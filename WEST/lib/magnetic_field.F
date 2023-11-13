@@ -217,9 +217,9 @@ CONTAINS
        !ip = 541
        !jp = 391 
        if (switch%ME .eqv. .FALSE.)  then !if not a moving equilibrium simulation
-         fname = 'B_field_exp/WEST_54487_0000.h5'
+         fname = path%field_path
        else
-        fname = 'B_field_exp/WEST_54487'
+        fname = path%field_path
         write(nit, "(i10)") int(time%it + 1)
         nit = trim(adjustl(nit))
         k = INDEX(nit, " ") -1
@@ -825,9 +825,9 @@ CONTAINS
        !ip = 541
        !jp = 391 
        if(switch%ME .eqv. .FALSE.) then !if not a moving equilibrium simulation
-          fname = 'Jtor_exp_nonnegative/WEST_54487_Jtor_0000.h5'
+          fname = path%jtor_path
        else
-          fname = 'Jtor_exp_nonnegative/WEST_54487_Jtor'
+          fname = path%jtor_path
           write(nit, "(i10)") int(time%it + 1)
           nit = trim(adjustl(nit))
           k = INDEX(nit, " ") -1

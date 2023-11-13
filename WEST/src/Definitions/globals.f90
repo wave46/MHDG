@@ -21,6 +21,7 @@ MODULE globals
   TYPE(Geometry_type), target :: geom
   TYPE(Magnetic_type), target :: magn
   TYPE(Switches_type), target :: switch
+  TYPE(Paths_type), target :: path
   TYPE(Time_type), target :: time
   TYPE(Numeric_type), target :: numer
   TYPE(Utils_type), target :: utils

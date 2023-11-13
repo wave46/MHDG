@@ -1,0 +1,12 @@
+WEST/src_git/
+WEST/test/B_field*
+WEST/test/Jtor*
+WEST/test/logs/
+WEST/test/MHDG-*
+WEST/test/param.txt
+WEST/test/Puff*
+WEST/test/Sol*
+WEST/lib/*.F
+WEST/lib/*.o
+WEST/lib/*.mod
+WEST/lib/MHDG-*

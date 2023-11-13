@@ -318,6 +318,14 @@ MODULE types
     logical :: logrho   ! solve for the density logarithm instead of density
   END TYPE Switches_type
 
+  !***************************************************************
+  ! Paths: type for storing paths to load inputs and sotre outputs
+  !***************************************************************
+  TYPE Paths_type
+    character(len=1000) :: field_path ! where do we read magnetic field from (WEST cases so far)
+    character(len=1000) :: jtor_path ! where do we read plasma current from (WEST cases so far)
+  END TYPE Paths_type
+
   !*******************************************************
   ! Time: type for the time stepping information
   !*******************************************************
