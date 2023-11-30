@@ -324,6 +324,8 @@ MODULE types
   TYPE Paths_type
     character(len=1000) :: field_path ! where do we read magnetic field from (WEST cases so far)
     character(len=1000) :: jtor_path ! where do we read plasma current from (WEST cases so far)
+    integer             :: field_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
+    integer             :: jtor_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
   END TYPE Paths_type
 
   !*******************************************************

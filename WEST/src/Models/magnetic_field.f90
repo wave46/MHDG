@@ -212,8 +212,8 @@ CONTAINS
     if (switch%testcase>=50 .and. switch%testcase<60) then
        ! WEST case
 				   ! Dimensions of the file storing the magnetic field for West
-				   ip = 457
-       jp = 457
+				   ip = path%field_dimensions(1)
+       jp = path%field_dimensions(2)
        !ip = 541
        !jp = 391 
        if (switch%ME .eqv. .FALSE.)  then !if not a moving equilibrium simulation
@@ -820,8 +820,8 @@ CONTAINS
     if (switch%testcase>=50 .and. switch%testcase<60) then
        ! WEST case
 			 ! Dimensions of the file storing the magnetic field for West
-			 ip = 457
-       jp = 457
+			 ip =  path%jtor_dimensions(1)
+       jp =  path%jtor_dimensions(2)
        !ip = 541
        !jp = 391 
        if(switch%ME .eqv. .FALSE.) then !if not a moving equilibrium simulation

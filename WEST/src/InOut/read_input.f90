@@ -38,6 +38,7 @@ SUBROUTINE READ_input()
 
   ! Paths for input and output
   character(len = 1000) :: field_path, jtor_path
+  integer               :: field_dimensions(1:2), jtor_dimensions(1:2)
 
   ! RMP and Ripple
   logical     :: RMP, Ripple
@@ -55,7 +56,7 @@ SUBROUTINE READ_input()
   NAMELIST /SWITCH_LST/ steady, time_init, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
     & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
     & logrho,bxgradb
-  NAMELIST /PATH_LST/ field_path, jtor_path
+  NAMELIST /PATH_LST/ field_path, field_dimensions, jtor_path, jtor_dimensions
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
@@ -116,7 +117,9 @@ SUBROUTINE READ_input()
   switch%logrho           = logrho
   switch%bxgradb          = bxgradb
   path%field_path         = trim(adjustl(field_path))
+  path%field_dimensions   = field_dimensions
   path%jtor_path          = trim(adjustl(jtor_path))
+  path%jtor_dimensions    = jtor_dimensions
   numer%tau               = tau
   numer%nrp               = nrp
   numer%tNR               = tNR
