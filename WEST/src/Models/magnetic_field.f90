@@ -330,10 +330,10 @@ CONTAINS
         ! taking coordinates for given element
         Xel = Mesh%X(Mesh%T(iel,:),:)
         !Jacobian computations
-        J11 = matmul(shapeFunctions(:,:,2),Xel(:,1))                           ! ng x 1
-        J12 = matmul(shapeFunctions(:,:,2),Xel(:,2))                           ! ng x 1
-        J21 = matmul(shapeFunctions(:,:,3),Xel(:,1))                          ! ng x 1
-        J22 = matmul(shapeFunctions(:,:,3),Xel(:,2))                          ! ng x 1
+        J11 = matmul(shapeFunctions(:,:,2),Xel(:,1))                           ! nnodes x 1
+        J12 = matmul(shapeFunctions(:,:,2),Xel(:,2))                           ! nnodes x 1
+        J21 = matmul(shapeFunctions(:,:,3),Xel(:,1))                          ! nnodes x 1
+        J22 = matmul(shapeFunctions(:,:,3),Xel(:,2))                          ! nnodes x 1
         detJ = J11*J22 - J21*J12                    ! determinant of the Jacobian
         iJ11 = J22/detJ
         iJ12 = -J12/detJ
