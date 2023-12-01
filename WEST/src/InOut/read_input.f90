@@ -36,9 +36,10 @@ SUBROUTINE READ_input()
   real*8            :: thrsol, thrsol2, mncrratio, athres, cthres
   real*8            :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
-  ! Paths for input and output
+  ! Info for input and output
   character(len = 1000) :: field_path, jtor_path
   integer               :: field_dimensions(1:2), jtor_dimensions(1:2)
+  logical               :: compute_from_flux, divide_by_2pi
 
   ! RMP and Ripple
   logical     :: RMP, Ripple
@@ -56,7 +57,7 @@ SUBROUTINE READ_input()
   NAMELIST /SWITCH_LST/ steady, time_init, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
     & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
     & logrho,bxgradb
-  NAMELIST /PATH_LST/ field_path, field_dimensions, jtor_path, jtor_dimensions
+  NAMELIST /INPUT_LST/ field_path, field_dimensions,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
@@ -75,7 +76,7 @@ SUBROUTINE READ_input()
   diagsource = 0.
   OPEN (uinput, file='param.txt', status='unknown')
   READ (uinput, SWITCH_LST)
-  READ (uinput, PATH_LST)
+  READ (uinput, INPUT_LST)
   READ (uinput, NUMER_LST)
   READ (uinput, GEOM_LST)
   READ (uinput, MAGN_LST)
@@ -116,10 +117,12 @@ SUBROUTINE READ_input()
   switch%pertini          = pertini
   switch%logrho           = logrho
   switch%bxgradb          = bxgradb
-  path%field_path         = trim(adjustl(field_path))
-  path%field_dimensions   = field_dimensions
-  path%jtor_path          = trim(adjustl(jtor_path))
-  path%jtor_dimensions    = jtor_dimensions
+  input%field_path        = trim(adjustl(field_path))
+  input%field_dimensions  = field_dimensions
+  input%compute_from_flux = compute_from_flux
+  input%divide_by_2pi     = divide_by_2pi
+  input%jtor_path         = trim(adjustl(jtor_path))
+  input%jtor_dimensions   = jtor_dimensions
   numer%tau               = tau
   numer%nrp               = nrp
   numer%tNR               = tNR

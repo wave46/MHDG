@@ -610,6 +610,82 @@ CONTAINS
   END SUBROUTINE compute_shape_functions_triangles
 
   !*********************************
+  ! Shape functions 2D at point !WARNING! transposed from marcelo version
+  !*********************************
+  SUBROUTINE compute_shape_functions_at_points(refEl, point, shapeFunctions)
+    TYPE(Reference_element_type), intent(INOUT) :: refEl
+    real*8, INTENT(IN)                       :: point(:,:)
+    real*8, INTENT(OUT)                      :: shapeFunctions(:,:,:)
+    real*8, allocatable                      :: Vand(:, :), L(:, :), U(:, :), Linv(:, :), Uinv(:, :)
+    real*8, allocatable                      :: p(:), dpxi(:), dpeta(:), A(:, :), temp(:, :)
+    integer*4, allocatable                   :: Pmatrix(:, :)
+    integer*4                                :: i, nnodes, ndeg, nIP,j
+
+
+    nnodes = refEl%Nnodes2D
+    ndeg   = refEl%nDeg
+    ! number of integration point
+    nIP = SIZE(point,1)
+
+    ALLOCATE(Vand(refEl%Nnodes2D, refEl%Nnodes2D))
+    CALL vandermonde_2d(Vand, refEl)
+
+    ALLOCATE (L(refEl%Nnodes2D, refEl%Nnodes2D))
+    ALLOCATE (U(refEl%Nnodes2D, refEl%Nnodes2D))
+    ALLOCATE (Pmatrix(refEl%Nnodes2D, refEl%Nnodes2D))
+
+    L = 0.d0
+    U = 0.d0
+    Pmatrix = 0
+
+    CALL compute_lup_decomp(transpose(Vand), refEl%Nnodes2D, L, U, Pmatrix)
+
+    ALLOCATE (Linv(refEl%Nnodes2D, refEl%Nnodes2D))
+    Linv = 0.d0
+    CALL invert_matrix(L, Linv)
+    ALLOCATE (Uinv(refEl%Nnodes2D, refEl%Nnodes2D))
+    CALL invert_matrix(U, Uinv)
+    ALLOCATE (p(refEl%Nnodes2D), dpxi(refEl%Nnodes2D), dpeta(refEl%Nnodes2D))
+    ALLOCATE (A(refEl%Nnodes2D,3))
+    ALLOCATE (temp(refEl%Nnodes2D,3))
+
+    DO i = 1, nIP
+      p = 0.d0
+      dpxi = 0.d0
+      dpeta = 0.d0
+      A = 0.d0
+      temp = 0.d0
+      CALL orthopoly2d_deriv(point(i,1), point(i,2), ndeg, nnodes, p, dpxi, dpeta)
+      A(:, 1) = p
+      A(:, 2) = dpxi
+      !if (dpxi .neqv. dpxi) then
+      !  WRITE (6, *) "xieta ", inode
+        
+      A(:, 3) = dpeta
+      temp = matmul(Uinv, matmul(Linv, matmul(Pmatrix, A)))
+      ! here changed 1 and second dimensions from Marcelo version
+      shapeFunctions(i, :, 1) = temp(:, 1) ! shape function
+      shapeFunctions(i, :, 2) = temp(:, 2) ! shape function derivative wrt xi
+      shapeFunctions(i, :, 3) = temp(:, 3) ! shape function derivative wrt eta
+
+    ENDDO
+
+  DEALLOCATE(temp)
+  DEALLOCATE(Vand)
+  DEALLOCATE(A)
+  DEALLOCATE(L)
+  DEALLOCATE(U)
+  DEALLOCATE(Linv)
+  DEALLOCATE(Uinv)
+  DEALLOCATE(Pmatrix)
+  DEALLOCATE(p)
+  DEALLOCATE(dpxi)
+  DEALLOCATE(dpeta)
+
+
+END SUBROUTINE compute_shape_functions_at_points
+
+  !*********************************
   ! Shape functions 2D for quads
   !*********************************
   SUBROUTINE compute_shape_functions_quads(refEl)

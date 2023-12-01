@@ -194,10 +194,23 @@ CONTAINS
     USE interpolation
     USE HDF5
     USE HDF5_io_module
+    USE reference_element
 
     integer                           :: i, j, ierr, ip, jp, ind, k
     integer(HID_T)                    :: file_id
     real*8, pointer, dimension(:, :)  :: r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D
+    !!! variables for computation derivatives of the flux
+    integer                           :: iel, inode
+    real*8                            :: shapeFunctions(refElpol%Nnodes2D,refElpol%Nnodes2D,3)
+    real*8                            :: Xel(refElpol%Nnodes2D,2)        !only for 2D so far
+    real*8                            :: J11(refElpol%Nnodes2D),J12(refElpol%Nnodes2D)
+    real*8                            :: J21(refElpol%Nnodes2D),J22(refElpol%Nnodes2D)
+    real*8                            :: iJ11(refElpol%Nnodes2D),iJ12(refElpol%Nnodes2D)
+    real*8                            :: iJ21(refElpol%Nnodes2D),iJ22(refElpol%Nnodes2D)
+    real*8                            :: Nxn(refElpol%Nnodes2D),Nyn(refElpol%Nnodes2D)
+    real*8                            :: detJ(refElpol%Nnodes2D)
+    real*8                            :: coord2D_fixed(refElpol%Nnodes2D,2)      ! applying some shift to the third node of thriangle to avoid infinite derivative
+    !!! end of variables for computation derivatives of the flux
     real*8, allocatable, dimension(:) :: xvec, yvec
     real*8                            :: x, y, t
     real*8                            :: Br, Bz, Bt, flux, psiSep
@@ -212,14 +225,14 @@ CONTAINS
     if (switch%testcase>=50 .and. switch%testcase<60) then
        ! WEST case
 				   ! Dimensions of the file storing the magnetic field for West
-				   ip = path%field_dimensions(1)
-       jp = path%field_dimensions(2)
+				   ip = input%field_dimensions(1)
+       jp = input%field_dimensions(2)
        !ip = 541
        !jp = 391 
        if (switch%ME .eqv. .FALSE.)  then !if not a moving equilibrium simulation
-         fname = path%field_path
+         fname = input%field_path
        else
-        fname = path%field_path
+        fname = input%field_path
         write(nit, "(i10)") int(time%it + 1)
         nit = trim(adjustl(nit))
         k = INDEX(nit, " ") -1
@@ -306,6 +319,43 @@ CONTAINS
       END DO
 #endif
     END DO
+    ! Field from fluxes (ONLY 2D, ONLY triangles checked)
+    ! gives nan at third point of the triangle, because its eta coordinate equal to straight 1.0
+    
+    if (input%compute_from_flux) then
+      coord2D_fixed =  refElpol%coord2d
+      coord2D_fixed(3,2) = coord2D_fixed(3,2)-1.e-10 !! dirty trick, need to solve it later
+      call compute_shape_functions_at_points(refElpol,coord2D_fixed,shapeFunctions)
+      do iel = 1, Mesh%Nelems
+        ! taking coordinates for given element
+        Xel = Mesh%X(Mesh%T(iel,:),:)
+        !Jacobian computations
+        J11 = matmul(shapeFunctions(:,:,2),Xel(:,1))                           ! ng x 1
+        J12 = matmul(shapeFunctions(:,:,2),Xel(:,2))                           ! ng x 1
+        J21 = matmul(shapeFunctions(:,:,3),Xel(:,1))                          ! ng x 1
+        J22 = matmul(shapeFunctions(:,:,3),Xel(:,2))                          ! ng x 1
+        detJ = J11*J22 - J21*J12                    ! determinant of the Jacobian
+        iJ11 = J22/detJ
+        iJ12 = -J12/detJ
+        iJ21 = -J21/detJ
+        iJ22 = J11/detJ
+        do inode = 1, Mesh%Nnodesperelem
+          ! x and y derivatives of the shape functions
+          Nxn = iJ11(inode)*shapeFunctions(inode,:,2) + iJ12(inode)*shapeFunctions(inode,:,3)
+          Nyn = iJ21(inode)*shapeFunctions(inode,:,2) + iJ22(inode)*shapeFunctions(inode,:,3)
+          ! Remember about 2pi
+          Br = -1.*dot_product(Nyn,phys%magnetic_flux(Mesh%T(iel,:)))/Xel(inode,1)/simpar%refval_length**2
+          Bz = dot_product(Nxn,phys%magnetic_flux(Mesh%T(iel,:)))/Xel(inode,1)/simpar%refval_length**2
+          phys%B(Mesh%T(iel,inode),1) = Br
+          phys%B(Mesh%T(iel,inode),2) = Bz
+        enddo
+      enddo
+      if (input%divide_by_2pi) then
+        phys%B(:,1) = phys%B(:,1)/2./PI 
+        phys%B(:,2) = phys%B(:,2)/2./PI 
+      endif
+    endif
+
      
     ! Min and Max flux for inizialization
     phys%Flux2Dmin = minval(phys%magnetic_flux)      
@@ -820,14 +870,14 @@ CONTAINS
     if (switch%testcase>=50 .and. switch%testcase<60) then
        ! WEST case
 			 ! Dimensions of the file storing the magnetic field for West
-			 ip =  path%jtor_dimensions(1)
-       jp =  path%jtor_dimensions(2)
+			 ip =  input%jtor_dimensions(1)
+       jp =  input%jtor_dimensions(2)
        !ip = 541
        !jp = 391 
        if(switch%ME .eqv. .FALSE.) then !if not a moving equilibrium simulation
-          fname = path%jtor_path
+          fname = input%jtor_path
        else
-          fname = path%jtor_path
+          fname = input%jtor_path
           write(nit, "(i10)") int(time%it + 1)
           nit = trim(adjustl(nit))
           k = INDEX(nit, " ") -1

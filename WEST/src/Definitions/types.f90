@@ -321,12 +321,14 @@ MODULE types
   !***************************************************************
   ! Paths: type for storing paths to load inputs and sotre outputs
   !***************************************************************
-  TYPE Paths_type
+  TYPE Inputs_type
     character(len=1000) :: field_path ! where do we read magnetic field from (WEST cases so far)
     character(len=1000) :: jtor_path ! where do we read plasma current from (WEST cases so far)
+    logical             :: compute_from_flux ! if components B_R, B_Z are computed from flux or not
+    logical             :: divide_by_2pi     ! correspondng to flux definition if it is needed to divide by 2pi or not
     integer             :: field_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
     integer             :: jtor_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
-  END TYPE Paths_type
+  END TYPE Inputs_type
 
   !*******************************************************
   ! Time: type for the time stepping information
