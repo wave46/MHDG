@@ -3389,9 +3389,17 @@ END IF
       !Assembly RHS Neutral Source Terms
       Sn0(1)    = ad*(niz*sigmaviz - nrec*sigmavrec)
       Sn0(2)    = ad*(-fGammacx*sigmavcx - fGammarec*sigmavrec)
+#ifdef AMJUELSPLINES
+      Sn0(1)    = Sn0(1) + ad*(niz*dot_product(dsigmaviz_dU,U) - nrec*dot_product(dsigmavrec_dU,U))
+      Sn0(2)    = Sn0(2) + ad*(- fGammarec*dot_product(dsigmavrec_dU,U))
+#endif
 #ifdef TEMPERATURE
       Sn0(3)    = ad*(RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx)
       Sn0(4)    = ad4*(-niz*sigmaviz*Tloss - nrec*sigmavrec*Tlossrec)
+#ifdef AMJUELSPLINES
+      Sn0(3)    = Sn0(3) + ad*(RE*fEiiz*dot_product(dsigmaviz_dU,U) - fEirec*dot_product(dsigmavrec_dU,U))
+      Sn0(4)    = Sn0(4) + ad4*(-niz*dot_product(dsigmaviz_dU,U)*Tloss - nrec*dot_product(dsigmavrec_dU,U)*Tlossrec)
+#endif
 #endif
       Sn0(Neq)  = -Sn0(1)
 
@@ -3410,6 +3418,9 @@ END IF
          Sn(3,4) = ad*(-RE*fEiiz*dsigmaviz_dU(4))
          Sn(3,5) = ad*(-RE*dfEiiz_dU(Neq)*sigmaviz)
          Sn0(3) = ad*(RE*fEiiz*sigmaviz)
+#ifdef AMJUELSPLINES
+         Sn0(3)    = Sn0(3) + ad*(RE*fEiiz*dot_product(dsigmaviz_dU,U))
+#endif
          Sn(4,1) = 0. !3./2.*6.e-10
          Sn(4,2) = 0.
          Sn(4,3) = 0.

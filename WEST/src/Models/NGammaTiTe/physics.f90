@@ -91,6 +91,96 @@ CONTAINS
 #ifdef NEUTRAL
     simpar%consvar_refval(5) = simpar%refval_neutral
 #endif
+#ifdef AMJUELSPLINES
+    ! coefficients for AMJUEL spline 3.1.8 FJ
+    phys%alpha_cx = (/-1.841756e+01,  5.282950e-01, -2.200477e-01,  9.750192e-02,&
+    -1.749183e-02,  4.954298e-04,  2.174910e-04, -2.530206e-05,&
+    8.230751e-07/)
+    ! coefficients for AMJUEL 2.1.5JH
+    phys%alpha_iz(:,1) = (/-3.29264710e+01,  1.42397767e+01, -6.51943873e+00,&
+                            2.00999615e+00, -4.28959442e-01,  6.04783461e-02,&
+                           -5.30473797e-03,  2.60694695e-04, -5.46790307e-06/)
+    phys%alpha_iz(:,2) = (/1.29348138e-02, -1.17314396e-02, -7.18982575e-03,&
+                           1.27597974e-02, -5.34086632e-03,  9.62490059e-04,&
+                          -7.85487245e-05,  2.31744225e-06,  6.07738004e-09/)
+    phys%alpha_iz(:,3) = (/5.51756251e-03,  1.06344011e-03,  9.24737741e-04,&
+                          -4.69347962e-03,  2.32458236e-03, -4.18298118e-04,&
+                           2.73582380e-05,  5.14889078e-08, -4.71289307e-08/)
+    phys%alpha_iz(:,4) = (/-7.85381632e-04, -1.60005353e-03,  2.03702675e-03,&
+                           -2.38922414e-05, -3.21722808e-04,  7.95723018e-05,&
+                           -5.91534856e-06, -7.14418252e-09,  1.08685876e-08/)
+    phys%alpha_iz(:,5) = (/1.43612850e-04,  1.13655464e-05, -3.66871720e-04,&
+                           1.35806992e-04,  6.66058141e-06, -7.44704256e-06,&
+                           8.66630287e-07, -2.54019475e-08, -3.44841725e-10/)
+    phys%alpha_iz(:,6) = (/-3.88375028e-07,  5.17766228e-05,  5.36863032e-06,&
+                           -1.45489756e-05,  2.39653187e-06,  1.84915526e-07,&
+                           -6.11551482e-08,  4.09785784e-09, -8.71418322e-11/)
+    phys%alpha_iz(:,7) = (/-1.48977436e-06, -7.94799990e-06,  3.71395891e-06,&
+                            4.21203150e-08, -1.78520832e-07,  1.61823364e-08,&
+                            1.07547317e-09, -2.04865734e-10,  8.02366070e-12/)
+    phys%alpha_iz(:,8) = (/1.41636143e-07,  4.50850568e-07, -3.12576437e-07,&
+                           5.50604467e-08,  6.09564957e-10, -8.18292830e-10,&
+                           4.11800067e-11,  3.02791637e-12, -2.39651850e-13/)
+    phys%alpha_iz(:,9) = (/-3.89093208e-09, -8.95261409e-09,  7.45121322e-09,&
+                           -1.85267764e-09,  1.47020423e-10,  4.83578962e-12,&
+                           -1.08932309e-12,  1.15585402e-14,  2.17364528e-15/)
+    ! coefficients for AMJUEL 2.1.8JH
+    phys%alpha_rec(:,1) = (/-2.85572848e+01, -7.66404261e-01, -4.93042400e-03,&
+                            -5.38683098e-03, -1.62603924e-04,  6.08090765e-06,&
+                             2.10110205e-05, -2.77071760e-06,  1.03823594e-07/)
+    phys%alpha_rec(:,2) = (/3.48856323e-02, -3.58323337e-03, -3.62024535e-03,&
+                           -9.53284048e-04,  1.88804863e-04, -1.01489068e-05,&
+                            2.24567656e-05, -4.69598237e-06,  2.52316661e-07/)
+    phys%alpha_rec(:,3) = (/-2.79964439e-02, -7.45251429e-03,  6.95871196e-03,&
+                             4.63175381e-04,  1.28857769e-04, -1.14502889e-04,&
+                            -2.24562427e-06,  3.25087887e-06, -2.14539040e-07/)
+    phys%alpha_rec(:,4) = (/1.20954532e-02,  2.70929976e-03, -2.13925730e-03,&
+                           -5.37117970e-04, -1.63458052e-05,  5.94219398e-05,&
+                           -2.94487376e-06, -9.38729079e-07,  7.38143524e-08/)
+    phys%alpha_rec(:,5) = (/-2.43663080e-03, -7.74512977e-04,  4.60388371e-04,&
+                            1.54335050e-04, -9.60103695e-06, -1.21185172e-05,&
+                            1.00210510e-06,  1.39239163e-07, -1.29971368e-08/)
+    phys%alpha_rec(:,6) = (/2.83789372e-04,  1.14244470e-04, -5.99163684e-05,&
+                           -2.25756584e-05,  3.42526239e-06,  1.11896550e-06,&
+                           -1.29132080e-07, -1.13909329e-08,  1.26518958e-09/)
+    phys%alpha_rec(:,7) = (/-1.88651117e-05, -9.38278352e-06,  4.72926255e-06,&
+                             1.73078295e-06, -4.07701994e-07, -4.27532157e-08,&
+                             7.78615546e-09,  5.17850560e-10, -6.85420397e-11/)
+    phys%alpha_rec(:,8) = (/6.75215560e-07,  3.90280010e-07, -1.99348540e-07,&
+                           -6.61824078e-08,  2.04204110e-08,  3.70861611e-10,&
+                           -2.44112778e-10, -9.45240216e-12,  1.83661503e-12/)
+    phys%alpha_rec(:,9) = (/-1.00589386e-08, -6.38741159e-09,  3.35258987e-09,&
+                             1.01336428e-09, -3.70797772e-10,  7.06845011e-12,&
+                             3.77320848e-12, -4.67272402e-14, -1.64049236e-14/)
+    ! coefficients for AMJUEL 2.1.8a
+    ! phys%alpha_rec(:,1) = (/-2.86177956e+01, -7.25199707e-01, -1.73502332e-02,&
+    ! -3.55775280e-03, -2.77788226e-04,  2.06029540e-05,&
+    !  1.59323839e-05, -2.11658076e-06,  7.66599010e-08/)
+    ! phys%alpha_rec(:,2) = (/-1.78616692e-02,  3.21096605e-03, -3.11251743e-03,&
+    ! 1.55896611e-03, -9.32993286e-05, -1.28371165e-04,&
+    ! 3.70550340e-05, -3.85417246e-06,  1.40078912e-07/)
+    ! phys%alpha_rec(:,3) = (/6.39155334e-04,  4.55025150e-03,  1.07786335e-03,&
+    ! -1.03733153e-03,  1.09633177e-04,  7.31231189e-05,&
+    ! -2.40723586e-05,  2.66239203e-06, -1.00895147e-07/)
+    ! phys%alpha_rec(:,4) = (/-4.50941526e-04, -1.88230646e-03, -2.61695897e-04,&
+    ! 2.81723717e-04, -4.56748839e-05, -1.06480515e-05,&
+    ! 4.91521392e-06, -6.12084620e-07,  2.49521491e-08/)
+    ! phys%alpha_rec(:,5) = (/7.09545902e-05,  3.98313304e-04,  5.45933281e-05,&
+    ! -4.40781517e-05,  8.49578724e-06, -1.49877643e-07,&
+    ! -3.34660940e-07,  5.66372822e-08, -2.67848413e-09/)
+    ! phys%alpha_rec(:,6) = (/-5.66030993e-06, -4.85183529e-05, -8.63530868e-06,&
+    ! 4.64601735e-06, -7.26107627e-07,  1.19908760e-07,&
+    !-4.91275369e-09, -1.47422116e-09,  1.17013833e-10/)
+    ! phys%alpha_rec(:,7) = (/1.16018663e-07,  3.40483450e-06,  8.38310637e-07,&
+    ! -3.36565455e-07,  2.32699294e-08, -5.66807913e-09,&
+    !  1.30239368e-09, -7.37309518e-11, -1.58825470e-13/)
+    ! phys%alpha_rec(:,8) = (/7.56498607e-09, -1.28083999e-07, -4.13335200e-08,&
+    ! 1.42835079e-08,  2.20808955e-10, -1.01855404e-10,&
+    !-3.16901361e-11,  4.31445723e-12, -1.22634522e-13/)
+    ! phys%alpha_rec(:,9) = (/-2.96981503e-10,  1.98283997e-09,  7.87249173e-10,&
+    ! -2.52215335e-10, -1.98997939e-11,  7.76657896e-12,&
+    ! -1.78376276e-13, -4.79167750e-14,  2.32940245e-15/)
+#endif
   END SUBROUTINE
 
   !*******************************************
@@ -1013,6 +1103,7 @@ CONTAINS
 
 
 #ifdef TEMPERATURE
+#ifndef AMJUELSPLINES
   SUBROUTINE compute_sigmaviz(U,sigmaviz)
    real*8, intent(IN) :: U(:)
    real*8             :: sigmaviz,U1,U4,T0,Ery,E0
@@ -1090,224 +1181,6 @@ CONTAINS
    endif 
   END SUBROUTINE compute_dsigmavrec_dU
 
-!SUBROUTINE compute_sigmaviz(U,sigmaviz)
-!  real*8, intent(IN) :: U(:)
-!  real*8 :: sigmaviz,U1,U4,T0,Ery,E0,te,ne,n0
-!  real*8, dimension(9,9) :: alpha
-!  real, parameter :: tol = 1e-10
-!  integer :: i, j
-  ! U1 = U(1)
-  ! U4 = U(4)
-  ! T0 = 50.
-  ! n0 = 1.e19
-  ! ! In EIRENE the density is scaled to 1.e14
-  ! ne = n0*U1/1.e14
-  ! te = T0*2/3/phys%Mref*U4/U1
-  ! if (U1<tol) U1=tol
-  ! if (U4<tol) U4=tol
-  ! if (ne<1.1e0) ne=1.1e0
-  ! if (ne>2.e7) ne = 2.e7
-  ! if (te<0.1) te=0.1
-  ! if (te>1.e4) te = 1.e4
-  ! sigmaviz = 0.
-
-  ! ! EIRENE documentation
-  ! alpha(1,:) = (/-3.29264710e+01,1.29348138e-02,5.51756251e-03,&
-  ! -7.85381632e-04,1.43612850e-04,-3.88375028e-07,&
-  ! -1.48977436e-06,1.41636143e-07,-3.89093208e-09/)
-  ! alpha(2,:) = (/1.42397767e+01, -1.17314396e-02, 1.06344011e-03,&
-  ! -1.60005353e-03, 1.13655464e-05, 5.17766228e-05,&
-  ! -7.94799990e-06, 4.50850568e-07, -8.95261409e-09/)
-  ! alpha(3,:) = (/-6.51943873e+00, -7.18982575e-03, 9.24737741e-04,&
-  ! 2.03702675e-03, -3.66871720e-04, 5.36863032e-06,&
-  ! 3.71395891e-06, -3.12576437e-07, 7.45121322e-09/)
-  ! alpha(4,:) = (/2.00999615e+00, 1.27597974e-02, -4.69347962e-03,&
-  ! -2.38922414e-05, 1.35806992e-04, -1.45489756e-05,&
-  ! 4.21203150e-08, 5.50604467e-08, -1.85267764e-09/)
-  ! alpha(5,:) = (/-4.28959442e-01, -5.34086632e-03, 2.32458236e-03,&
-  ! -3.21722808e-04, 6.66058141e-06, 2.39653187e-06,&
-  ! -1.78520832e-07, 6.09564957e-10, 1.47020423e-10/)
-  ! alpha(6,:) = (/6.04783461e-02, 9.62490059e-04, -4.18298118e-04,&
-  ! 7.95723018e-05, -7.44704256e-06, 1.84915526e-07,&
-  ! 1.61823364e-08, -8.18292830e-10, 4.83578962e-12/)
-  ! alpha(7,:) = (/-5.30473797e-03, -7.85487245e-05, 2.73582380e-05,&
-  ! -5.91534856e-06, 8.66630287e-07, -6.11551482e-08,&
-  ! 1.07547317e-09, 4.11800067e-11, -1.08932309e-12/)
-  ! alpha(8,:) = (/2.60694695e-04, 2.31744225e-06, 5.14889078e-08,&
-  ! -7.14418252e-09, -2.54019475e-08, 4.09785784e-09,&
-  ! -2.04865734e-10, 3.02791637e-12, 1.15585402e-14/)
-  ! alpha(9,:) = (/-5.46790307e-06, 6.07738004e-09, -4.71289307e-08,&
-  ! 1.08685876e-08, -3.44841725e-10, -8.71418322e-11,&
-  ! 8.02366070e-12, -2.39651850e-13, 2.17364528e-15/) 
-
-!  call compute_eirene_rate(te,ne,alpha,sigmaviz)
-  
-!END SUBROUTINE compute_sigmaviz 
-  
-  !SUBROUTINE compute_dsigmaviz_dU(U,res)
-  !  real*8, intent(IN) :: U(:)
-  !  real*8 :: res(:),sigmaviz,U1,U4,T0,Ery,E0,te,ne,n0
-  !  real*8, dimension(9,9) :: alpha
-  !  real, parameter :: tol = 1e-10
-  !  integer :: i, j
-  !  U1 = U(1)
-  !  U4 = U(4)
-  !  T0 = 50.
-  !  n0 = 1.e19
-  !  ne = n0*U1/1.e14
-  !  te = T0*2/3/phys%Mref*U4/U1
-  !  if (U1<tol) U1=tol
-  !  if (U4<tol) U4=tol
-  !  if (ne<1.1e0) ne=1.1e0
-  !  if (ne>2.e7) ne = 2.e7
-  !  if (te<0.1) te=0.1
-  !  if (te>1.e4) te = 1.e4
-  !  sigmaviz = 0.
-  !  call compute_sigmaviz(U,sigmaviz)
-
-  !  ! EIRENE documentation
-  !  alpha(1,:) = (/-3.29264710e+01,1.29348138e-02,5.51756251e-03,&
-  !  -7.85381632e-04,1.43612850e-04,-3.88375028e-07,&
-  !  -1.48977436e-06,1.41636143e-07,-3.89093208e-09/)
-  !  alpha(2,:) = (/1.42397767e+01, -1.17314396e-02, 1.06344011e-03,&
-  !  -1.60005353e-03, 1.13655464e-05, 5.17766228e-05,&
-  !  -7.94799990e-06, 4.50850568e-07, -8.95261409e-09/)
-  !  alpha(3,:) = (/-6.51943873e+00, -7.18982575e-03, 9.24737741e-04,&
-  !  2.03702675e-03, -3.66871720e-04, 5.36863032e-06,&
-  !  3.71395891e-06, -3.12576437e-07, 7.45121322e-09/)
-  ! alpha(4,:) = (/2.00999615e+00, 1.27597974e-02, -4.69347962e-03,&
-  !  -2.38922414e-05, 1.35806992e-04, -1.45489756e-05,&
-  !  4.21203150e-08, 5.50604467e-08, -1.85267764e-09/)
-  !  alpha(5,:) = (/-4.28959442e-01, -5.34086632e-03, 2.32458236e-03,&
-  !  -3.21722808e-04, 6.66058141e-06, 2.39653187e-06,&
-  !  -1.78520832e-07, 6.09564957e-10, 1.47020423e-10/)
-  !  alpha(6,:) = (/6.04783461e-02, 9.62490059e-04, -4.18298118e-04,&
-  !  7.95723018e-05, -7.44704256e-06, 1.84915526e-07,&
-  !  1.61823364e-08, -8.18292830e-10, 4.83578962e-12/)
-  !  alpha(7,:) = (/-5.30473797e-03, -7.85487245e-05, 2.73582380e-05,&
-  !  -5.91534856e-06, 8.66630287e-07, -6.11551482e-08,&
-  !  1.07547317e-09, 4.11800067e-11, -1.08932309e-12/)
-  !  alpha(8,:) = (/2.60694695e-04, 2.31744225e-06, 5.14889078e-08,&
-  !  -7.14418252e-09, -2.54019475e-08, 4.09785784e-09,&
-  !  -2.04865734e-10, 3.02791637e-12, 1.15585402e-14/)
-  !  alpha(9,:) = (/-5.46790307e-06, 6.07738004e-09, -4.71289307e-08,&
-  !  1.08685876e-08, -3.44841725e-10, -8.71418322e-11,&
-  !  8.02366070e-12, -2.39651850e-13, 2.17364528e-15/)
-  !  res = 0.
-  
-  !  call compute_eirene_rate_du(U1,U4,te,ne,alpha,res)
-  
-  !END SUBROUTINE compute_dsigmaviz_dU
-  
-  !SUBROUTINE compute_sigmavrec(U,sigmavrec)
-  !  real*8, intent(IN) :: U(:)
-  !  real*8 :: sigmavrec,U1,U4,T0,Ery,E0,te,ne,n0
-  !  real*8, dimension(9,9) :: alpha
-  !  real, parameter :: tol = 1e-10
-  !  integer :: i, j
-  !  U1 = U(1)
-  !  U4 = U(4)
-  !  T0 = 50.
-  !  n0 = 1.e19
-  !  ne = n0*U1/1.e14
-  !  te = T0*2/3/phys%Mref*U4/U1
-  !  if (U1<tol) U1=tol
-  !  if (U4<tol) U4=tol
-  !  if (ne<1.1e0) ne=1.1e0
-  !  if (ne>2.e7) ne = 2.e7
-  !  if (te<0.1) te=0.1
-  !  if (te>1.e4) te = 1.e4
-  !  sigmavrec = 0.
-  
-  !  ! EIRENE documentation
-  !  alpha(1,:) = (/-2.85572848e+01, 3.48856323e-02, -2.79964439e-02,&
-  !  1.20954532e-02, -2.43663080e-03, 2.83789372e-04,&
-  !  -1.88651117e-05, 6.75215560e-07, -1.00589386e-08/)
-  !  alpha(2,:) = (/-7.66404261e-01, -3.58323337e-03, -7.45251429e-03,&
-  !  2.70929976e-03, -7.74512977e-04, 1.14244470e-04,&
-  !  -9.38278352e-06, 3.90280010e-07, -6.38741159e-09/)
-  !  alpha(3,:) = (/-4.93042400e-03, -3.62024535e-03, 6.95871196e-03,&
-  !  -2.13925730e-03, 4.60388371e-04, -5.99163684e-05,&
-  !  4.72926255e-06, -1.99348540e-07, 3.35258987e-09/)
-  !  alpha(4,:) = (/-5.38683098e-03, -9.53284048e-04, 4.63175381e-04,&
-  !  -5.37117970e-04, 1.54335050e-04, -2.25756584e-05,&
-  !  1.73078295e-06, -6.61824078e-08, 1.01336428e-09/)
-  !  alpha(5,:) = (/-1.62603924e-04, 1.88804863e-04, 1.28857769e-04,&
-  !  -1.63458052e-05, -9.60103695e-06, 3.42526239e-06,&
-  !  -4.07701994e-07, 2.04204110e-08, -3.70797772e-10/)
-  !  alpha(6,:) = (/6.08090765e-06, -1.01489068e-05, -1.14502889e-04,&
-  !  5.94219398e-05, -1.21185172e-05, 1.11896550e-06,&
-  !  -4.27532157e-08, 3.70861611e-10, 7.06845011e-12/)
-  !  alpha(7,:) = (/2.10110205e-05, 2.24567656e-05, -2.24562427e-06,&
-  !  -2.94487376e-06, 1.00210510e-06, -1.29132080e-07,&
-  !  7.78615546e-09, -2.44112778e-10, 3.77320848e-12/)
-  !  alpha(8,:) = (/-2.77071760e-06, -4.69598237e-06, 3.25087887e-06,&
-  !  -9.38729079e-07, 1.39239163e-07, -1.13909329e-08,&
-  !  5.17850560e-10, -9.45240216e-12, -4.67272402e-14/)
-  !  alpha(9,:) = (/1.03823594e-07, 2.52316661e-07, -2.14539040e-07,&
-  !  7.38143524e-08, -1.29971368e-08, 1.26518958e-09,&
-  !  -6.85420397e-11, 1.83661503e-12, -1.64049236e-14/)
-  
-  !  call compute_eirene_rate(te,ne,alpha,sigmavrec)
-  
-  !END SUBROUTINE compute_sigmavrec
-
- ! SUBROUTINE compute_dsigmavrec_dU(U,res)
- !   real*8, intent(IN) :: U(:)
- !   real*8 :: res(:),sigmavrec,U1,U4,T0,Ery,E0,te,ne,n0
- !   real*8, dimension(9,9) :: alpha
- !   real, parameter :: tol = 1e-10
- !   integer :: i, j
- !   U1 = U(1)
- !   U4 = U(4)
- !   T0 = 50.
- !   n0 = 1.e19
- !   ne = n0*U1/1.e14
- !   te = T0*2/3/phys%Mref*U4/U1
- !   if (U1<tol) U1=tol
- !   if (U4<tol) U4=tol
- !   if (ne<1.1e0) ne=1.1e0
- !   if (ne>2.e7) ne = 2.e7
- !   if (te<0.1) te=0.1
- !   if (te>1.e4) te = 1.e4
- !  sigmavrec = 0.
- !  call compute_sigmavrec(U,sigmavrec)
-  
- !   ! EIRENE documentation
- !   alpha(1,:) = (/-2.85572848e+01, 3.48856323e-02, -2.79964439e-02,&
- !   1.20954532e-02, -2.43663080e-03, 2.83789372e-04,&
- !   -1.88651117e-05, 6.75215560e-07, -1.00589386e-08/)
- !   alpha(2,:) = (/-7.66404261e-01, -3.58323337e-03, -7.45251429e-03,&
- !   2.70929976e-03, -7.74512977e-04, 1.14244470e-04,&
- !   -9.38278352e-06, 3.90280010e-07, -6.38741159e-09/)
- !   alpha(3,:) = (/-4.93042400e-03, -3.62024535e-03, 6.95871196e-03,&
- !   -2.13925730e-03, 4.60388371e-04, -5.99163684e-05,&
- !   4.72926255e-06, -1.99348540e-07, 3.35258987e-09/)
- !   alpha(4,:) = (/-5.38683098e-03, -9.53284048e-04, 4.63175381e-04,&
- !   -5.37117970e-04, 1.54335050e-04, -2.25756584e-05,&
- !   1.73078295e-06, -6.61824078e-08, 1.01336428e-09/)
- !   alpha(5,:) = (/-1.62603924e-04, 1.88804863e-04, 1.28857769e-04,&
- !   -1.63458052e-05, -9.60103695e-06, 3.42526239e-06,&
- !   -4.07701994e-07, 2.04204110e-08, -3.70797772e-10/)
- !   alpha(6,:) = (/6.08090765e-06, -1.01489068e-05, -1.14502889e-04,&
- !   5.94219398e-05, -1.21185172e-05, 1.11896550e-06,&
- !   -4.27532157e-08, 3.70861611e-10, 7.06845011e-12/)
- !   alpha(7,:) = (/2.10110205e-05, 2.24567656e-05, -2.24562427e-06,&
- !   -2.94487376e-06, 1.00210510e-06, -1.29132080e-07,&
- !   7.78615546e-09, -2.44112778e-10, 3.77320848e-12/)
- !   alpha(8,:) = (/-2.77071760e-06, -4.69598237e-06, 3.25087887e-06,&
- !   -9.38729079e-07, 1.39239163e-07, -1.13909329e-08,&
- !   5.17850560e-10, -9.45240216e-12, -4.67272402e-14/)
- !   alpha(9,:) = (/1.03823594e-07, 2.52316661e-07, -2.14539040e-07,&
- !   7.38143524e-08, -1.29971368e-08, 1.26518958e-09,&
- !   -6.85420397e-11, 1.83661503e-12, -1.64049236e-14/)
- !   res = 0.
-  
- !   call compute_eirene_rate_du(U1,U4,te,ne,alpha,res)
-  
-  !END SUBROUTINE compute_dsigmavrec_dU
-
-
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavcx,U1,U4,T0,E0
@@ -1367,44 +1240,372 @@ CONTAINS
        res = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)*U1/U4*res
     end if
   END SUBROUTINE compute_dsigmavcx_dU
+#else
 
-  !SUBROUTINE compute_eirene_rate(te,ne,alpha,rate)
-  !  real*8, intent(IN) :: te,ne,alpha(:,:) 
-  !  real*8, intent(OUT):: rate
-  !  integer :: i,j
-  
-  !  ! In EIRENE the density is scaled to 1.e14
-  !  rate = 0.
-  !  do i=1,size(alpha,1)
-  !    do j = 1,size(alpha,2) 
-  !      rate = rate + alpha(i,j)*log(ne)**(j-1)*log(te)**(i-1)
-  !    end do
-  !  end do
-  !  ! rate is in cm^3/s in EIRENE
-  !  rate = exp(rate)/1.e6
-  
-  !END SUBROUTINE compute_eirene_rate
-  
-  !SUBROUTINE compute_eirene_rate_du(U1,U4,te,ne,alpha,rate_du)
-  !  real*8, intent(IN) :: U1,U4,te,ne,alpha(:,:)
-  !  real*8 :: rate
-  !  real*8, intent(OUT):: rate_du(:)
-  !  integer :: i,j
-  !  call compute_eirene_rate(te,ne,alpha,rate)
-  
-  !  ! In EIRENE the density is scaled to 1.e14
-  !  rate_du = 0.
+  ! These routines use AMUJUEL splines
+  SUBROUTINE compute_eirene_1D_rate(te,alpha,rate)
+    ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
+    real*8, intent(IN) :: te,alpha(:)          
+    real*8, intent(OUT):: rate
+    real*8             :: te_min=0.1
+    real*8             :: dlograte_dlogte
+    integer            :: i
+    rate = 0.
+    if (te>=te_min) then 
+      call compute_logeirene_1D_rate(te,alpha,rate)
+    else
+      call compute_logeirene_1D_rate(te_min,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogte(te_min,alpha,dlograte_dlogte)
+      rate = rate + dlograte_dlogte*(log(te)- log(te_min))
+    endif
+    ! rates are not higher than 1 m^3/s, if rate is higher than that value, then there is something weird
+    if (rate>6.*log(10.)) then
+      WRITE(6,*) "Something weird in compute_eirene_te_rate, probably, solution is not good already"
+      WRITE(6,*) " te equal to", te
+      WRITE(6,*) " rate equal to", rate
+      stop
+    endif
+    rate = exp(rate)/1.e6
+  END SUBROUTINE compute_eirene_1D_rate
+
+  SUBROUTINE compute_eirene_1D_rate_du(U1,U4,te,alpha,res)
+    ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
+    real*8, intent(IN) :: U1,U4,te,alpha(:)          
+    real*8, intent(OUT):: res(:)
+    real*8             :: te_min=0.1
+    real*8             :: dlograte_dlogte,rate
+    integer            :: i
+    res = 0.
+
+    if (te>te_min) then
+      call compute_eirene_1D_rate(te,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogte(te,alpha,dlograte_dlogte)
+      res(1) = res(1) + dlograte_dlogte*(-1./U1)
+      res(4) = res(4) + dlograte_dlogte*(1./U4)
+      res = rate*res
+    else
+      call compute_eirene_1D_rate(te,phys%alpha_cx,rate)
+      call compute_d_logeirene_1D_rate_dlogte(te_min,alpha,dlograte_dlogte)
+      res(1) = res(1) + dlograte_dlogte*(-1./U1)
+      res(4) = res(4) + dlograte_dlogte*(1./U4)
+      res = rate*res
+    endif
     
-  !  do i=1,size(alpha,1)
-  !    do j = 1,size(alpha,2)
-  !      rate_du(1) = rate_du(1)+alpha(i,j)*log(ne)**(j-2)*(j-1)*log(te)**(i-1)*(1./U1)
-  !      rate_du(1) = rate_du(1)+alpha(i,j)*log(ne)**(j-1)*(i-1)*log(te)**(i-2)*(-1./U1)
-  !      rate_du(4) = rate_du(4)+alpha(i,j)*log(ne)**(j-1)*(i-1)*log(te)**(i-2)*(1./U4)
-  !    end do
-  !  end do 
-  !  rate_du = rate_du*rate
-  
-  !END SUBROUTINE compute_eirene_rate_du  
+  END SUBROUTINE compute_eirene_1D_rate_du
+
+
+  SUBROUTINE compute_logeirene_1D_rate(te,alpha,rate)
+    ! Calculates 1D AMJUEL spline in loglog space
+    real*8, intent(IN) :: te,alpha(:)          
+    real*8, intent(OUT):: rate
+    integer            :: i
+    rate = 0.
+
+    do i = 1,size(alpha,1)    
+      rate = rate + alpha(i)*log(te)**(i-1)
+    end do
+
+  END SUBROUTINE compute_logeirene_1D_rate
+
+
+  SUBROUTINE compute_d_logeirene_1D_rate_dlogte(te,alpha,d_log_rate_dte)
+    ! calculates derivative of AMJUEL 1D spline in loglog space
+    real*8, intent(IN) :: te,alpha(:)          
+    real*8, intent(OUT):: d_log_rate_dte
+    integer            :: i
+    d_log_rate_dte = 0.
+
+    do i = 2,size(alpha,1)    
+      d_log_rate_dte = d_log_rate_dte + (i-1)*alpha(i)*log(te)**(i-2)
+    end do
+  END SUBROUTINE compute_d_logeirene_1D_rate_dlogte
+
+  ! Routines for 2D splines in te, ne loglogspace
+  SUBROUTINE compute_2D_eirene_rate(te,ne,alpha,rate)
+    ! this routine calculates eirene rate in te, ne space
+    ! if in the region of applicability, then just takes the values according to the splines
+    ! if ne>ne_max (LTE limit) or ne<ne_min (Corona limit) then no more dependancy on ne
+    ! if te<te_min or te>te_max then extrapolates in log space taking the derivative of the edge and linearly expanding
+    real*8, intent(IN) :: te,ne,alpha(:,:)          
+    real*8, intent(OUT):: rate
+    real*8             :: te_min = 0.1
+    real*8             :: te_max = 2.e4
+    real*8             :: ne_min = 1.
+    real*8             :: ne_max = 1.e6
+    real*8             :: dlograte_dlogne, dlograte_dlogte
+    integer            :: i,j
+    ! In EIRENE the density is scaled to 1.e14
+    rate = 0.
+    ! region 1, where ne is applicable
+    if ((ne>=ne_min) .and. (ne<=ne_max)) then
+      if ((te>=te_min) .and.(te<=te_max)) then
+        call compute_2D_logeirene_rate(te,ne,alpha,rate)
+      elseif (te<te_min) then
+        call compute_2D_logeirene_rate(te_min,ne,alpha,rate)
+        call compute_dlogeirene_2D_dlogte_rate(te_min,ne,alpha,dlograte_dlogte)
+        rate = rate+dlograte_dlogte*(log(te)-log(te_min))
+      elseif (te>te_max) then
+        call compute_2D_logeirene_rate(te_max,ne,alpha,rate)
+        call compute_dlogeirene_2D_dlogte_rate(te_max,ne,alpha,dlograte_dlogte)
+        rate = rate+dlograte_dlogte*(log(te)-log(te_max))
+      endif
+    ! beyond range of ne applicability
+    elseif(ne<ne_min) then
+      ! if te is still applicable
+      if ((te>=te_min) .and.(te<=te_max)) then
+        call compute_2D_logeirene_rate(te,ne_min,alpha,rate)
+      ! if te < te_min
+      elseif (te<te_min) then
+        call compute_2D_logeirene_rate(te_min,ne_min,alpha,rate)
+        call compute_dlogeirene_2D_dlogte_rate(te_min,ne_min,alpha,dlograte_dlogte)
+        rate = rate+dlograte_dlogte*(log(te)-log(te_min))
+      ! if te>te_max
+      elseif (te>te_max) then
+        call compute_2D_logeirene_rate(te_max,ne_min,alpha,rate)
+        call compute_dlogeirene_2D_dlogte_rate(te_max,ne_min,alpha,dlograte_dlogte)
+        rate = rate+dlograte_dlogte*(log(te)-log(te_max))
+      endif
+    ! if ne>ne_max
+    elseif (ne>ne_max) then
+      if ((te>=te_min) .and.(te<=te_max)) then
+        call compute_2D_logeirene_rate(te,ne_max,alpha,rate)
+      elseif (te<te_min) then
+        call compute_2D_logeirene_rate(te_min,ne_max,alpha,rate)
+        call compute_dlogeirene_2D_dlogte_rate(te_min,ne_max,alpha,dlograte_dlogte)
+        rate = rate+dlograte_dlogte*(log(te)-log(te_min))
+      elseif (te>te_max) then
+        call compute_2D_logeirene_rate(te_max,ne_max,alpha,rate)
+        call compute_dlogeirene_2D_dlogte_rate(te_max,ne_max,alpha,dlograte_dlogte)
+        rate = rate+dlograte_dlogte*(log(te)-log(te_max))
+      endif
+    endif
+    ! rate is in cm^3/s in EIRENE
+    rate = exp(rate)/1.e6
+  END SUBROUTINE compute_2D_eirene_rate
+
+  SUBROUTINE compute_2D_eirene_rate_du(U1,U4,te,ne,alpha,rate_du)
+    real*8, intent(IN) :: U1,U4,te,ne,alpha(:,:)
+    real*8             :: rate
+    real*8             :: te_min = 0.1
+    real*8             :: te_max = 2.e4
+    real*8             :: ne_min = 1.
+    real*8             :: ne_max = 1.e6
+    real*8             :: dlograte_dlogne, dlograte_dlogte
+    real*8, intent(OUT):: rate_du(:)
+    integer            :: i,j
+    call compute_2D_eirene_rate(te,ne,alpha,rate)
+    ! In EIRENE the density is scaled to 1.e14
+    rate_du = 0.
+    dlograte_dlogne = 0.
+    dlograte_dlogte = 0.
+    if ((ne>=ne_min) .and. (ne<=ne_max)) then
+      if ((te>=te_min) .and.(te<=te_max)) then
+        call compute_dlogeirene_2D_dlogne_rate(te,ne,alpha,dlograte_dlogne)
+        call compute_dlogeirene_2D_dlogte_rate(te,ne,alpha,dlograte_dlogte)
+      elseif (te<te_min) then
+        call compute_dlogeirene_2D_dlogne_rate(te_min,ne,alpha,dlograte_dlogne)
+        call compute_dlogeirene_2D_dlogte_rate(te_min,ne,alpha,dlograte_dlogte)
+      elseif (te>te_max) then
+        call compute_dlogeirene_2D_dlogne_rate(te_max,ne,alpha,dlograte_dlogne)
+        call compute_dlogeirene_2D_dlogte_rate(te_max,ne,alpha,dlograte_dlogte)
+      endif
+    ! beyond range of ne applicability (ne derivative is now zero)
+    elseif(ne<ne_min) then
+      ! if te is still applicable
+      if ((te>=te_min) .and.(te<=te_max)) then
+        call compute_dlogeirene_2D_dlogte_rate(te,ne_min,alpha,dlograte_dlogte)
+      ! if te < te_min
+      elseif (te<te_min) then
+        call compute_dlogeirene_2D_dlogte_rate(te_min,ne_min,alpha,dlograte_dlogte)
+      ! if te>te_max
+      elseif (te>te_max) then
+        call compute_dlogeirene_2D_dlogte_rate(te_max,ne_min,alpha,dlograte_dlogte)
+      endif
+    ! if ne>ne_max (ne derivative is now zero)
+    elseif (ne>ne_max) then
+      if ((te>=te_min) .and.(te<=te_max)) then
+        call compute_dlogeirene_2D_dlogte_rate(te,ne_max,alpha,dlograte_dlogte)
+      elseif (te<te_min) then
+        call compute_dlogeirene_2D_dlogte_rate(te_min,ne_max,alpha,dlograte_dlogte)
+      elseif (te>te_max) then
+        call compute_dlogeirene_2D_dlogte_rate(te_max,ne_max,alpha,dlograte_dlogte)
+      endif
+    endif
+    rate_du(1) = rate_du(1) + dlograte_dlogte*(-1./U1)
+    rate_du(1) = rate_du(1) + dlograte_dlogne*(1./U1)
+    rate_du(4) = rate_du(4) + dlograte_dlogte*(1./U4)
+    rate_du = rate_du*rate
+  END SUBROUTINE compute_2D_eirene_rate_du
+
+  SUBROUTINE compute_2D_logeirene_rate(te,ne,alpha,rate)
+    ! this routine calculate log (eirene_rate) for given te, ne in log log space
+    real*8, intent(IN) :: te,ne,alpha(:,:)          
+    real*8, intent(OUT):: rate
+    integer            :: i,j
+    ! In EIRENE the density is scaled to 1.e14
+    rate = 0.
+    do j=1,size(alpha,2)
+      do i = 1,size(alpha,1)    
+        rate = rate + alpha(i,j)*log(ne)**(j-1)*log(te)**(i-1)
+      end do
+    end do  
+  END SUBROUTINE compute_2D_logeirene_rate
+
+  SUBROUTINE compute_dlogeirene_2D_dlogte_rate(te,ne,alpha,rate)
+    ! this routines calculate derivative dlog (eirene_rate)/dlog(te) for given te, ne in log log space
+    real*8, intent(IN) :: te,ne,alpha(:,:)          
+    real*8, intent(OUT):: rate
+    integer            :: i,j
+    ! In EIRENE the density is scaled to 1.e14
+    rate = 0.
+    do j=1,size(alpha,2)
+      do i = 2,size(alpha,1)    
+        rate = rate + alpha(i,j)*(i-1)*log(ne)**(j-1)*log(te)**(i-2)
+      end do
+    end do  
+  END SUBROUTINE compute_dlogeirene_2D_dlogte_rate
+
+  SUBROUTINE compute_dlogeirene_2D_dlogne_rate(te,ne,alpha,rate)
+    ! this routine calculate derivative dlog (eirene_rate)/dlog(ne) for given te, ne in log log space
+    real*8, intent(IN) :: te,ne,alpha(:,:)          
+    real*8, intent(OUT):: rate
+    integer            :: i,j
+    ! In EIRENE the density is scaled to 1.e14
+    rate = 0.
+    do j=2,size(alpha,2)
+      do i = 1,size(alpha,1)    
+        rate = rate + alpha(i,j)*(j-1)*log(ne)**(j-2)*log(te)**(i-1)
+      end do
+    end do  
+  END SUBROUTINE compute_dlogeirene_2D_dlogne_rate
+
+
+  SUBROUTINE compute_sigmavcx(U,sigmavcx)
+    ! calculates AMJUEL CX rate
+    real*8, intent(IN) :: U(:)
+    real*8             :: sigmavcx,U1,U4,T0,E0,te
+    integer             :: i
+    real,parameter :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    
+    !if (U1<tol) U1=tol
+    !if (U4<tol) then
+    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
+      te = T0*2/3./phys%Mref*U4/U1
+    else!some low values  
+      te = 1.e-10
+    endif
+    sigmavcx = 0.
+
+    call compute_eirene_1D_rate(te, phys%alpha_cx, sigmavcx)
+  END SUBROUTINE compute_sigmavcx
+
+
+  SUBROUTINE compute_dsigmavcx_dU(U,res)
+    ! calculates derivative of AMJUEL CX rate for linearization
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),U1,U4,T0,te, te_min = 0.1
+    real*8             :: sigmavcx, sigmavcx_dte
+    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    integer            :: i
+    T0 = 50.
+    U1 = U(1)
+    U4 =  U(4)
+    res = 0.
+    if ((U1>tol) .and. (U4>tol)) then
+      te = T0*2/3./phys%Mref*U4/U1
+      call compute_eirene_1D_rate_dU(U1,U4,te,phys%alpha_cx,res)      
+    endif
+    
+
+  END SUBROUTINE compute_dsigmavcx_dU
+
+  SUBROUTINE compute_sigmaviz(U,sigmaviz)
+    real*8, intent(IN) :: U(:)
+    real*8             :: sigmaviz,U1,U4,T0,Ery,E0,te,ne,n0
+    real*8, dimension(9,9) :: alpha
+    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    integer            :: i, j
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    n0 = 1.e19
+    
+    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
+      te = T0*2/3./phys%Mref*U4/U1
+      ne = n0*U1/1.e14
+    else!some low values
+      ne = n0*1.e-20/1.e14  
+      te = 1.e-10
+    endif
+
+    sigmaviz = 0.
+
+    call compute_2D_eirene_rate(te,ne,phys%alpha_iz,sigmaviz)
+  END SUBROUTINE compute_sigmaviz
+
+  SUBROUTINE compute_dsigmaviz_dU(U,res)
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),sigmaviz,U1,U4,T0,Ery,E0,te,ne,n0
+    real*8, dimension(9,9) :: alpha
+    real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    integer            :: i, j
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    n0 = 1.e19
+    
+    res = 0.
+    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
+      ne = n0*U1/1.e14
+      te = T0*2/3./phys%Mref*U4/U1
+      call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_iz,res)
+    endif !let non-linear part as zero if negative solutions
+
+  END SUBROUTINE compute_dsigmaviz_dU
+
+  SUBROUTINE compute_sigmavrec(U,sigmavrec)
+    real*8, intent(IN) :: U(:)
+    real*8             :: sigmavrec,U1,U4,T0,Ery,E0,te,ne,n0
+    real*8, dimension(9,9) :: alpha
+    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    integer            :: i, j
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    n0 = 1.e19
+    
+    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
+      te = T0*2/3./phys%Mref*U4/U1
+      ne = n0*U1/1.e14
+    else!some low values
+      ne = n0*1.e-20/1.e14  
+      te = 1.e-10
+    endif
+    call compute_2D_eirene_rate(te,ne,phys%alpha_rec,sigmavrec)
+  END SUBROUTINE compute_sigmavrec
+
+  SUBROUTINE compute_dsigmavrec_dU(U,res)
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),sigmavrec,U1,U4,T0,Ery,E0,te,ne,n0
+    real*8, dimension(9,9) :: alpha
+    real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    integer            :: i, j
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    n0 = 1.e19
+    
+    res = 0.
+    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
+      ne = n0*U1/1.e14
+      te = T0*2/3./phys%Mref*U4/U1
+      call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_rec,res)
+    endif !let non-linear part as zero if negative solutions
+  END SUBROUTINE compute_dsigmavrec_dU
+#endif
 
   SUBROUTINE compute_Tloss(U,Tloss)
     real*8, intent(IN) :: U(:)
