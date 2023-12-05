@@ -52,7 +52,11 @@ CONTAINS
     CASE (50:59)
       ! Magnetic field loaded from file in a cartesian grid
       ! Interpolation is needed
-      CALL load_magnetic_field_grid
+      if (input%field_from_grid) then
+        CALL load_magnetic_field_grid
+      else
+        CALL load_magnetic_field_nodes
+      endif
 
     CASE (60:69)
 
@@ -383,11 +387,12 @@ CONTAINS
     USE HDF5_io_module
     USE MPI_OMP
     integer        :: i, ierr, k
-    character(LEN=20) :: fname = 'Evolving_equilibrium'
-    character(10)  :: npr, nid, nit
+    character(LEN=500) :: fname = 'Evolving_equilibrium'
+    character(50)  :: npr, nid, nit
     character(len=500) :: fname_complete
     integer(HID_T) :: file_id
     real*8, pointer, dimension(:) :: Br, Bz, Bt, flux
+    real*8            :: psiSep
     INTEGER  :: nnodes
 #ifdef TOR3D
     nnodes = Mesh%Nnodes*Mesh%Nnodes_toroidal
@@ -401,17 +406,30 @@ CONTAINS
     ALLOCATE (Bz(nnodes))
     ALLOCATE (Bt(nnodes))
 
-    ! File name
-    write (nit, "(i10)") time%it
-    nit = trim(adjustl(nit))
-    k = INDEX(nit, " ") - 1
+    if (switch%ME .eqv. .FALSE.)  then !if not a moving equilibrium simulation
+      fname = input%field_path
+    else
+      fname = input%field_path
+      write(nit, "(i10)") int(time%it + 1)
+      nit = trim(adjustl(nit))
+      k = INDEX(nit, " ") -1
+       ! I don't think this is actually needed for parallel read of the magnetic files
+       !IF (MPIvar%glob_size.GT.1) THEN
+       !   write(nid,*) MPIvar%glob_id+1
+       !   write(npr,*) MPIvar%glob_size
+       !   fname = trim(adjustl(fname))//'_'//trim(adjustl(nid))//'_'//trim(adjustl(npr))//'_'//REPEAT("0", 4 - k)//trim(ADJUSTL(nit))//'.h5'
+       !ELSE
+      fname = trim(adjustl(fname))//'_'//REPEAT("0", 4 - k)//trim(ADJUSTL(nit))
+       !END IF
+    endif
+
 
     IF (MPIvar%glob_size .GT. 1) THEN
       write (nid, *) MPIvar%glob_id + 1
       write (npr, *) MPIvar%glob_size
-      fname_complete = trim(adjustl(fname))//'_'//trim(adjustl(nid))//'_'//trim(adjustl(npr))//'_'//REPEAT("0", 4 - k)//trim(ADJUSTL(nit))//'.h5'
+      fname_complete = trim(adjustl(fname))//'_'//trim(adjustl(nid))//'_'//trim(adjustl(npr))//'.h5'
     ELSE
-      fname_complete = trim(adjustl(fname))//'_'//REPEAT("0", 4 - k)//trim(ADJUSTL(nit))//'.h5'
+      fname_complete = trim(adjustl(fname))//'.h5'
     END IF
     IF (MPIvar%glob_id .eq. 0) THEN
       write (6, *) 'Magnetic field loaded from file: ', trim(adjustl(fname_complete))
@@ -421,6 +439,7 @@ CONTAINS
     CALL HDF5_array1D_reading(file_id, Br, 'Br')
     CALL HDF5_array1D_reading(file_id, Bz, 'Bz')
     CALL HDF5_array1D_reading(file_id, Bt, 'Bt')
+    CALL HDF5_real_reading(file_id, psiSep, 'psiSep')
     CALL HDF5_array1D_reading(file_id, flux, 'flux')
     CALL HDF5_close(file_id)
 
@@ -428,6 +447,18 @@ CONTAINS
     phys%B(:, 2) = Bz
     phys%B(:, 3) = Bt
     phys%magnetic_flux = flux
+
+    ! Min and Max flux for inizialization
+    phys%Flux2Dmin = minval(phys%magnetic_flux)      
+    phys%Flux2Dmax = maxval(phys%magnetic_flux) 
+
+#ifdef PARALL
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmax, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmin, 1, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, ierr)
+#endif 
+  
+    ! Magnetic flux normalized to separatrix: PSI
+    phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin) 
     DEALLOCATE (Br, Bz, Bt, flux)
   END SUBROUTINE load_magnetic_field_nodes
 

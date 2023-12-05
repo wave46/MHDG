@@ -360,10 +360,12 @@ CONTAINS
       A(4, 4) = 5./3.*U(2)/U(1)
 
 #ifdef NEUTRAL
+#ifdef NEUTRALCONVECTION
       A(5, 1) = -U(5)*U(2)/U(1)**2
       A(5, 2) = U(5)/U(1)
       A(5, 5) = U(2)/U(1)
       !A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
+#endif
 #endif 
     end if
   END SUBROUTINE jacobianMatrices
@@ -421,10 +423,12 @@ CONTAINS
       An(4, 4) = 5./3.*U(2)/U(1)
       
 #ifdef NEUTRAL
+#ifdef NEUTRALCONVECTION
       An(5, 1) = -U(5)*U(2)/U(1)**2
       An(5, 2) = U(5)/U(1)
       An(5, 5) = U(2)/U(1)
       !An(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*An(5,:)
+#endif
 #endif      
     endif
     An = bn*An
@@ -468,10 +472,12 @@ CONTAINS
     A(2, 4) = auxe*U(2)/U(1)
     
 #ifdef NEUTRAL
+#ifdef NEUTRALCONVECTION
     A(5, 1) = -U(5)*U(2)/U(1)**2
     A(5, 2) = U(5)/U(1)
     A(5, 5) = U(2)/U(1) 
     !A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
+#endif
 #endif
   END SUBROUTINE jacobianMatricesBohm
 

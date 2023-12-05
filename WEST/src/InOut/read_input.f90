@@ -39,7 +39,7 @@ SUBROUTINE READ_input()
   ! Info for input and output
   character(len = 1000) :: field_path, jtor_path
   integer               :: field_dimensions(1:2), jtor_dimensions(1:2)
-  logical               :: compute_from_flux, divide_by_2pi
+  logical               :: field_from_grid, compute_from_flux, divide_by_2pi
 
   ! RMP and Ripple
   logical     :: RMP, Ripple
@@ -57,7 +57,7 @@ SUBROUTINE READ_input()
   NAMELIST /SWITCH_LST/ steady, time_init, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
     & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
     & logrho,bxgradb
-  NAMELIST /INPUT_LST/ field_path, field_dimensions,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions
+  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
@@ -119,6 +119,7 @@ SUBROUTINE READ_input()
   switch%bxgradb          = bxgradb
   input%field_path        = trim(adjustl(field_path))
   input%field_dimensions  = field_dimensions
+  input%field_from_grid   = field_from_grid
   input%compute_from_flux = compute_from_flux
   input%divide_by_2pi     = divide_by_2pi
   input%jtor_path         = trim(adjustl(jtor_path))
