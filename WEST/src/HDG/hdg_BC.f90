@@ -530,6 +530,17 @@ CONTAINS
   real*8                    :: uex(refElPol%Ngauss1d,phys%neq)
   real*8                    :: diff_iso_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
   real*8                    :: diff_ani_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
+#ifdef SAVEFLUX
+  real*8                    :: totalflux_in, totalflux_out, totalflux_net,totalflux_nn
+  real*8                    :: faceflux_in, faceflux_out, faceflux_net,faceflux_nn
+  integer*4                 :: ierr
+
+  totalflux_in = 0.
+  totalflux_out = 0.
+  totalflux_net = 0.
+  totalflux_nn = 0.
+
+#endif
 
   save_tau = switch%saveTau
   Ndim = 2
@@ -672,19 +683,33 @@ CONTAINS
     CASE(bc_periodic)
       CYCLE ! done in assembly
       !         CALL set_periodic_bc()
+#ifndef SAVEFLUX
     CASE (bc_Bohm)
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
     CASE (bc_BohmPump)
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
     CASE (bc_BohmPuff) 
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
+#else
+    CASE (bc_Bohm)
+      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_in,faceflux_out,faceflux_net,faceflux_nn)
+    CASE (bc_BohmPump)
+      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_in,faceflux_out,faceflux_net,faceflux_nn)
+    CASE (bc_BohmPuff) 
+      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_in,faceflux_out,faceflux_net,faceflux_nn)
+#endif
     CASE (bc_iter_core)
       CALL set_itercore_bc()       
     CASE DEFAULT
       WRITE (6,*) "Error: wrong boundary type"
       STOP
     END SELECT
-      
+#ifdef SAVEFLUX
+    totalflux_in = totalflux_in + faceflux_in
+    totalflux_out = totalflux_out + faceflux_out
+    totalflux_net = totalflux_net + faceflux_net
+    totalflux_nn = totalflux_nn + faceflux_nn
+#endif
     if (save_tau) then
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
        phys%v_nn_Bou(indtausave,:) = v_nn_Bou_el
@@ -695,6 +720,20 @@ CONTAINS
   
   END DO
 
+#ifdef SAVEFLUX
+#ifdef PARALL
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_in, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_out, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_net, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_nn, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+  IF (MPIvar%glob_id.eq.0) THEN
+     WRITE(6,*) 'puff = ',totalflux_in
+     WRITE(6,*) 'plasma parallel = ',totalflux_out
+     WRITE(6,*) 'plasma gradient = ',totalflux_net
+     WRITE(6,*) 'neutral flux = ',totalflux_nn
+  endif
+#endif
   if (save_tau) then
     write (6,*) "Saving tau in the boundary faces"
     call saveMatrix(tau_save,'tau_save_bound')
@@ -988,7 +1027,11 @@ CONTAINS
   !****************************
   ! Bohm
   !****************************
+#ifndef SAVEFLUX
   SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
+#else
+  SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_in,faceflux_out,faceflux_net,faceflux_nn)
+#endif
     integer                   :: g,i,j,k,idm
     real*8                    :: dline,xyDerNorm_g
     real*8                    :: setval
@@ -1001,7 +1044,15 @@ CONTAINS
     real*8,intent(out)        :: v_nn_Bou_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
     real*8                    :: Vnng(Ndim) 
     real                      :: tau_stab(Neq,Neq)
+#ifdef SAVEFLUX
+    real*8,intent(out)        :: faceflux_in,faceflux_out,faceflux_net,faceflux_nn
+    real*8                    :: flgflux_in,flgflux_out,flgflux_net,flgflux_nn
 
+    faceflux_in = 0.
+    faceflux_out = 0.
+    faceflux_net = 0.
+    faceflux_nn = 0.
+#endif
     ! Loop in 1D Gauss points
     DO g = 1,Ng1d
 
@@ -1107,8 +1158,18 @@ CONTAINS
 
       ! Assembly Bohm contribution
       if (numer%bohmtypebc.eq.0) then
+#ifndef SAVEFLUX
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
           &ufg(g,:),upg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,Vnng)
+#else
+        CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
+          &ufg(g,:),upg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_in,flgflux_out,flgflux_net,flgflux_nn)
+        !summing conribution from each part of the face
+        faceflux_in = faceflux_in+flgflux_in
+        faceflux_out = faceflux_out+flgflux_out
+        faceflux_net = faceflux_net+flgflux_net
+        faceflux_nn = faceflux_nn+flgflux_nn
+#endif
       else
         CALL assembly_bohm_bc_new(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
           &ufg(g,:),upg(g,:),b(g,1:2),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang)
@@ -1615,7 +1676,11 @@ CONTAINS
   !*********************************
   ! Assembly Bohm
   !*********************************
+#ifndef SAVEFLUX
   SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,ntang,Vnng)
+#else
+  SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_in,flgflux_out,flgflux_net,flgflux_nn)
+#endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc
     real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),bg(:),psig,ng(:),tau(:,:),setval,delta
     real*8           :: diffiso(:,:),diffani(:,:)
@@ -1636,6 +1701,10 @@ CONTAINS
     real*8           :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
     real*8           :: AbohmNP(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq),dDpn_dU(Neq)
 #endif
+#endif
+#ifdef SAVEFLUX
+    real*8           :: dline
+    real*8,intent(out)::  flgflux_in,flgflux_out,flgflux_net,flgflux_nn
 #endif
 
     Neqstab = Neq
@@ -2003,7 +2072,39 @@ CONTAINS
       WRITE (6,*) "Error: wrong boundary type"
       STOP
     END SELECT
-    
+
+#ifdef SAVEFLUX
+    !***************** flux control part ****************************
+
+    !flux which goes to plasma
+    !contribution from puff
+    flgflux_in = puff_coeff
+    !contribution from parallel flux onto the wall
+    !flgflux_in = flgflux_in + recycling_coeff*ufg(2)*bn
+    !contribution from perpendicular flux onto the wall
+    !flgflux_in = flgflux_in + recycling_coeff*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(1,2)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2)))!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2)) take this part depending on actual boundary condition
+    !contribution from the neutrals???
+    !dimensionalizing and multiplying by the surface under this gauss point
+    flgflux_in = flgflux_in*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+
+    !fluxes going out of plasma
+    !contribution from parallel flux onto the wall
+    !flgflux_out = recycling_coeff*ufg(2)*bn
+    flgflux_out = ufg(2)*bn
+    !contribution from perpendicular flux onto the wall
+    !flgflux_out = flgflux_out + (1.-recycling_coeff)*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(1,2)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2)))
+    !contribution from the neutrals???
+    !dimensionalizing and multiplying by the surface under this gauss point
+    flgflux_out = flgflux_out*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+
+    !net flux on Gauss point
+    flgflux_net = (diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(1,2)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)+Qpr(1,2)*bn*bg(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2))
+
+    flgflux_nn = (diffiso(5,5)*(Qpr(5,1)*ng(1) + Qpr(5,2)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    !puff_coeff*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!flgflux_in-flgflux_out
+
+    !***************** end of flux control part *********************
+#endif    
     ! Convective part
     k = Neq
     ! Plasma flux
@@ -2068,7 +2169,7 @@ CONTAINS
       indi = ind_asf+k
       indj = ind_ash+idm+(j-1)*Ndim
       !if (ntang) then
-        elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*phys%diff_n*recycling_coeff
+        elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*(ng(idm)*diffiso(j,j)-bn*bg(idm)*diffani(j,j))*recycling_coeff
       !else
       !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*phys%diff_n*recycling_coeff
       !endif

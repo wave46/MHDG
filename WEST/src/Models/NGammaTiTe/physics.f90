@@ -605,6 +605,7 @@ CONTAINS
     U3 = u(:,3)
     U4 = u(:,4)
     U5 = u(:,5)
+#ifndef CONSTANTNEUTRALDIFF
     DO i=1,size(u,1)
        CALL compute_sigmaviz(u(i,:),sigmaviz(i))
        CALL compute_sigmavcx(u(i,:),sigmavcx(i))
@@ -629,6 +630,9 @@ CONTAINS
 	      !!if (Dnn(i) .lt.  phys%diff_n) d_iso(5,5,i) = phys%diff_n
        !end if
     END DO
+#else
+    d_iso(5,5,:)=phys%diff_nn
+#endif
     !Dnn = sum(Dnn)/size(u,1)
 #endif
 #else
