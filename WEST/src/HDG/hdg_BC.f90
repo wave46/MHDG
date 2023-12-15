@@ -705,10 +705,16 @@ CONTAINS
       STOP
     END SELECT
 #ifdef SAVEFLUX
+#ifdef PARALL
+    IF (Mesh%ghostElems(iel) .eq. 0) THEN
+#endif
     totalflux_in = totalflux_in + faceflux_in
     totalflux_out = totalflux_out + faceflux_out
     totalflux_net = totalflux_net + faceflux_net
     totalflux_nn = totalflux_nn + faceflux_nn
+#ifdef PARALL
+  ENDIF
+#endif
 #endif
     if (save_tau) then
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
@@ -732,6 +738,7 @@ CONTAINS
      WRITE(6,*) 'plasma parallel = ',totalflux_out
      WRITE(6,*) 'plasma gradient = ',totalflux_net
      WRITE(6,*) 'neutral flux = ',totalflux_nn
+     WRITE(6,*) 'net flux = ',totalflux_out-totalflux_net-totalflux_nn+totalflux_in
   endif
 #endif
   if (save_tau) then
@@ -2095,12 +2102,12 @@ CONTAINS
     !flgflux_out = flgflux_out + (1.-recycling_coeff)*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(1,2)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2)))
     !contribution from the neutrals???
     !dimensionalizing and multiplying by the surface under this gauss point
-    flgflux_out = flgflux_out*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    flgflux_out = recycling_coeff*flgflux_out*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
     !net flux on Gauss point
-    flgflux_net = (diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(1,2)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)+Qpr(1,2)*bn*bg(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2))
+    flgflux_net = recycling_coeff*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(2,1)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)+Qpr(2,1)*bn*bg(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2))
 
-    flgflux_nn = (diffiso(5,5)*(Qpr(5,1)*ng(1) + Qpr(5,2)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    flgflux_nn = (diffiso(5,5)*(Qpr(1,5)*ng(1) + Qpr(2,5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
     !puff_coeff*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!flgflux_in-flgflux_out
 
     !***************** end of flux control part *********************

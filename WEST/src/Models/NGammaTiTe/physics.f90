@@ -1190,7 +1190,7 @@ CONTAINS
       &0.469*(E0**(-1./3))*(1./(3.*U4)))
    endif 
   END SUBROUTINE compute_dsigmavrec_dU
-
+#ifndef LEGACYCX
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavcx,U1,U4,T0,E0
@@ -1250,6 +1250,44 @@ CONTAINS
        res = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)*U1/U4*res
     end if
   END SUBROUTINE compute_dsigmavcx_dU
+#else
+  SUBROUTINE compute_sigmavcx(U,sigmavcx)
+    real*8, intent(IN) :: U(:)
+    real*8             :: sigmavcx,U1,U4,T0,E0
+    real*8              :: p1,p2,p3,p4,p5
+    real,parameter :: tol = 1e-10
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    if (U1<tol) U1=tol
+    if (U4<tol) U4=tol
+    !Analytical expression from Hugo Bufferand
+    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+    !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
+
+    E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+		sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)	
+  END SUBROUTINE compute_sigmavcx
+
+  SUBROUTINE compute_dsigmavcx_dU(U,res)
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),U1,U4,T0,E0
+    real*8             :: p1,p2,p3,p4,p5
+    real, parameter    :: tol = 1e-10
+    T0 = 50.
+    U1 = U(1)
+    U4 = U(4)
+    if (U1<tol) U1=tol
+    if (U4<tol) U4=tol
+    !Analytical expression from Hugo Bufferand
+
+    E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+    res = 0.
+    res(1) = -1./U4
+    res(4) = U1/(U4**2)
+    res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
+  END SUBROUTINE compute_dsigmavcx_dU
+#endif
 #else
 
   ! These routines use AMUJUEL splines
@@ -1341,7 +1379,7 @@ CONTAINS
     real*8             :: te_min = 0.1
     real*8             :: te_max = 2.e4
     real*8             :: ne_min = 1.
-    real*8             :: ne_max = 1.e6
+    real*8             :: ne_max = 1.e8
     real*8             :: dlograte_dlogne, dlograte_dlogte
     integer            :: i,j
     ! In EIRENE the density is scaled to 1.e14
@@ -1399,7 +1437,7 @@ CONTAINS
     real*8             :: te_min = 0.1
     real*8             :: te_max = 2.e4
     real*8             :: ne_min = 1.
-    real*8             :: ne_max = 1.e6
+    real*8             :: ne_max = 1.e8
     real*8             :: dlograte_dlogne, dlograte_dlogte
     real*8, intent(OUT):: rate_du(:)
     integer            :: i,j
@@ -2135,10 +2173,10 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(4) = tau_aux(4) + phys%diff_ee + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
+        tau_aux(5) = diff_iso(5,5,1)!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + phys%diff_nn 
+        tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)!phys%diff_nn 
 #endif
       else
 #endif
@@ -2149,7 +2187,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(4) = tau_aux(4) + 6*diff_iso(4,4,1) + abs(bn)*phys%diff_pare*(min(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + diff_iso(5,5,1) !phys%diff_nn !numer%tau(5) 
+        tau_aux(5) = tau_aux(5) +  diff_iso(5,5,1)!phys%diff_nn!phys%diff_nn !numer%tau(5) 
 #endif
 #else
         tau_aux(5) = tau_aux(5) + numer%tau(5)
