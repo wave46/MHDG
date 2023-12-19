@@ -531,14 +531,14 @@ CONTAINS
   real*8                    :: diff_iso_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
   real*8                    :: diff_ani_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
 #ifdef SAVEFLUX
-  real*8                    :: totalflux_in, totalflux_out, totalflux_net,totalflux_nn
-  real*8                    :: faceflux_in, faceflux_out, faceflux_net,faceflux_nn
+  real*8                    :: totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_neutral
+  real*8                    :: faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_neutral
   integer*4                 :: ierr
 
-  totalflux_in = 0.
-  totalflux_out = 0.
-  totalflux_net = 0.
-  totalflux_nn = 0.
+  totalflux_puff = 0.
+  totalflux_parallel = 0.
+  totalflux_perpendicular = 0.
+  totalflux_neutral = 0.
 
 #endif
 
@@ -692,11 +692,11 @@ CONTAINS
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
 #else
     CASE (bc_Bohm)
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_in,faceflux_out,faceflux_net,faceflux_nn)
+      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral)
     CASE (bc_BohmPump)
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_in,faceflux_out,faceflux_net,faceflux_nn)
+      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral)
     CASE (bc_BohmPuff) 
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_in,faceflux_out,faceflux_net,faceflux_nn)
+      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral)
 #endif
     CASE (bc_iter_core)
       CALL set_itercore_bc()       
@@ -708,10 +708,10 @@ CONTAINS
 #ifdef PARALL
     IF (Mesh%ghostElems(iel) .eq. 0) THEN
 #endif
-    totalflux_in = totalflux_in + faceflux_in
-    totalflux_out = totalflux_out + faceflux_out
-    totalflux_net = totalflux_net + faceflux_net
-    totalflux_nn = totalflux_nn + faceflux_nn
+    totalflux_puff = totalflux_puff + faceflux_puff
+    totalflux_parallel = totalflux_parallel + faceflux_parallel
+    totalflux_perpendicular = totalflux_perpendicular + faceflux_perpendicular
+    totalflux_neutral = totalflux_neutral + faceflux_neutral
 #ifdef PARALL
   ENDIF
 #endif
@@ -728,17 +728,17 @@ CONTAINS
 
 #ifdef SAVEFLUX
 #ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_in, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_out, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_net, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_nn, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_puff, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_parallel, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_perpendicular, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_neutral, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
   IF (MPIvar%glob_id.eq.0) THEN
-     WRITE(6,*) 'puff = ',totalflux_in
-     WRITE(6,*) 'plasma parallel = ',totalflux_out
-     WRITE(6,*) 'plasma gradient = ',totalflux_net
-     WRITE(6,*) 'neutral flux = ',totalflux_nn
-     WRITE(6,*) 'net flux = ',totalflux_out-totalflux_net-totalflux_nn+totalflux_in
+     WRITE(6,*) 'puff = ',totalflux_puff
+     WRITE(6,*) 'plasma parallel = ',totalflux_parallel
+     WRITE(6,*) 'plasma gradient = ',totalflux_perpendicular
+     WRITE(6,*) 'neutral flux = ',totalflux_neutral
+     WRITE(6,*) 'net flux = ',totalflux_parallel-totalflux_perpendicular-totalflux_neutral+totalflux_puff
   endif
 #endif
   if (save_tau) then
@@ -1037,7 +1037,7 @@ CONTAINS
 #ifndef SAVEFLUX
   SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
 #else
-  SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_in,faceflux_out,faceflux_net,faceflux_nn)
+  SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral)
 #endif
     integer                   :: g,i,j,k,idm
     real*8                    :: dline,xyDerNorm_g
@@ -1052,13 +1052,13 @@ CONTAINS
     real*8                    :: Vnng(Ndim) 
     real                      :: tau_stab(Neq,Neq)
 #ifdef SAVEFLUX
-    real*8,intent(out)        :: faceflux_in,faceflux_out,faceflux_net,faceflux_nn
-    real*8                    :: flgflux_in,flgflux_out,flgflux_net,flgflux_nn
+    real*8,intent(out)        :: faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral
+    real*8                    :: flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral
 
-    faceflux_in = 0.
-    faceflux_out = 0.
-    faceflux_net = 0.
-    faceflux_nn = 0.
+    faceflux_puff = 0.
+    faceflux_parallel = 0.
+    faceflux_perpendicular = 0.
+    faceflux_neutral = 0.
 #endif
     ! Loop in 1D Gauss points
     DO g = 1,Ng1d
@@ -1170,12 +1170,12 @@ CONTAINS
           &ufg(g,:),upg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,Vnng)
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_in,flgflux_out,flgflux_net,flgflux_nn)
+          &ufg(g,:),upg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)
         !summing conribution from each part of the face
-        faceflux_in = faceflux_in+flgflux_in
-        faceflux_out = faceflux_out+flgflux_out
-        faceflux_net = faceflux_net+flgflux_net
-        faceflux_nn = faceflux_nn+flgflux_nn
+        faceflux_puff = faceflux_puff+flgflux_puff
+        faceflux_parallel = faceflux_parallel+flgflux_parallel
+        faceflux_perpendicular = faceflux_perpendicular+flgflux_perpendicular
+        faceflux_neutral = faceflux_neutral+flgflux_neutral
 #endif
       else
         CALL assembly_bohm_bc_new(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
@@ -1686,7 +1686,7 @@ CONTAINS
 #ifndef SAVEFLUX
   SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,ntang,Vnng)
 #else
-  SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_in,flgflux_out,flgflux_net,flgflux_nn)
+  SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)
 #endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc
     real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),bg(:),psig,ng(:),tau(:,:),setval,delta
@@ -1711,7 +1711,7 @@ CONTAINS
 #endif
 #ifdef SAVEFLUX
     real*8           :: dline
-    real*8,intent(out)::  flgflux_in,flgflux_out,flgflux_net,flgflux_nn
+    real*8,intent(out)::  flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral
 #endif
 
     Neqstab = Neq
@@ -2083,35 +2083,27 @@ CONTAINS
 #ifdef SAVEFLUX
     !***************** flux control part ****************************
 
-    !flux which goes to plasma
+
     !contribution from puff
-    flgflux_in = puff_coeff
-    !contribution from parallel flux onto the wall
-    !flgflux_in = flgflux_in + recycling_coeff*ufg(2)*bn
-    !contribution from perpendicular flux onto the wall
-    !flgflux_in = flgflux_in + recycling_coeff*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(1,2)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2)))!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2)) take this part depending on actual boundary condition
-    !contribution from the neutrals???
+    flgflux_puff = puff_coeff
     !dimensionalizing and multiplying by the surface under this gauss point
-    flgflux_in = flgflux_in*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    flgflux_puff = flgflux_puff*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
-    !fluxes going out of plasma
-    !contribution from parallel flux onto the wall
-    !flgflux_out = recycling_coeff*ufg(2)*bn
-    flgflux_out = ufg(2)*bn
-    !contribution from perpendicular flux onto the wall
-    !flgflux_out = flgflux_out + (1.-recycling_coeff)*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(1,2)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2)))
-    !contribution from the neutrals???
-    !dimensionalizing and multiplying by the surface under this gauss point
-    flgflux_out = recycling_coeff*flgflux_out*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    !contribution from parallel flux onto the wall 
+    flgflux_parallel = ufg(2)*bn
+    !dimensionalizing and multiplying by the surface under this gauss point (multiplied by the local recycling)
+    flgflux_parallel = recycling_coeff*flgflux_parallel*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
-    !net flux on Gauss point
-    flgflux_net = recycling_coeff*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(2,1)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)+Qpr(2,1)*bn*bg(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2))
+    !Contribution from perpendicular plasma flux
+    flgflux_perpendicular = recycling_coeff*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(2,1)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)+Qpr(2,1)*bn*bg(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2))
 
-    flgflux_nn = (diffiso(5,5)*(Qpr(1,5)*ng(1) + Qpr(2,5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-    !puff_coeff*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!flgflux_in-flgflux_out
+    !Neutral flux
+    flgflux_neutral = (diffiso(5,5)*(Qpr(1,5)*ng(1) + Qpr(2,5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+
 
     !***************** end of flux control part *********************
-#endif    
+#endif
+#ifndef RHSBC    
     ! Convective part
     k = Neq
     ! Plasma flux
@@ -2181,7 +2173,34 @@ CONTAINS
       !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*phys%diff_n*recycling_coeff
       !endif
     END DO
+#else
+  ! diffusive diagonal part
+       k  = 5
+       indi = ind_asf+k
+       DO idm = 1,Ndim
+#ifndef NEUTRALP
+          indj = ind_ash+idm+(k-1)*Ndim
+          elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
+#else
+          DO j=1,Neq
+              indj = ind_asf + j
+              indk = ind_ash + idm + (j-1)*Ndim
+              kmult = (Dpn*Taupn(idm,j) + dDpn_dU(j)*gmpn(idm))*NiNi*(ng(idm) - bn*bg(idm))
+              elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - kmult
+              kmult = Dpn*Vpn(j)*NiNi*(ng(idm) - bn*bg(idm))
+              elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
+          END DO
+          kmultf = dot_product(dDpn_dU,ufg)*gmpn(idm)*Ni*(ng(idm) - bn*bg(idm))
+          elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #endif
+      END DO
+      ! Plasma outflux: now in the RHS
+      elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - recycling_coeff*(ufg(2)*bn - diffiso(1,1)*(Qpr(1,1)*(ng(1) - bn*bg(1)) + Qpr(2,1)*(ng(2)- bn*bg(2))))*Ni
+      ! Puff
+      elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - puff_coeff*Ni
+#endif
+#endif
+
 
   END SUBROUTINE assembly_bohm_bc
 
