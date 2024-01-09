@@ -1632,6 +1632,10 @@ CONTAINS
     real*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
     real*8           :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
     real*8           :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
+#ifdef DNNLINEARIZED
+    real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+    real*8                    :: gradDnn(Ndim)
+#endif
 #ifdef NEUTRALP
     real*8           :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
     real*8           :: AbohmNP(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq),dDpn_dU(Neq)
@@ -1747,7 +1751,10 @@ CONTAINS
       gme = dot_product(matmul(Qpr,Vvece),bg)             ! scalar
       Taui = matmul(Qpr,dV_dUi)                      ! 2x3
       Taue = matmul(Qpr,dV_dUe)      ! 2x3
-
+#ifdef DNNLINEARIZED
+      call compute_Dnn_dU(ufg,Dnn_dU)
+      Dnn_dU_u = dot_product(Dnn_dU,ufg)
+#endif
       ! Parallel diffusion for temperature
       DO i = 1,2
         indi = ind_asf + i
@@ -2039,6 +2046,15 @@ CONTAINS
        !else
        !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
        !endif
+#ifdef DNNLINEARIZED
+       DO j=1,Neq
+        indj = ind_asf + j
+        kmult = Dnn_dU(j)*Qpr(idm,k)*ng(idm)*NiNi
+        elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - kmult
+       enddo
+       kmultf = Dnn_dU_U*(Qpr(idm,k)*ng(idm))*Ni 
+       elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
+#endif
 #else
        indi = ind_asf + k
        DO j=1,Neq

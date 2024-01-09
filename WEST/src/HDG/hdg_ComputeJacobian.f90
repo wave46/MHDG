@@ -2042,6 +2042,10 @@ CONTAINS
     real*8                    :: sigmaviz,sigmavrec,sigmavcx,Tloss,Tlossrec,fEiiz,fEirec,fEicx
     real*8                    :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq),dTloss_dU(Neq),dTlossrec_dU(Neq)
     real*8                    :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
+#ifdef DNNLINEARIZED
+    real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+    real*8                    :: gradDnn(Ndim)
+#endif
 #ifdef NEUTRALP
     real*8                    :: Dnn,Dpn,Alphanp,Betanp,GammaLim,Gammaredpn,Tmin
     real*8                    :: Anp(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),dDpn_dU(Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq)
@@ -2217,6 +2221,11 @@ CONTAINS
     call compute_dTloss_dU(ue,dTloss_dU)
     call compute_Tlossrec(ue,Tlossrec)
     call compute_dTlossrec_dU(ue,dTlossrec_dU)
+#ifdef DNNLINEARIZED
+    call compute_Dnn_dU(ue,Dnn_dU)
+
+    Dnn_dU_u = dot_product(Dnn_dU,Ue)
+#endif
 #endif
 
     !Assembly the matrix for neutral sources
@@ -2340,6 +2349,20 @@ CONTAINS
           IF (switch%ohmicsrc) THEN
             rhs(:,i) = rhs(:,i) + Sohmic*(Jtor**2)*Ni
           ENDIF
+#ifdef DNNLINEARIZED
+          ELSEIF (i == 5) THEN
+            do j = 1,5 
+              z = i+(j-1)*Neq
+              do k = 1,Ndim
+                !z = i+(k-1)*Neq+(j-1)*Neq*Ndim
+                Auu(:,:,z) =Auu(:,:,z) + (NxyzNi(:,:,k)*Dnn_dU(j)*Qpr(k,i))
+              enddo
+            enddo
+              
+            DO k = 1, Ndim
+              rhs(:,i) = rhs(:,i)+Dnn_dU_U*Qpr(k,i)*Nxyzg(:,k)
+            enddo
+#endif
 #ifdef NEUTRALP		  
 		      ELSEIF (i == 5) THEN
 		         DO j = 1,5
@@ -2582,6 +2605,10 @@ CONTAINS
       real*8                    :: Vvece(Neq),dV_dUe(Neq,Neq),Alphae,dAlpha_dUe(Neq),gme,taue(Ndim,Neq)
       real*8                    :: W3(Neq),dW3_dU(Neq,Neq),QdW3(Ndim,Neq)
       real*8                    :: W4(Neq),dW4_dU(Neq,Neq),QdW4(Ndim,Neq)
+#ifdef DNNLINEARIZED
+      real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+      real*8                    :: gradDnn(Ndim)
+#endif
 #ifdef NEUTRALP
       real*8                    :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
    	  real*8                    :: Anp(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq),dDpn_dU(Neq)
@@ -2640,6 +2667,11 @@ CONTAINS
       gme = dot_product(matmul(Qpr,Vvece),b)
       Taui = matmul(Qpr,dV_dUi)      ! 2x3
       Taue = matmul(Qpr,dV_dUe)      ! 2x3
+#ifdef DNNLINEARIZED
+      call compute_Dnn_dU(uf,Dnn_dU)
+
+      Dnn_dU_u = dot_product(Dnn_dU,uf)
+#endif
 #ifdef NEUTRALP
     ! Compute Vpn(U^(k-1))
     CALL computeVpn(uf,Vpn)
@@ -2867,6 +2899,21 @@ CONTAINS
           kmultf = coefe*Alphae*(dot_product(matmul(transpose(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
+#ifdef DNNLINEARIZED
+      ELSEIF (i == 5) THEN
+        DO j=1,Neq
+          ind_jf = ind_asf+j
+          do k=1,Ndim
+
+            kmult = Dnn_dU(j)*Qpr(k,i)*n(k)*NNif
+            elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel)  = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
+            elMat%All(ind_ff(ind_if),ind_ff(ind_jf),iel)  = elMat%All(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
+          enddo
+        END DO
+        kmultf = Dnn_dU_U*(Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif
+        elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+        elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
+#endif
 #ifdef NEUTRALP
        ELSEIF (i == 5) THEN
           DO j = 1,Neq
@@ -2953,6 +3000,10 @@ CONTAINS
       real*8                    :: Vvece(Neq),dV_dUe(Neq,Neq),Alphae,dAlpha_dUe(Neq),gme,taue(Ndim,Neq)
       real*8                    :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
       real*8                    :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
+#ifdef DNNLINEARIZED
+      real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+      real*8                    :: gradDnn(Ndim)
+#endif
 #ifdef NEUTRALP
       real*8                    :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
       real*8                    :: Anp(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq),dDpn_dU(Neq)
@@ -3012,6 +3063,12 @@ CONTAINS
       gme = dot_product(matmul(Qpr,Vvece),b)
       Taui = matmul(Qpr,dV_dUi)               ! 2x3
       Taue = matmul(Qpr,dV_dUe)               ! 2x3
+
+#ifdef DNNLINEARIZED
+      call compute_Dnn_dU(uf,Dnn_dU)
+
+      Dnn_dU_u = dot_product(Dnn_dU,uf)
+#endif
 #ifdef NEUTRALP
       ! Compute Vpn(U^(k-1))
       CALL computeVpn(uf,Vpn)
@@ -3243,6 +3300,20 @@ END IF
           END DO
           kmultf = coefe*Alphae*(dot_product(matmul(transpose(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+#ifdef DNNLINEARIZED
+        ELSEIF (i == 5) THEN
+            DO j=1,Neq
+              ind_jf = ind_asf+j
+              DO k = 1,Ndim
+
+                kmult = Dnn_dU(j)*Qpr(k,i)*n(k)*NNif
+                elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
+              enddo
+            enddo
+            kmultf = Dnn_dU_U*(Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif
+            elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+#endif           
+
 #ifdef NEUTRALP
        ELSEIF (i == 5) THEN
           DO j = 1,Neq

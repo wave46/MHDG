@@ -552,9 +552,14 @@ CONTAINS
     real*8		              :: iperdiff(size(xy, 1))
 #ifdef NEUTRAL
     integer             		:: i
-    real*8				            :: Ery = 13.6, cs_n, DnnTh
+    real*8				            :: Ery = 13.6, cs_n, DnnTh, ti_min=1e-6,ti
     real*8, dimension(size(u,1))	:: U1, U2, U3, U4, U5, E0iz, E0cx, sigmaviz, sigmavcx, Dnn
+#ifdef DNNSMOOTH
+    real*8                  :: width_lower, width_higher
+    real*8                  :: width_temperature=1e-7
 #endif
+#endif
+
 
     ! d_iso(Neq,Neq,Ngauss),d_ani(Neq,Neq,Ngauss)
     ! first index corresponds to the equation
@@ -609,12 +614,49 @@ CONTAINS
        CALL compute_sigmaviz(u(i,:),sigmaviz(i))
        CALL compute_sigmavcx(u(i,:),sigmavcx(i))
     END DO
-    Dnn = simpar%refval_charge*max(simpar%refval_temperature*2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2),0.1)/(simpar%refval_mass*simpar%refval_density*U1*(sigmaviz + sigmavcx))   
-    Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
-    d_iso(5,5,:) = Dnn
+    !ti = max(simpar%refval_temperature*2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2),0.1)
+    !Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1*(sigmaviz + sigmavcx))   
+    !Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
+    
     !Set a threshold on Dnn
-    DO i=1,size(Dnn,1) 
-       if (Dnn(i) .gt.  phys%diff_nn) d_iso(5,5,i) = phys%diff_nn
+    DO i=1,size(Dnn,1)
+#ifndef DNNSMOOTH
+      ti = max(simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2),ti_min)
+      Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1(i)*(sigmaviz(i) + sigmavcx(i)))   
+      Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
+       if (Dnn(i) .gt.  phys%diff_nn) then
+        d_iso(5,5,i) = phys%diff_nn
+       else
+        d_iso(5,5,i) = Dnn(i)
+#else 
+      ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)
+      !if ((ti>=ti_min -5.*width_temperature) .and.(ti<ti_min +5.*width_temperature)) then
+      !    ti = ti_min +width_temperature*log(1+exp((ti-ti_min)/width_temperature))
+      !elseif (ti<ti_min-5.*width_temperature) then
+      !    ti = ti_min
+      !endif
+      call softplus(ti, ti_min)
+      Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1(i)*(sigmaviz(i) + sigmavcx(i)))   
+      Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
+      !Dnn(i) = phys%diff_nn*((xy(i,1)*simpar%refval_length-2.5)**2+(xy(i,2)*simpar%refval_length)**2)**10/0.8**20.
+      !d_iso(5,5,i)=tanh(Dnn(i)/phys%diff_nn)*phys%diff_nn
+      call double_softplus(Dnn(i),10.*phys%diff_n,phys%diff_nn)
+      d_iso(5,5,i) = Dnn(i)
+      !width_higher = phys%diff_nn/10.
+      !width_lower = phys%diff_n/10.
+      !if (Dnn(i)>=(phys%diff_nn+5*width_higher)) then
+      !  d_iso(5,5,i) = phys%diff_nn
+      !elseif (Dnn(i)>=(phys%diff_nn-5*width_higher).and.Dnn(i)<(phys%diff_nn+5*width_higher)) then
+      !  d_iso(5,5,i) = width_higher*log(1+exp(phys%diff_nn/width_higher))-width_higher*log(1+exp(-(Dnn(i)-phys%diff_nn)/width_higher))
+      !elseif (Dnn(i)>=(10.*phys%diff_n+5*width_lower).and.Dnn(i)<(phys%diff_nn-5*width_higher)) then
+      !  d_iso(5,5,i) = Dnn(i) 
+      !elseif (Dnn(i)>=(10.*phys%diff_n-5*width_lower).and.Dnn(i)<(10.*phys%diff_n+5*width_lower)) then
+      !  d_iso(5,5,i) = 10.*phys%diff_n + width_lower*log(1+exp((Dnn(i)-10.*phys%diff_n)/width_lower))
+      !else
+      !  d_iso(5,5,i) = 10.*phys%diff_n
+      !endif
+        
+#endif
        !if (Dnn(i) .lt.  19) d_iso(5,5,i) = 19
        !if (Dnn(i) .lt. 50*simpar%refval_time/simpar%refval_length**2) d_iso(5,5,i) = 50*simpar%refval_time/simpar%refval_length**2
        !cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)))
@@ -946,8 +988,8 @@ CONTAINS
     if (U4 < tol) U4 = tol
     if (U1 < tol) U1 = tol
     if (U3 < tol) U3 = tol
-    if ((phys%diff_ee .gt. 0.0380) .and. (switch%testcase .ne. 2)) then
-      s = 1./(phys%tie*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
+    if ((phys%diff_ee .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
+      s = 1./(phys%tie*2*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
     else
       s = 1./(phys%tie)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
     endif
@@ -969,8 +1011,8 @@ CONTAINS
     res(2) = U(2)*(U1/U4)**1.5
     res(3) = -U1**2.5/U4**1.5
     res(4) = -1.5*(U1/U4)**2.5*(U4 - U3 + 0.5*U(2)**2/U1) + U1**2.5/U4**1.5
-    if ((phys%diff_ee .gt. 0.0380) .and. (switch%testcase .ne. 2)) then
-      res = 1./(phys%tie*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*res
+    if ((phys%diff_ee .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
+      res = 1./(phys%tie*2*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*res
     else
      res = 1./(phys%tie)*(2./3./phys%Mref)**(-0.5)*res
     endif
@@ -1612,7 +1654,155 @@ CONTAINS
     endif !let non-linear part as zero if negative solutions
   END SUBROUTINE compute_dsigmavrec_dU
 #endif
+#ifdef DNNSMOOTH
+!!!! Routines to apply smoothening on limiting values of neutral diffusion
+  SUBROUTINE double_softplus(x, xmin, xmax)
+    ! this routine constrains value x between xmin and xmax
+    ! using paradigm of softplus function
+    ! for xmin it is a typical softplus 
+    ! f(x) = xmin+width*ln(1+exp((x-xmin)/w)
+    ! w here and after = w*xmin(or max), where w is defined inside the function 
+    ! parameter width states for the region where smoothening is applied xmax+-width*w
+    ! for xmax it is somewhat inversed softplus:
+    ! f(x) = width*ln(1+exp(xmax/width))-width*ln(1+exp(-(x-xmax)/width))
+    ! for x>= xmax+width*w*xmax : f(x)=xmax
+    ! for xmax-width*w*xmax<=x<xmax+width*w*xmax : f(x) = w*xmax*ln(1+exp(1/w))-width*w*xmax*ln(1+exp(-(x-xmax)/(w*xmax))
+    ! for xmin+width*w*xmin<=x<xmax-width*w*xmax : f(x) = x
+    ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f(x) = xmin + w*xmin*ln(1+exp((x-xmin)/(w*xmin))
+    ! x<xmin-width*w*xmin : f(x) = xmin
+    real*8, intent(IN) :: xmin, xmax
+    real*8, intent(INOUT):: x
+    real*8             :: w,width
+    w = 0.01
+    width = 10
+    if (x>=xmax+w*width*xmax) then
+      x = xmax
+    elseif ((x>=xmax-w*width*xmax) .and. (x<xmax+w*width*xmax)) then
+      x = xmax-w*xmax*log(1+exp(-(x-xmax)/(w*xmax)))
+    !elseif ((x>=xmin+w*width*xmin) .and. (x<xmax-w*width*xmax)) then
+      ! do nothing
+    elseif ((x>=xmin-w*width*xmin) .and. (x<xmin+w*width*xmin)) then
+      x = xmin + w*xmin*log(1+exp((x-xmin)/(w*xmin)))
+    elseif (x<xmin-w*width*xmin) then
+      x = xmin
+    endif
+  END SUBROUTINE double_softplus
 
+  SUBROUTINE double_softplus_deriv(x, xmin, xmax,deriv)
+    ! this calculates dervitive of double_softplus
+    ! for x>= xmax+width*w*xmax : f'(x)=0
+    ! for xmax-width*w*xmax<=x<xmax+width*w*xmax : f'(x) = 1/(1+exp((x-xmax)/(w*xmax)))
+    ! for xmin+width*w*xmin<=x<xmax-width*w*xmax : f'(x) = 1.
+    ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f'(x) = 1/(1+exp(-(x-xmin)/(w*xmin)))
+    ! x<xmin-width*w*xmin : f'(x) = 0
+    real*8, intent(IN) :: x,xmin, xmax
+    real*8, intent(OUT):: deriv
+    real*8             :: w, width
+    w = 0.01
+    width = 10
+    if (x>=xmax+w*width*xmax) then
+      deriv = 0.
+    elseif ((x>=xmax-w*width*xmax) .and. (x<xmax+w*width*xmax)) then
+      deriv = 1./(1.+exp((x-xmax)/(w*xmax)))
+    elseif ((x>=xmin+w*width*xmin) .and. (x<xmax-w*width*xmax)) then
+      deriv = 1.
+    elseif ((x>=xmin-w*width*xmin) .and. (x<xmin+w*width*xmin)) then
+      deriv = 1./(1.+exp(-1.*(x-xmin)/(w*xmin)))
+      !WRITE(6,*) 'Low diffusion ', x*simpar%refval_diffusion
+      !stop
+
+    elseif (x<xmin-w*width*xmin) then
+      deriv = 0.
+    endif
+  END SUBROUTINE double_softplus_deriv
+
+  SUBROUTINE softplus(x, xmin)
+    ! this routine limits value x with xmin
+    ! using paradigm of softplus function 
+    ! f(x) = xmin+width*ln(1+exp((x-xmin)/width)
+    ! w here and after = w*xmin(or max), where w is defined inside the function 
+    ! parameter width states for the region where smoothening is applied xmax+-width*w
+    ! for x>=xmin-width*w*xmin : f(x) = xmin + w*xmin*ln(1+exp((x-xmin)/(w*xmin))
+    ! x<xmin-width*w*xmin : f(x) = xmin
+    real*8, intent(IN) :: xmin
+    real*8, intent(INOUT):: x
+    real*8             :: w, width
+    w = 0.01
+    width = 10
+    !if (x>=xmin+w*5.xmin) then
+    !  x = x !do nothing
+    if ((x>=xmin-w*width*xmin) .and. (x<xmin+w*width*xmin)) then
+      x = xmin + w*xmin*log(1+exp((x-xmin)/(w*xmin)))
+    elseif (x<xmin-w*width*xmin) then
+      x = xmin
+    endif
+  END SUBROUTINE softplus
+
+  SUBROUTINE softplus_deriv(x, xmin,deriv)
+    ! this routine calculates derivtiv of softplus
+    ! x>=xmin+width*w*xmin: f'(x) = 1.
+    ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f'(x) = 1/(1+exp(-(x-xmin)/(w*xmin)))
+    ! x<xmin-width*w*xmin : f'(x) = 0
+    real*8, intent(IN) :: x, xmin
+    real*8, intent(OUT):: deriv
+    real*8             :: w, width
+    w = 0.01
+    width = 10
+    if (x>=xmin+w*width*xmin) then
+      deriv = 1.
+    elseif ((x>=xmin-w*width*xmin) .and. (x<xmin+w*width*xmin)) then
+      deriv =  1./(1.+exp(-1.*(x-xmin)/(w*xmin)))
+    elseif (x<xmin-w*width*xmin) then
+      deriv = 0.
+    endif
+  END SUBROUTINE softplus_deriv
+
+
+#endif
+#ifdef DNNLINEARIZED
+  SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
+    real*8, intent(IN) :: U(:)
+    real*8, intent(OUT) :: Dnn_dU(:)
+    real*8              :: double_soft_deriv, Dnn, ti, soft_deriv, ti_min=1e-6
+    real*8              :: sigmaviz, sigmavcx
+    real*8              :: dti_du(size(U,1)), dsigmaviz_dU(size(U,1)), dsigmavcx_dU(size(U,1))
+
+
+    ! calculation of atomic rates
+    call compute_sigmaviz(U,sigmaviz)
+    call compute_sigmavcx(U,sigmavcx)
+    ! calculation of temperature before limitation
+    ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
+    call softplus_deriv(ti, ti_min,soft_deriv)
+    call softplus(ti,ti_min)
+    ! calculation of Dnn before limitation
+    Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))*simpar%refval_time/simpar%refval_length**2   
+    call double_softplus_deriv(Dnn,10.*phys%diff_n,phys%diff_nn,double_soft_deriv)   !to check the mulptiplier for Dnn_min
+    
+    ! ti derivative
+    dti_du(:) = 0.
+    dti_du(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
+    dti_du(2) = -U(2)/U(1)**2
+    dti_du(3) = 1./U(1)
+    dti_du(:) = dti_du(:)*simpar%refval_temperature*2./(3.*phys%Mref)
+
+    ! atomic rates derivatives
+    call compute_dsigmaviz_dU(U,dsigmaviz_dU)
+    call compute_dsigmavcx_dU(U,dsigmavcx_dU)
+
+    ! arrange all ingredients
+    Dnn_dU(:) = 0.
+
+    ! ti part
+    Dnn_dU(:) = Dnn_dU(:)+dti_du(:)*soft_deriv*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))
+    ! n part
+    Dnn_dU(1) = Dnn_dU(1)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)**2*(sigmaviz + sigmavcx))
+    ! atomic rates part
+    Dnn_dU(:) = Dnn_dU(:)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx)**2)*(dsigmaviz_dU(:)+dsigmavcx_dU(:))
+    
+    Dnn_dU(:) = Dnn_dU(:)*simpar%refval_time/simpar%refval_length**2*double_soft_deriv
+  END SUBROUTINE  compute_Dnn_dU
+#endif
   SUBROUTINE compute_Tloss(U,Tloss)
     real*8, intent(IN) :: U(:)
     real*8             :: Tloss,U1,U4,T0
@@ -2134,7 +2324,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(5) = numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + phys%diff_nn 
+        tau_aux(5) = tau_aux(5) + 6*diff_iso(1,1,1)!diff_iso(5,5,1)!phys%diff_nn 
 #endif
       else
 #endif
@@ -2145,7 +2335,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(4) = tau_aux(4) + 6*diff_iso(4,4,1) + abs(bn)*phys%diff_pare*(min(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + diff_iso(5,5,1) !phys%diff_nn !numer%tau(5) 
+        tau_aux(5) = tau_aux(5) +  diff_iso(5,5,1)!diff_iso(5,5,1)!!phys%diff_nn !numer%tau(5) 
 #endif
 #else
         tau_aux(5) = tau_aux(5) + numer%tau(5)

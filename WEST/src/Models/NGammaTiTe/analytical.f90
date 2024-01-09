@@ -1285,7 +1285,7 @@ CONTAINS
       up(:, 3) = 18.*exp(-fluxel**2/(2*sigma**2))
       up(:, 4) = 18.*exp(-fluxel**2/(2*sigma**2))
 #ifdef NEUTRAL
-      up(:,11)= 1.e-8
+      up(:,11)= 1.e-3
 #endif
 
       !                                      r =         sqrt ( (x*phys%lscale-geom%R0)**2 + (y*phys%lscale)**2 )
