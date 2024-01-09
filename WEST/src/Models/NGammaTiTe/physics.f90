@@ -125,6 +125,7 @@ CONTAINS
                            -1.85267764e-09,  1.47020423e-10,  4.83578962e-12,&
                            -1.08932309e-12,  1.15585402e-14,  2.17364528e-15/)
     ! coefficients for AMJUEL 2.1.8JH
+#ifdef THREEBODYREC
     phys%alpha_rec(:,1) = (/-2.85572848e+01, -7.66404261e-01, -4.93042400e-03,&
                             -5.38683098e-03, -1.62603924e-04,  6.08090765e-06,&
                              2.10110205e-05, -2.77071760e-06,  1.03823594e-07/)
@@ -153,33 +154,35 @@ CONTAINS
                              1.01336428e-09, -3.70797772e-10,  7.06845011e-12,&
                              3.77320848e-12, -4.67272402e-14, -1.64049236e-14/)
     ! coefficients for AMJUEL 2.1.8a
-    ! phys%alpha_rec(:,1) = (/-2.86177956e+01, -7.25199707e-01, -1.73502332e-02,&
-    ! -3.55775280e-03, -2.77788226e-04,  2.06029540e-05,&
-    !  1.59323839e-05, -2.11658076e-06,  7.66599010e-08/)
-    ! phys%alpha_rec(:,2) = (/-1.78616692e-02,  3.21096605e-03, -3.11251743e-03,&
-    ! 1.55896611e-03, -9.32993286e-05, -1.28371165e-04,&
-    ! 3.70550340e-05, -3.85417246e-06,  1.40078912e-07/)
-    ! phys%alpha_rec(:,3) = (/6.39155334e-04,  4.55025150e-03,  1.07786335e-03,&
-    ! -1.03733153e-03,  1.09633177e-04,  7.31231189e-05,&
-    ! -2.40723586e-05,  2.66239203e-06, -1.00895147e-07/)
-    ! phys%alpha_rec(:,4) = (/-4.50941526e-04, -1.88230646e-03, -2.61695897e-04,&
-    ! 2.81723717e-04, -4.56748839e-05, -1.06480515e-05,&
-    ! 4.91521392e-06, -6.12084620e-07,  2.49521491e-08/)
-    ! phys%alpha_rec(:,5) = (/7.09545902e-05,  3.98313304e-04,  5.45933281e-05,&
-    ! -4.40781517e-05,  8.49578724e-06, -1.49877643e-07,&
-    ! -3.34660940e-07,  5.66372822e-08, -2.67848413e-09/)
-    ! phys%alpha_rec(:,6) = (/-5.66030993e-06, -4.85183529e-05, -8.63530868e-06,&
-    ! 4.64601735e-06, -7.26107627e-07,  1.19908760e-07,&
-    !-4.91275369e-09, -1.47422116e-09,  1.17013833e-10/)
-    ! phys%alpha_rec(:,7) = (/1.16018663e-07,  3.40483450e-06,  8.38310637e-07,&
-    ! -3.36565455e-07,  2.32699294e-08, -5.66807913e-09,&
-    !  1.30239368e-09, -7.37309518e-11, -1.58825470e-13/)
-    ! phys%alpha_rec(:,8) = (/7.56498607e-09, -1.28083999e-07, -4.13335200e-08,&
-    ! 1.42835079e-08,  2.20808955e-10, -1.01855404e-10,&
-    !-3.16901361e-11,  4.31445723e-12, -1.22634522e-13/)
-    ! phys%alpha_rec(:,9) = (/-2.96981503e-10,  1.98283997e-09,  7.87249173e-10,&
-    ! -2.52215335e-10, -1.98997939e-11,  7.76657896e-12,&
-    ! -1.78376276e-13, -4.79167750e-14,  2.32940245e-15/)
+#else
+     phys%alpha_rec(:,1) = (/-2.86177956e+01, -7.25199707e-01, -1.73502332e-02,&
+     -3.55775280e-03, -2.77788226e-04,  2.06029540e-05,&
+      1.59323839e-05, -2.11658076e-06,  7.66599010e-08/)
+     phys%alpha_rec(:,2) = (/-1.78616692e-02,  3.21096605e-03, -3.11251743e-03,&
+     1.55896611e-03, -9.32993286e-05, -1.28371165e-04,&
+     3.70550340e-05, -3.85417246e-06,  1.40078912e-07/)
+     phys%alpha_rec(:,3) = (/6.39155334e-04,  4.55025150e-03,  1.07786335e-03,&
+     -1.03733153e-03,  1.09633177e-04,  7.31231189e-05,&
+     -2.40723586e-05,  2.66239203e-06, -1.00895147e-07/)
+     phys%alpha_rec(:,4) = (/-4.50941526e-04, -1.88230646e-03, -2.61695897e-04,&
+     2.81723717e-04, -4.56748839e-05, -1.06480515e-05,&
+     4.91521392e-06, -6.12084620e-07,  2.49521491e-08/)
+     phys%alpha_rec(:,5) = (/7.09545902e-05,  3.98313304e-04,  5.45933281e-05,&
+     -4.40781517e-05,  8.49578724e-06, -1.49877643e-07,&
+     -3.34660940e-07,  5.66372822e-08, -2.67848413e-09/)
+     phys%alpha_rec(:,6) = (/-5.66030993e-06, -4.85183529e-05, -8.63530868e-06,&
+     4.64601735e-06, -7.26107627e-07,  1.19908760e-07,&
+    -4.91275369e-09, -1.47422116e-09,  1.17013833e-10/)
+     phys%alpha_rec(:,7) = (/1.16018663e-07,  3.40483450e-06,  8.38310637e-07,&
+     -3.36565455e-07,  2.32699294e-08, -5.66807913e-09,&
+      1.30239368e-09, -7.37309518e-11, -1.58825470e-13/)
+     phys%alpha_rec(:,8) = (/7.56498607e-09, -1.28083999e-07, -4.13335200e-08,&
+     1.42835079e-08,  2.20808955e-10, -1.01855404e-10,&
+    -3.16901361e-11,  4.31445723e-12, -1.22634522e-13/)
+     phys%alpha_rec(:,9) = (/-2.96981503e-10,  1.98283997e-09,  7.87249173e-10,&
+     -2.52215335e-10, -1.98997939e-11,  7.76657896e-12,&
+     -1.78376276e-13, -4.79167750e-14,  2.32940245e-15/)
+#endif
 #endif
   END SUBROUTINE
 
@@ -610,6 +613,7 @@ CONTAINS
     U3 = u(:,3)
     U4 = u(:,4)
     U5 = u(:,5)
+#ifndef CONSTANTNEUTRALDIFF
     DO i=1,size(u,1)
        CALL compute_sigmaviz(u(i,:),sigmaviz(i))
        CALL compute_sigmavcx(u(i,:),sigmavcx(i))
@@ -671,6 +675,9 @@ CONTAINS
 	      !!if (Dnn(i) .lt.  phys%diff_n) d_iso(5,5,i) = phys%diff_n
        !end if
     END DO
+#else
+    d_iso(5,5,:)=phys%diff_nn
+#endif
     !Dnn = sum(Dnn)/size(u,1)
 #endif
 #else
@@ -1228,7 +1235,7 @@ CONTAINS
       &0.469*(E0**(-1./3))*(1./(3.*U4)))
    endif 
   END SUBROUTINE compute_dsigmavrec_dU
-
+#ifndef LEGACYCX
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavcx,U1,U4,T0,E0
@@ -1288,6 +1295,44 @@ CONTAINS
        res = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)*U1/U4*res
     end if
   END SUBROUTINE compute_dsigmavcx_dU
+#else
+  SUBROUTINE compute_sigmavcx(U,sigmavcx)
+    real*8, intent(IN) :: U(:)
+    real*8             :: sigmavcx,U1,U4,T0,E0
+    real*8              :: p1,p2,p3,p4,p5
+    real,parameter :: tol = 1e-10
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    if (U1<tol) U1=tol
+    if (U4<tol) U4=tol
+    !Analytical expression from Hugo Bufferand
+    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+    !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
+
+    E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+		sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)	
+  END SUBROUTINE compute_sigmavcx
+
+  SUBROUTINE compute_dsigmavcx_dU(U,res)
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),U1,U4,T0,E0
+    real*8             :: p1,p2,p3,p4,p5
+    real, parameter    :: tol = 1e-10
+    T0 = 50.
+    U1 = U(1)
+    U4 = U(4)
+    if (U1<tol) U1=tol
+    if (U4<tol) U4=tol
+    !Analytical expression from Hugo Bufferand
+
+    E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+    res = 0.
+    res(1) = -1./U4
+    res(4) = U1/(U4**2)
+    res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
+  END SUBROUTINE compute_dsigmavcx_dU
+#endif
 #else
 
   ! These routines use AMUJUEL splines
@@ -1379,7 +1424,7 @@ CONTAINS
     real*8             :: te_min = 0.1
     real*8             :: te_max = 2.e4
     real*8             :: ne_min = 1.
-    real*8             :: ne_max = 1.e6
+    real*8             :: ne_max = 1.e8
     real*8             :: dlograte_dlogne, dlograte_dlogte
     integer            :: i,j
     ! In EIRENE the density is scaled to 1.e14
@@ -1437,7 +1482,7 @@ CONTAINS
     real*8             :: te_min = 0.1
     real*8             :: te_max = 2.e4
     real*8             :: ne_min = 1.
-    real*8             :: ne_max = 1.e6
+    real*8             :: ne_max = 1.e8
     real*8             :: dlograte_dlogne, dlograte_dlogte
     real*8, intent(OUT):: rate_du(:)
     integer            :: i,j
@@ -2321,10 +2366,10 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(4) = tau_aux(4) + phys%diff_ee + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
+        tau_aux(5) = diff_iso(5,5,1)!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + 6*diff_iso(1,1,1)!diff_iso(5,5,1)!phys%diff_nn 
+        tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)!phys%diff_nn 
 #endif
       else
 #endif
@@ -2335,7 +2380,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(4) = tau_aux(4) + 6*diff_iso(4,4,1) + abs(bn)*phys%diff_pare*(min(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) +  diff_iso(5,5,1)!diff_iso(5,5,1)!!phys%diff_nn !numer%tau(5) 
+        tau_aux(5) = tau_aux(5) +  diff_iso(5,5,1)!!phys%diff_nn !numer%tau(5) 
 #endif
 #else
         tau_aux(5) = tau_aux(5) + numer%tau(5)
