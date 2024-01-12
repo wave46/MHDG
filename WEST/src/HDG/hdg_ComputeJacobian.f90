@@ -3475,35 +3475,35 @@ END IF
       Sn0(Neq)  = -Sn0(1)
 
       !Thresholds: 
-#ifdef TEMPERATURE
-      Ti = 2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
-      Te = 2./(3.*phys%Mref)*U(4)/U(1)
-      if (Ti .le. 6.e-4 .or. Te .le. 6.e-4) then 
-!         Sn(1,:) = - abs(Sn(1,:))
-!         Sn0(1) = - abs(Sn0(1))
-!         Sn(2,:) = - abs(Sn(2,:))
-!         Sn0(2) = - abs(Sn0(2))
-         Sn(3,1) = ad*( - RE*fEiiz*dsigmaviz_dU(1))
-         Sn(3,2) = 0.
-         Sn(3,3) = ad*(-RE*dfEiiz_dU(3)*sigmaviz)
-         Sn(3,4) = ad*(-RE*fEiiz*dsigmaviz_dU(4))
-         Sn(3,5) = ad*(-RE*dfEiiz_dU(Neq)*sigmaviz)
-         Sn0(3) = ad*(RE*fEiiz*sigmaviz)
-#ifdef AMJUELSPLINES
-         Sn0(3)    = Sn0(3) + ad*(RE*fEiiz*dot_product(dsigmaviz_dU,U))
-#endif
-         Sn(4,1) = 0. !3./2.*6.e-10
-         Sn(4,2) = 0.
-         Sn(4,3) = 0.
-         Sn(4,4) = 0. !-1. 
-         Sn(4,5) = 0.
-         Sn0(4) = 0.
-!         Sn(5,:) = - abs(Sn(5,:))
-!         Sn0(5) = - abs(Sn0(5))
-!         Sn(:,:) = 0.
-!         Sn0(:) = 0.
-      endif
-#endif
+!#ifdef TEMPERATURE
+!      Ti = 2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
+!      Te = 2./(3.*phys%Mref)*U(4)/U(1)
+!      if (Ti .le. 6.e-4 .or. Te .le. 6.e-4) then 
+!!         Sn(1,:) = - abs(Sn(1,:))
+!!         Sn0(1) = - abs(Sn0(1))
+!!         Sn(2,:) = - abs(Sn(2,:))
+!!         Sn0(2) = - abs(Sn0(2))
+!         Sn(3,1) = ad*( - RE*fEiiz*dsigmaviz_dU(1))
+!         Sn(3,2) = 0.
+!         Sn(3,3) = ad*(-RE*dfEiiz_dU(3)*sigmaviz)
+!         Sn(3,4) = ad*(-RE*fEiiz*dsigmaviz_dU(4))
+!         Sn(3,5) = ad*(-RE*dfEiiz_dU(Neq)*sigmaviz)
+!         Sn0(3) = ad*(RE*fEiiz*sigmaviz)
+!#ifdef AMJUELSPLINES
+!         Sn0(3)    = Sn0(3) + ad*(RE*fEiiz*dot_product(dsigmaviz_dU,U))
+!#endif
+!         Sn(4,1) = 0. !3./2.*6.e-10
+!         Sn(4,2) = 0.
+!         Sn(4,3) = 0.
+!         Sn(4,4) = 0. !-1. 
+!         Sn(4,5) = 0.
+!         Sn0(4) = 0.
+!!         Sn(5,:) = - abs(Sn(5,:))
+!!         Sn0(5) = - abs(Sn0(5))
+!!         Sn(:,:) = 0.
+!!         Sn0(:) = 0.
+!      endif
+!#endif
 
     END SUBROUTINE assemblyNeutral
 #endif

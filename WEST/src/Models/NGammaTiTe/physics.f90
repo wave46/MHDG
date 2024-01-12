@@ -91,11 +91,19 @@ CONTAINS
 #ifdef NEUTRAL
     simpar%consvar_refval(5) = simpar%refval_neutral
 #endif
-#ifdef AMJUELSPLINES
+#ifdef EXPANDEDCX
+#ifdef AMJUELCX
     ! coefficients for AMJUEL spline 3.1.8 FJ
     phys%alpha_cx = (/-1.841756e+01,  5.282950e-01, -2.200477e-01,  9.750192e-02,&
     -1.749183e-02,  4.954298e-04,  2.174910e-04, -2.530206e-05,&
     8.230751e-07/)
+#endif
+#ifdef THERMALCX
+    phys%alpha_cx = (/-1.87744894e+01,  4.51800000e-01, -3.58100000e-02,  8.00400000e-03, -6.83700000e-04/)
+#endif
+#endif
+#ifdef AMJUELSPLINES
+
     ! coefficients for AMJUEL 2.1.5JH
     phys%alpha_iz(:,1) = (/-3.29264710e+01,  1.42397767e+01, -6.51943873e+00,&
                             2.00999615e+00, -4.28959442e-01,  6.04783461e-02,&
@@ -988,7 +996,7 @@ CONTAINS
   SUBROUTINE compute_s(U, s)
     real*8, intent(IN) :: U(:)
     real*8             :: s, U1, U4, U3
-    real, parameter :: tol = 1e-5
+    real, parameter :: tol = 1e-20
     U1 = U(1)
     U4 = U(4)
     U3 = U(3)
@@ -1006,7 +1014,7 @@ CONTAINS
   SUBROUTINE compute_ds_dU(U, res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:), U1, U4, U3
-    real, parameter :: tol = 1e-5
+    real, parameter :: tol = 1e-20
     U1 = U(1)
     U4 = U(4)
     U3 = U(3)
@@ -1033,7 +1041,7 @@ CONTAINS
   SUBROUTINE compute_Sohmic(U,Sohmic)
     real*8, intent(IN) :: U(:)
     real*8             :: Sohmic,U1,U4
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U4 = U(4)
     if (U4<tol) U4=tol
@@ -1045,7 +1053,7 @@ CONTAINS
   SUBROUTINE compute_dSohmic_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1,U4
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U4 = U(4)
     if (U4<tol) U4=tol
@@ -1065,7 +1073,7 @@ CONTAINS
   SUBROUTINE compute_niz(U,niz)
     real*8, intent(IN) :: U(:)
     real*8             :: niz,U1,U5
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U5 = U(5)
     if (U1<tol) U1=tol
@@ -1077,7 +1085,7 @@ CONTAINS
   SUBROUTINE compute_dniz_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1,U5
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U5 = U(5)
     if (U1<tol) U1=tol
@@ -1091,7 +1099,7 @@ CONTAINS
   SUBROUTINE compute_nrec(U,nrec)
     real*8, intent(IN) :: U(:)
     real*8             :: nrec,U1
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     if (U1<tol) U1=tol
     nrec = U1**2
@@ -1101,7 +1109,7 @@ CONTAINS
   SUBROUTINE compute_dnrec_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     if (U1<tol) U1=tol
     res = 0.
@@ -1112,7 +1120,7 @@ CONTAINS
   SUBROUTINE compute_fGammacx(U,fGammacx)
     real*8, intent(IN) :: U(:)
     real*8             :: fGammacx,U2,U5
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U2 = U(2)
     U5 = U(5)
     if (U5<tol) U5=tol
@@ -1123,7 +1131,7 @@ CONTAINS
   SUBROUTINE compute_dfGammacx_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U2,U5
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U2 = U(2)
     U5 = U(5)
     if (U5<tol) U5=tol
@@ -1136,7 +1144,7 @@ CONTAINS
   SUBROUTINE compute_fGammarec(U,fGammarec)
     real*8, intent(IN) :: U(:)
     real*8             :: fGammarec,U1,U2
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U2 = U(2)
     if (U1<tol) U1=tol
@@ -1147,7 +1155,7 @@ CONTAINS
   SUBROUTINE compute_dfGammarec_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1,U2
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U2 = U(2)
     if (U1<tol) U1=tol
@@ -1162,7 +1170,7 @@ CONTAINS
   SUBROUTINE compute_sigmaviz(U,sigmaviz)
    real*8, intent(IN) :: U(:)
    real*8             :: sigmaviz,U1,U4,T0,Ery,E0
-   real, parameter    :: tol = 1e-10
+   real, parameter    :: tol = 1e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1179,7 +1187,7 @@ CONTAINS
   SUBROUTINE compute_dsigmaviz_dU(U,res)
    real*8, intent(IN) :: U(:)
    real*8             :: res(:),U1,U4,T0,Ery,E0
-   real, parameter    :: tol = 1e-10
+   real, parameter    :: tol = 1e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1201,7 +1209,7 @@ CONTAINS
   SUBROUTINE compute_sigmavrec(U,sigmavrec)
    real*8, intent(IN) :: U(:)
    real*8             :: sigmavrec,U1,U4,T0,Ery,E0
-   real, parameter    :: tol = 1e-10
+   real, parameter    :: tol = 1e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1218,7 +1226,7 @@ CONTAINS
   SUBROUTINE compute_dsigmavrec_dU(U,res)
    real*8, intent(IN) :: U(:)
    real*8             :: res(:),U1,U4,T0,Ery,E0
-   real, parameter    :: tol = 1e-10
+   real, parameter    :: tol = 1e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1235,183 +1243,8 @@ CONTAINS
       &0.469*(E0**(-1./3))*(1./(3.*U4)))
    endif 
   END SUBROUTINE compute_dsigmavrec_dU
-#ifndef LEGACYCX
-  SUBROUTINE compute_sigmavcx(U,sigmavcx)
-    real*8, intent(IN) :: U(:)
-    real*8             :: sigmavcx,U1,U4,T0,E0
-    real*8              :: p1,p2,p3,p4,p5
-    real,parameter :: tol = 1e-10
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
-    if (U1<tol) U1=tol
-    if (U4<tol) U4=tol
-    !Analytical expression from Hugo Bufferand
-    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-    !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
-    !Fit log log from ADAS database
-    p1 = -0.0006837
-    p2 = 0.008004
-    p3 = -0.03581
-    p4 = 0.4518
-    p5 = -32.59
-    E0 = T0*2./(3.*phys%Mref)*U4/U1
-
-    !Threshold on Te >= 0.2 eV
-    if (E0 .le. 0.05) E0 = 0.05
-    sigmavcx = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)   
-  END SUBROUTINE compute_sigmavcx
-
-
-  SUBROUTINE compute_dsigmavcx_dU(U,res)
-    real*8, intent(IN) :: U(:)
-    real*8             :: res(:),U1,U4,T0,E0
-    real*8             :: p1,p2,p3,p4,p5
-    real, parameter    :: tol = 1e-10
-    T0 = 50.
-    U1 = U(1)
-    U4 = U(4)
-    if (U1<tol) U1=tol
-    if (U4<tol) U4=tol
-    !Analytical expression from Hugo Bufferand
-    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-    !res = 0.
-    !res(1) = -1./U4
-    !res(4) = U1/(U4**2)
-    !res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
-    !Fit log log from ADAS database
-    p1 = -0.0006837
-    p2 = 0.008004
-    p3 = -0.03581
-    p4 = 0.4518
-    p5 = -32.59
-    E0 = T0*2./(3.*phys%Mref)*U4/U1
-    res = 0.
-    !Threshold on Te >= 0.2 eV
-    !if (E0 .le. 0.05) E0 = 0.05
-    if (E0 .ge. 0.05) then
-       res(1) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*(-U4/U1**2) 
-       res(4) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*1./U1
-       res = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)*U1/U4*res
-    end if
-  END SUBROUTINE compute_dsigmavcx_dU
-#else
-  SUBROUTINE compute_sigmavcx(U,sigmavcx)
-    real*8, intent(IN) :: U(:)
-    real*8             :: sigmavcx,U1,U4,T0,E0
-    real*8              :: p1,p2,p3,p4,p5
-    real,parameter :: tol = 1e-10
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
-    if (U1<tol) U1=tol
-    if (U4<tol) U4=tol
-    !Analytical expression from Hugo Bufferand
-    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-    !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
-
-    E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-		sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)	
-  END SUBROUTINE compute_sigmavcx
-
-  SUBROUTINE compute_dsigmavcx_dU(U,res)
-    real*8, intent(IN) :: U(:)
-    real*8             :: res(:),U1,U4,T0,E0
-    real*8             :: p1,p2,p3,p4,p5
-    real, parameter    :: tol = 1e-10
-    T0 = 50.
-    U1 = U(1)
-    U4 = U(4)
-    if (U1<tol) U1=tol
-    if (U4<tol) U4=tol
-    !Analytical expression from Hugo Bufferand
-
-    E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-    res = 0.
-    res(1) = -1./U4
-    res(4) = U1/(U4**2)
-    res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
-  END SUBROUTINE compute_dsigmavcx_dU
-#endif
 #else
 
-  ! These routines use AMUJUEL splines
-  SUBROUTINE compute_eirene_1D_rate(te,alpha,rate)
-    ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
-    real*8, intent(IN) :: te,alpha(:)          
-    real*8, intent(OUT):: rate
-    real*8             :: te_min=0.1
-    real*8             :: dlograte_dlogte
-    integer            :: i
-    rate = 0.
-    if (te>=te_min) then 
-      call compute_logeirene_1D_rate(te,alpha,rate)
-    else
-      call compute_logeirene_1D_rate(te_min,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogte(te_min,alpha,dlograte_dlogte)
-      rate = rate + dlograte_dlogte*(log(te)- log(te_min))
-    endif
-    ! rates are not higher than 1 m^3/s, if rate is higher than that value, then there is something weird
-    if (rate>6.*log(10.)) then
-      WRITE(6,*) "Something weird in compute_eirene_te_rate, probably, solution is not good already"
-      WRITE(6,*) " te equal to", te
-      WRITE(6,*) " rate equal to", rate
-      stop
-    endif
-    rate = exp(rate)/1.e6
-  END SUBROUTINE compute_eirene_1D_rate
-
-  SUBROUTINE compute_eirene_1D_rate_du(U1,U4,te,alpha,res)
-    ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
-    real*8, intent(IN) :: U1,U4,te,alpha(:)          
-    real*8, intent(OUT):: res(:)
-    real*8             :: te_min=0.1
-    real*8             :: dlograte_dlogte,rate
-    integer            :: i
-    res = 0.
-
-    if (te>te_min) then
-      call compute_eirene_1D_rate(te,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogte(te,alpha,dlograte_dlogte)
-      res(1) = res(1) + dlograte_dlogte*(-1./U1)
-      res(4) = res(4) + dlograte_dlogte*(1./U4)
-      res = rate*res
-    else
-      call compute_eirene_1D_rate(te,phys%alpha_cx,rate)
-      call compute_d_logeirene_1D_rate_dlogte(te_min,alpha,dlograte_dlogte)
-      res(1) = res(1) + dlograte_dlogte*(-1./U1)
-      res(4) = res(4) + dlograte_dlogte*(1./U4)
-      res = rate*res
-    endif
-    
-  END SUBROUTINE compute_eirene_1D_rate_du
-
-
-  SUBROUTINE compute_logeirene_1D_rate(te,alpha,rate)
-    ! Calculates 1D AMJUEL spline in loglog space
-    real*8, intent(IN) :: te,alpha(:)          
-    real*8, intent(OUT):: rate
-    integer            :: i
-    rate = 0.
-
-    do i = 1,size(alpha,1)    
-      rate = rate + alpha(i)*log(te)**(i-1)
-    end do
-
-  END SUBROUTINE compute_logeirene_1D_rate
-
-
-  SUBROUTINE compute_d_logeirene_1D_rate_dlogte(te,alpha,d_log_rate_dte)
-    ! calculates derivative of AMJUEL 1D spline in loglog space
-    real*8, intent(IN) :: te,alpha(:)          
-    real*8, intent(OUT):: d_log_rate_dte
-    integer            :: i
-    d_log_rate_dte = 0.
-
-    do i = 2,size(alpha,1)    
-      d_log_rate_dte = d_log_rate_dte + (i-1)*alpha(i)*log(te)**(i-2)
-    end do
-  END SUBROUTINE compute_d_logeirene_1D_rate_dlogte
 
   ! Routines for 2D splines in te, ne loglogspace
   SUBROUTINE compute_2D_eirene_rate(te,ne,alpha,rate)
@@ -1573,47 +1406,7 @@ CONTAINS
   END SUBROUTINE compute_dlogeirene_2D_dlogne_rate
 
 
-  SUBROUTINE compute_sigmavcx(U,sigmavcx)
-    ! calculates AMJUEL CX rate
-    real*8, intent(IN) :: U(:)
-    real*8             :: sigmavcx,U1,U4,T0,E0,te
-    integer             :: i
-    real,parameter :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
-    
-    !if (U1<tol) U1=tol
-    !if (U4<tol) then
-    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      te = T0*2/3./phys%Mref*U4/U1
-    else!some low values  
-      te = 1.e-10
-    endif
-    sigmavcx = 0.
 
-    call compute_eirene_1D_rate(te, phys%alpha_cx, sigmavcx)
-  END SUBROUTINE compute_sigmavcx
-
-
-  SUBROUTINE compute_dsigmavcx_dU(U,res)
-    ! calculates derivative of AMJUEL CX rate for linearization
-    real*8, intent(IN) :: U(:)
-    real*8             :: res(:),U1,U4,T0,te, te_min = 0.1
-    real*8             :: sigmavcx, sigmavcx_dte
-    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    integer            :: i
-    T0 = 50.
-    U1 = U(1)
-    U4 =  U(4)
-    res = 0.
-    if ((U1>tol) .and. (U4>tol)) then
-      te = T0*2/3./phys%Mref*U4/U1
-      call compute_eirene_1D_rate_dU(U1,U4,te,phys%alpha_cx,res)      
-    endif
-    
-
-  END SUBROUTINE compute_dsigmavcx_dU
 
   SUBROUTINE compute_sigmaviz(U,sigmaviz)
     real*8, intent(IN) :: U(:)
@@ -1698,6 +1491,226 @@ CONTAINS
       call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_rec,res)
     endif !let non-linear part as zero if negative solutions
   END SUBROUTINE compute_dsigmavrec_dU
+#endif
+#ifdef MANUELCX
+!ADAS truncated CX
+  SUBROUTINE compute_sigmavcx(U,sigmavcx)
+    real*8, intent(IN) :: U(:)
+    real*8             :: sigmavcx,U1,U4,T0,E0
+    real*8              :: p1,p2,p3,p4,p5
+    real,parameter :: tol = 1e-20
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    if (U1<tol) U1=tol
+    if (U4<tol) U4=tol
+    !Analytical expression from Hugo Bufferand
+    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+    !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
+    !Fit log log from ADAS database
+    p1 = -0.0006837
+    p2 = 0.008004
+    p3 = -0.03581
+    p4 = 0.4518
+    p5 = -32.59
+    E0 = T0*2./(3.*phys%Mref)*U4/U1
+
+    !Threshold on Te >= 0.2 eV
+    if (E0 .le. 0.05) E0 = 0.05
+    sigmavcx = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)   
+  END SUBROUTINE compute_sigmavcx
+
+
+  SUBROUTINE compute_dsigmavcx_dU(U,res)
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),U1,U4,T0,E0
+    real*8             :: p1,p2,p3,p4,p5
+    real, parameter    :: tol = 1e-20
+    T0 = 50.
+    U1 = U(1)
+    U4 = U(4)
+    if (U1<tol) U1=tol
+    if (U4<tol) U4=tol
+    !Analytical expression from Hugo Bufferand
+    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+    !res = 0.
+    !res(1) = -1./U4
+    !res(4) = U1/(U4**2)
+    !res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
+    !Fit log log from ADAS database
+    p1 = -0.0006837
+    p2 = 0.008004
+    p3 = -0.03581
+    p4 = 0.4518
+    p5 = -32.59
+    E0 = T0*2./(3.*phys%Mref)*U4/U1
+    res = 0.
+    !Threshold on Te >= 0.2 eV
+    !if (E0 .le. 0.05) E0 = 0.05
+    if (E0 .ge. 0.05) then
+       res(1) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*(-U4/U1**2) 
+       res(4) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*1./U1
+       res = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)*U1/U4*res
+    end if
+  END SUBROUTINE compute_dsigmavcx_dU
+#endif
+#ifdef LEGACYCX
+  SUBROUTINE compute_sigmavcx(U,sigmavcx)
+    real*8, intent(IN) :: U(:)
+    real*8             :: sigmavcx,U1,U4,T0,E0
+    real*8              :: p1,p2,p3,p4,p5
+    real,parameter :: tol = 1e-20
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    if (U1<tol) U1=tol
+    if (U4<tol) U4=tol
+    !Analytical expression from Hugo Bufferand
+    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+    !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
+
+    E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+		sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)	
+  END SUBROUTINE compute_sigmavcx
+
+  SUBROUTINE compute_dsigmavcx_dU(U,res)
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),U1,U4,T0,E0
+    real*8             :: p1,p2,p3,p4,p5
+    real, parameter    :: tol = 1e-20
+    T0 = 50.
+    U1 = U(1)
+    U4 = U(4)
+    if (U1<tol) U1=tol
+    if (U4<tol) U4=tol
+    !Analytical expression from Hugo Bufferand
+
+    E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+    res = 0.
+    res(1) = -1./U4
+    res(4) = U1/(U4**2)
+    res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
+  END SUBROUTINE compute_dsigmavcx_dU
+#endif
+#ifdef EXPANDEDCX
+! These routines use AMUJUEL splines
+  SUBROUTINE compute_eirene_1D_rate(te,alpha,rate)
+    ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
+    real*8, intent(IN) :: te,alpha(:)          
+    real*8, intent(OUT):: rate
+    real*8             :: te_min=0.1
+    real*8             :: dlograte_dlogte
+    integer            :: i
+    rate = 0.
+    if (te>=te_min) then 
+      call compute_logeirene_1D_rate(te,alpha,rate)
+    else
+      call compute_logeirene_1D_rate(te_min,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogte(te_min,alpha,dlograte_dlogte)
+      rate = rate + dlograte_dlogte*(log(te)- log(te_min))
+    endif
+    ! rates are not higher than 1 m^3/s, if rate is higher than that value, then there is something weird
+    if (rate>6.*log(10.)) then
+      WRITE(6,*) "Something weird in compute_eirene_te_rate, probably, solution is not good already"
+      WRITE(6,*) " te equal to", te
+      WRITE(6,*) " rate equal to", rate
+      stop
+    endif
+    rate = exp(rate)/1.e6
+  END SUBROUTINE compute_eirene_1D_rate
+
+  SUBROUTINE compute_eirene_1D_rate_du(U1,U4,te,alpha,res)
+    ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
+    real*8, intent(IN) :: U1,U4,te,alpha(:)          
+    real*8, intent(OUT):: res(:)
+    real*8             :: te_min=0.1
+    real*8             :: dlograte_dlogte,rate
+    integer            :: i
+    res = 0.
+
+    if (te>te_min) then
+      call compute_eirene_1D_rate(te,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogte(te,alpha,dlograte_dlogte)
+      res(1) = res(1) + dlograte_dlogte*(-1./U1)
+      res(4) = res(4) + dlograte_dlogte*(1./U4)
+      res = rate*res
+    else
+      call compute_eirene_1D_rate(te,phys%alpha_cx,rate)
+      call compute_d_logeirene_1D_rate_dlogte(te_min,alpha,dlograte_dlogte)
+      res(1) = res(1) + dlograte_dlogte*(-1./U1)
+      res(4) = res(4) + dlograte_dlogte*(1./U4)
+      res = rate*res
+    endif
+
+  END SUBROUTINE compute_eirene_1D_rate_du
+
+
+  SUBROUTINE compute_logeirene_1D_rate(te,alpha,rate)
+    ! Calculates 1D AMJUEL spline in loglog space
+    real*8, intent(IN) :: te,alpha(:)          
+    real*8, intent(OUT):: rate
+    integer            :: i
+    rate = 0.
+
+    do i = 1,size(alpha,1)    
+      rate = rate + alpha(i)*log(te)**(i-1)
+    end do
+
+  END SUBROUTINE compute_logeirene_1D_rate
+
+
+  SUBROUTINE compute_d_logeirene_1D_rate_dlogte(te,alpha,d_log_rate_dte)
+    ! calculates derivative of AMJUEL 1D spline in loglog space
+    real*8, intent(IN) :: te,alpha(:)          
+    real*8, intent(OUT):: d_log_rate_dte
+    integer            :: i
+    d_log_rate_dte = 0.
+
+    do i = 2,size(alpha,1)    
+      d_log_rate_dte = d_log_rate_dte + (i-1)*alpha(i)*log(te)**(i-2)
+    end do
+  END SUBROUTINE compute_d_logeirene_1D_rate_dlogte
+  SUBROUTINE compute_sigmavcx(U,sigmavcx)
+    ! calculates AMJUEL CX rate
+    real*8, intent(IN) :: U(:)
+    real*8             :: sigmavcx,U1,U4,T0,E0,te
+    integer             :: i
+    real,parameter :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    
+    !if (U1<tol) U1=tol
+    !if (U4<tol) then
+    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
+      te = T0*2/3./phys%Mref*U4/U1
+    else!some low values  
+      te = 1.e-10
+    endif
+    sigmavcx = 0.
+  
+    call compute_eirene_1D_rate(te, phys%alpha_cx, sigmavcx)
+  END SUBROUTINE compute_sigmavcx
+  
+  
+  SUBROUTINE compute_dsigmavcx_dU(U,res)
+    ! calculates derivative of AMJUEL CX rate for linearization
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),U1,U4,T0,te, te_min = 0.1
+    real*8             :: sigmavcx, sigmavcx_dte
+    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    integer            :: i
+    T0 = 50.
+    U1 = U(1)
+    U4 =  U(4)
+    res = 0.
+    if ((U1>tol) .and. (U4>tol)) then
+      te = T0*2/3./phys%Mref*U4/U1
+      call compute_eirene_1D_rate_dU(U1,U4,te,phys%alpha_cx,res)      
+    endif
+    
+  
+  END SUBROUTINE compute_dsigmavcx_dU
 #endif
 #ifdef DNNSMOOTH
 !!!! Routines to apply smoothening on limiting values of neutral diffusion
@@ -1808,50 +1821,51 @@ CONTAINS
   SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT) :: Dnn_dU(:)
-    real*8              :: double_soft_deriv, Dnn, ti, soft_deriv, ti_min=1e-6
+    real*8              :: double_soft_deriv, Dnn, ti, soft_deriv, ti_min=1e-6, tol=1e-10
     real*8              :: sigmaviz, sigmavcx
     real*8              :: dti_du(size(U,1)), dsigmaviz_dU(size(U,1)), dsigmavcx_dU(size(U,1))
-
-
-    ! calculation of atomic rates
-    call compute_sigmaviz(U,sigmaviz)
-    call compute_sigmavcx(U,sigmavcx)
-    ! calculation of temperature before limitation
-    ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
-    call softplus_deriv(ti, ti_min,soft_deriv)
-    call softplus(ti,ti_min)
-    ! calculation of Dnn before limitation
-    Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))*simpar%refval_time/simpar%refval_length**2   
-    call double_softplus_deriv(Dnn,10.*phys%diff_n,phys%diff_nn,double_soft_deriv)   !to check the mulptiplier for Dnn_min
-    
-    ! ti derivative
-    dti_du(:) = 0.
-    dti_du(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
-    dti_du(2) = -U(2)/U(1)**2
-    dti_du(3) = 1./U(1)
-    dti_du(:) = dti_du(:)*simpar%refval_temperature*2./(3.*phys%Mref)
-
-    ! atomic rates derivatives
-    call compute_dsigmaviz_dU(U,dsigmaviz_dU)
-    call compute_dsigmavcx_dU(U,dsigmavcx_dU)
-
-    ! arrange all ingredients
     Dnn_dU(:) = 0.
+    if ((U(3)>=tol) .and. (U(1)>=tol) .and. (U(5)>=tol)) then
+      ! calculation of atomic rates
+        call compute_sigmaviz(U,sigmaviz)
+        call compute_sigmavcx(U,sigmavcx)
+        ! calculation of temperature before limitation
+        ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
+        call softplus_deriv(ti, ti_min,soft_deriv)
+        call softplus(ti,ti_min)
+        ! calculation of Dnn before limitation
+        Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))*simpar%refval_time/simpar%refval_length**2   
+        call double_softplus_deriv(Dnn,10.*phys%diff_n,phys%diff_nn,double_soft_deriv)   !to check the mulptiplier for Dnn_min
 
-    ! ti part
-    Dnn_dU(:) = Dnn_dU(:)+dti_du(:)*soft_deriv*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))
-    ! n part
-    Dnn_dU(1) = Dnn_dU(1)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)**2*(sigmaviz + sigmavcx))
-    ! atomic rates part
-    Dnn_dU(:) = Dnn_dU(:)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx)**2)*(dsigmaviz_dU(:)+dsigmavcx_dU(:))
-    
-    Dnn_dU(:) = Dnn_dU(:)*simpar%refval_time/simpar%refval_length**2*double_soft_deriv
+        ! ti derivative
+        dti_du(:) = 0.
+        dti_du(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
+        dti_du(2) = -U(2)/U(1)**2
+        dti_du(3) = 1./U(1)
+        dti_du(:) = dti_du(:)*simpar%refval_temperature*2./(3.*phys%Mref)
+
+        ! atomic rates derivatives
+        call compute_dsigmaviz_dU(U,dsigmaviz_dU)
+        call compute_dsigmavcx_dU(U,dsigmavcx_dU)
+
+        ! arrange all ingredients
+        Dnn_dU(:) = 0.
+
+        ! ti part
+        Dnn_dU(:) = Dnn_dU(:)+dti_du(:)*soft_deriv*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))
+        ! n part
+        Dnn_dU(1) = Dnn_dU(1)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)**2*(sigmaviz + sigmavcx))
+        ! atomic rates part
+        Dnn_dU(:) = Dnn_dU(:)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx)**2)*(dsigmaviz_dU(:)+dsigmavcx_dU(:))
+
+        Dnn_dU(:) = Dnn_dU(:)*simpar%refval_time/simpar%refval_length**2*double_soft_deriv
+    endif
   END SUBROUTINE  compute_Dnn_dU
 #endif
   SUBROUTINE compute_Tloss(U,Tloss)
     real*8, intent(IN) :: U(:)
     real*8             :: Tloss,U1,U4,T0
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1864,7 +1878,7 @@ CONTAINS
   SUBROUTINE compute_dTloss_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1,U4,T0
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1880,7 +1894,7 @@ CONTAINS
   SUBROUTINE compute_Tlossrec(U,Tlossrec)
     real*8, intent(IN) :: U(:)
     real*8             :: Tlossrec,U1,U4,T0
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1899,7 +1913,7 @@ CONTAINS
   SUBROUTINE compute_dTlossrec_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1,U4,T0,Tlossrec
-    real, parameter    :: tol = 1e-10
+    real, parameter    :: tol = 1e-20
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1924,7 +1938,7 @@ CONTAINS
   SUBROUTINE compute_fEiiz(U,fEiiz)
     real*8, intent(IN) :: U(:)
     real*8             :: fEiiz,U3,U5
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U3 = U(3)
     U5 = U(5)
     if (U3<tol) U3=tol
@@ -1936,7 +1950,7 @@ CONTAINS
   SUBROUTINE compute_dfEiiz_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U3,U5
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U3 = U(3)
     U5 = U(5)
     if (U3<tol) U3=tol
@@ -1950,7 +1964,7 @@ CONTAINS
   SUBROUTINE compute_fEirec(U,fEirec)
     real*8, intent(IN) :: U(:)
     real*8             :: fEirec,U1,U3
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U3 = U(3)
     if (U1<tol) U1=tol
@@ -1962,7 +1976,7 @@ CONTAINS
   SUBROUTINE compute_dfEirec_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1,U3
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U3 = U(3)
     if (U1<tol) U1=tol
@@ -1976,7 +1990,7 @@ CONTAINS
   SUBROUTINE compute_fEicx(U,fEicx)
     real*8, intent(IN) :: U(:)
     real*8             :: fEicx,U1,U2,U5
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U2 = U(2)
     U5 = U(5)
@@ -1989,7 +2003,7 @@ CONTAINS
   SUBROUTINE compute_dfEicx_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1,U2,U5
-    real,parameter :: tol = 1e-10
+    real,parameter :: tol = 1e-20
     U1 = U(1)
     U2 = U(2)
     U5 = U(5)
@@ -2366,7 +2380,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(4) = tau_aux(4) + phys%diff_ee + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = diff_iso(5,5,1)!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
+        tau_aux(5) = phys%diff_nn!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
 #endif
 #else
         tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)!phys%diff_nn 
@@ -2380,7 +2394,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(4) = tau_aux(4) + 6*diff_iso(4,4,1) + abs(bn)*phys%diff_pare*(min(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) +  diff_iso(5,5,1)!!phys%diff_nn !numer%tau(5) 
+        tau_aux(5) = tau_aux(5) + phys%diff_nn !! !numer%tau(5) diff_iso(5,5,1)
 #endif
 #else
         tau_aux(5) = tau_aux(5) + numer%tau(5)

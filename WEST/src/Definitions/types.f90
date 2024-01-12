@@ -246,9 +246,16 @@ MODULE types
     real*8          :: ME_diff_u
     real*8          :: ME_diff_e
     real*8          :: ME_diff_ee
+#ifdef EXPANDEDCX
+#ifdef AMJUELCX
+    real*8, dimension(9):: alpha_cx       ! Coefficients for charge exchange coefficients spline
+#endif
+#ifdef THERMALCX
+    real*8, dimension(5):: alpha_cx       ! Coefficients for charge exchange coefficients spline
+#endif
+#endif
 #ifdef AMJUELSPLINES
     ! Atomic rates coefficients
-    real*8, dimension(9):: alpha_cx       ! Coefficients for charge exchange coefficients spline
     real*8, dimension(9,9):: alpha_iz     ! Coefficients for ionization coefficients spline from EIRENE, (te,ne) grid
     real*8, dimension(9,9):: alpha_rec     ! Coefficients for recompination coefficients spline from EIRENE, (te,ne) grid
 #endif
