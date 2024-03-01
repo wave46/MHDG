@@ -139,7 +139,8 @@ MODULE types
     real*8, allocatable     :: scdiff_nodes(:, :)      ! Shock capturing diffusion in each node [Number of elements,Number of nodes per element]
     real*8                 :: xmax, xmin, ymax, ymin    ! Limit of the GLOBAL matrix, across mpi partitions
     real*8                  :: puff_area         ! area of the puff bounday condition
-    real*8                  :: core_area         ! area of the puff bounday condition
+    real*8                  :: pump_area         ! area of the pump bounday condition
+    real*8                  :: core_area         ! area of the core bounday condition
     real*8,allocatable      :: Xg(:,:)               ! 2D Gauss point coordinates
     real*8,allocatable      :: Xgf(:,:)              ! 1D Gauss point coordinates at interior faces
     real*8,allocatable      :: Xgb(:,:)          ! 1D Gauss point  coordinates at boundary faces
@@ -231,6 +232,7 @@ MODULE types
     real*8,allocatable:: v_nn_Fac(:,:)    ! Convective velocity in the neutral equation at 1D Gauss points on interior faces
     real*8,allocatable:: v_nn_Bou(:,:)    ! Convective velocity in the neutral equation at 1D Gauss points on boundary faces 
     real*8          :: Re                 ! Recycling for the neutral equation
+    real*8          :: Re_pump            ! Recycling for the neutral equation in the pump region
     real*8          :: puff               ! Puff coefficient
     real*8          :: puff_slope         ! Puff increment coefficient (only for moving equilibrium for ITER)
      real*8,pointer :: puff_exp(:)    ! Puff experimental coefficient (only for moving equilibriums)
@@ -337,6 +339,7 @@ MODULE types
   TYPE Inputs_type
     character(len=1000) :: field_path ! where do we read magnetic field from (WEST cases so far)
     character(len=1000) :: jtor_path ! where do we read plasma current from (WEST cases so far)
+    character(len=1000) :: save_folder ! where to save last solution
     logical             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
     logical             :: compute_from_flux ! if components B_R, B_Z are computed from flux or not
     logical             :: divide_by_2pi     ! correspondng to flux definition if it is needed to divide by 2pi or not

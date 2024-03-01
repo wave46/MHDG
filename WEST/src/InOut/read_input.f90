@@ -37,7 +37,7 @@ SUBROUTINE READ_input()
   real*8            :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
   ! Info for input and output
-  character(len = 1000) :: field_path, jtor_path
+  character(len = 1000) :: field_path, jtor_path,save_folder
   integer               :: field_dimensions(1:2), jtor_dimensions(1:2)
   logical               :: field_from_grid, compute_from_flux, divide_by_2pi
 
@@ -48,7 +48,7 @@ SUBROUTINE READ_input()
 
   ! Neutral and Ohmic heating
   logical     :: OhmicSrc
-  real*8      :: Pohmic,diff_nn,Re,puff,puff_slope
+  real*8      :: Pohmic,diff_nn,Re,Re_pump,puff,puff_slope
   
   ! Movin Equilibrium
   logical     :: ME
@@ -57,12 +57,12 @@ SUBROUTINE READ_input()
   NAMELIST /SWITCH_LST/ steady, time_init, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
     & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
     & logrho,bxgradb
-  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions
+  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions, save_folder
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn, Re, puff,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source, Pohmic, Tbg, bcflags, bohmth,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn, Re, Re_pump, puff,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source, Pohmic, Tbg, bcflags, bohmth,&
     &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
   NAMELIST /LSSOLV_LST/ sollib, lstiming, itmax, itrace, rest, istop, tol, kmethd, ptype,&
@@ -124,6 +124,7 @@ SUBROUTINE READ_input()
   input%divide_by_2pi     = divide_by_2pi
   input%jtor_path         = trim(adjustl(jtor_path))
   input%jtor_dimensions   = jtor_dimensions
+  input%save_folder       = trim(adjustl(save_folder))
   numer%tau               = tau
   numer%nrp               = nrp
   numer%tNR               = tNR
@@ -173,6 +174,7 @@ SUBROUTINE READ_input()
   phys%v_p                = v_p
   phys%diff_nn            = diff_nn
   phys%Re                 = Re
+  phys%Re_pump            = Re_pump
   phys%puff               = puff
   phys%puff_slope         = puff_slope
   phys%density_source     = density_source
@@ -340,6 +342,7 @@ SUBROUTINE READ_input()
 #ifdef NEUTRAL
     PRINT *, '                - diffusion in the neutral equation:                  ', phys%diff_nn
     PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
+    PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
     PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
     if (switch%ME) then
        PRINT *, '             - puff increment slope:                               ', phys%puff_slope

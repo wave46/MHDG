@@ -638,50 +638,23 @@ CONTAINS
       Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
        if (Dnn(i) .gt.  phys%diff_nn) then
         d_iso(5,5,i) = phys%diff_nn
+       elseif (Dnn(i)<10.*d_iso(1,1,i))then
+        d_iso(5,5,i) = 10.*d_iso(1,1,i)
        else
         d_iso(5,5,i) = Dnn(i)
+       endif
 #else 
       ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)
-      !if ((ti>=ti_min -5.*width_temperature) .and.(ti<ti_min +5.*width_temperature)) then
-      !    ti = ti_min +width_temperature*log(1+exp((ti-ti_min)/width_temperature))
-      !elseif (ti<ti_min-5.*width_temperature) then
-      !    ti = ti_min
-      !endif
       call softplus(ti, ti_min)
       Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1(i)*(sigmaviz(i) + sigmavcx(i)))   
       Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
-      !Dnn(i) = phys%diff_nn*((xy(i,1)*simpar%refval_length-2.5)**2+(xy(i,2)*simpar%refval_length)**2)**10/0.8**20.
-      !d_iso(5,5,i)=tanh(Dnn(i)/phys%diff_nn)*phys%diff_nn
+
       call double_softplus(Dnn(i),10.*phys%diff_n,phys%diff_nn)
       d_iso(5,5,i) = Dnn(i)
-      !width_higher = phys%diff_nn/10.
-      !width_lower = phys%diff_n/10.
-      !if (Dnn(i)>=(phys%diff_nn+5*width_higher)) then
-      !  d_iso(5,5,i) = phys%diff_nn
-      !elseif (Dnn(i)>=(phys%diff_nn-5*width_higher).and.Dnn(i)<(phys%diff_nn+5*width_higher)) then
-      !  d_iso(5,5,i) = width_higher*log(1+exp(phys%diff_nn/width_higher))-width_higher*log(1+exp(-(Dnn(i)-phys%diff_nn)/width_higher))
-      !elseif (Dnn(i)>=(10.*phys%diff_n+5*width_lower).and.Dnn(i)<(phys%diff_nn-5*width_higher)) then
-      !  d_iso(5,5,i) = Dnn(i) 
-      !elseif (Dnn(i)>=(10.*phys%diff_n-5*width_lower).and.Dnn(i)<(10.*phys%diff_n+5*width_lower)) then
-      !  d_iso(5,5,i) = 10.*phys%diff_n + width_lower*log(1+exp((Dnn(i)-10.*phys%diff_n)/width_lower))
-      !else
-      !  d_iso(5,5,i) = 10.*phys%diff_n
-      !endif
+
         
 #endif
-       !if (Dnn(i) .lt.  19) d_iso(5,5,i) = 19
-       !if (Dnn(i) .lt. 50*simpar%refval_time/simpar%refval_length**2) d_iso(5,5,i) = 50*simpar%refval_time/simpar%refval_length**2
-       !cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)))
-       !DnnTh = abs(cs_n*U5(i)/(sqrt(q(i,9)**2 + q(i,10)**2)))
-       !!Max Value
-       !if (Dnn(i) .gt.  DnnTh) then 
-	      !   if (DnnTh .gt. 20.*phys%diff_n) then 
-	      !      d_iso(5,5,i) = DnnTh
-       !      if (DnnTh .gt. phys%diff_nn) d_iso(5,5,i) = phys%diff_nn
-	      !   end if 
-	      !!Min Value
-	      !!if (Dnn(i) .lt.  phys%diff_n) d_iso(5,5,i) = phys%diff_n
-       !end if
+
     END DO
 #else
     d_iso(5,5,:)=phys%diff_nn
@@ -922,6 +895,11 @@ CONTAINS
       if (aux<tol) aux = tol
       res = aux**phys%epn
     endif
+    !! applying softplus instead strong limit
+    !if (switch%testcase .ne. 2) then 
+    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
+    !endif
+    !res = aux**phys%epn
   END FUNCTION computeAlphai
 
   FUNCTION computeAlphae(U) RESULT(res)
@@ -935,14 +913,33 @@ CONTAINS
       if (aux<tol) aux = tol
       res = aux**phys%epn
     endif
+    !! applying softplus instead strong limit
+    !if (switch%testcase .ne. 2) then 
+    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
+    !endif
+    !res = aux**phys%epn
   END FUNCTION computeAlphae
 
   SUBROUTINE compute_dAlpha_dUi(U, res)
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT):: res(:)
-    real*8             :: aux
+    real*8             :: aux, double_soft_deriv
     real, parameter :: tol = 1e-5
+    ! applying softplus instead strong limit
     aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
+    !double_soft_deriv = 1.
+    !if (switch%testcase .ne. 2) then  !! don't apply flux limiter if it is a convergence test
+    !  call double_softplus_deriv(aux, tol,3.*phys%Mref/2,double_soft_deriv)
+    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
+    !endif
+    !res = 0.
+    !res(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
+    !res(2) = -U(2)/U(1)**2
+    !res(3) = 1./U(1)
+    !res=phys%epn*aux**(phys%epn-1)*res
+    !if (switch%testcase .ne. 2) then
+    !  res = res*double_soft_deriv
+    !endif
     if ((2./(3.*phys%Mref)*aux > 1.) .and. (switch%testcase .ne. 2)) then !! don't apply flux limiter if it is a convergence test
       res = 0.
     else
@@ -958,9 +955,22 @@ CONTAINS
   SUBROUTINE compute_dAlpha_dUe(U, res)
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT):: res(:)
-    real*8             :: aux
+    real*8             :: aux, double_soft_deriv
     real, parameter :: tol = 1e-5
+    ! applying softplus instead strong limit
     aux = U(4)/U(1)
+    !double_soft_deriv = 1.
+    !if (switch%testcase .ne. 2) then  !! don't apply flux limiter if it is a convergence test
+    !  call double_softplus_deriv(aux, tol,3.*phys%Mref/2,double_soft_deriv)
+    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
+    !endif
+    !res = 0.
+    !res(1) = -U(4)/U(1)**2
+    !res(4) = 1./U(1)
+    !res=phys%epn*aux**(phys%epn-1)*res
+    !if (switch%testcase .ne. 2) then
+    !  res = res*double_soft_deriv
+    !endif
     if ((2./(3.*phys%Mref)*aux > 1.) .and. (switch%testcase .ne. 2)) then !! don't apply flux limiter if it is a convergence test
       res = 0.
     else
@@ -1821,11 +1831,14 @@ CONTAINS
   SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT) :: Dnn_dU(:)
-    real*8              :: double_soft_deriv, Dnn, ti, soft_deriv, ti_min=1e-6, tol=1e-10
+    real*8              :: Dnn, ti,  ti_min=1e-6, tol=1e-10
+#ifdef DNNSMOOTH
+    real*8              :: double_soft_deriv, soft_deriv
+#endif
     real*8              :: sigmaviz, sigmavcx
     real*8              :: dti_du(size(U,1)), dsigmaviz_dU(size(U,1)), dsigmavcx_dU(size(U,1))
     Dnn_dU(:) = 0.
-    if ((U(3)>=tol) .and. (U(1)>=tol) .and. (U(5)>=tol)) then
+    !if ((U(3)>=tol) .and. (U(1)>=tol) .and. (U(5)>=tol)) then
       ! calculation of atomic rates
         call compute_sigmaviz(U,sigmaviz)
         call compute_sigmavcx(U,sigmavcx)
@@ -1859,7 +1872,7 @@ CONTAINS
         Dnn_dU(:) = Dnn_dU(:)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx)**2)*(dsigmaviz_dU(:)+dsigmavcx_dU(:))
 
         Dnn_dU(:) = Dnn_dU(:)*simpar%refval_time/simpar%refval_length**2*double_soft_deriv
-    endif
+    !endif
   END SUBROUTINE  compute_Dnn_dU
 #endif
   SUBROUTINE compute_Tloss(U,Tloss)
@@ -2383,7 +2396,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(5) = phys%diff_nn!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)!phys%diff_nn 
+        tau_aux(5) = tau_aux(5) + phys%diff_nn!phys%diff_nn 
 #endif
       else
 #endif

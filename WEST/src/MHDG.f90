@@ -813,6 +813,8 @@ CONTAINS
 #else
     save_name = 'Sol2D_'//save_name
 #endif
+    ! Add save_folder
+    save_name = TRIM(ADJUSTL(input%save_folder))//save_name
   END SUBROUTINE setSolName
 
   SUBROUTINE compute_dt(errlstime)

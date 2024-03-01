@@ -57,7 +57,7 @@
 /
 
 &INPUT_LST
-    field_path          = 'B_field_FEEQS_nodes/second_try/WEST_54487_0202'  ! Path to Bfield h5 file. 
+    field_path          = 'B_field_FEEQS_nodes/8th_try/WEST_54487_0202'  ! Path to Bfield h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'B_field/WEST_54487'
                                                                         ! If switch%ME = .false. then put the full part 'B_field/WEST_54487_0000.h5'
     field_dimensions(1) = 200                                   ! 1st dimension dimensions of magnetic field file
@@ -72,6 +72,7 @@
                                                                         ! If switch%ME = .false. then put the full part 'Jtor/WEST_54487_Jtor_0000.h5'
     jtor_dimensions(1) = 457                                   ! 1st dimension dimensions of plasma current file
     jtor_dimensions(2) = 457                                   ! 2nd dimension dimensions of plasma current file
+    save_folder = '/scratch/ikudashev/results_hdg/papier_fontiers/puff_scan/with_smoothed_baffle_lfs_lim_finer/3.4e20_threebody_no_u_grad_dnn/'
 /
 
 &NUMER_LST
@@ -80,7 +81,7 @@
     tau(3)              = 1.E+0         ! Stabilization parameter 3rd equation
     tau(4)              = 1.E+0         ! Stabilization parameter 4th equation
     tau(5)              = 1.E-0         ! Stabilization parameter 5th equation
-    nrp                 = 30           ! Max number of Newton-Raphson iterations
+    nrp                 = 40           ! Max number of Newton-Raphson iterations
     tNR                 = 1e-4          ! Tolerance of the Newton-Raphson scheme
     tTM                 = 1e-8          ! Tolerance for the steady state achievement
     div                 = 1e5           ! Divergence of Newton-Raphon iteration
@@ -93,8 +94,8 @@
     thr                 = 1.e-12        ! Min value of density allowed (works only if the switch is activated)
     thrpre              = 1.e-12        ! Min value of pressure allowed (works only if the switch is activated)
     stab                = 5             ! Stabilization type (from 1 to 4 (5), 2 is good, 5 is better (simplified 2, only for N-Gamma(-T))
-    dumpnr_min          = 0.05! Dumping factor for Newton-Raphson (0<dumpnr<1, first parameter to decrease if NR fail) typical 0.1
-    dumpnr_max          = 0.05
+    dumpnr_min          = 0.000001! Dumping factor for Newton-Raphson (0<dumpnr<1, first parameter to decrease if NR fail) typical 0.1
+    dumpnr_max          = 0.25
     dumpnr_width        = 3.
     dumpnr_n0           = 10.
     ntor                = 3             ! Number of elements in the toroidal direction
@@ -126,7 +127,7 @@
 
 
 &TIME_LST
-    dt0                 = 3.e9         ! Initial time step 3.e9 1.6395702112189546e5
+    dt0                 = 3.e9        ! Initial time step 3.e9 1.6395702112189546e5
     nts                 = 10           ! Max number of time iterations to do in the current session (only for transient simulations) 30
     tfi                 = 1e8           ! Final time: the simulation stops when this time is reached
     tsw                 = 0             ! Switch to modify the time step
@@ -146,7 +147,8 @@
     diff_nn = 20e3 ! diffusion for neutral equation
     ! ****** Option for neutral equation (available only if compile with NEUTRAL)
     Re                  = 0.998     ! Recycling coefficient 0.997
-    puff                = 1.5e20  ! puff coefficient (particles per second in the whole puff area) 2.5e18 5.e18
+    Re_pump             = 0.95     ! Recycling coefficient in the pump region
+    puff                = 3.4e20 ! puff coefficient (particles per second in the whole puff area) 2.5e18 5.e18
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
     ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52 and 81)
     ener_source_ee      = 150.      ! amplitude of the truncated electron energy source (case 52 and 81)

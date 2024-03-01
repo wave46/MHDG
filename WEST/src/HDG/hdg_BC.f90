@@ -2076,8 +2076,8 @@ CONTAINS
        recycling_coeff =  phys%Re
        puff_coeff = 0.
     CASE (bc_BohmPump)
-       recycling_coeff =  min(0.9928,phys%Re)
-       if (switch%testcase .ge. 50 .and. switch%testcase .le. 59) recycling_coeff = 0.95
+       recycling_coeff =  phys%Re_pump
+       if (switch%testcase .ge. 50 .and. switch%testcase .le. 59) recycling_coeff = phys%Re_pump
        puff_coeff = 0.
     CASE (bc_BohmPuff) 
        recycling_coeff =  phys%Re
@@ -2598,7 +2598,7 @@ CONTAINS
        recycling_coeff =  phys%Re
        puff_coeff = 0.
     CASE (bc_BohmPump)
-       recycling_coeff =  min(0.9928,phys%Re)
+       recycling_coeff =  phys%Re_pump
        puff_coeff = 0.
     CASE (bc_BohmPuff) 
        recycling_coeff =  0.

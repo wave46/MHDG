@@ -471,6 +471,7 @@ CONTAINS
       call HDF5_real_saving(group_id2, phys%diff_pot, 'diff_pot')
       call HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
 	     call HDF5_real_saving(group_id2, phys%Re, 'recycling')
+       call HDF5_real_saving(group_id2, phys%Re_pump, 'recycling_pump')
 	     call HDF5_real_saving(group_id2, phys%puff, 'puff')
 	     IF (switch%ME) THEN
 	        call HDF5_array1d_saving(group_id2, phys%puff_exp, time%nts, 'puff_exp')
