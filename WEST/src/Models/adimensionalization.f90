@@ -166,7 +166,7 @@ SUBROUTINE adimensionalization()
   simpar%refval_magfield = B0
   simpar%refval_current = J0
   simpar%refval_diffusion = D0
-  simpar%refval_momentum = L0*n0
+  simpar%refval_momentum = L0*n0/t0
   simpar%refval_specpress = Tev*n0/mi*e
   simpar%refval_specenergy = u0**2
   simpar%refval_specenergydens = u0**2*n0

@@ -706,7 +706,7 @@ CONTAINS
     END SELECT
 #ifdef SAVEFLUX
 #ifdef PARALL
-    IF (Mesh%ghostElems(iel) .eq. 0) THEN
+    IF (Mesh%ghostFaces(Fi) .eq. 0) THEN
 #endif
     totalflux_puff = totalflux_puff + faceflux_puff
     totalflux_parallel = totalflux_parallel + faceflux_parallel

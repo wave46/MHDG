@@ -72,7 +72,7 @@ CONTAINS
     ALLOCATE (simpar%physvar_refval(phys%npv))
     ALLOCATE (simpar%consvar_refval(phys%Neq))
     simpar%physvar_refval(1) = simpar%refval_density
-    simpar%physvar_refval(2) = 1.
+    simpar%physvar_refval(2) = simpar%refval_speed
     simpar%physvar_refval(3) = simpar%refval_specenergy
     simpar%physvar_refval(4) = simpar%refval_specenergy
     simpar%physvar_refval(5) = simpar%refval_specpress
@@ -1797,7 +1797,7 @@ CONTAINS
     real*8             :: w, width
     w = 0.01
     width = 10
-    !if (x>=xmin+w*5.xmin) then
+    !if (x>=xmin+w*width.xmin) then
     !  x = x !do nothing
     if ((x>=xmin-w*width*xmin) .and. (x<xmin+w*width*xmin)) then
       x = xmin + w*xmin*log(1+exp((x-xmin)/(w*xmin)))
@@ -1834,6 +1834,8 @@ CONTAINS
     real*8              :: Dnn, ti,  ti_min=1e-6, tol=1e-10
 #ifdef DNNSMOOTH
     real*8              :: double_soft_deriv, soft_deriv
+#else
+    real*8              :: ti_real
 #endif
     real*8              :: sigmaviz, sigmavcx
     real*8              :: dti_du(size(U,1)), dsigmaviz_dU(size(U,1)), dsigmavcx_dU(size(U,1))
@@ -1844,35 +1846,58 @@ CONTAINS
         call compute_sigmavcx(U,sigmavcx)
         ! calculation of temperature before limitation
         ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
+#ifdef DNNSMOOTH 
         call softplus_deriv(ti, ti_min,soft_deriv)
         call softplus(ti,ti_min)
+#else
+        ti_real = ti
+        ti = max(ti_min,ti)
+#endif
         ! calculation of Dnn before limitation
-        Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))*simpar%refval_time/simpar%refval_length**2   
+        Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))*simpar%refval_time/simpar%refval_length**2
+#ifdef DNNSMOOTH   
         call double_softplus_deriv(Dnn,10.*phys%diff_n,phys%diff_nn,double_soft_deriv)   !to check the mulptiplier for Dnn_min
+#else
+        if ((Dnn>10.*phys%diff_n) .and. (Dnn<phys%diff_nn)) then
+#endif 
+          ! ti derivative
+          dti_du(:) = 0.
+#ifndef DNNSMOOTH
+          if (ti_real>ti) then
+#endif
+            dti_du(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
+            dti_du(2) = -U(2)/U(1)**2
+            dti_du(3) = 1./U(1)
+            dti_du(:) = dti_du(:)*simpar%refval_temperature*2./(3.*phys%Mref)
+#ifndef DNNSMOOTH
+          endif
+#endif
+          ! atomic rates derivatives
+          call compute_dsigmaviz_dU(U,dsigmaviz_dU)
+          call compute_dsigmavcx_dU(U,dsigmavcx_dU)
 
-        ! ti derivative
-        dti_du(:) = 0.
-        dti_du(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
-        dti_du(2) = -U(2)/U(1)**2
-        dti_du(3) = 1./U(1)
-        dti_du(:) = dti_du(:)*simpar%refval_temperature*2./(3.*phys%Mref)
+          ! arrange all ingredients
+          Dnn_dU(:) = 0.
+          ! ti part
+          Dnn_dU(:) = Dnn_dU(:)+dti_du(:)*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))
+#ifdef DNNSMOOTH
+          Dnn_dU(:) = Dnn_dU(:)*soft_deriv
+#endif
+          ! n part
+          Dnn_dU(1) = Dnn_dU(1)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)**2*(sigmaviz + sigmavcx))
+          ! atomic rates part
+          Dnn_dU(:) = Dnn_dU(:)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx)**2)*(dsigmaviz_dU(:)+dsigmavcx_dU(:))
 
-        ! atomic rates derivatives
-        call compute_dsigmaviz_dU(U,dsigmaviz_dU)
-        call compute_dsigmavcx_dU(U,dsigmavcx_dU)
-
-        ! arrange all ingredients
-        Dnn_dU(:) = 0.
-
-        ! ti part
-        Dnn_dU(:) = Dnn_dU(:)+dti_du(:)*soft_deriv*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))
-        ! n part
-        Dnn_dU(1) = Dnn_dU(1)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)**2*(sigmaviz + sigmavcx))
-        ! atomic rates part
-        Dnn_dU(:) = Dnn_dU(:)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx)**2)*(dsigmaviz_dU(:)+dsigmavcx_dU(:))
-
-        Dnn_dU(:) = Dnn_dU(:)*simpar%refval_time/simpar%refval_length**2*double_soft_deriv
+          Dnn_dU(:) = Dnn_dU(:)*simpar%refval_time/simpar%refval_length**2
+#ifdef DNNSMOOTH
+          Dnn_dU(:) = Dnn_dU(:)*double_soft_deriv
+#endif
     !endif
+#ifndef DNNSMOOTH
+        endif
+#endif
+
+        
   END SUBROUTINE  compute_Dnn_dU
 #endif
   SUBROUTINE compute_Tloss(U,Tloss)

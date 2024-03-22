@@ -701,7 +701,7 @@ CONTAINS
 					xyg = matmul(refElPol%N1D,Xf)
 					xyg_d = matmul(refElPol%Nxi1D,Xf)
 #ifdef PARALL
-          IF (Mesh%ghostElems(el) .eq. 0) THEN
+          IF (Mesh%ghostFaces(Mesh%Nextfaces+i) .eq. 0) THEN
 #endif
     				 DO g = 1, refElPol%NGauss1D
         	  	   xyDerNorm_g = norm2(xyg_d(g,:))
@@ -742,7 +742,7 @@ CONTAINS
             xyg = matmul(refElPol%N1D,Xf)
             xyg_d = matmul(refElPol%Nxi1D,Xf)
 #ifdef PARALL
-            IF (Mesh%ghostElems(el) .eq. 0) THEN
+            IF (Mesh%ghostFaces(Mesh%Nextfaces+i) .eq. 0) THEN
 #endif
                DO g = 1, refElPol%NGauss1D
                    xyDerNorm_g = norm2(xyg_d(g,:))
