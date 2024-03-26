@@ -1277,7 +1277,7 @@ CONTAINS
       up(:, 1) = 1.
       up(:, 3) = 18.
       up(:, 4) = 18.
-    CASE (50:64)
+    CASE (50:59)
       fluxel = phys%magnetic_flux(Mesh%T(iel,:))  
       fluxel = (fluxel - phys%Flux2Dmin)/(phys%Flux2Dmax - phys%Flux2Dmin)                                            
       sigma = 0.4
@@ -1285,7 +1285,7 @@ CONTAINS
       up(:, 3) = 18.*exp(-fluxel**2/(2*sigma**2))
       up(:, 4) = 18.*exp(-fluxel**2/(2*sigma**2))
 #ifdef NEUTRAL
-      up(:,11)= 1.e-3
+      up(:,11)= 1.e-8
 #endif
 
       !                                      r =         sqrt ( (x*phys%lscale-geom%R0)**2 + (y*phys%lscale)**2 )
@@ -1294,7 +1294,13 @@ CONTAINS
       !                                      up(:,2) = 10. + cos(r*2*pi)*sin(th*4*pi)
       !                                      up(:,3) = 36. + cos(r*2*pi)*sin(th*4*pi)
       !                                      up(:,4) = 36. + cos(r*2*pi)*sin(th*4*pi)
-
+    CASE (60:64)
+      up(:, 1) = 1.
+      up(:, 3) = 18.
+      up(:, 4) = 18.
+#ifdef NEUTRAL
+      up(:,11)= 1.e-8
+#endif
     CASE (65)
       up(:, 1) = 1.
       r = sqrt((x*phys%lscale - geom%R0)**2 + (y*phys%lscale - 0.75)**2)

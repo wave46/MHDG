@@ -623,9 +623,10 @@ CONTAINS
 
     ! Solution gradient at nodes
     qf = transpose(reshape(sol%q(ind_qf),(/Ndim*Neq,Npfl/)))
-
-    ! Analytical solution at face Gauss points
-    call analytical_solution(iel,xyg(:,1),xyg(:,2),uex)
+    if (switch%testcase .ne. 54) then !this we shouldn't actually call for WEST case
+        ! Analytical solution at face Gauss points
+        call analytical_solution(iel,xyg(:,1),xyg(:,2),uex)
+    endif
 
     ! Solution at face Gauss points
     ufg = matmul(refElPol%N1D,transpose(reshape(uf,[neq,Npfl])))
@@ -655,6 +656,13 @@ CONTAINS
     ! Physical variables at Gauss points with analytical sol
     CALL cons2phys(uex,uexpg)
 
+#ifdef SAVEFLUX
+    !Initialization of variables for flux control to avoid NaN if not Bohm boundary
+    faceflux_puff = 0.
+    faceflux_parallel = 0.
+    faceflux_perpendicular = 0.
+    faceflux_neutral = 0.
+#endif
     ! Type of boundary
     fl = Mesh%boundaryFlag(ifa)
 #ifdef PARALL

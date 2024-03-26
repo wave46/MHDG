@@ -371,7 +371,9 @@ CONTAINS
     ! Save normalized psi
     call HDF5_array1D_saving(file_id, phys%magnetic_psi, size(phys%magnetic_psi), 'magnetic_psi')
     ! Save toroidal current
-    call HDF5_array1D_saving(file_id, phys%Jtor, size(phys%Jtor), 'Jtor')
+    if (switch%ohmicsrc) then
+      call HDF5_array1D_saving(file_id, phys%Jtor, size(phys%Jtor), 'Jtor')
+    endif
     ! Save magnetic perturbation and related fields
     if ((switch%rmp).or.(switch%ripple)) then
       call HDF5_array2D_saving(file_id, phys%Bperturb, size(phys%Bperturb, 1), size(phys%Bperturb, 2), 'magnetic_perturbation')
@@ -494,7 +496,7 @@ CONTAINS
       call HDF5_logical_saving(group_id2, switch%steady, 'steady')
       call HDF5_integer_saving(group_id2, switch%testcase, 'testcase')
       call HDF5_logical_saving(group_id2, switch%ohmicsrc, 'ohmicsrc')
-      call HDF5_logical_saving(group_id2, switch%ohmicsrc, 'ME')
+      call HDF5_logical_saving(group_id2, switch%ME, 'ME')
       call HDF5_logical_saving(group_id2, switch%rmp, 'RMP')
       call HDF5_logical_saving(group_id2, switch%ripple, 'Ripple')
       call HDF5_logical_saving(group_id2, switch%psdtime, 'psdtime')
