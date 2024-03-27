@@ -1750,8 +1750,8 @@ CONTAINS
     Qpr = reshape(qfg,(/Ndim,Neq/))
 
     ! Split diffusion matrices/vectors for the momentum equation
-    CALL compute_W2(uf,W2)
-    CALL compute_dW2_dU(uf,dW2_dU)
+    CALL compute_W2(uf,W2,diffiso(1,1),diffiso(2,2))
+    CALL compute_dW2_dU(uf,dW2_dU,diffiso(1,1),diffiso(2,2))
     QdW2 = matmul(Qpr,dW2_dU)
 
     ! Case diagonal matrix stabilization
@@ -1809,12 +1809,12 @@ CONTAINS
       call compute_dV_dUe(ufg,dV_dUe)
 
       ! Split diffusion matrices/vectors for the energies equations
-      CALL compute_W3(uf,W3)
-      CALL compute_dW3_dU(uf,dW3_dU)
+      CALL compute_W3(uf,W3,diffiso(1,1),diffiso(2,2),diffiso(3,3))
+      CALL compute_dW3_dU(uf,dW3_dU,diffiso(1,1),diffiso(2,2),diffiso(3,3))
       QdW3 = matmul(Qpr,dW3_dU)
 
-      CALL compute_W4(uf,W4)
-      CALL compute_dW4_dU(uf,dW4_dU)
+      CALL compute_W4(uf,W4,diffiso(1,1),diffiso(4,4))
+      CALL compute_dW4_dU(uf,dW4_dU,diffiso(1,1),diffiso(4,4))
       QdW4 = matmul(Qpr,dW4_dU)
 
       ! Compute Alpha(U^(k-1))
@@ -1873,10 +1873,10 @@ CONTAINS
 
     ! Perpendicular diffusion
     IF (ntang) THEN
-#ifdef NEUTRAL
-      DO k = 1,Neq-1
-#else
+
       DO k = 1,Neqgrad
+#ifdef NEUTRAL
+        IF (k .eq. 5) CYCLE
 #endif
         DO idm = 1,Ndim
           indi = ind_asf + k
@@ -1927,10 +1927,10 @@ CONTAINS
         END DO
       END DO
     ELSE
-#ifdef NEUTRAL
-      DO k = 1,Neq-1
-#else
+
       DO k = 1,Neq
+#ifdef NEUTRAL
+      IF (k .eq. 5) CYCLE
 #endif
         DO idm = 1,Ndim
           indi = ind_asf + k
@@ -2120,7 +2120,7 @@ CONTAINS
 #endif
 #ifndef RHSBC    
     ! Convective part
-    k = Neq
+    k = 5
     ! Plasma flux
     indi = k+ind_asf
     indj = 2+ind_asf
@@ -2145,7 +2145,7 @@ CONTAINS
     
     ! diffusive diagonal part 
     DO idm = 1,Ndim
-       k = Neq
+       k = 5
 #ifndef NEUTRALP
        indi = ind_asf+k
        indj = ind_ash+idm+(k-1)*Ndim
@@ -2187,7 +2187,7 @@ CONTAINS
     
     ! diffusive non-diagonal part 
     DO idm = 1,Ndim
-      k = phys%Neq
+      k = 5
       j=1
       indi = ind_asf+k
       indj = ind_ash+idm+(j-1)*Ndim

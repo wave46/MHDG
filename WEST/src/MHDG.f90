@@ -421,6 +421,9 @@ PROGRAM MHDG
 #ifndef NEUTRALP
 #ifdef NEUTRAL
             WRITE (6, *) "Neutrals diffusion: ", phys%diff_nn!*switch%diffred*simpar%refval_diffusion
+#ifdef KEQUATION
+            WRITE (6, *) "K diffusion min: ", phys%diff_k_min*switch%diffred*simpar%refval_diffusion
+#endif
 #endif
 #endif
             WRITE (6, *) "************************************************"
@@ -438,6 +441,10 @@ PROGRAM MHDG
 #ifndef NEUTRALP
 #ifdef NEUTRAL
           phys%diff_nn = phys%diff_nn!*switch%diffred
+#ifdef KEQUATION
+          phys%diff_k_min = phys%diff_k_min*switch%diffred
+          phys%diff_k_max = phys%diff_k_max!*switch%diffred
+#endif
 #endif
 #endif
 
@@ -513,6 +520,9 @@ PROGRAM MHDG
 #ifndef NEUTRALP
 #ifdef NEUTRAL
           WRITE (6, *) "Neutrals diffusion: ", phys%diff_nn!*switch%diffred*simpar%refval_diffusion
+#ifdef KEQUATION
+          WRITE (6, *) "K diffusion min: ", phys%diff_k_min!*switch%diffred*simpar%refval_diffusion
+#endif
 #endif
 #endif
           WRITE (6, *) "************************************************"
@@ -530,6 +540,10 @@ PROGRAM MHDG
 #ifndef NEUTRALP
 #ifdef NEUTRAL
         phys%diff_nn = phys%diff_nn!*switch%diffred
+#ifdef KEQUATION
+        phys%diff_k_min = phys%diff_k_min*switch%diffred
+        phys%diff_k_max = phys%diff_k_max!*switch%diffred
+#endif
 #endif
 #endif
 

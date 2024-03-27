@@ -200,6 +200,12 @@ MODULE types
     real*8, pointer :: magnetic_psi(:)    ! Magnetic flux normalized to separatrix magnetic flux   [n of nodes]
     real*8          :: Flux2Dmin          ! Minimum of the magnetic flux, across the MPI partitions
     real*8          :: Flux2Dmax          ! Maximum of the magnetic flux, across the MPI partitions
+#ifdef KEQUATION
+    real*8, pointer :: omega(:)           ! larmor frequency   [n of nodes]
+    real*8, pointer :: q_cyl(:)           ! q cylindrical   [n of nodes]
+    real*8          :: r_axis             ! R-coordinate of magnetic axis
+    real*8          :: z_axis             ! Z-coordinate of magnetic axis
+#endif
     real*8, pointer :: Bperturb(:, :)     ! Magnetic perturbation, Br,Bz,Bphi [n of nodes  x 3]
     real*8          :: Tbg                ! Background temperature in the isothermal model
     real*8, pointer :: Jtor(:)            ! Toroidal Current
@@ -260,6 +266,12 @@ MODULE types
     ! Atomic rates coefficients
     real*8, dimension(9,9):: alpha_iz     ! Coefficients for ionization coefficients spline from EIRENE, (te,ne) grid
     real*8, dimension(9,9):: alpha_rec     ! Coefficients for recompination coefficients spline from EIRENE, (te,ne) grid
+#endif
+#ifdef KEQUATION
+    ! Coefficients for the k equation
+    real*8          :: diff_k_min         ! Mininmum diffusion in the k equation
+    real*8          :: diff_k_max         ! Maximum diffusion in the k equation
+    real*8          :: k_max              ! Maximum k
 #endif
   END TYPE Physics_type
 
@@ -495,6 +507,9 @@ MODULE types
     real*8    :: refval_temperature
     real*8    :: refval_density
     real*8    :: refval_neutral
+#ifdef KEQUATION
+    real*8    :: refval_k
+#endif
     real*8    :: refval_speed
     real*8    :: refval_potential
     real*8    :: refval_vorticity
@@ -516,6 +531,9 @@ MODULE types
     character(len=20)    :: refval_temperature_dimensions
     character(len=20)    :: refval_density_dimensions
     character(len=20)    :: refval_neutral_dimensions
+#ifdef KEQUATION
+    character(len=20)    :: refval_k_dimensions
+#endif
     character(len=20)    :: refval_speed_dimensions
     character(len=20)    :: refval_potential_dimensions
     character(len=20)    :: refval_vorticity_dimensions

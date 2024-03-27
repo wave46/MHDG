@@ -423,6 +423,9 @@ CONTAINS
       call HDF5_string_saving(group_id2, simpar%refval_temperature_dimensions, 'temperature_scale_dimensions')
       call HDF5_string_saving(group_id2, simpar%refval_density_dimensions, 'density_scale_dimensions')
       call HDF5_string_saving(group_id2, simpar%refval_neutral_dimensions, 'density_neutral_dimensions')
+#ifdef KEQUATION
+      call HDF5_string_saving(group_id2, simpar%refval_k_dimensions, 'density_k_dimensions')
+#endif
       call HDF5_string_saving(group_id2, simpar%refval_speed_dimensions, 'speed_scale_dimensions')
       call HDF5_string_saving(group_id2, simpar%refval_potential_dimensions, 'potential_scale_dimensions')
       call HDF5_string_saving(group_id2, simpar%refval_vorticity_dimensions, 'vorticity_scale_dimensions')
@@ -439,6 +442,9 @@ CONTAINS
       call HDF5_real_saving(group_id2, simpar%refval_temperature, 'temperature_scale')
       call HDF5_real_saving(group_id2, simpar%refval_density, 'density_scale')
       call HDF5_real_saving(group_id2, simpar%refval_neutral, 'neutral_scale')
+#ifdef KEQUATION
+      call HDF5_real_saving(group_id2, simpar%refval_k, 'k_scale')
+#endif
       call HDF5_real_saving(group_id2, simpar%refval_speed, 'speed_scale')
       call HDF5_real_saving(group_id2, simpar%refval_potential, 'potential_scale')
       call HDF5_real_saving(group_id2, simpar%refval_vorticity, 'vorticity_scale')

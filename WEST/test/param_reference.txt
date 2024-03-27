@@ -1,6 +1,6 @@
 
 &SWITCH_LST
-    steady              = .true.       ! Is it a steady state simulation?
+    steady              = .false.       ! Is it a steady state simulation?
                                         ! .false. = time evolving simulation
                                         ! .true.  = steady state simulation
     axisym              = .true.        ! Is it an axisymmetric simulation?
@@ -10,14 +10,14 @@
     init                = 1             ! Initialization type: 1-analytical at nodes; 2-L2 projection
     driftdia            = .false.       ! Set to FALSE to ignore diamagnetic drifts terms
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
-    testcase            = 54            ! Determine the analytical solution and the body forces
-    OhmicSrc            = .true.        ! True to set Ohmic source of energy
+    testcase            = 60            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
+    OhmicSrc            = .false.        ! True to set Ohmic source of energy
     ME                  = .false.        ! True to allow magnetic equilibrium evolution in time
     RMP                 = .false.       ! True to set RMP (non-axisymetrical perturbation)
     Ripple              = .false.       ! True to set Ripple (non-axisymetrical perturbation)
-    psdtime             = .false.        ! Reduce the diffusion every time we reach the steady state
+    psdtime             = .true.        ! Reduce the diffusion every time we reach the steady state
                                         ! condition (only works if steady=.false.)
-    diffred             = 0.8  ! Reduction factor of the diffusion for psdtime simulation (set for 20*diff_x)
+    diffred             = 0.6  ! Reduction factor of the diffusion for psdtime simulation (set for 20*diff_x)
     !diffred             = 0.76923076923
     diffmin             = 0.001           ! Minimum value of the diffusion for a psdtime simulation
     shockcp             = 0             ! Shock capturing option
@@ -72,7 +72,7 @@
                                                                         ! If switch%ME = .false. then put the full part 'Jtor/WEST_54487_Jtor_0000.h5'
     jtor_dimensions(1) = 457                                   ! 1st dimension dimensions of plasma current file
     jtor_dimensions(2) = 457                                   ! 2nd dimension dimensions of plasma current file
-    save_folder = '/scratch/ikudashev/results_hdg/papier_fontiers/puff_scan/with_smoothed_baffle_lfs_lim_finer/3.4e20_threebody_no_u_grad_dnn/'
+    save_folder = '/home/ikudashev/meso_backup/scratch/results_hdg/manuel_code/circular_case/k_equation_first_test/'
 /
 
 &NUMER_LST
@@ -94,8 +94,8 @@
     thr                 = 1.e-12        ! Min value of density allowed (works only if the switch is activated)
     thrpre              = 1.e-12        ! Min value of pressure allowed (works only if the switch is activated)
     stab                = 5             ! Stabilization type (from 1 to 4 (5), 2 is good, 5 is better (simplified 2, only for N-Gamma(-T))
-    dumpnr_min          = 0.000001! Dumping factor for Newton-Raphson (0<dumpnr<1, first parameter to decrease if NR fail) typical 0.1
-    dumpnr_max          = 0.25
+    dumpnr_min          = 0.5! Dumping factor for Newton-Raphson (0<dumpnr<1, first parameter to decrease if NR fail) typical 0.1
+    dumpnr_max          = 0.5
     dumpnr_width        = 3.
     dumpnr_n0           = 10.
     ntor                = 3             ! Number of elements in the toroidal direction
@@ -138,17 +138,17 @@
 
 &PHYS_LST
     ! ****** Diffusion parameters in m^2/s (start at 20*diff_x if psdtime = true)
-    diff_n = 1.! diffusion in the continuity equation
-    diff_u = 1. ! diffusion in the momentum equation
-    diff_e = 1.  ! perpendicular diffusion for the energy equation
-    diff_ee = 1.   ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
-    diff_vort = 1. ! diffusion in the vorticity equation
+    diff_n = 10.! diffusion in the continuity equation
+    diff_u = 10. ! diffusion in the momentum equation
+    diff_e = 10.  ! perpendicular diffusion for the energy equation
+    diff_ee = 10.   ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
+    diff_vort = 10. ! diffusion in the vorticity equation
     v_p = 0. ! Pinch velocity in the continuity equation (Pinch = vp*(psi^2 + psi^2*tanh((0.95 - psi)/0.02)) with psi = 1. at separatrix )
     diff_nn = 20e3 ! diffusion for neutral equation
     ! ****** Option for neutral equation (available only if compile with NEUTRAL)
     Re                  = 0.998     ! Recycling coefficient 0.997
     Re_pump             = 0.95     ! Recycling coefficient in the pump region
-    puff                = 3.4e20 ! puff coefficient (particles per second in the whole puff area) 2.5e18 5.e18
+    puff                = 1e20 ! puff coefficient (particles per second in the whole puff area) 2.5e18 5.e18
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
     ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52 and 81)
     ener_source_ee      = 150.      ! amplitude of the truncated electron energy source (case 52 and 81)
@@ -156,6 +156,10 @@
     fluxg_trunc         = 0.2       ! value of the NORMALISED magnetic surface at which truncate the gaussian source WEST (case 52)
     part_source         = 0.        ! source coefficient (particles per second in the whole core area [ONLY BC 6])
     ener_source         = 20e6      ! source coefficient (Watt in the whole core area [ONLY BC 6])
+    ! kequation part
+    diff_k_min = 10.  ! minimal diffusion in the k equation
+    diff_k_max = 10. ! maximal diffusion in the k equation
+    k_max = 1.e10      ! maximal k
     !puff               = 1.8e-6
     !puff               = 2.e-5
     ! ****** Ohmic heating: only for testcase 54 with core (not tested)
@@ -174,7 +178,7 @@
     bcflags(9)          = 50            ! Out
     bcflags(10)         = 50            ! Upper Limiter
     ! ****** Boundary threshold for Bohm
-    bohmth              = 0.000           ! threshold for imposing the bohm boundary condition
+    bohmth              = 0.02           ! threshold for imposing the bohm boundary condition !for circ put 0.1 0.02
     ! ****** Boundary coefficients for the Bohm boundary condition of the temperature equations:
     Gmbohm              = 2.5           ! gamma for Bohm boundary condition for energy equation (usually 7) and for ions energy equation (usually 2.5)
     Gmbohme             = 4.5           ! gamma for Bohm boundary condition for electron energy equation (usually 4.5)

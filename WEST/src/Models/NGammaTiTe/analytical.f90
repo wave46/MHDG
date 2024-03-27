@@ -93,6 +93,9 @@ CONTAINS
           up(ind, 4) = 18.
 #ifdef NEUTRAL
           up(ind,11) = 0.
+#ifdef KEQUATION
+          up(ind,12) = 1.8e-5
+#endif
 #endif
         CASE (64)
           up(ind, 1) = 1.
@@ -1286,6 +1289,9 @@ CONTAINS
       up(:, 4) = 18.*exp(-fluxel**2/(2*sigma**2))
 #ifdef NEUTRAL
       up(:,11)= 1.e-8
+#ifdef KEQUATION
+      up(:,12)= 1.8e-5
+#endif
 #endif
 
       !                                      r =         sqrt ( (x*phys%lscale-geom%R0)**2 + (y*phys%lscale)**2 )
@@ -1300,6 +1306,9 @@ CONTAINS
       up(:, 4) = 18.
 #ifdef NEUTRAL
       up(:,11)= 1.e-8
+#ifdef KEQUATION
+      up(:,12)= 1.e-5
+#endif
 #endif
     CASE (65)
       up(:, 1) = 1.
@@ -1324,6 +1333,9 @@ CONTAINS
     !  up(:, 4) = 18.*exp(-((x*phys%lscale - xm*phys%lscale)**2 + (y*phys%lscale - ym*phys%lscale)**2)/(2*sigma**2))
 #ifdef NEUTRAL
       up(:,11) = 1.e-8
+#ifdef KEQUATION
+      up(:,12)= 1.8e-5
+#endif
 #endif
     CASE DEFAULT
       WRITE (6, *) "Error! Test case not valid"
@@ -1408,6 +1420,10 @@ CONTAINS
 #ifdef NEUTRAL
     ux(:,5) = upx(:,5)
     uy(:,5) = upy(:,5)
+#ifdef KEQUATION
+    ux(:,6) = upx(:,6)*up(:,6)
+    uy(:,6) = upy(:,6)*up(:,6)
+#endif
 #endif
   END SUBROUTINE analytical_gradient
 

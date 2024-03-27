@@ -24,12 +24,19 @@ CONTAINS
     phys%Neq = 4
 #ifdef NEUTRAL
     phys%Neq = 5
+#ifdef KEQUATION
+    !so far we only use k equation with neutrals and the convention is that the k-equation is always the last
+    phys%Neq = 6
+#endif
 #endif
 
     ! number of physical variables
     phys%npv = 10
 #ifdef NEUTRAL
     phys%npv = 11
+#ifdef KEQUATION
+    phys%npv = 12
+#endif
 #endif
 
     ALLOCATE (phys%phyVarNam(phys%npv))
@@ -48,6 +55,9 @@ CONTAINS
     phys%phyVarNam(10)= "M"   ! Mach
 #ifdef NEUTRAL
     phys%phyVarNam(11)= "rhon"   ! density neutral
+#ifdef KEQUATION
+    phys%phyVarNam(12)= "k"   ! turbulent energy
+#endif
 #endif
 
     ! Set the name of the conservative variables
@@ -57,11 +67,17 @@ CONTAINS
     phys%conVarNam(4) = "nEe"   ! U4 = rho*Ee
 #ifdef NEUTRAL
     phys%conVarNam(5) = "rhon"  ! U5 = rhon
+#ifdef KEQUATION
+    phys%conVarNam(6) = "k"  ! U6 = k
+#endif
 #endif
 
     simpar%model = 'N-Gamma-Ti-Te'
 #ifdef NEUTRAL
     simpar%model = 'N-Gamma-Ti-Te-Neutral'
+#ifdef KEQUATION
+    simpar%model = 'N-Gamma-Ti-Te-Neutral-k'
+#endif
 #endif
     simpar%Ndim = 2
 #ifdef TOR3D
@@ -83,6 +99,9 @@ CONTAINS
     simpar%physvar_refval(10) = 1.
 #ifdef NEUTRAL
     simpar%physvar_refval(11) = simpar%refval_neutral
+#ifdef KEQUATION
+    simpar%physvar_refval(12) = simpar%refval_k
+#endif
 #endif
     simpar%consvar_refval(1) = simpar%refval_density
     simpar%consvar_refval(2) = simpar%refval_momentum
@@ -90,6 +109,9 @@ CONTAINS
     simpar%consvar_refval(4) = simpar%refval_specenergydens
 #ifdef NEUTRAL
     simpar%consvar_refval(5) = simpar%refval_neutral
+#ifdef KEQUATION
+    simpar%consvar_refval(6) = simpar%refval_k
+#endif
 #endif
 #ifdef EXPANDEDCX
 #ifdef AMJUELCX
@@ -208,6 +230,9 @@ CONTAINS
     ua(:, 4) = up(:, 1)*up(:, 4)
 #ifdef NEUTRAL
     ua(:,5) = abs(up(:,11))
+#ifdef KEQUATION
+    ua(:,6) = abs(up(:,12))
+#endif
 #endif
 
   END SUBROUTINE phys2cons
@@ -219,20 +244,18 @@ CONTAINS
   SUBROUTINE cons2phys(ua, up)
     real*8, dimension(:, :), intent(in)  :: ua
     real*8, dimension(:, :), intent(out) :: up
-    real*8,  dimension(size(ua,1))  :: U1,U5
+    real*8,  dimension(size(ua,1))  :: U1,U5,U6
     real, parameter :: tol = 1e-12
     integer :: i
 
     U1 = abs(ua(:,1))
 #ifdef NEUTRAL
     U5 = abs(ua(:,5))
+#ifdef KEQUATION
+    U6 = abs(ua(:,6))
 #endif
-!    do i = 1, size(ua,1)
-!      if (U1(i)<tol) U1(i)=tol
-!#ifdef NEUTRAL
-!      if (U5(i)<tol) U5(i)=tol
-!#endif
-!    end do
+#endif
+
 
     up(:, 1) = abs(U1)                                                           ! density
     up(:, 2) = ua(:, 2)/U1                                            ! u parallel
@@ -246,69 +269,71 @@ CONTAINS
     up(:, 10) = up(:, 2)/up(:, 9)                                           ! Mach
 #ifdef NEUTRAL
     up(:,11) = abs(U5)                                                 ! density neutral
+#ifdef KEQUATION
+    up(:,12) = U6                                                 ! turbulent energy
+#endif
 #endif
 
-    ! Set threshold for low density and temperature
-    !DO i = 1, size(ua,1) 
-    !   IF (up(i,1) < 1.e-6) up(i,1) = 1.e-6
-    !   IF (up(i,7) < 1.e-3) up(i,7) = 1.e-3
-    !   IF (up(i,8) < 1.e-3) up(i,8) = 1.e-3
-    !END DO
 
   END SUBROUTINE cons2phys
 
     ! ******************************
     ! Split diffusion terms
     ! ******************************
-    SUBROUTINE compute_W2(U,W2)
+    SUBROUTINE compute_W2(U,W2,diff_n,diff_u)
       real*8, intent(IN) :: U(:)
+      real*8, intent(IN) :: diff_n, diff_u
       real*8             :: W2(:)
       W2 = 0.
-      W2(1) = (phys%diff_n-phys%diff_u)*U(2)/U(1)
+      W2(1) = (diff_n-diff_u)*U(2)/U(1)
     END SUBROUTINE compute_W2
 
-    SUBROUTINE compute_W3(U,W3)
+    SUBROUTINE compute_W3(U,W3,diff_n,diff_u,diff_e)
       real*8, intent(IN) :: U(:)
+      real*8, intent(IN) :: diff_n, diff_u, diff_e
       real*8             :: W3(:)
       real*8 		:: rhovar
       real*8 		:: sigmavar
 
-      rhovar = (phys%diff_e-phys%diff_u)
-      sigmavar = (phys%diff_n-phys%diff_e)
+      rhovar = (diff_e-diff_u)
+      sigmavar = (diff_n-diff_e)
 
       W3 = 0.
       W3(1) = sigmavar*U(3)/U(1) + rhovar*(U(2)/U(1))**2
       W3(2) = -rhovar*U(2)/U(1)
     END SUBROUTINE compute_W3
 
-    SUBROUTINE compute_W4(U,W4)
+    SUBROUTINE compute_W4(U,W4,diff_n,diff_ee)
       real*8, intent(IN) :: U(:)
+      real*8, intent(IN) :: diff_n, diff_ee
       real*8             :: W4(:)
 
       W4 = 0.
-      W4(1) = (phys%diff_n-phys%diff_ee)*U(4)/U(1)
+      W4(1) = (diff_n-diff_ee)*U(4)/U(1)
     END SUBROUTINE compute_W4
 
 
 
-    SUBROUTINE compute_dW2_dU(U,dW2_dU)
+    SUBROUTINE compute_dW2_dU(U,dW2_dU,diff_n,diff_u)
       real*8, intent(IN) :: U(:)
+      real*8, intent(IN) :: diff_n, diff_u
       real*8             :: dW2_dU(:,:)
       dW2_dU = 0.
       dW2_dU(1,1) = -U(2)/(U(1)**2)
       dW2_dU(1,2) = 1./U(1)
 
-      dW2_dU = (phys%diff_n-phys%diff_u)*dW2_dU
+      dW2_dU = (diff_n-diff_u)*dW2_dU
     END SUBROUTINE compute_dW2_dU
 
-    SUBROUTINE compute_dW3_dU(U,res)
+    SUBROUTINE compute_dW3_dU(U,res,diff_n,diff_u,diff_e)
       real*8, intent(IN) :: U(:)
+      real*8, intent(IN) :: diff_n, diff_u,diff_e
       real*8             :: res(:,:)
       real*8 		:: rhovar
       real*8 		:: sigmavar
 
-      rhovar = (phys%diff_e-phys%diff_u)
-      sigmavar = (phys%diff_n-phys%diff_e)
+      rhovar = (diff_e-diff_u)
+      sigmavar = (diff_n-diff_e)
 
       res = 0.
       res(1,1) = -sigmavar*U(3)/(U(1)**2)-2*rhovar*(U(2)**2)/(U(1)**3)
@@ -319,12 +344,13 @@ CONTAINS
       res(2,2) = -rhovar*1./U(1)
     END SUBROUTINE compute_dW3_dU
 
-    SUBROUTINE compute_dW4_dU(U,res)
+    SUBROUTINE compute_dW4_dU(U,res,diff_n,diff_ee)
     real*8, intent(IN) :: U(:)
+    real*8, intent(IN) :: diff_n, diff_ee
     real*8             :: res(:,:)
     res = 0.
-    res(1,1) = -U(4)*(phys%diff_n-phys%diff_ee)/(U(1)**2)
-    res(1,4) = 1.*(phys%diff_n-phys%diff_ee)/U(1)
+    res(1,1) = -U(4)*(diff_n-diff_ee)/(U(1)**2)
+    res(1,4) = 1.*(diff_n-diff_ee)/U(1)
      END SUBROUTINE compute_dW4_dU
 
 
@@ -338,7 +364,8 @@ CONTAINS
     ! -2/3*U(2)**2/U(1)**2                          4/3*U(2)/U(1)                   2/3,              2/3; ...
     ! -5/3*U(2)*U(3)/U(1)**2+2/3*U(2)**3/U(1)**3    5/3*U(3)/U(1)-U(2)**2/U(1)**2   5/3*U(2)/U(1),    0 ;   ...
     ! -5/3*U(4)*U(2)/U(1)**2,                       5/3*U(4)/U(1),                  0,                5/3*U(2)/U(1)]
-
+    ! k equation line
+    ! -U(6)*U(2)/U(1)**2,                           U(6)/U(1),                      0,                0,            0,        U(2)/U(1)]
     A = 0.d0
     if (switch%decoup) then
       A(1, 2) = 1.
@@ -353,6 +380,11 @@ CONTAINS
       A(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
       A(4, 2) = 5./3.*U(4)/U(1)
       A(4, 4) = 5./3.*U(2)/U(1)
+#ifdef KEQUATION
+      A(6, 1) = -U(6)*U(2)/U(1)**2
+      A(6, 2) = U(6)/U(1)
+      A(6, 6) = U(2)/U(1)
+#endif
     else
 
       A(1, 2) = 1.
@@ -369,7 +401,13 @@ CONTAINS
       A(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
       A(4, 2) = 5./3.*U(4)/U(1)
       A(4, 4) = 5./3.*U(2)/U(1)
-
+#ifdef KEQUATION
+      A(6, 1) = -U(6)*U(2)/U(1)**2
+      A(6, 2) = U(6)/U(1)
+      !IF (U(6) >= 0.) THEN
+        A(6, 6) = U(2)/U(1)
+      !ENDIF
+#endif
 #ifdef NEUTRAL
 #ifdef NEUTRALCONVECTION
       A(5, 1) = -U(5)*U(2)/U(1)**2
@@ -417,6 +455,11 @@ CONTAINS
       An(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
       An(4, 2) = 5./3.*U(4)/U(1)
       An(4, 4) = 5./3.*U(2)/U(1)
+#ifdef KEQUATION
+      An(6, 1) = -U(6)*U(2)/U(1)**2
+      An(6, 2) = U(6)/U(1)
+      An(6, 6) = U(2)/U(1)
+#endif
     else
       An(1, 2) = 1.
 
@@ -432,7 +475,11 @@ CONTAINS
       An(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
       An(4, 2) = 5./3.*U(4)/U(1)
       An(4, 4) = 5./3.*U(2)/U(1)
-      
+#ifdef KEQUATION
+      An(6, 1) = -U(6)*U(2)/U(1)**2
+      An(6, 2) = U(6)/U(1)
+      An(6, 6) = U(2)/U(1)
+#endif
 #ifdef NEUTRAL
 #ifdef NEUTRALCONVECTION
       An(5, 1) = -U(5)*U(2)/U(1)**2
@@ -565,6 +612,10 @@ CONTAINS
     integer             		:: i
     real*8				            :: Ery = 13.6, cs_n, DnnTh, ti_min=1e-6,ti
     real*8, dimension(size(u,1))	:: U1, U2, U3, U4, U5, E0iz, E0cx, sigmaviz, sigmavcx, Dnn
+#ifdef KEQUATION
+    real*8, dimension(size(u,1))          :: D_k,U6,c_s
+    real*8                         :: r
+#endif
 #ifdef DNNSMOOTH
     real*8                  :: width_lower, width_higher
     real*8                  :: width_temperature=1e-7
@@ -621,6 +672,9 @@ CONTAINS
     U3 = u(:,3)
     U4 = u(:,4)
     U5 = u(:,5)
+#ifdef KEQUATION
+    U6 = u(:,6)
+#endif
 #ifndef CONSTANTNEUTRALDIFF
     DO i=1,size(u,1)
        CALL compute_sigmaviz(u(i,:),sigmaviz(i))
@@ -659,15 +713,52 @@ CONTAINS
 #else
     d_iso(5,5,:)=phys%diff_nn
 #endif
+
+#ifdef KEQUATION
+    DO i= 1,size(c_s, 1)
+      call compute_cs(u(i,:), c_s(i))
+      ! for all equations
+      if (c_s(i)<=1.e-20) then
+        D_k(i) = phys%diff_k_min
+        !WRITE(6,*) 'NEGATIVE C_S ', c_s(i)
+        !stop
+      else
+        if ((switch%testcase .ge. 50) .and.(switch%testcase .le. 59)) then
+          r = xy(i,1)
+        elseif ((switch%testcase .ge. 60) .and.(switch%testcase .le. 69)) then
+          r = xy(i,1) + geom%R0/simpar%refval_length
+        endif
+
+#ifndef KDIFFSMOOTH
+         
+        D_k(i) = max(phys%diff_k_min,min(phys%diff_k_max,r*U6(i)/c_s(i)))
+#else
+        D_k(i) = r*U6(i)/c_s(i)
+        !for circular case q_cyl assume constant
+        if (switch%testcase == 60) then
+          D_k(i) = D_k(i)*geom%q
+        call double_softplus(D_k(i),phys%diff_k_min,phys%diff_k_max)
+#endif
+      endif
+    enddo
+    d_iso(6,6,:) = D_k+phys%diff_n
+    d_ani(6,6,:) = d_iso(6,6,:)
+    d_iso(1,1,:) = d_iso(1,1,:) + D_k
+    d_iso(2,2,:) = d_iso(2,2,:) + D_k
+    d_iso(3,3,:) = d_iso(3,3,:) + D_k
+    d_iso(4,4,:) = d_iso(4,4,:) + D_k 
+    !WRITE(6,*) d_iso(6,6,:)*simpar%refval_length**2/simpar%refval_time
+    !WRITE(6,*) d_iso(1,1,:)*simpar%refval_length**2/simpar%refval_time
+#endif
     !Dnn = sum(Dnn)/size(u,1)
 #endif
 #else
     d_iso(5,5,:) = 0.
 #endif
-    d_ani(1, 1, :) = phys%diff_n
-    d_ani(2, 2, :) = phys%diff_u
-    d_ani(3, 3, :) = phys%diff_e
-    d_ani(4, 4, :) = phys%diff_ee
+    d_ani(1, 1, :) = d_iso(1,1,:)
+    d_ani(2, 2, :) = d_iso(2,2,:)
+    d_ani(3, 3, :) = d_iso(3,3,:)
+    d_ani(4, 4, :) = d_iso(4,4,:)
     if ((switch%ME .eqv. .TRUE.) .AND. (switch%testcase .gt. 84)) then !Iter core-edge with evolving equilibria plus diffusion decrease
        if (switch%testcase .eq. 85) then
          d_ani(1, 1, :) = phys%diff_n - (phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
@@ -1013,6 +1104,7 @@ CONTAINS
     if (U4 < tol) U4 = tol
     if (U1 < tol) U1 = tol
     if (U3 < tol) U3 = tol
+    ! keeping this thing for high diffusion, but take care for low values
     if ((phys%diff_ee .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
       s = 1./(phys%tie*2*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
     else
@@ -1036,6 +1128,7 @@ CONTAINS
     res(2) = U(2)*(U1/U4)**1.5
     res(3) = -U1**2.5/U4**1.5
     res(4) = -1.5*(U1/U4)**2.5*(U4 - U3 + 0.5*U(2)**2/U1) + U1**2.5/U4**1.5
+    ! keeping this thing for high diffusion, but take care for low values
     if ((phys%diff_ee .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
       res = 1./(phys%tie*2*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*res
     else
@@ -2052,6 +2145,133 @@ CONTAINS
     res(2) = 2.*U5*U2/U1
     res(5) = (U2**2)/U1
   END SUBROUTINE compute_dfEicx_dU
+#ifdef NEUTRAL
+  !*******************************************
+  ! Compute the terms relative to k equations
+  !*******************************************
+#ifdef KEQUATION
+
+SUBROUTINE compute_cs(U, cs)
+  ! Sound speed of plasma
+  real*8, intent(IN) :: U(:)
+  real*8             :: U1,U2,U3,U4
+  real*8, intent(OUT) :: cs
+  real,parameter :: tol = 1e-20
+  U1 = U(1)
+  U2 = U(2)
+  U3 = U(3)
+  U4 = U(4)
+  cs = 2./3./U1*(U3+U4-1./2.*U2**2/U1)
+  IF (cs<0.) cs = tol**2
+  cs = sqrt(cs) 
+END SUBROUTINE compute_cs
+SUBROUTINE compute_dcs_du(U, dcs_du)
+  ! Sound speed derivative
+  real*8, intent(IN) :: U(:)
+  real*8             :: U1,U2,U3,U4,cs
+  real*8, intent(OUT) :: dcs_du(:)
+  real,parameter :: tol = 1e-20
+  U1 = U(1)
+  U2 = U(2)
+  U3 = U(3)
+  U4 = U(4)
+  if (U4 < tol) U4 = tol
+  if (U1 < tol) U1 = tol
+  if (U3 < tol) U3 = tol
+  dcs_du = 0.
+  call compute_cs(U,cs)
+  if (cs>tol) then
+    dcs_du(1) = -1.*(U3+U4-U2**2/U1)/U1**2
+    dcs_du(2) = -1.*U2/U1**2
+    dcs_du(3) = 1./U1
+    dcs_du(4) = 1./U1
+
+
+    dcs_du = dcs_du/3./cs
+  endif
+END SUBROUTINE compute_dcs_du
+SUBROUTINE compute_gamma_I(U,Q, Btor, gradBtor, R, gamma_I)
+  ! growth rate for turbulent energy
+  real*8, intent(IN) :: U(:), Q(:,:), gradBtor(:), Btor, R
+  real*8             :: U1,U2,U3,U4, ti, te, gr_p_gr_b, cs, p, theta, ti_te
+  real*8, intent(OUT) :: gamma_I
+  real,parameter :: tol = 1e-20
+  U1 = U(1)
+  U2 = U(2)
+  U3 = U(3)
+  U4 = U(4)
+  gamma_I=0.
+    call compute_cs(U, cs)
+    ! grad(pi) x gradB
+    p = U3-1./2.*U2**2/U1
+    
+    ti = max(p/U1,tol)
+    te = max(U4/U1,tol)
+    if (p<tol) p = tol
+    theta = 5.*(1.+ti/te)
+    gr_p_gr_b = gradBtor(1)*(Q(1,3)-Q(1,2)*U2/U1+1./2.*U2**2/U1**2*Q(1,1))+gradBtor(2)*(Q(2,3)-Q(2,2)*U2/U1+1./2.*U2**2/U1**2*Q(2,1))
+    gr_p_gr_b = gr_p_gr_b/Btor/p-theta/R**2
+    if (gr_p_gr_b >= 0) then
+      gamma_I = cs*sqrt(gr_p_gr_b)
+    else
+      !gamma_I = -1.*cs*sqrt(-1.*gr_p_gr_b)
+      gamma_I=0.    
+    endif
+END SUBROUTINE compute_gamma_I
+
+SUBROUTINE compute_ce(U,Q, Btor, gradBtor, r,omega_c,q_cyl, ce)
+  ! dissipation rate for turbulent energy
+  real*8, intent(IN) :: U(:), Q(:,:), gradBtor(:), r, Btor,omega_c,q_cyl
+  real*8             :: U1,U2,U3, gamma_I, rhoL, cs, gamma_e , k_loc
+  real*8, intent(OUT) :: ce
+  real,parameter :: tol = 1e-20
+  U1 = U(1)
+  U2 = U(2)
+  U3 = U(3)
+
+  gamma_e = 4.5
+  call compute_cs(U, cs)
+  if (cs < tol) cs = tol 
+  call compute_rhoL(U, r, omega_c, rhoL)
+  if (rhoL < tol) rhoL = tol 
+  call compute_gamma_I(U,Q,Btor,gradBtor,r,gamma_I)
+  
+  ce = gamma_I*(2.*PI/16./1./gamma_e/rhoL**2/q_cyl/cs**2+1./phys%k_max)
+
+END SUBROUTINE compute_ce
+SUBROUTINE compute_rhoL(U, R,omega_c, rhoL)
+  ! Larmor radii
+  real*8, intent(IN) :: U(:), R,omega_c
+  real*8             :: cs
+  real*8, intent(OUT) :: rhoL
+  call compute_cs(U, cs)
+
+  rhoL = cs/omega_c/R
+
+END SUBROUTINE compute_rhoL
+
+SUBROUTINE compute_dissip(U, dissip)
+  real*8, intent(IN) :: U(:)
+  real*8             :: U6
+  real*8             :: dissip
+  real,parameter :: tol = 1e-10
+  U6 = U(6)
+  dissip = U6**2
+END SUBROUTINE  compute_dissip
+
+SUBROUTINE compute_ddissip_du(U, res)
+  real*8, intent(IN) :: U(:)
+  real*8             :: U6
+  real*8             :: res(:)
+  real,parameter :: tol = 1e-10
+  U6 = U(6)
+  !if (U6 < tol) U6 = tol
+  res = 0.
+  res(6) = 2.*U6
+END SUBROUTINE  compute_ddissip_du
+
+#endif
+#endif
   
 #ifdef NEUTRALP
   SUBROUTINE computeDpn(U,Q,Vpn,Dpn)
@@ -2296,7 +2516,11 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     integer, intent(in) :: ifa, iel
     real*8, intent(out) :: tau(:, :)
 #ifdef NEUTRAL
+#ifndef KEQUATION
     real*8              :: tau_aux(5),diff_iso(5,5,1),diff_ani(5,5,1)
+#else
+    real*8              :: tau_aux(6),diff_iso(6,6,1),diff_ani(6,6,1)
+#endif
 #ifdef NEUTRALP
     real*8              :: Dpn
    	real*8              :: Vpn(simpar%Neq),Qpr(simpar%Ndim,simpar%Neq)
@@ -2433,6 +2657,9 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 #ifndef NEUTRALP
 #ifdef NEUTRAL
         tau_aux(5) = tau_aux(5) + phys%diff_nn !! !numer%tau(5) diff_iso(5,5,1)
+#ifdef KEQUATION
+        tau_aux(6) = tau_aux(6) + 6.*diff_iso(6,6,1)
+#endif
 #endif
 #else
         tau_aux(5) = tau_aux(5) + numer%tau(5)
@@ -2459,6 +2686,9 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     tau(4, 4) = tau_aux(4)
 #ifdef NEUTRAL
     tau(5, 5) = tau_aux(5)
+#ifdef KEQUATION
+    tau(6,6) = tau_aux(6)
+#endif
 #endif
   END SUBROUTINE computeTauGaussPoints
 

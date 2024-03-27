@@ -27,6 +27,10 @@ CONTAINS
     ALLOCATE (phys%B(nnodes, 3))
     ALLOCATE (phys%magnetic_flux(nnodes))
     ALLOCATE (phys%magnetic_psi(nnodes))
+#ifdef KEQUATION
+    ALLOCATE (phys%omega(nnodes))
+    ALLOCATE (phys%q_cyl(nnodes))
+#endif
     IF (switch%ohmicsrc) THEN
       ALLOCATE (phys%Jtor(nnodes))
     END IF
@@ -43,6 +47,10 @@ CONTAINS
     phys%B = 0.
     phys%magnetic_flux = 0.
     phys%magnetic_psi = 0.
+#ifdef KEQUATION
+    phys%omega = 0.
+    phys%q_cyl = 0.
+#endif
 
     SELECT CASE (switch%testcase)
     CASE (1:49)
@@ -218,6 +226,10 @@ CONTAINS
     real*8, allocatable, dimension(:) :: xvec, yvec
     real*8                            :: x, y, t
     real*8                            :: Br, Bz, Bt, flux, psiSep
+#ifdef KEQUATION
+    real*8                            :: q_cyl, omega,a
+    integer                            :: min_ind(2)
+#endif
 
     character(LEN=1000) :: fname
     character(50)  :: npr,nid,nit
@@ -294,6 +306,13 @@ CONTAINS
     r2D = r2D/phys%lscale
     z2D = z2D/phys%lscale
 
+#ifdef KEQUATION
+    !finding axis
+    min_ind = MINLOC(flux2D)
+    phys%r_axis = r2D(min_ind(1),min_ind(2))
+    phys%z_axis = z2D(min_ind(1),min_ind(2))
+#endif
+
     ! Min and Max flux for inizialization
     !phys%Flux2Dmin = minval(flux2D)
     !phys%Flux2Dmax = maxval(flux2D)
@@ -310,6 +329,14 @@ CONTAINS
       Bz = interpolate(ip, yvec, jp, xvec, Bz2D, y, x, 1e-12)
       Bt = interpolate(ip, yvec, jp, xvec, Bphi2D, y, x, 1e-12)
       flux = interpolate(ip, yvec, jp, xvec, flux2D, y, x, 1e-12)
+#ifdef KEQUATION
+      omega = simpar%refval_charge/simpar%refval_mass*sqrt(Br**2+Bz**2+Bt**2)*simpar%refval_time
+      a = sqrt((x-phys%r_axis)**2+(y-phys%z_axis)**2)
+      q_cyl = abs(Bt)*a/sqrt(Br**2+Bz**2)/x
+      if(q_cyl>1.e4) q_cyl = 1.e4
+      if(q_cyl<1.) q_cyl = 1.
+
+#endif
       ind = i
 #ifdef TOR3D
       DO j = 1, Mesh%Nnodes_toroidal
@@ -319,6 +346,10 @@ CONTAINS
         phys%B(ind, 2) = Bz
         phys%B(ind, 3) = Bt
         phys%magnetic_flux(ind) = flux
+#ifdef KEQUATION
+        phys%omega(ind) = omega 
+        phys%q_cyl(ind) = q_cyl 
+#endif
 #ifdef TOR3D
       END DO
 #endif

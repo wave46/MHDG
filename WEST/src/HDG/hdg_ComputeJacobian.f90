@@ -66,6 +66,9 @@ SUBROUTINE HDG_computeJacobian()
   real*8                :: qe(Mesh%Nnodesperelem,phys%Neq*2),qef(refElPol%Nfacenodes,phys%Neq*2)
   real*8,allocatable    :: qres(:,:)
   real*8                :: Bel(refElPol%Nnodes2d,3),fluxel(refElPol%Nnodes2d),psiel(refElPol%Nnodes2d),Bfl(refElPol%Nfacenodes,3),psifl(refElPol%Nfacenodes)
+#ifdef KEQUATION
+  real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d)
+#endif
   real*8                :: Jtorel(refElPol%Nnodes2d)
   real*8                :: n,El_n,nn,El_nn,totaln
   real*8                :: diff_nn_Vol_el(refElPol%NGauss2D),v_nn_Vol_el(refElPol%NGauss2D,Mesh%Ndim),Xg_el(refElPol%NGauss2D,Mesh%Ndim)
@@ -1121,9 +1124,17 @@ CONTAINS
   !************************************
   !   Loop in elements in 2D
   !************************************
+#ifdef KEQUATION
+  !$OMP PARALLEL DEFAULT(SHARED) &
+  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,psifl,isdir,Jtorel,El_n,El_nn) &
+  !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
+  !$OMP FIRSTPRIVATE(phys,Mesh)
+#else
   !$OMP PARALLEL DEFAULT(SHARED) &
   !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,psiel,psifl,isdir,Jtorel,El_n,El_nn) &
-  !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)  
+  !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el) &
+  !$OMP FIRSTPRIVATE(phys,Mesh)
+#endif  
   allocate(Xel(Mesh%Nnodesperelem,2))
   allocate(Xfl(refElPol%Nfacenodes,2))
 
@@ -1141,6 +1152,19 @@ CONTAINS
     
     ! Normalized magnetic flux of the nodes of the element: PSI el
     psiel = phys%magnetic_psi(Mesh%T(iel,:))
+
+#ifdef KEQUATION
+    !omega and q_cyl on nodes of the element
+    
+    if (switch%testcase == 60) then
+      q_cylel = geom%q
+      ! to finish this
+      omegael = sqrt(Bel(:,1)**2+Bel(:,2)**2+Bel(:,3)**2)*simpar%refval_charge/simpar%refval_mass*simpar%refval_time
+    else
+      q_cylel = phys%q_cyl(Mesh%T(iel,:))
+      omegael = phys%omega(Mesh%T(iel,:))
+    endif
+#endif
     
     ! Ohmic heating (toroidal current)
     IF (switch%ohmicsrc) THEN
@@ -1157,7 +1181,11 @@ CONTAINS
     u0e = u0res(inde,:,:)
 
     ! Compute the matrices for the element
+#ifndef KEQUATION
     CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
+#else
+    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
+#endif
     if (save_tau) then
        inddiff_nn_Vol = (iel - 1)*refElPol%NGauss2D+(/(i,i=1,refElPol%NGauss2D)/)
        phys%diff_nn_Vol(inddiff_nn_Vol) = diff_nn_Vol_el
@@ -1285,10 +1313,17 @@ CONTAINS
   !***************************************************
   ! Volume computation in 2D
   !***************************************************
+#ifndef KEQUATION
   SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
+#else
+  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
+#endif
     integer,intent(IN)            :: iel
     real*8,intent(IN)             :: Xel(:,:)
     real*8,intent(IN)             :: Bel(:,:),fluxel(:),psiel(:),Jtorel(:)
+#ifdef KEQUATION
+    real*8,intent(IN)             :: omegael(:),q_cylel(:)
+#endif
     real*8,intent(IN)             :: qe(:,:)
     real*8,intent(IN)             :: ue(:,:),u0e(:,:,:)
     real*8,intent(OUT)            :: El_n,El_nn
@@ -1311,6 +1346,10 @@ CONTAINS
     real*8                        :: NxyzNi(Npel,Npel,3),Nxyzg(Npel,3)
     real*8                        :: upg(Ng2d,phys%npv)
     real*8                        :: Bmod_nod(Npel),b_nod(Npel,3),b(Ng2d,3),Bmod(Ng2d),divbg,driftg(3),gradbmod(3)
+#ifdef KEQUATION
+    real*8                        :: b_tor_nod(Npel),b_tor(Ng2d),gradbtor(3)
+    real*8                        :: omega(Ng2d),q_cyl(Ng2d)
+#endif
     real*8                        :: bg(3), Jtor(Ng2d)
     real*8                        :: diff_iso_vol(Neq,Neq,Ng2d),diff_ani_vol(Neq,Neq,Ng2d)
     real*8,allocatable            :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
@@ -1350,10 +1389,23 @@ CONTAINS
     b_nod(:,1) = Bel(:,1)/Bmod_nod
     b_nod(:,2) = Bel(:,2)/Bmod_nod
     b_nod(:,3) = Bel(:,3)/Bmod_nod
+#ifdef KEQUATION
+    ! Toroidal magnetic field absolute value at element nodes
+    b_tor_nod = abs(Bel(:,3))
+#endif
 
     ! Magnetic field norm and direction at Gauss points
     Bmod = matmul(refElPol%N2D,Bmod_nod)
     b = matmul(refElPol%N2D,b_nod)
+
+#ifdef KEQUATION
+    ! Toroidal magnetic field absolute value at Gauss points
+    b_tor = matmul(refElPol%N2D,b_tor_nod)
+
+    ! omega and q_cyl at Gauss points
+    omega = matmul(refElPol%N2D,omegael)
+    q_cyl = matmul(refElPol%N2D,q_cylel)
+#endif
    
     ! Normalized magnetic flux at Gauss points: PSI
     Psig = matmul(refElPol%N2D,psiel) 
@@ -1582,9 +1634,21 @@ CONTAINS
       call cross_product(bg,gradbmod,driftg)
       driftg = phys%dfcoef*driftg/Bmod(g)
 
+#ifdef KEQUATION
+      ! Gradient of toroidal magnetic field on Gauss point
+      gradbtor = 0.
+      gradbtor(1) = dot_product(Nxg,b_tor_nod)
+      gradbtor(2) = dot_product(Nyg,b_tor_nod)
+#endif
+#ifndef KEQUATION
       CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,Bmod(g),force(g,:),&
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
         &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g),Vnng)
+#else
+      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,Bmod(g),b_tor(g),gradbtor,omega(g),q_cyl(g),force(g,:),&
+        &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
+        &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g),Vnng)
+#endif
         
       if (save_tau) then
          v_nn_Vol_el(g,:) = Vnng
@@ -2005,10 +2069,18 @@ CONTAINS
   !         ASSEMBLY VOLUME CONTRIBUTION
   !
   !********************************************************************
+#ifndef KEQUATION
   SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,Bmod,f,&
       &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor,Vnng)
+#else
+  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,Bmod,btor,gradBtor,omega,q_cyl,f,&
+    &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor,Vnng)
+#endif
     real*8,intent(inout)      :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
     real*8,intent(IN)         :: b3(:),psi,divb,drift(:),f(:),ktis(:),Bmod
+#ifdef KEQUATION
+    real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl
+#endif
     real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
     real*8,intent(IN)         :: Ni(:),NNi(:,:),Nxyzg(:,:),NNxy(:,:),NxyzNi(:,:,:),NNbb(:)
     real*8,intent(IN)         :: upe(:),ue(:),xy(:),Jtor
@@ -2035,6 +2107,10 @@ CONTAINS
     real*8                    :: W4(Neq),dW4_dU(Neq,Neq),QdW4(Ndim,Neq)
 #endif
 #ifdef NEUTRAL
+#ifdef KEQUATION
+    real*8                    :: gamma_I,ce, dissip,r
+    real*8                    :: ddissip_du(Neq)
+#endif
     real*8                    :: Ax(Neq,Neq),Ay(Neq,Neq)
     real*8                    :: niz,nrec,fGammacx,fGammarec
     real*8                    :: dniz_dU(Neq),dnrec_dU(Neq),dfGammacx_dU(Neq),dfGammarec_dU(Neq)
@@ -2075,8 +2151,8 @@ CONTAINS
     Qpr = reshape(qe,(/Ndim,Neq/))
 
     ! Split diffusion matrices/vectors for the momentum equation
-    CALL compute_W2(ue,W2)
-    CALL compute_dW2_dU(ue,dW2_dU)
+    CALL compute_W2(ue,W2,diffiso(1,1),diffiso(2,2))
+    CALL compute_dW2_dU(ue,dW2_dU,diffiso(1,1),diffiso(2,2))
     QdW2 = matmul(Qpr,dW2_dU)
 
     qq = 0.
@@ -2118,12 +2194,12 @@ CONTAINS
     call compute_dW_dU(ue,dW_dU)
 
     ! Split diffusion matrices/vectors for the energies equations
-    CALL compute_W3(ue,W3)
-    CALL compute_dW3_dU(ue,dW3_dU)
+    CALL compute_W3(ue,W3,diffiso(1,1),diffiso(2,2),diffiso(3,3))
+    CALL compute_dW3_dU(ue,dW3_dU,diffiso(1,1),diffiso(2,2),diffiso(3,3))
     QdW3 = matmul(Qpr,dW3_dU)
 
-    CALL compute_W4(ue,W4)
-    CALL compute_dW4_dU(ue,dW4_dU)
+    CALL compute_W4(ue,W4,diffiso(1,1),diffiso(4,4))
+    CALL compute_dW4_dU(ue,dW4_dU,diffiso(1,1),diffiso(4,4))
     QdW4 = matmul(Qpr,dW4_dU)
 
     ! Temperature exchange terms
@@ -2185,6 +2261,35 @@ CONTAINS
     !   Anp = 0.
     !END IF
 #endif
+#endif
+#ifdef KEQUATION
+    if ((switch%testcase .ge. 50) .and.(switch%testcase .le. 59)) then
+      r = xy(1)
+    elseif ((switch%testcase .ge. 60) .and.(switch%testcase .le. 69)) then
+      r = xy(1) + geom%R0/simpar%refval_length
+    endif
+    call compute_gamma_I(ue,qq,btor,gradBtor,r,gamma_I)
+    call compute_ce(ue,qq,btor,gradBtor,r,omega,q_cyl,ce)
+    call compute_dissip(ue,dissip)
+    call compute_ddissip_du(ue,ddissip_du)
+    if (ue(6)<1.e-20) then
+      dissip =  abs(gamma_I)*dissip/phys%k_max
+      ddissip_du = abs(gamma_I)
+      gamma_I = 0.
+    elseif (ue(6)>phys%k_max) then
+      dissip =  -1.*abs(gamma_I)*dissip/phys%k_max
+      ddissip_du = -1.*abs(gamma_I)
+      gamma_I = 0.
+    else
+      if (gamma_I>0) then
+        dissip = ce*dissip
+        ddissip_du = ce*ddissip_du
+      else
+        dissip = 0.
+        ddissip_du = 0.
+        gamma_I = 0.
+      endif
+    endif
 #endif
 
 
@@ -2362,6 +2467,16 @@ CONTAINS
             DO k = 1, Ndim
               rhs(:,i) = rhs(:,i)+Dnn_dU_U*Qpr(k,i)*Nxyzg(:,k)
             enddo
+#endif
+#ifdef KEQUATION
+        ELSEIF (i==6) THEN
+          DO j=1,6
+            z = i+(j-1)*Neq
+            IF (j==6) then
+              Auu(:,:,z) = Auu(:,:, z) - (gamma_I-ddissip_du(j))*NNi 
+            ENDIF
+          END DO
+          rhs(:,i) = rhs(:,i) + dissip*Ni
 #endif
 #ifdef NEUTRALP		  
 		      ELSEIF (i == 5) THEN
@@ -2628,8 +2743,8 @@ CONTAINS
       Qpr = reshape(qf,(/Ndim,Neq/))
 
       ! Split diffusion vector/matrix for momentum equation
-      CALL compute_W2(uf,W2)
-      CALL compute_dW2_dU(uf,dW2_dU)
+      CALL compute_W2(uf,W2,diffiso(1,1),diffiso(2,2))
+      CALL compute_dW2_dU(uf,dW2_dU,diffiso(1,1),diffiso(2,2))
       QdW2 = matmul(Qpr,dW2_dU)
 
       nn = 0.
@@ -2647,12 +2762,12 @@ CONTAINS
       call compute_dV_dUe(uf,dV_dUe)
 
       ! Split diffusion vector/matrix for the energies equations
-      CALL compute_W3(uf,W3)
-      CALL compute_dW3_dU(uf,dW3_dU)
+      CALL compute_W3(uf,W3,diffiso(1,1),diffiso(2,2),diffiso(3,3))
+      CALL compute_dW3_dU(uf,dW3_dU,diffiso(1,1),diffiso(2,2),diffiso(3,3))
       QdW3 = matmul(Qpr,dW3_dU)
 
-      CALL compute_W4(uf,W4)
-      CALL compute_dW4_dU(uf,dW4_dU)
+      CALL compute_W4(uf,W4,diffiso(1,1),diffiso(4,4))
+      CALL compute_dW4_dU(uf,dW4_dU,diffiso(1,1),diffiso(4,4))
       QdW4 = matmul(Qpr,dW4_dU)
 
       ! Compute Alpha(U^(k-1))
@@ -3023,8 +3138,8 @@ CONTAINS
       Qpr = reshape(qf,(/Ndim,Neq/))
 
       ! Split diffusion vector/matrix for the momentum equation
-      CALL compute_W2(uf,W2)
-      CALL compute_dW2_dU(uf,dW2_dU)
+      CALL compute_W2(uf,W2,diffiso(1,1),diffiso(2,2))
+      CALL compute_dW2_dU(uf,dW2_dU,diffiso(1,1),diffiso(2,2))
       QdW2 = matmul(Qpr,dW2_dU)
 
       nn = 0.
@@ -3043,12 +3158,12 @@ CONTAINS
       call compute_dV_dUe(uf,dV_dUe)
 
       ! Split diffusion vector/matrix for the energies equations
-      CALL compute_W3(uf,W3)
-      CALL compute_dW3_dU(uf,dW3_dU)
+      CALL compute_W3(uf,W3,diffiso(1,1),diffiso(2,2),diffiso(3,3))
+      CALL compute_dW3_dU(uf,dW3_dU,diffiso(1,1),diffiso(2,2),diffiso(3,3))
       QdW3 = matmul(Qpr,dW3_dU)
 
-      CALL compute_W4(uf,W4)
-      CALL compute_dW4_dU(uf,dW4_dU)
+      CALL compute_W4(uf,W4,diffiso(1,1),diffiso(4,4))
+      CALL compute_dW4_dU(uf,dW4_dU,diffiso(1,1),diffiso(4,4))
       QdW4 = matmul(Qpr,dW4_dU)
 
       ! Compute Alpha(U^(k-1))
@@ -3428,7 +3543,7 @@ END IF
 
       !Assembly Source Terms in plasma density equation
       Sn(1,1)   = ad*(-dniz_dU(1)*sigmaviz + dnrec_dU(1)*sigmavrec)
-      Sn(1,Neq) = ad*(-dniz_dU(Neq)*sigmaviz)
+      Sn(1,5) = ad*(-dniz_dU(5)*sigmaviz)
 #ifdef TEMPERATURE
       Sn(1,1)   = Sn(1,1) + ad*(-niz*dsigmaviz_dU(1) + nrec*dsigmavrec_dU(1))
       Sn(1,4)   = Sn(1,4) + ad*(-niz*dsigmaviz_dU(4) + nrec*dsigmavrec_dU(4))
@@ -3436,7 +3551,7 @@ END IF
       !Assembly Source Terms in plasma momentum equation
       Sn(2,1)   = ad*(dfGammarec_dU(1)*sigmavrec)
       Sn(2,2)   = ad*(dfGammacx_dU(2)*sigmavcx + dfGammarec_dU(2)*sigmavrec)
-      Sn(2,Neq) = ad*(dfGammacx_dU(Neq)*sigmavcx)
+      Sn(2,5) = ad*(dfGammacx_dU(5)*sigmavcx)
 #ifdef TEMPERATURE
       Sn(2,1)   = Sn(2,1) + ad*( fGammacx*dsigmavcx_dU(1) + fGammarec*dsigmavrec_dU(1))
       Sn(2,4)   = Sn(2,4) + ad*( fGammacx*dsigmavcx_dU(4) + fGammarec*dsigmavrec_dU(4))
@@ -3446,16 +3561,16 @@ END IF
       Sn(3,2)   = ad*(dfEicx_dU(2)*sigmavcx )
       Sn(3,3)   = ad*(-RE*dfEiiz_dU(3)*sigmaviz + dfEirec_dU(3)*sigmavrec)
       Sn(3,4)   = ad*(-RE*fEiiz*dsigmaviz_dU(4) + fEirec*dsigmavrec_dU(4) + fEicx*dsigmavcx_dU(4))
-      Sn(3,Neq) = ad*(-RE*dfEiiz_dU(Neq)*sigmaviz + dfEicx_dU(Neq)*sigmavcx)
+      Sn(3,5) = ad*(-RE*dfEiiz_dU(5)*sigmaviz + dfEicx_dU(5)*sigmavcx)
       !Assembly Source Terms in electron energy equation
       Sn(4,1)   = ad4*(dniz_dU(1)*sigmaviz*Tloss + niz*dsigmaviz_dU(1)*Tloss + niz*sigmaviz*dTloss_dU(1) +&
         &dnrec_dU(1)*sigmavrec*Tlossrec + nrec*dsigmavrec_dU(1)*Tlossrec + nrec*sigmavrec*dTlossrec_dU(1))
       Sn(4,4)   = ad4*(niz*dsigmaviz_dU(4)*Tloss + niz*sigmaviz*dTloss_dU(4) +&
         &nrec*dsigmavrec_dU(4)*Tlossrec + nrec*sigmavrec*dTlossrec_dU(4))
-      Sn(4,Neq) = ad4*(dniz_dU(Neq)*sigmaviz*Tloss )
+      Sn(4,5) = ad4*(dniz_dU(5)*sigmaviz*Tloss )
 #endif
       !Assembly Source Terms in neutral density equation
-      Sn(Neq,:) = -Sn(1,:)
+      Sn(5,:) = -Sn(1,:)
 
       !Assembly RHS Neutral Source Terms
       Sn0(1)    = ad*(niz*sigmaviz - nrec*sigmavrec)
@@ -3472,7 +3587,7 @@ END IF
       Sn0(4)    = Sn0(4) + ad4*(-niz*dot_product(dsigmaviz_dU,U)*Tloss - nrec*dot_product(dsigmavrec_dU,U)*Tlossrec)
 #endif
 #endif
-      Sn0(Neq)  = -Sn0(1)
+      Sn0(5)  = -Sn0(1)
 
       !Thresholds: 
 !#ifdef TEMPERATURE

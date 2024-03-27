@@ -49,7 +49,10 @@ SUBROUTINE READ_input()
   ! Neutral and Ohmic heating
   logical     :: OhmicSrc
   real*8      :: Pohmic,diff_nn,Re,Re_pump,puff,puff_slope
-  
+#ifdef KEQUATION
+  ! k equation
+  real*8      :: diff_k_min, diff_k_max, k_max
+#endif
   ! Movin Equilibrium
   logical     :: ME
 
@@ -62,8 +65,14 @@ SUBROUTINE READ_input()
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
+#ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn, Re, Re_pump, puff,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source, Pohmic, Tbg, bcflags, bohmth,&
     &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
+#else
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn, Re, Re_pump, puff,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  & diff_k_min, diff_k_max, k_max, Pohmic, Tbg, bcflags, bohmth,&
+    &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
+#endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
   NAMELIST /LSSOLV_LST/ sollib, lstiming, itmax, itrace, rest, istop, tol, kmethd, ptype,&
     &smther, jsweeps,&
@@ -180,6 +189,11 @@ SUBROUTINE READ_input()
   phys%density_source     = density_source
   phys%ener_source_e      = ener_source_e
   phys%ener_source_ee     = ener_source_ee
+#ifdef KEQUATION
+  phys%diff_k_min         = diff_k_min
+  phys%diff_k_max         = diff_k_max
+  phys%k_max              = k_max
+#endif
   phys%sigma_source       = sigma_source
   phys%fluxg_trunc        = fluxg_trunc
   phys%part_source        = part_source
@@ -282,7 +296,11 @@ SUBROUTINE READ_input()
     PRINT *, '                                                                      '
 #ifndef TEMPERATURE
 #ifdef NEUTRAL
+#ifdef KEQUATION
+    PRINT *, ' MODEL: N-Gamma isothermal with neutral with k equation               '
+#else
     PRINT *, ' MODEL: N-Gamma isothermal with neutral                               '
+#endif
 #else
     PRINT *, ' MODEL: N-Gamma isothermal                                            '
 #endif
@@ -349,6 +367,11 @@ SUBROUTINE READ_input()
     endif 
     PRINT *, '                - particle source at core:                            ', part_source
     PRINT *, '                - energy source at core:                              ', ener_source
+#endif
+#ifdef KEQUATION
+    PRINT *, '                - minimum perp diffusion in the k equation:           ', phys%diff_k_min
+    PRINT *, '                - maximum perp diffusion in the k equation:           ', phys%diff_k_max
+    PRINT *, '                - maximum k:                                          ', phys%k_max
 #endif
     PRINT *, '                - constant for the momentum equation (isoth)          ', phys%a
     PRINT *, '                - diagonal implicit sources                           ', phys%diagsource
