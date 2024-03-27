@@ -728,17 +728,20 @@ CONTAINS
         elseif ((switch%testcase .ge. 60) .and.(switch%testcase .le. 69)) then
           r = xy(i,1) + geom%R0/simpar%refval_length
         endif
+        D_k(i) = r*U6(i)/c_s(i)
+        if (switch%testcase == 60) then
+          D_k(i) = D_k(i)*geom%q
+        endif
 
 #ifndef KDIFFSMOOTH
          
-        D_k(i) = max(phys%diff_k_min,min(phys%diff_k_max,r*U6(i)/c_s(i)))
+        D_k(i) = max(phys%diff_k_min,min(phys%diff_k_max,D_k(i) ))
 #else
-        D_k(i) = r*U6(i)/c_s(i)
         !for circular case q_cyl assume constant
-        if (switch%testcase == 60) then
-          D_k(i) = D_k(i)*geom%q
+        
         call double_softplus(D_k(i),phys%diff_k_min,phys%diff_k_max)
 #endif
+        
       endif
     enddo
     d_iso(6,6,:) = D_k+phys%diff_n
