@@ -365,6 +365,8 @@ MODULE types
   TYPE Time_type
     real*8      :: dt0  ! initial time step
     real*8      :: dt   ! current time step
+    real*8      :: dt_ME   ! time step from equilibrium !stored as dimensional value
+    real*8      :: t_ME   ! time step from equilibrium (to get puff rate) !stored as dimensional value
     real*8      :: tfi  ! final time of the simulation
     integer     :: it   ! the number of the current time step
     integer     :: ik   ! same as it but always incrementing (also in case of pseudotime..)

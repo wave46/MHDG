@@ -67,7 +67,7 @@ SUBROUTINE HDG_computeJacobian()
   real*8,allocatable    :: qres(:,:)
   real*8                :: Bel(refElPol%Nnodes2d,3),fluxel(refElPol%Nnodes2d),psiel(refElPol%Nnodes2d),Bfl(refElPol%Nfacenodes,3),psifl(refElPol%Nfacenodes)
 #ifdef KEQUATION
-  real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d)
+  real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d),q_cylfl(refElPol%Nfacenodes)
 #endif
   real*8                :: Jtorel(refElPol%Nnodes2d)
   real*8                :: n,El_n,nn,El_nn,totaln
@@ -1126,7 +1126,7 @@ CONTAINS
   !************************************
 #ifdef KEQUATION
   !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,psifl,isdir,Jtorel,El_n,El_nn) &
+  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,psifl,q_cylfl,isdir,Jtorel,El_n,El_nn) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
   !$OMP FIRSTPRIVATE(phys,Mesh)
 #else
@@ -1231,7 +1231,7 @@ CONTAINS
       inde = (iel - 1)*Npel + (/(i,i=1,Npel)/)
       uef = ures(inde(refElPol%face_nodes(ifa,:)),:)
       qef = qres(inde(refElPol%face_nodes(ifa,:)),:)
-
+#ifndef KEQUATION
       if (iface.le.Mesh%Nintfaces) then
         CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)		 
       else
@@ -1242,6 +1242,24 @@ CONTAINS
           CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
         endif
       endif
+#else
+      if (switch%testcase == 60) then
+        q_cylfl(:) = geom%q
+      else
+        q_cylfl(:) = phys%q_cyl(Mesh%T(iel,refElPol%face_nodes(ifa,:)))
+      endif
+
+      if (iface.le.Mesh%Nintfaces) then
+        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)		 
+      else
+        if (Mesh%periodic_faces(iface-Mesh%Nintfaces).eq.0) then
+          CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+        else
+          ! periodic face
+          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+        endif
+      endif
+#endif
 	 
       ! Flip faces
       if (Mesh%flipface(iel,ifa)) then
@@ -1422,7 +1440,11 @@ CONTAINS
     qeg = matmul(refElPol%N2D,qe)
 
     ! Compute diffusion at Gauss points
+#ifndef KEQUATION
     CALL setLocalDiff(xy,ueg,qeg,diff_iso_vol,diff_ani_vol)
+#else
+    CALL setLocalDiff(xy,ueg,qeg,diff_iso_vol,diff_ani_vol,q_cyl)
+#endif
     if (save_tau) then
        diff_nn_Vol_el = diff_iso_vol(5,5,:)
     endif
@@ -1663,12 +1685,19 @@ CONTAINS
   !***************************************************
   ! Interior faces computation in 2D
   !***************************************************
+#ifndef KEQUATION
   SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+#else
+  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)    
+#endif    
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
     real*8,intent(IN)         :: Bfl(:,:), psifl(:)
     real*8,intent(IN)         :: qef(:,:)
     real*8,intent(IN)         :: uef(:,:),uf(:,:)
+#ifdef KEQUATION
+    real*8,intent(IN)             :: q_cylfl(:)
+#endif
     real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
     integer*4                 :: g,NGauss,i,j,k,ieln,indsave(Ng1d)
     real*8                    :: dline,xyDerNorm_g
@@ -1685,7 +1714,9 @@ CONTAINS
     real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
-
+#ifdef KEQUATION
+    real*8                    :: q_cyl(Ng1d)
+#endif
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
 
@@ -1723,6 +1754,11 @@ CONTAINS
     ! Magnetic field norm and direction at Gauss points
     Bmod = matmul(refElPol%N1D,Bmod_nod)
     b = matmul(refElPol%N1D,b_nod)
+
+#ifdef KEQUATION
+    ! q_cyl at Gauss points
+    q_cyl = matmul(refElPol%N1D,q_cylfl)
+#endif
    
     ! Normalaized magnetic flux at Gauss points: PSI
     Psig = matmul(refElPol%N1d,psifl) 
@@ -1733,7 +1769,11 @@ CONTAINS
     qfg = matmul(refElPol%N1D,qef)
 
     ! Compute diffusion at faces Gauss points
+#ifndef KEQUATION
     CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac)
+#else
+    CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac,q_cyl)
+#endif
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(5,5,:)
@@ -1780,7 +1820,11 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
+#ifndef KEQUATION
           CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,ifa,0.,xyf(g,:),tau)
+#else
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,ifa,0.,xyf(g,:),q_cyl(g),tau)
+#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),0.,iel,tau)
         ENDIF
@@ -1808,13 +1852,20 @@ CONTAINS
   !***************************************************
   ! Exterior faces computation in 2D
   !***************************************************
+#ifndef KEQUATION
   SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+#else
+  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)    
+#endif    
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
     real*8,intent(IN)         :: Bfl(:,:), psifl(:)
     logical,intent(IN)        :: isdir
     real*8,intent(IN)         :: qef(:,:)
     real*8,intent(INOUT)      :: uef(:,:),uf(:,:)
+#ifdef KEQUATION
+    real*8,intent(IN)             :: q_cylfl(:)
+#endif
     real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
     integer*4                 :: g,NGauss,i,j,k,indsave(Ng1d)
     real*8                    :: dline,xyDerNorm_g
@@ -1833,7 +1884,9 @@ CONTAINS
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: Vnng(Ndim)
-	
+#ifdef KEQUATION
+    real*8                    :: q_cyl(Ng1d)
+#endif	
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
 
@@ -1859,6 +1912,10 @@ CONTAINS
     Bmod = matmul(refElPol%N1D,Bmod_nod)
     b = matmul(refElPol%N1D,b_nod)
 
+#ifdef KEQUATION
+    ! q_cyl at Gauss points
+    q_cyl = matmul(refElPol%N1D,q_cylfl)
+#endif
     ! Normalaized magnetic flux at Gauss points: PSI
     Psig = matmul(refElPol%N1D,psifl)
 
@@ -1883,7 +1940,11 @@ CONTAINS
     qfg = matmul(refElPol%N1D,qef)
 
     ! Compute diffusion at faces Gauss points
+#ifndef KEQUATION
     CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac)
+#else
+    CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac,q_cyl)
+#endif
     if (save_tau) then
        indsave = (ifa -1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(5,5,:)
@@ -1932,7 +1993,11 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
+#ifndef KEQUATION
           CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,ifa,isext,xyf(g,:),tau)
+#else
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,ifa,isext,xyf(g,:),q_cyl(g),tau)
+#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),isext,iel,tau)
         ENDIF

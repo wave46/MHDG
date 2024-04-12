@@ -255,7 +255,6 @@ PROGRAM MHDG
   ! Save solution
   CALL setSolName(save_name, mesh_name, 0, .true., .false.)
   CALL HDF5_save_solution(save_name)
-
   call mpi_barrier(mpi_comm_world,ierr)
 
 
@@ -265,10 +264,14 @@ PROGRAM MHDG
   ALLOCATE (sol%u0(nu, time%tis))
   sol%u0 = 0.
   sol%u0(:, 1) = sol%u
-  dt0 = time%dt
+  
   switch_save = 0
   it0 = 1
   IF (switch%ME .and. time%it .ne. 0) it0 = time%it
+  IF (switch%ME) then
+    time%dt = time%dt_ME/simpar%refval_time
+  endif
+  dt0 = time%dt
   !time%it = time%it+34
   !*******************************************************
   !                  TIME LOOP
@@ -501,6 +504,9 @@ PROGRAM MHDG
           !if (switch%testcase .ge. 80 .and. switch%testcase .le. 89) then
              CALL SetPuff()
           !endif
+          IF (switch%ME) then
+            time%dt = time%dt_ME/simpar%refval_time
+          endif
         endif
 
         ! compute dt
@@ -790,9 +796,12 @@ CONTAINS
     save_name = TRIM(ADJUSTL(save_name))//"Ptor"//Num
 
 #endif
-
+#ifndef KEQUATION
     ! Diffusion
     WRITE (Num, "(E10.3)") phys%diff_n*simpar%refval_diffusion
+#else
+  WRITE (Num, "(E10.3)") (phys%diff_n+phys%diff_k_min)*simpar%refval_diffusion
+#endif
     save_name = TRIM(ADJUSTL(save_name))//"_DPe"//TRIM(ADJUSTL(Num))
 #ifdef TEMPERATURE
     WRITE (Num, "(E10.3)") phys%diff_pari

@@ -225,7 +225,7 @@ CONTAINS
     !!! end of variables for computation derivatives of the flux
     real*8, allocatable, dimension(:) :: xvec, yvec
     real*8                            :: x, y, t
-    real*8                            :: Br, Bz, Bt, flux, psiSep
+    real*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
 #ifdef KEQUATION
     real*8                            :: q_cyl, omega,a
     integer                            :: min_ind(2)
@@ -300,6 +300,10 @@ CONTAINS
     CALL HDF5_array2D_reading(file_id, Br2D, 'Br2D')
     CALL HDF5_array2D_reading(file_id, Bz2D, 'Bz2D')
     CALL HDF5_array2D_reading(file_id, Bphi2D, 'Bphi2D')
+    if (switch%ME ) then
+      CALL HDF5_real_reading(file_id, dt_ME, 'dt')
+      CALL HDF5_real_reading(file_id, t_ME, 'time')
+    endif
     CALL HDF5_close(file_id)
 
     ! Apply length scale
@@ -404,6 +408,10 @@ CONTAINS
     ! Magnetic flux normalized to separatrix: PSI
     phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin) 
 
+    if (switch%ME) then
+      time%dt_ME = dt_ME
+      time%t_ME = t_ME
+    endif
     ! Free memory
     DEALLOCATE (Br2D, Bz2D, Bphi2D, xvec, yvec)
     DEALLOCATE (r2D, z2D, flux2D)
@@ -423,8 +431,16 @@ CONTAINS
     character(len=500) :: fname_complete
     integer(HID_T) :: file_id
     real*8, pointer, dimension(:) :: Br, Bz, Bt, flux
-    real*8            :: psiSep
+    real*8            :: psiSep,dt_ME,t_ME
     INTEGER  :: nnodes
+#ifdef KEQUATION
+    real*8                            :: q_cyl, omega,a
+    integer                            :: min_ind(1)
+#ifdef PARALL
+    real*8                              :: minflux_in(2), minflux_out(2)
+    integer                           :: my_rank
+#endif
+#endif
 #ifdef TOR3D
     nnodes = Mesh%Nnodes*Mesh%Nnodes_toroidal
 #else
@@ -472,6 +488,10 @@ CONTAINS
     CALL HDF5_array1D_reading(file_id, Bt, 'Bt')
     CALL HDF5_real_reading(file_id, psiSep, 'psiSep')
     CALL HDF5_array1D_reading(file_id, flux, 'flux')
+    if (switch%ME ) then
+      CALL HDF5_real_reading(file_id, dt_ME, 'dt')
+      CALL HDF5_real_reading(file_id, t_ME, 'time')
+    endif
     CALL HDF5_close(file_id)
 
     phys%B(:, 1) = Br
@@ -483,13 +503,42 @@ CONTAINS
     phys%Flux2Dmin = minval(phys%magnetic_flux)      
     phys%Flux2Dmax = maxval(phys%magnetic_flux) 
 
+!finding magnetic axis
+#ifdef KEQUATION
+    !finding axis
+    min_ind = MINLOC(flux)
+    phys%r_axis = Mesh%X(min_ind(1),1)
+    phys%z_axis = Mesh%X(min_ind(1),2)
+    
+#ifdef PARALL
+    
+    CALL MPI_COMM_RANK(MPI_COMM_WORLD, my_rank, ierr)
+
+    minflux_in(1) = phys%Flux2Dmin
+    minflux_in(2) = my_rank
+    CALL MPI_ALLREDUCE(minflux_in,minflux_out,1,MPI_2DOUBLE_PRECISION,MPI_MINLOC, MPI_COMM_WORLD, ierr)
+    CALL MPI_BCAST(phys%r_axis,1,MPI_DOUBLE_PRECISION,int(minflux_out(2)),MPI_COMM_WORLD, ierr)
+    CALL MPI_BCAST(phys%z_axis,1,MPI_DOUBLE_PRECISION,int(minflux_out(2)),MPI_COMM_WORLD, ierr)
+#endif
+#endif
+
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmax, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmin, 1, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, ierr)
-#endif 
+#endif
+
   
     ! Magnetic flux normalized to separatrix: PSI
     phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin) 
+
+#ifdef KEQUATION
+    phys%omega = simpar%refval_charge/simpar%refval_mass*sqrt(Br**2+Bz**2+Bt**2)*simpar%refval_time
+    phys%q_cyl = abs(Bt)*sqrt((Mesh%X(:,1)-phys%r_axis)**2+(Mesh%X(:,2)-phys%z_axis)**2)/sqrt(Br**2+Bz**2)/Mesh%X(:,1)
+#endif
+    if (switch%ME) then
+      time%dt_ME = dt_ME
+      time%t_ME = t_ME
+    endif
     DEALLOCATE (Br, Bz, Bt, flux)
   END SUBROUTINE load_magnetic_field_nodes
 
@@ -919,6 +968,7 @@ CONTAINS
 
     real*8,pointer,dimension(:,:) :: r2D,z2D,Jtor
     real*8,allocatable,dimension(:)   :: xvec,yvec
+    real*8                            :: dt_ME,t_ME
     real*8                            :: x,y
 
     IF (MPIvar%glob_id .eq. 0) THEN
@@ -976,6 +1026,8 @@ CONTAINS
     CALL HDF5_array2D_reading(file_id,r2D,'r2D')
     CALL HDF5_array2D_reading(file_id,z2D,'z2D')
     CALL HDF5_array2D_reading(file_id,Jtor,'Jtor')
+    CALL HDF5_real_reading(file_id, dt_ME, 'dt')
+    CALL HDF5_real_reading(file_id, t_ME, 'time')
     CALL HDF5_close(file_id)
 
     ! Apply length scale
@@ -1006,7 +1058,15 @@ CONTAINS
     
     IF (MPIvar%glob_id .eq. 0) THEN
           write(6,*) 'I_p =  ', phys%I_p, '[MA]'
-    ENDIF    
+    ENDIF
+    
+    ! check that time is the same
+    if (switch%ME) then
+      if ((dt_ME .ne. time%dt_ME) .or.(t_ME .ne. time%t_ME)) then
+        write(6,*) 'Time in current and in equilibrium files are different'
+        stop
+      endif
+    endif
 
     ! Free memory
     DEALLOCATE(r2D,z2D,Jtor,xvec,yvec)
@@ -1169,17 +1229,21 @@ CONTAINS
     USE HDF5_io_module
     USE interpolation
     integer           :: ierr,i
-    character(LEN=25) :: fname = 'Puff_54487_old.h5'
+    character(LEN=100) :: fname = 'Puff_54487_new.h5'
     integer(HID_T)    :: file_id
     integer           :: qp, Nn2D
     integer           :: T(Mesh%Nelems,refElPol%Nnodes2D)  
     real*8            :: lower, upper, nli, n_Gw, n_la, a = 2.
     real*8            :: X(Mesh%Nnodes,2), u(Mesh%Nelems*refElPol%Nnodes2D,phys%Neq)
     real*8            :: linex(1000), liney(1000), n_i(Mesh%Nelems*refElPol%Nnodes2D)
+    real*8, pointer, dimension(:) :: puff_time
+    integer           :: puff_time_idx, puff_len
 
     ! Allocate storing space in phys (puff for WEST, 403 entries)
     IF (switch%testcase .ge. 50 .and. switch%testcase .le. 59) THEN
-       ALLOCATE(phys%puff_exp(403))
+       puff_len = 401
+       ALLOCATE(puff_time(puff_len))
+       ALLOCATE(phys%puff_exp(puff_len))
        IF (MPIvar%glob_id .eq. 0) THEN
           WRITE (6, *) "******* Loading puff *******"
        ENDIF
@@ -1187,15 +1251,20 @@ CONTAINS
        ! Read file
        CALL HDF5_open(fname,file_id,IERR)
        CALL HDF5_array1D_reading(file_id,phys%puff_exp,'puff')
+       CALL HDF5_array1D_reading(file_id,puff_time,'time')
        IF (MPIvar%glob_id .eq. 0) THEN
           write(6,*) 'Puff loaded from file: ', trim(adjustl(fname))
-       ENDIF
-       
+       ENDIF       
        CALL HDF5_close(file_id)
-       phys%puff = phys%puff_exp(time%it+2)
+
+       !Linear interpolation of puff
+       puff_time_idx = binarySearch(puff_len,puff_time,time%t_ME,1e-12)
+       phys%puff = phys%puff_exp(puff_time_idx)*(puff_time(puff_time_idx+1)-time%t_ME)/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx))+ &
+                   phys%puff_exp(puff_time_idx+1)*(time%t_ME-puff_time(puff_time_idx))/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx))
        IF (MPIvar%glob_id .eq. 0) THEN
         write(6,*) 'puff =  ', phys%puff
       ENDIF
+      DEALLOCATE(puff_time)
     END IF
     
     ! ITER puff: linear increase up to nli = 4.00E+19
@@ -1262,7 +1331,7 @@ CONTAINS
        END IF
    
     END IF
-          
+    
   END SUBROUTINE SetPuff
 
 END MODULE Magnetic_field

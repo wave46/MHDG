@@ -603,9 +603,16 @@ CONTAINS
   !*****************************************
   ! Set the perpendicular diffusion
   !****************************************
+#ifndef KEQUATION
   SUBROUTINE setLocalDiff(xy, u, q, d_iso, d_ani)
+#else
+  SUBROUTINE setLocalDiff(xy, u, q, d_iso, d_ani, q_cyl)
+#endif
     real*8, intent(in)  		:: xy(:, :)
     real*8, intent(in)  		:: u(:,:), q(:,:)
+#ifdef KEQUATION
+    real*8, intent(in)  		:: q_cyl(:)
+#endif
     real*8, intent(out)		 :: d_iso(:, :, :), d_ani(:, :, :)
     real*8		              :: iperdiff(size(xy, 1))
 #ifdef NEUTRAL
@@ -731,6 +738,8 @@ CONTAINS
         D_k(i) = r*U6(i)/c_s(i)
         if (switch%testcase == 60) then
           D_k(i) = D_k(i)*geom%q
+        else
+          D_k(i) =  D_k(i)*q_cyl(i)
         endif
 
 #ifndef KDIFFSMOOTH
@@ -1108,8 +1117,13 @@ CONTAINS
     if (U1 < tol) U1 = tol
     if (U3 < tol) U3 = tol
     ! keeping this thing for high diffusion, but take care for low values
+#ifndef KEQUATION
     if ((phys%diff_ee .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
       s = 1./(phys%tie*2*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
+#else
+    if (((phys%diff_ee+phys%diff_k_min) .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
+      s = 1./(phys%tie*2*0.0380/(phys%diff_ee+phys%diff_k_min))*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
+#endif
     else
       s = 1./(phys%tie)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
     endif
@@ -1132,8 +1146,14 @@ CONTAINS
     res(3) = -U1**2.5/U4**1.5
     res(4) = -1.5*(U1/U4)**2.5*(U4 - U3 + 0.5*U(2)**2/U1) + U1**2.5/U4**1.5
     ! keeping this thing for high diffusion, but take care for low values
+#ifndef KEQUATION
     if ((phys%diff_ee .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
       res = 1./(phys%tie*2*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*res
+#else
+    if (((phys%diff_ee+phys%diff_k_min) .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
+      res = 1./(phys%tie*2*0.0380/(phys%diff_ee+phys%diff_k_min))*(2./3./phys%Mref)**(-0.5)*res
+
+#endif
     else
      res = 1./(phys%tie)*(2./3./phys%Mref)**(-0.5)*res
     endif
@@ -2513,10 +2533,17 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
   !*******************************************
   ! Compute the stabilization tensor tau
   !*******************************************
+#ifndef KEQUATION
   SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, tau)
+#else
+  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, q_cyl, tau)
+#endif
     real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
     real, intent(in)    :: isext
     integer, intent(in) :: ifa, iel
+#ifdef KEQUATION
+    real*8, intent(in)  :: q_cyl
+#endif
     real*8, intent(out) :: tau(:, :)
 #ifdef NEUTRAL
 #ifndef KEQUATION
@@ -2533,6 +2560,9 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 #endif
     integer             :: ndim
     real*8              :: xc, yc, rad, h, aux, bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
+#ifdef KEQUATION
+    real*8              :: qq_cyl(1)
+#endif
     real*8              :: U1, U2, U3, U4
     U1 = uc(1)
     U2 = uc(2)
@@ -2546,8 +2576,12 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     xyd(1,:) = xy(:)
     uu(1,:) = uc(:)
     qq(1,:) = q(:)
-
+#ifndef KEQUATION
     call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani)
+#else
+    qq_cyl(:) = q_cyl
+    call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani,qq_cyl)
+#endif
     
 #ifdef NEUTRALP
     ! Compute Vpn(U^(k-1))

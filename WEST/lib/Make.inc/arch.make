@@ -9,8 +9,8 @@ SDIR=$(PWD)/../src/
 COMPTYPE_OPT = opt
 COMPTYPE_DEB = deb
 COMPTYPE_PRO = pro
-COMPTYPE = $(COMPTYPE_OPT)
-#COMPTYPE = $(COMPTYPE_DEB)
+#COMPTYPE = $(COMPTYPE_OPT)
+COMPTYPE = $(COMPTYPE_DEB)
 #COMPTYPE = $(COMPTYPE_PRO)
 
 #-------------------------------------------------------------------------------
@@ -18,8 +18,8 @@ COMPTYPE = $(COMPTYPE_OPT)
 #-------------------------------------------------------------------------------
 MODE_SERIAL = serial
 MODE_PARALL = parall
-MODE = $(MODE_SERIAL)
-#MODE = $(MODE_PARALL)
+#MODE = $(MODE_SERIAL)
+MODE = $(MODE_PARALL)
 
 #-------------------------------------------------------------------------------
 # The compiler
@@ -104,10 +104,11 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  MACROS+= -DSAVEFLUX
  MACROS+= -DEXPANDEDCX
  MACROS+= -DTHERMALCX
+ #MACROS+= -DBOHMLIMIT
  #MACROS+= -DCONSTANTNEUTRALDIFF
  #MACROS+= -DNEUTRALCONVECTION
  #MACROS+= -DPINCH
- #MACROS+= -DKEQUATION
+ MACROS+= -DKEQUATION
  #MACROS+= -DKDIFFSMOOTH
  ADDMOD+=hdg_LimitingTechniques.o
 else ifeq ($(MDL),$(MDL_NGAMMAVORT))

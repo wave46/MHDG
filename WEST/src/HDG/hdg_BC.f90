@@ -530,6 +530,9 @@ CONTAINS
   real*8                    :: uex(refElPol%Ngauss1d,phys%neq)
   real*8                    :: diff_iso_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
   real*8                    :: diff_ani_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
+#ifdef KEQUATION
+  real*8                    :: q_cylfl(refElPol%Nfacenodes),q_cyl(refElPol%Ngauss1d)
+#endif
 #ifdef SAVEFLUX
   real*8                    :: totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_neutral
   real*8                    :: faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_neutral
@@ -601,6 +604,14 @@ CONTAINS
     b_nod(:,2) = Bfl(:,2)/Bmod_nod
     b_nod(:,3) = Bfl(:,3)/Bmod_nod
 
+#ifdef KEQUATION
+    if (switch%testcase == 60) then
+      q_cylfl = geom%q
+    else
+      q_cylfl = phys%q_cyl(Mesh%T(iel,nod))
+    endif
+#endif
+
     ! Normalized magnetic flux of the nodes of the face: PSI
     psifl = phys%magnetic_psi(Mesh%T(iel,nod))
 
@@ -638,11 +649,20 @@ CONTAINS
     Bmod = matmul(refElPol%N1d,Bmod_nod)
     b = matmul(refElPol%N1d,b_nod)
 
+#ifdef KEQUATION
+    ! q_cyl at Gauss points
+    q_cyl = matmul(refElPol%N1D,q_cylfl)
+#endif
+
     ! Normalized magnetic flux at Gauss points: PSI
     psig = matmul(refElPol%N1d,psifl)
     
     ! Compute diffusion at faces Gauss points
+#ifndef KEQUATION
     CALL setLocalDiff(xyg,ufg,qfg,diff_iso_fac,diff_ani_fac)
+#else
+    CALL setLocalDiff(xyg,ufg,qfg,diff_iso_fac,diff_ani_fac,q_cyl)
+#endif
     if (save_tau) then
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
        phys%diff_nn_Bou(indtausave) = diff_iso_fac(5,5,:)
@@ -653,8 +673,11 @@ CONTAINS
     CALL cons2phys(ufg,upg)
     end if
 
-    ! Physical variables at Gauss points with analytical sol
-    CALL cons2phys(uex,uexpg)
+    if (switch%testcase .ne. 54) then !this we shouldn't actually call for WEST case
+      ! Physical variables at Gauss points with analytical sol
+      CALL cons2phys(uex,uexpg)
+    endif
+    
 
 #ifdef SAVEFLUX
     !Initialization of variables for flux control to avoid NaN if not Bohm boundary
@@ -854,7 +877,11 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
+#ifndef KEQUATION
           CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),tau_stab)
+#else
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),q_cyl(g),tau_stab)
+#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -905,7 +932,11 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
+#ifndef KEQUATION
           CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),tau_stab)
+#else
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),q_cyl(g),tau_stab)
+#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -986,7 +1017,11 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
+#ifndef KEQUATION
           CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),tau_stab)
+#else
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),q_cyl(g),tau_stab)
+#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1093,6 +1128,12 @@ CONTAINS
 #endif
       ! tangency
       ntang = .TRUE.
+#ifdef BOHMLIMIT 
+      !use this flag as a proxy for turning off/on the bohm limit technique
+      if (any(ufg(:,4)<2.e-7)) then
+        ntang = .false.
+      endif
+#endif
       inc = bn/norm2(b(g,1:2))
 
 #ifdef NGAMMA
@@ -1151,7 +1192,11 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
+#ifndef KEQUATION
           CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),tau_stab)
+#else
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),q_cyl(g),tau_stab)
+#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1725,6 +1770,15 @@ CONTAINS
     real*8           :: dline
     real*8,intent(out)::  flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral
 #endif
+#ifdef BOHMLIMIT
+    real*8           :: U3_min = 2.e-8 ! 1e16[m^-3]*0.01^[eV]/n0/T0
+    logical          :: bohm_limit = .true.    ! false if U3<U3_min
+
+    if (ufg(3)<U3_min) then
+      bohm_limit = .false.
+    endif
+
+#endif
 
     Neqstab = Neq
     Neqgrad = Neq
@@ -1798,6 +1852,7 @@ CONTAINS
 
 
 #ifdef TEMPERATURE
+
     !IF (ntang) THEN
 
       ! Compute V(U^(k-1))
@@ -1839,6 +1894,9 @@ CONTAINS
       call compute_Dnn_dU(ufg,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,ufg)
 #endif
+#ifdef BOHMLIMIT
+    IF (ntang) then
+#endif
       ! Parallel diffusion for temperature
       DO i = 1,2
         indi = ind_asf + i
@@ -1868,11 +1926,18 @@ CONTAINS
           elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - coefe*Alphae*( dot_product (matmul(transpose(Taue),bg),ufg)  )*Ni*bn
         ENDIF
       END DO
+#ifdef BOHMLIMIT
+    ENDIF
+#endif
     !END IF ! tangency
 #endif
 
     ! Perpendicular diffusion
+#ifdef BOHMLIMIT
+    IF (ntang)  then
+#else
     IF (ntang) THEN
+#endif
 
       DO k = 1,Neqgrad
 #ifdef NEUTRAL
