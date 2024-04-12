@@ -771,6 +771,20 @@ CONTAINS
     d_ani(2, 2, :) = d_iso(2,2,:)
     d_ani(3, 3, :) = d_iso(3,3,:)
     d_ani(4, 4, :) = d_iso(4,4,:)
+    !if (any(q_cyl<0.9) .or.any(q_cyl>1.1e4))  then
+    !  WRITE(6,*) 'x', xy(1,1)*simpar%refval_length
+    !  WRITE(6,*) 'y', xy(1,2)*simpar%refval_length
+    !  WRITE(6,*) 'q_cyl', q_cyl(1)
+    !  WRITE(6,*) 'Dk', d_iso(6,6,1)*simpar%refval_length**2/simpar%refval_time
+    !  WRITE(6,*) 'Dn', d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time
+    !endif
+    !if ((d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time>6) .and. (xy(1,1)*simpar%refval_length>1.86))  then
+    !  WRITE(6,*) 'x', xy(1,1)*simpar%refval_length
+    !  WRITE(6,*) 'y', xy(1,2)*simpar%refval_length
+    !  WRITE(6,*) 'q_cyl', q_cyl(1)
+    !  WRITE(6,*) 'Dk', d_iso(6,6,1)*simpar%refval_length**2/simpar%refval_time
+    !  WRITE(6,*) 'Dn', d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time
+    !endif
     if ((switch%ME .eqv. .TRUE.) .AND. (switch%testcase .gt. 84)) then !Iter core-edge with evolving equilibria plus diffusion decrease
        if (switch%testcase .eq. 85) then
          d_ani(1, 1, :) = phys%diff_n - (phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
@@ -2213,6 +2227,31 @@ SUBROUTINE compute_dcs_du(U, dcs_du)
     dcs_du = dcs_du/3./cs
   endif
 END SUBROUTINE compute_dcs_du
+#ifdef DKLINEARIZED
+SUBROUTINE compute_ddk_du(U,xy,q_cyl,ddk_du)
+    ! Routine that computes linearization of turbulent diffusion
+    real*8, intent(IN) :: U(:), xy(:),q_cyl
+    real*8, intent(OUT) :: ddk_du(:)
+    real*8              :: cs,dk
+    real*8              :: dcs_du(size(U,1))
+    real,parameter :: tol = 1e-20
+
+    ddk_du(:) = 0.
+    call compute_cs(U,cs)
+    if (cs>tol) then  
+      dk = q_cyl*xy(1)*U(6)/cs
+      if ((dk>phys%diff_k_min) .and.(dk<phys%diff_k_max)) then
+        call compute_dcs_du(U,dcs_du)
+        ddk_du(:) = -1*dk/cs*dcs_du(:)
+        ddk_du(6) = ddk_du(6) + dk/U(6)
+      endif
+        
+    endif
+
+
+
+END SUBROUTINE compute_ddk_du
+#endif
 SUBROUTINE compute_gamma_I(U,Q, Btor, gradBtor, R, gamma_I)
   ! growth rate for turbulent energy
   real*8, intent(IN) :: U(:), Q(:,:), gradBtor(:), Btor, R

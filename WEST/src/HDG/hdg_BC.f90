@@ -1219,11 +1219,21 @@ CONTAINS
       ! Assembly Bohm contribution
       if (numer%bohmtypebc.eq.0) then
 #ifndef SAVEFLUX
+#ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
           &ufg(g,:),upg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,Vnng)
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
+          &ufg(g,:),upg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,Vnng)
+#endif
+#else
+#ifndef DKLINEARIZED
+        CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
           &ufg(g,:),upg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)
+#else     
+        CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
+        &ufg(g,:),upg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)   
+#endif
         !summing conribution from each part of the face
         faceflux_puff = faceflux_puff+flgflux_puff
         faceflux_parallel = faceflux_parallel+flgflux_parallel
@@ -1737,9 +1747,17 @@ CONTAINS
   ! Assembly Bohm
   !*********************************
 #ifndef SAVEFLUX
-  SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,ntang,Vnng)
+#ifndef DKLINEARIZED
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,ntang,Vnng)
 #else
-  SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,q_cyl,xyf,ng,tau,setval,delta,diffiso,diffani,ntang,Vnng)
+#endif
+#else
+#ifndef DKLINEARIZED
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)
+#else
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,q_cyl,xyf,ng,tau,setval,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)
+#endif
 #endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc
     real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),bg(:),psig,ng(:),tau(:,:),setval,delta
@@ -1760,6 +1778,9 @@ CONTAINS
 #ifdef DNNLINEARIZED
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
     real*8                    :: gradDnn(Ndim)
+#endif
+#ifdef DKLINEARIZED
+    real*8                 ::       q_cyl, xyf(:), ddk_dU(Neq), ddk_dU_u
 #endif
 #ifdef NEUTRALP
     real*8           :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
@@ -1894,6 +1915,12 @@ CONTAINS
       call compute_Dnn_dU(ufg,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,ufg)
 #endif
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+      call compute_ddk_dU(ufg,xyf,q_cyl,ddk_dU)
+      ddk_dU_u = dot_product(ddk_dU,ufg)
+#endif
+#endif
 #ifdef BOHMLIMIT
     IF (ntang) then
 #endif
@@ -1991,6 +2018,18 @@ CONTAINS
               END IF
         END DO
       END DO
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+            DO j=1,Neq
+             ind_jf = ind_asf + j
+             kmult = ddk_dU(j)*Qpr(idm,k)*(ng(idm)-bn*bg(idm))*NiNi
+             elMat%All(ind_ff(indi),ind_ff(ind_jf),iel) = elMat%All(ind_ff(indi),ind_ff(ind_jf),iel) - kmult
+            enddo
+            kmultf = ddk_dU_U*(Qpr(idm,k)*ng(idm)-bn*bg(idm))*Ni 
+            elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
+
+#endif
+#endif
     ELSE
 
       DO k = 1,Neq

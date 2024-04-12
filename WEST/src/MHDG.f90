@@ -158,9 +158,11 @@ PROGRAM MHDG
   
   ! Load magnetic field and, if ohmic src, also Jtor 
   IF (switch%ME .eqv. .FALSE.) THEN
+      
       CALL load_magnetic_field()
       IF (switch%ohmicsrc) CALL loadJtorMap()
   END IF
+  
         
 #ifdef TOR3D
   Ndim = 3                                               ! Number of dimensions

@@ -1445,6 +1445,8 @@ CONTAINS
 #else
     CALL setLocalDiff(xy,ueg,qeg,diff_iso_vol,diff_ani_vol,q_cyl)
 #endif
+
+    
     if (save_tau) then
        diff_nn_Vol_el = diff_iso_vol(5,5,:)
     endif
@@ -1829,10 +1831,14 @@ CONTAINS
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),0.,iel,tau)
         ENDIF
       END IF
-
-      ! Assembly local contributions
+! Assembly local contributions
+#ifdef DKLINEARIZED
+      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),q_cyl(g),xyf(g,:),&
+      n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,Vnng)
+#else
       CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),&
         n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,Vnng)
+#endif
 
       if (save_tau) then
         DO i = 1,Neq
@@ -2019,15 +2025,33 @@ CONTAINS
 #ifdef PARALL
       IF (Mesh%boundaryFlag(Mesh%F(iel,ifa) - Mesh%Nintfaces) .eq. 0) THEN
         ! Ghost face: assembly it as interior
+#ifndef DKLINEARIZED
         CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),&
           n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
+
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),&
           n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
       ENDIF
 #else
+
+        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),q_cyl(g),xyf(g,:),&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
+      ELSE
+        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),q_cyl(g),xyf(g,:),&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
+      ENDIF
+#endif
+
+#else
+#ifndef DKLINEARIZED
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),&
         n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,Vnng)
+#else
+      CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),q_cyl(g),xyf(g,:),&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,Vnng)
+#endif
+
 #endif
       if (save_tau) then
         DO i = 1,Neq
@@ -2145,6 +2169,10 @@ CONTAINS
     real*8,intent(IN)         :: b3(:),psi,divb,drift(:),f(:),ktis(:),Bmod
 #ifdef KEQUATION
     real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl
+#ifdef DKLINEARIZED
+    real*8                    :: ddk_dU(Neq), ddk_dU_U
+    real*8                    :: gradddk(Ndim)
+#endif
 #endif
     real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
     real*8,intent(IN)         :: Ni(:),NNi(:,:),Nxyzg(:,:),NNxy(:,:),NxyzNi(:,:,:),NNbb(:)
@@ -2350,11 +2378,16 @@ CONTAINS
         dissip = ce*dissip
         ddissip_du = ce*ddissip_du
       else
-        dissip = 0.
-        ddissip_du = 0.
+        dissip = abs(gamma_I)*dissip/phys%k_max
+        ddissip_du = abs(gamma_I)
         gamma_I = 0.
       endif
     endif
+#ifdef DKLINEARIZED
+    call compute_ddk_dU(ue,xy,q_cyl,ddk_dU)
+
+    ddk_dU_u = dot_product(ddk_dU,ue)
+#endif
 #endif
 
 
@@ -2396,6 +2429,7 @@ CONTAINS
 
     Dnn_dU_u = dot_product(Dnn_dU,Ue)
 #endif
+
 #endif
 
     !Assembly the matrix for neutral sources
@@ -2563,6 +2597,22 @@ CONTAINS
            END DO
 #endif
 		END IF
+#endif
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+    ! Contribution from linearized dk term assuming so far that Dk is the same in all plasma equations
+        if (i .ne. 5) then
+          DO j = 1,6
+            z = i+(j-1)*Neq
+            do k = 1,Ndim
+              Auu(:,:,z) =Auu(:,:,z) + ddk_dU(j)*Qpr(k,i)*(NxyzNi(:,:,k)-b(k)*NNxy)
+            enddo
+          enddo
+          DO k = 1, Ndim
+            rhs(:,i) = rhs(:,i)+ddk_dU_U*Qpr(k,i)*(Nxyzg(:,k)-b(k)*NNbb)
+          enddo
+        endif
+#endif
 #endif
        
 	! Convection contribution
@@ -2759,14 +2809,25 @@ CONTAINS
     !         ASSEMBLY INTERIOR FACES CONTRIBUTION
     !
     !********************************************************************
+
+#ifdef DKLINEARIZED
+  SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
+    &ind_fg,b3,Bmod,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,upf,qf,tau,Vnng,ifa)
+#else
     SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
         &ind_fg,b3,Bmod,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,upf,qf,tau,Vnng,ifa)
+#endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       real*8,intent(IN)         :: b3(:),n(:),Bmod, psi
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
       real*8,intent(IN)         :: uf(:),upf(:)
       real*8,intent(IN)         :: qf(:)
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+      real*8,intent(IN)         :: q_cyl, xyf(:)
+#endif
+#endif
       real*8,optional,intent(INOUT) :: tau(:,:),Vnng(:)
       real*8                     :: kcoeff
       real*8                     :: b(Ndim)
@@ -2788,6 +2849,12 @@ CONTAINS
 #ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
       real*8                    :: gradDnn(Ndim)
+#endif
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+      real*8                    :: ddk_dU(Neq), ddk_dU_U
+      real*8                    :: gradddk(Ndim)
+#endif
 #endif
 #ifdef NEUTRALP
       real*8                    :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
@@ -2851,6 +2918,13 @@ CONTAINS
       call compute_Dnn_dU(uf,Dnn_dU)
 
       Dnn_dU_u = dot_product(Dnn_dU,uf)
+#endif
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+      call compute_ddk_dU(uf,xyf,q_cyl,ddk_dU)
+
+      ddk_dU_u = dot_product(ddk_dU,uf)
+#endif
 #endif
 #ifdef NEUTRALP
     ! Compute Vpn(U^(k-1))
@@ -3119,6 +3193,24 @@ CONTAINS
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf 
 #endif                                                                           
        END IF
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+       if (i .ne. 5) then
+        DO j=1,Neq
+          ind_jf = ind_asf+j
+          do k=1,Ndim
+            kmult = ddk_dU(j)*Qpr(k,i)*(n(k)-b(k)*bn)*NNif
+            elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel)  = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
+            elMat%All(ind_ff(ind_if),ind_ff(ind_jf),iel)  = elMat%All(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
+          enddo
+        enddo
+        kmultf = ddk_dU_U*((Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif-(Qpr(1,i)*b(1)+Qpr(2,i)*b(2))*Nfbn)
+        elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+        elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
+      endif
+#endif
+#endif
+
 #endif
       END DO  ! i-Loop
 
@@ -3154,8 +3246,14 @@ CONTAINS
     !         ASSEMBLY EXTERIOR FACES CONTRIBUTION
     !
     !********************************************************************
+
+#ifdef DKLINEARIZED
+    SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
+      &ind_fg,b3,Bmod,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,upf,qf,tau,Vnng,ifa)
+#else
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
         &ind_fg,b3,Bmod,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,upf,qf,tau,Vnng,ifa)
+#endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       logical                   :: isdir
       real*8,intent(IN)         :: b3(:),n(:),Bmod, psi
@@ -3163,6 +3261,11 @@ CONTAINS
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
       real*8,intent(IN)         :: uf(:),upf(:)
       real*8,intent(IN)         :: qf(:)
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+      real*8,intent(IN)         :: q_cyl, xyf(:)
+#endif
+#endif
       real*8,optional,intent(INOUT) :: tau(:,:),Vnng(:)
       integer*4,optional         :: ifa
       real*8                    :: kcoeff
@@ -3183,6 +3286,12 @@ CONTAINS
 #ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
       real*8                    :: gradDnn(Ndim)
+#endif
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+      real*8                    :: ddk_dU(Neq), ddk_dU_U
+      real*8                    :: gradddk(Ndim)
+#endif
 #endif
 #ifdef NEUTRALP
       real*8                    :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
@@ -3248,6 +3357,14 @@ CONTAINS
       call compute_Dnn_dU(uf,Dnn_dU)
 
       Dnn_dU_u = dot_product(Dnn_dU,uf)
+#endif
+
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+      call compute_ddk_dU(uf,xyf,q_cyl,ddk_dU)
+
+      ddk_dU_u = dot_product(ddk_dU,uf)
+#endif
 #endif
 #ifdef NEUTRALP
       ! Compute Vpn(U^(k-1))
@@ -3516,7 +3633,25 @@ END IF
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
 #endif
       END IF
+
+#ifdef KEQUATION
+#ifdef DKLINEARIZED
+        if (i .ne. 5) then
+          DO j = 1,Neq
+            ind_jf = ind_asf + j
+            DO k = 1,Ndim
+              kmult = ddk_dU(j)*Qpr(k,i)*(n(k)-bn*b(k))*NNif
+              elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
+            enddo
+          enddo
+          kmultf = ddk_dU_U*((Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif-(Qpr(1,i)*b(1)+Qpr(2,i)*b(2))*Nfbn)
+          elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+        endif
 #endif
+#endif
+
+!if below for TEMPERATURE FLAG
+#endif 
       END DO  ! i-Loop
 
       ! Assembly stabilization terms

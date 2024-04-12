@@ -507,6 +507,7 @@ CONTAINS
 #ifdef KEQUATION
     !finding axis
     min_ind = MINLOC(flux)
+    
     phys%r_axis = Mesh%X(min_ind(1),1)
     phys%z_axis = Mesh%X(min_ind(1),2)
     
@@ -516,30 +517,57 @@ CONTAINS
 
     minflux_in(1) = phys%Flux2Dmin
     minflux_in(2) = my_rank
+    CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)
+
     CALL MPI_ALLREDUCE(minflux_in,minflux_out,1,MPI_2DOUBLE_PRECISION,MPI_MINLOC, MPI_COMM_WORLD, ierr)
+    CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)
+
     CALL MPI_BCAST(phys%r_axis,1,MPI_DOUBLE_PRECISION,int(minflux_out(2)),MPI_COMM_WORLD, ierr)
+    CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)
+
     CALL MPI_BCAST(phys%z_axis,1,MPI_DOUBLE_PRECISION,int(minflux_out(2)),MPI_COMM_WORLD, ierr)
+    CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)
+    CALL MPI_COMM_RANK(MPI_COMM_WORLD, my_rank, ierr)
+    
+
+
+   
 #endif
 #endif
 
 #ifdef PARALL
+    CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmax, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmin, 1, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, ierr)
+    CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)    
 #endif
 
-  
+
+    
     ! Magnetic flux normalized to separatrix: PSI
     phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin) 
 
 #ifdef KEQUATION
-    phys%omega = simpar%refval_charge/simpar%refval_mass*sqrt(Br**2+Bz**2+Bt**2)*simpar%refval_time
-    phys%q_cyl = abs(Bt)*sqrt((Mesh%X(:,1)-phys%r_axis)**2+(Mesh%X(:,2)-phys%z_axis)**2)/sqrt(Br**2+Bz**2)/Mesh%X(:,1)
+    DO i = 1, Mesh%Nnodes
+      phys%omega(i) = simpar%refval_charge/simpar%refval_mass*sqrt(Br(i)**2+Bz(i)**2+Bt(i)**2)*simpar%refval_time
+
+      phys%q_cyl(i) = abs(Bt(i))*sqrt((Mesh%X(i,1)-phys%r_axis)**2+(Mesh%X(i,2)-phys%z_axis)**2)/sqrt(Br(i)**2+Bz(i)**2)/Mesh%X(i,1)
+      phys%q_cyl(i) = max(phys%q_cyl(i),1.)
+      phys%q_cyl(i) = min(phys%q_cyl(i),1e4)
+    enddo
+    WRITE(6,*) 'r_axis', phys%r_axis*simpar%refval_length
+    WRITE(6,*) 'z_axis', phys%z_axis*simpar%refval_length
+    
 #endif
     if (switch%ME) then
       time%dt_ME = dt_ME
       time%t_ME = t_ME
     endif
+
     DEALLOCATE (Br, Bz, Bt, flux)
+
+    
   END SUBROUTINE load_magnetic_field_nodes
 
 #ifdef TOR3D
@@ -959,7 +987,7 @@ CONTAINS
     USE interpolation
     USE HDF5
     USE HDF5_io_module
-    !USE MPI_OMP
+    USE MPI_OMP
     integer        :: i,ierr,ip,jp,ind,j,k
     integer(HID_T) :: file_id
 
@@ -970,7 +998,11 @@ CONTAINS
     real*8,allocatable,dimension(:)   :: xvec,yvec
     real*8                            :: dt_ME,t_ME
     real*8                            :: x,y
+#ifdef PARALL
+    
 
+    
+#endif
     IF (MPIvar%glob_id .eq. 0) THEN
       WRITE(6,*) "******* Loading Toroidal Current *******"
     ENDIF
@@ -1026,8 +1058,10 @@ CONTAINS
     CALL HDF5_array2D_reading(file_id,r2D,'r2D')
     CALL HDF5_array2D_reading(file_id,z2D,'z2D')
     CALL HDF5_array2D_reading(file_id,Jtor,'Jtor')
-    CALL HDF5_real_reading(file_id, dt_ME, 'dt')
-    CALL HDF5_real_reading(file_id, t_ME, 'time')
+    if (switch%ME) then
+      CALL HDF5_real_reading(file_id, dt_ME, 'dt')
+      CALL HDF5_real_reading(file_id, t_ME, 'time')
+    endif
     CALL HDF5_close(file_id)
 
     ! Apply length scale
@@ -1052,9 +1086,11 @@ CONTAINS
       END DO
 #endif
     END DO
-
     !Compute Ip
+
+    
     CALL computeIplasma()
+    
     
     IF (MPIvar%glob_id .eq. 0) THEN
           write(6,*) 'I_p =  ', phys%I_p, '[MA]'
@@ -1164,6 +1200,7 @@ CONTAINS
   END SUBROUTINE loadMagneticFieldFromExperimentalData
 
   SUBROUTINE computeIplasma()
+    USE MPI_OMP
     real*8  	:: Xel(refElPol%Nnodes2D,2),xyg(refElPol%NGauss2D,2),xyg_d(refElPol%NGauss2D,2),dvolu
     real*8		:: Jtorel(refElPol%Nnodes2D),Jtorg(refElPol%NGauss2D)
     real*8		:: J11(refElPol%NGauss2D),J12(refElPol%NGauss2D)
@@ -1180,6 +1217,7 @@ CONTAINS
         
    	! Toroidal current of the nodes of the element
         Jtorel = phys%Jtor(Mesh%T(iel,:))
+        
    
        ! Gauss points position
        xyg = matmul(refElPol%N2D,Xel)
@@ -1211,12 +1249,13 @@ CONTAINS
 #ifdef PARALL
        ENDIF
 #endif
-     
+      
     END DO
-
+    
 #ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%I_p, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%I_p, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
+    
     
     ! Toroidal current in [MA]
     phys%I_p = phys%I_p/1.e6                                                   
