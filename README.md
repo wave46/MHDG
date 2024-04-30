@@ -1,1 +1,1 @@
-$\kappa$-$\epsilon$
+$\kappa\text{-}\epsilon$
