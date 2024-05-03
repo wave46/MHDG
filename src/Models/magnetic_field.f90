@@ -23,6 +23,9 @@ CONTAINS
 #else
       nnodes = Mesh%Nnodes
 #endif
+
+      ALLOCATE (magn%where_core(nnodes))
+
       ! Allocate storing space in phys
       ALLOCATE (phys%B(nnodes, 3))
       ALLOCATE (phys%magnetic_flux(nnodes))
@@ -92,6 +95,8 @@ CONTAINS
 #endif
       ! Adimensionalization of the magnetic field
       !phys%B = phys%B/phys%B0
+
+      call get_where_core(magn%where_core)
    END SUBROUTINE load_magnetic_field
 
    !***********************************************************************
@@ -473,7 +478,7 @@ CONTAINS
          write (npr, *) MPIvar%glob_size
          fname_complete = trim(adjustl(fname))//'_'//trim(adjustl(nid))//'_'//trim(adjustl(npr))//'.h5'
       ELSE
-         fname_complete = trim(adjustl(fname))//'.h5'
+         fname_complete = trim(adjustl(fname))
       END IF
       IF (MPIvar%glob_id .eq. 0) THEN
          write (6, *) 'Magnetic field loaded from file: ', trim(adjustl(fname_complete))
@@ -1353,13 +1358,25 @@ CONTAINS
 
    END SUBROUTINE SetPuff
 
-   subroutine get_where_core(B, magnetic_flux, where_core)
-      real*8, intent(in) :: B(:, :), magnetic_flux(:)
-      real*8 :: x_flux
+   subroutine get_where_core(where_core)
+      ! real*8, intent(in) :: B(:, :), magnetic_flux(:)
+
       logical, intent(out):: where_core(:)
-      ! Bpol = norm2(B(:,:2), dim=2)
-      x_flux = magnetic_flux(minloc(norm2(B(:, :2), dim=2), dim=1))
-      where_core = magnetic_flux < x_flux
+      SELECT case (switch%testcase)
+      case (60)
+         print *, shape(mesh%X)
+         print *, maxval(mesh%X)
+         where_core = norm2(mesh%X, dim=2) < 0.75
+      case (54)
+
+         ! real*8 :: x_flux
+         ! Bpol = norm2(B(:,:2), dim=2)
+         ! x_flux = phys%magnetic_flux(minloc(norm2(phys%b(:, :2), dim=2), dim=1))
+         where_core = phys%magnetic_flux < phys%magnetic_flux(minloc(norm2(phys%b(:, :2), dim=2), dim=1))
+      case DEFAULT
+         print *, "FAIL! unkown testcase in get_where_core"
+
+      end SELECT
 
    end subroutine
 

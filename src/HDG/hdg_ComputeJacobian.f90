@@ -1661,8 +1661,8 @@ CONTAINS
               &ueg(g, :), qeg(g, :), u0eg(g, :, :), xy(g, :), Jtor(g), Vnng)
 #else
       CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,Bmod(g),b_tor(g),gradbtor,omega(g),q_cyl(g),magn%where_core(g),force(g,:),&
-              &ktis, diff_iso_vol(:, :, g), diff_ani_vol(:, :, g), Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upg(g, :),&
-              &ueg(g, :), qeg(g, :), u0eg(g, :, :), xy(g, :), Jtor(g), Vnng)
+                    &ktis, diff_iso_vol(:, :, g), diff_ani_vol(:, :, g), Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upg(g, :),&
+                    &ueg(g, :), qeg(g, :), u0eg(g, :, :), xy(g, :), Jtor(g), Vnng)
 #endif
 
             if (save_tau) then
@@ -2151,7 +2151,7 @@ CONTAINS
                    &ktis, diffiso, diffani, Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upe, ue, qe, u0e, xy, Jtor, Vnng)
 #else
          SUBROUTINE assemblyVolumeContribution(Auq, Auu, rhs, b3, psi, divb, drift, Bmod, btor, gradBtor, omega, q_cyl, is_core, f,&
-                    &ktis, diffiso, diffani, Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upe, ue, qe, u0e, xy, Jtor, Vnng)
+                             &ktis, diffiso, diffani, Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upe, ue, qe, u0e, xy, Jtor, Vnng)
 #endif
                      real*8, intent(inout)      :: Auq(:, :, :), Auu(:, :, :), rhs(:, :)
                      real*8, intent(IN)         :: b3(:), psi, divb, drift(:), f(:), ktis(:), Bmod
@@ -2363,9 +2363,9 @@ CONTAINS
                            dissip = ce*dissip
                            ddissip_du = ce*ddissip_du
                         else
-                           dissip = abs(growth_rate)*dissip/phys%k_max
-                           ddissip_du = abs(growth_rate)
-                           growth_rate = 0.
+                           dissip = 0!abs(growth_rate)*dissip/phys%k_max
+                           ddissip_du = 0!abs(growth_rate)
+                           ! growth_rate = 0.
                         end if
                      end if
 #ifdef DKLINEARIZED
@@ -2501,7 +2501,7 @@ CONTAINS
                            IF (i == 3) THEN
                               DO j = 1, 4
   Auu(:, :, i + (j - 1)*Neq) = Auu(:, :, i + (j - 1)*Neq) + coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_product(Taui(:, j), b)))*NNxy + &
-                                             &(dot_product(Zet(:, j), b) + ds_dU(j))*NNi
+                                                                            &(dot_product(Zet(:, j), b) + ds_dU(j))*NNi
                                  DO k = 1, Ndim
                                     z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
                                     Auq(:, :, z) = Auq(:, :, z) + coefi*Alphai*Vveci(j)*b(k)*NNxy
@@ -3496,7 +3496,7 @@ CONTAINS
                                       kmult = kcoeff**2*(diffiso(i, ii)*Qpr(k, 1)*n(k)*NNif - diffani(i, ii)*Qpr(k, 1)*b(k)*NNif*bn)
                              elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
                          elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) + kcoeff*(diffiso(i, ii)*Qpr(k, 1)*n(k)*Nif - &
-                                                     &diffani(i, ii)*Qpr(k, 1)*b(k)*Nfbn)
+                                                                               &diffani(i, ii)*Qpr(k, 1)*b(k)*Nfbn)
                                                 END IF
                                              END IF
                                              kmult = NNif*kcoeff*(n(k)*diffiso(i, ii) - bn*b(k)*diffani(i, ii))
@@ -3686,7 +3686,7 @@ CONTAINS
                                  !********************************************************************
 #ifdef TEMPERATURE
                       SUBROUTINE assemblyNeutral(U, niz, dniz_dU, nrec, dnrec_dU, sigmaviz, dsigmaviz_dU, sigmavrec, dsigmavrec_dU,&
-                                     &fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, sigmavcx, dsigmavcx_dU, fEiiz,&
+                                                &fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, sigmavcx, dsigmavcx_dU, fEiiz,&
                                 &dfEiiz_dU, fEirec, dfEirec_dU, fEicx, dfEicx_dU, Tloss, dTloss_dU, Tlossrec, dTlossrec_dU, Sn, Sn0)
 #else
               SUBROUTINE assemblyNeutral(U, niz, dniz_dU, nrec, dnrec_dU, fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, Sn, Sn0)
@@ -3731,7 +3731,7 @@ CONTAINS
                                        Sn(2, 4) = Sn(2, 4) + ad*(fGammacx*dsigmavcx_dU(4) + fGammarec*dsigmavrec_dU(4))
                                        !Assembly Source Terms in ion energy equation
                                      Sn(3, 1) = ad*(-RE*fEiiz*dsigmaviz_dU(1) + dfEirec_dU(1)*sigmavrec + fEirec*dsigmavrec_dU(1) +&
-                                         &dfEicx_dU(1)*sigmavcx + fEicx*dsigmavcx_dU(1))
+                                           &dfEicx_dU(1)*sigmavcx + fEicx*dsigmavcx_dU(1))
                                        Sn(3, 2) = ad*(dfEicx_dU(2)*sigmavcx)
                                        Sn(3, 3) = ad*(-RE*dfEiiz_dU(3)*sigmaviz + dfEirec_dU(3)*sigmavrec)
                                        Sn(3, 4) = ad*(-RE*fEiiz*dsigmaviz_dU(4) + fEirec*dsigmavrec_dU(4) + fEicx*dsigmavcx_dU(4))

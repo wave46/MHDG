@@ -1309,7 +1309,7 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
          integer*4    :: ind(Npfl), i
 
          kmult = col(tensorProduct(ufg(:), Ni))
-         DO i = 1, Neq
+         DO i = 1, 5 !Neq
             ind = i + ind_asf
             elMat%All(ind_ff(ind), ind_ff(ind), iel) = elMat%All(ind_ff(ind), ind_ff(ind), iel) - numer%tau(i)*NiNi
             elMat%fh(ind_ff(ind), iel) = elMat%fh(ind_ff(ind), iel) - numer%tau(i)*kmult(ind)
@@ -1893,7 +1893,7 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
                                 &coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_product(Taui(:, j), bg)))*NiNi*bn
                               DO k = 1, Ndim
           elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) = elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) -&
-                                   &coefi*Alphai*Vveci(j)*bg(k)*NiNi*bn
+                                                          &coefi*Alphai*Vveci(j)*bg(k)*NiNi*bn
                               END DO
                            END DO
   elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - coefi*Alphai*( dot_product (matmul(transpose(Taui),bg),ufg)  )*Ni*bn
@@ -1905,7 +1905,7 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
                                 &coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_product(Taue(:, j), bg)))*NiNi*bn
                               DO k = 1, Ndim
           elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) = elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) -&
-                                   &coefe*Alphae*Vvece(j)*bg(k)*NiNi*bn
+                                                          &coefe*Alphae*Vvece(j)*bg(k)*NiNi*bn
                               END DO
                            END DO
   elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - coefe*Alphae*( dot_product (matmul(transpose(Taue),bg),ufg)  )*Ni*bn
@@ -2440,10 +2440,10 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
                                     indj = ind_asf + j
                elMat%All(ind_ff(indi + 2), ind_ff(indj), iel) = elMat%All(ind_ff(indi + 2), ind_ff(indj), iel) + Abohm(i, j)*NiNi*bn
                                   elMat%All(ind_ff(indi + 2), ind_ff(indj), iel) = elMat%All(ind_ff(indi + 2), ind_ff(indj), iel) -&
-                                      &coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_product(Taui(:, j), bg)))*NiNi*bn
+                                        &coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_product(Taui(:, j), bg)))*NiNi*bn
                                     DO k = 1, Ndim
           elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) = elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) -&
-                                         &coefi*Alphai*Vveci(j)*bg(k)*NiNi*bn
+                                                                      &coefi*Alphai*Vveci(j)*bg(k)*NiNi*bn
                                     END DO
                                  END DO
   elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - coefi*Alphai*( dot_product (matmul(transpose(Taui),bg),ufg)  )*Ni*bn
@@ -2452,10 +2452,10 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
                                     indj = ind_asf + j
                elMat%All(ind_ff(indi + 2), ind_ff(indj), iel) = elMat%All(ind_ff(indi + 2), ind_ff(indj), iel) + Abohm(i, j)*NiNi*bn
                                   elMat%All(ind_ff(indi + 2), ind_ff(indj), iel) = elMat%All(ind_ff(indi + 2), ind_ff(indj), iel) -&
-                                      &coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_product(Taue(:, j), bg)))*NiNi*bn
+                                        &coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_product(Taue(:, j), bg)))*NiNi*bn
                                     DO k = 1, Ndim
           elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) = elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) -&
-                                         &coefe*Alphae*Vvece(j)*bg(k)*NiNi*bn
+                                                                      &coefe*Alphae*Vvece(j)*bg(k)*NiNi*bn
                                     END DO
                                  END DO
   elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - coefe*Alphae*( dot_product (matmul(transpose(Taue),bg),ufg)  )*Ni*bn

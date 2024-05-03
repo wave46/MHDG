@@ -26,6 +26,17 @@ CONTAINS
       phys%Neq = 4
       ! number of physical variables
       phys%npv = 10
+
+#ifdef NEUTRAL
+      phys%Neq = 5
+      phys%npv = 11
+#ifdef KEQUATION
+      !so far we only use k equation with neutrals and the convention is that the k-equation is always the last
+      phys%Neq = 6
+      phys%npv = 12
+#endif
+#endif
+
       ALLOCATE (phys%phyVarNam(phys%npv))
       ALLOCATE (phys%conVarNam(phys%Neq))
 
@@ -72,8 +83,6 @@ CONTAINS
       simpar%Ndim = 2
 
 #ifdef NEUTRAL
-      phys%Neq = 5
-      phys%npv = 11
       phys%phyVarNam(11) = "rhon"   ! density neutral
       phys%conVarNam(5) = "rhon"  ! U5 = rhon
       simpar%model = 'N-Gamma-Ti-Te-Neutral'
@@ -81,8 +90,6 @@ CONTAINS
       simpar%consvar_refval(5) = simpar%refval_neutral
 #ifdef KEQUATION
       !so far we only use k equation with neutrals and the convention is that the k-equation is always the last
-      phys%Neq = 6
-      phys%npv = 12
       phys%phyVarNam(12) = "k"   ! turbulent energy
       phys%conVarNam(6) = "k"  ! U6 = k
       simpar%model = 'N-Gamma-Ti-Te-Neutral-k'
@@ -93,12 +100,7 @@ CONTAINS
 
 #ifdef TOR3D
       simpar%Ndim = 3
-      nnodes = Mesh%Nnodes*Mesh%Nnodes_toroidal
-#else
-      nnodes = Mesh%Nnodes
 #endif
-      ALLOCATE (magn%where_core(nnodes))
-      call get_where_core(phys%B, phys%magnetic_flux, magn%where_core)
 
 #ifdef EXPANDEDCX
 #ifdef AMJUELCX
@@ -1408,7 +1410,11 @@ CONTAINS
                         end if
                      end if
                      ! rate is in cm^3/s in EIRENE
-                     rate = exp(rate)/1.e6
+                     if (rate > -1e3) then
+                        rate = exp(rate)/1.e6
+                     else
+                        rate = 0
+                     end if
                   END SUBROUTINE compute_2D_eirene_rate
 
                   SUBROUTINE compute_2D_eirene_rate_du(U1, U4, te, ne, alpha, rate_du)
@@ -2203,10 +2209,10 @@ CONTAINS
                      real, parameter :: tol = 1e-20, m_ratio = 3670.4829678537167, coulomb_log = 15.
                      complex*8 :: bn, b_phi, bb
 
-                     n = U(1)
+                     n = max(tol, U(1))
                      v = U(2)/n
-                     Ti = 2./3./phys%Mref*(U(3)/n - v**2)
-                     Te = 2./3./phys%Mref*U(4)/n
+                     Ti = max(tol, 2./3./phys%Mref*(U(3)/n - v**2))
+                     Te = max(tol, 2./3./phys%Mref*U(4)/n)
                      call compute_cs(U, V0)
                      nB = n
 
@@ -2226,9 +2232,9 @@ CONTAINS
                      C_Omega = merge(C_Omega, min(1., C_Omega), is_core)*C_star
 
                      an = D_perp/DB/d_star + sqrt(C_Omega)
-                     a_phi = nu_perp/DB/d_star + d_perp
-                     bn = complex(rho_L/sqrt(2*d_perp)*(dn_dr - dn_dz)/nB, C_Omega**0.75)
-                     b_phi = complex(-sqrt(2*d_perp)*rho_L/abs(B)*gradB(1), merge(d_star*C_Omega**0.75, 0., is_core))
+                     a_phi = nu_perp/DB/d_star + d_star
+                     bn = complex(rho_L/sqrt(2*d_star)*(dn_dr - dn_dz)/nB, C_Omega**0.75)
+                     b_phi = complex(-sqrt(2*d_star)*rho_L/abs(B)*gradB(1), merge(d_star*C_Omega**0.75, 0., is_core))
 
                      aa = (an + a_phi)/2
                      bb = bn*b_phi
