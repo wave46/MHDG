@@ -12,3 +12,4 @@ WEST/lib/*.mod
 WEST/lib/MHDG-*
 *MHDG-*
 WEST/src_*
+*src_*
