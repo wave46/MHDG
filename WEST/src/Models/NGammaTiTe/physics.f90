@@ -1721,25 +1721,25 @@ CONTAINS
 #endif
 #ifdef EXPANDEDCX
 ! These routines use AMUJUEL splines
-  SUBROUTINE compute_eirene_1D_rate(te,alpha,rate)
-    ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
-    real*8, intent(IN) :: te,alpha(:)          
+  SUBROUTINE compute_eirene_1D_rate(ti,alpha,rate)
+    ! This routine calculates extrapolated AMJUEL 1D rate (here on ion temperature) for given temperature and coefficients
+    real*8, intent(IN) :: ti,alpha(:)          
     real*8, intent(OUT):: rate
-    real*8             :: te_min=0.1
-    real*8             :: dlograte_dlogte
+    real*8             :: ti_min=0.1
+    real*8             :: dlograte_dlogti
     integer            :: i
     rate = 0.
-    if (te>=te_min) then 
-      call compute_logeirene_1D_rate(te,alpha,rate)
+    if (ti>=ti_min) then 
+      call compute_logeirene_1D_rate(ti,alpha,rate)
     else
-      call compute_logeirene_1D_rate(te_min,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogte(te_min,alpha,dlograte_dlogte)
-      rate = rate + dlograte_dlogte*(log(te)- log(te_min))
+      call compute_logeirene_1D_rate(ti_min,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogti(ti_min,alpha,dlograte_dlogti)
+      rate = rate + dlograte_dlogti*(log(ti)- log(ti_min))
     endif
     ! rates are not higher than 1 m^3/s, if rate is higher than that value, then there is something weird
     if (rate>6.*log(10.)) then
       WRITE(6,*) "Something weird in compute_eirene_te_rate, probably, solution is not good already"
-      WRITE(6,*) " te equal to", te
+      WRITE(6,*) " ti equal to", ti
       WRITE(6,*) " rate equal to", rate
       stop
     endif
@@ -1757,14 +1757,14 @@ CONTAINS
 
     if (ti>ti_min) then
       call compute_eirene_1D_rate(ti,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogte(ti,alpha,dlograte_dlogte)
+      call compute_d_logeirene_1D_rate_dlogti(ti,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
       res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
       res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
       res = rate*res
     else
       call compute_eirene_1D_rate(ti,phys%alpha_cx,rate)
-      call compute_d_logeirene_1D_rate_dlogte(ti_min,alpha,dlograte_dlogte)
+      call compute_d_logeirene_1D_rate_dlogti(ti_min,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
       res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
       res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
@@ -1788,17 +1788,17 @@ CONTAINS
   END SUBROUTINE compute_logeirene_1D_rate
 
 
-  SUBROUTINE compute_d_logeirene_1D_rate_dlogte(ti,alpha,d_log_rate_dte)
+  SUBROUTINE compute_d_logeirene_1D_rate_dlogti(ti,alpha,d_log_rate_dti)
     ! calculates derivative of AMJUEL 1D spline in loglog space
     real*8, intent(IN) :: ti, alpha(:)          
-    real*8, intent(OUT):: d_log_rate_dte
+    real*8, intent(OUT):: d_log_rate_dti
     integer            :: i
-    d_log_rate_dte = 0.
+    d_log_rate_dti = 0.
 
     do i = 2,size(alpha,1)    
-      d_log_rate_dte = d_log_rate_dte + (i-1)*alpha(i)*log(ti)**(i-2)
+      d_log_rate_dti = d_log_rate_dti + (i-1)*alpha(i)*log(ti)**(i-2)
     end do
-  END SUBROUTINE compute_d_logeirene_1D_rate_dlogte
+  END SUBROUTINE compute_d_logeirene_1D_rate_dlogti
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     ! calculates AMJUEL CX rate
     real*8, intent(IN) :: U(:)

@@ -10,12 +10,12 @@
     init                = 1             ! Initialization type: 1-analytical at nodes; 2-L2 projection
     driftdia            = .false.       ! Set to FALSE to ignore diamagnetic drifts terms
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
-    testcase            = 60            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
-    OhmicSrc            = .false.        ! True to set Ohmic source of energy
+    testcase            = 54            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
+    OhmicSrc            = .true.        ! True to set Ohmic source of energy
     ME                  = .false.        ! True to allow magnetic equilibrium evolution in time
     RMP                 = .false.       ! True to set RMP (non-axisymetrical perturbation)
     Ripple              = .false.       ! True to set Ripple (non-axisymetrical perturbation)
-    psdtime             = .true.        ! Reduce the diffusion every time we reach the steady state
+    psdtime             = .false.        ! Reduce the diffusion every time we reach the steady state
                                         ! condition (only works if steady=.false.)
     diffred             = 0.6  ! Reduction factor of the diffusion for psdtime simulation (set for 20*diff_x)
     !diffred             = 0.76923076923
@@ -57,22 +57,22 @@
 /
 
 &INPUT_LST
-    field_path          = 'B_field_FEEQS_nodes/8th_try/WEST_54487_0202'  ! Path to Bfield h5 file. 
+    field_path          = 'B_field_exp/WEST_54487_0000.h5'  ! Path to Bfield h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'B_field/WEST_54487'
                                                                         ! If switch%ME = .false. then put the full part 'B_field/WEST_54487_0000.h5'
-    field_dimensions(1) = 200                                   ! 1st dimension dimensions of magnetic field file
-    field_dimensions(2) = 200                                   ! 2nd dimension dimensions of magnetic field file
-    field_from_grid = .false.                                   ! true then reads from cartesian grid and then biineary interpolates on nodes
+    field_dimensions(1) = 457                                   ! 1st dimension dimensions of magnetic field file
+    field_dimensions(2) = 457                                   ! 2nd dimension dimensions of magnetic field file
+    field_from_grid = .true.                                   ! true then reads from cartesian grid and then biineary interpolates on nodes
                                                                 ! false then reads from files with field on nodes
     compute_from_flux   = .false.                                ! if the Br, Bz is computed from flux works not well, only with loading from nodes
     divide_by_2pi       = .false.                               ! if corresponding to poloidal flux definition it is needed to divide by 2pi. For NICE .true.
                                                                 ! for FEEQS .false.
-    jtor_path           = 'Jtor_updated_exp/WEST_54487_Jtor_0200.h5'    ! Path to jtor h5 file. 
+    jtor_path           = 'Jtor_equimap_variable_time/WEST_54487_Jtor_0000.h5'    ! Path to jtor h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'Jtor/WEST_54487_Jtor'
                                                                         ! If switch%ME = .false. then put the full part 'Jtor/WEST_54487_Jtor_0000.h5'
-    jtor_dimensions(1) = 457                                   ! 1st dimension dimensions of plasma current file
-    jtor_dimensions(2) = 457                                   ! 2nd dimension dimensions of plasma current file
-    save_folder = '/home/ikudashev/meso_backup/scratch/results_hdg/manuel_code/circular_case/k_equation_first_test/'
+    jtor_dimensions(1) = 200                                   ! 1st dimension dimensions of plasma current file
+    jtor_dimensions(2) = 200                                   ! 2nd dimension dimensions of plasma current file
+    save_folder = '/home/ikudashev/meso_backup/scratch/results_hdg/manuel_code/steady/k_equation_test/time_init/'
 /
 
 &NUMER_LST
@@ -94,7 +94,7 @@
     thr                 = 1.e-12        ! Min value of density allowed (works only if the switch is activated)
     thrpre              = 1.e-12        ! Min value of pressure allowed (works only if the switch is activated)
     stab                = 5             ! Stabilization type (from 1 to 4 (5), 2 is good, 5 is better (simplified 2, only for N-Gamma(-T))
-    dumpnr_min          = 0.5! Dumping factor for Newton-Raphson (0<dumpnr<1, first parameter to decrease if NR fail) typical 0.1
+    dumpnr_min          = 0.000000001! Dumping factor for Newton-Raphson (0<dumpnr<1, first parameter to decrease if NR fail) typical 0.1
     dumpnr_max          = 0.5
     dumpnr_width        = 3.
     dumpnr_n0           = 10.
@@ -127,8 +127,8 @@
 
 
 &TIME_LST
-    dt0                 = 3.e9        ! Initial time step 3.e9 1.6395702112189546e5
-    nts                 = 10           ! Max number of time iterations to do in the current session (only for transient simulations) 30
+    dt0                 = 3.e9        ! Initial time step 3.e9 1.6395702112189546e5  1.4556040756914119e5
+    nts                 = 30           ! Max number of time iterations to do in the current session (only for transient simulations) 30
     tfi                 = 1e8           ! Final time: the simulation stops when this time is reached
     tsw                 = 0             ! Switch to modify the time step
                                         ! 0 = dt is not modified
@@ -138,13 +138,20 @@
 
 &PHYS_LST
     ! ****** Diffusion parameters in m^2/s (start at 20*diff_x if psdtime = true)
-    diff_n = 10.! diffusion in the continuity equation
-    diff_u = 10. ! diffusion in the momentum equation
-    diff_e = 10.  ! perpendicular diffusion for the energy equation
-    diff_ee = 10.   ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
-    diff_vort = 10. ! diffusion in the vorticity equation
+    diff_n = 1.! diffusion in the continuity equation
+    diff_u =  1. ! diffusion in the momentum equation
+    diff_e =  1. ! perpendicular diffusion for the energy equation
+    diff_ee =  1.   ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
+    diff_vort =  1. ! diffusion in the vorticity equation
     v_p = 0. ! Pinch velocity in the continuity equation (Pinch = vp*(psi^2 + psi^2*tanh((0.95 - psi)/0.02)) with psi = 1. at separatrix )
     diff_nn = 20e3 ! diffusion for neutral equation
+    ! external heating in the form of shifted 2D gaussian ~exp(-(r-(R0+dr)**2/sigmar**2))*exp(-(z-(Z0+dz)**2/sigmaz**2))
+    heating_power = 0.              ! [W] Total power of heating 
+    heating_dr = 0.0                 ! [m] displacement from magnetic axis alon R direction (can be positive and negative)
+    heating_dz = 0.                 ! [m] displacement from magnetic axis alon R direction (can be positive and negative)
+    heating_sigmar = 0.15             ! [m] gaussian width in r-direction
+    heating_sigmaz = 0.15             ! [m] gaussian width in z-direction
+    heating_equation = 3            ! equation to which heating is applied
     ! ****** Option for neutral equation (available only if compile with NEUTRAL)
     Re                  = 0.998     ! Recycling coefficient 0.997
     Re_pump             = 0.95     ! Recycling coefficient in the pump region
@@ -157,7 +164,7 @@
     part_source         = 0.        ! source coefficient (particles per second in the whole core area [ONLY BC 6])
     ener_source         = 20e6      ! source coefficient (Watt in the whole core area [ONLY BC 6])
     ! kequation part
-    diff_k_min = 10.  ! minimal diffusion in the k equation
+    diff_k_min =  10. ! minimal diffusion in the k equation
     diff_k_max = 10. ! maximal diffusion in the k equation
     k_max = 1.e10      ! maximal k
     !puff               = 1.8e-6
@@ -178,7 +185,7 @@
     bcflags(9)          = 50            ! Out
     bcflags(10)         = 50            ! Upper Limiter
     ! ****** Boundary threshold for Bohm
-    bohmth              = 0.02           ! threshold for imposing the bohm boundary condition !for circ put 0.1 0.02
+    bohmth              = 0.00           ! threshold for imposing the bohm boundary condition !for circ put 0.1 0.02
     ! ****** Boundary coefficients for the Bohm boundary condition of the temperature equations:
     Gmbohm              = 2.5           ! gamma for Bohm boundary condition for energy equation (usually 7) and for ions energy equation (usually 2.5)
     Gmbohme             = 4.5           ! gamma for Bohm boundary condition for electron energy equation (usually 4.5)
