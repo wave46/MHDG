@@ -737,9 +737,9 @@ CONTAINS
         endif
         D_k(i) = r*U6(i)/c_s(i)
         if (switch%testcase == 60) then
-          D_k(i) = D_k(i)*geom%q
+          D_k(i) = D_k(i)*geom%q*2.*PI
         else
-          D_k(i) =  D_k(i)*q_cyl(i)
+          D_k(i) =  D_k(i)*q_cyl(i)*2.*PI
         endif
 
 #ifndef KDIFFSMOOTH
@@ -771,20 +771,7 @@ CONTAINS
     d_ani(2, 2, :) = d_iso(2,2,:)
     d_ani(3, 3, :) = d_iso(3,3,:)
     d_ani(4, 4, :) = d_iso(4,4,:)
-    !if (any(q_cyl<0.9) .or.any(q_cyl>1.1e4))  then
-    !  WRITE(6,*) 'x', xy(1,1)*simpar%refval_length
-    !  WRITE(6,*) 'y', xy(1,2)*simpar%refval_length
-    !  WRITE(6,*) 'q_cyl', q_cyl(1)
-    !  WRITE(6,*) 'Dk', d_iso(6,6,1)*simpar%refval_length**2/simpar%refval_time
-    !  WRITE(6,*) 'Dn', d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time
-    !endif
-    !if ((d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time>6) .and. (xy(1,1)*simpar%refval_length>1.86))  then
-    !  WRITE(6,*) 'x', xy(1,1)*simpar%refval_length
-    !  WRITE(6,*) 'y', xy(1,2)*simpar%refval_length
-    !  WRITE(6,*) 'q_cyl', q_cyl(1)
-    !  WRITE(6,*) 'Dk', d_iso(6,6,1)*simpar%refval_length**2/simpar%refval_time
-    !  WRITE(6,*) 'Dn', d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time
-    !endif
+
     if ((switch%ME .eqv. .TRUE.) .AND. (switch%testcase .gt. 84)) then !Iter core-edge with evolving equilibria plus diffusion decrease
        if (switch%testcase .eq. 85) then
          d_ani(1, 1, :) = phys%diff_n - (phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
@@ -1759,94 +1746,108 @@ CONTAINS
     rate = exp(rate)/1.e6
   END SUBROUTINE compute_eirene_1D_rate
 
-  SUBROUTINE compute_eirene_1D_rate_du(U1,U4,te,alpha,res)
+  SUBROUTINE compute_eirene_1D_rate_du(U1,U2,U3,ti,dti_dU,alpha,res)
     ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
-    real*8, intent(IN) :: U1,U4,te,alpha(:)          
+    real*8, intent(IN) :: U1,U2,U3,ti,dti_dU(:),alpha(:)          
     real*8, intent(OUT):: res(:)
-    real*8             :: te_min=0.1
+    real*8             :: ti_min=0.1
     real*8             :: dlograte_dlogte,rate
     integer            :: i
     res = 0.
 
-    if (te>te_min) then
-      call compute_eirene_1D_rate(te,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogte(te,alpha,dlograte_dlogte)
-      res(1) = res(1) + dlograte_dlogte*(-1./U1)
-      res(4) = res(4) + dlograte_dlogte*(1./U4)
+    if (ti>ti_min) then
+      call compute_eirene_1D_rate(ti,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogte(ti,alpha,dlograte_dlogte)
+      res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
+      res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
+      res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
       res = rate*res
     else
-      call compute_eirene_1D_rate(te,phys%alpha_cx,rate)
-      call compute_d_logeirene_1D_rate_dlogte(te_min,alpha,dlograte_dlogte)
-      res(1) = res(1) + dlograte_dlogte*(-1./U1)
-      res(4) = res(4) + dlograte_dlogte*(1./U4)
+      call compute_eirene_1D_rate(ti,phys%alpha_cx,rate)
+      call compute_d_logeirene_1D_rate_dlogte(ti_min,alpha,dlograte_dlogte)
+      res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
+      res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
+      res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
       res = rate*res
     endif
 
   END SUBROUTINE compute_eirene_1D_rate_du
 
 
-  SUBROUTINE compute_logeirene_1D_rate(te,alpha,rate)
+  SUBROUTINE compute_logeirene_1D_rate(ti,alpha,rate)
     ! Calculates 1D AMJUEL spline in loglog space
-    real*8, intent(IN) :: te,alpha(:)          
+    real*8, intent(IN) :: ti,alpha(:)          
     real*8, intent(OUT):: rate
     integer            :: i
     rate = 0.
 
     do i = 1,size(alpha,1)    
-      rate = rate + alpha(i)*log(te)**(i-1)
+      rate = rate + alpha(i)*log(ti)**(i-1)
     end do
 
   END SUBROUTINE compute_logeirene_1D_rate
 
 
-  SUBROUTINE compute_d_logeirene_1D_rate_dlogte(te,alpha,d_log_rate_dte)
+  SUBROUTINE compute_d_logeirene_1D_rate_dlogte(ti,alpha,d_log_rate_dte)
     ! calculates derivative of AMJUEL 1D spline in loglog space
-    real*8, intent(IN) :: te,alpha(:)          
+    real*8, intent(IN) :: ti, alpha(:)          
     real*8, intent(OUT):: d_log_rate_dte
     integer            :: i
     d_log_rate_dte = 0.
 
     do i = 2,size(alpha,1)    
-      d_log_rate_dte = d_log_rate_dte + (i-1)*alpha(i)*log(te)**(i-2)
+      d_log_rate_dte = d_log_rate_dte + (i-1)*alpha(i)*log(ti)**(i-2)
     end do
   END SUBROUTINE compute_d_logeirene_1D_rate_dlogte
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     ! calculates AMJUEL CX rate
     real*8, intent(IN) :: U(:)
-    real*8             :: sigmavcx,U1,U4,T0,E0,te
+    real*8             :: sigmavcx,U1,U2,U3,T0,E0,ti
     integer             :: i
     real,parameter :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     U1 = U(1)
-    U4 = U(4)
+    U2 = U(2)
+    U3 = U(3)
     T0 = 50.
     
     !if (U1<tol) U1=tol
     !if (U4<tol) then
-    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      te = T0*2/3./phys%Mref*U4/U1
+    if ((U1>tol) .and. (U3>tol)) then ! basically it's a below zero check
+      ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
     else!some low values  
-      te = 1.e-10
+      ti = 1.e-10
     endif
     sigmavcx = 0.
   
-    call compute_eirene_1D_rate(te, phys%alpha_cx, sigmavcx)
+    call compute_eirene_1D_rate(ti, phys%alpha_cx, sigmavcx)
   END SUBROUTINE compute_sigmavcx
   
   
   SUBROUTINE compute_dsigmavcx_dU(U,res)
     ! calculates derivative of AMJUEL CX rate for linearization
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:),U1,U4,T0,te, te_min = 0.1
+    real*8             :: res(:), U1,U2,U3,T0,ti, ti_min = 0.1
+    real*8, allocatable :: dti_dU(:)
     real*8             :: sigmavcx, sigmavcx_dte
     real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i
+    
+    allocate(dti_dU(size(U)))
+    
     T0 = 50.
     U1 = U(1)
-    U4 =  U(4)
+    U2 = U(2)
+    U3 = U(3)
     res = 0.
-    if ((U1>tol) .and. (U4>tol)) then
-      te = T0*2/3./phys%Mref*U4/U1
-      call compute_eirene_1D_rate_dU(U1,U4,te,phys%alpha_cx,res)      
+    dti_dU = 0.
+    
+    if ((U1>tol) .and. (U3>tol)) then
+      ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
+      dti_dU(1) = dti_dU(1) + 1.*(-U3 + U2**2/U1) / U1**2
+      dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
+      dti_dU(3) = dti_dU(3) + 1./U1
+      dti_dU(:) = dti_dU(:) * T0*2/3. /phys%Mref
+      call compute_eirene_1D_rate_dU(U1,U2,U3,ti,dti_dU,phys%alpha_cx,res)      
     endif
     
   
@@ -2138,6 +2139,8 @@ CONTAINS
     if (U1<tol) U1=tol
     if (U3<tol) U3=tol
     fEirec = U1*U3
+    !PSI review
+    fEirec = fEirec-0.5*U(2)**2/U1*U3
   END SUBROUTINE compute_fEirec
 
 
@@ -2152,6 +2155,10 @@ CONTAINS
     res = 0.
     res(1) = U3
     res(3) = U1
+    !PSI review
+    res(1) = res(1)+0.5*U(2)**2/U1**2*U3
+    res(2) = -1.*U(2)/U1*U3
+    res(3) = res(3) - 0.5*U(2)**2/U1
   END SUBROUTINE compute_dfEirec_dU
 
 
@@ -2281,6 +2288,56 @@ SUBROUTINE compute_gamma_I(U,Q, Btor, gradBtor, R, gamma_I)
     endif
 END SUBROUTINE compute_gamma_I
 
+SUBROUTINE compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, gamma_ke)
+  ! growth rate for turbulent energy
+  real*8, intent(IN) :: U(:), Q(:, :), gradB(:), B, q_cyl, omega
+  logical :: is_core
+  real*8             :: n, v, ti, te, V0, nB, nu_e, DB, D_perp, nu_perp, d_star, rho_L, nu_star, L_para, dn_dr, dn_dz, C_Omega, tau_para, tau, C_star, aa, an, a_phi, b_nr, b_phir, b_ni, b_phii, gr, gi
+  real*8, intent(OUT) :: gamma_ke
+  real, parameter :: tol = 1e-20, m_ratio = sqrt(3670.4829678537167), coulomb_log = 15.
+
+  n = max(tol, U(1))
+  v = U(2)/n
+  Ti = max(tol, 2./3./phys%Mref*(U(3)/n - v**2))
+  Te = max(tol, 2./3./phys%Mref*U(4)/n)
+  call compute_cs(U, V0)
+  V0 = V0*m_ratio
+  nB = n
+
+  nu_e = 2.91e-12*n*simpar%refval_density*coulomb_log*(Te*simpar%refval_temperature)**(-1.5)*simpar%refval_time
+  DB = Te/abs(B)
+  D_perp = 1e-2*DB
+  nu_perp = 1e-2*DB
+  L_para = PI*q_cyl*geom%R0/simpar%refval_length
+  rho_L = V0/omega
+  nu_star = L_para/V0*nu_e
+  d_star = sqrt((D_perp + nu_perp)/DB)
+  dn_dr = Q(1, 1)
+  dn_dz = Q(2, 1)
+
+  C_star = V0/Omega/L_para
+  C_Omega = m_ratio/nu_star
+  is_core = (nu_star<m_ratio)
+  C_Omega = merge(C_Omega, min(1., C_Omega), is_core)*C_star
+
+  an = D_perp/DB/d_star + sqrt(C_Omega)
+  a_phi = nu_perp/DB/d_star + d_star
+  b_nr = rho_L/sqrt(2*d_star)*(dn_dr - dn_dz)/nB
+  b_ni = C_Omega**0.75
+  b_phir = -sqrt(2*d_star)*rho_L/abs(B)*gradB(1)
+  b_phii = merge(d_star*C_Omega**0.75, 0., is_core)
+
+  aa = (an + a_phi)/2
+  tau_para = L_para/V0
+  tau = tau_para/sqrt(C_Omega)*C_star
+
+  gi = -(b_nr * b_phii + b_ni * b_phir) / C_Omega
+  gr = aa**2 - an * a_phi - (b_nr * b_phir - b_ni * b_phii) / C_Omega
+
+  gamma_ke = (sqrt((gr + norm2([gr, gi], dim=1))/2) - aa)/tau
+
+END SUBROUTINE compute_gamma_ke
+
 SUBROUTINE compute_ce(U,Q, Btor, gradBtor, r,omega_c,q_cyl, ce)
   ! dissipation rate for turbulent energy
   real*8, intent(IN) :: U(:), Q(:,:), gradBtor(:), r, Btor,omega_c,q_cyl
@@ -2298,7 +2355,7 @@ SUBROUTINE compute_ce(U,Q, Btor, gradBtor, r,omega_c,q_cyl, ce)
   if (rhoL < tol) rhoL = tol 
   call compute_gamma_I(U,Q,Btor,gradBtor,r,gamma_I)
   
-  ce = gamma_I*(2.*PI/16./1./gamma_e/rhoL**2/q_cyl/cs**2+1./phys%k_max)
+  ce = gamma_I*(PI**2/8./gamma_e/rhoL**2/cs**2+1./phys%k_max)
 
 END SUBROUTINE compute_ce
 SUBROUTINE compute_rhoL(U, R,omega_c, rhoL)

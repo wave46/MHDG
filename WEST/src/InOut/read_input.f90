@@ -34,6 +34,8 @@ SUBROUTINE READ_input()
   character(len=20) :: aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, csolve, csbsolve, cmat
   integer           :: jsweeps, novr, fill, jsweeps2, novr2, fill2, outer_sweeps, maxlevs, csize, cfill, cjswp
   real*8            :: thrsol, thrsol2, mncrratio, athres, cthres
+  real*8            :: heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz
+  integer           :: heating_equation
   real*8            :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
   ! Info for input and output
@@ -66,10 +68,10 @@ SUBROUTINE READ_input()
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn, Re, Re_pump, puff,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source, Pohmic, Tbg, bcflags, bohmth,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, puff,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source, Pohmic, Tbg, bcflags, bohmth,&
     &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn, Re, Re_pump, puff,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, puff,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Pohmic, Tbg, bcflags, bohmth,&
     &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #endif
@@ -182,6 +184,12 @@ SUBROUTINE READ_input()
   phys%diff_vort          = diff_vort
   phys%v_p                = v_p
   phys%diff_nn            = diff_nn
+  phys%heating_power      = heating_power
+  phys%heating_dr         = heating_dr
+  phys%heating_dz         = heating_dz
+  phys%heating_sigmar     = heating_sigmar
+  phys%heating_sigmaz     = heating_sigmaz
+  phys%heating_equation   = heating_equation
   phys%Re                 = Re
   phys%Re_pump            = Re_pump
   phys%puff               = puff

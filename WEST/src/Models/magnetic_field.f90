@@ -226,10 +226,8 @@ CONTAINS
     real*8, allocatable, dimension(:) :: xvec, yvec
     real*8                            :: x, y, t
     real*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
-#ifdef KEQUATION
     real*8                            :: q_cyl, omega,a
     integer                            :: min_ind(2)
-#endif
 
     character(LEN=1000) :: fname
     character(50)  :: npr,nid,nit
@@ -310,12 +308,10 @@ CONTAINS
     r2D = r2D/phys%lscale
     z2D = z2D/phys%lscale
 
-#ifdef KEQUATION
     !finding axis
     min_ind = MINLOC(flux2D)
     phys%r_axis = r2D(min_ind(1),min_ind(2))
     phys%z_axis = z2D(min_ind(1),min_ind(2))
-#endif
 
     ! Min and Max flux for inizialization
     !phys%Flux2Dmin = minval(flux2D)
@@ -433,13 +429,11 @@ CONTAINS
     real*8, pointer, dimension(:) :: Br, Bz, Bt, flux
     real*8            :: psiSep,dt_ME,t_ME
     INTEGER  :: nnodes
-#ifdef KEQUATION
     real*8                            :: q_cyl, omega,a
     integer                            :: min_ind(1)
 #ifdef PARALL
     real*8                              :: minflux_in(2), minflux_out(2)
     integer                           :: my_rank
-#endif
 #endif
 #ifdef TOR3D
     nnodes = Mesh%Nnodes*Mesh%Nnodes_toroidal
@@ -504,7 +498,6 @@ CONTAINS
     phys%Flux2Dmax = maxval(phys%magnetic_flux) 
 
 !finding magnetic axis
-#ifdef KEQUATION
     !finding axis
     min_ind = MINLOC(flux)
     
@@ -532,7 +525,6 @@ CONTAINS
 
 
    
-#endif
 #endif
 
 #ifdef PARALL

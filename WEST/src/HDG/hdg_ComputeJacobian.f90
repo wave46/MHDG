@@ -1114,7 +1114,7 @@ CONTAINS
 
 #else
 !TOR3D
-
+  phys%heating_amplitude = phys%heating_power/2./PI**2/phys%heating_sigmar/phys%heating_sigmaz/phys%r_axis
   !********************************************
   !
   !                 2D routines
@@ -1524,6 +1524,18 @@ CONTAINS
 !          ENDIF
 !#endif
         ENDIF
+#ifdef TEMPERATURE
+      ! additional heating
+
+      if (phys%heating_amplitude>1e-10) then  
+        if (abs(xy(g,1)-(phys%r_axis+phys%heating_dr))<3.*abs(phys%heating_sigmar)) then
+          if (abs(xy(g,2)-(phys%z_axis+phys%heating_dz))<3.*abs(phys%heating_sigmaz)) then
+            force(g,phys%heating_equation) = force(g,phys%heating_equation)+phys%heating_amplitude*exp(-((xy(g,1)-(phys%r_axis+phys%heating_dr))**2)/(phys%heating_sigmar**2)) &
+                                                    *exp(-((xy(g,2)-(phys%z_axis+phys%heating_dz))**2)/(phys%heating_sigmaz**2))
+          endif
+        endif
+      endif
+#endif
       END DO
     END IF
     
@@ -2365,7 +2377,7 @@ CONTAINS
     call compute_ce(ue,qq,btor,gradBtor,r,omega,q_cyl,ce)
     call compute_dissip(ue,dissip)
     call compute_ddissip_du(ue,ddissip_du)
-    if (ue(6)<1.e-20) then
+    if ((ue(6)<1.e-20) .or. (ue(1)<1e-20) .or.(ue(3)<1.e-20) .or. (ue(4)<1e-20)) then
       dissip =  abs(gamma_I)*dissip/phys%k_max
       ddissip_du = abs(gamma_I)
       gamma_I = 0.
@@ -2526,6 +2538,12 @@ CONTAINS
                 Auq(:,:,z) = Auq(:,:,z)+W*NNi*b(k)
               END IF
             END DO
+            ! split diffusion electron energy equation (LU)
+            z = i+(j-1)*Neq
+            DO k = 1,Ndim
+              Auu(:,:,z) = Auu(:,:,z) + (NxyzNi(:,:,k)*QdW3(k,j))
+            END DO
+            Auu(:,:,z) = Auu(:,:,z) - (dot_product(QdW3(:,j),b))*NNxy
           END DO
           rhs(:,i) = rhs(:,i) + coefi*Alphai*(dot_product(matmul(transpose(Taui),b),ue))*NNbb + s*Ni
         ELSEIF (i == 4) THEN

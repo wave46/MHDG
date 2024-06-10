@@ -159,6 +159,12 @@ SUBROUTINE adimensionalization()
 
   ! Pinch velocity
   phys%v_p = phys%v_p/u0
+  ! additional heating coefficients
+  phys%heating_power = phys%heating_power*t0/n0/mi/u0**2/L0**3
+  phys%heating_dr    = phys%heating_dr/L0
+  phys%heating_dz    = phys%heating_dz/L0
+  phys%heating_sigmar    = phys%heating_sigmar/L0
+  phys%heating_sigmaz    = phys%heating_sigmaz/L0
 
   ! Curvature drift coefficient
   phys%dfcoef = 2*Tev*t0/(L0**2*B0)

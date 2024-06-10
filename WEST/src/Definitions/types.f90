@@ -203,9 +203,10 @@ MODULE types
 #ifdef KEQUATION
     real*8, pointer :: omega(:)           ! larmor frequency   [n of nodes]
     real*8, pointer :: q_cyl(:)           ! q cylindrical   [n of nodes]
+#endif
     real*8          :: r_axis             ! R-coordinate of magnetic axis
     real*8          :: z_axis             ! Z-coordinate of magnetic axis
-#endif
+
     real*8, pointer :: Bperturb(:, :)     ! Magnetic perturbation, Br,Bz,Bphi [n of nodes  x 3]
     real*8          :: Tbg                ! Background temperature in the isothermal model
     real*8, pointer :: Jtor(:)            ! Toroidal Current
@@ -229,6 +230,14 @@ MODULE types
     real*8          :: etapar
     real*8          :: c1, c2             ! coefficients coming from the adimensionalization
     real*8          :: Potfloat
+    ! Coefficients for ion heating
+    real*8          :: heating_power      ! total power of ion heating source
+    real*8          :: heating_amplitude  ! adimentionalized gaussian amplitude including integration coefficients
+    real*8          :: heating_dr         ! displacement of the soruce from magnetic axis in r direction
+    real*8          :: heating_dz         ! displacement of the soruce from magnetic axis in z direction
+    real*8          :: heating_sigmar     ! width of the soruce from magnetic axis in r direction
+    real*8          :: heating_sigmaz     ! width of the soruce from magnetic axis in z direction
+    integer         :: heating_equation   ! Equation to which additional heating is applied (3 for ions, 4 for  electrons)
     ! Coefficients for the neutral equations
     real*8          :: diff_nn            ! Diffusion in the neutral equation
     real*8,allocatable:: diff_nn_Vol(:)   ! Diffusion in the neutral equation at 2D Gauss points

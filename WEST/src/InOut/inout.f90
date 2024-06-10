@@ -405,7 +405,7 @@ CONTAINS
     ! Save simulation parameters
     !**********************************************************************
     subroutine save_simulation_parameters()
-      integer(HID_T) :: group_id1, group_id2, group_id3
+      integer(HID_T) :: group_id1, group_id2, group_id3, group_id4
 
       ! Create simulation parameters group
       CALL HDF5_group_create('simulation_parameters', file_id, group_id1, ierr)
@@ -577,6 +577,17 @@ CONTAINS
       call HDF5_real_saving(group_id2, magn%triang, 'Triangularity')
       call HDF5_real_saving(group_id2, magn%ellip, 'Ellipticity')
       call HDF5_group_close(group_id2, ierr)
+
+      !Create heating parameters group
+      CALL HDF5_group_create('additional heating', group_id1, group_id4, ierr)
+      call HDF5_integer_saving(group_id4, phys%heating_equation, 'heating_equation')
+      call HDF5_real_saving(group_id4, phys%heating_power, 'heating_power')
+      call HDF5_real_saving(group_id4, phys%heating_amplitude, 'heating_amplitude')
+      call HDF5_real_saving(group_id4, phys%heating_dr, 'heating_dr')
+      call HDF5_real_saving(group_id4, phys%heating_dz, 'heating_dz')
+      call HDF5_real_saving(group_id4, phys%heating_sigmar, 'heating_sigmar')
+      call HDF5_real_saving(group_id4, phys%heating_sigmaz, 'heating_sigmaz')
+      call HDF5_group_close(group_id4, ierr)
 
       call HDF5_group_close(group_id1, ierr)
 
