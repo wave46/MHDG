@@ -18,8 +18,8 @@ COMPTYPE = $(COMPTYPE_DEB)
 #-------------------------------------------------------------------------------
 MODE_SERIAL = serial
 MODE_PARALL = parall
-# MODE = $(MODE_SERIAL)
-MODE = $(MODE_PARALL)
+MODE = $(MODE_SERIAL)
+# MODE = $(MODE_PARALL)
 
 #-------------------------------------------------------------------------------
 # The compiler
