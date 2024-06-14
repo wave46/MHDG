@@ -30,10 +30,10 @@ CONTAINS
       ALLOCATE (phys%B(nnodes, 3))
       ALLOCATE (phys%magnetic_flux(nnodes))
       ALLOCATE (phys%magnetic_psi(nnodes))
-#ifdef KEQUATION
+! #ifdef KEQUATION
       ALLOCATE (phys%omega(nnodes))
       ALLOCATE (phys%q_cyl(nnodes))
-#endif
+! #endif
       IF (switch%ohmicsrc) THEN
          ALLOCATE (phys%Jtor(nnodes))
       END IF
@@ -50,10 +50,10 @@ CONTAINS
       phys%B = 0.
       phys%magnetic_flux = 0.
       phys%magnetic_psi = 0.
-#ifdef KEQUATION
+! #ifdef KEQUATION
       phys%omega = 0.
       phys%q_cyl = 0.
-#endif
+! #endif
 
       SELECT CASE (switch%testcase)
       CASE (1:49)
@@ -230,10 +230,10 @@ CONTAINS
       real*8, allocatable, dimension(:) :: xvec, yvec
       real*8                            :: x, y, t
       real*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME, t_ME
-#ifdef KEQUATION
+! #ifdef KEQUATION
       real*8                            :: q_cyl, omega, a
       integer                            :: min_ind(2)
-#endif
+! #endif
 
       character(LEN=1000) :: fname
       character(50)  :: npr, nid, nit
@@ -314,12 +314,12 @@ CONTAINS
       r2D = r2D/phys%lscale
       z2D = z2D/phys%lscale
 
-#ifdef KEQUATION
+! #ifdef KEQUATION
       !finding axis
       min_ind = MINLOC(flux2D)
       phys%r_axis = r2D(min_ind(1), min_ind(2))
       phys%z_axis = z2D(min_ind(1), min_ind(2))
-#endif
+! #endif
 
       ! Min and Max flux for inizialization
       !phys%Flux2Dmin = minval(flux2D)
@@ -337,14 +337,14 @@ CONTAINS
          Bz = interpolate(ip, yvec, jp, xvec, Bz2D, y, x, 1e-12)
          Bt = interpolate(ip, yvec, jp, xvec, Bphi2D, y, x, 1e-12)
          flux = interpolate(ip, yvec, jp, xvec, flux2D, y, x, 1e-12)
-#ifdef KEQUATION
+! #ifdef KEQUATION
          omega = simpar%refval_charge/simpar%refval_mass*sqrt(Br**2 + Bz**2 + Bt**2)*simpar%refval_time
          a = sqrt((x - phys%r_axis)**2 + (y - phys%z_axis)**2)
          q_cyl = abs(Bt)*a/sqrt(Br**2 + Bz**2)/x
          if (q_cyl > 1.e4) q_cyl = 1.e4
          if (q_cyl < 1.) q_cyl = 1.
 
-#endif
+! #endif
          ind = i
 #ifdef TOR3D
          DO j = 1, Mesh%Nnodes_toroidal
@@ -354,10 +354,10 @@ CONTAINS
             phys%B(ind, 2) = Bz
             phys%B(ind, 3) = Bt
             phys%magnetic_flux(ind) = flux
-#ifdef KEQUATION
+! #ifdef KEQUATION
             phys%omega(ind) = omega
             phys%q_cyl(ind) = q_cyl
-#endif
+! #endif
 #ifdef TOR3D
          END DO
 #endif
@@ -436,14 +436,14 @@ CONTAINS
       real*8, pointer, dimension(:) :: Br, Bz, Bt, flux
       real*8            :: psiSep, dt_ME, t_ME
       INTEGER  :: nnodes
-#ifdef KEQUATION
+! #ifdef KEQUATION
       real*8                            :: q_cyl, omega, a
       integer                            :: min_ind(1)
 #ifdef PARALL
       real*8                              :: minflux_in(2), minflux_out(2)
       integer                           :: my_rank
 #endif
-#endif
+! #endif
 #ifdef TOR3D
       nnodes = Mesh%Nnodes*Mesh%Nnodes_toroidal
 #else
@@ -506,7 +506,7 @@ CONTAINS
       phys%Flux2Dmax = maxval(phys%magnetic_flux)
 
 !finding magnetic axis
-#ifdef KEQUATION
+! #ifdef KEQUATION
       !finding axis
       min_ind = MINLOC(flux)
 
@@ -532,7 +532,7 @@ CONTAINS
       CALL MPI_COMM_RANK(MPI_COMM_WORLD, my_rank, ierr)
 
 #endif
-#endif
+! #endif
 
 #ifdef PARALL
       CALL MPI_BARRIER(MPI_COMM_WORLD, ierr)
@@ -545,7 +545,7 @@ CONTAINS
       ! Magnetic flux normalized to separatrix: PSI
       phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin)
 
-#ifdef KEQUATION
+! #ifdef KEQUATION
       DO i = 1, Mesh%Nnodes
          phys%omega(i) = simpar%refval_charge/simpar%refval_mass*sqrt(Br(i)**2 + Bz(i)**2 + Bt(i)**2)*simpar%refval_time
 
@@ -556,7 +556,7 @@ CONTAINS
       WRITE (6, *) 'r_axis', phys%r_axis*simpar%refval_length
       WRITE (6, *) 'z_axis', phys%z_axis*simpar%refval_length
 
-#endif
+! #endif
       if (switch%ME) then
          time%dt_ME = dt_ME
          time%t_ME = t_ME

@@ -32,8 +32,8 @@ CONTAINS
       phys%npv = 11
 #ifdef KEQUATION
       !so far we only use k equation with neutrals and the convention is that the k-equation is always the last
-      phys%Neq = 6
-      phys%npv = 12
+      phys%Neq = 7
+      phys%npv = 13
 #endif
 #endif
 
@@ -92,9 +92,13 @@ CONTAINS
       !so far we only use k equation with neutrals and the convention is that the k-equation is always the last
       phys%phyVarNam(12) = "k"   ! turbulent energy
       phys%conVarNam(6) = "k"  ! U6 = k
-      simpar%model = 'N-Gamma-Ti-Te-Neutral-k'
+      phys%phyVarNam(13) = "epsilon"   ! turbulent energy
+      phys%conVarNam(7) = "epsilon"  ! U6 = k
+      simpar%model = 'N-Gamma-Ti-Te-Neutral-k-epsilon'
       simpar%physvar_refval(12) = simpar%refval_k
       simpar%consvar_refval(6) = simpar%refval_k
+      simpar%physvar_refval(13) = simpar%refval_epsilon
+      simpar%consvar_refval(7) = simpar%refval_epsilon
 #endif
 #endif
 
@@ -221,6 +225,7 @@ CONTAINS
       ua(:, 5) = abs(up(:, 11))
 #ifdef KEQUATION
       ua(:, 6) = abs(up(:, 12))
+      ua(:, 7) = abs(up(:, 13))
 #endif
 #endif
 
@@ -233,17 +238,11 @@ CONTAINS
    SUBROUTINE cons2phys(ua, up)
       real*8, dimension(:, :), intent(in)  :: ua
       real*8, dimension(:, :), intent(out) :: up
-      real*8, dimension(size(ua, 1))  :: U1, U5, U6
+      real*8, dimension(size(ua, 1))  :: U1
       real, parameter :: tol = 1e-12
       integer :: i
 
       U1 = abs(ua(:, 1))
-#ifdef NEUTRAL
-      U5 = abs(ua(:, 5))
-#ifdef KEQUATION
-      U6 = abs(ua(:, 6))
-#endif
-#endif
 
       up(:, 1) = abs(U1)                                                           ! density
       up(:, 2) = ua(:, 2)/U1                                            ! u parallel
@@ -256,9 +255,10 @@ CONTAINS
       up(:, 9) = sqrt((up(:, 7) + up(:, 8))*phys%Mref)                        ! sound speed
       up(:, 10) = up(:, 2)/up(:, 9)                                           ! Mach
 #ifdef NEUTRAL
-      up(:, 11) = abs(U5)                                                 ! density neutral
+      up(:, 11) = abs(ua(:, 5))                                         ! density neutral
 #ifdef KEQUATION
-      up(:, 12) = U6                                                 ! turbulent energy
+      up(:, 12) = abs(ua(:, 6))                                         ! turbulent energy
+      up(:, 13) = abs(ua(:, 7))
 #endif
 #endif
 
@@ -357,18 +357,6 @@ CONTAINS
          A(2, 1) = (-U(2)**2/U(1)**2 + phys%Mref)
          A(2, 2) = 2.*U(2)/U(1)
 
-         A(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
-         A(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
-         A(3, 3) = 5./3.*U(2)/U(1)
-
-         A(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
-         A(4, 2) = 5./3.*U(4)/U(1)
-         A(4, 4) = 5./3.*U(2)/U(1)
-#ifdef KEQUATION
-         A(6, 1) = -U(6)*U(2)/U(1)**2
-         A(6, 2) = U(6)/U(1)
-         A(6, 6) = U(2)/U(1)
-#endif
       else
 
          A(1, 2) = 1.
@@ -378,29 +366,33 @@ CONTAINS
          A(2, 3) = 2./3.
          A(2, 4) = 2./3.
 
-         A(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
-         A(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
-         A(3, 3) = 5./3.*U(2)/U(1)
+      end if
 
-         A(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
-         A(4, 2) = 5./3.*U(4)/U(1)
-         A(4, 4) = 5./3.*U(2)/U(1)
-#ifdef KEQUATION
-         A(6, 1) = -U(6)*U(2)/U(1)**2
-         A(6, 2) = U(6)/U(1)
-         !IF (U(6) >= 0.) THEN
-         A(6, 6) = U(2)/U(1)
-         !ENDIF
-#endif
+      A(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
+      A(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
+      A(3, 3) = 5./3.*U(2)/U(1)
+
+      A(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
+      A(4, 2) = 5./3.*U(4)/U(1)
+      A(4, 4) = 5./3.*U(2)/U(1)
+
 #ifdef NEUTRAL
 #ifdef NEUTRALCONVECTION
-         A(5, 1) = -U(5)*U(2)/U(1)**2
-         A(5, 2) = U(5)/U(1)
-         A(5, 5) = U(2)/U(1)
-         !A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
+      A(5, 1) = -U(5)*U(2)/U(1)**2
+      A(5, 2) = U(5)/U(1)
+      A(5, 5) = U(2)/U(1)
+      !A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
+#endif
+#ifdef KEQUATION
+      A(6, 1) = -U(6)*U(2)/U(1)**2
+      A(6, 2) = U(6)/U(1)
+      A(6, 6) = U(2)/U(1)
+      A(7, 1) = -U(7)*U(2)/U(1)**2
+      A(7, 2) = U(7)/U(1)
+      A(7, 7) = U(2)/U(1)
+
 #endif
 #endif
-      end if
    END SUBROUTINE jacobianMatrices
 
 #ifdef NEUTRALP
@@ -426,24 +418,19 @@ CONTAINS
       real*8, intent(in)  :: U(:), bn
       real*8, intent(out) :: An(:, :)
       An = 0.d0
+      An(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
+      An(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
+      An(3, 3) = 5./3.*U(2)/U(1)
+
+      An(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
+      An(4, 2) = 5./3.*U(4)/U(1)
+      An(4, 4) = 5./3.*U(2)/U(1)
       if (switch%decoup) then
          An(1, 2) = 1.
 
          An(2, 1) = (-U(2)**2/U(1)**2 + phys%Mref)
          An(2, 2) = 2.*U(2)/U(1)
 
-         An(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
-         An(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
-         An(3, 3) = 5./3.*U(2)/U(1)
-
-         An(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
-         An(4, 2) = 5./3.*U(4)/U(1)
-         An(4, 4) = 5./3.*U(2)/U(1)
-#ifdef KEQUATION
-         An(6, 1) = -U(6)*U(2)/U(1)**2
-         An(6, 2) = U(6)/U(1)
-         An(6, 6) = U(2)/U(1)
-#endif
       else
          An(1, 2) = 1.
 
@@ -452,27 +439,24 @@ CONTAINS
          An(2, 3) = 2./3.
          An(2, 4) = 2./3.
 
-         An(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
-         An(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
-         An(3, 3) = 5./3.*U(2)/U(1)
+      end if
 
-         An(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
-         An(4, 2) = 5./3.*U(4)/U(1)
-         An(4, 4) = 5./3.*U(2)/U(1)
-#ifdef KEQUATION
-         An(6, 1) = -U(6)*U(2)/U(1)**2
-         An(6, 2) = U(6)/U(1)
-         An(6, 6) = U(2)/U(1)
-#endif
 #ifdef NEUTRAL
 #ifdef NEUTRALCONVECTION
-         An(5, 1) = -U(5)*U(2)/U(1)**2
-         An(5, 2) = U(5)/U(1)
-         An(5, 5) = U(2)/U(1)
-         !An(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*An(5,:)
+      An(5, 1) = -U(5)*U(2)/U(1)**2
+      An(5, 2) = U(5)/U(1)
+      An(5, 5) = U(2)/U(1)
+      !An(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*An(5,:)
+#endif
+#ifdef KEQUATION
+      An(6, 1) = -U(6)*U(2)/U(1)**2
+      An(6, 2) = U(6)/U(1)
+      An(6, 6) = U(2)/U(1)
+      An(7, 1) = -U(7)*U(2)/U(1)**2
+      An(7, 2) = U(7)/U(1)
+      An(7, 6) = U(2)/U(1)
 #endif
 #endif
-      end if
       An = bn*An
    END SUBROUTINE jacobianMatricesFace
 
@@ -587,1967 +571,1945 @@ CONTAINS
    !*****************************************
    ! Set the perpendicular diffusion
    !****************************************
-#ifndef KEQUATION
-   SUBROUTINE setLocalDiff(xy, u, q, d_iso, d_ani)
-#else
-      SUBROUTINE setLocalDiff(xy, u, q, d_iso, d_ani, q_cyl)
-#endif
-         real*8, intent(in)                  :: xy(:, :)
-         real*8, intent(in)                  :: u(:, :), q(:, :)
-#ifdef KEQUATION
-         real*8, intent(in)                  :: q_cyl(:)
-#endif
-         real*8, intent(out)                 :: d_iso(:, :, :), d_ani(:, :, :)
-         real*8                              :: iperdiff(size(xy, 1))
+! #ifdef KEQUATION
+   SUBROUTINE setLocalDiff(xy, u, q, d_iso, d_ani, q_cyl)
+      real*8, intent(in)                  :: xy(:, :)
+      real*8, intent(in)                  :: u(:, :), q(:, :)
+      real*8, intent(in)                  :: q_cyl(:)
+      real*8, dimension(size(u, 1))          :: D_ke
+! #else
+!       SUBROUTINE setLocalDiff(xy, u, q, d_iso, d_ani)
+! #endif
+
+      real*8, intent(out)                 :: d_iso(:, :, :), d_ani(:, :, :)
+      real*8                              :: iperdiff(size(xy, 1)), d_ani_diag
 #ifdef NEUTRAL
-         integer                             :: i
-         real*8                                            :: Ery = 13.6, cs_n, DnnTh, ti_min = 1e-6, ti
-         real*8, dimension(size(u, 1))        :: U1, U2, U3, U4, U5, E0iz, E0cx, sigmaviz, sigmavcx, Dnn
-#ifdef KEQUATION
-         real*8, dimension(size(u, 1))          :: D_k, U6, c_s
-         real*8                         :: r
-#endif
+      integer                             :: i
+      real*8                                            :: Ery = 13.6, cs_n, DnnTh, ti_min = 1e-6, ti
+      real*8, dimension(size(u, 1))        :: U1, U2, U3, U4, U5, E0iz, E0cx, sigmaviz, sigmavcx, Dnn
 #ifdef DNNSMOOTH
-         real*8                  :: width_lower, width_higher
-         real*8                  :: width_temperature = 1e-7
+      real*8                  :: width_lower, width_higher
+      real*8                  :: width_temperature = 1e-7
 #endif
 #endif
 
-         ! d_iso(Neq,Neq,Ngauss),d_ani(Neq,Neq,Ngauss)
-         ! first index corresponds to the equation
-         ! second index corresponds to the unknown
-         ! third index correspond to the gauss point
-         ! example d_iso(2,3,ig) is the diffusion in the non-diagonal
-         ! diffusion term in the second equation/third variable
-         ! d_iso>0,d_ani=0 is an isotropic diffusion
-         ! d_iso>0,d_ani=d_iso is a perpendicular diffusion
-         ! d_iso=0,d_ani<0 is a (positive) parallel diffusion
+      ! d_iso(Neq,Neq,Ngauss),d_ani(Neq,Neq,Ngauss)
+      ! first index corresponds to the equation
+      ! second index corresponds to the unknown
+      ! third index correspond to the gauss point
+      ! example d_iso(2,3,ig) is the diffusion in the non-diagonal
+      ! diffusion term in the second equation/third variable
+      ! d_iso>0,d_ani=0 is an isotropic diffusion
+      ! d_iso>0,d_ani=d_iso is a perpendicular diffusion
+      ! d_iso=0,d_ani<0 is a (positive) parallel diffusion
 
-         d_iso = 0.
-         d_ani = 0.
-         !*****************************
-         ! Diagonal terms
-         !*****************************
-         d_iso(1, 1, :) = phys%diff_n
-         d_iso(2, 2, :) = phys%diff_u
-         d_iso(3, 3, :) = phys%diff_e
-         d_iso(4, 4, :) = phys%diff_ee
-         if ((switch%ME .eqv. .TRUE.) .AND. (switch%testcase .gt. 84)) then
-            if (switch%testcase .eq. 85) then !Iter core-edge with evolving equilibria plus diffusion decrease
-               d_iso(1, 1, :) = phys%diff_n - (phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-               d_iso(2, 2, :) = phys%diff_u - (phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-               d_iso(3, 3, :) = phys%diff_e - (phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-             d_iso(4, 4, :) = phys%diff_ee - (phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-            else if (switch%testcase .eq. 86) then
+      d_iso = 0.
+      d_ani = 0.
+      !*****************************
+      ! Diagonal terms
+      !*****************************
+      d_iso(1, 1, :) = phys%diff_n
+      d_iso(2, 2, :) = phys%diff_u
+      d_iso(3, 3, :) = phys%diff_e
+      d_iso(4, 4, :) = phys%diff_ee
+      if ((switch%ME .eqv. .TRUE.) .AND. (switch%testcase .gt. 84)) then
+         if (switch%testcase .eq. 85) then !Iter core-edge with evolving equilibria plus diffusion decrease
+            d_iso(1, 1, :) = phys%diff_n - (phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
+            d_iso(2, 2, :) = phys%diff_u - (phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
+            d_iso(3, 3, :) = phys%diff_e - (phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
+            d_iso(4, 4, :) = phys%diff_ee - (phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
+         else if (switch%testcase .eq. 86) then
     d_iso(1, 1, :) = max(switch%diffmin, phys%diff_n - 2.18*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.)))
     d_iso(2, 2, :) = max(switch%diffmin, phys%diff_u - 2.18*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.)))
     d_iso(3, 3, :) = max(switch%diffmin, phys%diff_e - 2.18*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.)))
    d_iso(4, 4, :) = max(switch%diffmin, phys%diff_ee - 2.18*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.)))
-            else if (switch%testcase .eq. 87) then
-               d_iso(1, 1, :) = phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
-               d_iso(2, 2, :) = phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
-               d_iso(3, 3, :) = phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
-               d_iso(4, 4, :) = phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
-            end if
-            phys%ME_diff_n = d_iso(1, 1, 1)
-            phys%ME_diff_u = d_iso(2, 2, 1)
-            phys%ME_diff_e = d_iso(3, 3, 1)
-            phys%ME_diff_ee = d_iso(4, 4, 1)
+         else if (switch%testcase .eq. 87) then
+            d_iso(1, 1, :) = phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
+            d_iso(2, 2, :) = phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
+            d_iso(3, 3, :) = phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
+            d_iso(4, 4, :) = phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
          end if
+         phys%ME_diff_n = d_iso(1, 1, 1)
+         phys%ME_diff_u = d_iso(2, 2, 1)
+         phys%ME_diff_e = d_iso(3, 3, 1)
+         phys%ME_diff_ee = d_iso(4, 4, 1)
+      end if
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-         !d_iso(5, 5, :) = phys%diff_nn
-         U1 = u(:, 1)
-         U2 = u(:, 2)
-         U3 = u(:, 3)
-         U4 = u(:, 4)
-         U5 = u(:, 5)
-#ifdef KEQUATION
-         U6 = u(:, 6)
-#endif
+      !d_iso(5, 5, :) = phys%diff_nn
+      U1 = u(:, 1)
+      U2 = u(:, 2)
+      U3 = u(:, 3)
+      U4 = u(:, 4)
+      U5 = u(:, 5)
 #ifndef CONSTANTNEUTRALDIFF
-         DO i = 1, size(u, 1)
-            CALL compute_sigmaviz(u(i, :), sigmaviz(i))
-            CALL compute_sigmavcx(u(i, :), sigmavcx(i))
-         END DO
-         !ti = max(simpar%refval_temperature*2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2),0.1)
-         !Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1*(sigmaviz + sigmavcx))
-         !Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
+      DO i = 1, size(u, 1)
+         CALL compute_sigmaviz(u(i, :), sigmaviz(i))
+         CALL compute_sigmavcx(u(i, :), sigmavcx(i))
+      END DO
+      !ti = max(simpar%refval_temperature*2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2),0.1)
+      !Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1*(sigmaviz + sigmavcx))
+      !Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
 
-         !Set a threshold on Dnn
-         DO i = 1, size(Dnn, 1)
+      !Set a threshold on Dnn
+      DO i = 1, size(Dnn, 1)
 #ifndef DNNSMOOTH
-            ti = max(simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2), ti_min)
-            Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1(i)*(sigmaviz(i) + sigmavcx(i)))
-            Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
-            if (Dnn(i) .gt. phys%diff_nn) then
-               d_iso(5, 5, i) = phys%diff_nn
-            elseif (Dnn(i) < 10.*d_iso(1, 1, i)) then
-               d_iso(5, 5, i) = 10.*d_iso(1, 1, i)
-            else
-               d_iso(5, 5, i) = Dnn(i)
-            end if
-#else
-            ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)
-            call softplus(ti, ti_min)
-            Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1(i)*(sigmaviz(i) + sigmavcx(i)))
-            Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
-
-            call double_softplus(Dnn(i), 10.*phys%diff_n, phys%diff_nn)
+         ti = max(simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2), ti_min)
+         Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1(i)*(sigmaviz(i) + sigmavcx(i)))
+         Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
+         if (Dnn(i) .gt. phys%diff_nn) then
+            d_iso(5, 5, i) = phys%diff_nn
+         elseif (Dnn(i) < 10.*d_iso(1, 1, i)) then
+            d_iso(5, 5, i) = 10.*d_iso(1, 1, i)
+         else
             d_iso(5, 5, i) = Dnn(i)
+         end if
+#else
+         ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)
+         call softplus(ti, ti_min)
+         Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1(i)*(sigmaviz(i) + sigmavcx(i)))
+         Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
+
+         call double_softplus(Dnn(i), 10.*phys%diff_n, phys%diff_nn)
+         d_iso(5, 5, i) = Dnn(i)
 
 #endif
 
-         END DO
+      END DO
 #else
-         d_iso(5, 5, :) = phys%diff_nn
+      d_iso(5, 5, :) = phys%diff_nn
 #endif
 
 #ifdef KEQUATION
-         DO i = 1, size(c_s, 1)
-            call compute_cs(u(i, :), c_s(i))
-            ! for all equations
-            if (c_s(i) <= 1.e-20) then
-               D_k(i) = phys%diff_k_min
-               !WRITE(6,*) 'NEGATIVE C_S ', c_s(i)
-               !stop
-            else
-               if ((switch%testcase .ge. 50) .and. (switch%testcase .le. 59)) then
-                  r = xy(i, 1)
-               elseif ((switch%testcase .ge. 60) .and. (switch%testcase .le. 69)) then
-                  r = xy(i, 1) + geom%R0/simpar%refval_length
-               end if
-               D_k(i) = r*U6(i)/c_s(i)
-               if (switch%testcase == 60) then
-                  D_k(i) = D_k(i)*geom%q
-               else
-                  D_k(i) = D_k(i)*q_cyl(i)
-               end if
+      d_ke = u(:, 6)*0 ! **2/u(:, 7)
 
-#ifndef KDIFFSMOOTH
+! #ifndef KDIFFSMOOTH
+!
+!                D_k(i) = max(phys%diff_k_min, min(phys%diff_k_max, D_k(i)))
+! #else
+!                !for circular case q_cyl assume constant
+!
+!                call double_softplus(D_k(i), phys%diff_k_min, phys%diff_k_max)
+! #endif
 
-               D_k(i) = max(phys%diff_k_min, min(phys%diff_k_max, D_k(i)))
-#else
-               !for circular case q_cyl assume constant
-
-               call double_softplus(D_k(i), phys%diff_k_min, phys%diff_k_max)
+      d_iso(6, 6, :) = d_ke + phys%diff_n
+      d_iso(7, 7, :) = d_ke + phys%diff_n
+      d_ani(6, 6, :) = d_iso(6, 6, :)
+      d_ani(7, 7, :) = d_iso(7, 7, :)
+      do i = 1, 4
+         d_iso(i, i, :) = d_iso(i, i, :) + d_ke
+      end do
 #endif
-
-            end if
-         end do
-         d_iso(6, 6, :) = D_k + phys%diff_n
-         d_ani(6, 6, :) = d_iso(6, 6, :)
-         d_iso(1, 1, :) = d_iso(1, 1, :) + D_k
-         d_iso(2, 2, :) = d_iso(2, 2, :) + D_k
-         d_iso(3, 3, :) = d_iso(3, 3, :) + D_k
-         d_iso(4, 4, :) = d_iso(4, 4, :) + D_k
-         !WRITE(6,*) d_iso(6,6,:)*simpar%refval_length**2/simpar%refval_time
-         !WRITE(6,*) d_iso(1,1,:)*simpar%refval_length**2/simpar%refval_time
-#endif
-         !Dnn = sum(Dnn)/size(u,1)
+      !Dnn = sum(Dnn)/size(u,1)
 #endif
 #else
-         d_iso(5, 5, :) = 0.
+      d_iso(5, 5, :) = 0.
 #endif
-         d_ani(1, 1, :) = d_iso(1, 1, :)
-         d_ani(2, 2, :) = d_iso(2, 2, :)
-         d_ani(3, 3, :) = d_iso(3, 3, :)
-         d_ani(4, 4, :) = d_iso(4, 4, :)
-         !if (any(q_cyl<0.9) .or.any(q_cyl>1.1e4))  then
-         !  WRITE(6,*) 'x', xy(1,1)*simpar%refval_length
-         !  WRITE(6,*) 'y', xy(1,2)*simpar%refval_length
-         !  WRITE(6,*) 'q_cyl', q_cyl(1)
-         !  WRITE(6,*) 'Dk', d_iso(6,6,1)*simpar%refval_length**2/simpar%refval_time
-         !  WRITE(6,*) 'Dn', d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time
-         !endif
-         !if ((d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time>6) .and. (xy(1,1)*simpar%refval_length>1.86))  then
-         !  WRITE(6,*) 'x', xy(1,1)*simpar%refval_length
-         !  WRITE(6,*) 'y', xy(1,2)*simpar%refval_length
-         !  WRITE(6,*) 'q_cyl', q_cyl(1)
-         !  WRITE(6,*) 'Dk', d_iso(6,6,1)*simpar%refval_length**2/simpar%refval_time
-         !  WRITE(6,*) 'Dn', d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time
-         !endif
-         if ((switch%ME .eqv. .TRUE.) .AND. (switch%testcase .gt. 84)) then !Iter core-edge with evolving equilibria plus diffusion decrease
-            if (switch%testcase .eq. 85) then
-               d_ani(1, 1, :) = phys%diff_n - (phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-               d_ani(2, 2, :) = phys%diff_u - (phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-               d_ani(3, 3, :) = phys%diff_e - (phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-             d_ani(4, 4, :) = phys%diff_ee - (phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-            else if (switch%testcase .eq. 86) then
-    d_ani(1, 1, :) = max(switch%diffmin, phys%diff_n - 2.18*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.)))
-    d_ani(2, 2, :) = max(switch%diffmin, phys%diff_u - 2.18*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.)))
-    d_ani(3, 3, :) = max(switch%diffmin, phys%diff_e - 2.18*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.)))
-   d_ani(4, 4, :) = max(switch%diffmin, phys%diff_ee - 2.18*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.)))
-            else if (switch%testcase .eq. 87) then
-               d_ani(1, 1, :) = phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
-               d_ani(2, 2, :) = phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
-               d_ani(3, 3, :) = phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
-               d_ani(4, 4, :) = phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
-            end if
+      d_ani(1, 1, :) = d_iso(1, 1, :)
+      d_ani(2, 2, :) = d_iso(2, 2, :)
+      d_ani(3, 3, :) = d_iso(3, 3, :)
+      d_ani(4, 4, :) = d_iso(4, 4, :)
+      !if (any(q_cyl<0.9) .or.any(q_cyl>1.1e4))  then
+      !  WRITE(6,*) 'x', xy(1,1)*simpar%refval_length
+      !  WRITE(6,*) 'y', xy(1,2)*simpar%refval_length
+      !  WRITE(6,*) 'q_cyl', q_cyl(1)
+      !  WRITE(6,*) 'Dk', d_iso(6,6,1)*simpar%refval_length**2/simpar%refval_time
+      !  WRITE(6,*) 'Dn', d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time
+      !endif
+      !if ((d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time>6) .and. (xy(1,1)*simpar%refval_length>1.86))  then
+      !  WRITE(6,*) 'x', xy(1,1)*simpar%refval_length
+      !  WRITE(6,*) 'y', xy(1,2)*simpar%refval_length
+      !  WRITE(6,*) 'q_cyl', q_cyl(1)
+      !  WRITE(6,*) 'Dk', d_iso(6,6,1)*simpar%refval_length**2/simpar%refval_time
+      !  WRITE(6,*) 'Dn', d_iso(1,1,1)*simpar%refval_length**2/simpar%refval_time
+      !endif
+      if ((switch%ME .eqv. .TRUE.) .AND. (switch%testcase .gt. 84)) then !Iter core-edge with evolving equilibria plus diffusion decrease
+         if (switch%testcase .eq. 85) then
+            d_ani(1, 1, :) = phys%diff_n - (phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
+            d_ani(2, 2, :) = phys%diff_u - (phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
+            d_ani(3, 3, :) = phys%diff_e - (phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
+            d_ani(4, 4, :) = phys%diff_ee - (phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
+         else if (switch%testcase .eq. 86) then
+            d_ani_diag = 2.18*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
+            d_ani(1, 1, :) = max(switch%diffmin, phys%diff_n - d_ani_diag)
+            d_ani(2, 2, :) = max(switch%diffmin, phys%diff_u - d_ani_diag)
+            d_ani(3, 3, :) = max(switch%diffmin, phys%diff_e - d_ani_diag)
+            d_ani(4, 4, :) = max(switch%diffmin, phys%diff_ee - d_ani_diag)
+         else if (switch%testcase .eq. 87) then
+            d_ani_diag = 0.5*simpar%refval_time/simpar%refval_length**2*(tanh((phys%I_p - 0.35)/5.))
+            d_ani(1, 1, :) = phys%diff_n - d_ani_diag
+            d_ani(2, 2, :) = phys%diff_u - d_ani_diag
+            d_ani(3, 3, :) = phys%diff_e - d_ani_diag
+            d_ani(4, 4, :) = phys%diff_ee - d_ani_diag
          end if
+      end if
 #ifdef NEUTRAL
-         d_ani(5, 5, :) = 0.
+      d_ani(5, 5, :) = 0.
 #endif
 
-         !*****************************
-         ! Non diagonal terms
-         !*****************************
-         ! No non-diagonal terms defined for this model
-         call computeIperDiffusion(xy, u, iperdiff)
-         d_iso(1, 1, :) = d_iso(1, 1, :) + iperdiff
-         d_iso(2, 2, :) = d_iso(2, 2, :) + iperdiff
-         d_iso(3, 3, :) = d_iso(3, 3, :) + iperdiff
-         d_iso(4, 4, :) = d_iso(4, 4, :) + iperdiff
-      END SUBROUTINE setLocalDiff
+      !*****************************
+      ! Non diagonal terms
+      !*****************************
+      ! No non-diagonal terms defined for this model
+      call computeIperDiffusion(xy, u, iperdiff)
+      d_iso(1, 1, :) = d_iso(1, 1, :) + iperdiff
+      d_iso(2, 2, :) = d_iso(2, 2, :) + iperdiff
+      d_iso(3, 3, :) = d_iso(3, 3, :) + iperdiff
+      d_iso(4, 4, :) = d_iso(4, 4, :) + iperdiff
+   END SUBROUTINE setLocalDiff
 
-      !*******************************************
-      ! Compute local diffusion in points
-      !*******************************************
-      SUBROUTINE computeIperDiffusion(X, u, ipdiff)
-         real*8, intent(IN)  :: X(:, :), u(:, :)
-         real*8, intent(OUT) :: ipdiff(:)
-         real*8             :: d, dref, maxamp
-         real*8, allocatable :: xcorn(:), ycorn(:)
-         real*8             :: rad(size(X, 1))
-         real*8             :: h, rhog
-         real*8, parameter   :: tol = 1.e-6
-         integer            :: i, g, opt
+   !*******************************************
+   ! Compute local diffusion in points
+   !*******************************************
+   SUBROUTINE computeIperDiffusion(X, u, ipdiff)
+      real*8, intent(IN)  :: X(:, :), u(:, :)
+      real*8, intent(OUT) :: ipdiff(:)
+      real*8             :: d, dref, maxamp
+      real*8, allocatable :: xcorn(:), ycorn(:)
+      real*8             :: rad(size(X, 1))
+      real*8             :: h, rhog
+      real*8, parameter   :: tol = 1.e-6
+      integer            :: i, g, opt
 
-         ipdiff = 0.
+      ipdiff = 0.
 
-         if (switch%difcor .gt. 0) then
+      if (switch%difcor .gt. 0) then
 
-            SELECT CASE (switch%difcor)
-            CASE (1)
-               ! Circular case with infinitely small limiter
-               allocate (xcorn(1), ycorn(1))
-               xcorn = geom%R0
-               ycorn = -0.75
-            CASE (2)
-               ! Circular case with infinitely small limiter
-               allocate (xcorn(1), ycorn(1))
-               xcorn = geom%R0
-               ycorn = -0.287
-            CASE (3)
-               ! West
-               allocate (xcorn(1), ycorn(1))
-               xcorn = 2.7977
-               ycorn = -0.5128
-            case (4)
-               ! ITER
-               allocate (xcorn(4), ycorn(4))
-               xcorn(1) = 4.023150000000000
-               ycorn(1) = -2.544840000000000
-               xcorn(2) = 6.23648
-               ycorn(2) = -3.23689
-               xcorn(3) = 4.02837
-               ycorn(3) = 3.588
-               xcorn(4) = 5.74627
-               ycorn(4) = 4.51401
-            CASE DEFAULT
-               WRITE (6, *) "Case not valid"
-               STOP
-            END SELECT
+         SELECT CASE (switch%difcor)
+         CASE (1)
+            ! Circular case with infinitely small limiter
+            allocate (xcorn(1), ycorn(1))
+            xcorn = geom%R0
+            ycorn = -0.75
+         CASE (2)
+            ! Circular case with infinitely small limiter
+            allocate (xcorn(1), ycorn(1))
+            xcorn = geom%R0
+            ycorn = -0.287
+         CASE (3)
+            ! West
+            allocate (xcorn(1), ycorn(1))
+            xcorn = 2.7977
+            ycorn = -0.5128
+         case (4)
+            ! ITER
+            allocate (xcorn(4), ycorn(4))
+            xcorn(1) = 4.023150000000000
+            ycorn(1) = -2.544840000000000
+            xcorn(2) = 6.23648
+            ycorn(2) = -3.23689
+            xcorn(3) = 4.02837
+            ycorn(3) = 3.588
+            xcorn(4) = 5.74627
+            ycorn(4) = 4.51401
+         CASE DEFAULT
+            WRITE (6, *) "Case not valid"
+            STOP
+         END SELECT
 
                                                  !!**********************************************************
                                                  !! Gaussian around the corner
                                                  !!**********************************************************
-            h = 1e-1
-            do i = 1, size(xcorn)
-               rad = sqrt((X(:, 1)*phys%lscale - xcorn(i))**2 + (X(:, 2)*phys%lscale - ycorn(i))**2)
-               ipdiff = ipdiff + numer%dc_coe*exp(-(2*rad/h)**2)
+         h = 1e-1
+         do i = 1, size(xcorn)
+            rad = sqrt((X(:, 1)*phys%lscale - xcorn(i))**2 + (X(:, 2)*phys%lscale - ycorn(i))**2)
+            ipdiff = ipdiff + numer%dc_coe*exp(-(2*rad/h)**2)
 
-            end do
-            do i = 1, size(ipdiff)
-               if (ipdiff(i) < 1e-5) ipdiff(i) = 0.
-            end do
-            deallocate (xcorn, ycorn)
-         end if
+         end do
+         do i = 1, size(ipdiff)
+            if (ipdiff(i) < 1e-5) ipdiff(i) = 0.
+         end do
+         deallocate (xcorn, ycorn)
+      end if
 
-         maxamp = 4.
-         opt = 2
-         if (switch%limrho .eq. 2 .and. minval(u(:, 1)) .lt. numer%minrho) then
-            do g = 1, size(u, 1)
-               rhog = u(g, 1)
-               if (rhog < 0.) rhog = 0.
-               if (rhog < numer%minrho) then
-                  d = numer%minrho - rhog ! 0 < d < minrho
-                  if (opt .eq. 1) then
-                     dref = maxamp*d/numer%minrho  ! 0 < dref < maxamp
+      maxamp = 4.
+      opt = 2
+      if (switch%limrho .eq. 2 .and. minval(u(:, 1)) .lt. numer%minrho) then
+         do g = 1, size(u, 1)
+            rhog = u(g, 1)
+            if (rhog < 0.) rhog = 0.
+            if (rhog < numer%minrho) then
+               d = numer%minrho - rhog ! 0 < d < minrho
+               if (opt .eq. 1) then
+                  dref = maxamp*d/numer%minrho  ! 0 < dref < maxamp
 !                                    ipdiff(g) = exp(dref) ! 1 < ipdiff(g) < exp(maxamp)
-                     ipdiff(g) = ipdiff(g) + exp(dref) - 1 ! 0 < ipdiff(g) < exp(maxamp)-1
-                  else if (opt == 2) then
-                     ipdiff(g) = ipdiff(g) + 1./((1.-d/numer%minrho)*2 + 1./50.) - 1.
-                  end if
+                  ipdiff(g) = ipdiff(g) + exp(dref) - 1 ! 0 < ipdiff(g) < exp(maxamp)-1
+               else if (opt == 2) then
+                  ipdiff(g) = ipdiff(g) + 1./((1.-d/numer%minrho)*2 + 1./50.) - 1.
                end if
-            end do
-         end if
-
-      END SUBROUTINE computeIperDiffusion
-
-      !*****************************************
-      ! Pinch term
-      !***************************************
-      SUBROUTINE computePinch(b, psi, APinch)
-         real*8, intent(IN)     :: b(:), psi
-         real*8, intent(OUT)    :: APinch(:, :)
-         real*8                 :: v_p, bnorm(2)
-
-         APinch = 0.
-
-         bnorm = b(:)/norm2(b)
-         v_p = phys%v_p*(psi**2 + psi**2*tanh((0.95 - psi)/0.02))
-         !IF (v_p .lt. 1.e-4/simpar%refval_speed) v_p = 0.
-
-         APinch(1, 1) = v_p*bnorm(2)
-         APinch(1, 2) = v_p*(-bnorm(1))
-
-         !WRITE(6,*) 'psi = ', psi
-         !WRITE(6,*) 'v_p = ', v_p
-      END SUBROUTINE
-
-      !*****************************************
-      ! Curvature term matrix
-      !****************************************
-      SUBROUTINE GimpMatrix(U, divb, G)
-         real*8, intent(in)  :: U(:), divb
-         real*8, intent(out) :: G(:, :)
-
-         !G = divb*[              0,                            0,                            0                              0; ...
-         !                  1/3*U(2)**2/U(1)**2            -2/3*U(2)/U(1)                      2/3,                           2/3;...
-         !                        0                             0                             0                              0; ...
-         !                        0                             0                             0                              0];
-
-         G = 0.d0
-         if (switch%decoup) then
-            G(2, 1) = phys%Mref
-         else
-            G(2, 1) = 1./3.*U(2)**2/U(1)**2
-            G(2, 2) = -2./3.*U(2)/U(1)
-            G(2, 3) = 2./3.
-            G(2, 4) = 2./3.
-         end if
-         G = divb*G
-      END SUBROUTINE GimpMatrix
-
-      !*****************************************
-      ! Parallel diffusion terms
-      !****************************************
-      SUBROUTINE computeVi(U, V)
-         real*8, intent(IN)  :: U(:)
-         real*8, intent(OUT) :: V(:)
-         V = 0.d0
-         V(1) = U(2)**2/U(1)**3 - U(3)/U(1)**2
-         V(2) = -U(2)/U(1)**2
-         V(3) = 1./U(1)
-      END SUBROUTINE computeVi
-
-      SUBROUTINE computeVe(U, V)
-         real*8, intent(IN)  :: U(:)
-         real*8, intent(OUT) :: V(:)
-         V = 0.d0
-         V(1) = -U(4)/U(1)**2
-         V(4) = 1./U(1)
-      END SUBROUTINE computeVe
-
-      !                                SUBROUTINE computeVe(U,V)
-      !                                real*8, intent(IN)  :: U(:)
-      !                                real*8, intent(OUT) :: V(:)
-      !                                V = 0.d0
-      !                                V(1) = U(2)**2/U(1)**3 - U(4)/U(1)**2
-      !                                V(2) = -U(2)/U(1)**2
-      !                                V(4) = 1./U(1)
-      !                                END SUBROUTINE computeVe
-
-      SUBROUTINE compute_dV_dUi(U, dV_dU)
-         real*8, intent(IN)  :: U(:)
-         real*8, intent(OUT) :: dV_dU(:, :)
-         dV_dU = 0.
-         dV_dU(1, 1) = 2*U(3)/U(1)**3 - 3*U(2)**2/U(1)**4
-         dV_dU(1, 2) = 2*U(2)/U(1)**3
-         dV_dU(1, 3) = -1/U(1)**2
-         dV_dU(2, 1) = 2*U(2)/U(1)**3
-         dV_dU(2, 2) = -1/U(1)**2
-         dV_dU(3, 1) = -1/U(1)**2
-      END SUBROUTINE compute_dV_dUi
-
-      SUBROUTINE compute_dV_dUe(U, dV_dU)
-         real*8, intent(IN)  :: U(:)
-         real*8, intent(OUT) :: dV_dU(:, :)
-         dV_dU = 0.
-         dV_dU(1, 1) = 2*U(4)/U(1)**3
-         dV_dU(1, 4) = -1/U(1)**2
-         dV_dU(4, 1) = -1/U(1)**2
-      END SUBROUTINE compute_dV_dUe
-
-      FUNCTION computeAlphai(U) RESULT(res)
-         real*8 :: U(:)
-         real*8 :: res, aux
-         real, parameter :: tol = 1e-5
-         aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
-         if ((2./(3.*phys%Mref)*aux > 1.) .and. (switch%testcase .ne. 2)) then
-            res = (3.*phys%Mref/2)**(phys%epn)
-         else
-            if (aux < tol) aux = tol
-            res = aux**phys%epn
-         end if
-    !! applying softplus instead strong limit
-         !if (switch%testcase .ne. 2) then
-         !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-         !endif
-         !res = aux**phys%epn
-      END FUNCTION computeAlphai
-
-      FUNCTION computeAlphae(U) RESULT(res)
-         real*8 :: U(:)
-         real*8 :: res, aux
-         real, parameter :: tol = 1e-5
-         aux = U(4)/U(1)
-         if ((2./(3.*phys%Mref)*aux > 1.) .and. (switch%testcase .ne. 2)) then
-            res = (3.*phys%Mref/2)**(phys%epn)
-         else
-            if (aux < tol) aux = tol
-            res = aux**phys%epn
-         end if
-    !! applying softplus instead strong limit
-         !if (switch%testcase .ne. 2) then
-         !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-         !endif
-         !res = aux**phys%epn
-      END FUNCTION computeAlphae
-
-      SUBROUTINE compute_dAlpha_dUi(U, res)
-         real*8, intent(IN) :: U(:)
-         real*8, intent(OUT):: res(:)
-         real*8             :: aux, double_soft_deriv
-         real, parameter :: tol = 1e-5
-         ! applying softplus instead strong limit
-         aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
-         !double_soft_deriv = 1.
-         !if (switch%testcase .ne. 2) then  !! don't apply flux limiter if it is a convergence test
-         !  call double_softplus_deriv(aux, tol,3.*phys%Mref/2,double_soft_deriv)
-         !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-         !endif
-         !res = 0.
-         !res(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
-         !res(2) = -U(2)/U(1)**2
-         !res(3) = 1./U(1)
-         !res=phys%epn*aux**(phys%epn-1)*res
-         !if (switch%testcase .ne. 2) then
-         !  res = res*double_soft_deriv
-         !endif
-         if ((2./(3.*phys%Mref)*aux > 1.) .and. (switch%testcase .ne. 2)) then !! don't apply flux limiter if it is a convergence test
-            res = 0.
-         else
-            if (aux < 0) aux = tol
-            res = 0.d0
-            res(1) = -U(3)/U(1)**2 + U(2)**2/U(1)**3
-            res(2) = -U(2)/U(1)**2
-            res(3) = 1./U(1)
-            res = phys%epn*aux**(phys%epn - 1)*res
-         end if
-      END SUBROUTINE compute_dAlpha_dUi
-
-      SUBROUTINE compute_dAlpha_dUe(U, res)
-         real*8, intent(IN) :: U(:)
-         real*8, intent(OUT):: res(:)
-         real*8             :: aux, double_soft_deriv
-         real, parameter :: tol = 1e-5
-         ! applying softplus instead strong limit
-         aux = U(4)/U(1)
-         !double_soft_deriv = 1.
-         !if (switch%testcase .ne. 2) then  !! don't apply flux limiter if it is a convergence test
-         !  call double_softplus_deriv(aux, tol,3.*phys%Mref/2,double_soft_deriv)
-         !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-         !endif
-         !res = 0.
-         !res(1) = -U(4)/U(1)**2
-         !res(4) = 1./U(1)
-         !res=phys%epn*aux**(phys%epn-1)*res
-         !if (switch%testcase .ne. 2) then
-         !  res = res*double_soft_deriv
-         !endif
-         if ((2./(3.*phys%Mref)*aux > 1.) .and. (switch%testcase .ne. 2)) then !! don't apply flux limiter if it is a convergence test
-            res = 0.
-         else
-            if (aux < 0) aux = tol
-            res = 0.d0
-            res(1) = -U(4)/U(1)**2
-            res(4) = 1./U(1)
-            res = phys%epn*aux**(phys%epn - 1)*res
-         end if
-      END SUBROUTINE compute_dAlpha_dUe
-
-      ! ******************************
-      ! Parallel electric field terms
-      ! ******************************
-      SUBROUTINE compute_W(U, W)
-         real*8, intent(IN) :: U(:)
-         real*8             :: W
-
-         W = 2./3.*U(2)/U(1)
-      END SUBROUTINE compute_W
-
-      SUBROUTINE compute_dW_dU(U, res)
-         real*8, intent(IN) :: U(:)
-         real*8             :: res(:, :)
-         res = 0.
-         res(4, 1) = -2./3.*U(2)/U(1)**2
-         res(4, 2) = 2./3./U(1)
-      END SUBROUTINE compute_dW_dU
-
-      ! ******************************
-      ! Temperature exchange terms
-      ! ******************************
-      SUBROUTINE compute_s(U, s)
-         real*8, intent(IN) :: U(:)
-         real*8             :: s, U1, U4, U3
-         real, parameter :: tol = 1e-20
-         U1 = U(1)
-         U4 = U(4)
-         U3 = U(3)
-         if (U4 < tol) U4 = tol
-         if (U1 < tol) U1 = tol
-         if (U3 < tol) U3 = tol
-         ! keeping this thing for high diffusion, but take care for low values
-#ifndef KEQUATION
-         if ((phys%diff_ee .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
-            s = 1./(phys%tie*2*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4 - U3 + 0.5*(U(2)**2/U1))
-#else
-            if (((phys%diff_ee + phys%diff_k_min) .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
-    s = 1./(phys%tie*2*0.0380/(phys%diff_ee+phys%diff_k_min))*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
-#endif
-            else
-               s = 1./(phys%tie)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4 - U3 + 0.5*(U(2)**2/U1))
             end if
-            !s = 1./phys%tie*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4 - U3 + 0.5*(U(2)**2/U1))
-            END SUBROUTINE compute_s
+         end do
+      end if
 
-            SUBROUTINE compute_ds_dU(U, res)
-               real*8, intent(IN) :: U(:)
-               real*8             :: res(:), U1, U4, U3
-               real, parameter :: tol = 1e-20
-               U1 = U(1)
-               U4 = U(4)
-               U3 = U(3)
-               if (U4 < tol) U4 = tol
-               if (U1 < tol) U1 = tol
-               if (U3 < tol) U3 = tol
-               res = 0.
-               res(1) = 2.5*(U1/U4)**1.5*(U4 - U3 + 0.5*(U(2)**2/U1)) - 0.5*U1**0.5*U(2)**2/U4**1.5
-               res(2) = U(2)*(U1/U4)**1.5
-               res(3) = -U1**2.5/U4**1.5
-               res(4) = -1.5*(U1/U4)**2.5*(U4 - U3 + 0.5*U(2)**2/U1) + U1**2.5/U4**1.5
-               ! keeping this thing for high diffusion, but take care for low values
-#ifndef KEQUATION
-               if ((phys%diff_ee .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
-                  res = 1./(phys%tie*2*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*res
-#else
-                  if (((phys%diff_ee + phys%diff_k_min) .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
-                     res = 1./(phys%tie*2*0.0380/(phys%diff_ee + phys%diff_k_min))*(2./3./phys%Mref)**(-0.5)*res
+   END SUBROUTINE computeIperDiffusion
 
-#endif
-                  else
-                     res = 1./(phys%tie)*(2./3./phys%Mref)**(-0.5)*res
-                  end if
-                  !res = 1./phys%tie*(2./3./phys%Mref)**(-0.5)*res
-                  END SUBROUTINE compute_ds_dU
+   !*****************************************
+   ! Pinch term
+   !***************************************
+   SUBROUTINE computePinch(b, psi, APinch)
+      real*8, intent(IN)     :: b(:), psi
+      real*8, intent(OUT)    :: APinch(:, :)
+      real*8                 :: v_p, bnorm(2)
 
-                  !*****************************
-                  !Ohmic Heating Source
-                  !*****************************
-                  SUBROUTINE compute_Sohmic(U, Sohmic)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: Sohmic, U1, U4
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     if (U4 < tol) U4 = tol
-                     if (U1 < tol) U1 = tol
-                     Sohmic = phys%Pohmic*(((3*phys%Mref)/2)**1.5)*((U1/U4)**1.5)
-                  END SUBROUTINE compute_Sohmic
+      APinch = 0.
 
-                  SUBROUTINE compute_dSohmic_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U4
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     if (U4 < tol) U4 = tol
-                     if (U1 < tol) U1 = tol
-                     res = 0.
-                     res(1) = (1.5*U1**0.5)/(U4**1.5)
-                     res(4) = -(1.5*U1**1.5)/(U4**2.5)
-                     res = phys%Pohmic*(((3*phys%Mref)/2)**1.5)*res
-                  END SUBROUTINE compute_dSohmic_dU
+      bnorm = b(:)/norm2(b)
+      v_p = phys%v_p*(psi**2 + psi**2*tanh((0.95 - psi)/0.02))
+      !IF (v_p .lt. 1.e-4/simpar%refval_speed) v_p = 0.
 
-                  ! ******************************
-                  ! Neutral Source terms
-                  ! ******************************
+      APinch(1, 1) = v_p*bnorm(2)
+      APinch(1, 2) = v_p*(-bnorm(1))
+
+      !WRITE(6,*) 'psi = ', psi
+      !WRITE(6,*) 'v_p = ', v_p
+   END SUBROUTINE
+
+   !*****************************************
+   ! Curvature term matrix
+   !****************************************
+   SUBROUTINE GimpMatrix(U, divb, G)
+      real*8, intent(in)  :: U(:), divb
+      real*8, intent(out) :: G(:, :)
+
+      !G = divb*[              0,                            0,                            0                              0; ...
+      !                  1/3*U(2)**2/U(1)**2            -2/3*U(2)/U(1)                      2/3,                           2/3;...
+      !                        0                             0                             0                              0; ...
+      !                        0                             0                             0                              0];
+
+      G = 0.d0
+      if (switch%decoup) then
+         G(2, 1) = phys%Mref
+      else
+         G(2, 1) = 1./3.*U(2)**2/U(1)**2
+         G(2, 2) = -2./3.*U(2)/U(1)
+         G(2, 3) = 2./3.
+         G(2, 4) = 2./3.
+      end if
+      G = divb*G
+   END SUBROUTINE GimpMatrix
+
+   !*****************************************
+   ! Parallel diffusion terms
+   !****************************************
+   SUBROUTINE computeVi(U, V)
+      real*8, intent(IN)  :: U(:)
+      real*8, intent(OUT) :: V(:)
+      V = 0.d0
+      V(1) = U(2)**2/U(1)**3 - U(3)/U(1)**2
+      V(2) = -U(2)/U(1)**2
+      V(3) = 1./U(1)
+   END SUBROUTINE computeVi
+
+   SUBROUTINE computeVe(U, V)
+      real*8, intent(IN)  :: U(:)
+      real*8, intent(OUT) :: V(:)
+      V = 0.d0
+      V(1) = -U(4)/U(1)**2
+      V(4) = 1./U(1)
+   END SUBROUTINE computeVe
+
+   !                                SUBROUTINE computeVe(U,V)
+   !                                real*8, intent(IN)  :: U(:)
+   !                                real*8, intent(OUT) :: V(:)
+   !                                V = 0.d0
+   !                                V(1) = U(2)**2/U(1)**3 - U(4)/U(1)**2
+   !                                V(2) = -U(2)/U(1)**2
+   !                                V(4) = 1./U(1)
+   !                                END SUBROUTINE computeVe
+
+   SUBROUTINE compute_dV_dUi(U, dV_dU)
+      real*8, intent(IN)  :: U(:)
+      real*8, intent(OUT) :: dV_dU(:, :)
+      dV_dU = 0.
+      dV_dU(1, 1) = 2*U(3)/U(1)**3 - 3*U(2)**2/U(1)**4
+      dV_dU(1, 2) = 2*U(2)/U(1)**3
+      dV_dU(1, 3) = -1/U(1)**2
+      dV_dU(2, 1) = 2*U(2)/U(1)**3
+      dV_dU(2, 2) = -1/U(1)**2
+      dV_dU(3, 1) = -1/U(1)**2
+   END SUBROUTINE compute_dV_dUi
+
+   SUBROUTINE compute_dV_dUe(U, dV_dU)
+      real*8, intent(IN)  :: U(:)
+      real*8, intent(OUT) :: dV_dU(:, :)
+      dV_dU = 0.
+      dV_dU(1, 1) = 2*U(4)/U(1)**3
+      dV_dU(1, 4) = -1/U(1)**2
+      dV_dU(4, 1) = -1/U(1)**2
+   END SUBROUTINE compute_dV_dUe
+
+   FUNCTION computeAlphai(U) RESULT(res)
+      real*8 :: U(:)
+      real*8 :: res, aux
+      real, parameter :: tol = 1e-5
+      aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
+      if ((2./(3.*phys%Mref)*aux > 1.) .and. (switch%testcase .ne. 2)) then
+         res = (3.*phys%Mref/2)**(phys%epn)
+      else
+         if (aux < tol) aux = tol
+         res = aux**phys%epn
+      end if
+    !! applying softplus instead strong limit
+      !if (switch%testcase .ne. 2) then
+      !  call double_softplus(aux, tol, 3.*phys%Mref/2)
+      !endif
+      !res = aux**phys%epn
+   END FUNCTION computeAlphai
+
+   FUNCTION computeAlphae(U) RESULT(res)
+      real*8 :: U(:)
+      real*8 :: res, aux
+      real, parameter :: tol = 1e-5
+      aux = U(4)/U(1)
+      if ((2./(3.*phys%Mref)*aux > 1.) .and. (switch%testcase .ne. 2)) then
+         res = (3.*phys%Mref/2)**(phys%epn)
+      else
+         if (aux < tol) aux = tol
+         res = aux**phys%epn
+      end if
+    !! applying softplus instead strong limit
+      !if (switch%testcase .ne. 2) then
+      !  call double_softplus(aux, tol, 3.*phys%Mref/2)
+      !endif
+      !res = aux**phys%epn
+   END FUNCTION computeAlphae
+
+   SUBROUTINE compute_dAlpha_dUi(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8, intent(OUT):: res(:)
+      real*8             :: aux, double_soft_deriv
+      real, parameter :: tol = 1e-5
+      ! applying softplus instead strong limit
+      aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
+      !double_soft_deriv = 1.
+      !if (switch%testcase .ne. 2) then  !! don't apply flux limiter if it is a convergence test
+      !  call double_softplus_deriv(aux, tol,3.*phys%Mref/2,double_soft_deriv)
+      !  call double_softplus(aux, tol, 3.*phys%Mref/2)
+      !endif
+      !res = 0.
+      !res(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
+      !res(2) = -U(2)/U(1)**2
+      !res(3) = 1./U(1)
+      !res=phys%epn*aux**(phys%epn-1)*res
+      !if (switch%testcase .ne. 2) then
+      !  res = res*double_soft_deriv
+      !endif
+      if ((2./(3.*phys%Mref)*aux > 1.) .and. (switch%testcase .ne. 2)) then !! don't apply flux limiter if it is a convergence test
+         res = 0.
+      else
+         if (aux < 0) aux = tol
+         res = 0.d0
+         res(1) = -U(3)/U(1)**2 + U(2)**2/U(1)**3
+         res(2) = -U(2)/U(1)**2
+         res(3) = 1./U(1)
+         res = phys%epn*aux**(phys%epn - 1)*res
+      end if
+   END SUBROUTINE compute_dAlpha_dUi
+
+   SUBROUTINE compute_dAlpha_dUe(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8, intent(OUT):: res(:)
+      real*8             :: aux, double_soft_deriv
+      real, parameter :: tol = 1e-5
+      ! applying softplus instead strong limit
+      aux = U(4)/U(1)
+      !double_soft_deriv = 1.
+      !if (switch%testcase .ne. 2) then  !! don't apply flux limiter if it is a convergence test
+      !  call double_softplus_deriv(aux, tol,3.*phys%Mref/2,double_soft_deriv)
+      !  call double_softplus(aux, tol, 3.*phys%Mref/2)
+      !endif
+      !res = 0.
+      !res(1) = -U(4)/U(1)**2
+      !res(4) = 1./U(1)
+      !res=phys%epn*aux**(phys%epn-1)*res
+      !if (switch%testcase .ne. 2) then
+      !  res = res*double_soft_deriv
+      !endif
+      if ((2./(3.*phys%Mref)*aux > 1.) .and. (switch%testcase .ne. 2)) then !! don't apply flux limiter if it is a convergence test
+         res = 0.
+      else
+         if (aux < 0) aux = tol
+         res = 0.d0
+         res(1) = -U(4)/U(1)**2
+         res(4) = 1./U(1)
+         res = phys%epn*aux**(phys%epn - 1)*res
+      end if
+   END SUBROUTINE compute_dAlpha_dUe
+
+   ! ******************************
+   ! Parallel electric field terms
+   ! ******************************
+   SUBROUTINE compute_W(U, W)
+      real*8, intent(IN) :: U(:)
+      real*8             :: W
+
+      W = 2./3.*U(2)/U(1)
+   END SUBROUTINE compute_W
+
+   SUBROUTINE compute_dW_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:, :)
+      res = 0.
+      res(4, 1) = -2./3.*U(2)/U(1)**2
+      res(4, 2) = 2./3./U(1)
+   END SUBROUTINE compute_dW_dU
+
+   ! ******************************
+   ! Temperature exchange terms
+   ! ******************************
+   SUBROUTINE compute_s(U, s)
+      real*8, intent(IN) :: U(:)
+      real*8             :: s, U1, U4, U3
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      U3 = U(3)
+      if (U4 < tol) U4 = tol
+      if (U1 < tol) U1 = tol
+      if (U3 < tol) U3 = tol
+      ! keeping this thing for high diffusion, but take care for low values
+! #ifndef KEQUATION
+!          if ((phys%diff_ee .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
+!             s = 1./(phys%tie*2*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4 - U3 + 0.5*(U(2)**2/U1))
+! #else
+!             if (((phys%diff_ee + phys%diff_k_min) .gt. 2*0.0380) .and. (switch%testcase .ne. 2)) then
+!     s = 1./(phys%tie*2*0.0380/(phys%diff_ee+phys%diff_k_min))*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
+! #endif
+!             else
+!                s = 1./(phys%tie)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4 - U3 + 0.5*(U(2)**2/U1))
+!             end if
+
+      s = 1./phys%tie*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4 - U3 + 0.5*(U(2)**2/U1))
+   END SUBROUTINE compute_s
+
+   SUBROUTINE compute_ds_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U4, U3!, if_value(:)
+      real, parameter :: tol = 1e-20
+      logical :: logical_diff_k
+      U1 = U(1)
+      U4 = U(4)
+      U3 = U(3)
+      if (U4 < tol) U4 = tol
+      if (U1 < tol) U1 = tol
+      if (U3 < tol) U3 = tol
+      res = 0.
+      res(1) = 2.5*(U1/U4)**1.5*(U4 - U3 + 0.5*(U(2)**2/U1)) - 0.5*U1**0.5*U(2)**2/U4**1.5
+      res(2) = U(2)*(U1/U4)**1.5
+      res(3) = -U1**2.5/U4**1.5
+      res(4) = -1.5*(U1/U4)**2.5*(U4 - U3 + 0.5*U(2)**2/U1) + U1**2.5/U4**1.5
+      ! keeping this thing for high diffusion, but take care for low values
+! #ifndef KEQUATION
+! logical_diff_k = ((phys%diff_ee .gt. 2*0.0380) .and. (switch%testcase .ne. 2))
+! if_value = 1./(phys%tie*2*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*res
+! #else
+! logical_diff_k = (((phys%diff_ee + phys%diff_k_min) .gt. 2*0.0380) .and. (switch%testcase .ne. 2))
+! if_value = 1./(phys%tie*2*0.0380/(phys%diff_ee + phys%diff_k_min))*(2./3./phys%Mref)**(-0.5)*res
+!
+! #endif
+! if (logical_diff_k) then
+!   res = if_value
+!                   else
+!                      res = 1./(phys%tie)*(2./3./phys%Mref)**(-0.5)*res
+!                   end if
+      res = 1./phys%tie*(2./3./phys%Mref)**(-0.5)*res
+   END SUBROUTINE compute_ds_dU
+
+   !*****************************
+   !Ohmic Heating Source
+   !*****************************
+   SUBROUTINE compute_Sohmic(U, Sohmic)
+      real*8, intent(IN) :: U(:)
+      real*8             :: Sohmic, U1, U4
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      if (U4 < tol) U4 = tol
+      if (U1 < tol) U1 = tol
+      Sohmic = phys%Pohmic*(((3*phys%Mref)/2)**1.5)*((U1/U4)**1.5)
+   END SUBROUTINE compute_Sohmic
+
+   SUBROUTINE compute_dSohmic_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U4
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      if (U4 < tol) U4 = tol
+      if (U1 < tol) U1 = tol
+      res = 0.
+      res(1) = (1.5*U1**0.5)/(U4**1.5)
+      res(4) = -(1.5*U1**1.5)/(U4**2.5)
+      res = phys%Pohmic*(((3*phys%Mref)/2)**1.5)*res
+   END SUBROUTINE compute_dSohmic_dU
+
+   ! ******************************
+   ! Neutral Source terms
+   ! ******************************
 #ifdef NEUTRAL
 
-                  SUBROUTINE compute_niz(U, niz)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: niz, U1, U5
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
-                     niz = U1*U5
-                  END SUBROUTINE compute_niz
+   SUBROUTINE compute_niz(U, niz)
+      real*8, intent(IN) :: U(:)
+      real*8             :: niz, U1, U5
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
+      niz = U1*U5
+   END SUBROUTINE compute_niz
 
-                  SUBROUTINE compute_dniz_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U5
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
-                     res = 0.
-                     res(1) = U5
-                     res(5) = U1
-                  END SUBROUTINE compute_dniz_dU
+   SUBROUTINE compute_dniz_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U5
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
+      res = 0.
+      res(1) = U5
+      res(5) = U1
+   END SUBROUTINE compute_dniz_dU
 
-                  SUBROUTINE compute_nrec(U, nrec)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: nrec, U1
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     if (U1 < tol) U1 = tol
-                     nrec = U1**2
-                  END SUBROUTINE compute_nrec
+   SUBROUTINE compute_nrec(U, nrec)
+      real*8, intent(IN) :: U(:)
+      real*8             :: nrec, U1
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      if (U1 < tol) U1 = tol
+      nrec = U1**2
+   END SUBROUTINE compute_nrec
 
-                  SUBROUTINE compute_dnrec_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     if (U1 < tol) U1 = tol
-                     res = 0.
-                     res(1) = 2.*U1
-                  END SUBROUTINE compute_dnrec_dU
+   SUBROUTINE compute_dnrec_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      if (U1 < tol) U1 = tol
+      res = 0.
+      res(1) = 2.*U1
+   END SUBROUTINE compute_dnrec_dU
 
-                  SUBROUTINE compute_fGammacx(U, fGammacx)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: fGammacx, U2, U5
-                     real, parameter :: tol = 1e-20
-                     U2 = U(2)
-                     U5 = U(5)
-                     if (U5 < tol) U5 = tol
-                     fGammacx = U2*U5
-                  END SUBROUTINE compute_fGammacx
+   SUBROUTINE compute_fGammacx(U, fGammacx)
+      real*8, intent(IN) :: U(:)
+      real*8             :: fGammacx, U2, U5
+      real, parameter :: tol = 1e-20
+      U2 = U(2)
+      U5 = U(5)
+      if (U5 < tol) U5 = tol
+      fGammacx = U2*U5
+   END SUBROUTINE compute_fGammacx
 
-                  SUBROUTINE compute_dfGammacx_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U2, U5
-                     real, parameter :: tol = 1e-20
-                     U2 = U(2)
-                     U5 = U(5)
-                     if (U5 < tol) U5 = tol
-                     res = 0.
-                     res(2) = U5
-                     res(5) = U2
-                  END SUBROUTINE compute_dfGammacx_dU
+   SUBROUTINE compute_dfGammacx_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U2, U5
+      real, parameter :: tol = 1e-20
+      U2 = U(2)
+      U5 = U(5)
+      if (U5 < tol) U5 = tol
+      res = 0.
+      res(2) = U5
+      res(5) = U2
+   END SUBROUTINE compute_dfGammacx_dU
 
-                  SUBROUTINE compute_fGammarec(U, fGammarec)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: fGammarec, U1, U2
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U2 = U(2)
-                     if (U1 < tol) U1 = tol
-                     fGammarec = U1*U2
-                  END SUBROUTINE compute_fGammarec
+   SUBROUTINE compute_fGammarec(U, fGammarec)
+      real*8, intent(IN) :: U(:)
+      real*8             :: fGammarec, U1, U2
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U2 = U(2)
+      if (U1 < tol) U1 = tol
+      fGammarec = U1*U2
+   END SUBROUTINE compute_fGammarec
 
-                  SUBROUTINE compute_dfGammarec_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U2
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U2 = U(2)
-                     if (U1 < tol) U1 = tol
-                     res = 0.
-                     res(1) = U2
-                     res(2) = U1
-                  END SUBROUTINE compute_dfGammarec_dU
+   SUBROUTINE compute_dfGammarec_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U2
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U2 = U(2)
+      if (U1 < tol) U1 = tol
+      res = 0.
+      res(1) = U2
+      res(2) = U1
+   END SUBROUTINE compute_dfGammarec_dU
 
 #ifdef TEMPERATURE
 #ifndef AMJUELSPLINES
-                  SUBROUTINE compute_sigmaviz(U, sigmaviz)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: sigmaviz, U1, U4, T0, Ery, E0
-                     real, parameter    :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     Ery = 13.6
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     E0 = (2.*T0*U4)/(3.*phys%Mref*Ery*U1)
-                     !Threshold on Te >= 0.2 eV
-                     if (E0*Ery .le. 0.05) E0 = 0.05/Ery
-                     sigmaviz = 1.e-11*sqrt(E0)*(1./((Ery**1.5)*(6.+E0)))*exp(-1./E0)
-                  END SUBROUTINE compute_sigmaviz
+   SUBROUTINE compute_sigmaviz(U, sigmaviz)
+      real*8, intent(IN) :: U(:)
+      real*8             :: sigmaviz, U1, U4, T0, Ery, E0
+      real, parameter    :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      Ery = 13.6
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      E0 = (2.*T0*U4)/(3.*phys%Mref*Ery*U1)
+      !Threshold on Te >= 0.2 eV
+      if (E0*Ery .le. 0.05) E0 = 0.05/Ery
+      sigmaviz = 1.e-11*sqrt(E0)*(1./((Ery**1.5)*(6.+E0)))*exp(-1./E0)
+   END SUBROUTINE compute_sigmaviz
 
-                  SUBROUTINE compute_dsigmaviz_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U4, T0, Ery, E0
-                     real, parameter    :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     Ery = 13.6
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     res = 0.
-                     E0 = (2.*T0*U4)/(3.*phys%Mref*Ery*U1)
-                     !Threshold on Te >= 0.2 eV
-                     !if (E0*Ery .le. 0.05)  E0 = 0.05/Ery
-                     if (E0*Ery .ge. 0.05) then
-                        res(1) = (1./U1)*(-1./2 + 1./((6./E0) + 1) - 1./E0)
-                        res(4) = 1./(2.*U4) - 1./(6.*(U4/E0) + U4) + 1./(E0*U4)
-                        res = 1.e-11*sqrt(E0)*(1./((Ery**1.5)*(6.+E0)))*exp(-1./E0)*res
-                     end if
-                  END SUBROUTINE compute_dsigmaviz_dU
+   SUBROUTINE compute_dsigmaviz_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U4, T0, Ery, E0
+      real, parameter    :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      Ery = 13.6
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      res = 0.
+      E0 = (2.*T0*U4)/(3.*phys%Mref*Ery*U1)
+      !Threshold on Te >= 0.2 eV
+      !if (E0*Ery .le. 0.05)  E0 = 0.05/Ery
+      if (E0*Ery .ge. 0.05) then
+         res(1) = (1./U1)*(-1./2 + 1./((6./E0) + 1) - 1./E0)
+         res(4) = 1./(2.*U4) - 1./(6.*(U4/E0) + U4) + 1./(E0*U4)
+         res = 1.e-11*sqrt(E0)*(1./((Ery**1.5)*(6.+E0)))*exp(-1./E0)*res
+      end if
+   END SUBROUTINE compute_dsigmaviz_dU
 
-                  SUBROUTINE compute_sigmavrec(U, sigmavrec)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: sigmavrec, U1, U4, T0, Ery, E0
-                     real, parameter    :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     Ery = 13.6
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     E0 = (Ery*3.*phys%Mref*U1)/(T0*2.*U4)
-                     !Threshold on Te >= 0.1 eV
-                     if (E0/Ery .ge. 10.) E0 = 10.*Ery
-                     sigmavrec = 5.2e-20*sqrt(E0)*(0.43 + 0.5*log(E0) + 0.469*(E0**(-1./3)))
-                  END SUBROUTINE compute_sigmavrec
+   SUBROUTINE compute_sigmavrec(U, sigmavrec)
+      real*8, intent(IN) :: U(:)
+      real*8             :: sigmavrec, U1, U4, T0, Ery, E0
+      real, parameter    :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      Ery = 13.6
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      E0 = (Ery*3.*phys%Mref*U1)/(T0*2.*U4)
+      !Threshold on Te >= 0.1 eV
+      if (E0/Ery .ge. 10.) E0 = 10.*Ery
+      sigmavrec = 5.2e-20*sqrt(E0)*(0.43 + 0.5*log(E0) + 0.469*(E0**(-1./3)))
+   END SUBROUTINE compute_sigmavrec
 
-                  SUBROUTINE compute_dsigmavrec_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U4, T0, Ery, E0
-                     real, parameter    :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     Ery = 13.6
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     E0 = (Ery*3.*phys%Mref*U1)/(T0*2.*U4)
-                     res = 0.
-                     !Threshold on Te >= 0.1 eV
-                     if (E0/Ery .le. 10.) then
-                        res(1) = 5.2e-20*sqrt(E0)*(0.43 + 0.5*log(E0) + 0.469*(E0**(-1./3)))/(2.*U1) + 5.2e-20*sqrt(E0)*(0.5/U1 +&
-                        &0.469*(E0**(-1./3))*(-1./(3.*U1)))
-                        res(4) = -5.2e-20*sqrt(E0)*(0.43 + 0.5*log(E0) + 0.469*(E0**(-1./3)))/(2.*U4) + 5.2e-20*sqrt(E0)*(-0.5/U4 +&
-                        &0.469*(E0**(-1./3))*(1./(3.*U4)))
-                     end if
-                  END SUBROUTINE compute_dsigmavrec_dU
+   SUBROUTINE compute_dsigmavrec_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U4, T0, Ery, E0
+      real, parameter    :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      Ery = 13.6
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      E0 = (Ery*3.*phys%Mref*U1)/(T0*2.*U4)
+      res = 0.
+      !Threshold on Te >= 0.1 eV
+      if (E0/Ery .le. 10.) then
+         res(1) = 5.2e-20*sqrt(E0)*(0.43 + 0.5*log(E0) + 0.469*(E0**(-1./3)))/(2.*U1) + 5.2e-20*sqrt(E0)*(0.5/U1 +&
+         &0.469*(E0**(-1./3))*(-1./(3.*U1)))
+         res(4) = -5.2e-20*sqrt(E0)*(0.43 + 0.5*log(E0) + 0.469*(E0**(-1./3)))/(2.*U4) + 5.2e-20*sqrt(E0)*(-0.5/U4 +&
+         &0.469*(E0**(-1./3))*(1./(3.*U4)))
+      end if
+   END SUBROUTINE compute_dsigmavrec_dU
 #else
 
-                  ! Routines for 2D splines in te, ne loglogspace
-                  SUBROUTINE compute_2D_eirene_rate(te, ne, alpha, rate)
-                     ! this routine calculates eirene rate in te, ne space
-                     ! if in the region of applicability, then just takes the values according to the splines
-                     ! if ne>ne_max (LTE limit) or ne<ne_min (Corona limit) then no more dependancy on ne
-                     ! if te<te_min or te>te_max then extrapolates in log space taking the derivative of the edge and linearly expanding
-                     real*8, intent(IN) :: te, ne, alpha(:, :)
-                     real*8, intent(OUT):: rate
-                     real*8             :: te_min = 0.1
-                     real*8             :: te_max = 2.e4
-                     real*8             :: ne_min = 1.
-                     real*8             :: ne_max = 1.e8
-                     real*8             :: dlograte_dlogne, dlograte_dlogte
-                     integer            :: i, j
-                     ! In EIRENE the density is scaled to 1.e14
-                     rate = 0.
-                     ! region 1, where ne is applicable
-                     if ((ne >= ne_min) .and. (ne <= ne_max)) then
-                        if ((te >= te_min) .and. (te <= te_max)) then
-                           call compute_2D_logeirene_rate(te, ne, alpha, rate)
-                        elseif (te < te_min) then
-                           call compute_2D_logeirene_rate(te_min, ne, alpha, rate)
-                           call compute_dlogeirene_2D_dlogte_rate(te_min, ne, alpha, dlograte_dlogte)
-                           rate = rate + dlograte_dlogte*(log(te) - log(te_min))
-                        elseif (te > te_max) then
-                           call compute_2D_logeirene_rate(te_max, ne, alpha, rate)
-                           call compute_dlogeirene_2D_dlogte_rate(te_max, ne, alpha, dlograte_dlogte)
-                           rate = rate + dlograte_dlogte*(log(te) - log(te_max))
-                        end if
-                        ! beyond range of ne applicability
-                     elseif (ne < ne_min) then
-                        ! if te is still applicable
-                        if ((te >= te_min) .and. (te <= te_max)) then
-                           call compute_2D_logeirene_rate(te, ne_min, alpha, rate)
-                           ! if te < te_min
-                        elseif (te < te_min) then
-                           call compute_2D_logeirene_rate(te_min, ne_min, alpha, rate)
-                           call compute_dlogeirene_2D_dlogte_rate(te_min, ne_min, alpha, dlograte_dlogte)
-                           rate = rate + dlograte_dlogte*(log(te) - log(te_min))
-                           ! if te>te_max
-                        elseif (te > te_max) then
-                           call compute_2D_logeirene_rate(te_max, ne_min, alpha, rate)
-                           call compute_dlogeirene_2D_dlogte_rate(te_max, ne_min, alpha, dlograte_dlogte)
-                           rate = rate + dlograte_dlogte*(log(te) - log(te_max))
-                        end if
-                        ! if ne>ne_max
-                     elseif (ne > ne_max) then
-                        if ((te >= te_min) .and. (te <= te_max)) then
-                           call compute_2D_logeirene_rate(te, ne_max, alpha, rate)
-                        elseif (te < te_min) then
-                           call compute_2D_logeirene_rate(te_min, ne_max, alpha, rate)
-                           call compute_dlogeirene_2D_dlogte_rate(te_min, ne_max, alpha, dlograte_dlogte)
-                           rate = rate + dlograte_dlogte*(log(te) - log(te_min))
-                        elseif (te > te_max) then
-                           call compute_2D_logeirene_rate(te_max, ne_max, alpha, rate)
-                           call compute_dlogeirene_2D_dlogte_rate(te_max, ne_max, alpha, dlograte_dlogte)
-                           rate = rate + dlograte_dlogte*(log(te) - log(te_max))
-                        end if
-                     end if
-                     ! rate is in cm^3/s in EIRENE
-                     if (rate > -1e3) then
-                        rate = exp(rate)/1.e6
-                     else
-                        rate = 0
-                     end if
-                  END SUBROUTINE compute_2D_eirene_rate
+   ! Routines for 2D splines in te, ne loglogspace
+   SUBROUTINE compute_2D_eirene_rate(te, ne, alpha, rate)
+      ! this routine calculates eirene rate in te, ne space
+      ! if in the region of applicability, then just takes the values according to the splines
+      ! if ne>ne_max (LTE limit) or ne<ne_min (Corona limit) then no more dependancy on ne
+      ! if te<te_min or te>te_max then extrapolates in log space taking the derivative of the edge and linearly expanding
+      real*8, intent(IN) :: te, ne, alpha(:, :)
+      real*8, intent(OUT):: rate
+      real*8             :: te_min = 0.1
+      real*8             :: te_max = 2.e4
+      real*8             :: ne_min = 1.
+      real*8             :: ne_max = 1.e8
+      real*8             :: dlograte_dlogne, dlograte_dlogte
+      integer            :: i, j
+      ! In EIRENE the density is scaled to 1.e14
+      rate = 0.
+      ! region 1, where ne is applicable
+      if ((ne >= ne_min) .and. (ne <= ne_max)) then
+         if ((te >= te_min) .and. (te <= te_max)) then
+            call compute_2D_logeirene_rate(te, ne, alpha, rate)
+         elseif (te < te_min) then
+            call compute_2D_logeirene_rate(te_min, ne, alpha, rate)
+            call compute_dlogeirene_2D_dlogte_rate(te_min, ne, alpha, dlograte_dlogte)
+            rate = rate + dlograte_dlogte*(log(te) - log(te_min))
+         elseif (te > te_max) then
+            call compute_2D_logeirene_rate(te_max, ne, alpha, rate)
+            call compute_dlogeirene_2D_dlogte_rate(te_max, ne, alpha, dlograte_dlogte)
+            rate = rate + dlograte_dlogte*(log(te) - log(te_max))
+         end if
+         ! beyond range of ne applicability
+      elseif (ne < ne_min) then
+         ! if te is still applicable
+         if ((te >= te_min) .and. (te <= te_max)) then
+            call compute_2D_logeirene_rate(te, ne_min, alpha, rate)
+            ! if te < te_min
+         elseif (te < te_min) then
+            call compute_2D_logeirene_rate(te_min, ne_min, alpha, rate)
+            call compute_dlogeirene_2D_dlogte_rate(te_min, ne_min, alpha, dlograte_dlogte)
+            rate = rate + dlograte_dlogte*(log(te) - log(te_min))
+            ! if te>te_max
+         elseif (te > te_max) then
+            call compute_2D_logeirene_rate(te_max, ne_min, alpha, rate)
+            call compute_dlogeirene_2D_dlogte_rate(te_max, ne_min, alpha, dlograte_dlogte)
+            rate = rate + dlograte_dlogte*(log(te) - log(te_max))
+         end if
+         ! if ne>ne_max
+      elseif (ne > ne_max) then
+         if ((te >= te_min) .and. (te <= te_max)) then
+            call compute_2D_logeirene_rate(te, ne_max, alpha, rate)
+         elseif (te < te_min) then
+            call compute_2D_logeirene_rate(te_min, ne_max, alpha, rate)
+            call compute_dlogeirene_2D_dlogte_rate(te_min, ne_max, alpha, dlograte_dlogte)
+            rate = rate + dlograte_dlogte*(log(te) - log(te_min))
+         elseif (te > te_max) then
+            call compute_2D_logeirene_rate(te_max, ne_max, alpha, rate)
+            call compute_dlogeirene_2D_dlogte_rate(te_max, ne_max, alpha, dlograte_dlogte)
+            rate = rate + dlograte_dlogte*(log(te) - log(te_max))
+         end if
+      end if
+      ! rate is in cm^3/s in EIRENE
+      if (rate > -1e3) then
+         rate = exp(rate)/1.e6
+      else
+         rate = 0
+      end if
+   END SUBROUTINE compute_2D_eirene_rate
 
-                  SUBROUTINE compute_2D_eirene_rate_du(U1, U4, te, ne, alpha, rate_du)
-                     real*8, intent(IN) :: U1, U4, te, ne, alpha(:, :)
-                     real*8             :: rate
-                     real*8             :: te_min = 0.1
-                     real*8             :: te_max = 2.e4
-                     real*8             :: ne_min = 1.
-                     real*8             :: ne_max = 1.e8
-                     real*8             :: dlograte_dlogne, dlograte_dlogte
-                     real*8, intent(OUT):: rate_du(:)
-                     integer            :: i, j
-                     call compute_2D_eirene_rate(te, ne, alpha, rate)
-                     ! In EIRENE the density is scaled to 1.e14
-                     rate_du = 0.
-                     dlograte_dlogne = 0.
-                     dlograte_dlogte = 0.
-                     if ((ne >= ne_min) .and. (ne <= ne_max)) then
-                        if ((te >= te_min) .and. (te <= te_max)) then
-                           call compute_dlogeirene_2D_dlogne_rate(te, ne, alpha, dlograte_dlogne)
-                           call compute_dlogeirene_2D_dlogte_rate(te, ne, alpha, dlograte_dlogte)
-                        elseif (te < te_min) then
-                           call compute_dlogeirene_2D_dlogne_rate(te_min, ne, alpha, dlograte_dlogne)
-                           call compute_dlogeirene_2D_dlogte_rate(te_min, ne, alpha, dlograte_dlogte)
-                        elseif (te > te_max) then
-                           call compute_dlogeirene_2D_dlogne_rate(te_max, ne, alpha, dlograte_dlogne)
-                           call compute_dlogeirene_2D_dlogte_rate(te_max, ne, alpha, dlograte_dlogte)
-                        end if
-                        ! beyond range of ne applicability (ne derivative is now zero)
-                     elseif (ne < ne_min) then
-                        ! if te is still applicable
-                        if ((te >= te_min) .and. (te <= te_max)) then
-                           call compute_dlogeirene_2D_dlogte_rate(te, ne_min, alpha, dlograte_dlogte)
-                           ! if te < te_min
-                        elseif (te < te_min) then
-                           call compute_dlogeirene_2D_dlogte_rate(te_min, ne_min, alpha, dlograte_dlogte)
-                           ! if te>te_max
-                        elseif (te > te_max) then
-                           call compute_dlogeirene_2D_dlogte_rate(te_max, ne_min, alpha, dlograte_dlogte)
-                        end if
-                        ! if ne>ne_max (ne derivative is now zero)
-                     elseif (ne > ne_max) then
-                        if ((te >= te_min) .and. (te <= te_max)) then
-                           call compute_dlogeirene_2D_dlogte_rate(te, ne_max, alpha, dlograte_dlogte)
-                        elseif (te < te_min) then
-                           call compute_dlogeirene_2D_dlogte_rate(te_min, ne_max, alpha, dlograte_dlogte)
-                        elseif (te > te_max) then
-                           call compute_dlogeirene_2D_dlogte_rate(te_max, ne_max, alpha, dlograte_dlogte)
-                        end if
-                     end if
-                     rate_du(1) = rate_du(1) + dlograte_dlogte*(-1./U1)
-                     rate_du(1) = rate_du(1) + dlograte_dlogne*(1./U1)
-                     rate_du(4) = rate_du(4) + dlograte_dlogte*(1./U4)
-                     rate_du = rate_du*rate
-                  END SUBROUTINE compute_2D_eirene_rate_du
+   SUBROUTINE compute_2D_eirene_rate_du(U1, U4, te, ne, alpha, rate_du)
+      real*8, intent(IN) :: U1, U4, te, ne, alpha(:, :)
+      real*8             :: rate
+      real*8             :: te_min = 0.1
+      real*8             :: te_max = 2.e4
+      real*8             :: ne_min = 1.
+      real*8             :: ne_max = 1.e8
+      real*8             :: dlograte_dlogne, dlograte_dlogte
+      real*8, intent(OUT):: rate_du(:)
+      integer            :: i, j
+      call compute_2D_eirene_rate(te, ne, alpha, rate)
+      ! In EIRENE the density is scaled to 1.e14
+      rate_du = 0.
+      dlograte_dlogne = 0.
+      dlograte_dlogte = 0.
+      if ((ne >= ne_min) .and. (ne <= ne_max)) then
+         if ((te >= te_min) .and. (te <= te_max)) then
+            call compute_dlogeirene_2D_dlogne_rate(te, ne, alpha, dlograte_dlogne)
+            call compute_dlogeirene_2D_dlogte_rate(te, ne, alpha, dlograte_dlogte)
+         elseif (te < te_min) then
+            call compute_dlogeirene_2D_dlogne_rate(te_min, ne, alpha, dlograte_dlogne)
+            call compute_dlogeirene_2D_dlogte_rate(te_min, ne, alpha, dlograte_dlogte)
+         elseif (te > te_max) then
+            call compute_dlogeirene_2D_dlogne_rate(te_max, ne, alpha, dlograte_dlogne)
+            call compute_dlogeirene_2D_dlogte_rate(te_max, ne, alpha, dlograte_dlogte)
+         end if
+         ! beyond range of ne applicability (ne derivative is now zero)
+      elseif (ne < ne_min) then
+         ! if te is still applicable
+         if ((te >= te_min) .and. (te <= te_max)) then
+            call compute_dlogeirene_2D_dlogte_rate(te, ne_min, alpha, dlograte_dlogte)
+            ! if te < te_min
+         elseif (te < te_min) then
+            call compute_dlogeirene_2D_dlogte_rate(te_min, ne_min, alpha, dlograte_dlogte)
+            ! if te>te_max
+         elseif (te > te_max) then
+            call compute_dlogeirene_2D_dlogte_rate(te_max, ne_min, alpha, dlograte_dlogte)
+         end if
+         ! if ne>ne_max (ne derivative is now zero)
+      elseif (ne > ne_max) then
+         if ((te >= te_min) .and. (te <= te_max)) then
+            call compute_dlogeirene_2D_dlogte_rate(te, ne_max, alpha, dlograte_dlogte)
+         elseif (te < te_min) then
+            call compute_dlogeirene_2D_dlogte_rate(te_min, ne_max, alpha, dlograte_dlogte)
+         elseif (te > te_max) then
+            call compute_dlogeirene_2D_dlogte_rate(te_max, ne_max, alpha, dlograte_dlogte)
+         end if
+      end if
+      rate_du(1) = rate_du(1) + dlograte_dlogte*(-1./U1)
+      rate_du(1) = rate_du(1) + dlograte_dlogne*(1./U1)
+      rate_du(4) = rate_du(4) + dlograte_dlogte*(1./U4)
+      rate_du = rate_du*rate
+   END SUBROUTINE compute_2D_eirene_rate_du
 
-                  SUBROUTINE compute_2D_logeirene_rate(te, ne, alpha, rate)
-                     ! this routine calculate log (eirene_rate) for given te, ne in log log space
-                     real*8, intent(IN) :: te, ne, alpha(:, :)
-                     real*8, intent(OUT):: rate
-                     integer            :: i, j
-                     ! In EIRENE the density is scaled to 1.e14
-                     rate = 0.
-                     do j = 1, size(alpha, 2)
-                        do i = 1, size(alpha, 1)
-                           rate = rate + alpha(i, j)*log(ne)**(j - 1)*log(te)**(i - 1)
-                        end do
-                     end do
-                  END SUBROUTINE compute_2D_logeirene_rate
+   SUBROUTINE compute_2D_logeirene_rate(te, ne, alpha, rate)
+      ! this routine calculate log (eirene_rate) for given te, ne in log log space
+      real*8, intent(IN) :: te, ne, alpha(:, :)
+      real*8, intent(OUT):: rate
+      integer            :: i, j
+      ! In EIRENE the density is scaled to 1.e14
+      rate = 0.
+      do j = 1, size(alpha, 2)
+         do i = 1, size(alpha, 1)
+            rate = rate + alpha(i, j)*log(ne)**(j - 1)*log(te)**(i - 1)
+         end do
+      end do
+   END SUBROUTINE compute_2D_logeirene_rate
 
-                  SUBROUTINE compute_dlogeirene_2D_dlogte_rate(te, ne, alpha, rate)
-                     ! this routines calculate derivative dlog (eirene_rate)/dlog(te) for given te, ne in log log space
-                     real*8, intent(IN) :: te, ne, alpha(:, :)
-                     real*8, intent(OUT):: rate
-                     integer            :: i, j
-                     ! In EIRENE the density is scaled to 1.e14
-                     rate = 0.
-                     do j = 1, size(alpha, 2)
-                        do i = 2, size(alpha, 1)
-                           rate = rate + alpha(i, j)*(i - 1)*log(ne)**(j - 1)*log(te)**(i - 2)
-                        end do
-                     end do
-                  END SUBROUTINE compute_dlogeirene_2D_dlogte_rate
+   SUBROUTINE compute_dlogeirene_2D_dlogte_rate(te, ne, alpha, rate)
+      ! this routines calculate derivative dlog (eirene_rate)/dlog(te) for given te, ne in log log space
+      real*8, intent(IN) :: te, ne, alpha(:, :)
+      real*8, intent(OUT):: rate
+      integer            :: i, j
+      ! In EIRENE the density is scaled to 1.e14
+      rate = 0.
+      do j = 1, size(alpha, 2)
+         do i = 2, size(alpha, 1)
+            rate = rate + alpha(i, j)*(i - 1)*log(ne)**(j - 1)*log(te)**(i - 2)
+         end do
+      end do
+   END SUBROUTINE compute_dlogeirene_2D_dlogte_rate
 
-                  SUBROUTINE compute_dlogeirene_2D_dlogne_rate(te, ne, alpha, rate)
-                     ! this routine calculate derivative dlog (eirene_rate)/dlog(ne) for given te, ne in log log space
-                     real*8, intent(IN) :: te, ne, alpha(:, :)
-                     real*8, intent(OUT):: rate
-                     integer            :: i, j
-                     ! In EIRENE the density is scaled to 1.e14
-                     rate = 0.
-                     do j = 2, size(alpha, 2)
-                        do i = 1, size(alpha, 1)
-                           rate = rate + alpha(i, j)*(j - 1)*log(ne)**(j - 2)*log(te)**(i - 1)
-                        end do
-                     end do
-                  END SUBROUTINE compute_dlogeirene_2D_dlogne_rate
+   SUBROUTINE compute_dlogeirene_2D_dlogne_rate(te, ne, alpha, rate)
+      ! this routine calculate derivative dlog (eirene_rate)/dlog(ne) for given te, ne in log log space
+      real*8, intent(IN) :: te, ne, alpha(:, :)
+      real*8, intent(OUT):: rate
+      integer            :: i, j
+      ! In EIRENE the density is scaled to 1.e14
+      rate = 0.
+      do j = 2, size(alpha, 2)
+         do i = 1, size(alpha, 1)
+            rate = rate + alpha(i, j)*(j - 1)*log(ne)**(j - 2)*log(te)**(i - 1)
+         end do
+      end do
+   END SUBROUTINE compute_dlogeirene_2D_dlogne_rate
 
-                  SUBROUTINE compute_sigmaviz(U, sigmaviz)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: sigmaviz, U1, U4, T0, Ery, E0, te, ne, n0
-                     real*8, dimension(9, 9) :: alpha
-                     real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-                     integer            :: i, j
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     n0 = 1.e19
+   SUBROUTINE compute_sigmaviz(U, sigmaviz)
+      real*8, intent(IN) :: U(:)
+      real*8             :: sigmaviz, U1, U4, T0, Ery, E0, te, ne, n0
+      real*8, dimension(9, 9) :: alpha
+      real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+      integer            :: i, j
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      n0 = 1.e19
 
-                     if ((U1 > tol) .and. (U4 > tol)) then ! basically it's a below zero check
-                        te = T0*2/3./phys%Mref*U4/U1
-                        ne = n0*U1/1.e14
-                     else!some low values
-                        ne = n0*1.e-20/1.e14
-                        te = 1.e-10
-                     end if
+      if ((U1 > tol) .and. (U4 > tol)) then ! basically it's a below zero check
+         te = T0*2/3./phys%Mref*U4/U1
+         ne = n0*U1/1.e14
+      else!some low values
+         ne = n0*1.e-20/1.e14
+         te = 1.e-10
+      end if
 
-                     sigmaviz = 0.
+      sigmaviz = 0.
 
-                     call compute_2D_eirene_rate(te, ne, phys%alpha_iz, sigmaviz)
-                  END SUBROUTINE compute_sigmaviz
+      call compute_2D_eirene_rate(te, ne, phys%alpha_iz, sigmaviz)
+   END SUBROUTINE compute_sigmaviz
 
-                  SUBROUTINE compute_dsigmaviz_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), sigmaviz, U1, U4, T0, Ery, E0, te, ne, n0
-                     real*8, dimension(9, 9) :: alpha
-                     real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-                     integer            :: i, j
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     n0 = 1.e19
+   SUBROUTINE compute_dsigmaviz_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), sigmaviz, U1, U4, T0, Ery, E0, te, ne, n0
+      real*8, dimension(9, 9) :: alpha
+      real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+      integer            :: i, j
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      n0 = 1.e19
 
-                     res = 0.
-                     if ((U1 > tol) .and. (U4 > tol)) then ! basically it's a below zero check
-                        ne = n0*U1/1.e14
-                        te = T0*2/3./phys%Mref*U4/U1
-                        call compute_2D_eirene_rate_du(U1, U4, te, ne, phys%alpha_iz, res)
-                     end if !let non-linear part as zero if negative solutions
+      res = 0.
+      if ((U1 > tol) .and. (U4 > tol)) then ! basically it's a below zero check
+         ne = n0*U1/1.e14
+         te = T0*2/3./phys%Mref*U4/U1
+         call compute_2D_eirene_rate_du(U1, U4, te, ne, phys%alpha_iz, res)
+      end if !let non-linear part as zero if negative solutions
 
-                  END SUBROUTINE compute_dsigmaviz_dU
+   END SUBROUTINE compute_dsigmaviz_dU
 
-                  SUBROUTINE compute_sigmavrec(U, sigmavrec)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: sigmavrec, U1, U4, T0, Ery, E0, te, ne, n0
-                     real*8, dimension(9, 9) :: alpha
-                     real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-                     integer            :: i, j
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     n0 = 1.e19
+   SUBROUTINE compute_sigmavrec(U, sigmavrec)
+      real*8, intent(IN) :: U(:)
+      real*8             :: sigmavrec, U1, U4, T0, Ery, E0, te, ne, n0
+      real*8, dimension(9, 9) :: alpha
+      real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+      integer            :: i, j
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      n0 = 1.e19
 
-                     if ((U1 > tol) .and. (U4 > tol)) then ! basically it's a below zero check
-                        te = T0*2/3./phys%Mref*U4/U1
-                        ne = n0*U1/1.e14
-                     else!some low values
-                        ne = n0*1.e-20/1.e14
-                        te = 1.e-10
-                     end if
-                     call compute_2D_eirene_rate(te, ne, phys%alpha_rec, sigmavrec)
-                  END SUBROUTINE compute_sigmavrec
+      if ((U1 > tol) .and. (U4 > tol)) then ! basically it's a below zero check
+         te = T0*2/3./phys%Mref*U4/U1
+         ne = n0*U1/1.e14
+      else!some low values
+         ne = n0*1.e-20/1.e14
+         te = 1.e-10
+      end if
+      call compute_2D_eirene_rate(te, ne, phys%alpha_rec, sigmavrec)
+   END SUBROUTINE compute_sigmavrec
 
-                  SUBROUTINE compute_dsigmavrec_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), sigmavrec, U1, U4, T0, Ery, E0, te, ne, n0
-                     real*8, dimension(9, 9) :: alpha
-                     real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-                     integer            :: i, j
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     n0 = 1.e19
+   SUBROUTINE compute_dsigmavrec_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), sigmavrec, U1, U4, T0, Ery, E0, te, ne, n0
+      real*8, dimension(9, 9) :: alpha
+      real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+      integer            :: i, j
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      n0 = 1.e19
 
-                     res = 0.
-                     if ((U1 > tol) .and. (U4 > tol)) then ! basically it's a below zero check
-                        ne = n0*U1/1.e14
-                        te = T0*2/3./phys%Mref*U4/U1
-                        call compute_2D_eirene_rate_du(U1, U4, te, ne, phys%alpha_rec, res)
-                     end if !let non-linear part as zero if negative solutions
-                  END SUBROUTINE compute_dsigmavrec_dU
+      res = 0.
+      if ((U1 > tol) .and. (U4 > tol)) then ! basically it's a below zero check
+         ne = n0*U1/1.e14
+         te = T0*2/3./phys%Mref*U4/U1
+         call compute_2D_eirene_rate_du(U1, U4, te, ne, phys%alpha_rec, res)
+      end if !let non-linear part as zero if negative solutions
+   END SUBROUTINE compute_dsigmavrec_dU
 #endif
 #ifdef MANUELCX
 !ADAS truncated CX
-                  SUBROUTINE compute_sigmavcx(U, sigmavcx)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: sigmavcx, U1, U4, T0, E0
-                     real*8              :: p1, p2, p3, p4, p5
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     !Analytical expression from Hugo Bufferand
-                     !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-                     !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
-                     !Fit log log from ADAS database
-                     p1 = -0.0006837
-                     p2 = 0.008004
-                     p3 = -0.03581
-                     p4 = 0.4518
-                     p5 = -32.59
-                     E0 = T0*2./(3.*phys%Mref)*U4/U1
+   SUBROUTINE compute_sigmavcx(U, sigmavcx)
+      real*8, intent(IN) :: U(:)
+      real*8             :: sigmavcx, U1, U4, T0, E0
+      real*8              :: p1, p2, p3, p4, p5
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      !Analytical expression from Hugo Bufferand
+      !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+      !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
+      !Fit log log from ADAS database
+      p1 = -0.0006837
+      p2 = 0.008004
+      p3 = -0.03581
+      p4 = 0.4518
+      p5 = -32.59
+      E0 = T0*2./(3.*phys%Mref)*U4/U1
 
-                     !Threshold on Te >= 0.2 eV
-                     if (E0 .le. 0.05) E0 = 0.05
-                     sigmavcx = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)
-                  END SUBROUTINE compute_sigmavcx
+      !Threshold on Te >= 0.2 eV
+      if (E0 .le. 0.05) E0 = 0.05
+      sigmavcx = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)
+   END SUBROUTINE compute_sigmavcx
 
-                  SUBROUTINE compute_dsigmavcx_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U4, T0, E0
-                     real*8             :: p1, p2, p3, p4, p5
-                     real, parameter    :: tol = 1e-20
-                     T0 = 50.
-                     U1 = U(1)
-                     U4 = U(4)
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     !Analytical expression from Hugo Bufferand
-                     !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-                     !res = 0.
-                     !res(1) = -1./U4
-                     !res(4) = U1/(U4**2)
-                     !res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
-                     !Fit log log from ADAS database
-                     p1 = -0.0006837
-                     p2 = 0.008004
-                     p3 = -0.03581
-                     p4 = 0.4518
-                     p5 = -32.59
-                     E0 = T0*2./(3.*phys%Mref)*U4/U1
-                     res = 0.
-                     !Threshold on Te >= 0.2 eV
-                     !if (E0 .le. 0.05) E0 = 0.05
-                     if (E0 .ge. 0.05) then
-                        res(1) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*(-U4/U1**2)
-                        res(4) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*1./U1
-                        res = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)*U1/U4*res
-                     end if
-                  END SUBROUTINE compute_dsigmavcx_dU
+   SUBROUTINE compute_dsigmavcx_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U4, T0, E0
+      real*8             :: p1, p2, p3, p4, p5
+      real, parameter    :: tol = 1e-20
+      T0 = 50.
+      U1 = U(1)
+      U4 = U(4)
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      !Analytical expression from Hugo Bufferand
+      !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+      !res = 0.
+      !res(1) = -1./U4
+      !res(4) = U1/(U4**2)
+      !res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
+      !Fit log log from ADAS database
+      p1 = -0.0006837
+      p2 = 0.008004
+      p3 = -0.03581
+      p4 = 0.4518
+      p5 = -32.59
+      E0 = T0*2./(3.*phys%Mref)*U4/U1
+      res = 0.
+      !Threshold on Te >= 0.2 eV
+      !if (E0 .le. 0.05) E0 = 0.05
+      if (E0 .ge. 0.05) then
+         res(1) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*(-U4/U1**2)
+         res(4) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*1./U1
+         res = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)*U1/U4*res
+      end if
+   END SUBROUTINE compute_dsigmavcx_dU
 #endif
 #ifdef LEGACYCX
-                  SUBROUTINE compute_sigmavcx(U, sigmavcx)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: sigmavcx, U1, U4, T0, E0
-                     real*8              :: p1, p2, p3, p4, p5
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     !Analytical expression from Hugo Bufferand
-                     !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-                     !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
+   SUBROUTINE compute_sigmavcx(U, sigmavcx)
+      real*8, intent(IN) :: U(:)
+      real*8             :: sigmavcx, U1, U4, T0, E0
+      real*8              :: p1, p2, p3, p4, p5
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      !Analytical expression from Hugo Bufferand
+      !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+      !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
 
-                     E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-                     sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
-                  END SUBROUTINE compute_sigmavcx
+      E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+      sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
+   END SUBROUTINE compute_sigmavcx
 
-                  SUBROUTINE compute_dsigmavcx_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U4, T0, E0
-                     real*8             :: p1, p2, p3, p4, p5
-                     real, parameter    :: tol = 1e-20
-                     T0 = 50.
-                     U1 = U(1)
-                     U4 = U(4)
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     !Analytical expression from Hugo Bufferand
+   SUBROUTINE compute_dsigmavcx_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U4, T0, E0
+      real*8             :: p1, p2, p3, p4, p5
+      real, parameter    :: tol = 1e-20
+      T0 = 50.
+      U1 = U(1)
+      U4 = U(4)
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      !Analytical expression from Hugo Bufferand
 
-                     E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-                     res = 0.
-                     res(1) = -1./U4
-                     res(4) = U1/(U4**2)
-                     res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
-                  END SUBROUTINE compute_dsigmavcx_dU
+      E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
+      res = 0.
+      res(1) = -1./U4
+      res(4) = U1/(U4**2)
+      res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
+   END SUBROUTINE compute_dsigmavcx_dU
 #endif
 #ifdef EXPANDEDCX
 ! These routines use AMUJUEL splines
-                  SUBROUTINE compute_eirene_1D_rate(te, alpha, rate)
-                     ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
-                     real*8, intent(IN) :: te, alpha(:)
-                     real*8, intent(OUT):: rate
-                     real*8             :: te_min = 0.1
-                     real*8             :: dlograte_dlogte
-                     integer            :: i
-                     rate = 0.
-                     if (te >= te_min) then
-                        call compute_logeirene_1D_rate(te, alpha, rate)
-                     else
-                        call compute_logeirene_1D_rate(te_min, alpha, rate)
-                        call compute_d_logeirene_1D_rate_dlogte(te_min, alpha, dlograte_dlogte)
-                        rate = rate + dlograte_dlogte*(log(te) - log(te_min))
-                     end if
-                     ! rates are not higher than 1 m^3/s, if rate is higher than that value, then there is something weird
-                     if (rate > 6.*log(10.)) then
-                        WRITE (6, *) "Something weird in compute_eirene_te_rate, probably, solution is not good already"
-                        WRITE (6, *) " te equal to", te
-                        WRITE (6, *) " rate equal to", rate
-                        stop
-                     end if
-                     rate = exp(rate)/1.e6
-                  END SUBROUTINE compute_eirene_1D_rate
+   SUBROUTINE compute_eirene_1D_rate(te, alpha, rate)
+      ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
+      real*8, intent(IN) :: te, alpha(:)
+      real*8, intent(OUT):: rate
+      real*8             :: te_min = 0.1
+      real*8             :: dlograte_dlogte
+      integer            :: i
+      rate = 0.
+      if (te >= te_min) then
+         call compute_logeirene_1D_rate(te, alpha, rate)
+      else
+         call compute_logeirene_1D_rate(te_min, alpha, rate)
+         call compute_d_logeirene_1D_rate_dlogte(te_min, alpha, dlograte_dlogte)
+         rate = rate + dlograte_dlogte*(log(te) - log(te_min))
+      end if
+      ! rates are not higher than 1 m^3/s, if rate is higher than that value, then there is something weird
+      if (rate > 6.*log(10.)) then
+         WRITE (6, *) "Something weird in compute_eirene_te_rate, probably, solution is not good already"
+         WRITE (6, *) " te equal to", te
+         WRITE (6, *) " rate equal to", rate
+         stop
+      end if
+      rate = exp(rate)/1.e6
+   END SUBROUTINE compute_eirene_1D_rate
 
-                  SUBROUTINE compute_eirene_1D_rate_du(U1, U4, te, alpha, res)
-                     ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
-                     real*8, intent(IN) :: U1, U4, te, alpha(:)
-                     real*8, intent(OUT):: res(:)
-                     real*8             :: te_min = 0.1
-                     real*8             :: dlograte_dlogte, rate
-                     integer            :: i
-                     res = 0.
+   SUBROUTINE compute_eirene_1D_rate_du(U1, U4, te, alpha, res)
+      ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
+      real*8, intent(IN) :: U1, U4, te, alpha(:)
+      real*8, intent(OUT):: res(:)
+      real*8             :: te_min = 0.1
+      real*8             :: dlograte_dlogte, rate
+      integer            :: i
+      res = 0.
 
-                     if (te > te_min) then
-                        call compute_eirene_1D_rate(te, alpha, rate)
-                        call compute_d_logeirene_1D_rate_dlogte(te, alpha, dlograte_dlogte)
-                        res(1) = res(1) + dlograte_dlogte*(-1./U1)
-                        res(4) = res(4) + dlograte_dlogte*(1./U4)
-                        res = rate*res
-                     else
-                        call compute_eirene_1D_rate(te, phys%alpha_cx, rate)
-                        call compute_d_logeirene_1D_rate_dlogte(te_min, alpha, dlograte_dlogte)
-                        res(1) = res(1) + dlograte_dlogte*(-1./U1)
-                        res(4) = res(4) + dlograte_dlogte*(1./U4)
-                        res = rate*res
-                     end if
+      if (te > te_min) then
+         call compute_eirene_1D_rate(te, alpha, rate)
+         call compute_d_logeirene_1D_rate_dlogte(te, alpha, dlograte_dlogte)
+         res(1) = res(1) + dlograte_dlogte*(-1./U1)
+         res(4) = res(4) + dlograte_dlogte*(1./U4)
+         res = rate*res
+      else
+         call compute_eirene_1D_rate(te, phys%alpha_cx, rate)
+         call compute_d_logeirene_1D_rate_dlogte(te_min, alpha, dlograte_dlogte)
+         res(1) = res(1) + dlograte_dlogte*(-1./U1)
+         res(4) = res(4) + dlograte_dlogte*(1./U4)
+         res = rate*res
+      end if
 
-                  END SUBROUTINE compute_eirene_1D_rate_du
+   END SUBROUTINE compute_eirene_1D_rate_du
 
-                  SUBROUTINE compute_logeirene_1D_rate(te, alpha, rate)
-                     ! Calculates 1D AMJUEL spline in loglog space
-                     real*8, intent(IN) :: te, alpha(:)
-                     real*8, intent(OUT):: rate
-                     integer            :: i
-                     rate = 0.
+   SUBROUTINE compute_logeirene_1D_rate(te, alpha, rate)
+      ! Calculates 1D AMJUEL spline in loglog space
+      real*8, intent(IN) :: te, alpha(:)
+      real*8, intent(OUT):: rate
+      integer            :: i
+      rate = 0.
 
-                     do i = 1, size(alpha, 1)
-                        rate = rate + alpha(i)*log(te)**(i - 1)
-                     end do
+      do i = 1, size(alpha, 1)
+         rate = rate + alpha(i)*log(te)**(i - 1)
+      end do
 
-                  END SUBROUTINE compute_logeirene_1D_rate
+   END SUBROUTINE compute_logeirene_1D_rate
 
-                  SUBROUTINE compute_d_logeirene_1D_rate_dlogte(te, alpha, d_log_rate_dte)
-                     ! calculates derivative of AMJUEL 1D spline in loglog space
-                     real*8, intent(IN) :: te, alpha(:)
-                     real*8, intent(OUT):: d_log_rate_dte
-                     integer            :: i
-                     d_log_rate_dte = 0.
+   SUBROUTINE compute_d_logeirene_1D_rate_dlogte(te, alpha, d_log_rate_dte)
+      ! calculates derivative of AMJUEL 1D spline in loglog space
+      real*8, intent(IN) :: te, alpha(:)
+      real*8, intent(OUT):: d_log_rate_dte
+      integer            :: i
+      d_log_rate_dte = 0.
 
-                     do i = 2, size(alpha, 1)
-                        d_log_rate_dte = d_log_rate_dte + (i - 1)*alpha(i)*log(te)**(i - 2)
-                     end do
-                  END SUBROUTINE compute_d_logeirene_1D_rate_dlogte
-                  SUBROUTINE compute_sigmavcx(U, sigmavcx)
-                     ! calculates AMJUEL CX rate
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: sigmavcx, U1, U4, T0, E0, te
-                     integer             :: i
-                     real, parameter :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
+      do i = 2, size(alpha, 1)
+         d_log_rate_dte = d_log_rate_dte + (i - 1)*alpha(i)*log(te)**(i - 2)
+      end do
+   END SUBROUTINE compute_d_logeirene_1D_rate_dlogte
+   SUBROUTINE compute_sigmavcx(U, sigmavcx)
+      ! calculates AMJUEL CX rate
+      real*8, intent(IN) :: U(:)
+      real*8             :: sigmavcx, U1, U4, T0, E0, te
+      integer             :: i
+      real, parameter :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
 
-                     !if (U1<tol) U1=tol
-                     !if (U4<tol) then
-                     if ((U1 > tol) .and. (U4 > tol)) then ! basically it's a below zero check
-                        te = T0*2/3./phys%Mref*U4/U1
-                     else!some low values
-                        te = 1.e-10
-                     end if
-                     sigmavcx = 0.
+      !if (U1<tol) U1=tol
+      !if (U4<tol) then
+      if ((U1 > tol) .and. (U4 > tol)) then ! basically it's a below zero check
+         te = T0*2/3./phys%Mref*U4/U1
+      else!some low values
+         te = 1.e-10
+      end if
+      sigmavcx = 0.
 
-                     call compute_eirene_1D_rate(te, phys%alpha_cx, sigmavcx)
-                  END SUBROUTINE compute_sigmavcx
+      call compute_eirene_1D_rate(te, phys%alpha_cx, sigmavcx)
+   END SUBROUTINE compute_sigmavcx
 
-                  SUBROUTINE compute_dsigmavcx_dU(U, res)
-                     ! calculates derivative of AMJUEL CX rate for linearization
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U4, T0, te, te_min = 0.1
-                     real*8             :: sigmavcx, sigmavcx_dte
-                     real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-                     integer            :: i
-                     T0 = 50.
-                     U1 = U(1)
-                     U4 = U(4)
-                     res = 0.
-                     if ((U1 > tol) .and. (U4 > tol)) then
-                        te = T0*2/3./phys%Mref*U4/U1
-                        call compute_eirene_1D_rate_dU(U1, U4, te, phys%alpha_cx, res)
-                     end if
+   SUBROUTINE compute_dsigmavcx_dU(U, res)
+      ! calculates derivative of AMJUEL CX rate for linearization
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U4, T0, te, te_min = 0.1
+      real*8             :: sigmavcx, sigmavcx_dte
+      real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+      integer            :: i
+      T0 = 50.
+      U1 = U(1)
+      U4 = U(4)
+      res = 0.
+      if ((U1 > tol) .and. (U4 > tol)) then
+         te = T0*2/3./phys%Mref*U4/U1
+         call compute_eirene_1D_rate_dU(U1, U4, te, phys%alpha_cx, res)
+      end if
 
-                  END SUBROUTINE compute_dsigmavcx_dU
+   END SUBROUTINE compute_dsigmavcx_dU
 #endif
 #ifdef DNNSMOOTH
 !!!! Routines to apply smoothening on limiting values of neutral diffusion
-                  SUBROUTINE double_softplus(x, xmin, xmax)
-                     ! this routine constrains value x between xmin and xmax
-                     ! using paradigm of softplus function
-                     ! for xmin it is a typical softplus
-                     ! f(x) = xmin+width*ln(1+exp((x-xmin)/w)
-                     ! w here and after = w*xmin(or max), where w is defined inside the function
-                     ! parameter width states for the region where smoothening is applied xmax+-width*w
-                     ! for xmax it is somewhat inversed softplus:
-                     ! f(x) = width*ln(1+exp(xmax/width))-width*ln(1+exp(-(x-xmax)/width))
-                     ! for x>= xmax+width*w*xmax : f(x)=xmax
-                     ! for xmax-width*w*xmax<=x<xmax+width*w*xmax : f(x) = w*xmax*ln(1+exp(1/w))-width*w*xmax*ln(1+exp(-(x-xmax)/(w*xmax))
-                     ! for xmin+width*w*xmin<=x<xmax-width*w*xmax : f(x) = x
-                     ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f(x) = xmin + w*xmin*ln(1+exp((x-xmin)/(w*xmin))
-                     ! x<xmin-width*w*xmin : f(x) = xmin
-                     real*8, intent(IN) :: xmin, xmax
-                     real*8, intent(INOUT):: x
-                     real*8             :: w, width
-                     w = 0.01
-                     width = 10
-                     if (x >= xmax + w*width*xmax) then
-                        x = xmax
-                     elseif ((x >= xmax - w*width*xmax) .and. (x < xmax + w*width*xmax)) then
-                        x = xmax - w*xmax*log(1 + exp(-(x - xmax)/(w*xmax)))
-                        !elseif ((x>=xmin+w*width*xmin) .and. (x<xmax-w*width*xmax)) then
-                        ! do nothing
-                     elseif ((x >= xmin - w*width*xmin) .and. (x < xmin + w*width*xmin)) then
-                        x = xmin + w*xmin*log(1 + exp((x - xmin)/(w*xmin)))
-                     elseif (x < xmin - w*width*xmin) then
-                        x = xmin
-                     end if
-                  END SUBROUTINE double_softplus
+   SUBROUTINE double_softplus(x, xmin, xmax)
+      ! this routine constrains value x between xmin and xmax
+      ! using paradigm of softplus function
+      ! for xmin it is a typical softplus
+      ! f(x) = xmin+width*ln(1+exp((x-xmin)/w)
+      ! w here and after = w*xmin(or max), where w is defined inside the function
+      ! parameter width states for the region where smoothening is applied xmax+-width*w
+      ! for xmax it is somewhat inversed softplus:
+      ! f(x) = width*ln(1+exp(xmax/width))-width*ln(1+exp(-(x-xmax)/width))
+      ! for x>= xmax+width*w*xmax : f(x)=xmax
+      ! for xmax-width*w*xmax<=x<xmax+width*w*xmax : f(x) = w*xmax*ln(1+exp(1/w))-width*w*xmax*ln(1+exp(-(x-xmax)/(w*xmax))
+      ! for xmin+width*w*xmin<=x<xmax-width*w*xmax : f(x) = x
+      ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f(x) = xmin + w*xmin*ln(1+exp((x-xmin)/(w*xmin))
+      ! x<xmin-width*w*xmin : f(x) = xmin
+      real*8, intent(IN) :: xmin, xmax
+      real*8, intent(INOUT):: x
+      real*8             :: w, width
+      w = 0.01
+      width = 10
+      if (x >= xmax + w*width*xmax) then
+         x = xmax
+      elseif ((x >= xmax - w*width*xmax) .and. (x < xmax + w*width*xmax)) then
+         x = xmax - w*xmax*log(1 + exp(-(x - xmax)/(w*xmax)))
+         !elseif ((x>=xmin+w*width*xmin) .and. (x<xmax-w*width*xmax)) then
+         ! do nothing
+      elseif ((x >= xmin - w*width*xmin) .and. (x < xmin + w*width*xmin)) then
+         x = xmin + w*xmin*log(1 + exp((x - xmin)/(w*xmin)))
+      elseif (x < xmin - w*width*xmin) then
+         x = xmin
+      end if
+   END SUBROUTINE double_softplus
 
-                  SUBROUTINE double_softplus_deriv(x, xmin, xmax, deriv)
-                     ! this calculates dervitive of double_softplus
-                     ! for x>= xmax+width*w*xmax : f'(x)=0
-                     ! for xmax-width*w*xmax<=x<xmax+width*w*xmax : f'(x) = 1/(1+exp((x-xmax)/(w*xmax)))
-                     ! for xmin+width*w*xmin<=x<xmax-width*w*xmax : f'(x) = 1.
-                     ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f'(x) = 1/(1+exp(-(x-xmin)/(w*xmin)))
-                     ! x<xmin-width*w*xmin : f'(x) = 0
-                     real*8, intent(IN) :: x, xmin, xmax
-                     real*8, intent(OUT):: deriv
-                     real*8             :: w, width
-                     w = 0.01
-                     width = 10
-                     if (x >= xmax + w*width*xmax) then
-                        deriv = 0.
-                     elseif ((x >= xmax - w*width*xmax) .and. (x < xmax + w*width*xmax)) then
-                        deriv = 1./(1.+exp((x - xmax)/(w*xmax)))
-                     elseif ((x >= xmin + w*width*xmin) .and. (x < xmax - w*width*xmax)) then
-                        deriv = 1.
-                     elseif ((x >= xmin - w*width*xmin) .and. (x < xmin + w*width*xmin)) then
-                        deriv = 1./(1.+exp(-1.*(x - xmin)/(w*xmin)))
-                        !WRITE(6,*) 'Low diffusion ', x*simpar%refval_diffusion
-                        !stop
+   SUBROUTINE double_softplus_deriv(x, xmin, xmax, deriv)
+      ! this calculates dervitive of double_softplus
+      ! for x>= xmax+width*w*xmax : f'(x)=0
+      ! for xmax-width*w*xmax<=x<xmax+width*w*xmax : f'(x) = 1/(1+exp((x-xmax)/(w*xmax)))
+      ! for xmin+width*w*xmin<=x<xmax-width*w*xmax : f'(x) = 1.
+      ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f'(x) = 1/(1+exp(-(x-xmin)/(w*xmin)))
+      ! x<xmin-width*w*xmin : f'(x) = 0
+      real*8, intent(IN) :: x, xmin, xmax
+      real*8, intent(OUT):: deriv
+      real*8             :: w, width
+      w = 0.01
+      width = 10
+      if (x >= xmax + w*width*xmax) then
+         deriv = 0.
+      elseif ((x >= xmax - w*width*xmax) .and. (x < xmax + w*width*xmax)) then
+         deriv = 1./(1.+exp((x - xmax)/(w*xmax)))
+      elseif ((x >= xmin + w*width*xmin) .and. (x < xmax - w*width*xmax)) then
+         deriv = 1.
+      elseif ((x >= xmin - w*width*xmin) .and. (x < xmin + w*width*xmin)) then
+         deriv = 1./(1.+exp(-1.*(x - xmin)/(w*xmin)))
+         !WRITE(6,*) 'Low diffusion ', x*simpar%refval_diffusion
+         !stop
 
-                     elseif (x < xmin - w*width*xmin) then
-                        deriv = 0.
-                     end if
-                  END SUBROUTINE double_softplus_deriv
+      elseif (x < xmin - w*width*xmin) then
+         deriv = 0.
+      end if
+   END SUBROUTINE double_softplus_deriv
 
-                  SUBROUTINE softplus(x, xmin)
-                     ! this routine limits value x with xmin
-                     ! using paradigm of softplus function
-                     ! f(x) = xmin+width*ln(1+exp((x-xmin)/width)
-                     ! w here and after = w*xmin(or max), where w is defined inside the function
-                     ! parameter width states for the region where smoothening is applied xmax+-width*w
-                     ! for x>=xmin-width*w*xmin : f(x) = xmin + w*xmin*ln(1+exp((x-xmin)/(w*xmin))
-                     ! x<xmin-width*w*xmin : f(x) = xmin
-                     real*8, intent(IN) :: xmin
-                     real*8, intent(INOUT):: x
-                     real*8             :: w, width
-                     w = 0.01
-                     width = 10
-                     !if (x>=xmin+w*width.xmin) then
-                     !  x = x !do nothing
-                     if ((x >= xmin - w*width*xmin) .and. (x < xmin + w*width*xmin)) then
-                        x = xmin + w*xmin*log(1 + exp((x - xmin)/(w*xmin)))
-                     elseif (x < xmin - w*width*xmin) then
-                        x = xmin
-                     end if
-                  END SUBROUTINE softplus
+   SUBROUTINE softplus(x, xmin)
+      ! this routine limits value x with xmin
+      ! using paradigm of softplus function
+      ! f(x) = xmin+width*ln(1+exp((x-xmin)/width)
+      ! w here and after = w*xmin(or max), where w is defined inside the function
+      ! parameter width states for the region where smoothening is applied xmax+-width*w
+      ! for x>=xmin-width*w*xmin : f(x) = xmin + w*xmin*ln(1+exp((x-xmin)/(w*xmin))
+      ! x<xmin-width*w*xmin : f(x) = xmin
+      real*8, intent(IN) :: xmin
+      real*8, intent(INOUT):: x
+      real*8             :: w, width
+      w = 0.01
+      width = 10
+      !if (x>=xmin+w*width.xmin) then
+      !  x = x !do nothing
+      if ((x >= xmin - w*width*xmin) .and. (x < xmin + w*width*xmin)) then
+         x = xmin + w*xmin*log(1 + exp((x - xmin)/(w*xmin)))
+      elseif (x < xmin - w*width*xmin) then
+         x = xmin
+      end if
+   END SUBROUTINE softplus
 
-                  SUBROUTINE softplus_deriv(x, xmin, deriv)
-                     ! this routine calculates derivtiv of softplus
-                     ! x>=xmin+width*w*xmin: f'(x) = 1.
-                     ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f'(x) = 1/(1+exp(-(x-xmin)/(w*xmin)))
-                     ! x<xmin-width*w*xmin : f'(x) = 0
-                     real*8, intent(IN) :: x, xmin
-                     real*8, intent(OUT):: deriv
-                     real*8             :: w, width
-                     w = 0.01
-                     width = 10
-                     if (x >= xmin + w*width*xmin) then
-                        deriv = 1.
-                     elseif ((x >= xmin - w*width*xmin) .and. (x < xmin + w*width*xmin)) then
-                        deriv = 1./(1.+exp(-1.*(x - xmin)/(w*xmin)))
-                     elseif (x < xmin - w*width*xmin) then
-                        deriv = 0.
-                     end if
-                  END SUBROUTINE softplus_deriv
+   SUBROUTINE softplus_deriv(x, xmin, deriv)
+      ! this routine calculates derivtiv of softplus
+      ! x>=xmin+width*w*xmin: f'(x) = 1.
+      ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f'(x) = 1/(1+exp(-(x-xmin)/(w*xmin)))
+      ! x<xmin-width*w*xmin : f'(x) = 0
+      real*8, intent(IN) :: x, xmin
+      real*8, intent(OUT):: deriv
+      real*8             :: w, width
+      w = 0.01
+      width = 10
+      if (x >= xmin + w*width*xmin) then
+         deriv = 1.
+      elseif ((x >= xmin - w*width*xmin) .and. (x < xmin + w*width*xmin)) then
+         deriv = 1./(1.+exp(-1.*(x - xmin)/(w*xmin)))
+      elseif (x < xmin - w*width*xmin) then
+         deriv = 0.
+      end if
+   END SUBROUTINE softplus_deriv
 
 #endif
 #ifdef DNNLINEARIZED
-                  SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
-                     real*8, intent(IN) :: U(:)
-                     real*8, intent(OUT) :: Dnn_dU(:)
-                     real*8              :: Dnn, ti, ti_min = 1e-6, tol = 1e-10
+   SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
+      real*8, intent(IN) :: U(:)
+      real*8, intent(OUT) :: Dnn_dU(:)
+      real*8              :: Dnn, ti, ti_min = 1e-6, tol = 1e-10
 #ifdef DNNSMOOTH
-                     real*8              :: double_soft_deriv, soft_deriv
+      real*8              :: double_soft_deriv, soft_deriv
 #else
-                     real*8              :: ti_real
+      real*8              :: ti_real
 #endif
-                     real*8              :: sigmaviz, sigmavcx
-                     real*8              :: dti_du(size(U, 1)), dsigmaviz_dU(size(U, 1)), dsigmavcx_dU(size(U, 1))
-                     Dnn_dU(:) = 0.
-                     !if ((U(3)>=tol) .and. (U(1)>=tol) .and. (U(5)>=tol)) then
-                     ! calculation of atomic rates
-                     call compute_sigmaviz(U, sigmaviz)
-                     call compute_sigmavcx(U, sigmavcx)
-                     ! calculation of temperature before limitation
-                     ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
+      real*8              :: sigmaviz, sigmavcx
+      real*8              :: dti_du(size(U, 1)), dsigmaviz_dU(size(U, 1)), dsigmavcx_dU(size(U, 1))
+      Dnn_dU(:) = 0.
+      !if ((U(3)>=tol) .and. (U(1)>=tol) .and. (U(5)>=tol)) then
+      ! calculation of atomic rates
+      call compute_sigmaviz(U, sigmaviz)
+      call compute_sigmavcx(U, sigmavcx)
+      ! calculation of temperature before limitation
+      ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
 #ifdef DNNSMOOTH
-                     call softplus_deriv(ti, ti_min, soft_deriv)
-                     call softplus(ti, ti_min)
+      call softplus_deriv(ti, ti_min, soft_deriv)
+      call softplus(ti, ti_min)
 #else
-                     ti_real = ti
-                     ti = max(ti_min, ti)
+      ti_real = ti
+      ti = max(ti_min, ti)
 #endif
-                     ! calculation of Dnn before limitation
+      ! calculation of Dnn before limitation
         Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))*simpar%refval_time/simpar%refval_length**2
 #ifdef DNNSMOOTH
-                     call double_softplus_deriv(Dnn, 10.*phys%diff_n, phys%diff_nn, double_soft_deriv)   !to check the mulptiplier for Dnn_min
+      call double_softplus_deriv(Dnn, 10.*phys%diff_n, phys%diff_nn, double_soft_deriv)   !to check the mulptiplier for Dnn_min
 #else
-                     if ((Dnn > 10.*phys%diff_n) .and. (Dnn < phys%diff_nn)) then
+      if ((Dnn > 10.*phys%diff_n) .and. (Dnn < phys%diff_nn)) then
 #endif
-                        ! ti derivative
-                        dti_du(:) = 0.
+         ! ti derivative
+         dti_du(:) = 0.
 #ifndef DNNSMOOTH
-                        if (ti_real > ti) then
+         if (ti_real > ti) then
 #endif
-                           dti_du(1) = -U(3)/U(1)**2 + U(2)**2/U(1)**3
-                           dti_du(2) = -U(2)/U(1)**2
-                           dti_du(3) = 1./U(1)
-                           dti_du(:) = dti_du(:)*simpar%refval_temperature*2./(3.*phys%Mref)
+            dti_du(1) = -U(3)/U(1)**2 + U(2)**2/U(1)**3
+            dti_du(2) = -U(2)/U(1)**2
+            dti_du(3) = 1./U(1)
+            dti_du(:) = dti_du(:)*simpar%refval_temperature*2./(3.*phys%Mref)
 #ifndef DNNSMOOTH
-                        end if
+         end if
 #endif
-                        ! atomic rates derivatives
-                        call compute_dsigmaviz_dU(U, dsigmaviz_dU)
-                        call compute_dsigmavcx_dU(U, dsigmavcx_dU)
+         ! atomic rates derivatives
+         call compute_dsigmaviz_dU(U, dsigmaviz_dU)
+         call compute_dsigmavcx_dU(U, dsigmavcx_dU)
 
-                        ! arrange all ingredients
-                        Dnn_dU(:) = 0.
-                        ! ti part
+         ! arrange all ingredients
+         Dnn_dU(:) = 0.
+         ! ti part
         Dnn_dU(:) = Dnn_dU(:) + dti_du(:)*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))
 #ifdef DNNSMOOTH
-                        Dnn_dU(:) = Dnn_dU(:)*soft_deriv
+         Dnn_dU(:) = Dnn_dU(:)*soft_deriv
 #endif
-                        ! n part
-            Dnn_dU(1) = Dnn_dU(1) - ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)**2*(sigmaviz + sigmavcx))
-                        ! atomic rates part
+         ! n part
+         Dnn_dU(1) = Dnn_dU(1) - ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)**2*(sigmaviz + sigmavcx))
+         ! atomic rates part
           Dnn_dU(:) = Dnn_dU(:)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx)**2)*(dsigmaviz_dU(:)+dsigmavcx_dU(:))
 
-                        Dnn_dU(:) = Dnn_dU(:)*simpar%refval_time/simpar%refval_length**2
+         Dnn_dU(:) = Dnn_dU(:)*simpar%refval_time/simpar%refval_length**2
 #ifdef DNNSMOOTH
-                        Dnn_dU(:) = Dnn_dU(:)*double_soft_deriv
+         Dnn_dU(:) = Dnn_dU(:)*double_soft_deriv
 #endif
-                        !endif
+         !endif
 #ifndef DNNSMOOTH
-                     end if
+      end if
 #endif
 
-                  END SUBROUTINE compute_Dnn_dU
+   END SUBROUTINE compute_Dnn_dU
 #endif
-                  SUBROUTINE compute_Tloss(U, Tloss)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: Tloss, U1, U4, T0
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     Tloss = 25.+170.*exp(-(T0*U4)/(3.*phys%Mref*U1))
-                  END SUBROUTINE compute_Tloss
+   SUBROUTINE compute_Tloss(U, Tloss)
+      real*8, intent(IN) :: U(:)
+      real*8             :: Tloss, U1, U4, T0
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      Tloss = 25.+170.*exp(-(T0*U4)/(3.*phys%Mref*U1))
+   END SUBROUTINE compute_Tloss
 
-                  SUBROUTINE compute_dTloss_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U4, T0
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     res = 0.
-                     res(1) = U4/(U1**2)
-                     res(4) = -1./U1
-                     res = 170.*exp(-(T0*U4)/(3.*phys%Mref*U1))*(T0/(3.*phys%Mref))*res
-                  END SUBROUTINE compute_dTloss_dU
+   SUBROUTINE compute_dTloss_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U4, T0
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      res = 0.
+      res(1) = U4/(U1**2)
+      res(4) = -1./U1
+      res = 170.*exp(-(T0*U4)/(3.*phys%Mref*U1))*(T0/(3.*phys%Mref))*res
+   END SUBROUTINE compute_dTloss_dU
 
-                  SUBROUTINE compute_Tlossrec(U, Tlossrec)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: Tlossrec, U1, U4, T0
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     !Tlossrec = min(250.,8.*exp((2.*U4*T0)/(3.*phys%Mref*U1*9.)))
-                     Tlossrec = (2.*U4*T0)/(3.*phys%Mref*U1*9.)
-                     if (Tlossrec .le. log(250./8.)) then
-                        Tlossrec = 8.*exp(Tlossrec)
-                     else
-                        Tlossrec = 250.
-                     end if
-                  END SUBROUTINE compute_Tlossrec
+   SUBROUTINE compute_Tlossrec(U, Tlossrec)
+      real*8, intent(IN) :: U(:)
+      real*8             :: Tlossrec, U1, U4, T0
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      !Tlossrec = min(250.,8.*exp((2.*U4*T0)/(3.*phys%Mref*U1*9.)))
+      Tlossrec = (2.*U4*T0)/(3.*phys%Mref*U1*9.)
+      if (Tlossrec .le. log(250./8.)) then
+         Tlossrec = 8.*exp(Tlossrec)
+      else
+         Tlossrec = 250.
+      end if
+   END SUBROUTINE compute_Tlossrec
 
-                  SUBROUTINE compute_dTlossrec_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U4, T0, Tlossrec
-                     real, parameter    :: tol = 1e-20
-                     U1 = U(1)
-                     U4 = U(4)
-                     T0 = 50.
-                     if (U1 < tol) U1 = tol
-                     if (U4 < tol) U4 = tol
-                     res = 0.
-                     !Tlossrec = 8.*exp((2.*U4*T0)/(3.*phys%Mref*U1*9.))
-                     !if (Tlossrec .le. 250.) then
-                     !  res(1) = -U4/(U1**2)
-                     !  res(4) = 1./U1
-                     !  res = Tlossrec*((2.*T0)/(27.*phys%Mref))*res
-                     !endif
-                     Tlossrec = (2.*U4*T0)/(3.*phys%Mref*U1*9.)
-                     if (Tlossrec .le. log(250./8.)) then
-                        res(1) = -U4/(U1**2)
-                        res(4) = 1./U1
-                        res = 8.*exp(Tlossrec)*((2.*T0)/(27.*phys%Mref))*res
-                     end if
-                  END SUBROUTINE compute_dTlossrec_dU
+   SUBROUTINE compute_dTlossrec_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U4, T0, Tlossrec
+      real, parameter    :: tol = 1e-20
+      U1 = U(1)
+      U4 = U(4)
+      T0 = 50.
+      if (U1 < tol) U1 = tol
+      if (U4 < tol) U4 = tol
+      res = 0.
+      !Tlossrec = 8.*exp((2.*U4*T0)/(3.*phys%Mref*U1*9.))
+      !if (Tlossrec .le. 250.) then
+      !  res(1) = -U4/(U1**2)
+      !  res(4) = 1./U1
+      !  res = Tlossrec*((2.*T0)/(27.*phys%Mref))*res
+      !endif
+      Tlossrec = (2.*U4*T0)/(3.*phys%Mref*U1*9.)
+      if (Tlossrec .le. log(250./8.)) then
+         res(1) = -U4/(U1**2)
+         res(4) = 1./U1
+         res = 8.*exp(Tlossrec)*((2.*T0)/(27.*phys%Mref))*res
+      end if
+   END SUBROUTINE compute_dTlossrec_dU
 
-                  SUBROUTINE compute_fEiiz(U, fEiiz)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: fEiiz, U3, U5
-                     real, parameter :: tol = 1e-20
-                     U3 = U(3)
-                     U5 = U(5)
-                     if (U3 < tol) U3 = tol
-                     if (U5 < tol) U5 = tol
-                     fEiiz = U3*U5
-                  END SUBROUTINE compute_fEiiz
+   SUBROUTINE compute_fEiiz(U, fEiiz)
+      real*8, intent(IN) :: U(:)
+      real*8             :: fEiiz, U3, U5
+      real, parameter :: tol = 1e-20
+      U3 = U(3)
+      U5 = U(5)
+      if (U3 < tol) U3 = tol
+      if (U5 < tol) U5 = tol
+      fEiiz = U3*U5
+   END SUBROUTINE compute_fEiiz
 
-                  SUBROUTINE compute_dfEiiz_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U3, U5
-                     real, parameter :: tol = 1e-20
-                     U3 = U(3)
-                     U5 = U(5)
-                     if (U3 < tol) U3 = tol
-                     if (U5 < tol) U5 = tol
-                     res = 0.
-                     res(3) = U5
-                     res(5) = U3
-                  END SUBROUTINE compute_dfEiiz_dU
+   SUBROUTINE compute_dfEiiz_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U3, U5
+      real, parameter :: tol = 1e-20
+      U3 = U(3)
+      U5 = U(5)
+      if (U3 < tol) U3 = tol
+      if (U5 < tol) U5 = tol
+      res = 0.
+      res(3) = U5
+      res(5) = U3
+   END SUBROUTINE compute_dfEiiz_dU
 
-                  SUBROUTINE compute_fEirec(U, fEirec)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: fEirec, U1, U3
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U3 = U(3)
-                     if (U1 < tol) U1 = tol
-                     if (U3 < tol) U3 = tol
-                     fEirec = U1*U3
-                  END SUBROUTINE compute_fEirec
+   SUBROUTINE compute_fEirec(U, fEirec)
+      real*8, intent(IN) :: U(:)
+      real*8             :: fEirec, U1, U3
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U3 = U(3)
+      if (U1 < tol) U1 = tol
+      if (U3 < tol) U3 = tol
+      fEirec = U1*U3
+   END SUBROUTINE compute_fEirec
 
-                  SUBROUTINE compute_dfEirec_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U3
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U3 = U(3)
-                     if (U1 < tol) U1 = tol
-                     if (U3 < tol) U3 = tol
-                     res = 0.
-                     res(1) = U3
-                     res(3) = U1
-                  END SUBROUTINE compute_dfEirec_dU
+   SUBROUTINE compute_dfEirec_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U3
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U3 = U(3)
+      if (U1 < tol) U1 = tol
+      if (U3 < tol) U3 = tol
+      res = 0.
+      res(1) = U3
+      res(3) = U1
+   END SUBROUTINE compute_dfEirec_dU
 
-                  SUBROUTINE compute_fEicx(U, fEicx)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: fEicx, U1, U2, U5
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U2 = U(2)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
-                     fEicx = (U5*U2**2)/U1
-                  END SUBROUTINE compute_fEicx
+   SUBROUTINE compute_fEicx(U, fEicx)
+      real*8, intent(IN) :: U(:)
+      real*8             :: fEicx, U1, U2, U5
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U2 = U(2)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
+      fEicx = (U5*U2**2)/U1
+   END SUBROUTINE compute_fEicx
 
-                  SUBROUTINE compute_dfEicx_dU(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: res(:), U1, U2, U5
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U2 = U(2)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
-                     res = 0.
-                     res(1) = -U5*(U2/U1)**2
-                     res(2) = 2.*U5*U2/U1
-                     res(5) = (U2**2)/U1
-                  END SUBROUTINE compute_dfEicx_dU
+   SUBROUTINE compute_dfEicx_dU(U, res)
+      real*8, intent(IN) :: U(:)
+      real*8             :: res(:), U1, U2, U5
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U2 = U(2)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
+      res = 0.
+      res(1) = -U5*(U2/U1)**2
+      res(2) = 2.*U5*U2/U1
+      res(5) = (U2**2)/U1
+   END SUBROUTINE compute_dfEicx_dU
 #ifdef NEUTRAL
-                  !*******************************************
-                  ! Compute the terms relative to k equations
-                  !*******************************************
+   !*******************************************
+   ! Compute the terms relative to k equations
+   !*******************************************
 #ifdef KEQUATION
 
-                  SUBROUTINE compute_cs(U, cs)
-                     ! Sound speed of plasma
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: U1, U2, U3, U4
-                     real*8, intent(OUT) :: cs
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U4 = U(4)
-                     cs = 2./3./U1*(U3 + U4 - 1./2.*U2**2/U1)
-                     IF (cs < 0.) cs = tol**2
-                     cs = sqrt(cs)
-                  END SUBROUTINE compute_cs
-                  SUBROUTINE compute_dcs_du(U, dcs_du)
-                     ! Sound speed derivative
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: U1, U2, U3, U4, cs
-                     real*8, intent(OUT) :: dcs_du(:)
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U4 = U(4)
-                     if (U4 < tol) U4 = tol
-                     if (U1 < tol) U1 = tol
-                     if (U3 < tol) U3 = tol
-                     dcs_du = 0.
-                     call compute_cs(U, cs)
-                     if (cs > tol) then
-                        dcs_du(1) = -1.*(U3 + U4 - U2**2/U1)/U1**2
-                        dcs_du(2) = -1.*U2/U1**2
-                        dcs_du(3) = 1./U1
-                        dcs_du(4) = 1./U1
+   SUBROUTINE compute_cs(U, cs)
+      ! Sound speed of plasma
+      real*8, intent(IN) :: U(:)
+      real*8             :: U1, U2, U3, U4
+      real*8, intent(OUT) :: cs
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U4 = U(4)
+      cs = 2./3./U1*(U3 + U4 - 1./2.*U2**2/U1)
+      IF (cs < 0.) cs = tol**2
+      cs = sqrt(cs)
+   END SUBROUTINE compute_cs
+   SUBROUTINE compute_dcs_du(U, dcs_du)
+      ! Sound speed derivative
+      real*8, intent(IN) :: U(:)
+      real*8             :: U1, U2, U3, U4, cs
+      real*8, intent(OUT) :: dcs_du(:)
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U4 = U(4)
+      if (U4 < tol) U4 = tol
+      if (U1 < tol) U1 = tol
+      if (U3 < tol) U3 = tol
+      dcs_du = 0.
+      call compute_cs(U, cs)
+      if (cs > tol) then
+         dcs_du(1) = -1.*(U3 + U4 - U2**2/U1)/U1**2
+         dcs_du(2) = -1.*U2/U1**2
+         dcs_du(3) = 1./U1
+         dcs_du(4) = 1./U1
 
-                        dcs_du = dcs_du/3./cs
-                     end if
-                  END SUBROUTINE compute_dcs_du
+         dcs_du = dcs_du/3./cs
+      end if
+   END SUBROUTINE compute_dcs_du
+   subroutine compute_V(U, Q, B, gradB, q_cyl, omega, is_core, r, v)
+      real*8, intent(IN) :: U(:), Q(:, :), gradB(:), B, q_cyl, omega, r
+      logical, intent(in) :: is_core
+      real*8, intent(OUT) :: v
+      real*8 :: cs, alpha_s, r0, tau_para, growth_rate
+      r0 = geom%r0/simpar%refval_length
+      alpha_s = 3.
+      call compute_cs(U, cs)
+      tau_para = q_cyl*r0/max(cs, 1e-20)
+      ! call compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, is_core, r, growth_rate)
+      call compute_gamma_I(u, q, b, gradB, r, growth_rate)
+      v = cs**2/omega*alpha_s/r0*sqrt(max(0., tau_para*growth_rate))
+      ! print '(/,3x,"compute v = ",f20.15)', v
+   end subroutine
+   subroutine compute_dg_du(U, Q, B, gradB, q_cyl, omega, is_core, r, dg_du)
+      ! use ieee_arithmetic
+      real*8, intent(IN) :: U(:), Q(:, :), gradB(:), B, q_cyl, omega, r
+      logical, intent(in) :: is_core
+      real*8, intent(OUT) :: dg_du(:, :)
+      real*8 :: V, growth_rate, d_omega, kappa, epsil
+      kappa = max(1e-6, u(6))
+      epsil = max(1e-6, u(7))
+      dg_du = 0.
+      call compute_V(U, Q, B, gradB, q_cyl, omega, is_core, r, v)
+      ! call compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, is_core, growth_rate)
+      call compute_gamma_I(u, q, b, gradB, r, growth_rate)
+      growth_rate = max(growth_rate, 1e-10)
+      d_omega = 1e10/growth_rate/simpar%refval_k
+      dg_du(6, 6) = growth_rate - 2*kappa/d_omega
+      dg_du(7, 6) = 3./2.*v*epsil**2*kappa**(-5./2.)
+      dg_du(7, 7) = growth_rate - 2*v*epsil*kappa**(-3./2.)
+      ! print '(/,3x,"compute dg du 6,6 = ",f20.15,3x,"7,6 = ",f20.15,3x,"7,7 = ",f20.15)', dg_du(6,6), dg_du(7,6), dg_du(7,7)
+      ! print '(/,3x," kappa = ",f20.15,3x,"7,6 = ",L)', u(6), ieee_is_nan(dg_du(7,6))
+   end subroutine
 #ifdef DKLINEARIZED
-                  SUBROUTINE compute_ddk_du(U, xy, q_cyl, ddk_du)
-                     ! Routine that computes linearization of turbulent diffusion
-                     real*8, intent(IN) :: U(:), xy(:), q_cyl
-                     real*8, intent(OUT) :: ddk_du(:)
-                     real*8              :: cs, dk
-                     real*8              :: dcs_du(size(U, 1))
-                     real, parameter :: tol = 1e-20
+   SUBROUTINE compute_ddk_du(U, xy, q_cyl, ddk_du)
+      ! Routine that computes linearization of turbulent diffusion
+      real*8, intent(IN) :: U(:), xy(:), q_cyl
+      real*8, intent(OUT) :: ddk_du(:)
+      real*8              :: cs, dk
+      real*8              :: dcs_du(size(U, 1))
+      real, parameter :: tol = 1e-20
 
-                     ddk_du(:) = 0.
-                     call compute_cs(U, cs)
-                     if (cs > tol) then
-                        dk = q_cyl*xy(1)*U(6)/cs
-                        if ((dk > phys%diff_k_min) .and. (dk < phys%diff_k_max)) then
-                           call compute_dcs_du(U, dcs_du)
-                           ddk_du(:) = -1*dk/cs*dcs_du(:)
-                           ddk_du(6) = ddk_du(6) + dk/U(6)
-                        end if
+      ddk_du(:) = 0.
+      call compute_cs(U, cs)
+      if (cs > tol) then
+         dk = q_cyl*xy(1)*U(6)/cs
+         ! if ((dk > phys%diff_k_min) .and. (dk < phys%diff_k_max)) then
+         call compute_dcs_du(U, dcs_du)
+         ddk_du(:) = -1*dk/cs*dcs_du(:)
+         ddk_du(6) = ddk_du(6) + dk/U(6)
+         ! end if
 
-                     end if
+      end if
 
-                  END SUBROUTINE compute_ddk_du
+   END SUBROUTINE compute_ddk_du
 
 #endif
 
-                  SUBROUTINE compute_gamma_ke(U, Q, B, gradB, R, q_cyl, omega, is_core, gamma_ke)
-                     ! growth rate for turbulent energy
-                     real*8, intent(IN) :: U(:), Q(:, :), gradB(:), B, R, q_cyl, omega
-                     logical, intent(IN) :: is_core
-  real*8             :: n, v, ti, te, V0, nB, nu_e, DB, D_perp, nu_perp, d_star, rho_L, nu_star, L_para, dn_dr, dn_dz, C_Omega, tau_para, tau, C_star, aa, an, a_phi
-                     real*8, intent(OUT) :: gamma_ke
-                     real, parameter :: tol = 1e-20, m_ratio = 3670.4829678537167, coulomb_log = 15.
-                     complex*8 :: bn, b_phi, bb
+   SUBROUTINE compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, is_core, gamma_ke)
+      ! growth rate for turbulent energy
+      real*8, intent(IN) :: U(:), Q(:, :), gradB(:), B, q_cyl, omega
+      logical, intent(IN) :: is_core
+            real*8             :: n, v, ti, te, V0, nB, nu_e, DB, D_perp, nu_perp, d_star, rho_L, nu_star, L_para, dn_dr, dn_dz, C_Omega, tau_para, tau, C_star, aa, an, a_phi, b_nr, b_phir, b_ni, b_phii, gr, gi
+      real*8, intent(OUT) :: gamma_ke
+      real, parameter :: tol = 1e-20, m_ratio = 3670.4829678537167, coulomb_log = 15.
 
-                     n = max(tol, U(1))
-                     v = U(2)/n
-                     Ti = max(tol, 2./3./phys%Mref*(U(3)/n - v**2))
-                     Te = max(tol, 2./3./phys%Mref*U(4)/n)
-                     call compute_cs(U, V0)
-                     nB = n
+      n = max(tol, U(1))
+      v = U(2)/n
+      Ti = max(tol, 2./3./phys%Mref*(U(3)/n - v**2))
+      Te = max(tol, 2./3./phys%Mref*U(4)/n)
+      call compute_cs(U, V0)
+      nB = n
 
-                     nu_e = 2.91e-12*n*simpar%refval_density*coulomb_log*(Te*simpar%refval_temperature)**(-1.5)*simpar%refval_time
-                     DB = Te/abs(B)
-                     D_perp = 1e-2*DB
-                     nu_perp = 1e-2*DB
-                     L_para = PI*q_cyl*geom%R0/simpar%refval_length
-                     rho_L = V0/omega
-                     nu_star = L_para/V0*nu_e
-                     d_star = sqrt((D_perp + nu_perp)/DB)
-                     dn_dr = Q(1, 1)
-                     dn_dz = Q(2, 1)
+      nu_e = 2.91e-12*n*simpar%refval_density*coulomb_log*(Te*simpar%refval_temperature)**(-1.5)*simpar%refval_time
+      DB = Te/abs(B)
+      D_perp = 1e-2*DB
+      nu_perp = 1e-2*DB
+      L_para = PI*q_cyl*geom%R0/simpar%refval_length
+      rho_L = V0/omega
+      nu_star = L_para/V0*nu_e
+      d_star = sqrt((D_perp + nu_perp)/DB)
+      dn_dr = Q(1, 1)
+      dn_dz = Q(2, 1)
 
-                     C_star = V0/Omega/L_para
-                     C_Omega = m_ratio/nu_star
-                     C_Omega = merge(C_Omega, min(1., C_Omega), is_core)*C_star
+      C_star = V0/Omega/L_para
+      C_Omega = m_ratio/nu_star
+      C_Omega = merge(C_Omega, min(1., C_Omega), is_core)*C_star
 
-                     an = D_perp/DB/d_star + sqrt(C_Omega)
-                     a_phi = nu_perp/DB/d_star + d_star
-                     bn = complex(rho_L/sqrt(2*d_star)*(dn_dr - dn_dz)/nB, C_Omega**0.75)
-                     b_phi = complex(-sqrt(2*d_star)*rho_L/abs(B)*gradB(1), merge(d_star*C_Omega**0.75, 0., is_core))
+      an = D_perp/DB/d_star + sqrt(C_Omega)
+      a_phi = nu_perp/DB/d_star + d_star
+      b_nr = rho_L/sqrt(2*d_star)*(dn_dr - dn_dz)/nB
+      b_ni = C_Omega**0.75
+      b_phir = -sqrt(2*d_star)*rho_L/abs(B)*gradB(1)
+      b_phii = merge(d_star*C_Omega**0.75, 0., is_core)
 
-                     aa = (an + a_phi)/2
-                     bb = bn*b_phi
-                     tau_para = L_para/V0
-                     tau = tau_para/sqrt(C_Omega)*C_star
+      aa = (an + a_phi)/2
+      ! bb = bn*b_phi
+      tau_para = L_para/V0
+      tau = tau_para/sqrt(C_Omega)*C_star
 
-                     gamma_ke = real(sqrt(aa**2 - an*a_phi - bb/C_Omega) - aa)/tau
+      gi = -(b_nr*b_phii + b_ni*b_phir)/C_Omega
+      gr = aa**2 - an*a_phi - (b_nr*b_phir - b_ni*b_phii)/C_Omega
 
-                  END SUBROUTINE compute_gamma_ke
+      gamma_ke = (sqrt((gr + norm2([gr, gi], dim=1))/2) - aa)/tau
 
-                  SUBROUTINE compute_gamma_I(U, Q, Btor, gradBtor, R, gamma_I)
-                     ! growth rate for turbulent energy
-                     real*8, intent(IN) :: U(:), Q(:, :), gradBtor(:), Btor, R
-                     real*8             :: U1, U2, U3, U4, ti, te, gr_p_gr_b, cs, p, theta, ti_te
-                     real*8, intent(OUT) :: gamma_I
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U4 = U(4)
-                     gamma_I = 0.
-                     call compute_cs(U, cs)
-                     ! grad(pi) x gradB
-                     p = U3 - 1./2.*U2**2/U1
+   END SUBROUTINE compute_gamma_ke
 
-                     ti = max(p/U1, tol)
-                     te = max(U4/U1, tol)
-                     if (p < tol) p = tol
-                     theta = 5.*(1.+ti/te)
+   SUBROUTINE compute_gamma_I(U, Q, Btor, gradBtor, R, gamma_I)
+      ! growth rate for turbulent energy
+      real*8, intent(IN) :: U(:), Q(:, :), gradBtor(:), Btor, R
+      real*8             :: U1, U2, U3, U4, ti, te, gr_p_gr_b, cs, p, theta, ti_te
+      real*8, intent(OUT) :: gamma_I
+      real, parameter :: tol = 1e-20
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U4 = U(4)
+      gamma_I = 0.
+      call compute_cs(U, cs)
+      ! grad(pi) x gradB
+      p = U3 - 1./2.*U2**2/U1
+
+      ti = max(p/U1, tol)
+      te = max(U4/U1, tol)
+      if (p < tol) p = tol
+      theta = 5.*(1.+ti/te)
    gr_p_gr_b = gradBtor(1)*(Q(1,3)-Q(1,2)*U2/U1+1./2.*U2**2/U1**2*Q(1,1))+gradBtor(2)*(Q(2,3)-Q(2,2)*U2/U1+1./2.*U2**2/U1**2*Q(2,1))
-                     gr_p_gr_b = gr_p_gr_b/Btor/p - theta/R**2
-                     if (gr_p_gr_b >= 0) then
-                        gamma_I = cs*sqrt(gr_p_gr_b)
-                     else
-                        !gamma_I = -1.*cs*sqrt(-1.*gr_p_gr_b)
-                        gamma_I = 0.
-                     end if
-                  END SUBROUTINE compute_gamma_I
+      gr_p_gr_b = gr_p_gr_b/Btor/p - theta/R**2
+      if (gr_p_gr_b >= 0) then
+         gamma_I = cs*sqrt(gr_p_gr_b)
+      else
+         !gamma_I = -1.*cs*sqrt(-1.*gr_p_gr_b)
+         gamma_I = 0.
+      end if
+   END SUBROUTINE compute_gamma_I
 
-                  SUBROUTINE compute_ce(U, Q, Btor, gradBtor, r, omega_c, q_cyl, is_core, ce)
-                     ! dissipation rate for turbulent energy
-                     real*8, intent(IN) :: U(:), Q(:, :), gradBtor(:), r, Btor, omega_c, q_cyl
-                     logical, intent(in) :: is_core
-                     real*8             :: U1, U2, U3, gamma_ke, rhoL, cs, gamma_e, k_loc
-                     real*8, intent(OUT) :: ce
-                     real, parameter :: tol = 1e-20
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
+   function get_diffusion_ke(u) result(diff)
+      real*8, intent(in) :: u(:)
+      real*8 :: diff
+      diff = max(1e-20, u(6)**2/u(7))
+   end function
 
-                     gamma_e = 4.5
-                     call compute_cs(U, cs)
-                     if (cs < tol) cs = tol
-                     call compute_rhoL(U, r, omega_c, rhoL)
-                     if (rhoL < tol) rhoL = tol
-                     call compute_gamma_ke(U, Q, Btor, gradBtor, r, q_cyl, omega_c, is_core, gamma_ke)
-
-                     ce = gamma_ke*(2.*PI/16./1./gamma_e/rhoL**2/q_cyl/cs**2 + 1./phys%k_max)
-
-                  END SUBROUTINE compute_ce
-                  SUBROUTINE compute_rhoL(U, R, omega_c, rhoL)
-                     ! Larmor radii
-                     real*8, intent(IN) :: U(:), R, omega_c
-                     real*8             :: cs
-                     real*8, intent(OUT) :: rhoL
-                     call compute_cs(U, cs)
-
-                     rhoL = cs/omega_c/R
-
-                  END SUBROUTINE compute_rhoL
-
-                  SUBROUTINE compute_dissip(U, dissip)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: U6
-                     real*8             :: dissip
-                     real, parameter :: tol = 1e-10
-                     U6 = U(6)
-                     dissip = U6**2
-                  END SUBROUTINE compute_dissip
-
-                  SUBROUTINE compute_ddissip_du(U, res)
-                     real*8, intent(IN) :: U(:)
-                     real*8             :: U6
-                     real*8             :: res(:)
-                     real, parameter :: tol = 1e-10
-                     U6 = U(6)
-                     !if (U6 < tol) U6 = tol
-                     res = 0.
-                     res(6) = 2.*U6
-                  END SUBROUTINE compute_ddissip_du
+   function get_dd_du(u) result(dd_du)
+      real*8, intent(in) :: u(phys%neq)
+      real*8 :: dd_du(phys%neq)
+      dd_du = 0.
+      dd_du(6) = 2*u(6)/u(7)
+      dd_du(7) = -(u(6)/u(7))**2
+   end function
 
 #endif
 #endif
 
 #ifdef NEUTRALP
-                  SUBROUTINE computeDpn(U, Q, Vpn, Dpn)
-                     real*8, intent(IN) :: U(:), Q(:, :), Vpn(:)
-                     real*8, intent(OUT):: Dpn
-                     real*8             :: U1, U2, U3, U4, U5
-                     real*8             ::sigmaviz, sigmavcx, cs_n, Dpn_th
-                     real*8             :: Grad_Pn(simpar%Ndim)
-                     real, parameter :: tol = 1e-10
-                     Dpn = 0.
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U4 = U(4)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U2 < tol) U2 = tol
-                     if (U3 < tol) U3 = tol
-                     if (U4 < tol) U4 = tol
-                     if (U5 < tol) U5 = tol
-                     CALL compute_sigmaviz(U, sigmaviz)
-                     CALL compute_sigmavcx(U, sigmavcx)
-                     Dpn = 1./(simpar%refval_time*simpar%refval_density*U1*(sigmaviz + sigmavcx))
-                     Dpn = 2./3.*Dpn
-                     !Set a threshold Dpn*|grad(Pn)| <= cs_n*n_n
-                     !cs_n = 0.
-                     !Grad_Pn = 0.
-                     !cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
-                     !Grad_Pn = 2./(3.*phys%Mref)*matmul(Q,Vpn)
-                     !Dpn_th = abs(cs_n*U5/norm2(Grad_Pn))
-                     !if (Dpn .gt. Dpn_th) then
-                     if (Dpn .gt. phys%diff_nn) then
-                        Dpn = phys%diff_nn
-                        !fth(3) = 5.e-7*abs(U5)!*abs(U3/U1)
-                        !fth(4) = 5.e-7*abs(U5)!*abs(U4/U1)
-                     end if
-                     !Dpn*exp(abs(Dpn - Dpn_th)/Dpn_th) + Dpn_th
-                  END SUBROUTINE computeDpn
+   SUBROUTINE computeDpn(U, Q, Vpn, Dpn)
+      real*8, intent(IN) :: U(:), Q(:, :), Vpn(:)
+      real*8, intent(OUT):: Dpn
+      real*8             :: U1, U2, U3, U4, U5
+      real*8             ::sigmaviz, sigmavcx, cs_n, Dpn_th
+      real*8             :: Grad_Pn(simpar%Ndim)
+      real, parameter :: tol = 1e-10
+      Dpn = 0.
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U4 = U(4)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U2 < tol) U2 = tol
+      if (U3 < tol) U3 = tol
+      if (U4 < tol) U4 = tol
+      if (U5 < tol) U5 = tol
+      CALL compute_sigmaviz(U, sigmaviz)
+      CALL compute_sigmavcx(U, sigmavcx)
+      Dpn = 1./(simpar%refval_time*simpar%refval_density*U1*(sigmaviz + sigmavcx))
+      Dpn = 2./3.*Dpn
+      !Set a threshold Dpn*|grad(Pn)| <= cs_n*n_n
+      !cs_n = 0.
+      !Grad_Pn = 0.
+      !cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
+      !Grad_Pn = 2./(3.*phys%Mref)*matmul(Q,Vpn)
+      !Dpn_th = abs(cs_n*U5/norm2(Grad_Pn))
+      !if (Dpn .gt. Dpn_th) then
+      if (Dpn .gt. phys%diff_nn) then
+         Dpn = phys%diff_nn
+         !fth(3) = 5.e-7*abs(U5)!*abs(U3/U1)
+         !fth(4) = 5.e-7*abs(U5)!*abs(U4/U1)
+      end if
+      !Dpn*exp(abs(Dpn - Dpn_th)/Dpn_th) + Dpn_th
+   END SUBROUTINE computeDpn
 
-                  SUBROUTINE compute_dDpn_dU(U, Q, Vpn, res)
-                     real*8, intent(IN) :: U(:), Q(:, :), Vpn(:)
-                     real*8, intent(OUT):: res(:)
-                     real*8             :: sigmaviz, sigmavcx, Dpn
-                     real*8             :: dsigmaviz_dU(phys%Neq), dsigmavcx_dU(phys%Neq)
-                     real*8             :: U1, U2, U3, U4, U5
-                     real, parameter     :: tol = 1e-12
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U4 = U(4)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
-                     res = 0.
+   SUBROUTINE compute_dDpn_dU(U, Q, Vpn, res)
+      real*8, intent(IN) :: U(:), Q(:, :), Vpn(:)
+      real*8, intent(OUT):: res(:)
+      real*8             :: sigmaviz, sigmavcx, Dpn
+      real*8             :: dsigmaviz_dU(phys%Neq), dsigmavcx_dU(phys%Neq)
+      real*8             :: U1, U2, U3, U4, U5
+      real, parameter     :: tol = 1e-12
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U4 = U(4)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
+      res = 0.
 
-                     CALL compute_sigmaviz(U, sigmaviz)
-                     CALL compute_sigmavcx(U, sigmavcx)
-                     call compute_dsigmaviz_dU(U, dsigmaviz_dU)
-                     call compute_dsigmavcx_dU(U, dsigmavcx_dU)
-                     call computeDpn(U, Q, Vpn, Dpn)
+      CALL compute_sigmaviz(U, sigmaviz)
+      CALL compute_sigmavcx(U, sigmavcx)
+      call compute_dsigmaviz_dU(U, dsigmaviz_dU)
+      call compute_dsigmavcx_dU(U, dsigmavcx_dU)
+      call computeDpn(U, Q, Vpn, Dpn)
 
-                     IF (Dpn .lt. phys%diff_nn) THEN
-                        res(1) = sigmaviz + sigmavcx + U1*(dsigmaviz_dU(1) + dsigmavcx_dU(1))
-                        res(4) = U1*(dsigmaviz_dU(4) + dsigmavcx_dU(4))
-                        res = -3./2*Dpn**2*res
-                     END IF
-                  END SUBROUTINE
+      IF (Dpn .lt. phys%diff_nn) THEN
+         res(1) = sigmaviz + sigmavcx + U1*(dsigmaviz_dU(1) + dsigmavcx_dU(1))
+         res(4) = U1*(dsigmaviz_dU(4) + dsigmavcx_dU(4))
+         res = -3./2*Dpn**2*res
+      END IF
+   END SUBROUTINE
 
-                  SUBROUTINE computeVpn(U, Vpn)
-                     real*8, intent(IN) :: U(:)
-                     real*8, intent(OUT):: Vpn(:)
-                     real*8             :: U1, U2, U3, U5
-                     real, parameter :: tol = 1e-12
-                     Vpn = 0.
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
-                     Vpn(1) = U5*(U2**2/U1**3 - U3/U1**2)
-                     Vpn(2) = -U5*U2/U1**2
-                     Vpn(3) = U5/U1
-                     Vpn(5) = U3/U1 - 1./2.*U2**2/U1**2
-                  END SUBROUTINE computeVpn
+   SUBROUTINE computeVpn(U, Vpn)
+      real*8, intent(IN) :: U(:)
+      real*8, intent(OUT):: Vpn(:)
+      real*8             :: U1, U2, U3, U5
+      real, parameter :: tol = 1e-12
+      Vpn = 0.
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
+      Vpn(1) = U5*(U2**2/U1**3 - U3/U1**2)
+      Vpn(2) = -U5*U2/U1**2
+      Vpn(3) = U5/U1
+      Vpn(5) = U3/U1 - 1./2.*U2**2/U1**2
+   END SUBROUTINE computeVpn
 
-                  SUBROUTINE compute_dVpn_dU(U, dVpn_dU)
-                     real*8, intent(IN)  :: U(:)
-                     real*8, intent(OUT) :: dVpn_dU(:, :)
-                     real*8              :: U1, U2, U3, U5
-                     real, parameter :: tol = 1e-12
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
-                     dVpn_dU = 0.
+   SUBROUTINE compute_dVpn_dU(U, dVpn_dU)
+      real*8, intent(IN)  :: U(:)
+      real*8, intent(OUT) :: dVpn_dU(:, :)
+      real*8              :: U1, U2, U3, U5
+      real, parameter :: tol = 1e-12
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
+      dVpn_dU = 0.
 
-                     dVpn_dU(1, 1) = (2.*U3/U1**3 - 3.*U2**2/U1**4)*U5
-                     dVpn_dU(1, 2) = (2.*U2/U1**3)*U5
-                     dVpn_dU(1, 3) = -U5/U1**2
-                     dVpn_dU(1, 5) = U2**2/U1**3 - U3/U1**2
+      dVpn_dU(1, 1) = (2.*U3/U1**3 - 3.*U2**2/U1**4)*U5
+      dVpn_dU(1, 2) = (2.*U2/U1**3)*U5
+      dVpn_dU(1, 3) = -U5/U1**2
+      dVpn_dU(1, 5) = U2**2/U1**3 - U3/U1**2
 
-                     dVpn_dU(2, 1) = (2.*U2/U1**3)*U5
-                     dVpn_dU(2, 2) = -U5/U1**2
-                     dVpn_dU(2, 5) = -U2/U1**2
+      dVpn_dU(2, 1) = (2.*U2/U1**3)*U5
+      dVpn_dU(2, 2) = -U5/U1**2
+      dVpn_dU(2, 5) = -U2/U1**2
 
-                     dVpn_dU(3, 1) = -U5/U1**2
-                     dVpn_dU(3, 5) = 1./U1
+      dVpn_dU(3, 1) = -U5/U1**2
+      dVpn_dU(3, 5) = 1./U1
 
-                     dVpn_dU(5, 1) = U2**2/U1**3 - U3/U1**2
-                     dVpn_dU(5, 2) = -U2/U1**2
-                     dVpn_dU(5, 3) = 1./U1
-                  END SUBROUTINE compute_dVpn_dU
+      dVpn_dU(5, 1) = U2**2/U1**3 - U3/U1**2
+      dVpn_dU(5, 2) = -U2/U1**2
+      dVpn_dU(5, 3) = 1./U1
+   END SUBROUTINE compute_dVpn_dU
 
-                  SUBROUTINE computeGammared(U, res)
-                     real*8, intent(IN)  :: U(:)
-                     real*8, intent(OUT) :: res
-                     real*8              :: U1, U2, U3, U5, Tmin, T
-                     real, parameter      :: tol = 1e-12
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
+   SUBROUTINE computeGammared(U, res)
+      real*8, intent(IN)  :: U(:)
+      real*8, intent(OUT) :: res
+      real*8              :: U1, U2, U3, U5, Tmin, T
+      real, parameter      :: tol = 1e-12
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
 
-                     res = 0.
-                     Tmin = 0.2/simpar%refval_temperature  ! Threshold at 0.2 eV
-                     T = 2./(3.*phys%Mref)*(U3/U1 - 1./2.*U2**2/U1**2)
+      res = 0.
+      Tmin = 0.2/simpar%refval_temperature  ! Threshold at 0.2 eV
+      T = 2./(3.*phys%Mref)*(U3/U1 - 1./2.*U2**2/U1**2)
 
-                     !WRITE(6,*) 'Tmin/T = ', Tmin/T
+      !WRITE(6,*) 'Tmin/T = ', Tmin/T
 
-                     IF (Tmin/T .le. 1) THEN
-                        res = 0.*3./2.*(phys%Mref**2)*(Tmin/T)*U5
-                     ELSE
-                        res = 0.*3./2.*(phys%Mref**2)*U5
-                     END IF
+      IF (Tmin/T .le. 1) THEN
+         res = 0.*3./2.*(phys%Mref**2)*(Tmin/T)*U5
+      ELSE
+         res = 0.*3./2.*(phys%Mref**2)*U5
+      END IF
 
-                  END SUBROUTINE
+   END SUBROUTINE
 
-                  SUBROUTINE computeAlphaCoeff(U, Q, Vpn, res)
-                     real*8, intent(IN)    :: U(:), Q(:, :), Vpn(:)
-                     real*8, intent(OUT)   :: res
-                     real*8                :: U1, U2, U3, U4, U5
-                     real*8                :: cs_n, Dpn, t
-                     real*8                :: Grad_Pn(simpar%Ndim)
-                     real, parameter        :: gamma = 4., tol = 1e-12
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U4 = U(4)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
-                     res = 1.
+   SUBROUTINE computeAlphaCoeff(U, Q, Vpn, res)
+      real*8, intent(IN)    :: U(:), Q(:, :), Vpn(:)
+      real*8, intent(OUT)   :: res
+      real*8                :: U1, U2, U3, U4, U5
+      real*8                :: cs_n, Dpn, t
+      real*8                :: Grad_Pn(simpar%Ndim)
+      real, parameter        :: gamma = 4., tol = 1e-12
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U4 = U(4)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
+      res = 1.
 
-                     cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
-                     Grad_Pn = 2./(3.*phys%Mref)*matmul(Q, Vpn)
-                     call computeDpn(U, Q, Vpn, Dpn)
-                     !t = abs(Dpn*norm2(Grad_Pn))/abs(cs_n*U5)
-                     t = abs(Dpn)/phys%diff_nn
+      cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
+      Grad_Pn = 2./(3.*phys%Mref)*matmul(Q, Vpn)
+      call computeDpn(U, Q, Vpn, Dpn)
+      !t = abs(Dpn*norm2(Grad_Pn))/abs(cs_n*U5)
+      t = abs(Dpn)/phys%diff_nn
 
-                     IF (t .ge. 1) THEN
-                        res = exp((1 - t)/gamma)
-                     END IF
-                  END SUBROUTINE
+      IF (t .ge. 1) THEN
+         res = exp((1 - t)/gamma)
+      END IF
+   END SUBROUTINE
 
-                  SUBROUTINE computeBetaCoeff(U, Q, Vpn, res)
-                     real*8, intent(IN)    :: U(:), Q(:, :), Vpn(:)
-                     real*8, intent(OUT)   :: res
-                     real*8                :: U1, U2, U3, U4, U5
-                     real*8                :: cs_n, Dpn, t
-                     real*8                :: Grad_Pn(simpar%Ndim)
-                     real, parameter        :: gamma = 4., tol = 1e-12
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U4 = U(4)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
-                     res = 0.
+   SUBROUTINE computeBetaCoeff(U, Q, Vpn, res)
+      real*8, intent(IN)    :: U(:), Q(:, :), Vpn(:)
+      real*8, intent(OUT)   :: res
+      real*8                :: U1, U2, U3, U4, U5
+      real*8                :: cs_n, Dpn, t
+      real*8                :: Grad_Pn(simpar%Ndim)
+      real, parameter        :: gamma = 4., tol = 1e-12
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U4 = U(4)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
+      res = 0.
 
-                     cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
-                     Grad_Pn = 2./(3.*phys%Mref)*matmul(Q, Vpn)
-                     call computeDpn(U, Q, Vpn, Dpn)
-                     !t = abs(Dpn*norm2(Grad_Pn))/abs(cs_n*U5)
-                     t = abs(Dpn)/phys%diff_nn
+      cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
+      Grad_Pn = 2./(3.*phys%Mref)*matmul(Q, Vpn)
+      call computeDpn(U, Q, Vpn, Dpn)
+      !t = abs(Dpn*norm2(Grad_Pn))/abs(cs_n*U5)
+      t = abs(Dpn)/phys%diff_nn
 
-                     IF (t .ge. 1) THEN
-                        res = 1 - exp((1 - t)/gamma)
-                     END IF
-                  END SUBROUTINE
+      IF (t .ge. 1) THEN
+         res = 1 - exp((1 - t)/gamma)
+      END IF
+   END SUBROUTINE
 
-                  SUBROUTINE computeGammaLim(U, Q, Vpn, res)
-                     real*8, intent(IN)    :: U(:), Q(:, :), Vpn(:)
-                     real*8, intent(OUT)   :: res
-                     real*8                :: U1, U2, U3, U4, U5
-                     real*8                :: cs_n, Dpn, GammaDpn, GammaLim
-                     real*8                :: Grad_Pn(simpar%Ndim)
-                     real, parameter        :: tol = 1e-12
-                     U1 = U(1)
-                     U2 = U(2)
-                     U3 = U(3)
-                     U4 = U(4)
-                     U5 = U(5)
-                     if (U1 < tol) U1 = tol
-                     if (U5 < tol) U5 = tol
-                     res = 0.
+   SUBROUTINE computeGammaLim(U, Q, Vpn, res)
+      real*8, intent(IN)    :: U(:), Q(:, :), Vpn(:)
+      real*8, intent(OUT)   :: res
+      real*8                :: U1, U2, U3, U4, U5
+      real*8                :: cs_n, Dpn, GammaDpn, GammaLim
+      real*8                :: Grad_Pn(simpar%Ndim)
+      real, parameter        :: tol = 1e-12
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U4 = U(4)
+      U5 = U(5)
+      if (U1 < tol) U1 = tol
+      if (U5 < tol) U5 = tol
+      res = 0.
 
-                     cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
-                     Grad_Pn = 2./(3.*phys%Mref)*matmul(Q, Vpn)
-                     call computeDpn(U, Q, Vpn, Dpn)
-                     GammaDpn = abs(Dpn*norm2(Grad_Pn))
-                     GammaLim = abs(cs_n*U5)
+      cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
+      Grad_Pn = 2./(3.*phys%Mref)*matmul(Q, Vpn)
+      call computeDpn(U, Q, Vpn, Dpn)
+      GammaDpn = abs(Dpn*norm2(Grad_Pn))
+      GammaLim = abs(cs_n*U5)
 
-                     res = 1./(1.+GammaDpn/GammaLim)
-                  END SUBROUTINE
+      res = 1./(1.+GammaDpn/GammaLim)
+   END SUBROUTINE
 #endif
 !NEUTRAL PRESSURE
 
@@ -2557,182 +2519,173 @@ CONTAINS
 #endif
 !NEUTRAL
 
-                  !***********************************************************************
-                  !
-                  !    COMPUTATION OF THE STABILIZATION PARAMETER
-                  !
-                  !***********************************************************************
+   !***********************************************************************
+   !
+   !    COMPUTATION OF THE STABILIZATION PARAMETER
+   !
+   !***********************************************************************
 
-                  !*******************************************
-                  ! Compute the stabilization tensor tau
-                  !*******************************************
-#ifndef KEQUATION
-                  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, tau)
-#else
-                     SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, q_cyl, tau)
-#endif
-                        real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
-                        real, intent(in)    :: isext
-                        integer, intent(in) :: ifa, iel
-#ifdef KEQUATION
-                        real*8, intent(in)  :: q_cyl
-#endif
-                        real*8, intent(out) :: tau(:, :)
+   !*******************************************
+   ! Compute the stabilization tensor tau
+   !*******************************************
+! #ifdef KEQUATION
+   SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, q_cyl, tau)
+      real*8, intent(in)  :: q_cyl
+      real*8              :: qq_cyl(1)
+! #else
+!             SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, tau)
+! #endif
+      real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
+      real, intent(in)    :: isext
+      integer, intent(in) :: ifa, iel
+      real*8, intent(out) :: tau(:, :)
+      real*8              :: tau_aux(phys%neq), diff_iso(phys%neq, phys%neq, 1), diff_ani(phys%neq, phys%neq, 1)
 #ifdef NEUTRAL
-#ifndef KEQUATION
-                        real*8              :: tau_aux(5), diff_iso(5, 5, 1), diff_ani(5, 5, 1)
-#else
-                        real*8              :: tau_aux(6), diff_iso(6, 6, 1), diff_ani(6, 6, 1)
-#endif
 #ifdef NEUTRALP
-                        real*8              :: Dpn
-                        real*8              :: Vpn(simpar%Neq), Qpr(simpar%Ndim, simpar%Neq)
+      real*8              :: Dpn
+      real*8              :: Vpn(simpar%Neq), Qpr(simpar%Ndim, simpar%Neq)
 #endif
-#else
-                        real*8              :: tau_aux(4), diff_iso(4, 4, 1), diff_ani(4, 4, 1)
 #endif
-                        integer             :: ndim
-                        real*8              :: xc, yc, rad, h, aux, bn, bnorm, xyd(1, size(xy)), uu(1, size(uc)), qq(1, size(q))
-#ifdef KEQUATION
-                        real*8              :: qq_cyl(1)
-#endif
-                        real*8              :: U1, U2, U3, U4
-                        U1 = uc(1)
-                        U2 = uc(2)
-                        U3 = uc(3)
-                        U4 = uc(4)
+      integer             :: ndim, i
+      real*8              :: xc, yc, rad, h, aux, bn, bnorm, xyd(1, size(xy)), uu(1, size(uc)), qq(1, size(q))
+      real*8              :: U1, U2, U3, U4
+      U1 = uc(1)
+      U2 = uc(2)
+      U3 = uc(3)
+      U4 = uc(4)
 
-                        tau = 0.
-                        ndim = size(n)
-                        bn = dot_product(b(1:ndim), n)
-                        bnorm = norm2(b(1:ndim))
-                        xyd(1, :) = xy(:)
-                        uu(1, :) = uc(:)
-                        qq(1, :) = q(:)
-#ifndef KEQUATION
-                        call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani)
-#else
-                        qq_cyl(:) = q_cyl
-                        call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani, qq_cyl)
-#endif
+      tau = 0.
+      ndim = size(n)
+      bn = dot_product(b(1:ndim), n)
+      bnorm = norm2(b(1:ndim))
+      xyd(1, :) = xy(:)
+      uu(1, :) = uc(:)
+      qq(1, :) = q(:)
+! #ifndef KEQUATION
+!                call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani)
+! #else
+      qq_cyl(:) = q_cyl
+      call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani, qq_cyl)
+! #endif
 
 #ifdef NEUTRALP
-                        ! Compute Vpn(U^(k-1))
-                        CALL computeVpn(uc, Vpn)
-                        ! Compute Dpn(U^(k-1))
-                        Qpr = reshape(q, (/simpar%Ndim, simpar%Neq/))
-                        !CALL computeDpn(uc,Qpr,Vpn,Dpn)
+      ! Compute Vpn(U^(k-1))
+      CALL computeVpn(uc, Vpn)
+      ! Compute Dpn(U^(k-1))
+      Qpr = reshape(q, (/simpar%Ndim, simpar%Neq/))
+      !CALL computeDpn(uc,Qpr,Vpn,Dpn)
 #endif
 
-                        if (numer%stab == 2) then
-                           if (abs(isext - 1.) .lt. 1e-12) then
-                              ! exterior faces
-                              tau_aux = abs((4*uc(2)*bn)/uc(1))
-                           else
+      if (numer%stab == 2) then
+         if (abs(isext - 1.) .lt. 1e-12) then
+            ! exterior faces
+            tau_aux = abs((4*uc(2)*bn)/uc(1))
+         else
            tau_aux = max(abs(5./3.*up(2)*bn), abs(0.3*bn*(3*uc(1) + sqrt(abs(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)))
-                           end if
+         end if
 #ifdef TOR3D
-                           if (abs(n(3)) > 0.1) then
-                              ! Poloidal face
-                              tau_aux(1) = tau_aux(1) + phys%diff_n*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-                              tau_aux(2) = tau_aux(2) + phys%diff_u*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+         if (abs(n(3)) > 0.1) then
+            ! Poloidal face
+            tau_aux(1) = tau_aux(1) + phys%diff_n*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+            tau_aux(2) = tau_aux(2) + phys%diff_u*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
         tau_aux(3) = tau_aux(3) + (phys%diff_e + abs(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
         tau_aux(4) = tau_aux(4) + (phys%diff_ee + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifdef NEUTRAL
-                              tau_aux(5) = tau_aux(5) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+            tau_aux(5) = tau_aux(5) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #endif
-                           else
+         else
 #endif
-                              ! Toroidal face
-                              tau_aux(1) = tau_aux(1) + phys%diff_n*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-                              tau_aux(2) = tau_aux(2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+            ! Toroidal face
+            tau_aux(1) = tau_aux(1) + phys%diff_n*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+            tau_aux(2) = tau_aux(2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 tau_aux(3) = tau_aux(3) + (phys%diff_e + abs(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
         tau_aux(4) = tau_aux(4) + (phys%diff_ee + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifdef NEUTRAL
-                              tau_aux(5) = tau_aux(5) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+            tau_aux(5) = tau_aux(5) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #endif
 #ifdef TOR3D
-                           end if
+         end if
 #endif
 
-                        elseif (numer%stab == 3) then
-                           if (abs(isext - 1.) .lt. 1e-12) then
-                              ! exterior faces
-                              tau_aux = max(abs((5*U2 - 2*U2*phys%Gmbohme)/(3*U1)), abs((5*U2 - 2*U2*phys%Gmbohm)/(3*U1)))
-                           else
-                              tau_aux = max(abs((3*U2*bn + 5**(0.5)*bn*(-U2**2 + 2*U1*U3 + 2*U1*U4)**(0.5))/(3*U1)),&
-                                &abs((3*U2*bn - 5**(0.5)*bn*(-U2**2 + 2*U1*U3 + 2*U1*U4)**(0.5))/(3*U1)),&
-                                &abs((U2*bn)/U1),&
-                                &abs((5*U2*bn)/(3*U1)))
-                           end if
+      elseif (numer%stab == 3) then
+         if (abs(isext - 1.) .lt. 1e-12) then
+            ! exterior faces
+            tau_aux = max(abs((5*U2 - 2*U2*phys%Gmbohme)/(3*U1)), abs((5*U2 - 2*U2*phys%Gmbohm)/(3*U1)))
+         else
+            tau_aux = max(abs((3*U2*bn + 5**(0.5)*bn*(-U2**2 + 2*U1*U3 + 2*U1*U4)**(0.5))/(3*U1)),&
+              &abs((3*U2*bn - 5**(0.5)*bn*(-U2**2 + 2*U1*U3 + 2*U1*U4)**(0.5))/(3*U1)),&
+              &abs((U2*bn)/U1),&
+              &abs((5*U2*bn)/(3*U1)))
+         end if
 #ifdef TOR3D
-                           if (abs(n(3)) > 0.1) then
-                              ! Poloidal face
-                              tau_aux(1) = tau_aux(1) + phys%diff_n*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-                              tau_aux(2) = tau_aux(2) + phys%diff_u*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+         if (abs(n(3)) > 0.1) then
+            ! Poloidal face
+            tau_aux(1) = tau_aux(1) + phys%diff_n*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+            tau_aux(2) = tau_aux(2) + phys%diff_u*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
         tau_aux(3) = tau_aux(3) + (phys%diff_e + abs(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
         tau_aux(4) = tau_aux(4) + (phys%diff_ee + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifdef NEUTRAL
-                              tau_aux(5) = tau_aux(5) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+            tau_aux(5) = tau_aux(5) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #endif
-                           else
+         else
 #endif
-                              ! Toroidal face
-                              tau_aux(1) = tau_aux(1) + phys%diff_n*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-                              tau_aux(2) = tau_aux(2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+            ! Toroidal face
+            tau_aux(1) = tau_aux(1) + phys%diff_n*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+            tau_aux(2) = tau_aux(2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 tau_aux(3) = tau_aux(3) + (phys%diff_e + abs(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
         tau_aux(4) = tau_aux(4) + (phys%diff_ee + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifdef NEUTRAL
-                              tau_aux(5) = tau_aux(5) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+            tau_aux(5) = tau_aux(5) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #endif
 #ifdef TOR3D
-                           end if
+         end if
 #endif
 
-                        elseif (numer%stab == 4) then
+      elseif (numer%stab == 4) then
          tau_aux = max(abs(5./3.*up(2)*bn), abs(0.3*bn*(3*uc(1) + sqrt(abs(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)), &
                        phys%lscale/geom%R0*abs(bn)*phys%diff_pari*up(7)**2.5, phys%lscale/geom%R0*abs(bn)*phys%diff_pare*up(8)**2.5)
 
-                        elseif (numer%stab == 5) then
-                           if (abs(isext - 1.) .lt. 1e-12) then
-                              ! exterior faces
-                              tau_aux = abs((4*uc(2)*bn)/uc(1))
-                           else
+      elseif (numer%stab == 5) then
+         if (abs(isext - 1.) .lt. 1e-12) then
+            ! exterior faces
+            tau_aux = abs((4*uc(2)*bn)/uc(1))
+         else
            tau_aux = max(abs(5./3.*up(2)*bn), abs(0.3*bn*(3*uc(1) + sqrt(abs(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)))
 !#ifdef NEUTRALP
 !        tau_aux(5) = max(abs(5./3.*up(2)*bn), abs(0.3*bn*(3*uc(5) + sqrt(abs(10*uc(3)/uc(1)*uc(5)**2 - 5*(uc(5)*uc(2)/uc(1))**2)))/uc(5)))
 !#endif
-                           end if
+         end if
 #ifdef TOR3D
-                           if (abs(n(3)) > 0.1) then
-                              ! Poloidal face
-                              tau_aux(1) = tau_aux(1) + phys%diff_n
-                              tau_aux(2) = tau_aux(2) + phys%diff_u
+         if (abs(n(3)) > 0.1) then
+            ! Poloidal face
+            tau_aux(1) = tau_aux(1) + phys%diff_n
+            tau_aux(2) = tau_aux(2) + phys%diff_u
         tau_aux(3) = tau_aux(3) + phys%diff_e + abs(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
         tau_aux(4) = tau_aux(4) + phys%diff_ee + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-                              tau_aux(5) = phys%diff_nn!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
+            tau_aux(5) = phys%diff_nn!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
 #endif
 #else
-                              tau_aux(5) = tau_aux(5) + phys%diff_nn!phys%diff_nn
+            tau_aux(5) = tau_aux(5) + phys%diff_nn!phys%diff_nn
 #endif
-                           else
+         else
 #endif
-                              ! Toroidal face
-                              tau_aux(1) = tau_aux(1) + 6*diff_iso(1, 1, 1)
-                              tau_aux(2) = tau_aux(2) + 6*diff_iso(2, 2, 1)
+            ! Toroidal face
+            tau_aux(1) = tau_aux(1) + 6*diff_iso(1, 1, 1)
+            tau_aux(2) = tau_aux(2) + 6*diff_iso(2, 2, 1)
         tau_aux(3) = tau_aux(3) + 6*diff_iso(3,3,1) + abs(bn)*phys%diff_pari*(min(1.,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
         tau_aux(4) = tau_aux(4) + 6*diff_iso(4,4,1) + abs(bn)*phys%diff_pare*(min(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-                              tau_aux(5) = tau_aux(5) + phys%diff_nn !! !numer%tau(5) diff_iso(5,5,1)
+            tau_aux(5) = tau_aux(5) + phys%diff_nn !! !numer%tau(5) diff_iso(5,5,1)
 #ifdef KEQUATION
-                              tau_aux(6) = tau_aux(6) + 6.*diff_iso(6, 6, 1)
+            tau_aux(6) = tau_aux(6) + 6.*diff_iso(6, 6, 1) ! ??
+            tau_aux(7) = tau_aux(7) + 6.*diff_iso(7, 7, 1)
 #endif
 #endif
 #else
-                              tau_aux(5) = tau_aux(5) + numer%tau(5)
+            tau_aux(5) = tau_aux(5) + numer%tau(5)
 #endif
 !        ! Toroidal face
 !        tau_aux(1) = tau_aux(1) +  diff_iso(1,1,1)
@@ -2743,185 +2696,181 @@ tau_aux(3) = tau_aux(3) + (phys%diff_e + abs(bn)*phys%diff_pari*up(7)**2.5*bnorm
 !        tau_aux(5) = tau_aux(5) +  diff_iso(5,5,1)
 !#endif
 #ifdef TOR3D
-                           end if
+         end if
 #endif
 
-                        else
-                           write (6, *) "Wrong stabilization type: ", numer%stab
-                           stop
-                        end if
-                        tau(1, 1) = tau_aux(1)
-                        tau(2, 2) = tau_aux(2)
-                        tau(3, 3) = tau_aux(3)
-                        tau(4, 4) = tau_aux(4)
-#ifdef NEUTRAL
-                        tau(5, 5) = tau_aux(5)
-#ifdef KEQUATION
-                        tau(6, 6) = tau_aux(6)
-#endif
-#endif
-                     END SUBROUTINE computeTauGaussPoints
+      else
+         write (6, *) "Wrong stabilization type: ", numer%stab
+         stop
+      end if
+
+      ! Set the diagonals
+      do i = 1, phys%neq
+         tau(i, i) = tau_aux(i)
+      end do
+
+   END SUBROUTINE computeTauGaussPoints
 
   !!
 
-                     SUBROUTINE computeTauGaussPoints_matrix(up, uc, b, n, xy, isext, iel, tau)
+   SUBROUTINE computeTauGaussPoints_matrix(up, uc, b, n, xy, isext, iel, tau)
 
-                        real*8, intent(in)  :: up(:), uc(:), b(:), n(:), xy(:), isext
-                        real*8, intent(out) :: tau(:, :)
-                        integer, intent(in) :: iel
-                        real*8, parameter :: eps = 1e-12
-                        real*8              :: bn, bnorm
+      real*8, intent(in)  :: up(:), uc(:), b(:), n(:), xy(:), isext
+      real*8, intent(out) :: tau(:, :)
+      integer, intent(in) :: iel
+      real*8, parameter :: eps = 1e-12
+      real*8              :: bn, bnorm
 
-                        real*8 :: U1, U2, U3, U4
-                        real*8 :: t2, t3, t4, t5, t6, t7, t8, t9
-                        real*8 :: t10, t11, t12, t13, t14, t15, t16, t17, t18, t19
-                        real*8 :: t20, t21, t22, t23, t24, t25, t26, t27, t28, t29
-                        real*8 :: t30, t31, t32, t33, t34, t35, t36, t37, t38, t39
-                        real*8 :: t40, t41, t42, t43, t44, t45, t46, t47, t48, t49
-                        real*8 :: t50, t51, t52, t53, t54, t55, t56, t57, t58, t59
-                        real*8 :: t60, t61, t62, t63, t64, t65, t66, t67, t68, t69
-                        real*8 :: t70, t71, t72, t73, t74, t75, t76, t77, t78, t79, t80
-                        real*8 :: x, y, r, h, coef, r0, rc
+      real*8 :: U1, U2, U3, U4
+      real*8 :: t2, t3, t4, t5, t6, t7, t8, t9
+      real*8 :: t10, t11, t12, t13, t14, t15, t16, t17, t18, t19
+      real*8 :: t20, t21, t22, t23, t24, t25, t26, t27, t28, t29
+      real*8 :: t30, t31, t32, t33, t34, t35, t36, t37, t38, t39
+      real*8 :: t40, t41, t42, t43, t44, t45, t46, t47, t48, t49
+      real*8 :: t50, t51, t52, t53, t54, t55, t56, t57, t58, t59
+      real*8 :: t60, t61, t62, t63, t64, t65, t66, t67, t68, t69
+      real*8 :: t70, t71, t72, t73, t74, t75, t76, t77, t78, t79, t80
+      real*8 :: x, y, r, h, coef, r0, rc
 
-                        tau = 0.
-                        bn = dot_product(b, n)
-                        bnorm = norm2(b)
+      tau = 0.
+      bn = dot_product(b, n)
+      bnorm = norm2(b)
 
-                        x = xy(1)
-                        y = xy(2)
+      x = xy(1)
+      y = xy(2)
 
-                        U1 = uc(1)
-                        U2 = uc(2)
-                        U3 = uc(3)
-                        U4 = uc(4)
+      U1 = uc(1)
+      U2 = uc(2)
+      U3 = uc(3)
+      U4 = uc(4)
 
-                        !************************************
-                        !
-                        ! *****     CONVECTIVE PART  ********
-                        !
-                        !************************************
-                        IF (abs(isext - 1.) .lt. 1e-12) THEN
+      !************************************
+      !
+      ! *****     CONVECTIVE PART  ********
+      !
+      !************************************
+      IF (abs(isext - 1.) .lt. 1e-12) THEN
 
-                           !************************************
-                           !   EXTERIOR FACES
-                           !************************************
-                           tau(3, 1) = (1.0D0/U1**2*abs(U2*bn)*(U1*U3 - U2**2)*(-4.0D0))/abs(U1)
-                           tau(3, 2) = (abs(U2*bn)*(U1*U3*2.0D0 - U2**2*3.0D0)*2.0D0)/(U1*(U2 + eps)*abs(U1))
-                           tau(3, 3) = (abs(U2*bn)*4.0D0)/abs(U1)
+         !************************************
+         !   EXTERIOR FACES
+         !************************************
+         tau(3, 1) = (1.0D0/U1**2*abs(U2*bn)*(U1*U3 - U2**2)*(-4.0D0))/abs(U1)
+         tau(3, 2) = (abs(U2*bn)*(U1*U3*2.0D0 - U2**2*3.0D0)*2.0D0)/(U1*(U2 + eps)*abs(U1))
+         tau(3, 3) = (abs(U2*bn)*4.0D0)/abs(U1)
 
-                        ELSE
-                           !************************************
-                           !   INTERIOR FACES
-                           !************************************
-                           t2 = abs(U1)
-                           t3 = U1*U3*2.0D0
-                           t4 = U1*U4*2.0D0
-                           t5 = U2**2
-                           !          t6 = t3+t4-t5
-                           t6 = abs(t3 + t4 - t5)
-                           t7 = U2*bn
-                           t8 = abs(t7)
-                           t9 = t5**2
-                           t10 = U2*bn*3.0D0
-                           t11 = sqrt(5.0D0)
-                           t12 = sqrt(t6)
-                           t13 = bn*t11*t12
-                           t14 = t10 + t13
-                           t15 = abs(t14)
-                           t16 = t10 - t13
-                           t17 = abs(t16)
-                           t18 = t6**(3.0D0/2.0D0)
-                           t19 = 1.0D0/t6
-                           t20 = 1.0D0/t2
-                           t21 = U2*3.0D0
-                           t22 = t11*t12
-                           t23 = U1**2
-                           t24 = t21 + t22
-                           t25 = bn*t24
-                           t26 = abs(t25)
-                           t27 = t21 - t22
-                           t28 = bn*t27
-                           t29 = abs(t28)
-                           t30 = t8*(-6.0D0) + t26 + t29
-                           t31 = t19*t20*t23*t30*(1.0D0/5.0D0)
-                           t32 = 1.0D0/U1
-                           t33 = U1*U3*1.0D1
-                           t34 = U1*U4*1.0D1
-                           t51 = t5*9.0D0
-                           t35 = t33 + t34 - t51
-                           t36 = 1.0D0/t35
-                           t37 = U2*t12*5.0D0
-                           t38 = U1*U3*t11*1.0D1
-                           t39 = U1*U4*t11*1.0D1
-                           t40 = U2*t11*t12
-                           t41 = t3 + t4
-                           t42 = t2*t6*1.35D2
-                           t43 = t42 - t2*t41*6.0D1
-                           t44 = 1.0D0/t43
-                           t45 = U1*U2*t5*t8*7.2D1
-                           t46 = U1*U2*t6*t15*1.5D1
-                           t47 = U1*U2*t6*t17*1.5D1
-                           t48 = U1*t11*t15*t18*5.0D0
-                           t49 = U1*t5*t11*t12*t17*4.0D0
+      ELSE
+         !************************************
+         !   INTERIOR FACES
+         !************************************
+         t2 = abs(U1)
+         t3 = U1*U3*2.0D0
+         t4 = U1*U4*2.0D0
+         t5 = U2**2
+         !          t6 = t3+t4-t5
+         t6 = abs(t3 + t4 - t5)
+         t7 = U2*bn
+         t8 = abs(t7)
+         t9 = t5**2
+         t10 = U2*bn*3.0D0
+         t11 = sqrt(5.0D0)
+         t12 = sqrt(t6)
+         t13 = bn*t11*t12
+         t14 = t10 + t13
+         t15 = abs(t14)
+         t16 = t10 - t13
+         t17 = abs(t16)
+         t18 = t6**(3.0D0/2.0D0)
+         t19 = 1.0D0/t6
+         t20 = 1.0D0/t2
+         t21 = U2*3.0D0
+         t22 = t11*t12
+         t23 = U1**2
+         t24 = t21 + t22
+         t25 = bn*t24
+         t26 = abs(t25)
+         t27 = t21 - t22
+         t28 = bn*t27
+         t29 = abs(t28)
+         t30 = t8*(-6.0D0) + t26 + t29
+         t31 = t19*t20*t23*t30*(1.0D0/5.0D0)
+         t32 = 1.0D0/U1
+         t33 = U1*U3*1.0D1
+         t34 = U1*U4*1.0D1
+         t51 = t5*9.0D0
+         t35 = t33 + t34 - t51
+         t36 = 1.0D0/t35
+         t37 = U2*t12*5.0D0
+         t38 = U1*U3*t11*1.0D1
+         t39 = U1*U4*t11*1.0D1
+         t40 = U2*t11*t12
+         t41 = t3 + t4
+         t42 = t2*t6*1.35D2
+         t43 = t42 - t2*t41*6.0D1
+         t44 = 1.0D0/t43
+         t45 = U1*U2*t5*t8*7.2D1
+         t46 = U1*U2*t6*t15*1.5D1
+         t47 = U1*U2*t6*t17*1.5D1
+         t48 = U1*t11*t15*t18*5.0D0
+         t49 = U1*t5*t11*t12*t17*4.0D0
       t50 = t19*t44*(t45+t46+t47+t48+t49-U1*t11*t17*t18*5.0D0-U1*U2*t6*t8*9.0D1-U1*U2*t5*t15*1.2D1-U1*U2*t5*t17*1.2D1-U1*t5*t11*t12*t15*4.0D0)
-                           t52 = U1*U3*5.0D0
-                           t53 = U1*U4*5.0D0
-                           t54 = t5*(-4.0D0) + t52 + t53
-                           t55 = 1.0D0/U1**2
-                           t56 = t5*7.0D0
-                           t57 = 1.0D0/t6**(3.0D0/2.0D0)
-                           t58 = t33 + t34 - t40 - t56
-                           t59 = t9*1.5D1
-                           t60 = U3**2
-                           t61 = t23*t60*5.0D1
-                           t62 = U3*U4*t23*5.0D1
-                           t63 = U2*t5*t11*t12*3.0D0
-                           t65 = U1*U3*t5*5.5D1
-                           t66 = U1*U4*t5*3.0D1
-                           t64 = t59 + t61 + t62 + t63 - t65 - t66
-                           t67 = U2*2.0D0
-                           t68 = U1*U3*5.0D1
-                           t69 = U1*U4*5.0D1
-                           t73 = t5*4.5D1
-                           t70 = t68 + t69 - t73
-                           t71 = 1.0D0/t70
-                           t72 = t22 + t67
-                           t74 = t59 + t61 + t62 - t63 - t65 - t66
-                           t75 = t11*t20*t26*t57*t71*t72*t74*(1.0D0/1.5D1)
-                           t76 = t11*t20*t29*t57*t64*t71*(t22 - t67)*(1.0D0/1.5D1)
-                           t77 = 1.0D0/sqrt(t6)
-                           t78 = U1*U4*t12*t26*5.0D0
-                           t79 = U1*U4*t12*t29*5.0D0
-                           t80 = U1*U2*U4*t11*t26*2.0D0
+         t52 = U1*U3*5.0D0
+         t53 = U1*U4*5.0D0
+         t54 = t5*(-4.0D0) + t52 + t53
+         t55 = 1.0D0/U1**2
+         t56 = t5*7.0D0
+         t57 = 1.0D0/t6**(3.0D0/2.0D0)
+         t58 = t33 + t34 - t40 - t56
+         t59 = t9*1.5D1
+         t60 = U3**2
+         t61 = t23*t60*5.0D1
+         t62 = U3*U4*t23*5.0D1
+         t63 = U2*t5*t11*t12*3.0D0
+         t65 = U1*U3*t5*5.5D1
+         t66 = U1*U4*t5*3.0D1
+         t64 = t59 + t61 + t62 + t63 - t65 - t66
+         t67 = U2*2.0D0
+         t68 = U1*U3*5.0D1
+         t69 = U1*U4*5.0D1
+         t73 = t5*4.5D1
+         t70 = t68 + t69 - t73
+         t71 = 1.0D0/t70
+         t72 = t22 + t67
+         t74 = t59 + t61 + t62 - t63 - t65 - t66
+         t75 = t11*t20*t26*t57*t71*t72*t74*(1.0D0/1.5D1)
+         t76 = t11*t20*t29*t57*t64*t71*(t22 - t67)*(1.0D0/1.5D1)
+         t77 = 1.0D0/sqrt(t6)
+         t78 = U1*U4*t12*t26*5.0D0
+         t79 = U1*U4*t12*t29*5.0D0
+         t80 = U1*U2*U4*t11*t26*2.0D0
       tau(1,1) = (t19*(t8*t9*2.4D1-t9*t15*4.0D0-t9*t17*4.0D0+t6**2*t8*5.0D1-t5*t6*t8*7.0D1+t5*t6*t15*5.0D0+t5*t6*t17*5.0D0-U2*t11*t15*t18*5.0D0+U2*t11*t17*t18*5.0D0+U2*t5*t11*t12*t15*4.0D0-U2*t5*t11*t12*t17*4.0D0))/(t2*t6*9.0D1-t2*t41*4.0D1)
         tau(1, 2) = t19*t20*(U1*U2*t8*(-1.2D1) + U1*U2*t15*2.0D0 + U1*U2*t17*2.0D0 - U1*t11*t12*t15 + U1*t11*t12*t17)*(-1.0D0/1.0D1)
-                           tau(1, 3) = t31
-                           tau(1, 4) = t31
+         tau(1, 3) = t31
+         tau(1, 4) = t31
       tau(2,1) = U2*t8*t19*t20*t32*t54*(2.0D0/5.0D0)+U2*t11*t19*t20*t29*t32*t36*t58*(t37-t38-t39+t5*t11*1.1D1)*(1.0D0/1.5D2)-U2*t11*t19*t20*t26*t32*t36*(t37+t38+t39-t5*t11*1.1D1)*(t5*(-7.0D0)+t33+t34+t40)*(1.0D0/1.5D2)
     tau(2,2) = t19*t20*(t5*t8*3.6D1-t5*t15*6.0D0+t6*t15*5.0D0-t5*t17*6.0D0+t6*t17*5.0D0+U2*t11*t12*t15-U2*t11*t12*t17)*(1.0D0/3.0D1)
-                           tau(2, 3) = t50
-                           tau(2, 4) = t50
+         tau(2, 3) = t50
+         tau(2, 4) = t50
       tau(3,1) = t5*t8*t19*t20*t54*t55*(1.0D0/5.0D0)-U4*t5*t8*t20*t32*t36*(2.5D1/3.0D0)+U2*t11*t20*t29*t36*t55*t57*t58*t64*(1.0D0/1.5D2)-U2*t11*t20*t26*t36*t55*t57*(t33+t34+t40-t56)*(t59+t61+t62-U1*U3*t5*5.5D1-U1*U4*t5*3.0D1-U2*t5*t11*t12*3.0D0)*(1.0D0/1.5D2)
       tau(3,2) = t11*t20*t29*t32*t57*t64*(-1.0D0/1.5D2)+t11*t20*t26*t32*t57*(t59+t61+t62-t63-U1*U3*t5*5.5D1-U1*U4*t5*3.0D1)*(1.0D0/1.5D2)+U2*t5*t8*t19*t20*t32*(3.0D0/5.0D0)
-                           tau(3, 3) = t75 + t76 - t5*t8*t19*t20*(3.0D0/5.0D0) + U1*U4*t8*t20*t36*(5.0D1/3.0D0)
-                           tau(3, 4) = t75 + t76 - t5*t8*t19*t20*(3.0D0/5.0D0) - t8*t20*t36*(t33 - t51)*(5.0D0/3.0D0)
+         tau(3, 3) = t75 + t76 - t5*t8*t19*t20*(3.0D0/5.0D0) + U1*U4*t8*t20*t36*(5.0D1/3.0D0)
+         tau(3, 4) = t75 + t76 - t5*t8*t19*t20*(3.0D0/5.0D0) - t8*t20*t36*(t33 - t51)*(5.0D0/3.0D0)
       tau(4,1) = (t11*t77*(U2*U4*t5*t15*(-1.0D1)+U2*U4*t6*t15*2.5D1+U2*U4*t5*t17*1.0D1-U2*U4*t6*t17*2.5D1-U4*t5*t8*t11*t12*5.0D1+U4*t5*t11*t12*t15*5.0D0+U4*t5*t11*t12*t17*5.0D0)*(-1.0D0/5.0D0))/(U1*t2*t6*5.4D1-U1*t2*t41*2.4D1)
-                           tau(4, 2) = t20*t77*(U4*t11*t15 - U4*t11*t17)*(1.0D0/6.0D0)
-                           tau(4, 3) = t20*t36*t77*(t78 + t79 + t80 - U1*U4*t8*t12*5.0D1 - U1*U2*U4*t11*t29*2.0D0)*(1.0D0/3.0D0)
-             tau(4, 4) = t20*t36*t77*(t78 + t79 + t80 - t5*t8*t12*4.5D1 + U1*U3*t8*t12*5.0D1 - U1*U2*U4*t11*t29*2.0D0)*(1.0D0/3.0D0)
-                        END IF
+         tau(4, 2) = t20*t77*(U4*t11*t15 - U4*t11*t17)*(1.0D0/6.0D0)
+         tau(4, 3) = t20*t36*t77*(t78 + t79 + t80 - U1*U4*t8*t12*5.0D1 - U1*U2*U4*t11*t29*2.0D0)*(1.0D0/3.0D0)
+         tau(4, 4) = t20*t36*t77*(t78 + t79 + t80 - t5*t8*t12*4.5D1 + U1*U3*t8*t12*5.0D1 - U1*U2*U4*t11*t29*2.0D0)*(1.0D0/3.0D0)
+      END IF
 
-                        !************************************
-                        !
-                        ! *****     DIFFUSIVE PART  ********
-                        !
-                        !************************************
-                        tau(1, 1) = tau(1, 1) + phys%diff_n*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-                        tau(2, 2) = tau(2, 2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+      !************************************
+      !
+      ! *****     DIFFUSIVE PART  ********
+      !
+      !************************************
+      tau(1, 1) = tau(1, 1) + phys%diff_n*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+      tau(2, 2) = tau(2, 2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
   tau(3, 3) = tau(3, 3) + (phys%diff_e + abs(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
  tau(4, 4) = tau(4, 4) + (phys%diff_ee + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 
-                     END SUBROUTINE computeTauGaussPoints_matrix
+   END SUBROUTINE computeTauGaussPoints_matrix
 
 !  !***********************************************************************
 !  !
@@ -3308,4 +3257,4 @@ tau_aux(3) = tau_aux(3) + (phys%diff_e + abs(bn)*phys%diff_pari*up(7)**2.5*bnorm
 !
 !  END SUBROUTINE loadMagneticFieldTemporalEvolution
 
-                     END MODULE physics
+END MODULE physics

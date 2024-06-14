@@ -37,6 +37,13 @@ PROGRAM MHDG
    INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
    INTEGER             :: switch_save
 
+   ! integer              :: ieq
+   ! real*8, allocatable   :: uphy(:, :)
+   ! real*8               :: Vmax(phys%npv), Vmin(phys%npv)
+   !
+   ! ALLOCATE (uphy(nu/phys%Neq, phys%npv))
+   !
+
    write (6, *) "STARTING"
    ! Check the number of input arguments
    nb_args = iargc()
@@ -294,12 +301,16 @@ PROGRAM MHDG
          END IF
 
          ! Compute Jacobian
+         print *, "before Jacobian"
          CALL HDG_computeJacobian()
          ! Set boundary conditions
+         print *, "before bc"
          CALL hdg_BC()
          ! Compute elemental mapping
+         print *, "before mapping"
          CAlL hdg_Mapping()
          ! Assembly the global matrix
+         print *, "before assembly"
          CALL hdg_Assembly()
          !IF (switch_save.EQ.0) THEN
          !  WRITE (6, *) "Save matrix"
@@ -318,8 +329,10 @@ PROGRAM MHDG
 !      endif
          !ENDIF
          ! Solve linear system
+         print *, "before global"
          CALL solve_global_system()
          ! Compute element-by-element solution
+         print *, "before element solution"
          CALL compute_element_solution()
          ! Check for NaN (doesn't work with optimization flags)
          DO i = 1, nu
@@ -334,6 +347,8 @@ PROGRAM MHDG
 
          ! Apply filtering
 !      CALL HDG_FilterSolution()
+
+         call displayResults()
 
          ! Save solution
          IF (switch%saveNR) THEN
@@ -361,6 +376,7 @@ PROGRAM MHDG
             WRITE (6, *) " "
             WRITE (6, *) " "
          END IF
+
       END DO ! ************ END OF NEWTON-RAPHSON LOOP *********************
 
       !  ! Apply threshold
@@ -412,9 +428,9 @@ PROGRAM MHDG
 #ifndef NEUTRALP
 #ifdef NEUTRAL
                   WRITE (6, *) "Neutrals diffusion: ", phys%diff_nn!*switch%diffred*simpar%refval_diffusion
-#ifdef KEQUATION
-                  WRITE (6, *) "K diffusion min: ", phys%diff_k_min*switch%diffred*simpar%refval_diffusion
-#endif
+! #ifdef KEQUATION
+!                   WRITE (6, *) "K diffusion min: ", phys%diff_k_min*switch%diffred*simpar%refval_diffusion
+! #endif
 #endif
 #endif
                   WRITE (6, *) "************************************************"
@@ -432,10 +448,10 @@ PROGRAM MHDG
 #ifndef NEUTRALP
 #ifdef NEUTRAL
                phys%diff_nn = phys%diff_nn!*switch%diffred
-#ifdef KEQUATION
-               phys%diff_k_min = phys%diff_k_min*switch%diffred
-               phys%diff_k_max = phys%diff_k_max!*switch%diffred
-#endif
+! #ifdef KEQUATION
+!                phys%diff_k_min = phys%diff_k_min*switch%diffred
+!                phys%diff_k_max = phys%diff_k_max!*switch%diffred
+! #endif
 #endif
 #endif
 
@@ -514,9 +530,9 @@ PROGRAM MHDG
 #ifndef NEUTRALP
 #ifdef NEUTRAL
                WRITE (6, *) "Neutrals diffusion: ", phys%diff_nn!*switch%diffred*simpar%refval_diffusion
-#ifdef KEQUATION
-               WRITE (6, *) "K diffusion min: ", phys%diff_k_min!*switch%diffred*simpar%refval_diffusion
-#endif
+! #ifdef KEQUATION
+!                WRITE (6, *) "K diffusion min: ", phys%diff_k_min!*switch%diffred*simpar%refval_diffusion
+! #endif
 #endif
 #endif
                WRITE (6, *) "************************************************"
@@ -534,10 +550,10 @@ PROGRAM MHDG
 #ifndef NEUTRALP
 #ifdef NEUTRAL
             phys%diff_nn = phys%diff_nn!*switch%diffred
-#ifdef KEQUATION
-            phys%diff_k_min = phys%diff_k_min*switch%diffred
-            phys%diff_k_max = phys%diff_k_max!*switch%diffred
-#endif
+! #ifdef KEQUATION
+!             phys%diff_k_min = phys%diff_k_min*switch%diffred
+!             phys%diff_k_max = phys%diff_k_max!*switch%diffred
+! #endif
 #endif
 #endif
 
@@ -784,12 +800,12 @@ CONTAINS
       save_name = TRIM(ADJUSTL(save_name))//"Ptor"//Num
 
 #endif
-#ifndef KEQUATION
+! #ifndef KEQUATION
       ! Diffusion
       WRITE (Num, "(E10.3)") phys%diff_n*simpar%refval_diffusion
-#else
-      WRITE (Num, "(E10.3)") (phys%diff_n + phys%diff_k_min)*simpar%refval_diffusion
-#endif
+! #else
+!       WRITE (Num, "(E10.3)") (phys%diff_n + phys%diff_k_min)*simpar%refval_diffusion
+! #endif
       save_name = TRIM(ADJUSTL(save_name))//"_DPe"//TRIM(ADJUSTL(Num))
 #ifdef TEMPERATURE
       WRITE (Num, "(E10.3)") phys%diff_pari

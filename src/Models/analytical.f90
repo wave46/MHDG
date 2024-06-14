@@ -1291,6 +1291,7 @@ CONTAINS
          up(:, 11) = 1.e-8
 #ifdef KEQUATION
          up(:, 12) = 1.8e-5
+         up(:, 13) = 1.8e-3
 #endif
 #endif
 
@@ -1308,6 +1309,7 @@ CONTAINS
          up(:, 11) = 1.e-8
 #ifdef KEQUATION
          up(:, 12) = 1.e-5
+         up(:, 13) = 1.8e-3
 #endif
 #endif
       CASE (65)
@@ -1335,6 +1337,7 @@ CONTAINS
          up(:, 11) = 1.e-8
 #ifdef KEQUATION
          up(:, 12) = 1.8e-5
+         up(:, 13) = 1.8e-3
 #endif
 #endif
       CASE DEFAULT
@@ -1423,6 +1426,8 @@ CONTAINS
 #ifdef KEQUATION
       ux(:, 6) = upx(:, 6)*up(:, 6)
       uy(:, 6) = upy(:, 6)*up(:, 6)
+      ux(:, 7) = upx(:, 7)*up(:, 7)
+      uy(:, 7) = upy(:, 7)*up(:, 7)
 #endif
 #endif
    END SUBROUTINE analytical_gradient
@@ -1492,7 +1497,7 @@ CONTAINS
         f(i,1) = (2*D*a**2*t7-2*a*xm*t1*t3+2*a*xx*t1*t3+2*a*ym*t2*t3-2*a*yy*t2*t3+D*a**2*xm**2*t7+D*a**2*xx**2*t7+D*a**2*ym**2*t7+D*a**2*yy**2*t7+D*a*xm*t1-D*a*xx*t1+&
           &D*a*ym*t2-D*a*yy*t2+a*xm*cos(a*xx)*cy2*sin(a*xx)*t3-a*xx*cos(a*xx)*cy2*sin(a*xx)*t3-a*ym*cx2*cos(a*yy)*sin(a*yy)*t3+a*yy*cx2*cos(a*yy)*sin(a*yy)*t3-&
           &a*xm*cos(a*xx)*sin(a*xx)*sy2*t3+a*xx*cos(a*xx)*sin(a*xx)*sy2*t3+a*ym*t2**2*sin(a*yy)*t3-a*yy*t2**2*sin(a*yy)*t3-2*D*a**2*xm*ym*t6+2*D*a**2*xx*ym*t6+&
-                  &2*D*a**2*xm*yy*t6 - 2*D*a**2*xx*yy*t6 - 2*D*a**2*xm*xx*t7 - 2*D*a**2*ym*yy*t7)/((xm - xx)**2 + (ym - yy)**2 + 1)
+                   &2*D*a**2*xm*yy*t6 - 2*D*a**2*xx*yy*t6 - 2*D*a**2*xm*xx*t7 - 2*D*a**2*ym*yy*t7)/((xm - xx)**2 + (ym - yy)**2 + 1)
 
     f(i,2) = (a*(60*xm*t2*t3-60*xx*t2*t3-60*ym*t1*t3+60*yy*t1*t3+4*xm*t7*t3-4*xx*t7*t3+4*ym*t7*t3-4*yy*t7*t3+12*a*mu*t6-6*mu*xm*t2+&
  &6*mu*xx*t2-6*mu*ym*t1+6*mu*yy*t1-2*xm*cy2*sx2*t3+2*xx*cy2*sx2*t3-2*ym*cx2*sy2*t3+2*yy*cx2*sy2*t3+2*xm*sx2*sy2*t3-2*xx*sx2*sy2*t3+&
@@ -1509,7 +1514,7 @@ CONTAINS
                  &12*a*mu*xm*xx*t6 - 12*a*mu*ym*yy*t6 - 12*a*mu*xm*ym*t7 + 12*a*mu*xx*ym*t7 + 12*a*mu*xm*yy*t7 - 12*a*mu*xx*yy*t7 +&
                     &24*a*mu*cos(a*xx)*t2*sin(a*yy) + 12*a*mu*xm**2*cos(a*xx)*t2*sin(a*yy) + 12*a*mu*xx**2*cos(a*xx)*t2*sin(a*yy) +&
               &12*a*mu*ym**2*cos(a*xx)*t2*sin(a*yy) + 12*a*mu*yy**2*cos(a*xx)*t2*sin(a*yy) - 24*a*mu*xm*xx*cos(a*xx)*t2*sin(a*yy) -&
-                      &24*a*mu*ym*yy*cos(a*xx)*t2*sin(a*yy)))/(3*(xm**2 - 2*ym*yy - 2*xm*xx + xx**2 + ym**2 + yy**2 + 1))
+                                 &24*a*mu*ym*yy*cos(a*xx)*t2*sin(a*yy)))/(3*(xm**2 - 2*ym*yy - 2*xm*xx + xx**2 + ym**2 + yy**2 + 1))
 
             f(i, 3) = (csii*(a*xx - a*xm + 3*a**2*sin(2*a*xx) + 2*a*xm*cx2 - 2*a*xx*cx2 + a*xm*cy2 - a*xx*cy2 + 4*a**2*t1 +&
    &40*a**2*t7+2*a**2*xm**2*sin(2*a*xx)+2*a**2*xx**2*sin(2*a*xx)+a**2*ym**2*sin(2*a*xx)+a**2*yy**2*sin(2*a*xx)-2*a*xm*t5+2*a*xx*t5+&
