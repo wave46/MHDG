@@ -1236,7 +1236,7 @@ CONTAINS
     integer                                  :: i
     real*8                                   :: a, r(size(x)), th(size(x))
     real*8                                   :: sigma,fluxel(refElPol%Nnodes2d)
-    
+
     up = 0.
     a = 2*pi
     SELECT CASE (switch%testcase)

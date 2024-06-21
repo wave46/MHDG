@@ -10,33 +10,33 @@ SUBROUTINE adimensionalization()
   IMPLICIT NONE
 
   ! Parameters
-  real*8, parameter :: mi = 3.35e-27         ! Ionic mass [kg]
-  real*8, parameter :: me = 9.109e-31        ! Electronic mass [kg]
-  real*8, parameter :: e = 1.60217662e-19    ! Electron charge [C]
-  real*8, parameter :: kB = 1.38064852e-23   ! Boltzmann constant [m^2*kg*s^-2*K^-1]
-  real*8, parameter :: eps0 = 8.85e-12       ! Permittivity of free space [F/m]
+  REAL*8, PARAMETER :: mi = 3.35e-27         ! Ionic mass [kg]
+  REAL*8, PARAMETER :: me = 9.109e-31        ! Electronic mass [kg]
+  REAL*8, PARAMETER :: e = 1.60217662e-19    ! Electron charge [C]
+  REAL*8, PARAMETER :: kB = 1.38064852e-23   ! Boltzmann constant [m^2*kg*s^-2*K^-1]
+  REAL*8, PARAMETER :: eps0 = 8.85e-12       ! Permittivity of free space [F/m]
 
   ! Reference values
-  real*8, parameter :: L0 = 1.901e-3         ! Length scale [m]
-  real*8, parameter :: t0 = 1.374e-07        ! Time scale [s]
+  REAL*8, PARAMETER :: L0 = 1.901e-3         ! Length scale [m]
+  REAL*8, PARAMETER :: t0 = 1.374e-07        ! Time scale [s]
   ! *** Temperature scale [eV]. It corresponds to the background temperature
-  real*8           :: Tev                    ! Temperature scale [eV].
+  REAL*8           :: Tev                    ! Temperature scale [eV].
 
-  real*8, parameter :: n0 = 1e19             ! Reference density [m^-3]
+  REAL*8, PARAMETER :: n0 = 1e19             ! Reference density [m^-3]
 
   ! Derived reference values
-  real*8           :: u0                     ! Reference speed [m*s^-1]
-  real*8           :: B0                     ! Reference magnetic field [kg*C^-1*s^-1]
-  real*8           :: phi0                   ! Reference electric potential [kg*m^2*C^-1*s^-2]
-  real*8           :: W0                     ! Reference vorticity [kg^-1*C]
-  real*8           :: J0                     ! Reference current density [C*s^-1*m^-2]
-  real*8           :: D0                     ! Reference diffusion [m^2*s^-1]
+  REAL*8           :: u0                     ! Reference speed [m*s^-1]
+  REAL*8           :: B0                     ! Reference magnetic field [kg*C^-1*s^-1]
+  REAL*8           :: phi0                   ! Reference electric potential [kg*m^2*C^-1*s^-2]
+  REAL*8           :: W0                     ! Reference vorticity [kg^-1*C]
+  REAL*8           :: J0                     ! Reference current density [C*s^-1*m^-2]
+  REAL*8           :: D0                     ! Reference diffusion [m^2*s^-1]
 
   ! Values from Stengby
-  real*8, parameter :: k0 = 2000             ! Stengby
+  REAL*8, PARAMETER :: k0 = 2000             ! Stengby
 
   ! Other reals
-  real*8           :: k_star, coef, tau_ie
+  REAL*8           :: k_star, coef, tau_ie
 
   ! Set the reference temperature to the background one
 #ifdef TEMPERATURE
@@ -95,15 +95,15 @@ SUBROUTINE adimensionalization()
 
 
   IF (switch%testcase < 10) THEN
-    IF (MPIvar%glob_id .eq. 0) THEN
-      WRITE (6, *) "No adimensionalization needed"
-    ENDIF
-    RETURN
+     IF (MPIvar%glob_id .EQ. 0) THEN
+        WRITE (6, *) "No adimensionalization needed"
+     ENDIF
+     RETURN
   ELSE
-    phys%Mref = 1.
+     phys%Mref = 1.
   ENDIF
-  IF (MPIvar%glob_id .eq. 0) THEN
-    WRITE (6, *) "Adimensionalizing input values"
+  IF (MPIvar%glob_id .EQ. 0) THEN
+     WRITE (6, *) "Adimensionalizing input values"
   ENDIF
   ! Computing derived reference values
   u0 = L0/t0
@@ -130,10 +130,10 @@ SUBROUTINE adimensionalization()
   ! Parallel temperature diffusion coefficient for non-isothermal model
   ! tau_ie = mi/me*2.4/3.*1e10*Tev**(0.5)*u0**2/n0/t0
   k_star = t0**3*Tev**(7./2.)/(n0*L0**4)*k0/mi
-  coef = 3*sqrt2/e**4/12.*eps0**2*pi**1.5*mi/me*sqrt(me)*e**1.5
+  coef = 3*sqrt2/e**4/12.*eps0**2*pi**1.5*mi/me*SQRT(me)*e**1.5
   !tau_ie = mi/me*2.4/3.*1e10*sqrt(Tev)*u0**2/n0/t0
   !tau_ie =(12./15.)*(kB/e)*2./3.*sqrt(Tev)*mi*u0**2/(n0*t0*kB)
-  tau_ie = -(12./15.)*(kB/e)*2./3.*coef*sqrt(Tev)*mi*u0**2/(n0*t0*kB)
+  tau_ie = -(12./15.)*(kB/e)*2./3.*coef*SQRT(Tev)*mi*u0**2/(n0*t0*kB)
   !   tau_ie = 2./3.*coef*Tev**(0.5)*u0**2/n0/t0*mi/k0
   phys%diff_pari = k_star/33.333333333333336
   phys%diff_pare = k_star
@@ -155,16 +155,10 @@ SUBROUTINE adimensionalization()
   phys%diff_k_min = phys%diff_k_min/D0
   ! k limit
   phys%k_max = phys%k_max/u0**2
-#endif  
+#endif
 
   ! Pinch velocity
   phys%v_p = phys%v_p/u0
-  ! additional heating coefficients
-  phys%heating_power = phys%heating_power*t0/n0/mi/u0**2/L0**3
-  phys%heating_dr    = phys%heating_dr/L0
-  phys%heating_dz    = phys%heating_dz/L0
-  phys%heating_sigmar    = phys%heating_sigmar/L0
-  phys%heating_sigmaz    = phys%heating_sigmaz/L0
 
   ! Curvature drift coefficient
   phys%dfcoef = 2*Tev*t0/(L0**2*B0)

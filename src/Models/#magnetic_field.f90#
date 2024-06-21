@@ -216,7 +216,7 @@ CONTAINS
 				   ip = 457
        jp = 457
        !ip = 541
-       !jp = 391 
+       !jp = 391
        if(switch%testcase .ne. 59) then !if not a moving equilibrium simulation
          fname = 'WEST_54487_0201.h5'
        else
@@ -241,7 +241,7 @@ CONTAINS
         ! ITER case
     		  if (switch%ME .eq. .FALSE.) then !if not a moving equilibrium simulation
 			        !ip = 513
-           !jp = 257 
+           !jp = 257
     		     !fname = 'ITER_2008_MagField.h5'
     		     fname = 'ITER_135011_0000.h5'
 			     else
@@ -256,9 +256,9 @@ CONTAINS
         ENDIF
         CALL HDF5_open(fname, file_id, IERR)
         CALL HDF5_integer_reading(file_id, ip, 'ip')
-        CALL HDF5_integer_reading(file_id, jp, 'jp') 
+        CALL HDF5_integer_reading(file_id, jp, 'jp')
     endif
-    
+
     ALLOCATE (r2D(ip, jp))
     ALLOCATE (z2D(ip, jp))
     ALLOCATE (flux2D(ip, jp))
@@ -307,18 +307,18 @@ CONTAINS
       END DO
 #endif
     END DO
-     
+
     ! Min and Max flux for inizialization
-    phys%Flux2Dmin = minval(phys%magnetic_flux)      
-    phys%Flux2Dmax = maxval(phys%magnetic_flux) 
+    phys%Flux2Dmin = minval(phys%magnetic_flux)
+    phys%Flux2Dmax = maxval(phys%magnetic_flux)
 
 #IFDEF PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmax, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmin, 1, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, ierr)
-#ENDIF 
-  
+#ENDIF
+
     ! Magnetic flux normalized to separatrix: PSI
-    phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin)    
+    phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin)
     WRITE(6,*) 'psiSep = ', psiSep
     WRITE(6,*) 'min flux2D = ', phys%Flux2Dmin
 
@@ -826,7 +826,7 @@ CONTAINS
 			 ip = 457
        jp = 457
        !ip = 541
-       !jp = 391 
+       !jp = 391
        if (switch%ME .eq. .FALSE.) then !if not a moving equilibrium simulation
           fname = 'WEST_54487_Jtor_0201.h5'
        else
@@ -859,7 +859,7 @@ CONTAINS
         CALL HDF5_integer_reading(file_id, ip, 'ip')
         CALL HDF5_integer_reading(file_id, jp, 'jp')
     endif
-    
+
     ALLOCATE(r2D(ip,jp))
     ALLOCATE(z2D(ip,jp))
     ALLOCATE(Jtor(ip,jp))
@@ -894,10 +894,10 @@ CONTAINS
 
     !Compute Ip
     CALL computeIplasma()
-    
+
     IF (MPIvar%glob_id .eq. 0) THEN
           write(6,*) 'I_p =  ', phys%I_p, '[MA]'
-    ENDIF    
+    ENDIF
 
     ! Free memory
     DEALLOCATE(r2D,z2D,Jtor,xvec,yvec)
@@ -1002,22 +1002,22 @@ CONTAINS
     real*8		:: detJ(refElPol%NGauss2D)
     integer	:: iel,g
     real*8  	:: xyDerNorm_g
-    
+
     phys%I_p = 0.
-    
+
     DO iel = 1, Mesh%Nelems
     	! Coordinates of the nodes of the element
     	Xel = Mesh%X(Mesh%T(iel,:),:)
-        
+
    	! Toroidal current of the nodes of the element
         Jtorel = phys%Jtor(Mesh%T(iel,:))
-   
+
        ! Gauss points position
        xyg = matmul(refElPol%N2D,Xel)
-  
+
        ! Toroidal current at Gauss points
       Jtorg = matmul(refElPol%N2D,Jtorel)
-       
+
        ! Jacobian
        J11 = matmul(refElPol%Nxi2D,Xel(:,1))                             ! ng x 1
        J12 = matmul(refElPol%Nxi2D,Xel(:,2))                             ! ng x 1
@@ -1028,30 +1028,30 @@ CONTAINS
 #ifdef PARALL
        IF (Mesh%ghostElems(iel) .eq. 0) THEN
 #endif
-       
+
           ! Loop in 2D Gauss points
           DO g = 1, refElPol%NGauss2D
              ! Integration weight
              dvolu = refElPol%gauss_weights2D(g)*detJ(g)
 
              ! Compute I plasma
-             phys%I_p = phys%I_p + Jtorg(g)*dvolu*phys%lscale**2 	 
-       
+             phys%I_p = phys%I_p + Jtorg(g)*dvolu*phys%lscale**2
+
           END DO
-      		
+
 #ifdef PARALL
        ENDIF
 #endif
-     
+
     END DO
 
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%I_p, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
-    
+
     ! Toroidal current in [MA]
-    phys%I_p = phys%I_p/1.e6                                                   
-    
+    phys%I_p = phys%I_p/1.e6
+
   END SUBROUTINE computeIplasma
 
 
@@ -1063,7 +1063,7 @@ CONTAINS
     character(LEN=25) :: fname = 'Puff_54487.h5'
     integer(HID_T)    :: file_id
     integer           :: qp, Nn2D
-    integer           :: T(Mesh%Nelems,refElPol%Nnodes2D)  
+    integer           :: T(Mesh%Nelems,refElPol%Nnodes2D)
     real*8            :: lower, upper, nli, n_Gw, n_la, pi = 3.1416, a = 2.
     real*8            :: X(Mesh%Nnodes,2), u(Mesh%Nelems*refElPol%Nnodes2D,phys%Neq)
     real*8            :: linex(1000), liney(1000), n_i(Mesh%Nelems*refElPol%Nnodes2D)
@@ -1083,7 +1083,7 @@ CONTAINS
        ENDIF
        CALL HDF5_close(file_id)
     END IF
-    
+
     ! ITER puff: linear increase up to nli = 4.00E+19
     IF (switch%testcase .ge. 80 .and. switch%testcase .le. 89) THEN
         ! Puff feedback: check if central line integrated has reached the target value (4e19 for ITER ohmic)
@@ -1091,7 +1091,7 @@ CONTAINS
         Nn2D = refElPol%Nnodes2D
         X = mesh%X
         T = mesh%T
-        nli = 0. 
+        nli = 0.
         lower = minval(Mesh%X(:,1))
         upper = maxval(Mesh%X(:,1))
         linex = (/(lower + (upper - lower)/1000.*(i-1), i=1, 1000)/)
@@ -1140,15 +1140,15 @@ CONTAINS
                 phys%puff = phys%puff_exp(time%it+1)
         ELSE
            phys%puff_exp(time%it+1) = max(phys%puff_exp(time%it) + 50.*(2 - sign(1.,phys%puff_slope*n_Gw - n_la))*(phys%puff_slope*n_Gw - n_la), 0.)
-           !phys%puff_exp(time%it+1) = max(phys%puff_exp(time%it) + 50.*(phys%puff_slope*n_Gw - n_la), 0.)   
+           !phys%puff_exp(time%it+1) = max(phys%puff_exp(time%it) + 50.*(phys%puff_slope*n_Gw - n_la), 0.)
            phys%puff = phys%puff_exp(time%it+1)
        END IF
        IF (MPIvar%glob_id .eq. 0) THEN
 	       WRITE (6, '(" * Puff = ", E10.3, 27X, " *")')  phys%puff
        END IF
-   
+
     END IF
-          
+
   END SUBROUTINE SetPuff
 
 END MODULE Magnetic_field

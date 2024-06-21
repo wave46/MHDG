@@ -356,7 +356,7 @@ CONTAINS
           call HDF5_array2D_saving(file_id, Mesh%Xgf, size(Mesh%Xgf, 1), size(Mesh%Xgf, 2), 'Xgf')
           call HDF5_array2D_saving(file_id, Mesh%Xgb, size(Mesh%Xgb, 1), size(Mesh%Xgb, 2), 'Xgb')
        endif
-    endif   
+    endif
     !      call HDF5_array1D_saving(file_id,sol%tres,sol%Nt,'tres')
     !      call HDF5_array1D_saving(file_id,sol%time,sol%Nt,'time')
     if (switch%steady .or. switch%psdtime) then
@@ -868,7 +868,7 @@ CONTAINS
     CALL HDF5_group_open(group_id, 'switches', group_id2, ierr)
     CALL HDF5_integer_reading(group_id2, logrho_ptr, 'logrho')
     CALL HDF5_group_close(group_id2, ierr)
-#else  
+#else
     logrho_ptr = switch%logrho
 #endif
     IF (switch%ME) THEN

@@ -266,7 +266,7 @@ CONTAINS
       A(5, 2) = U(5)/U(1)
       A(5, 5) = U(2)/U(1)
       A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
-#endif 
+#endif
     end if
 
   END SUBROUTINE jacobianMatrices
@@ -306,13 +306,13 @@ CONTAINS
       An(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
       An(4, 2) = 5./3.*U(4)/U(1)
       An(4, 4) = 5./3.*U(2)/U(1)
-      
+
 #ifdef NEUTRALP
       An(5, 1) = -U(5)*U(2)/U(1)**2
       An(5, 2) = U(5)/U(1)
       An(5, 5) = U(2)/U(1)
       An(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*An(5,:)
-#endif      
+#endif
     endif
     An = bn*An
   END SUBROUTINE jacobianMatricesFace
@@ -338,11 +338,11 @@ CONTAINS
 #ifdef NEUTRALP
     A(5, 1) = -U(5)*U(2)/U(1)**2
     A(5, 2) = U(5)/U(1)
-    A(5, 5) = U(2)/U(1) 
+    A(5, 5) = U(2)/U(1)
     A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
 #endif
   END SUBROUTINE jacobianMatricesBohm
-  
+
 #ifdef NEUTRAL
   !*****************************************
   ! Jacobian matrices for Neutrals
@@ -351,16 +351,16 @@ CONTAINS
   real*8, intent(in)  :: U(:), Up(:), Q(:,:), b(:), sigmaviz, sigmavcx
   real*8, intent(out) :: Ax(:,:),Ay(:,:)
   real*8              :: GradTi(simpar%Ndim), GradTimod, Vnn, Csnn
-  
+
   GradTi(1) = 2./(3*phys%Mref)*( (U(2)**2/U(1)**3 - U(3)/U(1)**2)*Q(1,1) - (U(2)/U(1)**2)*Q(1,2) + 1./U(1)*Q(1,3) )
   GradTi(2) = 2./(3*phys%Mref)*( (U(2)**2/U(1)**3 - U(3)/U(1)**2)*Q(2,1) - (U(2)/U(1)**2)*Q(2,2) + 1./U(1)*Q(2,3) )
   GradTi = simpar%refval_temperature/simpar%refval_length*GradTi
-  
+
   GradTimod = sqrt(GradTi(1)**2 + GradTi(2)**2)
-  
+
   Vnn = simpar%refval_charge/(simpar%refval_mass*simpar%refval_density)*GradTimod/(U(1)*(abs(sigmaviz) + abs(sigmavcx)))
   Csnn = sqrt(simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass*Up(7))
-   
+
   Ax = 0.d0
   !Neutral convective velocity
 !  if (Csnn .ge. Vnn) then
@@ -371,7 +371,7 @@ CONTAINS
 !  Ax = Ax/simpar%refval_speed
   !Neutral velocity parallel to magnetic field
   Ax(5,5) = Ax(5,5) - Up(2)*b(1)
-  
+
   Ay = 0.d0
 !  if (Csnn .ge. Vnn) then
 !     Ay(5,5) = simpar%refval_charge/(simpar%refval_mass*simpar%refval_density)*GradTi(2)/(U(1)*(abs(sigmaviz) + abs(sigmavcx)))
@@ -381,10 +381,10 @@ CONTAINS
 !  Ay = Ay/simpar%refval_speed
   !Neutral velocity parallel to magnetic field
   Ay(5,5) = Ay(5,5) - Up(2)*b(2)
-  
+
   Ax = 0.
   Ay = 0.
-  
+
   END SUBROUTINE jacobianMatricesN
 #endif
 
@@ -433,20 +433,20 @@ CONTAINS
        CALL compute_sigmaviz(u(i,:),sigmaviz(i))
        CALL compute_sigmavcx(u(i,:),sigmavcx(i))
     END DO
-    Dnn = simpar%refval_charge*simpar%refval_temperature*2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)/(simpar%refval_mass*simpar%refval_density*U1*(sigmaviz + sigmavcx))   
+    Dnn = simpar%refval_charge*simpar%refval_temperature*2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)/(simpar%refval_mass*simpar%refval_density*U1*(sigmaviz + sigmavcx))
     Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
     d_iso(5,5,:) = Dnn
     !Set a threshold on Dnn
-    DO i=1,size(Dnn,1) 
-       !if (Dnn(i) .gt.  phys%diff_nn) d_iso(5,5,i) = phys%diff_nn 
+    DO i=1,size(Dnn,1)
+       !if (Dnn(i) .gt.  phys%diff_nn) d_iso(5,5,i) = phys%diff_nn
        cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)))
 	      DnnTh = abs(cs_n*U5(i)/(sqrt(q(i,9)**2 + q(i,10)**2)))
 	      !Max Value
-	      if (Dnn(i) .gt.  DnnTh) then 
-	         if (DnnTh .gt. 20.*phys%diff_n) then 
+	      if (Dnn(i) .gt.  DnnTh) then
+	         if (DnnTh .gt. 20.*phys%diff_n) then
 	            d_iso(5,5,i) = DnnTh
              if (DnnTh .gt. phys%diff_nn) d_iso(5,5,i) = phys%diff_nn
-	         end if 
+	         end if
 	      !Min Value
 	      !if (Dnn(i) .lt.  phys%diff_n) d_iso(5,5,i) = phys%diff_n
 	      end if
@@ -984,7 +984,7 @@ CONTAINS
     E0 = T0*2./(3.*phys%Mref)*U4/U1
     !Threshold on Te >= 0.2 eV
     if (E0 .le. 0.2) E0 = 0.2
-    sigmavcx = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)   
+    sigmavcx = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)
   END SUBROUTINE compute_sigmavcx
 
 
@@ -1014,7 +1014,7 @@ CONTAINS
     !Threshold on Te >= 0.2 eV
     if (E0 .le. 0.2) E0 = 0.2
     res = 0.
-    res(1) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*(-U4/U1) 
+    res(1) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*(-U4/U1)
     res(4) = (4.*p1*log(E0)**3 + 3.*p2*log(E0)**2 + 2.*p3*log(E0) + p4)*1./U1
     res = exp(p1*log(E0)**4 + p2*log(E0)**3 + p3*log(E0)**2 + p4*log(E0) + p5)*U1/U4*res
   END SUBROUTINE compute_dsigmavcx_dU
@@ -1089,7 +1089,7 @@ CONTAINS
        res(1) = -U4/(U1**2)
        res(4) = 1./U1
        res = 8.*exp(Tlossrec)*((2.*T0)/(27.*phys%Mref))*res
-    endif 
+    endif
   END SUBROUTINE compute_dTlossrec_dU
 
 
@@ -1172,7 +1172,7 @@ CONTAINS
     res(2) = 2.*U5*U2/U1
     res(5) = (U2**2)/U1
   END SUBROUTINE compute_dfEicx_dU
-  
+
 #ifdef NEUTRALP
   SUBROUTINE computeDpn(U,Q,Vpn,Dpn)
     real*8, intent(IN) :: U(:),Q(:,:),Vpn(:)
@@ -1200,8 +1200,8 @@ CONTAINS
     !For fit log log from ADAS database
     E0cx = simpar%refval_temperature*2./(3.*phys%Mref)*U4/U1
     !Threshold for temperatutre Te <= 0.2 eV
-    if (simpar%refval_temperature*2./(3.*phys%Mref)*U4/U1 .le. 0.2) then 
-       E0iz = 0.2/Ery 
+    if (simpar%refval_temperature*2./(3.*phys%Mref)*U4/U1 .le. 0.2) then
+       E0iz = 0.2/Ery
        !E0cx = 0.5*1./0.2
        E0cx = 0.2
     endif
@@ -1214,25 +1214,25 @@ CONTAINS
     !Analytical expression from Hugo Bufferand
     !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0cx)
     !Fit log log from ADAS database
-    sigmavcx = exp(p1*log(E0cx)**4 + p2*log(E0cx)**3 + p3*log(E0cx)**2 + p4*log(E0cx) + p5)   
+    sigmavcx = exp(p1*log(E0cx)**4 + p2*log(E0cx)**3 + p3*log(E0cx)**2 + p4*log(E0cx) + p5)
     !if (simpar%refval_length**2/simpar%refval_time*phys%diff_n .ge. 1.) then
     !   Dpn = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*1./(simpar%refval_time*simpar%refval_density*U1*(sigmaviz + sigmavcx))
     !else
        Dpn = 1./(simpar%refval_time*simpar%refval_density*U1*(sigmaviz + sigmavcx))
     !endif
     !Multiplication by coefficient from the description in terms of the conservative varables
-	   Dpn = 2./3.*Dpn   
+	   Dpn = 2./3.*Dpn
     !Set a threshold Dpn*|grad(Pn)| <= cs_n*n_n
     cs_n = 0.
     Grad_Pn = 0.
 	   cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
 	   Grad_Pn = 2./(3.*phys%Mref)*matmul(Q,Vpn)
 	   Dpn_th = abs(cs_n*U5/norm2(Grad_Pn))
-	   !if(Dpn .gt. Dpn_th) Dpn = Dpn_th 
-	   if(Dpn .gt. 2*phys%diff_nn) Dpn = 2*phys%diff_nn 
-	   !Dpn*exp(abs(Dpn - Dpn_th)/Dpn_th) + Dpn_th 
+	   !if(Dpn .gt. Dpn_th) Dpn = Dpn_th
+	   if(Dpn .gt. 2*phys%diff_nn) Dpn = 2*phys%diff_nn
+	   !Dpn*exp(abs(Dpn - Dpn_th)/Dpn_th) + Dpn_th
 	 END SUBROUTINE computeDpn
-  
+
   SUBROUTINE computeVpn(U,Vpn)
     real*8, intent(IN) :: U(:)
 	   real*8, intent(OUT):: Vpn(:)
@@ -1250,7 +1250,7 @@ CONTAINS
 	   Vpn(3) = U5/U1
 	   Vpn(5) = U3/U1 - 1./2.*U2**2/U1**2
   END SUBROUTINE computeVpn
-  
+
   SUBROUTINE compute_dVpn_dU(U,dVpn_dU)
     real*8, intent(IN)  :: U(:)
     real*8, intent(OUT) :: dVpn_dU(:, :)
@@ -1263,24 +1263,24 @@ CONTAINS
     if (U1<tol) U1=tol
     if (U5<tol) U5=tol
     dVpn_dU = 0.
-	
+
     dVpn_dU(1, 1) = (2.*U3/U1**3 - 3.*U2**2/U1**4)*U5
     dVpn_dU(1, 2) = (2.*U2/U1**3)*U5
-	   dVpn_dU(1, 3) = -U5/U1**2 
+	   dVpn_dU(1, 3) = -U5/U1**2
    	dVpn_dU(1, 5) = U2**2/U1**3 - U3/U1**2
-	
+
 	   dVpn_dU(2, 1) = (2.*U2/U1**3)*U5
 	   dVpn_dU(2, 2) = - U5/U1**2
 	   dVpn_dU(2, 5) = - U2/U1**2
-	
-	   dVpn_dU(3, 1) = -U5/U1**2 
+
+	   dVpn_dU(3, 1) = -U5/U1**2
 	   dVpn_dU(3, 5) = 1./U1
-	
+
 	   dVpn_dU(5, 1) = U2**2/U1**3 - U3/U1**2
     dVpn_dU(5, 2) = -U2/U1**2
-    dVpn_dU(5, 3) = 1./U1 	
+    dVpn_dU(5, 3) = 1./U1
   END SUBROUTINE compute_dVpn_dU
-#endif 
+#endif
 !NEUTRAL PRESSURE
 
 #endif
@@ -1329,7 +1329,7 @@ CONTAINS
     qq(1,:) = q(:)
 
     call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani)
-    
+
 #ifdef NEUTRALP
     ! Compute Vpn(U^(k-1))
     CALL computeVpn(uc,Vpn)
@@ -1412,9 +1412,9 @@ CONTAINS
         tau_aux = abs((4*uc(2)*bn)/uc(1))
       else
         tau_aux = max(abs(5./3.*up(2)*bn), abs(0.3*bn*(3*uc(1) + sqrt(abs(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)))
-!#ifdef NEUTRALP 
+!#ifdef NEUTRALP
 !        tau_aux(5) = max(abs(5./3.*up(2)*bn), abs(0.3*bn*(3*uc(5) + sqrt(abs(10*uc(3)/uc(1)*uc(5)**2 - 5*(uc(5)*uc(2)/uc(1))**2)))/uc(5)))
-!#endif      
+!#endif
       endif
 #ifdef TOR3D
       if (abs(n(3)) > 0.1) then
@@ -1428,7 +1428,7 @@ CONTAINS
         tau_aux(5) = numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + phys%diff_nn 
+        tau_aux(5) = tau_aux(5) + phys%diff_nn
 #endif
       else
 #endif
@@ -1439,7 +1439,7 @@ CONTAINS
         tau_aux(4) = tau_aux(4) + 6*phys%diff_ee + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + phys%diff_nn !phys%diff_nn  !diff_iso(5,5,1) !numer%tau(5) 
+        tau_aux(5) = tau_aux(5) + phys%diff_nn !phys%diff_nn  !diff_iso(5,5,1) !numer%tau(5)
 #endif
 #else
         tau_aux(5) = tau_aux(5) + numer%tau(5)

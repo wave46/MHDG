@@ -12,3 +12,9 @@
 *lib/MHDG-*
 *MHDG-*
 *src_*
+*test/res/*.h5
+*test/res/*.msh
+*test/res/*.mesh
+*test/res/geometries/*
+*test/Sample_equilibrium/*
+*test/*.h5

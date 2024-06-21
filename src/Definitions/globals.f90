@@ -11,27 +11,29 @@ MODULE globals
   IMPLICIT NONE
 
   !*******************************************
-  ! Declaretion of the GLOBAL variables
+  ! Declaration of the GLOBAL variables
   !*******************************************
 
-  TYPE(Reference_element_type), target :: refElPol
-  TYPE(Reference_element_type), target :: refElTor
-  TYPE(Mesh_type), target :: mesh
-  TYPE(Physics_type), target :: phys
-  TYPE(Geometry_type), target :: geom
-  TYPE(Magnetic_type), target :: magn
-  TYPE(Switches_type), target :: switch
-  TYPE(Inputs_type), target :: input
-  TYPE(Time_type), target :: time
-  TYPE(Numeric_type), target :: numer
-  TYPE(Utils_type), target :: utils
-  TYPE(Lssolver_type), target :: lssolver
-  TYPE(Elmat_type), target :: elmat
-  TYPE(Sol_type), target :: sol
-  TYPE(MAT_CSR_TYP), target :: MatK
-  TYPE(RHS_TYP), target :: rhs
-  TYPE(Simulationparams_type), target :: simpar
-  TYPE(Timing_type), target :: timing
+  TYPE(Reference_element_type), TARGET :: refElPol
+  TYPE(Reference_element_type), TARGET :: refElTor
+  TYPE(Mesh_type), TARGET :: mesh
+  TYPE(Splines_DT), ALLOCATABLE, TARGET   :: splines(:)
+  TYPE(Physics_type), TARGET :: phys
+  TYPE(Geometry_type), TARGET :: geom
+  TYPE(Magnetic_type), TARGET :: magn
+  TYPE(Switches_type), TARGET :: switch
+  TYPE(Inputs_type), TARGET :: input
+  TYPE(Time_type), TARGET :: time
+  TYPE(Numeric_type), TARGET :: numer
+  TYPE(Adaptivity_type), TARGET :: adapt
+  TYPE(Utils_type), TARGET :: utils
+  TYPE(Lssolver_type), TARGET :: lssolver
+  TYPE(Elmat_type), TARGET :: elmat
+  TYPE(Sol_type), TARGET :: sol
+  TYPE(MAT_CSR_TYP), TARGET :: MatK
+  TYPE(RHS_TYP), TARGET :: rhs
+  TYPE(Simulationparams_type), TARGET :: simpar
+  TYPE(Timing_type), TARGET :: timing
 
 CONTAINS
 
@@ -43,520 +45,812 @@ CONTAINS
 
     ! Reference element
     IF (ALLOCATED(refElPol%Face_nodes)) THEN
-      DEALLOCATE (refElPol%Face_nodes)
+       DEALLOCATE (refElPol%Face_nodes)
     END IF
     IF (ALLOCATED(refElPol%Bord_nodes)) THEN
-      DEALLOCATE (refElPol%Bord_nodes)
+       DEALLOCATE (refElPol%Bord_nodes)
     END IF
     IF (ALLOCATED(refElPol%inner_nodes)) THEN
-      DEALLOCATE (refElPol%inner_nodes)
+       DEALLOCATE (refElPol%inner_nodes)
     END IF
     IF (ALLOCATED(refElPol%inner_nodes_face)) THEN
-      DEALLOCATE (refElPol%inner_nodes_face)
+       DEALLOCATE (refElPol%inner_nodes_face)
     END IF
     IF (ASSOCIATED(refElPol%coord3D)) THEN
-      DEALLOCATE (refElPol%coord3D)
+       DEALLOCATE (refElPol%coord3D)
     END IF
     IF (ASSOCIATED(refElPol%coord2D)) THEN
-      DEALLOCATE (refElPol%coord2D)
+       DEALLOCATE (refElPol%coord2D)
     END IF
     IF (ASSOCIATED(refElPol%coord1D)) THEN
-      DEALLOCATE (refElPol%coord1D)
+       DEALLOCATE (refElPol%coord1D)
     END IF
     IF (ALLOCATED(refElPol%gauss_points3D)) THEN
-      DEALLOCATE (refElPol%gauss_points3D)
+       DEALLOCATE (refElPol%gauss_points3D)
     END IF
     IF (ALLOCATED(refElPol%gauss_points2D)) THEN
-      DEALLOCATE (refElPol%gauss_points2D)
+       DEALLOCATE (refElPol%gauss_points2D)
     END IF
     IF (ALLOCATED(refElPol%gauss_points1D)) THEN
-      DEALLOCATE (refElPol%gauss_points1D)
+       DEALLOCATE (refElPol%gauss_points1D)
     END IF
     IF (ALLOCATED(refElPol%gauss_weights3D)) THEN
-      DEALLOCATE (refElPol%gauss_weights3D)
+       DEALLOCATE (refElPol%gauss_weights3D)
     END IF
     IF (ALLOCATED(refElPol%gauss_weights2D)) THEN
-      DEALLOCATE (refElPol%gauss_weights2D)
+       DEALLOCATE (refElPol%gauss_weights2D)
     END IF
     IF (ALLOCATED(refElPol%gauss_weights1D)) THEN
-      DEALLOCATE (refElPol%gauss_weights1D)
+       DEALLOCATE (refElPol%gauss_weights1D)
     END IF
     IF (ALLOCATED(refElPol%N3D)) THEN
-      DEALLOCATE (refElPol%N3D)
+       DEALLOCATE (refElPol%N3D)
     END IF
     IF (ALLOCATED(refElPol%Nxi3D)) THEN
-      DEALLOCATE (refElPol%Nxi3D)
+       DEALLOCATE (refElPol%Nxi3D)
     END IF
     IF (ALLOCATED(refElPol%Neta3D)) THEN
-      DEALLOCATE (refElPol%Neta3D)
+       DEALLOCATE (refElPol%Neta3D)
     END IF
     IF (ALLOCATED(refElPol%Nzeta3D)) THEN
-      DEALLOCATE (refElPol%Nzeta3D)
+       DEALLOCATE (refElPol%Nzeta3D)
     END IF
     IF (ALLOCATED(refElPol%N2D)) THEN
-      DEALLOCATE (refElPol%N2D)
+       DEALLOCATE (refElPol%N2D)
     END IF
     IF (ALLOCATED(refElPol%Nxi2D)) THEN
-      DEALLOCATE (refElPol%Nxi2D)
+       DEALLOCATE (refElPol%Nxi2D)
     END IF
     IF (ALLOCATED(refElPol%Neta2D)) THEN
-      DEALLOCATE (refElPol%Neta2D)
+       DEALLOCATE (refElPol%Neta2D)
     END IF
     IF (ALLOCATED(refElPol%N1D)) THEN
-      DEALLOCATE (refElPol%N1D)
+       DEALLOCATE (refElPol%N1D)
     END IF
     IF (ALLOCATED(refElPol%Nxi1D)) THEN
-      DEALLOCATE (refElPol%Nxi1D)
+       DEALLOCATE (refElPol%Nxi1D)
     END IF
 
     ! Reference element
     IF (ALLOCATED(refElTor%Face_nodes)) THEN
-      DEALLOCATE (refElTor%Face_nodes)
+       DEALLOCATE (refElTor%Face_nodes)
     END IF
     IF (ALLOCATED(refElTor%Bord_nodes)) THEN
-      DEALLOCATE (refElTor%Bord_nodes)
+       DEALLOCATE (refElTor%Bord_nodes)
     END IF
     IF (ALLOCATED(refElTor%inner_nodes)) THEN
-      DEALLOCATE (refElTor%inner_nodes)
+       DEALLOCATE (refElTor%inner_nodes)
     END IF
     IF (ALLOCATED(refElTor%inner_nodes_face)) THEN
-      DEALLOCATE (refElTor%inner_nodes_face)
+       DEALLOCATE (refElTor%inner_nodes_face)
     END IF
     IF (ASSOCIATED(refElTor%coord3D)) THEN
-      DEALLOCATE (refElTor%coord3D)
+       DEALLOCATE (refElTor%coord3D)
     END IF
     IF (ASSOCIATED(refElTor%coord2D)) THEN
-      DEALLOCATE (refElTor%coord2D)
+       DEALLOCATE (refElTor%coord2D)
     END IF
     IF (ASSOCIATED(refElTor%coord1D)) THEN
-      DEALLOCATE (refElTor%coord1D)
+       DEALLOCATE (refElTor%coord1D)
     END IF
     IF (ALLOCATED(refElTor%gauss_points3D)) THEN
-      DEALLOCATE (refElTor%gauss_points3D)
+       DEALLOCATE (refElTor%gauss_points3D)
     END IF
     IF (ALLOCATED(refElTor%gauss_points2D)) THEN
-      DEALLOCATE (refElTor%gauss_points2D)
+       DEALLOCATE (refElTor%gauss_points2D)
     END IF
     IF (ALLOCATED(refElTor%gauss_points1D)) THEN
-      DEALLOCATE (refElTor%gauss_points1D)
+       DEALLOCATE (refElTor%gauss_points1D)
     END IF
     IF (ALLOCATED(refElTor%gauss_weights3D)) THEN
-      DEALLOCATE (refElTor%gauss_weights3D)
+       DEALLOCATE (refElTor%gauss_weights3D)
     END IF
     IF (ALLOCATED(refElTor%gauss_weights2D)) THEN
-      DEALLOCATE (refElTor%gauss_weights2D)
+       DEALLOCATE (refElTor%gauss_weights2D)
     END IF
     IF (ALLOCATED(refElTor%gauss_weights1D)) THEN
-      DEALLOCATE (refElTor%gauss_weights1D)
+       DEALLOCATE (refElTor%gauss_weights1D)
     END IF
     IF (ALLOCATED(refElTor%N3D)) THEN
-      DEALLOCATE (refElTor%N3D)
+       DEALLOCATE (refElTor%N3D)
     END IF
     IF (ALLOCATED(refElTor%Nxi3D)) THEN
-      DEALLOCATE (refElTor%Nxi3D)
+       DEALLOCATE (refElTor%Nxi3D)
     END IF
     IF (ALLOCATED(refElTor%Neta3D)) THEN
-      DEALLOCATE (refElTor%Neta3D)
+       DEALLOCATE (refElTor%Neta3D)
     END IF
     IF (ALLOCATED(refElTor%Nzeta3D)) THEN
-      DEALLOCATE (refElTor%Nzeta3D)
+       DEALLOCATE (refElTor%Nzeta3D)
     END IF
     IF (ALLOCATED(refElTor%N2D)) THEN
-      DEALLOCATE (refElTor%N2D)
+       DEALLOCATE (refElTor%N2D)
     END IF
     IF (ALLOCATED(refElTor%Nxi2D)) THEN
-      DEALLOCATE (refElTor%Nxi2D)
+       DEALLOCATE (refElTor%Nxi2D)
     END IF
     IF (ALLOCATED(refElTor%Neta2D)) THEN
-      DEALLOCATE (refElTor%Neta2D)
+       DEALLOCATE (refElTor%Neta2D)
     END IF
     IF (ALLOCATED(refElTor%N1D)) THEN
-      DEALLOCATE (refElTor%N1D)
+       DEALLOCATE (refElTor%N1D)
     END IF
     IF (ALLOCATED(refElTor%Nxi1D)) THEN
-      DEALLOCATE (refElTor%Nxi1D)
+       DEALLOCATE (refElTor%Nxi1D)
     ENDIF
 
     ! Mesh
     IF (ASSOCIATED(Mesh%T)) THEN
-      DEALLOCATE (Mesh%T)
+       DEALLOCATE (Mesh%T)
+    END IF
+    IF (ASSOCIATED(Mesh%T_gmsh)) THEN
+       DEALLOCATE (Mesh%T_gmsh)
     END IF
     IF (ASSOCIATED(Mesh%Tlin)) THEN
-      DEALLOCATE (Mesh%Tlin)
+       DEALLOCATE (Mesh%Tlin)
     END IF
     IF (ASSOCIATED(Mesh%Tb)) THEN
-      DEALLOCATE (Mesh%Tb)
+       DEALLOCATE (Mesh%Tb)
+    END IF
+    IF (ASSOCIATED(Mesh%Tb_gmsh)) THEN
+       DEALLOCATE (Mesh%Tb_gmsh)
     END IF
     IF (ASSOCIATED(Mesh%boundaryFlag)) THEN
-      DEALLOCATE (Mesh%boundaryFlag)
+       DEALLOCATE (Mesh%boundaryFlag)
     END IF
     IF (ALLOCATED(Mesh%F)) THEN
-      DEALLOCATE (Mesh%F)
+       DEALLOCATE (Mesh%F)
     END IF
     IF (ALLOCATED(Mesh%N)) THEN
-      DEALLOCATE (Mesh%N)
+       DEALLOCATE (Mesh%N)
+    END IF
+    IF (ALLOCATED(Mesh%face_info)) THEN
+       DEALLOCATE (Mesh%face_info)
     END IF
     IF (ALLOCATED(Mesh%faces)) THEN
-      DEALLOCATE (Mesh%faces)
+       DEALLOCATE (Mesh%faces)
     END IF
     IF (ALLOCATED(Mesh%extfaces)) THEN
-      DEALLOCATE (Mesh%extfaces)
+       DEALLOCATE (Mesh%extfaces)
     END IF
     IF (ALLOCATED(Mesh%intfaces)) THEN
-      DEALLOCATE (Mesh%intfaces)
+       DEALLOCATE (Mesh%intfaces)
     END IF
     IF (ALLOCATED(Mesh%flipFace)) THEN
-      DEALLOCATE (Mesh%flipface)
+       DEALLOCATE (Mesh%flipface)
     END IF
     IF (ALLOCATED(Mesh%Fdir)) THEN
-      DEALLOCATE (Mesh%Fdir)
+       DEALLOCATE (Mesh%Fdir)
     END IF
     IF (ALLOCATED(Mesh%Diric)) THEN
-      DEALLOCATE (Mesh%Diric)
+       DEALLOCATE (Mesh%Diric)
     END IF
     IF (ALLOCATED(Mesh%numberbcs)) THEN
-      DEALLOCATE (Mesh%numberbcs)
+       DEALLOCATE (Mesh%numberbcs)
     END IF
     IF (ASSOCIATED(Mesh%X)) THEN
-      DEALLOCATE (Mesh%X)
+       DEALLOCATE (Mesh%X)
+    END IF
+    IF (ASSOCIATED(Mesh%X_P1)) THEN
+       DEALLOCATE (Mesh%X_P1)
     END IF
     IF (ALLOCATED(Mesh%elemSize)) THEN
-      DEALLOCATE (Mesh%elemSize)
+       DEALLOCATE (Mesh%elemSize)
     END IF
     IF (ALLOCATED(Mesh%scdiff_nodes)) THEN
-      DEALLOCATE (Mesh%scdiff_nodes)
+       DEALLOCATE (Mesh%scdiff_nodes)
     END IF
     IF (ASSOCIATED(Mesh%toroidal)) THEN
-      DEALLOCATE (Mesh%toroidal)
+       DEALLOCATE (Mesh%toroidal)
     END IF
     IF (ALLOCATED(Mesh%periodic_faces)) THEN
-      DEALLOCATE (Mesh%periodic_faces)
+       DEALLOCATE (Mesh%periodic_faces)
     END IF
     ! sol type
     IF (ASSOCIATED(sol%u)) THEN
-      DEALLOCATE (sol%u)
+       DEALLOCATE (sol%u)
     END IF
     IF (ASSOCIATED(sol%u_tilde)) THEN
-      DEALLOCATE (sol%u_tilde)
+       DEALLOCATE (sol%u_tilde)
     END IF
     IF (ALLOCATED(sol%u0)) THEN
-      DEALLOCATE (sol%u0)
+       DEALLOCATE (sol%u0)
     END IF
     IF (ALLOCATED(sol%tres)) THEN
-      DEALLOCATE (sol%tres)
+       DEALLOCATE (sol%tres)
     END IF
     IF (ALLOCATED(sol%time)) THEN
-      DEALLOCATE (sol%time)
+       DEALLOCATE (sol%time)
     END IF
 
     IF (ALLOCATED(elMat%iAqq)) THEN
-      DEALLOCATE (elMat%iAqq)
+       DEALLOCATE (elMat%iAqq)
     END IF
     IF (ALLOCATED(elMat%Aqu)) THEN
-      DEALLOCATE (elMat%Aqu)
+       DEALLOCATE (elMat%Aqu)
     END IF
     IF (ALLOCATED(elMat%Aql)) THEN
-      DEALLOCATE (elMat%Aql)
+       DEALLOCATE (elMat%Aql)
     END IF
     IF (ALLOCATED(elMat%Auq)) THEN
-      DEALLOCATE (elMat%Auq)
+       DEALLOCATE (elMat%Auq)
     END IF
     IF (ALLOCATED(elMat%Auu)) THEN
-      DEALLOCATE (elMat%Auu)
+       DEALLOCATE (elMat%Auu)
     END IF
     IF (ALLOCATED(elMat%Aul)) THEN
-      DEALLOCATE (elMat%Aul)
+       DEALLOCATE (elMat%Aul)
     END IF
     IF (ALLOCATED(elMat%Alq)) THEN
-      DEALLOCATE (elMat%Alq)
+       DEALLOCATE (elMat%Alq)
     END IF
     IF (ALLOCATED(elMat%Alu)) THEN
-      DEALLOCATE (elMat%Alu)
+       DEALLOCATE (elMat%Alu)
     END IF
     IF (ALLOCATED(elMat%All)) THEN
-      DEALLOCATE (elMat%All)
+       DEALLOCATE (elMat%All)
     END IF
     IF (ALLOCATED(elMat%Aql_dir)) THEN
-      DEALLOCATE (elMat%Aql_dir)
+       DEALLOCATE (elMat%Aql_dir)
     END IF
     IF (ALLOCATED(elMat%Aul_dir)) THEN
-      DEALLOCATE (elMat%Aul_dir)
+       DEALLOCATE (elMat%Aul_dir)
     END IF
     IF (ALLOCATED(elMat%fH)) THEN
-      DEALLOCATE (elMat%fH)
+       DEALLOCATE (elMat%fH)
     END IF
     IF (ALLOCATED(elMat%LL)) THEN
-      DEALLOCATE (elMat%LL)
+       DEALLOCATE (elMat%LL)
     END IF
     IF (ALLOCATED(elMat%L0)) THEN
-      DEALLOCATE (elMat%L0)
+       DEALLOCATE (elMat%L0)
     ENDIF
     IF (ALLOCATED(elMat%S)) THEN
-      DEALLOCATE (elMat%S)
+       DEALLOCATE (elMat%S)
     END IF
     IF (ALLOCATED(elMat%UU)) THEN
-      DEALLOCATE (elMat%UU)
+       DEALLOCATE (elMat%UU)
     END IF
     IF (ALLOCATED(elMat%U0)) THEN
-      DEALLOCATE (elMat%U0)
+       DEALLOCATE (elMat%U0)
     END IF
 
     ! MatK
     IF (ASSOCIATED(MatK%rowptr)) THEN
-      DEALLOCATE (MatK%rowptr)
+       DEALLOCATE (MatK%rowptr)
     END IF
     IF (ASSOCIATED(MatK%cols)) THEN
-      DEALLOCATE (MatK%cols)
+       DEALLOCATE (MatK%cols)
     END IF
     IF (ASSOCIATED(MatK%vals)) THEN
-      DEALLOCATE (MatK%vals)
+       DEALLOCATE (MatK%vals)
     END IF
     IF (ASSOCIATED(MatK%loc2glob)) THEN
-      DEALLOCATE (MatK%loc2glob)
+       DEALLOCATE (MatK%loc2glob)
     END IF
 
     ! RHS
     IF (ASSOCIATED(RHS%vals)) THEN
-      DEALLOCATE (RHS%vals)
+       DEALLOCATE (RHS%vals)
     END IF
     IF (ASSOCIATED(RHS%loc2glob)) THEN
-      DEALLOCATE (RHS%loc2glob)
+       DEALLOCATE (RHS%loc2glob)
     END IF
 
     ! Physics
     IF (ASSOCIATED(phys%B)) THEN
-      DEALLOCATE (phys%B)
+       DEALLOCATE (phys%B)
     END IF
     IF (ASSOCIATED(phys%magnetic_flux)) THEN
-      DEALLOCATE (phys%magnetic_flux)
+       DEALLOCATE (phys%magnetic_flux)
     END IF
     IF (ASSOCIATED(phys%magnetic_psi)) THEN
-      DEALLOCATE (phys%magnetic_psi)
+       DEALLOCATE (phys%magnetic_psi)
     END IF
     IF (ASSOCIATED(phys%Bperturb)) THEN
-      DEALLOCATE (phys%Bperturb)
+       DEALLOCATE (phys%Bperturb)
     END IF
 
     ! magnetic
     IF (ASSOCIATED(magn%coils_rmp)) THEN
-      DEALLOCATE (magn%coils_rmp)
+       DEALLOCATE (magn%coils_rmp)
     END IF
     IF (ASSOCIATED(magn%coils_ripple)) THEN
-      DEALLOCATE (magn%coils_ripple)
+       DEALLOCATE (magn%coils_ripple)
     END IF
 
     IF (ALLOCATED(simpar%physvar_refval)) THEN
-      DEALLOCATE (simpar%physvar_refval)
+       DEALLOCATE (simpar%physvar_refval)
     END IF
     IF (ALLOCATED(simpar%consvar_refval)) THEN
-      DEALLOCATE (simpar%consvar_refval)
+       DEALLOCATE (simpar%consvar_refval)
     END IF
 
   END SUBROUTINE free_all
-  
+
   SUBROUTINE free_mesh
     ! Mesh
     IF (ASSOCIATED(Mesh%T)) THEN
-      DEALLOCATE (Mesh%T)
+       DEALLOCATE (Mesh%T)
     END IF
     IF (ASSOCIATED(Mesh%Tlin)) THEN
-      DEALLOCATE (Mesh%Tlin)
+       DEALLOCATE (Mesh%Tlin)
     END IF
     IF (ASSOCIATED(Mesh%Tb)) THEN
-      DEALLOCATE (Mesh%Tb)
+       DEALLOCATE (Mesh%Tb)
     END IF
     IF (ASSOCIATED(Mesh%boundaryFlag)) THEN
-      DEALLOCATE (Mesh%boundaryFlag)
+       DEALLOCATE (Mesh%boundaryFlag)
     END IF
     IF (ALLOCATED(Mesh%F)) THEN
-      DEALLOCATE (Mesh%F)
+       DEALLOCATE (Mesh%F)
+    END IF
+    IF (ALLOCATED(Mesh%face_info)) THEN
+       DEALLOCATE (Mesh%face_info)
     END IF
     IF (ALLOCATED(Mesh%N)) THEN
-      DEALLOCATE (Mesh%N)
+       DEALLOCATE (Mesh%N)
     END IF
     IF (ALLOCATED(Mesh%faces)) THEN
-      DEALLOCATE (Mesh%faces)
+       DEALLOCATE (Mesh%faces)
     END IF
     IF (ALLOCATED(Mesh%extfaces)) THEN
-      DEALLOCATE (Mesh%extfaces)
+       DEALLOCATE (Mesh%extfaces)
     END IF
     IF (ALLOCATED(Mesh%intfaces)) THEN
-      DEALLOCATE (Mesh%intfaces)
+       DEALLOCATE (Mesh%intfaces)
     END IF
     IF (ALLOCATED(Mesh%flipFace)) THEN
-      DEALLOCATE (Mesh%flipface)
+       DEALLOCATE (Mesh%flipface)
     END IF
     IF (ALLOCATED(Mesh%Fdir)) THEN
-      DEALLOCATE (Mesh%Fdir)
+       DEALLOCATE (Mesh%Fdir)
     END IF
     IF (ALLOCATED(Mesh%Diric)) THEN
-      DEALLOCATE (Mesh%Diric)
+       DEALLOCATE (Mesh%Diric)
     END IF
     IF (ALLOCATED(Mesh%numberbcs)) THEN
-      DEALLOCATE (Mesh%numberbcs)
+       DEALLOCATE (Mesh%numberbcs)
     END IF
     IF (ASSOCIATED(Mesh%X)) THEN
-      DEALLOCATE (Mesh%X)
+       DEALLOCATE (Mesh%X)
     END IF
     IF (ALLOCATED(Mesh%elemSize)) THEN
-      DEALLOCATE (Mesh%elemSize)
+       DEALLOCATE (Mesh%elemSize)
     END IF
     IF (ALLOCATED(Mesh%scdiff_nodes)) THEN
-      DEALLOCATE (Mesh%scdiff_nodes)
+       DEALLOCATE (Mesh%scdiff_nodes)
     END IF
     IF (ASSOCIATED(Mesh%toroidal)) THEN
-      DEALLOCATE (Mesh%toroidal)
+       DEALLOCATE (Mesh%toroidal)
     END IF
     IF (ALLOCATED(Mesh%periodic_faces)) THEN
-      DEALLOCATE (Mesh%periodic_faces)
-    END IF  
+       DEALLOCATE (Mesh%periodic_faces)
+    END IF
+
+#ifdef PARALL
+    IF (ASSOCIATED(Mesh%loc2glob_fa)) THEN
+       DEALLOCATE (Mesh%loc2glob_fa)
+    END IF
+    IF (ASSOCIATED(Mesh%loc2glob_el)) THEN
+       DEALLOCATE (Mesh%loc2glob_el)
+    END IF
+    IF (ASSOCIATED(Mesh%loc2glob_nodes)) THEN
+       DEALLOCATE (Mesh%loc2glob_nodes)
+    END IF
+    IF (ASSOCIATED(Mesh%ghostfaces)) THEN
+       DEALLOCATE (Mesh%ghostfaces)
+    END IF
+    IF (ASSOCIATED(Mesh%ghostelems)) THEN
+       DEALLOCATE (Mesh%ghostelems)
+    END IF
+    IF (ASSOCIATED(Mesh%ghostflp)) THEN
+       DEALLOCATE (Mesh%ghostflp)
+    END IF
+    IF (ASSOCIATED(Mesh%ghostloc)) THEN
+       DEALLOCATE (Mesh%ghostloc)
+    END IF
+    IF (ASSOCIATED(Mesh%ghostpro)) THEN
+       DEALLOCATE (Mesh%ghostpro)
+    END IF
+    IF (ASSOCIATED(Mesh%ghelsloc)) THEN
+       DEALLOCATE (Mesh%ghelsloc)
+    END IF
+    IF (ASSOCIATED(Mesh%ghelspro)) THEN
+       DEALLOCATE (Mesh%ghelspro)
+    END IF
+    IF (ALLOCATED(Mesh%fc2sd)) THEN
+       DEALLOCATE (Mesh%fc2sd)
+    END IF
+    IF (ALLOCATED(Mesh%pr2sd)) THEN
+       DEALLOCATE (Mesh%pr2sd)
+    END IF
+    IF (ALLOCATED(Mesh%fc2rv)) THEN
+       DEALLOCATE (Mesh%fc2rv)
+    END IF
+    IF (ALLOCATED(Mesh%pr2rv)) THEN
+       DEALLOCATE (Mesh%pr2rv)
+    END IF
+    IF (ALLOCATED(Mesh%el2sd)) THEN
+       DEALLOCATE (Mesh%el2sd)
+    END IF
+    IF (ALLOCATED(Mesh%pe2sd)) THEN
+       DEALLOCATE (Mesh%pe2sd)
+    END IF
+    IF (ALLOCATED(Mesh%el2rv)) THEN
+       DEALLOCATE (Mesh%el2rv)
+    END IF
+    IF (ALLOCATED(Mesh%pe2rv)) THEN
+       DEALLOCATE (Mesh%pe2rv)
+    END IF
+#endif
+
   END SUBROUTINE free_mesh
-  
+
   SUBROUTINE free_reference_element
-     ! Reference element
+    ! Reference element
     IF (ALLOCATED(refElPol%Face_nodes)) THEN
-      DEALLOCATE (refElPol%Face_nodes)
+       DEALLOCATE (refElPol%Face_nodes)
     END IF
     IF (ALLOCATED(refElPol%Bord_nodes)) THEN
-      DEALLOCATE (refElPol%Bord_nodes)
+       DEALLOCATE (refElPol%Bord_nodes)
     END IF
     IF (ALLOCATED(refElPol%inner_nodes)) THEN
-      DEALLOCATE (refElPol%inner_nodes)
+       DEALLOCATE (refElPol%inner_nodes)
     END IF
     IF (ALLOCATED(refElPol%inner_nodes_face)) THEN
-      DEALLOCATE (refElPol%inner_nodes_face)
+       DEALLOCATE (refElPol%inner_nodes_face)
     END IF
     IF (ASSOCIATED(refElPol%coord3D)) THEN
-      DEALLOCATE (refElPol%coord3D)
+       DEALLOCATE (refElPol%coord3D)
     END IF
     IF (ASSOCIATED(refElPol%coord2D)) THEN
-      DEALLOCATE (refElPol%coord2D)
+       DEALLOCATE (refElPol%coord2D)
     END IF
     IF (ASSOCIATED(refElPol%coord1D)) THEN
-      DEALLOCATE (refElPol%coord1D)
+       DEALLOCATE (refElPol%coord1D)
     END IF
     IF (ALLOCATED(refElPol%gauss_points3D)) THEN
-      DEALLOCATE (refElPol%gauss_points3D)
+       DEALLOCATE (refElPol%gauss_points3D)
     END IF
     IF (ALLOCATED(refElPol%gauss_points2D)) THEN
-      DEALLOCATE (refElPol%gauss_points2D)
+       DEALLOCATE (refElPol%gauss_points2D)
     END IF
     IF (ALLOCATED(refElPol%gauss_points1D)) THEN
-      DEALLOCATE (refElPol%gauss_points1D)
+       DEALLOCATE (refElPol%gauss_points1D)
     END IF
     IF (ALLOCATED(refElPol%gauss_weights3D)) THEN
-      DEALLOCATE (refElPol%gauss_weights3D)
+       DEALLOCATE (refElPol%gauss_weights3D)
     END IF
     IF (ALLOCATED(refElPol%gauss_weights2D)) THEN
-      DEALLOCATE (refElPol%gauss_weights2D)
+       DEALLOCATE (refElPol%gauss_weights2D)
     END IF
     IF (ALLOCATED(refElPol%gauss_weights1D)) THEN
-      DEALLOCATE (refElPol%gauss_weights1D)
+       DEALLOCATE (refElPol%gauss_weights1D)
     END IF
     IF (ALLOCATED(refElPol%N3D)) THEN
-      DEALLOCATE (refElPol%N3D)
+       DEALLOCATE (refElPol%N3D)
     END IF
     IF (ALLOCATED(refElPol%Nxi3D)) THEN
-      DEALLOCATE (refElPol%Nxi3D)
+       DEALLOCATE (refElPol%Nxi3D)
     END IF
     IF (ALLOCATED(refElPol%Neta3D)) THEN
-      DEALLOCATE (refElPol%Neta3D)
+       DEALLOCATE (refElPol%Neta3D)
     END IF
     IF (ALLOCATED(refElPol%Nzeta3D)) THEN
-      DEALLOCATE (refElPol%Nzeta3D)
+       DEALLOCATE (refElPol%Nzeta3D)
     END IF
     IF (ALLOCATED(refElPol%N2D)) THEN
-      DEALLOCATE (refElPol%N2D)
+       DEALLOCATE (refElPol%N2D)
     END IF
     IF (ALLOCATED(refElPol%Nxi2D)) THEN
-      DEALLOCATE (refElPol%Nxi2D)
+       DEALLOCATE (refElPol%Nxi2D)
     END IF
     IF (ALLOCATED(refElPol%Neta2D)) THEN
-      DEALLOCATE (refElPol%Neta2D)
+       DEALLOCATE (refElPol%Neta2D)
     END IF
     IF (ALLOCATED(refElPol%N1D)) THEN
-      DEALLOCATE (refElPol%N1D)
+       DEALLOCATE (refElPol%N1D)
     END IF
     IF (ALLOCATED(refElPol%Nxi1D)) THEN
-      DEALLOCATE (refElPol%Nxi1D)
+       DEALLOCATE (refElPol%Nxi1D)
     END IF
 
     ! Reference element
     IF (ALLOCATED(refElTor%Face_nodes)) THEN
-      DEALLOCATE (refElTor%Face_nodes)
+       DEALLOCATE (refElTor%Face_nodes)
     END IF
     IF (ALLOCATED(refElTor%Bord_nodes)) THEN
-      DEALLOCATE (refElTor%Bord_nodes)
+       DEALLOCATE (refElTor%Bord_nodes)
     END IF
     IF (ALLOCATED(refElTor%inner_nodes)) THEN
-      DEALLOCATE (refElTor%inner_nodes)
+       DEALLOCATE (refElTor%inner_nodes)
     END IF
     IF (ALLOCATED(refElTor%inner_nodes_face)) THEN
-      DEALLOCATE (refElTor%inner_nodes_face)
+       DEALLOCATE (refElTor%inner_nodes_face)
     END IF
     IF (ASSOCIATED(refElTor%coord3D)) THEN
-      DEALLOCATE (refElTor%coord3D)
+       DEALLOCATE (refElTor%coord3D)
     END IF
     IF (ASSOCIATED(refElTor%coord2D)) THEN
-      DEALLOCATE (refElTor%coord2D)
+       DEALLOCATE (refElTor%coord2D)
     END IF
     IF (ASSOCIATED(refElTor%coord1D)) THEN
-      DEALLOCATE (refElTor%coord1D)
+       DEALLOCATE (refElTor%coord1D)
     END IF
     IF (ALLOCATED(refElTor%gauss_points3D)) THEN
-      DEALLOCATE (refElTor%gauss_points3D)
+       DEALLOCATE (refElTor%gauss_points3D)
     END IF
     IF (ALLOCATED(refElTor%gauss_points2D)) THEN
-      DEALLOCATE (refElTor%gauss_points2D)
+       DEALLOCATE (refElTor%gauss_points2D)
     END IF
     IF (ALLOCATED(refElTor%gauss_points1D)) THEN
-      DEALLOCATE (refElTor%gauss_points1D)
+       DEALLOCATE (refElTor%gauss_points1D)
     END IF
     IF (ALLOCATED(refElTor%gauss_weights3D)) THEN
-      DEALLOCATE (refElTor%gauss_weights3D)
+       DEALLOCATE (refElTor%gauss_weights3D)
     END IF
     IF (ALLOCATED(refElTor%gauss_weights2D)) THEN
-      DEALLOCATE (refElTor%gauss_weights2D)
+       DEALLOCATE (refElTor%gauss_weights2D)
     END IF
     IF (ALLOCATED(refElTor%gauss_weights1D)) THEN
-      DEALLOCATE (refElTor%gauss_weights1D)
+       DEALLOCATE (refElTor%gauss_weights1D)
     END IF
     IF (ALLOCATED(refElTor%N3D)) THEN
-      DEALLOCATE (refElTor%N3D)
+       DEALLOCATE (refElTor%N3D)
     END IF
     IF (ALLOCATED(refElTor%Nxi3D)) THEN
-      DEALLOCATE (refElTor%Nxi3D)
+       DEALLOCATE (refElTor%Nxi3D)
     END IF
     IF (ALLOCATED(refElTor%Neta3D)) THEN
-      DEALLOCATE (refElTor%Neta3D)
+       DEALLOCATE (refElTor%Neta3D)
     END IF
     IF (ALLOCATED(refElTor%Nzeta3D)) THEN
-      DEALLOCATE (refElTor%Nzeta3D)
+       DEALLOCATE (refElTor%Nzeta3D)
     END IF
     IF (ALLOCATED(refElTor%N2D)) THEN
-      DEALLOCATE (refElTor%N2D)
+       DEALLOCATE (refElTor%N2D)
     END IF
     IF (ALLOCATED(refElTor%Nxi2D)) THEN
-      DEALLOCATE (refElTor%Nxi2D)
+       DEALLOCATE (refElTor%Nxi2D)
     END IF
     IF (ALLOCATED(refElTor%Neta2D)) THEN
-      DEALLOCATE (refElTor%Neta2D)
+       DEALLOCATE (refElTor%Neta2D)
     END IF
     IF (ALLOCATED(refElTor%N1D)) THEN
-      DEALLOCATE (refElTor%N1D)
+       DEALLOCATE (refElTor%N1D)
     END IF
     IF (ALLOCATED(refElTor%Nxi1D)) THEN
-      DEALLOCATE (refElTor%Nxi1D)
-    ENDIF 
-  END SUBROUTINE free_reference_element  
-  
+       DEALLOCATE (refElTor%Nxi1D)
+    ENDIF
+  END SUBROUTINE free_reference_element
+
+  SUBROUTINE free_reference_element_pol(RefEl)
+    TYPE(Reference_element_type), INTENT(INOUT) :: refEl
+
+    ! Reference element
+    IF (ALLOCATED(RefEl%Face_nodes)) THEN
+       DEALLOCATE (RefEl%Face_nodes)
+    END IF
+    IF (ALLOCATED(RefEl%Bord_nodes)) THEN
+       DEALLOCATE (RefEl%Bord_nodes)
+    END IF
+    IF (ALLOCATED(RefEl%inner_nodes)) THEN
+       DEALLOCATE (RefEl%inner_nodes)
+    END IF
+    IF (ALLOCATED(RefEl%inner_nodes_face)) THEN
+       DEALLOCATE (RefEl%inner_nodes_face)
+    END IF
+    IF (ASSOCIATED(RefEl%coord3D)) THEN
+       DEALLOCATE (RefEl%coord3D)
+    END IF
+    IF (ASSOCIATED(RefEl%coord2D)) THEN
+       DEALLOCATE (RefEl%coord2D)
+    END IF
+    IF (ASSOCIATED(RefEl%coord1D)) THEN
+       DEALLOCATE (RefEl%coord1D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_points3D)) THEN
+       DEALLOCATE (RefEl%gauss_points3D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_points2D)) THEN
+       DEALLOCATE (RefEl%gauss_points2D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_points1D)) THEN
+       DEALLOCATE (RefEl%gauss_points1D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_weights3D)) THEN
+       DEALLOCATE (RefEl%gauss_weights3D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_weights2D)) THEN
+       DEALLOCATE (RefEl%gauss_weights2D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_weights1D)) THEN
+       DEALLOCATE (RefEl%gauss_weights1D)
+    END IF
+    IF (ALLOCATED(RefEl%N3D)) THEN
+       DEALLOCATE (RefEl%N3D)
+    END IF
+    IF (ALLOCATED(RefEl%Nxi3D)) THEN
+       DEALLOCATE (RefEl%Nxi3D)
+    END IF
+    IF (ALLOCATED(RefEl%Neta3D)) THEN
+       DEALLOCATE (RefEl%Neta3D)
+    END IF
+    IF (ALLOCATED(RefEl%Nzeta3D)) THEN
+       DEALLOCATE (RefEl%Nzeta3D)
+    END IF
+    IF (ALLOCATED(RefEl%N2D)) THEN
+       DEALLOCATE (RefEl%N2D)
+    END IF
+    IF (ALLOCATED(RefEl%Nxi2D)) THEN
+       DEALLOCATE (RefEl%Nxi2D)
+    END IF
+    IF (ALLOCATED(RefEl%Neta2D)) THEN
+       DEALLOCATE (RefEl%Neta2D)
+    END IF
+    IF (ALLOCATED(RefEl%N1D)) THEN
+       DEALLOCATE (RefEl%N1D)
+    END IF
+    IF (ALLOCATED(RefEl%Nxi1D)) THEN
+       DEALLOCATE (RefEl%Nxi1D)
+    END IF
+    IF (ALLOCATED(RefEl%Nlin)) THEN
+       DEALLOCATE (RefEl%Nlin)
+    END IF
+    IF (ALLOCATED(RefEl%sFTF)) THEN
+       DEALLOCATE (RefEl%sFTF)
+    END IF
+    IF (ALLOCATED(RefEl%faceNodes3)) THEN
+       DEALLOCATE (RefEl%faceNodes3)
+    END IF
+  END SUBROUTINE free_reference_element_pol
+
+  SUBROUTINE free_reference_element_tor(RefEl)
+    TYPE(Reference_element_type), INTENT(INOUT) :: refEl
+    ! Reference element
+    IF (ALLOCATED(RefEl%Face_nodes)) THEN
+       DEALLOCATE (RefEl%Face_nodes)
+    END IF
+    IF (ALLOCATED(RefEl%Bord_nodes)) THEN
+       DEALLOCATE (RefEl%Bord_nodes)
+    END IF
+    IF (ALLOCATED(RefEl%inner_nodes)) THEN
+       DEALLOCATE (RefEl%inner_nodes)
+    END IF
+    IF (ALLOCATED(RefEl%inner_nodes_face)) THEN
+       DEALLOCATE (RefEl%inner_nodes_face)
+    END IF
+    IF (ASSOCIATED(RefEl%coord3D)) THEN
+       DEALLOCATE (RefEl%coord3D)
+    END IF
+    IF (ASSOCIATED(RefEl%coord2D)) THEN
+       DEALLOCATE (RefEl%coord2D)
+    END IF
+    IF (ASSOCIATED(RefEl%coord1D)) THEN
+       DEALLOCATE (RefEl%coord1D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_points3D)) THEN
+       DEALLOCATE (RefEl%gauss_points3D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_points2D)) THEN
+       DEALLOCATE (RefEl%gauss_points2D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_points1D)) THEN
+       DEALLOCATE (RefEl%gauss_points1D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_weights3D)) THEN
+       DEALLOCATE (RefEl%gauss_weights3D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_weights2D)) THEN
+       DEALLOCATE (RefEl%gauss_weights2D)
+    END IF
+    IF (ALLOCATED(RefEl%gauss_weights1D)) THEN
+       DEALLOCATE (RefEl%gauss_weights1D)
+    END IF
+    IF (ALLOCATED(RefEl%N3D)) THEN
+       DEALLOCATE (RefEl%N3D)
+    END IF
+    IF (ALLOCATED(RefEl%Nxi3D)) THEN
+       DEALLOCATE (RefEl%Nxi3D)
+    END IF
+    IF (ALLOCATED(RefEl%Neta3D)) THEN
+       DEALLOCATE (RefEl%Neta3D)
+    END IF
+    IF (ALLOCATED(RefEl%Nzeta3D)) THEN
+       DEALLOCATE (RefEl%Nzeta3D)
+    END IF
+    IF (ALLOCATED(RefEl%N2D)) THEN
+       DEALLOCATE (RefEl%N2D)
+    END IF
+    IF (ALLOCATED(RefEl%Nxi2D)) THEN
+       DEALLOCATE (RefEl%Nxi2D)
+    END IF
+    IF (ALLOCATED(RefEl%Neta2D)) THEN
+       DEALLOCATE (RefEl%Neta2D)
+    END IF
+    IF (ALLOCATED(RefEl%N1D)) THEN
+       DEALLOCATE (RefEl%N1D)
+    END IF
+    IF (ALLOCATED(RefEl%Nxi1D)) THEN
+       DEALLOCATE (RefEl%Nxi1D)
+    ENDIF
+  END SUBROUTINE free_reference_element_tor
+
+  SUBROUTINE free_el_mat
+    IF (ALLOCATED(elMat%iAqq)) THEN
+       DEALLOCATE (elMat%iAqq)
+    END IF
+    IF (ALLOCATED(elMat%Aqu)) THEN
+       DEALLOCATE (elMat%Aqu)
+    END IF
+    IF (ALLOCATED(elMat%Aql)) THEN
+       DEALLOCATE (elMat%Aql)
+    END IF
+    IF (ALLOCATED(elMat%Auq)) THEN
+       DEALLOCATE (elMat%Auq)
+    END IF
+    IF (ALLOCATED(elMat%Auu)) THEN
+       DEALLOCATE (elMat%Auu)
+    END IF
+    IF (ALLOCATED(elMat%Aul)) THEN
+       DEALLOCATE (elMat%Aul)
+    END IF
+    IF (ALLOCATED(elMat%Alq)) THEN
+       DEALLOCATE (elMat%Alq)
+    END IF
+    IF (ALLOCATED(elMat%Alu)) THEN
+       DEALLOCATE (elMat%Alu)
+    END IF
+    IF (ALLOCATED(elMat%All)) THEN
+       DEALLOCATE (elMat%All)
+    END IF
+    IF (ALLOCATED(elMat%Aql_dir)) THEN
+       DEALLOCATE (elMat%Aql_dir)
+    END IF
+    IF (ALLOCATED(elMat%Aul_dir)) THEN
+       DEALLOCATE (elMat%Aul_dir)
+    END IF
+    IF (ALLOCATED(elMat%fH)) THEN
+       DEALLOCATE (elMat%fH)
+    END IF
+    IF (ALLOCATED(elMat%LL)) THEN
+       DEALLOCATE (elMat%LL)
+    END IF
+    IF (ALLOCATED(elMat%L0)) THEN
+       DEALLOCATE (elMat%L0)
+    ENDIF
+    IF (ALLOCATED(elMat%S)) THEN
+       DEALLOCATE (elMat%S)
+    END IF
+    IF (ALLOCATED(elMat%UU)) THEN
+       DEALLOCATE (elMat%UU)
+    END IF
+    IF (ALLOCATED(elMat%U0)) THEN
+       DEALLOCATE (elMat%U0)
+    END IF
+  ENDSUBROUTINE free_el_mat
+
   SUBROUTINE free_mat
-    DEALLOCATE (MatK%cols)
-    DEALLOCATE (MatK%rowptr)
-    DEALLOCATE (MatK%vals)
-    DEALLOCATE (MatK%loc2glob)
-    DEALLOCATE (rhs%loc2glob)
-    DEALLOCATE (rhs%vals)
-  END SUBROUTINE
+    IF(ASSOCIATED(MatK%cols)) DEALLOCATE (MatK%cols)
+    IF(ASSOCIATED(MatK%rowptr)) DEALLOCATE (MatK%rowptr)
+    IF(ASSOCIATED(MatK%vals)) DEALLOCATE (MatK%vals)
+    IF(ASSOCIATED(MatK%loc2glob)) DEALLOCATE (MatK%loc2glob)
+    IF(ASSOCIATED(rhs%loc2glob)) DEALLOCATE (rhs%loc2glob)
+    IF(ASSOCIATED(rhs%vals)) DEALLOCATE (rhs%vals)
+  END SUBROUTINE free_mat
+
+
+  SUBROUTINE free_splines(splines_str_array)
+    TYPE(Splines_DT), ALLOCATABLE, INTENT(INOUT)  :: splines_str_array(:)
+    INTEGER                                       :: i
+    IF(ALLOCATED(splines_str_array)) THEN
+       DO i = 1, SIZE(splines_str_array)
+          IF(ALLOCATED(splines_str_array(i)%points_number)) DEALLOCATE (splines_str_array(i)%points_number)
+          IF(ALLOCATED(splines_str_array(i)%points_coord)) DEALLOCATE (splines_str_array(i)%points_coord)
+       ENDDO
+       DEALLOCATE(splines_str_array)
+    ENDIF
+  END SUBROUTINE free_splines
 
 END MODULE globals

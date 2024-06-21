@@ -11,16 +11,16 @@ MODULE MPI_OMP
 
   ! Type for MPI parallelization info
   TYPE MPI_typ
-    integer :: glob_id, glob_size ! global communicator size and id of the local process in the communicator
+     INTEGER :: glob_id, glob_size ! global communicator size and id of the local process in the communicator
 #ifdef TOR3D
-    integer :: ntor, npol, itor, ipol
+     INTEGER :: ntor, npol, itor, ipol
 #endif
-  END TYPE
+  END TYPE MPI_typ
 
   ! Type for OMP parallelization info
   TYPE OMP_typ
-    integer :: Nthreads ! number of openMP threads
-  END TYPE
+     INTEGER :: Nthreads ! number of openMP threads
+  END TYPE OMP_typ
 
   TYPE(MPI_typ) :: MPIvar
   TYPE(OMP_typ) :: OMPvar
@@ -32,8 +32,8 @@ CONTAINS
   !********************************************
   ! Initialization of MPI/OMP
   !********************************************
-  subroutine init_MPI_OMP()
-    integer :: IERR, OMP_GET_MAX_THREADS, MPI_THREAD_provided, MPI_THREAD_required
+  SUBROUTINE init_MPI_OMP()
+    INTEGER :: IERR, OMP_GET_MAX_THREADS, MPI_THREAD_provided, MPI_THREAD_required
 
     ! Initialization of the MPI communicator
     !  MPI_THREAD_required = MPI_THREAD_SINGLE
@@ -43,63 +43,62 @@ CONTAINS
     !#else
     !   MPI_THREAD_required = MPI_THREAD_MULTIPLE
     !#endif
-    call MPI_init_thread(MPI_THREAD_required, MPI_THREAD_provided, IERR)
-    call MPI_Comm_size(MPI_COMM_WORLD, MPIvar%glob_size, IERR)
+    CALL MPI_init_thread(MPI_THREAD_required, MPI_THREAD_provided, IERR)
+    CALL MPI_Comm_size(MPI_COMM_WORLD, MPIvar%glob_size, IERR)
 #ifndef PARALL
-    if (MPIvar%glob_size > 1) then
-      write (6, *) 'Error: using serial version in a parallel environment'
-      stop
-    endif
+    IF (MPIvar%glob_size > 1) THEN
+       WRITE (6, *) 'Error: using serial version in a parallel environment'
+       STOP
+    ENDIF
 #endif
-    call MPI_Comm_rank(MPI_COMM_WORLD, MPIvar%glob_id, IERR)
-    if ((MPI_THREAD_provided .NE. MPI_THREAD_required) .AND. (MPIvar%glob_id .EQ. 0)) then
-      print *, 'Problem with initialization of multi-threaded MPI.'
-      print *, 'Required: ', MPI_THREAD_required
-      print *, 'Provided: ', MPI_THREAD_provided
-      print *, '(MPI_THREAD_SINGLE = ', MPI_THREAD_SINGLE, ', MPI_THREAD_FUNNELED = ', MPI_THREAD_FUNNELED, &
-        ', MPI_THREAD_SERIALIZED = ', MPI_THREAD_SERIALIZED, ', MPI_THREAD_MULTIPLE = ', MPI_THREAD_MULTIPLE, ')'
-      print *, 'Exiting...'
-      stop
-    endif
+    CALL MPI_Comm_rank(MPI_COMM_WORLD, MPIvar%glob_id, IERR)
+    IF ((MPI_THREAD_provided .NE. MPI_THREAD_required) .AND. (MPIvar%glob_id .EQ. 0)) THEN
+       PRINT *, 'Problem with initialization of multi-threaded MPI.'
+       PRINT *, 'Required: ', MPI_THREAD_required
+       PRINT *, 'Provided: ', MPI_THREAD_provided
+       PRINT *, '(MPI_THREAD_SINGLE = ', MPI_THREAD_SINGLE, ', MPI_THREAD_FUNNELED = ', MPI_THREAD_FUNNELED, &
+            ', MPI_THREAD_SERIALIZED = ', MPI_THREAD_SERIALIZED, ', MPI_THREAD_MULTIPLE = ', MPI_THREAD_MULTIPLE, ')'
+       PRINT *, 'Exiting...'
+       STOP
+    ENDIF
 
     ! Makes sure that all the processes in the communicator have the same number of openMP threads
-    if (MPIvar%glob_id .EQ. 0) then
-      OMPvar%Nthreads = OMP_GET_MAX_THREADS()
-    endif
-    call MPI_BCast(OMPvar%Nthreads, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, IERR)
-    call OMP_SET_NUM_THREADS(OMPvar%Nthreads)
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       OMPvar%Nthreads = OMP_GET_MAX_THREADS()
+    ENDIF
+    CALL MPI_BCast(OMPvar%Nthreads, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, IERR)
+    CALL OMP_SET_NUM_THREADS(OMPvar%Nthreads)
 #ifdef TOR3D
     MPIvar%ntor = 1
     MPIvar%npol = 1
     MPIvar%itor = 0
     MPIvar%ipol = 0
 #endif
-  end subroutine init_MPI_OMP
+  END SUBROUTINE init_MPI_OMP
 
 #ifdef TOR3D
 #ifdef PARALL
-  subroutine set_divisions
-    use globals
+  SUBROUTINE set_divisions
+    USE globals
     MPIvar%ntor = numer%npartor
-    IF (MPIvar%glob_size .lt. MPIvar%ntor) THEN
-      WRITE (6, *) "Error: wrong number of MPI toroidal partition in input file or wrong number of MPI processes"
-      WRITE (6, *) "Number of processes: ", MPIvar%glob_size
-      WRITE (6, *) "Number of MPI toroidal partitions: ", MPIvar%ntor
-      STOP
+    IF (MPIvar%glob_size .LT. MPIvar%ntor) THEN
+       WRITE (6, *) "Error: wrong number of MPI toroidal partition in input file or wrong number of MPI processes"
+       WRITE (6, *) "Number of processes: ", MPIvar%glob_size
+       WRITE (6, *) "Number of MPI toroidal partitions: ", MPIvar%ntor
+       STOP
     ENDIF
-    IF (mod(MPIvar%glob_size, MPIvar%ntor) .ne. 0) THEN
-      WRITE (6, *) "Error: the number of MPI processes must be a multiple of the number of MPI toroidal divisions (set in input file)"
-      WRITE (6, *) "Number of processes: ", MPIvar%glob_size
-      WRITE (6, *) "Number of MPI toroidal partitions: ", MPIvar%ntor
-      STOP
+    IF (MOD(MPIvar%glob_size, MPIvar%ntor) .NE. 0) THEN
+       WRITE (6, *) "Error: the number of MPI processes must be a multiple of the number of MPI toroidal divisions (set in input file)"
+       WRITE (6, *) "Number of processes: ", MPIvar%glob_size
+       WRITE (6, *) "Number of MPI toroidal partitions: ", MPIvar%ntor
+       STOP
     ENDIF
 
     MPIvar%npol = MPIvar%glob_size/MPIvar%ntor
     MPIvar%itor = 1 + MPIvar%glob_id/MPIvar%npol
-    MPIvar%ipol = 1 + mod(MPIvar%glob_id, MPIvar%npol)
-  end subroutine
+    MPIvar%ipol = 1 + MOD(MPIvar%glob_id, MPIvar%npol)
+  END SUBROUTINE set_divisions
 #endif
 #endif
 
 END MODULE MPI_OMP
-
