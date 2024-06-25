@@ -2424,6 +2424,12 @@ CONTAINS
                           Auq(:,:,z) = Auq(:,:,z)+W*NNi*b(k)
                        END IF
                     END DO
+                    ! split diffusion electron energy equation (LU)
+                    z = i+(j-1)*Neq
+                    DO k = 1,Ndim
+                       Auu(:,:,z) = Auu(:,:,z) + (NxyzNi(:,:,k)*QdW3(k,j))
+                    END DO
+                    Auu(:,:,z) = Auu(:,:,z) - (dot_PRODUCT(QdW3(:,j),b))*NNxy
                  END DO
                  rhs(:,i) = rhs(:,i) + coefi*Alphai*(dot_PRODUCT(MATMUL(TRANSPOSE(Taui),b),ue))*NNbb + s*Ni
               ELSEIF (i == 4) THEN

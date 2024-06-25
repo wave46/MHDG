@@ -602,7 +602,7 @@ CONTAINS
 #ifdef NEUTRAL
     INTEGER             		:: i
     REAL*8				          :: ti_min=1e-6,ti
-    REAL*8, DIMENSION(SIZE(u,1))	:: U1, U2, U3, U4, U5, sigmaviz, sigmavcx, Dnn
+    REAL*8, DIMENSION(SIZE(u,1))	:: U1, U2, U3, U4, U5, sigmaviz, sigmavnn, sigmavcx, Dnn
 #ifdef KEQUATION
     REAL*8, DIMENSION(SIZE(u,1))          :: D_k,U6,c_s
     REAL*8                         :: r
@@ -665,6 +665,7 @@ CONTAINS
 #ifndef CONSTANTNEUTRALDIFF
     DO i=1,SIZE(u,1)
        CALL compute_sigmaviz(u(i,:),sigmaviz(i))
+       CALL compute_sigmavnn(u(i,:),sigmavnn(i))
        CALL compute_sigmavcx(u(i,:),sigmavcx(i))
     END DO
     !ti = max(simpar%refval_temperature*2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2),0.1)
@@ -675,7 +676,7 @@ CONTAINS
     DO i=1,SIZE(Dnn,1)
 #ifndef DNNSMOOTH
        ti = MAX(simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2),ti_min)
-       Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1(i)*(sigmaviz(i) + sigmavcx(i)))
+       Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*(U1(i)*(sigmaviz(i)+sigmavcx(i))+U5(i)*sigmavnn(i)))  
        Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
        IF (Dnn(i) .GT.  phys%diff_nn) THEN
           d_iso(5,5,i) = phys%diff_nn
@@ -687,7 +688,7 @@ CONTAINS
 #else
        ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)
        CALL softplus(ti, ti_min)
-       Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1(i)*(sigmaviz(i) + sigmavcx(i)))
+       Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*(U1(i)*(sigmaviz(i)+sigmavcx(i))+U5(i)*sigmavnn(i)))  
        Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
 
        CALL double_softplus(Dnn(i),10.*phys%diff_n,phys%diff_nn)
@@ -1578,6 +1579,62 @@ CONTAINS
     ENDIF !let non-linear part as zero if negative solutions
   END SUBROUTINE compute_dsigmavrec_dU
 #endif
+   ! Neutral-neutral collision reaction rate
+   SUBROUTINE compute_sigmavnn(U,sigmavnn)
+   real*8, intent(IN) :: U(:)
+   real*8             :: sigmavnn,U1,U2,U3,T0,ti,n0, kb, e_const
+   real*8             :: s0
+   real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+   U1 = U(1)
+   U2 = U(2)
+   U3 = U(3)
+   T0 = 50.
+   n0 = 1.e19
+   kb = 1.38064852e-23
+   e_const = 1.60217662e-19
+
+   s0 = 5.2958e-11 * 1.e-6
+   
+   if ((U1>tol) .and. (U2>tol) .and. (U3>tol)) then ! basically it's a below zero check
+     ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
+   else!some low values
+     ti = 1.e-10
+   endif
+
+   sigmavnn = 0.
+
+   sigmavnn = s0 * (ti * e_const/(1.38064852e-23))**0.25
+ END SUBROUTINE compute_sigmavnn
+
+ SUBROUTINE compute_dsigmavnn_dU(U,res)
+   real*8, intent(IN) :: U(:)
+   real*8             :: res(:),U1,U2,U3,T0,ti
+   real*8, allocatable :: dti_dU(:)
+   real*8             :: s0
+   real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+
+   allocate(dti_dU(size(U)))
+
+   U1 = U(1)
+   U2 = U(2)
+   U3 = U(3)
+   T0 = 50.
+
+   s0 = 5.2958e-11 * 1.e-6
+   
+   res = 0.
+   dti_dU = 0.
+   
+   if ((U1>tol) .and. (U2>tol) .and. (U3>tol)) then ! basically it's a below zero check
+     ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
+     dti_dU(1) = dti_dU(1) + 1.*(-U3 + U2**2/U1) / U1**2
+     dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
+     dti_dU(3) = dti_dU(3) + 1./U1
+     dti_dU(:) = dti_dU(:) * T0*2/3. /phys%Mref
+     
+     res = (0.25 *s0 / ti**0.75) * dti_dU
+   endif !let non-linear part as zero if negative solutions
+END SUBROUTINE compute_dsigmavnn_dU
 #ifdef MANUELCX
   !ADAS truncated CX
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
@@ -1927,12 +1984,13 @@ CONTAINS
 #else
     REAL*8              :: ti_real
 #endif
-    REAL*8              :: sigmaviz, sigmavcx
-    REAL*8              :: dti_du(SIZE(U,1)), dsigmaviz_dU(SIZE(U,1)), dsigmavcx_dU(SIZE(U,1))
+    REAL*8              :: sigmaviz, sigmavnn, sigmavcx
+    REAL*8              :: dti_du(SIZE(U,1)), dsigmaviz_dU(SIZE(U,1)), dsigmavcx_dU(SIZE(U,1)), dsigmavnn_dU(SIZE(U,1))
     Dnn_dU(:) = 0.
     !if ((U(3)>=tol) .and. (U(1)>=tol) .and. (U(5)>=tol)) then
     ! calculation of atomic rates
     CALL compute_sigmaviz(U,sigmaviz)
+    call compute_sigmavnn(U,sigmavnn)
     CALL compute_sigmavcx(U,sigmavcx)
     ! calculation of temperature before limitation
     ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
@@ -1944,7 +2002,7 @@ CONTAINS
     ti = MAX(ti_min,ti)
 #endif
     ! calculation of Dnn before limitation
-    Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))*simpar%refval_time/simpar%refval_length**2
+    Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*(U(1)*(sigmaviz + sigmavcx)+ U(5) * sigmavnn))*simpar%refval_time/simpar%refval_length**2
 #ifdef DNNSMOOTH
     CALL double_softplus_deriv(Dnn,10.*phys%diff_n,phys%diff_nn,double_soft_deriv)   !to check the mulptiplier for Dnn_min
 #else
@@ -1964,19 +2022,22 @@ CONTAINS
 #endif
        ! atomic rates derivatives
        CALL compute_dsigmaviz_dU(U,dsigmaviz_dU)
+       call compute_dsigmavnn_dU(U,dsigmavnn_dU)
        CALL compute_dsigmavcx_dU(U,dsigmavcx_dU)
 
        ! arrange all ingredients
        Dnn_dU(:) = 0.
        ! ti part
-       Dnn_dU(:) = Dnn_dU(:)+dti_du(:)*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx))
+       Dnn_dU(:) = Dnn_dU(:)+dti_du(:)*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*(U(1)*(sigmaviz + sigmavcx)+ U(5) * sigmavnn))
 #ifdef DNNSMOOTH
        Dnn_dU(:) = Dnn_dU(:)*soft_deriv
 #endif
        ! n part
-       Dnn_dU(1) = Dnn_dU(1)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)**2*(sigmaviz + sigmavcx))
+       Dnn_dU(1) = Dnn_dU(1)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density * ( U(1) * ( sigmaviz + sigmavcx ) + U(5) * sigmavnn)**2 ) * ( sigmaviz + sigmavcx )
+       ! nn part
+       Dnn_dU(5) = Dnn_dU(5)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density * ( U(1) * ( sigmaviz + sigmavcx ) + U(5) * sigmavnn)**2 ) * sigmavnn
        ! atomic rates part
-       Dnn_dU(:) = Dnn_dU(:)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*U(1)*(sigmaviz + sigmavcx)**2)*(dsigmaviz_dU(:)+dsigmavcx_dU(:))
+       Dnn_dU(:) = Dnn_dU(:)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density * ( U(1) * ( sigmaviz + sigmavcx ) + U(5) * sigmavnn)**2 ) * ( U(1) * (dsigmaviz_dU(:)+dsigmavcx_dU(:)) + U(5) * dsigmavnn_dU )
 
        Dnn_dU(:) = Dnn_dU(:)*simpar%refval_time/simpar%refval_length**2
 #ifdef DNNSMOOTH

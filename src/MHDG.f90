@@ -494,8 +494,8 @@ PROGRAM MHDG
      CALL deep_copy_mesh_struct(Mesh,Mesh_prec)
      CALL deep_copy_mesh_struct(Mesh,Mesh_init)
      CALL deep_copy_refel_struct(refElPol,refElPol_prec)
-
-     CALL adaptivity_estimator(mesh_name, adapt%param_est, count_adapt, order)
+     CALL adaptivity_indicator_estimator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
+     !CALL adaptivity_estimator(mesh_name, adapt%param_est, count_adapt, order)
      !CALL adaptivity_indicator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order, Mesh_init,Mesh_prec,refElPol_prec)
      !CALL HDF5_save_mesh("./newmesh.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
 
