@@ -448,10 +448,10 @@ PROGRAM MHDG
 #ifndef NEUTRALP
 #ifdef NEUTRAL
                phys%diff_nn = phys%diff_nn!*switch%diffred
-! #ifdef KEQUATION
-!                phys%diff_k_min = phys%diff_k_min*switch%diffred
-!                phys%diff_k_max = phys%diff_k_max!*switch%diffred
-! #endif
+#ifdef KEQUATION
+               phys%diff_ke_min = phys%diff_ke_min*switch%diffred
+               ! phys%diff_k_max = phys%diff_k_max!*switch%diffred
+#endif
 #endif
 #endif
 
@@ -550,10 +550,10 @@ PROGRAM MHDG
 #ifndef NEUTRALP
 #ifdef NEUTRAL
             phys%diff_nn = phys%diff_nn!*switch%diffred
-! #ifdef KEQUATION
-!             phys%diff_k_min = phys%diff_k_min*switch%diffred
+#ifdef KEQUATION
+            phys%diff_ke_min = phys%diff_ke_min*switch%diffred
 !             phys%diff_k_max = phys%diff_k_max!*switch%diffred
-! #endif
+#endif
 #endif
 #endif
 
@@ -800,12 +800,12 @@ CONTAINS
       save_name = TRIM(ADJUSTL(save_name))//"Ptor"//Num
 
 #endif
-! #ifndef KEQUATION
+#ifndef KEQUATION
       ! Diffusion
       WRITE (Num, "(E10.3)") phys%diff_n*simpar%refval_diffusion
-! #else
-!       WRITE (Num, "(E10.3)") (phys%diff_n + phys%diff_k_min)*simpar%refval_diffusion
-! #endif
+#else
+      WRITE (Num, "(E10.3)") (phys%diff_n + phys%diff_ke_min)*simpar%refval_diffusion
+#endif
       save_name = TRIM(ADJUSTL(save_name))//"_DPe"//TRIM(ADJUSTL(Num))
 #ifdef TEMPERATURE
       WRITE (Num, "(E10.3)") phys%diff_pari

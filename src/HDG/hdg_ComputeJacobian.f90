@@ -2136,7 +2136,7 @@ CONTAINS
          SUBROUTINE assemblyVolumeContribution(Auq, Auu, rhs, b3, psi, divb, drift, Bmod, btor, gradBtor, omega, q_cyl, is_core, f, ktis, diffiso, diffani, Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upe, ue, qe, u0e, xy, Jtor, Vnng)
       real*8, intent(IN)         :: btor, gradBtor(:), omega, q_cyl
       logical, intent(in) :: is_core
-      real*8                    :: growth_rate, dd_du(neq), d_omega, v, r
+      real*8                    :: growth_rate, dd_du(neq), d_omega, v, r, kappa, epsil, kappa_rhs, epsil_rhs
 #ifdef DKLINEARIZED
       real*8                    :: ddk_dU(Neq), ddk_dU_U
       real*8                    :: gradddk(Ndim)
@@ -2332,7 +2332,31 @@ CONTAINS
       call compute_gamma_I(ue, qq, btor, gradBtor, r, growth_rate)
       call compute_dg_du(ue, qq, btor, gradBtor, q_cyl, omega, is_core, r, dg_du)
       growth_rate = max(growth_rate, 1e-20)
-      d_omega = 1.e10/growth_rate/simpar%refval_k
+      d_omega = phys%k_max/growth_rate/simpar%refval_k
+      kappa = ue(6)
+      epsil = ue(7)
+      ! Trick to avoid underflow, -690 is about the smallest floating point number in log space
+      if (kappa < 0.) then
+         kappa_rhs = 0.
+      else
+         kappa_rhs = 2*log(kappa) - log(d_omega)
+         if (kappa_rhs < -690.) then
+            kappa_rhs = 0.
+         else
+            kappa_rhs = exp(kappa_rhs)
+         end if
+      end if
+      if (epsil < 0.) then
+         epsil_rhs = 0.
+      else
+         epsil_rhs = 2*log(epsil) - 1.5*log(max(kappa, 1e-7))
+         if (epsil_rhs < -690.) then
+            epsil_rhs = 0.
+         else
+            epsil_rhs = exp(epsil_rhs)
+         end if
+      end if
+
       ! print "(f20.15, 3x, f20.15)", growth_rate * ue(6) - ue(6)**2 / d_omega, growth_rate * ue(7) - v * ue(7)**2 * max(1e-10, ue(6)) ** (-3/2)
       ! diff = get_diff_ke(ue)
       ! dd_du = get_dd_du(ue)
@@ -2546,26 +2570,19 @@ CONTAINS
 #endif
 #ifdef KEQUATION
 ! TODO : Linearization of gamma
-         ELSEIF (i == 6 .or. i == 7) THEN
+         ELSEIF ((i == 6) .or. (i == 7)) THEN
             DO j = 1, Neq
                z = i + (j - 1)*Neq
-               ! do k = 1, Ndim
-               ! IF (i == 6 .or. j == 7) then
-               !    Auu(:, :, z) = Auu(:, :, z) - (growth_rate)*NxyzNi(:, :, k) ! dd_du(j)*qpr(k, i)
-               ! Auq(:, :, z) = Auq(:, :, z) + diff*qpr(k, i)*NxyzNi(:, :, k)
-               if (i == 6 .and. j == 7) then
-                  Auu(:, :, z) = Auu(:, :, z) + NNi ! epsilon in kappa
+               if ((i == 6) .and. (j == 7)) then
+                  if (epsil > 0.) then
+                     Auu(:, :, z) = Auu(:, :, z) + NNi ! epsilon in kappa
+                  end if
                end if
-               ! END IF
                Auu(:, :, z) = Auu(:, :, z) - dg_du(i, j)*NNi!NxyzNi(:, :, k)
-               ! end do
 
             END DO
-            ! do k = 1, Ndim
-            ! rhs(:, i) = rhs(:, i) - diff*qpr(k, i)*Nxyzg(:, k)
-            rhs(:, 6) = rhs(:, 6) + max(1e-6, ue(6))**2/d_omega*Ni
-            rhs(:, 7) = rhs(:, 7) - v/2.*max(1e-6, ue(7))**2*max(ue(6), 1e-6)**(-1.5)*Ni
-            ! end do
+            rhs(:, 6) = rhs(:, 6) + kappa_rhs*Ni
+            rhs(:, 7) = rhs(:, 7) - v/2.*epsil_rhs*Ni
 #endif
 #ifdef NEUTRALP
          ELSEIF (i == 5) THEN

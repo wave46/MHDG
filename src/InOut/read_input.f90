@@ -51,7 +51,7 @@ SUBROUTINE READ_input()
    real*8      :: Pohmic, diff_nn, Re, Re_pump, puff, puff_slope
 #ifdef KEQUATION
    ! k equation
-   real*8      :: diff_k_min, diff_k_max, k_max
+   real*8      :: diff_ke_min, diff_ke_max, k_max
 #endif
    ! Movin Equilibrium
    logical     :: ME
@@ -59,7 +59,7 @@ SUBROUTINE READ_input()
    ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady, time_init, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
     & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
-        & logrho, bxgradb
+         & logrho, bxgradb
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions, save_folder
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
    NAMELIST /GEOM_LST/ R0, q
@@ -67,11 +67,11 @@ SUBROUTINE READ_input()
    NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn, Re, Re_pump, puff,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source, Pohmic, Tbg, bcflags, bohmth,&
-        &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat, diagsource
+         &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat, diagsource
 #else
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn, Re, Re_pump, puff,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
-      & diff_k_min, diff_k_max, k_max, Pohmic, Tbg, bcflags, bohmth,&
-        &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat, diagsource
+       & diff_ke_min, diff_ke_max, k_max, Pohmic, Tbg, bcflags, bohmth,&
+         &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat, diagsource
 #endif
    NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
    NAMELIST /LSSOLV_LST/ sollib, lstiming, itmax, itrace, rest, istop, tol, kmethd, ptype,&
@@ -190,8 +190,9 @@ SUBROUTINE READ_input()
    phys%ener_source_e = ener_source_e
    phys%ener_source_ee = ener_source_ee
 #ifdef KEQUATION
-   ! phys%diff_k_min = diff_k_min
-   ! phys%diff_k_max = diff_k_max
+   ! set min to the max then it will be decreased
+   phys%diff_ke_min = diff_ke_max
+   phys%diff_ke_max = diff_ke_max
    phys%k_max = k_max
 #endif
    phys%sigma_source = sigma_source
@@ -370,7 +371,7 @@ SUBROUTINE READ_input()
 #endif
 #ifdef KEQUATION
       ! PRINT *, '                - minimum perp diffusion in the k equation:           ', phys%diff_k_min
-      ! PRINT *, '                - maximum perp diffusion in the k equation:           ', phys%diff_k_max
+      PRINT *, '                - maximum perp diffusion in the k equation:           ', phys%diff_ke_max
       PRINT *, '                - maximum k:                                          ', phys%k_max
 #endif
       PRINT *, '                - constant for the momentum equation (isoth)          ', phys%a

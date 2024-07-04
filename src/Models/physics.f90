@@ -344,6 +344,7 @@ CONTAINS
    SUBROUTINE jacobianMatrices(U, A)
       real*8, intent(in)  :: U(:)
       real*8, intent(out) :: A(:, :)
+      real*8 :: kappa, epsil
       ![ 0,                                           1,                              0,                0; ...
       ! -2/3*U(2)**2/U(1)**2                          4/3*U(2)/U(1)                   2/3,              2/3; ...
       ! -5/3*U(2)*U(3)/U(1)**2+2/3*U(2)**3/U(1)**3    5/3*U(3)/U(1)-U(2)**2/U(1)**2   5/3*U(2)/U(1),    0 ;   ...
@@ -384,12 +385,14 @@ CONTAINS
       !A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
 #endif
 #ifdef KEQUATION
-      A(6, 1) = -U(6)*U(2)/U(1)**2
-      A(6, 2) = U(6)/U(1)
-      A(6, 6) = U(2)/U(1)
-      A(7, 1) = -U(7)*U(2)/U(1)**2
-      A(7, 2) = U(7)/U(1)
-      A(7, 7) = U(2)/U(1)
+      kappa = max(U(6), 0.)
+      epsil = max(U(7), 0.)
+      A(6, 1) = -kappa*U(2)/U(1)**2
+      A(6, 2) = kappa/U(1)
+      A(6, 6) = U(2)/U(1) !* merge(1., 0., u(6) > 0. )
+      A(7, 1) = -epsil*U(2)/U(1)**2
+      A(7, 2) = epsil/U(1)
+      A(7, 7) = U(2)/U(1) !* merge(1., 0., u(7) > 0. )
 
 #endif
 #endif
@@ -417,6 +420,7 @@ CONTAINS
    SUBROUTINE jacobianMatricesFace(U, bn, An)
       real*8, intent(in)  :: U(:), bn
       real*8, intent(out) :: An(:, :)
+      real*8 :: kappa, epsil
       An = 0.d0
       An(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
       An(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
@@ -449,12 +453,14 @@ CONTAINS
       !An(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*An(5,:)
 #endif
 #ifdef KEQUATION
-      An(6, 1) = -U(6)*U(2)/U(1)**2
-      An(6, 2) = U(6)/U(1)
-      An(6, 6) = U(2)/U(1)
-      An(7, 1) = -U(7)*U(2)/U(1)**2
-      An(7, 2) = U(7)/U(1)
-      An(7, 6) = U(2)/U(1)
+      kappa = max(U(6), 0.)
+      epsil = max(U(7), 0.)
+      An(6, 1) = -kappa*U(2)/U(1)**2
+      An(6, 2) = kappa/U(1)
+      An(6, 6) = U(2)/U(1) !* merge(1., 0., u(6) > 0. )
+      An(7, 1) = -epsil*U(2)/U(1)**2
+      An(7, 2) = epsil/U(1)
+      An(7, 7) = U(2)/U(1) !* merge(1., 0., u(7) > 0. )
 #endif
 #endif
       An = bn*An
@@ -681,8 +687,22 @@ CONTAINS
 #endif
 
 #ifdef KEQUATION
-      d_ke = u(:, 6)*0 ! **2/u(:, 7)
 
+      where (u(:, 6) < 0.)
+         d_ke = phys%diff_ke_min
+      elsewhere(u(:, 7) < 0.)
+         d_ke = phys%diff_ke_max
+      elsewhere
+         ! diffusion = kappa²/epsilon
+         ! we use the logspace to avoid underflow when computing the square
+         d_ke = 2*log(u(:, 6)) - log(u(:, 7))
+         where (d_ke < -690.)
+            d_ke = 0.
+         elsewhere
+            d_ke = exp(d_ke)
+         end where
+      end where
+      d_ke = max(phys%diff_ke_min, min(phys%diff_ke_max, d_ke))
 ! #ifndef KDIFFSMOOTH
 !
 !                D_k(i) = max(phys%diff_k_min, min(phys%diff_k_max, D_k(i)))
@@ -692,13 +712,19 @@ CONTAINS
 !                call double_softplus(D_k(i), phys%diff_k_min, phys%diff_k_max)
 ! #endif
 
-      d_iso(6, 6, :) = d_ke + phys%diff_n
-      d_iso(7, 7, :) = d_ke + phys%diff_n
-      d_ani(6, 6, :) = d_iso(6, 6, :)
-      d_ani(7, 7, :) = d_iso(7, 7, :)
-      do i = 1, 4
+      ! d_iso(6, 6, :) = d_ke + phys%diff_n
+      ! d_iso(7, 7, :) = d_ke + phys%diff_n
+
+      ! set the diffusion to the self consistent one
+      do i = 1, phys%Neq
+         ! skip neutral
+         if (i == 5) then
+            continue
+         end if
          d_iso(i, i, :) = d_iso(i, i, :) + d_ke
       end do
+      d_ani(6, 6, :) = d_iso(6, 6, :)
+      d_ani(7, 7, :) = d_iso(7, 7, :)
 #endif
       !Dnn = sum(Dnn)/size(u,1)
 #endif
@@ -1959,12 +1985,17 @@ CONTAINS
       T0 = 50.
       if (U1 < tol) U1 = tol
       if (U4 < tol) U4 = tol
-      Tloss = 25.+170.*exp(-(T0*U4)/(3.*phys%Mref*U1))
+      Tloss = -(T0*U4)/(3.*phys%Mref*U1)
+      if (Tloss < -690) then
+         Tloss = 25.
+      else
+         Tloss = 25.+170.*exp(Tloss)
+      end if
    END SUBROUTINE compute_Tloss
 
    SUBROUTINE compute_dTloss_dU(U, res)
       real*8, intent(IN) :: U(:)
-      real*8             :: res(:), U1, U4, T0
+      real*8             :: res(:), U1, U4, T0, temp
       real, parameter :: tol = 1e-20
       U1 = U(1)
       U4 = U(4)
@@ -1974,7 +2005,15 @@ CONTAINS
       res = 0.
       res(1) = U4/(U1**2)
       res(4) = -1./U1
-      res = 170.*exp(-(T0*U4)/(3.*phys%Mref*U1))*(T0/(3.*phys%Mref))*res
+
+      temp = -(T0*U4)/(3.*phys%Mref*U1)
+      if (temp < -690) then
+         temp = 0.
+      else
+         temp = exp(temp)
+      end if
+
+      res = 170.*temp*(T0/(3.*phys%Mref))*res
    END SUBROUTINE compute_dTloss_dU
 
    SUBROUTINE compute_Tlossrec(U, Tlossrec)
@@ -2149,27 +2188,36 @@ CONTAINS
       ! call compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, is_core, r, growth_rate)
       call compute_gamma_I(u, q, b, gradB, r, growth_rate)
       v = cs**2/omega*alpha_s/r0*sqrt(max(0., tau_para*growth_rate))
-      ! print '(/,3x,"compute v = ",f20.15)', v
    end subroutine
    subroutine compute_dg_du(U, Q, B, gradB, q_cyl, omega, is_core, r, dg_du)
       ! use ieee_arithmetic
       real*8, intent(IN) :: U(:), Q(:, :), gradB(:), B, q_cyl, omega, r
       logical, intent(in) :: is_core
       real*8, intent(OUT) :: dg_du(:, :)
-      real*8 :: V, growth_rate, d_omega, kappa, epsil
-      kappa = max(1e-6, u(6))
-      epsil = max(1e-6, u(7))
+      real*8 :: V, growth_rate, d_omega, kappa, kappa_safe, epsil, ek
+      kappa_safe = max(1e-7, u(6))
+      kappa = u(6)
+      epsil = u(7)
+      ! epsil = max(u(7), 1e-6)
       dg_du = 0.
       call compute_V(U, Q, B, gradB, q_cyl, omega, is_core, r, v)
       ! call compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, is_core, growth_rate)
       call compute_gamma_I(u, q, b, gradB, r, growth_rate)
-      growth_rate = max(growth_rate, 1e-10)
-      d_omega = 1e10/growth_rate/simpar%refval_k
-      dg_du(6, 6) = growth_rate - 2*kappa/d_omega
-      dg_du(7, 6) = 3./2.*v*epsil**2*kappa**(-5./2.)
-      dg_du(7, 7) = growth_rate - 2*v*epsil*kappa**(-3./2.)
-      ! print '(/,3x,"compute dg du 6,6 = ",f20.15,3x,"7,6 = ",f20.15,3x,"7,7 = ",f20.15)', dg_du(6,6), dg_du(7,6), dg_du(7,7)
-      ! print '(/,3x," kappa = ",f20.15,3x,"7,6 = ",L)', u(6), ieee_is_nan(dg_du(7,6))
+      growth_rate = max(growth_rate, 1e-20)
+      d_omega = phys%k_max/growth_rate/simpar%refval_k
+      if (epsil < 0.) then
+         ek = 0.
+      else
+         ek = 2*log(epsil) - 2.5*log(kappa_safe)
+         if (ek < -690) then
+            ek = 0.
+         else
+            ek = exp(ek)
+         end if
+      end if
+      dg_du(6, 6) = growth_rate*merge(1, 0, kappa > 0.) - 2*max(kappa, 0.)/d_omega
+      dg_du(7, 6) = 3./2.*v*ek
+      dg_du(7, 7) = growth_rate*merge(1, 0, epsil > 0.) - 2*v*max(epsil, 0.)*kappa_safe**(-3./2.)
    end subroutine
 #ifdef DKLINEARIZED
    SUBROUTINE compute_ddk_du(U, xy, q_cyl, ddk_du)
