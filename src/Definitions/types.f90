@@ -285,6 +285,8 @@ MODULE types
      ! Atomic rates coefficients
      REAL*8, DIMENSION(9,9):: alpha_iz     ! Coefficients for ionization coefficients spline from EIRENE, (te,ne) grid
      REAL*8, DIMENSION(9,9):: alpha_rec     ! Coefficients for recompination coefficients spline from EIRENE, (te,ne) grid
+     real*8, dimension(9,9):: alpha_energy_iz     ! Coefficients for radiation losses due to ionization  spline from EIRENE, (te,ne) grid
+     real*8, dimension(9,9):: alpha_energy_rec     ! Coefficients for radiation losses due to recombination  spline from EIRENE, (te,ne) grid
 #endif
 #ifdef KEQUATION
      ! Coefficients for the k equation

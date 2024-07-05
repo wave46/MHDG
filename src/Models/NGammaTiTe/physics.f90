@@ -154,6 +154,61 @@ CONTAINS
     phys%alpha_iz(:,9) = (/-3.89093208e-09, -8.95261409e-09,  7.45121322e-09,&
          -1.85267764e-09,  1.47020423e-10,  4.83578962e-12,&
          -1.08932309e-12,  1.15585402e-14,  2.17364528e-15/)
+         phys%alpha_energy_iz(:,1) = (/-2.50812402e+01,  9.96163441e+00, -4.77618017e+00,&
+         1.63071304e+00, -3.86224646e-01,  5.90834812e-02,&
+        -5.50214904e-03,  2.82569314e-04, -6.12637364e-06/)
+         phys%alpha_energy_iz(:,2) = (/1.73410814e-02, -1.57330788e-02,  2.97091760e-04,&
+         3.45781992e-03, -1.35470702e-03,  2.46767178e-04,&
+        -2.55003960e-05,  1.47937419e-06, -3.76891493e-08/)
+         phys%alpha_energy_iz(:,3) = (/-1.89177715e-02,  1.84373426e-02, -3.80775886e-03,&
+         -1.18284624e-03,  5.75833588e-04, -9.70777644e-05,&
+          9.18691271e-06, -5.35799299e-07,  1.51653965e-08/)
+         phys%alpha_energy_iz(:,4) = (/7.82341508e-03, -7.52650697e-03,  2.10882029e-03,&
+         -1.06633298e-05, -6.05390376e-05,  7.78447320e-06,&
+         -5.44204893e-07,  4.79775889e-08, -2.40410533e-09/)
+         phys%alpha_energy_iz(:,5) = (/-1.63154981e-03,  1.44548221e-03, -4.15664835e-04,&
+         2.94249910e-05, -4.22728571e-07,  7.20587415e-07,&
+        -8.99016149e-08, -1.63703056e-09,  3.75320669e-10/)
+         phys%alpha_energy_iz(:,6) = (/ 1.88643572e-04, -1.43008955e-04,  3.40709882e-05,&
+         -8.97623559e-07, -2.35247387e-09, -9.88325233e-08,&
+          8.93347501e-09,  5.73579811e-10, -6.00200317e-11/)
+         phys%alpha_energy_iz(:,7) = (/-1.22470024e-05,  7.22137655e-06, -8.30018517e-07,&
+         -3.00628338e-07,  4.54414015e-08,  2.57712484e-09,&
+         -1.93796015e-10, -6.97804260e-11,  5.01115698e-12/)
+         phys%alpha_energy_iz(:,8) = (/ 4.17042724e-07, -1.63374822e-07, -2.67173046e-08,&
+         2.40019846e-08, -2.85457989e-09, -1.00767541e-10,&
+         1.66441312e-11,  1.83602098e-12, -1.64199582e-13/)
+         phys%alpha_energy_iz(:,9) = (/-5.77555689e-09,  1.02821579e-09,  1.14006243e-09,&
+         -4.90129725e-10,  3.86861210e-11,  6.21520030e-12,&
+         -9.52124215e-13,  1.88492217e-14,  1.25729669e-15/)
+         !AMJUEL energy losses
+         phys%alpha_energy_rec(:,1) = (/-2.59245035e+01, -7.29067024e-01,  2.36392587e-02,&
+         3.64533393e-03,  1.59418465e-03, -1.21666803e-03,&
+         2.37611590e-04, -1.93097764e-05,  5.59925778e-07/)
+         phys%alpha_energy_rec(:,2) = (/1.22209727e-02, -1.54032393e-02,  1.16445335e-02,&
+         -1.00582079e-03, -1.58223801e-05, -3.50307014e-04,&
+          1.17270978e-04, -1.31840149e-05,  4.97782332e-07/)
+         phys%alpha_energy_rec(:,3) = (/4.27849940e-05, -3.40609378e-03, -5.84520933e-03,&
+         6.95635227e-04,  4.07369562e-04,  1.04350030e-04,&
+        -6.69518205e-05,  8.84802545e-06, -3.61501382e-07/)
+         phys%alpha_energy_rec(:,4) = (/ 1.94396774e-03,  1.53224343e-03,  2.85414587e-03,&
+         -9.30505637e-04, -9.37916924e-05,  9.53616277e-06,&
+          1.18818401e-05, -2.07237071e-06,  9.46698931e-08/)
+         phys%alpha_energy_rec(:,5) = (/-7.12347460e-04, -4.65842377e-04, -5.07748529e-04,&
+         2.58489629e-04,  1.49089050e-06, -6.90868188e-06,&
+        -4.38151436e-07,  2.05591999e-07, -1.14648523e-08/)
+         phys%alpha_energy_rec(:,6) = (/1.30352340e-04,  5.97244875e-05,  4.21110664e-05,&
+         -3.29464390e-05,  2.24529287e-06,  8.23201901e-07,&
+         -6.93626717e-08, -7.48963265e-09,  6.77233892e-10/)
+         phys%alpha_energy_rec(:,7) = (/-1.18656075e-05, -4.07084329e-06, -1.25143662e-06,&
+         2.11292402e-06, -3.15090101e-07, -2.90533105e-08,&
+         6.59224926e-09, -7.07379703e-11, -1.77649634e-11/)
+         phys%alpha_energy_rec(:,8) = (/5.33445563e-07,  1.37870988e-07, -1.62655575e-08,&
+         -6.54468284e-08,  1.63196564e-08, -3.16903852e-10,&
+         -1.77888796e-10,  1.04708751e-11,  7.19919506e-14/)
+         phys%alpha_energy_rec(:,9) = (/-9.34985789e-09, -1.81807973e-09,  1.07345881e-09,&
+         7.81029308e-10, -2.98409303e-10,  2.44276577e-11,&
+         1.16076211e-12, -1.87744627e-13,  3.92930028e-15/)
     ! coefficients for AMJUEL 2.1.8JH
 #ifdef THREEBODYREC
     phys%alpha_rec(:,1) = (/-2.85572848e+01, -7.66404261e-01, -4.93042400e-03,&
@@ -1578,6 +1633,90 @@ CONTAINS
        CALL compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_rec,res)
     ENDIF !let non-linear part as zero if negative solutions
   END SUBROUTINE compute_dsigmavrec_dU
+
+  SUBROUTINE compute_sigmavEiz(U,sigmavEiz)
+    real*8, intent(IN) :: U(:)
+    real*8             :: sigmavEiz,U1,U4,T0,Ery,E0,te,ne,n0
+    real*8, dimension(9,9) :: alpha
+    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    integer            :: i, j
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    n0 = 1.e19
+    
+    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
+      te = T0*2/3./phys%Mref*U4/U1
+      ne = n0*U1/1.e14
+    else!some low values
+      ne = n0*1.e-20/1.e14  
+      te = 1.e-10
+    endif
+
+    sigmavEiz = 0.
+
+    call compute_2D_eirene_rate(te,ne,phys%alpha_energy_iz,sigmavEiz)
+  END SUBROUTINE compute_sigmavEiz
+
+  SUBROUTINE compute_dsigmavEiz_dU(U,res)
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),sigmavEiz,U1,U4,T0,Ery,E0,te,ne,n0
+    real*8, dimension(9,9) :: alpha
+    real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    integer            :: i, j
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    n0 = 1.e19
+    
+    res = 0.
+    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
+      ne = n0*U1/1.e14
+      te = T0*2/3./phys%Mref*U4/U1
+      call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_energy_iz,res)
+    endif !let non-linear part as zero if negative solutions
+
+  END SUBROUTINE compute_dsigmavEiz_dU
+
+  SUBROUTINE compute_sigmavErec(U,sigmavErec)
+    real*8, intent(IN) :: U(:)
+    real*8             :: sigmavErec,U1,U4,T0,Ery,E0,te,ne,n0
+    real*8, dimension(9,9) :: alpha
+    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    integer            :: i, j
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    n0 = 1.e19
+    
+    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
+      te = T0*2/3./phys%Mref*U4/U1
+      ne = n0*U1/1.e14
+    else!some low values
+      ne = n0*1.e-20/1.e14  
+      te = 1.e-10
+    endif
+    call compute_2D_eirene_rate(te,ne,phys%alpha_energy_rec,sigmavErec)
+  END SUBROUTINE compute_sigmavErec
+
+  SUBROUTINE compute_dsigmavErec_dU(U,res)
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),sigmavErec,U1,U4,T0,Ery,E0,te,ne,n0
+    real*8, dimension(9,9) :: alpha
+    real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    integer            :: i, j
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    n0 = 1.e19
+    
+    res = 0.
+    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
+      ne = n0*U1/1.e14
+      te = T0*2/3./phys%Mref*U4/U1
+      call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_energy_rec,res)
+    endif !let non-linear part as zero if negative solutions
+  END SUBROUTINE compute_dsigmavErec_dU
 #endif
    ! Neutral-neutral collision reaction rate
    SUBROUTINE compute_sigmavnn(U,sigmavnn)
@@ -2125,61 +2264,66 @@ END SUBROUTINE compute_dsigmavnn_dU
 
 
   SUBROUTINE compute_fEiiz(U,fEiiz)
-    REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: fEiiz,U3,U5
-    REAL,PARAMETER :: tol = 1e-20
+    real*8, intent(IN) :: U(:)
+    real*8             :: fEiiz,U1,U3,U5
+    real,parameter :: tol = 1e-20
     U3 = U(3)
     U5 = U(5)
-    IF (U3<tol) U3=tol
-    IF (U5<tol) U5=tol
-    fEiiz = U3*U5
+    U1 = U(1)
+    if (U1<tol) U1=tol
+    if (U3<tol) U3=tol
+    if (U5<tol) U5=tol
+    !PSI review
+    fEiiz = U5*(U3-0.5*U(2)**2/U1)
   END SUBROUTINE compute_fEiiz
 
 
   SUBROUTINE compute_dfEiiz_dU(U,res)
-    REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U3,U5
-    REAL,PARAMETER :: tol = 1e-20
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),U1,U3,U5
+    real,parameter :: tol = 1e-20
+    U1 = U(1)
     U3 = U(3)
     U5 = U(5)
-    IF (U3<tol) U3=tol
-    IF (U5<tol) U5=tol
+    if (U1<tol) U1=tol
+    if (U3<tol) U3=tol
+    if (U5<tol) U5=tol
     res = 0.
     res(3) = U5
     res(5) = U3
+    !PSI review
+    res(1) = res(1)+0.5*U(2)**2/U1**2*U5
+    res(2) = -1.*U(2)/U1*U5
+    res(5) = res(5) - 0.5*U(2)**2/U1
   END SUBROUTINE compute_dfEiiz_dU
 
 
   SUBROUTINE compute_fEirec(U,fEirec)
-   real*8, intent(IN) :: U(:)
-   real*8             :: fEirec,U1,U3
-   real,parameter :: tol = 1e-20
-   U1 = U(1)
-   U3 = U(3)
-   if (U1<tol) U1=tol
-   if (U3<tol) U3=tol
-   fEirec = U1*U3
-   !PSI review
-   fEirec = fEirec-0.5*U(2)**2/U1*U3
- END SUBROUTINE compute_fEirec
+    real*8, intent(IN) :: U(:)
+    real*8             :: fEirec,U1,U3
+    real,parameter :: tol = 1e-20
+    U1 = U(1)
+    U3 = U(3)
+    if (U1<tol) U1=tol
+    if (U3<tol) U3=tol
+    fEirec = U1*U3
+    
+    fEirec = fEirec
+  END SUBROUTINE compute_fEirec
 
 
- SUBROUTINE compute_dfEirec_dU(U,res)
-   real*8, intent(IN) :: U(:)
-   real*8             :: res(:),U1,U3
-   real,parameter :: tol = 1e-20
-   U1 = U(1)
-   U3 = U(3)
-   if (U1<tol) U1=tol
-   if (U3<tol) U3=tol
-   res = 0.
-   res(1) = U3
-   res(3) = U1
-   !PSI review
-   res(1) = res(1)+0.5*U(2)**2/U1**2*U3
-   res(2) = -1.*U(2)/U1*U3
-   res(3) = res(3) - 0.5*U(2)**2/U1
- END SUBROUTINE compute_dfEirec_dU
+  SUBROUTINE compute_dfEirec_dU(U,res)
+    real*8, intent(IN) :: U(:)
+    real*8             :: res(:),U1,U3
+    real,parameter :: tol = 1e-20
+    U1 = U(1)
+    U3 = U(3)
+    if (U1<tol) U1=tol
+    if (U3<tol) U3=tol
+    res = 0.
+    res(1) = U3
+    res(3) = U1   
+  END SUBROUTINE compute_dfEirec_dU
 
 
   SUBROUTINE compute_fEicx(U,fEicx)

@@ -25,7 +25,7 @@ CONTAINS
        !CALL gmsh%open("./res/West_Mesh_farWall_NoHole_SmoothCorner_base.geo")
        IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
           !CALL gmsh%OPEN("./res/geometries/West_Mesh_NoHole_farWall.geo")
-          CALL gmsh%OPEN("./res/geometries/TCV_simple.geo")
+          CALL gmsh%OPEN("./res/geometries/TCV_smooth.geo")
        ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
           CALL gmsh%OPEN("./res/geometries/West_Mesh_YesHole_SmoothCorner.geo")
        ELSE
@@ -51,7 +51,7 @@ CONTAINS
        !CALL gmsh%open("./res/West_Mesh_farWall_NoHole_SmoothCorner_base.geo")
        IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
           !CALL gmsh%OPEN("./res/geometries/West_Mesh_NoHole_farWall.geo")
-          CALL gmsh%OPEN("./res/geometries/TCV_simple.geo")
+          CALL gmsh%OPEN("./res/geometries/TCV_smooth.geo")
        ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
           CALL gmsh%OPEN("./res/geometries/West_Mesh_YesHole_SmoothCorner.geo")
        ELSE

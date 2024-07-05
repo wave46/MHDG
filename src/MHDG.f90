@@ -231,8 +231,10 @@ PROGRAM MHDG
      CALL generate_splines_from_geo_file('./res/geometries/Circ_InfLim_YesHole_Structured.geo')
   ELSE
      IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
-        WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_NoHole_farWall.geo"
-        CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_NoHole_farWall.geo')
+        !WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_NoHole_farWall.geo"
+        !CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_NoHole_farWall.geo')
+        WRITE(*,*) "Splines read from file ./res/geometries/TCV_smooth.geo"
+        CALL generate_splines_from_geo_file('./res/geometries/TCV_smooth.geo')
      ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
         WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_YesHole_SmoothCorner.geo"
         CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_YesHole_SmoothCorner.geo')
