@@ -1290,8 +1290,8 @@ CONTAINS
 #ifdef NEUTRAL
          up(:, 11) = 1.e-8
 #ifdef KEQUATION
-         up(:, 12) = 1.8e-5
-         up(:, 13) = 1.8e-3
+         up(:, 12) = 1e-5
+         up(:, 13) = 1e-8
 #endif
 #endif
 
@@ -1308,8 +1308,8 @@ CONTAINS
 #ifdef NEUTRAL
          up(:, 11) = 1.e-8
 #ifdef KEQUATION
-         up(:, 12) = 1.e-5
-         up(:, 13) = 1.8e-3
+         up(:, 12) = 1e-5
+         up(:, 13) = 1e-8
 #endif
 #endif
       CASE (65)
@@ -1336,8 +1336,8 @@ CONTAINS
 #ifdef NEUTRAL
          up(:, 11) = 1.e-8
 #ifdef KEQUATION
-         up(:, 12) = 1.8e-5
-         up(:, 13) = 1.8e-3
+         up(:, 12) = 1e-5
+         up(:, 13) = 1e-8
 #endif
 #endif
       CASE DEFAULT

@@ -448,7 +448,7 @@ CONTAINS
       !  Solve
       !******************************************
     call psb_krylov(lssolver%kmethd, matPSBLAS%mat, matPSBLAS%prec, matPSBLAS%b, matPSBLAS%x, lssolver%tol, matPSBLAS%desc_a, info,&
-                & itmax=lssolver%itmax, iter=iter, err=err, itrace=lssolver%itrace, istop=lssolver%istop, irst=lssolver%rest)
+                  & itmax=lssolver%itmax, iter=iter, err=err, itrace=lssolver%itrace, istop=lssolver%istop, irst=lssolver%rest)
 
       !******************************************
       !  Store solution

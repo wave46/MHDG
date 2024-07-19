@@ -719,7 +719,7 @@ CONTAINS
       do i = 1, phys%Neq
          ! skip neutral
          if (i == 5) then
-            continue
+            cycle
          end if
          d_iso(i, i, :) = d_iso(i, i, :) + d_ke
       end do
@@ -2187,6 +2187,7 @@ CONTAINS
       tau_para = q_cyl*r0/max(cs, 1e-20)
       ! call compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, is_core, r, growth_rate)
       call compute_gamma_I(u, q, b, gradB, r, growth_rate)
+      ! growth_rate = max(growth_rate, 1e-1)
       v = cs**2/omega*alpha_s/r0*sqrt(max(0., tau_para*growth_rate))
    end subroutine
    subroutine compute_dg_du(U, Q, B, gradB, q_cyl, omega, is_core, r, dg_du)
@@ -2195,7 +2196,7 @@ CONTAINS
       logical, intent(in) :: is_core
       real*8, intent(OUT) :: dg_du(:, :)
       real*8 :: V, growth_rate, d_omega, kappa, kappa_safe, epsil, ek
-      kappa_safe = max(1e-7, u(6))
+      kappa_safe = max(1e-6, u(6))
       kappa = u(6)
       epsil = u(7)
       ! epsil = max(u(7), 1e-6)
@@ -2204,7 +2205,7 @@ CONTAINS
       ! call compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, is_core, growth_rate)
       call compute_gamma_I(u, q, b, gradB, r, growth_rate)
       growth_rate = max(growth_rate, 1e-20)
-      d_omega = phys%k_max/growth_rate/simpar%refval_k
+      d_omega = phys%k_max/growth_rate ! (1e5 * simpar%refval_time )
       if (epsil < 0.) then
          ek = 0.
       else

@@ -188,8 +188,8 @@ SUBROUTINE adimensionalization()
    simpar%refval_specenergy_dimensions = 'm^2*s^-2'
 
 #ifdef KEQUATION
-   ! phys%diff_k_max = phys%diff_k_max/D0
-   ! phys%diff_k_min = phys%diff_k_min/D0
+   phys%diff_ke_max = phys%diff_ke_max/D0
+   phys%diff_ke_min = phys%diff_ke_min/D0
    ! k limit
    phys%k_max = phys%k_max/u0**2
    simpar%refval_k = u0**2
