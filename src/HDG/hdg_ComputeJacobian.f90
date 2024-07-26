@@ -2331,25 +2331,29 @@ CONTAINS
       ! call compute_gamma_ke(ue, qq, btor, gradBtor, q_cyl, omega, is_core, growth_rate)
       call compute_gamma_I(ue, qq, btor, gradBtor, r, growth_rate)
       call compute_dg_du(ue, qq, btor, gradBtor, q_cyl, omega, is_core, r, dg_du)
-      growth_rate = max(growth_rate, 1e-20) ! 1e6 * simpar%refval_time
-      d_omega = phys%k_max/growth_rate ! (1e5 * simpar%refval_time )
+      ! growth_rate = merge(growth_rate, 0., growth_rate / simpar%refval_time > 1e2)
+      ! d_omega = phys%k_max / growth_rate ! (1e5 * simpar%refval_time )
       kappa = ue(6)
       epsil = ue(7)
       kappa_safe = max(kappa, 1e-6)
       ! Trick to avoid underflow, -690 is about the smallest floating point number in log space
       if (kappa < 0.) then
          ! push to positive values
-         kappa_rhs = 0.!#1e-20 / (1e-6 / simpar%refval_time)
+         kappa_rhs = 1e-20/(1e-7/simpar%refval_time)
       else
-         kappa_rhs = 2*log(kappa) - log(d_omega)
-         if (kappa_rhs < -690.) then
+         if (growth_rate == 0.) then
             kappa_rhs = 0.
          else
-            kappa_rhs = exp(kappa_rhs)
+            kappa_rhs = 2*log(kappa) - log(phys%k_max/growth_rate)
+            if (kappa_rhs < -690.) then
+               kappa_rhs = 0.
+            else
+               kappa_rhs = exp(kappa_rhs)
+            end if
          end if
       end if
       if (epsil < 0.) then
-         epsil_rhs = 0.!1e-20 / (1e-6 / simpar%refval_time)
+         epsil_rhs = 1e-20/(1e-7/simpar%refval_time)
       else
          epsil_rhs = 2*log(epsil) - 1.5*log(kappa_safe)
          if (epsil_rhs < -690.) then
@@ -2359,36 +2363,7 @@ CONTAINS
          end if
       end if
 
-      if (kappa < 0.) then
-         d_ke = phys%diff_ke_min
-      elseif (epsil < 0.) then
-         d_ke = phys%diff_ke_max
-      else
-         ! diffusion = kappa²/epsilon
-         ! we use the logspace to avoid underflow when computing the square
-         d_ke = 2*log(kappa) - log(epsil)
-         if (d_ke < -690.) then
-            d_ke = 0.
-         else
-            d_ke = exp(d_ke)
-         end if
-      end if
-
-      if ((kappa < 0.) .or. (epsil < 0) .or. (d_ke < phys%diff_ke_min) .or. (d_ke > phys%diff_ke_max)) then
-         ! this case, the diffusion is set to a threshold value
-         ! thus the diffusion cannot be linearized and we set these variables to zero
-         kappa_epsil = 0.
-         d_ke = 0
-      else
-         kappa_epsil = log(kappa) - log(epsil)
-         if (kappa_epsil < -690.) then
-            kappa_epsil = 0.
-         else
-            kappa_epsil = exp(kappa_epsil)
-         end if
-         d_ke = max(phys%diff_ke_min, min(d_ke, phys%diff_ke_max))
-      end if
-
+      call compute_ke_dke(ue, kappa_epsil, d_ke)
 #ifdef DKLINEARIZED
       call compute_ddk_dU(ue, xy, q_cyl, ddk_dU)
 
@@ -2580,37 +2555,27 @@ CONTAINS
          ELSEIF ((i == 6) .or. (i == 7)) THEN
             DO j = 1, Neq
                z = i + (j - 1)*Neq
-               if ((i == 6) .and. (j == 7) .and. (epsil > 0.)) then
-                  Auu(:, :, z) = Auu(:, :, z) + NNi ! epsilon in kappa
-               end if
                ! push negative values to the positive side
-               ! if (((i == 6) .and. (j == 6) .and. (kappa < 0.)) .or. ((i == 7) .and. (j == 7) .and. (epsil < 0.)) ) then
-               !       Auu(:, :, z) = Auu(:, :, z) + NNi / (1e-6 / simpar%refval_time)
-               !  end if
+               if (((i == 6) .and. (j == 6) .and. (kappa < 0.)) .or. ((i == 7) .and. (j == 7) .and. (epsil < 0.))) then
+                  Auu(:, :, z) = Auu(:, :, z) + NNi/(1e-7/simpar%refval_time)
+               end if
                Auu(:, :, z) = Auu(:, :, z) - dg_du(i, j)*NNi
 
                ! diffusion
-               !    do k = 1, Ndim
-               !  z = i + (j - 1)*Neq
-               ! if ((i == 6) .and. (j == 6)) then
-               !        Auu(:, :, z) = Auu(:, :, z) - 2 * kappa_epsil * qpr(k, 6) * NxyzNi(:, :, k)
-               !  end if
-               ! if ((i == 7) .and. (j == 7)) then
-               !        Auu(:, :, z) = Auu(:, :, z) + kappa_epsil**2 * qpr(k, 7) * NxyzNi(:, :, k)
-               !  end if
-               !  if (i == j) then
-               !     z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
-               !    Auq(:, :, z) = Auq(:, :, z) - d_ke * NxyzNi(:, :, k)
-               !  end if
-               !    end do
+               do k = 1, Ndim
+                  if ((i == 6) .and. (j == 6)) then
+                     Auu(:, :, z) = Auu(:, :, z) + 2*kappa_epsil*qpr(k, 6)*NxyzNi(:, :, k)
+                  end if
+                  if ((i == 7) .and. (j == 7)) then
+                     Auu(:, :, z) = Auu(:, :, z) - kappa_epsil**2*qpr(k, 7)*NxyzNi(:, :, k)
+                  end if
+               end do
 
             END DO
             rhs(:, i) = rhs(:, i) + merge(kappa_rhs, epsil_rhs, i == 6)*Ni
-            ! rhs(:, 6) = rhs(:, 6) + kappa_rhs * Ni
-            ! rhs(:, 7) = rhs(:, 7) + epsil_rhs * Ni
-            ! do k = 1, ndim
-            !   rhs(:, i) = rhs(:, i) - d_ke * qpr(k, i) * Nxyzg(:, k)
-            ! end do
+            do k = 1, ndim
+               rhs(:, i) = rhs(:, i) + d_ke*qpr(k, i)*Nxyzg(:, k)
+            end do
 
 #endif
 #ifdef NEUTRALP
@@ -2874,6 +2839,9 @@ CONTAINS
       real*8                    :: Anp(Neq), Vpn(Neq), dVpn_dU(Neq, Neq), gmpn(Ndim), gmipn(Ndim), Taupn(Ndim, Neq), dDpn_dU(Neq)
 #endif
 #endif
+#ifdef KEQUATION
+      real*8 :: kappa, epsil, kappa_epsil, d_ke
+#endif
 
       b = b3(1:Ndim)
       bb = b3
@@ -2933,6 +2901,7 @@ CONTAINS
       Dnn_dU_u = dot_product(Dnn_dU, uf)
 #endif
 #ifdef KEQUATION
+      call compute_ke_dke(uf, kappa_epsil, d_ke)
 #ifdef DKLINEARIZED
       call compute_ddk_dU(uf, xyf, q_cyl, ddk_dU)
 
@@ -3205,58 +3174,46 @@ CONTAINS
             elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
             elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
 #endif
-         END IF
 #ifdef KEQUATION
-         ! ELSEIF ((i == 6) .or. (i == 7)) THEN
-         !    DO j = 1, Neq
-         !       ind_jf = ind_asf + j
-         !       ! diffusion
-         !         do k = 1, Ndim
-         !       z = i + (j - 1)*Neq
-         !      if ((i == 6) .and. (j == 6)) then
-         !          kmult = 2 * kappa_epsil * qpr(k, 6)*n(k)*NNif
-         !          elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
-         !             ! Auu(:, :, z) = Auu(:, :, z) - 2 * kappa_epsil * qpr(k, 6) * NxyzNi(:, :, k)
-         !       end if
-         !      if ((i == 7) .and. (j == 7)) then
-         !          kmult = - kappa_epsil**2 * qpr(k, 7) * n(k) *NNif
-         !          elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
-         !             ! Auu(:, :, z) = Auu(:, :, z) + kappa_epsil**2 * qpr(k, 7) * NxyzNi(:, :, k)
-         !       end if
-         !       if (i == j) then
-         !          z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
-         !         Auq(:, :, z) = Auq(:, :, z) - d_ke * NxyzNi(:, :, k)
-         !       end if
-         !         end do
-         ! !
-         ! !
-         ! !    END DO
-         ! !
-         ! !    do k = 1, ndim
-         ! !      rhs(:, 6) = rhs(:, 6) - d_ke * qpr(k, 6) * Nxyzg(:, k)
-         ! !      rhs(:, 7) = rhs(:, 7) - d_ke * qpr(k, 7) * Nxyzg(:, k)
-         ! !    end do
-         !    kmultf = *Nif
-         !    elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
-         !    elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
-
-#ifdef DKLINEARIZED
-         if (i .ne. 5) then
+         ELSEIF ((i == 6) .or. (i == 7)) THEN
             DO j = 1, Neq
                ind_jf = ind_asf + j
-               do k = 1, Ndim
-                  kmult = ddk_dU(j)*Qpr(k, i)*(n(k) - b(k)*bn)*NNif
+               ! diffusion
+               if (i == j) then
+                  if (i == 6) then
+                     kmult = 2*kappa_epsil*dot_product(qpr(:, 6), n)*NNif
+                  else
+                     kmult = -kappa_epsil**2*dot_product(qpr(:, 7), n)*NNif
+                  end if
                   elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
                   elMat%All(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%All(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
-               end do
-            end do
-            kmultf = ddk_dU_U*((Qpr(1, i)*n(1) + Qpr(2, i)*n(2))*Nif - (Qpr(1, i)*b(1) + Qpr(2, i)*b(2))*Nfbn)
+               end if
+
+               !
+               !
+            END DO
+
+            kmultf = d_ke*dot_product(qpr(:, i), n)*Nif
             elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
             elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
-         end if
+            !
+#ifdef DKLINEARIZED
+            if (i .ne. 5) then
+               DO j = 1, Neq
+                  ind_jf = ind_asf + j
+                  do k = 1, Ndim
+                     kmult = ddk_dU(j)*Qpr(k, i)*(n(k) - b(k)*bn)*NNif
+                     elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+                     elMat%All(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%All(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
+                  end do
+               end do
+               kmultf = ddk_dU_U*((Qpr(1, i)*n(1) + Qpr(2, i)*n(2))*Nif - (Qpr(1, i)*b(1) + Qpr(2, i)*b(2))*Nfbn)
+               elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+               elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
+            end if
 #endif
 #endif
-
+         END IF
 #endif
       END DO  ! i-Loop
 
@@ -3332,6 +3289,7 @@ CONTAINS
       real*8                    :: gradDnn(Ndim)
 #endif
 #ifdef KEQUATION
+      real*8 :: kappa_epsil, d_ke
 #ifdef DKLINEARIZED
       real*8                    :: ddk_dU(Neq), ddk_dU_U
       real*8                    :: gradddk(Ndim)
@@ -3404,6 +3362,7 @@ CONTAINS
 #endif
 
 #ifdef KEQUATION
+      call compute_ke_dke(uf, kappa_epsil, d_ke)
 #ifdef DKLINEARIZED
       call compute_ddk_dU(uf, xyf, q_cyl, ddk_dU)
 
@@ -3667,23 +3626,44 @@ CONTAINS
             !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),uf)*n(1) + dot_product(Taui(2,:),uf)*n(2)) + dot_product(dDpn_dU,uf)*(gmipn(1)*n(1) + gmipn(2)*n(2)))*Nif
             elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
 #endif
-         END IF
 
 #ifdef KEQUATION
-#ifdef DKLINEARIZED
-         if (i .ne. 5) then
+         ELSEIF ((i == 6) .or. (i == 7)) THEN
             DO j = 1, Neq
                ind_jf = ind_asf + j
-               DO k = 1, Ndim
-                  kmult = ddk_dU(j)*Qpr(k, i)*(n(k) - bn*b(k))*NNif
+               ! diffusion
+               if (i == j) then
+                  if (i == 6) then
+                     kmult = 2*kappa_epsil*dot_product(qpr(:, 6), n)*NNif
+                  else
+                     kmult = -kappa_epsil**2*dot_product(qpr(:, 7), n)*NNif
+                  end if
                   elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-               end do
-            end do
-            kmultf = ddk_dU_U*((Qpr(1, i)*n(1) + Qpr(2, i)*n(2))*Nif - (Qpr(1, i)*b(1) + Qpr(2, i)*b(2))*Nfbn)
+               end if
+
+               !
+               !
+            END DO
+
+            kmultf = d_ke*dot_product(qpr(:, i), n)*Nif
             elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
-         end if
+
+#ifdef DKLINEARIZED
+            if (i .ne. 5) then
+               DO j = 1, Neq
+                  ind_jf = ind_asf + j
+                  DO k = 1, Ndim
+                     kmult = ddk_dU(j)*Qpr(k, i)*(n(k) - bn*b(k))*NNif
+                     elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+                  end do
+               end do
+               kmultf = ddk_dU_U*((Qpr(1, i)*n(1) + Qpr(2, i)*n(2))*Nif - (Qpr(1, i)*b(1) + Qpr(2, i)*b(2))*Nfbn)
+               elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+            end if
 #endif
 #endif
+
+         END IF
 
 !if below for TEMPERATURE FLAG
 #endif

@@ -385,8 +385,8 @@ CONTAINS
       !A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
 #endif
 #ifdef KEQUATION
-      kappa = max(U(6), 0.)
-      epsil = max(U(7), 0.)
+      kappa = u(6) ! max(U(6), 0.)
+      epsil = u(7) ! max(U(7), 0.)
       A(6, 1) = -kappa*U(2)/U(1)**2
       A(6, 2) = kappa/U(1)
       A(6, 6) = U(2)/U(1) !* merge(1., 0., u(6) > 0. )
@@ -453,8 +453,8 @@ CONTAINS
       !An(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*An(5,:)
 #endif
 #ifdef KEQUATION
-      kappa = max(U(6), 0.)
-      epsil = max(U(7), 0.)
+      kappa = u(6) ! max(U(6), 0.)
+      epsil = u(7) ! max(U(7), 0.)
       An(6, 1) = -kappa*U(2)/U(1)**2
       An(6, 2) = kappa/U(1)
       An(6, 6) = U(2)/U(1) !* merge(1., 0., u(6) > 0. )
@@ -1398,7 +1398,7 @@ CONTAINS
          end if
       end if
       ! rate is in cm^3/s in EIRENE
-      if (rate > -1e3) then
+      if (rate > -690.) then
          rate = exp(rate)/1.e6
       else
          rate = 0
@@ -1708,7 +1708,11 @@ CONTAINS
          WRITE (6, *) " rate equal to", rate
          stop
       end if
-      rate = exp(rate)/1.e6
+      if (rate < -690.) then
+         rate = 0.
+      else
+         rate = exp(rate)/1.e6
+      end if
    END SUBROUTINE compute_eirene_1D_rate
 
    SUBROUTINE compute_eirene_1D_rate_du(U1, U4, te, alpha, res)
@@ -2184,10 +2188,11 @@ CONTAINS
       r0 = geom%r0/simpar%refval_length
       alpha_s = 3.
       call compute_cs(U, cs)
-      tau_para = q_cyl*r0/max(cs, 1e-20)
+      tau_para = q_cyl*r0/max(cs, 1e-10)
       ! call compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, is_core, r, growth_rate)
       call compute_gamma_I(u, q, b, gradB, r, growth_rate)
       ! growth_rate = max(growth_rate, 1e-1)
+      ! growth_rate = merge(growth_rate, 0., growth_rate / simpar%refval_time > 1e2)
       v = cs**2/omega*alpha_s/r0*sqrt(max(0., tau_para*growth_rate))
    end subroutine
    subroutine compute_dg_du(U, Q, B, gradB, q_cyl, omega, is_core, r, dg_du)
@@ -2204,8 +2209,9 @@ CONTAINS
       call compute_V(U, Q, B, gradB, q_cyl, omega, is_core, r, v)
       ! call compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, is_core, growth_rate)
       call compute_gamma_I(u, q, b, gradB, r, growth_rate)
-      growth_rate = max(growth_rate, 1e-20)
-      d_omega = phys%k_max/growth_rate ! (1e5 * simpar%refval_time )
+      ! growth_rate = merge(growth_rate, 0., growth_rate / simpar%refval_time > 1e2)
+      ! growth_rate = max(growth_rate, 1e-10)
+      ! d_omega = phys%k_max / growth_rate ! (1e5 * simpar%refval_time )
       if (epsil < 0.) then
          ek = 0.
       else
@@ -2216,9 +2222,51 @@ CONTAINS
             ek = exp(ek)
          end if
       end if
-      dg_du(6, 6) = growth_rate*merge(1, 0, kappa > 0.) - 2*max(kappa, 0.)/d_omega
+      dg_du(6, 6) = merge(growth_rate, 0., kappa > 0.) - 2*max(kappa, 0.)*growth_rate/phys%k_max
+      dg_du(6, 7) = merge(-1., 0., (epsil > 0) .and. (kappa > 0.) .and. (growth_rate > 0.))
       dg_du(7, 6) = 3./2.*v*ek
-      dg_du(7, 7) = growth_rate*merge(1, 0, epsil > 0.) - 2*v*max(epsil, 0.)*kappa_safe**(-3./2.)
+      dg_du(7, 7) = merge(growth_rate, 0., epsil > 0.) - 2*v*max(epsil, 0.)*kappa_safe**(-3./2.)
+   end subroutine
+   subroutine compute_ke_dke(u, kappa_epsil, d_ke)
+      ! compute some linearization terms of the kappa epsilon diffusion
+      real*8, intent(IN) :: u(:)
+      real*8, intent(OUT) :: kappa_epsil, d_ke
+      real*8 :: kappa, epsil
+
+      kappa = u(6)
+      epsil = u(7)
+      if (kappa < 0.) then
+         d_ke = phys%diff_ke_min
+      elseif (epsil < 0.) then
+         d_ke = phys%diff_ke_max
+      else
+         ! diffusion = kappa²/epsilon
+         ! we use the logspace to avoid underflow when computing the square
+         d_ke = 2*log(kappa) - log(epsil)
+         if (d_ke < -690.) then
+            d_ke = 0.
+         else
+            d_ke = exp(d_ke)
+         end if
+      end if
+
+      ! kappa_epsil = kappa / epsil
+      if ((kappa < 0.) .or. (epsil < 0) .or. (d_ke < phys%diff_ke_min) .or. (d_ke > phys%diff_ke_max)) then
+         ! this case, the diffusion is set to a threshold value
+         ! thus the diffusion cannot be linearized and we set these variables to zero
+         kappa_epsil = 0.
+         d_ke = 0.
+      else
+         kappa_epsil = log(kappa) - log(epsil)
+         if (kappa_epsil < -690.) then
+            kappa_epsil = 0.
+         else
+            kappa_epsil = exp(kappa_epsil)
+         end if
+
+         d_ke = max(phys%diff_ke_min, min(d_ke, phys%diff_ke_max))
+      end if
+
    end subroutine
 #ifdef DKLINEARIZED
    SUBROUTINE compute_ddk_du(U, xy, q_cyl, ddk_du)
