@@ -20,8 +20,16 @@ $$\begin{align}
 \end{align}$$
 
 ## Dependencies
-```
+### Debian
+```zsh
 sudo apt-get install gfortran openmpi-bin openmpi-common openmpi-doc libopenmpi-dev libblas-dev liblapack-dev libxt-dev libhdf5-serial-dev
+```
+### Macos
+```zsh
+brew install hdf5 scotch
+git clone https://gitlab.inria.fr/solverstack/pastix.git 
+cd pastix/tools/homebrew
+brew install --build-from-source pastix.rb
 ```
 ## Building
 ```zsh
@@ -29,6 +37,7 @@ cd lib
 source Make.inc/init_vars_libs.sh
 make
 ```
+On macos, change `arch.make` to `macos.make` in the `Makefile`. Modify `macos` to your needs.
 ## Running
 Using the circular case, do small time steps at high diffusion, prepare the `param.txt`, accordingly.
 Run the executable in the same foder as `param.txt`.

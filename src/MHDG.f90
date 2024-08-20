@@ -6,9 +6,6 @@ PROGRAM MHDG
    USE printutils
    USE debug
    USE initialization
-#ifdef WITH_PASTIX
-   USE solve_pastix
-#endif
 #ifdef WITH_PSBLAS
    USE solve_psblas
 #endif
@@ -34,7 +31,7 @@ PROGRAM MHDG
    real*8, allocatable  :: u_proj(:), q_proj(:), u_tilde_proj(:), xs(:, :)
    INTEGER :: code, pr, aux
    INTEGER, PARAMETER :: etiquette = 1000
-   INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
+   ! INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
    INTEGER             :: switch_save
 
    ! integer              :: ieq
@@ -515,6 +512,7 @@ PROGRAM MHDG
 
             ! compute dt
             ! CALL compute_dt(errlstime)
+            ! time%dt = time%dt*1.2
          END IF
       ELSE
          IF (switch%psdtime) THEN
@@ -693,7 +691,7 @@ PROGRAM MHDG
 
    IF (lssolver%sollib .eq. 1) THEN
 #ifdef WITH_PASTIX
-      CALL terminate_mat_PASTIX()
+      call finalize_pastix()
 
       ! MPI finalization
       call MPI_finalize(IERR)
@@ -705,6 +703,15 @@ PROGRAM MHDG
    END IF
 
 CONTAINS
+
+   ! wrapper to avoid conflict with MPI
+   SUBROUTINE finalize_pastix()
+#ifdef WITH_PASTIX
+      use solve_pastix
+
+      CALL terminate_mat_PASTIX()
+#endif
+   end SUBROUTINE finalize_pastix
 
    !************************************************
    ! Display results

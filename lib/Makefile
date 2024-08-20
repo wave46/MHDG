@@ -3,7 +3,8 @@
 # Makefile
 # date: 12/02/2016
 #---------------------------------------
-include Make.inc/arch.make
+# include Make.inc/arch.make
+include Make.inc/macos.make
 
 .PHONY : clean
 

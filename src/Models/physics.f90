@@ -695,7 +695,7 @@ CONTAINS
       elsewhere
          ! diffusion = kappa²/epsilon
          ! we use the logspace to avoid underflow when computing the square
-         d_ke = 2*log(u(:, 6)) - log(u(:, 7))
+         d_ke = 2*(log(u(:, 6)) - log(simpar%scale_kappa)) - (log(u(:, 7)) - log(simpar%scale_epsil))
          where (d_ke < -690.)
             d_ke = 0.
          elsewhere
@@ -703,6 +703,7 @@ CONTAINS
          end where
       end where
       d_ke = max(phys%diff_ke_min, min(phys%diff_ke_max, d_ke))
+      ! d_ke = min(d_ke, phys%diff_ke_min)
 ! #ifndef KDIFFSMOOTH
 !
 !                D_k(i) = max(phys%diff_k_min, min(phys%diff_k_max, D_k(i)))
@@ -723,8 +724,11 @@ CONTAINS
          end if
          d_iso(i, i, :) = d_iso(i, i, :) + d_ke
       end do
-      d_ani(6, 6, :) = d_iso(6, 6, :)
-      d_ani(7, 7, :) = d_iso(7, 7, :)
+      ! kappa and epsilon need a minimum diffusion for stability
+      do i = 6, 7
+         d_iso(i, i, :) = max(d_iso(i, i, :), 2/simpar%refval_diffusion)
+         d_ani(i, i, :) = d_iso(i, i, :)
+      end do
 #endif
       !Dnn = sum(Dnn)/size(u,1)
 #endif
@@ -2188,7 +2192,7 @@ CONTAINS
       r0 = geom%r0/simpar%refval_length
       alpha_s = 3.
       call compute_cs(U, cs)
-      tau_para = q_cyl*r0/max(cs, 1e-10)
+      tau_para = q_cyl*r0/max(cs, 1e-20)
       ! call compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, is_core, r, growth_rate)
       call compute_gamma_I(u, q, b, gradB, r, growth_rate)
       ! growth_rate = max(growth_rate, 1e-1)
@@ -2201,9 +2205,9 @@ CONTAINS
       logical, intent(in) :: is_core
       real*8, intent(OUT) :: dg_du(:, :)
       real*8 :: V, growth_rate, d_omega, kappa, kappa_safe, epsil, ek
-      kappa_safe = max(1e-6, u(6))
       kappa = u(6)
       epsil = u(7)
+      kappa_safe = max(kappa, phys%k_min)/simpar%scale_kappa
       ! epsil = max(u(7), 1e-6)
       dg_du = 0.
       call compute_V(U, Q, B, gradB, q_cyl, omega, is_core, r, v)
@@ -2222,10 +2226,10 @@ CONTAINS
             ek = exp(ek)
          end if
       end if
-      dg_du(6, 6) = merge(growth_rate, 0., kappa > 0.) - 2*max(kappa, 0.)*growth_rate/phys%k_max
-      dg_du(6, 7) = merge(-1., 0., (epsil > 0) .and. (kappa > 0.) .and. (growth_rate > 0.))
-      dg_du(7, 6) = 3./2.*v*ek
-      dg_du(7, 7) = merge(growth_rate, 0., epsil > 0.) - 2*v*max(epsil, 0.)*kappa_safe**(-3./2.)
+      dg_du(6, 6) = merge(growth_rate - 2*kappa*growth_rate/phys%k_max/simpar%scale_kappa, 0., kappa > 0.)
+      dg_du(6, 7) = merge(-1., 0., (epsil > 0.) .and. (kappa > 0.) .and. (growth_rate > 0.))*simpar%scale_kappa/simpar%scale_epsil
+      dg_du(7, 6) = 3./2.*v*ek/simpar%scale_epsil
+      dg_du(7, 7) = merge(growth_rate - 2*v*epsil*kappa_safe**(-3./2.)/simpar%scale_epsil, 0., epsil > 0.)
    end subroutine
    subroutine compute_ke_dke(u, kappa_epsil, d_ke)
       ! compute some linearization terms of the kappa epsilon diffusion

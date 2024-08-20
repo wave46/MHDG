@@ -270,7 +270,8 @@ MODULE types
       ! Coefficients for the k equation
       real*8          :: diff_ke_min         ! Mininmum diffusion in the k equation
       real*8          :: diff_ke_max         ! Maximum diffusion in the k equation
-      real*8          :: k_max              ! Maximum k
+      real*8          :: k_max, k_min, epsil_min              ! Maximum k
+      real*8 :: t_up
 #endif
    END TYPE Physics_type
 
@@ -387,7 +388,11 @@ MODULE types
       real*8         :: tNR      ! Tolerance of the Newton-Raphson scheme
       real*8         :: tTM      ! Tolerance for the steady state achievement
       real*8         :: div      ! Divergence detector
-      real*8         :: tau(1:5) ! Stabilization parameter for each equation (4 values max for now...)
+#ifdef KEQUATION
+      real*8         :: tau(7) ! include kappa and epsilon
+#else
+      real*8         :: tau(5) ! Stabilization parameter for each equation (4 values max for now...)
+#endif
       real*8         :: sc_coe   ! Shock capturing coefficient
       real*8         :: sc_sen   ! Shock capturing sensibility
       real*8         :: minrho   ! Value of rho to start applying limiting
@@ -560,6 +565,9 @@ MODULE types
       real*8    :: refval_epsilon
       character(len=20)    :: refval_k_dimensions
       character(len=20)    :: refval_epsilon_dimensions
+
+      real*8    :: scale_kappa
+      real*8    :: scale_epsil
 #endif
 
    END TYPE Simulationparams_type

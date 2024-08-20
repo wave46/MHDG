@@ -779,7 +779,8 @@ CONTAINS
    !****************************
    ! Dirichlet in weak form
    !****************************
-   SUBROUTINE set_dirichletwf_bc
+   SUBROUTINE set_dirichletwf_bc_eq(eq)
+      integer, intent(in) :: eq
       integer                   :: g
       real*8                    :: dline, xyDerNorm_g
       real*8                    :: NiNi(Npfl, Npfl), Ni(Npfl)
@@ -796,10 +797,18 @@ CONTAINS
          NiNi = tensorProduct(refElPol%N1D(g, :), refElPol%N1D(g, :))*dline
          Ni = refElPol%N1D(g, :)*dline
 
-         CALL assembly_dirichletwf_bc(iel, ind_asf, ind_ff, uex(g, :), NiNi, Ni)
+         CALL assembly_dirichletwf_bc(iel, ind_asf, ind_ff, uex(g, :), NiNi, Ni, eq)
 
       END DO
 
+   END SUBROUTINE set_dirichletwf_bc_eq
+
+   SUBROUTINE set_dirichletwf_bc
+      ! integer :: i
+      ! integer(*) :: eqs = [ (i, i=1,Neq) ]
+      do i = 1, Neq
+         call set_dirichletwf_bc_eq(i)
+      end do
    END SUBROUTINE set_dirichletwf_bc
 
    !   !****************************
@@ -846,7 +855,7 @@ CONTAINS
    ! Neumann in all variables
    !***************************************************************
    SUBROUTINE set_NeumannH_bc
-      integer                   :: g
+      integer                   :: g, i
       real*8                    :: dline, xyDerNorm_g
       real*8                    :: t_g(Ndim), n_g(Ndim)
       real*8                    :: NiNi(Npfl, Npfl), Ni(Npfl)
@@ -888,7 +897,9 @@ CONTAINS
          NiNi = tensorProduct(refElPol%N1D(g, :), refElPol%N1D(g, :))*dline
          Ni = refElPol%N1D(g, :)*dline
 
-         CALL assembly_neum_bc(iel, ind_asf, ind_ash, ind_ff, ind_fg, NiNi, n_g, tau_stab)
+         do i = 1, neq
+            CALL assembly_neum_bc(iel, ind_asf, ind_ash, ind_ff, ind_fg, NiNi, n_g, tau_stab, i)
+         end do
 
       END DO
 
@@ -1229,6 +1240,14 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
                v_nn_Bou_el(g, :) = Vnng
             end if
 
+#ifdef KEQUATION
+            !  CALL assembly_dirichletwf_bc(iel, ind_asf, ind_ff, uex(g, :) * 0, NiNi, Ni, 1)
+            do i = 6, 7
+               CALL assembly_dirichletwf_bc(iel, ind_asf, ind_ff, uex(g, :)*0, NiNi, Ni, i)
+               ! CALL assembly_neum_bc(iel, ind_asf, ind_ash, ind_ff, ind_fg, NiNi, n_g, tau_stab, i)
+            end do
+#endif
+
          END DO ! END loop in Gauss points
 
       END SUBROUTINE set_Bohm_bc
@@ -1301,21 +1320,22 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
 !
 !#else
 
-      SUBROUTINE assembly_dirichletwf_bc(iel, ind_asf, ind_ff, ufg, NiNi, Ni)
-         integer*4    :: iel, ind_asf(:), ind_ff(:)
+      SUBROUTINE assembly_dirichletwf_bc(iel, ind_asf, ind_ff, ufg, NiNi, Ni, eq)
+         integer*4    :: iel, ind_asf(:), ind_ff(:), eq
          real*8       :: ufg(:)
          real*8       :: NiNi(:, :), Ni(:)
          real*8       :: kmult(Neq*Npfl)
-         integer*4    :: ind(Npfl), i
+         integer*4    :: ind(Npfl), i, j
 
          kmult = col(tensorProduct(ufg(:), Ni))
-         DO i = 1, 5 !Neq
-            ind = i + ind_asf
-            elMat%All(ind_ff(ind), ind_ff(ind), iel) = elMat%All(ind_ff(ind), ind_ff(ind), iel) - numer%tau(i)*NiNi
-            elMat%fh(ind_ff(ind), iel) = elMat%fh(ind_ff(ind), iel) - numer%tau(i)*kmult(ind)
-            !         elMat%All(ind_ff(ind),ind_ff(ind),iel) = elMat%All(ind_ff(ind),ind_ff(ind),iel) - NiNi
-            !         elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel) - kmult(ind)
-         END DO
+         ! DO j = 1, size(eqs)
+         i = eq
+         ind = i + ind_asf
+         elMat%All(ind_ff(ind), ind_ff(ind), iel) = elMat%All(ind_ff(ind), ind_ff(ind), iel) - numer%tau(i)*NiNi
+         elMat%fh(ind_ff(ind), iel) = elMat%fh(ind_ff(ind), iel) - numer%tau(i)*kmult(ind)
+         !         elMat%All(ind_ff(ind),ind_ff(ind),iel) = elMat%All(ind_ff(ind),ind_ff(ind),iel) - NiNi
+         !         elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel) - kmult(ind)
+         ! END DO
 
       END SUBROUTINE assembly_dirichletwf_bc
 
@@ -1362,23 +1382,24 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
       !**************************
       ! Assembly  Neumann for all
       !**************************
-      SUBROUTINE assembly_neum_bc(iel, ind_asf, ind_ash, ind_ff, ind_fg, NiNi, ng, tau)
+      SUBROUTINE assembly_neum_bc(iel, ind_asf, ind_ash, ind_ff, ind_fg, NiNi, ng, tau, eq)
          integer*4    :: iel, ind_asf(:), ind_ash(:), ind_ff(:), ind_fg(:)
          real*8       :: NiNi(:, :), ng(:)
          real*8       :: tau(:, :)
-         integer*4    :: i, j, k, idm
+         integer*4    :: i, j, k, idm, eq
          integer*4    :: ind(Npfl), indi(Npfl), indj(Npfl)
 
-         DO i = 1, Neq
-            ind = i + ind_asf
-            elMat%All(ind_ff(ind), ind_ff(ind), iel) = elMat%All(ind_ff(ind), ind_ff(ind), iel) - tau(i, i)*NiNi
-            elMat%Alu(ind_ff(ind), ind_fe(ind), iel) = elMat%Alu(ind_ff(ind), ind_fe(ind), iel) + tau(i, i)*NiNi
-            DO idm = 1, Ndim
-               indi = ind_asf + i
-               indj = ind_ash + idm + (i - 1)*Ndim
-               elMat%Alq(ind_ff(indi), ind_fG(indj), iel) = elMat%Alq(ind_ff(indi), ind_fG(indj), iel) + NiNi*ng(idm)
-            END DO
+         ! DO i = 1, Neq
+         i = eq
+         ind = i + ind_asf
+         elMat%All(ind_ff(ind), ind_ff(ind), iel) = elMat%All(ind_ff(ind), ind_ff(ind), iel) - tau(i, i)*NiNi
+         elMat%Alu(ind_ff(ind), ind_fe(ind), iel) = elMat%Alu(ind_ff(ind), ind_fe(ind), iel) + tau(i, i)*NiNi
+         DO idm = 1, Ndim
+            indi = ind_asf + i
+            indj = ind_ash + idm + (i - 1)*Ndim
+            elMat%Alq(ind_ff(indi), ind_fG(indj), iel) = elMat%Alq(ind_ff(indi), ind_fG(indj), iel) + NiNi*ng(idm)
          END DO
+         ! END DO
 
       END SUBROUTINE assembly_neum_bc
 
@@ -1873,12 +1894,12 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
                   call compute_Dnn_dU(ufg, Dnn_dU)
                   Dnn_dU_u = dot_product(Dnn_dU, ufg)
 #endif
-#ifdef KEQUATION
-#ifdef DKLINEARIZED
-                  call compute_ddk_dU(ufg, xyf, q_cyl, ddk_dU)
-                  ddk_dU_u = dot_product(ddk_dU, ufg)
-#endif
-#endif
+! #ifdef KEQUATION
+! #ifdef DKLINEARIZED
+!                   call compute_ddk_dU(ufg, xyf, q_cyl, ddk_dU)
+!                   ddk_dU_u = dot_product(ddk_dU, ufg)
+! #endif
+! #endif
 #ifdef BOHMLIMIT
                   IF (ntang) then
 #endif
@@ -1972,18 +1993,18 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
                            END IF
                         END DO
                      END DO
-#ifdef KEQUATION
-#ifdef DKLINEARIZED
-                     DO j = 1, Neq
-                        ind_jf = ind_asf + j
-                        kmult = ddk_dU(j)*Qpr(idm, k)*(ng(idm) - bn*bg(idm))*NiNi
-                        elMat%All(ind_ff(indi), ind_ff(ind_jf), iel) = elMat%All(ind_ff(indi), ind_ff(ind_jf), iel) - kmult
-                     end do
-                     kmultf = ddk_dU_U*(Qpr(idm, k)*ng(idm) - bn*bg(idm))*Ni
-                     elMat%fh(ind_ff(indi), iel) = elMat%fh(ind_ff(indi), iel) - kmultf
+! #ifdef KEQUATION
+! #ifdef DKLINEARIZED
+                     ! DO j = 1, Neq
+                     !    ind_jf = ind_asf + j
+                     !    kmult = ddk_dU(j)*Qpr(idm, k)*(ng(idm) - bn*bg(idm))*NiNi
+                     !    elMat%All(ind_ff(indi), ind_ff(ind_jf), iel) = elMat%All(ind_ff(indi), ind_ff(ind_jf), iel) - kmult
+                     ! end do
+                     ! kmultf = ddk_dU_U*(Qpr(idm, k)*ng(idm) - bn*bg(idm))*Ni
+                     ! elMat%fh(ind_ff(indi), iel) = elMat%fh(ind_ff(indi), iel) - kmultf
 
-#endif
-#endif
+! #endif
+! #endif
                   ELSE
 
                      DO k = 1, Neq

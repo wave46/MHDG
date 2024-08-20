@@ -196,6 +196,14 @@ SUBROUTINE adimensionalization()
    simpar%refval_k_dimensions = 'm^2*s^-2'
    simpar%refval_epsilon = u0**2/t0
    simpar%refval_epsilon_dimensions = 'm^2*s^-3'
+   ! scale factors to keep kappa and epsilon close to unit during the simulation
+   ! They must be scale down for the post processing
+   simpar%scale_kappa = 1. ! it doesn't work so we leave to 1
+   simpar%scale_epsil = 1.
+   phys%k_min = 1e-7*simpar%scale_kappa
+   phys%epsil_min = 1e-9*simpar%scale_epsil
+   phys%t_up = 1e-6/simpar%refval_time
+
 #endif
 
    simpar%refval_specenergydens_dimensions = 'm^-1*s^-2'

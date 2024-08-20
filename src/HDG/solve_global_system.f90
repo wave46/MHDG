@@ -16,7 +16,7 @@ SUBROUTINE solve_global_system
 #ifdef WITH_PSBLAS
    USE solve_psblas
 #endif
-   USE MPI_OMP
+   ! USE MPI_OMP
 #ifdef PARALL
    USE Communications
 #endif
@@ -260,7 +260,8 @@ SUBROUTINE solve_global_system
 #endif
       errsol = errsol/pertamp
 #ifdef PARALL
-      CALL MPI_ALLREDUCE(MPI_IN_PLACE, errsol, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
+      ! CALL MPI_ALLREDUCE(MPI_IN_PLACE, errsol, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
+      call allreduce(errsol)
 #endif
       IF (MPIvar%glob_id .eq. 0) THEN
          WRITE (6, *) "ERROR AMPLIFICATION: ", errsol
@@ -328,6 +329,15 @@ CONTAINS
       WRITE (6, '(" *", 41("*"), "**")')
       WRITE (6, *) " "
    end subroutine displayMatrixInfo
+
+   subroutine allReduce(errsol)
+      use mpi
+      real*8, intent(in) :: errsol
+      integer :: ierr
+
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, errsol, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
+
+   end subroutine allreduce
 
 END SUBROUTINE solve_global_system
 
