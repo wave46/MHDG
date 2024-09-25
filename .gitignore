@@ -12,3 +12,6 @@
 *lib/MHDG-*
 *MHDG-*
 *src_*
+*test/res*
+*test/*h5
+*test/*/*h5
