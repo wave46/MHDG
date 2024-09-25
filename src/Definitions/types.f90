@@ -249,6 +249,7 @@ MODULE types
     real*8          :: Re                 ! Recycling for the neutral equation
     real*8          :: Re_pump            ! Recycling for the neutral equation in the pump region
     real*8          :: puff               ! Puff coefficient
+    real*8          :: cryopump_power     ! Cryopump power in [m^3/s] coefficient
     real*8          :: puff_slope         ! Puff increment coefficient (only for moving equilibrium for ITER)
      real*8,pointer :: puff_exp(:)    ! Puff experimental coefficient (only for moving equilibriums)
     real*8          :: part_source        ! Particle source for ITER
@@ -274,7 +275,9 @@ MODULE types
 #ifdef AMJUELSPLINES
     ! Atomic rates coefficients
     real*8, dimension(9,9):: alpha_iz     ! Coefficients for ionization coefficients spline from EIRENE, (te,ne) grid
-    real*8, dimension(9,9):: alpha_rec     ! Coefficients for recompination coefficients spline from EIRENE, (te,ne) grid
+    real*8, dimension(9,9):: alpha_rec     ! Coefficients for recombination coefficients spline from EIRENE, (te,ne) grid
+    real*8, dimension(9,9):: alpha_energy_iz     ! Coefficients for radiation losses due to ionization  spline from EIRENE, (te,ne) grid
+    real*8, dimension(9,9):: alpha_energy_rec     ! Coefficients for radiation losses due to recombination  spline from EIRENE, (te,ne) grid
 #endif
 #ifdef KEQUATION
     ! Coefficients for the k equation

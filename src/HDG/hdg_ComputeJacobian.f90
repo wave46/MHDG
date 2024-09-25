@@ -2221,6 +2221,9 @@ CONTAINS
     real*8                    :: dniz_dU(Neq),dnrec_dU(Neq),dfGammacx_dU(Neq),dfGammarec_dU(Neq)
 #ifdef TEMPERATURE
     real*8                    :: sigmaviz,sigmavrec,sigmavcx,Tloss,Tlossrec,fEiiz,fEirec,fEicx
+    !amjuel radiation losses 
+    real*8                    :: sigmavEiz,sigmavErec
+    real*8                    :: dsigmavEiz_dU(Neq),dsigmavErec_dU(Neq)
     real*8                    :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq),dTloss_dU(Neq),dTlossrec_dU(Neq)
     real*8                    :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
 #ifdef DNNLINEARIZED
@@ -2436,6 +2439,11 @@ CONTAINS
     call compute_dTloss_dU(ue,dTloss_dU)
     call compute_Tlossrec(ue,Tlossrec)
     call compute_dTlossrec_dU(ue,dTlossrec_dU)
+    !Amjuel energy losses
+    call compute_sigmavEiz(ue,sigmavEiz)
+    call compute_sigmavErec(ue,sigmavErec)
+    call compute_dsigmavEiz_dU(ue,dsigmavEiz_dU)
+    call compute_dsigmavErec_dU(ue,dsigmavErec_dU)
 #ifdef DNNLINEARIZED
     call compute_Dnn_dU(ue,Dnn_dU)
 
@@ -2448,7 +2456,7 @@ CONTAINS
 #ifdef TEMPERATURE
     call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
       &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
-      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Tloss,dTloss_dU,Tlossrec,dTlossrec_dU,Sn,Sn0)
+      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Tloss,dTloss_dU,Tlossrec,dTlossrec_dU,sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU,Sn,Sn0)
 #else
     call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,Sn,Sn0)
 #endif
@@ -3730,7 +3738,7 @@ END IF
 #ifdef TEMPERATURE
   SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
       &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
-      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Tloss,dTloss_dU,Tlossrec,dTlossrec_dU,Sn,Sn0)
+      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Tloss,dTloss_dU,Tlossrec,dTlossrec_dU,sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU,Sn,Sn0)
 #else
     SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,Sn,Sn0)
 #endif
@@ -3742,6 +3750,9 @@ END IF
       real*8, intent(IN) :: sigmaviz,sigmavrec,sigmavcx,fEiiz,fEirec,fEicx,Tloss,Tlossrec
       real*8, intent(IN) :: dsigmaviz_dU(:),dsigmavrec_dU(:),dsigmavcx_dU(:),dTloss_dU(:),dTlossrec_dU(:)
       real*8, intent(IN) :: dfEiiz_dU(:),dfEirec_dU(:),dfEicx_dU(:)
+      !Amjuel energy losses
+      real*8, intent(IN) :: sigmavEiz,sigmavErec
+      real*8, intent(IN) :: dsigmavEiz_dU(:),dsigmavErec_dU(:)
 #endif
       real*8             :: ad,ad4,RE,Sn(:,:),Sn0(:),Ti,Te
 
@@ -3749,8 +3760,8 @@ END IF
       Sn0  = 0.
       RE   = 0.2
       !RE   = 1.
-      ad   = 1.3737e12
-      ad4  = (ad*1.6e-19)/((1.3839e4**2)*3.35e-27)
+      ad   = 1e19*1.374e-07 !n0*t0 !1e19*1.374e-07 !old 1.3737e12
+      ad4  =  1e19*1.374e-07**3/1.901e-3**2*1.60217662e-19/3.35e-27 ! n0*t0/u0^2/m_i*e = 1e19*1.374e-07**3/1.901e-3**2*1.60217662e-19/3.35e-27 !old (ad*1.6e-19)/((1.3839e4**2)*3.35e-27)
 
 #ifndef TEMPERATURE
       sigmaviz   = 3.01e-14
@@ -3760,32 +3771,36 @@ END IF
 
 
       !Assembly Source Terms in plasma density equation
-      Sn(1,1)   = ad*(-dniz_dU(1)*sigmaviz + dnrec_dU(1)*sigmavrec)
-      Sn(1,5) = ad*(-dniz_dU(5)*sigmaviz)
+
+      Sn(1,:)   = ad*(-dniz_dU(:)*sigmaviz + dnrec_dU(:)*sigmavrec)
 #ifdef TEMPERATURE
-      Sn(1,1)   = Sn(1,1) + ad*(-niz*dsigmaviz_dU(1) + nrec*dsigmavrec_dU(1))
-      Sn(1,4)   = Sn(1,4) + ad*(-niz*dsigmaviz_dU(4) + nrec*dsigmavrec_dU(4))
+
+      Sn(1,:)   = Sn(1,:) + ad*(-niz*dsigmaviz_dU(:) + nrec*dsigmavrec_dU(:))
 #endif
       !Assembly Source Terms in plasma momentum equation
-      Sn(2,1)   = ad*(dfGammarec_dU(1)*sigmavrec)
-      Sn(2,2)   = ad*(dfGammacx_dU(2)*sigmavcx + dfGammarec_dU(2)*sigmavrec)
-      Sn(2,5) = ad*(dfGammacx_dU(5)*sigmavcx)
+
+      Sn(2,:) = ad*(dfGammacx_dU(:)*sigmavcx + dfGammarec_dU(:)*sigmavrec)
 #ifdef TEMPERATURE
-      Sn(2,1)   = Sn(2,1) + ad*( fGammacx*dsigmavcx_dU(1) + fGammarec*dsigmavrec_dU(1))
-      Sn(2,4)   = Sn(2,4) + ad*( fGammacx*dsigmavcx_dU(4) + fGammarec*dsigmavrec_dU(4))
+      !Sn(2,1)   = Sn(2,1) + ad*( fGammacx*dsigmavcx_dU(1) + fGammarec*dsigmavrec_dU(1))
+
+      Sn(2,:)   = Sn(2,:) + ad*( fGammacx*dsigmavcx_dU(:) + fGammarec*dsigmavrec_dU(:))
+      
       !Assembly Source Terms in ion energy equation
-      Sn(3,1)   = ad*( - RE*fEiiz*dsigmaviz_dU(1) + dfEirec_dU(1)*sigmavrec + fEirec*dsigmavrec_dU(1) +&
-        &dfEicx_dU(1)*sigmavcx + fEicx*dsigmavcx_dU(1))
-      Sn(3,2)   = ad*(dfEicx_dU(2)*sigmavcx )
-      Sn(3,3)   = ad*(-RE*dfEiiz_dU(3)*sigmaviz + dfEirec_dU(3)*sigmavrec)
-      Sn(3,4)   = ad*(-RE*fEiiz*dsigmaviz_dU(4) + fEirec*dsigmavrec_dU(4) + fEicx*dsigmavcx_dU(4))
-      Sn(3,5) = ad*(-RE*dfEiiz_dU(5)*sigmaviz + dfEicx_dU(5)*sigmavcx)
+
+      Sn(3,:) = ad*(-RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec+dfEicx_dU(:)*sigmavcx)
+      Sn(3,:) = Sn(3,:) + ad*(-RE*fEiiz*dsigmaviz_dU(:) + fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:))
       !Assembly Source Terms in electron energy equation
-      Sn(4,1)   = ad4*(dniz_dU(1)*sigmaviz*Tloss + niz*dsigmaviz_dU(1)*Tloss + niz*sigmaviz*dTloss_dU(1) +&
-        &dnrec_dU(1)*sigmavrec*Tlossrec + nrec*dsigmavrec_dU(1)*Tlossrec + nrec*sigmavrec*dTlossrec_dU(1))
-      Sn(4,4)   = ad4*(niz*dsigmaviz_dU(4)*Tloss + niz*sigmaviz*dTloss_dU(4) +&
-        &nrec*dsigmavrec_dU(4)*Tlossrec + nrec*sigmavrec*dTlossrec_dU(4))
-      Sn(4,5) = ad4*(dniz_dU(5)*sigmaviz*Tloss )
+
+
+      !Sn(4,:) =  ad4*(dniz_dU(:)*sigmaviz*Tloss + niz*dsigmaviz_dU(:)*Tloss + niz*sigmaviz*dTloss_dU(:) +&
+      !  &dnrec_dU(:)*sigmavrec*Tlossrec + nrec*dsigmavrec_dU(:)*Tlossrec + nrec*sigmavrec*dTlossrec_dU(:))
+      !AMJUEL rates
+      Sn(4,:) =  ad4*(dniz_dU(:)*sigmavEiz + niz*dsigmavEiz_dU(:) +&
+        &dnrec_dU(:)*sigmavErec + nrec*dsigmavErec_dU(:))
+
+      !modification with recombination gain
+      Sn(4,:) =  Sn(4,:)+ ad4*(-1.*dnrec_dU(:)*sigmavrec*13.6 - nrec*dsigmavrec_dU(:)*13.6)
+
 #endif
       !Assembly Source Terms in neutral density equation
       Sn(5,:) = -Sn(1,:)
@@ -3799,10 +3814,15 @@ END IF
 #endif
 #ifdef TEMPERATURE
       Sn0(3)    = ad*(RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx)
-      Sn0(4)    = ad4*(-niz*sigmaviz*Tloss - nrec*sigmavrec*Tlossrec)
+      !Sn0(4)    = ad4*(-niz*sigmaviz*Tloss - nrec*sigmavrec*Tlossrec)
+      !modification with recombination gain
+      Sn0(4)    = ad4*(nrec*sigmavrec*13.6)
+      Sn0(4)    = Sn0(4) + ad4*(-niz*sigmavEiz- nrec*sigmavErec)
 #ifdef AMJUELSPLINES
       Sn0(3)    = Sn0(3) + ad*(RE*fEiiz*dot_product(dsigmaviz_dU,U) - fEirec*dot_product(dsigmavrec_dU,U))
-      Sn0(4)    = Sn0(4) + ad4*(-niz*dot_product(dsigmaviz_dU,U)*Tloss - nrec*dot_product(dsigmavrec_dU,U)*Tlossrec)
+      !Sn0(4)    = Sn0(4) + ad4*(-niz*dot_product(dsigmaviz_dU,U)*Tloss - nrec*dot_product(dsigmavrec_dU,U)*Tlossrec)
+      Sn0(4)    = Sn0(4) + ad4*(-niz*dot_product(dsigmavEiz_dU,U) - nrec*dot_product(dsigmavErec_dU,U))
+      Sn0(4)    = Sn0(4) +  ad4*( nrec*dot_PRODUCT(dsigmavrec_dU,U)*13.6)
 #endif
 #endif
       Sn0(5)  = -Sn0(1)
