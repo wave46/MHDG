@@ -405,7 +405,7 @@ CONTAINS
     INTEGER                   :: i,j,k
     INTEGER                   :: g,igpol,igtor
     REAL*8                    :: dsurfg
-    REAL*8                    :: setval,delta
+    INTEGER                    :: setval,delta
     REAL*8                    :: inc,sn
     REAL*8                    :: NiNi(Npfl,Npfl),Ni(Npfl)
     REAL*8                    :: soundSpeed
@@ -538,10 +538,14 @@ CONTAINS
 #ifdef KEQUATION
   real*8                    :: q_cylfl(refElPol%Nfacenodes),q_cyl(refElPol%Ngauss1d)
 #endif
+#ifdef PARALL
+#ifdef SAVEFLUX
+  INTEGER                   :: ierr
+#endif
+#endif
 #ifdef SAVEFLUX
   real*8                    :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_neutral,totalflux_numerical
   real*8                    :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_neutral,faceflux_numerical
-  integer*4                 :: ierr
 
   totalflux_pump = 0.
   totalflux_puff = 0.
@@ -1249,18 +1253,18 @@ CONTAINS
 #ifndef SAVEFLUX
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,Vnng)
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,Vnng)
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,Vnng)
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,Vnng)
 #endif
 #else
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
 #else     
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-        &ufg(g,:),upg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)   
+        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)   
 #endif
         !summing conribution from each part of the face
         faceflux_pump = faceflux_pump+flgflux_pump
@@ -1779,19 +1783,19 @@ CONTAINS
   !*********************************
 #ifndef SAVEFLUX
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,ntang,Vnng)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang,Vnng)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,q_cyl,xyf,ng,tau,setval,delta,diffiso,diffani,ntang,Vnng)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang,Vnng)
 #endif
 #else
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,ng,tau,setval,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,bg,psig,q_cyl,xyf,ng,tau,setval,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
 #endif
 #endif
-    integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc
-    real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),bg(:),psig,ng(:),tau(:,:),setval,delta
+    integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
+    real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),psig,ng(:),tau(:,:),setval,dcs_du(:)
     real*8           :: diffiso(:,:),diffani(:,:)
     logical          :: ntang
     real*8           :: qfg(:),Vnng(:)
@@ -2268,7 +2272,7 @@ CONTAINS
     flgflux_puff = flgflux_puff*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
     !contribution from parallel flux onto the wall 
-        flgflux_parallel = ueg(2)*bn
+        flgflux_parallel = uefg(2)*bn
     !dimensionalizing and multiplying by the surface under this gauss point (multiplied by the local recycling)
     flgflux_parallel = recycling_coeff*flgflux_parallel*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
@@ -2279,7 +2283,7 @@ CONTAINS
     flgflux_neutral = (diffiso(5,5)*(Qpr(1,5)*ng(1) + Qpr(2,5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
         !flux neutral numerical
-        flgflux_numerical = tau(5,5)* (ueg(5)-ufg(5))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+        flgflux_numerical = tau(5,5)* (uefg(5)-ufg(5))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
 
     !***************** end of flux control part *********************
