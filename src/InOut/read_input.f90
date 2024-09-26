@@ -61,7 +61,7 @@ SUBROUTINE READ_input()
   LOGICAL     :: ME
 
   ! Defining the variables to READ from the file
-  NAMELIST /SWITCH_LST/ steady, time_init,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, saveMeshSol, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
+  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, saveMeshSol, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
     & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
     & logrho,bxgradb
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions, save_folder
@@ -103,7 +103,6 @@ SUBROUTINE READ_input()
 
   ! Storing at the right place
   switch%steady           = steady
-  switch%time_init        = time_init
   switch%read_gmsh        = read_gmsh
   switch%readMeshFromSol  = readMeshFromSol
   switch%set_2d_order     = set_2d_order

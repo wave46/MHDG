@@ -1221,7 +1221,7 @@ CONTAINS
       inde = (iel - 1)*Npel + (/(i,i=1,Npel)/)
       uef = ures(inde(refElPol%face_nodes(ifa,:)),:)
       qef = qres(inde(refElPol%face_nodes(ifa,:)),:)
-
+#ifndef KEQUATION
         IF (iface.LE.Mesh%Nintfaces) THEN
         CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)		 
         ELSE
