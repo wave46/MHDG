@@ -194,7 +194,7 @@ CONTAINS
   !***************************
   SUBROUTINE saveMatrix(Mat, name)
     REAL, DIMENSION(:, :), INTENT(IN) :: Mat
-    INTEGER :: di, dj, dk, i, j, k
+    INTEGER :: di, dj, dk, i, j
     CHARACTER(LEN=*) :: name
 
     di = SIZE(Mat, 1)
@@ -224,7 +224,7 @@ CONTAINS
   !***************************
   SUBROUTINE saveVector(Vec, name)
     REAL, DIMENSION(:), INTENT(IN) :: Vec
-    INTEGER :: di, dj, dk, i, j, k
+    INTEGER :: di, dj, dk, i
     CHARACTER(LEN=*) :: name
 
     di = SIZE(Vec)
@@ -282,7 +282,7 @@ CONTAINS
   SUBROUTINE save_CSR_vector_txt(vec, name)
     USE matrices_types
     TYPE(RHS_TYP), intent(in)   :: vec
-    INTEGER :: i, n, nnz
+    INTEGER :: i, n
     CHARACTER(LEN=*) :: name
     n = vec%n
     OPEN (33, file=trim(name)//".txt")
@@ -306,7 +306,7 @@ CONTAINS
   SUBROUTINE syncroprint_vector_int(Vec)
     USE MPI_OMP
     INTEGER, DIMENSION(:), INTENT(IN) :: Vec
-    INTEGER :: i, code, pr, aux
+    INTEGER :: code, aux
     INTEGER, PARAMETER :: etiquette = 1000
     INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
 
@@ -334,7 +334,7 @@ CONTAINS
   SUBROUTINE syncroprint_vector(Vec)
     USE MPI_OMP
     REAL, DIMENSION(:), INTENT(IN) :: Vec
-    INTEGER :: i, code, pr, aux
+    INTEGER :: code, aux
     INTEGER, PARAMETER :: etiquette = 1000
     INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
 
@@ -362,7 +362,7 @@ CONTAINS
   SUBROUTINE syncroprint_matrix(Mat)
     USE MPI_OMP
     REAL, DIMENSION(:, :), INTENT(IN) :: Mat
-    INTEGER :: i, code, pr, aux
+    INTEGER :: code,  aux
     INTEGER, PARAMETER :: etiquette = 1000
     INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
 
@@ -391,7 +391,7 @@ CONTAINS
   SUBROUTINE syncroprint_array(Mat)
     USE MPI_OMP
     REAL, DIMENSION(:, :, :), INTENT(IN) :: Mat
-    INTEGER :: i, code, pr, aux
+    INTEGER :: code, aux
     INTEGER, PARAMETER :: etiquette = 1000
     INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
 

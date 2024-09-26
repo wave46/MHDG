@@ -192,7 +192,7 @@ CONTAINS
     DO k = 1, size(A, 3)
       DO j = 1, size(A, 2)
         DO i = 1, size(A, 1)
-          IF (A(i, j, k) .ne. A(i, j, k)) THEN
+          IF (ISNAN(A(i, j, k))) THEN
             WRITE (6, *) "NaN detected in array at pos: i=", i, " j=", j, " k=", k
             stop
           ENDIF
@@ -207,7 +207,7 @@ CONTAINS
 
     DO j = 1, size(M, 2)
       DO i = 1, size(M, 1)
-        IF (M(i, j) .ne. M(i, j)) THEN
+        IF (ISNAN(M(i, j))) THEN
           WRITE (6, *) "NaN detected in matrix at pos: i=", i, " j=", j
           stop
         ENDIF
@@ -220,7 +220,7 @@ CONTAINS
     integer :: i
 
     DO i = 1, size(V, 1)
-      IF (V(i) .ne. V(i)) THEN
+      IF (ISNAN(V(i))) THEN
         WRITE (6, *) "NaN detected in vector at pos: i=", i
         stop
       ENDIF
