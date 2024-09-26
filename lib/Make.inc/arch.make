@@ -9,8 +9,8 @@ SDIR=$(PWD)/../src/
 COMPTYPE_OPT = opt
 COMPTYPE_DEB = deb
 COMPTYPE_PRO = pro
-#COMPTYPE = $(COMPTYPE_OPT)
-COMPTYPE = $(COMPTYPE_DEB)
+COMPTYPE = $(COMPTYPE_OPT)
+#COMPTYPE = $(COMPTYPE_DEB)
 #COMPTYPE = $(COMPTYPE_PRO)
 
 #-------------------------------------------------------------------------------
@@ -18,14 +18,15 @@ COMPTYPE = $(COMPTYPE_DEB)
 #-------------------------------------------------------------------------------
 MODE_SERIAL = serial
 MODE_PARALL = parall
-#MODE = $(MODE_SERIAL)
-MODE = $(MODE_PARALL)
+MODE = $(MODE_SERIAL)
+#MODE = $(MODE_PARALL)
 
 #-------------------------------------------------------------------------------
 # The compiler
 #-------------------------------------------------------------------------------
-FC = mpif90 
+#FC = mpif90 
 #FC = mpif90 -f90=ifort
+FC = mpifort
 
 #-------------------------------------------------------------------------------
 # Model
@@ -41,8 +42,8 @@ MDL_NGAMMAVORT=NGammaVort
 #MDL=$(MDL_NGAMMA)
 #MDL=$(MDL_NGAMMANEUTRAL)
 #MDL=$(MDL_NGAMMATITE)
-#MDL=$(MDL_NGAMMATITENEUTRAL)
-MDL=$(MDL_NGAMMATITENEUTRALK)
+MDL=$(MDL_NGAMMATITENEUTRAL)
+#MDL=$(MDL_NGAMMATITENEUTRALK)
 #MDL=$(MDL_NGAMMAVORT)
 #MDL=$(MDL_LAPLACE)
 
@@ -73,6 +74,8 @@ PASTIX=$(LIB_YES)
 PSBLAS=$(LIB_NO)
 #PSBLMG=$(LIB_YES)
 PSBLMG=$(LIB_NO)
+#PETSC=$(LIB_YES)
+PETSC=$(LIB_NO)
 
 
 #-------------------------------------------------------------------------------
@@ -100,8 +103,8 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC
  #MACROS+= -DRHSBC
- #MACROS+= -DDNNSMOOTH
- #MACROS+= -DDNNLINEARIZED
+ MACROS+= -DDNNSMOOTH
+ MACROS+= -DDNNLINEARIZED
  #MACROS+= -DNEUTRALPUMP
  #MACROS+= -DLEGACYCX
  MACROS+= -DSAVEFLUX
@@ -183,14 +186,21 @@ endif
 #-------------------------------------------------------------------------------
 ifeq ($(PASTIX),$(LIB_YES))
  MACROS+= -DWITH_PASTIX
+ ADDMODSOLV+=solve_pastix.o
  ADDMOD+=solve_pastix.o
+endif
+ifeq ($(PETSC),$(LIB_YES))
+ MACROS+= -DWITH_PETSC
+ ADDMODSOLV+=solve_petsc.o
+ ADDMOD+=solve_petsc.o
 endif
 ifeq ($(PSBLMG),$(LIB_YES))
  MACROS+= -DWITH_PSBLAS
- MACROS+= -DWITH_MLD2P4
+ ADDMODSOLV+=solve_psblas.o
  ADDMOD+=solve_psblas.o
 else ifeq ($(PSBLAS),$(LIB_YES))
  MACROS+= -DWITH_PSBLAS
+ ADDMODSOLV+=solve_psblas.o
  ADDMOD+=solve_psblas.o
 endif
 
@@ -236,6 +246,10 @@ FCFLAGS += -I/usr/include/hdf5/serial
 FCFLAGS += -I/usr/include/hwloc
 FCFLAGS += -I/usr/lib/x86_64-linux-gnu/caca
 FCFLAGS += -I/usr/include/X11
+FCFLAGS += -I$(MHDG_MMG_DIR)/build/include
+FCFLAGS += -I$(MHDG_GMSH_DIR)/include
+
+
 #Cluster
 #FCFLAGS += -I$(MHDG_HDF5_DIR)/include
 #FCFLAGS += -I$(MHDG_HWLOC_DIR)/include
@@ -251,6 +265,12 @@ endif
 ifeq ($(PSBLAS),$(LIB_YES))
  FCFLAGS += -I$(MHDG_PSBLAS_DIR)/include/
  FCFLAGS += -I$(MHDG_PSBLAS_DIR)/modules/
+endif
+
+# PETSC
+ifeq ($(PETSC),$(LIB_YES))
+ FCFLAGS += -I$(MHDG_PETSC_DIR)/include/
+ FCFLAGS += -I$(MHDG_PETSC_DIR)/$(PETSC_ARCH)/include
 endif
 
 # MLD2P4
@@ -270,6 +290,10 @@ LIB += -L/usr/lib/x86_64-linux-gnu/hwloc -lhwloc
 LIB += -L/usr/lib/x86_64-linux-gnu -lX11
 #LIB += -L/usr/lib/X11 -lX11
 LIB += -L/usr/lib/x86_64-linux-gnu/xtables -lXt
+
+#GMSH/MMG
+LIB += -L$(MHDG_GMSH_DIR)/lib -Llib -lgmsh -L. -Wl,-rpath=$(MHDG_GMSH_DIR)/lib 
+LIB += -L$(MHDG_MMG_DIR)/build/lib -lmmg
 
 #Cluster
 #LIB += -lz  -lm -lrt -lpthread
@@ -316,6 +340,17 @@ ifeq ($(PSBLMG),$(LIB_YES))
 else ifeq ($(PSBLAS),$(LIB_YES))
  include $(MHDG_PSBLAS_DIR)/include/Make.inc.psblas
 endif
+
+
+# PETSC
+#Local
+ifeq ($(PETSC),$(LIB_YES))
+ LIB += -L$(MHDG_PETSC_DIR)/lib -lpetsc
+ LIB += -L$(MHDG_PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc
+endif
+
+
+
 
 #-------------------------------------------------------------------------------
 # Add macros to the compiling flags
