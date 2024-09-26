@@ -22,8 +22,8 @@ CONTAINS
   !*********************************************
   SUBROUTINE init_sim(nts,dt)
 
-    integer,intent(out) :: nts
-    real,intent(out) :: dt
+    INTEGER,INTENT(out) :: nts
+    REAL,INTENT(out) :: dt
 
     CALL initPhys()
 
@@ -59,13 +59,17 @@ CONTAINS
   ! Initialization of the elemental matrices
   !*******************************************
   SUBROUTINE init_elmat
-    integer :: Neq,Ndim,Ntorloc,N2d,Nel,Np1d,Np2d,Np,Nfl,Nfp,Nfg,Nf
+    INTEGER :: Neq,Ndim,Nel,Np,Nfg,Nf
+
+#ifdef TOR3D
+    INTEGER :: Ntorloc,N2d,Np1d,Np2d,Nfl
+#endif
 
     Neq = phys%Neq                      ! N. of equations
 #ifdef TOR3D
     Ndim = 3                             ! N. of dimensions
 #ifdef PARALL
-    IF (MPIvar%ntor .gt. 1) THEN
+    IF (MPIvar%ntor .GT. 1) THEN
       ntorloc = numer%ntor/MPIvar%ntor + 1
     ELSE
       ntorloc = numer%ntor
@@ -97,7 +101,7 @@ CONTAINS
     ALLOCATE (elmat%Aul(Neq*Np,Neq*Nfg,Nel))
     ALLOCATE (elmat%Alq(Neq*Nfg,Neq*Ndim*Np,Nel))
     ALLOCATE (elmat%Alu(Neq*Nfg,Neq*Np,Nel))
-    ALLOCATE (elmat%All(Neq*Nfg,Neq*Nfg,Nel))
+    ALLOCATE (elmat%ALL(Neq*Nfg,Neq*Nfg,Nel))
     ALLOCATE (elmat%Aql_dir(Neq*Np*Ndim,Nel))
     ALLOCATE (elmat%Aul_dir(Neq*Np,Nel))
     ALLOCATE (elmat%S(Neq*Np,Nel))
@@ -155,16 +159,17 @@ CONTAINS
 	
   END SUBROUTINE init_elmat
 
-  subroutine init_solve_timing
-    use globals
-    timing%cputpre=1.e-8
-    timing%cputmap=1.e-8
-    timing%cputass=1.e-8
-    timing%cputbcd=1.e-8
-    timing%cputsol=1.e-8
-    timing%cputjac=1.e-8
-    timing%cputglb=1.e-8
-    timing%cputcom=1.e-8
+  SUBROUTINE init_solve_timing
+    USE globals
+    timing%cputpre   =1.e-8
+    timing%cputmap   =1.e-8
+    timing%cputass   =1.e-8
+    timing%cputbcd   =1.e-8
+    timing%cputsol   =1.e-8
+    timing%cputjac   =1.e-8
+    timing%cputglb   =1.e-8
+    timing%cputcom   =1.e-8
+    timing%cputadapt =1.e-8
 
     timing%runtpre=1.e-8
     timing%runtmap=1.e-8
@@ -174,6 +179,7 @@ CONTAINS
     timing%runtjac=1.e-8
     timing%runtglb=1.e-8
     timing%runtcom=1.e-8
+    timing%runtadapt=1.e-8
 
     timing%clstime1=1.e-8
     timing%clstime2=1.e-8
@@ -188,19 +194,24 @@ CONTAINS
     timing%rlstime4=1.e-8
     timing%rlstime5=1.e-8
     timing%rlstime6=1.e-8
-  end subroutine
+  END SUBROUTINE init_solve_timing
 
   !********************************
   ! Initialization of the solution
   !********************************
   SUBROUTINE init_sol
-    integer :: Neq,Ndim,Ntorloc,N2d,Nel,Np1d,Np2d,Np,Nfl,Nfp,Nfg,Nf,sizeutilde,sizeu
-    integer :: Ngvo
+    INTEGER :: Neq,Nel,Ndim,Np,Nf,Nfg,sizeutilde,sizeu
+    INTEGER :: Ngvo
+
+#ifdef TOR3D
+    INTEGER :: N2d, Nfl,Ntorloc,Np1d,Np2d
+#endif
+
     Neq = phys%Neq
 #ifdef TOR3D
     Ndim = 3                             ! N. of dimensions
 #ifdef PARALL
-    IF (MPIvar%ntor .gt. 1) THEN
+    IF (MPIvar%ntor .GT. 1) THEN
       ntorloc = numer%ntor/MPIvar%ntor + 1
     ELSE
       ntorloc = numer%ntor
@@ -219,11 +230,11 @@ CONTAINS
     sizeu = Neq*Nel*Np                    ! Size of u
     Ngvo = refElPol%Ngauss2d*refEltor%Ngauss1d
 #ifdef PARALL
-    if (MPIvar%ntor .gt. 1) then
+    IF (MPIvar%ntor .GT. 1) THEN
       sizeutilde = Neq*ntorloc*(Nfl*Nf + Np2d*N2d) + Neq*Np2d*N2d! Size of utilde
-    else
+    ELSE
       sizeutilde = Neq*ntorloc*(Nfl*Nf + Np2d*N2d)! Size of utilde
-    endif
+    ENDIF
 #else
     sizeutilde = Neq*ntorloc*(Nfl*Nf + Np2d*N2d)! Size of utilde
 #endif
@@ -241,42 +252,43 @@ CONTAINS
     ! Allocation of the solution vector
     ALLOCATE (sol%u(sizeu))
     ALLOCATE (sol%u_tilde(sizeutilde))
+    ALLOCATE (sol%u_tilde0(sizeutilde))
     ALLOCATE (sol%q(sizeu*Ndim))
     sol%u = 0.
     sol%u_tilde = 0.
     sol%q = 0.
     ! Initialize the solution
-    IF (MPIvar%glob_id .eq. 0) THEN
+    IF (MPIvar%glob_id .EQ. 0) THEN
       IF (utils%printint > 0) THEN
-        write (6,*) "*** Initializing the solution"
+          WRITE (6,*) "*** Initializing the solution"
       END IF
     ENDIF
-    if (switch%init.eq.1) then
+    IF (switch%init.EQ.1) THEN
       ! The solution is intialized in each node to the analytical solution
-      IF (MPIvar%glob_id .eq. 0) THEN
+       IF (MPIvar%glob_id .EQ. 0) THEN
         IF (utils%printint > 0) THEN
-          write (6,*) "******* Initializing the solution to the analytic solution"
+             WRITE (6,*) "******* Initializing the solution to the analytic solution"
         END IF
       ENDIF
       CALL init_sol_analytic()
-    elseif (switch%init.eq.2) then
+    ELSEIF (switch%init.EQ.2) THEN
       ! The solution is intialized in each node to the analytical solution
-      IF (MPIvar%glob_id .eq. 0) THEN
+       IF (MPIvar%glob_id .EQ. 0) THEN
         IF (utils%printint > 0) THEN
-          write (6,*) "******* Initializing the solution with L2 projection"
+             WRITE (6,*) "******* Initializing the solution with L2 projection"
         END IF
       ENDIF
       CALL init_sol_l2proj()
-    else
-      write(6,*) "Wrong initialization type"
-      stop
-    endif
+    ELSE
+       WRITE(6,*) "Wrong initialization type"
+       STOP
+    ENDIF
     ! Extract the face solution from the elemental one
     CALL extractFaceSolution()
 
-    IF (MPIvar%glob_id .eq. 0) THEN
+    IF (MPIvar%glob_id .EQ. 0) THEN
       IF (utils%printint > 0) THEN
-        write (6,*) "Done!"
+          WRITE (6,*) "Done!"
       END IF
     ENDIF
   CONTAINS
@@ -284,21 +296,21 @@ CONTAINS
     ! Initialization of the solution using the analytic solution
     !***********************************************************
     SUBROUTINE init_sol_analytic
-      integer             :: itor,itorg,iel,iel3,i
-      integer             :: ind(Np)
-      real*8              :: Xe(Mesh%Nnodesperelem,Mesh%Ndim)
-      real*8              :: ue(Np,Neq)
-      real*8,allocatable :: u(:,:)
-      real*8              :: tdiv(numer%ntor + 1)
+      INTEGER             :: iel,i
+      INTEGER             :: ind(Np)
+      REAL*8              :: Xe(Mesh%Nnodesperelem,Mesh%Ndim)
+      REAL*8              :: ue(Np,Neq)
+      REAL*8,ALLOCATABLE  :: u(:,:)
+      REAL*8,ALLOCATABLE  :: qx(:,:),qy(:,:),auxq(:,:)
+      REAL*8              :: uex(Np,Neq),uey(Np,Neq)
+
 #ifdef TOR3D
-      real*8              :: htor,tel(refElTor%Nnodes1d)
+      INTEGER             :: iel3, itor,itorg
+      REAL*8              :: htor,tel(refElTor%Nnodes1d), tdiv(numer%ntor + 1), uet(Np,Neq)
+      REAL*8,ALLOCATABLE  :: qt(:,:)
 #endif
-      real*8,allocatable :: qx(:,:),qy(:,:),auxq(:,:)
-      real*8              :: uex(Np,Neq),uey(Np,Neq)
-#ifdef TOR3D
-      real*8,allocatable :: qt(:,:)
-      real*8              :: uet(Np,Neq)
-#endif
+
+
       ALLOCATE (u(Nel*Np,phys%Neq))
       u = 0.
       ALLOCATE (qx(Nel*Np,phys%Neq))
@@ -324,7 +336,7 @@ CONTAINS
       DO itor = 1,ntorloc
 #ifdef PARALL
         itorg = itor + (MPIvar%itor - 1)*numer%ntor/MPIvar%ntor
-        if (itorg == numer%ntor + 1) itorg = 1
+         IF (itorg == numer%ntor + 1) itorg = 1
 #else
         itorg = itor
 #endif
@@ -333,7 +345,7 @@ CONTAINS
           iel3 = (itor - 1)*N2d+iel
           ind = (iel3 - 1)*Np + (/(i,i=1,Np)/)
           Xe = Mesh%X(Mesh%T(iel,:),:)
-          CALL analytical_solution(iel,Xe(:,1),Xe(:,2),tel,ue)
+            CALL analytical_solution(Xe(:,1),Xe(:,2),tel,ue)
           CALL analytical_gradient(Xe(:,1),Xe(:,2),tel,ue,uex,uey,uet)
           qx(ind,:) = uex
           qy(ind,:) = uey
@@ -360,14 +372,14 @@ CONTAINS
       !****************************************
       !          common
       !****************************************
-      sol%u = reshape(transpose(u),(/Nel*Np*phys%Neq/))
+      sol%u = RESHAPE(TRANSPOSE(u),(/Nel*Np*phys%Neq/))
 
-      auxq(:,1) = reshape(transpose(qx),(/Nel*Np*phys%Neq/))
-      auxq(:,2) = reshape(transpose(qy),(/Nel*Np*phys%Neq/))
+      auxq(:,1) = RESHAPE(TRANSPOSE(qx),(/Nel*Np*phys%Neq/))
+      auxq(:,2) = RESHAPE(TRANSPOSE(qy),(/Nel*Np*phys%Neq/))
 #ifdef TOR3D
-      auxq(:,3) = reshape(transpose(qt),(/Nel*Np*phys%Neq/))
+      auxq(:,3) = RESHAPE(TRANSPOSE(qt),(/Nel*Np*phys%Neq/))
 #endif
-      sol%q = reshape(transpose(auxq),(/Nel*Np*phys%Neq*Ndim/))
+      sol%q = RESHAPE(TRANSPOSE(auxq),(/Nel*Np*phys%Neq*Ndim/))
       DEALLOCATE (qx,qy,auxq)
 #ifdef TOR3D
       DEALLOCATE (qt)
@@ -385,33 +397,20 @@ CONTAINS
     ! Initialization of the solution using an L2 projection
     !***********************************************************
     SUBROUTINE init_sol_l2proj
-      integer             :: itor,itorg,iel,iel3,i,g
-      integer             :: ind(Np)
-      real*8              :: Xe(Mesh%Nnodesperelem,Mesh%Ndim)
-      real*8              :: ue(Np,Neq)
-      real*8              :: uex(Np,Neq),uey(Np,Neq)
-      real*8,allocatable  :: u(:,:)
-      real*8              :: tdiv(numer%ntor + 1)
-#ifdef TOR3D
-      real*8              :: htor,tel(refElTor%Nnodes1d)
-#endif
-      real*8,allocatable :: qx(:,:),qy(:,:),auxq(:,:)
+      REAL*8,ALLOCATABLE    :: u(:,:)
+      REAL*8,ALLOCATABLE    :: qx(:,:),qy(:,:),auxq(:,:)
 
 #ifdef TOR3D
-      real*8,allocatable :: qt(:,:)
-      real*8              :: uet(Np,Neq)
+      REAL*8, ALLOCATABLE   :: qt(:,:)
+#else
+      INTEGER               :: iel,i, g
+      INTEGER               :: ind(Np)
+      REAL*8                :: dvolu
+      REAL*8                :: Xe(Mesh%Nnodesperelem,Mesh%Ndim), xyg(Ngvo,2)
+      REAL*8                :: detJ(Ngvo), J11(Ngvo),J12(Ngvo), J21(Ngvo),J22(Ngvo), iJ21(Ngvo),iJ22(Ngvo), iJ11(Ngvo),iJ12(Ngvo)
+      REAL*8                :: M(Np,Np),rhs_u(Np,Neq),rhs_ux(Np,Neq),rhs_uy(Np,Neq), ue(Np,Neq), uex(Np,Neq),uey(Np,Neq),ug(Ngvo,Neq),ugx(Ngvo,Neq),ugy(Ngvo,Neq)
+      REAL*8,PARAMETER      :: tol = 1e-12
 #endif
-      real*8                :: J11(Ngvo),J12(Ngvo)
-      real*8                :: J21(Ngvo),J22(Ngvo)
-      real*8                :: detJ(Ngvo)
-      real*8                :: iJ11(Ngvo),iJ12(Ngvo)
-      real*8                :: iJ21(Ngvo),iJ22(Ngvo)
-      real*8                :: dvolu,M(Np,Np),rhs_u(Np,Neq),rhs_ux(Np,Neq),rhs_uy(Np,Neq)
-      real*8                :: xyg(Ngvo,2)
-      real*8                :: ug(Ngvo,Neq)
-      real*8                :: ugx(Ngvo,Neq),ugy(Ngvo,Neq)
-      real*8,parameter     :: tol = 1e-12
-
       ALLOCATE (u(Nel*Np,phys%Neq))
       u = 0.
       ALLOCATE (qx(Nel*Np,phys%Neq))
@@ -424,8 +423,8 @@ CONTAINS
 #endif
 
 #ifdef TOR3D
-      write(6,*) "Not coded yet"
-      stop
+      WRITE(6,*) "Not coded yet"
+      STOP
       !         !****************************************
       !         !          3D
       !         !****************************************
@@ -463,10 +462,10 @@ CONTAINS
 
         ind = (iel - 1)*Np + (/(i,i=1,Np)/)
         Xe = Mesh%X(Mesh%T(iel,:),:)
-        J11 = matmul(refElPol%Nxi2D,Xe(:,1))                           ! ng x 1
-        J12 = matmul(refElPol%Nxi2D,Xe(:,2))                           ! ng x 1
-        J21 = matmul(refElPol%Neta2D,Xe(:,1))                          ! ng x 1
-        J22 = matmul(refElPol%Neta2D,Xe(:,2))                          ! ng x 1
+         J11 = MATMUL(refElPol%Nxi2D,Xe(:,1))                           ! ng x 1
+         J12 = MATMUL(refElPol%Nxi2D,Xe(:,2))                           ! ng x 1
+         J21 = MATMUL(refElPol%Neta2D,Xe(:,1))                          ! ng x 1
+         J22 = MATMUL(refElPol%Neta2D,Xe(:,2))                          ! ng x 1
         detJ = J11*J22 - J21*J12                    ! determinant of the Jacobian
         iJ11 = J22/detJ
         iJ12 = -J12/detJ
@@ -474,7 +473,7 @@ CONTAINS
         iJ22 = J11/detJ
 
         ! Solution at Gauss points
-        xyg = matmul(refElPol%N2D,Xe)
+         xyg = MATMUL(refElPol%N2D,Xe)
         CALL analytical_solution(iel,xyg(:,1),xyg(:,2),ug)
         CALL analytical_gradient(xyg(:,1),xyg(:,2),ug,ugx,ugy)
 
@@ -488,8 +487,8 @@ CONTAINS
 
 
           IF (detJ(g) < tol) THEN
-            error stop "Negative jacobian"
-          END if
+               error STOP "Negative jacobian"
+            END IF
 
           ! Integration weight
           dvolu = refElPol%gauss_weights2D(g)*detJ(g)
@@ -503,9 +502,9 @@ CONTAINS
           rhs_ux = rhs_ux+tensorProduct(refElPol%N2D(g,:),ugx(g,:))*dvolu
           rhs_uy = rhs_uy+tensorProduct(refElPol%N2D(g,:),ugy(g,:))*dvolu
         END DO
-        call solve_linear_system(M,rhs_u,ue)
-        call solve_linear_system(M,rhs_ux,uex)
-        call solve_linear_system(M,rhs_uy,uey)
+         CALL solve_linear_system(M,rhs_u,ue)
+         CALL solve_linear_system(M,rhs_ux,uex)
+         CALL solve_linear_system(M,rhs_uy,uey)
         qx(ind,:) = uex
         qy(ind,:) = uey
         u(ind,:) = ue
@@ -519,14 +518,14 @@ CONTAINS
       !****************************************
       !          common
       !****************************************
-      sol%u = reshape(transpose(u),(/Nel*Np*phys%Neq/))
+      sol%u = RESHAPE(TRANSPOSE(u),(/Nel*Np*phys%Neq/))
 
-      auxq(:,1) = reshape(transpose(qx),(/Nel*Np*phys%Neq/))
-      auxq(:,2) = reshape(transpose(qy),(/Nel*Np*phys%Neq/))
+      auxq(:,1) = RESHAPE(TRANSPOSE(qx),(/Nel*Np*phys%Neq/))
+      auxq(:,2) = RESHAPE(TRANSPOSE(qy),(/Nel*Np*phys%Neq/))
 #ifdef TOR3D
-      auxq(:,3) = reshape(transpose(qt),(/Nel*Np*phys%Neq/))
+      auxq(:,3) = RESHAPE(TRANSPOSE(qt),(/Nel*Np*phys%Neq/))
 #endif
-      sol%q = reshape(transpose(auxq),(/Nel*Np*phys%Neq*Ndim/))
+      sol%q = RESHAPE(TRANSPOSE(auxq),(/Nel*Np*phys%Neq*Ndim/))
       DEALLOCATE (qx,qy,auxq)
 #ifdef TOR3D
       DEALLOCATE (qt)
@@ -685,19 +684,18 @@ CONTAINS
     !***************************************************************
 #ifdef TOR3D
     SUBROUTINE extractFaceSolution
-      integer :: neq,Ne,Nf,Nfe,unkF,Np,N2d,Np2d,Nfl,iel,iElem,ifa,iFace,i,itor,ntorloc,nut
-      integer :: c,Np1Dpol,Np1Dtor,blk,Nfdir,Fig,Fe,Fi,sh
-      integer :: ind_ue(refElTor%Nnodes3D),ind2(refElPol%Nnodes2D)
-      integer :: ind3(refElPol%Nnodes2D*refElTor%Nnodes1D),indl(refElPol%Nnodes1D*refElTor%Nnodes1D)
-      real*8,allocatable :: u(:,:),u_tilde(:,:)
-      integer :: ierr
+    INTEGER :: neq,Ne,Nf,Nfe,unkF,Np,N2d,Np2d,Nfl,iel,iElem,ifa,iFace,i,itor,ntorloc,nut
+    INTEGER :: c,Np1Dpol,Np1Dtor,Nfdir,sh
+    INTEGER :: ind_ue(refElTor%Nnodes3D),ind2(refElPol%Nnodes2D)
+    INTEGER :: ind3(refElPol%Nnodes2D*refElTor%Nnodes1D),indl(refElPol%Nnodes1D*refElTor%Nnodes1D)
+    REAL*8,ALLOCATABLE :: u(:,:),u_tilde(:,:)
 
       sol%u_tilde = 0.d0
       neq = phys%Neq
       N2D = Mesh%Nelems                  ! Number of 2D elements
       Np2D = refElPol%Nnodes2D            ! Number of nodes for each 2D element
 #ifdef PARALL
-      IF (MPIvar%ntor .gt. 1) THEN
+    IF (MPIvar%ntor .GT. 1) THEN
         ntorloc = numer%ntor/MPIvar%ntor + 1
       ELSE
         ntorloc = numer%ntor
@@ -714,11 +712,11 @@ CONTAINS
       unkF = Mesh%ukf
       Np = Np2D*refElTor%Nnodes1D       ! Number of nodes for each 3D element
 #ifdef PARALL
-      if (MPIvar%ntor .gt. 1) then
+    IF (MPIvar%ntor .GT. 1) THEN
         nut = ntorloc*(Nfl*Nf + Np2d*N2d) + Np2d*N2d ! Size of utilde per equation
-      else
+    ELSE
         nut = ntorloc*(Nfl*Nf + Np2d*N2d) ! Size of utilde per equation
-      endif
+    ENDIF
 #else
       nut = ntorloc*(Nfl*Nf + Np2d*N2d) ! Size of utilde per equation
 #endif
@@ -733,7 +731,7 @@ CONTAINS
       ALLOCATE (u(Ne*Np,neq))
       ALLOCATE (u_tilde(nut,neq))
       u_tilde = 0.d0
-      u = transpose(reshape(sol%u,(/neq,Ne*Np/)))
+    u = TRANSPOSE(RESHAPE(sol%u,(/neq,Ne*Np/)))
 
       ! Loop in elements
       c = 0
@@ -760,7 +758,7 @@ CONTAINS
         DO iFace = 1,Mesh%Nextfaces
           iel = Mesh%extfaces(iFace,1)
           ifa = Mesh%extfaces(iFace,2)
-          IF (.not. Mesh%Fdir(iel,ifa)) THEN
+          IF (.NOT. Mesh%Fdir(iel,ifa)) THEN
             iElem = (itor - 1)*N2D+iel
             ind_ue = (iElem - 1)*Np + ind3
             u_tilde(c + indl,:) = u(ind_ue(refElTor%faceNodes3(ifa,:)),:)
@@ -771,7 +769,7 @@ CONTAINS
 
 #ifdef PARALL
       ! Add solution on toroidal ghost faces
-      IF (MPIvar%ntor .gt. 1) THEN
+    IF (MPIvar%ntor .GT. 1) THEN
         sh = (Np1Dtor - 1)*Np2d
         DO iel = 1,N2D
           iElem = (ntorloc - 1)*N2D+iel
@@ -781,17 +779,16 @@ CONTAINS
         END DO
       ENDIF
 #endif
-      sol%u_tilde = reshape(transpose(u_tilde),(/nut*neq/))
+    sol%u_tilde = RESHAPE(TRANSPOSE(u_tilde),(/nut*neq/))
 
       DEALLOCATE (u,u_tilde)
     END SUBROUTINE extractFaceSolution
 #else
     SUBROUTINE extractFaceSolution
-      integer :: neq,Ne,Nf,Nfe,unkF,Np,Nfp,iElem,ifa,iFace,i
-      integer :: ind_uf(1:Mesh%Nnodesperface),faceNodes(1:Mesh%Nnodesperface)
-      integer :: ind_ue(1:Mesh%Nnodesperelem)
-      logical :: alreadydone(1:Mesh%ukf)
-      real*8,allocatable :: u(:,:),u_tilde(:,:)
+    INTEGER :: neq,Ne,Nf,Nfe,unkF,Np,Nfp,iElem,ifa,iFace,i
+    INTEGER :: ind_uf(1:Mesh%Nnodesperface),faceNodes(1:Mesh%Nnodesperface)
+    INTEGER :: ind_ue(1:Mesh%Nnodesperelem)
+    REAL*8,ALLOCATABLE :: u(:,:),u_tilde(:,:)
 
       sol%u_tilde = 0.d0
       neq = phys%Neq
@@ -805,7 +802,7 @@ CONTAINS
       ALLOCATE (u(1:Ne*Np,1:neq))
       ALLOCATE (u_tilde(1:Nf*Nfp,1:neq))
       u_tilde = 0.d0
-      u = transpose(reshape(sol%u,(/neq,Ne*Np/)))
+    u = TRANSPOSE(RESHAPE(sol%u,(/neq,Ne*Np/)))
 
       DO iFace = 1,Mesh%Nintfaces
         iElem = Mesh%intfaces(iFace,1)
@@ -819,14 +816,14 @@ CONTAINS
       DO iFace = 1,Mesh%Nextfaces
         iElem = Mesh%extfaces(iFace,1)
         ifa = Mesh%extfaces(iFace,2)
-        IF (.not. Mesh%Fdir(iElem,ifa)) THEN
+       IF (.NOT. Mesh%Fdir(iElem,ifa)) THEN
           ind_ue = (iElem - 1)*Np + (/(i,i=1,Np)/)
           ind_uf = Mesh%Nintfaces*Nfp + (iFace - 1)*Nfp + (/(i,i=1,Nfp)/)
           faceNodes = refElPol%Face_nodes(ifa,:)
           u_tilde(ind_uf,:) = u(ind_ue(faceNodes),:)
         END IF
       END DO
-      sol%u_tilde = reshape(transpose(u_tilde),(/Nf*Nfp*neq/))
+    sol%u_tilde = RESHAPE(TRANSPOSE(u_tilde),(/Nf*Nfp*neq/))
 
       DEALLOCATE (u,u_tilde)
     END SUBROUTINE extractFaceSolution
@@ -835,26 +832,29 @@ CONTAINS
 
 
   SUBROUTINE add_perturbation()
-    integer             :: Np1d,Np2d,Np
-    integer             :: itor,itorg,iel,iel2,i,imod,nmod,ieq,indl,iphi,ntorloc,itheta
-    integer,allocatable :: ind(:)
-    real*8              :: Xe(Mesh%Nnodesperelem,Mesh%Ndim),pertphi,perttheta
-#ifdef TOR3D
-    real*8              :: tdiv(numer%ntor + 1)
-    real*8              :: htor,tel(refElTor%Nnodes1d)
-#endif
-    real*8 :: phi,theta,amp
-    real*8,allocatable  :: u(:,:)
+    INTEGER             :: Np
+    INTEGER             :: iel,i,imod,nmod,ieq,indl, iel2, iphi
+    INTEGER,ALLOCATABLE :: ind(:)
+    REAL*8              :: Xe(Mesh%Nnodesperelem,Mesh%Ndim),pertphi,perttheta
+    REAL*8              :: phi,amp
+    REAL*8,ALLOCATABLE  :: u(:,:)
 
-    allocate(u(size(sol%u)/phys%neq,phys%neq))
-    u = transpose(reshape(sol%u,[phys%neq,size(sol%u)/phys%neq]))
+#ifdef TOR3D
+    INTEGER             :: itor, itorg, itheta, Np1d, Np2d, ntorloc
+    REAL*8              :: tdiv(numer%ntor + 1), tel(refElTor%Nnodes1d)
+    REAL*8              :: htor, theta
+#endif
+
+
+    ALLOCATE(u(SIZE(sol%u)/phys%neq,phys%neq))
+    u = TRANSPOSE(RESHAPE(sol%u,[phys%neq,SIZE(sol%u)/phys%neq]))
 
     amp = 1e-3
     nmod = 10
 
 #ifdef TOR3D
 #ifdef PARALL
-    IF (MPIvar%ntor .gt. 1) THEN
+    IF (MPIvar%ntor .GT. 1) THEN
       ntorloc = numer%ntor/MPIvar%ntor + 1
     ELSE
       ntorloc = numer%ntor
@@ -869,7 +869,7 @@ CONTAINS
     Np = refElPol%Nnodes2D
 #endif
 
-    allocate(ind(Np))
+    ALLOCATE(ind(Np))
 
 #ifdef TOR3D
     htor = numer%tmax/numer%ntor
@@ -881,7 +881,7 @@ CONTAINS
     DO itor = 1,ntorloc
 #ifdef PARALL
       itorg = itor + (MPIvar%itor - 1)*numer%ntor/MPIvar%ntor
-      if (itorg == numer%ntor + 1) itorg = 1
+       IF (itorg == numer%ntor + 1) itorg = 1
 #else
       itorg = itor
       tel = tdiv(itorg) + 0.5*(refElTor%coord1d+1)*(tdiv(itorg + 1) - tdiv(itorg))
@@ -899,11 +899,11 @@ CONTAINS
 #ifdef TOR3D
           DO itheta =1,refElTor%Nnodes1d
             theta = tel(itheta)
-            perttheta = 1+amp*(cos(imod*theta))
+                perttheta = 1+amp*(COS(imod*theta))
 #endif
             DO iphi = 1,refElPol%Nnodes2D
-              phi = atan2(Xe(iphi,2),Xe(iphi,1)-geom%R0)
-              pertphi = (1+amp*(cos(imod*phi)))
+                   phi = ATAN2(Xe(iphi,2),Xe(iphi,1)-geom%R0)
+                   pertphi = (1+amp*(COS(imod*phi)))
               indl = iphi
 #ifdef TOR3D
               indl = (itheta-1)*refElPol%Nnodes2D+iphi
@@ -920,28 +920,29 @@ CONTAINS
 #ifdef TOR3D
     END DO ! toroidal loop
 #endif
-    sol%u = col(transpose(u))
-    deallocate(ind,u)
+    sol%u = col(TRANSPOSE(u))
+    DEALLOCATE(ind,u)
 
   END SUBROUTINE add_perturbation
 
 
 
   SUBROUTINE add_blob()
-    integer             :: itor,itorg,iel,i,imod,nmod
-    integer             :: ind(refElPol%Nnodes2D)
-    real*8              :: Xe(refElPol%Nnodes2D,Mesh%Ndim)
-    real*8              :: xmax,xmin,ymax,ymin,xm,ym,smod,rs,xsource,ysource
-    real*8              :: dsource(refElPol%Nnodes2D),aux(refElPol%Nnodes2D)
-    real*8,allocatable  :: u(:,:)
+    INTEGER             :: iel,i
+    INTEGER             :: ind(refElPol%Nnodes2D)
+    REAL*8              :: Xe(refElPol%Nnodes2D,Mesh%Ndim)
+    REAL*8              :: xmax,xmin,ymax,ymin,xm,ym,smod,rs,xsource,ysource
+    REAL*8              :: dsource(refElPol%Nnodes2D),aux(refElPol%Nnodes2D)
+    REAL*8,ALLOCATABLE  :: u(:,:)
 
 #ifdef TOR3D
-    write(6,*) "Blob perturbation not implemented yet"
-    stop
+    WRITE(6,*) "Blob perturbation not implemented yet"
+    STOP
 #endif
 
-    allocate(u(size(sol%u)/phys%neq,phys%neq))
-    u = transpose(reshape(sol%u,[phys%neq,size(sol%u)/phys%neq]))
+    ALLOCATE(u(SIZE(sol%u)/phys%neq,phys%neq))
+    u = TRANSPOSE(RESHAPE(sol%u,[phys%neq,SIZE(sol%u)/phys%neq]))
+
     xmax = Mesh%xmax
     xmin = Mesh%xmin
     ymax = Mesh%ymax
@@ -956,224 +957,597 @@ CONTAINS
       rs = 0.04/simpar%refval_length
       xsource = xm+0.85*(xmax-xm)
       ysource = ym
-      dsource   = sqrt((Xe(:,1)-xsource)**2+(Xe(:,2)-ysource)**2)
+       dsource   = SQRT((Xe(:,1)-xsource)**2+(Xe(:,2)-ysource)**2)
       aux = -dsource**2/rs**2
       DO i=1,refElPol%Nnodes2D
-        if (aux(i).gt.-30) then
-          u(ind(i),1) =  u(ind(i),1)+smod*exp(aux(i))
-        endif
+          IF (aux(i).GT.-30) THEN
+             u(ind(i),1) =  u(ind(i),1)+smod*EXP(aux(i))
+          ENDIF
       END DO
     END DO ! elements 2d
-    sol%u = col(transpose(u))
 
-    deallocate(u)
+    sol%u = col(TRANSPOSE(u))
+
+    DEALLOCATE(u)
   END SUBROUTINE add_blob
 
 
- SUBROUTINE projectSolutionDifferentMeshes(xs)
- use reference_element, only:orthopoly2d,orthopoly1d,permutation_quads
- use linearAlgebra, only:solve_linear_system_sing,solve_linear_system
+  SUBROUTINE projectSolutionDifferentMeshes_general(T1, X1, T2, X2, u1, q1, u2, q2)
 
- real*8, intent(in)  :: xs(:,:)
- real*8, allocatable:: u_prov(:,:),q_prov(:,:)
- integer :: np,neq,iel,ip,nnod,nnod1
- integer :: ind_u(refElPol%Nnodes2D*phys%Neq),ind_q(refElPol%Nnodes2D*phys%Neq*2)
- integer, allocatable :: correl(:)
- real*8  :: Xe(3,2),d,xieta(2),mat(3,3),bc(3),Xq(4,2)
- real*8  :: V(1:refElPol%Nnodes2D, 1:refElPol%Nnodes2D)
- real*8  :: V1(1:refElPol%Nnodes1D, 1:refElPol%Nnodes1D)
- real*8  :: sf(refElPol%Nnodes2D),sf1(refElPol%Nnodes1D),sf2(refElPol%Nnodes1D)
- real*8  :: b1,b2,b3,dd
- real*8  :: a11,a12,a13,a21,a22,a23,a31,a32,a33
- real*8 :: r, s, p(1:refElPol%Nnodes2D),q1(refElPol%Nnodes1D),q2(refElPol%Nnodes1D)
- integer*4 :: i,j,perm(refElPol%Nnodes2D)
- real*8 :: tol
+    INTEGER, INTENT(IN)                                    :: T1(:,:), T2(:,:)
+    REAL*8, INTENT(IN)                                     :: X1(:,:), X2(:,:)
+    REAL*8, POINTER, DIMENSION(:), INTENT(IN)              :: u1(:)
+    REAL*8, POINTER, DIMENSION(:), OPTIONAL, INTENT(IN)    :: q1(:)
+    REAL*8, POINTER, DIMENSION(:), INTENT(INOUT)           :: u2(:)
+    REAL*8, POINTER, DIMENSION(:), OPTIONAL, INTENT(INOUT) :: q2(:)
+    REAL*8, ALLOCATABLE, DIMENSION(:,:)                    :: u1_2D, u2_2D
+    REAL*8, ALLOCATABLE, DIMENSION(:,:,:)                  :: q1_3D, q2_3D
+    INTEGER                                                :: i,j,k, counter
 
 
- IF (MPIvar%glob_id .eq. 0) THEN
-    write (6,*) "*** Projecting the solution: find corresponding elements"
+    ALLOCATE(u1_2D(SIZE(T1,1)*SIZE(T1,2), phys%neq))
+    ALLOCATE(u2_2D(SIZE(T2,1)*SIZE(T2,2), phys%neq))
+
+    IF(PRESENT(q1)) THEN
+       ALLOCATE(q1_3D(SIZE(T1,1)*SIZE(T1,2), phys%neq, refElPol%ndim))
+       ALLOCATE(q2_3D(SIZE(T2,1)*SIZE(T2,2), phys%neq, refElPol%ndim))
+       q1_3D = 0.
+       q2_3D = 0.
  ENDIF
 
- tol = max(abs(Mesh%xmax),abs(Mesh%xmin),abs(Mesh%ymax),abs(Mesh%ymin))*1e-5
+    u1_2D = 0.
+    u2_2D = 0.
 
- np = size(xs,1)
- neq = phys%Neq
- nnod = refElPol%Nnodes2D
- nnod1= refElPol%Nnodes1D
- allocate(u_prov(neq,np))
- allocate(q_prov(neq*2,np))
- allocate(correl(np))
- correl = 0
+    counter = 1
+    ! reshape u sol
+    DO i = 1, SIZE(u1_2D,1)
+       DO j = 1, SIZE(u1_2D,2)
+          u1_2D(i,j) = u1(counter)
+          counter = counter + 1
+       ENDDO
+    ENDDO
 
- ! Find corresponding element
- do iel = 1,size(Mesh%T,1)
-    Xe = Mesh%X(Mesh%T(iel,1:3),:)
-    mat(1,1:3) = Xe(1:3,1)
-    mat(2,1:3) = Xe(1:3,2)
-    mat(3,1:3) = 1.
-				dd = (mat(1,1)*mat(2,2)*mat(3,3) - mat(1,1)*mat(2,3)*mat(3,2) - mat(1,2)*mat(2,1)*mat(3,3) + &
-							  &mat(1,2)*mat(2,3)*mat(3,1) + mat(1,3)*mat(2,1)*mat(3,2) - mat(1,3)*mat(2,2)*mat(3,1))
+    IF(PRESENT(q1)) THEN
+       counter = 1
+       ! q1_3D not as easy
+       DO i = 1, SIZE(q1_3D,1)
+          DO j = 1, SIZE(q1_3D,2)
+             DO k = 1, SIZE(q1_3D,3)
+                q1_3D(i,j,k) = q1(counter)
+                counter = counter + 1
+             ENDDO
+          ENDDO
+       ENDDO
+    ENDIF
 
-				a11 =   mat(2,2)*mat(3,3) - mat(2,3)*mat(3,2)
-				a12 = - mat(1,2)*mat(3,3) + mat(1,3)*mat(3,2)
-				a13 =   mat(1,2)*mat(2,3) - mat(1,3)*mat(2,2)
-				a21 = - mat(2,1)*mat(3,3) + mat(2,3)*mat(3,1)
-				a22 =   mat(1,1)*mat(3,3) - mat(1,3)*mat(3,1)
-				a23 = - mat(1,1)*mat(2,3) + mat(1,3)*mat(2,1)
-				a31 =   mat(2,1)*mat(3,2) - mat(2,2)*mat(3,1)
-				a32 = - mat(1,1)*mat(3,2) + mat(1,2)*mat(3,1)
-				a33 =   mat(1,1)*mat(2,2) - mat(1,2)*mat(2,1)
-				do i=1,np
+    IF(PRESENT(q1)) THEN
+       CALL projectSolutionDifferentMeshes_Mod(T1, X1, T2, X2, u1_2D, q1_3D, u2_2D, q2_3D)
+    ELSE
+       CALL projectSolutionDifferentMeshes_Mod(T1, X1, T2, X2, u_old = u1_2D, u_new=u2_2D)
+    ENDIF
 
-							b1 = xs(i,1)
-							b2 = xs(i,2)
+    IF(SIZE(u2) .NE. SIZE(u2_2D)) THEN
+       DEALLOCATE(u2)
+       ALLOCATE(u2(SIZE(u2_2D)))
+    ENDIF
+
+    IF(PRESENT(q1)) THEN
+       IF(SIZE(q2) .NE. SIZE(q2_3D)) THEN
+          DEALLOCATE(q2)
+          ALLOCATE(q2(SIZE(q2_3D)))
+       ENDIF
+    ENDIF
+    ! solu is easy to reshape
+    counter = 1
+    DO i = 1, SIZE(u2_2D,1)
+       DO j = 1, SIZE(u2_2D,2)
+          u2(counter)   = u2_2D(i,j)
+          counter = counter + 1
+       ENDDO
+    ENDDO
+
+    IF(PRESENT(q1)) THEN
+       ! solq is not as easy
+       counter = 1
+       DO i = 1, SIZE(q2_3D,1)
+          DO j = 1, SIZE(q2_3D,2)
+             DO k = 1, SIZE(q2_3D,3)
+                q2(counter)   = q2_3D(i,j,k)
+                counter = counter + 1
+             ENDDO
+          ENDDO
+       ENDDO
+    ENDIF
+
+    DEALLOCATE(u2_2D)
+    DEALLOCATE(u1_2D)
+
+    IF(PRESENT(q1)) THEN
+       DEALLOCATE(q2_3D)
+       DEALLOCATE(q1_3D)
+    ENDIF
+
+  ENDSUBROUTINE projectSolutionDifferentMeshes_general
+
+  SUBROUTINE projectSolutionDifferentMeshes_general_arrays(T1, X1, T2, X2, u1, q1, u2, q2)
+
+    INTEGER, INTENT(IN)                                :: T1(:,:), T2(:,:)
+    REAL*8, INTENT(IN)                                 :: X1(:,:), X2(:,:)
+    REAL*8, DIMENSION(:), INTENT(IN)                   :: u1(:)
+    REAL*8, DIMENSION(:), OPTIONAL,INTENT(IN)          :: q1(:)
+    REAL*8, DIMENSION(:), INTENT(INOUT)                :: u2
+    REAL*8, DIMENSION(:), OPTIONAL,INTENT(INOUT)       :: q2
+    REAL*8, ALLOCATABLE, DIMENSION(:,:)                :: u1_2D, u2_2D
+    REAL*8, ALLOCATABLE, DIMENSION(:,:,:)              :: q1_3D, q2_3D
+    INTEGER                                            :: i,j,k, counter
+
+    ALLOCATE(u1_2D(SIZE(T1,1)*SIZE(T1,2), phys%neq))
+    ALLOCATE(u2_2D(SIZE(T2,1)*SIZE(T2,2), phys%neq))
+
+
+    IF(PRESENT(q1)) THEN
+       ALLOCATE(q1_3D(SIZE(T1,1)*SIZE(T1,2), phys%neq, refElPol%ndim))
+       ALLOCATE(q2_3D(SIZE(T2,1)*SIZE(T2,2), phys%neq, refElPol%ndim))
+       q1_3D = 0.
+       q2_3D = 0.
+    ENDIF
+
+    u1_2D = 0.
+    u2_2D = 0.
+
+
+    counter = 1
+    ! reshape u sol
+    DO i = 1, SIZE(u1_2D,1)
+       DO j = 1, SIZE(u1_2D,2)
+          u1_2D(i,j) = u1(counter)
+          counter = counter + 1
+       ENDDO
+    ENDDO
+
+
+    IF(PRESENT(q1)) THEN
+       counter = 1
+       DO i = 1, SIZE(q1_3D,1)
+          DO j = 1, SIZE(q1_3D,2)
+             DO k = 1, SIZE(q1_3D,3)
+                q1_3D(i,j,k) = q1(counter)
+                counter = counter + 1
+             ENDDO
+          ENDDO
+       ENDDO
+    ENDIF
+
+    IF(PRESENT(q1)) THEN
+       CALL projectSolutionDifferentMeshes_mod(T1, X1, T2, X2, u1_2D, q1_3D, u2_2D, q2_3D)
+    ELSE
+       CALL projectSolutionDifferentMeshes_mod(T1, X1, T2, X2, u_old=u1_2D, u_new = u2_2D)
+    ENDIF
+
+    ! IF(SIZE(u) .ne. SIZE(u2_2D)) THEN
+    !   DEALLOCATE(u)
+    !   ALLOCATE(u(SIZE(u2_2D)))
+    ! ENDIF
+    !
+    ! IF(SIZE(q) .ne. SIZE(q2_3D)) THEN
+    !   DEALLOCATE(q)
+    !   ALLOCATE(q(SIZE(q2_3D)))
+    ! ENDIF
+
+    ! solu is easy to reshape
+    counter = 1
+    DO i = 1, SIZE(u2_2D,1)
+       DO j = 1, SIZE(u2_2D,2)
+          u2(counter)   = u2_2D(i,j)
+          counter = counter + 1
+       ENDDO
+    ENDDO
+
+    IF(PRESENT(q1)) THEN
+       ! solq is not as easy
+       counter = 1
+       DO i = 1, SIZE(q2_3D,1)
+          DO j = 1, SIZE(q2_3D,2)
+             DO k = 1, SIZE(q2_3D,3)
+                q2(counter)   = q2_3D(i,j,k)
+                counter = counter + 1
+             ENDDO
+          ENDDO
+       ENDDO
+       DEALLOCATE(q2_3D)
+       DEALLOCATE(q1_3D)
+    ENDIF
+
+    DEALLOCATE(u2_2D)
+    DEALLOCATE(u1_2D)
+
+
+  ENDSUBROUTINE projectSolutionDifferentMeshes_general_arrays
+
+  SUBROUTINE projectSolutionDifferentMeshes_Mod(T1, X1, T2, X2, u_old, q_old, u_new, q_new)
+    USE linearAlgebra, ONLY: solve_linear_system_sing, colint, invert_matrix
+    USE adaptivity_common_module, ONLY: unique_1D, find_matches_int, inverse_isop_transf
+    USE reference_element, ONLY: compute_shape_functions_at_points
+
+    INTEGER, INTENT(IN)         :: T1(:,:), T2(:,:)
+    REAL*8, INTENT(IN)          :: X1(:,:), X2(:,:)
+    REAL*8                      :: xs(SIZE(T2,1)*SIZE(T2,2), 2)
+
+    REAL*8, INTENT(IN)          :: u_old(:,:)
+    REAL*8, OPTIONAL,INTENT(IN) :: q_old(:,:,:)
+
+    REAL*8, INTENT(OUT)         :: u_new(:,:)
+    REAL*8, OPTIONAL,INTENT(OUT):: q_new(:,:,:)
+
+    REAL*8                      :: X_old(SIZE(X1,1), SIZE(X1,2)), Xe_elem(Mesh%Nnodesperelem, refElPol%Ndim)
+    REAL*8                      :: A(3,3), b(3, SIZE(xs,1)), bcc(3)
+    REAL*8                      :: tol, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3
+    INTEGER                     :: T_old(SIZE(T1,1), SIZE(T1,2)), ind(SIZE(T1,2)), correl(SIZE(xs,1)), indcheck(SIZE(xs,1))
+    INTEGER                     :: i, j, counter, n_elements, np_perelem, iel
+    REAL*8,  ALLOCATABLE        :: shapeFunctions(:,:,:)
+    REAL*8,  ALLOCATABLE        :: x(:,:), xieta(:,:)
+    REAL*8, ALLOCATABLE         :: u_old_ind(:,:), q_old_ind(:,:,:)
+    REAL*8, ALLOCATABLE         :: u_prov(:,:), q_prov(:,:,:)
+    INTEGER, ALLOCATABLE        :: correl_unique(:), indices(:)
+    INTEGER                     :: elem_full(SIZE(T1,1))
+
+    u_new = 0
+    IF(PRESENT(q_new)) THEN
+       q_new = 0
+    ENDIF
+
+    ALLOCATE(u_old_ind(SIZE(T1,2), SIZE(u_old,2)))
+    u_old_ind = 0
+    ALLOCATE(u_prov(SIZE(xs,1), SIZE(u_old,2)))
+    u_prov = 0
+
+    IF(PRESENT(q_old)) THEN
+       ALLOCATE(q_prov(SIZE(xs,1), SIZE(q_old,2), SIZE(q_old,3)))
+       ALLOCATE(q_old_ind(SIZE(T1,2), SIZE(q_old,2),2))
+       q_prov = 0
+       q_old_ind = 0
+    ENDIF
+
+
+    n_elements = SIZE(T_old,1)
+    np_perelem = SIZE(T_old,2)
+    xs = X2(colint(TRANSPOSE(T2)),:)
+    X_old = X1
+    T_old = T1
+    elem_full = 0
+    u_prov = 0
+
+
+    correl = 0
+    indcheck = 0
+
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE(6,*) "*** Projecting the solution: find corresponding elements"
+    ENDIF
+
+    !$OMP parallel private(iel, counter, i, tol, Xe_elem, A, b, bcc, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3) shared( xs, X_old, T_old, correl)
+    tol = 1e-11
+    A(3,:) = 1.
 							b3 = 1.
-							bc(1) = (a11*b1+a12*b2+a13*b3)/dd
-							bc(2) = (a21*b1+a22*b2+a23*b3)/dd
-							bc(3) = (a31*b1+a32*b2+a33*b3)/dd
-							if ( bc(1)>=-tol .and. bc(2)>=-tol .and. bc(3)>=-tol .and. bc(1)<=1+tol .and. bc(2)<=1+tol .and. bc(3)<=1+tol) then
-			       correl(i) = iel
-			    endif
-				end do
 
-				if (refElPol%elemType==1) then
-						 Xe = Mesh%X(Mesh%T(iel,(/1,3,4/)),:)
-						 mat(1,1:3) = Xe(1:3,1)
-						 mat(2,1:3) = Xe(1:3,2)
-						 mat(3,1:3) = 1.
-							dd = (mat(1,1)*mat(2,2)*mat(3,3) - mat(1,1)*mat(2,3)*mat(3,2) - mat(1,2)*mat(2,1)*mat(3,3) + &
-												&mat(1,2)*mat(2,3)*mat(3,1) + mat(1,3)*mat(2,1)*mat(3,2) - mat(1,3)*mat(2,2)*mat(3,1))
+    DO
+       !$OMP DO SCHEDULE(STATIC)
+       DO iel = 1, n_elements
+          Xe_elem = X_old(T_old(iel,1:3),:)
+          A(1,:) = Xe_elem(1:3,1)
+          A(2,:) = Xe_elem(1:3,2)
 
-							a11 =   mat(2,2)*mat(3,3) - mat(2,3)*mat(3,2)
-							a12 = - mat(1,2)*mat(3,3) + mat(1,3)*mat(3,2)
-							a13 =   mat(1,2)*mat(2,3) - mat(1,3)*mat(2,2)
-							a21 = - mat(2,1)*mat(3,3) + mat(2,3)*mat(3,1)
-							a22 =   mat(1,1)*mat(3,3) - mat(1,3)*mat(3,1)
-							a23 = - mat(1,1)*mat(2,3) + mat(1,3)*mat(2,1)
-							a31 =   mat(2,1)*mat(3,2) - mat(2,2)*mat(3,1)
-							a32 = - mat(1,1)*mat(3,2) + mat(1,2)*mat(3,1)
-							a33 =   mat(1,1)*mat(2,2) - mat(1,2)*mat(2,1)
-							do i=1,np
+          detA = (A(1,1)*A(2,2)*A(3,3) - A(1,1)*A(2,3)*A(3,2) - A(1,2)*A(2,1)*A(3,3) + &
+               &A(1,2)*A(2,3)*A(3,1) + A(1,3)*A(2,1)*A(3,2) - A(1,3)*A(2,2)*A(3,1))
 
+          a11 =   A(2,2)*A(3,3) - A(2,3)*A(3,2)
+          a12 = - A(1,2)*A(3,3) + A(1,3)*A(3,2)
+          a13 =   A(1,2)*A(2,3) - A(1,3)*A(2,2)
+          a21 = - A(2,1)*A(3,3) + A(2,3)*A(3,1)
+          a22 =   A(1,1)*A(3,3) - A(1,3)*A(3,1)
+          a23 = - A(1,1)*A(2,3) + A(1,3)*A(2,1)
+          a31 =   A(2,1)*A(3,2) - A(2,2)*A(3,1)
+          a32 = - A(1,1)*A(3,2) + A(1,2)*A(3,1)
+          a33 =   A(1,1)*A(2,2) - A(1,2)*A(2,1)
+
+          DO i=1,SIZE(xs,1)
+             IF(correl(i) .NE. 0) CYCLE
 										b1 = xs(i,1)
 										b2 = xs(i,2)
-										b3 = 1.
-										bc(1) = (a11*b1+a12*b2+a13*b3)/dd
-										bc(2) = (a21*b1+a22*b2+a23*b3)/dd
-										bc(3) = (a31*b1+a32*b2+a33*b3)/dd
-										if ( bc(1)>=-tol .and. bc(2)>=-tol .and. bc(3)>=-tol .and. bc(1)<=1+tol .and. bc(2)<=1+tol .and. bc(3)<=1+tol) then
-									    correl(i) = iel
-									 endif
-							end do
-				endif
- end do
 
+             bcc(1) = (a11*b1+a12*b2+a13*b3)/detA
+             bcc(2) = (a21*b1+a22*b2+a23*b3)/detA
+             bcc(3) = (a31*b1+a32*b2+a33*b3)/detA
 
- IF (MPIvar%glob_id .eq. 0) THEN
-    write (6,*) "*** Projecting the solution: interpolation at points"
+             IF ( bcc(1)>=-tol .AND. bcc(2)>=-tol .AND. bcc(3)>=-tol .AND. bcc(1)<=1+tol .AND. bcc(2)<=1+tol .AND. bcc(3)<=1+tol) THEN
+                correl(i) = iel
  ENDIF
+          ENDDO
+       ENDDO
+       !$OMP END DO
 
-! call displayVectorInt(correl(1:1000))
-! stop
- do ip = 1,np
+       !$OMP BARRIER
+       IF(ALL(correl .NE. 0)) THEN
+          EXIT
+       ENDIF
 
-    iel = correl(ip)
-    if (iel==0) then
-     write(6,*) "Element not found for point: ", xs(i,:), " Stopping"
-     stop
-    endif
+       tol = tol * 10
 
-    ! Find the corresponding point in the reference element (linear approach so far)
-    if (refElPol%elemType==0) then
-						 Xe = Mesh%X(Mesh%T(iel,1:3),:)
-						 d = 0.5*( (Xe(2,1)-Xe(1,1))*(Xe(3,2)-Xe(1,2))-(Xe(3,1)-Xe(1,1))*(Xe(2,2)-Xe(1,2)))
-
-						 xieta(1)= 1./d*( (Xe(3,2)-Xe(1,2))*(xs(ip,1)-0.5*(Xe(2,1)+Xe(3,1)) ) - (Xe(3,1)-Xe(1,1))*(xs(ip,2)-0.5*(Xe(2,2)+Xe(3,2)) ) )
-						 xieta(2)= 1./d*( (Xe(2,1)-Xe(1,1))*(xs(ip,2)-0.5*(Xe(2,2)+Xe(3,2)) ) - (Xe(2,2)-Xe(1,2))*(xs(ip,1)-0.5*(Xe(2,1)+Xe(3,1)) ) )
-    else if (refElPol%elemType==1) then
-						 Xq = Mesh%X(Mesh%T(iel,1:4),:)
-						 d = 0.25*( (Xq(2,1)+Xq(3,1)-Xq(1,1)-Xq(4,1))*(Xq(3,2)+Xq(4,2)-Xq(1,2)-Xq(2,2)) - &
-						           &(Xq(2,2)+Xq(3,2)-Xq(1,2)-Xq(4,2))*(Xq(3,1)+Xq(4,1)-Xq(1,1)-Xq(2,1)) )
-
-						 xieta(1)= 1./d*( (Xq(3,2)+Xq(4,2)-Xq(1,2)-Xq(2,2))*(xs(ip,1)-0.25*(Xq(1,1)+Xq(2,1)+Xq(3,1)+Xq(4,1)) ) - &
-						                & (Xq(3,1)+Xq(4,1)-Xq(1,1)-Xq(2,1))*(xs(ip,2)-0.25*(Xq(1,2)+Xq(2,2)+Xq(3,2)+Xq(4,2)) ) )
-						 xieta(2)= 1./d*( (Xq(2,1)+Xq(3,1)-Xq(1,1)-Xq(4,1))*(xs(ip,2)-0.25*(Xq(1,2)+Xq(2,2)+Xq(3,2)+Xq(4,2)) ) - &
-						                 &(Xq(2,2)+Xq(3,2)-Xq(1,2)-Xq(4,2))*(xs(ip,1)-0.25*(Xq(1,1)+Xq(2,1)+Xq(3,1)+Xq(4,1)) ) )
-
-    end if
-
-    if (refElPol%elemType==0) then
-    ! Vandermond matrix
-						 V = 0.d0
-						 DO i = 1, nnod
-						   r = refElPol%coord2d(i, 1)
-						   s = refElPol%coord2d(i, 2)
-						   CALL orthopoly2d(r, s, nnod, refElPol%Ndeg, p)
-						   V(i, :) = p(:)
-						 END DO
-    ! Compute shape functions on triangles
-						 CALL orthopoly2d(xieta(1), xieta(2), nnod, refElPol%Ndeg, p)
-						 CALL solve_linear_system_sing(transpose(V), p, sf)
-    else if (refElPol%elemType==1) then
-    ! Vandermond matrix
-						 V1 = 0.d0
-						 DO i = 1, nnod1
-						   r = refElPol%coord1d(i)
-						   CALL orthopoly1d(r, refElPol%Ndeg, q1)
-						   V1(i, :) = q1(:)
-						 END DO
-    ! Compute shape functions on quads
-       CALL orthopoly1d(xieta(1), refElPol%Ndeg, q1)
-       CALL orthopoly1d(xieta(2), refElPol%Ndeg, q2)
-       CALL solve_linear_system_sing(transpose(V1), q1, sf1)
-       CALL solve_linear_system_sing(transpose(V1), q2, sf2)
-       perm = permutation_quads(refElPol)
-       sf(perm) = col(tensorProduct(sf1,sf2))
-    endif
+    ENDDO
+    !$OMP END PARALLEL
 
 
+    ! IF(ANY(correl .eq. 0)) THEN
+    !   WRITE(*,*) "Couldn't find a point in projection. STOP."
+    !
+    !
+    !   DO i = 1, SIZE(correl)
+    !     IF(correl(i) .eq. 0) THEN
+    !       WRITE(*,*) i, MOD(i, Mesh%Nnodesperelem)
+    !     ENDIF
+    !   ENDDO
+    !
+    !   STOP
+    ! ENDIF
 
-    ! Interpolation
-    ind_u =  (iel-1)*nnod*neq+(/(i,i=1,nnod*neq)/)
-    ind_q =  (iel-1)*nnod*neq*2+(/(i,i=1,nnod*neq*2)/)
-    u_prov(:,ip) = matmul(sf,transpose(reshape(sol%u(ind_u),[neq,nnod])))
-    q_prov(:,ip) = matmul(sf,transpose(reshape(sol%q(ind_q),[neq*2,nnod])))
+    WRITE(*,*) "TWO"
+
+    !$OMP parallel private(iel, indices, xieta, shapeFunctions, Xe_elem, x, ind, u_old_ind, q_old_ind) shared(xs, X_old, T_old, u_new, q_new, correl, n_elements, refElPol, np_perelem, indcheck)
+    !$OMP DO SCHEDULE(STATIC)
+    DO iel = 1, n_elements
+       IF(iel .EQ. 0) CYCLE
+
+       CALL find_matches_int(correl, iel, indices)
+
+       ALLOCATE(xieta(SIZE(indices), SIZE(xs,2)))
+       ALLOCATE(x(SIZE(indices), SIZE(xs,2)))
+       ALLOCATE(shapeFunctions(np_perelem, SIZE(indices), 3))
+
+       xieta = 0
+       x = 0
+       shapeFunctions = 0
+
+       !Xe_elem = X_old(T_old(iel,1:3),:)
+       Xe_elem = X_old(T_old(iel,:),:)
+       x = xs(indices,:)
+
+       ! Find the corresponding point in the reference element (linear approach so far)
+
+       ! a11 =   (Xe_elem(3,2)-Xe_elem(1,2))
+       ! a12 =   0.5*(Xe_elem(2,1)+Xe_elem(3,1))
+       ! a13 =   (Xe_elem(3,1)-Xe_elem(1,1))
+       ! a21 =   0.5*(Xe_elem(2,2)+Xe_elem(3,2))
+       ! a22 =   (Xe_elem(2,1)-Xe_elem(1,1))
+       ! a31 =   (Xe_elem(2,2)-Xe_elem(1,2))
+       ! a32 =   0.5*(Xe_elem(2,1)+Xe_elem(3,1))
+       !
+       ! d = 0.5*(a22*a11-a13*a31)
+       ! d = 1./d
+       !
+       ! xieta(:,1)= d*(a11*(x(:,1)-a12) - a13*(x(:,2)-a21))
+       ! xieta(:,2)= d*(a22*(x(:,2)-a21) - a31*(x(:,1)-a12))
+
+       ! this goddamn function always gives problems
+       CALL inverse_isop_transf(x, Xe_elem, refElPol, xieta)
+
+       ! just fucking brute force it
+       DO j = 1, SIZE(xieta,2)
+          DO i = 1, SIZE(xieta,1)
+             IF(ABS(xieta(i,j)-1.0) .LT. 1e-12) THEN
+                xieta(i,j) = xieta(i,j) - 1.e-10
+             ENDIF
+          ENDDO
+       ENDDO
+
+       CALL compute_shape_functions_at_points(refElPol, xieta, shapeFunctions)
+
+       ind = (iel-1)*np_perelem + (/ (j, j=1, np_perelem) /)
+
+       u_old_ind = u_old(ind, :)
+       u_new(indices,:) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), u_old_ind)
+
+       IF(PRESENT(q_old)) THEN
+          q_old_ind = q_old(ind, :, :)
+          q_new(indices,:,1) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), q_old_ind(:,:,1))
+          q_new(indices,:,2) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), q_old_ind(:,:,2))
+       ENDIF
+
+       DEALLOCATE(xieta)
+       DEALLOCATE(x)
+       DEALLOCATE(indices)
+       DEALLOCATE(shapeFunctions)
+    END DO
+    !$OMP END DO
+    !$OMP end parallel
+
+    WRITE(*,*) "THREE"
 
 
- end do
+    ! DO WHILE (ANY(indcheck .eq. 0))
+    !   tol = tol * 10
+    !
+    !   CALL find_matches_int(indcheck, 0, unknownnodes)
+    !
+    !   !$OMP parallel private(iel, i, Xe_elem, A, b, bcc, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3, d) shared(xs, X_old, T_old, correl, tol)
+    !    A(3,:) = 1.
+    !    b3 = 1.
+    !   !$OMP DO SCHEDULE(STATIC)
+    !    DO iel = 1, n_elements
+    !        Xe_elem = X_old(T_old(iel,1:3),:)
+    !        A(1,:) = Xe_elem(1:3,1)
+    !        A(2,:) = Xe_elem(1:3,2)
+    !
+    !        detA = (A(1,1)*A(2,2)*A(3,3) - A(1,1)*A(2,3)*A(3,2) - A(1,2)*A(2,1)*A(3,3) + &
+    !                  &A(1,2)*A(2,3)*A(3,1) + A(1,3)*A(2,1)*A(3,2) - A(1,3)*A(2,2)*A(3,1))
+    !
+    !        a11 =   A(2,2)*A(3,3) - A(2,3)*A(3,2)
+    !        a12 = - A(1,2)*A(3,3) + A(1,3)*A(3,2)
+    !        a13 =   A(1,2)*A(2,3) - A(1,3)*A(2,2)
+    !        a21 = - A(2,1)*A(3,3) + A(2,3)*A(3,1)
+    !        a22 =   A(1,1)*A(3,3) - A(1,3)*A(3,1)
+    !        a23 = - A(1,1)*A(2,3) + A(1,3)*A(2,1)
+    !        a31 =   A(2,1)*A(3,2) - A(2,2)*A(3,1)
+    !        a32 = - A(1,1)*A(3,2) + A(1,2)*A(3,1)
+    !        a33 =   A(1,1)*A(2,2) - A(1,2)*A(2,1)
+    !
+    !        DO i=1,SIZE(xs,1)
+    !
+    !              b1 = xs(i,1)
+    !              b2 = xs(i,2)
+    !
+    !              bcc(1) = (a11*b1+a12*b2+a13*b3)/detA
+    !              bcc(2) = (a21*b1+a22*b2+a23*b3)/detA
+    !              bcc(3) = (a31*b1+a32*b2+a33*b3)/detA
+    !
+    !              IF ( bcc(1)>=-tol .and. bcc(2)>=-tol .and. bcc(3)>=-tol .and. bcc(1)<=1+tol .and. bcc(2)<=1+tol .and. bcc(3)<=1+tol) then
+    !                correl(i) = iel
+    !              ENDIF
+    !        ENDDO
+    !    ENDDO
+    !    !$OMP END DO
+    !    !$OMP END PARALLEL
+    !
+    !   CALL unique_1D(correl, correl_unique)
+    !
+    !   WRITE(*,*) "FOUR"
+    !
+    !   !!$OMP parallel do schedule(static) private(i, iel, indices, xieta, x, shapeFunctions, Xe_elem, ind, u_old_ind, q_old_ind) shared(indcheck, correl, correl_unique, xs, X_old, T_old, refElPol, u_old, q_old, u_prov, q_prov)
+    !   DO i = 1, SIZE(correl_unique)
+    !     iel = correl_unique(i)
+    !
+    !     IF(iel .eq. 0) CYCLE
+    !
+    !     CALL find_matches_int(correl, iel, indices)
+    !     indcheck(indices) = 1
+    !
+    !     ALLOCATE(xieta(size(indices), size(xs,2)))
+    !     ALLOCATE(x(size(indices), size(xs,2)))
+    !     ALLOCATE(shapeFunctions(np_perelem, size(indices), 3))
+    !
+    !     Xe_elem = X_old(T_old(iel,:),:)
+    !     x = xs(indices,:)
+    !
+    !     ! Find the corresponding point in the reference element (linear approach so far)
+    !     a11 =   (Xe_elem(3,2)-Xe_elem(1,2))
+    !     a12 =   0.5*(Xe_elem(2,1)+Xe_elem(3,1))
+    !     a13 =   (Xe_elem(3,1)-Xe_elem(1,1))
+    !     a21 =   0.5*(Xe_elem(2,2)+Xe_elem(3,2))
+    !     a22 =   (Xe_elem(2,1)-Xe_elem(1,1))
+    !     a31 =   (Xe_elem(2,2)-Xe_elem(1,2))
+    !     a32 =   0.5*(Xe_elem(2,1)+Xe_elem(3,1))
+    !
+    !     d = 0.5*(a22*a11-a13*a31)
+    !     d = 1./d
+    !
+    !     xieta(:,1)= d*(a11*(x(:,1)-a12) - a13*(x(:,2)-a21))
+    !     xieta(:,2)= d*(a22*(x(:,2)-a21) - a31*(x(:,1)-a12))
+    !
+    !     ! this goddamn function always gives problems
+    !     !CALL inverse_isop_transf(x, Xe_elem, refElPol, xieta)
+    !
+    !     ! call HDF5_create('fortran_save_01.h5', file_id, ierr)
+    !     ! call HDF5_array2D_saving_int(file_id, T_old, size(T_old,1), size(T_old,2), 'T_old')
+    !     ! call HDF5_array2D_saving(file_id, X_old, size(X_old,1), size(X_old,2), 'X_old')
+    !     ! call HDF5_array2D_saving(file_id, Xe_elem, size(Xe_elem,1), size(Xe_elem,2), 'Xe_f')
+    !     ! call HDF5_array2D_saving(file_id, x, size(x,1),size(x,2), 'x_f')
+    !     ! call HDF5_integer_saving(file_id, iel, 'iel_f')
+    !     ! call HDF5_close(file_id)
+    !
+    !     ! just fucking brute force it
+    !     DO j = 1, SIZE(xieta,1)
+    !       IF(ANY(abs(xieta(j,:)-1.0) .lt. 1e-12)) THEN
+    !         xieta(j,:) = xieta(j,:) - 1.e-11
+    !       ENDIF
+    !     ENDDO
+    !
+    !     CALL compute_shape_functions_at_points(RefElPol, xieta, shapeFunctions)
+    !
+    !     ind = (iel-1)*np_perelem + (/ (j, j=1, np_perelem) /)
+    !
+    !     u_old_ind = u_old(ind, :)
+    !     u_prov(indices,:) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), u_old_ind)
+    !
+    !     IF(PRESENT(q_old)) THEN
+    !       q_old_ind = q_old(ind, :, :)
+    !       q_prov(indices,:,1) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), q_old_ind(:,:,1))
+    !       q_prov(indices,:,2) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), q_old_ind(:,:,2))
+    !     ENDIF
+    !
+    !     DEALLOCATE(xieta)
+    !     DEALLOCATE(x)
+    !     DEALLOCATE(indices)
+    !     DEALLOCATE(shapeFunctions)
+    !   END DO
+    !   !!$OMP end parallel do
+    !
+    !   u_new(unknownnodes,:) = u_prov(unknownnodes,:)
+    !   IF(PRESENT(q_old)) THEN
+    !     q_new(unknownnodes,:,:) = q_prov(unknownnodes,:,:)
+    !   ENDIF
+    !   DEALLOCATE(unknownnodes)
+    ! ENDDO
 
- deallocate(sol%u,sol%q,sol%u_tilde)
- allocate(sol%u(np*neq))
- allocate(sol%q(np*neq*2))
+    ! IF(ANY(indcheck .eq. 0)) THEN
+    !   WRITE(*,*) "indcheck equal to 0. STOPPING."
+    !   STOP
+    ! ENDIF
 
-! sol%u = col(u_prov)
-! sol%q = col(q_prov) ! warning, this may fill the stack
+    IF(ALLOCATED(correl_unique)) DEALLOCATE(correl_unique)
 
- do j=1,np
-   do i=1,neq
-   sol%u( i+(j-1)*neq ) = u_prov(i,j)
-   end do
- end do
+    DEALLOCATE(u_old_ind)
+    DEALLOCATE(u_prov)
+    IF(PRESENT(q_old)) THEN
+       DEALLOCATE(q_old_ind)
+       DEALLOCATE(q_prov)
+    ENDIF
 
- do j=1,np
-   do i=1,neq*2
-   sol%q( i+(j-1)*neq*2 ) = q_prov(i,j)
-   end do
- end do
+  END SUBROUTINE projectSolutionDifferentMeshes_Mod
 
 
- deallocate(u_prov,q_prov,correl)
+#ifdef WITH_PETSC
+  SUBROUTINE InitPETSC
+#include "petsc/finclude/petsc.h"
+    USE petsc, ONLY: PetscInitialize
+    !use petscsys
+    USE MPI_OMP
+    IMPLICIT NONE
 
- END SUBROUTINE projectSolutionDifferentMeshes
+    PetscErrorCode :: ierr
+    PetscBool      :: initialized
 
+    ! Init PETSC
+    CALL PetscInitialized(initialized, ierr)
+    IF (.NOT. initialized) THEN
+       CALL petscinitializenoarguments(ierr) ! Default communicator = MPI_COMM_WORLD
+    ENDIF
 
+    IF (ierr .NE. 0) THEN
+       PRINT*,'Unable to initialize PETSc even though it was requested. Aborting...'
+       CALL MPI_Abort(MPI_COMM_WORLD,-1,ierr)
+    ENDIF
 
+  END SUBROUTINE InitPETSC
 
+  SUBROUTINE FinalizePETSC
+#include "petsc/finclude/petsc.h"
+    USE petsc, ONLY: PetscFinalize
+    USE MPI_OMP
+    IMPLICIT NONE
 
+    PetscErrorCode :: ierr
+    PetscBool      :: finalized
 
+    ! Init PETSC
 
+    CALL PetscFinalized(finalized, ierr)
+    IF (.NOT. finalized) THEN
+       CALL PetscFinalize(ierr) ! Default communicator = MPI_COMM_WORLD
+    ENDIF
+    IF (ierr .NE. 0) THEN
+       PRINT*,'Unable to finalize PETSc even though it was requested. Aborting...'
+       CALL MPI_Abort(MPI_COMM_WORLD,-1,ierr)
+    ENDIF
 
-
-
-
+  END SUBROUTINE FinalizePETSC
+#endif
 END MODULE initialization
