@@ -209,29 +209,34 @@ CONTAINS
     USE HDF5_io_module
     USE reference_element
 
-    integer                           :: i, j, ierr, ip, jp, ind, k
-    integer(HID_T)                    :: file_id
-    real*8, pointer, dimension(:, :)  :: r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D
+    INTEGER                           :: i, ierr, ip, jp, ind, k
+#ifdef TOR3D
+    INTEGER                           :: j
+#endif
+    INTEGER(HID_T)                    :: file_id
+    REAL*8, POINTER, DIMENSION(:, :)  :: r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D
     !!! variables for computation derivatives of the flux
-    integer                           :: iel, inode
-    real*8                            :: shapeFunctions(refElpol%Nnodes2D,refElpol%Nnodes2D,3)
-    real*8                            :: Xel(refElpol%Nnodes2D,2)        !only for 2D so far
-    real*8                            :: J11(refElpol%Nnodes2D),J12(refElpol%Nnodes2D)
-    real*8                            :: J21(refElpol%Nnodes2D),J22(refElpol%Nnodes2D)
-    real*8                            :: iJ11(refElpol%Nnodes2D),iJ12(refElpol%Nnodes2D)
-    real*8                            :: iJ21(refElpol%Nnodes2D),iJ22(refElpol%Nnodes2D)
-    real*8                            :: Nxn(refElpol%Nnodes2D),Nyn(refElpol%Nnodes2D)
-    real*8                            :: detJ(refElpol%Nnodes2D)
-    real*8                            :: coord2D_fixed(refElpol%Nnodes2D,2)      ! applying some shift to the third node of thriangle to avoid infinite derivative
+    INTEGER                           :: iel, inode
+    REAL*8                            :: shapeFunctions(refElpol%Nnodes2D,refElpol%Nnodes2D,3)
+    REAL*8                            :: Xel(refElpol%Nnodes2D,2)        !only for 2D so far
+    REAL*8                            :: J11(refElpol%Nnodes2D),J12(refElpol%Nnodes2D)
+    REAL*8                            :: J21(refElpol%Nnodes2D),J22(refElpol%Nnodes2D)
+    REAL*8                            :: iJ11(refElpol%Nnodes2D),iJ12(refElpol%Nnodes2D)
+    REAL*8                            :: iJ21(refElpol%Nnodes2D),iJ22(refElpol%Nnodes2D)
+    REAL*8                            :: Nxn(refElpol%Nnodes2D),Nyn(refElpol%Nnodes2D)
+    REAL*8                            :: detJ(refElpol%Nnodes2D)
+    REAL*8                            :: coord2D_fixed(refElpol%Nnodes2D,2)      ! applying some shift to the third node of thriangle to avoid infinite derivative
     !!! end of variables for computation derivatives of the flux
-    real*8, allocatable, dimension(:) :: xvec, yvec
-    real*8                            :: x, y, t
-    real*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
-    real*8                            :: q_cyl, omega,a
-    integer                            :: min_ind(2)
+    REAL*8, ALLOCATABLE, DIMENSION(:) :: xvec, yvec
+    REAL*8                            :: x, y
+    REAL*8                            :: Br, Bz, Bt, flux, psiSep
+    CHARACTER(LEN=1000) :: fname
+    CHARACTER(50)  :: nit
 
-    character(LEN=1000) :: fname
-    character(50)  :: npr,nid,nit
+#ifdef KEQUATION
+    REAL*8                            :: q_cyl, omega,a
+    INTEGER                            :: min_ind(2)
+#endif
 
 
     IF (MPIvar%glob_id .EQ. 0) THEN
@@ -442,12 +447,12 @@ CONTAINS
     ALLOCATE (Bz(nnodes))
     ALLOCATE (Bt(nnodes))
 
-    if (switch%ME .eqv. .FALSE.)  then !if not a moving equilibrium simulation
+    IF (switch%ME .EQV. .FALSE.)  THEN !if not a moving equilibrium simulation
       fname = input%field_path
-    else
+    ELSE
       fname = input%field_path
-      write(nit, "(i10)") int(time%it + 1)
-      nit = trim(adjustl(nit))
+       WRITE(nit, "(i10)") INT(time%it + 1)
+       nit = TRIM(ADJUSTL(nit))
       k = INDEX(nit, " ") -1
        fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))
     ENDIF
@@ -976,7 +981,6 @@ CONTAINS
     real*8,allocatable,dimension(:)   :: xvec,yvec
     real*8                            :: dt_ME,t_ME
     real*8                            :: x,y
-#ifdef PARALL
     
     IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) "******* Loading Toroidal Current *******"
@@ -1061,9 +1065,8 @@ CONTAINS
       END DO
 #endif
     END DO
-    !Compute Ip
 
-    
+    !Compute Ip
     CALL computeIplasma()
     
     IF (MPIvar%glob_id .EQ. 0) THEN
