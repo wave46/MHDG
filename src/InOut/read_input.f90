@@ -14,56 +14,59 @@ SUBROUTINE READ_input()
   USE MPI_OMP
   IMPLICIT NONE
 
-  logical :: driftdia,driftexb, axisym, restart,steady,time_init, dotiming,psdtime,decoup,bxgradb
-  logical :: ckeramp,saveNR,filter,saveTau,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
-  integer :: thresh, difcor, tis, stab,pertini,init
-  integer :: itmax, itrace, rest, istop, sollib
-  integer :: uinput, printint, testcase, nrp
-  integer :: nts, tsw, freqdisp, freqsave, shockcp, limrho
-  integer :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
-  real*8  :: dt0, R0, diff_n, diff_u, v_p, tau(1:5), tNr, tTM, div, Tbg
-  real*8  :: tfi, a, bohmth, q, diffred, diffmin
-  real*8  :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
-  real*8  :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
-  real*8  :: diff_pare, diff_ee, tie, dumpnr,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0, tmax, tol
-  real*8  :: diff_vort, diff_pot, etapar, c1, c2, Potfloat,diagsource(10)
-  character(100) :: msg
-  character(20)  :: kmethd, ptype
+  LOGICAL :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5, saveMeshSol,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
+  LOGICAL :: ckeramp,saveNR,filter,saveTau,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
+  INTEGER :: thresh, difcor, tis, stab,pertini,init,order_2d
+  INTEGER :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
+  INTEGER :: uinput, printint, testcase, nrp
+  INTEGER :: nts, tsw, freqdisp, freqsave, shockcp, limrho
+  INTEGER :: shockcp_adapt, evaluator, param_est, difference, freq_t_adapt,freq_NR_adapt, quant_ind, n_quant_ind
+  REAL*8  :: thr_ind, tol_est, osc_tol, osc_check
+  INTEGER :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
+  REAL*8  :: dt0, R0, diff_n, diff_u, v_p, tau(1:5), tNr, tTM, div, Tbg
+  REAL*8  :: tfi, a, bohmth, q, diffred, diffmin
+  REAL*8  :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
+  REAL*8  :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
+  REAL*8  :: diff_pare, diff_ee, tie, dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0, tmax, tol, rtol, atol
+  REAL*8  :: diff_vort, diff_pot, etapar, c1, c2, Potfloat,diagsource(10)
+  CHARACTER(100) :: msg
+  CHARACTER(20)  :: kmethd, ptype, kspmethd, pctype
 
-  character(len=20) :: smther, smther2, prol, restr, solve, restr2, prol2, solve2, mlcycle
-  character(len=20) :: aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, csolve, csbsolve, cmat
-  integer           :: jsweeps, novr, fill, jsweeps2, novr2, fill2, outer_sweeps, maxlevs, csize, cfill, cjswp
-  real*8            :: thrsol, thrsol2, mncrratio, athres, cthres
+  CHARACTER(len=20) :: smther, smther2, prol, restr, solve, restr2, prol2, solve2, mlcycle
+  CHARACTER(len=20) :: aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, csolve, csbsolve, cmat
+  INTEGER           :: jsweeps, novr, fill, jsweeps2, novr2, fill2, outer_sweeps, maxlevs, csize, cfill, cjswp
+  REAL*8            :: thrsol, thrsol2, mncrratio, athres, cthres
   real*8            :: heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz
   integer           :: heating_equation
   real*8            :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
   ! Info for input and output
-  character(len = 1000) :: field_path, jtor_path,save_folder
-  integer               :: field_dimensions(1:2), jtor_dimensions(1:2)
-  logical               :: field_from_grid, compute_from_flux, divide_by_2pi
+  CHARACTER(len = 1000) :: field_path, jtor_path,save_folder
+  INTEGER               :: field_dimensions(1:2), jtor_dimensions(1:2)
+  LOGICAL               :: field_from_grid, compute_from_flux, divide_by_2pi
 
   ! RMP and Ripple
-  logical     :: RMP, Ripple
-  real*8      :: amp_rmp, torElongCoils_rmp, amp_ripple, triang, ellip
-  integer     :: nbCoils_rmp,  parite, nbRow, nbCoils_ripple
+  LOGICAL     :: RMP, Ripple
+  REAL*8      :: amp_rmp, torElongCoils_rmp, amp_ripple, triang, ellip
+  INTEGER     :: nbCoils_rmp,  parite, nbRow, nbCoils_ripple
 
   ! Neutral and Ohmic heating
-  logical     :: OhmicSrc
-  real*8      :: Pohmic,diff_nn,Re,Re_pump,puff,puff_slope
+  LOGICAL     :: OhmicSrc
+  REAL*8      :: Pohmic,diff_nn,Re,Re_pump,puff,puff_slope
 #ifdef KEQUATION
   ! k equation
-  real*8      :: diff_k_min, diff_k_max, k_max
+  REAL*8      :: diff_k_min, diff_k_max, k_max
 #endif
   ! Movin Equilibrium
-  logical     :: ME
+  LOGICAL     :: ME
 
   ! Defining the variables to READ from the file
-  NAMELIST /SWITCH_LST/ steady, time_init, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
+  NAMELIST /SWITCH_LST/ steady, time_init,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, saveMeshSol, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
     & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
     & logrho,bxgradb
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions, save_folder
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
+  NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
@@ -76,7 +79,7 @@ SUBROUTINE READ_input()
     &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
-  NAMELIST /LSSOLV_LST/ sollib, lstiming, itmax, itrace, rest, istop, tol, kmethd, ptype,&
+  NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
     &smther, jsweeps,&
     &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
     &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
@@ -89,6 +92,7 @@ SUBROUTINE READ_input()
   READ (uinput, SWITCH_LST)
   READ (uinput, INPUT_LST)
   READ (uinput, NUMER_LST)
+  READ (uinput, ADAPT_LST)
   READ (uinput, GEOM_LST)
   READ (uinput, MAGN_LST)
   READ (uinput, TIME_LST)
@@ -100,6 +104,10 @@ SUBROUTINE READ_input()
   ! Storing at the right place
   switch%steady           = steady
   switch%time_init        = time_init
+  switch%read_gmsh        = read_gmsh
+  switch%readMeshFromSol  = readMeshFromSol
+  switch%set_2d_order     = set_2d_order
+  switch%order_2d         = order_2d
   switch%axisym           = axisym
   switch%init             = init
   switch%driftdia         = driftdia
@@ -121,6 +129,8 @@ SUBROUTINE READ_input()
   switch%ckeramp          = ckeramp
   switch%saveNR           = saveNR
   switch%saveTau          = saveTau
+  switch%gmsh2h5          = gmsh2h5
+  switch%saveMeshSol      = saveMeshSol
   switch%fixdPotLim       = fixdPotLim
   switch%dirivortcore     = dirivortcore
   switch%dirivortlim      = dirivortlim
@@ -128,14 +138,14 @@ SUBROUTINE READ_input()
   switch%pertini          = pertini
   switch%logrho           = logrho
   switch%bxgradb          = bxgradb
-  input%field_path        = trim(adjustl(field_path))
+  input%field_path        = TRIM(ADJUSTL(field_path))
   input%field_dimensions  = field_dimensions
   input%field_from_grid   = field_from_grid
   input%compute_from_flux = compute_from_flux
   input%divide_by_2pi     = divide_by_2pi
-  input%jtor_path         = trim(adjustl(jtor_path))
+  input%jtor_path         = TRIM(ADJUSTL(jtor_path))
   input%jtor_dimensions   = jtor_dimensions
-  input%save_folder       = trim(adjustl(save_folder))
+  input%save_folder       = TRIM(ADJUSTL(save_folder))
   numer%tau               = tau
   numer%nrp               = nrp
   numer%tNR               = tNR
@@ -161,6 +171,24 @@ SUBROUTINE READ_input()
   numer%npartor           = npartor
   numer%bohmtypebc        = bohmtypebc
   numer%exbdump           = exbdump
+  adapt%adaptivity        = adaptivity
+  adapt%shockcp_adapt     = shockcp_adapt
+  adapt%param_est         = param_est
+  adapt%evaluator         = evaluator
+  adapt%difference        = difference
+  adapt%thr_ind           = thr_ind
+  adapt%quant_ind         = quant_ind
+  adapt%n_quant_ind       = n_quant_ind
+  adapt%tol_est           = tol_est
+  adapt%time_adapt        = time_adapt
+  adapt%NR_adapt          = NR_adapt
+  adapt%freq_t_adapt      = freq_t_adapt
+  adapt%freq_NR_adapt     = freq_NR_adapt
+  adapt%div_adapt         = div_adapt
+  adapt%rest_adapt        = rest_adapt
+  adapt%osc_adapt         = osc_adapt
+  adapt%osc_tol           = osc_tol
+  adapt%osc_check         = osc_check
   geom%R0                 = R0
   geom%q                  = q
   magn%amp_rmp            = amp_rmp
@@ -228,6 +256,19 @@ SUBROUTINE READ_input()
   utils%freqsave          = freqsave
   lssolver%sollib         = sollib
   lssolver%timing         = lstiming
+  lssolver%kspitrace      = kspitrace
+  lssolver%rtol           = rtol
+  lssolver%atol           = atol
+  lssolver%kspitmax       = kspitmax
+  lssolver%igz            = igz
+  lssolver%rprecond       = rprecond
+  lssolver%Nrprecond      = Nrprecond
+  lssolver%kspnorm        = kspnorm
+  lssolver%kspmethd       = kspmethd
+  lssolver%pctype         = pctype
+  lssolver%gmresres       = gmresres
+  lssolver%mglevels       = mglevels
+  lssolver%mgtypeform     = mgtypeform
   lssolver%itmax          = itmax
   lssolver%itrace         = itrace
   lssolver%rest           = rest
@@ -277,23 +318,23 @@ SUBROUTINE READ_input()
   END IF
 
   ! Some checking of the inputs
-  if (time%tis .gt. 6) then
-    write (6, *) "Error: wrong time integration scheme in parameters: tis=", time%tis
-    stop
-  end if
-  if (numer%dumpnr < 0. .or. numer%dumpnr > 1.) then
-    write (6, *) "Error: wrong dumping factor for Newton-Raphson: dumpnr=", numer%dumpnr
-    stop
-  end if
-  if (switch%testcase.ge.50 .and. .not.switch%axisym) then
-    write (6, *) "Error: this should be an axisymmetric simulation"
-    stop
-  endif
+  IF (time%tis .GT. 6) THEN
+     WRITE (6, *) "Error: wrong time integration scheme in parameters: tis=", time%tis
+     STOP
+  END IF
+  IF (numer%dumpnr < 0. .OR. numer%dumpnr > 1.) THEN
+     WRITE (6, *) "Error: wrong dumping factor for Newton-Raphson: dumpnr=", numer%dumpnr
+     STOP
+  END IF
+  IF (switch%testcase.GE.50 .AND. .NOT.switch%axisym) THEN
+     WRITE (6, *) "Error: this should be an axisymmetric simulation"
+     STOP
+  ENDIF
   ! Adimensionalize units and store reference values
   CALL adimensionalization()
 
   ! A little message for the user...
-  if (MPIvar%glob_id .eq. 0) THEN
+  IF (MPIvar%glob_id .EQ. 0) THEN
     PRINT *, '                                                                      '
     PRINT *, '                                                                      '
 #ifdef TOR3D
@@ -321,7 +362,7 @@ SUBROUTINE READ_input()
 #endif
     PRINT *, '                                                                      '
     PRINT *, '----------------------------------------------------------------------'
-    PRINT *, '  Simulation type: ', Adjustl(Trim(msg))
+     PRINT *, '  Simulation type: ', ADJUSTL(TRIM(msg))
     PRINT *, '----------------------------------------------------------------------'
     PRINT *, 'Parameter file loaded:'
     PRINT *, '        ***************** Geometry ****************************'
@@ -357,9 +398,9 @@ SUBROUTINE READ_input()
     PRINT *, '                - reference Mach number:                              ', phys%Mref
     PRINT *, '                - gamma for Bohm boundary condition on ions:          ', phys%Gmbohm
     PRINT *, '                - gamma for Bohm boundary condition for electrons:    ', phys%Gmbohme
-    if(switch%ohmicsrc) then
+     IF(switch%ohmicsrc) THEN
        PRINT *, '             - Ohmic heating                                       ', phys%Pohmic
-    endif
+     ENDIF
 #endif
 #ifdef VORTICITY
     PRINT *, '                - perp. diffusion in the vorticity equation:          ', phys%diff_vort
@@ -370,9 +411,9 @@ SUBROUTINE READ_input()
     PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
     PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
     PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
-    if (switch%ME) then
+     IF (switch%ME) THEN
        PRINT *, '             - puff increment slope:                               ', phys%puff_slope
-    endif 
+     ENDIF
     PRINT *, '                - particle source at core:                            ', part_source
     PRINT *, '                - energy source at core:                              ', ener_source
 #endif
@@ -386,11 +427,11 @@ SUBROUTINE READ_input()
     PRINT *, '        ***************** Switches ****************************'
     PRINT *, '                - stady state simulation:                             ', switch%steady
     PRINT *, '                - axisym:                                             ', switch%axisym
-    if (switch%init.eq.1) then
+     IF (switch%init.EQ.1) THEN
       PRINT *, '  Initializing with analytical solution at nodes                    '
-    else
+     ELSE
       PRINT *, '  Initializing with L2 projection                                   '
-    endif
+     ENDIF
     PRINT *, '                - driftdia:                                           ', driftdia
     PRINT *, '                - driftexb:                                           ', driftexb
     PRINT *, '                - test case:                                          ', testcase
@@ -419,24 +460,24 @@ SUBROUTINE READ_input()
     PRINT *, '                - max number of N-R iterations:                       ', numer%nrp
     PRINT *, '                - tolerance for the N-R scheme:                       ', numer%tNR
     PRINT *, '                - tolerance for the steady state achievement:         ', numer%tTM
-    IF (switch%shockcp .gt. 0) THEN
+     IF (switch%shockcp .GT. 0) THEN
       PRINT *, '                - shock capturing coeff:                            ', numer%sc_coe
       PRINT *, '                - shock capturing sensibility:                      ', numer%sc_sen
     END IF
-    IF (switch%limrho .gt. 0) THEN
+     IF (switch%limrho .GT. 0) THEN
       PRINT *, '                - applying limiting of rho at value:                ', numer%minrho
     END IF
-    IF (switch%limrho .eq. 1 .or. switch%limrho .eq. 3) THEN
+     IF (switch%limrho .EQ. 1 .OR. switch%limrho .EQ. 3) THEN
       PRINT *, '                - coefficient of the source for limiting rho:       ', numer%so_coe
     END IF
-    IF (switch%limrho .eq. 2 .or. switch%limrho .eq. 3) THEN
+     IF (switch%limrho .EQ. 2 .OR. switch%limrho .EQ. 3) THEN
       PRINT *, '                - coefficient of the diffusion for limiting rho:    ', numer%df_coe
     END IF
-    IF (switch%difcor .gt. 0) THEN
+     IF (switch%difcor .GT. 0) THEN
       PRINT *, '                - adding diffusion in corners, in position:         ', switch%difcor
       PRINT *, '                - diffusion coefficient in corners:                 ', numer%dc_coe
     END IF
-    IF (switch%thresh .gt. 0) THEN
+     IF (switch%thresh .GT. 0) THEN
       PRINT *, '                - using a threshold at rho:                         ', numer%thr
       PRINT *, '                - using a threshold at pressure:                    ', numer%thrpre
     END IF
@@ -450,6 +491,31 @@ SUBROUTINE READ_input()
     PRINT *, '                - max extention in the toroidal direction:            ', numer%tmax
 #endif
     PRINT *, '                - dumping for ExB term:       ', numer%exbdump
+     PRINT *, '                - type of bohm boundary condition:                     ',  numer%bohmtypebc
+     IF(adapt%adaptivity) THEN
+        PRINT *, '        ***************** Adaptivity ****************************'
+        PRINT *, '                - adaptivity :                                         ', adapt%adaptivity
+        PRINT *, '                - adaptivity evaluator:                                ', adapt%evaluator
+        PRINT *, '                - option for shock capturing:                          ', adapt%shockcp_adapt
+        PRINT *, '                - threshold for the indicator:                         ', adapt%thr_ind
+        PRINT *, '                - tollerance estimator:                                ', adapt%tol_est
+        PRINT *, '                - parameter for estimator:                             ', adapt%param_est
+        PRINT *, '                - adaptivity in time:                                  ', adapt%time_adapt
+        PRINT *, '                - adaptivity in NR:                                    ', adapt%NR_adapt
+        PRINT *, '                - frequence of time adaptivity:                        ', adapt%freq_t_adapt
+        PRINT *, '                - frequence of NR adaptivity:                          ', adapt%freq_NR_adapt
+        PRINT *, '                - NR divergence adaptivity:                            ', adapt%div_adapt
+        PRINT *, '                - restart adaptivity:                                  ', adapt%rest_adapt
+        PRINT *, '                - oscillations on the solution adaptivity:             ', adapt%osc_adapt
+        PRINT *, '                - oscillations tollerance adaptivity:                  ', adapt%osc_tol
+        PRINT *, '                - threshold oscillations for saving checkpoint:        ', adapt%osc_check
+
+        IF(adapt%difference .EQ. 0) THEN
+           PRINT *, '                - difference type for the estimator:              ', 'relative'
+        ELSE
+           PRINT *, '                - difference type for the estimator:              ', 'absolute'
+        ENDIF
+     ENDIF
     PRINT *, '        ***************** Linear solver params******************'
     IF (lssolver%sollib == 1) THEN
       PRINT *, '                - Library used for the linear system:   PASTIX      '
@@ -460,8 +526,22 @@ SUBROUTINE READ_input()
       PRINT *, '                - Stopping criterion type                           ', lssolver%istop
       PRINT *, '                - Stopping criterion tolerance                      ', lssolver%tol
       PRINT *, '                - Restart:                                          ', lssolver%rest
+     ELSEIF (lssolver%sollib == 3) THEN
+        PRINT *, '                - Library used for the linear system:   PETSc      '
+        PRINT *, '                - Iterative method:                                 ', lssolver%kspmethd
+        PRINT *, '                - Preconditioner:                                   ', lssolver%pctype
+        PRINT *, '                - Relative tollerance                               ', lssolver%rtol
+        PRINT *, '                - Absolute tollerance                               ', lssolver%atol
+        PRINT *, '                - Max number of iteration:                          ', lssolver%kspitmax
+        PRINT *, '                - Set to zero the initial guess                     ', lssolver%igz
+        PRINT *, '                - Recompute preconditioner at each NR               ', lssolver%rprecond
+        PRINT *, '                - Norm type                                         ', lssolver%kspnorm
+        PRINT *, '                - Gmres restart value                               ', lssolver%gmresres
+        PRINT *, '                - Display convergence at each iteration             ', lssolver%kspitrace
+        PRINT *, '                - MultiGrid (MG) levels                             ', lssolver%mglevels
+        PRINT *, '                - MultiGrid (MG) type form                          ', lssolver%mgtypeform
     ENDIF
 
     PRINT *, '        '
-  end if
+  END IF
 END SUBROUTINE READ_input
