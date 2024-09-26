@@ -111,7 +111,7 @@ SUBROUTINE compute_element_solution
   !***********************************************************************
   !                            VERSION 2D
   !***********************************************************************
-  integer*4             :: i, j, iel, N2d, Np, Nfp, Neq, Nf, Ndim, ierr, Nfdir
+  INTEGER*4             :: i, iel, N2d, Np, Nfp, Neq, Nf, Ndim
   integer*4             :: ind_ue(Mesh%Nnodesperelem*phys%Neq)
   integer*4             :: ind_uf(refElPol%Nfacenodes*phys%Neq*refElPol%Nfaces)
   integer*4             :: ind_ug(Mesh%Nnodesperelem*phys%Neq*Mesh%Ndim)
