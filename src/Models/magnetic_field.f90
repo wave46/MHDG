@@ -229,14 +229,14 @@ CONTAINS
     !!! end of variables for computation derivatives of the flux
     REAL*8, ALLOCATABLE, DIMENSION(:) :: xvec, yvec
     REAL*8                            :: x, y
-    REAL*8                            :: Br, Bz, Bt, flux, psiSep
+    REAL*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
     CHARACTER(LEN=1000) :: fname
     CHARACTER(50)  :: nit
 
-#ifdef KEQUATION
+
     REAL*8                            :: q_cyl, omega,a
     INTEGER                            :: min_ind(2)
-#endif
+
 
 
     IF (MPIvar%glob_id .EQ. 0) THEN
