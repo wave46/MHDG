@@ -20,10 +20,9 @@ SUBROUTINE HDG_assembly()
   USE LinearAlgebra, ONLY: tensorSumInt
   USE MPI_OMP
 
-  integer                        :: i, j, jj, k, iel, ifa, ifl, nnz, nn, cont, ieloc, ct_sc, iel3, itor, itorg
+  INTEGER                        :: i, j, jj, k, iel, ifa, ifl, nnz, nn, cont, ieloc, iel3, itor, itorg
   integer                        :: Neq, Nf, Nfl, Nfg, Nftot, Nfaces, Nfp, Nel, Nintf, Nextf, Ndirf, Nfunk, blk, blkp, blkt, Ndim, Np
   integer                        :: Np1Dpol, Np1Dtor, Np2d, Npfl, auxnn
-  integer                        :: nColsPosPerFaceInt, nColsPosPerFaceExt, nColsPosPerElem
   integer                        :: Fe(refElPol%Nfaces), Fi, Fig
   integer, allocatable            :: indglo(:), indpos(:)
   integer*4                      :: ind_loc(refElPol%Nfaces, refElPol%Nfacenodes*phys%Neq)
@@ -1145,10 +1144,9 @@ SUBROUTINE HDG_assembly()
   USE LinearAlgebra, ONLY: tensorSumInt
   USE MPI_OMP
 
-  integer                        :: i, j, jj, k, iel, ifa, ifl, nnz, nn, cont, ieloc, ct_sc
+  INTEGER                        :: i, j, jj, k, iel, ifa, ifl, nnz, nn, cont, ieloc
   integer                        :: ieln,ifan,Fi_per,Fe_aux(refElPol%Nfaces)
   integer                        :: Neq, Nf, Nfaces, Nfp, Nel, Nintf, Nextf, Ndirf, Nfunk, blk, Ndim, Np
-  integer                        :: nColsPosPerFaceInt, nColsPosPerFaceExt, nColsPosPerElem
   integer                        :: Fe(refElPol%Nfaces), Fi
   integer                        :: indglo(1:refElPol%Nfacenodes*refElPol%Nfaces*phys%Neq)
   integer                        :: indpos(1:refElPol%Nfacenodes*refElPol%Nfaces*phys%Neq)
@@ -1169,7 +1167,7 @@ SUBROUTINE HDG_assembly()
   integer                        ::        Fasind(Mesh%Nfaces)
   integer                        :: rept
 #endif
-  integer :: ierr
+
 
 
   if (utils%timing) then
@@ -1226,11 +1224,6 @@ SUBROUTINE HDG_assembly()
   vals => MatK%vals
   loc2glob => MatK%loc2glob
   rhsvec => rhs%vals
-
-  ! Number of cols position filled by each face (int & ext)
-  !   nColsPosPerFaceInt = Nfp**2*Neq**2*(2*Nf-1)
-  !   nColsPosPerFaceExt = Nfp**2*Neq**2*Nf
-  !   nColsPosPerElem = Nfp**2*Neq**2*Nf
 
   ind_loc = 0
   DO i = 1, Nf
