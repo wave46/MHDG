@@ -8,6 +8,7 @@
 
 MODULE types
   USE prec_const
+  USE mod_splines
   IMPLICIT NONE
 
   !*******************************************************
@@ -111,9 +112,10 @@ MODULE types
     integer*4, pointer :: T(:, :) => null()    ! Elements connectivity matrix
     integer*4, pointer :: Tlin(:, :) => null()    ! Elements linear connectivity matrix
     integer*4, pointer :: Tb(:, :) => null()    ! Outer faces connectivity matrix
-    integer*4, pointer :: boundaryFlag(:)     ! Flag for the boundary condition for each external face (set in the mesh generator)
+     INTEGER*4, POINTER :: boundaryFlag(:) => NULL()    ! Flag for the boundary condition for each external face (set in the mesh generator)
     integer*4, allocatable :: F(:, :)          ! Faces connectivity matrix
     integer*4, allocatable :: N(:, :)          ! Nodes connectivity matrix
+     INTEGER*4, ALLOCATABLE :: face_info(:, :)          ! Elemental face info
     integer*4, allocatable :: faces(:, :, :)    ! for each triangle i, stores info k on each face j: faces(i,j,1) = # of neighbouring triangle (0 if external
     ! boundary), faces(i,j,2) = type of boundary (), faces(i,j,3) = type of boundary condition
     integer*4, allocatable :: extfaces(:, :)   ! for each exterior face, stores the number of the triangle, the number of the face, and the type of BC
@@ -144,9 +146,13 @@ MODULE types
     real*8,allocatable      :: Xg(:,:)               ! 2D Gauss point coordinates
     real*8,allocatable      :: Xgf(:,:)              ! 1D Gauss point coordinates at interior faces
     real*8,allocatable      :: Xgb(:,:)          ! 1D Gauss point  coordinates at boundary faces
+     INTEGER*4, POINTER	    :: T_gmsh(:, :) => NULL()    ! Elements connectivity matrix to write the msh file
+     INTEGER*4, POINTER      :: Tb_gmsh(:, :) => NULL()    ! Outer faces connectivity matrix to write the msh file
+     REAL*8, POINTER         :: X_P1(:,:) => NULL()         ! coordinates of the nodes on the P1 mesh to write to the msh file
 #ifdef PARALL
     integer, pointer       :: loc2glob_fa(:)     ! mapping number of the faces for creating the global matrix [number of faces in the mesh]
     integer, pointer       :: loc2glob_el(:)     ! mapping number of the elements from local to global [number of elements in the mesh]
+     INTEGER, POINTER        :: loc2glob_nodes(:)    ! mapping number of the nodes from local to global [number of nodes in the mesh]
     integer, pointer       :: ghostfaces(:)      ! integer that states if a face is to be assembled locally or not [number of faces in the mesh]
     integer, pointer       :: ghostelems(:)      ! integer that states if an element is to be assembled locally or not (for 3D) [number of elements in the mesh]
     integer               :: nghostfaces        ! number of ghost faces
@@ -176,6 +182,19 @@ MODULE types
     !     integer,allocatable   :: connpro(:)        ! processes connected to the local process
 #endif
   END TYPE Mesh_type
+
+  TYPE Splines_DT
+     INTEGER                       :: boundaryFlag
+     INTEGER                       :: spline_number
+     INTEGER                       :: tot_n_splines
+     INTEGER                       :: n_points
+     REAL*8                        :: angle, xmax, xmin, ymax, ymin, xcenter, ycenter
+     REAL*8                        :: RotMat(2,2), AntiRotMat(2,2)
+     INTEGER, ALLOCATABLE          :: points_number(:)
+     REAL*8, ALLOCATABLE           :: points_coord(:,:)
+     TYPE(spline)                  :: spline
+
+  ENDTYPE Splines_DT
 
   !*******************************************************
   ! Physics: type for physical model info
@@ -327,6 +346,12 @@ MODULE types
     logical :: driftdia ! Set to TRUE to consider diamagnetic drift
     logical :: driftexb ! Set to TRUE to consider ExB drift
     logical :: steady
+     LOGICAL :: read_gmsh ! read a mesh file in gmsh format
+     LOGICAL :: readMeshFromSol ! read a mesh file from the solution
+     LOGICAL :: set_2d_order ! if read_gmsh = .true., set order
+     INTEGER :: order_2d    ! if read_gmsh = .true., set order = .true., what 2d polynomial order?
+     LOGICAL :: gmsh2h5
+     LOGICAL :: saveMeshSol
     logical :: time_init ! true if it is a time initialization simulation. The time counter "it" does not increment  (i.e. when the analitical initialisation is not good enough). Used for moving equilibrium (case 59)
     integer :: init     ! 1-init. analy. solution at nodes; 2-L2 projection
     ! Set to TRUE for a steady state computation
@@ -426,6 +451,30 @@ MODULE types
   END TYPE Numeric_type
 
   !*******************************************************
+  ! Adaptivity: parameters for the adaptivity procedures
+  !*******************************************************
+  TYPE adaptivity_type
+     LOGICAL :: adaptivity       ! Adaptivity enabled or not (1 or 0)
+     INTEGER :: shockcp_adapt
+     INTEGER :: evaluator        ! 1,2,3 (indicator, estimator, both)
+     REAL*8  :: thr_ind          ! Threshold  for the detection of oscillations (indicator)
+     INTEGER :: quant_ind        ! 1,2,3 (physical variable(s), gradient of variable(s), both)
+     INTEGER :: n_quant_ind      ! 1,2,3 for iso (n,u, Mach). 1,2,3,4,5 for aniso (n,u,Ti,Te,Mach), 10 for all of them
+     REAL*8  :: tol_est          ! Relative difference between the p+1 and p solution (estimator)
+     INTEGER :: param_est        ! 1,2,3 ... physical variable used in the estimator (-1 for all of them)
+     INTEGER :: difference       ! 0,1 (relative, absolute)
+     LOGICAL :: time_adapt       ! refine at times steps (pseudo or not)
+     LOGICAL :: NR_adapt         ! refine at NR steps
+     INTEGER :: freq_t_adapt     ! Frequency of time refinement, only if time_adapt = .true.
+     INTEGER :: freq_NR_adapt    ! Frequency of NR refinement, only if NR_adapt = .true.
+     LOGICAL :: div_adapt        ! refine if NR divergence
+     LOGICAL :: rest_adapt       ! call adaptivity at the very beginning, only for restart simulations
+     LOGICAL :: osc_adapt        ! refine if oscillations are lower than threshold
+     REAL*8  :: osc_tol          ! refine if oscillations are lower than this threshold, only if osc_adapt = .true.
+     REAL*8  :: osc_check        ! save the solution as checkpoint if the maximum value of oscillations are lower than this threshold
+  END TYPE adaptivity_type
+
+  !*******************************************************
   ! Utilities: type for printing/debugging/saving...
   !*******************************************************
   TYPE Utils_type
@@ -442,8 +491,27 @@ MODULE types
     integer           :: sollib    ! Solver library to be used
     ! 1-Pastix
     ! 2-PSBLAS
+     ! 3-PETSc
+
     logical           :: timing    ! timing of the linear solver
     ! Parameters relative to the library PSBLAS
+     INTEGER           :: kspitrace     ! Display convergence at each iteration
+     REAL*8            :: rtol       ! Relative tolerance
+     REAL*8            :: atol       ! Absolute tolerance
+     INTEGER           :: kspitmax      ! Max number of iterations
+     CHARACTER(len=20) :: kspmethd     ! Krylov method (see list on the library manual)
+     LOGICAL           :: igz        ! Set initial guess of the iterative method to zeros
+     INTEGER           :: rprecond   ! Recompute preconditioner
+     INTEGER           :: Nrprecond  ! Recompute preconditioner each Rrprecond iterations
+     INTEGER           :: kspnorm    ! norm type to be used
+     CHARACTER(len=20) :: ksptype    ! Krylov solver type
+     CHARACTER(len=20) :: pctype     ! Preconditioner type
+     INTEGER           :: gmresres   ! Restart value for GMRES
+     INTEGER           :: mglevels   ! Number of levels for the MultiGrid preconditioner
+     INTEGER           :: mgtypeform   ! Form type of the MultiGrid preconditioner
+
+
+     ! Parameters relative to the library PSBLAS
     character(len=20) :: kmethd    ! Krylov method (see list on the library manual)
     integer           :: istop     ! Stopping criterion (see spec on the library manual)
     integer           :: itmax     ! Max number of iterations
@@ -496,8 +564,15 @@ MODULE types
   !**********************************************************
   TYPE Sol_type
     real*8, pointer :: u(:) => null()  ! Elemental solution
+     REAL*8, POINTER :: u_conv(:) => NULL()
+     REAL*8, POINTER :: u_init(:) => NULL()
+     REAL*8, POINTER :: u0_init(:) => NULL()
     real*8, pointer :: u_tilde(:) => null()  ! Face solution
+     REAL*8, POINTER :: u_tilde0(:) => NULL()  ! Face solution
     real*8, pointer :: q(:) => null()  ! Elemental solution for the gradient
+     REAL*8, POINTER :: q_conv(:) => NULL()
+     REAL*8, POINTER :: q_init(:) => NULL()
+     REAL*8, POINTER :: q0_init(:) => NULL()
     real*8, allocatable :: u0(:, :)           ! Elemental solution at previous time steps
     real*8, allocatable :: tres(:)           ! Time residual
     real*8, allocatable :: time(:)           ! Time evolution
@@ -635,8 +710,8 @@ MODULE types
     integer :: cks2, clock_rate2, cke2, clock_start2, clock_end2
     real*8  :: time_start1, time_finish1, tps1, tpe1
     real*8  :: time_start2, time_finish2, tps2, tpe2
-    real*8  :: cputpre, cputmap, cputass, cputbcd, cputsol, cputjac, cputglb
-    real*8  :: runtpre, runtmap, runtass, runtbcd, runtsol, runtjac, runtglb
+     REAL*8  :: cputpre, cputmap, cputass, cputbcd, cputsol, cputjac, cputglb, cputadapt
+     REAL*8  :: runtpre, runtmap, runtass, runtbcd, runtsol, runtjac, runtglb, runtadapt
     real(8) :: clstime1, clstime2, clstime3, clstime4, clstime5, clstime6
     real(8) :: rlstime1, rlstime2, rlstime3, rlstime4, rlstime5, rlstime6
     real(8) :: cputcom
@@ -675,5 +750,358 @@ CONTAINS
     bc_flag_name(70) = 'Periodic'
 
   END SUBROUTINE set_boundary_flag_names
+
+  SUBROUTINE deep_copy_mesh_struct(Mesh1, Mesh2)
+    TYPE(Mesh_type), INTENT(IN)               :: Mesh1
+    TYPE(Mesh_type), INTENT(OUT)              :: Mesh2
+
+    Mesh2%Ndim = Mesh1%Ndim
+    Mesh2%Nnodes = Mesh1%Nnodes
+    Mesh2%Nnodesperelem = Mesh1%Nnodesperelem
+    Mesh2%Nnodesperface = Mesh1%Nnodesperface
+    Mesh2%Nelems = Mesh1%Nelems
+    Mesh2%Nfaces = Mesh1%Nfaces
+    Mesh2%Nextfaces = Mesh1%Nextfaces
+    Mesh2%Nintfaces = Mesh1%Nintfaces
+    Mesh2%elemType = Mesh1%elemType
+    Mesh2%ndir   = Mesh1%ndir
+    Mesh2%ukf = Mesh1%ukf
+
+    IF(ASSOCIATED(Mesh1%T)) THEN
+       ALLOCATE(Mesh2%T(SIZE(Mesh1%T, 1), SIZE(Mesh1%T, 2)))
+       Mesh2%T = Mesh1%T
+    ENDIF
+
+    IF(ASSOCIATED(Mesh1%Tlin)) THEN
+       ALLOCATE(Mesh2%Tlin(SIZE(Mesh1%Tlin, 1), SIZE(Mesh1%Tlin, 2)))
+       Mesh2%Tlin = Mesh1%Tlin
+    ENDIF
+
+    IF(ASSOCIATED(Mesh1%Tb)) THEN
+       ALLOCATE(Mesh2%Tb(SIZE(Mesh1%Tb, 1), SIZE(Mesh1%Tb, 2)))
+       Mesh2%Tb = Mesh1%Tb
+    ENDIF
+
+    IF(ASSOCIATED(Mesh1%boundaryFlag)) THEN
+       ALLOCATE(Mesh2%boundaryFlag(SIZE(Mesh1%boundaryFlag)))
+       Mesh2%boundaryFlag = Mesh1%boundaryFlag
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%F)) THEN
+       ALLOCATE(Mesh2%F(SIZE(Mesh1%F, 1), SIZE(Mesh1%F, 2)))
+       Mesh2%F = Mesh1%F
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%N)) THEN
+       ALLOCATE(Mesh2%N(SIZE(Mesh1%N, 1), SIZE(Mesh1%N, 2)))
+       Mesh2%N = Mesh1%N
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%faces)) THEN
+       ALLOCATE(Mesh2%faces(SIZE(Mesh1%faces, 1), SIZE(Mesh1%faces, 2), SIZE(Mesh1%faces, 3)))
+       Mesh2%faces = Mesh1%faces
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%extfaces)) THEN
+       ALLOCATE(Mesh2%extfaces(SIZE(Mesh1%extfaces, 1), SIZE(Mesh1%extfaces, 2)))
+       Mesh2%extfaces = Mesh1%extfaces
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%intfaces)) THEN
+       ALLOCATE(Mesh2%intfaces(SIZE(Mesh1%intfaces, 1), SIZE(Mesh1%intfaces, 2)))
+       Mesh2%intfaces = Mesh1%intfaces
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%flipface)) THEN
+       ALLOCATE(Mesh2%flipface(SIZE(Mesh1%flipface, 1), SIZE(Mesh1%flipface, 2)))
+       Mesh2%flipface = Mesh1%flipface
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%Fdir)) THEN
+       ALLOCATE(Mesh2%Fdir(SIZE(Mesh1%Fdir, 1), SIZE(Mesh1%Fdir, 2)))
+       Mesh2%Fdir = Mesh1%Fdir
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%periodic_faces)) THEN
+       ALLOCATE(Mesh2%periodic_faces(SIZE(Mesh1%periodic_faces)))
+       Mesh2%periodic_faces = Mesh1%periodic_faces
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%Diric)) THEN
+       ALLOCATE(Mesh2%Diric(SIZE(Mesh1%Diric)))
+       Mesh2%Diric = Mesh1%Diric
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%numberbcs)) THEN
+       ALLOCATE(Mesh2%numberbcs(SIZE(Mesh1%numberbcs)))
+       Mesh2%numberbcs = Mesh1%numberbcs
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%elemSize)) THEN
+       ALLOCATE(Mesh2%elemSize(SIZE(Mesh1%elemSize)))
+       Mesh2%elemSize = Mesh1%elemSize
+    ENDIF
+
+    IF(ASSOCIATED(Mesh1%X)) THEN
+       ALLOCATE(Mesh2%X(SIZE(Mesh1%X, 1), SIZE(Mesh1%X, 2)))
+       Mesh2%X = Mesh1%X
+    ENDIF
+
+    IF(ASSOCIATED(Mesh1%toroidal)) THEN
+       ALLOCATE(Mesh2%toroidal(SIZE(Mesh1%toroidal)))
+       Mesh2%toroidal = Mesh1%toroidal
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%flag_elems_rho)) THEN
+       ALLOCATE(Mesh2%flag_elems_rho(SIZE(Mesh1%flag_elems_rho)))
+       Mesh2%flag_elems_rho = Mesh1%flag_elems_rho
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%flag_elems_sc)) THEN
+       ALLOCATE(Mesh2%flag_elems_sc(SIZE(Mesh1%flag_elems_sc)))
+       Mesh2%flag_elems_sc = Mesh1%flag_elems_sc
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%minrho_elems)) THEN
+       ALLOCATE(Mesh2%minrho_elems(SIZE(Mesh1%minrho_elems)))
+       Mesh2%minrho_elems = Mesh1%minrho_elems
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%sour_elems)) THEN
+       ALLOCATE(Mesh2%sour_elems(SIZE(Mesh1%sour_elems)))
+       Mesh2%sour_elems = Mesh1%sour_elems
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%diff_elems)) THEN
+       ALLOCATE(Mesh2%diff_elems(SIZE(Mesh1%diff_elems)))
+       Mesh2%diff_elems = Mesh1%diff_elems
+    ENDIF
+
+    IF(ALLOCATED(Mesh1%scdiff_nodes)) THEN
+       ALLOCATE(Mesh2%scdiff_nodes(SIZE(Mesh1%scdiff_nodes, 1), SIZE(Mesh1%scdiff_nodes, 2)))
+       Mesh2%scdiff_nodes = Mesh1%scdiff_nodes
+    ENDIF
+
+    Mesh2%Nnodes_toroidal  = Mesh1%Nnodes_toroidal
+    Mesh2%xmax = Mesh1%xmax
+    Mesh2%xmin = Mesh1%xmin
+    Mesh2%ymax = Mesh1%ymax
+    Mesh2%ymin = Mesh1%ymin
+    Mesh2%puff_area = Mesh1%puff_area
+    Mesh2%core_area = Mesh1%core_area
+
+#ifdef PARALL
+    Mesh2%nghostfaces = Mesh1%nghostfaces
+    Mesh2%nghostelems  = Mesh1%nghostelems
+    Mesh2%Nel_glob = Mesh1%Nel_glob
+    Mesh2%Nfa_glob = Mesh1%Nfa_glob
+    Mesh2%Nno_glob = Mesh1%Nno_glob
+    Mesh2%Ndir_glob = Mesh1%Ndir_glob
+    Mesh2%Ngho_glob = Mesh1%Ngho_glob
+
+    IF (ASSOCIATED(Mesh1%loc2glob_fa)) THEN
+       ALLOCATE(Mesh2%loc2glob_fa(SIZE(Mesh1%loc2glob_fa)))
+       Mesh2%loc2glob_fa = Mesh1%loc2glob_fa
+    ENDIF
+    IF (ASSOCIATED(Mesh1%loc2glob_el)) THEN
+       ALLOCATE(Mesh2%loc2glob_el(SIZE(Mesh1%loc2glob_el)))
+       Mesh2%loc2glob_el = Mesh1%loc2glob_el
+    ENDIF
+    IF (ASSOCIATED(Mesh1%loc2glob_nodes)) THEN
+       ALLOCATE(Mesh2%loc2glob_nodes(SIZE(Mesh1%loc2glob_nodes)))
+       Mesh2%loc2glob_nodes = Mesh1%loc2glob_nodes
+    ENDIF
+    IF (ASSOCIATED(Mesh1%ghostfaces)) THEN
+       ALLOCATE(Mesh2%ghostfaces(SIZE(Mesh1%ghostfaces)))
+       Mesh2%ghostfaces = Mesh1%ghostfaces
+    ENDIF
+    IF (ASSOCIATED(Mesh1%ghostelems)) THEN
+       ALLOCATE(Mesh2%ghostelems(SIZE(Mesh1%ghostelems)))
+       Mesh2%ghostelems = Mesh1%ghostelems
+    ENDIF
+    IF (ASSOCIATED(Mesh1%ghostflp)) THEN
+       ALLOCATE(Mesh2%ghostflp(SIZE(Mesh1%ghostflp)))
+       Mesh2%ghostflp = Mesh1%ghostflp
+    ENDIF
+    IF (ASSOCIATED(Mesh1%ghostloc)) THEN
+       ALLOCATE(Mesh2%ghostloc(SIZE(Mesh1%ghostloc)))
+       Mesh2%ghostloc = Mesh1%ghostloc
+    ENDIF
+    IF (ASSOCIATED(Mesh1%ghostpro)) THEN
+       ALLOCATE(Mesh2%ghostpro(SIZE(Mesh1%ghostpro)))
+       Mesh2%ghostpro = Mesh1%ghostpro
+    ENDIF
+    IF (ASSOCIATED(Mesh1%ghelsloc)) THEN
+       ALLOCATE(Mesh2%ghelsloc(SIZE(Mesh1%ghelsloc)))
+       Mesh2%ghelsloc = Mesh1%ghelsloc
+    ENDIF
+    IF (ASSOCIATED(Mesh1%ghelspro)) THEN
+       ALLOCATE(Mesh2%ghelspro(SIZE(Mesh1%ghelspro)))
+       Mesh2%ghelspro = Mesh1%ghelspro
+    ENDIF
+    IF (ALLOCATED(Mesh1%fc2sd)) THEN
+       ALLOCATE(Mesh2%fc2sd(SIZE(Mesh1%fc2sd)))
+       Mesh2%fc2sd = Mesh1%fc2sd
+    ENDIF
+    IF (ALLOCATED(Mesh1%pr2sd)) THEN
+       ALLOCATE(Mesh2%pr2sd(SIZE(Mesh1%pr2sd)))
+       Mesh2%pr2sd = Mesh1%pr2sd
+    ENDIF
+    IF (ALLOCATED(Mesh1%fc2rv)) THEN
+       ALLOCATE(Mesh2%fc2rv(SIZE(Mesh1%fc2rv)))
+       Mesh2%fc2rv = Mesh1%fc2rv
+    ENDIF
+    IF (ALLOCATED(Mesh1%pr2rv)) THEN
+       ALLOCATE(Mesh2%pr2rv(SIZE(Mesh1%pr2rv)))
+       Mesh2%pr2rv = Mesh1%pr2rv
+    ENDIF
+    IF (ALLOCATED(Mesh1%el2sd)) THEN
+       ALLOCATE(Mesh2%el2sd(SIZE(Mesh1%el2sd)))
+       Mesh2%el2sd = Mesh1%el2sd
+    ENDIF
+    IF (ALLOCATED(Mesh1%el2rv)) THEN
+       ALLOCATE(Mesh2%el2rv(SIZE(Mesh1%el2rv)))
+       Mesh2%el2rv = Mesh1%el2rv
+    ENDIF
+    IF (ALLOCATED(Mesh1%pe2rv)) THEN
+       ALLOCATE(Mesh2%pe2rv(SIZE(Mesh1%pe2rv)))
+       Mesh2%pe2rv = Mesh1%pe2rv
+    ENDIF
+
+
+#endif
+
+  ENDSUBROUTINE deep_copy_mesh_struct
+
+  SUBROUTINE deep_copy_refel_struct(refEl1, refEl2)
+    TYPE(Reference_element_type), INTENT(IN)               :: refEl1
+    TYPE(Reference_element_type), INTENT(OUT)              :: refEl2
+
+    refEl2%ndim = refEl1%ndim
+    refEl2%elemType = refEl1%elemType
+    refEl2%Nvertices = refEl1%Nvertices
+    refEl2%Ndeg = refEl1%Ndeg
+    refEl2%Nnodes3D = refEl1%Nnodes3D
+    refEl2%Nnodes2D = refEl1%Nnodes2D
+    refEl2%Nnodes1D = refEl1%Nnodes1D
+    refEl2%Nfaces = refEl1%Nfaces
+    refEl2%Nbords = refEl1%Nbords
+    refEl2%Nextnodes   = refEl1%Nextnodes
+    refEl2%Nfacenodes = refEl1%Nfacenodes
+    refEl2%Nfacenodeslin = refEl1%Nfacenodeslin
+    refEl2%Nbordnodes = refEl1%Nbordnodes
+    refEl2%Ninnernodes = refEl1%Ninnernodes
+    refEl2%Ninnernodesface = refEl1%Ninnernodesface
+    refEl2%NGauss1D = refEl1%NGauss1D
+    refEl2%NGauss2D = refEl1%NGauss2D
+    refEl2%NGauss3D = refEl1%NGauss3D
+    refEl2%Nfl = refEl1%Nfl
+    refEl2%Ngl = refEl1%Ngl
+    refEl2%Nft = refEl1%Nft
+
+    IF(ALLOCATED(refEl1%Face_nodes)) THEN
+       ALLOCATE(refEl2%Face_nodes, mold = refEl1%Face_nodes)
+       refEl2%Face_nodes = refEl1%Face_nodes
+    ENDIF
+    IF(ALLOCATED(refEl1%Bord_nodes)) THEN
+       ALLOCATE(refEl2%Bord_nodes, mold = refEl1%Bord_nodes)
+       refEl2%Bord_nodes = refEl1%Bord_nodes
+    ENDIF
+    IF(ALLOCATED(refEl1%inner_nodes)) THEN
+       ALLOCATE(refEl2%inner_nodes, mold = refEl1%inner_nodes)
+       refEl2%inner_nodes = refEl1%inner_nodes
+    ENDIF
+    IF(ALLOCATED(refEl1%inner_nodes_face)) THEN
+       ALLOCATE(refEl2%inner_nodes_face, mold = refEl1%inner_nodes_face)
+       refEl2%inner_nodes_face = refEl1%inner_nodes_face
+    ENDIF
+    IF(ASSOCIATED(refEl1%coord3d)) THEN
+       ALLOCATE(refEl2%coord3d, mold = refEl1%coord3d)
+       refEl2%coord3d = refEl1%coord3d
+    ENDIF
+    IF(ASSOCIATED(refEl1%coord2d)) THEN
+       ALLOCATE(refEl2%coord2d, mold = refEl1%coord2d)
+       refEl2%coord2d = refEl1%coord2d
+    ENDIF
+    IF(ASSOCIATED(refEl1%coord1d)) THEN
+       ALLOCATE(refEl2%coord1d, mold = refEl1%coord1d)
+       refEl2%coord1d = refEl1%coord1d
+    ENDIF
+    IF(ALLOCATED(refEl1%gauss_points3D)) THEN
+       ALLOCATE(refEl2%gauss_points3D, mold = refEl1%gauss_points3D)
+       refEl2%gauss_points3D = refEl1%gauss_points3D
+    ENDIF
+    IF(ALLOCATED(refEl1%gauss_points2D)) THEN
+       ALLOCATE(refEl2%gauss_points2D, mold = refEl1%gauss_points2D)
+       refEl2%gauss_points2D = refEl1%gauss_points2D
+    ENDIF
+    IF(ALLOCATED(refEl1%gauss_points1D)) THEN
+       ALLOCATE(refEl2%gauss_points1D, mold = refEl1%gauss_points1D)
+       refEl2%gauss_points1D = refEl1%gauss_points1D
+    ENDIF
+    IF(ALLOCATED(refEl1%gauss_weights3D)) THEN
+       ALLOCATE(refEl2%gauss_weights3D, mold = refEl1%gauss_weights3D)
+       refEl2%gauss_weights3D = refEl1%gauss_weights3D
+    ENDIF
+    IF(ALLOCATED(refEl1%gauss_weights2D)) THEN
+       ALLOCATE(refEl2%gauss_weights2D, mold = refEl1%gauss_weights2D)
+       refEl2%gauss_weights2D = refEl1%gauss_weights2D
+    ENDIF
+    IF(ALLOCATED(refEl1%gauss_weights1D)) THEN
+       ALLOCATE(refEl2%gauss_weights1D, mold = refEl1%gauss_weights1D)
+       refEl2%gauss_weights1D = refEl1%gauss_weights1D
+    ENDIF
+    IF(ALLOCATED(refEl1%N3D)) THEN
+       ALLOCATE(refEl2%N3D, mold = refEl1%N3D)
+       refEl2%N3D = refEl1%N3D
+    ENDIF
+    IF(ALLOCATED(refEl1%Nxi3D)) THEN
+       ALLOCATE(refEl2%Nxi3D, mold = refEl1%Nxi3D)
+       refEl2%Nxi3D = refEl1%Nxi3D
+    ENDIF
+    IF(ALLOCATED(refEl1%Neta3D)) THEN
+       ALLOCATE(refEl2%Neta3D, mold = refEl1%Neta3D)
+       refEl2%Neta3D = refEl1%Neta3D
+    ENDIF
+    IF(ALLOCATED(refEl1%Nzeta3D)) THEN
+       ALLOCATE(refEl2%Nzeta3D, mold = refEl1%Nzeta3D)
+       refEl2%Nzeta3D = refEl1%Nzeta3D
+    ENDIF
+    IF(ALLOCATED(refEl1%N2D)) THEN
+       ALLOCATE(refEl2%N2D, mold = refEl1%N2D)
+       refEl2%N2D = refEl1%N2D
+    ENDIF
+    IF(ALLOCATED(refEl1%Nxi2D)) THEN
+       ALLOCATE(refEl2%Nxi2D, mold = refEl1%Nxi2D)
+       refEl2%Nxi2D = refEl1%Nxi2D
+    ENDIF
+    IF(ALLOCATED(refEl1%Neta2D)) THEN
+       ALLOCATE(refEl2%Neta2D, mold = refEl1%Neta2D)
+       refEl2%Neta2D = refEl1%Neta2D
+    ENDIF
+    IF(ALLOCATED(refEl1%N1D)) THEN
+       ALLOCATE(refEl2%N1D, mold = refEl1%N1D)
+       refEl2%N1D = refEl1%N1D
+    ENDIF
+    IF(ALLOCATED(refEl1%Nxi1D)) THEN
+       ALLOCATE(refEl2%Nxi1D, mold = refEl1%Nxi1D)
+       refEl2%Nxi1D = refEl1%Nxi1D
+    ENDIF
+    IF(ALLOCATED(refEl1%Nlin)) THEN
+       ALLOCATE(refEl2%Nlin, mold = refEl1%Nlin)
+       refEl2%Nlin = refEl1%Nlin
+    ENDIF
+    IF(ALLOCATED(refEl1%sFTF)) THEN
+       ALLOCATE(refEl2%sFTF, mold = refEl1%sFTF)
+       refEl2%sFTF = refEl1%sFTF
+    ENDIF
+    IF(ALLOCATED(refEl1%faceNodes3)) THEN
+       ALLOCATE(refEl2%faceNodes3, mold = refEl1%faceNodes3)
+       refEl2%faceNodes3 = refEl1%faceNodes3
+    ENDIF
+
+
+  ENDSUBROUTINE deep_copy_refel_struct
+
 
 END MODULE types
