@@ -21,39 +21,39 @@ SUBROUTINE HDG_assembly()
   USE MPI_OMP
 
   INTEGER                        :: i, j, jj, k, iel, ifa, ifl, nnz, nn, cont, ieloc, iel3, itor, itorg
-  integer                        :: Neq, Nf, Nfl, Nfg, Nftot, Nfaces, Nfp, Nel, Nintf, Nextf, Ndirf, Nfunk, blk, blkp, blkt, Ndim, Np
-  integer                        :: Np1Dpol, Np1Dtor, Np2d, Npfl, auxnn
-  integer                        :: Fe(refElPol%Nfaces), Fi, Fig
-  integer, allocatable            :: indglo(:), indpos(:)
-  integer*4                      :: ind_loc(refElPol%Nfaces, refElPol%Nfacenodes*phys%Neq)
-  integer                        :: ind_dim(refElPol%Nfaces + 2), ind_sta(refElPol%Nfaces + 2)
-  integer                        :: delta(refElPol%Nfaces + 2)
-  integer, allocatable            :: linew(:), shift(:)
-  integer                        :: pos_start(refElPol%Nfaces + 2)
-  integer, pointer, dimension(:)   :: cols, rows, loc2glob
-  real*8, pointer, dimension(:)    :: vals, rhsvec
-  logical                        :: Fd(refElPol%Nfaces)
-  real*8, allocatable             :: Kel(:,:,:), fel(:,:)
-  real*8, pointer                 :: Df(:,:), Hf(:,:), Ef(:,:)
-  real*8, pointer                 :: UU(:,:), U0(:)
-  real*8, allocatable             :: fh(:)
-  real*8, allocatable             :: Lf(:,:)
-  real*8, pointer                 :: Qf(:,:)
-  real*8, pointer                 :: LL(:,:), L0(:)
+  INTEGER                        :: Neq, Nf, Nfl, Nfg, Nftot, Nfaces, Nfp, Nel, Nintf, Nextf, Ndirf, Nfunk, blk, blkp, blkt, Ndim, Np
+  INTEGER                        :: Np1Dpol, Np1Dtor, Np2d, Npfl, auxnn
+  INTEGER                        :: Fe(refElPol%Nfaces), Fi, Fig
+  INTEGER, ALLOCATABLE            :: indglo(:), indpos(:)
+  INTEGER*4                      :: ind_loc(refElPol%Nfaces, refElPol%Nfacenodes*phys%Neq)
+  INTEGER                        :: ind_dim(refElPol%Nfaces + 2), ind_sta(refElPol%Nfaces + 2)
+  INTEGER                        :: delta(refElPol%Nfaces + 2)
+  INTEGER, ALLOCATABLE            :: linew(:), shift(:)
+  INTEGER                        :: pos_start(refElPol%Nfaces + 2)
+  INTEGER, POINTER, DIMENSION(:)   :: cols, rows, loc2glob
+  REAL*8, POINTER, DIMENSION(:)    :: vals, rhsvec
+  LOGICAL                        :: Fd(refElPol%Nfaces)
+  REAL*8, ALLOCATABLE             :: Kel(:,:,:), fel(:,:)
+  REAL*8, POINTER                 :: Df(:,:), Hf(:,:), Ef(:,:)
+  REAL*8, POINTER                 :: UU(:,:), U0(:)
+  REAL*8, ALLOCATABLE             :: fh(:)
+  REAL*8, ALLOCATABLE             :: Lf(:,:)
+  REAL*8, POINTER                 :: Qf(:,:)
+  REAL*8, POINTER                 :: LL(:,:), L0(:)
 #ifdef PARALL
-  integer                        ::        Nghostf, Nghoste, Fasind(Mesh%Nfaces), Easind(Mesh%Nelems)
-  integer                        :: shiftGlob3d(refElPol%Nfaces + 2), rept
+  INTEGER                        ::        Nghostf, Nghoste, Fasind(Mesh%Nfaces), Easind(Mesh%Nelems)
+  INTEGER                        :: shiftGlob3d(refElPol%Nfaces + 2), rept
 #endif
-  integer :: ierr
-  integer :: Ntorloc, Ntorass
+  INTEGER :: ierr
+  INTEGER :: Ntorloc, Ntorass
 
-  if (utils%timing) then
-    call cpu_time(timing%tps1)
-    call system_clock(timing%cks1, timing%clock_rate1)
-  end if
+  IF (utils%timing) THEN
+     CALL cpu_TIME(timing%tps1)
+     CALL system_CLOCK(timing%cks1, timing%clock_rate1)
+  END IF
 
 #ifdef PARALL
-  IF (MPIvar%ntor .gt. 1) THEN
+  IF (MPIvar%ntor .GT. 1) THEN
     ntorloc = numer%ntor/MPIvar%ntor + 1
     ntorass = ntorloc-1
   ELSE
@@ -98,7 +98,7 @@ SUBROUTINE HDG_assembly()
   ! Filling ind_dim and ind_sta
   ind_sta(1) = 1
   DO i = 1, Nf + 2
-    IF (i == 1 .or. i == Nf + 2) THEN
+     IF (i == 1 .OR. i == Nf + 2) THEN
       blk = blkp
     ELSE
       blk = blkt
@@ -115,7 +115,7 @@ SUBROUTINE HDG_assembly()
   Fasind = 0
   rept = 0
   DO i = 1, Nfaces
-    IF (Mesh%ghostfaces(i) .eq. 1) THEN
+     IF (Mesh%ghostfaces(i) .EQ. 1) THEN
       rept = rept + 1
       CYCLE
     END IF
@@ -124,7 +124,7 @@ SUBROUTINE HDG_assembly()
   Easind = 0
   rept = 0
   DO i = 1, Nel
-    IF (Mesh%ghostelems(i) .eq. 1) THEN
+     IF (Mesh%ghostelems(i) .EQ. 1) THEN
       rept = rept + 1
       CYCLE
     END IF
@@ -173,7 +173,7 @@ SUBROUTINE HDG_assembly()
   DO itor = 1, Ntorloc
 #ifdef PARALL
     itorg = itor + (MPIvar%itor-1)*numer%ntor/MPIvar%ntor
-    if (itorg == numer%ntor + 1) itorg = 1
+     IF (itorg == numer%ntor + 1) itorg = 1
 #else
     itorg = itor
 #endif
@@ -199,7 +199,7 @@ SUBROUTINE HDG_assembly()
         &(/ (Easind(iel)-1)*blkp,(Nel-Nghoste)*blkp+(Fasind(Fe)-1)*blkt,(Nel-Nghoste)*blkp+(Nfaces-Ndirf-Nghostf)*blkt+(Easind(iel)-1)*blkp /)
       shiftGlob3d = 1 + (itorg-1)*(Mesh%Nel_glob*blkp + (Mesh%Nfa_glob-Mesh%Ndir_glob)*blkt) + (/(Mesh%loc2glob_el(iel)-1)*blkp, &
         & Mesh%Nel_glob*blkp+(Mesh%loc2glob_fa(Fe)-1)*blkt, Mesh%Nel_glob*blkp+(Mesh%Nfa_glob-Mesh%Ndir_glob )*blkt+(Mesh%loc2glob_el(iel)-1)*blkp/)
-      IF (MPIvar%ntor .gt. 1 .and. MPIvar%itor .ne. MPIvar%ntor) delta = delta-(Nel-Nghoste)*blkp
+        IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .NE. MPIvar%ntor) delta = delta-(Nel-Nghoste)*blkp
 #else
       delta = 1+(itor-1)*(Nel*blkp+(Nfaces-Ndirf)*blkt)+(/ (iel-1)*blkp,Nel*blkp+(Fe-1)*blkt,Nel*blkp+(Nfaces-Ndirf)*blkt+(iel-1)*blkp /)
 #endif
@@ -208,7 +208,7 @@ SUBROUTINE HDG_assembly()
       IF (itorg == numer%ntor) THEN
         delta(Nf + 2) = 1 + (Easind(iel)-1)*blkp
         shiftGlob3d(Nf + 2) = 1 + (Mesh%loc2glob_el(iel)-1)*blkp
-      ELSE IF (itor == ntorass + 1 .and. MPIvar%itor == MPIvar%ntor) THEN
+        ELSE IF (itor == ntorass + 1 .AND. MPIvar%itor == MPIvar%ntor) THEN
         !            I enter here only with toroidal parallelization
         delta(1) = 1 + (Easind(iel)-1)*blkp
       ENDIF
@@ -235,17 +235,17 @@ SUBROUTINE HDG_assembly()
           ! ******** First poloidal face of the element *********
           !******************************************************
 #ifdef PARALL
-          IF (Mesh%ghostElems(iel) .eq. 1) CYCLE
-          IF ((MPIvar%ntor .gt. 1) .and. (itor == 1)) CYCLE ! toroidal ghost face
+              IF (Mesh%ghostElems(iel) .EQ. 1) CYCLE
+              IF ((MPIvar%ntor .GT. 1) .AND. (itor == 1)) CYCLE ! toroidal ghost face
 #endif
 
           Fig = (itor-1)*(Nel + Nfaces) + iel ! Global numbering of the face
 #ifdef PARALL
-          IF (MPIvar%ntor .gt. 1 .and. MPIvar%itor .ne. MPIvar%ntor) Fig = Fig-Nel
+              IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .NE. MPIvar%ntor) Fig = Fig-Nel
 #endif
 #ifdef PARALL
           ! Case of extra toroidal element for parallel purposes (only toroidal parallelization)
-          IF (MPIvar%itor == MPIvar%ntor .and. itor == ntorass + 1) Fig = iel
+              IF (MPIvar%itor == MPIvar%ntor .AND. itor == ntorass + 1) Fig = iel
 #endif
 
           blk = blkp                        ! Number of nodes of the face
@@ -256,20 +256,20 @@ SUBROUTINE HDG_assembly()
           ! ********* Second poloidal face of the element *******
           !******************************************************
 #ifdef PARALL
-          IF (Mesh%ghostElems(iel) .eq. 1) CYCLE
+              IF (Mesh%ghostElems(iel) .EQ. 1) CYCLE
           IF (itor == ntorass + 1) CYCLE
 #endif
 
           Fig = itor*(Nel + Nfaces) + iel ! Global numbering of the face
 #ifdef PARALL
-          IF (MPIvar%ntor .gt. 1 .and. MPIvar%itor .ne. MPIvar%ntor) Fig = Fig-Nel
+              IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .NE. MPIvar%ntor) Fig = Fig-Nel
 #endif
 #ifdef PARALL
           ! TODO: Fig è sempre iel????
-          IF (MPIvar%ntor .gt. 1 .and. MPIvar%itor == MPIvar%ntor .and. itor == ntorass) THEN
+              IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor == MPIvar%ntor .AND. itor == ntorass) THEN
             ! Toroidal parallelization
             Fig = iel
-          ELSE IF (MPIvar%ntor .eq. 1 .and. itor == ntorass) THEN
+              ELSE IF (MPIvar%ntor .EQ. 1 .AND. itor == ntorass) THEN
             ! No toroidal parallelization
             Fig = iel
           END IF
@@ -292,13 +292,13 @@ SUBROUTINE HDG_assembly()
           Fi = Fe(ifa-1)                      ! Face number in the 2D mesh
           Fig = (itor-1)*(Nel + Nfaces) + Nel + Fi ! Global numbering of the face
 #ifdef PARALL
-          IF (MPIvar%ntor .gt. 1 .and. MPIvar%itor .ne. MPIvar%ntor) Fig = Fig-Nel
+              IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .NE. MPIvar%ntor) Fig = Fig-Nel
 #endif
           blk = blkt                          ! Number of nodes of the face
 #ifdef PARALL
-          IF (Mesh%ghostFaces(Fi) .eq. 1) CYCLE
+              IF (Mesh%ghostFaces(Fi) .EQ. 1) CYCLE
 #endif
-          IF (Fi .le. Nintf) THEN
+              IF (Fi .LE. Nintf) THEN
             !**************************
             ! Interior face
             !**************************
@@ -328,12 +328,12 @@ SUBROUTINE HDG_assembly()
   NULLIFY (cols, rows, vals, loc2glob, rhsvec)
 
 
-  if (utils%timing) then
-    call cpu_time(timing%tpe1)
-    call system_clock(timing%cke1, timing%clock_rate1)
-    timing%runtass = timing%runtass + (timing%cke1-timing%cks1)/real(timing%clock_rate1)
+  IF (utils%timing) THEN
+     CALL cpu_TIME(timing%tpe1)
+     CALL system_CLOCK(timing%cke1, timing%clock_rate1)
+     timing%runtass = timing%runtass + (timing%cke1-timing%cks1)/REAL(timing%clock_rate1)
     timing%cputass = timing%cputass + timing%tpe1-timing%tps1
-  end if
+  END IF
 
 
 CONTAINS
@@ -342,7 +342,7 @@ CONTAINS
   ! Compute the nnz of the matrix
   !**************************************************
   SUBROUTINE computennz()
-    integer::shift_inc
+    INTEGER::shift_inc
 
     nnz = 0
     linew = 0
@@ -350,13 +350,13 @@ CONTAINS
     Fig = 0
     shift_inc = 0
 #ifdef PARALL
-    IF (MPIvar%ntor .gt. 1) THEN
-      IF (MPIvar%itor .eq. MPIvar%ntor) THEN
+    IF (MPIvar%ntor .GT. 1) THEN
+       IF (MPIvar%itor .EQ. MPIvar%ntor) THEN
         DO iel = 1, Nel
           ! Increment face count
           Fig = Fig + 1
-          IF (Mesh%ghostelems(iel) .eq. 1) THEN
-            IF (Fig .gt. 1) THEN
+             IF (Mesh%ghostelems(iel) .EQ. 1) THEN
+                IF (Fig .GT. 1) THEN
               shift(Fig) = shift(Fig-1)
               linew(Fig) = linew(Fig-1)
             ENDIF
@@ -378,7 +378,7 @@ CONTAINS
             nnz = nnz + 2*blkp*blkt
             linew(Fig) = linew(Fig) + 2*blkt
           END DO
-          IF (Fig .gt. 1) THEN
+             IF (Fig .GT. 1) THEN
             shift(Fig) = shift(Fig-1) + shift_inc
           ENDIF
           shift_inc = linew(Fig)*blkp
@@ -395,13 +395,13 @@ CONTAINS
       ! ************************************************
       DO iel = 1, Nel
 #ifdef PARALL
-        IF ((MPIvar%ntor .gt. 1) .and. (itor == 1)) CYCLE
+          IF ((MPIvar%ntor .GT. 1) .AND. (itor == 1)) CYCLE
 #endif
         ! Increment face count
         Fig = Fig + 1
 #ifdef PARALL
-        IF (Mesh%ghostelems(iel) .eq. 1) THEN
-          IF (Fig .gt. 1) THEN
+          IF (Mesh%ghostelems(iel) .EQ. 1) THEN
+             IF (Fig .GT. 1) THEN
             shift(Fig) = shift(Fig-1)
             linew(Fig) = linew(Fig-1)
           END IF
@@ -440,7 +440,7 @@ CONTAINS
           END DO
         END IF
 
-        IF (Fig .gt. 1) THEN
+          IF (Fig .GT. 1) THEN
           shift(Fig) = shift(Fig-1) + shift_inc
         END IF
         shift_inc = linew(Fig)*blkp
@@ -451,15 +451,15 @@ CONTAINS
       DO Fi = 1, Nfaces
         Fig = Fig + 1
 #ifdef PARALL
-        IF (Mesh%ghostfaces(Fi) .eq. 1) THEN
-          IF (Fig .gt. 1) THEN
+          IF (Mesh%ghostfaces(Fi) .EQ. 1) THEN
+             IF (Fig .GT. 1) THEN
             shift(Fig) = shift(Fig-1)
             linew(Fig) = linew(Fig-1)
           END IF
           CYCLE
         END IF
 #endif
-        IF (Fi .le. Nintf) THEN
+          IF (Fi .LE. Nintf) THEN
           !**************************
           ! Interior face
           !**************************
@@ -480,7 +480,7 @@ CONTAINS
             Fd = Mesh%Fdir(iel,:)
             DO ifl = 1, Nf
               IF (Fd(ifl)) CYCLE
-              IF (Fe(ifl) == Fi .and. ieloc == 2) CYCLE
+                   IF (Fe(ifl) == Fi .AND. ieloc == 2) CYCLE
               nnz = nnz + blkt**2
               linew(Fig) = linew(Fig) + blkt
             END DO
@@ -495,7 +495,7 @@ CONTAINS
 
           ! Skip Dirichlet faces
           IF (Fd(ifa)) THEN
-            IF (Fig .gt. 1) THEN
+                IF (Fig .GT. 1) THEN
               shift(Fig) = shift(Fig-1)
               linew(Fig) = linew(Fig-1)
             END IF
@@ -521,19 +521,19 @@ CONTAINS
 
         END IF
 
-        IF (Fig .gt. 1) THEN
+          IF (Fig .GT. 1) THEN
           shift(Fig) = shift(Fig-1) + shift_inc
         END IF
         shift_inc = linew(Fig)*blkt
       END DO
     END DO
 #ifdef PARALL
-    IF (MPIvar%ntor .gt. 1) THEN
-      IF (MPIvar%itor .ne. MPIvar%ntor) THEN
+    IF (MPIvar%ntor .GT. 1) THEN
+       IF (MPIvar%itor .NE. MPIvar%ntor) THEN
         DO iel = 1, Nel
           ! Increment face count
           Fig = Fig + 1
-          IF (Mesh%ghostelems(iel) .eq. 1) THEN
+             IF (Mesh%ghostelems(iel) .EQ. 1) THEN
             shift(Fig) = shift(Fig-1)
             linew(Fig) = linew(Fig-1)
             CYCLE
@@ -567,11 +567,11 @@ CONTAINS
   !**************************************************
   SUBROUTINE computeElementalMatrix(iel3)
     USE LinearAlgebra, ONLY: mymatmul
-    integer :: iel3
-    real*8, pointer                 :: A_lq(:,:), A_lu(:,:), A_ll(:,:)
-    real*8, pointer                 :: LL(:,:), L0(:), UU(:,:), U0(:), f(:)
+    INTEGER :: iel3
+    REAL*8, POINTER                 :: A_lq(:,:), A_lu(:,:), A_ll(:,:)
+    REAL*8, POINTER                 :: LL(:,:), L0(:), UU(:,:), U0(:), f(:)
 
-    real*8, allocatable :: auxAlqLL(:,:),auxAluUU(:,:)
+    REAL*8, ALLOCATABLE :: auxAlqLL(:,:),auxAluUU(:,:)
 
 
     LL => elMat%LL(:,:, iel3)
@@ -581,17 +581,17 @@ CONTAINS
 
     A_lq => elMat%Alq(:,:, iel3)
     A_lu => elMat%Alu(:,:, iel3)
-    A_ll => elMat%All(:,:, iel3)
+    A_ll => elMat%ALL(:,:, iel3)
     f => elMat%fh(:, iel3)
 
     ! Elemental matrix and elemental RHS
 
-    allocate(auxAlqLL(size(A_lq,1),size(LL,2)))
-    allocate(auxAluUU(size(A_lu,1),size(UU,2)))
-    call mymatmul(A_lq,LL,auxAlqLL)
-    call mymatmul(A_lu,UU,auxAluUU)
+    ALLOCATE(auxAlqLL(SIZE(A_lq,1),SIZE(LL,2)))
+    ALLOCATE(auxAluUU(SIZE(A_lu,1),SIZE(UU,2)))
+    CALL mymatmul(A_lq,LL,auxAlqLL)
+    CALL mymatmul(A_lu,UU,auxAluUU)
     Kel(:,:,iel3) = auxAlqLL+auxAluUU+A_ll
-    deallocate(auxAlqLL,auxAluUU)
+    DEALLOCATE(auxAlqLL,auxAluUU)
     !      Kel(:,:,iel3) = matmul(A_lq, LL) + matmul(A_lu, UU) + A_ll
 
 
@@ -607,7 +607,7 @@ CONTAINS
     !write(6,*) "TEST 3"
     !Kel = Kel + A_ll
     !write(6,*) "TEST 4"
-    fel(:,iel3) = -(matmul(A_lu, U0) + matmul(A_lq, L0)) + f
+    fel(:,iel3) = -(MATMUL(A_lu, U0) + MATMUL(A_lq, L0)) + f
 
     !call HDF5_save_vector(fel,"f1")
     !stop
@@ -657,10 +657,10 @@ CONTAINS
   ! for poloidal faces
   !**************************************************
   SUBROUTINE getindpospol(indpos)
-    integer :: i, j, indpos(:)
-    integer :: pos(1:Nf)
-    integer ::  qq, blkl
-    logical :: skip_first
+    INTEGER :: i, j, indpos(:)
+    INTEGER :: pos(1:Nf)
+    INTEGER ::  qq, blkl
+    LOGICAL :: skip_first
 
     ! Filling pos: needed to determine the relative position of the
     ! toroidal faces in the assembling line of the matrix for the
@@ -679,14 +679,14 @@ CONTAINS
 
     ! qq gives here the number of lateral faces assebled for this element
     ! (take out Dirichlet faces)
-    qq = maxval(pos)
+    qq = MAXVAL(pos)
 
     ! Filling pos_start: needed to determine the starting position of assembling
     ! the coefficients in the cols and vals vectors
     pos_start = 0
     pos_start(2:Nf + 1) = (pos-1)*blkt
 #ifdef PARALL
-    IF (MPIvar%ntor .gt. 1) THEN
+    IF (MPIvar%ntor .GT. 1) THEN
       !***************************************************************************************
       !
       !                  CASE TOROIDAL +  POLOIDAL PARALLELLIZATION
@@ -742,7 +742,7 @@ CONTAINS
           pos_start = pos_start + 2*blkp + qq*blkt
           pos_start(2:Nf + 2) = pos_start(2:Nf + 2) + blkp
           pos_start(Nf + 2) = 0
-        ELSE IF ((ifa == Nf + 2) .and. itorg == numer%ntor-1) THEN
+          ELSE IF ((ifa == Nf + 2) .AND. itorg == numer%ntor-1) THEN
           ! case second-last set
           ! GLOB. EQ.    O O x x x 0    x x x
           !                O x x x O [O x x x O]
@@ -791,7 +791,7 @@ CONTAINS
           !              O x x x O  [O x x x O]
           pos_start(2:Nf + 2) = pos_start(2:Nf + 2) + blkp
           pos_start(Nf + 2) = pos_start(Nf + 2) + qq*blkt
-        ELSE IF (itor == Ntorloc .and. Ntorloc == 2) THEN
+          ELSE IF (itor == Ntorloc .AND. Ntorloc == 2) THEN
           ! case last set with only 2 toroidal divisions
           ! GLOB. EQ.    0 x x x 0     x x x
           !             [O x x x O]  O x x x O
@@ -805,7 +805,7 @@ CONTAINS
           pos_start = pos_start + 2*blkp + qq*blkt
           pos_start(2:Nf + 2) = pos_start(2:Nf + 2) + blkp
           pos_start(Nf + 2) = 0
-        ELSE IF ((ifa == Nf + 2) .and. itor == Ntorloc-1) THEN
+          ELSE IF ((ifa == Nf + 2) .AND. itor == Ntorloc-1) THEN
           ! case second-last set
           ! GLOB. EQ.    O O x x x 0    x x x
           !                O x x x O [O x x x O]
@@ -852,7 +852,7 @@ CONTAINS
         !              O x x x O  [O x x x O]
         pos_start(2:Nf + 2) = pos_start(2:Nf + 2) + blkp
         pos_start(Nf + 2) = pos_start(Nf + 2) + qq*blkt
-      ELSE IF (itor == Ntorloc .and. Ntorloc == 2) THEN
+       ELSE IF (itor == Ntorloc .AND. Ntorloc == 2) THEN
         ! case last set with only 2 toroidal divisions
         ! GLOB. EQ.    0 x x x 0     x x x
         !             [O x x x O]  O x x x O
@@ -866,7 +866,7 @@ CONTAINS
         pos_start = pos_start + 2*blkp + qq*blkt
         pos_start(2:Nf + 2) = pos_start(2:Nf + 2) + blkp
         pos_start(Nf + 2) = 0
-      ELSE IF ((ifa == Nf + 2) .and. itor == Ntorloc-1) THEN
+       ELSE IF ((ifa == Nf + 2) .AND. itor == Ntorloc-1) THEN
         ! case second-last set
         ! GLOB. EQ.    O O x x x 0    x x x
         !                O x x x O [O x x x O]
@@ -895,7 +895,7 @@ CONTAINS
     ! Filling ind_pos: determines the assembly position in cols and vals
     qq = 1
     DO i = 1, Nf + 2
-      IF (i == 1 .or. i == Nf + 2) THEN
+       IF (i == 1 .OR. i == Nf + 2) THEN
         blkl = blkp
       ELSE
         blkl = blkt
@@ -912,10 +912,10 @@ CONTAINS
   ! for toroidal interior faces
   !**************************************************
   SUBROUTINE getindposint(indpos)
-    integer :: i, j, indpos(:), ieln, blkl
-    integer :: pos(1:Nf)
-    integer :: Fen(1:Nf), intface(5), qq
-    logical :: Fdn(1:Nf)
+    INTEGER :: i, j, indpos(:), ieln, blkl
+    INTEGER :: pos(1:Nf)
+    INTEGER :: Fen(1:Nf), intface(5), qq
+    LOGICAL :: Fdn(1:Nf)
 
     ! Extract infos on the element faces and the next element
     ! faces (the element connected to the actual one by the
@@ -976,7 +976,7 @@ CONTAINS
       pos_start(Nf + 2) = pos_start(Nf + 2) + blkp
     END IF
 
-    IF (itor == numer%ntor .and. numer%ntor > 1) THEN
+    IF (itor == numer%ntor .AND. numer%ntor > 1) THEN
       pos_start = pos_start + 2*blkp
       pos_start(Nf + 2) = 0
       IF (iel > ieln) THEN
@@ -993,7 +993,7 @@ CONTAINS
     ! Filling ind_pos: determines the assembly position in cols and vals
     qq = 1
     DO i = 1, Nf + 2
-      IF (i == 1 .or. i == Nf + 2) THEN
+       IF (i == 1 .OR. i == Nf + 2) THEN
         blkl = blkp
       ELSE
         blkl = blkt
@@ -1009,8 +1009,8 @@ CONTAINS
   ! for toroidal exterior faces
   !**************************************************
   SUBROUTINE getindposext(indpos)
-    integer :: i, j, indpos(:)
-    integer :: pos(1:Nf), qq, blkl
+    INTEGER :: i, j, indpos(:)
+    INTEGER :: pos(1:Nf), qq, blkl
 
     ! Filling pos: needed to determine the relative position of the
     ! toroidal faces in the assembling line of the matrix for the
@@ -1027,14 +1027,14 @@ CONTAINS
     END DO
     ! qq gives here the number of lateral faces assembled for this element
     ! (take out Dirichlet faces)
-    qq = maxval(pos)
+    qq = MAXVAL(pos)
 
     ! Filling pos_start: needed to determine the starting position of assembling
     ! the coefficients in the cols and vals vectors
     pos_start = 0
     pos_start(2:Nf + 1) = (pos-1)*blkt + blkp
     pos_start(Nf + 2) = blkp + blkt*qq
-    IF (itor == numer%ntor .and. numer%ntor > 1) THEN
+    IF (itor == numer%ntor .AND. numer%ntor > 1) THEN
       pos_start = pos_start + blkp
       pos_start(Nf + 2) = 0
     ELSE IF (numer%ntor == 1) THEN
@@ -1044,7 +1044,7 @@ CONTAINS
     ! Filling ind_pos: determines the assembly position in cols and vals
     qq = 1
     DO i = 1, Nf + 2
-      IF (i == 1 .or. i == Nf + 2) THEN
+       IF (i == 1 .OR. i == Nf + 2) THEN
         blkl = blkp
       ELSE
         blkl = blkt
@@ -1056,7 +1056,7 @@ CONTAINS
   END SUBROUTINE getindposext
 
   SUBROUTINE fill_cols_vals_rowptr_loc2glob()
-    integer :: sl, blkl
+    INTEGER :: sl, blkl
     CHARACTER(LEN=10)  :: num
 
     sl = delta(ifa)-1
@@ -1070,7 +1070,7 @@ CONTAINS
 #endif
 
       DO ifl = 1, Nf + 2
-        IF (ifl > 1 .and. ifl < Nf + 2) THEN
+          IF (ifl > 1 .AND. ifl < Nf + 2) THEN
           IF (Fd(ifl-1)) CYCLE
           blkl = blkt
         ELSE
@@ -1145,43 +1145,43 @@ SUBROUTINE HDG_assembly()
   USE MPI_OMP
 
   INTEGER                        :: i, j, jj, k, iel, ifa, ifl, nnz, nn, cont, ieloc
-  integer                        :: ieln,ifan,Fi_per,Fe_aux(refElPol%Nfaces)
-  integer                        :: Neq, Nf, Nfaces, Nfp, Nel, Nintf, Nextf, Ndirf, Nfunk, blk, Ndim, Np
-  integer                        :: Fe(refElPol%Nfaces), Fi
-  integer                        :: indglo(1:refElPol%Nfacenodes*refElPol%Nfaces*phys%Neq)
-  integer                        :: indpos(1:refElPol%Nfacenodes*refElPol%Nfaces*phys%Neq)
-  integer*4                      :: ind_loc(1:refElPol%Nfaces, 1:refElPol%Nfacenodes*phys%Neq)
-  integer                        :: n_periodic_faces
-  integer, dimension(Mesh%Nfaces) :: linew, shift
-  integer, pointer, dimension(:)   :: cols, rows, loc2glob
-  real*8, pointer, dimension(:)    :: vals, rhsvec
-  logical                        :: Fd(refElPol%Nfaces)
-  real*8, allocatable             :: Kel(:,:), fel(:)
-  real*8, pointer                 :: Df(:,:), Hf(:,:), Ef(:,:)
-  real*8, pointer                 :: UU(:,:), U0(:)
-  real*8, allocatable             :: fh(:)
-  real*8, allocatable             :: Lf(:,:)
-  real*8, pointer                 :: Qf(:,:)
-  real*8, pointer                 :: LL(:,:), L0(:)
+  INTEGER                        :: ieln,ifan,Fi_per,Fe_aux(refElPol%Nfaces)
+  INTEGER                        :: Neq, Nf, Nfaces, Nfp, Nel, Nintf, Nextf, Ndirf, Nfunk, blk, Ndim, Np
+  INTEGER                        :: Fe(refElPol%Nfaces), Fi
+  INTEGER                        :: indglo(1:refElPol%Nfacenodes*refElPol%Nfaces*phys%Neq)
+  INTEGER                        :: indpos(1:refElPol%Nfacenodes*refElPol%Nfaces*phys%Neq)
+  INTEGER*4                      :: ind_loc(1:refElPol%Nfaces, 1:refElPol%Nfacenodes*phys%Neq)
+  INTEGER                        :: n_periodic_faces
+  INTEGER, DIMENSION(Mesh%Nfaces) :: linew, shift
+  INTEGER, POINTER, DIMENSION(:)   :: cols, rows, loc2glob
+  REAL*8, POINTER, DIMENSION(:)    :: vals, rhsvec
+  LOGICAL                        :: Fd(refElPol%Nfaces)
+  REAL*8, ALLOCATABLE             :: Kel(:,:), fel(:)
+  REAL*8, POINTER                 :: Df(:,:), Hf(:,:), Ef(:,:)
+  REAL*8, POINTER                 :: UU(:,:), U0(:)
+  REAL*8, ALLOCATABLE             :: fh(:)
+  REAL*8, ALLOCATABLE             :: Lf(:,:)
+  REAL*8, POINTER                 :: Qf(:,:)
+  REAL*8, POINTER                 :: LL(:,:), L0(:)
 #ifdef PARALL
-  integer                        ::        Fasind(Mesh%Nfaces)
-  integer                        :: rept
+  INTEGER                        ::        Fasind(Mesh%Nfaces)
+  INTEGER                        :: rept
 #endif
 
 
 
-  if (utils%timing) then
-    call cpu_time(timing%tps1)
-    call system_clock(timing%cks1, timing%clock_rate1)
-  end if
+  IF (utils%timing) THEN
+     CALL cpu_TIME(timing%tps1)
+     CALL system_CLOCK(timing%cks1, timing%clock_rate1)
+  END IF
 
   ! Number of periodic faces
   n_periodic_faces=0
-  do i=1,Mesh%nextfaces
-    if (Mesh%periodic_faces(i).ne.0) then
+  DO i=1,Mesh%nextfaces
+     IF (Mesh%periodic_faces(i).NE.0) THEN
       n_periodic_faces = n_periodic_faces+1
-    endif
-  enddo
+     ENDIF
+  ENDDO
 
   Neq = phys%Neq
   Np = refElPol%Nnodes2D
@@ -1204,7 +1204,7 @@ SUBROUTINE HDG_assembly()
   Fasind = 0
   rept = 0
   DO i = 1, Nfaces
-    IF (Mesh%ghostfaces(i) .eq. 1) THEN
+     IF (Mesh%ghostfaces(i) .EQ. 1) THEN
       rept = rept + 1
       CYCLE
     END IF
@@ -1256,9 +1256,9 @@ SUBROUTINE HDG_assembly()
 
       Fi = Fe(ifa)
 #ifdef PARALL
-      IF (Mesh%ghostFaces(Fi) .eq. 1) CYCLE
+        IF (Mesh%ghostFaces(Fi) .EQ. 1) CYCLE
 #endif
-      IF (Fi .le. Nintf) THEN
+        IF (Fi .LE. Nintf) THEN
         !**************************
         ! Interior face
         !**************************
@@ -1269,9 +1269,9 @@ SUBROUTINE HDG_assembly()
         ! Exterior face
         !**************************
         IF (Mesh%Fdir(iel, ifa)) CYCLE
-        if (Mesh%periodic_faces(Fi-Nintf).eq.0) then
+           IF (Mesh%periodic_faces(Fi-Nintf).EQ.0) THEN
           CALL getindposext(indpos)
-        else
+           ELSE
           ieln = Mesh%extfaces(Mesh%periodic_faces(Fi-Nintf),1)
           ifan = Mesh%extfaces(Mesh%periodic_faces(Fi-Nintf),2)
           Fi_per = Mesh%F(ieln,ifan)
@@ -1282,13 +1282,13 @@ SUBROUTINE HDG_assembly()
           CALL getindposextperiodic(indpos)
           CALL fill_cols_vals_rowptr_loc2glob()
           Fe_aux = Fe
-          call exchange_Fi ! Fi--->Fi_per ; Fi_per--->Fi
+              CALL exchange_Fi ! Fi--->Fi_per ; Fi_per--->Fi
           CALL getindposextperiodic(indpos)
           CALL fill_cols_vals_rowptr_loc2glob()
           Fe = Fe_aux
           !stop
           CYCLE
-        endif
+           ENDIF
 
       END IF
 
@@ -1307,27 +1307,27 @@ SUBROUTINE HDG_assembly()
   !stop
 
 
-  if (utils%timing) then
-    call cpu_time(timing%tpe1)
-    call system_clock(timing%cke1, timing%clock_rate1)
-    timing%runtass = timing%runtass + (timing%cke1-timing%cks1)/real(timing%clock_rate1)
+  IF (utils%timing) THEN
+     CALL cpu_TIME(timing%tpe1)
+     CALL system_CLOCK(timing%cke1, timing%clock_rate1)
+     timing%runtass = timing%runtass + (timing%cke1-timing%cks1)/REAL(timing%clock_rate1)
     timing%cputass = timing%cputass + timing%tpe1-timing%tps1
-  end if
+  END IF
 
 
 CONTAINS
 
-  subroutine exchange_Fi
-    integer :: aux,i
-    do i=1,Nf
-      if (Fe(i)==Fi) then
+  SUBROUTINE exchange_Fi
+    INTEGER :: aux,i
+    DO i=1,Nf
+       IF (Fe(i)==Fi) THEN
         Fe(i)=Fi_per
-      endif
-    end do
+       ENDIF
+    END DO
     aux = Fi
     Fi = Fi_per
     Fi_per = aux
-  end subroutine exchange_Fi
+  END SUBROUTINE exchange_Fi
 
   !**************************************************
   ! Compute the nnz of the matrix
@@ -1339,15 +1339,15 @@ CONTAINS
     ! Loop in faces
     DO Fi = 1, Nfaces
 #ifdef PARALL
-      IF (Mesh%ghostfaces(Fi) .eq. 1) THEN
-        IF (Fi .gt. 1) THEN
+       IF (Mesh%ghostfaces(Fi) .EQ. 1) THEN
+          IF (Fi .GT. 1) THEN
           shift(Fi) = shift(Fi-1)
           linew(Fi) = linew(Fi-1)
         END IF
         CYCLE
       END IF
 #endif
-      IF (Fi .le. Nintf) THEN
+       IF (Fi .LE. Nintf) THEN
         !**************************
         ! Interior face
         !**************************
@@ -1357,7 +1357,7 @@ CONTAINS
           Fd = Mesh%Fdir(iel,:)
           DO ifl = 1, Nf
             IF (Fd(ifl)) CYCLE
-            IF (Fe(ifl) == Fi .and. ieloc == 2) CYCLE
+                IF (Fe(ifl) == Fi .AND. ieloc == 2) CYCLE
             nnz = nnz + blk**2
             linew(Fi) = linew(Fi) + blk
           END DO
@@ -1366,14 +1366,14 @@ CONTAINS
         !**************************
         ! Exterior face
         !**************************
-        if (Mesh%periodic_faces(Fi-Nintf).eq.0) then
+          IF (Mesh%periodic_faces(Fi-Nintf).EQ.0) THEN
           iel = Mesh%extfaces(Fi-Nintf, 1)
           ifa = Mesh%extfaces(Fi-Nintf, 2)
           Fd = Mesh%Fdir(iel,:)
 
           ! Skip Dirichlet faces
           IF (Fd(ifa)) THEN
-            IF (Fi .gt. 1) THEN
+                IF (Fi .GT. 1) THEN
               shift(Fi) = shift(Fi-1)
               linew(Fi) = linew(Fi-1)
             END IF
@@ -1385,17 +1385,17 @@ CONTAINS
             nnz = nnz + blk**2
             linew(Fi) = linew(Fi) + blk
           END DO
-        else
+          ELSE
           ! periodic face
           ieln = Mesh%extfaces(Mesh%periodic_faces(Fi-Nintf),1)
           ifan = Mesh%extfaces(Mesh%periodic_faces(Fi-Nintf),2)
           Fi_per = Mesh%F(ieln,ifan)
           DO ieloc = 1, 2
-            if (ieloc==1) then
+                IF (ieloc==1) THEN
               iel=Mesh%extfaces(Fi-Nintf, 1)
-            else
+                ELSE
               iel=Mesh%extfaces(Mesh%periodic_faces(Fi-Nintf),1)
-            endif
+                ENDIF
             Fe = Mesh%F(iel,:)
             Fd = Mesh%Fdir(iel,:)
             DO ifl = 1, Nf
@@ -1406,11 +1406,11 @@ CONTAINS
               linew(Fi) = linew(Fi) + blk
             END DO
           END DO
-        endif
+          ENDIF
 
       END IF
 
-      IF (Fi .gt. 1) THEN
+       IF (Fi .GT. 1) THEN
         shift(Fi) = shift(Fi-1) + linew(Fi-1)*blk
       END IF
     END DO
@@ -1436,8 +1436,8 @@ CONTAINS
 #endif
     Qf => elMat%Qf(:,:, iel)
     L0 => elMat%L0(:, iel)
-    IF (switch%shockcp .gt. 0) THEN
-      IF (Mesh%flag_elems_sc(iel) .ne. 0) THEN
+    IF (switch%shockcp .GT. 0) THEN
+       IF (Mesh%flag_elems_sc(iel) .NE. 0) THEN
         Lf = Lf + elMat%Lf_sc(:,:, Mesh%flag_elems_sc(iel))
       END IF
     END IF
@@ -1446,10 +1446,10 @@ CONTAINS
     Fd = Mesh%Fdir(iel,:)
 
     ! Elemental matrix and elemental RHS
-    Kel = matmul(Df, UU) + Hf-Ef
-    fel = -matmul(Df, U0) + fh
-    Kel = Kel-matmul((Lf-Qf), LL)
-    fel = fel + matmul((Lf-Qf), L0)
+    Kel = MATMUL(Df, UU) + Hf-Ef
+    fel = -MATMUL(Df, U0) + fh
+    Kel = Kel-MATMUL((Lf-Qf), LL)
+    fel = fel + MATMUL((Lf-Qf), L0)
     !if (iel==2) THEN
     !call saveMatrix(Kel,"Kel")
     !call saveVector(fel,"fel")
@@ -1466,8 +1466,8 @@ CONTAINS
   END SUBROUTINE computeElementalMatrix_old
 
   SUBROUTINE computeElementalMatrix()
-    real*8, pointer                 :: A_lq(:,:), A_lu(:,:), A_ll(:,:)
-    real*8, pointer                 :: LL(:,:), L0(:), UU(:,:), U0(:), f(:)
+    REAL*8, POINTER                 :: A_lq(:,:), A_lu(:,:), A_ll(:,:)
+    REAL*8, POINTER                 :: LL(:,:), L0(:), UU(:,:), U0(:), f(:)
     LL => elMat%LL(:,:, iel)
     L0 => elMat%L0(:, iel)
     UU => elMat%UU(:,:, iel)
@@ -1475,12 +1475,12 @@ CONTAINS
 
     A_lq => elMat%Alq(:,:, iel)
     A_lu => elMat%Alu(:,:, iel)
-    A_ll => elMat%All(:,:, iel)
+    A_ll => elMat%ALL(:,:, iel)
     f => elMat%fh(:, iel)
 
     ! Elemental matrix and elemental RHS
-    Kel = matmul(A_lq, LL) + matmul(A_lu, UU) + A_ll
-    fel = -(matmul(A_lu, U0) + matmul(A_lq, L0)) + f
+    Kel = MATMUL(A_lq, LL) + MATMUL(A_lu, UU) + A_ll
+    fel = -(MATMUL(A_lu, U0) + MATMUL(A_lq, L0)) + f
 
     !call HDF5_save_vector(fel,"f1")
     !stop
@@ -1494,10 +1494,10 @@ CONTAINS
   ! for interior faces
   !**************************************************
   SUBROUTINE getindposint(indpos)
-    integer :: i, j, indpos(1:neq*Nfp*Nf)
-    integer :: pos(1:Nf)
-    integer :: Fen(1:Nf), intface(5)
-    logical :: Fdn(1:Nf)
+    INTEGER :: i, j, indpos(1:neq*Nfp*Nf)
+    INTEGER :: pos(1:Nf)
+    INTEGER :: Fen(1:Nf), intface(5)
+    LOGICAL :: Fdn(1:Nf)
 
     intface = Mesh%intfaces(Fi,:)
 
@@ -1527,7 +1527,7 @@ CONTAINS
         END IF
       END DO
     END DO
-    indpos = reshape(TensorSumInt((/(i, i=1, neq*Nfp)/), (pos-1)*neq*Nfp), (/neq*Nfp*Nf/))
+    indpos = RESHAPE(TensorSumInt((/(i, i=1, neq*Nfp)/), (pos-1)*neq*Nfp), (/neq*Nfp*Nf/))
 
   END SUBROUTINE getindposint
 
@@ -1537,8 +1537,8 @@ CONTAINS
   ! for exterior faces
   !**************************************************
   SUBROUTINE getindposext(indpos)
-    integer :: i, j, indpos(1:neq*Nfp*Nf)
-    integer :: pos(1:Nf)
+    INTEGER :: i, j, indpos(1:neq*Nfp*Nf)
+    INTEGER :: pos(1:Nf)
 
     pos = 1
     DO i = 1, Nf
@@ -1550,7 +1550,7 @@ CONTAINS
         END IF
       END DO
     END DO
-    indpos = reshape(TensorSumInt((/(i, i=1, neq*Nfp)/), (pos-1)*neq*Nfp), (/neq*Nfp*Nf/))
+    indpos = RESHAPE(TensorSumInt((/(i, i=1, neq*Nfp)/), (pos-1)*neq*Nfp), (/neq*Nfp*Nf/))
   END SUBROUTINE getindposext
 
   !**************************************************
@@ -1559,10 +1559,10 @@ CONTAINS
   ! for exterior periodic faces
   !**************************************************
   SUBROUTINE getindposextperiodic(indpos)
-    integer :: i, j, indpos(1:neq*Nfp*Nf)
-    integer :: pos(1:Nf)
-    integer :: Fen(1:Nf)
-    logical :: Fdn(1:Nf)
+    INTEGER :: i, j, indpos(1:neq*Nfp*Nf)
+    INTEGER :: pos(1:Nf)
+    INTEGER :: Fen(1:Nf)
+    LOGICAL :: Fdn(1:Nf)
 
     !      intface = Mesh%intfaces(Fi,:)
 
@@ -1577,11 +1577,11 @@ CONTAINS
     Fen = Mesh%F(ieln,:)
     Fdn = Mesh%Fdir(ieln,:)
 
-    do i=1,Nf
-      if (Fen(i)==Fi_per) then
+    DO i=1,Nf
+       IF (Fen(i)==Fi_per) THEN
         Fen(i) = Fi
-      endif
-    end do
+       ENDIF
+    END DO
 
     !write(6,*) "Fi:",Fi
     !write(6,*) "Fe:",Fe
@@ -1604,7 +1604,7 @@ CONTAINS
         END IF
       END DO
     END DO
-    indpos = reshape(TensorSumInt((/(i, i=1, neq*Nfp)/), (pos-1)*neq*Nfp), (/neq*Nfp*Nf/))
+    indpos = RESHAPE(TensorSumInt((/(i, i=1, neq*Nfp)/), (pos-1)*neq*Nfp), (/neq*Nfp*Nf/))
 
     !write(6,*) "pos:",pos
     !call displayVectorInt(indpos)
@@ -1614,12 +1614,12 @@ CONTAINS
   ! Fill cols, vals, rowptr, loc2glob
   !**************************************************
   SUBROUTINE fill_cols_vals_rowptr_loc2glob()
-    integer :: sl
+    INTEGER :: sl
     ! Find global indices to fill cols and vals
 #ifdef PARALL
-    indglo = reshape(TensorSumInt((/(i, i=1, neq*Nfp)/), (Mesh%loc2glob_fa(Fe)-1)*neq*Nfp), (/neq*Nfp*Nf/))
+    indglo = RESHAPE(TensorSumInt((/(i, i=1, neq*Nfp)/), (Mesh%loc2glob_fa(Fe)-1)*neq*Nfp), (/neq*Nfp*Nf/))
 #else
-    indglo = reshape(TensorSumInt((/(i, i=1, neq*Nfp)/), (Fe-1)*neq*Nfp), (/neq*Nfp*Nf/))
+    indglo = RESHAPE(TensorSumInt((/(i, i=1, neq*Nfp)/), (Fe-1)*neq*Nfp), (/neq*Nfp*Nf/))
 #endif
 
 #ifdef PARALL
