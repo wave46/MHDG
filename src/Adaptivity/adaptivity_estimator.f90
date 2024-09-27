@@ -981,14 +981,10 @@ CONTAINS
        ! relative difference
       
        error = SQRT(error2/sol_norm)
-       DO i = 1, size(sol_norm)
-          IF (SQRT(sol_norm(i))<1.) THEN
-             error(i) = sqrt(error2(i))
-          ENDIF
-       ENDDO
+
     ELSEIF(adapt%difference .EQ. 1) THEN
        ! absolute difference
-       error = SQRT(error2)
+       error = SQRT(error2/SUM(sol_norm)*SUM(dom_area)/dom_area)
     ELSE
        WRITE(*,*) "Choice of relative/absolute difference for the adaptivity not valid. STOP."
        STOP
