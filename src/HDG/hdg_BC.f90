@@ -761,7 +761,7 @@ CONTAINS
     totalflux_parallel = totalflux_parallel + faceflux_parallel
     totalflux_perpendicular = totalflux_perpendicular + faceflux_perpendicular
     totalflux_neutral = totalflux_neutral + faceflux_neutral
-        totalflux_numerical = totalflux_numerical + faceflux_numerical
+    totalflux_numerical = totalflux_numerical + faceflux_numerical
 #ifdef PARALL
   ENDIF
 #endif
@@ -786,6 +786,7 @@ CONTAINS
   CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_numerical, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
   IF (MPIvar%glob_id.EQ.0) THEN
+     WRITE(6,*) 'pumf = ',totalflux_pump
      WRITE(6,*) 'puff = ',totalflux_puff
      WRITE(6,*) 'plasma parallel = ',totalflux_parallel
      WRITE(6,*) 'plasma gradient = ',totalflux_perpendicular
@@ -1103,7 +1104,7 @@ CONTAINS
 #ifndef SAVEFLUX
   SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
 #else
-  SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral,faceflux_nunerical)
+  SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral,faceflux_numerical)
 #endif
       INTEGER                   :: g,i
       REAL*8                    :: dline,xyDerNorm_g
@@ -1120,7 +1121,7 @@ CONTAINS
       REAL*8                    :: Vnng(Ndim)
       REAL                      :: tau_stab(Neq,Neq)
 #ifdef SAVEFLUX
-    real*8,intent(out)        :: faceflux_pump, faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral,faceflux_nunerical
+    real*8,intent(out)        :: faceflux_pump, faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral,faceflux_numerical
     real*8                    :: flgflux_pump, flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical
 
     faceflux_pump = 0.
@@ -1128,7 +1129,7 @@ CONTAINS
     faceflux_parallel = 0.
     faceflux_perpendicular = 0.
     faceflux_neutral = 0.
-      faceflux_numerical = 0.
+    faceflux_numerical = 0.
 #endif
     ! Loop in 1D Gauss points
     DO g = 1,Ng1d
@@ -2272,7 +2273,7 @@ CONTAINS
     flgflux_puff = flgflux_puff*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
     !contribution from parallel flux onto the wall 
-        flgflux_parallel = uefg(2)*bn
+        flgflux_parallel = ufg(2)*bn
     !dimensionalizing and multiplying by the surface under this gauss point (multiplied by the local recycling)
     flgflux_parallel = recycling_coeff*flgflux_parallel*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
