@@ -495,6 +495,15 @@ PROGRAM MHDG
      Mesh%X = Mesh%X*phys%lscale
      Mesh_init%X = Mesh_init%X*phys%lscale
 
+     !DEALLOCATE ALL BEFORE ADAPTIVITY
+     DEALLOCATE(phys%B)
+     DEALLOCATE(phys%magnetic_flux)
+     IF(ASSOCIATED(phys%Bperturb)) DEALLOCATE(phys%Bperturb)
+     IF(ASSOCIATED(phys%Jtor))     DEALLOCATE(phys%Jtor)
+     IF(ASSOCIATED(phys%puff_exp)) DEALLOCATE(phys%puff_exp)
+     CALL free_el_mat()
+     CALL free_mat
+
      CALL deep_copy_mesh_struct(Mesh,Mesh_prec)
      CALL deep_copy_mesh_struct(Mesh,Mesh_init)
      CALL deep_copy_refel_struct(refElPol,refElPol_prec)
@@ -565,11 +574,7 @@ PROGRAM MHDG
      !
      ! Mesh%X = Mesh%X/phys%lscale
 
-     DEALLOCATE(phys%B)
-     DEALLOCATE(phys%magnetic_flux)
-     IF(ASSOCIATED(phys%Bperturb)) DEALLOCATE(phys%Bperturb)
-     IF(ASSOCIATED(phys%Jtor))     DEALLOCATE(phys%Jtor)
-     IF(ASSOCIATED(phys%puff_exp)) DEALLOCATE(phys%puff_exp)
+     
 
      ! Initialize magnetic field (the Mesh is needed)
      CALL initialize_magnetic_field()
@@ -587,8 +592,7 @@ PROGRAM MHDG
         !endif
      ENDIF
 
-     CALL free_el_mat()
-     CALL free_mat
+     
      ! Allocation and initialization of the elemental matrices
      CALL init_elmat()
 
@@ -1515,7 +1519,14 @@ CONTAINS
 
     Mesh%X = Mesh%X*phys%lscale
     Mesh_prec%X = Mesh_prec%X*phys%lscale
-
+    !DEALLOCATE ALL BEFORE ADAPTIVITY
+    DEALLOCATE(phys%B)
+    DEALLOCATE(phys%magnetic_flux)
+    IF(ASSOCIATED(phys%Bperturb)) DEALLOCATE(phys%Bperturb)
+    IF(ASSOCIATED(phys%Jtor))     DEALLOCATE(phys%Jtor)
+    IF(ASSOCIATED(phys%puff_exp)) DEALLOCATE(phys%puff_exp)
+    CALL free_el_mat()
+    CALL free_mat
     IF(adapt%evaluator .EQ. 0) THEN
        CALL adaptivity_indicator_estimator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
     ELSEIF(adapt%evaluator .EQ. 1) THEN
@@ -1570,11 +1581,7 @@ CONTAINS
     Mesh_prec%X = Mesh_prec%X/phys%lscale
 
 
-    DEALLOCATE(phys%B)
-    DEALLOCATE(phys%magnetic_flux)
-    IF(ASSOCIATED(phys%Bperturb)) DEALLOCATE(phys%Bperturb)
-    IF(ASSOCIATED(phys%Jtor))     DEALLOCATE(phys%Jtor)
-    IF(ASSOCIATED(phys%puff_exp)) DEALLOCATE(phys%puff_exp)
+    
 
     ! Initialize magnetic field (the Mesh is needed)
     CALL initialize_magnetic_field()
@@ -1592,8 +1599,7 @@ CONTAINS
     ENDIF
 
 
-    CALL free_el_mat()
-    CALL free_mat
+    
     ! Allocation and initialization of the elemental matrices
     CALL init_elmat()
 
