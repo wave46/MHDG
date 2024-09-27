@@ -645,9 +645,10 @@ CONTAINS
 
     ! Solution at nodes
     uf = sol%u_tilde(ind_uf)
-     ! Elemental solution at nodes
+     ! Elemental solution at nodes PROBABLY WRONG
      inde = (iel - 1)*Npel + (/(i,i=1,Npel)/)
-     ue = ures(Mesh%T(iel,nod),:)
+     !ue = ures(Mesh%T(iel,nod),:)
+     ue = ures(inde(nod),:)
 
     ! Solution gradient at nodes
      qf = TRANSPOSE(RESHAPE(sol%q(ind_qf),(/Ndim*Neq,Npfl/)))
@@ -2273,7 +2274,7 @@ CONTAINS
     flgflux_puff = flgflux_puff*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
     !contribution from parallel flux onto the wall 
-        flgflux_parallel = ufg(2)*bn
+        flgflux_parallel = uefg(2)*bn
     !dimensionalizing and multiplying by the surface under this gauss point (multiplied by the local recycling)
     flgflux_parallel = recycling_coeff*flgflux_parallel*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
