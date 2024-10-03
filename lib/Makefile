@@ -264,7 +264,7 @@ Postprocess.F : $(SDIR)/InOut/Postprocess.f90
 Postprocess.o : Postprocess.F globals.o analytical.o PrintUtils.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
-gmsh.F : /home/ikudashev/libs/gmsh-4.11.1-Linux64-sdk/include/gmsh.f90
+gmsh.F : $(MHDG_GMSH_DIR)/include/gmsh.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
 gmsh.o : gmsh.F
