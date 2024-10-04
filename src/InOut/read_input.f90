@@ -14,31 +14,31 @@ SUBROUTINE READ_input()
   USE MPI_OMP
   IMPLICIT NONE
 
-  LOGICAL :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5, saveMeshSol,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
-  LOGICAL :: ckeramp,saveNR,filter,saveTau,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
-  INTEGER :: thresh, difcor, tis, stab,pertini,init,order_2d
-  INTEGER :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
-  INTEGER :: uinput, printint, testcase, nrp
-  INTEGER :: nts, tsw, freqdisp, freqsave, shockcp, limrho
-  INTEGER :: shockcp_adapt, evaluator, param_est, difference, freq_t_adapt,freq_NR_adapt, quant_ind, n_quant_ind
-  REAL*8  :: thr_ind, tol_est, osc_tol, osc_check
-  INTEGER :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
-  REAL*8  :: dt0, R0, diff_n, diff_u, v_p, tau(1:5), tNr, tTM, div, Tbg
-  REAL*8  :: tfi, a, bohmth, q, diffred, diffmin
-  REAL*8  :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
-  REAL*8  :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
-  REAL*8  :: diff_pare, diff_ee, tie, dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0, tmax, tol, rtol, atol
-  REAL*8  :: diff_vort, diff_pot, etapar, c1, c2, Potfloat,diagsource(10)
-  CHARACTER(100) :: msg
-  CHARACTER(20)  :: kmethd, ptype, kspmethd, pctype
+  LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5, saveMeshSol,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
+  LOGICAL               :: ckeramp,saveNR,filter,saveTau,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
+  INTEGER               :: thresh, difcor, tis, stab,pertini,init,order_2d
+  INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
+  INTEGER               :: uinput, printint, testcase, nrp
+  INTEGER               :: nts, tsw, freqdisp, freqsave, shockcp, limrho
+  INTEGER               :: shockcp_adapt, evaluator, param_est, difference, freq_t_adapt,freq_NR_adapt, quant_ind, n_quant_ind
+  REAL*8                :: thr_ind, tol_est, osc_tol, osc_check
+  INTEGER               :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
+  REAL*8                :: dt0, R0, diff_n, diff_u, v_p, tau(1:5), tNr, tTM, div, Tbg
+  REAL*8                :: tfi, a, bohmth, q, diffred, diffmin
+  REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
+  REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
+  REAL*8                :: diff_pare, diff_ee, tie, dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0, tmax, tol, rtol, atol
+  REAL*8                :: diff_vort, diff_pot, etapar, c1, c2, Potfloat,diagsource(10)
+  CHARACTER(100)        :: msg
+  CHARACTER(20)         :: kmethd, ptype, kspmethd, pctype
 
-  CHARACTER(len=20) :: smther, smther2, prol, restr, solve, restr2, prol2, solve2, mlcycle
-  CHARACTER(len=20) :: aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, csolve, csbsolve, cmat
-  INTEGER           :: jsweeps, novr, fill, jsweeps2, novr2, fill2, outer_sweeps, maxlevs, csize, cfill, cjswp
-  REAL*8            :: thrsol, thrsol2, mncrratio, athres, cthres
-  real*8            :: heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz
-  integer           :: heating_equation
-  real*8            :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
+  CHARACTER(len=20)     :: smther, smther2, prol, restr, solve, restr2, prol2, solve2, mlcycle
+  CHARACTER(len=20)     :: aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, csolve, csbsolve, cmat
+  INTEGER               :: jsweeps, novr, fill, jsweeps2, novr2, fill2, outer_sweeps, maxlevs, csize, cfill, cjswp
+  REAL*8                :: thrsol, thrsol2, mncrratio, athres, cthres
+  REAL*8                :: heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz
+  INTEGER               :: heating_equation
+  REAL*8                :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
   ! Info for input and output
   CHARACTER(len = 1000) :: field_path, jtor_path,save_folder
@@ -46,24 +46,24 @@ SUBROUTINE READ_input()
   LOGICAL               :: field_from_grid, compute_from_flux, divide_by_2pi
 
   ! RMP and Ripple
-  LOGICAL     :: RMP, Ripple
-  REAL*8      :: amp_rmp, torElongCoils_rmp, amp_ripple, triang, ellip
-  INTEGER     :: nbCoils_rmp,  parite, nbRow, nbCoils_ripple
+  LOGICAL               :: RMP, Ripple
+  REAL*8                :: amp_rmp, torElongCoils_rmp, amp_ripple, triang, ellip
+  INTEGER               :: nbCoils_rmp, parite, nbRow, nbCoils_ripple
 
   ! Neutral and Ohmic heating
-  LOGICAL     :: OhmicSrc
-  REAL*8      :: Pohmic,diff_nn,Re,Re_pump,puff,cryopump_power,puff_slope
+  LOGICAL               :: OhmicSrc
+  REAL*8                :: Pohmic,diff_nn,Re,Re_pump,puff,cryopump_power,puff_slope
 #ifdef KEQUATION
   ! k equation
-  REAL*8      :: diff_k_min, diff_k_max, k_max
+  REAL*8                :: diff_k_min, diff_k_max, k_max
 #endif
   ! Movin Equilibrium
-  LOGICAL     :: ME
+  LOGICAL               :: ME
 
   ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, saveMeshSol, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
-    & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
-    & logrho,bxgradb
+       & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
+       & logrho,bxgradb
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions, save_folder
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check
@@ -72,18 +72,18 @@ SUBROUTINE READ_input()
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source, Pohmic, Tbg, bcflags, bohmth,&
-    &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
+       &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #else
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
-  & diff_k_min, diff_k_max, k_max, Pohmic, Tbg, bcflags, bohmth,&
-    &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
+       & diff_k_min, diff_k_max, k_max, Pohmic, Tbg, bcflags, bohmth,&
+       &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
-    &smther, jsweeps,&
-    &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
-    &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
-    &csolve, csbsolve, cmat, cfill, cthres, cjswp
+       &smther, jsweeps,&
+       &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
+       &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
+       &csolve, csbsolve, cmat, cfill, cthres, cjswp
 
   ! Reading the file
   uinput = 100
@@ -310,11 +310,11 @@ SUBROUTINE READ_input()
   lssolver%cjswp          = cjswp
 
   IF (switch%steady) THEN
-    msg = 'Steady state simulation'
+     msg = 'Steady state simulation'
   ELSEIF (switch%psdtime) THEN
-    msg = 'Pseudotime simulation for reducing diffusion'
+     msg = 'Pseudotime simulation for reducing diffusion'
   ELSE
-    msg = 'Time advancing simulation'
+     msg = 'Time advancing simulation'
   END IF
 
   ! Some checking of the inputs
@@ -335,163 +335,163 @@ SUBROUTINE READ_input()
 
   ! A little message for the user...
   IF (MPIvar%glob_id .EQ. 0) THEN
-    PRINT *, '                                                                      '
-    PRINT *, '                                                                      '
+     PRINT *, '                                                                      '
+     PRINT *, '                                                                      '
 #ifdef TOR3D
-    PRINT *, '------------------------  MHDG SIMULATION IN 3D ----------------------'
+     PRINT *, '------------------------  MHDG SIMULATION IN 3D ----------------------'
 #else
-    PRINT *, '------------------------  MHDG SIMULATION IN 2D ----------------------'
+     PRINT *, '------------------------  MHDG SIMULATION IN 2D ----------------------'
 #endif
-    PRINT *, '                                                                      '
+     PRINT *, '                                                                      '
 #ifndef TEMPERATURE
 #ifdef NEUTRAL
 #ifdef KEQUATION
-    PRINT *, ' MODEL: N-Gamma isothermal with neutral with k equation               '
+     PRINT *, ' MODEL: N-Gamma isothermal with neutral with k equation               '
 #else
-    PRINT *, ' MODEL: N-Gamma isothermal with neutral                               '
+     PRINT *, ' MODEL: N-Gamma isothermal with neutral                               '
 #endif
 #else
-    PRINT *, ' MODEL: N-Gamma isothermal                                            '
+     PRINT *, ' MODEL: N-Gamma isothermal                                            '
 #endif
 #else
 #ifdef NEUTRAL
-    PRINT *, ' MODEL: N-Gamma-Ti-Te with neutral                                    '
+     PRINT *, ' MODEL: N-Gamma-Ti-Te with neutral                                    '
 #else
-    PRINT *, ' MODEL: N-Gamma-Ti-Te                                                 '
+     PRINT *, ' MODEL: N-Gamma-Ti-Te                                                 '
 #endif
 #endif
-    PRINT *, '                                                                      '
-    PRINT *, '----------------------------------------------------------------------'
+     PRINT *, '                                                                      '
+     PRINT *, '----------------------------------------------------------------------'
      PRINT *, '  Simulation type: ', ADJUSTL(TRIM(msg))
-    PRINT *, '----------------------------------------------------------------------'
-    PRINT *, 'Parameter file loaded:'
-    PRINT *, '        ***************** Geometry ****************************'
-    PRINT *, '                - R0:                                                 ', R0
-    PRINT *, '                - Security factor:                                    ', q
-    PRINT *, '      	***************** Magnetic ****************************'
-    PRINT *, '		            - RMP amplitude:                                      ', amp_rmp
-    PRINT *, '		            - RMP coil number:                                    ', nbCoils_rmp
-    PRINT *, '		            - RMP coil toroidal elongation:                       ', torElongCoils_rmp
-    PRINT *, '		            - RMP parity:                                         ', parite
-    PRINT *, '		            - RMP row number:                                     ', nbRow
-    PRINT *, '		            - Ripple amplitude:                                   ', amp_ripple
-    PRINT *, '		            - Ripple coil number:                                 ', nbCoils_ripple
-    PRINT *, '		            - triangularity:                                      ', triang
-    PRINT *, '		            - ellipticity:                                        ', ellip
-    PRINT *, '        ***************** Time stepping ************************'
-    PRINT *, '                - dt0:                                                ', time%dt0
-    PRINT *, '                - dt modification:                                    ', time%tsw
-    PRINT *, '                - final time:                                         ', time%tfi
-    PRINT *, '                - max number of time steps:                           ', time%nts
-    PRINT *, '                - time integration scheme:                            ', time%tis
-    PRINT *, '        ***************** Physics *****************************'
-    PRINT *, '                - perp. diffusion in the continuity equation:         ', phys%diff_n
-    PRINT *, '                - perp. diffusion in the momentum equation:           ', phys%diff_u
-    PRINT *, '                - pinch velocity in continuity equation:              ', phys%v_p 
+     PRINT *, '----------------------------------------------------------------------'
+     PRINT *, 'Parameter file loaded:'
+     PRINT *, '        ***************** Geometry ****************************'
+     PRINT *, '                - R0:                                                 ', R0
+     PRINT *, '                - Security factor:                                    ', q
+     PRINT *, '      	***************** Magnetic ****************************'
+     PRINT *, '		            - RMP amplitude:                                      ', amp_rmp
+     PRINT *, '		            - RMP coil number:                                    ', nbCoils_rmp
+     PRINT *, '		            - RMP coil toroidal elongation:                       ', torElongCoils_rmp
+     PRINT *, '		            - RMP parity:                                         ', parite
+     PRINT *, '		            - RMP row number:                                     ', nbRow
+     PRINT *, '		            - Ripple amplitude:                                   ', amp_ripple
+     PRINT *, '		            - Ripple coil number:                                 ', nbCoils_ripple
+     PRINT *, '		            - triangularity:                                      ', triang
+     PRINT *, '		            - ellipticity:                                        ', ellip
+     PRINT *, '        ***************** Time stepping ************************'
+     PRINT *, '                - dt0:                                                ', time%dt0
+     PRINT *, '                - dt modification:                                    ', time%tsw
+     PRINT *, '                - final time:                                         ', time%tfi
+     PRINT *, '                - max number of time steps:                           ', time%nts
+     PRINT *, '                - time integration scheme:                            ', time%tis
+     PRINT *, '        ***************** Physics *****************************'
+     PRINT *, '                - perp. diffusion in the continuity equation:         ', phys%diff_n
+     PRINT *, '                - perp. diffusion in the momentum equation:           ', phys%diff_u
+     PRINT *, '                - pinch velocity in continuity equation:              ', phys%v_p
 #ifdef TEMPERATURE
-    PRINT *, '                - perp. diffusion in the ions energy equation:        ', phys%diff_e
-    PRINT *, '                - perp. diffusion in the electrons energy equation:   ', phys%diff_ee
-    PRINT *, '                - paral. diffusion for ions temperature:              ', phys%diff_pari
-    PRINT *, '                - paral. diffusion for electrons temperature:         ', phys%diff_pare
-    PRINT *, '                - temperature exchange coefficient ions/electrons:    ', phys%tie
-    PRINT *, '                - temperature diffusion exponential:                  ', phys%epn
-    PRINT *, '                - reference Mach number:                              ', phys%Mref
-    PRINT *, '                - gamma for Bohm boundary condition on ions:          ', phys%Gmbohm
-    PRINT *, '                - gamma for Bohm boundary condition for electrons:    ', phys%Gmbohme
+     PRINT *, '                - perp. diffusion in the ions energy equation:        ', phys%diff_e
+     PRINT *, '                - perp. diffusion in the electrons energy equation:   ', phys%diff_ee
+     PRINT *, '                - paral. diffusion for ions temperature:              ', phys%diff_pari
+     PRINT *, '                - paral. diffusion for electrons temperature:         ', phys%diff_pare
+     PRINT *, '                - temperature exchange coefficient ions/electrons:    ', phys%tie
+     PRINT *, '                - temperature diffusion exponential:                  ', phys%epn
+     PRINT *, '                - reference Mach number:                              ', phys%Mref
+     PRINT *, '                - gamma for Bohm boundary condition on ions:          ', phys%Gmbohm
+     PRINT *, '                - gamma for Bohm boundary condition for electrons:    ', phys%Gmbohme
      IF(switch%ohmicsrc) THEN
-       PRINT *, '             - Ohmic heating                                       ', phys%Pohmic
+        PRINT *, '             - Ohmic heating                                       ', phys%Pohmic
      ENDIF
 #endif
 #ifdef VORTICITY
-    PRINT *, '                - perp. diffusion in the vorticity equation:          ', phys%diff_vort
-    PRINT *, '                - perp. diffusion in the potential equation:          ', phys%diff_pot
+     PRINT *, '                - perp. diffusion in the vorticity equation:          ', phys%diff_vort
+     PRINT *, '                - perp. diffusion in the potential equation:          ', phys%diff_pot
 #endif
 #ifdef NEUTRAL
-    PRINT *, '                - diffusion in the neutral equation:                  ', phys%diff_nn
-    PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
-    PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
-    PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
-    PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power
+     PRINT *, '                - diffusion in the neutral equation:                  ', phys%diff_nn
+     PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
+     PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
+     PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
+     PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power
      IF (switch%ME) THEN
-       PRINT *, '             - puff increment slope:                               ', phys%puff_slope
+        PRINT *, '             - puff increment slope:                               ', phys%puff_slope
      ENDIF
-    PRINT *, '                - particle source at core:                            ', part_source
-    PRINT *, '                - energy source at core:                              ', ener_source
+     PRINT *, '                - particle source at core:                            ', part_source
+     PRINT *, '                - energy source at core:                              ', ener_source
 #endif
 #ifdef KEQUATION
-    PRINT *, '                - minimum perp diffusion in the k equation:           ', phys%diff_k_min
-    PRINT *, '                - maximum perp diffusion in the k equation:           ', phys%diff_k_max
-    PRINT *, '                - maximum k:                                          ', phys%k_max
+     PRINT *, '                - minimum perp diffusion in the k equation:           ', phys%diff_k_min
+     PRINT *, '                - maximum perp diffusion in the k equation:           ', phys%diff_k_max
+     PRINT *, '                - maximum k:                                          ', phys%k_max
 #endif
-    PRINT *, '                - constant for the momentum equation (isoth)          ', phys%a
-    PRINT *, '                - diagonal implicit sources                           ', phys%diagsource
-    PRINT *, '        ***************** Switches ****************************'
-    PRINT *, '                - stady state simulation:                             ', switch%steady
-    PRINT *, '                - axisym:                                             ', switch%axisym
+     PRINT *, '                - constant for the momentum equation (isoth)          ', phys%a
+     PRINT *, '                - diagonal implicit sources                           ', phys%diagsource
+     PRINT *, '        ***************** Switches ****************************'
+     PRINT *, '                - stady state simulation:                             ', switch%steady
+     PRINT *, '                - axisym:                                             ', switch%axisym
      IF (switch%init.EQ.1) THEN
-      PRINT *, '  Initializing with analytical solution at nodes                    '
+        PRINT *, '  Initializing with analytical solution at nodes                    '
      ELSE
-      PRINT *, '  Initializing with L2 projection                                   '
+        PRINT *, '  Initializing with L2 projection                                   '
      ENDIF
-    PRINT *, '                - driftdia:                                           ', driftdia
-    PRINT *, '                - driftexb:                                           ', driftexb
-    PRINT *, '                - test case:                                          ', testcase
-    PRINT *, '                - Ohmic heating:                                      ', OhmicSrc
-    PRINT *, '                - Moving equilibrium:                                 ', ME
-    PRINT *, '                - RMP:                                                ', RMP
-    PRINT *, '                - Ripple:                                             ', Ripple
-    PRINT *, '                - shockcp:                                            ', shockcp
-    PRINT *, '                - minrho:                                             ', minrho
-    PRINT *, '                - logrho:                                             ', logrho
-    PRINT *, '                - thresh:                                             ', thresh
-    PRINT *, '                - filter:                                             ', filter
+     PRINT *, '                - driftdia:                                           ', driftdia
+     PRINT *, '                - driftexb:                                           ', driftexb
+     PRINT *, '                - test case:                                          ', testcase
+     PRINT *, '                - Ohmic heating:                                      ', OhmicSrc
+     PRINT *, '                - Moving equilibrium:                                 ', ME
+     PRINT *, '                - RMP:                                                ', RMP
+     PRINT *, '                - Ripple:                                             ', Ripple
+     PRINT *, '                - shockcp:                                            ', shockcp
+     PRINT *, '                - minrho:                                             ', minrho
+     PRINT *, '                - logrho:                                             ', logrho
+     PRINT *, '                - thresh:                                             ', thresh
+     PRINT *, '                - filter:                                             ', filter
 #ifdef TEMPERATURE
-    PRINT *, '                - decoup:                                             ', decoup
+     PRINT *, '                - decoup:                                             ', decoup
 #endif
-    PRINT *, '                - ckeramp:                                            ', ckeramp
-    PRINT *, '                - saveNR:                                             ', saveNR
-    PRINT *, '                - saveTau:                                            ', saveTau
-    PRINT *, '        ***************** Numerics ****************************'
-    PRINT *, '                - stabilization type:                                 ', numer%stab
-    PRINT *, '                - tau(1):                                             ', numer%tau(1)
-    PRINT *, '                - tau(2):                                             ', numer%tau(2)
-    PRINT *, '                - tau(3):                                             ', numer%tau(3)
-    PRINT *, '                - tau(4):                                             ', numer%tau(4)
-    PRINT *, '                - tau(5):                                             ', numer%tau(5)
-    PRINT *, '                - max number of N-R iterations:                       ', numer%nrp
-    PRINT *, '                - tolerance for the N-R scheme:                       ', numer%tNR
-    PRINT *, '                - tolerance for the steady state achievement:         ', numer%tTM
+     PRINT *, '                - ckeramp:                                            ', ckeramp
+     PRINT *, '                - saveNR:                                             ', saveNR
+     PRINT *, '                - saveTau:                                            ', saveTau
+     PRINT *, '        ***************** Numerics ****************************'
+     PRINT *, '                - stabilization type:                                 ', numer%stab
+     PRINT *, '                - tau(1):                                             ', numer%tau(1)
+     PRINT *, '                - tau(2):                                             ', numer%tau(2)
+     PRINT *, '                - tau(3):                                             ', numer%tau(3)
+     PRINT *, '                - tau(4):                                             ', numer%tau(4)
+     PRINT *, '                - tau(5):                                             ', numer%tau(5)
+     PRINT *, '                - max number of N-R iterations:                       ', numer%nrp
+     PRINT *, '                - tolerance for the N-R scheme:                       ', numer%tNR
+     PRINT *, '                - tolerance for the steady state achievement:         ', numer%tTM
      IF (switch%shockcp .GT. 0) THEN
-      PRINT *, '                - shock capturing coeff:                            ', numer%sc_coe
-      PRINT *, '                - shock capturing sensibility:                      ', numer%sc_sen
-    END IF
+        PRINT *, '                - shock capturing coeff:                            ', numer%sc_coe
+        PRINT *, '                - shock capturing sensibility:                      ', numer%sc_sen
+     END IF
      IF (switch%limrho .GT. 0) THEN
-      PRINT *, '                - applying limiting of rho at value:                ', numer%minrho
-    END IF
+        PRINT *, '                - applying limiting of rho at value:                ', numer%minrho
+     END IF
      IF (switch%limrho .EQ. 1 .OR. switch%limrho .EQ. 3) THEN
-      PRINT *, '                - coefficient of the source for limiting rho:       ', numer%so_coe
-    END IF
+        PRINT *, '                - coefficient of the source for limiting rho:       ', numer%so_coe
+     END IF
      IF (switch%limrho .EQ. 2 .OR. switch%limrho .EQ. 3) THEN
-      PRINT *, '                - coefficient of the diffusion for limiting rho:    ', numer%df_coe
-    END IF
+        PRINT *, '                - coefficient of the diffusion for limiting rho:    ', numer%df_coe
+     END IF
      IF (switch%difcor .GT. 0) THEN
-      PRINT *, '                - adding diffusion in corners, in position:         ', switch%difcor
-      PRINT *, '                - diffusion coefficient in corners:                 ', numer%dc_coe
-    END IF
+        PRINT *, '                - adding diffusion in corners, in position:         ', switch%difcor
+        PRINT *, '                - diffusion coefficient in corners:                 ', numer%dc_coe
+     END IF
      IF (switch%thresh .GT. 0) THEN
-      PRINT *, '                - using a threshold at rho:                         ', numer%thr
-      PRINT *, '                - using a threshold at pressure:                    ', numer%thrpre
-    END IF
-    PRINT *, '                - using a dumping factor for Newton-Raphson:          ', numer%dumpnr
+        PRINT *, '                - using a threshold at rho:                         ', numer%thr
+        PRINT *, '                - using a threshold at pressure:                    ', numer%thrpre
+     END IF
+     PRINT *, '                - using a dumping factor for Newton-Raphson:          ', numer%dumpnr
 #ifdef TOR3D
-    PRINT *, '                - number of elements in the toroidal direction:       ', numer%ntor
-    PRINT *, '                - polynomial degree in the toroidal direction:        ', numer%ptor
+     PRINT *, '                - number of elements in the toroidal direction:       ', numer%ntor
+     PRINT *, '                - polynomial degree in the toroidal direction:        ', numer%ptor
 #ifdef PARALL
-    PRINT *, '                - number of MPI partitions in the toroidal direction :', numer%npartor
+     PRINT *, '                - number of MPI partitions in the toroidal direction :', numer%npartor
 #endif
-    PRINT *, '                - max extention in the toroidal direction:            ', numer%tmax
+     PRINT *, '                - max extention in the toroidal direction:            ', numer%tmax
 #endif
-    PRINT *, '                - dumping for ExB term:       ', numer%exbdump
+     PRINT *, '                - dumping for ExB term:       ', numer%exbdump
      PRINT *, '                - type of bohm boundary condition:                     ',  numer%bohmtypebc
      IF(adapt%adaptivity) THEN
         PRINT *, '        ***************** Adaptivity ****************************'
@@ -517,16 +517,16 @@ SUBROUTINE READ_input()
            PRINT *, '                - difference type for the estimator:              ', 'absolute'
         ENDIF
      ENDIF
-    PRINT *, '        ***************** Linear solver params******************'
-    IF (lssolver%sollib == 1) THEN
-      PRINT *, '                - Library used for the linear system:   PASTIX      '
-    ELSEIF (lssolver%sollib == 2) THEN
-      PRINT *, '                - Library used for the linear system:   PSBLAS      '
-      PRINT *, '                - Iterative method:                                 ', lssolver%kmethd
-      PRINT *, '                - Preconditioner:                                   ', lssolver%ptype
-      PRINT *, '                - Stopping criterion type                           ', lssolver%istop
-      PRINT *, '                - Stopping criterion tolerance                      ', lssolver%tol
-      PRINT *, '                - Restart:                                          ', lssolver%rest
+     PRINT *, '        ***************** Linear solver params******************'
+     IF (lssolver%sollib == 1) THEN
+        PRINT *, '                - Library used for the linear system:   PASTIX      '
+     ELSEIF (lssolver%sollib == 2) THEN
+        PRINT *, '                - Library used for the linear system:   PSBLAS      '
+        PRINT *, '                - Iterative method:                                 ', lssolver%kmethd
+        PRINT *, '                - Preconditioner:                                   ', lssolver%ptype
+        PRINT *, '                - Stopping criterion type                           ', lssolver%istop
+        PRINT *, '                - Stopping criterion tolerance                      ', lssolver%tol
+        PRINT *, '                - Restart:                                          ', lssolver%rest
      ELSEIF (lssolver%sollib == 3) THEN
         PRINT *, '                - Library used for the linear system:   PETSc      '
         PRINT *, '                - Iterative method:                                 ', lssolver%kspmethd
@@ -541,8 +541,8 @@ SUBROUTINE READ_input()
         PRINT *, '                - Display convergence at each iteration             ', lssolver%kspitrace
         PRINT *, '                - MultiGrid (MG) levels                             ', lssolver%mglevels
         PRINT *, '                - MultiGrid (MG) type form                          ', lssolver%mgtypeform
-    ENDIF
+     ENDIF
 
-    PRINT *, '        '
+     PRINT *, '        '
   END IF
 END SUBROUTINE READ_input
