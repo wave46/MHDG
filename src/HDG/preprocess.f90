@@ -133,23 +133,23 @@ CONTAINS
 #endif
     ! It does not work in parallel (TODO)
     IF (MPIvar%glob_id .EQ. 0) THEN
-      IF (utils%printint > 0) THEN
-         WRITE (6, *) "Puff area:  ", Mesh%puff_area*phys%lscale*phys%lscale, " m^2"
-      END IF
-   ENDIF
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      IF (utils%printint > 0) THEN
-         WRITE (6, *) "Computing pump area"
-      END IF
-   ENDIF
+       IF (utils%printint > 0) THEN
+          WRITE (6, *) "Puff area:  ", Mesh%puff_area*phys%lscale*phys%lscale, " m^2"
+       END IF
+    ENDIF
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       IF (utils%printint > 0) THEN
+          WRITE (6, *) "Computing pump area"
+       END IF
+    ENDIF
 #ifndef PARALL
-   CALL computePumpArea()
+    CALL computePumpArea()
 #endif
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      IF (utils%printint > 0) THEN
-         WRITE (6, *) "Pump area:  ", Mesh%pump_area*phys%lscale*phys%lscale, " m^2"
-      END IF
-   ENDIF
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       IF (utils%printint > 0) THEN
+          WRITE (6, *) "Pump area:  ", Mesh%pump_area*phys%lscale*phys%lscale, " m^2"
+       END IF
+    ENDIF
 #ifndef PARALL
     CALL computeCoreArea()
 #endif

@@ -54,15 +54,15 @@ SUBROUTINE compute_element_solution
   ind_sta(1) = 1
   aux = 0
   DO i = 2, refElPol%Nfaces + 2
-    ind_sta(i) = 1 + ind_dim(i - 1) + aux
-    aux = aux + ind_dim(i - 1)
+     ind_sta(i) = 1 + ind_dim(i - 1) + aux
+     aux = aux + ind_dim(i - 1)
   END DO
 
 #ifdef PARALL
   IF (MPIvar%ntor .GT. 1) THEN
-    ntorloc = numer%ntor/MPIvar%ntor + 1
+     ntorloc = numer%ntor/MPIvar%ntor + 1
   ELSE
-    ntorloc = numer%ntor
+     ntorloc = numer%ntor
   ENDIF
 #else
   ntorloc = numer%ntor
@@ -72,37 +72,38 @@ SUBROUTINE compute_element_solution
   !$OMP PRIVATE(itor,iel,iel3d,ind_ue,ind_uf,Fe,dd,delta,ifa)
   !$OMP DO
   DO itor = 1, ntorloc
-    DO iel = 1, N2d
-      iel3d = (itor - 1)*N2d+iel  !3d numbering of the element
-      ind_ue = (iel3d-1)*Np*Neq + (/(i, i=1, Np*Neq)/)
+     DO iel = 1, N2d
+        iel3d = (itor - 1)*N2d+iel  !3d numbering of the element
+        ind_ue = (iel3d-1)*Np*Neq + (/(i, i=1, Np*Neq)/)
 
-      ! Index for the face solution
-      Fe = Mesh%F(iel, :)
-      dd = 1 + (itor - 1)*Neq*(N2d*Np2D+(Mesh%Nfaces - Nfdir)*Nfl)
-      delta(1) = dd + (iel - 1)*Np2D*Neq
-      delta(2:refElPol%Nfaces + 1) = dd + N2d*Np2D*Neq + (Fe - 1)*Nfl*Neq
-      delta(refElPol%Nfaces + 2) = dd + N2d*Np2D*Neq + (Mesh%Nfaces - Nfdir)*Nfl*Neq + (iel - 1)*Np2D*Neq
+        ! Index for the face solution
+        Fe = Mesh%F(iel, :)
+        dd = 1 + (itor - 1)*Neq*(N2d*Np2D+(Mesh%Nfaces - Nfdir)*Nfl)
+        delta(1) = dd + (iel - 1)*Np2D*Neq
+        delta(2:refElPol%Nfaces + 1) = dd + N2d*Np2D*Neq + (Fe - 1)*Nfl*Neq
+        delta(refElPol%Nfaces + 2) = dd + N2d*Np2D*Neq + (Mesh%Nfaces - Nfdir)*Nfl*Neq + (iel - 1)*Np2D*Neq
+
         IF (MPIvar%ntor .EQ. 1) THEN
            IF (itor == numer%ntor) THEN
-          delta(refElPol%Nfaces + 2) = 1 + (iel - 1)*Np2D*Neq
+              delta(refElPol%Nfaces + 2) = 1 + (iel - 1)*Np2D*Neq
            END IF
         ENDIF
 
         DO ifa = 1, Nf + 2
            DO i = 0, ind_dim(ifa) - 1
-          ind_uf(i + ind_sta(ifa)) = delta(ifa) + i
+              ind_uf(i + ind_sta(ifa)) = delta(ifa) + i
            END DO
         END DO
 
-      ! elemental solutions
+        ! elemental solutions
         sol%u(ind_ue) = MATMUL(elMat%UU(:, :, iel3d), sol%u_tilde(ind_uf)) + elMat%U0(:, iel3d)
 
-      ! Index for the element gradient
-      ind_ug = (iel3d-1)*neq*Np*Ndim + (/(i, i=1, Neq*Np*Ndim)/)
+        ! Index for the element gradient
+        ind_ug = (iel3d-1)*neq*Np*Ndim + (/(i, i=1, Neq*Np*Ndim)/)
 
-      ! elemental solutions
+        ! elemental solutions
         sol%q(ind_ug) = MATMUL(elMat%LL(:, :, iel), sol%u_tilde(ind_uf)) + elMat%L0(:, iel)
-    END DO
+     END DO
   END DO
   !$OMP END DO
   !$OMP END PARALLEL
@@ -130,20 +131,20 @@ SUBROUTINE compute_element_solution
   Nf = refElPol%Nfaces
 
   DO iel = 1, N2d
-    ! Index for the face solution
-    Fe = Mesh%F(iel, :)
+     ! Index for the face solution
+     Fe = Mesh%F(iel, :)
      ind_uf = RESHAPE(tensorSumInt((/(i, i=1, Neq*Nfp)/), (Fe - 1)*Neq*Nfp), (/Neq*Nfp*Nf/))
 
-    ! Index for the element solution
-    ind_ue = (iel - 1)*neq*Np + (/(i, i=1, Neq*Np)/)
+     ! Index for the element solution
+     ind_ue = (iel - 1)*neq*Np + (/(i, i=1, Neq*Np)/)
 
-    ! elemental solutions
+     ! elemental solutions
      sol%u(ind_ue) = MATMUL(elMat%UU(:, :, iel), sol%u_tilde(ind_uf)) + elMat%U0(:, iel)
 
-    ! Index for the element gradient
-    ind_ug = (iel - 1)*neq*Np*Ndim + (/(i, i=1, Neq*Np*Ndim)/)
+     ! Index for the element gradient
+     ind_ug = (iel - 1)*neq*Np*Ndim + (/(i, i=1, Neq*Np*Ndim)/)
 
-    ! elemental solutions
+     ! elemental solutions
      sol%q(ind_ug) = MATMUL(elMat%LL(:, :, iel), sol%u_tilde(ind_uf)) + elMat%L0(:, iel)
   END DO
 
@@ -154,8 +155,7 @@ SUBROUTINE compute_element_solution
      CALL cpu_TIME(timing%tpe1)
      CALL system_CLOCK(timing%cke1, timing%clock_rate1)
      timing%runtsol = timing%runtsol + (timing%cke1 - timing%cks1)/REAL(timing%clock_rate1)
-    timing%cputsol = timing%cputsol + timing%tpe1 - timing%tps1
+     timing%cputsol = timing%cputsol + timing%tpe1 - timing%tps1
   END IF
 
 END SUBROUTINE compute_element_solution
-

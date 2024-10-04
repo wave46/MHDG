@@ -35,11 +35,11 @@ SUBROUTINE HDG_precalculatedfirstequation()
 
 
   IF (MPIvar%glob_id .EQ. 0) THEN
-    IF (utils%printint > 0) THEN
-      WRITE (6,*) '*************************************************'
-      WRITE (6,*) '*           PRECALCULATED MATRICES              *'
-      WRITE (6,*) '*************************************************'
-    END IF
+     IF (utils%printint > 0) THEN
+        WRITE (6,*) '*************************************************'
+        WRITE (6,*) '*           PRECALCULATED MATRICES              *'
+        WRITE (6,*) '*************************************************'
+     END IF
   END IF
   IF (utils%timing) THEN
      CALL cpu_TIME(timing%tps1)
@@ -70,13 +70,13 @@ SUBROUTINE HDG_precalculatedfirstequation()
   htor = numer%tmax/numer%ntor
   tdiv = 0.
   DO i = 1,numer%ntor
-    tdiv(i + 1) = i*htor
+     tdiv(i + 1) = i*htor
   END DO
 #ifdef PARALL
   IF (MPIvar%ntor .GT. 1) THEN
-    ntorloc = numer%ntor/MPIvar%ntor + 1
+     ntorloc = numer%ntor/MPIvar%ntor + 1
   ELSE
-    ntorloc = numer%ntor
+     ntorloc = numer%ntor
   ENDIF
 #else
   ntorloc = numer%ntor
@@ -92,46 +92,46 @@ SUBROUTINE HDG_precalculatedfirstequation()
   ALLOCATE(Xfl(refElPol%Nfacenodes,2))
   !$OMP DO SCHEDULE(STATIC) COLLAPSE(2)
   DO itor = 1,ntorloc
-    DO iel = 1,N2D
-      ! I made a perfectly nested loop for enabling omp parallelization
+     DO iel = 1,N2D
+        ! I made a perfectly nested loop for enabling omp parallelization
 #ifdef PARALL
-      itorg = itor + (MPIvar%itor - 1)*numer%ntor/MPIvar%ntor
+        itorg = itor + (MPIvar%itor - 1)*numer%ntor/MPIvar%ntor
         IF (itorg == numer%ntor + 1) itorg = 1
 #else
-      itorg = itor
+        itorg = itor
 #endif
-      tel = tdiv(itorg) + 0.5*(refElTor%coord1d+1)*(tdiv(itorg + 1) - tdiv(itorg))
+        tel = tdiv(itorg) + 0.5*(refElTor%coord1d+1)*(tdiv(itorg + 1) - tdiv(itorg))
 
-      ! Index of 3D element
-      iel3 = (itor - 1)*N2d+iel
+        ! Index of 3D element
+        iel3 = (itor - 1)*N2d+iel
 
-      ! Coordinates of the nodes of the element
-      Xel = Mesh%X(Mesh%T(iel,:),:)
+        ! Coordinates of the nodes of the element
+        Xel = Mesh%X(Mesh%T(iel,:),:)
 
-      ! Compute the matrices for the element
-      CALL elemental_matrices_volume(iel3,Xel,tel)
+        ! Compute the matrices for the element
+        CALL elemental_matrices_volume(iel3,Xel,tel)
 
-      ! First poloidal face
-      ifa = 1
-      CALL elemental_matrices_pol_faces(iel3,ifa,Xel)
+        ! First poloidal face
+        ifa = 1
+        CALL elemental_matrices_pol_faces(iel3,ifa,Xel)
 
-      ! Toroidal faces
-      DO ifa=1,refElPol%Nfaces
-        IF (Mesh%Fdir(iel,ifa)) CYCLE
-        iface = Mesh%F(iel,ifa)
-        Xfl = Mesh%X(Mesh%T(iel,refElPol%face_nodes(ifa,:)),:)
+        ! Toroidal faces
+        DO ifa=1,refElPol%Nfaces
+           IF (Mesh%Fdir(iel,ifa)) CYCLE
+           iface = Mesh%F(iel,ifa)
+           Xfl = Mesh%X(Mesh%T(iel,refElPol%face_nodes(ifa,:)),:)
            IF (iface.LE.Mesh%Nintfaces) THEN
               CALL elemental_matrices_int_faces(iel3,ifa+1,Xfl,tel)
            ELSE
               CALL elemental_matrices_ext_faces(iel3,ifa+1,Xfl,tel)
            ENDIF
-      END DO
+        END DO
 
-      ! Second poloidal face
-      ifa = refElPol%Nfaces + 2
-      CALL elemental_matrices_pol_faces(iel3,ifa,Xel)
+        ! Second poloidal face
+        ifa = refElPol%Nfaces + 2
+        CALL elemental_matrices_pol_faces(iel3,ifa,Xel)
 
-    END DO
+     END DO
   END DO
   !$OMP END DO
   DEALLOCATE(Xel,Xfl)
@@ -238,7 +238,7 @@ SUBROUTINE HDG_precalculatedfirstequation()
      CALL cpu_TIME(timing%tpe1)
      CALL system_CLOCK(timing%cke1,timing%clock_rate1)
      timing%runtpre = timing%runtpre + (timing%cke1 - timing%cks1)/REAL(timing%clock_rate1)
-    timing%cputpre = timing%cputpre + timing%tpe1 - timing%tps1
+     timing%cputpre = timing%cputpre + timing%tpe1 - timing%tps1
   END IF
 
 
@@ -298,43 +298,43 @@ CONTAINS
     NgaussPol = Ng2D
     NgaussTor = Ng1Dtor
     DO igtor = 1,NGaussTor
-      N1g => refElTor%N1D(igtor,:)                   ! Toroidal shape function
-      N1xg_cart = refElTor%Nxi1D(igtor,:)*2/htor       ! Toroidal shape function derivative
-      dvolu1d = 0.5*refElTor%gauss_weights1D(igtor)*htor ! Toroidal contribution to the elemental volume
+       N1g => refElTor%N1D(igtor,:)                   ! Toroidal shape function
+       N1xg_cart = refElTor%Nxi1D(igtor,:)*2/htor       ! Toroidal shape function derivative
+       dvolu1d = 0.5*refElTor%gauss_weights1D(igtor)*htor ! Toroidal contribution to the elemental volume
 
-      DO igpol = 1,NgaussPol
-        g = (igtor - 1)*NGaussPol + igpol
+       DO igpol = 1,NgaussPol
+          g = (igtor - 1)*NGaussPol + igpol
 
-        ! Poloidal shape functions and derivatives
-        N2g => refElPol%N2D(igpol,:)
-        Nxg = iJ11(igpol)*refElPol%Nxi2D(igpol,:) + iJ12(igpol)*refElPol%Neta2D(igpol,:)
-        Nyg = iJ21(igpol)*refElPol%Nxi2D(igpol,:) + iJ22(igpol)*refElPol%Neta2D(igpol,:)
+          ! Poloidal shape functions and derivatives
+          N2g => refElPol%N2D(igpol,:)
+          Nxg = iJ11(igpol)*refElPol%Nxi2D(igpol,:) + iJ12(igpol)*refElPol%Neta2D(igpol,:)
+          Nyg = iJ21(igpol)*refElPol%Nxi2D(igpol,:) + iJ22(igpol)*refElPol%Neta2D(igpol,:)
 
-        IF (switch%axisym) THEN
-          Nx_ax = Nxg + 1./xy(igpol,1)*N2g
-          N1xg = N1xg_cart/xy(igpol,1)
-        ELSE
-          Nx_ax = Nxg
-          N1xg = N1xg_cart
-        END IF
+          IF (switch%axisym) THEN
+             Nx_ax = Nxg + 1./xy(igpol,1)*N2g
+             N1xg = N1xg_cart/xy(igpol,1)
+          ELSE
+             Nx_ax = Nxg
+             N1xg = N1xg_cart
+          END IF
 
-        ! 3D integration weight
-        dvolu = refElPol%gauss_weights2D(igpol)*detJ(igpol)*dvolu1d
-        IF (switch%axisym) THEN
-          dvolu = dvolu*xy(igpol,1)
-        END IF
+          ! 3D integration weight
+          dvolu = refElPol%gauss_weights2D(igpol)*detJ(igpol)*dvolu1d
+          IF (switch%axisym) THEN
+             dvolu = dvolu*xy(igpol,1)
+          END IF
 
-        ! 3D shape functions
-        Ni = col(TensorProduct(N2g,N1g))      ! 3D shape function
-        Nidvolu = Ni*dvolu
-        NN = tensorProduct(Ni,Nidvolu)
-        NxNy_ax(:,:,1) = TensorProduct(col(TensorProduct(Nx_ax,N1g)),Nidvolu)
-        NxNy_ax(:,:,2) = TensorProduct(col(TensorProduct(Nyg,N1g)),Nidvolu)
-        NxNy_ax(:,:,3) = TensorProduct(col(TensorProduct(N2g,N1xg)),Nidvolu)
+          ! 3D shape functions
+          Ni = col(TensorProduct(N2g,N1g))      ! 3D shape function
+          Nidvolu = Ni*dvolu
+          NN = tensorProduct(Ni,Nidvolu)
+          NxNy_ax(:,:,1) = TensorProduct(col(TensorProduct(Nx_ax,N1g)),Nidvolu)
+          NxNy_ax(:,:,2) = TensorProduct(col(TensorProduct(Nyg,N1g)),Nidvolu)
+          NxNy_ax(:,:,3) = TensorProduct(col(TensorProduct(N2g,N1xg)),Nidvolu)
 
-        ! Local assembly
-        CALL assemblyVolumeContribution(NxNy_ax,NN,Aqq,Aqu)
-      END DO
+          ! Local assembly
+          CALL assemblyVolumeContribution(NxNy_ax,NN,Aqq,Aqu)
+       END DO
     END DO
 
     CALL do_assembly(Aqq,Aqu,ind_ass,ind_asq,iel)
@@ -383,24 +383,24 @@ CONTAINS
     dsurf = refElPol%gauss_weights2D*detJ
 
     IF (ifa == 1) THEN
-      ind_ff = (/(i,i=1,Np2D*Neq)/)
-      ind_fg = (/(i,i=1,Np2D*Ndim*Neq)/)
-      ! Exterior normal
-      n_g = 0.; n_g(:,3) = -1
+       ind_ff = (/(i,i=1,Np2D*Neq)/)
+       ind_fg = (/(i,i=1,Np2D*Ndim*Neq)/)
+       ! Exterior normal
+       n_g = 0.; n_g(:,3) = -1
     ELSE
-      ind_ff = Np2D*Neq + refElPol%Nfaces*Npfl*Neq + (/(i,i=1,Np2D*Neq)/)
-      ind_fg = Np2d*(Np1dTor - 1)*Ndim*Neq + (/(i,i=1,Np2D*Ndim*Neq)/)
-      ! Exterior normal
-      n_g = 0.; n_g(:,3) = 1
+       ind_ff = Np2D*Neq + refElPol%Nfaces*Npfl*Neq + (/(i,i=1,Np2D*Neq)/)
+       ind_fg = Np2d*(Np1dTor - 1)*Ndim*Neq + (/(i,i=1,Np2D*Ndim*Neq)/)
+       ! Exterior normal
+       n_g = 0.; n_g(:,3) = 1
     ENDIF
 
     DO g = 1,NGauss
 
-      ! Shape functions product
-      NiNi = TensorProduct(refElPol%N2D(g,:),refElPol%N2D(g,:))*dsurf(g)
+       ! Shape functions product
+       NiNi = TensorProduct(refElPol%N2D(g,:),refElPol%N2D(g,:))*dsurf(g)
 
-      ! Local assembly
-      CALL assemblyFacesContribution(iel,NiNi,n_g(g,:),ind_asf,ind_ash,ind_fG,ind_ff)
+       ! Local assembly
+       CALL assemblyFacesContribution(iel,NiNi,n_g(g,:),ind_asf,ind_ash,ind_fG,ind_ff)
     END DO
 
 
@@ -446,34 +446,34 @@ CONTAINS
     t_g(:,2) = xyDer(:,2)/xydNorm_g
     n_g = 0.
     DO i = 1,Ng1dTor
-      ind = (i - 1)*Ng1dPol + (/(j,j=1,Ng1dPol)/)
-      n_g(ind,1) = t_g(:,2)
-      n_g(ind,2) = -t_g(:,1)
+       ind = (i - 1)*Ng1dPol + (/(j,j=1,Ng1dPol)/)
+       n_g(ind,1) = t_g(:,2)
+       n_g(ind,2) = -t_g(:,1)
     END DO
 
     !*****************************
     ! Loop in face Gauss points
     !*****************************
     DO igtor = 1,Ng1dTor
-      DO igpol = 1,Ng1dPol
+       DO igpol = 1,Ng1dPol
 
-        g = (igtor - 1)*Ng1dPol + igpol
+          g = (igtor - 1)*Ng1dPol + igpol
 
-        ! Face shape functions
-        Nfg => refElTor%sFTF(g,:)
+          ! Face shape functions
+          Nfg => refElTor%sFTF(g,:)
 
-        IF (switch%axisym) THEN
-          dsurfg = dsurf(g)*xyf(igpol,1)
-        ELSE
-          dsurfg = dsurf(g)
-        END IF
+          IF (switch%axisym) THEN
+             dsurfg = dsurf(g)*xyf(igpol,1)
+          ELSE
+             dsurfg = dsurf(g)
+          END IF
 
-        ! Shape functions product
-        NiNi = tensorProduct(Nfg,Nfg)*dsurfg
+          ! Shape functions product
+          NiNi = tensorProduct(Nfg,Nfg)*dsurfg
 
-        ! Local assembly
-        CALL assemblyFacesContribution(iel,NiNi,n_g(g,:),ind_asf,ind_ash,ind_fG,ind_ff)
-      END DO ! Gauss points
+          ! Local assembly
+          CALL assemblyFacesContribution(iel,NiNi,n_g(g,:),ind_asf,ind_ash,ind_fG,ind_ff)
+       END DO ! Gauss points
     END DO
 
   END SUBROUTINE elemental_matrices_int_faces
@@ -517,34 +517,34 @@ CONTAINS
     t_g(:,2) = xyDer(:,2)/xydNorm_g
     n_g = 0.
     DO i = 1,Ng1dTor
-      ind = (i - 1)*Ng1dPol + (/(j,j=1,Ng1dPol)/)
-      n_g(ind,1) = t_g(:,2)
-      n_g(ind,2) = -t_g(:,1)
+       ind = (i - 1)*Ng1dPol + (/(j,j=1,Ng1dPol)/)
+       n_g(ind,1) = t_g(:,2)
+       n_g(ind,2) = -t_g(:,1)
     END DO
 
     !*****************************
     ! Loop in face Gauss points
     !*****************************
     DO igtor = 1,Ng1dTor
-      DO igpol = 1,Ng1dPol
+       DO igpol = 1,Ng1dPol
 
-        g = (igtor - 1)*Ng1dPol + igpol
+          g = (igtor - 1)*Ng1dPol + igpol
 
-        ! Face shape functions
-        Nfg => refElTor%sFTF(g,:)
+          ! Face shape functions
+          Nfg => refElTor%sFTF(g,:)
 
-        IF (switch%axisym) THEN
-          dsurfg = dsurf(g)*xyf(igpol,1)
-        ELSE
-          dsurfg = dsurf(g)
-        END IF
+          IF (switch%axisym) THEN
+             dsurfg = dsurf(g)*xyf(igpol,1)
+          ELSE
+             dsurfg = dsurf(g)
+          END IF
 
-        ! Shape functions product
-        NiNi = tensorProduct(Nfg,Nfg)*dsurfg
+          ! Shape functions product
+          NiNi = tensorProduct(Nfg,Nfg)*dsurfg
 
-        ! Local assembly
-        CALL assemblyFacesContribution(iel,NiNi,n_g(g,:),ind_asf,ind_ash,ind_fG,ind_ff)
-      END DO ! Gauss points
+          ! Local assembly
+          CALL assemblyFacesContribution(iel,NiNi,n_g(g,:),ind_asf,ind_ash,ind_fG,ind_ff)
+       END DO ! Gauss points
     END DO
 
   END SUBROUTINE elemental_matrices_ext_faces
@@ -572,28 +572,28 @@ CONTAINS
   !$OMP DO SCHEDULE(STATIC)
   DO iel = 1,N2D
 
-    ! Coordinates of the nodes of the element
-    Xel = Mesh%X(Mesh%T(iel,:),:)
+     ! Coordinates of the nodes of the element
+     Xel = Mesh%X(Mesh%T(iel,:),:)
 
-    ! Compute the matrices for the element
-    CALL elemental_matrices_volume(iel,Xel)
+     ! Compute the matrices for the element
+     CALL elemental_matrices_volume(iel,Xel)
 
-    ! Loop in local faces
-    DO ifa=1,refElPol%Nfaces
-      IF (Mesh%Fdir(iel,ifa)) CYCLE
-      iface = Mesh%F(iel,ifa)
-      Xfl = Mesh%X(Mesh%T(iel,refElPol%face_nodes(ifa,:)),:)
+     ! Loop in local faces
+     DO ifa=1,refElPol%Nfaces
+        IF (Mesh%Fdir(iel,ifa)) CYCLE
+        iface = Mesh%F(iel,ifa)
+        Xfl = Mesh%X(Mesh%T(iel,refElPol%face_nodes(ifa,:)),:)
         IF (iface.LE.Mesh%Nintfaces) THEN
            CALL elemental_matrices_int_faces(iel,ifa,Xfl)
         ELSE
            IF (Mesh%periodic_faces(iface-Mesh%Nintfaces).EQ.0) THEN
               CALL elemental_matrices_ext_faces(iel,ifa,Xfl)
            ELSE
-          ! periodic face
+              ! periodic face
               CALL elemental_matrices_int_faces(iel,ifa,Xfl)
            ENDIF
         ENDIF
-    END DO
+     END DO
 
   END DO
   !$OMP END DO
@@ -601,9 +601,9 @@ CONTAINS
   !$OMP END PARALLEL
 
   IF (MPIvar%glob_id .EQ. 0) THEN
-    IF (utils%printint > 0) THEN
-      WRITE (6,*) "Done!"
-    END IF
+     IF (utils%printint > 0) THEN
+        WRITE (6,*) "Done!"
+     END IF
   END IF
 
 
@@ -611,7 +611,7 @@ CONTAINS
      CALL cpu_TIME(timing%tpe1)
      CALL system_CLOCK(timing%cke1,timing%clock_rate1)
      timing%runtpre = timing%runtpre + (timing%cke1 - timing%cks1)/REAL(timing%clock_rate1)
-    timing%cputpre = timing%cputpre + timing%tpe1 - timing%tps1
+     timing%cputpre = timing%cputpre + timing%tpe1 - timing%tps1
   END IF
 
 CONTAINS
@@ -661,31 +661,31 @@ CONTAINS
     iJ22 = J11/detJ
     DO g = 1,NGauss
 
-      IF (detJ(g) < tol) THEN
+       IF (detJ(g) < tol) THEN
           WRITE(6,*) "iel: ", iel, "detJ(g): ", detJ(g)
           error STOP "Negative jacobian in element: "
        END IF
 
-      ! x and y derivatives of the shape functions
-      Nxg = iJ11(g)*refElPol%Nxi2D(g,:) + iJ12(g)*refElPol%Neta2D(g,:)
-      Nyg = iJ21(g)*refElPol%Nxi2D(g,:) + iJ22(g)*refElPol%Neta2D(g,:)
-      IF (switch%axisym) THEN
-        Nx_ax = Nxg + 1./xy(g,1)*refElPol%N2D(g,:)
-      ELSE
-        Nx_ax = Nxg
-      END IF
-      ! Integration weight
-      dvolu = refElPol%gauss_weights2D(g)*detJ(g)
-      IF (switch%axisym) THEN
-        dvolu = dvolu*xy(g,1)
-      END IF
+       ! x and y derivatives of the shape functions
+       Nxg = iJ11(g)*refElPol%Nxi2D(g,:) + iJ12(g)*refElPol%Neta2D(g,:)
+       Nyg = iJ21(g)*refElPol%Nxi2D(g,:) + iJ22(g)*refElPol%Neta2D(g,:)
+       IF (switch%axisym) THEN
+          Nx_ax = Nxg + 1./xy(g,1)*refElPol%N2D(g,:)
+       ELSE
+          Nx_ax = Nxg
+       END IF
+       ! Integration weight
+       dvolu = refElPol%gauss_weights2D(g)*detJ(g)
+       IF (switch%axisym) THEN
+          dvolu = dvolu*xy(g,1)
+       END IF
 
-      NN = TensorProduct(refElPol%N2D(g,:),refElPol%N2D(g,:))*dvolu
-      NxNy_ax(:,:,1) = TensorProduct(Nx_ax,refElPol%N2D(g,:))*dvolu
-      NxNy_ax(:,:,2) = TensorProduct(Nyg,refElPol%N2D(g,:))*dvolu
+       NN = TensorProduct(refElPol%N2D(g,:),refElPol%N2D(g,:))*dvolu
+       NxNy_ax(:,:,1) = TensorProduct(Nx_ax,refElPol%N2D(g,:))*dvolu
+       NxNy_ax(:,:,2) = TensorProduct(Nyg,refElPol%N2D(g,:))*dvolu
 
-      ! Local assembly
-      CALL assemblyVolumeContribution(NxNy_ax,NN,Aqq,Aqu)
+       ! Local assembly
+       CALL assemblyVolumeContribution(NxNy_ax,NN,Aqq,Aqu)
     END DO
     CALL do_assembly(Aqq,Aqu,ind_ass,ind_asq,iel)
 
@@ -731,19 +731,19 @@ CONTAINS
     ! Loop in 1D Gauss points
     DO g = 1,NGauss
 
-      ! Calculate the integration weight
+       ! Calculate the integration weight
        xyDerNorm_g = NORM2(xyDer(g,:))
-      dline = refElPol%gauss_weights1D(g)*xyDerNorm_g
+       dline = refElPol%gauss_weights1D(g)*xyDerNorm_g
 
-      IF (switch%axisym) THEN
-        dline = dline*xyf(g,1)
-      END IF
-      ! Unit normal to the boundary
-      t_g = xyDer(g,:)/xyDerNorm_g
-      n_g = [t_g(2),-t_g(1)]
+       IF (switch%axisym) THEN
+          dline = dline*xyf(g,1)
+       END IF
+       ! Unit normal to the boundary
+       t_g = xyDer(g,:)/xyDerNorm_g
+       n_g = [t_g(2),-t_g(1)]
 
-      NiNi = tensorProduct(refElPol%N1D(g,:),refElPol%N1D(g,:))*dline
-      CALL assemblyFacesContribution(iel,NiNi,n_g,ind_asf,ind_ash,ind_fG,ind_ff)
+       NiNi = tensorProduct(refElPol%N1D(g,:),refElPol%N1D(g,:))*dline
+       CALL assemblyFacesContribution(iel,NiNi,n_g,ind_asf,ind_ash,ind_fG,ind_ff)
     END DO ! Gauss points
 
   END SUBROUTINE elemental_matrices_int_faces
@@ -779,19 +779,19 @@ CONTAINS
     ! Loop in 1D Gauss points
     DO g = 1,NGauss
 
-      ! Calculate the integration weight
+       ! Calculate the integration weight
        xyDerNorm_g = NORM2(xyDer(g,:))
-      dline = refElPol%gauss_weights1D(g)*xyDerNorm_g
+       dline = refElPol%gauss_weights1D(g)*xyDerNorm_g
 
-      IF (switch%axisym) THEN
-        dline = dline*xyf(g,1)
-      END IF
-      ! Unit normal to the boundary
-      t_g = xyDer(g,:)/xyDerNorm_g
-      n_g = [t_g(2),-t_g(1)]
+       IF (switch%axisym) THEN
+          dline = dline*xyf(g,1)
+       END IF
+       ! Unit normal to the boundary
+       t_g = xyDer(g,:)/xyDerNorm_g
+       n_g = [t_g(2),-t_g(1)]
 
-      NiNi = tensorProduct(refElPol%N1D(g,:),refElPol%N1D(g,:))*dline
-      CALL assemblyFacesContribution(iel,NiNi,n_g,ind_asf,ind_ash,ind_fG,ind_ff)
+       NiNi = tensorProduct(refElPol%N1D(g,:),refElPol%N1D(g,:))*dline
+       CALL assemblyFacesContribution(iel,NiNi,n_g,ind_asf,ind_ash,ind_fG,ind_ff)
     END DO ! Gauss points
 
   END SUBROUTINE elemental_matrices_ext_faces
@@ -806,7 +806,7 @@ CONTAINS
 
     Aqq = Aqq + NN
     DO k = 1,Ndim
-      Aqu(:,:,k) = Aqu(:,:,k) +  NxNy_ax(:,:,k)
+       Aqu(:,:,k) = Aqu(:,:,k) +  NxNy_ax(:,:,k)
     END DO
 
   END SUBROUTINE assemblyVolumeContribution
@@ -822,16 +822,17 @@ CONTAINS
     iAqq = 0.
     exAqq = 0.
     DO j = 1,Neq
-      ind_j = j + ind_ass
-      DO k = 1,Ndim
-        ind_i = ind_asq + k + (j - 1)*Ndim
-        elMat%Aqu(ind_i,ind_j,iel)=elMat%Aqu(ind_i,ind_j,iel)+Aqu(:,:,k)
-        exAqq(ind_i,ind_i) = exAqq(ind_i,ind_i) + Aqq
-      END DO
+       ind_j = j + ind_ass
+       DO k = 1,Ndim
+          ind_i = ind_asq + k + (j - 1)*Ndim
+          elMat%Aqu(ind_i,ind_j,iel)=elMat%Aqu(ind_i,ind_j,iel)+Aqu(:,:,k)
+          exAqq(ind_i,ind_i) = exAqq(ind_i,ind_i) + Aqq
+       END DO
     END DO
     CALL invert_matrix(exAqq,iAqq)
     elMat%iAqq(:,:,iel)=elMat%iAqq(:,:,iel)+iAqq
     DEALLOCATE(iAqq,exAqq)
+
   END SUBROUTINE do_assembly
 
   SUBROUTINE assemblyFacesContribution(iel,NiNi,n_g,ind_asf,ind_ash,ind_fG,ind_ff)
@@ -841,17 +842,13 @@ CONTAINS
     INTEGER*4              :: ind_1f(SIZE(ind_asf)),ind_2f(SIZE(ind_asf))
     INTEGER*4              :: k,idm
     DO k = 1,Neq
-      DO idm = 1,Ndim
-        ind_1f = ind_ash + idm + (k - 1)*Ndim
-        ind_2f = ind_asf + k
-        elMat%Aql(ind_fG(ind_1f),ind_ff(ind_2f),iel) = elMat%Aql(ind_fG(ind_1f),ind_ff(ind_2f),iel) - NiNi*n_g(idm)
-      END DO
+       DO idm = 1,Ndim
+          ind_1f = ind_ash + idm + (k - 1)*Ndim
+          ind_2f = ind_asf + k
+          elMat%Aql(ind_fG(ind_1f),ind_ff(ind_2f),iel) = elMat%Aql(ind_fG(ind_1f),ind_ff(ind_2f),iel) - NiNi*n_g(idm)
+       END DO
     END DO
+
   END SUBROUTINE assemblyFacesContribution
 
-
-
-
-
 END SUBROUTINE HDG_precalculatedfirstequation
-

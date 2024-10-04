@@ -672,7 +672,7 @@ CONTAINS
 
     ! Normalized magnetic flux at Gauss points: PSI
      psig = MATMUL(refElPol%N1d,psifl)
-    
+
     ! Compute diffusion at faces Gauss points
 #ifndef KEQUATION
     CALL setLocalDiff(xyg,ufg,qfg,diff_iso_fac,diff_ani_fac)
@@ -735,20 +735,20 @@ CONTAINS
     CASE (bc_Bohm)
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
     CASE (bc_BohmPump)
-         
+
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
-    CASE (bc_BohmPuff) 
+    CASE (bc_BohmPuff)
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
 #else
     CASE (bc_Bohm)
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral,faceflux_numerical)
     CASE (bc_BohmPump)
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral,faceflux_numerical)
-    CASE (bc_BohmPuff) 
+    CASE (bc_BohmPuff)
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral,faceflux_numerical)
 #endif
     CASE (bc_iter_core)
-      CALL set_itercore_bc()       
+      CALL set_itercore_bc()
     CASE DEFAULT
       WRITE (6,*) "Error: wrong boundary type"
       STOP
@@ -774,7 +774,7 @@ CONTAINS
        Mesh%Xgb(indtausave,:) = xy_g_save_el
        xy_g_save(indtausave,:) = xy_g_save_el
      ENDIF
-  
+
   END DO
 
 #ifdef SAVEFLUX
@@ -1065,9 +1065,9 @@ CONTAINS
     END DO
 
   END SUBROUTINE set_itercore_bc
-  
-  
-  
+
+
+
   !********************************
   ! Transmission boundary condition
   !********************************
@@ -1150,7 +1150,7 @@ CONTAINS
 #ifndef TEMPERATURE
          SoundSpeed = SQRT(phys%a)
 #else
-         
+
          !SoundSpeed = upg(g,9)
          CALL compute_cs(ufg(g,:),SoundSpeed)
          call compute_dcs_du(ufg(g,:),dcs_du)
@@ -1160,7 +1160,7 @@ CONTAINS
 #endif
       ! tangency
       ntang = .TRUE.
-#ifdef BOHMLIMIT 
+#ifdef BOHMLIMIT
       !use this flag as a proxy for turning off/on the bohm limit technique
       if (any(ufg(:,4)<2.e-7)) then
         ntang = .false.
@@ -1174,7 +1174,7 @@ CONTAINS
       !IF (abs(inc) .le. phys%bohmth) THEN
       !   !sn = 1.
       !   !delta = 0 ! TODO try to module delta in the WEST case
-      !   !Modification BC 
+      !   !Modification BC
       !   sn = sign(1.,bn)
       !   delta = 0.
       !   setval = sn
@@ -1188,20 +1188,20 @@ CONTAINS
       !     delta = 1
       !  ELSE IF ((abs(upg(g,2))) .gt. SoundSpeed) THEN
       !    !delta = 0
-      !    !setval = upg(g,2)			
-      !    !Modification BC 
+      !    !setval = upg(g,2)
+      !    !Modification BC
       !    delta = 0.
       !    setval = sn
       !    !End modification BC
       !  END IF
 
       ! NEW BOHM BC
-      ! Above angle threshold: Impose outgoing supersonic velocity everywhere 
+      ! Above angle threshold: Impose outgoing supersonic velocity everywhere
       ! Below angle thresgold: Impose linear decrease of supersonic velocity
       !                        to 0 as a function of the angle of incidence
          setval = ABS(upg(g,2))
          sn = SIGN(1.,bn)
-      delta = 1.      
+      delta = 1.
          IF (ABS(inc) .LE. phys%bohmth) THEN
             setval = sn*SoundSpeed/phys%bohmth*ABS(inc)
             dcs_du = sn*dcs_du/phys%bohmth*ABS(inc)
@@ -1212,13 +1212,13 @@ CONTAINS
             ELSE IF (ABS(upg(g,2)) .GT. SoundSpeed) THEN
             delta = 0.
             !setval = sn*setval
-         END IF 
+         END IF
          !if (numer%bohmtypebc.eq.1) then
          !  delta=1
          !endif
       END IF
 #endif
-     
+
       ! Shape functions
       NiNi = tensorProduct(refElPol%N1D(g,:),refElPol%N1D(g,:))*dline
       Ni = refElPol%N1D(g,:)*dline
@@ -1264,9 +1264,9 @@ CONTAINS
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
           &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
-#else     
+#else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)   
+        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
 #endif
         !summing conribution from each part of the face
         faceflux_pump = faceflux_pump+flgflux_pump
@@ -1280,11 +1280,11 @@ CONTAINS
         CALL assembly_bohm_bc_new(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
           &ufg(g,:),upg(g,:),b(g,1:2),n_g,tau_stab,setval,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang)
          ENDIF
-      
+
          IF (save_tau) THEN
          v_nn_Bou_el(g,:) = Vnng
          ENDIF
-      
+
     END DO ! END loop in Gauss points
 
   END SUBROUTINE set_Bohm_bc
@@ -1607,9 +1607,9 @@ CONTAINS
       indj = ind_ash + idm + (j - 1)*Ndim
       elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
         &NiNi*ng(idm)*phys%diff_nn
-    END DO      
+    END DO
     ! flux rhs-part
-    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_dens_coeff*Ni 
+    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_dens_coeff*Ni
 
 
 
@@ -1625,7 +1625,7 @@ CONTAINS
       !elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*ng(idm)*phys%diff_u
       elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*(ng(idm)*diffiso(i,i)-bn*bg(idm)*diffani(i,i))
     END DO
- 
+
 
 #ifdef TEMPERATURE
     ! *********** Equation 3 --> Ions energy flux equal 10 MW
@@ -1641,9 +1641,9 @@ CONTAINS
       !elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
       !  &NiNi*ng(idm)*phys%diff_e
       elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*(ng(idm)*diffiso(i,i)-bn*bg(idm)*diffani(i,i))
-    END DO 
+    END DO
     ! flux rhs-part
-    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_ener_coeff*Ni 
+    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_ener_coeff*Ni
 
 
     ! *********** Equation 4 --> Electrons energy flux equal 10 MW
@@ -1659,10 +1659,10 @@ CONTAINS
       !elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
       !  &NiNi*ng(idm)*phys%diff_ee
       elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*(ng(idm)*diffiso(i,i)-bn*bg(idm)*diffani(i,i))
-    END DO 
+    END DO
     ! flux rhs-part
-    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_ener_coeff*Ni 
-#endif      
+    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_ener_coeff*Ni
+#endif
 
 
     ! *********** Equation Neq --> Flux neutrals equal to flux plasma - source
@@ -1684,17 +1684,17 @@ CONTAINS
 !      indj = ind_ash + idm + (j - 1)*Ndim
 !      elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
 !        &NiNi*ng(idm)*phys%diff_n
-!    END DO      
+!    END DO
 !    ! flux rhs-part
-!    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_dens_coeff*Ni 
-    
-    
-    
+!    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_dens_coeff*Ni
+
+
+
 
   END SUBROUTINE assembly_itercore_bc
-  
-  
-  
+
+
+
   !**********************************
   ! Assembly Dirichlet in strong form
   !**********************************
@@ -1874,7 +1874,7 @@ CONTAINS
               !dirichlet boundary on minimal allowed values
               !IF ((i .ne. 5) .and. ((ufg(1)<1e-5) .or. (ufg(3)<1.e-8*3/2*phys%Mref) .or. (ufg(4)<1.e-8*3/2*phys%Mref))) THEN
               !IF (.false.) THEN
-              ! if (i==1) then 
+              ! if (i==1) then
               !    elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel)  - tau(i,i)*1e-5*Ni
               ! elseif (i == 3) then
               !    elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel)  - tau(i,i)*1.e-8*3/2*phys%Mref*Ni
@@ -1893,7 +1893,7 @@ CONTAINS
           !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*(1 - delta)*setval*NiNi
           !End modification BC
           !NEW BOHM BC: Impose everywhere a value for velocity
-          elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) + tau(i,i)*delta*setval*NiNi 
+          elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) + tau(i,i)*delta*setval*NiNi
           elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*(1. - delta)*NiNi
                  !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*NiNi
                  !weird investigations
@@ -2080,7 +2080,7 @@ CONTAINS
              kmult = ddk_dU(j)*Qpr(idm,k)*(ng(idm)-bn*bg(idm))*NiNi
              elMat%All(ind_ff(indi),ind_ff(ind_jf),iel) = elMat%All(ind_ff(indi),ind_ff(ind_jf),iel) - kmult
             enddo
-            kmultf = ddk_dU_U*(Qpr(idm,k)*ng(idm)-bn*bg(idm))*Ni 
+            kmultf = ddk_dU_U*(Qpr(idm,k)*ng(idm)-bn*bg(idm))*Ni
             elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 
 #endif
@@ -2204,37 +2204,37 @@ CONTAINS
       CALL computeDpn(ufg,Qpr,Vpn,Dpn)
       ! Compute dDpn_dU(U^(k-1))
       CALL compute_dDpn_dU(ufg,Qpr,Vpn,dDpn_dU)
-      ! Reduce Grad Pn for low collision regime 
-      ! Threshold set at 0.5xGradPn for Ti = 0.2 eV 
+      ! Reduce Grad Pn for low collision regime
+      ! Threshold set at 0.5xGradPn for Ti = 0.2 eV
       Gammaredpn = 1.
       Tmin = 0.2/simpar%refval_temperature
         IF (Tmin/upfg(7) .LE. 1.) Gammaredpn = Gammaredpn*Tmin/upfg(7)
-      Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*Dpn 
+      Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*Dpn
       ! Comput Gammaredpn(U^(k-1))
       !CALL computeGammared(ufg,Gammaredpn)
       !gmipn = matmul(Qpr,Vveci)
       !CALL computeGammaLim(ue,Qpr,Vpn,GammaLim)
-      ! Set Grad Ti = 0. for low collision regime 
+      ! Set Grad Ti = 0. for low collision regime
       ! (back to diffusion equation for neutral density)
-      !CALL computeAlphaCoeff(ufg,Qpr,Vpn,Alphanp)  
-      !CALL computeBetaCoeff(ufg,Qpr,Vpn,Betanp)  
+      !CALL computeAlphaCoeff(ufg,Qpr,Vpn,Alphanp)
+      !CALL computeBetaCoeff(ufg,Qpr,Vpn,Betanp)
       !Dpn = Alphanp*Dpn
       !dDpn_dU = Alphanp*dDpn_dU
-      !Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*Dpn 
+      !Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*Dpn
       !IF (Dnn .gt. phys%diff_nn) Dnn = phys%diff_nn
       !IF (Dpn .gt. phys%diff_nn) THEN
       !   Dpn = Alphanp*Dpn !0.
       !   dDpn_dU = Alphanp*dDpn_dU !0.
       !   Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*phys%diff_nn
        !END IF
-      ! Set Gamma Convective = cs_n*n_n for low collision regime 
+      ! Set Gamma Convective = cs_n*n_n for low collision regime
       !IF (Dpn .gt. phys%diff_nn) THEN
       !   Dpn = 0.
       !   dDpn_dU = 0.
       !   CALL jacobianMatricesBohmNP(ufg,AbohmNP)
       !ELSE
       !   AbohmNP = 0.
-      !END IF   
+      !END IF
 #endif
 
     bc = phys%bcflags(fl)
@@ -2251,7 +2251,7 @@ CONTAINS
        cryopump_coeff = phys%cryopump_power/(Mesh%pump_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
        if (switch%testcase .ge. 50 .and. switch%testcase .le. 59) recycling_coeff = phys%Re_pump
        puff_coeff = 0.
-    CASE (bc_BohmPuff) 
+    CASE (bc_BohmPuff)
        recycling_coeff =  phys%Re
        cryopump_coeff = 0.
        puff_coeff = phys%puff/simpar%refval_density/(Mesh%puff_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
@@ -2273,7 +2273,7 @@ CONTAINS
     !dimensionalizing and multiplying by the surface under this gauss point
     flgflux_puff = flgflux_puff*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
-    !contribution from parallel flux onto the wall 
+    !contribution from parallel flux onto the wall
         flgflux_parallel = uefg(2)*bn
     !dimensionalizing and multiplying by the surface under this gauss point (multiplied by the local recycling)
     flgflux_parallel = recycling_coeff*flgflux_parallel*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
@@ -2290,7 +2290,7 @@ CONTAINS
 
     !***************** end of flux control part *********************
 #endif
-#ifndef RHSBC    
+#ifndef RHSBC
     ! Convective part
     k = 5
     ! Plasma flux
@@ -2307,18 +2307,18 @@ CONTAINS
     DO j=1,Neq
        indj = ind_asf + j
            elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) + Abohm(k,j)*NiNi*bn
-       !elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + (Abohm(k,j) + AbohmNP(j))*NiNi*bn 
+       !elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + (Abohm(k,j) + AbohmNP(j))*NiNi*bn
     END DO
 !#endif
     !cryopump modification Should it be ALU?
     indj = k+ind_asf !5th equation and 5th conservative variable: pump_power*U5
     elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - cryopump_coeff*NiNi
-    
+
     ! Neutrals velocity
     !indj = Neq+ind_asf
     !elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) - (Ax(Neq,Neq)*ng(1) + Ay(Neq,Neq)*ng(2))*NiNi
-    
-    ! diffusive diagonal part 
+
+    ! diffusive diagonal part
     DO idm = 1,Ndim
        k = 5
 #ifndef NEUTRALP
@@ -2335,7 +2335,7 @@ CONTAINS
         kmult = Dnn_dU(j)*Qpr(idm,k)*ng(idm)*NiNi
               elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
            ENDDO
-       kmultf = Dnn_dU_U*(Qpr(idm,k)*ng(idm))*Ni 
+       kmultf = Dnn_dU_U*(Qpr(idm,k)*ng(idm))*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #endif
 #else
@@ -2344,7 +2344,7 @@ CONTAINS
           indj = ind_asf + j
           indk = ind_ash + idm + (j-1)*Ndim
           kmult = (Dpn*Taupn(idm,j) + dDpn_dU(j)*gmpn(idm))*ng(idm)*NiNi
-          !kmult = kmult - Gammaredpn*(Dpn*Taui(idm,j) + dDpn_dU(j)*gmipn(idm))*ng(idm)*NiNi 
+          !kmult = kmult - Gammaredpn*(Dpn*Taui(idm,j) + dDpn_dU(j)*gmipn(idm))*ng(idm)*NiNi
               elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
           kmult = Dpn*Vpn(j)*ng(idm)*NiNi
           !kmult = kmult - Gammaredpn*Dpn*Vveci(j)*ng(idm)*NiNi
@@ -2354,13 +2354,13 @@ CONTAINS
           elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
        END DO
            kmultf = dot_PRODUCT(dDpn_dU,ufg)*gmpn(idm)*ng(idm)*Ni
-       !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),ufg)*ng(1) + dot_product(Taui(2,:),ufg)*ng(2)) + dot_product(dDpn_dU,ufg)*(gmipn(1)*ng(1) + gmipn(2)*ng(2)))*Ni     
+       !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),ufg)*ng(1) + dot_product(Taui(2,:),ufg)*ng(2)) + dot_product(dDpn_dU,ufg)*(gmipn(1)*ng(1) + gmipn(2)*ng(2)))*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #endif
     END DO
     elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - puff_coeff*Ni
-    
-    ! diffusive non-diagonal part 
+
+    ! diffusive non-diagonal part
     DO idm = 1,Ndim
       k = 5
       j=1
@@ -2789,7 +2789,7 @@ CONTAINS
     CASE (bc_BohmPump)
        recycling_coeff =  phys%Re_pump
        puff_coeff = 0.
-    CASE (bc_BohmPuff) 
+    CASE (bc_BohmPuff)
        recycling_coeff =  0.
        puff_coeff = phys%puff/simpar%refval_density/(Mesh%puff_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
 !       write(6,*) "puff coeff " , puff_coeff
@@ -2798,7 +2798,7 @@ CONTAINS
       WRITE (6,*) "Error: wrong boundary type"
       STOP
     END SELECT
-    
+
     ! convective part
     k = Neq
     indi = k+ind_asf
@@ -2806,8 +2806,8 @@ CONTAINS
         IF (ntang) THEN
       elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + bn*NiNi*recycling_coeff
         ENDIF
-    
-    ! diffusive diagonal part 
+
+    ! diffusive diagonal part
     DO idm = 1,Ndim
       k = Neq
       indi = ind_asf+k
@@ -2818,9 +2818,9 @@ CONTAINS
         elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*phys%diff_nn
            ENDIF
     END DO
-    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - puff_coeff*Ni    
-    
-    ! diffusive non-diagonal part 
+    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - puff_coeff*Ni
+
+    ! diffusive non-diagonal part
     DO idm = 1,Ndim
       k = phys%Neq
       j=1
@@ -2836,4 +2836,3 @@ CONTAINS
 
   END SUBROUTINE assembly_bohm_bc_new
 END SUBROUTINE HDG_BC
-
