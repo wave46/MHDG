@@ -40,7 +40,6 @@ CONTAINS
     CHARACTER(1024)                             :: mesh_name_npne, new_mesh_name_npne, buffer
     INTEGER                                     :: ierr
 
-
     WRITE(*,*) '*************** Starting refinement procedure with oscillations: ****************'
 
     CALL hdg_ShockCapturing_adapt(thresh, eps_plot)
@@ -433,24 +432,10 @@ CONTAINS
        ENDDO
     ENDDO
 
-    ! IF(PRESENT(oscillations)) THEN
-    !   WRITE(time_buffer, *) time%it
-    !   buffer = './fortran_save_'// trim(adjustl(time_buffer)) // '.h5'
-    !   call HDF5_create(trim(adjustl(buffer)), file_id, ierr)
-    !   call HDF5_array2D_saving(file_id, um, size(um,1), size(um,2), 'sol_f')
-    !   call HDF5_array2D_saving(file_id, umho, size(umho,1), size(umho,2), 'sol_ho_f')
-    !   call HDF5_array1D_saving(file_id, oscillations, size(oscillations), 'oscillations_f')
-    !   call HDF5_array2D_saving_int(file_id, Mesh%T, size(Mesh%T,1), size(Mesh%T,2), 'T_f')
-    !   call HDF5_array2D_saving(file_id, Mesh%X, size(Mesh%X,1), size(Mesh%X,2), 'X_f')
-    !   call HDF5_array2D_saving(file_id, up, size(up,1), size(up,2), 'up_f')
-    !   call HDF5_array2D_saving(file_id, grad_mag, size(grad_mag,1), size(grad_mag,2), 'grad_mag_f')
-    !   call HDF5_array1D_saving(file_id, sol%u, size(sol%u,1), 'u_f')
-    !   call HDF5_close(file_id)
-    ! ENDIF
-
     DEALLOCATE (up, udet, um, umho)
     DEALLOCATE (grad_mag, grad)
     DEALLOCATE(indices)
+
   END SUBROUTINE find_coeff_shock_capturing_adapt
 
   SUBROUTINE read_error(eps_plot, error_oscillation)
@@ -490,6 +475,7 @@ CONTAINS
 
     DEALLOCATE(error_vec)
     DEALLOCATE(count_vec)
+
   ENDSUBROUTINE read_error
 
 
@@ -581,6 +567,7 @@ CONTAINS
           STOP
        ENDIF
     ENDDO
+
   END SUBROUTINE h_map
 
   SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
@@ -593,8 +580,8 @@ CONTAINS
     J(2,1) = two_d_nodes(B,2) - two_d_nodes(A,2)
     J(1,2) = two_d_nodes(C,1) - two_d_nodes(A,1)
     J(2,2) = two_d_nodes(C,2) - two_d_nodes(A,2)
-  END SUBROUTINE jacobian
 
+  END SUBROUTINE jacobian
 
   PURE SUBROUTINE unique_2D(input_matrix, output_matrix)
     INTEGER, INTENT(IN)                :: input_matrix(:,:)

@@ -1,9 +1,3 @@
-!************************************************************
-! project: MHDG
-! file: inout.f90
-! date: 06/09/2016
-! Module for schock capturing adaptivity
-!************************************************************
 
 MODULE adaptivity_estimator_indicator_module
   USE globals
@@ -37,7 +31,6 @@ CONTAINS
     INTEGER, ALLOCATABLE                        :: T_nogho(:,:)
     REAL*8, ALLOCATABLE                         :: q_nogho(:), u_nogho(:)
 #endif
-
 
     CHARACTER(70)                               :: param_adapt_char, count_adapt_char
     ! mesh_name is the mesh path + mesh name + .msh extension ("./Meshes/CircLim.msh")
@@ -228,7 +221,6 @@ CONTAINS
 
 
     n_el_unstable = 0
-
     DO i = 1, SIZE(error_oscillation)
        IF(error_oscillation(i) .GT. 1e-12) THEN
           n_el_unstable = n_el_unstable + 1

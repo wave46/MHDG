@@ -289,27 +289,17 @@ CONTAINS
 
 
        buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-
        CALL copy_file(buffer, "./res/temp.mesh")
-       
        !CALL delete_file(buffer)
 
        buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
-       
-
        CALL open_merge_with_geometry(gmsh, buffer)
-       
        CALL copy_file(buffer, "./res/temp.msh")
-       
-       
        !CALL delete_file(buffer)
 
        buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".sol"
        CALL delete_file(buffer)
-
        !CALL merge_with_geometry(gmsh)
-       
-       
 
 #ifdef PARALL
     ENDIF
@@ -354,7 +344,7 @@ CONTAINS
        Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
     END IF
 
-    CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+    !CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
 
     WRITE(*,*) "********** Rounding edges **********"
     !CALL round_edges(Mesh)
@@ -362,11 +352,10 @@ CONTAINS
     ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
     CALL write_msh_file(Mesh%X,Mesh%T)
     ! convert the mesh to .mesh
-    
-    CALL convert_msh2mesh('./res/temp')
-    
 
-    CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+    CALL convert_msh2mesh('./res/temp')
+
+    !CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
 
     DEALLOCATE(two_d_nodes)
     DEALLOCATE(two_d_elements)
@@ -472,7 +461,6 @@ CONTAINS
     DEALLOCATE(u_star)
     DEALLOCATE(u_int)
 
-
   ENDSUBROUTINE post_process_matrix_solution
 
   SUBROUTINE L2_error_estimator_eval(X,T,u,q,error_param,error_L2,eg_L2)
@@ -504,7 +492,6 @@ CONTAINS
     ALLOCATE(u_sol(Mesh%Nnodesperelem*n_elements*phys%neq/phys%Neq, phys%npv))
     ALLOCATE(u_star_sol((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements/phys%Neq, phys%npv))
 
-
     CALL create_reference_element(refElv_star,2,refElPol%Ndeg+1, verbose = 0)
 
     ! local calculation of the p+1 solution u_star
@@ -526,23 +513,18 @@ CONTAINS
     DEALLOCATE(u_star)
     DEALLOCATE(u_int)
 
-
   ENDSUBROUTINE L2_error_estimator_eval
 
-
-
   SUBROUTINE hdg_post_process_matrix(X, T, refElv, p1, p2, K, Bt, int_N, M)
-    TYPE(Reference_element_type), INTENT(IN)                :: refElv
-    REAL*8, INTENT(IN)              :: X(:,:)
-    INTEGER, INTENT(IN)             :: T(:,:)
-    INTEGER, INTENT(IN)             :: p1, p2
-    REAL*8, INTENT(OUT)             :: K(:,:,:), Bt(:,:,:), int_N(:,:,:)
-    REAL*8, INTENT(OUT), OPTIONAL   :: M(:,:,:)
-
-    ! Declarations
-    INTEGER                              :: n_elements, Nv2, iElem
-    REAL*8, DIMENSION(:, :), ALLOCATABLE :: shapeFunctions
-    REAL*8, DIMENSION(:, :), ALLOCATABLE :: Ke, Bte, int_Ne, Me
+    TYPE(Reference_element_type), INTENT(IN) :: refElv
+    REAL*8, INTENT(IN)                       :: X(:,:)
+    INTEGER, INTENT(IN)                      :: T(:,:)
+    INTEGER, INTENT(IN)                      :: p1, p2
+    REAL*8, INTENT(OUT)                      :: K(:,:,:), Bt(:,:,:), int_N(:,:,:)
+    REAL*8, INTENT(OUT), OPTIONAL            :: M(:,:,:)
+    INTEGER                                  :: n_elements, Nv2, iElem
+    REAL*8, DIMENSION(:, :), ALLOCATABLE     :: shapeFunctions
+    REAL*8, DIMENSION(:, :), ALLOCATABLE     :: Ke, Bte, int_Ne, Me
 
     ! Initialization
     n_elements = SIZE(T, 1)
@@ -599,9 +581,7 @@ CONTAINS
        DEALLOCATE(Me)
     ENDIF
 
-
   ENDSUBROUTINE hdg_post_process_matrix
-
 
   SUBROUTINE elemental_matrices(Xe, refElv, Ke, Bte, int_Ne, Me)
     TYPE(Reference_element_type), INTENT(IN)               :: refElv
@@ -734,14 +714,8 @@ CONTAINS
 
     SUBROUTINE expand_matrix_Bt(Bx, By, B)
       REAL*8, INTENT(in)    :: Bx(:, :), By(:, :)
-      !real*8, INTENT(out)   :: B(phys%Neq*size(Bx, 1), phys%Neq*Mesh%ndim*size(Bx, 2))
       REAL*8, INTENT(out)   :: B(:,:)
       INTEGER*4             :: i, k, j, n, m, neq_dim, neq, ndim
-
-
-      ! neq_dim = phys%Neq*Mesh%ndim
-      ! neq = phys%Neq
-      ! ndim = Mesh%ndim
 
       neq_dim = 2*Mesh%ndim
       neq = 2
@@ -759,11 +733,10 @@ CONTAINS
             END DO
          END DO
       END DO
+
     ENDSUBROUTINE expand_matrix_Bt
 
-
   ENDSUBROUTINE elemental_matrices
-
 
   SUBROUTINE hdg_postprocess_solution(qin, uin, K, Bt, int_N, refElv_star, refElv, n_elements, u_star,u_int)
     TYPE(Reference_element_type), INTENT(IN)                 :: refElv
@@ -781,9 +754,7 @@ CONTAINS
     INTEGER, DIMENSION(:), ALLOCATABLE                       :: ind_u_star, ind_L_star
     INTEGER                                                  :: Nv, Nv_star, ielem, i, j, counter
     INTEGER                                                  :: NeqNv, NeqNvStar, NeqNvStar2, NeqNvStar4, NeqNvStar2Elem, NeqNvStar4Elem
-
     INTEGER                                                  :: SizeK1, SizeK2, SizeBt1, SizeBt2, SizeIntN1, SizeIntN2, SizeIntUeStar1, SizeIntUeStar2, SizeA
-
 
     SizeK1 = SIZE(K,1)
     SizeK2 = SIZE(K,2)
@@ -833,7 +804,6 @@ CONTAINS
           counter = counter + 1
        ENDDO
     ENDDO
-
 
     ALLOCATE(shapeFunctions(Nv_star,Nv))
 
@@ -972,19 +942,14 @@ CONTAINS
 
     ENDDO
 
-    IF(adapt%difference .EQ. 0) THEN 
-      !DO i = 1, size(sol_norm)
-      !   IF (sol_norm(i)<1.e-3) THEN
-      !      sol_norm(i)=sol_norm(i)+1.e-3
-      !   ENDIF
-      !ENDDO
-       ! relative difference
-      
+    IF(adapt%difference .EQ. 0) THEN
+      ! relative error
        error = SQRT(error2/sol_norm)
 
     ELSEIF(adapt%difference .EQ. 1) THEN
-       ! absolute difference
+       ! absolute error density
        error = SQRT(error2/SUM(sol_norm)*SUM(dom_area)/dom_area)
+
     ELSE
        WRITE(*,*) "Choice of relative/absolute difference for the adaptivity not valid. STOP."
        STOP
@@ -1002,9 +967,9 @@ CONTAINS
     REAL*8, DIMENSION(:, :), INTENT(IN)                :: coordGauss
     REAL*8, INTENT(OUT)                                :: elem_error, sol_norm, elem_area
 
-    REAL*8, DIMENSION(refEl2%NGauss2D,refEl2%Ndim)       :: xyg_xi, xyg_eta, xyg_p2, xyg_p1, xyg_err
-    REAL*8, DIMENSION(refEl2%Ndim,refEl2%NGauss2D)       :: gxy0,gxy
-    REAL*8, DIMENSION(refEl2%NGauss2D)                  :: detJ, dvolu, ueg_p1, ueg_p2, err_gauss
+    REAL*8, DIMENSION(refEl2%NGauss2D,refEl2%Ndim)     :: xyg_xi, xyg_eta, xyg_p2, xyg_p1, xyg_err
+    REAL*8, DIMENSION(refEl2%Ndim,refEl2%NGauss2D)     :: gxy0,gxy
+    REAL*8, DIMENSION(refEl2%NGauss2D)                 :: detJ, dvolu, ueg_p1, ueg_p2, err_gauss
     LOGICAL                                            :: convergence
 
     xyg_xi = MATMUL(refEl2%Nxi2D, Xe_p2)
@@ -1104,6 +1069,7 @@ CONTAINS
     END DO
 
     IF (iter == max_iter) convergence = .FALSE.
+
   END SUBROUTINE recompute_gauss_points
 
   SUBROUTINE error_on_vertices(error_L2,T, vector_nodes_unique,N_n_vertex,error_output)
@@ -1169,11 +1135,9 @@ CONTAINS
        ENDIF
     ENDDO
 
-
   ENDSUBROUTINE error_on_vertices
 
   SUBROUTINE error_on_vertices_target(error_L2,T,vector_nodes_unique,N_n_vertex,error_output)
-
     REAL*8, INTENT(IN)               :: error_L2(:)
     INTEGER, INTENT(IN)              :: vector_nodes_unique(:)
     INTEGER, INTENT(IN)              :: T(:,:)
@@ -1233,7 +1197,6 @@ CONTAINS
           STOP
        ENDIF
     ENDDO
-
 
   ENDSUBROUTINE error_on_vertices_target
 
