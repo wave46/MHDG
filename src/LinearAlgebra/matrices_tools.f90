@@ -13,9 +13,9 @@ CONTAINS
   !********************************
   SUBROUTINE full_to_CSR(M, S)
     REAL, DIMENSION(:, :), INTENT(IN) :: M ! full matrix
-    TYPE(MAT_CSR_TYP), INTENT(OUT)  :: S ! sparse matrix in CSR format
-    INTEGER  :: r, c, nnz, ic, i, j
-    REAL, PARAMETER :: tol = 1e-10
+    TYPE(MAT_CSR_TYP), INTENT(OUT)    :: S ! sparse matrix in CSR format
+    INTEGER                           :: r, c, nnz, ic, i, j
+    REAL, PARAMETER                   :: tol = 1e-10
 
     ! Matrix dimensions
     r = SIZE(M, 1)
@@ -55,12 +55,14 @@ CONTAINS
   ! Convert a sparse matrix in CSR format
   ! into a full matrix
   !********************************
+
   SUBROUTINE CSR_to_full(S, M)
-    TYPE(MAT_CSR_TYP), INTENT(IN)    :: S ! sparse matrix in CSR format
+
+    TYPE(MAT_CSR_TYP), INTENT(IN)                      :: S ! sparse matrix in CSR format
     REAL(8), DIMENSION(:, :), ALLOCATABLE, INTENT(OUT) :: M ! full matrix
-    INTEGER :: r, c, i, j, nnz
-    INTEGER, DIMENSION(:), POINTER :: cols, rowptr
-    REAL(8), DIMENSION(:), POINTER :: vals
+    INTEGER                                            :: r, c, i, j, nnz
+    INTEGER, DIMENSION(:), POINTER                     :: cols, rowptr
+    REAL(8), DIMENSION(:), POINTER                     :: vals
 
     nnz = S%nnz
     cols => S%cols
@@ -143,7 +145,7 @@ CONTAINS
   !********************************
   SUBROUTINE CSR_to_IJV_partial(N, rowsptr, loc2glob, Irows)
 
-    INTEGER :: N
+    INTEGER               :: N
     INTEGER, DIMENSION(:) :: rowsptr
     INTEGER, DIMENSION(:) :: Irows
     INTEGER, DIMENSION(:) :: loc2glob
@@ -163,11 +165,11 @@ CONTAINS
   ! Inspired by Youcef Saad - GG January 2016
   !**************************************************************
   SUBROUTINE amux(A, x, y)
-    TYPE(MAT_CSR_TYP), INTENT(IN)                     :: A
-    REAL(8), DIMENSION(:), INTENT(IN)                  :: x
+    TYPE(MAT_CSR_TYP), INTENT(IN)                        :: A
+    REAL(8), DIMENSION(:), INTENT(IN)                    :: x
     REAL(8), DIMENSION(SIZE(A%rowptr) - 1), INTENT(OUT)  :: y
-    INTEGER  :: i, k, r
-    REAL(8)  :: t
+    INTEGER                                              :: i, k, r
+    REAL(8)                                              :: t
 
     r = SIZE(A%rowptr) - 1
     DO i = 1, r
@@ -261,13 +263,13 @@ CONTAINS
   ! by Youcef Saad - Modified by GG January 2016
   !**************************************************************
   FUNCTION lsol(A, b) RESULT(x)
-    TYPE(MAT_CSR_TYP), INTENT(IN)    :: A ! sparse matrix in CSR format
+    TYPE(MAT_CSR_TYP), INTENT(IN)     :: A ! sparse matrix in CSR format
     REAL(8), DIMENSION(:), INTENT(IN) :: b ! RHS
     REAL(8), DIMENSION(SIZE(b))       :: x ! unknowns
     INTEGER                           :: n, j, k
-    INTEGER, DIMENSION(:), POINTER      :: cols, rowptr
+    INTEGER, DIMENSION(:), POINTER    :: cols, rowptr
     REAL(8)                           :: t, d
-    REAL(8), DIMENSION(:), POINTER      :: vals
+    REAL(8), DIMENSION(:), POINTER    :: vals
 
     n = A%n
     vals => A%vals
@@ -296,13 +298,13 @@ CONTAINS
   ! by Youcef Saad - Modified by GG January 2016
   !**************************************************************
   FUNCTION usol(A, b) RESULT(x)
-    TYPE(MAT_CSR_TYP), INTENT(IN)    :: A ! sparse matrix in CSR format
+    TYPE(MAT_CSR_TYP), INTENT(IN)     :: A ! sparse matrix in CSR format
     REAL(8), DIMENSION(:), INTENT(IN) :: b ! RHS
     REAL(8), DIMENSION(SIZE(b))       :: x ! unknowns
     INTEGER                           :: n, j, k, nnz
-    INTEGER, DIMENSION(:), POINTER      :: cols, rowptr
+    INTEGER, DIMENSION(:), POINTER    :: cols, rowptr
     REAL(8)                           :: t, d
-    REAL(8), DIMENSION(:), POINTER      :: vals
+    REAL(8), DIMENSION(:), POINTER    :: vals
 
     d = 0
     n = A%n
@@ -392,11 +394,11 @@ CONTAINS
   ! cols are not in crescent order: cannot use for ILU0!
   ! workaround: transpose and transpose back with trspspr
   SUBROUTINE amub(A, B, C)
-    TYPE(MAT_CSR_TYP), INTENT(IN)  :: A, B ! INPUT: sparse matrix in CSR format
-    TYPE(MAT_CSR_TYP), INTENT(OUT) :: C   ! OUTPUT:sparse matrix in CSR format
-    INTEGER                          :: ncol, nrow, nnz, ii, jj, len, jpos, jcol, k, ka, kb
+    TYPE(MAT_CSR_TYP), INTENT(IN)      :: A, B ! INPUT: sparse matrix in CSR format
+    TYPE(MAT_CSR_TYP), INTENT(OUT)     :: C   ! OUTPUT:sparse matrix in CSR format
+    INTEGER                            :: ncol, nrow, nnz, ii, jj, len, jpos, jcol, k, ka, kb
     INTEGER, DIMENSION(:), ALLOCATABLE :: iw
-    REAL(8)                          :: scal
+    REAL(8)                            :: scal
 
     ncol = B%n
     nrow = SIZE(A%rowptr) - 1
@@ -459,12 +461,12 @@ CONTAINS
   SUBROUTINE dump_CSR(prefix, rowptr, loc2glob, cols, vals)
     USE MPI_OMP
 
-    CHARACTER(len=*) :: prefix
+    CHARACTER(len=*)      :: prefix
     INTEGER, DIMENSION(:) :: rowptr, loc2glob, cols
-    REAL*8, DIMENSION(:) :: vals
+    REAL*8, DIMENSION(:)  :: vals
 
-    CHARACTER(len=100) :: tempstr, fname_complete
-    INTEGER :: Nrows, krow, kNZ
+    CHARACTER(len=100)    :: tempstr, fname_complete
+    INTEGER               :: Nrows, krow, kNZ
 
     Nrows = UBOUND(rowptr, 1) - 1
 
@@ -489,12 +491,11 @@ CONTAINS
   SUBROUTINE dump_IJV(prefix, Irows, Jcols, Avals)
     USE MPI_OMP
 
-    CHARACTER(len=*) :: prefix
+    CHARACTER(len=*)      :: prefix
     INTEGER, DIMENSION(:) :: Irows, Jcols
-    REAL*8, DIMENSION(:) :: Avals
-
-    CHARACTER(len=100) :: tempstr, fname_complete
-    INTEGER :: kNZ, NNZ
+    REAL*8, DIMENSION(:)  :: Avals
+    CHARACTER(len=100)    :: tempstr, fname_complete
+    INTEGER               :: kNZ, NNZ
 
     NNZ = UBOUND(Avals, 1)
 
@@ -514,11 +515,11 @@ CONTAINS
   SUBROUTINE dump_vec(prefix, vec)
     USE MPI_OMP
 
-    CHARACTER(len=*) :: prefix
-    REAL*8, DIMENSION(:) :: vec
+    CHARACTER(len=*)        :: prefix
+    REAL*8, DIMENSION(:)    :: vec
 
-    CHARACTER(len=100) :: tempstr, fname_complete
-    INTEGER :: Nrows, krow
+    CHARACTER(len=100)      :: tempstr, fname_complete
+    INTEGER                 :: Nrows, krow
 
     Nrows = SIZE(vec)
 

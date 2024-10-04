@@ -12,16 +12,16 @@ CONTAINS
     ! endif
 
     IMPLICIT NONE
-    INTEGER, INTENT(in) :: length
-    REAL, DIMENSION(length), INTENT(in) :: array
+    INTEGER, INTENT(IN)                 :: length
+    REAL, DIMENSION(length), INTENT(IN) :: array
     !f2py depend(length) array
-    REAL, INTENT(in) :: VALUE
-    REAL, INTENT(in), OPTIONAL :: delta
+    REAL, INTENT(IN)                    :: VALUE
+    REAL, INTENT(IN), OPTIONAL          :: delta
 
-    INTEGER :: binarysearch
+    INTEGER                             :: binarysearch
 
-    INTEGER :: left, middle, right
-    REAL :: d
+    INTEGER                             :: left, middle, right
+    REAL                                :: d
 
     IF (PRESENT(delta) .EQV. .TRUE.) THEN
        d = delta
@@ -56,30 +56,30 @@ CONTAINS
     ! by x_array and the grid y values specified by y_array
     ! Reference: http://en.wikipedia.org/wiki/Bilinear_interpolation
     IMPLICIT NONE
-    INTEGER, INTENT(in) :: x_len, y_len
-    REAL, DIMENSION(x_len), INTENT(in) :: x_array
-    REAL, DIMENSION(y_len), INTENT(in) :: y_array
-    REAL, DIMENSION(x_len, y_len), INTENT(in) :: f
-    REAL, INTENT(in) :: x, y
-    REAL, INTENT(in), OPTIONAL :: delta
+    INTEGER, INTENT(IN)                       :: x_len, y_len
+    REAL, DIMENSION(x_len), INTENT(IN)        :: x_array
+    REAL, DIMENSION(y_len), INTENT(IN)        :: y_array
+    REAL, DIMENSION(x_len, y_len), INTENT(IN) :: f
+    REAL, INTENT(IN)                          :: x, y
+    REAL, INTENT(IN), OPTIONAL                :: delta
     !f2py depend(x_len) x_array, f
     !f2py depend(y_len) y_array, f
 
-    REAL :: denom, x1, x2, y1, y2
-    INTEGER :: i, j
+    REAL                                      :: denom, x1, x2, y1, y2
+    INTEGER                                   :: i, j
 
     i = binarysearch(x_len, x_array, x, delta)
     j = binarysearch(y_len, y_array, y, delta)
 
     IF (i == x_len) THEN
-       WRITE (6, *) "Problem in the binary search"
+       WRITE (6, *) "Problem IN the binary search"
        WRITE (6, *) "x", x
        WRITE (6, *) "max(x_array)", MAXVAL(x_array)
        WRITE (6, *) "min(x_array)", MINVAL(x_array)
     END IF
 
     IF (j == y_len) THEN
-       WRITE (6, *) "Problem in the binary search"
+       WRITE (6, *) "Problem IN the binary search"
        WRITE (6, *) "y", y
        WRITE (6, *) "max(y_array)", MAXVAL(y_array)
        WRITE (6, *) "min(y_array)", MINVAL(y_array)
@@ -99,12 +99,12 @@ CONTAINS
   END FUNCTION interpolate
 
   FUNCTION nodesearch(x, y, xy_len, x_array, y_array)
-    ! Given a  point (x,y), returns the index of the closest node in 2D
+    ! Given a  point (x,y), returns the index of the closest node IN 2D
     IMPLICIT NONE
-    INTEGER,INTENT(in) :: xy_len
-    REAL,INTENT(in) :: x, y
-    REAL,DIMENSION(xy_len),INTENT(in):: x_array, y_array
-    REAL*8 :: d(xy_len)
+    INTEGER,INTENT(IN)               :: xy_len
+    REAL,INTENT(IN)                  :: x, y
+    REAL,DIMENSION(xy_len),INTENT(IN):: x_array, y_array
+    REAL*8                           :: d(xy_len)
 
     INTEGER :: nodesearch
 
@@ -115,13 +115,13 @@ CONTAINS
 
   SUBROUTINE lineintegration(qp_len, x_vec, y_vec, f, Xc, T, nodes2D, nli)
     ! Given a set of points (x, y) along a line of sight, retruns the line integration of
-    ! f. The function f is evaluated in the closest nodes to points (x, y).
+    ! f. The function f is evaluated IN the closest nodes to points (x, y).
     IMPLICIT NONE
-    INTEGER,INTENT(in) :: qp_len, nodes2D, T(:,:)
-    REAL*8,INTENT(in) :: x_vec(:), y_vec(:), f(:), Xc(:,:)
-    REAL*8,INTENT(out) :: nli
-    INTEGER :: i, iel, inp, n_ind, f_ind(2), np_len
-    REAL*8 :: x, y, dl(qp_len-1), x_qp(qp_len), f_qp(qp_len)
+    INTEGER,INTENT(IN) :: qp_len, nodes2D, T(:,:)
+    REAL*8,INTENT(IN)  :: x_vec(:), y_vec(:), f(:), Xc(:,:)
+    REAL*8,INTENT(OUT) :: nli
+    INTEGER            :: i, iel, inp, n_ind, f_ind(2), np_len
+    REAL*8             :: x, y, dl(qp_len-1), x_qp(qp_len), f_qp(qp_len)
 
     ! Search closest node and evaluate f
     DO i = 1, qp_len
@@ -143,12 +143,12 @@ CONTAINS
 
   !real function lineintegration(qp_len, x_vec, y_vec, np_len, x_array, y_array ,f)
   ! Given a set of points (x, y) along a line of sight, retruns the line integration of
-  ! f. The function f is evaluated in the closest nodes to points (x, y).
+  ! f. The function f is evaluated IN the closest nodes to points (x, y).
   !  implicit none
-  !  real,intent(in) :: qp_len, np_len
-  !  real,dimension(qp_len),intent(in) :: x_vec,  y_vec
-  !  real,dimension(np_len),intent(in) :: x_array,  y_array
-  !  real, intent(in) :: f
+  !  real,intent(IN) :: qp_len, np_len
+  !  real,dimension(qp_len),intent(IN) :: x_vec,  y_vec
+  !  real,dimension(np_len),intent(IN) :: x_array,  y_array
+  !  real, intent(IN) :: f
   !  integer :: i, iel, inp, n_ind, f_ind(2)
   !  real*8 :: x, y, dl(qp_len-1), x_qp(qp_len), f_qp(qp_len)
 

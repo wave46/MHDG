@@ -8,26 +8,26 @@ MODULE solve_pastix
 
   TYPE PASTIX_STRUC ! A type to store matrices in CSR format
      ! Variables are defined in a PASTIX specific way
-     pastix_int_t :: n    ! Number of (locally owned) columns in the matrix
-     pastix_int_t :: nnz  ! Number of (locally owned) non-zeros
+     pastix_int_t                           :: n    ! Number of (locally owned) columns in the matrix
+     pastix_int_t                           :: nnz  ! Number of (locally owned) non-zeros
      pastix_int_t, DIMENSION(:), POINTER    :: rowptr => NULL()  ! Index of first element of each row in cols and vals
      pastix_int_t, DIMENSION(:), POINTER    :: cols => NULL()  ! Column of each element
      pastix_float_t, DIMENSION(:), POINTER  :: vals => NULL()  ! Value of each element
      pastix_int_t, DIMENSION(:), POINTER    :: loc2glob => NULL()  ! Global column number of the local columns
      ! From here below the variables are PASTIX specific
-     pastix_data_ptr_t                     :: pastix_data ! Structure to keep information in PaStiX (0 for first CALL)
-     INTEGER                               :: pastix_comm ! MPI communicator used by pastix
-     pastix_int_t, DIMENSION(:), POINTER :: perm => NULL() ! permutation tabular
-     pastix_int_t, DIMENSION(:), POINTER :: invp => NULL() ! reverse permutation tabular
-     pastix_float_t, DIMENSION(:), POINTER :: rhs => NULL() ! Right hand side
-     pastix_int_t                          :: nrhs   ! right hand side number
-     pastix_int_t, DIMENSION(:), POINTER :: iparm => NULL()! Integer parameters
-     REAL(float), DIMENSION(:), POINTER :: dparm => NULL()! Floating point parameters
-     INTEGER                               :: nbthread    ! Number of threads in PaStiX
-     LOGICAL                               :: start  ! keeps track if it is the first solve
+     pastix_data_ptr_t                      :: pastix_data ! Structure to keep information in PaStiX (0 for first CALL)
+     INTEGER                                :: pastix_comm ! MPI communicator used by pastix
+     pastix_int_t, DIMENSION(:), POINTER    :: perm => NULL() ! permutation tabular
+     pastix_int_t, DIMENSION(:), POINTER    :: invp => NULL() ! reverse permutation tabular
+     pastix_float_t, DIMENSION(:), POINTER  :: rhs => NULL() ! Right hand side
+     pastix_int_t                           :: nrhs   ! right hand side number
+     pastix_int_t, DIMENSION(:), POINTER    :: iparm => NULL()! Integer parameters
+     REAL(float), DIMENSION(:), POINTER     :: dparm => NULL()! Floating point parameters
+     INTEGER                                :: nbthread    ! Number of threads in PaStiX
+     LOGICAL                                :: start  ! keeps track if it is the first solve
   END TYPE PASTIX_STRUC
 
-  INTEGER, PARAMETER                   :: verbose_level_PASTIX = 0 ! Level of verbose (0 = Silent mode, no messages; 1 = Some messages;
+  INTEGER, PARAMETER                        :: verbose_level_PASTIX = 0 ! Level of verbose (0 = Silent mode, no messages; 1 = Some messages;
   ! 2 = Many messages; 3 = Like a gossip; 4 = Really talking too much...)
   TYPE(PASTIX_STRUC) :: matPASTIX
 
@@ -135,31 +135,18 @@ CONTAINS
        timing%rlstime1 = timing%rlstime1 + (cke - cks)/REAL(clock_rate)
        timing%clstime1 = timing%clstime1 + tpe - tps
     END IF
+
   END SUBROUTINE init_mat_PASTIX
-
-  !                real*8  :: tps, tpe
-  !                integer :: cks,clock_rate,cke
-  !                if (lssolver%timing) then
-  !                                call cpu_time(tps)
-  !                                call system_clock(cks,clock_rate)
-  !                endif
-
-  !                if (lssolver%timing) then
-  !                        call cpu_time(tpe)
-  !                        call system_clock(cke,clock_rate)
-  !                        timing%rlstime1 = timing%rlstime1+(cke-cks)/real(clock_rate)
-  !                        timing%clstime1 = timing%clstime1+tpe-tps
-  !                end if
 
   !***********************************************
   ! From the generic CSR storage, fills the PASTIX
   ! instance of the matrix
   !***********************************************
   SUBROUTINE build_mat_PASTIX(matPASTIX)
-    !   TYPE(MAT_CSR_TYP) :: matCSR
-    TYPE(PASTIX_STRUC) :: matPASTIX
-    REAL*8  :: tps, tpe
-    INTEGER :: cks, clock_rate, cke
+
+    TYPE(PASTIX_STRUC)  :: matPASTIX
+    REAL*8              :: tps, tpe
+    INTEGER             :: cks, clock_rate, cke
 
     cks = 0
     cke = 0
@@ -214,12 +201,11 @@ CONTAINS
   SUBROUTINE check_mat_PASTIX(matPASTIX)
 
     TYPE(PASTIX_STRUC) :: matPASTIX
-
-    INTEGER :: nnz
-    pastix_data_ptr_t :: data_check
-    pastix_int_t :: flagcor
-    REAL*8  :: tps, tpe
-    INTEGER :: cks, clock_rate, cke
+    INTEGER            :: nnz
+    pastix_data_ptr_t  :: data_check
+    pastix_int_t       :: flagcor
+    REAL*8             :: tps, tpe
+    INTEGER            :: cks, clock_rate, cke
 
     cks = 0
     cke = 0
@@ -264,8 +250,8 @@ CONTAINS
     USE matrices_tools, ONLY: dump_CSR
 
     TYPE(PASTIX_STRUC) :: matPASTIX
-    REAL*8  :: tps, tpe
-    INTEGER :: cks, clock_rate, cke
+    REAL*8             :: tps, tpe
+    INTEGER            :: cks, clock_rate, cke
 
     cks = 0
     cke = 0
@@ -298,9 +284,8 @@ CONTAINS
   SUBROUTINE LU_mat_pastix(matPASTIX)
 
     TYPE(PASTIX_STRUC) :: matPASTIX
-
-    REAL*8  :: tps, tpe
-    INTEGER :: cks, clock_rate, cke
+    REAL*8             :: tps, tpe
+    INTEGER            :: cks, clock_rate, cke
 
     cks = 0
     cke = 0
@@ -332,10 +317,10 @@ CONTAINS
   ! Solve problem with PASTIX
   !***********************************************
   SUBROUTINE solve_mat_PASTIX(matPASTIX)
-    TYPE(PASTIX_STRUC) :: matPASTIX
 
-    REAL*8  :: tps, tpe
-    INTEGER :: cks, clock_rate, cke
+    TYPE(PASTIX_STRUC) :: matPASTIX
+    REAL*8             :: tps, tpe
+    INTEGER            :: cks, clock_rate, cke
 
     cks = 0
     cke = 0
@@ -362,27 +347,8 @@ CONTAINS
        timing%rlstime6 = timing%rlstime6 + (cke - cks)/REAL(clock_rate)
        timing%clstime6 = timing%clstime6 + tpe - tps
     END IF
-  END SUBROUTINE solve_mat_PASTIX
 
-  !SUBROUTINE free_mat_PASTIX(matPASTIX)
-  !   TYPE(PASTIX_STRUC) :: matPASTIX
-  !
-  !   IF (associated(matPASTIX%rowptr)) then
-  !      deallocate(matPASTIX%rowptr)
-  !   endif
-  !   IF (associated(matPASTIX%loc2glob)) then
-  !      deallocate(matPASTIX%loc2glob)
-  !   endif
-  !   IF (associated(matPASTIX%cols)) then
-  !      deallocate(matPASTIX%cols)
-  !   endif
-  !   IF (associated(matPASTIX%vals)) then
-  !      deallocate(matPASTIX%vals)
-  !   endif
-  !   IF (associated(matPASTIX%rhs)) then
-  !      deallocate(matPASTIX%rhs)
-  !   endif
-  !END SUBROUTINE free_mat_PASTIX
+  END SUBROUTINE solve_mat_PASTIX
 
   SUBROUTINE terminate_mat_PASTIX()
 

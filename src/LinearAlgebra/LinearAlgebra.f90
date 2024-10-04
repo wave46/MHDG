@@ -11,12 +11,12 @@ MODULE LinearAlgebra
 CONTAINS
 
   SUBROUTINE compute_lup_decomp(A, n, L, U, P)
-    INTEGER*4, INTENT(in) :: n
-    REAL*8, INTENT(in) :: A(:, :)
-    REAL*8, INTENT(inout) :: L(:, :), U(:, :)
-    INTEGER*4, INTENT(inout) :: P(:, :)
-    INTEGER*4 :: i, j, itemp(1:n)
-    REAL*8 :: temp(1:n, 1:n)
+    INTEGER*4, INTENT(IN)    :: n
+    REAL*8, INTENT(IN)       :: A(:, :)
+    REAL*8, INTENT(INOUT)    :: L(:, :), U(:, :)
+    INTEGER*4, INTENT(INOUT) :: P(:, :)
+    INTEGER*4                :: i, j, itemp(1:n)
+    REAL*8                   :: temp(1:n, 1:n)
 
     temp = A
     CALL dgetrf(n, n, temp, n, itemp, i)
@@ -33,13 +33,14 @@ CONTAINS
        END DO
     END DO
     CALL find_permutation(n, P, itemp)
+
   END SUBROUTINE compute_lup_decomp
 
   SUBROUTINE find_permutation(n, P, per)
-    INTEGER*4, INTENT(in) :: n
-    INTEGER*4, INTENT(inout) :: per(1:n)
-    INTEGER*4, INTENT(out) :: P(1:n, 1:n)
-    INTEGER*4 :: i, temp, auxper(1:n)
+    INTEGER*4, INTENT(IN)    :: n
+    INTEGER*4, INTENT(INOUT) :: per(1:n)
+    INTEGER*4, INTENT(OUT)   :: P(1:n, 1:n)
+    INTEGER*4                :: i, temp, auxper(1:n)
 
     P = 0
     auxper = (/(i, i=1, n)/)
@@ -57,10 +58,10 @@ CONTAINS
   END SUBROUTINE find_permutation
 
   SUBROUTINE check_permutation(P, A, L, U, n)
-    INTEGER*4, INTENT(in) :: n, P(1:n, 1:n)
-    REAL*8, INTENT(in) :: A(1:n, 1:n), L(1:n, 1:n), U(1:n, 1:n)
-    REAL*8 :: temp1(1:n, 1:n), temp2(1:n, 1:n)
-    INTEGER*4 :: i, j
+    INTEGER*4, INTENT(IN) :: n, P(1:n, 1:n)
+    REAL*8, INTENT(IN)    :: A(1:n, 1:n), L(1:n, 1:n), U(1:n, 1:n)
+    REAL*8                :: temp1(1:n, 1:n), temp2(1:n, 1:n)
+    INTEGER*4             :: i, j
 
     temp1 = MATMUL(DBLE(P), A)
     temp2 = MATMUL(L, U)
@@ -92,8 +93,8 @@ CONTAINS
   ! Invert a square matrix
   !***************************
   SUBROUTINE invert_matrix(M, I)
-    REAL*8, INTENT(in)   :: M(:, :)
-    REAL*8, INTENT(out)  :: I(:, :)
+    REAL*8, INTENT(IN)   :: M(:, :)
+    REAL*8, INTENT(OUT)  :: I(:, :)
     INTEGER*4            :: n
     REAL*8               :: work(1:SIZE(M, 1)) ! work array for LAPACK
     INTEGER*4            :: ipiv(1:SIZE(M, 1)) ! pivot indices
@@ -104,7 +105,7 @@ CONTAINS
 
     n = SIZE(M, 1)
 
-    ! store the matrix in inverse to prevent it from being overwritten by LAPACK
+    ! store the matrix IN inverse to prevent it from being overwritten by LAPACK
     I = M
 
     ! DGETRF computes an LU factorization of a general M-by-N matrix A
@@ -128,11 +129,11 @@ CONTAINS
   ! multiple rhs
   !***************************
   SUBROUTINE solve_linear_system(A, b, x)
-    REAL*8, INTENT(in) :: A(:, :)
-    REAL*8, INTENT(in) :: b(:, :)
-    REAL*8, INTENT(out):: x(:, :)
-    INTEGER :: n, m, info
-    INTEGER :: p(1:SIZE(b, 1))
+    REAL*8, INTENT(IN) :: A(:, :)
+    REAL*8, INTENT(IN) :: b(:, :)
+    REAL*8, INTENT(OUT):: x(:, :)
+    INTEGER            :: n, m, info
+    INTEGER            :: p(1:SIZE(b, 1))
     REAL*8,ALLOCATABLE :: temp(:,:)
 
     EXTERNAL DGESV
@@ -151,6 +152,7 @@ CONTAINS
        STOP
     END IF
     DEALLOCATE(temp)
+
   END SUBROUTINE solve_linear_system
 
   !***************************
@@ -158,12 +160,12 @@ CONTAINS
   ! single rhs
   !***************************
   SUBROUTINE solve_linear_system_sing(A, b, x)
-    REAL*8, INTENT(in) :: A(:, :)
-    REAL*8, INTENT(in) :: b(:)
-    REAL*8, INTENT(out):: x(:)
-    INTEGER :: n, m, info
-    INTEGER :: p(1:SIZE(b, 1))
-    REAL*8 :: temp(SIZE(A, 1), SIZE(A, 2))
+    REAL*8, INTENT(IN) :: A(:, :)
+    REAL*8, INTENT(IN) :: b(:)
+    REAL*8, INTENT(OUT):: x(:)
+    INTEGER            :: n, m, info
+    INTEGER            :: p(1:SIZE(b, 1))
+    REAL*8             :: temp(SIZE(A, 1), SIZE(A, 2))
     EXTERNAL DGESV
 
     n = SIZE(b, 1) ! size of the matrix (n x n)
@@ -178,19 +180,18 @@ CONTAINS
        WRITE (*, *) 'A is singular; the solution could not be computed.'
        STOP
     END IF
+
   END SUBROUTINE solve_linear_system_sing
-
-
 
   !***************************
   ! Matrix multiplication using
   ! dgemm (avoid stack overflow)
   !***************************
   SUBROUTINE mymatmul(A,B,C)
-    REAL*8, INTENT(in) :: A(:, :)
-    REAL*8, INTENT(in) :: B(:,:)
-    REAL*8, INTENT(out):: C(:,:)
-    INTEGER :: a1,a2,b1,b2,c1,c2
+    REAL*8, INTENT(IN) :: A(:, :)
+    REAL*8, INTENT(IN) :: B(:,:)
+    REAL*8, INTENT(OUT):: C(:,:)
+    INTEGER            :: a1,a2,b1,b2,c1,c2
     EXTERNAL DGEMM
 
     a1 = SIZE(A,1)
@@ -226,14 +227,14 @@ CONTAINS
   ! right eigenvectors
   !***************************
   SUBROUTINE eig(A, V, D)
-    REAL*8, INTENT(in)  :: A(:, :)
-    REAL*8, INTENT(out) :: V(:, :)
-    REAL*8, INTENT(out) :: D(:, :)
-    INTEGER            :: m, lwork, i, info
-    INTEGER, PARAMETER :: nb = 64
-    REAL*8,ALLOCATABLE    :: work(:)
+    REAL*8, INTENT(IN)  :: A(:, :)
+    REAL*8, INTENT(OUT) :: V(:, :)
+    REAL*8, INTENT(OUT) :: D(:, :)
+    INTEGER             :: m, lwork, i, info
+    INTEGER, PARAMETER  :: nb = 64
+    REAL*8,ALLOCATABLE  :: work(:)
     REAL*8, ALLOCATABLE :: Vmat(:, :), wr(:), wi(:)
-    REAL*8             :: dummy(SIZE(A,1), SIZE(A,1))
+    REAL*8              :: dummy(SIZE(A,1), SIZE(A,1))
 
     EXTERNAL dgeev
 
@@ -264,7 +265,7 @@ CONTAINS
   ! Tensor product
   !*******************************************
   FUNCTION TensorProduct(Vl, Vr) RESULT(Tens)
-    REAL, DIMENSION(:) :: Vl, Vr
+    REAL, DIMENSION(:)                  :: Vl, Vr
     REAL, DIMENSION(SIZE(Vl), SIZE(Vr)) :: Tens
 
     INTEGER :: i, j, Nl, Nr
@@ -283,7 +284,7 @@ CONTAINS
   !*******************************************
   SUBROUTINE TensorProductCumul(M, Vl, Vr)
     REAL, DIMENSION(:, :) :: M
-    REAL, DIMENSION(:)   :: Vl, Vr
+    REAL, DIMENSION(:)    :: Vl, Vr
 
     INTEGER :: i, j, Nl, Nr
 
@@ -300,7 +301,7 @@ CONTAINS
   ! Tensor sum for integers
   !*******************************************
   FUNCTION TensorSumInt(Vl, Vr) RESULT(Tens)
-    INTEGER, DIMENSION(:) :: Vl, Vr
+    INTEGER, DIMENSION(:)                  :: Vl, Vr
     INTEGER, DIMENSION(SIZE(Vl), SIZE(Vr)) :: Tens
 
     INTEGER :: i, j, Nl, Nr
@@ -315,10 +316,10 @@ CONTAINS
   END FUNCTION TensorSumInt
 
   !****************************************************
-  ! Transform matrices in vectors for integers: colint
+  ! Transform matrices IN vectors for integers: colint
   !****************************************************
   FUNCTION colint(M) RESULT(V)
-    INTEGER, DIMENSION(:, :) :: M
+    INTEGER, DIMENSION(:, :)                  :: M
     INTEGER, DIMENSION(SIZE(M, 1)*SIZE(M, 2)) :: V
 
     INTEGER :: i, j
@@ -331,10 +332,10 @@ CONTAINS
   END FUNCTION colint
 
   !****************************************************
-  ! Transform matrices in vectors for reals: col
+  ! Transform matrices IN vectors for reals: col
   !****************************************************
   FUNCTION col(M) RESULT(V)
-    REAL, DIMENSION(:, :) :: M
+    REAL, DIMENSION(:, :)                  :: M
     REAL, DIMENSION(SIZE(M, 1)*SIZE(M, 2)) :: V
 
     INTEGER :: i, j
@@ -345,11 +346,12 @@ CONTAINS
        END DO
     END DO
   END FUNCTION col
+
 END MODULE LinearAlgebra
 
 SUBROUTINE cross_product(a, b, c)
-  REAL*8, INTENT(in) :: a(3), b(3)
-  REAL*8, INTENT(out):: c(3)
+  REAL*8, INTENT(IN) :: a(3), b(3)
+  REAL*8, INTENT(OUT):: c(3)
 
   c = 0.
   c(1) = a(2)*b(3) - a(3)*b(2)
@@ -359,8 +361,8 @@ SUBROUTINE cross_product(a, b, c)
 END SUBROUTINE cross_product
 
 SUBROUTINE ijk_cross_product(i, j, k)
-  INTEGER, INTENT(in) :: i
-  INTEGER, INTENT(out):: j, k
+  INTEGER, INTENT(IN) :: i
+  INTEGER, INTENT(OUT):: j, k
 
   SELECT CASE (i)
   CASE (1)
@@ -373,6 +375,7 @@ SUBROUTINE ijk_cross_product(i, j, k)
      j = 2
      k = 1
   CASE DEFAULT
-     WRITE (*, *) "Error, wrong case in cross-product"
+     WRITE (*, *) "Error, wrong case IN cross-product"
   END SELECT
+
 END SUBROUTINE ijk_cross_product

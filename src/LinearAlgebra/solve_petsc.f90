@@ -10,20 +10,20 @@ MODULE solve_petsc
 
 
   TYPE PETSC_STRUC ! A type to store structures for the PETSC library
-     Mat                               :: matK          ! sparse matrix for PSBLAS
-     KSP                               :: ksp           ! solver
-     PC                                :: pc            ! preconditioner
-     Vec                               :: solPETSC_vec      ! solution
-     Vec                               :: rhs_vec           ! right hand side
-     PetscInt                          :: n, nnz        ! matrix n and number of non-zeros
-     PetscInt, DIMENSION(:), POINTER   :: rowptr => NULL()
-     PetscInt, DIMENSION(:), POINTER   :: loc2glob => NULL()
-     PetscInt, DIMENSION(:), POINTER   :: cols => NULL()
+     Mat                                :: matK          ! sparse matrix for PSBLAS
+     KSP                                :: ksp           ! solver
+     PC                                 :: pc            ! preconditioner
+     Vec                                :: solPETSC_vec      ! solution
+     Vec                                :: rhs_vec           ! right hand side
+     PetscInt                           :: n, nnz        ! matrix n and number of non-zeros
+     PetscInt, DIMENSION(:), POINTER    :: rowptr => NULL()
+     PetscInt, DIMENSION(:), POINTER    :: loc2glob => NULL()
+     PetscInt, DIMENSION(:), POINTER    :: cols => NULL()
      PetscScalar, DIMENSION(:), POINTER :: vals_matK => NULL()
      PetscScalar, DIMENSION(:), POINTER :: vals_rhs => NULL()
-     PetscScalar                       :: residue   ! UNPRECONDTIONED residue norm of the linear system
-     PetscInt                          :: its      ! Previous number of iterations
-     KSPConvergedReason                :: convergedReason
+     PetscScalar                        :: residue   ! UNPRECONDTIONED residue norm of the linear system
+     PetscInt                           :: its      ! Previous number of iterations
+     KSPConvergedReason                 :: convergedReason
 
   END TYPE PETSC_STRUC
 
