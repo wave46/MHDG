@@ -21,7 +21,7 @@ MODULE types
   INTEGER, PARAMETER, PUBLIC :: bc_dirichlet_weak_form_oldvalues = 3
   INTEGER, PARAMETER, PUBLIC :: bc_Transmission = 4
   INTEGER, PARAMETER, PUBLIC :: bc_dirichlet_and_Neumann = 5
-   INTEGER, PARAMETER, PUBLIC :: bc_iter_core = 6
+  INTEGER, PARAMETER, PUBLIC :: bc_iter_core = 6
   ! 20-.. In out type
   INTEGER, PARAMETER, PUBLIC :: bc_inout = 20
   ! 30-.. Neumann type
@@ -117,13 +117,13 @@ MODULE types
      INTEGER*4, ALLOCATABLE :: N(:, :)          ! Nodes connectivity matrix
      INTEGER*4, ALLOCATABLE :: face_info(:, :)          ! Elemental face info
      INTEGER*4, ALLOCATABLE :: faces(:, :, :)    ! for each triangle i, stores info k on each face j: faces(i,j,1) = # of neighbouring triangle (0 if external
-    ! boundary), faces(i,j,2) = type of boundary (), faces(i,j,3) = type of boundary condition
+     ! boundary), faces(i,j,2) = type of boundary (), faces(i,j,3) = type of boundary condition
      INTEGER*4, ALLOCATABLE :: extfaces(:, :)   ! for each exterior face, stores the number of the triangle, the number of the face, and the type of BC
      INTEGER*4, ALLOCATABLE :: intfaces(:, :)   ! for each interior face, stores the number of the triangle, the number of the face, the number of the
-    ! neighboring triangle, the number of its face and the number of the node of the neighboring triangle that
-    ! matches the first knot of the triangle
+     ! neighboring triangle, the number of its face and the number of the node of the neighboring triangle that
+     ! matches the first knot of the triangle
      LOGICAL, ALLOCATABLE :: flipface(:, :)    ! for each triangle, and for each face, 0 if the order of the numbering in the face is to be kept, 1 if the
-    ! order is to be reversed
+     ! order is to be reversed
      LOGICAL, ALLOCATABLE    :: Fdir(:, :)         ! for each element states if each local face is of Dirichlet type
      INTEGER*4, ALLOCATABLE  :: periodic_faces(:)  ! Mapping for periodic faces
      INTEGER*4, ALLOCATABLE  :: Diric(:)
@@ -132,7 +132,7 @@ MODULE types
      REAL*8, POINTER         :: X(:, :) => NULL()    ! nodes coordinates
      INTEGER*4              :: Nnodes_toroidal     ! Number of nodes in the toroidal direction
      REAL*8, POINTER         :: toroidal(:) => NULL()    ! nodes coordinates in the toroidal direction
-    ! Limiting & shock capturing stuff
+     ! Limiting & shock capturing stuff
      INTEGER, ALLOCATABLE    :: flag_elems_rho(:)      ! Flagged elements for limiting rho [Number of elements]
      INTEGER, ALLOCATABLE    :: flag_elems_sc(:)     !  Flagged elements for shock-capturing [Number of elements]
      REAL*8, ALLOCATABLE     :: minrho_elems(:)        ! Minimum value of density in the flagged elements[Number of elements]
@@ -162,13 +162,13 @@ MODULE types
      INTEGER               :: Nno_glob           ! number of nodes of global mesh
      INTEGER               :: Ndir_glob          ! number of Dirichlet faces in the global mesh
      INTEGER               :: Ngho_glob          ! number of ghost faces in the global mesh
-    ! readed from input
+     ! readed from input
      INTEGER, POINTER       :: ghostflp(:)        ! flipFaces for the ghost faces [number of ghost faces]
      INTEGER, POINTER       :: ghostloc(:)        ! local numbering of the ghost face in the process that assemble it [number of ghost faces]
      INTEGER, POINTER       :: ghostpro(:)        ! the process that assemble the ghost face [number of ghost faces]
      INTEGER, POINTER       :: ghelsloc(:)        ! local numbering of the ghost element in the process that assemble it (only 3D) [number of ghost elements]
      INTEGER, POINTER       :: ghelspro(:)        ! the process that assemble the ghost element (only 3D) [number of ghost elements]
-    ! built after reading from input
+     ! built after reading from input
      INTEGER, ALLOCATABLE   :: fc2sd(:)          ! face 2 send: faces computed locally that the local process has to send (vector)
      INTEGER, ALLOCATABLE   :: pr2sd(:)          ! process 2 send: to which process the faces computed locally need to be sent (vector)
      INTEGER, ALLOCATABLE   :: fc2rv(:)          ! face 2 receive: ghost faces computed by other processes that the local process need to receive[number of ghost faces]
@@ -179,7 +179,7 @@ MODULE types
      INTEGER, ALLOCATABLE   :: el2rv(:)          ! element 2 receive: ghost elements computed by other processes that the local process need to receive (only 3D) [number of ghost elements]
      INTEGER, ALLOCATABLE   :: pe2rv(:)          ! process 2 receive: from which process the elements computed externally need to be received (only 3D) [number of ghost elements] (it is the same as ghelspro)
 
-    !     integer,allocatable   :: connpro(:)        ! processes connected to the local process
+     !     integer,allocatable   :: connpro(:)        ! processes connected to the local process
 #endif
   END TYPE Mesh_type
 
@@ -200,109 +200,109 @@ MODULE types
   ! Physics: type for physical model info
   !*******************************************************
   TYPE Physics_type
-     INTEGER         :: neq            ! Number of equations
-     INTEGER         :: npv            ! Number of physical variables
-     REAL*8          :: diff_n, diff_u ! Perpendicular diffusion in the continuity and momentum equation
-     REAL*8          :: v_p            ! Pinch velocity in the continuity equation
-     REAL*8          :: a              ! Proportionality constant between pressure and density for isothermal model (p = a*rho)
-     REAL*8          :: dfcoef         ! Constant related to the diamagnetic drift velocity
-     REAL*8          :: dexbcoef         ! Constant related to the ExB drift velocity
-     INTEGER*4       :: bcflags(1:10)          ! Set the correspondence between mesh boundary flag (Mesh%boundaryFlag) and the boundary condition
-     REAL*8          :: diagsource(1:10)       ! Diagonal implicit sources
+     INTEGER                   :: neq ! Number of equations
+     INTEGER                   :: npv ! Number of physical variables
+     REAL*8                    :: diff_n, diff_u ! Perpendicular diffusion in the continuity and momentum equation
+     REAL*8                    :: v_p ! Pinch velocity in the continuity equation
+     REAL*8                    :: a ! Proportionality constant between pressure and density for isothermal model (p = a*rho)
+     REAL*8                    :: dfcoef ! Constant related to the diamagnetic drift velocity
+     REAL*8                    :: dexbcoef ! Constant related to the ExB drift velocity
+     INTEGER*4                 :: bcflags(1:10) ! Set the correspondence between mesh boundary flag (Mesh%boundaryFlag) and the boundary condition
+     REAL*8                    :: diagsource(1:10) ! Diagonal implicit sources
      CHARACTER(LEN=20), POINTER:: phyVarNam(:) => NULL() ! Names of the physical variables (set in initPhys)
      CHARACTER(LEN=20), POINTER:: conVarNam(:) => NULL() ! Names of the conservative variables (set in initPhys)
-     REAL*8          :: lscale          ! Length scale for the non-dimensionalization of the equations
-    ! Magnetic field defined for each node of the mesh.
-     REAL*8, POINTER :: B(:, :)            ! Magnetic field, Br,Bz,Bphi [n of nodes  x 3]
-     REAL*8          :: B0                 ! Reference value for the magnetic field [Tesla]
-     REAL*8, POINTER :: magnetic_flux(:)   ! Magnetic flux   [n of nodes]
-     REAL*8, POINTER :: magnetic_psi(:)    ! Magnetic flux normalized to separatrix magnetic flux   [n of nodes]
-     REAL*8          :: Flux2Dmin          ! Minimum of the magnetic flux, across the MPI partitions
-     REAL*8          :: Flux2Dmax          ! Maximum of the magnetic flux, across the MPI partitions
+     REAL*8                    :: lscale ! Length scale for the non-dimensionalization of the equations
+     ! Magnetic field defined for each node of the mesh.
+     REAL*8, POINTER           :: B(:, :) ! Magnetic field, Br,Bz,Bphi [n of nodes x 3]
+     REAL*8                    :: B0 ! Reference value for the magnetic field [Tesla]
+     REAL*8, POINTER           :: magnetic_flux(:) ! Magnetic flux [n of nodes]
+     REAL*8, POINTER           :: magnetic_psi(:) ! Magnetic flux normalized to separatrix magnetic flux [n of nodes]
+     REAL*8                    :: Flux2Dmin ! Minimum of the magnetic flux, across the MPI partitions
+     REAL*8                    :: Flux2Dmax ! Maximum of the magnetic flux, across the MPI partitions
 #ifdef KEQUATION
-     REAL*8, POINTER :: omega(:)           ! larmor frequency   [n of nodes]
-     REAL*8, POINTER :: q_cyl(:)           ! q cylindrical   [n of nodes]
+     REAL*8, POINTER           :: omega(:) ! larmor frequency [n of nodes]
+     REAL*8, POINTER           :: q_cyl(:) ! q cylindrical [n of nodes]
 #endif
-     REAL*8          :: r_axis             ! R-coordinate of magnetic axis
-     REAL*8          :: z_axis             ! Z-coordinate of magnetic axis
+     REAL*8                    :: r_axis ! R-coordinate of magnetic axis
+     REAL*8                    :: z_axis ! Z-coordinate of magnetic axis
 
-     REAL*8, POINTER :: Bperturb(:, :)     ! Magnetic perturbation, Br,Bz,Bphi [n of nodes  x 3]
-     REAL*8          :: Tbg                ! Background temperature in the isothermal model
-     REAL*8, POINTER :: Jtor(:)            ! Toroidal Current
-     REAL*8          :: I_p                ! Total plasma current
-     REAL*8          :: bohmth             ! Threshold for imposing the Bohm boundary condition
-    ! Energy equation coefficients
-     REAL*8          :: diff_e             ! Perpendicular diffusion in the energy equation
-     REAL*8          :: epn                ! Exponential of the parallel diffusion (usually 5/2)
-     REAL*8          :: Mref               ! Reference Mach number
-     REAL*8          :: diff_pari          ! Parallel diffusion for the temperature (usually 1e7)
-     REAL*8          :: Gmbohm             ! gamma for Bohm boundary condition on energy:
-    ! Temperature equations coefficients (the ions coefficients are the ones defined previously)
-     REAL*8          :: diff_ee            ! Perpendicular diffusion in the elcetron energy equation
-     REAL*8          :: diff_pare          ! Parallel diffusion for the electron temperature
-     REAL*8          :: tie                ! Temperature exchange coefficient between ions and electrons
-     REAL*8          :: Gmbohme            ! gamma for Bohm boundary condition on electron energy:
-     REAL*8          :: Pohmic             ! Ohmic heating power
-    ! Coefficients for the vorticity equations
-     REAL*8          :: diff_vort
-     REAL*8          :: diff_pot
-     REAL*8          :: etapar
-     REAL*8          :: c1, c2             ! coefficients coming from the adimensionalization
-     REAL*8          :: Potfloat
-    ! Coefficients for ion heating
-    real*8          :: heating_power      ! total power of ion heating source
-    real*8          :: heating_amplitude  ! adimentionalized gaussian amplitude including integration coefficients
-    real*8          :: heating_dr         ! displacement of the soruce from magnetic axis in r direction
-    real*8          :: heating_dz         ! displacement of the soruce from magnetic axis in z direction
-    real*8          :: heating_sigmar     ! width of the soruce from magnetic axis in r direction
-    real*8          :: heating_sigmaz     ! width of the soruce from magnetic axis in z direction
-    integer         :: heating_equation   ! Equation to which additional heating is applied (3 for ions, 4 for  electrons)
-    ! Coefficients for the neutral equations
-     REAL*8          :: diff_nn            ! Diffusion in the neutral equation
-     REAL*8,ALLOCATABLE:: diff_nn_Vol(:)   ! Diffusion in the neutral equation at 2D Gauss points
-     REAL*8,ALLOCATABLE:: diff_nn_Fac(:)   ! Diffusion in the neutral equation at 1D Gauss points on interior faces
-     REAL*8,ALLOCATABLE:: diff_nn_Bou(:)   ! Diffusion in the neutral equation at 1D Gauss points on boundary faces
-     REAL*8,ALLOCATABLE:: v_nn_Vol(:,:)    ! Convective velocity in the neutral equation at 2D Gauss points
-     REAL*8,ALLOCATABLE:: v_nn_Fac(:,:)    ! Convective velocity in the neutral equation at 1D Gauss points on interior faces
-     REAL*8,ALLOCATABLE:: v_nn_Bou(:,:)    ! Convective velocity in the neutral equation at 1D Gauss points on boundary faces
-     REAL*8          :: Re                 ! Recycling for the neutral equation
-     REAL*8          :: Re_pump            ! Recycling for the neutral equation in the pump region
-     REAL*8          :: puff               ! Puff coefficient
-    real*8          :: cryopump_power     ! Cryopump power in [m^3/s] coefficient
-     REAL*8          :: puff_slope         ! Puff increment coefficient (only for moving equilibrium for ITER)
-     REAL*8,POINTER :: puff_exp(:)    ! Puff experimental coefficient (only for moving equilibriums)
-     REAL*8          :: part_source        ! Particle source for ITER
-     REAL*8          :: ener_source        ! Particle source for ITER
-     REAL*8          :: density_source     ! Density source for WEST (2D, case 52)
-     REAL*8          :: ener_source_e      ! Ion energy source for WEST and ITER (2D, case 52 and 81)
-     REAL*8          :: ener_source_ee     ! Electron source for WEST and ITER (2D, case 52 and 81)
-     REAL*8          :: sigma_source       ! Sigma for the gaussian sources for WEST and ITER (2D, case 52 and 81)
-     REAL*8          :: fluxg_trunc        ! Value of the NORMALISED magnetic flux at which to truncate the gaussian sources for WEST (2D, case 52), refer to Source_shape.m file
-    ! Diffusion coefficients ITER evolving equilibrium
-     REAL*8          :: ME_diff_n
-     REAL*8          :: ME_diff_u
-     REAL*8          :: ME_diff_e
-     REAL*8          :: ME_diff_ee
+     REAL*8, POINTER           :: Bperturb(:, :) ! Magnetic perturbation, Br,Bz,Bphi [n of nodes x 3]
+     REAL*8                    :: Tbg ! Background temperature in the isothermal model
+     REAL*8, POINTER           :: Jtor(:) ! Toroidal Current
+     REAL*8                    :: I_p ! Total plasma current
+     REAL*8                    :: bohmth ! Threshold for imposing the Bohm boundary condition
+     ! Energy equation coefficients
+     REAL*8                    :: diff_e ! Perpendicular diffusion in the energy equation
+     REAL*8                    :: epn ! Exponential of the parallel diffusion (usually 5/2)
+     REAL*8                    :: Mref ! Reference Mach number
+     REAL*8                    :: diff_pari ! Parallel diffusion for the temperature (usually 1e7)
+     REAL*8                    :: Gmbohm ! gamma for Bohm boundary condition on energy:
+     ! Temperature equations coefficients (the ions coefficients are the ones defined previously)
+     REAL*8                    :: diff_ee ! Perpendicular diffusion in the elcetron energy equation
+     REAL*8                    :: diff_pare ! Parallel diffusion for the electron temperature
+     REAL*8                    :: tie ! Temperature exchange coefficient between ions and electrons
+     REAL*8                    :: Gmbohme ! gamma for Bohm boundary condition on electron energy:
+     REAL*8                    :: Pohmic ! Ohmic heating power
+     ! Coefficients for the vorticity equations
+     REAL*8                    :: diff_vort
+     REAL*8                    :: diff_pot
+     REAL*8                    :: etapar
+     REAL*8                    :: c1, c2 ! coefficients coming from the adimensionalization
+     REAL*8                    :: Potfloat
+     ! Coefficients for ion heating
+     REAL*8                    :: heating_power ! total power of ion heating source
+     REAL*8                    :: heating_amplitude ! adimentionalized gaussian amplitude including integration coefficients
+     REAL*8                    :: heating_dr ! displacement of the soruce from magnetic axis in r direction
+     REAL*8                    :: heating_dz ! displacement of the soruce from magnetic axis in z direction
+     REAL*8                    :: heating_sigmar ! width of the soruce from magnetic axis in r direction
+     REAL*8                    :: heating_sigmaz ! width of the soruce from magnetic axis in z direction
+     INTEGER                   :: heating_equation ! Equation to which additional heating is applied (3 for ions, 4 for electrons)
+     ! Coefficients for the neutral equations
+     REAL*8                    :: diff_nn ! Diffusion in the neutral equation
+     REAL*8,ALLOCATABLE        :: diff_nn_Vol(:) ! Diffusion in the neutral equation at 2D Gauss points
+     REAL*8,ALLOCATABLE        :: diff_nn_Fac(:) ! Diffusion in the neutral equation at 1D Gauss points on interior faces
+     REAL*8,ALLOCATABLE        :: diff_nn_Bou(:) ! Diffusion in the neutral equation at 1D Gauss points on boundary faces
+     REAL*8,ALLOCATABLE        :: v_nn_Vol(:,:) ! Convective velocity in the neutral equation at 2D Gauss points
+     REAL*8,ALLOCATABLE        :: v_nn_Fac(:,:) ! Convective velocity in the neutral equation at 1D Gauss points on interior faces
+     REAL*8,ALLOCATABLE        :: v_nn_Bou(:,:) ! Convective velocity in the neutral equation at 1D Gauss points on boundary faces
+     REAL*8                    :: Re ! Recycling for the neutral equation
+     REAL*8                    :: Re_pump ! Recycling for the neutral equation in the pump region
+     REAL*8                    :: puff ! Puff coefficient
+     REAL*8                    :: cryopump_power ! Cryopump power in [m^3/s] coefficient
+     REAL*8                    :: puff_slope ! Puff increment coefficient (only for moving equilibrium for ITER)
+     REAL*8,POINTER            :: puff_exp(:) ! Puff experimental coefficient (only for moving equilibriums)
+     REAL*8                    :: part_source ! Particle source for ITER
+     REAL*8                    :: ener_source ! Particle source for ITER
+     REAL*8                    :: density_source ! Density source for WEST (2D, case 52)
+     REAL*8                    :: ener_source_e ! Ion energy source for WEST and ITER (2D, case 52 and 81)
+     REAL*8                    :: ener_source_ee ! Electron source for WEST and ITER (2D, case 52 and 81)
+     REAL*8                    :: sigma_source ! Sigma for the gaussian sources for WEST and ITER (2D, case 52 and 81)
+     REAL*8                    :: fluxg_trunc ! Value of the NORMALISED magnetic flux at which to truncate the gaussian sources for WEST (2D, case 52), refer to Source_shape.m file
+     ! Diffusion coefficients ITER evolving equilibrium
+     REAL*8                    :: ME_diff_n
+     REAL*8                    :: ME_diff_u
+     REAL*8                    :: ME_diff_e
+     REAL*8                    :: ME_diff_ee
 #ifdef EXPANDEDCX
 #ifdef AMJUELCX
-     REAL*8, DIMENSION(9):: alpha_cx       ! Coefficients for charge exchange coefficients spline
+     REAL*8, DIMENSION(9)      :: alpha_cx ! Coefficients for charge exchange coefficients spline
 #endif
 #ifdef THERMALCX
-     REAL*8, DIMENSION(5):: alpha_cx       ! Coefficients for charge exchange coefficients spline
+     REAL*8, DIMENSION(5)      :: alpha_cx ! Coefficients for charge exchange coefficients spline
 #endif
 #endif
 #ifdef AMJUELSPLINES
-    ! Atomic rates coefficients
-     REAL*8, DIMENSION(9,9):: alpha_iz     ! Coefficients for ionization coefficients spline from EIRENE, (te,ne) grid
-     REAL*8, DIMENSION(9,9):: alpha_rec     ! Coefficients for recompination coefficients spline from EIRENE, (te,ne) grid
-    real*8, dimension(9,9):: alpha_energy_iz     ! Coefficients for radiation losses due to ionization  spline from EIRENE, (te,ne) grid
-    real*8, dimension(9,9):: alpha_energy_rec     ! Coefficients for radiation losses due to recombination  spline from EIRENE, (te,ne) grid
+     ! Atomic rates coefficients
+     REAL*8, DIMENSION(9,9)    :: alpha_iz ! Coefficients for ionization coefficients spline from EIRENE, (te,ne) grid
+     REAL*8, DIMENSION(9,9)    :: alpha_rec ! Coefficients for recompination coefficients spline from EIRENE, (te,ne) grid
+     REAL*8, DIMENSION(9,9)    :: alpha_energy_iz ! Coefficients for radiation losses due to ionization spline from EIRENE, (te,ne) grid
+     REAL*8, DIMENSION(9,9)    :: alpha_energy_rec ! Coefficients for radiation losses due to recombination spline from EIRENE, (te,ne) grid
 #endif
 #ifdef KEQUATION
-    ! Coefficients for the k equation
-     REAL*8          :: diff_k_min         ! Mininmum diffusion in the k equation
-     REAL*8          :: diff_k_max         ! Maximum diffusion in the k equation
-     REAL*8          :: k_max              ! Maximum k
+     ! Coefficients for the k equation
+     REAL*8                    :: diff_k_min ! Mininmum diffusion in the k equation
+     REAL*8                    :: diff_k_max ! Maximum diffusion in the k equation
+     REAL*8                    :: k_max ! Maximum k
 #endif
   END TYPE Physics_type
 
@@ -337,8 +337,8 @@ MODULE types
   !*******************************************************
   TYPE Switches_type
      LOGICAL :: axisym ! Is it an axisymmetric simulation?
-    ! true =
-    ! false =
+     ! true =
+     ! false =
      LOGICAL :: rmp      ! To activate resonant magnetic perturbation
      LOGICAL :: ripple   ! To activate ripple
      LOGICAL :: ohmicsrc ! Set to TRUE to consider ohmic source of energy
@@ -354,18 +354,18 @@ MODULE types
      LOGICAL :: saveMeshSol
      LOGICAL :: time_init ! true if it is a time initialization simulation. The time counter "it" does not increment  (i.e. when the analitical initialisation is not good enough). Used for moving equilibrium (case 59)
      INTEGER :: init     ! 1-init. analy. solution at nodes; 2-L2 projection
-    ! Set to TRUE for a steady state computation
-    ! Set to FALSE for a transient computation
+     ! Set to TRUE for a steady state computation
+     ! Set to FALSE for a transient computation
      INTEGER :: testcase  ! Define the testcase ( which analytical solution, body force, magnetic field...)
      LOGICAL :: psdtime ! Reduce the diffusion every time we reach the steady state
-    ! condition (only works if steady=.false.)
+     ! condition (only works if steady=.false.)
      REAL*8  :: diffred ! Reduction factor of the diffusion for psdtime simulation
      REAL*8  :: diffmin ! Minimum value of the diffusion for a psdtime simulation
      INTEGER :: shockcp ! Shock capturing option
      INTEGER :: limrho  ! Add a source for limiting the min value of rho
      INTEGER :: difcor  ! Add diffusion in corners
      INTEGER :: thresh  ! Use a threshold for limiting the min value of rho
-    ! (rho-rho*E in case of N-Gamma-Energy model, rho-rho*Ei-rho*Ee in case of N-Gamma-Ti-Te model)
+     ! (rho-rho*E in case of N-Gamma-Energy model, rho-rho*Ei-rho*Ee in case of N-Gamma-Ti-Te model)
      LOGICAL :: filter  ! Filter solution to avoid oscillation in empty zones
      LOGICAL :: decoup  ! Decouple N-Gamma from Te-Ti (only used for N-Gamma-Ti-Te model)
      LOGICAL :: ckeramp ! Chech the error amplification in the linear system solution (for very ill-conditioned matrices)
@@ -377,8 +377,8 @@ MODULE types
      LOGICAL :: convvort ! consider the convective term in the vorticity equation
      LOGICAL :: bxgradb  ! consider the term in BxGradB in the vorticity equation
      INTEGER :: pertini  ! add perturbation in the initial solution
-    ! 1 -add sinusoidal perturbation
-    ! 2 -add density blob
+     ! 1 -add sinusoidal perturbation
+     ! 2 -add density blob
      LOGICAL :: logrho   ! solve for the density logarithm instead of density
   END TYPE Switches_type
 
@@ -402,8 +402,8 @@ MODULE types
   TYPE Time_type
      REAL*8      :: dt0  ! initial time step
      REAL*8      :: dt   ! current time step
-    real*8      :: dt_ME   ! time step from equilibrium !stored as dimensional value
-    real*8      :: t_ME   ! time step from equilibrium (to get puff rate) !stored as dimensional value
+     REAL*8      :: dt_ME   ! time step from equilibrium !stored as dimensional value
+     REAL*8      :: t_ME   ! time step from equilibrium (to get puff rate) !stored as dimensional value
      REAL*8      :: tfi  ! final time of the simulation
      INTEGER     :: it   ! the number of the current time step
      INTEGER     :: ik   ! same as it but always incrementing (also in case of pseudotime..)
@@ -411,8 +411,8 @@ MODULE types
      INTEGER     :: tsw  ! switch to modify the time step
      INTEGER     :: nts  ! max number of time iterations to do in the current session (only for transient simulations)
      INTEGER     :: tis  ! time integration scheme
-    ! 1 - first order
-    ! 2 - second order
+                         ! 1 - first order
+                         ! 2 - second order
      REAL*8      :: t    ! time of the simulation (initialized to finish time of previous simulation if restart, to 0 if new simulation)
   END TYPE Time_type
 
@@ -434,9 +434,9 @@ MODULE types
      REAL*8         :: thr      ! Threshold to limit rho
      REAL*8         :: thrpre   ! Threshold to limit pressure
      INTEGER        :: stab     ! Stabilization type
-    ! 1 - constant tau (one for each equation) in the whole domain
-    ! 2 -
-    ! 3 -
+                                ! 1 - constant tau (one for each equation) in the whole domain
+                                ! 2 -
+                                ! 3 -
      REAL*8         :: dumpnr   ! dumping factor for Newton-Raphson. 0<dumpnr<1
      REAL*8         :: dumpnr_min   ! dumping factor minimum for Newton-Raphson. 0<dumpnr<1
      REAL*8         :: dumpnr_max   ! dumping factor maximum for Newton-Raphson. 0<dumpnr<1
@@ -489,9 +489,9 @@ MODULE types
   !*******************************************************
   TYPE Lssolver_type
      INTEGER           :: sollib    ! Solver library to be used
-    ! 1-Pastix
-    ! 2-PSBLAS
-     ! 3-PETSc
+                                    ! 1-Pastix
+                                    ! 2-PSBLAS
+                                    ! 3-PETSc
 
      LOGICAL           :: timing    ! timing of the linear solver
      ! Parameters relative to the library PETSc
@@ -510,7 +510,6 @@ MODULE types
      INTEGER           :: mglevels   ! Number of levels for the MultiGrid preconditioner
      INTEGER           :: mgtypeform   ! Form type of the MultiGrid preconditioner
 
-
      ! Parameters relative to the library PSBLAS
      CHARACTER(len=20) :: kmethd    ! Krylov method (see list on the library manual)
      INTEGER           :: istop     ! Stopping criterion (see spec on the library manual)
@@ -519,8 +518,9 @@ MODULE types
      INTEGER           :: rest      ! Restart
      REAL*8            :: tol       ! Stopping tolerance
      CHARACTER(len=20) :: ptype     ! Preconditioner type
-    ! Parameters relative to the library MLD2P4
-    ! First smoother / 1-lev preconditioner
+
+     ! Parameters relative to the library MLD2P4
+     ! First smoother / 1-lev preconditioner
      CHARACTER(len=20) :: smther       ! smoother type
      INTEGER           :: jsweeps      ! (pre-)smoother / 1-lev prec sweeps
      INTEGER           :: novr         ! Number of olverlap layers, for Additive Schwartz only
@@ -529,7 +529,7 @@ MODULE types
      CHARACTER(len=20) :: solve        ! local subsolver
      INTEGER           :: fill         ! fill-in level p of the ILU factorizations
      REAL              :: thr          ! threshold for ILUT
-    ! Second smoother/ AMG post-smoother (if NONE ignored in main)
+     ! Second smoother/ AMG post-smoother (if NONE ignored in main)
      CHARACTER(len=20) :: smther2      ! smoother type
      INTEGER           :: jsweeps2     ! (post-)smoother sweeps
      INTEGER           :: novr2        ! number of overlap layers
@@ -538,19 +538,19 @@ MODULE types
      CHARACTER(len=20) :: solve2       ! local subsolver
      INTEGER           :: fill2        ! fill-in for incomplete LU
      REAL              :: thr2         ! threshold for ILUT
-    ! general AMG data
+     ! general AMG data
      CHARACTER(len=20) :: mlcycle      ! multi-level cycle
      INTEGER           :: outer_sweeps ! number of multilevel cycles
      INTEGER           :: maxlevs      ! Maximum number of levels
      INTEGER           :: csize        ! Coarse size threshold
-    ! aggregation
+     ! aggregation
      REAL              :: mncrratio    ! Minimum coarsening ratio
      REAL              :: athres       ! Aggregation threshold
      CHARACTER(len=20) :: aggr_prol    ! Prolongator used by the aggregation algorithm
      CHARACTER(len=20) :: par_aggr_alg ! Parallel aggregation algorithm
      CHARACTER(len=20) :: aggr_ord     ! Initial ordering of indices for the aggregation algorithm
      CHARACTER(len=20) :: aggr_filter  ! Matrix used in computing the smoothed prolongator
-    ! coasest-level solver
+     ! coasest-level solver
      CHARACTER(len=20) :: csolve       ! coarsest-lev solver
      CHARACTER(len=20) :: csbsolve     ! coarsest-lev solver
      CHARACTER(len=20) :: cmat         ! coarsest mat layout
@@ -563,88 +563,89 @@ MODULE types
   ! Solution: contains the solution at the current time step
   !**********************************************************
   TYPE Sol_type
-     REAL*8, POINTER :: u(:) => NULL()  ! Elemental solution
-     REAL*8, POINTER :: u_conv(:) => NULL()
-     REAL*8, POINTER :: u_init(:) => NULL()
-     REAL*8, POINTER :: u0_init(:) => NULL()
-     REAL*8, POINTER :: u_tilde(:) => NULL()  ! Face solution
-     REAL*8, POINTER :: u_tilde0(:) => NULL()  ! Face solution
-     REAL*8, POINTER :: q(:) => NULL()  ! Elemental solution for the gradient
-     REAL*8, POINTER :: q_conv(:) => NULL()
-     REAL*8, POINTER :: q_init(:) => NULL()
-     REAL*8, POINTER :: q0_init(:) => NULL()
-     REAL*8, ALLOCATABLE :: u0(:, :)           ! Elemental solution at previous time steps
-     REAL*8, ALLOCATABLE :: tres(:)           ! Time residual
-     REAL*8, ALLOCATABLE :: time(:)           ! Time evolution
-     INTEGER             :: Nt                ! Number of time-steps
+     REAL*8, POINTER     :: u(:) => NULL() ! Elemental solution
+     REAL*8, POINTER     :: u_conv(:) => NULL()
+     REAL*8, POINTER     :: u_init(:) => NULL()
+     REAL*8, POINTER     :: u0_init(:) => NULL()
+     REAL*8, POINTER     :: u_tilde(:) => NULL() ! Face solution
+     REAL*8, POINTER     :: u_tilde0(:) => NULL() ! Face solution
+     REAL*8, POINTER     :: q(:) => NULL() ! Elemental solution for the gradient
+     REAL*8, POINTER     :: q_conv(:) => NULL()
+     REAL*8, POINTER     :: q_init(:) => NULL()
+     REAL*8, POINTER     :: q0_init(:) => NULL()
+     REAL*8, ALLOCATABLE :: u0(:, :) ! Elemental solution at previous time steps
+     REAL*8, ALLOCATABLE :: tres(:) ! Time residual
+     REAL*8, ALLOCATABLE :: time(:) ! Time evolution
+     INTEGER             :: Nt ! Number of time-steps
   END TYPE Sol_type
 
   !**********************************************************
   ! Simulation parameters: for saving purpose
   !**********************************************************
   TYPE Simulationparams_type
-     CHARACTER(len=50) :: model
-     INTEGER   :: Ndim
-     INTEGER   :: Neq
-     REAL, ALLOCATABLE :: consvar_refval(:)
-     REAL, ALLOCATABLE :: physvar_refval(:)
-    ! Reference values
-     REAL*8    :: refval_length
-     REAL*8    :: refval_mass
-     REAL*8    :: refval_charge
-     REAL*8    :: refval_time
-     REAL*8    :: refval_temperature
-     REAL*8    :: refval_density
-     REAL*8    :: refval_neutral
+     CHARACTER(len =50) :: model
+     INTEGER            :: Ndim
+     INTEGER            :: Neq
+     REAL, ALLOCATABLE  :: consvar_refval(:)
+     REAL, ALLOCATABLE  :: physvar_refval(:)
+     ! Reference values
+     REAL*8             :: refval_length
+     REAL*8             :: refval_mass
+     REAL*8             :: refval_charge
+     REAL*8             :: refval_time
+     REAL*8             :: refval_temperature
+     REAL*8             :: refval_density
+     REAL*8             :: refval_neutral
 #ifdef KEQUATION
-     REAL*8    :: refval_k
+     REAL*8             :: refval_k
 #endif
-     REAL*8    :: refval_speed
-     REAL*8    :: refval_potential
-     REAL*8    :: refval_vorticity
-     REAL*8    :: refval_magfield
-     REAL*8    :: refval_current
-     REAL*8    :: refval_diffusion
-     REAL*8    :: refval_momentum
-     REAL*8    :: refval_specpress
-     REAL*8    :: refval_specenergy
-     REAL*8    :: refval_specenergydens
-    ! Adimesional isothermal compressibility coefficient
-     REAL*8    :: compress_coeff
+     REAL*8             :: refval_speed
+     REAL*8             :: refval_potential
+     REAL*8             :: refval_vorticity
+     REAL*8             :: refval_magfield
+     REAL*8             :: refval_current
+     REAL*8             :: refval_diffusion
+     REAL*8             :: refval_momentum
+     REAL*8             :: refval_specpress
+     REAL*8             :: refval_specenergy
+     REAL*8             :: refval_specenergydens
+     ! Adimesional isothermal compressibility coefficient
+     REAL*8 :: compress_coeff
 
-    ! Dimensions used in the simulation
-     CHARACTER(len=20)    :: refval_length_dimensions
-     CHARACTER(len=20)    :: refval_mass_dimensions
-     CHARACTER(len=20)    :: refval_charge_dimensions
-     CHARACTER(len=20)    :: refval_time_dimensions
-     CHARACTER(len=20)    :: refval_temperature_dimensions
-     CHARACTER(len=20)    :: refval_density_dimensions
-     CHARACTER(len=20)    :: refval_neutral_dimensions
+     ! Dimensions used in the simulation
+     CHARACTER(len =20) :: refval_length_dimensions
+     CHARACTER(len =20) :: refval_mass_dimensions
+     CHARACTER(len =20) :: refval_charge_dimensions
+     CHARACTER(len =20) :: refval_time_dimensions
+     CHARACTER(len =20) :: refval_temperature_dimensions
+     CHARACTER(len =20) :: refval_density_dimensions
+     CHARACTER(len =20) :: refval_neutral_dimensions
 #ifdef KEQUATION
-     CHARACTER(len=20)    :: refval_k_dimensions
+     CHARACTER(len =20) :: refval_k_dimensions
 #endif
-     CHARACTER(len=20)    :: refval_speed_dimensions
-     CHARACTER(len=20)    :: refval_potential_dimensions
-     CHARACTER(len=20)    :: refval_vorticity_dimensions
-     CHARACTER(len=20)    :: refval_magfield_dimensions
-     CHARACTER(len=20)    :: refval_current_dimensions
-     CHARACTER(len=20)    :: refval_diffusion_dimensions
-     CHARACTER(len=20)    :: refval_momentum_dimensions
-     CHARACTER(len=20)    :: refval_specpress_dimensions
-     CHARACTER(len=20)    :: refval_specenergy_dimensions
-     CHARACTER(len=20)    :: refval_specenergydens_dimensions
+     CHARACTER(len =20) :: refval_speed_dimensions
+     CHARACTER(len =20) :: refval_potential_dimensions
+     CHARACTER(len =20) :: refval_vorticity_dimensions
+     CHARACTER(len =20) :: refval_magfield_dimensions
+     CHARACTER(len =20) :: refval_current_dimensions
+     CHARACTER(len =20) :: refval_diffusion_dimensions
+     CHARACTER(len =20) :: refval_momentum_dimensions
+     CHARACTER(len =20) :: refval_specpress_dimensions
+     CHARACTER(len =20) :: refval_specenergy_dimensions
+     CHARACTER(len =20) :: refval_specenergydens_dimensions
 
-    ! Physical parameters used in the computation
-     REAL*8    :: a
-     REAL*8    :: Mref
-     REAL*8    :: c1
-     REAL*8    :: c2
-     REAL*8    :: diff_pari
-     REAL*8    :: diff_pare
-     REAL*8    :: diff_n
-     REAL*8    :: diff_u
-     REAL*8    :: diff_e
-     REAL*8    :: diff_ee
+     ! Physical parameters used in the computation
+     REAL*8             :: a
+     REAL*8             :: Mref
+     REAL*8             :: c1
+     REAL*8             :: c2
+     REAL*8             :: diff_pari
+     REAL*8             :: diff_pare
+     REAL*8             :: diff_n
+     REAL*8             :: diff_u
+     REAL*8             :: diff_e
+     REAL*8             :: diff_ee
+
   END TYPE Simulationparams_type
 
   !**********************************************************
@@ -660,7 +661,7 @@ MODULE types
      REAL*8, ALLOCATABLE :: Aul(:, :, :)
      REAL*8, ALLOCATABLE :: Alq(:, :, :)
      REAL*8, ALLOCATABLE :: Alu(:, :, :)
-     REAL*8, ALLOCATABLE :: ALL(:, :, :)
+     REAL*8, ALLOCATABLE :: All(:, :, :)
      REAL*8, ALLOCATABLE :: Aql_dir(:, :)
      REAL*8, ALLOCATABLE :: Aul_dir(:, :)
 
@@ -688,10 +689,10 @@ MODULE types
      REAL*8, ALLOCATABLE :: Qf(:, :, :)
      REAL*8, ALLOCATABLE :: LL(:, :, :)
      REAL*8, ALLOCATABLE :: L0(:, :)
-    ! Limiting rho
+     ! Limiting rho
      REAL*8, ALLOCATABLE :: S_lrho(:, :)
      REAL*8, ALLOCATABLE :: P_lrho(:, :, :)
-    ! Shock capturing
+     ! Shock capturing
      REAL*8, ALLOCATABLE :: P_sc(:, :, :)
      REAL*8, ALLOCATABLE :: Lf_sc(:, :, :)
      REAL*8, ALLOCATABLE :: TQ(:, :, :)
@@ -716,29 +717,30 @@ MODULE types
      REAL(8) :: rlstime1, rlstime2, rlstime3, rlstime4, rlstime5, rlstime6
      REAL(8) :: cputcom
      REAL(8) :: runtcom
+
   END TYPE Timing_type
 
 
 CONTAINS
 
   SUBROUTINE set_boundary_flag_names()
-    bc_flag_type(1) = 'Tb_Dirichlet'
-    bc_flag_type(2) = 'Tb_LEFT'
-    bc_flag_type(3) = 'Tb_RIGHT'
-    bc_flag_type(4) = 'Tb_UP'
-    bc_flag_type(5) = 'Tb_PUMP'
-    bc_flag_type(6) = 'Tb_PUFF'
-    bc_flag_type(7) = 'Tb_LIM'
-    bc_flag_type(8) = 'Tb_IN'
-    bc_flag_type(9) = 'Tb_OUT'
+    bc_flag_type(1)  = 'Tb_Dirichlet'
+    bc_flag_type(2)  = 'Tb_LEFT'
+    bc_flag_type(3)  = 'Tb_RIGHT'
+    bc_flag_type(4)  = 'Tb_UP'
+    bc_flag_type(5)  = 'Tb_PUMP'
+    bc_flag_type(6)  = 'Tb_PUFF'
+    bc_flag_type(7)  = 'Tb_LIM'
+    bc_flag_type(8)  = 'Tb_IN'
+    bc_flag_type(9)  = 'Tb_OUT'
     bc_flag_type(10) = 'Tb_ULIM'
 
-    bc_flag_name(1) = 'Dirichlet strong form'
-    bc_flag_name(2) = 'Dirichlet weak form'
-    bc_flag_name(3) = 'Dirichlet weak form using old values of the variables'
-    bc_flag_name(4) = 'Transmission boundary conditions'
-    bc_flag_name(5) = 'Dirichlet in some equations and Neumann in others '
-    bc_flag_name(6) = 'ITER core BC: plasma flux = plasma flux, energy flux imposed '
+    bc_flag_name(1)  = 'Dirichlet strong form'
+    bc_flag_name(2)  = 'Dirichlet weak form'
+    bc_flag_name(3)  = 'Dirichlet weak form using old values of the variables'
+    bc_flag_name(4)  = 'Transmission boundary conditions'
+    bc_flag_name(5)  = 'Dirichlet in some equations and Neumann in others '
+    bc_flag_name(6)  = 'ITER core BC: plasma flux = plasma flux, energy flux imposed '
     bc_flag_name(20) = 'Inlet-Outlet'
     bc_flag_name(30) = 'Neumann homogeneus'
     bc_flag_name(50) = 'Bohm'
@@ -968,7 +970,6 @@ CONTAINS
        Mesh2%pe2rv = Mesh1%pe2rv
     ENDIF
 
-
 #endif
 
   ENDSUBROUTINE deep_copy_mesh_struct
@@ -1100,8 +1101,6 @@ CONTAINS
        refEl2%faceNodes3 = refEl1%faceNodes3
     ENDIF
 
-
   ENDSUBROUTINE deep_copy_refel_struct
-
 
 END MODULE types
