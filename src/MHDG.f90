@@ -68,7 +68,7 @@ PROGRAM MHDG
   nb_args = iargc()
 
   IF (nb_args .LT. 1) THEN
-    PRINT *, " Error: the mesh name is needed"
+     PRINT *, " Error: the mesh name is needed"
      STOP
   END IF
 
@@ -76,22 +76,19 @@ PROGRAM MHDG
   mesh_name = ADJUSTL(TRIM(mesh_name))
 
   IF (nb_args .GT. 1) THEN
-    CALL getarg(2, save_name)
+     CALL getarg(2, save_name)
      save_name = ADJUSTL(TRIM(save_name))
-    PRINT *, " Restart simulation with solution: ", save_name
+     PRINT *, " Restart simulation with solution: ", save_name
   END IF
-
 
   IF (nb_args .GT. 2) THEN
-    CALL getarg(3, mesh_name_proj)
+     CALL getarg(3, mesh_name_proj)
      mesh_name_proj = ADJUSTL(TRIM(mesh_name_proj))
-    PRINT *, " Projecting solution from: ", mesh_name_proj
+     PRINT *, " Projecting solution from: ", mesh_name_proj
   END IF
 
-
-
   IF (nb_args .GT. 3) THEN
-    PRINT *, " Too many arguments "
+     PRINT *, " Too many arguments "
      STOP
   END IF
 
@@ -210,7 +207,7 @@ PROGRAM MHDG
      ELSE
 
 #ifndef PARALL
-  CALL load_mesh(mesh_name)
+        CALL load_mesh(mesh_name)
 #else
 
         CALL load_mesh_serial(mesh_name)
@@ -327,14 +324,14 @@ PROGRAM MHDG
 
   ! Initialize magnetic field (the Mesh is needed)
   CALL initialize_magnetic_field()
-  
-  ! Load magnetic field and, if ohmic src, also Jtor 
+
+  ! Load magnetic field and, if ohmic src, also Jtor
   IF (switch%ME .EQV. .FALSE.) THEN
-      CALL load_magnetic_field()
-      IF (switch%ohmicsrc) CALL loadJtorMap()
+     CALL load_magnetic_field()
+     IF (switch%ohmicsrc) CALL loadJtorMap()
   END IF
-  
-        
+
+
 #ifdef TOR3D
   Ndim = 3                                               ! Number of dimensions
 #ifdef PARALL
@@ -349,10 +346,10 @@ PROGRAM MHDG
   Nf = Mesh%Nfaces                                     ! Number of faces in the 2D mesh
 #ifdef PARALL
   IF (MPIvar%ntor .GT. 1) THEN
-    nut = phys%Neq*ntorloc*(Nfl*Nf + refElPol%Nnodes2D*Mesh%Nelems) + &
-      &phys%Neq*refElPol%Nnodes2D*Mesh%Nelems ! Size of utilde
+     nut = phys%Neq*ntorloc*(Nfl*Nf + refElPol%Nnodes2D*Mesh%Nelems) + &
+          &phys%Neq*refElPol%Nnodes2D*Mesh%Nelems ! Size of utilde
   ELSE
-    nut = phys%Neq*ntorloc*(Nfl*Nf + refElPol%Nnodes2D*Mesh%Nelems) ! Size of utilde
+     nut = phys%Neq*ntorloc*(Nfl*Nf + refElPol%Nnodes2D*Mesh%Nelems) ! Size of utilde
   ENDIF
 #else
   nut = phys%Neq*ntorloc*(Nfl*Nf + refElPol%Nnodes2D*Mesh%Nelems) ! Size of utilde
@@ -382,7 +379,7 @@ PROGRAM MHDG
 
   ! Initialize shock capturing
   IF ((switch%shockcp .GT. 0) .OR. (adapt%shockcp_adapt .GT. 0))  THEN
-    CALL initializeShockCapturing()
+     CALL initializeShockCapturing()
   ENDIF
 
 
@@ -395,14 +392,14 @@ PROGRAM MHDG
      ! restart simulation: load solution from file (the name is given in argument)
      CALL HDF5_load_solution(save_name)
      ALLOCATE(sol%u_tilde0(SIZE(sol%u_tilde)))
-	 ! Update magnetic field and, if ohmic src, Jtor also
-	 ! In case of restart initialize the magnetic configuration to the previous one
+     ! Update magnetic field and, if ohmic src, Jtor also
+     ! In case of restart initialize the magnetic configuration to the previous one
      IF (switch%ME .EQV. .TRUE.) THEN
-      CALL load_magnetic_field()
-      IF (switch%ohmicsrc) CALL loadJtorMap()
-  END IF
+        CALL load_magnetic_field()
+        IF (switch%ohmicsrc) CALL loadJtorMap()
+     END IF
   ELSE
-    CALL init_sol()
+     CALL init_sol()
   END IF
 
 
@@ -427,19 +424,19 @@ PROGRAM MHDG
      CALL add_blob()
      WRITE(6,*) "Adding density blob to initial solution"
   ENDIF
-  
+
   ! Initialize puff in case of time evolving magnetic configurations
 #ifdef NEUTRAL
   IF (switch%ME .EQV. .FALSE.) THEN
      IF (MPIvar%glob_id .EQ. 0) THEN
-                WRITE(6,*) 'Puff is analytical'
-             ENDIF
-          ELSE
+        WRITE(6,*) 'Puff is analytical'
+     ENDIF
+  ELSE
      IF (MPIvar%glob_id .EQ. 0) THEN
-              WRITE(6,*) 'Puff is experimental'
-            ENDIF
-              CALL SetPuff()
-         END IF
+        WRITE(6,*) 'Puff is experimental'
+     ENDIF
+     CALL SetPuff()
+  END IF
 #endif
 
   ! Save solution
@@ -461,7 +458,7 @@ PROGRAM MHDG
 
   sol%u0 = 0.
   sol%u0(:, 1) = sol%u
-  
+
   sol%u_conv = sol%u
   sol%q_conv = sol%q
 
@@ -574,13 +571,13 @@ PROGRAM MHDG
      !
      ! Mesh%X = Mesh%X/phys%lscale
 
-     
+
 
      ! Initialize magnetic field (the Mesh is needed)
      CALL initialize_magnetic_field()
 
      ! Load magnetic field and, if case is 54 or 59
-     CALL load_magnetic_field() 
+     CALL load_magnetic_field()
      IF (switch%ohmicsrc) CALL loadJtorMap()
 
 
@@ -592,7 +589,7 @@ PROGRAM MHDG
         !endif
      ENDIF
 
-     
+
      ! Allocation and initialization of the elemental matrices
      CALL init_elmat()
 
@@ -624,10 +621,10 @@ PROGRAM MHDG
   switch_save = 0
   ir_check = 0
   it0 = 1
-  IF (switch%ME .and. time%it .ne. 0) it0 = time%it
-  IF (switch%ME) then
-    time%dt = time%dt_ME/simpar%refval_time
-  endif
+  IF (switch%ME .AND. time%it .NE. 0) it0 = time%it
+  IF (switch%ME) THEN
+     time%dt = time%dt_ME/simpar%refval_time
+  ENDIF
   dt0 = time%dt
   !time%it = time%it+34
   !*******************************************************
@@ -648,82 +645,82 @@ PROGRAM MHDG
      sol%q_conv = sol%q
      !CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
 
-    ! Compute time step
-    !time%dt = dt0*2**(it/100.)
+     ! Compute time step
+     !time%dt = dt0*2**(it/100.)
 
-    ! Actualization of time
-    time%t = time%t + time%dt
-    time%it = time%it + 1
-    time%ik = time%ik + 1
-    sol%Nt = sol%Nt + 1
+     ! Actualization of time
+     time%t = time%t + time%dt
+     time%it = time%it + 1
+     time%ik = time%ik + 1
+     sol%Nt = sol%Nt + 1
 
      IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE (6, '(" *", 60("*"), "**")')
-      WRITE (6, '(" *", 20X,    "Time iteration   = ", I5, 16X, " *")') time%it
-      WRITE (6, '(" *", 60("*"), "**")')
-    END IF
+        WRITE (6, '(" *", 60("*"), "**")')
+        WRITE (6, '(" *", 20X,    "Time iteration   = ", I5, 16X, " *")') time%it
+        WRITE (6, '(" *", 60("*"), "**")')
+     END IF
 
-    !*******************************************************
-    !             Newton-Raphson iterations
-    !*******************************************************
+     !*******************************************************
+     !             Newton-Raphson iterations
+     !*******************************************************
      IF(SIZE(uiter) .NE. SIZE(sol%u0(:,1))) THEN
         DEALLOCATE(uiter)
         ALLOCATE(uiter(SIZE(sol%u0(:,1))))
      ENDIF
-    uiter = sol%u0(:, 1)
+     uiter = sol%u0(:, 1)
      ir = 1
      DO WHILE(ir .LE. numer%nrp) ! ************ NEWTON-RAPHSON LOOP *********************
-      numer%dumpnr = numer%dumpnr_min+(numer%dumpnr_max-numer%dumpnr_min)/2.*(1+TANH((ir-numer%dumpnr_n0)/numer%dumpnr_width))
+        numer%dumpnr = numer%dumpnr_min+(numer%dumpnr_max-numer%dumpnr_min)/2.*(1+TANH((ir-numer%dumpnr_n0)/numer%dumpnr_width))
         IF (MPIvar%glob_id .EQ. 0) THEN
-        WRITE (6, *) "***** NR iteration: ", ir, "*****"
-        WRITE (6, *) "NR dumping factor: ",  numer%dumpnr
-      ENDIF
+           WRITE (6, *) "***** NR iteration: ", ir, "*****"
+           WRITE (6, *) "NR dumping factor: ",  numer%dumpnr
+        ENDIF
 
-      ! Compute Jacobian
-      CALL HDG_computeJacobian()
-      ! Set boundary conditions
-      CALL hdg_BC()
-      ! Compute elemental mapping
+        ! Compute Jacobian
+        CALL HDG_computeJacobian()
+        ! Set boundary conditions
+        CALL hdg_BC()
+        ! Compute elemental mapping
         CALL hdg_Mapping()
-      ! Assembly the global matrix
-      CALL hdg_Assembly()
-      !IF (switch_save.EQ.0) THEN
-      !  WRITE (6, *) "Save matrix"
-!        call HDF5_save_CSR_matrix('Mat')
-!        call HDF5_save_CSR_vector('rhs')
-!
-!        stop
-      !  switch_save = 1
-      !call displayMatrixInt(Mesh%F)
-      !call displayMatrixInt(Mesh%extfaces)
-      !call displayVectorInt(Mesh%periodic_faces)
-!      stop
-!      if (ir==10) then
-!      call print_matrices_hdf5
-!      stop
-!      endif
-      !ENDIF
-      ! Solve linear system
+        ! Assembly the global matrix
+        CALL hdg_Assembly()
+        !IF (switch_save.EQ.0) THEN
+        !  WRITE (6, *) "Save matrix"
+        !        call HDF5_save_CSR_matrix('Mat')
+        !        call HDF5_save_CSR_vector('rhs')
+        !
+        !        stop
+        !  switch_save = 1
+        !call displayMatrixInt(Mesh%F)
+        !call displayMatrixInt(Mesh%extfaces)
+        !call displayVectorInt(Mesh%periodic_faces)
+        !      stop
+        !      if (ir==10) then
+        !      call print_matrices_hdf5
+        !      stop
+        !      endif
+        !ENDIF
+        ! Solve linear system
         CALL solve_global_system(ir)
 
-      ! Compute element-by-element solution
-      CALL compute_element_solution()
-      ! Check for NaN (doesn't work with optimization flags)
+        ! Compute element-by-element solution
+        CALL compute_element_solution()
+        ! Check for NaN (doesn't work with optimization flags)
         DO i = 1, SIZE(sol%u)
            IF(ISNAN(sol%u(i))) THEN
               !IF (sol%u(i) /= sol%u(i)) THEN
-          WRITE (6, *) "NaN detected"
-          STOP
-        END IF
-      END DO
+              WRITE (6, *) "NaN detected"
+              STOP
+           END IF
+        END DO
 
-      ! Apply threshold
-!      CALL HDG_applyThreshold(mkelms)
+        ! Apply threshold
+        !      CALL HDG_applyThreshold(mkelms)
 
-      ! Apply filtering
-!      CALL HDG_FilterSolution()
+        ! Apply filtering
+        !      CALL HDG_FilterSolution()
 
-!!!!! ADAPTIVITY
+        !!!!! ADAPTIVITY
         CALL unique_2D(Mesh%T(:,1:RefElPol%Nvertices),vector_nodes_unique)
         N_n_vertex = SIZE(vector_nodes_unique)
         IF(.NOT. ALLOCATED(error_oscillation)) THEN
@@ -796,15 +793,15 @@ PROGRAM MHDG
         DEALLOCATE(vector_nodes_unique)
 
 
-      ! Save solution
-      IF (switch%saveNR) THEN
+        ! Save solution
+        IF (switch%saveNR) THEN
            CALL setSolName(save_name, mesh_name, ir, .FALSE., .TRUE.)
-        CALL HDF5_save_solution(save_name)
-      END IF
+           CALL HDF5_save_solution(save_name)
+        END IF
 
-      ! Check convergence of Newton-Raphson
-      errNR = computeResidual(sol%u, uiter, 1.)
-      errNR = errNR/numer%dumpnr
+        ! Check convergence of Newton-Raphson
+        errNR = computeResidual(sol%u, uiter, 1.)
+        errNR = errNR/numer%dumpnr
 
         IF (MPIvar%glob_id .EQ. 0) THEN
            WRITE (*, *)   "Error:                  ", errNR
@@ -813,7 +810,7 @@ PROGRAM MHDG
               WRITE (*, *) "Relative Residue PETSc: ", matPETSC%residue
               WRITE (*,*)  "Number of Iterations:   ", matPETSC%its
               WRITE (*,*)  "Converged Reason:       ", matPETSC%convergedReason
-      END IF
+           END IF
 #endif
         ENDIF
 
@@ -831,12 +828,12 @@ PROGRAM MHDG
            sol%q_conv = qiter_best
            ir_check = 1
            CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
-        EXIT
+           EXIT
         ELSEIF (errNR .GT. numer%div) THEN
-        WRITE (6, *) 'Problem in the N-R procedure'
-        STOP
-      ELSE
-        uiter = sol%u
+           WRITE (6, *) 'Problem in the N-R procedure'
+           STOP
+        ELSE
+           uiter = sol%u
            !! ADAPTIVITY
            IF(errNR .LT. errNR_adapt) THEN
               errNR_adapt = errNR
@@ -901,107 +898,107 @@ PROGRAM MHDG
               CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
 
            ENDIF
-      END IF
+        END IF
         IF (MPIvar%glob_id .EQ. 0) THEN
-        WRITE (6, *) "*********************************"
-        WRITE (6, *) " "
-        WRITE (6, *) " "
-      ENDIF
+           WRITE (6, *) "*********************************"
+           WRITE (6, *) " "
+           WRITE (6, *) " "
+        ENDIF
         ir = ir + 1
-    END DO ! ************ END OF NEWTON-RAPHSON LOOP *********************
+     END DO ! ************ END OF NEWTON-RAPHSON LOOP *********************
 
-    !  ! Apply threshold
-    !  CALL HDG_applyThreshold()
+     !  ! Apply threshold
+     !  CALL HDG_applyThreshold()
 
-    ! Check convergence in time advancing and update
-    errlstime = computeResidual(sol%u, sol%u0(:, 1), time%dt)
-    sol%tres(sol%Nt) = errlstime
-    sol%time(sol%Nt) = time%t
+     ! Check convergence in time advancing and update
+     errlstime = computeResidual(sol%u, sol%u0(:, 1), time%dt)
+     sol%tres(sol%Nt) = errlstime
+     sol%time(sol%Nt) = time%t
 
 
-    ! Display results
+     ! Display results
      IF (MOD(time%it, utils%freqdisp) .EQ. 0) THEN
-      CALL displayResults()
-    END IF
+        CALL displayResults()
+     END IF
 
-    ! Check for NaN (doesn't work with optimization flags)
+     ! Check for NaN (doesn't work with optimization flags)
      DO i = 1, SIZE(sol%u)
         !IF (sol%u(i) /= sol%u(i)) THEN
         IF(ISNAN(sol%u(i))) THEN
-        WRITE (6, *) "NaN detected"
-        STOP
-      END IF
-    END DO
+           WRITE (6, *) "NaN detected"
+           STOP
+        END IF
+     END DO
 
      IF (.NOT. switch%steady) THEN
-      ! Save solution
+        ! Save solution
         IF (MOD(time%it, utils%freqsave) .EQ. 0) THEN
            CALL setSolName(save_name, mesh_name, time%it, .TRUE., .FALSE.)
-          CALL HDF5_save_solution(save_name)
-      END IF
+           CALL HDF5_save_solution(save_name)
+        END IF
 
-      !****************************************
-      ! Check steady state and update or exit
-      !****************************************
+        !****************************************
+        ! Check steady state and update or exit
+        !****************************************
         IF (errlstime .LT. numer%tTM) THEN
-        IF (switch%psdtime) THEN
-          ! Pseudo-time simulation
+           IF (switch%psdtime) THEN
+              ! Pseudo-time simulation
 
-          ! Save solution
+              ! Save solution
               CALL setSolName(save_name, mesh_name, it, .TRUE., .TRUE.)
-          CALL HDF5_save_solution(save_name)
+              CALL HDF5_save_solution(save_name)
 
-          ! Update the diffusion, the elemental matrices and the solution
+              ! Update the diffusion, the elemental matrices and the solution
               IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE (6, *) "************************************************"
-            WRITE (6, *) "Reducing diffusion: ", phys%diff_n*switch%diffred*simpar%refval_diffusion
+                 WRITE (6, *) "************************************************"
+                 WRITE (6, *) "Reducing diffusion: ", phys%diff_n*switch%diffred*simpar%refval_diffusion
 
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-            WRITE (6, *) "Neutrals diffusion: ", phys%diff_nn!*switch%diffred*simpar%refval_diffusion
+                 WRITE (6, *) "Neutrals diffusion: ", phys%diff_nn!*switch%diffred*simpar%refval_diffusion
 #ifdef KEQUATION
-            WRITE (6, *) "K diffusion min: ", phys%diff_k_min*switch%diffred*simpar%refval_diffusion
+                 WRITE (6, *) "K diffusion min: ", phys%diff_k_min*switch%diffred*simpar%refval_diffusion
 #endif
 #endif
 #endif
-            WRITE (6, *) "************************************************"
-          END IF
-          phys%diff_n = phys%diff_n*switch%diffred
-          phys%diff_u = phys%diff_u*switch%diffred
+                 WRITE (6, *) "************************************************"
+              END IF
+              phys%diff_n = phys%diff_n*switch%diffred
+              phys%diff_u = phys%diff_u*switch%diffred
 #ifdef TEMPERATURE
-          phys%diff_e = phys%diff_e*switch%diffred
-          phys%diff_ee = phys%diff_ee*switch%diffred
+              phys%diff_e = phys%diff_e*switch%diffred
+              phys%diff_ee = phys%diff_ee*switch%diffred
 #endif
 #ifdef VORTICITY
-          phys%diff_vort = phys%diff_vort*switch%diffred
-          phys%diff_pot = phys%diff_pot*switch%diffred
+              phys%diff_vort = phys%diff_vort*switch%diffred
+              phys%diff_pot = phys%diff_pot*switch%diffred
 #endif
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-          phys%diff_nn = phys%diff_nn!*switch%diffred
+              phys%diff_nn = phys%diff_nn!*switch%diffred
 #ifdef KEQUATION
-          phys%diff_k_min = phys%diff_k_min*switch%diffred
-          phys%diff_k_max = phys%diff_k_max!*switch%diffred
+              phys%diff_k_min = phys%diff_k_min*switch%diffred
+              phys%diff_k_max = phys%diff_k_max!*switch%diffred
 #endif
 #endif
 #endif
 
-          !**********************************
-          !           UPDATE SOLUTION
-          !**********************************
-          ! Update u0
+              !**********************************
+              !           UPDATE SOLUTION
+              !**********************************
+              ! Update u0
               IF (time%tis .GT. 1 .AND. it .LT. time%tis) THEN
-            DO is = it, 1, -1
-              sol%u0(:, is + 1) = sol%u0(:, is)
-            END DO
-          ELSEIF (time%tis > 1) THEN
-            DO is = time%tis, 2, -1
-              sol%u0(:, is) = sol%u0(:, is - 1)
-            END DO
-          END IF
-          sol%u0(:, 1) = sol%u
+                 DO is = it, 1, -1
+                    sol%u0(:, is + 1) = sol%u0(:, is)
+                 END DO
+              ELSEIF (time%tis > 1) THEN
+                 DO is = time%tis, 2, -1
+                    sol%u0(:, is) = sol%u0(:, is - 1)
+                 END DO
+              END IF
+              sol%u0(:, 1) = sol%u
 
-          time%it = 0
+              time%it = 0
 
               IF(SIZE(sol%u_conv) .NE. SIZE(sol%u)) THEN
                  DEALLOCATE(sol%u_conv)
@@ -1027,34 +1024,34 @@ PROGRAM MHDG
 
 
 
-          ! compute dt
-        ELSE
-          ! Time advancing simulation
+              ! compute dt
+           ELSE
+              ! Time advancing simulation
               IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE (6, *) "**********************"
-            WRITE (6, *) "Time scheme converged!"
-            WRITE (6, *) "**********************"
-          END IF
-          EXIT ! Here I exit the time advancing scheme if I reach convergence
-        END IF
+                 WRITE (6, *) "**********************"
+                 WRITE (6, *) "Time scheme converged!"
+                 WRITE (6, *) "**********************"
+              END IF
+              EXIT ! Here I exit the time advancing scheme if I reach convergence
+           END IF
         ELSEIF (errlstime .GT. numer%div) THEN
-        WRITE (6, *) 'Problem in the time advancing scheme'
-        STOP
-      ELSE
-        !**********************************
-        !           UPDATE SOLUTION
-        !**********************************
-        ! Update u0
+           WRITE (6, *) 'Problem in the time advancing scheme'
+           STOP
+        ELSE
+           !**********************************
+           !           UPDATE SOLUTION
+           !**********************************
+           ! Update u0
            IF (time%tis .GT. 1 .AND. it .LT. time%tis) THEN
-          DO is = it, 1, -1
-            sol%u0(:, is + 1) = sol%u0(:, is)
-          END DO
-        ELSEIF (time%tis > 1) THEN
-          DO is = time%tis, 2, -1
-            sol%u0(:, is) = sol%u0(:, is - 1)
-          END DO
-        END IF
-        sol%u0(:, 1) = sol%u
+              DO is = it, 1, -1
+                 sol%u0(:, is + 1) = sol%u0(:, is)
+              END DO
+           ELSEIF (time%tis > 1) THEN
+              DO is = time%tis, 2, -1
+                 sol%u0(:, is) = sol%u0(:, is - 1)
+              END DO
+           END IF
+           sol%u0(:, 1) = sol%u
 
            IF((adapt%adaptivity) .AND. (adapt%time_adapt) .AND. (MOD(it,adapt%freq_t_adapt) .EQ. 0)) THEN
               CALL adaptivity
@@ -1065,86 +1062,86 @@ PROGRAM MHDG
               CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
            ENDIF
 
-        ! if moving equilibrium case then update the magnetic field, otherwise just continue
+           ! if moving equilibrium case then update the magnetic field, otherwise just continue
            IF(switch%ME) THEN
-          ! ReLoad magnetic field and Jtor
-          CALL load_magnetic_field()
-          CALL loadJtorMap()
-          !if (switch%testcase .ge. 80 .and. switch%testcase .le. 89) then
-             CALL SetPuff()
-          !endif
-          IF (switch%ME) then
-            time%dt = time%dt_ME/simpar%refval_time
-          endif
-        endif
+              ! ReLoad magnetic field and Jtor
+              CALL load_magnetic_field()
+              CALL loadJtorMap()
+              !if (switch%testcase .ge. 80 .and. switch%testcase .le. 89) then
+              CALL SetPuff()
+              !endif
+              IF (switch%ME) THEN
+                 time%dt = time%dt_ME/simpar%refval_time
+              ENDIF
+           ENDIF
 
-        ! compute dt
-        ! CALL compute_dt(errlstime)
-      END IF
-    ELSE
-      IF (switch%psdtime) THEN
-        ! Save solution
+           ! compute dt
+           ! CALL compute_dt(errlstime)
+        END IF
+     ELSE
+        IF (switch%psdtime) THEN
+           ! Save solution
            CALL setSolName(save_name, mesh_name, it, .TRUE., .TRUE.)
-        CALL HDF5_save_solution(save_name)
+           CALL HDF5_save_solution(save_name)
 
-        ! Update the diffusion, the elemental matrices and the solution
+           ! Update the diffusion, the elemental matrices and the solution
            IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE (6, *) "************************************************"
-          WRITE (6, *) "Reducing diffusion: ", phys%diff_n*switch%diffred*simpar%refval_diffusion
+              WRITE (6, *) "************************************************"
+              WRITE (6, *) "Reducing diffusion: ", phys%diff_n*switch%diffred*simpar%refval_diffusion
 
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-          WRITE (6, *) "Neutrals diffusion: ", phys%diff_nn!*switch%diffred*simpar%refval_diffusion
+              WRITE (6, *) "Neutrals diffusion: ", phys%diff_nn!*switch%diffred*simpar%refval_diffusion
 #ifdef KEQUATION
-          WRITE (6, *) "K diffusion min: ", phys%diff_k_min!*switch%diffred*simpar%refval_diffusion
+              WRITE (6, *) "K diffusion min: ", phys%diff_k_min!*switch%diffred*simpar%refval_diffusion
 #endif
 #endif
 #endif
-          WRITE (6, *) "************************************************"
-        END IF
-        phys%diff_n = phys%diff_n*switch%diffred
-        phys%diff_u = phys%diff_u*switch%diffred
+              WRITE (6, *) "************************************************"
+           END IF
+           phys%diff_n = phys%diff_n*switch%diffred
+           phys%diff_u = phys%diff_u*switch%diffred
 #ifdef TEMPERATURE
-        phys%diff_e = phys%diff_e*switch%diffred
-        phys%diff_ee = phys%diff_ee*switch%diffred
+           phys%diff_e = phys%diff_e*switch%diffred
+           phys%diff_ee = phys%diff_ee*switch%diffred
 #endif
 #ifdef VORTICITY
-        phys%diff_vort = phys%diff_vort*switch%diffred
-        phys%diff_pot = phys%diff_pot*switch%diffred
+           phys%diff_vort = phys%diff_vort*switch%diffred
+           phys%diff_pot = phys%diff_pot*switch%diffred
 #endif
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        phys%diff_nn = phys%diff_nn!*switch%diffred
+           phys%diff_nn = phys%diff_nn!*switch%diffred
 #ifdef KEQUATION
-        phys%diff_k_min = phys%diff_k_min*switch%diffred
-        phys%diff_k_max = phys%diff_k_max!*switch%diffred
+           phys%diff_k_min = phys%diff_k_min*switch%diffred
+           phys%diff_k_max = phys%diff_k_max!*switch%diffred
 #endif
 #endif
 #endif
 
-        !**********************************
-        !           UPDATE SOLUTION
-        !**********************************
-        ! Update u0
+           !**********************************
+           !           UPDATE SOLUTION
+           !**********************************
+           ! Update u0
            IF (time%tis .GT. 1 .AND. it .LT. time%tis) THEN
-          DO is = it, 1, -1
-            sol%u0(:, is + 1) = sol%u0(:, is)
-          END DO
+              DO is = it, 1, -1
+                 sol%u0(:, is + 1) = sol%u0(:, is)
+              END DO
            ELSEIF (time%tis .GT. 1) THEN
-          DO is = time%tis, 2, -1
-            sol%u0(:, is) = sol%u0(:, is - 1)
-          END DO
-        END IF
-        sol%u0(:, 1) = sol%u
-        time%it = 0
-      ELSE
-        EXIT
-      ENDIF
+              DO is = time%tis, 2, -1
+                 sol%u0(:, is) = sol%u0(:, is - 1)
+              END DO
+           END IF
+           sol%u0(:, 1) = sol%u
+           time%it = 0
+        ELSE
+           EXIT
+        ENDIF
      ENDIF
 
      IF(checkpoint .GT. 1) THEN
         convergence_counter = convergence_counter + 1
-    ENDIF
+     ENDIF
 
   END DO ! ************ END OF THE TIME LOOP *********************
 
@@ -1160,90 +1157,90 @@ PROGRAM MHDG
   ! Code timing
   IF (MPIvar%glob_id .EQ. 0) THEN
      IF (utils%timing) THEN
-      cputtot = 1e-8
-      runttot = 1e-8
+        cputtot = 1e-8
+        runttot = 1e-8
         cputtot = timing%cputpre + timing%cputjac + timing%cputbcd + timing%cputmap + timing%cputass + timing%cputglb + timing%cputsol + timing%cputadapt
         runttot = timing%runtpre + timing%runtjac + timing%runtbcd + timing%runtmap + timing%runtass + timing%runtglb + timing%runtsol + timing%runtadapt
 #ifdef PARALL
-      cputtot = cputtot + timing%cputcom
-      runttot = runttot + timing%runtcom
+        cputtot = cputtot + timing%cputcom
+        runttot = runttot + timing%runtcom
 #endif
-      WRITE(6, *) " "
-      WRITE(6, *) " "
-      WRITE(6, *) " "
-      WRITE(6, '(" *", 90("*"), "**")')
-      WRITE(6, '(" *", 36X, "CODE TIMING ( Nthreads = ",i2,")", 26X, " *")') Nthreads
-      WRITE(6, '(" *", 28X, "Cpu-time  (% tot)",6X,    "Run-time  (% tot)   Speedup/Nthreads ", 2X, " *")')
-      WRITE(6, '(" *", 2X,  "Precal. matr     : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
-        &timing%cputpre,timing%cputpre/cputtot*100,timing%runtpre,timing%runtpre/runttot*100,timing%cputpre/timing%runtpre/Nthreads
-      WRITE(6, '(" *", 2X,  "Jacobian         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-        &timing%cputjac,timing%cputjac/cputtot*100,timing%runtjac,timing%runtjac/runttot*100,timing%cputjac/timing%runtjac/Nthreads
-      WRITE(6, '(" *", 2X,  "Mapping          : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-        &timing%cputmap,timing%cputmap/cputtot*100,timing%runtmap,timing%runtmap/runttot*100,timing%cputmap/timing%runtmap/Nthreads
-      WRITE(6, '(" *", 2X,  "Boundary cond.   : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-        &timing%cputbcd,timing%cputbcd/cputtot*100,timing%runtbcd,timing%runtbcd/runttot*100,timing%cputbcd/timing%runtbcd/Nthreads
-      WRITE(6, '(" *", 2X,  "Assembly         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-        &timing%cputass,timing%cputass/cputtot*100,timing%runtass,timing%runtass/runttot*100,timing%cputass/timing%runtass/Nthreads
-      WRITE(6, '(" *", 2X,  "Solve glob. syst.: ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-        &timing%cputglb,timing%cputglb/cputtot*100,timing%runtglb,timing%runtglb/runttot*100,timing%cputglb/timing%runtglb/Nthreads
-      WRITE(6, '(" *", 2X,  "Element solution : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-        &timing%cputsol,timing%cputsol/cputtot*100,timing%runtsol,timing%runtsol/runttot*100,timing%cputsol/timing%runtsol/Nthreads
+        WRITE(6, *) " "
+        WRITE(6, *) " "
+        WRITE(6, *) " "
+        WRITE(6, '(" *", 90("*"), "**")')
+        WRITE(6, '(" *", 36X, "CODE TIMING ( Nthreads = ",i2,")", 26X, " *")') Nthreads
+        WRITE(6, '(" *", 28X, "Cpu-time  (% tot)",6X,    "Run-time  (% tot)   Speedup/Nthreads ", 2X, " *")')
+        WRITE(6, '(" *", 2X,  "Precal. matr     : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
+             &timing%cputpre,timing%cputpre/cputtot*100,timing%runtpre,timing%runtpre/runttot*100,timing%cputpre/timing%runtpre/Nthreads
+        WRITE(6, '(" *", 2X,  "Jacobian         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+             &timing%cputjac,timing%cputjac/cputtot*100,timing%runtjac,timing%runtjac/runttot*100,timing%cputjac/timing%runtjac/Nthreads
+        WRITE(6, '(" *", 2X,  "Mapping          : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+             &timing%cputmap,timing%cputmap/cputtot*100,timing%runtmap,timing%runtmap/runttot*100,timing%cputmap/timing%runtmap/Nthreads
+        WRITE(6, '(" *", 2X,  "Boundary cond.   : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+             &timing%cputbcd,timing%cputbcd/cputtot*100,timing%runtbcd,timing%runtbcd/runttot*100,timing%cputbcd/timing%runtbcd/Nthreads
+        WRITE(6, '(" *", 2X,  "Assembly         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+             &timing%cputass,timing%cputass/cputtot*100,timing%runtass,timing%runtass/runttot*100,timing%cputass/timing%runtass/Nthreads
+        WRITE(6, '(" *", 2X,  "Solve glob. syst.: ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+             &timing%cputglb,timing%cputglb/cputtot*100,timing%runtglb,timing%runtglb/runttot*100,timing%cputglb/timing%runtglb/Nthreads
+        WRITE(6, '(" *", 2X,  "Element solution : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+             &timing%cputsol,timing%cputsol/cputtot*100,timing%runtsol,timing%runtsol/runttot*100,timing%cputsol/timing%runtsol/Nthreads
         IF(adapt%adaptivity .EQV. .TRUE.) THEN
            WRITE(6, '(" *", 2X,  "Adaptivity       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
                 &timing%cputadapt,timing%cputadapt/cputtot*100,timing%runtadapt,timing%runtadapt/runttot*100,timing%cputadapt/timing%runtadapt/Nthreads
         ENDIF
 #ifdef PARALL
-      WRITE(6, '(" *", 2X,  "Communications   : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-        &timing%cputcom,timing%cputcom/cputtot*100,timing%runtcom,timing%runtcom/runttot*100,timing%cputcom/timing%runtcom/Nthreads
+        WRITE(6, '(" *", 2X,  "Communications   : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+             &timing%cputcom,timing%cputcom/cputtot*100,timing%runtcom,timing%runtcom/runttot*100,timing%cputcom/timing%runtcom/Nthreads
 #endif
-      WRITE(6, '(" *", 2X, "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")')   &
-        cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
-      WRITE(6, '(" *", 90("*"), "**")')
-      WRITE(6, *) " "
-      WRITE(6, *) " "
-      WRITE(6, *) " "
+        WRITE(6, '(" *", 2X, "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")')   &
+             cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
+        WRITE(6, '(" *", 90("*"), "**")')
+        WRITE(6, *) " "
+        WRITE(6, *) " "
+        WRITE(6, *) " "
      END IF
 
      IF (lssolver%timing) THEN
-      cputtot = timing%clstime1 + timing%clstime2 + timing%clstime3 + timing%clstime4 + timing%clstime5 + timing%clstime6
-      runttot = timing%rlstime1 + timing%rlstime2 + timing%rlstime3 + timing%rlstime4 + timing%rlstime5 + timing%rlstime6
-      WRITE(6, '(" *", 90("*"), "**")')
+        cputtot = timing%clstime1 + timing%clstime2 + timing%clstime3 + timing%clstime4 + timing%clstime5 + timing%clstime6
+        runttot = timing%rlstime1 + timing%rlstime2 + timing%rlstime3 + timing%rlstime4 + timing%rlstime5 + timing%rlstime6
+        WRITE(6, '(" *", 90("*"), "**")')
         IF (lssolver%sollib .EQ. 1) THEN
-        WRITE(6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PASTIX ( Nthreads = ",i2,")", 14X, " *")') Nthreads
+           WRITE(6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PASTIX ( Nthreads = ",i2,")", 14X, " *")') Nthreads
         ELSE IF (lssolver%sollib .EQ. 2) THEN
-        WRITE(6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PSBLAS ( Nthreads = ",i2,")", 14X, " *")') Nthreads
+           WRITE(6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PSBLAS ( Nthreads = ",i2,")", 14X, " *")') Nthreads
         ELSE IF (lssolver%sollib .EQ. 3) THEN
            WRITE(6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PETSc ( Nthreads = ",i2,")", 14X, " *")') Nthreads
         ENDIF
-      WRITE(6, '(" *", 28X, "Cpu-time  (% tot)",6X,    "Run-time  (% tot)   Speedup/Nthreads ", 2X, " *")')
+        WRITE(6, '(" *", 28X, "Cpu-time  (% tot)",6X,    "Run-time  (% tot)   Speedup/Nthreads ", 2X, " *")')
         IF (lssolver%sollib .EQ. 1) THEN
-        WRITE(6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
-          &timing%clstime1,timing%clstime1/cputtot*100,timing%rlstime1,timing%rlstime1/runttot*100,timing%clstime1/timing%rlstime1/Nthreads
-        WRITE(6, '(" *", 2X,  "Check mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
-          &timing%clstime2,timing%clstime2/cputtot*100,timing%rlstime2,timing%rlstime2/runttot*100,timing%clstime2/timing%rlstime2/Nthreads
-        WRITE(6, '(" *", 2X,  "Anal. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
-          &timing%clstime3,timing%clstime3/cputtot*100,timing%rlstime3,timing%rlstime3/runttot*100,timing%clstime3/timing%rlstime3/Nthreads
-        WRITE(6, '(" *", 2X,  "Build mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
-          &timing%clstime4,timing%clstime4/cputtot*100,timing%rlstime4,timing%rlstime4/runttot*100,timing%clstime4/timing%rlstime4/Nthreads
-        WRITE(6, '(" *", 2X,  "LU decomp.       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
-          &timing%clstime5,timing%clstime5/cputtot*100,timing%rlstime5,timing%rlstime5/runttot*100,timing%clstime5/timing%rlstime5/Nthreads
-        WRITE(6, '(" *", 2X,  "Solve            : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
-          &timing%clstime6,timing%clstime6/cputtot*100,timing%rlstime6,timing%rlstime6/runttot*100,timing%clstime6/timing%rlstime6/Nthreads
-        WRITE(6, '(" *", 2X,  "Total time      : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",7X,F5.1 , 10X, " *")') &
-          &cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
+           WRITE(6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
+                &timing%clstime1,timing%clstime1/cputtot*100,timing%rlstime1,timing%rlstime1/runttot*100,timing%clstime1/timing%rlstime1/Nthreads
+           WRITE(6, '(" *", 2X,  "Check mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+                &timing%clstime2,timing%clstime2/cputtot*100,timing%rlstime2,timing%rlstime2/runttot*100,timing%clstime2/timing%rlstime2/Nthreads
+           WRITE(6, '(" *", 2X,  "Anal. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+                &timing%clstime3,timing%clstime3/cputtot*100,timing%rlstime3,timing%rlstime3/runttot*100,timing%clstime3/timing%rlstime3/Nthreads
+           WRITE(6, '(" *", 2X,  "Build mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+                &timing%clstime4,timing%clstime4/cputtot*100,timing%rlstime4,timing%rlstime4/runttot*100,timing%clstime4/timing%rlstime4/Nthreads
+           WRITE(6, '(" *", 2X,  "LU decomp.       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+                &timing%clstime5,timing%clstime5/cputtot*100,timing%rlstime5,timing%rlstime5/runttot*100,timing%clstime5/timing%rlstime5/Nthreads
+           WRITE(6, '(" *", 2X,  "Solve            : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+                &timing%clstime6,timing%clstime6/cputtot*100,timing%rlstime6,timing%rlstime6/runttot*100,timing%clstime6/timing%rlstime6/Nthreads
+           WRITE(6, '(" *", 2X,  "Total time      : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",7X,F5.1 , 10X, " *")') &
+                &cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
         ELSEIF (lssolver%sollib .EQ. 2) THEN
-        WRITE(6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
-          &timing%clstime1,timing%clstime1/cputtot*100,timing%rlstime1,timing%rlstime1/runttot*100,timing%clstime1/timing%rlstime1/Nthreads
-        WRITE(6, '(" *", 2X,  "Build mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
-          &timing%clstime2,timing%clstime2/cputtot*100,timing%rlstime2,timing%rlstime2/runttot*100,timing%clstime2/timing%rlstime2/Nthreads
-        WRITE(6, '(" *", 2X,  "Build prec       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
-          &timing%clstime3,timing%clstime3/cputtot*100,timing%rlstime3,timing%rlstime3/runttot*100,timing%clstime3/timing%rlstime3/Nthreads
-        WRITE(6, '(" *", 2X,  "Fill vec         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
-          &timing%clstime4,timing%clstime4/cputtot*100,timing%rlstime4,timing%rlstime4/runttot*100,timing%clstime4/timing%rlstime4/Nthreads
-        WRITE(6, '(" *", 2X,  "Solve            : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
-          &timing%clstime5,timing%clstime5/cputtot*100,timing%rlstime5,timing%rlstime5/runttot*100,timing%clstime5/timing%rlstime5/Nthreads
-        WRITE(6, '(" *", 2X,  "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")') &
-          &cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
+           WRITE(6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
+                &timing%clstime1,timing%clstime1/cputtot*100,timing%rlstime1,timing%rlstime1/runttot*100,timing%clstime1/timing%rlstime1/Nthreads
+           WRITE(6, '(" *", 2X,  "Build mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+                &timing%clstime2,timing%clstime2/cputtot*100,timing%rlstime2,timing%rlstime2/runttot*100,timing%clstime2/timing%rlstime2/Nthreads
+           WRITE(6, '(" *", 2X,  "Build prec       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+                &timing%clstime3,timing%clstime3/cputtot*100,timing%rlstime3,timing%rlstime3/runttot*100,timing%clstime3/timing%rlstime3/Nthreads
+           WRITE(6, '(" *", 2X,  "Fill vec         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+                &timing%clstime4,timing%clstime4/cputtot*100,timing%rlstime4,timing%rlstime4/runttot*100,timing%clstime4/timing%rlstime4/Nthreads
+           WRITE(6, '(" *", 2X,  "Solve            : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+                &timing%clstime5,timing%clstime5/cputtot*100,timing%rlstime5,timing%rlstime5/runttot*100,timing%clstime5/timing%rlstime5/Nthreads
+           WRITE(6, '(" *", 2X,  "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")') &
+                &cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
         ELSEIF (lssolver%sollib .EQ. 3) THEN
            WRITE(6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
                 &timing%clstime1,timing%clstime1/cputtot*100,timing%rlstime1,timing%rlstime1/runttot*100,timing%clstime1/timing%rlstime1/Nthreads
@@ -1256,21 +1253,21 @@ PROGRAM MHDG
            WRITE(6, '(" *", 2X,  "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")') &
                 &cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
         ENDIF
-      WRITE (6, '(" *", 90("*"), "**")')
-      WRITE (6, *) " "
-      WRITE (6, *) " "
-      WRITE (6, *) " "
+        WRITE (6, '(" *", 90("*"), "**")')
+        WRITE (6, *) " "
+        WRITE (6, *) " "
+        WRITE (6, *) " "
      END IF
   END IF
 
   IF (switch%testcase < 5) THEN
-    ALLOCATE (L2err(phys%neq))
-    CALL computeL2ErrorAnalyticSol(L2err)
-    WRITE (6, *) " "
-    DO i = 1, phys%Neq
-      WRITE (6, '(A,I1,A,ES16.5)') "L2 error in U(", i, ") = ", L2err(i)
-    END DO
-    DEALLOCATE (L2err)
+     ALLOCATE (L2err(phys%neq))
+     CALL computeL2ErrorAnalyticSol(L2err)
+     WRITE (6, *) " "
+     DO i = 1, phys%Neq
+        WRITE (6, '(A,I1,A,ES16.5)') "L2 error in U(", i, ") = ", L2err(i)
+     END DO
+     DEALLOCATE (L2err)
   END IF
 
   DEALLOCATE (uiter)
@@ -1285,14 +1282,14 @@ PROGRAM MHDG
 
   IF (lssolver%sollib .EQ. 1) THEN
 #ifdef WITH_PASTIX
-    CALL terminate_mat_PASTIX()
+     CALL terminate_mat_PASTIX()
 
-    ! MPI finalization
+     ! MPI finalization
      CALL MPI_finalize(IERR)
 #endif
   ELSEIF (lssolver%sollib .EQ. 2) THEN
 #ifdef WITH_PSBLAS
-    CALL terminate_PSBLAS()
+     CALL terminate_PSBLAS()
 #endif
   ELSEIF (lssolver%sollib .EQ. 3) THEN
 #ifdef WITH_PETSC
@@ -1327,20 +1324,20 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, Vmin, phys%npv, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, ierr)
 #endif
     IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE (6, '(" * ", 60("-"), "*")')
-      WRITE (6, '(" * Time (adimensional) = ", E12.5, 27X, " *")') time%t
-      WRITE (6, '(" * Dt (adimensional)        = ", E12.5, 27X, " *")') time%dt
-      WRITE (6, '(" * ", 45("^"), 14X, " *")')
-      WRITE (6, '(" * ", 10("_"), "      Minimum   ", 4X, "     Maximum   ", 14X, " *")')
-      DO ieq = 1, phys%npv
-        WRITE (6, '(" * ", A7, " -->", ES16.8, 3X, ES16.8, 13X, " *")') &
+       WRITE (6, '(" * ", 60("-"), "*")')
+       WRITE (6, '(" * Time (adimensional) = ", E12.5, 27X, " *")') time%t
+       WRITE (6, '(" * Dt (adimensional)        = ", E12.5, 27X, " *")') time%dt
+       WRITE (6, '(" * ", 45("^"), 14X, " *")')
+       WRITE (6, '(" * ", 10("_"), "      Minimum   ", 4X, "     Maximum   ", 14X, " *")')
+       DO ieq = 1, phys%npv
+          WRITE (6, '(" * ", A7, " -->", ES16.8, 3X, ES16.8, 13X, " *")') &
                & TRIM(phys%phyVarNam(ieq)), Vmin(ieq), Vmax(ieq)
-      END DO
-      WRITE (6, '(" * ", 60("-"), "*")')
-      WRITE (6, '(" * Time residual  = ", 1X, 2(E16.8, 2X), 13X, " *")') sol%tres(it)
-      WRITE (6, *) '  '
-      WRITE (6, *) '  '
-      WRITE (6, *) '  '
+       END DO
+       WRITE (6, '(" * ", 60("-"), "*")')
+       WRITE (6, '(" * Time residual  = ", 1X, 2(E16.8, 2X), 13X, " *")') sol%tres(it)
+       WRITE (6, *) '  '
+       WRITE (6, *) '  '
+       WRITE (6, *) '  '
     END IF
 #ifdef PARALL
     CALL MPI_BARRIER(MPI_COMM_WORLD, ierr)
@@ -1411,7 +1408,7 @@ CONTAINS
     ! Diffusion
     WRITE (Num, "(E10.3)") phys%diff_n*simpar%refval_diffusion
 #else
-  WRITE (Num, "(E10.3)") (phys%diff_n+phys%diff_k_min)*simpar%refval_diffusion
+    WRITE (Num, "(E10.3)") (phys%diff_n+phys%diff_k_min)*simpar%refval_diffusion
 #endif
     save_name = TRIM(ADJUSTL(save_name))//"_DPe"//TRIM(ADJUSTL(Num))
 #ifdef TEMPERATURE
@@ -1423,18 +1420,18 @@ CONTAINS
 #endif
     ! Complete the save name: if not converged the NR, I put NR + the iteration number
     IF (.NOT. convNR) THEN
-      WRITE (Num, "(i10)") it
-      Num = TRIM(ADJUSTL(Num))
-      k = INDEX(Num, " ") - 1
-      save_name = TRIM(ADJUSTL(save_name))//"_NR"//REPEAT("0", 4 - k)//TRIM(ADJUSTL(Num))
+       WRITE (Num, "(i10)") it
+       Num = TRIM(ADJUSTL(Num))
+       k = INDEX(Num, " ") - 1
+       save_name = TRIM(ADJUSTL(save_name))//"_NR"//REPEAT("0", 4 - k)//TRIM(ADJUSTL(Num))
     END IF
 
     ! Complete the save name: if not converged the time scheme, I put the iteration number
     IF (.NOT. convT) THEN
-      WRITE (Num, "(i10)") it/utils%freqsave
-      Num = TRIM(ADJUSTL(Num))
-      k = INDEX(Num, " ") - 1
-      save_name = TRIM(ADJUSTL(save_name))//"_"//REPEAT("0", 4 - k)//TRIM(ADJUSTL(Num))
+       WRITE (Num, "(i10)") it/utils%freqsave
+       Num = TRIM(ADJUSTL(Num))
+       k = INDEX(Num, " ") - 1
+       save_name = TRIM(ADJUSTL(save_name))//"_"//REPEAT("0", 4 - k)//TRIM(ADJUSTL(Num))
     END IF
 
     IF (switch%decoup) THEN
@@ -1456,7 +1453,7 @@ CONTAINS
 
     IF ((errlstime*time%dt) < 1e-3) THEN
        WRITE (6, *) "******** Changing time step ***********"
-      time%dt = time%dt*2.
+       time%dt = time%dt*2.
     ENDIF
   END SUBROUTINE compute_dt
 
@@ -1474,13 +1471,13 @@ CONTAINS
     htor = numer%tmax/numer%ntor
     tdiv = 0.
     DO i = 1, numer%ntor
-      tdiv(i + 1) = i*htor
+       tdiv(i + 1) = i*htor
     END DO
 #ifdef PARALL
     IF (MPIvar%ntor .GT. 1) THEN
-      ntorloc = numer%ntor/MPIvar%ntor + 1
+       ntorloc = numer%ntor/MPIvar%ntor + 1
     ELSE
-      ntorloc = numer%ntor
+       ntorloc = numer%ntor
     ENDIF
 #else
     ntorloc = numer%ntor
@@ -1492,14 +1489,14 @@ CONTAINS
 
     DO itor = 1, ntorloc
 #ifdef PARALL
-      itorg = itor + (MPIvar%itor - 1)*numer%ntor/MPIvar%ntor
+       itorg = itor + (MPIvar%itor - 1)*numer%ntor/MPIvar%ntor
        IF (itorg == numer%ntor + 1) itorg = 1
 #else
-      itorg = itor
+       itorg = itor
 #endif
-      tel = tdiv(itorg) + 0.5*(refElTor%coord1d+1)*(tdiv(itorg + 1) - tdiv(itorg))
-      ind = (itor - 1)*numer%ptor + (/(i, i=1, numer%ptor + 1)/)
-      Mesh%toroidal(ind) = tel
+       tel = tdiv(itorg) + 0.5*(refElTor%coord1d+1)*(tdiv(itorg + 1) - tdiv(itorg))
+       ind = (itor - 1)*numer%ptor + (/(i, i=1, numer%ptor + 1)/)
+       Mesh%toroidal(ind) = tel
     END DO
   END SUBROUTINE define_toroidal_discretization
 #endif
@@ -1581,7 +1578,7 @@ CONTAINS
     Mesh_prec%X = Mesh_prec%X/phys%lscale
 
 
-    
+
 
     ! Initialize magnetic field (the Mesh is needed)
     CALL initialize_magnetic_field()
@@ -1599,7 +1596,7 @@ CONTAINS
     ENDIF
 
 
-    
+
     ! Allocation and initialization of the elemental matrices
     CALL init_elmat()
 
