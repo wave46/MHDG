@@ -63,16 +63,12 @@ SUBROUTINE solve_global_system
       IF (matK%start) THEN
          call displayMatrixInfo()
          call init_mat_PASTIX(matPASTIX)
-         call check_mat_PASTIX(matPASTIX)
-         call anal_mat_PASTIX(matPASTIX)
          matK%start = .false.
       ELSE
          call build_mat_PASTIX(matPASTIX)
-         !#ifdef PARALL
-         ! This needs to be redone in parallel (who knows why??)
-         call check_mat_PASTIX(matPASTIX)
-         !#endif
       END IF
+      call check_mat_PASTIX(matPASTIX)
+      call anal_mat_PASTIX(matPASTIX)
       call LU_mat_pastix(matPASTIX)
       call solve_mat_PASTIX(matPASTIX)
 #else

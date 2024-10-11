@@ -220,7 +220,8 @@ FCFLAGS += -I/usr/include/X11
 
 # PASTIX
 ifeq ($(PASTIX),$(LIB_YES))
- FCFLAGS += -I$(MHDG_PASTIX_DIR)/install
+ # FCFLAGS += -I$(MHDG_PASTIX_DIR)/install
+ FCFLAGS += `pkg-config --cflags pastix pastixf`
  FCFLAGS += -I$(MHDG_SCOTCH_DIR)/include
 endif
 
@@ -262,8 +263,9 @@ ifeq ($(PASTIX),$(LIB_YES))
  #LIB += -L$(HOME)/libs/scotch_6.0.4/lib/ -lscotch -lscotcherrexit  -lptscotchparmetis -lptscotch -lpthread -lhwloc
  #LIB += -L$(MHDG_PASTIX_DIR)/install -lpastix -lm -lrt -lifcore
  #New GNU
- LIB += -L$(MHDG_SCOTCH_DIR)/lib -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread
- LIB += -L$(MHDG_PASTIX_DIR)/install -lpastix -lm -lrt -lgfortran -lpthread -lhwloc -lptscotch -lscotch -lscotcherr
+ LIB += -lscotch -lscotcherr -lz -lm -lrt -lpthread
+ # LIB += -L$(MHDG_PASTIX_DIR)/install -lpastix -lm -lrt -lgfortran -lpthread -lhwloc -lptscotch -lscotch -lscotcherr
+ LIB += `pkg-config --libs pastix pastixf`
  #New INTEL
  #LIB += -L$(MHDG_SCOTCH_DIR)/lib -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread
  #LIB += -L$(MHDG_PASTIX_DIR)/install -lpastix -lm -lrt -lifcore -lpthread -lhwloc -lptscotch -lscotch -lscotcherr
