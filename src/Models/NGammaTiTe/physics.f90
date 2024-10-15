@@ -302,7 +302,7 @@ CONTAINS
     REAL*8, DIMENSION(:, :), INTENT(out) :: up
     REAL*8,  DIMENSION(SIZE(ua,1))       :: U1
 
-    U1 = max(ua(:,1),1e-10)
+    U1 = max(ua(:,1),1e-20)
 
     up(:, 1) = ABS(U1)                                                           ! density
     up(:, 2) = ua(:, 2)/U1                                            ! u parallel
@@ -310,8 +310,8 @@ CONTAINS
     up(:, 4) = ua(:, 4)/U1                                            ! total energy of electrons
     up(:, 5) = (2./(3.*phys%Mref)*(ua(:, 3) - 0.5*ua(:, 2)**2/U1)) ! pressure of ions
     up(:, 6) = (2./(3.*phys%Mref)*ua(:, 4))                              ! pressure of electrons
-    up(:, 7) = max(up(:, 5)/U1,1e-3)                                           ! temperature of ions
-    up(:, 8) = max(up(:, 6)/U1,1e-3)                                         ! temperature of electrons
+    up(:, 7) = max(up(:, 5)/U1,1e-20)                                           ! temperature of ions
+    up(:, 8) = max(up(:, 6)/U1,1e-20)                                         ! temperature of electrons
     up(:, 9) = SQRT(max((up(:, 5) + up(:, 6))/U1*phys%Mref,1e-20))                        ! sound speed
     up(:, 10) = up(:, 2)/up(:, 9)                                           ! Mach
 #ifdef NEUTRAL
@@ -1674,7 +1674,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavnn,U1,U2,U3,T0,ti,n0, kb, e_const
     real*8             :: s0
-    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real, parameter    :: tol = 1.e-10  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
@@ -1684,11 +1684,10 @@ CONTAINS
     e_const = 1.60217662e-19
 
     s0 = 5.2958e-11 * 1.e-6
-
-    if ((U1>tol) .and. (U2>tol) .and. (U3>tol)) then ! basically it's a below zero check
-      ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
-    else!some low values
-      ti = 1.e-10
+    ti = T0*2/3. /phys%Mref * (U3/U1 - 1./2. *U2**2/U1**2)
+    if (ti<tol) then ! basically it's a below zero check
+      !some low values
+      ti = tol
     endif
 
     sigmavnn = 0.
@@ -1701,7 +1700,7 @@ CONTAINS
     real*8             :: res(:),U1,U2,U3,T0,ti
     real*8, allocatable :: dti_dU(:)
     real*8             :: s0
-    real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real, parameter    :: tol = 1.e-10 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
 
     allocate(dti_dU(size(U)))
 
@@ -1714,9 +1713,9 @@ CONTAINS
 
     res = 0.
     dti_dU = 0.
-
-    if ((U1>tol) .and. (U2>tol) .and. (U3>tol)) then ! basically it's a below zero check
-      ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
+    ti = T0*2/3. /phys%Mref * (U3/U1 - 1./2. *U2**2/U1**2)
+    if (ti>tol) then ! basically it's a below zero check
+      
       dti_dU(1) = dti_dU(1) + 1.*(-U3 + U2**2/U1) / U1**2
       dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
       dti_dU(3) = dti_dU(3) + 1./U1
@@ -1990,7 +1989,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavcx,U1,U2,U3,T0,E0,ti
     integer             :: i
-    real,parameter :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real,parameter :: tol = 1.e-10 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
@@ -1998,10 +1997,10 @@ CONTAINS
 
     !if (U1<tol) U1=tol
     !if (U4<tol) then
-    if ((U1>tol) .and. (U3>tol)) then ! basically it's a below zero check
-      ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
-    else!some low values
-      ti = 1.e-10
+    ti = T0*2/3. /phys%Mref * (U3/U1 - 1./2. *U2**2/U1**2)
+    if (ti<tol) then ! basically it's a below zero check
+!some low values
+      ti = tol
     endif
     sigmavcx = 0.
 
@@ -2015,7 +2014,7 @@ CONTAINS
     real*8             :: res(:), U1,U2,U3,T0,ti, ti_min = 0.1
     real*8, allocatable :: dti_dU(:)
     real*8             :: sigmavcx, sigmavcx_dte
-    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real, parameter    :: tol = 1.e-10  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i
 
     allocate(dti_dU(size(U)))
@@ -2026,9 +2025,9 @@ CONTAINS
     U3 = U(3)
     res = 0.
     dti_dU = 0.
-
-    if ((U1>tol) .and. (U3>tol)) then
-      ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
+    ti = T0*2/3. /phys%Mref * (U3/U1 - 1./2. *U2**2/U1**2)
+    if (ti>tol) then
+     
       dti_dU(1) = dti_dU(1) + 1.*(-U3 + U2**2/U1) / U1**2
       dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
       dti_dU(3) = dti_dU(3) + 1./U1
@@ -2961,15 +2960,15 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
             phys%lscale/geom%R0*ABS(bn)*phys%diff_pari*up(7)**2.5, phys%lscale/geom%R0*ABS(bn)*phys%diff_pare*up(8)**2.5)
 
     ELSEIF (numer%stab == 5) THEN
-       IF (ABS(isext - 1.) .LT. 1e-12) THEN
-        ! exterior faces
-          tau_aux = ABS((4*uc(2)*bn)/uc(1))
-       ELSE
+       !IF (ABS(isext - 1.) .LT. 1e-12) THEN
+       ! ! exterior faces
+       !   tau_aux = ABS((4*uc(2)*bn)/uc(1))
+       !ELSE
           tau_aux = MAX(ABS(5./3.*up(2)*bn), ABS(0.3*bn*(3*uc(1) + SQRT(ABS(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)))
 !#ifdef NEUTRALP
 !        tau_aux(5) = max(abs(5./3.*up(2)*bn), abs(0.3*bn*(3*uc(5) + sqrt(abs(10*uc(3)/uc(1)*uc(5)**2 - 5*(uc(5)*uc(2)/uc(1))**2)))/uc(5)))
 !#endif
-       ENDIF
+       
 #ifdef TOR3D
        IF (ABS(n(3)) > 0.1) THEN
         ! Poloidal face
@@ -2987,15 +2986,15 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
        ELSE
 #endif
         ! Toroidal face
-        tau_aux(1) = tau_aux(1) + 6*diff_iso(1,1,1)
-        tau_aux(2) = tau_aux(2) + 6*diff_iso(2,2,1)
-          tau_aux(3) = tau_aux(3) + 6*diff_iso(3,3,1) + ABS(bn)*phys%diff_pari*(MIN(1.,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-          tau_aux(4) = tau_aux(4) + 6*diff_iso(4,4,1) + ABS(bn)*phys%diff_pare*(MIN(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+        tau_aux(1) = tau_aux(1) + diff_iso(1,1,1)*refElPol%ndeg/Mesh%elemSize(iel)
+        tau_aux(2) = tau_aux(2) + diff_iso(2,2,1)*refElPol%ndeg/Mesh%elemSize(iel)
+          tau_aux(3) = tau_aux(3) + diff_iso(3,3,1)*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pari*(MIN(1.,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
+          tau_aux(4) = tau_aux(4) + diff_iso(4,4,1)*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pare*(MIN(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + phys%diff_nn !! !numer%tau(5) diff_iso(5,5,1)
+        tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)*refElPol%ndeg/Mesh%elemSize(iel) !! !numer%tau(5) diff_iso(5,5,1)
 #ifdef KEQUATION
-        tau_aux(6) = tau_aux(6) + 6.*diff_iso(6,6,1)
+        tau_aux(6) = tau_aux(6) + diff_iso(6,6,1)*refElPol%ndeg/Mesh%elemSize(iel)
 #endif
 #endif
 #else
