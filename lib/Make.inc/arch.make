@@ -210,7 +210,7 @@ endif
 ####### Begin gfortran #######
 ifeq ($(COMPTYPE),$(COMPTYPE_DEB))
 # FCFLAGS = -Og -g -fbounds-check -fbacktrace -fbounds-check -ffpe-trap=zero,overflow,underflow,invalid
- FCFLAGS = -Og -g -fbounds-check -fbacktrace -fbounds-check -ffpe-trap=zero,overflow,invalid
+ FCFLAGS = -Og -g -fbounds-check -fbacktrace -fbounds-check -ffpe-trap=zero,overflow,underflow,invalid
  FCFLAGS += -Wall -Wextra -Wconversion -fcheck=all -Wuninitialized -Wtabs
 else ifeq ($(COMPTYPE),$(COMPTYPE_PRO))
  FCFLAGS = -Og -pg
