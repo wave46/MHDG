@@ -256,7 +256,9 @@ PROGRAM MHDG
 
 
   ! Create the reference element based on the mesh type
+#ifdef PARALL
   CALL mpi_barrier(MPI_COMM_WORLD,ierr)
+#endif
   CALL create_reference_element(refElPol, 2, verbose = 1)
   order = refElPol%nDeg
 
@@ -445,8 +447,9 @@ PROGRAM MHDG
   ! Save solution
   CALL setSolName(save_name, mesh_name, 0, .TRUE., .FALSE.)
   CALL HDF5_save_solution(save_name)
-
+#ifdef PARALL
   CALL mpi_barrier(mpi_comm_world,ierr)
+#endif
 
 
   ! Allocate and initialize uiter and u0
