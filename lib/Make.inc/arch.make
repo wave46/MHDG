@@ -24,8 +24,6 @@ MODE = $(MODE_SERIAL)
 #-------------------------------------------------------------------------------
 # The compiler
 #-------------------------------------------------------------------------------
-#FC = mpif90 
-#FC = mpif90 -f90=ifort
 FC = mpifort
 
 #-------------------------------------------------------------------------------
@@ -46,14 +44,6 @@ MDL=$(MDL_NGAMMATITENEUTRAL)
 #MDL=$(MDL_NGAMMATITENEUTRALK)
 #MDL=$(MDL_NGAMMAVORT)
 #MDL=$(MDL_LAPLACE)
-
-#-------------------------------------------------------------------------------
-# Moving equilibrium (not available anymore for this version)
-#-------------------------------------------------------------------------------
-#MVEQ_TRUE = true
-#MVEQ_FALS = false
-#MVEQ = $(MVEQ_FALS)
-##MVEQ = $(MVEQ_TRUE)
 
 #-------------------------------------------------------------------------------
 # Dimensions 2D/3D
@@ -97,23 +87,34 @@ else ifeq ($(MDL),$(MDL_NGAMMATITE))
  ADDMOD+=hdg_LimitingTechniques.o
 else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  RMDL=NGammaTiTe
- MACROS+= -DNGAMMA 
+ #turns on continuity and momentum equations
+ MACROS+= -DNGAMMA
+ #turns on ion and electron energy equations
  MACROS+= -DTEMPERATURE
+ #turns on neutral contimuity equations
  MACROS+= -DNEUTRAL
+ #Uses AMJUEL splines for recombination and ionization, better turn on. If not, Te splines from NRL formulas employed
  MACROS+= -DAMJUELSPLINES
+ #Uses AMJUEL splines for three-body recombination spline. If turned off, takes the one without three-body recombination, may be more stable
  MACROS+= -DTHREEBODYREC
- #MACROS+= -DRHSBC
- MACROS+= -DDNNSMOOTH
- MACROS+= -DDNNLINEARIZED
- #MACROS+= -DNEUTRALPUMP
+ #Takes legacy approximated expression for cx rate. Left only for back-comparison, should not be usually used.
  #MACROS+= -DLEGACYCX
- MACROS+= -DSAVEFLUX
+ #The combination of the two flags applies OpenADAS spline for thermal cx coefficient            
  MACROS+= -DEXPANDEDCX
  MACROS+= -DTHERMALCX
+ #Applies soft min and max on neutral diffusion coefficient. Should be more stable
+ MACROS+= -DDNNSMOOTH
+ #Turns on linearization of neutral diffusion. Better to keep it on
+ MACROS+= -DDNNLINEARIZED
+ #Model with constant neutral diffusion. If turned on, turn off the previous two flags
  #MACROS+= -DCONSTANTNEUTRALDIFF
+ #Actually not saves, but monitors in the output particle balance
+ MACROS+= -DSAVEFLUX
+ #The following 4 flags are development ones, should not be used
  #MACROS+= -DBOHMLIMIT
  #MACROS+= -DNEUTRALCONVECTION
  #MACROS+= -DPINCH
+ #MACROS+= -DRHSBC
  ADDMOD+=hdg_LimitingTechniques.o
 else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
  RMDL=NGammaTiTe
@@ -153,19 +154,6 @@ else
  abort Unsupported MDL==$(MDL)
  exit
 endif
-
-#-------------------------------------------------------------------------------
-# MACROS FOR MOVING EQUILIBRIUM
-#-------------------------------------------------------------------------------
-#ifeq ($(MVEQ),$(MVEQ_FALS))
-## Do nothing
-#else ifeq ($(MVEQ),$(MVEQ_TRUE))
-# MACROS+= -DMOVINGEQUILIBRIUM
-# ADDMOD+=hdg_MagneticDependingMatrices.o
-#else
-# abort Unsupported MVEQ==$(MVEQ)
-# exit
-#endif
 
 
 #-------------------------------------------------------------------------------
@@ -209,7 +197,6 @@ endif
 #-------------------------------------------------------------------------------
 ####### Begin gfortran #######
 ifeq ($(COMPTYPE),$(COMPTYPE_DEB))
-# FCFLAGS = -Og -g -fbounds-check -fbacktrace -fbounds-check -ffpe-trap=zero,overflow,underflow,invalid
  FCFLAGS = -Og -g -fbounds-check -fbacktrace -fbounds-check -ffpe-trap=zero,overflow,underflow,invalid
  FCFLAGS += -Wall -Wextra -Wconversion -fcheck=all -Wuninitialized -Wtabs
 else ifeq ($(COMPTYPE),$(COMPTYPE_PRO))
@@ -244,20 +231,15 @@ FCFLAGS += -I/usr/include
 FCFLAGS += -I/usr/include/x86_64-linux-gnu
 FCFLAGS += -I/usr/include/hdf5/serial
 FCFLAGS += -I/usr/include/hwloc
-FCFLAGS += -I/usr/lib/x86_64-linux-gnu/caca
 FCFLAGS += -I/usr/include/X11
+
+#GMSH/MMG
 FCFLAGS += -I$(MHDG_MMG_DIR)/build/include
 FCFLAGS += -I$(MHDG_GMSH_DIR)/include
 
-
-#Cluster
-#FCFLAGS += -I$(MHDG_HDF5_DIR)/include
-#FCFLAGS += -I$(MHDG_HWLOC_DIR)/include
-#FCFLAGS += -I/usr/include/X11
-
 # PASTIX
 ifeq ($(PASTIX),$(LIB_YES))
- FCFLAGS += -I$(MHDG_PASTIX_DIR)/install
+ FCFLAGS += $(shell echo `PKG_CONFIG_PATH=${PKG_CONFIG_PATH} pkg-config --cflags pastix pastixf`)
  FCFLAGS += -I$(MHDG_SCOTCH_DIR)/include
 endif
 
@@ -288,19 +270,11 @@ LIB += -L/usr/lib/x86_64-linux-gnu -lz -lm -lrt -lpthread
 LIB += -L/usr/lib/x86_64-linux-gnu/hdf5/serial -lhdf5_fortran -lhdf5
 LIB += -L/usr/lib/x86_64-linux-gnu/hwloc -lhwloc
 LIB += -L/usr/lib/x86_64-linux-gnu -lX11
-#LIB += -L/usr/lib/X11 -lX11
 LIB += -L/usr/lib/x86_64-linux-gnu/xtables -lXt
 
 #GMSH/MMG
 LIB += -L$(MHDG_GMSH_DIR)/lib -Llib -lgmsh -L. -Wl,-rpath=$(MHDG_GMSH_DIR)/lib 
 LIB += -L$(MHDG_MMG_DIR)/build/lib -lmmg
-
-#Cluster
-#LIB += -lz  -lm -lrt -lpthread
-#LIB += -L$(MHDG_HDF5_DIR)/lib -lhdf5_fortran -lhdf5
-#LIB += -L$(MHDG_HWLOC_DIR)/lib -lhwloc
-#LIB += -lX11
-#LIB += -lXt
 
 
 # PASTIX
@@ -310,7 +284,7 @@ ifeq ($(PASTIX),$(LIB_YES))
  #LIB += -L$(MHDG_PASTIX_DIR)/install -lpastix -lm -lrt -lifcore
  #New GNU
  LIB += -L$(MHDG_SCOTCH_DIR)/lib -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread
- LIB += -L$(MHDG_PASTIX_DIR)/install -lpastix -lm -lrt -lgfortran -lpthread -lhwloc -lptscotch -lscotch -lscotcherr
+ LIB += $(shell echo `PKG_CONFIG_PATH=${PKG_CONFIG_PATH} pkg-config --libs pastix pastixf`)
  #New INTEL
  #LIB += -L$(MHDG_SCOTCH_DIR)/lib -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread
  #LIB += -L$(MHDG_PASTIX_DIR)/install -lpastix -lm -lrt -lifcore -lpthread -lhwloc -lptscotch -lscotch -lscotcherr
@@ -318,12 +292,7 @@ endif
 
 # BLAS/LAPACK
 #Local
-LIB += -L/usr/lib/x86_64-linux-gnu -lblas -llapack
-#Cluster
-#Intel
-#LIB += -L$(MKL_HOME)/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core
-#GNU
-#LIB += -L$(BLAS_HOME)/lib -lblas -L$(LAPACK_HOME)/lib -llapack
+LIB += -L/usr/lib/x86_64-linux-gnu -lblas -llapack -llapacke
 
 
 # PSBLAS/MLD2P4
