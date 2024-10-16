@@ -33,7 +33,7 @@ Convergence : Convergence-$(MDL)-$(DIM)
 
 clean: 
 	@echo "Cleaning *.o *.mod *.F"
-	$(RM) *.o *.mod *.kmo  *.F *.f90
+	$(RM) *.o *.mod *.kmo  *.F *.f90 *.F90
 	$(RM) MHDG-* Convergence *~
 
 mod_splines.F : $(SDIR)/Spline/mod_splines.f90
