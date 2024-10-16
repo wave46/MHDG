@@ -1,12 +1,14 @@
-
 &SWITCH_LST
-    steady              = .false.       ! Is it a steady state simulation?
+    steady              = .true.       ! Is it a steady state simulation?
                                         ! .false. = time evolving simulation
                                         ! .true.  = steady state simulation
+    read_gmsh           = .true.	! .true. = mesh is read from msh/mesh file format
+    readMeshFromSol     = .true.	! .true. = mesh is read from solution file
+    set_2d_order	= .true.	! .true. = set the order of the 2d polynomial if not set already 
+    order_2d = 8 ! if read_gmsh = .true. and set_2d_order = .true., order of the 2d polynomial
     axisym              = .true.        ! Is it an axisymmetric simulation?
                                         ! true = yes (even for magnetic perturbation)
                                         ! false = no
-    time_init           = .true.
     init                = 1             ! Initialization type: 1-analytical at nodes; 2-L2 projection
     driftdia            = .false.       ! Set to FALSE to ignore diamagnetic drifts terms
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
@@ -45,6 +47,8 @@
     ckeramp             = .false.       ! check the error amplification in the linear system solution (for very ill-conditioned matrices)
     saveNR              = .true.        ! save each N-R iterations
     saveTau             = .false.       ! save tau on faces
+    gmsh2h5		= .true.	! convert the gmsh read in input to hdf5 format
+    saveMeshSol		= .true.	! save the mesh in the solution file
     !***** N-Gamma-Vorticity model
     fixdPotLim          = .false.       ! Fix potential at the floating potential on the limiter
     dirivortcore        = .false.       ! Dirichlet boundary condition on the vorticity in the core boundary
@@ -57,22 +61,22 @@
 /
 
 &INPUT_LST
-    field_path          = 'B_field_exp/WEST_54487_0000.h5'  ! Path to Bfield h5 file. 
+    field_path          = 'path/to/magnetic/field.h5'  ! Path to Bfield h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'B_field/WEST_54487'
                                                                         ! If switch%ME = .false. then put the full part 'B_field/WEST_54487_0000.h5'
-    field_dimensions(1) = 457                                   ! 1st dimension dimensions of magnetic field file
-    field_dimensions(2) = 457                                   ! 2nd dimension dimensions of magnetic field file
+    field_dimensions(1) = 2000                                   ! 1st dimension dimensions of magnetic field file (200x200)
+    field_dimensions(2) = 2000                                   ! 2nd dimension dimensions of magnetic field file
     field_from_grid = .true.                                   ! true then reads from cartesian grid and then biineary interpolates on nodes
                                                                 ! false then reads from files with field on nodes
     compute_from_flux   = .false.                                ! if the Br, Bz is computed from flux works not well, only with loading from nodes
     divide_by_2pi       = .false.                               ! if corresponding to poloidal flux definition it is needed to divide by 2pi. For NICE .true.
                                                                 ! for FEEQS .false.
-    jtor_path           = 'Jtor_equimap_variable_time/WEST_54487_Jtor_0000.h5'    ! Path to jtor h5 file. 
+    jtor_path           = 'path/to/plasma/current.h5'    ! Path to jtor h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'Jtor/WEST_54487_Jtor'
                                                                         ! If switch%ME = .false. then put the full part 'Jtor/WEST_54487_Jtor_0000.h5'
-    jtor_dimensions(1) = 200                                   ! 1st dimension dimensions of plasma current file
-    jtor_dimensions(2) = 200                                   ! 2nd dimension dimensions of plasma current file
-    save_folder = '/home/ikudashev/meso_backup/scratch/results_hdg/manuel_code/steady/k_equation_test/time_init/'
+    jtor_dimensions(1) = 2000                                   ! 1st dimension dimensions of plasma current file 457x457
+    jtor_dimensions(2) = 2000                                   ! 2nd dimension dimensions of plasma current file
+    save_folder = 'path/where/to/save/'
 /
 
 &NUMER_LST
@@ -81,8 +85,8 @@
     tau(3)              = 1.E+0         ! Stabilization parameter 3rd equation
     tau(4)              = 1.E+0         ! Stabilization parameter 4th equation
     tau(5)              = 1.E-0         ! Stabilization parameter 5th equation
-    nrp                 = 40           ! Max number of Newton-Raphson iterations
-    tNR                 = 1e-4          ! Tolerance of the Newton-Raphson scheme
+    nrp                 = 40          ! Max number of Newton-Raphson iterations
+    tNR                 = 2e-4          ! Tolerance of the Newton-Raphson scheme
     tTM                 = 1e-8          ! Tolerance for the steady state achievement
     div                 = 1e5           ! Divergence of Newton-Raphon iteration
     sc_coe              = 0             ! Shock capturing coefficient
@@ -94,9 +98,9 @@
     thr                 = 1.e-12        ! Min value of density allowed (works only if the switch is activated)
     thrpre              = 1.e-12        ! Min value of pressure allowed (works only if the switch is activated)
     stab                = 5             ! Stabilization type (from 1 to 4 (5), 2 is good, 5 is better (simplified 2, only for N-Gamma(-T))
-    dumpnr_min          = 0.000000001! Dumping factor for Newton-Raphson (0<dumpnr<1, first parameter to decrease if NR fail) typical 0.1
-    dumpnr_max          = 0.5
-    dumpnr_width        = 3.
+    dumpnr_min          = 0.1! Dumping factor for Newton-Raphson (0<dumpnr<1, first parameter to decrease if NR fail) typical 0.1
+    dumpnr_max          = 1.
+    dumpnr_width        = 10.
     dumpnr_n0           = 10.
     ntor                = 3             ! Number of elements in the toroidal direction
     ptor                = 4             ! Polynomial degree in the toroidal direction
@@ -104,6 +108,31 @@
     npartor             = 1             ! Number of MPI partition in the toroidal direction
     bohmtypebc          = 0             ! Implementation of the Bohm bc for Gamma (0-Old Bohm BC, 1-Dirichlet always, 2-Dirichlet+Neumann)
     exbdump             = 1.            ! Dumping for ExB drift
+/
+
+&ADAPT_LST
+    adaptivity		= .true.	! Enable or disable adaptivity [0,1]
+    shockcp_adapt       = 2             ! Shock capturing option for adaptivity (2)
+                                        ! 0 - No shock capturing
+                                        ! 1 - Constant in each element
+                                        ! 2 - Linear interpolation between nodes
+                                        ! 3 - Linear interpolation between nodes+save parameter
+    evaluator		= 0		! Mixed, indicator, estimator [0,1,2]
+    param_est		= 0		! Mixed, density, p_velocity ... [0,1,2,...] !on physical variable
+    thr_ind		= 1e-20		! Catch oscillations if higher than this value (indicator)
+    quant_ind		= 1		! 1,2,3 (physical variable(s), gradient of variable(s), both)
+    n_quant_ind		= 0		! 1,2,3 for iso (n,u, Mach). 1,2,3,4,5 for aniso (n,u,Ti,Te,Mach), 0 for all of them
+    tol_est		= 5e-1		! Difference between p+1 and p solution (estimator)
+    difference		= 1		! Type of difference: relative, absolute [0,1]
+    time_adapt		= .true.	! Refine at times steps (pseudo or not)
+    NR_adapt		= .false.	! Refine at NR steps (pseudo or not)
+    freq_t_adapt	= 1		! Frequency of time refinement, only if time_adapt = .true.
+    freq_NR_adapt	= 5		! Frequency of NR refinement, only if NR_adapt = .true.
+    div_adapt		= .false.	! Refine if NR diverges
+    rest_adapt		= .true.	! Call adaptivity at the very beginning, only for restart simulations
+    osc_adapt		= .true.	! Refine if oscillations are higher than threshold
+    osc_tol		= -2.8		! Refine if oscillations are higher than this threshold, only if osc_adapt = .true.
+    osc_check		= -3.		! Save the solution as checkpoint if the maximum value of oscillations are lower than this threshold (-100 for no oscillations at all)
 /
 
 &GEOM_LST
@@ -127,9 +156,9 @@
 
 
 &TIME_LST
-    dt0                 = 3.e9        ! Initial time step 3.e9 1.6395702112189546e5  1.4556040756914119e5
+    dt0                 = 3e9        ! Initial time step 3.e9 1.6395702112189546e5
     nts                 = 30           ! Max number of time iterations to do in the current session (only for transient simulations) 30
-    tfi                 = 1e8           ! Final time: the simulation stops when this time is reached
+    tfi                 = 1e10           ! Final time: the simulation stops when this time is reached
     tsw                 = 0             ! Switch to modify the time step
                                         ! 0 = dt is not modified
                                         ! 1 = ...
@@ -138,13 +167,13 @@
 
 &PHYS_LST
     ! ****** Diffusion parameters in m^2/s (start at 20*diff_x if psdtime = true)
-    diff_n = 1.! diffusion in the continuity equation
-    diff_u =  1. ! diffusion in the momentum equation
-    diff_e =  1. ! perpendicular diffusion for the energy equation
-    diff_ee =  1.   ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
-    diff_vort =  1. ! diffusion in the vorticity equation
+    diff_n = 0.26! diffusion in the continuity equation
+    diff_u =  0.26! diffusion in the momentum equation
+    diff_e =0.66667 ! perpendicular diffusion for the energy equation
+    diff_ee =   0.66667  ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
+    diff_vort = 0.66667! diffusion in the vorticity equation
     v_p = 0. ! Pinch velocity in the continuity equation (Pinch = vp*(psi^2 + psi^2*tanh((0.95 - psi)/0.02)) with psi = 1. at separatrix )
-    diff_nn = 20e3 ! diffusion for neutral equation
+    diff_nn = 2e4 ! diffusion for neutral equation
     ! external heating in the form of shifted 2D gaussian ~exp(-(r-(R0+dr)**2/sigmar**2))*exp(-(z-(Z0+dz)**2/sigmaz**2))
     heating_power = 0.              ! [W] Total power of heating 
     heating_dr = 0.0                 ! [m] displacement from magnetic axis alon R direction (can be positive and negative)
@@ -153,9 +182,10 @@
     heating_sigmaz = 0.15             ! [m] gaussian width in z-direction
     heating_equation = 3            ! equation to which heating is applied
     ! ****** Option for neutral equation (available only if compile with NEUTRAL)
-    Re                  = 0.998     ! Recycling coefficient 0.997
-    Re_pump             = 0.95     ! Recycling coefficient in the pump region
-    puff                = 1e20 ! puff coefficient (particles per second in the whole puff area) 2.5e18 5.e18
+    Re                  = 0.9     ! Recycling coefficient 0.997
+    Re_pump             = 0.9     ! Recycling coefficient in the pump region
+    puff                = 4e20 ! puff coefficient (particles per second in the whole puff area) 2.5e18 5.e18
+    cryopump_power      = 0.      ! cryopump power in [m^3/s]
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
     ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52 and 81)
     ener_source_ee      = 150.      ! amplitude of the truncated electron energy source (case 52 and 81)
@@ -164,13 +194,13 @@
     part_source         = 0.        ! source coefficient (particles per second in the whole core area [ONLY BC 6])
     ener_source         = 20e6      ! source coefficient (Watt in the whole core area [ONLY BC 6])
     ! kequation part
-    diff_k_min =  10. ! minimal diffusion in the k equation
-    diff_k_max = 10. ! maximal diffusion in the k equation
-    k_max = 1.e10      ! maximal k
+    !diff_k_min = 10.  ! minimal diffusion in the k equation
+    !diff_k_max = 10. ! maximal diffusion in the k equation
+    !k_max = 1.e10      ! maximal k
     !puff               = 1.8e-6
     !puff               = 2.e-5
     ! ****** Ohmic heating: only for testcase 54 with core (not tested)
-    Pohmic              = 4.8e-14       ! Ohmic Heating
+    Pohmic              = 7.2e-14       ! Ohmic Heating
     ! ****** Background temperature in eV for isothermal model (default is 50 eV)
     Tbg                 = 50
     ! ****** Boundary conditions: set the correspondance between boundary flag and boundary condition
@@ -215,7 +245,27 @@
     sollib              = 1             ! Solver library to be used
                                         ! 1-Pastix (Limit found in 3D for total nnz > 2*31-1 even with in64 compilation)
                                         ! 2-PSBLAS (all options below TODO: find a combination that works!)
+                                        ! 3-PETSc 
     lstiming            = true
+
+    ! Parameters relative to the library PETSc
+    kspitrace           = 0             ! Display convergence at each iteration
+    rtol		= 5e-12		! Relative tollerance
+    atol                = 1e-50         ! Absolute tollerance
+    kspitmax            = 2000         ! Max number of iterations
+    igz			= .false.	! Set initial guess of the iterative method equal to zero
+    rprecond		= 1		! Recompute conditioner ( 1 every NR iteration, 2 each Nreprecond iterations, 3 if kspitmax has been reached)
+    Nrprecond		= 1		! Recompute preconditioner each Nrprecond iterations 
+    kspnorm		= 2		! Ksp norm type (1 preconditioned, 2 unpreconditioned)
+    !kspmethd		= 'KSPPREONLY'	! Krylov method KSPCG KSPBCGS KSPGMRES KSPPREONLY KSPMINRES KSPRICHARDSON and more 
+    kspmethd		= 'KSPBCGS'	! Krylov method KSPCG KSPBCGS KSPGMRES KSPPREONLY KSPMINRES KSPRICHARDSON and more 
+    pctype		= 'PCLU'	! Preconditioner type PCNONE PCJACOBI PCSOR PCLU PCILU PCGAMG PCMG and more
+    !pctype		= 'PCJACOBI'	! Preconditioner type PCNONE PCJACOBI PCSOR PCLU PCILU PCGAMG PCMG and more
+    gmresres            = 30            ! Restart of the GMRES method (30 default)
+    mglevels		= 1		! Number of levels for the MG preconditioner
+    mgtypeform		= 1		! Form of the MG preconditioner (1 multiplicative, 2 additive, 3 full, 4 Kaskade)
+    
+    
     ! Parameters relative to the library PSBLAS
     itmax               = 500           ! Max number of iterations
     itrace              = 0             ! Display convergence at each iteration

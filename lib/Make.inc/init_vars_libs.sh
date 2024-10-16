@@ -22,25 +22,27 @@ export MHDG_HDF5_DIR=/usr/lib
 export MHDG_LIB_DIR=$HOME/libs
 
 # Set where the PETSC are (if common directory)
-export PETSC_ARCH=arch-linux-c-opt
-export PETSC_DIR=$MHDG_LIB_DIR/petsc-3.18.0
+#export PETSC_ARCH=arch-linux-c-opt
+#export PETSC_DIR=$MHDG_LIB_DIR/petsc-3.18.0
 
-# Set the libraries
-export MHDG_SCOTCH_DIR=$MHDG_LIB_DIR/scotch_6.0.4
+# Set the libraries (uncomment or add what you need)
+export MHDG_PASTIX_DIR=$MHDG_LIB_DIR/pastix_32
+source $MHDG_PASTIX_DIR/bin/pastix_env
+export MHDG_SCOTCH_DIR=$MHDG_LIB_DIR/scotch_32
 export MHDG_MMG_DIR=$MHDG_LIB_DIR/mmg
 export MHDG_GMSH_DIR=$MHDG_LIB_DIR/gmsh-4.11.1-Linux64-sdk
-export MHDG_PASTIX_DIR=$MHDG_LIB_DIR/pastix_5.2.3_rep
-export MHDG_PSBLAS_DIR=$MHDG_LIB_DIR/psblas3
-export MHDG_MLD2P4_DIR=$MHDG_LIB_DIR/mld2p4-2
-export MHDG_PETSC_DIR=$MHDG_LIB_DIR/petsc-3.18.0
+export MHDG_PASTIX_DIR=$PASTIX_ROOT
+#export MHDG_PSBLAS_DIR=$MHDG_LIB_DIR/psblas3
+#export MHDG_MLD2P4_DIR=$MHDG_LIB_DIR/mld2p4-2
+#export MHDG_PETSC_DIR=$MHDG_LIB_DIR/petsc-3.18.0
 
 echo "Libraries directory: $MHDG_LIB_DIR"
 echo "HWLOC directory: $MHDG_HWLOC_DIR"
 echo "HDF5 directory: $MHDG_HDF5_DIR"
 echo "SCOTCH (https://gitlab.inria.fr/scotch/scotch) directory: $MHDG_SCOTCH_DIR"
 echo "PASTIX (https://gitlab.inria.fr/solverstack/pastix) directory: $MHDG_PASTIX_DIR"
-echo "PSBLAS (https://github.com/sfilippone/psblas3) directory: $MHDG_PSBLAS_DIR"
-echo "MLD2P4 (https://github.com/sfilippone/mld2p4-2) directory: $MHDG_MLD2P4_DIR"
-echo "PETSC directory: $MHDG_PETSC_DIR"
+#echo "PSBLAS (https://github.com/sfilippone/psblas3) directory: $MHDG_PSBLAS_DIR"
+#echo "MLD2P4 (https://github.com/sfilippone/mld2p4-2) directory: $MHDG_MLD2P4_DIR"
+#echo "PETSC directory: $MHDG_PETSC_DIR"
 echo "MMG directory: $MHDG_MMG_DIR"
 echo "GMSH directory: $MHDG_GMSH_DIR"

@@ -82,8 +82,7 @@ SUBROUTINE solve_global_system(ir)
      IF (matK%start) THEN
         CALL displayMatrixInfo()
         CALL init_mat_PASTIX(matPASTIX)
-        CALL check_mat_PASTIX(matPASTIX)
-        CALL anal_mat_PASTIX(matPASTIX)
+        
         matK%start = .FALSE.
      ELSE
         CALL build_mat_PASTIX(matPASTIX)
@@ -92,6 +91,8 @@ SUBROUTINE solve_global_system(ir)
         CALL check_mat_PASTIX(matPASTIX)
         !#endif
      END IF
+     CALL check_mat_PASTIX(matPASTIX)
+     CALL anal_mat_PASTIX(matPASTIX)
      CALL LU_mat_pastix(matPASTIX)
      CALL solve_mat_PASTIX(matPASTIX)
 #else
