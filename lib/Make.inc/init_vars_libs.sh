@@ -24,8 +24,10 @@ export MHDG_LIB_DIR=$HOME/libs
 # Set where the PETSC are (if common directory)
 #export PETSC_ARCH=arch-linux-c-opt
 #export PETSC_DIR=$MHDG_LIB_DIR/petsc-3.18.0
-source /home/ikudashev/libs/pastix_32/bin/pastix_env
-# Set the libraries
+
+# Set the libraries (uncomment or add what you need)
+export MHDG_PASTIX_DIR=$MHDG_LIB_DIR/pastix_32
+source $MHDG_PASTIX_DIR/bin/pastix_env
 export MHDG_SCOTCH_DIR=$MHDG_LIB_DIR/scotch_32
 export MHDG_MMG_DIR=$MHDG_LIB_DIR/mmg
 export MHDG_GMSH_DIR=$MHDG_LIB_DIR/gmsh-4.11.1-Linux64-sdk
