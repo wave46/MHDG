@@ -2197,7 +2197,8 @@ CONTAINS
       call compute_gamma_I(u, q, b, gradB, r, growth_rate)
       ! growth_rate = max(growth_rate, 1e-1)
       ! growth_rate = merge(growth_rate, 0., growth_rate / simpar%refval_time > 1e2)
-      v = cs**2/omega*alpha_s/r0*sqrt(max(0., tau_para*growth_rate))
+      !v = cs**2/omega*alpha_s/r0*sqrt(max(0., tau_para*growth_rate))
+      v = alpha_s*q_cyl*cs/omega*growth_rate
    end subroutine
    subroutine compute_dg_du(U, Q, B, gradB, q_cyl, omega, is_core, r, dg_du)
       ! use ieee_arithmetic

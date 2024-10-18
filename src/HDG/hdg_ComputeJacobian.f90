@@ -2564,20 +2564,20 @@ CONTAINS
                Auu(:, :, z) = Auu(:, :, z) - dg_du(i, j)*NNi
 
                ! diffusion
-               ! do k = 1, Ndim
-               !    if ((i == 6) .and. (j == 6)) then
-               !       Auu(:, :, z) = Auu(:, :, z) + 2*kappa_epsil*qpr(k, 6)*NxyzNi(:, :, k)
-               !    end if
-               !    if ((i == 7) .and. (j == 7)) then
-               !       Auu(:, :, z) = Auu(:, :, z) - kappa_epsil**2*qpr(k, 7)*NxyzNi(:, :, k)
-               !    end if
-               ! end do
+               !do k = 1, Ndim
+               !   if ((i == 6) .and. (j == 6)) then
+               !      Auu(:, :, z) = Auu(:, :, z) + 2*kappa_epsil*qpr(k, 6)*NxyzNi(:, :, k)
+               !   end if
+               !   if ((i == 7) .and. (j == 7)) then
+               !      Auu(:, :, z) = Auu(:, :, z) - kappa_epsil**2*qpr(k, 7)*NxyzNi(:, :, k)
+               !   end if
+               !end do
 
             END DO
             rhs(:, i) = rhs(:, i) + merge(kappa_rhs, epsil_rhs, i == 6)*Ni
-            ! do k = 1, ndim
-            !    rhs(:, i) = rhs(:, i) + d_ke*qpr(k, i)*Nxyzg(:, k)
-            ! end do
+            !do k = 1, ndim
+            !   rhs(:, i) = rhs(:, i) + d_ke*qpr(k, i)*Nxyzg(:, k)
+            !end do
 
 #endif
 #ifdef NEUTRALP

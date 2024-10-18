@@ -1240,13 +1240,13 @@ SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_puff,facefl
                v_nn_Bou_el(g, :) = Vnng
             end if
 
-#ifdef KEQUATION
+!#ifdef KEQUATION
             !  CALL assembly_dirichletwf_bc(iel, ind_asf, ind_ff, uex(g, :) * 0, NiNi, Ni, 1)
-            do i = 6, 7
-               CALL assembly_dirichletwf_bc(iel, ind_asf, ind_ff, uex(g, :)*0, NiNi, Ni, i)
-               ! CALL assembly_neum_bc(iel, ind_asf, ind_ash, ind_ff, ind_fg, NiNi, n_g, tau_stab, i)
-            end do
-#endif
+            !do i = 6, 7
+            !   CALL assembly_dirichletwf_bc(iel, ind_asf, ind_ff, uex(g, :)*0, NiNi, Ni, i)
+            !   ! CALL assembly_neum_bc(iel, ind_asf, ind_ash, ind_ff, ind_fg, NiNi, n_g, tau_stab, i)
+            !end do
+!#endif
 
          END DO ! END loop in Gauss points
 
