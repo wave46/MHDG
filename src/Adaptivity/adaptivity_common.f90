@@ -14,54 +14,54 @@ MODULE adaptivity_common_module
 
 CONTAINS
 
-  SUBROUTINE merge_with_geometry(gmsh)
-    TYPE(gmsh_t), INTENT(IN)          :: gmsh
+  SUBROUTINE merge_with_geometry(gmsh_l)
+    TYPE(gmsh_t), INTENT(IN)          :: gmsh_l
 
-    CALL gmsh%initialize()
+    CALL gmsh_l%initialize()
 
     IF (switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) THEN
-       CALL gmsh%OPEN("./res/geometries/Circ_InfLim_YesHole_Structured.geo")
+       CALL gmsh_l%OPEN("./res/geometries/Circ_InfLim_YesHole_Structured.geo")
     ELSE
-       !CALL gmsh%open("./res/West_Mesh_farWall_NoHole_SmoothCorner_base.geo")
+       !CALL gmsh_l%open("./res/West_Mesh_farWall_NoHole_SmoothCorner_base.geo")
        IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
           !CALL gmsh%OPEN("./res/geometries/West_Mesh_NoHole_farWall.geo")
-          CALL gmsh%OPEN("./res/geometries/TCV_smooth.geo")
+          CALL gmsh_l%OPEN("./res/geometries/TCV_smooth.geo")
        ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
-          CALL gmsh%OPEN("./res/geometries/West_Mesh_YesHole_SmoothCorner.geo")
+          CALL gmsh_l%OPEN("./res/geometries/West_Mesh_YesHole_SmoothCorner.geo")
        ELSE
-          CALL gmsh%OPEN("./res/geometries/West_Mesh_NoHole_SmoothCorner.geo")
+          CALL gmsh_l%OPEN("./res/geometries/West_Mesh_NoHole_SmoothCorner.geo")
        ENDIF
     END IF
     
-    CALL gmsh%MERGE("./res/temp.msh")
-    call gmsh%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh%WRITE("./res/temp.msh")
-    CALL gmsh%finalize()
+    CALL gmsh_l%MERGE("./res/temp.msh")
+    call gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
+    CALL gmsh_l%WRITE("./res/temp.msh")
+    CALL gmsh_l%finalize()
 
   ENDSUBROUTINE merge_with_geometry
 
-  SUBROUTINE open_merge_with_geometry(gmsh,path2msh)
-    TYPE(gmsh_t), INTENT(IN)           :: gmsh
+  SUBROUTINE open_merge_with_geometry(gmsh_l,path2msh)
+    TYPE(gmsh_t), INTENT(IN)           :: gmsh_l
     CHARACTER ( len = * ), INTENT(IN) :: path2msh
 
-    CALL gmsh%initialize()
+    CALL gmsh_l%initialize()
     IF (switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) THEN
-       CALL gmsh%OPEN("./res/geometries/Circ_InfLim_YesHole_Structured.geo")
+       CALL gmsh_l%OPEN("./res/geometries/Circ_InfLim_YesHole_Structured.geo")
     ELSE
        !CALL gmsh%open("./res/West_Mesh_farWall_NoHole_SmoothCorner_base.geo")
        IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
           !CALL gmsh%OPEN("./res/geometries/West_Mesh_NoHole_farWall.geo")
-          CALL gmsh%OPEN("./res/geometries/TCV_smooth.geo")
+          CALL gmsh_l%OPEN("./res/geometries/TCV_smooth.geo")
        ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
-          CALL gmsh%OPEN("./res/geometries/West_Mesh_YesHole_SmoothCorner.geo")
+          CALL gmsh_l%OPEN("./res/geometries/West_Mesh_YesHole_SmoothCorner.geo")
        ELSE
-          CALL gmsh%OPEN("./res/geometries/West_Mesh_NoHole_SmoothCorner.geo")
+          CALL gmsh_l%OPEN("./res/geometries/West_Mesh_NoHole_SmoothCorner.geo")
        ENDIF
     END IF
-    CALL gmsh%MERGE(path2msh)
-    call gmsh%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh%WRITE(path2msh)
-    CALL gmsh%finalize()
+    CALL gmsh_l%MERGE(path2msh)
+    call gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
+    CALL gmsh_l%WRITE(path2msh)
+    CALL gmsh_l%finalize()
 
   ENDSUBROUTINE open_merge_with_geometry
 
@@ -2517,15 +2517,15 @@ CONTAINS
 
     CHARACTER(*), INTENT(IN)            :: mesh_name
     CHARACTER(LEN = 1024)               :: file_in, file_out
-    TYPE(gmsh_t)                        :: gmsh
+    TYPE(gmsh_t)                        :: gmsh_l
 
     file_in  = TRIM(ADJUSTL(mesh_name))// '.msh'
     file_out = TRIM(ADJUSTL(mesh_name))// '.mesh'
 
-    CALL gmsh%initialize()
-    CALL gmsh%OPEN(file_in)
-    CALL gmsh%WRITE(file_out)
-    CALL gmsh%finalize()
+    CALL gmsh_l%initialize()
+    CALL gmsh_l%OPEN(file_in)
+    CALL gmsh_l%WRITE(file_out)
+    CALL gmsh_l%finalize()
   ENDSUBROUTINE convert_msh2mesh
 
   SUBROUTINE convert_mesh2msh(mesh_name)
@@ -2535,16 +2535,16 @@ CONTAINS
 
     CHARACTER(*), INTENT(IN)            :: mesh_name
     CHARACTER(LEN = 1024)               :: file_in, file_out
-    TYPE(gmsh_t)                        :: gmsh
+    TYPE(gmsh_t)                        :: gmsh_l
 
     file_in  = TRIM(ADJUSTL(mesh_name))// '.mesh'
     file_out = TRIM(ADJUSTL(mesh_name))// '.msh'
 
-    CALL gmsh%initialize()
-    CALL gmsh%OPEN(file_in)
-    call gmsh%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh%WRITE(file_out)
-    CALL gmsh%finalize()
+    CALL gmsh_l%initialize()
+    CALL gmsh_l%OPEN(file_in)
+    call gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
+    CALL gmsh_l%WRITE(file_out)
+    CALL gmsh_l%finalize()
 
   ENDSUBROUTINE convert_mesh2msh
 
@@ -2812,7 +2812,7 @@ RECURSIVE SUBROUTINE quicksort_int(a)
   IF (j + 1 < last)  CALL quicksort_int(a(j + 1 : last))
 ENDSUBROUTINE quicksort_int
 
-SUBROUTINE quicksort_real(a)
+RECURSIVE SUBROUTINE quicksort_real(a)
   !! quicksort.f -*-f90-*-
   !! Author: t-nissie, some tweaks by 1AdAstra1
   !! License: GPLv3
