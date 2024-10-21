@@ -266,9 +266,9 @@ Postprocess.o : Postprocess.F globals.o analytical.o PrintUtils.o
 
 gmsh.F : $(MHDG_GMSH_DIR)/include/gmsh.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
-
+#-ffree-form for gfortran, -free for intel
 gmsh.o : gmsh.F
-	$(FC) -c -O3 -ffree-form  $(INC)  $< -o $@ 
+	$(FC) -c -O3 -free  $(INC)  $< -o $@  
 
 adaptivity_common.F : $(SDIR)/Adaptivity/adaptivity_common.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
