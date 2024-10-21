@@ -100,7 +100,8 @@ CONTAINS
       matPASTIX%iparm(IPARM_TRANSPOSE_SOLVE) = PastixTrans
 
       call pastixInit(matPASTIX%pastix_data, MPI_COMM_WORLD, matPASTIX%iparm, matPASTIX%dparm)
-
+      allocate (matPASTIX%spm)
+      call spmInitDist(matPASTIX%spm, MPI_COMM_WORLD)
       call build_mat_PASTIX(matPASTIX)
 
       if (lssolver%timing) then
@@ -138,12 +139,12 @@ CONTAINS
          matPASTIX%spm%values = c_null_ptr
          matPASTIX%spm%loc2glob = c_null_ptr
          call spmExit(matPASTIX%spm)
-         deallocate (matPASTIX%spm)
+         !deallocate (matPASTIX%spm)
       end if
 
-      allocate (matPASTIX%spm)
+      !allocate (matPASTIX%spm)
 
-      call spmInitDist(matPASTIX%spm, MPI_COMM_WORLD)
+      !call spmInitDist(matPASTIX%spm, MPI_COMM_WORLD)
       ! call spmInit( matPASTIX%spm )
 
       matPASTIX%spm%baseval = 1              ! 0 or 1, 1-based because of fortran
@@ -160,13 +161,15 @@ CONTAINS
 #endif
 
       call spmUpdateComputedFields(matPASTIX%spm)
-      call spmAlloc(matPASTIX%spm)
+      !call spmAlloc(matPASTIX%spm)
 
-      call spmGetArray(matPASTIX%spm, colptr=colptr, rowptr=rowptr, dvalues=values)
-      colptr(:) = matK%rowptr(:)  ! swap because csr/csc
-      rowptr(:) = matK%cols(:)
-      values(:) = matK%vals(:)
-
+      !call spmGetArray(matPASTIX%spm, colptr=colptr, rowptr=rowptr, dvalues=values)
+      !colptr(:) = matK%rowptr(:)  ! swap because csr/csc
+      !rowptr(:) = matK%cols(:)
+      !values(:) = matK%vals(:)
+      matPASTIX%spm%colptr = c_loc(matK%rowptr)
+      matPASTIX%spm%rowptr = c_loc(matK%cols)
+      matPASTIX%spm%values = c_loc(matK%vals)
       matPASTIX%spm%loc2glob = c_loc(matK%loc2glob)
 
       ! Scale A for better stability with low-rank computations
@@ -174,9 +177,13 @@ CONTAINS
       call spmScal(1./normA, matPASTIX%spm)
 
       if (allocated(matPASTIX%x)) then
-         deallocate (matPASTIX%x)
-         deallocate (matPASTIX%b)
-         deallocate (matPASTIX%rhs)
+         deallocate (matPASTIX%x)         
+      end if
+      if (allocated(matPASTIX%b)) then
+         deallocate (matPASTIX%b)         
+      end if
+      if (allocated(matPASTIX%rhs)) then
+         deallocate (matPASTIX%rhs)         
       end if
       allocate (matPASTIX%x(matPASTIX%spm%nexp, matPASTIX%nrhs))
       allocate (matPASTIX%b(matPASTIX%spm%nexp, matPASTIX%nrhs))
