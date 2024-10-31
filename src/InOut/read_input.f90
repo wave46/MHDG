@@ -52,7 +52,7 @@ SUBROUTINE READ_input()
 
   ! Neutral and Ohmic heating
   LOGICAL     :: OhmicSrc
-  REAL*8      :: Pohmic,diff_nn,Re,Re_pump,puff,cryopump_power,puff_slope
+  REAL*8      :: Zeff,Pohmic,diff_nn,Re,Re_pump,puff,cryopump_power,puff_slope
 #ifdef KEQUATION
   ! k equation
   REAL*8      :: diff_k_min, diff_k_max, k_max
@@ -71,11 +71,11 @@ SUBROUTINE READ_input()
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source, Pohmic, Tbg, bcflags, bohmth,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #else
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
-  & diff_k_min, diff_k_max, k_max, Pohmic, Tbg, bcflags, bohmth,&
+  & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
@@ -234,6 +234,7 @@ SUBROUTINE READ_input()
   phys%fluxg_trunc        = fluxg_trunc
   phys%part_source        = part_source
   phys%ener_source        = ener_source
+  phys%Zeff               = Zeff
   phys%Pohmic             = Pohmic
   phys%Tbg                = Tbg
   phys%bcflags            = bcflags
@@ -399,6 +400,7 @@ SUBROUTINE READ_input()
     PRINT *, '                - gamma for Bohm boundary condition on ions:          ', phys%Gmbohm
     PRINT *, '                - gamma for Bohm boundary condition for electrons:    ', phys%Gmbohme
      IF(switch%ohmicsrc) THEN
+       PRINT *, '             - Zeff                                                ', phys%Zeff
        PRINT *, '             - Ohmic heating                                       ', phys%Pohmic
      ENDIF
 #endif

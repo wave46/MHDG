@@ -242,6 +242,7 @@ MODULE types
      REAL*8          :: diff_pare          ! Parallel diffusion for the electron temperature
      REAL*8          :: tie                ! Temperature exchange coefficient between ions and electrons
      REAL*8          :: Gmbohme            ! gamma for Bohm boundary condition on electron energy:
+     REAL*8          :: Zeff               ! Plasma effective charge (>1.)
      REAL*8          :: Pohmic             ! Ohmic heating power
     ! Coefficients for the vorticity equations
      REAL*8          :: diff_vort

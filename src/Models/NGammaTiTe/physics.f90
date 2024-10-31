@@ -1221,7 +1221,7 @@ CONTAINS
     U4 = U(4)
     IF (U4<tol) U4=tol
     IF (U1<tol) U1=tol
-    Sohmic = phys%Pohmic*(((3*phys%Mref)/2)**1.5)*((U1/U4)**1.5)
+    Sohmic = phys%Zeff*phys%Pohmic*(((3*phys%Mref)/2)**1.5)*((U1/U4)**1.5)
   END SUBROUTINE compute_Sohmic
 
 
@@ -1236,7 +1236,7 @@ CONTAINS
     res = 0.
     res(1) = (1.5*U1**0.5)/(U4**1.5)
     res(4) = -(1.5*U1**1.5)/(U4**2.5)
-    res = phys%Pohmic*(((3*phys%Mref)/2)**1.5)*res
+    res = phys%Zeff*phys%Pohmic*(((3*phys%Mref)/2)**1.5)*res
   END SUBROUTINE compute_dSohmic_dU
 
 
