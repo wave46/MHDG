@@ -1285,7 +1285,7 @@ PROGRAM MHDG
   IF(ALLOCATED(error_oscillation)) DEALLOCATE(error_oscillation)
 
   CALL free_splines(splines)
-
+  CALL free_all()
   IF (lssolver%sollib .EQ. 1) THEN
 #ifdef WITH_PASTIX
     CALL terminate_mat_PASTIX()
