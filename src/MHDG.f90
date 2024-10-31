@@ -219,31 +219,31 @@ PROGRAM MHDG
 
      ENDIF
   ENDIF
+  IF (adapt%adaptivity) THEN
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       WRITE(*,*) "*************************************************"
+       WRITE(*,*) "               SPLINE READING                    "
+       WRITE(*,*) "*************************************************"
+    ENDIF
 
-  IF(MPIvar%glob_id .EQ. 0) THEN
-     WRITE(*,*) "*************************************************"
-     WRITE(*,*) "               SPLINE READING                    "
-     WRITE(*,*) "*************************************************"
+    IF (switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) THEN
+       WRITE(*,*) "Splines read from file ./res/geometries/Circ_InfLim_YesHole_Structured.geo"
+       CALL generate_splines_from_geo_file('./res/geometries/Circ_InfLim_YesHole_Structured.geo')
+    ELSE
+       IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
+          !WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_NoHole_farWall.geo"
+          !CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_NoHole_farWall.geo')
+          WRITE(*,*) "Splines read from file ./res/geometries/TCV_smooth.geo"
+          CALL generate_splines_from_geo_file('./res/geometries/TCV_smooth.geo')
+       ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
+          WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_YesHole_SmoothCorner.geo"
+          CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_YesHole_SmoothCorner.geo')
+       ELSE
+          WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_NoHole_SmoothCorner.geo"
+          CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_NoHole_SmoothCorner.geo')
+       ENDIF
+    END IF
   ENDIF
-
-  IF (switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) THEN
-     WRITE(*,*) "Splines read from file ./res/geometries/Circ_InfLim_YesHole_Structured.geo"
-     CALL generate_splines_from_geo_file('./res/geometries/Circ_InfLim_YesHole_Structured.geo')
-  ELSE
-     IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
-        !WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_NoHole_farWall.geo"
-        !CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_NoHole_farWall.geo')
-        WRITE(*,*) "Splines read from file ./res/geometries/TCV_smooth.geo"
-        CALL generate_splines_from_geo_file('./res/geometries/TCV_smooth.geo')
-     ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
-        WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_YesHole_SmoothCorner.geo"
-        CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_YesHole_SmoothCorner.geo')
-     ELSE
-        WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_NoHole_SmoothCorner.geo"
-        CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_NoHole_SmoothCorner.geo')
-     ENDIF
-  END IF
-
 
   ! Linear solver: set the start to true
   matK%start = .TRUE.
