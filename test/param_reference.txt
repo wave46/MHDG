@@ -200,7 +200,8 @@
     !puff               = 1.8e-6
     !puff               = 2.e-5
     ! ****** Ohmic heating: only for testcase 54 with core (not tested)
-    Pohmic              = 7.2e-14       ! Ohmic Heating
+    Zeff                = 1.
+    Pohmic              = 4.8e-14       ! Ohmic Heating
     ! ****** Background temperature in eV for isothermal model (default is 50 eV)
     Tbg                 = 50
     ! ****** Boundary conditions: set the correspondance between boundary flag and boundary condition
