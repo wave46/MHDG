@@ -58,12 +58,15 @@ CONTAINS
     END IF
     IF (ASSOCIATED(refElPol%coord3D)) THEN
        DEALLOCATE (refElPol%coord3D)
+       NULLIFY(refElPol%coord3D)
     END IF
     IF (ASSOCIATED(refElPol%coord2D)) THEN
        DEALLOCATE (refElPol%coord2D)
+       NULLIFY(refElPol%coord2D)
     END IF
     IF (ASSOCIATED(refElPol%coord1D)) THEN
        DEALLOCATE (refElPol%coord1D)
+       NULLIFY(refElPol%coord1D)
     END IF
     IF (ALLOCATED(refElPol%gauss_points3D)) THEN
        DEALLOCATE (refElPol%gauss_points3D)
@@ -126,12 +129,15 @@ CONTAINS
     END IF
     IF (ASSOCIATED(refElTor%coord3D)) THEN
        DEALLOCATE (refElTor%coord3D)
+       NULLIFY(refElTor%coord3D)
     END IF
     IF (ASSOCIATED(refElTor%coord2D)) THEN
        DEALLOCATE (refElTor%coord2D)
+       NULLIFY(refElTor%coord2D)
     END IF
     IF (ASSOCIATED(refElTor%coord1D)) THEN
        DEALLOCATE (refElTor%coord1D)
+       NULLIFY(refElTor%coord1D)
     END IF
     IF (ALLOCATED(refElTor%gauss_points3D)) THEN
        DEALLOCATE (refElTor%gauss_points3D)
@@ -181,22 +187,28 @@ CONTAINS
 
     ! Mesh
     IF (ASSOCIATED(Mesh%T)) THEN
-       DEALLOCATE (Mesh%T)
+       DEALLOCATE(Mesh%T)
+       NULLIFY(Mesh%T)
     END IF
     IF (ASSOCIATED(Mesh%T_gmsh)) THEN
-       DEALLOCATE (Mesh%T_gmsh)
+       DEALLOCATE(Mesh%T_gmsh)
+       NULLIFY(Mesh%T_gmsh)
     END IF
     IF (ASSOCIATED(Mesh%Tlin)) THEN
-       DEALLOCATE (Mesh%Tlin)
+       DEALLOCATE(Mesh%Tlin)
+       NULLIFY(Mesh%Tlin)
     END IF
     IF (ASSOCIATED(Mesh%Tb)) THEN
-       DEALLOCATE (Mesh%Tb)
+       DEALLOCATE(Mesh%Tb)
+       NULLIFY(Mesh%Tb)
     END IF
     IF (ASSOCIATED(Mesh%Tb_gmsh)) THEN
-       DEALLOCATE (Mesh%Tb_gmsh)
+       DEALLOCATE(Mesh%Tb_gmsh)
+       NULLIFY(Mesh%Tb_gmsh)
     END IF
     IF (ASSOCIATED(Mesh%boundaryFlag)) THEN
-       DEALLOCATE (Mesh%boundaryFlag)
+       DEALLOCATE(Mesh%boundaryFlag)
+       NULLIFY(Mesh%boundaryFlag)
     END IF
     IF (ALLOCATED(Mesh%F)) THEN
        DEALLOCATE (Mesh%F)
@@ -230,9 +242,11 @@ CONTAINS
     END IF
     IF (ASSOCIATED(Mesh%X)) THEN
        DEALLOCATE (Mesh%X)
+       NULLIFY(Mesh%X)
     END IF
     IF (ASSOCIATED(Mesh%X_P1)) THEN
        DEALLOCATE (Mesh%X_P1)
+       NULLIFY(Mesh%X_P1)
     END IF
     IF (ALLOCATED(Mesh%elemSize)) THEN
        DEALLOCATE (Mesh%elemSize)
@@ -242,6 +256,7 @@ CONTAINS
     END IF
     IF (ASSOCIATED(Mesh%toroidal)) THEN
        DEALLOCATE (Mesh%toroidal)
+        NULLIFY(Mesh%toroidal)
     END IF
     IF (ALLOCATED(Mesh%periodic_faces)) THEN
        DEALLOCATE (Mesh%periodic_faces)
@@ -250,21 +265,27 @@ CONTAINS
     ! sol type
     IF (ASSOCIATED(sol%u)) THEN
        DEALLOCATE (sol%u)
+       NULLIFY(sol%u)
     END IF
     IF (ASSOCIATED(sol%u_conv)) THEN
        DEALLOCATE (sol%u_conv)
+       NULLIFY(sol%u_conv)
     END IF
     IF (ASSOCIATED(sol%q)) THEN
        DEALLOCATE (sol%q)
+       NULLIFY(sol%q)
     END IF
     IF (ASSOCIATED(sol%q_conv)) THEN
        DEALLOCATE (sol%q_conv)
+       NULLIFY(sol%q_conv)
     END IF
     IF (ASSOCIATED(sol%u_tilde)) THEN
        DEALLOCATE (sol%u_tilde)
+       NULLIFY(sol%u_tilde)
     END IF
     IF (ASSOCIATED(sol%u_tilde0)) THEN
        DEALLOCATE (sol%u_tilde0)
+       NULLIFY(sol%u_tilde0)
     END IF
     IF (ALLOCATED(sol%u0)) THEN
        DEALLOCATE (sol%u0)
@@ -331,46 +352,59 @@ CONTAINS
     ! MatK
     IF (ASSOCIATED(MatK%rowptr)) THEN
        DEALLOCATE (MatK%rowptr)
+       NULLIFY(MatK%rowptr)
     END IF
     IF (ASSOCIATED(MatK%cols)) THEN
        DEALLOCATE (MatK%cols)
+       NULLIFY(MatK%cols)
     END IF
     IF (ASSOCIATED(MatK%vals)) THEN
        DEALLOCATE (MatK%vals)
+       NULLIFY(MatK%vals)
     END IF
     IF (ASSOCIATED(MatK%loc2glob)) THEN
        DEALLOCATE (MatK%loc2glob)
+       NULLIFY(MatK%loc2glob)
     END IF
 
     ! RHS
     IF (ASSOCIATED(RHS%vals)) THEN
        DEALLOCATE (RHS%vals)
+       NULLIFY(RHS%vals)
     END IF
     IF (ASSOCIATED(RHS%loc2glob)) THEN
        DEALLOCATE (RHS%loc2glob)
+       NULLIFY(RHS%loc2glob)
     END IF
 
     ! Physics
     IF (ASSOCIATED(phys%B)) THEN
        DEALLOCATE (phys%B)
+       NULLIFY(phys%B)
     END IF
     IF (ASSOCIATED(phys%magnetic_flux)) THEN
        DEALLOCATE (phys%magnetic_flux)
+       NULLIFY(phys%magnetic_flux)
     END IF
     IF (ASSOCIATED(phys%magnetic_psi)) THEN
        DEALLOCATE (phys%magnetic_psi)
+       NULLIFY(phys%magnetic_psi)
     END IF
     IF (ASSOCIATED(phys%Bperturb)) THEN
        DEALLOCATE (phys%Bperturb)
+       NULLIFY(phys%Bperturb)
     END IF
     IF (ASSOCIATED(phys%phyVarNam)) THEN
        DEALLOCATE (phys%phyVarNam)
+       NULLIFY(phys%phyVarNam)
     END IF
     IF (ASSOCIATED(phys%conVarNam)) THEN
        DEALLOCATE (phys%conVarNam)
+       NULLIFY(phys%conVarNam)
     END IF
     IF (ASSOCIATED(phys%Jtor)) THEN
        DEALLOCATE (phys%Jtor)
+       NULLIFY(phys%Jtor)
     END IF
 
     IF (ALLOCATED(phys%diff_nn_Vol)) THEN
@@ -393,23 +427,28 @@ CONTAINS
     END IF
     IF (ASSOCIATED(phys%puff_exp)) THEN
        DEALLOCATE (phys%puff_exp)
+       NULLIFY(phys%puff_exp)
     END IF
 
 #ifdef KEQUATION
     IF (ASSOCIATED(phys%omega)) THEN
        DEALLOCATE (phys%omega)
+       NULLIFY(phys%omega)
     END IF
     IF (ASSOCIATED(phys%q_cyl)) THEN
        DEALLOCATE (phys%q_cyl)
+       NULLIFY(phys%q_cyl)
     END IF
 #endif
 
     ! magnetic
     IF (ASSOCIATED(magn%coils_rmp)) THEN
        DEALLOCATE (magn%coils_rmp)
+       NULLIFY(magn%coils_rmp)
     END IF
     IF (ASSOCIATED(magn%coils_ripple)) THEN
        DEALLOCATE (magn%coils_ripple)
+       NULLIFY(magn%coils_ripple)
     END IF
 
     IF (ALLOCATED(simpar%physvar_refval)) THEN
@@ -425,15 +464,19 @@ CONTAINS
     ! Mesh
     IF (ASSOCIATED(Mesh%T)) THEN
        DEALLOCATE (Mesh%T)
+       NULLIFY(Mesh%T)
     END IF
     IF (ASSOCIATED(Mesh%Tlin)) THEN
        DEALLOCATE (Mesh%Tlin)
+       NULLIFY(Mesh%Tlin)
     END IF
     IF (ASSOCIATED(Mesh%Tb)) THEN
        DEALLOCATE (Mesh%Tb)
+       NULLIFY(Mesh%Tb)
     END IF
     IF (ASSOCIATED(Mesh%boundaryFlag)) THEN
        DEALLOCATE (Mesh%boundaryFlag)
+       NULLIFY(Mesh%boundaryFlag)
     END IF
     IF (ALLOCATED(Mesh%F)) THEN
        DEALLOCATE (Mesh%F)
@@ -467,6 +510,10 @@ CONTAINS
     END IF
     IF (ASSOCIATED(Mesh%X)) THEN
        DEALLOCATE (Mesh%X)
+       NULLIFY(Mesh%X)
+    END IF
+    IF (ALLOCATED(Mesh%flag_elems_sc)) THEN
+       DEALLOCATE (Mesh%flag_elems_sc)
     END IF
     IF (ALLOCATED(Mesh%elemSize)) THEN
        DEALLOCATE (Mesh%elemSize)
@@ -476,6 +523,7 @@ CONTAINS
     END IF
     IF (ASSOCIATED(Mesh%toroidal)) THEN
        DEALLOCATE (Mesh%toroidal)
+       NULLIFY(Mesh%toroidal)
     END IF
     IF (ALLOCATED(Mesh%periodic_faces)) THEN
        DEALLOCATE (Mesh%periodic_faces)
@@ -483,34 +531,45 @@ CONTAINS
 
 #ifdef PARALL
     IF (ASSOCIATED(Mesh%loc2glob_fa)) THEN
-       DEALLOCATE (Mesh%loc2glob_fa)
+       DEALLOCATE(Mesh%loc2glob_fa)
+       NULLIFY(Mesh%loc2glob_fa)
     END IF
     IF (ASSOCIATED(Mesh%loc2glob_el)) THEN
-       DEALLOCATE (Mesh%loc2glob_el)
+       DEALLOCATE(Mesh%loc2glob_el)
+       NULLIFY(Mesh%loc2glob_el)
     END IF
     IF (ASSOCIATED(Mesh%loc2glob_nodes)) THEN
-       DEALLOCATE (Mesh%loc2glob_nodes)
+       DEALLOCATE(Mesh%loc2glob_nodes)
+       NULLIFY(Mesh%loc2glob_nodes)
     END IF
     IF (ASSOCIATED(Mesh%ghostfaces)) THEN
-       DEALLOCATE (Mesh%ghostfaces)
+       DEALLOCATE(Mesh%ghostfaces)
+       NULLIFY(Mesh%ghostfaces)
     END IF
     IF (ASSOCIATED(Mesh%ghostelems)) THEN
-       DEALLOCATE (Mesh%ghostelems)
+       DEALLOCATE(Mesh%ghostelems)
+       NULLIFY(Mesh%ghostelems)
     END IF
+
     IF (ASSOCIATED(Mesh%ghostflp)) THEN
-       DEALLOCATE (Mesh%ghostflp)
+       DEALLOCATE(Mesh%ghostflp)
+       NULLIFY(Mesh%ghostflp)
     END IF
     IF (ASSOCIATED(Mesh%ghostloc)) THEN
-       DEALLOCATE (Mesh%ghostloc)
+       DEALLOCATE(Mesh%ghostloc)
+       NULLIFY(Mesh%ghostloc)
     END IF
     IF (ASSOCIATED(Mesh%ghostpro)) THEN
-       DEALLOCATE (Mesh%ghostpro)
+       DEALLOCATE(Mesh%ghostpro)
+       NULLIFY(Mesh%ghostpro)
     END IF
     IF (ASSOCIATED(Mesh%ghelsloc)) THEN
-       DEALLOCATE (Mesh%ghelsloc)
+       DEALLOCATE(Mesh%ghelsloc)
+       NULLIFY(Mesh%ghelsloc)
     END IF
     IF (ASSOCIATED(Mesh%ghelspro)) THEN
-       DEALLOCATE (Mesh%ghelspro)
+       DEALLOCATE(Mesh%ghelspro)
+       NULLIFY(Mesh%ghelspro)
     END IF
     IF (ALLOCATED(Mesh%fc2sd)) THEN
        DEALLOCATE (Mesh%fc2sd)
@@ -544,16 +603,20 @@ CONTAINS
     TYPE(Mesh_type), INTENT(INOUT) :: Mesh_loc
     ! Mesh
     IF (ASSOCIATED(Mesh_loc%T)) THEN
-       DEALLOCATE (Mesh_loc%T)
+       DEALLOCATE(Mesh_loc%T)
+       NULLIFY(Mesh_loc%T)
     END IF
     IF (ASSOCIATED(Mesh_loc%Tlin)) THEN
-       DEALLOCATE (Mesh_loc%Tlin)
+       DEALLOCATE(Mesh_loc%Tlin)
+       NULLIFY(Mesh_loc%Tlin)
     END IF
     IF (ASSOCIATED(Mesh_loc%Tb)) THEN
-       DEALLOCATE (Mesh_loc%Tb)
+       DEALLOCATE(Mesh_loc%Tb)
+       NULLIFY(Mesh_loc%Tb)
     END IF
     IF (ASSOCIATED(Mesh_loc%boundaryFlag)) THEN
-       DEALLOCATE (Mesh_loc%boundaryFlag)
+       DEALLOCATE(Mesh_loc%boundaryFlag)
+       NULLIFY(Mesh_loc%boundaryFlag)
     END IF
     IF (ALLOCATED(Mesh_loc%F)) THEN
        DEALLOCATE (Mesh_loc%F)
@@ -587,6 +650,7 @@ CONTAINS
     END IF
     IF (ASSOCIATED(Mesh_loc%X)) THEN
        DEALLOCATE (Mesh_loc%X)
+       NULLIFY(Mesh_loc%X)
     END IF
     IF (ALLOCATED(Mesh_loc%elemSize)) THEN
        DEALLOCATE (Mesh_loc%elemSize)
@@ -596,6 +660,7 @@ CONTAINS
     END IF
     IF (ASSOCIATED(Mesh_loc%toroidal)) THEN
        DEALLOCATE (Mesh_loc%toroidal)
+       NULLIFY(Mesh_loc%toroidal)
     END IF
     IF (ALLOCATED(Mesh_loc%periodic_faces)) THEN
        DEALLOCATE (Mesh_loc%periodic_faces)
@@ -603,34 +668,44 @@ CONTAINS
 
 #ifdef PARALL
     IF (ASSOCIATED(Mesh_loc%loc2glob_fa)) THEN
-       DEALLOCATE (Mesh_loc%loc2glob_fa)
+       DEALLOCATE(Mesh_loc%loc2glob_fa)
+       NULLIFY(Mesh_loc%loc2glob_fa)
     END IF
     IF (ASSOCIATED(Mesh_loc%loc2glob_el)) THEN
-       DEALLOCATE (Mesh_loc%loc2glob_el)
+       DEALLOCATE(Mesh_loc%loc2glob_el)
+       NULLIFY(Mesh_loc%loc2glob_el)
     END IF
     IF (ASSOCIATED(Mesh_loc%loc2glob_nodes)) THEN
-       DEALLOCATE (Mesh_loc%loc2glob_nodes)
+       DEALLOCATE(Mesh_loc%loc2glob_nodes)
+       NULLIFY(Mesh_loc%loc2glob_nodes)
     END IF
     IF (ASSOCIATED(Mesh_loc%ghostfaces)) THEN
-       DEALLOCATE (Mesh_loc%ghostfaces)
+       DEALLOCATE(Mesh_loc%ghostfaces)
+       NULLIFY(Mesh_loc%ghostfaces)
     END IF
     IF (ASSOCIATED(Mesh_loc%ghostelems)) THEN
-       DEALLOCATE (Mesh_loc%ghostelems)
+       DEALLOCATE(Mesh_loc%ghostelems)
+       NULLIFY(Mesh_loc%ghostelems)
     END IF
     IF (ASSOCIATED(Mesh_loc%ghostflp)) THEN
-       DEALLOCATE (Mesh_loc%ghostflp)
+       DEALLOCATE(Mesh_loc%ghostflp)
+       NULLIFY(Mesh_loc%ghostflp)
     END IF
     IF (ASSOCIATED(Mesh_loc%ghostloc)) THEN
-       DEALLOCATE (Mesh_loc%ghostloc)
+       DEALLOCATE(Mesh_loc%ghostloc)
+       NULLIFY(Mesh_loc%ghostloc)
     END IF
     IF (ASSOCIATED(Mesh_loc%ghostpro)) THEN
-       DEALLOCATE (Mesh_loc%ghostpro)
+       DEALLOCATE(Mesh_loc%ghostpro)
+       NULLIFY(Mesh_loc%ghostpro)
     END IF
     IF (ASSOCIATED(Mesh_loc%ghelsloc)) THEN
-       DEALLOCATE (Mesh_loc%ghelsloc)
+       DEALLOCATE(Mesh_loc%ghelsloc)
+       NULLIFY(Mesh_loc%ghelsloc)
     END IF
     IF (ASSOCIATED(Mesh_loc%ghelspro)) THEN
-       DEALLOCATE (Mesh_loc%ghelspro)
+       DEALLOCATE(Mesh_loc%ghelspro)
+       NULLIFY(Mesh_loc%ghelspro)
     END IF
     IF (ALLOCATED(Mesh_loc%fc2sd)) THEN
        DEALLOCATE (Mesh_loc%fc2sd)
@@ -677,12 +752,15 @@ END SUBROUTINE free_mesh_loc
     END IF
     IF (ASSOCIATED(refElPol%coord3D)) THEN
        DEALLOCATE (refElPol%coord3D)
+       NULLIFY(refElPol%coord3D)
     END IF
     IF (ASSOCIATED(refElPol%coord2D)) THEN
        DEALLOCATE (refElPol%coord2D)
+       NULLIFY(refElPol%coord2D)
     END IF
     IF (ASSOCIATED(refElPol%coord1D)) THEN
        DEALLOCATE (refElPol%coord1D)
+       NULLIFY(refElPol%coord1D)
     END IF
     IF (ALLOCATED(refElPol%gauss_points3D)) THEN
        DEALLOCATE (refElPol%gauss_points3D)
@@ -748,12 +826,15 @@ END SUBROUTINE free_mesh_loc
     END IF
     IF (ASSOCIATED(refElTor%coord3D)) THEN
        DEALLOCATE (refElTor%coord3D)
+       NULLIFY(refElTor%coord3D)
     END IF
     IF (ASSOCIATED(refElTor%coord2D)) THEN
        DEALLOCATE (refElTor%coord2D)
+       NULLIFY(refElTor%coord2D)
     END IF
     IF (ASSOCIATED(refElTor%coord1D)) THEN
        DEALLOCATE (refElTor%coord1D)
+       NULLIFY(refElTor%coord1D)
     END IF
     IF (ALLOCATED(refElTor%gauss_points3D)) THEN
        DEALLOCATE (refElTor%gauss_points3D)
@@ -821,12 +902,15 @@ END SUBROUTINE free_mesh_loc
     END IF
     IF (ASSOCIATED(RefEl%coord3D)) THEN
        DEALLOCATE (RefEl%coord3D)
+       NULLIFY(RefEl%coord3D)
     END IF
     IF (ASSOCIATED(RefEl%coord2D)) THEN
        DEALLOCATE (RefEl%coord2D)
+       NULLIFY(RefEl%coord2D)
     END IF
     IF (ASSOCIATED(RefEl%coord1D)) THEN
        DEALLOCATE (RefEl%coord1D)
+       NULLIFY(RefEl%coord1D)
     END IF
     IF (ALLOCATED(RefEl%gauss_points3D)) THEN
        DEALLOCATE (RefEl%gauss_points3D)
@@ -902,12 +986,15 @@ END SUBROUTINE free_mesh_loc
     END IF
     IF (ASSOCIATED(RefEl%coord3D)) THEN
        DEALLOCATE (RefEl%coord3D)
+       NULLIFY(RefEl%coord3D)
     END IF
     IF (ASSOCIATED(RefEl%coord2D)) THEN
        DEALLOCATE (RefEl%coord2D)
+       NULLIFY(RefEl%coord2D)
     END IF
     IF (ASSOCIATED(RefEl%coord1D)) THEN
        DEALLOCATE (RefEl%coord1D)
+       NULLIFY(RefEl%coord1D)
     END IF
     IF (ALLOCATED(RefEl%gauss_points3D)) THEN
        DEALLOCATE (RefEl%gauss_points3D)
@@ -1013,12 +1100,30 @@ END SUBROUTINE free_mesh_loc
   ENDSUBROUTINE free_el_mat
 
   SUBROUTINE free_mat
-    IF(ASSOCIATED(MatK%cols)) DEALLOCATE (MatK%cols)
-    IF(ASSOCIATED(MatK%rowptr)) DEALLOCATE (MatK%rowptr)
-    IF(ASSOCIATED(MatK%vals)) DEALLOCATE (MatK%vals)
-    IF(ASSOCIATED(MatK%loc2glob)) DEALLOCATE (MatK%loc2glob)
-    IF(ASSOCIATED(rhs%loc2glob)) DEALLOCATE (rhs%loc2glob)
-    IF(ASSOCIATED(rhs%vals)) DEALLOCATE (rhs%vals)
+    IF(ASSOCIATED(MatK%cols)) THEN
+      DEALLOCATE (MatK%cols)
+      NULLIFY(MatK%cols)
+    ENDIF
+    IF(ASSOCIATED(MatK%rowptr)) THEN
+      DEALLOCATE (MatK%rowptr)
+      NULLIFY(MatK%rowptr)
+    ENDIF
+    IF(ASSOCIATED(MatK%vals)) THEN
+      DEALLOCATE (MatK%vals)
+      NULLIFY(MatK%vals)
+    ENDIF
+    IF(ASSOCIATED(MatK%loc2glob)) THEN
+      DEALLOCATE (MatK%loc2glob)
+      NULLIFY(MatK%loc2glob)
+    ENDIF
+    IF(ASSOCIATED(rhs%loc2glob)) THEN
+      DEALLOCATE (rhs%loc2glob)
+      NULLIFY(rhs%loc2glob)
+    ENDIF
+    IF(ASSOCIATED(rhs%vals)) THEN
+      DEALLOCATE (rhs%vals)
+      NULLIFY(rhs%vals)
+    ENDIF
 
   END SUBROUTINE free_mat
 
