@@ -1039,7 +1039,7 @@ CONTAINS
   FUNCTION computeAlphai(U) RESULT(res)
     REAL*8 :: U(:)
     REAL*8 :: res, aux
-    REAL, PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
     IF ((2./(3.*phys%Mref)*aux > 1.) .AND. (switch%testcase .NE. 2)) THEN
       res = (3.*phys%Mref/2)**(phys%epn)
@@ -1057,7 +1057,7 @@ CONTAINS
   FUNCTION computeAlphae(U) RESULT(res)
     REAL*8 :: U(:)
     REAL*8 :: res, aux
-    REAL, PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     aux = U(4)/U(1)
     IF ((2./(3.*phys%Mref)*aux > 1.) .AND. (switch%testcase .NE. 2)) THEN
       res = (3.*phys%Mref/2)**(phys%epn)
@@ -1076,7 +1076,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT):: res(:)
     real*8             :: aux, double_soft_deriv
-    real, parameter :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     ! applying softplus instead strong limit
     aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
     !double_soft_deriv = 1.
@@ -1108,7 +1108,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT):: res(:)
     real*8             :: aux, double_soft_deriv
-    real, parameter :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     ! applying softplus instead strong limit
     aux = U(4)/U(1)
     !double_soft_deriv = 1.
@@ -1158,7 +1158,7 @@ CONTAINS
   SUBROUTINE compute_s(U, s)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: s, U1, U4, U3
-    REAL, PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
     U3 = U(3)
@@ -1182,7 +1182,7 @@ CONTAINS
   SUBROUTINE compute_ds_dU(U, res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:), U1, U4, U3
-    REAL, PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
     U3 = U(3)
@@ -1216,7 +1216,7 @@ CONTAINS
   SUBROUTINE compute_Sohmic(U,Sohmic)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: Sohmic,U1,U4
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
     IF (U4<tol) U4=tol
@@ -1228,7 +1228,7 @@ CONTAINS
   SUBROUTINE compute_dSohmic_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
     IF (U4<tol) U4=tol
@@ -1248,7 +1248,7 @@ CONTAINS
   SUBROUTINE compute_niz(U,niz)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: niz,U1,U5
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U5 = U(5)
     IF (U1<tol) U1=tol
@@ -1260,7 +1260,7 @@ CONTAINS
   SUBROUTINE compute_dniz_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U5
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U5 = U(5)
     IF (U1<tol) U1=tol
@@ -1274,7 +1274,7 @@ CONTAINS
   SUBROUTINE compute_nrec(U,nrec)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: nrec,U1
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     IF (U1<tol) U1=tol
     nrec = U1**2
@@ -1284,7 +1284,7 @@ CONTAINS
   SUBROUTINE compute_dnrec_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     IF (U1<tol) U1=tol
     res = 0.
@@ -1295,7 +1295,7 @@ CONTAINS
   SUBROUTINE compute_fGammacx(U,fGammacx)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: fGammacx,U2,U5
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U2 = U(2)
     U5 = U(5)
     IF (U5<tol) U5=tol
@@ -1306,7 +1306,7 @@ CONTAINS
   SUBROUTINE compute_dfGammacx_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U2,U5
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U2 = U(2)
     U5 = U(5)
     IF (U5<tol) U5=tol
@@ -1319,7 +1319,7 @@ CONTAINS
   SUBROUTINE compute_fGammarec(U,fGammarec)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: fGammarec,U1,U2
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U2 = U(2)
     IF (U1<tol) U1=tol
@@ -1330,7 +1330,7 @@ CONTAINS
   SUBROUTINE compute_dfGammarec_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U2
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U2 = U(2)
     IF (U1<tol) U1=tol
@@ -1811,7 +1811,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmavcx,U1,U4,T0,E0
     REAL*8              :: p1,p2,p3,p4,p5
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1872,7 +1872,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmavcx,U1,U4,T0,E0
     REAL*8              :: p1,p2,p3,p4,p5
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1990,7 +1990,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavcx,U1,U2,U3,T0,E0,ti
     integer             :: i
-    real,parameter :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8, PARAMETER :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
@@ -2222,7 +2222,7 @@ CONTAINS
   SUBROUTINE compute_Tloss(U,Tloss)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: Tloss,U1,U4,T0
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -2235,7 +2235,7 @@ CONTAINS
   SUBROUTINE compute_dTloss_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -2251,7 +2251,7 @@ CONTAINS
   SUBROUTINE compute_Tlossrec(U,Tlossrec)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: Tlossrec,U1,U4,T0
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -2295,7 +2295,7 @@ CONTAINS
   SUBROUTINE compute_fEiiz(U,fEiiz)
     real*8, intent(IN) :: U(:)
     real*8             :: fEiiz,U1,U3,U5
-    real,parameter :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U3 = U(3)
     U5 = U(5)
     U1 = U(1)
@@ -2310,7 +2310,7 @@ CONTAINS
   SUBROUTINE compute_dfEiiz_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1,U3,U5
-    real,parameter :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U3 = U(3)
     U5 = U(5)
@@ -2330,7 +2330,7 @@ CONTAINS
   SUBROUTINE compute_fEirec(U,fEirec)
     real*8, intent(IN) :: U(:)
     real*8             :: fEirec,U1,U3
-    real,parameter :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U3 = U(3)
     if (U1<tol) U1=tol
@@ -2344,7 +2344,7 @@ CONTAINS
   SUBROUTINE compute_dfEirec_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1,U3
-    real,parameter :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U3 = U(3)
     if (U1<tol) U1=tol
@@ -2358,7 +2358,7 @@ CONTAINS
   SUBROUTINE compute_fEicx(U,fEicx)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: fEicx,U1,U2,U5
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U2 = U(2)
     U5 = U(5)
@@ -2371,7 +2371,7 @@ CONTAINS
   SUBROUTINE compute_dfEicx_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U2,U5
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U2 = U(2)
     U5 = U(5)
@@ -2392,7 +2392,7 @@ SUBROUTINE compute_cs(U, cs)
   REAL*8, INTENT(IN) :: U(:)
   REAL*8             :: U1,U2,U3,U4
   REAL*8, INTENT(OUT) :: cs
-  REAL,PARAMETER :: tol = 1e-20
+  REAL*8, PARAMETER :: tol = 1.e-20
   U1 = U(1)
   U2 = U(2)
   U3 = U(3)
@@ -2408,7 +2408,7 @@ SUBROUTINE compute_dcs_du(U, dcs_du)
   real*8, intent(IN) :: U(:)
   real*8             :: U1,U2,U3,U4,cs,cs_real,soft_deriv
   real*8, intent(OUT) :: dcs_du(:)
-  real,parameter :: tol = 1e-20
+  REAL*8, PARAMETER :: tol = 1.e-20
   U1 = U(1)
   U2 = U(2)
   U3 = U(3)
@@ -2442,7 +2442,7 @@ SUBROUTINE compute_ddk_du(U,xy,q_cyl,ddk_du)
     real*8              :: dcs_du(size(U,1))
     !softplus stuff
     real*8              :: double_soft_deriv
-    real,parameter :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
 
     ddk_du(:) = 0.
     !modification softplus dk
@@ -2468,7 +2468,7 @@ SUBROUTINE compute_gamma_I(U,Q, Btor, gradBtor, R, gamma_I)
     REAL*8, INTENT(IN) :: U(:), Q(:,:), gradBtor(:), Btor, R
     REAL*8             :: U1,U2,U3,U4, ti, te, gr_p_gr_b, cs, p, theta, ti_te
     REAL*8, INTENT(OUT) :: gamma_I
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
   U1 = U(1)
   U2 = U(2)
   U3 = U(3)
@@ -2498,7 +2498,7 @@ SUBROUTINE compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, gamma_ke)
   logical :: is_core
   real*8             :: n, v, ti, te, V0, nB, nu_e, DB, D_perp, nu_perp, d_star, rho_L, nu_star, L_para, dn_dr, dn_dz, C_Omega, tau_para, tau, C_star, aa, an, a_phi, b_nr, b_phir, b_ni, b_phii, gr, gi
   real*8, intent(OUT) :: gamma_ke
-  real, parameter :: tol = 1e-20, m_ratio = sqrt(3670.4829678537167), coulomb_log = 15.
+  REAL*8, PARAMETER :: tol = 1.e-20, m_ratio = sqrt(3670.4829678537167), coulomb_log = 15.
 
   n = max(tol, U(1))
   v = U(2)/n
@@ -2547,7 +2547,7 @@ SUBROUTINE compute_ce(U,Q, Btor, gradBtor, r,omega_c,q_cyl, ce)
     REAL*8, INTENT(IN) :: U(:), Q(:,:), gradBtor(:), r, Btor,omega_c,q_cyl
     REAL*8             :: U1,U2,U3, gamma_I, rhoL, cs, gamma_e , k_loc
     REAL*8, INTENT(OUT) :: ce
-    REAL,PARAMETER :: tol = 1e-20
+    REAL*8, PARAMETER :: tol = 1.e-20
   U1 = U(1)
   U2 = U(2)
   U3 = U(3)
@@ -2577,7 +2577,7 @@ SUBROUTINE compute_dissip(U, dissip)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: U6
     REAL*8             :: dissip
-    REAL,PARAMETER :: tol = 1e-10
+    REAL*8, PARAMETER :: tol = 1.e-10
   U6 = U(6)
   dissip = U6**2
 END SUBROUTINE  compute_dissip
@@ -2586,7 +2586,7 @@ SUBROUTINE compute_ddissip_du(U, res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: U6
     REAL*8             :: res(:)
-    REAL,PARAMETER :: tol = 1e-10
+    REAL*8, PARAMETER :: tol = 1.e-10
   U6 = U(6)
   !if (U6 < tol) U6 = tol
   res = 0.
@@ -2603,7 +2603,7 @@ END SUBROUTINE  compute_ddissip_du
     REAL*8             :: U1,U2,U3,U4,U5
     REAL*8             ::sigmaviz,sigmavcx,cs_n,Dpn_th
     REAL*8             :: Grad_Pn(simpar%Ndim)
-    REAL,PARAMETER :: tol = 1e-10
+    REAL*8, PARAMETER :: tol = 1.e-10
 	   Dpn = 0.
 	   U1 = U(1)
 	   U2 = U(2)
@@ -2667,7 +2667,7 @@ END SUBROUTINE  compute_ddissip_du
     REAL*8, INTENT(IN) :: U(:)
     REAL*8, INTENT(OUT):: Vpn(:)
     REAL*8             :: U1,U2,U3,U5
-    REAL,PARAMETER :: tol = 1e-12
+    REAL*8, PARAMETER :: tol = 1.e-12
 	   Vpn = 0.
     U1 = U(1)
     U2 = U(2)
@@ -2685,7 +2685,7 @@ END SUBROUTINE  compute_ddissip_du
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: dVpn_dU(:, :)
     REAL*8              :: U1,U2,U3,U5
-    REAL,PARAMETER :: tol = 1e-12
+    REAL*8, PARAMETER :: tol = 1.e-12
 	   U1 = U(1)
     U2 = U(2)
 	   U3 = U(3)
@@ -3577,3 +3577,4 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 
 
 END MODULE physics
+
