@@ -565,14 +565,10 @@ MODULE types
   TYPE Sol_type
      REAL*8, POINTER     :: u(:) => NULL() ! Elemental solution
      REAL*8, POINTER     :: u_conv(:) => NULL()
-     REAL*8, POINTER     :: u_init(:) => NULL()
-     REAL*8, POINTER     :: u0_init(:) => NULL()
      REAL*8, POINTER     :: u_tilde(:) => NULL() ! Face solution
      REAL*8, POINTER     :: u_tilde0(:) => NULL() ! Face solution
      REAL*8, POINTER     :: q(:) => NULL() ! Elemental solution for the gradient
      REAL*8, POINTER     :: q_conv(:) => NULL()
-     REAL*8, POINTER     :: q_init(:) => NULL()
-     REAL*8, POINTER     :: q0_init(:) => NULL()
      REAL*8, ALLOCATABLE :: u0(:, :) ! Elemental solution at previous time steps
      REAL*8, ALLOCATABLE :: tres(:) ! Time residual
      REAL*8, ALLOCATABLE :: time(:) ! Time evolution
