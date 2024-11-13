@@ -50,7 +50,7 @@ PROGRAM MHDG
   INTEGER,ALLOCATABLE          :: vector_nodes_unique(:,:)
   INTEGER                      :: N_n_vertex, n_osc
   INTEGER*8                    :: file_id
-  TYPE(Mesh_type)              :: Mesh_prec, Mesh_init
+  TYPE(Mesh_type)              :: Mesh_prec
 #ifdef PARALL
   TYPE(Mesh_type)              :: Mesh_glob
   INTEGER, ALLOCATABLE         :: T_glob(:,:)
@@ -315,8 +315,6 @@ PROGRAM MHDG
 
 
   ! CALL HDF5_save_mesh("./newmesh_pre_init_pre.h5", Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
-  CALL deep_copy_mesh_struct(Mesh, Mesh_init)
-  CALL deep_copy_mesh_struct(Mesh, Mesh_init)
 #ifdef TOR3D
   ! Define toroidal discretization
   CALL define_toroidal_discretization
@@ -402,21 +400,10 @@ PROGRAM MHDG
      CALL init_sol()
   END IF
 
-
-
-  ALLOCATE (sol%u_init(SIZE(sol%u)))
-  ALLOCATE (sol%q_init(SIZE(sol%q)))
-  ALLOCATE (sol%u0_init(SIZE(sol%u)))
-  ALLOCATE (sol%q0_init(SIZE(sol%q)))
   ALLOCATE (sol%u_conv(SIZE(sol%u)))
   ALLOCATE (sol%q_conv(SIZE(sol%q)))
 
   !! without blob!!
-  sol%u_init = sol%u
-  sol%q_init = sol%q
-  sol%u0_init = sol%u
-  sol%q0_init = sol%q
-
   IF (switch%pertini .EQ. 1) THEN
      CALL add_perturbation()
      WRITE(6,*) "Adding perturbation to the initial solution"
@@ -490,7 +477,6 @@ PROGRAM MHDG
      count_adapt = count_adapt + 1
 
      Mesh%X = Mesh%X*phys%lscale
-     Mesh_init%X = Mesh_init%X*phys%lscale
 
      !DEALLOCATE ALL BEFORE ADAPTIVITY
      DEALLOCATE(phys%B)
@@ -502,14 +488,8 @@ PROGRAM MHDG
      CALL free_mat
 
      CALL deep_copy_mesh_struct(Mesh,Mesh_prec)
-     CALL deep_copy_mesh_struct(Mesh,Mesh_init)
      CALL deep_copy_refel_struct(refElPol,refElPol_prec)
      CALL adaptivity_indicator_estimator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
-     !CALL adaptivity_estimator(mesh_name, adapt%param_est, count_adapt, order)
-     !CALL adaptivity_indicator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order, Mesh_init,Mesh_prec,refElPol_prec)
-     !CALL HDF5_save_mesh("./newmesh.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-
-     !CALL HDF5_save_mesh("./old_mesh.h5", Mesh_prec%Ndim, Mesh_prec%Nelems, Mesh_prec%Nextfaces, Mesh_prec%Nnodes, Mesh_prec%Nnodesperelem, Mesh_prec%Nnodesperface, Mesh_prec%elemType, Mesh_prec%T, Mesh_prec%X, Mesh_prec%Tb, Mesh_prec%boundaryFlag)
 
 #ifdef PARALL
      !CALL split_mesh(MPIvar%glob_size, 2, .FALSE.)
@@ -552,26 +532,6 @@ PROGRAM MHDG
      WRITE(*,*) "Number of elements previous mesh: ", SIZE(Mesh_prec%T,1)
      WRITE(*,*) "Number of elements current mesh:  ", SIZE(Mesh%T,1)
      CALL deep_copy_mesh_struct(Mesh,Mesh_prec)
-
-
-     ! Mesh%X = Mesh%X*phys%lscale
-     ! CALL projectSolutionDifferentMeshes_general(Mesh_init, Mesh, sol%u0_init, sol%q0_init, sol%u_init, sol%q_init)
-     !
-     ! call HDF5_create('./fortran_save.h5', file_id, ierr)
-     ! call HDF5_array2D_saving_int(file_id, Mesh_init%T, size(Mesh_init%T,1), size(Mesh_init%T,2), 'T_f_init')
-     ! call HDF5_array2D_saving(file_id, Mesh_init%X, size(Mesh_init%X,1), size(Mesh_init%X,2), 'X_f_init')
-     ! call HDF5_array2D_saving_int(file_id, Mesh%T, size(Mesh%T,1), size(Mesh%T,2), 'T_f')
-     ! call HDF5_array2D_saving(file_id, Mesh%X, size(Mesh%X,1), size(Mesh%X,2), 'X_f')
-     ! call HDF5_array1D_saving(file_id, sol%u0_init, size(sol%u0_init), 'u0_init_f')
-     ! call HDF5_array1D_saving(file_id, sol%q0_init, size(sol%q0_init), 'q0_init_f')
-     ! call HDF5_array1D_saving(file_id, sol%u_init, size(sol%u_init), 'u_f')
-     ! call HDF5_array1D_saving(file_id, sol%q_init, size(sol%q_init), 'q_f')
-     ! call HDF5_close(file_id)
-     ! pause
-     !
-     ! Mesh%X = Mesh%X/phys%lscale
-
-
 
      ! Initialize magnetic field (the Mesh is needed)
      CALL initialize_magnetic_field()
@@ -1283,7 +1243,6 @@ PROGRAM MHDG
   IF (lssolver%sollib .EQ. 1) THEN
 #ifdef WITH_PASTIX
      CALL terminate_mat_PASTIX()
-
      ! MPI finalization
      CALL MPI_finalize(IERR)
 #endif
@@ -1298,6 +1257,12 @@ PROGRAM MHDG
      CALL MPI_finalize(IERR)
 #endif
   ENDIF
+
+  CALL free_all
+#ifdef PARALL
+  CALL free_mesh_loc(Mesh_glob)
+#endif
+  CALL free_mesh_loc(Mesh_prec)
 
 CONTAINS
 
