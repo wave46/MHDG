@@ -1124,7 +1124,7 @@ CONTAINS
   !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,psiel,psifl,isdir,Jtorel,El_n,El_nn) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el) &
   !$OMP FIRSTPRIVATE(phys,Mesh)
-#endif  
+#endif
   ALLOCATE(Xel(Mesh%Nnodesperelem,2))
   ALLOCATE(Xfl(refElPol%Nfacenodes,2))
 
@@ -1139,13 +1139,13 @@ CONTAINS
     ! Magnetic field of the nodes of the element
     Bel = phys%B(Mesh%T(iel,:),:)
     fluxel = phys%magnetic_flux(Mesh%T(iel,:))
-    
+
     ! Normalized magnetic flux of the nodes of the element: PSI el
     psiel = phys%magnetic_psi(Mesh%T(iel,:))
 
 #ifdef KEQUATION
     !omega and q_cyl on nodes of the element
-    
+
      IF (switch%testcase == 60) THEN
       q_cylel = geom%q
       ! to finish this
@@ -1155,7 +1155,7 @@ CONTAINS
       omegael = phys%omega(Mesh%T(iel,:))
      ENDIF
 #endif
-    
+
     ! Ohmic heating (toroidal current)
     IF (switch%ohmicsrc) THEN
       Jtorel = phys%Jtor(Mesh%T(iel,:))
@@ -1199,7 +1199,7 @@ CONTAINS
        tau_save_el = 0.
        xy_g_save_el = 0;
      ENDIF
-    
+
     DO ifa=1,refElPol%Nfaces
       iface = Mesh%F(iel,ifa)
       isdir = Mesh%Fdir(iel,ifa)
@@ -1209,10 +1209,10 @@ CONTAINS
 
       ! Magnetic field of the nodes of the face
       Bfl = phys%B(Mesh%T(iel,refElPol%face_nodes(ifa,:)),:)
-   
+
       ! Normalized magnetic flux of the nodes of the face: PSI fl
       psifl = phys%magnetic_psi(Mesh%T(iel,refElPol%face_nodes(ifa,:)))
-            
+
       ! Face solution
       indf = (iface-1)*Npfl + (/(i,i=1,Npfl)/)
       uf = lres(indf,:)
@@ -1223,7 +1223,7 @@ CONTAINS
       qef = qres(inde(refElPol%face_nodes(ifa,:)),:)
 #ifndef KEQUATION
         IF (iface.LE.Mesh%Nintfaces) THEN
-        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)		 
+        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
         ELSE
            IF (Mesh%periodic_faces(iface-Mesh%Nintfaces).EQ.0) THEN
           CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
@@ -1240,7 +1240,7 @@ CONTAINS
       endif
 
       if (iface.le.Mesh%Nintfaces) then
-        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)		 
+        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
       else
         if (Mesh%periodic_faces(iface-Mesh%Nintfaces).eq.0) then
           CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
@@ -1250,7 +1250,7 @@ CONTAINS
         endif
       endif
 #endif
-	 
+
       ! Flip faces
         IF (Mesh%flipface(iel,ifa)) THEN
         elMat%Alq(ind_loc(ifa,:),:,iel) = elMat%Alq(ind_loc(ifa,perm),:,iel)
@@ -1260,7 +1260,7 @@ CONTAINS
         elMat%fh(ind_loc(ifa,:),iel) = elMat%fh(ind_loc(ifa,perm),iel)
         END IF
     END DO
-	
+
      IF (save_tau) THEN
        indtausave = (iel - 1)*refElPol%Nfaces*refElPol%Ngauss1d+(/(i,i=1,refElPol%Nfaces*refElPol%Ngauss1d)/)
 	   phys%diff_nn_Fac(indtausave) = diff_nn_Fac_el
@@ -1365,7 +1365,7 @@ CONTAINS
     real*8                        :: Pi,sigma,sigmax,sigmay,x0,y0,A,r
     real*8                        :: th_n = 1.e-14
     real*8                        :: Vnng(Ndim)
-    
+
       IF (save_tau) THEN
        Xg_el = 0.
        diff_nn_Vol_el = 0.
@@ -1415,10 +1415,10 @@ CONTAINS
       omega = MATMUL(refElPol%N2D,omegael)
       q_cyl = MATMUL(refElPol%N2D,q_cylel)
 #endif
-   
+
     ! Normalized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N2D,psiel)
-  
+
     ! toroidal current at Gauss points
     IF (switch%ohmicsrc) THEN
          Jtor = MATMUL(refElPol%N2D,Jtorel)
@@ -1437,11 +1437,11 @@ CONTAINS
     CALL setLocalDiff(xy,ueg,qeg,diff_iso_vol,diff_ani_vol,q_cyl)
 #endif
 
-    
+
     if (save_tau) then
        diff_nn_Vol_el = diff_iso_vol(5,5,:)
       ENDIF
-    
+
       IF (switch%shockcp.GT.0) THEN
          auxdiffsc = MATMUL(refElPol%N2D,Mesh%scdiff_nodes(iel,:))
          DO i=1,Neq
@@ -1460,17 +1460,17 @@ CONTAINS
     ! Constant sources
     ! Body force at the integration points
     CALL body_force(xy(:,1),xy(:,2),force)
-    
+
     ! Some sources to limit low density and temeprauture values
     !DO g=1, Ng2d
     !   IF (ueg(g,1) .lt. 1.e-7) force(g,1) = 1.e-7 - ueg(g,1) !Th at n = 1.00E+12 [m^(-3)]
-    !   IF (upg(g,7) .lt. 6.e-4) force(g,3) = 3./2.*ueg(g,1)*(1.e-3 - upg(g,7)) !Th at Ti 0.03 eV 
+    !   IF (upg(g,7) .lt. 6.e-4) force(g,3) = 3./2.*ueg(g,1)*(1.e-3 - upg(g,7)) !Th at Ti 0.03 eV
     !   IF (upg(g,8) .lt. 6.e-4) force(g,4) = 3./2.*ueg(g,1)*(1.e-3 - upg(g,8)) !Th at Te 0.03 eV
     !   IF (ueg(g,5) .gt. 1.e+0) force(g,5) = 1.e+0 - ueg(g,5) !Th at nEe
     !    IF (ueg(g,3) .lt. 2.e-4) force(g,3) = 2.e-5
     !    IF (ueg(g,4) .lt. 2.e-4) force(g,4) = 2.e-5
     !END DO
-   
+
     ! Some sources for West cases
       IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
       ! Compute flux surfaces and normalise them
@@ -1518,7 +1518,7 @@ CONTAINS
 #ifdef TEMPERATURE
       ! additional heating
 
-      if (phys%heating_amplitude>1e-10) then  
+      if (phys%heating_amplitude>1e-10) then
         if (abs(xy(g,1)-(phys%r_axis+phys%heating_dr))<3.*abs(phys%heating_sigmar)) then
           if (abs(xy(g,2)-(phys%z_axis+phys%heating_dz))<3.*abs(phys%heating_sigmaz)) then
             force(g,phys%heating_equation) = force(g,phys%heating_equation)+phys%heating_amplitude*exp(-((xy(g,1)-(phys%r_axis+phys%heating_dr))**2)/(phys%heating_sigmar**2)) &
@@ -1529,8 +1529,8 @@ CONTAINS
 #endif
       END DO
     END IF
-    
-    ! Some sources for ITER cases    
+
+    ! Some sources for ITER cases
       IF (switch%testcase .GE. 80) THEN
        ! Compute flux surfaces and normalise them
          fluxg = MATMUL(refElPol%N2D,fluxel)
@@ -1543,7 +1543,7 @@ CONTAINS
             A = (phys%lscale**2)/SQRT((2*Pi*sigma**2))
           ! Only energy sources: density from neutral model
             IF (fluxg(g) .LE. phys%fluxg_trunc) THEN
-#ifdef NEUTRAL   
+#ifdef NEUTRAL
 #ifdef TEMPERATURE
                force(g,3) = phys%ener_source_e*A*EXP(-((fluxg(g)-x0)**2)/(2*sigma**2))
                force(g,4) = phys%ener_source_ee*A*EXP(-((fluxg(g)-x0)**2)/(2*sigma**2))
@@ -1561,7 +1561,7 @@ CONTAINS
 #endif
 #endif
        ENDIF
-    ENDIF 
+    ENDIF
     ! end sources
 
     ! Some sources for Circular cases
@@ -1676,11 +1676,11 @@ CONTAINS
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
         &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g),Vnng)
 #endif
-        
+
          IF (save_tau) THEN
          v_nn_Vol_el(g,:) = Vnng
          ENDIF
-      
+
     END DO ! END loop in volume Gauss points
       CALL do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)
       DEALLOCATE(Auq,Auu,rhs)
@@ -1693,8 +1693,8 @@ CONTAINS
 #ifndef KEQUATION
   SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
 #else
-  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)    
-#endif    
+  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+#endif
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
     real*8,intent(IN)         :: Bfl(:,:), psifl(:)
@@ -1764,7 +1764,7 @@ CONTAINS
     ! q_cyl at Gauss points
     q_cyl = matmul(refElPol%N1D,q_cylfl)
 #endif
-   
+
     ! Normalaized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N1d,psifl)
 
@@ -1851,7 +1851,7 @@ CONTAINS
         v_nn_Fac_el((ifa -1)*Ngauss + g,:) = Vnng
         xy_g_save_el((ifa - 1)*Ngauss + g,:) = xyf(g,:)
          ENDIF
-      
+
 
     END DO ! Gauss points
 !stop
@@ -1865,8 +1865,8 @@ CONTAINS
 #ifndef KEQUATION
   SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
 #else
-  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)    
-#endif    
+  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+#endif
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
     real*8,intent(IN)         :: Bfl(:,:), psifl(:)
@@ -1896,7 +1896,7 @@ CONTAINS
     real*8                    :: Vnng(Ndim)
 #ifdef KEQUATION
     real*8                    :: q_cyl(Ng1d)
-#endif	
+#endif
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
 
@@ -1935,11 +1935,11 @@ CONTAINS
       CALL analytical_solution(iel,xyf(:,1),xyf(:,2),ufg)
     ELSE
 #ifdef PARALL
-      IF (Mesh%flipFace(iel,ifa)) THEN
+      ! FOR SOME UNKNOWN REASON EXTERNAL FACES DO NOT NEED TO BE FLIPPED ONLY AT THE VERY FIRST ITERATION.
+      IF (Mesh%flipFace(iel,ifa) .AND. (.NOT. matK%start)) THEN
         uf = uf((/(i,i=Npfl,1,-1)/),:)
       ENDIF
       ! TODO: VERIFY IF I NEED TO FLIP ALSO xyf,b and Bmod in this case!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 #endif
          ufg = MATMUL(refElPol%N1D,uf)
     END IF
@@ -1959,7 +1959,7 @@ CONTAINS
        indsave = (ifa -1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(5,5,:)
       END IF
-	
+
       IF (switch%shockcp.GT.0) THEN
          auxdiffsc = MATMUL(refElPol%N1D,Mesh%scdiff_nodes(iel,refElPol%face_nodes(ifa,:)))
          DO i=1,Neq
@@ -1977,7 +1977,7 @@ CONTAINS
     DO g = 1,NGauss
 
       ! Calculate the integration weight
-         xyDerNorm_g = NORM2(xyDer(g,:))
+      xyDerNorm_g = NORM2(xyDer(g,:))
       dline = refElPol%gauss_weights1D(g)*xyDerNorm_g
       IF (switch%axisym) THEN
         dline = dline*xyf(g,1)
@@ -2213,7 +2213,7 @@ CONTAINS
     real*8                    :: dniz_dU(Neq),dnrec_dU(Neq),dfGammacx_dU(Neq),dfGammarec_dU(Neq)
 #ifdef TEMPERATURE
         REAL*8                    :: sigmaviz,sigmavrec,sigmavcx,Tloss,Tlossrec,fEiiz,fEirec,fEicx
-    !amjuel radiation losses 
+    !amjuel radiation losses
     real*8                    :: sigmavEiz,sigmavErec
     real*8                    :: dsigmavEiz_dU(Neq),dsigmavErec_dU(Neq)
         REAL*8                    :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq),dTloss_dU(Neq),dTlossrec_dU(Neq)
@@ -2244,7 +2244,7 @@ CONTAINS
 
     ! Jacobian for convection term
     CALL jacobianMatrices(ue,A)
-    
+
     ! Jacobian for pinch term
     CALL computePinch(b,psi,APinch)
 
@@ -2318,7 +2318,7 @@ CONTAINS
     ENDIF
 
         Zet = MATMUL(Qpr,dW_dU)       ! Ndim x Neq
-    
+
 #ifdef NEUTRALP
     ! Compute Vpn(U^(k-1))
     CALL computeVpn(ue,Vpn)
@@ -2329,31 +2329,31 @@ CONTAINS
 	   ! Compute Dpn(U^(k-1))
     CALL computeDpn(ue,Qpr,Vpn,Dpn)
     ! Compute dDpn_dU(U^(k-1))
-    CALL compute_dDpn_dU(ue,Qpr,Vpn,dDpn_dU) 
-    ! Reduce Grad Pn for low collision regime 
-    ! Threshold set at 0.5xGradPn for Ti = 0.2 eV 
+    CALL compute_dDpn_dU(ue,Qpr,Vpn,dDpn_dU)
+    ! Reduce Grad Pn for low collision regime
+    ! Threshold set at 0.5xGradPn for Ti = 0.2 eV
     Gammaredpn = 1.
     Tmin = 0.2/simpar%refval_temperature
         IF (Tmin/upe(7) .LE. 1.) Gammaredpn = Gammaredpn*Tmin/upe(7)
-    Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upe(7)*Dpn 
+    Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upe(7)*Dpn
     ! Compute Gammaredpn(U^(k-1))
-    !CALL computeGammared(ue,Gammaredpn) 
-    !gmipn = matmul(Qpr,Vveci) 
+    !CALL computeGammared(ue,Gammaredpn)
+    !gmipn = matmul(Qpr,Vveci)
     !CALL computeGammaLim(ue,Qpr,Vpn,GammaLim)
-    ! Set Grad Ti = 0. for low collision regime 
+    ! Set Grad Ti = 0. for low collision regime
     ! (back to diffusion equation for neutral density)
-    !CALL computeAlphaCoeff(ue,Qpr,Vpn,Alphanp)  
-    !CALL computeBetaCoeff(ue,Qpr,Vpn,Betanp)  
+    !CALL computeAlphaCoeff(ue,Qpr,Vpn,Alphanp)
+    !CALL computeBetaCoeff(ue,Qpr,Vpn,Betanp)
     !Dpn = Alphanp*Dpn
     !dDpn_dU = Alphanp*dDpn_dU
-    !Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upe(7)*Dpn 
+    !Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upe(7)*Dpn
     !IF (Dnn .gt. phys%diff_nn) Dnn = phys%diff_nn
     !IF (Dpn .gt. phys%diff_nn) THEN
     !   Dpn = Alphanp*Dpn !0.
     !   dDpn_dU = Alphanp*dDpn_dU !0.
     !   Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upe(7)*phys%diff_nn
     !   END IF
-    ! Set Gamma Convective = cs_n*n_n for low collision regime 
+    ! Set Gamma Convective = cs_n*n_n for low collision regime
     !IF (Dpn .gt. phys%diff_nn) THEN
     !   Dpn = 0.
     !   dDpn_dU = 0.
@@ -2581,7 +2581,7 @@ CONTAINS
                 Auu(:,:,z) =Auu(:,:,z) + (NxyzNi(:,:,k)*Dnn_dU(j)*Qpr(k,i))
                     ENDDO
                  ENDDO
-              
+
             DO k = 1, Ndim
               rhs(:,i) = rhs(:,i)+Dnn_dU_U*Qpr(k,i)*Nxyzg(:,k)
                  ENDDO
@@ -2591,18 +2591,18 @@ CONTAINS
           DO j=1,6
             z = i+(j-1)*Neq
                     IF (j==6) THEN
-              Auu(:,:,z) = Auu(:,:, z) - (gamma_I-ddissip_du(j))*NNi 
+              Auu(:,:,z) = Auu(:,:, z) - (gamma_I-ddissip_du(j))*NNi
             ENDIF
           END DO
           rhs(:,i) = rhs(:,i) + dissip*Ni
 #endif
-#ifdef NEUTRALP		  
+#ifdef NEUTRALP
 		      ELSEIF (i == 5) THEN
 		         DO j = 1,5
 			           DO k = 1,Ndim
 			              z = i+(k-1)*Neq+(j-1)*Neq*Ndim
-                    Auu(:,:,i+(j-1)*Neq) = Auu(:,:,i+(j-1)*Neq) + (Dpn*Taupn(k,j) + dDpn_dU(j)*gmpn(k))*NxyzNi(:,:,k) 
-                    !Auu(:,:,i+(j-1)*Neq) = Auu(:,:,i+(j-1)*Neq) - Gammaredpn*(Dpn*Taui(k,j) + dDpn_dU(j)*gmipn(k))*NxyzNi(:,:,k) 
+                    Auu(:,:,i+(j-1)*Neq) = Auu(:,:,i+(j-1)*Neq) + (Dpn*Taupn(k,j) + dDpn_dU(j)*gmpn(k))*NxyzNi(:,:,k)
+                    !Auu(:,:,i+(j-1)*Neq) = Auu(:,:,i+(j-1)*Neq) - Gammaredpn*(Dpn*Taui(k,j) + dDpn_dU(j)*gmipn(k))*NxyzNi(:,:,k)
                     Auq(:,:,z) = Auq(:,:,z) + Dpn*Vpn(j)*NxyzNi(:,:,k)
                     !Auq(:,:,z) = Auq(:,:,z) - Gammaredpn*Dpn*Vveci(j)*NxyzNi(:,:,k)
                     IF (j == 5) THEN
@@ -2633,7 +2633,7 @@ CONTAINS
         endif
 #endif
 #endif
-       
+
 	! Convection contribution
         DO j = 1,Neq
            z = i+(j-1)*Neq
@@ -2888,8 +2888,8 @@ CONTAINS
       CALL jacobianMatrices(uf,A)
 
       ! Jacobian for pinch term
-      CALL computePinch(b,psi,APinch)  
-   
+      CALL computePinch(b,psi,APinch)
+
       ! Compute Q^T^(k-1)
            Qpr = RESHAPE(qf,(/Ndim,Neq/))
 
@@ -2902,7 +2902,7 @@ CONTAINS
       qq = 0.
       nn(1:Ndim) = n
       qq(1:Ndim,:) = Qpr
-      
+
 #ifdef TEMPERATURE
       ! Compute V(U^(k-1))
            CALL computeVi(uf,Vveci)
@@ -2956,30 +2956,30 @@ CONTAINS
     CALL computeDpn(uf,Qpr,Vpn,Dpn)
     ! Compute dDpn_dU(U^(k-1))
     CALL compute_dDpn_dU(uf,Qpr,Vpn,dDpn_dU)
-    ! Reduce Grad Pn for low collision regime 
-    ! Threshold set at 0.5xGradPn for Ti = 0.2 eV 
+    ! Reduce Grad Pn for low collision regime
+    ! Threshold set at 0.5xGradPn for Ti = 0.2 eV
     Gammaredpn = 1.
     Tmin = 0.2/simpar%refval_temperature
            IF (Tmin/upf(7) .LE. 1.) Gammaredpn = Gammaredpn*Tmin/upf(7)
-    Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*Dpn 
+    Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*Dpn
     ! Comput Gammaredpn(U^(k-1))
     !CALL computeGammared(uf,Gammaredpn)
     !gmipn = matmul(Qpr,Vveci)
     !CALL computeGammaLim(ue,Qpr,Vpn,GammaLim)
-    ! Set Grad Ti = 0. for low collision regime 
+    ! Set Grad Ti = 0. for low collision regime
     ! (back to diffusion equation for neutral density)
-    !CALL computeAlphaCoeff(uf,Qpr,Vpn,Alphanp)  
-    !CALL computeBetaCoeff(uf,Qpr,Vpn,Betanp)  
+    !CALL computeAlphaCoeff(uf,Qpr,Vpn,Alphanp)
+    !CALL computeBetaCoeff(uf,Qpr,Vpn,Betanp)
     !Dpn = Alphanp*Dpn
     !dDpn_dU = Alphanp*dDpn_dU
-    !Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*Dpn 
+    !Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*Dpn
     !IF (Dnn .gt. phys%diff_nn) Dnn = phys%diff_nn
     !IF (Dpn .gt. phys%diff_nn) THEN
     !   Dpn = Alphanp*Dpn !0.
     !   dDpn_dU = Alphanp*dDpn_dU !0.
     !   Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*phys%diff_nn
     !   END IF
-    ! Set Gamma Convective = cs_n*n_n for low collision regime 
+    ! Set Gamma Convective = cs_n*n_n for low collision regime
     !IF (Dpn .gt. phys%diff_nn) THEN
     !   Dpn = 0.
     !   dDpn_dU = 0.
@@ -3193,24 +3193,24 @@ CONTAINS
              ind_jf = ind_asf + j
              DO k = 1,Ndim
                 ind_kf = k + (j - 1)*Ndim + ind_ash
-                kmult = (Dpn*Taupn(k,j) + dDpn_dU(j)*gmpn(k))*n(k)*NNif 
-                !kmult = kmult - Gammaredpn*(Dpn*Taui(k,j) + dDpn_dU(j)*gmipn(k))*n(k)*NNif 
+                kmult = (Dpn*Taupn(k,j) + dDpn_dU(j)*gmpn(k))*n(k)*NNif
+                !kmult = kmult - Gammaredpn*(Dpn*Taui(k,j) + dDpn_dU(j)*gmipn(k))*n(k)*NNif
                 elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
                        elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
                 kmult = Dpn*Vpn(j)*n(k)*NNif
                 !kmult = kmult - Gammaredpn*Dpn*Vveci(j)*n(k)*NNif
                 IF (j == 5) THEN
                    kmult = kmult + Dnn*n(k)*NNif
-                END IF 
+                END IF
                 elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) = elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) - kmult
                 elMat%Alq(ind_ff(ind_if),ind_fg(ind_kf),iel) = elMat%Alq(ind_ff(ind_if),ind_fg(ind_kf),iel) - kmult
              END DO
           END DO
                  kmultf = dot_PRODUCT(dDpn_dU,uf)*(gmpn(1)*n(1) + gmpn(2)*n(2))*Nif
-          !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),uf)*n(1) + dot_product(Taui(2,:),uf)*n(2)) + dot_product(dDpn_dU,uf)*(gmipn(1)*n(1) + gmipn(2)*n(2)))*Nif             
+          !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),uf)*n(1) + dot_product(Taui(2,:),uf)*n(2)) + dot_product(dDpn_dU,uf)*(gmipn(1)*n(1) + gmipn(2)*n(2)))*Nif
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
-          elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf 
-#endif                                                                           
+          elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
+#endif
        END IF
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -3396,37 +3396,37 @@ CONTAINS
       CALL computeDpn(uf,Qpr,Vpn,Dpn)
       ! Compute dDpn_dU(U^(k-1))
       CALL compute_dDpn_dU(uf,Qpr,Vpn,dDpn_dU)
-      ! Reduce Grad Pn for low collision regime 
-      ! Threshold set at 0.5xGradPn for Ti = 0.2 eV 
+      ! Reduce Grad Pn for low collision regime
+      ! Threshold set at 0.5xGradPn for Ti = 0.2 eV
       Gammaredpn = 1.
       Tmin = 0.2/simpar%refval_temperature
            IF (Tmin/upf(7) .LE. 1.) Gammaredpn = Gammaredpn*Tmin/upf(7)
-      Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*Dpn 
+      Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*Dpn
       ! Comput Gammaredpn(U^(k-1))
       !CALL computeGammared(uf,Gammaredpn)
       !gmipn = matmul(Qpr,Vveci)
       !CALL computeGammaLim(ue,Qpr,Vpn,GammaLim)
-      ! Set Grad Ti = 0. for low collision regime 
+      ! Set Grad Ti = 0. for low collision regime
       ! (back to diffusion equation for neutral density)
-      !CALL computeAlphaCoeff(uf,Qpr,Vpn,Alphanp)  
-      !CALL computeBetaCoeff(uf,Qpr,Vpn,Betanp)  
+      !CALL computeAlphaCoeff(uf,Qpr,Vpn,Alphanp)
+      !CALL computeBetaCoeff(uf,Qpr,Vpn,Betanp)
       !Dpn = Alphanp*Dpn
       !dDpn_dU = Alphanp*dDpn_dU
-      !Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*Dpn      
-      !IF (Dnn .gt. phys%diff_nn) Dnn = phys%diff_nn    
+      !Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*Dpn
+      !IF (Dnn .gt. phys%diff_nn) Dnn = phys%diff_nn
       !IF (Dpn .gt. phys%diff_nn) THEN
       ! Dpn = Alphanp*Dpn !0.
       ! dDpn_dU = Alphanp*dDpn_dU !0.
       ! Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*phys%diff_nn
-      ! END IF  
-      ! Set Gamma Convective = cs_n*n_n for low collision regime 
+      ! END IF
+      ! Set Gamma Convective = cs_n*n_n for low collision regime
       !IF (Dpn .gt. phys%diff_nn) THEN
       !   Dpn = 0.
       !   dDpn_dU = 0.
       !   CALL jacobianMatricesNP(uf,Anp)
       !ELSE
       !   Anp = 0.
-      !END IF   
+      !END IF
 #endif
 #endif
 
@@ -3628,7 +3628,7 @@ END IF
                  ENDDO
             kmultf = Dnn_dU_U*(Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif
             elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
-#endif           
+#endif
 
 #ifdef NEUTRALP
        ELSEIF (i == 5) THEN
@@ -3636,8 +3636,8 @@ END IF
              ind_jf = ind_asf + j
              DO k = 1,Ndim
                 ind_kf = k + (j - 1)*Ndim + ind_ash
-                kmult = (Dpn*Taupn(k,j) + dDpn_dU(j)*gmpn(k))*n(k)*NNif 
-                !kmult = kmult - Gammaredpn*(Dpn*Taui(k,j) + dDpn_dU(j)*gmipn(k))*n(k)*NNif 
+                kmult = (Dpn*Taupn(k,j) + dDpn_dU(j)*gmpn(k))*n(k)*NNif
+                !kmult = kmult - Gammaredpn*(Dpn*Taui(k,j) + dDpn_dU(j)*gmipn(k))*n(k)*NNif
                 elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
                 kmult = Dpn*Vpn(j)*n(k)*NNif
                 !kmult = kmult - Gammaredpn*Dpn*Vveci(j)*n(k)*NNif
@@ -3648,7 +3648,7 @@ END IF
              END DO
           END DO
                  kmultf = dot_PRODUCT(dDpn_dU,uf)*(gmpn(1)*n(1) + gmpn(2)*n(2))*Nif
-          !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),uf)*n(1) + dot_product(Taui(2,:),uf)*n(2)) + dot_product(dDpn_dU,uf)*(gmipn(1)*n(1) + gmipn(2)*n(2)))*Nif                             
+          !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),uf)*n(1) + dot_product(Taui(2,:),uf)*n(2)) + dot_product(dDpn_dU,uf)*(gmipn(1)*n(1) + gmipn(2)*n(2)))*Nif
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
 #endif
       END IF
@@ -3670,7 +3670,7 @@ END IF
 #endif
 
 !if below for TEMPERATURE FLAG
-#endif 
+#endif
       END DO  ! i-Loop
 
       ! Assembly stabilization terms
@@ -3777,7 +3777,7 @@ END IF
 
 
       Sn(2,:)   = Sn(2,:) + ad*( fGammacx*dsigmavcx_dU(:) + fGammarec*dsigmavrec_dU(:))
-      
+
       !Assembly Source Terms in ion energy equation
 
       Sn(3,:) = ad*(-RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec+dfEicx_dU(:)*sigmavcx)
@@ -3821,7 +3821,7 @@ END IF
 #endif
       Sn0(5)  = -Sn0(1)
 
-      !Thresholds: 
+      !Thresholds:
 #ifdef TEMPERATURE
                    Ti = 2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
                    Te = 2./(3.*phys%Mref)*U(4)/U(1)
