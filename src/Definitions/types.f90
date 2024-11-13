@@ -150,11 +150,11 @@ MODULE types
      INTEGER*4, POINTER      :: Tb_gmsh(:, :) => NULL()    ! Outer faces connectivity matrix to write the msh file
      REAL*8, POINTER         :: X_P1(:,:) => NULL()         ! coordinates of the nodes on the P1 mesh to write to the msh file
 #ifdef PARALL
-     INTEGER, POINTER       :: loc2glob_fa(:)     ! mapping number of the faces for creating the global matrix [number of faces in the mesh]
-     INTEGER, POINTER       :: loc2glob_el(:)     ! mapping number of the elements from local to global [number of elements in the mesh]
-     INTEGER, POINTER        :: loc2glob_nodes(:)    ! mapping number of the nodes from local to global [number of nodes in the mesh]
-     INTEGER, POINTER       :: ghostfaces(:)      ! integer that states if a face is to be assembled locally or not [number of faces in the mesh]
-     INTEGER, POINTER       :: ghostelems(:)      ! integer that states if an element is to be assembled locally or not (for 3D) [number of elements in the mesh]
+     INTEGER, POINTER       :: loc2glob_fa(:) => NULL()! mapping number of the faces for creating the global matrix [number of faces in the mesh]
+     INTEGER, POINTER       :: loc2glob_el(:) => NULL()! mapping number of the elements from local to global [number of elements in the mesh]
+     INTEGER, POINTER       :: loc2glob_nodes(:) => NULL()! mapping number of the nodes from local to global [number of nodes in the mesh]
+     INTEGER, POINTER       :: ghostfaces(:) => NULL()! integer that states if a face is to be assembled locally or not [number of faces in the mesh]
+     INTEGER, POINTER       :: ghostelems(:) => NULL()! integer that states if an element is to be assembled locally or not (for 3D) [number of elements in the mesh]
      INTEGER               :: nghostfaces        ! number of ghost faces
      INTEGER               :: nghostelems        ! number of ghost elements (used only for 3D)
      INTEGER               :: Nel_glob           ! number of elements of global mesh
@@ -162,12 +162,12 @@ MODULE types
      INTEGER               :: Nno_glob           ! number of nodes of global mesh
      INTEGER               :: Ndir_glob          ! number of Dirichlet faces in the global mesh
      INTEGER               :: Ngho_glob          ! number of ghost faces in the global mesh
-     ! readed from input
-     INTEGER, POINTER       :: ghostflp(:)        ! flipFaces for the ghost faces [number of ghost faces]
-     INTEGER, POINTER       :: ghostloc(:)        ! local numbering of the ghost face in the process that assemble it [number of ghost faces]
-     INTEGER, POINTER       :: ghostpro(:)        ! the process that assemble the ghost face [number of ghost faces]
-     INTEGER, POINTER       :: ghelsloc(:)        ! local numbering of the ghost element in the process that assemble it (only 3D) [number of ghost elements]
-     INTEGER, POINTER       :: ghelspro(:)        ! the process that assemble the ghost element (only 3D) [number of ghost elements]
+     ! read from input
+     INTEGER, POINTER       :: ghostflp(:) => NULL()! flipFaces for the ghost faces [number of ghost faces]
+     INTEGER, POINTER       :: ghostloc(:) => NULL()! local numbering of the ghost face in the process that assemble it [number of ghost faces]
+     INTEGER, POINTER       :: ghostpro(:) => NULL()! the process that assemble the ghost face [number of ghost faces]
+     INTEGER, POINTER       :: ghelsloc(:) => NULL()! local numbering of the ghost element in the process that assemble it (only 3D) [number of ghost elements]
+     INTEGER, POINTER       :: ghelspro(:) => NULL()! the process that assemble the ghost element (only 3D) [number of ghost elements]
      ! built after reading from input
      INTEGER, ALLOCATABLE   :: fc2sd(:)          ! face 2 send: faces computed locally that the local process has to send (vector)
      INTEGER, ALLOCATABLE   :: pr2sd(:)          ! process 2 send: to which process the faces computed locally need to be sent (vector)
@@ -213,22 +213,22 @@ MODULE types
      CHARACTER(LEN=20), POINTER:: conVarNam(:) => NULL() ! Names of the conservative variables (set in initPhys)
      REAL*8                    :: lscale ! Length scale for the non-dimensionalization of the equations
      ! Magnetic field defined for each node of the mesh.
-     REAL*8, POINTER           :: B(:, :) ! Magnetic field, Br,Bz,Bphi [n of nodes x 3]
+     REAL*8, POINTER           :: B(:, :) => NULL()! Magnetic field, Br,Bz,Bphi [n of nodes x 3]
      REAL*8                    :: B0 ! Reference value for the magnetic field [Tesla]
-     REAL*8, POINTER           :: magnetic_flux(:) ! Magnetic flux [n of nodes]
-     REAL*8, POINTER           :: magnetic_psi(:) ! Magnetic flux normalized to separatrix magnetic flux [n of nodes]
+     REAL*8, POINTER           :: magnetic_flux(:) => NULL()! Magnetic flux [n of nodes]
+     REAL*8, POINTER           :: magnetic_psi(:) => NULL()! Magnetic flux normalized to separatrix magnetic flux [n of nodes]
      REAL*8                    :: Flux2Dmin ! Minimum of the magnetic flux, across the MPI partitions
      REAL*8                    :: Flux2Dmax ! Maximum of the magnetic flux, across the MPI partitions
 #ifdef KEQUATION
-     REAL*8, POINTER           :: omega(:) ! larmor frequency [n of nodes]
-     REAL*8, POINTER           :: q_cyl(:) ! q cylindrical [n of nodes]
+     REAL*8, POINTER           :: omega(:) => NULL()! larmor frequency [n of nodes]
+     REAL*8, POINTER           :: q_cyl(:) => NULL()! q cylindrical [n of nodes]
 #endif
      REAL*8                    :: r_axis ! R-coordinate of magnetic axis
      REAL*8                    :: z_axis ! Z-coordinate of magnetic axis
 
-     REAL*8, POINTER           :: Bperturb(:, :) ! Magnetic perturbation, Br,Bz,Bphi [n of nodes x 3]
+     REAL*8, POINTER           :: Bperturb(:, :) => NULL()! Magnetic perturbation, Br,Bz,Bphi [n of nodes x 3]
      REAL*8                    :: Tbg ! Background temperature in the isothermal model
-     REAL*8, POINTER           :: Jtor(:) ! Toroidal Current
+     REAL*8, POINTER           :: Jtor(:) => NULL()! Toroidal Current
      REAL*8                    :: I_p ! Total plasma current
      REAL*8                    :: bohmth ! Threshold for imposing the Bohm boundary condition
      ! Energy equation coefficients
@@ -270,7 +270,7 @@ MODULE types
      REAL*8                    :: puff ! Puff coefficient
      REAL*8                    :: cryopump_power ! Cryopump power in [m^3/s] coefficient
      REAL*8                    :: puff_slope ! Puff increment coefficient (only for moving equilibrium for ITER)
-     REAL*8,POINTER            :: puff_exp(:) ! Puff experimental coefficient (only for moving equilibriums)
+     REAL*8,POINTER            :: puff_exp(:) => NULL()! Puff experimental coefficient (only for moving equilibriums)
      REAL*8                    :: part_source ! Particle source for ITER
      REAL*8                    :: ener_source ! Particle source for ITER
      REAL*8                    :: density_source ! Density source for WEST (2D, case 52)
@@ -328,8 +328,8 @@ MODULE types
      INTEGER         :: nbCoils_ripple     ! number coils Ripple (full torus)
      REAL*8          :: triang             ! triangularity (0: None)
      REAL*8          :: ellip              ! ellipticity (1: None)
-     REAL*8, POINTER :: coils_rmp(:, :, :) ! Coil coordinates for RMP (nbCoils*4*Discr,start-stop*(xyz)=6,rowNb) (4 for square coils)
-     REAL*8, POINTER :: coils_ripple(:, :) ! Coil coordinates for Ripple (nbCoils*Discr,start-stop*(xyz)=6)
+     REAL*8, POINTER :: coils_rmp(:, :, :) => NULL()! Coil coordinates for RMP (nbCoils*4*Discr,start-stop*(xyz)=6,rowNb) (4 for square coils)
+     REAL*8, POINTER :: coils_ripple(:, :) => NULL()! Coil coordinates for Ripple (nbCoils*Discr,start-stop*(xyz)=6)
   END TYPE Magnetic_type
 
   !*******************************************************
