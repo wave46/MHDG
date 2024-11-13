@@ -126,7 +126,7 @@ CONTAINS
        END IF
 
        DO i = 2, n-1                            ! tridiag. decomposition
-          sig = (x(i)-(i-1))/(x(i+1)-x(i-1))
+          sig = (x(i)-(REAL(i)-1))/(x(i+1)-x(i-1))
           p = sig*y2(i-1)+2.
           y2(i) = (sig-1.)/p
           u(i)=(6.*((y(i+1)-y(i))/(x(i+1)-x(i))-(y(i)-y(i-1))/(x(i)-x(i-1)))/(x(i+1)-x(i-1))-sig*u(i-1))/p
