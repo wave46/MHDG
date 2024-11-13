@@ -253,6 +253,9 @@ CONTAINS
     IF (ASSOCIATED(sol%u_tilde)) THEN
        DEALLOCATE (sol%u_tilde)
     END IF
+    IF (ASSOCIATED(sol%u_tilde0)) THEN
+       DEALLOCATE (sol%u_tilde0)
+    END IF
     IF (ALLOCATED(sol%u0)) THEN
        DEALLOCATE (sol%u0)
     END IF
@@ -350,6 +353,46 @@ CONTAINS
     IF (ASSOCIATED(phys%Bperturb)) THEN
        DEALLOCATE (phys%Bperturb)
     END IF
+    IF (ASSOCIATED(phys%phyVarNam)) THEN
+       DEALLOCATE (phys%phyVarNam)
+    END IF
+    IF (ASSOCIATED(phys%conVarNam)) THEN
+       DEALLOCATE (phys%conVarNam)
+    END IF
+    IF (ASSOCIATED(phys%Jtor)) THEN
+       DEALLOCATE (phys%Jtor)
+    END IF
+
+    IF (ALLOCATED(phys%diff_nn_Vol)) THEN
+       DEALLOCATE (phys%diff_nn_Vol)
+    END IF
+    IF (ALLOCATED(phys%diff_nn_Fac)) THEN
+       DEALLOCATE (phys%diff_nn_Fac)
+    END IF
+    IF (ALLOCATED(phys%diff_nn_Bou)) THEN
+       DEALLOCATE (phys%diff_nn_Bou)
+    END IF
+    IF (ALLOCATED(phys%v_nn_Vol)) THEN
+       DEALLOCATE (phys%v_nn_Vol)
+    END IF
+    IF (ALLOCATED(phys%v_nn_Fac)) THEN
+       DEALLOCATE (phys%v_nn_Fac)
+    END IF
+    IF (ALLOCATED(phys%v_nn_Bou)) THEN
+       DEALLOCATE (phys%v_nn_Bou)
+    END IF
+    IF (ASSOCIATED(phys%puff_exp)) THEN
+       DEALLOCATE (phys%puff_exp)
+    END IF
+
+#ifdef KEQUATION
+    IF (ASSOCIATED(phys%omega)) THEN
+       DEALLOCATE (phys%omega)
+    END IF
+    IF (ASSOCIATED(phys%q_cyl)) THEN
+       DEALLOCATE (phys%q_cyl)
+    END IF
+#endif
 
     ! magnetic
     IF (ASSOCIATED(magn%coils_rmp)) THEN
@@ -486,6 +529,127 @@ CONTAINS
 #endif
 
   END SUBROUTINE free_mesh
+
+  SUBROUTINE free_mesh_loc(Mesh_loc)
+    TYPE(Mesh_type), INTENT(INOUT) :: Mesh_loc
+    ! Mesh
+    IF (ASSOCIATED(Mesh_loc%T)) THEN
+       DEALLOCATE (Mesh_loc%T)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%Tlin)) THEN
+       DEALLOCATE (Mesh_loc%Tlin)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%Tb)) THEN
+       DEALLOCATE (Mesh_loc%Tb)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%boundaryFlag)) THEN
+       DEALLOCATE (Mesh_loc%boundaryFlag)
+    END IF
+    IF (ALLOCATED(Mesh_loc%F)) THEN
+       DEALLOCATE (Mesh_loc%F)
+    END IF
+    IF (ALLOCATED(Mesh_loc%face_info)) THEN
+       DEALLOCATE (Mesh_loc%face_info)
+    END IF
+    IF (ALLOCATED(Mesh_loc%N)) THEN
+       DEALLOCATE (Mesh_loc%N)
+    END IF
+    IF (ALLOCATED(Mesh_loc%faces)) THEN
+       DEALLOCATE (Mesh_loc%faces)
+    END IF
+    IF (ALLOCATED(Mesh_loc%extfaces)) THEN
+       DEALLOCATE (Mesh_loc%extfaces)
+    END IF
+    IF (ALLOCATED(Mesh_loc%intfaces)) THEN
+       DEALLOCATE (Mesh_loc%intfaces)
+    END IF
+    IF (ALLOCATED(Mesh_loc%flipFace)) THEN
+       DEALLOCATE (Mesh_loc%flipface)
+    END IF
+    IF (ALLOCATED(Mesh_loc%Fdir)) THEN
+       DEALLOCATE (Mesh_loc%Fdir)
+    END IF
+    IF (ALLOCATED(Mesh_loc%Diric)) THEN
+       DEALLOCATE (Mesh_loc%Diric)
+    END IF
+    IF (ALLOCATED(Mesh_loc%numberbcs)) THEN
+       DEALLOCATE (Mesh_loc%numberbcs)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%X)) THEN
+       DEALLOCATE (Mesh_loc%X)
+    END IF
+    IF (ALLOCATED(Mesh_loc%elemSize)) THEN
+       DEALLOCATE (Mesh_loc%elemSize)
+    END IF
+    IF (ALLOCATED(Mesh_loc%scdiff_nodes)) THEN
+       DEALLOCATE (Mesh_loc%scdiff_nodes)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%toroidal)) THEN
+       DEALLOCATE (Mesh_loc%toroidal)
+    END IF
+    IF (ALLOCATED(Mesh_loc%periodic_faces)) THEN
+       DEALLOCATE (Mesh_loc%periodic_faces)
+    END IF
+
+#ifdef PARALL
+    IF (ASSOCIATED(Mesh_loc%loc2glob_fa)) THEN
+       DEALLOCATE (Mesh_loc%loc2glob_fa)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%loc2glob_el)) THEN
+       DEALLOCATE (Mesh_loc%loc2glob_el)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%loc2glob_nodes)) THEN
+       DEALLOCATE (Mesh_loc%loc2glob_nodes)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%ghostfaces)) THEN
+       DEALLOCATE (Mesh_loc%ghostfaces)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%ghostelems)) THEN
+       DEALLOCATE (Mesh_loc%ghostelems)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%ghostflp)) THEN
+       DEALLOCATE (Mesh_loc%ghostflp)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%ghostloc)) THEN
+       DEALLOCATE (Mesh_loc%ghostloc)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%ghostpro)) THEN
+       DEALLOCATE (Mesh_loc%ghostpro)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%ghelsloc)) THEN
+       DEALLOCATE (Mesh_loc%ghelsloc)
+    END IF
+    IF (ASSOCIATED(Mesh_loc%ghelspro)) THEN
+       DEALLOCATE (Mesh_loc%ghelspro)
+    END IF
+    IF (ALLOCATED(Mesh_loc%fc2sd)) THEN
+       DEALLOCATE (Mesh_loc%fc2sd)
+    END IF
+    IF (ALLOCATED(Mesh_loc%pr2sd)) THEN
+       DEALLOCATE (Mesh_loc%pr2sd)
+    END IF
+    IF (ALLOCATED(Mesh_loc%fc2rv)) THEN
+       DEALLOCATE (Mesh_loc%fc2rv)
+    END IF
+    IF (ALLOCATED(Mesh_loc%pr2rv)) THEN
+       DEALLOCATE (Mesh_loc%pr2rv)
+    END IF
+    IF (ALLOCATED(Mesh_loc%el2sd)) THEN
+       DEALLOCATE (Mesh_loc%el2sd)
+    END IF
+    IF (ALLOCATED(Mesh_loc%pe2sd)) THEN
+       DEALLOCATE (Mesh_loc%pe2sd)
+    END IF
+    IF (ALLOCATED(Mesh_loc%el2rv)) THEN
+       DEALLOCATE (Mesh_loc%el2rv)
+    END IF
+    IF (ALLOCATED(Mesh_loc%pe2rv)) THEN
+       DEALLOCATE (Mesh_loc%pe2rv)
+    END IF
+#endif
+
+END SUBROUTINE free_mesh_loc
+
 
   SUBROUTINE free_reference_element
     ! Reference element
