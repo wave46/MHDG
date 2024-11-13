@@ -259,6 +259,7 @@ CONTAINS
     sol%u = 0.
     sol%u_tilde = 0.
     sol%q = 0.
+    sol%u_tilde0 = 0.
     ! Initialize the solution
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
@@ -319,6 +320,7 @@ CONTAINS
       ALLOCATE (qy(Nel*Np,phys%Neq))
       ALLOCATE (auxq(Nel*Np*phys%Neq,Ndim))
       qx = 0.; qy = 0.
+      auxq = 0.
 #ifdef TOR3D
       ALLOCATE (qt(Nel*Np,phys%Neq))
       qt = 0.
@@ -412,7 +414,7 @@ CONTAINS
       ALLOCATE (qx(Nel*Np,phys%Neq))
       ALLOCATE (qy(Nel*Np,phys%Neq))
       ALLOCATE (auxq(Nel*Np*phys%Neq,Ndim))
-      qx = 0.; qy = 0.
+      qx = 0.; qy = 0.;auxq = 0.
 #ifdef TOR3D
       ALLOCATE (qt(Nel*Np,phys%Neq))
       qt = 0.
@@ -717,6 +719,7 @@ CONTAINS
     ALLOCATE (u(Ne*Np,neq))
     ALLOCATE (u_tilde(nut,neq))
     u_tilde = 0.d0
+    u = 0.d0
     u = TRANSPOSE(RESHAPE(sol%u,(/neq,Ne*Np/)))
 
     ! Loop in elements
@@ -788,6 +791,7 @@ CONTAINS
     ALLOCATE (u(1:Ne*Np,1:neq))
     ALLOCATE (u_tilde(1:Nf*Nfp,1:neq))
     u_tilde = 0.d0
+    u = 0.d0
     u = TRANSPOSE(RESHAPE(sol%u,(/neq,Ne*Np/)))
 
     DO iFace = 1,Mesh%Nintfaces
@@ -853,6 +857,7 @@ CONTAINS
 #endif
 
     ALLOCATE(ind(Np))
+    ind = 0
 
 #ifdef TOR3D
     htor = numer%tmax/numer%ntor
