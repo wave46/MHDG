@@ -75,13 +75,14 @@ CONTAINS
        DEALLOCATE(Mesh%flag_elems_sc)
     ENDIF
     ALLOCATE (Mesh%flag_elems_sc(Ne))
+    Mesh%flag_elems_sc = 0
 
     IF (ALLOCATED(Mesh%scdiff_nodes)) THEN
        DEALLOCATE(Mesh%scdiff_nodes)
     ENDIF
 
     ALLOCATE (Mesh%scdiff_nodes(Mesh%Nelems, Mesh%Nnodesperelem))
-    Mesh%flag_elems_sc = 0
+    Mesh%scdiff_nodes = 0
 
     shock = 0
 
@@ -676,6 +677,8 @@ CONTAINS
       ALLOCATE (Qx(Nfp, Nfp))
       ALLOCATE (Qy(Nfp, Nfp))
       Q_loc = 0.
+      Qx = 0.
+      Qy = 0.
 
       ! Loop in the faces of the element
       DO ifa = 1, Nf
