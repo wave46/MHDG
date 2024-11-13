@@ -16,9 +16,9 @@ SUBROUTINE HDG_mapping()
 #endif
   REAL*8, ALLOCATABLE    :: LL(:, :), UU(:, :), L0(:), U0(:)
   REAL*8, ALLOCATABLE    :: Auq_iAqq(:, :), Mu(:, :), Ml(:, :), Md(:), aux(:, :), auxAqq(:, :), auxAquUU(:, :)
-  REAL*8, POINTER        :: iAqq(:, :), Aqu(:, :), Aql(:, :)
-  REAL*8, POINTER        :: Auq(:, :), Auu(:, :), Aul(:, :)
-  REAL*8, POINTER        :: Aql_dir(:), Aul_dir(:), f(:)
+  REAL*8, POINTER        :: iAqq(:, :) =>  NULL(), Aqu(:, :) =>  NULL(), Aql(:, :) =>  NULL()
+  REAL*8, POINTER        :: Auq(:, :) =>  NULL(), Auu(:, :) =>  NULL(), Aul(:, :) =>  NULL()
+  REAL*8, POINTER        :: Aql_dir(:) =>  NULL(), Aul_dir(:) =>  NULL(), f(:) =>  NULL()
 
   IF (MPIvar%glob_id .EQ. 0) THEN
      IF (utils%printint > 1) THEN
