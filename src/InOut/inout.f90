@@ -305,6 +305,11 @@ CONTAINS
        WRITE (6, *) "Error reading loc2glob_el"
        STOP
     ENDIF
+    CALL HDF5_array1D_reading_int(file_id, Mesh%loc2glob_nodes, 'loc2glob_no', ierr)
+    IF (IERR .NE. 0) THEN
+       WRITE (6, *) "Error reading loc2glob_no"
+       STOP
+    ENDIF
     CALL HDF5_array1D_reading_int(file_id, Mesh%ghostFaces, 'ghostFaces', ierr)
     IF (IERR .NE. 0) THEN
        WRITE (6, *) "Error reading ghostFaces"
@@ -386,10 +391,12 @@ CONTAINS
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MAXVAL(Mesh%loc2glob_el), Nel_glob, 1, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MAXVAL(Mesh%loc2glob_fa), Nfa_glob, 1, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MAXVAL(Mesh%loc2glob_nodes), Nnodes_glob, 1, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(Mesh%ndir, Ndir_glob, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(Mesh%nghostfaces, Ngho_glob, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
     Mesh%Nel_glob = Nel_glob
     Mesh%Nfa_glob = Nfa_glob
+    Mesh%Nno_glob = Nnodes_glob
     Mesh%Ndir_glob = Ndir_glob
     Mesh%Ngho_glob = Ngho_glob
 #endif
@@ -403,7 +410,7 @@ CONTAINS
 
     xmin = MINVAL(Mesh%X(:,1))
 #ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, xmin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, xmin, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
 #endif
     ! Apply shift if axisymmetric case
     IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) .OR. (switch%axisym .AND. xmin < tol)) THEN
@@ -422,10 +429,10 @@ CONTAINS
     Mesh%ymin = MINVAL(Mesh%X(:, 2))
 
 #ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%xmax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%ymax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%xmin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%ymin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%xmax, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%ymax, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%xmin, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%ymin, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
 #endif
 
     IF (utils%printint > 0) THEN
@@ -1138,7 +1145,7 @@ CONTAINS
 
     xmin = MINVAL(Mesh%X(:,1))
 #ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, xmin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, xmin, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
 #endif
     ! Apply shift if axisymmetric case
     IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) .OR. (switch%axisym .AND. xmin < tol)) THEN
@@ -1157,10 +1164,10 @@ CONTAINS
     Mesh%ymin = MINVAL(Mesh%X(:, 2))
 
 #ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%xmax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%ymax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%xmin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%ymin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%xmax, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%ymax, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%xmin, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%ymin, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
 #endif
 
     IF (utils%printint > 0) THEN
