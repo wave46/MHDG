@@ -652,10 +652,10 @@ CONTAINS
 
      ! Solution gradient at nodes
      qf = TRANSPOSE(RESHAPE(sol%q(ind_qf),(/Ndim*Neq,Npfl/)))
-     
+
      ! Analytical solution at face Gauss points
      CALL analytical_solution(iel,xyg(:,1),xyg(:,2),uex)
-     
+
      ! Solution at face Gauss points
      ufg = MATMUL(refElPol%N1D,TRANSPOSE(RESHAPE(uf,[neq,Npfl])))
 
@@ -690,7 +690,7 @@ CONTAINS
 
     ! Physical variables at Gauss points with analytical sol
     CALL cons2phys(uex,uexpg)
-    
+
 
 #ifdef SAVEFLUX
     !Initialization of variables for flux control to avoid NaN if not Bohm boundary
