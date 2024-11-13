@@ -405,7 +405,7 @@ CONTAINS
     INTEGER                   :: i,j,k
     INTEGER                   :: g,igpol,igtor
     REAL*8                    :: dsurfg
-    INTEGER                    :: setval,delta
+    REAL*8                    :: setval,delta
     REAL*8                    :: inc,sn
     REAL*8                    :: NiNi(Npfl,Npfl),Ni(Npfl)
     REAL*8                    :: soundSpeed
@@ -643,21 +643,20 @@ CONTAINS
     ! Shape function derivatives at Gauss points
      xyDer = MATMUL(refElPol%Nxi1D,Xf)
 
-    ! Solution at nodes
-    uf = sol%u_tilde(ind_uf)
+     ! Solution at nodes
+     uf = sol%u_tilde(ind_uf)
      ! Elemental solution at nodes PROBABLY WRONG
      inde = (iel - 1)*Npel + (/(i,i=1,Npel)/)
      !ue = ures(Mesh%T(iel,nod),:)
      ue = ures(inde(nod),:)
 
-    ! Solution gradient at nodes
+     ! Solution gradient at nodes
      qf = TRANSPOSE(RESHAPE(sol%q(ind_qf),(/Ndim*Neq,Npfl/)))
-     IF (switch%testcase .NE. 54) THEN !this we shouldn't actually call for WEST case
-        ! Analytical solution at face Gauss points
-        CALL analytical_solution(iel,xyg(:,1),xyg(:,2),uex)
-     ENDIF
-
-    ! Solution at face Gauss points
+     
+     ! Analytical solution at face Gauss points
+     CALL analytical_solution(iel,xyg(:,1),xyg(:,2),uex)
+     
+     ! Solution at face Gauss points
      ufg = MATMUL(refElPol%N1D,TRANSPOSE(RESHAPE(uf,[neq,Npfl])))
 
      ! Elemental solution at face Gauss points
@@ -689,10 +688,9 @@ CONTAINS
     CALL cons2phys(ufg,upg)
     end if
 
-    if (switch%testcase .ne. 54) then !this we shouldn't actually call for WEST case
-      ! Physical variables at Gauss points with analytical sol
-      CALL cons2phys(uex,uexpg)
-     ENDIF
+    ! Physical variables at Gauss points with analytical sol
+    CALL cons2phys(uex,uexpg)
+    
 
 #ifdef SAVEFLUX
     !Initialization of variables for flux control to avoid NaN if not Bohm boundary
@@ -1201,7 +1199,7 @@ CONTAINS
       !                        to 0 as a function of the angle of incidence
          setval = ABS(upg(g,2))
          sn = SIGN(1.,bn)
-      delta = 1.
+      delta = 1
          IF (ABS(inc) .LE. phys%bohmth) THEN
             setval = sn*SoundSpeed/phys%bohmth*ABS(inc)
             dcs_du = sn*dcs_du/phys%bohmth*ABS(inc)
@@ -1210,7 +1208,7 @@ CONTAINS
             setval = sn*SoundSpeed
                dcs_du = sn*dcs_du
             ELSE IF (ABS(upg(g,2)) .GT. SoundSpeed) THEN
-            delta = 0.
+            delta = 0
             !setval = sn*setval
          END IF
          !if (numer%bohmtypebc.eq.1) then
@@ -1825,7 +1823,7 @@ CONTAINS
 #endif
 #endif
 #ifdef SAVEFLUX
-    real*8           :: dline
+    real*8, INTENT(IN)            :: dline
     real*8,intent(out)::  flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical
 #endif
 #ifdef BOHMLIMIT
@@ -2247,9 +2245,7 @@ CONTAINS
        puff_coeff = 0.
     CASE (bc_BohmPump)
        recycling_coeff =  phys%Re_pump
-
        cryopump_coeff = phys%cryopump_power/(Mesh%pump_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
-       if (switch%testcase .ge. 50 .and. switch%testcase .le. 59) recycling_coeff = phys%Re_pump
        puff_coeff = 0.
     CASE (bc_BohmPuff)
        recycling_coeff =  phys%Re
