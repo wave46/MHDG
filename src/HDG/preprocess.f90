@@ -377,6 +377,9 @@ CONTAINS
     ii = 0
     markE = .FALSE.
     markF = .FALSE.
+    Mesh%extFaces = 0
+    temp_intFaces = 0
+
     DO iel = 1, Mesh%Nelems
        DO ifa = 1, refElPol%Nfaces
           IF (.NOT. markE(iel, ifa)) THEN
@@ -407,6 +410,7 @@ CONTAINS
 
     Mesh%Nintfaces = ii
     ALLOCATE (Mesh%intFaces(ii, 5))
+    Mesh%intFaces = 0
     Mesh%intFaces = temp_intFaces(1:ii, :)
     Mesh%Nfaces = Mesh%Nextfaces + Mesh%Nintfaces
     DEALLOCATE (markE, markF, temp_intFaces)
@@ -588,6 +592,10 @@ CONTAINS
     jj = 0
     markE = .FALSE.
     markF = .FALSE.
+    temp_intFaces = 0
+    temp_extFaces = 0
+
+
     DO iel = 1, SIZE(T,1)
        DO ifa = 1, refElPol%Nfaces
           IF (.NOT. markE(iel, ifa)) THEN
@@ -648,6 +656,8 @@ CONTAINS
 
       ALLOCATE(T_temp(counter, SIZE(T,2)))
       ALLOCATE(indices(counter))
+      T_temp = 0
+      indices = 0
 
       counter = 1
       DO i = 1, SIZE(T,1)
@@ -1031,6 +1041,7 @@ CONTAINS
     Mesh%Fdir = .FALSE.
     Mesh%flipFace = .FALSE.
     isdir = .FALSE.
+
     DO ifa = 1, Mesh%Nintfaces
        infoFace = Mesh%intFaces(ifa, :)
        Mesh%F(infoFace(1), infoFace(2)) = ifa
@@ -1052,6 +1063,7 @@ CONTAINS
        Mesh%F(infoFace_ex(1), infoFace_ex(2)) = ifa + Mesh%Nintfaces
        Mesh%Fdir(infoFace_ex(1), infoFace_ex(2)) = isdir
     END DO
+    
     ! Modify flipface for periodic faces
     DO ifa = 1, Mesh%Nextfaces
        IF (Mesh%periodic_faces(ifa).NE.0) THEN
@@ -1085,6 +1097,7 @@ CONTAINS
     Mesh%Fdir = .FALSE.
     Mesh%flipFace = .FALSE.
     isdir = .FALSE.
+
     DO ifa = 1, Mesh%Nintfaces
        infoFace = Mesh%intFaces(ifa, :)
        Mesh%F(infoFace(1), infoFace(2)) = ifa
