@@ -42,6 +42,9 @@ CONTAINS
     ALLOCATE (phys%phyVarNam(phys%npv))
     ALLOCATE (phys%conVarNam(phys%Neq))
 
+    phys%phyVarNam = ""
+    phys%conVarNam = ""
+
     ! Set the name of the physical variables
     phys%phyVarNam(1) = "rho" ! density
     phys%phyVarNam(2) = "u"   ! parallel velocity
@@ -87,6 +90,9 @@ CONTAINS
 
     ALLOCATE (simpar%physvar_refval(phys%npv))
     ALLOCATE (simpar%consvar_refval(phys%Neq))
+    simpar%physvar_refval = 0.
+    simpar%consvar_refval = 0.
+
     simpar%physvar_refval(1) = simpar%refval_density
     simpar%physvar_refval(2) = simpar%refval_speed
     simpar%physvar_refval(3) = simpar%refval_specenergy
@@ -1637,7 +1643,7 @@ CONTAINS
     n0 = 1.e19
 
     if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      te = T0*2/3./phys%Mref*U4/U1
+      te = T0*2./3./phys%Mref*U4/U1
       ne = n0*U1/1.e14
     else!some low values
       ne = n0*1.e-20/1.e14
@@ -1663,7 +1669,7 @@ CONTAINS
     res = 0.
     if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
       ne = n0*U1/1.e14
-      te = T0*2/3./phys%Mref*U4/U1
+      te = T0*2./3./phys%Mref*U4/U1
       call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_energy_iz,res)
     endif !let non-linear part as zero if negative solutions
 
@@ -1674,7 +1680,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavnn,U1,U2,U3,T0,ti,n0, kb, e_const
     real*8             :: s0
-    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real*8, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
@@ -1686,7 +1692,7 @@ CONTAINS
     s0 = 5.2958e-11 * 1.e-6
 
     if ((U1>tol) .and. (U2>tol) .and. (U3>tol)) then ! basically it's a below zero check
-      ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
+      ti = T0*2./3. /phys%Mref * (U3/U1 - 0.5 *U2**2/U1**2)
     else!some low values
       ti = 1.e-10
     endif
@@ -1701,7 +1707,7 @@ CONTAINS
     real*8             :: res(:),U1,U2,U3,T0,ti
     real*8, allocatable :: dti_dU(:)
     real*8             :: s0
-    real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real*8, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
 
     allocate(dti_dU(size(U)))
 
@@ -1716,11 +1722,11 @@ CONTAINS
     dti_dU = 0.
 
     if ((U1>tol) .and. (U2>tol) .and. (U3>tol)) then ! basically it's a below zero check
-      ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
+      ti = T0*2./3. /phys%Mref * (U3/U1 - 0.5 *U2**2/U1**2)
       dti_dU(1) = dti_dU(1) + 1.*(-U3 + U2**2/U1) / U1**2
       dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
       dti_dU(3) = dti_dU(3) + 1./U1
-      dti_dU(:) = dti_dU(:) * T0*2/3. /phys%Mref
+      dti_dU(:) = dti_dU(:) * T0*2./3. /phys%Mref
 
       res = (0.25 *s0 / ti**0.75) * dti_dU
     endif !let non-linear part as zero if negative solutions
@@ -1729,7 +1735,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavrec,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real*8, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1737,7 +1743,7 @@ CONTAINS
     n0 = 1.e19
 
     if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      te = T0*2/3./phys%Mref*U4/U1
+      te = T0*2./3./phys%Mref*U4/U1
       ne = n0*U1/1.e14
     else!some low values
       ne = n0*1.e-20/1.e14
@@ -1760,7 +1766,7 @@ CONTAINS
     res = 0.
     if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
       ne = n0*U1/1.e14
-      te = T0*2/3./phys%Mref*U4/U1
+      te = T0*2./3./phys%Mref*U4/U1
       call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_rec,res)
     endif !let non-linear part as zero if negative solutions
   END SUBROUTINE compute_dsigmavrec_dU
@@ -1777,7 +1783,7 @@ CONTAINS
     n0 = 1.e19
 
     if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      te = T0*2/3./phys%Mref*U4/U1
+      te = T0*2./3./phys%Mref*U4/U1
       ne = n0*U1/1.e14
     else!some low values
       ne = n0*1.e-20/1.e14
@@ -1800,7 +1806,7 @@ CONTAINS
     res = 0.
     if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
       ne = n0*U1/1.e14
-      te = T0*2/3./phys%Mref*U4/U1
+      te = T0*2./3./phys%Mref*U4/U1
       call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_energy_rec,res)
     endif !let non-linear part as zero if negative solutions
   END SUBROUTINE compute_dsigmavErec_dU
@@ -1838,7 +1844,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0,E0
     REAL*8             :: p1,p2,p3,p4,p5
-    REAL, PARAMETER    :: tol = 1e-20
+    REAL*8, PARAMETER    :: tol = 1.e-20
     T0 = 50.
     U1 = U(1)
     U4 = U(4)
@@ -1998,9 +2004,9 @@ CONTAINS
 
     !if (U1<tol) U1=tol
     !if (U4<tol) then
-    if ((U1>tol) .and. (U3>tol)) then ! basically it's a below zero check
-      ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
-    else!some low values
+    ti = T0*2./3./phys%Mref * (U3/U1 - 0.5*U2**2/U1**2)
+
+    if (ti .lt. 1.e-10) then ! basically it's a below zero check
       ti = 1.e-10
     endif
     sigmavcx = 0.
@@ -2027,12 +2033,12 @@ CONTAINS
     res = 0.
     dti_dU = 0.
 
-    if ((U1>tol) .and. (U3>tol)) then
-      ti = T0*2/3. /phys%Mref * (U3/U1 - 1/2 *U2**2/U1**2)
+    ti = T0*2./3. /phys%Mref * (U3/U1 - 0.5 *U2**2/U1**2)
+    if (ti .gt. 1e-10) then
       dti_dU(1) = dti_dU(1) + 1.*(-U3 + U2**2/U1) / U1**2
       dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
       dti_dU(3) = dti_dU(3) + 1./U1
-      dti_dU(:) = dti_dU(:) * T0*2/3. /phys%Mref
+      dti_dU(:) = dti_dU(:) * T0*2./3. /phys%Mref
       call compute_eirene_1D_rate_dU(U1,U2,U3,ti,dti_dU,phys%alpha_cx,res)
     endif
 
@@ -2270,7 +2276,7 @@ CONTAINS
   SUBROUTINE compute_dTlossrec_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0,Tlossrec
-    REAL, PARAMETER    :: tol = 1e-20
+    REAL*8, PARAMETER    :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
