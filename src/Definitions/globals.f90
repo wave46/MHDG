@@ -246,9 +246,19 @@ CONTAINS
     IF (ALLOCATED(Mesh%periodic_faces)) THEN
        DEALLOCATE (Mesh%periodic_faces)
     END IF
+
     ! sol type
     IF (ASSOCIATED(sol%u)) THEN
        DEALLOCATE (sol%u)
+    END IF
+    IF (ASSOCIATED(sol%u_conv)) THEN
+       DEALLOCATE (sol%u_conv)
+    END IF
+    IF (ASSOCIATED(sol%q)) THEN
+       DEALLOCATE (sol%q)
+    END IF
+    IF (ASSOCIATED(sol%q_conv)) THEN
+       DEALLOCATE (sol%q_conv)
     END IF
     IF (ASSOCIATED(sol%u_tilde)) THEN
        DEALLOCATE (sol%u_tilde)
@@ -719,6 +729,9 @@ END SUBROUTINE free_mesh_loc
     IF (ALLOCATED(refElPol%Nxi1D)) THEN
        DEALLOCATE (refElPol%Nxi1D)
     END IF
+    IF (ALLOCATED(refElPol%Nlin)) THEN
+       DEALLOCATE (refElPol%Nlin)
+    END IF
 
     ! Reference element
     IF (ALLOCATED(refElTor%Face_nodes)) THEN
@@ -1020,7 +1033,7 @@ END SUBROUTINE free_mesh_loc
        ENDDO
        DEALLOCATE(splines_str_array)
     ENDIF
-    
+
   END SUBROUTINE free_splines
 
 END MODULE globals
