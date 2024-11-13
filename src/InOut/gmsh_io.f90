@@ -48,6 +48,10 @@ CONTAINS
 
     ALLOCATE ( node_x(1:m,1:node_num) )
     ALLOCATE ( element_node(1:element_order,1:element_num) )
+
+    node_x = 0.
+    element_node = 0
+
   !
   !  Get the data.
   !
@@ -272,6 +276,14 @@ CONTAINS
     ALLOCATE(Tb_PUFF(n_Tb_PUFF, element_order))
     ALLOCATE(Tb_PUMP(n_Tb_PUMP, element_order))
     ALLOCATE(T(n_T_DOM, (element_order)*(element_order+1)/2))
+
+    Tb_IN = 0
+    Tb_OUT = 0
+    Tb_LIM = 0
+    Tb_PUFF = 0
+    Tb_PUMP = 0
+    T = 0
+
 
     !
     !  Now fill Tb_IN, Tb_OUt, Tb_LIM and T
@@ -548,8 +560,8 @@ CONTAINS
     ALLOCATE(Tb(s1,s2))
     ALLOCATE(boundaryFlag(s1))
 
-    Tb = 0.
-    boundaryFlag = 0.
+    Tb = 0
+    boundaryFlag = 0
 
 
     s1 = 1
@@ -614,7 +626,7 @@ CONTAINS
       s1 = index
     ENDIF
 
-  ENDSUBROUTINE
+  ENDSUBROUTINE generate_boundary_names
 
   SUBROUTINE generate_elemface_info(T, Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, element_order, face_info)
       INTEGER, INTENT(IN)                              :: T(:,:)
@@ -762,9 +774,9 @@ CONTAINS
     character(LEN=*), INTENT(IN) :: h5_filename
     INTEGER, INTENT(IN)          :: Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType
     INTEGER, INTENT(IN)          :: T(:,:), Tb(:,:), boundaryFlag(:)
-    REAL, INTENT(IN)             :: X(:,:)
-    REAL                         :: temp(SIZE(X,1),SIZE(X,2))
-    real                         :: xmin
+    REAL*8, INTENT(IN)           :: X(:,:)
+    REAL*8                       :: temp(SIZE(X,1),SIZE(X,2))
+    REAL*8                       :: xmin
 
     temp = X
     !Apply length scale back
@@ -792,7 +804,7 @@ CONTAINS
     INTEGER(HID_T)               :: file_id
     INTEGER, INTENT(IN)          :: Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType
     INTEGER, INTENT(IN)          :: T(:,:), Tb(:,:), boundaryFlag(:)
-    REAL, INTENT(IN)             :: X(:,:)
+    REAL*8, INTENT(IN)           :: X(:,:)
     CHARACTER(LEN=500)           :: fname_mod, Num
     INTEGER                      :: i
 
@@ -800,7 +812,7 @@ CONTAINS
 
     i = INDEX(fname_mod, 'P', .TRUE.)
     IF(i .ne. 0) THEN
-      WRITE (Num, "(i10)") refElPol%nDeg
+      WRITE (Num, "(i10)") SIZE(TB,2) - 1
       fname_mod(i+1:i+1) = TRIM(ADJUSTL(Num))
     ENDIF
 
@@ -823,7 +835,96 @@ CONTAINS
       print *, 'Mesh converted from gmsh to hdf5. Output written to file ', trim(adjustl(fname_mod))
       print *, '        '
     END IF
-  ENDSUBROUTINE
+  ENDSUBROUTINE HDF5_save_mesh
+
+  SUBROUTINE HDF5_save_mesh_struct(Mesh_in, fname)
+    USE HDF5
+    USE HDF5_io_module
+    USE MPI_OMP
+    USE GLOBALS
+
+    character(LEN=*), INTENT(IN) :: fname
+    TYPE(Mesh_type), INTENT(IN)  :: Mesh_in
+    INTEGER                      :: ierr
+    INTEGER(HID_T)               :: file_id
+
+    CHARACTER(LEN=500)           :: fname_mod, Num
+    INTEGER                      :: i, j
+    INTEGER                      :: flipFace_int(SIZE(Mesh_in%flipFace,1),SIZE(Mesh_in%flipFace,2))
+
+
+    flipFace_int = 0
+    !! convert to integer flipFace
+    DO i = 1, SIZE(Mesh_in%flipFace,1)
+      DO j = 1, SIZE(Mesh_in%flipFace,2)
+        IF(Mesh_in%flipFace(i,j)) THEN
+          flipFace_int(i,j) = 1
+        ENDIF
+      ENDDO
+    ENDDO
+
+    fname_mod = trim(adjustl(fname))
+
+    i = INDEX(fname_mod, 'P', .TRUE.)
+    IF(i .ne. 0) THEN
+      WRITE (Num, "(i10)") Mesh_in%Nnodesperface - 1
+      fname_mod(i+1:i+1) = TRIM(ADJUSTL(Num))
+    ENDIF
+
+    call HDF5_create(fname_mod, file_id, ierr)
+    call HDF5_integer_saving(file_id,Mesh_in%Ndim,'Ndim')
+    call HDF5_integer_saving(file_id,Mesh_in%Nnodes,'Nnodes')
+    call HDF5_integer_saving(file_id,Mesh_in%Nnodesperelem,'Nnodesperelem')
+    call HDF5_integer_saving(file_id,Mesh_in%Nnodesperface,'Nnodesperface')
+    call HDF5_integer_saving(file_id,Mesh_in%Nelems,'Nelems')
+    call HDF5_integer_saving(file_id,Mesh_in%Nextfaces,'Nextfaces')
+    call HDF5_integer_saving(file_id,Mesh_in%Nfaces,'Nfaces')
+    call HDF5_integer_saving(file_id,Mesh_in%Nintfaces,'Nintfaces')
+    call HDF5_integer_saving(file_id,Mesh_in%elemType,'elemType')
+    call HDF5_array2D_saving_int(file_id, Mesh_in%T, size(Mesh_in%T, 1), size(Mesh_in%T, 2), 'T')
+    call HDF5_array2D_saving(file_id, Mesh_in%X, size(Mesh_in%X, 1), size(Mesh_in%X, 2), 'X')
+    call HDF5_array2D_saving_int(file_id, Mesh_in%Tb, size(Mesh_in%Tb, 1), size(Mesh_in%Tb, 2), 'Tb')
+    call HDF5_array1D_saving_int(file_id, Mesh_in%boundaryFlag, SIZE(Mesh_in%boundaryFlag), 'boundaryFlag')
+    call HDF5_array2D_saving_int(file_id, Mesh_in%extfaces, SIZE(Mesh_in%extfaces,1), SIZE(Mesh_in%extfaces,2), 'extfaces')
+    call HDF5_array2D_saving_int(file_id, Mesh_in%intfaces, SIZE(Mesh_in%intfaces,1), SIZE(Mesh_in%intfaces,2), 'intfaces')
+#ifdef PARALL
+    call HDF5_array2D_saving_int(file_id, flipFace_int, SIZE(flipFace_int,1), SIZE(flipFace_int,2), 'flipFace')
+    call HDF5_array1D_saving_int(file_id, Mesh_in%loc2glob_fa, SIZE(Mesh_in%loc2glob_fa), 'loc2glob_fa')
+    call HDF5_array1D_saving_int(file_id, Mesh_in%loc2glob_el, SIZE(Mesh_in%loc2glob_el), 'loc2glob_el')
+    call HDF5_array1D_saving_int(file_id, Mesh_in%loc2glob_nodes, SIZE(Mesh_in%loc2glob_nodes), 'loc2glob_no')
+    call HDF5_array1D_saving_int(file_id, Mesh_in%ghostfaces, SIZE(Mesh_in%ghostfaces), 'ghostFaces')
+    call HDF5_array1D_saving_int(file_id, Mesh_in%ghostelems, SIZE(Mesh_in%ghostelems), 'ghostElems')
+    call HDF5_integer_saving(file_id, Mesh_in%nghostfaces,'nghostfaces')
+    call HDF5_integer_saving(file_id, Mesh_in%nghostelems,'nghostelems')
+    call HDF5_integer_saving(file_id, Mesh_in%Nel_glob,'Nel_glob')
+    call HDF5_integer_saving(file_id, Mesh_in%Nfa_glob,'Nfa_glob')
+    call HDF5_integer_saving(file_id, Mesh_in%Nno_glob,'Nno_glob')
+    call HDF5_integer_saving(file_id, Mesh_in%Ndir_glob,'Ndir_glob')
+    call HDF5_integer_saving(file_id, Mesh_in%Ngho_glob,'Ngho_glob')
+    IF(ASSOCIATED(Mesh_in%ghostflp)) call HDF5_array1D_saving_int(file_id, Mesh_in%ghostflp, SIZE(Mesh_in%ghostflp), 'ghostFlp')
+    IF(ASSOCIATED(Mesh_in%ghostloc)) call HDF5_array1D_saving_int(file_id, Mesh_in%ghostloc, SIZE(Mesh_in%ghostloc), 'ghostLoc')
+    IF(ASSOCIATED(Mesh_in%ghostpro)) call HDF5_array1D_saving_int(file_id, Mesh_in%ghostpro, SIZE(Mesh_in%ghostpro), 'ghostPro')
+    IF(ASSOCIATED(Mesh_in%ghelsloc)) call HDF5_array1D_saving_int(file_id, Mesh_in%ghelsloc, SIZE(Mesh_in%ghelsloc), 'ghelsLoc')
+    IF(ASSOCIATED(Mesh_in%ghelspro)) call HDF5_array1D_saving_int(file_id, Mesh_in%ghelspro, SIZE(Mesh_in%ghelspro), 'ghelsPro')
+    IF(ALLOCATED(Mesh_in%fc2sd)) call HDF5_array1D_saving_int(file_id, Mesh_in%fc2sd, SIZE(Mesh_in%fc2sd), 'fc2sd')
+    IF(ALLOCATED(Mesh_in%pr2sd)) call HDF5_array1D_saving_int(file_id, Mesh_in%pr2sd, SIZE(Mesh_in%pr2sd), 'pr2sd')
+    IF(ALLOCATED(Mesh_in%fc2rv)) call HDF5_array1D_saving_int(file_id, Mesh_in%fc2rv, SIZE(Mesh_in%fc2rv), 'fc2rv')
+    IF(ALLOCATED(Mesh_in%pr2rv)) call HDF5_array1D_saving_int(file_id, Mesh_in%pr2rv, SIZE(Mesh_in%pr2rv), 'pr2rv')
+    IF(ALLOCATED(Mesh_in%el2sd))call HDF5_array1D_saving_int(file_id, Mesh_in%el2sd, SIZE(Mesh_in%el2sd), 'el2sd')
+    IF(ALLOCATED(Mesh_in%pe2sd))call HDF5_array1D_saving_int(file_id, Mesh_in%pe2sd, SIZE(Mesh_in%pe2sd), 'pe2sd')
+    IF(ALLOCATED(Mesh_in%el2rv))call HDF5_array1D_saving_int(file_id, Mesh_in%el2rv, SIZE(Mesh_in%el2rv), 'el2rv')
+    IF(ALLOCATED(Mesh_in%pe2rv))call HDF5_array1D_saving_int(file_id, Mesh_in%pe2rv, SIZE(Mesh_in%pe2rv), 'pe2rv')
+#endif
+
+    call HDF5_close(file_id)
+
+    ! Message to confirm succesful creation and filling of file
+    IF (MPIvar%glob_id .eq. 0) THEN
+      print *, 'Mesh converted from gmsh to hdf5. Output written to file ', trim(adjustl(fname_mod))
+      print *, '        '
+    END IF
+
+  ENDSUBROUTINE HDF5_save_mesh_struct
 
   !********************************
   ! Loads mesh from an hdf5 file
@@ -842,7 +943,7 @@ CONTAINS
     real*8                       :: xmin
 
     IF (utils%printint > 0) THEN
-      print *, 'Loading mesh.'
+      print *, 'Loading mesh with mesh2global_var.'
       print *, '        '
     ENDIF
 
