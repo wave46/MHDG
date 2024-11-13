@@ -1351,7 +1351,7 @@ CONTAINS
   SUBROUTINE compute_sigmaviz(U,sigmaviz)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmaviz,U1,U4,T0,Ery,E0
-    REAL, PARAMETER    :: tol = 1e-20
+    REAL*8 PARAMETER    :: tol = 1.e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1368,7 +1368,7 @@ CONTAINS
   SUBROUTINE compute_dsigmaviz_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0,Ery,E0
-    REAL, PARAMETER    :: tol = 1e-20
+    REAL*8 PARAMETER    :: tol = 1.e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1390,7 +1390,7 @@ CONTAINS
   SUBROUTINE compute_sigmavrec(U,sigmavrec)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmavrec,U1,U4,T0,Ery,E0
-    REAL, PARAMETER    :: tol = 1e-20
+    REAL*8 PARAMETER    :: tol = 1.e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1407,7 +1407,7 @@ CONTAINS
   SUBROUTINE compute_dsigmavrec_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0,Ery,E0
-    REAL, PARAMETER    :: tol = 1e-20
+    REAL*8 PARAMETER    :: tol = 1.e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1592,7 +1592,7 @@ CONTAINS
   SUBROUTINE compute_sigmaviz(U,sigmaviz)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmaviz,U1,U4,T0,te,ne,n0
-    REAL, PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8 PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
 
     U1 = U(1)
     U4 = U(4)
@@ -1615,7 +1615,7 @@ CONTAINS
   SUBROUTINE compute_dsigmaviz_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0, te,ne,n0
-    REAL, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8 PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
 
     U1 = U(1)
     U4 = U(4)
@@ -1635,7 +1635,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavEiz,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8 parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1659,7 +1659,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),sigmavEiz,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8 parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1756,7 +1756,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),sigmavrec,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8 parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1775,7 +1775,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavErec,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8 parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1796,7 +1796,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),sigmavErec,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    real, parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8 parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1896,7 +1896,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0,E0
     REAL*8             :: p1,p2,p3,p4,p5
-    REAL, PARAMETER    :: tol = 1e-20
+    REAL*8 PARAMETER    :: tol = 1.e-20
     T0 = 50.
     U1 = U(1)
     U4 = U(4)
@@ -2021,7 +2021,7 @@ CONTAINS
     real*8             :: res(:), U1,U2,U3,T0,ti, ti_min = 0.1
     real*8, allocatable :: dti_dU(:)
     real*8             :: sigmavcx, sigmavcx_dte
-    real, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8 parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i
 
     allocate(dti_dU(size(U)))
@@ -2646,7 +2646,7 @@ END SUBROUTINE  compute_ddissip_du
     REAL*8             :: sigmaviz,sigmavcx,Dpn
     REAL*8             :: dsigmaviz_dU(phys%Neq),dsigmavcx_dU(phys%Neq)
     REAL*8             :: U1,U2,U3,U4,U5
-    REAL,PARAMETER     :: tol = 1e-12
+    REAL*8,PARAMETER     :: tol = 1.e-12
 	   U1 = U(1)
     U2 = U(2)
 	   U3 = U(3)
@@ -2721,7 +2721,7 @@ END SUBROUTINE  compute_ddissip_du
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: res
     REAL*8              :: U1,U2,U3,U5,Tmin,T
-    REAL,PARAMETER      :: tol = 1e-12
+    REAL*8PARAMETER      :: tol = 1.e-12
 	   U1 = U(1)
     U2 = U(2)
 	   U3 = U(3)
@@ -2749,7 +2749,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8                :: U1,U2,U3,U4,U5
     REAL*8                :: cs_n,Dpn,t
     REAL*8                :: Grad_Pn(simpar%Ndim)
-    REAL,PARAMETER        :: gamma = 4.,tol = 1e-12
+    REAL*8PARAMETER        :: gamma = 4.,tol = 1.e-12
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
@@ -2776,7 +2776,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8                :: U1,U2,U3,U4,U5
     REAL*8                :: cs_n,Dpn,t
     REAL*8                :: Grad_Pn(simpar%Ndim)
-    REAL,PARAMETER        :: gamma = 4.,tol = 1e-12
+    REAL*8PARAMETER        :: gamma = 4.,tol = 1.e-12
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
@@ -2803,7 +2803,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8                :: U1,U2,U3,U4,U5
     REAL*8                :: cs_n,Dpn,GammaDpn,GammaLim
     REAL*8                :: Grad_Pn(simpar%Ndim)
-    REAL,PARAMETER        :: tol = 1e-12
+    REAL*8PARAMETER        :: tol = 1.e-12
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
@@ -2845,7 +2845,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
   SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, q_cyl, tau)
 #endif
     real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
-    real, intent(in)    :: isext
+    REAL*8 intent(in)    :: isext
     integer, intent(in) :: ifa, iel
 #ifdef KEQUATION
     real*8, intent(in)  :: q_cyl
@@ -3583,4 +3583,3 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 
 
 END MODULE physics
-
