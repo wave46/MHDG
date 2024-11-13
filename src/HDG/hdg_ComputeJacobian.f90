@@ -1104,7 +1104,9 @@ CONTAINS
 
 #else
 !TOR3D
-  phys%heating_amplitude = phys%heating_power/2./PI**2/phys%heating_sigmar/phys%heating_sigmaz/phys%r_axis
+  IF(switch%testcase .NE. 60) THEN
+     phys%heating_amplitude = phys%heating_power/2./PI**2/phys%heating_sigmar/phys%heating_sigmaz/phys%r_axis
+  ENDIF
   !********************************************
   !
   !                 2D routines
@@ -1188,7 +1190,9 @@ CONTAINS
      IF (Mesh%ghostElems(iel) .EQ. 0) THEN
 #endif
       n  = n + El_n
+#ifdef NEUTRAL
       nn = nn + El_nn
+#endif
 #ifdef PARALL
     ENDIF
 #endif
@@ -1624,8 +1628,9 @@ CONTAINS
 
       ! Check if total density is costant
       El_n  = El_n  + ueg(g,1)*2*3.1416*dvolu*phys%lscale**3
+#ifdef NEUTRAL
       El_nn = El_nn + ueg(g,5)*2*3.1416*dvolu*phys%lscale**3
-
+#endif
       ! x and y derivatives of the shape functions
       Nxg = iJ11(g)*refElPol%Nxi2D(g,:) + iJ12(g)*refElPol%Neta2D(g,:)
       Nyg = iJ21(g)*refElPol%Nxi2D(g,:) + iJ22(g)*refElPol%Neta2D(g,:)
@@ -1919,18 +1924,18 @@ CONTAINS
     b_nod(:,2) = Bfl(:,2)/Bmod_nod
     b_nod(:,3) = Bfl(:,3)/Bmod_nod
     ! Magnetic field norm and direction at Gauss points
-      Bmod = MATMUL(refElPol%N1D,Bmod_nod)
-      b = MATMUL(refElPol%N1D,b_nod)
+    Bmod = MATMUL(refElPol%N1D,Bmod_nod)
+    b = MATMUL(refElPol%N1D,b_nod)
 
 #ifdef KEQUATION
     ! q_cyl at Gauss points
     q_cyl = matmul(refElPol%N1D,q_cylfl)
 #endif
     ! Normalaized magnetic flux at Gauss points: PSI
-      Psig = MATMUL(refElPol%N1D,psifl)
+    Psig = MATMUL(refElPol%N1D,psifl)
 
     ! Trace solution at face Gauss points
-      xyf = MATMUL(refElPol%N1D,Xfl)
+    xyf = MATMUL(refElPol%N1D,Xfl)
     IF (isdir) THEN
       CALL analytical_solution(iel,xyf(:,1),xyf(:,2),ufg)
     ELSE
@@ -2373,7 +2378,7 @@ CONTAINS
     call compute_ce(ue,qq,btor,gradBtor,r,omega,q_cyl,ce)
     call compute_dissip(ue,dissip)
     call compute_ddissip_du(ue,ddissip_du)
-    if ((ue(6)<1.e-20) .or. (ue(1)<1e-20) .or.(ue(3)<1.e-20) .or. (ue(4)<1e-20)) then
+    IF ((ue(6)<1.e-20) .or. (ue(1)<1.e-20) .or.(ue(3)<1.e-20) .or. (ue(4)<1.e-20)) THEN
       dissip =  abs(gamma_I)*dissip/phys%k_max
       ddissip_du = abs(gamma_I)
       gamma_I = 0.
@@ -2432,11 +2437,22 @@ CONTAINS
         CALL compute_dTloss_dU(ue,dTloss_dU)
         CALL compute_Tlossrec(ue,Tlossrec)
         CALL compute_dTlossrec_dU(ue,dTlossrec_dU)
+
+#ifdef AMJUELSPLINES
     !Amjuel energy losses
     call compute_sigmavEiz(ue,sigmavEiz)
     call compute_sigmavErec(ue,sigmavErec)
     call compute_dsigmavEiz_dU(ue,dsigmavEiz_dU)
     call compute_dsigmavErec_dU(ue,dsigmavErec_dU)
+#else
+    !! hot fix DO NOT USE
+    WRITE(*,*) this is a hotfix. Do not use. STOPPING.
+    STOP
+    sigmavEiz = sigmaviz*Tloss
+    sigmavErec = sigmavrec*Tlossrec
+#endif
+
+
 #ifdef DNNLINEARIZED
         CALL compute_Dnn_dU(ue,Dnn_dU)
 
