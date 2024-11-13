@@ -1272,12 +1272,20 @@ CONTAINS
        up(:, 3) = 18.
        up(:, 4) = 18.
     CASE (50:59)
-       fluxel = phys%magnetic_flux(Mesh%T(iel,:))
-       fluxel = (fluxel - phys%Flux2Dmin)/(phys%Flux2Dmax - phys%Flux2Dmin)
-       sigma = 0.4
-       up(:, 1) = 1.*EXP(-fluxel**2/(2*sigma**2))
-       up(:, 3) = 18.*EXP(-fluxel**2/(2*sigma**2))
-       up(:, 4) = 18.*EXP(-fluxel**2/(2*sigma**2))
+       IF(size(fluxel,1) .eq. size(up,1)) THEN
+         ! Case in which analytical_solution is called to initialise the initial solution
+         fluxel = phys%magnetic_flux(Mesh%T(iel,:))
+         fluxel = (fluxel - phys%Flux2Dmin)/(phys%Flux2Dmax - phys%Flux2Dmin)
+         sigma = 0.4
+         up(:, 1) = 1.*EXP(-fluxel**2/(2*sigma**2))
+         up(:, 3) = 18.*EXP(-fluxel**2/(2*sigma**2))
+         up(:, 4) = 18.*EXP(-fluxel**2/(2*sigma**2))
+       ELSE
+         ! Case in which analytical_solution is called to apply boundary conditions
+         up(:, 1) = 1.
+         up(:, 3) = 18.
+         up(:, 4) = 18.
+       ENDIF
 #ifdef NEUTRAL
        up(:,11)= 1.e-8
 #ifdef KEQUATION
