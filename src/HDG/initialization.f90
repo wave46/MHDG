@@ -819,6 +819,16 @@ CONTAINS
   END SUBROUTINE extractFaceSolution
 #endif
 
+  SUBROUTINE add_initial_perturbation()
+    IF (switch%pertini .EQ. 1) THEN
+       CALL add_perturbation()
+       WRITE(6,*) "Adding perturbation to the initial solution"
+    ELSE IF (switch%pertini .EQ. 2) THEN
+       CALL add_blob()
+       WRITE(6,*) "Adding density blob to initial solution"
+    ENDIF
+  ENDSUBROUTINE add_initial_perturbation
+
   SUBROUTINE add_perturbation()
     INTEGER             :: Np
     INTEGER             :: iel,i,imod,nmod,ieq,indl, iel2, iphi
