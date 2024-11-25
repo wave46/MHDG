@@ -20,7 +20,7 @@ CONTAINS
   ! Loads mesh from an hdf5 file
   ! external file
   !********************************
-  SUBROUTINE load_mesh_serial(fname)
+  SUBROUTINE load_mesh_serial_h5(fname)
     USE MPI_OMP
     CHARACTER(LEN=*) :: fname
     CHARACTER(len=1000) :: fname_complete
@@ -172,9 +172,9 @@ CONTAINS
        ENDIF
     ENDIF
 
-  END SUBROUTINE load_mesh_serial
+  END SUBROUTINE load_mesh_serial_h5
 
-  SUBROUTINE load_mesh(fname)
+  SUBROUTINE load_mesh_h5(fname)
     USE MPI_OMP
     CHARACTER(LEN=*) :: fname
     CHARACTER(len=1000) :: fname_complete
@@ -467,7 +467,7 @@ CONTAINS
        ENDIF
     ENDIF
 
-  END SUBROUTINE load_mesh
+  END SUBROUTINE load_mesh_h5
 
   !**********************************************************************
   ! Save solution in HDF5 file format
