@@ -1063,7 +1063,7 @@ CONTAINS
        Mesh%F(infoFace_ex(1), infoFace_ex(2)) = ifa + Mesh%Nintfaces
        Mesh%Fdir(infoFace_ex(1), infoFace_ex(2)) = isdir
     END DO
-    
+
     ! Modify flipface for periodic faces
     DO ifa = 1, Mesh%Nextfaces
        IF (Mesh%periodic_faces(ifa).NE.0) THEN
