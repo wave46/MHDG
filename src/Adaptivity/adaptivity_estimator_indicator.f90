@@ -194,7 +194,6 @@ CONTAINS
 
     CALL read_extended_connectivity('./res/temp.msh')
 
-    WRITE(*,*) "********** Increasing order mesh **********"
     CALL set_order_mesh(order)
     CALL free_reference_element
     CALL create_reference_element(refElPol,2,order, verbose = 0)
