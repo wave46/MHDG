@@ -36,8 +36,9 @@ CONTAINS
     INTEGER                                     :: N_n_vertex_glob, counter, j, jj, ii
     REAL*8                                      :: dummy_sum
     REAL*8, ALLOCATABLE                         :: h_target_glob_rep(:), h_target_glob(:)
-    INTEGER, ALLOCATABLE                        :: T_nogho(:,:)
-    REAL*8, ALLOCATABLE                         :: u_nogho(:), q_nogho(:)
+    REAL*8, POINTER                             :: error_L2_glob(:) => NULL()
+    INTEGER, POINTER                            :: T_nogho(:,:) => NULL()
+    REAL*8, POINTER                             :: u_nogho(:) => NULL(), q_nogho(:) => NULL(), X_nogho(:,:) => NULL()
     INTEGER, ALLOCATABLE                        :: recvcounts(:), displs(:), vector_nodes_unique_glob(:), temp(:)
     LOGICAL, ALLOCATABLE                        :: already_counted(:)
 #endif
@@ -128,7 +129,7 @@ CONTAINS
 #endif
 
     two_d_nodes = 0.
-    two_d_elements = 0.
+    two_d_elements = 0
     h = 0.
     error_L2_vertices = 0.
     h_target_temp = 0.
@@ -303,7 +304,7 @@ CONTAINS
 
 #ifdef PARALL
     ENDIF
-    ! wait for process 0 to finish writing before loading new meshe
+    ! wait for process 0 to finish writing before loading new mesh
     CALL MPI_BARRIER(mpi_comm_world, ierr)
 #endif
 
@@ -329,10 +330,6 @@ CONTAINS
 
     CALL read_extended_connectivity('./res/temp.msh')
 
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       WRITE(*,*) "********** Increasing order mesh **********"
-    ENDIF
-
     CALL set_order_mesh(order)
     CALL free_reference_element
     CALL create_reference_element(refElPol,2,order, verbose = 0)
@@ -346,15 +343,14 @@ CONTAINS
 
     !CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
 
-    WRITE(*,*) "********** Rounding edges **********"
-    !CALL round_edges(Mesh)
-
-    ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
-    CALL write_msh_file(Mesh%X,Mesh%T)
-    ! convert the mesh to .mesh
-
-    CALL convert_msh2mesh('./res/temp')
-
+    IF(MPIvar%glob_id .EQ. 0) THEN
+      WRITE(*,*) "********** Rounding edges **********"
+      !CALL round_edges(Mesh)
+      ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
+      CALL write_msh_file(Mesh%X,Mesh%T)
+      ! convert the mesh to .mesh
+      CALL convert_msh2mesh('./res/temp')
+    ENDIF
     !CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
 
     DEALLOCATE(two_d_nodes)
