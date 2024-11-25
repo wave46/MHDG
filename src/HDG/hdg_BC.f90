@@ -613,7 +613,7 @@ CONTAINS
     Bfl = phys%B(Mesh%T(iel,nod),:)
 
     ! Magnetic field norm and direction at element nodes
-     Bmod_nod = SQRT(Bfl(:,1)**2 + Bfl(:,2)**2 + Bfl(:,3)**2)
+    Bmod_nod = SQRT(Bfl(:,1)**2 + Bfl(:,2)**2 + Bfl(:,3)**2)
     b_nod(:,1) = Bfl(:,1)/Bmod_nod
     b_nod(:,2) = Bfl(:,2)/Bmod_nod
     b_nod(:,3) = Bfl(:,3)/Bmod_nod
@@ -632,8 +632,8 @@ CONTAINS
     ! Assembly indices
     ind_uf = (Fi - 1)*Neq*Npfl + (/(i,i=1,Neq*Npfl)/)
     ind_ff = (ifl - 1)*Neq*Npfl + (/(i,i=1,Neq*Npfl)/)
-     ind_fe = RESHAPE(tensorSumInt((/(i,i=1,neq)/),neq*(nod - 1)),(/neq*Npfl/))
-     ind_fG = RESHAPE(tensorSumInt((/(i,i=1,neq*Ndim)/),neq*Ndim*(refElPol%face_nodes(ifl,:) - 1)),(/neq*Ndim*Npfl/))
+    ind_fe = RESHAPE(tensorSumInt((/(i,i=1,neq)/),neq*(nod - 1)),(/neq*Npfl/))
+    ind_fG = RESHAPE(tensorSumInt((/(i,i=1,neq*Ndim)/),neq*Ndim*(refElPol%face_nodes(ifl,:) - 1)),(/neq*Ndim*Npfl/))
     ind_qf = (iel - 1)*Ndim*Neq*Npel + ind_fG
 
 
