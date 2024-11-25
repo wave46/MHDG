@@ -3052,9 +3052,31 @@ CONTAINS
     RETURN
   END SUBROUTINE get_unit
 
+  SUBROUTINE read_splines()
+    USE globals
+    IF (switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) THEN
+       WRITE(*,*) "Splines read from file ./res/geometries/Circ_InfLim_YesHole_Structured.geo"
+       CALL generate_splines_from_geo_file('./res/geometries/Circ_InfLim_YesHole_Structured.geo')
+    ELSE
+       IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
+          !WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_NoHole_farWall.geo"
+          !CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_NoHole_farWall.geo')
+          WRITE(*,*) "Splines read from file ./res/geometries/TCV_smooth.geo"
+          CALL generate_splines_from_geo_file('./res/geometries/TCV_smooth.geo')
+       ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
+          WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_YesHole_SmoothCorner.geo"
+          CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_YesHole_SmoothCorner.geo')
+       ELSE
+          WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_NoHole_SmoothCorner.geo"
+          CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_NoHole_SmoothCorner.geo')
+       ENDIF
+    END IF
+  ENDSUBROUTINE read_splines
+
   SUBROUTINE generate_splines_from_geo_file(filename)
     USE mod_splines
     USE globals
+    USE MPI_OMP
       IMPLICIT NONE
       CHARACTER (*), INTENT(IN)       :: filename
 
@@ -3064,6 +3086,14 @@ CONTAINS
       REAL*8                          :: xcenter, ycenter, x1, x2, y1, y2, angle, RotMat(2,2)
       INTEGER, PARAMETER              :: read_unit = 99
 
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         WRITE(*,*) "*************************************************"
+         WRITE(*,*) "               SPLINE READING                    "
+         WRITE(*,*) "*************************************************"
+      ENDIF
+
+      line = ""
 
       ! Open the file
       OPEN(unit=read_unit, file=filename, iostat=ios)
