@@ -261,6 +261,9 @@ CONTAINS
     IF (ALLOCATED(Mesh%periodic_faces)) THEN
        DEALLOCATE (Mesh%periodic_faces)
     END IF
+    IF (ALLOCATED(Mesh%flag_elems_sc)) THEN
+       DEALLOCATE (Mesh%flag_elems_sc)
+    END IF
 
     ! sol type
     IF (ASSOCIATED(sol%u)) THEN
