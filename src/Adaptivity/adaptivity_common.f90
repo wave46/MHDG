@@ -18,21 +18,7 @@ CONTAINS
     TYPE(gmsh_t), INTENT(IN)          :: gmsh
 
     CALL gmsh%initialize()
-
-    IF (switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) THEN
-       CALL gmsh%OPEN("./res/geometries/Circ_InfLim_YesHole_Structured.geo")
-    ELSE
-       !CALL gmsh%open("./res/West_Mesh_farWall_NoHole_SmoothCorner_base.geo")
-       IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
-          !CALL gmsh%OPEN("./res/geometries/West_Mesh_NoHole_farWall.geo")
-          CALL gmsh%OPEN("./res/geometries/TCV_smooth.geo")
-       ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
-          CALL gmsh%OPEN("./res/geometries/West_Mesh_YesHole_SmoothCorner.geo")
-       ELSE
-          CALL gmsh%OPEN("./res/geometries/West_Mesh_NoHole_SmoothCorner.geo")
-       ENDIF
-    END IF
-
+    CALL gmsh%OPEN(adapt%geometry_path)
     CALL gmsh%MERGE("./res/temp.msh")
     CALL gmsh%option%setNumber("Mesh.MshFileVersion", 2.2)
     CALL gmsh%WRITE("./res/temp.msh")
@@ -45,19 +31,7 @@ CONTAINS
     CHARACTER ( len = * ), INTENT(IN) :: path2msh
 
     CALL gmsh%initialize()
-    IF (switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) THEN
-       CALL gmsh%OPEN("./res/geometries/Circ_InfLim_YesHole_Structured.geo")
-    ELSE
-       !CALL gmsh%open("./res/West_Mesh_farWall_NoHole_SmoothCorner_base.geo")
-       IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
-          !CALL gmsh%OPEN("./res/geometries/West_Mesh_NoHole_farWall.geo")
-          CALL gmsh%OPEN("./res/geometries/TCV_smooth.geo")
-       ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
-          CALL gmsh%OPEN("./res/geometries/West_Mesh_YesHole_SmoothCorner.geo")
-       ELSE
-          CALL gmsh%OPEN("./res/geometries/West_Mesh_NoHole_SmoothCorner.geo")
-       ENDIF
-    END IF
+    CALL gmsh%OPEN(adapt%geometry_path)
     CALL gmsh%MERGE(path2msh)
     CALL gmsh%option%setNumber("Mesh.MshFileVersion", 2.2)
     CALL gmsh%WRITE(path2msh)
@@ -80,6 +54,13 @@ CONTAINS
     LOGICAL, ALLOCATABLE, DIMENSION(:)       :: aux_coord_logical, local_coord_logical, int_face_meshed
     REAL*8, ALLOCATABLE, DIMENSION(:,:)      :: Xp, Xp_aux, elem_nodes_mod, coord_ref
     INTEGER , ALLOCATABLE, DIMENSION(:,:)    :: Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_ULIM, Tb_PUFF, Tb_PUMP, mesh_info
+
+    IF (utils%printint > 0) THEN
+       WRITE (6, *) '*************************************************'
+       WRITE (6, *) '*              INCREASE ORDER MESH              *'
+       WRITE (6, *) '*************************************************'
+     ENDIF
+
 
     CALL create_reference_element(refElLocal,2, p, verbose = 1)
 
