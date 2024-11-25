@@ -145,7 +145,6 @@ CONTAINS
 
     CALL read_extended_connectivity('./res/temp.msh')
 
-    WRITE(*,*) "********** Increasing order mesh **********"
     CALL set_order_mesh(order)
     CALL free_reference_element
     CALL create_reference_element(refElPol,2,order, verbose = 0)
@@ -186,6 +185,83 @@ CONTAINS
     DEALLOCATE(vector_nodes_unique)
 
   ENDSUBROUTINE adaptivity_indicator
+
+  SUBROUTINE compute_error_oscillations(error_oscillation, oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec)
+    REAL*8, ALLOCATABLE, INTENT(OUT)  :: error_oscillation(:), oscillations(:)
+    REAL*8, INTENT(OUT)               :: min_osc, max_osc
+    INTEGER, INTENT(IN)               :: ir
+    INTEGER, INTENT(OUT)              :: n_osc,  ir_check
+    TYPE(Mesh_type), INTENT(INOUT)    :: Mesh_prec
+    INTEGER, ALLOCATABLE              :: vector_nodes_unique(:,:)
+    INTEGER                           :: N_n_vertex
+
+    IF (utils%timing) THEN
+       CALL cpu_TIME(timing%tps1)
+       CALL system_CLOCK(timing%cks1, timing%clock_rate1)
+    END IF
+
+    CALL unique_2D(Mesh%T(:,1:RefElPol%Nvertices),vector_nodes_unique)
+
+    N_n_vertex = SIZE(vector_nodes_unique)
+
+    IF(.NOT. ALLOCATED(error_oscillation)) THEN
+       ALLOCATE(error_oscillation(N_n_vertex))
+    ELSEIF(SIZE(error_oscillation) .NE. N_n_vertex) THEN
+       DEALLOCATE(error_oscillation)
+       ALLOCATE(error_oscillation(N_n_vertex))
+    ENDIF
+    error_oscillation = 0.
+
+    IF(.NOT. ALLOCATED(oscillations)) THEN
+       ALLOCATE(oscillations(Mesh%Nelems))
+    ELSEIF(SIZE(oscillations) .NE. Mesh%Nelems) THEN
+       DEALLOCATE(oscillations)
+       ALLOCATE(oscillations(Mesh%Nelems))
+    ENDIF
+    oscillations = -100.
+
+    CALL check_oscillations(adapt%thr_ind, error_oscillation, oscillations)
+
+    max_osc = MAXVAL(oscillations)
+    min_osc = MINVAL(oscillations)
+    n_osc = COUNT((oscillations .LT. 0.) .AND. (oscillations .GT. -100.))
+
+#ifdef PARALL
+    CALL MPI_Allreduce(MPI_IN_PLACE, max_osc, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_Allreduce(MPI_IN_PLACE, min_osc, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
+    CALL MPI_Allreduce(MPI_IN_PLACE, n_osc, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+
+    IF(MPIvar%glob_id .EQ. 0) THEN
+      WRITE(*,*) "MAX ERROR OSCILLATION:       ", max_osc
+      !WRITE(*,*) "MIN ERROR OSCILLATION:       ", min_osc
+      WRITE(*,*) "NUMBER OF OSCILLATIONS:      ", n_osc
+
+      IF(max_osc .LE. adapt%osc_check) THEN
+        WRITE(*,*) "Solution saved as checkpoint."
+        IF(SIZE(sol%u_conv) .NE. SIZE(sol%u)) THEN
+          DEALLOCATE(sol%u_conv)
+          DEALLOCATE(sol%q_conv)
+          ALLOCATE(sol%u_conv(SIZE(sol%u)))
+          ALLOCATE(sol%q_conv(SIZE(sol%q)))
+        ENDIF
+        sol%u_conv = sol%u
+        sol%q_conv = sol%q
+        ir_check = ir
+        CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
+      ENDIF
+    ENDIF
+
+    DEALLOCATE(vector_nodes_unique)
+
+    IF (utils%timing) THEN
+       CALL cpu_TIME(timing%tpe1)
+       CALL system_CLOCK(timing%cke1, timing%clock_rate1)
+       timing%runtadapt = timing%runtadapt + (timing%cke1-timing%cks1)/REAL(timing%clock_rate1)
+       timing%cputadapt = timing%cputadapt + timing%tpe1-timing%tps1
+    END IF
+
+  ENDSUBROUTINE compute_error_oscillations
 
   SUBROUTINE check_oscillations(thresh, error_oscillation, oscillations)
 
