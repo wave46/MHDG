@@ -104,7 +104,7 @@ PROGRAM Convergence
         WRITE (6, *) "Computing ", TRIM(mesh_name)
 
         ! Load the mesh file
-        CALL load_mesh(TRIM(mesh_name))
+        CALL load_mesh_h5(TRIM(mesh_name))
 
         ! Pastix: set the start to true
         matK%start = .TRUE.
