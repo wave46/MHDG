@@ -1351,7 +1351,7 @@ CONTAINS
   SUBROUTINE compute_sigmaviz(U,sigmaviz)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmaviz,U1,U4,T0,Ery,E0
-    REAL*8 PARAMETER    :: tol = 1.e-20
+    REAL*8, PARAMETER    :: tol = 1.e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1368,7 +1368,7 @@ CONTAINS
   SUBROUTINE compute_dsigmaviz_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0,Ery,E0
-    REAL*8 PARAMETER    :: tol = 1.e-20
+    REAL*8, PARAMETER    :: tol = 1.e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1390,7 +1390,7 @@ CONTAINS
   SUBROUTINE compute_sigmavrec(U,sigmavrec)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmavrec,U1,U4,T0,Ery,E0
-    REAL*8 PARAMETER    :: tol = 1.e-20
+    REAL*8, PARAMETER    :: tol = 1.e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1407,7 +1407,7 @@ CONTAINS
   SUBROUTINE compute_dsigmavrec_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0,Ery,E0
-    REAL*8 PARAMETER    :: tol = 1.e-20
+    REAL*8, PARAMETER    :: tol = 1.e-20
    U1 = U(1)
    U4 = U(4)
    T0 = 50.
@@ -1586,13 +1586,10 @@ CONTAINS
     END DO
   END SUBROUTINE compute_dlogeirene_2D_dlogne_rate
 
-
-
-
   SUBROUTINE compute_sigmaviz(U,sigmaviz)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmaviz,U1,U4,T0,te,ne,n0
-    REAL*8 PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8, PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
 
     U1 = U(1)
     U4 = U(4)
@@ -1615,7 +1612,7 @@ CONTAINS
   SUBROUTINE compute_dsigmaviz_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0, te,ne,n0
-    REAL*8 PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
 
     U1 = U(1)
     U4 = U(4)
@@ -1635,7 +1632,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavEiz,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    REAL*8 parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8, PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1659,7 +1656,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),sigmavEiz,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    REAL*8 parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1756,7 +1753,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),sigmavrec,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    REAL*8 parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1775,7 +1772,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: sigmavErec,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    REAL*8 parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8, PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1796,7 +1793,7 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),sigmavErec,U1,U4,T0,Ery,E0,te,ne,n0
     real*8, dimension(9,9) :: alpha
-    REAL*8 parameter    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
     U4 = U(4)
@@ -1896,7 +1893,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U4,T0,E0
     REAL*8             :: p1,p2,p3,p4,p5
-    REAL*8 PARAMETER    :: tol = 1.e-20
+    REAL*8, PARAMETER    :: tol = 1.e-20
     T0 = 50.
     U1 = U(1)
     U4 = U(4)
@@ -2021,7 +2018,7 @@ CONTAINS
     real*8             :: res(:), U1,U2,U3,T0,ti, ti_min = 0.1
     real*8, allocatable :: dti_dU(:)
     real*8             :: sigmavcx, sigmavcx_dte
-    REAL*8 parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8, PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i
 
     allocate(dti_dU(size(U)))
@@ -2046,107 +2043,6 @@ CONTAINS
   END SUBROUTINE compute_dsigmavcx_dU
 #endif
 
-!!!! Routines to apply smoothening on limiting values of neutral diffusion
-  SUBROUTINE double_softplus(x, xmin, xmax)
-    ! this routine constrains value x between xmin and xmax
-    ! using paradigm of softplus function
-    ! for xmin it is a typical softplus
-    ! f(x) = xmin+width*ln(1+exp((x-xmin)/w)
-    ! w here and after = w*xmin(or max), where w is defined inside the function
-    ! parameter width states for the region where smoothening is applied xmax+-width*w
-    ! for xmax it is somewhat inversed softplus:
-    ! f(x) = width*ln(1+exp(xmax/width))-width*ln(1+exp(-(x-xmax)/width))
-    ! for x>= xmax+width*w*xmax : f(x)=xmax
-    ! for xmax-width*w*xmax<=x<xmax+width*w*xmax : f(x) = w*xmax*ln(1+exp(1/w))-width*w*xmax*ln(1+exp(-(x-xmax)/(w*xmax))
-    ! for xmin+width*w*xmin<=x<xmax-width*w*xmax : f(x) = x
-    ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f(x) = xmin + w*xmin*ln(1+exp((x-xmin)/(w*xmin))
-    ! x<xmin-width*w*xmin : f(x) = xmin
-    REAL*8, INTENT(IN) :: xmin, xmax
-    REAL*8, INTENT(INOUT):: x
-    REAL*8             :: w,width
-    w = 0.01
-    width = 10
-    IF (x>=xmax+w*width*xmax) THEN
-      x = xmax
-    ELSEIF ((x>=xmax-w*width*xmax) .AND. (x<xmax+w*width*xmax)) THEN
-       x = xmax-w*xmax*LOG(1+EXP(-(x-xmax)/(w*xmax)))
-    !elseif ((x>=xmin+w*width*xmin) .and. (x<xmax-w*width*xmax)) then
-      ! do nothing
-    ELSEIF ((x>=xmin-w*width*xmin) .AND. (x<xmin+w*width*xmin)) THEN
-       x = xmin + w*xmin*LOG(1+EXP((x-xmin)/(w*xmin)))
-    ELSEIF (x<xmin-w*width*xmin) THEN
-      x = xmin
-    ENDIF
-  END SUBROUTINE double_softplus
-
-  SUBROUTINE double_softplus_deriv(x, xmin, xmax,deriv)
-    ! this calculates dervitive of double_softplus
-    ! for x>= xmax+width*w*xmax : f'(x)=0
-    ! for xmax-width*w*xmax<=x<xmax+width*w*xmax : f'(x) = 1/(1+exp((x-xmax)/(w*xmax)))
-    ! for xmin+width*w*xmin<=x<xmax-width*w*xmax : f'(x) = 1.
-    ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f'(x) = 1/(1+exp(-(x-xmin)/(w*xmin)))
-    ! x<xmin-width*w*xmin : f'(x) = 0
-    REAL*8, INTENT(IN) :: x,xmin, xmax
-    REAL*8, INTENT(OUT):: deriv
-    REAL*8             :: w, width
-    w = 0.01
-    width = 10
-    IF (x>=xmax+w*width*xmax) THEN
-      deriv = 0.
-    ELSEIF ((x>=xmax-w*width*xmax) .AND. (x<xmax+w*width*xmax)) THEN
-       deriv = 1./(1.+EXP((x-xmax)/(w*xmax)))
-    ELSEIF ((x>=xmin+w*width*xmin) .AND. (x<xmax-w*width*xmax)) THEN
-      deriv = 1.
-    ELSEIF ((x>=xmin-w*width*xmin) .AND. (x<xmin+w*width*xmin)) THEN
-       deriv = 1./(1.+EXP(-1.*(x-xmin)/(w*xmin)))
-      !WRITE(6,*) 'Low diffusion ', x*simpar%refval_diffusion
-      !stop
-
-    ELSEIF (x<xmin-w*width*xmin) THEN
-      deriv = 0.
-    ENDIF
-  END SUBROUTINE double_softplus_deriv
-
-  SUBROUTINE softplus(x, xmin)
-    ! this routine limits value x with xmin
-    ! using paradigm of softplus function
-    ! f(x) = xmin+width*ln(1+exp((x-xmin)/width)
-    ! w here and after = w*xmin(or max), where w is defined inside the function
-    ! parameter width states for the region where smoothening is applied xmax+-width*w
-    ! for x>=xmin-width*w*xmin : f(x) = xmin + w*xmin*ln(1+exp((x-xmin)/(w*xmin))
-    ! x<xmin-width*w*xmin : f(x) = xmin
-    REAL*8, INTENT(IN) :: xmin
-    REAL*8, INTENT(INOUT):: x
-    REAL*8             :: w, width
-    w = 0.01
-    width = 10
-    !if (x>=xmin+w*width.xmin) then
-    !  x = x !do nothing
-    IF ((x>=xmin-w*width*xmin) .AND. (x<xmin+w*width*xmin)) THEN
-       x = xmin + w*xmin*LOG(1+EXP((x-xmin)/(w*xmin)))
-    ELSEIF (x<xmin-w*width*xmin) THEN
-      x = xmin
-    ENDIF
-  END SUBROUTINE softplus
-
-  SUBROUTINE softplus_deriv(x, xmin,deriv)
-    ! this routine calculates derivtiv of softplus
-    ! x>=xmin+width*w*xmin: f'(x) = 1.
-    ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f'(x) = 1/(1+exp(-(x-xmin)/(w*xmin)))
-    ! x<xmin-width*w*xmin : f'(x) = 0
-    REAL*8, INTENT(IN) :: x, xmin
-    REAL*8, INTENT(OUT):: deriv
-    REAL*8             :: w, width
-    w = 0.01
-    width = 10
-    IF (x>=xmin+w*width*xmin) THEN
-      deriv = 1.
-    ELSEIF ((x>=xmin-w*width*xmin) .AND. (x<xmin+w*width*xmin)) THEN
-       deriv =  1./(1.+EXP(-1.*(x-xmin)/(w*xmin)))
-    ELSEIF (x<xmin-w*width*xmin) THEN
-      deriv = 0.
-    ENDIF
-  END SUBROUTINE softplus_deriv
 
 #ifdef DNNLINEARIZED
   SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
@@ -2389,56 +2285,10 @@ CONTAINS
     res(5) = (U2**2)/U1
     res(:) = res(:)*0.5
   END SUBROUTINE compute_dfEicx_dU
+
+
 #ifdef NEUTRAL
-  !*******************************************
-  ! Compute the terms relative to k equations
-  !*******************************************
-SUBROUTINE compute_cs(U, cs)
-  ! Sound speed of plasma
-  REAL*8, INTENT(IN) :: U(:)
-  REAL*8             :: U1,U2,U3,U4
-  REAL*8, INTENT(OUT) :: cs
-  REAL*8, PARAMETER :: tol = 1.e-20
-  U1 = U(1)
-  U2 = U(2)
-  U3 = U(3)
-  U4 = U(4)
-  cs = 2./3./U1*(U3+U4-1./2.*U2**2/U1)
-  !modification softplus dk
-  !IF (cs<0.) cs = tol**2
-  call softplus(cs,tol)
-  cs = sqrt(cs)
-END SUBROUTINE compute_cs
-SUBROUTINE compute_dcs_du(U, dcs_du)
-  ! Sound speed derivative
-  real*8, intent(IN) :: U(:)
-  real*8             :: U1,U2,U3,U4,cs,cs_real,soft_deriv
-  real*8, intent(OUT) :: dcs_du(:)
-  REAL*8, PARAMETER :: tol = 1.e-20
-  U1 = U(1)
-  U2 = U(2)
-  U3 = U(3)
-  U4 = U(4)
-  !if (U4 < tol) U4 = tol
-  !if (U1 < tol) U1 = tol
-  !if (U3 < tol) U3 = tol
-  dcs_du = 0.
-  !modification softplus dk
-  cs_real = 2./3./U1*(U3+U4-1./2.*U2**2/U1)
-  call softplus_deriv(cs_real,tol,soft_deriv)
-  call compute_cs(U,cs)
-  !if (cs>tol) then
-    dcs_du(1) = -1.*(U3+U4-U2**2/U1)/U1**2
-    dcs_du(2) = -1.*U2/U1**2
-    dcs_du(3) = 1./U1
-    dcs_du(4) = 1./U1
-
-
-    dcs_du = dcs_du/3./cs*soft_deriv
-  !endif
-END SUBROUTINE compute_dcs_du
 #ifdef KEQUATION
-
 #ifdef DKLINEARIZED
 SUBROUTINE compute_ddk_du(U,xy,q_cyl,ddk_du)
     ! Routine that computes linearization of turbulent diffusion
@@ -2845,7 +2695,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
   SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, q_cyl, tau)
 #endif
     real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
-    REAL*8 intent(in)    :: isext
+    REAL*8, intent(in)    :: isext
     integer, intent(in) :: ifa, iel
 #ifdef KEQUATION
     real*8, intent(in)  :: q_cyl
@@ -3580,6 +3430,157 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 !    CALL HDF5_close(file_id)
 !
 !  END SUBROUTINE loadMagneticFieldTemporalEvolution
+#ifdef TEMPERATURE
+  !!!! Routines to apply smoothening on limiting values of neutral diffusion
+    SUBROUTINE double_softplus(x, xmin, xmax)
+      ! this routine constrains value x between xmin and xmax
+      ! using paradigm of softplus function
+      ! for xmin it is a typical softplus
+      ! f(x) = xmin+width*ln(1+exp((x-xmin)/w)
+      ! w here and after = w*xmin(or max), where w is defined inside the function
+      ! parameter width states for the region where smoothening is applied xmax+-width*w
+      ! for xmax it is somewhat inversed softplus:
+      ! f(x) = width*ln(1+exp(xmax/width))-width*ln(1+exp(-(x-xmax)/width))
+      ! for x>= xmax+width*w*xmax : f(x)=xmax
+      ! for xmax-width*w*xmax<=x<xmax+width*w*xmax : f(x) = w*xmax*ln(1+exp(1/w))-width*w*xmax*ln(1+exp(-(x-xmax)/(w*xmax))
+      ! for xmin+width*w*xmin<=x<xmax-width*w*xmax : f(x) = x
+      ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f(x) = xmin + w*xmin*ln(1+exp((x-xmin)/(w*xmin))
+      ! x<xmin-width*w*xmin : f(x) = xmin
+      REAL*8, INTENT(IN) :: xmin, xmax
+      REAL*8, INTENT(INOUT):: x
+      REAL*8             :: w,width
+      w = 0.01
+      width = 10
+      IF (x>=xmax+w*width*xmax) THEN
+        x = xmax
+      ELSEIF ((x>=xmax-w*width*xmax) .AND. (x<xmax+w*width*xmax)) THEN
+         x = xmax-w*xmax*LOG(1+EXP(-(x-xmax)/(w*xmax)))
+      !elseif ((x>=xmin+w*width*xmin) .and. (x<xmax-w*width*xmax)) then
+        ! do nothing
+      ELSEIF ((x>=xmin-w*width*xmin) .AND. (x<xmin+w*width*xmin)) THEN
+         x = xmin + w*xmin*LOG(1+EXP((x-xmin)/(w*xmin)))
+      ELSEIF (x<xmin-w*width*xmin) THEN
+        x = xmin
+      ENDIF
+    END SUBROUTINE double_softplus
 
+    SUBROUTINE double_softplus_deriv(x, xmin, xmax,deriv)
+      ! this calculates dervitive of double_softplus
+      ! for x>= xmax+width*w*xmax : f'(x)=0
+      ! for xmax-width*w*xmax<=x<xmax+width*w*xmax : f'(x) = 1/(1+exp((x-xmax)/(w*xmax)))
+      ! for xmin+width*w*xmin<=x<xmax-width*w*xmax : f'(x) = 1.
+      ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f'(x) = 1/(1+exp(-(x-xmin)/(w*xmin)))
+      ! x<xmin-width*w*xmin : f'(x) = 0
+      REAL*8, INTENT(IN) :: x,xmin, xmax
+      REAL*8, INTENT(OUT):: deriv
+      REAL*8             :: w, width
+      w = 0.01
+      width = 10
+      IF (x>=xmax+w*width*xmax) THEN
+        deriv = 0.
+      ELSEIF ((x>=xmax-w*width*xmax) .AND. (x<xmax+w*width*xmax)) THEN
+         deriv = 1./(1.+EXP((x-xmax)/(w*xmax)))
+      ELSEIF ((x>=xmin+w*width*xmin) .AND. (x<xmax-w*width*xmax)) THEN
+        deriv = 1.
+      ELSEIF ((x>=xmin-w*width*xmin) .AND. (x<xmin+w*width*xmin)) THEN
+         deriv = 1./(1.+EXP(-1.*(x-xmin)/(w*xmin)))
+        !WRITE(6,*) 'Low diffusion ', x*simpar%refval_diffusion
+        !stop
+
+      ELSEIF (x<xmin-w*width*xmin) THEN
+        deriv = 0.
+      ENDIF
+    END SUBROUTINE double_softplus_deriv
+
+    SUBROUTINE softplus(x, xmin)
+      ! this routine limits value x with xmin
+      ! using paradigm of softplus function
+      ! f(x) = xmin+width*ln(1+exp((x-xmin)/width)
+      ! w here and after = w*xmin(or max), where w is defined inside the function
+      ! parameter width states for the region where smoothening is applied xmax+-width*w
+      ! for x>=xmin-width*w*xmin : f(x) = xmin + w*xmin*ln(1+exp((x-xmin)/(w*xmin))
+      ! x<xmin-width*w*xmin : f(x) = xmin
+      REAL*8, INTENT(IN) :: xmin
+      REAL*8, INTENT(INOUT):: x
+      REAL*8             :: w, width
+      w = 0.01
+      width = 10
+      !if (x>=xmin+w*width.xmin) then
+      !  x = x !do nothing
+      IF ((x>=xmin-w*width*xmin) .AND. (x<xmin+w*width*xmin)) THEN
+         x = xmin + w*xmin*LOG(1+EXP((x-xmin)/(w*xmin)))
+      ELSEIF (x<xmin-w*width*xmin) THEN
+        x = xmin
+      ENDIF
+    END SUBROUTINE softplus
+
+    SUBROUTINE softplus_deriv(x, xmin,deriv)
+      ! this routine calculates derivtiv of softplus
+      ! x>=xmin+width*w*xmin: f'(x) = 1.
+      ! for xmin-width*w*xmin<=x<xmin+width*w*xmin : f'(x) = 1/(1+exp(-(x-xmin)/(w*xmin)))
+      ! x<xmin-width*w*xmin : f'(x) = 0
+      REAL*8, INTENT(IN) :: x, xmin
+      REAL*8, INTENT(OUT):: deriv
+      REAL*8             :: w, width
+      w = 0.01
+      width = 10
+      IF (x>=xmin+w*width*xmin) THEN
+        deriv = 1.
+      ELSEIF ((x>=xmin-w*width*xmin) .AND. (x<xmin+w*width*xmin)) THEN
+         deriv =  1./(1.+EXP(-1.*(x-xmin)/(w*xmin)))
+      ELSEIF (x<xmin-w*width*xmin) THEN
+        deriv = 0.
+      ENDIF
+    END SUBROUTINE softplus_deriv
+    !*******************************************
+    ! Compute the terms relative to k equations
+    !*******************************************
+    SUBROUTINE compute_cs(U, cs)
+      ! Sound speed of plasma
+      REAL*8, INTENT(IN) :: U(:)
+      REAL*8             :: U1,U2,U3,U4
+      REAL*8, INTENT(OUT) :: cs
+      REAL :: tol
+    tol = 1.e-20
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U4 = U(4)
+      cs = 2./3./U1*(U3+U4-1./2.*U2**2/U1)
+      !modification softplus dk
+      !IF (cs<0.) cs = tol**2
+      call softplus(cs,tol)
+      cs = sqrt(cs)
+    END SUBROUTINE compute_cs
+    SUBROUTINE compute_dcs_du(U, dcs_du)
+      ! Sound speed derivative
+      real*8, intent(IN) :: U(:)
+      real*8             :: U1,U2,U3,U4,cs,cs_real,soft_deriv
+      real*8, intent(OUT) :: dcs_du(:)
+      REAL :: tol
+      tol = 1.e-20
+      U1 = U(1)
+      U2 = U(2)
+      U3 = U(3)
+      U4 = U(4)
+      !if (U4 < tol) U4 = tol
+      !if (U1 < tol) U1 = tol
+      !if (U3 < tol) U3 = tol
+      dcs_du = 0.
+      !modification softplus dk
+      cs_real = 2./3./U1*(U3+U4-1./2.*U2**2/U1)
+      call softplus_deriv(cs_real,tol,soft_deriv)
+      call compute_cs(U,cs)
+      !if (cs>tol) then
+        dcs_du(1) = -1.*(U3+U4-U2**2/U1)/U1**2
+        dcs_du(2) = -1.*U2/U1**2
+        dcs_du(3) = 1./U1
+        dcs_du(4) = 1./U1
+
+
+        dcs_du = dcs_du/3./cs*soft_deriv
+      !endif
+    END SUBROUTINE compute_dcs_du
+#endif
 
 END MODULE physics
