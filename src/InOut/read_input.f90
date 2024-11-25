@@ -41,7 +41,7 @@ SUBROUTINE READ_input()
   REAL*8                :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
   ! Info for input and output
-  CHARACTER(len = 1000) :: field_path, jtor_path,save_folder
+  CHARACTER(len = 1000) :: field_path, jtor_path,save_folder, geometry_path
   INTEGER               :: field_dimensions(1:2), jtor_dimensions(1:2)
   LOGICAL               :: field_from_grid, compute_from_flux, divide_by_2pi
 
@@ -66,7 +66,7 @@ SUBROUTINE READ_input()
        & logrho,bxgradb
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions, save_folder
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
-  NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check
+  NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
@@ -188,6 +188,7 @@ SUBROUTINE READ_input()
   adapt%osc_adapt         = osc_adapt
   adapt%osc_tol           = osc_tol
   adapt%osc_check         = osc_check
+  adapt%geometry_path     = TRIM(ADJUSTL(geometry_path))
   geom%R0                 = R0
   geom%q                  = q
   magn%amp_rmp            = amp_rmp
