@@ -39,6 +39,13 @@ CONTAINS
     END IF
   END SUBROUTINE initialize_magnetic_field
 
+  SUBROUTINE load_magnetic_field_Jtor
+    IF (switch%ME .EQV. .FALSE.) THEN
+       CALL load_magnetic_field()
+       IF (switch%ohmicsrc) CALL loadJtorMap()
+    END IF
+  ENDSUBROUTINE load_magnetic_field_Jtor
+
   !**********************************************
   ! Load magnetic field in phys
   !**********************************************
@@ -249,7 +256,7 @@ CONTAINS
 				   ip = input%field_dimensions(1)
        jp = input%field_dimensions(2)
        !ip = 541
-       !jp = 391 
+       !jp = 391
        IF (switch%ME .EQV. .FALSE.)  THEN !if not a moving equilibrium simulation
          fname = input%field_path
        ELSE
@@ -267,7 +274,7 @@ CONTAINS
         ! ITER case
        IF (switch%ME .EQV. .FALSE.) THEN !if not a moving equilibrium simulation
 			        !ip = 513
-           !jp = 257 
+           !jp = 257
     		     !fname = 'ITER_2008_MagField.h5'
     		     fname = 'ITER_135011_0000.h5'
        ELSE
@@ -282,9 +289,9 @@ CONTAINS
         ENDIF
         CALL HDF5_open(fname, file_id, IERR)
         CALL HDF5_integer_reading(file_id, ip, 'ip')
-        CALL HDF5_integer_reading(file_id, jp, 'jp') 
+        CALL HDF5_integer_reading(file_id, jp, 'jp')
     ENDIF
-    
+
     ALLOCATE (r2D(ip, jp))
     ALLOCATE (z2D(ip, jp))
     ALLOCATE (flux2D(ip, jp))
@@ -347,8 +354,8 @@ CONTAINS
         phys%B(ind, 3) = Bt
         phys%magnetic_flux(ind) = flux
 #ifdef KEQUATION
-        phys%omega(ind) = omega 
-        phys%q_cyl(ind) = q_cyl 
+        phys%omega(ind) = omega
+        phys%q_cyl(ind) = q_cyl
 #endif
 #ifdef TOR3D
       END DO
@@ -356,7 +363,7 @@ CONTAINS
     END DO
     ! Field from fluxes (ONLY 2D, ONLY triangles checked)
     ! gives nan at third point of the triangle, because its eta coordinate equal to straight 1.0
-    
+
     IF (input%compute_from_flux) THEN
       coord2D_fixed =  refElpol%coord2d
       coord2D_fixed(3,2) = coord2D_fixed(3,2)-1.e-10 !! dirty trick, need to solve it later
@@ -386,12 +393,12 @@ CONTAINS
           ENDDO
        ENDDO
        IF (input%divide_by_2pi) THEN
-        phys%B(:,1) = phys%B(:,1)/2./PI 
-        phys%B(:,2) = phys%B(:,2)/2./PI 
+        phys%B(:,1) = phys%B(:,1)/2./PI
+        phys%B(:,2) = phys%B(:,2)/2./PI
        ENDIF
     ENDIF
 
-     
+
     ! Min and Max flux for inizialization
     phys%Flux2Dmin = MINVAL(phys%magnetic_flux)
     phys%Flux2Dmax = MAXVAL(phys%magnetic_flux)
@@ -399,10 +406,10 @@ CONTAINS
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmax, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmin, 1, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, ierr)
-#endif 
-  
+#endif
+
     ! Magnetic flux normalized to separatrix: PSI
-    phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin) 
+    phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin)
 
     if (switch%ME) then
       time%dt_ME = dt_ME
@@ -487,18 +494,18 @@ CONTAINS
     phys%magnetic_flux = flux
 
     ! Min and Max flux for inizialization
-    phys%Flux2Dmin = minval(phys%magnetic_flux)      
-    phys%Flux2Dmax = maxval(phys%magnetic_flux) 
+    phys%Flux2Dmin = minval(phys%magnetic_flux)
+    phys%Flux2Dmax = maxval(phys%magnetic_flux)
 
 !finding magnetic axis
     !finding axis
     min_ind = MINLOC(flux)
-    
+
     phys%r_axis = Mesh%X(min_ind(1),1)
     phys%z_axis = Mesh%X(min_ind(1),2)
-    
+
 #ifdef PARALL
-    
+
     CALL MPI_COMM_RANK(MPI_COMM_WORLD, my_rank, ierr)
 
     minflux_in(1) = phys%Flux2Dmin
@@ -514,10 +521,10 @@ CONTAINS
     CALL MPI_BCAST(phys%z_axis,1,MPI_REAL8,int(minflux_out(2)),MPI_COMM_WORLD, ierr)
     CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)
     CALL MPI_COMM_RANK(MPI_COMM_WORLD, my_rank, ierr)
-    
 
 
-   
+
+
 #endif
 
 #ifdef PARALL
@@ -525,13 +532,13 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmax, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
     CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmin, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
-    CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)    
+    CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)
 #endif
 
 
-    
+
     ! Magnetic flux normalized to separatrix: PSI
-    phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin) 
+    phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin)
 
 #ifdef KEQUATION
     DO i = 1, Mesh%Nnodes
@@ -543,14 +550,14 @@ CONTAINS
     enddo
     WRITE(6,*) 'r_axis', phys%r_axis*simpar%refval_length
     WRITE(6,*) 'z_axis', phys%z_axis*simpar%refval_length
-    
+
 #endif
     if (switch%ME) then
       time%dt_ME = dt_ME
       time%t_ME = t_ME
     endif
 
-    DEALLOCATE (Br, Bz, Bt, flux)    
+    DEALLOCATE (Br, Bz, Bt, flux)
   END SUBROUTINE load_magnetic_field_nodes
 
 #ifdef TOR3D
@@ -981,7 +988,7 @@ CONTAINS
     real*8,allocatable,dimension(:)   :: xvec,yvec
     real*8                            :: dt_ME,t_ME
     real*8                            :: x,y
-    
+
     IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) "******* Loading Toroidal Current *******"
     ENDIF
@@ -996,7 +1003,7 @@ CONTAINS
 			 ip =  input%jtor_dimensions(1)
        jp =  input%jtor_dimensions(2)
        !ip = 541
-       !jp = 391 
+       !jp = 391
        IF(switch%ME .EQV. .FALSE.) THEN !if not a moving equilibrium simulation
           fname = input%jtor_path
        ELSE
@@ -1029,7 +1036,7 @@ CONTAINS
         CALL HDF5_integer_reading(file_id, ip, 'ip')
         CALL HDF5_integer_reading(file_id, jp, 'jp')
     ENDIF
-    
+
     ALLOCATE(r2D(ip,jp))
     ALLOCATE(z2D(ip,jp))
     ALLOCATE(Jtor(ip,jp))
@@ -1068,11 +1075,11 @@ CONTAINS
 
     !Compute Ip
     CALL computeIplasma()
-    
+
     IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,*) 'I_p =  ', phys%I_p, '[MA]'
     ENDIF
-    
+
     ! check that time is the same
     if (switch%ME) then
       if ((dt_ME .ne. time%dt_ME) .or.(t_ME .ne. time%t_ME)) then
@@ -1190,22 +1197,22 @@ CONTAINS
 #ifdef PARALL
     INTEGER   :: ierr
 #endif
-    
+
     phys%I_p = 0.
-    
+
     DO iel = 1, Mesh%Nelems
     	! Coordinates of the nodes of the element
     	Xel = Mesh%X(Mesh%T(iel,:),:)
-        
+
    	! Toroidal current of the nodes of the element
         Jtorel = phys%Jtor(Mesh%T(iel,:))
-   
+
        ! Gauss points position
        xyg = MATMUL(refElPol%N2D,Xel)
-  
+
        ! Toroidal current at Gauss points
        Jtorg = MATMUL(refElPol%N2D,Jtorel)
-       
+
        ! Jacobian
        J11 = MATMUL(refElPol%Nxi2D,Xel(:,1))                             ! ng x 1
        J12 = MATMUL(refElPol%Nxi2D,Xel(:,2))                             ! ng x 1
@@ -1216,31 +1223,46 @@ CONTAINS
 #ifdef PARALL
        IF (Mesh%ghostElems(iel) .EQ. 0) THEN
 #endif
-       
+
           ! Loop in 2D Gauss points
           DO g = 1, refElPol%NGauss2D
              ! Integration weight
              dvolu = refElPol%gauss_weights2D(g)*detJ(g)
 
              ! Compute I plasma
-             phys%I_p = phys%I_p + Jtorg(g)*dvolu*phys%lscale**2 	 
-       
+             phys%I_p = phys%I_p + Jtorg(g)*dvolu*phys%lscale**2
+
           END DO
-      		
+
 #ifdef PARALL
        ENDIF
 #endif
-      
+
     END DO
-    
+
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%I_p, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
-    
+
     ! Toroidal current in [MA]
-    phys%I_p = phys%I_p/1.e6                                                   
-    
+    phys%I_p = phys%I_p/1.e6
+
   END SUBROUTINE computeIplasma
+
+  SUBROUTINE initialize_puff()
+#ifdef NEUTRAL
+    IF (switch%ME .EQV. .FALSE.) THEN
+      IF (MPIvar%glob_id .EQ. 0) THEN
+        WRITE(6,*) 'Puff is analytical'
+      ENDIF
+    ELSE
+      IF (MPIvar%glob_id .EQ. 0) THEN
+        WRITE(6,*) 'Puff is experimental'
+      ENDIF
+      CALL SetPuff()
+    END IF
+#endif
+  ENDSUBROUTINE initialize_puff
 
 
   SUBROUTINE SetPuff()
@@ -1251,7 +1273,7 @@ CONTAINS
     character(LEN=100) :: fname = 'Puff_54487_new.h5'
     integer(HID_T)    :: file_id
     integer           :: qp, Nn2D
-    integer           :: T(Mesh%Nelems,refElPol%Nnodes2D)  
+    integer           :: T(Mesh%Nelems,refElPol%Nnodes2D)
     real*8            :: lower, upper, nli, n_Gw, n_la, a = 2.
     real*8            :: X(Mesh%Nnodes,2), u(Mesh%Nelems*refElPol%Nnodes2D,phys%Neq)
     real*8            :: linex(1000), liney(1000), n_i(Mesh%Nelems*refElPol%Nnodes2D)
@@ -1273,7 +1295,7 @@ CONTAINS
        CALL HDF5_array1D_reading(file_id,puff_time,'time')
        IF (MPIvar%glob_id .eq. 0) THEN
           write(6,*) 'Puff loaded from file: ', trim(adjustl(fname))
-       ENDIF       
+       ENDIF
        CALL HDF5_close(file_id)
 
        !Linear interpolation of puff
@@ -1285,7 +1307,7 @@ CONTAINS
       ENDIF
       DEALLOCATE(puff_time)
     END IF
-    
+
     ! ITER puff: linear increase up to nli = 4.00E+19
     IF (switch%testcase .GE. 80 .AND. switch%testcase .LE. 89) THEN
         ! Puff feedback: check if central line integrated has reached the target value (4e19 for ITER ohmic)
@@ -1293,7 +1315,7 @@ CONTAINS
         Nn2D = refElPol%Nnodes2D
         X = mesh%X
         T = mesh%T
-        nli = 0. 
+        nli = 0.
        lower = MINVAL(Mesh%X(:,1))
        upper = MAXVAL(Mesh%X(:,1))
         linex = (/(lower + (upper - lower)/1000.*(i-1), i=1, 1000)/)
@@ -1342,15 +1364,15 @@ CONTAINS
                 phys%puff = phys%puff_exp(time%it+1)
         ELSE
           phys%puff_exp(time%it+1) = MAX(phys%puff_exp(time%it) + 50.*(2 - SIGN(1.,phys%puff_slope*n_Gw - n_la))*(phys%puff_slope*n_Gw - n_la), 0.)
-           !phys%puff_exp(time%it+1) = max(phys%puff_exp(time%it) + 50.*(phys%puff_slope*n_Gw - n_la), 0.)   
+           !phys%puff_exp(time%it+1) = max(phys%puff_exp(time%it) + 50.*(phys%puff_slope*n_Gw - n_la), 0.)
            phys%puff = phys%puff_exp(time%it+1)
        END IF
        IF (MPIvar%glob_id .EQ. 0) THEN
 	       WRITE (6, '(" * Puff = ", E10.3, 27X, " *")')  phys%puff
        END IF
-   
+
     END IF
-    
+
   END SUBROUTINE SetPuff
 
 END MODULE Magnetic_field
