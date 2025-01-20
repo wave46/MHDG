@@ -209,6 +209,15 @@ CONTAINS
     INTEGER :: N2d, Nfl,Ntorloc,Np1d,Np2d
 #endif
 
+    IF (utils%printint > 0) THEN
+       IF(MPIvar%glob_id .EQ. 0) THEN
+          WRITE (6, *) '*************************************************'
+          WRITE (6, *) '*            INITIALIZING SOLUTION              *'
+          WRITE (6, *) '*************************************************'
+       ENDIF
+    END IF
+
+
     Neq = phys%Neq
 #ifdef TOR3D
     Ndim = 3                             ! N. of dimensions
@@ -260,17 +269,12 @@ CONTAINS
     sol%u_tilde = 0.
     sol%q = 0.
     sol%u_tilde0 = 0.
-    ! Initialize the solution
-    IF (MPIvar%glob_id .EQ. 0) THEN
-       IF (utils%printint > 0) THEN
-          WRITE (6,*) "*** Initializing the solution"
-       END IF
-    ENDIF
+
     IF (switch%init.EQ.1) THEN
        ! The solution is intialized in each node to the analytical solution
        IF (MPIvar%glob_id .EQ. 0) THEN
           IF (utils%printint > 0) THEN
-             WRITE (6,*) "******* Initializing the solution to the analytic solution"
+             WRITE (6, *) '*      Initializing analytical solution         *'
           END IF
        ENDIF
        CALL init_sol_analytic()
@@ -278,22 +282,17 @@ CONTAINS
        ! The solution is intialized in each node to the analytical solution
        IF (MPIvar%glob_id .EQ. 0) THEN
           IF (utils%printint > 0) THEN
-             WRITE (6,*) "******* Initializing the solution with L2 projection"
+             WRITE (6, *) '* Initializing the solution with L2 projection  *'
           END IF
        ENDIF
        CALL init_sol_l2proj()
     ELSE
-       WRITE(6,*) "Wrong initialization type"
+       WRITE(6,*) "Wrong initialization type. STOP."
        STOP
     ENDIF
     ! Extract the face solution from the elemental one
     CALL extractFaceSolution()
 
-    IF (MPIvar%glob_id .EQ. 0) THEN
-       IF (utils%printint > 0) THEN
-          WRITE (6,*) "Done!"
-       END IF
-    ENDIF
   CONTAINS
     !***********************************************************
     ! Initialization of the solution using the analytic solution
@@ -808,7 +807,11 @@ CONTAINS
        ifa = Mesh%extfaces(iFace,2)
        IF (.NOT. Mesh%Fdir(iElem,ifa)) THEN
           ind_ue = (iElem - 1)*Np + (/(i,i=1,Np)/)
-          ind_uf = Mesh%Nintfaces*Nfp + (iFace - 1)*Nfp + (/(i,i=1,Nfp)/)
+          IF (Mesh%flipFace(iElem,ifa)) THEN
+             ind_uf = Mesh%Nintfaces*Nfp + (iFace - 1)*Nfp + (/(i,i=Nfp,1,-1)/)
+          ELSE
+             ind_uf = Mesh%Nintfaces*Nfp + (iFace - 1)*Nfp + (/(i,i=1,Nfp)/)
+          ENDIF
           faceNodes = refElPol%Face_nodes(ifa,:)
           u_tilde(ind_uf,:) = u(ind_ue(faceNodes),:)
        END IF
@@ -950,7 +953,7 @@ CONTAINS
     DO iel = 1,Mesh%Nelems
        ind = (iel - 1)*refElPol%Nnodes2D + (/(i,i=1,refElPol%Nnodes2D)/)
        Xe = Mesh%X(Mesh%T(iel,:),:)
-       smod = 0.1
+       smod = 0.2
        rs = 0.04/simpar%refval_length
        xsource = xm+0.85*(xmax-xm)
        ysource = ym
@@ -1120,16 +1123,6 @@ CONTAINS
        CALL projectSolutionDifferentMeshes_mod(T1, X1, T2, X2, u_old=u1_2D, u_new = u2_2D)
     ENDIF
 
-    ! IF(SIZE(u) .ne. SIZE(u2_2D)) THEN
-    !   DEALLOCATE(u)
-    !   ALLOCATE(u(SIZE(u2_2D)))
-    ! ENDIF
-    !
-    ! IF(SIZE(q) .ne. SIZE(q2_3D)) THEN
-    !   DEALLOCATE(q)
-    !   ALLOCATE(q(SIZE(q2_3D)))
-    ! ENDIF
-
     ! solu is easy to reshape
     counter = 1
     DO i = 1, SIZE(u2_2D,1)
@@ -1176,15 +1169,15 @@ CONTAINS
     REAL*8, OPTIONAL,INTENT(OUT):: q_new(:,:,:)
 
     REAL*8                      :: X_old(SIZE(X1,1), SIZE(X1,2)), Xe_elem(Mesh%Nnodesperelem, refElPol%Ndim)
-    REAL*8                      :: A(3,3), b(3, SIZE(xs,1)), bcc(3)
+    REAL*8                      :: A(3,3), bcc(3)
     REAL*8                      :: tol, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3
     INTEGER                     :: T_old(SIZE(T1,1), SIZE(T1,2)), ind(SIZE(T1,2)), correl(SIZE(xs,1)), indcheck(SIZE(xs,1))
-    INTEGER                     :: i, j, counter, n_elements, np_perelem, iel
+    INTEGER                     :: i, j, n_elements, np_perelem, iel
     REAL*8,  ALLOCATABLE        :: shapeFunctions(:,:,:)
     REAL*8,  ALLOCATABLE        :: x(:,:), xieta(:,:)
     REAL*8, ALLOCATABLE         :: u_old_ind(:,:), q_old_ind(:,:,:)
     REAL*8, ALLOCATABLE         :: u_prov(:,:), q_prov(:,:,:)
-    INTEGER, ALLOCATABLE        :: correl_unique(:), indices(:)
+    INTEGER, ALLOCATABLE        :: indices(:)
     INTEGER                     :: elem_full(SIZE(T1,1))
 
     u_new = 0
@@ -1218,16 +1211,20 @@ CONTAINS
     indcheck = 0
 
     IF (MPIvar%glob_id .EQ. 0) THEN
-       WRITE(6,*) "*** Projecting the solution: find corresponding elements"
+       IF (utils%printint > 0) THEN
+          WRITE (6, *) '*************************************************'
+          WRITE (6, *) '*      PROJECTING SOLUTION TO NEW MESH          *'
+          WRITE (6, *) '*************************************************'
+       END IF
     ENDIF
 
-    !$OMP parallel private(iel, counter, i, tol, Xe_elem, A, b, bcc, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3) shared( xs, X_old, T_old, correl)
+!!$OMP parallel private(iel, counter, i, tol, Xe_elem, A, b, bcc, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3) shared( xs, X_old, T_old, correl)
     tol = 1e-11
     A(3,:) = 1.
     b3 = 1.
 
-    DO
-       !$OMP DO SCHEDULE(STATIC)
+    DO WHILE(tol .LE. 0.1)
+!!$OMP DO SCHEDULE(STATIC)
        DO iel = 1, n_elements
           Xe_elem = X_old(T_old(iel,1:3),:)
           A(1,:) = Xe_elem(1:3,1)
@@ -1260,9 +1257,9 @@ CONTAINS
              ENDIF
           ENDDO
        ENDDO
-       !$OMP END DO
+!!$OMP END DO
 
-       !$OMP BARRIER
+!!$OMP BARRIER
        IF(ALL(correl .NE. 0)) THEN
           EXIT
        ENDIF
@@ -1270,26 +1267,16 @@ CONTAINS
        tol = tol * 10
 
     ENDDO
-    !$OMP END PARALLEL
+!!$OMP END PARALLEL
 
 
-    ! IF(ANY(correl .eq. 0)) THEN
-    !   WRITE(*,*) "Couldn't find a point in projection. STOP."
-    !
-    !
-    !   DO i = 1, SIZE(correl)
-    !     IF(correl(i) .eq. 0) THEN
-    !       WRITE(*,*) i, MOD(i, Mesh%Nnodesperelem)
-    !     ENDIF
-    !   ENDDO
-    !
-    !   STOP
-    ! ENDIF
+    IF(ANY(correl .eq. 0)) THEN
+      WRITE(*,*) "Couldn't find a point in projection. STOP."
+    ENDIF
 
-    WRITE(*,*) "TWO"
 
-    !$OMP parallel private(iel, indices, xieta, shapeFunctions, Xe_elem, x, ind, u_old_ind, q_old_ind) shared(xs, X_old, T_old, u_new, q_new, correl, n_elements, refElPol, np_perelem, indcheck)
-    !$OMP DO SCHEDULE(STATIC)
+!!$OMP parallel private(iel, indices, xieta, shapeFunctions, Xe_elem, x, ind, u_old_ind, q_old_ind) shared(xs, X_old, T_old, u_new, q_new, correl, n_elements, refElPol, np_perelem, indcheck)
+!!$OMP DO SCHEDULE(STATIC)
     DO iel = 1, n_elements
        IF(iel .EQ. 0) CYCLE
 
@@ -1306,22 +1293,6 @@ CONTAINS
        !Xe_elem = X_old(T_old(iel,1:3),:)
        Xe_elem = X_old(T_old(iel,:),:)
        x = xs(indices,:)
-
-       ! Find the corresponding point in the reference element (linear approach so far)
-
-       ! a11 =   (Xe_elem(3,2)-Xe_elem(1,2))
-       ! a12 =   0.5*(Xe_elem(2,1)+Xe_elem(3,1))
-       ! a13 =   (Xe_elem(3,1)-Xe_elem(1,1))
-       ! a21 =   0.5*(Xe_elem(2,2)+Xe_elem(3,2))
-       ! a22 =   (Xe_elem(2,1)-Xe_elem(1,1))
-       ! a31 =   (Xe_elem(2,2)-Xe_elem(1,2))
-       ! a32 =   0.5*(Xe_elem(2,1)+Xe_elem(3,1))
-       !
-       ! d = 0.5*(a22*a11-a13*a31)
-       ! d = 1./d
-       !
-       ! xieta(:,1)= d*(a11*(x(:,1)-a12) - a13*(x(:,2)-a21))
-       ! xieta(:,2)= d*(a22*(x(:,2)-a21) - a31*(x(:,1)-a12))
 
        ! this goddamn function always gives problems
        CALL inverse_isop_transf(x, Xe_elem, refElPol, xieta)
@@ -1353,142 +1324,9 @@ CONTAINS
        DEALLOCATE(indices)
        DEALLOCATE(shapeFunctions)
     END DO
-    !$OMP END DO
-    !$OMP end parallel
+!!$OMP END DO
+!!$OMP end parallel
 
-    WRITE(*,*) "THREE"
-
-
-    ! DO WHILE (ANY(indcheck .eq. 0))
-    !   tol = tol * 10
-    !
-    !   CALL find_matches_int(indcheck, 0, unknownnodes)
-    !
-    !   !$OMP parallel private(iel, i, Xe_elem, A, b, bcc, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3, d) shared(xs, X_old, T_old, correl, tol)
-    !    A(3,:) = 1.
-    !    b3 = 1.
-    !   !$OMP DO SCHEDULE(STATIC)
-    !    DO iel = 1, n_elements
-    !        Xe_elem = X_old(T_old(iel,1:3),:)
-    !        A(1,:) = Xe_elem(1:3,1)
-    !        A(2,:) = Xe_elem(1:3,2)
-    !
-    !        detA = (A(1,1)*A(2,2)*A(3,3) - A(1,1)*A(2,3)*A(3,2) - A(1,2)*A(2,1)*A(3,3) + &
-    !                  &A(1,2)*A(2,3)*A(3,1) + A(1,3)*A(2,1)*A(3,2) - A(1,3)*A(2,2)*A(3,1))
-    !
-    !        a11 =   A(2,2)*A(3,3) - A(2,3)*A(3,2)
-    !        a12 = - A(1,2)*A(3,3) + A(1,3)*A(3,2)
-    !        a13 =   A(1,2)*A(2,3) - A(1,3)*A(2,2)
-    !        a21 = - A(2,1)*A(3,3) + A(2,3)*A(3,1)
-    !        a22 =   A(1,1)*A(3,3) - A(1,3)*A(3,1)
-    !        a23 = - A(1,1)*A(2,3) + A(1,3)*A(2,1)
-    !        a31 =   A(2,1)*A(3,2) - A(2,2)*A(3,1)
-    !        a32 = - A(1,1)*A(3,2) + A(1,2)*A(3,1)
-    !        a33 =   A(1,1)*A(2,2) - A(1,2)*A(2,1)
-    !
-    !        DO i=1,SIZE(xs,1)
-    !
-    !              b1 = xs(i,1)
-    !              b2 = xs(i,2)
-    !
-    !              bcc(1) = (a11*b1+a12*b2+a13*b3)/detA
-    !              bcc(2) = (a21*b1+a22*b2+a23*b3)/detA
-    !              bcc(3) = (a31*b1+a32*b2+a33*b3)/detA
-    !
-    !              IF ( bcc(1)>=-tol .and. bcc(2)>=-tol .and. bcc(3)>=-tol .and. bcc(1)<=1+tol .and. bcc(2)<=1+tol .and. bcc(3)<=1+tol) then
-    !                correl(i) = iel
-    !              ENDIF
-    !        ENDDO
-    !    ENDDO
-    !    !$OMP END DO
-    !    !$OMP END PARALLEL
-    !
-    !   CALL unique_1D(correl, correl_unique)
-    !
-    !   WRITE(*,*) "FOUR"
-    !
-    !   !!$OMP parallel do schedule(static) private(i, iel, indices, xieta, x, shapeFunctions, Xe_elem, ind, u_old_ind, q_old_ind) shared(indcheck, correl, correl_unique, xs, X_old, T_old, refElPol, u_old, q_old, u_prov, q_prov)
-    !   DO i = 1, SIZE(correl_unique)
-    !     iel = correl_unique(i)
-    !
-    !     IF(iel .eq. 0) CYCLE
-    !
-    !     CALL find_matches_int(correl, iel, indices)
-    !     indcheck(indices) = 1
-    !
-    !     ALLOCATE(xieta(size(indices), size(xs,2)))
-    !     ALLOCATE(x(size(indices), size(xs,2)))
-    !     ALLOCATE(shapeFunctions(np_perelem, size(indices), 3))
-    !
-    !     Xe_elem = X_old(T_old(iel,:),:)
-    !     x = xs(indices,:)
-    !
-    !     ! Find the corresponding point in the reference element (linear approach so far)
-    !     a11 =   (Xe_elem(3,2)-Xe_elem(1,2))
-    !     a12 =   0.5*(Xe_elem(2,1)+Xe_elem(3,1))
-    !     a13 =   (Xe_elem(3,1)-Xe_elem(1,1))
-    !     a21 =   0.5*(Xe_elem(2,2)+Xe_elem(3,2))
-    !     a22 =   (Xe_elem(2,1)-Xe_elem(1,1))
-    !     a31 =   (Xe_elem(2,2)-Xe_elem(1,2))
-    !     a32 =   0.5*(Xe_elem(2,1)+Xe_elem(3,1))
-    !
-    !     d = 0.5*(a22*a11-a13*a31)
-    !     d = 1./d
-    !
-    !     xieta(:,1)= d*(a11*(x(:,1)-a12) - a13*(x(:,2)-a21))
-    !     xieta(:,2)= d*(a22*(x(:,2)-a21) - a31*(x(:,1)-a12))
-    !
-    !     ! this goddamn function always gives problems
-    !     !CALL inverse_isop_transf(x, Xe_elem, refElPol, xieta)
-    !
-    !     ! call HDF5_create('fortran_save_01.h5', file_id, ierr)
-    !     ! call HDF5_array2D_saving_int(file_id, T_old, size(T_old,1), size(T_old,2), 'T_old')
-    !     ! call HDF5_array2D_saving(file_id, X_old, size(X_old,1), size(X_old,2), 'X_old')
-    !     ! call HDF5_array2D_saving(file_id, Xe_elem, size(Xe_elem,1), size(Xe_elem,2), 'Xe_f')
-    !     ! call HDF5_array2D_saving(file_id, x, size(x,1),size(x,2), 'x_f')
-    !     ! call HDF5_integer_saving(file_id, iel, 'iel_f')
-    !     ! call HDF5_close(file_id)
-    !
-    !     ! just fucking brute force it
-    !     DO j = 1, SIZE(xieta,1)
-    !       IF(ANY(abs(xieta(j,:)-1.0) .lt. 1e-12)) THEN
-    !         xieta(j,:) = xieta(j,:) - 1.e-11
-    !       ENDIF
-    !     ENDDO
-    !
-    !     CALL compute_shape_functions_at_points(RefElPol, xieta, shapeFunctions)
-    !
-    !     ind = (iel-1)*np_perelem + (/ (j, j=1, np_perelem) /)
-    !
-    !     u_old_ind = u_old(ind, :)
-    !     u_prov(indices,:) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), u_old_ind)
-    !
-    !     IF(PRESENT(q_old)) THEN
-    !       q_old_ind = q_old(ind, :, :)
-    !       q_prov(indices,:,1) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), q_old_ind(:,:,1))
-    !       q_prov(indices,:,2) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), q_old_ind(:,:,2))
-    !     ENDIF
-    !
-    !     DEALLOCATE(xieta)
-    !     DEALLOCATE(x)
-    !     DEALLOCATE(indices)
-    !     DEALLOCATE(shapeFunctions)
-    !   END DO
-    !   !!$OMP end parallel do
-    !
-    !   u_new(unknownnodes,:) = u_prov(unknownnodes,:)
-    !   IF(PRESENT(q_old)) THEN
-    !     q_new(unknownnodes,:,:) = q_prov(unknownnodes,:,:)
-    !   ENDIF
-    !   DEALLOCATE(unknownnodes)
-    ! ENDDO
-
-    ! IF(ANY(indcheck .eq. 0)) THEN
-    !   WRITE(*,*) "indcheck equal to 0. STOPPING."
-    !   STOP
-    ! ENDIF
-
-    IF(ALLOCATED(correl_unique)) DEALLOCATE(correl_unique)
 
     DEALLOCATE(u_old_ind)
     DEALLOCATE(u_prov)
