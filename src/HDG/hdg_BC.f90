@@ -782,10 +782,10 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_parallel, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_perpendicular, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_neutral, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-  CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_numerical, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_numerical, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
   IF (MPIvar%glob_id.EQ.0) THEN
-     WRITE(6,*) 'pumf = ',totalflux_pump
+     WRITE(6,*) 'pump = ',totalflux_pump
      WRITE(6,*) 'puff = ',totalflux_puff
      WRITE(6,*) 'plasma parallel = ',totalflux_parallel
      WRITE(6,*) 'plasma gradient = ',totalflux_perpendicular
