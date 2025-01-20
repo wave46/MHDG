@@ -7,7 +7,7 @@ CONTAINS
 
   SUBROUTINE load_gmsh_mesh(gmsh_filename, flip)
     USE globals
-    !USE in_out
+    USE MPI_OMP, only: MPIvar
 
 
   !*****************************************************************************80
@@ -25,8 +25,10 @@ CONTAINS
 
     temp_filename      = TRIM(ADJUSTL(gmsh_filename))//'.msh'
 
-    WRITE ( *, '(a)' ) ''
-    WRITE ( *, '(a)' ) 'LOADING GMSH FILE'
+    IF(MPIvar%glob_id .EQ. 0) THEN
+      WRITE ( *, '(a)' ) ''
+      WRITE ( *, '(a)' ) 'LOADING GMSH FILE'
+    ENDIF
   !
   !  Get the data size.
   !
@@ -35,13 +37,15 @@ CONTAINS
   !
   !  Print the sizes.
   !
-    WRITE ( *, '(a)' ) ''
-    WRITE ( *, '(a)' ) '  Node data read from file "' // TRIM ( temp_filename ) // '"'
-    WRITE ( *, '(a)' ) ''
-    WRITE ( *, '(a,i4)' ) '  Number of nodes = ', node_num
-    WRITE ( *, '(a,i4)' ) '  Spatial dimension = ', m
-    WRITE ( *, '(a,i4)' ) '  Number of elements = ', element_num
-    WRITE ( *, '(a,i4)' ) '  Element order = ', element_order
+    IF(MPIvar%glob_id .EQ. 0) THEN
+      WRITE ( *, '(a)' ) ''
+      WRITE ( *, '(a)' ) '  Node data read from file "' // TRIM ( temp_filename ) // '"'
+      WRITE ( *, '(a)' ) ''
+      WRITE ( *, '(a,i4)' ) '  Number of nodes = ', node_num
+      WRITE ( *, '(a,i4)' ) '  Spatial dimension = ', m
+      WRITE ( *, '(a,i4)' ) '  Number of elements = ', element_num
+      WRITE ( *, '(a,i4)' ) '  Element order = ', element_order
+    ENDIF
   !
   !  Allocate memory.
   !
@@ -943,8 +947,10 @@ CONTAINS
     real*8                       :: xmin
 
     IF (utils%printint > 0) THEN
-      print *, 'Loading mesh with mesh2global_var.'
-      print *, '        '
+      IF(MPIvar%glob_id .EQ. 0) THEN
+        print *, 'Loading mesh with mesh2global_var.'
+        print *, '        '
+      ENDIF
     ENDIF
 
     ALLOCATE (Mesh%T(Nelems, Nnodesperelem))
@@ -3054,29 +3060,15 @@ CONTAINS
 
   SUBROUTINE read_splines()
     USE globals
-    IF (switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) THEN
-       WRITE(*,*) "Splines read from file ./res/geometries/Circ_InfLim_YesHole_Structured.geo"
-       CALL generate_splines_from_geo_file('./res/geometries/Circ_InfLim_YesHole_Structured.geo')
-    ELSE
-       IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
-          !WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_NoHole_farWall.geo"
-          !CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_NoHole_farWall.geo')
-          WRITE(*,*) "Splines read from file ./res/geometries/TCV_smooth.geo"
-          CALL generate_splines_from_geo_file('./res/geometries/TCV_smooth.geo')
-       ELSEIF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
-          WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_YesHole_SmoothCorner.geo"
-          CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_YesHole_SmoothCorner.geo')
-       ELSE
-          WRITE(*,*) "Splines read from file ./res/geometries/West_Mesh_NoHole_SmoothCorner.geo"
-          CALL generate_splines_from_geo_file('./res/geometries/West_Mesh_NoHole_SmoothCorner.geo')
-       ENDIF
-    END IF
+    CALL generate_splines_from_geo_file(adapt%geometry_path)
+
   ENDSUBROUTINE read_splines
 
   SUBROUTINE generate_splines_from_geo_file(filename)
     USE mod_splines
     USE globals
     USE MPI_OMP
+
       IMPLICIT NONE
       CHARACTER (*), INTENT(IN)       :: filename
 
@@ -3091,6 +3083,7 @@ CONTAINS
          WRITE(*,*) "*************************************************"
          WRITE(*,*) "               SPLINE READING                    "
          WRITE(*,*) "*************************************************"
+         WRITE(*,*) "Splines read from file: ", TRIM(ADJUSTL(adapt%geometry_path))
       ENDIF
 
       line = ""
@@ -3197,7 +3190,7 @@ CONTAINS
       DO
         READ(read_unit, '(A)', iostat=ios) line
         ! Count the number of splines
-        IF(line(:21) .eq. 'Physical Curve("PUFF"') THEN
+        IF((line(:21) .eq. 'Physical Curve("PUFF"') .AND. (.NOT. ALLOCATED(phys_curve_PUFF))) THEN
           ! extract the numbers between the {}
           data_str = line(index(line,'{')+1:index(line,'}')-1)
           ! count how many splines make up the physical boundary IN
@@ -3207,7 +3200,7 @@ CONTAINS
           ! read the points
           READ(data_str, *) phys_curve_PUFF
         ENDIF
-        IF(line(:21) .eq. 'Physical Curve("PUMP"') THEN
+        IF((line(:21) .eq. 'Physical Curve("PUMP"') .AND. (.NOT. ALLOCATED(phys_curve_PUMP))) THEN
           ! extract the numbers between the {}
           data_str = line(index(line,'{')+1:index(line,'}')-1)
           ! count how many splines make up the physical boundary IN
@@ -3217,7 +3210,7 @@ CONTAINS
           ! read the points
           READ(data_str, *) phys_curve_PUMP
         ENDIF
-        IF(line(:19) .eq. 'Physical Curve("IN"') THEN
+        IF((line(:19) .eq. 'Physical Curve("IN"') .AND. (.NOT. ALLOCATED(phys_curve_IN))) THEN
           ! extract the numbers between the {}
           data_str = line(index(line,'{')+1:index(line,'}')-1)
           ! count how many splines make up the physical boundary IN
@@ -3227,7 +3220,7 @@ CONTAINS
           ! read the points
           READ(data_str, *) phys_curve_IN
         ENDIF
-        IF(line(:20) .eq. 'Physical Curve("LIM"') THEN
+        IF((line(:20) .eq. 'Physical Curve("LIM"') .AND. (.NOT. ALLOCATED(phys_curve_LIM))) THEN
           ! extract the numbers between the {}
           data_str = line(index(line,'{')+1:index(line,'}')-1)
           ! count how many splines make up the physical boundary IN
@@ -3238,7 +3231,7 @@ CONTAINS
           READ(data_str, *) phys_curve_LIM
         ENDIF
 
-        IF(line(:20) .eq. 'Physical Curve("OUT"') THEN
+        IF((line(:20) .eq. 'Physical Curve("OUT"') .AND. (.NOT. ALLOCATED(phys_curve_OUT))) THEN
           ! extract the numbers between the {}
           data_str = line(index(line,'{')+1:index(line,'}')-1)
           ! count how many splines make up the physical boundary IN
