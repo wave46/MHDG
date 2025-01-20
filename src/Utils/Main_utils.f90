@@ -7,7 +7,7 @@
 MODULE Main_utils
 
   USE in_out
-  USE GMSH_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, read_splines, convert_gmsh_to_hdf5, gmsh_mesh2d_write
+  USE GMSH_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, read_splines, convert_gmsh_to_hdf5, gmsh_mesh2d_write, hdf5_save_mesh_struct
   USE reference_element
   USE preprocess
   USE MPI_OMP
@@ -31,6 +31,7 @@ MODULE Main_utils
   USE Postprocess
 #ifdef PARALL
   USE Communications
+  USE domain_decomposition_module
 #endif
   USE HDG_LimitingTechniques
 
@@ -52,8 +53,8 @@ MODULE Main_utils
   INTEGER                      :: clock_rate,clock_start, clock_end
   REAL*8                       :: time_start, time_finish
   REAL*8,ALLOCATABLE           :: xs(:,:)
-  REAL*8, ALLOCATABLE          :: error_oscillation(:),oscillations(:)
-  REAL*8                       :: max_osc, min_osc
+  REAL*8, ALLOCATABLE          :: oscillations(:)
+  REAL*8                       :: max_osc = -100., min_osc = -100.
   INTEGER,ALLOCATABLE          :: vector_nodes_unique(:,:)
   INTEGER                      :: N_n_vertex, n_osc
   INTEGER*8                    :: file_id
@@ -61,9 +62,11 @@ MODULE Main_utils
   LOGICAL                      :: restart_adapt
 #ifdef PARALL
   TYPE(Mesh_type)              :: Mesh_glob
-  INTEGER, ALLOCATABLE         :: T_glob(:,:)
-  REAL*8, ALLOCATABLE          :: X_glob(:,:)
-  REAL*8, POINTER              :: u_glob(:), q_glob(:)
+  REAL*8, POINTER              :: X_glob(:,:) => NULL(), B_glob(:,:) => NULL()
+  REAL*8, POINTER              :: u_glob(:) => NULL(), q_glob(:) => NULL(), magnetic_flux_glob(:) => NULL(), u_tilde_glob(:) => NULL()
+  INTEGER, POINTER             :: T_glob(:,:) => NULL(), Tb_glob(:,:) => NULL(), F_glob(:,:) => NULL(), N_glob(:,:) => NULL(), flipface_glob(:,:) => NULL(), Tlin_glob(:,:) => NULL(), &
+                                  & boundaryFlag_glob(:) => NULL(), extFaces_Glob(:,:) => NULL(), intFaces_Glob(:,:) => NULL()
+  CHARACTER(70)                :: npr, nid
 #endif
 #ifdef TOR3D
   INTEGER                      :: Neq, ntorloc,Nfl, Np1dPol, Np1dTor, Ng1dPol, Ng1dTor,
@@ -72,6 +75,115 @@ MODULE Main_utils
 
 
 CONTAINS
+
+#ifdef PARALL
+  SUBROUTINE domain_decomposition()
+    IF(MPIvar%glob_size .GT. 1) THEN
+       ! split the mesh
+       IF(switch%read_gmsh) THEN
+          CALL free_mesh_loc(Mesh_glob)
+          CALL deep_copy_mesh_struct(Mesh, Mesh_glob)
+          Mesh_glob%X = Mesh_glob%X*phys%lscale
+          CALL split_mesh(MPIvar%glob_size, 3 , .FALSE.)
+          CALL mpi_barrier(MPI_COMM_WORLD,ierr)
+          CALL mesh_preprocess(ierr)
+
+          WRITE (nid, *) MPIvar%glob_id + 1
+          WRITE (npr, *) MPIvar%glob_size
+          h5_filename = TRIM(ADJUSTL(mesh_name)) // '_' // TRIM(ADJUSTL(nid)) // '_' // TRIM(ADJUSTL(npr)) // '.h5'
+          Mesh%X = Mesh%X*phys%lscale
+          CALL HDF5_save_mesh_struct(Mesh, h5_filename)
+          Mesh%X = Mesh%X/phys%lscale
+          !CALL HDF5_save_mesh(h5_filename, Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
+       ENDIF
+    ELSE
+       ALLOCATE(Mesh%ghostelems(Mesh%Nelems))
+       ALLOCATE(Mesh%ghostfaces(Mesh%Nfaces))
+       ALLOCATE(Mesh%ghostpro(Mesh%Nfaces))
+       ALLOCATE(Mesh%ghostloc(Mesh%Nfaces))
+       ALLOCATE(Mesh%loc2glob_el(Mesh%Nelems))
+       ALLOCATE(Mesh%loc2glob_fa(Mesh%Nfaces))
+       ALLOCATE(Mesh%loc2glob_nodes(Mesh%Nnodes))
+
+       Mesh%ghostelems = 0
+       Mesh%ghostfaces = 0
+       Mesh%ghostpro = 0
+       Mesh%ghostLoc = 0
+       Mesh%loc2glob_el = [(i, i = 1, Mesh%Nelems)]
+       Mesh%loc2glob_fa = [(i, i = 1, Mesh%Nfaces)]
+       Mesh%loc2glob_nodes = [(i, i = 1, Mesh%Nnodes)]
+
+       Mesh%Nel_glob = Mesh%Nelems
+       Mesh%Nfa_glob = Mesh%Nfaces
+       Mesh%Nno_glob = Mesh%Nnodes
+    ENDIF
+
+  ENDSUBROUTINE domain_decomposition
+
+  SUBROUTINE solution_decomposition()
+    REAL*8, POINTER         :: u_glob(:), u_tilde_glob(:), q_glob(:)
+    REAL*8, ALLOCATABLE     :: u_3d(:,:,:), u_tilde_3d(:,:,:), q_4D(:,:,:,:)
+    REAL*8, ALLOCATABLE     :: u_3d_local(:,:,:), u_tilde_3d_local(:,:,:), q_4d_local(:,:,:,:)
+    INTEGER                 :: i, index
+
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       WRITE(*,*) "*************************************************"
+       WRITE(*,*) "           SOLUTION DECOMPOSITION                "
+       WRITE(*,*) "*************************************************"
+    ENDIF
+
+    u_glob => sol%u
+    u_tilde_glob => sol%u_tilde
+    q_glob => sol%q
+
+    ALLOCATE(u_3d(Mesh%Nel_glob, Mesh%Nnodesperelem, phys%neq))
+    ALLOCATE(u_tilde_3d(Mesh%Nfa_glob, Mesh%Nnodesperface, phys%neq))
+    ALLOCATE(q_4d(Mesh%Nel_glob, Mesh%Nnodesperelem, phys%neq, Mesh%Ndim))
+    u_tilde_3d = 0.
+    u_3d = 0.
+    q_4D = 0.
+
+    CALL reshape_transpose_permute(u_glob, u_3d, phys%neq, Mesh%Nel_glob, Mesh%Nnodesperelem)
+    CALL reshape_transpose_permute(u_tilde_glob, u_tilde_3d, phys%neq, Mesh%Nfa_glob, Mesh%Nnodesperface)
+    CALL reshape_transpose_permute_4D(q_glob, q_4D, Mesh%Ndim, phys%neq, Mesh%Nel_glob, Mesh%Nnodesperelem)
+
+    ALLOCATE(u_3d_local(Mesh%Nelems, Mesh%Nnodesperelem, phys%neq))
+    ALLOCATE(u_tilde_3d_local(Mesh%Nfaces, Mesh%Nnodesperface, phys%neq))
+    ALLOCATE(q_4d_local(Mesh%Nelems, Mesh%Nnodesperelem, phys%neq, Mesh%Ndim))
+    u_3d_local = 0.
+    u_tilde_3d_local = 0.
+    q_4d_local = 0.
+
+    DO i = 1, Mesh%Nelems
+      index = Mesh%loc2glob_el(i)
+      u_3d_local(i,:,:) = u_3d(index,:,:)
+      q_4d_local(i,:,:,:) = q_4D(index,:,:,:)
+    ENDDO
+
+    DO i = 1, Mesh%Nfaces
+      u_tilde_3d_local(i,:,:) = u_tilde_3d(Mesh%loc2glob_fa(i),:,:)
+    ENDDO
+
+    DEALLOCATE(sol%u, sol%u_tilde, sol%q)
+
+    ALLOCATE(sol%u(Mesh%Nelems*Mesh%Nnodesperelem*phys%neq))
+    ALLOCATE(sol%u_tilde(Mesh%Nfaces*Mesh%Nnodesperface*phys%neq))
+    ALLOCATE(sol%q(Mesh%Nelems*Mesh%Nnodesperelem*phys%neq*Mesh%Ndim))
+    sol%u = 0
+    sol%u_tilde = 0
+    sol%q = 0
+
+    CALL flatten_row_major(u_3d_local, sol%u, SIZE(u_3d_local,1), SIZE(u_3d_local,2), SIZE(u_3d_local,3))
+    CALL flatten_row_major(u_tilde_3d_local, sol%u_tilde, SIZE(u_tilde_3d_local,1), SIZE(u_tilde_3d_local,2), SIZE(u_tilde_3d_local,3))
+    CALL flatten_row_major_4D(q_4d_local, sol%q, SIZE(q_4d_local,1), SIZE(q_4d_local,2), SIZE(q_4d_local,3),SIZE(q_4d_local,4))
+
+
+    DEALLOCATE(u_3d, u_tilde_3d, q_4d)
+    DEALLOCATE(u_3d_local, u_tilde_3d_local, q_4d_local)
+    NULLIFY(u_glob, u_tilde_glob, q_glob)
+
+  ENDSUBROUTINE solution_decomposition
+#endif
 
   SUBROUTINE adaptivity()
 
@@ -92,7 +204,9 @@ CONTAINS
     count_adapt = count_adapt + 1
 
     ! Deep copy previous Mesh and reference element
+    CALL free_mesh_loc(Mesh_prec)
     CALL deep_copy_mesh_struct(Mesh,Mesh_prec)
+    CALL free_reference_element_pol(refElPol_prec)
     CALL deep_copy_refel_struct(refElPol,refElPol_prec)
 
     ! Rescale to dimensional values
@@ -103,37 +217,94 @@ CONTAINS
     CALL free_before_adaptivity()
 
     ! Call estimator, estimator_indicator or indicator
-    IF((adapt%evaluator .EQ. 0) .OR. (restart_adapt))  THEN
-       CALL adaptivity_indicator_estimator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
-    ELSEIF(adapt%evaluator .EQ. 1) THEN
-       CALL adaptivity_indicator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
-    ELSEIF(adapt%evaluator .EQ. 2) THEN
+    IF (adapt%evaluator .EQ. 2) THEN
        CALL adaptivity_estimator(mesh_name, adapt%param_est, count_adapt, order)
+    ELSEIF ((adapt%evaluator .EQ. 1) ) THEN
+       CALL adaptivity_indicator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
+    ELSEIF((adapt%evaluator .EQ. 0) .OR. (restart_adapt)) THEN
+       CALL adaptivity_indicator_estimator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
     ELSE
        WRITE(*,*) "Choice of adaptivity evaluator not valid. STOP."
     ENDIF
 
 
 #ifdef PARALL
+
+    ! IF(MPIvar%glob_id .EQ. 0) THEN
+    !    CALL HDF5_create('./global_sol_par_newmesh.h5', file_id, ierr)
+    !    CALL HDF5_array2D_saving_int(file_id, Mesh%T, SIZE(Mesh%T, 1), SIZE(Mesh%T,2), 'T_par')
+    !    CALL HDF5_array2D_saving(file_id, Mesh%X, SIZE(Mesh%X, 1), SIZE(Mesh%X,2), 'X_par')
+    !    CALL HDF5_close(file_id)
+    ! ENDIF
+
+    Mesh%X = Mesh%X/phys%lscale
     ! Domain decomposition on the new mesh
-    CALL split_mesh(MPIvar%glob_size, 2, .FALSE.)
+    CALL split_mesh(MPIvar%glob_size, 3, .FALSE.)
     CALL MPI_Barrier(MPI_COMM_WORLD, ierr)
     CALL mesh_preprocess(ierr)
+    Mesh%X = Mesh%X*phys%lscale
 
     ! Restart communication
     CALL init_com()
 
     ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
-    CALL gather_mesh_solution(Mesh_prec, sol%u_conv, sol%q_conv, T_glob, X_glob, u_glob, q_glob)
+    CALL gather_mesh(Mesh_prec,  T_glob = T_glob, X_glob = X_glob)
+    CALL gather_solution(Mesh_in = Mesh_prec, Nnodesperelem = Mesh_prec%Nnodesperelem, u_in = sol%u_conv, q_in = sol%q_conv, u_glob = u_glob, q_glob = q_glob)
     ! Project the check-point solution to the new mesh
-    CALL projectSolutionDifferentMeshes_general(Mesh_glob%T,Mesh_glob%X,Mesh%T,Mesh%X, u_glob, q_glob, sol%u, sol%q)
+    CALL projectSolutionDifferentMeshes_general(T_glob,X_glob,Mesh%T,Mesh%X, u_glob, q_glob, sol%u, sol%q)
+
+    DEALLOCATE(X_glob,T_glob, u_glob, q_glob)
+    NULLIFY(X_glob, T_glob, u_glob, q_glob)
+    CALL mpi_barrier(MPI_COMM_WORLD,ierr)
+
+    ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
+    CALL gather_solution(Mesh_in = Mesh, Nnodesperelem = Mesh%Nnodesperelem, u_in = sol%u, q_in = sol%q, u_glob = u_glob, q_glob = q_glob)
+    CALL gather_mesh(Mesh_in = Mesh, T_glob = T_glob, X_glob = X_glob)
+
+    ! IF(MPIvar%glob_id .EQ. 0) THEN
+    !    CALL HDF5_create('./global_sol_par_proj.h5', file_id, ierr)
+    !    CALL HDF5_array2D_saving_int(file_id, T_glob, SIZE(T_glob,1), SIZE(T_glob,2), 'T_par')
+    !    !CALL HDF5_array2D_saving_int(file_id, Tb_glob, SIZE(Tb_glob,1), SIZE(Tb_glob,2), 'Tb_par')
+    !    CALL HDF5_array2D_saving(file_id, X_glob, SIZE(X_glob,1), SIZE(X_glob,2), 'X_par')
+    !    CALL HDF5_array1D_saving(file_id, u_glob, SIZE(u_glob), 'u_par')
+    !    CALL HDF5_array1D_saving(file_id, q_glob, SIZE(q_glob), 'q_par')
+    !    CALL HDF5_close(file_id)
+    ! ENDIF
+
+    DEALLOCATE(X_glob,T_glob, u_glob, q_glob)
+    NULLIFY(X_glob, T_glob, u_glob, q_glob)
+    CALL mpi_barrier(MPI_COMM_WORLD,ierr)
+
 #else
+    Mesh%X = Mesh%X*phys%lscale
+    Mesh%X = Mesh%X/phys%lscale
+
+    ! IF(MPIvar%glob_id .EQ. 0) THEN
+    !    CALL HDF5_create('./global_sol_ser_newmesh.h5', file_id, ierr)
+    !    CALL HDF5_array2D_saving_int(file_id, Mesh%T, SIZE(Mesh%T, 1), SIZE(Mesh%T,2), 'T_ser')
+    !    CALL HDF5_array2D_saving(file_id, Mesh%X, SIZE(Mesh%X, 1), SIZE(Mesh%X,2), 'X_ser')
+    !    CALL HDF5_close(file_id)
+    ! ENDIF
+
     ! Project the check-point solution to the new mesh
     CALL projectSolutionDifferentMeshes_general(Mesh_prec%T,Mesh_prec%X,Mesh%T, Mesh%X, sol%u_conv, sol%q_conv, sol%u, sol%q)
-#endif
 
-    WRITE(*,*) "Number of elements previous mesh: ", SIZE(Mesh_prec%T,1)
-    WRITE(*,*) "Number of elements current mesh:  ", SIZE(Mesh%T,1)
+    ! CALL HDF5_create('./global_sol_ser_proj.h5', file_id, ierr)
+    ! CALL HDF5_array2D_saving_int(file_id, Mesh%T, SIZE(Mesh%T,1), SIZE(Mesh%T,2), 'T_ser')
+    ! CALL HDF5_array2D_saving(file_id, Mesh%X, SIZE(Mesh%X,1), SIZE(Mesh%X,2), 'X_ser')
+    ! CALL HDF5_array1D_saving(file_id, sol%u, SIZE(sol%u), 'u')
+    ! CALL HDF5_array1D_saving(file_id, sol%q, SIZE(sol%q), 'q')
+    ! CALL HDF5_close(file_id)
+#endif
+    IF(MPIvar%glob_id .EQ. 0) THEN
+#ifndef PARALL
+       WRITE(*,*) "Number of elements previous mesh: ", Mesh_prec%Nelems
+       WRITE(*,*) "Number of elements current mesh:  ", Mesh%Nelems
+#else
+       WRITE(*,*) "Number of elements previous mesh: ", Mesh_prec%Nel_glob
+       WRITE(*,*) "Number of elements current mesh:  ", Mesh%Nel_glob
+#endif
+    ENDIF
 
     ! Extract new trace solution
     CALL update_solution_arrays()
@@ -141,6 +312,9 @@ CONTAINS
     ! Rescale back to adimensional values
     Mesh%X = Mesh%X/phys%lscale
     Mesh_prec%X = Mesh_prec%X/phys%lscale
+
+    ! reset parameters
+    CALL set_parameters()
 
     ! Re-initialize magnetic field (the Mesh is needed)
     CALL initialize_magnetic_field()
@@ -169,7 +343,7 @@ CONTAINS
     IF(MPIvar%glob_id .EQ. 0) THEN
        WRITE (count_adapt_char, *) count_adapt
        CALL HDF5_save_mesh("./res/new_mesh_n" // TRIM(ADJUSTL(count_adapt_char)) // ".h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-       CALL HDF5_save_solution("./res/projected_solution_n" // TRIM(ADJUSTL(count_adapt_char)))
+       !CALL HDF5_save_solution("./res/projected_solution_n" // TRIM(ADJUSTL(count_adapt_char)))
     ENDIF
 
     !! UPDATE VARIABLES
@@ -193,11 +367,14 @@ CONTAINS
 
 
   SUBROUTINE free_before_adaptivity()
-    DEALLOCATE(phys%B)
-    DEALLOCATE(phys%magnetic_flux)
+    IF(ASSOCIATED(phys%B)) DEALLOCATE(phys%B)
+    IF(ASSOCIATED(phys%magnetic_flux)) DEALLOCATE(phys%magnetic_flux)
     IF(ASSOCIATED(phys%Bperturb)) DEALLOCATE(phys%Bperturb)
+    IF(ASSOCIATED(phys%magnetic_psi)) DEALLOCATE(phys%magnetic_psi)
     IF(ASSOCIATED(phys%Jtor))     DEALLOCATE(phys%Jtor)
     IF(ASSOCIATED(phys%puff_exp)) DEALLOCATE(phys%puff_exp)
+
+    NULLIFY(phys%magnetic_flux, phys%Bperturb, phys%magnetic_psi, phys%Jtor, phys%puff_exp)
     CALL free_el_mat()
     CALL free_mat()
   ENDSUBROUTINE free_before_adaptivity
@@ -222,9 +399,10 @@ CONTAINS
     END DO
 
 #ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Vmax, phys%npv, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Vmin, phys%npv, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Vmax, phys%npv, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Vmin, phys%npv, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
 #endif
+
     IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE (6, '(" * ", 60("-"), "*")')
        WRITE (6, '(" * Time (adimensional) = ", E12.5, 27X, " *")') time%t
@@ -263,11 +441,11 @@ CONTAINS
     nglo = SIZE(u)
 
 #ifdef PARALL
-    CALL mpi_allreduce(MPI_IN_PLACE, sum2, 1, mpi_double_precision, mpi_sum, MPI_COMM_WORLD, ierr)
-    CALL mpi_allreduce(nu, nglo, 1, mpi_integer, mpi_sum, MPI_COMM_WORLD, ierr)
+    CALL mpi_allreduce(MPI_IN_PLACE, sum2, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL mpi_allreduce(nu, nglo, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
 
-    res = SQRT(sum2)/SQRT(DBLE(nglo))/coeff
+    res = SQRT(sum2)/SQRT(REAL(nglo))/coeff
   END FUNCTION computeResidual
 
   !************************************************
@@ -342,9 +520,9 @@ CONTAINS
 
     ! Add "Sol_"
 #ifdef TOR3D
-    save_name = 'Sol3D_'//save_name
+    save_name = 'Sol3D_'//TRIM(ADJUSTL(save_name))
 #else
-    save_name = 'Sol2D_'//save_name
+    save_name = 'Sol2D_'//TRIM(ADJUSTL(save_name))
 #endif
     ! Add save_folder
     save_name = TRIM(ADJUSTL(input%save_folder))//save_name
@@ -418,13 +596,15 @@ CONTAINS
        sol%u0(:, 1) = sol%u
     ENDIF
 
-    ! Update check-point solution to the one projected on the new mesh
-    DEALLOCATE(sol%u_conv)
-    ALLOCATE(sol%u_conv(SIZE(sol%u)))
-    sol%u_conv = sol%u
-    DEALLOCATE(sol%q_conv)
-    ALLOCATE(sol%q_conv(SIZE(sol%q)))
-    sol%q_conv = sol%q
+    IF(.NOT. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0))) THEN
+       ! Update check-point solution to the one projected on the new mesh
+       DEALLOCATE(sol%u_conv)
+       ALLOCATE(sol%u_conv(SIZE(sol%u)))
+       sol%u_conv = sol%u
+       DEALLOCATE(sol%q_conv)
+       ALLOCATE(sol%q_conv(SIZE(sol%q)))
+       sol%q_conv = sol%q
+    ENDIF
 
   ENDSUBROUTINE update_solution_arrays
 
@@ -451,23 +631,29 @@ CONTAINS
 
   SUBROUTINE update_uiter_qiter_best(uiter_best, qiter_best, u, q)
     REAL*8, POINTER, INTENT(OUT)  :: uiter_best(:), qiter_best(:)
-    REAL*8, INTENT(OUT)           :: u(:), q(:)
+    REAL*8, INTENT(IN)           :: u(:), q(:)
 
-    IF(SIZE(uiter_best) .NE. SIZE(u)) THEN
-       DEALLOCATE(uiter_best)
-       DEALLOCATE(qiter_best)
+    IF(ASSOCIATED(uiter_best)) THEN
+       IF(SIZE(uiter_best) .NE. SIZE(u)) THEN
+          DEALLOCATE(uiter_best)
+          DEALLOCATE(qiter_best)
+          ALLOCATE(uiter_best(SIZE(u)))
+          ALLOCATE(qiter_best(SIZE(q)))
+          uiter_best = u
+          qiter_best = q
+       ENDIF
+    ELSE
        ALLOCATE(uiter_best(SIZE(u)))
        ALLOCATE(qiter_best(SIZE(q)))
        uiter_best = u
        qiter_best = q
     ENDIF
 
+
   ENDSUBROUTINE update_uiter_qiter_best
 
 
   SUBROUTINE set_parameters()
-
-    restart_adapt = adapt%rest_adapt
     order = refElPol%nDeg
 #ifdef TOR3D
     Ndim = 3                                               ! Number of dimensions
@@ -604,14 +790,10 @@ CONTAINS
           CALL create_reference_element(refElPol, 2, verbose = 1)
 
           IF((switch%set_2d_order) .AND. (refElPol%nDeg .NE. switch%order_2d) ) THEN
-             !CALL mesh_preprocess(ierr)
              CALL mesh_preprocess_serial(ierr)
-             CALL HDF5_create('./fortran_save_0.h5', file_id, ierr)
-             CALL HDF5_array2D_saving_int(file_id, Mesh%T, SIZE(Mesh%T,1), SIZE(Mesh%T,2), 'T_f')
-             CALL HDF5_array2D_saving(file_id, Mesh%X, SIZE(Mesh%X,1), SIZE(Mesh%X,2), 'X_f')
-             CALL HDF5_close(file_id)
              CALL set_order_mesh(switch%order_2d)
-             CALL create_reference_element(refElPol, 2, verbose = 1)
+             CALL free_reference_element_pol(refElPol)
+
              Mesh%X = Mesh%X*phys%lscale
              Mesh%xmax = Mesh%xmax*phys%lscale
              Mesh%xmin = Mesh%xmin*phys%lscale
@@ -620,9 +802,12 @@ CONTAINS
           ENDIF
 
           IF(switch%gmsh2h5) THEN
-             h5_filename = TRIM(ADJUSTL(mesh_name)) // '.h5'
-             CALL convert_gmsh_to_hdf5(h5_filename, SIZE(Mesh%X,2), SIZE(Mesh%T,1), SIZE(Mesh%Tb,1), SIZE(Mesh%X,1), SIZE(Mesh%T,2), refElPol%nDeg+1, 0, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+             IF(MPIvar%glob_id .EQ. 0) THEN
+               h5_filename = TRIM(ADJUSTL(mesh_name)) // '.h5'
+               CALL convert_gmsh_to_hdf5(h5_filename, SIZE(Mesh%X,2), SIZE(Mesh%T,1), SIZE(Mesh%Tb,1), SIZE(Mesh%X,1), SIZE(Mesh%T,2), refElPol%nDeg+1, 0, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+             ENDIF
           ENDIF
+
 
           IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80)) THEN
              Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
@@ -649,16 +834,12 @@ CONTAINS
              CALL copy_file(gmsh_filename_mesh,"./res/temp.mesh")
           ENDIF
        ELSE
-#ifndef PARALL
           CALL load_mesh_h5(mesh_name)
-#else
-          CALL load_mesh_serial_h5(mesh_name)
-#endif
        ENDIF
     ENDIF
   ENDSUBROUTINE load_mesh
 
-  SUBROUTINE check_input_arguments
+  SUBROUTINE check_input_arguments()
 
     ! Check the number of input arguments
     nb_args = iargc()
@@ -674,7 +855,9 @@ CONTAINS
     IF (nb_args .GT. 1) THEN
        CALL getarg(2, save_name)
        save_name = ADJUSTL(TRIM(save_name))
-       PRINT *, " Restart simulation with solution: ", save_name
+       IF(MPIvar%glob_id .EQ. 0) THEN
+         PRINT *, " Restart simulation with solution: ", save_name
+       ENDIF
     END IF
 
     IF (nb_args .GT. 2) THEN
@@ -699,6 +882,7 @@ CONTAINS
   ENDSUBROUTINE check_for_NaNs
 
   SUBROUTINE project_u0_newmesh()
+
     IF(.NOT. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0))) THEN
        ALLOCATE(u0_temp(SIZE(sol%u0,1),SIZE(sol%u0,2)))
        u0_temp = sol%u0
@@ -715,7 +899,20 @@ CONTAINS
     Mesh%X = Mesh%X*phys%lscale
     Mesh_prec%X = Mesh_prec%X*phys%lscale
 
+#ifndef PARALL
     CALL projectSolutionDifferentMeshes_general_arrays(Mesh_prec%T,Mesh_prec%X, Mesh%T, Mesh%X, u1 = u0_temp(:,1), u2 = sol%u0(:,1))
+#else
+    ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
+
+    CALL gather_mesh(Mesh_in = Mesh_prec, T_glob = T_glob, X_glob = X_glob)
+    CALL gather_solution(Mesh_in = Mesh_prec, Nnodesperelem = Mesh_prec%Nnodesperelem, u_in = u0_temp(:,1), u_glob = u_glob)
+
+    CALL projectSolutionDifferentMeshes_general_arrays(T_glob,X_glob, Mesh%T, Mesh%X, u1 = u_glob, u2 = sol%u0(:,1))
+    DEALLOCATE(T_glob, X_glob, u_glob)
+    NULLIFY(T_glob, X_glob, u_glob)
+#endif
+
+
 
     Mesh%X = Mesh%X/phys%lscale
     Mesh_prec%X = Mesh_prec%X/phys%lscale
@@ -868,18 +1065,15 @@ CONTAINS
     END IF
   ENDSUBROUTINE print_timing_infos
 
-
-
   SUBROUTINE free_main()
-    DEALLOCATE (uiter)
-    DEALLOCATE(uiter_best)
-    DEALLOCATE(qiter_best)
+    IF(ALLOCATED(uiter)) DEALLOCATE (uiter)
+    IF(ASSOCIATED(uiter_best)) DEALLOCATE(uiter_best)
+    IF(ASSOCIATED(qiter_best)) DEALLOCATE(qiter_best)
     NULLIFY(uiter_best)
     NULLIFY(qiter_best)
-    DEALLOCATE (mkelms)
-    DEALLOCATE (sol%u0)
+    IF(ALLOCATED(mkelms)) DEALLOCATE (mkelms)
+    IF(ALLOCATED(sol%u0)) DEALLOCATE (sol%u0)
     IF(ALLOCATED(oscillations)) DEALLOCATE(oscillations)
-    IF(ALLOCATED(error_oscillation)) DEALLOCATE(error_oscillation)
 
     CALL free_splines(splines)
 
