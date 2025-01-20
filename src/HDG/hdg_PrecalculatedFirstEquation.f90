@@ -565,10 +565,11 @@ CONTAINS
   !*****************
   ! Loop in elements
   !*****************
-  !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,Xel,Xfl)
   ALLOCATE(Xel(Mesh%Nnodesperelem,2))
   ALLOCATE(Xfl(refElPol%Nfacenodes,2))
+  !$OMP PARALLEL DEFAULT(SHARED) &
+  !$OMP PRIVATE(iel,ifa,iface,Xel,Xfl)
+
   !$OMP DO SCHEDULE(STATIC)
   DO iel = 1,N2D
 
@@ -597,15 +598,9 @@ CONTAINS
 
   END DO
   !$OMP END DO
-  DEALLOCATE(Xel,Xfl)
   !$OMP END PARALLEL
 
-  IF (MPIvar%glob_id .EQ. 0) THEN
-     IF (utils%printint > 0) THEN
-        WRITE (6,*) "Done!"
-     END IF
-  END IF
-
+  DEALLOCATE(Xel,Xfl)
 
   IF (utils%timing) THEN
      CALL cpu_TIME(timing%tpe1)
