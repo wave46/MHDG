@@ -65,9 +65,11 @@ CONTAINS
     IF ((switch%shockcp .EQ. 0) .AND. (adapt%shockcp_adapt .EQ. 0)) RETURN
 
     IF (utils%printint > 0) THEN
-       WRITE (6, *) '*************************************************'
-       WRITE (6, *) '*  Initializing shock capturing                 *'
-       WRITE (6, *) '*************************************************'
+       IF(MPIvar%glob_id .EQ. 0) THEN
+          WRITE (6, *) '*************************************************'
+          WRITE (6, *) '*        INITIALIZING SHOCK CAPTURING           *'
+          WRITE (6, *) '*************************************************'
+       ENDIF
     END IF
 
     Ne = Mesh%Nelems
@@ -978,7 +980,7 @@ CONTAINS
 
 #ifdef PARALL
     CALL mpi_allreduce(MPI_IN_PLACE, ctgl, 1, mpi_integer, mpi_sum, MPI_COMM_WORLD, ierr)
-    CALL mpi_allreduce(MPI_IN_PLACE, maxdiff, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL mpi_allreduce(MPI_IN_PLACE, maxdiff, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
 #endif
     IF (MPIvar%glob_id .EQ. 0 .AND. ctgl .GT. 0) THEN
        IF (utils%printint > 0) THEN
@@ -1719,7 +1721,7 @@ CONTAINS
     ! Store filtered solution and deallcate
     sol%u = RESHAPE(TRANSPOSE(u), (/neq*nu/))
     DEALLOCATE (u)
-    
+
   END SUBROUTINE HDG_FilterSolution
 
 END MODULE HDG_LimitingTechniques
