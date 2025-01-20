@@ -78,10 +78,12 @@ SUBROUTINE HDG_computeJacobian()
   INTEGER               :: ierr
 #endif
 
-  IF (utils%printint > 1) THEN
-    WRITE (6,*) '*************************************************'
-    WRITE (6,*) '*          COMPUTING JACOBIAN                   *'
-    WRITE (6,*) '*************************************************'
+  IF (utils%printint .GT. 1) THEN
+    IF(MPIvar%glob_id .EQ. 0) THEN
+      WRITE (6,*) '*************************************************'
+      WRITE (6,*) '*          COMPUTING JACOBIAN                   *'
+      WRITE (6,*) '*************************************************'
+    ENDIF
   END IF
 
   IF (utils%timing) THEN
@@ -1941,7 +1943,7 @@ CONTAINS
     ELSE
 #ifdef PARALL
       ! FOR SOME UNKNOWN REASON EXTERNAL FACES DO NOT NEED TO BE FLIPPED ONLY AT THE VERY FIRST ITERATION.
-      IF (Mesh%flipFace(iel,ifa) .AND. (.NOT. matK%start)) THEN
+      IF (Mesh%flipFace(iel,ifa)) THEN
         uf = uf((/(i,i=Npfl,1,-1)/),:)
       ENDIF
       ! TODO: VERIFY IF I NEED TO FLIP ALSO xyf,b and Bmod in this case!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
