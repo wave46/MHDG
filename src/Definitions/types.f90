@@ -92,76 +92,81 @@ MODULE types
      INTEGER*4          :: Nfl           ! Number of nodes in lateral faces for toroidal 3d computations
      INTEGER*4          :: Ngl           ! Number of Gauss points in lateral faces for toroidal 3d computations
      INTEGER*4          :: Nft           ! Number of nodes in all faces for toroidal 3d computations
+
   END TYPE Reference_element_type
 
   !*******************************************************
   ! Mesh
   !*******************************************************
   TYPE :: Mesh_type
-     INTEGER*4 :: Ndim                ! Number of dimensions of the mesh
-     INTEGER*4 :: Nnodes              ! Number of nodes in the mesh
-     INTEGER*4 :: Nnodesperelem       ! Number of nodes per element in the mesh (dimension 2 of the connectvity matrix)
-     INTEGER*4 :: Nnodesperface       ! Number of nodes per face in the mesh (dimension 2 of boundary connectvity matrix )
-     INTEGER*4 :: Nelems              ! Number of elements in the mesh
-     INTEGER*4 :: Nfaces              ! Number of faces in the mesh
-     INTEGER*4 :: Nextfaces           ! Number of exterior faces
-     INTEGER*4 :: Nintfaces           ! Number of interior faces
-     INTEGER*4 :: elemType            ! 0 for quads - 1 for triangles - 2 for thetra - 3 for hexa
-     INTEGER*4 :: ndir                ! number of Dirichlet faces
-     INTEGER*4 :: ukf                 ! number of faces in the mesh minus the number of Dirichlet faces
-     INTEGER*4, POINTER :: T(:, :) => NULL()    ! Elements connectivity matrix
-     INTEGER*4, POINTER :: Tlin(:, :) => NULL()    ! Elements linear connectivity matrix
-     INTEGER*4, POINTER :: Tb(:, :) => NULL()    ! Outer faces connectivity matrix
-     INTEGER*4, POINTER :: boundaryFlag(:) => NULL()    ! Flag for the boundary condition for each external face (set in the mesh generator)
-     INTEGER*4, ALLOCATABLE :: F(:, :)          ! Faces connectivity matrix
-     INTEGER*4, ALLOCATABLE :: N(:, :)          ! Nodes connectivity matrix
-     INTEGER*4, ALLOCATABLE :: face_info(:, :)          ! Elemental face info
-     INTEGER*4, ALLOCATABLE :: faces(:, :, :)    ! for each triangle i, stores info k on each face j: faces(i,j,1) = # of neighbouring triangle (0 if external
+     INTEGER*4              :: Ndim ! Number of dimensions of the mesh
+     INTEGER*4              :: Nnodes ! Number of nodes in the mesh
+     INTEGER*4              :: Nnodesperelem ! Number of nodes per element in the mesh (dimension 2 of the connectvity matrix)
+     INTEGER*4              :: Nnodesperface ! Number of nodes per face in the mesh (dimension 2 of boundary connectvity matrix )
+     INTEGER*4              :: Nelems ! Number of elements in the mesh
+     INTEGER*4              :: Nfaces ! Number of faces in the mesh
+     INTEGER*4              :: Nextfaces ! Number of exterior faces
+     INTEGER*4              :: Nintfaces ! Number of interior faces
+     INTEGER*4              :: elemType ! 0 for quads - 1 for triangles - 2 for thetra - 3 for hexa
+     INTEGER*4              :: ndir ! number of Dirichlet faces
+     INTEGER*4              :: ukf ! number of faces in the mesh minus the number of Dirichlet faces
+     INTEGER*4, POINTER     :: T(:, :) => NULL() ! Elements connectivity matrix
+     INTEGER*4, POINTER     :: Tlin(:, :) => NULL() ! Elements linear connectivity matrix
+     INTEGER*4, POINTER     :: Tb(:, :) => NULL() ! Outer faces connectivity matrix
+     INTEGER*4, POINTER     :: boundaryFlag(:) => NULL() ! Flag for the boundary condition for each external face (set in the mesh generator)
+     INTEGER*4, ALLOCATABLE :: F(:, :) ! Faces connectivity matrix
+     INTEGER*4, ALLOCATABLE :: N(:, :) ! Nodes connectivity matrix
+     INTEGER*4, ALLOCATABLE :: face_info(:, :) ! Elemental face info
+     INTEGER*4, ALLOCATABLE :: faces(:, :, :) ! for each triangle i, stores info k on each face j: faces(i,j,1) = # of neighbouring triangle (0 if external
      ! boundary), faces(i,j,2) = type of boundary (), faces(i,j,3) = type of boundary condition
-     INTEGER*4, ALLOCATABLE :: extfaces(:, :)   ! for each exterior face, stores the number of the triangle, the number of the face, and the type of BC
-     INTEGER*4, ALLOCATABLE :: intfaces(:, :)   ! for each interior face, stores the number of the triangle, the number of the face, the number of the
+     INTEGER*4, ALLOCATABLE :: extfaces(:, :) ! for each exterior face, stores the number of the triangle, the number of the face, and the type of BC
+     INTEGER*4, ALLOCATABLE :: intfaces(:, :) ! for each interior face, stores the number of the triangle, the number of the face, the number of the
      ! neighboring triangle, the number of its face and the number of the node of the neighboring triangle that
      ! matches the first knot of the triangle
-     LOGICAL, ALLOCATABLE :: flipface(:, :)    ! for each triangle, and for each face, 0 if the order of the numbering in the face is to be kept, 1 if the
+     LOGICAL, ALLOCATABLE   :: flipface(:, :) ! for each triangle, and for each face, 0 if the order of the numbering in the face is to be kept, 1 if the
      ! order is to be reversed
-     LOGICAL, ALLOCATABLE    :: Fdir(:, :)         ! for each element states if each local face is of Dirichlet type
-     INTEGER*4, ALLOCATABLE  :: periodic_faces(:)  ! Mapping for periodic faces
-     INTEGER*4, ALLOCATABLE  :: Diric(:)
-     INTEGER*4, ALLOCATABLE  :: numberbcs(:)
-     REAL*8, ALLOCATABLE     :: elemSize(:)   ! element size (area in 2D, volume in 3D) [Number of elements]
-     REAL*8, POINTER         :: X(:, :) => NULL()    ! nodes coordinates
-     INTEGER*4              :: Nnodes_toroidal     ! Number of nodes in the toroidal direction
-     REAL*8, POINTER         :: toroidal(:) => NULL()    ! nodes coordinates in the toroidal direction
+     LOGICAL, ALLOCATABLE   :: Fdir(:, :) ! for each element states if each local face is of Dirichlet type
+     INTEGER*4, ALLOCATABLE :: periodic_faces(:) ! Mapping for periodic faces
+     INTEGER*4, ALLOCATABLE :: Diric(:)
+     INTEGER*4, ALLOCATABLE :: numberbcs(:)
+     REAL*8, POINTER        :: elemSize(:) => NULL() ! element size (area in 2D, volume in 3D) [Number of elements]
+     REAL*8, POINTER        :: X(:, :) => NULL() ! nodes coordinates
+     INTEGER*4              :: Nnodes_toroidal ! Number of nodes in the toroidal direction
+     REAL*8, POINTER        :: toroidal(:) => NULL() ! nodes coordinates in the toroidal direction
      ! Limiting & shock capturing stuff
-     INTEGER, ALLOCATABLE    :: flag_elems_rho(:)      ! Flagged elements for limiting rho [Number of elements]
-     INTEGER, ALLOCATABLE    :: flag_elems_sc(:)     !  Flagged elements for shock-capturing [Number of elements]
-     REAL*8, ALLOCATABLE     :: minrho_elems(:)        ! Minimum value of density in the flagged elements[Number of elements]
-     REAL*8, ALLOCATABLE     :: sour_elems(:)          ! Source to limit rho in the flagged elements[Number of elements]
-     REAL*8, ALLOCATABLE     :: diff_elems(:)          ! Diffusion to limit rho in the flagged elements[Number of elements]
-     REAL*8, ALLOCATABLE     :: scdiff_nodes(:, :)      ! Shock capturing diffusion in each node [Number of elements,Number of nodes per element]
-     REAL*8                 :: xmax, xmin, ymax, ymin    ! Limit of the GLOBAL matrix, across mpi partitions
-     REAL*8                  :: puff_area         ! area of the puff bounday condition
-     REAL*8                  :: pump_area         ! area of the pump bounday condition
-     REAL*8                  :: core_area         ! area of the core bounday condition
-     REAL*8,ALLOCATABLE      :: Xg(:,:)               ! 2D Gauss point coordinates
-     REAL*8,ALLOCATABLE      :: Xgf(:,:)              ! 1D Gauss point coordinates at interior faces
-     REAL*8,ALLOCATABLE      :: Xgb(:,:)          ! 1D Gauss point  coordinates at boundary faces
-     INTEGER*4, POINTER	    :: T_gmsh(:, :) => NULL()    ! Elements connectivity matrix to write the msh file
-     INTEGER*4, POINTER      :: Tb_gmsh(:, :) => NULL()    ! Outer faces connectivity matrix to write the msh file
-     REAL*8, POINTER         :: X_P1(:,:) => NULL()         ! coordinates of the nodes on the P1 mesh to write to the msh file
+     INTEGER, ALLOCATABLE   :: flag_elems_rho(:) ! Flagged elements for limiting rho [Number of elements]
+     INTEGER, ALLOCATABLE   :: flag_elems_sc(:) ! Flagged elements for shock-capturing [Number of elements]
+     REAL*8, ALLOCATABLE    :: minrho_elems(:) ! Minimum value of density in the flagged elements[Number of elements]
+     REAL*8, ALLOCATABLE    :: sour_elems(:) ! Source to limit rho in the flagged elements[Number of elements]
+     REAL*8, ALLOCATABLE    :: diff_elems(:) ! Diffusion to limit rho in the flagged elements[Number of elements]
+     REAL*8, ALLOCATABLE    :: scdiff_nodes(:, :) ! Shock capturing diffusion in each node [Number of elements,Number of nodes per element]
+     REAL*8                 :: xmax, xmin, ymax, ymin ! Limit of the GLOBAL matrix, across mpi partitions
+     REAL*8                 :: puff_area ! area of the puff bounday condition
+     REAL*8                 :: pump_area ! area of the pump bounday condition
+     REAL*8                 :: core_area ! area of the core bounday condition
+     REAL*8,ALLOCATABLE     :: Xg(:,:) ! 2D Gauss point coordinates
+     REAL*8,ALLOCATABLE     :: Xgf(:,:) ! 1D Gauss point coordinates at interior faces
+     REAL*8,ALLOCATABLE     :: Xgb(:,:) ! 1D Gauss point coordinates at boundary faces
+     INTEGER*4, POINTER	    :: T_gmsh(:, :) => NULL() ! Elements connectivity matrix to write the msh file
+     INTEGER*4, POINTER     :: Tb_gmsh(:, :) => NULL() ! Outer faces connectivity matrix to write the msh file
+     REAL*8, POINTER        :: X_P1(:,:) => NULL() ! coordinates of the nodes on the P1 mesh to write to the msh file
 #ifdef PARALL
      INTEGER, POINTER       :: loc2glob_fa(:) => NULL()! mapping number of the faces for creating the global matrix [number of faces in the mesh]
      INTEGER, POINTER       :: loc2glob_el(:) => NULL()! mapping number of the elements from local to global [number of elements in the mesh]
      INTEGER, POINTER       :: loc2glob_nodes(:) => NULL()! mapping number of the nodes from local to global [number of nodes in the mesh]
      INTEGER, POINTER       :: ghostfaces(:) => NULL()! integer that states if a face is to be assembled locally or not [number of faces in the mesh]
      INTEGER, POINTER       :: ghostelems(:) => NULL()! integer that states if an element is to be assembled locally or not (for 3D) [number of elements in the mesh]
-     INTEGER               :: nghostfaces        ! number of ghost faces
-     INTEGER               :: nghostelems        ! number of ghost elements (used only for 3D)
-     INTEGER               :: Nel_glob           ! number of elements of global mesh
-     INTEGER               :: Nfa_glob           ! number of faces of global mesh
-     INTEGER               :: Nno_glob           ! number of nodes of global mesh
-     INTEGER               :: Ndir_glob          ! number of Dirichlet faces in the global mesh
-     INTEGER               :: Ngho_glob          ! number of ghost faces in the global mesh
+     INTEGER                :: nghostfaces ! number of ghost faces
+     INTEGER                :: nghostelems ! number of ghost elements (used only for 3D)
+     INTEGER                :: Nel_glob ! number of elements of global mesh
+     INTEGER                :: Nfa_glob ! number of faces of global mesh
+     INTEGER                :: Nno_glob ! number of nodes of global mesh
+     INTEGER                :: Nextfaces_glob ! number of external faces of the global mesh
+     INTEGER                :: Nintfaces_glob ! number of external faces of the global mesh
+     INTEGER                :: Nintfaces_nogho ! number of local internal faces that are not ghost faces
+     INTEGER                :: Nextfaces_nogho ! number of local external faces that are not ghost faces
+     INTEGER                :: Ndir_glob ! number of Dirichlet faces in the global mesh
+     INTEGER                :: Ngho_glob ! number of ghost faces in the global mesh
      ! read from input
      INTEGER, POINTER       :: ghostflp(:) => NULL()! flipFaces for the ghost faces [number of ghost faces]
      INTEGER, POINTER       :: ghostloc(:) => NULL()! local numbering of the ghost face in the process that assemble it [number of ghost faces]
@@ -169,15 +174,15 @@ MODULE types
      INTEGER, POINTER       :: ghelsloc(:) => NULL()! local numbering of the ghost element in the process that assemble it (only 3D) [number of ghost elements]
      INTEGER, POINTER       :: ghelspro(:) => NULL()! the process that assemble the ghost element (only 3D) [number of ghost elements]
      ! built after reading from input
-     INTEGER, ALLOCATABLE   :: fc2sd(:)          ! face 2 send: faces computed locally that the local process has to send (vector)
-     INTEGER, ALLOCATABLE   :: pr2sd(:)          ! process 2 send: to which process the faces computed locally need to be sent (vector)
-     INTEGER, ALLOCATABLE   :: fc2rv(:)          ! face 2 receive: ghost faces computed by other processes that the local process need to receive[number of ghost faces]
-     INTEGER, ALLOCATABLE   :: pr2rv(:)          ! process 2 receive: from which process the faces computed externally need to be received [number of ghost faces] (it is the same as ghostpro)
+     INTEGER, ALLOCATABLE   :: fc2sd(:) ! face 2 send: faces computed locally that the local process has to send (vector)
+     INTEGER, ALLOCATABLE   :: pr2sd(:) ! process 2 send: to which process the faces computed locally need to be sent (vector)
+     INTEGER, ALLOCATABLE   :: fc2rv(:) ! face 2 receive: ghost faces computed by other processes that the local process need to receive[number of ghost faces]
+     INTEGER, ALLOCATABLE   :: pr2rv(:) ! process 2 receive: from which process the faces computed externally need to be received [number of ghost faces] (it is the same as ghostpro)
 
-     INTEGER, ALLOCATABLE   :: el2sd(:)          ! element 2 send: elements computed locally that the local process has to send (only 3D) (vector)
-     INTEGER, ALLOCATABLE   :: pe2sd(:)          ! process 2 send: to which process the elements computed locally need to be sent (only 3D) (vector)
-     INTEGER, ALLOCATABLE   :: el2rv(:)          ! element 2 receive: ghost elements computed by other processes that the local process need to receive (only 3D) [number of ghost elements]
-     INTEGER, ALLOCATABLE   :: pe2rv(:)          ! process 2 receive: from which process the elements computed externally need to be received (only 3D) [number of ghost elements] (it is the same as ghelspro)
+     INTEGER, ALLOCATABLE   :: el2sd(:) ! element 2 send: elements computed locally that the local process has to send (only 3D) (vector)
+     INTEGER, ALLOCATABLE   :: pe2sd(:) ! process 2 send: to which process the elements computed locally need to be sent (only 3D) (vector)
+     INTEGER, ALLOCATABLE   :: el2rv(:) ! element 2 receive: ghost elements computed by other processes that the local process need to receive (only 3D) [number of ghost elements]
+     INTEGER, ALLOCATABLE   :: pe2rv(:) ! process 2 receive: from which process the elements computed externally need to be received (only 3D) [number of ghost elements] (it is the same as ghelspro)
 
      !     integer,allocatable   :: connpro(:)        ! processes connected to the local process
 #endif
@@ -411,8 +416,8 @@ MODULE types
      INTEGER     :: tsw  ! switch to modify the time step
      INTEGER     :: nts  ! max number of time iterations to do in the current session (only for transient simulations)
      INTEGER     :: tis  ! time integration scheme
-                         ! 1 - first order
-                         ! 2 - second order
+     ! 1 - first order
+     ! 2 - second order
      REAL*8      :: t    ! time of the simulation (initialized to finish time of previous simulation if restart, to 0 if new simulation)
   END TYPE Time_type
 
@@ -434,9 +439,9 @@ MODULE types
      REAL*8         :: thr      ! Threshold to limit rho
      REAL*8         :: thrpre   ! Threshold to limit pressure
      INTEGER        :: stab     ! Stabilization type
-                                ! 1 - constant tau (one for each equation) in the whole domain
-                                ! 2 -
-                                ! 3 -
+     ! 1 - constant tau (one for each equation) in the whole domain
+     ! 2 -
+     ! 3 -
      REAL*8         :: dumpnr   ! dumping factor for Newton-Raphson. 0<dumpnr<1
      REAL*8         :: dumpnr_min   ! dumping factor minimum for Newton-Raphson. 0<dumpnr<1
      REAL*8         :: dumpnr_max   ! dumping factor maximum for Newton-Raphson. 0<dumpnr<1
@@ -490,9 +495,9 @@ MODULE types
   !*******************************************************
   TYPE Lssolver_type
      INTEGER           :: sollib    ! Solver library to be used
-                                    ! 1-Pastix
-                                    ! 2-PSBLAS
-                                    ! 3-PETSc
+     ! 1-Pastix
+     ! 2-PSBLAS
+     ! 3-PETSc
 
      LOGICAL           :: timing    ! timing of the linear solver
      ! Parameters relative to the library PETSc
@@ -836,7 +841,7 @@ CONTAINS
        Mesh2%numberbcs = Mesh1%numberbcs
     ENDIF
 
-    IF(ALLOCATED(Mesh1%elemSize)) THEN
+    IF(ASSOCIATED(Mesh1%elemSize)) THEN
        ALLOCATE(Mesh2%elemSize(SIZE(Mesh1%elemSize)))
        Mesh2%elemSize = Mesh1%elemSize
     ENDIF
