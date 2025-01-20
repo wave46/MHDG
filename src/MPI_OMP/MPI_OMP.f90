@@ -36,7 +36,7 @@ CONTAINS
     INTEGER :: IERR, OMP_GET_MAX_THREADS, MPI_THREAD_provided, MPI_THREAD_required
 
     ! Initialization of the MPI communicator
-    !  MPI_THREAD_required = MPI_THREAD_SINGLE
+    !MPI_THREAD_required = MPI_THREAD_SINGLE
     MPI_THREAD_required = MPI_THREAD_MULTIPLE
     !#ifdef THREAD_FUNNELED
     !   MPI_THREAD_required = MPI_THREAD_FUNNELED
