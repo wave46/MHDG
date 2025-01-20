@@ -1687,8 +1687,8 @@ CONTAINS
     e_const = 1.60217662e-19
 
     s0 = 5.2958e-11 * 1.e-6
-
-    if ((U1>tol) .and. (U2>tol) .and. (U3>tol)) then ! basically it's a below zero check
+    ti = T0*2./3. /phys%Mref * (U3/U1 - 0.5 *U2**2/U1**2)
+    if (ti .gt. tol) then ! basically it's a below zero check
       ti = T0*2./3. /phys%Mref * (U3/U1 - 0.5 *U2**2/U1**2)
     else!some low values
       ti = 1.e-10
@@ -1718,13 +1718,15 @@ CONTAINS
     res = 0.
     dti_dU = 0.
 
-    if ((U1>tol) .and. (U2>tol) .and. (U3>tol)) then ! basically it's a below zero check
-      ti = T0*2./3. /phys%Mref * (U3/U1 - 0.5 *U2**2/U1**2)
+    ti = T0*2./3. /phys%Mref * (U3/U1 - 0.5 *U2**2/U1**2)
+
+    if (ti .gt. tol) then ! basically it's a below zero check
+
       dti_dU(1) = dti_dU(1) + 1.*(-U3 + U2**2/U1) / U1**2
       dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
       dti_dU(3) = dti_dU(3) + 1./U1
       dti_dU(:) = dti_dU(:) * T0*2./3. /phys%Mref
-
+      ti = T0*2./3. /phys%Mref * (U3/U1 - 0.5 *U2**2/U1**2)
       res = (0.25 *s0 / ti**0.75) * dti_dU
     endif !let non-linear part as zero if negative solutions
   END SUBROUTINE compute_dsigmavnn_dU
