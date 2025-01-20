@@ -111,7 +111,7 @@ PrintUtils.o : PrintUtils.F matrices_types.o MPI_OMP.o
 Communications.F : $(SDIR)/MPI_OMP/Communications.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-Communications.o : Communications.F MPI_OMP.o PrintUtils.o
+Communications.o : Communications.F MPI_OMP.o preprocess.o PrintUtils.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 interpolation.F : $(SDIR)/LinearAlgebra/interpolation.f90
@@ -252,6 +252,12 @@ solve_global_system.F : $(SDIR)/HDG/solve_global_system.f90
 solve_global_system.o : solve_global_system.F globals.o analytical.o LinearAlgebra.o PrintUtils.o $(ADDMODSOLV)
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
+domain_decomposition.F : $(SDIR)/MPI_OMP/domain_decomposition.f90
+	$(CMP) -s $< $@ || $(CP) -f $< $@
+
+domain_decomposition.o : domain_decomposition.F globals.o preprocess.o adaptivity_common.o
+	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
+
 compute_element_solution.F : $(SDIR)/HDG/compute_element_solution.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
@@ -297,7 +303,7 @@ adaptivity_estimator_indicator.o : adaptivity_estimator_indicator.F globals.o gm
 Main_utils.F : $(SDIR)/Utils/Main_utils.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-Main_utils.o : Main_utils.F inout.o reference_element.o MPI_OMP.o PrintUtils.o Debug.o initialization.o Postprocess.o mod_splines.o adaptivity_common.o adaptivity_estimator_indicator.o adaptivity_indicator.o adaptivity_estimator.o $(ADDMODSOLV) hdg_LimitingTechniques.o#transport_coefficient_map.o
+Main_utils.o : Main_utils.F Communications.o domain_decomposition.o inout.o reference_element.o MPI_OMP.o PrintUtils.o Debug.o initialization.o Postprocess.o mod_splines.o adaptivity_common.o adaptivity_estimator_indicator.o adaptivity_indicator.o adaptivity_estimator.o $(ADDMODSOLV) hdg_LimitingTechniques.o#transport_coefficient_map.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 MHDG.F : $(SDIR)/MHDG.f90
@@ -312,8 +318,8 @@ Convergence.F : $(SDIR)/Convergence.f90
 Convergence.o : Convergence.F inout.o gmsh_io.o reference_element.o MPI_OMP.o PrintUtils.o Debug.o initialization.o Postprocess.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
-MHDG-$(MDL)-$(MODE)-$(DIM) : Main_utils.o MPI_OMP.o matrices_types.o interpolation.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o physics.o read_input.o HDF5_io.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o solve_global_system.o compute_element_solution.o adaptivity_common.o mod_splines.o adaptivity_estimator.o adaptivity_indicator.o adaptivity_estimator_indicator.o  MHDG.o
-	$(FC) $(FCFLAGS)  Main_utils.o MPI_OMP.o matrices_types.o interpolation.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o physics.o read_input.o HDF5_io.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  Postprocess.o $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o  solve_global_system.o compute_element_solution.o mod_splines.o adaptivity_common.o adaptivity_indicator.o adaptivity_estimator.o adaptivity_estimator_indicator.o MHDG.o -o MHDG-$(MDL)-$(MODE)-$(DIM) $(LIB)
+MHDG-$(MDL)-$(MODE)-$(DIM) : Main_utils.o MPI_OMP.o matrices_types.o interpolation.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o physics.o read_input.o HDF5_io.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o solve_global_system.o compute_element_solution.o adaptivity_common.o mod_splines.o adaptivity_estimator.o adaptivity_indicator.o adaptivity_estimator_indicator.o domain_decomposition.o MHDG.o
+	$(FC) $(FCFLAGS)  Main_utils.o MPI_OMP.o matrices_types.o interpolation.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o physics.o read_input.o HDF5_io.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  Postprocess.o $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o  solve_global_system.o compute_element_solution.o mod_splines.o adaptivity_common.o adaptivity_indicator.o adaptivity_estimator.o adaptivity_estimator_indicator.o domain_decomposition.o MHDG.o -o MHDG-$(MDL)-$(MODE)-$(DIM) $(LIB)
 	/bin/cp -f MHDG-$(MDL)-$(MODE)-$(DIM) ../test/
 #	/bin/cp -f MHDG-$(MDL)-$(MODE)-$(DIM) ../test_anal/
 #	/bin/cp -f MHDG-$(MDL)-$(MODE)-$(DIM) ../test_psblas/
