@@ -20,27 +20,25 @@ CONTAINS
     USE in_out, ONLY: copy_file
     USE gmsh_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5
     USE preprocess
+#ifdef PARALL
+    USE Communications, ONLY: gather_1D_vector_int,gather_1D_vector_real
+#endif
 
 
     TYPE(gmsh_t)                                :: gmsh
     INTEGER, INTENT(IN)                         :: param_adapt, count_adapt, order
 
-    REAL*8,  ALLOCATABLE                        :: two_d_nodes(:,:)
-    INTEGER, ALLOCATABLE                        :: two_d_elements(:,:)
-    REAL*8,  ALLOCATABLE                        :: u_sol(:,:), u_star_sol(:,:), h(:), h_target(:),h_target_temp(:), error_L2(:), error_L2_vertices(:), error_L2_init(:), error_target(:)
+    REAL*8,  ALLOCATABLE                        :: u_sol(:,:), u_star_sol(:,:), h(:), h_target(:), h_target_temp(:), error_L2(:), &
+         & error_L2_vertices(:), error_L2_init(:), error_target(:)
     INTEGER, ALLOCATABLE                        :: vector_nodes_unique(:)
     INTEGER                                     :: i, N_n_vertex,ierr
     REAL*8                                      :: eg_L2, eg_L2_init
 
 #ifdef PARALL
-    INTEGER                                     :: N_n_vertex_glob, counter, j, jj, ii
-    REAL*8                                      :: dummy_sum
-    REAL*8, ALLOCATABLE                         :: h_target_glob_rep(:), h_target_glob(:)
-    REAL*8, POINTER                             :: error_L2_glob(:) => NULL()
-    INTEGER, POINTER                            :: T_nogho(:,:) => NULL()
-    REAL*8, POINTER                             :: u_nogho(:) => NULL(), q_nogho(:) => NULL(), X_nogho(:,:) => NULL()
-    INTEGER, ALLOCATABLE                        :: recvcounts(:), displs(:), vector_nodes_unique_glob(:), temp(:)
-    LOGICAL, ALLOCATABLE                        :: already_counted(:)
+    REAL*8, ALLOCATABLE                         :: h_root(:), error_L2_vertices_root(:)
+    REAL*8, POINTER                             :: h_glob(:), error_L2_vertices_glob(:)
+    INTEGER, POINTER                            :: vector_nodes_unique_glob(:), count_vec_glob(:)
+    INTEGER, ALLOCATABLE                        :: count_vec(:), noghost_index(:)
 #endif
 
     CHARACTER(70)                               :: param_adapt_char, count_adapt_char
@@ -51,106 +49,79 @@ CONTAINS
     CHARACTER(1024), INTENT(IN)                 :: mesh_name
     CHARACTER(1024)                             :: mesh_name_npne, new_mesh_name_npne, buffer
 
-    !!  Refinement part with indicator
+#ifdef PARALL
+    NULLIFY(h_glob, error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob)
+#endif
+
     IF(MPIvar%glob_id .EQ. 0) THEN
-       WRITE(*,*) '*************** Starting refinement procedure  ****************'
+       WRITE(*,*) "*************************************************"
+       WRITE(*,*) "            ADAPTIVITY ESTIMATOR                 "
+       WRITE(*,*) "*************************************************"
     ENDIF
+
 
 #ifdef PARALL
-
-    ! remove ghost elements from T, u and q
-    ALLOCATE(T_nogho(Mesh%Nelems-Mesh%nghostelems, Mesh%Nnodesperelem))
-    ALLOCATE(u_nogho((Mesh%Nelems-Mesh%nghostelems)*phys%Neq*Mesh%Nnodesperelem))
-    ALLOCATE(q_nogho((Mesh%Nelems-Mesh%nghostelems)*phys%Neq*Mesh%Ndim*Mesh%Nnodesperelem))
-
-    counter = 1
-    DO i = 1, SIZE(Mesh%T,1)
-       IF(Mesh%ghostElems(i) .NE. 1) THEN
-          T_nogho(counter,:) = Mesh%T(i,:)
-          counter = counter + 1
-       ENDIF
-    ENDDO
-
-    counter = 1
-    DO i = 1, SIZE(Mesh%T,1)
-       IF(Mesh%ghostElems(i) .NE. 1) THEN
-          DO j = 1, Mesh%Nnodesperelem
-             DO jj = 1, phys%neq
-                u_nogho(counter) = sol%u((i-1)*Mesh%Nnodesperelem*phys%neq+(j-1)*phys%neq+jj)
-                counter = counter + 1
-             ENDDO
-          ENDDO
-       ENDIF
-    ENDDO
-
-    counter = 1
-    DO i = 1, SIZE(Mesh%T,1)
-       IF(Mesh%ghostElems(i) .NE. 1) THEN
-          DO j = 1, Mesh%Nnodesperelem
-             DO ii = 1, phys%neq
-                DO jj = 1, Mesh%Ndim
-                   q_nogho(counter) = sol%q((i-1)*Mesh%Nnodesperelem*phys%neq*Mesh%Ndim + (j-1)*phys%neq + (ii-1)*Mesh%Ndim+jj)
-                   counter = counter + 1
-                ENDDO
-             ENDDO
-          ENDDO
-       ENDIF
-    ENDDO
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       WRITE(*,*) '*************** Unique  ****************'
-    ENDIF
-    CALL unique_1D(RESHAPE(T_nogho(:,1:refElPol%Nvertices), [SIZE(T_nogho(:,1:refElPol%Nvertices),1) * SIZE(T_nogho(:,1:refElPol%Nvertices),2)]), vector_nodes_unique)
-
+    ALLOCATE(noghost_index(Mesh%Nelems-Mesh%nghostelems))
+    ! only select the indices of the non-ghost elements
+    noghost_index = PACK([(i, i=1, Mesh%Nelems)], Mesh%ghostElems(:) .EQ. 0)
+    CALL unique_1D(RESHAPE(Mesh%T(noghost_index,1:refElPol%Nvertices), [SIZE(Mesh%T(noghost_index,1:refElPol%Nvertices),1) * SIZE(Mesh%T(noghost_index,1:refElPol%Nvertices),2)]), vector_nodes_unique)
+    CALL gather_1D_vector_int(Mesh%loc2glob_nodes(vector_nodes_unique), vector_nodes_unique_glob, allgather = .FALSE.)
 #else
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       WRITE(*,*) '*************** Unique  ****************'
-    ENDIF
     CALL unique_1D(RESHAPE(Mesh%T(:,1:refElPol%Nvertices), [SIZE(Mesh%T(:,1:refElPol%Nvertices),1) * SIZE(Mesh%T(:,1:refElPol%Nvertices),2)]), vector_nodes_unique)
 #endif
 
     N_n_vertex = SIZE(vector_nodes_unique)
 
-    ALLOCATE(two_d_nodes(N_n_vertex,2))
     ALLOCATE(h(N_n_vertex))
     ALLOCATE(error_L2_vertices(N_n_vertex))
+#ifndef PARALL
     ALLOCATE(error_target(N_n_vertex))
     ALLOCATE(h_target(N_n_vertex))
-    ALLOCATE(h_target_temp(N_n_vertex))
-#ifndef PARALL
-    ALLOCATE(two_d_elements(SIZE(Mesh%T,1),3))
-    ALLOCATE(error_L2(SIZE(Mesh%T,1)))
-    ALLOCATE(error_L2_init(SIZE(Mesh%T,1)))
+    error_target = adapt%tol_est
+    h_target = 100.
 #else
-    ALLOCATE(two_d_elements(SIZE(T_nogho,1),3))
-    ALLOCATE(error_L2(SIZE(T_nogho,1)))
-    ALLOCATE(error_L2_init(SIZE(T_nogho,1)))
-
+    ALLOCATE(count_vec(N_n_vertex))
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       N_n_vertex = MAXVAL(vector_nodes_unique_glob)
+       ALLOCATE(error_L2_vertices_root(N_n_vertex))
+       ALLOCATE(error_target(N_n_vertex))
+       ALLOCATE(h_target(N_n_vertex))
+       error_L2_vertices_root = 0
+       error_target = adapt%tol_est
+       h_target = 100.
+       N_n_vertex = SIZE(vector_nodes_unique)
+    ENDIF
 #endif
 
-    two_d_nodes = 0.
-    two_d_elements = 0
+    ALLOCATE(h_target_temp(N_n_vertex))
+    ALLOCATE(error_L2(SIZE(Mesh%T,1)))
+    ALLOCATE(error_L2_init(SIZE(Mesh%T,1)))
+
     h = 0.
     error_L2_vertices = 0.
     h_target_temp = 0.
-    error_target = adapt%tol_est
-    h_target = 0.
     error_L2 = 0.
     error_L2_init = 0.
     eg_L2 = 0.
     eg_L2_init = 0.
 
-    two_d_nodes = Mesh%X(vector_nodes_unique,1:2)
-#ifndef PARALL
-    two_d_elements = Mesh%T(:,1:3)
-#else
-    two_d_elements = T_nogho(:,1:3)
-#endif
     !! use error map to create element size map: h_target
-    CALL h_map(N_n_vertex,two_d_nodes,two_d_elements,vector_nodes_unique, h)
+#ifndef PARALL
+    CALL h_map(N_n_vertex,Mesh%X(vector_nodes_unique,1:2),Mesh%T(:,1:3),vector_nodes_unique, h)
+#else
+    CALL h_map(N_n_vertex,Mesh%X(vector_nodes_unique,1:2),Mesh%T(:,1:3),vector_nodes_unique, h, count_vec)
 
-    h_target_temp = 0.
-    h_target = 100.
+    CALL gather_1D_vector_real(h, h_glob, allgather = .FALSE.)
+    CALL gather_1D_vector_int(count_vec, count_vec_glob, allgather = .FALSE.)
+
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       ALLOCATE(h_root(MAXVAL(vector_nodes_unique_glob)))
+       h_root = 0.
+
+       CALL compute_error_on_vertices_root(h_glob, vector_nodes_unique_glob, count_vec_glob, h_root)
+    ENDIF
+
+#endif
 
     IF(param_adapt .EQ. 0) THEN
        ! u_sol, u_star_sol are allocated here
@@ -160,114 +131,57 @@ CONTAINS
           ! error estimation for the mesh and the solution
           CALL calculate_L2_error_two_sols_different_p_scalar_general(Mesh%X,Mesh%T,i, u_sol,u_star_sol, error_L2, eg_L2)
           CALL error_on_vertices(error_L2,Mesh%T,vector_nodes_unique, N_n_vertex, error_L2_vertices)
+
+#ifdef PARALL
+          CALL gather_1D_vector_real(error_L2_vertices, error_L2_vertices_glob, allgather = .FALSE.)
+
+          IF(MPIvar%glob_id .EQ. 0) THEN
+             CALL compute_error_on_vertices_root(error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob, error_L2_vertices_root)
+
+             ! richardson formula only for estimator
+             h_target_temp = h_root * ((error_target / error_L2_vertices_root) ** (1./ (order + 1.)))
+             h_target = MIN(h_target_temp, h_target)
+          ENDIF
+          DEALLOCATE(error_L2_vertices_glob)
+          NULLIFY(error_L2_vertices_glob)
+#else
           ! richardson formula only for estimator
           h_target_temp = EXP( ( LOG(error_target) - LOG( error_L2_vertices ) )/(order+1) + LOG(h) )
           h_target = MIN(h_target_temp, h_target)
-       ENDDO
 
+#endif
+       ENDDO
        DEALLOCATE(u_sol,u_star_sol)
     ELSE
        ! error estimation for the mesh and the solution
-#ifdef PARALL
-       CALL L2_error_estimator_eval(Mesh%X,T_nogho,u_nogho,q_nogho,param_adapt,error_L2,eg_L2)
-       CALL error_on_vertices(error_L2,T_nogho,vector_nodes_unique, N_n_vertex, error_L2_vertices)
-#else
        CALL L2_error_estimator_eval(Mesh%X,Mesh%T,sol%u,sol%q,param_adapt,error_L2,eg_L2)
        CALL error_on_vertices(error_L2,Mesh%T,vector_nodes_unique, N_n_vertex, error_L2_vertices)
-#endif
 
-       ! richardson formula only for estimator
-       h_target = EXP( ( LOG(error_target) - LOG( error_L2_vertices ) )/(order+1) + LOG(h) )
+#ifdef PARALL
 
-    ENDIF
+       CALL gather_1D_vector_real(error_L2_vertices, error_L2_vertices_glob, allgather = .FALSE.)
 
-    ! create contribution of estimator and indicator for mmg
-    ! if oscillations are detected just use original size/2 otherwise use
-    ! estimator calculated with Richardson
+       IF(MPIvar%glob_id .EQ. 0) THEN
+          CALL compute_error_on_vertices_root(error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob, error_L2_vertices_root)
 
-    DO i=1,SIZE(h_target) !check on coarsening ---> not higher than initial mesh
-       IF (h_target(i) .GT. 0.1) THEN
-          h_target(i) = 0.1
+          ! richardson formula only for estimator
+          h_target = h_root * ((error_target / error_L2_vertices_root) ** (1./ (order + 1.)))
+          h_target = MIN(h_target, 0.1)
        ENDIF
-    ENDDO
-
-#ifndef PARALL
-    CALL generate_htarget_sol_file(N_n_vertex, h_target)
 #else
-    ! reduce the size of global h_target array
-    CALL MPI_Reduce(N_n_vertex, N_n_vertex_glob, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, ierr);
-
-    ALLOCATE(h_target_glob_rep(N_n_vertex_glob))
-    ALLOCATE(vector_nodes_unique_glob(N_n_vertex_glob))
-    h_target_glob_rep = 0
-    vector_nodes_unique_glob = 0
-
-    ! vector containing N_n_vertex from each process
-    ALLOCATE(recvcounts(MPIvar%glob_size))
-    recvcounts(MPIvar%glob_id+1) = N_n_vertex
-    CALL MPI_Allgather(N_n_vertex, 1, MPI_INTEGER, recvcounts, 1, MPI_INTEGER, MPI_COMM_WORLD, ierr)
-
-    ! vector containing the displacemenet
-    ALLOCATE(displs(MPIvar%glob_size))
-    displs(1) = 0
-    DO i = 2, MPIvar%glob_size
-       displs(i) = displs(i-1) + recvcounts(i-1)
-    ENDDO
-
-
-    CALL MPI_Gatherv(h_target, N_n_vertex, MPI_REAL8, h_target_glob_rep, recvcounts, displs, MPI_REAL8, 0, MPI_COMM_WORLD, ierr)
-    CALL MPI_Gatherv(Mesh%loc2glob_nodes(vector_nodes_unique), N_n_vertex, MPI_INT, vector_nodes_unique_glob, recvcounts, displs, MPI_INT, 0, MPI_COMM_WORLD, ierr)
-    DEALLOCATE(displs, recvcounts)
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-
-
-       ALLOCATE(temp(SIZE(vector_nodes_unique_glob)))
-       temp = vector_nodes_unique_glob
-
-       CALL quicksort_int(temp)
-
-       ! Count total duplicates
-       counter = 0
-       DO i = 2, SIZE(temp)
-          IF (temp(i) .EQ. temp(i - 1)) THEN
-             counter = counter + 1
-          ENDIF
-       END DO
-
-       DEALLOCATE(temp)
-       ALLOCATE(already_counted(N_n_vertex_glob))
-       ALLOCATE(h_target_glob(N_n_vertex_glob-counter))
-       already_counted = .FALSE.
-       h_target_glob = 0
-
-       DO i = 1, N_n_vertex_glob
-          dummy_sum = 0
-          counter = 0
-          IF(already_counted(i) .EQV. .FALSE.) THEN
-             DO j = 1, N_n_vertex_glob
-                IF(vector_nodes_unique_glob(i) .EQ. vector_nodes_unique_glob(j)) THEN
-                   dummy_sum = dummy_sum + h_target_glob_rep(j)
-                   already_counted(j) = .TRUE.
-                   counter = counter + 1
-                ENDIF
-             ENDDO
-             h_target_glob(vector_nodes_unique_glob(i)) = dummy_sum/counter
-          ENDIF
-       ENDDO
-
-       DEALLOCATE(already_counted)
-
-       CALL generate_htarget_sol_file(SIZE(h_target_glob), h_target_glob)
-
-    ENDIF
-    DEALLOCATE(h_target_glob_rep)
-    DEALLOCATE(vector_nodes_unique_glob)
+       ! richardson formula only for estimator
+       h_target = h * ((error_target / error_L2_vertices) ** (1./ (order + 1.)))
+       h_target = MIN(h_target, 0.1)
 #endif
+    ENDIF
+
+
 
 #ifdef PARALL
     IF(MPIvar%glob_id .EQ. 0) THEN
+       N_n_vertex = MAXVAL(vector_nodes_unique_glob)
 #endif
+       CALL generate_htarget_sol_file(N_n_vertex, h_target)
 
        CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
 
@@ -318,6 +232,7 @@ CONTAINS
        CALL load_gmsh_mesh("./res/temp",1)
     ENDIF
 
+    CALL free_reference_element_pol(refElPol)
     CALL create_reference_element(refElPol,2,1, verbose = 0)
     CALL mesh_preprocess_serial(ierr)
 
@@ -331,7 +246,7 @@ CONTAINS
     CALL read_extended_connectivity('./res/temp.msh')
 
     CALL set_order_mesh(order)
-    CALL free_reference_element
+    CALL free_reference_element_pol(refElPol)
     CALL create_reference_element(refElPol,2,order, verbose = 0)
     CALL mesh_preprocess_serial(ierr)
 
@@ -342,27 +257,43 @@ CONTAINS
     END IF
 
     !CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+    !CALL round_edges(Mesh)
 
     IF(MPIvar%glob_id .EQ. 0) THEN
-      WRITE(*,*) "********** Rounding edges **********"
-      !CALL round_edges(Mesh)
-      ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
-      CALL write_msh_file(Mesh%X,Mesh%T)
-      ! convert the mesh to .mesh
-      CALL convert_msh2mesh('./res/temp')
+       ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
+       CALL write_msh_file(Mesh%X,Mesh%T)
+       ! convert the mesh to .mesh
+       CALL convert_msh2mesh('./res/temp')
     ENDIF
     !CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
 
-    DEALLOCATE(two_d_nodes)
-    DEALLOCATE(two_d_elements)
     DEALLOCATE(h)
     DEALLOCATE(error_L2_vertices)
-    DEALLOCATE(error_target)
+#ifndef PARALL
     DEALLOCATE(h_target)
+#endif
     DEALLOCATE(h_target_temp)
     DEALLOCATE(error_L2)
     DEALLOCATE(error_L2_init)
     DEALLOCATE(vector_nodes_unique)
+
+#ifdef PARALL
+    DEALLOCATE(noghost_index)
+    DEALLOCATE(count_vec)
+    IF(ASSOCIATED(error_L2_vertices_glob)) DEALLOCATE(error_L2_vertices_glob)
+    DEALLOCATE(vector_nodes_unique_glob)
+    DEALLOCATE(count_vec_glob)
+    DEALLOCATE(h_glob)
+
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       DEALLOCATE(error_target)
+       DEALLOCATE(h_root)
+       DEALLOCATE(h_target)
+       DEALLOCATE(error_L2_vertices_root)
+    ENDIF
+
+    NULLIFY(h_glob, error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob)
+#endif
 
   END SUBROUTINE adaptivity_estimator
 
@@ -425,11 +356,7 @@ CONTAINS
     REAL*8, ALLOCATABLE               :: u_star(:), u_int(:)
     INTEGER                           :: n_elements
 
-#ifndef PARALL
     n_elements = Mesh%Nelems
-#else
-    n_elements = SIZE(Mesh%T,1) - Mesh%nghostelems
-#endif
 
     ALLOCATE(K((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq, n_elements))
     ALLOCATE(Bt((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq*mesh%ndim*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2, n_elements))
@@ -461,6 +388,7 @@ CONTAINS
 
   SUBROUTINE L2_error_estimator_eval(X,T,u,q,error_param,error_L2,eg_L2)
     USE physics, ONLY: cons2phys
+    USE HDF5_io_module
 
     REAL*8, INTENT(IN)                :: X(:,:)
     INTEGER, INTENT(IN)               :: T(:,:)
@@ -474,11 +402,7 @@ CONTAINS
     REAL*8, ALLOCATABLE               :: u_star(:), u_int(:), u_sol(:,:), u_star_sol(:,:)
     INTEGER                           :: n_elements
 
-#ifndef PARALL
     n_elements = Mesh%Nelems
-#else
-    n_elements = SIZE(Mesh%T,1) - Mesh%nghostelems
-#endif
 
     ALLOCATE(K((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq, n_elements))
     ALLOCATE(Bt((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq*mesh%ndim*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2, n_elements))
@@ -903,8 +827,12 @@ CONTAINS
     REAL*8                                      :: Xe_p1(refEl1%Nnodes2D, SIZE(X1,2)), Xe_p2(refEl2%Nnodes2D, SIZE(X2,2))
     REAL*8                                      :: ue_p1(refEl1%Nnodes2D), ue_p2(refEl2%Nnodes2D)
     INTEGER                                     :: ind_p1(refEl1%Nnodes2D), ind_p2(refEl2%Nnodes2D)
-    INTEGER                                     :: nnodes_p1, nnodes_p2, n_elements, iElem, i
-    REAL*8                                      :: elem_area, elem_sol_norm, elem_error
+    INTEGER                                     :: nnodes_p1, nnodes_p2, n_elements, iElem, i, ierr
+    REAL*8                                      :: elem_area, elem_sol_norm, elem_error, total_area, total_norm_sol
+
+    error2 = 0.
+    sol_norm = 0.
+    dom_area = 0.
 
     CALL compute_shape_functions_at_interp_points(refEl1%nDeg,refEl2%nDeg,refEl1%elemType,shapeFunctions_post)
 
@@ -921,6 +849,9 @@ CONTAINS
 
     DO iElem = 1, n_elements
 
+#ifdef PARALL
+       IF(Mesh%ghostElems(iElem) .EQ. 1) CYCLE
+#endif
        Xe_p2 = MATMUL(shapeFunctions_post,X2(T2(ielem,:),:))
        Xe_p1 = X1(T1(ielem,:),:)
 
@@ -939,12 +870,29 @@ CONTAINS
     ENDDO
 
     IF(adapt%difference .EQ. 0) THEN
-      ! relative error
+       ! relative error
        error = SQRT(error2/sol_norm)
 
     ELSEIF(adapt%difference .EQ. 1) THEN
-       ! absolute error density
-       error = SQRT(error2/SUM(sol_norm)*SUM(dom_area)/dom_area)
+       total_norm_sol = SUM(sol_norm)
+       total_area = SUM(dom_area)
+
+#ifdef PARALL
+       CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_norm_sol, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+       CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+       DO iElem = 1, n_elements
+          IF(Mesh%ghostElems(iElem) .EQ. 1) THEN
+             ! absolute error density
+             error(iElem) = 0.
+          ELSE
+             error(iElem) = SQRT(error2(iElem)/total_norm_sol*total_area/dom_area(iElem))
+          ENDIF
+       ENDDO
+#else
+       error = SQRT(error2/total_norm_sol*total_area/dom_area)
+#endif
+
 
     ELSE
        WRITE(*,*) "Choice of relative/absolute difference for the adaptivity not valid. STOP."
@@ -1086,6 +1034,9 @@ CONTAINS
 
     DO i = 1, SIZE(T,1)
 
+#ifdef PARALL
+       IF(Mesh%ghostElems(i) .EQ. 1) CYCLE
+#endif
        ! Find indexes of the vertex nodes
        A = 0
        B = 0
@@ -1120,16 +1071,18 @@ CONTAINS
        count_vec(C) = count_vec(C) + 1
     ENDDO
 
+    IF(ANY(count_vec .EQ. 0)) THEN
+       WRITE(*,*) "GOT A DIVISION BY 0 IN error_on_vertices ADAPTIVITY, SOMETHING IS WRONG!"
+       STOP
+    ENDIF
 
     ! Calculate h values
-    DO i = 1, N_n_vertex
-       IF (count_vec(i) .GT. 0) THEN
-          error_output(i) = g(i) / count_vec(i)
-       ELSE
-          WRITE(*,*) "GOT A DIVISION BY 0 IN error_on_vertices ADAPTIVITY, SOMETHING IS WRONG!"
-          STOP
-       ENDIF
-    ENDDO
+#ifdef PARALL
+    error_output = g
+#else
+    error_output = g / count_vec
+#endif
+
 
   ENDSUBROUTINE error_on_vertices
 
