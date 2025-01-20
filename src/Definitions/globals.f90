@@ -248,8 +248,9 @@ CONTAINS
        DEALLOCATE (Mesh%X_P1)
        NULLIFY(Mesh%X_P1)
     END IF
-    IF (ALLOCATED(Mesh%elemSize)) THEN
+    IF (ASSOCIATED(Mesh%elemSize)) THEN
        DEALLOCATE (Mesh%elemSize)
+       NULLIFY(Mesh%elemSize)
     END IF
     IF (ALLOCATED(Mesh%scdiff_nodes)) THEN
        DEALLOCATE (Mesh%scdiff_nodes)
@@ -409,7 +410,6 @@ CONTAINS
        DEALLOCATE (phys%Jtor)
        NULLIFY(phys%Jtor)
     END IF
-
     IF (ALLOCATED(phys%diff_nn_Vol)) THEN
        DEALLOCATE (phys%diff_nn_Vol)
     END IF
@@ -518,8 +518,9 @@ CONTAINS
     IF (ALLOCATED(Mesh%flag_elems_sc)) THEN
        DEALLOCATE (Mesh%flag_elems_sc)
     END IF
-    IF (ALLOCATED(Mesh%elemSize)) THEN
+    IF (ASSOCIATED(Mesh%elemSize)) THEN
        DEALLOCATE (Mesh%elemSize)
+       NULLIFY(Mesh%elemSize)
     END IF
     IF (ALLOCATED(Mesh%scdiff_nodes)) THEN
        DEALLOCATE (Mesh%scdiff_nodes)
@@ -655,8 +656,9 @@ CONTAINS
        DEALLOCATE (Mesh_loc%X)
        NULLIFY(Mesh_loc%X)
     END IF
-    IF (ALLOCATED(Mesh_loc%elemSize)) THEN
+    IF (ASSOCIATED(Mesh_loc%elemSize)) THEN
        DEALLOCATE (Mesh_loc%elemSize)
+       NULLIFY(Mesh_loc%elemSize)
     END IF
     IF (ALLOCATED(Mesh_loc%scdiff_nodes)) THEN
        DEALLOCATE (Mesh_loc%scdiff_nodes)
