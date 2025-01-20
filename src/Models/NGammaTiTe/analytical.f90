@@ -1229,10 +1229,8 @@ CONTAINS
     real*8, dimension(:, :), intent(OUT)     :: u
     real*8, dimension(size(u, 1), phys%npv)  :: up
     integer                                  :: i
-    real*8                                   :: a, r(size(x)), th(size(x))
+    real*8                                   :: a, r(size(x))
     real*8                                   :: sigma,fluxel(refElPol%Nnodes2d)
-    integer*4                                :: ierr
-    real*8                                   :: minFlux2D, maxFlux2D
     real*8                                   :: xmax, xmin, ymax, ymin, xm, ym
 
     up = 0.
