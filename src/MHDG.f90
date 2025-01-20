@@ -4,8 +4,6 @@ PROGRAM MHDG
 
   IMPLICIT NONE
 
-  WRITE (6, *) "STARTING"
-
   ! check initial arguments like mesh, initial solution etc
   CALL check_input_arguments()
 
@@ -15,7 +13,11 @@ PROGRAM MHDG
 
   ! Initialize MPI
   CALL init_MPI_OMP()
-  
+
+  IF (MPIvar%glob_id .EQ. 0) THEN
+     WRITE (6, *) "STARTING"
+  ENDIF
+
   ! Number of threads
   Nthreads = OMPvar%Nthreads
 
@@ -49,7 +51,7 @@ PROGRAM MHDG
   ! Linear solver: set the start to true
   matK%start = .TRUE.
   IF (lssolver%timing) THEN
-     CALL init_solve_timing
+     CALL init_solve_timing()
   ENDIF
 
   ! Initialize marked elements for thresholds
@@ -78,7 +80,19 @@ PROGRAM MHDG
   ! Mesh preprocess: create the mesh related structures
   ! used in the HDG scheme
   ierr = 1
-  CALL mesh_preprocess_serial(ierr)
+#ifdef PARALL
+  IF(switch%read_gmsh) THEN
+     IF(MPIvar%glob_size .GT. 1) THEN
+        CALL mesh_preprocess_serial(ierr)
+     ELSE
+        CALL mesh_preprocess(ierr)
+     ENDIF
+  ELSE
+     CALL mesh_preprocess(ierr)
+  ENDIF
+#else
+  CALL mesh_preprocess(ierr)
+#endif
 
   IF((ierr .EQ. 0) .AND. (switch%read_gmsh)) THEN
      CALL free_mesh
@@ -87,6 +101,7 @@ PROGRAM MHDG
      ELSE
         CALL load_gmsh_mesh(mesh_name, 0)
      ENDIF
+
      CALL mesh_preprocess_serial(ierr)
 
      IF(ierr .EQ. 0) THEN
@@ -95,6 +110,22 @@ PROGRAM MHDG
      ENDIF
   ENDIF
 
+#ifdef PARALL
+  IF(nb_args .GT. 1) THEN
+     ! Initialize the solution
+     CALL initialize_solution()
+  ENDIF
+
+  CALL domain_decomposition()
+
+  IF(nb_args .GT. 1) THEN
+     CALL solution_decomposition()
+  ENDIF
+#else
+  Mesh%X = Mesh%X*phys%lscale
+  Mesh%X = Mesh%X/phys%lscale
+#endif
+
   ! Initialize magnetic field (the Mesh is needed)
   CALL initialize_magnetic_field()
 
@@ -102,6 +133,7 @@ PROGRAM MHDG
   CALL load_magnetic_field_Jtor()
 
   ! set parameters like Nelems, Nfacenodes etc
+  restart_adapt = adapt%rest_adapt
   CALL set_parameters()
 
 #ifdef PARALL
@@ -120,8 +152,11 @@ PROGRAM MHDG
      CALL initializeShockCapturing()
   ENDIF
 
-  ! Initialize the solution
-  CALL initialize_solution()
+#ifdef PARALL
+  IF (nb_args .LT. 2) THEN
+     ! Initialize the solution
+     CALL initialize_solution()
+  ENDIF
 
   ! add initial perturbation (pertini), magnetic or blob
   CALL add_initial_perturbation()
@@ -131,7 +166,7 @@ PROGRAM MHDG
 
   ! Save solution
   CALL setSolName(save_name, mesh_name, 0, .TRUE., .FALSE.)
-  CALL HDF5_save_solution(save_name)
+  !CALL HDF5_save_solution(save_name)
 
   CALL mpi_barrier(mpi_comm_world,ierr)
 
@@ -176,9 +211,7 @@ PROGRAM MHDG
      CALL update_uiter()
 
      ir = 1
-
      DO WHILE(ir .LE. numer%nrp) ! ************ NEWTON-RAPHSON LOOP *********************
-
         ! update nonconstant dumping factor
         CALL update_dumpnr()
 
@@ -195,34 +228,18 @@ PROGRAM MHDG
         CALL hdg_Mapping()
         ! Assembly the global matrix
         CALL hdg_Assembly()
-
-        !  WRITE (6, *) "Save matrix"
-        !  call HDF5_save_CSR_matrix('Mat')
-        !  call HDF5_save_CSR_vector('rhs')
-        !  stop
-        !  call displayMatrixInt(Mesh%F)
-        !  call displayMatrixInt(Mesh%extfaces)
-        !  call displayVectorInt(Mesh%periodic_faces)
-        !  stop
-        !  if (ir==10) then
-        !   call print_matrices_hdf5
-        !   stop
-        !  endif
-
         ! Solve linear system
         CALL solve_global_system(ir)
-
         ! Compute element-by-element solution
         CALL compute_element_solution()
-
         ! Check for NaN (should work with optimization flags)
         CALL check_for_NaNs()
 
-        IF (adapt%adaptivity .and. restart_adapt) THEN
-          CALL adaptivity
-          DEALLOCATE(uiter)
-          ALLOCATE(uiter(size(sol%u)))
-          uiter = 0.
+        IF (adapt%adaptivity .AND. restart_adapt) THEN
+           CALL adaptivity()
+           DEALLOCATE(uiter)
+           ALLOCATE(uiter(SIZE(sol%u)))
+           uiter = 0.
         ENDIF
 
         ! Apply threshold
@@ -232,8 +249,9 @@ PROGRAM MHDG
         ! CALL HDG_FilterSolution()
 
         ! Compute error on oscillations, print max value of oscillation and save solution as check-point if oscillations are lower than threshold
-        CALL compute_error_oscillations(error_oscillation, oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec)
-
+        IF (adapt%adaptivity) THEN
+           CALL compute_error_oscillations(oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec)
+        ENDIF
         ! Save solution
         IF (switch%saveNR) THEN
            CALL setSolName(save_name, mesh_name, ir, .FALSE., .TRUE.)
@@ -262,6 +280,7 @@ PROGRAM MHDG
            errNR_adapt = 1e10
            ir_adapt = 0
            ir_check = 1
+           CALL free_mesh_loc(Mesh_prec)
            CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
            EXIT
         ELSEIF (errNR .GT. numer%div) THEN
@@ -276,25 +295,38 @@ PROGRAM MHDG
               ir_adapt = ir
 
               ! if the NR is the lowest reached so far, then save it as best check-point
-              WRITE(*,*) "Solution saved as last checkpoint."
+              IF (MPIvar%glob_id .EQ. 0) THEN
+                 WRITE(*,*) "Solution saved as last checkpoint."
+              ENDIF
+
               CALL update_uiter_qiter_best(uiter_best, qiter_best, sol%u, sol%q)
               divergence_counter_adapt = 0
-
            ELSEIF(errNR .GT. errNR_adapt) THEN
               divergence_counter_adapt = divergence_counter_adapt + 1
            ENDIF
 
-           WRITE(*,*) "ir_check: ", ir_check
-           ! Call adaptivity if one of the following conditions is respected
-           IF ((adapt%adaptivity) .AND. (ir .GT. (ir_check+1)) .AND. ((adapt%osc_adapt .AND. (MAXVAL(oscillations) .GT. adapt%osc_tol)) .OR. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0))))THEN !  .or. (flag)) THEN
+           IF (MPIvar%glob_id .EQ. 0) THEN
+              WRITE(*,*) "ir_check: ", ir_check
+           ENDIF
 
-              WRITE(*,*) "Residue before mapping:", computeResidual(sol%u, uiter, 1.)/numer%dumpnr
+           ! Call adaptivity if one of the following conditions is respected
+           IF ((adapt%adaptivity) .AND. ((adapt%osc_adapt .AND. (max_osc .GT. adapt%osc_tol)) .OR. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)))) THEN !  .or. (flag)) THEN
 
               ! call adaptivity precedure
               CALL adaptivity()
 
               ! u0 also needs to be projected from old mesh to new mesh
               CALL project_u0_newmesh()
+
+              IF((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)) THEN
+                 ! Update check-point solution to the one projected on the new mesh
+                 DEALLOCATE(sol%u_conv)
+                 ALLOCATE(sol%u_conv(SIZE(sol%u)))
+                 sol%u_conv = sol%u
+                 DEALLOCATE(sol%q_conv)
+                 ALLOCATE(sol%q_conv(SIZE(sol%q)))
+                 sol%q_conv = sol%q
+              ENDIF
 
               ! update uiter to new mapped solution
               CALL update_uiter()
@@ -305,12 +337,12 @@ PROGRAM MHDG
                  ir = 0
               ENDIF
 
-              WRITE(*,*) "Residue after mapping:", computeResidual(sol%u, uiter, 1.)/numer%dumpnr
-
+              CALL free_mesh_loc(Mesh_prec)
               CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
 
            ENDIF
         END IF
+
         IF (MPIvar%glob_id .EQ. 0) THEN
            WRITE (6, *) "*********************************"
            WRITE (6, *) " "
@@ -323,10 +355,10 @@ PROGRAM MHDG
      !  CALL HDG_applyThreshold()
 
      ! Check convergence in time advancing and update
+
      errlstime = computeResidual(sol%u, sol%u0(:, 1), time%dt)
      sol%tres(sol%Nt) = errlstime
      sol%time(sol%Nt) = time%t
-
 
      ! Display results
      IF (MOD(time%it, utils%freqdisp) .EQ. 0) THEN
@@ -363,7 +395,7 @@ PROGRAM MHDG
 
               ! update sol%u_conv = sol%u, sol%q_conv = sol%q
               CALL update_uconv_qconv(sol%u, sol%q)
-
+              CALL free_mesh_loc(Mesh_prec)
               CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
 
               ! call the adaptive procedure if time refinement is on
@@ -372,7 +404,7 @@ PROGRAM MHDG
                  CALL adaptivity
 
                  CALL update_u0(sol%u)
-
+                 CALL free_mesh_loc(Mesh_prec)
                  CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
               ENDIF
 
@@ -400,7 +432,7 @@ PROGRAM MHDG
               CALL adaptivity
 
               CALL update_u0(sol%u)
-
+              CALL free_mesh_loc(Mesh_prec)
               CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
            ENDIF
 
