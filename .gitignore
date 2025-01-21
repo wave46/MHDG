@@ -8,7 +8,7 @@
 *test/Sol*
 *lib/*.F
 *lib/*.o
-*lib/*.mod
+*lib/*.*mod
 *lib/MHDG-*
 *MHDG-*
 *src_*
@@ -17,3 +17,4 @@
 *test/*/*h5
 *lib_*
 test/*.sh*
+code_tests
