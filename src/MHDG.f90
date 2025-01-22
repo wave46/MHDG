@@ -59,7 +59,9 @@ PROGRAM MHDG
   mkelms = .FALSE.
 
   ! Create the reference element based on the mesh type
+#ifdef PARALL
   CALL mpi_barrier(MPI_COMM_WORLD,ierr)
+#endif
   CALL create_reference_element(refElPol, 2, verbose = 1)
 
   ! create the temp.msh and temp.mesh needed by the adaptivity
@@ -163,9 +165,7 @@ PROGRAM MHDG
 
   ! Save solution
   CALL setSolName(save_name, mesh_name, 0, .TRUE., .FALSE.)
-  !CALL HDF5_save_solution(save_name)
-
-  CALL mpi_barrier(mpi_comm_world,ierr)
+  CALL HDF5_save_solution(save_name)
 
   ! Allocate and initialize uiter, uiter_best, qiter_best, u0, u_conv, q_conv
   CALL initialize_solu0_uiter_uconv()

@@ -14,28 +14,28 @@ MODULE adaptivity_common_module
 
 CONTAINS
 
-  SUBROUTINE merge_with_geometry(gmsh)
-    TYPE(gmsh_t), INTENT(IN)          :: gmsh
+  SUBROUTINE merge_with_geometry(gmsh_l)
+    TYPE(gmsh_t), INTENT(IN)          :: gmsh_l
 
-    CALL gmsh%initialize()
-    CALL gmsh%OPEN(adapt%geometry_path)
-    CALL gmsh%MERGE("./res/temp.msh")
-    CALL gmsh%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh%WRITE("./res/temp.msh")
-    CALL gmsh%finalize()
+    CALL gmsh_l%initialize()
+    CALL gmsh_l%OPEN(adapt%geometry_path)
+    CALL gmsh_l%MERGE("./res/temp.msh")
+    CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
+    CALL gmsh_l%WRITE("./res/temp.msh")
+    CALL gmsh_l%finalize()
 
   ENDSUBROUTINE merge_with_geometry
 
-  SUBROUTINE open_merge_with_geometry(gmsh,path2msh)
-    TYPE(gmsh_t), INTENT(IN)           :: gmsh
+  SUBROUTINE open_merge_with_geometry(gmsh_l,path2msh)
+    TYPE(gmsh_t), INTENT(IN)           :: gmsh_l
     CHARACTER ( len = * ), INTENT(IN) :: path2msh
 
-    CALL gmsh%initialize()
-    CALL gmsh%OPEN(adapt%geometry_path)
-    CALL gmsh%MERGE(path2msh)
-    CALL gmsh%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh%WRITE(path2msh)
-    CALL gmsh%finalize()
+    CALL gmsh_l%initialize()
+    CALL gmsh_l%OPEN(adapt%geometry_path)
+    CALL gmsh_l%MERGE(path2msh)
+    CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
+    CALL gmsh_l%WRITE(path2msh)
+    CALL gmsh_l%finalize()
 
   ENDSUBROUTINE open_merge_with_geometry
 
@@ -1315,15 +1315,15 @@ CONTAINS
 
     CHARACTER(*), INTENT(IN)            :: mesh_name
     CHARACTER(LEN = 1024)               :: file_in, file_out
-    TYPE(gmsh_t)                        :: gmsh
+    TYPE(gmsh_t)                        :: gmsh_l
 
     file_in  = TRIM(ADJUSTL(mesh_name))// '.msh'
     file_out = TRIM(ADJUSTL(mesh_name))// '.mesh'
 
-    CALL gmsh%initialize()
-    CALL gmsh%OPEN(file_in)
-    CALL gmsh%WRITE(file_out)
-    CALL gmsh%finalize()
+    CALL gmsh_l%initialize()
+    CALL gmsh_l%OPEN(file_in)
+    CALL gmsh_l%WRITE(file_out)
+    CALL gmsh_l%finalize()
 
   ENDSUBROUTINE convert_msh2mesh
 
@@ -1334,16 +1334,16 @@ CONTAINS
 
     CHARACTER(*), INTENT(IN)            :: mesh_name
     CHARACTER(LEN = 1024)               :: file_in, file_out
-    TYPE(gmsh_t)                        :: gmsh
+    TYPE(gmsh_t)                        :: gmsh_l
 
     file_in  = TRIM(ADJUSTL(mesh_name))// '.mesh'
     file_out = TRIM(ADJUSTL(mesh_name))// '.msh'
 
-    CALL gmsh%initialize()
-    CALL gmsh%OPEN(file_in)
-    CALL gmsh%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh%WRITE(file_out)
-    CALL gmsh%finalize()
+    CALL gmsh_l%initialize()
+    CALL gmsh_l%OPEN(file_in)
+    CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
+    CALL gmsh_l%WRITE(file_out)
+    CALL gmsh_l%finalize()
 
   ENDSUBROUTINE convert_mesh2msh
 
