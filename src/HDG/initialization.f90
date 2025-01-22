@@ -1229,7 +1229,7 @@ CONTAINS
 
   SUBROUTINE FinalizePETSC
 #include "petsc/finclude/petsc.h"
-    USE petsc, ONLY: PetscFinalize
+    USE petsc, ONLY: PetscFinalize, PetscFinalized
     USE MPI_OMP
     IMPLICIT NONE
 
