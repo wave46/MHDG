@@ -1723,7 +1723,6 @@ CONTAINS
       dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
       dti_dU(3) = dti_dU(3) + 1./U1
       dti_dU(:) = dti_dU(:) * T0*2./3. /phys%Mref
-      ti = T0*2./3. /phys%Mref * (U3/U1 - 0.5 *U2**2/U1**2)
       res = (0.25 *s0 / ti**0.75) * dti_dU
     endif !let non-linear part as zero if negative solutions
   END SUBROUTINE compute_dsigmavnn_dU
