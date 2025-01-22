@@ -1206,7 +1206,7 @@ CONTAINS
 #ifdef WITH_PETSC
   SUBROUTINE InitPETSC
 #include "petsc/finclude/petsc.h"
-    USE petsc, ONLY: PetscInitialize
+    USE petsc, ONLY: PetscInitialize, PetscInitialized
     !use petscsys
     USE MPI_OMP
     IMPLICIT NONE
