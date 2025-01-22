@@ -4,15 +4,15 @@ PROGRAM MHDG
 
   IMPLICIT NONE
 
+  ! Initialize MPI
+  CALL init_MPI_OMP()
+
   ! check initial arguments like mesh, initial solution etc
   CALL check_input_arguments()
 
   ! Start timing the code
   CALL cpu_TIME(time_start)
   CALL system_CLOCK(clock_start, clock_rate)
-
-  ! Initialize MPI
-  CALL init_MPI_OMP()
 
   IF (MPIvar%glob_id .EQ. 0) THEN
      WRITE (6, *) "STARTING"
@@ -111,28 +111,31 @@ PROGRAM MHDG
   ENDIF
 
 #ifdef PARALL
-  IF(nb_args .GT. 1) THEN
-     ! Initialize the solution
+  ! if the restart solution is given
+  IF (nb_args .EQ. 2) THEN
+     ! load the serial solution
+     CALL initialize_solution()
+     ! decompose the domain over the processes
+     CALL domain_decomposition()
+     ! decompose the solution over the processes
+     CALL solution_decomposition()
+  ! if the restart solution is not given
+  ELSE
+    ! just decompose the domain
+     CALL domain_decomposition()
+  ENDIF
+#endif
+
+  ! initialise magnetic field (the mesh is needed)
+  CALL initialize_magnetic_field()
+  ! load magnetic field and Jtor
+  CALL load_magnetic_field_Jtor()
+
+  ! if the restart solution is not given or we are in the serial environment
+  IF ((nb_args .EQ. 1) .OR. (MPIvar%glob_size .EQ. 1)) THEN
      CALL initialize_solution()
   ENDIF
 
-  CALL domain_decomposition()
-
-  IF(nb_args .GT. 1) THEN
-     CALL solution_decomposition()
-  ENDIF
-#else
-  Mesh%X = Mesh%X*phys%lscale
-  Mesh%X = Mesh%X/phys%lscale
-#endif
-
-  ! Initialize magnetic field (the Mesh is needed)
-  CALL initialize_magnetic_field()
-
-  ! Load magnetic field and, if ohmic src, also Jtor
-  CALL load_magnetic_field_Jtor()
-
-  ! set parameters like Nelems, Nfacenodes etc
   restart_adapt = adapt%rest_adapt
   CALL set_parameters()
 
@@ -150,12 +153,6 @@ PROGRAM MHDG
   ! Initialize shock capturing
   IF ((switch%shockcp .GT. 0) .OR. (adapt%shockcp_adapt .GT. 0))  THEN
      CALL initializeShockCapturing()
-  ENDIF
-
-#ifdef PARALL
-  IF (nb_args .LT. 2) THEN
-     ! Initialize the solution
-     CALL initialize_solution()
   ENDIF
 
   ! add initial perturbation (pertini), magnetic or blob
