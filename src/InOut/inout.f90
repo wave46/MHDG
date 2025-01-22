@@ -506,8 +506,6 @@ CONTAINS
 
 #endif
 
-
-
 #ifdef TOR3D
     IF (MPIvar%glob_size .GT. 1) THEN
        WRITE (nip, *) MPIvar%ipol
@@ -757,7 +755,7 @@ CONTAINS
              CALL HDF5_group_create('gmsh_mesh', file_id, group_id1, ierr)
              CALL HDF5_array2D_saving_int(group_id1,Mesh%T_gmsh, SIZE(Mesh%T_gmsh, 1), SIZE(Mesh%T_gmsh, 2), 'T_gmsh')
              CALL HDF5_array2D_saving_int(group_id1,Mesh%Tb_gmsh, SIZE(Mesh%Tb_gmsh, 1), SIZE(Mesh%Tb_gmsh, 2), 'Tb_gmsh')
-             !CALL HDF5_array2D_saving(group_id1,Mesh%X_P1, SIZE(Mesh%X_P1, 1), SIZE(Mesh%X_P1, 2), 'X_P1')
+             CALL HDF5_array2D_saving(group_id1,Mesh%X_P1, SIZE(Mesh%X_P1, 1), SIZE(Mesh%X_P1, 2), 'X_P1')
              CALL HDF5_integer_saving(group_id1,SIZE(Mesh%X_P1,1),'Nnodes_P1')
              CALL HDF5_group_close(group_id1, ierr)
           ENDIF
