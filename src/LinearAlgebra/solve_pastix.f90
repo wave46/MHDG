@@ -73,6 +73,8 @@ CONTAINS
 
       call set_nthreads(matPASTIX)
 
+
+
       ! matPASTIX%iparm(IPARM_SYM) = API_SYM_NO
       ! Verbose mode - Default: PastixVerboseNo
       ! Possible values : PastixVerboseNot, PastixVerboseNo, PastixVerboseYes
@@ -154,7 +156,7 @@ CONTAINS
       matPASTIX%spm%n = matK%n      ! Local number of unknowns
       matPASTIX%spm%nnz = matK%nnz    ! Local number of non zeroes
       matPASTIX%spm%dof = 1              ! Degree of freedom per unknown
-      
+
 #ifdef PARALL
       matPASTIX%spm%replicated = 0
 #else
