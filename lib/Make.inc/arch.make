@@ -64,8 +64,8 @@ PASTIX=$(LIB_YES)
 PSBLAS=$(LIB_NO)
 #PSBLMG=$(LIB_YES)
 PSBLMG=$(LIB_NO)
-PETSC=$(LIB_YES)
-#PETSC=$(LIB_NO)
+#PETSC=$(LIB_YES)
+PETSC=$(LIB_NO)
 
 
 #-------------------------------------------------------------------------------
