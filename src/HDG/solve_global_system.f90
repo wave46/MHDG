@@ -10,7 +10,7 @@ SUBROUTINE solve_global_system(ir)
   USE printUtils
   USE in_out
 #ifdef WITH_PASTIX
-  USE solve_pastix
+  USE solve_pastix, only: matPASTIX, init_mat_PASTIX, build_mat_PASTIX, check_mat_PASTIX, anal_mat_PASTIX, LU_mat_pastix, solve_mat_PASTIX
 #endif
 #ifdef WITH_PSBLAS
   USE solve_psblas
@@ -26,10 +26,8 @@ SUBROUTINE solve_global_system(ir)
   INTEGER, INTENT(IN) :: ir
   REAL, ALLOCATABLE   :: rhspert(:)
   REAL                :: pertamp, errsol
-#ifdef WITH_PASTIX
   INTEGER*4           :: seed(34)
   REAL, ALLOCATABLE   :: u_tilde_exact(:), u_tilde_check(:)
-#endif
   INTEGER             :: i
 #ifdef PARALL
   INTEGER*4           :: j, ierr, Neq, Nfp
@@ -82,7 +80,7 @@ SUBROUTINE solve_global_system(ir)
      IF (matK%start) THEN
         CALL displayMatrixInfo()
         CALL init_mat_PASTIX(matPASTIX)
-        
+
         matK%start = .FALSE.
      ELSE
         CALL build_mat_PASTIX(matPASTIX)
