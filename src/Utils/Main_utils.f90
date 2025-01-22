@@ -14,15 +14,8 @@ MODULE Main_utils
   USE printutils
   USE debug
   USE initialization
-#ifdef WITH_PASTIX
-  USE solve_pastix
-#endif
-#ifdef WITH_PSBLAS
-  USE solve_psblas
-#endif
 #ifdef WITH_PETSC
-#include "petsc/finclude/petsc.h"
-  USE solve_petsc
+   USE solve_petsc, only: matPETSC
 #endif
   USE adaptivity_common_module
   USE adaptivity_estimator_module
@@ -85,7 +78,6 @@ CONTAINS
           CALL deep_copy_mesh_struct(Mesh, Mesh_glob)
           Mesh_glob%X = Mesh_glob%X*phys%lscale
           CALL split_mesh(MPIvar%glob_size, 3 , .FALSE.)
-          CALL mpi_barrier(MPI_COMM_WORLD,ierr)
           CALL mesh_preprocess(ierr)
 
           WRITE (nid, *) MPIvar%glob_id + 1
@@ -230,17 +222,9 @@ CONTAINS
 
 #ifdef PARALL
 
-    ! IF(MPIvar%glob_id .EQ. 0) THEN
-    !    CALL HDF5_create('./global_sol_par_newmesh.h5', file_id, ierr)
-    !    CALL HDF5_array2D_saving_int(file_id, Mesh%T, SIZE(Mesh%T, 1), SIZE(Mesh%T,2), 'T_par')
-    !    CALL HDF5_array2D_saving(file_id, Mesh%X, SIZE(Mesh%X, 1), SIZE(Mesh%X,2), 'X_par')
-    !    CALL HDF5_close(file_id)
-    ! ENDIF
-
     Mesh%X = Mesh%X/phys%lscale
     ! Domain decomposition on the new mesh
     CALL split_mesh(MPIvar%glob_size, 3, .FALSE.)
-    CALL MPI_Barrier(MPI_COMM_WORLD, ierr)
     CALL mesh_preprocess(ierr)
     Mesh%X = Mesh%X*phys%lscale
 
@@ -255,46 +239,21 @@ CONTAINS
 
     DEALLOCATE(X_glob,T_glob, u_glob, q_glob)
     NULLIFY(X_glob, T_glob, u_glob, q_glob)
-    CALL mpi_barrier(MPI_COMM_WORLD,ierr)
 
     ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
     CALL gather_solution(Mesh_in = Mesh, Nnodesperelem = Mesh%Nnodesperelem, u_in = sol%u, q_in = sol%q, u_glob = u_glob, q_glob = q_glob)
     CALL gather_mesh(Mesh_in = Mesh, T_glob = T_glob, X_glob = X_glob)
 
-    ! IF(MPIvar%glob_id .EQ. 0) THEN
-    !    CALL HDF5_create('./global_sol_par_proj.h5', file_id, ierr)
-    !    CALL HDF5_array2D_saving_int(file_id, T_glob, SIZE(T_glob,1), SIZE(T_glob,2), 'T_par')
-    !    !CALL HDF5_array2D_saving_int(file_id, Tb_glob, SIZE(Tb_glob,1), SIZE(Tb_glob,2), 'Tb_par')
-    !    CALL HDF5_array2D_saving(file_id, X_glob, SIZE(X_glob,1), SIZE(X_glob,2), 'X_par')
-    !    CALL HDF5_array1D_saving(file_id, u_glob, SIZE(u_glob), 'u_par')
-    !    CALL HDF5_array1D_saving(file_id, q_glob, SIZE(q_glob), 'q_par')
-    !    CALL HDF5_close(file_id)
-    ! ENDIF
-
     DEALLOCATE(X_glob,T_glob, u_glob, q_glob)
     NULLIFY(X_glob, T_glob, u_glob, q_glob)
-    CALL mpi_barrier(MPI_COMM_WORLD,ierr)
 
 #else
     Mesh%X = Mesh%X*phys%lscale
     Mesh%X = Mesh%X/phys%lscale
 
-    ! IF(MPIvar%glob_id .EQ. 0) THEN
-    !    CALL HDF5_create('./global_sol_ser_newmesh.h5', file_id, ierr)
-    !    CALL HDF5_array2D_saving_int(file_id, Mesh%T, SIZE(Mesh%T, 1), SIZE(Mesh%T,2), 'T_ser')
-    !    CALL HDF5_array2D_saving(file_id, Mesh%X, SIZE(Mesh%X, 1), SIZE(Mesh%X,2), 'X_ser')
-    !    CALL HDF5_close(file_id)
-    ! ENDIF
-
     ! Project the check-point solution to the new mesh
     CALL projectSolutionDifferentMeshes_general(Mesh_prec%T,Mesh_prec%X,Mesh%T, Mesh%X, sol%u_conv, sol%q_conv, sol%u, sol%q)
 
-    ! CALL HDF5_create('./global_sol_ser_proj.h5', file_id, ierr)
-    ! CALL HDF5_array2D_saving_int(file_id, Mesh%T, SIZE(Mesh%T,1), SIZE(Mesh%T,2), 'T_ser')
-    ! CALL HDF5_array2D_saving(file_id, Mesh%X, SIZE(Mesh%X,1), SIZE(Mesh%X,2), 'X_ser')
-    ! CALL HDF5_array1D_saving(file_id, sol%u, SIZE(sol%u), 'u')
-    ! CALL HDF5_array1D_saving(file_id, sol%q, SIZE(sol%q), 'q')
-    ! CALL HDF5_close(file_id)
 #endif
     IF(MPIvar%glob_id .EQ. 0) THEN
 #ifndef PARALL
@@ -1066,6 +1025,16 @@ CONTAINS
   ENDSUBROUTINE print_timing_infos
 
   SUBROUTINE free_main()
+#ifdef WITH_PASTIX
+    USE solve_pastix, only: terminate_mat_PASTIX
+#endif
+#ifdef WITH_PETSC
+    USE solve_petsc, only: terminate_PETSC, FinalizePETSC
+#endif
+#ifdef WITH_PSBLAS
+    USE solve_psblas, only: terminate_PSBLAS
+#endif
+
     IF(ALLOCATED(uiter)) DEALLOCATE (uiter)
     IF(ASSOCIATED(uiter_best)) DEALLOCATE(uiter_best)
     IF(ASSOCIATED(qiter_best)) DEALLOCATE(qiter_best)
