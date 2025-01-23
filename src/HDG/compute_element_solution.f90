@@ -9,7 +9,6 @@
 SUBROUTINE compute_element_solution
   USE globals
   USE LinearAlgebra
-  USE printUtils
   USE MPI_OMP
   IMPLICIT NONE
 

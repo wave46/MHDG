@@ -1,7 +1,7 @@
 MODULE matrices_tools
 
   USE matrices_types
-
+  USE MPI_OMP
   IMPLICIT NONE
 
 CONTAINS
@@ -459,7 +459,7 @@ CONTAINS
   ! in I,J,val format
   !********************************
   SUBROUTINE dump_CSR(prefix, rowptr, loc2glob, cols, vals)
-    USE MPI_OMP
+
 
     CHARACTER(len=*)      :: prefix
     INTEGER, DIMENSION(:) :: rowptr, loc2glob, cols
@@ -489,7 +489,7 @@ CONTAINS
   ! in I,J,val format
   !********************************
   SUBROUTINE dump_IJV(prefix, Irows, Jcols, Avals)
-    USE MPI_OMP
+
 
     CHARACTER(len=*)      :: prefix
     INTEGER, DIMENSION(:) :: Irows, Jcols
@@ -513,7 +513,7 @@ CONTAINS
   ! Dump a vector to a text file
   !********************************
   SUBROUTINE dump_vec(prefix, vec)
-    USE MPI_OMP
+
 
     CHARACTER(len=*)        :: prefix
     REAL*8, DIMENSION(:)    :: vec

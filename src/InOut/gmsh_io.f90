@@ -1,14 +1,14 @@
 MODULE GMSH_io_module
 
+  USE MPI_OMP, only: MPIvar
+  USE globals
   IMPLICIT NONE
+
 
 CONTAINS
 
 
   SUBROUTINE load_gmsh_mesh(gmsh_filename, flip)
-    USE globals
-    USE MPI_OMP, only: MPIvar
-
 
   !*****************************************************************************80
   !
@@ -70,11 +70,10 @@ CONTAINS
     DEALLOCATE ( node_x )
     !stop
     RETURN
-  END SUBROUTINE load_gmsh_mesh
+  ENDSUBROUTINE load_gmsh_mesh
 
   SUBROUTINE gmsh_data_read ( gmsh_filename, node_dim, node_num, node_x, &
     element_order, element_num, element_node, flip )
-    USE globals
 
   !*****************************************************************************80
   !
@@ -109,8 +108,7 @@ CONTAINS
   !    Output, integer ( kind = 4 ) ELEMENT_NODE(ELEMENT_ORDER,ELEMENT_NUM),
   !    the nodes that make up each element.
   !
-    USE globals
-    USE reference_element, ONLY: generate_fekete_nodes, create_reference_element
+    USE reference_element, ONLY: generate_fekete_nodes, create_reference_element, Reference_element_type
 
     TYPE(Reference_element_type)             :: refEl
     INTEGER, INTENT(in)                      :: flip
@@ -774,7 +772,6 @@ CONTAINS
   ENDSUBROUTINE
 
   subroutine convert_gmsh_to_hdf5(h5_filename, Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, T, X, Tb, boundaryFlag)
-    USE globals
     character(LEN=*), INTENT(IN) :: h5_filename
     INTEGER, INTENT(IN)          :: Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType
     INTEGER, INTENT(IN)          :: T(:,:), Tb(:,:), boundaryFlag(:)
@@ -800,8 +797,6 @@ CONTAINS
   SUBROUTINE HDF5_save_mesh(fname, Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, T, X, Tb, boundaryFlag)
     USE HDF5
     USE HDF5_io_module
-    USE MPI_OMP
-    USE GLOBALS
 
     character(LEN=*), INTENT(IN) :: fname
     INTEGER                      :: ierr
@@ -844,8 +839,7 @@ CONTAINS
   SUBROUTINE HDF5_save_mesh_struct(Mesh_in, fname)
     USE HDF5
     USE HDF5_io_module
-    USE MPI_OMP
-    USE GLOBALS
+
 
     character(LEN=*), INTENT(IN) :: fname
     TYPE(Mesh_type), INTENT(IN)  :: Mesh_in
@@ -935,8 +929,7 @@ CONTAINS
   ! external file
   !********************************
   SUBROUTINE load_mesh2global_var(Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, T, X, Tb, boundaryFlag, face_info)
-    USE MPI_OMP
-    USE globals
+
     USE printutils
 
     INTEGER, INTENT(IN)          :: Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType
@@ -1023,7 +1016,7 @@ CONTAINS
       ENDIF
     ENDIF
 
-  END SUBROUTINE load_mesh2global_var
+  ENDSUBROUTINE load_mesh2global_var
 
   SUBROUTINE gmsh_size_read ( gmsh_filename, node_num, node_dim, element_num, element_order )
 
@@ -1199,7 +1192,7 @@ CONTAINS
     CLOSE ( unit = inputt )
 
     RETURN
-  END SUBROUTINE gmsh_size_read
+  ENDSUBROUTINE gmsh_size_read
 
   SUBROUTINE gmsh_mesh1d_write ( gmsh_filename, m, node_num, node_x, &
      element_order, element_num, element_node )
@@ -1302,7 +1295,7 @@ CONTAINS
     CLOSE ( unit = gmsh_unit )
 
     RETURN
-  END SUBROUTINE gmsh_mesh1d_write
+  ENDSUBROUTINE gmsh_mesh1d_write
 
   SUBROUTINE gmsh_mesh2d_element_data_example ( element_num, element_order, &
      element_node )
@@ -1369,7 +1362,7 @@ CONTAINS
          element_node )
 
     RETURN
-  END SUBROUTINE gmsh_mesh2d_element_data_example
+  ENDSUBROUTINE gmsh_mesh2d_element_data_example
 
   SUBROUTINE gmsh_mesh2d_element_size_example ( element_num, element_order )
 
@@ -1404,7 +1397,7 @@ CONTAINS
     element_order = 3
 
     RETURN
-  END SUBROUTINE gmsh_mesh2d_element_size_example
+  ENDSUBROUTINE gmsh_mesh2d_element_size_example
   SUBROUTINE gmsh_mesh2d_node_data_example ( node_num, node_dim, node_x )
 
     !*****************************************************************************80
@@ -1464,7 +1457,7 @@ CONTAINS
     CALL r8mat_copy ( node_dim, node_num, node_x_save, node_x )
 
     RETURN
-  END SUBROUTINE gmsh_mesh2d_node_data_example
+  ENDSUBROUTINE gmsh_mesh2d_node_data_example
 
   SUBROUTINE gmsh_mesh2d_node_size_example ( node_num, node_dim )
 
@@ -1499,7 +1492,7 @@ CONTAINS
     node_dim = 2
 
     RETURN
-  END SUBROUTINE gmsh_mesh2d_node_size_example
+  ENDSUBROUTINE gmsh_mesh2d_node_size_example
 
   SUBROUTINE gmsh_mesh2d_write ( gmsh_filename, m, node_num, node_x, &
        element_order, element_num, element_node )
@@ -1611,7 +1604,7 @@ CONTAINS
     CLOSE ( unit = gmsh_unit )
 
     RETURN
-  END SUBROUTINE gmsh_mesh2d_write
+  ENDSUBROUTINE gmsh_mesh2d_write
 
   SUBROUTINE gmsh_mesh3d_write ( gmsh_filename, m, node_num, node_x, &
        element_order, element_num, element_node )
@@ -1788,7 +1781,7 @@ CONTAINS
     CLOSE ( unit = gmsh_unit )
 
     RETURN
-  END SUBROUTINE gmsh_mesh3d_write
+  ENDSUBROUTINE gmsh_mesh3d_write
 
   SUBROUTINE i4mat_copy ( m, n, a1, a2 )
 
@@ -1831,7 +1824,7 @@ CONTAINS
     a2(1:m,1:n) = a1(1:m,1:n)
 
     RETURN
-  END SUBROUTINE i4mat_copy
+  ENDSUBROUTINE i4mat_copy
   SUBROUTINE i4mat_transpose_print ( m, n, a, title )
 
     !*****************************************************************************80
@@ -1873,7 +1866,7 @@ CONTAINS
     CALL i4mat_transpose_print_some ( m, n, a, 1, 1, m, n, title )
 
     RETURN
-  END SUBROUTINE i4mat_transpose_print
+  ENDSUBROUTINE i4mat_transpose_print
   SUBROUTINE i4mat_transpose_print_some ( m, n, a, ilo, jlo, ihi, jhi, title )
 
     !*****************************************************************************80
@@ -1978,7 +1971,7 @@ CONTAINS
     END DO
 
     RETURN
-  END SUBROUTINE i4mat_transpose_print_some
+  ENDSUBROUTINE i4mat_transpose_print_some
 
   SUBROUTINE mesh_base_one ( node_num, element_order, element_num, element_node )
 
@@ -2058,7 +2051,7 @@ CONTAINS
     END IF
 
     RETURN
-  END SUBROUTINE mesh_base_one
+  ENDSUBROUTINE mesh_base_one
 
   SUBROUTINE r8mat_copy ( m, n, a, b )
 
@@ -2101,7 +2094,7 @@ CONTAINS
     b(1:m,1:n) = a(1:m,1:n)
 
     RETURN
-  END SUBROUTINE r8mat_copy
+  ENDSUBROUTINE r8mat_copy
 
   SUBROUTINE r8mat_transpose_print ( m, n, a, title )
 
@@ -2144,7 +2137,7 @@ CONTAINS
     CALL r8mat_transpose_print_some ( m, n, a, 1, 1, m, n, title )
 
     RETURN
-  END SUBROUTINE r8mat_transpose_print
+  ENDSUBROUTINE r8mat_transpose_print
 
   SUBROUTINE r8mat_transpose_print_some ( m, n, a, ilo, jlo, ihi, jhi, title )
 
@@ -2247,7 +2240,7 @@ CONTAINS
     END DO
 
     RETURN
-  END SUBROUTINE r8mat_transpose_print_some
+  ENDSUBROUTINE r8mat_transpose_print_some
 
   SUBROUTINE s_begin ( s1, s2, flag )
 
@@ -2370,7 +2363,7 @@ CONTAINS
     flag = .FALSE.
 
     RETURN
-  END SUBROUTINE s_begin
+  ENDSUBROUTINE s_begin
 
   SUBROUTINE ch_eqi ( c1, c2, flag )
 
@@ -2421,7 +2414,7 @@ CONTAINS
     END IF
 
     RETURN
-  END SUBROUTINE ch_eqi
+  ENDSUBROUTINE ch_eqi
 
   SUBROUTINE s_to_i4 ( s, ival, ierror, length )
 
@@ -2536,7 +2529,7 @@ CONTAINS
     END IF
 
     RETURN
-  END SUBROUTINE s_to_i4
+  ENDSUBROUTINE s_to_i4
 
   SUBROUTINE s_to_r8 ( s, dval, ierror, length )
 
@@ -2813,7 +2806,7 @@ CONTAINS
     dval = REAL ( isgn, kind = 8 ) * rexp * rtop / rbot
 
     RETURN
-  END SUBROUTINE s_to_r8
+  ENDSUBROUTINE s_to_r8
 
   SUBROUTINE timestamp ( )
 
@@ -2892,7 +2885,7 @@ CONTAINS
          d, TRIM ( month(m) ), y, h, ':', n, ':', s, '.', mm, TRIM ( ampm )
 
     RETURN
-  END SUBROUTINE timestamp
+  ENDSUBROUTINE timestamp
 
   SUBROUTINE ch_cap ( ch )
 
@@ -2932,7 +2925,7 @@ CONTAINS
     END IF
 
     RETURN
-  END SUBROUTINE ch_cap
+  ENDSUBROUTINE ch_cap
 
   SUBROUTINE ch_to_digit ( c, digit )
 
@@ -2991,7 +2984,7 @@ CONTAINS
     END IF
 
     RETURN
-  END SUBROUTINE ch_to_digit
+  ENDSUBROUTINE ch_to_digit
 
   SUBROUTINE get_unit ( iunit )
 
@@ -3056,18 +3049,15 @@ CONTAINS
     END DO
 
     RETURN
-  END SUBROUTINE get_unit
+  ENDSUBROUTINE get_unit
 
   SUBROUTINE read_splines()
-    USE globals
     CALL generate_splines_from_geo_file(adapt%geometry_path)
-
   ENDSUBROUTINE read_splines
 
   SUBROUTINE generate_splines_from_geo_file(filename)
     USE mod_splines
-    USE globals
-    USE MPI_OMP
+
 
       IMPLICIT NONE
       CHARACTER (*), INTENT(IN)       :: filename
@@ -3348,7 +3338,7 @@ CONTAINS
 
       ENDDO
 
-  end subroutine generate_splines_from_geo_file
+  ENDSUBROUTINE generate_splines_from_geo_file
 
 
 END MODULE

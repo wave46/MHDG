@@ -6,6 +6,7 @@ MODULE adaptivity_estimator_indicator_module
   USE adaptivity_common_module
   USE adaptivity_indicator_module
   USE adaptivity_estimator_module
+  USE MPI_OMP
   IMPLICIT NONE
 
 CONTAINS

@@ -8,9 +8,9 @@
 MODULE adaptivity_indicator_module
   USE globals
   USE reference_element
-  USE LinearAlgebra
   USE gmsh
   USE adaptivity_common_module
+  USE MPI_OMP
   IMPLICIT NONE
 
 CONTAINS
@@ -638,116 +638,6 @@ CONTAINS
     DEALLOCATE(vertex_nodes)
 
   ENDSUBROUTINE read_error
-
-
-  SUBROUTINE h_map(N_n_vertex, two_d_nodes, two_d_elements, vector_nodes_unique, h, count_vec)
-    INTEGER, INTENT(IN)              :: N_n_vertex
-    INTEGER                          :: N_e_real
-    REAL*8, INTENT(IN)               :: two_d_nodes(:,:)
-    INTEGER, INTENT(IN)              :: two_d_elements(:,:), vector_nodes_unique(:)
-    REAL*8, INTENT(OUT)              :: h(N_n_vertex)
-    INTEGER, OPTIONAL, INTENT(OUT)   :: count_vec(:)
-    INTEGER                          :: count_vec_local(N_n_vertex)
-    REAL*8                           :: g(N_n_vertex), l(N_n_vertex)
-    INTEGER                          :: i, j, A, B, C
-    REAL*8, DIMENSION(2, 2)          :: J1, J2, J3
-    REAL*8, DIMENSION(2, 2)          :: M1, M2, M3
-    REAL*8                           :: detJ1, detJ2, detJ3
-    REAL*8                           :: sqrt3
-
-    sqrt3 = SQRT(3.0)
-    N_e_real = SIZE(Mesh%T,1)
-
-    ! Initialize arrays
-    g = 0.
-    l = 0.
-    count_vec_local = 0
-    J1 = 0.
-    J2 = 0.
-    J3 = 0.
-
-    DO i = 1, N_e_real
-
-#ifdef PARALL
-       IF(Mesh%ghostElems(i) .EQ. 1) CYCLE
-#endif
-
-       ! Find indexes of the vertex nodes
-       A = 0
-       B = 0
-       C = 0
-
-       DO j = 1, N_n_vertex
-          IF ((two_d_elements(i, 1) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             A = j
-          ENDIF
-          IF ((two_d_elements(i, 2) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             B = j
-          ENDIF
-          IF ((two_d_elements(i, 3) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             C = j
-          ENDIF
-       ENDDO
-
-       IF(A*B*C .EQ. 0) THEN
-          WRITE(*,*) "Index not found in h_map. STOP"
-          STOP
-       ENDIF
-
-       ! Calculate Jacobian matrices
-       CALL jacobian(two_d_nodes, A, B, C, J1)
-       CALL jacobian(two_d_nodes, A, B, C, J2)
-       CALL jacobian(two_d_nodes, A, B, C, J3)
-
-       ! Calculate determinants of Jacobians
-       detJ1 = J1(1, 1) * J1(2, 2) - J1(1, 2) * J1(2, 1)
-       detJ2 = J2(1, 1) * J2(2, 2) - J2(1, 2) * J2(2, 1)
-       detJ3 = J3(1, 1) * J3(2, 2) - J3(1, 2) * J3(2, 1)
-
-       ! Calculate metrics
-       M1 = MATMUL(TRANSPOSE(J1), J1)
-       M2 = MATMUL(TRANSPOSE(J2), J2)
-       M3 = MATMUL(TRANSPOSE(J3), J3)
-
-       ! Using Jacobian
-       g(A) = g(A) + SQRT(2. * detJ1 / sqrt3)
-       count_vec_local(A) = count_vec_local(A) + 1
-
-       g(B) = g(B) + SQRT(2. * detJ2 / sqrt3)
-       count_vec_local(B) = count_vec_local(B) + 1
-
-       g(C) = g(C) + SQRT(2. * detJ3 / sqrt3)
-       count_vec_local(C) = count_vec_local(C) + 1
-    ENDDO
-
-
-    IF(ANY(count_vec_local .EQ. 0)) THEN
-       WRITE(*,*) "GOT A DIVISION BY 0 IN h_map ADAPTIVITY, SOMETHING IS WRONG!"
-       STOP
-    ENDIF
-
-
-#ifdef PARALL
-    count_vec = count_vec_local
-    h = g
-#else
-    ! Calculate h values
-    h = g / count_vec_local
-#endif
-  END SUBROUTINE h_map
-
-  SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
-    REAL*8, INTENT(IN)              :: two_d_nodes(:,:)
-    REAL*8, INTENT(OUT)             :: J(2,2)
-    INTEGER, INTENT(IN)             :: A, B, C
-
-    ! Calculate Jacobian matrix
-    J(1,1) = two_d_nodes(B,1) - two_d_nodes(A,1)
-    J(2,1) = two_d_nodes(B,2) - two_d_nodes(A,2)
-    J(1,2) = two_d_nodes(C,1) - two_d_nodes(A,1)
-    J(2,2) = two_d_nodes(C,2) - two_d_nodes(A,2)
-
-  END SUBROUTINE jacobian
 
   PURE SUBROUTINE unique_2D(input_matrix, output_matrix)
     INTEGER, INTENT(IN)                :: input_matrix(:,:)

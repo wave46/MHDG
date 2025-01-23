@@ -3,7 +3,6 @@ MODULE solve_petsc
   USE matrices_types
   USE types
   USE globals
-  USE MPI_OMP
   USE petsc
   USE initialization
   IMPLICIT NONE
@@ -38,7 +37,6 @@ CONTAINS
   !***********************************************
   SUBROUTINE init_mat_PETSC(matPETSC)
     USE petsc
-    USE MPI_OMP
 
     TYPE(PETSC_STRUC)     :: matPETSC
     PetscErrorCode        :: ierr

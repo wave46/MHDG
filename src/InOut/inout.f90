@@ -9,9 +9,10 @@
 MODULE in_out
   USE HDF5
   USE HDF5_io_module
-  USE globals
-  USE printutils
+  USE GLOBALS
   USE MPI_OMP
+  USE printutils
+
   IMPLICIT NONE
 
 CONTAINS
@@ -21,7 +22,7 @@ CONTAINS
   ! external file
   !********************************
   SUBROUTINE load_mesh_serial_h5(fname)
-    USE MPI_OMP
+
     CHARACTER(LEN=*) :: fname
     CHARACTER(len=1000) :: fname_complete
     CHARACTER(10)  :: str
@@ -174,10 +175,10 @@ CONTAINS
        ENDIF
     ENDIF
 
-  END SUBROUTINE load_mesh_serial_h5
+  ENDSUBROUTINE load_mesh_serial_h5
 
   SUBROUTINE load_mesh_h5(fname)
-    USE MPI_OMP
+
     CHARACTER(LEN=*) :: fname
     CHARACTER(len=1000) :: fname_complete
     CHARACTER(10)  :: str
@@ -475,13 +476,13 @@ CONTAINS
        ENDIF
     ENDIF
 
-  END SUBROUTINE load_mesh_h5
+  ENDSUBROUTINE load_mesh_h5
 
   !**********************************************************************
   ! Save solution in HDF5 file format
   !**********************************************************************
   SUBROUTINE HDF5_save_solution(fname)
-    USE globals
+
 #ifdef PARALL
     USE communications, ONLY: gather_mesh, gather_solution, gather_additional, gather_magnetic_field
 #endif
@@ -1003,16 +1004,16 @@ CONTAINS
       CALL HDF5_group_close(group_id1, ierr)
 
 
-    END SUBROUTINE save_simulation_parameters
+    ENDSUBROUTINE save_simulation_parameters
 
-  END SUBROUTINE HDF5_save_solution
+  ENDSUBROUTINE HDF5_save_solution
 
   SUBROUTINE HDF5_load_mesh_from_solution(fname)
     !*************************************
     !              2D case
     !*************************************
 
-    USE MPI_OMP
+
     CHARACTER(LEN=*) :: fname
     CHARACTER(len=1000) :: fname_complete
     CHARACTER(10)  :: str
@@ -1237,7 +1238,7 @@ CONTAINS
   ! Load solution in HDF5 file format
   !**********************************************************************
   SUBROUTINE HDF5_load_solution(fname)
-    USE globals
+
     USE LinearAlgebra, ONLY: tensorsumint, colint,col
     IMPLICIT NONE
 
@@ -1599,13 +1600,13 @@ CONTAINS
        PRINT *, '        '
     END IF
 
-  END SUBROUTINE HDF5_load_solution
+  ENDSUBROUTINE HDF5_load_solution
 
   !**********************************************************************
   ! Save HDG matrix (CSR) in HDF5 file format
   !**********************************************************************
   SUBROUTINE HDF5_save_CSR_matrix(fname)
-    USE globals
+
     IMPLICIT NONE
 
     CHARACTER(LEN=*) :: fname
@@ -1635,13 +1636,13 @@ CONTAINS
        PRINT*,'        '
     END IF
 
-  END SUBROUTINE HDF5_save_CSR_matrix
+  ENDSUBROUTINE HDF5_save_CSR_matrix
 
   !**********************************************************************
   ! Save HDG vector (CSR) in HDF5 file format
   !**********************************************************************
   SUBROUTINE HDF5_save_CSR_vector(fname)
-    USE globals
+
     IMPLICIT NONE
 
     CHARACTER(LEN=*) :: fname
@@ -1668,13 +1669,13 @@ CONTAINS
     !                                                   print*,'        '
     !      END IF
 
-  END SUBROUTINE HDF5_save_CSR_vector
+  ENDSUBROUTINE HDF5_save_CSR_vector
 
   !**********************************************************************
   ! Save 3D array in HDF5 file format
   !**********************************************************************
   SUBROUTINE HDF5_save_array(Arr, fname)
-    USE globals
+
     IMPLICIT NONE
 
     REAL, DIMENSION(:, :, :), INTENT(IN) :: Arr
@@ -1700,13 +1701,13 @@ CONTAINS
     !                                                   print*,'        '
     !      END IF
 
-  END SUBROUTINE HDF5_save_array
+  ENDSUBROUTINE HDF5_save_array
 
   !**********************************************************************
   ! Save 2D array in HDF5 file format
   !**********************************************************************
   SUBROUTINE HDF5_save_matrix(Mat, fname)
-    USE globals
+
     IMPLICIT NONE
 
     REAL, DIMENSION(:, :), INTENT(IN) :: Mat
@@ -1732,13 +1733,13 @@ CONTAINS
     !                                                   print*,'        '
     !      END IF
 
-  END SUBROUTINE HDF5_save_matrix
+  ENDSUBROUTINE HDF5_save_matrix
 
   !**********************************************************************
   ! Save 1D array in HDF5 file format
   !**********************************************************************
   SUBROUTINE HDF5_save_vector(Vec, fname)
-    USE globals
+
     IMPLICIT NONE
 
     REAL, DIMENSION(:), INTENT(IN) :: Vec
@@ -1764,13 +1765,13 @@ CONTAINS
     !                                                   print*,'        '
     !      END IF
 
-  END SUBROUTINE HDF5_save_vector
+  ENDSUBROUTINE HDF5_save_vector
 
   !**********************************************************************
   ! Save 1D array in HDF5 file format
   !**********************************************************************
   SUBROUTINE HDF5_save_vector_int(Vec, fname)
-    USE globals
+
     IMPLICIT NONE
 
     INTEGER, DIMENSION(:), INTENT(IN) :: Vec
@@ -1796,7 +1797,7 @@ CONTAINS
     !                                                   print*,'        '
     !      END IF
 
-  END SUBROUTINE HDF5_save_vector_int
+  ENDSUBROUTINE HDF5_save_vector_int
 
 
   ! Define subroutine copy_file
@@ -1843,6 +1844,6 @@ CONTAINS
     ! Close the files
     CLOSE(unit_in)
     CLOSE(unit_out)
-  END SUBROUTINE copy_file
+  ENDSUBROUTINE copy_file
 
 END MODULE in_out

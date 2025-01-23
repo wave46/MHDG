@@ -7,8 +7,6 @@
 SUBROUTINE solve_global_system(ir)
   USE globals
   USE LinearAlgebra
-  USE printUtils
-  USE in_out
 #ifdef WITH_PASTIX
   USE solve_pastix, only: matPASTIX, init_mat_PASTIX, build_mat_PASTIX, check_mat_PASTIX, anal_mat_PASTIX, LU_mat_pastix, solve_mat_PASTIX
 #endif
@@ -22,6 +20,7 @@ SUBROUTINE solve_global_system(ir)
 #ifdef PARALL
   USE Communications
 #endif
+
   IMPLICIT NONE
   INTEGER, INTENT(IN) :: ir
   REAL, ALLOCATABLE   :: rhspert(:)
@@ -714,6 +713,6 @@ CONTAINS
     WRITE (6, '(" *", 2X,  "Number of nnz      : ", I12, 6X, " *")') MatK%nnz
     WRITE (6, '(" *", 41("*"), "**")')
     WRITE (6, *) " "
-  END SUBROUTINE displayMatrixInfo
+  ENDSUBROUTINE displayMatrixInfo
 
-END SUBROUTINE solve_global_system
+ENDSUBROUTINE solve_global_system

@@ -8,13 +8,13 @@
 MODULE preprocess
   USE types
   USE globals
-  USE printutils
   USE MPI_OMP
 
   IMPLICIT NONE
 CONTAINS
 
   SUBROUTINE mesh_preprocess_serial(ierr)
+    USE printUtils, only: displayMatrixInt, displayMatrixLog
 
     INTEGER, INTENT(OUT)            :: ierr
     IF (MPIvar%glob_id .EQ. 0) THEN
@@ -157,9 +157,10 @@ CONTAINS
           WRITE (6, *) "Done! "
        END IF
     ENDIF
-  END SUBROUTINE mesh_preprocess_serial
+  ENDSUBROUTINE mesh_preprocess_serial
 
   SUBROUTINE mesh_preprocess(ierr)
+    USE printUtils, only: displayMatrixInt, displayMatrixLog
 
     INTEGER, INTENT(OUT)            :: ierr
 
@@ -311,7 +312,7 @@ CONTAINS
           WRITE (6, *) "Done! "
        END IF
     ENDIF
-  END SUBROUTINE mesh_preprocess
+  ENDSUBROUTINE mesh_preprocess
 
   !********************
   ! Nodal Connectivity
@@ -374,7 +375,7 @@ CONTAINS
       END DO
     ENDIF
     DEALLOCATE(nn, Te, nn_Te)
-  END SUBROUTINE createNodalConnectivity
+  ENDSUBROUTINE createNodalConnectivity
 
   !********************************************
   ! Create extFaces and intFaces: the exterior
@@ -492,7 +493,7 @@ CONTAINS
          END DO
          IF (jel .NE. 0) EXIT ! I found the element
       END DO
-    END SUBROUTINE FindElem
+    ENDSUBROUTINE FindElem
 
     !*************************************************
     ! Find face: find the local face number in the
@@ -547,7 +548,7 @@ CONTAINS
       END IF
       node1 = i
 
-    END SUBROUTINE FindFace
+    ENDSUBROUTINE FindFace
 
     !*************************************************
     ! Find where to place the current exterior face in
@@ -588,11 +589,11 @@ CONTAINS
          RETURN
       END IF
       ierr = 1
-    END SUBROUTINE FindCorrespondingFace
+    ENDSUBROUTINE FindCorrespondingFace
 
-  END SUBROUTINE GetFaces
+  ENDSUBROUTINE GetFaces
 
-  SUBROUTINE GetFaces_mod(T, int_faces, ext_faces)
+  PURE SUBROUTINE GetFaces_mod(T, int_faces, ext_faces)
 
     INTEGER, INTENT(IN)                          :: T(:,:)
     INTEGER, ALLOCATABLE, INTENT(OUT)            :: int_faces(:,:)
@@ -672,7 +673,7 @@ CONTAINS
     ! Find element: find the neighboring element to the
     ! element i connected by the nodes defined in nf
     !*************************************************
-    SUBROUTINE FindElem(T, nf, iel, jel)
+    PURE SUBROUTINE FindElem(T, nf, iel, jel)
       INTEGER, INTENT(IN) :: nf(:)
       INTEGER, INTENT(IN) :: T(:,:)
       INTEGER, INTENT(IN) :: iel
@@ -714,13 +715,13 @@ CONTAINS
 
       DEALLOCATE(T_temp)
       DEALLOCATE(indices)
-    END SUBROUTINE FindElem
+    ENDSUBROUTINE FindElem
 
     !*************************************************
     ! Find face: find the local face number in the
     ! element and the matching node for the first node
     !*************************************************
-    SUBROUTINE FindFace(nfi, nodesE, Efaces, jfa, node1)
+    PURE SUBROUTINE FindFace(nfi, nodesE, Efaces, jfa, node1)
       INTEGER, INTENT(IN) :: nfi(:)
       INTEGER, INTENT(IN) :: nodesE(:)
       INTEGER, INTENT(IN) :: Efaces(:, :)
@@ -755,15 +756,10 @@ CONTAINS
          ENDIF
       ENDDO
 
-      IF ((jfa .EQ. -1) .OR. (node1 .EQ. -1)) THEN
-         WRITE(*,*) "Corresponding face or node to found. STOP."
-         STOP
-      ENDIF
-
       DEALLOCATE(check)
 
-    END SUBROUTINE FindFace
-  END SUBROUTINE GetFaces_mod
+    ENDSUBROUTINE FindFace
+  ENDSUBROUTINE GetFaces_mod
 
   !********************************************
   ! Identify the number of boundaries and place
@@ -771,8 +767,8 @@ CONTAINS
   ! list
   !********************************************
   SUBROUTINE Bc_preprocess()
-    INTEGER :: fl, nb, ndir, ifa, bt, idir
-    INTEGER :: df(max_num_diff_bc)
+    INTEGER              :: fl, nb, ndir, ifa, bt, idir
+    INTEGER              :: df(max_num_diff_bc)
     INTEGER, ALLOCATABLE :: aux_Tb(:, :), aux_extFaces(:, :), aux_boundaryflag(:)
 
     nb = 0
@@ -918,9 +914,9 @@ CONTAINS
          ENDIF
       END DO
 
-    END SUBROUTINE periodic_faces_preprocess
+    ENDSUBROUTINE periodic_faces_preprocess
 
-  END SUBROUTINE Bc_preprocess
+  ENDSUBROUTINE Bc_preprocess
 
   SUBROUTINE Bc_preprocess_serial()
     INTEGER :: fl, nb, ndir, ifa, bt, idir
@@ -1054,12 +1050,11 @@ CONTAINS
          ENDIF
       END DO
 
-    END SUBROUTINE periodic_faces_preprocess
+    ENDSUBROUTINE periodic_faces_preprocess
 
-  END SUBROUTINE Bc_preprocess_serial
+  ENDSUBROUTINE Bc_preprocess_serial
 
   SUBROUTINE CreateFaceConnectivity_serial
-    USE MPI_OMP
     INTEGER :: ifa, igh
     INTEGER :: infoFace(5), infoFace_ex(2)
     LOGICAL :: isdir
@@ -1111,11 +1106,10 @@ CONTAINS
        ENDIF
     END DO
 
-  END SUBROUTINE CreateFaceConnectivity_serial
+  ENDSUBROUTINE CreateFaceConnectivity_serial
 
 
   SUBROUTINE CreateFaceConnectivity()
-    USE MPI_OMP
     INTEGER :: ifa, igh
     INTEGER :: infoFace(5), infoFace_ex(2)
     LOGICAL :: isdir
@@ -1179,7 +1173,7 @@ CONTAINS
        ENDIF
     END DO
 
-  END SUBROUTINE CreateFaceConnectivity
+  ENDSUBROUTINE CreateFaceConnectivity
 
   !********************************************
   ! Compute the element size in the
@@ -1257,7 +1251,7 @@ CONTAINS
 
     NULLIFY(T_p, X_p, Tlin_p, elemSize_p)
 
-  END SUBROUTINE computeElementSize
+  ENDSUBROUTINE computeElementSize
 
 
   SUBROUTINE computePuffArea()
@@ -1308,7 +1302,7 @@ CONTAINS
 #endif
     END DO
 
-  END SUBROUTINE computePuffArea
+  ENDSUBROUTINE computePuffArea
 
   SUBROUTINE computePumpArea()
     REAL*8   :: Xf(refElPol%Nfacenodes,2),xyg(refElPol%NGauss1D,2),xyg_d(refElPol%NGauss1D,2),dline
@@ -1347,7 +1341,7 @@ CONTAINS
        END IF
 #endif
     END DO
-  END SUBROUTINE computePumpArea
+  ENDSUBROUTINE computePumpArea
 
 
 
@@ -1390,7 +1384,7 @@ CONTAINS
 #endif
     END DO
 
-  END SUBROUTINE computeCoreArea
+  ENDSUBROUTINE computeCoreArea
 
 
 END MODULE preprocess

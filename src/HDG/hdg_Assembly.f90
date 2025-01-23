@@ -341,7 +341,7 @@
     !**************************************************
     ! Compute the nnz of the matrix
     !**************************************************
-    SUBROUTINE computennz()
+    PURE SUBROUTINE computennz()
       INTEGER::shift_inc
 
       nnz = 0
@@ -568,7 +568,7 @@
       END IF
 #endif
 
-    END SUBROUTINE computennz
+    ENDSUBROUTINE computennz
 
     !**************************************************
     ! Generate the elemental matrix
@@ -604,7 +604,7 @@
       NULLIFY (LL, L0, UU, U0)
       NULLIFY (A_lq, A_lu, A_ll)
 
-    END SUBROUTINE computeElementalMatrix
+    ENDSUBROUTINE computeElementalMatrix
     !SUBROUTINE computeElementalMatrix()
     !     Df => elMat%Df(:,:,iel3)
     !     UU => elMat%UU(:,:,iel3)
@@ -640,15 +640,16 @@
     !     DEALLOCATE(Lf,fh)
     !     NULLIFY(LL,Qf,L0)
     !     NULLIFY(Df,UU,Hf,Ef,U0)
-    ! END SUBROUTINE computeElementalMatrix
+    ! ENDSUBROUTINE computeElementalMatrix
 
-    SUBROUTINE getindpospol(indpos)
+    PURE SUBROUTINE getindpospol(indpos)
       !**************************************************
       ! This routine computes the indices to
       ! determine the assembly positions of cols and vals
       ! for poloidal faces
       !**************************************************
-      INTEGER :: i, j, indpos(:)
+      INTEGER :: i, j
+      INTEGER, INTENT(OUT) :: indpos(:)
       INTEGER :: pos(1:Nf)
       INTEGER ::  qq, blkl
       LOGICAL :: skip_first
@@ -895,7 +896,7 @@
          qq = qq + blkl
       END DO
 
-    END SUBROUTINE getindpospol
+    ENDSUBROUTINE getindpospol
 
     !**************************************************
     ! This routine computes the indices to
@@ -992,7 +993,7 @@
          indpos(qq:qq + blkl-1) = (/(i, i=1, blkl)/) + pos_start(i)
          qq = qq + blkl
       END DO
-    END SUBROUTINE getindposint
+    ENDSUBROUTINE getindposint
 
     SUBROUTINE getindposext(indpos)
       !**************************************************
@@ -1044,7 +1045,7 @@
          qq = qq + blkl
       END DO
 
-    END SUBROUTINE getindposext
+    ENDSUBROUTINE getindposext
 
     SUBROUTINE fill_cols_vals_rowptr_loc2glob()
       INTEGER :: sl, blkl
@@ -1076,7 +1077,7 @@
          END DO
       END DO
 
-    END SUBROUTINE fill_cols_vals_rowptr_loc2glob
+    ENDSUBROUTINE fill_cols_vals_rowptr_loc2glob
 
     !*********************************************************
     ! Deallocate and reallocate MatK and rhs. Initialize to 0
@@ -1117,9 +1118,9 @@
       rhs%vals = 0.
       rhs%loc2glob = 0
 
-    END SUBROUTINE init_mat
+    ENDSUBROUTINE init_mat
 
-  END SUBROUTINE HDG_assembly
+  ENDSUBROUTINE HDG_assembly
 #else
 
   !***********************************************************************
@@ -1317,7 +1318,7 @@
       aux = Fi
       Fi = Fi_per
       Fi_per = aux
-    END SUBROUTINE exchange_Fi
+    ENDSUBROUTINE exchange_Fi
 
     !**************************************************
     ! Compute the nnz of the matrix
@@ -1404,7 +1405,7 @@
             shift(Fi) = shift(Fi-1) + linew(Fi-1)*blk
          END IF
       END DO
-    END SUBROUTINE computennz
+    ENDSUBROUTINE computennz
 
     !**************************************************
     ! Generate the elemental matrix
@@ -1444,7 +1445,7 @@
       DEALLOCATE (Lf, fh)
       NULLIFY (LL, Qf, L0)
       NULLIFY (Df, UU, Hf, Ef, U0)
-    END SUBROUTINE computeElementalMatrix_old
+    ENDSUBROUTINE computeElementalMatrix_old
 
     SUBROUTINE computeElementalMatrix()
       REAL*8, POINTER                 :: A_lq(:,:), A_lu(:,:), A_ll(:,:)
@@ -1468,7 +1469,7 @@
       NULLIFY (LL, L0, UU, U0)
       NULLIFY (A_lq, A_lu, A_ll)
 
-    END SUBROUTINE computeElementalMatrix
+    ENDSUBROUTINE computeElementalMatrix
 
     !**************************************************
     ! This routine computes the indices to
@@ -1511,7 +1512,7 @@
       END DO
       indpos = RESHAPE(TensorSumInt((/(i, i=1, neq*Nfp)/), (pos-1)*neq*Nfp), (/neq*Nfp*Nf/))
 
-    END SUBROUTINE getindposint
+    ENDSUBROUTINE getindposint
 
     !**************************************************
     ! This routine computes the indices to
@@ -1533,7 +1534,7 @@
          END DO
       END DO
       indpos = RESHAPE(TensorSumInt((/(i, i=1, neq*Nfp)/), (pos-1)*neq*Nfp), (/neq*Nfp*Nf/))
-    END SUBROUTINE getindposext
+    ENDSUBROUTINE getindposext
 
     !**************************************************
     ! This routine computes the indices to
@@ -1577,7 +1578,7 @@
 
       !write(6,*) "pos:",pos
       !call displayVectorInt(indpos)
-    END SUBROUTINE getindposextperiodic
+    ENDSUBROUTINE getindposextperiodic
 
     !**************************************************
     ! Fill cols, vals, rowptr, loc2glob
@@ -1615,7 +1616,7 @@
             END DO
          END DO
       END DO
-    END SUBROUTINE fill_cols_vals_rowptr_loc2glob
+    ENDSUBROUTINE fill_cols_vals_rowptr_loc2glob
 
     !*********************************************************
     ! Deallocate and reallocate MatK and rhs. Initialize to 0
@@ -1656,7 +1657,7 @@
       rhs%vals = 0.
       rhs%loc2glob = 0
 
-    END SUBROUTINE init_mat
+    ENDSUBROUTINE init_mat
 
-  END SUBROUTINE HDG_assembly
+  ENDSUBROUTINE HDG_assembly
 #endif

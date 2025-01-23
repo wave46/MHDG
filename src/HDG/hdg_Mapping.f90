@@ -1,24 +1,24 @@
 SUBROUTINE HDG_mapping()
   USE globals
-  USE LinearAlgebra
-  USE printUtils
-  USE MPI_OMP
-  USE in_out
+  USE LinearAlgebra, ONLY: mymatmul, solve_linear_system, solve_linear_system_sing
+  USE MPI_OMP, ONLY: MPIvar
 
   IMPLICIT NONE
-  INTEGER*4             :: Ndim, N2d, neq, Np, Nfp, Nfe, i, ifa, iel, iel3, Nfg
+  INTEGER*4           :: Ndim, N2d, neq, Np, Nfp, Nfe, i, ifa, iel, iel3, Nfg
+  REAL*8, ALLOCATABLE :: LL(:, :), UU(:, :), L0(:), U0(:)
+  REAL*8, ALLOCATABLE :: Auq_iAqq(:, :), Mu(:, :), Ml(:, :), Md(:), aux(:, :), auxAqq(:, :), auxAquUU(:, :)
+  REAL*8, POINTER     :: iAqq(:, :) => NULL(), Aqu(:, :) => NULL(), Aql(:, :) => NULL()
+  REAL*8, POINTER     :: Auq(:, :) => NULL(), Auu(:, :) => NULL(), Aul(:, :) => NULL()
+  REAL*8, POINTER     :: Aql_dir(:) => NULL(), Aul_dir(:) => NULL(), f(:) => NULL()
 #ifdef TOR3D
-  INTEGER*4             :: ind(refElPol%Nfaces, phys%neq*refElTor%Nfl), perm(refElTor%Nfl*phys%Neq)
-  INTEGER*4             :: j, Nfl, itor, Np1Dtor, Np1Dpol, Np2D, ntorloc
+  INTEGER*4           :: ind(refElPol%Nfaces, phys%neq*refElTor%Nfl), perm(refElTor%Nfl*phys%Neq)
+  INTEGER*4           :: j, Nfl, itor, Np1Dtor, Np1Dpol, Np2D, ntorloc
 #else
-  INTEGER*4             :: ind(refElPol%Nfaces, phys%neq*Mesh%Nnodesperface)
-  INTEGER*4             :: perm(refElPol%Nfacenodes*phys%Neq)
+  INTEGER*4           :: ind(refElPol%Nfaces, phys%neq*Mesh%Nnodesperface)
+  INTEGER*4           :: perm(refElPol%Nfacenodes*phys%Neq)
 #endif
-  REAL*8, ALLOCATABLE    :: LL(:, :), UU(:, :), L0(:), U0(:)
-  REAL*8, ALLOCATABLE    :: Auq_iAqq(:, :), Mu(:, :), Ml(:, :), Md(:), aux(:, :), auxAqq(:, :), auxAquUU(:, :)
-  REAL*8, POINTER        :: iAqq(:, :) =>  NULL(), Aqu(:, :) =>  NULL(), Aql(:, :) =>  NULL()
-  REAL*8, POINTER        :: Auq(:, :) =>  NULL(), Auu(:, :) =>  NULL(), Aul(:, :) =>  NULL()
-  REAL*8, POINTER        :: Aql_dir(:) =>  NULL(), Aul_dir(:) =>  NULL(), f(:) =>  NULL()
+
+  NULLIFY(iAqq, Aqu, Aql, Auq, Auu, Aul, Aql_dir, Aul_dir, f)
 
   IF (MPIvar%glob_id .EQ. 0) THEN
      IF (utils%printint > 1) THEN
@@ -203,7 +203,7 @@ CONTAINS
   !*****************************************
   ! Set permutations for flipping faces
   !****************************************
-  SUBROUTINE set_permutations(Np1Dpol, Np1Dtor, Neq, perm)
+  PURE SUBROUTINE set_permutations(Np1Dpol, Np1Dtor, Neq, perm)
     INTEGER, INTENT(IN)  :: Np1Dpol, Np1Dtor, Neq
     INTEGER, INTENT(OUT) :: perm(:)
     INTEGER              :: i, j, k
@@ -220,23 +220,18 @@ CONTAINS
        END DO
     END DO
 
-  END SUBROUTINE set_permutations
+  ENDSUBROUTINE set_permutations
 
 #else
 
   !*****************************************
   ! Set permutations for flipping faces
   !****************************************
-  SUBROUTINE set_permutations(n, m, perm)
+  PURE SUBROUTINE set_permutations(n, m, perm)
     INTEGER*4, INTENT(IN)  :: n, m
     INTEGER*4, INTENT(OUT) :: perm(:)
     INTEGER*4              :: i
     INTEGER*4              :: temp(m, n/m), templr(m, n/m)
-
-    IF (MOD(n, m) .NE. 0) THEN
-       WRITE (6, *) 'Error! n must be a multiple of m'
-       STOP
-    END IF
 
     templr = 0
     temp = RESHAPE((/(i, i=1, n)/), (/m, n/m/))
@@ -245,6 +240,6 @@ CONTAINS
     END DO
     perm = RESHAPE(templr, (/n/))
 
-  END SUBROUTINE set_permutations
+  ENDSUBROUTINE set_permutations
 #endif
-END SUBROUTINE HDG_mapping
+ENDSUBROUTINE HDG_mapping

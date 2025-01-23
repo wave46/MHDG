@@ -6,7 +6,7 @@
 !**********************************
 SUBROUTINE adimensionalization()
   USE globals
-  USE MPI_OMP
+  USE MPI_OMP, only: MPIvar
   IMPLICIT NONE
 
   ! Parameters
@@ -155,7 +155,7 @@ SUBROUTINE adimensionalization()
   phys%diff_k_min = phys%diff_k_min/D0
   ! k limit
   phys%k_max = phys%k_max/u0**2
-#endif  
+#endif
 
   ! Pinch velocity
   phys%v_p = phys%v_p/u0

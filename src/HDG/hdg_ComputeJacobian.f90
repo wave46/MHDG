@@ -8,12 +8,9 @@
 
 SUBROUTINE HDG_computeJacobian()
   USE globals
-  USE LinearAlgebra
-  USE analytical
+  USE LinearAlgebra, only: tensorProduct, tensorSumInt
+  USE analytical, only: body_force, analytical_solution
   USE physics
-  USE printUtils
-  USE MPI_OMP
-  USE Debug
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
 
   IMPLICIT NONE
@@ -649,7 +646,7 @@ CONTAINS
     CALL do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)
     DEALLOCATE(Auq,Auu,rhs)
 
-  END SUBROUTINE elemental_matrices_volume
+  ENDSUBROUTINE elemental_matrices_volume
 
   !*****************************************
   ! Poloidal faces computations in 3D
@@ -772,7 +769,7 @@ CONTAINS
     END DO
     !      END DO
 
-  END SUBROUTINE elemental_matrices_faces_pol
+  ENDSUBROUTINE elemental_matrices_faces_pol
 
   !***************************************************
   ! Interior faces computation in 3D
@@ -913,7 +910,7 @@ CONTAINS
     END DO
     !      END DO ! 2 elements
 
-  END SUBROUTINE elemental_matrices_faces_int
+  ENDSUBROUTINE elemental_matrices_faces_int
 
   !***************************************************
   ! Exterior faces computation in 3D
@@ -1081,7 +1078,7 @@ CONTAINS
       END DO ! Gauss points
     END DO
 
-  END SUBROUTINE elemental_matrices_faces_ext
+  ENDSUBROUTINE elemental_matrices_faces_ext
 
   !*****************************************
   ! Set permutations for flipping faces
@@ -1102,7 +1099,7 @@ CONTAINS
         END DO
       END DO
     END DO
-  END SUBROUTINE set_permutations
+  ENDSUBROUTINE set_permutations
 
 #else
 !TOR3D
@@ -1693,7 +1690,7 @@ CONTAINS
       CALL do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)
       DEALLOCATE(Auq,Auu,rhs)
 
-  END SUBROUTINE elemental_matrices_volume
+  ENDSUBROUTINE elemental_matrices_volume
 
   !***************************************************
   ! Interior faces computation in 2D
@@ -1865,7 +1862,7 @@ CONTAINS
 !stop
 
 
-  END SUBROUTINE elemental_matrices_faces_int
+  ENDSUBROUTINE elemental_matrices_faces_int
 
   !***************************************************
   ! Exterior faces computation in 2D
@@ -2075,7 +2072,7 @@ CONTAINS
 
     END DO ! Gauss points
 
-  END SUBROUTINE elemental_matrices_faces_ext
+  ENDSUBROUTINE elemental_matrices_faces_ext
 
   !*******************************************
   !           AUXILIARY ROUTINES
@@ -2101,7 +2098,7 @@ CONTAINS
       templr(:,i) = temp(:,n/m - i + 1)
     END DO
       perm = RESHAPE(templr,(/n/))
-  END SUBROUTINE set_permutations
+  ENDSUBROUTINE set_permutations
 
 #endif
 !TOR3D
@@ -2163,7 +2160,7 @@ CONTAINS
          WRITE (6,*) 'Formula not available'
          STOP
     END SELECT
-  END SUBROUTINE setTimeIntegrationCoefficients
+  ENDSUBROUTINE setTimeIntegrationCoefficients
 
   !********************************************************************
   !
@@ -2840,7 +2837,7 @@ CONTAINS
 !#ifdef NEUTRALP
 !      rhs = rhs+tensorProduct(Ni,fth)
 !#endif
-    END SUBROUTINE assemblyVolumeContribution
+    ENDSUBROUTINE assemblyVolumeContribution
 
     !********************************************************************
     !
@@ -3277,7 +3274,7 @@ CONTAINS
       ENDIF
       !************* End stabilization terms************************
 
-    END SUBROUTINE assemblyIntFacesContribution
+    ENDSUBROUTINE assemblyIntFacesContribution
 
     !********************************************************************
     !
@@ -3716,7 +3713,7 @@ END IF
         END DO
       ENDIF
       !************* End stabilization terms************************
-    END SUBROUTINE assemblyExtFacesContribution
+    ENDSUBROUTINE assemblyExtFacesContribution
 
     SUBROUTINE do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)
            REAL*8,INTENT(in)    :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
@@ -3739,7 +3736,7 @@ END IF
         END DO
       END DO
 
-    END SUBROUTINE do_assembly
+    ENDSUBROUTINE do_assembly
 
 #ifdef NEUTRAL
   !********************************************************************
@@ -3875,8 +3872,8 @@ END IF
                    !endif
 #endif
 
-    END SUBROUTINE assemblyNeutral
+    ENDSUBROUTINE assemblyNeutral
 #endif
 
 
-         END SUBROUTINE hdg_ComputeJacobian
+         ENDSUBROUTINE hdg_ComputeJacobian

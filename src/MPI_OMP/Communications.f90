@@ -6,7 +6,7 @@
 !*****************************************
 MODULE Communications
   USE MPI_OMP
-  USE globals
+  USE GLOBALS
   USE PrintUtils
 
 CONTAINS
@@ -623,8 +623,8 @@ CONTAINS
 #ifdef PARALL
 
   SUBROUTINE gather_1D_vector_real(vector_local, vector_global, allgather)
-    USE MPI_OMP
-    USE GLOBALS
+
+
     REAL*8, INTENT(IN)                  :: vector_local(:)
     REAL*8, POINTER, INTENT(OUT)        :: vector_global(:)
     LOGICAL, INTENT(IN)                 :: allgather
@@ -653,8 +653,8 @@ CONTAINS
   ENDSUBROUTINE gather_1D_vector_real
 
   SUBROUTINE gather_1D_vector_int(vector_local, vector_global, allgather)
-    USE MPI_OMP
-    USE GLOBALS
+
+
     INTEGER, INTENT(IN)                  :: vector_local(:)
     INTEGER, POINTER, INTENT(OUT)        :: vector_global(:)
     LOGICAL, INTENT(IN)                  :: allgather
@@ -683,8 +683,8 @@ CONTAINS
   ENDSUBROUTINE gather_1D_vector_int
 
   SUBROUTINE gather_2D_matrix_int(matrix_local, matrix_global, allgather)
-    USE MPI_OMP
-    USE GLOBALS
+
+
     INTEGER, INTENT(IN)                 :: matrix_local(:,:)
     INTEGER, POINTER, INTENT(OUT)       :: matrix_global(:,:)
 
@@ -723,8 +723,8 @@ CONTAINS
   ENDSUBROUTINE gather_2D_matrix_int
 
   SUBROUTINE gather_2D_matrix_real(matrix_local, matrix_global, allgather)
-    USE MPI_OMP
-    USE GLOBALS
+
+
     REAL*8, INTENT(IN)                  :: matrix_local(:,:)
     REAL*8, POINTER, INTENT(OUT)        :: matrix_global(:,:)
 

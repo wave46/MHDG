@@ -8,7 +8,7 @@
 MODULE initialization
   USE globals
   USE printutils
-  USE analytical
+  USE analytical, only: analytical_solution, analytical_gradient
   USE physics
   USE MPI_OMP
   USE LinearAlgebra, ONLY: col,tensorProduct,solve_linear_system

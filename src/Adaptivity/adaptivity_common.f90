@@ -8,8 +8,8 @@
 MODULE adaptivity_common_module
   USE globals
   USE reference_element
-  USE LinearAlgebra
   USE gmsh
+  USE GMSH_io_module
   IMPLICIT NONE
 
 CONTAINS
@@ -40,7 +40,6 @@ CONTAINS
   ENDSUBROUTINE open_merge_with_geometry
 
   SUBROUTINE set_order_mesh(p)
-    USE gmsh_io_module, ONLY: generate_boundary_names, generate_elemface_info, load_mesh2global_var
 
     INTEGER, INTENT(IN)                      :: p
     TYPE(Reference_element_type)             :: refElLocal
@@ -363,9 +362,117 @@ CONTAINS
 
   ENDSUBROUTINE linear_mapping
 
+  SUBROUTINE h_map(N_n_vertex, two_d_nodes, two_d_elements, vector_nodes_unique, h, count_vec)
+    INTEGER, INTENT(IN)              :: N_n_vertex
+    INTEGER                          :: N_e_real
+    REAL*8, INTENT(IN)               :: two_d_nodes(:,:)
+    INTEGER, INTENT(IN)              :: two_d_elements(:,:), vector_nodes_unique(:)
+    REAL*8, INTENT(OUT)              :: h(N_n_vertex)
+    INTEGER, OPTIONAL, INTENT(OUT)   :: count_vec(:)
+    INTEGER                          :: count_vec_local(N_n_vertex)
+    REAL*8                           :: g(N_n_vertex), l(N_n_vertex)
+    INTEGER                          :: i, j, A, B, C
+    REAL*8, DIMENSION(2, 2)          :: J1, J2, J3
+    REAL*8, DIMENSION(2, 2)          :: M1, M2, M3
+    REAL*8                           :: detJ1, detJ2, detJ3
+    REAL*8                           :: sqrt3
+
+    sqrt3 = SQRT(3.0)
+    N_e_real = SIZE(Mesh%T,1)
+
+    ! Initialize arrays
+    g = 0.
+    l = 0.
+    count_vec_local = 0
+    J1 = 0.
+    J2 = 0.
+    J3 = 0.
+
+    DO i = 1, N_e_real
+
+#ifdef PARALL
+       IF(Mesh%ghostElems(i) .EQ. 1) CYCLE
+#endif
+
+       ! Find indexes of the vertex nodes
+       A = 0
+       B = 0
+       C = 0
+
+       DO j = 1, N_n_vertex
+          IF ((two_d_elements(i, 1) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
+             A = j
+          ENDIF
+          IF ((two_d_elements(i, 2) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
+             B = j
+          ENDIF
+          IF ((two_d_elements(i, 3) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
+             C = j
+          ENDIF
+       ENDDO
+
+       IF(A*B*C .EQ. 0) THEN
+          WRITE(*,*) "Index not found in h_map. STOP"
+          STOP
+       ENDIF
+
+       ! Calculate Jacobian matrices
+       CALL jacobian(two_d_nodes, A, B, C, J1)
+       CALL jacobian(two_d_nodes, A, B, C, J2)
+       CALL jacobian(two_d_nodes, A, B, C, J3)
+
+       ! Calculate determinants of Jacobians
+       detJ1 = J1(1, 1) * J1(2, 2) - J1(1, 2) * J1(2, 1)
+       detJ2 = J2(1, 1) * J2(2, 2) - J2(1, 2) * J2(2, 1)
+       detJ3 = J3(1, 1) * J3(2, 2) - J3(1, 2) * J3(2, 1)
+
+       ! Calculate metrics
+       M1 = MATMUL(TRANSPOSE(J1), J1)
+       M2 = MATMUL(TRANSPOSE(J2), J2)
+       M3 = MATMUL(TRANSPOSE(J3), J3)
+
+       ! Using Jacobian
+       g(A) = g(A) + SQRT(2. * detJ1 / sqrt3)
+       count_vec_local(A) = count_vec_local(A) + 1
+
+       g(B) = g(B) + SQRT(2. * detJ2 / sqrt3)
+       count_vec_local(B) = count_vec_local(B) + 1
+
+       g(C) = g(C) + SQRT(2. * detJ3 / sqrt3)
+       count_vec_local(C) = count_vec_local(C) + 1
+    ENDDO
+
+
+    IF(ANY(count_vec_local .EQ. 0)) THEN
+       WRITE(*,*) "GOT A DIVISION BY 0 IN h_map ADAPTIVITY, SOMETHING IS WRONG!"
+       STOP
+    ENDIF
+
+
+#ifdef PARALL
+    count_vec = count_vec_local
+    h = g
+#else
+    ! Calculate h values
+    h = g / count_vec_local
+#endif
+  END SUBROUTINE h_map
+
+  SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
+    REAL*8, INTENT(IN)              :: two_d_nodes(:,:)
+    REAL*8, INTENT(OUT)             :: J(2,2)
+    INTEGER, INTENT(IN)             :: A, B, C
+
+    ! Calculate Jacobian matrix
+    J(1,1) = two_d_nodes(B,1) - two_d_nodes(A,1)
+    J(2,1) = two_d_nodes(B,2) - two_d_nodes(A,2)
+    J(1,2) = two_d_nodes(C,1) - two_d_nodes(A,1)
+    J(2,2) = two_d_nodes(C,2) - two_d_nodes(A,2)
+
+  END SUBROUTINE jacobian
+
   SUBROUTINE round_edges(Mesh_loc)
     USE mod_splines
-    USE HDF5_io_module
 
     ! Variables
     TYPE(Mesh_type), INTENT(IN)       :: Mesh_loc
@@ -1031,9 +1138,10 @@ CONTAINS
     ELSE
        xieta = xieta0
     ENDIF
-  END SUBROUTINE inverse_isop_transf
+  ENDSUBROUTINE inverse_isop_transf
 
   SUBROUTINE inverse_linear_transformation(x,Xe,xieta)
+    USE LinearAlgebra, only: solve_linear_system
 
     REAL*8, INTENT(IN)      :: x(:,:), Xe(:,:)
     REAL*8, INTENT(OUT)     :: xieta(:,:)
@@ -1073,7 +1181,7 @@ CONTAINS
 
   ENDSUBROUTINE iso_transformation_high_order
 
-  SUBROUTINE find_matches_int(a, b, indices)
+  PURE SUBROUTINE find_matches_int(a, b, indices)
     INTEGER, DIMENSION(:), INTENT(IN)                 :: a
     INTEGER, INTENT(IN)                               :: b
     INTEGER, DIMENSION(:), INTENT(INOUT), ALLOCATABLE :: indices
@@ -1095,7 +1203,7 @@ CONTAINS
   END SUBROUTINE find_matches_int
 
   SUBROUTINE write_msh_file(X, T)
-    USE GMSH_io_module, ONLY: get_unit
+
     REAL*8, INTENT(in)                  :: X(:,:)
     INTEGER, INTENT(in)                 :: T(:,:)
     INTEGER, ALLOCATABLE                :: unique_T(:)
@@ -1170,7 +1278,7 @@ CONTAINS
 
 
   SUBROUTINE read_extended_connectivity(filename)
-    USE GMSH_io_module, ONLY: get_unit
+
     CHARACTER * ( * ), INTENT(IN)       :: filename
     INTEGER, ALLOCATABLE                :: T_gmsh(:,:), Tb_gmsh(:,:)
     REAL*8, ALLOCATABLE                 :: X_P1(:,:)
@@ -1236,7 +1344,7 @@ CONTAINS
 
 
   SUBROUTINE generate_msh_from_solution_mesh(mesh_name)
-    USE GMSH_io_module, ONLY: get_unit
+
 
     CHARACTER * ( * )                   :: mesh_name
     INTEGER ( kind = 4 )                :: gmsh_unit
@@ -1309,7 +1417,6 @@ CONTAINS
 
 
   SUBROUTINE convert_msh2mesh(mesh_name)
-    USE gmsh
 
     IMPLICIT NONE
 
@@ -1328,7 +1435,6 @@ CONTAINS
   ENDSUBROUTINE convert_msh2mesh
 
   SUBROUTINE convert_mesh2msh(mesh_name)
-    USE gmsh
 
     IMPLICIT NONE
 
@@ -1348,7 +1454,7 @@ CONTAINS
   ENDSUBROUTINE convert_mesh2msh
 
   SUBROUTINE delete_file(filename)
-    USE GMSH_io_module, ONLY: get_unit
+
     CHARACTER(*), INTENT(IN)        :: filename
     INTEGER                         :: fileID, stat
 
@@ -1521,7 +1627,7 @@ CONTAINS
   ENDSUBROUTINE mmg_create_mesh_from_h_target
 
   SUBROUTINE generate_htarget_sol_file(N_n_vertex, h_target)
-    USE GMSH_io_module, ONLY: get_unit
+
     INTEGER, INTENT(IN)         :: N_n_vertex
     REAL*8, INTENT(IN)          :: h_target(:)
     INTEGER                     :: fileID
@@ -1549,7 +1655,7 @@ CONTAINS
 
   ENDSUBROUTINE generate_htarget_sol_file
 
-  SUBROUTINE unique_1D(list_in, list_out)
+  PURE SUBROUTINE unique_1D(list_in, list_out)
     !! From a 1D array of integers list_in extracts the list of unique occurences of values
     !integer, dimension(:), intent(in) :: list_in
     INTEGER, DIMENSION(:), INTENT(in) :: list_in
@@ -1582,15 +1688,17 @@ CONTAINS
 
   END SUBROUTINE unique_1D
 
-  RECURSIVE SUBROUTINE quicksort_int(a)
+  PURE RECURSIVE SUBROUTINE quicksort_int(a)
     !! quicksort.f -*-f90-*-
     !! Author: t-nissie, some tweaks by 1AdAstra1
     !! License: GPLv3
     !! Gist: https://gist.github.com/t-nissie/479f0f16966925fa29ea
     INTEGER, DIMENSION(:), INTENT(inout) :: a
     INTEGER ::  x, t
-    INTEGER :: first = 1, last
+    INTEGER :: first, last
     INTEGER i, j
+
+    first = 1
 
     last = SIZE(a, 1)
     x = a( (first+last) / 2 )
@@ -1615,7 +1723,7 @@ CONTAINS
 
   ENDSUBROUTINE quicksort_int
 
-  SUBROUTINE quicksort_real(a)
+  PURE RECURSIVE SUBROUTINE quicksort_real(a)
     !! quicksort.f -*-f90-*-
     !! Author: t-nissie, some tweaks by 1AdAstra1
     !! License: GPLv3
@@ -1624,9 +1732,10 @@ CONTAINS
     !! The array to sort
 
     REAL*8 ::  x, t
-    INTEGER :: first = 1, last
+    INTEGER :: first, last
     INTEGER i, j
 
+    first = 1
     last = SIZE(a, 1)
     x = a( (first+last) / 2 )
     i = first
@@ -1648,9 +1757,9 @@ CONTAINS
     IF (first < i - 1) CALL quicksort_real(a(first : i - 1))
     IF (j + 1 < last)  CALL quicksort_real(a(j + 1 : last))
 
-  END SUBROUTINE quicksort_real
+  ENDSUBROUTINE quicksort_real
 
-  SUBROUTINE unique_stable(arrayin, uniqueArr)
+  PURE SUBROUTINE unique_stable(arrayin, uniqueArr)
     INTEGER, DIMENSION(:), INTENT(IN) :: arrayin
     INTEGER, DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: uniqueArr
     INTEGER, DIMENSION(SIZE(arrayin)) :: indices
@@ -1683,7 +1792,7 @@ CONTAINS
 
   ENDSUBROUTINE unique_stable
 
-  SUBROUTINE intersect_stable_int(a,b,c)
+  PURE SUBROUTINE intersect_stable_int(a,b,c)
     INTEGER, INTENT(IN)                       :: a(:)
     INTEGER, INTENT(IN)                       :: b(:)
     INTEGER, INTENT(OUT), ALLOCATABLE         :: c(:)

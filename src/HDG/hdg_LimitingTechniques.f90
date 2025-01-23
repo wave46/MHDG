@@ -5,10 +5,8 @@
 ! Limiting techniques
 !*****************************************
 MODULE HDG_LimitingTechniques
-
   USE globals
-  USE analytical
-  USE LinearAlgebra
+  USE LinearAlgebra, only: tensorSumInt, tensorProduct, invert_matrix
   USE printUtils
   USE MPI_OMP
 
@@ -1241,6 +1239,7 @@ CONTAINS
     ! element (Persson-Peraire)
     !*****************************************
     SUBROUTINE findCoeffShockCaptur(thresh, eps, invV)
+      USE Physics, only: cons2phys
       REAL*8, INTENT(IN)      :: thresh
       REAL*8, INTENT(OUT)     :: eps(:)
       REAL*8, INTENT(IN)      :: invV(refElPol%Nnodes2D, refElPol%Nnodes2D)

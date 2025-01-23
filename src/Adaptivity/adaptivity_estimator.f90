@@ -8,10 +8,9 @@
 MODULE adaptivity_estimator_module
   USE globals
   USE reference_element
-  USE LinearAlgebra
   USE gmsh
   USE adaptivity_common_module
-  USE adaptivity_indicator_module
+  USE MPI_OMP
   IMPLICIT NONE
 
 CONTAINS
@@ -19,7 +18,7 @@ CONTAINS
   SUBROUTINE adaptivity_estimator(mesh_name, param_adapt, count_adapt, order)
     USE in_out, ONLY: copy_file
     USE gmsh_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5
-    USE preprocess
+    USE preprocess, only: mesh_preprocess_serial
 #ifdef PARALL
     USE Communications, ONLY: gather_1D_vector_int,gather_1D_vector_real
 #endif
@@ -295,7 +294,7 @@ CONTAINS
     NULLIFY(h_glob, error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob)
 #endif
 
-  END SUBROUTINE adaptivity_estimator
+  ENDSUBROUTINE adaptivity_estimator
 
   SUBROUTINE adaptivity_estimator_get_error(param_adapt,vector_nodes_unique,error_estimator)
 
@@ -324,7 +323,7 @@ CONTAINS
     DEALLOCATE(error_L2)
     DEALLOCATE(error_L2_init)
 
-  END SUBROUTINE adaptivity_estimator_get_error
+  ENDSUBROUTINE adaptivity_estimator_get_error
 
   SUBROUTINE calculate_L2_error_two_sols_different_p_scalar_general(X,T,error_param, u_sol,u_star_sol, error_L2, eg_L2)
 
@@ -388,7 +387,6 @@ CONTAINS
 
   SUBROUTINE L2_error_estimator_eval(X,T,u,q,error_param,error_L2,eg_L2)
     USE physics, ONLY: cons2phys
-    USE HDF5_io_module
 
     REAL*8, INTENT(IN)                :: X(:,:)
     INTEGER, INTENT(IN)               :: T(:,:)
@@ -593,7 +591,7 @@ CONTAINS
 
   CONTAINS
 
-    SUBROUTINE expand_matrix_A(A, n, res)
+    PURE SUBROUTINE expand_matrix_A(A, n, res)
       REAL*8, INTENT(IN)                        :: A(:,:)
       INTEGER, INTENT(IN)                       :: n
       REAL*8, ALLOCATABLE, DIMENSION(:,:,:,:)   :: temp_1, temp_2
@@ -632,7 +630,7 @@ CONTAINS
       DEALLOCATE(temp_1, temp_2)
     ENDSUBROUTINE expand_matrix_A
 
-    SUBROUTINE expand_matrix_Bt(Bx, By, B)
+    PURE SUBROUTINE expand_matrix_Bt(Bx, By, B)
       REAL*8, INTENT(in)    :: Bx(:, :), By(:, :)
       REAL*8, INTENT(out)   :: B(:,:)
       INTEGER*4             :: i, k, j, n, m, neq_dim, neq, ndim
@@ -659,6 +657,7 @@ CONTAINS
   ENDSUBROUTINE elemental_matrices
 
   SUBROUTINE hdg_postprocess_solution(qin, uin, K, Bt, int_N, refElv_star, refElv, n_elements, u_star,u_int)
+    USE LinearAlgebra, only: solve_linear_system
     TYPE(Reference_element_type), INTENT(IN)                 :: refElv
     TYPE(Reference_element_type), INTENT(IN)                 :: refElv_star
     REAL*8, DIMENSION(:), INTENT(IN)                         :: qin, uin
@@ -1014,7 +1013,7 @@ CONTAINS
 
     IF (iter == max_iter) convergence = .FALSE.
 
-  END SUBROUTINE recompute_gauss_points
+  ENDSUBROUTINE recompute_gauss_points
 
   SUBROUTINE error_on_vertices(error_L2,T, vector_nodes_unique,N_n_vertex,error_output)
 

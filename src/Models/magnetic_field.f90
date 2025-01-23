@@ -11,6 +11,9 @@ MODULE magnetic_field
   USE prec_const
   USE globals
   USE in_out
+  USE HDF5_io_module
+  USE HDF5
+  USE interpolation
 CONTAINS
 
   !**********************************************
@@ -211,9 +214,9 @@ CONTAINS
   ! Magnetic field loaded by a hdf5 file in a cartesian grid
   !***********************************************************************
   SUBROUTINE load_magnetic_field_grid()
-    USE interpolation
-    USE HDF5
-    USE HDF5_io_module
+
+
+
     USE reference_element
 
     INTEGER                           :: i, ierr, ip, jp, ind, k
@@ -429,9 +432,9 @@ CONTAINS
   ! Magnetic field loaded by a hdf5 file in the nodes !TODO modify for 3D
   !***********************************************************************
   SUBROUTINE load_magnetic_field_nodes()
-    USE HDF5
-    USE HDF5_io_module
-    USE MPI_OMP
+
+
+    USE MPI_OMP, only: MPIvar
     INTEGER        :: i, ierr, k
     CHARACTER(LEN=1000) :: fname = 'Evolving_equilibrium'
     CHARACTER(50)  :: npr, nid, nit
@@ -968,10 +971,10 @@ CONTAINS
   ! Below are routines from Manuel MHDG v2.1. Copy as it without any check: TODO adapt it to global magnetic field
 
   SUBROUTINE loadJtorMap()
-    USE interpolation
-    USE HDF5
-    USE HDF5_io_module
-    !USE MPI_OMP
+
+
+
+
     INTEGER        :: i,ierr,ip,jp,ind, k
 #ifdef TOR3D
     INTEGER        :: j
@@ -1096,10 +1099,10 @@ CONTAINS
   END SUBROUTINE loadJtorMap
 
   SUBROUTINE loadMagneticFieldFromExperimentalData()
-    USE interpolation
-    USE HDF5
-    USE HDF5_io_module
-    USE MPI_OMP
+
+
+
+    USE MPI_OMP, only: MPIvar
     INTEGER        :: ierr,k,ip,jp,i,ind
     REAL*8,POINTER,DIMENSION(:,:) :: r2D,z2D,flux2D,Br2D,Bz2D,Bphi2D
     REAL*8,ALLOCATABLE,DIMENSION(:)   :: xvec,yvec,Bmod
@@ -1275,9 +1278,9 @@ CONTAINS
 
 
   SUBROUTINE SetPuff()
-    USE HDF5
-    USE HDF5_io_module
-    USE interpolation
+
+
+
     INTEGER           :: ierr,i
     CHARACTER(LEN=100) :: fname = 'Puff_54487_new.h5'
     INTEGER(HID_T)    :: file_id

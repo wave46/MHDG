@@ -10,10 +10,7 @@ SUBROUTINE HDG_BC()
   USE globals
   USE LinearAlgebra
   USE physics
-  USE analytical
-  USE printUtils
-  USE in_out
-  USE MPI_OMP
+  USE analytical, only: analytical_solution
 
   IMPLICIT NONE
 #ifdef TOR3D

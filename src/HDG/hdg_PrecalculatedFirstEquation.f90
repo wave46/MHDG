@@ -8,12 +8,8 @@
 
 SUBROUTINE HDG_precalculatedfirstequation()
   USE globals
-  USE analytical
-  USE physics
-  USE LinearAlgebra
-  USE printUtils
-  USE MPI_OMP
-  USE Debug
+  USE LinearAlgebra, only: tensorSumInt, tensorProduct, invert_matrix
+  USE MPI_OMP, only: MPIvar
 
   IMPLICIT NONE
 
@@ -137,103 +133,6 @@ SUBROUTINE HDG_precalculatedfirstequation()
   DEALLOCATE(Xel,Xfl)
   !$OMP END PARALLEL
 
-
-
-  !****************************
-  ! Loop in poloidal faces
-  !***************** ***********
-  !allocate(Xfl(Mesh%Nnodesperelem,2))
-  !   DO itor = 1,ntorloc
-  !   DO iface = 1,N2D
-
-
-  !      els(1) = (itor - 1)*N2D+iface
-  !      fas(1) = 1
-  !      els(2) = (itor - 2)*N2D+iface
-  !      if (itor == 1 .and. MPIvar%ntor == 1) then
-  !         els(2) = N2D*(ntorloc - 1) + iface
-  !      endif
-  !      fas(2) = refElPol%Nfaces + 2
-
-  !      ! Coordinates of the nodes of the face
-  !      Xfl = Mesh%X(Mesh%T(iface,:),:)
-
-  !      ! Compute the matrices for the element
-  !      CALL elemental_matrices_pol_faces(els,fas,Xfl)
-
-  !   END DO
-  !   END DO
-  !deallocate(Xfl)
-
-
-
-
-
-
-
-
-  !**********************************
-  ! Loop in toroidal interior faces
-  !**********************************
-  !allocate(Xfl(refElPol%Nfacenodes,2))
-  !   DO itor = 1,ntorloc
-  !#ifdef PARALL
-  !      itorg = itor + (MPIvar%itor - 1)*numer%ntor/MPIvar%ntor
-  !      if (itorg == numer%ntor + 1) itorg = 1
-  !#else
-  !      itorg = itor
-  !#endif
-  !      tel = tdiv(itorg) + 0.5*(refElTor%coord1d+1)*(tdiv(itorg + 1) - tdiv(itorg))
-
-  !      DO iface = 1,Mesh%Nintfaces
-
-  !         els = Mesh%intfaces(iFace,(/1,3/))
-  !         fas = Mesh%intfaces(iFace,(/2,4/))
-
-  !         ! Coordinates of the nodes of the face
-  !         Xfl = Mesh%X(Mesh%T(els(1),refElPol%face_nodes(fas(1),:)),:)
-
-  !         ! Compute the matrices for the element
-  !         CALL elemental_matrices_int_faces((itor - 1)*N2d+els,fas + 1,Xfl,tel)
-
-  !      END DO
-  !   END DO
-  !deallocate(Xfl)
-
-
-  !*********************************
-  ! Loop in toroidal exterior faces
-  !*********************************
-  !allocate(Xfl(refElPol%Nfacenodes,2))
-  !   DO itor = 1,ntorloc
-  !#ifdef PARALL
-  !      itorg = itor + (MPIvar%itor - 1)*numer%ntor/MPIvar%ntor
-  !      if (itorg == numer%ntor + 1) itorg = 1
-  !#else
-  !      itorg = itor
-  !#endif
-  !      tel = tdiv(itorg) + 0.5*(refElTor%coord1d+1)*(tdiv(itorg + 1) - tdiv(itorg))
-
-  !      DO iface = 1,Mesh%Nextfaces
-
-  !         iel = Mesh%extfaces(iFace,1)
-  !         ifa = Mesh%extfaces(iFace,2)
-
-  !         IF (Mesh%Fdir(iel,ifa)) CYCLE
-
-  !         ! Index of 3D element
-  !         iel3 = (itor - 1)*N2d+iel
-
-  !         ! Coordinates of the nodes of the element
-  !         Xfl = Mesh%X(Mesh%T(iel,refElPol%face_nodes(ifa,:)),:)
-
-  !         ! Compute the matrices for the element
-  !         CALL elemental_matrices_ext_faces(iel3,ifa + 1,Xfl,tel)
-  !      END DO
-  !   END DO
-  !deallocate(Xfl)
-
-
   IF (utils%timing) THEN
      CALL cpu_TIME(timing%tpe1)
      CALL system_CLOCK(timing%cke1,timing%clock_rate1)
@@ -341,7 +240,7 @@ CONTAINS
     DEALLOCATE (Aqq,Aqu)
     NULLIFY (N1g,N2g)
 
-  END SUBROUTINE elemental_matrices_volume
+  ENDSUBROUTINE elemental_matrices_volume
 
   !*****************************************
   ! Poloidal faces computations
@@ -404,7 +303,7 @@ CONTAINS
     END DO
 
 
-  END SUBROUTINE elemental_matrices_pol_faces
+  ENDSUBROUTINE elemental_matrices_pol_faces
 
   !*****************************************
   !  Toroidal interior faces computations
@@ -476,7 +375,7 @@ CONTAINS
        END DO ! Gauss points
     END DO
 
-  END SUBROUTINE elemental_matrices_int_faces
+  ENDSUBROUTINE elemental_matrices_int_faces
 
   !*****************************************
   ! Toroidal exterior faces computations
@@ -547,7 +446,7 @@ CONTAINS
        END DO ! Gauss points
     END DO
 
-  END SUBROUTINE elemental_matrices_ext_faces
+  ENDSUBROUTINE elemental_matrices_ext_faces
 
 #else
 
@@ -686,7 +585,7 @@ CONTAINS
 
     DEALLOCATE (Aqq,Aqu)
 
-  END SUBROUTINE elemental_matrices_volume
+  ENDSUBROUTINE elemental_matrices_volume
 
   !*****************************************
   ! Interior faces computations
@@ -741,7 +640,7 @@ CONTAINS
        CALL assemblyFacesContribution(iel,NiNi,n_g,ind_asf,ind_ash,ind_fG,ind_ff)
     END DO ! Gauss points
 
-  END SUBROUTINE elemental_matrices_int_faces
+  ENDSUBROUTINE elemental_matrices_int_faces
 
   !*****************************************
   ! Exterior faces computations
@@ -789,22 +688,21 @@ CONTAINS
        CALL assemblyFacesContribution(iel,NiNi,n_g,ind_asf,ind_ash,ind_fG,ind_ff)
     END DO ! Gauss points
 
-  END SUBROUTINE elemental_matrices_ext_faces
+  ENDSUBROUTINE elemental_matrices_ext_faces
 
 #endif
 
-  SUBROUTINE assemblyVolumeContribution(NxNy_ax,NN,Aqq,Aqu)
-    REAL*8                  :: NN(:,:)
-    REAL*8                  :: NxNy_ax(:,:,:)
-    REAL*8,INTENT(inout)    :: Aqq(:,:),Aqu(:,:,:)
-    INTEGER*4               :: k
+  PURE SUBROUTINE assemblyVolumeContribution(NxNy_ax,NN,Aqq,Aqu)
+    REAL*8, INTENT(IN)   :: NN(:,:), NxNy_ax(:,:,:)
+    REAL*8,INTENT(INOUT) :: Aqq(:,:),Aqu(:,:,:)
+    INTEGER*4            :: k
 
     Aqq = Aqq + NN
     DO k = 1,Ndim
        Aqu(:,:,k) = Aqu(:,:,k) +  NxNy_ax(:,:,k)
     END DO
 
-  END SUBROUTINE assemblyVolumeContribution
+  ENDSUBROUTINE assemblyVolumeContribution
 
   SUBROUTINE do_assembly(Aqq,Aqu,ind_ass,ind_asq,iel)
     REAL*8,INTENT(in)    :: Aqq(:,:),Aqu(:,:,:)
@@ -828,7 +726,7 @@ CONTAINS
     elMat%iAqq(:,:,iel)=elMat%iAqq(:,:,iel)+iAqq
     DEALLOCATE(iAqq,exAqq)
 
-  END SUBROUTINE do_assembly
+  ENDSUBROUTINE do_assembly
 
   SUBROUTINE assemblyFacesContribution(iel,NiNi,n_g,ind_asf,ind_ash,ind_fG,ind_ff)
     INTEGER*4,INTENT(in)   :: iel,ind_asf(:),ind_ash(:),ind_fG(:),ind_ff(:)
@@ -844,6 +742,6 @@ CONTAINS
        END DO
     END DO
 
-  END SUBROUTINE assemblyFacesContribution
+  ENDSUBROUTINE assemblyFacesContribution
 
-END SUBROUTINE HDG_precalculatedfirstequation
+ENDSUBROUTINE HDG_precalculatedfirstequation

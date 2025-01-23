@@ -3,7 +3,6 @@ MODULE domain_decomposition_module
   USE globals
   USE adaptivity_common_module, ONLY: unique_1D, unique_stable, quicksort_int
   USE preprocess, ONLY: GetFaces_mod
-  USE HDF5_io_module
   IMPLICIT NONE
 
 CONTAINS

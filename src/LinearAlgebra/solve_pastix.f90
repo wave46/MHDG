@@ -38,7 +38,7 @@ MODULE solve_pastix
 CONTAINS
 
    SUBROUTINE set_nthreads(matPASTIX)
-      use MPI_OMP
+      use MPI_OMP, only: OMPvar
       TYPE(PASTIX_STRUC) :: matPASTIX
       matPASTIX%iparm(IPARM_THREAD_NBR) = OMPvar%Nthreads
    end SUBROUTINE set_nthreads
@@ -48,7 +48,6 @@ CONTAINS
    ! Part specific to PASTIX
    !***********************************************
    SUBROUTINE init_mat_PASTIX(matPASTIX)
-      use pastixf
 
       IMPLICIT NONE
 
@@ -120,7 +119,6 @@ CONTAINS
    !***********************************************
    SUBROUTINE build_mat_PASTIX(matPASTIX)
 
-      use pastixf
       TYPE(PASTIX_STRUC) :: matPASTIX
       integer(kind=spm_int_t), dimension(:), pointer :: rowptr
       integer(kind=spm_int_t), dimension(:), pointer :: colptr

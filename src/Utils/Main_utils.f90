@@ -15,13 +15,13 @@ MODULE Main_utils
   USE debug
   USE initialization
 #ifdef WITH_PETSC
-   USE solve_petsc, only: matPETSC
+   USE solve_petsc, only: matPETSC, InitPETSC
 #endif
   USE adaptivity_common_module
   USE adaptivity_estimator_module
   USE adaptivity_indicator_module
   USE adaptivity_estimator_indicator_module
-  USE Postprocess
+  USE Postprocess, only: computeL2ErrorAnalyticSol
 #ifdef PARALL
   USE Communications
   USE domain_decomposition_module
