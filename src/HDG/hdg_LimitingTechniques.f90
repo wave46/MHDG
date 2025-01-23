@@ -6,7 +6,7 @@
 !*****************************************
 MODULE HDG_LimitingTechniques
   USE globals
-  USE LinearAlgebra, only: tensorSumInt, tensorProduct, invert_matrix
+  USE LinearAlgebra, only: tensorSumInt, tensorProduct, invert_matrix, solve_linear_system
   USE printUtils
   USE MPI_OMP
 
