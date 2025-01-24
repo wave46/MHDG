@@ -302,8 +302,11 @@ adaptivity_estimator_indicator.o : adaptivity_estimator_indicator.F globals.o gm
 
 Main_utils.F : $(SDIR)/Utils/Main_utils.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
-
+ifeq ($(PETSC),$(LIB_YES))
 Main_utils.o : Main_utils.F inout.o gmsh_io.o reference_element.o preprocess.o MPI_OMP.o PrintUtils.o Debug.o initialization.o adaptivity_indicator.o adaptivity_estimator.o adaptivity_estimator_indicator.o Communications.o domain_decomposition.o hdg_LimitingTechniques.o solve_petsc.o Postprocess.o
+else
+Main_utils.o : Main_utils.F inout.o gmsh_io.o reference_element.o preprocess.o MPI_OMP.o PrintUtils.o Debug.o initialization.o adaptivity_indicator.o adaptivity_estimator.o adaptivity_estimator_indicator.o Communications.o domain_decomposition.o hdg_LimitingTechniques.o Postprocess.o
+endif
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 MHDG.F : $(SDIR)/MHDG.f90
