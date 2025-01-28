@@ -83,7 +83,7 @@ PROGRAM MHDG
   ! used in the HDG scheme
   ierr = 1
 #ifdef PARALL
-  IF(switch%read_gmsh) THEN
+  IF(switch%read_gmsh .or. switch%readMeshFromSol) THEN
      IF(MPIvar%glob_size .GT. 1) THEN
         CALL mesh_preprocess_serial(ierr)
      ELSE
