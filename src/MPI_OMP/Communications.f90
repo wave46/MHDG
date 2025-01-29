@@ -766,15 +766,14 @@ CONTAINS
   ENDSUBROUTINE gather_2D_matrix_real
 
   SUBROUTINE gather_mesh(Mesh_in, T_glob, X_glob, Tb_glob, F_glob, N_glob, intfaces_glob, extfaces_glob, boundaryFlag_glob, Tlin_glob, periodic_faces_glob, elemSize_glob, flag_elems_sc_glob, scdiff_nodes_glob)
-    USE preprocess, only: createNodalConnectivity, computeElementSize
+    USE preprocess, ONLY: createNodalConnectivity, computeElementSize
     TYPE(Mesh_type)                         :: Mesh_in
     INTEGER, POINTER, INTENT(OUT)           :: T_glob(:,:)
     REAL*8, POINTER, INTENT(OUT)            :: X_glob(:,:)
     REAL*8, OPTIONAL, POINTER, INTENT(OUT)  :: elemSize_glob(:), scdiff_nodes_glob(:,:)
     INTEGER, OPTIONAL, POINTER, INTENT(OUT) :: Tb_glob(:,:), F_glob(:,:), N_glob(:,:), intfaces_glob(:,:), extfaces_glob(:,:), Tlin_glob(:,:)
     INTEGER, OPTIONAL, POINTER, INTENT(OUT) :: boundaryFlag_glob(:), periodic_faces_glob(:), flag_elems_sc_glob(:)
-    INTEGER, ALLOCATABLE                    :: intfaces(:,:), extfaces(:,:), Tb(:,:), boundaryFlag(:), periodic_faces(:)
-    INTEGER                                 :: i, counter, index, ierr
+    INTEGER                                 :: i, index, ierr
 
     !remove ghost elements from T, X
     ALLOCATE(T_glob(Mesh_in%Nel_glob, Mesh_in%Nnodesperelem))
@@ -788,24 +787,36 @@ CONTAINS
        F_glob = 0
     ENDIF
     IF(PRESENT(intfaces_glob)) THEN
-       ALLOCATE(intfaces(Mesh_in%Nintfaces_nogho, 5))
-       intfaces = 0
+       ALLOCATE(intfaces_glob(Mesh_in%Nintfaces_glob, 5))
+       intfaces_glob = 0
     ENDIF
     IF(PRESENT(extfaces_glob)) THEN
-       ALLOCATE(extfaces(Mesh_in%Nextfaces_nogho, 2))
-       extfaces = 0
+       ALLOCATE(extfaces_glob(Mesh_in%Nextfaces_glob, 2))
+       extfaces_glob = 0
+    ENDIF
+    IF(PRESENT(boundaryFlag_glob)) THEN
+       ALLOCATE(boundaryFlag_glob(Mesh_in%Nextfaces_glob))
+       boundaryFlag_glob = 0
     ENDIF
     IF(PRESENT(Tlin_glob)) THEN
        ALLOCATE(Tlin_glob(Mesh_in%Nel_glob, refElPol%Nvertices))
        Tlin_glob = 0
     ENDIF
     IF(PRESENT(flag_elems_sc_glob)) THEN
-      ALLOCATE(flag_elems_sc_glob(Mesh_in%Nel_glob))
-      flag_elems_sc_glob = 0
+       ALLOCATE(flag_elems_sc_glob(Mesh_in%Nel_glob))
+       flag_elems_sc_glob = 0
     ENDIF
     IF(PRESENT(scdiff_nodes_glob)) THEN
-      ALLOCATE(scdiff_nodes_glob(Mesh_in%Nel_glob, Mesh_in%Nnodesperelem))
-      scdiff_nodes_glob = 0
+       ALLOCATE(scdiff_nodes_glob(Mesh_in%Nel_glob, Mesh_in%Nnodesperelem))
+       scdiff_nodes_glob = 0
+    ENDIF
+    IF(PRESENT(Tb_glob)) THEN
+       ALLOCATE(Tb_glob(Mesh_in%Nextfaces_glob,Mesh_in%Nnodesperface))
+       Tb_glob = 0
+    ENDIF
+    IF(PRESENT(periodic_faces_glob)) THEN
+       ALLOCATE(periodic_faces_glob(Mesh_in%Nextfaces_glob))
+       periodic_faces_glob = 0
     ENDIF
 
     DO i = 1, Mesh_in%Nelems
@@ -821,81 +832,67 @@ CONTAINS
     ENDDO
 
     IF(PRESENT(Tb_glob)) THEN
-       ALLOCATE(Tb(Mesh_in%Nextfaces_nogho,Mesh_in%Nnodesperface))
-       counter = 1
        DO i = 1, Mesh_in%NextFaces
           IF(Mesh_in%ghostFaces(Mesh_in%Nintfaces+i) .EQ. 0) THEN
-             Tb(counter,:) = Mesh_in%loc2glob_nodes(Mesh_in%Tb(i,:))
-             counter = counter + 1
+             index = Mesh_in%loc2glob_fa(Mesh_in%Nintfaces + i) - Mesh_in%Nintfaces_glob
+             Tb_glob(index,:) = Mesh_in%loc2glob_nodes(Mesh_in%Tb(i,:))
           ENDIF
        ENDDO
     ENDIF
 
     IF(PRESENT(intfaces_glob)) THEN
-      counter = 1
        DO i = 1, Mesh_in%Nintfaces
           IF(Mesh_in%ghostFaces(i) .EQ. 0) THEN
-             intfaces(counter,1)   = Mesh_in%loc2glob_el(Mesh_in%intfaces(i,1)) ! number of the triangle
-             intfaces(counter,2)   = Mesh_in%intfaces(i,2) ! number of the face
-             intfaces(counter,3)   = Mesh_in%loc2glob_el(Mesh_in%intfaces(i,3)) ! number of the neighbour triangle
-             intfaces(counter,4:5) = Mesh_in%intfaces(i,4:5) ! number of the face of the neighbour triangle and number of the node sharing the first knot
-             counter = counter + 1
+             index =  Mesh_in%loc2glob_fa(i)
+             intfaces_glob(index,1)   = Mesh_in%loc2glob_el(Mesh_in%intfaces(i,1)) ! number of the triangle
+             intfaces_glob(index,2)   = Mesh_in%intfaces(i,2) ! number of the face
+             intfaces_glob(index,3)   = Mesh_in%loc2glob_el(Mesh_in%intfaces(i,3)) ! number of the neighbour triangle
+             intfaces_glob(index,4:5) = Mesh_in%intfaces(i,4:5) ! number of the face of the neighbour triangle and number of the node sharing the first knot
           ENDIF
        ENDDO
     ENDIF
 
     IF(PRESENT(extfaces_glob)) THEN
-      counter = 1
-      DO i = 1, Mesh_in%NextFaces
+       DO i = 1, Mesh_in%NextFaces
           IF (Mesh_in%ghostFaces(Mesh_in%Nintfaces+i) .EQ. 0) THEN
-             extfaces(counter,1) = Mesh_in%loc2glob_el(Mesh_in%extfaces(i,1)) ! number of the triangle
-             extfaces(counter,2) = Mesh_in%extfaces(i,2) ! number of the face
-             counter = counter + 1
+             index = Mesh_in%loc2glob_fa(Mesh_in%Nintfaces + i) - Mesh_in%Nintfaces_glob
+             extfaces_glob(index,1) = Mesh_in%loc2glob_el(Mesh_in%extfaces(i,1)) ! number of the triangle
+             extfaces_glob(index,2) = Mesh_in%extfaces(i,2) ! number of the face
           ENDIF
        ENDDO
     ENDIF
 
-
     IF(PRESENT(boundaryFlag_glob)) THEN
-       ALLOCATE(boundaryFlag(Mesh_in%Nextfaces_nogho))
-       boundaryFlag = 0
-
-       counter = 1
        DO i = 1, Mesh_in%Nextfaces
           IF((Mesh_in%boundaryFlag(i) .NE. 0) .AND. (Mesh_in%ghostFaces(Mesh_in%Nintfaces+i) .EQ. 0)) THEN
-             boundaryFlag(counter) = Mesh_in%boundaryFlag(i)
-             counter = counter + 1
+             index = Mesh_in%loc2glob_fa(Mesh_in%Nintfaces + i) - Mesh_in%Nintfaces_glob
+             boundaryFlag_glob(index) = Mesh_in%boundaryFlag(i)
           ENDIF
        ENDDO
     ENDIF
 
     IF(PRESENT(periodic_faces_glob)) THEN
-       ALLOCATE(periodic_faces(Mesh_in%Nextfaces_nogho))
-       periodic_faces = 0
-
-       counter = 1
        DO i = 1, Mesh_in%Nextfaces
           IF((Mesh_in%boundaryFlag(i) .NE. 0) .AND. (Mesh_in%ghostFaces(Mesh_in%Nintfaces+i) .EQ. 0)) THEN
-             periodic_faces(counter) = Mesh_in%periodic_faces(i)
-             counter = counter + 1
+             index = Mesh_in%loc2glob_fa(Mesh_in%Nintfaces + i) - Mesh_in%Nintfaces_glob
+             periodic_faces_glob(index) = Mesh_in%periodic_faces(i)
           ENDIF
        ENDDO
     ENDIF
 
-    ! stack arrays
-    IF(PRESENT(intfaces_glob))        CALL gather_2D_matrix_int(intfaces, intfaces_glob, .FALSE.)
-    IF(PRESENT(extfaces_glob))        CALL gather_2D_matrix_int(extfaces, extfaces_glob, .FALSE.)
-    IF(PRESENT(Tb_glob))              CALL gather_2D_matrix_int(Tb, Tb_glob, .FALSE.)
-    IF(PRESENT(boundaryFlag_glob))    CALL gather_1D_vector_int(boundaryFlag, boundaryFlag_glob, .FALSE.)
-    IF(PRESENT(periodic_faces_glob))  CALL gather_1D_vector_int(periodic_faces, periodic_faces_glob, .FALSE.)
-
     ! reduce results over processes
     CALL MPI_Allreduce(MPI_IN_PLACE, T_glob, SIZE(T_glob,1)*SIZE(T_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_Allreduce(MPI_IN_PLACE, X_glob, SIZE(X_glob,1)*SIZE(X_glob,2), MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+    IF(PRESENT(Tb_glob)) CALL MPI_Allreduce(MPI_IN_PLACE, Tb_glob, SIZE(Tb_glob,1)*SIZE(Tb_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+    IF(PRESENT(intfaces_glob)) CALL MPI_Allreduce(MPI_IN_PLACE, intfaces_glob, SIZE(intfaces_glob,1)*SIZE(intfaces_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+    IF(PRESENT(extfaces_glob)) CALL MPI_Allreduce(MPI_IN_PLACE, extfaces_glob, SIZE(extfaces_glob,1)*SIZE(extfaces_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+    IF(PRESENT(boundaryFlag_glob)) CALL MPI_Allreduce(MPI_IN_PLACE, boundaryFlag_glob, SIZE(boundaryFlag_glob,1), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+    IF(PRESENT(periodic_faces_glob)) CALL MPI_Allreduce(MPI_IN_PLACE, periodic_faces_glob, SIZE(periodic_faces_glob,1), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+
 
     ! I believe it is much easier to reconstruct the nodal connectivity rather than trying to reassemble it from processes (lots of communication)
     IF(PRESENT(N_glob)) THEN
-      CALL createNodalConnectivity(T_glob, Mesh%Nel_glob, Mesh%Nno_glob, Mesh%Nnodesperelem, N_glob)
+       CALL createNodalConnectivity(T_glob, Mesh%Nel_glob, Mesh%Nno_glob, Mesh%Nnodesperelem, N_glob)
     ENDIF
 
     IF(PRESENT(F_glob))             CALL MPI_Allreduce(MPI_IN_PLACE, F_glob, SIZE(F_glob,1)*SIZE(F_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
@@ -905,14 +902,9 @@ CONTAINS
 
     ! elemsize cannot be gathered as there is no information on the order of elements in the global mesh
     IF(PRESENT(elemSize_glob)) THEN
-      CALL computeElementSize(T_glob, X_glob, Tlin_glob, elemSize_glob)
+       CALL computeElementSize(T_glob, X_glob, Tlin_glob, elemSize_glob)
     ENDIF
 
-    IF(PRESENT(intfaces_glob)) DEALLOCATE(intfaces)
-    IF(PRESENT(extfaces_glob)) DEALLOCATE(extfaces)
-    IF(PRESENT(Tb_glob)) DEALLOCATE(Tb)
-    IF(PRESENT(boundaryFlag_glob)) DEALLOCATE(boundaryFlag)
-    IF(PRESENT(periodic_faces_glob)) DEALLOCATE(periodic_faces)
   ENDSUBROUTINE gather_mesh
 
   SUBROUTINE gather_solution(Mesh_in, Nnodesperelem, Nnodesperface, u_tilde_in, u_in, q_in, u_glob, u_tilde_glob, q_glob)
@@ -934,8 +926,8 @@ CONTAINS
     u_3d = 0.
 
     IF(PRESENT(u_tilde_in)) THEN
-      ALLOCATE(u_tilde_3d(Mesh_in%Nfaces, Nnodesperface, phys%neq))
-      u_tilde_3d = 0.
+       ALLOCATE(u_tilde_3d(Mesh_in%Nfaces, Nnodesperface, phys%neq))
+       u_tilde_3d = 0.
     ENDIF
     IF(PRESENT(q_in)) THEN
        ALLOCATE(q_4d(Mesh_in%Nelems, Nnodesperelem,phys%neq, Mesh_in%Ndim))
@@ -946,7 +938,7 @@ CONTAINS
     ! u_2d = TRANSPOSE(RESHAPE(u_in,[phys%neq, SIZE(u_in)/phys%neq]))
     ! temp3d = RESHAPE(u_2d, [Nnodesperelem, Mesh_in%Nelems, phys%neq])
     ! permute(temp3d,u_3d)
-                            CALL reshape_transpose_permute(u_in, u_3d, phys%neq, Mesh_in%Nelems, Nnodesperelem)
+    CALL reshape_transpose_permute(u_in, u_3d, phys%neq, Mesh_in%Nelems, Nnodesperelem)
     IF(PRESENT(u_tilde_in)) CALL reshape_transpose_permute(u_tilde_in, u_tilde_3d, phys%neq, Mesh_in%Nfaces, Nnodesperface)
     IF(PRESENT(q_in))       CALL reshape_transpose_permute_4D(q_in, q_4D, Mesh_in%Ndim, phys%neq, Mesh_in%Nelems, Nnodesperelem)
 
@@ -954,41 +946,41 @@ CONTAINS
     ALLOCATE(u_nogho_3d(Mesh_in%Nel_glob, Nnodesperelem, phys%neq))
     u_nogho_3d = 0.
     IF(PRESENT(u_tilde_in)) THEN
-      ALLOCATE(u_tilde_nogho_3d(Mesh_in%Nfa_glob, Nnodesperface, phys%neq))
-      u_tilde_nogho_3d = 0.
+       ALLOCATE(u_tilde_nogho_3d(Mesh_in%Nfa_glob, Nnodesperface, phys%neq))
+       u_tilde_nogho_3d = 0.
     ENDIF
     IF(PRESENT(q_in)) THEN
-      ALLOCATE(q_nogho_4d(Mesh_in%Nel_glob, Nnodesperelem, phys%neq, Mesh_in%Ndim))
-      q_nogho_4d = 0.
+       ALLOCATE(q_nogho_4d(Mesh_in%Nel_glob, Nnodesperelem, phys%neq, Mesh_in%Ndim))
+       q_nogho_4d = 0.
     ENDIF
 
     ! filtering out ghost cells
     DO i = 1, Mesh_in%Nelems
-      IF(Mesh_in%ghostElems(i) .EQ. 0) THEN
-        u_nogho_3d(Mesh_in%loc2glob_el(i),:,:) = u_3d(i,:,:)
-      ENDIF
+       IF(Mesh_in%ghostElems(i) .EQ. 0) THEN
+          u_nogho_3d(Mesh_in%loc2glob_el(i),:,:) = u_3d(i,:,:)
+       ENDIF
     ENDDO
 
     IF(PRESENT(q_in)) THEN
-      ! filtering out ghost cells
-      DO i = 1, Mesh_in%Nelems
-        IF(Mesh_in%ghostElems(i) .EQ. 0) THEN
-          q_nogho_4d(Mesh_in%loc2glob_el(i),:,:,:) = q_4d(i,:,:,:)
-        ENDIF
-      ENDDO
+       ! filtering out ghost cells
+       DO i = 1, Mesh_in%Nelems
+          IF(Mesh_in%ghostElems(i) .EQ. 0) THEN
+             q_nogho_4d(Mesh_in%loc2glob_el(i),:,:,:) = q_4d(i,:,:,:)
+          ENDIF
+       ENDDO
     ENDIF
 
     ! filtering out ghost faces
     IF(PRESENT(u_tilde_in)) THEN
-      DO i = 1, Mesh_in%Nfaces
-        IF(Mesh_in%ghostFaces(i) .EQ. 0) THEN
-          u_tilde_nogho_3d(Mesh_in%loc2glob_fa(i),:,:) = u_tilde_3d(i,:,:)
-        ENDIF
-      ENDDO
+       DO i = 1, Mesh_in%Nfaces
+          IF(Mesh_in%ghostFaces(i) .EQ. 0) THEN
+             u_tilde_nogho_3d(Mesh_in%loc2glob_fa(i),:,:) = u_tilde_3d(i,:,:)
+          ENDIF
+       ENDDO
     ENDIF
 
     ! reduce results over processes
-                            CALL MPI_Allreduce(MPI_IN_PLACE, u_nogho_3d, SIZE(u_nogho_3d,1)*SIZE(u_nogho_3d,2)*SIZE(u_nogho_3d,3), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_Allreduce(MPI_IN_PLACE, u_nogho_3d, SIZE(u_nogho_3d,1)*SIZE(u_nogho_3d,2)*SIZE(u_nogho_3d,3), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     IF(PRESENT(u_tilde_in)) CALL MPI_Allreduce(MPI_IN_PLACE, u_tilde_nogho_3d, SIZE(u_tilde_nogho_3d,1)*SIZE(u_tilde_nogho_3d,2)*SIZE(u_tilde_nogho_3d,3), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     IF(PRESENT(q_in))       CALL MPI_Allreduce(MPI_IN_PLACE, q_nogho_4d, SIZE(q_nogho_4d,1)*SIZE(q_nogho_4d,2)*SIZE(q_nogho_4d,3)*SIZE(q_nogho_4d,4), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 
@@ -1006,11 +998,11 @@ CONTAINS
        q_glob = 0.
     ENDIF
 
-                            CALL flatten_row_major(u_nogho_3d, u_glob, SIZE(u_nogho_3d,1), SIZE(u_nogho_3d,2), SIZE(u_nogho_3d,3))
+    CALL flatten_row_major(u_nogho_3d, u_glob, SIZE(u_nogho_3d,1), SIZE(u_nogho_3d,2), SIZE(u_nogho_3d,3))
     IF(PRESENT(u_tilde_in)) CALL flatten_row_major(u_tilde_nogho_3d, u_tilde_glob, SIZE(u_tilde_nogho_3d,1), SIZE(u_tilde_nogho_3d,2), SIZE(u_tilde_nogho_3d,3))
     IF(PRESENT(q_in))       CALL flatten_row_major_4D(q_nogho_4d, q_glob, SIZE(q_nogho_4d,1), SIZE(q_nogho_4d,2), SIZE(q_nogho_4d,3),SIZE(q_nogho_4d,4))
 
-                            DEALLOCATE(u_3d, u_nogho_3d)
+    DEALLOCATE(u_3d, u_nogho_3d)
     IF(PRESENT(q_in))       DEALLOCATE(q_4d, q_nogho_4d)
     IF(PRESENT(u_tilde_in)) DEALLOCATE(u_tilde_3d, u_tilde_nogho_3d)
 
