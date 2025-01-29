@@ -83,18 +83,15 @@ PROGRAM MHDG
   ! used in the HDG scheme
   ierr = 1
 #ifdef PARALL
-  IF(switch%read_gmsh) THEN
-     IF(MPIvar%glob_size .GT. 1) THEN
-        CALL mesh_preprocess_serial(ierr)
-     ELSE
-        CALL mesh_preprocess(ierr)
-     ENDIF
+  IF((switch%read_gmsh) .OR. (switch%readMeshFromSol) .AND. (MPIvar%glob_size .GT. 1)) THEN
+     CALL mesh_preprocess_serial(ierr)
   ELSE
      CALL mesh_preprocess(ierr)
   ENDIF
 #else
   CALL mesh_preprocess(ierr)
 #endif
+
 
   IF((ierr .EQ. 0) .AND. (switch%read_gmsh)) THEN
      CALL free_mesh
@@ -121,9 +118,8 @@ PROGRAM MHDG
      CALL domain_decomposition()
      ! decompose the solution over the processes
      CALL solution_decomposition()
-  ! if the restart solution is not given
-  ELSE
-    ! just decompose the domain
+  ELSE ! if the restart solution is not given
+     ! just decompose the domain
      CALL domain_decomposition()
   ENDIF
 #endif
