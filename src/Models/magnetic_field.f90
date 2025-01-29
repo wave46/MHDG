@@ -43,10 +43,8 @@ CONTAINS
   END SUBROUTINE initialize_magnetic_field
 
   SUBROUTINE load_magnetic_field_Jtor
-    IF (switch%ME .EQV. .FALSE.) THEN
-       CALL load_magnetic_field()
-       IF (switch%ohmicsrc) CALL loadJtorMap()
-    END IF
+      CALL load_magnetic_field()
+      IF (switch%ohmicsrc) CALL loadJtorMap()
   ENDSUBROUTINE load_magnetic_field_Jtor
 
   !**********************************************

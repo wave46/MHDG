@@ -703,12 +703,6 @@ CONTAINS
        ! restart simulation: load solution from file (the name is given in argument)
        CALL HDF5_load_solution(save_name)
        ALLOCATE(sol%u_tilde0(SIZE(sol%u_tilde)))
-       ! Update magnetic field and, if ohmic src, Jtor also
-       ! In case of restart initialize the magnetic configuration to the previous one
-       IF (switch%ME .EQV. .TRUE.) THEN
-          CALL load_magnetic_field()
-          IF (switch%ohmicsrc) CALL loadJtorMap()
-       END IF
     ELSE
        CALL init_sol()
     END IF

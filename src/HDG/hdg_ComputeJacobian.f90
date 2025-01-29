@@ -1120,12 +1120,12 @@ CONTAINS
   !$OMP PARALLEL DEFAULT(SHARED) &
   !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,psifl,q_cylfl,isdir,Jtorel,El_n,El_nn) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
-  !$OMP FIRSTPRIVATE(phys,Mesh)
+  !$OMP FIRSTPRIVATE(phys)
 #else
   !$OMP PARALLEL DEFAULT(SHARED) &
   !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,psiel,psifl,isdir,Jtorel,El_n,El_nn) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el) &
-  !$OMP FIRSTPRIVATE(phys,Mesh)
+  !$OMP FIRSTPRIVATE(phys)
 #endif
   ALLOCATE(Xel(Mesh%Nnodesperelem,2))
   ALLOCATE(Xfl(refElPol%Nfacenodes,2))
