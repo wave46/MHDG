@@ -73,7 +73,7 @@ CONTAINS
   SUBROUTINE domain_decomposition()
     IF(MPIvar%glob_size .GT. 1) THEN
        ! split the mesh
-       IF(switch%read_gmsh) THEN
+       IF(switch%read_gmsh .OR. switch%readMeshFromSol) THEN
           CALL free_mesh_loc(Mesh_glob)
           CALL deep_copy_mesh_struct(Mesh, Mesh_glob)
           Mesh_glob%X = Mesh_glob%X*phys%lscale
@@ -223,6 +223,14 @@ CONTAINS
 #ifdef PARALL
 
     Mesh%X = Mesh%X/phys%lscale
+
+    ! Save new mesh and solution
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       WRITE (count_adapt_char, *) count_adapt
+       CALL HDF5_save_mesh("./res/new_mesh_n" // TRIM(ADJUSTL(count_adapt_char)) // ".h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+       !CALL HDF5_save_solution("./res/projected_solution_n" // TRIM(ADJUSTL(count_adapt_char)))
+    ENDIF
+
     ! Domain decomposition on the new mesh
     CALL split_mesh(MPIvar%glob_size, 3, .FALSE.)
     CALL mesh_preprocess(ierr)
@@ -241,8 +249,8 @@ CONTAINS
     NULLIFY(X_glob, T_glob, u_glob, q_glob)
 
     ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
-    CALL gather_solution(Mesh_in = Mesh, Nnodesperelem = Mesh%Nnodesperelem, u_in = sol%u, q_in = sol%q, u_glob = u_glob, q_glob = q_glob)
     CALL gather_mesh(Mesh_in = Mesh, T_glob = T_glob, X_glob = X_glob)
+    CALL gather_solution(Mesh_in = Mesh, Nnodesperelem = Mesh%Nnodesperelem, u_in = sol%u, q_in = sol%q, u_glob = u_glob, q_glob = q_glob)
 
     DEALLOCATE(X_glob,T_glob, u_glob, q_glob)
     NULLIFY(X_glob, T_glob, u_glob, q_glob)
@@ -297,13 +305,6 @@ CONTAINS
 
     ! Re-Compute first equation (definition of the gradient)
     CALL HDG_precalculatedfirstequation()
-
-    ! Save new mesh and solution
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       WRITE (count_adapt_char, *) count_adapt
-       CALL HDF5_save_mesh("./res/new_mesh_n" // TRIM(ADJUSTL(count_adapt_char)) // ".h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-       !CALL HDF5_save_solution("./res/projected_solution_n" // TRIM(ADJUSTL(count_adapt_char)))
-    ENDIF
 
     !! UPDATE VARIABLES
     errNR_adapt = 1e10
