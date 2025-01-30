@@ -310,8 +310,14 @@ PROGRAM MHDG
            ! Call adaptivity if one of the following conditions is respected
            IF ((adapt%adaptivity) .AND. ((adapt%osc_adapt .AND. (max_osc .GT. adapt%osc_tol)) .OR. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)))) THEN !  .or. (flag)) THEN
 
+              IF (switch%ME .EQV. .TRUE.) THEN
+               time%it=time%it-1
+              ENDIF
               ! call adaptivity precedure
               CALL adaptivity()
+              IF (switch%ME .EQV. .TRUE.) THEN
+               time%it=time%it-1
+              ENDIF
 
               ! u0 also needs to be projected from old mesh to new mesh
               CALL project_u0_newmesh()
