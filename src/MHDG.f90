@@ -227,8 +227,8 @@ PROGRAM MHDG
         CALL compute_element_solution()
         ! Check for NaN (should work with optimization flags)
         CALL check_for_NaNs()
-
-        IF (switch%ME .EQV. .TRUE.) THEN
+        IF (adapt%adaptivity .AND. restart_adapt) THEN
+           IF (switch%ME .EQV. .TRUE.) THEN
               time%it=time%it-1
            ENDIF
            CALL adaptivity()
