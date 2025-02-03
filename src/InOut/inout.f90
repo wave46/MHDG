@@ -1534,11 +1534,6 @@ CONTAINS
        ELSE
        END IF
        CALL HDF5_group_close(group_id2, ierr)
-       IF (time%it .NE. 0) THEN
-          CALL HDF5_group_open(group_id, 'physics', group_id2, ierr)
-          CALL HDF5_array1D_reading(group_id2, phys%puff_exp, 'puff_exp')
-          CALL HDF5_group_close(group_id2, ierr)
-       END IF
     END IF
     CALL HDF5_group_close(group_id, ierr)
 
