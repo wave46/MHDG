@@ -882,7 +882,7 @@ CONTAINS
 
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-       WRITE (6, *) "Neutrals diffusion: ", phys%diff_nn!*switch%diffred*simpar%refval_diffusion
+       WRITE (6, *) "Neutrals diffusion: ", phys%diff_nn*simpar%refval_diffusion
 #ifdef KEQUATION
        WRITE (6, *) "K diffusion min: ", phys%diff_k_min*switch%diffred*simpar%refval_diffusion
 #endif
