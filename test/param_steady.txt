@@ -133,6 +133,7 @@
     osc_adapt		= .true.	! Refine if oscillations are higher than threshold
     osc_tol		= -2.		! Refine if oscillations are higher than this threshold, only if osc_adapt = .true.
     osc_check		= -3.		! Save the solution as checkpoint if the maximum value of oscillations are lower than this threshold (-100 for no oscillations at all)
+    geometry_path	= '/path/to/geo/file/from/gmesh/geometry.geo
 /
 
 &GEOM_LST
