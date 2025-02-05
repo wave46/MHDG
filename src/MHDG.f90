@@ -316,7 +316,7 @@ PROGRAM MHDG
               ! call adaptivity precedure
               CALL adaptivity()
               IF (switch%ME .EQV. .TRUE.) THEN
-               time%it=time%it-1
+               time%it=time%it+1
               ENDIF
 
               ! u0 also needs to be projected from old mesh to new mesh
