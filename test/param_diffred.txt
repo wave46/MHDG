@@ -199,7 +199,7 @@
     !k_max = 1.e10      ! maximal k
     !puff               = 1.8e-6
     !puff               = 2.e-5
-    ! ****** Ohmic heating: only for testcase 54 with core (not tested)
+    ! ****** Ohmic heating: only for testcase 54 with core
     Zeff                = 3.
     Pohmic              = 4.8e-14       ! Ohmic Heating
     ! ****** Background temperature in eV for isothermal model (default is 50 eV)
