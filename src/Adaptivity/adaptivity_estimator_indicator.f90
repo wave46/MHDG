@@ -175,7 +175,6 @@ CONTAINS
     !! error indicator based on the elemental oscillations
 #ifndef PARALL
     CALL read_error(eps_plot, error_oscillation)
-    h_target = h  ! Start by assigning h to h_target
     WHERE (ABS(error_oscillation) .GT. 1e-10)
        h_target = h * 0.5
     END WHERE
