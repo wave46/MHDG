@@ -1859,6 +1859,92 @@ CONTAINS
 
 #endif
 
+SUBROUTINE gmsh_create_from_h_target(h_target_on_nodes,vertices_coordinates, connectivity, p_order)
+
+   USE, INTRINSIC :: iso_c_binding
+   USE gmsh
+
+   TYPE(gmsh_t) :: gmsh_l
+   INTEGER, INTENT(IN) :: p_order
+   REAL*8, DIMENSION(:), INTENT(IN) :: h_target_on_nodes ! on the vertices
+   REAL*8, DIMENSION(:,:), INTENT(IN) :: vertices_coordinates ! coordinates of the vertices
+   INTEGER, DIMENSION(:,:), INTENT(IN) :: connectivity ! connectivity of the triangles
+   REAL*8, ALLOCATABLE :: data_for_gmsh(:)
+   INTEGER*8           :: gmsh_dim, number_of_vertices_per_triangle, i, j, start_index
+   INTEGER*4           :: size_view,number_of_triangles,ret
+   REAL*8              :: sf_index, vertex_coordinates(2),h_target_on_vertex
+   !GMSH always have (X,Y,Z) coordinates
+   gmsh_dim = 3 
+   number_of_vertices_per_triangle = 3 
+   number_of_triangles = SIZE(connectivity,1)
+
+   ! initalize gmsh
+   CALL gmsh_l%initialize()
+
+   ! Set verbosity level to 2 (Errors and warnings)
+   CALL gmsh_l%option%setNumber("General.Verbosity", 2.0)
+   
+   !create model
+   CALL gmsh_l%model%add("geo")
+   ! merge
+   CALL gmsh_l%merge(adapt%geometry_path)
+   
+
+   ALLOCATE(data_for_gmsh((number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))*number_of_triangles))
+
+   ! Prepare data in gmsh format
+   DO i = 1, number_of_triangles
+      start_index = (i-1)*(number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))
+      DO j = 1, number_of_vertices_per_triangle
+         vertex_coordinates = vertices_coordinates(connectivity(i,j),:)
+         h_target_on_vertex = h_target_on_nodes(connectivity(i,j))
+         data_for_gmsh(start_index+j) = vertex_coordinates(1)
+         data_for_gmsh(start_index+number_of_vertices_per_triangle+j) = vertex_coordinates(2)
+         data_for_gmsh(start_index+2*number_of_vertices_per_triangle+j) = 0.0 ! no Z coordinate
+         data_for_gmsh(start_index+3*number_of_vertices_per_triangle+j) = h_target_on_vertex
+      ENDDO
+   ENDDO
+
+   ! Add h_target as a post-processing view
+   size_view = gmsh_l%view%add("h_target")
+   call gmsh_l%view%addListData(size_view, "ST",number_of_triangles,data_for_gmsh)
+   sf_index = gmsh_l%view%getIndex(size_view)
+
+   ! Add the view as a field
+   ret = gmsh_l%model%mesh%field%add("PostView")
+   call gmsh_l%model%mesh%field%setNumber(ret, "ViewIndex", 0d0)
+
+   ! Apply the view as the current background mesh size field:
+   call gmsh_l%model%mesh%field%setAsBackgroundMesh(ret)
+
+   ! ignore characteristic length from geometry
+   call gmsh_l%option%setNumber("Mesh.MeshSizeExtendFromBoundary", 0d0)
+   call gmsh_l%option%setNumber("Mesh.MeshSizeFromPoints", 0d0)
+   call gmsh_l%option%setNumber("Mesh.MeshSizeFromCurvature", 0d0)
+   
+   !Changing the algorithm to Delaunay, the default is Frontal-Delaunay (Don't Know if needed)
+   !call gmsh_l%option%setNumber("Mesh.Algorithm", 5d0)
+   
+   ! Generate the refined mesh
+   call gmsh_l%model%mesh%generate(2)
+   call gmsh_l%model%mesh%setOrder(p_order)
+   call gmsh_l%model%mesh%optimize('HighOrderFastCurving')
+   call gmsh_l%model%mesh%optimize('HighOrder')
+   CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
+   call gmsh_l%write('./res/temp.msh')
+   CALL gmsh_l%finalize()
+
+   DEALLOCATE(data_for_gmsh)
+
+END SUBROUTINE gmsh_create_from_h_target
+
+
+
+
+
+
+
+
 
 
 END MODULE adaptivity_common_module
