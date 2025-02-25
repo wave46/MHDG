@@ -776,9 +776,10 @@ CONTAINS
     INTEGER, INTENT(IN)          :: Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType
     INTEGER, INTENT(IN)          :: T(:,:), Tb(:,:), boundaryFlag(:)
     REAL*8, INTENT(IN)           :: X(:,:)
-    REAL*8                       :: temp(SIZE(X,1),SIZE(X,2))
+    REAL*8, ALLOCATABLE                       :: temp(:,:)
     REAL*8                       :: xmin
 
+    ALLOCATE(temp(SIZE(X,1),SIZE(X,2)))
     temp = X
     !Apply length scale back
     temp = temp*phys%lscale
@@ -791,7 +792,7 @@ CONTAINS
 
 
     CALL HDF5_save_mesh(h5_filename, Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, T, temp, Tb, boundaryFlag)
-
+    DEALLOCATE(temp)
   ENDSUBROUTINE
 
   SUBROUTINE HDF5_save_mesh(fname, Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, T, X, Tb, boundaryFlag)
