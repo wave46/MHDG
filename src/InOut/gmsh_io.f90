@@ -137,7 +137,7 @@ CONTAINS
     INTEGER ( kind = 4 ) level
     REAL    ( kind = 8 ) node_x(node_dim,node_num), x
     LOGICAL flag
-    CHARACTER ( len = 255 ) text
+    CHARACTER ( len = 1000 ) text
 
     n_Tb_IN = 0
     n_Tb_OUT = 0
