@@ -3,7 +3,7 @@
                                         ! .false. = time evolving simulation
                                         ! .true.  = steady state simulation
     read_gmsh           = .false.	! .true. = mesh is read from msh/mesh file format
-    readMeshFromSol     = .false.	! .true. = mesh is read from solution file
+    readMeshFromSol     = .true.	! .true. = mesh is read from solution file
     set_2d_order	= .false.	! .true. = set the order of the 2d polynomial if not set already 
     order_2d = 8 ! if read_gmsh = .true. and set_2d_order = .true., order of the 2d polynomial
     axisym              = .true.        ! Is it an axisymmetric simulation?
@@ -48,7 +48,6 @@
     saveNR              = .true.        ! save each N-R iterations
     saveTau             = .false.       ! save tau on faces
     gmsh2h5		= .false.	! convert the gmsh read in input to hdf5 format
-    saveMeshSol		= .true.	! save the mesh in the solution file
     !***** N-Gamma-Vorticity model
     fixdPotLim          = .false.       ! Fix potential at the floating potential on the limiter
     dirivortcore        = .false.       ! Dirichlet boundary condition on the vorticity in the core boundary
