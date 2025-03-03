@@ -73,21 +73,21 @@ CONTAINS
   SUBROUTINE domain_decomposition()
     IF(MPIvar%glob_size .GT. 1) THEN
        ! split the mesh
-       IF(switch%read_gmsh .OR. switch%readMeshFromSol) THEN
-          CALL free_mesh_loc(Mesh_glob)
-          CALL deep_copy_mesh_struct(Mesh, Mesh_glob)
-          Mesh_glob%X = Mesh_glob%X*phys%lscale
-          CALL split_mesh(MPIvar%glob_size, 3 , .FALSE.)
-          CALL mesh_preprocess(ierr)
+       
+      CALL free_mesh_loc(Mesh_glob)
+      CALL deep_copy_mesh_struct(Mesh, Mesh_glob)
+      Mesh_glob%X = Mesh_glob%X*phys%lscale
+      CALL split_mesh(MPIvar%glob_size, 3 , .FALSE.)
+      CALL mesh_preprocess(ierr)
 
-          WRITE (nid, *) MPIvar%glob_id + 1
-          WRITE (npr, *) MPIvar%glob_size
-          h5_filename = TRIM(ADJUSTL(mesh_name)) // '_' // TRIM(ADJUSTL(nid)) // '_' // TRIM(ADJUSTL(npr)) // '.h5'
-          Mesh%X = Mesh%X*phys%lscale
-          CALL HDF5_save_mesh_struct(Mesh, h5_filename)
-          Mesh%X = Mesh%X/phys%lscale
-          !CALL HDF5_save_mesh(h5_filename, Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
-       ENDIF
+      WRITE (nid, *) MPIvar%glob_id + 1
+      WRITE (npr, *) MPIvar%glob_size
+      h5_filename = TRIM(ADJUSTL(mesh_name)) // '_' // TRIM(ADJUSTL(nid)) // '_' // TRIM(ADJUSTL(npr)) // '.h5'
+      Mesh%X = Mesh%X*phys%lscale
+      CALL HDF5_save_mesh_struct(Mesh, h5_filename)
+      Mesh%X = Mesh%X/phys%lscale
+      !CALL HDF5_save_mesh(h5_filename, Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
+       
     ELSE
        ALLOCATE(Mesh%ghostelems(Mesh%Nelems))
        ALLOCATE(Mesh%ghostfaces(Mesh%Nfaces))
@@ -735,61 +735,54 @@ CONTAINS
     ELSE
 
        ! Load the mesh file from gmsh input or h5
-       IF(switch%read_gmsh) THEN
-          IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
-             CALL load_gmsh_mesh(mesh_name, 0)
-          ELSE
-             CALL load_gmsh_mesh(mesh_name, 1)
-          ENDIF
-          CALL create_reference_element(refElPol, 2, verbose = 1)
+       
+      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
+         CALL load_gmsh_mesh(mesh_name, 0)
+      ELSE
+         CALL load_gmsh_mesh(mesh_name, 1)
+      ENDIF
+      CALL create_reference_element(refElPol, 2, verbose = 1)
 
-          IF((switch%set_2d_order) .AND. (refElPol%nDeg .NE. switch%order_2d) ) THEN
-             CALL mesh_preprocess_serial(ierr)
-             CALL set_order_mesh(switch%order_2d)
-             CALL free_reference_element_pol(refElPol)
+      IF((switch%set_2d_order) .AND. (refElPol%nDeg .NE. switch%order_2d) ) THEN
+         CALL mesh_preprocess_serial(ierr)
+         CALL set_order_mesh(switch%order_2d)
+         CALL free_reference_element_pol(refElPol)
+         Mesh%X = Mesh%X*phys%lscale
+         Mesh%xmax = Mesh%xmax*phys%lscale
+         Mesh%xmin = Mesh%xmin*phys%lscale
+         Mesh%ymax = Mesh%ymax*phys%lscale
+         Mesh%ymin = Mesh%ymin*phys%lscale
+      ENDIF
 
-             Mesh%X = Mesh%X*phys%lscale
-             Mesh%xmax = Mesh%xmax*phys%lscale
-             Mesh%xmin = Mesh%xmin*phys%lscale
-             Mesh%ymax = Mesh%ymax*phys%lscale
-             Mesh%ymin = Mesh%ymin*phys%lscale
-          ENDIF
-
-          IF(switch%gmsh2h5) THEN
-             IF(MPIvar%glob_id .EQ. 0) THEN
-               h5_filename = TRIM(ADJUSTL(mesh_name)) // '.h5'
-               CALL convert_gmsh_to_hdf5(h5_filename, SIZE(Mesh%X,2), SIZE(Mesh%T,1), SIZE(Mesh%Tb,1), SIZE(Mesh%X,1), SIZE(Mesh%T,2), refElPol%nDeg+1, 0, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-             ENDIF
-          ENDIF
+      IF(switch%gmsh2h5) THEN
+         IF(MPIvar%glob_id .EQ. 0) THEN
+           h5_filename = TRIM(ADJUSTL(mesh_name)) // '.h5'
+           CALL convert_gmsh_to_hdf5(h5_filename, SIZE(Mesh%X,2), SIZE(Mesh%T,1), SIZE(Mesh%Tb,1), SIZE(Mesh%X,1), SIZE(Mesh%T,2), refElPol%nDeg+1, 0, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+         ENDIF
+      ENDIF
 
 
-          IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80)) THEN
-             Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
-          END IF
-
-          IF (adapt%shockcp_adapt .GT. 0) THEN
-             gmsh_filename      = TRIM(ADJUSTL(mesh_name))//'.msh'
-
-             i = 1
-             DO
-                IF((i+2) .GE. LEN(gmsh_filename)) THEN
-                   WRITE(*,*) "GMSH file input not found, check input syntax."
-                   STOP
-                ENDIF
-
-                IF((gmsh_filename(i:i) .EQ. 'm') .AND. (gmsh_filename(i+1:i+1) .EQ. 's') .AND. (gmsh_filename(i+2:i+2) .EQ. 'h')) THEN
-                   gmsh_filename_mesh = TRIM(ADJUSTL(gmsh_filename(1:i-4))) // 'P1.mesh'
-                   EXIT
-                ENDIF
-                i = i + 1
-             ENDDO
-
-             CALL copy_file(gmsh_filename,"./res/temp.msh")
-             CALL copy_file(gmsh_filename_mesh,"./res/temp.mesh")
-          ENDIF
-       ELSE
-          CALL load_mesh_h5(mesh_name)
-       ENDIF
+      IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80)) THEN
+         Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
+      END IF
+      IF (adapt%shockcp_adapt .GT. 0) THEN
+         gmsh_filename      = TRIM(ADJUSTL(mesh_name))//'.msh'
+         i = 1
+         DO
+            IF((i+2) .GE. LEN(gmsh_filename)) THEN
+               WRITE(*,*) "GMSH file input not found, check input syntax."
+               STOP
+            ENDIF
+            IF((gmsh_filename(i:i) .EQ. 'm') .AND. (gmsh_filename(i+1:i+1) .EQ. 's') .AND. (gmsh_filename(i+2:i+2) .EQ. 'h')) THEN
+               gmsh_filename_mesh = TRIM(ADJUSTL(gmsh_filename(1:i-4))) // 'P1.mesh'
+               EXIT
+            ENDIF
+            i = i + 1
+         ENDDO
+         CALL copy_file(gmsh_filename,"./res/temp.msh")
+         CALL copy_file(gmsh_filename_mesh,"./res/temp.mesh")
+      ENDIF
+       
     ENDIF
   ENDSUBROUTINE load_mesh
 
