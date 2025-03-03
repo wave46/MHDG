@@ -207,7 +207,7 @@ endif
 
 FCFLAGS += -cpp  -fopenmp
 FCFLAGS += -fdefault-double-8 -fdefault-real-8 
-FCFLAGS += -ffree-line-length-none -fimplicit-none -ffree-form -Wno-tabs
+FCFLAGS += -ffree-line-length-none -fimplicit-none -ffree-form -Wno-tabs -march=native
 ######## End gfortran ########
 
 ######## Begin ifort #########
