@@ -266,6 +266,10 @@ MODULE types
      INTEGER                   :: heating_equation ! Equation to which additional heating is applied (3 for ions, 4 for electrons)
      ! Coefficients for the neutral equations
      REAL*8                    :: diff_nn ! Diffusion in the neutral equation
+     LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
+     REAL*8,DIMENSION(22)      :: E           ! Energy values from TRIM
+     REAL*8,DIMENSION(19)      :: theta       ! Incidence angle values from TRIM
+     REAL*8,DIMENSION(22,19)   :: RN_DW       ! Reflection coefficient for neutrals from TRIM, (E,theta) grid
      REAL*8,ALLOCATABLE        :: diff_nn_Vol(:) ! Diffusion in the neutral equation at 2D Gauss points
      REAL*8,ALLOCATABLE        :: diff_nn_Fac(:) ! Diffusion in the neutral equation at 1D Gauss points on interior faces
      REAL*8,ALLOCATABLE        :: diff_nn_Bou(:) ! Diffusion in the neutral equation at 1D Gauss points on boundary faces

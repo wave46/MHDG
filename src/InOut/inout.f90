@@ -898,6 +898,7 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%diff_pot, 'diff_pot')
       CALL HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
       CALL HDF5_real_saving(group_id2, phys%Re, 'recycling')
+      CALL HDF5_logical_saving(group_id2, phys%apply_trim, 'apply_trim')
       CALL HDF5_real_saving(group_id2, phys%Zeff, 'Zeff')
       CALL HDF5_real_saving(group_id2, phys%Pohmic, 'ohmic_coeff')
       CALL HDF5_real_saving(group_id2, phys%Re_pump, 'recycling_pump')

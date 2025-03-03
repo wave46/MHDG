@@ -1810,9 +1810,12 @@ CONTAINS
         REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
         REAL*8           :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
         REAL*8           :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
+#ifdef NEUTRAL
+        REAL*8           :: E, theta, RN
 #ifdef DNNLINEARIZED
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
     real*8                    :: gradDnn(Ndim)
+#endif
 #endif
 #ifdef DKLINEARIZED
     real*8                 ::       q_cyl, xyf(:), ddk_dU(Neq), ddk_dU_u
@@ -2191,6 +2194,14 @@ CONTAINS
 
 
 #ifdef NEUTRAL
+      ! Reflection coefficient from TRIM
+      IF (phys%apply_trim) THEN
+        E = 1./2.*1./simpar%refval_charge*simpar%refval_mass*(simpar%refval_speed*upfg(2))**2
+        theta = 180./acos(-1.D0)*acos(abs(bn))
+        call compute_RN(E,theta,RN)
+      ELSE
+        RN=1.
+      ENDIF
 #ifdef NEUTRALP
       ! Compute Vpn(U^(k-1))
       CALL computeVpn(ufg,Vpn)
@@ -2240,15 +2251,15 @@ CONTAINS
     SELECT CASE (bc)
 
     CASE (bc_Bohm)
-       recycling_coeff =  phys%Re
+       recycling_coeff =  phys%Re*RN
        cryopump_coeff = 0.
        puff_coeff = 0.
     CASE (bc_BohmPump)
-       recycling_coeff =  phys%Re_pump
+       recycling_coeff =  phys%Re_pump*RN
        cryopump_coeff = phys%cryopump_power/(Mesh%pump_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
        puff_coeff = 0.
     CASE (bc_BohmPuff)
-       recycling_coeff =  phys%Re
+       recycling_coeff =  phys%Re*RN
        cryopump_coeff = 0.
        puff_coeff = phys%puff/simpar%refval_density/(Mesh%puff_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
     CASE DEFAULT
