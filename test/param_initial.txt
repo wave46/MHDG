@@ -184,6 +184,7 @@
     ! ****** Option for neutral equation (available only if compile with NEUTRAL)
     Re                  = 0.998     ! Recycling coefficient 0.997
     Re_pump             = 0.95     ! Recycling coefficient in the pump region
+    apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
     puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
     cryopump_power      = 10.      ! cryopump power in [m^3/s]
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
