@@ -1615,12 +1615,15 @@ CONTAINS
     ! this routine calculate log (eirene_rate) for given te, ne in log log space
     REAL*8, INTENT(IN) :: te,ne,alpha(:,:)
     REAL*8, INTENT(OUT):: rate
+    REAL*8             :: logte, logne  
     INTEGER            :: i,j
     ! In EIRENE the density is scaled to 1.e14
     rate = 0.
+    logte = LOG(te)
+    logne = LOG(ne)
     DO j=1,SIZE(alpha,2)
        DO i = 1,SIZE(alpha,1)
-          rate = rate + alpha(i,j)*LOG(ne)**(j-1)*LOG(te)**(i-1)
+          rate = rate + alpha(i,j)*logne**(j-1)*logte**(i-1)
        END DO
     END DO
   ENDSUBROUTINE compute_2D_logeirene_rate
@@ -1629,12 +1632,15 @@ CONTAINS
     ! this routines calculate derivative dlog (eirene_rate)/dlog(te) for given te, ne in log log space
     REAL*8, INTENT(IN) :: te,ne,alpha(:,:)
     REAL*8, INTENT(OUT):: rate
+    REAL*8             :: logte, logne 
     INTEGER            :: i,j
     ! In EIRENE the density is scaled to 1.e14
     rate = 0.
+    logte = LOG(te)
+    logne = LOG(ne)
     DO j=1,SIZE(alpha,2)
        DO i = 2,SIZE(alpha,1)
-          rate = rate + alpha(i,j)*(i-1)*LOG(ne)**(j-1)*LOG(te)**(i-2)
+          rate = rate + alpha(i,j)*(i-1)*logne**(j-1)*logte**(i-2)
        END DO
     END DO
   ENDSUBROUTINE compute_dlogeirene_2D_dlogte_rate
@@ -1643,12 +1649,15 @@ CONTAINS
     ! this routine calculate derivative dlog (eirene_rate)/dlog(ne) for given te, ne in log log space
     REAL*8, INTENT(IN) :: te,ne,alpha(:,:)
     REAL*8, INTENT(OUT):: rate
+    REAL*8             :: logte, logne
     INTEGER            :: i,j
     ! In EIRENE the density is scaled to 1.e14
     rate = 0.
+    logte = LOG(te)
+    logne = LOG(ne)
     DO j=2,SIZE(alpha,2)
        DO i = 1,SIZE(alpha,1)
-          rate = rate + alpha(i,j)*(j-1)*LOG(ne)**(j-2)*LOG(te)**(i-1)
+          rate = rate + alpha(i,j)*(j-1)*logne**(j-2)*logte**(i-1)
        END DO
     END DO
   ENDSUBROUTINE compute_dlogeirene_2D_dlogne_rate
@@ -1879,6 +1888,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmavcx,U1,U4,T0,E0
     REAL*8              :: p1,p2,p3,p4,p5
+    REAL*8              :: logE0
     REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U4 = U(4)
@@ -1895,10 +1905,11 @@ CONTAINS
     p4 = 0.4518
     p5 = -32.59
     E0 = T0*2./(3.*phys%Mref)*U4/U1
-
+    
     !Threshold on Te >= 0.2 eV
     IF (E0 .LE. 0.05) E0 = 0.05
-    sigmavcx = EXP(p1*LOG(E0)**4 + p2*LOG(E0)**3 + p3*LOG(E0)**2 + p4*LOG(E0) + p5)
+    logE0 = LOG(E0)
+    sigmavcx = EXP(p1*logE0**4 + p2*logE0**3 + p3*logE0**2 + p4*logE0 + p5)
   ENDSUBROUTINE compute_sigmavcx
 
 
