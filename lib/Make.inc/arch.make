@@ -243,6 +243,9 @@ ifeq ($(PASTIX),$(LIB_YES))
  FCFLAGS += -I$(MHDG_SCOTCH_DIR)/include
 endif
 
+# MKL
+#FCFLAGS += -I$(MHDG_MKL_DIR)/build/mkl/latest/include
+
 # PSBLAS
 ifeq ($(PSBLAS),$(LIB_YES))
  FCFLAGS += -I$(MHDG_PSBLAS_DIR)/include/
@@ -294,6 +297,8 @@ endif
 #Local
 LIB += -L/usr/lib/x86_64-linux-gnu -lblas -llapack -llapacke
 
+# MKL
+#LIB += -L$(MHDG_MKL_DIR)/build/mkl/latest/lib/intel64 -Wl,-rpath,$(MHDG_MKL_DIR)/build/mkl/latest/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
 
 # PSBLAS/MLD2P4
 ifeq  ($(PSBLMG),$(LIB_YES)) 
