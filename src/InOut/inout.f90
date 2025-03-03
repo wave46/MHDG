@@ -694,71 +694,70 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
        CALL HDF5_group_close(group_id1)
 
-       ! Save mesh related structures
-       IF(switch%saveMeshSol) THEN
-          CALL HDF5_group_create('mesh', file_id, group_id1, ierr)
-          CALL HDF5_integer_saving(group_id1,Mesh%Ndim,'Ndim')
-          CALL HDF5_integer_saving(group_id1,Mesh%Nno_glob,'Nnodes')
-          CALL HDF5_integer_saving(group_id1,Mesh%Nel_glob,'Nelems')
-          CALL HDF5_integer_saving(group_id1,Mesh%Nfa_glob,'Nfaces')
-          CALL HDF5_integer_saving(group_id1,Mesh%Nextfaces_glob,'Nextfaces')
-          CALL HDF5_integer_saving(group_id1,Mesh%Nintfaces_glob,'Nintfaces')
-          CALL HDF5_integer_saving(group_id1,Mesh%Ndir_glob,'Ndir')
-          CALL HDF5_integer_saving(group_id1,Mesh%Nnodesperelem,'Nnodesperelem')
-          CALL HDF5_integer_saving(group_id1,Mesh%Nnodesperface,'Nnodesperface')
-          CALL HDF5_integer_saving(group_id1,Mesh%elemType,'elemType')
-          ! these are already reduced in preprocess or load mesh
-          CALL HDF5_real_saving(group_id1, Mesh%puff_area, 'puff_area')
-          CALL HDF5_real_saving(group_id1, Mesh%core_area, 'core_area')
-          CALL HDF5_real_saving(group_id1, Mesh%xmax, 'xmax')
-          CALL HDF5_real_saving(group_id1, Mesh%xmin, 'xmin')
-          CALL HDF5_real_saving(group_id1, Mesh%ymax, 'ymax')
-          CALL HDF5_real_saving(group_id1, Mesh%ymin, 'ymin')
-          CALL HDF5_integer_saving(group_id1,Mesh%Nfa_glob,'ukf')
+       
+      CALL HDF5_group_create('mesh', file_id, group_id1, ierr)
+      CALL HDF5_integer_saving(group_id1,Mesh%Ndim,'Ndim')
+      CALL HDF5_integer_saving(group_id1,Mesh%Nno_glob,'Nnodes')
+      CALL HDF5_integer_saving(group_id1,Mesh%Nel_glob,'Nelems')
+      CALL HDF5_integer_saving(group_id1,Mesh%Nfa_glob,'Nfaces')
+      CALL HDF5_integer_saving(group_id1,Mesh%Nextfaces_glob,'Nextfaces')
+      CALL HDF5_integer_saving(group_id1,Mesh%Nintfaces_glob,'Nintfaces')
+      CALL HDF5_integer_saving(group_id1,Mesh%Ndir_glob,'Ndir')
+      CALL HDF5_integer_saving(group_id1,Mesh%Nnodesperelem,'Nnodesperelem')
+      CALL HDF5_integer_saving(group_id1,Mesh%Nnodesperface,'Nnodesperface')
+      CALL HDF5_integer_saving(group_id1,Mesh%elemType,'elemType')
+      ! these are already reduced in preprocess or load mesh
+      CALL HDF5_real_saving(group_id1, Mesh%puff_area, 'puff_area')
+      CALL HDF5_real_saving(group_id1, Mesh%core_area, 'core_area')
+      CALL HDF5_real_saving(group_id1, Mesh%xmax, 'xmax')
+      CALL HDF5_real_saving(group_id1, Mesh%xmin, 'xmin')
+      CALL HDF5_real_saving(group_id1, Mesh%ymax, 'ymax')
+      CALL HDF5_real_saving(group_id1, Mesh%ymin, 'ymin')
+      CALL HDF5_integer_saving(group_id1,Mesh%Nfa_glob,'ukf')
 
-          CALL HDF5_array2D_saving_int(group_id1,T_glob, SIZE(T_glob, 1), SIZE(T_glob, 2), 'T')
-          CALL HDF5_array2D_saving_int(group_id1,Tb_glob, SIZE(Tb_glob, 1), SIZE(Tb_glob, 2), 'Tb')
-          CALL HDF5_array2D_saving(group_id1,X_glob*phys%lscale, SIZE(X_glob, 1), SIZE(X_glob, 2), 'X')
+      CALL HDF5_array2D_saving_int(group_id1,T_glob, SIZE(T_glob, 1), SIZE(T_glob, 2), 'T')
+      CALL HDF5_array2D_saving_int(group_id1,Tb_glob, SIZE(Tb_glob, 1), SIZE(Tb_glob, 2), 'Tb')
+      CALL HDF5_array2D_saving(group_id1,X_glob*phys%lscale, SIZE(X_glob, 1), SIZE(X_glob, 2), 'X')
 
-          !CALL HDF5_array1D_saving_int(file_id,Mesh%boundaryFlag, SIZE(Mesh%boundaryFlag), 'boundaryFlag')
-          CALL HDF5_array2D_saving_int(group_id1,F_glob, SIZE(F_glob,1),SIZE(F_glob,2), 'F')
-          CALL HDF5_array2D_saving_int(group_id1,N_glob, SIZE(N_glob,1),SIZE(N_glob,2), 'N')
+      !CALL HDF5_array1D_saving_int(file_id,Mesh%boundaryFlag, SIZE(Mesh%boundaryFlag), 'boundaryFlag')
+      CALL HDF5_array2D_saving_int(group_id1,F_glob, SIZE(F_glob,1),SIZE(F_glob,2), 'F')
+      CALL HDF5_array2D_saving_int(group_id1,N_glob, SIZE(N_glob,1),SIZE(N_glob,2), 'N')
 
-          CALL HDF5_array1D_saving(group_id1,elemSize_glob,SIZE(elemSize_glob), 'elemSize')
+      CALL HDF5_array1D_saving(group_id1,elemSize_glob,SIZE(elemSize_glob), 'elemSize')
 
-          ! Save boundary structure
-          CALL HDF5_array2D_saving_int(group_id1, extfaces_glob, SIZE(extfaces_glob, 1), SIZE(extfaces_glob, 2), 'extfaces')
-          CALL HDF5_array2D_saving_int(group_id1, intfaces_glob, SIZE(intfaces_glob,1),SIZE(intfaces_glob,2), 'intfaces')
-          CALL HDF5_array1D_saving_int(group_id1, boundaryFlag_glob, SIZE(boundaryFlag_glob, 1), 'boundaryFlag')
+      ! Save boundary structure
+      CALL HDF5_array2D_saving_int(group_id1, extfaces_glob, SIZE(extfaces_glob, 1), SIZE(extfaces_glob, 2), 'extfaces')
+      CALL HDF5_array2D_saving_int(group_id1, intfaces_glob, SIZE(intfaces_glob,1),SIZE(intfaces_glob,2), 'intfaces')
+      CALL HDF5_array1D_saving_int(group_id1, boundaryFlag_glob, SIZE(boundaryFlag_glob, 1), 'boundaryFlag')
 
-          IF(ALLOCATED(Mesh%periodic_faces)) THEN
-             CALL HDF5_array1D_saving_int(group_id1,periodic_faces_glob, SIZE(periodic_faces_glob), 'periodic_faces')
-          ENDIF
-          IF(ASSOCIATED(Mesh%Tlin)) THEN
-             CALL HDF5_array2D_saving_int(group_id1,Tlin_glob, SIZE(Tlin_glob, 1), SIZE(Tlin_glob, 2), 'Tlin')
-          ENDIF
-          IF(ALLOCATED(Mesh%flag_elems_sc)) THEN
-            CALL HDF5_array1D_saving_int(group_id1,flag_elems_sc_glob,SIZE(flag_elems_sc_glob), 'flag_elems_sc')
-          ENDIF
-          IF(ALLOCATED(Mesh%scdiff_nodes)) THEN
-            CALL HDF5_array2D_saving(group_id1,scdiff_nodes_glob,SIZE(scdiff_nodes_glob,1),SIZE(scdiff_nodes_glob,2), 'scdiff_nodes')
-          ENDIF
+      IF(ALLOCATED(Mesh%periodic_faces)) THEN
+         CALL HDF5_array1D_saving_int(group_id1,periodic_faces_glob, SIZE(periodic_faces_glob), 'periodic_faces')
+      ENDIF
+      IF(ASSOCIATED(Mesh%Tlin)) THEN
+         CALL HDF5_array2D_saving_int(group_id1,Tlin_glob, SIZE(Tlin_glob, 1), SIZE(Tlin_glob, 2), 'Tlin')
+      ENDIF
+      IF(ALLOCATED(Mesh%flag_elems_sc)) THEN
+        CALL HDF5_array1D_saving_int(group_id1,flag_elems_sc_glob,SIZE(flag_elems_sc_glob), 'flag_elems_sc')
+      ENDIF
+      IF(ALLOCATED(Mesh%scdiff_nodes)) THEN
+        CALL HDF5_array2D_saving(group_id1,scdiff_nodes_glob,SIZE(scdiff_nodes_glob,1),SIZE(scdiff_nodes_glob,2), 'scdiff_nodes')
+      ENDIF
 
 #ifdef TOR3D
-          CALL HDF5_integer_saving(group_id1,Mesh%Nnodes_toroidal,'Nnodes_toroidal')
-          CALL HDF5_array1D_saving(group_id1,Mesh%toroidal,SIZE(Mesh%toroidal), 'toroidal')
+      CALL HDF5_integer_saving(group_id1,Mesh%Nnodes_toroidal,'Nnodes_toroidal')
+      CALL HDF5_array1D_saving(group_id1,Mesh%toroidal,SIZE(Mesh%toroidal), 'toroidal')
 #endif
-          CALL HDF5_group_close(group_id1, ierr)
+      CALL HDF5_group_close(group_id1, ierr)
 
-          IF(ASSOCIATED(Mesh%T_gmsh)) THEN
-             CALL HDF5_group_create('gmsh_mesh', file_id, group_id1, ierr)
-             CALL HDF5_array2D_saving_int(group_id1,Mesh%T_gmsh, SIZE(Mesh%T_gmsh, 1), SIZE(Mesh%T_gmsh, 2), 'T_gmsh')
-             CALL HDF5_array2D_saving_int(group_id1,Mesh%Tb_gmsh, SIZE(Mesh%Tb_gmsh, 1), SIZE(Mesh%Tb_gmsh, 2), 'Tb_gmsh')
-             CALL HDF5_array2D_saving(group_id1,Mesh%X_P1, SIZE(Mesh%X_P1, 1), SIZE(Mesh%X_P1, 2), 'X_P1')
-             CALL HDF5_integer_saving(group_id1,SIZE(Mesh%X_P1,1),'Nnodes_P1')
-             CALL HDF5_group_close(group_id1, ierr)
-          ENDIF
-       ENDIF
+      IF(ASSOCIATED(Mesh%T_gmsh)) THEN
+         CALL HDF5_group_create('gmsh_mesh', file_id, group_id1, ierr)
+         CALL HDF5_array2D_saving_int(group_id1,Mesh%T_gmsh, SIZE(Mesh%T_gmsh, 1), SIZE(Mesh%T_gmsh, 2), 'T_gmsh')
+         CALL HDF5_array2D_saving_int(group_id1,Mesh%Tb_gmsh, SIZE(Mesh%Tb_gmsh, 1), SIZE(Mesh%Tb_gmsh, 2), 'Tb_gmsh')
+         CALL HDF5_array2D_saving(group_id1,Mesh%X_P1, SIZE(Mesh%X_P1, 1), SIZE(Mesh%X_P1, 2), 'X_P1')
+         CALL HDF5_integer_saving(group_id1,SIZE(Mesh%X_P1,1),'Nnodes_P1')
+         CALL HDF5_group_close(group_id1, ierr)
+      ENDIF
+       
 
        CALL HDF5_group_create('magnetic', file_id, group_id1, ierr)
        IF (switch%rmp) THEN
