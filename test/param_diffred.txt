@@ -216,6 +216,7 @@
     bcflags(10)         = 50            ! Upper Limiter
     ! ****** Boundary threshold for Bohm
     bohmth              = 0.00           ! threshold for imposing the bohm boundary condition !for circ put 0.1 0.02
+    bohm_energy_thresh  = 2e-4           ! threshold on adimensional conservative ion energy for imposing Bohm, 2e-4 for density of 1e7 and no mach number corresponds to ~0.1 eV
     ! ****** Boundary coefficients for the Bohm boundary condition of the temperature equations:
     Gmbohm              = 2.5           ! gamma for Bohm boundary condition for energy equation (usually 7) and for ions energy equation (usually 2.5)
     Gmbohme             = 4.5           ! gamma for Bohm boundary condition for electron energy equation (usually 4.5)
