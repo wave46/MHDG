@@ -318,8 +318,12 @@ SUBROUTINE READ_input()
   ELSE
      msg = 'Time advancing simulation'
   END IF
-
+  
   ! Some checking of the inputs
+  IF (.NOT. (switch%read_gmsh .OR. switch%readMeshFromSol)) THEN
+       WRITE (6, *) "Error: you must choose between reading the mesh from a Gmsh file or from a solution file"
+       STOP
+  END IF
   IF (time%tis .GT. 6) THEN
      WRITE (6, *) "Error: wrong time integration scheme in parameters: tis=", time%tis
      STOP
