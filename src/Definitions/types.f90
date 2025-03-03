@@ -357,7 +357,6 @@ MODULE types
      LOGICAL :: set_2d_order ! if read_gmsh = .true., set order
      INTEGER :: order_2d    ! if read_gmsh = .true., set order = .true., what 2d polynomial order?
      LOGICAL :: gmsh2h5
-     LOGICAL :: saveMeshSol
      LOGICAL :: time_init ! true if it is a time initialization simulation. The time counter "it" does not increment  (i.e. when the analitical initialisation is not good enough). Used for moving equilibrium (case 59)
      INTEGER :: init     ! 1-init. analy. solution at nodes; 2-L2 projection
      ! Set to TRUE for a steady state computation
