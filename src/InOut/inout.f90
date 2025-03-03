@@ -787,11 +787,12 @@ CONTAINS
        CALL HDF5_group_close(group_id1, ierr)
 
     END IF
-
-    DEALLOCATE(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
-    DEALLOCATE(u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob)
-    NULLIFY(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
-    NULLIFY(u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob)
+    IF (ASSOCIATED(T_glob)) THEN
+      DEALLOCATE(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
+      DEALLOCATE(u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob)
+      NULLIFY(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
+      NULLIFY(u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob)
+    ENDIF
 
     IF(ASSOCIATED(Jtor_glob)) THEN
       DEALLOCATE(Jtor_glob)
