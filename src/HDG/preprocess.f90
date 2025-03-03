@@ -8,22 +8,20 @@
 MODULE preprocess
   USE types
   USE globals
-  USE printutils
   USE MPI_OMP
 
   IMPLICIT NONE
 CONTAINS
 
   SUBROUTINE mesh_preprocess_serial(ierr)
+    USE printUtils, only: displayMatrixInt, displayMatrixLog
 
     INTEGER, INTENT(OUT)            :: ierr
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
-          IF (MPIvar%glob_id .EQ. 0) THEN
-             WRITE (6, *) '*************************************************'
-             WRITE (6, *) '*                MESH PREPROCESS                *'
-             WRITE (6, *) '*************************************************'
-          ENDIF
+          WRITE (6, *) '*************************************************'
+          WRITE (6, *) '*                MESH PREPROCESS                *'
+          WRITE (6, *) '*************************************************'
        END IF
     ENDIF
     !**************************************
@@ -133,23 +131,23 @@ CONTAINS
 #endif
     ! It does not work in parallel (TODO)
     IF (MPIvar%glob_id .EQ. 0) THEN
-      IF (utils%printint > 0) THEN
-         WRITE (6, *) "Puff area:  ", Mesh%puff_area*phys%lscale*phys%lscale, " m^2"
-      END IF
-   ENDIF
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      IF (utils%printint > 0) THEN
-         WRITE (6, *) "Computing pump area"
-      END IF
-   ENDIF
+       IF (utils%printint > 0) THEN
+          WRITE (6, *) "Puff area:  ", Mesh%puff_area*phys%lscale*phys%lscale, " m^2"
+       END IF
+    ENDIF
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       IF (utils%printint > 0) THEN
+          WRITE (6, *) "Computing pump area"
+       END IF
+    ENDIF
 #ifndef PARALL
-   CALL computePumpArea()
+    CALL computePumpArea()
 #endif
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      IF (utils%printint > 0) THEN
-         WRITE (6, *) "Pump area:  ", Mesh%pump_area*phys%lscale*phys%lscale, " m^2"
-      END IF
-   ENDIF
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       IF (utils%printint > 0) THEN
+          WRITE (6, *) "Pump area:  ", Mesh%pump_area*phys%lscale*phys%lscale, " m^2"
+       END IF
+    ENDIF
 #ifndef PARALL
     CALL computeCoreArea()
 #endif
@@ -159,9 +157,10 @@ CONTAINS
           WRITE (6, *) "Done! "
        END IF
     ENDIF
-  END SUBROUTINE mesh_preprocess_serial
+  ENDSUBROUTINE mesh_preprocess_serial
 
   SUBROUTINE mesh_preprocess(ierr)
+    USE printUtils, only: displayMatrixInt, displayMatrixLog
 
     INTEGER, INTENT(OUT)            :: ierr
 
@@ -313,36 +312,70 @@ CONTAINS
           WRITE (6, *) "Done! "
        END IF
     ENDIF
-  END SUBROUTINE mesh_preprocess
+  ENDSUBROUTINE mesh_preprocess
 
   !********************
   ! Nodal Connectivity
   !********************
-  SUBROUTINE createNodalConnectivity()
+  SUBROUTINE createNodalConnectivity(T, Nelems, Nnodes, Nnodesperelem, N)
+    INTEGER, OPTIONAL, INTENT(IN)           :: T(:,:)
+    INTEGER, OPTIONAL, INTENT(IN)           :: Nelems, Nnodes, Nnodesperelem
+    INTEGER, OPTIONAL, POINTER, INTENT(OUT) :: N(:,:)
+    INTEGER                                 :: nc, k, iel
+    INTEGER, ALLOCATABLE                    :: nn(:), Te(:), nn_Te(:)
 
-    INTEGER :: nc, k, iel, nn_Te(1:Mesh%Nnodesperelem)
-    INTEGER :: nn(1:Mesh%Nnodes), Te(1:Mesh%Nnodesperelem)
-    ! Find the number of colums of the N matrix
-    nn = 1
-    DO iel = 1, Mesh%Nelems
-       Te = Mesh%T(iel, :)
-       nn(Te) = nn(Te) + 1
-    END DO
-    nc = MAXVAL(nn)
+    IF(.NOT. PRESENT(N)) THEN
+      ALLOCATE(nn(Mesh%Nnodes))
+      ALLOCATE(nn_Te(Mesh%Nnodesperelem))
+      ALLOCATE(Te(Mesh%Nnodesperelem))
+      ! Find the number of colums of the N matrix
+      nn = 1
+      DO iel = 1, Mesh%Nelems
+         Te = Mesh%T(iel, :)
+         nn(Te) = nn(Te) + 1
+      END DO
+      nc = MAXVAL(nn)
 
-    ALLOCATE (Mesh%N(Mesh%Nnodes, nc))
-    Mesh%N = 0
-    nn = 1
-    nn_Te = 0
-    DO iel = 1, Mesh%Nelems
-       Te = Mesh%T(iel, :)
-       nn_Te = nn(Te)
-       DO k = 1, Mesh%Nnodesperelem
-          Mesh%N(Te(k), nn_Te(k)) = iel
-       END DO
-       nn(Te) = nn(Te) + 1
-    END DO
-  END SUBROUTINE createNodalConnectivity
+      ALLOCATE (Mesh%N(Mesh%Nnodes, nc))
+      Mesh%N = 0
+      nn = 1
+      nn_Te = 0
+      DO iel = 1, Mesh%Nelems
+         Te = Mesh%T(iel, :)
+         nn_Te = nn(Te)
+         DO k = 1, Mesh%Nnodesperelem
+            Mesh%N(Te(k), nn_Te(k)) = iel
+         END DO
+         nn(Te) = nn(Te) + 1
+      END DO
+    ELSE
+      ! Find the number of colums of the N matrix
+      ALLOCATE(nn(Nnodes))
+      ALLOCATE(nn_Te(Nnodesperelem))
+      ALLOCATE(Te(Nnodesperelem))
+
+      nn = 1
+      DO iel = 1, Nelems
+         Te = T(iel, :)
+         nn(Te) = nn(Te) + 1
+      END DO
+      nc = MAXVAL(nn)
+
+      ALLOCATE (N(Nnodes, nc))
+      N = 0
+      nn = 1
+      nn_Te = 0
+      DO iel = 1, Nelems
+         Te = T(iel, :)
+         nn_Te = nn(Te)
+         DO k = 1, Nnodesperelem
+            N(Te(k), nn_Te(k)) = iel
+         END DO
+         nn(Te) = nn(Te) + 1
+      END DO
+    ENDIF
+    DEALLOCATE(nn, Te, nn_Te)
+  ENDSUBROUTINE createNodalConnectivity
 
   !********************************************
   ! Create extFaces and intFaces: the exterior
@@ -377,6 +410,9 @@ CONTAINS
     ii = 0
     markE = .FALSE.
     markF = .FALSE.
+    Mesh%extFaces = 0
+    temp_intFaces = 0
+
     DO iel = 1, Mesh%Nelems
        DO ifa = 1, refElPol%Nfaces
           IF (.NOT. markE(iel, ifa)) THEN
@@ -407,6 +443,7 @@ CONTAINS
 
     Mesh%Nintfaces = ii
     ALLOCATE (Mesh%intFaces(ii, 5))
+    Mesh%intFaces = 0
     Mesh%intFaces = temp_intFaces(1:ii, :)
     Mesh%Nfaces = Mesh%Nextfaces + Mesh%Nintfaces
     DEALLOCATE (markE, markF, temp_intFaces)
@@ -456,7 +493,7 @@ CONTAINS
          END DO
          IF (jel .NE. 0) EXIT ! I found the element
       END DO
-    END SUBROUTINE FindElem
+    ENDSUBROUTINE FindElem
 
     !*************************************************
     ! Find face: find the local face number in the
@@ -511,7 +548,7 @@ CONTAINS
       END IF
       node1 = i
 
-    END SUBROUTINE FindFace
+    ENDSUBROUTINE FindFace
 
     !*************************************************
     ! Find where to place the current exterior face in
@@ -552,11 +589,11 @@ CONTAINS
          RETURN
       END IF
       ierr = 1
-    END SUBROUTINE FindCorrespondingFace
+    ENDSUBROUTINE FindCorrespondingFace
 
-  END SUBROUTINE GetFaces
+  ENDSUBROUTINE GetFaces
 
-  SUBROUTINE GetFaces_mod(T, int_faces, ext_faces)
+  PURE SUBROUTINE GetFaces_mod(T, int_faces, ext_faces)
 
     INTEGER, INTENT(IN)                          :: T(:,:)
     INTEGER, ALLOCATABLE, INTENT(OUT)            :: int_faces(:,:)
@@ -588,6 +625,10 @@ CONTAINS
     jj = 0
     markE = .FALSE.
     markF = .FALSE.
+    temp_intFaces = 0
+    temp_extFaces = 0
+
+
     DO iel = 1, SIZE(T,1)
        DO ifa = 1, refElPol%Nfaces
           IF (.NOT. markE(iel, ifa)) THEN
@@ -632,7 +673,7 @@ CONTAINS
     ! Find element: find the neighboring element to the
     ! element i connected by the nodes defined in nf
     !*************************************************
-    SUBROUTINE FindElem(T, nf, iel, jel)
+    PURE SUBROUTINE FindElem(T, nf, iel, jel)
       INTEGER, INTENT(IN) :: nf(:)
       INTEGER, INTENT(IN) :: T(:,:)
       INTEGER, INTENT(IN) :: iel
@@ -648,6 +689,8 @@ CONTAINS
 
       ALLOCATE(T_temp(counter, SIZE(T,2)))
       ALLOCATE(indices(counter))
+      T_temp = 0
+      indices = 0
 
       counter = 1
       DO i = 1, SIZE(T,1)
@@ -672,13 +715,13 @@ CONTAINS
 
       DEALLOCATE(T_temp)
       DEALLOCATE(indices)
-    END SUBROUTINE FindElem
+    ENDSUBROUTINE FindElem
 
     !*************************************************
     ! Find face: find the local face number in the
     ! element and the matching node for the first node
     !*************************************************
-    SUBROUTINE FindFace(nfi, nodesE, Efaces, jfa, node1)
+    PURE SUBROUTINE FindFace(nfi, nodesE, Efaces, jfa, node1)
       INTEGER, INTENT(IN) :: nfi(:)
       INTEGER, INTENT(IN) :: nodesE(:)
       INTEGER, INTENT(IN) :: Efaces(:, :)
@@ -713,15 +756,10 @@ CONTAINS
          ENDIF
       ENDDO
 
-      IF ((jfa .EQ. -1) .OR. (node1 .EQ. -1)) THEN
-         WRITE(*,*) "Corresponding face or node to found. STOP."
-         STOP
-      ENDIF
-
       DEALLOCATE(check)
 
-    END SUBROUTINE FindFace
-  END SUBROUTINE GetFaces_mod
+    ENDSUBROUTINE FindFace
+  ENDSUBROUTINE GetFaces_mod
 
   !********************************************
   ! Identify the number of boundaries and place
@@ -729,8 +767,8 @@ CONTAINS
   ! list
   !********************************************
   SUBROUTINE Bc_preprocess()
-    INTEGER :: fl, nb, ndir, ifa, bt, idir
-    INTEGER :: df(max_num_diff_bc)
+    INTEGER              :: fl, nb, ndir, ifa, bt, idir
+    INTEGER              :: df(max_num_diff_bc)
     INTEGER, ALLOCATABLE :: aux_Tb(:, :), aux_extFaces(:, :), aux_boundaryflag(:)
 
     nb = 0
@@ -876,9 +914,9 @@ CONTAINS
          ENDIF
       END DO
 
-    END SUBROUTINE periodic_faces_preprocess
+    ENDSUBROUTINE periodic_faces_preprocess
 
-  END SUBROUTINE Bc_preprocess
+  ENDSUBROUTINE Bc_preprocess
 
   SUBROUTINE Bc_preprocess_serial()
     INTEGER :: fl, nb, ndir, ifa, bt, idir
@@ -1004,7 +1042,7 @@ CONTAINS
                xen=Mesh%X(Mesh%T(ieln,nen),1)
                yin=Mesh%X(Mesh%T(ieln,nin),2)
                yen=Mesh%X(Mesh%T(ieln,nen),2)
-               IF (((ABS(xi-xe) .GT. 1.e-12) .AND. (ABS(xi-xen) .LT. 1e-12) .AND. (ABS(xe-xin) .LT. 1.e-12)) .OR. ((ABS(yi-ye) .GT. 1e-12) .AND. (ABS(yi-yen) .LT. 1.e-12) .AND. (ABS(ye-yin) .LT. 1e-12))) THEN
+               IF (((ABS(xi-xe) .GT. 1.e-12) .AND. (ABS(xi-xen) .LT. 1.e-12) .AND. (ABS(xe-xin) .LT. 1.e-12)) .OR. ((ABS(yi-ye) .GT. 1.e-12) .AND. (ABS(yi-yen) .LT. 1.e-12) .AND. (ABS(ye-yin) .LT. 1.e-12))) THEN
                   Mesh%periodic_faces(i)=j
                   EXIT
                ENDIF
@@ -1012,12 +1050,11 @@ CONTAINS
          ENDIF
       END DO
 
-    END SUBROUTINE periodic_faces_preprocess
+    ENDSUBROUTINE periodic_faces_preprocess
 
-  END SUBROUTINE Bc_preprocess_serial
+  ENDSUBROUTINE Bc_preprocess_serial
 
   SUBROUTINE CreateFaceConnectivity_serial
-    USE MPI_OMP
     INTEGER :: ifa, igh
     INTEGER :: infoFace(5), infoFace_ex(2)
     LOGICAL :: isdir
@@ -1031,6 +1068,7 @@ CONTAINS
     Mesh%Fdir = .FALSE.
     Mesh%flipFace = .FALSE.
     isdir = .FALSE.
+
     DO ifa = 1, Mesh%Nintfaces
        infoFace = Mesh%intFaces(ifa, :)
        Mesh%F(infoFace(1), infoFace(2)) = ifa
@@ -1052,6 +1090,7 @@ CONTAINS
        Mesh%F(infoFace_ex(1), infoFace_ex(2)) = ifa + Mesh%Nintfaces
        Mesh%Fdir(infoFace_ex(1), infoFace_ex(2)) = isdir
     END DO
+
     ! Modify flipface for periodic faces
     DO ifa = 1, Mesh%Nextfaces
        IF (Mesh%periodic_faces(ifa).NE.0) THEN
@@ -1067,11 +1106,10 @@ CONTAINS
        ENDIF
     END DO
 
-  END SUBROUTINE CreateFaceConnectivity_serial
+  ENDSUBROUTINE CreateFaceConnectivity_serial
 
 
   SUBROUTINE CreateFaceConnectivity()
-    USE MPI_OMP
     INTEGER :: ifa, igh
     INTEGER :: infoFace(5), infoFace_ex(2)
     LOGICAL :: isdir
@@ -1085,6 +1123,7 @@ CONTAINS
     Mesh%Fdir = .FALSE.
     Mesh%flipFace = .FALSE.
     isdir = .FALSE.
+
     DO ifa = 1, Mesh%Nintfaces
        infoFace = Mesh%intFaces(ifa, :)
        Mesh%F(infoFace(1), infoFace(2)) = ifa
@@ -1134,63 +1173,95 @@ CONTAINS
        ENDIF
     END DO
 
-  END SUBROUTINE CreateFaceConnectivity
+  ENDSUBROUTINE CreateFaceConnectivity
 
   !********************************************
   ! Compute the element size in the
   ! mesh (the length of the edge 2D-3D is
   ! considered)
   !********************************************
-  SUBROUTINE computeElementSize()
-    INTEGER                         :: i
-    REAL*8                          :: h1, h2, h3, h4
-    REAL*8, DIMENSION(Mesh%ndim)     :: p1, p2, p3, p4
+  SUBROUTINE computeElementSize(T, X, Tlin, elemSize)
+    INTEGER, OPTIONAL, POINTER, INTENT(IN)  :: T(:,:), Tlin(:,:)
+    REAL*8, OPTIONAL, POINTER, INTENT(IN)   :: X(:,:)
+    REAL*8, OPTIONAL, POINTER, INTENT(OUT)  :: elemSize(:)
+    INTEGER                                 :: i
+    REAL*8                                  :: h1, h2, h3, h4
+    REAL*8, DIMENSION(Mesh%ndim)            :: p1, p2, p3, p4
+    INTEGER, POINTER                        :: T_p(:,:), Tlin_p(:,:)
+    REAL*8, POINTER                         :: X_p(:,:), elemSize_p(:)
+    INTEGER                                 :: Nelems
 
-    ALLOCATE (Mesh%elemSize(Mesh%Nelems))
-    Mesh%elemSize = 0.
+    NULLIFY(T_p, Tlin_p, X_p, elemSize_p)
+
+    IF(PRESENT(elemSize)) THEN
+      T_p => T
+      X_p => X
+      Tlin_p => Tlin
+      elemSize_p => elemSize
+      Nelems = SIZE(T,1)
+    ELSE
+      T_p => Mesh%T
+      X_p => Mesh%X
+      Tlin_p => Mesh%Tlin
+      elemSize_p => Mesh%elemSize
+      Nelems = Mesh%Nelems
+    ENDIF
+
+    ALLOCATE (elemSize_p(Nelems))
+    elemSize_p = 0.
 
     ! Loop in elements
     IF (refElPol%elemType .EQ. 0) THEN
-       !$OMP PARALLEL PRIVATE(i,p1,p2,p3,h1,h2,h3)
-       !$OMP DO
-       DO i = 1, Mesh%Nelems
-          p1 = Mesh%X(Mesh%Tlin(i, 1), :)
-          p2 = Mesh%X(Mesh%Tlin(i, 2), :)
-          p3 = Mesh%X(Mesh%Tlin(i, 3), :)
+      !!$OMP PARALLEL PRIVATE(i,p1,p2,p3,h1,h2,h3) SHARED(Mesh)
+      !!$OMP DO
+       DO i = 1, Nelems
+          p1 = X_p(Tlin_p(i, 1), :)
+          p2 = X_p(Tlin_p(i, 2), :)
+          p3 = X_p(Tlin_p(i, 3), :)
           h1 = NORM2(p1 - p2)
           h2 = NORM2(p1 - p3)
           h3 = NORM2(p3 - p2)
-          Mesh%elemSize(i) = MIN(h1, h2, h3)
+          elemSize_p(i) = MIN(h1, h2, h3)
        END DO
-       !$OMP END DO
-       !$OMP END PARALLEL
+      !!$OMP END DO
+      !!$OMP END PARALLEL
     ELSEIF (refElPol%elemType .EQ. 1) THEN
-       !$OMP PARALLEL PRIVATE(i,p1,p2,p3,p4,h1,h2,h3,h4)
-       !$OMP DO
-       DO i = 1, Mesh%Nelems
-          p1 = Mesh%X(Mesh%Tlin(i, 1), :)
-          p2 = Mesh%X(Mesh%Tlin(i, 2), :)
-          p3 = Mesh%X(Mesh%Tlin(i, 3), :)
-          p4 = Mesh%X(Mesh%Tlin(i, 4), :)
+      !!$OMP PARALLEL PRIVATE(i,p1,p2,p3,p4,h1,h2,h3,h4) SHARED(Mesh)
+      !!$OMP DO
+       DO i = 1, Nelems
+          p1 = X_p(Tlin_p(i, 1), :)
+          p2 = X_p(Tlin_p(i, 2), :)
+          p3 = X_p(Tlin_p(i, 3), :)
+          p4 = X_p(Tlin_p(i, 4), :)
           h1 = NORM2(p1 - p2)
           h2 = NORM2(p1 - p3)
           h3 = NORM2(p3 - p2)
           h4 = NORM2(p4 - p3)
-          Mesh%elemSize(i) = MIN(h1, h2, h3, h4)
+          elemSize_p(i) = MIN(h1, h2, h3, h4)
        END DO
-       !$OMP END DO
-       !$OMP END PARALLEL
+      !!$OMP END DO
+      !!$OMP END PARALLEL
     END IF
 
-  END SUBROUTINE computeElementSize
+    IF(PRESENT(elemSize)) THEN
+      elemSize => elemSize_p
+    ELSE
+      Mesh%elemSize => elemSize_p
+    ENDIF
+
+    NULLIFY(T_p, X_p, Tlin_p, elemSize_p)
+
+  ENDSUBROUTINE computeElementSize
 
 
   SUBROUTINE computePuffArea()
     REAL*8   :: Xf(refElPol%Nfacenodes,2),xyg(refElPol%NGauss1D,2),xyg_d(refElPol%NGauss1D,2),dline
-    INTEGER  :: i,el,fa,fl,g
+    INTEGER  :: i,el,fa,fl,g, counterfl, counternogho, countergo
     REAL*8   :: xyDerNorm_g
 
-
+    counternogho = 0
+    counterfl = 0
+    countergo = 0
     Mesh%puff_area = 0.
 
     DO i = 1, Mesh%Nextfaces
@@ -1198,7 +1269,11 @@ CONTAINS
        fl = Mesh%boundaryFlag(i)
 
 #ifdef PARALL
-       IF (fl .EQ. 0) CYCLE
+       IF (fl .EQ. 0)THEN
+         counterfl = counterfl + 1
+         CYCLE
+       ENDIF
+
 #endif
 
        IF (phys%bcflags(fl) .NE. bc_BohmPuff) THEN
@@ -1213,6 +1288,7 @@ CONTAINS
 #ifdef PARALL
        IF (Mesh%ghostFaces(Mesh%Nintfaces+i) .EQ. 0) THEN
 #endif
+          counternogho = counternogho + 1
           DO g = 1, refElPol%NGauss1D
              xyDerNorm_g = NORM2(xyg_d(g,:))
              dline = refElPol%gauss_weights1D(g)*xyDerNorm_g
@@ -1220,18 +1296,20 @@ CONTAINS
              Mesh%puff_area = Mesh%puff_area + 2*pi*dline
           END DO
 #ifdef PARALL
-       END IF
+        ELSE
+          countergo = countergo + 1
+        ENDIF
 #endif
     END DO
 
-  END SUBROUTINE computePuffArea
+  ENDSUBROUTINE computePuffArea
 
   SUBROUTINE computePumpArea()
     REAL*8   :: Xf(refElPol%Nfacenodes,2),xyg(refElPol%NGauss1D,2),xyg_d(refElPol%NGauss1D,2),dline
-    INTEGER  :: i,el,fa,fl,g
+    INTEGER  :: i,el,fa,fl,g, counter
     REAL*8   :: xyDerNorm_g
 
-
+    counter = 0
     Mesh%pump_area = 0.
 
     DO i = 1, Mesh%Nextfaces
@@ -1242,9 +1320,7 @@ CONTAINS
        IF (fl .EQ. 0) CYCLE
 #endif
 
-       IF (phys%bcflags(fl) .NE. bc_BohmPump) THEN
-          CYCLE
-       END IF
+       IF (phys%bcflags(fl) .NE. bc_BohmPump) CYCLE
 
        el = Mesh%extfaces(i,1)
        fa = Mesh%extfaces(i,2)
@@ -1254,6 +1330,7 @@ CONTAINS
 #ifdef PARALL
        IF (Mesh%ghostFaces(Mesh%Nintfaces+i) .EQ. 0) THEN
 #endif
+          counter = counter + 1
           DO g = 1, refElPol%NGauss1D
              xyDerNorm_g = NORM2(xyg_d(g,:))
              dline = refElPol%gauss_weights1D(g)*xyDerNorm_g
@@ -1264,8 +1341,7 @@ CONTAINS
        END IF
 #endif
     END DO
-
-  END SUBROUTINE computePumpArea
+  ENDSUBROUTINE computePumpArea
 
 
 
@@ -1308,7 +1384,7 @@ CONTAINS
 #endif
     END DO
 
-  END SUBROUTINE computeCoreArea
+  ENDSUBROUTINE computeCoreArea
 
 
 END MODULE preprocess

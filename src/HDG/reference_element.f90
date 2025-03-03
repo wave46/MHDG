@@ -9,7 +9,7 @@ MODULE reference_element
   USE globals
   USE LinearAlgebra
   USE printutils
-  USE MPI_OMP
+  USE MPI_OMP, only: MPIvar
 
   IMPLICIT NONE
 
@@ -1848,7 +1848,6 @@ CONTAINS
   END SUBROUTINE create_toroidal_structures
 
   SUBROUTINE generate_fekete_nodes(X,T,nDegRef,RefEl)
-    USE globals
     USE HDF5
     USE HDF5_io_module
 
@@ -1965,7 +1964,6 @@ CONTAINS
   END SUBROUTINE generate_fekete_nodes
 
   SUBROUTINE compute_shape_functions_at_interp_points(n_deg1,n_deg2,elemType, shapeFunctions)
-    USE globals
 
     IMPLICIT NONE
     TYPE(Reference_element_type)                :: refEl1

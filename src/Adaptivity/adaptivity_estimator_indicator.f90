@@ -1,9 +1,3 @@
-!************************************************************
-! project: MHDG
-! file: inout.f90
-! date: 06/09/2016
-! Module for schock capturing adaptivity
-!************************************************************
 
 MODULE adaptivity_estimator_indicator_module
   USE globals
@@ -12,6 +6,7 @@ MODULE adaptivity_estimator_indicator_module
   USE adaptivity_common_module
   USE adaptivity_indicator_module
   USE adaptivity_estimator_module
+  USE MPI_OMP
   IMPLICIT NONE
 
 CONTAINS
@@ -20,24 +15,26 @@ CONTAINS
     USE in_out, ONLY: copy_file
     USE gmsh_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5
     USE preprocess
+#ifdef PARALL
+    USE Communications, ONLY: gather_1D_vector_int,gather_1D_vector_real
+#endif
 
     TYPE(gmsh_t)                                :: gmsh
     REAL*8, INTENT(IN)                          :: thresh
     INTEGER, INTENT(IN)                         :: param_adapt, count_adapt, order
 
-    REAL*8,  ALLOCATABLE                        :: two_d_nodes(:,:)
-    INTEGER, ALLOCATABLE                        :: two_d_elements(:,:)
-    REAL*8,  ALLOCATABLE                        :: u_sol(:,:), u_star_sol(:,:), h(:), h_target(:), h_target_temp(:), error_oscillation(:), error_L2(:), error_L2_vertices(:), error_L2_init(:), error_target(:), temp_error(:)
+    REAL*8,  ALLOCATABLE                        :: u_sol(:,:), u_star_sol(:,:), h(:), h_target(:), h_target_temp(:), error_oscillation(:), error_L2(:), error_L2_vertices(:), error_target(:)
     INTEGER, ALLOCATABLE                        :: vector_nodes_unique(:)
     INTEGER                                     :: i, N_n_vertex, n_el_unstable, ierr
     REAL*8                                      :: eps_plot(Mesh%Nnodes)
     REAL*8                                      :: eg_L2
 
 #ifdef PARALL
-    INTEGER, ALLOCATABLE                        :: T_nogho(:,:)
-    REAL*8, ALLOCATABLE                         :: q_nogho(:), u_nogho(:)
+    REAL*8, ALLOCATABLE                         :: h_root(:), error_L2_vertices_root(:), error_oscillation_root(:)
+    REAL*8, POINTER                             :: h_glob(:), error_oscillation_glob(:), error_L2_vertices_glob(:)
+    INTEGER, POINTER                            :: vector_nodes_unique_glob(:), count_vec_glob(:)
+    INTEGER, ALLOCATABLE                        :: count_vec(:), noghost_index(:)
 #endif
-
 
     CHARACTER(70)                               :: param_adapt_char, count_adapt_char
     ! mesh_name is the mesh path + mesh name + .msh extension ("./Meshes/CircLim.msh")
@@ -46,53 +43,81 @@ CONTAINS
     ! buffer is a dummy array to store intermediate mesh names
     CHARACTER(1024), INTENT(IN)                 :: mesh_name
     CHARACTER(1024)                             :: mesh_name_npne, new_mesh_name_npne, buffer
+#ifdef PARALL
+    NULLIFY(h_glob, error_oscillation_glob, error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob)
+#endif
 
     IF(MPIvar%glob_id .EQ. 0) THEN
-       WRITE(*,*) '*************** Starting refinement procedure with oscillations: ****************'
+       WRITE(*,*) "*************************************************"
+       WRITE(*,*) "        ADAPTIVITY ESTIMATOR-INDICATOR           "
+       WRITE(*,*) "*************************************************"
     ENDIF
 
-    CALL hdg_ShockCapturing_adapt(thresh, eps_plot)
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       WRITE(*,*) '*************** Unique  ****************'
-    ENDIF
-
-    CALL unique_1D(RESHAPE(Mesh%T(:,1:RefElPol%Nvertices), [SIZE(Mesh%T(:,1:RefElPol%Nvertices),1) * SIZE(Mesh%T(:,1:RefElPol%Nvertices),2)]), vector_nodes_unique)
+#ifdef PARALL
+    ALLOCATE(noghost_index(Mesh%Nelems-Mesh%nghostelems))
+    ! only select the indices of the non-ghost elements
+    noghost_index = PACK([(i, i=1, Mesh%Nelems)], Mesh%ghostElems(:) .EQ. 0)
+    CALL unique_1D(RESHAPE(Mesh%T(noghost_index,1:refElPol%Nvertices), [SIZE(Mesh%T(noghost_index,1:refElPol%Nvertices),1) * SIZE(Mesh%T(noghost_index,1:refElPol%Nvertices),2)]), vector_nodes_unique)
+    CALL gather_1D_vector_int(Mesh%loc2glob_nodes(vector_nodes_unique), vector_nodes_unique_glob, allgather = .FALSE.)
+    DEALLOCATE(noghost_index)
+#else
+    CALL unique_1D(RESHAPE(Mesh%T(:,1:refElPol%Nvertices), [SIZE(Mesh%T(:,1:refElPol%Nvertices),1) * SIZE(Mesh%T(:,1:refElPol%Nvertices),2)]), vector_nodes_unique)
+#endif
 
     N_n_vertex = SIZE(vector_nodes_unique)
 
-    ALLOCATE(two_d_nodes(N_n_vertex,2))
-    ALLOCATE(two_d_elements(SIZE(Mesh%T,1),3))
-    ALLOCATE(error_oscillation(N_n_vertex))
     ALLOCATE(h(N_n_vertex))
     ALLOCATE(error_L2_vertices(N_n_vertex))
-    ALLOCATE(temp_error(N_n_vertex))
+
+#ifndef PARALL
+
     ALLOCATE(error_target(N_n_vertex))
     ALLOCATE(h_target(N_n_vertex))
-    ALLOCATE(h_target_temp(N_n_vertex))
-    ALLOCATE(error_L2(SIZE(Mesh%T,1)))
-    ALLOCATE(error_L2_init(SIZE(Mesh%T,1)))
-
-    two_d_nodes = 0.
-    two_d_elements = 0.
-    error_oscillation = 0.
-    h = 0.
-    error_L2_vertices = 0.
     error_target = adapt%tol_est
     h_target = 100.
+#else
+
+    ALLOCATE(count_vec(N_n_vertex))
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       N_n_vertex = MAXVAL(vector_nodes_unique_glob)
+       ALLOCATE(error_L2_vertices_root(N_n_vertex))
+       ALLOCATE(error_target(N_n_vertex))
+       ALLOCATE(h_target(N_n_vertex))
+       error_L2_vertices_root = 0
+       error_target = adapt%tol_est
+       h_target = 100.
+       N_n_vertex = SIZE(vector_nodes_unique)
+    ENDIF
+
+#endif
+    ALLOCATE(h_target_temp(N_n_vertex))
+    ALLOCATE(error_L2(SIZE(Mesh%T,1)))
+    ALLOCATE(error_oscillation(N_n_vertex))
+    h = 0.
+    error_oscillation = 0.
+    error_L2_vertices = 0.
+    h_target_temp = 0.
     error_L2 = 0.
-    error_L2_init = 0.
+    eg_L2 = 0.
 
+    !! COMPUTE h_map !!
+#ifndef PARALL
+    CALL h_map(N_n_vertex,Mesh%X(vector_nodes_unique,1:2),Mesh%T(:,1:3),vector_nodes_unique, h)
+#else
+    CALL h_map(N_n_vertex,Mesh%X(vector_nodes_unique,1:2),Mesh%T(:,1:3),vector_nodes_unique, h, count_vec)
 
-    two_d_nodes = Mesh%X(vector_nodes_unique,:)
-    two_d_elements = Mesh%T(:,1:3)
+    CALL gather_1D_vector_real(h, h_glob, allgather = .FALSE.)
+    CALL gather_1D_vector_int(count_vec, count_vec_glob, allgather = .FALSE.)
 
-    !! error indicator based on the elemental oscillations
-    CALL read_error(eps_plot, error_oscillation)
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       ALLOCATE(h_root(MAXVAL(vector_nodes_unique_glob)))
+       h_root = 0.
+       CALL compute_error_on_vertices_root(h_glob, vector_nodes_unique_glob, count_vec_glob, h_root)
+    ENDIF
+#endif
+    !! END OF COMPUTING h_map !!
 
-    !! use error map to create element size map: h
-    CALL h_map(N_n_vertex,two_d_nodes,two_d_elements,vector_nodes_unique, h)
-
+    !! ESTIMATOR !!
     IF(param_adapt .EQ. 0) THEN
        ! u_sol, u_star_sol are allocated here
        CALL post_process_matrix_solution(Mesh%X,Mesh%T,sol%u,sol%q,u_sol,u_star_sol)
@@ -101,85 +126,126 @@ CONTAINS
           ! error estimation for the mesh and the solution
           CALL calculate_L2_error_two_sols_different_p_scalar_general(Mesh%X,Mesh%T,i, u_sol,u_star_sol, error_L2, eg_L2)
           CALL error_on_vertices(error_L2,Mesh%T,vector_nodes_unique, N_n_vertex, error_L2_vertices)
+
+#ifdef PARALL
+          CALL gather_1D_vector_real(error_L2_vertices, error_L2_vertices_glob, allgather = .FALSE.)
+
+          IF(MPIvar%glob_id .EQ. 0) THEN
+             CALL compute_error_on_vertices_root(error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob, error_L2_vertices_root)
+
+             ! richardson formula only for estimator
+             h_target_temp = h_root * ((error_target / error_L2_vertices_root) ** (1./ (order + 1.)))
+             h_target = MIN(h_target_temp, h_target)
+          ENDIF
+          DEALLOCATE(error_L2_vertices_glob)
+          NULLIFY(error_L2_vertices_glob)
+#else
           ! richardson formula only for estimator
           h_target_temp = EXP( ( LOG(error_target) - LOG( error_L2_vertices ) )/(order+1) + LOG(h) )
           h_target = MIN(h_target_temp, h_target)
+#endif
        ENDDO
-
        DEALLOCATE(u_sol,u_star_sol)
     ELSE
        ! error estimation for the mesh and the solution
-#ifdef PARALL
-       CALL L2_error_estimator_eval(Mesh%X,T_nogho,u_nogho,q_nogho,param_adapt,error_L2,eg_L2)
-       CALL error_on_vertices(error_L2,T_nogho,vector_nodes_unique, N_n_vertex, error_L2_vertices)
-#else
        CALL L2_error_estimator_eval(Mesh%X,Mesh%T,sol%u,sol%q,param_adapt,error_L2,eg_L2)
        CALL error_on_vertices(error_L2,Mesh%T,vector_nodes_unique, N_n_vertex, error_L2_vertices)
-#endif
 
+#ifdef PARALL
+
+       CALL gather_1D_vector_real(error_L2_vertices, error_L2_vertices_glob, allgather = .FALSE.)
+
+       IF(MPIvar%glob_id .EQ. 0) THEN
+          CALL compute_error_on_vertices_root(error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob, error_L2_vertices_root)
+
+          ! richardson formula only for estimator
+          h_target = h_root * ((error_target / error_L2_vertices_root) ** (1./ (order + 1.)))
+          h_target = SQRT(h_target*h) !smoothing richardson formula
+       ENDIF
+#else
        ! richardson formula only for estimator
-       h_target = EXP( ( LOG(error_target) - LOG( error_L2_vertices ) )/(order+1) + LOG(h) )
+       h_target = h * ((error_target / error_L2_vertices) ** (1./ (order + 1.)))
+       h_target = SQRT(h_target*h) !smoothing richardson formula
+#endif
+    ENDIF
+    !! END OF ESTIMATOR !!
+
+    !! INDICATOR
+    CALL hdg_ShockCapturing_adapt(thresh, eps_plot)
+    !! error indicator based on the elemental oscillations
+#ifndef PARALL
+    CALL read_error(eps_plot, error_oscillation)
+    WHERE (ABS(error_oscillation) .GT. 1e-10)
+       h_target = h * 0.5
+    END WHERE
+    h_target = MIN(h_target, 0.1)
+#else
+    CALL read_error(eps_plot, error_oscillation, count_vec)
+    CALL gather_1D_vector_real(error_oscillation, error_oscillation_glob, allgather = .FALSE.)
+
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       ALLOCATE(error_oscillation_root(MAXVAL(vector_nodes_unique_glob)))
+       error_oscillation_root = 0.
+       CALL compute_error_on_vertices_root(error_oscillation_glob, vector_nodes_unique_glob, count_vec_glob, error_oscillation_root)
+
+       WHERE (ABS(error_oscillation_root) .GT. 1e-10)
+          h_target = h_root * 0.5
+       END WHERE
+       h_target = MIN(h_target, 0.1)
 
     ENDIF
+#endif
+    !! END OF INDICATOR !!
 
 
-    h_target = SQRT(h_target*h) !smoothing richardson formula
+#ifdef PARALL
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       N_n_vertex = MAXVAL(vector_nodes_unique_glob)
+#endif
+       CALL generate_htarget_sol_file(N_n_vertex, h_target)
 
-    ! create contribution of estimator and indicator for mmg
-    ! if oscillations are detected just use original size/2 otherwise use
-    ! estimator calculated with Richardson
+       CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
 
-    DO i=1, SIZE(h) !here we add the oscillation contribution
-       IF (error_oscillation(i) .GT. 0) THEN
-          ! refine dividing by 2 the element size when find oscillations
-          h_target(i) = h(i)/2
-       ENDIF  !if no oscillation don't do anything
-    ENDDO
+       WRITE(param_adapt_char, *) param_adapt
+       WRITE(count_adapt_char, *) count_adapt
+       new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
 
-    DO i=1,SIZE(h) !check on coarsening ---> not higher than initial mesh
-       IF (h_target(i) .GT. 0.1) THEN
-          h_target(i) = 0.1
+       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
+       IF(MPIvar%glob_id .EQ. 0) THEN
+          CALL mmg_create_mesh_from_h_target(buffer)
        ENDIF
-    ENDDO
+
+       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne))
+       CALL convert_mesh2msh(buffer)
+       CALL convert_msh2mesh(buffer)
+
+       CALL delete_file("./res/temp.mesh")
+       CALL delete_file("./res/temp.msh")
+       CALL delete_file("./res/ElSizeMap.sol")
 
 
-    CALL generate_htarget_sol_file(N_n_vertex, h_target)
+       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
+       CALL copy_file(buffer, "./res/temp.mesh")
+       !CALL delete_file(buffer)
 
-    CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
+       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
+       CALL open_merge_with_geometry(gmsh, buffer)
+       CALL copy_file(buffer, "./res/temp.msh")
+       !CALL delete_file(buffer)
 
-    WRITE(param_adapt_char, *) param_adapt
-    WRITE(count_adapt_char, *) count_adapt
-    new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
+       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".sol"
+       CALL delete_file(buffer)
+       !CALL merge_with_geometry(gmsh)
 
-    buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-    CALL mmg_create_mesh_from_h_target(buffer)
+#ifdef PARALL
+    ENDIF
+    ! wait for process 0 to finish writing before loading new mesh
+    CALL MPI_BARRIER(mpi_comm_world, ierr)
+#endif
 
-    buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne))
-    CALL convert_mesh2msh(buffer)
-    CALL convert_msh2mesh(buffer)
-
-    CALL delete_file("./res/temp.mesh")
-    CALL delete_file("./res/temp.msh")
-    CALL delete_file("./res/ElSizeMap.sol")
-
-
-    buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-    CALL copy_file(buffer, "./res/temp.mesh")
-    !CALL delete_file(buffer)
-
-    buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
-
-    CALL open_merge_with_geometry(gmsh, buffer)
-    CALL copy_file(buffer, "./res/temp.msh")
-    !CALL delete_file(buffer)
-
-
-    buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".sol"
-    CALL delete_file(buffer)
-
-    !CALL merge_with_geometry(gmsh)
-
-    WRITE(*,*) "********** Loading mesh P1  **********"
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       WRITE(*,*) "********** Loading mesh P1  **********"
+    ENDIF
     CALL free_mesh
     IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
        CALL load_gmsh_mesh("./res/temp",0)
@@ -187,8 +253,9 @@ CONTAINS
        CALL load_gmsh_mesh("./res/temp",1)
     ENDIF
 
+    CALL free_reference_element_pol(refElPol)
     CALL create_reference_element(refElPol,2,1, verbose = 0)
-    CALL mesh_preprocess(ierr)
+    CALL mesh_preprocess_serial(ierr)
 
     Mesh%X = Mesh%X*phys%lscale
 
@@ -197,16 +264,12 @@ CONTAINS
        STOP
     ENDIF
 
-    CALL HDF5_save_mesh("./newmesh_pre.h5", Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
-
     CALL read_extended_connectivity('./res/temp.msh')
 
-    WRITE(*,*) "********** Increasing order mesh **********"
     CALL set_order_mesh(order)
-    CALL free_reference_element
+    CALL free_reference_element_pol(refElPol)
     CALL create_reference_element(refElPol,2,order, verbose = 0)
-    CALL mesh_preprocess(ierr)
-
+    CALL mesh_preprocess_serial(ierr)
 
     Mesh%X = Mesh%X*phys%lscale
 
@@ -214,41 +277,70 @@ CONTAINS
        Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
     END IF
 
-    CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-
-    WRITE(*,*) "********** Rounding edges **********"
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+    ENDIF
     !CALL round_edges(Mesh)
 
-    ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
-    CALL write_msh_file(Mesh%X,Mesh%T)
-    ! convert the mesh to .mesh
-    CALL convert_msh2mesh('./res/temp')
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
+       CALL write_msh_file(Mesh%X,Mesh%T)
+       ! convert the mesh to .mesh
+       CALL convert_msh2mesh('./res/temp')
+    ENDIF
 
-    CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+    ENDIF
 
     n_el_unstable = 0
-
     DO i = 1, SIZE(error_oscillation)
        IF(error_oscillation(i) .GT. 1e-12) THEN
           n_el_unstable = n_el_unstable + 1
        ENDIF
     ENDDO
 
-    WRITE(*,'(a, F5.2)') "********** Percentage of oscillating elements on previous mesh: ", REAL(n_el_unstable*100)/REAL(N_n_vertex), "%"
+#ifdef PARALL
+    CALL MPI_Allreduce(MPI_IN_PLACE, n_el_unstable, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+    N_n_vertex = MAXVAL(vector_nodes_unique_glob)
+#endif
 
-    DEALLOCATE(two_d_nodes)
-    DEALLOCATE(two_d_elements)
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       WRITE(*,'(a, F5.2)') "********** Percentage of oscillating elements on previous mesh: ", REAL(n_el_unstable*100)/REAL(N_n_vertex), "%"
+    ENDIF
+
     DEALLOCATE(error_oscillation)
     DEALLOCATE(h)
+    DEALLOCATE(vector_nodes_unique)
     DEALLOCATE(error_L2_vertices)
-    DEALLOCATE(error_target)
-    DEALLOCATE(h_target)
     DEALLOCATE(h_target_temp)
     DEALLOCATE(error_L2)
-    DEALLOCATE(error_L2_init)
-    DEALLOCATE(temp_error)
-    DEALLOCATE(vector_nodes_unique)
+
+#ifndef PARALL
+    DEALLOCATE(h_target)
+#else
+    IF(ASSOCIATED(error_L2_vertices_glob)) DEALLOCATE(error_L2_vertices_glob)
+
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       DEALLOCATE(error_target)
+       DEALLOCATE(error_L2_vertices_root)
+    ENDIF
+
+    DEALLOCATE(h_glob)
+    DEALLOCATE(count_vec_glob)
+    DEALLOCATE(error_oscillation_glob)
+    DEALLOCATE(vector_nodes_unique_glob)
+    DEALLOCATE(count_vec)
+
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       DEALLOCATE(h_target)
+       DEALLOCATE(h_root)
+       DEALLOCATE(error_oscillation_root)
+    ENDIF
+
+    NULLIFY(h_glob, error_oscillation_glob, error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob)
+#endif
+
 
   END SUBROUTINE adaptivity_indicator_estimator
 

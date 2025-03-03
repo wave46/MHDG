@@ -2,7 +2,7 @@
     steady              = .false.       ! Is it a steady state simulation?
                                         ! .false. = time evolving simulation
                                         ! .true.  = steady state simulation
-    read_gmsh           = .false.	! .true. = mesh is read from msh/mesh file format
+    read_gmsh           = .true.	! .true. = mesh is read from msh/mesh file format
     readMeshFromSol     = .false.	! .true. = mesh is read from solution file
     set_2d_order	= .false.	! .true. = set the order of the 2d polynomial if not set already 
     order_2d = 8 ! if read_gmsh = .true. and set_2d_order = .true., order of the 2d polynomial
@@ -48,7 +48,6 @@
     saveNR              = .true.        ! save each N-R iterations
     saveTau             = .false.       ! save tau on faces
     gmsh2h5		= .false.	! convert the gmsh read in input to hdf5 format
-    saveMeshSol		= .true.	! save the mesh in the solution file
     !***** N-Gamma-Vorticity model
     fixdPotLim          = .false.       ! Fix potential at the floating potential on the limiter
     dirivortcore        = .false.       ! Dirichlet boundary condition on the vorticity in the core boundary
@@ -133,6 +132,7 @@
     osc_adapt		= .true.	! Refine if oscillations are higher than threshold
     osc_tol		= -2.		! Refine if oscillations are higher than this threshold, only if osc_adapt = .true.
     osc_check		= -3.		! Save the solution as checkpoint if the maximum value of oscillations are lower than this threshold (-100 for no oscillations at all)
+    geometry_path	= '/path/to/geo/file/from/gmesh/geometry.geo
 /
 
 &GEOM_LST
@@ -173,7 +173,7 @@
     diff_ee =    20. ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
     diff_vort =  20.! diffusion in the vorticity equation
     v_p = 0. ! Pinch velocity in the continuity equation (Pinch = vp*(psi^2 + psi^2*tanh((0.95 - psi)/0.02)) with psi = 1. at separatrix )
-    diff_nn = 2e8 ! max diffusion for neutral equation
+    diff_nn = 2e8 ! max diffusion for neutral equation or if used DCONSTANTNEUTRALDIFF flag, then the value of neutral diffusion
     ! external heating in the form of shifted 2D gaussian ~exp(-(r-(R0+dr)**2/sigmar**2))*exp(-(z-(Z0+dz)**2/sigmaz**2))
     heating_power = 0.              ! [W] Total power of heating 
     heating_dr = 0.0                 ! [m] displacement from magnetic axis alon R direction (can be positive and negative)
@@ -199,7 +199,7 @@
     !k_max = 1.e10      ! maximal k
     !puff               = 1.8e-6
     !puff               = 2.e-5
-    ! ****** Ohmic heating: only for testcase 54 with core (not tested)
+    ! ****** Ohmic heating: only for testcase 54 with core
     Zeff                = 3.
     Pohmic              = 4.8e-14       ! Ohmic Heating
     ! ****** Background temperature in eV for isothermal model (default is 50 eV)

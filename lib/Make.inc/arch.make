@@ -9,8 +9,8 @@ SDIR=$(PWD)/../src/
 COMPTYPE_OPT = opt
 COMPTYPE_DEB = deb
 COMPTYPE_PRO = pro
-COMPTYPE = $(COMPTYPE_OPT)
-#COMPTYPE = $(COMPTYPE_DEB)
+#COMPTYPE = $(COMPTYPE_OPT)
+COMPTYPE = $(COMPTYPE_DEB)
 #COMPTYPE = $(COMPTYPE_PRO)
 
 #-------------------------------------------------------------------------------
@@ -18,8 +18,8 @@ COMPTYPE = $(COMPTYPE_OPT)
 #-------------------------------------------------------------------------------
 MODE_SERIAL = serial
 MODE_PARALL = parall
-MODE = $(MODE_SERIAL)
-#MODE = $(MODE_PARALL)
+#MODE = $(MODE_SERIAL)
+MODE = $(MODE_PARALL)
 
 #-------------------------------------------------------------------------------
 # The compiler
@@ -283,7 +283,7 @@ ifeq ($(PASTIX),$(LIB_YES))
  #LIB += -L$(HOME)/libs/scotch_6.0.4/lib/ -lscotch -lscotcherrexit  -lptscotchparmetis -lptscotch -lpthread -lhwloc
  #LIB += -L$(MHDG_PASTIX_DIR)/install -lpastix -lm -lrt -lifcore
  #New GNU
- LIB += -L$(MHDG_SCOTCH_DIR)/lib -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread
+ LIB += -L$(MHDG_SCOTCH_DIR)/lib -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread -lhwloc
  LIB += $(shell echo `PKG_CONFIG_PATH=${PKG_CONFIG_PATH} pkg-config --libs pastix pastixf`)
  #New INTEL
  #LIB += -L$(MHDG_SCOTCH_DIR)/lib -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread

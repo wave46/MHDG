@@ -104,7 +104,7 @@ PROGRAM Convergence
         WRITE (6, *) "Computing ", TRIM(mesh_name)
 
         ! Load the mesh file
-        CALL load_mesh(TRIM(mesh_name))
+        CALL load_mesh_h5(TRIM(mesh_name))
 
         ! Pastix: set the start to true
         matK%start = .TRUE.
@@ -352,7 +352,7 @@ CONTAINS
     nglo = nu
 
 #ifdef PARALL
-    CALL mpi_allreduce(MPI_IN_PLACE, sum2, 1, mpi_double_precision, mpi_sum, MPI_COMM_WORLD, ierr)
+    CALL mpi_allreduce(MPI_IN_PLACE, sum2, 1, MPI_REAL8, mpi_sum, MPI_COMM_WORLD, ierr)
     CALL mpi_allreduce(nu, nglo, 1, mpi_integer, mpi_sum, MPI_COMM_WORLD, ierr)
 #endif
     res = SQRT(sum2)/SQRT(DBLE(nglo))/coeff

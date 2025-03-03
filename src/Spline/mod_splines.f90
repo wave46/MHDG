@@ -51,12 +51,12 @@ CONTAINS
     ! =====================================================
 
     TYPE(spline) :: sp
-    REAL*8, INTENT(in) :: x(:), y(:)
-    REAL*8 :: y2(SIZE(y)), dx(SIZE(y)-1), divdif(SIZE(y)-1), b(SIZE(y)), s(SIZE(y)), Mat(SIZE(y),3), dzzdx(SIZE(y)-1), dzdxdx(SIZE(y)-1), coeff(SIZE(y)-1,4), coeff_slope(SIZE(y)-1,3)
-    REAL*8, OPTIONAL, INTENT(in) :: y1_slope, yn_slope
-    REAL*8:: x31, xn
-    REAL*8:: p, qn, sig, un, u(SIZE(y))
-    INTEGER:: n, i, j
+    REAL*8, INTENT(IN)           :: x(:), y(:)
+    REAL*8                       :: y2(SIZE(y)), dx(SIZE(y)-1), divdif(SIZE(y)-1), b(SIZE(y)), s(SIZE(y)), Mat(SIZE(y),3), dzzdx(SIZE(y)-1), dzdxdx(SIZE(y)-1), coeff(SIZE(y)-1,4), coeff_slope(SIZE(y)-1,3)
+    REAL*8, OPTIONAL, INTENT(IN) :: y1_slope, yn_slope
+    REAL*8                       :: x31, xn
+    REAL*8                       :: p, qn, sig, un, u(SIZE(y))
+    INTEGER                      :: n, i, j
 
     n = SIZE(x)
 
@@ -126,7 +126,7 @@ CONTAINS
        END IF
 
        DO i = 2, n-1                            ! tridiag. decomposition
-          sig = (x(i)-(i-1))/(x(i+1)-x(i-1))
+          sig = (x(i)-(REAL(i)-1))/(x(i+1)-x(i-1))
           p = sig*y2(i-1)+2.
           y2(i) = (sig-1.)/p
           u(i)=(6.*((y(i+1)-y(i))/(x(i+1)-x(i))-(y(i)-y(i-1))/(x(i)-x(i-1)))/(x(i+1)-x(i-1))-sig*u(i-1))/p

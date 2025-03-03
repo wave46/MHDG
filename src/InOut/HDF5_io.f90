@@ -28,9 +28,8 @@
 !  array saving and reading in HDF5 format
 !---------------------------------------------
 MODULE HDF5_io_module
+  USE HDF5
   USE prec_const
-  !  use mem_alloc_module
-
   IMPLICIT NONE
 
   !******************************
@@ -41,7 +40,7 @@ CONTAINS
   ! create HDF5 file
   !----------------------------------------
   SUBROUTINE HDF5_create(filename, file_id, ierr)
-    USE HDF5
+
     CHARACTER(LEN=*), INTENT(in)  :: filename  ! file name
     INTEGER(HID_T), INTENT(out) :: file_id   ! file identifier
     INTEGER, OPTIONAL, INTENT(out) :: ierr
@@ -63,7 +62,7 @@ CONTAINS
   ! open HDF5 file
   !----------------------------------------
   SUBROUTINE HDF5_open(filename, file_id, ierr)
-    USE HDF5
+
     CHARACTER(LEN=*), INTENT(in)  :: filename  ! file name
     INTEGER(HID_T), INTENT(out) :: file_id   ! file identifier
     INTEGER, OPTIONAL, INTENT(out) :: ierr
@@ -84,7 +83,7 @@ CONTAINS
   ! close HDF5 file
   !----------------------------------------
   SUBROUTINE HDF5_close(file_id)
-    USE HDF5
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
 
     INTEGER :: error   ! error flag
@@ -96,7 +95,7 @@ CONTAINS
   ! create new group
   !----------------------------------------
   SUBROUTINE HDF5_group_create(groupname, group_up_id, group_id, ierr)
-    USE HDF5
+
     CHARACTER(LEN=*), INTENT(in)  :: groupname   ! group name
     INTEGER(HID_T), INTENT(in)  :: group_up_id ! the upper level
     INTEGER(HID_T), INTENT(out) :: group_id     ! the new group
@@ -119,7 +118,7 @@ CONTAINS
   ! open a group in a HDF5 file
   !----------------------------------------
   SUBROUTINE HDF5_group_open(file_id, group_name, group_id, ierr)
-    USE HDF5
+
     INTEGER(HID_T), INTENT(in) :: file_id
     CHARACTER(len=*), INTENT(in) :: group_name   ! file identifier/group identifier
     INTEGER(HID_T), INTENT(out) :: group_id   ! file identifier/group identifier
@@ -140,7 +139,7 @@ CONTAINS
   ! close group
   !----------------------------------------
   SUBROUTINE HDF5_group_close(group_id, ierr)
-    USE HDF5
+
     INTEGER(HID_T), INTENT(out) :: group_id     ! the new group
     INTEGER, OPTIONAL, INTENT(out) :: ierr
 
@@ -162,8 +161,8 @@ CONTAINS
   ! HDF5 saving for an integer
   !----------------------------------------
   SUBROUTINE HDF5_integer_saving(file_id, int, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     INTEGER, INTENT(in) :: int
     CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
@@ -197,8 +196,8 @@ CONTAINS
   ! HDF5 saving for an boolean
   !----------------------------------------
   SUBROUTINE HDF5_logical_saving(file_id, bool, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     LOGICAL, INTENT(in) :: bool
     CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
@@ -236,8 +235,8 @@ CONTAINS
   ! HDF5 saving for a real double
   !----------------------------------------
   SUBROUTINE HDF5_real_saving(file_id, rd, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     REAL(float), INTENT(in) :: rd
     CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
@@ -271,7 +270,7 @@ CONTAINS
   ! HDF5 saving for strings
   !----------------------------------------
   SUBROUTINE HDF5_string_saving(file_id, string, dsetname)
-    USE HDF5
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     CHARACTER(LEN=*), INTENT(in) :: string    ! string to be saved
     CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
@@ -305,7 +304,7 @@ CONTAINS
   ! HDF5 saving for string arrays
   !----------------------------------------
   SUBROUTINE HDF5_string_array1D_saving(file_id, string_array, dsetname)
-    USE HDF5
+
     USE ISO_C_BINDING
     INTEGER(HID_T), INTENT(in)        :: file_id   ! file identifier
     CHARACTER(LEN=*), DIMENSION(:), INTENT(in), TARGET :: string_array    ! string to be saved
@@ -347,8 +346,8 @@ CONTAINS
   ! HDF5 reading for a string
   !----------------------------------------
   SUBROUTINE HDF5_string_reading(file_id, string, dsetname, ierr)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     CHARACTER(LEN=*), POINTER    :: string
     CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
@@ -388,7 +387,7 @@ CONTAINS
   ! HDF5 saving for a 1D array of integer
   !----------------------------------------
   SUBROUTINE HDF5_array1D_saving_int(file_id, array1D, dim1, dsetname)
-    USE HDF5
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     INTEGER, DIMENSION(:), INTENT(in) :: array1D
     INTEGER, INTENT(in) :: dim1
@@ -423,7 +422,7 @@ CONTAINS
   ! HDF5 saving for a 2D array of integer
   !----------------------------------------
   SUBROUTINE HDF5_array2D_saving_int(file_id, array2D, dim1, dim2, dsetname)
-    USE HDF5
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     INTEGER, DIMENSION(:, :), INTENT(in) :: array2D
     INTEGER, INTENT(in) :: dim1, dim2
@@ -459,7 +458,7 @@ CONTAINS
   ! gzip HDF5 saving for a 1D array of real*4
   !----------------------------------------
   SUBROUTINE HDF5_array1D_saving_r4(file_id, array1D, dim1, dsetname)
-    USE HDF5
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     REAL(4), DIMENSION(:), INTENT(in) :: array1D
     INTEGER, INTENT(in) :: dim1
@@ -503,8 +502,8 @@ CONTAINS
   ! gzip HDF5 saving for a 1D array of real*8
   !--------------------------------------------
   SUBROUTINE HDF5_array1D_saving(file_id, array1D, dim1, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     REAL(float), &
          DIMENSION(:), INTENT(in) :: array1D
@@ -549,8 +548,8 @@ CONTAINS
   ! gzip HDF5 saving for a 2D array
   !----------------------------------------
   SUBROUTINE HDF5_array2D_saving(file_id, array2D, dim1, dim2, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     REAL(float), &
          DIMENSION(:, :), INTENT(in) :: array2D
@@ -597,8 +596,8 @@ CONTAINS
   !----------------------------------------
   SUBROUTINE HDF5_array3D_saving(file_id, array3D, &
        dim1, dim2, dim3, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     REAL(float), &
          DIMENSION(:, :, :), INTENT(in) :: array3D
@@ -646,8 +645,8 @@ CONTAINS
   !----------------------------------------
   SUBROUTINE HDF5_array4D_saving(file_id, array4d, &
        dim1, dim2, dim3, dim4, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     REAL(float), &
          DIMENSION(:, :, :, :), INTENT(in) :: array4d
@@ -696,8 +695,8 @@ CONTAINS
   !----------------------------------------
   SUBROUTINE HDF5_array5D_saving(file_id, array5d, &
        dim1, dim2, dim3, dim4, dim5, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id  ! file identifier
     REAL(float), &
          DIMENSION(:, :, :, :, :), INTENT(in) :: array5d
@@ -751,8 +750,8 @@ CONTAINS
   ! HDF5 get dimensions of a 1d dataset
   !----------------------------------------
   SUBROUTINE HDF5_getdim(file_id, dsetname, res)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in)  :: file_id   ! file identifier
     CHARACTER(LEN=*), INTENT(in)  :: dsetname  ! dataset name
     INTEGER(HSIZE_T), INTENT(out) :: res       ! the dataset size
@@ -779,8 +778,8 @@ CONTAINS
   ! HDF5 reading for an integer
   !----------------------------------------
   SUBROUTINE HDF5_integer_reading(file_id, int, dsetname, ierr)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in)  :: file_id   ! file identifier
     INTEGER, INTENT(out) :: int
     CHARACTER(LEN=*), INTENT(in)  :: dsetname  ! dataset name
@@ -808,8 +807,8 @@ CONTAINS
   ! HDF5 reading for a real double
   !----------------------------------------
   SUBROUTINE HDF5_real_reading(file_id, rd, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in)  :: file_id   ! file identifier
     REAL(float), INTENT(out) :: rd
     CHARACTER(LEN=*), INTENT(in)  :: dsetname  ! dataset name
@@ -834,8 +833,8 @@ CONTAINS
   ! HDF5 reading for an array 1D of integer
   !----------------------------------------
   SUBROUTINE HDF5_array1D_reading_int(file_id, array1D, dsetname, ierr)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     INTEGER, DIMENSION(:), POINTER    :: array1D
     CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
@@ -864,8 +863,8 @@ CONTAINS
   ! HDF5 reading for an array 2D of integer
   !----------------------------------------
   SUBROUTINE HDF5_array2D_reading_int(file_id, array2D, dsetname, ierr)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     INTEGER, DIMENSION(:, :), POINTER    :: array2D
     CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
@@ -894,8 +893,8 @@ CONTAINS
   ! HDF5 reading for an array 1D
   !----------------------------------------
   SUBROUTINE HDF5_array1D_reading(file_id, array1D, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     REAL(float), &
          DIMENSION(:), POINTER    :: array1D
@@ -922,8 +921,8 @@ CONTAINS
   ! HDF5 reading for an array 2D
   !----------------------------------------
   SUBROUTINE HDF5_array2D_reading(file_id, array2D, dsetname, ierr)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     REAL(float), &
          DIMENSION(:, :), POINTER    :: array2D
@@ -953,8 +952,8 @@ CONTAINS
   ! HDF5 reading for an array 3D
   !----------------------------------------
   SUBROUTINE HDF5_array3D_reading(file_id, array3D, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
     REAL(float), &
          DIMENSION(:, :, :), POINTER    :: array3D
@@ -983,8 +982,7 @@ CONTAINS
   ! HDF5 reading for an array 4D
   !----------------------------------------
   SUBROUTINE HDF5_array4D_reading(file_id, array4D, dsetname, ierr)
-    USE HDF5
-    USE prec_const
+
     INTEGER(HID_T), INTENT(in)  :: file_id   ! file identifier
     REAL(float), &
          DIMENSION(:, :, :, :), POINTER     :: array4D
@@ -1016,8 +1014,8 @@ CONTAINS
   ! HDF5 reading for an array 5D
   !----------------------------------------
   SUBROUTINE HDF5_array5D_reading(file_id, array5D, dsetname)
-    USE HDF5
-    USE prec_const
+
+
     INTEGER(HID_T), INTENT(in)                        :: file_id
     REAL(float), DIMENSION(:, :, :, :, :), POINTER    :: array5D
     CHARACTER(LEN=*), INTENT(in)                      :: dsetname  ! dataset name
@@ -1128,7 +1126,7 @@ CONTAINS
   !   !  Write a test file for 1D array
   !   !------------------------------------------------
   !   subroutine Write_HDF5_test1D(idiag_num,var1D_name,array1D)
-  !     use HDF5
+  !
   !     integer                       , intent(in) :: idiag_num
   !     character(LEN=*)              , intent(in) :: var1D_name
   !     real(float)     , dimension(:), pointer    :: array1D
@@ -1166,7 +1164,7 @@ CONTAINS
   !   !  Write a test file for 2D array
   !   !------------------------------------------------
   !   subroutine Write_HDF5_test2D(idiag_num,var2D_name,array2D)
-  !     use HDF5
+  !
   !     integer                         , intent(in) :: idiag_num
   !     character(LEN=*)                , intent(in) :: var2D_name
   !     real(float)     , dimension(:,:), pointer    :: array2D
@@ -1210,7 +1208,7 @@ CONTAINS
   !   !  Write a test file for 3D array
   !   !------------------------------------------------
   !   subroutine Write_HDF5_test3D(idiag_num,var3D_name,array3D)
-  !     use HDF5
+  !
   !     integer                           , intent(in) :: idiag_num
   !     character(LEN=*)                  , intent(in) :: var3D_name
   !     real(float)     , dimension(:,:,:), pointer    :: array3D

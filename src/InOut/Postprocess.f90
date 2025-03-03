@@ -85,7 +85,6 @@ CONTAINS
 
     SUBROUTINE elemental_Error()
       USE LinearAlgebra
-      USE analytical
       INTEGER            :: g, NgaussPol, NgaussTor, igtor, igpol
       REAL*8             :: dvolu1d, dvolu
       REAL*8             :: Ni(Np), N1g(refElTor%Nnodes1D), N2g(refElPol%Nnodes2D)

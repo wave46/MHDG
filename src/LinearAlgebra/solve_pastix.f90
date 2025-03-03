@@ -38,7 +38,7 @@ MODULE solve_pastix
 CONTAINS
 
    SUBROUTINE set_nthreads(matPASTIX)
-      use MPI_OMP
+      use MPI_OMP, only: OMPvar
       TYPE(PASTIX_STRUC) :: matPASTIX
       matPASTIX%iparm(IPARM_THREAD_NBR) = OMPvar%Nthreads
    end SUBROUTINE set_nthreads
@@ -48,7 +48,6 @@ CONTAINS
    ! Part specific to PASTIX
    !***********************************************
    SUBROUTINE init_mat_PASTIX(matPASTIX)
-      use pastixf
 
       IMPLICIT NONE
 
@@ -72,6 +71,8 @@ CONTAINS
       call pastixInitParam(matPASTIX%iparm, matPASTIX%dparm)
 
       call set_nthreads(matPASTIX)
+
+
 
       ! matPASTIX%iparm(IPARM_SYM) = API_SYM_NO
       ! Verbose mode - Default: PastixVerboseNo
@@ -118,7 +119,6 @@ CONTAINS
    !***********************************************
    SUBROUTINE build_mat_PASTIX(matPASTIX)
 
-      use pastixf
       TYPE(PASTIX_STRUC) :: matPASTIX
       integer(kind=spm_int_t), dimension(:), pointer :: rowptr
       integer(kind=spm_int_t), dimension(:), pointer :: colptr
@@ -154,6 +154,7 @@ CONTAINS
       matPASTIX%spm%n = matK%n      ! Local number of unknowns
       matPASTIX%spm%nnz = matK%nnz    ! Local number of non zeroes
       matPASTIX%spm%dof = 1              ! Degree of freedom per unknown
+
 #ifdef PARALL
       matPASTIX%spm%replicated = 0
 #else
@@ -177,13 +178,13 @@ CONTAINS
       call spmScal(1./normA, matPASTIX%spm)
 
       if (allocated(matPASTIX%x)) then
-         deallocate (matPASTIX%x)         
+         deallocate (matPASTIX%x)
       end if
       if (allocated(matPASTIX%b)) then
-         deallocate (matPASTIX%b)         
+         deallocate (matPASTIX%b)
       end if
       if (allocated(matPASTIX%rhs)) then
-         deallocate (matPASTIX%rhs)         
+         deallocate (matPASTIX%rhs)
       end if
       allocate (matPASTIX%x(matPASTIX%spm%nexp, matPASTIX%nrhs))
       allocate (matPASTIX%b(matPASTIX%spm%nexp, matPASTIX%nrhs))
