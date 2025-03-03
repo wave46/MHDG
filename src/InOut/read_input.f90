@@ -51,7 +51,7 @@ SUBROUTINE READ_input()
   INTEGER               :: nbCoils_rmp, parite, nbRow, nbCoils_ripple
 
   ! Neutral and Ohmic heating
-  LOGICAL               :: OhmicSrc
+  LOGICAL               :: OhmicSrc, apply_trim
   REAL*8                :: Zeff,Pohmic,diff_nn,Re,Re_pump,puff,cryopump_power,puff_slope
 #ifdef KEQUATION
   ! k equation
@@ -71,10 +71,10 @@ SUBROUTINE READ_input()
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #endif
@@ -219,6 +219,7 @@ SUBROUTINE READ_input()
   phys%heating_equation   = heating_equation
   phys%Re                 = Re
   phys%Re_pump            = Re_pump
+  phys%apply_trim         = apply_trim
   phys%cryopump_power     = cryopump_power
   phys%puff               = puff
   phys%puff_slope         = puff_slope
@@ -417,6 +418,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - diffusion in the neutral equation:                  ', phys%diff_nn
      PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
      PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
+     PRINT *, '                - applying trim:                                      ', phys%apply_trim
      PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
      PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power
      IF (switch%ME) THEN
