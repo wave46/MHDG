@@ -20,7 +20,7 @@ CONTAINS
     USE gmsh_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5
     USE preprocess
 #ifdef PARALL
-    USE Communications, ONLY: gather_1D_vector_int,gather_1D_vector_real
+    USE Communications, ONLY: gather_1D_vector_int,gather_1D_vector_real,gather_mesh
 #endif
     TYPE(gmsh_t)                                :: gmsh
     REAL*8, INTENT(IN)                          :: thresh
@@ -29,6 +29,8 @@ CONTAINS
     INTEGER, ALLOCATABLE                        :: vector_nodes_unique(:)
     INTEGER                                     :: i, N_n_vertex, n_el_unstable
     REAL*8                                      :: eps_plot(Mesh%Nnodes)
+    REAL*8, POINTER                             :: h_target_on_nodes(:), nodes_glob(:,:)
+    INTEGER, POINTER                            :: connectivity_glob(:,:)
 #ifdef PARALL
     REAL*8, ALLOCATABLE                         :: h_root(:), error_oscillation_root(:)
     REAL*8, POINTER                             :: h_glob(:), error_oscillation_glob(:)
@@ -43,6 +45,8 @@ CONTAINS
     CHARACTER(1024), INTENT(IN)                 :: mesh_name
     CHARACTER(1024)                             :: mesh_name_npne, new_mesh_name_npne, buffer
     INTEGER                                     :: ierr
+
+    NULLIFY(h_target_on_nodes, nodes_glob, connectivity_glob)
 
 #ifdef PARALL
     NULLIFY(h_glob, error_oscillation_glob, vector_nodes_unique_glob, count_vec_glob)
@@ -128,84 +132,48 @@ CONTAINS
     ENDIF
 #endif
 
-#ifdef PARALL
+#ifndef PARALL
+    ALLOCATE(nodes_glob(SIZE(Mesh%X,1),SIZE(Mesh%X,2)))
+    ALLOCATE(connectivity_glob(SIZE(Mesh%T,1),SIZE(Mesh%T,2)))
+    nodes_glob = Mesh%X
+    connectivity_glob = Mesh%T
+#else
+   CALL gather_mesh(Mesh,connectivity_glob,nodes_glob)
+   DEALLOCATE(vector_nodes_unique)
+   CALL unique_1D(vector_nodes_unique_glob,vector_nodes_unique)  
+   
     IF(MPIvar%glob_id .EQ. 0) THEN
        N_n_vertex = MAXVAL(vector_nodes_unique_glob)
 #endif
-       CALL generate_htarget_sol_file(N_n_vertex, h_target)
+      ALLOCATE(h_target_on_nodes(SIZE(Mesh%X,1)))
+      h_target_on_nodes = 0.5
+      DO i=1,SIZE(vector_nodes_unique,1)
+         h_target_on_nodes(vector_nodes_unique(i)) = h_target(i)
+      ENDDO
 
-       CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
+      CALL gmsh_create_from_h_target( h_target_on_nodes, Mesh%X, Mesh%T(:,1:3), order)
 
-       WRITE(param_adapt_char, *) param_adapt
-       WRITE(count_adapt_char, *) count_adapt
-       new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
-
-       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-       CALL mmg_create_mesh_from_h_target(buffer)
-
-       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne))
-       CALL convert_mesh2msh(buffer)
-       CALL convert_msh2mesh(buffer)
-
-       CALL delete_file("./res/temp.mesh")
-       CALL delete_file("./res/temp.msh")
-       CALL delete_file("./res/ElSizeMap.sol")
-
-
-       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-       CALL copy_file(buffer, "./res/temp.mesh")
-       !CALL delete_file(buffer)
-
-       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
-
-
-       CALL open_merge_with_geometry(gmsh, buffer)
-       CALL copy_file(buffer, "./res/temp.msh")
-       !CALL delete_file(buffer)
-
-
-       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".sol"
-       CALL delete_file(buffer)
-
-       !CALL merge_with_geometry(gmsh)
 #ifdef PARALL
     ENDIF
     ! wait for process 0 to finish writing before loading new mesh
     CALL MPI_BARRIER(mpi_comm_world, ierr)
 #endif
 
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       WRITE(*,*) "********** Loading mesh P1  **********"
-    ENDIF
     CALL free_mesh
+
+    CALL free_reference_element_pol(refElPol)
+    CALL create_reference_element(refElPol,2,order, verbose = 0)
 
     IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
        CALL load_gmsh_mesh("./res/temp",0)
     ELSE
        CALL load_gmsh_mesh("./res/temp",1)
     ENDIF
-    CALL free_reference_element_pol(refElPol)
-    CALL create_reference_element(refElPol,2,1, verbose = 0)
-    CALL mesh_preprocess_serial(ierr)
-
-    Mesh%X = Mesh%X*phys%lscale
-
-    IF(ierr .EQ. 0) THEN
-       WRITE(*,*) "Error! Corresponding face in Tb not found. STOP"
-       STOP
-    ENDIF
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       CALL HDF5_save_mesh("./newmesh_pre.h5", Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
-    ENDIF
-
-    CALL read_extended_connectivity('./res/temp.msh')
-
-    CALL set_order_mesh(order)
+    
     CALL free_reference_element_pol(refElPol)
     CALL create_reference_element(refElPol,2,order, verbose = 0)
     CALL mesh_preprocess_serial(ierr)
+    CALL read_extended_connectivity('./res/temp.msh')
 
     Mesh%X = Mesh%X*phys%lscale
 
@@ -213,21 +181,6 @@ CONTAINS
        Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
     END IF
 
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-    ENDIF
-    !CALL round_edges(Mesh)
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
-       CALL write_msh_file(Mesh%X,Mesh%T)
-       ! convert the mesh to .mesh
-       CALL convert_msh2mesh('./res/temp')
-    ENDIF
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-    ENDIF
     n_el_unstable = 0
 
     DO i = 1, SIZE(error_oscillation)
@@ -251,6 +204,13 @@ CONTAINS
     DEALLOCATE(vector_nodes_unique_glob)
     DEALLOCATE(noghost_index)
     DEALLOCATE(count_vec)
+    IF(ASSOCIATED(h_target_on_nodes)) DEALLOCATE(h_target_on_nodes)    
+    NULLIFY(h_target_on_nodes)
+    DEALLOCATE(nodes_glob)
+    IF(ASSOCIATED(nodes_glob)) DEALLOCATE(nodes_glob) 
+    NULLIFY(nodes_glob)
+    IF(ASSOCIATED(connectivity_glob)) DEALLOCATE(connectivity_glob)
+    NULLIFY(connectivity_glob)
     IF(MPIvar%glob_id .EQ. 0) THEN
        DEALLOCATE(h_target)
        DEALLOCATE(h_root)
