@@ -909,6 +909,7 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%dfcoef, 'dfcoef')
       CALL HDF5_real_saving(group_id2, phys%dexbcoef, 'dexbcoef')
       CALL HDF5_real_saving(group_id2, phys%bohmth, 'bohmth')
+      CALL HDF5_real_saving(group_id2, phys%bohm_energy_thresh, 'bohm_energy_thresh')
       CALL HDF5_real_saving(group_id2, phys%epn, 'epn')
       CALL HDF5_real_saving(group_id2, phys%Gmbohm, 'Gmbohm')
       CALL HDF5_real_saving(group_id2, phys%Gmbohme, 'Gmbohme')
