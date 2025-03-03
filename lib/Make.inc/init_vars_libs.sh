@@ -35,6 +35,9 @@ export MHDG_PASTIX_DIR=$PASTIX_ROOT
 #export MHDG_PSBLAS_DIR=$MHDG_LIB_DIR/psblas3
 #export MHDG_MLD2P4_DIR=$MHDG_LIB_DIR/mld2p4-2
 #export MHDG_PETSC_DIR=$MHDG_LIB_DIR/petsc-3.18.0
+#if you wanna use mkl
+#export MHDG_MKL_DIR=$MHDG_LIB_DIR/intel_mkl
+#source $MHDG_MKL_DIR/build/setvars.sh
 
 echo "Libraries directory: $MHDG_LIB_DIR"
 echo "HWLOC directory: $MHDG_HWLOC_DIR"

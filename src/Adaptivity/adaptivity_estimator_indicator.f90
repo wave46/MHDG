@@ -192,7 +192,6 @@ CONTAINS
        error_oscillation_root = 0.
        CALL compute_error_on_vertices_root(error_oscillation_glob, vector_nodes_unique_glob, count_vec_glob, error_oscillation_root)
 
-       h_target = h_root  ! Start by assigning h to h_target
        WHERE (ABS(error_oscillation_root) .GT. 1e-10)
           h_target = h_root * 0.5
        END WHERE

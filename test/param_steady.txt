@@ -3,7 +3,7 @@
                                         ! .false. = time evolving simulation
                                         ! .true.  = steady state simulation
     read_gmsh           = .false.	! .true. = mesh is read from msh/mesh file format
-    readMeshFromSol     = .false.	! .true. = mesh is read from solution file
+    readMeshFromSol     = .true.	! .true. = mesh is read from solution file
     set_2d_order	= .false.	! .true. = set the order of the 2d polynomial if not set already 
     order_2d = 8 ! if read_gmsh = .true. and set_2d_order = .true., order of the 2d polynomial
     axisym              = .true.        ! Is it an axisymmetric simulation?
@@ -48,7 +48,6 @@
     saveNR              = .true.        ! save each N-R iterations
     saveTau             = .false.       ! save tau on faces
     gmsh2h5		= .false.	! convert the gmsh read in input to hdf5 format
-    saveMeshSol		= .true.	! save the mesh in the solution file
     !***** N-Gamma-Vorticity model
     fixdPotLim          = .false.       ! Fix potential at the floating potential on the limiter
     dirivortcore        = .false.       ! Dirichlet boundary condition on the vorticity in the core boundary
@@ -174,7 +173,7 @@
     diff_ee =    0.5 ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
     diff_vort =  0.5! diffusion in the vorticity equation
     v_p = 0. ! Pinch velocity in the continuity equation (Pinch = vp*(psi^2 + psi^2*tanh((0.95 - psi)/0.02)) with psi = 1. at separatrix )
-    diff_nn = 2e8 ! max diffusion for neutral equation
+    diff_nn = 2e8 ! max diffusion for neutral equation or if used DCONSTANTNEUTRALDIFF flag, then the value of neutral diffusion
     ! external heating in the form of shifted 2D gaussian ~exp(-(r-(R0+dr)**2/sigmar**2))*exp(-(z-(Z0+dz)**2/sigmaz**2))
     heating_power = 0.              ! [W] Total power of heating 
     heating_dr = 0.0                 ! [m] displacement from magnetic axis alon R direction (can be positive and negative)
@@ -185,6 +184,7 @@
     ! ****** Option for neutral equation (available only if compile with NEUTRAL)
     Re                  = 0.998     ! Recycling coefficient 0.997
     Re_pump             = 0.95     ! Recycling coefficient in the pump region
+    apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
     puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
     cryopump_power      = 10.      ! cryopump power in [m^3/s]
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
@@ -218,6 +218,7 @@
     bcflags(10)         = 50            ! Upper Limiter
     ! ****** Boundary threshold for Bohm
     bohmth              = 0.00           ! threshold for imposing the bohm boundary condition !for circ put 0.1 0.02
+    bohm_energy_thresh  = 2e-4           ! threshold on adimensional conservative ion energy for imposing Bohm, 2e-4 for density of 1e7 and no mach number corresponds to ~0.1 eV
     ! ****** Boundary coefficients for the Bohm boundary condition of the temperature equations:
     Gmbohm              = 2.5           ! gamma for Bohm boundary condition for energy equation (usually 7) and for ions energy equation (usually 2.5)
     Gmbohme             = 4.5           ! gamma for Bohm boundary condition for electron energy equation (usually 4.5)

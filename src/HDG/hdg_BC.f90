@@ -1116,6 +1116,7 @@ CONTAINS
       REAL*8,INTENT(out)        :: v_nn_Bou_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
       REAL*8                    :: Vnng(Ndim)
       REAL                      :: tau_stab(Neq,Neq)
+      REAL*8                    :: bohm_suppresion, energy_zero_threshold
 #ifdef SAVEFLUX
     real*8,intent(out)        :: faceflux_pump, faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral,faceflux_numerical
     real*8                    :: flgflux_pump, flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical
@@ -1127,6 +1128,7 @@ CONTAINS
     faceflux_neutral = 0.
     faceflux_numerical = 0.
 #endif
+    energy_zero_threshold=1.e-20
     ! Loop in 1D Gauss points
     DO g = 1,Ng1d
 
@@ -1197,14 +1199,15 @@ CONTAINS
          setval = ABS(upg(g,2))
          sn = SIGN(1.,bn)
       delta = 1
+         bohm_suppresion = max(ufg(g,3),energy_zero_threshold)/(max(ufg(g,3),energy_zero_threshold)+phys%bohm_energy_thresh)
          IF (ABS(inc) .LE. phys%bohmth) THEN
-            setval = sn*SoundSpeed/phys%bohmth*ABS(inc)
-            dcs_du = sn*dcs_du/phys%bohmth*ABS(inc)
+            setval = sn*SoundSpeed/phys%bohmth*ABS(inc)*bohm_suppresion
+            dcs_du = sn*dcs_du/phys%bohmth*ABS(inc)*bohm_suppresion
       ELSE
-            IF (ABS(upg(g,2)) .LE. SoundSpeed) THEN
-            setval = sn*SoundSpeed
-               dcs_du = sn*dcs_du
-            ELSE IF (ABS(upg(g,2)) .GT. SoundSpeed) THEN
+            IF (ABS(upg(g,2)) .LE. SoundSpeed/bohm_suppresion) THEN
+            setval = sn*SoundSpeed*bohm_suppresion
+               dcs_du = sn*dcs_du*bohm_suppresion
+            ELSE IF (ABS(upg(g,2)) .GT. SoundSpeed/bohm_suppresion) THEN
             delta = 0
             !setval = sn*setval
          END IF
@@ -1807,9 +1810,12 @@ CONTAINS
         REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
         REAL*8           :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
         REAL*8           :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
+#ifdef NEUTRAL
+        REAL*8           :: E, theta, RN
 #ifdef DNNLINEARIZED
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
     real*8                    :: gradDnn(Ndim)
+#endif
 #endif
 #ifdef DKLINEARIZED
     real*8                 ::       q_cyl, xyf(:), ddk_dU(Neq), ddk_dU_u
@@ -2188,6 +2194,14 @@ CONTAINS
 
 
 #ifdef NEUTRAL
+      ! Reflection coefficient from TRIM
+      IF (phys%apply_trim) THEN
+        E = 1./2.*1./simpar%refval_charge*simpar%refval_mass*(simpar%refval_speed*upfg(2))**2
+        theta = 180./acos(-1.D0)*acos(abs(bn))
+        call compute_RN(E,theta,RN)
+      ELSE
+        RN=1.
+      ENDIF
 #ifdef NEUTRALP
       ! Compute Vpn(U^(k-1))
       CALL computeVpn(ufg,Vpn)
@@ -2237,15 +2251,15 @@ CONTAINS
     SELECT CASE (bc)
 
     CASE (bc_Bohm)
-       recycling_coeff =  phys%Re
+       recycling_coeff =  phys%Re*RN
        cryopump_coeff = 0.
        puff_coeff = 0.
     CASE (bc_BohmPump)
-       recycling_coeff =  phys%Re_pump
+       recycling_coeff =  phys%Re_pump*RN
        cryopump_coeff = phys%cryopump_power/(Mesh%pump_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
        puff_coeff = 0.
     CASE (bc_BohmPuff)
-       recycling_coeff =  phys%Re
+       recycling_coeff =  phys%Re*RN
        cryopump_coeff = 0.
        puff_coeff = phys%puff/simpar%refval_density/(Mesh%puff_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
     CASE DEFAULT

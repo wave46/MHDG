@@ -207,7 +207,7 @@ endif
 
 FCFLAGS += -cpp  -fopenmp
 FCFLAGS += -fdefault-double-8 -fdefault-real-8 
-FCFLAGS += -ffree-line-length-none -fimplicit-none -ffree-form -Wno-tabs
+FCFLAGS += -ffree-line-length-none -fimplicit-none -ffree-form -Wno-tabs -march=native
 ######## End gfortran ########
 
 ######## Begin ifort #########
@@ -242,6 +242,9 @@ ifeq ($(PASTIX),$(LIB_YES))
  FCFLAGS += $(shell echo `PKG_CONFIG_PATH=${PKG_CONFIG_PATH} pkg-config --cflags pastix pastixf`)
  FCFLAGS += -I$(MHDG_SCOTCH_DIR)/include
 endif
+
+# MKL
+#FCFLAGS += -I$(MHDG_MKL_DIR)/build/mkl/latest/include
 
 # PSBLAS
 ifeq ($(PSBLAS),$(LIB_YES))
@@ -294,6 +297,8 @@ endif
 #Local
 LIB += -L/usr/lib/x86_64-linux-gnu -lblas -llapack -llapacke
 
+# MKL
+#LIB += -L$(MHDG_MKL_DIR)/build/mkl/latest/lib/intel64 -Wl,-rpath,$(MHDG_MKL_DIR)/build/mkl/latest/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
 
 # PSBLAS/MLD2P4
 ifeq  ($(PSBLMG),$(LIB_YES)) 

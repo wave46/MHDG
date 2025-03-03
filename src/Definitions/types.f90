@@ -236,6 +236,7 @@ MODULE types
      REAL*8, POINTER           :: Jtor(:) => NULL()! Toroidal Current
      REAL*8                    :: I_p ! Total plasma current
      REAL*8                    :: bohmth ! Threshold for imposing the Bohm boundary condition
+     REAL*8                    :: bohm_energy_thresh ! threshold on adimensional conservative ion energy for imposing Bohm, 2e-4 for density of 1e7 and no mach number corresponds to ~0.1 eV
      ! Energy equation coefficients
      REAL*8                    :: diff_e ! Perpendicular diffusion in the energy equation
      REAL*8                    :: epn ! Exponential of the parallel diffusion (usually 5/2)
@@ -265,6 +266,10 @@ MODULE types
      INTEGER                   :: heating_equation ! Equation to which additional heating is applied (3 for ions, 4 for electrons)
      ! Coefficients for the neutral equations
      REAL*8                    :: diff_nn ! Diffusion in the neutral equation
+     LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
+     REAL*8,DIMENSION(22)      :: E           ! Energy values from TRIM
+     REAL*8,DIMENSION(19)      :: theta       ! Incidence angle values from TRIM
+     REAL*8,DIMENSION(22,19)   :: RN_DW       ! Reflection coefficient for neutrals from TRIM, (E,theta) grid
      REAL*8,ALLOCATABLE        :: diff_nn_Vol(:) ! Diffusion in the neutral equation at 2D Gauss points
      REAL*8,ALLOCATABLE        :: diff_nn_Fac(:) ! Diffusion in the neutral equation at 1D Gauss points on interior faces
      REAL*8,ALLOCATABLE        :: diff_nn_Bou(:) ! Diffusion in the neutral equation at 1D Gauss points on boundary faces
@@ -357,7 +362,6 @@ MODULE types
      LOGICAL :: set_2d_order ! if read_gmsh = .true., set order
      INTEGER :: order_2d    ! if read_gmsh = .true., set order = .true., what 2d polynomial order?
      LOGICAL :: gmsh2h5
-     LOGICAL :: saveMeshSol
      LOGICAL :: time_init ! true if it is a time initialization simulation. The time counter "it" does not increment  (i.e. when the analitical initialisation is not good enough). Used for moving equilibrium (case 59)
      INTEGER :: init     ! 1-init. analy. solution at nodes; 2-L2 projection
      ! Set to TRUE for a steady state computation
