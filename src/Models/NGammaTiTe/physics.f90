@@ -1298,6 +1298,25 @@ CONTAINS
   ! Neutral Source terms
   ! ******************************
 #ifdef NEUTRAL
+  SUBROUTINE compute_RN(E,theta,RN)
+    ! Compute the recycling coefficeint RN(E,theta) interpolating the TRIM data
+    USE interpolation
+    real*8, intent(IN)   :: E,theta
+    real*8, intent(OUT)  :: RN
+    REAL*8               :: E_clipped, theta_clipped
+    integer              :: ip, jp
+  
+    RN = 1.
+  
+    ip = size(phys%E)
+    jp = size(phys%theta)
+
+    E_clipped = max(1e-20,min(1e3-1e-20,E))
+    theta_clipped = max(1e-20,min(90-1e-20,theta))
+  
+    RN = interpolate(ip, phys%E, jp, phys%theta, phys%RN_DW, E_clipped, theta_clipped, 1e-12)
+  
+  END SUBROUTINE compute_RN
 
   SUBROUTINE compute_niz(U,niz)
     REAL*8, INTENT(IN) :: U(:)
