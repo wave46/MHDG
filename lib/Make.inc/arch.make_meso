@@ -197,7 +197,7 @@ endif
 #-------------------------------------------------------------------------------
 ######## Begin ifort #########
 ifeq ($(COMPTYPE),$(COMPTYPE_DEB))
- FCFLAGS = -fpp -O0 -r8 -qopenmp -xHOST -g -traceback -check all -free -check bounds -debug all
+ FCFLAGS = -fpp -O0 -r8 -qopenmp -xHOST -g -traceback -check bounds -free
 else ifeq ($(COMPTYPE),$(COMPTYPE_PRO))
  FCFLAGS = -fpp -O3 -parallel -fpe0 -qopenmp -xHOST -r8 -free -g
 else ifeq ($(COMPTYPE),$(COMPTYPE_OPT))
@@ -261,8 +261,8 @@ LIB += -L$(MHDG_MMG_DIR)/build/lib -lmmg
 # PASTIX #on cluster it might be lib64
 ifeq ($(PASTIX),$(LIB_YES)) 
  
- LIB += -L$(MHDG_SCOTCH_DIR)/lib64 -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread
- LIB += $(shell echo `PKG_CONFIG_PATH=${PKG_CONFIG_PATH} pkg-config --libs pastix pastixf`)
+ LIB += -L$(MHDG_SCOTCH_DIR)/lib64 -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread -lhwloc
+ LIB += $(shell echo `PKG_CONFIG_PATH=${PKG_CONFIG_PATH} pkg-config --libs pastix pastixf`) -lhwloc
 endif
 
 # BLAS/LAPACK
