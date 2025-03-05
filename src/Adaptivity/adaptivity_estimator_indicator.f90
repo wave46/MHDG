@@ -216,13 +216,13 @@ CONTAINS
        N_n_vertex = MAXVAL(vector_nodes_unique_glob)
 #endif
 
-    ALLOCATE(h_target_on_nodes(SIZE(Mesh%X,1)))
+    ALLOCATE(h_target_on_nodes(SIZE(nodes_glob,1)))
     h_target_on_nodes = 0.5
     DO i=1,SIZE(vector_nodes_unique,1)
        h_target_on_nodes(vector_nodes_unique(i)) = h_target(i)
     ENDDO
 
-    CALL gmsh_create_from_h_target( h_target_on_nodes, Mesh%X, Mesh%T(:,1:3), order)
+    CALL gmsh_create_from_h_target( h_target_on_nodes, nodes_glob, connectivity_glob(:,1:3), order)
 
 #ifdef PARALL
     ENDIF

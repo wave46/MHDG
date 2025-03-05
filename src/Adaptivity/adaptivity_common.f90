@@ -1863,6 +1863,7 @@ SUBROUTINE gmsh_create_from_h_target(h_target_on_nodes,vertices_coordinates, con
 
    USE, INTRINSIC :: iso_c_binding
    USE gmsh
+   USE MPI_OMP, only: OMPvar
 
    TYPE(gmsh_t) :: gmsh_l
    INTEGER, INTENT(IN) :: p_order
@@ -1921,6 +1922,8 @@ SUBROUTINE gmsh_create_from_h_target(h_target_on_nodes,vertices_coordinates, con
    call gmsh_l%option%setNumber("Mesh.MeshSizeExtendFromBoundary", 0d0)
    call gmsh_l%option%setNumber("Mesh.MeshSizeFromPoints", 0d0)
    call gmsh_l%option%setNumber("Mesh.MeshSizeFromCurvature", 0d0)
+   CALL gmsh_l%option%setNumber("Mesh.MeshSizeFactor", 1d0)
+   CALL gmsh_l%option%setNumber("General.NumThreads", REAL(OMPvar%Nthreads))
    
    !Changing the algorithm to Delaunay, the default is Frontal-Delaunay (Don't Know if needed)
    !call gmsh_l%option%setNumber("Mesh.Algorithm", 5d0)
