@@ -1921,6 +1921,7 @@ SUBROUTINE gmsh_create_from_h_target(h_target_on_nodes,vertices_coordinates, con
    call gmsh_l%option%setNumber("Mesh.MeshSizeExtendFromBoundary", 0d0)
    call gmsh_l%option%setNumber("Mesh.MeshSizeFromPoints", 0d0)
    call gmsh_l%option%setNumber("Mesh.MeshSizeFromCurvature", 0d0)
+   CALL gmsh_l%option%setNumber("Mesh.MeshSizeFactor", 1d0)
    
    !Changing the algorithm to Delaunay, the default is Frontal-Delaunay (Don't Know if needed)
    !call gmsh_l%option%setNumber("Mesh.Algorithm", 5d0)
