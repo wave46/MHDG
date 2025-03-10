@@ -2091,9 +2091,8 @@ CONTAINS
   SUBROUTINE compute_dsigmavcx_dU(U,res)
     ! calculates derivative of AMJUEL CX rate for linearization
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:), U1,U2,U3,T0,ti, ti_min = 0.1
+    real*8             :: res(:), U1,U2,U3,T0,ti
     real*8, allocatable :: dti_dU(:)
-    real*8             :: sigmavcx, sigmavcx_dte
     real, parameter    :: tol = 1.e-10  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
 
     allocate(dti_dU(size(U)))
