@@ -2067,8 +2067,7 @@ CONTAINS
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     ! calculates AMJUEL CX rate
     real*8, intent(IN)  :: U(:)
-    real*8              :: sigmavcx,U1,U2,U3,T0,E0,ti
-    integer             :: i
+    real*8              :: sigmavcx,U1,U2,U3,T0,ti
     real,parameter      :: tol = 1.e-10 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     U1 = U(1)
     U2 = U(2)
