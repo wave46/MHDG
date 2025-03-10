@@ -1804,10 +1804,8 @@ CONTAINS
   ENDSUBROUTINE compute_dsigmavnn_dU
   SUBROUTINE compute_sigmavrec(U,sigmavrec)
     real*8, intent(IN) :: U(:)
-    real*8             :: sigmavrec,U1,U4,T0,Ery,E0,te,ne,n0
-    real*8, dimension(9,9) :: alpha
+    real*8             :: sigmavrec,U1,U4,T0,te,ne,n0
     real*8, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    integer            :: i, j
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
