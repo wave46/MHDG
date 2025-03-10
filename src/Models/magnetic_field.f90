@@ -240,10 +240,10 @@ CONTAINS
     REAL*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
     CHARACTER(LEN=1000) :: fname
     CHARACTER(50)  :: nit
-
-
-    REAL*8                            :: q_cyl, omega,a
     INTEGER                            :: min_ind(2)
+#ifdef KEQUATION
+    REAL*8                            :: q_cyl, omega,a    
+#endif
 
 
     IF (utils%printint > 0) THEN
