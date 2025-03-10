@@ -188,7 +188,7 @@ SUBROUTINE HDG_BC()
       CALL cons2phys(ufg,upg)
 
       ! Compute diffusion at faces Gauss points
-      CALL setLocalDiff(xyf,ufg,qfg,diff_iso_fac,diff_ani_fac)
+      CALL setLocalDiff(xyf,ufg,diff_iso_fac,diff_ani_fac)
 
       ! Type of boundary
       fl = Mesh%boundaryFlag(ifa)
@@ -671,9 +671,9 @@ CONTAINS
 
     ! Compute diffusion at faces Gauss points
 #ifndef KEQUATION
-    CALL setLocalDiff(xyg,ufg,qfg,diff_iso_fac,diff_ani_fac)
+    CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac)
 #else
-    CALL setLocalDiff(xyg,ufg,qfg,diff_iso_fac,diff_ani_fac,q_cyl)
+    CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac,q_cyl)
 #endif
     if (save_tau) then
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)

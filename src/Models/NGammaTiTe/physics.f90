@@ -706,12 +706,12 @@ CONTAINS
   ! Set the perpendicular diffusion
   !****************************************
 #ifndef KEQUATION
-  SUBROUTINE setLocalDiff(xy, u, q, d_iso, d_ani)
+  SUBROUTINE setLocalDiff(xy, u, d_iso, d_ani)
 #else
-  SUBROUTINE setLocalDiff(xy, u, q, d_iso, d_ani, q_cyl)
+  SUBROUTINE setLocalDiff(xy, u, d_iso, d_ani, q_cyl)
 #endif
     real*8, intent(in)  		:: xy(:, :)
-    real*8, intent(in)  		:: u(:,:), q(:,:)
+    real*8, intent(in)  		:: u(:,:)
 #ifdef KEQUATION
     real*8, intent(in)  		:: q_cyl(:)
 #endif
@@ -2754,10 +2754,10 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     uu(1,:) = uc(:)
     qq(1,:) = q(:)
 #ifndef KEQUATION
-    call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani)
+    call setLocalDiff(xyd, uu, diff_iso, diff_ani)
 #else
     qq_cyl(:) = q_cyl
-    call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani,qq_cyl)
+    call setLocalDiff(xyd, uu, diff_iso, diff_ani,qq_cyl)
 #endif
 
 #ifdef NEUTRALP

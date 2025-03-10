@@ -1780,9 +1780,9 @@ CONTAINS
 
     ! Compute diffusion at faces Gauss points
 #ifndef KEQUATION
-    CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac)
+    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac)
 #else
-    CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac,q_cyl)
+    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac,q_cyl)
 #endif
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
@@ -1956,9 +1956,9 @@ CONTAINS
 
     ! Compute diffusion at faces Gauss points
 #ifndef KEQUATION
-    CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac)
+    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac)
 #else
-    CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac,q_cyl)
+    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac,q_cyl)
 #endif
     if (save_tau) then
        indsave = (ifa -1)*Ngauss + (/(i,i=1,Ngauss)/)
