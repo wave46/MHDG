@@ -2095,7 +2095,6 @@ CONTAINS
     real*8, allocatable :: dti_dU(:)
     real*8             :: sigmavcx, sigmavcx_dte
     real, parameter    :: tol = 1.e-10  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    integer            :: i
 
     allocate(dti_dU(size(U)))
 
