@@ -826,8 +826,11 @@ CONTAINS
     REAL*8                                      :: Xe_p1(refEl1%Nnodes2D, SIZE(X1,2)), Xe_p2(refEl2%Nnodes2D, SIZE(X2,2))
     REAL*8                                      :: ue_p1(refEl1%Nnodes2D), ue_p2(refEl2%Nnodes2D)
     INTEGER                                     :: ind_p1(refEl1%Nnodes2D), ind_p2(refEl2%Nnodes2D)
-    INTEGER                                     :: nnodes_p1, nnodes_p2, n_elements, iElem, i, ierr
+    INTEGER                                     :: nnodes_p1, nnodes_p2, n_elements, iElem, i
     REAL*8                                      :: elem_area, elem_sol_norm, elem_error, total_area, total_norm_sol
+#ifdef PARALL
+      INTEGER                                     :: ierr
+#endif
 
     error2 = 0.
     sol_norm = 0.
