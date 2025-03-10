@@ -454,7 +454,6 @@ CONTAINS
     h = g
 #else
     ! Calculate h values
-    count_vec = count_vec_local
     h = g / count_vec_local
 #endif
   END SUBROUTINE h_map
