@@ -2011,13 +2011,12 @@ CONTAINS
     rate = exp(rate)/1.e6
   ENDSUBROUTINE compute_eirene_1D_rate
 
-  SUBROUTINE compute_eirene_1D_rate_du(U1,U2,U3,ti,dti_dU,alpha,res)
+  SUBROUTINE compute_eirene_1D_rate_du(ti,dti_dU,alpha,res)
     ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
-    real*8, intent(IN) :: U1,U2,U3,ti,dti_dU(:),alpha(:)
+    real*8, intent(IN) :: ti,dti_dU(:),alpha(:)
     real*8, intent(OUT):: res(:)
     real*8             :: ti_min=0.1
     real*8             :: dlograte_dlogte,rate
-    integer            :: i
     res = 0.
 
     if (ti>ti_min) then
@@ -2109,7 +2108,7 @@ CONTAINS
       dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
       dti_dU(3) = dti_dU(3) + 1./U1
       dti_dU(:) = dti_dU(:) * T0*2./3. /phys%Mref
-      call compute_eirene_1D_rate_dU(U1,U2,U3,ti,dti_dU,phys%alpha_cx,res)
+      call compute_eirene_1D_rate_dU(ti,dti_dU,phys%alpha_cx,res)
     endif
 
   ENDSUBROUTINE compute_dsigmavcx_dU
