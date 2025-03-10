@@ -2765,13 +2765,13 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
   ! Compute the stabilization tensor tau
   !*******************************************
 #ifndef KEQUATION
-  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, tau)
+  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau)
 #else
-  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, q_cyl, tau)
+  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, q_cyl, tau)
 #endif
     real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
     REAL*8, intent(in)    :: isext
-    integer, intent(in) :: ifa, iel
+    integer, intent(in) ::  iel
 #ifdef KEQUATION
     real*8, intent(in)  :: q_cyl
 #endif
@@ -2790,7 +2790,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8              :: tau_aux(4),diff_iso(4,4,1),diff_ani(4,4,1)
 #endif
     integer             :: ndim
-    real*8              :: xc, yc, rad, h, aux, bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
+    real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
 #ifdef KEQUATION
     real*8              :: qq_cyl(1)
 #endif
