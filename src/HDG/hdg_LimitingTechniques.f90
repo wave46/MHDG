@@ -1059,27 +1059,6 @@ CONTAINS
       DEALLOCATE (up, udet, um, umho)
     END SUBROUTINE findCoeffShockCaptur
 
-    !*****************************************
-    ! Set permutations for flipping faces
-    !****************************************
-    SUBROUTINE set_permutations(n, m, perm)
-      INTEGER, INTENT(IN)  :: n, m
-      INTEGER, INTENT(OUT) :: perm(:)
-      INTEGER              :: i
-      INTEGER              :: temp(m, n/m), templr(m, n/m)
-
-      IF (MOD(n, m) .NE. 0) THEN
-         WRITE (6, *) 'Error! n must be a multiple of m'
-         STOP
-      END IF
-
-      templr = 0
-      temp = RESHAPE((/(i, i=1, n)/), (/m, n/m/))
-      DO i = 1, n/m
-         templr(:, i) = temp(:, n/m - i + 1)
-      END DO
-      perm = RESHAPE(templr, (/n/))
-    END SUBROUTINE set_permutations
 
   END SUBROUTINE HDG_ShockCapturing
 
