@@ -1866,7 +1866,6 @@ CONTAINS
   SUBROUTINE compute_dsigmavErec_dU(U,res)
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),sigmavErec,U1,U4,T0,Ery,E0,te,ne,n0
-    real*8, dimension(9,9) :: alpha
     REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     integer            :: i, j
     U1 = U(1)
