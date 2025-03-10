@@ -986,6 +986,7 @@ CONTAINS
     REAL*8,ALLOCATABLE,DIMENSION(:)   :: xvec,yvec
     REAL*8                            :: dt_ME,t_ME
     REAL*8                            :: x,y
+    REAL*8,PARAMETER                  :: tol = 1e-12
 
 
     IF (utils%printint > 0) THEN
@@ -1085,7 +1086,7 @@ CONTAINS
 
     ! check that time is the same
     IF (switch%ME) THEN
-       IF ((dt_ME .NE. time%dt_ME) .OR.(t_ME .NE. time%t_ME)) THEN
+       IF ((ABS(dt_ME - time%dt_ME) > TOL) .OR. (ABS(t_ME - time%t_ME) > TOL)) THEN
           WRITE(6,*) 'Time in current and in equilibrium files are different'
           STOP
        ENDIF
