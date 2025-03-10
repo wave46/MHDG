@@ -1992,7 +1992,6 @@ CONTAINS
     real*8, intent(OUT):: rate
     real*8             :: ti_min=0.1
     real*8             :: dlograte_dlogti
-    integer            :: i
     rate = 0.
     if (ti>=ti_min) then
       call compute_logeirene_1D_rate(ti,alpha,rate)
