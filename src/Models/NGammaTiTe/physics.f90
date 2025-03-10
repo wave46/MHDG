@@ -719,15 +719,11 @@ CONTAINS
     real*8		              :: iperdiff(size(xy, 1))
 #ifdef NEUTRAL
     integer             		:: i
-    real*8				            :: Ery = 13.6, cs_n, DnnTh, ti_min=1e-6,ti
-    real*8, dimension(size(u,1))	:: U1, U2, U3, U4, U5, E0iz, E0cx, sigmaviz, sigmavnn, sigmavcx, Dnn
+    real*8				            :: ti_min=1e-6,ti
+    real*8, dimension(size(u,1))	:: U1, U2, U3, U4, U5, sigmaviz, sigmavnn, sigmavcx, Dnn
 #ifdef KEQUATION
     real*8, dimension(size(u,1))          :: D_k,U6,c_s
     real*8                         :: r
-#endif
-#ifdef DNNSMOOTH
-    real*8                  :: width_lower, width_higher
-    real*8                  :: width_temperature=1e-7
 #endif
 #endif
 
