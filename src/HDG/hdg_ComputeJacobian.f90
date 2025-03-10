@@ -1436,9 +1436,9 @@ CONTAINS
 
     ! Compute diffusion at Gauss points
 #ifndef KEQUATION
-    CALL setLocalDiff(xy,ueg,qeg,diff_iso_vol,diff_ani_vol)
+    CALL setLocalDiff(xy,ueg,diff_iso_vol,diff_ani_vol)
 #else
-    CALL setLocalDiff(xy,ueg,qeg,diff_iso_vol,diff_ani_vol,q_cyl)
+    CALL setLocalDiff(xy,ueg,diff_iso_vol,diff_ani_vol,q_cyl)
 #endif
 
 
