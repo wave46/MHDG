@@ -433,7 +433,10 @@ CONTAINS
 
 
     USE MPI_OMP, only: MPIvar
-    INTEGER        :: i, ierr, k
+    INTEGER        ::  ierr, k
+#ifdef KEQUATION
+    INTEGER        ::  i
+#endif
     CHARACTER(LEN=1000) :: fname = 'Evolving_equilibrium'
     CHARACTER(50)  :: npr, nid, nit
     CHARACTER(len=1000) :: fname_complete
