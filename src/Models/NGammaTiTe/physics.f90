@@ -1101,11 +1101,6 @@ CONTAINS
        IF (aux<tol) aux = tol
       res = aux**phys%epn
     ENDIF
-    !! applying softplus instead strong limit
-    !if (switch%testcase .ne. 2) then
-    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-    !endif
-    !res = aux**phys%epn
   END FUNCTION computeAlphai
 
   FUNCTION computeAlphae(U) RESULT(res)
@@ -1119,33 +1114,16 @@ CONTAINS
        IF (aux<tol) aux = tol
       res = aux**phys%epn
     ENDIF
-    !! applying softplus instead strong limit
-    !if (switch%testcase .ne. 2) then
-    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-    !endif
-    !res = aux**phys%epn
   END FUNCTION computeAlphae
 
   SUBROUTINE compute_dAlpha_dUi(U, res)
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT):: res(:)
-    real*8             :: aux, double_soft_deriv
+    real*8             :: aux
     REAL*8, PARAMETER :: tol = 1.e-20
-    ! applying softplus instead strong limit
+
     aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
-    !double_soft_deriv = 1.
-    !if (switch%testcase .ne. 2) then  !! don't apply flux limiter if it is a convergence test
-    !  call double_softplus_deriv(aux, tol,3.*phys%Mref/2,double_soft_deriv)
-    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-    !endif
-    !res = 0.
-    !res(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
-    !res(2) = -U(2)/U(1)**2
-    !res(3) = 1./U(1)
-    !res=phys%epn*aux**(phys%epn-1)*res
-    !if (switch%testcase .ne. 2) then
-    !  res = res*double_soft_deriv
-    !endif
+
     IF ((2./(3.*phys%Mref)*aux > 1.) .AND. (switch%testcase .NE. 2)) THEN !! don't apply flux limiter if it is a convergence test
       res = 0.
     ELSE
@@ -1161,22 +1139,11 @@ CONTAINS
   SUBROUTINE compute_dAlpha_dUe(U, res)
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT):: res(:)
-    real*8             :: aux, double_soft_deriv
+    real*8             :: aux
     REAL*8, PARAMETER :: tol = 1.e-20
-    ! applying softplus instead strong limit
+
     aux = U(4)/U(1)
-    !double_soft_deriv = 1.
-    !if (switch%testcase .ne. 2) then  !! don't apply flux limiter if it is a convergence test
-    !  call double_softplus_deriv(aux, tol,3.*phys%Mref/2,double_soft_deriv)
-    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-    !endif
-    !res = 0.
-    !res(1) = -U(4)/U(1)**2
-    !res(4) = 1./U(1)
-    !res=phys%epn*aux**(phys%epn-1)*res
-    !if (switch%testcase .ne. 2) then
-    !  res = res*double_soft_deriv
-    !endif
+
     IF ((2./(3.*phys%Mref)*aux > 1.) .AND. (switch%testcase .NE. 2)) THEN !! don't apply flux limiter if it is a convergence test
       res = 0.
     ELSE
