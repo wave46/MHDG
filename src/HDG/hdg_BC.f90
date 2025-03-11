@@ -543,7 +543,13 @@ CONTAINS
 #ifdef SAVEFLUX
   real*8                    :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_neutral,totalflux_numerical
   real*8                    :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_neutral,faceflux_numerical
+#endif
 
+  IF (utils%timing) THEN
+    CALL cpu_TIME(timing%tps1)
+    CALL system_CLOCK(timing%cks1,timing%clock_rate1)
+  END IF
+#ifdef SAVEFLUX
   totalflux_pump = 0.
   totalflux_puff = 0.
   totalflux_parallel = 0.
@@ -551,7 +557,6 @@ CONTAINS
   totalflux_neutral = 0.
   totalflux_numerical = 0.
 #endif
-
   save_tau = switch%saveTau
   Ndim = 2
   Npel = refElPol%Nnodes2D
@@ -799,6 +804,13 @@ CONTAINS
      WRITE (6,*) "Done saving tau!"
   ENDIF
   DEALLOCATE(ures)
+
+  IF (utils%timing) THEN
+    CALL cpu_TIME(timing%tpe1)
+    CALL system_CLOCK(timing%cke1,timing%clock_rate1)
+    timing%runtbcd = timing%runtbcd + (timing%cke1 - timing%cks1)/REAL(timing%clock_rate1)
+   timing%cputbcd = timing%cputbcd + timing%tpe1 - timing%tps1
+ END IF
 
 CONTAINS
 
