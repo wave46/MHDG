@@ -120,9 +120,6 @@ CONTAINS
    SUBROUTINE build_mat_PASTIX(matPASTIX)
 
       TYPE(PASTIX_STRUC) :: matPASTIX
-      integer(kind=spm_int_t), dimension(:), pointer :: rowptr
-      integer(kind=spm_int_t), dimension(:), pointer :: colptr
-      real(kind=c_double), dimension(:), pointer :: values
       real(kind=c_double)                                      :: normA
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
