@@ -240,7 +240,6 @@ CONTAINS
       use matrices_tools, only: dump_CSR
 
       TYPE(PASTIX_STRUC) :: matPASTIX
-      integer :: iproc, ierr
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
       if (lssolver%timing) then
