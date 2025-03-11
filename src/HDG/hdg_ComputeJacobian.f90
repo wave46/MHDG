@@ -1366,7 +1366,7 @@ CONTAINS
     real*8                        :: diff_iso_vol(Neq,Neq,Ng2d),diff_ani_vol(Neq,Neq,Ng2d)
     real*8,allocatable            :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
     real*8                        :: auxdiffsc(Ng2d)
-    real*8                        :: Pi,sigma,sigmax,sigmay,x0,y0,A,r
+    real*8                        :: Pi,sigma,x0,A,r
     real*8                        :: th_n = 1.e-14
     real*8                        :: Vnng(Ndim)
 
