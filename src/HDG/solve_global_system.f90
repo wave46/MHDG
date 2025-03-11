@@ -6,6 +6,7 @@
 !*****************************************
 #ifdef WITH_PETSC
    SUBROUTINE solve_global_system(ir)
+   INTEGER, INTENT(IN) :: ir
 #else
    SUBROUTINE solve_global_system()
 #endif
