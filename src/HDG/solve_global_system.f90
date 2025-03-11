@@ -4,7 +4,11 @@
 ! date: 23/07/2019
 ! Solve the global system
 !*****************************************
-SUBROUTINE solve_global_system(ir)
+#ifdef WITH_PETSC
+   SUBROUTINE solve_global_system(ir)
+#else
+   SUBROUTINE solve_global_system()
+#endif
   USE globals
   USE LinearAlgebra
 #ifdef WITH_PASTIX
@@ -22,7 +26,7 @@ SUBROUTINE solve_global_system(ir)
 #endif
 
   IMPLICIT NONE
-  INTEGER, INTENT(IN) :: ir
+
   REAL, ALLOCATABLE   :: rhspert(:)
   REAL                :: pertamp, errsol
   INTEGER*4           :: seed(34)
@@ -39,6 +43,7 @@ SUBROUTINE solve_global_system(ir)
   REAL*8, ALLOCATABLE :: aux_sol(:)
 #ifdef PARALL
 #ifdef WITH_PETSC
+  INTEGER, INTENT(IN) :: ir
   INTEGER             :: total_n
   REAL*8, ALLOCATABLE :: aux_sol_glob_petsc(:)
   INTEGER             :: counts_recv(MPIvar%glob_size), displs(MPIvar%glob_size)
@@ -564,13 +569,11 @@ CONTAINS
     ENDIF
 #endif
   ENDSUBROUTINE storeFaceSolution
-
+#ifdef WITH_PETSC
   SUBROUTINE extractInitialGuess_PETSC()
 #ifdef PARALL
-#ifdef WITH_PETSC
     INTEGER               :: total_n = 0, counts_recv(MPIvar%glob_size), displs(MPIvar%glob_size)
     REAL*8, ALLOCATABLE   :: aux_sol_glob_petsc(:)
-#endif
 
     IF(matK%start) THEN
 
@@ -705,6 +708,7 @@ CONTAINS
 #endif
 
   ENDSUBROUTINE extractInitialGuess_PETSC
+#endif
 
   SUBROUTINE displayMatrixInfo
     WRITE (6, *) " "
