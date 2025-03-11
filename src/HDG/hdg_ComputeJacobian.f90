@@ -638,9 +638,9 @@ CONTAINS
           CALL cross_product(bg,gradbmod,driftg)
         driftg = phys%dfcoef*driftg/Bmod(g)
 
-        CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),divbg,driftg,Bmod(g),force(g,:),&
+        CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),divbg,driftg,force(g,:),&
           &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
-          &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g))
+          &ueg(g,:),qeg(g,:),u0eg(g,:,:),Jtor(g))
       END DO ! END loop in volume Gauss points
     END DO
     CALL do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)
@@ -1673,13 +1673,13 @@ CONTAINS
          gradbtor(2) = dot_PRODUCT(Nyg,b_tor_nod)
 #endif
 #ifndef KEQUATION
-      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,Bmod(g),force(g,:),&
+      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,force(g,:),&
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
-        &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g),Vnng)
+        &ueg(g,:),qeg(g,:),u0eg(g,:,:),Jtor(g))
 #else
-      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,Bmod(g),b_tor(g),gradbtor,omega(g),q_cyl(g),force(g,:),&
+      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,b_tor(g),gradbtor,omega(g),q_cyl(g),force(g,:),&
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
-        &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g),Vnng)
+        &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g))
 #endif
 
          IF (save_tau) THEN
@@ -2168,16 +2168,16 @@ CONTAINS
   !
   !********************************************************************
 #ifndef KEQUATION
-  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,Bmod,f,&
-      &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor,Vnng)
+  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,f,&
+      &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,Jtor)
 #else
-  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,Bmod,btor,gradBtor,omega,q_cyl,f,&
-    &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor,Vnng)
+  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,btor,gradBtor,omega,q_cyl,f,&
+    &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor)
 #endif
         REAL*8,INTENT(inout)      :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
-        REAL*8,INTENT(IN)         :: b3(:),psi,divb,drift(:),f(:),ktis(:),Bmod
+        REAL*8,INTENT(IN)         :: b3(:),psi,divb,drift(:),f(:),ktis(:)
 #ifdef KEQUATION
-    real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl
+    real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl,xy(:)
 #ifdef DKLINEARIZED
     real*8                    :: ddk_dU(Neq), ddk_dU_U
     real*8                    :: gradddk(Ndim)
@@ -2185,19 +2185,21 @@ CONTAINS
 #endif
     real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
     real*8,intent(IN)         :: Ni(:),NNi(:,:),Nxyzg(:,:),NNxy(:,:),NxyzNi(:,:,:),NNbb(:)
-    real*8,intent(IN)         :: upe(:),ue(:),xy(:),Jtor
-    real*8,intent(INOUT)      :: u0e(:,:),Vnng(:)
+    real*8,intent(IN)         :: upe(:),ue(:),Jtor
+    real*8,intent(INOUT)      :: u0e(:,:)
     real*8,intent(IN)         :: qe(:)
-    integer*4                 :: i,j,k,iord,ii,alpha,beta,z
-    integer*4,dimension(Npel) :: ind_i,ind_j,ind_k
+#ifdef VORTICITY
+    real*8                     :: kcoeff,exb(3)
+    integer*4                  :: alpha,beta,ii
+#endif
+    integer*4                 :: i,j,k,iord,z
     real*8,dimension(neq,neq) :: A
     real*8,dimension(neq,Ndim):: APinch
-    real*8                    :: kcoeff
-    real*8                    :: Qpr(Ndim,Neq),exb(3),bb(3)
+    real*8                    :: Qpr(Ndim,Neq),bb(3)
     real*8                    :: W2(Neq),dW2_dU(Neq,Neq),QdW2(Ndim,Neq)
     real*8                    :: qq(3,Neq),b(Ndim)
     real*8                    :: grad_n(3),gradpar_n
-    real*8                    :: auxvec(Neq)
+
 #ifdef TEMPERATURE
     real*8,dimension(neq,neq) :: GG
     real*8                    :: Telect
@@ -2207,13 +2209,14 @@ CONTAINS
     real*8                    :: Sohmic,dSohmic_dU(Neq) ! Ohmic heating
     real*8                    :: W3(Neq),dW3_dU(Neq,Neq),QdW3(Ndim,Neq)
     real*8                    :: W4(Neq),dW4_dU(Neq,Neq),QdW4(Ndim,Neq)
+#else
+    real*8                    :: auxvec(Neq)
 #endif
 #ifdef NEUTRAL
 #ifdef KEQUATION
         REAL*8                    :: gamma_I,ce, dissip,r
         REAL*8                    :: ddissip_du(Neq)
 #endif
-    real*8                    :: Ax(Neq,Neq),Ay(Neq,Neq)
     real*8                    :: niz,nrec,fGammacx,fGammarec
     real*8                    :: dniz_dU(Neq),dnrec_dU(Neq),dfGammacx_dU(Neq),dfGammarec_dU(Neq)
 #ifdef TEMPERATURE
@@ -2225,7 +2228,6 @@ CONTAINS
         REAL*8                    :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
 #ifdef DNNLINEARIZED
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-    real*8                    :: gradDnn(Ndim)
 #endif
 #ifdef NEUTRALP
         REAL*8                    :: Dnn,Dpn,Alphanp,Betanp,GammaLim,Gammaredpn,Tmin
