@@ -809,8 +809,8 @@ CONTAINS
     CALL cpu_TIME(timing%tpe1)
     CALL system_CLOCK(timing%cke1,timing%clock_rate1)
     timing%runtbcd = timing%runtbcd + (timing%cke1 - timing%cks1)/REAL(timing%clock_rate1)
-   timing%cputbcd = timing%cputbcd + timing%tpe1 - timing%tps1
- END IF
+    timing%cputbcd = timing%cputbcd + timing%tpe1 - timing%tps1
+  END IF
 
 CONTAINS
 
