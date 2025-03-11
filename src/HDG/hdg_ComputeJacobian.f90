@@ -3311,7 +3311,8 @@ CONTAINS
 #endif
       real*8,optional,intent(INOUT) :: tau(:,:)
 #ifdef VORTICITY
-      integer*4                 :: alpha,beta,exb(3),ii,kcoeff
+      integer*4                 :: alpha,beta,ii
+      real*8                    :: exb(3),kcoeff
 #endif
       integer*4                 :: i,j,k
       integer*4,dimension(Npfl)  :: ind_if,ind_jf,ind_kf
