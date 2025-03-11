@@ -1518,7 +1518,7 @@ CONTAINS
     ENDIF
     ! rate is in cm^3/s in EIRENE
 
-    IF (rate < -700) THEN
+    IF (rate < -100) THEN
         rate = 0.0
     ELSE
         rate = EXP(rate)/1.e6
@@ -1963,7 +1963,11 @@ CONTAINS
       WRITE(6,*) " rate equal to", rate
       stop
     endif
-    rate = exp(rate)/1.e6
+    if (rate < -100) then
+      rate = 0.0
+    else
+      rate = exp(rate)/1.e6
+    endif
   ENDSUBROUTINE compute_eirene_1D_rate
 
   SUBROUTINE compute_eirene_1D_rate_du(ti,dti_dU,alpha,res)
