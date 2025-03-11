@@ -32,8 +32,10 @@
   INTEGER*4           :: seed(34)
   REAL, ALLOCATABLE   :: u_tilde_exact(:), u_tilde_check(:)
   INTEGER             :: i
-#ifdef PARALL
+#if defined(PARALL) || defined(WITH_PETSC)
   REAL*8, ALLOCATABLE :: aux_sol(:)
+#endif
+#ifdef PARALL
   INTEGER*4           :: j, ierr, Neq, Nfp
   INTEGER*4           :: ct, indg(refElPol%Nfacenodes*phys%Neq), indl(refElPol%Nfacenodes*phys%Neq)
 #ifdef TOR3D
