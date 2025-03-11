@@ -56,6 +56,8 @@ CONTAINS
 
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks = 0.
+      
       if (lssolver%timing) then
          call cpu_time(tps)
          call system_clock(cks, clock_rate)
@@ -120,6 +122,7 @@ CONTAINS
       real(kind=c_double)                                      :: normA
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks =0.
 
       if (lssolver%timing) then
          call cpu_time(tps)
@@ -206,6 +209,8 @@ CONTAINS
 
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks = 0.
+
       if (lssolver%timing) then
          call cpu_time(tps)
          call system_clock(cks, clock_rate)
@@ -236,6 +241,8 @@ CONTAINS
       TYPE(PASTIX_STRUC) :: matPASTIX
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks = 0.
+
       if (lssolver%timing) then
          call cpu_time(tps)
          call system_clock(cks, clock_rate)
@@ -263,6 +270,8 @@ CONTAINS
 
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks = 0.
+
       if (lssolver%timing) then
          call cpu_time(tps)
          call system_clock(cks, clock_rate)
@@ -287,9 +296,11 @@ CONTAINS
    !***********************************************
    SUBROUTINE solve_mat_PASTIX(matPASTIX)
       TYPE(PASTIX_STRUC) :: matPASTIX
-
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+
+      cks = 0.
+
       if (lssolver%timing) then
          call cpu_time(tps)
          call system_clock(cks, clock_rate)
