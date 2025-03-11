@@ -1067,12 +1067,12 @@ CONTAINS
           CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),&
             n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,ifa)
         ELSE
-          CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),&
-            n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,ifa)
+          CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),&
+            n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
         ENDIF
 #else
-        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),&
-          n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,ifa)
+        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),&
+          n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 
 #endif
       END DO ! Gauss points
@@ -2040,7 +2040,7 @@ CONTAINS
 
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
       ENDIF
 #else
 
@@ -2048,17 +2048,17 @@ CONTAINS
         n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
       ENDIF
 #endif
 
 #else
 #ifndef DKLINEARIZED
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,Vnng)
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 #else
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,Vnng)
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 #endif
 
 #endif
@@ -3292,30 +3292,28 @@ CONTAINS
 
 #ifdef DKLINEARIZED
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-      &ind_fg,b3,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,upf,qf,tau,Vnng,ifa)
+      &ind_fg,b3,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
 #else
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-        &ind_fg,b3,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,upf,qf,tau,Vnng,ifa)
+        &ind_fg,b3,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       logical                   :: isdir
       real*8,intent(IN)         :: b3(:),n(:), psi
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
-      real*8,intent(IN)         :: uf(:),upf(:)
+      real*8,intent(IN)         :: uf(:)
       real*8,intent(IN)         :: qf(:)
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8,intent(IN)         :: q_cyl, xyf(:)
 #endif
 #endif
-      real*8,optional,intent(INOUT) :: tau(:,:),Vnng(:)
-      integer*4,optional         :: ifa
-      real*8                    :: kcoeff
+      real*8,optional,intent(INOUT) :: tau(:,:)
 #ifdef VORTICITY
-      integer*4                 :: alpha,beta
+      integer*4                 :: alpha,beta,exb(3),ii,kcoeff
 #endif
-      integer*4                 :: i,j,k,ii
+      integer*4                 :: i,j,k
       integer*4,dimension(Npfl)  :: ind_if,ind_jf,ind_kf
       real*8,dimension(neq,neq) :: A
       real*8,dimension(neq,Ndim):: APinch
@@ -3323,7 +3321,7 @@ CONTAINS
       real*8                    :: auxvec(neq)
 #endif
       real*8                    :: bn,kmult(Npfl,Npfl),kmultf(Npfl)
-      real*8                    :: Qpr(Ndim,Neq),exb(3)
+      real*8                    :: Qpr(Ndim,Neq)
       real*8                    :: nn(3),qq(3,Neq),b(Ndim),bb(3)
       real*8                    :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
 #ifdef TEMPERATURE
@@ -3333,7 +3331,6 @@ CONTAINS
       real*8                    :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
 #ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-      real*8                    :: gradDnn(Ndim)
 #endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
