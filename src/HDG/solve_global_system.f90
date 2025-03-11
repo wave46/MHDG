@@ -33,6 +33,7 @@
   REAL, ALLOCATABLE   :: u_tilde_exact(:), u_tilde_check(:)
   INTEGER             :: i
 #ifdef PARALL
+  REAL*8, ALLOCATABLE :: aux_sol(:)
   INTEGER*4           :: j, ierr, Neq, Nfp
   INTEGER*4           :: ct, indg(refElPol%Nfacenodes*phys%Neq), indl(refElPol%Nfacenodes*phys%Neq)
 #ifdef TOR3D
@@ -40,7 +41,6 @@
   INTEGER*4           :: indgp(refElPol%Nnodes2D*phys%Neq),indlp(refElPol%Nnodes2D*phys%Neq),indgt(refElTor%Nfl*phys%Neq),indlt(refElTor%Nfl*phys%Neq)
 #endif
 #endif
-  REAL*8, ALLOCATABLE :: aux_sol(:)
 #ifdef PARALL
 #ifdef WITH_PETSC
   INTEGER, INTENT(IN) :: ir
