@@ -15,6 +15,12 @@ MODULE adaptivity_indicator_module
 
 CONTAINS
 
+  SUBROUTINE calculate_oscillations(oscillation_element)
+   REAL*8, INTENT(OUT) :: oscillation_element(:)
+
+   oscillation_element = 0.0
+  ENDSUBROUTINE calculate_oscillations
+
   SUBROUTINE adaptivity_indicator(mesh_name,thresh, param_adapt, count_adapt, order)
     USE in_out, ONLY: copy_file
     USE gmsh_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5
