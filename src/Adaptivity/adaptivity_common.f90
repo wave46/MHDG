@@ -23,10 +23,13 @@ CONTAINS
    CHARACTER(1024), INTENT(IN)                 :: mesh_name
    INTEGER, INTENT(IN)                         :: count_adapt
    LOGICAL, INTENT(IN)                         :: restart_adapt
+   REAL*8                                      :: h_map_elements(SIZE(Mesh%T,1))
    
 
 
    CALL adaptivity_console_output(restart_adapt)
+
+   CALL calculate_h_map_elements(Mesh%X,Mesh%T(:,1:3),h_map_elements)
 
    ENDSUBROUTINE adaptivity_new
 
@@ -498,6 +501,22 @@ CONTAINS
     h = g / count_vec_local
 #endif
   END SUBROUTINE h_map
+
+  SUBROUTINE calculate_h_map_elements(nodes,connectivity,h_map)
+   REAL*8,INTENT(IN)                :: nodes(:,:)
+   INTEGER, INTENT(IN)              :: connectivity(:,:)
+   REAL*8, INTENT(OUT)              :: h_map(SIZE(connectivity,1))
+   INTEGER                          :: i
+   REAL*8, DIMENSION(2,2)           :: J
+   REAL*8                           :: detJ
+
+   DO i = 1, SIZE(connectivity,1)      
+      CALL jacobian(nodes, connectivity(i,1), connectivity(i,2), connectivity(i,3), J)
+      detJ = J(1,1)*J(2,2) - J(1,2)*J(2,1)
+      h_map(i) = SQRT(2.0*detJ/SQRT(3.0))
+   ENDDO
+   
+   END SUBROUTINE calculate_h_map_elements
 
   SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
     REAL*8, INTENT(IN)              :: two_d_nodes(:,:)
