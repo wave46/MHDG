@@ -3755,7 +3755,8 @@ END IF
 #ifdef TEMPERATURE
   SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
       &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
-      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0,Tloss,dTloss_dU,Tlossrec,dTlossrec_dU,sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU)
+      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0,&
+      sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU)
 #else
     SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,Sn,Sn0)
 #endif
@@ -3767,7 +3768,7 @@ END IF
       REAL*8, INTENT(IN)        :: sigmaviz,sigmavrec,sigmavcx,fEiiz,fEirec,fEicx      
       REAL*8, INTENT(IN)        :: dsigmaviz_dU(:),dsigmavrec_dU(:),dsigmavcx_dU(:)
       REAL*8, INTENT(IN)        :: dfEiiz_dU(:),dfEirec_dU(:),dfEicx_dU(:)
-      REAL*8, INTENT(IN), OPTIONAL :: Tloss,Tlossrec, sigmavEiz,sigmavErec,dTloss_dU(:),dTlossrec_dU(:),dsigmavEiz_dU(:),dsigmavErec_dU(:)
+      REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz,sigmavErec,dsigmavEiz_dU(:),dsigmavErec_dU(:)
 #endif
              REAL*8             :: ad,ad4,RE,Sn(:,:),Sn0(:), Ti,Te
 
@@ -3785,7 +3786,6 @@ END IF
 
 
       !Assembly Source Terms in plasma density equation
-
       Sn(1,:)   = ad*(-dniz_dU(:)*sigmaviz + dnrec_dU(:)*sigmavrec)
 #ifdef TEMPERATURE
 
