@@ -1358,10 +1358,7 @@ CONTAINS
     DO Fi = 1, Nfaces
 #ifdef PARALL
        IF (Mesh%ghostfaces(Fi) .EQ. 1) THEN
-          IF (Fi .GT. 1) THEN
-             shift(Fi) = shift(Fi-1)
-             linew(Fi) = linew(Fi-1)
-          END IF
+          CALL shift_linew_move_indice(Fi)
           CYCLE
        END IF
 #endif
@@ -1391,10 +1388,7 @@ CONTAINS
 
              ! Skip Dirichlet faces
              IF (Fd(ifa)) THEN
-                IF (Fi .GT. 1) THEN
-                   shift(Fi) = shift(Fi-1)
-                   linew(Fi) = linew(Fi-1)
-                END IF
+                CALL shift_linew_move_indice(Fi)
                 CYCLE
              END IF
 
@@ -1428,11 +1422,26 @@ CONTAINS
 
        END IF
 
-       IF (Fi .GT. 1) THEN
-          shift(Fi) = shift(Fi-1) + linew(Fi-1)*blk
-       END IF
+       CALL shift_move_indice(Fi)
     END DO
   ENDSUBROUTINE computennz
+
+  SUBROUTINE shift_linew_move_indice(Fi)
+      INTEGER, INTENT(IN) :: Fi
+   
+      IF (Fi .GT. 1) THEN
+         shift(Fi) = shift(Fi-1)
+         linew(Fi) = linew(Fi-1)
+      END IF
+  END SUBROUTINE shift_linew_move_indice
+
+  SUBROUTINE shift_move_indice(Fi)
+      INTEGER, INTENT(IN) :: Fi
+   
+      IF (Fi .GT. 1) THEN
+         shift(Fi) = shift(Fi-1) + linew(Fi-1)*blk
+      END IF
+  END SUBROUTINE shift_move_indice
 
   SUBROUTINE computeElementalMatrix(Kel, fel, iel)
     INTEGER, INTENT(IN)             :: iel
