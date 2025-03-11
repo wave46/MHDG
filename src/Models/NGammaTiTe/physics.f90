@@ -1517,7 +1517,12 @@ CONTAINS
        ENDIF
     ENDIF
     ! rate is in cm^3/s in EIRENE
-    rate = EXP(rate)/1.e6
+
+    IF (rate < -700) THEN
+        rate = 0.0
+    ELSE
+        rate = EXP(rate)/1.e6
+    END IF
   ENDSUBROUTINE compute_2D_eirene_rate
 
   SUBROUTINE compute_2D_eirene_rate_du(U1,U4,te,ne,alpha,rate_du)
