@@ -207,7 +207,7 @@ CONTAINS
 
     ! Free elmat, mat, magnetic field, Jtor, puff (to save some memory for the adaptivity)
     CALL free_before_adaptivity()
-
+    CALL adaptivity_new(mesh_name,count_adapt,restart_adapt)
     ! Call estimator, estimator_indicator or indicator
     IF (adapt%evaluator .EQ. 2) THEN
        CALL adaptivity_estimator(mesh_name, adapt%param_est, count_adapt, order)
