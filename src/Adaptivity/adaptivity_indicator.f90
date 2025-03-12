@@ -24,8 +24,6 @@ CONTAINS
       oscillations = 0.
       CALL find_oscillations_elements(eps_element,oscillations)
 
-      !CALL output_oscillations_info(h_map_elements)
-
       CALL refine_h_map(h_map_elements,eps_element,h_target_elements)
       
    ENDSUBROUTINE apply_indicator
@@ -77,7 +75,7 @@ CONTAINS
           END SELECT
       ENDDO
   
-      WRITE(*,'(A, F5.2, A)') "********** Percentage of refined elements on previous mesh: ", REAL(unstable_elements*100)/REAL(SIZE(h_map_elements)), "%"
+      WRITE(*,'(A, F5.2, A)') "********** Percentage of refined elements on previous mesh by indicator: ", REAL(unstable_elements*100)/REAL(SIZE(h_map_elements)), "%"
   
   END SUBROUTINE refine_h_map
   
