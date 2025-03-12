@@ -120,37 +120,61 @@ CONTAINS
 
    END SUBROUTINE load_new_mesh
 
-   SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices)
+   SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices,T)
       REAL*8, INTENT(IN)                              :: h_map_elements(:)
-      REAL*8, DIMENSION(:), ALLOCATABLE, INTENT(OUT)  :: h_target_vertices
-      REAL*8                                          :: h_target_nodal(Mesh%Nnodes)
-      INTEGER                                         :: nodes_repeats(Mesh%Nnodes)    
-      INTEGER                                         :: i,j,number_of_vertices
+      INTEGER,INTENT(IN)                              :: T(:,:)
+      REAL*8, DIMENSION(:), POINTER, INTENT(OUT)      :: h_target_vertices
+      REAL*8, ALLOCATABLE                             :: h_target_nodal(:)
+      INTEGER, ALLOCATABLE                            :: nodes_repeats(:)
+      INTEGER                                         :: number_of_vertices
 
 
-      h_target_nodal = 0.
-      nodes_repeats = 0
-      DO i=1,Mesh%Nelems
-         DO j=1,3
-            h_target_nodal(Mesh%T(i,j)) = h_target_nodal(Mesh%T(i,j)) + h_map_elements(i)
-            nodes_repeats(Mesh%T(i,j)) = nodes_repeats(Mesh%T(i,j)) + 1
-         ENDDO
-      ENDDO
+      ALLOCATE(h_target_nodal(SIZE(T,1)))
+      ALLOCATE(nodes_repeats(SIZE(T,1)))      
+
+      CALL sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
 
       number_of_vertices = COUNT(nodes_repeats /= 0)
 
       ALLOCATE(h_target_vertices(number_of_vertices))
-       
-      j = 1
 
-      DO i=1,Mesh%Nnodes
+      CALL average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
+
+      DEALLOCATE(h_target_nodal, nodes_repeats)
+   END SUBROUTINE get_h_target_vertices
+
+   SUBROUTINE average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
+      REAL*8, INTENT(IN)                              :: h_target_nodal(:)
+      INTEGER, INTENT(IN)                             :: nodes_repeats(:)
+      REAL*8, DIMENSION(:), POINTER, INTENT(OUT)      :: h_target_vertices
+      INTEGER                                         :: i, j
+
+      j = 1
+      DO i=1,SIZE(h_target_nodal)
          IF(nodes_repeats(i) /= 0) THEN
             h_target_vertices(j) = h_target_nodal(i)/REAL(nodes_repeats(i))
             j = j + 1
          ENDIF
       ENDDO
+   END SUBROUTINE average_h_target
 
-   END SUBROUTINE get_h_target_vertices
+   SUBROUTINE sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
+      INTEGER, INTENT(IN)               :: T(:,:)
+      REAL*8, INTENT(IN)                :: h_map_elements(:)
+      REAL*8, INTENT(OUT)               :: h_target_nodal(:)
+      INTEGER, INTENT(OUT)              :: nodes_repeats(:)
+      INTEGER                           :: i, j
+
+      h_target_nodal = 0.
+      nodes_repeats = 0
+      DO i=1,SIZE(T,1)
+         DO j=1,3
+            h_target_nodal(T(i,j)) = h_target_nodal(T(i,j)) + h_map_elements(i)
+            nodes_repeats(T(i,j)) = nodes_repeats(T(i,j)) + 1
+         ENDDO
+      ENDDO
+   END SUBROUTINE sum_h_target_nodal
+      
 
   SUBROUTINE merge_with_geometry(gmsh_l)
     TYPE(gmsh_t), INTENT(IN)          :: gmsh_l
