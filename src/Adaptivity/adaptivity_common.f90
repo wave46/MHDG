@@ -114,6 +114,42 @@ CONTAINS
       ENDIF
 
    END SUBROUTINE generate_new_mesh
+
+   SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices,vertex_indices)
+      REAL*8, INTENT(IN)                              :: h_map_elements(:)
+      REAL*8, DIMENSION(:), ALLOCATABLE, INTENT(OUT)  :: h_target_vertices
+      INTEGER, DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: vertex_indices
+      REAL*8                                          :: h_target_nodal(Mesh%Nnodes)
+      INTEGER                                         :: nodes_repeats(Mesh%Nnodes)    
+      INTEGER                                         :: i,j,number_of_vertices
+
+
+      h_target_nodal = 0.
+      nodes_repeats = 0
+      DO i=1,Mesh%Nelems
+         DO j=1,3
+            h_target_nodal(Mesh%T(i,j)) = h_target_nodal(Mesh%T(i,j)) + h_map_elements(i)
+            nodes_repeats(Mesh%T(i,j)) = nodes_repeats(Mesh%T(i,j)) + 1
+         ENDDO
+      ENDDO
+
+      number_of_vertices = COUNT(nodes_repeats /= 0)
+
+      ALLOCATE(h_target_vertices(number_of_vertices))
+      ALLOCATE(vertex_indices(number_of_vertices))
+       
+      j = 1
+
+      DO i=1,Mesh%Nnodes
+         IF(nodes_repeats(i) /= 0) THEN
+            h_target_vertices(j) = h_target_nodal(i)/REAL(nodes_repeats(i))
+            vertex_indices(j) = i
+            j = j + 1
+         ENDIF
+      ENDDO
+
+   END SUBROUTINE get_h_target_vertices
+
   SUBROUTINE merge_with_geometry(gmsh_l)
     TYPE(gmsh_t), INTENT(IN)          :: gmsh_l
 
