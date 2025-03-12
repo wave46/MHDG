@@ -303,7 +303,7 @@ adaptivity_estimator_indicator.o : adaptivity_estimator_indicator.F globals.o gm
 adaptivity_general.F : $(SDIR)/Adaptivity/adaptivity_general.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-adaptivity_general.o : adaptivity_general.F globals.o adaptivity_common.o adaptivity_indicator.o adaptivity_estimator.o adaptivity_estimator_indicator.o
+adaptivity_general.o : adaptivity_general.F MPI_OMP.o Communications.o globals.o adaptivity_common.o adaptivity_indicator.o adaptivity_estimator.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 Main_utils.F : $(SDIR)/Utils/Main_utils.f90
