@@ -76,7 +76,7 @@ CONTAINS
         IF (adapt%evaluator .EQ. 0) THEN
             CALL apply_estimator(h_map_elements, order, h_target_elements_est)
             CALL apply_indicator(h_map_elements, h_target_elements_ind)
-            CALL combine_h_target_ind_est(h_target_elements_est, h_target_elements_ind, h_target_elements)
+            CALL combine_h_target_ind_est(h_map_elements,h_target_elements_est, h_target_elements_ind, h_target_elements)
         ELSEIF (adapt%evaluator .EQ. 1) THEN
             CALL apply_indicator(h_map_elements, h_target_elements_ind)
             h_target_elements = h_target_elements_ind
@@ -86,15 +86,17 @@ CONTAINS
         ENDIF
     ENDSUBROUTINE evaluate_adaptivity
 
-     SUBROUTINE combine_h_target_ind_est(h_target_elements_est,h_target_elements_ind,h_target_elements)
+     SUBROUTINE combine_h_target_ind_est(h_map_elements,h_target_elements_est,h_target_elements_ind,h_target_elements)
+        REAL*8, INTENT(IN) :: h_map_elements(:)
         REAL*8, INTENT(IN) :: h_target_elements_est(:)
         REAL*8, INTENT(IN) :: h_target_elements_ind(:)
         REAL*8, INTENT(OUT) :: h_target_elements(:)
-        INTEGER :: i
-
-        DO i = 1, SIZE(h_target_elements)
-           h_target_elements(i) = MIN(h_target_elements_est(i),h_target_elements_ind(i))
-        ENDDO
+        REAL*8, PARAMETER :: tol = 1.0E-10
+        
+        h_target_elements = h_target_elements_est
+        WHERE(ABS(h_target_elements_ind-h_map_elements) .LT. tol)
+           h_target_elements = h_target_elements_ind
+        END WHERE
     ENDSUBROUTINE combine_h_target_ind_est
 
     SUBROUTINE deallocate_pointers(h_target_vertices, T_global, h_target_elements_global)
