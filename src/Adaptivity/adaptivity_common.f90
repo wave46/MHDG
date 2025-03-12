@@ -115,10 +115,9 @@ CONTAINS
 
    END SUBROUTINE generate_new_mesh
 
-   SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices,vertex_indices)
+   SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices)
       REAL*8, INTENT(IN)                              :: h_map_elements(:)
       REAL*8, DIMENSION(:), ALLOCATABLE, INTENT(OUT)  :: h_target_vertices
-      INTEGER, DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: vertex_indices
       REAL*8                                          :: h_target_nodal(Mesh%Nnodes)
       INTEGER                                         :: nodes_repeats(Mesh%Nnodes)    
       INTEGER                                         :: i,j,number_of_vertices
@@ -136,14 +135,12 @@ CONTAINS
       number_of_vertices = COUNT(nodes_repeats /= 0)
 
       ALLOCATE(h_target_vertices(number_of_vertices))
-      ALLOCATE(vertex_indices(number_of_vertices))
        
       j = 1
 
       DO i=1,Mesh%Nnodes
          IF(nodes_repeats(i) /= 0) THEN
             h_target_vertices(j) = h_target_nodal(i)/REAL(nodes_repeats(i))
-            vertex_indices(j) = i
             j = j + 1
          ENDIF
       ENDDO
