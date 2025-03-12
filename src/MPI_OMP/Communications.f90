@@ -1008,6 +1008,57 @@ CONTAINS
 
   ENDSUBROUTINE gather_solution
 
+  SUBROUTINE gather_connectivity(Mesh_in, connectivity_glob, allgather)
+   
+      TYPE(Mesh_type)                         :: Mesh_in
+      INTEGER, POINTER, INTENT(OUT)           :: connectivity_glob(:,:)
+      LOGICAL, INTENT(IN)                     :: allgather
+      INTEGER                                 :: i, ierr
+   
+      ALLOCATE(connectivity_glob(Mesh_in%Nel_glob, Mesh_in%Nnodesperelem))
+      connectivity_glob = 0
+   
+      DO i = 1, Mesh_in%Nelems
+          IF(Mesh_in%ghostElems(i) .EQ. 0) THEN
+            connectivity_glob(Mesh_in%loc2glob_el(i),:) = Mesh_in%loc2glob_nodes(Mesh_in%T(i,:))
+          ENDIF
+      ENDDO
+   
+      ! reduce results over processes
+      !IF (allgather) THEN
+         CALL MPI_ALLREDUCE(MPI_IN_PLACE, connectivity_glob, SIZE(connectivity_glob,1)*SIZE(connectivity_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+      !ELSE
+      !   CALL MPI_REDUCE(connectivity_glob, SIZE(connectivity_glob,1)*SIZE(connectivity_glob,2), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+      !ENDIF   
+   ENDSUBROUTINE gather_connectivity
+
+  SUBROUTINE gather_elemental_values(Mesh_in,value_in,value_glob,allgather)
+
+    TYPE(Mesh_type)                         :: Mesh_in
+    REAL*8, INTENT(IN)                      :: value_in(:)
+    REAL*8, POINTER, INTENT(OUT)            :: value_glob(:)
+    LOGICAL, INTENT(IN)                     :: allgather
+    INTEGER                                 :: i, ierr
+
+    ALLOCATE(value_glob(Mesh_in%Nel_glob))
+    value_glob = 0.
+
+    DO i = 1, Mesh_in%Nelems
+       IF(Mesh_in%ghostElems(i) .EQ. 0) THEN
+          value_glob(Mesh_in%loc2glob_el(i)) = value_in(i)
+       ENDIF
+    ENDDO
+
+    ! reduce results over processes
+    !IF (allgather) THEN
+      CALL MPI_Allreduce(MPI_IN_PLACE, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    !ELSE
+    !  CALL MPI_Reduce(value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, 0, ierr)
+    !ENDIF
+
+
+ END SUBROUTINE gather_elemental_values
+
   SUBROUTINE gather_magnetic_field(Mesh_in, B_glob, magnetic_flux_glob, magnetic_psi_glob, Bperturb_glob, Jtor_glob)
 
     TYPE(Mesh_type)                         :: Mesh_in
