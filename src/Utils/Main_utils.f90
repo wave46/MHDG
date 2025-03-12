@@ -208,17 +208,7 @@ CONTAINS
 
     ! Free elmat, mat, magnetic field, Jtor, puff (to save some memory for the adaptivity)
     CALL free_before_adaptivity()
-    CALL adaptivity_new(mesh_name,count_adapt,restart_adapt)
-    ! Call estimator, estimator_indicator or indicator
-    IF (adapt%evaluator .EQ. 2) THEN
-       CALL adaptivity_estimator(mesh_name, adapt%param_est, count_adapt, order)
-    ELSEIF ((adapt%evaluator .EQ. 1) ) THEN
-       CALL adaptivity_indicator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
-    ELSEIF((adapt%evaluator .EQ. 0) .OR. (restart_adapt)) THEN
-       CALL adaptivity_indicator_estimator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
-    ELSE
-       WRITE(*,*) "Choice of adaptivity evaluator not valid. STOP."
-    ENDIF
+    CALL adaptively_refine_mesh(mesh_name,count_adapt,order)
 
 
 #ifdef PARALL
