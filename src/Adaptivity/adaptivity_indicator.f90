@@ -17,7 +17,7 @@ CONTAINS
 
   SUBROUTINE apply_indicator(h_map_elements,h_target_elements)
       REAL*8, INTENT(IN)    :: h_map_elements(:)
-      REAL*8, INTENT(OUT)   :: h_target_elements(SIZE(h_map_elements))
+      REAL*8, INTENT(OUT)   :: h_target_elements(:)
       REAL*8                :: eps_element(SIZE(Mesh%T,1))
       REAL*8                :: oscillations(SIZE(Mesh%T,1))
 
@@ -56,7 +56,7 @@ CONTAINS
    SUBROUTINE refine_h_map(h_map_elements, eps_element,h_target_elements)
       REAL*8, INTENT(IN) :: h_map_elements(:)
       REAL*8, INTENT(IN)    :: eps_element(:)
-      REAL*8, INTENT(OUT)   :: h_target_elements(SIZE(h_map_elements))
+      REAL*8, INTENT(OUT)   :: h_target_elements(:)
       INTEGER               :: unstable_elements
       INTEGER               :: i
   
