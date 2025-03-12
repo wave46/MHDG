@@ -1008,11 +1008,10 @@ CONTAINS
 
   ENDSUBROUTINE gather_solution
 
-  SUBROUTINE gather_connectivity(Mesh_in, connectivity_glob, allgather)
+  SUBROUTINE gather_connectivity(Mesh_in, connectivity_glob)
    
       TYPE(Mesh_type)                         :: Mesh_in
       INTEGER, POINTER, INTENT(OUT)           :: connectivity_glob(:,:)
-      LOGICAL, INTENT(IN)                     :: allgather
       INTEGER                                 :: i, ierr
    
       ALLOCATE(connectivity_glob(Mesh_in%Nel_glob, Mesh_in%Nnodesperelem))
@@ -1032,12 +1031,11 @@ CONTAINS
       !ENDIF   
    ENDSUBROUTINE gather_connectivity
 
-  SUBROUTINE gather_elemental_values(Mesh_in,value_in,value_glob,allgather)
+  SUBROUTINE gather_elemental_values(Mesh_in,value_in,value_glob)
 
     TYPE(Mesh_type)                         :: Mesh_in
     REAL*8, INTENT(IN)                      :: value_in(:)
     REAL*8, POINTER, INTENT(OUT)            :: value_glob(:)
-    LOGICAL, INTENT(IN)                     :: allgather
     INTEGER                                 :: i, ierr
 
     ALLOCATE(value_glob(Mesh_in%Nel_glob))
