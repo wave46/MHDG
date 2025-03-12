@@ -7,40 +7,32 @@ MODULE adaptivity_general_module
 
 CONTAINS
 
-    SUBROUTINE adaptivity_new(mesh_name,count_adapt,restart_adapt,order)
-
-        ! mesh_name is the mesh path + mesh name + .msh extension ("./Meshes/CircLim.msh")
-        ! mesh_name_npne (mesh name no path no extension) is just the name of the mesh ("CircLim")
-        ! new_mesh_name_npne (new mesh name no path no extension) is just the name of the mesh + param_adapt + count_adapt ("CircLim_param2_n1")
-        ! buffer is a dummy array to store intermediate mesh names
+    SUBROUTINE adaptivity_new(mesh_name,count_adapt,order)
         CHARACTER(1024), INTENT(IN)                 :: mesh_name
         INTEGER, INTENT(IN)                         :: count_adapt
-        LOGICAL, INTENT(IN)                         :: restart_adapt
         INTEGER, INTENT(IN)                         :: order
         REAL*8                                      :: h_map_elements(SIZE(Mesh%T,1))
         REAL*8                                      :: h_target_elements(SIZE(Mesh%T,1))
         REAL*8, ALLOCATABLE                             :: h_target_vertices(:)
-        INTEGER, ALLOCATABLE                            :: vertex_indices(:)
 
         
         
         
-        CALL adaptivity_console_output(restart_adapt)
+        CALL adaptivity_console_output()
         
         CALL calculate_h_map_elements(Mesh%X,Mesh%T(:,1:3),h_map_elements)
 
 
         IF((adapt%evaluator .EQ. 2) .or. (adapt%evaluator .EQ. 0)) THEN
-           CALL apply_estimator(h_map_elements,h_target_elements)
-        ELSE
-            h_target_elements = h_map_elements
+           CALL apply_estimator(h_map_elements,order,h_target_elements)
+           h_map_elements = h_target_elements
         ENDIF
         
         IF((adapt%evaluator .EQ. 1) .or. (adapt%evaluator .EQ. 0)) THEN
            CALL apply_indicator(h_map_elements,h_target_elements)
         ENDIF
 
-        CALL get_h_target_vertices(h_target_elements,h_target_vertices,vertex_indices)
+        CALL get_h_target_vertices(h_target_elements,h_target_vertices)
 
         CALL generate_new_mesh(mesh_name,h_target_vertices,count_adapt,order)
 
@@ -48,20 +40,16 @@ CONTAINS
            DEALLOCATE(h_target_vertices)        
         ENDIF
 
-        IF (ALLOCATED(vertex_indices)) THEN
-           DEALLOCATE(vertex_indices)
-        ENDIF
     ENDSUBROUTINE adaptivity_new
 
-    SUBROUTINE adaptivity_console_output(restart_adapt)
-        LOGICAL, INTENT(IN) :: restart_adapt
+    SUBROUTINE adaptivity_console_output()
         CHARACTER(1024) :: buffer
   
         IF ((adapt%evaluator .EQ. 2)) THEN
            buffer = "            ADAPTIVITY ESTIMATOR                 "
         ELSEIF ((adapt%evaluator .EQ. 1)) THEN
            buffer = "            ADAPTIVITY INDICATOR                 "
-        ELSEIF((adapt%evaluator .EQ. 0) .OR. (restart_adapt)) THEN
+        ELSEIF((adapt%evaluator .EQ. 0)) THEN
            buffer = "        ADAPTIVITY ESTIMATOR-INDICATOR           "
         ENDIF
   
