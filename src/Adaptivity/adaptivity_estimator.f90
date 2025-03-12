@@ -880,9 +880,6 @@ CONTAINS
 
     DO iElem = 1, n_elements
 
-#ifdef PARALL
-       IF(Mesh%ghostElems(iElem) .EQ. 1) CYCLE
-#endif
        Xe_p2 = MATMUL(shapeFunctions_post,X2(T2(ielem,:),:))
        Xe_p1 = X1(T1(ielem,:),:)
 
@@ -913,12 +910,7 @@ CONTAINS
        CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 
        DO iElem = 1, n_elements
-          IF(Mesh%ghostElems(iElem) .EQ. 1) THEN
-             ! absolute error density
-             error(iElem) = 0.
-          ELSE
-             error(iElem) = SQRT(error2(iElem)/total_norm_sol*total_area/dom_area(iElem))
-          ENDIF
+         error(iElem) = SQRT(error2(iElem)/total_norm_sol*total_area/dom_area(iElem))
        ENDDO
 #else
        error = SQRT(error2/total_norm_sol*total_area/dom_area)
