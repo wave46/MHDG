@@ -15,11 +15,99 @@ MODULE adaptivity_indicator_module
 
 CONTAINS
 
-  SUBROUTINE calculate_oscillations(oscillation_element)
-   REAL*8, INTENT(OUT) :: oscillation_element(:)
+  SUBROUTINE apply_indicator(h_map_elements,h_target_elements)
+      REAL*8, INTENT(IN)    :: h_map_elements(:)
+      REAL*8, INTENT(OUT)   :: h_target_elements(SIZE(h_map_elements))
+      REAL*8                :: eps_element(SIZE(Mesh%T,1))
+      REAL*8                :: oscillations(SIZE(Mesh%T,1))
 
-   oscillation_element = 0.0
-  ENDSUBROUTINE calculate_oscillations
+      oscillations = 0.
+      CALL find_oscillations_elements(eps_element,oscillations)
+
+      !CALL output_oscillations_info(h_map_elements)
+
+      CALL refine_h_map(h_map_elements,eps_element,h_target_elements)
+      
+   ENDSUBROUTINE apply_indicator
+     
+
+  SUBROUTINE find_oscillations_elements(eps_element,oscillations)
+   REAL*8, INTENT(OUT)           :: eps_element(:)
+   REAL*8, INTENT(OUT), OPTIONAL :: oscillations(:)
+   REAL*8                        :: Vand(refElPol%Nnodes2D, refElPol%Nnodes2D), invVand(refElPol%Nnodes2D, refElPol%Nnodes2D)
+
+   !******* Find shock capturing coefficient in each element
+    ! Vandermonde matrix
+   IF (refElPol%elemType == 0) THEN
+      ! Triangles
+      CALL vandermonde_2d(Vand, refElPol)
+   ELSEIF (refElPol%elemType == 1) THEN
+      ! Quadrilaterals
+      CALL vandermonde_qua(Vand, refElPol)
+   ELSE
+      WRITE (6, *) "Vandermonde matrix for this element type not coded yet"
+      STOP
+   END IF
+   ! Invert Vandermonde matrix
+   CALL invert_matrix(Vand, invVand)
+
+   CALL find_coeff_shock_capturing_adapt(adapt%thr_ind, eps_element, invVand, oscillations)
+
+   END SUBROUTINE find_oscillations_elements
+
+   SUBROUTINE refine_h_map(h_map_elements, eps_element,h_target_elements)
+      REAL*8, INTENT(IN) :: h_map_elements(:)
+      REAL*8, INTENT(IN)    :: eps_element(:)
+      REAL*8, INTENT(OUT)   :: h_target_elements(SIZE(h_map_elements))
+      INTEGER               :: unstable_elements
+      INTEGER               :: i
+  
+      unstable_elements = 0
+      h_target_elements = h_map_elements
+  
+      DO i = 1, SIZE(h_target_elements)
+          SELECT CASE (adapt%shockcp_adapt)
+          CASE (1)
+              CALL refine_if_oscillating(h_target_elements(i), eps_element(i), unstable_elements)
+          CASE (2)
+              CALL refine_if_neighbors_oscillating(h_target_elements(i), eps_element, i, unstable_elements)
+          CASE DEFAULT
+              WRITE(*,*) "Option of shockcp_adapt not allowed. STOP."
+              STOP
+          END SELECT
+      ENDDO
+  
+      WRITE(*,'(A, F5.2, A)') "********** Percentage of refined elements on previous mesh: ", REAL(unstable_elements*100)/REAL(SIZE(h_map_elements)), "%"
+  
+  END SUBROUTINE refine_h_map
+  
+  SUBROUTINE refine_if_oscillating(h_map_element, eps_element, unstable_elements)
+      REAL*8, INTENT(INOUT) :: h_map_element
+      REAL*8, INTENT(IN)    :: eps_element
+      INTEGER, INTENT(INOUT) :: unstable_elements
+  
+      IF (eps_element .GT. 1e-10) THEN
+          h_map_element = h_map_element * 0.5
+          unstable_elements = unstable_elements + 1
+      END IF
+  END SUBROUTINE refine_if_oscillating
+  
+  SUBROUTINE refine_if_neighbors_oscillating(h_map_element, eps_element, i, unstable_elements)
+      REAL*8, INTENT(INOUT) :: h_map_element
+      REAL*8, INTENT(IN)    :: eps_element(:)
+      INTEGER, INTENT(IN)   :: i
+      INTEGER, INTENT(INOUT) :: unstable_elements
+      INTEGER               :: inod, els(SIZE(Mesh%N, 2))
+  
+      DO inod = 1, refElPol%Nvertices
+          els = Mesh%N(Mesh%Tlin(i, inod), :)
+          IF (ANY(eps_element(PACK(els, els /= 0)) .GT. 1e-10)) THEN
+              h_map_element = h_map_element * 0.5
+              unstable_elements = unstable_elements + 1
+              EXIT
+          END IF
+      END DO
+  END SUBROUTINE refine_if_neighbors_oscillating
 
   SUBROUTINE adaptivity_indicator(mesh_name,thresh, param_adapt, count_adapt, order)
     USE in_out, ONLY: copy_file
