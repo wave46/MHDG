@@ -1781,6 +1781,35 @@ CONTAINS
 
   ENDSUBROUTINE mmg_create_mesh_from_h_target
 
+  SUBROUTINE generate_htarget_sol_file_1(N_n_vertex, h_target)
+
+   INTEGER, INTENT(IN)         :: N_n_vertex
+   REAL*8, INTENT(IN)          :: h_target(:)
+   INTEGER                     :: fileID
+
+
+   CALL get_unit ( fileID )
+   ! Open the file for writing
+   OPEN(unit=fileID, file='./res/ElSizeMap_1.sol')
+
+   ! WRITE data to the file
+   WRITE(fileID, '(A,I0)') 'MeshVersionFormatted ', 2
+   WRITE(fileID, *)
+   WRITE(fileID, '(A,I0)') 'Dimension ', 3
+   WRITE(fileID, *)
+   WRITE(fileID, '(A)') 'SolAtVertices'
+   WRITE(fileID, '(I0)') N_n_vertex
+   WRITE(fileID, '(I1, 1X, I1)') 1, 1
+   WRITE(fileID, *)
+   WRITE(fileID, '(F8.6)') h_target
+   WRITE(fileID, *)
+   WRITE(fileID, '(A)') 'End'
+
+   ! Close the file
+   CLOSE(fileID)
+
+ ENDSUBROUTINE generate_htarget_sol_file_1
+
   SUBROUTINE generate_htarget_sol_file(N_n_vertex, h_target)
 
     INTEGER, INTENT(IN)         :: N_n_vertex
