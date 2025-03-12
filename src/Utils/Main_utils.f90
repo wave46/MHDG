@@ -20,7 +20,6 @@ MODULE Main_utils
   USE adaptivity_common_module
   USE adaptivity_estimator_module
   USE adaptivity_indicator_module
-  USE adaptivity_estimator_indicator_module
   USE adaptivity_general_module
   USE Postprocess, only: computeL2ErrorAnalyticSol
 #ifdef PARALL
