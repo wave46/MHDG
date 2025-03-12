@@ -14,6 +14,106 @@ MODULE adaptivity_common_module
 
 CONTAINS
 
+   SUBROUTINE generate_new_mesh(mesh_name,h_target,count_adapt,order)
+      USE in_out, ONLY: copy_file
+      USE preprocess
+      TYPE(gmsh_t)                :: gmsh
+      CHARACTER(1024), INTENT(IN) :: mesh_name
+      INTEGER, INTENT(IN)         :: count_adapt
+      REAL*8, INTENT(IN)          :: h_target(:)
+      INTEGER, INTENT(IN)         :: order
+      INTEGER                     :: N_n_vertex
+      CHARACTER(1024)             :: mesh_name_npne,new_mesh_name_npne, buffer
+      CHARACTER(70)               :: param_adapt_char, count_adapt_char
+      INTEGER                     :: ierr
+
+
+
+      N_n_vertex = SIZE(h_target)
+
+      CALL generate_htarget_sol_file(N_n_vertex,h_target)
+
+      CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
+
+      WRITE(param_adapt_char, *) adapt%param_est
+      WRITE(count_adapt_char, *) count_adapt
+      new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
+
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
+      CALL mmg_create_mesh_from_h_target(buffer)
+
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne))
+      CALL convert_mesh2msh(buffer)
+      CALL convert_msh2mesh(buffer)
+      CALL delete_file("./res/temp.mesh")
+      CALL delete_file("./res/temp.msh")
+      CALL delete_file("./res/ElSizeMap.sol")
+
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
+      CALL copy_file(buffer, "./res/temp.mesh")
+
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
+      CALL open_merge_with_geometry(gmsh, buffer)
+      CALL copy_file(buffer, "./res/temp.msh")
+      
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".sol"
+      CALL delete_file(buffer)
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         WRITE(*,*) "********** Loading mesh P1  **********"
+      ENDIF
+      CALL free_mesh
+
+      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
+         CALL load_gmsh_mesh("./res/temp",0)
+      ELSE
+         CALL load_gmsh_mesh("./res/temp",1)
+      ENDIF
+      CALL free_reference_element_pol(refElPol)
+      CALL create_reference_element(refElPol,2,1, verbose = 0)
+      CALL mesh_preprocess_serial(ierr)
+  
+      Mesh%X = Mesh%X*phys%lscale
+
+      IF(ierr .EQ. 0) THEN
+         WRITE(*,*) "Error! Corresponding face in Tb not found. STOP"
+         STOP
+      ENDIF
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         CALL HDF5_save_mesh("./newmesh_pre.h5", Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
+      ENDIF
+  
+      CALL read_extended_connectivity('./res/temp.msh')
+  
+      CALL set_order_mesh(order)
+      CALL free_reference_element_pol(refElPol)
+      CALL create_reference_element(refElPol,2,order, verbose = 0)
+      CALL mesh_preprocess_serial(ierr)
+
+      Mesh%X = Mesh%X*phys%lscale
+
+      IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80)) THEN
+         Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
+      END IF
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+      ENDIF
+      !CALL round_edges(Mesh)
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
+         CALL write_msh_file(Mesh%X,Mesh%T)
+         ! convert the mesh to .mesh
+         CALL convert_msh2mesh('./res/temp')
+      ENDIF
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+      ENDIF
+
+   END SUBROUTINE generate_new_mesh
   SUBROUTINE merge_with_geometry(gmsh_l)
     TYPE(gmsh_t), INTENT(IN)          :: gmsh_l
 
