@@ -14,18 +14,16 @@ MODULE adaptivity_common_module
 
 CONTAINS
 
-   SUBROUTINE generate_new_mesh(mesh_name,h_target,count_adapt,order)
+   SUBROUTINE generate_new_mesh(mesh_name,h_target,count_adapt)
       USE in_out, ONLY: copy_file
-      USE preprocess
       TYPE(gmsh_t)                :: gmsh
       CHARACTER(1024), INTENT(IN) :: mesh_name
       INTEGER, INTENT(IN)         :: count_adapt
       REAL*8, INTENT(IN)          :: h_target(:)
-      INTEGER, INTENT(IN)         :: order
       INTEGER                     :: N_n_vertex
       CHARACTER(1024)             :: mesh_name_npne,new_mesh_name_npne, buffer
       CHARACTER(70)               :: param_adapt_char, count_adapt_char
-      INTEGER                     :: ierr
+      
 
 
 
@@ -58,6 +56,13 @@ CONTAINS
       
       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".sol"
       CALL delete_file(buffer)
+
+   END SUBROUTINE generate_new_mesh
+
+   SUBROUTINE load_new_mesh(order)
+      USE preprocess
+      INTEGER, INTENT(IN) :: order
+      INTEGER                     :: ierr
 
       IF(MPIvar%glob_id .EQ. 0) THEN
          WRITE(*,*) "********** Loading mesh P1  **********"
@@ -113,7 +118,7 @@ CONTAINS
          CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
       ENDIF
 
-   END SUBROUTINE generate_new_mesh
+   END SUBROUTINE load_new_mesh
 
    SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices)
       REAL*8, INTENT(IN)                              :: h_map_elements(:)

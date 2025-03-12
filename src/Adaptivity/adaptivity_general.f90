@@ -32,10 +32,18 @@ CONTAINS
            CALL apply_indicator(h_map_elements,h_target_elements)
         ENDIF
 
+#ifdef PARALL
+        IF(MPIvar%glob_id .EQ. 0) THEN
+#endif
+
         CALL get_h_target_vertices(h_target_elements,h_target_vertices)
 
-        CALL generate_new_mesh(mesh_name,h_target_vertices,count_adapt,order)
+        CALL generate_new_mesh(mesh_name,h_target_vertices,count_adapt)
 
+#ifdef PARALL
+        ENDIF
+#endif
+        CALL load_new_mesh(order)
         IF (ALLOCATED(h_target_vertices)) THEN
            DEALLOCATE(h_target_vertices)        
         ENDIF
