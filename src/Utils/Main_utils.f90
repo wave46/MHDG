@@ -760,8 +760,8 @@ CONTAINS
                WRITE(*,*) "GMSH file input not found, check input syntax."
                STOP
             ENDIF
-            IF((gmsh_filename(i:i) .EQ. 'm') .AND. (gmsh_filename(i+1:i+1) .EQ. 's') .AND. (gmsh_filename(i+2:i+2) .EQ. 'h')) THEN
-               gmsh_filename_mesh = TRIM(ADJUSTL(gmsh_filename(1:i-4))) // 'P1.mesh'
+            IF((gmsh_filename(i:i) .EQ. '.') .AND. (gmsh_filename(i+1:i+1) .EQ. 'm') .AND. (gmsh_filename(i+2:i+2) .EQ. 's') .AND. (gmsh_filename(i+3:i+3) .EQ. 'h')) THEN
+               gmsh_filename_mesh = TRIM(ADJUSTL(gmsh_filename(1:i-3))) // 'P1.mesh'
                EXIT
             ENDIF
             i = i + 1
