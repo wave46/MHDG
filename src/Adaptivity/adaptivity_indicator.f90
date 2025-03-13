@@ -344,48 +344,4 @@ CONTAINS
 
   END SUBROUTINE find_coeff_shock_capturing_adapt
 
-
-  PURE SUBROUTINE unique_2D(input_matrix, output_matrix)
-    INTEGER, INTENT(IN)                :: input_matrix(:,:)
-    INTEGER, ALLOCATABLE, INTENT(OUT)  :: output_matrix(:,:)
-    INTEGER                            :: num_rows, num_cols, i, j, k, count
-    LOGICAL, ALLOCATABLE               :: is_unique(:)
-
-    ! Determine the number of rows and columns in the input matrix
-    num_rows = SIZE(input_matrix, 1)
-    num_cols = SIZE(input_matrix, 2)
-
-    ! Initialize an array to track unique elements along the second dimension
-    ALLOCATE(is_unique(num_cols))
-    is_unique = .TRUE.
-
-    ! Initialize the output matrix
-    ALLOCATE(output_matrix(num_rows, num_cols))
-
-    ! Loop through each row and remove duplicate elements along the second dimension
-    DO i = 1, num_rows
-       ! Reset is_unique array for each row
-       is_unique = .TRUE.
-       count = 0
-
-       DO j = 1, num_cols
-          IF (is_unique(j)) THEN
-             count = count + 1
-             output_matrix(i, count) = input_matrix(i, j)
-
-             ! Check for duplicates in the rest of the row
-             DO k = j + 1, num_cols
-                IF (input_matrix(i, j) == input_matrix(i, k)) THEN
-                   is_unique(k) = .FALSE.
-                END IF
-             END DO
-          END IF
-       END DO
-    END DO
-
-    ! Deallocate the temporary array
-    DEALLOCATE(is_unique)
-
-  END SUBROUTINE unique_2D
-
 ENDMODULE adaptivity_indicator_module
