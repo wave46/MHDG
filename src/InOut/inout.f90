@@ -1130,11 +1130,11 @@ CONTAINS
 
     IF(adapt%adaptivity) THEN
       IF(elemType .EQ. 0) THEN
-         ALLOCATE (Mesh%T_gmsh(Nelems, 5 + 3))
-         ALLOCATE (Mesh%Tb_gmsh(Nextfaces, 5 + 2))
+         ALLOCATE (Mesh%T_gmsh(Nelems, 5 + Nnodesperelem))
+         ALLOCATE (Mesh%Tb_gmsh(Nextfaces, 5 + Nnodesperface))
       ELSE
-         ALLOCATE (Mesh%T_gmsh(Nelems, 5 + 4))
-         ALLOCATE (Mesh%Tb_gmsh(Nextfaces, 5 + 2))
+         ALLOCATE (Mesh%T_gmsh(Nelems, 5 + Nnodesperelem))
+         ALLOCATE (Mesh%Tb_gmsh(Nextfaces, 5 + Nnodesperface))
       ENDIF
 
       CALL HDF5_group_open(file_id, 'gmsh_mesh', group_id, ierr)
