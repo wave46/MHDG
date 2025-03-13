@@ -117,6 +117,37 @@ CONTAINS
 
    END SUBROUTINE generate_new_mesh
 
+   SUBROUTINE load_new_mesh_gmsh(order)
+      USE preprocess
+      INTEGER, INTENT(IN) :: order
+      INTEGER                     :: ierr
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         WRITE(*,*) "********** Loading new mesh  **********"
+      ENDIF
+
+      CALL free_mesh
+
+      CALL free_reference_element_pol(refElPol)
+      CALL create_reference_element(refElPol,2,order, verbose = 0)
+
+      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
+         CALL load_gmsh_mesh("./res/temp",0)
+      ELSE
+         CALL load_gmsh_mesh("./res/temp",1)
+      ENDIF
+
+      CALL mesh_preprocess_serial(ierr)
+      CALL read_extended_connectivity('./res/temp.msh')
+
+      Mesh%X = Mesh%X*phys%lscale
+
+      IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80)) THEN
+         Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
+      END IF
+
+   END SUBROUTINE load_new_mesh_gmsh
+
    SUBROUTINE load_new_mesh(order)
       USE preprocess
       INTEGER, INTENT(IN) :: order
