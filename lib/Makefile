@@ -303,7 +303,7 @@ adaptivity_general.o : adaptivity_general.F MPI_OMP.o Communications.o globals.o
 Main_utils.F : $(SDIR)/Utils/Main_utils.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-Main_utils.o : Main_utils.F inout.o gmsh_io.o adaptivity_general.o reference_element.o preprocess.o MPI_OMP.o PrintUtils.o Debug.o initialization.o adaptivity_indicator.o adaptivity_estimator.o Communications.o domain_decomposition.o hdg_LimitingTechniques.o Postprocess.o $(ADDMODSOLV)
+Main_utils.o : Main_utils.F inout.o gmsh_io.o adaptivity_general.o reference_element.o preprocess.o MPI_OMP.o PrintUtils.o Debug.o initialization.o Communications.o domain_decomposition.o hdg_LimitingTechniques.o Postprocess.o $(ADDMODSOLV)
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 MHDG.F : $(SDIR)/MHDG.f90

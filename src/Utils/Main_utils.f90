@@ -17,9 +17,6 @@ MODULE Main_utils
 #ifdef WITH_PETSC
    USE solve_petsc, only: matPETSC, InitPETSC
 #endif
-  USE adaptivity_common_module
-  USE adaptivity_estimator_module
-  USE adaptivity_indicator_module
   USE adaptivity_general_module
   USE Postprocess, only: computeL2ErrorAnalyticSol
 #ifdef PARALL
