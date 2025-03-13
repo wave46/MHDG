@@ -130,7 +130,7 @@ CONTAINS
     ENDIF
     oscillations = -100.
 
-    CALL check_oscillations(adapt%thr_ind, oscillations)
+    CALL check_oscillations(oscillations)
 
     max_osc = MAXVAL(oscillations)
     min_osc = MINVAL(oscillations)
@@ -177,13 +177,12 @@ CONTAINS
 
   ENDSUBROUTINE compute_error_oscillations
 
-  SUBROUTINE check_oscillations(thresh, oscillations)
+  SUBROUTINE check_oscillations(oscillations)
 
-    REAL*8, INTENT(IN)                                  :: thresh
     REAL*8, OPTIONAL, INTENT(OUT)                       :: oscillations(:)
-    REAL*8                                              :: eps_plot(Mesh%Nnodes)
+    REAL*8                                              :: eps_elem(Mesh%Nelems)
 
-    CALL hdg_ShockCapturing_adapt(thresh, eps_plot, oscillations)
+    CALL find_oscillations_elements(eps_elem, oscillations)
 
   ENDSUBROUTINE check_oscillations
 
