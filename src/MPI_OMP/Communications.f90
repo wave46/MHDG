@@ -1008,10 +1008,11 @@ CONTAINS
 
   ENDSUBROUTINE gather_solution
 
-  SUBROUTINE gather_connectivity(Mesh_in, connectivity_glob)
+  SUBROUTINE gather_connectivity(Mesh_in, connectivity_glob,allgather)
    
       TYPE(Mesh_type)                         :: Mesh_in
       INTEGER, POINTER, INTENT(OUT)           :: connectivity_glob(:,:)
+      LOGICAL, INTENT(IN), OPTIONAL           :: allgather
       INTEGER                                 :: i, ierr
    
       ALLOCATE(connectivity_glob(Mesh_in%Nel_glob, Mesh_in%Nnodesperelem))
@@ -1024,18 +1025,23 @@ CONTAINS
       ENDDO
    
       ! reduce results over processes
-      !IF (allgather) THEN
-         CALL MPI_ALLREDUCE(MPI_IN_PLACE, connectivity_glob, SIZE(connectivity_glob,1)*SIZE(connectivity_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
-      !ELSE
-      !   CALL MPI_REDUCE(connectivity_glob, SIZE(connectivity_glob,1)*SIZE(connectivity_glob,2), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
-      !ENDIF   
+      IF (allgather) THEN
+         CALL MPI_Allreduce(MPI_IN_PLACE, connectivity_glob, SIZE(connectivity_glob,1)*SIZE(connectivity_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+      ELSE
+         IF (MPIvar%glob_id == 0) THEN
+            CALL MPI_REDUCE(MPI_IN_PLACE, connectivity_glob, SIZE(connectivity_glob,1)*SIZE(connectivity_glob,2), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+         ELSE
+            CALL MPI_REDUCE(connectivity_glob, connectivity_glob, SIZE(connectivity_glob,1)*SIZE(connectivity_glob,2), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+         END IF
+      END IF
    ENDSUBROUTINE gather_connectivity
 
-  SUBROUTINE gather_elemental_values(Mesh_in,value_in,value_glob)
+  SUBROUTINE gather_elemental_values(Mesh_in,value_in,value_glob,allgather)
 
     TYPE(Mesh_type)                         :: Mesh_in
     REAL*8, INTENT(IN)                      :: value_in(:)
     REAL*8, POINTER, INTENT(OUT)            :: value_glob(:)
+    LOGICAL, INTENT(IN), OPTIONAL           :: allgather
     INTEGER                                 :: i, ierr
 
     ALLOCATE(value_glob(Mesh_in%Nel_glob))
@@ -1047,12 +1053,15 @@ CONTAINS
        ENDIF
     ENDDO
 
-    ! reduce results over processes
-    !IF (allgather) THEN
-      CALL MPI_Allreduce(MPI_IN_PLACE, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    !ELSE
-    !  CALL MPI_Reduce(value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, 0, ierr)
-    !ENDIF
+    IF (allgather) THEN
+       CALL MPI_Allreduce(MPI_IN_PLACE, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    ELSE
+       IF (MPIvar%glob_id == 0) THEN
+          CALL MPI_REDUCE(MPI_IN_PLACE, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+       ELSE
+          CALL MPI_REDUCE(value_glob, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+       END IF
+    END IF
 
 
  END SUBROUTINE gather_elemental_values
