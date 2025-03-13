@@ -60,33 +60,13 @@ CONTAINS
 #endif
     ENDSUBROUTINE adaptively_refine_mesh
 
-
-    SUBROUTINE adaptivity_console_output()
-        CHARACTER(1024) :: buffer
-  
-        IF ((adapt%evaluator .EQ. 2)) THEN
-           buffer = "            ADAPTIVITY ESTIMATOR                 "
-        ELSEIF ((adapt%evaluator .EQ. 1)) THEN
-           buffer = "            ADAPTIVITY INDICATOR                 "
-        ELSEIF((adapt%evaluator .EQ. 0)) THEN
-           buffer = "        ADAPTIVITY ESTIMATOR-INDICATOR           "
-        ENDIF
-  
-        IF(MPIvar%glob_id .EQ. 0) THEN
-           WRITE(*,*) "*************************************************"
-           WRITE(*,*) TRIM(buffer)
-           WRITE(*,*) "*************************************************"
-        ENDIF
-  
-     ENDSUBROUTINE adaptivity_console_output
-
     SUBROUTINE evaluate_adaptivity(h_map_elements, order, h_target_elements)
         REAL*8, INTENT(IN) :: h_map_elements(:)
         INTEGER, INTENT(IN) :: order
         REAL*8              :: h_target_elements_ind(SIZE(h_map_elements))
         REAL*8              :: h_target_elements_est(SIZE(h_map_elements))
         REAL*8, INTENT(OUT) :: h_target_elements(:)
-
+  
         IF (adapt%evaluator .EQ. 0) THEN
             CALL apply_estimator(h_map_elements, order, h_target_elements_est)
             CALL apply_indicator(h_map_elements, h_target_elements_ind)
@@ -98,19 +78,6 @@ CONTAINS
             CALL apply_estimator(h_map_elements, order, h_target_elements_est)
             h_target_elements = h_target_elements_est
         ENDIF
-    ENDSUBROUTINE evaluate_adaptivity
-
-     SUBROUTINE combine_h_target_ind_est(h_map_elements,h_target_elements_est,h_target_elements_ind,h_target_elements)
-        REAL*8, INTENT(IN) :: h_map_elements(:)
-        REAL*8, INTENT(IN) :: h_target_elements_est(:)
-        REAL*8, INTENT(IN) :: h_target_elements_ind(:)
-        REAL*8, INTENT(OUT) :: h_target_elements(:)
-        REAL*8, PARAMETER :: tol = 1.0E-10
-        
-        h_target_elements = h_target_elements_est
-        WHERE(ABS(h_target_elements_ind-h_map_elements) .LT. tol)
-           h_target_elements = h_target_elements_ind
-        END WHERE
-    ENDSUBROUTINE combine_h_target_ind_est
+     ENDSUBROUTINE evaluate_adaptivity
 
 END MODULE adaptivity_general_module

@@ -14,6 +14,64 @@ MODULE adaptivity_common_module
 
 CONTAINS
 
+   SUBROUTINE adaptivity_console_output()
+      CHARACTER(1024) :: buffer
+
+      IF ((adapt%evaluator .EQ. 2)) THEN
+         buffer = "            ADAPTIVITY ESTIMATOR                 "
+      ELSEIF ((adapt%evaluator .EQ. 1)) THEN
+         buffer = "            ADAPTIVITY INDICATOR                 "
+      ELSEIF((adapt%evaluator .EQ. 0)) THEN
+         buffer = "        ADAPTIVITY ESTIMATOR-INDICATOR           "
+      ENDIF
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         WRITE(*,*) "*************************************************"
+         WRITE(*,*) TRIM(buffer)
+         WRITE(*,*) "*************************************************"
+      ENDIF
+
+   ENDSUBROUTINE adaptivity_console_output
+
+   SUBROUTINE calculate_h_map_elements(nodes,connectivity,h_map)
+      REAL*8,INTENT(IN)                :: nodes(:,:)
+      INTEGER, INTENT(IN)              :: connectivity(:,:)
+      REAL*8, INTENT(OUT)              :: h_map(SIZE(connectivity,1))
+      INTEGER                          :: i
+      REAL*8, DIMENSION(2,2)           :: J
+      REAL*8                           :: detJ
+
+      DO i = 1, SIZE(connectivity,1)      
+         CALL jacobian(nodes, connectivity(i,1), connectivity(i,2), connectivity(i,3), J)
+         detJ = J(1,1)*J(2,2) - J(1,2)*J(2,1)
+         h_map(i) = SQRT(2.0*detJ/SQRT(3.0))
+      ENDDO
+
+   END SUBROUTINE calculate_h_map_elements       
+
+   SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices,T)
+      REAL*8, INTENT(IN)                              :: h_map_elements(:)
+      INTEGER,INTENT(IN)                              :: T(:,:)
+      REAL*8, DIMENSION(:), POINTER, INTENT(OUT)      :: h_target_vertices
+      REAL*8, ALLOCATABLE                             :: h_target_nodal(:)
+      INTEGER, ALLOCATABLE                            :: nodes_repeats(:)
+      INTEGER                                         :: number_of_vertices
+
+
+      ALLOCATE(h_target_nodal(SIZE(T,1)))
+      ALLOCATE(nodes_repeats(SIZE(T,1)))      
+
+      CALL sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
+
+      number_of_vertices = COUNT(nodes_repeats /= 0)
+
+      ALLOCATE(h_target_vertices(number_of_vertices))
+
+      CALL average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
+
+      DEALLOCATE(h_target_nodal, nodes_repeats)
+   END SUBROUTINE get_h_target_vertices
+
    SUBROUTINE generate_new_mesh(mesh_name,h_target,count_adapt)
       USE in_out, ONLY: copy_file
       TYPE(gmsh_t)                :: gmsh
@@ -120,43 +178,31 @@ CONTAINS
 
    END SUBROUTINE load_new_mesh
 
-   SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices,T)
-      REAL*8, INTENT(IN)                              :: h_map_elements(:)
-      INTEGER,INTENT(IN)                              :: T(:,:)
-      REAL*8, DIMENSION(:), POINTER, INTENT(OUT)      :: h_target_vertices
-      REAL*8, ALLOCATABLE                             :: h_target_nodal(:)
-      INTEGER, ALLOCATABLE                            :: nodes_repeats(:)
-      INTEGER                                         :: number_of_vertices
+   SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
+      REAL*8, INTENT(IN)              :: two_d_nodes(:,:)
+      REAL*8, INTENT(OUT)             :: J(2,2)
+      INTEGER, INTENT(IN)             :: A, B, C
+  
+      ! Calculate Jacobian matrix
+      J(1,1) = two_d_nodes(B,1) - two_d_nodes(A,1)
+      J(2,1) = two_d_nodes(B,2) - two_d_nodes(A,2)
+      J(1,2) = two_d_nodes(C,1) - two_d_nodes(A,1)
+      J(2,2) = two_d_nodes(C,2) - two_d_nodes(A,2)
+  
+   END SUBROUTINE jacobian
 
-
-      ALLOCATE(h_target_nodal(SIZE(T,1)))
-      ALLOCATE(nodes_repeats(SIZE(T,1)))      
-
-      CALL sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
-
-      number_of_vertices = COUNT(nodes_repeats /= 0)
-
-      ALLOCATE(h_target_vertices(number_of_vertices))
-
-      CALL average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
-
-      DEALLOCATE(h_target_nodal, nodes_repeats)
-   END SUBROUTINE get_h_target_vertices
-
-   SUBROUTINE average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
-      REAL*8, INTENT(IN)                              :: h_target_nodal(:)
-      INTEGER, INTENT(IN)                             :: nodes_repeats(:)
-      REAL*8, DIMENSION(:), POINTER, INTENT(OUT)      :: h_target_vertices
-      INTEGER                                         :: i, j
-
-      j = 1
-      DO i=1,SIZE(h_target_nodal)
-         IF(nodes_repeats(i) /= 0) THEN
-            h_target_vertices(j) = h_target_nodal(i)/REAL(nodes_repeats(i))
-            j = j + 1
-         ENDIF
-      ENDDO
-   END SUBROUTINE average_h_target
+   SUBROUTINE combine_h_target_ind_est(h_map_elements,h_target_elements_est,h_target_elements_ind,h_target_elements)
+      REAL*8, INTENT(IN) :: h_map_elements(:)
+      REAL*8, INTENT(IN) :: h_target_elements_est(:)
+      REAL*8, INTENT(IN) :: h_target_elements_ind(:)
+      REAL*8, INTENT(OUT) :: h_target_elements(:)
+      REAL*8, PARAMETER :: tol = 1.0E-10
+      
+      h_target_elements = h_target_elements_est
+      WHERE(ABS(h_target_elements_ind-h_map_elements) .LT. tol)
+         h_target_elements = h_target_elements_ind
+      END WHERE
+   ENDSUBROUTINE combine_h_target_ind_est
 
    SUBROUTINE sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
       INTEGER, INTENT(IN)               :: T(:,:)
@@ -174,6 +220,21 @@ CONTAINS
          ENDDO
       ENDDO
    END SUBROUTINE sum_h_target_nodal
+
+   SUBROUTINE average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
+      REAL*8, INTENT(IN)                              :: h_target_nodal(:)
+      INTEGER, INTENT(IN)                             :: nodes_repeats(:)
+      REAL*8, DIMENSION(:), POINTER, INTENT(OUT)      :: h_target_vertices
+      INTEGER                                         :: i, j
+
+      j = 1
+      DO i=1,SIZE(h_target_nodal)
+         IF(nodes_repeats(i) /= 0) THEN
+            h_target_vertices(j) = h_target_nodal(i)/REAL(nodes_repeats(i))
+            j = j + 1
+         ENDIF
+      ENDDO
+   END SUBROUTINE average_h_target
       
 
   SUBROUTINE merge_with_geometry(gmsh_l)
@@ -622,35 +683,6 @@ CONTAINS
     h = g / count_vec_local
 #endif
   END SUBROUTINE h_map
-
-  SUBROUTINE calculate_h_map_elements(nodes,connectivity,h_map)
-   REAL*8,INTENT(IN)                :: nodes(:,:)
-   INTEGER, INTENT(IN)              :: connectivity(:,:)
-   REAL*8, INTENT(OUT)              :: h_map(SIZE(connectivity,1))
-   INTEGER                          :: i
-   REAL*8, DIMENSION(2,2)           :: J
-   REAL*8                           :: detJ
-
-   DO i = 1, SIZE(connectivity,1)      
-      CALL jacobian(nodes, connectivity(i,1), connectivity(i,2), connectivity(i,3), J)
-      detJ = J(1,1)*J(2,2) - J(1,2)*J(2,1)
-      h_map(i) = SQRT(2.0*detJ/SQRT(3.0))
-   ENDDO
-
-   END SUBROUTINE calculate_h_map_elements
-
-  SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
-    REAL*8, INTENT(IN)              :: two_d_nodes(:,:)
-    REAL*8, INTENT(OUT)             :: J(2,2)
-    INTEGER, INTENT(IN)             :: A, B, C
-
-    ! Calculate Jacobian matrix
-    J(1,1) = two_d_nodes(B,1) - two_d_nodes(A,1)
-    J(2,1) = two_d_nodes(B,2) - two_d_nodes(A,2)
-    J(1,2) = two_d_nodes(C,1) - two_d_nodes(A,1)
-    J(2,2) = two_d_nodes(C,2) - two_d_nodes(A,2)
-
-  END SUBROUTINE jacobian
 
   SUBROUTINE round_edges(Mesh_loc)
     USE mod_splines
