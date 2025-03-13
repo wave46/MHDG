@@ -571,57 +571,6 @@ CONTAINS
 
   ENDSUBROUTINE linear_mapping
 
-  SUBROUTINE blending_boundary(Z,m,porder,s,W)
-    INTEGER, INTENT(IN)                 :: m, porder
-    REAL*8, INTENT(IN)                  :: Z(:,:), s(:)
-    REAL*8, INTENT(OUT)                 :: W(:)
-    INTEGER                             :: i, ind
-    REAL*8                              :: C(porder-1, porder-1), invC(porder-1, porder-1)
-    REAL*8                              :: ZC(SIZE(Z,1),2)
-
-    IF (m .EQ. 1) THEN
-       ! First vertex ([0,0] in xi-eta)
-       W = 1.0D0 - Z(:,1) - Z(:,2)
-    ELSEIF (m .EQ. porder + 1) THEN
-       ! Second vertex ([1,0] in xi-eta)
-       W = Z(:,1)
-    ELSEIF (m .EQ. 2*porder + 1) THEN
-       ! Third vertex ([0,0] in xi-eta)
-       W = Z(:,2)
-    ELSE
-       ! Edge nodes
-       C = 1.0D0
-       C(:,1) = s(2:SIZE(s)-1) * (1.0D0 - s(2:SIZE(s)-1))
-       DO i = 2, porder-1
-          C(:,i) = C(:,i-1) * s(2:SIZE(s)-1)
-       ENDDO
-
-       CALL invert_matrix(C,invC)
-
-       IF (m < porder + 1) THEN
-          ! First edge
-          ZC = Z
-          ind = m - 1
-       ELSEIF (m .LT. 2*porder + 1) THEN
-          ! Second edge
-          ZC(:,1) = Z(:,2)
-          ZC(:,2) = 1.0D0 - Z(:,1) - Z(:,2)
-          ind = m - porder - 1
-       ELSE
-          ! Third edge
-          ZC(:,1) = 1.0D0 - Z(:,1) - Z(:,2)
-          ZC(:,2) = Z(:,1)
-          ind = m - 2*porder - 1
-       ENDIF
-
-       W = 0.0D0
-       DO i = 1, porder-1
-          W = W + invC(i,ind) * ZC(:,1)**i
-       ENDDO
-       W = W * (1.0D0 - ZC(:,1) - ZC(:,2))
-    ENDIF
-  ENDSUBROUTINE blending_boundary
-
   SUBROUTINE inverse_isop_transf(x, Xe, refEl, xieta)
     TYPE(Reference_element_type), INTENT(IN)  :: RefEl
     REAL*8, INTENT(OUT)                       :: xieta(:,:)
