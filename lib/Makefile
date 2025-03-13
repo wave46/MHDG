@@ -261,7 +261,7 @@ domain_decomposition.o : domain_decomposition.F globals.o MPI_OMP.o preprocess.o
 compute_element_solution.F : $(SDIR)/HDG/compute_element_solution.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-compute_element_solution.o : compute_element_solution.F globals.o LinearAlgebra.o MPI_OMP.o
+compute_element_solution.o : compute_element_solution.F globals.o LinearAlgebra.o MPI_OMP.o PrintUtils.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 Postprocess.F : $(SDIR)/InOut/Postprocess.f90

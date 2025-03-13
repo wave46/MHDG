@@ -622,6 +622,10 @@ CONTAINS
           j=j+1
        ENDIF
     ENDDO
+    IF (PRESENT(count_vec)) THEN
+       count_vec = count_vec_local
+
+    ENDIF
 #else
     j=1
     DO i=1,N_n_max

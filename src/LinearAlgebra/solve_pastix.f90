@@ -53,12 +53,11 @@ CONTAINS
 
       !   TYPE(MAT_CSR_TYP) :: matCSR
       TYPE(PASTIX_STRUC) :: matPASTIX
-      integer(kind=spm_int_t), dimension(:), pointer :: rowptr
-      integer(kind=spm_int_t), dimension(:), pointer :: colptr
-      real(kind=c_double), dimension(:), pointer :: values
 
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks = 0.
+
       if (lssolver%timing) then
          call cpu_time(tps)
          call system_clock(cks, clock_rate)
@@ -120,12 +119,10 @@ CONTAINS
    SUBROUTINE build_mat_PASTIX(matPASTIX)
 
       TYPE(PASTIX_STRUC) :: matPASTIX
-      integer(kind=spm_int_t), dimension(:), pointer :: rowptr
-      integer(kind=spm_int_t), dimension(:), pointer :: colptr
-      real(kind=c_double), dimension(:), pointer :: values
       real(kind=c_double)                                      :: normA
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks =0.
 
       if (lssolver%timing) then
          call cpu_time(tps)
@@ -212,6 +209,8 @@ CONTAINS
 
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks = 0.
+
       if (lssolver%timing) then
          call cpu_time(tps)
          call system_clock(cks, clock_rate)
@@ -240,9 +239,10 @@ CONTAINS
       use matrices_tools, only: dump_CSR
 
       TYPE(PASTIX_STRUC) :: matPASTIX
-      integer :: iproc, ierr
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks = 0.
+
       if (lssolver%timing) then
          call cpu_time(tps)
          call system_clock(cks, clock_rate)
@@ -270,6 +270,8 @@ CONTAINS
 
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks = 0.
+
       if (lssolver%timing) then
          call cpu_time(tps)
          call system_clock(cks, clock_rate)
@@ -295,9 +297,10 @@ CONTAINS
    SUBROUTINE solve_mat_PASTIX(matPASTIX)
       TYPE(PASTIX_STRUC) :: matPASTIX
 
-      integer :: Nall, irow, iproc, IERR
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      cks = 0.
+
       if (lssolver%timing) then
          call cpu_time(tps)
          call system_clock(cks, clock_rate)

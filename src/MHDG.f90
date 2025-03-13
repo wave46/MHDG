@@ -222,7 +222,11 @@ PROGRAM MHDG
         ! Assembly the global matrix
         CALL hdg_Assembly()
         ! Solve linear system
+#ifdef WITH_PETSC
         CALL solve_global_system(ir)
+#else
+        CALL solve_global_system()
+#endif
         ! Compute element-by-element solution
         CALL compute_element_solution()
         ! Check for NaN (should work with optimization flags)

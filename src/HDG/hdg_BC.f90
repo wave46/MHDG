@@ -188,7 +188,7 @@ SUBROUTINE HDG_BC()
       CALL cons2phys(ufg,upg)
 
       ! Compute diffusion at faces Gauss points
-      CALL setLocalDiff(xyf,ufg,qfg,diff_iso_fac,diff_ani_fac)
+      CALL setLocalDiff(xyf,ufg,diff_iso_fac,diff_ani_fac)
 
       ! Type of boundary
       fl = Mesh%boundaryFlag(ifa)
@@ -335,7 +335,7 @@ CONTAINS
         IF (numer%stab > 1) THEN
           ! Compute tau in the Gauss points
           IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),iel,ifa,1.,xyf(g,:),tau_stab)
+            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),iel,1.,xyf(g,:),tau_stab)
           ELSE
             CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),xyf(g,:),1.,iel,tau_stab)
           ENDIF
@@ -389,7 +389,7 @@ CONTAINS
         ! Shaspe functions product
         Ni = Nfi(g,:)*dsurfg
 
-        CALL assembly_dirichletstr_bc(iel3,ind_asf,ind_ash,ind_fe,ind_fg,Ni,qfg(g,:),uex(g,:),uexpg(g,:),b(g,:),n_g(g,:))
+        CALL assembly_dirichletstr_bc(iel3,ind_asf,ind_ash,ind_fe,ind_fg,Ni,qfg(g,:),uex(g,:),b(g,:),n_g(g,:))
 
       END DO
     END DO
@@ -470,7 +470,7 @@ CONTAINS
         IF (numer%stab > 1) THEN
           ! Compute tau in the Gauss points
           IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),iel,ifa,1.,xyf(g,:),tau_stab)
+            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),iel,1.,xyf(g,:),tau_stab)
           ELSE
             CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),xyf(g,:),1.,iel,tau_stab)
           ENDIF
@@ -543,7 +543,13 @@ CONTAINS
 #ifdef SAVEFLUX
   real*8                    :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_neutral,totalflux_numerical
   real*8                    :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_neutral,faceflux_numerical
+#endif
 
+  IF (utils%timing) THEN
+    CALL cpu_TIME(timing%tps1)
+    CALL system_CLOCK(timing%cks1,timing%clock_rate1)
+  END IF
+#ifdef SAVEFLUX
   totalflux_pump = 0.
   totalflux_puff = 0.
   totalflux_parallel = 0.
@@ -551,7 +557,6 @@ CONTAINS
   totalflux_neutral = 0.
   totalflux_numerical = 0.
 #endif
-
   save_tau = switch%saveTau
   Ndim = 2
   Npel = refElPol%Nnodes2D
@@ -671,9 +676,9 @@ CONTAINS
 
     ! Compute diffusion at faces Gauss points
 #ifndef KEQUATION
-    CALL setLocalDiff(xyg,ufg,qfg,diff_iso_fac,diff_ani_fac)
+    CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac)
 #else
-    CALL setLocalDiff(xyg,ufg,qfg,diff_iso_fac,diff_ani_fac,q_cyl)
+    CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac,q_cyl)
 #endif
     if (save_tau) then
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
@@ -800,6 +805,13 @@ CONTAINS
   ENDIF
   DEALLOCATE(ures)
 
+  IF (utils%timing) THEN
+    CALL cpu_TIME(timing%tpe1)
+    CALL system_CLOCK(timing%cke1,timing%clock_rate1)
+    timing%runtbcd = timing%runtbcd + (timing%cke1 - timing%cks1)/REAL(timing%clock_rate1)
+    timing%cputbcd = timing%cputbcd + timing%tpe1 - timing%tps1
+  END IF
+
 CONTAINS
 
   !****************************
@@ -898,9 +910,9 @@ CONTAINS
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
 #ifndef KEQUATION
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),tau_stab)
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
 #else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),q_cyl(g),tau_stab)
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
 #endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
@@ -953,9 +965,9 @@ CONTAINS
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
 #ifndef KEQUATION
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),tau_stab)
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
 #else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),q_cyl(g),tau_stab)
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
 #endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
@@ -1002,7 +1014,7 @@ CONTAINS
       ! Shape functions product
       Ni = refElPol%N1D(g,:)*dline
 
-      CALL assembly_dirichletstr_bc(iel,ind_asf,ind_ash,ind_fe,ind_fg,Ni,qfg(g,:),uex(g,:),uexpg(g,:),b(g,1:2),n_g)
+      CALL assembly_dirichletstr_bc(iel,ind_asf,ind_ash,ind_fe,ind_fg,Ni,qfg(g,:),uex(g,:),b(g,1:2),n_g)
 
     END DO
 
@@ -1038,9 +1050,9 @@ CONTAINS
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
 #ifndef KEQUATION
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),tau_stab)
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
 #else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),q_cyl(g),tau_stab)
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
 #endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
@@ -1056,7 +1068,7 @@ CONTAINS
 
       NiNi = tensorProduct(refElPol%N1D(g,:),refElPol%N1D(g,:))*dline
       Ni = refElPol%N1D(g,:)*dline
-      CALL assembly_itercore_bc(iel,ind_asf,ind_ash,ind_ff,ind_fg,uex(g,:),NiNi,Ni,b(g,1:2),n_g,tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
+      CALL assembly_itercore_bc(iel,ind_asf,ind_ash,ind_ff,ind_fg,NiNi,Ni,b(g,1:2),n_g,tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
     END DO
 
   END SUBROUTINE set_itercore_bc
@@ -1225,9 +1237,9 @@ CONTAINS
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
 #ifndef KEQUATION
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),tau_stab)
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
 #else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,ifa,1.,xyg(g,:),q_cyl(g),tau_stab)
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
 #endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
@@ -1253,18 +1265,18 @@ CONTAINS
 #ifndef SAVEFLUX
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,Vnng)
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang)
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,Vnng)
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang)
 #endif
 #else
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
+        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
 #endif
         !summing conribution from each part of the face
         faceflux_pump = faceflux_pump+flgflux_pump
@@ -1562,9 +1574,9 @@ CONTAINS
   !*********************************
   ! ITER core boundary condition
   !*********************************
-  SUBROUTINE assembly_itercore_bc(iel,ind_asf,ind_ash,ind_ff,ind_fg,ufg,NiNi,Ni,bg,ng,tau,diffiso,diffani)
+  SUBROUTINE assembly_itercore_bc(iel,ind_asf,ind_ash,ind_ff,ind_fg,NiNi,Ni,bg,ng,tau,diffiso,diffani)
       INTEGER*4    :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fg(:)
-      REAL*8       :: NiNi(:,:),Ni(:),ufg(:),bg(:),ng(:)
+      REAL*8       :: NiNi(:,:),Ni(:),bg(:),ng(:)
       REAL*8       :: tau(:,:)
       REAL*8       :: diffiso(:,:),diffani(:,:)
       REAL*8       :: bn
@@ -1696,9 +1708,9 @@ CONTAINS
   !**********************************
   ! Assembly Dirichlet in strong form
   !**********************************
-  SUBROUTINE assembly_dirichletstr_bc(iel,ind_asf,ind_ash,ind_fe,ind_fg,Ni,qg,ufg,upg,bg,ng)
+  SUBROUTINE assembly_dirichletstr_bc(iel,ind_asf,ind_ash,ind_fe,ind_fg,Ni,qg,ufg,bg,ng)
       INTEGER*4        :: iel,ind_asf(:),ind_ash(:),ind_fe(:),ind_fg(:)
-      REAL*8           :: Ni(:),ufg(:),upg(:),bg(:),ng(:)
+      REAL*8           :: Ni(:),ufg(:),bg(:),ng(:)
       REAL*8           :: qg(:)
       REAL*8           :: bn,An(Neq,Neq)
       INTEGER          :: i,j,idm
@@ -1783,26 +1795,30 @@ CONTAINS
   !*********************************
 #ifndef SAVEFLUX
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang,Vnng)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang,Vnng)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang)
 #endif
 #else
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,Vnng,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
 #endif
 #endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
     real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),psig,ng(:),tau(:,:),setval,dcs_du(:)
     real*8           :: diffiso(:,:),diffani(:,:)
     logical          :: ntang
-    real*8           :: qfg(:),Vnng(:)
+    real*8           :: qfg(:)
     real*8           :: bn,Abohm(Neq,Neq),APinch(Neq,Ndim)
     integer          :: i,j,k,idm,Neqstab,Neqgrad
-    integer*4        :: ind(Npfl),indi(Npfl),indj(Npfl),indk(Npfl),ind_jf(Npfl),ind_kf(Npfl)
-    real*8           :: Qpr(Ndim,Neq),kcoeff, recycling_coeff,  cryopump_coeff,puff_coeff
+#ifdef VORTICITY
+    integer*4        :: indk(Npfl)
+    real*8           :: kcoeff
+#endif
+    integer*4        :: ind(Npfl),indi(Npfl),indj(Npfl),ind_jf(Npfl),ind_kf(Npfl)
+    real*8           :: Qpr(Ndim,Neq), recycling_coeff,  cryopump_coeff,puff_coeff
     real*8           :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
 #ifdef TEMPERATURE
@@ -1814,7 +1830,6 @@ CONTAINS
         REAL*8           :: E, theta, RN
 #ifdef DNNLINEARIZED
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-    real*8                    :: gradDnn(Ndim)
 #endif
 #endif
 #ifdef DKLINEARIZED

@@ -240,10 +240,10 @@ CONTAINS
     REAL*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
     CHARACTER(LEN=1000) :: fname
     CHARACTER(50)  :: nit
-
-
-    REAL*8                            :: q_cyl, omega,a
     INTEGER                            :: min_ind(2)
+#ifdef KEQUATION
+    REAL*8                            :: q_cyl, omega,a    
+#endif
 
 
     IF (utils%printint > 0) THEN
@@ -433,7 +433,10 @@ CONTAINS
 
 
     USE MPI_OMP, only: MPIvar
-    INTEGER        :: i, ierr, k
+    INTEGER        ::  ierr, k
+#ifdef KEQUATION
+    INTEGER        ::  i
+#endif
     CHARACTER(LEN=1000) :: fname = 'Evolving_equilibrium'
     CHARACTER(50)  :: npr, nid, nit
     CHARACTER(len=1000) :: fname_complete
@@ -986,6 +989,7 @@ CONTAINS
     REAL*8,ALLOCATABLE,DIMENSION(:)   :: xvec,yvec
     REAL*8                            :: dt_ME,t_ME
     REAL*8                            :: x,y
+    REAL*8,PARAMETER                  :: tol = 1.e-12
 
 
     IF (utils%printint > 0) THEN
@@ -1085,7 +1089,7 @@ CONTAINS
 
     ! check that time is the same
     IF (switch%ME) THEN
-       IF ((dt_ME .NE. time%dt_ME) .OR.(t_ME .NE. time%t_ME)) THEN
+       IF ((ABS(dt_ME - time%dt_ME) > TOL) .OR. (ABS(t_ME - time%t_ME) > TOL)) THEN
           WRITE(6,*) 'Time in current and in equilibrium files are different'
           STOP
        ENDIF

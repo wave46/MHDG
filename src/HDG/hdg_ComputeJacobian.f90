@@ -638,9 +638,9 @@ CONTAINS
           CALL cross_product(bg,gradbmod,driftg)
         driftg = phys%dfcoef*driftg/Bmod(g)
 
-        CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),divbg,driftg,Bmod(g),force(g,:),&
+        CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),divbg,driftg,force(g,:),&
           &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
-          &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g))
+          &ueg(g,:),qeg(g,:),u0eg(g,:,:),Jtor(g))
       END DO ! END loop in volume Gauss points
     END DO
     CALL do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)
@@ -757,15 +757,15 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),b(g,:),Bmod(g),n_g(g,:),iel2,ifa,0.,xyf(g,:),tau)
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),b(g,:),Bmod(g),n_g(g,:),iel2,0.,xyf(g,:),tau)
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g(g,:),xyf(g,:),0.,iel2,tau)
         ENDIF
       END IF
 
       ! Assembly local contributions
-      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),&
-        n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,ifa)
+      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),&
+        n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
     END DO
     !      END DO
 
@@ -896,15 +896,15 @@ CONTAINS
           ! Non constant stabilization
           ! Compute tau in the Gauss points
           IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),b(g,:),Bmod(g),n_g(g,:),iel2,ifa,0.,xyf(g,:),tau)
+            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),b(g,:),Bmod(g),n_g(g,:),iel2,0.,xyf(g,:),tau)
           ELSE
             CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g(g,:),xyf(g,:),0.,iel2,tau)
           ENDIF
         END IF
 
         ! Assembly local contributions
-        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),&
-          n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,ifa)
+        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),&
+          n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 
       END DO ! Gauss points
     END DO
@@ -1064,15 +1064,15 @@ CONTAINS
 #ifdef PARALL
           IF (Mesh%boundaryFlag(Mesh%F(iel2,ifa - 1) - Mesh%Nintfaces) .EQ. 0) THEN
           ! Ghost face: assembly it as interior
-          CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),&
-            n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,ifa)
+          CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),&
+            n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
         ELSE
-          CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),&
-            n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,ifa)
+          CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),&
+            n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
         ENDIF
 #else
-        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),&
-          n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,ifa)
+        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),&
+          n_g(g,:),diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 
 #endif
       END DO ! Gauss points
@@ -1366,7 +1366,7 @@ CONTAINS
     real*8                        :: diff_iso_vol(Neq,Neq,Ng2d),diff_ani_vol(Neq,Neq,Ng2d)
     real*8,allocatable            :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
     real*8                        :: auxdiffsc(Ng2d)
-    real*8                        :: Pi,sigma,sigmax,sigmay,x0,y0,A,r
+    real*8                        :: Pi,sigma,x0,A,r
     real*8                        :: th_n = 1.e-14
     real*8                        :: Vnng(Ndim)
 
@@ -1436,9 +1436,9 @@ CONTAINS
 
     ! Compute diffusion at Gauss points
 #ifndef KEQUATION
-    CALL setLocalDiff(xy,ueg,qeg,diff_iso_vol,diff_ani_vol)
+    CALL setLocalDiff(xy,ueg,diff_iso_vol,diff_ani_vol)
 #else
-    CALL setLocalDiff(xy,ueg,qeg,diff_iso_vol,diff_ani_vol,q_cyl)
+    CALL setLocalDiff(xy,ueg,diff_iso_vol,diff_ani_vol,q_cyl)
 #endif
 
 
@@ -1673,13 +1673,13 @@ CONTAINS
          gradbtor(2) = dot_PRODUCT(Nyg,b_tor_nod)
 #endif
 #ifndef KEQUATION
-      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,Bmod(g),force(g,:),&
+      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,force(g,:),&
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
-        &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g),Vnng)
+        &ueg(g,:),qeg(g,:),u0eg(g,:,:),Jtor(g))
 #else
-      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,Bmod(g),b_tor(g),gradbtor,omega(g),q_cyl(g),force(g,:),&
+      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,b_tor(g),gradbtor,omega(g),q_cyl(g),force(g,:),&
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
-        &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g),Vnng)
+        &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g))
 #endif
 
          IF (save_tau) THEN
@@ -1780,9 +1780,9 @@ CONTAINS
 
     ! Compute diffusion at faces Gauss points
 #ifndef KEQUATION
-    CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac)
+    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac)
 #else
-    CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac,q_cyl)
+    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac,q_cyl)
 #endif
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
@@ -1831,9 +1831,9 @@ CONTAINS
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
 #ifndef KEQUATION
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,ifa,0.,xyf(g,:),tau)
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau)
 #else
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,ifa,0.,xyf(g,:),q_cyl(g),tau)
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),q_cyl(g),tau)
 #endif
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),0.,iel,tau)
@@ -1842,11 +1842,11 @@ CONTAINS
 
 ! Assembly local contributions
 #ifdef DKLINEARIZED
-      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),q_cyl(g),xyf(g,:),&
-      n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,Vnng)
+      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
+      n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 #else
-      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,Vnng)
+      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 #endif
 
          IF (save_tau) THEN
@@ -1956,9 +1956,9 @@ CONTAINS
 
     ! Compute diffusion at faces Gauss points
 #ifndef KEQUATION
-    CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac)
+    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac)
 #else
-    CALL setLocalDiff(xyf,uefg,qfg,diff_iso_fac,diff_ani_fac,q_cyl)
+    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac,q_cyl)
 #endif
     if (save_tau) then
        indsave = (ifa -1)*Ngauss + (/(i,i=1,Ngauss)/)
@@ -2009,9 +2009,9 @@ CONTAINS
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
 #ifndef KEQUATION
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,ifa,isext,xyf(g,:),tau)
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau)
 #else
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,ifa,isext,xyf(g,:),q_cyl(g),tau)
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),q_cyl(g),tau)
 #endif
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),isext,iel,tau)
@@ -2035,30 +2035,30 @@ CONTAINS
          IF (Mesh%boundaryFlag(Mesh%F(iel,ifa) - Mesh%Nintfaces) .EQ. 0) THEN
         ! Ghost face: assembly it as interior
 #ifndef DKLINEARIZED
-        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
+        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 
       ELSE
-        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
+        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
       ENDIF
 #else
 
-        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
+        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),,Psig(g),q_cyl(g),xyf(g,:),&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
       ELSE
-        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),q_cyl(g),xyf(g,:),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau)
+        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
       ENDIF
 #endif
 
 #else
 #ifndef DKLINEARIZED
-      CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,Vnng)
+      CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 #else
-      CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Bmod(g),Psig(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),upgf(g,:),qfg(g,:),tau,Vnng)
+      CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 #endif
 
 #endif
@@ -2168,16 +2168,16 @@ CONTAINS
   !
   !********************************************************************
 #ifndef KEQUATION
-  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,Bmod,f,&
-      &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor,Vnng)
+  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,f,&
+      &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,Jtor)
 #else
-  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,Bmod,btor,gradBtor,omega,q_cyl,f,&
-    &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor,Vnng)
+  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,btor,gradBtor,omega,q_cyl,f,&
+    &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor)
 #endif
         REAL*8,INTENT(inout)      :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
-        REAL*8,INTENT(IN)         :: b3(:),psi,divb,drift(:),f(:),ktis(:),Bmod
+        REAL*8,INTENT(IN)         :: b3(:),psi,divb,drift(:),f(:),ktis(:)
 #ifdef KEQUATION
-    real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl
+    real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl,xy(:)
 #ifdef DKLINEARIZED
     real*8                    :: ddk_dU(Neq), ddk_dU_U
     real*8                    :: gradddk(Ndim)
@@ -2185,19 +2185,21 @@ CONTAINS
 #endif
     real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
     real*8,intent(IN)         :: Ni(:),NNi(:,:),Nxyzg(:,:),NNxy(:,:),NxyzNi(:,:,:),NNbb(:)
-    real*8,intent(IN)         :: upe(:),ue(:),xy(:),Jtor
-    real*8,intent(INOUT)      :: u0e(:,:),Vnng(:)
+    real*8,intent(IN)         :: upe(:),ue(:),Jtor
+    real*8,intent(INOUT)      :: u0e(:,:)
     real*8,intent(IN)         :: qe(:)
-    integer*4                 :: i,j,k,iord,ii,alpha,beta,z
-    integer*4,dimension(Npel) :: ind_i,ind_j,ind_k
+#ifdef VORTICITY
+    real*8                     :: kcoeff,exb(3)
+    integer*4                  :: alpha,beta,ii
+#endif
+    integer*4                 :: i,j,k,iord,z
     real*8,dimension(neq,neq) :: A
     real*8,dimension(neq,Ndim):: APinch
-    real*8                    :: kcoeff
-    real*8                    :: Qpr(Ndim,Neq),exb(3),bb(3)
+    real*8                    :: Qpr(Ndim,Neq),bb(3)
     real*8                    :: W2(Neq),dW2_dU(Neq,Neq),QdW2(Ndim,Neq)
     real*8                    :: qq(3,Neq),b(Ndim)
     real*8                    :: grad_n(3),gradpar_n
-    real*8                    :: auxvec(Neq)
+
 #ifdef TEMPERATURE
     real*8,dimension(neq,neq) :: GG
     real*8                    :: Telect
@@ -2207,13 +2209,14 @@ CONTAINS
     real*8                    :: Sohmic,dSohmic_dU(Neq) ! Ohmic heating
     real*8                    :: W3(Neq),dW3_dU(Neq,Neq),QdW3(Ndim,Neq)
     real*8                    :: W4(Neq),dW4_dU(Neq,Neq),QdW4(Ndim,Neq)
+#else
+    real*8                    :: auxvec(Neq)
 #endif
 #ifdef NEUTRAL
 #ifdef KEQUATION
         REAL*8                    :: gamma_I,ce, dissip,r
         REAL*8                    :: ddissip_du(Neq)
 #endif
-    real*8                    :: Ax(Neq,Neq),Ay(Neq,Neq)
     real*8                    :: niz,nrec,fGammacx,fGammarec
     real*8                    :: dniz_dU(Neq),dnrec_dU(Neq),dfGammacx_dU(Neq),dfGammarec_dU(Neq)
 #ifdef TEMPERATURE
@@ -2225,7 +2228,6 @@ CONTAINS
         REAL*8                    :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
 #ifdef DNNLINEARIZED
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-    real*8                    :: gradDnn(Ndim)
 #endif
 #ifdef NEUTRALP
         REAL*8                    :: Dnn,Dpn,Alphanp,Betanp,GammaLim,Gammaredpn,Tmin
@@ -2463,9 +2465,17 @@ CONTAINS
 
     !Assembly the matrix for neutral sources
 #ifdef TEMPERATURE
+#ifdef AMJUELSPLINES
     call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
       &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
-      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Tloss,dTloss_dU,Tlossrec,dTlossrec_dU,sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU,Sn,Sn0)
+      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0, &
+      sigmavEiz=sigmavEiz,dsigmavEiz_dU=dsigmavEiz_dU,sigmavErec=sigmavErec,dsigmavErec_dU=dsigmavErec_dU)
+#else
+    call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
+      &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
+      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0,&
+      Tloss=Tloss,dTloss_dU=dTloss_dU,Tlossrec=Tlossrec,dTlossrec_dU=dTlossrec_dU)
+#endif
 #else
         CALL assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,Sn,Sn0)
 #endif
@@ -2847,34 +2857,38 @@ CONTAINS
 
 #ifdef DKLINEARIZED
   SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
-    &ind_fg,b3,Bmod,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,upf,qf,tau,Vnng,ifa)
+    &ind_fg,b3,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
 #else
     SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
-        &ind_fg,b3,Bmod,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,upf,qf,tau,Vnng,ifa)
+        &ind_fg,b3,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
-      real*8,intent(IN)         :: b3(:),n(:),Bmod, psi
+      real*8,intent(IN)         :: b3(:),n(:), psi
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
-      real*8,intent(IN)         :: uf(:),upf(:)
+      real*8,intent(IN)         :: uf(:)
       real*8,intent(IN)         :: qf(:)
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8,intent(IN)         :: q_cyl, xyf(:)
 #endif
 #endif
-      real*8,optional,intent(INOUT) :: tau(:,:),Vnng(:)
-      real*8                     :: kcoeff
+      real*8,optional,intent(INOUT) :: tau(:,:)
       real*8                     :: b(Ndim)
-      integer*4,optional         :: ifa
-      integer*4                  :: i,j,k,ii,alpha,beta
+#ifdef VORTICITY
+      real*8                     :: kcoeff,exb(3)
+      integer*4                  :: alpha,beta,ii
+#endif
+      integer*4                  :: i,j,k
       integer*4,dimension(size(ind_asf))  :: ind_if,ind_jf,ind_kf
       real*8,dimension(neq,neq) :: A
       real*8,dimension(neq,Ndim):: APinch
-      real*8                    :: auxvec(Neq)
+#ifndef TEMPERATURE
+      real*8                    :: auxvec(neq)
+#endif
       real*8                    :: nn(3),qq(3,Neq),bb(3)
       real*8                    :: bn,kmult(size(ind_asf),size(ind_asf)),kmultf(size(ind_asf))
-      real*8                    :: Qpr(Ndim,Neq),exb(3)
+      real*8                    :: Qpr(Ndim,Neq)
       real*8                    :: W2(Neq),dW2_dU(Neq,Neq),QdW2(Ndim,Neq)
 #ifdef TEMPERATURE
       real*8                    :: Vveci(Neq),dV_dUi(Neq,Neq),Alphai,dAlpha_dUi(Neq),gmi,taui(Ndim,Neq)
@@ -2883,7 +2897,6 @@ CONTAINS
       real*8                    :: W4(Neq),dW4_dU(Neq,Neq),QdW4(Ndim,Neq)
 #ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-      real*8                    :: gradDnn(Ndim)
 #endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -3284,33 +3297,37 @@ CONTAINS
 
 #ifdef DKLINEARIZED
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-      &ind_fg,b3,Bmod,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,upf,qf,tau,Vnng,ifa)
+      &ind_fg,b3,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
 #else
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-        &ind_fg,b3,Bmod,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,upf,qf,tau,Vnng,ifa)
+        &ind_fg,b3,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       logical                   :: isdir
-      real*8,intent(IN)         :: b3(:),n(:),Bmod, psi
+      real*8,intent(IN)         :: b3(:),n(:), psi
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
-      real*8,intent(IN)         :: uf(:),upf(:)
+      real*8,intent(IN)         :: uf(:)
       real*8,intent(IN)         :: qf(:)
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8,intent(IN)         :: q_cyl, xyf(:)
 #endif
 #endif
-      real*8,optional,intent(INOUT) :: tau(:,:),Vnng(:)
-      integer*4,optional         :: ifa
-      real*8                    :: kcoeff
-      integer*4                 :: i,j,k,ii,alpha,beta
+      real*8,optional,intent(INOUT) :: tau(:,:)
+#ifdef VORTICITY
+      integer*4                 :: alpha,beta,ii
+      real*8                    :: exb(3),kcoeff
+#endif
+      integer*4                 :: i,j,k
       integer*4,dimension(Npfl)  :: ind_if,ind_jf,ind_kf
       real*8,dimension(neq,neq) :: A
       real*8,dimension(neq,Ndim):: APinch
+#ifndef TEMPERATURE
       real*8                    :: auxvec(neq)
+#endif
       real*8                    :: bn,kmult(Npfl,Npfl),kmultf(Npfl)
-      real*8                    :: Qpr(Ndim,Neq),exb(3)
+      real*8                    :: Qpr(Ndim,Neq)
       real*8                    :: nn(3),qq(3,Neq),b(Ndim),bb(3)
       real*8                    :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
 #ifdef TEMPERATURE
@@ -3320,7 +3337,6 @@ CONTAINS
       real*8                    :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
 #ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-      real*8                    :: gradDnn(Ndim)
 #endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -3747,7 +3763,8 @@ END IF
 #ifdef TEMPERATURE
   SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
       &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
-      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Tloss,dTloss_dU,Tlossrec,dTlossrec_dU,sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU,Sn,Sn0)
+      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0,&
+      sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU)
 #else
     SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,Sn,Sn0)
 #endif
@@ -3756,12 +3773,10 @@ END IF
 #ifndef TEMPERATURE
              REAL*8             :: sigmaviz,sigmavrec,sigmavcx
 #else
-             REAL*8, INTENT(IN) :: sigmaviz,sigmavrec,sigmavcx,fEiiz,fEirec,fEicx,Tloss,Tlossrec
-             REAL*8, INTENT(IN) :: dsigmaviz_dU(:),dsigmavrec_dU(:),dsigmavcx_dU(:),dTloss_dU(:),dTlossrec_dU(:)
-             REAL*8, INTENT(IN) :: dfEiiz_dU(:),dfEirec_dU(:),dfEicx_dU(:)
-      !Amjuel energy losses
-      real*8, intent(IN) :: sigmavEiz,sigmavErec
-      real*8, intent(IN) :: dsigmavEiz_dU(:),dsigmavErec_dU(:)
+      REAL*8, INTENT(IN)        :: sigmaviz,sigmavrec,sigmavcx,fEiiz,fEirec,fEicx      
+      REAL*8, INTENT(IN)        :: dsigmaviz_dU(:),dsigmavrec_dU(:),dsigmavcx_dU(:)
+      REAL*8, INTENT(IN)        :: dfEiiz_dU(:),dfEirec_dU(:),dfEicx_dU(:)
+      REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz,sigmavErec,dsigmavEiz_dU(:),dsigmavErec_dU(:)
 #endif
              REAL*8             :: ad,ad4,RE,Sn(:,:),Sn0(:), Ti,Te
 
@@ -3779,7 +3794,6 @@ END IF
 
 
       !Assembly Source Terms in plasma density equation
-
       Sn(1,:)   = ad*(-dniz_dU(:)*sigmaviz + dnrec_dU(:)*sigmavrec)
 #ifdef TEMPERATURE
 

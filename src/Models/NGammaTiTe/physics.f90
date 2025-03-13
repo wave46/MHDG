@@ -706,12 +706,12 @@ CONTAINS
   ! Set the perpendicular diffusion
   !****************************************
 #ifndef KEQUATION
-  SUBROUTINE setLocalDiff(xy, u, q, d_iso, d_ani)
+  SUBROUTINE setLocalDiff(xy, u, d_iso, d_ani)
 #else
-  SUBROUTINE setLocalDiff(xy, u, q, d_iso, d_ani, q_cyl)
+  SUBROUTINE setLocalDiff(xy, u, d_iso, d_ani, q_cyl)
 #endif
     real*8, intent(in)  		:: xy(:, :)
-    real*8, intent(in)  		:: u(:,:), q(:,:)
+    real*8, intent(in)  		:: u(:,:)
 #ifdef KEQUATION
     real*8, intent(in)  		:: q_cyl(:)
 #endif
@@ -719,15 +719,11 @@ CONTAINS
     real*8		              :: iperdiff(size(xy, 1))
 #ifdef NEUTRAL
     integer             		:: i
-    real*8				            :: Ery = 13.6, cs_n, DnnTh, ti_min=1e-6,ti
-    real*8, dimension(size(u,1))	:: U1, U2, U3, U4, U5, E0iz, E0cx, sigmaviz, sigmavnn, sigmavcx, Dnn
+    real*8				            :: ti_min=1e-6,ti
+    real*8, dimension(size(u,1))	:: U1, U2, U3, U4, U5, sigmaviz, sigmavnn, sigmavcx, Dnn
 #ifdef KEQUATION
     real*8, dimension(size(u,1))          :: D_k,U6,c_s
     real*8                         :: r
-#endif
-#ifdef DNNSMOOTH
-    real*8                  :: width_lower, width_higher
-    real*8                  :: width_temperature=1e-7
 #endif
 #endif
 
@@ -1101,11 +1097,6 @@ CONTAINS
        IF (aux<tol) aux = tol
       res = aux**phys%epn
     ENDIF
-    !! applying softplus instead strong limit
-    !if (switch%testcase .ne. 2) then
-    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-    !endif
-    !res = aux**phys%epn
   END FUNCTION computeAlphai
 
   FUNCTION computeAlphae(U) RESULT(res)
@@ -1119,33 +1110,16 @@ CONTAINS
        IF (aux<tol) aux = tol
       res = aux**phys%epn
     ENDIF
-    !! applying softplus instead strong limit
-    !if (switch%testcase .ne. 2) then
-    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-    !endif
-    !res = aux**phys%epn
   END FUNCTION computeAlphae
 
   SUBROUTINE compute_dAlpha_dUi(U, res)
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT):: res(:)
-    real*8             :: aux, double_soft_deriv
+    real*8             :: aux
     REAL*8, PARAMETER :: tol = 1.e-20
-    ! applying softplus instead strong limit
+
     aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
-    !double_soft_deriv = 1.
-    !if (switch%testcase .ne. 2) then  !! don't apply flux limiter if it is a convergence test
-    !  call double_softplus_deriv(aux, tol,3.*phys%Mref/2,double_soft_deriv)
-    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-    !endif
-    !res = 0.
-    !res(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
-    !res(2) = -U(2)/U(1)**2
-    !res(3) = 1./U(1)
-    !res=phys%epn*aux**(phys%epn-1)*res
-    !if (switch%testcase .ne. 2) then
-    !  res = res*double_soft_deriv
-    !endif
+
     IF ((2./(3.*phys%Mref)*aux > 1.) .AND. (switch%testcase .NE. 2)) THEN !! don't apply flux limiter if it is a convergence test
       res = 0.
     ELSE
@@ -1161,22 +1135,11 @@ CONTAINS
   SUBROUTINE compute_dAlpha_dUe(U, res)
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT):: res(:)
-    real*8             :: aux, double_soft_deriv
+    real*8             :: aux
     REAL*8, PARAMETER :: tol = 1.e-20
-    ! applying softplus instead strong limit
+
     aux = U(4)/U(1)
-    !double_soft_deriv = 1.
-    !if (switch%testcase .ne. 2) then  !! don't apply flux limiter if it is a convergence test
-    !  call double_softplus_deriv(aux, tol,3.*phys%Mref/2,double_soft_deriv)
-    !  call double_softplus(aux, tol, 3.*phys%Mref/2)
-    !endif
-    !res = 0.
-    !res(1) = -U(4)/U(1)**2
-    !res(4) = 1./U(1)
-    !res=phys%epn*aux**(phys%epn-1)*res
-    !if (switch%testcase .ne. 2) then
-    !  res = res*double_soft_deriv
-    !endif
+
     IF ((2./(3.*phys%Mref)*aux > 1.) .AND. (switch%testcase .NE. 2)) THEN !! don't apply flux limiter if it is a convergence test
       res = 0.
     ELSE
@@ -1554,7 +1517,12 @@ CONTAINS
        ENDIF
     ENDIF
     ! rate is in cm^3/s in EIRENE
-    rate = EXP(rate)/1.e6
+
+    IF (rate < -100) THEN
+        rate = 0.0
+    ELSE
+        rate = EXP(rate)/1.e6
+    END IF
   ENDSUBROUTINE compute_2D_eirene_rate
 
   SUBROUTINE compute_2D_eirene_rate_du(U1,U4,te,ne,alpha,rate_du)
@@ -1706,10 +1674,8 @@ CONTAINS
 
   SUBROUTINE compute_sigmavEiz(U,sigmavEiz)
     real*8, intent(IN) :: U(:)
-    real*8             :: sigmavEiz,U1,U4,T0,Ery,E0,te,ne,n0
-    real*8, dimension(9,9) :: alpha
+    real*8             :: sigmavEiz,U1,U4,T0,te,ne,n0
     REAL*8, PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    integer            :: i, j
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1730,10 +1696,8 @@ CONTAINS
 
   SUBROUTINE compute_dsigmavEiz_dU(U,res)
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:),sigmavEiz,U1,U4,T0,Ery,E0,te,ne,n0
-    real*8, dimension(9,9) :: alpha
+    real*8             :: res(:),U1,U4,T0,te,ne,n0
     REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    integer            :: i, j
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1804,10 +1768,8 @@ CONTAINS
   ENDSUBROUTINE compute_dsigmavnn_dU
   SUBROUTINE compute_sigmavrec(U,sigmavrec)
     real*8, intent(IN) :: U(:)
-    real*8             :: sigmavrec,U1,U4,T0,Ery,E0,te,ne,n0
-    real*8, dimension(9,9) :: alpha
+    real*8             :: sigmavrec,U1,U4,T0,te,ne,n0
     real*8, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    integer            :: i, j
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1825,10 +1787,8 @@ CONTAINS
 
   SUBROUTINE compute_dsigmavrec_dU(U,res)
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:),sigmavrec,U1,U4,T0,Ery,E0,te,ne,n0
-    real*8, dimension(9,9) :: alpha
+    real*8             :: res(:),U1,U4,T0,te,ne,n0
     REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    integer            :: i, j
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1844,10 +1804,8 @@ CONTAINS
 
   SUBROUTINE compute_sigmavErec(U,sigmavErec)
     real*8, intent(IN) :: U(:)
-    real*8             :: sigmavErec,U1,U4,T0,Ery,E0,te,ne,n0
-    real*8, dimension(9,9) :: alpha
+    real*8             :: sigmavErec,U1,U4,T0,te,ne,n0
     REAL*8, PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    integer            :: i, j
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1865,10 +1823,8 @@ CONTAINS
 
   SUBROUTINE compute_dsigmavErec_dU(U,res)
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:),sigmavErec,U1,U4,T0,Ery,E0,te,ne,n0
-    real*8, dimension(9,9) :: alpha
+    real*8             :: res(:),U1,U4,T0,te,ne,n0
     REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    integer            :: i, j
     U1 = U(1)
     U4 = U(4)
     T0 = 50.
@@ -1992,7 +1948,6 @@ CONTAINS
     real*8, intent(OUT):: rate
     real*8             :: ti_min=0.1
     real*8             :: dlograte_dlogti
-    integer            :: i
     rate = 0.
     if (ti>=ti_min) then
       call compute_logeirene_1D_rate(ti,alpha,rate)
@@ -2008,16 +1963,19 @@ CONTAINS
       WRITE(6,*) " rate equal to", rate
       stop
     endif
-    rate = exp(rate)/1.e6
+    if (rate < -100) then
+      rate = 0.0
+    else
+      rate = exp(rate)/1.e6
+    endif
   ENDSUBROUTINE compute_eirene_1D_rate
 
-  SUBROUTINE compute_eirene_1D_rate_du(U1,U2,U3,ti,dti_dU,alpha,res)
+  SUBROUTINE compute_eirene_1D_rate_du(ti,dti_dU,alpha,res)
     ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
-    real*8, intent(IN) :: U1,U2,U3,ti,dti_dU(:),alpha(:)
+    real*8, intent(IN) :: ti,dti_dU(:),alpha(:)
     real*8, intent(OUT):: res(:)
     real*8             :: ti_min=0.1
     real*8             :: dlograte_dlogte,rate
-    integer            :: i
     res = 0.
 
     if (ti>ti_min) then
@@ -2067,8 +2025,7 @@ CONTAINS
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     ! calculates AMJUEL CX rate
     real*8, intent(IN)  :: U(:)
-    real*8              :: sigmavcx,U1,U2,U3,T0,E0,ti
-    integer             :: i
+    real*8              :: sigmavcx,U1,U2,U3,T0,ti
     real,parameter      :: tol = 1.e-10 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
     U1 = U(1)
     U2 = U(2)
@@ -2091,11 +2048,9 @@ CONTAINS
   SUBROUTINE compute_dsigmavcx_dU(U,res)
     ! calculates derivative of AMJUEL CX rate for linearization
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:), U1,U2,U3,T0,ti, ti_min = 0.1
+    real*8             :: res(:), U1,U2,U3,T0,ti
     real*8, allocatable :: dti_dU(:)
-    real*8             :: sigmavcx, sigmavcx_dte
     real, parameter    :: tol = 1.e-10  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    integer            :: i
 
     allocate(dti_dU(size(U)))
 
@@ -2112,7 +2067,7 @@ CONTAINS
       dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
       dti_dU(3) = dti_dU(3) + 1./U1
       dti_dU(:) = dti_dU(:) * T0*2./3. /phys%Mref
-      call compute_eirene_1D_rate_dU(U1,U2,U3,ti,dti_dU,phys%alpha_cx,res)
+      call compute_eirene_1D_rate_dU(ti,dti_dU,phys%alpha_cx,res)
     endif
 
   ENDSUBROUTINE compute_dsigmavcx_dU
@@ -2765,13 +2720,13 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
   ! Compute the stabilization tensor tau
   !*******************************************
 #ifndef KEQUATION
-  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, tau)
+  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau)
 #else
-  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, ifa, isext, xy, q_cyl, tau)
+  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, q_cyl, tau)
 #endif
     real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
     REAL*8, intent(in)    :: isext
-    integer, intent(in) :: ifa, iel
+    integer, intent(in) ::  iel
 #ifdef KEQUATION
     real*8, intent(in)  :: q_cyl
 #endif
@@ -2790,7 +2745,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8              :: tau_aux(4),diff_iso(4,4,1),diff_ani(4,4,1)
 #endif
     integer             :: ndim
-    real*8              :: xc, yc, rad, h, aux, bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
+    real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
 #ifdef KEQUATION
     real*8              :: qq_cyl(1)
 #endif
@@ -2808,10 +2763,10 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     uu(1,:) = uc(:)
     qq(1,:) = q(:)
 #ifndef KEQUATION
-    call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani)
+    call setLocalDiff(xyd, uu, diff_iso, diff_ani)
 #else
     qq_cyl(:) = q_cyl
-    call setLocalDiff(xyd, uu, qq, diff_iso, diff_ani,qq_cyl)
+    call setLocalDiff(xyd, uu, diff_iso, diff_ani,qq_cyl)
 #endif
 
 #ifdef NEUTRALP

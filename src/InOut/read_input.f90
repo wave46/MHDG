@@ -28,7 +28,7 @@ SUBROUTINE READ_input()
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
   REAL*8                :: diff_pare, diff_ee, tie, dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0, tmax, tol, rtol, atol
-  REAL*8                :: diff_vort, diff_pot, etapar, c1, c2, Potfloat,diagsource(10)
+  REAL*8                :: diff_vort, diff_pot, etapar, Potfloat,diagsource(10)
   CHARACTER(100)        :: msg
   CHARACTER(20)         :: kmethd, ptype, kspmethd, pctype
 

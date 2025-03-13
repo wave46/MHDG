@@ -20,10 +20,9 @@ SUBROUTINE HDG_assembly()
   USE LinearAlgebra, ONLY: tensorSumInt
   USE MPI_OMP
 
-  INTEGER                        :: i, j, jj, k, iel, ifa, ifl, nnz, nn, cont, ieloc, ct_sc, iel3, itor, itorg
+  INTEGER                        :: i, j, jj, k, iel, ifa, ifl, nnz, nn, cont, ieloc, iel3, itor, itorg
   INTEGER                        :: Neq, Nf, Nfl, Nfg, Nftot, Nfaces, Nfp, Nel, Nintf, Nextf, Ndirf, Nfunk, blk, blkp, blkt, Ndim, Np
   INTEGER                        :: Np1Dpol, Np1Dtor, Np2d, Npfl, auxnn
-  INTEGER                        :: nColsPosPerFaceInt, nColsPosPerFaceExt, nColsPosPerElem
   INTEGER                        :: Fe(refElPol%Nfaces), Fi, Fig
   INTEGER, ALLOCATABLE            :: indglo(:), indpos(:)
   INTEGER*4                      :: ind_loc(refElPol%Nfaces, refElPol%Nfacenodes*phys%Neq)
@@ -35,12 +34,7 @@ SUBROUTINE HDG_assembly()
   REAL*8, POINTER, DIMENSION(:)    :: vals, rhsvec
   LOGICAL                        :: Fd(refElPol%Nfaces)
   REAL*8, ALLOCATABLE             :: Kel(:,:,:), fel(:,:)
-  REAL*8, POINTER                 :: Df(:,:), Hf(:,:), Ef(:,:)
   REAL*8, POINTER                 :: UU(:,:), U0(:)
-  REAL*8, ALLOCATABLE             :: fh(:)
-  REAL*8, ALLOCATABLE             :: Lf(:,:)
-  REAL*8, POINTER                 :: Qf(:,:)
-  REAL*8, POINTER                 :: LL(:,:), L0(:)
 #ifdef PARALL
   INTEGER                        ::        Nghostf, Nghoste, Fasind(Mesh%Nfaces), Easind(Mesh%Nelems)
   INTEGER                        :: shiftGlob3d(refElPol%Nfaces + 2), rept
@@ -1144,10 +1138,9 @@ SUBROUTINE HDG_assembly()
   USE debug
   USE LinearAlgebra, ONLY: tensorSumInt
 
-  INTEGER                         :: i, j, jj, k, iel, ifa, ifl, nnz, nn, cont, ieloc, ct_sc
+  INTEGER                         :: i, j, iel, ifa, ifl, nnz, nn, cont, ieloc
   INTEGER                         :: ieln,ifan,Fi_per,Fe_aux(refElPol%Nfaces)
   INTEGER                         :: Neq, Nf, Nfaces, Nfp, Nel, Nintf, Nextf, Ndirf, Nfunk, blk, Ndim, Np
-  INTEGER                         :: nColsPosPerFaceInt, nColsPosPerFaceExt, nColsPosPerElem
   INTEGER                         :: Fe(refElPol%Nfaces), Fi
   INTEGER                         :: indglo(1:refElPol%Nfacenodes*refElPol%Nfaces*phys%Neq)
   INTEGER                         :: indpos(1:refElPol%Nfacenodes*refElPol%Nfaces*phys%Neq)
@@ -1158,12 +1151,6 @@ SUBROUTINE HDG_assembly()
   REAL*8, POINTER                 :: vals(:), rhsvec(:)
   LOGICAL                         :: Fd(refElPol%Nfaces)
   REAL*8, ALLOCATABLE             :: Kel(:,:), fel(:)
-  REAL*8, POINTER                 :: Df(:,:), Hf(:,:), Ef(:,:)
-  REAL*8, POINTER                 :: UU(:,:), U0(:)
-  REAL*8, ALLOCATABLE             :: fh(:)
-  REAL*8, ALLOCATABLE             :: Lf(:,:)
-  REAL*8, POINTER                 :: Qf(:,:)
-  REAL*8, POINTER                 :: LL(:,:), L0(:)
 #ifdef PARALL
   INTEGER                         :: Fasind(Mesh%Nfaces)
   INTEGER                         :: rept
@@ -1371,10 +1358,7 @@ CONTAINS
     DO Fi = 1, Nfaces
 #ifdef PARALL
        IF (Mesh%ghostfaces(Fi) .EQ. 1) THEN
-          IF (Fi .GT. 1) THEN
-             shift(Fi) = shift(Fi-1)
-             linew(Fi) = linew(Fi-1)
-          END IF
+          CALL shift_linew_move_indice(Fi)
           CYCLE
        END IF
 #endif
@@ -1404,10 +1388,7 @@ CONTAINS
 
              ! Skip Dirichlet faces
              IF (Fd(ifa)) THEN
-                IF (Fi .GT. 1) THEN
-                   shift(Fi) = shift(Fi-1)
-                   linew(Fi) = linew(Fi-1)
-                END IF
+                CALL shift_linew_move_indice(Fi)
                 CYCLE
              END IF
 
@@ -1441,11 +1422,26 @@ CONTAINS
 
        END IF
 
-       IF (Fi .GT. 1) THEN
-          shift(Fi) = shift(Fi-1) + linew(Fi-1)*blk
-       END IF
+       CALL shift_move_indice(Fi)
     END DO
   ENDSUBROUTINE computennz
+
+  SUBROUTINE shift_linew_move_indice(Fi)
+      INTEGER, INTENT(IN) :: Fi
+   
+      IF (Fi .GT. 1) THEN
+         shift(Fi) = shift(Fi-1)
+         linew(Fi) = linew(Fi-1)
+      END IF
+  END SUBROUTINE shift_linew_move_indice
+
+  SUBROUTINE shift_move_indice(Fi)
+      INTEGER, INTENT(IN) :: Fi
+   
+      IF (Fi .GT. 1) THEN
+         shift(Fi) = shift(Fi-1) + linew(Fi-1)*blk
+      END IF
+  END SUBROUTINE shift_move_indice
 
   SUBROUTINE computeElementalMatrix(Kel, fel, iel)
     INTEGER, INTENT(IN)             :: iel
