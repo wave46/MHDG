@@ -1347,37 +1347,6 @@ CONTAINS
 
   ENDSUBROUTINE unique_stable
 
-#ifdef PARALL
-  SUBROUTINE compute_error_on_vertices_root(error_array_glob, vector_nodes_unique_glob, count_glob, error_array_root)
-    REAL*8, INTENT(IN)                :: error_array_glob(:)
-    INTEGER, INTENT(IN)               :: vector_nodes_unique_glob(:), count_glob(:)
-    REAL*8, INTENT(OUT)               :: error_array_root(:)
-    INTEGER                           :: count_var, j, jj
-    REAL*8                            :: error_var
-
-
-    error_array_root = 0.
-
-    DO j = 1, SIZE(error_array_root)
-       error_var = 0.
-       count_var = 0
-       DO jj = 1, SIZE(vector_nodes_unique_glob)
-          IF(vector_nodes_unique_glob(jj) .EQ. j) THEN
-             IF(error_array_root(j) .LE. 1.e-12) THEN
-                error_var = error_var + error_array_glob(jj)
-                count_var = count_var + count_glob(jj)
-             ELSE
-                CYCLE ! it means it has already been counted
-             ENDIF
-          ENDIF
-       ENDDO
-
-       error_array_root(j) = error_var/count_var
-    ENDDO
-
-  ENDSUBROUTINE compute_error_on_vertices_root
-
-#endif
 
 
 
