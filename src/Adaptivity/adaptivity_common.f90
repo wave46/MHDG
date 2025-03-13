@@ -52,7 +52,7 @@ CONTAINS
    SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices,T)
       REAL*8, INTENT(IN)                              :: h_map_elements(:)
       INTEGER,INTENT(IN)                              :: T(:,:)
-      REAL*8, DIMENSION(:), POINTER, INTENT(OUT)      :: h_target_vertices
+      REAL*8, DIMENSION(:), POINTER, INTENT(INOUT)    :: h_target_vertices
       REAL*8, ALLOCATABLE                             :: h_target_nodal(:)
       INTEGER, ALLOCATABLE                            :: nodes_repeats(:)
       INTEGER                                         :: number_of_vertices
@@ -223,7 +223,7 @@ CONTAINS
    SUBROUTINE average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
       REAL*8, INTENT(IN)                              :: h_target_nodal(:)
       INTEGER, INTENT(IN)                             :: nodes_repeats(:)
-      REAL*8, DIMENSION(:), POINTER, INTENT(OUT)      :: h_target_vertices
+      REAL*8, DIMENSION(:), POINTER, INTENT(INOUT)      :: h_target_vertices
       INTEGER                                         :: i, j
 
       j = 1
