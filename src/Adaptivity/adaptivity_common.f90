@@ -1460,5 +1460,21 @@ CONTAINS
 
    END SUBROUTINE gmsh_create_from_h_target
 
+   SUBROUTINE save_copy_new_mesh(mesh_name, count_adapt)
+      USE in_out, ONLY: copy_file
+      CHARACTER(1024), INTENT(IN) :: mesh_name
+      INTEGER, INTENT(IN)         :: count_adapt
+      CHARACTER(70)               :: param_adapt_char, count_adapt_char
+      CHARACTER(1024)             :: mesh_name_npne,new_mesh_name_npne, buffer
 
+      CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
+
+      WRITE(param_adapt_char, *) adapt%param_est
+      WRITE(count_adapt_char, *) count_adapt
+      new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
+      
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
+      CALL copy_file("./res/temp.msh",buffer)
+
+   END SUBROUTINE save_copy_new_mesh
 END MODULE adaptivity_common_module
