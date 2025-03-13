@@ -344,65 +344,6 @@ CONTAINS
 
   END SUBROUTINE find_coeff_shock_capturing_adapt
 
-  SUBROUTINE read_error(eps_plot, error_oscillation, count_vec)
-    REAL*8, INTENT(OUT)                                 :: error_oscillation(:)
-    REAL*8, INTENT(IN)                                  :: eps_plot(:)
-    INTEGER, INTENT(OUT), OPTIONAL                      :: count_vec(:)
-    REAL*8, ALLOCATABLE                                 :: error_vec(:)
-    INTEGER, ALLOCATABLE                                :: count_vec_local(:)
-    INTEGER                                             :: i,j, ind, N_e_real, N_n_max
-    INTEGER, ALLOCATABLE                                :: vertex_nodes(:,:)
-
-
-    N_e_real = Mesh%Nelems
-    N_n_max = Mesh%Nelems*Mesh%Nnodesperelem
-
-    ALLOCATE(vertex_nodes(Mesh%Nelems,refElPol%Nvertices))
-    ALLOCATE(error_vec(N_n_max))
-    ALLOCATE(count_vec_local(N_n_max))
-    error_vec = 0.
-    count_vec_local = 0
-    vertex_nodes = Mesh%T(:,1:refElPol%Nvertices)
-
-    DO i =1,N_e_real
-#ifdef PARALL
-       IF(Mesh%ghostElems(i) .EQ. 1) CYCLE
-#endif
-       DO j=1,RefElPol%Nvertices
-          ind = vertex_nodes(i,j)
-          error_vec(ind) = error_vec(ind) + eps_plot(ind)
-          count_vec_local(ind) = count_vec_local(ind) + 1
-       ENDDO
-    ENDDO
-
-#ifndef PARALL
-    j=1
-    DO i=1,N_n_max
-       IF (count_vec_local(i) .NE. 0) THEN
-          error_oscillation(j) = error_vec(i)/count_vec_local(i)
-          j=j+1
-       ENDIF
-    ENDDO
-    IF (PRESENT(count_vec)) THEN
-       count_vec = count_vec_local
-
-    ENDIF
-#else
-    j=1
-    DO i=1,N_n_max
-       IF (count_vec_local(i) .NE. 0) THEN
-          error_oscillation(j) = error_vec(i)
-          count_vec(j) = count_vec_local(i)
-          j=j+1
-       ENDIF
-    ENDDO
-#endif
-
-    DEALLOCATE(error_vec)
-    DEALLOCATE(count_vec_local)
-    DEALLOCATE(vertex_nodes)
-
-  ENDSUBROUTINE read_error
 
   PURE SUBROUTINE unique_2D(input_matrix, output_matrix)
     INTEGER, INTENT(IN)                :: input_matrix(:,:)
