@@ -1347,41 +1347,6 @@ CONTAINS
 
   ENDSUBROUTINE unique_stable
 
-  PURE SUBROUTINE intersect_stable_int(a,b,c)
-    INTEGER, INTENT(IN)                       :: a(:)
-    INTEGER, INTENT(IN)                       :: b(:)
-    INTEGER, INTENT(OUT), ALLOCATABLE         :: c(:)
-    INTEGER, ALLOCATABLE                      :: temp(:)
-    INTEGER                                   :: i, j, counter
-
-    counter = 0
-    DO i = 1, SIZE(a)
-       DO j = 1, SIZE(b)
-          IF(a(i) .EQ. b(j)) THEN
-             counter = counter + 1
-          ENDIF
-       ENDDO
-    ENDDO
-
-    ALLOCATE(temp(counter))
-    counter = 1
-
-    DO i = 1, SIZE(a)
-       DO j = 1, SIZE(b)
-          IF(a(i) .EQ. b(j)) THEN
-             temp(counter) = a(i)
-             counter = counter + 1
-          ENDIF
-       ENDDO
-    ENDDO
-
-    ! c is allocated in here
-    CALL unique_stable(temp, c)
-
-    DEALLOCATE(temp)
-
-  ENDSUBROUTINE intersect_stable_int
-
 #ifdef PARALL
   SUBROUTINE compute_error_on_vertices_root(error_array_glob, vector_nodes_unique_glob, count_glob, error_array_root)
     REAL*8, INTENT(IN)                :: error_array_glob(:)
