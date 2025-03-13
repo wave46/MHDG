@@ -989,7 +989,7 @@ CONTAINS
     REAL*8,ALLOCATABLE,DIMENSION(:)   :: xvec,yvec
     REAL*8                            :: dt_ME,t_ME
     REAL*8                            :: x,y
-    REAL*8,PARAMETER                  :: tol = 1e-12
+    REAL*8,PARAMETER                  :: tol = 1.e-12
 
 
     IF (utils%printint > 0) THEN
