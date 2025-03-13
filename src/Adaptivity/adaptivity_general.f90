@@ -30,8 +30,8 @@ CONTAINS
         CALL evaluate_adaptivity(h_map_elements, order, h_target_elements)
 
 #ifdef PARALL
-        CALL gather_connectivity(Mesh, T_global)
-        CALL gather_elemental_values(Mesh, h_target_elements, h_target_elements_global)
+        CALL gather_connectivity(Mesh, T_global,allgather=.false.)
+        CALL gather_elemental_values(Mesh, h_target_elements, h_target_elements_global,allgather=.false.)
         IF (MPIvar%glob_id .EQ. 0) THEN
             CALL get_h_target_vertices(h_target_elements_global, h_target_vertices, T_global)
 #else
