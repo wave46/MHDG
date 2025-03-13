@@ -43,7 +43,21 @@ CONTAINS
         CALL MPI_BARRIER(MPI_COMM_WORLD, ierr)
 #endif
         CALL load_new_mesh(order)
-        CALL deallocate_pointers(h_target_vertices, T_global, h_target_elements_global)
+
+        IF (ASSOCIATED(h_target_vertices)) THEN
+            DEALLOCATE(h_target_vertices)
+            NULLIFY(h_target_vertices)
+        ENDIF
+#ifdef PARALL
+        IF (ASSOCIATED(T_global)) THEN
+            DEALLOCATE(T_global)
+            NULLIFY(T_global)
+        ENDIF
+        IF (ASSOCIATED(h_target_elements_global)) THEN
+            DEALLOCATE(h_target_elements_global)
+            NULLIFY(h_target_elements_global)
+        ENDIF
+#endif
     ENDSUBROUTINE adaptively_refine_mesh
 
 
@@ -98,28 +112,5 @@ CONTAINS
            h_target_elements = h_target_elements_ind
         END WHERE
     ENDSUBROUTINE combine_h_target_ind_est
-
-    SUBROUTINE deallocate_pointers(h_target_vertices, T_global, h_target_elements_global)
-        REAL*8, POINTER, INTENT(INOUT) :: h_target_vertices(:)
-#ifdef PARALL
-        INTEGER, POINTER, INTENT(INOUT) :: T_global(:, :)
-        REAL*8, POINTER, INTENT(INOUT) :: h_target_elements_global(:)
-#endif
-
-        IF (ASSOCIATED(h_target_vertices)) THEN
-            DEALLOCATE(h_target_vertices)
-            NULLIFY(h_target_vertices)
-        ENDIF
-#ifdef PARALL
-        IF (ASSOCIATED(T_global)) THEN
-            DEALLOCATE(T_global)
-            NULLIFY(T_global)
-        ENDIF
-        IF (ASSOCIATED(h_target_elements_global)) THEN
-            DEALLOCATE(h_target_elements_global)
-            NULLIFY(h_target_elements_global)
-        ENDIF
-#endif
-    ENDSUBROUTINE deallocate_pointers
 
 END MODULE adaptivity_general_module
