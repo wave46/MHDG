@@ -58,8 +58,8 @@ CONTAINS
       INTEGER                                         :: number_of_vertices
 
 
-      ALLOCATE(h_target_nodal(SIZE(T,1)))
-      ALLOCATE(nodes_repeats(SIZE(T,1)))      
+      ALLOCATE(h_target_nodal(MAXVAL(T)))
+      ALLOCATE(nodes_repeats(MAXVAL(T)))      
 
       CALL sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
 
