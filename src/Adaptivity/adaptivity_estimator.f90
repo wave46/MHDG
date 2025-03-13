@@ -43,35 +43,6 @@ CONTAINS
       DEALLOCATE(error_L2, u_sol, u_star_sol)
    END SUBROUTINE apply_estimator
 
-  SUBROUTINE adaptivity_estimator_get_error(param_adapt,vector_nodes_unique,error_estimator)
-
-    INTEGER, INTENT(IN)                         :: param_adapt
-    INTEGER, INTENT(IN)                         :: vector_nodes_unique(:)
-    REAL*8, INTENT(OUT)                         :: error_estimator(:)
-
-    REAL*8,  ALLOCATABLE                        :: error_L2(:), error_L2_vertices(:), error_L2_init(:), error_target(:)
-    INTEGER                                     :: N_n_vertex
-    REAL*8                                      :: eg_L2
-
-    N_n_vertex = SIZE(error_estimator)
-    ALLOCATE(error_L2_vertices(N_n_vertex))
-    ALLOCATE(error_target(N_n_vertex))
-    ALLOCATE(error_L2(SIZE(Mesh%T,1)))
-    ALLOCATE(error_L2_init(SIZE(Mesh%T,1)))
-
-    ! error estimation for the mesh and the solution
-    CALL L2_error_estimator_eval(Mesh%X,Mesh%T,sol%u,sol%q,param_adapt,error_L2,eg_L2)
-    CALL error_on_vertices(error_L2,Mesh%T,vector_nodes_unique, N_n_vertex, error_L2_vertices)
-
-    error_estimator = error_L2_vertices
-
-    DEALLOCATE(error_L2_vertices)
-    DEALLOCATE(error_target)
-    DEALLOCATE(error_L2)
-    DEALLOCATE(error_L2_init)
-
-  ENDSUBROUTINE adaptivity_estimator_get_error
-
   SUBROUTINE calculate_L2_error_two_sols_different_p_scalar_general(X,T,error_param, u_sol,u_star_sol, error_L2, eg_L2)
 
     REAL*8, INTENT(IN)                :: X(:,:)
