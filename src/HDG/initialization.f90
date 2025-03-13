@@ -1020,7 +1020,7 @@ CONTAINS
 
   SUBROUTINE projectSolutionDifferentMeshes_Mod(T1, X1, T2, X2, u_old, q_old, u_new, q_new)
     USE linearAlgebra, ONLY: solve_linear_system_sing, colint, invert_matrix
-    USE adaptivity_common_module, ONLY: unique_1D, find_matches_int, inverse_isop_transf
+    USE adaptivity_common_module, ONLY: find_matches_int, inverse_isop_transf
     USE reference_element, ONLY: compute_shape_functions_at_points
 
     INTEGER, INTENT(IN)         :: T1(:,:), T2(:,:)
