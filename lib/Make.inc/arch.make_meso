@@ -201,7 +201,7 @@ ifeq ($(COMPTYPE),$(COMPTYPE_DEB))
 else ifeq ($(COMPTYPE),$(COMPTYPE_PRO))
  FCFLAGS = -fpp -O3 -parallel -fpe0 -qopenmp -xHOST -r8 -free -g
 else ifeq ($(COMPTYPE),$(COMPTYPE_OPT))
- FCFLAGS = -fpp -O3 -parallel -fpe0 -qopenmp -xHOST -r8 -free
+ FCFLAGS = -fpp -O3 -parallel -qopenmp -xHOST -r8 -free
 endif
 ######### End ifort ##########
 
