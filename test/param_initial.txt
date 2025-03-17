@@ -76,6 +76,8 @@
     jtor_dimensions(1) = 1000                                   ! 1st dimension dimensions of plasma current file 
     jtor_dimensions(2) = 1000                                   ! 2nd dimension dimensions of plasma current file
     save_folder = '/path/where/to/save/solution/'
+    puff_path = '/path/where/to/read/puff/' ! only used in moving equilibrium
+    puff_dimension = 1000
 /
 
 &NUMER_LST
