@@ -1284,7 +1284,7 @@ CONTAINS
 
 
     INTEGER           :: ierr,i
-    CHARACTER(LEN=100) :: fname = 'Puff_54487_new.h5'
+    CHARACTER(LEN=1000) :: fname
     INTEGER(HID_T)    :: file_id
     INTEGER           :: qp, Nn2D
     INTEGER           :: T(Mesh%Nelems,refElPol%Nnodes2D)
@@ -1293,10 +1293,13 @@ CONTAINS
     REAL*8            :: linex(1000), liney(1000), n_i(Mesh%Nelems*refElPol%Nnodes2D)
     REAL*8, POINTER, DIMENSION(:) :: puff_time
     INTEGER           :: puff_time_idx, puff_len
+    
+    fname = input%puff_path
+    puff_len = input%puff_dimension
 
     ! Allocate storing space in phys (puff for WEST, 403 entries)
     IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
-       puff_len = 401
+      
        ALLOCATE(puff_time(puff_len))
        ALLOCATE(phys%puff_exp(puff_len))
 
