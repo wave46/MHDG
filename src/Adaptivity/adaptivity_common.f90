@@ -232,7 +232,7 @@ CONTAINS
       REAL*8, PARAMETER :: tol = 1.0E-10
       
       h_target_elements = h_target_elements_est
-      WHERE(ABS(h_target_elements_ind-h_map_elements) .LT. tol)
+      WHERE(ABS(h_target_elements_ind-h_map_elements) .GT. tol)
          h_target_elements = h_target_elements_ind
       END WHERE
    ENDSUBROUTINE combine_h_target_ind_est
