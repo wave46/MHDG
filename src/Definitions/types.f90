@@ -399,11 +399,13 @@ MODULE types
      CHARACTER(len=1000) :: field_path ! where do we read magnetic field from (WEST cases so far)
      CHARACTER(len=1000) :: jtor_path ! where do we read plasma current from (WEST cases so far)
      CHARACTER(len=1000) :: save_folder ! where to save last solution
+     CHARACTER(len=1000) :: puff_path ! where do we read puff boundary condition from
      LOGICAL             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: compute_from_flux ! if components B_R, B_Z are computed from flux or not
      LOGICAL             :: divide_by_2pi     ! correspondng to flux definition if it is needed to divide by 2pi or not
      INTEGER             :: field_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
      INTEGER             :: jtor_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
+     INTEGER             :: puff_dimension ! number of timeslices in the puff file
   END TYPE Inputs_type
 
   !*******************************************************

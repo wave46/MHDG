@@ -18,7 +18,7 @@ CONTAINS
    SUBROUTINE apply_estimator(h_map_elements, order, h_target_elements)
       REAL*8, INTENT(IN)  :: h_map_elements(:)
       INTEGER, INTENT(IN) :: order
-      REAL*8, INTENT(OUT) :: h_target_elements(:)
+      REAL*8, INTENT(INOUT) :: h_target_elements(:)
       REAL*8, ALLOCATABLE :: error_L2(:), u_sol(:,:), u_star_sol(:,:)
       REAL*8              :: h_target_temp(SIZE(Mesh%T,1))
       REAL*8              :: eg_L2
