@@ -65,7 +65,7 @@ CONTAINS
         INTEGER, INTENT(IN) :: order
         REAL*8              :: h_target_elements_ind(SIZE(h_map_elements))
         REAL*8              :: h_target_elements_est(SIZE(h_map_elements))
-        REAL*8, INTENT(OUT) :: h_target_elements(:)
+        REAL*8, INTENT(INOUT) :: h_target_elements(:)
   
         IF (adapt%evaluator .EQ. 0) THEN
             CALL apply_estimator(h_map_elements, order, h_target_elements_est)
