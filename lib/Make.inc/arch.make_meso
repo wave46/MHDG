@@ -18,8 +18,8 @@ COMPTYPE = $(COMPTYPE_OPT)
 #-------------------------------------------------------------------------------
 MODE_SERIAL = serial
 MODE_PARALL = parall
-MODE = $(MODE_SERIAL)
-#MODE = $(MODE_PARALL)
+#MODE = $(MODE_SERIAL)
+MODE = $(MODE_PARALL)
 
 #-------------------------------------------------------------------------------
 # The compiler
@@ -197,11 +197,11 @@ endif
 #-------------------------------------------------------------------------------
 ######## Begin ifort #########
 ifeq ($(COMPTYPE),$(COMPTYPE_DEB))
- FCFLAGS = -fpp -g -O0 -r8 -qopenmp -xHOST -g -traceback -check all -free -fpe3 -debug all
+ FCFLAGS = -fpp -g -O0 -r8 -qopenmp -xHOST -g -traceback -check bounds -free -fpe3 -debug all
 else ifeq ($(COMPTYPE),$(COMPTYPE_PRO))
  FCFLAGS = -fpp -O3 -parallel -fpe0 -qopenmp -xHOST -r8 -free -g
 else ifeq ($(COMPTYPE),$(COMPTYPE_OPT))
- FCFLAGS = -fpp -O3 -parallel -qopenmp -xHOST -r8 -free
+ FCFLAGS = -fpp -O3 -qopenmp -xHOST -r8 -free -implicitnone
 endif
 ######### End ifort ##########
 
@@ -267,7 +267,7 @@ endif
 
 # BLAS/LAPACK
 #Local
-LIB += -L$(MKLROOT)/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core
+LIB += -L$(MKLROOT)/lib/intel64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl
 
 # PSBLAS/MLD2P4
 ifeq  ($(PSBLMG),$(LIB_YES)) 
@@ -306,3 +306,5 @@ FCFLAGS += $(MACROS)
 RM=/bin/rm -f
 CP=/bin/cp -f
 CMP=cmp
+
+PARALLEL_FLAGS = $(FCFLAGS) -parallel

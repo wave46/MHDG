@@ -220,6 +220,34 @@ CONTAINS
 
   END SUBROUTINE mymatmul
 
+  FUNCTION matmul_dgemm(A, B) RESULT(C)
+   REAL*8, INTENT(IN) :: A(:, :)  ! Input matrix A
+   REAL*8, INTENT(IN) :: B(:, :)  ! Input matrix B
+   REAL*8, ALLOCATABLE :: C(:, :) ! Result matrix C
+   INTEGER :: a1, a2, b1, b2, c1, c2
+   EXTERNAL DGEMM
+
+   ! Get dimensions of input matrices
+   a1 = SIZE(A, 1)  ! Rows of A
+   a2 = SIZE(A, 2)  ! Columns of A
+   b1 = SIZE(B, 1)  ! Rows of B
+   b2 = SIZE(B, 2)  ! Columns of B
+
+   ! Check matrix dimensions for compatibility
+   IF (a2 /= b1) THEN
+      WRITE(6, *) "Error: number of columns of A different from number of rows of B"
+      STOP
+   END IF
+
+   ! Allocate result matrix C
+   c1 = a1
+   c2 = b2
+   ALLOCATE(C(c1, c2))
+
+   ! Call DGEMM for matrix multiplication
+   CALL DGEMM('N', 'N', a1, b2, a2, 1.0D0, A, a1, B, a2, 0.0D0, C, a1)
+
+   END FUNCTION matmul_dgemm
 
 
   !***************************
