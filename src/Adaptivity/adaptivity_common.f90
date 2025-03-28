@@ -935,9 +935,12 @@ CONTAINS
   SUBROUTINE generate_msh_from_solution_mesh(mesh_name)
 
 
-    CHARACTER * ( * )                   :: mesh_name
-    INTEGER ( kind = 4 )                :: gmsh_unit
-    INTEGER                             :: i, n
+    CHARACTER * ( * )     :: mesh_name
+    INTEGER ( kind = 4 )  :: gmsh_unit
+    INTEGER               :: i, n
+    REAL*8                :: temp_coords(SIZE(Mesh%X_P1, 2) - 1)
+    INTEGER               :: temp_T_gmsh(SIZE(Mesh%T_gmsh, 2))
+    INTEGER               :: temp_Tb_gmsh(SIZE(Mesh%Tb_gmsh, 2))
 
     ! get unit file and open it
     CALL get_unit ( gmsh_unit )
@@ -983,7 +986,8 @@ CONTAINS
     WRITE ( gmsh_unit, '(a)' ) '$Nodes'
     WRITE ( gmsh_unit, '(i6)' ) SIZE(Mesh%X_P1,1)
     DO i = 1, SIZE(Mesh%X_P1,1)
-       WRITE ( gmsh_unit, * ) i, Mesh%X_P1(i,2:)
+       temp_coords = Mesh%X_P1(i, 2:)
+       WRITE ( gmsh_unit, * ) i, temp_coords
     END DO
     WRITE ( gmsh_unit, '(a)' ) '$EndNodes'
 
@@ -991,10 +995,12 @@ CONTAINS
     WRITE ( gmsh_unit, '(a)' ) '$Elements'
     WRITE ( gmsh_unit, '(i6)' ) SIZE(Mesh%Tb_gmsh,1) + SIZE(Mesh%T_gmsh,1)
     DO i = 1, SIZE(Mesh%Tb_gmsh,1)
-       WRITE ( gmsh_unit, *) Mesh%Tb_gmsh(i,:)
+       temp_Tb_gmsh = Mesh%Tb_gmsh(i,:)
+       WRITE ( gmsh_unit, *) temp_Tb_gmsh
     ENDDO
     DO i = 1, SIZE(Mesh%T_gmsh,1)
-       WRITE ( gmsh_unit, *) Mesh%T_gmsh(i,:)
+       temp_T_gmsh = Mesh%T_gmsh(i,:)
+       WRITE ( gmsh_unit, *) temp_T_gmsh
     ENDDO
 
     WRITE ( gmsh_unit, '(a)' ) '$EndElements'
