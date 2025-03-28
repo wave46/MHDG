@@ -7,7 +7,7 @@
 MODULE Main_utils
 
   USE in_out
-  USE GMSH_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, read_splines, convert_gmsh_to_hdf5, gmsh_mesh2d_write, hdf5_save_mesh_struct
+  USE GMSH_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5, gmsh_mesh2d_write, hdf5_save_mesh_struct
   USE reference_element
   USE preprocess
   USE MPI_OMP
