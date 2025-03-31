@@ -46,7 +46,6 @@ PROGRAM MHDG
 
   CALL load_mesh()
 
-  CALL read_splines()
 
   ! Linear solver: set the start to true
   matK%start = .TRUE.
