@@ -106,64 +106,6 @@ CONTAINS
 
    END SUBROUTINE load_new_mesh_gmsh
 
-   SUBROUTINE load_new_mesh(order)
-      USE preprocess
-      INTEGER, INTENT(IN) :: order
-      INTEGER                     :: ierr
-
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         WRITE(*,*) "********** Loading mesh P1  **********"
-      ENDIF
-      CALL free_mesh
-
-      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
-         CALL load_gmsh_mesh("./res/temp",0)
-      ELSE
-         CALL load_gmsh_mesh("./res/temp",1)
-      ENDIF
-      CALL free_reference_element_pol(refElPol)
-      CALL create_reference_element(refElPol,2,1, verbose = 0)
-      CALL mesh_preprocess_serial(ierr)
-  
-      Mesh%X = Mesh%X*phys%lscale
-
-      IF(ierr .EQ. 0) THEN
-         WRITE(*,*) "Error! Corresponding face in Tb not found. STOP"
-         STOP
-      ENDIF
-
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         CALL HDF5_save_mesh("./newmesh_pre.h5", Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
-      ENDIF
-  
-  
-      CALL set_order_mesh(order)
-      CALL free_reference_element_pol(refElPol)
-      CALL create_reference_element(refElPol,2,order, verbose = 0)
-      CALL mesh_preprocess_serial(ierr)
-
-      Mesh%X = Mesh%X*phys%lscale
-
-      IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80)) THEN
-         Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
-      END IF
-
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-      ENDIF
-
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
-         CALL write_msh_file(Mesh%X,Mesh%T)
-         ! convert the mesh to .mesh
-         CALL convert_msh2mesh('./res/temp')
-      ENDIF
-
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-      ENDIF
-
-   END SUBROUTINE load_new_mesh
 
    SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
       REAL*8, INTENT(IN)              :: two_d_nodes(:,:)
