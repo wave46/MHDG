@@ -762,43 +762,6 @@ CONTAINS
   END SUBROUTINE write_msh_file
 
 
-  SUBROUTINE convert_msh2mesh(mesh_name)
-
-    IMPLICIT NONE
-
-    CHARACTER(*), INTENT(IN)            :: mesh_name
-    CHARACTER(LEN = 1024)               :: file_in, file_out
-    TYPE(gmsh_t)                        :: gmsh_l
-
-    file_in  = TRIM(ADJUSTL(mesh_name))// '.msh'
-    file_out = TRIM(ADJUSTL(mesh_name))// '.mesh'
-
-    CALL gmsh_l%initialize()
-    CALL gmsh_l%OPEN(file_in)
-    CALL gmsh_l%WRITE(file_out)
-    CALL gmsh_l%finalize()
-
-  ENDSUBROUTINE convert_msh2mesh
-
-  SUBROUTINE convert_mesh2msh(mesh_name)
-
-    IMPLICIT NONE
-
-    CHARACTER(*), INTENT(IN)            :: mesh_name
-    CHARACTER(LEN = 1024)               :: file_in, file_out
-    TYPE(gmsh_t)                        :: gmsh_l
-
-    file_in  = TRIM(ADJUSTL(mesh_name))// '.mesh'
-    file_out = TRIM(ADJUSTL(mesh_name))// '.msh'
-
-    CALL gmsh_l%initialize()
-    CALL gmsh_l%OPEN(file_in)
-    CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh_l%WRITE(file_out)
-    CALL gmsh_l%finalize()
-
-  ENDSUBROUTINE convert_mesh2msh
-
   SUBROUTINE delete_file(filename)
 
     CHARACTER(*), INTENT(IN)        :: filename
