@@ -151,19 +151,6 @@ CONTAINS
       ENDDO
    END SUBROUTINE average_h_target
 
-  SUBROUTINE open_merge_with_geometry(gmsh_l,path2msh)
-    TYPE(gmsh_t), INTENT(IN)           :: gmsh_l
-    CHARACTER ( len = * ), INTENT(IN) :: path2msh
-
-    CALL gmsh_l%initialize()
-    CALL gmsh_l%OPEN(adapt%geometry_path)
-    CALL gmsh_l%MERGE(path2msh)
-    CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh_l%WRITE(path2msh)
-    CALL gmsh_l%finalize()
-
-  ENDSUBROUTINE open_merge_with_geometry
-
   SUBROUTINE set_order_mesh(p)
 
     INTEGER, INTENT(IN)                      :: p
