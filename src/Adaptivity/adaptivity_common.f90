@@ -141,7 +141,6 @@ CONTAINS
       ENDIF
 
       CALL mesh_preprocess_serial(ierr)
-      CALL read_extended_connectivity('./res/temp.msh')
 
       Mesh%X = Mesh%X*phys%lscale
 
@@ -181,7 +180,6 @@ CONTAINS
          CALL HDF5_save_mesh("./newmesh_pre.h5", Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
       ENDIF
   
-      CALL read_extended_connectivity('./res/temp.msh')
   
       CALL set_order_mesh(order)
       CALL free_reference_element_pol(refElPol)
@@ -864,151 +862,6 @@ CONTAINS
     DEALLOCATE(unique_T)
 
   END SUBROUTINE write_msh_file
-
-
-  SUBROUTINE read_extended_connectivity(filename)
-
-    CHARACTER * ( * ), INTENT(IN)       :: filename
-    INTEGER, ALLOCATABLE                :: T_gmsh(:,:), Tb_gmsh(:,:)
-    REAL*8, ALLOCATABLE                 :: X_P1(:,:)
-    CHARACTER( LEN = 255 )              :: buffer
-    INTEGER                             :: i, ios
-    INTEGER ( kind = 4 )                :: unit_gmsh
-
-    ! Open the destination file for writing
-    CALL get_unit ( unit_gmsh )
-    ! Open the source file for reading
-    OPEN(unit=unit_gmsh, file=filename, status='old', action='read', iostat=ios)
-    IF (ios /= 0) THEN
-       PRINT *, "Error opening destination file."
-       CLOSE(unit_gmsh)
-       RETURN
-    END IF
-
-    ! read till the nodes are found
-    DO
-       READ (unit_gmsh, '(a)', iostat = ios ) buffer
-       IF (ios /= 0) EXIT ! Exit loop if end of file is reached
-       IF(buffer(1:6) .EQ. '$Nodes') EXIT
-    END DO
-
-    ! read one more line (# of nodes)
-    READ (unit_gmsh, '(a)', iostat = ios ) buffer
-
-    ALLOCATE(X_P1(SIZE(Mesh%X,1),2 + Mesh%Ndim))
-    ! read coordinates of the nodes
-    DO i = 1,SIZE(Mesh%X,1)
-       READ(unit_gmsh,*) X_P1(i,:)
-    ENDDO
-
-    ! skip $EndNodes, $Elements, #elements
-    DO i = 1,3
-       ! read one more line
-       READ (unit_gmsh, '(a)', iostat = ios ) buffer
-    ENDDO
-
-    ALLOCATE(Tb_gmsh(SIZE(Mesh%Tb,1),5 + SIZE(Mesh%Tb,2)))
-
-    DO i = 1,SIZE(Mesh%Tb,1)
-       READ(unit_gmsh,*) Tb_gmsh(i,:)
-    ENDDO
-
-    ALLOCATE(T_gmsh(SIZE(Mesh%T,1), 5 + SIZE(Mesh%T,2)))
-    DO i = 1,SIZE(Mesh%T,1)
-       READ(unit_gmsh,*) T_gmsh(i,:)
-    ENDDO
-
-    CLOSE(unit_gmsh)
-
-    ALLOCATE(Mesh%Tb_gmsh(SIZE(Tb_gmsh,1),SIZE(Tb_gmsh,2)))
-    Mesh%Tb_gmsh = Tb_gmsh
-    ALLOCATE(Mesh%T_gmsh(SIZE(T_gmsh,1), SIZE(T_gmsh,2)))
-    Mesh%T_gmsh = T_gmsh
-    ALLOCATE(Mesh%X_P1(SIZE(X_P1,1), SIZE(X_P1,2)))
-    Mesh%X_P1 = X_P1
-
-    DEALLOCATE(Tb_gmsh,T_gmsh, X_P1)
-
-  ENDSUBROUTINE read_extended_connectivity
-
-
-  SUBROUTINE generate_msh_from_solution_mesh(mesh_name)
-
-
-    CHARACTER * ( * )     :: mesh_name
-    INTEGER ( kind = 4 )  :: gmsh_unit
-    INTEGER               :: i, n
-    REAL*8                :: temp_coords(SIZE(Mesh%X_P1, 2) - 1)
-    INTEGER               :: temp_T_gmsh(SIZE(Mesh%T_gmsh, 2))
-    INTEGER               :: temp_Tb_gmsh(SIZE(Mesh%Tb_gmsh, 2))
-
-    ! get unit file and open it
-    CALL get_unit ( gmsh_unit )
-    OPEN ( unit = gmsh_unit, file = mesh_name, status = 'replace' )
-
-    ! write mesh format
-    WRITE ( gmsh_unit, '(a)' ) '$MeshFormat'
-    WRITE ( gmsh_unit, '(a)' ) '2.2 0 8'
-    WRITE ( gmsh_unit, '(a)' ) '$EndMeshFormat'
-
-    WRITE ( gmsh_unit, '(a)' ) '$PhysicalNames '
-
-    n = 0
-    DO i = 1, 10
-       IF(COUNT(Mesh%boundaryFlag .EQ. i) .NE. 0) THEN
-          n = n + 1
-       ENDIF
-    ENDDO
-
-    ! + 1 is the domain
-    WRITE (gmsh_unit, *) n + 1
-    IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
-       WRITE (gmsh_unit, *) 1,5, '"PUMP"'
-    ENDIF
-    IF(ANY(Mesh%boundaryFlag .EQ. 6)) THEN
-       WRITE (gmsh_unit, *) 1,6, '"PUFF"'
-    ENDIF
-    IF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
-       WRITE (gmsh_unit, *) 1,1, '"IN"'
-    ENDIF
-    IF(ANY(Mesh%boundaryFlag .EQ. 9)) THEN
-       WRITE (gmsh_unit, *) 1,2, '"OUT"'
-    ENDIF
-    IF(ANY(Mesh%boundaryFlag .EQ. 7)) THEN
-       WRITE (gmsh_unit, *) 1,3, '"LIM"'
-    ENDIF
-
-    WRITE (gmsh_unit, *) 2,4, '"DOM"'
-
-    WRITE ( gmsh_unit, '(a)' ) '$EndPhysicalNames '
-
-    ! write nodes
-    WRITE ( gmsh_unit, '(a)' ) '$Nodes'
-    WRITE ( gmsh_unit, '(i6)' ) SIZE(Mesh%X_P1,1)
-    DO i = 1, SIZE(Mesh%X_P1,1)
-       temp_coords = Mesh%X_P1(i, 2:)
-       WRITE ( gmsh_unit, * ) i, temp_coords
-    END DO
-    WRITE ( gmsh_unit, '(a)' ) '$EndNodes'
-
-    ! write elements, Tb extended to gmsh and T extended to gmsh
-    WRITE ( gmsh_unit, '(a)' ) '$Elements'
-    WRITE ( gmsh_unit, '(i6)' ) SIZE(Mesh%Tb_gmsh,1) + SIZE(Mesh%T_gmsh,1)
-    DO i = 1, SIZE(Mesh%Tb_gmsh,1)
-       temp_Tb_gmsh = Mesh%Tb_gmsh(i,:)
-       WRITE ( gmsh_unit, *) temp_Tb_gmsh
-    ENDDO
-    DO i = 1, SIZE(Mesh%T_gmsh,1)
-       temp_T_gmsh = Mesh%T_gmsh(i,:)
-       WRITE ( gmsh_unit, *) temp_T_gmsh
-    ENDDO
-
-    WRITE ( gmsh_unit, '(a)' ) '$EndElements'
-
-    ! close file
-    CLOSE ( unit = gmsh_unit )
-
-  ENDSUBROUTINE generate_msh_from_solution_mesh
 
 
   SUBROUTINE convert_msh2mesh(mesh_name)

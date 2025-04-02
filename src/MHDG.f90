@@ -63,12 +63,6 @@ PROGRAM MHDG
 #endif
   CALL create_reference_element(refElPol, 2, verbose = 1)
 
-  ! create the temp.msh and temp.mesh needed by the adaptivity
-  IF((switch%readMeshFromSol) .AND. (adapt%adaptivity)) THEN
-     CALL generate_msh_from_solution_mesh('./res/temp.msh')
-     CALL convert_msh2mesh('./res/temp')
-  ENDIF
-
 #ifdef TOR3D
   ! create toroidal reference element and toroidal structures
   CALL create_reference_element(refElTor, 1, numer%ptor, verbose = 1)
