@@ -75,50 +75,6 @@ CONTAINS
       DEALLOCATE(h_target_nodal, nodes_repeats)
    END SUBROUTINE get_h_target_vertices
 
-   SUBROUTINE generate_new_mesh(mesh_name,h_target,count_adapt)
-      USE in_out, ONLY: copy_file
-      TYPE(gmsh_t)                :: gmsh
-      CHARACTER(1024), INTENT(IN) :: mesh_name
-      INTEGER, INTENT(IN)         :: count_adapt
-      REAL*8, INTENT(IN)          :: h_target(:)
-      INTEGER                     :: N_n_vertex
-      CHARACTER(1024)             :: mesh_name_npne,new_mesh_name_npne, buffer
-      CHARACTER(70)               :: param_adapt_char, count_adapt_char
-      
-
-
-
-      N_n_vertex = SIZE(h_target)
-
-      CALL generate_htarget_sol_file(N_n_vertex,h_target)
-
-      CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
-
-      WRITE(param_adapt_char, *) adapt%param_est
-      WRITE(count_adapt_char, *) count_adapt
-      new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
-
-      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-      CALL mmg_create_mesh_from_h_target(buffer)
-
-      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne))
-      CALL convert_mesh2msh(buffer)
-      CALL convert_msh2mesh(buffer)
-      CALL delete_file("./res/temp.mesh")
-      CALL delete_file("./res/temp.msh")
-      CALL delete_file("./res/ElSizeMap.sol")
-
-      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-      CALL copy_file(buffer, "./res/temp.mesh")
-
-      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
-      CALL open_merge_with_geometry(gmsh, buffer)
-      CALL copy_file(buffer, "./res/temp.msh")
-      
-      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".sol"
-      CALL delete_file(buffer)
-
-   END SUBROUTINE generate_new_mesh
 
    SUBROUTINE load_new_mesh_gmsh(order)
       USE preprocess
