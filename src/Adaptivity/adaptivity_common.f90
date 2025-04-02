@@ -106,20 +106,6 @@ CONTAINS
 
    END SUBROUTINE load_new_mesh_gmsh
 
-
-   SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
-      REAL*8, INTENT(IN)              :: two_d_nodes(:,:)
-      REAL*8, INTENT(OUT)             :: J(2,2)
-      INTEGER, INTENT(IN)             :: A, B, C
-  
-      ! Calculate Jacobian matrix
-      J(1,1) = two_d_nodes(B,1) - two_d_nodes(A,1)
-      J(2,1) = two_d_nodes(B,2) - two_d_nodes(A,2)
-      J(1,2) = two_d_nodes(C,1) - two_d_nodes(A,1)
-      J(2,2) = two_d_nodes(C,2) - two_d_nodes(A,2)
-  
-   END SUBROUTINE jacobian
-
    SUBROUTINE combine_h_target_ind_est(h_map_elements,h_target_elements_est,h_target_elements_ind,h_target_elements)
       REAL*8, INTENT(IN) :: h_map_elements(:)
       REAL*8, INTENT(IN) :: h_target_elements_est(:)
