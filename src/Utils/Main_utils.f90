@@ -36,7 +36,7 @@ MODULE Main_utils
   REAL*8, POINTER              :: uiter_best(:) => NULL(), qiter_best(:) => NULL()
   CHARACTER(LEN=1024)          :: mesh_name,mesh_name_proj, save_name
   CHARACTER ( len = 255 )      :: gmsh_filename
-  CHARACTER ( len = 255 )      :: gmsh_filename_mesh, h5_filename
+  CHARACTER ( len = 255 )      :: h5_filename
   CHARACTER ( len = 50 )       :: count_adapt_char
   REAL*8                       :: cputtot, runttot
   INTEGER                      :: OMP_GET_MAX_THREADS
@@ -765,7 +765,6 @@ CONTAINS
             i = i + 1
          ENDDO
          CALL copy_file(gmsh_filename,"./res/temp.msh")
-         CALL copy_file(gmsh_filename_mesh,"./res/temp.mesh")
       ENDIF
        
     ENDIF
