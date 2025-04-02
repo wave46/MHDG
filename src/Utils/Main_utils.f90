@@ -276,8 +276,6 @@ CONTAINS
     ! Re-load magnetic field and Jtor
     CALL load_magnetic_field_Jtor()
 
-    ! Re-initialise puff, only if neutrals are present
-    CALL initialize_puff()
 
     ! Re-Allocation and initialization of the elemental matrices
     CALL init_elmat()
