@@ -216,7 +216,6 @@ FCFLAGS += -I$(MHDG_HWLOC_DIR)/include
 FCFLAGS += -I/usr/include/X11
 
 #GMSH/MMG
-FCFLAGS += -I$(MHDG_MMG_DIR)/build/include
 FCFLAGS += -I$(MHDG_GMSH_DIR)/include
 
 # PASTIX
@@ -255,7 +254,6 @@ LIB += -lXt
 
 #GMSH/MMG #on cluster it might be lib64
 LIB += -L$(MHDG_GMSH_DIR)/lib64 -Llib -lgmsh -L. -Wl,-rpath=$(MHDG_GMSH_DIR)/lib64 
-LIB += -L$(MHDG_MMG_DIR)/build/lib -lmmg
 
 
 # PASTIX #on cluster it might be lib64
