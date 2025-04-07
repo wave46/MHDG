@@ -1002,7 +1002,7 @@ CONTAINS
     CHARACTER(10)  :: str
     REAL*8, PARAMETER::tol = 1e-6
     REAL*8 :: xmin
-    INTEGER :: elemType, ndim, Nnodes, Nelems, Nnodesperelem, Nnodes_P1
+    INTEGER :: elemType, ndim, Nnodes, Nelems, Nnodesperelem
     INTEGER :: Nextfaces, Nnodesperface, Nfaces, IERR
     INTEGER(HID_T) :: file_id, group_id
 #ifdef TOR3D
