@@ -752,14 +752,6 @@ CONTAINS
       END IF
       IF (adapt%shockcp_adapt .GT. 0) THEN
          gmsh_filename      = TRIM(ADJUSTL(mesh_name))//'.msh'
-         i = 1
-         DO
-            IF((i+2) .GE. LEN(gmsh_filename)) THEN
-               WRITE(*,*) "GMSH file input not found, check input syntax."
-               STOP
-            ENDIF
-            i = i + 1
-         ENDDO
          CALL copy_file(gmsh_filename,"./res/temp.msh")
       ENDIF
        
