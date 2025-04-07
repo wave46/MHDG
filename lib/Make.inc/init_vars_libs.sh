@@ -29,7 +29,6 @@ export MHDG_LIB_DIR=$HOME/libs
 export MHDG_PASTIX_DIR=$MHDG_LIB_DIR/pastix_32
 source $MHDG_PASTIX_DIR/bin/pastix_env
 export MHDG_SCOTCH_DIR=$MHDG_LIB_DIR/scotch_32
-export MHDG_MMG_DIR=$MHDG_LIB_DIR/mmg
 export MHDG_GMSH_DIR=$MHDG_LIB_DIR/gmsh-4.11.1-Linux64-sdk
 export MHDG_PASTIX_DIR=$PASTIX_ROOT
 #export MHDG_PSBLAS_DIR=$MHDG_LIB_DIR/psblas3
@@ -47,5 +46,4 @@ echo "PASTIX (https://gitlab.inria.fr/solverstack/pastix) directory: $MHDG_PASTI
 #echo "PSBLAS (https://github.com/sfilippone/psblas3) directory: $MHDG_PSBLAS_DIR"
 #echo "MLD2P4 (https://github.com/sfilippone/mld2p4-2) directory: $MHDG_MLD2P4_DIR"
 #echo "PETSC directory: $MHDG_PETSC_DIR"
-echo "MMG directory: $MHDG_MMG_DIR"
 echo "GMSH directory: $MHDG_GMSH_DIR"
