@@ -945,7 +945,7 @@ CONTAINS
       
       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
       IF (MPIvar%glob_id .EQ. 0) THEN
-         WRITE (*,*), "Mesh saved as: ", TRIM(ADJUSTL(new_mesh_name_npne))
+         WRITE (*,*) "Mesh saved as: ", TRIM(ADJUSTL(new_mesh_name_npne))
       ENDIF
       CALL copy_file("./res/temp.msh",buffer)
 
