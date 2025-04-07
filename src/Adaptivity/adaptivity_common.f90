@@ -944,6 +944,9 @@ CONTAINS
       new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
       
       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*,*), "Mesh saved as: ", TRIM(ADJUSTL(new_mesh_name_npne))
+      ENDIF
       CALL copy_file("./res/temp.msh",buffer)
 
    END SUBROUTINE save_copy_new_mesh
