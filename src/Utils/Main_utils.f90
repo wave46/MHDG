@@ -7,7 +7,7 @@
 MODULE Main_utils
 
   USE in_out
-  USE GMSH_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, read_splines, convert_gmsh_to_hdf5, gmsh_mesh2d_write, hdf5_save_mesh_struct
+  USE GMSH_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5, gmsh_mesh2d_write, hdf5_save_mesh_struct
   USE reference_element
   USE preprocess
   USE MPI_OMP
@@ -36,7 +36,7 @@ MODULE Main_utils
   REAL*8, POINTER              :: uiter_best(:) => NULL(), qiter_best(:) => NULL()
   CHARACTER(LEN=1024)          :: mesh_name,mesh_name_proj, save_name
   CHARACTER ( len = 255 )      :: gmsh_filename
-  CHARACTER ( len = 255 )      :: gmsh_filename_mesh, h5_filename
+  CHARACTER ( len = 255 )      :: h5_filename
   CHARACTER ( len = 50 )       :: count_adapt_char
   REAL*8                       :: cputtot, runttot
   INTEGER                      :: OMP_GET_MAX_THREADS
@@ -276,8 +276,6 @@ CONTAINS
     ! Re-load magnetic field and Jtor
     CALL load_magnetic_field_Jtor()
 
-    ! Re-initialise puff, only if neutrals are present
-    CALL initialize_puff()
 
     ! Re-Allocation and initialization of the elemental matrices
     CALL init_elmat()
@@ -754,20 +752,7 @@ CONTAINS
       END IF
       IF (adapt%shockcp_adapt .GT. 0) THEN
          gmsh_filename      = TRIM(ADJUSTL(mesh_name))//'.msh'
-         i = 1
-         DO
-            IF((i+2) .GE. LEN(gmsh_filename)) THEN
-               WRITE(*,*) "GMSH file input not found, check input syntax."
-               STOP
-            ENDIF
-            IF((gmsh_filename(i:i) .EQ. '.') .AND. (gmsh_filename(i+1:i+1) .EQ. 'm') .AND. (gmsh_filename(i+2:i+2) .EQ. 's') .AND. (gmsh_filename(i+3:i+3) .EQ. 'h')) THEN
-               gmsh_filename_mesh = TRIM(ADJUSTL(gmsh_filename(1:i-3))) // 'P1.mesh'
-               EXIT
-            ENDIF
-            i = i + 1
-         ENDDO
          CALL copy_file(gmsh_filename,"./res/temp.msh")
-         CALL copy_file(gmsh_filename_mesh,"./res/temp.mesh")
       ENDIF
        
     ENDIF

@@ -637,14 +637,6 @@ CONTAINS
     CALL HDF5_real_saving(group_id1, Mesh%puff_area, 'puff_area')
     CALL HDF5_real_saving(group_id1, Mesh%core_area, 'core_area')
     CALL HDF5_group_close(group_id1, ierr)
-    IF(ASSOCIATED(Mesh%T_gmsh)) THEN
-       CALL HDF5_group_create('gmsh_mesh', file_id, group_id1, ierr)
-       CALL HDF5_integer_saving(group_id1,SIZE(Mesh%X_P1,1),'Nnodes_P1')
-       CALL HDF5_array2D_saving_int(group_id1,Mesh%T_gmsh, SIZE(Mesh%T_gmsh, 1), SIZE(Mesh%T_gmsh, 2), 'T_gmsh')
-       CALL HDF5_array2D_saving_int(group_id1,Mesh%Tb_gmsh, SIZE(Mesh%Tb_gmsh, 1), SIZE(Mesh%Tb_gmsh, 2), 'Tb_gmsh')
-       CALL HDF5_array2D_saving(group_id1,Mesh%X_P1, SIZE(Mesh%X_P1, 1), SIZE(Mesh%X_P1, 2), 'X_P1')
-       CALL HDF5_group_close(group_id1, ierr)
-    ENDIF
     
 
 #else
@@ -748,15 +740,6 @@ CONTAINS
       CALL HDF5_array1D_saving(group_id1,Mesh%toroidal,SIZE(Mesh%toroidal), 'toroidal')
 #endif
       CALL HDF5_group_close(group_id1, ierr)
-
-      IF(ASSOCIATED(Mesh%T_gmsh)) THEN
-         CALL HDF5_group_create('gmsh_mesh', file_id, group_id1, ierr)
-         CALL HDF5_array2D_saving_int(group_id1,Mesh%T_gmsh, SIZE(Mesh%T_gmsh, 1), SIZE(Mesh%T_gmsh, 2), 'T_gmsh')
-         CALL HDF5_array2D_saving_int(group_id1,Mesh%Tb_gmsh, SIZE(Mesh%Tb_gmsh, 1), SIZE(Mesh%Tb_gmsh, 2), 'Tb_gmsh')
-         CALL HDF5_array2D_saving(group_id1,Mesh%X_P1, SIZE(Mesh%X_P1, 1), SIZE(Mesh%X_P1, 2), 'X_P1')
-         CALL HDF5_integer_saving(group_id1,SIZE(Mesh%X_P1,1),'Nnodes_P1')
-         CALL HDF5_group_close(group_id1, ierr)
-      ENDIF
        
 
        CALL HDF5_group_create('magnetic', file_id, group_id1, ierr)
@@ -1019,7 +1002,7 @@ CONTAINS
     CHARACTER(10)  :: str
     REAL*8, PARAMETER::tol = 1e-6
     REAL*8 :: xmin
-    INTEGER :: elemType, ndim, Nnodes, Nelems, Nnodesperelem, Nnodes_P1
+    INTEGER :: elemType, ndim, Nnodes, Nelems, Nnodesperelem
     INTEGER :: Nextfaces, Nnodesperface, Nfaces, IERR
     INTEGER(HID_T) :: file_id, group_id
 #ifdef TOR3D
@@ -1128,44 +1111,6 @@ CONTAINS
 
     CALL HDF5_group_close(group_id, ierr)
 
-    IF(adapt%adaptivity) THEN
-      IF(elemType .EQ. 0) THEN
-         ALLOCATE (Mesh%T_gmsh(Nelems, 5 + 3))
-         ALLOCATE (Mesh%Tb_gmsh(Nextfaces, 5 + 2))
-      ELSE
-         ALLOCATE (Mesh%T_gmsh(Nelems, 5 + 4))
-         ALLOCATE (Mesh%Tb_gmsh(Nextfaces, 5 + 2))
-      ENDIF
-
-      CALL HDF5_group_open(file_id, 'gmsh_mesh', group_id, ierr)
-      IF (IERR .NE. 0) THEN
-         WRITE (6, *) "Error opening group 'gmsh_mesh'"
-         STOP
-      ENDIF
-
-      CALL HDF5_integer_reading(group_id, Nnodes_P1, 'Nnodes_P1', ierr)
-      IF (IERR .NE. 0) THEN
-         WRITE (6, *) "Error reading integer: Nnodes_P1"
-         STOP
-      ENDIF
-      ALLOCATE (Mesh%X_P1(Nnodes_P1,ndim+2))
-      CALL HDF5_array2D_reading(group_id, Mesh%X_P1, 'X_P1', ierr)
-      IF (IERR .NE. 0) THEN
-         WRITE (6, *) "Error reading coordinate matrix X_P1"
-         STOP
-      ENDIF
-      CALL HDF5_array2D_reading_int(group_id, Mesh%Tb_gmsh, 'Tb_gmsh', ierr)
-      IF (IERR .NE. 0) THEN
-         WRITE (6, *) "Error reading boundary connectivity Tb_gmsh"
-         STOP
-      ENDIF
-      CALL HDF5_array2D_reading_int(group_id, Mesh%T_gmsh, 'T_gmsh', ierr)
-      IF (IERR .NE. 0) THEN
-         WRITE (6, *) "Error reading boundary connectivity T_gmsh"
-         STOP
-      ENDIF
-      CALL HDF5_group_close(group_id, ierr)
-    ENDIF
     CALL HDF5_close(file_id)
 
     !************************************************************************

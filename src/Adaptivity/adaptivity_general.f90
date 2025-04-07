@@ -9,7 +9,7 @@ CONTAINS
 
     SUBROUTINE adaptively_refine_mesh(mesh_name, count_adapt, order)
 #ifdef PARALL
-        USE Communications, only: gather_connectivity, gather_elemental_values
+        USE Communications, only: gather_mesh, gather_elemental_values
 #endif
         CHARACTER(1024), INTENT(IN) :: mesh_name
         INTEGER, INTENT(IN) :: count_adapt
@@ -20,8 +20,9 @@ CONTAINS
 #ifdef PARALL
         INTEGER :: ierr
         INTEGER, POINTER :: T_global(:, :)
+        REAL*8, POINTER :: X_global(:,:)
         REAL*8, POINTER :: h_target_elements_global(:)
-        NULLIFY(T_global, h_target_elements_global)
+        NULLIFY(T_global, h_target_elements_global, X_global)
 #endif
         NULLIFY(h_target_vertices)
 
@@ -30,19 +31,19 @@ CONTAINS
         CALL evaluate_adaptivity(h_map_elements, order, h_target_elements)
 
 #ifdef PARALL
-        CALL gather_connectivity(Mesh, T_global,allgather=.false.)
+        CALL gather_mesh(Mesh,T_global,X_global)
         CALL gather_elemental_values(Mesh, h_target_elements, h_target_elements_global,allgather=.false.)
         IF (MPIvar%glob_id .EQ. 0) THEN
-            CALL get_h_target_vertices(h_target_elements_global, h_target_vertices, T_global)
+            CALL gmsh_create_from_h_target(h_target_elements_global,X_global, T_global(:,:3), order)
 #else
-            CALL get_h_target_vertices(h_target_elements, h_target_vertices, Mesh%T)
-#endif
-            CALL generate_new_mesh(mesh_name, h_target_vertices, count_adapt)
+            CALL gmsh_create_from_h_target(h_target_elements,Mesh%X, Mesh%T(:,:3), order)
+#endif            
+            CALL save_copy_new_mesh(mesh_name, count_adapt)
 #ifdef PARALL
         ENDIF
         CALL MPI_BARRIER(MPI_COMM_WORLD, ierr)
 #endif
-        CALL load_new_mesh(order)
+        CALL load_new_mesh_gmsh(order)
 
         IF (ASSOCIATED(h_target_vertices)) THEN
             DEALLOCATE(h_target_vertices)
@@ -56,6 +57,10 @@ CONTAINS
         IF (ASSOCIATED(h_target_elements_global)) THEN
             DEALLOCATE(h_target_elements_global)
             NULLIFY(h_target_elements_global)
+        ENDIF
+        IF (ASSOCIATED(X_global)) THEN
+            DEALLOCATE(X_global)
+            NULLIFY(X_global)
         ENDIF
 #endif
     ENDSUBROUTINE adaptively_refine_mesh

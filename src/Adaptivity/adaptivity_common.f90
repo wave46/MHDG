@@ -33,21 +33,24 @@ CONTAINS
 
    ENDSUBROUTINE adaptivity_console_output
 
-   SUBROUTINE calculate_h_map_elements(nodes,connectivity,h_map)
-      REAL*8,INTENT(IN)                :: nodes(:,:)
-      INTEGER, INTENT(IN)              :: connectivity(:,:)
-      REAL*8, INTENT(OUT)              :: h_map(SIZE(connectivity,1))
-      INTEGER                          :: i
-      REAL*8, DIMENSION(2,2)           :: J
-      REAL*8                           :: detJ
+   SUBROUTINE calculate_h_map_elements(nodes, connectivity, h_map)
+      REAL*8, INTENT(IN)                :: nodes(:,:)
+      INTEGER, INTENT(IN)               :: connectivity(:,:)
+      REAL*8, INTENT(OUT)               :: h_map(SIZE(connectivity,1))
+      INTEGER                           :: i
+      REAL*8                            :: side1, side2, side3, s, area
 
-      DO i = 1, SIZE(connectivity,1)      
-         CALL jacobian(nodes, connectivity(i,1), connectivity(i,2), connectivity(i,3), J)
-         detJ = J(1,1)*J(2,2) - J(1,2)*J(2,1)
-         h_map(i) = SQRT(2.0*detJ/SQRT(3.0))
+      DO i = 1, SIZE(connectivity,1)
+         side1 = SQRT((nodes(connectivity(i,1),1) - nodes(connectivity(i,2),1))**2 + (nodes(connectivity(i,1),2) - nodes(connectivity(i,2),2))**2)
+         side2 = SQRT((nodes(connectivity(i,2),1) - nodes(connectivity(i,3),1))**2 + (nodes(connectivity(i,2),2) - nodes(connectivity(i,3),2))**2)
+         side3 = SQRT((nodes(connectivity(i,3),1) - nodes(connectivity(i,1),1))**2 + (nodes(connectivity(i,3),2) - nodes(connectivity(i,1),2))**2)
+
+         s = (side1 + side2 + side3) / 2.0
+         area = SQRT(s * (s - side1) * (s - side2) * (s - side3))
+         !Double circumradius
+         h_map(i) = (side1 * side2 * side3) / (2.0 * area)
       ENDDO
-
-   END SUBROUTINE calculate_h_map_elements       
+   END SUBROUTINE calculate_h_map_elements
 
    SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices,T)
       REAL*8, INTENT(IN)                              :: h_map_elements(:)
@@ -72,86 +75,27 @@ CONTAINS
       DEALLOCATE(h_target_nodal, nodes_repeats)
    END SUBROUTINE get_h_target_vertices
 
-   SUBROUTINE generate_new_mesh(mesh_name,h_target,count_adapt)
-      USE in_out, ONLY: copy_file
-      TYPE(gmsh_t)                :: gmsh
-      CHARACTER(1024), INTENT(IN) :: mesh_name
-      INTEGER, INTENT(IN)         :: count_adapt
-      REAL*8, INTENT(IN)          :: h_target(:)
-      INTEGER                     :: N_n_vertex
-      CHARACTER(1024)             :: mesh_name_npne,new_mesh_name_npne, buffer
-      CHARACTER(70)               :: param_adapt_char, count_adapt_char
-      
 
-
-
-      N_n_vertex = SIZE(h_target)
-
-      CALL generate_htarget_sol_file(N_n_vertex,h_target)
-
-      CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
-
-      WRITE(param_adapt_char, *) adapt%param_est
-      WRITE(count_adapt_char, *) count_adapt
-      new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
-
-      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-      CALL mmg_create_mesh_from_h_target(buffer)
-
-      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne))
-      CALL convert_mesh2msh(buffer)
-      CALL convert_msh2mesh(buffer)
-      CALL delete_file("./res/temp.mesh")
-      CALL delete_file("./res/temp.msh")
-      CALL delete_file("./res/ElSizeMap.sol")
-
-      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-      CALL copy_file(buffer, "./res/temp.mesh")
-
-      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
-      CALL open_merge_with_geometry(gmsh, buffer)
-      CALL copy_file(buffer, "./res/temp.msh")
-      
-      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".sol"
-      CALL delete_file(buffer)
-
-   END SUBROUTINE generate_new_mesh
-
-   SUBROUTINE load_new_mesh(order)
+   SUBROUTINE load_new_mesh_gmsh(order)
       USE preprocess
       INTEGER, INTENT(IN) :: order
       INTEGER                     :: ierr
 
       IF(MPIvar%glob_id .EQ. 0) THEN
-         WRITE(*,*) "********** Loading mesh P1  **********"
+         WRITE(*,*) "********** Loading new mesh  **********"
       ENDIF
+
       CALL free_mesh
+
+      CALL free_reference_element_pol(refElPol)
+      CALL create_reference_element(refElPol,2,order, verbose = 0)
 
       IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
          CALL load_gmsh_mesh("./res/temp",0)
       ELSE
          CALL load_gmsh_mesh("./res/temp",1)
       ENDIF
-      CALL free_reference_element_pol(refElPol)
-      CALL create_reference_element(refElPol,2,1, verbose = 0)
-      CALL mesh_preprocess_serial(ierr)
-  
-      Mesh%X = Mesh%X*phys%lscale
 
-      IF(ierr .EQ. 0) THEN
-         WRITE(*,*) "Error! Corresponding face in Tb not found. STOP"
-         STOP
-      ENDIF
-
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         CALL HDF5_save_mesh("./newmesh_pre.h5", Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
-      ENDIF
-  
-      CALL read_extended_connectivity('./res/temp.msh')
-  
-      CALL set_order_mesh(order)
-      CALL free_reference_element_pol(refElPol)
-      CALL create_reference_element(refElPol,2,order, verbose = 0)
       CALL mesh_preprocess_serial(ierr)
 
       Mesh%X = Mesh%X*phys%lscale
@@ -160,35 +104,7 @@ CONTAINS
          Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
       END IF
 
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-      ENDIF
-
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
-         CALL write_msh_file(Mesh%X,Mesh%T)
-         ! convert the mesh to .mesh
-         CALL convert_msh2mesh('./res/temp')
-      ENDIF
-
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-      ENDIF
-
-   END SUBROUTINE load_new_mesh
-
-   SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
-      REAL*8, INTENT(IN)              :: two_d_nodes(:,:)
-      REAL*8, INTENT(OUT)             :: J(2,2)
-      INTEGER, INTENT(IN)             :: A, B, C
-  
-      ! Calculate Jacobian matrix
-      J(1,1) = two_d_nodes(B,1) - two_d_nodes(A,1)
-      J(2,1) = two_d_nodes(B,2) - two_d_nodes(A,2)
-      J(1,2) = two_d_nodes(C,1) - two_d_nodes(A,1)
-      J(2,2) = two_d_nodes(C,2) - two_d_nodes(A,2)
-  
-   END SUBROUTINE jacobian
+   END SUBROUTINE load_new_mesh_gmsh
 
    SUBROUTINE combine_h_target_ind_est(h_map_elements,h_target_elements_est,h_target_elements_ind,h_target_elements)
       REAL*8, INTENT(IN) :: h_map_elements(:)
@@ -234,19 +150,6 @@ CONTAINS
          ENDIF
       ENDDO
    END SUBROUTINE average_h_target
-
-  SUBROUTINE open_merge_with_geometry(gmsh_l,path2msh)
-    TYPE(gmsh_t), INTENT(IN)           :: gmsh_l
-    CHARACTER ( len = * ), INTENT(IN) :: path2msh
-
-    CALL gmsh_l%initialize()
-    CALL gmsh_l%OPEN(adapt%geometry_path)
-    CALL gmsh_l%MERGE(path2msh)
-    CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh_l%WRITE(path2msh)
-    CALL gmsh_l%finalize()
-
-  ENDSUBROUTINE open_merge_with_geometry
 
   SUBROUTINE set_order_mesh(p)
 
@@ -757,256 +660,6 @@ CONTAINS
 
   END SUBROUTINE find_matches_int
 
-  SUBROUTINE write_msh_file(X, T)
-
-    REAL*8, INTENT(in)                  :: X(:,:)
-    INTEGER, INTENT(in)                 :: T(:,:)
-    INTEGER, ALLOCATABLE                :: unique_T(:)
-    CHARACTER ( len = 255 )             :: buffer
-    INTEGER                             :: unit_in,unit_out, i, j, ios
-
-    CALL unique_1D(RESHAPE(T(:,1:3), [SIZE(T(:,1:3),1)*SIZE(T(:,1:3),2)]), unique_T)
-
-    ! rename temp.msh
-    CALL rename('./res/temp.msh','./res/temp_origin.msh')
-    ! get file_id of temp.msh
-    CALL get_unit ( unit_in )
-    ! Open the source file for reading
-    OPEN(unit=unit_in, file='./res/temp_origin.msh', status='old', action='read', iostat=ios)
-    IF (ios /= 0) THEN
-       PRINT *, "Error opening source file."
-       RETURN
-    END IF
-
-    ! get unit and open destination file
-    CALL get_unit ( unit_out )
-    ! Open the destination file for writing
-    OPEN(unit=unit_out, file='./res/temp.msh', status='replace', action='write', iostat=ios)
-    IF (ios /= 0) THEN
-       PRINT *, "Error opening destination file."
-       CLOSE(unit_in)
-       RETURN
-    END IF
-
-    ! Copy data from source to destination
-    DO
-       READ (unit_in, '(a)', iostat = ios ) buffer
-       IF (ios /= 0) EXIT ! Exit loop when end of file is reached
-       WRITE(unit_out, '(a)') buffer(1:100)
-       IF(buffer(1:6) .EQ. '$Nodes') EXIT
-    END DO
-
-    ! write the number of nodes
-    WRITE(unit_out, '(I0)') SIZE(unique_T)
-
-    ! write the new coordinates of the nodes
-    DO i = 1, SIZE(unique_T)
-       WRITE(unit_out, '(I0, 2F14.10, A)') i, (X(unique_T(i), j), j = 1, 2), ' 0'
-    END DO
-    WRITE(unit_out, '(A)') "$EndNodes"
-
-    ! copy the connectivity
-    ! go down till it encounters $Elements
-    DO
-       READ (unit_in, '(a)', iostat = ios ) buffer
-       IF (ios /= 0) EXIT ! Exit loop if end of file is reached
-       IF(buffer(1:9) .EQ. '$Elements') EXIT
-    END DO
-
-    ! write $Elements
-    WRITE(unit_out, '(A)') "$Elements"
-
-    ! Copy connectivity
-    DO
-       READ (unit_in, '(a)', iostat = ios ) buffer
-       IF (ios /= 0) EXIT ! Exit loop when end of file is reached
-       WRITE(unit_out, '(a)') buffer(1:100)
-    END DO
-
-    CLOSE(unit_in)
-    CLOSE(unit_out)
-
-    CALL delete_file('./res/temp_origin.msh')
-    DEALLOCATE(unique_T)
-
-  END SUBROUTINE write_msh_file
-
-
-  SUBROUTINE read_extended_connectivity(filename)
-
-    CHARACTER * ( * ), INTENT(IN)       :: filename
-    INTEGER, ALLOCATABLE                :: T_gmsh(:,:), Tb_gmsh(:,:)
-    REAL*8, ALLOCATABLE                 :: X_P1(:,:)
-    CHARACTER( LEN = 255 )              :: buffer
-    INTEGER                             :: i, ios
-    INTEGER ( kind = 4 )                :: unit_gmsh
-
-    ! Open the destination file for writing
-    CALL get_unit ( unit_gmsh )
-    ! Open the source file for reading
-    OPEN(unit=unit_gmsh, file=filename, status='old', action='read', iostat=ios)
-    IF (ios /= 0) THEN
-       PRINT *, "Error opening destination file."
-       CLOSE(unit_gmsh)
-       RETURN
-    END IF
-
-    ! read till the nodes are found
-    DO
-       READ (unit_gmsh, '(a)', iostat = ios ) buffer
-       IF (ios /= 0) EXIT ! Exit loop if end of file is reached
-       IF(buffer(1:6) .EQ. '$Nodes') EXIT
-    END DO
-
-    ! read one more line (# of nodes)
-    READ (unit_gmsh, '(a)', iostat = ios ) buffer
-
-    ALLOCATE(X_P1(SIZE(Mesh%X,1),2 + Mesh%Ndim))
-    ! read coordinates of the nodes
-    DO i = 1,SIZE(Mesh%X,1)
-       READ(unit_gmsh,*) X_P1(i,:)
-    ENDDO
-
-    ! skip $EndNodes, $Elements, #elements
-    DO i = 1,3
-       ! read one more line
-       READ (unit_gmsh, '(a)', iostat = ios ) buffer
-    ENDDO
-
-    ALLOCATE(Tb_gmsh(SIZE(Mesh%Tb,1),5 + SIZE(Mesh%Tb,2)))
-
-    DO i = 1,SIZE(Mesh%Tb,1)
-       READ(unit_gmsh,*) Tb_gmsh(i,:)
-    ENDDO
-
-    ALLOCATE(T_gmsh(SIZE(Mesh%T,1), 5 + SIZE(Mesh%T,2)))
-    DO i = 1,SIZE(Mesh%T,1)
-       READ(unit_gmsh,*) T_gmsh(i,:)
-    ENDDO
-
-    CLOSE(unit_gmsh)
-
-    ALLOCATE(Mesh%Tb_gmsh(SIZE(Tb_gmsh,1),SIZE(Tb_gmsh,2)))
-    Mesh%Tb_gmsh = Tb_gmsh
-    ALLOCATE(Mesh%T_gmsh(SIZE(T_gmsh,1), SIZE(T_gmsh,2)))
-    Mesh%T_gmsh = T_gmsh
-    ALLOCATE(Mesh%X_P1(SIZE(X_P1,1), SIZE(X_P1,2)))
-    Mesh%X_P1 = X_P1
-
-    DEALLOCATE(Tb_gmsh,T_gmsh, X_P1)
-
-  ENDSUBROUTINE read_extended_connectivity
-
-
-  SUBROUTINE generate_msh_from_solution_mesh(mesh_name)
-
-
-    CHARACTER * ( * )                   :: mesh_name
-    INTEGER ( kind = 4 )                :: gmsh_unit
-    INTEGER                             :: i, n
-
-    ! get unit file and open it
-    CALL get_unit ( gmsh_unit )
-    OPEN ( unit = gmsh_unit, file = mesh_name, status = 'replace' )
-
-    ! write mesh format
-    WRITE ( gmsh_unit, '(a)' ) '$MeshFormat'
-    WRITE ( gmsh_unit, '(a)' ) '2.2 0 8'
-    WRITE ( gmsh_unit, '(a)' ) '$EndMeshFormat'
-
-    WRITE ( gmsh_unit, '(a)' ) '$PhysicalNames '
-
-    n = 0
-    DO i = 1, 10
-       IF(COUNT(Mesh%boundaryFlag .EQ. i) .NE. 0) THEN
-          n = n + 1
-       ENDIF
-    ENDDO
-
-    ! + 1 is the domain
-    WRITE (gmsh_unit, *) n + 1
-    IF(ANY(Mesh%boundaryFlag .EQ. 5)) THEN
-       WRITE (gmsh_unit, *) 1,5, '"PUMP"'
-    ENDIF
-    IF(ANY(Mesh%boundaryFlag .EQ. 6)) THEN
-       WRITE (gmsh_unit, *) 1,6, '"PUFF"'
-    ENDIF
-    IF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
-       WRITE (gmsh_unit, *) 1,1, '"IN"'
-    ENDIF
-    IF(ANY(Mesh%boundaryFlag .EQ. 9)) THEN
-       WRITE (gmsh_unit, *) 1,2, '"OUT"'
-    ENDIF
-    IF(ANY(Mesh%boundaryFlag .EQ. 7)) THEN
-       WRITE (gmsh_unit, *) 1,3, '"LIM"'
-    ENDIF
-
-    WRITE (gmsh_unit, *) 2,4, '"DOM"'
-
-    WRITE ( gmsh_unit, '(a)' ) '$EndPhysicalNames '
-
-    ! write nodes
-    WRITE ( gmsh_unit, '(a)' ) '$Nodes'
-    WRITE ( gmsh_unit, '(i6)' ) SIZE(Mesh%X_P1,1)
-    DO i = 1, SIZE(Mesh%X_P1,1)
-       WRITE ( gmsh_unit, * ) i, Mesh%X_P1(i,2:)
-    END DO
-    WRITE ( gmsh_unit, '(a)' ) '$EndNodes'
-
-    ! write elements, Tb extended to gmsh and T extended to gmsh
-    WRITE ( gmsh_unit, '(a)' ) '$Elements'
-    WRITE ( gmsh_unit, '(i6)' ) SIZE(Mesh%Tb_gmsh,1) + SIZE(Mesh%T_gmsh,1)
-    DO i = 1, SIZE(Mesh%Tb_gmsh,1)
-       WRITE ( gmsh_unit, *) Mesh%Tb_gmsh(i,:)
-    ENDDO
-    DO i = 1, SIZE(Mesh%T_gmsh,1)
-       WRITE ( gmsh_unit, *) Mesh%T_gmsh(i,:)
-    ENDDO
-
-    WRITE ( gmsh_unit, '(a)' ) '$EndElements'
-
-    ! close file
-    CLOSE ( unit = gmsh_unit )
-
-  ENDSUBROUTINE generate_msh_from_solution_mesh
-
-
-  SUBROUTINE convert_msh2mesh(mesh_name)
-
-    IMPLICIT NONE
-
-    CHARACTER(*), INTENT(IN)            :: mesh_name
-    CHARACTER(LEN = 1024)               :: file_in, file_out
-    TYPE(gmsh_t)                        :: gmsh_l
-
-    file_in  = TRIM(ADJUSTL(mesh_name))// '.msh'
-    file_out = TRIM(ADJUSTL(mesh_name))// '.mesh'
-
-    CALL gmsh_l%initialize()
-    CALL gmsh_l%OPEN(file_in)
-    CALL gmsh_l%WRITE(file_out)
-    CALL gmsh_l%finalize()
-
-  ENDSUBROUTINE convert_msh2mesh
-
-  SUBROUTINE convert_mesh2msh(mesh_name)
-
-    IMPLICIT NONE
-
-    CHARACTER(*), INTENT(IN)            :: mesh_name
-    CHARACTER(LEN = 1024)               :: file_in, file_out
-    TYPE(gmsh_t)                        :: gmsh_l
-
-    file_in  = TRIM(ADJUSTL(mesh_name))// '.mesh'
-    file_out = TRIM(ADJUSTL(mesh_name))// '.msh'
-
-    CALL gmsh_l%initialize()
-    CALL gmsh_l%OPEN(file_in)
-    CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh_l%WRITE(file_out)
-    CALL gmsh_l%finalize()
-
-  ENDSUBROUTINE convert_mesh2msh
 
   SUBROUTINE delete_file(filename)
 
@@ -1057,158 +710,6 @@ CONTAINS
     mesh_name_npne = TRIM(ADJUSTL(mesh_name(start:)))
 
   ENDSUBROUTINE extract_mesh_name_from_fullpath_woext
-
-  SUBROUTINE mmg_create_mesh_from_h_target(mesh_name)
-
-#include "mmg/mmg2d/libmmg2df.h"
-
-    MMG5_DATA_PTR_T           :: mmgMesh
-    MMG5_DATA_PTR_T           :: mmgSol
-    INTEGER                   :: ier
-    CHARACTER(len=300)        :: filename,filename_sol,fileout
-    CHARACTER(*), INTENT(IN)  :: mesh_name
-
-
-    PRINT*,"  -- Creating new Mesh file from h_target"
-
-    filename       = './res/temp.mesh'
-    filename_sol   = './res/ElSizeMap.sol'
-    fileout        = mesh_name
-
-    !> ------------------------------ STEP   I --------------------------
-    !! 1) Initialisation of mesh and sol structures
-    !!   args of InitMesh:
-    !! MMG5_ARG_start: we start to give the args of a variadic func
-    !! MMG5_ARG_ppMesh: next arg will be a pointer over a MMG5_pMesh
-    !! mmgMesh: your MMG5_pMesh (that store your mesh)
-    !! MMG5_ARG_ppMet: next arg will be a pointer over a MMG5_pSol storing a metric
-    !! mmgSol: your MMG5_pSol (that store your metric) */
-
-    mmgMesh = 0
-    mmgSol  = 0
-
-    CALL MMG2D_Init_mesh(MMG5_ARG_start, &
-         MMG5_ARG_ppMesh,mmgMesh,MMG5_ARG_ppMet,mmgSol, &
-         MMG5_ARG_end)
-
-    CALL MMG2D_Set_iparameter(mmgMesh,mmgSol,MMG2D_IPARAM_verbose,-1, ier);
-
-
-    !> 2) Build mesh in MMG5 format
-    !! Two solutions: just use the MMG2D_loadMesh function that will read a .mesh(b)
-    !! file formatted or manually set your mesh using the MMG2D_Set* functions
-
-    !> with MMG2D_loadMesh function
-    CALL MMG2D_Set_iparameter(mmgMesh,mmgSol,MMG2D_IPARAM_3dMedit,2, ier);
-    IF ((switch%testcase .LT. 60 .OR. switch%testcase .GT. 80)) THEN
-       !CALL MMG2D_Set_iparameter(mmgMesh,mmgSol,MMG2D_IPARAM_nosurf,1, ier);
-       CALL MMG2D_Set_iparameter(mmgMesh,mmgSol,MMG2D_IPARAM_xreg,1, ier);
-
-       !call MMG2D_Set_iparameter(mmgMesh,mmgSol,MMG2D_IPARAM_noswap,1, ier);
-       !call MMG2D_Set_iparameter(mmgMesh,mmgSol,MMG2D_IPARAM_nomove,1, ier);
-       !call MMG2D_Set_iparameter(mmgMesh,mmgSol,MMG2D_DPARAM_hausd,1, ier);
-       !call MMG2D_Set_dparameter(mmgMesh,mmgSol,MMG2D_DPARAM_hausd,0.001, ier);
-    END IF
-
-    !CALL MMG2D_Set_iparameter(mmgMesh,mmgSol,MMG2D_IPARAM_xreg,1, ier);
-    CALL MMG2D_Set_iparameter(mmgMesh,mmgSol,MMG2D_IPARAM_angle,1, ier);
-    CALL MMG2D_Set_dparameter(mmgMesh,mmgSol,MMG2D_DPARAM_angleDetection,0.1, ier);
-    !CALL MMG2D_Set_dparameter(mmgMesh,mmgSol,MMG2D_DPARAM_hmin,4e-5, ier);
-    CALL MMG2D_Set_dparameter(mmgMesh,mmgSol,MMG2D_DPARAM_hgrad,2.4, ier);
-
-
-
-    CALL MMG2D_loadMesh(mmgMesh,TRIM(ADJUSTL(filename)),LEN(TRIM(ADJUSTL(filename))),ier)
-    IF ( ier /= 1 ) THEN
-       WRITE(*,*) "Error loading the .mesh file"
-       CALL EXIT(102)
-    ENDIF
-    !> 3) Build sol in MMG5 format
-    !! Two solutions: just use the MMG2D_loadMet function that will read a .sol(b)
-    !!    file formatted or manually set your sol using the MMG2D_Set* functions
-
-    !> With MMG2D_loadSol function
-    CALL MMG2D_loadSol(mmgMesh,mmgSol,TRIM(ADJUSTL(filename_sol)),LEN(TRIM(ADJUSTL(filename_sol))),ier)
-    IF ( ier /= 1 ) THEN
-       WRITE(*,*) "Error loading the .sol file"
-       CALL EXIT(104)
-    ENDIF
-
-    !> 4) (not mandatory): check IF the number of given entities match with mesh size
-    CALL MMG2D_Chk_meshData(mmgMesh,mmgSol,ier)
-    IF ( ier /= 1 ) THEN
-       WRITE(*,*) "Error checking the data for mmg."
-       CALL EXIT(107)
-    ENDIF
-
-    !> ------------------------------ STEP  II --------------------------
-    !! remesh function
-    ! NULLIFY(va)
-    CALL MMG2D_mmg2dlib(mmgMesh,mmgSol,ier)
-    IF ( ier == MMG5_STRONGFAILURE ) THEN
-       PRINT*,"BAD ENDING OF MMG2DLIB: UNABLE TO SAVE MESH"
-       STOP MMG5_STRONGFAILURE
-    ELSE IF ( ier == MMG5_LOWFAILURE ) THEN
-       PRINT*,"BAD ENDING OF MMG2DLIB"
-    ELSE
-       PRINT*,"MMG2DLIB SUCCEED"
-    ENDIF
-
-    !> ------------------------------ STEP III --------------------------
-    !! get results
-    !! Two solutions: just use the MMG2D_saveMesh/MMG2D_saveSol functions
-    !!    that will WRITE .mesh(b)/.sol formatted files or manually get your mesh/sol
-    !!    using the MMG2D_getMesh/MMG2D_getSol functions
-
-    !> 1) Automatically save the mesh
-    CALL MMG2D_saveMesh(mmgMesh,TRIM(ADJUSTL(fileout)),LEN(TRIM(ADJUSTL(fileout))),ier)
-    IF ( ier /= 1 ) THEN
-       WRITE(*,*) "Error checking the data for mmg."
-       CALL EXIT(106)
-    ENDIF
-
-    !> 2) Automatically save the solution
-    CALL MMG2D_saveSol(mmgMesh,mmgSol,TRIM(ADJUSTL(fileout)),LEN(TRIM(ADJUSTL(fileout))),ier)
-    IF ( ier /= 1 ) THEN
-       WRITE(*,*) "Error saving the solution."
-       CALL EXIT(107)
-    ENDIF
-
-    !> 3) Free the MMG2D5 structures
-    CALL MMG2D_Free_all(MMG5_ARG_start, &
-         MMG5_ARG_ppMesh,mmgMesh,MMG5_ARG_ppMet,mmgSol, &
-         MMG5_ARG_end)
-
-  ENDSUBROUTINE mmg_create_mesh_from_h_target
-
-  SUBROUTINE generate_htarget_sol_file(N_n_vertex, h_target)
-
-    INTEGER, INTENT(IN)         :: N_n_vertex
-    REAL*8, INTENT(IN)          :: h_target(:)
-    INTEGER                     :: fileID
-
-
-    CALL get_unit ( fileID )
-    ! Open the file for writing
-    OPEN(unit=fileID, file='./res/ElSizeMap.sol')
-
-    ! WRITE data to the file
-    WRITE(fileID, '(A,I0)') 'MeshVersionFormatted ', 2
-    WRITE(fileID, *)
-    WRITE(fileID, '(A,I0)') 'Dimension ', 3
-    WRITE(fileID, *)
-    WRITE(fileID, '(A)') 'SolAtVertices'
-    WRITE(fileID, '(I0)') N_n_vertex
-    WRITE(fileID, '(I1, 1X, I1)') 1, 1
-    WRITE(fileID, *)
-    WRITE(fileID, '(F8.6)') h_target
-    WRITE(fileID, *)
-    WRITE(fileID, '(A)') 'End'
-
-    ! Close the file
-    CLOSE(fileID)
-
-  ENDSUBROUTINE generate_htarget_sol_file
 
   PURE SUBROUTINE unique_1D(list_in, list_out)
     !! From a 1D array of integers list_in extracts the list of unique occurences of values
@@ -1348,6 +849,105 @@ CONTAINS
   ENDSUBROUTINE unique_stable
 
 
+  SUBROUTINE gmsh_create_from_h_target(h_target_on_elements,vertices_coordinates, connectivity, p_order)
+
+      USE, INTRINSIC :: iso_c_binding
+      USE gmsh
+      USE MPI_OMP, only: OMPvar
+
+      TYPE(gmsh_t) :: gmsh_l
+      INTEGER, INTENT(IN) :: p_order
+      REAL*8, DIMENSION(:), INTENT(IN) :: h_target_on_elements ! on the elements
+      REAL*8, DIMENSION(:,:), INTENT(IN) :: vertices_coordinates ! coordinates of the vertices
+      INTEGER, DIMENSION(:,:), INTENT(IN) :: connectivity ! connectivity of the triangles
+      REAL*8, ALLOCATABLE :: data_for_gmsh(:)
+      INTEGER*8           :: gmsh_dim, number_of_vertices_per_triangle, i, j, start_index
+      INTEGER*4           :: size_view,number_of_triangles,ret
+      REAL*8              :: sf_index, vertex_coordinates(2),h_target_on_vertex
+      !GMSH always have (X,Y,Z) coordinates
+      gmsh_dim = 3 
+      number_of_vertices_per_triangle = 3 
+      number_of_triangles = SIZE(connectivity,1)
+
+      ! initalize gmsh
+      CALL gmsh_l%initialize()
+
+      ! Set verbosity level to 2 (Errors and warnings)
+      CALL gmsh_l%option%setNumber("General.Verbosity", 2.0)
+
+      !create model
+      CALL gmsh_l%model%add("geo")
+      ! merge
+      CALL gmsh_l%merge(adapt%geometry_path)
 
 
+      ALLOCATE(data_for_gmsh((number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))*number_of_triangles))
+
+      ! Prepare data in gmsh format
+      DO i = 1, number_of_triangles
+         start_index = (i-1)*(number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))
+         DO j = 1, number_of_vertices_per_triangle
+            vertex_coordinates = vertices_coordinates(connectivity(i,j),:)
+            h_target_on_vertex = h_target_on_elements(i)
+            data_for_gmsh(start_index+j) = vertex_coordinates(1)
+            data_for_gmsh(start_index+number_of_vertices_per_triangle+j) = vertex_coordinates(2)
+            data_for_gmsh(start_index+2*number_of_vertices_per_triangle+j) = 0.0 ! no Z coordinate
+            data_for_gmsh(start_index+3*number_of_vertices_per_triangle+j) = h_target_on_vertex
+         ENDDO
+      ENDDO
+
+      ! Add h_target as a post-processing view
+      size_view = gmsh_l%view%add("h_target")
+      call gmsh_l%view%addListData(size_view, "ST",number_of_triangles,data_for_gmsh)
+      sf_index = gmsh_l%view%getIndex(size_view)
+
+      ! Add the view as a field
+      ret = gmsh_l%model%mesh%field%add("PostView")
+      call gmsh_l%model%mesh%field%setNumber(ret, "ViewIndex", 0d0)
+
+      ! Apply the view as the current background mesh size field:
+      call gmsh_l%model%mesh%field%setAsBackgroundMesh(ret)
+
+      ! ignore characteristic length from geometry
+      call gmsh_l%option%setNumber("Mesh.MeshSizeExtendFromBoundary", 0d0)
+      call gmsh_l%option%setNumber("Mesh.MeshSizeFromPoints", 0d0)
+      call gmsh_l%option%setNumber("Mesh.MeshSizeFromCurvature", 0d0)
+      CALL gmsh_l%option%setNumber("Mesh.MeshSizeFactor", 1d0)
+      CALL gmsh_l%option%setNumber("General.NumThreads", REAL(OMPvar%Nthreads))
+
+      !Changing the algorithm to Delaunay, the default is Frontal-Delaunay (Don't Know if needed)
+      call gmsh_l%option%setNumber("Mesh.Algorithm", 5d0)
+
+      ! Generate the refined mesh
+      call gmsh_l%model%mesh%generate(2)
+      call gmsh_l%model%mesh%setOrder(p_order)
+      call gmsh_l%model%mesh%optimize('HighOrder')
+      CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
+      call gmsh_l%write('./res/temp.msh')
+      CALL gmsh_l%finalize()
+
+      DEALLOCATE(data_for_gmsh)
+
+   END SUBROUTINE gmsh_create_from_h_target
+
+   SUBROUTINE save_copy_new_mesh(mesh_name, count_adapt)
+      USE in_out, ONLY: copy_file
+      CHARACTER(1024), INTENT(IN) :: mesh_name
+      INTEGER, INTENT(IN)         :: count_adapt
+      CHARACTER(70)               :: param_adapt_char, count_adapt_char
+      CHARACTER(1024)             :: mesh_name_npne,new_mesh_name_npne, buffer
+
+      CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
+
+      WRITE(param_adapt_char, *) adapt%param_est
+      WRITE(count_adapt_char, *) count_adapt
+      new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
+      
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*,*) "Mesh saved as: ", TRIM(ADJUSTL(new_mesh_name_npne))
+      ENDIF
+      CALL copy_file("./res/temp.msh",buffer)
+
+   END SUBROUTINE save_copy_new_mesh
 END MODULE adaptivity_common_module

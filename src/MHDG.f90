@@ -46,7 +46,6 @@ PROGRAM MHDG
 
   CALL load_mesh()
 
-  CALL read_splines()
 
   ! Linear solver: set the start to true
   matK%start = .TRUE.
@@ -63,12 +62,6 @@ PROGRAM MHDG
   CALL mpi_barrier(MPI_COMM_WORLD,ierr)
 #endif
   CALL create_reference_element(refElPol, 2, verbose = 1)
-
-  ! create the temp.msh and temp.mesh needed by the adaptivity
-  IF((switch%readMeshFromSol) .AND. (adapt%adaptivity)) THEN
-     CALL generate_msh_from_solution_mesh('./res/temp.msh')
-     CALL convert_msh2mesh('./res/temp')
-  ENDIF
 
 #ifdef TOR3D
   ! create toroidal reference element and toroidal structures
@@ -124,15 +117,29 @@ PROGRAM MHDG
   ENDIF
 #endif
 
-  ! initialise magnetic field (the mesh is needed)
-  CALL initialize_magnetic_field()
-  ! load magnetic field and Jtor
-  CALL load_magnetic_field_Jtor()
 
-  ! if the restart solution is not given or we are in the serial environment
-  IF ((nb_args .EQ. 1) .OR. (MPIvar%glob_size .EQ. 1)) THEN
+  ! if the restart solution is not given
+  IF ((nb_args .EQ. 1)) THEN
+     ! initialise magnetic field (the mesh is needed)
+     CALL initialize_magnetic_field()
+     ! load magnetic field and Jtor
+     CALL load_magnetic_field_Jtor()
+     ! initialise solution
      CALL initialize_solution()
+  ELSEIF ((MPIvar%glob_size .EQ. 1)) THEN
+       ! load the serial solution
+       CALL initialize_solution()
+       ! initialise magnetic field (the mesh is needed)
+       CALL initialize_magnetic_field()
+       ! load magnetic field and Jtor
+       CALL load_magnetic_field_Jtor()
+  ELSE 
+      ! initialise magnetic field (the mesh is needed)
+      CALL initialize_magnetic_field()
+      ! load magnetic field and Jtor
+      CALL load_magnetic_field_Jtor()
   ENDIF
+  
 
   restart_adapt = adapt%rest_adapt
   CALL set_parameters()

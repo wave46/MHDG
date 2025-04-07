@@ -147,9 +147,6 @@ MODULE types
      REAL*8,ALLOCATABLE     :: Xg(:,:) ! 2D Gauss point coordinates
      REAL*8,ALLOCATABLE     :: Xgf(:,:) ! 1D Gauss point coordinates at interior faces
      REAL*8,ALLOCATABLE     :: Xgb(:,:) ! 1D Gauss point coordinates at boundary faces
-     INTEGER*4, POINTER	    :: T_gmsh(:, :) => NULL() ! Elements connectivity matrix to write the msh file
-     INTEGER*4, POINTER     :: Tb_gmsh(:, :) => NULL() ! Outer faces connectivity matrix to write the msh file
-     REAL*8, POINTER        :: X_P1(:,:) => NULL() ! coordinates of the nodes on the P1 mesh to write to the msh file
 #ifdef PARALL
      INTEGER, POINTER       :: loc2glob_fa(:) => NULL()! mapping number of the faces for creating the global matrix [number of faces in the mesh]
      INTEGER, POINTER       :: loc2glob_el(:) => NULL()! mapping number of the elements from local to global [number of elements in the mesh]

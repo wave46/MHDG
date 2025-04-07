@@ -233,8 +233,7 @@ FCFLAGS += -I/usr/include/hdf5/serial
 FCFLAGS += -I/usr/include/hwloc
 FCFLAGS += -I/usr/include/X11
 
-#GMSH/MMG
-FCFLAGS += -I$(MHDG_MMG_DIR)/build/include
+#GMSH
 FCFLAGS += -I$(MHDG_GMSH_DIR)/include
 
 # PASTIX
@@ -275,9 +274,8 @@ LIB += -L/usr/lib/x86_64-linux-gnu/hwloc -lhwloc
 LIB += -L/usr/lib/x86_64-linux-gnu -lX11
 LIB += -L/usr/lib/x86_64-linux-gnu/xtables -lXt
 
-#GMSH/MMG
+#GMSH
 LIB += -L$(MHDG_GMSH_DIR)/lib -Llib -lgmsh -L. -Wl,-rpath=$(MHDG_GMSH_DIR)/lib 
-LIB += -L$(MHDG_MMG_DIR)/build/lib -lmmg
 
 
 # PASTIX

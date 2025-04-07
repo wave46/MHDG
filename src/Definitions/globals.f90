@@ -190,10 +190,6 @@ CONTAINS
        DEALLOCATE(Mesh%T)
        NULLIFY(Mesh%T)
     END IF
-    IF (ASSOCIATED(Mesh%T_gmsh)) THEN
-       DEALLOCATE(Mesh%T_gmsh)
-       NULLIFY(Mesh%T_gmsh)
-    END IF
     IF (ASSOCIATED(Mesh%Tlin)) THEN
        DEALLOCATE(Mesh%Tlin)
        NULLIFY(Mesh%Tlin)
@@ -201,10 +197,6 @@ CONTAINS
     IF (ASSOCIATED(Mesh%Tb)) THEN
        DEALLOCATE(Mesh%Tb)
        NULLIFY(Mesh%Tb)
-    END IF
-    IF (ASSOCIATED(Mesh%Tb_gmsh)) THEN
-       DEALLOCATE(Mesh%Tb_gmsh)
-       NULLIFY(Mesh%Tb_gmsh)
     END IF
     IF (ASSOCIATED(Mesh%boundaryFlag)) THEN
        DEALLOCATE(Mesh%boundaryFlag)
@@ -243,10 +235,6 @@ CONTAINS
     IF (ASSOCIATED(Mesh%X)) THEN
        DEALLOCATE (Mesh%X)
        NULLIFY(Mesh%X)
-    END IF
-    IF (ASSOCIATED(Mesh%X_P1)) THEN
-       DEALLOCATE (Mesh%X_P1)
-       NULLIFY(Mesh%X_P1)
     END IF
     IF (ASSOCIATED(Mesh%elemSize)) THEN
        DEALLOCATE (Mesh%elemSize)
