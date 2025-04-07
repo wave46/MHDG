@@ -117,15 +117,29 @@ PROGRAM MHDG
   ENDIF
 #endif
 
-  ! initialise magnetic field (the mesh is needed)
-  CALL initialize_magnetic_field()
-  ! load magnetic field and Jtor
-  CALL load_magnetic_field_Jtor()
 
-  ! if the restart solution is not given or we are in the serial environment
-  IF ((nb_args .EQ. 1) .OR. (MPIvar%glob_size .EQ. 1)) THEN
+  ! if the restart solution is not given
+  IF ((nb_args .EQ. 1)) THEN
+     ! initialise magnetic field (the mesh is needed)
+     CALL initialize_magnetic_field()
+     ! load magnetic field and Jtor
+     CALL load_magnetic_field_Jtor()
+     ! initialise solution
      CALL initialize_solution()
+  ELSEIF ((MPIvar%glob_size .EQ. 1)) THEN
+       ! load the serial solution
+       CALL initialize_solution()
+       ! initialise magnetic field (the mesh is needed)
+       CALL initialize_magnetic_field()
+       ! load magnetic field and Jtor
+       CALL load_magnetic_field_Jtor()
+  ELSE 
+      ! initialise magnetic field (the mesh is needed)
+      CALL initialize_magnetic_field()
+      ! load magnetic field and Jtor
+      CALL load_magnetic_field_Jtor()
   ENDIF
+  
 
   restart_adapt = adapt%rest_adapt
   CALL set_parameters()
