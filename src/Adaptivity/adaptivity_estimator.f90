@@ -15,315 +15,33 @@ MODULE adaptivity_estimator_module
 
 CONTAINS
 
-  SUBROUTINE adaptivity_estimator(mesh_name, param_adapt, count_adapt, order)
-    USE in_out, ONLY: copy_file
-    USE gmsh_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5
-    USE preprocess, only: mesh_preprocess_serial
-#ifdef PARALL
-    USE Communications, ONLY: gather_1D_vector_int,gather_1D_vector_real
-#endif
-
-
-    TYPE(gmsh_t)                                :: gmsh
-    INTEGER, INTENT(IN)                         :: param_adapt, count_adapt, order
-
-    REAL*8,  ALLOCATABLE                        :: u_sol(:,:), u_star_sol(:,:), h(:), h_target(:), h_target_temp(:), error_L2(:), &
-         & error_L2_vertices(:), error_L2_init(:), error_target(:)
-    INTEGER, ALLOCATABLE                        :: vector_nodes_unique(:)
-    INTEGER                                     :: i, N_n_vertex,ierr
-    REAL*8                                      :: eg_L2, eg_L2_init
-
-#ifdef PARALL
-    REAL*8, ALLOCATABLE                         :: h_root(:), error_L2_vertices_root(:)
-    REAL*8, POINTER                             :: h_glob(:), error_L2_vertices_glob(:)
-    INTEGER, POINTER                            :: vector_nodes_unique_glob(:), count_vec_glob(:)
-    INTEGER, ALLOCATABLE                        :: count_vec(:), noghost_index(:)
-#endif
-
-    CHARACTER(70)                               :: param_adapt_char, count_adapt_char
-    ! mesh_name is the mesh path + mesh name + .msh extension ("./Meshes/CircLim.msh")
-    ! mesh_name_npne (mesh name no path no extension) is just the name of the mesh ("CircLim")
-    ! new_mesh_name_npne (new mesh name no path no extension) is just the name of the mesh + param_adapt + count_adapt ("CircLim_param2_n1")
-    ! buffer is a dummy array to store intermediate mesh names
-    CHARACTER(1024), INTENT(IN)                 :: mesh_name
-    CHARACTER(1024)                             :: mesh_name_npne, new_mesh_name_npne, buffer
-
-#ifdef PARALL
-    NULLIFY(h_glob, error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob)
-#endif
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       WRITE(*,*) "*************************************************"
-       WRITE(*,*) "            ADAPTIVITY ESTIMATOR                 "
-       WRITE(*,*) "*************************************************"
-    ENDIF
-
-
-#ifdef PARALL
-    ALLOCATE(noghost_index(Mesh%Nelems-Mesh%nghostelems))
-    ! only select the indices of the non-ghost elements
-    noghost_index = PACK([(i, i=1, Mesh%Nelems)], Mesh%ghostElems(:) .EQ. 0)
-    CALL unique_1D(RESHAPE(Mesh%T(noghost_index,1:refElPol%Nvertices), [SIZE(Mesh%T(noghost_index,1:refElPol%Nvertices),1) * SIZE(Mesh%T(noghost_index,1:refElPol%Nvertices),2)]), vector_nodes_unique)
-    CALL gather_1D_vector_int(Mesh%loc2glob_nodes(vector_nodes_unique), vector_nodes_unique_glob, allgather = .FALSE.)
-#else
-    CALL unique_1D(RESHAPE(Mesh%T(:,1:refElPol%Nvertices), [SIZE(Mesh%T(:,1:refElPol%Nvertices),1) * SIZE(Mesh%T(:,1:refElPol%Nvertices),2)]), vector_nodes_unique)
-#endif
-
-    N_n_vertex = SIZE(vector_nodes_unique)
-
-    ALLOCATE(h(N_n_vertex))
-    ALLOCATE(error_L2_vertices(N_n_vertex))
-#ifndef PARALL
-    ALLOCATE(error_target(N_n_vertex))
-    ALLOCATE(h_target(N_n_vertex))
-    error_target = adapt%tol_est
-    h_target = 100.
-#else
-    ALLOCATE(count_vec(N_n_vertex))
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       N_n_vertex = MAXVAL(vector_nodes_unique_glob)
-       ALLOCATE(error_L2_vertices_root(N_n_vertex))
-       ALLOCATE(error_target(N_n_vertex))
-       ALLOCATE(h_target(N_n_vertex))
-       error_L2_vertices_root = 0
-       error_target = adapt%tol_est
-       h_target = 100.
-       N_n_vertex = SIZE(vector_nodes_unique)
-    ENDIF
-#endif
-
-    ALLOCATE(h_target_temp(N_n_vertex))
-    ALLOCATE(error_L2(SIZE(Mesh%T,1)))
-    ALLOCATE(error_L2_init(SIZE(Mesh%T,1)))
-
-    h = 0.
-    error_L2_vertices = 0.
-    h_target_temp = 0.
-    error_L2 = 0.
-    error_L2_init = 0.
-    eg_L2 = 0.
-    eg_L2_init = 0.
-
-    !! use error map to create element size map: h_target
-#ifndef PARALL
-    CALL h_map(N_n_vertex,Mesh%X(vector_nodes_unique,1:2),Mesh%T(:,1:3),vector_nodes_unique, h)
-#else
-    CALL h_map(N_n_vertex,Mesh%X(vector_nodes_unique,1:2),Mesh%T(:,1:3),vector_nodes_unique, h, count_vec)
-
-    CALL gather_1D_vector_real(h, h_glob, allgather = .FALSE.)
-    CALL gather_1D_vector_int(count_vec, count_vec_glob, allgather = .FALSE.)
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       ALLOCATE(h_root(MAXVAL(vector_nodes_unique_glob)))
-       h_root = 0.
-
-       CALL compute_error_on_vertices_root(h_glob, vector_nodes_unique_glob, count_vec_glob, h_root)
-    ENDIF
-
-#endif
-
-    IF(param_adapt .EQ. 0) THEN
-       ! u_sol, u_star_sol are allocated here
-       CALL post_process_matrix_solution(Mesh%X,Mesh%T,sol%u,sol%q,u_sol,u_star_sol)
-
-       DO i = 1, phys%npv
-          ! error estimation for the mesh and the solution
-          CALL calculate_L2_error_two_sols_different_p_scalar_general(Mesh%X,Mesh%T,i, u_sol,u_star_sol, error_L2, eg_L2)
-          CALL error_on_vertices(error_L2,Mesh%T,vector_nodes_unique, N_n_vertex, error_L2_vertices)
-
-#ifdef PARALL
-          CALL gather_1D_vector_real(error_L2_vertices, error_L2_vertices_glob, allgather = .FALSE.)
-
-          IF(MPIvar%glob_id .EQ. 0) THEN
-             CALL compute_error_on_vertices_root(error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob, error_L2_vertices_root)
-
-             ! richardson formula only for estimator
-             h_target_temp = h_root * ((error_target / error_L2_vertices_root) ** (1./ (order + 1.)))
-             h_target = MIN(h_target_temp, h_target)
-          ENDIF
-          DEALLOCATE(error_L2_vertices_glob)
-          NULLIFY(error_L2_vertices_glob)
-#else
-          ! richardson formula only for estimator
-          h_target_temp = EXP( ( LOG(error_target) - LOG( error_L2_vertices ) )/(order+1) + LOG(h) )
-          h_target = MIN(h_target_temp, h_target)
-
-#endif
-       ENDDO
-       DEALLOCATE(u_sol,u_star_sol)
-    ELSE
-       ! error estimation for the mesh and the solution
-       CALL L2_error_estimator_eval(Mesh%X,Mesh%T,sol%u,sol%q,param_adapt,error_L2,eg_L2)
-       CALL error_on_vertices(error_L2,Mesh%T,vector_nodes_unique, N_n_vertex, error_L2_vertices)
-
-#ifdef PARALL
-
-       CALL gather_1D_vector_real(error_L2_vertices, error_L2_vertices_glob, allgather = .FALSE.)
-
-       IF(MPIvar%glob_id .EQ. 0) THEN
-          CALL compute_error_on_vertices_root(error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob, error_L2_vertices_root)
-
-          ! richardson formula only for estimator
-          h_target = h_root * ((error_target / error_L2_vertices_root) ** (1./ (order + 1.)))
-          h_target = MIN(h_target, 0.1)
-       ENDIF
-#else
-       ! richardson formula only for estimator
-       h_target = h * ((error_target / error_L2_vertices) ** (1./ (order + 1.)))
-       h_target = MIN(h_target, 0.1)
-#endif
-    ENDIF
-
-
-
-#ifdef PARALL
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       N_n_vertex = MAXVAL(vector_nodes_unique_glob)
-#endif
-       CALL generate_htarget_sol_file(N_n_vertex, h_target)
-
-       CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
-
-       WRITE(param_adapt_char, *) param_adapt
-       WRITE(count_adapt_char, *) count_adapt
-       new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
-
-       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-       IF(MPIvar%glob_id .EQ. 0) THEN
-          CALL mmg_create_mesh_from_h_target(buffer)
-       ENDIF
-
-       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne))
-       CALL convert_mesh2msh(buffer)
-       CALL convert_msh2mesh(buffer)
-
-       CALL delete_file("./res/temp.mesh")
-       CALL delete_file("./res/temp.msh")
-       CALL delete_file("./res/ElSizeMap.sol")
-
-
-       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
-       CALL copy_file(buffer, "./res/temp.mesh")
-       !CALL delete_file(buffer)
-
-       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
-       CALL open_merge_with_geometry(gmsh, buffer)
-       CALL copy_file(buffer, "./res/temp.msh")
-       !CALL delete_file(buffer)
-
-       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".sol"
-       CALL delete_file(buffer)
-       !CALL merge_with_geometry(gmsh)
-
-#ifdef PARALL
-    ENDIF
-    ! wait for process 0 to finish writing before loading new mesh
-    CALL MPI_BARRIER(mpi_comm_world, ierr)
-#endif
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       WRITE(*,*) "********** Loading mesh P1  **********"
-    ENDIF
-    CALL free_mesh
-    IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
-       CALL load_gmsh_mesh("./res/temp",0)
-    ELSE
-       CALL load_gmsh_mesh("./res/temp",1)
-    ENDIF
-
-    CALL free_reference_element_pol(refElPol)
-    CALL create_reference_element(refElPol,2,1, verbose = 0)
-    CALL mesh_preprocess_serial(ierr)
-
-    Mesh%X = Mesh%X*phys%lscale
-
-    IF(ierr .EQ. 0) THEN
-       WRITE(*,*) "Error! Corresponding face in Tb not found. STOP"
-       STOP
-    ENDIF
-
-    CALL read_extended_connectivity('./res/temp.msh')
-
-    CALL set_order_mesh(order)
-    CALL free_reference_element_pol(refElPol)
-    CALL create_reference_element(refElPol,2,order, verbose = 0)
-    CALL mesh_preprocess_serial(ierr)
-
-    Mesh%X = Mesh%X*phys%lscale
-
-    IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80)) THEN
-       Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
-    END IF
-
-    !CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-    !CALL round_edges(Mesh)
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
-       CALL write_msh_file(Mesh%X,Mesh%T)
-       ! convert the mesh to .mesh
-       CALL convert_msh2mesh('./res/temp')
-    ENDIF
-    !CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-
-    DEALLOCATE(h)
-    DEALLOCATE(error_L2_vertices)
-#ifndef PARALL
-    DEALLOCATE(h_target)
-#endif
-    DEALLOCATE(h_target_temp)
-    DEALLOCATE(error_L2)
-    DEALLOCATE(error_L2_init)
-    DEALLOCATE(vector_nodes_unique)
-
-#ifdef PARALL
-    DEALLOCATE(noghost_index)
-    DEALLOCATE(count_vec)
-    IF(ASSOCIATED(error_L2_vertices_glob)) DEALLOCATE(error_L2_vertices_glob)
-    DEALLOCATE(vector_nodes_unique_glob)
-    DEALLOCATE(count_vec_glob)
-    DEALLOCATE(h_glob)
-
-    IF(MPIvar%glob_id .EQ. 0) THEN
-       DEALLOCATE(error_target)
-       DEALLOCATE(h_root)
-       DEALLOCATE(h_target)
-       DEALLOCATE(error_L2_vertices_root)
-    ENDIF
-
-    NULLIFY(h_glob, error_L2_vertices_glob, vector_nodes_unique_glob, count_vec_glob)
-#endif
-
-  ENDSUBROUTINE adaptivity_estimator
-
-  SUBROUTINE adaptivity_estimator_get_error(param_adapt,vector_nodes_unique,error_estimator)
-
-    INTEGER, INTENT(IN)                         :: param_adapt
-    INTEGER, INTENT(IN)                         :: vector_nodes_unique(:)
-    REAL*8, INTENT(OUT)                         :: error_estimator(:)
-
-    REAL*8,  ALLOCATABLE                        :: error_L2(:), error_L2_vertices(:), error_L2_init(:), error_target(:)
-    INTEGER                                     :: N_n_vertex
-    REAL*8                                      :: eg_L2
-
-    N_n_vertex = SIZE(error_estimator)
-    ALLOCATE(error_L2_vertices(N_n_vertex))
-    ALLOCATE(error_target(N_n_vertex))
-    ALLOCATE(error_L2(SIZE(Mesh%T,1)))
-    ALLOCATE(error_L2_init(SIZE(Mesh%T,1)))
-
-    ! error estimation for the mesh and the solution
-    CALL L2_error_estimator_eval(Mesh%X,Mesh%T,sol%u,sol%q,param_adapt,error_L2,eg_L2)
-    CALL error_on_vertices(error_L2,Mesh%T,vector_nodes_unique, N_n_vertex, error_L2_vertices)
-
-    error_estimator = error_L2_vertices
-
-    DEALLOCATE(error_L2_vertices)
-    DEALLOCATE(error_target)
-    DEALLOCATE(error_L2)
-    DEALLOCATE(error_L2_init)
-
-  ENDSUBROUTINE adaptivity_estimator_get_error
+   SUBROUTINE apply_estimator(h_map_elements, order, h_target_elements)
+      REAL*8, INTENT(IN)  :: h_map_elements(:)
+      INTEGER, INTENT(IN) :: order
+      REAL*8, INTENT(OUT) :: h_target_elements(:)
+      REAL*8, ALLOCATABLE :: error_L2(:), u_sol(:,:), u_star_sol(:,:)
+      REAL*8              :: h_target_temp(SIZE(Mesh%T,1))
+      REAL*8              :: eg_L2
+      INTEGER             :: i
+
+      ALLOCATE(error_L2(SIZE(Mesh%T,1)))
+      h_target_elements = 0.1
+
+      IF (adapt%param_est == 0) THEN
+         CALL post_process_matrix_solution(Mesh%X, Mesh%T, sol%u, sol%q, u_sol, u_star_sol)
+         DO i = 1, phys%npv
+            CALL calculate_L2_error_two_sols_different_p_scalar_general(Mesh%X, Mesh%T, i, u_sol, u_star_sol, error_L2, eg_L2)
+            h_target_temp = h_map_elements * ((adapt%tol_est / error_L2) ** (1. / (order + 1.)))
+            h_target_elements = MIN(h_target_temp, h_target_elements)
+         ENDDO
+      ELSE
+         CALL L2_error_estimator_eval(Mesh%X, Mesh%T, sol%u, sol%q, adapt%param_est, error_L2, eg_L2)
+         h_target_temp = h_map_elements * ((adapt%tol_est / error_L2) ** (1. / (order + 1.)))
+         h_target_elements = MIN(h_target_temp, h_target_elements)
+      ENDIF
+
+      DEALLOCATE(error_L2, u_sol, u_star_sol)
+   END SUBROUTINE apply_estimator
 
   SUBROUTINE calculate_L2_error_two_sols_different_p_scalar_general(X,T,error_param, u_sol,u_star_sol, error_L2, eg_L2)
 
@@ -851,9 +569,6 @@ CONTAINS
 
     DO iElem = 1, n_elements
 
-#ifdef PARALL
-       IF(Mesh%ghostElems(iElem) .EQ. 1) CYCLE
-#endif
        Xe_p2 = MATMUL(shapeFunctions_post,X2(T2(ielem,:),:))
        Xe_p1 = X1(T1(ielem,:),:)
 
@@ -884,12 +599,7 @@ CONTAINS
        CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 
        DO iElem = 1, n_elements
-          IF(Mesh%ghostElems(iElem) .EQ. 1) THEN
-             ! absolute error density
-             error(iElem) = 0.
-          ELSE
-             error(iElem) = SQRT(error2(iElem)/total_norm_sol*total_area/dom_area(iElem))
-          ENDIF
+         error(iElem) = SQRT(error2(iElem)/total_norm_sol*total_area/dom_area(iElem))
        ENDDO
 #else
        error = SQRT(error2/total_norm_sol*total_area/dom_area)
@@ -1017,138 +727,5 @@ CONTAINS
     IF (iter == max_iter) convergence = .FALSE.
 
   ENDSUBROUTINE recompute_gauss_points
-
-  SUBROUTINE error_on_vertices(error_L2,T, vector_nodes_unique,N_n_vertex,error_output)
-
-    REAL*8, INTENT(IN)               :: error_L2(:)
-    INTEGER, INTENT(IN)              :: vector_nodes_unique(:)
-    INTEGER, INTENT(IN)              :: T(:,:)
-    REAL*8, INTENT(OUT)              :: error_output(:)
-    INTEGER, INTENT(IN)              :: N_n_vertex
-
-    INTEGER                          :: count_vec(N_n_vertex)
-    REAL*8                           :: g(N_n_vertex)
-    INTEGER                          :: i, j, A, B, C
-
-
-    g = 0.
-    count_vec = 0
-
-    DO i = 1, SIZE(T,1)
-
-#ifdef PARALL
-       IF(Mesh%ghostElems(i) .EQ. 1) CYCLE
-#endif
-       ! Find indexes of the vertex nodes
-       A = 0
-       B = 0
-       C = 0
-
-       DO j = 1, N_n_vertex
-          IF ((T(i, 1) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             A = j
-          ENDIF
-          IF ((T(i, 2) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             B = j
-          ENDIF
-          IF ((T(i, 3) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             C = j
-          ENDIF
-
-          IF(A*B*C .NE. 0) EXIT
-       ENDDO
-
-       IF((A .EQ. 0) .OR. (B .EQ. 0) .OR. (C .EQ. 0)) THEN
-          WRITE(*,*) "Point not found! error_on_vertices. STOP."
-          STOP
-       ENDIF
-
-       g(A) = g(A) + error_L2(i)
-       count_vec(A) = count_vec(A) + 1
-
-       g(B) = g(B) + error_L2(i)
-       count_vec(B) = count_vec(B) + 1
-
-       g(C) = g(C) + error_L2(i)
-       count_vec(C) = count_vec(C) + 1
-    ENDDO
-
-    IF(ANY(count_vec .EQ. 0)) THEN
-       WRITE(*,*) "GOT A DIVISION BY 0 IN error_on_vertices ADAPTIVITY, SOMETHING IS WRONG!"
-       STOP
-    ENDIF
-
-    ! Calculate h values
-#ifdef PARALL
-    error_output = g
-#else
-    error_output = g / count_vec
-#endif
-
-
-  ENDSUBROUTINE error_on_vertices
-
-  SUBROUTINE error_on_vertices_target(error_L2,T,vector_nodes_unique,N_n_vertex,error_output)
-    REAL*8, INTENT(IN)               :: error_L2(:)
-    INTEGER, INTENT(IN)              :: vector_nodes_unique(:)
-    INTEGER, INTENT(IN)              :: T(:,:)
-    REAL*8, INTENT(OUT)              :: error_output(:)
-    INTEGER, INTENT(IN)              :: N_n_vertex
-
-    REAL*8                           :: count_vec(N_n_vertex)
-    REAL*8                           :: g(N_n_vertex)
-    INTEGER                          :: i, j, A, B, C, n_elements
-
-    n_elements = SIZE(T,1)
-    g = 0.
-    count_vec = 0.
-
-    DO i = 1, n_elements
-
-       ! Find indices of the vertex nodes
-       A = 0
-       B = 0
-       C = 0
-
-       DO j = 1, N_n_vertex
-          IF ((T(i, 1) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             A = j
-          ENDIF
-          IF ((T(i, 2) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             B = j
-          ENDIF
-          IF ((T(i, 3) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             C = j
-          ENDIF
-
-          IF(A*B*C .NE. 0) EXIT
-       ENDDO
-
-       IF((A .EQ. 0) .OR. (B .EQ. 0) .OR. (C .EQ. 0)) THEN
-          WRITE(*,*) "Point not found! error_on_vertices. STOP."
-          STOP
-       ENDIF
-
-       g(A) = g(A) + error_L2(i)
-       count_vec(A) = count_vec(A) + 1.
-
-       g(B) = g(B) + error_L2(i)
-       count_vec(B) = count_vec(B) + 1.
-
-       g(C) = g(C) + error_L2(i)
-       count_vec(C) = count_vec(C) + 1.
-    ENDDO
-
-    ! Calculate h values
-    DO i = 1, N_n_vertex
-       IF (count_vec(i) .GT. 0.) THEN
-          error_output(i) = g(i) / count_vec(i)
-       ELSE
-          WRITE(*,*) "GOT A DIVISION BY 0 IN error_on_vertices ADAPTIVITY, SOMETHING IS WRONG!"
-          STOP
-       ENDIF
-    ENDDO
-
-  ENDSUBROUTINE error_on_vertices_target
 
 END MODULE adaptivity_estimator_module

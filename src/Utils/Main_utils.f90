@@ -17,10 +17,7 @@ MODULE Main_utils
 #ifdef WITH_PETSC
    USE solve_petsc, only: matPETSC, InitPETSC
 #endif
-  USE adaptivity_common_module
-  USE adaptivity_estimator_module
-  USE adaptivity_indicator_module
-  USE adaptivity_estimator_indicator_module
+  USE adaptivity_general_module
   USE Postprocess, only: computeL2ErrorAnalyticSol
 #ifdef PARALL
   USE Communications
@@ -207,17 +204,7 @@ CONTAINS
 
     ! Free elmat, mat, magnetic field, Jtor, puff (to save some memory for the adaptivity)
     CALL free_before_adaptivity()
-
-    ! Call estimator, estimator_indicator or indicator
-    IF (adapt%evaluator .EQ. 2) THEN
-       CALL adaptivity_estimator(mesh_name, adapt%param_est, count_adapt, order)
-    ELSEIF ((adapt%evaluator .EQ. 1) ) THEN
-       CALL adaptivity_indicator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
-    ELSEIF((adapt%evaluator .EQ. 0) .OR. (restart_adapt)) THEN
-       CALL adaptivity_indicator_estimator(mesh_name, adapt%thr_ind, adapt%param_est, count_adapt, order)
-    ELSE
-       WRITE(*,*) "Choice of adaptivity evaluator not valid. STOP."
-    ENDIF
+    CALL adaptively_refine_mesh(mesh_name,count_adapt,order)
 
 
 #ifdef PARALL
@@ -773,8 +760,8 @@ CONTAINS
                WRITE(*,*) "GMSH file input not found, check input syntax."
                STOP
             ENDIF
-            IF((gmsh_filename(i:i) .EQ. 'm') .AND. (gmsh_filename(i+1:i+1) .EQ. 's') .AND. (gmsh_filename(i+2:i+2) .EQ. 'h')) THEN
-               gmsh_filename_mesh = TRIM(ADJUSTL(gmsh_filename(1:i-4))) // 'P1.mesh'
+            IF((gmsh_filename(i:i) .EQ. '.') .AND. (gmsh_filename(i+1:i+1) .EQ. 'm') .AND. (gmsh_filename(i+2:i+2) .EQ. 's') .AND. (gmsh_filename(i+3:i+3) .EQ. 'h')) THEN
+               gmsh_filename_mesh = TRIM(ADJUSTL(gmsh_filename(1:i-3))) // 'P1.mesh'
                EXIT
             ENDIF
             i = i + 1

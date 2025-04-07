@@ -197,7 +197,7 @@ endif
 #-------------------------------------------------------------------------------
 ######## Begin ifort #########
 ifeq ($(COMPTYPE),$(COMPTYPE_DEB))
- FCFLAGS = -fpp -O0 -r8 -qopenmp -xHOST -g -traceback -check bounds -free
+ FCFLAGS = -fpp -g -O0 -r8 -qopenmp -xHOST -g -traceback -check all -free -fpe3 -debug all
 else ifeq ($(COMPTYPE),$(COMPTYPE_PRO))
  FCFLAGS = -fpp -O3 -parallel -fpe0 -qopenmp -xHOST -r8 -free -g
 else ifeq ($(COMPTYPE),$(COMPTYPE_OPT))

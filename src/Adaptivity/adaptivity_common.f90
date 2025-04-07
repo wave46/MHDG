@@ -14,17 +14,226 @@ MODULE adaptivity_common_module
 
 CONTAINS
 
-  SUBROUTINE merge_with_geometry(gmsh_l)
-    TYPE(gmsh_t), INTENT(IN)          :: gmsh_l
+   SUBROUTINE adaptivity_console_output()
+      CHARACTER(1024) :: buffer
 
-    CALL gmsh_l%initialize()
-    CALL gmsh_l%OPEN(adapt%geometry_path)
-    CALL gmsh_l%MERGE("./res/temp.msh")
-    CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
-    CALL gmsh_l%WRITE("./res/temp.msh")
-    CALL gmsh_l%finalize()
+      IF ((adapt%evaluator .EQ. 2)) THEN
+         buffer = "            ADAPTIVITY ESTIMATOR                 "
+      ELSEIF ((adapt%evaluator .EQ. 1)) THEN
+         buffer = "            ADAPTIVITY INDICATOR                 "
+      ELSEIF((adapt%evaluator .EQ. 0)) THEN
+         buffer = "        ADAPTIVITY ESTIMATOR-INDICATOR           "
+      ENDIF
 
-  ENDSUBROUTINE merge_with_geometry
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         WRITE(*,*) "*************************************************"
+         WRITE(*,*) TRIM(buffer)
+         WRITE(*,*) "*************************************************"
+      ENDIF
+
+   ENDSUBROUTINE adaptivity_console_output
+
+   SUBROUTINE calculate_h_map_elements(nodes,connectivity,h_map)
+      REAL*8,INTENT(IN)                :: nodes(:,:)
+      INTEGER, INTENT(IN)              :: connectivity(:,:)
+      REAL*8, INTENT(OUT)              :: h_map(SIZE(connectivity,1))
+      INTEGER                          :: i
+      REAL*8, DIMENSION(2,2)           :: J
+      REAL*8                           :: detJ
+
+      DO i = 1, SIZE(connectivity,1)      
+         CALL jacobian(nodes, connectivity(i,1), connectivity(i,2), connectivity(i,3), J)
+         detJ = J(1,1)*J(2,2) - J(1,2)*J(2,1)
+         h_map(i) = SQRT(2.0*detJ/SQRT(3.0))
+      ENDDO
+
+   END SUBROUTINE calculate_h_map_elements       
+
+   SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices,T)
+      REAL*8, INTENT(IN)                              :: h_map_elements(:)
+      INTEGER,INTENT(IN)                              :: T(:,:)
+      REAL*8, DIMENSION(:), POINTER, INTENT(INOUT)    :: h_target_vertices
+      REAL*8, ALLOCATABLE                             :: h_target_nodal(:)
+      INTEGER, ALLOCATABLE                            :: nodes_repeats(:)
+      INTEGER                                         :: number_of_vertices
+
+
+      ALLOCATE(h_target_nodal(MAXVAL(T)))
+      ALLOCATE(nodes_repeats(MAXVAL(T)))      
+
+      CALL sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
+
+      number_of_vertices = COUNT(nodes_repeats /= 0)
+
+      ALLOCATE(h_target_vertices(number_of_vertices))
+
+      CALL average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
+
+      DEALLOCATE(h_target_nodal, nodes_repeats)
+   END SUBROUTINE get_h_target_vertices
+
+   SUBROUTINE generate_new_mesh(mesh_name,h_target,count_adapt)
+      USE in_out, ONLY: copy_file
+      TYPE(gmsh_t)                :: gmsh
+      CHARACTER(1024), INTENT(IN) :: mesh_name
+      INTEGER, INTENT(IN)         :: count_adapt
+      REAL*8, INTENT(IN)          :: h_target(:)
+      INTEGER                     :: N_n_vertex
+      CHARACTER(1024)             :: mesh_name_npne,new_mesh_name_npne, buffer
+      CHARACTER(70)               :: param_adapt_char, count_adapt_char
+      
+
+
+
+      N_n_vertex = SIZE(h_target)
+
+      CALL generate_htarget_sol_file(N_n_vertex,h_target)
+
+      CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
+
+      WRITE(param_adapt_char, *) adapt%param_est
+      WRITE(count_adapt_char, *) count_adapt
+      new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
+
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
+      CALL mmg_create_mesh_from_h_target(buffer)
+
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne))
+      CALL convert_mesh2msh(buffer)
+      CALL convert_msh2mesh(buffer)
+      CALL delete_file("./res/temp.mesh")
+      CALL delete_file("./res/temp.msh")
+      CALL delete_file("./res/ElSizeMap.sol")
+
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".mesh"
+      CALL copy_file(buffer, "./res/temp.mesh")
+
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
+      CALL open_merge_with_geometry(gmsh, buffer)
+      CALL copy_file(buffer, "./res/temp.msh")
+      
+      buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".sol"
+      CALL delete_file(buffer)
+
+   END SUBROUTINE generate_new_mesh
+
+   SUBROUTINE load_new_mesh(order)
+      USE preprocess
+      INTEGER, INTENT(IN) :: order
+      INTEGER                     :: ierr
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         WRITE(*,*) "********** Loading mesh P1  **********"
+      ENDIF
+      CALL free_mesh
+
+      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
+         CALL load_gmsh_mesh("./res/temp",0)
+      ELSE
+         CALL load_gmsh_mesh("./res/temp",1)
+      ENDIF
+      CALL free_reference_element_pol(refElPol)
+      CALL create_reference_element(refElPol,2,1, verbose = 0)
+      CALL mesh_preprocess_serial(ierr)
+  
+      Mesh%X = Mesh%X*phys%lscale
+
+      IF(ierr .EQ. 0) THEN
+         WRITE(*,*) "Error! Corresponding face in Tb not found. STOP"
+         STOP
+      ENDIF
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         CALL HDF5_save_mesh("./newmesh_pre.h5", Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
+      ENDIF
+  
+      CALL read_extended_connectivity('./res/temp.msh')
+  
+      CALL set_order_mesh(order)
+      CALL free_reference_element_pol(refElPol)
+      CALL create_reference_element(refElPol,2,order, verbose = 0)
+      CALL mesh_preprocess_serial(ierr)
+
+      Mesh%X = Mesh%X*phys%lscale
+
+      IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80)) THEN
+         Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
+      END IF
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         CALL HDF5_save_mesh("./newmesh_notround.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+      ENDIF
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         ! overwrite the temp.msh file with the new one with rounded edges (still order 1)
+         CALL write_msh_file(Mesh%X,Mesh%T)
+         ! convert the mesh to .mesh
+         CALL convert_msh2mesh('./res/temp')
+      ENDIF
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         CALL HDF5_save_mesh("./newmesh_round.h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
+      ENDIF
+
+   END SUBROUTINE load_new_mesh
+
+   SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
+      REAL*8, INTENT(IN)              :: two_d_nodes(:,:)
+      REAL*8, INTENT(OUT)             :: J(2,2)
+      INTEGER, INTENT(IN)             :: A, B, C
+  
+      ! Calculate Jacobian matrix
+      J(1,1) = two_d_nodes(B,1) - two_d_nodes(A,1)
+      J(2,1) = two_d_nodes(B,2) - two_d_nodes(A,2)
+      J(1,2) = two_d_nodes(C,1) - two_d_nodes(A,1)
+      J(2,2) = two_d_nodes(C,2) - two_d_nodes(A,2)
+  
+   END SUBROUTINE jacobian
+
+   SUBROUTINE combine_h_target_ind_est(h_map_elements,h_target_elements_est,h_target_elements_ind,h_target_elements)
+      REAL*8, INTENT(IN) :: h_map_elements(:)
+      REAL*8, INTENT(IN) :: h_target_elements_est(:)
+      REAL*8, INTENT(IN) :: h_target_elements_ind(:)
+      REAL*8, INTENT(OUT) :: h_target_elements(:)
+      REAL*8, PARAMETER :: tol = 1.0E-10
+      
+      h_target_elements = h_target_elements_est
+      WHERE(ABS(h_target_elements_ind-h_map_elements) .GT. tol)
+         h_target_elements = h_target_elements_ind
+      END WHERE
+   ENDSUBROUTINE combine_h_target_ind_est
+
+   SUBROUTINE sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
+      INTEGER, INTENT(IN)               :: T(:,:)
+      REAL*8, INTENT(IN)                :: h_map_elements(:)
+      REAL*8, INTENT(OUT)               :: h_target_nodal(:)
+      INTEGER, INTENT(OUT)              :: nodes_repeats(:)
+      INTEGER                           :: i, j
+
+      h_target_nodal = 0.
+      nodes_repeats = 0
+      DO i=1,SIZE(T,1)
+         DO j=1,3
+            h_target_nodal(T(i,j)) = h_target_nodal(T(i,j)) + h_map_elements(i)
+            nodes_repeats(T(i,j)) = nodes_repeats(T(i,j)) + 1
+         ENDDO
+      ENDDO
+   END SUBROUTINE sum_h_target_nodal
+
+   SUBROUTINE average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
+      REAL*8, INTENT(IN)                              :: h_target_nodal(:)
+      INTEGER, INTENT(IN)                             :: nodes_repeats(:)
+      REAL*8, DIMENSION(:), POINTER, INTENT(INOUT)      :: h_target_vertices
+      INTEGER                                         :: i, j
+
+      j = 1
+      DO i=1,SIZE(h_target_nodal)
+         IF(nodes_repeats(i) /= 0) THEN
+            h_target_vertices(j) = h_target_nodal(i)/REAL(nodes_repeats(i))
+            j = j + 1
+         ENDIF
+      ENDDO
+   END SUBROUTINE average_h_target
 
   SUBROUTINE open_merge_with_geometry(gmsh_l,path2msh)
     TYPE(gmsh_t), INTENT(IN)           :: gmsh_l
@@ -361,663 +570,6 @@ CONTAINS
     ENDSUBROUTINE linear_shape_functions_2D
 
   ENDSUBROUTINE linear_mapping
-
-  SUBROUTINE h_map(N_n_vertex, two_d_nodes, two_d_elements, vector_nodes_unique, h, count_vec)
-    INTEGER, INTENT(IN)              :: N_n_vertex
-    INTEGER                          :: N_e_real
-    REAL*8, INTENT(IN)               :: two_d_nodes(:,:)
-    INTEGER, INTENT(IN)              :: two_d_elements(:,:), vector_nodes_unique(:)
-    REAL*8, INTENT(OUT)              :: h(N_n_vertex)
-    INTEGER, OPTIONAL, INTENT(OUT)   :: count_vec(:)
-    INTEGER                          :: count_vec_local(N_n_vertex)
-    REAL*8                           :: g(N_n_vertex), l(N_n_vertex)
-    INTEGER                          :: i, j, A, B, C
-    REAL*8, DIMENSION(2, 2)          :: J1, J2, J3
-    REAL*8, DIMENSION(2, 2)          :: M1, M2, M3
-    REAL*8                           :: detJ1, detJ2, detJ3
-    REAL*8                           :: sqrt3
-
-    sqrt3 = SQRT(3.0)
-    N_e_real = SIZE(Mesh%T,1)
-
-    ! Initialize arrays
-    g = 0.
-    l = 0.
-    count_vec_local = 0
-    J1 = 0.
-    J2 = 0.
-    J3 = 0.
-
-    DO i = 1, N_e_real
-
-#ifdef PARALL
-       IF(Mesh%ghostElems(i) .EQ. 1) CYCLE
-#endif
-
-       ! Find indexes of the vertex nodes
-       A = 0
-       B = 0
-       C = 0
-
-       DO j = 1, N_n_vertex
-          IF ((two_d_elements(i, 1) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             A = j
-          ENDIF
-          IF ((two_d_elements(i, 2) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             B = j
-          ENDIF
-          IF ((two_d_elements(i, 3) + 1) .EQ. (vector_nodes_unique(j) + 1)) THEN
-             C = j
-          ENDIF
-       ENDDO
-
-       IF(A*B*C .EQ. 0) THEN
-          WRITE(*,*) "Index not found in h_map. STOP"
-          STOP
-       ENDIF
-
-       ! Calculate Jacobian matrices
-       CALL jacobian(two_d_nodes, A, B, C, J1)
-       CALL jacobian(two_d_nodes, A, B, C, J2)
-       CALL jacobian(two_d_nodes, A, B, C, J3)
-
-       ! Calculate determinants of Jacobians
-       detJ1 = J1(1, 1) * J1(2, 2) - J1(1, 2) * J1(2, 1)
-       detJ2 = J2(1, 1) * J2(2, 2) - J2(1, 2) * J2(2, 1)
-       detJ3 = J3(1, 1) * J3(2, 2) - J3(1, 2) * J3(2, 1)
-
-       ! Calculate metrics
-       M1 = MATMUL(TRANSPOSE(J1), J1)
-       M2 = MATMUL(TRANSPOSE(J2), J2)
-       M3 = MATMUL(TRANSPOSE(J3), J3)
-
-       ! Using Jacobian
-       g(A) = g(A) + SQRT(2. * detJ1 / sqrt3)
-       count_vec_local(A) = count_vec_local(A) + 1
-
-       g(B) = g(B) + SQRT(2. * detJ2 / sqrt3)
-       count_vec_local(B) = count_vec_local(B) + 1
-
-       g(C) = g(C) + SQRT(2. * detJ3 / sqrt3)
-       count_vec_local(C) = count_vec_local(C) + 1
-    ENDDO
-
-
-    IF(ANY(count_vec_local .EQ. 0)) THEN
-       WRITE(*,*) "GOT A DIVISION BY 0 IN h_map ADAPTIVITY, SOMETHING IS WRONG!"
-       STOP
-    ENDIF
-
-
-#ifdef PARALL
-    count_vec = count_vec_local
-    h = g
-#else
-    ! Calculate h values
-    IF (PRESENT(count_vec)) THEN
-       count_vec = count_vec_local
-    ENDIF
-    h = g / count_vec_local
-#endif
-  END SUBROUTINE h_map
-
-  SUBROUTINE jacobian(two_d_nodes, A, B, C, J)
-    REAL*8, INTENT(IN)              :: two_d_nodes(:,:)
-    REAL*8, INTENT(OUT)             :: J(2,2)
-    INTEGER, INTENT(IN)             :: A, B, C
-
-    ! Calculate Jacobian matrix
-    J(1,1) = two_d_nodes(B,1) - two_d_nodes(A,1)
-    J(2,1) = two_d_nodes(B,2) - two_d_nodes(A,2)
-    J(1,2) = two_d_nodes(C,1) - two_d_nodes(A,1)
-    J(2,2) = two_d_nodes(C,2) - two_d_nodes(A,2)
-
-  END SUBROUTINE jacobian
-
-  SUBROUTINE round_edges(Mesh_loc)
-    USE mod_splines
-
-    ! Variables
-    TYPE(Mesh_type), INTENT(IN)       :: Mesh_loc
-
-    REAL*8, ALLOCATABLE               :: X(:,:)
-    INTEGER, ALLOCATABLE              :: T(:,:), Tb(:,:), extFaces(:)
-    INTEGER                           :: n_boundaries, n, i, j, k, l, ibound, isp, counter, counter2, Ndim, Nelems, Nextfaces, Nnodesperface, Nexternalnodes, Nnodesperelem, Ninnerfnodes, Ninnerenodes, Difffenodes, Sumfenodes, tot_n_splines
-    REAL*8                            :: RotMat(2,2), elem_nodes_mod(Mesh_loc%Nnodesperelem - refElPol%Nvertices,2)
-    REAL*8                            :: xcenter, ycenter, xmin, xmax, ymin, ymax
-    INTEGER, ALLOCATABLE              :: Tb_bound(:), Tb_bound_vtx(:), extFaces_bound(:), indices(:)
-    REAL*8, ALLOCATABLE               :: nodes_on_spline(:,:),nodes_on_spline0(:,:), nodes_on_spline_proj(:,:), opposite_vertex(:,:), m1(:),  m2(:), q1(:), q2(:), m(:), q(:), displacement(:,:), gamma_par(:,:), norm(:)
-    REAL*8, PARAMETER                 :: tol = 1.e-4, tol_iter = 1.e-12
-    INTEGER, PARAMETER                :: max_iter = 10
-    LOGICAL                           :: check_vtx(2)
-
-
-    IF (MPIvar%glob_id .EQ. 0) THEN
-       IF (utils%printint > 0) THEN
-          WRITE (6, *) '*************************************************'
-          WRITE (6, *) '*               ROUDING EDGES                   *'
-          WRITE (6, *) '*************************************************'
-       END IF
-    ENDIF
-
-    n_boundaries = MAXVAL(Mesh_loc%boundaryFlag)
-    Nnodesperface = Mesh_loc%Nnodesperface
-    Nnodesperelem = Mesh_loc%Nnodesperelem
-    Ninnerfnodes = Nnodesperface - 2
-    Ninnerenodes = Mesh_loc%Nnodesperelem - refElPol%Nvertices*(Ninnerfnodes + 1)
-    Nexternalnodes = Mesh_loc%Nnodesperelem-Ninnerenodes
-    Difffenodes = Ninnerenodes - Ninnerfnodes
-    Sumfenodes = Ninnerenodes + Ninnerfnodes
-    Ndim = Mesh_loc%Ndim
-    Nelems = Mesh_loc%Nelems
-    Nextfaces = Mesh_loc%NextFaces
-
-    ALLOCATE(X(Mesh_loc%Nnodes, Ndim))
-    ALLOCATE(T(Nelems, Mesh_loc%Nnodesperelem))
-    ALLOCATE(Tb(Nextfaces, Nnodesperface))
-    ALLOCATE(extFaces(Nextfaces))
-
-    X = Mesh_loc%X
-    T = Mesh_loc%T
-    Tb = Mesh_loc%Tb
-    extFaces = Mesh_loc%extFaces(:,1)
-
-    tot_n_splines = splines(1)%tot_n_splines
-
-    DO k = 1,2
-       DO ibound = 1, n_boundaries
-          n = COUNT(Mesh_loc%boundaryFlag .EQ. ibound)
-          IF(n .EQ. 0) CYCLE
-
-          ! count how many vertices are on the splines that define the current boundary
-          n = 0
-          DO isp = 1, tot_n_splines
-             IF(splines(isp)%boundaryFlag .NE. ibound) CYCLE
-             xmin = splines(isp)%xmin - tol
-             xmax = splines(isp)%xmax + tol
-             ymin = splines(isp)%ymin - tol
-             ymax = splines(isp)%ymax + tol
-
-             DO i = 1, NextFaces
-                IF (Mesh_loc%boundaryFlag(i) .EQ. ibound) THEN
-                   IF(ALL(((X(Tb(i, [1,Nnodesperface]),1) .GE. xmin) .AND. (X(Tb(i, [1,Nnodesperface]),1) .LE. xmax)) .AND. ((X(Tb(i, [1,Nnodesperface]),2) .GE. ymin) .AND. (X(Tb(i, [1,Nnodesperface]),2) .LE. ymax)))) THEN
-                      ! as a second check, slower, check if any distance of the points to any point in the spline is less than 0.02
-                      check_vtx = .FALSE.
-                      counter2 = 1
-                      DO l = 1,Nnodesperface,Nnodesperface-1
-                         DO j = 1, splines(isp)%n_points
-                            IF(NORM2(splines(isp)%points_coord(j,:) - X(Tb(i, l), :)) .LT. 0.02) THEN
-                               check_vtx(counter2) = .TRUE.
-                               EXIT
-                            ENDIF
-                         ENDDO
-                         counter2 = counter2 + 1
-                      ENDDO
-
-                      IF(ALL(check_vtx)) THEN
-                         n = n + 1  ! Increment counter for next iteration
-                      ENDIF
-                   ENDIF
-                ENDIF
-             ENDDO
-          ENDDO
-
-          IF(n .EQ. 0) CYCLE
-
-          ALLOCATE(Tb_bound_vtx(2*n))
-          IF(k .GT. 1) THEN
-             ALLOCATE(Tb_bound(n*(Sumfenodes)))
-             ALLOCATE(extFaces_bound(n*(Sumfenodes)))
-             ALLOCATE(opposite_vertex(n*(Sumfenodes),2))
-             ALLOCATE(displacement(n*(Sumfenodes),2))
-             ALLOCATE(gamma_par(n*(Sumfenodes),2))
-             ALLOCATE(norm(n*(Sumfenodes)))
-             ALLOCATE(m(n))
-             ALLOCATE(q(n))
-             ALLOCATE(m2(n*(Sumfenodes)))
-             ALLOCATE(q2(n*(Sumfenodes)))
-          ENDIF
-
-          counter = 1
-          DO isp = 1, tot_n_splines
-             IF(splines(isp)%boundaryFlag .NE. ibound) CYCLE
-
-             xmin = splines(isp)%xmin - tol
-             xmax = splines(isp)%xmax + tol
-             ymin = splines(isp)%ymin - tol
-             ymax = splines(isp)%ymax + tol
-
-             DO i = 1, NextFaces
-                IF (Mesh_loc%boundaryFlag(i) .EQ. ibound) THEN
-                   ! as a first check, check if the coordinates of the points are in the range of the spline
-                   IF(ALL(((X(Tb(i, [1,Nnodesperface]),1) .GE. xmin) .AND. (X(Tb(i, [1,Nnodesperface]),1) .LE. xmax)) .AND. ((X(Tb(i, [1,Nnodesperface]),2) .GE. ymin) .AND. (X(Tb(i, [1,Nnodesperface]),2) .LE. ymax)))) THEN
-                      ! as a second check, slower, check if any distance of the points to any point in the spline is less than 0.02
-                      check_vtx = .FALSE.
-                      counter2 = 1
-                      DO l = 1,Nnodesperface,Nnodesperface-1
-                         DO j = 1, splines(isp)%n_points
-                            IF(NORM2(splines(isp)%points_coord(j,:) - X(Tb(i, l), :)) .LT. 0.02) THEN
-                               check_vtx(counter2) = .TRUE.
-                               EXIT
-                            ENDIF
-                         ENDDO
-                         counter2 = counter2 + 1
-                      ENDDO
-
-                      IF(ALL(check_vtx))  THEN
-                         ! Extract node numbers for face vertices nodes
-                         Tb_bound_vtx(counter:counter+1) = Tb(i, [1,Nnodesperface])
-                         counter = counter + 2  ! Increment counter for next iteration
-                      ENDIF
-                   ENDIF
-                ENDIF
-             ENDDO
-          ENDDO
-
-          IF(k .GT. 1) THEN
-             ! this flattens the array at the same time
-             counter = 1
-             DO isp = 1, tot_n_splines
-                IF(splines(isp)%boundaryFlag .NE. ibound) CYCLE
-
-                xmin = splines(isp)%xmin - tol
-                xmax = splines(isp)%xmax + tol
-                ymin = splines(isp)%ymin - tol
-                ymax = splines(isp)%ymax + tol
-
-                DO i = 1, NextFaces
-                   IF (Mesh_loc%boundaryFlag(i) .EQ. ibound) THEN
-                      ! as a first check, check if the coordinates of the points are in the range of the spline
-                      IF(ALL(((X(Tb(i, 2:Nnodesperface-1),1) .GE. xmin) .AND. (X(Tb(i, 2:Nnodesperface-1),1) .LE. xmax)) .AND. ((X(Tb(i, 2:Nnodesperface-1),2) .GE. ymin) .AND. (X(Tb(i, 2:Nnodesperface-1),2) .LE. ymax)))) THEN
-                         ! as a second check, slower, check if any distance of the vertices to any point in the spline is less than 0.02
-                         check_vtx = .FALSE.
-                         counter2 = 1
-                         DO l = 1,Nnodesperface,Nnodesperface-1
-                            DO j = 1, splines(isp)%n_points
-                               IF(NORM2(splines(isp)%points_coord(j,:) - X(Tb(i, l), :)) .LT. 0.02) THEN
-                                  check_vtx(counter2) = .TRUE.
-                                  EXIT
-                               ENDIF
-                            ENDDO
-                            counter2 = counter2 + 1
-                         ENDDO
-
-                         IF(ALL(check_vtx)) THEN
-                            ! Extract node numbers for inner face nodes from Tb
-                            Tb_bound(counter:counter+Ninnerfnodes-1) = Tb(i, 2:Nnodesperface-1)
-                            extFaces_bound(counter:counter+Ninnerfnodes-1) = extfaces(i)
-                            counter = counter + Ninnerfnodes  ! Increment counter for next iteration
-
-                            ! Extract node numbers for inner element nodes from T array
-                            Tb_bound(counter:counter+Ninnerenodes-1) = T(extFaces(i), Nexternalnodes+1:)
-                            extFaces_bound(counter:counter+Ninnerenodes-1) = extfaces(i)
-                            counter = counter + Ninnerenodes  ! Increment counter for next iteration
-                         ENDIF
-                      ENDIF
-                   ENDIF
-                ENDDO
-             ENDDO
-
-             ! compute displacement inner element nodes
-             CALL displacement_innerenodes
-
-             ! move the inner element nodes to the boundary element face
-             X(Tb_bound,:) = X(Tb_bound,:) + displacement
-
-          ELSE
-             CALL unique_1D(Tb_bound_vtx,Tb_bound)
-          ENDIF
-
-          DO isp = 1, tot_n_splines
-             IF(splines(isp)%boundaryFlag .NE. ibound) CYCLE
-
-             xmin = splines(isp)%xmin - tol
-             xmax = splines(isp)%xmax + tol
-             ymin = splines(isp)%ymin - tol
-             ymax = splines(isp)%ymax + tol
-
-             ! count number of points in the mesh that are supposed to be on the spline
-             !n = COUNT(((X(Tb_bound,1) .ge. xmin) .and. (X(Tb_bound,1) .le. xmax)) .and. ((X(Tb_bound,2) .ge. ymin) .and. (X(Tb_bound,2) .le. ymax)))
-
-             n = 0
-             DO i = 1, SIZE(Tb_bound)
-                IF(((X(Tb_bound(i),1) .GE. xmin) .AND. (X(Tb_bound(i),1) .LE. xmax)) .AND. ((X(Tb_bound(i),2) .GE. ymin) .AND. (X(Tb_bound(i),2) .LE. ymax))) THEN
-                   DO j = 1, splines(isp)%n_points
-                      IF(NORM2(splines(isp)%points_coord(j,:) - X(Tb_bound(i),:)) .LT. 0.02) THEN
-                         n = n + 1
-                         EXIT
-                      ENDIF
-                   ENDDO
-                ENDIF
-             ENDDO
-
-             IF(n .NE. 0) THEN
-
-                ALLOCATE(nodes_on_spline(n,Ndim))
-                ALLOCATE(nodes_on_spline_proj(n,Ndim))
-                ALLOCATE(nodes_on_spline0(n,Ndim))
-                ALLOCATE(opposite_vertex(n,2))
-                ALLOCATE(m1(n))
-                ALLOCATE(m2(n))
-                ALLOCATE(q1(n))
-                ALLOCATE(q2(n))
-                ALLOCATE(indices(n))
-
-                ! select the nodes that are on the spline
-                counter = 1
-                DO i = 1, SIZE(Tb_bound)
-                   IF(((X(Tb_bound(i),1) .GE. xmin) .AND. (X(Tb_bound(i),1) .LE. xmax)) .AND. ((X(Tb_bound(i),2) .GE. ymin) .AND. (X(Tb_bound(i),2) .LE. ymax))) THEN
-                      DO j = 1, splines(isp)%n_points
-                         IF(NORM2(splines(isp)%points_coord(j,:) - X(Tb_bound(i),:)) .LT. 0.02) THEN
-                            nodes_on_spline(counter,:) = X(Tb_bound(i),:)
-                            indices(counter) = i
-                            counter = counter + 1
-                            EXIT
-                         ENDIF
-                      ENDDO
-                   ENDIF
-                ENDDO
-
-                IF(k .EQ. 1) THEN
-                   WRITE(*,*) "Cubic Spline Projection Vertices"
-                ELSE
-                   WRITE(*,*) "Cubic Spline Projection Internals"
-                ENDIF
-
-                ! rotate the reference frame
-                CALL rotate(nodes_on_spline)
-
-                nodes_on_spline0 = nodes_on_spline
-
-                IF(k .NE. 1) THEN
-                   CALL get_line_opposite_vertex
-                ENDIF
-
-                counter = 0
-                DO
-
-                   IF(k .EQ. 1) THEN
-                      CALL project_perp_to_spline
-                   ELSE
-                      CALL project_from_opposite_vertex
-                   ENDIF
-
-                   IF(ALL(NORM2((nodes_on_spline - nodes_on_spline_proj)/nodes_on_spline,2) .LE. tol_iter) .OR. (counter .EQ. max_iter)) THEN
-                      nodes_on_spline = nodes_on_spline_proj
-                      EXIT
-                   ELSE
-                      nodes_on_spline = nodes_on_spline_proj
-                   ENDIF
-
-                   counter = counter + 1
-                ENDDO
-
-                CALL anti_rotate(nodes_on_spline)
-
-                ! move back the inner element nodes
-                IF(k .NE. 1) THEN
-                   nodes_on_spline_proj = X(Tb_bound(indices),:) - displacement(indices,:)
-                   CALL anti_rotate(opposite_vertex)
-
-                   gamma_par(indices,1) = (nodes_on_spline_proj(:,1)-opposite_vertex(:,1)) * NORM2(opposite_vertex-nodes_on_spline,2)/norm(indices)
-                   gamma_par(indices,2) = (nodes_on_spline_proj(:,2)-opposite_vertex(:,2)) * NORM2(opposite_vertex-nodes_on_spline,2)/norm(indices)
-
-                   X(Tb_bound(indices),:) =  opposite_vertex + gamma_par(indices,:)
-                ELSE
-                   X(Tb_bound(indices),:) = nodes_on_spline(:,:)
-                ENDIF
-
-                DEALLOCATE(nodes_on_spline)
-                DEALLOCATE(nodes_on_spline_proj)
-                DEALLOCATE(nodes_on_spline0)
-                DEALLOCATE(m1, m2, q1, q2)
-                DEALLOCATE(indices)
-                DEALLOCATE(opposite_vertex)
-
-             ENDIF
-          ENDDO
-
-          DEALLOCATE(Tb_bound)
-          DEALLOCATE(Tb_bound_vtx)
-          IF(k .GT. 1) THEN
-             DEALLOCATE(extFaces_bound)
-             DEALLOCATE(displacement)
-             DEALLOCATE(gamma_par)
-             DEALLOCATE(norm)
-             DEALLOCATE(m)
-             DEALLOCATE(q)
-          ENDIF
-       ENDDO
-
-       IF(k .EQ. 1) THEN
-          DO i = 1, Nelems
-             DO j = 1, Nnodesperelem-3
-                CALL linear_mapping(X(T(i,1:3),:),refElPol%coord2d(j+3,:), elem_nodes_mod(j,:))
-             ENDDO
-             X(T(i,4:),:) = elem_nodes_mod
-          ENDDO
-       ENDIF
-
-    ENDDO
-
-    CALL generate_fekete_nodes(X,T,refElPol%nDeg,refElPol)
-
-    Mesh_loc%X = X
-
-    DEALLOCATE(X,T,Tb, extFaces)
-
-  CONTAINS
-
-    SUBROUTINE displacement_innerenodes
-
-      ! find coordinates of vertex opposite to each face
-      DO i = 1, n*Sumfenodes
-         DO j = 1, 3
-            IF(COUNT(T(extFaces_bound(i),j) .EQ. Tb_bound_vtx) .EQ. 0) THEN
-               opposite_vertex(i,:) = X(T(extFaces_bound(i),j),:)
-            ENDIF
-         ENDDO
-      ENDDO
-
-      ! find slope and intercept of line passing through the vertex and the point to project
-      m2 = (opposite_vertex(:,2) - X(Tb_bound,2))/(opposite_vertex(:,1) - X(Tb_bound,1))
-      q2 = opposite_vertex(:,2) - m2*opposite_vertex(:,1)
-
-      !  get slope of the line passing by the vertices
-      counter = 1
-      DO i = 1, 2*n-1, 2
-         m(counter) = (X(Tb_bound_vtx(i+1),2) - X(Tb_bound_vtx(i),2))/(X(Tb_bound_vtx(i+1),1) - X(Tb_bound_vtx(i),1))
-         counter = counter + 1
-      ENDDO
-
-      ! get intercept of the line passing by the vertices
-      counter = 1
-      DO i = 1, 2*n, 2
-         q(counter) = X(Tb_bound_vtx(i),2)-m(counter)*X(Tb_bound_vtx(i),1)
-         counter = counter + 1
-      ENDDO
-
-      ! find intersection between the two lines (here i use displacement to store the new coordinates)
-      counter = 1
-      DO i = 1, n
-         displacement(counter:counter + Sumfenodes-1 ,1) = (q(i)-q2(counter:counter + Sumfenodes -1))/(m2(counter:counter + Sumfenodes -1)-m(i))
-         counter = counter + Sumfenodes
-      ENDDO
-
-      displacement(:,2) = m2*displacement(:,1)+q2
-
-      ! a-c = ca vector
-      gamma_par = opposite_vertex - displacement
-
-      norm = NORM2(gamma_par,2)
-
-      displacement = displacement - X(Tb_bound,:)
-
-      DO i = 1, n*Sumfenodes
-         IF(NORM2(displacement(i,:)) .LT. 1e-12) THEN
-            displacement(i,:) = 0
-         ENDIF
-      ENDDO
-
-      DEALLOCATE(opposite_vertex, m2, q2)
-
-    ENDSUBROUTINE displacement_innerenodes
-
-    SUBROUTINE project_from_opposite_vertex
-
-      ! project to spline and find y1
-      nodes_on_spline_proj(:,1) = nodes_on_spline(:,1)
-      nodes_on_spline_proj(:,2) = splines(isp)%spline%VALUE(nodes_on_spline(:,1))
-
-      ! get the slope (m1)
-      m1 = splines(isp)%spline%slope(nodes_on_spline(:,1))
-
-      ! get the intercept (q1)
-      q1 = nodes_on_spline_proj(:,2) - m1*nodes_on_spline_proj(:,1)
-
-      ! find x coordinate of intersection point
-      nodes_on_spline(:,1) = (q1-q2)/(m2-m1)
-
-      ! project new point to spline and find y2 and slope m2
-      nodes_on_spline_proj(:,1) = nodes_on_spline(:,1)
-      nodes_on_spline_proj(:,2) = splines(isp)%spline%VALUE(nodes_on_spline(:,1))
-      m1 = splines(isp)%spline%slope(nodes_on_spline(:,1))
-
-    ENDSUBROUTINE project_from_opposite_vertex
-
-    SUBROUTINE get_line_opposite_vertex
-      !find coordinates of vertex opposite to each face
-      DO i = 1, n
-         DO j = 1, 3
-            IF(COUNT(T(extFaces_bound(indices(i)),j) .EQ. Tb_bound_vtx) .EQ. 0) THEN
-               opposite_vertex(i,:) = X(T(extFaces_bound(indices(i)),j),:)
-            ENDIF
-         ENDDO
-      ENDDO
-
-      CALL rotate(opposite_vertex)
-
-      ! find slope and intercept of line passing through the vertex and the point to project
-      m2 = (opposite_vertex(:,2) - nodes_on_spline(:,2))/(opposite_vertex(:,1) - nodes_on_spline(:,1))
-      q2 = opposite_vertex(:,2) - m2*opposite_vertex(:,1)
-
-    ENDSUBROUTINE get_line_opposite_vertex
-
-    SUBROUTINE project_perp_to_spline
-      ! project to spline and find y1
-      nodes_on_spline_proj(:,1) = nodes_on_spline(:,1)
-      nodes_on_spline_proj(:,2) = splines(isp)%spline%VALUE(nodes_on_spline(:,1))
-      ! get the slope (m1)
-      m1 = splines(isp)%spline%slope(nodes_on_spline(:,1))
-
-      ! get the intercept (q1)
-      q1 = nodes_on_spline_proj(:,2) - m1*nodes_on_spline_proj(:,1)
-
-      ! get slope of perpendicular line (m2)
-      m2 = -1/m1
-      ! get intercept of perpendicular line (q2) passing through original point
-      q2 = nodes_on_spline0(:,2)-m2*nodes_on_spline0(:,1)
-
-      ! find x coordinate of intersection point
-      nodes_on_spline(:,1) = (q2-q1)/(m1-m2)
-
-      ! project new point to spline and find y2 and slope m2
-      nodes_on_spline_proj(:,1) = nodes_on_spline(:,1)
-      nodes_on_spline_proj(:,2) = splines(isp)%spline%VALUE(nodes_on_spline(:,1))
-      m1 = splines(isp)%spline%slope(nodes_on_spline(:,1))
-
-    ENDSUBROUTINE project_perp_to_spline
-
-    SUBROUTINE rotate(nodes)
-      REAL*8, INTENT(INOUT)            :: nodes(:,:)
-
-      ! rotate the points so that the straight boundary aligns to the x axis
-      xcenter = splines(isp)%xcenter
-      ycenter = splines(isp)%ycenter
-
-      nodes(:,1) = nodes(:,1) - xcenter
-      nodes(:,2) = nodes(:,2) - ycenter
-
-      RotMat = splines(isp)%RotMat
-
-      nodes = TRANSPOSE(MATMUL(RotMat,TRANSPOSE(nodes)))
-
-      nodes(:,1) = nodes(:,1) + xcenter
-      nodes(:,2) = nodes(:,2) + ycenter
-
-    ENDSUBROUTINE rotate
-
-    SUBROUTINE anti_rotate(nodes)
-      REAL*8, INTENT(INOUT)            :: nodes(:,:)
-
-      ! rotate the points so that the straight boundary aligns to the x axis
-      xcenter = splines(isp)%xcenter
-      ycenter = splines(isp)%ycenter
-
-      nodes(:,1) = nodes(:,1) - xcenter
-      nodes(:,2) = nodes(:,2) - ycenter
-
-      RotMat = splines(isp)%AntiRotMat
-
-      nodes = TRANSPOSE(MATMUL(RotMat,TRANSPOSE(nodes)))
-
-      nodes(:,1) = nodes(:,1) + xcenter
-      nodes(:,2) = nodes(:,2) + ycenter
-
-    ENDSUBROUTINE anti_rotate
-
-  ENDSUBROUTINE round_edges
-
-  SUBROUTINE blending_boundary(Z,m,porder,s,W)
-    INTEGER, INTENT(IN)                 :: m, porder
-    REAL*8, INTENT(IN)                  :: Z(:,:), s(:)
-    REAL*8, INTENT(OUT)                 :: W(:)
-    INTEGER                             :: i, ind
-    REAL*8                              :: C(porder-1, porder-1), invC(porder-1, porder-1)
-    REAL*8                              :: ZC(SIZE(Z,1),2)
-
-    IF (m .EQ. 1) THEN
-       ! First vertex ([0,0] in xi-eta)
-       W = 1.0D0 - Z(:,1) - Z(:,2)
-    ELSEIF (m .EQ. porder + 1) THEN
-       ! Second vertex ([1,0] in xi-eta)
-       W = Z(:,1)
-    ELSEIF (m .EQ. 2*porder + 1) THEN
-       ! Third vertex ([0,0] in xi-eta)
-       W = Z(:,2)
-    ELSE
-       ! Edge nodes
-       C = 1.0D0
-       C(:,1) = s(2:SIZE(s)-1) * (1.0D0 - s(2:SIZE(s)-1))
-       DO i = 2, porder-1
-          C(:,i) = C(:,i-1) * s(2:SIZE(s)-1)
-       ENDDO
-
-       CALL invert_matrix(C,invC)
-
-       IF (m < porder + 1) THEN
-          ! First edge
-          ZC = Z
-          ind = m - 1
-       ELSEIF (m .LT. 2*porder + 1) THEN
-          ! Second edge
-          ZC(:,1) = Z(:,2)
-          ZC(:,2) = 1.0D0 - Z(:,1) - Z(:,2)
-          ind = m - porder - 1
-       ELSE
-          ! Third edge
-          ZC(:,1) = 1.0D0 - Z(:,1) - Z(:,2)
-          ZC(:,2) = Z(:,1)
-          ind = m - 2*porder - 1
-       ENDIF
-
-       W = 0.0D0
-       DO i = 1, porder-1
-          W = W + invC(i,ind) * ZC(:,1)**i
-       ENDDO
-       W = W * (1.0D0 - ZC(:,1) - ZC(:,2))
-    ENDIF
-  ENDSUBROUTINE blending_boundary
 
   SUBROUTINE inverse_isop_transf(x, Xe, refEl, xieta)
     TYPE(Reference_element_type), INTENT(IN)  :: RefEl
@@ -1795,72 +1347,6 @@ CONTAINS
 
   ENDSUBROUTINE unique_stable
 
-  PURE SUBROUTINE intersect_stable_int(a,b,c)
-    INTEGER, INTENT(IN)                       :: a(:)
-    INTEGER, INTENT(IN)                       :: b(:)
-    INTEGER, INTENT(OUT), ALLOCATABLE         :: c(:)
-    INTEGER, ALLOCATABLE                      :: temp(:)
-    INTEGER                                   :: i, j, counter
-
-    counter = 0
-    DO i = 1, SIZE(a)
-       DO j = 1, SIZE(b)
-          IF(a(i) .EQ. b(j)) THEN
-             counter = counter + 1
-          ENDIF
-       ENDDO
-    ENDDO
-
-    ALLOCATE(temp(counter))
-    counter = 1
-
-    DO i = 1, SIZE(a)
-       DO j = 1, SIZE(b)
-          IF(a(i) .EQ. b(j)) THEN
-             temp(counter) = a(i)
-             counter = counter + 1
-          ENDIF
-       ENDDO
-    ENDDO
-
-    ! c is allocated in here
-    CALL unique_stable(temp, c)
-
-    DEALLOCATE(temp)
-
-  ENDSUBROUTINE intersect_stable_int
-
-#ifdef PARALL
-  SUBROUTINE compute_error_on_vertices_root(error_array_glob, vector_nodes_unique_glob, count_glob, error_array_root)
-    REAL*8, INTENT(IN)                :: error_array_glob(:)
-    INTEGER, INTENT(IN)               :: vector_nodes_unique_glob(:), count_glob(:)
-    REAL*8, INTENT(OUT)               :: error_array_root(:)
-    INTEGER                           :: count_var, j, jj
-    REAL*8                            :: error_var
-
-
-    error_array_root = 0.
-
-    DO j = 1, SIZE(error_array_root)
-       error_var = 0.
-       count_var = 0
-       DO jj = 1, SIZE(vector_nodes_unique_glob)
-          IF(vector_nodes_unique_glob(jj) .EQ. j) THEN
-             IF(error_array_root(j) .LE. 1.e-12) THEN
-                error_var = error_var + error_array_glob(jj)
-                count_var = count_var + count_glob(jj)
-             ELSE
-                CYCLE ! it means it has already been counted
-             ENDIF
-          ENDIF
-       ENDDO
-
-       error_array_root(j) = error_var/count_var
-    ENDDO
-
-  ENDSUBROUTINE compute_error_on_vertices_root
-
-#endif
 
 
 
