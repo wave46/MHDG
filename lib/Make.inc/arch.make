@@ -18,8 +18,8 @@ COMPTYPE = $(COMPTYPE_DEB)
 #-------------------------------------------------------------------------------
 MODE_SERIAL = serial
 MODE_PARALL = parall
-#MODE = $(MODE_SERIAL)
-MODE = $(MODE_PARALL)
+MODE = $(MODE_SERIAL)
+#MODE = $(MODE_PARALL)
 
 #-------------------------------------------------------------------------------
 # The compiler
@@ -202,12 +202,12 @@ ifeq ($(COMPTYPE),$(COMPTYPE_DEB))
 else ifeq ($(COMPTYPE),$(COMPTYPE_PRO))
  FCFLAGS = -Og -pg
 else ifeq ($(COMPTYPE),$(COMPTYPE_OPT))
- FCFLAGS = -Ofast
+ FCFLAGS = -Ofast -march=native
 endif
 
 FCFLAGS += -cpp  -fopenmp
-FCFLAGS += -fdefault-double-8 -fdefault-real-8 
-FCFLAGS += -ffree-line-length-none -fimplicit-none -ffree-form -Wno-tabs -march=native
+FCFLAGS += -fdefault-double-8 -fdefault-real-8
+FCFLAGS += -ffree-line-length-none -fimplicit-none -ffree-form -Wno-tabs
 ######## End gfortran ########
 
 ######## Begin ifort #########
