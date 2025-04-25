@@ -14,6 +14,7 @@ MODULE Main_utils
   USE printutils
   USE debug
   USE initialization
+  USE external_heating
 #ifdef WITH_PETSC
    USE solve_petsc, only: matPETSC, InitPETSC
 #endif
@@ -275,6 +276,11 @@ CONTAINS
 
     ! Re-load magnetic field and Jtor
     CALL load_magnetic_field_Jtor()
+
+    IF (switch%external_heating) THEN
+       CALL initialize_external_heating()
+       CALL load_external_heating_from_grid()
+    ENDIF
 
 
     ! Re-Allocation and initialization of the elemental matrices
