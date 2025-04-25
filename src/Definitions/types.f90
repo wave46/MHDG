@@ -261,6 +261,9 @@ MODULE types
      REAL*8                    :: heating_sigmar ! width of the soruce from magnetic axis in r direction
      REAL*8                    :: heating_sigmaz ! width of the soruce from magnetic axis in z direction
      INTEGER                   :: heating_equation ! Equation to which additional heating is applied (3 for ions, 4 for electrons)
+     ! Coefficients for the external heating
+     REAL*8, POINTER           :: external_heating(:) => NULL() ! External heating on nodes of the mesh
+     REAL*8, POINTER       :: external_heating_distribtution(:) => NULL() ! distribution of the external heating between ions and electrons ([0.5,0.5] will be equal, [0,1] fully on electrons)
      ! Coefficients for the neutral equations
      REAL*8                    :: diff_nn ! Diffusion in the neutral equation
      LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
@@ -387,6 +390,7 @@ MODULE types
      ! 1 -add sinusoidal perturbation
      ! 2 -add density blob
      LOGICAL :: logrho   ! solve for the density logarithm instead of density
+     LOGICAL :: external_heating ! to read and apply external heating from input file
   END TYPE Switches_type
 
   !***************************************************************
@@ -396,8 +400,10 @@ MODULE types
      CHARACTER(len=1000) :: field_path ! where do we read magnetic field from (WEST cases so far)
      CHARACTER(len=1000) :: jtor_path ! where do we read plasma current from (WEST cases so far)
      CHARACTER(len=1000) :: save_folder ! where to save last solution
+     CHARACTER(len=1000) :: external_heating_path ! where do we read external heating from (only used if the external_heating is on)
      CHARACTER(len=1000) :: puff_path ! where do we read puff boundary condition from
      LOGICAL             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
+     LOGICAL             :: external_heating_from_grid !if true, then reads external heating file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: compute_from_flux ! if components B_R, B_Z are computed from flux or not
      LOGICAL             :: divide_by_2pi     ! correspondng to flux definition if it is needed to divide by 2pi or not
      INTEGER             :: field_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
