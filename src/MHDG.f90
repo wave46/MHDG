@@ -139,6 +139,13 @@ PROGRAM MHDG
       ! load magnetic field and Jtor
       CALL load_magnetic_field_Jtor()
   ENDIF
+
+  IF (switch%external_heating) THEN
+     ! Initialise external heating
+     CALL initialize_external_heating()
+     ! Load external heating
+     CALL load_external_heating()
+  ENDIF
   
 
   restart_adapt = adapt%rest_adapt
