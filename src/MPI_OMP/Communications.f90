@@ -1066,6 +1066,34 @@ CONTAINS
 
  END SUBROUTINE gather_elemental_values
 
+ SUBROUTINE gather_nodal_values(Mesh_in,value_in,value_glob,allgather)
+
+    TYPE(Mesh_type)                         :: Mesh_in
+    REAL*8, INTENT(IN)                      :: value_in(:)
+    REAL*8, POINTER, INTENT(OUT)            :: value_glob(:)
+    LOGICAL, INTENT(IN), OPTIONAL           :: allgather
+    INTEGER                                 :: i, ierr
+
+    ALLOCATE(value_glob(Mesh_in%Nno_glob))
+    value_glob = 0.
+
+    DO i = 1, SIZE(Mesh_in%T,1)
+       IF(Mesh_in%ghostElems(i) .NE. 1) THEN
+          value_glob(Mesh_in%loc2glob_nodes(Mesh_in%T(i,:))) = value_in(Mesh_in%T(i,:))
+       ENDIF
+    ENDDO
+
+    IF (allgather) THEN
+       CALL MPI_Allreduce(MPI_IN_PLACE, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    ELSE
+       IF (MPIvar%glob_id == 0) THEN
+          CALL MPI_REDUCE(MPI_IN_PLACE, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+       ELSE
+          CALL MPI_REDUCE(value_glob, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+       END IF
+    END IF
+   END SUBROUTINE gather_nodal_values
+
   SUBROUTINE gather_magnetic_field(Mesh_in, B_glob, magnetic_flux_glob, magnetic_psi_glob, Bperturb_glob, Jtor_glob)
 
     TYPE(Mesh_type)                         :: Mesh_in
