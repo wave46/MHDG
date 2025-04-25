@@ -63,6 +63,7 @@ SUBROUTINE HDG_computeJacobian()
   REAL*8                :: qe(Mesh%Nnodesperelem,phys%Neq*2),qef(refElPol%Nfacenodes,phys%Neq*2)
   REAL*8,ALLOCATABLE    :: qres(:,:)
   REAL*8                :: Bel(refElPol%Nnodes2d,3),fluxel(refElPol%Nnodes2d),psiel(refElPol%Nnodes2d),Bfl(refElPol%Nfacenodes,3),psifl(refElPol%Nfacenodes)
+  REAL*8                :: external_heating_el(refElPol%Nnodes2d)
 #ifdef KEQUATION
   real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d),q_cylfl(refElPol%Nfacenodes)
 #endif
@@ -1118,12 +1119,12 @@ CONTAINS
   !************************************
 #ifdef KEQUATION
   !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,psifl,q_cylfl,isdir,Jtorel,El_n,El_nn) &
+  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_el,psifl,q_cylfl,isdir,Jtorel,El_n,El_nn) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
   !$OMP FIRSTPRIVATE(phys)
 #else
   !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,psiel,psifl,isdir,Jtorel,El_n,El_nn) &
+  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,psiel,psifl,external_heating_el,isdir,Jtorel,El_n,El_nn) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el) &
   !$OMP FIRSTPRIVATE(phys)
 #endif
@@ -1141,6 +1142,13 @@ CONTAINS
     ! Magnetic field of the nodes of the element
     Bel = phys%B(Mesh%T(iel,:),:)
     fluxel = phys%magnetic_flux(Mesh%T(iel,:))
+    
+    !external heating
+    IF (switch%external_heating) THEN
+      external_heating_el = phys%external_heating(Mesh%T(iel,:))
+    ELSE
+      external_heating_el = 0.
+    ENDIF
 
     ! Normalized magnetic flux of the nodes of the element: PSI el
     psiel = phys%magnetic_psi(Mesh%T(iel,:))
@@ -1174,9 +1182,9 @@ CONTAINS
 
     ! Compute the matrices for the element
 #ifndef KEQUATION
-    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
+    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,psiel,external_heating_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
 #else
-    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
+    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
 #endif
      IF (save_tau) THEN
        inddiff_nn_Vol = (iel - 1)*refElPol%NGauss2D+(/(i,i=1,refElPol%NGauss2D)/)
@@ -1326,13 +1334,14 @@ CONTAINS
   ! Volume computation in 2D
   !***************************************************
 #ifndef KEQUATION
-  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
+  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,psiel,external_heating_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
 #else
-  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
+  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
 #endif
       INTEGER,INTENT(IN)            :: iel
       REAL*8,INTENT(IN)             :: Xel(:,:)
       REAL*8,INTENT(IN)             :: Bel(:,:),fluxel(:),psiel(:),Jtorel(:)
+      REAL*8,INTENT(IN)             :: external_heating_el(:)
 #ifdef KEQUATION
       REAL*8,INTENT(IN)             :: omegael(:),q_cylel(:)
 #endif
@@ -1369,6 +1378,7 @@ CONTAINS
     real*8                        :: Pi,sigma,x0,A,r
     real*8                        :: th_n = 1.e-14
     real*8                        :: Vnng(Ndim)
+    REAL*8                        :: external_heating_gauss(Ng2d)
 
       IF (save_tau) THEN
        Xg_el = 0.
@@ -1428,6 +1438,13 @@ CONTAINS
          Jtor = MATMUL(refElPol%N2D,Jtorel)
     ELSE
       Jtor = 0.
+    END IF
+
+    ! External heating at Gauss points
+    IF (switch%external_heating) THEN
+      external_heating_gauss = MATMUL(refElPol%N2D,external_heating_el)
+    ELSE
+      external_heating_gauss = 0.
     END IF
 
     ! Solution at Gauss points
@@ -1530,6 +1547,14 @@ CONTAINS
           endif
         endif
       endif
+      ! external heating
+      IF (switch%external_heating) THEN
+        ! ion heating
+        force(g,3) = force(g,3)+external_heating_gauss(g)*phys%external_heating_distribtution(1)
+        ! electron heating
+        force(g,4) = force(g,4)+external_heating_gauss(g)*phys%external_heating_distribtution(2)
+      ENDIF
+
 #endif
       END DO
     END IF
