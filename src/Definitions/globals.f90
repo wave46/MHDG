@@ -449,6 +449,12 @@ CONTAINS
        DEALLOCATE (simpar%consvar_refval)
     END IF
 
+    IF (ASSOCIATED(phys%external_heating)) THEN
+      DEALLOCATE (phys%external_heating,phys%external_heating_distribtution)
+      NULLIFY (phys%external_heating,phys%external_heating_distribtution)
+    END IF
+         
+
   END SUBROUTINE free_all
 
   SUBROUTINE free_mesh
