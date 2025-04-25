@@ -10,6 +10,7 @@
                                         ! true = yes (even for magnetic perturbation)
                                         ! false = no
     init                = 1             ! Initialization type: 1-analytical at nodes; 2-L2 projection
+    external_heating    = .true.       ! True will use external from the file provided in INPUT_LST
     driftdia            = .false.       ! Set to FALSE to ignore diamagnetic drifts terms
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
     testcase            = 54            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
@@ -76,6 +77,8 @@
     jtor_dimensions(1) = 1000                                   ! 1st dimension dimensions of plasma current file 
     jtor_dimensions(2) = 1000                                   ! 2nd dimension dimensions of plasma current file
     save_folder = '/path/where/to/save/solution/'
+    external_heating_path = '/path/where/to/read/external/heating/from.h5'
+    external_heating_from_grid = .true.
     puff_path = '/path/where/to/read/puff/' ! only used in moving equilibrium
     puff_dimension = 1000
 /
