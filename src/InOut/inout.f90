@@ -500,10 +500,12 @@ CONTAINS
     INTEGER, POINTER        :: T_glob(:,:), Tb_glob(:,:), extfaces_glob(:,:), intfaces_glob(:,:), boundaryFlag_glob(:), periodic_faces_glob(:), F_glob(:,:), N_glob(:,:), face_info_glob(:,:), Tlin_glob(:,:), flag_elems_sc_glob(:)
     REAL*8, POINTER         :: u_tilde_glob(:), u_glob(:), q_glob(:), magnetic_psi_glob(:), magnetic_flux_glob(:), Jtor_glob(:), elemSize_glob(:), scdiff_nodes_glob(:,:)
     REAL*8, POINTER         :: X_glob(:,:), B_glob(:,:), Bperturb_glob(:,:)
+    REAL*8, POINTER         :: external_heating_glob(:)
 
     NULLIFY(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, face_info_glob, Tlin_glob, flag_elems_sc_glob)
     NULLIFY(u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, Jtor_glob, elemSize_glob, scdiff_nodes_glob)
     NULLIFY(X_glob, B_glob, Bperturb_glob)
+    NULLIFY(external_heating_glob)
 
 #endif
 
@@ -658,6 +660,10 @@ CONTAINS
        ENDIF
     ENDIF
 
+    IF (switch%external_heating) THEN
+      CALL gather_nodal_values(Mesh_in = Mesh, value_in=phys%external_heating, value_glob=external_heating_glob)
+    ENDIF
+
     
     IF ((switch%shockcp .NE. 0) .OR. (adapt%shockcp_adapt .NE. 0)) THEN
       CALL gather_mesh(Mesh, T_glob, X_glob, Tb_glob, F_glob, N_glob, intfaces_glob, extfaces_glob, boundaryFlag_glob, Tlin_glob, periodic_faces_glob, elemSize_glob, flag_elems_sc_glob, scdiff_nodes_glob)
@@ -773,8 +779,10 @@ CONTAINS
     IF (ASSOCIATED(T_glob)) THEN
       DEALLOCATE(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
       DEALLOCATE(u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob)
+      DEALLOCATE(external_heating_glob)
       NULLIFY(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
       NULLIFY(u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob)
+      NULLIFY(external_heating_glob)
     ENDIF
 
     IF(ASSOCIATED(Jtor_glob)) THEN
@@ -889,6 +897,13 @@ CONTAINS
       IF (switch%ME) THEN
          CALL HDF5_array1d_saving(group_id2, phys%puff_exp, time%nts, 'puff_exp')
       END IF
+      if (switch%external_heating) THEN
+#ifdef PARALL
+         CALL HDF5_array1D_saving(group_id2, external_heating_glob, SIZE(external_heating_glob), 'external_heating')
+#else
+         CALL HDF5_array1D_saving(group_id2, phys%external_heating, SIZE(phys%external_heating), 'external_heating')
+#endif
+      ENDIF
       CALL HDF5_real_saving(group_id2, phys%tie, 'tau_ie')
       CALL HDF5_real_saving(group_id2, phys%dfcoef, 'dfcoef')
       CALL HDF5_real_saving(group_id2, phys%dexbcoef, 'dexbcoef')
