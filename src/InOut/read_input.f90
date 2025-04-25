@@ -59,12 +59,17 @@ SUBROUTINE READ_input()
 #endif
   ! Movin Equilibrium
   LOGICAL               :: ME
+  !external heating
+  LOGICAL               :: external_heating, external_heating_from_grid
+  CHARACTER(1000)       :: external_heating_path
+
+
 
   ! Defining the variables to READ from the file
-  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
+  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb
-       NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions, save_folder,puff_path,puff_dimension
+  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
@@ -136,6 +141,7 @@ SUBROUTINE READ_input()
   switch%pertini          = pertini
   switch%logrho           = logrho
   switch%bxgradb          = bxgradb
+  switch%external_heating = external_heating
   input%field_path        = TRIM(ADJUSTL(field_path))
   input%field_dimensions  = field_dimensions
   input%field_from_grid   = field_from_grid
@@ -143,6 +149,8 @@ SUBROUTINE READ_input()
   input%divide_by_2pi     = divide_by_2pi
   input%jtor_path         = TRIM(ADJUSTL(jtor_path))
   input%jtor_dimensions   = jtor_dimensions
+  input%external_heating_path = TRIM(ADJUSTL(external_heating_path))
+  input%external_heating_from_grid = external_heating_from_grid
   input%save_folder       = TRIM(ADJUSTL(save_folder))
   input%puff_path        = TRIM(ADJUSTL(puff_path))
   input%puff_dimension   = puff_dimension
