@@ -922,17 +922,14 @@ CONTAINS
   !----------------------------------------
   SUBROUTINE HDF5_array2D_reading(file_id, array2D, dsetname, ierr)
 
+    INTEGER(HID_T), INTENT(in)            :: file_id ! file identifier
+    REAL(float), DIMENSION(:, :), POINTER :: array2D
+    CHARACTER(LEN=*), INTENT(in)          :: dsetname ! dataset name
+    INTEGER, OPTIONAL, INTENT(out)        :: ierr ! error flag
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(float), &
-         DIMENSION(:, :), POINTER    :: array2D
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
-    INTEGER, OPTIONAL, INTENT(out)   :: ierr ! error flag
-
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(2)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
+    INTEGER                               :: error ! error flag
+    INTEGER(HSIZE_T), DIMENSION(2)        :: dim ! dataset dimensions
+    INTEGER(HID_T)                        :: dataset ! dataset identifier
 
     !*** file opening ***
     CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
