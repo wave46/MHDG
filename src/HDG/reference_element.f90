@@ -894,6 +894,8 @@ CONTAINS
 
     CALL HDF5_open('positionFeketeNodesTri2D.h5', file_id, IERR)
     CALL HDF5_array2D_reading(file_id, refEl%coord2d, datasetname)
+    CALL HDF5_close(file_id)
+
   END SUBROUTINE read_fekete_nodes_2D
 
   ! Hard coded positions for the fekete nodes in 1D
