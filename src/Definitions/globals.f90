@@ -658,6 +658,9 @@ CONTAINS
     IF (ALLOCATED(Mesh_loc%periodic_faces)) THEN
        DEALLOCATE (Mesh_loc%periodic_faces)
     END IF
+    IF (ALLOCATED(Mesh_loc%flag_elems_sc)) THEN
+       DEALLOCATE (Mesh_loc%flag_elems_sc)
+    END IF
 
 #ifdef PARALL
     IF (ASSOCIATED(Mesh_loc%loc2glob_fa)) THEN
