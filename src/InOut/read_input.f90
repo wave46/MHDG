@@ -144,8 +144,8 @@ SUBROUTINE READ_input()
   input%jtor_path         = TRIM(ADJUSTL(jtor_path))
   input%jtor_dimensions   = jtor_dimensions
   input%save_folder       = TRIM(ADJUSTL(save_folder))
-  input%puff_path        = TRIM(ADJUSTL(puff_path))
-  input%puff_dimension   = puff_dimension
+  input%puff_path         = TRIM(ADJUSTL(puff_path))
+  input%puff_dimension    = puff_dimension
   numer%tau               = tau
   numer%nrp               = nrp
   numer%tNR               = tNR
