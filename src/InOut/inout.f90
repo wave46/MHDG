@@ -887,7 +887,15 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%Re_pump, 'recycling_pump')
       CALL HDF5_real_saving(group_id2, phys%puff, 'puff')
       IF (switch%ME) THEN
-         CALL HDF5_array1d_saving(group_id2, phys%puff_exp, time%nts, 'puff_exp')
+         CALL HDF5_array1d_saving(group_id2, phys%puff_exp, input%puff_dimension, 'puff_exp')
+         IF (switch%target_density) THEN
+            CALL HDF5_real_saving(group_id2, phys%feedback_propotional_gain,'feedback_propotional_gain')
+            CALL HDF5_real_saving(group_id2, phys%feedback_integral_gain,'feedback_integral_gain')
+            CALL HDF5_real_saving(group_id2, phys%feedback_derivative_gain,'feedback_derivative_gain')
+            CALL HDF5_real_saving(group_id2, phys%n_li,'n_li')
+            CALL HDF5_real_saving(group_id2, phys%feedback_integral_error,'feedback_integral_error')
+            CALL HDF5_real_saving(group_id2, phys%feedback_previous_error,'feedback_previous_error')
+         ENDIF
       END IF
       CALL HDF5_real_saving(group_id2, phys%tie, 'tau_ie')
       CALL HDF5_real_saving(group_id2, phys%dfcoef, 'dfcoef')
@@ -909,6 +917,7 @@ CONTAINS
       CALL HDF5_integer_saving(group_id2, switch%testcase, 'testcase')
       CALL HDF5_logical_saving(group_id2, switch%ohmicsrc, 'ohmicsrc')
       CALL HDF5_logical_saving(group_id2, switch%ME, 'ME')
+      CALL HDF5_logical_saving(group_id2, switch%target_density, 'target_density')
       CALL HDF5_logical_saving(group_id2, switch%rmp, 'RMP')
       CALL HDF5_logical_saving(group_id2, switch%ripple, 'Ripple')
       CALL HDF5_logical_saving(group_id2, switch%psdtime, 'psdtime')
@@ -1479,6 +1488,15 @@ CONTAINS
        ELSE
        END IF
        CALL HDF5_group_close(group_id2, ierr)
+       IF (switch%target_density) THEN           
+         CALL HDF5_group_open(group_id, 'physics', group_id2, ierr)
+         CALL HDF5_real_reading(group_id2, phys%puff, 'puff')
+         IF (time%it .GT. 1) THEN
+            CALL HDF5_real_reading(group_id2, phys%feedback_integral_error, 'feedback_integral_error')
+            CALL HDF5_real_reading(group_id2, phys%feedback_previous_error, 'feedback_previous_error')
+         ENDIF
+         CALL HDF5_group_close(group_id2, ierr)
+       ENDIF
     END IF
     CALL HDF5_group_close(group_id, ierr)
 

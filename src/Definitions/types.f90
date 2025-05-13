@@ -276,6 +276,12 @@ MODULE types
      REAL*8                    :: Re ! Recycling for the neutral equation
      REAL*8                    :: Re_pump ! Recycling for the neutral equation in the pump region
      REAL*8                    :: puff ! Puff coefficient
+     REAL*8                    :: feedback_propotional_gain ! relative feedback propotional gain
+     REAL*8                    :: feedback_integral_gain ! feedback integral gain
+     REAL*8                    :: feedback_derivative_gain ! feedback derivative gain
+     REAL*8                    :: feedback_previous_error ! previous error for the feedback control
+     REAL*8                    :: feedback_integral_error ! integral error for the feedback control
+     REAL*8                    :: n_li  ! line integrated density
      REAL*8                    :: cryopump_power ! Cryopump power in [m^3/s] coefficient
      REAL*8                    :: puff_slope ! Puff increment coefficient (only for moving equilibrium for ITER)
      REAL*8,POINTER            :: puff_exp(:) => NULL()! Puff experimental coefficient (only for moving equilibriums)
@@ -351,6 +357,7 @@ MODULE types
      LOGICAL :: ripple   ! To activate ripple
      LOGICAL :: ohmicsrc ! Set to TRUE to consider ohmic source of energy
      LOGICAL :: ME       ! Set to TRUE to allow magnetic equilibrium evolution in time
+     LOGICAL :: target_density ! Set to TRUE to adjust puff to match a target density in ME simulations
      LOGICAL :: driftdia ! Set to TRUE to consider diamagnetic drift
      LOGICAL :: driftexb ! Set to TRUE to consider ExB drift
      LOGICAL :: steady
@@ -397,12 +404,14 @@ MODULE types
      CHARACTER(len=1000) :: jtor_path ! where do we read plasma current from (WEST cases so far)
      CHARACTER(len=1000) :: save_folder ! where to save last solution
      CHARACTER(len=1000) :: puff_path ! where do we read puff boundary condition from
+     CHARACTER(len=1000) :: target_density_path ! where do we read target density from
      LOGICAL             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: compute_from_flux ! if components B_R, B_Z are computed from flux or not
      LOGICAL             :: divide_by_2pi     ! correspondng to flux definition if it is needed to divide by 2pi or not
      INTEGER             :: field_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
      INTEGER             :: jtor_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
      INTEGER             :: puff_dimension ! number of timeslices in the puff file
+     INTEGER             :: target_density_dimension ! number of timeslices in the target density file
   END TYPE Inputs_type
 
   !*******************************************************
