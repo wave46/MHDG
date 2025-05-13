@@ -423,6 +423,7 @@ CONTAINS
     ! Free memory
     DEALLOCATE (Br2D, Bz2D, Bphi2D, xvec, yvec)
     DEALLOCATE (r2D, z2D, flux2D)
+    NULLIFY (r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D)
 
   END SUBROUTINE load_magnetic_field_grid
 
@@ -1097,6 +1098,7 @@ CONTAINS
 
     ! Free memory
     DEALLOCATE(r2D,z2D,Jtor,xvec,yvec)
+    NULLIFY(r2D,z2D,Jtor)
 
   END SUBROUTINE loadJtorMap
 
