@@ -1272,211 +1272,210 @@ CONTAINS
           WRITE(6,*) 'Puff is analytical'
        ENDIF
     ELSE
-       CALL SetPuff()
+       CALL SetParticleSource()
     END IF
 #endif
   ENDSUBROUTINE initialize_puff
 
 
-  SUBROUTINE SetPuff()
+SUBROUTINE SetParticleSource()
 
+   CHARACTER(LEN=1000) :: fname, fname_density
+   INTEGER(HID_T)    :: file_id
+   INTEGER           :: qp, Nn2D
+   REAL*8            :: lower, upper, nli, n_Gw, n_la, a = 2.
+   REAL*8, POINTER, DIMENSION(:) :: puff_time, target_density_time, target_density_exp
+   INTEGER           :: puff_len, density_len
 
+   NULLIFY(puff_time, target_density_time, target_density_exp)
 
-    INTEGER           :: ierr,i
-    CHARACTER(LEN=1000) :: fname,fname_density
-    INTEGER(HID_T)    :: file_id
-    INTEGER           :: qp, Nn2D
-    INTEGER           :: T(Mesh%Nelems,refElPol%Nnodes2D)
-    REAL*8            :: lower, upper, nli, n_Gw, n_la, a = 2.
-    REAL*8            :: X(Mesh%Nnodes,2), u(Mesh%Nelems*refElPol%Nnodes2D,phys%Neq)
-    REAL*8            :: linex(1000), liney(1000), n_i(Mesh%Nelems*refElPol%Nnodes2D)
-    REAL*8, POINTER, DIMENSION(:) :: puff_time, target_density_time, target_density_exp
-    INTEGER           :: puff_time_idx, puff_len,density_len, target_density_idx
-    REAL*8            :: x_lower, x_upper, y_lower, y_upper
-    REAL*8            :: target_density
-    REAL*8            :: control_signal,anti_windup_gain
-    
-    NULLIFY(puff_time, target_density_time, target_density_exp)
+   fname = input%puff_path
+   puff_len = input%puff_dimension
+   fname_density = input%target_density_path
+   density_len = input%target_density_dimension
 
-    fname = input%puff_path
-    puff_len = input%puff_dimension
-    fname_density = input%target_density_path
-    density_len = input%target_density_dimension
-
-    ! Allocate storing space in phys (puff for WEST, 403 entries)
-    IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
-
+   ! Allocate storing space in phys (puff for WEST, 403 entries)
+   IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
       IF (switch%target_density .EQ. 0) THEN
-         IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE(6,*) 'Puff is experimental'
-         ENDIF
-       
-         ALLOCATE(puff_time(puff_len))
-         ALLOCATE(phys%puff_exp(puff_len))
-
-         ! Read file
-         CALL HDF5_open(fname,file_id,IERR)
-         CALL HDF5_array1D_reading(file_id,phys%puff_exp,'puff')
-         CALL HDF5_array1D_reading(file_id,puff_time,'time')
-         IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE(6,*) 'Puff loaded from file: ', TRIM(ADJUSTL(fname))
-         ENDIF
-         CALL HDF5_close(file_id)
-
-         !Linear interpolation of puff
-         puff_time_idx = binarySearch(puff_len,puff_time,time%t_ME,1e-12)
-         phys%puff = phys%puff_exp(puff_time_idx)*(puff_time(puff_time_idx+1)-time%t_ME)/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx))+ &
-              phys%puff_exp(puff_time_idx+1)*(time%t_ME-puff_time(puff_time_idx))/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx))
-         DEALLOCATE(puff_time)
-         NULLIFY(puff_time)
-      ELSE
-         IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE(6,*) 'Puff is adjusted as feedback to target line integrated density'
-         ENDIF
-
-         ALLOCATE(target_density_time(density_len))
-         ALLOCATE(target_density_exp(density_len))
-
-         ! Read file
-         CALL HDF5_open(fname_density,file_id,IERR)
-         CALL HDF5_array1D_reading(file_id,target_density_exp,'target_density')
-         CALL HDF5_array1D_reading(file_id,target_density_time,'time')
-         CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
-         CALL HDF5_real_reading(file_id, x_upper, 'x_upper')
-         CALL HDF5_real_reading(file_id, y_lower, 'y_lower')
-         CALL HDF5_real_reading(file_id, y_upper, 'y_upper')
-         IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE(6,*) 'Target density loaded from file: ', TRIM(ADJUSTL(fname_density))
-         ENDIF
-         CALL HDF5_close(file_id)
-
-         !Linear interpolation of target density
-         target_density_idx = binarySearch(density_len,target_density_time,time%t_ME,1e-12)
-         target_density = target_density_exp(target_density_idx)*(target_density_time(target_density_idx+1)-time%t_ME)/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))+ &
-              target_density_exp(target_density_idx+1)*(time%t_ME-target_density_time(target_density_idx))/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))
-         target_density = target_density/2.
-         ! Compute line integrated density
-         qp = SIZE(linex)
-         Nn2D = refElPol%Nnodes2D
-         X = mesh%X
-         T = mesh%T
-         nli = 0.
-         linex = (/(x_lower + (x_upper - x_lower)/1000.*(i-1), i=1, 1000)/)/phys%lscale
-         liney = (/(y_lower + (y_upper - y_lower)/1000.*(i-1), i=1, 1000)/)/phys%lscale
-         u = TRANSPOSE(RESHAPE(sol%u,[phys%Neq,SIZE(sol%u)/phys%Neq]))
-         n_i = u(:,1)
-         
-#ifndef PARALL
-         CALL lineintegration(qp, linex, liney, n_i, X, T, Nn2D, nli)
-#else
-         CALL lineintegration(qp, linex, liney, n_i, X, T, Nn2D,Mesh%ghostElems, nli)
-         CALL MPI_ALLREDUCE(MPI_IN_PLACE, nli, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
-         nli = nli*simpar%refval_density
-         phys%n_li = nli
-         IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE(6,*) 'n_li = ', nli, ' [m^-2]'
-            WRITE(6,*) 'n_litarget = ', target_density, '[m^-2]'
-         END IF   
-          ! Initialize integral error and previous error on the first timestep
-          IF (time%it .EQ. 0) THEN
-            phys%feedback_integral_error = 0.0
-            phys%feedback_previous_error = target_density - nli
-          END IF
-
-          ! Calculate the control signal
-         control_signal = phys%puff + phys%feedback_propotional_gain * (target_density - nli) + &
-         phys%feedback_integral_gain * phys%feedback_integral_error + &
-         phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
-
-         ! Saturate the control signal
-         phys%puff = MAX(control_signal, 0.0)
-
-         ! Back-calculate the integral error to prevent windup
-         anti_windup_gain = 0.1  ! Tunable parameter
-         phys%feedback_integral_error = phys%feedback_integral_error + &
-                        anti_windup_gain * (phys%puff - control_signal)
-
-         ! Update the integral error only if the output is not saturated
-         IF (phys%puff > 0.0) THEN
-            phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * time%dt_ME
-         END IF
-
-         ! Update the previous error
-         phys%feedback_previous_error = target_density - nli
+         CALL load_puff_from_file(fname, puff_len)
+      ELSEIF (switch%target_density .EQ. 1) THEN
+         CALL adjust_puff_to_target_density(fname_density, density_len)
+      !ELSEIF (switch%target_density .EQ. 2) THEN
+      !   !We first load the puff from file
+      !   CALL load_puff_from_file(fname, puff_len)
+      !   !Then we adjust wall recycling
+      !   CALL adjust_recycling_to_target_density(fname_density, density_len)
       END IF
-      DEALLOCATE(target_density_time, target_density_exp)
-      NULLIFY(target_density_time, target_density_exp)
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         WRITE(6,*) 'puff =  ', phys%puff
-      ENDIF
-    END IF
+   END IF
 
-    ! ITER puff: linear increase up to nli = 4.00E+19
-    IF (switch%testcase .GE. 80 .AND. switch%testcase .LE. 89) THEN
+   ! ITER puff: linear increase up to nli = 4.00E+19
+   IF (switch%testcase .GE. 80 .AND. switch%testcase .LE. 89) THEN
        ! Puff feedback: check if central line integrated has reached the target value (4e19 for ITER ohmic)
-       qp = SIZE(linex)
-       Nn2D = refElPol%Nnodes2D
-       X = mesh%X
-       T = mesh%T
-       nli = 0.
-       lower = MINVAL(Mesh%X(:,1))
-       upper = MAXVAL(Mesh%X(:,1))
-       linex = (/(lower + (upper - lower)/1000.*(i-1), i=1, 1000)/)
-       liney = 0.5/phys%lscale
-       u = TRANSPOSE(RESHAPE(sol%u,[phys%Neq,SIZE(sol%u)/phys%Neq]))
-       n_i = u(:,1)
+       CALL compute_line_integrated_density(MINVAL(Mesh%X(:, 1)), MAXVAL(Mesh%X(:, 1)), 0.5/phys%lscale, 0.5/phys%lscale, nli)
+       CALL adjust_ITER_puff(nli)
+   END IF
+
+END SUBROUTINE SetParticleSource
+
+SUBROUTINE load_puff_from_file(fname, puff_len)
+   CHARACTER(LEN=1000), INTENT(IN) :: fname
+   INTEGER, INTENT(IN) :: puff_len
+   INTEGER(HID_T) :: file_id
+   REAL*8, POINTER, DIMENSION(:) :: puff_time
+   INTEGER :: puff_time_idx
+   INTEGER :: ierr
+
+   ALLOCATE(puff_time(puff_len))
+   ALLOCATE(phys%puff_exp(puff_len))
+
+   ! Read file
+   CALL HDF5_open(fname, file_id, ierr)
+   CALL HDF5_array1D_reading(file_id, phys%puff_exp, 'puff')
+   CALL HDF5_array1D_reading(file_id, puff_time, 'time')
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'Puff loaded from file: ', TRIM(ADJUSTL(fname))
+   END IF
+   CALL HDF5_close(file_id)
+
+   ! Linear interpolation of puff
+   puff_time_idx = binarySearch(puff_len, puff_time, time%t_ME, 1e-12)
+   phys%puff = phys%puff_exp(puff_time_idx)*(puff_time(puff_time_idx+1)-time%t_ME)/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx)) + &
+               phys%puff_exp(puff_time_idx+1)*(time%t_ME-puff_time(puff_time_idx))/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx))
+   DEALLOCATE(puff_time)
+   NULLIFY(puff_time)
+END SUBROUTINE load_puff_from_file
+
+SUBROUTINE adjust_puff_to_target_density(fname_density, density_len)
+   CHARACTER(LEN=1000), INTENT(IN) :: fname_density
+   INTEGER, INTENT(IN) :: density_len
+   REAL*8 :: x_lower, x_upper, y_lower, y_upper
+   INTEGER(HID_T) :: file_id
+   REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
+   INTEGER :: target_density_idx
+   REAL*8 :: target_density, nli
+   INTEGER :: ierr
+
+   ALLOCATE(target_density_time(density_len))
+   ALLOCATE(target_density_exp(density_len))
+
+   ! Read file
+   CALL HDF5_open(fname_density, file_id, ierr)
+   CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
+   CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
+   CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
+   CALL HDF5_real_reading(file_id, x_upper, 'x_upper')
+   CALL HDF5_real_reading(file_id, y_lower, 'y_lower')
+   CALL HDF5_real_reading(file_id, y_upper, 'y_upper')
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'Target density loaded from file: ', TRIM(ADJUSTL(fname_density))
+   END IF
+   CALL HDF5_close(file_id)
+
+   ! Linear interpolation of target density
+   target_density_idx = binarySearch(density_len, target_density_time, time%t_ME, 1e-12)
+   target_density = target_density_exp(target_density_idx)*(target_density_time(target_density_idx+1)-time%t_ME)/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx)) + &
+                    target_density_exp(target_density_idx+1)*(time%t_ME-target_density_time(target_density_idx))/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))
+   target_density = target_density / 2.
+
+   ! Compute line integrated density
+   CALL compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
+
+   ! Adjust puff using feedback
+   CALL adjust_puff_feedback(target_density, nli)
+
+   DEALLOCATE(target_density_time, target_density_exp)
+   NULLIFY(target_density_time, target_density_exp)
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'puff =  ', phys%puff
+   END IF
+END SUBROUTINE adjust_puff_to_target_density
+
+
+SUBROUTINE compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
+   REAL*8, INTENT(IN) :: x_lower, x_upper, y_lower, y_upper
+   REAL*8, INTENT(OUT) :: nli
+   INTEGER :: qp, Nn2D
 #ifdef PARALL
-       ! Check in the case of horizontal partition to not waste time
-       IF (MAXVAL(Mesh%X(:, 2)) .GT. liney(1) .AND. MINVAL(Mesh%X(:, 2)) .LT. liney(1) ) THEN
-          CALL lineintegration(qp, linex, liney, n_i, X, T, Nn2D,Mesh%ghostElems, nli)
-       END IF
-       CALL MPI_ALLREDUCE(MPI_IN_PLACE, nli, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-       n_la = nli/(8.3659 - 4.04)*simpar%refval_density
-       IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE(6,*) 'nli = ', nli, 'E+19 [m^-2]'
-          WRITE(6,*) 'n_la = ', n_la, '[m^-3]'
-       END IF
-#else
-       CALL lineintegration(qp, linex, liney, n_i, X, T, Nn2D, nli)
-       n_la = nli/(8.3659 - 4.04)*simpar%refval_density
-       WRITE(6,*) 'nli = ', nli, 'E+19 [m^-2]'
-       WRITE(6,*) n_la, '[m^-3]'
+   INTEGER :: ierr
 #endif
-       ! Upgrade puff
-       n_Gw = phys%I_p/(pi*a**2)*10.*simpar%refval_density
-       !IF (nli .lt. 4) THEN
-       !    IF (time%it .eq. 0) THEN
-       !       phys%puff_exp(time%it+1) = phys%puff_slope*time%dt*simpar%refval_time
-       !       phys%puff = phys%puff_exp(time%it+1)
-       !    ELSE
-       !        phys%puff_exp(time%it+1) = phys%puff_exp(time%it) + phys%puff_slope*time%dt*simpar%refval_time
-       !       phys%puff = phys%puff_exp(time%it+1)
-       !    END IF
-       !    IF (MPIvar%glob_id .eq. 0) THEN
-       !       WRITE (6, '(" * Puff = ", E10.3, 27X, " *")')  phys%puff
-       !    END IF
-       !ELSE
-       !    phys%puff_exp(time%it+1) = phys%puff_exp(time%it) - exp(nli - 4)*simpar%refval_density*time%dt*simpar%refval_time
-       !    phys%puff = max(phys%puff_exp(time%it+1),0.)
-       !    IF (MPIvar%glob_id .eq. 0) THEN
-       !        WRITE (6, '(" * Puff = ", E10.3, 27X, " *")')  phys%puff
-       !    END IF
-       !END IF
-       IF (time%it .EQ. 0) THEN
-          phys%puff_exp(time%it+1) = MAX(10.*(phys%puff_slope*n_Gw - n_la), 0.)
-          phys%puff = phys%puff_exp(time%it+1)
-       ELSE
-          phys%puff_exp(time%it+1) = MAX(phys%puff_exp(time%it) + 50.*(2 - SIGN(1.,phys%puff_slope*n_Gw - n_la))*(phys%puff_slope*n_Gw - n_la), 0.)
-          !phys%puff_exp(time%it+1) = max(phys%puff_exp(time%it) + 50.*(phys%puff_slope*n_Gw - n_la), 0.)
-          phys%puff = phys%puff_exp(time%it+1)
-       END IF
-       IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE (6, '(" * Puff = ", E10.3, 27X, " *")')  phys%puff
-       END IF
+   REAL*8 :: linex(1000), liney(1000), n_i(Mesh%Nelems*refElPol%Nnodes2D)
+   REAL*8 :: X(Mesh%Nnodes,2), u(Mesh%Nelems*refElPol%Nnodes2D,phys%Neq)
+   INTEGER :: T(Mesh%Nelems,refElPol%Nnodes2D)
 
-    END IF
+   qp = SIZE(linex)
+   Nn2D = refElPol%Nnodes2D
+   X = mesh%X
+   T = mesh%T
+   nli = 0.
+   linex = (/(x_lower + (x_upper - x_lower)/1000.*(i-1), i=1, 1000)/)/phys%lscale
+   liney = (/(y_lower + (y_upper - y_lower)/1000.*(i-1), i=1, 1000)/)/phys%lscale
+   u = TRANSPOSE(RESHAPE(sol%u,[phys%Neq,SIZE(sol%u)/phys%Neq]))
+   n_i = u(:,1)
 
-  END SUBROUTINE SetPuff
+#ifndef PARALL
+   CALL lineintegration(qp, linex, liney, n_i, X, T, Nn2D, nli)
+#else
+   CALL lineintegration(qp, linex, liney, n_i, X, T, Nn2D,Mesh%ghostElems, nli)
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE, nli, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+   nli = nli*simpar%refval_density
+END SUBROUTINE compute_line_integrated_density
+
+SUBROUTINE adjust_puff_feedback(target_density, nli)
+   REAL*8, INTENT(IN) :: target_density, nli
+   REAL*8 :: control_signal, anti_windup_gain
+
+   IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE(6,*) 'n_li = ', nli, ' [m^-2]'
+       WRITE(6,*) 'n_litarget = ', target_density, '[m^-2]'
+   END IF   
+
+   ! Initialize integral error and previous error on the first timestep
+   IF (time%it .EQ. 0) THEN
+       phys%feedback_integral_error = 0.0
+       phys%feedback_previous_error = target_density - nli
+   END IF
+
+   ! Calculate the control signal
+   control_signal = phys%puff + phys%feedback_propotional_gain * (target_density - nli) + &
+                            phys%feedback_integral_gain * phys%feedback_integral_error + &
+                            phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+
+   ! Saturate the control signal
+   phys%puff = MAX(control_signal, 0.0)
+
+   ! Back-calculate the integral error to prevent windup
+   anti_windup_gain = 0.1  ! Tunable parameter
+   phys%feedback_integral_error = phys%feedback_integral_error + &
+                                                 anti_windup_gain * (phys%puff - control_signal)
+
+   ! Update the integral error only if the output is not saturated
+   IF (phys%puff > 0.0) THEN
+       phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * time%dt_ME
+   END IF
+
+   ! Update the previous error
+   phys%feedback_previous_error = target_density - nli
+END SUBROUTINE adjust_puff_feedback
+
+SUBROUTINE adjust_ITER_puff(nli)
+   REAL*8, INTENT(IN) :: nli
+   REAL*8 :: n_Gw, n_la, a = 2.
+
+   n_la = nli/(8.3659 - 4.04)*simpar%refval_density
+   n_Gw = phys%I_p/(pi*a**2)*10.*simpar%refval_density
+
+   IF (time%it .EQ. 0) THEN
+       phys%puff_exp(time%it+1) = MAX(10.*(phys%puff_slope*n_Gw - n_la), 0.)
+       phys%puff = phys%puff_exp(time%it+1)
+   ELSE
+       phys%puff_exp(time%it+1) = MAX(phys%puff_exp(time%it) + 50.*(2 - SIGN(1.,phys%puff_slope*n_Gw - n_la))*(phys%puff_slope*n_Gw - n_la), 0.)
+       phys%puff = phys%puff_exp(time%it+1)
+   END IF
+
+   IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE (6, '(" * Puff = ", E10.3, 27X, " *")')  phys%puff
+   END IF
+END SUBROUTINE adjust_ITER_puff
 
 END MODULE Magnetic_field
