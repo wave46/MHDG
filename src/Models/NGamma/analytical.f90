@@ -497,16 +497,19 @@ CONTAINS
   !*****************************************
   ! Analytical solution
   !****************************************
-  SUBROUTINE analytical_solution(x, y, u)
-    REAL*8, DIMENSION(:), INTENT(IN)        :: x, y
-    REAL*8, DIMENSION(:, :), INTENT(OUT)     :: u
-    REAL*8, DIMENSION(SIZE(u, 1), phys%npv)  :: up
-    REAL*8 :: a,b,xx,yy,tt,xmax,xmin,ymax,ymin,xm,ym
-    REAL*8 :: dsource(SIZE(x)),aux(SIZE(x)),xsource,ysource,smod
-    INTEGER:: np,i
-    REAL*8 :: r(SIZE(x)),rs
+  SUBROUTINE analytical_solution(iel,x, y, u)
+    integer, intent(IN)                      :: iel
+    real*8, dimension(:), intent(IN)         :: x, y
+    real*8, dimension(:, :), intent(OUT)     :: u
+    real*8, dimension(size(u, 1), phys%npv)  :: up
+    integer                                  :: i
+    real*8                                   :: a, r(size(x))
+    real*8                                   :: sigma,fluxel(refElPol%Nnodes2d)
+    real*8                                   :: xmax, xmin, ymax, ymin, xm, ym
 
-    np = SIZE(x)
+    up = 0.
+    a = 2*pi
+
     xmax = Mesh%xmax
     xmin = Mesh%xmin
     ymax = Mesh%ymax
@@ -514,76 +517,47 @@ CONTAINS
     xm = 0.5*(xmax + xmin)
     ym = 0.5*(ymax + ymin)
 
-    up = 0.
-    u = 0.
-    a = 2*pi
-
-
     SELECT CASE (switch%testcase)
     CASE (1)
        IF (switch%axisym) THEN
           WRITE (6, *) "This is NOT an axisymmetric test case!"
           STOP
        END IF
-       ! Circular field centered in [xc, yc], n = 2+sin(a*x)*sin(a*y),  u = cos(a*x)*cos(a*y)
-       ! Case 9 of the Matlab version: for convergence purpose
+       ! Cartesian case with div(b)~=0, n = 2+sin(wx*x )*sin(wy*y),  u = cos(wx*x)*cos(wy*y), Ei = 20+cos(wx*x)*sin(wy*y), Ee = 10-sin(wx*x)*cos(wy*y)
        up(:, 1) = 2 + SIN(a*x)*SIN(a*y)
        up(:, 2) = COS(a*x)*COS(a*y)
     CASE (2)
-       ! Axisimmetric case with div(b)~=0
+       ! Axisimmetric case with div(b)~=0, n = 2+sin(wx*x )*sin(wy*y),  u = cos(wx*x)*cos(wy*y), Ei = 20+cos(wx*x)*sin(wy*y), Ee = 10-sin(wx*x)*cos(wy*y)
        IF (.NOT. switch%axisym) THEN
           WRITE (6, *) "This is an axisymmetric test case!"
           STOP
        END IF
        up(:, 1) = 2 + SIN(a*x)*SIN(a*y)
        up(:, 2) = COS(a*x)*COS(a*y)
-    CASE (5)
-       IF (switch%axisym) THEN
-          WRITE (6,*) "This is NOT an axisymmetric test case!"
-          STOP
-       END IF
-       smod = 1.
-       rs = 0.04/simpar%refval_length
-       xsource = xm-0.5*(xmax-xm)
-       ysource = ym
-       dsource   = SQRT((x-xsource)**2+(y-ysource)**2)
-       aux = -dsource**2/rs**2
-       up(:,1) = 1e-3
-       DO i=1,np
-          IF (aux(i).GT.-30) THEN
-             up(i,1) =  up(i,1)+smod*EXP(aux(i))
-          ENDIF
-       END DO
-    CASE (6)
-       IF (.NOT.switch%axisym) THEN
-          WRITE (6,*) "This is an axisymmetric test case!"
-          STOP
-       END IF
-       !
-       smod = 1.
-       rs = 0.04/simpar%refval_length
-       xsource = xm-0.5*(xmax-xm)
-       ysource = ym
-       dsource   = SQRT((x-xsource)**2+(y-ysource)**2)
-       aux = -dsource**2/rs**2
-       up(:,1) = 1e-6
-       DO i=1,np
-          IF (aux(i).GT.-30) THEN
-             up(i,1) =  up(i,1)+smod*EXP(aux(i))
-          ENDIF
-       END DO
-
-    CASE (50:64)
-
-
+    CASE (5:6)
+       ! Cartesian case, square mesh, horizontal field
        up(:, 1) = 1.
-       up(:, 2) = 0.
+    CASE (50:59)
+       IF(size(fluxel,1) .eq. size(up,1)) THEN
+         ! Case in which analytical_solution is called to initialise the initial solution
+         fluxel = phys%magnetic_flux(Mesh%T(iel,:))
+         fluxel = (fluxel - phys%Flux2Dmin)/(phys%Flux2Dmax - phys%Flux2Dmin)
+         sigma = 0.4
+         up(:, 1) = 1.*EXP(-fluxel**2/(2*sigma**2))
+       ELSE
+         ! Case in which analytical_solution is called to apply boundary conditions
+         up(:, 1) = 1.
+       ENDIF
 #ifdef NEUTRAL
-       up(:,4)  = 0.
+       up(:,4)= 1.e-8
+#endif
+    CASE (60:64)
+       up(:, 1) = 1.
+#ifdef NEUTRAL
+       up(:,4)= 1.e-8
 #endif
     CASE (65)
        up(:, 1) = 1.
-       up(:, 2) = 0.
        r = SQRT((x*phys%lscale - geom%R0)**2 + (y*phys%lscale - 0.75)**2)
        DO i = 1, SIZE(x)
           IF (r(i) .LE. 0.05) THEN
@@ -591,21 +565,20 @@ CONTAINS
           END IF
        END DO
     CASE (80:89)
-       up(:, 1) = 1.
-       up(:, 2) = 0.
+       !Define an anylitical solution with a Gaussian shape respect to the normalized flux surface
+       fluxel = phys%magnetic_flux(Mesh%T(iel,:))
+       fluxel = (fluxel - phys%Flux2Dmin)/(phys%Flux2Dmax - phys%Flux2Dmin)
+       sigma = 0.3
+       up(:, 1) = 1.*EXP(-fluxel**2/(2*sigma**2))
 #ifdef NEUTRAL
-       up(:,4)  = 0.
+       up(:4) = 1.e-8
 #endif
-
     CASE DEFAULT
        WRITE (6, *) "Error! Test case not valid"
        STOP
     END SELECT
     ! Convert physical variables to conservative variables
     CALL phys2cons(up, u)
-
-
-
   END SUBROUTINE analytical_solution
 
   !*****************************************
