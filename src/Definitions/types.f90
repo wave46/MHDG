@@ -221,10 +221,6 @@ MODULE types
      REAL*8, POINTER           :: magnetic_psi(:) => NULL()! Magnetic flux normalized to separatrix magnetic flux [n of nodes]
      REAL*8                    :: Flux2Dmin ! Minimum of the magnetic flux, across the MPI partitions
      REAL*8                    :: Flux2Dmax ! Maximum of the magnetic flux, across the MPI partitions
-#ifdef KEQUATION
-     REAL*8, POINTER           :: omega(:) => NULL()! larmor frequency [n of nodes]
-     REAL*8, POINTER           :: q_cyl(:) => NULL()! q cylindrical [n of nodes]
-#endif
      REAL*8                    :: r_axis ! R-coordinate of magnetic axis
      REAL*8                    :: z_axis ! Z-coordinate of magnetic axis
 
@@ -305,12 +301,6 @@ MODULE types
      REAL*8, DIMENSION(9,9)    :: alpha_rec ! Coefficients for recompination coefficients spline from EIRENE, (te,ne) grid
      REAL*8, DIMENSION(9,9)    :: alpha_energy_iz ! Coefficients for radiation losses due to ionization spline from EIRENE, (te,ne) grid
      REAL*8, DIMENSION(9,9)    :: alpha_energy_rec ! Coefficients for radiation losses due to recombination spline from EIRENE, (te,ne) grid
-#endif
-#ifdef KEQUATION
-     ! Coefficients for the k equation
-     REAL*8                    :: diff_k_min ! Mininmum diffusion in the k equation
-     REAL*8                    :: diff_k_max ! Maximum diffusion in the k equation
-     REAL*8                    :: k_max ! Maximum k
 #endif
   END TYPE Physics_type
 
@@ -602,9 +592,6 @@ MODULE types
      REAL*8             :: refval_temperature
      REAL*8             :: refval_density
      REAL*8             :: refval_neutral
-#ifdef KEQUATION
-     REAL*8             :: refval_k
-#endif
      REAL*8             :: refval_speed
      REAL*8             :: refval_potential
      REAL*8             :: refval_vorticity
@@ -626,9 +613,6 @@ MODULE types
      CHARACTER(len =20) :: refval_temperature_dimensions
      CHARACTER(len =20) :: refval_density_dimensions
      CHARACTER(len =20) :: refval_neutral_dimensions
-#ifdef KEQUATION
-     CHARACTER(len =20) :: refval_k_dimensions
-#endif
      CHARACTER(len =20) :: refval_speed_dimensions
      CHARACTER(len =20) :: refval_potential_dimensions
      CHARACTER(len =20) :: refval_vorticity_dimensions
