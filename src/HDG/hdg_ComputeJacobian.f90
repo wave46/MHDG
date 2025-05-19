@@ -63,9 +63,6 @@ SUBROUTINE HDG_computeJacobian()
   REAL*8                :: qe(Mesh%Nnodesperelem,phys%Neq*2),qef(refElPol%Nfacenodes,phys%Neq*2)
   REAL*8,ALLOCATABLE    :: qres(:,:)
   REAL*8                :: Bel(refElPol%Nnodes2d,3),fluxel(refElPol%Nnodes2d),psiel(refElPol%Nnodes2d),Bfl(refElPol%Nfacenodes,3),psifl(refElPol%Nfacenodes)
-#ifdef KEQUATION
-  real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d),q_cylfl(refElPol%Nfacenodes)
-#endif
   REAL*8                :: Jtorel(refElPol%Nnodes2d)
   REAL*8                :: n,El_n,nn,El_nn,totaln
   REAL*8                :: diff_nn_Vol_el(refElPol%NGauss2D),v_nn_Vol_el(refElPol%NGauss2D,Mesh%Ndim),Xg_el(refElPol%NGauss2D,Mesh%Ndim)
@@ -1116,17 +1113,12 @@ CONTAINS
   !************************************
   !   Loop in elements in 2D
   !************************************
-#ifdef KEQUATION
-  !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,psifl,q_cylfl,isdir,Jtorel,El_n,El_nn) &
-  !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
-  !$OMP FIRSTPRIVATE(phys)
-#else
+
   !$OMP PARALLEL DEFAULT(SHARED) &
   !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,psiel,psifl,isdir,Jtorel,El_n,El_nn) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el) &
   !$OMP FIRSTPRIVATE(phys)
-#endif
+
   ALLOCATE(Xel(Mesh%Nnodesperelem,2))
   ALLOCATE(Xfl(refElPol%Nfacenodes,2))
 
@@ -1145,19 +1137,6 @@ CONTAINS
     ! Normalized magnetic flux of the nodes of the element: PSI el
     psiel = phys%magnetic_psi(Mesh%T(iel,:))
 
-#ifdef KEQUATION
-    !omega and q_cyl on nodes of the element
-
-     IF (switch%testcase == 60) THEN
-      q_cylel = geom%q
-      ! to finish this
-        omegael = SQRT(Bel(:,1)**2+Bel(:,2)**2+Bel(:,3)**2)*simpar%refval_charge/simpar%refval_mass*simpar%refval_time
-     ELSE
-      q_cylel = phys%q_cyl(Mesh%T(iel,:))
-      omegael = phys%omega(Mesh%T(iel,:))
-     ENDIF
-#endif
-
     ! Ohmic heating (toroidal current)
     IF (switch%ohmicsrc) THEN
       Jtorel = phys%Jtor(Mesh%T(iel,:))
@@ -1173,11 +1152,9 @@ CONTAINS
     u0e = u0res(inde,:,:)
 
     ! Compute the matrices for the element
-#ifndef KEQUATION
+
     CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
-#else
-    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
-#endif
+
      IF (save_tau) THEN
        inddiff_nn_Vol = (iel - 1)*refElPol%NGauss2D+(/(i,i=1,refElPol%NGauss2D)/)
        phys%diff_nn_Vol(inddiff_nn_Vol) = diff_nn_Vol_el
@@ -1225,7 +1202,7 @@ CONTAINS
       inde = (iel - 1)*Npel + (/(i,i=1,Npel)/)
       uef = ures(inde(refElPol%face_nodes(ifa,:)),:)
       qef = qres(inde(refElPol%face_nodes(ifa,:)),:)
-#ifndef KEQUATION
+
         IF (iface.LE.Mesh%Nintfaces) THEN
         CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
         ELSE
@@ -1236,24 +1213,6 @@ CONTAINS
           CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
         endif
       endif
-#else
-      if (switch%testcase == 60) then
-        q_cylfl(:) = geom%q
-      else
-        q_cylfl(:) = phys%q_cyl(Mesh%T(iel,refElPol%face_nodes(ifa,:)))
-      endif
-
-      if (iface.le.Mesh%Nintfaces) then
-        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-      else
-        if (Mesh%periodic_faces(iface-Mesh%Nintfaces).eq.0) then
-          CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-        else
-          ! periodic face
-          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-        endif
-      endif
-#endif
 
       ! Flip faces
         IF (Mesh%flipface(iel,ifa)) THEN
@@ -1325,52 +1284,43 @@ CONTAINS
   !***************************************************
   ! Volume computation in 2D
   !***************************************************
-#ifndef KEQUATION
   SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
-#else
-  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
-#endif
-      INTEGER,INTENT(IN)            :: iel
-      REAL*8,INTENT(IN)             :: Xel(:,:)
-      REAL*8,INTENT(IN)             :: Bel(:,:),fluxel(:),psiel(:),Jtorel(:)
-#ifdef KEQUATION
-      REAL*8,INTENT(IN)             :: omegael(:),q_cylel(:)
-#endif
-      REAL*8,INTENT(IN)             :: qe(:,:)
-      REAL*8,INTENT(IN)             :: ue(:,:),u0e(:,:,:)
-      REAL*8,INTENT(OUT)            :: El_n,El_nn
-      REAL*8,INTENT(OUT)            :: diff_nn_Vol_el(Ng2D),v_nn_Vol_el(Ng2D,ndim),Xg_el(Ng2D,ndim)
-      INTEGER*4                     :: g,NGauss,i
-      REAL*8                        :: dvolu
-      REAL*8                        :: xy(Ng2d,ndim),ueg(Ng2d,neq),u0eg(Ng2d,neq,time%tis)
-      REAL*8                        :: force(Ng2d,Neq)
-      REAL*8                        :: qeg(Ng2d,neq*Ndim)
-      REAL*8                        :: J11(Ng2d),J12(Ng2d)
-      REAL*8                        :: J21(Ng2d),J22(Ng2d)
-      REAL*8                        :: detJ(Ng2d)
-      REAL*8                        :: iJ11(Ng2d),iJ12(Ng2d)
-      REAL*8                        :: iJ21(Ng2d),iJ22(Ng2d)
-      REAL*8                        :: fluxg(Ng2d),max_flux2D,min_flux2D, Psig(Ng2d)
-      INTEGER*4,DIMENSION(Npel)     :: ind_ass,ind_asq
-      REAL*8                        :: ktis(time%tis + 1)
-      REAL*8,DIMENSION(Npel)        :: Ni,Nxg,Nyg,NNbb,Nx_ax
-      REAL*8,DIMENSION(Npel,Npel)   :: NxNi,NyNi,NNxy,NNi
-      REAL*8                        :: NxyzNi(Npel,Npel,3),Nxyzg(Npel,3)
-      REAL*8                        :: upg(Ng2d,phys%npv)
-      REAL*8                        :: Bmod_nod(Npel),b_nod(Npel,3),b(Ng2d,3),Bmod(Ng2d),divbg,driftg(3),gradbmod(3)
-#ifdef KEQUATION
-      REAL*8                        :: b_tor_nod(Npel),b_tor(Ng2d),gradbtor(3)
-      REAL*8                        :: omega(Ng2d),q_cyl(Ng2d)
-#endif
-    real*8                        :: bg(3), Jtor(Ng2d)
-    real*8                        :: diff_iso_vol(Neq,Neq,Ng2d),diff_ani_vol(Neq,Neq,Ng2d)
-    real*8,allocatable            :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
-    real*8                        :: auxdiffsc(Ng2d)
-    real*8                        :: Pi,sigma,x0,A,r
-    real*8                        :: th_n = 1.e-14
-    real*8                        :: Vnng(Ndim)
 
-      IF (save_tau) THEN
+    INTEGER,INTENT(IN)          :: iel
+    REAL*8,INTENT(IN)           :: Xel(:,:)
+    REAL*8,INTENT(IN)           :: Bel(:,:),fluxel(:),psiel(:),Jtorel(:)
+    REAL*8,INTENT(IN)           :: qe(:,:)
+    REAL*8,INTENT(IN)           :: ue(:,:),u0e(:,:,:)
+    REAL*8,INTENT(OUT)          :: El_n,El_nn
+    REAL*8,INTENT(OUT)          :: diff_nn_Vol_el(Ng2D),v_nn_Vol_el(Ng2D,ndim),Xg_el(Ng2D,ndim)
+    INTEGER*4                   :: g,NGauss,i
+    REAL*8                      :: dvolu
+    REAL*8                      :: xy(Ng2d,ndim),ueg(Ng2d,neq),u0eg(Ng2d,neq,time%tis)
+    REAL*8                      :: force(Ng2d,Neq)
+    REAL*8                      :: qeg(Ng2d,neq*Ndim)
+    REAL*8                      :: J11(Ng2d),J12(Ng2d)
+    REAL*8                      :: J21(Ng2d),J22(Ng2d)
+    REAL*8                      :: detJ(Ng2d)
+    REAL*8                      :: iJ11(Ng2d),iJ12(Ng2d)
+    REAL*8                      :: iJ21(Ng2d),iJ22(Ng2d)
+    REAL*8                      :: fluxg(Ng2d),max_flux2D,min_flux2D, Psig(Ng2d)
+    INTEGER*4,DIMENSION(Npel)   :: ind_ass,ind_asq
+    REAL*8                      :: ktis(time%tis + 1)
+    REAL*8,DIMENSION(Npel)      :: Ni,Nxg,Nyg,NNbb,Nx_ax
+    REAL*8,DIMENSION(Npel,Npel) :: NxNi,NyNi,NNxy,NNi
+    REAL*8                      :: NxyzNi(Npel,Npel,3),Nxyzg(Npel,3)
+    REAL*8                      :: upg(Ng2d,phys%npv)
+    REAL*8                      :: Bmod_nod(Npel),b_nod(Npel,3),b(Ng2d,3),Bmod(Ng2d),divbg,driftg(3),gradbmod(3)
+    REAL*8                      :: bg(3), Jtor(Ng2d)
+    REAL*8                      :: diff_iso_vol(Neq,Neq,Ng2d),diff_ani_vol(Neq,Neq,Ng2d)
+    REAL*8,ALLOCATABLE          :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
+    REAL*8                      :: auxdiffsc(Ng2d)
+    REAL*8                      :: Pi,sigma,x0,A,r
+    REAL*8                      :: th_n = 1.e-14
+    REAL*8                      :: Vnng(Ndim)
+
+
+    IF (save_tau) THEN
        Xg_el = 0.
        diff_nn_Vol_el = 0.
        v_nn_Vol_el = 0.
@@ -1402,23 +1352,10 @@ CONTAINS
     b_nod(:,1) = Bel(:,1)/Bmod_nod
     b_nod(:,2) = Bel(:,2)/Bmod_nod
     b_nod(:,3) = Bel(:,3)/Bmod_nod
-#ifdef KEQUATION
-    ! Toroidal magnetic field absolute value at element nodes
-      b_tor_nod = ABS(Bel(:,3))
-#endif
 
     ! Magnetic field norm and direction at Gauss points
       Bmod = MATMUL(refElPol%N2D,Bmod_nod)
       b = MATMUL(refElPol%N2D,b_nod)
-
-#ifdef KEQUATION
-    ! Toroidal magnetic field absolute value at Gauss points
-      b_tor = MATMUL(refElPol%N2D,b_tor_nod)
-
-    ! omega and q_cyl at Gauss points
-      omega = MATMUL(refElPol%N2D,omegael)
-      q_cyl = MATMUL(refElPol%N2D,q_cylel)
-#endif
 
     ! Normalized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N2D,psiel)
@@ -1435,12 +1372,7 @@ CONTAINS
       qeg = MATMUL(refElPol%N2D,qe)
 
     ! Compute diffusion at Gauss points
-#ifndef KEQUATION
     CALL setLocalDiff(xy,ueg,diff_iso_vol,diff_ani_vol)
-#else
-    CALL setLocalDiff(xy,ueg,diff_iso_vol,diff_ani_vol,q_cyl)
-#endif
-
 
     if (save_tau) then
        diff_nn_Vol_el = diff_iso_vol(5,5,:)
@@ -1666,21 +1598,10 @@ CONTAINS
          CALL cross_product(bg,gradbmod,driftg)
       driftg = phys%dfcoef*driftg/Bmod(g)
 
-#ifdef KEQUATION
-      ! Gradient of toroidal magnetic field on Gauss point
-      gradbtor = 0.
-         gradbtor(1) = dot_PRODUCT(Nxg,b_tor_nod)
-         gradbtor(2) = dot_PRODUCT(Nyg,b_tor_nod)
-#endif
-#ifndef KEQUATION
+
       CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,force(g,:),&
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
         &ueg(g,:),qeg(g,:),u0eg(g,:,:),Jtor(g))
-#else
-      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,b_tor(g),gradbtor,omega(g),q_cyl(g),force(g,:),&
-        &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
-        &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g))
-#endif
 
          IF (save_tau) THEN
          v_nn_Vol_el(g,:) = Vnng
@@ -1695,19 +1616,13 @@ CONTAINS
   !***************************************************
   ! Interior faces computation in 2D
   !***************************************************
-#ifndef KEQUATION
   SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-#else
-  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-#endif
+
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
     real*8,intent(IN)         :: Bfl(:,:), psifl(:)
     real*8,intent(IN)         :: qef(:,:)
     real*8,intent(IN)         :: uef(:,:),uf(:,:)
-#ifdef KEQUATION
-    real*8,intent(IN)             :: q_cylfl(:)
-#endif
     real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
     integer*4                 :: g,NGauss,i,indsave(Ng1d)
     real*8                    :: dline,xyDerNorm_g
@@ -1724,9 +1639,7 @@ CONTAINS
     real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
-#ifdef KEQUATION
-    real*8                    :: q_cyl(Ng1d)
-#endif
+
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
 
@@ -1765,11 +1678,6 @@ CONTAINS
     Bmod = matmul(refElPol%N1D,Bmod_nod)
     b = matmul(refElPol%N1D,b_nod)
 
-#ifdef KEQUATION
-    ! q_cyl at Gauss points
-    q_cyl = matmul(refElPol%N1D,q_cylfl)
-#endif
-
     ! Normalaized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N1d,psifl)
 
@@ -1779,11 +1687,8 @@ CONTAINS
       qfg = MATMUL(refElPol%N1D,qef)
 
     ! Compute diffusion at faces Gauss points
-#ifndef KEQUATION
     CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac)
-#else
-    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac,q_cyl)
-#endif
+
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(5,5,:)
@@ -1830,11 +1735,7 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
           CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau)
-#else
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),q_cyl(g),tau)
-#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),0.,iel,tau)
         ENDIF
@@ -1862,20 +1763,14 @@ CONTAINS
   !***************************************************
   ! Exterior faces computation in 2D
   !***************************************************
-#ifndef KEQUATION
+
   SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-#else
-  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-#endif
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
     real*8,intent(IN)         :: Bfl(:,:), psifl(:)
     logical,intent(IN)        :: isdir
     real*8,intent(IN)         :: qef(:,:)
     real*8,intent(INOUT)      :: uef(:,:),uf(:,:)
-#ifdef KEQUATION
-    real*8,intent(IN)             :: q_cylfl(:)
-#endif
     real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
     integer*4                 :: g,NGauss,i,indsave(Ng1d)
     real*8                    :: dline,xyDerNorm_g
@@ -1894,9 +1789,6 @@ CONTAINS
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: Vnng(Ndim)
-#ifdef KEQUATION
-    real*8                    :: q_cyl(Ng1d)
-#endif
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
 
@@ -1922,10 +1814,6 @@ CONTAINS
     Bmod = MATMUL(refElPol%N1D,Bmod_nod)
     b = MATMUL(refElPol%N1D,b_nod)
 
-#ifdef KEQUATION
-    ! q_cyl at Gauss points
-    q_cyl = matmul(refElPol%N1D,q_cylfl)
-#endif
     ! Normalaized magnetic flux at Gauss points: PSI
     Psig = MATMUL(refElPol%N1D,psifl)
 
@@ -1950,11 +1838,8 @@ CONTAINS
       qfg = MATMUL(refElPol%N1D,qef)
 
     ! Compute diffusion at faces Gauss points
-#ifndef KEQUATION
     CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac)
-#else
-    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac,q_cyl)
-#endif
+
     if (save_tau) then
        indsave = (ifa -1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(5,5,:)
@@ -2003,11 +1888,7 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
           CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau)
-#else
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),q_cyl(g),tau)
-#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),isext,iel,tau)
         ENDIF
@@ -2146,26 +2027,19 @@ CONTAINS
   !         ASSEMBLY VOLUME CONTRIBUTION
   !
   !********************************************************************
-#ifndef KEQUATION
+
   SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,f,&
       &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,Jtor)
-#else
-  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,btor,gradBtor,omega,q_cyl,f,&
-    &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor)
-#endif
-        REAL*8,INTENT(inout)      :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
-        REAL*8,INTENT(IN)         :: b3(:),psi,divb,drift(:),f(:),ktis(:)
-#ifdef KEQUATION
-    real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl,xy(:)
-#endif
+        REAL*8,INTENT(inout)  :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
+        REAL*8,INTENT(IN)     :: b3(:),psi,divb,drift(:),f(:),ktis(:)
     real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
     real*8,intent(IN)         :: Ni(:),NNi(:,:),Nxyzg(:,:),NNxy(:,:),NxyzNi(:,:,:),NNbb(:)
     real*8,intent(IN)         :: upe(:),ue(:),Jtor
     real*8,intent(INOUT)      :: u0e(:,:)
     real*8,intent(IN)         :: qe(:)
 #ifdef VORTICITY
-    real*8                     :: kcoeff,exb(3)
-    integer*4                  :: alpha,beta,ii
+    real*8                    :: kcoeff,exb(3)
+    integer*4                 :: alpha,beta,ii
 #endif
     integer*4                 :: i,j,k,iord,z
     real*8,dimension(neq,neq) :: A
@@ -2188,30 +2062,22 @@ CONTAINS
     real*8                    :: auxvec(Neq)
 #endif
 #ifdef NEUTRAL
-#ifdef KEQUATION
-        REAL*8                    :: gamma_I,ce, dissip,r
-        REAL*8                    :: ddissip_du(Neq)
-#endif
     real*8                    :: niz,nrec,fGammacx,fGammarec
     real*8                    :: dniz_dU(Neq),dnrec_dU(Neq),dfGammacx_dU(Neq),dfGammarec_dU(Neq)
 #ifdef TEMPERATURE
-        REAL*8                    :: sigmaviz,sigmavrec,sigmavcx,Tloss,Tlossrec,fEiiz,fEirec,fEicx
+        REAL*8                :: sigmaviz,sigmavrec,sigmavcx,Tloss,Tlossrec,fEiiz,fEirec,fEicx
     !amjuel radiation losses
     real*8                    :: sigmavEiz,sigmavErec
     real*8                    :: dsigmavEiz_dU(Neq),dsigmavErec_dU(Neq)
-        REAL*8                    :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq),dTloss_dU(Neq),dTlossrec_dU(Neq)
-        REAL*8                    :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
+        REAL*8                :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq),dTloss_dU(Neq),dTlossrec_dU(Neq)
+        REAL*8                :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
 #ifdef DNNLINEARIZED
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
 #endif
 #endif
     real*8                    :: Sn(Neq,Neq),Sn0(Neq)
 #endif
-
-
-
-
-        REAL*8 :: kmult(SIZE(Auq,1),SIZE(Auq,2))
+        REAL*8                :: kmult(SIZE(Auq,1),SIZE(Auq,2))
 
 
 
@@ -2298,37 +2164,6 @@ CONTAINS
         Zet = MATMUL(Qpr,dW_dU)       ! Ndim x Neq
 
 #endif
-#ifdef KEQUATION
-        IF ((switch%testcase .GE. 50) .AND.(switch%testcase .LE. 59)) THEN
-      r = xy(1)
-        ELSEIF ((switch%testcase .GE. 60) .AND.(switch%testcase .LE. 69)) THEN
-      r = xy(1) + geom%R0/simpar%refval_length
-    endif
-    call compute_gamma_I(ue,qq,btor,gradBtor,r,gamma_I)
-    call compute_ce(ue,qq,btor,gradBtor,r,omega,q_cyl,ce)
-    call compute_dissip(ue,dissip)
-    call compute_ddissip_du(ue,ddissip_du)
-    IF ((ue(6)<1.e-20) .or. (ue(1)<1.e-20) .or.(ue(3)<1.e-20) .or. (ue(4)<1.e-20)) THEN
-      dissip =  abs(gamma_I)*dissip/phys%k_max
-      ddissip_du = abs(gamma_I)
-      gamma_I = 0.
-        ELSEIF (ue(6)>phys%k_max) THEN
-           dissip =  -1.*ABS(gamma_I)*dissip/phys%k_max
-           ddissip_du = -1.*ABS(gamma_I)
-      gamma_I = 0.
-        ELSE
-           IF (gamma_I>0) THEN
-        dissip = ce*dissip
-        ddissip_du = ce*ddissip_du
-      else
-        dissip = abs(gamma_I)*dissip/phys%k_max
-        ddissip_du = abs(gamma_I)
-        gamma_I = 0.
-      endif
-    endif
-#endif
-
-
 
 #ifdef NEUTRAL
     !Neutral Source Terms needed in the plasma and neutral density equations
@@ -2534,16 +2369,6 @@ CONTAINS
             DO k = 1, Ndim
               rhs(:,i) = rhs(:,i)+Dnn_dU_U*Qpr(k,i)*Nxyzg(:,k)
                  ENDDO
-#endif
-#ifdef KEQUATION
-        ELSEIF (i==6) THEN
-          DO j=1,6
-            z = i+(j-1)*Neq
-                    IF (j==6) THEN
-              Auu(:,:,z) = Auu(:,:, z) - (gamma_I-ddissip_du(j))*NNi
-            ENDIF
-          END DO
-          rhs(:,i) = rhs(:,i) + dissip*Ni
 #endif
 		END IF
 #endif
@@ -3074,8 +2899,6 @@ CONTAINS
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
       real*8,intent(IN)         :: uf(:)
       real*8,intent(IN)         :: qf(:)
-#ifdef KEQUATION
-#endif
       real*8,optional,intent(INOUT) :: tau(:,:)
 #ifdef VORTICITY
       integer*4                 :: alpha,beta,ii
