@@ -278,7 +278,7 @@ CONTAINS
     ! Allocate atomic data
     phys%E = (/0, 1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 250, 270, 300, 350, 400, 500, 600, 700, 1000/)
     phys%theta = (/0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90/)
-    
+
     phys%RN_DW(1,:) = (/0.7987, 0.8017, 0.8047, 0.8078, 0.8169, 0.8260, 0.8351, 0.8482, 0.8612, 0.8743, 0.8928,&
                         0.9114, 0.9261, 0.9409, 0.9514, 0.9620, 0.9682, 0.9716, 0.9751/)
     phys%RN_DW(2,:) = (/0.7949, 0.7980, 0.8010, 0.8040, 0.8131, 0.8223, 0.8314, 0.8446, 0.8578, 0.8710, 0.8898,&
@@ -295,7 +295,7 @@ CONTAINS
                         0.8045, 0.8343, 0.8640, 0.9017, 0.9395, 0.9738, 0.9932, 1.0000 /)
     phys%RN_DW(8,:) = (/0.6730, 0.6755, 0.6781, 0.6806, 0.6894, 0.6983, 0.7072, 0.7220, 0.7369, 0.7518, 0.7740,&
                         0.7962, 0.8260, 0.8558, 0.8945, 0.9333, 0.9711, 0.9932, 1.0000 /)
-    phys%RN_DW(9,:) = (/0.6671, 0.6694, 0.6717, 0.6740, 0.6828, 0.6917, 0.7005, 0.7156, 0.7306, 0.7456, 0.7667,& 
+    phys%RN_DW(9,:) = (/0.6671, 0.6694, 0.6717, 0.6740, 0.6828, 0.6917, 0.7005, 0.7156, 0.7306, 0.7456, 0.7667,&
                         0.7879, 0.8178, 0.8476, 0.8874, 0.9271, 0.9683, 0.9933, 1.0000 /)
     phys%RN_DW(10,:) = (/0.6611, 0.6632, 0.6653, 0.6674, 0.6762, 0.6851, 0.6939, 0.7091, 0.7242, 0.7394, 0.7595,&
                          0.7795, 0.8095, 0.8395, 0.8802, 0.9209, 0.9655, 0.9933, 1.0000 /)
@@ -824,13 +824,11 @@ CONTAINS
     DO i= 1,SIZE(c_s, 1)
        CALL compute_cs(u(i,:), c_s(i))
       ! for all equations
-#ifndef DKLINEARIZED
       if (c_s(i)<=1.e-20) then
         D_k(i) = phys%diff_k_min
         !WRITE(6,*) 'NEGATIVE C_S ', c_s(i)
         !stop
       else
-#endif
         if ((switch%testcase .ge. 50) .and.(switch%testcase .le. 59)) then
           r = xy(i,1)
         elseif ((switch%testcase .ge. 60) .and.(switch%testcase .le. 69)) then
@@ -843,16 +841,8 @@ CONTAINS
           D_k(i) =  D_k(i)*q_cyl(i)*2.*PI
         endif
 
-#ifndef DKLINEARIZED
-
         D_k(i) = max(phys%diff_k_min,min(phys%diff_k_max,D_k(i) ))
       endif
-#else
-        !for circular case q_cyl assume constant
-
-          CALL double_softplus(D_k(i),phys%diff_k_min,phys%diff_k_max)
-#endif
-
 
     enddo
     d_iso(6,6,:) = D_k+phys%diff_n
@@ -1268,17 +1258,17 @@ CONTAINS
     real*8, intent(OUT)  :: RN
     REAL*8               :: E_clipped, theta_clipped
     integer              :: ip, jp
-  
+
     RN = 1.
-  
+
     ip = size(phys%E)
     jp = size(phys%theta)
 
     E_clipped = max(1e-20,min(1e3-1e-20,E))
     theta_clipped = max(1e-20,min(90-1e-20,theta))
-  
+
     RN = interpolate(ip, phys%E, jp, phys%theta, phys%RN_DW, E_clipped, theta_clipped, 1e-12)
-  
+
   END SUBROUTINE compute_RN
 
   SUBROUTINE compute_niz(U,niz)
@@ -1583,7 +1573,7 @@ CONTAINS
     ! this routine calculate log (eirene_rate) for given te, ne in log log space
     REAL*8, INTENT(IN) :: te,ne,alpha(:,:)
     REAL*8, INTENT(OUT):: rate
-    REAL*8             :: logte, logne  
+    REAL*8             :: logte, logne
     INTEGER            :: i,j
     ! In EIRENE the density is scaled to 1.e14
     rate = 0.
@@ -1600,7 +1590,7 @@ CONTAINS
     ! this routines calculate derivative dlog (eirene_rate)/dlog(te) for given te, ne in log log space
     REAL*8, INTENT(IN) :: te,ne,alpha(:,:)
     REAL*8, INTENT(OUT):: rate
-    REAL*8             :: logte, logne 
+    REAL*8             :: logte, logne
     INTEGER            :: i,j
     ! In EIRENE the density is scaled to 1.e14
     rate = 0.
@@ -1861,7 +1851,7 @@ CONTAINS
     p4 = 0.4518
     p5 = -32.59
     E0 = T0*2./(3.*phys%Mref)*U4/U1
-    
+
     !Threshold on Te >= 0.2 eV
     IF (E0 .LE. 0.05) E0 = 0.05
     logE0 = LOG(E0)
@@ -2319,36 +2309,6 @@ CONTAINS
 
 #ifdef NEUTRAL
 #ifdef KEQUATION
-#ifdef DKLINEARIZED
-SUBROUTINE compute_ddk_du(U,xy,q_cyl,ddk_du)
-    ! Routine that computes linearization of turbulent diffusion
-    real*8, intent(IN) :: U(:), xy(:),q_cyl
-    real*8, intent(OUT) :: ddk_du(:)
-    real*8              :: cs,dk
-    real*8              :: dcs_du(size(U,1))
-    !softplus stuff
-    real*8              :: double_soft_deriv
-    REAL*8, PARAMETER :: tol = 1.e-20
-
-    ddk_du(:) = 0.
-    !modification softplus dk
-    !call compute_cs(U,cs)
-    !!if (cs>tol) then
-    !  dk = 2.*PI*q_cyl*xy(1)*U(6)/cs
-    !  call double_softplus_deriv(dk,phys%diff_k_min,phys%diff_k_max,double_soft_deriv)
-    !  !if ((dk>phys%diff_k_min) .and.(dk<phys%diff_k_max)) then
-    !    call compute_dcs_du(U,dcs_du)
-    !    ddk_du(:) = -1*dk/cs*dcs_du(:)
-    !    ddk_du(6) = ddk_du(6) + dk/U(6)
-    !    ddk_du(:) = ddk_du(:)*double_soft_deriv
-    !  !endif
-    !
-    !!endif
-
-
-
-ENDSUBROUTINE compute_ddk_du
-#endif
 SUBROUTINE compute_gamma_I(U,Q, Btor, gradBtor, R, gamma_I)
   ! growth rate for turbulent energy
     REAL*8, INTENT(IN) :: U(:), Q(:,:), gradBtor(:), Btor, R
