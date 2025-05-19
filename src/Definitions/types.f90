@@ -357,7 +357,7 @@ MODULE types
      LOGICAL :: ripple   ! To activate ripple
      LOGICAL :: ohmicsrc ! Set to TRUE to consider ohmic source of energy
      LOGICAL :: ME       ! Set to TRUE to allow magnetic equilibrium evolution in time
-     LOGICAL :: target_density ! Set to TRUE to adjust puff to match a target density in ME simulations
+     INTEGER :: target_variable ! in moving equilibrium 0 -- puff from experimental file, 1 -- puff adjusted to target density, 2 -- recycling adjusted to target density
      LOGICAL :: driftdia ! Set to TRUE to consider diamagnetic drift
      LOGICAL :: driftexb ! Set to TRUE to consider ExB drift
      LOGICAL :: steady

@@ -1296,15 +1296,15 @@ SUBROUTINE SetParticleSource()
 
    ! Allocate storing space in phys (puff for WEST, 403 entries)
    IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
-      IF (switch%target_density .EQ. 0) THEN
+      IF (switch%target_variable .EQ. 0) THEN
          CALL load_puff_from_file(fname, puff_len)
-      ELSEIF (switch%target_density .EQ. 1) THEN
+      ELSEIF (switch%target_variable .EQ. 1) THEN
          CALL adjust_puff_to_target_density(fname_density, density_len)
-      !ELSEIF (switch%target_density .EQ. 2) THEN
-      !   !We first load the puff from file
-      !   CALL load_puff_from_file(fname, puff_len)
-      !   !Then we adjust wall recycling
-      !   CALL adjust_recycling_to_target_density(fname_density, density_len)
+      ELSEIF (switch%target_variable .EQ. 2) THEN
+         !We first load the puff from file
+         CALL load_puff_from_file(fname, puff_len)
+         !Then we adjust wall recycling
+         CALL adjust_recycling_to_target_density(fname_density, density_len)
       END IF
    END IF
 
@@ -1341,6 +1341,9 @@ SUBROUTINE load_puff_from_file(fname, puff_len)
    puff_time_idx = binarySearch(puff_len, puff_time, time%t_ME, 1e-12)
    phys%puff = phys%puff_exp(puff_time_idx)*(puff_time(puff_time_idx+1)-time%t_ME)/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx)) + &
                phys%puff_exp(puff_time_idx+1)*(time%t_ME-puff_time(puff_time_idx))/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx))
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'puff =  ', phys%puff
+   END IF
    DEALLOCATE(puff_time)
    NULLIFY(puff_time)
 END SUBROUTINE load_puff_from_file
@@ -1390,6 +1393,50 @@ SUBROUTINE adjust_puff_to_target_density(fname_density, density_len)
    END IF
 END SUBROUTINE adjust_puff_to_target_density
 
+SUBROUTINE adjust_recycling_to_target_density(fname_density, density_len)
+   CHARACTER(LEN=1000), INTENT(IN) :: fname_density
+   INTEGER, INTENT(IN) :: density_len
+   REAL*8 :: x_lower, x_upper, y_lower, y_upper
+   INTEGER(HID_T) :: file_id
+   REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
+   INTEGER :: target_density_idx
+   REAL*8 :: target_density, nli
+   INTEGER :: ierr
+
+   ALLOCATE(target_density_time(density_len))
+   ALLOCATE(target_density_exp(density_len))
+
+   ! Read file
+   CALL HDF5_open(fname_density, file_id, ierr)
+   CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
+   CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
+   CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
+   CALL HDF5_real_reading(file_id, x_upper, 'x_upper')
+   CALL HDF5_real_reading(file_id, y_lower, 'y_lower')
+   CALL HDF5_real_reading(file_id, y_upper, 'y_upper')
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'Target density loaded from file: ', TRIM(ADJUSTL(fname_density))
+   END IF
+   CALL HDF5_close(file_id)
+
+   ! Linear interpolation of target density
+   target_density_idx = binarySearch(density_len, target_density_time, time%t_ME, 1e-12)
+   target_density = target_density_exp(target_density_idx)*(target_density_time(target_density_idx+1)-time%t_ME)/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx)) + &
+                    target_density_exp(target_density_idx+1)*(time%t_ME-target_density_time(target_density_idx))/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))
+   target_density = target_density / 2.
+
+   ! Compute line integrated density
+   CALL compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
+   ! Adjust recycling using feedback
+   CALL adjust_recycling_feedback(target_density, nli)
+
+   DEALLOCATE(target_density_time, target_density_exp)
+   NULLIFY(target_density_time, target_density_exp)
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'recycling =  ', phys%Re
+   END IF
+
+END SUBROUTINE adjust_recycling_to_target_density
 
 SUBROUTINE compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
    REAL*8, INTENT(IN) :: x_lower, x_upper, y_lower, y_upper
@@ -1419,6 +1466,7 @@ SUBROUTINE compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, n
    CALL MPI_ALLREDUCE(MPI_IN_PLACE, nli, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
    nli = nli*simpar%refval_density
+   phys%n_li = nli
 END SUBROUTINE compute_line_integrated_density
 
 SUBROUTINE adjust_puff_feedback(target_density, nli)
@@ -1440,7 +1488,11 @@ SUBROUTINE adjust_puff_feedback(target_density, nli)
    control_signal = phys%puff + phys%feedback_propotional_gain * (target_density - nli) + &
                             phys%feedback_integral_gain * phys%feedback_integral_error + &
                             phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
-
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6,*) 'Proportional impact: ', phys%feedback_propotional_gain * (target_density - nli)
+      WRITE(6,*) 'Integral impact: ', phys%feedback_integral_gain * phys%feedback_integral_error
+      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+   END IF
    ! Saturate the control signal
    phys%puff = MAX(control_signal, 0.0)
 
@@ -1457,6 +1509,48 @@ SUBROUTINE adjust_puff_feedback(target_density, nli)
    ! Update the previous error
    phys%feedback_previous_error = target_density - nli
 END SUBROUTINE adjust_puff_feedback
+
+SUBROUTINE adjust_recycling_feedback(target_density, nli)
+   REAL*8, INTENT(IN) :: target_density, nli
+   REAL*8 :: control_signal, anti_windup_gain
+
+   IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE(6,*) 'n_li = ', nli, ' [m^-2]'
+       WRITE(6,*) 'n_litarget = ', target_density, '[m^-2]'
+   END IF   
+
+   ! Initialize integral error and previous error on the first timestep
+   IF (time%it .EQ. 0) THEN
+       phys%feedback_integral_error = 0.0
+       phys%feedback_previous_error = target_density - nli
+   END IF
+   ! Print the impact of each part of the feedback on the control signal
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6,*) 'Proportional impact: ', phys%feedback_propotional_gain * (target_density - nli)
+      WRITE(6,*) 'Integral impact: ', phys%feedback_integral_gain * phys%feedback_integral_error
+      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+   END IF
+   ! Calculate the control signal
+   control_signal = phys%Re + phys%feedback_propotional_gain * (target_density - nli) + &
+                            phys%feedback_integral_gain * phys%feedback_integral_error + &
+                            phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+   
+   ! Saturate the control signal
+   phys%Re = MAX(control_signal, 0.0)
+
+   ! Back-calculate the integral error to prevent windup
+   anti_windup_gain = 0.1  ! Tunable parameter
+   phys%feedback_integral_error = phys%feedback_integral_error + &
+                                                 anti_windup_gain * (phys%Re - control_signal)
+
+   ! Update the integral error only if the output is not saturated
+   IF (phys%Re > 0.0) THEN
+       phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * time%dt_ME
+   END IF
+
+   ! Update the previous error
+   phys%feedback_previous_error = target_density - nli
+END SUBROUTINE adjust_recycling_feedback
 
 SUBROUTINE adjust_ITER_puff(nli)
    REAL*8, INTENT(IN) :: nli

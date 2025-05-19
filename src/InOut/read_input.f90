@@ -61,10 +61,10 @@ SUBROUTINE READ_input()
   LOGICAL               :: ME
 
   ! target density
-  LOGICAL               :: target_density
+  INTEGER               :: target_variable
 
   ! Defining the variables to READ from the file
-  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, target_density, RMP, Ripple, psdtime, diffred, diffmin, &
+  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb
        NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension
@@ -117,7 +117,7 @@ SUBROUTINE READ_input()
   switch%testcase         = testcase
   switch%ohmicsrc         = OhmicSrc
   switch%ME               = ME
-  switch%target_density   = target_density
+  switch%target_variable   = target_variable
   switch%RMP              = RMP
   switch%Ripple           = Ripple
   switch%psdtime          = psdtime
@@ -434,7 +434,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power
      IF (switch%ME) THEN
         PRINT *, '             - puff increment slope:                               ', phys%puff_slope
-          IF (switch%target_density) THEN
+          IF (switch%target_variable /= 0) THEN
              PRINT *, '             - feedback_propotional_gain:                               ', phys%feedback_propotional_gain
              PRINT *, '             - feedback_integral_gain:                                  ', phys%feedback_integral_gain
              PRINT *, '             - feedback_derivative_gain:                                 ', phys%feedback_derivative_gain
