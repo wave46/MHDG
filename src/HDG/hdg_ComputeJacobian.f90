@@ -2071,9 +2071,7 @@ CONTAINS
     real*8                    :: dsigmavEiz_dU(Neq),dsigmavErec_dU(Neq)
         REAL*8                :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq),dTloss_dU(Neq),dTlossrec_dU(Neq)
         REAL*8                :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
-#ifdef DNNLINEARIZED
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
 #endif
     real*8                    :: Sn(Neq,Neq),Sn0(Neq)
 #endif
@@ -2212,12 +2210,8 @@ CONTAINS
     sigmavErec = sigmavrec*Tlossrec
 #endif
 
-
-#ifdef DNNLINEARIZED
         CALL compute_Dnn_dU(ue,Dnn_dU)
-
         Dnn_dU_u = dot_PRODUCT(Dnn_dU,Ue)
-#endif
 
 #endif
 
@@ -2352,11 +2346,11 @@ CONTAINS
             END DO
                     Auu(:,:,z) = Auu(:,:,z) - (dot_PRODUCT(QdW4(:,j),b))*NNxy
           END DO
-                 rhs(:,i) = rhs(:,i)+coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),ue))*NNbb - s*Ni
-          IF (switch%ohmicsrc) THEN
-            rhs(:,i) = rhs(:,i) + Sohmic*(Jtor**2)*Ni
-          ENDIF
-#ifdef DNNLINEARIZED
+            rhs(:,i) = rhs(:,i)+coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),ue))*NNbb - s*Ni
+            IF (switch%ohmicsrc) THEN
+              rhs(:,i) = rhs(:,i) + Sohmic*(Jtor**2)*Ni
+            ENDIF
+
           ELSEIF (i == 5) THEN
                  DO j = 1,5
               z = i+(j-1)*Neq
@@ -2369,7 +2363,6 @@ CONTAINS
             DO k = 1, Ndim
               rhs(:,i) = rhs(:,i)+Dnn_dU_U*Qpr(k,i)*Nxyzg(:,k)
                  ENDDO
-#endif
 		END IF
 #endif
 
@@ -2593,9 +2586,7 @@ CONTAINS
       real*8                    :: Vvece(Neq),dV_dUe(Neq,Neq),Alphae,dAlpha_dUe(Neq),gme,taue(Ndim,Neq)
       real*8                    :: W3(Neq),dW3_dU(Neq,Neq),QdW3(Ndim,Neq)
       real*8                    :: W4(Neq),dW4_dU(Neq,Neq),QdW4(Ndim,Neq)
-#ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
 #endif
 
       b = b3(1:Ndim)
@@ -2643,18 +2634,16 @@ CONTAINS
       Alphae = computeAlphae(uf)
 
       ! Compute dAlpha/dU^(k-1)
-           CALL compute_dAlpha_dUi(uf,dAlpha_dUi)
-           CALL compute_dAlpha_dUe(uf,dAlpha_dUe)
+      CALL compute_dAlpha_dUi(uf,dAlpha_dUi)
+      CALL compute_dAlpha_dUe(uf,dAlpha_dUe)
 
-           gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),b)  ! scalar
-           gme = dot_PRODUCT(MATMUL(Qpr,Vvece),b)
-           Taui = MATMUL(Qpr,dV_dUi)      ! 2x3
-           Taue = MATMUL(Qpr,dV_dUe)      ! 2x3
-#ifdef DNNLINEARIZED
-           CALL compute_Dnn_dU(uf,Dnn_dU)
-
+      gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),b)  ! scalar
+      gme = dot_PRODUCT(MATMUL(Qpr,Vvece),b)
+      Taui = MATMUL(Qpr,dV_dUi)      ! 2x3
+      Taue = MATMUL(Qpr,dV_dUe)      ! 2x3
+      CALL compute_Dnn_dU(uf,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,uf)
-#endif
+
 #endif
 
       ! Assembly local matrix
@@ -2837,7 +2826,6 @@ CONTAINS
                  kmultf = coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
-#ifdef DNNLINEARIZED
       ELSEIF (i == 5) THEN
         DO j=1,Neq
           ind_jf = ind_asf+j
@@ -2851,7 +2839,6 @@ CONTAINS
         kmultf = Dnn_dU_U*(Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif
         elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
         elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
-#endif
        END IF
 #endif
       END DO  ! i-Loop
@@ -2920,9 +2907,7 @@ CONTAINS
       real*8                    :: Vvece(Neq),dV_dUe(Neq,Neq),Alphae,dAlpha_dUe(Neq),gme,taue(Ndim,Neq)
       real*8                    :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
       real*8                    :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
-#ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
 #endif
 
       b = b3(1:Ndim)
@@ -2971,19 +2956,17 @@ CONTAINS
       Alphae = computeAlphae(uf)
 
       ! Compute dAlpha/dU^(k-1)
-           CALL compute_dAlpha_dUi(uf,dAlpha_dUi)
-           CALL compute_dAlpha_dUe(uf,dAlpha_dUe)
+      CALL compute_dAlpha_dUi(uf,dAlpha_dUi)
+      CALL compute_dAlpha_dUe(uf,dAlpha_dUe)
 
-           gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),b)  ! scalar
-           gme = dot_PRODUCT(MATMUL(Qpr,Vvece),b)
-           Taui = MATMUL(Qpr,dV_dUi)               ! 2x3
-           Taue = MATMUL(Qpr,dV_dUe)               ! 2x3
+      gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),b)  ! scalar
+      gme = dot_PRODUCT(MATMUL(Qpr,Vvece),b)
+      Taui = MATMUL(Qpr,dV_dUi)               ! 2x3
+      Taue = MATMUL(Qpr,dV_dUe)               ! 2x3
 
-#ifdef DNNLINEARIZED
-           CALL compute_Dnn_dU(uf,Dnn_dU)
+       CALL compute_Dnn_dU(uf,Dnn_dU)
 
       Dnn_dU_u = dot_product(Dnn_dU,uf)
-#endif
 #endif
 
       ! Assembly local matrix
@@ -3169,7 +3152,6 @@ END IF
           END DO
                  kmultf = coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
-#ifdef DNNLINEARIZED
         ELSEIF (i == 5) THEN
             DO j=1,Neq
               ind_jf = ind_asf+j
@@ -3181,7 +3163,6 @@ END IF
                  ENDDO
             kmultf = Dnn_dU_U*(Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif
             elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
-#endif
       END IF
 
 !if below for TEMPERATURE FLAG
