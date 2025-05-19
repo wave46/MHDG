@@ -1841,13 +1841,8 @@ CONTAINS
       END IF
 
 ! Assembly local contributions
-#ifdef DKLINEARIZED
-      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
-      n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
-#else
       CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
         n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
-#endif
 
          IF (save_tau) THEN
         DO i = 1,Neq
@@ -2034,7 +2029,6 @@ CONTAINS
 #ifdef PARALL
          IF (Mesh%boundaryFlag(Mesh%F(iel,ifa) - Mesh%Nintfaces) .EQ. 0) THEN
         ! Ghost face: assembly it as interior
-#ifndef DKLINEARIZED
         CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
           n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
 
@@ -2044,23 +2038,8 @@ CONTAINS
       ENDIF
 #else
 
-        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),,Psig(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
-      ELSE
-        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
-      ENDIF
-#endif
-
-#else
-#ifndef DKLINEARIZED
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
         n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
-#else
-      CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
-#endif
-
 #endif
       if (save_tau) then
         DO i = 1,Neq
@@ -2178,10 +2157,6 @@ CONTAINS
         REAL*8,INTENT(IN)         :: b3(:),psi,divb,drift(:),f(:),ktis(:)
 #ifdef KEQUATION
     real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl,xy(:)
-#ifdef DKLINEARIZED
-    real*8                    :: ddk_dU(Neq), ddk_dU_U
-    real*8                    :: gradddk(Ndim)
-#endif
 #endif
     real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
     real*8,intent(IN)         :: Ni(:),NNi(:,:),Nxyzg(:,:),NNxy(:,:),NxyzNi(:,:,:),NNbb(:)
@@ -2398,11 +2373,6 @@ CONTAINS
         gamma_I = 0.
       endif
     endif
-#ifdef DKLINEARIZED
-    call compute_ddk_dU(ue,xy,q_cyl,ddk_dU)
-
-    ddk_dU_u = dot_product(ddk_dU,ue)
-#endif
 #endif
 
 
@@ -2643,22 +2613,6 @@ CONTAINS
 #endif
 		END IF
 #endif
-#ifdef KEQUATION
-#ifdef DKLINEARIZED
-    ! Contribution from linearized dk term assuming so far that Dk is the same in all plasma equations
-        if (i .ne. 5) then
-          DO j = 1,6
-            z = i+(j-1)*Neq
-            do k = 1,Ndim
-              Auu(:,:,z) =Auu(:,:,z) + ddk_dU(j)*Qpr(k,i)*(NxyzNi(:,:,k)-b(k)*NNxy)
-            enddo
-          enddo
-          DO k = 1, Ndim
-            rhs(:,i) = rhs(:,i)+ddk_dU_U*Qpr(k,i)*(Nxyzg(:,k)-b(k)*NNbb)
-          enddo
-        endif
-#endif
-#endif
 
 	! Convection contribution
         DO j = 1,Neq
@@ -2855,24 +2809,15 @@ CONTAINS
     !
     !********************************************************************
 
-#ifdef DKLINEARIZED
-  SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
-    &ind_fg,b3,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
-#else
     SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
         &ind_fg,b3,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
-#endif
+
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       real*8,intent(IN)         :: b3(:),n(:), psi
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
       real*8,intent(IN)         :: uf(:)
       real*8,intent(IN)         :: qf(:)
-#ifdef KEQUATION
-#ifdef DKLINEARIZED
-      real*8,intent(IN)         :: q_cyl, xyf(:)
-#endif
-#endif
       real*8,optional,intent(INOUT) :: tau(:,:)
       real*8                     :: b(Ndim)
 #ifdef VORTICITY
@@ -2897,12 +2842,6 @@ CONTAINS
       real*8                    :: W4(Neq),dW4_dU(Neq,Neq),QdW4(Ndim,Neq)
 #ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
-#ifdef KEQUATION
-#ifdef DKLINEARIZED
-      real*8                    :: ddk_dU(Neq), ddk_dU_U
-      real*8                    :: gradddk(Ndim)
-#endif
 #endif
 #ifdef NEUTRALP
       real*8                    :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
@@ -2967,13 +2906,7 @@ CONTAINS
 
       Dnn_dU_u = dot_product(Dnn_dU,uf)
 #endif
-#ifdef KEQUATION
-#ifdef DKLINEARIZED
-      call compute_ddk_dU(uf,xyf,q_cyl,ddk_dU)
 
-      ddk_dU_u = dot_product(ddk_dU,uf)
-#endif
-#endif
 #ifdef NEUTRALP
     ! Compute Vpn(U^(k-1))
     CALL computeVpn(uf,Vpn)
@@ -3241,24 +3174,6 @@ CONTAINS
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
 #endif
        END IF
-#ifdef KEQUATION
-#ifdef DKLINEARIZED
-       if (i .ne. 5) then
-        DO j=1,Neq
-          ind_jf = ind_asf+j
-          do k=1,Ndim
-            kmult = ddk_dU(j)*Qpr(k,i)*(n(k)-b(k)*bn)*NNif
-            elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel)  = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
-            elMat%All(ind_ff(ind_if),ind_ff(ind_jf),iel)  = elMat%All(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
-          enddo
-        enddo
-        kmultf = ddk_dU_U*((Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif-(Qpr(1,i)*b(1)+Qpr(2,i)*b(2))*Nfbn)
-        elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
-        elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
-      endif
-#endif
-#endif
-
 #endif
       END DO  ! i-Loop
 
@@ -3295,13 +3210,9 @@ CONTAINS
     !
     !********************************************************************
 
-#ifdef DKLINEARIZED
-    SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-      &ind_fg,b3,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
-#else
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
         &ind_fg,b3,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
-#endif
+
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       logical                   :: isdir
       real*8,intent(IN)         :: b3(:),n(:), psi
@@ -3310,9 +3221,6 @@ CONTAINS
       real*8,intent(IN)         :: uf(:)
       real*8,intent(IN)         :: qf(:)
 #ifdef KEQUATION
-#ifdef DKLINEARIZED
-      real*8,intent(IN)         :: q_cyl, xyf(:)
-#endif
 #endif
       real*8,optional,intent(INOUT) :: tau(:,:)
 #ifdef VORTICITY
@@ -3337,12 +3245,6 @@ CONTAINS
       real*8                    :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
 #ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
-#ifdef KEQUATION
-#ifdef DKLINEARIZED
-      real*8                    :: ddk_dU(Neq), ddk_dU_U
-      real*8                    :: gradddk(Ndim)
-#endif
 #endif
 #ifdef NEUTRALP
       real*8                    :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
@@ -3410,13 +3312,6 @@ CONTAINS
       Dnn_dU_u = dot_product(Dnn_dU,uf)
 #endif
 
-#ifdef KEQUATION
-#ifdef DKLINEARIZED
-      call compute_ddk_dU(uf,xyf,q_cyl,ddk_dU)
-
-      ddk_dU_u = dot_product(ddk_dU,uf)
-#endif
-#endif
 #ifdef NEUTRALP
       ! Compute Vpn(U^(k-1))
       CALL computeVpn(uf,Vpn)
@@ -3685,22 +3580,6 @@ END IF
 #endif
       END IF
 
-#ifdef KEQUATION
-#ifdef DKLINEARIZED
-        if (i .ne. 5) then
-          DO j = 1,Neq
-            ind_jf = ind_asf + j
-            DO k = 1,Ndim
-              kmult = ddk_dU(j)*Qpr(k,i)*(n(k)-bn*b(k))*NNif
-              elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
-            enddo
-          enddo
-          kmultf = ddk_dU_U*((Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif-(Qpr(1,i)*b(1)+Qpr(2,i)*b(2))*Nfbn)
-          elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
-        endif
-#endif
-#endif
-
 !if below for TEMPERATURE FLAG
 #endif
       END DO  ! i-Loop
@@ -3773,7 +3652,7 @@ END IF
 #ifndef TEMPERATURE
              REAL*8             :: sigmaviz,sigmavrec,sigmavcx
 #else
-      REAL*8, INTENT(IN)        :: sigmaviz,sigmavrec,sigmavcx,fEiiz,fEirec,fEicx      
+      REAL*8, INTENT(IN)        :: sigmaviz,sigmavrec,sigmavcx,fEiiz,fEirec,fEicx
       REAL*8, INTENT(IN)        :: dsigmaviz_dU(:),dsigmavrec_dU(:),dsigmavcx_dU(:)
       REAL*8, INTENT(IN)        :: dfEiiz_dU(:),dfEirec_dU(:),dfEicx_dU(:)
       REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz,sigmavErec,dsigmavEiz_dU(:),dsigmavErec_dU(:)
