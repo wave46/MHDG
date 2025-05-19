@@ -566,7 +566,7 @@ CONTAINS
     CALL HDF5_group_close(group_id1, ierr)
 
 
-    
+
     ! Save mesh related arrays
     CALL HDF5_group_create('mesh', file_id, group_id1, ierr)
     ! Save boundary structure
@@ -637,7 +637,7 @@ CONTAINS
     CALL HDF5_real_saving(group_id1, Mesh%puff_area, 'puff_area')
     CALL HDF5_real_saving(group_id1, Mesh%core_area, 'core_area')
     CALL HDF5_group_close(group_id1, ierr)
-    
+
 
 #else
 
@@ -658,13 +658,13 @@ CONTAINS
        ENDIF
     ENDIF
 
-    
+
     IF ((switch%shockcp .NE. 0) .OR. (adapt%shockcp_adapt .NE. 0)) THEN
       CALL gather_mesh(Mesh, T_glob, X_glob, Tb_glob, F_glob, N_glob, intfaces_glob, extfaces_glob, boundaryFlag_glob, Tlin_glob, periodic_faces_glob, elemSize_glob, flag_elems_sc_glob, scdiff_nodes_glob)
     ELSE
       CALL gather_mesh(Mesh, T_glob, X_glob, Tb_glob, F_glob, N_glob, intfaces_glob, extfaces_glob, boundaryFlag_glob, Tlin_glob, periodic_faces_glob, elemSize_glob)
     ENDIF
-    
+
 
     ! save to file
     IF (MPIvar%glob_id .EQ. 0) THEN
@@ -686,7 +686,7 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
        CALL HDF5_group_close(group_id1)
 
-       
+
       CALL HDF5_group_create('mesh', file_id, group_id1, ierr)
       CALL HDF5_integer_saving(group_id1,Mesh%Ndim,'Ndim')
       CALL HDF5_integer_saving(group_id1,Mesh%Nno_glob,'Nnodes')
@@ -740,7 +740,7 @@ CONTAINS
       CALL HDF5_array1D_saving(group_id1,Mesh%toroidal,SIZE(Mesh%toroidal), 'toroidal')
 #endif
       CALL HDF5_group_close(group_id1, ierr)
-       
+
 
        CALL HDF5_group_create('magnetic', file_id, group_id1, ierr)
        IF (switch%rmp) THEN
@@ -825,9 +825,6 @@ CONTAINS
       CALL HDF5_string_saving(group_id2, simpar%refval_temperature_dimensions, 'temperature_scale_dimensions')
       CALL HDF5_string_saving(group_id2, simpar%refval_density_dimensions, 'density_scale_dimensions')
       CALL HDF5_string_saving(group_id2, simpar%refval_neutral_dimensions, 'density_neutral_dimensions')
-#ifdef KEQUATION
-      CALL HDF5_string_saving(group_id2, simpar%refval_k_dimensions, 'density_k_dimensions')
-#endif
       CALL HDF5_string_saving(group_id2, simpar%refval_speed_dimensions, 'speed_scale_dimensions')
       CALL HDF5_string_saving(group_id2, simpar%refval_potential_dimensions, 'potential_scale_dimensions')
       CALL HDF5_string_saving(group_id2, simpar%refval_vorticity_dimensions, 'vorticity_scale_dimensions')
@@ -844,9 +841,6 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, simpar%refval_temperature, 'temperature_scale')
       CALL HDF5_real_saving(group_id2, simpar%refval_density, 'density_scale')
       CALL HDF5_real_saving(group_id2, simpar%refval_neutral, 'neutral_scale')
-#ifdef KEQUATION
-      CALL HDF5_real_saving(group_id2, simpar%refval_k, 'k_scale')
-#endif
       CALL HDF5_real_saving(group_id2, simpar%refval_speed, 'speed_scale')
       CALL HDF5_real_saving(group_id2, simpar%refval_potential, 'potential_scale')
       CALL HDF5_real_saving(group_id2, simpar%refval_vorticity, 'vorticity_scale')
