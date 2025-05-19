@@ -70,7 +70,7 @@ CONTAINS
   SUBROUTINE domain_decomposition()
     IF(MPIvar%glob_size .GT. 1) THEN
        ! split the mesh
-       
+
       CALL free_mesh_loc(Mesh_glob)
       CALL deep_copy_mesh_struct(Mesh, Mesh_glob)
       Mesh_glob%X = Mesh_glob%X*phys%lscale
@@ -84,7 +84,7 @@ CONTAINS
       CALL HDF5_save_mesh_struct(Mesh, h5_filename)
       Mesh%X = Mesh%X/phys%lscale
       !CALL HDF5_save_mesh(h5_filename, Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
-       
+
     ELSE
        ALLOCATE(Mesh%ghostelems(Mesh%Nelems))
        ALLOCATE(Mesh%ghostfaces(Mesh%Nfaces))
@@ -429,12 +429,8 @@ CONTAINS
     save_name = TRIM(ADJUSTL(save_name))//"Ptor"//Num
 
 #endif
-#ifndef KEQUATION
     ! Diffusion
     WRITE (Num, "(E10.3)") phys%diff_n*simpar%refval_diffusion
-#else
-    WRITE (Num, "(E10.3)") (phys%diff_n+phys%diff_k_min)*simpar%refval_diffusion
-#endif
     save_name = TRIM(ADJUSTL(save_name))//"_DPe"//TRIM(ADJUSTL(Num))
 #ifdef TEMPERATURE
     WRITE (Num, "(E10.3)") phys%diff_pari
@@ -720,7 +716,7 @@ CONTAINS
     ELSE
 
        ! Load the mesh file from gmsh input or h5
-       
+
       IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
          CALL load_gmsh_mesh(mesh_name, 0)
       ELSE
@@ -754,7 +750,7 @@ CONTAINS
          gmsh_filename      = TRIM(ADJUSTL(mesh_name))//'.msh'
          CALL copy_file(gmsh_filename,"./res/temp.msh")
       ENDIF
-       
+
     ENDIF
   ENDSUBROUTINE load_mesh
 
@@ -844,10 +840,6 @@ CONTAINS
     IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE (6, *) "************************************************"
        WRITE (6, *) "Reducing diffusion: ", phys%diff_n*switch%diffred*simpar%refval_diffusion
-
-#ifdef KEQUATION
-       WRITE (6, *) "K diffusion min: ", phys%diff_k_min*switch%diffred*simpar%refval_diffusion
-#endif
        WRITE (6, *) "************************************************"
     END IF
     phys%diff_n = phys%diff_n*switch%diffred
@@ -859,10 +851,6 @@ CONTAINS
 #ifdef VORTICITY
     phys%diff_vort = phys%diff_vort*switch%diffred
     phys%diff_pot = phys%diff_pot*switch%diffred
-#endif
-#ifdef KEQUATION
-    phys%diff_k_min = phys%diff_k_min*switch%diffred
-    phys%diff_k_max = phys%diff_k_max!*switch%diffred
 #endif
   ENDSUBROUTINE reduce_diffusion
 
