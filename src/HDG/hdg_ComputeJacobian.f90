@@ -1050,7 +1050,7 @@ CONTAINS
           ! Non constant stabilization
           ! Compute tau in the Gauss points
           IF (numer%stab < 6) THEN
-                CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:), b(g,:),n_g(g,:),iel2,isext,xyf(g,:),tau)
+                CALL computeTauGaussPoints(upgf(g,:),ufg(g,:), b(g,:),n_g(g,:),iel2,isext,xyf(g,:),tau)
 
           ELSE
             CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g(g,:),xyf(g,:),isext,iel2,tau)
@@ -1735,7 +1735,7 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau)
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau)
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),0.,iel,tau)
         ENDIF
@@ -1888,7 +1888,7 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau)
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau)
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),isext,iel,tau)
         ENDIF
@@ -2091,7 +2091,7 @@ CONTAINS
     CALL computePinch(b,psi,APinch)
 
     ! Compute Q^T^(k-1)
-        Qpr = RESHAPE(qe,(/Ndim,Neq/))
+    Qpr = RESHAPE(qe,(/Ndim,Neq/))
 
     ! Split diffusion matrices/vectors for the momentum equation
     CALL compute_W2(ue,W2,diffiso(1,1),diffiso(2,2))
@@ -2380,20 +2380,20 @@ CONTAINS
         z = i+(i-1)*Neq
         Auu(:,:,z) =  Auu(:,:,z) - (APinch(i,1)*NxyzNi(:,:,1) + APinch(i,2)*NxyzNi(:,:,2))
 
-#ifndef TEMPERATURE
-        ! Added term for n=exp(x) change of variable
-              IF (switch%logrho) THEN
-                 CALL logrhojacobianVector(ue,upe,auxvec)
-          rhs(:,i)=rhs(:,i)+NNbb*auxvec(i)
-
-                 DO j = 1,Neq
-                    IF (i==1 .AND. j==1) THEN
-              z = i+(j-1)*Neq
-                       Auu(:,:,z)=Auu(:,:,z)+upe(2)*TRANSPOSE(NNxy) ! TODO: this is a first order linearization!!!
-                    ENDIF
-                 END DO
-              ENDIF
-#endif
+! #ifndef TEMPERATURE
+!         ! Added term for n=exp(x) change of variable
+!               IF (switch%logrho) THEN
+!                  CALL logrhojacobianVector(ue,upe,auxvec)
+!                  rhs(:,i)=rhs(:,i)+NNbb*auxvec(i)
+!
+!                  DO j = 1,Neq
+!                     IF (i==1 .AND. j==1) THEN
+!                       z = i+(j-1)*Neq
+!                       Auu(:,:,z)=Auu(:,:,z)+upe(2)*TRANSPOSE(NNxy) ! TODO: this is a first order linearization!!!
+!                     ENDIF
+!                  END DO
+!               ENDIF
+! #endif
 
         DO k = 1,Ndim
         ! split diffusion contributions (LQ)
