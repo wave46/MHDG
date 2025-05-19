@@ -1105,7 +1105,7 @@ CONTAINS
 !TOR3D
   IF(switch%testcase .NE. 60) THEN
     ! large aspect ratio assumption and low width of source
-     phys%heating_amplitude = phys%heating_power/2./PI**2/phys%heating_sigmar/phys%heating_sigmaz/phys%r_axis
+     phys%heating_amplitude = phys%heating_power/2./PI**2/phys%heating_sigmar/phys%heating_sigmaz/(phys%r_axis+phys%heating_dr)
   ENDIF
   !********************************************
   !
