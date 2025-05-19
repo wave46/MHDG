@@ -2782,15 +2782,15 @@ CONTAINS
         elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) + (APinch(i,1)*n(1) + APinch(i,2)*n(2))*NNif
               elMat%ALL(ind_ff(ind_if),ind_ff(ind_if),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_if),iel) + (APinch(i,1)*n(1) + APinch(i,2)*n(2))*NNif
 
-#ifndef TEMPERATURE
-        ! Added term for n=exp(x) change of variable
-              IF (switch%logrho) THEN
-                 CALL logrhojacobianVector(uf,upf,auxvec)
-          kmultf = Nfbn*auxvec(i)
-          elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel)-kmultf
-          elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) -kmultf
-              ENDIF
-#endif
+! #ifndef TEMPERATURE
+!         ! Added term for n=exp(x) change of variable
+!         IF (switch%logrho) THEN
+!           CALL logrhojacobianVector(uf,upf,auxvec)
+!           kmultf = Nfbn*auxvec(i)
+!           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel)-kmultf
+!           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) -kmultf
+!         ENDIF
+! #endif
 
 #ifdef TEMPERATURE
         ! Parallel diffusion for the temperature
@@ -3107,16 +3107,17 @@ END IF
         ENDIF
 
 
-#ifndef TEMPERATURE
-        ! Added term for n=exp(x) change of variable
-              IF (.NOT. isdir) THEN
-                 IF (switch%logrho) THEN
-                    CALL logrhojacobianVector(uf,upf,auxvec)
-            kmultf = Nfbn*auxvec(i)
-            elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel)-kmultf
-                 ENDIF
-              ENDIF
-#endif
+! #ifndef TEMPERATURE
+!         ! Added term for n=exp(x) change of variable
+!         IF (.NOT. isdir) THEN
+!           IF (switch%logrho) THEN
+!             CALL logrhojacobianVector(uf,upf,auxvec)
+!             kmultf = Nfbn*auxvec(i)
+!             elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel)-kmultf
+!           ENDIF
+!         ENDIF
+! #endif
+
 
 
 
