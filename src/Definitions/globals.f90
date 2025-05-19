@@ -421,17 +421,6 @@ CONTAINS
        NULLIFY(phys%puff_exp)
     END IF
 
-#ifdef KEQUATION
-    IF (ASSOCIATED(phys%omega)) THEN
-       DEALLOCATE (phys%omega)
-       NULLIFY(phys%omega)
-    END IF
-    IF (ASSOCIATED(phys%q_cyl)) THEN
-       DEALLOCATE (phys%q_cyl)
-       NULLIFY(phys%q_cyl)
-    END IF
-#endif
-
     ! magnetic
     IF (ASSOCIATED(magn%coils_rmp)) THEN
        DEALLOCATE (magn%coils_rmp)
