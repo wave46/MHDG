@@ -53,10 +53,6 @@ SUBROUTINE READ_input()
   ! Neutral and Ohmic heating
   LOGICAL               :: OhmicSrc, apply_trim
   REAL*8                :: Zeff,Pohmic,diff_nn,Re,Re_pump,puff,cryopump_power,puff_slope
-#ifdef KEQUATION
-  ! k equation
-  REAL*8                :: diff_k_min, diff_k_max, k_max
-#endif
   ! Movin Equilibrium
   LOGICAL               :: ME
 
@@ -70,14 +66,8 @@ SUBROUTINE READ_input()
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
-#ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
-#else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
-  & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
-    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
-#endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
        &smther, jsweeps,&
@@ -228,11 +218,6 @@ SUBROUTINE READ_input()
   phys%density_source     = density_source
   phys%ener_source_e      = ener_source_e
   phys%ener_source_ee     = ener_source_ee
-#ifdef KEQUATION
-  phys%diff_k_min         = diff_k_min
-  phys%diff_k_max         = diff_k_max
-  phys%k_max              = k_max
-#endif
   phys%sigma_source       = sigma_source
   phys%fluxg_trunc        = fluxg_trunc
   phys%part_source        = part_source
@@ -321,7 +306,7 @@ SUBROUTINE READ_input()
   ELSE
      msg = 'Time advancing simulation'
   END IF
-  
+
   ! Some checking of the inputs
   IF (.NOT. (switch%read_gmsh .OR. switch%readMeshFromSol)) THEN
        WRITE (6, *) "Error: you must choose between reading the mesh from a Gmsh file or from a solution file"
@@ -354,11 +339,7 @@ SUBROUTINE READ_input()
      PRINT *, '                                                                      '
 #ifndef TEMPERATURE
 #ifdef NEUTRAL
-#ifdef KEQUATION
-     PRINT *, ' MODEL: N-Gamma isothermal with neutral with k equation               '
-#else
      PRINT *, ' MODEL: N-Gamma isothermal with neutral                               '
-#endif
 #else
      PRINT *, ' MODEL: N-Gamma isothermal                                            '
 #endif
@@ -428,11 +409,6 @@ SUBROUTINE READ_input()
      ENDIF
      PRINT *, '                - particle source at core:                            ', part_source
      PRINT *, '                - energy source at core:                              ', ener_source
-#endif
-#ifdef KEQUATION
-     PRINT *, '                - minimum perp diffusion in the k equation:           ', phys%diff_k_min
-     PRINT *, '                - maximum perp diffusion in the k equation:           ', phys%diff_k_max
-     PRINT *, '                - maximum k:                                          ', phys%k_max
 #endif
      PRINT *, '                - constant for the momentum equation (isoth)          ', phys%a
      PRINT *, '                - diagonal implicit sources                           ', phys%diagsource
