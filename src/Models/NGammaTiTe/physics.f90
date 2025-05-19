@@ -1894,8 +1894,6 @@ END DO
   ENDSUBROUTINE compute_dsigmavcx_dU
 #endif
 
-
-#ifdef DNNLINEARIZED
   SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8, INTENT(OUT) :: Dnn_dU(:)
@@ -1971,7 +1969,7 @@ END DO
 
 
   ENDSUBROUTINE  compute_Dnn_dU
-#endif
+
   SUBROUTINE compute_Tloss(U,Tloss)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: Tloss,U1,U4,T0
