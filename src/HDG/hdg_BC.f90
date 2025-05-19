@@ -532,9 +532,6 @@ CONTAINS
   REAL*8                    :: uex(refElPol%Ngauss1d,phys%neq)
   REAL*8                    :: diff_iso_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
   REAL*8                    :: diff_ani_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
-#ifdef KEQUATION
-  real*8                    :: q_cylfl(refElPol%Nfacenodes),q_cyl(refElPol%Ngauss1d)
-#endif
 #ifdef PARALL
 #ifdef SAVEFLUX
   INTEGER                   :: ierr
@@ -620,14 +617,6 @@ CONTAINS
     b_nod(:,2) = Bfl(:,2)/Bmod_nod
     b_nod(:,3) = Bfl(:,3)/Bmod_nod
 
-#ifdef KEQUATION
-    if (switch%testcase == 60) then
-      q_cylfl = geom%q
-    else
-      q_cylfl = phys%q_cyl(Mesh%T(iel,nod))
-    endif
-#endif
-
     ! Normalized magnetic flux of the nodes of the face: PSI
     psifl = phys%magnetic_psi(Mesh%T(iel,nod))
 
@@ -675,11 +664,8 @@ CONTAINS
      psig = MATMUL(refElPol%N1d,psifl)
 
     ! Compute diffusion at faces Gauss points
-#ifndef KEQUATION
     CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac)
-#else
-    CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac,q_cyl)
-#endif
+
     if (save_tau) then
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
        phys%diff_nn_Bou(indtausave) = diff_iso_fac(5,5,:)
@@ -909,11 +895,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
           CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
-#else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
-#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -964,11 +946,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
           CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
-#else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
-#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1049,11 +1027,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
           CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
-#else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
-#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1236,11 +1210,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
           CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
-#else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
-#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
