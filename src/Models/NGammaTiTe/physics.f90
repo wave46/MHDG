@@ -353,10 +353,10 @@ CONTAINS
     ! ******************************
     ! Split diffusion terms
     ! ******************************
-    SUBROUTINE compute_W2(U,W2,diff_n,diff_u)
-    REAL*8, INTENT(IN) :: U(:)
-    REAL*8, INTENT(IN) :: diff_n, diff_u
-    REAL*8             :: W2(:)
+    PURE SUBROUTINE compute_W2(U,W2,diff_n,diff_u)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(IN)  :: diff_n, diff_u
+    REAL*8, INTENT(OUT) :: W2(:)
       W2 = 0.
       W2(1) = (diff_n-diff_u)*U(2)/U(1)
     ENDSUBROUTINE compute_W2
@@ -387,10 +387,10 @@ CONTAINS
 
 
 
-    SUBROUTINE compute_dW2_dU(U,dW2_dU,diff_n,diff_u)
-    REAL*8, INTENT(IN) :: U(:)
-    REAL*8, INTENT(IN) :: diff_n, diff_u
-    REAL*8             :: dW2_dU(:,:)
+    PURE SUBROUTINE compute_dW2_dU(U,dW2_dU,diff_n,diff_u)
+    REAL*8, INTENT(IN)    :: U(:)
+    REAL*8, INTENT(IN)    :: diff_n, diff_u
+    REAL*8, INTENT(OUT)   :: dW2_dU(:,:)
       dW2_dU = 0.
       dW2_dU(1,1) = -U(2)/(U(1)**2)
       dW2_dU(1,2) = 1./U(1)
@@ -826,22 +826,20 @@ END DO
   !*****************************************
   ! Pinch term
   !***************************************
-  SUBROUTINE computePinch(b,psi,APinch)
+  PURE SUBROUTINE computePinch(b,psi,APinch)
     REAL*8, INTENT(IN)     :: b(:),psi
     REAL*8, INTENT(OUT)    :: APinch(:,:)
     REAL*8                 :: v_p,bnorm(2)
 
-  APinch = 0.
+    APinch = 0.
 
     bnorm = b(:)/NORM2(b)
     v_p = phys%v_p*(psi**2 + psi**2*TANH((0.95 - psi)/0.02))
-  !IF (v_p .lt. 1.e-4/simpar%refval_speed) v_p = 0.
+    !IF (v_p .lt. 1.e-4/simpar%refval_speed) v_p = 0.
 
-  APinch(1,1) = v_p*bnorm(2)
-  APinch(1,2) = v_p*(-bnorm(1))
+    APinch(1,1) = v_p*bnorm(2)
+    APinch(1,2) = v_p*(-bnorm(1))
 
-  !WRITE(6,*) 'psi = ', psi
-  !WRITE(6,*) 'v_p = ', v_p
   ENDSUBROUTINE computePinch
 
   !*****************************************
@@ -2150,7 +2148,7 @@ END DO
   ! Compute the stabilization tensor tau
   !*******************************************
 
-  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau)
+  SUBROUTINE computeTauGaussPoints(up, uc, b, n, iel, isext, xy, tau)
     real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
     REAL*8, intent(in)    :: isext
     integer, intent(in) ::  iel
@@ -2162,7 +2160,7 @@ END DO
     REAL*8              :: tau_aux(4),diff_iso(4,4,1),diff_ani(4,4,1)
 #endif
     integer             :: ndim
-    real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
+    real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),
     real*8              :: U1, U2, U3, U4
     U1 = uc(1)
     U2 = uc(2)
@@ -2175,7 +2173,6 @@ END DO
     bnorm = NORM2(b(1:ndim))
     xyd(1,:) = xy(:)
     uu(1,:) = uc(:)
-    qq(1,:) = q(:)
 
     call setLocalDiff(xyd, uu, diff_iso, diff_ani)
 
