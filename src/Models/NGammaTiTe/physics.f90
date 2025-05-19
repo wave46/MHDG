@@ -520,22 +520,6 @@ CONTAINS
     END IF
   ENDSUBROUTINE jacobianMatrices
 
-#ifdef NEUTRALP
-  SUBROUTINE jacobianMatricesNP(U, Anp)
-    REAL*8, INTENT(in)  :: U(:)
-    REAL*8, INTENT(out) :: Anp(:)
-    REAL*8              :: cs_n
-
-    Anp = 0.d0
-    cs_n = SQRT(ABS(2./3.*(U(3)/U(1) - 1./2.*U(2)**2/U(1)**2)))
-
-    Anp(1) = 1./(3.*cs_n)*(U(2)**2/U(1)**3 - U(3)/U(1)**2)
-    Anp(2) = - 1./(3.*cs_n)*U(2)*U(5)/U(1)**2
-    Anp(3) = 1./(3.*cs_n)*U(5)/U(1)
-    Anp(5) = cs_n
-  ENDSUBROUTINE jacobianMatricesNP
-#endif
-
   !*****************************************
   ! Jacobian matrix for face computations
   !****************************************
@@ -593,24 +577,6 @@ CONTAINS
     An = bn*An
   ENDSUBROUTINE jacobianMatricesFace
 
-#ifdef NEUTRALP
-  SUBROUTINE jacobianMatricesFaceNP(U, bn, Anpn)
-    REAL*8, INTENT(in)  :: U(:), bn
-    REAL*8, INTENT(out) :: Anpn(:)
-    REAL*8              :: cs_n
-
-    Anpn = 0.d0
-    cs_n = SQRT(2./3.*(U(3)/U(1) - 1./2.*U(2)**2/U(1)**2))
-
-    Anpn(1) = 1./(3.*cs_n)*(U(2)**2/U(1)**3 - U(3)/U(1)**2)
-    Anpn(2) = - 1./(3.*cs_n)*U(2)*U(5)/U(1)**2
-    Anpn(3) = 1./(3.*cs_n)*U(5)/U(1)
-    Anpn(5) = cs_n
-
-    Anpn = bn*Anpn
-  ENDSUBROUTINE jacobianMatricesFaceNP
-#endif
-
   !*****************************************
   ! Jacobian matrix for the Bohm BC
   !****************************************
@@ -641,21 +607,6 @@ CONTAINS
 
   ENDSUBROUTINE jacobianMatricesBohm
 
-#ifdef NEUTRALP
-  SUBROUTINE jacobianMatricesBohmNP(U, Anp)
-    REAL*8, INTENT(in)  :: U(:)
-    REAL*8, INTENT(out) :: Anp(:)
-    REAL*8              :: cs_n
-
-    Anp = 0.d0
-    cs_n = SQRT(ABS(2./3.*(U(3)/U(1) - 1./2.*U(2)**2/U(1)**2)))
-
-    Anp(1) = 1./(3.*cs_n)*(U(2)**2/U(1)**3 - U(3)/U(1)**2)
-    Anp(2) = - 1./(3.*cs_n)*U(2)*U(5)/U(1)**2
-    Anp(3) = 1./(3.*cs_n)*U(5)/U(1)
-    Anp(5) = cs_n
-  ENDSUBROUTINE jacobianMatricesBohmNP
-#endif
 
 #ifdef NEUTRAL
   !*****************************************
@@ -769,7 +720,7 @@ CONTAINS
       phys%ME_diff_e = d_iso(3,3,1)
       phys%ME_diff_ee = d_iso(4,4,1)
     ENDIF
-#ifndef NEUTRALP
+
 #ifdef NEUTRAL
     !d_iso(5, 5, :) = phys%diff_nn
     U1 = u(:,1)
@@ -804,22 +755,11 @@ CONTAINS
         d_iso(5,5,i) = Dnn(i)
        ENDIF
 #else
-      ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)
-       CALL softplus(ti, ti_min)
-       Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*(U1(i)*(sigmaviz(i)+sigmavcx(i))+U5(i)*sigmavnn(i)))
-      Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
-
-       CALL double_softplus(Dnn(i),10.*phys%diff_n,phys%diff_nn)
-      d_iso(5,5,i) = Dnn(i)
-
-
 #endif
-
-    END DO
+END DO
 #else
     d_iso(5,5,:)=phys%diff_nn
 #endif
-
 #ifdef KEQUATION
     DO i= 1,SIZE(c_s, 1)
        CALL compute_cs(u(i,:), c_s(i))
@@ -856,9 +796,7 @@ CONTAINS
 #endif
     !Dnn = sum(Dnn)/size(u,1)
 #endif
-#else
-    d_iso(5,5,:) = 0.
-#endif
+
     d_ani(1, 1, :) = d_iso(1,1,:)
     d_ani(2, 2, :) = d_iso(2,2,:)
     d_ani(3, 3, :) = d_iso(3,3,:)
@@ -2441,229 +2379,6 @@ ENDSUBROUTINE  compute_ddissip_du
 
 #endif
 #endif
-
-#ifdef NEUTRALP
-  SUBROUTINE computeDpn(U,Q,Vpn,Dpn)
-    REAL*8, INTENT(IN) :: U(:),Q(:,:),Vpn(:)
-    REAL*8, INTENT(OUT):: Dpn
-    REAL*8             :: U1,U2,U3,U4,U5
-    REAL*8             ::sigmaviz,sigmavcx,cs_n,Dpn_th
-    REAL*8             :: Grad_Pn(simpar%Ndim)
-    REAL*8, PARAMETER :: tol = 1.e-10
-	   Dpn = 0.
-	   U1 = U(1)
-	   U2 = U(2)
-	   U3 = U(3)
-    U4 = U(4)
-    U5 = U(5)
-    IF (U1<tol) U1=tol
-    IF (U2<tol) U2=tol
-    IF (U3<tol) U3=tol
-    IF (U4<tol) U4=tol
-    IF (U5<tol) U5=tol
-    CALL compute_sigmaviz(U,sigmaviz)
-    CALL compute_sigmavcx(U,sigmavcx)
-    Dpn = 1./(simpar%refval_time*simpar%refval_density*U1*(sigmaviz + sigmavcx))
-	   Dpn = 2./3.*Dpn
-    !Set a threshold Dpn*|grad(Pn)| <= cs_n*n_n
-    !cs_n = 0.
-    !Grad_Pn = 0.
-	   !cs_n = sqrt(phys%Mref*abs(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
-	   !Grad_Pn = 2./(3.*phys%Mref)*matmul(Q,Vpn)
-	   !Dpn_th = abs(cs_n*U5/norm2(Grad_Pn))
-	   !if (Dpn .gt. Dpn_th) then
-    IF (Dpn .GT. phys%diff_nn) THEN
-	      Dpn = phys%diff_nn
-	      !fth(3) = 5.e-7*abs(U5)!*abs(U3/U1)
-	      !fth(4) = 5.e-7*abs(U5)!*abs(U4/U1)
-    END IF
-	   !Dpn*exp(abs(Dpn - Dpn_th)/Dpn_th) + Dpn_th
-	 ENDSUBROUTINE computeDpn
-
-	 SUBROUTINE compute_dDpn_dU(U,Q,Vpn,res)
-    REAL*8, INTENT(IN) :: U(:),Q(:,:),Vpn(:)
-    REAL*8, INTENT(OUT):: res(:)
-    REAL*8             :: sigmaviz,sigmavcx,Dpn
-    REAL*8             :: dsigmaviz_dU(phys%Neq),dsigmavcx_dU(phys%Neq)
-    REAL*8             :: U1,U2,U3,U4,U5
-    REAL*8,PARAMETER     :: tol = 1.e-12
-	   U1 = U(1)
-    U2 = U(2)
-	   U3 = U(3)
-	   U4 = U(4)
-    U5 = U(5)
-    IF (U1<tol) U1=tol
-    IF (U5<tol) U5=tol
-    res = 0.
-
-    CALL compute_sigmaviz(U,sigmaviz)
-    CALL compute_sigmavcx(U,sigmavcx)
-    CALL compute_dsigmaviz_dU(U,dsigmaviz_dU)
-    CALL compute_dsigmavcx_dU(U,dsigmavcx_dU)
-    CALL computeDpn(U,Q,Vpn,Dpn)
-
-    IF (Dpn .LT. phys%diff_nn) THEN
-       res(1) = sigmaviz + sigmavcx + U1*(dsigmaviz_dU(1) + dsigmavcx_dU(1))
-       res(4) = U1*(dsigmaviz_dU(4) + dsigmavcx_dU(4))
-       res = -3./2*Dpn**2*res
-    END IF
-  ENDSUBROUTINE compute_dDpn_dU
-
-  SUBROUTINE computeVpn(U,Vpn)
-    REAL*8, INTENT(IN) :: U(:)
-    REAL*8, INTENT(OUT):: Vpn(:)
-    REAL*8             :: U1,U2,U3,U5
-    REAL*8, PARAMETER :: tol = 1.e-12
-	   Vpn = 0.
-    U1 = U(1)
-    U2 = U(2)
-	   U3 = U(3)
-    U5 = U(5)
-    IF (U1<tol) U1=tol
-    IF (U5<tol) U5=tol
-    Vpn(1) = U5*(U2**2/U1**3 - U3/U1**2)
-	   Vpn(2) = - U5*U2/U1**2
-	   Vpn(3) = U5/U1
-	   Vpn(5) = U3/U1 - 1./2.*U2**2/U1**2
-  ENDSUBROUTINE computeVpn
-
-  SUBROUTINE compute_dVpn_dU(U,dVpn_dU)
-    REAL*8, INTENT(IN)  :: U(:)
-    REAL*8, INTENT(OUT) :: dVpn_dU(:, :)
-    REAL*8              :: U1,U2,U3,U5
-    REAL*8, PARAMETER :: tol = 1.e-12
-	   U1 = U(1)
-    U2 = U(2)
-	   U3 = U(3)
-    U5 = U(5)
-    IF (U1<tol) U1=tol
-    IF (U5<tol) U5=tol
-    dVpn_dU = 0.
-
-    dVpn_dU(1, 1) = (2.*U3/U1**3 - 3.*U2**2/U1**4)*U5
-    dVpn_dU(1, 2) = (2.*U2/U1**3)*U5
-	   dVpn_dU(1, 3) = -U5/U1**2
-   	dVpn_dU(1, 5) = U2**2/U1**3 - U3/U1**2
-
-	   dVpn_dU(2, 1) = (2.*U2/U1**3)*U5
-	   dVpn_dU(2, 2) = - U5/U1**2
-	   dVpn_dU(2, 5) = - U2/U1**2
-
-	   dVpn_dU(3, 1) = -U5/U1**2
-	   dVpn_dU(3, 5) = 1./U1
-
-	   dVpn_dU(5, 1) = U2**2/U1**3 - U3/U1**2
-    dVpn_dU(5, 2) = -U2/U1**2
-    dVpn_dU(5, 3) = 1./U1
-  ENDSUBROUTINE compute_dVpn_dU
-
-  SUBROUTINE computeGammared(U,res)
-    REAL*8, INTENT(IN)  :: U(:)
-    REAL*8, INTENT(OUT) :: res
-    REAL*8              :: U1,U2,U3,U5,Tmin,T
-    REAL*8PARAMETER      :: tol = 1.e-12
-	   U1 = U(1)
-    U2 = U(2)
-	   U3 = U(3)
-    U5 = U(5)
-    IF (U1<tol) U1=tol
-    IF (U5<tol) U5=tol
-
-    res = 0.
-    Tmin = 0.2/simpar%refval_temperature  ! Threshold at 0.2 eV
-    T = 2./(3.*phys%Mref)*(U3/U1 - 1./2.*U2**2/U1**2)
-
-    !WRITE(6,*) 'Tmin/T = ', Tmin/T
-
-    IF (Tmin/T .LE. 1) THEN
-       res = 0.*3./2.*(phys%Mref**2)*(Tmin/T)*U5
-    ELSE
-       res = 0.*3./2.*(phys%Mref**2)*U5
-    END IF
-
-  ENDSUBROUTINE computeGammared
-
-SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
-    REAL*8, INTENT(IN)    :: U(:),Q(:,:),Vpn(:)
-    REAL*8, INTENT(OUT)   :: res
-    REAL*8                :: U1,U2,U3,U4,U5
-    REAL*8                :: cs_n,Dpn,t
-    REAL*8                :: Grad_Pn(simpar%Ndim)
-    REAL*8PARAMETER        :: gamma = 4.,tol = 1.e-12
-    U1 = U(1)
-    U2 = U(2)
-    U3 = U(3)
-    U4 = U(4)
-    U5 = U(5)
-    IF (U1<tol) U1=tol
-    IF (U5<tol) U5=tol
-    res = 1.
-
-    cs_n = SQRT(phys%Mref*ABS(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
-    Grad_Pn = 2./(3.*phys%Mref)*MATMUL(Q,Vpn)
-    CALL computeDpn(U,Q,Vpn,Dpn)
-    !t = abs(Dpn*norm2(Grad_Pn))/abs(cs_n*U5)
-    t = ABS(Dpn)/phys%diff_nn
-
-    IF (t .GE. 1) THEN
-       res = EXP((1-t)/gamma)
-    END IF
-  ENDSUBROUTINE computeAlphaCoeff
-
-  SUBROUTINE computeBetaCoeff(U,Q,Vpn,res)
-    REAL*8, INTENT(IN)    :: U(:),Q(:,:),Vpn(:)
-    REAL*8, INTENT(OUT)   :: res
-    REAL*8                :: U1,U2,U3,U4,U5
-    REAL*8                :: cs_n,Dpn,t
-    REAL*8                :: Grad_Pn(simpar%Ndim)
-    REAL*8PARAMETER        :: gamma = 4.,tol = 1.e-12
-    U1 = U(1)
-    U2 = U(2)
-    U3 = U(3)
-    U4 = U(4)
-    U5 = U(5)
-    IF (U1<tol) U1=tol
-    IF (U5<tol) U5=tol
-    res = 0.
-
-    cs_n = SQRT(phys%Mref*ABS(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
-    Grad_Pn = 2./(3.*phys%Mref)*MATMUL(Q,Vpn)
-    CALL computeDpn(U,Q,Vpn,Dpn)
-    !t = abs(Dpn*norm2(Grad_Pn))/abs(cs_n*U5)
-    t = ABS(Dpn)/phys%diff_nn
-
-    IF (t .GE. 1) THEN
-       res = 1 - EXP((1-t)/gamma)
-    END IF
-  ENDSUBROUTINE computeBetaCoeff
-
-  SUBROUTINE computeGammaLim(U,Q,Vpn,res)
-    REAL*8, INTENT(IN)    :: U(:),Q(:,:),Vpn(:)
-    REAL*8, INTENT(OUT)   :: res
-    REAL*8                :: U1,U2,U3,U4,U5
-    REAL*8                :: cs_n,Dpn,GammaDpn,GammaLim
-    REAL*8                :: Grad_Pn(simpar%Ndim)
-    REAL*8PARAMETER        :: tol = 1.e-12
-    U1 = U(1)
-    U2 = U(2)
-    U3 = U(3)
-    U4 = U(4)
-    U5 = U(5)
-    IF (U1<tol) U1=tol
-    IF (U5<tol) U5=tol
-    res = 0.
-
-    cs_n = SQRT(phys%Mref*ABS(2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2)))
-    Grad_Pn = 2./(3.*phys%Mref)*MATMUL(Q,Vpn)
-    CALL computeDpn(U,Q,Vpn,Dpn)
-    GammaDpn = ABS(Dpn*NORM2(Grad_Pn))
-    GammaLim = ABS(cs_n*U5)
-
-    res = 1./(1. + GammaDpn/GammaLim)
-  ENDSUBROUTINE computeGammaLim
-#endif
-!NEUTRAL PRESSURE
-
 #endif
 !TEMPERATURE
 
@@ -2697,10 +2412,6 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 #else
     REAL*8              :: tau_aux(6),diff_iso(6,6,1),diff_ani(6,6,1)
 #endif
-#ifdef NEUTRALP
-    REAL*8              :: Dpn
-    REAL*8              :: Vpn(simpar%Neq),Qpr(simpar%Ndim,simpar%Neq)
-#endif
 #else
     REAL*8              :: tau_aux(4),diff_iso(4,4,1),diff_ani(4,4,1)
 #endif
@@ -2727,14 +2438,6 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 #else
     qq_cyl(:) = q_cyl
     call setLocalDiff(xyd, uu, diff_iso, diff_ani,qq_cyl)
-#endif
-
-#ifdef NEUTRALP
-    ! Compute Vpn(U^(k-1))
-    CALL computeVpn(uc,Vpn)
-	   ! Compute Dpn(U^(k-1))
-    Qpr = RESHAPE(q,(/simpar%Ndim,simpar%Neq/))
-    !CALL computeDpn(uc,Qpr,Vpn,Dpn)
 #endif
 
     IF (numer%stab == 2) THEN
@@ -2812,9 +2515,6 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
        !   tau_aux = ABS((4*uc(2)*bn)/uc(1))
        !ELSE
           tau_aux = MAX(ABS(5./3.*up(2)*bn), ABS(0.3*bn*(3*uc(1) + SQRT(ABS(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)))
-!#ifdef NEUTRALP
-!        tau_aux(5) = max(abs(5./3.*up(2)*bn), abs(0.3*bn*(3*uc(5) + sqrt(abs(10*uc(3)/uc(1)*uc(5)**2 - 5*(uc(5)*uc(2)/uc(1))**2)))/uc(5)))
-!#endif
 
 #ifdef TOR3D
        IF (ABS(n(3)) > 0.1) THEN
@@ -2823,12 +2523,8 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(2) = tau_aux(2) + phys%diff_u
           tau_aux(3) = tau_aux(3) + phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
           tau_aux(4) = tau_aux(4) + phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-#ifndef NEUTRALP
 #ifdef NEUTRAL
         tau_aux(5) = phys%diff_nn!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
-#endif
-#else
-        tau_aux(5) = tau_aux(5) + phys%diff_nn!phys%diff_nn
 #endif
        ELSE
 #endif
@@ -2837,16 +2533,14 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(2) = tau_aux(2) + diff_iso(2,2,1)*refElPol%ndeg/Mesh%elemSize(iel)
           tau_aux(3) = tau_aux(3) + diff_iso(3,3,1)*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pari*(MIN(1.,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
           tau_aux(4) = tau_aux(4) + diff_iso(4,4,1)*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pare*(MIN(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
-#ifndef NEUTRALP
 #ifdef NEUTRAL
         tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)*refElPol%ndeg/Mesh%elemSize(iel) !! !numer%tau(5) diff_iso(5,5,1)
 #ifdef KEQUATION
         tau_aux(6) = tau_aux(6) + diff_iso(6,6,1)*refElPol%ndeg/Mesh%elemSize(iel)
 #endif
 #endif
-#else
         tau_aux(5) = tau_aux(5) + numer%tau(5)
-#endif
+
 !        ! Toroidal face
 !        tau_aux(1) = tau_aux(1) +  diff_iso(1,1,1)
 !        tau_aux(2) = tau_aux(2) +  diff_iso(2,2,1)
