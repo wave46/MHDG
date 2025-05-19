@@ -133,22 +133,26 @@ CONTAINS
   ! ******************************
   ! Split diffusion terms
   ! ******************************
-  SUBROUTINE compute_W2(U,W2)
-    REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: W2(:)
+  PURE SUBROUTINE compute_W2(U,W2,diff_n,diff_u)
+  REAL*8, INTENT(IN)  :: U(:)
+  REAL*8, INTENT(IN)  :: diff_n, diff_u
+  REAL*8, INTENT(OUT) :: W2(:)
     W2 = 0.
-    W2(1) = (phys%diff_n-phys%diff_u)*U(2)/U(1)
-  END SUBROUTINE compute_W2
+    W2(1) = (diff_n-diff_u)*U(2)/U(1)
+  ENDSUBROUTINE compute_W2
 
-  SUBROUTINE compute_dW2_dU(U,res)
-    REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:,:)
-    res = 0.
-    res(1,1) = -U(2)*(phys%diff_n-phys%diff_u)/(U(1)**2)
-    res(1,2) = 1.*(phys%diff_n-phys%diff_u)/U(1)
-  END SUBROUTINE compute_dW2_dU
+  PURE SUBROUTINE compute_dW2_dU(U,dW2_dU,diff_n,diff_u)
+  REAL*8, INTENT(IN)    :: U(:)
+  REAL*8, INTENT(IN)    :: diff_n, diff_u
+  REAL*8, INTENT(OUT)   :: dW2_dU(:,:)
+    dW2_dU = 0.
+    dW2_dU(1,1) = -U(2)/(U(1)**2)
+    dW2_dU(1,2) = 1./U(1)
 
-  SUBROUTINE jacobianMatrices(U, A)
+    dW2_dU = (diff_n-diff_u)*dW2_dU
+  ENDSUBROUTINE compute_dW2_dU
+
+  PURE SUBROUTINE jacobianMatrices(U, A)
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: A(:, :)
     REAL*8 :: dens
@@ -162,9 +166,6 @@ CONTAINS
        A(2,2) = 2*U(2)/dens
     ELSE
        dens=U(1)
-       !      if (switch%thresh.ne.0) then
-       !         dens = max(dens,numer%thr)
-       !      endif
        A(1, 2) = 1.
        A(2, 1) = (-1*U(2)**2/dens**2 + phys%a)
        A(2, 2) = 2*U(2)/dens
@@ -185,23 +186,22 @@ CONTAINS
   END SUBROUTINE jacobianMatricesFace
 
 
-  SUBROUTINE logrhojacobianVector(U,Up,V)
-    REAL*8, INTENT(in)  :: U(:),Up(:)
-    REAL*8, INTENT(out) :: V(:)
-
-    V = 0.d0
-    V(1) = U(2)*U(1)/Up(1)
-    V(2) = (U(1)-1)*(U(2)**2/Up(1) - phys%a*Up(1))
-
-  END SUBROUTINE logrhojacobianVector
+  ! SUBROUTINE logrhojacobianVector(U,Up,V)
+  !   REAL*8, INTENT(in)  :: U(:),Up(:)
+  !   REAL*8, INTENT(out) :: V(:)
+  !
+  !   V = 0.d0
+  !   V(1) = U(2)*U(1)/Up(1)
+  !   V(2) = (U(1)-1)*(U(2)**2/Up(1) - phys%a*Up(1))
+  !
+  ! END SUBROUTINE logrhojacobianVector
 
 
   !*****************************************
   ! Set the perpendicular diffusion
   !****************************************
-  SUBROUTINE setLocalDiff(xy, u, d_iso, d_ani, Bmod)
+  SUBROUTINE setLocalDiff(xy, u, d_iso, d_ani)
     REAL*8, INTENT(in)  :: xy(:, :)
-    REAL*8, INTENT(in)  :: Bmod(:)
     REAL*8, INTENT(in)  :: u(:,:)
     REAL*8, INTENT(out) :: d_iso(:, :, :), d_ani(:, :, :)
     REAL*8              :: iperdiff(SIZE(xy, 1))
@@ -324,6 +324,26 @@ CONTAINS
     ENDIF
   END SUBROUTINE computeIperDiffusion
 
+  !*****************************************
+  ! Pinch term
+  !***************************************
+  PURE SUBROUTINE computePinch(b,psi,APinch)
+    REAL*8, INTENT(IN)     :: b(:),psi
+    REAL*8, INTENT(OUT)    :: APinch(:,:)
+    REAL*8                 :: v_p,bnorm(2)
+
+    APinch = 0.
+
+    bnorm = b(:)/NORM2(b)
+    v_p = phys%v_p*(psi**2 + psi**2*TANH((0.95 - psi)/0.02))
+    !IF (v_p .lt. 1.e-4/simpar%refval_speed) v_p = 0.
+
+    APinch(1,1) = v_p*bnorm(2)
+    APinch(1,2) = v_p*(-bnorm(1))
+
+  ENDSUBROUTINE computePinch
+
+
   ! ******************************
   ! Neutral Source terms
   ! ******************************
@@ -432,10 +452,10 @@ CONTAINS
   !*******************************************
   ! Compute the stabilization tensor tau
   !*******************************************
-  SUBROUTINE computeTauGaussPoints(up, uc, b, bmod, n, iel, ifa, isext, xy, tau)
-    REAL*8, INTENT(in)  :: up(:), uc(:), b(:), bmod,n(:), xy(:)
+  SUBROUTINE computeTauGaussPoints(up, uc, b, n, iel, isext, xy, tau)
+    REAL*8, INTENT(in)  :: up(:), uc(:), b(:),n(:), xy(:)
     REAL, INTENT(in)    :: isext
-    INTEGER, INTENT(in) :: ifa, iel
+    INTEGER, INTENT(in) :: iel
     REAL*8, INTENT(out) :: tau(:, :)
     INTEGER             :: ndim
 #ifdef NEUTRAL
@@ -443,7 +463,7 @@ CONTAINS
 #else
     REAL*8              :: tau_aux(2),diff_iso(2,2,1),diff_ani(2,2,1)
 #endif
-    REAL*8              :: bn, bnorm,xyd(1,SIZE(xy)),uu(1,SIZE(uc)),bmod_d(1)
+    REAL*8              :: bn, bnorm,xyd(1,SIZE(xy)),uu(1,SIZE(uc))
 
 
     ndim = SIZE(n)
@@ -451,9 +471,8 @@ CONTAINS
     bnorm = NORM2(b(1:ndim))
     xyd(1,:) = xy(:)
     uu(1,:) = uc(:)
-    bmod_d = bmod
 
-    CALL setLocalDiff(xyd, uu, diff_iso, diff_ani, bmod_d)
+    CALL setLocalDiff(xyd, uu, diff_iso, diff_ani)
 
 
     !    write(6,*) "diff_iso", diff_iso(1,1,1),diff_iso(2,2,1),diff_iso(3,3,1), " phys%diff_n ", phys%diff_n, " phys%diff_u ",phys%diff_u,  " phys%diff_nn ",phys%diff_nn
