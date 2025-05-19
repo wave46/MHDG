@@ -41,8 +41,8 @@ SUBROUTINE READ_input()
   REAL*8                :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
   ! Info for input and output
-  CHARACTER(len = 1000) :: field_path, jtor_path,save_folder, geometry_path,puff_path
-  INTEGER               :: field_dimensions(1:2), jtor_dimensions(1:2),puff_dimension
+  CHARACTER(len = 1000) :: field_path, jtor_path,save_folder, geometry_path,puff_path, target_density_path
+  INTEGER               :: field_dimensions(1:2), jtor_dimensions(1:2),puff_dimension, target_density_dimension
   LOGICAL               :: field_from_grid, compute_from_flux, divide_by_2pi
 
   ! RMP and Ripple
@@ -52,13 +52,16 @@ SUBROUTINE READ_input()
 
   ! Neutral and Ohmic heating
   LOGICAL               :: OhmicSrc, apply_trim
-  REAL*8                :: Zeff,Pohmic,diff_nn,Re,Re_pump,puff,cryopump_power,puff_slope
+  REAL*8                :: Zeff,Pohmic,diff_nn,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
 #ifdef KEQUATION
   ! k equation
   REAL*8                :: diff_k_min, diff_k_max, k_max
 #endif
   ! Movin Equilibrium
   LOGICAL               :: ME
+
+  ! target density
+  INTEGER               :: target_variable
   !external heating
   LOGICAL               :: external_heating, external_heating_from_grid
   CHARACTER(1000)       :: external_heating_path
@@ -66,20 +69,20 @@ SUBROUTINE READ_input()
 
 
   ! Defining the variables to READ from the file
-  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
+  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, init, driftdia, driftexb, testcase, OhmicSrc, ME, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb
-  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension
+  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #endif
@@ -119,6 +122,7 @@ SUBROUTINE READ_input()
   switch%testcase         = testcase
   switch%ohmicsrc         = OhmicSrc
   switch%ME               = ME
+  switch%target_variable   = target_variable
   switch%RMP              = RMP
   switch%Ripple           = Ripple
   switch%psdtime          = psdtime
@@ -153,6 +157,8 @@ SUBROUTINE READ_input()
   input%external_heating_from_grid = external_heating_from_grid
   input%save_folder       = TRIM(ADJUSTL(save_folder))
   input%puff_path        = TRIM(ADJUSTL(puff_path))
+  input%target_density_path = TRIM(ADJUSTL(target_density_path))
+  input%target_density_dimension = target_density_dimension
   input%puff_dimension   = puff_dimension
   numer%tau               = tau
   numer%nrp               = nrp
@@ -232,6 +238,9 @@ SUBROUTINE READ_input()
   phys%apply_trim         = apply_trim
   phys%cryopump_power     = cryopump_power
   phys%puff               = puff
+  phys%feedback_propotional_gain = feedback_propotional_gain
+  phys%feedback_integral_gain = feedback_integral_gain
+  phys%feedback_derivative_gain = feedback_derivative_gain
   phys%puff_slope         = puff_slope
   phys%density_source     = density_source
   phys%ener_source_e      = ener_source_e
@@ -433,6 +442,11 @@ SUBROUTINE READ_input()
      PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power
      IF (switch%ME) THEN
         PRINT *, '             - puff increment slope:                               ', phys%puff_slope
+          IF (switch%target_variable /= 0) THEN
+             PRINT *, '             - feedback_propotional_gain:                               ', phys%feedback_propotional_gain
+             PRINT *, '             - feedback_integral_gain:                                  ', phys%feedback_integral_gain
+             PRINT *, '             - feedback_derivative_gain:                                 ', phys%feedback_derivative_gain
+          ENDIF
      ENDIF
      PRINT *, '                - particle source at core:                            ', part_source
      PRINT *, '                - energy source at core:                              ', ener_source

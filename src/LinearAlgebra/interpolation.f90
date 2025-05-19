@@ -112,34 +112,136 @@ CONTAINS
     nodesearch = MINLOC(d, DIM = 1)
 
   END FUNCTION nodesearch
-
+#ifndef PARALL
   SUBROUTINE lineintegration(qp_len, x_vec, y_vec, f, Xc, T, nodes2D, nli)
-    ! Given a set of points (x, y) along a line of sight, retruns the line integration of
-    ! f. The function f is evaluated IN the closest nodes to points (x, y).
-    IMPLICIT NONE
-    INTEGER,INTENT(IN) :: qp_len, nodes2D, T(:,:)
-    REAL*8,INTENT(IN)  :: x_vec(:), y_vec(:), f(:), Xc(:,:)
-    REAL*8,INTENT(OUT) :: nli
-    INTEGER            :: i, iel, inp, n_ind, f_ind(2), np_len
-    REAL*8             :: x, y, dl(qp_len-1), x_qp(qp_len), f_qp(qp_len)
+#else
+   SUBROUTINE lineintegration(qp_len, x_vec, y_vec, f, Xc, T, nodes2D, ghost_elems, nli)
+#endif
+   ! Given a set of points (x, y) along a line of sight, returns the line integration of
+   ! f. The function f is evaluated IN the closest nodes to points (x, y).
+   IMPLICIT NONE
+   INTEGER, INTENT(IN) :: qp_len, nodes2D, T(:,:)
+   REAL*8, INTENT(IN)  :: x_vec(:), y_vec(:), f(:), Xc(:,:)
+   REAL*8, INTENT(OUT) :: nli
+   INTEGER             :: i, inp, n_ind, f_ind(2), np_len
+   REAL*8              :: x, y, x_prev, y_prev, f_prev, dl, f_cur, d(nodes2D)
+   LOGICAL             :: is_inside
+   INTEGER             :: element_index
+#ifdef PARALL
+   INTEGER, INTENT(IN) :: ghost_elems(:)
+#endif
 
-    ! Search closest node and evaluate f
-    DO i = 1, qp_len
-       x = x_vec(i)
-       y = y_vec(i)
-       np_len = SIZE(Xc,1)
-       n_ind = nodesearch(x, y, np_len, Xc(:,1), Xc(:,2))
-       f_ind = FINDLOC(T,n_ind)
-       iel = f_ind(1)
-       inp = f_ind(2)
-       x_qp(i) = Xc(n_ind,1)
-       f_qp(i) = f((iel-1)*nodes2D + inp)
-    END DO
+   ! Initialize result
+   nli = 0.0D0
+   x_prev = 0.0D0
+   y_prev = 0.0D0
+   f_prev = 0.0D0
+   dl = 0.0D0
+   f_cur = 0.0D0
+   d = 0.0D0
 
-    dl = (x_qp(2:qp_len) - x_qp(1:qp_len - 1))*1.901e-3
-    nli = SUM(0.5*(f_qp(2:qp_len) + f_qp(1:qp_len - 1))*dl)
+   DO i = 1, qp_len
+      x = x_vec(i)
+      y = y_vec(i)
+      np_len = SIZE(Xc, 1)
+
+      ! Check if the point (x, y) is inside the mesh
+      CALL point_in_mesh(x, y, Xc, T, is_inside, element_index)
+
+      IF (.NOT. is_inside) THEN
+         x_prev = x
+         y_prev = y
+         f_prev = 0.
+         CYCLE  ! Skip this point if it is outside the mesh
+      ENDIF
+#ifdef PARALL
+      ! Check if the element is a ghost element
+      IF ((ghost_elems(element_index) .EQ. 1)) THEN
+         x_prev = x
+         y_prev = y
+         f_prev = 0.
+         CYCLE
+      END IF
+#endif
+
+      ! Compute distances to the point (x, y)
+      d = SQRT((Xc(T(element_index, :), 1) - x)**2 + (Xc(T(element_index, :), 2) - y)**2)
+
+      ! Find the index of the closest node in the element
+      inp = MINLOC(d, DIM = 1)
+      f_cur = f((element_index-1)*nodes2D + inp)
+
+      ! Compute the line segment length and update the summation
+      IF (i > 1) THEN
+         dl = SQRT((x - x_prev)**2 + (y - y_prev)**2) * 1.901e-3
+         nli = nli + 0.5D0 * (f_cur + f_prev) * dl
+      END IF
+
+      ! Update previous values
+      x_prev = x
+      y_prev = y
+      f_prev = f_cur
+   END DO
 
   END SUBROUTINE lineintegration
+
+  SUBROUTINE point_in_mesh(x, y, Xc, T, is_inside, element_index)
+     IMPLICIT NONE
+     REAL*8, INTENT(IN) :: x, y       ! Coordinates of the point
+     REAL*8, INTENT(IN) :: Xc(:,:)    ! Node coordinates
+     INTEGER, INTENT(IN) :: T(:,:)    ! Connectivity matrix
+     LOGICAL, INTENT(OUT) :: is_inside
+     INTEGER, INTENT(OUT) :: element_index
+     INTEGER :: i, j
+     REAL*8 :: x_nodes(3), y_nodes(3)
+  
+     is_inside = .FALSE.
+     element_index = -1
+  
+     ! Loop over all elements in the mesh
+     DO i = 1, SIZE(T, 1)
+         ! Get the coordinates of the nodes of the current element
+         DO j = 1, 3
+             x_nodes(j) = Xc(T(i, j), 1)
+             y_nodes(j) = Xc(T(i, j), 2)
+         END DO
+        
+         ! Check if the point (x, y) is inside the current element
+         IF (point_in_triangle(x, y, x_nodes, y_nodes)) THEN
+             is_inside = .TRUE.
+             element_index = i
+             RETURN
+         END IF
+     END DO
+  END SUBROUTINE point_in_mesh
+
+  LOGICAL FUNCTION point_in_triangle(x, y, x_nodes, y_nodes)
+    IMPLICIT NONE
+    REAL*8, INTENT(IN) :: x, y          ! Coordinates of the point
+    REAL*8, INTENT(IN) :: x_nodes(3), y_nodes(3)  ! Triangle vertices
+    REAL*8 :: area, area1, area2, area3
+
+    ! Compute the area of the triangle
+    area = 0.5D0 * ABS(x_nodes(1)*(y_nodes(2)-y_nodes(3)) + &
+                       x_nodes(2)*(y_nodes(3)-y_nodes(1)) + &
+                       x_nodes(3)*(y_nodes(1)-y_nodes(2)))
+
+    ! Compute the areas of the sub-triangles formed with the point
+    area1 = 0.5D0 * ABS(x*(y_nodes(2)-y_nodes(3)) + &
+                        x_nodes(2)*(y_nodes(3)-y) + &
+                        x_nodes(3)*(y-y_nodes(2)))
+
+    area2 = 0.5D0 * ABS(x_nodes(1)*(y-y_nodes(3)) + &
+                        x*(y_nodes(3)-y_nodes(1)) + &
+                        x_nodes(3)*(y_nodes(1)-y))
+
+    area3 = 0.5D0 * ABS(x_nodes(1)*(y_nodes(2)-y) + &
+                        x_nodes(2)*(y-y_nodes(1)) + &
+                        x*(y_nodes(1)-y_nodes(2)))
+
+    ! Check if the sum of the sub-triangle areas equals the total area
+    point_in_triangle = ABS(area - (area1 + area2 + area3)) < 1.0D-10
+  END FUNCTION point_in_triangle
 
   !real function lineintegration(qp_len, x_vec, y_vec, np_len, x_array, y_array ,f)
   ! Given a set of points (x, y) along a line of sight, retruns the line integration of

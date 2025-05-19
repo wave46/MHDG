@@ -463,7 +463,7 @@ PROGRAM MHDG
               ! ReLoad magnetic field and Jtor
               CALL load_magnetic_field()
               CALL loadJtorMap()
-              CALL SetPuff()
+              CALL SetParticleSource()
               time%dt = time%dt_ME/simpar%refval_time
            ENDIF
         END IF
