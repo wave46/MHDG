@@ -30,10 +30,6 @@ CONTAINS
     ALLOCATE (phys%B(nnodes, 3))
     ALLOCATE (phys%magnetic_flux(nnodes))
     ALLOCATE (phys%magnetic_psi(nnodes))
-#ifdef KEQUATION
-    ALLOCATE (phys%omega(nnodes))
-    ALLOCATE (phys%q_cyl(nnodes))
-#endif
     IF (switch%ohmicsrc) THEN
        ALLOCATE (phys%Jtor(nnodes))
     END IF
@@ -55,10 +51,6 @@ CONTAINS
     phys%B = 0.
     phys%magnetic_flux = 0.
     phys%magnetic_psi = 0.
-#ifdef KEQUATION
-    phys%omega = 0.
-    phys%q_cyl = 0.
-#endif
 
     SELECT CASE (switch%testcase)
     CASE (1:49)
@@ -241,9 +233,6 @@ CONTAINS
     CHARACTER(LEN=1000) :: fname
     CHARACTER(50)  :: nit
     INTEGER                            :: min_ind(2)
-#ifdef KEQUATION
-    REAL*8                            :: q_cyl, omega,a    
-#endif
 
 
     IF (utils%printint > 0) THEN
@@ -341,14 +330,6 @@ CONTAINS
        Bz = interpolate(ip, yvec, jp, xvec, Bz2D, y, x, 1e-12)
        Bt = interpolate(ip, yvec, jp, xvec, Bphi2D, y, x, 1e-12)
        flux = interpolate(ip, yvec, jp, xvec, flux2D, y, x, 1e-12)
-#ifdef KEQUATION
-       omega = simpar%refval_charge/simpar%refval_mass*SQRT(Br**2+Bz**2+Bt**2)*simpar%refval_time
-       a = SQRT((x-phys%r_axis)**2+(y-phys%z_axis)**2)
-       q_cyl = ABS(Bt)*a/SQRT(Br**2+Bz**2)/x
-       IF(q_cyl>1.e4) q_cyl = 1.e4
-       IF(q_cyl<1.) q_cyl = 1.
-
-#endif
        ind = i
 #ifdef TOR3D
        DO j = 1, Mesh%Nnodes_toroidal
@@ -358,10 +339,6 @@ CONTAINS
           phys%B(ind, 2) = Bz
           phys%B(ind, 3) = Bt
           phys%magnetic_flux(ind) = flux
-#ifdef KEQUATION
-          phys%omega(ind) = omega
-          phys%q_cyl(ind) = q_cyl
-#endif
 #ifdef TOR3D
        END DO
 #endif
@@ -434,9 +411,6 @@ CONTAINS
 
     USE MPI_OMP, only: MPIvar
     INTEGER        ::  ierr, k
-#ifdef KEQUATION
-    INTEGER        ::  i
-#endif
     CHARACTER(LEN=1000) :: fname = 'Evolving_equilibrium'
     CHARACTER(50)  :: npr, nid, nit
     CHARACTER(len=1000) :: fname_complete
@@ -541,18 +515,6 @@ CONTAINS
     ! Magnetic flux normalized to separatrix: PSI
     phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin)
 
-#ifdef KEQUATION
-    DO i = 1, Mesh%Nnodes
-       phys%omega(i) = simpar%refval_charge/simpar%refval_mass*SQRT(Br(i)**2+Bz(i)**2+Bt(i)**2)*simpar%refval_time
-
-       phys%q_cyl(i) = ABS(Bt(i))*SQRT((Mesh%X(i,1)-phys%r_axis)**2+(Mesh%X(i,2)-phys%z_axis)**2)/SQRT(Br(i)**2+Bz(i)**2)/Mesh%X(i,1)
-       phys%q_cyl(i) = MAX(phys%q_cyl(i),1.)
-       phys%q_cyl(i) = MIN(phys%q_cyl(i),1e4)
-    ENDDO
-    WRITE(6,*) 'r_axis', phys%r_axis*simpar%refval_length
-    WRITE(6,*) 'z_axis', phys%z_axis*simpar%refval_length
-
-#endif
     IF (switch%ME) THEN
        time%dt_ME = dt_ME
        time%t_ME = t_ME
@@ -1293,13 +1255,13 @@ CONTAINS
     REAL*8            :: linex(1000), liney(1000), n_i(Mesh%Nelems*refElPol%Nnodes2D)
     REAL*8, POINTER, DIMENSION(:) :: puff_time
     INTEGER           :: puff_time_idx, puff_len
-    
+
     fname = input%puff_path
     puff_len = input%puff_dimension
 
     ! Allocate storing space in phys (puff for WEST, 403 entries)
     IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
-      
+
        ALLOCATE(puff_time(puff_len))
        ALLOCATE(phys%puff_exp(puff_len))
 
