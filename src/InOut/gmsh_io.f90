@@ -116,7 +116,7 @@ CONTAINS
     INTEGER ( kind = 4 ) element_order
     INTEGER ( kind = 4 ) node_dim
     INTEGER ( kind = 4 ) node_num, n_Tb_IN, n_Tb_OUT, n_Tb_LIM, n_Tb_PUMP, n_Tb_PUFF, n_T_DOM
-    INTEGER ( kind = 4 ), DIMENSION(:,:), ALLOCATABLE :: face_info, Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_PUMP, Tb_PUFF, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_ULIM, T, Tb
+    INTEGER ( kind = 4 ), DIMENSION(:,:), ALLOCATABLE :: Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_PUMP, Tb_PUFF, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_ULIM, T, Tb
     INTEGER    ( kind = 4 ), DIMENSION(:), ALLOCATABLE   :: temp
     INTEGER   ( kind = 4 ), DIMENSION(:), ALLOCATABLE :: boundaryFlag
     INTEGER ( kind = 4 ) i_Tb_IN, i_Tb_OUT, i_Tb_LIM, i_Tb_PUMP, i_Tb_PUFF,  i_T_DOM
@@ -483,9 +483,9 @@ CONTAINS
       DEALLOCATE(indices)
     ENDIF
 
-    CALL generate_elemface_info(T,Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, element_order, face_info)
+    !CALL generate_elemface_info(T,Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, element_order, face_info)
     CALL generate_boundary_names(Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_PUFF, Tb_PUMP, Tb_ULIM, Tb, boundaryFlag, element_order)
-    CALL load_mesh2global_var(SIZE(node_x,1), SIZE(T,1), SIZE(Tb,1), SIZE(node_x,2), SIZE(T,2), element_order, 0, T, transpose(node_x), Tb, boundaryFlag, face_info)
+    CALL load_mesh2global_var(SIZE(node_x,1), SIZE(T,1), SIZE(Tb,1), SIZE(node_x,2), SIZE(T,2), element_order, 0, T, transpose(node_x), Tb, boundaryFlag)!, face_info)
     CALL create_reference_element(refEl, SIZE(node_x,1), verbose = 0)
     CALL generate_fekete_nodes(Mesh%X,Mesh%T, element_order-1, refEl)
 
@@ -630,146 +630,146 @@ CONTAINS
 
   ENDSUBROUTINE generate_boundary_names
 
-  SUBROUTINE generate_elemface_info(T, Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, element_order, face_info)
-      INTEGER, INTENT(IN)                              :: T(:,:)
-      INTEGER, INTENT(IN)                              :: element_order
-      INTEGER, DIMENSION(:,:), ALLOCATABLE, INTENT(IN) :: Tb_IN, Tb_LIM,Tb_PUMP, Tb_PUFF, Tb_OUT
-      INTEGER, ALLOCATABLE, INTENT(OUT)                :: face_info(:,:)
-      INTEGER, ALLOCATABLE                             :: aux_extfaces(:,:), aux_Tb(:,:)
-      INTEGER                                          :: n_Tb_vec(5)
-      INTEGER                                          :: nodes(2)
-      INTEGER                                          :: n_faces, ifa, iel, n_elements, n_boundaries, el_index, loc_fa, elemFaceInfo_fa
-      INTEGER                                          :: i, counter
-
-      n_elements = SIZE(T,1)
-      n_Tb_vec = 0
-      IF(ALLOCATED(Tb_PUMP)) THEN
-        n_Tb_vec(1) = SIZE(Tb_PUMP,1)
-      ENDIF
-      IF(ALLOCATED(Tb_PUFF)) THEN
-        n_Tb_vec(2) = SIZE(Tb_PUFF,1)
-      ENDIF
-      IF(ALLOCATED(Tb_IN)) THEN
-        n_Tb_vec(3) = SIZE(Tb_IN,1)
-      ENDIF
-      IF(ALLOCATED(Tb_LIM)) THEN
-        n_Tb_vec(4) = SIZE(Tb_LIM,1)
-      ENDIF
-      IF(ALLOCATED(Tb_OUT)) THEN
-        n_Tb_vec(5) = SIZE(Tb_OUT,1)
-      ENDIF
-
-      n_boundaries = SIZE(n_Tb_vec)
-
-      ALLOCATE(face_info(SUM(n_Tb_vec), 2))
-
-      DO i = 1, n_boundaries
-          IF(n_Tb_vec(i) .ne. 0) THEN
-              ALLOCATE(aux_extfaces(n_Tb_vec(i), 2))
-              ALLOCATE(aux_Tb(n_Tb_vec(i), element_order))
-              SELECT CASE(i)
-                  CASE (1)
-                      aux_Tb = Tb_PUMP
-                  CASE (2)
-                      aux_Tb = Tb_PUFF
-                  CASE (3)
-                      aux_Tb = Tb_IN
-                  CASE (4)
-                      aux_Tb = Tb_LIM
-                  CASE (5)
-                      aux_Tb = Tb_OUT
-              END SELECT
-          ELSE
-              CYCLE
-          ENDIF
-
-          n_faces = n_Tb_vec(i)
-          el_index = 0
-          loc_fa = 0
-          counter = 0
-
-          DO ifa = 1, n_faces
-              IF(i .eq. 1) THEN
-                  nodes(1) = aux_Tb(ifa, element_order)
-                  nodes(2) = aux_Tb(ifa, 1)
-              ELSE
-                  nodes(1) = aux_Tb(ifa, 1)
-                  nodes(2) = aux_Tb(ifa, element_order)
-              ENDIF
-
-              DO iel = 1, n_elements
-                  counter = COUNT(T(iel, 1:3) .eq. nodes(1))
-                  counter = counter + COUNT(T(iel, 1:3) .eq. nodes(2))
-                  IF(counter .eq. 2) THEN
-                      el_index = iel
-                      EXIT
-                  ENDIF
-                  counter = 0
-              ENDDO
-
-              IF(el_index .eq. 0) THEN
-                  PRINT *, "Error in generate_elemface_info: element not found. STOP."
-                  STOP
-              ENDIF
-
-              IF (equality(T(el_index, 1),nodes(1)) .OR. (equality(T(el_index, 1),nodes(2)))) THEN
-                  ! Check for loc_fa = 1 or 3
-                  IF (equality(T(el_index, 2),nodes(1)) .OR. (equality(T(el_index, 2),nodes(2)))) THEN
-                      loc_fa = 1
-                  ELSEIF(equality(T(el_index, 3),nodes(1)) .OR. (equality(T(el_index, 3),nodes(2)))) THEN
-                      loc_fa = 3
-                  END IF
-              ELSEIF (equality(T(el_index, 2),nodes(1)) .OR. (equality(T(el_index, 2),nodes(2)))) THEN
-                  ! Check for loc_fa = 2 or 1
-                  IF (equality(T(el_index, 3),nodes(1)) .OR. (equality(T(el_index, 3),nodes(2)))) THEN
-                      loc_fa = 2
-                  ELSEIF(equality(T(el_index, 1),nodes(1)) .OR. (equality(T(el_index, 1),nodes(2)))) THEN
-                      loc_fa = 1
-                  END IF
-              ELSEIF (equality(T(el_index, 3),nodes(1)) .OR. (equality(T(el_index, 3),nodes(2)))) THEN
-                  ! Check for loc_fa = 3 or elemFaceInfo_fa = 2
-                  IF (equality(T(el_index, 1),nodes(1)) .OR. (equality(T(el_index, 1),nodes(2)))) THEN
-                      loc_fa = 3
-                  ELSEIF(equality(T(el_index, 2),nodes(1)) .OR. (equality(T(el_index, 2),nodes(2)))) THEN
-                      elemFaceInfo_fa = 2
-                  END IF
-              ELSE
-                  ! Error condition
-                  PRINT *, 'Something is wrong in gmsh_io'
-                  STOP
-              END IF
-
-              aux_extfaces(ifa,1) = el_index
-              aux_extfaces(ifa,2) = loc_fa
-
-          ENDDO
-
-          IF(i .eq. 1) THEN
-              face_info(1:n_Tb_vec(i),:) = aux_extfaces(:,:)
-          ELSE
-              face_info(SUM(n_Tb_vec(1:i-1))+1:SUM(n_Tb_vec(1:i)),:) = aux_extfaces(:,:)
-          ENDIF
-
-          DEALLOCATE(aux_extfaces)
-          DEALLOCATE(aux_Tb)
-      ENDDO
-
-  contains
-
-    function equality (input1,input2) result(flag)
-      INTEGER, intent(IN) :: input1
-      INTEGER, intent(IN) :: input2
-      logical            :: flag
-
-      IF(input1 .eq. input2) THEN
-        flag = .true.
-      ELSE
-        flag = .false.
-      ENDIF
-
-      return
-    endfunction
-  ENDSUBROUTINE
+  ! SUBROUTINE generate_elemface_info(T, Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, element_order, face_info)
+  !     INTEGER, INTENT(IN)                              :: T(:,:)
+  !     INTEGER, INTENT(IN)                              :: element_order
+  !     INTEGER, DIMENSION(:,:), ALLOCATABLE, INTENT(IN) :: Tb_IN, Tb_LIM,Tb_PUMP, Tb_PUFF, Tb_OUT
+  !     INTEGER, ALLOCATABLE, INTENT(OUT)                :: face_info(:,:)
+  !     INTEGER, ALLOCATABLE                             :: aux_extfaces(:,:), aux_Tb(:,:)
+  !     INTEGER                                          :: n_Tb_vec(5)
+  !     INTEGER                                          :: nodes(2)
+  !     INTEGER                                          :: n_faces, ifa, iel, n_elements, n_boundaries, el_index, loc_fa, elemFaceInfo_fa
+  !     INTEGER                                          :: i, counter
+  !
+  !     n_elements = SIZE(T,1)
+  !     n_Tb_vec = 0
+  !     IF(ALLOCATED(Tb_PUMP)) THEN
+  !       n_Tb_vec(1) = SIZE(Tb_PUMP,1)
+  !     ENDIF
+  !     IF(ALLOCATED(Tb_PUFF)) THEN
+  !       n_Tb_vec(2) = SIZE(Tb_PUFF,1)
+  !     ENDIF
+  !     IF(ALLOCATED(Tb_IN)) THEN
+  !       n_Tb_vec(3) = SIZE(Tb_IN,1)
+  !     ENDIF
+  !     IF(ALLOCATED(Tb_LIM)) THEN
+  !       n_Tb_vec(4) = SIZE(Tb_LIM,1)
+  !     ENDIF
+  !     IF(ALLOCATED(Tb_OUT)) THEN
+  !       n_Tb_vec(5) = SIZE(Tb_OUT,1)
+  !     ENDIF
+  !
+  !     n_boundaries = SIZE(n_Tb_vec)
+  !
+  !     !ALLOCATE(face_info(SUM(n_Tb_vec), 2))
+  !
+  !     DO i = 1, n_boundaries
+  !         IF(n_Tb_vec(i) .ne. 0) THEN
+  !             ALLOCATE(aux_extfaces(n_Tb_vec(i), 2))
+  !             ALLOCATE(aux_Tb(n_Tb_vec(i), element_order))
+  !             SELECT CASE(i)
+  !                 CASE (1)
+  !                     aux_Tb = Tb_PUMP
+  !                 CASE (2)
+  !                     aux_Tb = Tb_PUFF
+  !                 CASE (3)
+  !                     aux_Tb = Tb_IN
+  !                 CASE (4)
+  !                     aux_Tb = Tb_LIM
+  !                 CASE (5)
+  !                     aux_Tb = Tb_OUT
+  !             END SELECT
+  !         ELSE
+  !             CYCLE
+  !         ENDIF
+  !
+  !         n_faces = n_Tb_vec(i)
+  !         el_index = 0
+  !         loc_fa = 0
+  !         counter = 0
+  !
+  !         DO ifa = 1, n_faces
+  !             IF(i .eq. 1) THEN
+  !                 nodes(1) = aux_Tb(ifa, element_order)
+  !                 nodes(2) = aux_Tb(ifa, 1)
+  !             ELSE
+  !                 nodes(1) = aux_Tb(ifa, 1)
+  !                 nodes(2) = aux_Tb(ifa, element_order)
+  !             ENDIF
+  !
+  !             DO iel = 1, n_elements
+  !                 counter = COUNT(T(iel, 1:3) .eq. nodes(1))
+  !                 counter = counter + COUNT(T(iel, 1:3) .eq. nodes(2))
+  !                 IF(counter .eq. 2) THEN
+  !                     el_index = iel
+  !                     EXIT
+  !                 ENDIF
+  !                 counter = 0
+  !             ENDDO
+  !
+  !             IF(el_index .eq. 0) THEN
+  !                 PRINT *, "Error in generate_elemface_info: element not found. STOP."
+  !                 STOP
+  !             ENDIF
+  !
+  !             IF (equality(T(el_index, 1),nodes(1)) .OR. (equality(T(el_index, 1),nodes(2)))) THEN
+  !                 ! Check for loc_fa = 1 or 3
+  !                 IF (equality(T(el_index, 2),nodes(1)) .OR. (equality(T(el_index, 2),nodes(2)))) THEN
+  !                     loc_fa = 1
+  !                 ELSEIF(equality(T(el_index, 3),nodes(1)) .OR. (equality(T(el_index, 3),nodes(2)))) THEN
+  !                     loc_fa = 3
+  !                 END IF
+  !             ELSEIF (equality(T(el_index, 2),nodes(1)) .OR. (equality(T(el_index, 2),nodes(2)))) THEN
+  !                 ! Check for loc_fa = 2 or 1
+  !                 IF (equality(T(el_index, 3),nodes(1)) .OR. (equality(T(el_index, 3),nodes(2)))) THEN
+  !                     loc_fa = 2
+  !                 ELSEIF(equality(T(el_index, 1),nodes(1)) .OR. (equality(T(el_index, 1),nodes(2)))) THEN
+  !                     loc_fa = 1
+  !                 END IF
+  !             ELSEIF (equality(T(el_index, 3),nodes(1)) .OR. (equality(T(el_index, 3),nodes(2)))) THEN
+  !                 ! Check for loc_fa = 3 or elemFaceInfo_fa = 2
+  !                 IF (equality(T(el_index, 1),nodes(1)) .OR. (equality(T(el_index, 1),nodes(2)))) THEN
+  !                     loc_fa = 3
+  !                 ELSEIF(equality(T(el_index, 2),nodes(1)) .OR. (equality(T(el_index, 2),nodes(2)))) THEN
+  !                     elemFaceInfo_fa = 2
+  !                 END IF
+  !             ELSE
+  !                 ! Error condition
+  !                 PRINT *, 'Something is wrong in gmsh_io'
+  !                 STOP
+  !             END IF
+  !
+  !             aux_extfaces(ifa,1) = el_index
+  !             aux_extfaces(ifa,2) = loc_fa
+  !
+  !         ENDDO
+  !
+  !         ! IF(i .eq. 1) THEN
+  !         !     face_info(1:n_Tb_vec(i),:) = aux_extfaces(:,:)
+  !         ! ELSE
+  !         !     face_info(SUM(n_Tb_vec(1:i-1))+1:SUM(n_Tb_vec(1:i)),:) = aux_extfaces(:,:)
+  !         ! ENDIF
+  !
+  !         DEALLOCATE(aux_extfaces)
+  !         DEALLOCATE(aux_Tb)
+  !     ENDDO
+  !
+  ! contains
+  !
+  !   function equality (input1,input2) result(flag)
+  !     INTEGER, intent(IN) :: input1
+  !     INTEGER, intent(IN) :: input2
+  !     logical            :: flag
+  !
+  !     IF(input1 .eq. input2) THEN
+  !       flag = .true.
+  !     ELSE
+  !       flag = .false.
+  !     ENDIF
+  !
+  !     return
+  !   endfunction
+  ! ENDSUBROUTINE
 
   subroutine convert_gmsh_to_hdf5(h5_filename, Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, T, X, Tb, boundaryFlag)
     character(LEN=*), INTENT(IN) :: h5_filename
@@ -929,12 +929,12 @@ CONTAINS
   ! Loads mesh from an hdf5 file
   ! external file
   !********************************
-  SUBROUTINE load_mesh2global_var(Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, T, X, Tb, boundaryFlag, face_info)
+  SUBROUTINE load_mesh2global_var(Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, T, X, Tb, boundaryFlag)
 
     USE printutils
 
     INTEGER, INTENT(IN)          :: Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType
-    INTEGER, INTENT(IN)          :: T(:,:), Tb(:,:), boundaryFlag(:),face_info(:,:)
+    INTEGER, INTENT(IN)          :: T(:,:), Tb(:,:), boundaryFlag(:)
     REAL*8, INTENT(IN)           :: X(:,:)
     character(10)                :: str
     real*8, parameter            :: tol = 1e-6
@@ -951,13 +951,11 @@ CONTAINS
     ALLOCATE (Mesh%X(Nnodes, Ndim))
     ALLOCATE (Mesh%Tb(Nextfaces, Nnodesperface))
     ALLOCATE (Mesh%boundaryFlag(Nextfaces))
-    ALLOCATE (Mesh%face_info(Nextfaces,2))
 
     Mesh%T = T
     Mesh%Tb = Tb
     Mesh%boundaryFlag = boundaryFlag
     Mesh%X = X
-    Mesh%face_info = face_info
 
     Mesh%Ndim = Ndim
     Mesh%Nnodes = Nnodes
