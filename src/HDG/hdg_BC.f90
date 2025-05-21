@@ -538,8 +538,8 @@ CONTAINS
 #endif
 #endif
 #ifdef SAVEFLUX
-  real*8                    :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_neutral,totalflux_numerical
-  real*8                    :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_neutral,faceflux_numerical
+  REAL*8                    :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_neutral,totalflux_numerical
+  REAL*8                    :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_neutral,faceflux_numerical
 #endif
 
   IF (utils%timing) THEN
@@ -831,11 +831,11 @@ CONTAINS
   !   ! Periodic bc
   !   !****************************
   !   SUBROUTINE set_periodic_bc
-  !      integer                   :: g,i,ifan,ifln,ieln,Fin,ind_ufn(refElPol%Nfacenodes*phys%neq)
-  !      real*8                    :: dline,xyDerNorm_g
-  !      real*8                    :: NiNi(Npfl,Npfl),Ni(Npfl)
-  !      real*8                    :: ufn(refElPol%Nfacenodes*phys%neq)
-  !      real*8                    :: ufgn(refElPol%Ngauss1d,phys%neq),uaux(refElPol%Ngauss1d,phys%neq)
+  !      INTEGER                   :: g,i,ifan,ifln,ieln,Fin,ind_ufn(refElPol%Nfacenodes*phys%neq)
+  !      REAL*8                    :: dline,xyDerNorm_g
+  !      REAL*8                    :: NiNi(Npfl,Npfl),Ni(Npfl)
+  !      REAL*8                    :: ufn(refElPol%Nfacenodes*phys%neq)
+  !      REAL*8                    :: ufgn(refElPol%Ngauss1d,phys%neq),uaux(refElPol%Ngauss1d,phys%neq)
 
   !      ! Solution in the corresponding face
   !      ifan = Mesh%periodic_faces(ifa)
@@ -1104,8 +1104,8 @@ CONTAINS
       REAL                      :: tau_stab(Neq,Neq)
       REAL*8                    :: bohm_suppresion, energy_zero_threshold
 #ifdef SAVEFLUX
-    real*8,intent(out)        :: faceflux_pump, faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral,faceflux_numerical
-    real*8                    :: flgflux_pump, flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical
+    REAL*8,intent(out)        :: faceflux_pump, faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_neutral,faceflux_numerical
+    REAL*8                    :: flgflux_pump, flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical
 
     faceflux_pump = 0.
     faceflux_puff = 0.
@@ -1273,14 +1273,14 @@ CONTAINS
   !*********************************
 !#ifdef NEUTRAL
 !  SUBROUTINE assembly_dirichletwf_bc(iel,ind_asf,ind_ff,ufg,NiNi,Ni,xyfg)
-!    real*8       :: xyfg(:)
-!    real*8       :: kmult_neutral(Npfl)
-!    real*8       :: p1,p2,p3,p4,p5,p6,p7,p8,p9,a1,a2,a3,b1,b2,b3,c1,c2,c3,fit
-!    integer*4    :: iel,ind_asf(:),ind_ff(:)
-!    real*8       :: ufg(:)
-!    real*8       :: NiNi(:,:),Ni(:)
-!    real*8       :: kmult(Neq*Npfl)
-!    integer*4    :: ind(Npfl),i
+!    REAL*8       :: xyfg(:)
+!    REAL*8       :: kmult_neutral(Npfl)
+!    REAL*8       :: p1,p2,p3,p4,p5,p6,p7,p8,p9,a1,a2,a3,b1,b2,b3,c1,c2,c3,fit
+!    INTEGER*4    :: iel,ind_asf(:),ind_ff(:)
+!    REAL*8       :: ufg(:)
+!    REAL*8       :: NiNi(:,:),Ni(:)
+!    REAL*8       :: kmult(Neq*Npfl)
+!    INTEGER*4    :: ind(Npfl),i
 !
 !    !xyfg(:) = xyfg(:)*phys%lscale
 !    ! Dirichlet for neutrals
@@ -1354,10 +1354,10 @@ CONTAINS
   !   ! Assembly periodic bc
   !   !*********************************
   !   SUBROUTINE assembly_periodic_bc(iel,ind_ff,ind_ff,NiNi)
-  !      integer*4    :: iel,ind_ff(:)
-  !      real*8       :: NiNi(:,:)
-  !      real*8       :: kmult(Neq*Npfl)
-  !      integer*4    :: ind(Npfl),i
+  !      INTEGER*4    :: iel,ind_ff(:)
+  !      REAL*8       :: NiNi(:,:)
+  !      REAL*8       :: kmult(Neq*Npfl)
+  !      INTEGER*4    :: ind(Npfl),i
 
   !      kmult = col(tensorProduct(ufg(:),Ni))
   !      DO i = 1,Neq
@@ -1760,38 +1760,38 @@ CONTAINS
 #else
     SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical)
 #endif
-    integer*4          :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
-    real*8             :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),psig,ng(:),tau(:,:),setval,dcs_du(:)
-    real*8             :: diffiso(:,:),diffani(:,:)
-    logical            :: ntang
-    real*8             :: qfg(:)
-    real*8             :: bn,Abohm(Neq,Neq),APinch(Neq,Ndim)
-    integer            :: i,j,k,idm,Neqstab,Neqgrad
+      INTEGER*4          :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
+      REAL*8             :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),psig,ng(:),tau(:,:),setval,dcs_du(:)
+      REAL*8             :: diffiso(:,:),diffani(:,:)
+      LOGICAL            :: ntang
+      REAL*8             :: qfg(:)
+      REAL*8             :: bn,Abohm(Neq,Neq),APinch(Neq,Ndim)
+      INTEGER            :: i,j,k,idm,Neqstab,Neqgrad
 #ifdef VORTICITY
-    integer*4          :: indk(Npfl)
-    real*8             :: kcoeff
+      INTEGER*4          :: indk(Npfl)
+      REAL*8             :: kcoeff
 #endif
-    integer*4          :: ind(Npfl),indi(Npfl),indj(Npfl),ind_jf(Npfl),ind_kf(Npfl)
-    real*8             :: Qpr(Ndim,Neq), recycling_coeff, cryopump_coeff,puff_coeff
-    real*8             :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
-    real*8             :: kmult(Npfl,Npfl),kmultf(Npfl)
+      INTEGER*4          :: ind(Npfl),indi(Npfl),indj(Npfl),ind_jf(Npfl),ind_kf(Npfl)
+      REAL*8             :: Qpr(Ndim,Neq), recycling_coeff, cryopump_coeff,puff_coeff
+      REAL*8             :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
+      REAL*8             :: kmult(Npfl,Npfl),kmultf(Npfl)
 #ifdef TEMPERATURE
-        REAL*8         :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
-        REAL*8         :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
-        REAL*8         :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
-        REAL*8         :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
+      REAL*8             :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
+      REAL*8             :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
+      REAL*8             :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
+      REAL*8             :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
 #ifdef NEUTRAL
-        REAL*8         :: E, theta, RN
-    real*8             :: Dnn_dU(Neq), Dnn_dU_U
+      REAL*8             :: E, theta, RN
+      REAL*8             :: Dnn_dU(Neq), Dnn_dU_U
 #endif
 #endif
 #ifdef SAVEFLUX
-    real*8, INTENT(IN) :: dline
-    real*8,intent(out) :: flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical
+      REAL*8, INTENT(IN) :: dline
+      REAL*8,intent(out) :: flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical
 #endif
 #ifdef BOHMLIMIT
-    real*8             :: U3_min = 2.e-8 ! 1e16[m^-3]*0.01^[eV]/n0/T0
-    logical            :: bohm_limit = .true. ! false if U3<U3_min
+      REAL*8             :: U3_min = 2.e-8 ! 1e16[m^-3]*0.01^[eV]/n0/T0
+      LOGICAL            :: bohm_limit = .true. ! false if U3<U3_min
 
     if (ufg(3)<U3_min) then
       bohm_limit = .false.
@@ -2031,9 +2031,9 @@ CONTAINS
 
     ELSE
 
-      DO k = 1,Neq
+      DO k = 1, Neq
 #ifdef NEUTRAL
-              IF (k .EQ. 5) CYCLE
+        IF (k .EQ. 5) CYCLE
 #endif
         DO idm = 1,Ndim
           indi = ind_asf + k
@@ -2130,7 +2130,6 @@ CONTAINS
 
       END IF
     END IF
-
 #endif
 
 
@@ -2194,6 +2193,7 @@ CONTAINS
 
     !***************** end of flux control part *********************
 #endif
+
 #ifndef RHSBC
     ! Convective part
     k = 5
@@ -2268,6 +2268,7 @@ CONTAINS
       ! Puff
       elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - puff_coeff*Ni
 #endif
+
 #endif
 
 
