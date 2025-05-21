@@ -62,7 +62,7 @@ CONTAINS
 
 
       ALLOCATE(h_target_nodal(MAXVAL(T)))
-      ALLOCATE(nodes_repeats(MAXVAL(T)))      
+      ALLOCATE(nodes_repeats(MAXVAL(T)))
 
       CALL sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
 
@@ -91,7 +91,7 @@ CONTAINS
       CALL create_reference_element(refElPol,2,order, verbose = 0)
 
       IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
-         CALL load_gmsh_mesh("./res/temp",0)
+         CALL load_gmsh_mesh("./res/temp",1)
       ELSE
          CALL load_gmsh_mesh("./res/temp",1)
       ENDIF
@@ -99,10 +99,6 @@ CONTAINS
       CALL mesh_preprocess_serial(ierr)
 
       Mesh%X = Mesh%X*phys%lscale
-
-      IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80)) THEN
-         Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
-      END IF
 
    END SUBROUTINE load_new_mesh_gmsh
 
@@ -112,7 +108,7 @@ CONTAINS
       REAL*8, INTENT(IN) :: h_target_elements_ind(:)
       REAL*8, INTENT(OUT) :: h_target_elements(:)
       REAL*8, PARAMETER :: tol = 1.0E-10
-      
+
       h_target_elements = h_target_elements_est
       WHERE(ABS(h_target_elements_ind-h_map_elements) .GT. tol)
          h_target_elements = h_target_elements_ind
@@ -160,7 +156,7 @@ CONTAINS
                                                 Nnodesperface, counter1, start, stop_index
     INTEGER                                  :: temp(p-1), elem_pos(2), face_pos(2), face_nodes(3,p-1), face_info(3), elements(2), nodes_face(2, p-1), element_face(2), already_meshed_face_nodes(2, p-1), already_meshed_element_faces(2), &
                                                 already_meshed_element(2), ifacenode(p+1)
-    INTEGER, ALLOCATABLE, DIMENSION(:,:)     :: int_faces, elem_int_face, Tp, Tb, total_face_info
+    INTEGER, ALLOCATABLE, DIMENSION(:,:)     :: int_faces, elem_int_face, Tp, Tb
     INTEGER, ALLOCATABLE, DIMENSION(:)       :: boundaryFlag, unique_boundary_flag
     LOGICAL, ALLOCATABLE, DIMENSION(:)       :: aux_coord_logical, local_coord_logical, int_face_meshed
     REAL*8, ALLOCATABLE, DIMENSION(:,:)      :: Xp, Xp_aux, elem_nodes_mod, coord_ref
@@ -347,8 +343,8 @@ CONTAINS
 
        counter = 1
        DO j = start,stop_index
-          ielem = Mesh%face_info(j,1)
-          iface = Mesh%face_info(j,2)
+          ielem = Mesh%extfaces(j,1)
+          iface = Mesh%extfaces(j,2)
           ifacenode = refElLocal%face_nodes(iface,:)
           IF(unique_boundary_flag(i) .EQ. 5)  Tb_PUMP(counter,:)  = Tp(ielem,ifacenode)
           IF(unique_boundary_flag(i) .EQ. 6)  Tb_PUFF(counter,:)  = Tp(ielem,ifacenode)
@@ -385,19 +381,18 @@ CONTAINS
     elemType = Mesh%elemType
     element_order = n_face_nodes
 
-    ALLOCATE(mesh_info(SIZE(Mesh%face_info,1),SIZE(Mesh%face_info,2)))
+    ALLOCATE(mesh_info(SIZE(Mesh%extfaces,1),SIZE(Mesh%extfaces,2)))
 
-    mesh_info = Mesh%face_info
+    mesh_info = Mesh%extfaces
 
     CALL free_mesh
 
-    CALL generate_elemface_info(Tp,Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, p+1, total_face_info)
+    !CALL generate_elemface_info(Tp,Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, p+1, total_face_info)
     CALL generate_boundary_names(Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_PUFF, Tb_PUMP, Tb_ULIM, Tb, boundaryFlag, element_order)
-    CALL load_mesh2global_var(Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, Tp, Xp_aux, Tb, boundaryFlag, total_face_info)
+    CALL load_mesh2global_var(Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, Tp, Xp_aux, Tb, boundaryFlag)
 
     CALL free_reference_element_pol(refElLocal)
     DEALLOCATE(int_faces, elem_int_face, Tp, Tb)
-    DEALLOCATE(total_face_info)
     DEALLOCATE(boundaryFlag, unique_boundary_flag)
     DEALLOCATE(aux_coord_logical, local_coord_logical, int_face_meshed)
     DEALLOCATE(Xp, Xp_aux, elem_nodes_mod, coord_ref)
@@ -865,15 +860,15 @@ CONTAINS
       INTEGER*4           :: size_view,number_of_triangles,ret
       REAL*8              :: sf_index, vertex_coordinates(2),h_target_on_vertex
       !GMSH always have (X,Y,Z) coordinates
-      gmsh_dim = 3 
-      number_of_vertices_per_triangle = 3 
+      gmsh_dim = 3
+      number_of_vertices_per_triangle = 3
       number_of_triangles = SIZE(connectivity,1)
 
       ! initalize gmsh
       CALL gmsh_l%initialize()
 
       ! Set verbosity level to 2 (Errors and warnings)
-      CALL gmsh_l%option%setNumber("General.Verbosity", 2.0)
+      CALL gmsh_l%option%setNumber("General.Verbosity", 2d0)
 
       !create model
       CALL gmsh_l%model%add("geo")
@@ -913,11 +908,10 @@ CONTAINS
       call gmsh_l%option%setNumber("Mesh.MeshSizeFromPoints", 0d0)
       call gmsh_l%option%setNumber("Mesh.MeshSizeFromCurvature", 0d0)
       CALL gmsh_l%option%setNumber("Mesh.MeshSizeFactor", 1d0)
-      CALL gmsh_l%option%setNumber("General.NumThreads", REAL(OMPvar%Nthreads))
+      CALL gmsh_l%option%setNumber("General.NumThreads", 1d0) ! it should be use what specified by OMP_NUM_THREADS
 
       !Changing the algorithm to Delaunay, the default is Frontal-Delaunay (Don't Know if needed)
       call gmsh_l%option%setNumber("Mesh.Algorithm", 5d0)
-
       ! Generate the refined mesh
       call gmsh_l%model%mesh%generate(2)
       call gmsh_l%model%mesh%setOrder(p_order)
@@ -942,7 +936,7 @@ CONTAINS
       WRITE(param_adapt_char, *) adapt%param_est
       WRITE(count_adapt_char, *) count_adapt
       new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
-      
+
       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
       IF (MPIvar%glob_id .EQ. 0) THEN
          WRITE (*,*) "Mesh saved as: ", TRIM(ADJUSTL(new_mesh_name_npne))
