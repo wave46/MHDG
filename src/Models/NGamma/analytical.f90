@@ -571,7 +571,7 @@ CONTAINS
        sigma = 0.3
        up(:, 1) = 1.*EXP(-fluxel**2/(2*sigma**2))
 #ifdef NEUTRAL
-       up(:4) = 1.e-8
+       up(:,4) = 1.e-8
 #endif
     CASE DEFAULT
        WRITE (6, *) "Error! Test case not valid"
