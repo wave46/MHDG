@@ -1143,12 +1143,6 @@ CONTAINS
 #endif
       ! tangency
       ntang = .TRUE.
-#ifdef BOHMLIMIT
-      !use this flag as a proxy for turning off/on the bohm limit technique
-      if (any(ufg(:,4)<2.e-7)) then
-        ntang = .false.
-      endif
-#endif
       inc = bn/norm2(b(g,1:2))
 
 #ifdef NGAMMA
@@ -1789,15 +1783,6 @@ CONTAINS
       REAL*8, INTENT(IN) :: dline
       REAL*8,intent(out) :: flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_neutral,flgflux_numerical
 #endif
-#ifdef BOHMLIMIT
-      REAL*8             :: U3_min = 2.e-8 ! 1e16[m^-3]*0.01^[eV]/n0/T0
-      LOGICAL            :: bohm_limit = .true. ! false if U3<U3_min
-
-    if (ufg(3)<U3_min) then
-      bohm_limit = .false.
-    endif
-
-#endif
 
     Neqstab = Neq
     Neqgrad = Neq
@@ -1931,9 +1916,7 @@ CONTAINS
       call compute_Dnn_dU(ufg,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,ufg)
 
-#ifdef BOHMLIMIT
     IF (ntang) then
-#endif
       ! Parallel diffusion for temperature
       !if (.not. ((ufg(1)<1e-5) .or. (ufg(3)<1.e-8*3/2*phys%Mref) .or. (ufg(4)<1.e-8*3/2*phys%Mref))) then
         !IF (.true.) THEN
@@ -1970,12 +1953,7 @@ CONTAINS
 #endif
 
     ! Perpendicular diffusion
-#ifdef BOHMLIMIT
-    IF (ntang)  then
-#else
     IF (ntang) THEN
-#endif
-
       DO k = 1,Neqgrad
 #ifdef NEUTRAL
               IF (k .EQ. 5) CYCLE
