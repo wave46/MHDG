@@ -116,7 +116,6 @@ MODULE types
      INTEGER*4, POINTER     :: boundaryFlag(:) => NULL() ! Flag for the boundary condition for each external face (set in the mesh generator)
      INTEGER*4, ALLOCATABLE :: F(:, :) ! Faces connectivity matrix
      INTEGER*4, ALLOCATABLE :: N(:, :) ! Nodes connectivity matrix
-     INTEGER*4, ALLOCATABLE :: face_info(:, :) ! Elemental face info
      INTEGER*4, ALLOCATABLE :: faces(:, :, :) ! for each triangle i, stores info k on each face j: faces(i,j,1) = # of neighbouring triangle (0 if external
      ! boundary), faces(i,j,2) = type of boundary (), faces(i,j,3) = type of boundary condition
      INTEGER*4, ALLOCATABLE :: extfaces(:, :) ! for each exterior face, stores the number of the triangle, the number of the face, and the type of BC
