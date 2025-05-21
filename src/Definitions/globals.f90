@@ -208,9 +208,6 @@ CONTAINS
     IF (ALLOCATED(Mesh%N)) THEN
        DEALLOCATE (Mesh%N)
     END IF
-    IF (ALLOCATED(Mesh%face_info)) THEN
-       DEALLOCATE (Mesh%face_info)
-    END IF
     IF (ALLOCATED(Mesh%faces)) THEN
        DEALLOCATE (Mesh%faces)
     END IF
@@ -461,9 +458,6 @@ CONTAINS
     IF (ALLOCATED(Mesh%F)) THEN
        DEALLOCATE (Mesh%F)
     END IF
-    IF (ALLOCATED(Mesh%face_info)) THEN
-       DEALLOCATE (Mesh%face_info)
-    END IF
     IF (ALLOCATED(Mesh%N)) THEN
        DEALLOCATE (Mesh%N)
     END IF
@@ -601,9 +595,6 @@ CONTAINS
     END IF
     IF (ALLOCATED(Mesh_loc%F)) THEN
        DEALLOCATE (Mesh_loc%F)
-    END IF
-    IF (ALLOCATED(Mesh_loc%face_info)) THEN
-       DEALLOCATE (Mesh_loc%face_info)
     END IF
     IF (ALLOCATED(Mesh_loc%N)) THEN
        DEALLOCATE (Mesh_loc%N)
