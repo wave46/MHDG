@@ -2149,7 +2149,7 @@ END DO
   !*******************************************
 
   SUBROUTINE computeTauGaussPoints(up, uc, b, n, iel, isext, xy, tau)
-    real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
+    real*8, intent(in)  :: up(:), uc(:), b(:), n(:), xy(:)
     REAL*8, intent(in)    :: isext
     integer, intent(in) ::  iel
 
@@ -2160,7 +2160,7 @@ END DO
     REAL*8              :: tau_aux(4),diff_iso(4,4,1),diff_ani(4,4,1)
 #endif
     integer             :: ndim
-    real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),
+    real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc))
     real*8              :: U1, U2, U3, U4
     U1 = uc(1)
     U2 = uc(2)
