@@ -1137,6 +1137,7 @@ CONTAINS
 
     IF(ANY(correl .eq. 0)) THEN
       WRITE(*,*) "Couldn't find a point in projection. STOP."
+      STOP
     ENDIF
 
 
