@@ -609,6 +609,7 @@ CONTAINS
   !****************************************
 
   SUBROUTINE setLocalDiff(xy, u, d_iso, d_ani)
+
     REAL*8, INTENT(in)  		:: xy(:, :)
     REAL*8, INTENT(in)  		:: u(:,:)
     REAL*8, INTENT(out)		 :: d_iso(:, :, :), d_ani(:, :, :)
@@ -669,6 +670,7 @@ CONTAINS
     U3 = u(:,3)
     U4 = u(:,4)
     U5 = u(:,5)
+
 #ifndef CONSTANTNEUTRALDIFF
     DO i=1,SIZE(u,1)
        CALL compute_sigmaviz(u(i,:),sigmaviz(i))
@@ -693,13 +695,25 @@ CONTAINS
           d_iso(5,5,i) = Dnn(i)
        ENDIF
 #else
+       ! DNNSMOOTH
+       ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)
+       CALL softplus(ti, ti_min)
+       Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*(U1(i)*(sigmaviz(i)+sigmavcx(i))+U5(i)*sigmavnn(i)))
+       Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
+
+       CALL double_softplus(Dnn(i),10.*phys%diff_n,phys%diff_nn)
+       d_iso(5,5,i) = Dnn(i)
 #endif
+       ! DNNSMOOTH
     END DO
 #else
     d_iso(5,5,:)=phys%diff_nn
+    ! CONSTANTNEUTRALDIFF
 #endif
-    !Dnn = sum(Dnn)/size(u,1)
+    ! CONSTANTNEUTRALDIFF
 #endif
+    ! NEUTRALS
+
 
     d_ani(1, 1, :) = d_iso(1,1,:)
     d_ani(2, 2, :) = d_iso(2,2,:)
@@ -736,6 +750,7 @@ CONTAINS
     d_iso(2, 2, :) = d_iso(2, 2, :)+iperdiff
     d_iso(3, 3, :) = d_iso(3, 3, :)+iperdiff
     d_iso(4, 4, :) = d_iso(4, 4, :)+iperdiff
+
   ENDSUBROUTINE setLocalDiff
 
   !*******************************************
@@ -1968,7 +1983,8 @@ CONTAINS
 #endif
 
   ENDSUBROUTINE  compute_Dnn_dU
-#endif ! Neutrals
+#endif
+  ! Neutrals
 
   SUBROUTINE compute_Tloss(U,Tloss)
     REAL*8, INTENT(IN) :: U(:)
