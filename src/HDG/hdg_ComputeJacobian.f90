@@ -2388,12 +2388,6 @@ CONTAINS
                   z = i + (k - 1)*Neq + (ii - 1)*Ndim*Neq
                   Auq(:, :, z) = Auq(:, :, z) + kcoeff*diffiso(i, ii)*NxyzNi(:, :, k) - kcoeff*diffani(i, ii)*NNxy*b(k)
 
-                  !write(6,*) "kcoeff",kcoeff
-                  !write(6,*) "i:",i,"ii:",ii, "diffiso(i,ii)",diffiso(i,ii)
-                  !write(6,*) "i:",i,"ii:",ii, "diffani(i,ii)",diffani(i,ii)
-                  !call HDF5_save_matrix(kcoeff*diffiso(i,ii)*NxyzNi(:,:,k) - kcoeff*diffani(i,ii)*NNxy*b(k),'fava')
-                  !stop
-
                END DO
 #endif
             END DO ! loop in k: 1-Ndim
@@ -2404,14 +2398,11 @@ CONTAINS
                j = 3
                z = i + (j - 1)*Neq
                Auu(:, :, z) = Auu(:, :, z) + NNi
-               !rhs(:,i)=rhs(:,i)-ue(j)*Ni ! doens't work very well like this
             END IF
 #endif
 
 #ifdef VORTICITY
-            !if (switch%testcase.eq.7 .and. switch%logrho .and. i.eq.1 .and. upe(1).gt.1) then
-            !  rhs(:,i)=rhs(:,i)-100*(upe(1)-1.)*Ni
-            !endif
+
             IF (switch%testcase .EQ. 7) THEN
                IF ((xy(1) - geom%R0)/phys%lscale .GT. 0.4) THEN
                   ! Implicit sources to take into account parallel losses
@@ -2465,37 +2456,37 @@ CONTAINS
             SUBROUTINE assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe,&
                 &ind_fg, b3, psi, n, diffiso, diffani, NNif, Nif, Nfbn, uf, qf, tau)
 
-               integer*4, intent(IN)      :: iel, ind_asf(:), ind_ash(:), ind_ff(:), ind_fe(:), ind_fg(:)
-               real*8, intent(IN)         :: b3(:), n(:), psi
-               real*8, intent(IN)         :: diffiso(:, :), diffani(:, :)
-               real*8, intent(IN)         :: NNif(:, :), Nif(:), Nfbn(:)
-               real*8, intent(IN)         :: uf(:)
-               real*8, intent(IN)         :: qf(:)
-               real*8, optional, intent(INOUT) :: tau(:, :)
-               real*8                     :: b(Ndim)
-#ifdef VORTICITY
-               real*8                     :: kcoeff, exb(3)
-               integer*4                  :: alpha, beta, ii
-#endif
-               integer*4                  :: i, j, k
-               integer*4, dimension(size(ind_asf))  :: ind_if, ind_jf, ind_kf
-               real*8, dimension(neq, neq) :: A
-               real*8, dimension(neq, Ndim):: APinch
+               integer*4, intent(IN)               :: iel, ind_asf(:), ind_ash(:), ind_ff(:), ind_fe(:), ind_fg(:)
+               real*8, intent(IN)                  :: b3(:), n(:), psi
+               real*8, intent(IN)                  :: diffiso(:, :), diffani(:, :)
+               real*8, intent(IN)                  :: NNif(:, :), Nif(:), Nfbn(:)
+               real*8, intent(IN)                  :: uf(:)
+               real*8, intent(IN)                  :: qf(:)
+               real*8, optional, intent(INOUT)     :: tau(:, :)
+               real*8                              :: b(Ndim)
+               integer*4                           :: i, j, k
+               integer*4, dimension(size(ind_asf)) :: ind_if, ind_jf, ind_kf
+               real*8, dimension(neq, neq)         :: A
+               real*8, dimension(neq, Ndim)        :: APinch
+               real*8                              :: nn(3), qq(3, Neq), bb(3)
+               real*8                              :: bn, kmult(size(ind_asf), size(ind_asf)), kmultf(size(ind_asf))
+               real*8                              :: Qpr(Ndim, Neq)
+               real*8                              :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
 #ifndef TEMPERATURE
-               real*8                    :: auxvec(neq)
+               real*8                              :: auxvec(neq)
+#else
+               real*8                              :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
+               real*8                              :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
+               real*8                              :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
+               real*8                              :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
 #endif
-               real*8                    :: nn(3), qq(3, Neq), bb(3)
-               real*8                    :: bn, kmult(size(ind_asf), size(ind_asf)), kmultf(size(ind_asf))
-               real*8                    :: Qpr(Ndim, Neq)
-               real*8                    :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
-#ifdef TEMPERATURE
-               real*8                    :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
-               real*8                    :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
-               real*8                    :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
-               real*8                    :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
-               real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+#ifdef NEUTRAL
+              real*8                               :: Dnn_dU(Neq), Dnn_dU_U
 #endif
-
+#ifdef VORTICITY
+               real*8                              :: kcoeff, exb(3)
+               integer*4                           :: alpha, beta, ii
+#endif
                b = b3(1:Ndim)
                bb = b3
                ! Jacobian matrices
@@ -2712,6 +2703,7 @@ CONTAINS
                      kmultf = coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue), b), uf))*Nfbn
                      elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
                      elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
+#ifdef NEUTRAL
                   ELSEIF (i == 5) THEN
                      DO j = 1, Neq
                         ind_jf = ind_asf + j
@@ -2725,6 +2717,7 @@ CONTAINS
                      kmultf = Dnn_dU_U*(Qpr(1, i)*n(1) + Qpr(2, i)*n(2))*Nif
                      elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
                      elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
+#endif
                   END IF
 #endif
                END DO  ! i-Loop
@@ -2765,35 +2758,36 @@ CONTAINS
             SUBROUTINE assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe,&
                 &ind_fg, b3, psi, n, diffiso, diffani, NNif, Nif, Nfbn, uf, qf, tau)
 
-               integer*4, intent(IN)      :: iel, ind_asf(:), ind_ash(:), ind_ff(:), ind_fe(:), ind_fg(:)
-               logical                   :: isdir
-               real*8, intent(IN)         :: b3(:), n(:), psi
-               real*8, intent(IN)         :: diffiso(:, :), diffani(:, :)
-               real*8, intent(IN)         :: NNif(:, :), Nif(:), Nfbn(:)
-               real*8, intent(IN)         :: uf(:)
-               real*8, intent(IN)         :: qf(:)
+               integer*4, intent(IN)           :: iel, ind_asf(:), ind_ash(:), ind_ff(:), ind_fe(:), ind_fg(:)
+               logical, INTENT(IN)             :: isdir
+               real*8, intent(IN)              :: b3(:), n(:), psi
+               real*8, intent(IN)              :: diffiso(:, :), diffani(:, :)
+               real*8, intent(IN)              :: NNif(:, :), Nif(:), Nfbn(:)
+               real*8, intent(IN)              :: uf(:)
+               real*8, intent(IN)              :: qf(:)
                real*8, optional, intent(INOUT) :: tau(:, :)
-#ifdef VORTICITY
-               integer*4                 :: alpha, beta, ii
-               real*8                    :: exb(3), kcoeff
-#endif
-               integer*4                 :: i, j, k
-               integer*4, dimension(Npfl)  :: ind_if, ind_jf, ind_kf
-               real*8, dimension(neq, neq) :: A
-               real*8, dimension(neq, Ndim):: APinch
+               real*8                          :: bn, kmult(Npfl, Npfl), kmultf(Npfl)
+               real*8                          :: Qpr(Ndim, Neq)
+               real*8                          :: nn(3), qq(3, Neq), b(Ndim), bb(3)
+               real*8                          :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
+               integer*4                       :: i, j, k
+               integer*4, dimension(Npfl)      :: ind_if, ind_jf, ind_kf
+               real*8, dimension(neq, neq)     :: A
+               real*8, dimension(neq, Ndim)    :: APinch
 #ifndef TEMPERATURE
-               real*8                    :: auxvec(neq)
+               real*8                          :: auxvec(neq)
+#else
+               real*8                          :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
+               real*8                          :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
+               real*8                          :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
+               real*8                          :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
 #endif
-               real*8                    :: bn, kmult(Npfl, Npfl), kmultf(Npfl)
-               real*8                    :: Qpr(Ndim, Neq)
-               real*8                    :: nn(3), qq(3, Neq), b(Ndim), bb(3)
-               real*8                    :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
-#ifdef TEMPERATURE
-               real*8                    :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
-               real*8                    :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
-               real*8                    :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
-               real*8                    :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
-               real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+#ifdef NEUTRAL
+               real*8                          :: Dnn_dU(Neq), Dnn_dU_U
+#endif
+#ifdef VORTICITY
+               integer*4                       :: alpha, beta, ii
+               real*8                          :: exb(3), kcoeff
 #endif
 
                b = b3(1:Ndim)
@@ -3003,6 +2997,7 @@ CONTAINS
                      END DO
                      kmultf = coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue), b), uf))*Nfbn
                      elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+#ifdef NEUTRAL
                   ELSEIF (i == 5) THEN
                      DO j = 1, Neq
                         ind_jf = ind_asf + j
@@ -3014,6 +3009,7 @@ CONTAINS
                      END DO
                      kmultf = Dnn_dU_U*(Qpr(1, i)*n(1) + Qpr(2, i)*n(2))*Nif
                      elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+#endif
                   END IF
 
 !if below for TEMPERATURE FLAG
