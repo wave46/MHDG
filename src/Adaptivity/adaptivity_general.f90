@@ -37,7 +37,7 @@ CONTAINS
             CALL gmsh_create_from_h_target(h_target_elements_global,X_global, T_global(:,:3), order)
 #else
             CALL gmsh_create_from_h_target(h_target_elements,Mesh%X, Mesh%T(:,:3), order)
-#endif            
+#endif
             CALL save_copy_new_mesh(mesh_name, count_adapt)
 #ifdef PARALL
         ENDIF
@@ -71,7 +71,7 @@ CONTAINS
         REAL*8              :: h_target_elements_ind(SIZE(h_map_elements))
         REAL*8              :: h_target_elements_est(SIZE(h_map_elements))
         REAL*8, INTENT(INOUT) :: h_target_elements(:)
-  
+
         IF (adapt%evaluator .EQ. 0) THEN
             CALL apply_estimator(h_map_elements, order, h_target_elements_est)
             CALL apply_indicator(h_map_elements, h_target_elements_ind)
