@@ -478,6 +478,7 @@ MODULE types
   !*******************************************************
   TYPE Utils_type
      INTEGER :: printint       ! Integer for printing
+     LOGICAL :: printflux
      LOGICAL :: timing         ! Timing of the code
      INTEGER :: freqdisp       ! Frequency of results display
      INTEGER :: freqsave       ! Frequency of solution save
