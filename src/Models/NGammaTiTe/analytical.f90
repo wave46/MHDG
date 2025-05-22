@@ -1221,14 +1221,14 @@ CONTAINS
   ! Analytical solution
   !****************************************
   SUBROUTINE analytical_solution(iel,x, y, u)
-    integer, intent(IN)                      :: iel
-    real*8, dimension(:), intent(IN)         :: x, y
-    real*8, dimension(:, :), intent(OUT)     :: u
-    real*8, dimension(size(u, 1), phys%npv)  :: up
-    integer                                  :: i
-    real*8                                   :: a, r(size(x))
-    real*8                                   :: sigma,fluxel(refElPol%Nnodes2d)
-    real*8                                   :: xmax, xmin, ymax, ymin, xm, ym
+    INTEGER, INTENT(IN)                      :: iel
+    REAL*8, DIMENSION(:), INTENT(IN)         :: x, y
+    REAL*8, DIMENSION(:, :), INTENT(OUT)     :: u
+    REAL*8, DIMENSION(SIZE(u, 1), phys%npv)  :: up
+    INTEGER                                  :: i
+    REAL*8                                   :: a, r(SIZE(x))
+    REAL*8                                   :: sigma,fluxel(refElPol%Nnodes2d)
+    REAL*8                                   :: xmax, xmin, ymax, ymin, xm, ym
 
     up = 0.
     a = 2*pi
@@ -1267,19 +1267,19 @@ CONTAINS
        up(:, 3) = 18.
        up(:, 4) = 18.
     CASE (50:59)
-       IF(size(fluxel,1) .eq. size(up,1)) THEN
-         ! Case in which analytical_solution is called to initialise the initial solution
-         fluxel = phys%magnetic_flux(Mesh%T(iel,:))
-         fluxel = (fluxel - phys%Flux2Dmin)/(phys%Flux2Dmax - phys%Flux2Dmin)
-         sigma = 0.4
-         up(:, 1) = 1.*EXP(-fluxel**2/(2*sigma**2))
-         up(:, 3) = 18.*EXP(-fluxel**2/(2*sigma**2))
-         up(:, 4) = 18.*EXP(-fluxel**2/(2*sigma**2))
+       IF(SIZE(fluxel,1) .EQ. SIZE(up,1)) THEN
+          ! Case in which analytical_solution is called to initialise the initial solution
+          fluxel = phys%magnetic_flux(Mesh%T(iel,:))
+          fluxel = (fluxel - phys%Flux2Dmin)/(phys%Flux2Dmax - phys%Flux2Dmin)
+          sigma = 0.4
+          up(:, 1) = 1.*EXP(-fluxel**2/(2*sigma**2))
+          up(:, 3) = 18.*EXP(-fluxel**2/(2*sigma**2))
+          up(:, 4) = 18.*EXP(-fluxel**2/(2*sigma**2))
        ELSE
-         ! Case in which analytical_solution is called to apply boundary conditions
-         up(:, 1) = 1.
-         up(:, 3) = 18.
-         up(:, 4) = 18.
+          ! Case in which analytical_solution is called to apply boundary conditions
+          up(:, 1) = 1.
+          up(:, 3) = 18.
+          up(:, 4) = 18.
        ENDIF
 #ifdef NEUTRAL
        up(:,11)= 1.e-8
