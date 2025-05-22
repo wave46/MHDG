@@ -1678,7 +1678,7 @@ CONTAINS
       REAL*8             :: bn, Abohm(Neq, Neq), APinch(Neq, Ndim)
       INTEGER            :: i, j, k, idm, Neqstab, Neqgrad
       REAL*8, INTENT(IN) :: dline
-      REAL*8, intent(out) :: flgflux_pump, flgflux_puff, flgflux_parallel, flgflux_perpendicular, flgflux_neutral, flgflux_numerical
+      REAL*8, intent(OUT) :: flgflux_pump, flgflux_puff, flgflux_parallel, flgflux_perpendicular, flgflux_neutral, flgflux_numerical
 #ifdef VORTICITY
       INTEGER*4          :: indk(Npfl)
       REAL*8             :: kcoeff
@@ -1708,6 +1708,13 @@ CONTAINS
       END IF
 #endif
 
+      flgflux_pump = 0.
+      flgflux_puff = 0.
+      flgflux_parallel = 0.
+      flgflux_perpendicular = 0.
+      flgflux_neutral = 0.
+      flgflux_numerical = 0.
+
       bn = dot_PRODUCT(bg, ng)
       ! Compute Q^T^(k-1)
       Qpr = RESHAPE(qfg, (/Ndim, Neq/))
@@ -1722,22 +1729,7 @@ CONTAINS
          DO i = 1, Neqstab
             ind = i + ind_asf
             elMat%ALL(ind_ff(ind), ind_ff(ind), iel) = elMat%ALL(ind_ff(ind), ind_ff(ind), iel) - tau(i, i)*NiNi
-            !dirichlet boundary on minimal allowed values
-            !IF ((i .ne. 5) .and. ((ufg(1)<1e-5) .or. (ufg(3)<1.e-8*3/2*phys%Mref) .or. (ufg(4)<1.e-8*3/2*phys%Mref))) THEN
-            !IF (.false.) THEN
-            ! if (i==1) then
-            !    elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel)  - tau(i,i)*1e-5*Ni
-            ! elseif (i == 3) then
-            !    elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel)  - tau(i,i)*1.e-8*3/2*phys%Mref*Ni
-            ! elseif (i==4) then
-            !    elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel)  - tau(i,i)*1.e-8*3/2*phys%Mref*Ni
-            ! endif
             IF (i == 2) THEN
-               !elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) + tau(i,i)*(delta*setval)*NiNi
-               !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*(1 - delta)*NiNi
-               !Modification BC
-               !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*(1 - delta)*setval*NiNi
-               !End modification BC
                !NEW BOHM BC: Impose everywhere a value for velocity
                elMat%Alu(ind_ff(ind), ind_fe(ind - 1), iel) = elMat%Alu(ind_ff(ind), ind_fe(ind - 1), iel) + tau(i, i)*delta*setval*NiNi
                elMat%Alu(ind_ff(ind), ind_fe(ind), iel) = elMat%Alu(ind_ff(ind), ind_fe(ind), iel) + tau(i, i)*(1.-delta)*NiNi
@@ -1817,8 +1809,6 @@ CONTAINS
       Dnn_dU_u = dot_product(Dnn_dU, ufg)
 #endif
       ! Parallel diffusion for temperature
-      !if (.not. ((ufg(1)<1e-5) .or. (ufg(3)<1.e-8*3/2*phys%Mref) .or. (ufg(4)<1.e-8*3/2*phys%Mref))) then
-      !IF (.true.) THEN
       DO i = 1, 2
          indi = ind_asf + i
          IF (i == 1) THEN
@@ -2035,29 +2025,24 @@ CONTAINS
 
       IF (utils%printflux) THEN
          !***************** flux control part ****************************
-#ifdef NEUTRAL
-         !contribution from pump
+         ! contribution from pump
          flgflux_pump = cryopump_coeff*ufg(5)        !cryopump modification
-         !dimensionalizing and multiplying by the surface under this gauss point
+         ! dimensionalizing and multiplying by the surface under this gauss point
          flgflux_pump = flgflux_pump*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-         !Neutral flux
+         ! Neutral flux
          flgflux_neutral = (diffiso(5, 5)*(Qpr(1, 5)*ng(1) + Qpr(2, 5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-         !flux neutral numerical
+         ! flux neutral numerical
          flgflux_numerical = tau(5, 5)*(uefg(5) - ufg(5))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-#endif
-         !contribution from puff
+         ! contribution from puff
          flgflux_puff = puff_coeff
-         !dimensionalizing and multiplying by the surface under this gauss point
+         ! dimensionalizing and multiplying by the surface under this gauss point
          flgflux_puff = flgflux_puff*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-
-         !contribution from parallel flux onto the wall
+         ! contribution from parallel flux onto the wall
          flgflux_parallel = uefg(2)*bn
          !dimensionalizing and multiplying by the surface under this gauss point (multiplied by the local recycling)
          flgflux_parallel = recycling_coeff*flgflux_parallel*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-
-         !Contribution from perpendicular plasma flux
+         ! Contribution from perpendicular plasma flux
          flgflux_perpendicular = recycling_coeff*(diffiso(1, 1)*(Qpr(1, 1)*ng(1) + Qpr(2, 1)*ng(2)) - diffani(1, 1)*(Qpr(1, 1)*bn*bg(1) + Qpr(2, 1)*bn*bg(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2))
-
          !***************** end of flux control part *********************
       END IF
 
@@ -2131,7 +2116,7 @@ CONTAINS
 #endif
 
 #endif
-
+! endif neutrals
    END SUBROUTINE assembly_bohm_bc
 
    !*********************************
