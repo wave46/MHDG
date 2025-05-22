@@ -413,7 +413,7 @@ CONTAINS
     ! look for the P of the order of the polynomial (P4 for example)
     i = INDEX(save_name, 'P', .TRUE.)
     WRITE (Num, "(i10)") refElPol%nDeg
-    save_name(i+1:i+1) = TRIM(ADJUSTL(Num))
+    save_name(i+1:i+2) = TRIM(ADJUSTL(Num))
 
 
 #ifdef TOR3D
