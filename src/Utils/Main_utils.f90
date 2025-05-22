@@ -206,17 +206,16 @@ CONTAINS
     CALL free_before_adaptivity()
     CALL adaptively_refine_mesh(mesh_name,count_adapt,order)
 
-
-#ifdef PARALL
-
-    Mesh%X = Mesh%X/phys%lscale
-
     ! Save new mesh and solution
     IF(MPIvar%glob_id .EQ. 0) THEN
        WRITE (count_adapt_char, *) count_adapt
        CALL HDF5_save_mesh("./res/new_mesh_n" // TRIM(ADJUSTL(count_adapt_char)) // ".h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
        !CALL HDF5_save_solution("./res/projected_solution_n" // TRIM(ADJUSTL(count_adapt_char)))
     ENDIF
+
+#ifdef PARALL
+
+    Mesh%X = Mesh%X/phys%lscale
 
     ! Domain decomposition on the new mesh
     CALL split_mesh(MPIvar%glob_size, 3, .FALSE.)
@@ -716,12 +715,8 @@ CONTAINS
     ELSE
 
        ! Load the mesh file from gmsh input or h5
+      CALL load_gmsh_mesh(mesh_name, 1)
 
-      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
-         CALL load_gmsh_mesh(mesh_name, 0)
-      ELSE
-         CALL load_gmsh_mesh(mesh_name, 1)
-      ENDIF
       CALL create_reference_element(refElPol, 2, verbose = 1)
 
       IF((switch%set_2d_order) .AND. (refElPol%nDeg .NE. switch%order_2d) ) THEN
