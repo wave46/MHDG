@@ -2250,6 +2250,7 @@ CONTAINS
         END IF
 #endif
       END IF
+
 #ifndef TEMPERATURE
       IF (i == 2) THEN
         ! Curvature contribution (isothermal)
@@ -2350,7 +2351,7 @@ CONTAINS
             IF (switch%ohmicsrc) THEN
               rhs(:,i) = rhs(:,i) + Sohmic*(Jtor**2)*Ni
             ENDIF
-
+#ifdef NEUTRAL
           ELSEIF (i == 5) THEN
                  DO j = 1,5
               z = i+(j-1)*Neq
@@ -2362,7 +2363,8 @@ CONTAINS
 
             DO k = 1, Ndim
               rhs(:,i) = rhs(:,i)+Dnn_dU_U*Qpr(k,i)*Nxyzg(:,k)
-                 ENDDO
+            ENDDO
+#endif
 		END IF
 #endif
 
@@ -2641,9 +2643,10 @@ CONTAINS
       gme = dot_PRODUCT(MATMUL(Qpr,Vvece),b)
       Taui = MATMUL(Qpr,dV_dUi)      ! 2x3
       Taue = MATMUL(Qpr,dV_dUe)      ! 2x3
+#ifdef NEUTRAL
       CALL compute_Dnn_dU(uf,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,uf)
-
+#endif
 #endif
 
       ! Assembly local matrix
@@ -2963,10 +2966,10 @@ CONTAINS
       gme = dot_PRODUCT(MATMUL(Qpr,Vvece),b)
       Taui = MATMUL(Qpr,dV_dUi)               ! 2x3
       Taue = MATMUL(Qpr,dV_dUe)               ! 2x3
-
-       CALL compute_Dnn_dU(uf,Dnn_dU)
-
+#ifdef NEUTRAL
+      CALL compute_Dnn_dU(uf,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,uf)
+#endif
 #endif
 
       ! Assembly local matrix
