@@ -1892,6 +1892,7 @@ CONTAINS
   ENDSUBROUTINE compute_dsigmavcx_dU
 #endif
 
+#ifdef NEUTRAL
   SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8, INTENT(OUT) :: Dnn_dU(:)
@@ -1904,6 +1905,7 @@ CONTAINS
     REAL*8              :: sigmaviz, sigmavnn, sigmavcx
     REAL*8              :: dti_du(SIZE(U,1)), dsigmaviz_dU(SIZE(U,1)), dsigmavcx_dU(SIZE(U,1)), dsigmavnn_dU(SIZE(U,1))
     Dnn_dU(:) = 0.
+
     !if ((U(3)>=tol) .and. (U(1)>=tol) .and. (U(5)>=tol)) then
     ! calculation of atomic rates
     CALL compute_sigmaviz(U,sigmaviz)
@@ -1965,8 +1967,8 @@ CONTAINS
     ENDIF
 #endif
 
-
   ENDSUBROUTINE  compute_Dnn_dU
+#endif ! Neutrals
 
   SUBROUTINE compute_Tloss(U,Tloss)
     REAL*8, INTENT(IN) :: U(:)
