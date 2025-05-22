@@ -2272,7 +2272,6 @@ END DO
 #ifdef NEUTRAL
         tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)*refElPol%ndeg/Mesh%elemSize(iel) !! !numer%tau(5) diff_iso(5,5,1)
 #endif
-        tau_aux(5) = tau_aux(5) + numer%tau(5)
 
 !        ! Toroidal face
 !        tau_aux(1) = tau_aux(1) +  diff_iso(1,1,1)
