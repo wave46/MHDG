@@ -75,6 +75,86 @@ CONTAINS
       DEALLOCATE(h_target_nodal, nodes_repeats)
    END SUBROUTINE get_h_target_vertices
 
+    ! SUBROUTINE compute_nodal_characteristic_lengths_tri(num_nodes, num_elements, num_dims, &
+    !      X, T, estimated_lc)
+    !   !
+    !   ! Computes the average length of all edges connected to each node in a mesh
+    !   ! composed ONLY of triangles.
+    !   !
+    !   ! Arguments:
+    !   INTEGER, INTENT(in) :: num_nodes              ! Total number of nodes
+    !   INTEGER, INTENT(in) :: num_elements           ! Total number of elements
+    !   INTEGER, INTENT(in) :: num_dims               ! Number of spatial dimensions (2 or 3)
+    !   REAL(kind=8), INTENT(in) :: X(num_nodes, num_dims) ! Nodal coordinates (real(kind=8) for double precision)
+    !   INTEGER, INTENT(in) :: T(num_elements, 3)     ! Connectivity matrix (1-based indexing assumed for Fortran)
+    !   ! Fixed to 3 columns for triangles
+    !   REAL(kind=8), INTENT(out) :: estimated_lc(num_nodes) ! Output: Estimated characteristic lengths for each node
+    !
+    !   ! Local variables
+    !   INTEGER :: i, j, k, elem_idx, node_idx_1, node_idx_2
+    !   REAL(kind=8) :: edge_length
+    !   REAL(kind=8), ALLOCATABLE :: node_lc_sum(:)
+    !   INTEGER, ALLOCATABLE :: node_edge_counts(:)
+    !
+    !   ! --- Define edges for triangles (local indices within the element's row in T) ---
+    !   ! For a triangle with nodes (T_elem_row(1), T_elem_row(2), T_elem_row(3))
+    !   ! Edges are: (node 1, node 2), (node 2, node 3), (node 3, node 1)
+    !   INTEGER, PARAMETER :: local_triangle_edges(3, 2) = RESHAPE([1, 2, 2, 3, 3, 1], shape=[3, 2])
+    !   INTEGER, PARAMETER :: num_nodes_per_elem = 3 ! Fixed for triangles
+    !   INTEGER, PARAMETER :: num_edges_per_elem = 3 ! Fixed for triangles
+    !
+    !
+    !   ! --- Initialize arrays ---
+    !   ALLOCATE(node_lc_sum(num_nodes))
+    !   ALLOCATE(node_edge_counts(num_nodes))
+    !   node_lc_sum = 0.0_8
+    !   node_edge_counts = 0
+    !
+    !   ! --- Iterate through each element ---
+    !   DO elem_idx = 1, num_elements
+    !      ! --- Iterate through each edge of the current triangle ---
+    !      DO i = 1, num_edges_per_elem
+    !         ! Get the global node indices (Fortran uses 1-based indexing, T is assumed 1-based)
+    !         node_idx_1 = T(elem_idx, local_triangle_edges(i, 1))
+    !         node_idx_2 = T(elem_idx, local_triangle_edges(i, 2))
+    !
+    !         ! Calculate the Euclidean distance (length) of the edge
+    !         edge_length = 0.0_8
+    !         DO j = 1, num_dims
+    !            edge_length = edge_length + (X(node_idx_1, j) - X(node_idx_2, j))**2
+    !         END DO
+    !         edge_length = SQRT(edge_length)
+    !
+    !         ! Accumulate the sum of edge lengths and count for both nodes on this edge
+    !         node_lc_sum(node_idx_1) = node_lc_sum(node_idx_1) + edge_length
+    !         node_edge_counts(node_idx_1) = node_edge_counts(node_idx_1) + 1
+    !
+    !         ! Make sure we don't double-count if the edge is self-referencing (shouldn't happen)
+    !         IF (node_idx_1 /= node_idx_2) THEN
+    !            node_lc_sum(node_idx_2) = node_lc_sum(node_idx_2) + edge_length
+    !            node_edge_counts(node_idx_2) = node_edge_counts(node_idx_2) + 1
+    !         END IF
+    !      END DO ! i (edges per element)
+    !   END DO ! elem_idx
+    !
+    !   ! --- Calculate the average for each node ---
+    !   DO i = 1, num_nodes
+    !      IF (node_edge_counts(i) > 0) THEN
+    !         estimated_lc(i) = node_lc_sum(i) / REAL(node_edge_counts(i), kind=8)
+    !      ELSE
+    !         ! Handle isolated nodes (nodes with no connected edges).
+    !         ! This shouldn't happen in a valid mesh.
+    !         WRITE(*,*) 'Warning: Node', i, 'has no connected edges. Assigning default LC = 1.0_8'
+    !         estimated_lc(i) = 1.0_8 ! Default value, adjust as needed
+    !      END IF
+    !   END DO
+    !
+    !   DEALLOCATE(node_lc_sum)
+    !   DEALLOCATE(node_edge_counts)
+    !
+    ! END SUBROUTINE compute_nodal_characteristic_lengths_tri
+
+
 
    SUBROUTINE load_new_mesh_gmsh(order)
       USE preprocess
