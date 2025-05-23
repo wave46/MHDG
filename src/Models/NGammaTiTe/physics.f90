@@ -834,8 +834,6 @@ CONTAINS
           ENDIF
        END DO
     ENDIF
-
-
   ENDSUBROUTINE computeIperDiffusion
 
   !*****************************************
@@ -854,7 +852,6 @@ CONTAINS
 
     APinch(1,1) = v_p*bnorm(2)
     APinch(1,2) = v_p*(-bnorm(1))
-
   ENDSUBROUTINE computePinch
 
   !*****************************************
@@ -900,15 +897,6 @@ CONTAINS
     V(1) = -U(4)/U(1)**2
     V(4) = 1./U(1)
   ENDSUBROUTINE computeVe
-
-  !                                SUBROUTINE computeVe(U,V)
-  !                                real*8, intent(IN)  :: U(:)
-  !                                real*8, intent(OUT) :: V(:)
-  !                                V = 0.d0
-  !                                V(1) = U(2)**2/U(1)**3 - U(4)/U(1)**2
-  !                                V(2) = -U(2)/U(1)**2
-  !                                V(4) = 1./U(1)
-  !                                ENDSUBROUTINE computeVe
 
   SUBROUTINE compute_dV_dUi(U, dV_dU)
     REAL*8, INTENT(IN)  :: U(:)
@@ -1108,10 +1096,10 @@ CONTAINS
     ip = SIZE(phys%E)
     jp = SIZE(phys%theta)
 
-    E_clipped = MAX(1e-20,MIN(1e3-1e-20,E))
-    theta_clipped = MAX(1e-20,MIN(90-1e-20,theta))
+    E_clipped = MAX(1.e-20,MIN(1.e3-1.e-20,E))
+    theta_clipped = MAX(1.e-20,MIN(90.-1.e-20,theta))
 
-    RN = interpolate(ip, phys%E, jp, phys%theta, phys%RN_DW, E_clipped, theta_clipped, 1e-12)
+    RN = interpolate(ip, phys%E, jp, phys%theta, phys%RN_DW, E_clipped, theta_clipped, 1.e-12)
 
   END SUBROUTINE compute_RN
 
