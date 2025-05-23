@@ -657,7 +657,7 @@ CONTAINS
 
       if (save_tau) then
          indtausave = (ifa - 1)*refElPol%Ngauss1d + (/(i, i=1, refElPol%Ngauss1d)/)
-         phys%diff_nn_Bou(indtausave) = diff_iso_fac(5, 5, :)
+         phys%diff_nn_Bou(indtausave) = diff_iso_fac(neq, neq, :)
       END IF
 
       ! Physical variables at Gauss points (division by 0 during convergence test!!!)
@@ -1693,10 +1693,10 @@ CONTAINS
       REAL*8             :: Vvece(Neq), Alphae, taue(Ndim, Neq), dV_dUe(Neq, Neq), gme, dAlpha_dUe(Neq)
       REAL*8             :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
       REAL*8             :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
+#endif
 #ifdef NEUTRAL
       REAL*8             :: E, theta, RN
       REAL*8             :: Dnn_dU(Neq), Dnn_dU_U
-#endif
 #endif
 
       Neqstab = Neq
@@ -1767,6 +1767,9 @@ CONTAINS
          END DO
       END IF
 
+      ! Jacobian matrix for pinch part
+      CALL computePinch(bg, psig, APinch)
+
 #ifdef TEMPERATURE
 
       ! Compute V(U^(k-1))
@@ -1796,9 +1799,6 @@ CONTAINS
 
       ! Jacobian matrix for convection part
       CALL jacobianMatricesBohm(ufg, Abohm)
-
-      ! Jacobian matrix for pinch part
-      CALL computePinch(bg, psig, APinch)
 
       gmi = dot_PRODUCT(MATMUL(Qpr, Vveci), bg)  ! scalar
       gme = dot_PRODUCT(MATMUL(Qpr, Vvece), bg)             ! scalar
@@ -1839,11 +1839,11 @@ CONTAINS
       END DO
       !endif
 #endif
-
+! endif temperature
       ! Perpendicular diffusion
       DO k = 1, Neqgrad
 #ifdef NEUTRAL
-         IF (k .EQ. 5) CYCLE
+         IF (k .EQ. neq) CYCLE
 #endif
          DO idm = 1, Ndim
             indi = ind_asf + k
@@ -1890,6 +1890,7 @@ CONTAINS
                   elMat%ALL(ind_ff(indi), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(indi), ind_ff(ind_jf), iel) - kmult
                END DO
 #endif
+! endif temperature
             END IF
          END DO
       END DO
@@ -1992,6 +1993,7 @@ CONTAINS
 
       END IF
 #endif
+! endif vorticity
 
 #ifdef NEUTRAL
       ! Reflection coefficient from TRIM
@@ -2026,13 +2028,13 @@ CONTAINS
       IF (utils%printflux) THEN
          !***************** flux control part ****************************
          ! contribution from pump
-         flgflux_pump = cryopump_coeff*ufg(5)        !cryopump modification
+         flgflux_pump = cryopump_coeff*ufg(neq)        !cryopump modification
          ! dimensionalizing and multiplying by the surface under this gauss point
          flgflux_pump = flgflux_pump*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
          ! Neutral flux
-         flgflux_neutral = (diffiso(5, 5)*(Qpr(1, 5)*ng(1) + Qpr(2, 5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+         flgflux_neutral = (diffiso(neq, neq)*(Qpr(1, neq)*ng(1) + Qpr(2, neq)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
          ! flux neutral numerical
-         flgflux_numerical = tau(5, 5)*(uefg(5) - ufg(5))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+         flgflux_numerical = tau(neq, neq)*(uefg(neq) - ufg(neq))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
          ! contribution from puff
          flgflux_puff = puff_coeff
          ! dimensionalizing and multiplying by the surface under this gauss point
@@ -2048,7 +2050,7 @@ CONTAINS
 
 #ifndef RHSBC
       ! Convective part
-      k = 5
+      k = neq
 
       ! Plasma flux
       indi = k + ind_asf
@@ -2059,12 +2061,14 @@ CONTAINS
       indj = 1 + ind_asf
       elMat%Alu(ind_ff(indi), ind_fe(indj), iel) = elMat%Alu(ind_ff(indi), ind_fe(indj), iel) + (APinch(1, 1)*ng(1) + APinch(1, 2)*ng(2))*NiNi*recycling_coeff
 
+#ifdef NEUTRALCONVECTION
       ! Neutrals flux
       DO j = 1, Neq
          indj = ind_asf + j
          elMat%ALL(ind_ff(indi), ind_ff(indj), iel) = elMat%ALL(ind_ff(indi), ind_ff(indj), iel) + Abohm(k, j)*NiNi*bn
          !elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + (Abohm(k,j) + AbohmNP(j))*NiNi*bn
       END DO
+#endif
 
       ! cryopump modification Should it be ALU?
       indj = k + ind_asf !5th equation and 5th conservative variable: pump_power*U5
@@ -2076,12 +2080,12 @@ CONTAINS
 
       ! diffusive diagonal part
       DO idm = 1, Ndim
-         k = 5
+         k = neq
          indi = ind_asf + k
          indj = ind_ash + idm + (k - 1)*Ndim
 
          elMat%Alq(ind_ff(indi), ind_fG(indj), iel) = elMat%Alq(ind_ff(indi), ind_fG(indj), iel) - NiNi*ng(idm)*diffiso(k, k)
-
+#ifndef CONSTANTNEUTRALDIFF
          DO j = 1, Neq
             indj = ind_asf + j
             kmult = Dnn_dU(j)*Qpr(idm, k)*ng(idm)*NiNi
@@ -2089,13 +2093,14 @@ CONTAINS
          END DO
          kmultf = Dnn_dU_U*(Qpr(idm, k)*ng(idm))*Ni
          elMat%fh(ind_ff(indi), iel) = elMat%fh(ind_ff(indi), iel) - kmultf
-
+#endif
+! endif constantneutraldiff
       END DO
       elMat%fh(ind_ff(indi), iel) = elMat%fh(ind_ff(indi), iel) - puff_coeff*Ni
 
       ! diffusive non-diagonal part
       DO idm = 1, Ndim
-         k = 5
+         k = neq
          j = 1
          indi = ind_asf + k
          indj = ind_ash + idm + (j - 1)*Ndim
@@ -2103,7 +2108,7 @@ CONTAINS
       END DO
 #else
       ! diffusive diagonal part
-      k = 5
+      k = neq
       indi = ind_asf + k
       DO idm = 1, Ndim
          indj = ind_ash + idm + (k - 1)*Ndim
@@ -2114,6 +2119,7 @@ CONTAINS
       ! Puff
       elMat%fh(ind_ff(indi), iel) = elMat%fh(ind_ff(indi), iel) - puff_coeff*Ni
 #endif
+! endif RHSBC
 
 #endif
 ! endif neutrals
