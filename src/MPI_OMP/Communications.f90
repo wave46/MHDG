@@ -228,14 +228,11 @@ CONTAINS
 #ifdef PARALL
     IF (MPIvar%ntor .GT. 1) THEN
        ntorloc = numer%ntor/MPIvar%ntor + 1
-       !       ntorass = ntorloc-1
     ELSE
        ntorloc = numer%ntor
-       !       ntorass = ntorloc
     ENDIF
 #else
     ntorloc = numer%ntor
-    ntorass = ntorloc
 #endif
     Neq = phys%Neq
     Nfl = refElTor%Nfl
@@ -1009,21 +1006,21 @@ CONTAINS
   ENDSUBROUTINE gather_solution
 
   SUBROUTINE gather_connectivity(Mesh_in, connectivity_glob,allgather)
-   
+
       TYPE(Mesh_type)                         :: Mesh_in
       INTEGER, POINTER, INTENT(OUT)           :: connectivity_glob(:,:)
       LOGICAL, INTENT(IN), OPTIONAL           :: allgather
       INTEGER                                 :: i, ierr
-   
+
       ALLOCATE(connectivity_glob(Mesh_in%Nel_glob, Mesh_in%Nnodesperelem))
       connectivity_glob = 0
-   
+
       DO i = 1, Mesh_in%Nelems
           IF(Mesh_in%ghostElems(i) .EQ. 0) THEN
             connectivity_glob(Mesh_in%loc2glob_el(i),:) = Mesh_in%loc2glob_nodes(Mesh_in%T(i,:))
           ENDIF
       ENDDO
-   
+
       ! reduce results over processes
       IF (allgather) THEN
          CALL MPI_Allreduce(MPI_IN_PLACE, connectivity_glob, SIZE(connectivity_glob,1)*SIZE(connectivity_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
