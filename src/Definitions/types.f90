@@ -146,7 +146,7 @@ MODULE types
      REAL*8,ALLOCATABLE     :: Xg(:,:) ! 2D Gauss point coordinates
      REAL*8,ALLOCATABLE     :: Xgf(:,:) ! 1D Gauss point coordinates at interior faces
      REAL*8,ALLOCATABLE     :: Xgb(:,:) ! 1D Gauss point coordinates at boundary faces
-#ifdef PARALL
+
      INTEGER, POINTER       :: loc2glob_fa(:) => NULL()! mapping number of the faces for creating the global matrix [number of faces in the mesh]
      INTEGER, POINTER       :: loc2glob_el(:) => NULL()! mapping number of the elements from local to global [number of elements in the mesh]
      INTEGER, POINTER       :: loc2glob_nodes(:) => NULL()! mapping number of the nodes from local to global [number of nodes in the mesh]
@@ -181,7 +181,6 @@ MODULE types
      INTEGER, ALLOCATABLE   :: pe2rv(:) ! process 2 receive: from which process the elements computed externally need to be received (only 3D) [number of ghost elements] (it is the same as ghelspro)
 
      !     integer,allocatable   :: connpro(:)        ! processes connected to the local process
-#endif
   END TYPE Mesh_type
 
   TYPE Splines_DT
