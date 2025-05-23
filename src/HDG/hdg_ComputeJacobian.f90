@@ -1338,7 +1338,7 @@ CONTAINS
       CALL setLocalDiff(xy, ueg, diff_iso_vol, diff_ani_vol)
 
       if (save_tau) then
-         diff_nn_Vol_el = diff_iso_vol(5, 5, :)
+         diff_nn_Vol_el = diff_iso_vol(neq, neq, :)
       END IF
 
       IF (switch%shockcp .GT. 0) THEN
@@ -1493,7 +1493,7 @@ CONTAINS
          ! Check if total density is costant
          El_n = El_n + ueg(g, 1)*2*3.1416*dvolu*phys%lscale**3
 #ifdef NEUTRAL
-         El_nn = El_nn + ueg(g, 5)*2*3.1416*dvolu*phys%lscale**3
+         El_nn = El_nn + ueg(g, neq)*2*3.1416*dvolu*phys%lscale**3
 #endif
          ! x and y derivatives of the shape functions
          Nxg = iJ11(g)*refElPol%Nxi2D(g, :) + iJ12(g)*refElPol%Neta2D(g, :)
@@ -1621,7 +1621,7 @@ CONTAINS
 
       if (save_tau) then
          indsave = (ifa - 1)*Ngauss + (/(i, i=1, Ngauss)/)
-         diff_nn_Fac_el(indsave) = diff_iso_fac(5, 5, :)
+         diff_nn_Fac_el(indsave) = diff_iso_fac(neq, neq, :)
       END IF
 
       IF (switch%shockcp .GT. 0) THEN
@@ -1770,7 +1770,7 @@ CONTAINS
 
       if (save_tau) then
          indsave = (ifa - 1)*Ngauss + (/(i, i=1, Ngauss)/)
-         diff_nn_Fac_el(indsave) = diff_iso_fac(5, 5, :)
+         diff_nn_Fac_el(indsave) = diff_iso_fac(neq, neq, :)
       END IF
 
       IF (switch%shockcp .GT. 0) THEN
@@ -2272,8 +2272,8 @@ CONTAINS
                   rhs(:, i) = rhs(:, i) + Sohmic*(Jtor**2)*Ni
                END IF
 #ifdef NEUTRAL
-            ELSEIF (i == 5) THEN
-               DO j = 1, 5
+             ELSEIF (i == neq) THEN
+               DO j = 1, neq
                   z = i + (j - 1)*Neq
                   DO k = 1, Ndim
                      !z = i+(k-1)*Neq+(j-1)*Neq*Ndim
@@ -2704,7 +2704,7 @@ CONTAINS
                      elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
                      elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
 #ifdef NEUTRAL
-                  ELSEIF (i == 5) THEN
+                  ELSEIF (i == neq) THEN
                      DO j = 1, Neq
                         ind_jf = ind_asf + j
                         DO k = 1, Ndim
@@ -2998,7 +2998,7 @@ CONTAINS
                      kmultf = coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue), b), uf))*Nfbn
                      elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
 #ifdef NEUTRAL
-                  ELSEIF (i == 5) THEN
+                  ELSEIF (i == neq) THEN
                      DO j = 1, Neq
                         ind_jf = ind_asf + j
                         DO k = 1, Ndim
@@ -3130,7 +3130,7 @@ CONTAINS
 
 #endif
                   !Assembly Source Terms in neutral density equation
-                  Sn(5, :) = -Sn(1, :)
+                  Sn(neq, :) = -Sn(1, :)
 
                   !Assembly RHS Neutral Source Terms
                   Sn0(1) = ad*(niz*sigmaviz - nrec*sigmavrec)
@@ -3151,7 +3151,7 @@ CONTAINS
                   Sn0(4) = Sn0(4) + ad4*(nrec*dot_PRODUCT(dsigmavrec_dU, U)*13.6)
 #endif
 #endif
-                  Sn0(5) = -Sn0(1)
+                  Sn0(neq) = -Sn0(1)
 
                   !Thresholds:
 #ifdef TEMPERATURE
