@@ -25,9 +25,7 @@ CONTAINS
       CALL find_oscillations_elements(eps_element,oscillations)
 
       CALL refine_h_map(h_map_elements,eps_element,h_target_elements)
-      
    ENDSUBROUTINE apply_indicator
-     
 
   SUBROUTINE find_oscillations_elements(eps_element,oscillations)
    REAL*8, INTENT(OUT)           :: eps_element(:)
@@ -59,10 +57,10 @@ CONTAINS
       REAL*8, INTENT(INOUT)   :: h_target_elements(:)
       INTEGER               :: unstable_elements
       INTEGER               :: i
-  
+
       unstable_elements = 0
       h_target_elements = h_map_elements
-  
+
       DO i = 1, SIZE(h_target_elements)
           SELECT CASE (adapt%shockcp_adapt)
           CASE (1)
@@ -74,29 +72,29 @@ CONTAINS
               STOP
           END SELECT
       ENDDO
-  
+
       WRITE(*,'(A, F5.2, A)') "********** Percentage of refined elements on previous mesh by indicator: ", REAL(unstable_elements*100)/REAL(SIZE(h_map_elements)), "%"
-  
+
   END SUBROUTINE refine_h_map
-  
+
   SUBROUTINE refine_if_oscillating(h_map_element, eps_element, unstable_elements)
       REAL*8, INTENT(INOUT) :: h_map_element
       REAL*8, INTENT(IN)    :: eps_element
       INTEGER, INTENT(INOUT) :: unstable_elements
-  
-      IF (eps_element .GT. 1e-10) THEN
+
+      IF (eps_element .GT. 1.e-10) THEN
           h_map_element = h_map_element * 0.5
           unstable_elements = unstable_elements + 1
       END IF
   END SUBROUTINE refine_if_oscillating
-  
+
   SUBROUTINE refine_if_neighbors_oscillating(h_map_element, eps_element, i, unstable_elements)
       REAL*8, INTENT(INOUT) :: h_map_element
       REAL*8, INTENT(IN)    :: eps_element(:)
       INTEGER, INTENT(IN)   :: i
       INTEGER, INTENT(INOUT) :: unstable_elements
       INTEGER               :: inod, els(SIZE(Mesh%N, 2))
-  
+
       DO inod = 1, refElPol%Nvertices
           els = Mesh%N(Mesh%Tlin(i, inod), :)
           IF (ANY(eps_element(PACK(els, els /= 0)) .GT. 1e-10)) THEN
@@ -145,7 +143,6 @@ CONTAINS
 
     IF(MPIvar%glob_id .EQ. 0) THEN
        WRITE(*,*) "MAX ERROR OSCILLATION:       ", max_osc
-       !WRITE(*,*) "MIN ERROR OSCILLATION:       ", min_osc
        WRITE(*,*) "NUMBER OF OSCILLATIONS:      ", n_osc
     ENDIF
 
