@@ -40,7 +40,8 @@ CONTAINS
          h_target_elements = MIN(h_target_temp, h_target_elements)
       ENDIF
 
-      DEALLOCATE(error_L2, u_sol, u_star_sol)
+      DEALLOCATE(error_L2)
+      IF(adapt%param_est == 0) DEALLOCATE(u_sol, u_star_sol)
    END SUBROUTINE apply_estimator
 
   SUBROUTINE calculate_L2_error_two_sols_different_p_scalar_general(X,T,error_param, u_sol,u_star_sol, error_L2, eg_L2)
