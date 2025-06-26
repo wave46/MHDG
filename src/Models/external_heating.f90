@@ -19,9 +19,10 @@ CONTAINS
     nnodes = Mesh%Nnodes
 #endif
 
-    ALLOCATE (phys%external_heating(nnodes))
-    ALLOCATE (phys%external_heating_distribtution(2))
-    phys%external_heating = 0.0
+    ALLOCATE (phys%external_heating_ions(nnodes))
+    ALLOCATE (phys%external_heating_electrons(nnodes))
+    phys%external_heating_ions = 0.0
+    phys%external_heating_electrons = 0.0
 END SUBROUTINE initialize_external_heating
 
   !*******************************************************
@@ -43,9 +44,9 @@ END SUBROUTINE initialize_external_heating
     INTEGER(HID_T)                                :: file_id
     INTEGER                                       :: IERR, ip, jp, ind, i, k
     CHARACTER(70)        :: nit
-    REAL*8, POINTER, DIMENSION(:, :)              :: r2D => NULL(), z2D => NULL(), heating2D => NULL()
+    REAL*8, POINTER, DIMENSION(:, :)              :: r2D => NULL(), z2D => NULL(), heating2D_ions => NULL(), heating2D_electrons => NULL()
     REAL*8, ALLOCATABLE, DIMENSION(:)             :: xvec, yvec
-    REAL*8                                        :: heating, x, y
+    REAL*8                                        :: heating_ions, heating_electrons, x, y
 
     IF (utils%printint > 0) THEN
       IF (MPIvar%glob_id .EQ. 0) THEN
@@ -74,19 +75,22 @@ END SUBROUTINE initialize_external_heating
 
     ALLOCATE (r2D(ip, jp))
     ALLOCATE (z2D(ip, jp))
-    ALLOCATE (heating2D(ip, jp))
+    ALLOCATE (heating2D_ions(ip, jp))
+    ALLOCATE (heating2D_electrons(ip, jp))
 
     CALL HDF5_array2D_reading(file_id, r2D, 'r2D')
     CALL HDF5_array2D_reading(file_id, z2D, 'z2D')
-    CALL HDF5_array2D_reading(file_id, heating2D, 'heating2D')
-    CALL HDF5_array1D_reading(file_id, phys%external_heating_distribtution, 'additional_heating_distribtution')
+    CALL HDF5_array2D_reading(file_id, heating2D_ions, 'heating2D_ions')
+    CALL HDF5_array2D_reading(file_id, heating2D_electrons, 'heating2D_electrons')
 
     ! Apply length scale
     r2D = r2D/phys%lscale
     z2D = z2D/phys%lscale
 
     ! Apply energy scale
-    heating2D = heating2D*simpar%refval_time/simpar%refval_specenergydens/ &
+    heating2D_ions = heating2D_ions*simpar%refval_time/simpar%refval_specenergydens/ &
+                simpar%refval_mass
+    heating2D_electrons = heating2D_electrons*simpar%refval_time/simpar%refval_specenergydens/ &
                 simpar%refval_mass
 
     ! Interpolate the external heating field to the nodes
@@ -98,14 +102,16 @@ END SUBROUTINE initialize_external_heating
     DO i = 1, Mesh%Nnodes
       x = Mesh%X(i, 1)
       y = Mesh%X(i, 2)
-      heating = interpolate(ip, yvec, jp, xvec, heating2D, y, x, 1e-12)
+      heating_ions = interpolate(ip, yvec, jp, xvec, heating2D_ions, y, x, 1e-12)
+      heating_electrons = interpolate(ip, yvec, jp, xvec, heating2D_electrons, y, x, 1e-12)
 
     ind = i
 #ifdef TOR3D
       DO j = 1, Mesh%Nnodes_toroidal
         ind = (j - 1)*Mesh%Nnodes + i
 #endif
-      phys%external_heating(ind) = heating
+      phys%external_heating_ions(ind) = heating_ions
+      phys%external_heating_electrons(ind) = heating_electrons
 #ifdef TOR3D
       END DO
 #endif
@@ -113,8 +119,8 @@ END SUBROUTINE initialize_external_heating
 
 
     ! Deallocate arrays
-    DEALLOCATE (r2D, z2D, heating2D)
-    NULLIFY (r2D, z2D, heating2D)
+    DEALLOCATE (r2D, z2D, heating2D_ions, heating2D_electrons)
+    NULLIFY (r2D, z2D, heating2D_ions, heating2D_electrons)
     DEALLOCATE (xvec, yvec)
 
     CALL HDF5_close(file_id)

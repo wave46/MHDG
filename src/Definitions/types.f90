@@ -262,8 +262,8 @@ MODULE types
      REAL*8                    :: heating_sigmaz ! width of the soruce from magnetic axis in z direction
      INTEGER                   :: heating_equation ! Equation to which additional heating is applied (3 for ions, 4 for electrons)
      ! Coefficients for the external heating
-     REAL*8, POINTER           :: external_heating(:) => NULL() ! External heating on nodes of the mesh
-     REAL*8, POINTER       :: external_heating_distribtution(:) => NULL() ! distribution of the external heating between ions and electrons ([0.5,0.5] will be equal, [0,1] fully on electrons)
+     REAL*8, POINTER           :: external_heating_ions(:) => NULL() ! External heating on ions on nodes of the mesh
+     REAL*8, POINTER           :: external_heating_electrons(:) => NULL() ! External heating on electrons on nodes of the mesh
      ! Coefficients for the neutral equations
      REAL*8                    :: diff_nn ! Diffusion in the neutral equation
      LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
