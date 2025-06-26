@@ -484,7 +484,7 @@ CONTAINS
   SUBROUTINE HDF5_save_solution(fname)
 
 #ifdef PARALL
-    USE communications, ONLY: gather_mesh, gather_solution, gather_additional, gather_magnetic_field
+    USE communications, ONLY: gather_mesh, gather_solution, gather_additional, gather_magnetic_field, gather_nodal_values
 #endif
     IMPLICIT NONE
 
@@ -661,7 +661,7 @@ CONTAINS
     ENDIF
 
     IF (switch%external_heating) THEN
-      CALL gather_nodal_values(Mesh_in = Mesh, value_in=phys%external_heating, value_glob=external_heating_glob)
+      CALL gather_nodal_values(Mesh_in = Mesh, value_in=phys%external_heating, value_glob=external_heating_glob,allgather=.TRUE.)
     ENDIF
 
     
@@ -782,6 +782,8 @@ CONTAINS
       DEALLOCATE(external_heating_glob)
       NULLIFY(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
       NULLIFY(u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob)
+    ENDIF
+    IF (ASSOCIATED(external_heating_glob)) THEN
       NULLIFY(external_heating_glob)
     ENDIF
 
