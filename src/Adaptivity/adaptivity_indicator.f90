@@ -193,7 +193,6 @@ CONTAINS
     REAL*8, OPTIONAL, INTENT(OUT) :: oscillations(:)
     REAL*8, INTENT(IN)            :: invV(refElPol%Nnodes2D, refElPol%Nnodes2D)
     INTEGER*4                     :: Ndim, Neq, Nel, Np, Npm1, i, j, counter1, counter2, start, ending
-    INTEGER, ALLOCATABLE          :: indices(:)
     REAL*8                        :: se(Mesh%Nelems), s0
     REAL*8, ALLOCATABLE           :: up(:, :),grad_mag(:, :), grad(:, :, :), udet(:)
     REAL*8, ALLOCATABLE           :: um(:, :), umho(:, :)
@@ -288,24 +287,14 @@ CONTAINS
        ENDDO
     ENDIF
 
-    IF(adapt%n_quant_ind .EQ. 0) THEN
-       ALLOCATE(indices(phys%npv))
-       indices = (/(i,i=1,phys%npv)/)
-    ELSEIF((adapt%n_quant_ind .GE. 1) .AND. (adapt%n_quant_ind .LE. 10)) THEN
-       ALLOCATE(indices(1))
-       indices(1) = adapt%n_quant_ind
-    ELSE
-       WRITE(*,*) "n_quant_ind not valid, must be between 0 and 10. STOP"
-       STOP
-    ENDIF
 
     DO counter1 = start,ending
-       DO j = 1, SIZE(indices)
+       DO j = 1, SIZE(adapt%n_quant_ind,1)
 
           IF(counter1 .EQ. 1) THEN
-             udet = up(:,indices(j))
+             udet = up(:,adapt%n_quant_ind(j))
           ELSE
-             udet = grad_mag(:,indices(j))
+             udet = grad_mag(:,adapt%n_quant_ind(j))
           ENDIF
 
 
@@ -340,8 +329,6 @@ CONTAINS
 
     DEALLOCATE (up, udet, um, umho)
     DEALLOCATE (grad_mag, grad)
-    DEALLOCATE(indices)
-
   END SUBROUTINE find_coeff_shock_capturing_adapt
 
 ENDMODULE adaptivity_indicator_module

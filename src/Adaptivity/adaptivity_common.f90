@@ -934,14 +934,13 @@ CONTAINS
       USE in_out, ONLY: copy_file
       CHARACTER(1024), INTENT(IN) :: mesh_name
       INTEGER, INTENT(IN)         :: count_adapt
-      CHARACTER(70)               :: param_adapt_char, count_adapt_char
+      CHARACTER(70)               :: count_adapt_char
       CHARACTER(1024)             :: mesh_name_npne,new_mesh_name_npne, buffer
 
       CALL extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
 
-      WRITE(param_adapt_char, *) adapt%param_est
       WRITE(count_adapt_char, *) count_adapt
-      new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_param'// TRIM(ADJUSTL(param_adapt_char)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
+      new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne)) // '_n' // TRIM(ADJUSTL(count_adapt_char))
       
       buffer = "./res/" // TRIM(ADJUSTL(new_mesh_name_npne)) // ".msh"
       IF (MPIvar%glob_id .EQ. 0) THEN

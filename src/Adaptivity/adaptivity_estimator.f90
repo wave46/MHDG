@@ -27,18 +27,13 @@ CONTAINS
       ALLOCATE(error_L2(SIZE(Mesh%T,1)))
       h_target_elements = 0.1
 
-      IF (adapt%param_est == 0) THEN
-         CALL post_process_matrix_solution(Mesh%X, Mesh%T, sol%u, sol%q, u_sol, u_star_sol)
-         DO i = 1, phys%npv
-            CALL calculate_L2_error_two_sols_different_p_scalar_general(Mesh%X, Mesh%T, i, u_sol, u_star_sol, error_L2, eg_L2)
-            h_target_temp = h_map_elements * ((adapt%tol_est / error_L2) ** (1. / (order + 1.)))
-            h_target_elements = MIN(h_target_temp, h_target_elements)
-         ENDDO
-      ELSE
-         CALL L2_error_estimator_eval(Mesh%X, Mesh%T, sol%u, sol%q, adapt%param_est, error_L2, eg_L2)
+
+      CALL post_process_matrix_solution(Mesh%X, Mesh%T, sol%u, sol%q, u_sol, u_star_sol)
+      DO i = 1, SIZE(adapt%param_est,1)
+         CALL calculate_L2_error_two_sols_different_p_scalar_general(Mesh%X, Mesh%T, adapt%param_est(i), u_sol, u_star_sol, error_L2, eg_L2)
          h_target_temp = h_map_elements * ((adapt%tol_est / error_L2) ** (1. / (order + 1.)))
          h_target_elements = MIN(h_target_temp, h_target_elements)
-      ENDIF
+      ENDDO
 
       DEALLOCATE(error_L2, u_sol, u_star_sol)
    END SUBROUTINE apply_estimator
