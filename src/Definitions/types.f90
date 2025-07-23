@@ -264,6 +264,9 @@ MODULE types
      ! Coefficients for the external heating
      REAL*8, POINTER           :: external_heating(:) => NULL() ! External heating on nodes of the mesh
      REAL*8, POINTER       :: external_heating_distribtution(:) => NULL() ! distribution of the external heating between ions and electrons ([0.5,0.5] will be equal, [0,1] fully on electrons)
+     ! Impurity radiation details
+     CHARACTER(LEN=20)         :: impurity_name ! Name of the impurity
+     REAL*8                    :: impurity_concentration ! Impurity concentration as a fraction of the electron density
      ! Coefficients for the neutral equations
      REAL*8                    :: diff_nn ! Diffusion in the neutral equation
      LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
@@ -307,6 +310,7 @@ MODULE types
 #ifdef THERMALCX
      REAL*8, DIMENSION(5)      :: alpha_cx ! Coefficients for charge exchange coefficients spline
 #endif
+     REAL*8, DIMENSION(17)     :: alpha_cooling_factor ! coefficients for cooling factor spline or Nitrogen. 1D fit in loglog space for ADAS data in coronal limit, fitted in the range of 0.2 eV to 4e3 eV
 #endif
 #ifdef AMJUELSPLINES
      ! Atomic rates coefficients
@@ -398,6 +402,7 @@ MODULE types
      ! 2 -add density blob
      LOGICAL :: logrho   ! solve for the density logarithm instead of density
      LOGICAL :: external_heating ! to read and apply external heating from input file
+     LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
   END TYPE Switches_type
 
   !***************************************************************
@@ -409,6 +414,7 @@ MODULE types
      CHARACTER(len=1000) :: save_folder ! where to save last solution
      CHARACTER(len=1000) :: external_heating_path ! where do we read external heating from (only used if the external_heating is on)
      CHARACTER(len=1000) :: puff_path ! where do we read puff boundary condition from
+     CHARACTER(len=1000) :: impurity_concentration_path ! where do we read impurity radiation from
      CHARACTER(len=1000) :: target_density_path ! where do we read target density from
      LOGICAL             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: external_heating_from_grid !if true, then reads external heating file n rectangular grid; if false - on nodes of the mesh
@@ -417,6 +423,7 @@ MODULE types
      INTEGER             :: field_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
      INTEGER             :: jtor_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
      INTEGER             :: puff_dimension ! number of timeslices in the puff file
+     INTEGER             :: impurity_concentration_dimension ! number of timeslices in the impurity radiation file
      INTEGER             :: target_density_dimension ! number of timeslices in the target density file
   END TYPE Inputs_type
 
