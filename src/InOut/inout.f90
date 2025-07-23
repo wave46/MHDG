@@ -889,6 +889,8 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%diff_pot, 'diff_pot')
       CALL HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
       CALL HDF5_real_saving(group_id2, phys%Re, 'recycling')
+      CALL HDF5_real_saving(group_id2, phys%impurity_concentration, 'impurity_concentration')
+      CALL HDF5_string_saving(group_id2, phys%impurity_name, 'impurity_name')
       CALL HDF5_logical_saving(group_id2, phys%apply_trim, 'apply_trim')
       CALL HDF5_real_saving(group_id2, phys%Zeff, 'Zeff')
       CALL HDF5_real_saving(group_id2, phys%Pohmic, 'ohmic_coeff')
@@ -952,6 +954,7 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%dirivortlim, 'dirivortlim')
       CALL HDF5_logical_saving(group_id2, switch%convvort, 'convvort')
       CALL HDF5_logical_saving(group_id2, switch%logrho, 'logrho')
+      CALL HDF5_logical_saving(group_id2, switch%impurity_radiation, 'impurity_radiation')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create numerics parameters group

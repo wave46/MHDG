@@ -214,6 +214,23 @@ CONTAINS
     phys%alpha_energy_rec(:,9) = (/-9.34985789e-09, -1.81807973e-09,  1.07345881e-09,&
     7.81029308e-10, -2.98409303e-10,  2.44276577e-11,&
     1.16076211e-12, -1.87744627e-13,  3.92930028e-15/)
+    !Cooling factor for Nitrogen. 1D fit in loglog space for ADAS data in coronal limit, fitted in the range of 0.2 eV to 4e3 eV
+    IF (phys%impurity_name == 'N') THEN
+      phys%alpha_cooling_factor = (/-2.49348163e+01,  9.52628451e+00, -4.39511346e+00,  2.00446916e+00,&
+      -2.27166819e+00,  9.95587194e-01,  1.11209167e+00, -1.13089140e+00,&
+       2.22902131e-01,  1.37491696e-01, -9.74320916e-02,  2.88337222e-02,&
+      -5.03419501e-03,  5.54252119e-04, -3.80153983e-05,  1.49061146e-06,&
+      -2.56122449e-08/)
+    ELSEIF (phys%impurity_name == 'W') THEN
+      phys%alpha_cooling_factor = (/-3.29798537e+01,  3.38045169e+01, -3.81202398e+01,  2.47450333e+01,&
+      -9.04921504e+00,  1.91417658e+00, -2.32405139e-01,  1.46022765e-02,&
+      -2.46177645e-04, -1.89159754e-05,  7.73790432e-07,  0.,&
+      0.,  0., 0.,  0.,&
+      0./)
+    ELSE 
+      WRITE(6,*) 'Warning: cooling factor not defined for impurity ', TRIM(phys%impurity_name)
+      STOP
+    ENDIF
     ! coefficients for AMJUEL 2.1.8JH
 #ifdef THREEBODYREC
     phys%alpha_rec(:,1) = (/-2.85572848e+01, -7.66404261e-01, -4.93042400e-03,&
@@ -1942,24 +1959,29 @@ CONTAINS
 #endif
 #ifdef EXPANDEDCX
 ! These routines use AMUJUEL splines
-  SUBROUTINE compute_eirene_1D_rate(ti,alpha,rate)
+  SUBROUTINE compute_eirene_1D_rate(t,alpha,rate)
     ! This routine calculates extrapolated AMJUEL 1D rate (here on ion temperature) for given temperature and coefficients
-    real*8, intent(IN) :: ti,alpha(:)
+    real*8, intent(IN) :: t,alpha(:)
     real*8, intent(OUT):: rate
-    real*8             :: ti_min=0.1
-    real*8             :: dlograte_dlogti
+    real*8             :: t_min=0.1
+    real*8             :: t_max=3.e3
+    real*8             :: dlograte_dlogt
     rate = 0.
-    if (ti>=ti_min) then
-      call compute_logeirene_1D_rate(ti,alpha,rate)
+    if ((t>=t_min) .AND. (t<=t_max)) then
+      call compute_logeirene_1D_rate(t,alpha,rate)
+    elseif(t<t_min) then
+      call compute_logeirene_1D_rate(t_min,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(t_min,alpha,dlograte_dlogt)
+      rate = rate + dlograte_dlogt*(log(t)- log(t_min))
     else
-      call compute_logeirene_1D_rate(ti_min,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogti(ti_min,alpha,dlograte_dlogti)
-      rate = rate + dlograte_dlogti*(log(ti)- log(ti_min))
+      call compute_logeirene_1D_rate(t_max,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(t_max,alpha,dlograte_dlogt)
+      rate = rate + dlograte_dlogt*(log(t)- log(t_max))
     endif
     ! rates are not higher than 1 m^3/s, if rate is higher than that value, then there is something weird
     if (rate>6.*log(10.)) then
-      WRITE(6,*) "Something weird in compute_eirene_te_rate, probably, solution is not good already"
-      WRITE(6,*) " ti equal to", ti
+      WRITE(6,*) "Something weird in compute_eirene_rate, probably, solution is not good already"
+      WRITE(6,*) " t equal to", t
       WRITE(6,*) " rate equal to", rate
       stop
     endif
@@ -1970,31 +1992,70 @@ CONTAINS
     endif
   ENDSUBROUTINE compute_eirene_1D_rate
 
-  SUBROUTINE compute_eirene_1D_rate_du(ti,dti_dU,alpha,res)
+  SUBROUTINE compute_eirene_1D_rate_vs_ti_du(ti,dti_dU,alpha,res)
     ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
     real*8, intent(IN) :: ti,dti_dU(:),alpha(:)
     real*8, intent(OUT):: res(:)
     real*8             :: ti_min=0.1
+    real*8             :: ti_max=3.e3
     real*8             :: dlograte_dlogte,rate
     res = 0.
 
-    if (ti>ti_min) then
+    if ((ti>=ti_min) .AND. (ti<=ti_max)) then
       call compute_eirene_1D_rate(ti,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogti(ti,alpha,dlograte_dlogte)
+      call compute_d_logeirene_1D_rate_dlogt(ti,alpha,dlograte_dlogte)
+      res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
+      res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
+      res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
+      res = rate*res
+    elseif(ti<ti_min) then
+      call compute_eirene_1D_rate(ti,phys%alpha_cx,rate)
+      call compute_d_logeirene_1D_rate_dlogt(ti_min,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
       res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
       res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
       res = rate*res
     else
       call compute_eirene_1D_rate(ti,phys%alpha_cx,rate)
-      call compute_d_logeirene_1D_rate_dlogti(ti_min,alpha,dlograte_dlogte)
+      call compute_d_logeirene_1D_rate_dlogt(ti_max,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
       res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
       res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
       res = rate*res
     endif
 
-  ENDSUBROUTINE compute_eirene_1D_rate_du
+  ENDSUBROUTINE compute_eirene_1D_rate_vs_ti_du
+
+  SUBROUTINE compute_eirene_1D_rate_vs_te_du(te,dte_dU,alpha,res)
+    ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
+    real*8, intent(IN) :: te,dte_dU(:),alpha(:)
+    real*8, intent(OUT):: res(:)
+    real*8             :: te_min=0.1
+    real*8             :: te_max=3.e3
+    real*8             :: dlograte_dlogte,rate
+    res = 0.
+
+    if ((te>=te_min) .AND. (te<=te_max)) then
+      call compute_eirene_1D_rate(te,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(te,alpha,dlograte_dlogte)
+      res(1) = res(1) + dlograte_dlogte*(dte_dU(1)/te)
+      res(4) = res(4) + dlograte_dlogte*(dte_dU(4)/te)
+      res = rate*res
+    elseif(te<te_min) then
+      call compute_eirene_1D_rate(te,phys%alpha_cx,rate)
+      call compute_d_logeirene_1D_rate_dlogt(te_min,alpha,dlograte_dlogte)
+      res(1) = res(1) + dlograte_dlogte*(dte_dU(1)/te)
+      res(4) = res(4) + dlograte_dlogte*(dte_dU(4)/te)
+      res = rate*res
+    else
+      call compute_eirene_1D_rate(te,phys%alpha_cx,rate)
+      call compute_d_logeirene_1D_rate_dlogt(te_max,alpha,dlograte_dlogte)
+      res(1) = res(1) + dlograte_dlogte*(dte_dU(1)/te)
+      res(4) = res(4) + dlograte_dlogte*(dte_dU(4)/te)
+      res = rate*res
+    endif
+
+  ENDSUBROUTINE compute_eirene_1D_rate_vs_te_du
 
 
   SUBROUTINE compute_logeirene_1D_rate(ti,alpha,rate)
@@ -2011,17 +2072,17 @@ CONTAINS
   ENDSUBROUTINE compute_logeirene_1D_rate
 
 
-  SUBROUTINE compute_d_logeirene_1D_rate_dlogti(ti,alpha,d_log_rate_dti)
+  SUBROUTINE compute_d_logeirene_1D_rate_dlogt(t,alpha,d_log_rate_dt)
     ! calculates derivative of AMJUEL 1D spline in loglog space
-    real*8, intent(IN) :: ti, alpha(:)
-    real*8, intent(OUT):: d_log_rate_dti
+    real*8, intent(IN) :: t, alpha(:)
+    real*8, intent(OUT):: d_log_rate_dt
     integer            :: i
-    d_log_rate_dti = 0.
+    d_log_rate_dt = 0.
 
     do i = 2,size(alpha,1)
-      d_log_rate_dti = d_log_rate_dti + (i-1)*alpha(i)*log(ti)**(i-2)
+      d_log_rate_dt = d_log_rate_dt + (i-1)*alpha(i)*log(t)**(i-2)
     end do
-  ENDSUBROUTINE compute_d_logeirene_1D_rate_dlogti
+  ENDSUBROUTINE compute_d_logeirene_1D_rate_dlogt
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     ! calculates AMJUEL CX rate
     real*8, intent(IN)  :: U(:)
@@ -2067,10 +2128,53 @@ CONTAINS
       dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
       dti_dU(3) = dti_dU(3) + 1./U1
       dti_dU(:) = dti_dU(:) * T0*2./3. /phys%Mref
-      call compute_eirene_1D_rate_dU(ti,dti_dU,phys%alpha_cx,res)
+      call compute_eirene_1D_rate_vs_ti_dU(ti,dti_dU,phys%alpha_cx,res)
     endif
 
   ENDSUBROUTINE compute_dsigmavcx_dU
+
+  SUBROUTINE compute_cooling_factor(U,res)
+    REAL*8, INTENT(IN) :: U(:)
+    REAL*8             :: res,U1,U4,T0,te
+    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+
+    res = 0.
+    IF ((U1>tol) .AND. (U4>tol)) THEN ! basically it's a below zero check
+      te = T0*2/3./phys%Mref*U4/U1
+
+
+      CALL compute_eirene_1D_rate(te,phys%alpha_cooling_factor,res)
+
+    ENDIF
+  ENDSUBROUTINE compute_cooling_factor
+
+  SUBROUTINE compute_dcooling_factor_dU(U,res)
+    REAL*8, INTENT(IN) :: U(:)
+    REAL*8             :: res(:),U1,U4,T0,te
+    real*8, allocatable :: dte_dU(:)
+    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+
+    allocate(dte_dU(size(U)))
+    U1 = U(1)
+    U4 = U(4)
+    T0 = 50.
+    dte_dU = 0.
+
+    res = 0.
+    IF ((U1>tol) .AND. (U4>tol)) THEN ! basically it's a below zero check
+      te = T0*2/3./phys%Mref*U4/U1
+      dte_dU(1) = dte_dU(1) + 1.*(-U4) / U1**2
+      dte_dU(4) = dte_dU(4) + 1./U1
+      dte_dU(:) = dte_dU(:) * T0*2./3. /phys%Mref
+      CALL compute_eirene_1D_rate_vs_te_du(te,dte_dU,phys%alpha_cooling_factor,res)
+      res = res!/simpar%refval_charge
+    ENDIF
+  ENDSUBROUTINE compute_dcooling_factor_dU
+
+
 #endif
 
 

@@ -2249,6 +2249,8 @@ CONTAINS
     !amjuel radiation losses
     real*8                    :: sigmavEiz,sigmavErec
     real*8                    :: dsigmavEiz_dU(Neq),dsigmavErec_dU(Neq)
+    real*8                    :: cooling_factor
+    real*8                    :: dcooling_factor_dU(Neq)
         REAL*8                    :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq),dTloss_dU(Neq),dTlossrec_dU(Neq)
         REAL*8                    :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
 #ifdef DNNLINEARIZED
@@ -2464,6 +2466,15 @@ CONTAINS
         CALL compute_dTloss_dU(ue,dTloss_dU)
         CALL compute_Tlossrec(ue,Tlossrec)
         CALL compute_dTlossrec_dU(ue,dTlossrec_dU)
+
+    IF (switch%impurity_radiation) THEN
+        CALL compute_cooling_factor(ue,cooling_factor)
+        !WRITE(*,*) "cooling_factor", cooling_factor
+        CALL compute_dcooling_factor_dU(ue,dcooling_factor_dU)
+    ELSE
+        cooling_factor = 0.
+        dcooling_factor_dU = 0.
+    ENDIF
 
 #ifdef AMJUELSPLINES
     !Amjuel energy losses
@@ -3789,7 +3800,7 @@ END IF
   SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
       &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
       &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0,&
-      sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU)
+      sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU,cooling_factor,dcooling_factor_dU)
 #else
     SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,Sn,Sn0)
 #endif
@@ -3802,6 +3813,7 @@ END IF
       REAL*8, INTENT(IN)        :: dsigmaviz_dU(:),dsigmavrec_dU(:),dsigmavcx_dU(:)
       REAL*8, INTENT(IN)        :: dfEiiz_dU(:),dfEirec_dU(:),dfEicx_dU(:)
       REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz,sigmavErec,dsigmavEiz_dU(:),dsigmavErec_dU(:)
+      REAL*8, INTENT(IN), OPTIONAL :: cooling_factor,dcooling_factor_dU(:)
 #endif
              REAL*8             :: ad,ad4,RE,Sn(:,:),Sn0(:), Ti,Te
 
@@ -3844,6 +3856,10 @@ END IF
       !AMJUEL rates
       Sn(4,:) =  ad4*(dniz_dU(:)*sigmavEiz + niz*dsigmavEiz_dU(:) +&
         &dnrec_dU(:)*sigmavErec + nrec*dsigmavErec_dU(:))
+      IF (PRESENT(cooling_factor)) THEN
+      ! Cooling factor term
+        Sn(4,:) = Sn(4,:) + phys%impurity_concentration*ad4*(nrec*dcooling_factor_dU(:)+dnrec_dU(:)*cooling_factor)
+      endif
 
       !modification with recombination gain
       Sn(4,:) =  Sn(4,:)+ ad4*(-1.*dnrec_dU(:)*sigmavrec*13.6 - nrec*dsigmavrec_dU(:)*13.6)
@@ -3872,6 +3888,10 @@ END IF
       Sn0(4)    = Sn0(4) + ad4*(-niz*dot_product(dsigmavEiz_dU,U) - nrec*dot_product(dsigmavErec_dU,U))
       Sn0(4)    = Sn0(4) +  ad4*( nrec*dot_PRODUCT(dsigmavrec_dU,U)*13.6)
 #endif
+      IF (PRESENT(cooling_factor)) THEN
+      ! Cooling factor term
+        Sn0(4)    = Sn0(4) + phys%impurity_concentration*ad4*(-nrec*cooling_factor)
+      ENDIF
 #endif
       Sn0(5)  = -Sn0(1)
 

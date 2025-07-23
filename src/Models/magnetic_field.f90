@@ -1280,12 +1280,12 @@ CONTAINS
 
 SUBROUTINE SetParticleSource()
 
-   CHARACTER(LEN=1000) :: fname, fname_density
+   CHARACTER(LEN=1000) :: fname, fname_density, fname_impurity, fname_zeff
    INTEGER(HID_T)    :: file_id
    INTEGER           :: qp, Nn2D
    REAL*8            :: lower, upper, nli, n_Gw, n_la, a = 2.
    REAL*8, POINTER, DIMENSION(:) :: puff_time, target_density_time, target_density_exp
-   INTEGER           :: puff_len, density_len
+   INTEGER           :: puff_len, density_len, impurity_concentration_len, zeff_len
 
    NULLIFY(puff_time, target_density_time, target_density_exp)
 
@@ -1293,19 +1293,35 @@ SUBROUTINE SetParticleSource()
    puff_len = input%puff_dimension
    fname_density = input%target_density_path
    density_len = input%target_density_dimension
+   fname_impurity = input%impurity_concentration_path
+   impurity_concentration_len = input%impurity_concentration_dimension
+   fname_zeff = input%zeff_path
+   zeff_len = input%zeff_dimension
+   
 
    ! Allocate storing space in phys (puff for WEST, 403 entries)
    IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
       IF (switch%target_variable .EQ. 0) THEN
          CALL load_puff_from_file(fname, puff_len)
+         IF (switch%impurity_radiation)THEN
+            CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
+         ENDIF
       ELSEIF (switch%target_variable .EQ. 1) THEN
          CALL adjust_puff_to_target_density(fname_density, density_len)
+         IF (switch%impurity_radiation)THEN
+            CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
+         ENDIF
       ELSEIF (switch%target_variable .EQ. 2) THEN
          !We first load the puff from file
          CALL load_puff_from_file(fname, puff_len)
          !Then we adjust wall recycling
          CALL adjust_recycling_to_target_density(fname_density, density_len)
+         IF (switch%impurity_radiation)THEN
+            CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
+         ENDIF
       END IF
+      CALL load_zeff(fname_zeff, zeff_len)
+      
    END IF
 
    ! ITER puff: linear increase up to nli = 4.00E+19
@@ -1437,6 +1453,74 @@ SUBROUTINE adjust_recycling_to_target_density(fname_density, density_len)
    END IF
 
 END SUBROUTINE adjust_recycling_to_target_density
+
+SUBROUTINE load_impurity_concentration(fname_impurity, impurity_concentration_len)
+   CHARACTER(LEN=1000), INTENT(IN) :: fname_impurity
+   INTEGER, INTENT(IN) :: impurity_concentration_len
+   INTEGER(HID_T) :: file_id
+   REAL*8, POINTER, DIMENSION(:) :: impurity_concentration_time, impurity_concentration_exp
+   INTEGER :: impurity_concentration_idx
+   REAL*8 :: impurity_concentration
+   INTEGER :: ierr
+
+   ALLOCATE(impurity_concentration_time(impurity_concentration_len))
+   ALLOCATE(impurity_concentration_exp(impurity_concentration_len))
+
+   ! Read file
+   CALL HDF5_open(fname_impurity, file_id, ierr)
+   CALL HDF5_array1D_reading(file_id, impurity_concentration_exp, 'impurity_concentration')
+   CALL HDF5_array1D_reading(file_id, impurity_concentration_time, 'time')
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'Impurity concentration loaded from file: ', TRIM(ADJUSTL(fname_impurity))
+   END IF
+   CALL HDF5_close(file_id)
+
+   ! Linear interpolation of impurity concentration
+   impurity_concentration_idx = binarySearch(impurity_concentration_len, impurity_concentration_time, time%t_ME, 1e-12)
+   impurity_concentration = impurity_concentration_exp(impurity_concentration_idx)*(impurity_concentration_time(impurity_concentration_idx+1)-time%t_ME)/(impurity_concentration_time(impurity_concentration_idx+1)-impurity_concentration_time(impurity_concentration_idx)) + &
+                            impurity_concentration_exp(impurity_concentration_idx+1)*(time%t_ME-impurity_concentration_time(impurity_concentration_idx))/(impurity_concentration_time(impurity_concentration_idx+1)-impurity_concentration_time(impurity_concentration_idx))
+
+   phys%impurity_concentration = impurity_concentration
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentration
+   END IF
+   DEALLOCATE(impurity_concentration_time, impurity_concentration_exp)
+   NULLIFY(impurity_concentration_time, impurity_concentration_exp)
+END SUBROUTINE load_impurity_concentration
+
+SUBROUTINE load_zeff(fname_zeff, zeff_len)
+   CHARACTER(LEN=1000), INTENT(IN) :: fname_zeff
+   INTEGER, INTENT(IN) :: zeff_len
+   INTEGER(HID_T) :: file_id
+   REAL*8, POINTER, DIMENSION(:) :: zeff_time, zeff_exp
+   INTEGER :: zeff_idx
+   REAL*8 :: zeff
+   INTEGER :: ierr
+
+   ALLOCATE(zeff_time(zeff_len))
+   ALLOCATE(zeff_exp(zeff_len))
+
+   ! Read file
+   CALL HDF5_open(fname_zeff, file_id, ierr)
+   CALL HDF5_array1D_reading(file_id, zeff_exp, 'zeff')
+   CALL HDF5_array1D_reading(file_id, zeff_time, 'time')
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'Zeff loaded from file: ', TRIM(ADJUSTL(fname_zeff))
+   END IF
+   CALL HDF5_close(file_id)
+
+   ! Linear interpolation of Zeff
+   zeff_idx = binarySearch(zeff_len, zeff_time, time%t_ME, 1e-12)
+   zeff = zeff_exp(zeff_idx)*(zeff_time(zeff_idx+1)-time%t_ME)/(zeff_time(zeff_idx+1)-zeff_time(zeff_idx)) + &
+          zeff_exp(zeff_idx+1)*(time%t_ME-zeff_time(zeff_idx))/(zeff_time(zeff_idx+1)-zeff_time(zeff_idx))
+
+   phys%Zeff = zeff
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'Zeff =  ', phys%Zeff
+   END IF
+   DEALLOCATE(zeff_time, zeff_exp)
+   NULLIFY(zeff_time, zeff_exp)
+END SUBROUTINE load_zeff
 
 SUBROUTINE compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
    REAL*8, INTENT(IN) :: x_lower, x_upper, y_lower, y_upper
