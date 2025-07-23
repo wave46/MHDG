@@ -1295,6 +1295,9 @@ SUBROUTINE SetParticleSource()
    density_len = input%target_density_dimension
    fname_impurity = input%impurity_concentration_path
    impurity_concentration_len = input%impurity_concentration_dimension
+   fname_zeff = input%zeff_path
+   zeff_len = input%zeff_dimension
+   
 
    ! Allocate storing space in phys (puff for WEST, 403 entries)
    IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
@@ -1317,6 +1320,8 @@ SUBROUTINE SetParticleSource()
             CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
          ENDIF
       END IF
+      CALL load_zeff(fname_zeff, zeff_len)
+      
    END IF
 
    ! ITER puff: linear increase up to nli = 4.00E+19
@@ -1482,6 +1487,40 @@ SUBROUTINE load_impurity_concentration(fname_impurity, impurity_concentration_le
    DEALLOCATE(impurity_concentration_time, impurity_concentration_exp)
    NULLIFY(impurity_concentration_time, impurity_concentration_exp)
 END SUBROUTINE load_impurity_concentration
+
+SUBROUTINE load_zeff(fname_zeff, zeff_len)
+   CHARACTER(LEN=1000), INTENT(IN) :: fname_zeff
+   INTEGER, INTENT(IN) :: zeff_len
+   INTEGER(HID_T) :: file_id
+   REAL*8, POINTER, DIMENSION(:) :: zeff_time, zeff_exp
+   INTEGER :: zeff_idx
+   REAL*8 :: zeff
+   INTEGER :: ierr
+
+   ALLOCATE(zeff_time(zeff_len))
+   ALLOCATE(zeff_exp(zeff_len))
+
+   ! Read file
+   CALL HDF5_open(fname_zeff, file_id, ierr)
+   CALL HDF5_array1D_reading(file_id, zeff_exp, 'zeff')
+   CALL HDF5_array1D_reading(file_id, zeff_time, 'time')
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'Zeff loaded from file: ', TRIM(ADJUSTL(fname_zeff))
+   END IF
+   CALL HDF5_close(file_id)
+
+   ! Linear interpolation of Zeff
+   zeff_idx = binarySearch(zeff_len, zeff_time, time%t_ME, 1e-12)
+   zeff = zeff_exp(zeff_idx)*(zeff_time(zeff_idx+1)-time%t_ME)/(zeff_time(zeff_idx+1)-zeff_time(zeff_idx)) + &
+          zeff_exp(zeff_idx+1)*(time%t_ME-zeff_time(zeff_idx))/(zeff_time(zeff_idx+1)-zeff_time(zeff_idx))
+
+   phys%Zeff = zeff
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'Zeff =  ', phys%Zeff
+   END IF
+   DEALLOCATE(zeff_time, zeff_exp)
+   NULLIFY(zeff_time, zeff_exp)
+END SUBROUTINE load_zeff
 
 SUBROUTINE compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
    REAL*8, INTENT(IN) :: x_lower, x_upper, y_lower, y_upper
