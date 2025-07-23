@@ -416,6 +416,7 @@ MODULE types
      CHARACTER(len=1000) :: puff_path ! where do we read puff boundary condition from
      CHARACTER(len=1000) :: impurity_concentration_path ! where do we read impurity radiation from
      CHARACTER(len=1000) :: target_density_path ! where do we read target density from
+     CHARACTER(len=1000) :: zeff_path ! where do we read Zeff from
      LOGICAL             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: external_heating_from_grid !if true, then reads external heating file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: compute_from_flux ! if components B_R, B_Z are computed from flux or not
@@ -425,6 +426,7 @@ MODULE types
      INTEGER             :: puff_dimension ! number of timeslices in the puff file
      INTEGER             :: impurity_concentration_dimension ! number of timeslices in the impurity radiation file
      INTEGER             :: target_density_dimension ! number of timeslices in the target density file
+     INTEGER             :: zeff_dimension ! number of timeslices in the Zeff file
   END TYPE Inputs_type
 
   !*******************************************************
