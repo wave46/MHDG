@@ -1280,7 +1280,7 @@ CONTAINS
 
 SUBROUTINE SetParticleSource()
 
-   CHARACTER(LEN=1000) :: fname, fname_density, fname_impurity
+   CHARACTER(LEN=1000) :: fname, fname_density, fname_impurity, fname_zeff
    INTEGER(HID_T)    :: file_id
    INTEGER           :: qp, Nn2D
    REAL*8            :: lower, upper, nli, n_Gw, n_la, a = 2.
