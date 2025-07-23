@@ -43,8 +43,8 @@ SUBROUTINE READ_input()
   REAL*8                :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
   ! Info for input and output
-  CHARACTER(len = 1000) :: field_path, jtor_path,save_folder, geometry_path,puff_path, target_density_path, impurity_concentration_path,
-  INTEGER               :: field_dimensions(1:2), jtor_dimensions(1:2),puff_dimension, target_density_dimension,impurity_concentration_dimension
+  CHARACTER(len = 1000) :: field_path, jtor_path,save_folder, geometry_path,puff_path, target_density_path, impurity_concentration_path, zeff_path
+  INTEGER               :: field_dimensions(1:2), jtor_dimensions(1:2),puff_dimension, target_density_dimension,impurity_concentration_dimension, zeff_dimension
   LOGICAL               :: field_from_grid, compute_from_flux, divide_by_2pi
 
   ! RMP and Ripple
