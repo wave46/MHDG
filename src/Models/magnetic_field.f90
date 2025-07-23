@@ -1532,6 +1532,7 @@ SUBROUTINE compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, n
    REAL*8 :: linex(1000), liney(1000), n_i(Mesh%Nelems*refElPol%Nnodes2D)
    REAL*8 :: X(Mesh%Nnodes,2), u(Mesh%Nelems*refElPol%Nnodes2D,phys%Neq)
    INTEGER :: T(Mesh%Nelems,refElPol%Nnodes2D)
+   INTEGER :: i
 
    qp = SIZE(linex)
    Nn2D = refElPol%Nnodes2D
