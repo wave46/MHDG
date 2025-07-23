@@ -182,6 +182,8 @@ SUBROUTINE READ_input()
   input%target_density_dimension = target_density_dimension
   input%impurity_concentration_path = TRIM(ADJUSTL(impurity_concentration_path))
   input%impurity_concentration_dimension = impurity_concentration_dimension
+  input%zeff_path         = TRIM(ADJUSTL(zeff_path))
+  input%zeff_dimension    = zeff_dimension
   input%puff_dimension   = puff_dimension
   numer%tau               = tau
   numer%nrp               = nrp
