@@ -10,12 +10,14 @@
                                         ! true = yes (even for magnetic perturbation)
                                         ! false = no
     init                = 1             ! Initialization type: 1-analytical at nodes; 2-L2 projection
-    external_heating    = .true.       ! True will use external from the file provided in INPUT_LST
+    external_heating    = .false.       ! True will use external from the file provided in INPUT_LST
+    impurity_radiation  = .false.        ! to take into account impurity radiaion with concentration provided in PHYS_LST
     driftdia            = .false.       ! Set to FALSE to ignore diamagnetic drifts terms
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
     testcase            = 54            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
     OhmicSrc            = .true.        ! True to set Ohmic source of energy
     ME                  = .false.        ! True to allow magnetic equilibrium evolution in time
+    target_variable      = 2       ! in moving equilibrium 0 -- puff from experimental file, 1 -- puff adjusted to target density, 2 -- recycling adjusted to target density, 3 -- 1+ conecntratio of impurity is adjusted to lid at X-Ppoint
     RMP                 = .false.       ! True to set RMP (non-axisymetrical perturbation)
     Ripple              = .false.       ! True to set Ripple (non-axisymetrical perturbation)
     psdtime             = .false.        ! Reduce the diffusion every time we reach the steady state
@@ -81,6 +83,12 @@
     external_heating_from_grid = .true.
     puff_path = '/path/where/to/read/puff/' ! only used in moving equilibrium
     puff_dimension = 1000
+    target_density_path = '/path/where/to/read/target/density/'
+    target_density_dimension = 10000
+    impurity_concentration_path = '/path/where/to/read/impurity/concentration/'
+    impurity_concentration_dimension = 10000
+    zeff_path = '/path/where/to/read/zeff/'
+    zeff_dimension = 10000
 /
 
 &NUMER_LST
@@ -190,8 +198,10 @@
     Re                  = 0.9     ! Recycling coefficient 0.997
     Re_pump             = 0.9     ! Recycling coefficient in the pump region
     apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
-    puff                = 4e20 ! puff coefficient (particles per second in the whole puff area) 2.5e18 5.e18
-    cryopump_power      = 0.      ! cryopump power in [m^3/s]
+    puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
+    impurity_name       = 'W' ! name of impurity
+    impurity_concentration = 3.647395612815730E-004!fraction of electron density considered as impurity
+    cryopump_power      = 10.      ! cryopump power in [m^3/s]
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
     ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52 and 81)
     ener_source_ee      = 150.      ! amplitude of the truncated electron energy source (case 52 and 81)
