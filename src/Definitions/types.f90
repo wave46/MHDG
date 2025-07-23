@@ -483,9 +483,9 @@ MODULE types
      INTEGER             :: evaluator ! 1,2,3 (indicator, estimator, both)
      REAL*8              :: thr_ind ! Threshold for the detection of oscillations (indicator)
      INTEGER             :: quant_ind ! 1,2,3 (physical variable(s), gradient of variable(s), both)
-     INTEGER             :: n_quant_ind ! 1,2,3 for iso (n,u, Mach). 1,2,3,4,5 for aniso (n,u,Ti,Te,Mach), 10 for all of them
+     INTEGER,ALLOCATABLE,DIMENSION(:):: n_quant_ind ! Indexes of physical variables (gradients) to which idicator is applied
      REAL*8              :: tol_est ! Relative difference between the p+1 and p solution (estimator)
-     INTEGER             :: param_est ! 1,2,3 ... physical variable used in the estimator (-1 for all of them)
+     INTEGER,ALLOCATABLE,DIMENSION(:):: param_est ! Indexes of physical variables (gradients) to which estimator is applied
      INTEGER             :: difference ! 0,1 (relative, absolute)
      LOGICAL             :: time_adapt ! refine at times steps (pseudo or not)
      LOGICAL             :: NR_adapt ! refine at NR steps
