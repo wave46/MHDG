@@ -122,10 +122,10 @@
                                         ! 2 - Linear interpolation between nodes
                                         ! 3 - Linear interpolation between nodes+save parameter
     evaluator		= 0		! Mixed, indicator, estimator [0,1,2]
-    param_est		= 0		! Mixed, density, p_velocity ... [0,1,2,...] !on physical variable
+    param_est = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10		! Specify all physical variables(gradients) to which you would like to apply estimator
     thr_ind		= 1e-20		! Catch oscillations if higher than this value (indicator)
     quant_ind		= 1		! 1,2,3 (physical variable(s), gradient of variable(s), both)
-    n_quant_ind		= 0		! 1,2,3 for iso (n,u, Mach). 1,2,3,4,5 for aniso (n,u,Ti,Te,Mach), 0 for all of them
+    n_quant_ind = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10		! Specify all physical variables(gradients) to which you would like to apply indicator
     tol_est		= 5e-1		! Difference between p+1 and p solution (estimator)
     difference		= 1		! Type of difference: relative, absolute [0,1]
     time_adapt		= .true.	! Refine at times steps (pseudo or not)
