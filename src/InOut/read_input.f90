@@ -20,7 +20,9 @@ SUBROUTINE READ_input()
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
   INTEGER               :: uinput, printint, testcase, nrp
   INTEGER               :: nts, tsw, freqdisp, freqsave, shockcp, limrho
-  INTEGER               :: shockcp_adapt, evaluator, param_est, difference, freq_t_adapt,freq_NR_adapt, quant_ind, n_quant_ind
+  INTEGER               :: shockcp_adapt, evaluator, difference, freq_t_adapt,freq_NR_adapt, quant_ind
+  INTEGER,ALLOCATABLE,DIMENSION(:) :: n_quant_ind,param_est
+  INTEGER               :: num_param_est, num_n_quant_ind
   REAL*8                :: thr_ind, tol_est, osc_tol, osc_check
   INTEGER               :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
   REAL*8                :: dt0, R0, diff_n, diff_u, v_p, tau(1:5), tNr, tTM, div, Tbg
@@ -68,6 +70,11 @@ SUBROUTINE READ_input()
 
 
 
+  !preallocating adaptivity arrays
+  ALLOCATE(param_est(1000))
+  ALLOCATE(n_quant_ind(1000))
+  param_est = -1
+  n_quant_ind = -1
   ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, init, driftdia, driftexb, testcase, OhmicSrc, ME, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
@@ -187,12 +194,16 @@ SUBROUTINE READ_input()
   numer%exbdump           = exbdump
   adapt%adaptivity        = adaptivity
   adapt%shockcp_adapt     = shockcp_adapt
-  adapt%param_est         = param_est
+  num_param_est        = COUNT(param_est /= -1.0)
+  ALLOCATE(adapt%param_est(num_param_est))
+  adapt%param_est         = param_est(1:num_param_est)
   adapt%evaluator         = evaluator
   adapt%difference        = difference
   adapt%thr_ind           = thr_ind
   adapt%quant_ind         = quant_ind
-  adapt%n_quant_ind       = n_quant_ind
+  num_n_quant_ind    = COUNT(n_quant_ind /= -1.0)
+  ALLOCATE(adapt%n_quant_ind(num_n_quant_ind))
+  adapt%n_quant_ind       = n_quant_ind(1:num_n_quant_ind)
   adapt%tol_est           = tol_est
   adapt%time_adapt        = time_adapt
   adapt%NR_adapt          = NR_adapt
