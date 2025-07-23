@@ -1285,7 +1285,7 @@ SUBROUTINE SetParticleSource()
    INTEGER           :: qp, Nn2D
    REAL*8            :: lower, upper, nli, n_Gw, n_la, a = 2.
    REAL*8, POINTER, DIMENSION(:) :: puff_time, target_density_time, target_density_exp
-   INTEGER           :: puff_len, density_len
+   INTEGER           :: puff_len, density_len, impurity_concentration_len
 
    NULLIFY(puff_time, target_density_time, target_density_exp)
 
