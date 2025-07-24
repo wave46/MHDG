@@ -1230,10 +1230,10 @@ CONTAINS
     res(4) = -1.5*(U1/U4)**2.5*(U4 - U3 + 0.5*U(2)**2/U1) + U1**2.5/U4**1.5
     ! keeping this thing for high diffusion, but take care for low values
 #ifndef KEQUATION
-    if ((phys%diff_ee .gt. 0.0380) .and. (switch%testcase .ne. 2)) then
+    if ((phys%diff_ee .gt. 0.0380) .and. (switch%testcase .ne. 2) .and. (switch%psdtime)) then
       res = 1./(phys%tie*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*res
 #else
-    if (((phys%diff_ee+phys%diff_k_min) .gt. 0.0380) .and. (switch%testcase .ne. 2)) then
+    if (((phys%diff_ee+phys%diff_k_min) .gt. 0.0380) .and. (switch%testcase .ne. 2) .and. (switch%psdtime)) then
       res = 1./(phys%tie*0.0380/(phys%diff_ee+phys%diff_k_min))*(2./3./phys%Mref)**(-0.5)*res
 
 #endif
