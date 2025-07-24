@@ -764,7 +764,7 @@ CONTAINS
     d_iso(2, 2, :) = phys%diff_u
     d_iso(3, 3, :) = phys%diff_e
     d_iso(4, 4, :) = phys%diff_ee
-    IF ((switch%ME .EQV. .TRUE.)  .AND. (switch%testcase .GT. 84)) THEN
+    IF ((switch%ME .EQV. .TRUE.) ) THEN
        IF (switch%testcase .EQ. 85) THEN !Iter core-edge with evolving equilibria plus diffusion decrease
           d_iso(1, 1, :) = phys%diff_n - (phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
           d_iso(2, 2, :) = phys%diff_u - (phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
@@ -780,6 +780,13 @@ CONTAINS
           d_iso(2,2,:) = phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
           d_iso(3,3,:) = phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
           d_iso(4,4,:) = phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
+       ENDIF
+
+       IF (switch%diff_reverse_Ip) THEN
+         d_iso(1,1,:) = phys%diff_n*phys%I_0/phys%I_p
+         d_iso(2,2,:) = phys%diff_u*phys%I_0/phys%I_p
+         d_iso(3,3,:) = phys%diff_e*phys%I_0/phys%I_p
+         d_iso(4,4,:) = phys%diff_ee*phys%I_0/phys%I_p
        ENDIF
       phys%ME_diff_n = d_iso(1,1,1)
       phys%ME_diff_u = d_iso(2,2,1)
