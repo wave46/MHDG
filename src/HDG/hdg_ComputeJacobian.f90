@@ -2502,10 +2502,18 @@ CONTAINS
     !Assembly the matrix for neutral sources
 #ifdef TEMPERATURE
 #ifdef AMJUELSPLINES
-    call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
-      &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
-      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0, &
-      sigmavEiz=sigmavEiz,dsigmavEiz_dU=dsigmavEiz_dU,sigmavErec=sigmavErec,dsigmavErec_dU=dsigmavErec_dU)
+IF (switch%impurity_radiation) THEN
+  call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
+    &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
+    &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0, &
+    sigmavEiz=sigmavEiz,dsigmavEiz_dU=dsigmavEiz_dU,sigmavErec=sigmavErec,dsigmavErec_dU=dsigmavErec_dU,&
+    cooling_factor=cooling_factor,dcooling_factor_dU=dcooling_factor_dU)
+ELSE
+  call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
+    &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
+    &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0, &
+    sigmavEiz=sigmavEiz,dsigmavEiz_dU=dsigmavEiz_dU,sigmavErec=sigmavErec,dsigmavErec_dU=dsigmavErec_dU)
+ENDIF
 #else
     call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
       &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
