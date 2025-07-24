@@ -1291,8 +1291,8 @@ CONTAINS
     ip = size(phys%E)
     jp = size(phys%theta)
 
-    E_clipped = max(1e-20,min(1e3-1e-20,E))
-    theta_clipped = max(1e-20,min(90-1e-20,theta))
+    E_clipped = max(1e-10,min(1e3-1e-10,E))
+    theta_clipped = max(1e-10,min(90-1e-10,theta))
   
     RN = interpolate(ip, phys%E, jp, phys%theta, phys%RN_DW, E_clipped, theta_clipped, 1e-12)
   
