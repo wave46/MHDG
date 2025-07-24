@@ -909,6 +909,14 @@ CONTAINS
             CALL HDF5_real_saving(group_id2, phys%feedback_integral_error,'feedback_integral_error')
             CALL HDF5_real_saving(group_id2, phys%feedback_previous_error,'feedback_previous_error')
          ENDIF
+         IF (switch%diff_reverse_Ip) THEN
+            CALL HDF5_real_saving(group_id2, phys%I_0, 'I_0')
+            CALL HDF5_real_saving(group_id2, phys%I_p, 'I_p')
+            CALL HDF5_real_saving(group_id2, phys%ME_diff_n, 'ME_diff_n')
+            CALL HDF5_real_saving(group_id2, phys%ME_diff_u, 'ME_diff_u')
+            CALL HDF5_real_saving(group_id2, phys%ME_diff_e, 'ME_diff_e')
+            CALL HDF5_real_saving(group_id2, phys%ME_diff_ee, 'ME_diff_ee')
+         ENDIF
       END IF
       if (switch%external_heating) THEN
 #ifdef PARALL

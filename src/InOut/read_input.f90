@@ -61,6 +61,10 @@ SUBROUTINE READ_input()
 #endif
   ! Movin Equilibrium
   LOGICAL               :: ME
+  LOGICAL               :: diff_reverse_Ip
+  REAL*8                :: I_0
+
+
   ! impurity radiation
   LOGICAL               :: impurity_radiation
   CHARACTER(1000)       :: impurity_name
@@ -80,7 +84,7 @@ SUBROUTINE READ_input()
   param_est = -1
   n_quant_ind = -1
   ! Defining the variables to READ from the file
-  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
+  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension
@@ -90,12 +94,12 @@ SUBROUTINE READ_input()
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
   & cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #endif
@@ -144,6 +148,7 @@ SUBROUTINE READ_input()
   switch%testcase         = testcase
   switch%ohmicsrc         = OhmicSrc
   switch%ME               = ME
+  switch%diff_reverse_Ip = diff_reverse_Ip
   switch%target_variable   = target_variable
   switch%RMP              = RMP
   switch%Ripple           = Ripple
@@ -258,6 +263,7 @@ SUBROUTINE READ_input()
   phys%diff_vort          = diff_vort
   phys%v_p                = v_p
   phys%diff_nn            = diff_nn
+  phys%I_0                = I_0
   phys%heating_power      = heating_power
   phys%heating_dr         = heating_dr
   phys%heating_dz         = heating_dz
@@ -476,6 +482,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - impurity name:                                     ', TRIM(ADJUSTL(phys%impurity_name))
      PRINT *, '                - impurity concentration:                            ', phys%impurity_concentration
      IF (switch%ME) THEN
+        PRINT *, '                - I_0 for moving equilibrium:                         ', phys%I_0
         PRINT *, '             - puff increment slope:                               ', phys%puff_slope
           IF (switch%target_variable /= 0) THEN
              PRINT *, '             - feedback_propotional_gain:                               ', phys%feedback_propotional_gain
@@ -506,6 +513,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - test case:                                          ', testcase
      PRINT *, '                - Ohmic heating:                                      ', OhmicSrc
      PRINT *, '                - Moving equilibrium:                                 ', ME
+     PRINT *, '                - Diffusion adjusted to plasma current:               ', diff_reverse_Ip
      PRINT *, '                - RMP:                                                ', RMP
      PRINT *, '                - Ripple:                                             ', Ripple
      PRINT *, '                - shockcp:                                            ', shockcp
