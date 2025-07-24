@@ -2484,7 +2484,7 @@ CONTAINS
     call compute_dsigmavErec_dU(ue,dsigmavErec_dU)
 #else
     !! hot fix DO NOT USE
-    WRITE(*,*) this is a hotfix. Do not use. STOPPING.
+    WRITE(*,*) "this is a hotfix. Do not use. STOPPING."
     STOP
     sigmavEiz = sigmaviz*Tloss
     sigmavErec = sigmavrec*Tlossrec
