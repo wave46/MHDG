@@ -1119,7 +1119,7 @@ CONTAINS
   !************************************
 #ifdef KEQUATION
   !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_elpsifl,q_cylfl,isdir,Jtorel,El_n,El_nn) &
+  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,isdir,Jtorel,El_n,El_nn) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
   !$OMP FIRSTPRIVATE(phys)
 #else
