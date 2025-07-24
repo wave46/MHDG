@@ -1299,6 +1299,12 @@ CONTAINS
      IF((switch%ME .EQV. .TRUE.) .AND. (switch%testcase .GE. 80)) THEN
         WRITE(6,*) 'D_n = ', phys%ME_diff_n*simpar%refval_length**2/simpar%refval_time
      ENDIF
+     IF ((switch%ME .EQV. .TRUE.) .AND. (switch%diff_reverse_Ip .EQV. .TRUE.)) THEN
+        WRITE(6,*) 'D_n = ', phys%ME_diff_n*simpar%refval_length**2/simpar%refval_time
+        WRITE(6,*) 'mu = ', phys%ME_diff_u*simpar%refval_length**2/simpar%refval_time
+        WRITE(6,*) 'chi_i', phys%ME_diff_e*simpar%refval_length**2/simpar%refval_time
+        WRITE(6,*) 'chi_e', phys%ME_diff_ee*simpar%refval_length**2/simpar%refval_time
+     ENDIF
      totaln = n + nn
      WRITE(6,*) 'n = ',n
      WRITE(6,*) 'nn = ',nn
