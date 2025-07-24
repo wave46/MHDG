@@ -449,9 +449,9 @@ CONTAINS
        DEALLOCATE (simpar%consvar_refval)
     END IF
 
-    IF (ASSOCIATED(phys%external_heating)) THEN
-      DEALLOCATE (phys%external_heating,phys%external_heating_distribtution)
-      NULLIFY (phys%external_heating,phys%external_heating_distribtution)
+    IF (ASSOCIATED(phys%external_heating_ions)) THEN
+      DEALLOCATE (phys%external_heating_ions,phys%external_heating_electrons)
+      NULLIFY (phys%external_heating_ions,phys%external_heating_electrons)
     END IF
          
 
