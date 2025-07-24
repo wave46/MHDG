@@ -325,6 +325,7 @@ MODULE types
      REAL*8                    :: diff_k_max ! Maximum diffusion in the k equation
      REAL*8                    :: k_max ! Maximum k
 #endif
+     REAL*8                    :: I_0 ! plasma current at flat-top for moving equilibrium diffusion adjustment
   END TYPE Physics_type
 
   !*******************************************************
@@ -364,6 +365,7 @@ MODULE types
      LOGICAL :: ripple   ! To activate ripple
      LOGICAL :: ohmicsrc ! Set to TRUE to consider ohmic source of energy
      LOGICAL :: ME       ! Set to TRUE to allow magnetic equilibrium evolution in time
+     LOGICAL :: diff_reverse_Ip ! Set to TRUE to adjust diffusion during moving equilibrium D=D0*I_0/I_p, D0 is diff_n, diff_u, etc., I_0 set in param file, I_p is the current plasma current
      INTEGER :: target_variable ! in moving equilibrium 0 -- puff from experimental file, 1 -- puff adjusted to target density, 2 -- recycling adjusted to target density
      LOGICAL :: driftdia ! Set to TRUE to consider diamagnetic drift
      LOGICAL :: driftexb ! Set to TRUE to consider ExB drift
