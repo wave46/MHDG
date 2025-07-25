@@ -1280,19 +1280,21 @@ CONTAINS
 
 SUBROUTINE SetParticleSource()
 
-   CHARACTER(LEN=1000) :: fname, fname_density, fname_impurity, fname_zeff
+   CHARACTER(LEN=1000) :: fname, fname_density, fname_impurity,fname_xpr_density, fname_zeff
    INTEGER(HID_T)    :: file_id
    INTEGER           :: qp, Nn2D
    REAL*8            :: lower, upper, nli, n_Gw, n_la, a = 2.
    REAL*8, POINTER, DIMENSION(:) :: puff_time, target_density_time, target_density_exp
-   INTEGER           :: puff_len, density_len, impurity_concentration_len, zeff_len
+   INTEGER           :: puff_len, density_len, impurity_concentration_len,density_xpr_len, zeff_len
 
    NULLIFY(puff_time, target_density_time, target_density_exp)
 
    fname = input%puff_path
    puff_len = input%puff_dimension
    fname_density = input%target_density_path
+   fname_xpr_density = input%target_density_xpr_path
    density_len = input%target_density_dimension
+   density_xpr_len = input%target_density_xpr_dimension
    fname_impurity = input%impurity_concentration_path
    impurity_concentration_len = input%impurity_concentration_dimension
    fname_zeff = input%zeff_path
@@ -1319,6 +1321,12 @@ SUBROUTINE SetParticleSource()
          IF (switch%impurity_radiation)THEN
             CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
          ENDIF
+      ELSEIF (switch%target_variable .EQ. 3) THEN
+         CALL adjust_puff_to_target_density(fname_density, density_len)
+         IF (switch%impurity_radiation)THEN
+            CALL adjust_impurity_concentration_to_target_density_xpr(fname_xpr_density, density_xpr_len)
+         ENDIF
+         
       END IF
       CALL load_zeff(fname_zeff, zeff_len)
       
@@ -1408,6 +1416,51 @@ SUBROUTINE adjust_puff_to_target_density(fname_density, density_len)
       WRITE(6, *) 'puff =  ', phys%puff
    END IF
 END SUBROUTINE adjust_puff_to_target_density
+
+SUBROUTINE adjust_impurity_concentration_to_target_density_xpr(fname_xpr_density, density_xpr_len)
+   CHARACTER(LEN=1000), INTENT(IN) :: fname_xpr_density
+   INTEGER, INTENT(IN) :: density_xpr_len
+   REAL*8 :: x_lower, x_upper, y_lower, y_upper
+   INTEGER(HID_T) :: file_id
+   REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
+   INTEGER :: target_density_idx
+   REAL*8 :: target_density, nli
+   INTEGER :: ierr
+
+   ALLOCATE(target_density_time(density_xpr_len))
+   ALLOCATE(target_density_exp(density_xpr_len))
+
+   ! Read file
+   CALL HDF5_open(fname_xpr_density, file_id, ierr)
+   CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
+   CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
+   CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
+   CALL HDF5_real_reading(file_id, x_upper, 'x_upper')
+   CALL HDF5_real_reading(file_id, y_lower, 'y_lower')
+   CALL HDF5_real_reading(file_id, y_upper, 'y_upper')
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'X-point target density loaded from file: ', TRIM(ADJUSTL(fname_xpr_density))
+   END IF
+   CALL HDF5_close(file_id)
+
+   ! Linear interpolation of target density
+   target_density_idx = binarySearch(density_xpr_len, target_density_time, time%t_ME, 1e-12)
+   target_density = target_density_exp(target_density_idx)*(target_density_time(target_density_idx+1)-time%t_ME)/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx)) + &
+                    target_density_exp(target_density_idx+1)*(time%t_ME-target_density_time(target_density_idx))/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))
+   target_density = target_density / 2.
+
+   ! Compute line integrated density
+   CALL compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
+
+   ! Adjust impurity concentration using feedback
+   CALL adjust_impurity_concentration_feedback(target_density,nli)
+
+   DEALLOCATE(target_density_time, target_density_exp)
+   NULLIFY(target_density_time, target_density_exp)
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentration
+   END IF
+END SUBROUTINE adjust_impurity_concentration_to_target_density_xpr
 
 SUBROUTINE adjust_recycling_to_target_density(fname_density, density_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_density
@@ -1594,6 +1647,48 @@ SUBROUTINE adjust_puff_feedback(target_density, nli)
    ! Update the previous error
    phys%feedback_previous_error = target_density - nli
 END SUBROUTINE adjust_puff_feedback
+
+SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
+   REAL*8, INTENT(IN) :: target_density, nli
+   REAL*8 :: control_signal, anti_windup_gain
+
+   IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE(6,*) 'X-point n_li = ', nli, ' [m^-2]'
+       WRITE(6,*) 'X-point n_litarget = ', target_density, '[m^-2]'
+   END IF   
+
+   ! Initialize integral error and previous error on the first timestep
+   IF (time%it .EQ. 0) THEN
+       phys%feedback_integral_error_xpr = 0.0
+       phys%feedback_previous_error_xpr = target_density - nli
+   END IF
+
+   ! Calculate the control signal
+   control_signal = phys%impurity_concentration + phys%feedback_propotional_gain_xpr * (target_density - nli) + &
+                            phys%feedback_integral_gain_xpr * phys%feedback_integral_error_xpr + &
+                            phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/time%dt_ME
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6,*) 'XPR Proportional impact: ', phys%feedback_propotional_gain_xpr * (target_density - nli)
+      WRITE(6,*) 'XPR Integral impact: ', phys%feedback_integral_gain_xpr * phys%feedback_integral_error_xpr
+      WRITE(6,*) 'XPR Derivative impact: ', phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/time%dt_ME
+   END IF
+
+   ! Saturate the control signal
+   phys%impurity_concentration = MAX(control_signal, 0.0)
+
+   ! Back-calculate the integral error to prevent windup
+   anti_windup_gain = 0.1  ! Tunable parameter
+   phys%feedback_integral_error_xpr = phys%feedback_integral_error_xpr + &
+                                                 anti_windup_gain * (phys%impurity_concentration - control_signal)
+
+   ! Update the integral error only if the output is not saturated
+   IF (phys%impurity_concentration > 0.0) THEN
+       phys%feedback_integral_error_xpr = phys%feedback_integral_error_xpr + (target_density - nli) * time%dt_ME
+   END IF
+
+   ! Update the previous error
+   phys%feedback_previous_error_xpr = target_density - nli
+END SUBROUTINE adjust_impurity_concentration_feedback
 
 SUBROUTINE adjust_recycling_feedback(target_density, nli)
    REAL*8, INTENT(IN) :: target_density, nli
