@@ -86,6 +86,8 @@
     puff_dimension = 1000
     target_density_path = '/path/where/to/read/target/density/'
     target_density_dimension = 10000
+    target_density_xpr_path = '/path/where/to/read/target/density/xpr/'
+    target_density_xpr_dimension = 101
     impurity_concentration_path = '/path/where/to/read/impurity/concentration/'
     impurity_concentration_dimension = 10000
     zeff_path = '/path/where/to/read/zeff/'

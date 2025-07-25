@@ -86,6 +86,8 @@
     puff_dimension = 1000
     target_density_path = '/path/where/to/read/target/density/'
     target_density_dimension = 10000
+    target_density_xpr_path = '/path/where/to/read/target/density/xpr/'
+    target_density_xpr_dimension = 101
     impurity_concentration_path = '/path/where/to/read/impurity/concentration/'
     impurity_concentration_dimension = 10000
     zeff_path = '/path/where/to/read/zeff/'
@@ -202,7 +204,13 @@
     apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
     puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
     impurity_name       = 'W' ! name of impurity
-    impurity_concentration = 3.647395612815730E-004!fraction of electron density considered as impurity
+    impurity_concentration = 0.!fraction of electron density considered as impurity
+    feedback_propotional_gain = 10.e-21 !100.e-21  10.e-21
+    feedback_integral_gain = 200.e-22 !1000 200
+    feedback_derivative_gain = 8.e-22
+    feedback_propotional_gain_xpr = 1.e-22 
+    feedback_integral_gain_xpr = 2.e-22
+    feedback_derivative_gain_xpr = 0.5e-23
     cryopump_power      = 10.      ! cryopump power in [m^3/s]
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
     ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52 and 81)
