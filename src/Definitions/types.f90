@@ -287,6 +287,11 @@ MODULE types
      REAL*8                    :: feedback_derivative_gain ! feedback derivative gain
      REAL*8                    :: feedback_previous_error ! previous error for the feedback control
      REAL*8                    :: feedback_integral_error ! integral error for the feedback control
+     REAL*8                    :: feedback_propotional_gain_xpr ! relative feedback propotional gain for the xpr feedback control
+     REAL*8                    :: feedback_integral_gain_xpr ! feedback integral gain for the xpr feedback control
+     REAL*8                    :: feedback_derivative_gain_xpr ! feedback derivative gain for the xpr feedback control
+     REAL*8                    :: feedback_previous_error_xpr ! previous error for the xpr feedback control
+     REAL*8                    :: feedback_integral_error_xpr ! integral error for the xpr feedback control
      REAL*8                    :: n_li  ! line integrated density
      REAL*8                    :: cryopump_power ! Cryopump power in [m^3/s] coefficient
      REAL*8                    :: puff_slope ! Puff increment coefficient (only for moving equilibrium for ITER)
@@ -418,6 +423,7 @@ MODULE types
      CHARACTER(len=1000) :: puff_path ! where do we read puff boundary condition from
      CHARACTER(len=1000) :: impurity_concentration_path ! where do we read impurity radiation from
      CHARACTER(len=1000) :: target_density_path ! where do we read target density from
+     CHARACTER(len=1000) :: target_density_xpr_path ! where do we read target density expression from (only used if the target_density is on)
      CHARACTER(len=1000) :: zeff_path ! where do we read Zeff from
      LOGICAL             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: external_heating_from_grid !if true, then reads external heating file n rectangular grid; if false - on nodes of the mesh
@@ -428,6 +434,7 @@ MODULE types
      INTEGER             :: puff_dimension ! number of timeslices in the puff file
      INTEGER             :: impurity_concentration_dimension ! number of timeslices in the impurity radiation file
      INTEGER             :: target_density_dimension ! number of timeslices in the target density file
+     INTEGER             :: target_density_xpr_dimension ! number of timeslices in the target density expression file
      INTEGER             :: zeff_dimension ! number of timeslices in the Zeff file
   END TYPE Inputs_type
 
