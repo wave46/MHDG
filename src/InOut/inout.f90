@@ -908,6 +908,13 @@ CONTAINS
             CALL HDF5_real_saving(group_id2, phys%n_li,'n_li')
             CALL HDF5_real_saving(group_id2, phys%feedback_integral_error,'feedback_integral_error')
             CALL HDF5_real_saving(group_id2, phys%feedback_previous_error,'feedback_previous_error')
+            IF (switch%target_variable == 3) THEN
+               CALL HDF5_real_saving(group_id2, phys%feedback_propotional_gain_xpr,'feedback_propotional_gain_xpr')
+               CALL HDF5_real_saving(group_id2, phys%feedback_integral_gain_xpr,'feedback_integral_gain_xpr')
+               CALL HDF5_real_saving(group_id2, phys%feedback_derivative_gain_xpr,'feedback_derivative_gain_xpr')
+               CALL HDF5_real_saving(group_id2, phys%feedback_integral_error_xpr,'feedback_integral_error_xpr')
+               CALL HDF5_real_saving(group_id2, phys%feedback_previous_error_xpr,'feedback_previous_error_xpr')
+            ENDIF
          ENDIF
          IF (switch%diff_reverse_Ip) THEN
             CALL HDF5_real_saving(group_id2, phys%I_0, 'I_0')
@@ -1525,11 +1532,18 @@ CONTAINS
             CALL HDF5_real_reading(group_id2, phys%puff, 'puff')
          ELSEIF (switch%target_variable == 2) THEN
             CALL HDF5_real_reading(group_id2, phys%Re, 'recycling')
+         ELSEIF (switch%target_variable == 3) THEN
+            CALL HDF5_real_reading(group_id2, phys%puff, 'puff')
+            CALL HDF5_real_reading(group_id2, phys%impurity_concentration, 'impurity_concentration')
          ENDIF
          
          IF (time%it .GT. 1) THEN
             CALL HDF5_real_reading(group_id2, phys%feedback_integral_error, 'feedback_integral_error')
             CALL HDF5_real_reading(group_id2, phys%feedback_previous_error, 'feedback_previous_error')
+            IF (switch%target_variable == 3) THEN
+               CALL HDF5_real_reading(group_id2, phys%feedback_integral_error_xpr, 'feedback_integral_error_xpr')
+               CALL HDF5_real_reading(group_id2, phys%feedback_previous_error_xpr, 'feedback_previous_error_xpr')
+            ENDIF
          ENDIF
          CALL HDF5_group_close(group_id2, ierr)
        ENDIF
