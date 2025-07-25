@@ -17,6 +17,7 @@
     testcase            = 54            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
     OhmicSrc            = .true.        ! True to set Ohmic source of energy
     ME                  = .false.        ! True to allow magnetic equilibrium evolution in time
+    diff_reverse_Ip     = .false.        ! True to make D=D0*I_0/I_p in moving equilibrium, where D0 is diff_n, diff_u, so on, I_0 is plasma current at flat-top (set-up below), I_p is the current plasma current
     target_variable      = 2       ! in moving equilibrium 0 -- puff from experimental file, 1 -- puff adjusted to target density, 2 -- recycling adjusted to target density, 3 -- 1+ conecntratio of impurity is adjusted to lid at X-Ppoint
     RMP                 = .false.       ! True to set RMP (non-axisymetrical perturbation)
     Ripple              = .false.       ! True to set Ripple (non-axisymetrical perturbation)
@@ -85,6 +86,8 @@
     puff_dimension = 1000
     target_density_path = '/path/where/to/read/target/density/'
     target_density_dimension = 10000
+    target_density_xpr_path = '/path/where/to/read/target/density/xpr/'
+    target_density_xpr_dimension = 101
     impurity_concentration_path = '/path/where/to/read/impurity/concentration/'
     impurity_concentration_dimension = 10000
     zeff_path = '/path/where/to/read/zeff/'
@@ -187,6 +190,7 @@
     diff_vort =  20.! diffusion in the vorticity equation
     v_p = 0. ! Pinch velocity in the continuity equation (Pinch = vp*(psi^2 + psi^2*tanh((0.95 - psi)/0.02)) with psi = 1. at separatrix )
     diff_nn = 2e8 ! max diffusion for neutral equation or if used DCONSTANTNEUTRALDIFF flag, then the value of neutral diffusion
+    I_0 = 0.3     ! [MA] Plasma current at flat-top for diffusion in moving equilibrium
     ! external heating in the form of shifted 2D gaussian ~exp(-(r-(R0+dr)**2/sigmar**2))*exp(-(z-(Z0+dz)**2/sigmaz**2))
     heating_power = 0.              ! [W] Total power of heating 
     heating_dr = 0.0                 ! [m] displacement from magnetic axis alon R direction (can be positive and negative)
@@ -200,7 +204,13 @@
     apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
     puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
     impurity_name       = 'W' ! name of impurity
-    impurity_concentration = 3.647395612815730E-004!fraction of electron density considered as impurity
+    impurity_concentration = 0.!fraction of electron density considered as impurity
+    feedback_propotional_gain = 10.e-21 !100.e-21  10.e-21
+    feedback_integral_gain = 200.e-22 !1000 200
+    feedback_derivative_gain = 8.e-22
+    feedback_propotional_gain_xpr = 1.e-22 
+    feedback_integral_gain_xpr = 2.e-22
+    feedback_derivative_gain_xpr = 0.5e-23
     cryopump_power      = 10.      ! cryopump power in [m^3/s]
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
     ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52 and 81)

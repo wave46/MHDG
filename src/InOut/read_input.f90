@@ -43,8 +43,8 @@ SUBROUTINE READ_input()
   REAL*8                :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
   ! Info for input and output
-  CHARACTER(len = 1000) :: field_path, jtor_path,save_folder, geometry_path,puff_path, target_density_path, impurity_concentration_path, zeff_path
-  INTEGER               :: field_dimensions(1:2), jtor_dimensions(1:2),puff_dimension, target_density_dimension,impurity_concentration_dimension, zeff_dimension
+  CHARACTER(len = 1000) :: field_path, jtor_path,save_folder, geometry_path,puff_path, target_density_path,target_density_xpr_path, impurity_concentration_path, zeff_path
+  INTEGER               :: field_dimensions(1:2), jtor_dimensions(1:2),puff_dimension, target_density_dimension,target_density_xpr_dimension,impurity_concentration_dimension, zeff_dimension
   LOGICAL               :: field_from_grid, compute_from_flux, divide_by_2pi
 
   ! RMP and Ripple
@@ -55,6 +55,7 @@ SUBROUTINE READ_input()
   ! Neutral and Ohmic heating
   LOGICAL               :: OhmicSrc, apply_trim
   REAL*8                :: Zeff,Pohmic,diff_nn,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
+  REAL*8                :: feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr
 #ifdef KEQUATION
   ! k equation
   REAL*8                :: diff_k_min, diff_k_max, k_max
@@ -87,7 +88,7 @@ SUBROUTINE READ_input()
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb
-  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension
+  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
@@ -96,10 +97,10 @@ SUBROUTINE READ_input()
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
-  & cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
+  & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #endif
@@ -186,7 +187,9 @@ SUBROUTINE READ_input()
   input%save_folder       = TRIM(ADJUSTL(save_folder))
   input%puff_path        = TRIM(ADJUSTL(puff_path))
   input%target_density_path = TRIM(ADJUSTL(target_density_path))
+  input%target_density_xpr_path = TRIM(ADJUSTL(target_density_xpr_path))
   input%target_density_dimension = target_density_dimension
+  input%target_density_xpr_dimension = target_density_xpr_dimension
   input%impurity_concentration_path = TRIM(ADJUSTL(impurity_concentration_path))
   input%impurity_concentration_dimension = impurity_concentration_dimension
   input%zeff_path         = TRIM(ADJUSTL(zeff_path))
@@ -280,6 +283,9 @@ SUBROUTINE READ_input()
   phys%feedback_propotional_gain = feedback_propotional_gain
   phys%feedback_integral_gain = feedback_integral_gain
   phys%feedback_derivative_gain = feedback_derivative_gain
+  phys%feedback_propotional_gain_xpr = feedback_propotional_gain_xpr
+  phys%feedback_integral_gain_xpr = feedback_integral_gain_xpr
+  phys%feedback_derivative_gain_xpr = feedback_derivative_gain_xpr
   phys%puff_slope         = puff_slope
   phys%density_source     = density_source
   phys%ener_source_e      = ener_source_e
@@ -488,6 +494,11 @@ SUBROUTINE READ_input()
              PRINT *, '             - feedback_propotional_gain:                               ', phys%feedback_propotional_gain
              PRINT *, '             - feedback_integral_gain:                                  ', phys%feedback_integral_gain
              PRINT *, '             - feedback_derivative_gain:                                 ', phys%feedback_derivative_gain
+             IF (switch%target_variable == 3) THEN
+                PRINT *, '             - feedback_propotional_gain_xpr:                            ', phys%feedback_propotional_gain_xpr
+                PRINT *, '             - feedback_integral_gain_xpr:                               ', phys%feedback_integral_gain_xpr
+                PRINT *, '             - feedback_derivative_gain_xpr:                              ', phys%feedback_derivative_gain_xpr
+             ENDIF
           ENDIF
      ENDIF
      PRINT *, '                - particle source at core:                            ', part_source
