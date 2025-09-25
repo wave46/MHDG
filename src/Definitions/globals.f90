@@ -432,6 +432,31 @@ CONTAINS
     END IF
 #endif
 
+    IF (ASSOCIATED(phys%rho_1D)) THEN
+       DEALLOCATE (phys%rho_1D)
+       NULLIFY(phys%rho_1D)
+    END IF
+
+    IF (ASSOCIATED(phys%diff_n_1D)) THEN
+       DEALLOCATE (phys%diff_n_1D)
+       NULLIFY(phys%diff_n_1D)
+    END IF
+
+    IF (ASSOCIATED(phys%diff_u_1D)) THEN
+       DEALLOCATE (phys%diff_u_1D)
+       NULLIFY(phys%diff_u_1D)
+    END IF
+
+    IF (ASSOCIATED(phys%diff_e_1D)) THEN
+       DEALLOCATE (phys%diff_e_1D)
+       NULLIFY(phys%diff_e_1D)
+    END IF
+
+    IF (ASSOCIATED(phys%diff_ee_1D)) THEN
+       DEALLOCATE (phys%diff_ee_1D)
+       NULLIFY(phys%diff_ee_1D)
+   END IF   
+
     ! magnetic
     IF (ASSOCIATED(magn%coils_rmp)) THEN
        DEALLOCATE (magn%coils_rmp)

@@ -680,6 +680,13 @@ CONTAINS
 #else
     CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac,q_cyl)
 #endif
+    
+    
+
+    IF (switch%import_diffusion_1D) THEN
+      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
+    ENDIF
+
     if (save_tau) then
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
        phys%diff_nn_Bou(indtausave) = diff_iso_fac(5,5,:)
@@ -909,11 +916,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
-#else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
-#endif
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -964,11 +967,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
-#else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
-#endif
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1049,11 +1048,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
-#else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
-#endif
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1236,11 +1231,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab)
-#else
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),q_cyl(g),tau_stab)
-#endif
+            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF

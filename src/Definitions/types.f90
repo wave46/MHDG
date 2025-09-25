@@ -308,6 +308,15 @@ MODULE types
      REAL*8                    :: ME_diff_u
      REAL*8                    :: ME_diff_e
      REAL*8                    :: ME_diff_ee
+     ! Diffusion coefficients 1D imported from file
+     REAL*8, POINTER           :: rho_1D(:) => NULL() ! Radial coordinate for 1D diffusion profiles
+     REAL*8, POINTER           :: diff_n_1D(:) => NULL() ! Perpendicular diffusion in the continuity equation
+     REAL*8, POINTER           :: diff_u_1D(:) => NULL() ! Perpendicular diffusion in the momentum equation
+     REAL*8, POINTER           :: diff_e_1D(:) => NULL() ! Perpendicular diffusion in the energy equation
+     REAL*8, POINTER           :: diff_ee_1D(:) => NULL() ! Perpendicular diffusion in the electron energy equation
+     REAL*8                    :: rho_1D_max ! Maximum value of rho for the 1D diffusion profiles
+     REAL*8                    :: rho_1D_min ! Minimum value of rho for the 1D diffusion profiles 
+     INTEGER                   :: rho_1D_size ! Size of the 1D diffusion profiles
 #ifdef EXPANDEDCX
 #ifdef AMJUELCX
      REAL*8, DIMENSION(9)      :: alpha_cx ! Coefficients for charge exchange coefficients spline
@@ -410,6 +419,7 @@ MODULE types
      LOGICAL :: logrho   ! solve for the density logarithm instead of density
      LOGICAL :: external_heating ! to read and apply external heating from input file
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
+     LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs
   END TYPE Switches_type
 
   !***************************************************************
@@ -425,6 +435,7 @@ MODULE types
      CHARACTER(len=1000) :: target_density_path ! where do we read target density from
      CHARACTER(len=1000) :: target_density_xpr_path ! where do we read target density expression from (only used if the target_density is on)
      CHARACTER(len=1000) :: zeff_path ! where do we read Zeff from
+     CHARACTER(len=1000) :: diffusion_1D_path ! where do we read 1D diffusion profiles from (only used if the import_diffusion_1D is on)
      LOGICAL             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: external_heating_from_grid !if true, then reads external heating file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: compute_from_flux ! if components B_R, B_Z are computed from flux or not
