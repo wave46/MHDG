@@ -836,8 +836,11 @@ CONTAINS
       CALL HDF5_string_saving(group_id2, simpar%refval_temperature_dimensions, 'temperature_scale_dimensions')
       CALL HDF5_string_saving(group_id2, simpar%refval_density_dimensions, 'density_scale_dimensions')
       CALL HDF5_string_saving(group_id2, simpar%refval_neutral_dimensions, 'density_neutral_dimensions')
-#ifdef KEQUATION
+#ifdef TURBULENCE
       CALL HDF5_string_saving(group_id2, simpar%refval_k_dimensions, 'density_k_dimensions')
+#ifdef KEPSILON
+      CALL HDF5_string_saving(group_id2, simpar%refval_epsilon_dimensions, 'density_epsilon_dimensions')
+#endif
 #endif
       CALL HDF5_string_saving(group_id2, simpar%refval_speed_dimensions, 'speed_scale_dimensions')
       CALL HDF5_string_saving(group_id2, simpar%refval_potential_dimensions, 'potential_scale_dimensions')
@@ -855,8 +858,11 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, simpar%refval_temperature, 'temperature_scale')
       CALL HDF5_real_saving(group_id2, simpar%refval_density, 'density_scale')
       CALL HDF5_real_saving(group_id2, simpar%refval_neutral, 'neutral_scale')
-#ifdef KEQUATION
+#ifdef TURBULENCE
       CALL HDF5_real_saving(group_id2, simpar%refval_k, 'k_scale')
+#ifdef KEPSILON
+      CALL HDF5_real_saving(group_id2, simpar%refval_epsilon, 'epsilon_scale')
+#endif
 #endif
       CALL HDF5_real_saving(group_id2, simpar%refval_speed, 'speed_scale')
       CALL HDF5_real_saving(group_id2, simpar%refval_potential, 'potential_scale')
@@ -1255,7 +1261,9 @@ CONTAINS
     REAL*8               :: t
 #endif
     INTEGER :: Neq, Ndim, Nel, Np, Nfg, Nf, sizeutilde, sizeu, it
+    INTEGER :: size_read_u, size_read_ut, read_neq
     REAL*8, ALLOCATABLE       :: uaux(:,:),utaux(:,:),qaux(:,:)
+    REAL*8, POINTER       :: read_u(:),read_ut(:),read_q(:)
     INTEGER              :: logrho_ptr = 0
 
     Neq = phys%Neq
@@ -1502,6 +1510,7 @@ CONTAINS
     CALL HDF5_open(fname_complete, file_id, IERR)
     CALL HDF5_group_open(file_id, 'simulation_parameters', group_id, ierr)
     CALL HDF5_string_reading(group_id, mod_ptr, 'model')
+    CALL HDF5_integer_reading(group_id, read_neq, 'Neq', ierr)
 #ifndef TEMPERATURE
     CALL HDF5_group_open(group_id, 'switches', group_id2, ierr)
     CALL HDF5_integer_reading(group_id2, logrho_ptr, 'logrho')
@@ -1550,19 +1559,63 @@ CONTAINS
     END IF
     CALL HDF5_group_close(group_id, ierr)
 
+    size_read_u = read_neq * Nel*Np
+    size_read_ut = read_neq*Mesh%Nfaces*Mesh%Nnodesperface
+
+    CALL HDF5_group_open(file_id, 'solution', group_id, ierr)
 
     ! Check if the readed solution corresponds to the right model
-    IF (simpar%model .NE. model_string) THEN
+    ! if model == plasma+keps and only plasma is given then load the plasma
+    ! in other words, we start a k-epsilon simulation from a plasma only solution
+    IF (simpar%model == "N-Gamma-Ti-Te-Neutral-k-epsilon" .AND. model_string == "N-Gamma-Ti-Te-Neutral") THEN
+       ALLOCATE(read_u(size_read_u))
+       ALLOCATE(read_ut(size_read_ut))
+       ALLOCATE(read_q(size_read_u*Ndim))
+       CALL HDF5_array1D_reading(group_id, read_u, 'u')
+       CALL HDF5_array1D_reading(group_id, read_ut, 'u_tilde')
+       CALL HDF5_array1D_reading(group_id, read_q, 'q')
+
+       ALLOCATE(uaux(SIZE(sol%u)/phys%neq,phys%neq))
+       ALLOCATE(utaux(SIZE(sol%u_tilde)/phys%neq,phys%neq))
+       ALLOCATE(qaux(SIZE(sol%q)/phys%neq/Ndim,phys%neq*Ndim))
+       uaux = RESHAPE(sol%u,[phys%neq,SIZE(sol%u)/phys%neq])
+       utaux = RESHAPE(sol%u_tilde,[phys%neq,SIZE(sol%u_tilde)/phys%neq])
+       qaux = RESHAPE(sol%q,[phys%neq*Ndim,SIZE(sol%q)/phys%neq/Ndim])
+
+       uaux(1:read_neq,:) = RESHAPE(read_u,[read_neq, size_read_u/read_neq])
+       utaux(1:read_neq,:) = RESHAPE(read_ut,[read_neq, size_read_ut/read_neq])
+       qaux(:read_neq*Ndim,:) = RESHAPE(read_q,[read_neq*Ndim, size_read_u/read_neq])
+       ! initial conditions for k-epsilon
+       uaux(6,:) = 1e-4
+       uaux(7,:) = 1e-7
+       utaux(6,:) = 1e-4
+       utaux(7,:) = 1e-7
+       qaux(11,:) = 1e-20
+       qaux(12,:) = 1e-20
+       qaux(13,:) = 1e-20
+       qaux(14,:) = 1e-20
+
+
+       sol%u = col(uaux)
+       sol%u_tilde = col(utaux)
+       sol%q = col(qaux)
+       DEALLOCATE(read_u,read_ut,read_q)
+       DEALLOCATE(uaux,utaux,qaux)
+
+    ELSEIF (simpar%model .NE. model_string) THEN
        WRITE (6, *) "Wrong model in loaded solution | Loaded model: ", model_string, " | Current model: ", simpar%model
        STOP
+    ELSE
+      ! just set the values
+       CALL HDF5_array1D_reading(group_id, sol%u, 'u')
+       CALL HDF5_array1D_reading(group_id, sol%u_tilde, 'u_tilde')
+       CALL HDF5_array1D_reading(group_id, sol%q, 'q')
     ENDIF
-    CALL HDF5_group_open(file_id, 'solution', group_id, ierr)
-    CALL HDF5_array1D_reading(group_id, sol%u, 'u')
-    CALL HDF5_array1D_reading(group_id, sol%u_tilde, 'u_tilde')
-    CALL HDF5_array1D_reading(group_id, sol%q, 'q')
-    CALL HDF5_group_close(group_id, ierr)
 
+
+    CALL HDF5_group_close(group_id, ierr)
     CALL HDF5_close(file_id)
+
 #endif
 
     IF (switch%logrho .AND. logrho_ptr.EQ.0 ) THEN

@@ -150,9 +150,9 @@ SUBROUTINE adimensionalization()
   phys%diff_pot = phys%diff_pot/D0
   phys%diff_nn = phys%diff_nn/D0
   switch%diffmin = switch%diffmin/D0
-#ifdef KEQUATION
-  phys%diff_k_max = phys%diff_k_max/D0
-  phys%diff_k_min = phys%diff_k_min/D0
+#ifdef TURBULENCE
+  phys%diff_turb_max = phys%diff_turb_max/D0
+  phys%diff_turb_min = phys%diff_turb_min/D0
   ! k limit
   phys%k_max = phys%k_max/u0**2
 #endif
@@ -178,9 +178,6 @@ SUBROUTINE adimensionalization()
   simpar%refval_temperature = Tev
   simpar%refval_density = n0
   simpar%refval_neutral = n0
-#ifdef KEQUATION
-  simpar%refval_k = u0**2
-#endif
   simpar%refval_speed = u0
   simpar%refval_potential = phi0
   simpar%refval_vorticity = W0
@@ -205,9 +202,19 @@ SUBROUTINE adimensionalization()
   simpar%refval_momentum_dimensions = 'm^-2*s^-1'
   simpar%refval_specpress_dimensions = 'm^-1*s^-2'
   simpar%refval_specenergy_dimensions = 'm^2*s^-2'
-#ifdef KEQUATION
-  simpar%refval_k_dimensions = 'm^2*s^-2'
-#endif
   simpar%refval_specenergydens_dimensions = 'm^-1*s^-2'
+
+#ifdef KEQUATION
+  simpar%refval_k = u0**2
+  simpar%refval_k_dimensions = 'm^2*s^-2'
+#elif defined(KEPSILON)
+  simpar%refval_k = u0**2
+  simpar%refval_epsilon = u0**2 / t0
+  simpar%refval_k_dimensions = 'm^2*s^-2'
+  simpar%refval_epsilon_dimensions = 'm^2*s^-3'
+  phys%k_min = 1e-7
+  phys%eps_min = 1e-8
+  phys%t_up = 1e-6/simpar%refval_time
+#endif
 
 END SUBROUTINE adimensionalization

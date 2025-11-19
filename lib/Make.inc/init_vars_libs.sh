@@ -29,7 +29,7 @@ export MHDG_LIB_DIR=$HOME/libs
 export MHDG_PASTIX_DIR=$MHDG_LIB_DIR/pastix_32
 source $MHDG_PASTIX_DIR/bin/pastix_env
 export MHDG_SCOTCH_DIR=$MHDG_LIB_DIR/scotch_32
-export MHDG_GMSH_DIR=$MHDG_LIB_DIR/gmsh-4.11.1-Linux64-sdk
+export MHDG_GMSH_DIR=/usr # $MHDG_LIB_DIR/gmsh-4.11.1-Linux64-sdk
 export MHDG_PASTIX_DIR=$PASTIX_ROOT
 #export MHDG_PSBLAS_DIR=$MHDG_LIB_DIR/psblas3
 #export MHDG_MLD2P4_DIR=$MHDG_LIB_DIR/mld2p4-2

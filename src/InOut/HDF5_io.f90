@@ -754,7 +754,7 @@ CONTAINS
 
     INTEGER(HID_T), INTENT(in)  :: file_id   ! file identifier
     CHARACTER(LEN=*), INTENT(in)  :: dsetname  ! dataset name
-    INTEGER(HSIZE_T), INTENT(out) :: res       ! the dataset size
+    INTEGER, INTENT(out) :: res       ! the dataset size
 
     INTEGER             :: error      ! error flag
     INTEGER(HSIZE_T), &

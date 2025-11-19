@@ -176,6 +176,15 @@ CONTAINS
 #endif
 
   SUBROUTINE adaptivity()
+#ifdef WITH_PASTIX
+    USE solve_pastix, only: terminate_mat_PASTIX
+#endif
+#ifdef WITH_PETSC
+    USE solve_petsc, only: terminate_PETSC, FinalizePETSC
+#endif
+#ifdef WITH_PSBLAS
+    USE solve_psblas, only: terminate_PSBLAS
+#endif
 
     ! Start timing
     IF (utils%timing) THEN
@@ -288,6 +297,23 @@ CONTAINS
 
     ! restart to first ever iteration
     matK%start = .TRUE.
+
+  IF (lssolver%sollib .EQ. 1) THEN
+#ifdef WITH_PASTIX
+       CALL terminate_mat_PASTIX()
+       ! MPI finalization
+#endif
+    ELSEIF (lssolver%sollib .EQ. 2) THEN
+#ifdef WITH_PSBLAS
+       CALL terminate_PSBLAS()
+#endif
+    ELSEIF (lssolver%sollib .EQ. 3) THEN
+#ifdef WITH_PETSC
+       CALL terminate_PETSC()
+       CALL FinalizePETSC()
+       CALL InitPETSC()
+#endif
+    ENDIF
 
     ! Re-Initialize shock capturing
     IF ((switch%shockcp .GT. 0) .OR. ((adapt%adaptivity) .AND. (adapt%shockcp_adapt .GT. 0)))  THEN
@@ -435,12 +461,14 @@ CONTAINS
     save_name = TRIM(ADJUSTL(save_name))//"Ptor"//Num
 
 #endif
-#ifndef KEQUATION
+
+#ifdef TURBULENCE
     ! Diffusion
-    WRITE (Num, "(E10.3)") phys%diff_n*simpar%refval_diffusion
+    WRITE (Num, "(E10.3)") (phys%diff_n+phys%diff_turb_min)*simpar%refval_diffusion
 #else
-    WRITE (Num, "(E10.3)") (phys%diff_n+phys%diff_k_min)*simpar%refval_diffusion
+    WRITE (Num, "(E10.3)") phys%diff_n*simpar%refval_diffusion
 #endif
+
     save_name = TRIM(ADJUSTL(save_name))//"_DPe"//TRIM(ADJUSTL(Num))
 #ifdef TEMPERATURE
     WRITE (Num, "(E10.3)") phys%diff_pari
@@ -692,6 +720,9 @@ CONTAINS
        CALL extractFaceSolution()
     ELSE IF (nb_args .EQ. 2) THEN
        ! restart simulation: load solution from file (the name is given in argument)
+       ! load default values 
+       ! CALL init_sol() 
+       ! then overwrite, useful for the k-epsilon model
        CALL HDF5_load_solution(save_name)
        ALLOCATE(sol%u_tilde0(SIZE(sol%u_tilde)))
     ELSE
@@ -851,8 +882,8 @@ CONTAINS
        WRITE (6, *) "************************************************"
        WRITE (6, *) "Reducing diffusion: ", phys%diff_n*switch%diffred*simpar%refval_diffusion
 
-#ifdef KEQUATION
-       WRITE (6, *) "K diffusion min: ", phys%diff_k_min*switch%diffred*simpar%refval_diffusion
+#ifdef TURBULENCE
+       WRITE (6, *) "turb diffusion min: ", phys%diff_turb_min*switch%diffred*simpar%refval_diffusion
 #endif
        WRITE (6, *) "************************************************"
     END IF
@@ -866,9 +897,9 @@ CONTAINS
     phys%diff_vort = phys%diff_vort*switch%diffred
     phys%diff_pot = phys%diff_pot*switch%diffred
 #endif
-#ifdef KEQUATION
-    phys%diff_k_min = phys%diff_k_min*switch%diffred
-    phys%diff_k_max = phys%diff_k_max!*switch%diffred
+#ifdef TURBULENCE
+    phys%diff_turb_min = phys%diff_turb_min*switch%diffred
+    phys%diff_turb_max = phys%diff_turb_max!*switch%diffred
 #endif
   ENDSUBROUTINE reduce_diffusion
 

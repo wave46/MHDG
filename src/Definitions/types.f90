@@ -221,10 +221,8 @@ MODULE types
      REAL*8, POINTER           :: magnetic_psi(:) => NULL()! Magnetic flux normalized to separatrix magnetic flux [n of nodes]
      REAL*8                    :: Flux2Dmin ! Minimum of the magnetic flux, across the MPI partitions
      REAL*8                    :: Flux2Dmax ! Maximum of the magnetic flux, across the MPI partitions
-#ifdef KEQUATION
      REAL*8, POINTER           :: omega(:) => NULL()! larmor frequency [n of nodes]
      REAL*8, POINTER           :: q_cyl(:) => NULL()! q cylindrical [n of nodes]
-#endif
      REAL*8                    :: r_axis ! R-coordinate of magnetic axis
      REAL*8                    :: z_axis ! Z-coordinate of magnetic axis
 
@@ -324,11 +322,15 @@ MODULE types
      REAL*8, DIMENSION(9,9)    :: alpha_energy_iz ! Coefficients for radiation losses due to ionization spline from EIRENE, (te,ne) grid
      REAL*8, DIMENSION(9,9)    :: alpha_energy_rec ! Coefficients for radiation losses due to recombination spline from EIRENE, (te,ne) grid
 #endif
-#ifdef KEQUATION
+#ifdef TURBULENCE
      ! Coefficients for the k equation
-     REAL*8                    :: diff_k_min ! Mininmum diffusion in the k equation
-     REAL*8                    :: diff_k_max ! Maximum diffusion in the k equation
+     REAL*8                    :: diff_turb_min ! Mininmum diffusion in the k equation
+     REAL*8                    :: diff_turb_max ! Maximum diffusion in the k equation
      REAL*8                    :: k_max ! Maximum k
+#ifdef KEPSILON
+     REAL*8                    :: k_min, eps_min ! Minimal value of k and epsilon
+     REAL*8                    :: t_up ! time scale to push negative values
+#endif
 #endif
      REAL*8                    :: I_0 ! plasma current at flat-top for moving equilibrium diffusion adjustment
   END TYPE Physics_type
@@ -410,6 +412,9 @@ MODULE types
      LOGICAL :: logrho   ! solve for the density logarithm instead of density
      LOGICAL :: external_heating ! to read and apply external heating from input file
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
+#ifdef KEPSILON
+     LOGICAL :: standard_keps
+#endif
   END TYPE Switches_type
 
   !***************************************************************
@@ -466,7 +471,13 @@ MODULE types
      REAL*8         :: tNR      ! Tolerance of the Newton-Raphson scheme
      REAL*8         :: tTM      ! Tolerance for the steady state achievement
      REAL*8         :: div      ! Divergence detector
+#ifdef KEQUATION
+     REAL*8         :: tau(1:6) ! Stabilization parameter for each equation
+#elif defined(KEPSILON)
+     REAL*8         :: tau(1:7) ! Stabilization parameter for each equation
+#else
      REAL*8         :: tau(1:5) ! Stabilization parameter for each equation (4 values max for now...)
+#endif
      REAL*8         :: sc_coe   ! Shock capturing coefficient
      REAL*8         :: sc_sen   ! Shock capturing sensibility
      REAL*8         :: minrho   ! Value of rho to start applying limiting
@@ -637,6 +648,8 @@ MODULE types
      REAL*8             :: refval_neutral
 #ifdef KEQUATION
      REAL*8             :: refval_k
+#elif defined(KEPSILON)
+     REAL*8             :: refval_k, refval_epsilon
 #endif
      REAL*8             :: refval_speed
      REAL*8             :: refval_potential
@@ -661,6 +674,8 @@ MODULE types
      CHARACTER(len =20) :: refval_neutral_dimensions
 #ifdef KEQUATION
      CHARACTER(len =20) :: refval_k_dimensions
+#elif defined(KEPSILON)
+     CHARACTER(len =20) :: refval_k_dimensions, refval_epsilon_dimensions
 #endif
      CHARACTER(len =20) :: refval_speed_dimensions
      CHARACTER(len =20) :: refval_potential_dimensions

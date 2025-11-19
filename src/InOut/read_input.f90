@@ -25,7 +25,14 @@ SUBROUTINE READ_input()
   INTEGER               :: num_param_est, num_n_quant_ind
   REAL*8                :: thr_ind, tol_est, osc_tol, osc_check
   INTEGER               :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
-  REAL*8                :: dt0, R0, diff_n, diff_u, v_p, tau(1:5), tNr, tTM, div, Tbg
+#ifdef KEQUATION
+     REAL*8         :: tau(1:6) ! Stabilization parameter for each equation
+#elif defined(KEPSILON)
+     REAL*8         :: tau(1:7) ! Stabilization parameter for each equation
+#else
+     REAL*8         :: tau(1:5) ! Stabilization parameter for each equation (4 values max for now...)
+#endif
+  REAL*8                :: dt0, R0, diff_n, diff_u, v_p, tNr, tTM, div, Tbg
   REAL*8                :: tfi, a, bohmth,bohm_energy_thresh, q, diffred, diffmin
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
@@ -56,9 +63,12 @@ SUBROUTINE READ_input()
   LOGICAL               :: OhmicSrc, apply_trim
   REAL*8                :: Zeff,Pohmic,diff_nn,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
   REAL*8                :: feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr
-#ifdef KEQUATION
+#ifdef TURBULENCE
   ! k equation
-  REAL*8                :: diff_k_min, diff_k_max, k_max
+  REAL*8                :: diff_turb_min, diff_turb_max, k_max
+#endif
+#ifdef KEPSILON
+  LOGICAL               :: standard_keps
 #endif
   ! Movin Equilibrium
   LOGICAL               :: ME
@@ -79,12 +89,14 @@ SUBROUTINE READ_input()
 
 
 
-  !preallocating adaptivity arrays
-  ALLOCATE(param_est(1000))
-  ALLOCATE(n_quant_ind(1000))
-  param_est = -1
-  n_quant_ind = -1
+
   ! Defining the variables to READ from the file
+#ifdef KEPSILON
+  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
+       & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
+       & logrho,bxgradb, standard_keps
+
+#endif
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb
@@ -94,14 +106,14 @@ SUBROUTINE READ_input()
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
-#ifndef KEQUATION
+#ifndef TURBULENCE
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #else
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
-  & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
+  & diff_turb_min, diff_turb_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
@@ -110,6 +122,12 @@ SUBROUTINE READ_input()
        &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
        &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
        &csolve, csbsolve, cmat, cfill, cthres, cjswp
+
+  !preallocating adaptivity arrays
+  ALLOCATE(param_est(1000))
+  ALLOCATE(n_quant_ind(1000))
+  param_est = -1
+  n_quant_ind = -1
 
   ! Reading the file
   uinput = 100
@@ -175,6 +193,9 @@ SUBROUTINE READ_input()
   switch%bxgradb          = bxgradb
   switch%external_heating = external_heating
   switch%impurity_radiation = impurity_radiation
+#ifdef KEPSILON
+  switch%standard_keps = standard_keps
+#endif
   input%field_path        = TRIM(ADJUSTL(field_path))
   input%field_dimensions  = field_dimensions
   input%field_from_grid   = field_from_grid
@@ -290,9 +311,9 @@ SUBROUTINE READ_input()
   phys%density_source     = density_source
   phys%ener_source_e      = ener_source_e
   phys%ener_source_ee     = ener_source_ee
-#ifdef KEQUATION
-  phys%diff_k_min         = diff_k_min
-  phys%diff_k_max         = diff_k_max
+#ifdef TURBULENCE
+  phys%diff_turb_min         = diff_turb_min
+  phys%diff_turb_max         = diff_turb_max
   phys%k_max              = k_max
 #endif
   phys%sigma_source       = sigma_source
@@ -418,6 +439,8 @@ SUBROUTINE READ_input()
 #ifdef NEUTRAL
 #ifdef KEQUATION
      PRINT *, ' MODEL: N-Gamma isothermal with neutral with k equation               '
+#elif defined(KEPSILON)
+     PRINT *, ' MODEL: N-Gamma isothermal with neutral with k-epsilon               '
 #else
      PRINT *, ' MODEL: N-Gamma isothermal with neutral                               '
 #endif
@@ -426,7 +449,11 @@ SUBROUTINE READ_input()
 #endif
 #else
 #ifdef NEUTRAL
+#ifdef KEPSILON
+     PRINT *, ' MODEL: N-Gamma-Ti-Te neutral k-epsilon                               '
+#else
      PRINT *, ' MODEL: N-Gamma-Ti-Te with neutral                                    '
+#endif
 #else
      PRINT *, ' MODEL: N-Gamma-Ti-Te                                                 '
 #endif
@@ -504,9 +531,9 @@ SUBROUTINE READ_input()
      PRINT *, '                - particle source at core:                            ', part_source
      PRINT *, '                - energy source at core:                              ', ener_source
 #endif
-#ifdef KEQUATION
-     PRINT *, '                - minimum perp diffusion in the k equation:           ', phys%diff_k_min
-     PRINT *, '                - maximum perp diffusion in the k equation:           ', phys%diff_k_max
+#ifdef TURBULENCE
+     PRINT *, '                - minimum perp diffusion in the k equation:           ', phys%diff_turb_min
+     PRINT *, '                - maximum perp diffusion in the k equation:           ', phys%diff_turb_max
      PRINT *, '                - maximum k:                                          ', phys%k_max
 #endif
      PRINT *, '                - constant for the momentum equation (isoth)          ', phys%a

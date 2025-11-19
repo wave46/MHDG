@@ -95,6 +95,9 @@ CONTAINS
              up(ind,11) = 0.
 #ifdef KEQUATION
              up(ind,12) = 1.8e-5
+#elif defined(KEPSILON)
+             up(:,12)= 1.e-4
+             up(:,13)= 1.e-7
 #endif
 #endif
           CASE (64)
@@ -1287,7 +1290,10 @@ CONTAINS
 #ifdef NEUTRAL
        up(:,11)= 1.e-8
 #ifdef KEQUATION
-       up(:,12)= 1.8e-5
+       up(:,12)= 1.e-5
+#elif defined(KEPSILON)
+       up(:,12)= 1.e-4
+       up(:,13)= 1.e-7
 #endif
 #endif
 
@@ -1305,6 +1311,9 @@ CONTAINS
        up(:,11)= 1.e-8
 #ifdef KEQUATION
        up(:,12)= 1.e-5
+#elif defined(KEPSILON)
+       up(:,12)= 1.e-4
+       up(:,13)= 1.e-7
 #endif
 #endif
     CASE (65)
@@ -1332,6 +1341,9 @@ CONTAINS
        up(:,11) = 1.e-8
 #ifdef KEQUATION
        up(:,12)= 1.8e-5
+#elif defined(KEPSILON)
+       up(:,12)= 1.e-4
+       up(:,13)= 1.e-7
 #endif
 #endif
     CASE DEFAULT
@@ -1420,6 +1432,11 @@ CONTAINS
 #ifdef KEQUATION
     ux(:,6) = upx(:,6)*up(:,6)
     uy(:,6) = upy(:,6)*up(:,6)
+#elif defined(KEPSILON)
+    ux(:,6) = upx(:,6)*up(:,6)
+    uy(:,6) = upy(:,6)*up(:,6)
+    ux(:,7) = upx(:,7)*up(:,7)
+    uy(:,7) = upy(:,7)*up(:,7)
 #endif
 #endif
   END SUBROUTINE analytical_gradient
