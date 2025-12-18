@@ -1585,10 +1585,10 @@ CONTAINS
        uaux(1:read_neq,:) = RESHAPE(read_u,[read_neq, size_read_u/read_neq])
        utaux(1:read_neq,:) = RESHAPE(read_ut,[read_neq, size_read_ut/read_neq])
        qaux(:read_neq*Ndim,:) = RESHAPE(read_q,[read_neq*Ndim, size_read_u/read_neq])
-       ! initial conditions for k-epsilon
-       uaux(6,:) = 1e-4
+       ! initial conditions for theta-phi
+       uaux(6,:) = 1e-3
        uaux(7,:) = 1e-7
-       utaux(6,:) = 1e-4
+       utaux(6,:) = 1e-3
        utaux(7,:) = 1e-7
        qaux(11,:) = 1e-20
        qaux(12,:) = 1e-20
@@ -1596,9 +1596,10 @@ CONTAINS
        qaux(14,:) = 1e-20
 
 
-       sol%u = col(uaux)
-       sol%u_tilde = col(utaux)
-       sol%q = col(qaux)
+       sol%u = reshape(uaux, (/SIZE(sol%u)/))
+       sol%u_tilde = reshape(utaux, (/SIZE(sol%u_tilde)/))
+       sol%q = reshape(qaux, (/SIZE(sol%q)/))
+
        DEALLOCATE(read_u,read_ut,read_q)
        DEALLOCATE(uaux,utaux,qaux)
 

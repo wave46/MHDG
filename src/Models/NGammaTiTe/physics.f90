@@ -751,7 +751,7 @@ CONTAINS
     real*8				            :: ti_min=1e-6,ti
     real*8, dimension(size(u,1))	:: U1, U2, U3, U4, U5, sigmaviz, sigmavnn, sigmavcx, Dnn
 #ifdef TURBULENCE
-    real*8, dimension(size(u,1))          :: D_turb, c_s, d_max
+    real*8, dimension(size(u,1))          :: D_turb, c_s, d_max, d_min
     real*8                         :: r
 #endif
 #endif
@@ -892,7 +892,6 @@ CONTAINS
     d_ani(6,6,:) = d_iso(6,6,:)
 
 #elif defined(KEPSILON)
-    d_max = max(phys%diff_turb_min, phys%diff_turb_max)
     where (u(:, 6) <= 0.)
         D_turb = phys%diff_turb_min
     ! elsewhere(u(:, 7) <= 0.)
@@ -907,14 +906,27 @@ CONTAINS
             D_turb = exp(D_turb)
         end where
     end where
-    D_turb = max(phys%diff_turb_min, min(d_max, D_turb))
     ! D_turb = phys%diff_turb_min ! no turbulence
-    do i = 6, 7
-        d_iso(i, i,:) = phys%diff_n + 100 / simpar%refval_diffusion
-        d_ani(i, i, :) = d_iso(i, i, :)
-    end do
-    !WRITE(6,*) d_iso(6,6,:)*simpar%refval_length**2/simpar%refval_time
-    !WRITE(6,*) d_iso(1,1,:)*simpar%refval_length**2/simpar%refval_time
+    if (switch%standard_keps) then
+        ! D = k**2 / eps = 1 / theta / phi
+        ! D_turb = 1. / u(:, 6) / u(:,7)
+        ! D_turb = u(:, 6)**2 * u(:, 7)
+        d_max = 1e5 / simpar%refval_diffusion
+        d_min = 20. / simpar%refval_diffusion !phys%diff_turb_min
+        d_iso(6, 6,:) = max(d_min, min(d_max, D_turb))
+        d_iso(7, 7,:) = max(d_min, min(d_max, D_turb * 0.84))
+        d_ani(6, 6, :) = d_iso(6, 6, :)
+        d_ani(7, 7, :) = d_iso(7, 7, :)
+        d_max = max(phys%diff_turb_min, phys%diff_turb_max)
+        D_turb = max(phys%diff_turb_min, min(d_max, D_turb * 3e-3))
+    else
+        d_max = max(phys%diff_turb_min, phys%diff_turb_max)
+        D_turb = max(phys%diff_turb_min, min(d_max, D_turb))
+        do i = 6, 7
+            d_iso(i, i,:) = D_turb * 100
+            d_ani(i, i, :) = d_iso(i, i, :)
+        end do
+    endif
 #endif
     d_iso(1,1,:) = d_iso(1,1,:) + D_turb
     d_iso(2,2,:) = d_iso(2,2,:) + D_turb
@@ -2538,55 +2550,65 @@ SUBROUTINE compute_gamma_I(U,Q, Btor, gradBtor, R, gamma_I)
     ! gamma_I = max(gamma_I, 1e4 * simpar%refval_time)
 ENDSUBROUTINE compute_gamma_I
 
-SUBROUTINE compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, gamma_ke)
+SUBROUTINE get_grate_2f(U, Q, B, grad_B, q_cyl, gamma)
   ! growth rate for turbulent energy
-  real*8, intent(IN) :: U(:), Q(:, :), gradB(:), B, q_cyl, omega
+  real*8, intent(IN) :: U(:), Q(:, :), grad_B(:), B, q_cyl
   logical :: is_core
-  real*8             :: n, v, ti, te, V0, nB, nu_e, DB, D_perp, nu_perp, d_star, rho_L, nu_star, L_para, dn_dr, dn_dz, C_Omega, tau_para, tau, C_star, aa, an, a_phi, b_nr, b_phir, b_ni, b_phii, gr, gi
-  real*8, intent(OUT) :: gamma_ke
-  REAL*8, PARAMETER :: tol = 1.e-20, m_ratio = sqrt(3670.4829678537167), coulomb_log = 15.
+  real*8             :: n, n_si, v, ti, te, te_eV, t_eV, L_para, dn_dr, dn_dz, c_para, B_SI, d_perp, nu_perp, nu_e, poisson_b, poisson_kappa_1
+  complex*8 :: a_nn, a_nphi, a_phiphi, a_phin, bb, c, delta, C_perp
+  real*8 :: grad_n_SI(2), grad_pe(2), grad_B_SI(2), kappa_1(2), kappa_2(2)
+  real*8 :: k2_perp, k_perp_norm, kr, kz, angle
+  real*8, intent(OUT) :: gamma
+  REAL*8, PARAMETER :: tol = 1.e-20, mi=3.3435837724e-27, me=9.1093837015e-31, coulomb_log = 15., e=1.602176634e-19
 
   n = max(tol, U(1))
   v = U(2)/n
   Ti = max(tol, 2./3./phys%Mref*(U(3)/n - v**2))
   Te = max(tol, 2./3./phys%Mref*U(4)/n)
-  call compute_cs(U, V0)
-  V0 = V0*m_ratio
-  nB = n
+  grad_pe = 2. / 3. * Q(:2, 4) / phys%Mref
 
-  nu_e = 2.91e-12*n*simpar%refval_density*coulomb_log*(Te*simpar%refval_temperature)**(-1.5)*simpar%refval_time
-  DB = Te/abs(B)
-  D_perp = 1e-2*DB
-  nu_perp = 1e-2*DB
-  L_para = PI*q_cyl*geom%R0/simpar%refval_length
-  rho_L = V0/omega
-  nu_star = L_para/V0*nu_e
-  d_star = sqrt((D_perp + nu_perp)/DB)
-  dn_dr = Q(1, 1)
-  dn_dz = Q(2, 1)
+  ! Quantities with dimensions
+  Te_eV = Te*simpar%refval_temperature
+  T_eV = (Ti+Te)*simpar%refval_temperature
+  n_SI = n*simpar%refval_density
+  B_SI = B * simpar%refval_magfield
+  grad_n_SI = Q(:2, 1) * simpar%refval_density / simpar%refval_length
+  grad_B_SI = grad_B(:2) * simpar%refval_magfield / simpar%refval_length
 
-  C_star = V0/Omega/L_para
-  C_Omega = m_ratio/nu_star
-  is_core = (nu_star<m_ratio)
-  C_Omega = merge(C_Omega, min(1., C_Omega), is_core)*C_star
+  nu_e = 2.91e-12*n_SI*coulomb_log*(Te_eV)**(-1.5)
+  D_perp = 1e-3 !/ simpar%refval_diffusion
+  nu_perp = D_perp
+  L_para = 2.*PI*min(max(q_cyl, 2.), 10.)*geom%R0!/simpar%refval_length
 
-  an = D_perp/DB/d_star + sqrt(C_Omega)
-  a_phi = nu_perp/DB/d_star + d_star
-  b_nr = rho_L/sqrt(2*d_star)*(dn_dr - dn_dz)/nB
-  b_ni = C_Omega**0.75
-  b_phir = -sqrt(2*d_star)*rho_L/abs(B)*gradB(1)
-  b_phii = merge(d_star*C_Omega**0.75, 0., is_core)
+  ! Wave vector
+  k2_perp = e * B_SI / L_para / sqrt(me * mi * nu_e * nu_perp)
+  k_perp_norm = sqrt(k2_perp)
+  angle = atan2(grad_pe(2), grad_pe(1)) / 2. ! interchange optimization
+  kR = k_perp_norm * cos(angle)
+  kz = k_perp_norm * sin(angle)
 
-  aa = (an + a_phi)/2
-  tau_para = L_para/V0
-  tau = tau_para/sqrt(C_Omega)*C_star
+  kappa_1 = grad_n_SI - n_SI * grad_B_SI / B_SI
+  kappa_2 = grad_n_SI - n_SI * grad_B_SI / B_SI * 2
+  poisson_kappa_1 = (kz * kappa_1(1) - kr * kappa_1(2)) / B_SI
+  poisson_b = (kz * grad_B_SI(1) - kr * grad_B_SI(2)) / B_SI**2
 
-  gi = -(b_nr * b_phii + b_ni * b_phir) / C_Omega
-  gr = aa**2 - an * a_phi - (b_nr * b_phir - b_ni * b_phii) / C_Omega
+  ! C_perp = B_SI**2 / mi / n_SI / k2_perp
+  C_perp = B_SI**2 / mi / complex(kappa_2(1) * kr + kappa_2(2) * kz, n_SI * k2_perp)
+  C_para = e / me / nu_e / L_para**2
 
-  gamma_ke = (sqrt((gr + norm2([gr, gi], dim=1))/2) - aa)/tau
+  a_nn = complex(-poisson_b * Te_eV, D_perp * k2_perp + C_para * Te_eV)
+  a_nphi = - complex(poisson_kappa_1, C_para * n_SI)
+  a_phin = C_perp * complex(C_para * Te_eV, poisson_b*T_eV) * e
+  a_phiphi = complex(0., nu_perp * k2_perp) - C_para * e * n_SI * C_perp
 
-ENDSUBROUTINE compute_gamma_ke
+  c = a_phiphi * a_nn - a_nphi * a_phin
+  bb = a_phiphi + a_nn
+  Delta = bb**2 - 4. * c
+
+  gamma = (-aimag(bb) + sqrt((abs(Delta) - real(Delta)) / .2)) / 2.
+  gamma = gamma * simpar%refval_time ! make it dimensionless
+
+ENDSUBROUTINE get_grate_2f
 
 SUBROUTINE compute_ce(U,Q, Btor, gradBtor, r,omega_c,q_cyl, ce)
   ! dissipation rate for turbulent energy
@@ -2666,29 +2688,74 @@ ENDSUBROUTINE  compute_ddissip_du
 
 #ifdef KEPSILON
 
-   subroutine compute_linearisation_keps(U, Q, B, gradB, q_cyl, omega, xy, r, keps_linmat, keps_rhs)
+   subroutine compute_linearisation_keps(U, Q, B, grad_B, q_cyl, omega, xy, r, keps_linmat, keps_rhs)
       ! use ieee_arithmetic
-      real*8, intent(IN) :: U(:), Q(:, :), gradB(:), B, q_cyl, omega, r, xy(:)
+      real*8, intent(IN) :: U(:), Q(:, :), grad_B(:), B, q_cyl, omega, r, xy(:)
       real*8, intent(OUT) :: keps_linmat(:, :), keps_rhs(2)
       ! logical :: is_core
-      real*8 :: V, d_omega, k, k_safe, k_low, eps, ek, gamma, tol=1e-20, t_down
+      real*8 :: V, d_omega, k, k_safe, eps, eps_safe, ek, gamma, gamma_min, ek2
+      real*8 :: c1=1.66, c2=1.71, tol=1e-20
       k = u(6)
       eps = u(7)
+      eps_safe = max(eps, phys%eps_min)
       k_safe = max(k, phys%k_min)
-      k_low = phys%k_min * 100
       keps_linmat = tol
       keps_rhs = tol
-      t_down = 1e-4 / simpar%refval_time
+      gamma_min = 1e2 * simpar%refval_time
 
-      ! if (switch%standard_keps) then
-          keps_linmat = 0.
-          keps_rhs = 0.
-          ! is_core = get_is_core(xy)
-          call get_gamma_V(U, Q, B, gradB, q_cyl, omega, r, gamma, v)
-          ! call compute_V(U, Q, B, gradB, q_cyl, omega, is_core, r, v)
-          ! call compute_gamma_I(u, q, b, gradB, r, gamma)
+      if (switch%standard_keps) then
+
+          call get_grate_2f(U, Q, B, grad_B, q_cyl, gamma)
+          ! call get_gamma_V(U, Q, B, grad_B, q_cyl, omega, r, gamma, v)
+          gamma = max(gamma, gamma_min)
+          call compute_safe_frac(max(eps, tol), max(k, tol), 1., 2., ek2)
+          ek = eps_safe/k_safe
+
+          ! keps_linmat(6, 6) = gamma
+          ! keps_linmat(6, 7) = merge(-1., tol, eps > 0.)
+          ! ! keps_linmat(7, 6) = merge(c1*gamma**2, 0., k>0.) + c2 * ek**2
+          ! ! keps_linmat(7, 7) = -2*c2 * ek
+          ! keps_linmat(7, 6) = c2 * ek**2
+          ! keps_linmat(7, 7) = c1 * gamma - 2*c2 * ek
+          ! keps_rhs(1) = gamma_min * phys%k_min
+          ! keps_rhs(2) = gamma_min * phys%eps_min
+
+          
+          keps_linmat(6, 6) = -ek
+          keps_rhs(1) = gamma * k_safe
+          keps_linmat(7, 7) = -ek * c2
+          keps_rhs(2) = c1 * gamma * eps_safe
+
+          ! keps_linmat(6, 6) = gamma - ek
+          ! keps_linmat(7, 7) = c1 * gamma - ek * c2
+          ! keps_rhs(1) = gamma_min * phys%k_min
+          ! keps_rhs(2) = gamma_min * phys%eps_min
+
+          ! theta
+          ! keps_linmat(6, 6) = gamma * (1. - c1)
+          ! keps_rhs(1) = c2 - 1
+          ! keps_linmat(7, 7) = gamma * c1 - c2 / k_safe
+          ! keps_linmat(7, 6) = ek2 * c2
+          ! keps_rhs(2) = ek * c2
+          ! keps_rhs(2) = gamma_min * phys%eps_min
+
+          ! ! phi
+          ! keps_linmat(7, 7) = gamma * (2. * c1 - 3.) + (3. - 2. * c2) / k
+          ! if (keps_linmat(7, 7) > 0) then
+          !   keps_linmat(7, 7) = -tol
+          ! else
+            ! in this case, gamma could be negative while satisfying the stability
+            ! keps_linmat(7, 6) = -ek2 * (3. - 2. * c2)
+            ! keps_rhs(2) = ek * (3. - 2. * c2)
+          ! endif
+          ! additional term to make sure phi isn't too low, this way the steady state isn't zero
+          ! if (gamma < 0.) then
+          !   keps_rhs(2) = keps_rhs(2) + 1e-9
+          ! endif
+
+      else
+          call get_gamma_V(U, Q, B, grad_B, q_cyl, omega, r, gamma, v)
           call compute_safe_frac(max(eps, tol), k_safe, 2., 2.5, ek)
-
 
           ! keps_linmat(6, 6) = merge(gamma - eps * k_low / (k_low + k)**2, - 1./phys%t_up, k > 0.)
           ! keps_linmat(6, 7) = merge(-k / (k_low + k), tol, (eps > 0.) .and. (k > 0.) )
@@ -2696,25 +2763,22 @@ ENDSUBROUTINE  compute_ddissip_du
           keps_linmat(6, 6) = merge(gamma , - 1./phys%t_up, k > 0.)
           keps_linmat(6, 7) = merge(-1., tol, (eps > 0.) .and. (k > 0.))
 
-          if (k < phys%k_min) then
-             keps_rhs(1) = keps_rhs(1) + phys%k_min * max(1/phys%t_up, gamma)
-          end if
+          keps_linmat(7, 6) = merge(merge(gamma**2, 0., k>0.) + 3./2.*v*ek, tol, eps > 0.)
+          keps_linmat(7, 7) = merge(-2*eps*(v*k_safe**(-1.5) + 1/phys%t_up/1e-2), - 1./phys%t_up, eps > 0.)
+          call compute_safe_frac(max(eps, tol), k_safe, 2., 1.5, keps_rhs(2))
+          keps_rhs(2) = - v / 2 * keps_rhs(2)
+      end if
 
-
-          ! if (gamma > 0.) then
-            keps_linmat(7, 6) = merge(merge(gamma**2, 0., k>0.) + 3./2.*v*ek, tol, eps > 0.)
-            keps_linmat(7, 7) = merge(-2*eps*(v*k_safe**(-1.5) + 1/phys%t_up/1e-2), - 1./phys%t_up, eps > 0.)
-            call compute_safe_frac(max(eps, tol), k_safe, 2., 1.5, keps_rhs(2))
-            keps_rhs(2) = - v / 2 * keps_rhs(2)
-          ! else if (gamma == 0) then
-          !   keps_linmat(7, 6) = merge(merge(1/t_down**2, 0., k>0.), tol, eps > 0.)
-          !   keps_linmat(7, 7) = merge(- 1/t_down, - 1./phys%t_up, eps > 0.)
-          ! end if
-
-          if (eps < phys%eps_min) then
-             keps_rhs(2) = keps_rhs(2) + phys%eps_min * max(1/phys%t_up, gamma)
-          end if
-      ! end if
+      if (k < phys%k_min) then
+         keps_linmat(6, 6) = - 1./phys%t_up
+         keps_linmat(6, 7) = tol
+         keps_rhs(1) = phys%k_min * max(1/phys%t_up, gamma)
+      end if
+      if (eps < phys%eps_min) then
+         keps_linmat(7, 6) = tol
+         keps_linmat(7, 7) = - 1./phys%t_up
+         keps_rhs(2) = phys%eps_min * max(1/phys%t_up, gamma)
+      end if
 
    end subroutine
 

@@ -87,6 +87,9 @@ SUBROUTINE READ_input()
   LOGICAL               :: external_heating, external_heating_from_grid
   CHARACTER(1000)       :: external_heating_path
 
+  ! puff control
+  ! REAL*8                :: p1(2), p2(2), n_target, ki
+
 
 
 
@@ -122,6 +125,7 @@ SUBROUTINE READ_input()
        &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
        &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
        &csolve, csbsolve, cmat, cfill, cthres, cjswp
+  ! NAMELIST /CONTROL_LST/ p1, p2, n_target, ki
 
   !preallocating adaptivity arrays
   ALLOCATE(param_est(1000))
@@ -143,6 +147,7 @@ SUBROUTINE READ_input()
   READ (uinput, PHYS_LST)
   READ (uinput, UTILS_LST)
   READ (uinput, LSSOLV_LST)
+  ! READ (uinput, CONTROL_LST)
   CLOSE (uinput)
 
   IF (impurity_radiation) THEN
@@ -396,6 +401,10 @@ SUBROUTINE READ_input()
   lssolver%cfill          = cfill
   lssolver%cthres         = cthres
   lssolver%cjswp          = cjswp
+  ! control%p1              = p1
+  ! control%p2              = p2
+  ! control%n_target        = n_target
+  ! control%ki              = ki
 
   IF (switch%steady) THEN
      msg = 'Steady state simulation'

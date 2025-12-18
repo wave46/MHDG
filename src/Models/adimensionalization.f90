@@ -212,9 +212,9 @@ SUBROUTINE adimensionalization()
   simpar%refval_epsilon = u0**2 / t0
   simpar%refval_k_dimensions = 'm^2*s^-2'
   simpar%refval_epsilon_dimensions = 'm^2*s^-3'
-  phys%k_min = 1e-7
-  phys%eps_min = 1e-8
-  phys%t_up = 1e-6/simpar%refval_time
+  phys%k_min = 1e-6
+  phys%eps_min = 1e-10
+  phys%t_up = 1e-4/simpar%refval_time
 #endif
 
 END SUBROUTINE adimensionalization
