@@ -231,7 +231,11 @@ PROGRAM MHDG
            WRITE (6, *) "***** NR iteration: ", ir, "*****"
            WRITE (6, *) "NR dumping factor:  ",  numer%dumpnr
         ENDIF
-
+        
+        !update bohmgyrobohm stuff if used
+        IF (switch%bohm_gyrobohm) THEN
+            CALL update_bohmgyrobohm()
+        ENDIF
         ! Compute Jacobian
         CALL HDG_computeJacobian()
         ! Set boundary conditions

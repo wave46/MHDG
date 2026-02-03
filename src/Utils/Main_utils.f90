@@ -711,6 +711,72 @@ CONTAINS
     numer%dumpnr = numer%dumpnr_min+(numer%dumpnr_max-numer%dumpnr_min)/2.*(1+TANH((ir-numer%dumpnr_n0)/numer%dumpnr_width))
   ENDSUBROUTINE update_dumpnr
 
+
+
+  SUBROUTINE update_bohmgyrobohm()
+   REAL*8, ALLOCATABLE   :: uphy(:, :),rho_poloidal(:)
+   
+   nu = SIZE(sol%u)
+
+   ALLOCATE (uphy(nu/phys%Neq, phys%npv))
+   ALLOCATE (rho_poloidal(nu/phys%Neq))
+
+   ! Compute physical variables
+   CALL cons2phys(TRANSPOSE(RESHAPE(sol%u, (/phys%Neq, nu/phys%Neq/))), uphy)
+
+   rho_poloidal = phys%magnetic_psi(RESHAPE(TRANSPOSE(Mesh%T), (/SIZE(Mesh%T)/)))
+   rho_poloidal = SQRT(MAX(0.0, rho_poloidal))
+
+   CALL update_delta_te(uphy(:,8), rho_poloidal)
+   
+
+   ENDSUBROUTINE update_bohmgyrobohm
+
+   SUBROUTINE update_delta_te(te,rho_poloidal)
+      REAL*8,INTENT(IN) :: te(:), rho_poloidal(:)
+      INTEGER :: i, count_0_8, count_1
+      REAL*8 :: threshold, Te_0_8, Te_1
+
+      threshold = 1.0E-3 
+      count_0_8 = 0
+      count_1 = 0
+      Te_0_8 = 0.0
+      Te_1 = 0.0
+
+      DO i = 1, SIZE(rho_poloidal)
+         IF (ABS(rho_poloidal(i) - 1.0) < threshold) THEN
+            count_1 = count_1 + 1
+            Te_1 = Te_1 + te(i)
+         ELSE IF (ABS(rho_poloidal(i) - 0.8) < threshold) THEN
+            count_0_8 = count_0_8 + 1
+            Te_0_8 = Te_0_8 + te(i)
+         END IF
+      END DO
+
+#ifdef PARALL
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE, count_1, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE, count_0_8, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE, Te_1, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE, Te_0_8, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+
+      IF (count_1 > 0) THEN
+         Te_1 = Te_1 / REAL(count_1)
+      ELSE
+         Te_1 = 0.
+      END IF
+
+      IF (count_0_8 > 0) THEN
+         Te_0_8 = Te_0_8 / REAL(count_0_8)
+      ELSE
+         Te_0_8 = 0.
+      END IF
+
+      phys%delta_te = (Te_0_8-Te_1)/Te_1
+   
+ENDSUBROUTINE update_delta_te   
+
+
   SUBROUTINE initialize_solution()
     IF (nb_args .EQ. 3) THEN
        ALLOCATE(sol%u_tilde(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
