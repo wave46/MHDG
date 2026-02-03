@@ -12,6 +12,7 @@
     init                = 1             ! Initialization type: 1-analytical at nodes; 2-L2 projection
     external_heating    = .false.       ! True will use external from the file provided in INPUT_LST
     impurity_radiation  = .false.        ! to take into account impurity radiaion with concentration provided in PHYS_LST
+    import_diffusion_1D = .false.        ! Import or not additional profile of diffuion in 1D as function of rho_pol, supply path to the file
     driftdia            = .false.       ! Set to FALSE to ignore diamagnetic drifts terms
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
     testcase            = 54            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
@@ -92,6 +93,7 @@
     impurity_concentration_dimension = 10000
     zeff_path = '/path/where/to/read/zeff/'
     zeff_dimension = 10000
+    diffusion_1D_path = '/path/where/to/read/1d/diffsion/
 /
 
 &NUMER_LST
