@@ -64,9 +64,7 @@ SUBROUTINE HDG_computeJacobian()
   REAL*8,ALLOCATABLE    :: qres(:,:)
   REAL*8                :: Bel(refElPol%Nnodes2d,3),fluxel(refElPol%Nnodes2d),psiel(refElPol%Nnodes2d),Bfl(refElPol%Nfacenodes,3),psifl(refElPol%Nfacenodes)
   REAL*8                :: external_heating_ions_el(refElPol%Nnodes2d),external_heating_electrons_el(refElPol%Nnodes2d)
-#ifdef KEQUATION
-  real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d),q_cylfl(refElPol%Nfacenodes)
-#endif
+  real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d),q_cylfl(refElPol%Nfacenodes),omegafl(refElPol%Nfacenodes)
   REAL*8                :: Jtorel(refElPol%Nnodes2d)
   REAL*8                :: n,El_n,nn,El_nn,totaln
   REAL*8                :: diff_nn_Vol_el(refElPol%NGauss2D),v_nn_Vol_el(refElPol%NGauss2D,Mesh%Ndim),Xg_el(refElPol%NGauss2D,Mesh%Ndim)
@@ -1117,17 +1115,12 @@ CONTAINS
   !************************************
   !   Loop in elements in 2D
   !************************************
-#ifdef KEQUATION
+
   !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,isdir,Jtorel,El_n,El_nn) &
+  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,omegafl,isdir,Jtorel,El_n,El_nn) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
   !$OMP FIRSTPRIVATE(phys)
-#else
-  !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,psiel,psifl,external_heating_ions_el,external_heating_electrons_el,isdir,Jtorel,El_n,El_nn) &
-  !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el) &
-  !$OMP FIRSTPRIVATE(phys)
-#endif
+
   ALLOCATE(Xel(Mesh%Nnodesperelem,2))
   ALLOCATE(Xfl(refElPol%Nfacenodes,2))
 
@@ -1155,7 +1148,7 @@ CONTAINS
     ! Normalized magnetic flux of the nodes of the element: PSI el
     psiel = phys%magnetic_psi(Mesh%T(iel,:))
 
-#ifdef KEQUATION
+
     !omega and q_cyl on nodes of the element
 
      IF (switch%testcase == 60) THEN
@@ -1166,7 +1159,7 @@ CONTAINS
       q_cylel = phys%q_cyl(Mesh%T(iel,:))
       omegael = phys%omega(Mesh%T(iel,:))
      ENDIF
-#endif
+
 
     ! Ohmic heating (toroidal current)
     IF (switch%ohmicsrc) THEN
@@ -1183,11 +1176,8 @@ CONTAINS
     u0e = u0res(inde,:,:)
 
     ! Compute the matrices for the element
-#ifndef KEQUATION
-    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
-#else
     CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
-#endif
+
      IF (save_tau) THEN
        inddiff_nn_Vol = (iel - 1)*refElPol%NGauss2D+(/(i,i=1,refElPol%NGauss2D)/)
        phys%diff_nn_Vol(inddiff_nn_Vol) = diff_nn_Vol_el
@@ -1235,35 +1225,27 @@ CONTAINS
       inde = (iel - 1)*Npel + (/(i,i=1,Npel)/)
       uef = ures(inde(refElPol%face_nodes(ifa,:)),:)
       qef = qres(inde(refElPol%face_nodes(ifa,:)),:)
-#ifndef KEQUATION
-        IF (iface.LE.Mesh%Nintfaces) THEN
-        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-        ELSE
-           IF (Mesh%periodic_faces(iface-Mesh%Nintfaces).EQ.0) THEN
-          CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-           ELSE
-          ! periodic face
-          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-        endif
-      endif
-#else
+
       if (switch%testcase == 60) then
         q_cylfl(:) = geom%q
+        omegafl(:) = SQRT(Bfl(:,1)**2+Bfl(:,2)**2+Bfl(:,3)**2)*simpar%refval_charge/simpar%refval_mass*simpar%refval_time
       else
         q_cylfl(:) = phys%q_cyl(Mesh%T(iel,refElPol%face_nodes(ifa,:)))
+        omegafl(:) = phys%omega(Mesh%T(iel,refElPol%face_nodes(ifa,:)))
       endif
 
       if (iface.le.Mesh%Nintfaces) then
-        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
       else
+
         if (Mesh%periodic_faces(iface-Mesh%Nintfaces).eq.0) then
-          CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+          CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
         else
           ! periodic face
-          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
         endif
       endif
-#endif
+
 
       ! Flip faces
         IF (Mesh%flipface(iel,ifa)) THEN
@@ -1341,18 +1323,13 @@ CONTAINS
   !***************************************************
   ! Volume computation in 2D
   !***************************************************
-#ifndef KEQUATION
-  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
-#else
   SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
-#endif
+
       INTEGER,INTENT(IN)            :: iel
       REAL*8,INTENT(IN)             :: Xel(:,:)
       REAL*8,INTENT(IN)             :: Bel(:,:),fluxel(:),psiel(:),Jtorel(:)
       REAL*8,INTENT(IN)             :: external_heating_ions_el(:),external_heating_electrons_el(:)
-#ifdef KEQUATION
       REAL*8,INTENT(IN)             :: omegael(:),q_cylel(:)
-#endif
       REAL*8,INTENT(IN)             :: qe(:,:)
       REAL*8,INTENT(IN)             :: ue(:,:),u0e(:,:,:)
       REAL*8,INTENT(OUT)            :: El_n,El_nn
@@ -1375,10 +1352,8 @@ CONTAINS
       REAL*8                        :: NxyzNi(Npel,Npel,3),Nxyzg(Npel,3)
       REAL*8                        :: upg(Ng2d,phys%npv)
       REAL*8                        :: Bmod_nod(Npel),b_nod(Npel,3),b(Ng2d,3),Bmod(Ng2d),divbg,driftg(3),gradbmod(3)
-#ifdef KEQUATION
       REAL*8                        :: b_tor_nod(Npel),b_tor(Ng2d),gradbtor(3)
       REAL*8                        :: omega(Ng2d),q_cyl(Ng2d)
-#endif
     real*8                        :: bg(3), Jtor(Ng2d)
     real*8                        :: diff_iso_vol(Neq,Neq,Ng2d),diff_ani_vol(Neq,Neq,Ng2d)
     real*8,allocatable            :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
@@ -1429,14 +1404,14 @@ CONTAINS
       Bmod = MATMUL(refElPol%N2D,Bmod_nod)
       b = MATMUL(refElPol%N2D,b_nod)
 
-#ifdef KEQUATION
+
     ! Toroidal magnetic field absolute value at Gauss points
       b_tor = MATMUL(refElPol%N2D,b_tor_nod)
 
     ! omega and q_cyl at Gauss points
       omega = MATMUL(refElPol%N2D,omegael)
       q_cyl = MATMUL(refElPol%N2D,q_cylel)
-#endif
+
 
     ! Normalized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N2D,psiel)
@@ -1470,6 +1445,11 @@ CONTAINS
 
     IF (switch%import_diffusion_1D) THEN
       CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_vol,diff_ani_vol)
+    ENDIF
+
+    IF (switch%bohm_gyrobohm) THEN
+      CALL add_bohm_gyrobohm_diffusion(ueg,qeg,omega,b,q_cyl,diff_iso_vol,diff_ani_vol) 
+
     ENDIF
 
 
@@ -1734,19 +1714,16 @@ CONTAINS
   !***************************************************
   ! Interior faces computation in 2D
   !***************************************************
-#ifndef KEQUATION
-  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-#else
-  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-#endif
+
+  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
     real*8,intent(IN)         :: Bfl(:,:), psifl(:)
     real*8,intent(IN)         :: qef(:,:)
     real*8,intent(IN)         :: uef(:,:),uf(:,:)
-#ifdef KEQUATION
     real*8,intent(IN)             :: q_cylfl(:)
-#endif
+    real*8,intent(in)         :: omegafl(:)
     real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
     integer*4                 :: g,NGauss,i,indsave(Ng1d)
     real*8                    :: dline,xyDerNorm_g
@@ -1763,9 +1740,8 @@ CONTAINS
     real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
-#ifdef KEQUATION
     real*8                    :: q_cyl(Ng1d)
-#endif
+    real*8                    :: omega(Ng1d)
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
 
@@ -1804,10 +1780,10 @@ CONTAINS
     Bmod = matmul(refElPol%N1D,Bmod_nod)
     b = matmul(refElPol%N1D,b_nod)
 
-#ifdef KEQUATION
-    ! q_cyl at Gauss points
+
+    ! q_cyl and omega at Gauss points
     q_cyl = matmul(refElPol%N1D,q_cylfl)
-#endif
+    omega = matmul(refElPol%N1D,omegafl)
 
     ! Normalaized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N1d,psifl)
@@ -1826,6 +1802,10 @@ CONTAINS
 
     IF (switch%import_diffusion_1D) THEN
       CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
+    ENDIF
+
+    IF (switch%bohm_gyrobohm) THEN
+      CALL add_bohm_gyrobohm_diffusion(uefg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
     ENDIF
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
@@ -1906,20 +1886,17 @@ CONTAINS
   !***************************************************
   ! Exterior faces computation in 2D
   !***************************************************
-#ifndef KEQUATION
-  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-#else
-  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
-#endif
+
+  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
     real*8,intent(IN)         :: Bfl(:,:), psifl(:)
     logical,intent(IN)        :: isdir
     real*8,intent(IN)         :: qef(:,:)
     real*8,intent(INOUT)      :: uef(:,:),uf(:,:)
-#ifdef KEQUATION
     real*8,intent(IN)             :: q_cylfl(:)
-#endif
+    real*8,intent(in)         :: omegafl(:)
     real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
     integer*4                 :: g,NGauss,i,indsave(Ng1d)
     real*8                    :: dline,xyDerNorm_g
@@ -1938,9 +1915,8 @@ CONTAINS
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: Vnng(Ndim)
-#ifdef KEQUATION
     real*8                    :: q_cyl(Ng1d)
-#endif
+    real*8                    :: omega(Ng1d)
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
 
@@ -1966,10 +1942,10 @@ CONTAINS
     Bmod = MATMUL(refElPol%N1D,Bmod_nod)
     b = MATMUL(refElPol%N1D,b_nod)
 
-#ifdef KEQUATION
-    ! q_cyl at Gauss points
+
+    ! q_cyl and omega at Gauss points
     q_cyl = matmul(refElPol%N1D,q_cylfl)
-#endif
+    omega = matmul(refElPol%N1D,omegafl)
     ! Normalaized magnetic flux at Gauss points: PSI
     Psig = MATMUL(refElPol%N1D,psifl)
 
@@ -2004,6 +1980,11 @@ CONTAINS
     IF (switch%import_diffusion_1D) THEN
       CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
     ENDIF
+
+    IF (switch%bohm_gyrobohm) THEN
+      CALL add_bohm_gyrobohm_diffusion(uefg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
+    ENDIF
+
     if (save_tau) then
        indsave = (ifa -1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(5,5,:)
