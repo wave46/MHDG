@@ -38,17 +38,15 @@ CONTAINS
       INTEGER, INTENT(IN)               :: connectivity(:,:)
       REAL*8, INTENT(OUT)               :: h_map(SIZE(connectivity,1))
       INTEGER                           :: i
-      REAL*8                            :: side1, side2, side3, s, area
+      REAL*8                            :: side1, side2, side3
 
       DO i = 1, SIZE(connectivity,1)
          side1 = SQRT((nodes(connectivity(i,1),1) - nodes(connectivity(i,2),1))**2 + (nodes(connectivity(i,1),2) - nodes(connectivity(i,2),2))**2)
          side2 = SQRT((nodes(connectivity(i,2),1) - nodes(connectivity(i,3),1))**2 + (nodes(connectivity(i,2),2) - nodes(connectivity(i,3),2))**2)
          side3 = SQRT((nodes(connectivity(i,3),1) - nodes(connectivity(i,1),1))**2 + (nodes(connectivity(i,3),2) - nodes(connectivity(i,1),2))**2)
 
-         s = (side1 + side2 + side3) / 2.0
-         area = SQRT(s * (s - side1) * (s - side2) * (s - side3))
-         !Double circumradius
-         h_map(i) = (side1 * side2 * side3) / (2.0 * area)
+
+         h_map(i) = (side1 + side2 + side3)/3
       ENDDO
    END SUBROUTINE calculate_h_map_elements
 
