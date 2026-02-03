@@ -176,6 +176,15 @@ CONTAINS
 #endif
 
   SUBROUTINE adaptivity()
+#ifdef WITH_PASTIX
+    USE solve_pastix, only: terminate_mat_PASTIX
+#endif
+#ifdef WITH_PETSC
+    USE solve_petsc, only: terminate_PETSC, FinalizePETSC
+#endif
+#ifdef WITH_PSBLAS
+    USE solve_psblas, only: terminate_PSBLAS
+#endif
 
     ! Start timing
     IF (utils%timing) THEN
@@ -288,6 +297,23 @@ CONTAINS
 
     ! restart to first ever iteration
     matK%start = .TRUE.
+
+    IF (lssolver%sollib .EQ. 1) THEN
+#ifdef WITH_PASTIX
+       CALL terminate_mat_PASTIX()
+       ! MPI finalization
+#endif
+    ELSEIF (lssolver%sollib .EQ. 2) THEN
+#ifdef WITH_PSBLAS
+       CALL terminate_PSBLAS()
+#endif
+    ELSEIF (lssolver%sollib .EQ. 3) THEN
+#ifdef WITH_PETSC
+       CALL terminate_PETSC()
+       CALL FinalizePETSC()
+       CALL InitPETSC()
+#endif
+    ENDIF
 
     ! Re-Initialize shock capturing
     IF ((switch%shockcp .GT. 0) .OR. ((adapt%adaptivity) .AND. (adapt%shockcp_adapt .GT. 0)))  THEN
