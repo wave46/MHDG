@@ -878,6 +878,9 @@ CONTAINS
       ! merge
       CALL gmsh_l%merge(adapt%geometry_path)
 
+      !Set minimal size for mesh elements
+      CALL gmsh_l%option%setNumber("Mesh.MeshSizeMin", 0.5e-4)
+
 
       ALLOCATE(data_for_gmsh((number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))*number_of_triangles))
 
