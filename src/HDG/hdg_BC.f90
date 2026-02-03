@@ -532,9 +532,8 @@ CONTAINS
   REAL*8                    :: uex(refElPol%Ngauss1d,phys%neq)
   REAL*8                    :: diff_iso_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
   REAL*8                    :: diff_ani_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
-#ifdef KEQUATION
   real*8                    :: q_cylfl(refElPol%Nfacenodes),q_cyl(refElPol%Ngauss1d)
-#endif
+  real*8                    :: omegafl(refElPol%Nfacenodes),omega(refElPol%Ngauss1d)
 #ifdef PARALL
 #ifdef SAVEFLUX
   INTEGER                   :: ierr
@@ -620,13 +619,15 @@ CONTAINS
     b_nod(:,2) = Bfl(:,2)/Bmod_nod
     b_nod(:,3) = Bfl(:,3)/Bmod_nod
 
-#ifdef KEQUATION
+
     if (switch%testcase == 60) then
       q_cylfl = geom%q
+      omegafl(:) = SQRT(Bfl(:,1)**2+Bfl(:,2)**2+Bfl(:,3)**2)*simpar%refval_charge/simpar%refval_mass*simpar%refval_time
     else
       q_cylfl = phys%q_cyl(Mesh%T(iel,nod))
+      omegafl = phys%omega(Mesh%T(iel,nod))
     endif
-#endif
+
 
     ! Normalized magnetic flux of the nodes of the face: PSI
     psifl = phys%magnetic_psi(Mesh%T(iel,nod))
@@ -674,6 +675,10 @@ CONTAINS
     ! Normalized magnetic flux at Gauss points: PSI
      psig = MATMUL(refElPol%N1d,psifl)
 
+    ! q_cylicdrical and omega
+
+     q_cyl = MATMUL(refElPol%N1d,q_cylfl)
+     omega = MATMUL(refElPol%N1d,omegafl)
     ! Compute diffusion at faces Gauss points
 #ifndef KEQUATION
     CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac)
@@ -685,6 +690,10 @@ CONTAINS
 
     IF (switch%import_diffusion_1D) THEN
       CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
+    ENDIF
+
+    IF (switch%bohm_gyrobohm) THEN
+      CALL add_bohm_gyrobohm_diffusion(ufg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
     ENDIF
 
     if (save_tau) then
