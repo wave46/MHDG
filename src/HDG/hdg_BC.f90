@@ -438,7 +438,7 @@ CONTAINS
 #endif
         ! tangency
         ntang = .TRUE.
-          inc = bn/NORM2(b(g,1:2))
+          inc = bn
 
         setval = ufg(g,2)
 
@@ -1170,7 +1170,7 @@ CONTAINS
         ntang = .false.
       endif
 #endif
-      inc = bn/norm2(b(g,1:2))
+      inc = bn
 
 #ifdef NGAMMA
       setval = ufg(g,2)
