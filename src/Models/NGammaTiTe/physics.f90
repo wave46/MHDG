@@ -750,14 +750,14 @@ CONTAINS
    !linear interpolation of the diffusion coefficients
    DO i=1,size(rho)
        rho_loc = rho(i)
-       IF (rho_loc .LT. phys%rho_1D_min) rho_loc = phys%rho_1D_min
+       IF (rho_loc .LT. phys%rho_1D_min) rho_loc = phys%rho_1D_min+1e-10
        IF (rho_loc.GT. phys%rho_1D_max) rho_loc = phys%rho_1D_max-1e-10
 
-       idx = binarySearch(phys%rho_1D_size, phys%rho_1D, rho(i),1e-12)
-       diff_1D(i,1) = phys%diff_n_1D(idx) + (phys%diff_n_1D(idx+1)-phys%diff_n_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
-       diff_1D(i,2) = phys%diff_u_1D(idx) + (phys%diff_u_1D(idx+1)-phys%diff_u_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
-       diff_1D(i,3) = phys%diff_e_1D(idx) + (phys%diff_e_1D(idx+1)-phys%diff_e_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
-       diff_1D(i,4) = phys%diff_ee_1D(idx) + (phys%diff_ee_1D(idx+1)-phys%diff_ee_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       idx = binarySearch(phys%rho_1D_size, phys%rho_1D, rho_loc,1e-12)
+       diff_1D(i,1) = phys%diff_n_1D(idx) + (phys%diff_n_1D(idx+1)-phys%diff_n_1D(idx))*(rho_loc-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       diff_1D(i,2) = phys%diff_u_1D(idx) + (phys%diff_u_1D(idx+1)-phys%diff_u_1D(idx))*(rho_loc-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       diff_1D(i,3) = phys%diff_e_1D(idx) + (phys%diff_e_1D(idx+1)-phys%diff_e_1D(idx))*(rho_loc-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       diff_1D(i,4) = phys%diff_ee_1D(idx) + (phys%diff_ee_1D(idx+1)-phys%diff_ee_1D(idx))*(rho_loc-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
 
    END DO
 
