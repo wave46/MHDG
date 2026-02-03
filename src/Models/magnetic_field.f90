@@ -1678,7 +1678,7 @@ SUBROUTINE adjust_puff_feedback(target_density, nli)
    phys%puff = MAX(control_signal, 0.0)
 
    ! Back-calculate the integral error to prevent windup
-   anti_windup_gain = 0.1  ! Tunable parameter
+   anti_windup_gain = 0.01  ! Tunable parameter
    phys%feedback_integral_error = phys%feedback_integral_error + &
                                                  anti_windup_gain * (phys%puff - control_signal)
 
