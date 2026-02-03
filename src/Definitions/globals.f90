@@ -421,7 +421,6 @@ CONTAINS
        NULLIFY(phys%puff_exp)
     END IF
 
-#ifdef KEQUATION
     IF (ASSOCIATED(phys%omega)) THEN
        DEALLOCATE (phys%omega)
        NULLIFY(phys%omega)
@@ -430,7 +429,7 @@ CONTAINS
        DEALLOCATE (phys%q_cyl)
        NULLIFY(phys%q_cyl)
     END IF
-#endif
+
 
     IF (ASSOCIATED(phys%rho_1D)) THEN
        DEALLOCATE (phys%rho_1D)

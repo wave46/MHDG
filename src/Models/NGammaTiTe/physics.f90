@@ -341,6 +341,18 @@ CONTAINS
     phys%RN_DW(22,:) = (/0.5174, 0.5210, 0.5247, 0.5283, 0.5379, 0.5474, 0.5570, 0.5730, 0.5890, 0.6050, 0.6253,&
                          0.6456, 0.6741, 0.7026, 0.7381, 0.7737, 0.8327, 0.9419, 1.0000/)
 #endif
+
+  ! Bohm-GyroBohm definitions
+  phys%c_bohm_i = 1.6e-4
+  phys%c_bohm_e = 8.e-5
+  phys%c_gyroBohm_i = 1.75e-2
+  phys%c_gyroBohm_e = 3.5e-2
+  phys%prandtl = 1.
+  phys%c_bohm_n = 1.
+
+
+
+
   ENDSUBROUTINE initPhys
 
   !*******************************************
@@ -750,18 +762,129 @@ CONTAINS
    !linear interpolation of the diffusion coefficients
    DO i=1,size(rho)
        rho_loc = rho(i)
-       IF (rho_loc .LT. phys%rho_1D_min) rho_loc = phys%rho_1D_min
+       IF (rho_loc .LT. phys%rho_1D_min) rho_loc = phys%rho_1D_min+1e-10
        IF (rho_loc.GT. phys%rho_1D_max) rho_loc = phys%rho_1D_max-1e-10
 
-       idx = binarySearch(phys%rho_1D_size, phys%rho_1D, rho(i),1e-12)
-       diff_1D(i,1) = phys%diff_n_1D(idx) + (phys%diff_n_1D(idx+1)-phys%diff_n_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
-       diff_1D(i,2) = phys%diff_u_1D(idx) + (phys%diff_u_1D(idx+1)-phys%diff_u_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
-       diff_1D(i,3) = phys%diff_e_1D(idx) + (phys%diff_e_1D(idx+1)-phys%diff_e_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
-       diff_1D(i,4) = phys%diff_ee_1D(idx) + (phys%diff_ee_1D(idx+1)-phys%diff_ee_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       idx = binarySearch(phys%rho_1D_size, phys%rho_1D, rho_loc,1e-12)
+       diff_1D(i,1) = phys%diff_n_1D(idx) + (phys%diff_n_1D(idx+1)-phys%diff_n_1D(idx))*(rho_loc-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       diff_1D(i,2) = phys%diff_u_1D(idx) + (phys%diff_u_1D(idx+1)-phys%diff_u_1D(idx))*(rho_loc-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       diff_1D(i,3) = phys%diff_e_1D(idx) + (phys%diff_e_1D(idx+1)-phys%diff_e_1D(idx))*(rho_loc-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       diff_1D(i,4) = phys%diff_ee_1D(idx) + (phys%diff_ee_1D(idx+1)-phys%diff_ee_1D(idx))*(rho_loc-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
 
    END DO
 
   END SUBROUTINE interpolate_1D_diff
+
+  SUBROUTINE add_bohm_gyrobohm_diffusion(u, q, omega_c, b_unit, q_cyl, d_iso, d_ani)
+    ! Bohm-GyroBohm model diffusion from JETTO https://w3.pppl.gov/ntcc/JETTO/mixed_Bohm_gyro_Bohm/mixed_Bohm_gyro_Bohm.html
+    ! And initially from the paper Erda M., et al., Nucl. Fusion 38.7 (1998): 1013
+    REAL*8, INTENT(IN)  :: u(:, :), q(:,:), q_cyl(:), omega_c(:), b_unit(:, :)
+    REAL*8, INTENT(INOUT) :: d_iso(:, :, :), d_ani(:, :, :)
+    REAL*8              :: diff_bohm(size(u, 1))
+    REAL*8              :: diff_gyrobohm(size(u, 1))
+    REAL*8              :: b_unit2D(size(u, 1), 2)
+    INTEGER             :: i
+    REAL*8              :: rho_s_te, cs_te
+    REAL*8              :: q_reshaped(size(q, 1), size(q, 2) / phys%neq, phys%neq)
+    REAL*8              :: chi_i(size(u, 1)), chi_e(size(u, 1))
+
+    ! Initialize variables
+    rho_s_te = 0.0
+    cs_te = 0.0
+    chi_i = 0.0
+    chi_e = 0.0
+    diff_bohm = 0.0
+    diff_gyrobohm = 0.0
+
+    ! Copy the first two columns of b_unit into b_unit2D
+    b_unit2D(:, 1) = b_unit(:, 1)
+    b_unit2D(:, 2) = b_unit(:, 2)
+
+    ! Reshape q for easier indexing
+    q_reshaped = RESHAPE(q, [size(q, 1), INT(size(q, 2) / phys%neq), phys%neq])
+
+    ! Loop over all rows of u
+    DO i = 1, size(u, 1)
+       ! Normalize b_unit2D to avoid division by zero
+       IF (SUM(b_unit2D(i, :)**2) > 1e-20) THEN
+          b_unit2D(i, :) = b_unit2D(i, :) / SQRT(SUM(b_unit2D(i, :)**2))
+       END IF
+
+       ! Compute Bohm and GyroBohm diffusion
+       CALL compute_cs_te(u(i, :), cs_te)
+       CALL compute_rho_s_te(cs_te, omega_c(i), rho_s_te)
+       CALL compute_bohm_diffusion(u(i, :), q_reshaped(i, :, :), b_unit2D(i, :), q_cyl(i), rho_s_te, cs_te, diff_bohm(i))
+       CALL compute_gyrobohm_diffusion(u(i, :), q_reshaped(i, :, :), b_unit2D(i, :), rho_s_te, cs_te, diff_gyrobohm(i))
+
+       ! Calculate chi_i and chi_e with a minimum threshold
+       chi_i(i) = MAX(phys%c_bohm_i * diff_bohm(i) + phys%c_gyrobohm_i * diff_gyrobohm(i), 1e-10)
+       chi_e(i) = MAX(phys%c_bohm_e * diff_bohm(i) + phys%c_gyrobohm_e * diff_gyrobohm(i), 1e-10)
+
+       chi_i(i) = MIN(chi_i(i), 20./simpar%refval_length**2*simpar%refval_time)
+        chi_e(i) = MIN(chi_e(i), 20./simpar%refval_length**2*simpar%refval_time)
+    END DO
+
+    ! Update isotropic and anisotropic diffusion tensors
+    d_iso(3, 3, :) = d_iso(3, 3, :) + chi_i(:)
+    d_iso(4, 4, :) = d_iso(4, 4, :) + chi_e(:)
+    d_ani(3, 3, :) = d_ani(3, 3, :) + chi_i(:)
+    d_ani(4, 4, :) = d_ani(4, 4, :) + chi_e(:)
+
+    ! Update diffusion for the first and second equations
+    d_iso(1, 1, :) = d_iso(1, 1, :) + phys%c_bohm_n * chi_i(:) * chi_e(:) / MAX(chi_i(:) + chi_e(:), 1e-10)
+    d_ani(1, 1, :) = d_ani(1, 1, :) + phys%c_bohm_n * chi_i(:) * chi_e(:) / MAX(chi_i(:) + chi_e(:), 1e-10)
+    d_iso(2, 2, :) = d_iso(2, 2, :) + phys%prandtl*chi_i(:)
+    d_ani(2, 2, :) = d_ani(2, 2, :) + phys%prandtl*chi_i(:)
+  ENDSUBROUTINE add_bohm_gyrobohm_diffusion
+
+  SUBROUTINE compute_bohm_diffusion(u,q,b_unit2D,q_cyl,rho_s_te,cs_te,diff_bohm)
+    REAL*8, INTENT(IN)  :: u(:), q(:,:),q_cyl, b_unit2D(:)
+    REAL*8, INTENT(OUT) :: diff_bohm
+    REAL*8, INTENT(IN)  :: rho_s_te, cs_te
+    REAL*8              :: dpe_dr
+    REAL*8              :: q4(size(q,1))
+    dpe_dr = 0.
+    ! perpendicular to magnetic field
+    !q4 = q(:,4)
+    !q4 = SIGN(MAX(ABS(q(:,4)), 1e-7), q(:,4))
+    dpe_dr = ABS(q(1,4)*b_unit2D(2)-q(2,4)*b_unit2D(1))
+
+    ! we omit here 2/3Mref since it is (dp/dr)/p
+    diff_bohm = rho_s_te*cs_te*q_cyl**2*phys%a_minor
+   
+    diff_bohm = diff_bohm * (dpe_dr/max(u(4),1e-10))*phys%delta_te
+    !WRITE(*,*) 'Bohm diff', diff_bohm
+  END SUBROUTINE compute_bohm_diffusion
+
+  SUBROUTINE compute_gyrobohm_diffusion(u,q,b_unit2D,rho_s_te,cs_te,diff_gyrobohm)
+    REAL*8, INTENT(IN)  :: u(:), q(:,:), rho_s_te, cs_te, b_unit2D(:)
+    REAL*8, INTENT(OUT) :: diff_gyrobohm
+    REAL*8              :: dte_dr,gradte(size(b_unit2D))
+
+    gradte = q(:,1)*(-1.*u(4)/u(1)**2) + q(:,4)/u(1)
+    dte_dr = gradte(1)*b_unit2D(2)-gradte(2)*b_unit2D(1)
+    ! we omit here 2/3Mref since it is (dt/dr)/t
+
+    diff_gyrobohm = rho_s_te**2*cs_te*ABS(dte_dr)/max(u(4)/u(1),1e-20)
+
+  END SUBROUTINE compute_gyrobohm_diffusion
+
+  SUBROUTINE compute_cs_te(u,cs_te)
+    REAL*8, INTENT(IN)  :: u(:)
+    REAL*8, INTENT(OUT) :: cs_te
+
+    cs_te = SQRT(MAX(2./3.*u(4)/u(1),1e-20))
+
+  END SUBROUTINE compute_cs_te
+
+  SUBROUTINE compute_rho_s_te(cs_te,omega_c,rho_s_te)
+    REAL*8, INTENT(IN)  :: cs_te
+    REAL*8, INTENT(IN)  :: omega_c
+    REAL*8, INTENT(OUT) :: rho_s_te
+
+    rho_s_te = cs_te/omega_c
+
+  END SUBROUTINE compute_rho_s_te
 
   !*****************************************
   ! Set the perpendicular diffusion

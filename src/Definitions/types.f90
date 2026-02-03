@@ -221,10 +221,9 @@ MODULE types
      REAL*8, POINTER           :: magnetic_psi(:) => NULL()! Magnetic flux normalized to separatrix magnetic flux [n of nodes]
      REAL*8                    :: Flux2Dmin ! Minimum of the magnetic flux, across the MPI partitions
      REAL*8                    :: Flux2Dmax ! Maximum of the magnetic flux, across the MPI partitions
-#ifdef KEQUATION
      REAL*8, POINTER           :: omega(:) => NULL()! larmor frequency [n of nodes]
      REAL*8, POINTER           :: q_cyl(:) => NULL()! q cylindrical [n of nodes]
-#endif
+     REAL*8                    :: a_minor ! minor radius (half width of the plasma)
      REAL*8                    :: r_axis ! R-coordinate of magnetic axis
      REAL*8                    :: z_axis ! Z-coordinate of magnetic axis
 
@@ -317,6 +316,14 @@ MODULE types
      REAL*8                    :: rho_1D_max ! Maximum value of rho for the 1D diffusion profiles
      REAL*8                    :: rho_1D_min ! Minimum value of rho for the 1D diffusion profiles 
      INTEGER                   :: rho_1D_size ! Size of the 1D diffusion profiles
+     ! For Bohm gyrobohm model
+     REAL*8                    :: delta_te  ! (Te(0.8)-Te(1))/Te(1) where Te(1) is the electron temperature at rho poloidal = 1 and Te(0.8) at rho poloidal = 0.8
+     REAL*8                    :: c_bohm_i ! multiplier for Bohm diffusion for ions
+     REAL*8                    :: c_gyrobohm_i ! multiplier for gyrobohm diffusion for ions
+     REAL*8                    :: c_bohm_e ! multiplier for Bohm diffusion for electrons
+     REAL*8                    :: c_gyrobohm_e ! multiplier for gyrobohm diffusion for electrons
+     REAL*8                    :: prandtl ! Prandtl number (ratio of momentum diffusion to ion heat diffusion)
+     REAL*8                    :: c_bohm_n ! multiplier for particle diffusion
 #ifdef EXPANDEDCX
 #ifdef AMJUELCX
      REAL*8, DIMENSION(9)      :: alpha_cx ! Coefficients for charge exchange coefficients spline
@@ -420,6 +427,7 @@ MODULE types
      LOGICAL :: external_heating ! to read and apply external heating from input file
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
      LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs
+     LOGICAL :: bohm_gyrobohm ! use Bohm-gyrobohm model for diffusion coefficients
   END TYPE Switches_type
 
   !***************************************************************
