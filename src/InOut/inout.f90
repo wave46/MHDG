@@ -944,6 +944,13 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%Gmbohme, 'Gmbohme')
       CALL HDF5_real_saving(group_id2, phys%Potfloat, 'Potfloat')
       CALL HDF5_array1d_saving_int(group_id2, phys%bcflags, 10, 'boundary_flags')
+      IF (switch%import_diffusion_1D) THEN 
+         CALL HDF5_array1D_saving(group_id2, phys%rho_1D, SIZE(phys%rho_1D), 'rho_1D')
+         CALL HDF5_array1D_saving(group_id2, phys%diff_n_1D, SIZE(phys%diff_n_1D), 'diff_n_1D')
+         CALL HDF5_array1D_saving(group_id2, phys%diff_u_1D, SIZE(phys%diff_u_1D), 'diff_u_1D')
+         CALL HDF5_array1D_saving(group_id2, phys%diff_e_1D, SIZE(phys%diff_e_1D), 'diff_e_1D')
+         CALL HDF5_array1D_saving(group_id2, phys%diff_ee_1D, SIZE(phys%diff_ee_1D), 'diff_ee_1D')
+      ENDIF
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create switches parameters group
@@ -975,6 +982,8 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%convvort, 'convvort')
       CALL HDF5_logical_saving(group_id2, switch%logrho, 'logrho')
       CALL HDF5_logical_saving(group_id2, switch%impurity_radiation, 'impurity_radiation')
+      CALL HDF5_logical_saving(group_id2, switch%external_heating, 'external_heating')
+      CALL HDF5_logical_saving(group_id2, switch%import_diffusion_1D, 'import_diffusion_1D')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create numerics parameters group

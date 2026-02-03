@@ -173,6 +173,11 @@ PROGRAM MHDG
   ! Initialise puff, only if neutrals are present
   CALL initialize_puff()
 
+  ! Read 1D diffusion profiles if needed
+  IF (switch%import_diffusion_1D) THEN
+     CALL read_1D_diffusion_profiles()
+  ENDIF
+
   ! Save solution
   CALL setSolName(save_name, mesh_name, 0, .TRUE., .FALSE.)
   CALL HDF5_save_solution(save_name)

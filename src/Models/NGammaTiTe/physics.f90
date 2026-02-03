@@ -719,6 +719,50 @@ CONTAINS
   ENDSUBROUTINE jacobianMatricesN
 #endif
 
+  
+
+  SUBROUTINE add_1D_diff(rho,d_iso,d_ani)
+    REAL*8, INTENT(IN)  :: rho(:)
+    REAL*8, INTENT(INOUT) :: d_iso(:, :, :), d_ani(:, :, :)
+    REAL*8              :: diff_1D(size(rho),4)
+
+    CALL interpolate_1D_diff(rho, diff_1D)
+
+    d_iso(1, 1, :) = d_iso(1, 1, :) + diff_1D(:,1)
+    d_iso(2, 2, :) = d_iso(2, 2, :) + diff_1D(:,2)
+    d_iso(3, 3, :) = d_iso(3, 3, :) + diff_1D(:,3)
+    d_iso(4, 4, :) = d_iso(4, 4, :) + diff_1D(:,4)
+
+    d_ani(1, 1, :) = d_ani(1, 1, :) + diff_1D(:,1)
+    d_ani(2, 2, :) = d_ani(2, 2, :) + diff_1D(:,2)
+    d_ani(3, 3, :) = d_ani(3, 3, :) + diff_1D(:,3)
+    d_ani(4, 4, :) = d_ani(4, 4, :) + diff_1D(:,4)
+
+  ENDSUBROUTINE add_1D_diff
+
+ SUBROUTINE interpolate_1D_diff(rho,diff_1D)
+   USE interpolation
+   REAL*8, INTENT(IN)  :: rho(:)
+   REAL*8, INTENT(INOUT) :: diff_1D(size(rho),4)
+   REAL*8            :: rho_loc 
+   INTEGER :: i,idx
+   
+   !linear interpolation of the diffusion coefficients
+   DO i=1,size(rho)
+       rho_loc = rho(i)
+       IF (rho_loc .LT. phys%rho_1D_min) rho_loc = phys%rho_1D_min
+       IF (rho_loc.GT. phys%rho_1D_max) rho_loc = phys%rho_1D_max-1e-10
+
+       idx = binarySearch(phys%rho_1D_size, phys%rho_1D, rho(i),1e-12)
+       diff_1D(i,1) = phys%diff_n_1D(idx) + (phys%diff_n_1D(idx+1)-phys%diff_n_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       diff_1D(i,2) = phys%diff_u_1D(idx) + (phys%diff_u_1D(idx+1)-phys%diff_u_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       diff_1D(i,3) = phys%diff_e_1D(idx) + (phys%diff_e_1D(idx+1)-phys%diff_e_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+       diff_1D(i,4) = phys%diff_ee_1D(idx) + (phys%diff_ee_1D(idx+1)-phys%diff_ee_1D(idx))*(rho(i)-phys%rho_1D(idx))/(phys%rho_1D(idx+1)-phys%rho_1D(idx))
+
+   END DO
+
+  END SUBROUTINE interpolate_1D_diff
+
   !*****************************************
   ! Set the perpendicular diffusion
   !****************************************
@@ -2830,36 +2874,30 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
   !*******************************************
   ! Compute the stabilization tensor tau
   !*******************************************
-#ifndef KEQUATION
-  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau)
-#else
-  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, q_cyl, tau)
-#endif
+  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau,diff_iso,diff_ani)
     real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
     REAL*8, intent(in)    :: isext
     integer, intent(in) ::  iel
-#ifdef KEQUATION
-    real*8, intent(in)  :: q_cyl
-#endif
     real*8, intent(out) :: tau(:, :)
 #ifdef NEUTRAL
 #ifndef KEQUATION
-    REAL*8              :: tau_aux(5),diff_iso(5,5,1),diff_ani(5,5,1)
+    REAL*8              :: tau_aux(5)
+    REAL*8,INTENT(IN)   :: diff_iso(5,5,1),diff_ani(5,5,1)
 #else
-    REAL*8              :: tau_aux(6),diff_iso(6,6,1),diff_ani(6,6,1)
+    REAL*8              :: tau_aux(6)
+    REAL*8,INTENT(IN)   :: diff_iso(6,6,1),diff_ani(6,6,1)
 #endif
 #ifdef NEUTRALP
     REAL*8              :: Dpn
     REAL*8              :: Vpn(simpar%Neq),Qpr(simpar%Ndim,simpar%Neq)
 #endif
 #else
-    REAL*8              :: tau_aux(4),diff_iso(4,4,1),diff_ani(4,4,1)
+    REAL*8              :: tau_aux(4)
+    REAL*8,INTENT(IN)   :: diff_iso(4,4,1),diff_ani(4,4,1)
 #endif
     integer             :: ndim
     real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
-#ifdef KEQUATION
-    real*8              :: qq_cyl(1)
-#endif
+
     real*8              :: U1, U2, U3, U4
     U1 = uc(1)
     U2 = uc(2)
@@ -2873,12 +2911,6 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     xyd(1,:) = xy(:)
     uu(1,:) = uc(:)
     qq(1,:) = q(:)
-#ifndef KEQUATION
-    call setLocalDiff(xyd, uu, diff_iso, diff_ani)
-#else
-    qq_cyl(:) = q_cyl
-    call setLocalDiff(xyd, uu, diff_iso, diff_ani,qq_cyl)
-#endif
 
 #ifdef NEUTRALP
     ! Compute Vpn(U^(k-1))

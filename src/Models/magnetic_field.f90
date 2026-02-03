@@ -1277,6 +1277,36 @@ CONTAINS
 #endif
   ENDSUBROUTINE initialize_puff
 
+SUBROUTINE read_1D_diffusion_profiles()
+   CHARACTER(LEN=1000) :: fname
+   INTEGER(HID_T)    :: file_id
+   INTEGER           :: ip, IERR
+
+   fname = input%diffusion_1D_path
+   CALL HDF5_open(fname, file_id, IERR)
+   CALL HDF5_integer_reading(file_id, phys%rho_1D_size, 'size')
+   ALLOCATE(phys%rho_1D(phys%rho_1D_size))
+   ALLOCATE(phys%diff_n_1D(phys%rho_1D_size))
+   ALLOCATE(phys%diff_u_1D(phys%rho_1D_size))
+   ALLOCATE(phys%diff_e_1D(phys%rho_1D_size))
+   ALLOCATE(phys%diff_ee_1D(phys%rho_1D_size))
+   CALL HDF5_array1D_reading(file_id, phys%rho_1D, 'rho_pol')
+   CALL HDF5_array1D_reading(file_id, phys%diff_n_1D, 'd')
+   CALL HDF5_array1D_reading(file_id, phys%diff_u_1D, 'mu')
+   CALL HDF5_array1D_reading(file_id, phys%diff_e_1D, 'chii')
+   CALL HDF5_array1D_reading(file_id, phys%diff_ee_1D, 'chie')
+   CALL HDF5_close(file_id)
+   phys%rho_1D_max = MAXVAL(phys%rho_1D)
+   phys%rho_1D_min = MINVAL(phys%rho_1D)
+   !adimensionalization
+   phys%diff_n_1D = phys%diff_n_1D*simpar%refval_time/simpar%refval_length**2
+   phys%diff_u_1D = phys%diff_u_1D*simpar%refval_time/simpar%refval_length**2
+   phys%diff_e_1D = phys%diff_e_1D*simpar%refval_time/simpar%refval_length**2
+   phys%diff_ee_1D = phys%diff_ee_1D*simpar%refval_time/simpar%refval_length**2
+   IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6,*) '1D diffusion profiles loaded from file: ', TRIM(ADJUSTL(fname))
+   END IF
+END SUBROUTINE read_1D_diffusion_profiles
 
 SUBROUTINE SetParticleSource()
 

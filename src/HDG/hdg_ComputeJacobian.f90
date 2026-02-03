@@ -1468,6 +1468,10 @@ CONTAINS
     CALL setLocalDiff(xy,ueg,diff_iso_vol,diff_ani_vol,q_cyl)
 #endif
 
+    IF (switch%import_diffusion_1D) THEN
+      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_vol,diff_ani_vol)
+    ENDIF
+
 
     if (save_tau) then
        diff_nn_Vol_el = diff_iso_vol(5,5,:)
@@ -1819,6 +1823,10 @@ CONTAINS
 #else
     CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac,q_cyl)
 #endif
+
+    IF (switch%import_diffusion_1D) THEN
+      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
+    ENDIF
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(5,5,:)
@@ -1865,11 +1873,7 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau)
-#else
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),q_cyl(g),tau)
-#endif
+            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),0.,iel,tau)
         ENDIF
@@ -1995,6 +1999,11 @@ CONTAINS
 #else
     CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac,q_cyl)
 #endif
+
+
+    IF (switch%import_diffusion_1D) THEN
+      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
+    ENDIF
     if (save_tau) then
        indsave = (ifa -1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(5,5,:)
@@ -2043,11 +2052,7 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-#ifndef KEQUATION
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau)
-#else
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),q_cyl(g),tau)
-#endif
+            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),isext,iel,tau)
         ENDIF
