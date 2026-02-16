@@ -3134,7 +3134,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 #endif
 #ifdef NEUTRALP
     REAL*8              :: Dpn
-    REAL*8              :: Vpn(simpar%Neq),Qpr(simpar%Ndim,simpar%Neq)
+    REAL*8              :: Vpn(simpar%Neq)
 #endif
 #else
     REAL*8              :: tau_aux(4)
@@ -3142,6 +3142,8 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 #endif
     integer             :: ndim
     real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
+    REAL*8              :: q_fs_i, q_fs_e, flux_limiter_i, flux_limiter_e, q_sh_i, q_sh_e
+    REAL*8              :: Qpr(simpar%Ndim,simpar%Neq)
 
     real*8              :: U1, U2, U3, U4
     U1 = uc(1)
@@ -3156,12 +3158,26 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     xyd(1,:) = xy(:)
     uu(1,:) = uc(:)
     qq(1,:) = q(:)
+    Qpr = RESHAPE(q,(/simpar%Ndim,simpar%Neq/))
+    ! Compute flux limiters at the face
+    IF (switch%flux_limiter) THEN
+      call compute_free_streaming_heat_flux_electrons(uc,q_fs_e)
+      call compute_free_streaming_heat_flux_ions(uc,q_fs_i)
+      call compute_spitzer_harm_flux_electrons(uc,Qpr,b,q_sh_e)
+      call compute_spitzer_harm_flux_ions(uc,Qpr,b,q_sh_i)
+      call compute_flux_limiter(q_fs_e,q_sh_e,phys%c_fle,flux_limiter_e)
+      call compute_flux_limiter(q_fs_i,q_sh_i,phys%c_fli,flux_limiter_i)
+
+    ELSE
+      flux_limiter_e = 1.
+      flux_limiter_i = 1.
+    END IF
 
 #ifdef NEUTRALP
     ! Compute Vpn(U^(k-1))
     CALL computeVpn(uc,Vpn)
 	   ! Compute Dpn(U^(k-1))
-    Qpr = RESHAPE(q,(/simpar%Ndim,simpar%Neq/))
+    
     !CALL computeDpn(uc,Qpr,Vpn,Dpn)
 #endif
 
@@ -3263,8 +3279,8 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         ! Toroidal face
         tau_aux(1) = tau_aux(1) + diff_iso(1,1,1)*refElPol%ndeg/Mesh%elemSize(iel)
         tau_aux(2) = tau_aux(2) + diff_iso(2,2,1)*refElPol%ndeg/Mesh%elemSize(iel)
-          tau_aux(3) = tau_aux(3) + diff_iso(3,3,1)*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pari*(MIN(1.,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
-          tau_aux(4) = tau_aux(4) + diff_iso(4,4,1)*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pare*(MIN(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
+          tau_aux(3) = tau_aux(3) + diff_iso(3,3,1)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_i*ABS(bn)*phys%diff_pari*(MIN(1.,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
+          tau_aux(4) = tau_aux(4) + diff_iso(4,4,1)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_e*ABS(bn)*phys%diff_pare*(MIN(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
         tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)*refElPol%ndeg/Mesh%elemSize(iel) !! !numer%tau(5) diff_iso(5,5,1)
