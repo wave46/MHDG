@@ -1342,6 +1342,128 @@ CONTAINS
     ENDIF
   ENDSUBROUTINE compute_dAlpha_dUe
 
+  SUBROUTINE compute_free_streaming_heat_flux_electrons(U, qfs)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: qfs
+    REAL*8, PARAMETER :: tmin = 1e-5 ! eV    
+    REAL*8            :: tmin_cons
+    REAL*8, PARAMETER :: mi = 3.35e-27         ! Ionic mass [kg]
+    REAL*8, PARAMETER :: me = 9.109e-31        ! Electronic mass [kg]
+    REAL*8             :: t, n
+
+    tmin_cons = tmin/simpar%refval_temperature*3*phys%Mref/2.
+    
+
+    t = MAX(U(4)/U(1), tmin_cons)
+    n = U(1)
+    
+
+    qfs = (2./3.)**1.5*SQRT(mi/me)*t**1.5*n
+
+
+  END SUBROUTINE
+
+  SUBROUTINE compute_dfree_streaming_heat_flux_electrons_dU(U, res)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: res(:)
+    REAL*8, PARAMETER :: mi = 3.35e-27         ! Ionic mass [kg]
+    REAL*8, PARAMETER :: me = 9.109e-31        ! Electronic mass [kg]
+    REAL*8, PARAMETER :: tmin = 1e-5 ! eV    
+    REAL*8            :: tmin_cons
+
+    res = 0.d0
+
+    tmin_cons = tmin/simpar%refval_temperature*3*phys%Mref/2.
+    
+    IF (U(4)/U(1) > tmin_cons) THEN
+      res(1) = -0.5/U(1)
+      res(4) = 3./2./U(4)
+      res = (2./3.*U(4)/U(1))**1.5*U(1)*SQRT(mi/me)*res
+    ENDIF
+  END SUBROUTINE
+
+  SUBROUTINE compute_free_streaming_heat_flux_ions(U,qfs)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: qfs
+    REAL*8, PARAMETER :: tmin = 1e-5 ! eV    
+    REAL*8            :: tmin_cons
+    REAL*8             :: t, n
+
+    tmin_cons = tmin/simpar%refval_temperature*3*phys%Mref/2.
+
+    t = MAX(U(3)/U(1) - 0.5*U(2)**2/U(1)**2, tmin_cons)
+    n = U(1)
+
+
+
+    qfs = (2./3.)**1.5*t**1.5*n
+
+
+  END SUBROUTINE
+
+  SUBROUTINE compute_dfree_streaming_heat_flux_ions_dU(U, res)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: res(:)
+    REAL*8, PARAMETER :: tmin = 1e-5 ! eV    
+    REAL*8            :: tmin_cons
+
+    res = 0.d0
+    
+    tmin_cons = tmin/simpar%refval_temperature*3*phys%Mref/2.
+
+    IF ((U(3)-0.5*U(2)**2)/U(1)**2 > tmin_cons) THEN
+
+      res(1) = -0.5*(U(3)-2.*U(2)**2/U(1))/(U(1)*(U(3)-1./2.*U(2)**2/U(1)))
+      res(2) = -3./2.*U(2)/(U(1)*(U(3)-1./2.*U(2)**2/U(1)))
+      res(3) = 3./2./(U(3)-1./2.*U(2)**2/U(1))
+      res = (2./3.*(U(3)-1./2.*U(2)**2/U(1))/U(1))**1.5*U(1)*res
+    ENDIF
+  END SUBROUTINE
+
+  SUBROUTINE compute_spitzer_harm_flux_ions(U, Q, b, q_sh_i)
+    REAL*8, INTENT(IN) :: U(:), Q(:,:), b(:)
+    REAL*8, INTENT(OUT):: q_sh_i
+    REAL*8             :: Alphai, gmi, coefi
+    REAL*8             :: Vveci(SIZE(U))
+
+    coefi = phys%diff_pari*(2./(3.*phys%Mref))**(1 + phys%epn)
+    Alphai = computeAlphai(U)
+    CALL computeVi(U, Vveci)
+    gmi = dot_PRODUCT(MATMUL(Q,Vveci),b)
+    q_sh_i = -coefi*Alphai*gmi
+  
+  END SUBROUTINE compute_spitzer_harm_flux_ions
+
+  SUBROUTINE compute_spitzer_harm_flux_electrons(U, Q, b, q_sh_e)
+    REAL*8, INTENT(IN) :: U(:), Q(:,:), b(:)
+    REAL*8, INTENT(OUT):: q_sh_e
+    REAL*8             :: Alphae, gme, coefe
+    REAL*8             :: Vvece(SIZE(U))
+
+    coefe = phys%diff_pare*(2./(3.*phys%Mref))**(1 + phys%epn)
+    Alphae = computeAlphae(U)
+    CALL computeVe(U, Vvece)
+    gme = dot_PRODUCT(MATMUL(Q,Vvece),b)
+    q_sh_e = -coefe*Alphae*gme
+
+  END SUBROUTINE compute_spitzer_harm_flux_electrons
+
+  SUBROUTINE compute_flux_limiter(qfs,qsh,c_fl, flux_limiter)
+    REAL*8, INTENT(IN)  :: qfs, qsh, c_fl
+    REAL*8, INTENT(OUT) :: flux_limiter
+    REAL*8, PARAMETER :: tol = 1.e-10
+    
+    !IF ((qfs <= tol)) THEN
+    !  flux_limiter = 0.
+    !ELSEIF ((qsh <= tol)) THEN
+    !  flux_limiter = 1.
+    !ELSE
+      flux_limiter = 1./(1.+ABS(qsh)/(c_fl*qfs))
+    !ENDIF
+
+  END SUBROUTINE compute_flux_limiter
+   
+
   ! ******************************
   ! Parallel electric field terms
   ! ******************************
