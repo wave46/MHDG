@@ -944,6 +944,10 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%Gmbohme, 'Gmbohme')
       CALL HDF5_real_saving(group_id2, phys%Potfloat, 'Potfloat')
       CALL HDF5_array1d_saving_int(group_id2, phys%bcflags, 10, 'boundary_flags')
+      IF (switch%flux_limiter) THEN
+         CALL HDF5_real_saving(group_id2, phys%c_fli, 'c_fli')
+         CALL HDF5_real_saving(group_id2, phys%c_fle, 'c_fle')
+      ENDIF
       IF (switch%import_diffusion_1D) THEN 
          CALL HDF5_array1D_saving(group_id2, phys%rho_1D, SIZE(phys%rho_1D), 'rho_1D')
          CALL HDF5_array1D_saving(group_id2, phys%diff_n_1D, SIZE(phys%diff_n_1D), 'diff_n_1D')
@@ -990,6 +994,7 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%dirivortlim, 'dirivortlim')
       CALL HDF5_logical_saving(group_id2, switch%convvort, 'convvort')
       CALL HDF5_logical_saving(group_id2, switch%logrho, 'logrho')
+      CALL HDF5_logical_saving(group_id2, switch%flux_limiter, 'flux_limiter')
       CALL HDF5_logical_saving(group_id2, switch%impurity_radiation, 'impurity_radiation')
       CALL HDF5_logical_saving(group_id2, switch%external_heating, 'external_heating')
       CALL HDF5_logical_saving(group_id2, switch%import_diffusion_1D, 'import_diffusion_1D')
