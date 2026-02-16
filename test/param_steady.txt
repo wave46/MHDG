@@ -10,6 +10,7 @@
                                         ! true = yes (even for magnetic perturbation)
                                         ! false = no
     init                = 1             ! Initialization type: 1-analytical at nodes; 2-L2 projection
+    flux_limiter        = .false.       ! use flux limiter for ion and electron parallel conductive heat fluxes (with provided c_fli,c_fle in physics)
     external_heating    = .false.       ! True will use external from the file provided in INPUT_LST
     impurity_radiation  = .false.        ! to take into account impurity radiaion with concentration provided in PHYS_LST
     import_diffusion_1D = .false.        ! Import or not additional profile of diffuion in 1D as function of rho_pol, supply path to the file
@@ -257,6 +258,9 @@
     diff_pari           = 10            ! (3.1475e5) parallel diffusion for the ions temperature
     diff_pare           = 20            ! (1.0492e7) parallel diffusion for the electron temperature
     diff_pot            = 4             ! diffusion in the potential equation (only used for analytic tests)
+    ! **** Flux limiter coefficients
+    c_fli               = 5.e-1            ! Fraction of the free streaming flux used in the ion flux limiter
+    c_fle               = 2.e-1            ! Fraction of the free streaming flux used in the electron flux limiter
     ! **** Non isothermal exponential
     epn                 = 2.5           ! exponential of the parallel diffusion for the temperature
     ! ***** Coefficients for the vorticity model
