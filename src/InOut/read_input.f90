@@ -77,6 +77,10 @@ SUBROUTINE READ_input()
   LOGICAL               :: external_heating, external_heating_from_grid
   CHARACTER(1000)       :: external_heating_path
 
+  ! flux limiter
+  LOGICAL               :: flux_limiter
+  REAL*8                :: c_fli, c_fle
+
   ! 1D diffusion
   LOGICAL               :: import_diffusion_1D
   CHARACTER(1000)       :: diffusion_1D_path
@@ -94,7 +98,7 @@ SUBROUTINE READ_input()
   ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
-       & logrho,bxgradb,import_diffusion_1D,bohm_gyrobohm
+       & logrho,bxgradb,flux_limiter,import_diffusion_1D,bohm_gyrobohm
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension, diffusion_1D_path
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
@@ -105,11 +109,11 @@ SUBROUTINE READ_input()
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
-    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
+    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle
 #else
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
-    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource
+    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
@@ -179,6 +183,7 @@ SUBROUTINE READ_input()
   switch%convvort         = convvort
   switch%pertini          = pertini
   switch%logrho           = logrho
+  switch%flux_limiter     = flux_limiter
   switch%bxgradb          = bxgradb
   switch%external_heating = external_heating
   switch%impurity_radiation = impurity_radiation
@@ -323,6 +328,8 @@ SUBROUTINE READ_input()
   phys%diff_pari          = diff_pari
   phys%diff_pare          = diff_pare
   phys%diff_pot           = diff_pot
+  phys%c_fli              = c_fli
+  phys%c_fle              = c_fle
   phys%epn                = epn
   phys%etapar             = etapar
   phys%Potfloat           = Potfloat
@@ -495,6 +502,11 @@ SUBROUTINE READ_input()
      PRINT *, '                - applying trim:                                      ', phys%apply_trim
      PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
      PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power
+     PRINT *, '                - flux limiter applied:                               ', switch%flux_limiter
+     IF (switch%flux_limiter) THEN
+       PRINT *, '                - c_fli (ions):                                      ', phys%c_fli
+       PRINT *, '                - c_fle (electrons):                                 ', phys%c_fle
+     ENDIF
      PRINT *, '                - impurity name:                                     ', TRIM(ADJUSTL(phys%impurity_name))
      PRINT *, '                - impurity concentration:                            ', phys%impurity_concentration
      PRINT *, '                - import 1D diffusion profile:                       ', switch%import_diffusion_1D
