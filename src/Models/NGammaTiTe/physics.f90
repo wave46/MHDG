@@ -1410,8 +1410,8 @@ CONTAINS
     res = 0.d0
     
     tmin_cons = tmin/simpar%refval_temperature*3*phys%Mref/2.
-
-    IF ((U(3)-0.5*U(2)**2)/U(1)**2 > tmin_cons) THEN
+    
+    IF (U(3)/U(1) - 0.5*U(2)**2/U(1)**2  > tmin_cons) THEN
 
       res(1) = -0.5*(U(3)-2.*U(2)**2/U(1))/(U(1)*(U(3)-1./2.*U(2)**2/U(1)))
       res(2) = -3./2.*U(2)/(U(1)*(U(3)-1./2.*U(2)**2/U(1)))
