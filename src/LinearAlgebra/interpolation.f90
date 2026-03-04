@@ -98,6 +98,297 @@ CONTAINS
 
   END FUNCTION interpolate
 
+   !-----------------------------------------------------------------------
+   ! Locate the grid cell containing a coordinate and compute local parameter
+   ! t in [0,1] for that cell.
+   !
+   ! If value is outside the grid, we clamp to the first/last cell so that
+   ! interpolation routines can still evaluate safely at boundaries.
+   !-----------------------------------------------------------------------
+   SUBROUTINE find_cell_and_local_coordinate(n, vec, value, idx, t)
+      INTEGER, INTENT(IN) :: n
+      REAL*8, INTENT(IN) :: vec(n), value
+      INTEGER, INTENT(OUT) :: idx
+      REAL*8, INTENT(OUT) :: t
+      INTEGER :: lo, hi, mid
+      REAL*8 :: den
+
+      IF (value <= vec(1)) THEN
+         idx = 1
+      ELSEIF (value >= vec(n)) THEN
+         idx = n - 1
+      ELSE
+         lo = 1
+         hi = n
+         DO WHILE (hi - lo > 1)
+            mid = (lo + hi)/2
+            IF (value >= vec(mid)) THEN
+               lo = mid
+            ELSE
+               hi = mid
+            ENDIF
+         ENDDO
+         idx = lo
+      ENDIF
+
+      den = vec(idx + 1) - vec(idx)
+      IF (ABS(den) < 1.d-16) THEN
+         t = 0.d0
+      ELSE
+         t = (value - vec(idx))/den
+      ENDIF
+      t = MAX(0.d0, MIN(1.d0, t))
+   END SUBROUTINE find_cell_and_local_coordinate
+
+   !-----------------------------------------------------------------------
+   ! Build derivative fields used by bicubic Hermite interpolation.
+   !
+   ! Method:
+   ! - fx, fy: first derivatives from finite differences on a rectilinear grid
+   !   (centered in interior, one-sided at boundaries).
+   ! - fxy: derivative of fx with respect to y, computed with the same stencil.
+   !
+   ! Note: this is a local bicubic Hermite patch method (often called
+   ! "bicubic spline" in practice), not a global spline solve.
+   !-----------------------------------------------------------------------
+   SUBROUTINE build_bicubic_derivatives(ny, yvec, nx, xvec, f, fx, fy, fxy)
+      INTEGER, INTENT(IN) :: ny, nx
+      REAL*8, INTENT(IN) :: yvec(ny), xvec(nx)
+      REAL*8, INTENT(IN) :: f(ny, nx)
+      REAL*8, INTENT(OUT) :: fx(ny, nx), fy(ny, nx), fxy(ny, nx)
+      INTEGER :: i, j
+      REAL*8 :: dx, dy
+
+      DO i = 1, ny
+          DO j = 1, nx
+               IF (j == 1) THEN
+                   dx = xvec(2) - xvec(1)
+                   fx(i, j) = (f(i, 2) - f(i, 1))/dx
+               ELSEIF (j == nx) THEN
+                   dx = xvec(nx) - xvec(nx - 1)
+                   fx(i, j) = (f(i, nx) - f(i, nx - 1))/dx
+               ELSE
+                   dx = xvec(j + 1) - xvec(j - 1)
+                   fx(i, j) = (f(i, j + 1) - f(i, j - 1))/dx
+               ENDIF
+
+               IF (i == 1) THEN
+                   dy = yvec(2) - yvec(1)
+                   fy(i, j) = (f(2, j) - f(1, j))/dy
+               ELSEIF (i == ny) THEN
+                   dy = yvec(ny) - yvec(ny - 1)
+                   fy(i, j) = (f(ny, j) - f(ny - 1, j))/dy
+               ELSE
+                   dy = yvec(i + 1) - yvec(i - 1)
+                   fy(i, j) = (f(i + 1, j) - f(i - 1, j))/dy
+               ENDIF
+          ENDDO
+      ENDDO
+
+      DO i = 1, ny
+          DO j = 1, nx
+               IF (i == 1) THEN
+                   dy = yvec(2) - yvec(1)
+                   fxy(i, j) = (fx(2, j) - fx(1, j))/dy
+               ELSEIF (i == ny) THEN
+                   dy = yvec(ny) - yvec(ny - 1)
+                   fxy(i, j) = (fx(ny, j) - fx(ny - 1, j))/dy
+               ELSE
+                   dy = yvec(i + 1) - yvec(i - 1)
+                   fxy(i, j) = (fx(i + 1, j) - fx(i - 1, j))/dy
+               ENDIF
+          ENDDO
+      ENDDO
+   END SUBROUTINE build_bicubic_derivatives
+
+   !-----------------------------------------------------------------------
+   ! Evaluate bicubic Hermite interpolant value at (x,y).
+   !
+   ! Reference formulation:
+   ! - Bicubic interpolation as tensor product of 1D cubic Hermite basis.
+   ! - Basis functions used here are:
+   !     h00(t)= 2t^3-3t^2+1
+   !     h10(t)= t^3-2t^2+t
+   !     h01(t)=-2t^3+3t^2
+   !     h11(t)= t^3-t^2
+   !
+   ! These correspond to the standard Hermite form described in common
+   ! numerical analysis texts (e.g. Numerical Recipes) and the bicubic
+   ! interpolation article on Wikipedia.
+   !-----------------------------------------------------------------------
+   SUBROUTINE eval_bicubic_value(ny, yvec, nx, xvec, f, fx, fy, fxy, y, x, val)
+      INTEGER, INTENT(IN) :: ny, nx
+      REAL*8, INTENT(IN) :: yvec(ny), xvec(nx)
+      REAL*8, INTENT(IN) :: f(ny, nx), fx(ny, nx), fy(ny, nx), fxy(ny, nx)
+      REAL*8, INTENT(IN) :: y, x
+      REAL*8, INTENT(OUT) :: val
+      INTEGER :: iy, ix
+      REAL*8 :: ty, tx, dy, dx
+      REAL*8 :: h00x, h10x, h01x, h11x, h00y, h10y, h01y, h11y
+      REAL*8 :: a0, a1, b0, b1
+
+      CALL find_cell_and_local_coordinate(ny, yvec, y, iy, ty)
+      CALL find_cell_and_local_coordinate(nx, xvec, x, ix, tx)
+
+      dy = yvec(iy + 1) - yvec(iy)
+      dx = xvec(ix + 1) - xvec(ix)
+
+      h00x = 2.d0*tx**3 - 3.d0*tx**2 + 1.d0
+      h10x = tx**3 - 2.d0*tx**2 + tx
+      h01x = -2.d0*tx**3 + 3.d0*tx**2
+      h11x = tx**3 - tx**2
+
+      h00y = 2.d0*ty**3 - 3.d0*ty**2 + 1.d0
+      h10y = ty**3 - 2.d0*ty**2 + ty
+      h01y = -2.d0*ty**3 + 3.d0*ty**2
+      h11y = ty**3 - ty**2
+
+      a0 = h00x*f(iy,ix) + h10x*dx*fx(iy,ix) + h01x*f(iy,ix+1) + h11x*dx*fx(iy,ix+1)
+      a1 = h00x*f(iy+1,ix) + h10x*dx*fx(iy+1,ix) + h01x*f(iy+1,ix+1) + h11x*dx*fx(iy+1,ix+1)
+      b0 = h00x*dy*fy(iy,ix) + h10x*dx*dy*fxy(iy,ix) + h01x*dy*fy(iy,ix+1) + h11x*dx*dy*fxy(iy,ix+1)
+      b1 = h00x*dy*fy(iy+1,ix) + h10x*dx*dy*fxy(iy+1,ix) + h01x*dy*fy(iy+1,ix+1) + h11x*dx*dy*fxy(iy+1,ix+1)
+
+      val = h00y*a0 + h10y*b0 + h01y*a1 + h11y*b1
+   END SUBROUTINE eval_bicubic_value
+
+   !-----------------------------------------------------------------------
+   ! Evaluate bicubic Hermite interpolant and first derivatives at (x,y).
+   !
+   ! dval_dx and dval_dy are obtained by differentiating the Hermite basis
+   ! analytically and applying chain rule factors 1/dx and 1/dy.
+   !-----------------------------------------------------------------------
+   SUBROUTINE eval_bicubic_with_derivatives(ny, yvec, nx, xvec, f, fx, fy, fxy, y, x, val, dval_dy, dval_dx)
+      INTEGER, INTENT(IN) :: ny, nx
+      REAL*8, INTENT(IN) :: yvec(ny), xvec(nx)
+      REAL*8, INTENT(IN) :: f(ny, nx), fx(ny, nx), fy(ny, nx), fxy(ny, nx)
+      REAL*8, INTENT(IN) :: y, x
+      REAL*8, INTENT(OUT) :: val, dval_dy, dval_dx
+      INTEGER :: iy, ix
+      REAL*8 :: ty, tx, dy, dx
+      REAL*8 :: h00x, h10x, h01x, h11x, h00y, h10y, h01y, h11y
+      REAL*8 :: dh00x, dh10x, dh01x, dh11x, dh00y, dh10y, dh01y, dh11y
+      REAL*8 :: a0, a1, b0, b1
+
+      CALL find_cell_and_local_coordinate(ny, yvec, y, iy, ty)
+      CALL find_cell_and_local_coordinate(nx, xvec, x, ix, tx)
+
+      dy = yvec(iy + 1) - yvec(iy)
+      dx = xvec(ix + 1) - xvec(ix)
+
+      h00x = 2.d0*tx**3 - 3.d0*tx**2 + 1.d0
+      h10x = tx**3 - 2.d0*tx**2 + tx
+      h01x = -2.d0*tx**3 + 3.d0*tx**2
+      h11x = tx**3 - tx**2
+
+      h00y = 2.d0*ty**3 - 3.d0*ty**2 + 1.d0
+      h10y = ty**3 - 2.d0*ty**2 + ty
+      h01y = -2.d0*ty**3 + 3.d0*ty**2
+      h11y = ty**3 - ty**2
+
+      dh00x = 6.d0*tx**2 - 6.d0*tx
+      dh10x = 3.d0*tx**2 - 4.d0*tx + 1.d0
+      dh01x = -6.d0*tx**2 + 6.d0*tx
+      dh11x = 3.d0*tx**2 - 2.d0*tx
+
+      dh00y = 6.d0*ty**2 - 6.d0*ty
+      dh10y = 3.d0*ty**2 - 4.d0*ty + 1.d0
+      dh01y = -6.d0*ty**2 + 6.d0*ty
+      dh11y = 3.d0*ty**2 - 2.d0*ty
+
+      a0 = h00x*f(iy,ix) + h10x*dx*fx(iy,ix) + h01x*f(iy,ix+1) + h11x*dx*fx(iy,ix+1)
+      a1 = h00x*f(iy+1,ix) + h10x*dx*fx(iy+1,ix) + h01x*f(iy+1,ix+1) + h11x*dx*fx(iy+1,ix+1)
+      b0 = h00x*dy*fy(iy,ix) + h10x*dx*dy*fxy(iy,ix) + h01x*dy*fy(iy,ix+1) + h11x*dx*dy*fxy(iy,ix+1)
+      b1 = h00x*dy*fy(iy+1,ix) + h10x*dx*dy*fxy(iy+1,ix) + h01x*dy*fy(iy+1,ix+1) + h11x*dx*dy*fxy(iy+1,ix+1)
+
+      val = h00y*a0 + h10y*b0 + h01y*a1 + h11y*b1
+
+      dval_dx = h00y*(dh00x*f(iy,ix)/dx + dh10x*fx(iy,ix) + dh01x*f(iy,ix+1)/dx + dh11x*fx(iy,ix+1)) + &
+                     h10y*(dh00x*dy*fy(iy,ix)/dx + dh10x*dy*fxy(iy,ix) + dh01x*dy*fy(iy,ix+1)/dx + dh11x*dy*fxy(iy,ix+1)) + &
+                     h01y*(dh00x*f(iy+1,ix)/dx + dh10x*fx(iy+1,ix) + dh01x*f(iy+1,ix+1)/dx + dh11x*fx(iy+1,ix+1)) + &
+                     h11y*(dh00x*dy*fy(iy+1,ix)/dx + dh10x*dy*fxy(iy+1,ix) + dh01x*dy*fy(iy+1,ix+1)/dx + dh11x*dy*fxy(iy+1,ix+1))
+
+      dval_dy = dh00y*a0/dy + dh10y*b0/dy + dh01y*a1/dy + dh11y*b1/dy
+   END SUBROUTINE eval_bicubic_with_derivatives
+
+   !-----------------------------------------------------------------------
+   ! Evaluate bicubic Hermite interpolant, first derivatives, and pure second
+   ! derivatives at (x,y).
+   !
+   ! d2val_dx2 and d2val_dy2 are formed from second derivatives of the
+   ! Hermite basis. Mixed derivative d2/dxdy is not returned here because
+   ! current callers only need pure second derivatives.
+   !-----------------------------------------------------------------------
+   SUBROUTINE eval_bicubic_with_2nd_derivatives(ny, yvec, nx, xvec, f, fx, fy, fxy, y, x, val, dval_dy, dval_dx, d2val_dy2, d2val_dx2)
+      INTEGER, INTENT(IN) :: ny, nx
+      REAL*8, INTENT(IN) :: yvec(ny), xvec(nx)
+      REAL*8, INTENT(IN) :: f(ny, nx), fx(ny, nx), fy(ny, nx), fxy(ny, nx)
+      REAL*8, INTENT(IN) :: y, x
+      REAL*8, INTENT(OUT) :: val, dval_dy, dval_dx, d2val_dy2, d2val_dx2
+      INTEGER :: iy, ix
+      REAL*8 :: ty, tx, dy, dx
+      REAL*8 :: h00x, h10x, h01x, h11x, h00y, h10y, h01y, h11y
+      REAL*8 :: dh00x, dh10x, dh01x, dh11x, dh00y, dh10y, dh01y, dh11y
+      REAL*8 :: d2h00x, d2h10x, d2h01x, d2h11x, d2h00y, d2h10y, d2h01y, d2h11y
+      REAL*8 :: a0, a1, b0, b1
+
+      CALL find_cell_and_local_coordinate(ny, yvec, y, iy, ty)
+      CALL find_cell_and_local_coordinate(nx, xvec, x, ix, tx)
+
+      dy = yvec(iy + 1) - yvec(iy)
+      dx = xvec(ix + 1) - xvec(ix)
+
+      h00x = 2.d0*tx**3 - 3.d0*tx**2 + 1.d0
+      h10x = tx**3 - 2.d0*tx**2 + tx
+      h01x = -2.d0*tx**3 + 3.d0*tx**2
+      h11x = tx**3 - tx**2
+
+      h00y = 2.d0*ty**3 - 3.d0*ty**2 + 1.d0
+      h10y = ty**3 - 2.d0*ty**2 + ty
+      h01y = -2.d0*ty**3 + 3.d0*ty**2
+      h11y = ty**3 - ty**2
+
+      dh00x = 6.d0*tx**2 - 6.d0*tx
+      dh10x = 3.d0*tx**2 - 4.d0*tx + 1.d0
+      dh01x = -6.d0*tx**2 + 6.d0*tx
+      dh11x = 3.d0*tx**2 - 2.d0*tx
+
+      dh00y = 6.d0*ty**2 - 6.d0*ty
+      dh10y = 3.d0*ty**2 - 4.d0*ty + 1.d0
+      dh01y = -6.d0*ty**2 + 6.d0*ty
+      dh11y = 3.d0*ty**2 - 2.d0*ty
+
+      d2h00x = 12.d0*tx - 6.d0
+      d2h10x = 6.d0*tx - 4.d0
+      d2h01x = -12.d0*tx + 6.d0
+      d2h11x = 6.d0*tx - 2.d0
+
+      d2h00y = 12.d0*ty - 6.d0
+      d2h10y = 6.d0*ty - 4.d0
+      d2h01y = -12.d0*ty + 6.d0
+      d2h11y = 6.d0*ty - 2.d0
+
+      a0 = h00x*f(iy,ix) + h10x*dx*fx(iy,ix) + h01x*f(iy,ix+1) + h11x*dx*fx(iy,ix+1)
+      a1 = h00x*f(iy+1,ix) + h10x*dx*fx(iy+1,ix) + h01x*f(iy+1,ix+1) + h11x*dx*fx(iy+1,ix+1)
+      b0 = h00x*dy*fy(iy,ix) + h10x*dx*dy*fxy(iy,ix) + h01x*dy*fy(iy,ix+1) + h11x*dx*dy*fxy(iy,ix+1)
+      b1 = h00x*dy*fy(iy+1,ix) + h10x*dx*dy*fxy(iy+1,ix) + h01x*dy*fy(iy+1,ix+1) + h11x*dx*dy*fxy(iy+1,ix+1)
+
+      val = h00y*a0 + h10y*b0 + h01y*a1 + h11y*b1
+
+      dval_dx = h00y*(dh00x*f(iy,ix)/dx + dh10x*fx(iy,ix) + dh01x*f(iy,ix+1)/dx + dh11x*fx(iy,ix+1)) + &
+                     h10y*(dh00x*dy*fy(iy,ix)/dx + dh10x*dy*fxy(iy,ix) + dh01x*dy*fy(iy,ix+1)/dx + dh11x*dy*fxy(iy,ix+1)) + &
+                     h01y*(dh00x*f(iy+1,ix)/dx + dh10x*fx(iy+1,ix) + dh01x*f(iy+1,ix+1)/dx + dh11x*fx(iy+1,ix+1)) + &
+                     h11y*(dh00x*dy*fy(iy+1,ix)/dx + dh10x*dy*fxy(iy+1,ix) + dh01x*dy*fy(iy+1,ix+1)/dx + dh11x*dy*fxy(iy+1,ix+1))
+
+      dval_dy = dh00y*a0/dy + dh10y*b0/dy + dh01y*a1/dy + dh11y*b1/dy
+
+      d2val_dx2 = h00y*(d2h00x*f(iy,ix)/dx**2 + d2h10x*fx(iy,ix)/dx + d2h01x*f(iy,ix+1)/dx**2 + d2h11x*fx(iy,ix+1)/dx) + &
+                        h10y*(d2h00x*dy*fy(iy,ix)/dx**2 + d2h10x*dy*fxy(iy,ix)/dx + d2h01x*dy*fy(iy,ix+1)/dx**2 + d2h11x*dy*fxy(iy,ix+1)/dx) + &
+                        h01y*(d2h00x*f(iy+1,ix)/dx**2 + d2h10x*fx(iy+1,ix)/dx + d2h01x*f(iy+1,ix+1)/dx**2 + d2h11x*fx(iy+1,ix+1)/dx) + &
+                        h11y*(d2h00x*dy*fy(iy+1,ix)/dx**2 + d2h10x*dy*fxy(iy+1,ix)/dx + d2h01x*dy*fy(iy+1,ix+1)/dx**2 + d2h11x*dy*fxy(iy+1,ix+1)/dx)
+
+      d2val_dy2 = d2h00y*a0/dy**2 + d2h10y*b0/dy**2 + d2h01y*a1/dy**2 + d2h11y*b1/dy**2
+   END SUBROUTINE eval_bicubic_with_2nd_derivatives
+
   FUNCTION nodesearch(x, y, xy_len, x_array, y_array)
     ! Given a  point (x,y), returns the index of the closest node IN 2D
     IMPLICIT NONE
@@ -273,3 +564,4 @@ CONTAINS
   !end function lineintegration
 
 END MODULE interpolation
+ 

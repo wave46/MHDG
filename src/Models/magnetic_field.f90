@@ -215,34 +215,24 @@ CONTAINS
 
 
 
-    USE reference_element
-
     INTEGER                           :: i, ierr, ip, jp, ind, k
 #ifdef TOR3D
     INTEGER                           :: j
 #endif
     INTEGER(HID_T)                    :: file_id
     REAL*8, POINTER, DIMENSION(:, :)  :: r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D
-!!! variables for computation derivatives of the flux
-    INTEGER                           :: iel, inode
-    REAL*8                            :: shapeFunctions(refElpol%Nnodes2D,refElpol%Nnodes2D,3)
-    REAL*8                            :: Xel(refElpol%Nnodes2D,2)        !only for 2D so far
-    REAL*8                            :: J11(refElpol%Nnodes2D),J12(refElpol%Nnodes2D)
-    REAL*8                            :: J21(refElpol%Nnodes2D),J22(refElpol%Nnodes2D)
-    REAL*8                            :: iJ11(refElpol%Nnodes2D),iJ12(refElpol%Nnodes2D)
-    REAL*8                            :: iJ21(refElpol%Nnodes2D),iJ22(refElpol%Nnodes2D)
-    REAL*8                            :: Nxn(refElpol%Nnodes2D),Nyn(refElpol%Nnodes2D)
-    REAL*8                            :: detJ(refElpol%Nnodes2D)
-    REAL*8                            :: coord2D_fixed(refElpol%Nnodes2D,2)      ! applying some shift to the third node of thriangle to avoid infinite derivative
-!!! end of variables for computation derivatives of the flux
     REAL*8, ALLOCATABLE, DIMENSION(:) :: xvec, yvec
+   REAL*8, ALLOCATABLE, DIMENSION(:, :) :: flux_dx2D, flux_dy2D, flux_dxy2D
+   REAL*8, ALLOCATABLE, DIMENSION(:, :) :: Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D
     REAL*8                            :: x, y
+   REAL*8                            :: x_safe, dflux_dx, dflux_dy
     REAL*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
     CHARACTER(LEN=1000) :: fname
     CHARACTER(50)  :: nit
-    INTEGER                            :: min_ind(2)
+    INTEGER                           :: axis_ind_tmp(2)
 
-    REAL*8                            :: q_cyl, omega,a,R_min,R_max    
+   REAL*8                            :: q_cyl, omega,a,flux_axis,flux_span
+   REAL*8                            :: sign_psi, fac_2pi_field
 
 
 
@@ -320,27 +310,52 @@ CONTAINS
     r2D = r2D/phys%lscale
     z2D = z2D/phys%lscale
 
-    !finding axis
-    min_ind = MINLOC(flux2D)
-    phys%r_axis = r2D(min_ind(1),min_ind(2))
-    phys%z_axis = z2D(min_ind(1),min_ind(2))
-
-    ! Min and Max flux for inizialization
-    !phys%Flux2Dmin = minval(flux2D)
-    !phys%Flux2Dmax = maxval(flux2D)
-
     ! Interpolate
     ALLOCATE (xvec(jp))
     ALLOCATE (yvec(ip))
     xvec = r2D(1, :)
     yvec = z2D(:, 1)
+
+   ! Refine axis to mesh domain (find minimum flux only within mesh bounds)
+   CALL find_axis_in_mesh_domain(ip, jp, flux2D, yvec, xvec, axis_ind_tmp, phys%r_axis, phys%z_axis)
+
+   ALLOCATE (Bphi_dx2D(ip, jp))
+   ALLOCATE (Bphi_dy2D(ip, jp))
+   ALLOCATE (Bphi_dxy2D(ip, jp))
+   CALL build_bicubic_derivatives(ip, yvec, jp, xvec, Bphi2D, Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D)
+
+    IF (input%compute_from_flux) THEN
+       ALLOCATE (flux_dx2D(ip, jp))
+       ALLOCATE (flux_dy2D(ip, jp))
+       ALLOCATE (flux_dxy2D(ip, jp))
+       CALL build_bicubic_derivatives(ip, yvec, jp, xvec, flux2D, flux_dx2D, flux_dy2D, flux_dxy2D)
+
+       fac_2pi_field = 1.d0
+       IF (input%divide_by_2pi) fac_2pi_field = 2.d0*PI
+
+       sign_psi = determine_flux_sign(ip, jp, r2D, Br2D, Bz2D, flux_dx2D, flux_dy2D, fac_2pi_field)
+    ELSE
+       sign_psi = 1.d0
+    ENDIF
+
     DO i = 1, Mesh%Nnodes
        x = Mesh%X(i, 1)
        y = Mesh%X(i, 2)
-       Br = interpolate(ip, yvec, jp, xvec, Br2D, y, x, 1e-12)
-       Bz = interpolate(ip, yvec, jp, xvec, Bz2D, y, x, 1e-12)
-       Bt = interpolate(ip, yvec, jp, xvec, Bphi2D, y, x, 1e-12)
-       flux = interpolate(ip, yvec, jp, xvec, flux2D, y, x, 1e-12)
+       IF (input%compute_from_flux) THEN
+          CALL eval_bicubic_with_derivatives(ip, yvec, jp, xvec, flux2D, flux_dx2D, flux_dy2D, flux_dxy2D, y, x, flux, dflux_dy, dflux_dx)
+          x_safe = MAX(ABS(x), 1.d-12)
+          Br = -sign_psi*dflux_dy/x_safe/simpar%refval_length**2
+          Bz = sign_psi*dflux_dx/x_safe/simpar%refval_length**2
+          IF (input%divide_by_2pi) THEN
+             Br = Br/2.d0/PI
+             Bz = Bz/2.d0/PI
+          ENDIF
+       ELSE
+          Br = interpolate(ip, yvec, jp, xvec, Br2D, y, x, 1e-12)
+          Bz = interpolate(ip, yvec, jp, xvec, Bz2D, y, x, 1e-12)
+          flux = interpolate(ip, yvec, jp, xvec, flux2D, y, x, 1e-12)
+       ENDIF
+      CALL eval_bicubic_value(ip, yvec, jp, xvec, Bphi2D, Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D, y, x, Bt)
 
        omega = simpar%refval_charge/simpar%refval_mass*SQRT(Br**2+Bz**2+Bt**2)*simpar%refval_time
        a = SQRT((x-phys%r_axis)**2+(y-phys%z_axis)**2)
@@ -366,46 +381,15 @@ CONTAINS
        END DO
 #endif
     END DO
-    ! Field from fluxes (ONLY 2D, ONLY triangles checked)
-    ! gives nan at third point of the triangle, because its eta coordinate equal to straight 1.0
-
     IF (input%compute_from_flux) THEN
-       coord2D_fixed =  refElpol%coord2d
-       coord2D_fixed(3,2) = coord2D_fixed(3,2)-1.e-10 !! dirty trick, need to solve it later
-       CALL compute_shape_functions_at_points(refElpol,coord2D_fixed,shapeFunctions)
-       DO iel = 1, Mesh%Nelems
-          ! taking coordinates for given element
-          Xel = Mesh%X(Mesh%T(iel,:),:)
-          !Jacobian computations
-          J11 = MATMUL(shapeFunctions(:,:,2),Xel(:,1))                           ! nnodes x 1
-          J12 = MATMUL(shapeFunctions(:,:,2),Xel(:,2))                           ! nnodes x 1
-          J21 = MATMUL(shapeFunctions(:,:,3),Xel(:,1))                          ! nnodes x 1
-          J22 = MATMUL(shapeFunctions(:,:,3),Xel(:,2))                          ! nnodes x 1
-          detJ = J11*J22 - J21*J12                    ! determinant of the Jacobian
-          iJ11 = J22/detJ
-          iJ12 = -J12/detJ
-          iJ21 = -J21/detJ
-          iJ22 = J11/detJ
-          DO inode = 1, Mesh%Nnodesperelem
-             ! x and y derivatives of the shape functions
-             Nxn = iJ11(inode)*shapeFunctions(inode,:,2) + iJ12(inode)*shapeFunctions(inode,:,3)
-             Nyn = iJ21(inode)*shapeFunctions(inode,:,2) + iJ22(inode)*shapeFunctions(inode,:,3)
-             ! Remember about 2pi
-             Br = -1.*dot_PRODUCT(Nyn,phys%magnetic_flux(Mesh%T(iel,:)))/Xel(inode,1)/simpar%refval_length**2
-             Bz = dot_PRODUCT(Nxn,phys%magnetic_flux(Mesh%T(iel,:)))/Xel(inode,1)/simpar%refval_length**2
-             phys%B(Mesh%T(iel,inode),1) = Br
-             phys%B(Mesh%T(iel,inode),2) = Bz
-          ENDDO
-       ENDDO
-       IF (input%divide_by_2pi) THEN
-          phys%B(:,1) = phys%B(:,1)/2./PI
-          phys%B(:,2) = phys%B(:,2)/2./PI
-       ENDIF
+       DEALLOCATE (flux_dx2D, flux_dy2D, flux_dxy2D)
     ENDIF
+    DEALLOCATE (Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D)
 
 
-    ! Min and Max flux for inizialization
-    phys%Flux2Dmin = MINVAL(phys%magnetic_flux)
+   ! Flux at magnetic axis for normalization (avoid using global minimum over full mesh)
+   flux_axis = flux2D(axis_ind_tmp(1), axis_ind_tmp(2))
+   phys%Flux2Dmin = flux_axis
     phys%Flux2Dmax = MAXVAL(phys%magnetic_flux)
 
 #ifdef PARALL
@@ -413,23 +397,16 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmin, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
 #endif
 
-    ! Magnetic flux normalized to separatrix: PSI
-    phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/(psiSep - phys%Flux2Dmin)
+    ! Magnetic flux normalized to separatrix: PSI (axis-referenced)
+    flux_span = psiSep - phys%Flux2Dmin
+    IF (ABS(flux_span) > 1.d-14) THEN
+       phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/flux_span
+    ELSE
+       phys%magnetic_psi = 0.d0
+    ENDIF
 
-   ! Find a_minor
-   R_min = HUGE(0.0)
-   R_max = -HUGE(0.0)
-   DO i = 1, Mesh%Nnodes
-      IF (ABS(phys%magnetic_psi(i) - 1.0) < 1e-3) THEN
-        R_min = MIN(R_min, Mesh%X(i, 1))
-        R_max = MAX(R_max, Mesh%X(i, 1))
-      END IF
-   END DO
-#ifdef PARALL
-   CALL MPI_ALLREDUCE(R_min, R_min, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
-   CALL MPI_ALLREDUCE(R_max, R_max, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
-#endif
-   phys%a_minor = 0.5*(R_max - R_min)
+    ! Find a_minor from mesh nodes on psi~1 contour (robust on actual computation mesh)
+    CALL compute_a_minor_from_mesh_psi(phys%a_minor)
 
 
     IF (switch%ME) THEN
@@ -442,6 +419,98 @@ CONTAINS
     NULLIFY (r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D)
 
   END SUBROUTINE load_magnetic_field_grid
+
+  SUBROUTINE compute_a_minor_from_mesh_psi(a_minor)
+    REAL*8, INTENT(OUT) :: a_minor
+    REAL*8 :: r_min, r_max
+    INTEGER :: i
+#ifdef PARALL
+    INTEGER :: ierr
+#endif
+
+    r_min = HUGE(0.d0)
+    r_max = -HUGE(0.d0)
+    DO i = 1, Mesh%Nnodes
+       IF (ABS(phys%magnetic_psi(i) - 1.d0) < 1.d-3) THEN
+          r_min = MIN(r_min, Mesh%X(i, 1))
+          r_max = MAX(r_max, Mesh%X(i, 1))
+       ENDIF
+    ENDDO
+#ifdef PARALL
+    CALL MPI_ALLREDUCE(r_min, r_min, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(r_max, r_max, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+#endif
+
+    a_minor = 0.d0
+    IF (r_max > r_min) a_minor = 0.5d0*(r_max - r_min)
+  END SUBROUTINE compute_a_minor_from_mesh_psi
+
+   SUBROUTINE find_axis_in_mesh_domain(ny, nx, flux2D, yvec, xvec, axis_ind, r_axis, z_axis)
+    ! Find magnetic axis (minimum flux) within specified mesh domain bounds
+    INTEGER, INTENT(IN) :: ny, nx
+    REAL*8, INTENT(IN) :: flux2D(ny, nx)
+    REAL*8, INTENT(IN) :: yvec(ny), xvec(nx)
+    INTEGER, INTENT(OUT) :: axis_ind(2)
+    REAL*8, INTENT(OUT) :: r_axis, z_axis
+    
+         REAL*8 :: flux_min, r_mesh_min, r_mesh_max, z_mesh_min, z_mesh_max
+#ifdef PARALL
+      INTEGER :: ierr
+#endif
+    INTEGER :: ii, jj
+
+      r_mesh_min = MINVAL(Mesh%X(:,1))
+      r_mesh_max = MAXVAL(Mesh%X(:,1))
+      z_mesh_min = MINVAL(Mesh%X(:,2))
+      z_mesh_max = MAXVAL(Mesh%X(:,2))
+
+#ifdef PARALL
+         CALL MPI_ALLREDUCE(MPI_IN_PLACE, r_mesh_min, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
+         CALL MPI_ALLREDUCE(MPI_IN_PLACE, r_mesh_max, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+         CALL MPI_ALLREDUCE(MPI_IN_PLACE, z_mesh_min, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
+         CALL MPI_ALLREDUCE(MPI_IN_PLACE, z_mesh_max, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+#endif
+    
+    flux_min = HUGE(0.d0)
+    axis_ind = (/1, 1/)
+    
+    DO ii = 1, ny
+       DO jj = 1, nx
+          IF (xvec(jj) >= r_mesh_min .AND. xvec(jj) <= r_mesh_max .AND. &
+              yvec(ii) >= z_mesh_min .AND. yvec(ii) <= z_mesh_max) THEN
+             IF (flux2D(ii,jj) < flux_min) THEN
+                flux_min = flux2D(ii,jj)
+                axis_ind = (/ii, jj/)
+             ENDIF
+          ENDIF
+       ENDDO
+    ENDDO
+    
+    r_axis = xvec(axis_ind(2))
+    z_axis = yvec(axis_ind(1))
+  END SUBROUTINE find_axis_in_mesh_domain
+
+   REAL*8 FUNCTION determine_flux_sign(ny, nx, r2D, Br2D, Bz2D, flux_dx2D, flux_dy2D, fac_2pi_field)
+      INTEGER, INTENT(IN) :: ny, nx
+      REAL*8, INTENT(IN) :: r2D(ny, nx), Br2D(ny, nx), Bz2D(ny, nx)
+      REAL*8, INTENT(IN) :: flux_dx2D(ny, nx), flux_dy2D(ny, nx)
+      REAL*8, INTENT(IN) :: fac_2pi_field
+      INTEGER :: ii, jj
+      REAL*8 :: score_sign, x_safe, Br_ref, Bz_ref
+
+      score_sign = 0.d0
+      DO ii = 1, ny
+          DO jj = 1, nx
+               x_safe = MAX(ABS(r2D(ii,jj)), 1.d-12)
+               Br_ref = -flux_dy2D(ii,jj)/x_safe/simpar%refval_length**2/fac_2pi_field
+               Bz_ref = flux_dx2D(ii,jj)/x_safe/simpar%refval_length**2/fac_2pi_field
+               score_sign = score_sign + Br_ref*Br2D(ii,jj) + Bz_ref*Bz2D(ii,jj)
+          ENDDO
+      ENDDO
+
+      determine_flux_sign = 1.d0
+      IF (score_sign < 0.d0) determine_flux_sign = -1.d0
+   END FUNCTION determine_flux_sign
 
   !***********************************************************************
   ! Magnetic field loaded by a hdf5 file in the nodes !TODO modify for 3D
@@ -999,8 +1068,9 @@ CONTAINS
     CHARACTER(LEN=1000)    :: fname
     CHARACTER(70)        :: nit
 
-    REAL*8,POINTER,DIMENSION(:,:) :: r2D,z2D,Jtor
-    REAL*8,ALLOCATABLE,DIMENSION(:)   :: xvec,yvec
+   REAL*8,POINTER,DIMENSION(:,:) :: r2D,z2D,Jtor
+   REAL*8,ALLOCATABLE,DIMENSION(:)   :: xvec,yvec
+   REAL*8,ALLOCATABLE,DIMENSION(:,:) :: Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D
     REAL*8                            :: dt_ME,t_ME
     REAL*8                            :: x,y
     REAL*8,PARAMETER                  :: tol = 1.e-12
@@ -1080,7 +1150,12 @@ CONTAINS
     ALLOCATE(yvec(ip))
     xvec = r2D(1,:)
     yvec = z2D(:,1)
-    DO i = 1,Mesh%Nnodes
+       ALLOCATE(Jtor_dx2D(ip,jp))
+       ALLOCATE(Jtor_dy2D(ip,jp))
+       ALLOCATE(Jtor_dxy2D(ip,jp))
+       CALL build_bicubic_derivatives(ip, yvec, jp, xvec, Jtor, Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D)
+
+       DO i = 1,Mesh%Nnodes
        x = Mesh%X(i,1)
        y = Mesh%X(i,2)
        ind = i
@@ -1088,7 +1163,7 @@ CONTAINS
        DO j = 1, Mesh%Nnodes_toroidal
           ind = (j - 1)*Mesh%Nnodes + i
 #endif
-          phys%Jtor(ind) = interpolate(ip, yvec,jp, xvec,Jtor, y,x, 1e-12)
+         CALL eval_bicubic_value(ip, yvec, jp, xvec, Jtor, Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D, y, x, phys%Jtor(ind))
 #ifdef TOR3D
        END DO
 #endif
@@ -1110,7 +1185,7 @@ CONTAINS
     ENDIF
 
     ! Free memory
-    DEALLOCATE(r2D,z2D,Jtor,xvec,yvec)
+   DEALLOCATE(r2D,z2D,Jtor,xvec,yvec,Jtor_dx2D,Jtor_dy2D,Jtor_dxy2D)
     NULLIFY(r2D,z2D,Jtor)
 
   END SUBROUTINE loadJtorMap
@@ -1796,3 +1871,4 @@ SUBROUTINE adjust_ITER_puff(nli)
 END SUBROUTINE adjust_ITER_puff
 
 END MODULE Magnetic_field
+ 
