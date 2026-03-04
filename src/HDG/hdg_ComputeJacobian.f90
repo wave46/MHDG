@@ -2337,8 +2337,8 @@ CONTAINS
   
     
       ! Derivatives of flux limiters
-      flux_limiter_e_ratio = ABS(q_sh_e)/(q_fs_e)
-      flux_limiter_i_ratio = ABS(q_sh_i)/(q_fs_i)
+      flux_limiter_e_ratio = ABS(q_sh_e)/(q_fs_e)/phys%c_fle
+      flux_limiter_i_ratio = ABS(q_sh_i)/(q_fs_i)/phys%c_fli
 
       fl_deriv_e = q_sh_e*flux_limiter_e_ratio/q_fs_e
       fl_deriv_i = q_sh_i*flux_limiter_i_ratio/q_fs_i
@@ -3058,8 +3058,8 @@ ENDIF
         CALL compute_flux_limiter(q_fs_i,q_sh_i,phys%c_fli,flux_limiter_i)
 
         ! Derivative of flux limiter
-        flux_limiter_e_ratio = ABS(q_sh_e)/q_fs_e
-        flux_limiter_i_ratio = ABS(q_sh_i)/q_fs_i
+        flux_limiter_e_ratio = ABS(q_sh_e)/q_fs_e/phys%c_fle
+        flux_limiter_i_ratio = ABS(q_sh_i)/q_fs_i/phys%c_fli
 
         fl_deriv_e = q_sh_e*flux_limiter_e_ratio/q_fs_e
         fl_deriv_i = q_sh_i*flux_limiter_i_ratio/q_fs_i
@@ -3536,8 +3536,8 @@ ENDIF
         CALL compute_flux_limiter(q_fs_i,q_sh_i,phys%c_fli, flux_limiter_i)
 
         ! Derivative of flux limiter
-        flux_limiter_e_ratio = ABS(q_sh_e)/(q_fs_e)
-        flux_limiter_i_ratio = ABS(q_sh_i)/(q_fs_i)
+        flux_limiter_e_ratio = ABS(q_sh_e)/(q_fs_e)/phys%c_fle
+        flux_limiter_i_ratio = ABS(q_sh_i)/(q_fs_i)/phys%c_fli
 
         fl_deriv_e = q_sh_e*flux_limiter_e_ratio/q_fs_e
         fl_deriv_i = q_sh_i*flux_limiter_i_ratio/q_fs_i
