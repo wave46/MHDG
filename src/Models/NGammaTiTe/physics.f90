@@ -1282,8 +1282,8 @@ CONTAINS
     REAL*8 :: res, aux
     REAL*8, PARAMETER :: tol = 1.e-20
     aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
-    IF ((2./(3.*phys%Mref)*aux > 1.) .AND. (switch%testcase .NE. 2)) THEN
-      res = (3.*phys%Mref/2)**(phys%epn)
+    IF ((2./(3.*phys%Mref)*aux > phys%T_fluxlim_maxi) .AND. (switch%testcase .NE. 2)) THEN
+      res = (3.*phys%Mref/2*phys%T_fluxlim_maxi)**(phys%epn)
     ELSE
        IF (aux<tol) aux = tol
       res = aux**phys%epn
@@ -1295,8 +1295,8 @@ CONTAINS
     REAL*8 :: res, aux
     REAL*8, PARAMETER :: tol = 1.e-20
     aux = U(4)/U(1)
-    IF ((2./(3.*phys%Mref)*aux > 1.) .AND. (switch%testcase .NE. 2)) THEN
-      res = (3.*phys%Mref/2)**(phys%epn)
+    IF ((2./(3.*phys%Mref)*aux > phys%T_fluxlim_maxe) .AND. (switch%testcase .NE. 2)) THEN
+      res = (3.*phys%Mref/2*phys%T_fluxlim_maxe)**(phys%epn)
     ELSE
        IF (aux<tol) aux = tol
       res = aux**phys%epn
@@ -1311,7 +1311,7 @@ CONTAINS
 
     aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
 
-    IF ((2./(3.*phys%Mref)*aux > 1.) .AND. (switch%testcase .NE. 2)) THEN !! don't apply flux limiter if it is a convergence test
+    IF ((2./(3.*phys%Mref)*aux > phys%T_fluxlim_maxi) .AND. (switch%testcase .NE. 2)) THEN !! don't apply flux limiter if it is a convergence test
       res = 0.
     ELSE
        IF (aux<0) aux = tol
@@ -1331,7 +1331,7 @@ CONTAINS
 
     aux = U(4)/U(1)
 
-    IF ((2./(3.*phys%Mref)*aux > 1.) .AND. (switch%testcase .NE. 2)) THEN !! don't apply flux limiter if it is a convergence test
+    IF ((2./(3.*phys%Mref)*aux > phys%T_fluxlim_maxe) .AND. (switch%testcase .NE. 2)) THEN !! don't apply flux limiter if it is a convergence test
       res = 0.
     ELSE
        IF (aux<0) aux = tol
@@ -3279,8 +3279,8 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         ! Toroidal face
         tau_aux(1) = tau_aux(1) + diff_iso(1,1,1)*refElPol%ndeg/Mesh%elemSize(iel)
         tau_aux(2) = tau_aux(2) + diff_iso(2,2,1)*refElPol%ndeg/Mesh%elemSize(iel)
-          tau_aux(3) = tau_aux(3) + diff_iso(3,3,1)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_i*ABS(bn)*phys%diff_pari*(MIN(1.,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
-          tau_aux(4) = tau_aux(4) + diff_iso(4,4,1)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_e*ABS(bn)*phys%diff_pare*(MIN(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
+          tau_aux(3) = tau_aux(3) + diff_iso(3,3,1)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_i*ABS(bn)*phys%diff_pari*(MIN(phys%T_fluxlim_maxi,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
+          tau_aux(4) = tau_aux(4) + diff_iso(4,4,1)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_e*ABS(bn)*phys%diff_pare*(MIN(phys%T_fluxlim_maxe,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
         tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)*refElPol%ndeg/Mesh%elemSize(iel) !! !numer%tau(5) diff_iso(5,5,1)
