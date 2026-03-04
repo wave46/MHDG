@@ -948,6 +948,8 @@ CONTAINS
          CALL HDF5_real_saving(group_id2, phys%c_fli, 'c_fli')
          CALL HDF5_real_saving(group_id2, phys%c_fle, 'c_fle')
       ENDIF
+      CALL HDF5_real_saving(group_id2, phys%T_fluxlim_maxi, 'T_fluxlim_maxi')
+      CALL HDF5_real_saving(group_id2, phys%T_fluxlim_maxe, 'T_fluxlim_maxe')
       IF (switch%import_diffusion_1D) THEN 
          CALL HDF5_array1D_saving(group_id2, phys%rho_1D, SIZE(phys%rho_1D), 'rho_1D')
          CALL HDF5_array1D_saving(group_id2, phys%diff_n_1D, SIZE(phys%diff_n_1D), 'diff_n_1D')

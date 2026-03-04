@@ -80,6 +80,7 @@ SUBROUTINE READ_input()
   ! flux limiter
   LOGICAL               :: flux_limiter
   REAL*8                :: c_fli, c_fle
+  REAL*8                :: T_fluxlim_maxi, T_fluxlim_maxe
 
   ! 1D diffusion
   LOGICAL               :: import_diffusion_1D
@@ -109,11 +110,11 @@ SUBROUTINE READ_input()
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
-    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle
+    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
 #else
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
-    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle
+    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
@@ -330,6 +331,8 @@ SUBROUTINE READ_input()
   phys%diff_pot           = diff_pot
   phys%c_fli              = c_fli
   phys%c_fle              = c_fle
+  phys%T_fluxlim_maxi     = T_fluxlim_maxi
+  phys%T_fluxlim_maxe     = T_fluxlim_maxe
   phys%epn                = epn
   phys%etapar             = etapar
   phys%Potfloat           = Potfloat
@@ -507,6 +510,8 @@ SUBROUTINE READ_input()
        PRINT *, '                - c_fli (ions):                                      ', phys%c_fli
        PRINT *, '                - c_fle (electrons):                                 ', phys%c_fle
      ENDIF
+     PRINT *, '                - T_maxi for the flux limiter:                       ', phys%T_fluxlim_maxi
+     PRINT *, '                - T_maxe for the flux limiter:                       ', phys%T_fluxlim_maxe
      PRINT *, '                - impurity name:                                     ', TRIM(ADJUSTL(phys%impurity_name))
      PRINT *, '                - impurity concentration:                            ', phys%impurity_concentration
      PRINT *, '                - import 1D diffusion profile:                       ', switch%import_diffusion_1D
