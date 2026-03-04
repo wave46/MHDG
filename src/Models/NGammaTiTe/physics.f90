@@ -1452,14 +1452,13 @@ CONTAINS
     REAL*8, INTENT(IN)  :: qfs, qsh, c_fl
     REAL*8, INTENT(OUT) :: flux_limiter
     REAL*8, PARAMETER :: tol = 1.e-10
+    REAL*8 :: qfs_clamped
     
-    !IF ((qfs <= tol)) THEN
-    !  flux_limiter = 0.
-    !ELSEIF ((qsh <= tol)) THEN
-    !  flux_limiter = 1.
-    !ELSE
-      flux_limiter = 1./(1.+ABS(qsh)/(c_fl*qfs))
-    !ENDIF
+
+    qfs_clamped = MAX(ABS(qfs), tol)
+
+    flux_limiter = 1.0 / (1.0 + ABS(qsh) / (c_fl * qfs_clamped))
+
 
   END SUBROUTINE compute_flux_limiter
    
