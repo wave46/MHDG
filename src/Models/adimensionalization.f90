@@ -170,6 +170,10 @@ SUBROUTINE adimensionalization()
   phys%dfcoef = 2*Tev*t0/(L0**2*B0)
   phys%dexbcoef = phi0/B0*t0/L0**2
 
+  ! flux limiter max temperatures
+  phys%T_fluxlim_maxi = phys%T_fluxlim_maxi/Tev
+  phys%T_fluxlim_maxe = phys%T_fluxlim_maxe/Tev
+
   ! Store reference values
   simpar%refval_mass = mi
   simpar%refval_charge = e

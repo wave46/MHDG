@@ -307,6 +307,11 @@ MODULE types
      REAL*8                    :: ME_diff_u
      REAL*8                    :: ME_diff_e
      REAL*8                    :: ME_diff_ee
+     ! Flux limiter related
+     REAL*8                    :: c_fli ! Fraction of the free streaming flux used in the ion flux limiter
+     REAL*8                    :: c_fle ! Fraction of the free streaming flux used in the electron flux limiter
+     REAL*8                    :: T_fluxlim_maxi ! Max ion temperature [eV] in old heat flux limiter (limiting T in T^(5/2))
+     REAL*8                    :: T_fluxlim_maxe ! Max electron temperature [eV] in old heat flux limiter (limiting T in T^(5/2))
      ! Diffusion coefficients 1D imported from file
      REAL*8, POINTER           :: rho_1D(:) => NULL() ! Radial coordinate for 1D diffusion profiles
      REAL*8, POINTER           :: diff_n_1D(:) => NULL() ! Perpendicular diffusion in the continuity equation
@@ -424,6 +429,7 @@ MODULE types
      ! 1 -add sinusoidal perturbation
      ! 2 -add density blob
      LOGICAL :: logrho   ! solve for the density logarithm instead of density
+     LOGICAL :: flux_limiter ! use flux limiter for ion and electron parallel conductive heat fluxes (with provided c_fli,c_fle in physics)
      LOGICAL :: external_heating ! to read and apply external heating from input file
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
      LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs

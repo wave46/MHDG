@@ -1723,6 +1723,9 @@ CONTAINS
 #else
       REAL*8           :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
       REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
+      REAL*8           :: q_fs_i, q_fs_e, flux_limiter_e, flux_limiter_i, q_sh_e, q_sh_i
+      real*8           :: flux_limiter_i_ratio, flux_limiter_e_ratio, fl_deriv_i, fl_deriv_e
+      real*8           :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)
 #endif
 
       bn = dot_PRODUCT(bg,ng)
@@ -1774,14 +1777,47 @@ CONTAINS
       CALL compute_dAlpha_dUi(ufg,dAlpha_dUi)
       CALL compute_dAlpha_dUe(ufg,dAlpha_dUe)
 
+    ! Compute flux limiters
+    IF (switch%flux_limiter) THEN
+
+      CALL compute_free_streaming_heat_flux_electrons(ufg,q_fs_e)
+      CALL compute_free_streaming_heat_flux_ions(ufg,q_fs_i)
+
+      ! Compute spitzer-Harm heat flux
+      q_sh_e = coefe*Alphae*gme
+      q_sh_i = coefi*Alphai*gmi
+
+      CALL compute_flux_limiter(q_fs_e,q_sh_e,phys%c_fle,flux_limiter_e)
+      CALL compute_flux_limiter(q_fs_i,q_sh_i,phys%c_fli,flux_limiter_i)
+
+      ! Derivative of flux limiter
+      flux_limiter_e_ratio = ABS(q_sh_e)/q_fs_e/phys%c_fle
+      flux_limiter_i_ratio = ABS(q_sh_i)/q_fs_i/phys%c_fli
+
+      fl_deriv_e = q_sh_e*flux_limiter_e_ratio/q_fs_e
+      fl_deriv_i = q_sh_i*flux_limiter_i_ratio/q_fs_i
+
+      call compute_dfree_streaming_heat_flux_electrons_dU(ufg,dq_fs_e_dU)
+      call compute_dfree_streaming_heat_flux_ions_dU(ufg,dq_fs_i_dU)
+    ELSE
+      flux_limiter_e = 1.0
+      flux_limiter_i = 1.0
+      fl_deriv_e = 0.0
+      fl_deriv_i = 0.0
+      dq_fs_e_dU = 0.0
+      dq_fs_i_dU = 0.0
+    END IF
+
     DO i = 3,4
       DO j = 1,4
         IF (i == 3) THEN
           elMat%Aul_dir(ind_fe(i + ind_asf),iel) = elMat%Aul_dir(ind_fe(i + ind_asf),iel) - &
-                    &coefi*Ni*bn*((gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:,j),bg)))*ufg(j))
+                    &flux_limiter_i**2*Ni*bn*((coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:,j),bg)))+&
+                    &fl_deriv_i*dq_fs_i_dU(j))*ufg(j))
         ELSE
           elMat%Aul_dir(ind_fe(i + ind_asf),iel) = elMat%Aul_dir(ind_fe(i + ind_asf),iel) - &
-                    &coefe*Ni*bn*((gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:,j),bg)))*ufg(j))
+                    &flux_limiter_e**2*Ni*bn*((coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:,j),bg)))+&
+                    &fl_deriv_e*dq_fs_e_dU(j))*ufg(j))
         END IF
       END DO
     END DO
@@ -1824,6 +1860,9 @@ CONTAINS
 #ifdef TEMPERATURE
         REAL*8           :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
         REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
+        REAL*8           :: q_fs_i, q_fs_e, flux_limiter_e, flux_limiter_i, q_sh_e, q_sh_i
+        REAL*8           :: flux_limiter_i_ratio, flux_limiter_e_ratio, fl_deriv_i, fl_deriv_e
+        REAL*8           :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)
         REAL*8           :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
         REAL*8           :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
 #ifdef NEUTRAL
@@ -1980,6 +2019,40 @@ CONTAINS
         gme = dot_PRODUCT(MATMUL(Qpr,Vvece),bg)             ! scalar
         Taui = MATMUL(Qpr,dV_dUi)                      ! 2x3
         Taue = MATMUL(Qpr,dV_dUe)      ! 2x3
+
+      ! Compute flux limiters
+
+      IF (switch%flux_limiter) THEN
+        CALL compute_free_streaming_heat_flux_electrons(ufg,q_fs_e)
+        CALL compute_free_streaming_heat_flux_ions(ufg,q_fs_i)
+
+        ! Compute spitzer-Harm heat flux
+          q_sh_e = coefe*Alphae*gme
+          q_sh_i = coefi*Alphai*gmi
+
+        CALL compute_flux_limiter(q_fs_e,q_sh_e,phys%c_fle,flux_limiter_e)
+        CALL compute_flux_limiter(q_fs_i,q_sh_i,phys%c_fli,flux_limiter_i)
+
+        ! Derivative of flux limiter
+        flux_limiter_e_ratio = ABS(q_sh_e)/q_fs_e/phys%c_fle
+        flux_limiter_i_ratio = ABS(q_sh_i)/q_fs_i/phys%c_fli
+
+        fl_deriv_e = q_sh_e*flux_limiter_e_ratio/q_fs_e
+        fl_deriv_i = q_sh_i*flux_limiter_i_ratio/q_fs_i
+
+        call compute_dfree_streaming_heat_flux_electrons_dU(ufg,dq_fs_e_dU)
+        call compute_dfree_streaming_heat_flux_ions_dU(ufg,dq_fs_i_dU)
+
+      
+      ELSE
+        flux_limiter_e = 1.0
+        flux_limiter_i = 1.0
+        fl_deriv_e = 0.0
+        fl_deriv_i = 0.0
+        dq_fs_e_dU = 0.0
+        dq_fs_i_dU = 0.0
+      END IF
+
 #ifdef DNNLINEARIZED
       call compute_Dnn_dU(ufg,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,ufg)
@@ -2003,25 +2076,27 @@ CONTAINS
             indj = ind_asf + j
                  elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) + Abohm(i,j)*NiNi*bn
                  elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) -&
-                      &coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:,j),bg)))*NiNi*bn
+                      &flux_limiter_i**2*(coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:,j),bg)))+&
+                      &fl_deriv_i*dq_fs_i_dU(j))*NiNi*bn
             DO k = 1,Ndim
               elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) = elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) -&
-                &coefi*Alphai*Vveci(j)*bg(k)*NiNi*bn
+                &flux_limiter_i**2*coefi*Alphai*Vveci(j)*bg(k)*NiNi*bn
             END DO
           END DO
-              elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - coefi*Alphai*( dot_PRODUCT (MATMUL(TRANSPOSE(Taui),bg),ufg)  )*Ni*bn
+              elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - flux_limiter_i**2*coefi*Alphai*( dot_PRODUCT (MATMUL(TRANSPOSE(Taui),bg),ufg)  )*Ni*bn
         ELSE
           DO j = 1,Neq
             indj = ind_asf + j
                  elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) + Abohm(i,j)*NiNi*bn
                  elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) -&
-                      &coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:,j),bg)))*NiNi*bn
+                      &flux_limiter_e**2*(coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:,j),bg)))+&
+                      &fl_deriv_e*dq_fs_e_dU(j))*NiNi*bn
             DO k = 1,Ndim
               elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) = elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) -&
-                &coefe*Alphae*Vvece(j)*bg(k)*NiNi*bn
+                &flux_limiter_e**2*coefe*Alphae*Vvece(j)*bg(k)*NiNi*bn
             END DO
           END DO
-              elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - coefe*Alphae*( dot_PRODUCT (MATMUL(TRANSPOSE(Taue),bg),ufg)  )*Ni*bn
+              elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - flux_limiter_e**2*coefe*Alphae*( dot_PRODUCT (MATMUL(TRANSPOSE(Taue),bg),ufg)  )*Ni*bn
         ENDIF
       END DO
       !endif
@@ -2440,6 +2515,9 @@ CONTAINS
 #ifdef TEMPERATURE
         REAL*8                       :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
         REAL*8                       :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
+        REAL*8                       :: q_fs_i, q_fs_e, flux_limiter_i, flux_limiter_e, q_sh_i, q_sh_e
+        REAL*8                       :: flux_limiter_i_ratio, flux_limiter_e_ratio, fl_deriv_e, fl_deriv_i
+        REAL*8                       :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)
 #endif
 #ifdef NEUTRAL
         REAL*8                       :: recycling_coeff,  puff_coeff
@@ -2581,6 +2659,38 @@ CONTAINS
            Taui = MATMUL(Qpr,dV_dUi)                      ! 2x3
            Taue = MATMUL(Qpr,dV_dUe)      ! 2x3
 
+      ! Compute flux limiters
+
+      IF (switch%flux_limiter) THEN
+
+        CALL compute_free_streaming_heat_flux_electrons(ufg,q_fs_e)
+        CALL compute_free_streaming_heat_flux_ions(ufg,q_fs_i)
+
+        ! Compute spitzer-Harm heat flux limiters
+        q_sh_e = coefe*Alphae*gme
+        q_sh_i = coefi*Alphai*gmi
+
+        CALL compute_flux_limiter(q_fs_e, q_sh_e, phys%c_fle, flux_limiter_e)
+        CALL compute_flux_limiter(q_fs_i, q_sh_i, phys%c_fli, flux_limiter_i)
+        
+
+        ! Derivative of flux limiters
+        flux_limiter_e_ratio = ABS(q_sh_e)/q_fs_e/phys%c_fle
+        flux_limiter_i_ratio = ABS(q_sh_i)/q_fs_i/phys%c_fli        
+
+        fl_deriv_e = q_sh_e*flux_limiter_e_ratio/q_fs_e
+        fl_deriv_i = q_sh_i*flux_limiter_i_ratio/q_fs_i
+
+        call compute_dfree_streaming_heat_flux_electrons_dU(ufg,dq_fs_e_dU)
+        call compute_dfree_streaming_heat_flux_ions_dU(ufg,dq_fs_i_dU)
+      ELSE
+        flux_limiter_i = 1.
+        flux_limiter_e = 1.
+        fl_deriv_e = 0.
+        fl_deriv_i = 0.
+        dq_fs_i_dU = 0.
+        dq_fs_e_dU = 0.
+      END IF
       ! Parallel diffusion for temperature
       DO i = 1,2
         indi = ind_asf + i
@@ -2589,25 +2699,27 @@ CONTAINS
             indj = ind_asf + j
                     elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) + Abohm(i,j)*NiNi*bn
                     elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) -&
-                         &coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:,j),bg)))*NiNi*bn
+                         &flux_limiter_i**2*(coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:,j),bg)))+&
+                         &fl_deriv_i*dq_fs_i_dU(j))*NiNi*bn
             DO k = 1,Ndim
               elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) = elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) -&
-                &coefi*Alphai*Vveci(j)*bg(k)*NiNi*bn
+                &flux_limiter_i**2*coefi*Alphai*Vveci(j)*bg(k)*NiNi*bn
             END DO
           END DO
-                 elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - coefi*Alphai*( dot_PRODUCT (MATMUL(TRANSPOSE(Taui),bg),ufg)  )*Ni*bn
+                 elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - flux_limiter_i**2*coefi*Alphai*( dot_PRODUCT (MATMUL(TRANSPOSE(Taui),bg),ufg)  )*Ni*bn
         ELSE
           DO j = 1,Neq
             indj = ind_asf + j
                     elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) + Abohm(i,j)*NiNi*bn
                     elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) -&
-                         &coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:,j),bg)))*NiNi*bn
+                         &flux_limiter_e**2*(coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:,j),bg)))+&
+                         &fl_deriv_e*dq_fs_e_dU(j))*NiNi*bn
             DO k = 1,Ndim
               elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) = elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) -&
-                &coefe*Alphae*Vvece(j)*bg(k)*NiNi*bn
+                &flux_limiter_e**2*coefe*Alphae*Vvece(j)*bg(k)*NiNi*bn
             END DO
           END DO
-                 elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - coefe*Alphae*( dot_PRODUCT (MATMUL(TRANSPOSE(Taue),bg),ufg)  )*Ni*bn
+                 elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - flux_limiter_e**2*coefe*Alphae*( dot_PRODUCT (MATMUL(TRANSPOSE(Taue),bg),ufg)  )*Ni*bn
         ENDIF
       END DO
 
