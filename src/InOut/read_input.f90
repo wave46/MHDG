@@ -89,13 +89,6 @@ SUBROUTINE READ_input()
   !bohm-gyrobohm
   LOGICAL               :: bohm_gyrobohm
 
-
-
-  !preallocating adaptivity arrays
-  ALLOCATE(param_est(1000))
-  ALLOCATE(n_quant_ind(1000))
-  param_est = -1
-  n_quant_ind = -1
   ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
@@ -122,6 +115,12 @@ SUBROUTINE READ_input()
        &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
        &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
        &csolve, csbsolve, cmat, cfill, cthres, cjswp
+
+  ! preallocate adaptivity arrays after specification statements
+  ALLOCATE(param_est(1000))
+  ALLOCATE(n_quant_ind(1000))
+  param_est = -1
+  n_quant_ind = -1
 
   ! Reading the file
   uinput = 100
