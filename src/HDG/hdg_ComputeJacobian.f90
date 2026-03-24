@@ -3304,7 +3304,7 @@ ENDIF
           DO j = 1,4
             ind_jf = ind_asf + j
                     kmult = flux_limiter_e**2*(coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:,j),b)))+&
-                    +fl_deriv_e*dq_fs_e_dU(j))*NNif*bn
+                    fl_deriv_e*dq_fs_e_dU(j))*NNif*bn
             elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
                     elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
             DO k = 1,Ndim
