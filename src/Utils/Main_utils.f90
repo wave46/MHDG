@@ -714,23 +714,128 @@ CONTAINS
 
 
   SUBROUTINE update_bohmgyrobohm()
-   REAL*8, ALLOCATABLE   :: uphy(:, :),rho_poloidal(:)
-   
-   nu = SIZE(sol%u)
+  
+     INTEGER :: nu, nelem, nnode2D
+     REAL*8 :: Te_0_8, Te_1
+  
+     REAL*8, ALLOCATABLE :: uphy(:, :)
+     REAL*8, ALLOCATABLE :: uphy_el(:, :, :)
+     REAL*8, ALLOCATABLE :: psi_el(:, :)
+  
+     nu = SIZE(sol%u)
+     nelem = Mesh%Nelems
+     nnode2D = refElPol%Nnodes2D
+  
+     ALLOCATE(uphy(nu/phys%Neq, phys%npv))
+     ALLOCATE(uphy_el(nelem, nnode2D, phys%npv))
+     ALLOCATE(psi_el(nelem, nnode2D))
+  
+     CALL cons2phys(TRANSPOSE(RESHAPE(sol%u, (/phys%Neq, nu/phys%Neq/))), uphy)
+  
+     uphy_el = RESHAPE(uphy, (/nelem, nnode2D, phys%npv/))
+     psi_el = RESHAPE(phys%magnetic_psi(RESHAPE(TRANSPOSE(Mesh%T), (/SIZE(Mesh%T)/))), (/nelem, nnode2D/))
+  
+     CALL shell_average_te_from_nodes(uphy_el(:,:,8), psi_el, 0.8D0,  1.0D-3, Te_0_8)
+     CALL shell_average_te_from_nodes(uphy_el(:,:,8), psi_el, 0.95D0, 1.0D-3, Te_1)
+  
+     IF (Te_1 > 0.0D0) THEN
+        phys%delta_te = (Te_0_8 - Te_1) / Te_1
+     ELSE
+        phys%delta_te = 0.0D0
+     END IF
+  
+     DEALLOCATE(uphy)
+     DEALLOCATE(uphy_el)
+     DEALLOCATE(psi_el)
+  
+  END SUBROUTINE update_bohmgyrobohm
 
-   ALLOCATE (uphy(nu/phys%Neq, phys%npv))
-   ALLOCATE (rho_poloidal(nu/phys%Neq))
 
-   ! Compute physical variables
-   CALL cons2phys(TRANSPOSE(RESHAPE(sol%u, (/phys%Neq, nu/phys%Neq/))), uphy)
+  SUBROUTINE shell_average_te_from_nodes(te_el, psi_el, rho0, drho, te_avg)
 
-   rho_poloidal = phys%magnetic_psi(RESHAPE(TRANSPOSE(Mesh%T), (/SIZE(Mesh%T)/)))
-   rho_poloidal = SQRT(MAX(0.0, rho_poloidal))
+     REAL*8, INTENT(IN)  :: te_el(:,:), psi_el(:,:)
+     REAL*8, INTENT(IN)  :: rho0, drho
+     REAL*8, INTENT(OUT) :: te_avg
+  
+     INTEGER :: iel, i, g, Ng2D
+     REAL*8 :: pi, rho_g, dvolu, weight_g
+     REAL*8 :: num, den
+  
+     REAL*8, ALLOCATABLE :: Xel(:, :)
+     REAL*8, ALLOCATABLE :: Teel(:), psiel(:)
+     REAL*8, ALLOCATABLE :: xy(:, :)
+     REAL*8, ALLOCATABLE :: Teg(:), Psig(:)
+     REAL*8, ALLOCATABLE :: J11(:), J12(:), J21(:), J22(:), detJ(:)
+  
+     pi = ACOS(-1.0D0)
+     Ng2D = refElPol%Ngauss2d
+  
+     ALLOCATE(Xel(refElPol%Nnodes2D, 2))
+     ALLOCATE(Teel(refElPol%Nnodes2D))
+     ALLOCATE(psiel(refElPol%Nnodes2D))
+     ALLOCATE(xy(Ng2d, 2))
+     ALLOCATE(Teg(Ng2d))
+     ALLOCATE(Psig(Ng2d))
+     ALLOCATE(J11(Ng2d), J12(Ng2d), J21(Ng2d), J22(Ng2d), detJ(Ng2d))
+  
+     num = 0.0D0
+     den = 0.0D0
+  
+     DO iel = 1, Mesh%Nelems
+  
+#ifdef PARALL
+        IF (Mesh%ghostElems(iel) .NE. 0) CYCLE
+#endif
+  
+        DO i = 1, refElPol%Nnodes2D
+           Xel(i,1) = Mesh%X(Mesh%T(iel,i),1)
+           Xel(i,2) = Mesh%X(Mesh%T(iel,i),2)
+        END DO
+  
+        Teel = te_el(iel,:)
+        psiel = psi_el(iel,:)
+  
+        xy   = MATMUL(refElPol%N2D, Xel)
+        Teg  = MATMUL(refElPol%N2D, Teel)
+        Psig = MATMUL(refElPol%N2D, psiel)
+  
+        J11 = MATMUL(refElPol%Nxi2D,  Xel(:,1))
+        J12 = MATMUL(refElPol%Nxi2D,  Xel(:,2))
+        J21 = MATMUL(refElPol%Neta2D, Xel(:,1))
+        J22 = MATMUL(refElPol%Neta2D, Xel(:,2))
+        detJ = J11*J22 - J21*J12
+  
+        DO g = 1, Ng2d
+           rho_g = SQRT(MAX(0.0D0, Psig(g)))
+  
+           IF (ABS(rho_g - rho0) > drho) CYCLE
+  
+           dvolu = refElPol%gauss_weights2D(g) * ABS(detJ(g))
+           IF (switch%axisym) dvolu = dvolu * xy(g,1)
+  
+           weight_g = 2.0D0 * pi * dvolu * phys%lscale**3
+  
+           num = num + Teg(g) * weight_g
+           den = den + weight_g
+        END DO
+  
+     END DO
+  
+#ifdef PARALL
+     CALL MPI_ALLREDUCE(MPI_IN_PLACE, num, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+     CALL MPI_ALLREDUCE(MPI_IN_PLACE, den, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+  
+     IF (den > 0.0D0) THEN
+        te_avg = num / den
+     ELSE
+        te_avg = 0.0D0
+     END IF
+  
+     DEALLOCATE(Xel, Teel, psiel, xy, Teg, Psig, J11, J12, J21, J22, detJ)
+  
+  END SUBROUTINE shell_average_te_from_nodes
 
-   CALL update_delta_te(uphy(:,8), rho_poloidal)
-   
-
-   ENDSUBROUTINE update_bohmgyrobohm
 
    SUBROUTINE update_delta_te(te,rho_poloidal)
       REAL*8,INTENT(IN) :: te(:), rho_poloidal(:)
