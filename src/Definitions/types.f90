@@ -420,6 +420,7 @@ MODULE types
      LOGICAL :: ckeramp ! Chech the error amplification in the linear system solution (for very ill-conditioned matrices)
      LOGICAL :: saveNR  ! Save solution at each NR iteration
      LOGICAL :: saveTau ! Save tau on faces
+     LOGICAL :: save_reduced_profiles_1D ! Save reduced 1D flux-surface profiles with solution output
      LOGICAL :: fixdPotLim
      LOGICAL :: dirivortcore
      LOGICAL :: dirivortlim

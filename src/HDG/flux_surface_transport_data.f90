@@ -29,6 +29,7 @@ MODULE flux_surface_transport_data
      PROCEDURE :: destroy => fs_destroy
      PROCEDURE :: reset_accumulators => fs_reset_accumulators
      PROCEDURE :: build_profiles => fs_build_profiles
+     PROCEDURE :: reduce_profile_sums => fs_reduce_profile_sums
      PROCEDURE :: finalize_profiles => fs_finalize_profiles
      PROCEDURE :: write_hdf5 => fs_write_hdf5
      FINAL :: fs_finalize
@@ -114,11 +115,22 @@ CONTAINS
     rho_max_glob = fs_compute_rho_max()
     CALL fs_ensure_grid(this, rho_max_glob)
     CALL fs_accumulate_profiles(this, ures, qres)
-    CALL fs_reduce_profile_sums(this)
+    CALL this%reduce_profile_sums()
     CALL this%finalize_profiles()
 
     DEALLOCATE(ures, qres)
   END SUBROUTINE fs_build_profiles
+
+  SUBROUTINE fs_reduce_profile_sums(this)
+    CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
+#ifdef PARALL
+    INTEGER :: ierr
+
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%shell_weight, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%U_sum, this%neq*this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%Q_rad_sum, this%neq*this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+  END SUBROUTINE fs_reduce_profile_sums
 
   SUBROUTINE fs_finalize_profiles(this)
     CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
@@ -143,6 +155,7 @@ CONTAINS
     INTEGER(HID_T) :: group_id
     INTEGER :: ierr
 
+    IF (.NOT. switch%save_reduced_profiles_1D) RETURN
     IF (.NOT. this%profiles_built) RETURN
 
     CALL HDF5_group_create('transport_1d', parent_group_id, group_id, ierr)
@@ -151,6 +164,10 @@ CONTAINS
     CALL HDF5_array2D_saving(group_id, this%U_fs, SIZE(this%U_fs, 1), SIZE(this%U_fs, 2), 'U_fs')
     CALL HDF5_array2D_saving(group_id, this%Q_rad_fs, SIZE(this%Q_rad_fs, 1), SIZE(this%Q_rad_fs, 2), 'Q_rad_fs')
     CALL HDF5_group_close(group_id, ierr)
+
+    IF (MPIvar%glob_id == 0 .AND. utils%printint > 0) THEN
+       WRITE (6, *) 'Saved reduced 1D flux-surface profiles under /solution/transport_1d'
+    END IF
   END SUBROUTINE fs_write_hdf5
 
   SUBROUTINE fs_reshape_solution_fields(ures, qres)
@@ -272,17 +289,6 @@ CONTAINS
        END DO
     END DO
   END SUBROUTINE fs_accumulate_element
-
-  SUBROUTINE fs_reduce_profile_sums(this)
-    CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
-#ifdef PARALL
-    INTEGER :: ierr
-
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%shell_weight, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%U_sum, this%neq*this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%Q_rad_sum, this%neq*this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
-  END SUBROUTINE fs_reduce_profile_sums
 
   LOGICAL FUNCTION fs_is_local_element(iel)
     INTEGER, INTENT(IN) :: iel

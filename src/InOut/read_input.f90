@@ -15,7 +15,7 @@ SUBROUTINE READ_input()
   IMPLICIT NONE
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
-  LOGICAL               :: ckeramp,saveNR,filter,saveTau,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
+  LOGICAL               :: ckeramp,saveNR,filter,saveTau,save_reduced_profiles_1D,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
   INTEGER               :: thresh, difcor, tis, stab,pertini,init,order_2d
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
   INTEGER               :: uinput, printint, testcase, nrp
@@ -91,7 +91,7 @@ SUBROUTINE READ_input()
 
   ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
-       & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
+       & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, save_reduced_profiles_1D, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb,flux_limiter,import_diffusion_1D,bohm_gyrobohm
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension, diffusion_1D_path
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
@@ -176,6 +176,7 @@ SUBROUTINE READ_input()
   switch%ckeramp          = ckeramp
   switch%saveNR           = saveNR
   switch%saveTau          = saveTau
+  switch%save_reduced_profiles_1D = save_reduced_profiles_1D
   switch%gmsh2h5          = gmsh2h5
   switch%fixdPotLim       = fixdPotLim
   switch%dirivortcore     = dirivortcore
@@ -566,6 +567,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - ckeramp:                                            ', ckeramp
      PRINT *, '                - saveNR:                                             ', saveNR
      PRINT *, '                - saveTau:                                            ', saveTau
+     PRINT *, '                - save_reduced_profiles_1D:                          ', save_reduced_profiles_1D
      PRINT *, '        ***************** Numerics ****************************'
      PRINT *, '                - stabilization type:                                 ', numer%stab
      PRINT *, '                - tau(1):                                             ', numer%tau(1)
