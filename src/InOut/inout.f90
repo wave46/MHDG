@@ -542,10 +542,8 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id1, sol%u, SIZE(sol%u), 'u')
     CALL HDF5_array1D_saving(group_id1, sol%u_tilde, SIZE(sol%u_tilde), 'u_tilde')
     CALL HDF5_array1D_saving(group_id1, sol%q, SIZE(sol%q), 'q')
+    CALL fs_transport%write_hdf5(group_id1)
     CALL HDF5_group_close(group_id1, ierr)
-
-    CALL fs_transport%build_profiles()
-    CALL fs_transport%write_hdf5(file_id)
 
     ! save magnetic field and Jtor arrays
     CALL HDF5_group_create('magnetic', file_id, group_id1, ierr)
@@ -675,11 +673,6 @@ CONTAINS
     ELSE
       CALL gather_mesh(Mesh, T_glob, X_glob, Tb_glob, F_glob, N_glob, intfaces_glob, extfaces_glob, boundaryFlag_glob, Tlin_glob, periodic_faces_glob, elemSize_glob)
     ENDIF
-    
-
-    ! build distributed 1D transport diagnostics before the rank-0 HDF5 write
-    CALL fs_transport%build_profiles()
-
     ! save to file
     IF (MPIvar%glob_id .EQ. 0) THEN
 
@@ -698,9 +691,8 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, u_tilde_glob, SIZE(u_tilde_glob), 'u_tilde')
        CALL HDF5_array1D_saving(group_id1, u_glob, SIZE(u_glob), 'u')
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
+       CALL fs_transport%write_hdf5(group_id1)
        CALL HDF5_group_close(group_id1)
-
-      CALL fs_transport%write_hdf5(file_id)
 
       CALL HDF5_group_create('mesh', file_id, group_id1, ierr)
       CALL HDF5_integer_saving(group_id1,Mesh%Ndim,'Ndim')

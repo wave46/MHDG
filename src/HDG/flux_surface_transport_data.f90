@@ -21,15 +21,17 @@ MODULE flux_surface_transport_data
      REAL*8, ALLOCATABLE :: rho_grid(:)
      REAL*8, ALLOCATABLE :: shell_weight(:)
      REAL*8, ALLOCATABLE :: U_sum(:, :)
-     REAL*8, ALLOCATABLE :: Q_sum(:, :)
+     REAL*8, ALLOCATABLE :: Q_rad_sum(:, :)
      REAL*8, ALLOCATABLE :: U_fs(:, :)
-     REAL*8, ALLOCATABLE :: Q_fs(:, :)
+     REAL*8, ALLOCATABLE :: Q_rad_fs(:, :)
    CONTAINS
      PROCEDURE :: init => fs_init
      PROCEDURE :: destroy => fs_destroy
      PROCEDURE :: reset_accumulators => fs_reset_accumulators
      PROCEDURE :: build_profiles => fs_build_profiles
+     PROCEDURE :: finalize_profiles => fs_finalize_profiles
      PROCEDURE :: write_hdf5 => fs_write_hdf5
+     FINAL :: fs_finalize
   END TYPE flux_surface_transport_t
 
   TYPE(flux_surface_transport_t), SAVE :: fs_transport
@@ -54,16 +56,16 @@ CONTAINS
     ALLOCATE(this%rho_grid(this%nrho))
     ALLOCATE(this%shell_weight(this%nrho))
     ALLOCATE(this%U_sum(this%neq, this%nrho))
-    ALLOCATE(this%Q_sum(this%neq, this%nrho))
+    ALLOCATE(this%Q_rad_sum(this%neq, this%nrho))
     ALLOCATE(this%U_fs(this%neq, this%nrho))
-    ALLOCATE(this%Q_fs(this%neq, this%nrho))
+    ALLOCATE(this%Q_rad_fs(this%neq, this%nrho))
 
     DO i = 1, this%nrho
        this%rho_grid(i) = (i - 1)*this%drho
     END DO
 
-    CALL this%reset_accumulators()
     this%is_initialized = .TRUE.
+    CALL this%reset_accumulators()
   END SUBROUTINE fs_init
 
   SUBROUTINE fs_destroy(this)
@@ -72,9 +74,9 @@ CONTAINS
     IF (ALLOCATED(this%rho_grid)) DEALLOCATE(this%rho_grid)
     IF (ALLOCATED(this%shell_weight)) DEALLOCATE(this%shell_weight)
     IF (ALLOCATED(this%U_sum)) DEALLOCATE(this%U_sum)
-    IF (ALLOCATED(this%Q_sum)) DEALLOCATE(this%Q_sum)
+    IF (ALLOCATED(this%Q_rad_sum)) DEALLOCATE(this%Q_rad_sum)
     IF (ALLOCATED(this%U_fs)) DEALLOCATE(this%U_fs)
-    IF (ALLOCATED(this%Q_fs)) DEALLOCATE(this%Q_fs)
+    IF (ALLOCATED(this%Q_rad_fs)) DEALLOCATE(this%Q_rad_fs)
 
     this%is_initialized = .FALSE.
     this%profiles_built = .FALSE.
@@ -84,6 +86,12 @@ CONTAINS
     this%drho = rho_step_default
   END SUBROUTINE fs_destroy
 
+  SUBROUTINE fs_finalize(this)
+    TYPE(flux_surface_transport_t), INTENT(INOUT) :: this
+
+    CALL this%destroy()
+  END SUBROUTINE fs_finalize
+
   SUBROUTINE fs_reset_accumulators(this)
     CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
 
@@ -91,152 +99,200 @@ CONTAINS
 
     this%shell_weight = 0.d0
     this%U_sum = 0.d0
-    this%Q_sum = 0.d0
+    this%Q_rad_sum = 0.d0
     this%U_fs = 0.d0
-    this%Q_fs = 0.d0
+    this%Q_rad_fs = 0.d0
     this%profiles_built = .FALSE.
   END SUBROUTINE fs_reset_accumulators
 
   SUBROUTINE fs_build_profiles(this)
     CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
-    INTEGER :: iel, g, ieq, irho
-    INTEGER :: sizeu
-    REAL*8 :: rho_max_local, rho_max_glob
-    REAL*8 :: weight_g, rho_g, detJg, dpsi_dxi, dpsi_deta, gradpsi_norm
-    REAL*8 :: Xel(refElPol%Nnodes2D, 2)
-    REAL*8 :: psiel(refElPol%Nnodes2D)
-    REAL*8 :: ue(refElPol%Nnodes2D, phys%Neq)
-    REAL*8 :: qe(refElPol%Nnodes2D, phys%Neq*Mesh%Ndim)
-    REAL*8 :: xy(refElPol%NGauss2D, 2)
-    REAL*8 :: Psig(refElPol%NGauss2D)
-    REAL*8 :: ueg(refElPol%NGauss2D, phys%Neq)
-    REAL*8 :: qeg(refElPol%NGauss2D, phys%Neq*Mesh%Ndim)
-    REAL*8 :: J11(refElPol%NGauss2D), J12(refElPol%NGauss2D), J21(refElPol%NGauss2D), J22(refElPol%NGauss2D)
-    REAL*8 :: detJ(refElPol%NGauss2D), iJ11(refElPol%NGauss2D), iJ12(refElPol%NGauss2D), iJ21(refElPol%NGauss2D), iJ22(refElPol%NGauss2D)
-    REAL*8 :: gradpsi(2), npsi(2), gradu(2)
     REAL*8, ALLOCATABLE :: ures(:, :), qres(:, :)
-#ifdef PARALL
+    REAL*8 :: rho_max_glob
+
+    CALL fs_reshape_solution_fields(ures, qres)
+    rho_max_glob = fs_compute_rho_max()
+    CALL fs_ensure_grid(this, rho_max_glob)
+    CALL fs_accumulate_profiles(this, ures, qres)
+    CALL fs_reduce_profile_sums(this)
+    CALL this%finalize_profiles()
+
+    DEALLOCATE(ures, qres)
+  END SUBROUTINE fs_build_profiles
+
+  SUBROUTINE fs_finalize_profiles(this)
+    CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
+    INTEGER :: irho
+
+    IF (.NOT. this%is_initialized) RETURN
+
+    this%U_fs = 0.d0
+    this%Q_rad_fs = 0.d0
+    DO irho = 1, this%nrho
+       IF (this%shell_weight(irho) > rho_tol) THEN
+          this%U_fs(:, irho) = this%U_sum(:, irho)/this%shell_weight(irho)
+          this%Q_rad_fs(:, irho) = this%Q_rad_sum(:, irho)/this%shell_weight(irho)
+       END IF
+    END DO
+    this%profiles_built = .TRUE.
+  END SUBROUTINE fs_finalize_profiles
+
+  SUBROUTINE fs_write_hdf5(this, parent_group_id)
+    CLASS(flux_surface_transport_t), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: parent_group_id
+    INTEGER(HID_T) :: group_id
     INTEGER :: ierr
-#endif
+
+    IF (.NOT. this%profiles_built) RETURN
+
+    CALL HDF5_group_create('transport_1d', parent_group_id, group_id, ierr)
+    CALL HDF5_array1D_saving(group_id, this%rho_grid, SIZE(this%rho_grid), 'rho_grid')
+    CALL HDF5_array1D_saving(group_id, this%shell_weight, SIZE(this%shell_weight), 'shell_weight')
+    CALL HDF5_array2D_saving(group_id, this%U_fs, SIZE(this%U_fs, 1), SIZE(this%U_fs, 2), 'U_fs')
+    CALL HDF5_array2D_saving(group_id, this%Q_rad_fs, SIZE(this%Q_rad_fs, 1), SIZE(this%Q_rad_fs, 2), 'Q_rad_fs')
+    CALL HDF5_group_close(group_id, ierr)
+  END SUBROUTINE fs_write_hdf5
+
+  SUBROUTINE fs_reshape_solution_fields(ures, qres)
+    REAL*8, ALLOCATABLE, INTENT(OUT) :: ures(:, :), qres(:, :)
+    INTEGER :: sizeu
 
     sizeu = SIZE(sol%u)
     ALLOCATE(ures(sizeu/phys%Neq, phys%Neq))
     ALLOCATE(qres(sizeu/phys%Neq, phys%Neq*Mesh%Ndim))
     ures = TRANSPOSE(RESHAPE(sol%u, [phys%Neq, sizeu/phys%Neq]))
     qres = TRANSPOSE(RESHAPE(sol%q, [phys%Neq*Mesh%Ndim, sizeu/phys%Neq]))
+  END SUBROUTINE fs_reshape_solution_fields
+
+  FUNCTION fs_compute_rho_max() RESULT(rho_max_glob)
+    REAL*8 :: rho_max_glob
+    REAL*8 :: rho_max_local
+    INTEGER :: iel
+#ifdef PARALL
+    INTEGER :: ierr
+#endif
 
     rho_max_local = 0.d0
     DO iel = 1, Mesh%Nelems
-#ifdef PARALL
-       IF (ASSOCIATED(Mesh%ghostElems)) THEN
-          IF (Mesh%ghostElems(iel) /= 0) CYCLE
-       END IF
-#endif
-       psiel = phys%magnetic_psi(Mesh%T(iel, :))
-       rho_max_local = MAX(rho_max_local, SQRT(MAX(0.d0, MAXVAL(psiel))))
+       IF (.NOT. fs_is_local_element(iel)) CYCLE
+       rho_max_local = MAX(rho_max_local, SQRT(MAX(0.d0, MAXVAL(phys%magnetic_psi(Mesh%T(iel, :))))))
     END DO
 
     rho_max_glob = rho_max_local
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, rho_max_glob, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
 #endif
+  END FUNCTION fs_compute_rho_max
+
+  SUBROUTINE fs_ensure_grid(this, rho_max_glob)
+    CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: rho_max_glob
 
     IF ((.NOT. this%is_initialized) .OR. ABS(rho_max_glob - this%rho_max) > 0.5d0*this%drho) THEN
        CALL this%init(phys%Neq, rho_max_glob, rho_step_default)
     ELSE
        CALL this%reset_accumulators()
     END IF
+  END SUBROUTINE fs_ensure_grid
+
+  SUBROUTINE fs_accumulate_profiles(this, ures, qres)
+    CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: ures(:, :), qres(:, :)
+    INTEGER :: iel
 
     DO iel = 1, Mesh%Nelems
-#ifdef PARALL
-       IF (ASSOCIATED(Mesh%ghostElems)) THEN
-          IF (Mesh%ghostElems(iel) /= 0) CYCLE
+       IF (.NOT. fs_is_local_element(iel)) CYCLE
+       CALL fs_accumulate_element(this, iel, ures, qres)
+    END DO
+  END SUBROUTINE fs_accumulate_profiles
+
+  SUBROUTINE fs_accumulate_element(this, iel, ures, qres)
+    CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
+    INTEGER, INTENT(IN) :: iel
+    REAL*8, INTENT(IN) :: ures(:, :), qres(:, :)
+    INTEGER :: g, ieq, irho
+    REAL*8 :: rho_g, weight_g, dpsi_dxi, dpsi_deta, gradpsi_norm
+    REAL*8 :: Xel(refElPol%Nnodes2D, 2)
+    REAL*8 :: psiel(refElPol%Nnodes2D)
+    REAL*8 :: ue(refElPol%Nnodes2D, phys%Neq)
+    REAL*8 :: qe(refElPol%Nnodes2D, phys%Neq*Mesh%Ndim)
+    REAL*8 :: xy(refElPol%NGauss2D, 2)
+    REAL*8 :: psig(refElPol%NGauss2D)
+    REAL*8 :: ueg(refElPol%NGauss2D, phys%Neq)
+    REAL*8 :: qeg(refElPol%NGauss2D, phys%Neq*Mesh%Ndim)
+    REAL*8 :: J11(refElPol%NGauss2D), J12(refElPol%NGauss2D), J21(refElPol%NGauss2D), J22(refElPol%NGauss2D)
+    REAL*8 :: detJ(refElPol%NGauss2D), iJ11(refElPol%NGauss2D), iJ12(refElPol%NGauss2D), iJ21(refElPol%NGauss2D), iJ22(refElPol%NGauss2D)
+    REAL*8 :: gradpsi(2), npsi(2), gradu(2)
+
+    Xel = Mesh%X(Mesh%T(iel, :), :)
+    psiel = phys%magnetic_psi(Mesh%T(iel, :))
+    ue = ures((iel - 1)*refElPol%Nnodes2D + 1:iel*refElPol%Nnodes2D, :)
+    qe = qres((iel - 1)*refElPol%Nnodes2D + 1:iel*refElPol%Nnodes2D, :)
+
+    xy = MATMUL(refElPol%N2D, Xel)
+    psig = MATMUL(refElPol%N2D, psiel)
+    ueg = MATMUL(refElPol%N2D, ue)
+    qeg = MATMUL(refElPol%N2D, qe)
+
+    J11 = MATMUL(refElPol%Nxi2D, Xel(:, 1))
+    J12 = MATMUL(refElPol%Nxi2D, Xel(:, 2))
+    J21 = MATMUL(refElPol%Neta2D, Xel(:, 1))
+    J22 = MATMUL(refElPol%Neta2D, Xel(:, 2))
+    detJ = J11*J22 - J21*J12
+    iJ11 = J22/detJ
+    iJ12 = -J12/detJ
+    iJ21 = -J21/detJ
+    iJ22 = J11/detJ
+
+    DO g = 1, refElPol%NGauss2D
+       rho_g = SQRT(MAX(0.d0, psig(g)))
+       irho = MIN(MAX(NINT(rho_g/this%drho) + 1, 1), this%nrho)
+       weight_g = refElPol%gauss_weights2D(g)*ABS(detJ(g))
+       IF (switch%axisym) weight_g = 2.d0*pi_fs*xy(g, 1)*weight_g
+
+       this%shell_weight(irho) = this%shell_weight(irho) + weight_g
+       this%U_sum(:, irho) = this%U_sum(:, irho) + ueg(g, :)*weight_g
+
+       dpsi_dxi = DOT_PRODUCT(refElPol%Nxi2D(g, :), psiel)
+       dpsi_deta = DOT_PRODUCT(refElPol%Neta2D(g, :), psiel)
+       gradpsi(1) = iJ11(g)*dpsi_dxi + iJ12(g)*dpsi_deta
+       gradpsi(2) = iJ21(g)*dpsi_dxi + iJ22(g)*dpsi_deta
+       gradpsi_norm = SQRT(DOT_PRODUCT(gradpsi, gradpsi))
+
+       IF (gradpsi_norm > rho_tol) THEN
+          npsi = gradpsi/gradpsi_norm
+       ELSE
+          npsi = 0.d0
        END IF
-#endif
-       Xel = Mesh%X(Mesh%T(iel, :), :)
-       psiel = phys%magnetic_psi(Mesh%T(iel, :))
-       ue = ures((iel - 1)*refElPol%Nnodes2D + 1:iel*refElPol%Nnodes2D, :)
-       qe = qres((iel - 1)*refElPol%Nnodes2D + 1:iel*refElPol%Nnodes2D, :)
 
-       xy = MATMUL(refElPol%N2D, Xel)
-       Psig = MATMUL(refElPol%N2D, psiel)
-       ueg = MATMUL(refElPol%N2D, ue)
-       qeg = MATMUL(refElPol%N2D, qe)
-
-       J11 = MATMUL(refElPol%Nxi2D, Xel(:, 1))
-       J12 = MATMUL(refElPol%Nxi2D, Xel(:, 2))
-       J21 = MATMUL(refElPol%Neta2D, Xel(:, 1))
-       J22 = MATMUL(refElPol%Neta2D, Xel(:, 2))
-       detJ = J11*J22 - J21*J12
-       iJ11 = J22/detJ
-       iJ12 = -J12/detJ
-       iJ21 = -J21/detJ
-       iJ22 = J11/detJ
-
-       DO g = 1, refElPol%NGauss2D
-          rho_g = SQRT(MAX(0.d0, Psig(g)))
-          irho = MIN(MAX(NINT(rho_g/this%drho) + 1, 1), this%nrho)
-
-          detJg = ABS(detJ(g))
-          weight_g = refElPol%gauss_weights2D(g)*detJg
-          IF (switch%axisym) weight_g = 2.d0*pi_fs*xy(g, 1)*weight_g
-          weight_g = weight_g*phys%lscale**3
-
-          this%shell_weight(irho) = this%shell_weight(irho) + weight_g
-          this%U_sum(:, irho) = this%U_sum(:, irho) + ueg(g, :)*weight_g
-
-          dpsi_dxi = DOT_PRODUCT(refElPol%Nxi2D(g, :), psiel)
-          dpsi_deta = DOT_PRODUCT(refElPol%Neta2D(g, :), psiel)
-          gradpsi(1) = iJ11(g)*dpsi_dxi + iJ12(g)*dpsi_deta
-          gradpsi(2) = iJ21(g)*dpsi_dxi + iJ22(g)*dpsi_deta
-          gradpsi_norm = SQRT(DOT_PRODUCT(gradpsi, gradpsi))
-
-          IF (gradpsi_norm > rho_tol) THEN
-             npsi = gradpsi/gradpsi_norm
-          ELSE
-             npsi = 0.d0
-          END IF
-
-          DO ieq = 1, this%neq
-             gradu(1) = qeg(g, (ieq - 1)*Mesh%Ndim + 1)
-             gradu(2) = qeg(g, (ieq - 1)*Mesh%Ndim + 2)
-             this%Q_sum(ieq, irho) = this%Q_sum(ieq, irho) + DOT_PRODUCT(gradu, npsi)*weight_g
-          END DO
+       DO ieq = 1, this%neq
+          gradu(1) = qeg(g, (ieq - 1)*Mesh%Ndim + 1)
+          gradu(2) = qeg(g, (ieq - 1)*Mesh%Ndim + 2)
+          this%Q_rad_sum(ieq, irho) = this%Q_rad_sum(ieq, irho) + DOT_PRODUCT(gradu, npsi)*weight_g
        END DO
     END DO
+  END SUBROUTINE fs_accumulate_element
 
+  SUBROUTINE fs_reduce_profile_sums(this)
+    CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
 #ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%shell_weight, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%U_sum, this%neq*this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%Q_sum, this%neq*this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
-
-    DO irho = 1, this%nrho
-       IF (this%shell_weight(irho) > rho_tol) THEN
-          this%U_fs(:, irho) = this%U_sum(:, irho)/this%shell_weight(irho)
-          this%Q_fs(:, irho) = this%Q_sum(:, irho)/this%shell_weight(irho)
-       END IF
-    END DO
-
-    this%profiles_built = .TRUE.
-
-    DEALLOCATE(ures, qres)
-  END SUBROUTINE fs_build_profiles
-
-  SUBROUTINE fs_write_hdf5(this, file_or_group_id)
-    CLASS(flux_surface_transport_t), INTENT(IN) :: this
-    INTEGER(HID_T), INTENT(IN) :: file_or_group_id
-    INTEGER(HID_T) :: group_id
     INTEGER :: ierr
 
-    IF (.NOT. this%profiles_built) RETURN
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%shell_weight, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%U_sum, this%neq*this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%Q_rad_sum, this%neq*this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+  END SUBROUTINE fs_reduce_profile_sums
 
-    CALL HDF5_group_create('transport_1d', file_or_group_id, group_id, ierr)
-    CALL HDF5_array1D_saving(group_id, this%rho_grid, SIZE(this%rho_grid), 'rho_grid')
-    CALL HDF5_array1D_saving(group_id, this%shell_weight, SIZE(this%shell_weight), 'shell_weight')
-    CALL HDF5_array2D_saving(group_id, this%U_fs, SIZE(this%U_fs, 1), SIZE(this%U_fs, 2), 'U_fs')
-    CALL HDF5_array2D_saving(group_id, this%Q_fs, SIZE(this%Q_fs, 1), SIZE(this%Q_fs, 2), 'Q_fs')
-    CALL HDF5_group_close(group_id, ierr)
-  END SUBROUTINE fs_write_hdf5
+  LOGICAL FUNCTION fs_is_local_element(iel)
+    INTEGER, INTENT(IN) :: iel
+
+    fs_is_local_element = .TRUE.
+#ifdef PARALL
+    IF (ASSOCIATED(Mesh%ghostElems)) THEN
+       fs_is_local_element = Mesh%ghostElems(iel) == 0
+    END IF
+#endif
+  END FUNCTION fs_is_local_element
 
 END MODULE flux_surface_transport_data
