@@ -2,6 +2,7 @@ MODULE flux_surface_transport_data
   USE globals
   USE MPI_OMP
   USE HDF5_io_module
+  USE interpolation, ONLY: find_cell_and_local_coordinate
   IMPLICIT NONE
 
   PRIVATE
@@ -31,6 +32,8 @@ MODULE flux_surface_transport_data
      PROCEDURE :: build_profiles => fs_build_profiles
      PROCEDURE :: reduce_profile_sums => fs_reduce_profile_sums
      PROCEDURE :: finalize_profiles => fs_finalize_profiles
+     PROCEDURE :: interp_U => fs_interp_U
+     PROCEDURE :: interp_Q_rad => fs_interp_Q_rad
      PROCEDURE :: write_hdf5 => fs_write_hdf5
      FINAL :: fs_finalize
   END TYPE flux_surface_transport_t
@@ -148,6 +151,23 @@ CONTAINS
     END DO
     this%profiles_built = .TRUE.
   END SUBROUTINE fs_finalize_profiles
+
+
+  SUBROUTINE fs_interp_U(this, rho, U_rho)
+    CLASS(flux_surface_transport_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho
+    REAL*8, INTENT(OUT) :: U_rho(:)
+
+    CALL fs_interp_profile(this, rho, this%U_fs, U_rho)
+  END SUBROUTINE fs_interp_U
+
+  SUBROUTINE fs_interp_Q_rad(this, rho, Q_rad_rho)
+    CLASS(flux_surface_transport_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho
+    REAL*8, INTENT(OUT) :: Q_rad_rho(:)
+
+    CALL fs_interp_profile(this, rho, this%Q_rad_fs, Q_rad_rho)
+  END SUBROUTINE fs_interp_Q_rad
 
   SUBROUTINE fs_write_hdf5(this, parent_group_id)
     CLASS(flux_surface_transport_t), INTENT(IN) :: this
@@ -290,6 +310,91 @@ CONTAINS
        END DO
     END DO
   END SUBROUTINE fs_accumulate_element
+
+
+  SUBROUTINE fs_interp_profile(this, rho, profile_fs, profile_rho)
+    CLASS(flux_surface_transport_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho
+    REAL*8, INTENT(IN) :: profile_fs(:, :)
+    REAL*8, INTENT(OUT) :: profile_rho(:)
+    INTEGER :: ilow, ihigh
+    REAL*8 :: alpha, rho_eval, rho_low, rho_high
+
+    profile_rho = 0.d0
+
+    IF (SIZE(profile_rho) /= SIZE(profile_fs, 1)) RETURN
+    IF (.NOT. this%profiles_built) RETURN
+    IF (this%nrho <= 0) RETURN
+
+    IF (this%nrho == 1) THEN
+       IF (this%shell_weight(1) > rho_tol) profile_rho = profile_fs(:, 1)
+       RETURN
+    END IF
+
+    CALL find_cell_and_local_coordinate(this%nrho, this%rho_grid, rho, ilow, alpha)
+    ihigh = MIN(ilow + 1, this%nrho)
+
+    IF (this%shell_weight(ilow) > rho_tol .AND. this%shell_weight(ihigh) > rho_tol) THEN
+       profile_rho = (1.d0 - alpha)*profile_fs(:, ilow) + alpha*profile_fs(:, ihigh)
+       RETURN
+    END IF
+
+    ilow = fs_find_valid_left(this, ilow)
+    ihigh = fs_find_valid_right(this, ihigh)
+
+    IF (ilow <= 0 .AND. ihigh <= 0) RETURN
+    IF (ilow <= 0) THEN
+       profile_rho = profile_fs(:, ihigh)
+       RETURN
+    END IF
+    IF (ihigh <= 0) THEN
+       profile_rho = profile_fs(:, ilow)
+       RETURN
+    END IF
+    IF (ilow == ihigh) THEN
+       profile_rho = profile_fs(:, ilow)
+       RETURN
+    END IF
+
+    rho_low = this%rho_grid(ilow)
+    rho_high = this%rho_grid(ihigh)
+    rho_eval = MIN(MAX(rho, rho_low), rho_high)
+    IF (rho_high <= rho_low + rho_tol) THEN
+       profile_rho = profile_fs(:, ilow)
+       RETURN
+    END IF
+
+    alpha = (rho_eval - rho_low)/(rho_high - rho_low)
+    profile_rho = (1.d0 - alpha)*profile_fs(:, ilow) + alpha*profile_fs(:, ihigh)
+  END SUBROUTINE fs_interp_profile
+
+  INTEGER FUNCTION fs_find_valid_left(this, istart)
+    CLASS(flux_surface_transport_t), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: istart
+    INTEGER :: i
+
+    fs_find_valid_left = 0
+    DO i = MIN(MAX(istart, 1), this%nrho), 1, -1
+       IF (this%shell_weight(i) > rho_tol) THEN
+          fs_find_valid_left = i
+          RETURN
+       END IF
+    END DO
+  END FUNCTION fs_find_valid_left
+
+  INTEGER FUNCTION fs_find_valid_right(this, istart)
+    CLASS(flux_surface_transport_t), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: istart
+    INTEGER :: i
+
+    fs_find_valid_right = 0
+    DO i = MIN(MAX(istart, 1), this%nrho), this%nrho
+       IF (this%shell_weight(i) > rho_tol) THEN
+          fs_find_valid_right = i
+          RETURN
+       END IF
+    END DO
+  END FUNCTION fs_find_valid_right
 
   LOGICAL FUNCTION fs_is_local_element(iel)
     INTEGER, INTENT(IN) :: iel
