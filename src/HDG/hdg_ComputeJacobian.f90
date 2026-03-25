@@ -1352,7 +1352,9 @@ CONTAINS
       REAL*8                        :: NxyzNi(Npel,Npel,3),Nxyzg(Npel,3)
       REAL*8                        :: upg(Ng2d,phys%npv)
       REAL*8                        :: Bmod_nod(Npel),b_nod(Npel,3),b(Ng2d,3),Bmod(Ng2d),divbg,driftg(3),gradbmod(3)
+#ifdef KEQUATION      
       REAL*8                        :: b_tor_nod(Npel),b_tor(Ng2d),gradbtor(3)
+#endif
       REAL*8                        :: omega(Ng2d),q_cyl(Ng2d)
     real*8                        :: bg(3), Jtor(Ng2d)
     real*8                        :: diff_iso_vol(Neq,Neq,Ng2d),diff_ani_vol(Neq,Neq,Ng2d)
@@ -1398,6 +1400,8 @@ CONTAINS
 #ifdef KEQUATION
     ! Toroidal magnetic field absolute value at element nodes
       b_tor_nod = ABS(Bel(:,3))
+      ! Toroidal magnetic field absolute value at Gauss points
+      b_tor = MATMUL(refElPol%N2D,b_tor_nod)
 #endif
 
     ! Magnetic field norm and direction at Gauss points
@@ -1405,8 +1409,7 @@ CONTAINS
       b = MATMUL(refElPol%N2D,b_nod)
 
 
-    ! Toroidal magnetic field absolute value at Gauss points
-      b_tor = MATMUL(refElPol%N2D,b_tor_nod)
+
 
     ! omega and q_cyl at Gauss points
       omega = MATMUL(refElPol%N2D,omegael)
