@@ -9,6 +9,7 @@
 MODULE in_out
   USE HDF5
   USE HDF5_io_module
+  USE flux_surface_transport_data
   USE GLOBALS
   USE MPI_OMP
   USE printutils
@@ -543,6 +544,9 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id1, sol%q, SIZE(sol%q), 'q')
     CALL HDF5_group_close(group_id1, ierr)
 
+    CALL fs_transport%build_profiles()
+    CALL fs_transport%write_hdf5(file_id)
+
     ! save magnetic field and Jtor arrays
     CALL HDF5_group_create('magnetic', file_id, group_id1, ierr)
     ! Save magnetic field
@@ -673,6 +677,9 @@ CONTAINS
     ENDIF
     
 
+    ! build distributed 1D transport diagnostics before the rank-0 HDF5 write
+    CALL fs_transport%build_profiles()
+
     ! save to file
     IF (MPIvar%glob_id .EQ. 0) THEN
 
@@ -693,7 +700,8 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
        CALL HDF5_group_close(group_id1)
 
-       
+      CALL fs_transport%write_hdf5(file_id)
+
       CALL HDF5_group_create('mesh', file_id, group_id1, ierr)
       CALL HDF5_integer_saving(group_id1,Mesh%Ndim,'Ndim')
       CALL HDF5_integer_saving(group_id1,Mesh%Nno_glob,'Nnodes')
