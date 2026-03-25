@@ -263,7 +263,8 @@ CONTAINS
 
     DO g = 1, refElPol%NGauss2D
        rho_g = SQRT(MAX(0.d0, psig(g)))
-       irho = MIN(MAX(NINT(rho_g/this%drho) + 1, 1), this%nrho)
+       irho = FLOOR(rho_g/this%drho) + 1
+       irho = MIN(MAX(irho, 1), this%nrho)
        weight_g = refElPol%gauss_weights2D(g)*ABS(detJ(g))
        IF (switch%axisym) weight_g = 2.d0*pi_fs*xy(g, 1)*weight_g
 
