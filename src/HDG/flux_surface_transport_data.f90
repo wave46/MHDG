@@ -10,7 +10,8 @@ MODULE flux_surface_transport_data
 
   REAL*8, PARAMETER :: pi_fs = 4.d0*DATAN(1.d0)
   REAL*8, PARAMETER :: rho_step_default = 1.d-2
-  REAL*8, PARAMETER :: rho_tol = 1.d-12
+  REAL*8, PARAMETER :: shell_weight_tol = 1.d-12
+  REAL*8, PARAMETER :: gradpsi_tol = 1.d-12
 
   TYPE :: flux_surface_transport_t
      LOGICAL :: is_initialized = .FALSE.
@@ -34,6 +35,7 @@ MODULE flux_surface_transport_data
      PROCEDURE :: finalize_profiles => fs_finalize_profiles
      PROCEDURE :: interp_U => fs_interp_U
      PROCEDURE :: interp_Q_rad => fs_interp_Q_rad
+     PROCEDURE :: interp_scalar => fs_interp_scalar
      PROCEDURE :: write_hdf5 => fs_write_hdf5
      FINAL :: fs_finalize
   END TYPE flux_surface_transport_t
@@ -144,7 +146,7 @@ CONTAINS
     this%U_fs = 0.d0
     this%Q_rad_fs = 0.d0
     DO irho = 1, this%nrho
-       IF (this%shell_weight(irho) > rho_tol) THEN
+       IF (this%shell_weight(irho) > shell_weight_tol) THEN
           this%U_fs(:, irho) = this%U_sum(:, irho)/this%shell_weight(irho)
           this%Q_rad_fs(:, irho) = this%Q_rad_sum(:, irho)/this%shell_weight(irho)
        END IF
@@ -168,6 +170,62 @@ CONTAINS
 
     CALL fs_interp_profile(this, rho, this%Q_rad_fs, Q_rad_rho)
   END SUBROUTINE fs_interp_Q_rad
+
+  SUBROUTINE fs_interp_scalar(this, rho, profile_fs, value)
+    CLASS(flux_surface_transport_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho
+    REAL*8, INTENT(IN) :: profile_fs(:)
+    REAL*8, INTENT(OUT) :: value
+    INTEGER :: ilow, ihigh
+    REAL*8 :: alpha, rho_eval, rho_low, rho_high
+
+    value = 0.d0
+
+    IF (SIZE(profile_fs) /= this%nrho) RETURN
+    IF (.NOT. this%profiles_built) RETURN
+    IF (this%nrho <= 0) RETURN
+
+    IF (this%nrho == 1) THEN
+       IF (this%shell_weight(1) > shell_weight_tol) value = profile_fs(1)
+       RETURN
+    END IF
+
+    CALL find_cell_and_local_coordinate(this%nrho, this%rho_grid, rho, ilow, alpha)
+    ihigh = MIN(ilow + 1, this%nrho)
+
+    IF (this%shell_weight(ilow) > shell_weight_tol .AND. this%shell_weight(ihigh) > shell_weight_tol) THEN
+       value = (1.d0 - alpha)*profile_fs(ilow) + alpha*profile_fs(ihigh)
+       RETURN
+    END IF
+
+    ilow = fs_find_valid_left(this, ilow)
+    ihigh = fs_find_valid_right(this, ihigh)
+
+    IF (ilow <= 0 .AND. ihigh <= 0) RETURN
+    IF (ilow <= 0) THEN
+       value = profile_fs(ihigh)
+       RETURN
+    END IF
+    IF (ihigh <= 0) THEN
+       value = profile_fs(ilow)
+       RETURN
+    END IF
+    IF (ilow == ihigh) THEN
+       value = profile_fs(ilow)
+       RETURN
+    END IF
+
+    rho_low = this%rho_grid(ilow)
+    rho_high = this%rho_grid(ihigh)
+    rho_eval = MIN(MAX(rho, rho_low), rho_high)
+    IF (rho_high <= rho_low + gradpsi_tol) THEN
+       value = profile_fs(ilow)
+       RETURN
+    END IF
+
+    alpha = (rho_eval - rho_low)/(rho_high - rho_low)
+    value = (1.d0 - alpha)*profile_fs(ilow) + alpha*profile_fs(ihigh)
+  END SUBROUTINE fs_interp_scalar
 
   SUBROUTINE fs_write_hdf5(this, parent_group_id)
     CLASS(flux_surface_transport_t), INTENT(IN) :: this
@@ -297,7 +355,7 @@ CONTAINS
        gradpsi(2) = iJ21(g)*dpsi_dxi + iJ22(g)*dpsi_deta
        gradpsi_norm = SQRT(DOT_PRODUCT(gradpsi, gradpsi))
 
-       IF (gradpsi_norm > rho_tol) THEN
+       IF (gradpsi_norm > gradpsi_tol) THEN
           npsi = gradpsi/gradpsi_norm
        ELSE
           npsi = 0.d0
@@ -327,14 +385,14 @@ CONTAINS
     IF (this%nrho <= 0) RETURN
 
     IF (this%nrho == 1) THEN
-       IF (this%shell_weight(1) > rho_tol) profile_rho = profile_fs(:, 1)
+       IF (this%shell_weight(1) > shell_weight_tol) profile_rho = profile_fs(:, 1)
        RETURN
     END IF
 
     CALL find_cell_and_local_coordinate(this%nrho, this%rho_grid, rho, ilow, alpha)
     ihigh = MIN(ilow + 1, this%nrho)
 
-    IF (this%shell_weight(ilow) > rho_tol .AND. this%shell_weight(ihigh) > rho_tol) THEN
+    IF (this%shell_weight(ilow) > shell_weight_tol .AND. this%shell_weight(ihigh) > shell_weight_tol) THEN
        profile_rho = (1.d0 - alpha)*profile_fs(:, ilow) + alpha*profile_fs(:, ihigh)
        RETURN
     END IF
@@ -359,7 +417,7 @@ CONTAINS
     rho_low = this%rho_grid(ilow)
     rho_high = this%rho_grid(ihigh)
     rho_eval = MIN(MAX(rho, rho_low), rho_high)
-    IF (rho_high <= rho_low + rho_tol) THEN
+    IF (rho_high <= rho_low + gradpsi_tol) THEN
        profile_rho = profile_fs(:, ilow)
        RETURN
     END IF
@@ -375,7 +433,7 @@ CONTAINS
 
     fs_find_valid_left = 0
     DO i = MIN(MAX(istart, 1), this%nrho), 1, -1
-       IF (this%shell_weight(i) > rho_tol) THEN
+       IF (this%shell_weight(i) > shell_weight_tol) THEN
           fs_find_valid_left = i
           RETURN
        END IF
@@ -389,7 +447,7 @@ CONTAINS
 
     fs_find_valid_right = 0
     DO i = MIN(MAX(istart, 1), this%nrho), this%nrho
-       IF (this%shell_weight(i) > rho_tol) THEN
+       IF (this%shell_weight(i) > shell_weight_tol) THEN
           fs_find_valid_right = i
           RETURN
        END IF
