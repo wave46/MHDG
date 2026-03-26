@@ -10,6 +10,8 @@
   rho_model_max = 1.0
 
   ! Mixed Bohm / gyro-Bohm coefficients.
+  ! Reference: JETTO/NTCC mixed_bohm_gyro_bohm model description.
+
   c_bohm_i = 1.6e-4
   c_gyrobohm_i = 1.75e-2
   c_bohm_e = 8.e-5
@@ -19,12 +21,17 @@
 
   ! Pinch model selector:
   ! 1 -> Militello collisionality-dependent pinch
-  ! 2 -> geometric pinch
-  pinch_model = 1
+  !      Reference: E. Militello-Asp et al., NF 2022-style suppression factor.
+  ! 2 -> Polevoi-style geometric pinch baseline
+  !      with v_pinch = C * D * r / a^2.
+  !      Reference for integrated-model usage: Polevoi et al., Nuclear Fusion (2020).
+  pinch_model = 2
 
-  ! Shared pinch coefficient.
+  ! Pinch coefficient C.
+  ! For benchmarking we currently use one shared coefficient for both models,
+  ! but in practice the Polevoi-style baseline may need a different tuned value.
   c_pinch = 0.5
 
-  ! Collisionality threshold used by the Militello suppression factor.
+  ! Collisionality threshold used only by the Militello suppression factor.
   nu_th = 0.04
 /
