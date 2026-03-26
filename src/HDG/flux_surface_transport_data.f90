@@ -272,7 +272,7 @@ CONTAINS
     INTEGER(HID_T) :: group_id
     INTEGER :: ierr
 
-    IF (.NOT. switch%save_reduced_profiles_1D) RETURN
+    IF (.NOT. switch%transport_1d) RETURN
     IF (.NOT. this%profiles_built) RETURN
 
     CALL HDF5_group_create('transport_1d', parent_group_id, group_id, ierr)

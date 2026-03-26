@@ -178,7 +178,7 @@ CONTAINS
 #endif
 
   SUBROUTINE update_reduced_transport_profiles()
-    IF (.NOT. switch%save_reduced_profiles_1D) RETURN
+    IF (.NOT. switch%transport_1d) RETURN
 
     CALL fs_transport%build_profiles()
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)

@@ -176,7 +176,7 @@ CONTAINS
     INTEGER(HID_T) :: group_id
     INTEGER :: ierr
 
-    IF (.NOT. switch%save_reduced_profiles_1D) RETURN
+    IF (.NOT. switch%transport_1d) RETURN
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
