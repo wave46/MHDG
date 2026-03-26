@@ -35,6 +35,7 @@ MODULE transport_models_1d
      REAL*8, ALLOCATABLE :: dpe_dr_fs(:)
      REAL*8, ALLOCATABLE :: nuestar_fs(:)
      REAL*8, ALLOCATABLE :: chi_bohm_fs(:)
+     REAL*8, ALLOCATABLE :: chi_gyrobohm_fs(:)
    CONTAINS
      PROCEDURE :: init => tm1d_init
      PROCEDURE :: destroy => tm1d_destroy
@@ -43,6 +44,7 @@ MODULE transport_models_1d
      PROCEDURE :: compute_delta_te => tm1d_compute_delta_te
      PROCEDURE :: compute_collisionality_profile => tm1d_compute_collisionality_profile
      PROCEDURE :: compute_bohm_profile => tm1d_compute_bohm_profile
+     PROCEDURE :: compute_gyrobohm_profile => tm1d_compute_gyrobohm_profile
      PROCEDURE :: write_hdf5 => tm1d_write_hdf5
      FINAL :: tm1d_finalize
   END TYPE transport_model_1d_t
@@ -81,6 +83,7 @@ CONTAINS
     ALLOCATE(this%dpe_dr_fs(this%nrho))
     ALLOCATE(this%nuestar_fs(this%nrho))
     ALLOCATE(this%chi_bohm_fs(this%nrho))
+    ALLOCATE(this%chi_gyrobohm_fs(this%nrho))
 
     this%te_fs = 0.d0
     this%ti_fs = 0.d0
@@ -97,6 +100,7 @@ CONTAINS
     this%dpe_dr_fs = 0.d0
     this%nuestar_fs = 0.d0
     this%chi_bohm_fs = 0.d0
+    this%chi_gyrobohm_fs = 0.d0
     this%delta_te = 0.d0
     this%is_initialized = .TRUE.
   END SUBROUTINE tm1d_init
@@ -119,6 +123,7 @@ CONTAINS
     IF (ALLOCATED(this%dpe_dr_fs)) DEALLOCATE(this%dpe_dr_fs)
     IF (ALLOCATED(this%nuestar_fs)) DEALLOCATE(this%nuestar_fs)
     IF (ALLOCATED(this%chi_bohm_fs)) DEALLOCATE(this%chi_bohm_fs)
+    IF (ALLOCATED(this%chi_gyrobohm_fs)) DEALLOCATE(this%chi_gyrobohm_fs)
 
     this%is_initialized = .FALSE.
     this%nrho = 0
@@ -177,6 +182,7 @@ CONTAINS
     CALL this%compute_delta_te(fs_data)
     CALL this%compute_collisionality_profile()
     CALL this%compute_bohm_profile()
+    CALL this%compute_gyrobohm_profile()
 
     DEALLOCATE(ua, up)
   END SUBROUTINE tm1d_update_from_flux_surfaces
@@ -225,6 +231,17 @@ CONTAINS
          ABS(this%dpe_dr_fs) / MAX(this%pe_fs, model_tol) * this%delta_te
   END SUBROUTINE tm1d_compute_bohm_profile
 
+  SUBROUTINE tm1d_compute_gyrobohm_profile(this)
+    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+    REAL*8 :: rho_s_te_fs(this%nrho)
+
+    IF (.NOT. this%is_initialized) RETURN
+    IF (this%nrho <= 0) RETURN
+
+    rho_s_te_fs = this%cs_te_fs / MAX(this%omega_fs, model_tol)
+    this%chi_gyrobohm_fs = rho_s_te_fs**2 * this%cs_te_fs * ABS(this%dte_dr_fs) / MAX(this%te_fs, model_tol)
+  END SUBROUTINE tm1d_compute_gyrobohm_profile
+
   SUBROUTINE tm1d_write_hdf5(this, parent_group_id)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     INTEGER(HID_T), INTENT(IN) :: parent_group_id
@@ -251,6 +268,7 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id, this%dpe_dr_fs, SIZE(this%dpe_dr_fs), 'dpe_dr_fs')
     CALL HDF5_array1D_saving(group_id, this%nuestar_fs, SIZE(this%nuestar_fs), 'nuestar_fs')
     CALL HDF5_array1D_saving(group_id, this%chi_bohm_fs, SIZE(this%chi_bohm_fs), 'chi_bohm_fs')
+    CALL HDF5_array1D_saving(group_id, this%chi_gyrobohm_fs, SIZE(this%chi_gyrobohm_fs), 'chi_gyrobohm_fs')
     CALL HDF5_real_saving(group_id, this%a_minor, 'a_minor')
     CALL HDF5_real_saving(group_id, this%rho_core, 'rho_core')
     CALL HDF5_real_saving(group_id, this%rho_edge, 'rho_edge')
