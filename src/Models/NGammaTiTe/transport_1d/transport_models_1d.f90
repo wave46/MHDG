@@ -32,12 +32,14 @@ MODULE transport_models_1d
      REAL*8, ALLOCATABLE :: cs_te_fs(:)
      REAL*8, ALLOCATABLE :: dte_dr_fs(:)
      REAL*8, ALLOCATABLE :: dpe_dr_fs(:)
+     REAL*8, ALLOCATABLE :: nuestar_fs(:)
    CONTAINS
      PROCEDURE :: init => tm1d_init
      PROCEDURE :: destroy => tm1d_destroy
      PROCEDURE :: set_config => tm1d_set_config
      PROCEDURE :: update_from_flux_surfaces => tm1d_update_from_flux_surfaces
      PROCEDURE :: compute_delta_te => tm1d_compute_delta_te
+     PROCEDURE :: compute_collisionality_profile => tm1d_compute_collisionality_profile
      PROCEDURE :: write_hdf5 => tm1d_write_hdf5
      FINAL :: tm1d_finalize
   END TYPE transport_model_1d_t
@@ -73,6 +75,7 @@ CONTAINS
     ALLOCATE(this%cs_te_fs(this%nrho))
     ALLOCATE(this%dte_dr_fs(this%nrho))
     ALLOCATE(this%dpe_dr_fs(this%nrho))
+    ALLOCATE(this%nuestar_fs(this%nrho))
 
     this%te_fs = 0.d0
     this%ti_fs = 0.d0
@@ -86,6 +89,7 @@ CONTAINS
     this%cs_te_fs = 0.d0
     this%dte_dr_fs = 0.d0
     this%dpe_dr_fs = 0.d0
+    this%nuestar_fs = 0.d0
     this%delta_te = 0.d0
     this%is_initialized = .TRUE.
   END SUBROUTINE tm1d_init
@@ -105,6 +109,7 @@ CONTAINS
     IF (ALLOCATED(this%cs_te_fs)) DEALLOCATE(this%cs_te_fs)
     IF (ALLOCATED(this%dte_dr_fs)) DEALLOCATE(this%dte_dr_fs)
     IF (ALLOCATED(this%dpe_dr_fs)) DEALLOCATE(this%dpe_dr_fs)
+    IF (ALLOCATED(this%nuestar_fs)) DEALLOCATE(this%nuestar_fs)
 
     this%is_initialized = .FALSE.
     this%nrho = 0
@@ -160,6 +165,7 @@ CONTAINS
 
     CALL tm1d_build_projected_gradients(this, fs_data)
     CALL this%compute_delta_te(fs_data)
+    CALL this%compute_collisionality_profile()
 
     DEALLOCATE(ua, up)
   END SUBROUTINE tm1d_update_from_flux_surfaces
@@ -178,6 +184,24 @@ CONTAINS
     te_edge = MAX(te_edge, model_tol)
     this%delta_te = (te_core - te_edge)/te_edge
   END SUBROUTINE tm1d_compute_delta_te
+
+  SUBROUTINE tm1d_compute_collisionality_profile(this)
+    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+    REAL*8 :: ne_dim(this%nrho), te_dim(this%nrho), rmaj_dim(this%nrho), lambda_e(this%nrho)
+
+    IF (.NOT. this%is_initialized) RETURN
+    IF (this%nrho <= 0) RETURN
+
+    ne_dim = MAX(ABS(this%ne_fs)*simpar%refval_density, model_tol)
+    te_dim = MAX(ABS(this%te_fs)*simpar%refval_temperature, model_tol)
+    rmaj_dim = MAX(ABS(this%Rmaj_fs)*simpar%refval_length, model_tol)
+
+    lambda_e = 31.3d0 - LOG(ne_dim/te_dim)
+    lambda_e = MAX(lambda_e, 1.d0)
+
+    this%nuestar_fs = 6.921d-18 * ABS(this%q_fs) * rmaj_dim * ne_dim * MAX(phys%Zeff, 1.d0) * lambda_e / &
+         (MAX(this%eps_fs, model_tol)**1.5d0 * te_dim**2)
+  END SUBROUTINE tm1d_compute_collisionality_profile
 
   SUBROUTINE tm1d_write_hdf5(this, parent_group_id)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
@@ -202,6 +226,7 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id, this%cs_te_fs, SIZE(this%cs_te_fs), 'cs_te_fs')
     CALL HDF5_array1D_saving(group_id, this%dte_dr_fs, SIZE(this%dte_dr_fs), 'dte_dr_fs')
     CALL HDF5_array1D_saving(group_id, this%dpe_dr_fs, SIZE(this%dpe_dr_fs), 'dpe_dr_fs')
+    CALL HDF5_array1D_saving(group_id, this%nuestar_fs, SIZE(this%nuestar_fs), 'nuestar_fs')
     CALL HDF5_real_saving(group_id, this%a_minor, 'a_minor')
     CALL HDF5_real_saving(group_id, this%rho_core, 'rho_core')
     CALL HDF5_real_saving(group_id, this%rho_edge, 'rho_edge')
