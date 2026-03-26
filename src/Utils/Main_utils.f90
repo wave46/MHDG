@@ -25,6 +25,8 @@ MODULE Main_utils
   USE domain_decomposition_module
 #endif
   USE HDG_LimitingTechniques
+  USE flux_surface_transport_data
+  USE transport_models_1d
 
   IMPLICIT NONE
 
@@ -174,6 +176,13 @@ CONTAINS
 
   ENDSUBROUTINE solution_decomposition
 #endif
+
+  SUBROUTINE update_reduced_transport_profiles()
+    IF (.NOT. switch%save_reduced_profiles_1D) RETURN
+
+    CALL fs_transport%build_profiles()
+    CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
+  END SUBROUTINE update_reduced_transport_profiles
 
   SUBROUTINE adaptivity()
 #ifdef WITH_PASTIX

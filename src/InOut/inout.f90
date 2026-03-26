@@ -10,6 +10,7 @@ MODULE in_out
   USE HDF5
   USE HDF5_io_module
   USE flux_surface_transport_data
+  USE transport_models_1d
   USE GLOBALS
   USE MPI_OMP
   USE printutils
@@ -543,6 +544,7 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id1, sol%u_tilde, SIZE(sol%u_tilde), 'u_tilde')
     CALL HDF5_array1D_saving(group_id1, sol%q, SIZE(sol%q), 'q')
     CALL fs_transport%write_hdf5(group_id1)
+    CALL transport_model_1d%write_hdf5(group_id1)
     CALL HDF5_group_close(group_id1, ierr)
 
     ! save magnetic field and Jtor arrays
@@ -692,6 +694,7 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, u_glob, SIZE(u_glob), 'u')
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
        CALL fs_transport%write_hdf5(group_id1)
+       CALL transport_model_1d%write_hdf5(group_id1)
        CALL HDF5_group_close(group_id1)
 
       CALL HDF5_group_create('mesh', file_id, group_id1, ierr)

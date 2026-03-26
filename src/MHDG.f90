@@ -1,6 +1,5 @@
 PROGRAM MHDG
   USE Main_utils
-  USE flux_surface_transport_data
   USE MPI_OMP
 
   IMPLICIT NONE
@@ -181,7 +180,7 @@ PROGRAM MHDG
 
   ! Save solution
   CALL setSolName(save_name, mesh_name, 0, .TRUE., .FALSE.)
-  IF (switch%save_reduced_profiles_1D) CALL fs_transport%build_profiles()
+  CALL update_reduced_transport_profiles()
   CALL HDF5_save_solution(save_name)
 
   ! Allocate and initialize uiter, uiter_best, qiter_best, u0, u_conv, q_conv
@@ -282,7 +281,7 @@ PROGRAM MHDG
         ! Save solution
         IF (switch%saveNR) THEN
            CALL setSolName(save_name, mesh_name, ir, .FALSE., .TRUE.)
-           IF (switch%save_reduced_profiles_1D) CALL fs_transport%build_profiles()
+           CALL update_reduced_transport_profiles()
            CALL HDF5_save_solution(save_name)
         END IF
 
@@ -406,7 +405,7 @@ PROGRAM MHDG
         ! Save solution
         IF (MOD(time%it, utils%freqsave) .EQ. 0) THEN
            CALL setSolName(save_name, mesh_name, time%it, .TRUE., .FALSE.)
-           IF (switch%save_reduced_profiles_1D) CALL fs_transport%build_profiles()
+           CALL update_reduced_transport_profiles()
            CALL HDF5_save_solution(save_name)
         END IF
 
@@ -419,7 +418,7 @@ PROGRAM MHDG
 
               ! Save solution
               CALL setSolName(save_name, mesh_name, it, .TRUE., .TRUE.)
-              IF (switch%save_reduced_profiles_1D) CALL fs_transport%build_profiles()
+              CALL update_reduced_transport_profiles()
               CALL HDF5_save_solution(save_name)
 
               ! reduce diffusion
@@ -485,7 +484,7 @@ PROGRAM MHDG
         IF (switch%psdtime) THEN
            ! Save solution
            CALL setSolName(save_name, mesh_name, it, .TRUE., .TRUE.)
-           IF (switch%save_reduced_profiles_1D) CALL fs_transport%build_profiles()
+           CALL update_reduced_transport_profiles()
            CALL HDF5_save_solution(save_name)
 
            CALL reduce_diffusion()
@@ -505,7 +504,7 @@ PROGRAM MHDG
 
   ! Save solution
   CALL setSolName(save_name, mesh_name, time%it, .TRUE., .TRUE.)
-  IF (switch%save_reduced_profiles_1D) CALL fs_transport%build_profiles()
+  CALL update_reduced_transport_profiles()
   CALL HDF5_save_solution(save_name)
 
   CALL cpu_TIME(time_finish)

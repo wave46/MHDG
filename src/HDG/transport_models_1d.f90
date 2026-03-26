@@ -1,4 +1,6 @@
 MODULE transport_models_1d
+  USE HDF5
+  USE HDF5_io_module
   USE globals
   USE flux_surface_transport_data, ONLY: flux_surface_transport_t
   USE physics, ONLY: cons2phys
@@ -35,6 +37,7 @@ MODULE transport_models_1d
      PROCEDURE :: destroy => tm1d_destroy
      PROCEDURE :: update_from_flux_surfaces => tm1d_update_from_flux_surfaces
      PROCEDURE :: compute_delta_te => tm1d_compute_delta_te
+     PROCEDURE :: write_hdf5 => tm1d_write_hdf5
      FINAL :: tm1d_finalize
   END TYPE transport_model_1d_t
 
@@ -166,6 +169,36 @@ CONTAINS
     te_edge = MAX(te_edge, model_tol)
     this%delta_te = (te_core - te_edge)/te_edge
   END SUBROUTINE tm1d_compute_delta_te
+
+  SUBROUTINE tm1d_write_hdf5(this, parent_group_id)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: parent_group_id
+    INTEGER(HID_T) :: group_id
+    INTEGER :: ierr
+
+    IF (.NOT. switch%save_reduced_profiles_1D) RETURN
+    IF (.NOT. this%is_initialized) RETURN
+    IF (this%nrho <= 0) RETURN
+
+    CALL HDF5_group_create('transport_model_1d', parent_group_id, group_id, ierr)
+    CALL HDF5_array1D_saving(group_id, this%ne_fs, SIZE(this%ne_fs), 'ne_fs')
+    CALL HDF5_array1D_saving(group_id, this%ti_fs, SIZE(this%ti_fs), 'ti_fs')
+    CALL HDF5_array1D_saving(group_id, this%te_fs, SIZE(this%te_fs), 'te_fs')
+    CALL HDF5_array1D_saving(group_id, this%pi_fs, SIZE(this%pi_fs), 'pi_fs')
+    CALL HDF5_array1D_saving(group_id, this%pe_fs, SIZE(this%pe_fs), 'pe_fs')
+    CALL HDF5_array1D_saving(group_id, this%q_fs, SIZE(this%q_fs), 'q_fs')
+    CALL HDF5_array1D_saving(group_id, this%Rmaj_fs, SIZE(this%Rmaj_fs), 'Rmaj_fs')
+    CALL HDF5_array1D_saving(group_id, this%rmin_fs, SIZE(this%rmin_fs), 'rmin_fs')
+    CALL HDF5_array1D_saving(group_id, this%eps_fs, SIZE(this%eps_fs), 'eps_fs')
+    CALL HDF5_array1D_saving(group_id, this%cs_te_fs, SIZE(this%cs_te_fs), 'cs_te_fs')
+    CALL HDF5_array1D_saving(group_id, this%dte_dr_fs, SIZE(this%dte_dr_fs), 'dte_dr_fs')
+    CALL HDF5_array1D_saving(group_id, this%dpe_dr_fs, SIZE(this%dpe_dr_fs), 'dpe_dr_fs')
+    CALL HDF5_real_saving(group_id, this%a_minor, 'a_minor')
+    CALL HDF5_real_saving(group_id, this%rho_core, 'rho_core')
+    CALL HDF5_real_saving(group_id, this%rho_edge, 'rho_edge')
+    CALL HDF5_real_saving(group_id, this%delta_te, 'delta_te')
+    CALL HDF5_group_close(group_id, ierr)
+  END SUBROUTINE tm1d_write_hdf5
 
   SUBROUTINE tm1d_build_projected_gradients(this, fs_data)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
