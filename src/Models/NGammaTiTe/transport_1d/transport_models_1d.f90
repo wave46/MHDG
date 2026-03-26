@@ -238,7 +238,7 @@ CONTAINS
     IF (PRESENT(pinch_model)) this%pinch_model = pinch_model
     IF (PRESENT(c_pinch)) this%c_pinch = c_pinch
     IF (PRESENT(nu_th)) this%nu_th = nu_th
-    IF (PRESENT(vpinch_const_phys)) this%vpinch_const = vpinch_const_phys/simpar%refval_speed
+    IF (PRESENT(vpinch_const_phys)) this%vpinch_const = vpinch_const_phys*simpar%refval_time/simpar%refval_length
     IF (PRESENT(rho_pinch_axis_width)) this%rho_pinch_axis_width = rho_pinch_axis_width
     IF (PRESENT(rho_pinch_model_max)) this%rho_pinch_model_max = rho_pinch_model_max
     IF (PRESENT(rho_pinch_edge_width)) this%rho_pinch_edge_width = rho_pinch_edge_width
@@ -401,7 +401,6 @@ CONTAINS
 
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
-    IF (rho > this%rho_diffusion_model_max) RETURN
     IF (rho <= model_tol) RETURN
 
     CALL tm1d_interp_profile(this, rho, this%chi_i_fs, chi_i)
@@ -584,7 +583,7 @@ CONTAINS
     CALL HDF5_integer_saving(group_id, this%pinch_model, 'pinch_model')
     CALL HDF5_real_saving(group_id, this%c_pinch, 'c_pinch')
     CALL HDF5_real_saving(group_id, this%nu_th, 'nu_th')
-    CALL HDF5_real_saving(group_id, this%vpinch_const*simpar%refval_speed, 'vpinch_const_phys')
+    CALL HDF5_real_saving(group_id, this%vpinch_const, 'vpinch_const')
     CALL HDF5_real_saving(group_id, this%rho_pinch_axis_width, 'rho_pinch_axis_width')
     CALL HDF5_real_saving(group_id, this%rho_pinch_model_max, 'rho_pinch_model_max')
     CALL HDF5_real_saving(group_id, this%rho_pinch_edge_width, 'rho_pinch_edge_width')
