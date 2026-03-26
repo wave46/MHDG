@@ -185,7 +185,10 @@ CONTAINS
          c_gyrobohm_i=transport_model_input%c_gyrobohm_i, c_bohm_e=transport_model_input%c_bohm_e, &
          c_gyrobohm_e=transport_model_input%c_gyrobohm_e, c_bohm_n=transport_model_input%c_bohm_n, &
          prandtl=transport_model_input%prandtl, pinch_model=transport_model_input%pinch_model, &
-         c_pinch=transport_model_input%c_pinch, nu_th=transport_model_input%nu_th)
+         c_pinch=transport_model_input%c_pinch, nu_th=transport_model_input%nu_th, &
+         rho_blend_width=transport_model_input%rho_blend_width, diff_n_min_phys=transport_model_input%diff_n_min_phys, &
+         diff_u_min_phys=transport_model_input%diff_u_min_phys, diff_e_min_phys=transport_model_input%diff_e_min_phys, &
+         diff_ee_min_phys=transport_model_input%diff_ee_min_phys)
     CALL fs_transport%build_profiles()
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
   END SUBROUTINE update_reduced_transport_profiles

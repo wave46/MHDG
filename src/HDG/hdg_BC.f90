@@ -10,6 +10,7 @@ SUBROUTINE HDG_BC()
   USE globals
   USE LinearAlgebra
   USE physics
+  USE transport_models_1d, ONLY: transport_model_1d
   USE analytical, only: analytical_solution
 
   IMPLICIT NONE
@@ -525,7 +526,7 @@ CONTAINS
   REAL*8                    :: Bfl(refElPol%Nfacenodes,3),psifl(refElPol%Nfacenodes)
   REAL*8                    :: Bmod_nod(refElPol%Nfacenodes),b_nod(refElPol%Nfacenodes,3)
   REAL*8                    :: xyg(refElPol%Ngauss1d,2),xyder(refElPol%Ngauss1d,2)
-  REAL*8                    :: Bmod(refElPol%Ngauss1d),b(refElPol%Ngauss1d,3), psig(refElPol%Ngauss1d)
+  REAL*8                    :: Bmod(refElPol%Ngauss1d),b(refElPol%Ngauss1d,3), psig(refElPol%Ngauss1d), rho_pol_norm(refElPol%Ngauss1d)
   REAL*8                    :: ufg(refElPol%Ngauss1d,phys%neq),qfg(refElPol%Ngauss1d,phys%neq*2)
   REAL*8                    :: ueg(refElPol%Ngauss1d,phys%neq)
   REAL*8                    :: upg(refElPol%Ngauss1d,phys%npv),uexpg(refElPol%Ngauss1d,phys%npv)
@@ -674,6 +675,7 @@ CONTAINS
 
     ! Normalized magnetic flux at Gauss points: PSI
      psig = MATMUL(refElPol%N1d,psifl)
+     rho_pol_norm = SQRT(MAX(psig,1.e-10))
 
     ! q_cylicdrical and omega
 
@@ -689,10 +691,12 @@ CONTAINS
     
 
     IF (switch%import_diffusion_1D) THEN
-      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
+      CALL add_1D_diff(rho_pol_norm,diff_iso_fac,diff_ani_fac)
     ENDIF
 
-    IF (switch%bohm_gyrobohm) THEN
+    IF (switch%transport_1d) THEN
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
+    ELSEIF (switch%bohm_gyrobohm) THEN
       CALL add_bohm_gyrobohm_diffusion(ufg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
     ENDIF
 

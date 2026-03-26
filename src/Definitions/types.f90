@@ -478,6 +478,11 @@ MODULE types
      INTEGER :: pinch_model = 1
      REAL*8 :: c_pinch = 0.5d0
      REAL*8 :: nu_th = 0.04d0
+     REAL*8 :: rho_blend_width = 0.02d0
+     REAL*8 :: diff_n_min_phys = 0.d0
+     REAL*8 :: diff_u_min_phys = 0.d0
+     REAL*8 :: diff_e_min_phys = 0.d0
+     REAL*8 :: diff_ee_min_phys = 0.d0
   END TYPE Transport_model_input_type
 
   !*******************************************************

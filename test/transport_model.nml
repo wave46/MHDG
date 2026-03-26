@@ -7,7 +7,7 @@
   ! Transport model is expected to be valid only in the confined region.
   ! Keep coefficients computed on the full 1D grid; apply this cutoff later
   ! when interpolating transport back to local points.
-  rho_model_max = 1.0
+  rho_model_max = 0.99
 
   ! Mixed Bohm / gyro-Bohm coefficients.
   ! Reference: JETTO/NTCC mixed_bohm_gyro_bohm model description.
@@ -34,4 +34,14 @@
 
   ! Collisionality threshold used only by the Militello suppression factor.
   nu_th = 0.04
+
+  ! Width of the smooth core-to-edge transport transition in rho.
+  rho_blend_width = 0.03
+
+  ! Minimum transport coefficients in physical units [m^2/s].
+  ! They are adimensionalized internally before use.
+  diff_n_min_phys = 1e-2
+  diff_u_min_phys = 1e-2
+  diff_e_min_phys = 1e-2
+  diff_ee_min_phys = 1e-2
 /

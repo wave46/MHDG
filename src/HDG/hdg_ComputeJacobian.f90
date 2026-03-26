@@ -11,6 +11,7 @@ SUBROUTINE HDG_computeJacobian()
   USE LinearAlgebra, only: tensorProduct, tensorSumInt
   USE analytical, only: body_force, analytical_solution
   USE physics
+  USE transport_models_1d, ONLY: transport_model_1d
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
 
   IMPLICIT NONE
@@ -1344,7 +1345,7 @@ CONTAINS
       REAL*8                        :: detJ(Ng2d)
       REAL*8                        :: iJ11(Ng2d),iJ12(Ng2d)
       REAL*8                        :: iJ21(Ng2d),iJ22(Ng2d)
-      REAL*8                        :: fluxg(Ng2d),max_flux2D,min_flux2D, Psig(Ng2d)
+      REAL*8                        :: fluxg(Ng2d),max_flux2D,min_flux2D, Psig(Ng2d),rho_pol_norm(Ng2d)
       INTEGER*4,DIMENSION(Npel)     :: ind_ass,ind_asq
       REAL*8                        :: ktis(time%tis + 1)
       REAL*8,DIMENSION(Npel)        :: Ni,Nxg,Nyg,NNbb,Nx_ax
@@ -1418,6 +1419,7 @@ CONTAINS
 
     ! Normalized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N2D,psiel)
+      rho_pol_norm = SQRT(MAX(Psig,1.e-10))
 
     ! toroidal current at Gauss points
     IF (switch%ohmicsrc) THEN
@@ -1447,12 +1449,13 @@ CONTAINS
 #endif
 
     IF (switch%import_diffusion_1D) THEN
-      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_vol,diff_ani_vol)
+      CALL add_1D_diff(rho_pol_norm,diff_iso_vol,diff_ani_vol)
     ENDIF
 
-    IF (switch%bohm_gyrobohm) THEN
-      CALL add_bohm_gyrobohm_diffusion(ueg,qeg,omega,b,q_cyl,diff_iso_vol,diff_ani_vol) 
-
+    IF (switch%transport_1d) THEN
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_vol,diff_ani_vol)
+    ELSEIF (switch%bohm_gyrobohm) THEN
+      CALL add_bohm_gyrobohm_diffusion(ueg,qeg,omega,b,q_cyl,diff_iso_vol,diff_ani_vol)
     ENDIF
 
 
@@ -1740,7 +1743,7 @@ CONTAINS
     real*8                    :: NNif(Npfl,Npfl),Nif(Npfl),Nfbn(Npfl)
     real*8                    :: upgf(Ng1d,phys%npv)
     real*8                    :: tau(Neq,Neq),Vnng(Ndim)
-    real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d)
+    real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d),rho_pol_norm(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: q_cyl(Ng1d)
@@ -1790,6 +1793,7 @@ CONTAINS
 
     ! Normalaized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N1d,psifl)
+      rho_pol_norm = SQRT(MAX(Psig,1.e-10))
 
     ! Element solution at face Gauss points
       uefg = MATMUL(refElPol%N1D,uef)
@@ -1804,10 +1808,12 @@ CONTAINS
 #endif
 
     IF (switch%import_diffusion_1D) THEN
-      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
+      CALL add_1D_diff(rho_pol_norm,diff_iso_fac,diff_ani_fac)
     ENDIF
 
-    IF (switch%bohm_gyrobohm) THEN
+    IF (switch%transport_1d) THEN
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
+    ELSEIF (switch%bohm_gyrobohm) THEN
       CALL add_bohm_gyrobohm_diffusion(uefg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
     ENDIF
     if (save_tau) then
@@ -1914,7 +1920,7 @@ CONTAINS
     real*8                    :: NNif(Npfl,Npfl),Nif(Npfl),Nfbn(Npfl)
     real*8                    :: tau(Neq,Neq)
     real*8                    :: upgf(Ng1d,phys%npv)
-    real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d), Psig(Ng1d)
+    real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d), Psig(Ng1d), rho_pol_norm(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: Vnng(Ndim)
@@ -1951,6 +1957,7 @@ CONTAINS
     omega = matmul(refElPol%N1D,omegafl)
     ! Normalaized magnetic flux at Gauss points: PSI
     Psig = MATMUL(refElPol%N1D,psifl)
+    rho_pol_norm = SQRT(MAX(Psig,1.e-10))
 
     ! Trace solution at face Gauss points
     xyf = MATMUL(refElPol%N1D,Xfl)
@@ -1981,10 +1988,12 @@ CONTAINS
 
 
     IF (switch%import_diffusion_1D) THEN
-      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
+      CALL add_1D_diff(rho_pol_norm,diff_iso_fac,diff_ani_fac)
     ENDIF
 
-    IF (switch%bohm_gyrobohm) THEN
+    IF (switch%transport_1d) THEN
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
+    ELSEIF (switch%bohm_gyrobohm) THEN
       CALL add_bohm_gyrobohm_diffusion(uefg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
     ENDIF
 

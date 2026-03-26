@@ -23,6 +23,11 @@ MODULE transport_models_1d
      INTEGER :: pinch_model = 1
      REAL*8 :: c_pinch = 0.5d0
      REAL*8 :: nu_th = 0.04d0
+     REAL*8 :: rho_blend_width = 0.02d0
+     REAL*8 :: diff_n_min = 0.d0
+     REAL*8 :: diff_u_min = 0.d0
+     REAL*8 :: diff_e_min = 0.d0
+     REAL*8 :: diff_ee_min = 0.d0
      REAL*8 :: a_minor = 0.d0
      REAL*8 :: delta_te = 0.d0
      REAL*8 :: c_bohm_i = 1.6d-4
@@ -67,6 +72,7 @@ MODULE transport_models_1d
      PROCEDURE :: compute_mixed_transport => tm1d_compute_mixed_transport
      PROCEDURE :: compute_pinch_profile => tm1d_compute_pinch_profile
      PROCEDURE :: interp_transport => tm1d_interp_transport
+     PROCEDURE :: apply_1D_diffusion => tm1d_apply_1D_diffusion
      PROCEDURE :: write_hdf5 => tm1d_write_hdf5
      FINAL :: tm1d_finalize
   END TYPE transport_model_1d_t
@@ -181,6 +187,11 @@ CONTAINS
     this%pinch_model = 1
     this%c_pinch = 0.5d0
     this%nu_th = 0.04d0
+    this%rho_blend_width = 0.02d0
+    this%diff_n_min = 0.d0
+    this%diff_u_min = 0.d0
+    this%diff_e_min = 0.d0
+    this%diff_ee_min = 0.d0
     this%a_minor = 0.d0
     this%delta_te = 0.d0
     this%c_bohm_i = 1.6d-4
@@ -197,9 +208,9 @@ CONTAINS
     CALL this%destroy()
   END SUBROUTINE tm1d_finalize
 
-  SUBROUTINE tm1d_set_config(this, rho_edge, rho_core, rho_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th)
+  SUBROUTINE tm1d_set_config(this, rho_edge, rho_core, rho_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th
+    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
 
     IF (PRESENT(rho_edge)) this%rho_edge = rho_edge
@@ -214,6 +225,11 @@ CONTAINS
     IF (PRESENT(pinch_model)) this%pinch_model = pinch_model
     IF (PRESENT(c_pinch)) this%c_pinch = c_pinch
     IF (PRESENT(nu_th)) this%nu_th = nu_th
+    IF (PRESENT(rho_blend_width)) this%rho_blend_width = rho_blend_width
+    IF (PRESENT(diff_n_min_phys)) this%diff_n_min = diff_n_min_phys*simpar%refval_time/simpar%refval_length**2
+    IF (PRESENT(diff_u_min_phys)) this%diff_u_min = diff_u_min_phys*simpar%refval_time/simpar%refval_length**2
+    IF (PRESENT(diff_e_min_phys)) this%diff_e_min = diff_e_min_phys*simpar%refval_time/simpar%refval_length**2
+    IF (PRESENT(diff_ee_min_phys)) this%diff_ee_min = diff_ee_min_phys*simpar%refval_time/simpar%refval_length**2
   END SUBROUTINE tm1d_set_config
 
   SUBROUTINE tm1d_update_from_flux_surfaces(this, fs_data)
@@ -367,6 +383,68 @@ CONTAINS
     CALL tm1d_interp_profile(this, rho, this%nu_mom_fs, nu_mom)
     CALL tm1d_interp_profile(this, rho, this%vpinch_fs, vpinch)
   END SUBROUTINE tm1d_interp_transport
+
+
+  SUBROUTINE tm1d_apply_1D_diffusion(this, rho_pol_norm, diff_iso, diff_ani)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho_pol_norm(:)
+    REAL*8, INTENT(INOUT) :: diff_iso(:, :, :), diff_ani(:, :, :)
+    INTEGER :: g
+    REAL*8 :: rho_g, w, chi_i, chi_e, d_part, nu_mom, vpinch
+
+    IF (.NOT. this%is_initialized) RETURN
+    IF (SIZE(diff_iso, 3) /= SIZE(rho_pol_norm)) RETURN
+    IF (SIZE(diff_ani, 3) /= SIZE(rho_pol_norm)) RETURN
+
+    DO g = 1, SIZE(rho_pol_norm)
+       rho_g = MAX(rho_pol_norm(g), 0.d0)
+       w = tm1d_blend_weight(this, rho_g)
+       IF (w <= 0.d0) CYCLE
+
+       CALL this%interp_transport(rho_g, chi_i, chi_e, d_part, nu_mom, vpinch)
+
+       d_part = MAX(d_part, this%diff_n_min)
+       nu_mom = MAX(nu_mom, this%diff_u_min)
+       chi_i = MAX(chi_i, this%diff_e_min)
+       chi_e = MAX(chi_e, this%diff_ee_min)
+
+       diff_iso(1, 1, g) = diff_iso(1, 1, g) + w*(d_part - diff_iso(1, 1, g))
+       diff_iso(2, 2, g) = diff_iso(2, 2, g) + w*(nu_mom - diff_iso(2, 2, g))
+       diff_iso(3, 3, g) = diff_iso(3, 3, g) + w*(chi_i - diff_iso(3, 3, g))
+       diff_iso(4, 4, g) = diff_iso(4, 4, g) + w*(chi_e - diff_iso(4, 4, g))
+
+       diff_ani(1, 1, g) = diff_ani(1, 1, g) + w*(d_part - diff_ani(1, 1, g))
+       diff_ani(2, 2, g) = diff_ani(2, 2, g) + w*(nu_mom - diff_ani(2, 2, g))
+       diff_ani(3, 3, g) = diff_ani(3, 3, g) + w*(chi_i - diff_ani(3, 3, g))
+       diff_ani(4, 4, g) = diff_ani(4, 4, g) + w*(chi_e - diff_ani(4, 4, g))
+    END DO
+  END SUBROUTINE tm1d_apply_1D_diffusion
+
+  REAL*8 FUNCTION tm1d_blend_weight(this, rho)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho
+    REAL*8 :: rho_start, rho_center, sigma
+
+    IF (rho >= this%rho_model_max) THEN
+       tm1d_blend_weight = 0.d0
+       RETURN
+    END IF
+
+    IF (this%rho_blend_width <= model_tol) THEN
+       tm1d_blend_weight = 1.d0
+       RETURN
+    END IF
+
+    rho_start = this%rho_model_max - this%rho_blend_width
+    IF (rho <= rho_start) THEN
+       tm1d_blend_weight = 1.d0
+       RETURN
+    END IF
+
+    rho_center = rho_start + 0.5d0*this%rho_blend_width
+    sigma = MAX(0.2d0*this%rho_blend_width, model_tol)
+    tm1d_blend_weight = 0.5d0*(1.d0 - TANH((rho - rho_center)/sigma))
+  END FUNCTION tm1d_blend_weight
 
   SUBROUTINE tm1d_write_hdf5(this, parent_group_id)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
