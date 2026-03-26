@@ -24,8 +24,15 @@ MODULE flux_surface_transport_data
      REAL*8, ALLOCATABLE :: shell_weight(:)
      REAL*8, ALLOCATABLE :: U_sum(:, :)
      REAL*8, ALLOCATABLE :: Q_rad_sum(:, :)
+     REAL*8, ALLOCATABLE :: q_sum(:)
+     REAL*8, ALLOCATABLE :: Rmaj_sum(:)
+     REAL*8, ALLOCATABLE :: rmin_sum(:)
      REAL*8, ALLOCATABLE :: U_fs(:, :)
      REAL*8, ALLOCATABLE :: Q_rad_fs(:, :)
+     REAL*8, ALLOCATABLE :: q_fs(:)
+     REAL*8, ALLOCATABLE :: Rmaj_fs(:)
+     REAL*8, ALLOCATABLE :: rmin_fs(:)
+     REAL*8, ALLOCATABLE :: eps_fs(:)
    CONTAINS
      PROCEDURE :: init => fs_init
      PROCEDURE :: destroy => fs_destroy
@@ -63,8 +70,15 @@ CONTAINS
     ALLOCATE(this%shell_weight(this%nrho))
     ALLOCATE(this%U_sum(this%neq, this%nrho))
     ALLOCATE(this%Q_rad_sum(this%neq, this%nrho))
+    ALLOCATE(this%q_sum(this%nrho))
+    ALLOCATE(this%Rmaj_sum(this%nrho))
+    ALLOCATE(this%rmin_sum(this%nrho))
     ALLOCATE(this%U_fs(this%neq, this%nrho))
     ALLOCATE(this%Q_rad_fs(this%neq, this%nrho))
+    ALLOCATE(this%q_fs(this%nrho))
+    ALLOCATE(this%Rmaj_fs(this%nrho))
+    ALLOCATE(this%rmin_fs(this%nrho))
+    ALLOCATE(this%eps_fs(this%nrho))
 
     DO i = 1, this%nrho
        this%rho_grid(i) = (i - 1)*this%drho
@@ -81,8 +95,15 @@ CONTAINS
     IF (ALLOCATED(this%shell_weight)) DEALLOCATE(this%shell_weight)
     IF (ALLOCATED(this%U_sum)) DEALLOCATE(this%U_sum)
     IF (ALLOCATED(this%Q_rad_sum)) DEALLOCATE(this%Q_rad_sum)
+    IF (ALLOCATED(this%q_sum)) DEALLOCATE(this%q_sum)
+    IF (ALLOCATED(this%Rmaj_sum)) DEALLOCATE(this%Rmaj_sum)
+    IF (ALLOCATED(this%rmin_sum)) DEALLOCATE(this%rmin_sum)
     IF (ALLOCATED(this%U_fs)) DEALLOCATE(this%U_fs)
     IF (ALLOCATED(this%Q_rad_fs)) DEALLOCATE(this%Q_rad_fs)
+    IF (ALLOCATED(this%q_fs)) DEALLOCATE(this%q_fs)
+    IF (ALLOCATED(this%Rmaj_fs)) DEALLOCATE(this%Rmaj_fs)
+    IF (ALLOCATED(this%rmin_fs)) DEALLOCATE(this%rmin_fs)
+    IF (ALLOCATED(this%eps_fs)) DEALLOCATE(this%eps_fs)
 
     this%is_initialized = .FALSE.
     this%profiles_built = .FALSE.
@@ -106,8 +127,15 @@ CONTAINS
     this%shell_weight = 0.d0
     this%U_sum = 0.d0
     this%Q_rad_sum = 0.d0
+    this%q_sum = 0.d0
+    this%Rmaj_sum = 0.d0
+    this%rmin_sum = 0.d0
     this%U_fs = 0.d0
     this%Q_rad_fs = 0.d0
+    this%q_fs = 0.d0
+    this%Rmaj_fs = 0.d0
+    this%rmin_fs = 0.d0
+    this%eps_fs = 0.d0
     this%profiles_built = .FALSE.
   END SUBROUTINE fs_reset_accumulators
 
@@ -134,6 +162,9 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%shell_weight, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%U_sum, this%neq*this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%Q_rad_sum, this%neq*this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%q_sum, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%Rmaj_sum, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%rmin_sum, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
   END SUBROUTINE fs_reduce_profile_sums
 
@@ -145,10 +176,18 @@ CONTAINS
 
     this%U_fs = 0.d0
     this%Q_rad_fs = 0.d0
+    this%q_fs = 0.d0
+    this%Rmaj_fs = 0.d0
+    this%rmin_fs = 0.d0
+    this%eps_fs = 0.d0
     DO irho = 1, this%nrho
        IF (this%shell_weight(irho) > shell_weight_tol) THEN
           this%U_fs(:, irho) = this%U_sum(:, irho)/this%shell_weight(irho)
           this%Q_rad_fs(:, irho) = this%Q_rad_sum(:, irho)/this%shell_weight(irho)
+          this%q_fs(irho) = this%q_sum(irho)/this%shell_weight(irho)
+          this%Rmaj_fs(irho) = this%Rmaj_sum(irho)/this%shell_weight(irho)
+          this%rmin_fs(irho) = this%rmin_sum(irho)/this%shell_weight(irho)
+          this%eps_fs(irho) = this%rmin_fs(irho)/MAX(this%Rmaj_fs(irho), shell_weight_tol)
        END IF
     END DO
     this%profiles_built = .TRUE.
@@ -241,6 +280,10 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id, this%shell_weight, SIZE(this%shell_weight), 'shell_weight')
     CALL HDF5_array2D_saving(group_id, this%U_fs, SIZE(this%U_fs, 1), SIZE(this%U_fs, 2), 'U_fs')
     CALL HDF5_array2D_saving(group_id, this%Q_rad_fs, SIZE(this%Q_rad_fs, 1), SIZE(this%Q_rad_fs, 2), 'Q_rad_fs')
+    CALL HDF5_array1D_saving(group_id, this%q_fs, SIZE(this%q_fs), 'q_fs')
+    CALL HDF5_array1D_saving(group_id, this%Rmaj_fs, SIZE(this%Rmaj_fs), 'Rmaj_fs')
+    CALL HDF5_array1D_saving(group_id, this%rmin_fs, SIZE(this%rmin_fs), 'rmin_fs')
+    CALL HDF5_array1D_saving(group_id, this%eps_fs, SIZE(this%eps_fs), 'eps_fs')
     CALL HDF5_group_close(group_id, ierr)
 
     IF (MPIvar%glob_id == 0 .AND. utils%printint > 0) THEN
@@ -308,11 +351,11 @@ CONTAINS
     INTEGER :: g, ieq, irho
     REAL*8 :: rho_g, weight_g, dpsi_dxi, dpsi_deta, gradpsi_norm
     REAL*8 :: Xel(refElPol%Nnodes2D, 2)
-    REAL*8 :: psiel(refElPol%Nnodes2D)
+    REAL*8 :: psiel(refElPol%Nnodes2D), q_cylel(refElPol%Nnodes2D)
     REAL*8 :: ue(refElPol%Nnodes2D, phys%Neq)
     REAL*8 :: qe(refElPol%Nnodes2D, phys%Neq*Mesh%Ndim)
     REAL*8 :: xy(refElPol%NGauss2D, 2)
-    REAL*8 :: psig(refElPol%NGauss2D)
+    REAL*8 :: psig(refElPol%NGauss2D), q_cylg(refElPol%NGauss2D)
     REAL*8 :: ueg(refElPol%NGauss2D, phys%Neq)
     REAL*8 :: qeg(refElPol%NGauss2D, phys%Neq*Mesh%Ndim)
     REAL*8 :: J11(refElPol%NGauss2D), J12(refElPol%NGauss2D), J21(refElPol%NGauss2D), J22(refElPol%NGauss2D)
@@ -321,11 +364,13 @@ CONTAINS
 
     Xel = Mesh%X(Mesh%T(iel, :), :)
     psiel = phys%magnetic_psi(Mesh%T(iel, :))
+    q_cylel = phys%q_cyl(Mesh%T(iel, :))
     ue = ures((iel - 1)*refElPol%Nnodes2D + 1:iel*refElPol%Nnodes2D, :)
     qe = qres((iel - 1)*refElPol%Nnodes2D + 1:iel*refElPol%Nnodes2D, :)
 
     xy = MATMUL(refElPol%N2D, Xel)
     psig = MATMUL(refElPol%N2D, psiel)
+    q_cylg = MATMUL(refElPol%N2D, q_cylel)
     ueg = MATMUL(refElPol%N2D, ue)
     qeg = MATMUL(refElPol%N2D, qe)
 
@@ -348,6 +393,9 @@ CONTAINS
 
        this%shell_weight(irho) = this%shell_weight(irho) + weight_g
        this%U_sum(:, irho) = this%U_sum(:, irho) + ueg(g, :)*weight_g
+       this%q_sum(irho) = this%q_sum(irho) + q_cylg(g)*weight_g
+       this%Rmaj_sum(irho) = this%Rmaj_sum(irho) + xy(g, 1)*weight_g
+       this%rmin_sum(irho) = this%rmin_sum(irho) + SQRT((xy(g, 1) - phys%r_axis)**2 + (xy(g, 2) - phys%z_axis)**2)*weight_g
 
        dpsi_dxi = DOT_PRODUCT(refElPol%Nxi2D(g, :), psiel)
        dpsi_deta = DOT_PRODUCT(refElPol%Neta2D(g, :), psiel)

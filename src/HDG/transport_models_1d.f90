@@ -16,12 +16,17 @@ MODULE transport_models_1d
      INTEGER :: nrho = 0
      REAL*8 :: rho_edge = rho_edge_default
      REAL*8 :: rho_core = rho_core_default
+     REAL*8 :: a_minor = 0.d0
      REAL*8 :: delta_te = 0.d0
      REAL*8, ALLOCATABLE :: te_fs(:)
      REAL*8, ALLOCATABLE :: ti_fs(:)
      REAL*8, ALLOCATABLE :: ne_fs(:)
      REAL*8, ALLOCATABLE :: pe_fs(:)
      REAL*8, ALLOCATABLE :: pi_fs(:)
+     REAL*8, ALLOCATABLE :: q_fs(:)
+     REAL*8, ALLOCATABLE :: Rmaj_fs(:)
+     REAL*8, ALLOCATABLE :: rmin_fs(:)
+     REAL*8, ALLOCATABLE :: eps_fs(:)
      REAL*8, ALLOCATABLE :: cs_te_fs(:)
      REAL*8, ALLOCATABLE :: dte_dr_fs(:)
      REAL*8, ALLOCATABLE :: dpe_dr_fs(:)
@@ -57,6 +62,10 @@ CONTAINS
     ALLOCATE(this%ne_fs(this%nrho))
     ALLOCATE(this%pe_fs(this%nrho))
     ALLOCATE(this%pi_fs(this%nrho))
+    ALLOCATE(this%q_fs(this%nrho))
+    ALLOCATE(this%Rmaj_fs(this%nrho))
+    ALLOCATE(this%rmin_fs(this%nrho))
+    ALLOCATE(this%eps_fs(this%nrho))
     ALLOCATE(this%cs_te_fs(this%nrho))
     ALLOCATE(this%dte_dr_fs(this%nrho))
     ALLOCATE(this%dpe_dr_fs(this%nrho))
@@ -66,6 +75,10 @@ CONTAINS
     this%ne_fs = 0.d0
     this%pe_fs = 0.d0
     this%pi_fs = 0.d0
+    this%q_fs = 0.d0
+    this%Rmaj_fs = 0.d0
+    this%rmin_fs = 0.d0
+    this%eps_fs = 0.d0
     this%cs_te_fs = 0.d0
     this%dte_dr_fs = 0.d0
     this%dpe_dr_fs = 0.d0
@@ -81,6 +94,10 @@ CONTAINS
     IF (ALLOCATED(this%ne_fs)) DEALLOCATE(this%ne_fs)
     IF (ALLOCATED(this%pe_fs)) DEALLOCATE(this%pe_fs)
     IF (ALLOCATED(this%pi_fs)) DEALLOCATE(this%pi_fs)
+    IF (ALLOCATED(this%q_fs)) DEALLOCATE(this%q_fs)
+    IF (ALLOCATED(this%Rmaj_fs)) DEALLOCATE(this%Rmaj_fs)
+    IF (ALLOCATED(this%rmin_fs)) DEALLOCATE(this%rmin_fs)
+    IF (ALLOCATED(this%eps_fs)) DEALLOCATE(this%eps_fs)
     IF (ALLOCATED(this%cs_te_fs)) DEALLOCATE(this%cs_te_fs)
     IF (ALLOCATED(this%dte_dr_fs)) DEALLOCATE(this%dte_dr_fs)
     IF (ALLOCATED(this%dpe_dr_fs)) DEALLOCATE(this%dpe_dr_fs)
@@ -89,6 +106,7 @@ CONTAINS
     this%nrho = 0
     this%rho_edge = rho_edge_default
     this%rho_core = rho_core_default
+    this%a_minor = 0.d0
     this%delta_te = 0.d0
   END SUBROUTINE tm1d_destroy
 
@@ -121,6 +139,11 @@ CONTAINS
     this%pe_fs = up(:, 6)
     this%ti_fs = up(:, 7)
     this%te_fs = up(:, 8)
+    this%q_fs = fs_data%q_fs
+    this%Rmaj_fs = fs_data%Rmaj_fs
+    this%rmin_fs = fs_data%rmin_fs
+    this%eps_fs = fs_data%eps_fs
+    this%a_minor = phys%a_minor
     this%cs_te_fs = SQRT(MAX(this%te_fs*phys%Mref, model_tol))
 
     CALL tm1d_build_projected_gradients(this, fs_data)
