@@ -3,6 +3,7 @@ MODULE transport_models_1d
   USE HDF5_io_module
   USE globals
   USE flux_surface_transport_data, ONLY: flux_surface_transport_t
+  USE interpolation, ONLY: find_cell_and_local_coordinate
   USE physics, ONLY: cons2phys
   IMPLICIT NONE
 
@@ -65,6 +66,7 @@ MODULE transport_models_1d
      PROCEDURE :: compute_gyrobohm_profile => tm1d_compute_gyrobohm_profile
      PROCEDURE :: compute_mixed_transport => tm1d_compute_mixed_transport
      PROCEDURE :: compute_pinch_profile => tm1d_compute_pinch_profile
+     PROCEDURE :: interp_transport => tm1d_interp_transport
      PROCEDURE :: write_hdf5 => tm1d_write_hdf5
      FINAL :: tm1d_finalize
   END TYPE transport_model_1d_t
@@ -343,6 +345,29 @@ CONTAINS
     END SELECT
   END SUBROUTINE tm1d_compute_pinch_profile
 
+
+  SUBROUTINE tm1d_interp_transport(this, rho, chi_i, chi_e, d_part, nu_mom, vpinch)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho
+    REAL*8, INTENT(OUT) :: chi_i, chi_e, d_part, nu_mom, vpinch
+
+    chi_i = 0.d0
+    chi_e = 0.d0
+    d_part = 0.d0
+    nu_mom = 0.d0
+    vpinch = 0.d0
+
+    IF (.NOT. this%is_initialized) RETURN
+    IF (this%nrho <= 0) RETURN
+    IF (rho > this%rho_model_max) RETURN
+
+    CALL tm1d_interp_profile(this, rho, this%chi_i_fs, chi_i)
+    CALL tm1d_interp_profile(this, rho, this%chi_e_fs, chi_e)
+    CALL tm1d_interp_profile(this, rho, this%d_part_fs, d_part)
+    CALL tm1d_interp_profile(this, rho, this%nu_mom_fs, nu_mom)
+    CALL tm1d_interp_profile(this, rho, this%vpinch_fs, vpinch)
+  END SUBROUTINE tm1d_interp_transport
+
   SUBROUTINE tm1d_write_hdf5(this, parent_group_id)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     INTEGER(HID_T), INTENT(IN) :: parent_group_id
@@ -406,5 +431,39 @@ CONTAINS
     this%dte_dr_fs = 2.d0/(3.d0*phys%Mref) * &
          (fs_data%Q_rad_fs(4, :)/u1_safe - fs_data%U_fs(4, :)*fs_data%Q_rad_fs(1, :)/u1_safe**2)
   END SUBROUTINE tm1d_build_projected_gradients
+
+
+  SUBROUTINE tm1d_interp_profile(this, rho, profile, value)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho
+    REAL*8, INTENT(IN) :: profile(:)
+    REAL*8, INTENT(OUT) :: value
+    INTEGER :: ilow, ihigh, i
+    REAL*8 :: alpha
+    REAL*8 :: rho_grid(this%nrho)
+
+    value = 0.d0
+
+    IF (this%nrho <= 0) RETURN
+    IF (SIZE(profile) /= this%nrho) RETURN
+    IF (this%nrho == 1) THEN
+       value = profile(1)
+       RETURN
+    END IF
+
+    DO i = 1, this%nrho
+       rho_grid(i) = DBLE(i - 1)/DBLE(MAX(this%nrho - 1, 1))
+    END DO
+
+    CALL find_cell_and_local_coordinate(this%nrho, rho_grid, MIN(MAX(rho, 0.d0), 1.d0), ilow, alpha)
+    ilow = MIN(MAX(ilow, 1), this%nrho)
+    ihigh = MIN(ilow + 1, this%nrho)
+
+    IF (ihigh == ilow) THEN
+       value = profile(ilow)
+    ELSE
+       value = (1.d0 - alpha)*profile(ilow) + alpha*profile(ihigh)
+    END IF
+  END SUBROUTINE tm1d_interp_profile
 
 END MODULE transport_models_1d
