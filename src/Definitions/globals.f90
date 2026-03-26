@@ -23,6 +23,7 @@ MODULE globals
   TYPE(Magnetic_type), TARGET :: magn
   TYPE(Switches_type), TARGET :: switch
   TYPE(Inputs_type), TARGET :: input
+  TYPE(Transport_model_input_type), TARGET :: transport_model_input
   TYPE(Time_type), TARGET :: time
   TYPE(Numeric_type), TARGET :: numer
   TYPE(Adaptivity_type), TARGET :: adapt

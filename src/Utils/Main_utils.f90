@@ -180,6 +180,7 @@ CONTAINS
   SUBROUTINE update_reduced_transport_profiles()
     IF (.NOT. switch%transport_1d) RETURN
 
+    CALL transport_model_1d%set_config(transport_model_input%rho_edge, transport_model_input%rho_core)
     CALL fs_transport%build_profiles()
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
   END SUBROUTINE update_reduced_transport_profiles

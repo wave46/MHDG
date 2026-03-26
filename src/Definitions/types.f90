@@ -442,6 +442,7 @@ MODULE types
   !***************************************************************
   TYPE Inputs_type
      CHARACTER(len=1000) :: field_path ! where do we read magnetic field from (WEST cases so far)
+     CHARACTER(len=1000) :: transport_model_path ! where do we read transport model settings from
      CHARACTER(len=1000) :: jtor_path ! where do we read plasma current from (WEST cases so far)
      CHARACTER(len=1000) :: save_folder ! where to save last solution
      CHARACTER(len=1000) :: external_heating_path ! where do we read external heating from (only used if the external_heating is on)
@@ -463,6 +464,11 @@ MODULE types
      INTEGER             :: target_density_xpr_dimension ! number of timeslices in the target density expression file
      INTEGER             :: zeff_dimension ! number of timeslices in the Zeff file
   END TYPE Inputs_type
+
+  TYPE Transport_model_input_type
+     REAL*8 :: rho_core = 0.8d0
+     REAL*8 :: rho_edge = 0.99d0
+  END TYPE Transport_model_input_type
 
   !*******************************************************
   ! Time: type for the time stepping information

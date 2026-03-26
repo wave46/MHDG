@@ -1,0 +1,4 @@
+&TRANSPORT_MODEL_1D_LST
+  rho_core = 0.8
+  rho_edge = 0.99
+/

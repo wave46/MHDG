@@ -68,6 +68,7 @@
 /
 
 &INPUT_LST
+    transport_model_path = 'transport_model.nml'
     field_path          = '/home/ikudashev/Documents/Github/HDG_postprocess/demos/data/solutions/limiter_case/field/B_field_k_5_60527_t_5_6.h5'  ! Path to Bfield h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'B_field/WEST_54487'
                                                                         ! If switch%ME = .false. then put the full part 'B_field/WEST_54487_0000.h5'

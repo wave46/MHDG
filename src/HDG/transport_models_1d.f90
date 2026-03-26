@@ -35,6 +35,7 @@ MODULE transport_models_1d
    CONTAINS
      PROCEDURE :: init => tm1d_init
      PROCEDURE :: destroy => tm1d_destroy
+     PROCEDURE :: set_config => tm1d_set_config
      PROCEDURE :: update_from_flux_surfaces => tm1d_update_from_flux_surfaces
      PROCEDURE :: compute_delta_te => tm1d_compute_delta_te
      PROCEDURE :: write_hdf5 => tm1d_write_hdf5
@@ -118,6 +119,14 @@ CONTAINS
 
     CALL this%destroy()
   END SUBROUTINE tm1d_finalize
+
+  SUBROUTINE tm1d_set_config(this, rho_edge, rho_core)
+    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core
+
+    IF (PRESENT(rho_edge)) this%rho_edge = rho_edge
+    IF (PRESENT(rho_core)) this%rho_core = rho_core
+  END SUBROUTINE tm1d_set_config
 
   SUBROUTINE tm1d_update_from_flux_surfaces(this, fs_data)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
