@@ -575,6 +575,12 @@ SUBROUTINE READ_input()
      PRINT *, '                - transport_model_path:                  ', TRIM(ADJUSTL(input%transport_model_path))
      PRINT *, '                - rho_core (transport model):            ', transport_model_input%rho_core
      PRINT *, '                - rho_edge (transport model):            ', transport_model_input%rho_edge
+     PRINT *, '                - c_bohm_i (transport model):           ', transport_model_input%c_bohm_i
+     PRINT *, '                - c_gyrobohm_i (transport model):       ', transport_model_input%c_gyrobohm_i
+     PRINT *, '                - c_bohm_e (transport model):           ', transport_model_input%c_bohm_e
+     PRINT *, '                - c_gyrobohm_e (transport model):       ', transport_model_input%c_gyrobohm_e
+     PRINT *, '                - c_bohm_n (transport model):           ', transport_model_input%c_bohm_n
+     PRINT *, '                - prandtl (transport model):            ', transport_model_input%prandtl
      PRINT *, '        ***************** Numerics ****************************'
      PRINT *, '                - stabilization type:                                 ', numer%stab
      PRINT *, '                - tau(1):                                             ', numer%tau(1)
@@ -678,11 +684,17 @@ SUBROUTINE read_transport_model_input()
   IMPLICIT NONE
 
   INTEGER :: utransport, ios
-  REAL*8 :: rho_core, rho_edge
-  NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge
+  REAL*8 :: rho_core, rho_edge, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl
+  NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl
 
   rho_core = transport_model_input%rho_core
   rho_edge = transport_model_input%rho_edge
+  c_bohm_i = transport_model_input%c_bohm_i
+  c_gyrobohm_i = transport_model_input%c_gyrobohm_i
+  c_bohm_e = transport_model_input%c_bohm_e
+  c_gyrobohm_e = transport_model_input%c_gyrobohm_e
+  c_bohm_n = transport_model_input%c_bohm_n
+  prandtl = transport_model_input%prandtl
 
   IF (LEN_TRIM(input%transport_model_path) == 0) RETURN
 
@@ -702,4 +714,10 @@ SUBROUTINE read_transport_model_input()
 
   transport_model_input%rho_core = rho_core
   transport_model_input%rho_edge = rho_edge
+  transport_model_input%c_bohm_i = c_bohm_i
+  transport_model_input%c_gyrobohm_i = c_gyrobohm_i
+  transport_model_input%c_bohm_e = c_bohm_e
+  transport_model_input%c_gyrobohm_e = c_gyrobohm_e
+  transport_model_input%c_bohm_n = c_bohm_n
+  transport_model_input%prandtl = prandtl
 END SUBROUTINE read_transport_model_input

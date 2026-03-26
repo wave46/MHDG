@@ -468,6 +468,12 @@ MODULE types
   TYPE Transport_model_input_type
      REAL*8 :: rho_core = 0.8d0
      REAL*8 :: rho_edge = 0.99d0
+     REAL*8 :: c_bohm_i = 1.6d-4
+     REAL*8 :: c_gyrobohm_i = 1.75d-2
+     REAL*8 :: c_bohm_e = 8.d-5
+     REAL*8 :: c_gyrobohm_e = 3.5d-2
+     REAL*8 :: c_bohm_n = 1.d0
+     REAL*8 :: prandtl = 1.d0
   END TYPE Transport_model_input_type
 
   !*******************************************************
