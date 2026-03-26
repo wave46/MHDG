@@ -20,16 +20,18 @@
   prandtl = 1.0
 
   ! Pinch model selector:
-  ! 1 -> Militello collisionality-dependent inward pinch
+  ! 1 -> Militello collisionality-dependent pinch
   !      Reference: E. Militello-Asp et al., NF 2022-style suppression factor.
-  ! 2 -> Polevoi-style geometric inward pinch baseline
+  ! 2 -> Polevoi-style geometric pinch baseline
   !      with v_pinch = C * D * r / a^2.
   !      Reference for integrated-model usage: Polevoi et al., Nuclear Fusion (2020).
-  ! 3 -> Constant inward pinch for steady-state checks.
-  !      Positive vpinch_const_phys means inward pinch speed.
+  ! 3 -> Constant pinch for steady-state checks.
+  !      Positive values mean outward pinch (along increasing minor radius);
+  !      negative values mean inward pinch.
   pinch_model = 3
 
-  ! Pinch coefficient C.
+  ! Pinch coefficient C. Positive C follows the outward radial convention;
+  ! use negative C for inward pinch.
   ! For benchmarking we currently use one shared coefficient for both models,
   ! but in practice the Polevoi-style baseline may need a different tuned value.
   c_pinch = 0.5
@@ -45,7 +47,7 @@
   ! over rho_pinch_axis_width. Near rho_pinch_model_max it ramps back to 0
   ! over rho_pinch_edge_width.
   rho_pinch_axis_width = 0.02
-  rho_pinch_model_max = 0.99
+  rho_pinch_model_max = 1.3
   rho_pinch_edge_width = 0.03
 
   ! Width of the smooth core-to-edge transport transition in rho.
