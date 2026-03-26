@@ -26,6 +26,7 @@ MODULE transport_models_1d
      REAL*8, ALLOCATABLE :: pe_fs(:)
      REAL*8, ALLOCATABLE :: pi_fs(:)
      REAL*8, ALLOCATABLE :: q_fs(:)
+     REAL*8, ALLOCATABLE :: omega_fs(:)
      REAL*8, ALLOCATABLE :: Rmaj_fs(:)
      REAL*8, ALLOCATABLE :: rmin_fs(:)
      REAL*8, ALLOCATABLE :: eps_fs(:)
@@ -33,6 +34,7 @@ MODULE transport_models_1d
      REAL*8, ALLOCATABLE :: dte_dr_fs(:)
      REAL*8, ALLOCATABLE :: dpe_dr_fs(:)
      REAL*8, ALLOCATABLE :: nuestar_fs(:)
+     REAL*8, ALLOCATABLE :: chi_bohm_fs(:)
    CONTAINS
      PROCEDURE :: init => tm1d_init
      PROCEDURE :: destroy => tm1d_destroy
@@ -40,6 +42,7 @@ MODULE transport_models_1d
      PROCEDURE :: update_from_flux_surfaces => tm1d_update_from_flux_surfaces
      PROCEDURE :: compute_delta_te => tm1d_compute_delta_te
      PROCEDURE :: compute_collisionality_profile => tm1d_compute_collisionality_profile
+     PROCEDURE :: compute_bohm_profile => tm1d_compute_bohm_profile
      PROCEDURE :: write_hdf5 => tm1d_write_hdf5
      FINAL :: tm1d_finalize
   END TYPE transport_model_1d_t
@@ -69,6 +72,7 @@ CONTAINS
     ALLOCATE(this%pe_fs(this%nrho))
     ALLOCATE(this%pi_fs(this%nrho))
     ALLOCATE(this%q_fs(this%nrho))
+    ALLOCATE(this%omega_fs(this%nrho))
     ALLOCATE(this%Rmaj_fs(this%nrho))
     ALLOCATE(this%rmin_fs(this%nrho))
     ALLOCATE(this%eps_fs(this%nrho))
@@ -76,6 +80,7 @@ CONTAINS
     ALLOCATE(this%dte_dr_fs(this%nrho))
     ALLOCATE(this%dpe_dr_fs(this%nrho))
     ALLOCATE(this%nuestar_fs(this%nrho))
+    ALLOCATE(this%chi_bohm_fs(this%nrho))
 
     this%te_fs = 0.d0
     this%ti_fs = 0.d0
@@ -83,6 +88,7 @@ CONTAINS
     this%pe_fs = 0.d0
     this%pi_fs = 0.d0
     this%q_fs = 0.d0
+    this%omega_fs = 0.d0
     this%Rmaj_fs = 0.d0
     this%rmin_fs = 0.d0
     this%eps_fs = 0.d0
@@ -90,6 +96,7 @@ CONTAINS
     this%dte_dr_fs = 0.d0
     this%dpe_dr_fs = 0.d0
     this%nuestar_fs = 0.d0
+    this%chi_bohm_fs = 0.d0
     this%delta_te = 0.d0
     this%is_initialized = .TRUE.
   END SUBROUTINE tm1d_init
@@ -103,6 +110,7 @@ CONTAINS
     IF (ALLOCATED(this%pe_fs)) DEALLOCATE(this%pe_fs)
     IF (ALLOCATED(this%pi_fs)) DEALLOCATE(this%pi_fs)
     IF (ALLOCATED(this%q_fs)) DEALLOCATE(this%q_fs)
+    IF (ALLOCATED(this%omega_fs)) DEALLOCATE(this%omega_fs)
     IF (ALLOCATED(this%Rmaj_fs)) DEALLOCATE(this%Rmaj_fs)
     IF (ALLOCATED(this%rmin_fs)) DEALLOCATE(this%rmin_fs)
     IF (ALLOCATED(this%eps_fs)) DEALLOCATE(this%eps_fs)
@@ -110,6 +118,7 @@ CONTAINS
     IF (ALLOCATED(this%dte_dr_fs)) DEALLOCATE(this%dte_dr_fs)
     IF (ALLOCATED(this%dpe_dr_fs)) DEALLOCATE(this%dpe_dr_fs)
     IF (ALLOCATED(this%nuestar_fs)) DEALLOCATE(this%nuestar_fs)
+    IF (ALLOCATED(this%chi_bohm_fs)) DEALLOCATE(this%chi_bohm_fs)
 
     this%is_initialized = .FALSE.
     this%nrho = 0
@@ -157,6 +166,7 @@ CONTAINS
     this%ti_fs = up(:, 7)
     this%te_fs = up(:, 8)
     this%q_fs = fs_data%q_fs
+    this%omega_fs = fs_data%omega_fs
     this%Rmaj_fs = fs_data%Rmaj_fs
     this%rmin_fs = fs_data%rmin_fs
     this%eps_fs = fs_data%eps_fs
@@ -166,6 +176,7 @@ CONTAINS
     CALL tm1d_build_projected_gradients(this, fs_data)
     CALL this%compute_delta_te(fs_data)
     CALL this%compute_collisionality_profile()
+    CALL this%compute_bohm_profile()
 
     DEALLOCATE(ua, up)
   END SUBROUTINE tm1d_update_from_flux_surfaces
@@ -196,12 +207,23 @@ CONTAINS
     te_dim = MAX(ABS(this%te_fs)*simpar%refval_temperature, model_tol)
     rmaj_dim = MAX(ABS(this%Rmaj_fs)*simpar%refval_length, model_tol)
 
-    lambda_e = 31.3d0 - LOG(ne_dim/te_dim)
-    lambda_e = MAX(lambda_e, 1.d0)
+    lambda_e = 31.3d0 - LOG(SQRT(ne_dim)/te_dim)
 
     this%nuestar_fs = 6.921d-18 * ABS(this%q_fs) * rmaj_dim * ne_dim * MAX(phys%Zeff, 1.d0) * lambda_e / &
          (MAX(this%eps_fs, model_tol)**1.5d0 * te_dim**2)
   END SUBROUTINE tm1d_compute_collisionality_profile
+
+  SUBROUTINE tm1d_compute_bohm_profile(this)
+    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+    REAL*8 :: rho_s_te_fs(this%nrho)
+
+    IF (.NOT. this%is_initialized) RETURN
+    IF (this%nrho <= 0) RETURN
+
+    rho_s_te_fs = this%cs_te_fs / MAX(this%omega_fs, model_tol)
+    this%chi_bohm_fs = rho_s_te_fs * this%cs_te_fs * this%q_fs**2 * this%a_minor * &
+         ABS(this%dpe_dr_fs) / MAX(this%pe_fs, model_tol) * this%delta_te
+  END SUBROUTINE tm1d_compute_bohm_profile
 
   SUBROUTINE tm1d_write_hdf5(this, parent_group_id)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
@@ -220,6 +242,7 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id, this%pi_fs, SIZE(this%pi_fs), 'pi_fs')
     CALL HDF5_array1D_saving(group_id, this%pe_fs, SIZE(this%pe_fs), 'pe_fs')
     CALL HDF5_array1D_saving(group_id, this%q_fs, SIZE(this%q_fs), 'q_fs')
+    CALL HDF5_array1D_saving(group_id, this%omega_fs, SIZE(this%omega_fs), 'omega_fs')
     CALL HDF5_array1D_saving(group_id, this%Rmaj_fs, SIZE(this%Rmaj_fs), 'Rmaj_fs')
     CALL HDF5_array1D_saving(group_id, this%rmin_fs, SIZE(this%rmin_fs), 'rmin_fs')
     CALL HDF5_array1D_saving(group_id, this%eps_fs, SIZE(this%eps_fs), 'eps_fs')
@@ -227,6 +250,7 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id, this%dte_dr_fs, SIZE(this%dte_dr_fs), 'dte_dr_fs')
     CALL HDF5_array1D_saving(group_id, this%dpe_dr_fs, SIZE(this%dpe_dr_fs), 'dpe_dr_fs')
     CALL HDF5_array1D_saving(group_id, this%nuestar_fs, SIZE(this%nuestar_fs), 'nuestar_fs')
+    CALL HDF5_array1D_saving(group_id, this%chi_bohm_fs, SIZE(this%chi_bohm_fs), 'chi_bohm_fs')
     CALL HDF5_real_saving(group_id, this%a_minor, 'a_minor')
     CALL HDF5_real_saving(group_id, this%rho_core, 'rho_core')
     CALL HDF5_real_saving(group_id, this%rho_edge, 'rho_edge')
