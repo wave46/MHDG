@@ -1,10 +1,30 @@
 &TRANSPORT_MODEL_1D_LST
+  ! Reference radii used by the 1D core transport model.
+  ! rho_core enters Delta_Te, rho_edge is the edge reference point.
   rho_core = 0.8
   rho_edge = 0.99
+
+  ! Transport model is expected to be valid only in the confined region.
+  ! Keep coefficients computed on the full 1D grid; apply this cutoff later
+  ! when interpolating transport back to local points.
+  rho_model_max = 1.0
+
+  ! Mixed Bohm / gyro-Bohm coefficients.
   c_bohm_i = 1.6e-4
   c_gyrobohm_i = 1.75e-2
   c_bohm_e = 8.e-5
   c_gyrobohm_e = 3.5e-2
   c_bohm_n = 1.0
   prandtl = 1.0
+
+  ! Pinch model selector:
+  ! 1 -> Militello collisionality-dependent pinch
+  ! 2 -> geometric pinch
+  pinch_model = 1
+
+  ! Shared pinch coefficient.
+  c_pinch = 0.5
+
+  ! Collisionality threshold used by the Militello suppression factor.
+  nu_th = 0.04
 /

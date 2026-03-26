@@ -181,9 +181,11 @@ CONTAINS
     IF (.NOT. switch%transport_1d) RETURN
 
     CALL transport_model_1d%set_config(rho_edge=transport_model_input%rho_edge, rho_core=transport_model_input%rho_core, &
-         c_bohm_i=transport_model_input%c_bohm_i, c_gyrobohm_i=transport_model_input%c_gyrobohm_i, &
-         c_bohm_e=transport_model_input%c_bohm_e, c_gyrobohm_e=transport_model_input%c_gyrobohm_e, &
-         c_bohm_n=transport_model_input%c_bohm_n, prandtl=transport_model_input%prandtl)
+         rho_model_max=transport_model_input%rho_model_max, c_bohm_i=transport_model_input%c_bohm_i, &
+         c_gyrobohm_i=transport_model_input%c_gyrobohm_i, c_bohm_e=transport_model_input%c_bohm_e, &
+         c_gyrobohm_e=transport_model_input%c_gyrobohm_e, c_bohm_n=transport_model_input%c_bohm_n, &
+         prandtl=transport_model_input%prandtl, pinch_model=transport_model_input%pinch_model, &
+         c_pinch=transport_model_input%c_pinch, nu_th=transport_model_input%nu_th)
     CALL fs_transport%build_profiles()
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
   END SUBROUTINE update_reduced_transport_profiles

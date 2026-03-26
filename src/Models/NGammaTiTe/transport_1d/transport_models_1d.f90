@@ -18,6 +18,10 @@ MODULE transport_models_1d
      INTEGER :: nrho = 0
      REAL*8 :: rho_edge = rho_edge_default
      REAL*8 :: rho_core = rho_core_default
+     REAL*8 :: rho_model_max = 1.d0
+     INTEGER :: pinch_model = 1
+     REAL*8 :: c_pinch = 0.5d0
+     REAL*8 :: nu_th = 0.04d0
      REAL*8 :: a_minor = 0.d0
      REAL*8 :: delta_te = 0.d0
      REAL*8 :: c_bohm_i = 1.6d-4
@@ -46,6 +50,10 @@ MODULE transport_models_1d
      REAL*8, ALLOCATABLE :: chi_e_fs(:)
      REAL*8, ALLOCATABLE :: d_part_fs(:)
      REAL*8, ALLOCATABLE :: nu_mom_fs(:)
+     REAL*8, ALLOCATABLE :: pinch_factor_militello_fs(:)
+     REAL*8, ALLOCATABLE :: vpinch_militello_fs(:)
+     REAL*8, ALLOCATABLE :: vpinch_geometric_fs(:)
+     REAL*8, ALLOCATABLE :: vpinch_fs(:)
    CONTAINS
      PROCEDURE :: init => tm1d_init
      PROCEDURE :: destroy => tm1d_destroy
@@ -56,6 +64,7 @@ MODULE transport_models_1d
      PROCEDURE :: compute_bohm_profile => tm1d_compute_bohm_profile
      PROCEDURE :: compute_gyrobohm_profile => tm1d_compute_gyrobohm_profile
      PROCEDURE :: compute_mixed_transport => tm1d_compute_mixed_transport
+     PROCEDURE :: compute_pinch_profile => tm1d_compute_pinch_profile
      PROCEDURE :: write_hdf5 => tm1d_write_hdf5
      FINAL :: tm1d_finalize
   END TYPE transport_model_1d_t
@@ -64,10 +73,10 @@ MODULE transport_models_1d
 
 CONTAINS
 
-  SUBROUTINE tm1d_init(this, nrho, rho_edge, rho_core)
+  SUBROUTINE tm1d_init(this, nrho, rho_edge, rho_core, rho_model_max)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     INTEGER, INTENT(IN) :: nrho
-    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core
+    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_model_max
 
     CALL this%destroy()
 
@@ -76,6 +85,8 @@ CONTAINS
     IF (.NOT. PRESENT(rho_edge)) this%rho_edge = rho_edge_default
     IF (PRESENT(rho_core)) this%rho_core = rho_core
     IF (.NOT. PRESENT(rho_core)) this%rho_core = rho_core_default
+    IF (PRESENT(rho_model_max)) this%rho_model_max = rho_model_max
+    IF (.NOT. PRESENT(rho_model_max)) this%rho_model_max = 1.d0
 
     IF (this%nrho <= 0) RETURN
 
@@ -99,6 +110,10 @@ CONTAINS
     ALLOCATE(this%chi_e_fs(this%nrho))
     ALLOCATE(this%d_part_fs(this%nrho))
     ALLOCATE(this%nu_mom_fs(this%nrho))
+    ALLOCATE(this%pinch_factor_militello_fs(this%nrho))
+    ALLOCATE(this%vpinch_militello_fs(this%nrho))
+    ALLOCATE(this%vpinch_geometric_fs(this%nrho))
+    ALLOCATE(this%vpinch_fs(this%nrho))
 
     this%te_fs = 0.d0
     this%ti_fs = 0.d0
@@ -120,6 +135,10 @@ CONTAINS
     this%chi_e_fs = 0.d0
     this%d_part_fs = 0.d0
     this%nu_mom_fs = 0.d0
+    this%pinch_factor_militello_fs = 0.d0
+    this%vpinch_militello_fs = 0.d0
+    this%vpinch_geometric_fs = 0.d0
+    this%vpinch_fs = 0.d0
     this%delta_te = 0.d0
     this%is_initialized = .TRUE.
   END SUBROUTINE tm1d_init
@@ -147,11 +166,19 @@ CONTAINS
     IF (ALLOCATED(this%chi_e_fs)) DEALLOCATE(this%chi_e_fs)
     IF (ALLOCATED(this%d_part_fs)) DEALLOCATE(this%d_part_fs)
     IF (ALLOCATED(this%nu_mom_fs)) DEALLOCATE(this%nu_mom_fs)
+    IF (ALLOCATED(this%pinch_factor_militello_fs)) DEALLOCATE(this%pinch_factor_militello_fs)
+    IF (ALLOCATED(this%vpinch_militello_fs)) DEALLOCATE(this%vpinch_militello_fs)
+    IF (ALLOCATED(this%vpinch_geometric_fs)) DEALLOCATE(this%vpinch_geometric_fs)
+    IF (ALLOCATED(this%vpinch_fs)) DEALLOCATE(this%vpinch_fs)
 
     this%is_initialized = .FALSE.
     this%nrho = 0
     this%rho_edge = rho_edge_default
     this%rho_core = rho_core_default
+    this%rho_model_max = 1.d0
+    this%pinch_model = 1
+    this%c_pinch = 0.5d0
+    this%nu_th = 0.04d0
     this%a_minor = 0.d0
     this%delta_te = 0.d0
     this%c_bohm_i = 1.6d-4
@@ -168,18 +195,23 @@ CONTAINS
     CALL this%destroy()
   END SUBROUTINE tm1d_finalize
 
-  SUBROUTINE tm1d_set_config(this, rho_edge, rho_core, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl)
+  SUBROUTINE tm1d_set_config(this, rho_edge, rho_core, rho_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl
+    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th
+    INTEGER, INTENT(IN), OPTIONAL :: pinch_model
 
     IF (PRESENT(rho_edge)) this%rho_edge = rho_edge
     IF (PRESENT(rho_core)) this%rho_core = rho_core
+    IF (PRESENT(rho_model_max)) this%rho_model_max = rho_model_max
     IF (PRESENT(c_bohm_i)) this%c_bohm_i = c_bohm_i
     IF (PRESENT(c_gyrobohm_i)) this%c_gyrobohm_i = c_gyrobohm_i
     IF (PRESENT(c_bohm_e)) this%c_bohm_e = c_bohm_e
     IF (PRESENT(c_gyrobohm_e)) this%c_gyrobohm_e = c_gyrobohm_e
     IF (PRESENT(c_bohm_n)) this%c_bohm_n = c_bohm_n
     IF (PRESENT(prandtl)) this%prandtl = prandtl
+    IF (PRESENT(pinch_model)) this%pinch_model = pinch_model
+    IF (PRESENT(c_pinch)) this%c_pinch = c_pinch
+    IF (PRESENT(nu_th)) this%nu_th = nu_th
   END SUBROUTINE tm1d_set_config
 
   SUBROUTINE tm1d_update_from_flux_surfaces(this, fs_data)
@@ -190,7 +222,7 @@ CONTAINS
     IF (.NOT. fs_data%profiles_built) RETURN
 
     IF ((.NOT. this%is_initialized) .OR. this%nrho /= fs_data%nrho) THEN
-       CALL this%init(fs_data%nrho, this%rho_edge, this%rho_core)
+       CALL this%init(fs_data%nrho, this%rho_edge, this%rho_core, this%rho_model_max)
     END IF
     IF (.NOT. this%is_initialized) RETURN
 
@@ -219,6 +251,7 @@ CONTAINS
     CALL this%compute_bohm_profile()
     CALL this%compute_gyrobohm_profile()
     CALL this%compute_mixed_transport()
+    CALL this%compute_pinch_profile()
 
     DEALLOCATE(ua, up)
   END SUBROUTINE tm1d_update_from_flux_surfaces
@@ -290,6 +323,26 @@ CONTAINS
     this%nu_mom_fs = this%prandtl * this%chi_i_fs
   END SUBROUTINE tm1d_compute_mixed_transport
 
+  SUBROUTINE tm1d_compute_pinch_profile(this)
+    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+
+    IF (.NOT. this%is_initialized) RETURN
+    IF (this%nrho <= 0) RETURN
+
+    this%pinch_factor_militello_fs = MIN(1.d0, EXP(1.d0 - this%nuestar_fs/MAX(this%nu_th, model_tol)))
+    this%vpinch_militello_fs = this%pinch_factor_militello_fs * this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
+    this%vpinch_geometric_fs = this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
+
+    SELECT CASE (this%pinch_model)
+    CASE (1)
+       this%vpinch_fs = this%vpinch_militello_fs
+    CASE (2)
+       this%vpinch_fs = this%vpinch_geometric_fs
+    CASE DEFAULT
+       this%vpinch_fs = 0.d0
+    END SELECT
+  END SUBROUTINE tm1d_compute_pinch_profile
+
   SUBROUTINE tm1d_write_hdf5(this, parent_group_id)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     INTEGER(HID_T), INTENT(IN) :: parent_group_id
@@ -321,9 +374,14 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id, this%chi_e_fs, SIZE(this%chi_e_fs), 'chi_e_fs')
     CALL HDF5_array1D_saving(group_id, this%d_part_fs, SIZE(this%d_part_fs), 'd_part_fs')
     CALL HDF5_array1D_saving(group_id, this%nu_mom_fs, SIZE(this%nu_mom_fs), 'nu_mom_fs')
+    CALL HDF5_array1D_saving(group_id, this%pinch_factor_militello_fs, SIZE(this%pinch_factor_militello_fs), 'pinch_factor_militello_fs')
+    CALL HDF5_array1D_saving(group_id, this%vpinch_militello_fs, SIZE(this%vpinch_militello_fs), 'vpinch_militello_fs')
+    CALL HDF5_array1D_saving(group_id, this%vpinch_geometric_fs, SIZE(this%vpinch_geometric_fs), 'vpinch_geometric_fs')
+    CALL HDF5_array1D_saving(group_id, this%vpinch_fs, SIZE(this%vpinch_fs), 'vpinch_fs')
     CALL HDF5_real_saving(group_id, this%a_minor, 'a_minor')
     CALL HDF5_real_saving(group_id, this%rho_core, 'rho_core')
     CALL HDF5_real_saving(group_id, this%rho_edge, 'rho_edge')
+    CALL HDF5_real_saving(group_id, this%rho_model_max, 'rho_model_max')
     CALL HDF5_real_saving(group_id, this%delta_te, 'delta_te')
     CALL HDF5_real_saving(group_id, this%c_bohm_i, 'c_bohm_i')
     CALL HDF5_real_saving(group_id, this%c_gyrobohm_i, 'c_gyrobohm_i')
@@ -331,6 +389,9 @@ CONTAINS
     CALL HDF5_real_saving(group_id, this%c_gyrobohm_e, 'c_gyrobohm_e')
     CALL HDF5_real_saving(group_id, this%c_bohm_n, 'c_bohm_n')
     CALL HDF5_real_saving(group_id, this%prandtl, 'prandtl')
+    CALL HDF5_integer_saving(group_id, this%pinch_model, 'pinch_model')
+    CALL HDF5_real_saving(group_id, this%c_pinch, 'c_pinch')
+    CALL HDF5_real_saving(group_id, this%nu_th, 'nu_th')
     CALL HDF5_group_close(group_id, ierr)
   END SUBROUTINE tm1d_write_hdf5
 
