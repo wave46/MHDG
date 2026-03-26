@@ -203,13 +203,13 @@ preprocess.F : $(SDIR)/HDG/preprocess.f90
 preprocess.o : preprocess.F globals.o PrintUtils.o types.o MPI_OMP.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
-flux_surface_transport_data.F : $(SDIR)/HDG/flux_surface_transport_data.f90
+flux_surface_transport_data.F : $(SDIR)/Models/$(RMDL)/transport_1d/flux_surface_transport_data.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
 flux_surface_transport_data.o : flux_surface_transport_data.F globals.o MPI_OMP.o HDF5_io.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
-transport_models_1d.F : $(SDIR)/HDG/transport_models_1d.f90
+transport_models_1d.F : $(SDIR)/Models/$(RMDL)/transport_1d/transport_models_1d.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
 transport_models_1d.o : transport_models_1d.F flux_surface_transport_data.o globals.o physics.o
