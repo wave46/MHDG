@@ -2291,7 +2291,11 @@ CONTAINS
     CALL jacobianMatrices(ue,A)
 
     ! Jacobian for pinch term
-    CALL computePinch(b,psi,APinch)
+    IF (switch%transport_1d) THEN
+      CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
+    ELSE
+      CALL computePinch(b,psi,APinch)
+    ENDIF
 
     ! Compute Q^T^(k-1)
         Qpr = RESHAPE(qe,(/Ndim,Neq/))
@@ -3009,7 +3013,11 @@ ENDIF
       CALL jacobianMatrices(uf,A)
 
       ! Jacobian for pinch term
+      IF (switch%transport_1d) THEN
+      CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
+    ELSE
       CALL computePinch(b,psi,APinch)
+    ENDIF
 
       ! Compute Q^T^(k-1)
            Qpr = RESHAPE(qf,(/Ndim,Neq/))
@@ -3488,7 +3496,11 @@ ENDIF
       CALL jacobianMatrices(uf,A)
 
       ! Jacobian matrices Pinch
+      IF (switch%transport_1d) THEN
+      CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
+    ELSE
       CALL computePinch(b,psi,APinch)
+    ENDIF
 
       ! Compute Q^T^(k-1)
            Qpr = RESHAPE(qf,(/Ndim,Neq/))

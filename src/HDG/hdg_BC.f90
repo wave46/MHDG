@@ -2017,7 +2017,11 @@ CONTAINS
       CALL jacobianMatricesBohm(ufg,Abohm)
 
       ! Jacobian matrix for pinch part
-      CALL computePinch(bg,psig,APinch)
+      IF (switch%transport_1d) THEN
+        CALL transport_model_1d%compute_1D_pinch_matrix(bg,SQRT(MAX(psig,0.d0)),APinch)
+      ELSE
+        CALL computePinch(bg,psig,APinch)
+      ENDIF
 
         gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),bg)  ! scalar
         gme = dot_PRODUCT(MATMUL(Qpr,Vvece),bg)             ! scalar
@@ -2378,6 +2382,7 @@ CONTAINS
 
     !Contribution from perpendicular plasma flux
     flgflux_perpendicular = recycling_coeff*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(2,1)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)+Qpr(2,1)*bn*bg(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2))
+    flgflux_perpendicular = flgflux_perpendicular + recycling_coeff*uefg(1)*(APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
     !Neutral flux
     flgflux_neutral = (diffiso(5,5)*(Qpr(1,5)*ng(1) + Qpr(2,5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2

@@ -575,7 +575,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - transport_model_path:                  ', TRIM(ADJUSTL(input%transport_model_path))
      PRINT *, '                - rho_core (transport model):            ', transport_model_input%rho_core
      PRINT *, '                - rho_edge (transport model):            ', transport_model_input%rho_edge
-     PRINT *, '                - rho_model_max (transport model):       ', transport_model_input%rho_model_max
+     PRINT *, '                - rho_diffusion_model_max (transport model):       ', transport_model_input%rho_diffusion_model_max
      PRINT *, '                - c_bohm_i (transport model):           ', transport_model_input%c_bohm_i
      PRINT *, '                - c_gyrobohm_i (transport model):       ', transport_model_input%c_gyrobohm_i
      PRINT *, '                - c_bohm_e (transport model):           ', transport_model_input%c_bohm_e
@@ -688,13 +688,13 @@ SUBROUTINE read_transport_model_input()
   IMPLICIT NONE
 
   INTEGER :: utransport, ios
-  REAL*8 :: rho_core, rho_edge, rho_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+  REAL*8 :: rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
   INTEGER :: pinch_model
-  NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge, rho_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+  NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
 
   rho_core = transport_model_input%rho_core
   rho_edge = transport_model_input%rho_edge
-  rho_model_max = transport_model_input%rho_model_max
+  rho_diffusion_model_max = transport_model_input%rho_diffusion_model_max
   c_bohm_i = transport_model_input%c_bohm_i
   c_gyrobohm_i = transport_model_input%c_gyrobohm_i
   c_bohm_e = transport_model_input%c_bohm_e
@@ -704,6 +704,10 @@ SUBROUTINE read_transport_model_input()
   pinch_model = transport_model_input%pinch_model
   c_pinch = transport_model_input%c_pinch
   nu_th = transport_model_input%nu_th
+  vpinch_const_phys = transport_model_input%vpinch_const_phys
+  rho_pinch_axis_width = transport_model_input%rho_pinch_axis_width
+  rho_pinch_model_max = transport_model_input%rho_pinch_model_max
+  rho_pinch_edge_width = transport_model_input%rho_pinch_edge_width
   rho_blend_width = transport_model_input%rho_blend_width
   diff_n_min_phys = transport_model_input%diff_n_min_phys
   diff_u_min_phys = transport_model_input%diff_u_min_phys
@@ -728,7 +732,7 @@ SUBROUTINE read_transport_model_input()
 
   transport_model_input%rho_core = rho_core
   transport_model_input%rho_edge = rho_edge
-  transport_model_input%rho_model_max = rho_model_max
+  transport_model_input%rho_diffusion_model_max = rho_diffusion_model_max
   transport_model_input%c_bohm_i = c_bohm_i
   transport_model_input%c_gyrobohm_i = c_gyrobohm_i
   transport_model_input%c_bohm_e = c_bohm_e
@@ -738,6 +742,10 @@ SUBROUTINE read_transport_model_input()
   transport_model_input%pinch_model = pinch_model
   transport_model_input%c_pinch = c_pinch
   transport_model_input%nu_th = nu_th
+  transport_model_input%vpinch_const_phys = vpinch_const_phys
+  transport_model_input%rho_pinch_axis_width = rho_pinch_axis_width
+  transport_model_input%rho_pinch_model_max = rho_pinch_model_max
+  transport_model_input%rho_pinch_edge_width = rho_pinch_edge_width
   transport_model_input%rho_blend_width = rho_blend_width
   transport_model_input%diff_n_min_phys = diff_n_min_phys
   transport_model_input%diff_u_min_phys = diff_u_min_phys

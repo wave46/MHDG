@@ -7,7 +7,7 @@
   ! Transport model is expected to be valid only in the confined region.
   ! Keep coefficients computed on the full 1D grid; apply this cutoff later
   ! when interpolating transport back to local points.
-  rho_model_max = 0.99
+  rho_diffusion_model_max = 0.99
 
   ! Mixed Bohm / gyro-Bohm coefficients.
   ! Reference: JETTO/NTCC mixed_bohm_gyro_bohm model description.
@@ -20,11 +20,13 @@
   prandtl = 1.0
 
   ! Pinch model selector:
-  ! 1 -> Militello collisionality-dependent pinch
+  ! 1 -> Militello collisionality-dependent inward pinch
   !      Reference: E. Militello-Asp et al., NF 2022-style suppression factor.
-  ! 2 -> Polevoi-style geometric pinch baseline
+  ! 2 -> Polevoi-style geometric inward pinch baseline
   !      with v_pinch = C * D * r / a^2.
   !      Reference for integrated-model usage: Polevoi et al., Nuclear Fusion (2020).
+  ! 3 -> Constant inward pinch for steady-state checks.
+  !      Positive vpinch_const_phys means inward pinch speed.
   pinch_model = 2
 
   ! Pinch coefficient C.
@@ -34,6 +36,17 @@
 
   ! Collisionality threshold used only by the Militello suppression factor.
   nu_th = 0.04
+
+  ! Constant inward pinch speed [m/s] used only when pinch_model = 3.
+  vpinch_const_phys = 0.0
+
+  ! Smooth pinch window parameters in rho_pol_norm.
+  ! Near the axis, the effective pinch ramps from 0 to the model value
+  ! over rho_pinch_axis_width. Near rho_pinch_model_max it ramps back to 0
+  ! over rho_pinch_edge_width.
+  rho_pinch_axis_width = 0.02
+  rho_pinch_model_max = 0.99
+  rho_pinch_edge_width = 0.03
 
   ! Width of the smooth core-to-edge transport transition in rho.
   rho_blend_width = 0.03

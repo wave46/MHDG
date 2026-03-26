@@ -468,7 +468,7 @@ MODULE types
   TYPE Transport_model_input_type
      REAL*8 :: rho_core = 0.8d0
      REAL*8 :: rho_edge = 0.99d0
-     REAL*8 :: rho_model_max = 1.d0
+     REAL*8 :: rho_diffusion_model_max = 1.d0
      REAL*8 :: c_bohm_i = 1.6d-4
      REAL*8 :: c_gyrobohm_i = 1.75d-2
      REAL*8 :: c_bohm_e = 8.d-5
@@ -478,6 +478,10 @@ MODULE types
      INTEGER :: pinch_model = 1
      REAL*8 :: c_pinch = 0.5d0
      REAL*8 :: nu_th = 0.04d0
+     REAL*8 :: vpinch_const_phys = 0.d0
+     REAL*8 :: rho_pinch_axis_width = 0.02d0
+     REAL*8 :: rho_pinch_model_max = 0.99d0
+     REAL*8 :: rho_pinch_edge_width = 0.03d0
      REAL*8 :: rho_blend_width = 0.02d0
      REAL*8 :: diff_n_min_phys = 0.d0
      REAL*8 :: diff_u_min_phys = 0.d0

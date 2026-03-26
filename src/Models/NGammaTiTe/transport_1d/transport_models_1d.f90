@@ -19,10 +19,14 @@ MODULE transport_models_1d
      INTEGER :: nrho = 0
      REAL*8 :: rho_edge = rho_edge_default
      REAL*8 :: rho_core = rho_core_default
-     REAL*8 :: rho_model_max = 1.d0
+     REAL*8 :: rho_diffusion_model_max = 1.d0
      INTEGER :: pinch_model = 1
      REAL*8 :: c_pinch = 0.5d0
      REAL*8 :: nu_th = 0.04d0
+     REAL*8 :: vpinch_const = 0.d0
+     REAL*8 :: rho_pinch_axis_width = 0.02d0
+     REAL*8 :: rho_pinch_model_max = 0.99d0
+     REAL*8 :: rho_pinch_edge_width = 0.03d0
      REAL*8 :: rho_blend_width = 0.02d0
      REAL*8 :: diff_n_min = 0.d0
      REAL*8 :: diff_u_min = 0.d0
@@ -59,6 +63,7 @@ MODULE transport_models_1d
      REAL*8, ALLOCATABLE :: pinch_factor_militello_fs(:)
      REAL*8, ALLOCATABLE :: vpinch_militello_fs(:)
      REAL*8, ALLOCATABLE :: vpinch_geometric_fs(:)
+     REAL*8, ALLOCATABLE :: vpinch_constant_fs(:)
      REAL*8, ALLOCATABLE :: vpinch_fs(:)
    CONTAINS
      PROCEDURE :: init => tm1d_init
@@ -72,6 +77,7 @@ MODULE transport_models_1d
      PROCEDURE :: compute_mixed_transport => tm1d_compute_mixed_transport
      PROCEDURE :: compute_pinch_profile => tm1d_compute_pinch_profile
      PROCEDURE :: interp_transport => tm1d_interp_transport
+     PROCEDURE :: compute_1D_pinch_matrix => tm1d_compute_1D_pinch_matrix
      PROCEDURE :: apply_1D_diffusion => tm1d_apply_1D_diffusion
      PROCEDURE :: write_hdf5 => tm1d_write_hdf5
      FINAL :: tm1d_finalize
@@ -81,10 +87,10 @@ MODULE transport_models_1d
 
 CONTAINS
 
-  SUBROUTINE tm1d_init(this, nrho, rho_edge, rho_core, rho_model_max)
+  SUBROUTINE tm1d_init(this, nrho, rho_edge, rho_core, rho_diffusion_model_max)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     INTEGER, INTENT(IN) :: nrho
-    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_model_max
+    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max
 
     CALL this%destroy()
 
@@ -93,8 +99,8 @@ CONTAINS
     IF (.NOT. PRESENT(rho_edge)) this%rho_edge = rho_edge_default
     IF (PRESENT(rho_core)) this%rho_core = rho_core
     IF (.NOT. PRESENT(rho_core)) this%rho_core = rho_core_default
-    IF (PRESENT(rho_model_max)) this%rho_model_max = rho_model_max
-    IF (.NOT. PRESENT(rho_model_max)) this%rho_model_max = 1.d0
+    IF (PRESENT(rho_diffusion_model_max)) this%rho_diffusion_model_max = rho_diffusion_model_max
+    IF (.NOT. PRESENT(rho_diffusion_model_max)) this%rho_diffusion_model_max = 1.d0
 
     IF (this%nrho <= 0) RETURN
 
@@ -121,6 +127,7 @@ CONTAINS
     ALLOCATE(this%pinch_factor_militello_fs(this%nrho))
     ALLOCATE(this%vpinch_militello_fs(this%nrho))
     ALLOCATE(this%vpinch_geometric_fs(this%nrho))
+    ALLOCATE(this%vpinch_constant_fs(this%nrho))
     ALLOCATE(this%vpinch_fs(this%nrho))
 
     this%te_fs = 0.d0
@@ -146,6 +153,7 @@ CONTAINS
     this%pinch_factor_militello_fs = 0.d0
     this%vpinch_militello_fs = 0.d0
     this%vpinch_geometric_fs = 0.d0
+    this%vpinch_constant_fs = 0.d0
     this%vpinch_fs = 0.d0
     this%delta_te = 0.d0
     this%is_initialized = .TRUE.
@@ -177,16 +185,21 @@ CONTAINS
     IF (ALLOCATED(this%pinch_factor_militello_fs)) DEALLOCATE(this%pinch_factor_militello_fs)
     IF (ALLOCATED(this%vpinch_militello_fs)) DEALLOCATE(this%vpinch_militello_fs)
     IF (ALLOCATED(this%vpinch_geometric_fs)) DEALLOCATE(this%vpinch_geometric_fs)
+    IF (ALLOCATED(this%vpinch_constant_fs)) DEALLOCATE(this%vpinch_constant_fs)
     IF (ALLOCATED(this%vpinch_fs)) DEALLOCATE(this%vpinch_fs)
 
     this%is_initialized = .FALSE.
     this%nrho = 0
     this%rho_edge = rho_edge_default
     this%rho_core = rho_core_default
-    this%rho_model_max = 1.d0
+    this%rho_diffusion_model_max = 1.d0
     this%pinch_model = 1
     this%c_pinch = 0.5d0
     this%nu_th = 0.04d0
+    this%vpinch_const = 0.d0
+    this%rho_pinch_axis_width = 0.02d0
+    this%rho_pinch_model_max = 0.99d0
+    this%rho_pinch_edge_width = 0.03d0
     this%rho_blend_width = 0.02d0
     this%diff_n_min = 0.d0
     this%diff_u_min = 0.d0
@@ -208,14 +221,14 @@ CONTAINS
     CALL this%destroy()
   END SUBROUTINE tm1d_finalize
 
-  SUBROUTINE tm1d_set_config(this, rho_edge, rho_core, rho_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys)
+  SUBROUTINE tm1d_set_config(this, rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
 
     IF (PRESENT(rho_edge)) this%rho_edge = rho_edge
     IF (PRESENT(rho_core)) this%rho_core = rho_core
-    IF (PRESENT(rho_model_max)) this%rho_model_max = rho_model_max
+    IF (PRESENT(rho_diffusion_model_max)) this%rho_diffusion_model_max = rho_diffusion_model_max
     IF (PRESENT(c_bohm_i)) this%c_bohm_i = c_bohm_i
     IF (PRESENT(c_gyrobohm_i)) this%c_gyrobohm_i = c_gyrobohm_i
     IF (PRESENT(c_bohm_e)) this%c_bohm_e = c_bohm_e
@@ -225,6 +238,10 @@ CONTAINS
     IF (PRESENT(pinch_model)) this%pinch_model = pinch_model
     IF (PRESENT(c_pinch)) this%c_pinch = c_pinch
     IF (PRESENT(nu_th)) this%nu_th = nu_th
+    IF (PRESENT(vpinch_const_phys)) this%vpinch_const = vpinch_const_phys/simpar%refval_speed
+    IF (PRESENT(rho_pinch_axis_width)) this%rho_pinch_axis_width = rho_pinch_axis_width
+    IF (PRESENT(rho_pinch_model_max)) this%rho_pinch_model_max = rho_pinch_model_max
+    IF (PRESENT(rho_pinch_edge_width)) this%rho_pinch_edge_width = rho_pinch_edge_width
     IF (PRESENT(rho_blend_width)) this%rho_blend_width = rho_blend_width
     IF (PRESENT(diff_n_min_phys)) this%diff_n_min = diff_n_min_phys*simpar%refval_time/simpar%refval_length**2
     IF (PRESENT(diff_u_min_phys)) this%diff_u_min = diff_u_min_phys*simpar%refval_time/simpar%refval_length**2
@@ -240,7 +257,7 @@ CONTAINS
     IF (.NOT. fs_data%profiles_built) RETURN
 
     IF ((.NOT. this%is_initialized) .OR. this%nrho /= fs_data%nrho) THEN
-       CALL this%init(fs_data%nrho, this%rho_edge, this%rho_core, this%rho_model_max)
+       CALL this%init(fs_data%nrho, this%rho_edge, this%rho_core, this%rho_diffusion_model_max)
     END IF
     IF (.NOT. this%is_initialized) RETURN
 
@@ -350,12 +367,21 @@ CONTAINS
     this%pinch_factor_militello_fs = MIN(1.d0, EXP(1.d0 - this%nuestar_fs/MAX(this%nu_th, model_tol)))
     this%vpinch_militello_fs = this%pinch_factor_militello_fs * this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
     this%vpinch_geometric_fs = this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
+    this%vpinch_constant_fs = this%vpinch_const
+
+    WHERE (this%rmin_fs <= model_tol)
+       this%vpinch_militello_fs = 0.d0
+       this%vpinch_geometric_fs = 0.d0
+       this%vpinch_constant_fs = 0.d0
+    END WHERE
 
     SELECT CASE (this%pinch_model)
     CASE (1)
        this%vpinch_fs = this%vpinch_militello_fs
     CASE (2)
        this%vpinch_fs = this%vpinch_geometric_fs
+    CASE (3)
+       this%vpinch_fs = this%vpinch_constant_fs
     CASE DEFAULT
        this%vpinch_fs = 0.d0
     END SELECT
@@ -375,7 +401,8 @@ CONTAINS
 
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
-    IF (rho > this%rho_model_max) RETURN
+    IF (rho > this%rho_diffusion_model_max) RETURN
+    IF (rho <= model_tol) RETURN
 
     CALL tm1d_interp_profile(this, rho, this%chi_i_fs, chi_i)
     CALL tm1d_interp_profile(this, rho, this%chi_e_fs, chi_e)
@@ -383,6 +410,67 @@ CONTAINS
     CALL tm1d_interp_profile(this, rho, this%nu_mom_fs, nu_mom)
     CALL tm1d_interp_profile(this, rho, this%vpinch_fs, vpinch)
   END SUBROUTINE tm1d_interp_transport
+
+
+  SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: b(:), rho
+    REAL*8, INTENT(OUT) :: APinch(:,:)
+    REAL*8 :: vpinch, bnorm(2), bnorm_norm, pinch_weight
+    REAL*8 :: chi_i, chi_e, d_part, nu_mom
+
+    APinch = 0.d0
+    IF (.NOT. this%is_initialized) RETURN
+
+    pinch_weight = tm1d_pinch_window(this, rho)
+    IF (pinch_weight <= model_tol) RETURN
+
+    CALL this%interp_transport(rho, chi_i, chi_e, d_part, nu_mom, vpinch)
+    vpinch = pinch_weight*vpinch
+    IF (ABS(vpinch) <= model_tol) RETURN
+
+    bnorm = b(1:2)
+    bnorm_norm = NORM2(bnorm)
+    IF (bnorm_norm <= model_tol) RETURN
+    bnorm = bnorm/bnorm_norm
+
+    APinch(1,1) = vpinch*bnorm(2)
+    APinch(1,2) = -vpinch*bnorm(1)
+  END SUBROUTINE tm1d_compute_1D_pinch_matrix
+
+  REAL*8 FUNCTION tm1d_pinch_window(this, rho)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho
+    REAL*8 :: w_axis, w_edge, s, rho_start
+
+    tm1d_pinch_window = 0.d0
+    IF (rho <= 0.d0) RETURN
+
+    IF (this%rho_pinch_axis_width <= model_tol) THEN
+       w_axis = 1.d0
+    ELSEIF (rho >= this%rho_pinch_axis_width) THEN
+       w_axis = 1.d0
+    ELSE
+       s = MAX(MIN(rho/this%rho_pinch_axis_width, 1.d0), 0.d0)
+       w_axis = s*s*(3.d0 - 2.d0*s)
+    ENDIF
+
+    IF (rho >= this%rho_pinch_model_max) THEN
+       w_edge = 0.d0
+    ELSEIF (this%rho_pinch_edge_width <= model_tol) THEN
+       w_edge = 1.d0
+    ELSE
+       rho_start = this%rho_pinch_model_max - this%rho_pinch_edge_width
+       IF (rho <= rho_start) THEN
+          w_edge = 1.d0
+       ELSE
+          s = MAX(MIN((rho - rho_start)/this%rho_pinch_edge_width, 1.d0), 0.d0)
+          w_edge = 1.d0 - s*s*(3.d0 - 2.d0*s)
+       ENDIF
+    ENDIF
+
+    tm1d_pinch_window = w_axis*w_edge
+  END FUNCTION tm1d_pinch_window
 
 
   SUBROUTINE tm1d_apply_1D_diffusion(this, rho_pol_norm, diff_iso, diff_ani)
@@ -425,7 +513,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: rho
     REAL*8 :: rho_start, rho_center, sigma
 
-    IF (rho >= this%rho_model_max) THEN
+    IF (rho >= this%rho_diffusion_model_max) THEN
        tm1d_blend_weight = 0.d0
        RETURN
     END IF
@@ -435,7 +523,7 @@ CONTAINS
        RETURN
     END IF
 
-    rho_start = this%rho_model_max - this%rho_blend_width
+    rho_start = this%rho_diffusion_model_max - this%rho_blend_width
     IF (rho <= rho_start) THEN
        tm1d_blend_weight = 1.d0
        RETURN
@@ -480,11 +568,12 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id, this%pinch_factor_militello_fs, SIZE(this%pinch_factor_militello_fs), 'pinch_factor_militello_fs')
     CALL HDF5_array1D_saving(group_id, this%vpinch_militello_fs, SIZE(this%vpinch_militello_fs), 'vpinch_militello_fs')
     CALL HDF5_array1D_saving(group_id, this%vpinch_geometric_fs, SIZE(this%vpinch_geometric_fs), 'vpinch_geometric_fs')
+    CALL HDF5_array1D_saving(group_id, this%vpinch_constant_fs, SIZE(this%vpinch_constant_fs), 'vpinch_constant_fs')
     CALL HDF5_array1D_saving(group_id, this%vpinch_fs, SIZE(this%vpinch_fs), 'vpinch_fs')
     CALL HDF5_real_saving(group_id, this%a_minor, 'a_minor')
     CALL HDF5_real_saving(group_id, this%rho_core, 'rho_core')
     CALL HDF5_real_saving(group_id, this%rho_edge, 'rho_edge')
-    CALL HDF5_real_saving(group_id, this%rho_model_max, 'rho_model_max')
+    CALL HDF5_real_saving(group_id, this%rho_diffusion_model_max, 'rho_diffusion_model_max')
     CALL HDF5_real_saving(group_id, this%delta_te, 'delta_te')
     CALL HDF5_real_saving(group_id, this%c_bohm_i, 'c_bohm_i')
     CALL HDF5_real_saving(group_id, this%c_gyrobohm_i, 'c_gyrobohm_i')
@@ -495,6 +584,10 @@ CONTAINS
     CALL HDF5_integer_saving(group_id, this%pinch_model, 'pinch_model')
     CALL HDF5_real_saving(group_id, this%c_pinch, 'c_pinch')
     CALL HDF5_real_saving(group_id, this%nu_th, 'nu_th')
+    CALL HDF5_real_saving(group_id, this%vpinch_const*simpar%refval_speed, 'vpinch_const_phys')
+    CALL HDF5_real_saving(group_id, this%rho_pinch_axis_width, 'rho_pinch_axis_width')
+    CALL HDF5_real_saving(group_id, this%rho_pinch_model_max, 'rho_pinch_model_max')
+    CALL HDF5_real_saving(group_id, this%rho_pinch_edge_width, 'rho_pinch_edge_width')
     CALL HDF5_group_close(group_id, ierr)
   END SUBROUTINE tm1d_write_hdf5
 
