@@ -121,7 +121,7 @@ CONTAINS
     this%pe_fs = up(:, 6)
     this%ti_fs = up(:, 7)
     this%te_fs = up(:, 8)
-    this%cs_te_fs = SQRT(MAX(this%te_fs/phys%Mref, model_tol))
+    this%cs_te_fs = SQRT(MAX(this%te_fs*phys%Mref, model_tol))
 
     CALL tm1d_build_projected_gradients(this, fs_data)
     CALL this%compute_delta_te(fs_data)
