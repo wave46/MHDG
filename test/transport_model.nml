@@ -47,7 +47,7 @@
   ! over rho_pinch_axis_width. Near rho_pinch_model_max it ramps back to 0
   ! over rho_pinch_edge_width.
   rho_pinch_axis_width = 0.02
-  rho_pinch_model_max = 1.3
+  rho_pinch_model_max = 0.99
   rho_pinch_edge_width = 0.03
 
   ! Width of the smooth core-to-edge transport transition in rho.
