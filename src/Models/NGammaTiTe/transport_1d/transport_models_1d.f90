@@ -54,7 +54,6 @@ MODULE transport_models_1d
      REAL*8, ALLOCATABLE :: cs_te_fs(:)
      REAL*8, ALLOCATABLE :: dte_dr_fs(:)
      REAL*8, ALLOCATABLE :: dpe_dr_fs(:)
-     REAL*8, ALLOCATABLE :: nuestar_fs(:)
      REAL*8, ALLOCATABLE :: chi_i_fs(:)
      REAL*8, ALLOCATABLE :: chi_e_fs(:)
      REAL*8, ALLOCATABLE :: d_part_fs(:)
@@ -66,7 +65,6 @@ MODULE transport_models_1d
      PROCEDURE :: set_config => tm1d_set_config
      PROCEDURE :: update_from_flux_surfaces => tm1d_update_from_flux_surfaces
      PROCEDURE :: compute_delta_te => tm1d_compute_delta_te
-     PROCEDURE :: compute_collisionality_profile => tm1d_compute_collisionality_profile
      PROCEDURE :: compute_pinch_profile => tm1d_compute_pinch_profile
      PROCEDURE :: interp_transport => tm1d_interp_transport
      PROCEDURE :: compute_1D_pinch_matrix => tm1d_compute_1D_pinch_matrix
@@ -109,7 +107,6 @@ CONTAINS
     ALLOCATE(this%cs_te_fs(this%nrho))
     ALLOCATE(this%dte_dr_fs(this%nrho))
     ALLOCATE(this%dpe_dr_fs(this%nrho))
-    ALLOCATE(this%nuestar_fs(this%nrho))
     ALLOCATE(this%chi_i_fs(this%nrho))
     ALLOCATE(this%chi_e_fs(this%nrho))
     ALLOCATE(this%d_part_fs(this%nrho))
@@ -130,7 +127,6 @@ CONTAINS
     this%cs_te_fs = 0.d0
     this%dte_dr_fs = 0.d0
     this%dpe_dr_fs = 0.d0
-    this%nuestar_fs = 0.d0
     this%chi_i_fs = 0.d0
     this%chi_e_fs = 0.d0
     this%d_part_fs = 0.d0
@@ -157,7 +153,6 @@ CONTAINS
     IF (ALLOCATED(this%cs_te_fs)) DEALLOCATE(this%cs_te_fs)
     IF (ALLOCATED(this%dte_dr_fs)) DEALLOCATE(this%dte_dr_fs)
     IF (ALLOCATED(this%dpe_dr_fs)) DEALLOCATE(this%dpe_dr_fs)
-    IF (ALLOCATED(this%nuestar_fs)) DEALLOCATE(this%nuestar_fs)
     IF (ALLOCATED(this%chi_i_fs)) DEALLOCATE(this%chi_i_fs)
     IF (ALLOCATED(this%chi_e_fs)) DEALLOCATE(this%chi_e_fs)
     IF (ALLOCATED(this%d_part_fs)) DEALLOCATE(this%d_part_fs)
@@ -230,7 +225,7 @@ CONTAINS
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
     REAL*8, ALLOCATABLE :: ua(:, :), up(:, :)
-    REAL*8, ALLOCATABLE :: chi_bohm_fs(:), chi_gyrobohm_fs(:)
+    REAL*8, ALLOCATABLE :: chi_bohm_fs(:), chi_gyrobohm_fs(:), nuestar_fs(:)
 
     IF (.NOT. fs_data%profiles_built) RETURN
 
@@ -243,6 +238,7 @@ CONTAINS
     ALLOCATE(up(fs_data%nrho, phys%npv))
     ALLOCATE(chi_bohm_fs(this%nrho))
     ALLOCATE(chi_gyrobohm_fs(this%nrho))
+    ALLOCATE(nuestar_fs(this%nrho))
 
     ua = TRANSPOSE(fs_data%U_fs)
     CALL cons2phys(ua, up)
@@ -264,13 +260,13 @@ CONTAINS
 
     CALL tm1d_build_projected_gradients(this, fs_data)
     CALL this%compute_delta_te(fs_data)
-    CALL this%compute_collisionality_profile()
+    CALL tm1d_compute_collisionality_profile(this, nuestar_fs)
     CALL tm1d_compute_bohm_profile(this, chi_bohm_fs)
     CALL tm1d_compute_gyrobohm_profile(this, chi_gyrobohm_fs)
     CALL tm1d_compute_mixed_transport(this, chi_bohm_fs, chi_gyrobohm_fs)
-    CALL this%compute_pinch_profile()
+    CALL this%compute_pinch_profile(nuestar_fs)
 
-    DEALLOCATE(chi_bohm_fs, chi_gyrobohm_fs)
+    DEALLOCATE(chi_bohm_fs, chi_gyrobohm_fs, nuestar_fs)
     DEALLOCATE(ua, up)
   END SUBROUTINE tm1d_update_from_flux_surfaces
 
@@ -289,8 +285,9 @@ CONTAINS
     this%delta_te = (te_core - te_edge)/te_edge
   END SUBROUTINE tm1d_compute_delta_te
 
-  SUBROUTINE tm1d_compute_collisionality_profile(this)
-    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+  SUBROUTINE tm1d_compute_collisionality_profile(this, nuestar_fs)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(OUT) :: nuestar_fs(:)
     REAL*8 :: ne_dim(this%nrho), te_dim(this%nrho), rmaj_dim(this%nrho), lambda_e(this%nrho)
 
     IF (.NOT. this%is_initialized) RETURN
@@ -302,7 +299,7 @@ CONTAINS
 
     lambda_e = 31.3d0 - LOG(SQRT(ne_dim)/te_dim)
 
-    this%nuestar_fs = 6.921d-18 * ABS(this%q_fs) * rmaj_dim * ne_dim * MAX(phys%Zeff, 1.d0) * lambda_e / &
+    nuestar_fs = 6.921d-18 * ABS(this%q_fs) * rmaj_dim * ne_dim * MAX(phys%Zeff, 1.d0) * lambda_e / &
          (MAX(this%eps_fs, model_tol)**1.5d0 * te_dim**2)
   END SUBROUTINE tm1d_compute_collisionality_profile
 
@@ -344,15 +341,16 @@ CONTAINS
     this%nu_mom_fs = this%prandtl * this%chi_i_fs
   END SUBROUTINE tm1d_compute_mixed_transport
 
-  SUBROUTINE tm1d_compute_pinch_profile(this)
+  SUBROUTINE tm1d_compute_pinch_profile(this, nuestar_fs)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: nuestar_fs(:)
 
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
     SELECT CASE (this%pinch_model)
     CASE (1)
-       CALL tm1d_compute_militello_pinch(this, this%vpinch_fs)
+       CALL tm1d_compute_militello_pinch(this, nuestar_fs, this%vpinch_fs)
     CASE (2)
        CALL tm1d_compute_geometric_pinch(this, this%vpinch_fs)
     CASE (3)
@@ -362,12 +360,13 @@ CONTAINS
     END SELECT
   END SUBROUTINE tm1d_compute_pinch_profile
 
-  SUBROUTINE tm1d_compute_militello_pinch(this, vpinch_fs)
+  SUBROUTINE tm1d_compute_militello_pinch(this, nuestar_fs, vpinch_fs)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: nuestar_fs(:)
     REAL*8, INTENT(OUT) :: vpinch_fs(:)
     REAL*8 :: pinch_factor_militello_fs(this%nrho)
 
-    pinch_factor_militello_fs = MIN(1.d0, EXP(1.d0 - this%nuestar_fs/MAX(this%nu_th, model_tol)))
+    pinch_factor_militello_fs = MIN(1.d0, EXP(1.d0 - nuestar_fs/MAX(this%nu_th, model_tol)))
     vpinch_fs = pinch_factor_militello_fs * this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
 
     WHERE (this%rmin_fs <= model_tol)
