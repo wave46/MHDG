@@ -61,10 +61,6 @@ MODULE transport_models_1d
      REAL*8, ALLOCATABLE :: chi_e_fs(:)
      REAL*8, ALLOCATABLE :: d_part_fs(:)
      REAL*8, ALLOCATABLE :: nu_mom_fs(:)
-     REAL*8, ALLOCATABLE :: pinch_factor_militello_fs(:)
-     REAL*8, ALLOCATABLE :: vpinch_militello_fs(:)
-     REAL*8, ALLOCATABLE :: vpinch_geometric_fs(:)
-     REAL*8, ALLOCATABLE :: vpinch_constant_fs(:)
      REAL*8, ALLOCATABLE :: vpinch_fs(:)
    CONTAINS
      PROCEDURE :: init => tm1d_init
@@ -125,10 +121,6 @@ CONTAINS
     ALLOCATE(this%chi_e_fs(this%nrho))
     ALLOCATE(this%d_part_fs(this%nrho))
     ALLOCATE(this%nu_mom_fs(this%nrho))
-    ALLOCATE(this%pinch_factor_militello_fs(this%nrho))
-    ALLOCATE(this%vpinch_militello_fs(this%nrho))
-    ALLOCATE(this%vpinch_geometric_fs(this%nrho))
-    ALLOCATE(this%vpinch_constant_fs(this%nrho))
     ALLOCATE(this%vpinch_fs(this%nrho))
     ALLOCATE(this%rho_grid(this%nrho))
 
@@ -152,10 +144,6 @@ CONTAINS
     this%chi_e_fs = 0.d0
     this%d_part_fs = 0.d0
     this%nu_mom_fs = 0.d0
-    this%pinch_factor_militello_fs = 0.d0
-    this%vpinch_militello_fs = 0.d0
-    this%vpinch_geometric_fs = 0.d0
-    this%vpinch_constant_fs = 0.d0
     this%vpinch_fs = 0.d0
     this%rho_grid = 0.d0
     this%delta_te = 0.d0
@@ -185,10 +173,6 @@ CONTAINS
     IF (ALLOCATED(this%chi_e_fs)) DEALLOCATE(this%chi_e_fs)
     IF (ALLOCATED(this%d_part_fs)) DEALLOCATE(this%d_part_fs)
     IF (ALLOCATED(this%nu_mom_fs)) DEALLOCATE(this%nu_mom_fs)
-    IF (ALLOCATED(this%pinch_factor_militello_fs)) DEALLOCATE(this%pinch_factor_militello_fs)
-    IF (ALLOCATED(this%vpinch_militello_fs)) DEALLOCATE(this%vpinch_militello_fs)
-    IF (ALLOCATED(this%vpinch_geometric_fs)) DEALLOCATE(this%vpinch_geometric_fs)
-    IF (ALLOCATED(this%vpinch_constant_fs)) DEALLOCATE(this%vpinch_constant_fs)
     IF (ALLOCATED(this%vpinch_fs)) DEALLOCATE(this%vpinch_fs)
     IF (ALLOCATED(this%rho_grid)) DEALLOCATE(this%rho_grid)
 
@@ -370,28 +354,52 @@ CONTAINS
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
-    this%pinch_factor_militello_fs = MIN(1.d0, EXP(1.d0 - this%nuestar_fs/MAX(this%nu_th, model_tol)))
-    this%vpinch_militello_fs = this%pinch_factor_militello_fs * this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
-    this%vpinch_geometric_fs = this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
-    this%vpinch_constant_fs = this%vpinch_const
-
-    WHERE (this%rmin_fs <= model_tol)
-       this%vpinch_militello_fs = 0.d0
-       this%vpinch_geometric_fs = 0.d0
-       this%vpinch_constant_fs = 0.d0
-    END WHERE
-
     SELECT CASE (this%pinch_model)
     CASE (1)
-       this%vpinch_fs = this%vpinch_militello_fs
+       CALL tm1d_compute_militello_pinch(this, this%vpinch_fs)
     CASE (2)
-       this%vpinch_fs = this%vpinch_geometric_fs
+       CALL tm1d_compute_geometric_pinch(this, this%vpinch_fs)
     CASE (3)
-       this%vpinch_fs = this%vpinch_constant_fs
+       CALL tm1d_compute_constant_pinch(this, this%vpinch_fs)
     CASE DEFAULT
        this%vpinch_fs = 0.d0
     END SELECT
   END SUBROUTINE tm1d_compute_pinch_profile
+
+  SUBROUTINE tm1d_compute_militello_pinch(this, vpinch_fs)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(OUT) :: vpinch_fs(:)
+    REAL*8 :: pinch_factor_militello_fs(this%nrho)
+
+    pinch_factor_militello_fs = MIN(1.d0, EXP(1.d0 - this%nuestar_fs/MAX(this%nu_th, model_tol)))
+    vpinch_fs = pinch_factor_militello_fs * this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
+
+    WHERE (this%rmin_fs <= model_tol)
+       vpinch_fs = 0.d0
+    END WHERE
+  END SUBROUTINE tm1d_compute_militello_pinch
+
+  SUBROUTINE tm1d_compute_geometric_pinch(this, vpinch_fs)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(OUT) :: vpinch_fs(:)
+
+    vpinch_fs = this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
+
+    WHERE (this%rmin_fs <= model_tol)
+       vpinch_fs = 0.d0
+    END WHERE
+  END SUBROUTINE tm1d_compute_geometric_pinch
+
+  SUBROUTINE tm1d_compute_constant_pinch(this, vpinch_fs)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(OUT) :: vpinch_fs(:)
+
+    vpinch_fs = this%vpinch_const
+
+    WHERE (this%rmin_fs <= model_tol)
+       vpinch_fs = 0.d0
+    END WHERE
+  END SUBROUTINE tm1d_compute_constant_pinch
 
 
   SUBROUTINE tm1d_interp_transport(this, rho, chi_i, chi_e, d_part, nu_mom, vpinch)
