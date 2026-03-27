@@ -286,20 +286,15 @@ CONTAINS
     IF (.NOT. switch%transport_1d) RETURN
     IF (.NOT. this%profiles_built) RETURN
 
-    CALL HDF5_group_create('transport_1d', parent_group_id, group_id, ierr)
+    CALL HDF5_group_create('profiles', parent_group_id, group_id, ierr)
     CALL HDF5_array1D_saving(group_id, this%rho_grid, SIZE(this%rho_grid), 'rho_grid')
     CALL HDF5_array1D_saving(group_id, this%shell_weight, SIZE(this%shell_weight), 'shell_weight')
     CALL HDF5_array2D_saving(group_id, this%U_fs, SIZE(this%U_fs, 1), SIZE(this%U_fs, 2), 'U_fs')
     CALL HDF5_array2D_saving(group_id, this%Q_rad_fs, SIZE(this%Q_rad_fs, 1), SIZE(this%Q_rad_fs, 2), 'Q_rad_fs')
-    CALL HDF5_array1D_saving(group_id, this%q_fs, SIZE(this%q_fs), 'q_fs')
-    CALL HDF5_array1D_saving(group_id, this%omega_fs, SIZE(this%omega_fs), 'omega_fs')
-    CALL HDF5_array1D_saving(group_id, this%Rmaj_fs, SIZE(this%Rmaj_fs), 'Rmaj_fs')
-    CALL HDF5_array1D_saving(group_id, this%rmin_fs, SIZE(this%rmin_fs), 'rmin_fs')
-    CALL HDF5_array1D_saving(group_id, this%eps_fs, SIZE(this%eps_fs), 'eps_fs')
     CALL HDF5_group_close(group_id, ierr)
 
     IF (MPIvar%glob_id == 0 .AND. utils%printint > 0) THEN
-       WRITE (6, *) 'Saved reduced 1D flux-surface profiles under /solution/transport_1d'
+       WRITE (6, *) 'Saved reduced 1D flux-surface profiles under /transport_1d/profiles'
     END IF
   END SUBROUTINE fs_write_hdf5
 

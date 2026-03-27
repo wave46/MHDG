@@ -543,9 +543,14 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id1, sol%u, SIZE(sol%u), 'u')
     CALL HDF5_array1D_saving(group_id1, sol%u_tilde, SIZE(sol%u_tilde), 'u_tilde')
     CALL HDF5_array1D_saving(group_id1, sol%q, SIZE(sol%q), 'q')
-    CALL fs_transport%write_hdf5(group_id1)
-    CALL transport_model_1d%write_hdf5(group_id1)
     CALL HDF5_group_close(group_id1, ierr)
+
+    IF (switch%transport_1d) THEN
+       CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
+       CALL fs_transport%write_hdf5(group_id1)
+       CALL transport_model_1d%write_hdf5(group_id1)
+       CALL HDF5_group_close(group_id1, ierr)
+    END IF
 
     ! save magnetic field and Jtor arrays
     CALL HDF5_group_create('magnetic', file_id, group_id1, ierr)
@@ -693,9 +698,14 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, u_tilde_glob, SIZE(u_tilde_glob), 'u_tilde')
        CALL HDF5_array1D_saving(group_id1, u_glob, SIZE(u_glob), 'u')
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
-       CALL fs_transport%write_hdf5(group_id1)
-       CALL transport_model_1d%write_hdf5(group_id1)
        CALL HDF5_group_close(group_id1)
+
+       IF (switch%transport_1d) THEN
+          CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
+          CALL fs_transport%write_hdf5(group_id1)
+          CALL transport_model_1d%write_hdf5(group_id1)
+          CALL HDF5_group_close(group_id1)
+       END IF
 
       CALL HDF5_group_create('mesh', file_id, group_id1, ierr)
       CALL HDF5_integer_saving(group_id1,Mesh%Ndim,'Ndim')
