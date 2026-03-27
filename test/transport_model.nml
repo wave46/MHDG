@@ -5,9 +5,10 @@
   rho_edge = 0.99
 
   ! Transport model is expected to be valid only in the confined region.
-  ! Keep coefficients computed on the full 1D grid; apply this cutoff later
-  ! when interpolating transport back to local points.
-  rho_diffusion_model_max = 0.0
+  ! The diffusion replacement uses a finite-interval cubic smoothstep cutoff:
+  ! full value below rho_diffusion_model_max - rho_blend_width, smooth decay
+  ! over that interval, and exactly zero for rho >= rho_diffusion_model_max.
+  rho_diffusion_model_max = 0.99
 
   ! Mixed Bohm / gyro-Bohm coefficients.
   ! Reference: JETTO/NTCC mixed_bohm_gyro_bohm model description.
@@ -28,7 +29,7 @@
   ! 3 -> Constant pinch for steady-state checks.
   !      Positive values mean outward pinch (along increasing minor radius);
   !      negative values mean inward pinch.
-  pinch_model = 3
+  pinch_model = 2
 
   ! Pinch coefficient C. Positive C follows the outward radial convention;
   ! use negative C for inward pinch.
@@ -40,23 +41,24 @@
   nu_th = 0.04
 
   ! Constant inward pinch speed [m/s] used only when pinch_model = 3.
-  vpinch_const_phys = -10.0
+  vpinch_const_phys = -1.0
 
   ! Smooth pinch window parameters in rho_pol_norm.
+  ! The pinch window uses finite-interval cubic smoothstep ramps.
   ! Near the axis, the effective pinch ramps from 0 to the model value
   ! over rho_pinch_axis_width. Near rho_pinch_model_max it ramps back to 0
-  ! over rho_pinch_edge_width.
+  ! over rho_pinch_edge_width, and is exactly zero for rho >= rho_pinch_model_max.
   rho_pinch_axis_width = 0.02
   rho_pinch_model_max = 0.99
   rho_pinch_edge_width = 0.03
 
-  ! Width of the smooth core-to-edge transport transition in rho.
+  ! Width of the cubic smoothstep core-to-edge diffusion transition in rho.
   rho_blend_width = 0.03
 
   ! Minimum transport coefficients in physical units [m^2/s].
   ! They are adimensionalized internally before use.
-  diff_n_min_phys = 1e-2
-  diff_u_min_phys = 1e-2
-  diff_e_min_phys = 1e-2
-  diff_ee_min_phys = 1e-2
+  diff_n_min_phys = 0.01
+  diff_u_min_phys = 0.01
+  diff_e_min_phys = 0.01
+  diff_ee_min_phys = 0.01
 /
