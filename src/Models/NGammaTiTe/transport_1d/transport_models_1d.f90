@@ -17,6 +17,7 @@ MODULE transport_models_1d
   TYPE :: transport_model_1d_t
      LOGICAL :: is_initialized = .FALSE.
      INTEGER :: nrho = 0
+     REAL*8, ALLOCATABLE :: rho_grid(:)
      REAL*8 :: rho_edge = rho_edge_default
      REAL*8 :: rho_core = rho_core_default
      REAL*8 :: rho_diffusion_model_max = 1.d0
@@ -129,6 +130,7 @@ CONTAINS
     ALLOCATE(this%vpinch_geometric_fs(this%nrho))
     ALLOCATE(this%vpinch_constant_fs(this%nrho))
     ALLOCATE(this%vpinch_fs(this%nrho))
+    ALLOCATE(this%rho_grid(this%nrho))
 
     this%te_fs = 0.d0
     this%ti_fs = 0.d0
@@ -155,6 +157,7 @@ CONTAINS
     this%vpinch_geometric_fs = 0.d0
     this%vpinch_constant_fs = 0.d0
     this%vpinch_fs = 0.d0
+    this%rho_grid = 0.d0
     this%delta_te = 0.d0
     this%is_initialized = .TRUE.
   END SUBROUTINE tm1d_init
@@ -187,6 +190,7 @@ CONTAINS
     IF (ALLOCATED(this%vpinch_geometric_fs)) DEALLOCATE(this%vpinch_geometric_fs)
     IF (ALLOCATED(this%vpinch_constant_fs)) DEALLOCATE(this%vpinch_constant_fs)
     IF (ALLOCATED(this%vpinch_fs)) DEALLOCATE(this%vpinch_fs)
+    IF (ALLOCATED(this%rho_grid)) DEALLOCATE(this%rho_grid)
 
     this%is_initialized = .FALSE.
     this%nrho = 0
@@ -266,6 +270,8 @@ CONTAINS
 
     ua = TRANSPOSE(fs_data%U_fs)
     CALL cons2phys(ua, up)
+
+    this%rho_grid = fs_data%rho_grid
 
     this%ne_fs = up(:, 1)
     this%pi_fs = up(:, 5)
@@ -608,11 +614,10 @@ CONTAINS
        RETURN
     END IF
 
-    DO i = 1, this%nrho
-       rho_grid(i) = DBLE(i - 1)/DBLE(MAX(this%nrho - 1, 1))
-    END DO
+    IF (.NOT. ALLOCATED(this%rho_grid)) RETURN
+    rho_grid = this%rho_grid
 
-    CALL find_cell_and_local_coordinate(this%nrho, rho_grid, MIN(MAX(rho, 0.d0), 1.d0), ilow, alpha)
+    CALL find_cell_and_local_coordinate(this%nrho, rho_grid, MIN(MAX(rho, rho_grid(1)), rho_grid(this%nrho)), ilow, alpha)
     ilow = MIN(MAX(ilow, 1), this%nrho)
     ihigh = MIN(ilow + 1, this%nrho)
 
