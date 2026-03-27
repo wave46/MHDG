@@ -443,38 +443,50 @@ CONTAINS
     APinch(1,2) = -vpinch*bnorm(1)
   END SUBROUTINE tm1d_compute_1D_pinch_matrix
 
+  REAL*8 FUNCTION tm1d_smoothstep01(s)
+    REAL*8, INTENT(IN) :: s
+    REAL*8 :: sc
+
+    sc = MAX(MIN(s, 1.d0), 0.d0)
+    tm1d_smoothstep01 = sc*sc*(3.d0 - 2.d0*sc)
+  END FUNCTION tm1d_smoothstep01
+
+  REAL*8 FUNCTION tm1d_axis_ramp(rho, width)
+    REAL*8, INTENT(IN) :: rho, width
+
+    IF (rho <= 0.d0) THEN
+       tm1d_axis_ramp = 0.d0
+    ELSEIF (width <= model_tol .OR. rho >= width) THEN
+       tm1d_axis_ramp = 1.d0
+    ELSE
+       tm1d_axis_ramp = tm1d_smoothstep01(rho/width)
+    END IF
+  END FUNCTION tm1d_axis_ramp
+
+  REAL*8 FUNCTION tm1d_edge_cutoff(rho, rho_max, width)
+    REAL*8, INTENT(IN) :: rho, rho_max, width
+    REAL*8 :: rho_start
+
+    IF (rho >= rho_max) THEN
+       tm1d_edge_cutoff = 0.d0
+    ELSEIF (width <= model_tol) THEN
+       tm1d_edge_cutoff = 1.d0
+    ELSE
+       rho_start = rho_max - width
+       IF (rho <= rho_start) THEN
+          tm1d_edge_cutoff = 1.d0
+       ELSE
+          tm1d_edge_cutoff = 1.d0 - tm1d_smoothstep01((rho - rho_start)/width)
+       END IF
+    END IF
+  END FUNCTION tm1d_edge_cutoff
+
   REAL*8 FUNCTION tm1d_pinch_window(this, rho)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     REAL*8, INTENT(IN) :: rho
-    REAL*8 :: w_axis, w_edge, s, rho_start
 
-    tm1d_pinch_window = 0.d0
-    IF (rho <= 0.d0) RETURN
-
-    IF (this%rho_pinch_axis_width <= model_tol) THEN
-       w_axis = 1.d0
-    ELSEIF (rho >= this%rho_pinch_axis_width) THEN
-       w_axis = 1.d0
-    ELSE
-       s = MAX(MIN(rho/this%rho_pinch_axis_width, 1.d0), 0.d0)
-       w_axis = s*s*(3.d0 - 2.d0*s)
-    ENDIF
-
-    IF (rho >= this%rho_pinch_model_max) THEN
-       w_edge = 0.d0
-    ELSEIF (this%rho_pinch_edge_width <= model_tol) THEN
-       w_edge = 1.d0
-    ELSE
-       rho_start = this%rho_pinch_model_max - this%rho_pinch_edge_width
-       IF (rho <= rho_start) THEN
-          w_edge = 1.d0
-       ELSE
-          s = MAX(MIN((rho - rho_start)/this%rho_pinch_edge_width, 1.d0), 0.d0)
-          w_edge = 1.d0 - s*s*(3.d0 - 2.d0*s)
-       ENDIF
-    ENDIF
-
-    tm1d_pinch_window = w_axis*w_edge
+    tm1d_pinch_window = tm1d_axis_ramp(rho, this%rho_pinch_axis_width) * &
+         tm1d_edge_cutoff(rho, this%rho_pinch_model_max, this%rho_pinch_edge_width)
   END FUNCTION tm1d_pinch_window
 
 
@@ -516,27 +528,8 @@ CONTAINS
   REAL*8 FUNCTION tm1d_blend_weight(this, rho)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     REAL*8, INTENT(IN) :: rho
-    REAL*8 :: rho_start, rho_center, sigma
 
-    IF (rho >= this%rho_diffusion_model_max) THEN
-       tm1d_blend_weight = 0.d0
-       RETURN
-    END IF
-
-    IF (this%rho_blend_width <= model_tol) THEN
-       tm1d_blend_weight = 1.d0
-       RETURN
-    END IF
-
-    rho_start = this%rho_diffusion_model_max - this%rho_blend_width
-    IF (rho <= rho_start) THEN
-       tm1d_blend_weight = 1.d0
-       RETURN
-    END IF
-
-    rho_center = rho_start + 0.5d0*this%rho_blend_width
-    sigma = MAX(0.2d0*this%rho_blend_width, model_tol)
-    tm1d_blend_weight = 0.5d0*(1.d0 - TANH((rho - rho_center)/sigma))
+    tm1d_blend_weight = tm1d_edge_cutoff(rho, this%rho_diffusion_model_max, this%rho_blend_width)
   END FUNCTION tm1d_blend_weight
 
   SUBROUTINE tm1d_write_hdf5(this, parent_group_id)
