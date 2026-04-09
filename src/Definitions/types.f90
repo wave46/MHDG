@@ -434,7 +434,6 @@ MODULE types
      LOGICAL :: external_heating ! to read and apply external heating from input file
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
      LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs
-     LOGICAL :: bohm_gyrobohm ! use Bohm-gyrobohm model for diffusion coefficients
   END TYPE Switches_type
 
   !***************************************************************

@@ -973,14 +973,6 @@ CONTAINS
          CALL HDF5_array1D_saving(group_id2, phys%diff_e_1D, SIZE(phys%diff_e_1D), 'diff_e_1D')
          CALL HDF5_array1D_saving(group_id2, phys%diff_ee_1D, SIZE(phys%diff_ee_1D), 'diff_ee_1D')
       ENDIF
-      IF (switch%bohm_gyrobohm) THEN
-         CALL HDF5_real_saving(group_id2, phys%c_bohm_i, 'c_bohm_i')
-         CALL HDF5_real_saving(group_id2, phys%c_bohm_e, 'c_bohm_e')
-         CALL HDF5_real_saving(group_id2, phys%c_gyrobohm_i, 'c_gyrobohm_i')
-         CALL HDF5_real_saving(group_id2, phys%c_gyrobohm_e, 'c_gyrobohm_e')
-         CALL HDF5_real_saving(group_id2, phys%prandtl, 'prandtl')
-         CALL HDF5_real_saving(group_id2, phys%c_bohm_n, 'c_bohm_n')
-      ENDIF
       CALL HDF5_group_close(group_id2, ierr)
          
 
@@ -1016,7 +1008,6 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%impurity_radiation, 'impurity_radiation')
       CALL HDF5_logical_saving(group_id2, switch%external_heating, 'external_heating')
       CALL HDF5_logical_saving(group_id2, switch%import_diffusion_1D, 'import_diffusion_1D')
-      CALL HDF5_logical_saving(group_id2, switch%bohm_gyrobohm, 'bohm_gyrobohm')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create numerics parameters group

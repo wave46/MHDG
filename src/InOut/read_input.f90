@@ -87,13 +87,10 @@ SUBROUTINE READ_input()
   LOGICAL               :: import_diffusion_1D
   CHARACTER(1000)       :: diffusion_1D_path
 
-  !bohm-gyrobohm
-  LOGICAL               :: bohm_gyrobohm
-
   ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, transport_1d, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
-       & logrho,bxgradb,flux_limiter,import_diffusion_1D,bohm_gyrobohm
+       & logrho,bxgradb,flux_limiter,import_diffusion_1D
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
@@ -190,7 +187,6 @@ SUBROUTINE READ_input()
   switch%external_heating = external_heating
   switch%impurity_radiation = impurity_radiation
   switch%import_diffusion_1D = import_diffusion_1D
-  switch%bohm_gyrobohm    = bohm_gyrobohm
   input%field_path        = TRIM(ADJUSTL(field_path))
   input%field_dimensions  = field_dimensions
   input%field_from_grid   = field_from_grid
@@ -519,7 +515,6 @@ SUBROUTINE READ_input()
      PRINT *, '                - impurity name:                                     ', TRIM(ADJUSTL(phys%impurity_name))
      PRINT *, '                - impurity concentration:                            ', phys%impurity_concentration
      PRINT *, '                - import 1D diffusion profile:                       ', switch%import_diffusion_1D
-     PRINT *, '                - Bohm-gyro-Bohm model applied:                      ', switch%bohm_gyrobohm
      IF (switch%ME) THEN
         PRINT *, '                - I_0 for moving equilibrium:                         ', phys%I_0
         PRINT *, '             - puff increment slope:                               ', phys%puff_slope

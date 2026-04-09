@@ -240,10 +240,6 @@ PROGRAM MHDG
             CALL update_reduced_transport_profiles()
         ENDIF
 
-        !update bohmgyrobohm stuff if used
-        IF (switch%bohm_gyrobohm) THEN
-            CALL update_bohmgyrobohm()
-        ENDIF
         ! Compute Jacobian
         CALL HDG_computeJacobian()
         ! Set boundary conditions
