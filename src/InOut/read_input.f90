@@ -15,7 +15,7 @@ SUBROUTINE READ_input()
   IMPLICIT NONE
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
-  LOGICAL               :: ckeramp,saveNR,filter,saveTau,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
+  LOGICAL               :: ckeramp,saveNR,filter,saveTau,transport_1d,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
   INTEGER               :: thresh, difcor, tis, stab,pertini,init,order_2d
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
   INTEGER               :: uinput, printint, testcase, nrp
@@ -25,7 +25,7 @@ SUBROUTINE READ_input()
   INTEGER               :: num_param_est, num_n_quant_ind
   REAL*8                :: thr_ind, tol_est, osc_tol, osc_check
   INTEGER               :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
-  REAL*8                :: dt0, R0, diff_n, diff_u, v_p, tau(1:5), tNr, tTM, div, Tbg
+  REAL*8                :: dt0, R0, diff_n, diff_u, tau(1:5), tNr, tTM, div, Tbg
   REAL*8                :: tfi, a, bohmth,bohm_energy_thresh, q, diffred, diffmin
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
@@ -44,6 +44,7 @@ SUBROUTINE READ_input()
 
   ! Info for input and output
   CHARACTER(len = 1000) :: field_path, jtor_path,save_folder, geometry_path,puff_path, target_density_path,target_density_xpr_path, impurity_concentration_path, zeff_path
+  CHARACTER(len = 1000) :: transport_model_path = 'transport_model.nml'
   INTEGER               :: field_dimensions(1:2), jtor_dimensions(1:2),puff_dimension, target_density_dimension,target_density_xpr_dimension,impurity_concentration_dimension, zeff_dimension
   LOGICAL               :: field_from_grid, compute_from_flux, divide_by_2pi
 
@@ -86,33 +87,23 @@ SUBROUTINE READ_input()
   LOGICAL               :: import_diffusion_1D
   CHARACTER(1000)       :: diffusion_1D_path
 
-  !bohm-gyrobohm
-  LOGICAL               :: bohm_gyrobohm
-
-
-
-  !preallocating adaptivity arrays
-  ALLOCATE(param_est(1000))
-  ALLOCATE(n_quant_ind(1000))
-  param_est = -1
-  n_quant_ind = -1
   ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
-       & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
-       & logrho,bxgradb,flux_limiter,import_diffusion_1D,bohm_gyrobohm
-  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension, diffusion_1D_path
+       & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, transport_1d, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
+       & logrho,bxgradb,flux_limiter,import_diffusion_1D
+  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
 #endif
@@ -122,6 +113,12 @@ SUBROUTINE READ_input()
        &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
        &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
        &csolve, csbsolve, cmat, cfill, cthres, cjswp
+
+  ! preallocate adaptivity arrays after specification statements
+  ALLOCATE(param_est(1000))
+  ALLOCATE(n_quant_ind(1000))
+  param_est = -1
+  n_quant_ind = -1
 
   ! Reading the file
   uinput = 100
@@ -177,6 +174,7 @@ SUBROUTINE READ_input()
   switch%ckeramp          = ckeramp
   switch%saveNR           = saveNR
   switch%saveTau          = saveTau
+  switch%transport_1d = transport_1d
   switch%gmsh2h5          = gmsh2h5
   switch%fixdPotLim       = fixdPotLim
   switch%dirivortcore     = dirivortcore
@@ -189,7 +187,6 @@ SUBROUTINE READ_input()
   switch%external_heating = external_heating
   switch%impurity_radiation = impurity_radiation
   switch%import_diffusion_1D = import_diffusion_1D
-  switch%bohm_gyrobohm    = bohm_gyrobohm
   input%field_path        = TRIM(ADJUSTL(field_path))
   input%field_dimensions  = field_dimensions
   input%field_from_grid   = field_from_grid
@@ -211,6 +208,7 @@ SUBROUTINE READ_input()
   input%zeff_dimension    = zeff_dimension
   input%puff_dimension   = puff_dimension
   input%diffusion_1D_path = TRIM(ADJUSTL(diffusion_1D_path))
+  input%transport_model_path = TRIM(ADJUSTL(transport_model_path))
   numer%tau               = tau
   numer%nrp               = nrp
   numer%tNR               = tNR
@@ -258,6 +256,8 @@ SUBROUTINE READ_input()
   adapt%osc_adapt         = osc_adapt
   adapt%osc_tol           = osc_tol
   adapt%osc_check         = osc_check
+
+  IF (switch%transport_1d) CALL read_transport_model_input()
   adapt%geometry_path     = TRIM(ADJUSTL(geometry_path))
   geom%R0                 = R0
   geom%q                  = q
@@ -280,7 +280,6 @@ SUBROUTINE READ_input()
   phys%diff_e             = diff_e
   phys%diff_ee            = diff_ee
   phys%diff_vort          = diff_vort
-  phys%v_p                = v_p
   phys%diff_nn            = diff_nn
   phys%I_0                = I_0
   phys%heating_power      = heating_power
@@ -478,7 +477,6 @@ SUBROUTINE READ_input()
      PRINT *, '        ***************** Physics *****************************'
      PRINT *, '                - perp. diffusion in the continuity equation:         ', phys%diff_n
      PRINT *, '                - perp. diffusion in the momentum equation:           ', phys%diff_u
-     PRINT *, '                - pinch velocity in continuity equation:              ', phys%v_p
 #ifdef TEMPERATURE
      PRINT *, '                - perp. diffusion in the ions energy equation:        ', phys%diff_e
      PRINT *, '                - perp. diffusion in the electrons energy equation:   ', phys%diff_ee
@@ -515,7 +513,6 @@ SUBROUTINE READ_input()
      PRINT *, '                - impurity name:                                     ', TRIM(ADJUSTL(phys%impurity_name))
      PRINT *, '                - impurity concentration:                            ', phys%impurity_concentration
      PRINT *, '                - import 1D diffusion profile:                       ', switch%import_diffusion_1D
-     PRINT *, '                - Bohm-gyro-Bohm model applied:                      ', switch%bohm_gyrobohm
      IF (switch%ME) THEN
         PRINT *, '                - I_0 for moving equilibrium:                         ', phys%I_0
         PRINT *, '             - puff increment slope:                               ', phys%puff_slope
@@ -567,6 +564,20 @@ SUBROUTINE READ_input()
      PRINT *, '                - ckeramp:                                            ', ckeramp
      PRINT *, '                - saveNR:                                             ', saveNR
      PRINT *, '                - saveTau:                                            ', saveTau
+     PRINT *, '                - transport_1d:                          ', transport_1d
+     PRINT *, '                - transport_model_path:                  ', TRIM(ADJUSTL(input%transport_model_path))
+     PRINT *, '                - rho_core (transport model):            ', transport_model_input%rho_core
+     PRINT *, '                - rho_edge (transport model):            ', transport_model_input%rho_edge
+     PRINT *, '                - rho_diffusion_model_max (transport model):       ', transport_model_input%rho_diffusion_model_max
+     PRINT *, '                - c_bohm_i (transport model):           ', transport_model_input%c_bohm_i
+     PRINT *, '                - c_gyrobohm_i (transport model):       ', transport_model_input%c_gyrobohm_i
+     PRINT *, '                - c_bohm_e (transport model):           ', transport_model_input%c_bohm_e
+     PRINT *, '                - c_gyrobohm_e (transport model):       ', transport_model_input%c_gyrobohm_e
+     PRINT *, '                - c_bohm_n (transport model):           ', transport_model_input%c_bohm_n
+     PRINT *, '                - prandtl (transport model):            ', transport_model_input%prandtl
+     PRINT *, '                - pinch_model (transport model):        ', transport_model_input%pinch_model
+     PRINT *, '                - c_pinch (transport model):            ', transport_model_input%c_pinch
+     PRINT *, '                - nu_th (transport model):              ', transport_model_input%nu_th
      PRINT *, '        ***************** Numerics ****************************'
      PRINT *, '                - stabilization type:                                 ', numer%stab
      PRINT *, '                - tau(1):                                             ', numer%tau(1)
@@ -661,4 +672,76 @@ SUBROUTINE READ_input()
 
      PRINT *, '        '
   END IF
+
 END SUBROUTINE READ_input
+
+SUBROUTINE read_transport_model_input()
+  USE globals
+  USE MPI_OMP
+  IMPLICIT NONE
+
+  INTEGER :: utransport, ios
+  REAL*8 :: rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+  INTEGER :: pinch_model
+  NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+
+  rho_core = transport_model_input%rho_core
+  rho_edge = transport_model_input%rho_edge
+  rho_diffusion_model_max = transport_model_input%rho_diffusion_model_max
+  c_bohm_i = transport_model_input%c_bohm_i
+  c_gyrobohm_i = transport_model_input%c_gyrobohm_i
+  c_bohm_e = transport_model_input%c_bohm_e
+  c_gyrobohm_e = transport_model_input%c_gyrobohm_e
+  c_bohm_n = transport_model_input%c_bohm_n
+  prandtl = transport_model_input%prandtl
+  pinch_model = transport_model_input%pinch_model
+  c_pinch = transport_model_input%c_pinch
+  nu_th = transport_model_input%nu_th
+  vpinch_const_phys = transport_model_input%vpinch_const_phys
+  rho_pinch_axis_width = transport_model_input%rho_pinch_axis_width
+  rho_pinch_model_max = transport_model_input%rho_pinch_model_max
+  rho_pinch_edge_width = transport_model_input%rho_pinch_edge_width
+  rho_blend_width = transport_model_input%rho_blend_width
+  diff_n_min_phys = transport_model_input%diff_n_min_phys
+  diff_u_min_phys = transport_model_input%diff_u_min_phys
+  diff_e_min_phys = transport_model_input%diff_e_min_phys
+  diff_ee_min_phys = transport_model_input%diff_ee_min_phys
+
+  IF (LEN_TRIM(input%transport_model_path) == 0) RETURN
+
+  utransport = 101
+  OPEN(utransport, file=TRIM(ADJUSTL(input%transport_model_path)), status='old', iostat=ios)
+  IF (ios /= 0) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Warning: could not open transport model settings file: ', TRIM(ADJUSTL(input%transport_model_path))
+     RETURN
+  END IF
+
+  READ(utransport, nml=TRANSPORT_MODEL_1D_LST, iostat=ios)
+  CLOSE(utransport)
+  IF (ios /= 0) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Warning: could not read TRANSPORT_MODEL_1D_LST from file: ', TRIM(ADJUSTL(input%transport_model_path))
+     RETURN
+  END IF
+
+  transport_model_input%rho_core = rho_core
+  transport_model_input%rho_edge = rho_edge
+  transport_model_input%rho_diffusion_model_max = rho_diffusion_model_max
+  transport_model_input%c_bohm_i = c_bohm_i
+  transport_model_input%c_gyrobohm_i = c_gyrobohm_i
+  transport_model_input%c_bohm_e = c_bohm_e
+  transport_model_input%c_gyrobohm_e = c_gyrobohm_e
+  transport_model_input%c_bohm_n = c_bohm_n
+  transport_model_input%prandtl = prandtl
+  transport_model_input%pinch_model = pinch_model
+  transport_model_input%c_pinch = c_pinch
+  transport_model_input%nu_th = nu_th
+  transport_model_input%vpinch_const_phys = vpinch_const_phys
+  transport_model_input%rho_pinch_axis_width = rho_pinch_axis_width
+  transport_model_input%rho_pinch_model_max = rho_pinch_model_max
+  transport_model_input%rho_pinch_edge_width = rho_pinch_edge_width
+  transport_model_input%rho_blend_width = rho_blend_width
+  transport_model_input%diff_n_min_phys = diff_n_min_phys
+  transport_model_input%diff_u_min_phys = diff_u_min_phys
+  transport_model_input%diff_e_min_phys = diff_e_min_phys
+  transport_model_input%diff_ee_min_phys = diff_ee_min_phys
+END SUBROUTINE read_transport_model_input

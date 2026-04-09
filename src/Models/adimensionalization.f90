@@ -156,9 +156,6 @@ SUBROUTINE adimensionalization()
   ! k limit
   phys%k_max = phys%k_max/u0**2
 #endif
-
-  ! Pinch velocity
-  phys%v_p = phys%v_p/u0
   ! additional heating coefficients
   phys%heating_power = phys%heating_power*t0/n0/mi/u0**2/L0**3
   phys%heating_dr    = phys%heating_dr/L0

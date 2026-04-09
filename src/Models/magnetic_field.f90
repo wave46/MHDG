@@ -10,7 +10,7 @@
 MODULE magnetic_field
   USE prec_const
   USE globals
-  USE in_out
+  USE MPI_OMP
   USE HDF5_io_module
   USE HDF5
   USE interpolation

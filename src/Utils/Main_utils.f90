@@ -25,6 +25,8 @@ MODULE Main_utils
   USE domain_decomposition_module
 #endif
   USE HDG_LimitingTechniques
+  USE flux_surface_transport_data
+  USE transport_models_1d
 
   IMPLICIT NONE
 
@@ -174,6 +176,24 @@ CONTAINS
 
   ENDSUBROUTINE solution_decomposition
 #endif
+
+  SUBROUTINE update_reduced_transport_profiles()
+    IF (.NOT. switch%transport_1d) RETURN
+
+    CALL transport_model_1d%set_config(rho_edge=transport_model_input%rho_edge, rho_core=transport_model_input%rho_core, &
+         rho_diffusion_model_max=transport_model_input%rho_diffusion_model_max, c_bohm_i=transport_model_input%c_bohm_i, &
+         c_gyrobohm_i=transport_model_input%c_gyrobohm_i, c_bohm_e=transport_model_input%c_bohm_e, &
+         c_gyrobohm_e=transport_model_input%c_gyrobohm_e, c_bohm_n=transport_model_input%c_bohm_n, &
+         prandtl=transport_model_input%prandtl, pinch_model=transport_model_input%pinch_model, &
+         c_pinch=transport_model_input%c_pinch, nu_th=transport_model_input%nu_th, &
+         vpinch_const_phys=transport_model_input%vpinch_const_phys, rho_pinch_axis_width=transport_model_input%rho_pinch_axis_width, &
+         rho_pinch_model_max=transport_model_input%rho_pinch_model_max, rho_pinch_edge_width=transport_model_input%rho_pinch_edge_width, &
+         rho_blend_width=transport_model_input%rho_blend_width, diff_n_min_phys=transport_model_input%diff_n_min_phys, &
+         diff_u_min_phys=transport_model_input%diff_u_min_phys, diff_e_min_phys=transport_model_input%diff_e_min_phys, &
+         diff_ee_min_phys=transport_model_input%diff_ee_min_phys)
+    CALL fs_transport%build_profiles()
+    CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
+  END SUBROUTINE update_reduced_transport_profiles
 
   SUBROUTINE adaptivity()
 #ifdef WITH_PASTIX
@@ -710,27 +730,6 @@ CONTAINS
   SUBROUTINE update_dumpnr()
     numer%dumpnr = numer%dumpnr_min+(numer%dumpnr_max-numer%dumpnr_min)/2.*(1+TANH((ir-numer%dumpnr_n0)/numer%dumpnr_width))
   ENDSUBROUTINE update_dumpnr
-
-
-
-  SUBROUTINE update_bohmgyrobohm()
-   REAL*8, ALLOCATABLE   :: uphy(:, :),rho_poloidal(:)
-   
-   nu = SIZE(sol%u)
-
-   ALLOCATE (uphy(nu/phys%Neq, phys%npv))
-   ALLOCATE (rho_poloidal(nu/phys%Neq))
-
-   ! Compute physical variables
-   CALL cons2phys(TRANSPOSE(RESHAPE(sol%u, (/phys%Neq, nu/phys%Neq/))), uphy)
-
-   rho_poloidal = phys%magnetic_psi(RESHAPE(TRANSPOSE(Mesh%T), (/SIZE(Mesh%T)/)))
-   rho_poloidal = SQRT(MAX(0.0, rho_poloidal))
-
-   CALL update_delta_te(uphy(:,8), rho_poloidal)
-   
-
-   ENDSUBROUTINE update_bohmgyrobohm
 
    SUBROUTINE update_delta_te(te,rho_poloidal)
       REAL*8,INTENT(IN) :: te(:), rho_poloidal(:)

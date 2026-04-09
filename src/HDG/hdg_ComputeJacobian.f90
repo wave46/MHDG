@@ -11,6 +11,7 @@ SUBROUTINE HDG_computeJacobian()
   USE LinearAlgebra, only: tensorProduct, tensorSumInt
   USE analytical, only: body_force, analytical_solution
   USE physics
+  USE transport_models_1d, ONLY: transport_model_1d
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
 
   IMPLICIT NONE
@@ -1344,7 +1345,7 @@ CONTAINS
       REAL*8                        :: detJ(Ng2d)
       REAL*8                        :: iJ11(Ng2d),iJ12(Ng2d)
       REAL*8                        :: iJ21(Ng2d),iJ22(Ng2d)
-      REAL*8                        :: fluxg(Ng2d),max_flux2D,min_flux2D, Psig(Ng2d)
+      REAL*8                        :: fluxg(Ng2d),max_flux2D,min_flux2D, Psig(Ng2d),rho_pol_norm(Ng2d)
       INTEGER*4,DIMENSION(Npel)     :: ind_ass,ind_asq
       REAL*8                        :: ktis(time%tis + 1)
       REAL*8,DIMENSION(Npel)        :: Ni,Nxg,Nyg,NNbb,Nx_ax
@@ -1352,7 +1353,9 @@ CONTAINS
       REAL*8                        :: NxyzNi(Npel,Npel,3),Nxyzg(Npel,3)
       REAL*8                        :: upg(Ng2d,phys%npv)
       REAL*8                        :: Bmod_nod(Npel),b_nod(Npel,3),b(Ng2d,3),Bmod(Ng2d),divbg,driftg(3),gradbmod(3)
+#ifdef KEQUATION      
       REAL*8                        :: b_tor_nod(Npel),b_tor(Ng2d),gradbtor(3)
+#endif
       REAL*8                        :: omega(Ng2d),q_cyl(Ng2d)
     real*8                        :: bg(3), Jtor(Ng2d)
     real*8                        :: diff_iso_vol(Neq,Neq,Ng2d),diff_ani_vol(Neq,Neq,Ng2d)
@@ -1398,6 +1401,8 @@ CONTAINS
 #ifdef KEQUATION
     ! Toroidal magnetic field absolute value at element nodes
       b_tor_nod = ABS(Bel(:,3))
+      ! Toroidal magnetic field absolute value at Gauss points
+      b_tor = MATMUL(refElPol%N2D,b_tor_nod)
 #endif
 
     ! Magnetic field norm and direction at Gauss points
@@ -1405,8 +1410,7 @@ CONTAINS
       b = MATMUL(refElPol%N2D,b_nod)
 
 
-    ! Toroidal magnetic field absolute value at Gauss points
-      b_tor = MATMUL(refElPol%N2D,b_tor_nod)
+
 
     ! omega and q_cyl at Gauss points
       omega = MATMUL(refElPol%N2D,omegael)
@@ -1415,6 +1419,7 @@ CONTAINS
 
     ! Normalized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N2D,psiel)
+      rho_pol_norm = SQRT(MAX(Psig,1.e-10))
 
     ! toroidal current at Gauss points
     IF (switch%ohmicsrc) THEN
@@ -1444,12 +1449,11 @@ CONTAINS
 #endif
 
     IF (switch%import_diffusion_1D) THEN
-      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_vol,diff_ani_vol)
+      CALL add_1D_diff(rho_pol_norm,diff_iso_vol,diff_ani_vol)
     ENDIF
 
-    IF (switch%bohm_gyrobohm) THEN
-      CALL add_bohm_gyrobohm_diffusion(ueg,qeg,omega,b,q_cyl,diff_iso_vol,diff_ani_vol) 
-
+    IF (switch%transport_1d) THEN
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_vol,diff_ani_vol)
     ENDIF
 
 
@@ -1737,7 +1741,7 @@ CONTAINS
     real*8                    :: NNif(Npfl,Npfl),Nif(Npfl),Nfbn(Npfl)
     real*8                    :: upgf(Ng1d,phys%npv)
     real*8                    :: tau(Neq,Neq),Vnng(Ndim)
-    real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d)
+    real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d),rho_pol_norm(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: q_cyl(Ng1d)
@@ -1787,6 +1791,7 @@ CONTAINS
 
     ! Normalaized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N1d,psifl)
+      rho_pol_norm = SQRT(MAX(Psig,1.e-10))
 
     ! Element solution at face Gauss points
       uefg = MATMUL(refElPol%N1D,uef)
@@ -1801,11 +1806,11 @@ CONTAINS
 #endif
 
     IF (switch%import_diffusion_1D) THEN
-      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
+      CALL add_1D_diff(rho_pol_norm,diff_iso_fac,diff_ani_fac)
     ENDIF
 
-    IF (switch%bohm_gyrobohm) THEN
-      CALL add_bohm_gyrobohm_diffusion(uefg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
+    IF (switch%transport_1d) THEN
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
     ENDIF
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
@@ -1911,7 +1916,7 @@ CONTAINS
     real*8                    :: NNif(Npfl,Npfl),Nif(Npfl),Nfbn(Npfl)
     real*8                    :: tau(Neq,Neq)
     real*8                    :: upgf(Ng1d,phys%npv)
-    real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d), Psig(Ng1d)
+    real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d), Psig(Ng1d), rho_pol_norm(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: Vnng(Ndim)
@@ -1948,6 +1953,7 @@ CONTAINS
     omega = matmul(refElPol%N1D,omegafl)
     ! Normalaized magnetic flux at Gauss points: PSI
     Psig = MATMUL(refElPol%N1D,psifl)
+    rho_pol_norm = SQRT(MAX(Psig,1.e-10))
 
     ! Trace solution at face Gauss points
     xyf = MATMUL(refElPol%N1D,Xfl)
@@ -1978,11 +1984,11 @@ CONTAINS
 
 
     IF (switch%import_diffusion_1D) THEN
-      CALL add_1D_diff(SQRT(MAX(Psig,1.e-10)),diff_iso_fac,diff_ani_fac)
+      CALL add_1D_diff(rho_pol_norm,diff_iso_fac,diff_ani_fac)
     ENDIF
 
-    IF (switch%bohm_gyrobohm) THEN
-      CALL add_bohm_gyrobohm_diffusion(uefg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
+    IF (switch%transport_1d) THEN
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
     ENDIF
 
     if (save_tau) then
@@ -2279,7 +2285,10 @@ CONTAINS
     CALL jacobianMatrices(ue,A)
 
     ! Jacobian for pinch term
-    CALL computePinch(b,psi,APinch)
+    APinch = 0.d0
+    IF (switch%transport_1d) THEN
+      CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
+    ENDIF
 
     ! Compute Q^T^(k-1)
         Qpr = RESHAPE(qe,(/Ndim,Neq/))
@@ -2997,7 +3006,10 @@ ENDIF
       CALL jacobianMatrices(uf,A)
 
       ! Jacobian for pinch term
-      CALL computePinch(b,psi,APinch)
+      APinch = 0.d0
+      IF (switch%transport_1d) THEN
+      CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
+    ENDIF
 
       ! Compute Q^T^(k-1)
            Qpr = RESHAPE(qf,(/Ndim,Neq/))
@@ -3304,7 +3316,7 @@ ENDIF
           DO j = 1,4
             ind_jf = ind_asf + j
                     kmult = flux_limiter_e**2*(coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:,j),b)))+&
-                    +fl_deriv_e*dq_fs_e_dU(j))*NNif*bn
+                    fl_deriv_e*dq_fs_e_dU(j))*NNif*bn
             elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
                     elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
             DO k = 1,Ndim
@@ -3476,7 +3488,10 @@ ENDIF
       CALL jacobianMatrices(uf,A)
 
       ! Jacobian matrices Pinch
-      CALL computePinch(b,psi,APinch)
+      APinch = 0.d0
+      IF (switch%transport_1d) THEN
+      CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
+    ENDIF
 
       ! Compute Q^T^(k-1)
            Qpr = RESHAPE(qf,(/Ndim,Neq/))

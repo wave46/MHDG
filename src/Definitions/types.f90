@@ -205,7 +205,6 @@ MODULE types
      INTEGER                   :: neq ! Number of equations
      INTEGER                   :: npv ! Number of physical variables
      REAL*8                    :: diff_n, diff_u ! Perpendicular diffusion in the continuity and momentum equation
-     REAL*8                    :: v_p ! Pinch velocity in the continuity equation
      REAL*8                    :: a ! Proportionality constant between pressure and density for isothermal model (p = a*rho)
      REAL*8                    :: dfcoef ! Constant related to the diamagnetic drift velocity
      REAL*8                    :: dexbcoef ! Constant related to the ExB drift velocity
@@ -420,6 +419,7 @@ MODULE types
      LOGICAL :: ckeramp ! Chech the error amplification in the linear system solution (for very ill-conditioned matrices)
      LOGICAL :: saveNR  ! Save solution at each NR iteration
      LOGICAL :: saveTau ! Save tau on faces
+     LOGICAL :: transport_1d ! Save reduced 1D flux-surface profiles with solution output
      LOGICAL :: fixdPotLim
      LOGICAL :: dirivortcore
      LOGICAL :: dirivortlim
@@ -433,7 +433,6 @@ MODULE types
      LOGICAL :: external_heating ! to read and apply external heating from input file
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
      LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs
-     LOGICAL :: bohm_gyrobohm ! use Bohm-gyrobohm model for diffusion coefficients
   END TYPE Switches_type
 
   !***************************************************************
@@ -441,6 +440,7 @@ MODULE types
   !***************************************************************
   TYPE Inputs_type
      CHARACTER(len=1000) :: field_path ! where do we read magnetic field from (WEST cases so far)
+     CHARACTER(len=1000) :: transport_model_path ! where do we read transport model settings from
      CHARACTER(len=1000) :: jtor_path ! where do we read plasma current from (WEST cases so far)
      CHARACTER(len=1000) :: save_folder ! where to save last solution
      CHARACTER(len=1000) :: external_heating_path ! where do we read external heating from (only used if the external_heating is on)
@@ -462,6 +462,30 @@ MODULE types
      INTEGER             :: target_density_xpr_dimension ! number of timeslices in the target density expression file
      INTEGER             :: zeff_dimension ! number of timeslices in the Zeff file
   END TYPE Inputs_type
+
+  TYPE Transport_model_input_type
+     REAL*8 :: rho_core = 0.8d0
+     REAL*8 :: rho_edge = 0.99d0
+     REAL*8 :: rho_diffusion_model_max = 1.d0
+     REAL*8 :: c_bohm_i = 1.6d-4
+     REAL*8 :: c_gyrobohm_i = 1.75d-2
+     REAL*8 :: c_bohm_e = 8.d-5
+     REAL*8 :: c_gyrobohm_e = 3.5d-2
+     REAL*8 :: c_bohm_n = 1.d0
+     REAL*8 :: prandtl = 1.d0
+     INTEGER :: pinch_model = 1
+     REAL*8 :: c_pinch = 0.5d0
+     REAL*8 :: nu_th = 0.04d0
+     REAL*8 :: vpinch_const_phys = 0.d0
+     REAL*8 :: rho_pinch_axis_width = 0.02d0
+     REAL*8 :: rho_pinch_model_max = 0.99d0
+     REAL*8 :: rho_pinch_edge_width = 0.03d0
+     REAL*8 :: rho_blend_width = 0.02d0
+     REAL*8 :: diff_n_min_phys = 0.d0
+     REAL*8 :: diff_u_min_phys = 0.d0
+     REAL*8 :: diff_e_min_phys = 0.d0
+     REAL*8 :: diff_ee_min_phys = 0.d0
+  END TYPE Transport_model_input_type
 
   !*******************************************************
   ! Time: type for the time stepping information

@@ -179,6 +179,9 @@ PROGRAM MHDG
   ENDIF
 
   ! Save solution
+  IF (switch%transport_1d) THEN
+     CALL update_reduced_transport_profiles()
+  ENDIF
   CALL setSolName(save_name, mesh_name, 0, .TRUE., .FALSE.)
   CALL HDF5_save_solution(save_name)
 
@@ -232,10 +235,11 @@ PROGRAM MHDG
            WRITE (6, *) "NR dumping factor:  ",  numer%dumpnr
         ENDIF
         
-        !update bohmgyrobohm stuff if used
-        IF (switch%bohm_gyrobohm) THEN
-            CALL update_bohmgyrobohm()
+        !update 1D transport stuff if used
+        IF (switch%transport_1d) THEN
+            CALL update_reduced_transport_profiles()
         ENDIF
+
         ! Compute Jacobian
         CALL HDG_computeJacobian()
         ! Set boundary conditions

@@ -9,6 +9,8 @@
 MODULE in_out
   USE HDF5
   USE HDF5_io_module
+  USE flux_surface_transport_data
+  USE transport_models_1d
   USE GLOBALS
   USE MPI_OMP
   USE printutils
@@ -543,6 +545,13 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id1, sol%q, SIZE(sol%q), 'q')
     CALL HDF5_group_close(group_id1, ierr)
 
+    IF (switch%transport_1d) THEN
+       CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
+       CALL fs_transport%write_hdf5(group_id1)
+       CALL transport_model_1d%write_hdf5(group_id1)
+       CALL HDF5_group_close(group_id1, ierr)
+    END IF
+
     ! save magnetic field and Jtor arrays
     CALL HDF5_group_create('magnetic', file_id, group_id1, ierr)
     ! Save magnetic field
@@ -671,8 +680,6 @@ CONTAINS
     ELSE
       CALL gather_mesh(Mesh, T_glob, X_glob, Tb_glob, F_glob, N_glob, intfaces_glob, extfaces_glob, boundaryFlag_glob, Tlin_glob, periodic_faces_glob, elemSize_glob)
     ENDIF
-    
-
     ! save to file
     IF (MPIvar%glob_id .EQ. 0) THEN
 
@@ -693,7 +700,13 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
        CALL HDF5_group_close(group_id1)
 
-       
+       IF (switch%transport_1d) THEN
+          CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
+          CALL fs_transport%write_hdf5(group_id1)
+          CALL transport_model_1d%write_hdf5(group_id1)
+          CALL HDF5_group_close(group_id1)
+       END IF
+
       CALL HDF5_group_create('mesh', file_id, group_id1, ierr)
       CALL HDF5_integer_saving(group_id1,Mesh%Ndim,'Ndim')
       CALL HDF5_integer_saving(group_id1,Mesh%Nno_glob,'Nnodes')
@@ -960,14 +973,6 @@ CONTAINS
          CALL HDF5_array1D_saving(group_id2, phys%diff_e_1D, SIZE(phys%diff_e_1D), 'diff_e_1D')
          CALL HDF5_array1D_saving(group_id2, phys%diff_ee_1D, SIZE(phys%diff_ee_1D), 'diff_ee_1D')
       ENDIF
-      IF (switch%bohm_gyrobohm) THEN
-         CALL HDF5_real_saving(group_id2, phys%c_bohm_i, 'c_bohm_i')
-         CALL HDF5_real_saving(group_id2, phys%c_bohm_e, 'c_bohm_e')
-         CALL HDF5_real_saving(group_id2, phys%c_gyrobohm_i, 'c_gyrobohm_i')
-         CALL HDF5_real_saving(group_id2, phys%c_gyrobohm_e, 'c_gyrobohm_e')
-         CALL HDF5_real_saving(group_id2, phys%prandtl, 'prandtl')
-         CALL HDF5_real_saving(group_id2, phys%c_bohm_n, 'c_bohm_n')
-      ENDIF
       CALL HDF5_group_close(group_id2, ierr)
          
 
@@ -1003,7 +1008,6 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%impurity_radiation, 'impurity_radiation')
       CALL HDF5_logical_saving(group_id2, switch%external_heating, 'external_heating')
       CALL HDF5_logical_saving(group_id2, switch%import_diffusion_1D, 'import_diffusion_1D')
-      CALL HDF5_logical_saving(group_id2, switch%bohm_gyrobohm, 'bohm_gyrobohm')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create numerics parameters group
