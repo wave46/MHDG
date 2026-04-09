@@ -14,17 +14,6 @@ MODULE transport_models_1d
   REAL*8, PARAMETER :: rho_core_default = 0.8d0
   REAL*8, PARAMETER :: model_tol = 1.d-12
 
-  TYPE :: transport_model_workspace_t
-     REAL*8, ALLOCATABLE :: cs_te_fs(:)
-     REAL*8, ALLOCATABLE :: nuestar_fs(:)
-     REAL*8, ALLOCATABLE :: chi_bohm_fs(:)
-     REAL*8, ALLOCATABLE :: chi_gyrobohm_fs(:)
-   CONTAINS
-     PROCEDURE :: init => tm1d_workspace_init
-     PROCEDURE :: destroy => tm1d_workspace_destroy
-     FINAL :: tm1d_workspace_finalize
-  END TYPE transport_model_workspace_t
-
   TYPE :: transport_model_1d_t
      LOGICAL :: is_initialized = .FALSE.
      INTEGER :: nrho = 0
@@ -82,6 +71,17 @@ MODULE transport_models_1d
      PROCEDURE :: write_hdf5 => tm1d_write_hdf5
      FINAL :: tm1d_finalize
   END TYPE transport_model_1d_t
+
+  TYPE :: transport_model_workspace_t
+     REAL*8, ALLOCATABLE :: cs_te_fs(:)
+     REAL*8, ALLOCATABLE :: nuestar_fs(:)
+     REAL*8, ALLOCATABLE :: chi_bohm_fs(:)
+     REAL*8, ALLOCATABLE :: chi_gyrobohm_fs(:)
+   CONTAINS
+     PROCEDURE :: init => tm1d_workspace_init
+     PROCEDURE :: destroy => tm1d_workspace_destroy
+     FINAL :: tm1d_workspace_finalize
+  END TYPE transport_model_workspace_t
 
   TYPE(transport_model_1d_t), SAVE :: transport_model_1d
 
