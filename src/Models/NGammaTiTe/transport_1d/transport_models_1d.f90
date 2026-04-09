@@ -41,11 +41,6 @@ MODULE transport_models_1d
      REAL*8 :: c_gyrobohm_e = 3.5d-2
      REAL*8 :: c_bohm_n = 1.d0
      REAL*8 :: prandtl = 1.d0
-     REAL*8, ALLOCATABLE :: q_fs(:)
-     REAL*8, ALLOCATABLE :: omega_fs(:)
-     REAL*8, ALLOCATABLE :: Rmaj_fs(:)
-     REAL*8, ALLOCATABLE :: rmin_fs(:)
-     REAL*8, ALLOCATABLE :: eps_fs(:)
      REAL*8, ALLOCATABLE :: chi_i_fs(:)
      REAL*8, ALLOCATABLE :: chi_e_fs(:)
      REAL*8, ALLOCATABLE :: d_part_fs(:)
@@ -72,6 +67,11 @@ MODULE transport_models_1d
      REAL*8, ALLOCATABLE :: pe_fs(:)
      REAL*8, ALLOCATABLE :: ti_fs(:)
      REAL*8, ALLOCATABLE :: te_fs(:)
+     REAL*8, ALLOCATABLE :: q_fs(:)
+     REAL*8, ALLOCATABLE :: omega_fs(:)
+     REAL*8, ALLOCATABLE :: Rmaj_fs(:)
+     REAL*8, ALLOCATABLE :: rmin_fs(:)
+     REAL*8, ALLOCATABLE :: eps_fs(:)
      REAL*8, ALLOCATABLE :: nuestar_fs(:)
      REAL*8, ALLOCATABLE :: dpe_dr_fs(:)
      REAL*8, ALLOCATABLE :: dte_dr_fs(:)
@@ -124,11 +124,13 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(transport_model_workspace_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_militello_pinch
-     MODULE SUBROUTINE tm1d_compute_geometric_pinch(this)
+     MODULE SUBROUTINE tm1d_compute_geometric_pinch(this, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+       TYPE(transport_model_workspace_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_geometric_pinch
-     MODULE SUBROUTINE tm1d_compute_constant_pinch(this)
+     MODULE SUBROUTINE tm1d_compute_constant_pinch(this, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+       TYPE(transport_model_workspace_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_constant_pinch
      MODULE SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
@@ -189,6 +191,11 @@ CONTAINS
     ALLOCATE(this%pe_fs(nrho))
     ALLOCATE(this%ti_fs(nrho))
     ALLOCATE(this%te_fs(nrho))
+    ALLOCATE(this%q_fs(nrho))
+    ALLOCATE(this%omega_fs(nrho))
+    ALLOCATE(this%Rmaj_fs(nrho))
+    ALLOCATE(this%rmin_fs(nrho))
+    ALLOCATE(this%eps_fs(nrho))
     ALLOCATE(this%nuestar_fs(nrho))
     ALLOCATE(this%dpe_dr_fs(nrho))
     ALLOCATE(this%dte_dr_fs(nrho))
@@ -201,6 +208,11 @@ CONTAINS
     this%pe_fs = 0.d0
     this%ti_fs = 0.d0
     this%te_fs = 0.d0
+    this%q_fs = 0.d0
+    this%omega_fs = 0.d0
+    this%Rmaj_fs = 0.d0
+    this%rmin_fs = 0.d0
+    this%eps_fs = 0.d0
     this%nuestar_fs = 0.d0
     this%dpe_dr_fs = 0.d0
     this%dte_dr_fs = 0.d0
@@ -217,6 +229,11 @@ CONTAINS
     IF (ALLOCATED(this%pe_fs)) DEALLOCATE(this%pe_fs)
     IF (ALLOCATED(this%ti_fs)) DEALLOCATE(this%ti_fs)
     IF (ALLOCATED(this%te_fs)) DEALLOCATE(this%te_fs)
+    IF (ALLOCATED(this%q_fs)) DEALLOCATE(this%q_fs)
+    IF (ALLOCATED(this%omega_fs)) DEALLOCATE(this%omega_fs)
+    IF (ALLOCATED(this%Rmaj_fs)) DEALLOCATE(this%Rmaj_fs)
+    IF (ALLOCATED(this%rmin_fs)) DEALLOCATE(this%rmin_fs)
+    IF (ALLOCATED(this%eps_fs)) DEALLOCATE(this%eps_fs)
     IF (ALLOCATED(this%nuestar_fs)) DEALLOCATE(this%nuestar_fs)
     IF (ALLOCATED(this%dpe_dr_fs)) DEALLOCATE(this%dpe_dr_fs)
     IF (ALLOCATED(this%dte_dr_fs)) DEALLOCATE(this%dte_dr_fs)
@@ -247,11 +264,6 @@ CONTAINS
 
     IF (this%nrho <= 0) RETURN
 
-    ALLOCATE(this%q_fs(this%nrho))
-    ALLOCATE(this%omega_fs(this%nrho))
-    ALLOCATE(this%Rmaj_fs(this%nrho))
-    ALLOCATE(this%rmin_fs(this%nrho))
-    ALLOCATE(this%eps_fs(this%nrho))
     ALLOCATE(this%chi_i_fs(this%nrho))
     ALLOCATE(this%chi_e_fs(this%nrho))
     ALLOCATE(this%d_part_fs(this%nrho))
@@ -259,11 +271,6 @@ CONTAINS
     ALLOCATE(this%vpinch_fs(this%nrho))
     ALLOCATE(this%rho_grid(this%nrho))
 
-    this%q_fs = 0.d0
-    this%omega_fs = 0.d0
-    this%Rmaj_fs = 0.d0
-    this%rmin_fs = 0.d0
-    this%eps_fs = 0.d0
     this%chi_i_fs = 0.d0
     this%chi_e_fs = 0.d0
     this%d_part_fs = 0.d0
@@ -277,11 +284,6 @@ CONTAINS
   SUBROUTINE tm1d_destroy(this)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
 
-    IF (ALLOCATED(this%q_fs)) DEALLOCATE(this%q_fs)
-    IF (ALLOCATED(this%omega_fs)) DEALLOCATE(this%omega_fs)
-    IF (ALLOCATED(this%Rmaj_fs)) DEALLOCATE(this%Rmaj_fs)
-    IF (ALLOCATED(this%rmin_fs)) DEALLOCATE(this%rmin_fs)
-    IF (ALLOCATED(this%eps_fs)) DEALLOCATE(this%eps_fs)
     IF (ALLOCATED(this%chi_i_fs)) DEALLOCATE(this%chi_i_fs)
     IF (ALLOCATED(this%chi_e_fs)) DEALLOCATE(this%chi_e_fs)
     IF (ALLOCATED(this%d_part_fs)) DEALLOCATE(this%d_part_fs)

@@ -30,11 +30,11 @@ CONTAINS
     work%pe_fs = up(:, 6)
     work%ti_fs = up(:, 7)
     work%te_fs = up(:, 8)
-    this%q_fs = fs_data%q_fs
-    this%omega_fs = fs_data%omega_fs
-    this%Rmaj_fs = fs_data%Rmaj_fs
-    this%rmin_fs = fs_data%rmin_fs
-    this%eps_fs = fs_data%eps_fs
+    work%q_fs = fs_data%q_fs
+    work%omega_fs = fs_data%omega_fs
+    work%Rmaj_fs = fs_data%Rmaj_fs
+    work%rmin_fs = fs_data%rmin_fs
+    work%eps_fs = fs_data%eps_fs
     this%a_minor = phys%a_minor
 
     CALL tm1d_build_projected_gradients(this, fs_data, work)

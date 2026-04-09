@@ -14,9 +14,9 @@ CONTAINS
     CASE (1)
        CALL tm1d_compute_militello_pinch(this, work)
     CASE (2)
-       CALL tm1d_compute_geometric_pinch(this)
+       CALL tm1d_compute_geometric_pinch(this, work)
     CASE (3)
-       CALL tm1d_compute_constant_pinch(this)
+       CALL tm1d_compute_constant_pinch(this, work)
     CASE DEFAULT
        this%vpinch_fs = 0.d0
     END SELECT
@@ -28,29 +28,31 @@ CONTAINS
     REAL*8 :: pinch_factor_militello_fs(this%nrho)
 
     pinch_factor_militello_fs = MIN(1.d0, EXP(1.d0 - work%nuestar_fs/MAX(this%nu_th, model_tol)))
-    this%vpinch_fs = pinch_factor_militello_fs * this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
+    this%vpinch_fs = pinch_factor_militello_fs * this%c_pinch * this%d_part_fs * work%rmin_fs / MAX(this%a_minor, model_tol)**2
 
-    WHERE (this%rmin_fs <= model_tol)
+    WHERE (work%rmin_fs <= model_tol)
        this%vpinch_fs = 0.d0
     END WHERE
   END SUBROUTINE tm1d_compute_militello_pinch
 
-  MODULE SUBROUTINE tm1d_compute_geometric_pinch(this)
+  MODULE SUBROUTINE tm1d_compute_geometric_pinch(this, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+    TYPE(transport_model_workspace_t), INTENT(IN) :: work
 
-    this%vpinch_fs = this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
+    this%vpinch_fs = this%c_pinch * this%d_part_fs * work%rmin_fs / MAX(this%a_minor, model_tol)**2
 
-    WHERE (this%rmin_fs <= model_tol)
+    WHERE (work%rmin_fs <= model_tol)
        this%vpinch_fs = 0.d0
     END WHERE
   END SUBROUTINE tm1d_compute_geometric_pinch
 
-  MODULE SUBROUTINE tm1d_compute_constant_pinch(this)
+  MODULE SUBROUTINE tm1d_compute_constant_pinch(this, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+    TYPE(transport_model_workspace_t), INTENT(IN) :: work
 
     this%vpinch_fs = this%vpinch_const
 
-    WHERE (this%rmin_fs <= model_tol)
+    WHERE (work%rmin_fs <= model_tol)
        this%vpinch_fs = 0.d0
     END WHERE
   END SUBROUTINE tm1d_compute_constant_pinch
