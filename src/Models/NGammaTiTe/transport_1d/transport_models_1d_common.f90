@@ -45,7 +45,7 @@ CONTAINS
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     REAL*8, INTENT(IN) :: rho
 
-    tm1d_blend_weight = tm1d_edge_cutoff(rho, this%rho_diffusion_model_max, this%rho_blend_width)
+    tm1d_blend_weight = tm1d_edge_cutoff(rho, this%config%rho_diffusion_model_max, this%config%rho_blend_width)
   END FUNCTION tm1d_blend_weight
 
   MODULE SUBROUTINE tm1d_interp_profile(this, rho, profile, value)

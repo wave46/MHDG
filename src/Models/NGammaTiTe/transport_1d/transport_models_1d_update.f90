@@ -11,7 +11,7 @@ CONTAINS
     IF (.NOT. fs_data%profiles_built) RETURN
 
     IF ((.NOT. this%is_initialized) .OR. this%nrho /= fs_data%nrho) THEN
-       CALL this%init(fs_data%nrho, this%rho_edge, this%rho_core, this%rho_diffusion_model_max)
+       CALL this%init(fs_data%nrho, this%config%rho_edge, this%config%rho_core, this%config%rho_diffusion_model_max)
     END IF
     IF (.NOT. this%is_initialized) RETURN
 
@@ -42,8 +42,8 @@ CONTAINS
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
-    CALL fs_data%interp_scalar(this%rho_core, work%te_fs, te_core)
-    CALL fs_data%interp_scalar(this%rho_edge, work%te_fs, te_edge)
+    CALL fs_data%interp_scalar(this%config%rho_core, work%te_fs, te_core)
+    CALL fs_data%interp_scalar(this%config%rho_edge, work%te_fs, te_edge)
     te_edge = MAX(te_edge, model_tol)
     this%delta_te = (te_core - te_edge)/te_edge
   END SUBROUTINE tm1d_compute_delta_te

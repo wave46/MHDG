@@ -55,10 +55,10 @@ CONTAINS
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
-    this%chi_i_fs = MAX(this%c_bohm_i*work%chi_bohm_fs + this%c_gyrobohm_i*work%chi_gyrobohm_fs, 1.d-10)
-    this%chi_e_fs = MAX(this%c_bohm_e*work%chi_bohm_fs + this%c_gyrobohm_e*work%chi_gyrobohm_fs, 1.d-10)
-    this%d_part_fs = this%c_bohm_n * this%chi_i_fs*this%chi_e_fs / MAX(this%chi_i_fs + this%chi_e_fs, 1.d-10)
-    this%nu_mom_fs = this%prandtl * this%chi_i_fs
+    this%chi_i_fs = MAX(this%config%c_bohm_i*work%chi_bohm_fs + this%config%c_gyrobohm_i*work%chi_gyrobohm_fs, 1.d-10)
+    this%chi_e_fs = MAX(this%config%c_bohm_e*work%chi_bohm_fs + this%config%c_gyrobohm_e*work%chi_gyrobohm_fs, 1.d-10)
+    this%d_part_fs = this%config%c_bohm_n * this%chi_i_fs*this%chi_e_fs / MAX(this%chi_i_fs + this%chi_e_fs, 1.d-10)
+    this%nu_mom_fs = this%config%prandtl * this%chi_i_fs
   END SUBROUTINE tm1d_compute_mixed_transport
 
   MODULE SUBROUTINE tm1d_build_projected_gradients(this, fs_data, work)

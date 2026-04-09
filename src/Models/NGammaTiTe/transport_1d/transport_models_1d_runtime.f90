@@ -43,10 +43,10 @@ CONTAINS
 
        CALL this%interp_transport(rho_g, chi_i, chi_e, d_part, nu_mom, vpinch)
 
-       d_part = MAX(d_part, this%diff_n_min)
-       nu_mom = MAX(nu_mom, this%diff_u_min)
-       chi_i = MAX(chi_i, this%diff_e_min)
-       chi_e = MAX(chi_e, this%diff_ee_min)
+       d_part = MAX(d_part, this%config%diff_n_min)
+       nu_mom = MAX(nu_mom, this%config%diff_u_min)
+       chi_i = MAX(chi_i, this%config%diff_e_min)
+       chi_e = MAX(chi_e, this%config%diff_ee_min)
 
        diff_iso(1, 1, g) = diff_iso(1, 1, g) + w*(d_part - diff_iso(1, 1, g))
        diff_iso(2, 2, g) = diff_iso(2, 2, g) + w*(nu_mom - diff_iso(2, 2, g))
