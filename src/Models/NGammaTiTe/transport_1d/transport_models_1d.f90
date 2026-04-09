@@ -31,7 +31,6 @@ MODULE transport_models_1d
      PROCEDURE :: destroy => tm1d_destroy
      PROCEDURE :: set_config => tm1d_set_config
      PROCEDURE :: update_from_flux_surfaces => tm1d_update_from_flux_surfaces
-     PROCEDURE :: compute_delta_te => tm1d_compute_delta_te
      PROCEDURE :: compute_pinch_profile => tm1d_compute_pinch_profile
      PROCEDURE :: interp_transport => tm1d_interp_transport
      PROCEDURE :: compute_1D_pinch_matrix => tm1d_compute_1D_pinch_matrix
@@ -47,11 +46,6 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
      END SUBROUTINE tm1d_update_from_flux_surfaces
-     MODULE SUBROUTINE tm1d_compute_delta_te(this, fs_data, work)
-       CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-       TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
-       TYPE(transport_model_derived_t), INTENT(INOUT) :: work
-     END SUBROUTINE tm1d_compute_delta_te
      MODULE SUBROUTINE tm1d_compute_collisionality_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
        TYPE(transport_model_derived_t), INTENT(INOUT) :: work

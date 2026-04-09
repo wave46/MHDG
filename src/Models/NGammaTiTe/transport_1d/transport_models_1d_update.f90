@@ -22,7 +22,7 @@ CONTAINS
     CALL tm1d_fill_workspace_from_fs(fs_data, work)
 
     CALL tm1d_build_projected_gradients(this, fs_data, work)
-    CALL this%compute_delta_te(fs_data, work)
+    CALL tm1d_fill_delta_te(this, fs_data, work)
     CALL tm1d_compute_collisionality_profile(this, work)
     CALL tm1d_compute_bohm_profile(this, work)
     CALL tm1d_compute_gyrobohm_profile(this, work)
@@ -32,7 +32,7 @@ CONTAINS
     CALL work%destroy()
   END SUBROUTINE tm1d_update_from_flux_surfaces
 
-  MODULE SUBROUTINE tm1d_compute_delta_te(this, fs_data, work)
+  SUBROUTINE tm1d_fill_delta_te(this, fs_data, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
     TYPE(transport_model_derived_t), INTENT(INOUT) :: work
@@ -46,7 +46,7 @@ CONTAINS
     CALL fs_data%interp_scalar(this%config%rho_edge, work%te_fs, te_edge)
     te_edge = MAX(te_edge, model_tol)
     work%delta_te = (te_core - te_edge)/te_edge
-  END SUBROUTINE tm1d_compute_delta_te
+  END SUBROUTINE tm1d_fill_delta_te
 
   SUBROUTINE tm1d_fill_workspace_from_fs(fs_data, work)
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
