@@ -14,7 +14,6 @@
     external_heating    = .false.       ! True will use external from the file provided in INPUT_LST
     impurity_radiation  = .false.        ! to take into account impurity radiaion with concentration provided in PHYS_LST
     import_diffusion_1D = .false.        ! Import or not additional profile of diffuion in 1D as function of rho_pol, supply path to the file
-    bohm_gyrobohm       = .false.        ! apply or not apply bohm-gyrobohm model
     driftdia            = .false.       ! Set to FALSE to ignore diamagnetic drifts terms
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
     testcase            = 54            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
@@ -192,7 +191,7 @@
     diff_e = 20. ! perpendicular diffusion for the energy equation
     diff_ee =    20. ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
     diff_vort =  20.! diffusion in the vorticity equation
-    v_p = 0. ! Pinch velocity in the continuity equation (Pinch = vp*(psi^2 + psi^2*tanh((0.95 - psi)/0.02)) with psi = 1. at separatrix )
+    v_p = 0. ! Legacy pinch parameter, inactive when transport_1d is not used here
     diff_nn = 2e8 !max diffusion for neutral equation or if used DCONSTANTNEUTRALDIFF flag, then the value of neutral diffusion
     I_0 = 0.3     ! [MA] Plasma current at flat-top for diffusion in moving equilibrium
     ! external heating in the form of shifted 2D gaussian ~exp(-(r-(R0+dr)**2/sigmar**2))*exp(-(z-(Z0+dz)**2/sigmaz**2))
