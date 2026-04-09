@@ -41,11 +41,6 @@ MODULE transport_models_1d
      REAL*8 :: c_gyrobohm_e = 3.5d-2
      REAL*8 :: c_bohm_n = 1.d0
      REAL*8 :: prandtl = 1.d0
-     REAL*8, ALLOCATABLE :: te_fs(:)
-     REAL*8, ALLOCATABLE :: ti_fs(:)
-     REAL*8, ALLOCATABLE :: ne_fs(:)
-     REAL*8, ALLOCATABLE :: pe_fs(:)
-     REAL*8, ALLOCATABLE :: pi_fs(:)
      REAL*8, ALLOCATABLE :: q_fs(:)
      REAL*8, ALLOCATABLE :: omega_fs(:)
      REAL*8, ALLOCATABLE :: Rmaj_fs(:)
@@ -72,6 +67,11 @@ MODULE transport_models_1d
 
   TYPE :: transport_model_workspace_t
      REAL*8, ALLOCATABLE :: cs_te_fs(:)
+     REAL*8, ALLOCATABLE :: ne_fs(:)
+     REAL*8, ALLOCATABLE :: pi_fs(:)
+     REAL*8, ALLOCATABLE :: pe_fs(:)
+     REAL*8, ALLOCATABLE :: ti_fs(:)
+     REAL*8, ALLOCATABLE :: te_fs(:)
      REAL*8, ALLOCATABLE :: nuestar_fs(:)
      REAL*8, ALLOCATABLE :: dpe_dr_fs(:)
      REAL*8, ALLOCATABLE :: dte_dr_fs(:)
@@ -90,9 +90,10 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
      END SUBROUTINE tm1d_update_from_flux_surfaces
-     MODULE SUBROUTINE tm1d_compute_delta_te(this, fs_data)
+     MODULE SUBROUTINE tm1d_compute_delta_te(this, fs_data, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
+       TYPE(transport_model_workspace_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_delta_te
      MODULE SUBROUTINE tm1d_compute_collisionality_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
@@ -183,6 +184,11 @@ CONTAINS
     IF (nrho <= 0) RETURN
 
     ALLOCATE(this%cs_te_fs(nrho))
+    ALLOCATE(this%ne_fs(nrho))
+    ALLOCATE(this%pi_fs(nrho))
+    ALLOCATE(this%pe_fs(nrho))
+    ALLOCATE(this%ti_fs(nrho))
+    ALLOCATE(this%te_fs(nrho))
     ALLOCATE(this%nuestar_fs(nrho))
     ALLOCATE(this%dpe_dr_fs(nrho))
     ALLOCATE(this%dte_dr_fs(nrho))
@@ -190,6 +196,11 @@ CONTAINS
     ALLOCATE(this%chi_gyrobohm_fs(nrho))
 
     this%cs_te_fs = 0.d0
+    this%ne_fs = 0.d0
+    this%pi_fs = 0.d0
+    this%pe_fs = 0.d0
+    this%ti_fs = 0.d0
+    this%te_fs = 0.d0
     this%nuestar_fs = 0.d0
     this%dpe_dr_fs = 0.d0
     this%dte_dr_fs = 0.d0
@@ -201,6 +212,11 @@ CONTAINS
     CLASS(transport_model_workspace_t), INTENT(INOUT) :: this
 
     IF (ALLOCATED(this%cs_te_fs)) DEALLOCATE(this%cs_te_fs)
+    IF (ALLOCATED(this%ne_fs)) DEALLOCATE(this%ne_fs)
+    IF (ALLOCATED(this%pi_fs)) DEALLOCATE(this%pi_fs)
+    IF (ALLOCATED(this%pe_fs)) DEALLOCATE(this%pe_fs)
+    IF (ALLOCATED(this%ti_fs)) DEALLOCATE(this%ti_fs)
+    IF (ALLOCATED(this%te_fs)) DEALLOCATE(this%te_fs)
     IF (ALLOCATED(this%nuestar_fs)) DEALLOCATE(this%nuestar_fs)
     IF (ALLOCATED(this%dpe_dr_fs)) DEALLOCATE(this%dpe_dr_fs)
     IF (ALLOCATED(this%dte_dr_fs)) DEALLOCATE(this%dte_dr_fs)
@@ -231,11 +247,6 @@ CONTAINS
 
     IF (this%nrho <= 0) RETURN
 
-    ALLOCATE(this%te_fs(this%nrho))
-    ALLOCATE(this%ti_fs(this%nrho))
-    ALLOCATE(this%ne_fs(this%nrho))
-    ALLOCATE(this%pe_fs(this%nrho))
-    ALLOCATE(this%pi_fs(this%nrho))
     ALLOCATE(this%q_fs(this%nrho))
     ALLOCATE(this%omega_fs(this%nrho))
     ALLOCATE(this%Rmaj_fs(this%nrho))
@@ -248,11 +259,6 @@ CONTAINS
     ALLOCATE(this%vpinch_fs(this%nrho))
     ALLOCATE(this%rho_grid(this%nrho))
 
-    this%te_fs = 0.d0
-    this%ti_fs = 0.d0
-    this%ne_fs = 0.d0
-    this%pe_fs = 0.d0
-    this%pi_fs = 0.d0
     this%q_fs = 0.d0
     this%omega_fs = 0.d0
     this%Rmaj_fs = 0.d0
@@ -271,11 +277,6 @@ CONTAINS
   SUBROUTINE tm1d_destroy(this)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
 
-    IF (ALLOCATED(this%te_fs)) DEALLOCATE(this%te_fs)
-    IF (ALLOCATED(this%ti_fs)) DEALLOCATE(this%ti_fs)
-    IF (ALLOCATED(this%ne_fs)) DEALLOCATE(this%ne_fs)
-    IF (ALLOCATED(this%pe_fs)) DEALLOCATE(this%pe_fs)
-    IF (ALLOCATED(this%pi_fs)) DEALLOCATE(this%pi_fs)
     IF (ALLOCATED(this%q_fs)) DEALLOCATE(this%q_fs)
     IF (ALLOCATED(this%omega_fs)) DEALLOCATE(this%omega_fs)
     IF (ALLOCATED(this%Rmaj_fs)) DEALLOCATE(this%Rmaj_fs)

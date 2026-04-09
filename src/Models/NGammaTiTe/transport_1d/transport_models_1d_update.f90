@@ -25,11 +25,11 @@ CONTAINS
 
     this%rho_grid = fs_data%rho_grid
 
-    this%ne_fs = up(:, 1)
-    this%pi_fs = up(:, 5)
-    this%pe_fs = up(:, 6)
-    this%ti_fs = up(:, 7)
-    this%te_fs = up(:, 8)
+    work%ne_fs = up(:, 1)
+    work%pi_fs = up(:, 5)
+    work%pe_fs = up(:, 6)
+    work%ti_fs = up(:, 7)
+    work%te_fs = up(:, 8)
     this%q_fs = fs_data%q_fs
     this%omega_fs = fs_data%omega_fs
     this%Rmaj_fs = fs_data%Rmaj_fs
@@ -38,7 +38,7 @@ CONTAINS
     this%a_minor = phys%a_minor
 
     CALL tm1d_build_projected_gradients(this, fs_data, work)
-    CALL this%compute_delta_te(fs_data)
+    CALL this%compute_delta_te(fs_data, work)
     CALL tm1d_compute_collisionality_profile(this, work)
     CALL tm1d_compute_bohm_profile(this, work)
     CALL tm1d_compute_gyrobohm_profile(this, work)
@@ -49,17 +49,18 @@ CONTAINS
     DEALLOCATE(ua, up)
 END SUBROUTINE tm1d_update_from_flux_surfaces
 
-  MODULE SUBROUTINE tm1d_compute_delta_te(this, fs_data)
+  MODULE SUBROUTINE tm1d_compute_delta_te(this, fs_data, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
+    TYPE(transport_model_workspace_t), INTENT(IN) :: work
     REAL*8 :: te_core, te_edge
 
     this%delta_te = 0.d0
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
-    CALL fs_data%interp_scalar(this%rho_core, this%te_fs, te_core)
-    CALL fs_data%interp_scalar(this%rho_edge, this%te_fs, te_edge)
+    CALL fs_data%interp_scalar(this%rho_core, work%te_fs, te_core)
+    CALL fs_data%interp_scalar(this%rho_edge, work%te_fs, te_edge)
     te_edge = MAX(te_edge, model_tol)
     this%delta_te = (te_core - te_edge)/te_edge
   END SUBROUTINE tm1d_compute_delta_te
