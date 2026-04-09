@@ -51,8 +51,6 @@ MODULE transport_models_1d
      REAL*8, ALLOCATABLE :: Rmaj_fs(:)
      REAL*8, ALLOCATABLE :: rmin_fs(:)
      REAL*8, ALLOCATABLE :: eps_fs(:)
-     REAL*8, ALLOCATABLE :: dte_dr_fs(:)
-     REAL*8, ALLOCATABLE :: dpe_dr_fs(:)
      REAL*8, ALLOCATABLE :: chi_i_fs(:)
      REAL*8, ALLOCATABLE :: chi_e_fs(:)
      REAL*8, ALLOCATABLE :: d_part_fs(:)
@@ -75,6 +73,8 @@ MODULE transport_models_1d
   TYPE :: transport_model_workspace_t
      REAL*8, ALLOCATABLE :: cs_te_fs(:)
      REAL*8, ALLOCATABLE :: nuestar_fs(:)
+     REAL*8, ALLOCATABLE :: dpe_dr_fs(:)
+     REAL*8, ALLOCATABLE :: dte_dr_fs(:)
      REAL*8, ALLOCATABLE :: chi_bohm_fs(:)
      REAL*8, ALLOCATABLE :: chi_gyrobohm_fs(:)
    CONTAINS
@@ -110,9 +110,10 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_mixed_transport
-     MODULE SUBROUTINE tm1d_build_projected_gradients(this, fs_data)
+     MODULE SUBROUTINE tm1d_build_projected_gradients(this, fs_data, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
+       TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_build_projected_gradients
      MODULE SUBROUTINE tm1d_compute_pinch_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
@@ -183,11 +184,15 @@ CONTAINS
 
     ALLOCATE(this%cs_te_fs(nrho))
     ALLOCATE(this%nuestar_fs(nrho))
+    ALLOCATE(this%dpe_dr_fs(nrho))
+    ALLOCATE(this%dte_dr_fs(nrho))
     ALLOCATE(this%chi_bohm_fs(nrho))
     ALLOCATE(this%chi_gyrobohm_fs(nrho))
 
     this%cs_te_fs = 0.d0
     this%nuestar_fs = 0.d0
+    this%dpe_dr_fs = 0.d0
+    this%dte_dr_fs = 0.d0
     this%chi_bohm_fs = 0.d0
     this%chi_gyrobohm_fs = 0.d0
   END SUBROUTINE tm1d_workspace_init
@@ -197,6 +202,8 @@ CONTAINS
 
     IF (ALLOCATED(this%cs_te_fs)) DEALLOCATE(this%cs_te_fs)
     IF (ALLOCATED(this%nuestar_fs)) DEALLOCATE(this%nuestar_fs)
+    IF (ALLOCATED(this%dpe_dr_fs)) DEALLOCATE(this%dpe_dr_fs)
+    IF (ALLOCATED(this%dte_dr_fs)) DEALLOCATE(this%dte_dr_fs)
     IF (ALLOCATED(this%chi_bohm_fs)) DEALLOCATE(this%chi_bohm_fs)
     IF (ALLOCATED(this%chi_gyrobohm_fs)) DEALLOCATE(this%chi_gyrobohm_fs)
   END SUBROUTINE tm1d_workspace_destroy
@@ -234,8 +241,6 @@ CONTAINS
     ALLOCATE(this%Rmaj_fs(this%nrho))
     ALLOCATE(this%rmin_fs(this%nrho))
     ALLOCATE(this%eps_fs(this%nrho))
-    ALLOCATE(this%dte_dr_fs(this%nrho))
-    ALLOCATE(this%dpe_dr_fs(this%nrho))
     ALLOCATE(this%chi_i_fs(this%nrho))
     ALLOCATE(this%chi_e_fs(this%nrho))
     ALLOCATE(this%d_part_fs(this%nrho))
@@ -253,8 +258,6 @@ CONTAINS
     this%Rmaj_fs = 0.d0
     this%rmin_fs = 0.d0
     this%eps_fs = 0.d0
-    this%dte_dr_fs = 0.d0
-    this%dpe_dr_fs = 0.d0
     this%chi_i_fs = 0.d0
     this%chi_e_fs = 0.d0
     this%d_part_fs = 0.d0
@@ -278,8 +281,6 @@ CONTAINS
     IF (ALLOCATED(this%Rmaj_fs)) DEALLOCATE(this%Rmaj_fs)
     IF (ALLOCATED(this%rmin_fs)) DEALLOCATE(this%rmin_fs)
     IF (ALLOCATED(this%eps_fs)) DEALLOCATE(this%eps_fs)
-    IF (ALLOCATED(this%dte_dr_fs)) DEALLOCATE(this%dte_dr_fs)
-    IF (ALLOCATED(this%dpe_dr_fs)) DEALLOCATE(this%dpe_dr_fs)
     IF (ALLOCATED(this%chi_i_fs)) DEALLOCATE(this%chi_i_fs)
     IF (ALLOCATED(this%chi_e_fs)) DEALLOCATE(this%chi_e_fs)
     IF (ALLOCATED(this%d_part_fs)) DEALLOCATE(this%d_part_fs)

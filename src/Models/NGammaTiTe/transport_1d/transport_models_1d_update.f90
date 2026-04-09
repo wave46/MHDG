@@ -38,7 +38,7 @@ CONTAINS
     this%a_minor = phys%a_minor
     work%cs_te_fs = SQRT(MAX(this%te_fs*phys%Mref, model_tol))
 
-    CALL tm1d_build_projected_gradients(this, fs_data)
+    CALL tm1d_build_projected_gradients(this, fs_data, work)
     CALL this%compute_delta_te(fs_data)
     CALL tm1d_compute_collisionality_profile(this, work)
     CALL tm1d_compute_bohm_profile(this, work)

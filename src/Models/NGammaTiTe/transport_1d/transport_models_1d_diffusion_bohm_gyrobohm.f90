@@ -31,7 +31,7 @@ CONTAINS
 
     rho_s_te_fs = work%cs_te_fs / MAX(this%omega_fs, model_tol)
     work%chi_bohm_fs = rho_s_te_fs * work%cs_te_fs * this%q_fs**2 * this%a_minor * &
-         ABS(this%dpe_dr_fs) / MAX(this%pe_fs, model_tol) * this%delta_te
+         ABS(work%dpe_dr_fs) / MAX(this%pe_fs, model_tol) * this%delta_te
   END SUBROUTINE tm1d_compute_bohm_profile
 
   MODULE SUBROUTINE tm1d_compute_gyrobohm_profile(this, work)
@@ -43,7 +43,7 @@ CONTAINS
     IF (this%nrho <= 0) RETURN
 
     rho_s_te_fs = work%cs_te_fs / MAX(this%omega_fs, model_tol)
-    work%chi_gyrobohm_fs = rho_s_te_fs**2 * work%cs_te_fs * ABS(this%dte_dr_fs) / MAX(this%te_fs, model_tol)
+    work%chi_gyrobohm_fs = rho_s_te_fs**2 * work%cs_te_fs * ABS(work%dte_dr_fs) / MAX(this%te_fs, model_tol)
   END SUBROUTINE tm1d_compute_gyrobohm_profile
 
   MODULE SUBROUTINE tm1d_compute_mixed_transport(this, work)
@@ -59,15 +59,16 @@ CONTAINS
     this%nu_mom_fs = this%prandtl * this%chi_i_fs
   END SUBROUTINE tm1d_compute_mixed_transport
 
-  MODULE SUBROUTINE tm1d_build_projected_gradients(this, fs_data)
+  MODULE SUBROUTINE tm1d_build_projected_gradients(this, fs_data, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
+    TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
     REAL*8 :: u1_safe(fs_data%nrho)
 
     u1_safe = MAX(fs_data%U_fs(1, :), model_tol)
 
-    this%dpe_dr_fs = 2.d0/(3.d0*phys%Mref) * fs_data%Q_rad_fs(4, :)
-    this%dte_dr_fs = 2.d0/(3.d0*phys%Mref) * &
+    work%dpe_dr_fs = 2.d0/(3.d0*phys%Mref) * fs_data%Q_rad_fs(4, :)
+    work%dte_dr_fs = 2.d0/(3.d0*phys%Mref) * &
          (fs_data%Q_rad_fs(4, :)/u1_safe - fs_data%U_fs(4, :)*fs_data%Q_rad_fs(1, :)/u1_safe**2)
   END SUBROUTINE tm1d_build_projected_gradients
 
