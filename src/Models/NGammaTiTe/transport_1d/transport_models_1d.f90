@@ -140,6 +140,16 @@ MODULE transport_models_1d
      MODULE REAL*8 FUNCTION tm1d_edge_cutoff(rho, rho_max, width)
        REAL*8, INTENT(IN) :: rho, rho_max, width
      END FUNCTION tm1d_edge_cutoff
+     MODULE REAL*8 FUNCTION tm1d_blend_weight(this, rho)
+       CLASS(transport_model_1d_t), INTENT(IN) :: this
+       REAL*8, INTENT(IN) :: rho
+     END FUNCTION tm1d_blend_weight
+     MODULE SUBROUTINE tm1d_interp_profile(this, rho, profile, value)
+       CLASS(transport_model_1d_t), INTENT(IN) :: this
+       REAL*8, INTENT(IN) :: rho
+       REAL*8, INTENT(IN) :: profile(:)
+       REAL*8, INTENT(OUT) :: value
+     END SUBROUTINE tm1d_interp_profile
   END INTERFACE
 
 CONTAINS
@@ -344,13 +354,6 @@ CONTAINS
     END DO
   END SUBROUTINE tm1d_apply_1D_diffusion
 
-  REAL*8 FUNCTION tm1d_blend_weight(this, rho)
-    CLASS(transport_model_1d_t), INTENT(IN) :: this
-    REAL*8, INTENT(IN) :: rho
-
-    tm1d_blend_weight = tm1d_edge_cutoff(rho, this%rho_diffusion_model_max, this%rho_blend_width)
-  END FUNCTION tm1d_blend_weight
-
   SUBROUTINE tm1d_write_hdf5(this, parent_group_id)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     INTEGER(HID_T), INTENT(IN) :: parent_group_id
@@ -394,37 +397,5 @@ CONTAINS
     CALL HDF5_real_saving(params_group_id, this%rho_pinch_edge_width, 'rho_pinch_edge_width')
     CALL HDF5_group_close(params_group_id, ierr)
   END SUBROUTINE tm1d_write_hdf5
-
-  SUBROUTINE tm1d_interp_profile(this, rho, profile, value)
-    CLASS(transport_model_1d_t), INTENT(IN) :: this
-    REAL*8, INTENT(IN) :: rho
-    REAL*8, INTENT(IN) :: profile(:)
-    REAL*8, INTENT(OUT) :: value
-    INTEGER :: ilow, ihigh, i
-    REAL*8 :: alpha
-    REAL*8 :: rho_grid(this%nrho)
-
-    value = 0.d0
-
-    IF (this%nrho <= 0) RETURN
-    IF (SIZE(profile) /= this%nrho) RETURN
-    IF (this%nrho == 1) THEN
-       value = profile(1)
-       RETURN
-    END IF
-
-    IF (.NOT. ALLOCATED(this%rho_grid)) RETURN
-    rho_grid = this%rho_grid
-
-    CALL find_cell_and_local_coordinate(this%nrho, rho_grid, MIN(MAX(rho, rho_grid(1)), rho_grid(this%nrho)), ilow, alpha)
-    ilow = MIN(MAX(ilow, 1), this%nrho)
-    ihigh = MIN(ilow + 1, this%nrho)
-
-    IF (ihigh == ilow) THEN
-       value = profile(ilow)
-    ELSE
-       value = (1.d0 - alpha)*profile(ilow) + alpha*profile(ihigh)
-    END IF
-  END SUBROUTINE tm1d_interp_profile
 
 END MODULE transport_models_1d
