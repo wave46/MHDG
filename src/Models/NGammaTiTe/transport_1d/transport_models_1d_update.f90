@@ -6,7 +6,7 @@ CONTAINS
   MODULE SUBROUTINE tm1d_update_from_flux_surfaces(this, fs_data)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
-    TYPE(transport_model_workspace_t) :: work
+    TYPE(transport_model_derived_t) :: work
 
     IF (.NOT. fs_data%profiles_built) RETURN
 
@@ -35,7 +35,7 @@ CONTAINS
   MODULE SUBROUTINE tm1d_compute_delta_te(this, fs_data, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
-    TYPE(transport_model_workspace_t), INTENT(IN) :: work
+    TYPE(transport_model_derived_t), INTENT(IN) :: work
     REAL*8 :: te_core, te_edge
 
     this%delta_te = 0.d0
@@ -50,7 +50,7 @@ CONTAINS
 
   SUBROUTINE tm1d_fill_workspace_from_fs(fs_data, work)
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
-    TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+    TYPE(transport_model_derived_t), INTENT(INOUT) :: work
     REAL*8, ALLOCATABLE :: ua(:, :), up(:, :)
 
     ALLOCATE(ua(fs_data%nrho, fs_data%neq))

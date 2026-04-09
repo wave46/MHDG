@@ -5,7 +5,7 @@ MODULE transport_models_1d
   USE flux_surface_transport_data, ONLY: flux_surface_transport_t
   USE interpolation, ONLY: find_cell_and_local_coordinate
   USE physics, ONLY: cons2phys
-  USE transport_models_1d_workspace, ONLY: transport_model_workspace_t
+  USE transport_models_1d_derived, ONLY: transport_model_derived_t
   IMPLICIT NONE
 
   PRIVATE
@@ -71,44 +71,44 @@ MODULE transport_models_1d
      MODULE SUBROUTINE tm1d_compute_delta_te(this, fs_data, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
-       TYPE(transport_model_workspace_t), INTENT(IN) :: work
+       TYPE(transport_model_derived_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_delta_te
      MODULE SUBROUTINE tm1d_compute_collisionality_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
-       TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+       TYPE(transport_model_derived_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_collisionality_profile
      MODULE SUBROUTINE tm1d_compute_bohm_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
-       TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+       TYPE(transport_model_derived_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_bohm_profile
      MODULE SUBROUTINE tm1d_compute_gyrobohm_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
-       TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+       TYPE(transport_model_derived_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_gyrobohm_profile
      MODULE SUBROUTINE tm1d_compute_mixed_transport(this, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-       TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+       TYPE(transport_model_derived_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_mixed_transport
      MODULE SUBROUTINE tm1d_build_projected_gradients(this, fs_data, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
-       TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+       TYPE(transport_model_derived_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_build_projected_gradients
      MODULE SUBROUTINE tm1d_compute_pinch_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-       TYPE(transport_model_workspace_t), INTENT(IN) :: work
+       TYPE(transport_model_derived_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_pinch_profile
      MODULE SUBROUTINE tm1d_compute_militello_pinch(this, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-       TYPE(transport_model_workspace_t), INTENT(IN) :: work
+       TYPE(transport_model_derived_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_militello_pinch
      MODULE SUBROUTINE tm1d_compute_geometric_pinch(this, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-       TYPE(transport_model_workspace_t), INTENT(IN) :: work
+       TYPE(transport_model_derived_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_geometric_pinch
      MODULE SUBROUTINE tm1d_compute_constant_pinch(this, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-       TYPE(transport_model_workspace_t), INTENT(IN) :: work
+       TYPE(transport_model_derived_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_constant_pinch
      MODULE SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch)
        CLASS(transport_model_1d_t), INTENT(IN) :: this

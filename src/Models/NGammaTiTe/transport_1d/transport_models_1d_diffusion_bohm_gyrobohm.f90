@@ -5,7 +5,7 @@ CONTAINS
 
   MODULE SUBROUTINE tm1d_compute_collisionality_profile(this, work)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
-    TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+    TYPE(transport_model_derived_t), INTENT(INOUT) :: work
     REAL*8 :: ne_dim(this%nrho), te_dim(this%nrho), rmaj_dim(this%nrho), lambda_e(this%nrho)
 
     IF (.NOT. this%is_initialized) RETURN
@@ -23,7 +23,7 @@ CONTAINS
 
   MODULE SUBROUTINE tm1d_compute_bohm_profile(this, work)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
-    TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+    TYPE(transport_model_derived_t), INTENT(INOUT) :: work
     REAL*8 :: rho_s_te_fs(this%nrho)
 
     IF (.NOT. this%is_initialized) RETURN
@@ -37,7 +37,7 @@ CONTAINS
 
   MODULE SUBROUTINE tm1d_compute_gyrobohm_profile(this, work)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
-    TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+    TYPE(transport_model_derived_t), INTENT(INOUT) :: work
     REAL*8 :: rho_s_te_fs(this%nrho)
 
     IF (.NOT. this%is_initialized) RETURN
@@ -50,7 +50,7 @@ CONTAINS
 
   MODULE SUBROUTINE tm1d_compute_mixed_transport(this, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+    TYPE(transport_model_derived_t), INTENT(INOUT) :: work
 
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
@@ -64,7 +64,7 @@ CONTAINS
   MODULE SUBROUTINE tm1d_build_projected_gradients(this, fs_data, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
-    TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
+    TYPE(transport_model_derived_t), INTENT(INOUT) :: work
     REAL*8 :: u1_safe(fs_data%nrho)
 
     u1_safe = MAX(fs_data%U_fs(1, :), model_tol)

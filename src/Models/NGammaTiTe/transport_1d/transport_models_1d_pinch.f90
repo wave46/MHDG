@@ -5,7 +5,7 @@ CONTAINS
 
   MODULE SUBROUTINE tm1d_compute_pinch_profile(this, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    TYPE(transport_model_workspace_t), INTENT(IN) :: work
+    TYPE(transport_model_derived_t), INTENT(IN) :: work
 
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
@@ -24,7 +24,7 @@ CONTAINS
 
   MODULE SUBROUTINE tm1d_compute_militello_pinch(this, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    TYPE(transport_model_workspace_t), INTENT(IN) :: work
+    TYPE(transport_model_derived_t), INTENT(IN) :: work
     REAL*8 :: pinch_factor_militello_fs(this%nrho)
 
     pinch_factor_militello_fs = MIN(1.d0, EXP(1.d0 - work%nuestar_fs/MAX(this%nu_th, model_tol)))
@@ -37,7 +37,7 @@ CONTAINS
 
   MODULE SUBROUTINE tm1d_compute_geometric_pinch(this, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    TYPE(transport_model_workspace_t), INTENT(IN) :: work
+    TYPE(transport_model_derived_t), INTENT(IN) :: work
 
     this%vpinch_fs = this%c_pinch * this%d_part_fs * work%rmin_fs / MAX(this%a_minor, model_tol)**2
 
@@ -48,7 +48,7 @@ CONTAINS
 
   MODULE SUBROUTINE tm1d_compute_constant_pinch(this, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    TYPE(transport_model_workspace_t), INTENT(IN) :: work
+    TYPE(transport_model_derived_t), INTENT(IN) :: work
 
     this%vpinch_fs = this%vpinch_const
 
