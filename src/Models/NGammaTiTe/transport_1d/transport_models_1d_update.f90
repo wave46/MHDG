@@ -6,8 +6,8 @@ CONTAINS
   MODULE SUBROUTINE tm1d_update_from_flux_surfaces(this, fs_data)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
+    TYPE(transport_model_workspace_t) :: work
     REAL*8, ALLOCATABLE :: ua(:, :), up(:, :)
-    REAL*8, ALLOCATABLE :: chi_bohm_fs(:), chi_gyrobohm_fs(:), nuestar_fs(:), cs_te_fs(:)
 
     IF (.NOT. fs_data%profiles_built) RETURN
 
@@ -18,10 +18,7 @@ CONTAINS
 
     ALLOCATE(ua(fs_data%nrho, fs_data%neq))
     ALLOCATE(up(fs_data%nrho, phys%npv))
-    ALLOCATE(chi_bohm_fs(this%nrho))
-    ALLOCATE(chi_gyrobohm_fs(this%nrho))
-    ALLOCATE(nuestar_fs(this%nrho))
-    ALLOCATE(cs_te_fs(this%nrho))
+    CALL work%init(this%nrho)
 
     ua = TRANSPOSE(fs_data%U_fs)
     CALL cons2phys(ua, up)
@@ -39,17 +36,17 @@ CONTAINS
     this%rmin_fs = fs_data%rmin_fs
     this%eps_fs = fs_data%eps_fs
     this%a_minor = phys%a_minor
-    cs_te_fs = SQRT(MAX(this%te_fs*phys%Mref, model_tol))
+    work%cs_te_fs = SQRT(MAX(this%te_fs*phys%Mref, model_tol))
 
     CALL tm1d_build_projected_gradients(this, fs_data)
     CALL this%compute_delta_te(fs_data)
-    CALL tm1d_compute_collisionality_profile(this, nuestar_fs)
-    CALL tm1d_compute_bohm_profile(this, cs_te_fs, chi_bohm_fs)
-    CALL tm1d_compute_gyrobohm_profile(this, cs_te_fs, chi_gyrobohm_fs)
-    CALL tm1d_compute_mixed_transport(this, chi_bohm_fs, chi_gyrobohm_fs)
-    CALL this%compute_pinch_profile(nuestar_fs)
+    CALL tm1d_compute_collisionality_profile(this, work)
+    CALL tm1d_compute_bohm_profile(this, work)
+    CALL tm1d_compute_gyrobohm_profile(this, work)
+    CALL tm1d_compute_mixed_transport(this, work)
+    CALL this%compute_pinch_profile(work%nuestar_fs)
 
-    DEALLOCATE(chi_bohm_fs, chi_gyrobohm_fs, nuestar_fs, cs_te_fs)
+    CALL work%destroy()
     DEALLOCATE(ua, up)
 END SUBROUTINE tm1d_update_from_flux_surfaces
 

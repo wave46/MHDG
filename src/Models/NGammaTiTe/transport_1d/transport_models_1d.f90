@@ -14,6 +14,17 @@ MODULE transport_models_1d
   REAL*8, PARAMETER :: rho_core_default = 0.8d0
   REAL*8, PARAMETER :: model_tol = 1.d-12
 
+  TYPE :: transport_model_workspace_t
+     REAL*8, ALLOCATABLE :: cs_te_fs(:)
+     REAL*8, ALLOCATABLE :: nuestar_fs(:)
+     REAL*8, ALLOCATABLE :: chi_bohm_fs(:)
+     REAL*8, ALLOCATABLE :: chi_gyrobohm_fs(:)
+   CONTAINS
+     PROCEDURE :: init => tm1d_workspace_init
+     PROCEDURE :: destroy => tm1d_workspace_destroy
+     FINAL :: tm1d_workspace_finalize
+  END TYPE transport_model_workspace_t
+
   TYPE :: transport_model_1d_t
      LOGICAL :: is_initialized = .FALSE.
      INTEGER :: nrho = 0
@@ -83,23 +94,21 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
      END SUBROUTINE tm1d_compute_delta_te
-     MODULE SUBROUTINE tm1d_compute_collisionality_profile(this, nuestar_fs)
+     MODULE SUBROUTINE tm1d_compute_collisionality_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
-       REAL*8, INTENT(OUT) :: nuestar_fs(:)
+       TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_collisionality_profile
-     MODULE SUBROUTINE tm1d_compute_bohm_profile(this, cs_te_fs, chi_bohm_fs)
+     MODULE SUBROUTINE tm1d_compute_bohm_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
-       REAL*8, INTENT(IN) :: cs_te_fs(:)
-       REAL*8, INTENT(OUT) :: chi_bohm_fs(:)
+       TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_bohm_profile
-     MODULE SUBROUTINE tm1d_compute_gyrobohm_profile(this, cs_te_fs, chi_gyrobohm_fs)
+     MODULE SUBROUTINE tm1d_compute_gyrobohm_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
-       REAL*8, INTENT(IN) :: cs_te_fs(:)
-       REAL*8, INTENT(OUT) :: chi_gyrobohm_fs(:)
+       TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_gyrobohm_profile
-     MODULE SUBROUTINE tm1d_compute_mixed_transport(this, chi_bohm_fs, chi_gyrobohm_fs)
+     MODULE SUBROUTINE tm1d_compute_mixed_transport(this, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-       REAL*8, INTENT(IN) :: chi_bohm_fs(:), chi_gyrobohm_fs(:)
+       TYPE(transport_model_workspace_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_mixed_transport
      MODULE SUBROUTINE tm1d_build_projected_gradients(this, fs_data)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
@@ -167,6 +176,39 @@ MODULE transport_models_1d
   END INTERFACE
 
 CONTAINS
+
+  SUBROUTINE tm1d_workspace_init(this, nrho)
+    CLASS(transport_model_workspace_t), INTENT(INOUT) :: this
+    INTEGER, INTENT(IN) :: nrho
+
+    CALL this%destroy()
+    IF (nrho <= 0) RETURN
+
+    ALLOCATE(this%cs_te_fs(nrho))
+    ALLOCATE(this%nuestar_fs(nrho))
+    ALLOCATE(this%chi_bohm_fs(nrho))
+    ALLOCATE(this%chi_gyrobohm_fs(nrho))
+
+    this%cs_te_fs = 0.d0
+    this%nuestar_fs = 0.d0
+    this%chi_bohm_fs = 0.d0
+    this%chi_gyrobohm_fs = 0.d0
+  END SUBROUTINE tm1d_workspace_init
+
+  SUBROUTINE tm1d_workspace_destroy(this)
+    CLASS(transport_model_workspace_t), INTENT(INOUT) :: this
+
+    IF (ALLOCATED(this%cs_te_fs)) DEALLOCATE(this%cs_te_fs)
+    IF (ALLOCATED(this%nuestar_fs)) DEALLOCATE(this%nuestar_fs)
+    IF (ALLOCATED(this%chi_bohm_fs)) DEALLOCATE(this%chi_bohm_fs)
+    IF (ALLOCATED(this%chi_gyrobohm_fs)) DEALLOCATE(this%chi_gyrobohm_fs)
+  END SUBROUTINE tm1d_workspace_destroy
+
+  SUBROUTINE tm1d_workspace_finalize(this)
+    TYPE(transport_model_workspace_t), INTENT(INOUT) :: this
+
+    CALL this%destroy()
+  END SUBROUTINE tm1d_workspace_finalize
 
   SUBROUTINE tm1d_init(this, nrho, rho_edge, rho_core, rho_diffusion_model_max)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
