@@ -44,7 +44,7 @@ CONTAINS
     CALL tm1d_compute_bohm_profile(this, work)
     CALL tm1d_compute_gyrobohm_profile(this, work)
     CALL tm1d_compute_mixed_transport(this, work)
-    CALL this%compute_pinch_profile(work%nuestar_fs)
+    CALL this%compute_pinch_profile(work)
 
     CALL work%destroy()
     DEALLOCATE(ua, up)

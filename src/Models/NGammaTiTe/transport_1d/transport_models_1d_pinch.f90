@@ -3,16 +3,16 @@ IMPLICIT NONE
 
 CONTAINS
 
-  MODULE SUBROUTINE tm1d_compute_pinch_profile(this, nuestar_fs)
+  MODULE SUBROUTINE tm1d_compute_pinch_profile(this, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN) :: nuestar_fs(:)
+    TYPE(transport_model_workspace_t), INTENT(IN) :: work
 
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
     SELECT CASE (this%pinch_model)
     CASE (1)
-       CALL tm1d_compute_militello_pinch(this, nuestar_fs, this%vpinch_fs)
+       CALL tm1d_compute_militello_pinch(this, work%nuestar_fs, this%vpinch_fs)
     CASE (2)
        CALL tm1d_compute_geometric_pinch(this, this%vpinch_fs)
     CASE (3)
