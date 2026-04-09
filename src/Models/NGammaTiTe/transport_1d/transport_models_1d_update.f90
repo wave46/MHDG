@@ -18,7 +18,7 @@ CONTAINS
     CALL work%init(this%nrho)
 
     this%rho_grid = fs_data%rho_grid
-    this%a_minor = phys%a_minor
+    work%a_minor = phys%a_minor
     CALL tm1d_fill_workspace_from_fs(fs_data, work)
 
     CALL tm1d_build_projected_gradients(this, fs_data, work)
@@ -35,17 +35,17 @@ CONTAINS
   MODULE SUBROUTINE tm1d_compute_delta_te(this, fs_data, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
-    TYPE(transport_model_derived_t), INTENT(IN) :: work
+    TYPE(transport_model_derived_t), INTENT(INOUT) :: work
     REAL*8 :: te_core, te_edge
 
-    this%delta_te = 0.d0
+    work%delta_te = 0.d0
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
     CALL fs_data%interp_scalar(this%config%rho_core, work%te_fs, te_core)
     CALL fs_data%interp_scalar(this%config%rho_edge, work%te_fs, te_edge)
     te_edge = MAX(te_edge, model_tol)
-    this%delta_te = (te_core - te_edge)/te_edge
+    work%delta_te = (te_core - te_edge)/te_edge
   END SUBROUTINE tm1d_compute_delta_te
 
   SUBROUTINE tm1d_fill_workspace_from_fs(fs_data, work)

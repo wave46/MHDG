@@ -20,7 +20,7 @@ CONTAINS
 
     CALL tm1d_interp_profile(this, rho, this%chi_i_fs, chi_i)
     CALL tm1d_interp_profile(this, rho, this%chi_e_fs, chi_e)
-    CALL tm1d_interp_profile(this, rho, this%d_part_fs, d_part)
+    CALL tm1d_interp_profile(this, rho, this%d_fs, d_part)
     CALL tm1d_interp_profile(this, rho, this%nu_mom_fs, nu_mom)
     CALL tm1d_interp_profile(this, rho, this%vpinch_fs, vpinch)
   END SUBROUTINE tm1d_interp_transport

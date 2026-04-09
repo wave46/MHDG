@@ -5,6 +5,8 @@ MODULE transport_models_1d_derived
   PUBLIC :: transport_model_derived_t
 
   TYPE :: transport_model_derived_t
+     REAL*8 :: a_minor = 0.d0
+     REAL*8 :: delta_te = 0.d0
      REAL*8, ALLOCATABLE :: cs_te_fs(:)
      REAL*8, ALLOCATABLE :: ne_fs(:)
      REAL*8, ALLOCATABLE :: pi_fs(:)
@@ -35,6 +37,9 @@ CONTAINS
 
     CALL this%destroy()
     IF (nrho <= 0) RETURN
+
+    this%a_minor = 0.d0
+    this%delta_te = 0.d0
 
     ALLOCATE(this%cs_te_fs(nrho))
     ALLOCATE(this%ne_fs(nrho))
@@ -73,6 +78,9 @@ CONTAINS
 
   SUBROUTINE tm1d_workspace_destroy(this)
     CLASS(transport_model_derived_t), INTENT(INOUT) :: this
+
+    this%a_minor = 0.d0
+    this%delta_te = 0.d0
 
     IF (ALLOCATED(this%cs_te_fs)) DEALLOCATE(this%cs_te_fs)
     IF (ALLOCATED(this%ne_fs)) DEALLOCATE(this%ne_fs)

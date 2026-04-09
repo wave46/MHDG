@@ -31,8 +31,8 @@ CONTAINS
 
     work%cs_te_fs = SQRT(MAX(work%te_fs*phys%Mref, model_tol))
     rho_s_te_fs = work%cs_te_fs / MAX(work%omega_fs, model_tol)
-    work%chi_bohm_fs = rho_s_te_fs * work%cs_te_fs * work%q_fs**2 * this%a_minor * &
-         ABS(work%dpe_dr_fs) / MAX(work%pe_fs, model_tol) * this%delta_te
+    work%chi_bohm_fs = rho_s_te_fs * work%cs_te_fs * work%q_fs**2 * work%a_minor * &
+         ABS(work%dpe_dr_fs) / MAX(work%pe_fs, model_tol) * work%delta_te
   END SUBROUTINE tm1d_compute_bohm_profile
 
   MODULE SUBROUTINE tm1d_compute_gyrobohm_profile(this, work)
@@ -57,7 +57,7 @@ CONTAINS
 
     this%chi_i_fs = MAX(this%config%c_bohm_i*work%chi_bohm_fs + this%config%c_gyrobohm_i*work%chi_gyrobohm_fs, 1.d-10)
     this%chi_e_fs = MAX(this%config%c_bohm_e*work%chi_bohm_fs + this%config%c_gyrobohm_e*work%chi_gyrobohm_fs, 1.d-10)
-    this%d_part_fs = this%config%c_bohm_n * this%chi_i_fs*this%chi_e_fs / MAX(this%chi_i_fs + this%chi_e_fs, 1.d-10)
+    this%d_fs = this%config%c_bohm_n * this%chi_i_fs*this%chi_e_fs / MAX(this%chi_i_fs + this%chi_e_fs, 1.d-10)
     this%nu_mom_fs = this%config%prandtl * this%chi_i_fs
   END SUBROUTINE tm1d_compute_mixed_transport
 

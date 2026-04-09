@@ -21,11 +21,9 @@ MODULE transport_models_1d
      INTEGER :: nrho = 0
      REAL*8, ALLOCATABLE :: rho_grid(:)
      TYPE(transport_model_config_t) :: config
-     REAL*8 :: a_minor = 0.d0
-     REAL*8 :: delta_te = 0.d0
      REAL*8, ALLOCATABLE :: chi_i_fs(:)
      REAL*8, ALLOCATABLE :: chi_e_fs(:)
-     REAL*8, ALLOCATABLE :: d_part_fs(:)
+     REAL*8, ALLOCATABLE :: d_fs(:)
      REAL*8, ALLOCATABLE :: nu_mom_fs(:)
      REAL*8, ALLOCATABLE :: vpinch_fs(:)
    CONTAINS
@@ -52,7 +50,7 @@ MODULE transport_models_1d
      MODULE SUBROUTINE tm1d_compute_delta_te(this, fs_data, work)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
-       TYPE(transport_model_derived_t), INTENT(IN) :: work
+       TYPE(transport_model_derived_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_delta_te
      MODULE SUBROUTINE tm1d_compute_collisionality_profile(this, work)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
@@ -156,18 +154,17 @@ CONTAINS
 
     ALLOCATE(this%chi_i_fs(this%nrho))
     ALLOCATE(this%chi_e_fs(this%nrho))
-    ALLOCATE(this%d_part_fs(this%nrho))
+    ALLOCATE(this%d_fs(this%nrho))
     ALLOCATE(this%nu_mom_fs(this%nrho))
     ALLOCATE(this%vpinch_fs(this%nrho))
     ALLOCATE(this%rho_grid(this%nrho))
 
     this%chi_i_fs = 0.d0
     this%chi_e_fs = 0.d0
-    this%d_part_fs = 0.d0
+    this%d_fs = 0.d0
     this%nu_mom_fs = 0.d0
     this%vpinch_fs = 0.d0
     this%rho_grid = 0.d0
-    this%delta_te = 0.d0
     this%is_initialized = .TRUE.
   END SUBROUTINE tm1d_init
 
@@ -176,7 +173,7 @@ CONTAINS
 
     IF (ALLOCATED(this%chi_i_fs)) DEALLOCATE(this%chi_i_fs)
     IF (ALLOCATED(this%chi_e_fs)) DEALLOCATE(this%chi_e_fs)
-    IF (ALLOCATED(this%d_part_fs)) DEALLOCATE(this%d_part_fs)
+    IF (ALLOCATED(this%d_fs)) DEALLOCATE(this%d_fs)
     IF (ALLOCATED(this%nu_mom_fs)) DEALLOCATE(this%nu_mom_fs)
     IF (ALLOCATED(this%vpinch_fs)) DEALLOCATE(this%vpinch_fs)
     IF (ALLOCATED(this%rho_grid)) DEALLOCATE(this%rho_grid)
@@ -198,8 +195,6 @@ CONTAINS
     this%config%diff_u_min = 0.d0
     this%config%diff_e_min = 0.d0
     this%config%diff_ee_min = 0.d0
-    this%a_minor = 0.d0
-    this%delta_te = 0.d0
     this%config%c_bohm_i = 1.6d-4
     this%config%c_gyrobohm_i = 1.75d-2
     this%config%c_bohm_e = 8.d-5
