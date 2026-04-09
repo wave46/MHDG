@@ -24,6 +24,7 @@ CONTAINS
     CALL tm1d_build_projected_gradients(this, fs_data, work)
     CALL tm1d_fill_delta_te(this, fs_data, work)
     CALL tm1d_compute_collisionality_profile(this, work)
+    work%cs_te_fs = SQRT(MAX(work%te_fs*phys%Mref, model_tol))
     CALL tm1d_compute_bohm_profile(this, work)
     CALL tm1d_compute_gyrobohm_profile(this, work)
     CALL tm1d_compute_mixed_transport(this, work)
@@ -60,9 +61,7 @@ CONTAINS
     CALL cons2phys(ua, up)
 
     work%ne_fs = up(:, 1)
-    work%pi_fs = up(:, 5)
     work%pe_fs = up(:, 6)
-    work%ti_fs = up(:, 7)
     work%te_fs = up(:, 8)
     work%q_fs = fs_data%q_fs
     work%omega_fs = fs_data%omega_fs

@@ -8,7 +8,7 @@ MODULE flux_surface_transport_data
   PRIVATE
   PUBLIC :: flux_surface_transport_t, fs_transport
 
-  REAL*8, PARAMETER :: pi_fs = 4.d0*DATAN(1.d0)
+  REAL*8, PARAMETER :: twopi_const = 4.d0*DATAN(1.d0)
   REAL*8, PARAMETER :: rho_step_default = 1.d-2
   REAL*8, PARAMETER :: shell_weight_tol = 1.d-12
   REAL*8, PARAMETER :: gradpsi_tol = 1.d-12
@@ -398,7 +398,7 @@ CONTAINS
        irho = FLOOR(rho_g/this%drho) + 1
        irho = MIN(MAX(irho, 1), this%nrho)
        weight_g = refElPol%gauss_weights2D(g)*ABS(detJ(g))
-       IF (switch%axisym) weight_g = 2.d0*pi_fs*xy(g, 1)*weight_g
+       IF (switch%axisym) weight_g = 2.d0*twopi_const*xy(g, 1)*weight_g
 
        this%shell_weight(irho) = this%shell_weight(irho) + weight_g
        this%U_sum(:, irho) = this%U_sum(:, irho) + ueg(g, :)*weight_g

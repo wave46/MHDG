@@ -9,9 +9,7 @@ MODULE transport_models_1d_derived
      REAL*8 :: delta_te = 0.d0
      REAL*8, ALLOCATABLE :: cs_te_fs(:)
      REAL*8, ALLOCATABLE :: ne_fs(:)
-     REAL*8, ALLOCATABLE :: pi_fs(:)
      REAL*8, ALLOCATABLE :: pe_fs(:)
-     REAL*8, ALLOCATABLE :: ti_fs(:)
      REAL*8, ALLOCATABLE :: te_fs(:)
      REAL*8, ALLOCATABLE :: q_fs(:)
      REAL*8, ALLOCATABLE :: omega_fs(:)
@@ -43,9 +41,7 @@ CONTAINS
 
     ALLOCATE(this%cs_te_fs(nrho))
     ALLOCATE(this%ne_fs(nrho))
-    ALLOCATE(this%pi_fs(nrho))
     ALLOCATE(this%pe_fs(nrho))
-    ALLOCATE(this%ti_fs(nrho))
     ALLOCATE(this%te_fs(nrho))
     ALLOCATE(this%q_fs(nrho))
     ALLOCATE(this%omega_fs(nrho))
@@ -60,9 +56,7 @@ CONTAINS
 
     this%cs_te_fs = 0.d0
     this%ne_fs = 0.d0
-    this%pi_fs = 0.d0
     this%pe_fs = 0.d0
-    this%ti_fs = 0.d0
     this%te_fs = 0.d0
     this%q_fs = 0.d0
     this%omega_fs = 0.d0
@@ -84,9 +78,7 @@ CONTAINS
 
     IF (ALLOCATED(this%cs_te_fs)) DEALLOCATE(this%cs_te_fs)
     IF (ALLOCATED(this%ne_fs)) DEALLOCATE(this%ne_fs)
-    IF (ALLOCATED(this%pi_fs)) DEALLOCATE(this%pi_fs)
     IF (ALLOCATED(this%pe_fs)) DEALLOCATE(this%pe_fs)
-    IF (ALLOCATED(this%ti_fs)) DEALLOCATE(this%ti_fs)
     IF (ALLOCATED(this%te_fs)) DEALLOCATE(this%te_fs)
     IF (ALLOCATED(this%q_fs)) DEALLOCATE(this%q_fs)
     IF (ALLOCATED(this%omega_fs)) DEALLOCATE(this%omega_fs)

@@ -29,7 +29,6 @@ CONTAINS
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
-    work%cs_te_fs = SQRT(MAX(work%te_fs*phys%Mref, model_tol))
     rho_s_te_fs = work%cs_te_fs / MAX(work%omega_fs, model_tol)
     work%chi_bohm_fs = rho_s_te_fs * work%cs_te_fs * work%q_fs**2 * work%a_minor * &
          ABS(work%dpe_dr_fs) / MAX(work%pe_fs, model_tol) * work%delta_te
@@ -43,7 +42,6 @@ CONTAINS
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
-    work%cs_te_fs = SQRT(MAX(work%te_fs*phys%Mref, model_tol))
     rho_s_te_fs = work%cs_te_fs / MAX(work%omega_fs, model_tol)
     work%chi_gyrobohm_fs = rho_s_te_fs**2 * work%cs_te_fs * ABS(work%dte_dr_fs) / MAX(work%te_fs, model_tol)
   END SUBROUTINE tm1d_compute_gyrobohm_profile

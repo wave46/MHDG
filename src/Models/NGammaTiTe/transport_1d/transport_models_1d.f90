@@ -12,8 +12,6 @@ MODULE transport_models_1d
   PRIVATE
   PUBLIC :: transport_model_1d_t, transport_model_1d
 
-  REAL*8, PARAMETER :: rho_edge_default = 0.99d0
-  REAL*8, PARAMETER :: rho_core_default = 0.8d0
   REAL*8, PARAMETER :: model_tol = 1.d-12
 
   TYPE :: transport_model_1d_t
@@ -115,10 +113,10 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(IN) :: this
        INTEGER(HID_T), INTENT(IN) :: parent_group_id
      END SUBROUTINE tm1d_write_hdf5
-     MODULE SUBROUTINE tm1d_interp_transport(this, rho, chi_i, chi_e, d_part, nu_mom, vpinch)
+     MODULE SUBROUTINE tm1d_interp_transport(this, rho, chi_i, chi_e, d, nu_mom, vpinch)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
        REAL*8, INTENT(IN) :: rho
-       REAL*8, INTENT(OUT) :: chi_i, chi_e, d_part, nu_mom, vpinch
+       REAL*8, INTENT(OUT) :: chi_i, chi_e, d, nu_mom, vpinch
      END SUBROUTINE tm1d_interp_transport
      MODULE SUBROUTINE tm1d_apply_1D_diffusion(this, rho_pol_norm, diff_iso, diff_ani)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
