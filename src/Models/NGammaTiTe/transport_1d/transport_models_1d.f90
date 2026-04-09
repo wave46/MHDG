@@ -118,18 +118,15 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(transport_model_workspace_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_pinch_profile
-     MODULE SUBROUTINE tm1d_compute_militello_pinch(this, nuestar_fs, vpinch_fs)
-       CLASS(transport_model_1d_t), INTENT(IN) :: this
-       REAL*8, INTENT(IN) :: nuestar_fs(:)
-       REAL*8, INTENT(OUT) :: vpinch_fs(:)
+     MODULE SUBROUTINE tm1d_compute_militello_pinch(this, work)
+       CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+       TYPE(transport_model_workspace_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_militello_pinch
-     MODULE SUBROUTINE tm1d_compute_geometric_pinch(this, vpinch_fs)
-       CLASS(transport_model_1d_t), INTENT(IN) :: this
-       REAL*8, INTENT(OUT) :: vpinch_fs(:)
+     MODULE SUBROUTINE tm1d_compute_geometric_pinch(this)
+       CLASS(transport_model_1d_t), INTENT(INOUT) :: this
      END SUBROUTINE tm1d_compute_geometric_pinch
-     MODULE SUBROUTINE tm1d_compute_constant_pinch(this, vpinch_fs)
-       CLASS(transport_model_1d_t), INTENT(IN) :: this
-       REAL*8, INTENT(OUT) :: vpinch_fs(:)
+     MODULE SUBROUTINE tm1d_compute_constant_pinch(this)
+       CLASS(transport_model_1d_t), INTENT(INOUT) :: this
      END SUBROUTINE tm1d_compute_constant_pinch
      MODULE SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch)
        CLASS(transport_model_1d_t), INTENT(IN) :: this

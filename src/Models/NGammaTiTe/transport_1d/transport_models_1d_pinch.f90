@@ -12,49 +12,46 @@ CONTAINS
 
     SELECT CASE (this%pinch_model)
     CASE (1)
-       CALL tm1d_compute_militello_pinch(this, work%nuestar_fs, this%vpinch_fs)
+       CALL tm1d_compute_militello_pinch(this, work)
     CASE (2)
-       CALL tm1d_compute_geometric_pinch(this, this%vpinch_fs)
+       CALL tm1d_compute_geometric_pinch(this)
     CASE (3)
-       CALL tm1d_compute_constant_pinch(this, this%vpinch_fs)
+       CALL tm1d_compute_constant_pinch(this)
     CASE DEFAULT
        this%vpinch_fs = 0.d0
     END SELECT
   END SUBROUTINE tm1d_compute_pinch_profile
 
-  MODULE SUBROUTINE tm1d_compute_militello_pinch(this, nuestar_fs, vpinch_fs)
-    CLASS(transport_model_1d_t), INTENT(IN) :: this
-    REAL*8, INTENT(IN) :: nuestar_fs(:)
-    REAL*8, INTENT(OUT) :: vpinch_fs(:)
+  MODULE SUBROUTINE tm1d_compute_militello_pinch(this, work)
+    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+    TYPE(transport_model_workspace_t), INTENT(IN) :: work
     REAL*8 :: pinch_factor_militello_fs(this%nrho)
 
-    pinch_factor_militello_fs = MIN(1.d0, EXP(1.d0 - nuestar_fs/MAX(this%nu_th, model_tol)))
-    vpinch_fs = pinch_factor_militello_fs * this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
+    pinch_factor_militello_fs = MIN(1.d0, EXP(1.d0 - work%nuestar_fs/MAX(this%nu_th, model_tol)))
+    this%vpinch_fs = pinch_factor_militello_fs * this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
 
     WHERE (this%rmin_fs <= model_tol)
-       vpinch_fs = 0.d0
+       this%vpinch_fs = 0.d0
     END WHERE
   END SUBROUTINE tm1d_compute_militello_pinch
 
-  MODULE SUBROUTINE tm1d_compute_geometric_pinch(this, vpinch_fs)
-    CLASS(transport_model_1d_t), INTENT(IN) :: this
-    REAL*8, INTENT(OUT) :: vpinch_fs(:)
+  MODULE SUBROUTINE tm1d_compute_geometric_pinch(this)
+    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
 
-    vpinch_fs = this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
+    this%vpinch_fs = this%c_pinch * this%d_part_fs * this%rmin_fs / MAX(this%a_minor, model_tol)**2
 
     WHERE (this%rmin_fs <= model_tol)
-       vpinch_fs = 0.d0
+       this%vpinch_fs = 0.d0
     END WHERE
   END SUBROUTINE tm1d_compute_geometric_pinch
 
-  MODULE SUBROUTINE tm1d_compute_constant_pinch(this, vpinch_fs)
-    CLASS(transport_model_1d_t), INTENT(IN) :: this
-    REAL*8, INTENT(OUT) :: vpinch_fs(:)
+  MODULE SUBROUTINE tm1d_compute_constant_pinch(this)
+    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
 
-    vpinch_fs = this%vpinch_const
+    this%vpinch_fs = this%vpinch_const
 
     WHERE (this%rmin_fs <= model_tol)
-       vpinch_fs = 0.d0
+       this%vpinch_fs = 0.d0
     END WHERE
   END SUBROUTINE tm1d_compute_constant_pinch
 
