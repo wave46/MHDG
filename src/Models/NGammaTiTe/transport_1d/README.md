@@ -3,6 +3,14 @@
 This directory contains the reduced 1D transport-model path used by the
 NGammaTiTe solver when `switch%transport_1d = .true.`.
 
+The user-facing settings for this module are read from
+`test/transport_model.nml`. That namelist controls:
+
+- the reference radii used by the Bohm / gyro-Bohm model,
+- the diffusion replacement window,
+- the pinch model and pinch windows,
+- the coefficient floors.
+
 ## Purpose
 
 The module does three things:
@@ -21,8 +29,8 @@ the raw solution fields and the static input parameters.
   Builds flux-surface-averaged profiles from the current solution.
 
 - `transport_models_1d.f90`
-  Parent module. Defines the main transport object, light lifecycle/config
-  routines, and the public interfaces implemented in submodules.
+  Parent module. Defines the main transport object, keeps the light lifecycle
+  routines, and declares the public interfaces implemented in submodules.
 
 - `transport_models_1d_config.f90`
   Scalar model controls grouped in `transport_model_config_t`.
@@ -119,6 +127,81 @@ Important for postprocessing:
 
 - coefficient arrays use `/transport_1d/profiles/rho_grid` as their radial axis
 - do not reconstruct a synthetic `linspace(0,1,nrho)` grid
+
+## Model Expressions
+
+The current implementation uses the mixed Bohm / gyro-Bohm structure:
+
+```text
+chi_i = c_B,i  * chi_B  + c_gB,i * chi_gB
+chi_e = c_B,e  * chi_B  + c_gB,e * chi_gB
+```
+
+with
+
+```text
+chi_B  = rho_s * c_s * q^2 * a * abs(d p_e / dr) / max(p_e, eps) * Delta_Te
+chi_gB = rho_s^2 * c_s * abs(d T_e / dr) / max(T_e, eps)
+```
+
+and
+
+```text
+Delta_Te = ( T_e(rho_core) - T_e(rho_edge) ) / max( T_e(rho_edge), eps )
+```
+
+The particle and momentum transport are then built as
+
+```text
+d_fs   = c_B,n * chi_i * chi_e / max(chi_i + chi_e, eps)
+nu_mom = Pr * chi_i
+```
+
+The pinch models are:
+
+1. Militello-style collisionality suppression
+
+```text
+V_pinch = min( 1, exp( 1 - nu_star / max(nu_th, eps) ) )
+          * c_pinch * d_fs * r / max(a, eps)^2
+```
+
+2. Geometric / Polevoi-style baseline
+
+```text
+V_pinch = c_pinch * d_fs * r / max(a, eps)^2
+```
+
+3. Constant pinch
+
+```text
+V_pinch = V_const
+```
+
+In this code the sign convention is radial:
+
+- positive pinch is outward
+- negative pinch is inward
+
+The pinch is additionally windowed near the axis and near the outer cutoff
+through analytic smoothstep-based ramps in `rho_pol_norm`.
+
+## References
+
+- Mixed Bohm / gyro-Bohm online description from the NTCC/JETTO documentation:
+  https://w3.pppl.gov/ntcc/JETTO/mixed_Bohm_gyro_Bohm/
+
+- Final mixed model summary and coefficients:
+  https://w3.pppl.gov/ntcc/JETTO/mixed_Bohm_gyro_Bohm/node4.html
+
+- Validation paper for the mixed Bohm / gyro-Bohm model:
+  https://scipub.euro-fusion.org/archives/jet-archive/validation-of-a-new-mixed-bohmgyro-bohm-transport-model-on-discharges-of-the-iter-data-base
+
+- Example integrated-model reference used for the Polevoi-style pinch baseline:
+  https://doi.org/10.1007/s10894-020-00232-x
+
+- Example ITER/JINTRAC scenario work by E. Militello Asp and collaborators:
+  https://nucleus.iaea.org/sites/fusionportal/Shared%20Documents/FEC%202020/fec2020-preprints/preprint1104.pdf
 
 ## Extending the Module
 

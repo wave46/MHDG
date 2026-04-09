@@ -19,7 +19,7 @@ CONTAINS
 
     this%rho_grid = fs_data%rho_grid
     work%a_minor = phys%a_minor
-    CALL tm1d_fill_workspace_from_fs(fs_data, work)
+    CALL tm1d_fill_derived_from_fs(fs_data, work)
 
     CALL tm1d_build_projected_gradients(this, fs_data, work)
     CALL tm1d_fill_delta_te(this, fs_data, work)
@@ -48,7 +48,7 @@ CONTAINS
     work%delta_te = (te_core - te_edge)/te_edge
   END SUBROUTINE tm1d_fill_delta_te
 
-  SUBROUTINE tm1d_fill_workspace_from_fs(fs_data, work)
+  SUBROUTINE tm1d_fill_derived_from_fs(fs_data, work)
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
     TYPE(transport_model_derived_t), INTENT(INOUT) :: work
     REAL*8, ALLOCATABLE :: ua(:, :), up(:, :)
@@ -71,6 +71,6 @@ CONTAINS
     work%eps_fs = fs_data%eps_fs
 
     DEALLOCATE(ua, up)
-  END SUBROUTINE tm1d_fill_workspace_from_fs
+  END SUBROUTINE tm1d_fill_derived_from_fs
 
 END SUBMODULE transport_models_1d_update
