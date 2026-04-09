@@ -205,7 +205,6 @@ MODULE types
      INTEGER                   :: neq ! Number of equations
      INTEGER                   :: npv ! Number of physical variables
      REAL*8                    :: diff_n, diff_u ! Perpendicular diffusion in the continuity and momentum equation
-     REAL*8                    :: v_p ! Pinch velocity in the continuity equation
      REAL*8                    :: a ! Proportionality constant between pressure and density for isothermal model (p = a*rho)
      REAL*8                    :: dfcoef ! Constant related to the diamagnetic drift velocity
      REAL*8                    :: dexbcoef ! Constant related to the ExB drift velocity
