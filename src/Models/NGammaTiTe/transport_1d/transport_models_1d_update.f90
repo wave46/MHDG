@@ -36,7 +36,6 @@ CONTAINS
     this%rmin_fs = fs_data%rmin_fs
     this%eps_fs = fs_data%eps_fs
     this%a_minor = phys%a_minor
-    work%cs_te_fs = SQRT(MAX(this%te_fs*phys%Mref, model_tol))
 
     CALL tm1d_build_projected_gradients(this, fs_data, work)
     CALL this%compute_delta_te(fs_data)
