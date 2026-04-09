@@ -697,8 +697,6 @@ CONTAINS
 
     IF (switch%transport_1d) THEN
       CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
-    ELSEIF (switch%bohm_gyrobohm) THEN
-      CALL add_bohm_gyrobohm_diffusion(ufg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
     ENDIF
 
     if (save_tau) then
@@ -2024,10 +2022,9 @@ CONTAINS
       CALL jacobianMatricesBohm(ufg,Abohm)
 
       ! Jacobian matrix for pinch part
+      APinch = 0.d0
       IF (switch%transport_1d) THEN
         CALL transport_model_1d%compute_1D_pinch_matrix(bg,SQRT(MAX(psig,0.d0)),APinch)
-      ELSE
-        CALL computePinch(bg,psig,APinch)
       ENDIF
 
         gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),bg)  ! scalar

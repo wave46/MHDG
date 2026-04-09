@@ -1454,8 +1454,6 @@ CONTAINS
 
     IF (switch%transport_1d) THEN
       CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_vol,diff_ani_vol)
-    ELSEIF (switch%bohm_gyrobohm) THEN
-      CALL add_bohm_gyrobohm_diffusion(ueg,qeg,omega,b,q_cyl,diff_iso_vol,diff_ani_vol)
     ENDIF
 
 
@@ -1813,8 +1811,6 @@ CONTAINS
 
     IF (switch%transport_1d) THEN
       CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
-    ELSEIF (switch%bohm_gyrobohm) THEN
-      CALL add_bohm_gyrobohm_diffusion(uefg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
     ENDIF
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
@@ -1993,8 +1989,6 @@ CONTAINS
 
     IF (switch%transport_1d) THEN
       CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
-    ELSEIF (switch%bohm_gyrobohm) THEN
-      CALL add_bohm_gyrobohm_diffusion(uefg,qfg,omega,b,q_cyl,diff_iso_fac,diff_ani_fac)
     ENDIF
 
     if (save_tau) then
@@ -2291,10 +2285,9 @@ CONTAINS
     CALL jacobianMatrices(ue,A)
 
     ! Jacobian for pinch term
+    APinch = 0.d0
     IF (switch%transport_1d) THEN
       CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
-    ELSE
-      CALL computePinch(b,psi,APinch)
     ENDIF
 
     ! Compute Q^T^(k-1)
@@ -3013,10 +3006,9 @@ ENDIF
       CALL jacobianMatrices(uf,A)
 
       ! Jacobian for pinch term
+      APinch = 0.d0
       IF (switch%transport_1d) THEN
       CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
-    ELSE
-      CALL computePinch(b,psi,APinch)
     ENDIF
 
       ! Compute Q^T^(k-1)
@@ -3496,10 +3488,9 @@ ENDIF
       CALL jacobianMatrices(uf,A)
 
       ! Jacobian matrices Pinch
+      APinch = 0.d0
       IF (switch%transport_1d) THEN
       CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
-    ELSE
-      CALL computePinch(b,psi,APinch)
     ENDIF
 
       ! Compute Q^T^(k-1)
