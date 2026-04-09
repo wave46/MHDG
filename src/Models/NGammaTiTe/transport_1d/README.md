@@ -132,51 +132,67 @@ Important for postprocessing:
 
 The current implementation uses the mixed Bohm / gyro-Bohm structure:
 
-```text
-chi_i = c_B,i  * chi_B  + c_gB,i * chi_gB
-chi_e = c_B,e  * chi_B  + c_gB,e * chi_gB
-```
+$$
+\chi_i = c_{\mathrm{B},i}\,\chi_{\mathrm{B}} + c_{\mathrm{gB},i}\,\chi_{\mathrm{gB}},
+\qquad
+\chi_e = c_{\mathrm{B},e}\,\chi_{\mathrm{B}} + c_{\mathrm{gB},e}\,\chi_{\mathrm{gB}}.
+$$
 
 with
 
-```text
-chi_B  = rho_s * c_s * q^2 * a * abs(d p_e / dr) / max(p_e, eps) * Delta_Te
-chi_gB = rho_s^2 * c_s * abs(d T_e / dr) / max(T_e, eps)
-```
+$$
+\chi_{\mathrm{B}}
+= \rho_s c_s q^2 a\,
+\frac{\left|\partial_r p_e\right|}{\max(p_e,\varepsilon)}\,
+\Delta T_e,
+$$
+
+$$
+\chi_{\mathrm{gB}}
+= \rho_s^2 c_s\,
+\frac{\left|\partial_r T_e\right|}{\max(T_e,\varepsilon)},
+$$
 
 and
 
-```text
-Delta_Te = ( T_e(rho_core) - T_e(rho_edge) ) / max( T_e(rho_edge), eps )
-```
+$$
+\Delta T_e
+= \frac{T_e(\rho_{\mathrm{core}})-T_e(\rho_{\mathrm{edge}})}
+        {\max\!\left(T_e(\rho_{\mathrm{edge}}),\varepsilon\right)}.
+$$
 
 The particle and momentum transport are then built as
 
-```text
-d_fs   = c_B,n * chi_i * chi_e / max(chi_i + chi_e, eps)
-nu_mom = Pr * chi_i
-```
+$$
+d_{\mathrm{fs}}
+= c_{\mathrm{B},n}\,
+\frac{\chi_i\chi_e}{\max(\chi_i+\chi_e,\varepsilon)},
+\qquad
+\nu_{\mathrm{mom}} = \mathrm{Pr}\,\chi_i.
+$$
 
 The pinch models are:
 
 1. Militello-style collisionality suppression
 
-```text
-V_pinch = min( 1, exp( 1 - nu_star / max(nu_th, eps) ) )
-          * c_pinch * d_fs * r / max(a, eps)^2
-```
+$$
+V_{\mathrm{pinch}}
+= \min\!\left(1,\exp\!\left[1-\frac{\nu_*}{\max(\nu_{\mathrm{th}},\varepsilon)}\right]\right)
+\; c_{\mathrm{pinch}}\, d_{\mathrm{fs}}\, \frac{r}{\max(a,\varepsilon)^2}
+$$
 
 2. Geometric / Polevoi-style baseline
 
-```text
-V_pinch = c_pinch * d_fs * r / max(a, eps)^2
-```
+$$
+V_{\mathrm{pinch}}
+= c_{\mathrm{pinch}}\, d_{\mathrm{fs}}\, \frac{r}{\max(a,\varepsilon)^2}
+$$
 
 3. Constant pinch
 
-```text
-V_pinch = V_const
-```
+$$
+V_{\mathrm{pinch}} = V_{\mathrm{const}}.
+$$
 
 In this code the sign convention is radial:
 
