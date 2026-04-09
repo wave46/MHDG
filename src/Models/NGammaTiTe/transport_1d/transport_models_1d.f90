@@ -132,7 +132,7 @@ CONTAINS
     INTEGER, INTENT(IN) :: nrho
     REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max
 
-    CALL this%destroy()
+    CALL tm1d_clear_storage(this)
 
     this%nrho = MAX(0, nrho)
     CALL tm1d_config_apply(this%config, simpar%refval_time, simpar%refval_length, &
@@ -159,6 +159,13 @@ CONTAINS
   SUBROUTINE tm1d_destroy(this)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
 
+    CALL tm1d_clear_storage(this)
+    CALL tm1d_config_reset(this%config)
+  END SUBROUTINE tm1d_destroy
+
+  SUBROUTINE tm1d_clear_storage(this)
+    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+
     IF (ALLOCATED(this%chi_i_fs)) DEALLOCATE(this%chi_i_fs)
     IF (ALLOCATED(this%chi_e_fs)) DEALLOCATE(this%chi_e_fs)
     IF (ALLOCATED(this%d_fs)) DEALLOCATE(this%d_fs)
@@ -168,8 +175,7 @@ CONTAINS
 
     this%is_initialized = .FALSE.
     this%nrho = 0
-    CALL tm1d_config_reset(this%config)
-  END SUBROUTINE tm1d_destroy
+  END SUBROUTINE tm1d_clear_storage
 
   SUBROUTINE tm1d_set_config(this, rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
