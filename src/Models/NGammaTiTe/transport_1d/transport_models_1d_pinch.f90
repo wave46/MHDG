@@ -58,32 +58,6 @@ CONTAINS
     END WHERE
   END SUBROUTINE tm1d_compute_constant_pinch
 
-  MODULE SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch)
-    CLASS(transport_model_1d_t), INTENT(IN) :: this
-    REAL*8, INTENT(IN) :: b(:), rho
-    REAL*8, INTENT(OUT) :: APinch(:,:)
-    REAL*8 :: vpinch, bnorm(2), bnorm_norm, pinch_weight
-    REAL*8 :: chi_i, chi_e, d_part, nu_mom
-
-    APinch = 0.d0
-    IF (.NOT. this%is_initialized) RETURN
-
-    pinch_weight = tm1d_pinch_window(this, rho)
-    IF (pinch_weight <= model_tol) RETURN
-
-    CALL this%interp_transport(rho, chi_i, chi_e, d_part, nu_mom, vpinch)
-    vpinch = pinch_weight*vpinch
-    IF (ABS(vpinch) <= model_tol) RETURN
-
-    bnorm = b(1:2)
-    bnorm_norm = NORM2(bnorm)
-    IF (bnorm_norm <= model_tol) RETURN
-    bnorm = bnorm/bnorm_norm
-
-    APinch(1,1) = vpinch*bnorm(2)
-    APinch(1,2) = -vpinch*bnorm(1)
-  END SUBROUTINE tm1d_compute_1D_pinch_matrix
-
   MODULE REAL*8 FUNCTION tm1d_pinch_window(this, rho)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     REAL*8, INTENT(IN) :: rho
