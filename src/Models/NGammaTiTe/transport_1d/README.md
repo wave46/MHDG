@@ -171,6 +171,14 @@ d_{\mathrm{fs}}
 \nu_{\mathrm{mom}} = \mathrm{Pr}\,\chi_i.
 $$
 
+Important normalization note:
+
+- in the HDG formulation used here, the stored ion and electron `\chi`
+  coefficients correspond to `2/3` of the more typical heat-conductivity
+  convention used in transport literature
+- when choosing `\chi`-related coefficients in `transport_model.nml`, this
+  factor should be taken into account
+
 The pinch models are:
 
 1. Militello-style collisionality suppression
