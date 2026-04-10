@@ -2459,7 +2459,7 @@ CONTAINS
         kmult = W5p(j)*ng(idm)*NiNi
         elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
            ENDDO
-       kmultf = dot_product(matmul(transpose(QdW5p),ng),ufg)*Ni
+       kmultf = dot_product(QdW5p(idm,:),ufg)*ng(idm)*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #endif
 #else
@@ -2508,12 +2508,12 @@ CONTAINS
           DO j = 1,Neq
               indj = ind_asf + j
               indk = ind_ash + idm + (j-1)*Ndim
-              kmult = QdW5p(idm,j)*NiNi*(ng(idm) - bn*bg(idm))
+              kmult = QdW5p(idm,j)*NiNi*ng(idm)
               elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
-              kmult = W5p(j)*NiNi*(ng(idm) - bn*bg(idm))
+              kmult = W5p(j)*NiNi*ng(idm)
               elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
           END DO
-          kmultf = dot_product(matmul(transpose(QdW5p),(ng - bn*bg)),ufg)*Ni
+          kmultf = dot_product(QdW5p(idm,:),ufg)*ng(idm)*Ni
           elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #endif
 #else
