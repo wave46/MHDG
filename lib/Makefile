@@ -75,7 +75,7 @@ MPI_OMP.o : MPI_OMP.F globals.o
 magnetic_field.F : $(SDIR)/Models/magnetic_field.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-magnetic_field.o : magnetic_field.F globals.o inout.o prec_const.o HDF5_io.o MPI_OMP.o interpolation.o
+magnetic_field.o : magnetic_field.F globals.o prec_const.o HDF5_io.o MPI_OMP.o interpolation.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 external_heating.F : $(SDIR)/Models/external_heating.f90
@@ -98,7 +98,7 @@ HDF5_io.o : HDF5_io.F prec_const.o
 gmsh_io.F : $(SDIR)/InOut/gmsh_io.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-gmsh_io.o : gmsh_io.F reference_element.o inout.o MPI_OMP.o HDF5_io.o reference_element.o PrintUtils.o
+gmsh_io.o : gmsh_io.F reference_element.o MPI_OMP.o HDF5_io.o reference_element.o PrintUtils.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 matrices_tools.F : $(SDIR)/LinearAlgebra/matrices_tools.f90
@@ -206,7 +206,7 @@ preprocess.o : preprocess.F globals.o PrintUtils.o types.o MPI_OMP.o
 flux_surface_transport_data.F : $(SDIR)/Models/$(RMDL)/transport_1d/flux_surface_transport_data.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-flux_surface_transport_data.o : flux_surface_transport_data.F globals.o MPI_OMP.o HDF5_io.o
+flux_surface_transport_data.o : flux_surface_transport_data.F globals.o MPI_OMP.o HDF5_io.o interpolation.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 transport_models_1d_config.F : $(SDIR)/Models/$(RMDL)/transport_1d/transport_models_1d_config.f90
@@ -344,7 +344,7 @@ gmsh.o : gmsh.F
 adaptivity_common.F : $(SDIR)/Adaptivity/adaptivity_common.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-adaptivity_common.o : adaptivity_common.F physics.o mod_splines.o globals.o gmsh.o reference_element.o LinearAlgebra.o gmsh_io.o
+adaptivity_common.o : adaptivity_common.F physics.o mod_splines.o globals.o gmsh.o reference_element.o LinearAlgebra.o gmsh_io.o inout.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 adaptivity_indicator.F : $(SDIR)/Adaptivity/adaptivity_indicator.f90
