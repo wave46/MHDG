@@ -2381,6 +2381,57 @@ CONTAINS
 #endif
   ENDSUBROUTINE compute_Dnn_dU
 
+  SUBROUTINE compute_W5p(U, W5p)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: W5p(:)
+    REAL*8, PARAMETER   :: ti_min = 1.d-6
+    REAL*8              :: Dnn, Ti, Ti_limited, alpha, ti_factor
+
+    ti_factor = 2.d0/(3.d0*phys%Mref)
+    CALL compute_Dnn(U, Dnn)
+    CALL compute_Ti(U, Ti)
+    Ti_limited = Ti
+    CALL softplus(Ti_limited, ti_min/simpar%refval_temperature)
+
+    alpha = ti_factor*U(5)*Dnn/Ti_limited
+    CALL computeVi(U, W5p)
+    W5p = alpha*W5p
+  ENDSUBROUTINE compute_W5p
+
+  SUBROUTINE compute_dW5p_dU(U, dW5p_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: dW5p_dU(:, :)
+    REAL*8, PARAMETER   :: ti_min = 1.d-6
+    REAL*8              :: Vi(size(U)), dVi_dU(size(U), size(U))
+    REAL*8              :: Dnn, Dnn_dU(size(U))
+    REAL*8              :: Ti, Ti_limited, soft_deriv
+    REAL*8              :: dTi_dU(size(U)), dTi_limited_dU(size(U))
+    REAL*8              :: alpha, dalpha_dU(size(U)), ti_factor
+    INTEGER             :: j
+
+    dW5p_dU = 0.d0
+    ti_factor = 2.d0/(3.d0*phys%Mref)
+
+    CALL computeVi(U, Vi)
+    CALL compute_dV_dUi(U, dVi_dU)
+    CALL compute_Dnn(U, Dnn)
+    CALL compute_Dnn_dU(U, Dnn_dU)
+    CALL compute_Ti(U, Ti)
+    CALL compute_dTi_dU(U, dTi_dU)
+    CALL softplus_deriv(Ti, ti_min/simpar%refval_temperature, soft_deriv)
+    Ti_limited = Ti
+    CALL softplus(Ti_limited, ti_min/simpar%refval_temperature)
+    dTi_limited_dU = dTi_dU*soft_deriv
+
+    alpha = ti_factor*U(5)*Dnn/Ti_limited
+    dalpha_dU = ti_factor*(U(5)*Dnn_dU/Ti_limited - U(5)*Dnn*dTi_limited_dU/Ti_limited**2)
+    dalpha_dU(5) = dalpha_dU(5) + ti_factor*Dnn/Ti_limited
+
+    DO j = 1, SIZE(U)
+      dW5p_dU(:,j) = Vi*dalpha_dU(j) + alpha*dVi_dU(:,j)
+    END DO
+  ENDSUBROUTINE compute_dW5p_dU
+
   SUBROUTINE compute_Tloss(U,Tloss)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: Tloss,U1,U4,T0
