@@ -3503,6 +3503,9 @@ ENDIF
       real*8                    :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)  
       real*8                    :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
       real*8                    :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
+#ifdef NEUTRALPNEW
+      real*8                    :: W5p(Neq), dW5p_dU(Neq,Neq), QdW5p(Ndim,Neq)
+#endif
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -3559,6 +3562,11 @@ ENDIF
       CALL compute_W4(uf,W4,diffiso(1,1),diffiso(4,4))
       CALL compute_dW4_dU(uf,dW4_dU,diffiso(1,1),diffiso(4,4))
            QdW4 = MATMUL(Qpr,dW4_dU)
+#ifdef NEUTRALPNEW
+      CALL compute_W5p(uf,W5p)
+      CALL compute_dW5p_dU(uf,dW5p_dU)
+           QdW5p = MATMUL(Qpr,dW5p_dU)
+#endif
 
       ! Compute Alpha(U^(k-1))
       Alphai = computeAlphai(uf)
@@ -3857,6 +3865,21 @@ END IF
                  ENDDO
             kmultf = Dnn_dU_U*(Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif
             elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+#ifdef NEUTRALPNEW
+            DO j = 1,Neq
+              ind_jf = ind_asf + j
+              DO k = 1,Ndim
+                ind_kf = k + (j - 1)*Ndim + ind_ash
+                kmult = W5p(j)*n(k)*NNif
+                elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) = elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) - kmult
+                IF (.NOT. isdir) THEN
+                  elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - QdW5p(k,j)*n(k)*NNif
+                END IF
+              END DO
+            END DO
+            kmultf = dot_product(matmul(transpose(QdW5p),n),uf)*Nif
+            elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+#endif
 #endif
 
 #ifdef NEUTRALP

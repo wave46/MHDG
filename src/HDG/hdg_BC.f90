@@ -1862,7 +1862,7 @@ CONTAINS
     integer*4        :: indk(Npfl)
     real*8           :: kcoeff
 #endif
-    integer*4        :: ind(Npfl),indi(Npfl),indj(Npfl),ind_jf(Npfl),ind_kf(Npfl)
+    integer*4        :: ind(Npfl),indi(Npfl),indj(Npfl),indk(Npfl),ind_jf(Npfl),ind_kf(Npfl)
     real*8           :: Qpr(Ndim,Neq), recycling_coeff,  cryopump_coeff,puff_coeff
     real*8           :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
@@ -1874,6 +1874,9 @@ CONTAINS
         REAL*8           :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)
         REAL*8           :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
         REAL*8           :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
+#ifdef NEUTRALPNEW
+        REAL*8           :: W5p(Neq), dW5p_dU(Neq,Neq), QdW5p(Ndim,Neq)
+#endif
 #ifdef NEUTRAL
         REAL*8           :: E, theta, RN
         REAL*8           :: Dnn_dU(Neq), Dnn_dU_U
@@ -2007,6 +2010,11 @@ CONTAINS
       CALL compute_W4(uf,W4,diffiso(1,1),diffiso(4,4))
       CALL compute_dW4_dU(uf,dW4_dU,diffiso(1,1),diffiso(4,4))
         QdW4 = MATMUL(Qpr,dW4_dU)
+#ifdef NEUTRALPNEW
+      CALL compute_W5p(ufg,W5p)
+      CALL compute_dW5p_dU(ufg,dW5p_dU)
+        QdW5p = MATMUL(Qpr,dW5p_dU)
+#endif
 
       ! Compute Alpha(U^(k-1))
       Alphai = computeAlphai(ufg)
@@ -2386,6 +2394,9 @@ CONTAINS
 
     !Neutral flux
     flgflux_neutral = (diffiso(5,5)*(Qpr(1,5)*ng(1) + Qpr(2,5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+#ifdef NEUTRALPNEW
+    flgflux_neutral = flgflux_neutral + dot_product(matmul(transpose(Qpr),ng),W5p)*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+#endif
 
         !flux neutral numerical
         flgflux_numerical = tau(5,5)* (uefg(5)-ufg(5))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
@@ -2439,6 +2450,18 @@ CONTAINS
            ENDDO
        kmultf = Dnn_dU_U*(Qpr(idm,k)*ng(idm))*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
+#ifdef NEUTRALPNEW
+       DO j = 1,Neq
+        indj = ind_asf + j
+        indk = ind_ash + idm + (j-1)*Ndim
+        kmult = QdW5p(idm,j)*ng(idm)*NiNi
+              elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
+        kmult = W5p(j)*ng(idm)*NiNi
+        elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
+           ENDDO
+       kmultf = dot_product(matmul(transpose(QdW5p),ng),ufg)*Ni
+       elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
+#endif
 #else
        indi = ind_asf + k
        DO j=1,Neq
@@ -2481,6 +2504,18 @@ CONTAINS
 #ifndef NEUTRALP
           indj = ind_ash+idm+(k-1)*Ndim
           elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
+#ifdef NEUTRALPNEW
+          DO j = 1,Neq
+              indj = ind_asf + j
+              indk = ind_ash + idm + (j-1)*Ndim
+              kmult = QdW5p(idm,j)*NiNi*(ng(idm) - bn*bg(idm))
+              elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
+              kmult = W5p(j)*NiNi*(ng(idm) - bn*bg(idm))
+              elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
+          END DO
+          kmultf = dot_product(matmul(transpose(QdW5p),(ng - bn*bg)),ufg)*Ni
+          elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
+#endif
 #else
           DO j=1,Neq
               indj = ind_asf + j
