@@ -9,8 +9,8 @@ SDIR=$(PWD)/../src/
 COMPTYPE_OPT = opt
 COMPTYPE_DEB = deb
 COMPTYPE_PRO = pro
-#COMPTYPE = $(COMPTYPE_OPT)
-COMPTYPE = $(COMPTYPE_DEB)
+COMPTYPE = $(COMPTYPE_OPT)
+#COMPTYPE = $(COMPTYPE_DEB)
 #COMPTYPE = $(COMPTYPE_PRO)
 
 #-------------------------------------------------------------------------------
@@ -18,8 +18,8 @@ COMPTYPE = $(COMPTYPE_DEB)
 #-------------------------------------------------------------------------------
 MODE_SERIAL = serial
 MODE_PARALL = parall
-MODE = $(MODE_SERIAL)
-#MODE = $(MODE_PARALL)
+#MODE = $(MODE_SERIAL)
+MODE = $(MODE_PARALL)
 
 #-------------------------------------------------------------------------------
 # The compiler
@@ -102,11 +102,8 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  #The combination of the two flags applies OpenADAS spline for thermal cx coefficient            
  MACROS+= -DEXPANDEDCX
  MACROS+= -DTHERMALCX
- #Applies soft min and max on neutral diffusion coefficient. Should be more stable
- MACROS+= -DDNNSMOOTH
- #Turns on linearization of neutral diffusion. Better to keep it on
- MACROS+= -DDNNLINEARIZED
- #Model with constant neutral diffusion. If turned on, turn off the previous two flags
+ #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
+ #Model with constant neutral diffusion
  #MACROS+= -DCONSTANTNEUTRALDIFF
  #Actually not saves, but monitors in the output particle balance
  MACROS+= -DSAVEFLUX
@@ -124,8 +121,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC
  #MACROS+= -DRHSBC
- MACROS+= -DDNNSMOOTH
- MACROS+= -DDNNLINEARIZED
+ #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
  #MACROS+= -DNEUTRALPUMP
  #MACROS+= -DLEGACYCX
  MACROS+= -DSAVEFLUX

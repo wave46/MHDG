@@ -481,8 +481,44 @@ CONTAINS
     res = 0.
     res(1,1) = -U(4)*(diff_n-diff_ee)/(U(1)**2)
     res(1,4) = 1.*(diff_n-diff_ee)/U(1)
-     ENDSUBROUTINE compute_dW4_dU
+  ENDSUBROUTINE compute_dW4_dU
 
+  SUBROUTINE compute_Ti(U, Ti)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: Ti
+
+    Ti = 2.d0/(3.d0*phys%Mref)*(U(3)/U(1) - 0.5d0*(U(2)/U(1))**2)
+  ENDSUBROUTINE compute_Ti
+
+  SUBROUTINE compute_dTi_dU(U, dTi_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: dTi_dU(:)
+
+    CALL computeVi(U, dTi_dU)
+    dTi_dU = dTi_dU*2.d0/(3.d0*phys%Mref)
+  ENDSUBROUTINE compute_dTi_dU
+
+  SUBROUTINE compute_Dnn(U, Dnn)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: Dnn
+    REAL*8, PARAMETER   :: ti_min = 1.d-6
+    REAL*8              :: Ti, sigmaviz, sigmavnn, sigmavcx
+
+#ifdef CONSTANTNEUTRALDIFF
+    Dnn = phys%diff_nn
+#else
+    CALL compute_Ti(U, Ti)
+    CALL softplus(Ti, ti_min/simpar%refval_temperature)
+    CALL compute_sigmaviz(U, sigmaviz)
+    CALL compute_sigmavnn(U, sigmavnn)
+    CALL compute_sigmavcx(U, sigmavcx)
+
+    Dnn = simpar%refval_charge*(simpar%refval_temperature*Ti)/ &
+      &(simpar%refval_mass*simpar%refval_density*(U(1)*(sigmaviz + sigmavcx) + U(5)*sigmavnn))
+    Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
+    CALL double_softplus(Dnn, 10.d0*phys%diff_n, phys%diff_nn)
+#endif
+  ENDSUBROUTINE compute_Dnn
 
   !*****************************************
   ! Jacobian matrices
@@ -792,8 +828,7 @@ CONTAINS
     real*8		              :: iperdiff(size(xy, 1))
 #ifdef NEUTRAL
     integer             		:: i
-    real*8				            :: ti_min=1e-6,ti
-    real*8, dimension(size(u,1))	:: U1, U2, U3, U4, U5, sigmaviz, sigmavnn, sigmavcx, Dnn
+    real*8, dimension(size(u,1))	:: Dnn
 #ifdef KEQUATION
     real*8, dimension(size(u,1))          :: D_k,U6,c_s
     real*8                         :: r
@@ -851,50 +886,13 @@ CONTAINS
     ENDIF
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-    !d_iso(5, 5, :) = phys%diff_nn
-    U1 = u(:,1)
-    U2 = u(:,2)
-    U3 = u(:,3)
-    U4 = u(:,4)
-    U5 = u(:,5)
 #ifdef KEQUATION
     U6 = u(:,6)
 #endif
 #ifndef CONSTANTNEUTRALDIFF
     DO i=1,SIZE(u,1)
-       CALL compute_sigmaviz(u(i,:),sigmaviz(i))
-       CALL compute_sigmavnn(u(i,:),sigmavnn(i))
-       CALL compute_sigmavcx(u(i,:),sigmavcx(i))
-    END DO
-    !ti = max(simpar%refval_temperature*2./(3.*phys%Mref)*(U3/U1 - 1./2.*(U2/U1)**2),0.1)
-    !Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*U1*(sigmaviz + sigmavcx))
-    !Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
-
-    !Set a threshold on Dnn
-    DO i=1,SIZE(Dnn,1)
-#ifndef DNNSMOOTH
-       ti = MAX(simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2),ti_min)
-       Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*(U1(i)*(sigmaviz(i)+sigmavcx(i))+U5(i)*sigmavnn(i)))
-      Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
-       IF (Dnn(i) .GT.  phys%diff_nn) THEN
-        d_iso(5,5,i) = phys%diff_nn
-       ELSEIF (Dnn(i)<10.*d_iso(1,1,i))THEN
-        d_iso(5,5,i) = 10.*d_iso(1,1,i)
-       ELSE
-        d_iso(5,5,i) = Dnn(i)
-       ENDIF
-#else
-      ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U3(i)/U1(i) - 1./2.*(U2(i)/U1(i))**2)
-       CALL softplus(ti, ti_min)
-       Dnn(i) = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*(U1(i)*(sigmaviz(i)+sigmavcx(i))+U5(i)*sigmavnn(i)))
-      Dnn(i) = Dnn(i)*simpar%refval_time/simpar%refval_length**2
-
-       CALL double_softplus(Dnn(i),10.*phys%diff_n,phys%diff_nn)
-      d_iso(5,5,i) = Dnn(i)
-
-
-#endif
-
+       CALL compute_Dnn(u(i,:), Dnn(i))
+       d_iso(5,5,i) = Dnn(i)
     END DO
 #else
     d_iso(5,5,:)=phys%diff_nn
@@ -2340,84 +2338,49 @@ CONTAINS
 
 #endif
 
-
-#ifdef DNNLINEARIZED
   SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
-    REAL*8, INTENT(IN) :: U(:)
+    REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: Dnn_dU(:)
-    REAL*8              :: Dnn, ti,  ti_min=1e-6
-#ifdef DNNSMOOTH
-    REAL*8              :: double_soft_deriv, soft_deriv
-#else
-    REAL*8              :: ti_real
-#endif
-    REAL*8              :: sigmaviz, sigmavnn, sigmavcx
-    REAL*8              :: dti_du(SIZE(U,1)), dsigmaviz_dU(SIZE(U,1)), dsigmavcx_dU(SIZE(U,1)), dsigmavnn_dU(SIZE(U,1))
-    Dnn_dU(:) = 0.
-    !if ((U(3)>=tol) .and. (U(1)>=tol) .and. (U(5)>=tol)) then
-      ! calculation of atomic rates
+    REAL*8, PARAMETER   :: ti_min = 1.d-6
+    REAL*8              :: Ti, Ti_limited, soft_deriv, Dnn
+    REAL*8              :: sigmaviz, sigmavnn, sigmavcx, double_soft_deriv, denom
+    REAL*8              :: dTi_dU(size(U)), dTi_limited_dU(size(U))
+    REAL*8              :: dsigmaviz_dU(size(U)), dsigmavnn_dU(size(U)), dsigmavcx_dU(size(U))
+    REAL*8              :: ddenom_dU(size(U))
+    REAL*8              :: Dcoeff
+
+    Dnn_dU = 0.d0
+#ifndef CONSTANTNEUTRALDIFF
+    CALL compute_Ti(U, Ti)
+    CALL compute_dTi_dU(U, dTi_dU)
+    CALL softplus_deriv(Ti, ti_min/simpar%refval_temperature, soft_deriv)
+    Ti_limited = Ti
+    CALL softplus(Ti_limited, ti_min/simpar%refval_temperature)
+    dTi_limited_dU = dTi_dU*soft_deriv
+
     CALL compute_sigmaviz(U,sigmaviz)
-        call compute_sigmavnn(U,sigmavnn)
+    CALL compute_sigmavnn(U,sigmavnn)
     CALL compute_sigmavcx(U,sigmavcx)
-        ! calculation of temperature before limitation
-        ti = simpar%refval_temperature*2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
-#ifdef DNNSMOOTH
-    CALL softplus_deriv(ti, ti_min,soft_deriv)
-    CALL softplus(ti,ti_min)
-#else
-        ti_real = ti
-    ti = MAX(ti_min,ti)
-#endif
-        ! calculation of Dnn before limitation
-        Dnn = simpar%refval_charge*ti/(simpar%refval_mass*simpar%refval_density*(U(1)*(sigmaviz + sigmavcx)+ U(5) * sigmavnn))*simpar%refval_time/simpar%refval_length**2
-#ifdef DNNSMOOTH
-    CALL double_softplus_deriv(Dnn,10.*phys%diff_n,phys%diff_nn,double_soft_deriv)   !to check the mulptiplier for Dnn_min
-#else
-    IF ((Dnn>10.*phys%diff_n) .AND. (Dnn<phys%diff_nn)) THEN
-#endif
-          ! ti derivative
-          dti_du(:) = 0.
-#ifndef DNNSMOOTH
-       IF (ti_real>ti) THEN
-#endif
-            dti_du(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
-            dti_du(2) = -U(2)/U(1)**2
-            dti_du(3) = 1./U(1)
-            dti_du(:) = dti_du(:)*simpar%refval_temperature*2./(3.*phys%Mref)
-#ifndef DNNSMOOTH
-       ENDIF
-#endif
-          ! atomic rates derivatives
-       CALL compute_dsigmaviz_dU(U,dsigmaviz_dU)
-          call compute_dsigmavnn_dU(U,dsigmavnn_dU)
-       CALL compute_dsigmavcx_dU(U,dsigmavcx_dU)
+    CALL compute_dsigmaviz_dU(U,dsigmaviz_dU)
+    CALL compute_dsigmavnn_dU(U,dsigmavnn_dU)
+    CALL compute_dsigmavcx_dU(U,dsigmavcx_dU)
 
-          ! arrange all ingredients
-          Dnn_dU(:) = 0.
-          ! ti part
-          Dnn_dU(:) = Dnn_dU(:)+dti_du(:)*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density*(U(1)*(sigmaviz + sigmavcx)+ U(5) * sigmavnn))
-#ifdef DNNSMOOTH
-          Dnn_dU(:) = Dnn_dU(:)*soft_deriv
-#endif
-          ! n part
-          Dnn_dU(1) = Dnn_dU(1)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density * ( U(1) * ( sigmaviz + sigmavcx ) + U(5) * sigmavnn)**2 ) * ( sigmaviz + sigmavcx )
-          ! nn part
-          Dnn_dU(5) = Dnn_dU(5)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density * ( U(1) * ( sigmaviz + sigmavcx ) + U(5) * sigmavnn)**2 ) * sigmavnn
-          ! atomic rates part
-          Dnn_dU(:) = Dnn_dU(:)-ti*simpar%refval_charge/(simpar%refval_mass*simpar%refval_density * ( U(1) * ( sigmaviz + sigmavcx ) + U(5) * sigmavnn)**2 ) * ( U(1) * (dsigmaviz_dU(:)+dsigmavcx_dU(:)) + U(5) * dsigmavnn_dU )
+    denom = U(1)*(sigmaviz + sigmavcx) + U(5)*sigmavnn
+    ddenom_dU = U(1)*(dsigmaviz_dU + dsigmavcx_dU) + U(5)*dsigmavnn_dU
+    ddenom_dU(1) = ddenom_dU(1) + sigmaviz + sigmavcx
+    ddenom_dU(5) = ddenom_dU(5) + sigmavnn
 
-          Dnn_dU(:) = Dnn_dU(:)*simpar%refval_time/simpar%refval_length**2
-#ifdef DNNSMOOTH
-          Dnn_dU(:) = Dnn_dU(:)*double_soft_deriv
-#endif
-    !endif
-#ifndef DNNSMOOTH
-    ENDIF
-#endif
+    Dcoeff = simpar%refval_charge*simpar%refval_temperature/(simpar%refval_mass*simpar%refval_density)
+    Dnn = Dcoeff*Ti_limited/denom
+    Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
+    CALL double_softplus_deriv(Dnn, 10.d0*phys%diff_n, phys%diff_nn, double_soft_deriv)
 
-
-  ENDSUBROUTINE  compute_Dnn_dU
+    Dnn_dU = Dcoeff*(dTi_limited_dU/denom - Ti_limited*ddenom_dU/denom**2)
+    Dnn_dU = Dnn_dU*simpar%refval_time/simpar%refval_length**2
+    Dnn_dU = Dnn_dU*double_soft_deriv
 #endif
+  ENDSUBROUTINE compute_Dnn_dU
+
   SUBROUTINE compute_Tloss(U,Tloss)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: Tloss,U1,U4,T0

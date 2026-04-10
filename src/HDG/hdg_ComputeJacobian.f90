@@ -2258,9 +2258,7 @@ CONTAINS
     real*8                    :: dcooling_factor_dU(Neq)
         REAL*8                    :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq),dTloss_dU(Neq),dTlossrec_dU(Neq)
         REAL*8                    :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
-#ifdef DNNLINEARIZED
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
 #ifdef NEUTRALP
         REAL*8                    :: Dnn,Dpn,Alphanp,Betanp,GammaLim,Gammaredpn,Tmin
         REAL*8                    :: Anp(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),dDpn_dU(Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq)
@@ -2532,11 +2530,8 @@ CONTAINS
 #endif
 
 
-#ifdef DNNLINEARIZED
         CALL compute_Dnn_dU(ue,Dnn_dU)
-
         Dnn_dU_u = dot_PRODUCT(Dnn_dU,Ue)
-#endif
 
 #endif
 
@@ -2684,12 +2679,11 @@ ENDIF
           IF (switch%ohmicsrc) THEN
             rhs(:,i) = rhs(:,i) + Sohmic*(Jtor**2)*Ni
           ENDIF
-#ifdef DNNLINEARIZED
+#ifndef NEUTRALP
           ELSEIF (i == 5) THEN
                  DO j = 1,5
               z = i+(j-1)*Neq
                     DO k = 1,Ndim
-                !z = i+(k-1)*Neq+(j-1)*Neq*Ndim
                 Auu(:,:,z) =Auu(:,:,z) + (NxyzNi(:,:,k)*Dnn_dU(j)*Qpr(k,i))
                     ENDDO
                  ENDDO
@@ -2984,9 +2978,7 @@ ENDIF
       real*8                    :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)
       real*8                    :: W3(Neq),dW3_dU(Neq,Neq),QdW3(Ndim,Neq)
       real*8                    :: W4(Neq),dW4_dU(Neq,Neq),QdW4(Ndim,Neq)
-#ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8                    :: ddk_dU(Neq), ddk_dU_U
@@ -3088,11 +3080,8 @@ ENDIF
         dq_fs_i_dU = 0.
       END IF
 
-#ifdef DNNLINEARIZED
            CALL compute_Dnn_dU(uf,Dnn_dU)
-
       Dnn_dU_u = dot_product(Dnn_dU,uf)
-#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       call compute_ddk_dU(uf,xyf,q_cyl,ddk_dU)
@@ -3206,7 +3195,6 @@ ENDIF
                 elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel)  = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
                        elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel)  = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
               END DO
-#endif
           ENDIF
 #ifdef VORTICITY
 
@@ -3329,7 +3317,7 @@ ENDIF
                  kmultf = flux_limiter_e**2*coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
-#ifdef DNNLINEARIZED
+#ifndef NEUTRALP
       ELSEIF (i == 5) THEN
         DO j=1,Neq
           ind_jf = ind_asf+j
@@ -3367,6 +3355,7 @@ ENDIF
           !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),uf)*n(1) + dot_product(Taui(2,:),uf)*n(2)) + dot_product(dDpn_dU,uf)*(gmipn(1)*n(1) + gmipn(2)*n(2)))*Nif
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
+#endif
 #endif
        END IF
 #ifdef KEQUATION
@@ -3466,9 +3455,7 @@ ENDIF
       real*8                    :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)  
       real*8                    :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
       real*8                    :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
-#ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8                    :: ddk_dU(Neq), ddk_dU_U
@@ -3569,11 +3556,8 @@ ENDIF
         dq_fs_i_dU = 0.
       END IF
       
-#ifdef DNNLINEARIZED
            CALL compute_Dnn_dU(uf,Dnn_dU)
-
       Dnn_dU_u = dot_product(Dnn_dU,uf)
-#endif
 
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -3689,8 +3673,6 @@ ENDIF
                 !    elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
                 ! END IF
                END DO
-
-#endif
 END IF
 
 
@@ -3815,7 +3797,7 @@ END IF
           END DO
                  kmultf = flux_limiter_e**2*coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
-#ifdef DNNLINEARIZED
+#ifndef NEUTRALP
         ELSEIF (i == 5) THEN
             DO j=1,Neq
               ind_jf = ind_asf+j
@@ -3849,6 +3831,7 @@ END IF
                  kmultf = dot_PRODUCT(dDpn_dU,uf)*(gmpn(1)*n(1) + gmpn(2)*n(2))*Nif
           !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),uf)*n(1) + dot_product(Taui(2,:),uf)*n(2)) + dot_product(dDpn_dU,uf)*(gmipn(1)*n(1) + gmipn(2)*n(2)))*Nif
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+#endif
 #endif
       END IF
 
