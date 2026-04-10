@@ -105,6 +105,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
  #Model with constant neutral diffusion
  #MACROS+= -DCONSTANTNEUTRALDIFF
+ #MACROS+= -DNEUTRALPNEW
  #Actually not saves, but monitors in the output particle balance
  MACROS+= -DSAVEFLUX
  #The following 4 flags are development ones, should not be used
