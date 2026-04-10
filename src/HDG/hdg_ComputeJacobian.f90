@@ -2239,6 +2239,9 @@ CONTAINS
     real*8                    :: Sohmic,dSohmic_dU(Neq) ! Ohmic heating
     real*8                    :: W3(Neq),dW3_dU(Neq,Neq),QdW3(Ndim,Neq)
     real*8                    :: W4(Neq),dW4_dU(Neq,Neq),QdW4(Ndim,Neq)
+#ifdef NEUTRALPNEW
+    real*8                    :: W5p(Neq),dW5p_dU(Neq,Neq),QdW5p(Ndim,Neq),dW5p_dU_u(Neq)
+#endif
 #else
     real*8                    :: auxvec(Neq)
 #endif
@@ -2375,6 +2378,12 @@ CONTAINS
     CALL compute_W4(ue,W4,diffiso(1,1),diffiso(4,4))
     CALL compute_dW4_dU(ue,dW4_dU,diffiso(1,1),diffiso(4,4))
         QdW4 = MATMUL(Qpr,dW4_dU)
+#ifdef NEUTRALPNEW
+    CALL compute_W5p(ue,W5p)
+    CALL compute_dW5p_dU(ue,dW5p_dU)
+        QdW5p = MATMUL(Qpr,dW5p_dU)
+        dW5p_dU_u = MATMUL(dW5p_dU,ue)
+#endif
 
     ! Temperature exchange terms
     ! s(U^(k-1))
@@ -2685,11 +2694,17 @@ ENDIF
               z = i+(j-1)*Neq
                     DO k = 1,Ndim
                 Auu(:,:,z) =Auu(:,:,z) + (NxyzNi(:,:,k)*Dnn_dU(j)*Qpr(k,i))
+#ifdef NEUTRALPNEW
+                Auu(:,:,z) =Auu(:,:,z) + (NxyzNi(:,:,k)*QdW5p(k,j))
+#endif
                     ENDDO
                  ENDDO
 
             DO k = 1, Ndim
               rhs(:,i) = rhs(:,i)+Dnn_dU_U*Qpr(k,i)*Nxyzg(:,k)
+#ifdef NEUTRALPNEW
+              rhs(:,i) = rhs(:,i)+dot_PRODUCT(Qpr(k,:),dW5p_dU_u)*Nxyzg(:,k)
+#endif
                  ENDDO
 #endif
 #ifdef KEQUATION
@@ -2790,6 +2805,13 @@ ENDIF
                 z = i+(k-1)*Neq+(j-1)*Neq*Ndim
                 Auq(:,:,z) = Auq(:,:,z) + W4(j)*(NxyzNi(:,:,k) -NNxy*b(k))
             END DO
+#ifdef NEUTRALPNEW
+          ELSEIF(i==5) THEN
+            DO j = 1,Neq
+                z = i+(k-1)*Neq+(j-1)*Neq*Ndim
+                Auq(:,:,z) = Auq(:,:,z) + W5p(j)*NxyzNi(:,:,k)
+            END DO
+#endif
 #endif
            ENDIF
 
