@@ -2430,7 +2430,6 @@ CONTAINS
 
     !***************** end of flux control part *********************
 #endif
-#ifndef RHSBC
     ! Convective part
     k = 5
     ! Plasma flux
@@ -2522,44 +2521,6 @@ CONTAINS
       !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*phys%diff_n*recycling_coeff
       !endif
     END DO
-#else
-  ! diffusive diagonal part
-       k  = 5
-       indi = ind_asf+k
-       DO idm = 1,Ndim
-#ifndef NEUTRALP
-          indj = ind_ash+idm+(k-1)*Ndim
-          elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
-#ifdef NEUTRALPNEW
-          DO j = 1,Neq
-              indj = ind_asf + j
-              indk = ind_ash + idm + (j-1)*Ndim
-              kmult = QdW5p(idm,j)*NiNi*ng(idm)
-              elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
-              kmult = W5p(j)*NiNi*ng(idm)
-              elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
-          END DO
-          kmultf = dot_product(QdW5p(idm,:),ufg)*ng(idm)*Ni
-          elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
-#endif
-#else
-          DO j=1,Neq
-              indj = ind_asf + j
-              indk = ind_ash + idm + (j-1)*Ndim
-              kmult = (Dpn*Taupn(idm,j) + dDpn_dU(j)*gmpn(idm))*NiNi*(ng(idm) - bn*bg(idm))
-              elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
-              kmult = Dpn*Vpn(j)*NiNi*(ng(idm) - bn*bg(idm))
-              elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
-          END DO
-           kmultf = dot_PRODUCT(dDpn_dU,ufg)*gmpn(idm)*Ni*(ng(idm) - bn*bg(idm))
-          elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
-#endif
-      END DO
-      ! Plasma outflux: now in the RHS
-      elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - recycling_coeff*(ufg(2)*bn - diffiso(1,1)*(Qpr(1,1)*(ng(1) - bn*bg(1)) + Qpr(2,1)*(ng(2)- bn*bg(2))))*Ni
-      ! Puff
-      elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - puff_coeff*Ni
-#endif
 #endif
 
 
