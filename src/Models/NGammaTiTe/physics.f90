@@ -2882,7 +2882,7 @@ ENDSUBROUTINE  compute_ddissip_du
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: res
     REAL*8              :: U1,U2,U3,U5,Tmin,T
-    REAL*8PARAMETER      :: tol = 1.e-12
+    REAL*8, PARAMETER    :: tol = 1.e-12
 	   U1 = U(1)
     U2 = U(2)
 	   U3 = U(3)
@@ -2910,7 +2910,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8                :: U1,U2,U3,U4,U5
     REAL*8                :: cs_n,Dpn,t
     REAL*8                :: Grad_Pn(simpar%Ndim)
-    REAL*8PARAMETER        :: gamma = 4.,tol = 1.e-12
+    REAL*8, PARAMETER      :: gamma = 4.d0, tol = 1.d-12
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
@@ -2937,7 +2937,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8                :: U1,U2,U3,U4,U5
     REAL*8                :: cs_n,Dpn,t
     REAL*8                :: Grad_Pn(simpar%Ndim)
-    REAL*8PARAMETER        :: gamma = 4.,tol = 1.e-12
+    REAL*8, PARAMETER      :: gamma = 4.d0, tol = 1.d-12
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
@@ -2964,7 +2964,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8                :: U1,U2,U3,U4,U5
     REAL*8                :: cs_n,Dpn,GammaDpn,GammaLim
     REAL*8                :: Grad_Pn(simpar%Ndim)
-    REAL*8PARAMETER        :: tol = 1.e-12
+    REAL*8, PARAMETER      :: tol = 1.d-12
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
@@ -3014,7 +3014,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8,INTENT(IN)   :: diff_iso(6,6,1),diff_ani(6,6,1)
 #endif
 #ifdef NEUTRALP
-    REAL*8              :: Dpn
+    REAL*8              :: Dpn, Dnn
     REAL*8              :: Vpn(simpar%Neq)
 #endif
 #else
@@ -3058,8 +3058,8 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     ! Compute Vpn(U^(k-1))
     CALL computeVpn(uc,Vpn)
 	   ! Compute Dpn(U^(k-1))
-    
-    !CALL computeDpn(uc,Qpr,Vpn,Dpn)
+    CALL computeDpn(uc,Qpr,Vpn,Dpn)
+    Dnn = (simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*up(7)*Dpn
 #endif
 
     IF (numer%stab == 2) THEN
@@ -3076,8 +3076,12 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(2) = tau_aux(2) + phys%diff_u*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
           tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+#ifndef NEUTRALP
 #ifdef NEUTRAL
         tau_aux(5) = tau_aux(5) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+#endif
+#else
+        tau_aux(5) = tau_aux(5) + Dnn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #endif
        ELSE
 #endif
@@ -3086,8 +3090,12 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(2) = tau_aux(2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
           tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+#ifndef NEUTRALP
 #ifdef NEUTRAL
         tau_aux(5) = tau_aux(5) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+#endif
+#else
+        tau_aux(5) = tau_aux(5) + Dnn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #endif
 #ifdef TOR3D
        ENDIF
@@ -3110,8 +3118,12 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(2) = tau_aux(2) + phys%diff_u*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
           tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+#ifndef NEUTRALP
 #ifdef NEUTRAL
         tau_aux(5) = tau_aux(5) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+#endif
+#else
+        tau_aux(5) = tau_aux(5) + Dnn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #endif
        ELSE
 #endif
@@ -3120,8 +3132,12 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(2) = tau_aux(2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
           tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+#ifndef NEUTRALP
 #ifdef NEUTRAL
         tau_aux(5) = tau_aux(5) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+#endif
+#else
+        tau_aux(5) = tau_aux(5) + Dnn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #endif
 #ifdef TOR3D
        ENDIF
@@ -3153,7 +3169,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
         tau_aux(5) = phys%diff_nn!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + phys%diff_nn!phys%diff_nn
+        tau_aux(5) = tau_aux(5) + Dnn
 #endif
        ELSE
 #endif
@@ -3170,7 +3186,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 #endif
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + numer%tau(5)
+        tau_aux(5) = tau_aux(5) + Dnn*refElPol%ndeg/Mesh%elemSize(iel)
 #endif
 !        ! Toroidal face
 !        tau_aux(1) = tau_aux(1) +  diff_iso(1,1,1)

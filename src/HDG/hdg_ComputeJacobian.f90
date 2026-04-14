@@ -2412,12 +2412,8 @@ CONTAINS
     CALL computeDpn(ue,Qpr,Vpn,Dpn)
     ! Compute dDpn_dU(U^(k-1))
     CALL compute_dDpn_dU(ue,Qpr,Vpn,dDpn_dU)
-    ! Reduce Grad Pn for low collision regime
-    ! Threshold set at 0.5xGradPn for Ti = 0.2 eV
-    Gammaredpn = 1.
-    Tmin = 0.2/simpar%refval_temperature
-        IF (Tmin/upe(7) .LE. 1.) Gammaredpn = Gammaredpn*Tmin/upe(7)
-    Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upe(7)*Dpn
+    ! Use the plain pressure-diffusion coefficient for the legacy NEUTRALP check.
+    Dnn = (simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upe(7)*Dpn
     ! Compute Gammaredpn(U^(k-1))
     !CALL computeGammared(ue,Gammaredpn)
     !gmipn = matmul(Qpr,Vveci)
@@ -3130,12 +3126,8 @@ ENDIF
     CALL computeDpn(uf,Qpr,Vpn,Dpn)
     ! Compute dDpn_dU(U^(k-1))
     CALL compute_dDpn_dU(uf,Qpr,Vpn,dDpn_dU)
-    ! Reduce Grad Pn for low collision regime
-    ! Threshold set at 0.5xGradPn for Ti = 0.2 eV
-    Gammaredpn = 1.
-    Tmin = 0.2/simpar%refval_temperature
-           IF (Tmin/upf(7) .LE. 1.) Gammaredpn = Gammaredpn*Tmin/upf(7)
-    Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*Dpn
+    ! Use the plain pressure-diffusion coefficient for the legacy NEUTRALP check.
+    Dnn = (simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*uf(7)*Dpn
     ! Comput Gammaredpn(U^(k-1))
     !CALL computeGammared(uf,Gammaredpn)
     !gmipn = matmul(Qpr,Vveci)
@@ -3633,12 +3625,8 @@ ENDIF
       CALL computeDpn(uf,Qpr,Vpn,Dpn)
       ! Compute dDpn_dU(U^(k-1))
       CALL compute_dDpn_dU(uf,Qpr,Vpn,dDpn_dU)
-      ! Reduce Grad Pn for low collision regime
-      ! Threshold set at 0.5xGradPn for Ti = 0.2 eV
-      Gammaredpn = 1.
-      Tmin = 0.2/simpar%refval_temperature
-           IF (Tmin/upf(7) .LE. 1.) Gammaredpn = Gammaredpn*Tmin/upf(7)
-      Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upf(7)*Dpn
+      ! Use the plain pressure-diffusion coefficient for the legacy NEUTRALP check.
+      Dnn = (simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*uf(7)*Dpn
       ! Comput Gammaredpn(U^(k-1))
       !CALL computeGammared(uf,Gammaredpn)
       !gmipn = matmul(Qpr,Vveci)

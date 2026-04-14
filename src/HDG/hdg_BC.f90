@@ -2336,12 +2336,8 @@ CONTAINS
       CALL computeDpn(ufg,Qpr,Vpn,Dpn)
       ! Compute dDpn_dU(U^(k-1))
       CALL compute_dDpn_dU(ufg,Qpr,Vpn,dDpn_dU)
-      ! Reduce Grad Pn for low collision regime
-      ! Threshold set at 0.5xGradPn for Ti = 0.2 eV
-      Gammaredpn = 1.
-      Tmin = 0.2/simpar%refval_temperature
-        IF (Tmin/upfg(7) .LE. 1.) Gammaredpn = Gammaredpn*Tmin/upfg(7)
-      Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*Dpn
+      ! Use the plain pressure-diffusion coefficient for the legacy NEUTRALP check.
+      Dnn = (simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*Dpn
       ! Comput Gammaredpn(U^(k-1))
       !CALL computeGammared(ufg,Gammaredpn)
       !gmipn = matmul(Qpr,Vveci)
@@ -2416,6 +2412,10 @@ CONTAINS
     flgflux_neutral_diff = (diffiso(5,5)*(Qpr(1,5)*ng(1) + Qpr(2,5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
     flgflux_neutral_pgrad = 0.d0
     flgflux_neutral_conv = 0.d0
+#ifdef NEUTRALP
+    flgflux_neutral_diff = Dnn*dot_product(Qpr(:,5),ng)*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    flgflux_neutral_pgrad = Dpn*dot_product(gmpn,ng)*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+#endif
 #ifdef NEUTRALPNEW
     flgflux_neutral_pgrad = dot_product(matmul(transpose(Qpr),ng),W5p)*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 #endif
