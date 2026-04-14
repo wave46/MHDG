@@ -40,6 +40,8 @@ CONTAINS
     if (phys%idx_rhon_eq == 0) then
       phys%idx_rhon_eq = 5
       phys%idx_rhon_pv = 11
+      phys%Neq = phys%idx_rhon_eq
+      phys%npv = phys%idx_rhon_pv
     end if
     phys%idx_gamman_eq = phys%idx_rhon_eq + 1
     phys%idx_un_pv = phys%idx_rhon_pv + 1
