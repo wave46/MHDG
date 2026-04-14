@@ -25,7 +25,7 @@ SUBROUTINE READ_input()
   INTEGER               :: num_param_est, num_n_quant_ind
   REAL*8                :: thr_ind, tol_est, osc_tol, osc_check
   INTEGER               :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
-  REAL*8                :: dt0, R0, diff_n, diff_u, tau(1:5), tNr, tTM, div, Tbg
+  REAL*8                :: dt0, R0, diff_n, diff_u, tau(1:5), tNr, tTM, div, Tbg, neutralp_lambda
   REAL*8                :: tfi, a, bohmth,bohm_energy_thresh, q, diffred, diffmin
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
@@ -92,7 +92,7 @@ SUBROUTINE READ_input()
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, transport_1d, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb,flux_limiter,import_diffusion_1D
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path
-  NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
+  NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump,neutralp_lambda
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
@@ -123,6 +123,7 @@ SUBROUTINE READ_input()
   ! Reading the file
   uinput = 100
   diagsource = 0.
+  neutralp_lambda = 1.d0
   OPEN (uinput, file='param.txt', status='unknown')
   READ (uinput, SWITCH_LST)
   READ (uinput, INPUT_LST)
@@ -234,6 +235,7 @@ SUBROUTINE READ_input()
   numer%npartor           = npartor
   numer%bohmtypebc        = bohmtypebc
   numer%exbdump           = exbdump
+  numer%neutralp_lambda   = neutralp_lambda
   adapt%adaptivity        = adaptivity
   adapt%shockcp_adapt     = shockcp_adapt
   num_param_est        = COUNT(param_est /= -1.0)
@@ -585,6 +587,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - tau(3):                                             ', numer%tau(3)
      PRINT *, '                - tau(4):                                             ', numer%tau(4)
      PRINT *, '                - tau(5):                                             ', numer%tau(5)
+     PRINT *, '                - neutralp lambda:                                    ', numer%neutralp_lambda
      PRINT *, '                - max number of N-R iterations:                       ', numer%nrp
      PRINT *, '                - tolerance for the N-R scheme:                       ', numer%tNR
      PRINT *, '                - tolerance for the steady state achievement:         ', numer%tTM

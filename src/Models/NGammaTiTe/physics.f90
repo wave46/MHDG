@@ -2393,7 +2393,7 @@ CONTAINS
     Ti_limited = Ti
     CALL softplus(Ti_limited, ti_min/simpar%refval_temperature)
 
-    alpha = ti_factor*U(5)*Dnn/Ti_limited
+    alpha = numer%neutralp_lambda*ti_factor*U(5)*Dnn/Ti_limited
     CALL computeVi(U, W5p)
     W5p = alpha*W5p
   ENDSUBROUTINE compute_W5p
@@ -2423,9 +2423,9 @@ CONTAINS
     CALL softplus(Ti_limited, ti_min/simpar%refval_temperature)
     dTi_limited_dU = dTi_dU*soft_deriv
 
-    alpha = ti_factor*U(5)*Dnn/Ti_limited
-    dalpha_dU = ti_factor*(U(5)*Dnn_dU/Ti_limited - U(5)*Dnn*dTi_limited_dU/Ti_limited**2)
-    dalpha_dU(5) = dalpha_dU(5) + ti_factor*Dnn/Ti_limited
+    alpha = numer%neutralp_lambda*ti_factor*U(5)*Dnn/Ti_limited
+    dalpha_dU = numer%neutralp_lambda*ti_factor*(U(5)*Dnn_dU/Ti_limited - U(5)*Dnn*dTi_limited_dU/Ti_limited**2)
+    dalpha_dU(5) = dalpha_dU(5) + numer%neutralp_lambda*ti_factor*Dnn/Ti_limited
 
     DO j = 1, SIZE(U)
       dW5p_dU(:,j) = Vi*dalpha_dU(j) + alpha*dVi_dU(:,j)

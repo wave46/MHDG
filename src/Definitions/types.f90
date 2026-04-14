@@ -539,6 +539,7 @@ MODULE types
      INTEGER        :: npartor  ! Number of MPI divisions in the toroidal direction
      INTEGER        :: bohmtypebc ! Implementation of the Bohm bc for Gamma
      REAL*8         :: exbdump ! Dumping for ExB drifts
+     REAL*8         :: neutralp_lambda ! Continuation factor for the additive NEUTRALPNEW term
   END TYPE Numeric_type
 
   !*******************************************************
