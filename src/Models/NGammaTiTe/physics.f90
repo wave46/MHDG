@@ -540,6 +540,9 @@ CONTAINS
     REAL*8, INTENT(OUT) :: Dnn
     REAL*8, PARAMETER   :: ti_min = 1.d-6
     REAL*8              :: Ti, sigmaviz, sigmavnn, sigmavcx
+    INTEGER             :: inn
+
+    inn = phys%idx_rhon_eq
 
 #ifdef CONSTANTNEUTRALDIFF
     Dnn = phys%diff_nn
@@ -551,7 +554,7 @@ CONTAINS
     CALL compute_sigmavcx(U, sigmavcx)
 
     Dnn = simpar%refval_charge*(simpar%refval_temperature*Ti)/ &
-      &(simpar%refval_mass*simpar%refval_density*(U(1)*(sigmaviz + sigmavcx) + U(5)*sigmavnn))
+      &(simpar%refval_mass*simpar%refval_density*(U(1)*(sigmaviz + sigmavcx) + U(inn)*sigmavnn))
     Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
     CALL double_softplus(Dnn, 10.d0*phys%diff_n, phys%diff_nn)
 #endif
@@ -563,7 +566,7 @@ CONTAINS
   SUBROUTINE jacobianMatrices(U, A)
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: A(:, :)
-    INTEGER             :: ik
+    INTEGER             :: ik, inn
     ![ 0,                                           1,                              0,                0; ...
     ! -2/3*U(2)**2/U(1)**2                          4/3*U(2)/U(1)                   2/3,              2/3; ...
     ! -5/3*U(2)*U(3)/U(1)**2+2/3*U(2)**3/U(1)**3    5/3*U(3)/U(1)-U(2)**2/U(1)**2   5/3*U(2)/U(1),    0 ;   ...
@@ -572,6 +575,7 @@ CONTAINS
     ! -U(6)*U(2)/U(1)**2,                           U(6)/U(1),                      0,                0,            0,        U(2)/U(1)]
     A = 0.d0
     ik = phys%idx_k_eq
+    inn = phys%idx_rhon_eq
     IF (switch%decoup) THEN
       A(1, 2) = 1.
 
@@ -619,10 +623,12 @@ CONTAINS
 #endif
 #ifdef NEUTRAL
 #ifdef NEUTRALCONVECTION
-      A(5, 1) = -U(5)*U(2)/U(1)**2
-      A(5, 2) = U(5)/U(1)
-      A(5, 5) = U(2)/U(1)
-      !A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
+      if (inn > 0) then
+        A(inn, 1) = -U(inn)*U(2)/U(1)**2
+        A(inn, 2) = U(inn)/U(1)
+        A(inn, inn) = U(2)/U(1)
+      end if
+      !A(inn, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(inn,:)
 #endif
 #endif
     END IF
@@ -650,9 +656,10 @@ CONTAINS
   SUBROUTINE jacobianMatricesFace(U, bn, An)
     REAL*8, INTENT(in)  :: U(:), bn
     REAL*8, INTENT(out) :: An(:, :)
-    INTEGER             :: ik
+    INTEGER             :: ik, inn
     An = 0.d0
     ik = phys%idx_k_eq
+    inn = phys%idx_rhon_eq
     IF (switch%decoup) THEN
       An(1, 2) = 1.
 
@@ -697,10 +704,12 @@ CONTAINS
 #endif
 #ifdef NEUTRAL
 #ifdef NEUTRALCONVECTION
-      An(5, 1) = -U(5)*U(2)/U(1)**2
-      An(5, 2) = U(5)/U(1)
-      An(5, 5) = U(2)/U(1)
-      !An(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*An(5,:)
+      if (inn > 0) then
+        An(inn, 1) = -U(inn)*U(2)/U(1)**2
+        An(inn, 2) = U(inn)/U(1)
+        An(inn, inn) = U(2)/U(1)
+      end if
+      !An(inn, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*An(inn,:)
 #endif
 #endif
     ENDIF
@@ -732,8 +741,10 @@ CONTAINS
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: A(:, :)
     REAL*8              :: auxi, auxe
+    INTEGER             :: inn
 
     A = 0.
+    inn = phys%idx_rhon_eq
     auxi = (5.-2.*phys%Gmbohm)/3.
     auxe = (5.-2.*phys%Gmbohme)/3.
     A(1, 1) = -auxi*(U(2)**3/U(1)**3 - U(2)*U(3)/U(1)**2)
@@ -746,10 +757,12 @@ CONTAINS
 
 #ifdef NEUTRAL
 #ifdef NEUTRALCONVECTION
-    A(5, 1) = -U(5)*U(2)/U(1)**2
-    A(5, 2) = U(5)/U(1)
-    A(5, 5) = U(2)/U(1)
-    !A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
+    if (inn > 0) then
+      A(inn, 1) = -U(inn)*U(2)/U(1)**2
+      A(inn, 2) = U(inn)/U(1)
+      A(inn, inn) = U(2)/U(1)
+    end if
+    !A(inn, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(inn,:)
 #endif
 #endif
 
@@ -779,6 +792,9 @@ CONTAINS
     REAL*8, INTENT(in)  :: U(:), Up(:), Q(:,:), b(:), sigmaviz, sigmavcx
     REAL*8, INTENT(out) :: Ax(:,:),Ay(:,:)
     REAL*8              :: GradTi(simpar%Ndim), GradTimod, Vnn, Csnn
+    INTEGER             :: inn
+
+    inn = phys%idx_rhon_eq
 
   GradTi(1) = 2./(3*phys%Mref)*( (U(2)**2/U(1)**3 - U(3)/U(1)**2)*Q(1,1) - (U(2)/U(1)**2)*Q(1,2) + 1./U(1)*Q(1,3) )
   GradTi(2) = 2./(3*phys%Mref)*( (U(2)**2/U(1)**3 - U(3)/U(1)**2)*Q(2,1) - (U(2)/U(1)**2)*Q(2,2) + 1./U(1)*Q(2,3) )
@@ -798,7 +814,7 @@ CONTAINS
 !  endif
 !  Ax = Ax/simpar%refval_speed
   !Neutral velocity parallel to magnetic field
-  Ax(5,5) = Ax(5,5) - Up(2)*b(1)
+  Ax(inn,inn) = Ax(inn,inn) - Up(2)*b(1)
 
   Ay = 0.d0
 !  if (Csnn .ge. Vnn) then
@@ -808,7 +824,7 @@ CONTAINS
 !  endif
 !  Ay = Ay/simpar%refval_speed
   !Neutral velocity parallel to magnetic field
-  Ay(5,5) = Ay(5,5) - Up(2)*b(2)
+  Ay(inn,inn) = Ay(inn,inn) - Up(2)*b(2)
 
   Ax = 0.
   Ay = 0.
@@ -875,6 +891,7 @@ CONTAINS
 #endif
     real*8, intent(out)		 :: d_iso(:, :, :), d_ani(:, :, :)
     real*8		              :: iperdiff(size(xy, 1))
+    integer                     :: inn
 #ifdef NEUTRAL
     integer             		:: i
     real*8, dimension(size(u,1))	:: Dnn
@@ -886,6 +903,7 @@ CONTAINS
 #endif
 
 
+    inn = phys%idx_rhon_eq
     ! d_iso(Neq,Neq,Ngauss),d_ani(Neq,Neq,Ngauss)
     ! first index corresponds to the equation
     ! second index corresponds to the unknown
@@ -943,10 +961,10 @@ CONTAINS
 #ifndef CONSTANTNEUTRALDIFF
     DO i=1,SIZE(u,1)
        CALL compute_Dnn(u(i,:), Dnn(i))
-       d_iso(5,5,i) = Dnn(i)
+       d_iso(inn,inn,i) = Dnn(i)
     END DO
 #else
-    d_iso(5,5,:)=phys%diff_nn
+    d_iso(inn,inn,:)=phys%diff_nn
 #endif
 
 #ifdef KEQUATION
@@ -996,7 +1014,7 @@ CONTAINS
     !Dnn = sum(Dnn)/size(u,1)
 #endif
 #else
-    d_iso(5,5,:) = 0.
+    if (inn > 0) d_iso(inn,inn,:) = 0.
 #endif
     d_ani(1, 1, :) = d_iso(1,1,:)
     d_ani(2, 2, :) = d_iso(2,2,:)
@@ -1021,7 +1039,7 @@ CONTAINS
        ENDIF
     ENDIF
 #ifdef NEUTRAL
-    d_ani(5,5,:) = 0.
+    d_ani(inn,inn,:) = 0.
 #endif
 
     !*****************************
@@ -1514,8 +1532,10 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: niz,U1,U5
     REAL*8, PARAMETER :: tol = 1.e-20
+    INTEGER            :: inn
     U1 = U(1)
-    U5 = U(5)
+    inn = phys%idx_rhon_eq
+    U5 = U(inn)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     niz = U1*U5
@@ -1526,13 +1546,15 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U5
     REAL*8, PARAMETER :: tol = 1.e-20
+    INTEGER            :: inn
     U1 = U(1)
-    U5 = U(5)
+    inn = phys%idx_rhon_eq
+    U5 = U(inn)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     res = 0.
     res(1) = U5
-    res(5) = U1
+    res(inn) = U1
   ENDSUBROUTINE compute_dniz_dU
 
 
@@ -1561,8 +1583,10 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: fGammacx,U2,U5
     REAL*8, PARAMETER :: tol = 1.e-20
+    INTEGER            :: inn
     U2 = U(2)
-    U5 = U(5)
+    inn = phys%idx_rhon_eq
+    U5 = U(inn)
     IF (U5<tol) U5=tol
     fGammacx = U2*U5
   ENDSUBROUTINE compute_fGammacx
@@ -1572,12 +1596,14 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U2,U5
     REAL*8, PARAMETER :: tol = 1.e-20
+    INTEGER            :: inn
     U2 = U(2)
-    U5 = U(5)
+    inn = phys%idx_rhon_eq
+    U5 = U(inn)
     IF (U5<tol) U5=tol
     res = 0.
     res(2) = U5
-    res(5) = U2
+    res(inn) = U2
   ENDSUBROUTINE compute_dfGammacx_dU
 
 
@@ -2399,8 +2425,10 @@ CONTAINS
     REAL*8              :: dsigmaviz_dU(size(U)), dsigmavnn_dU(size(U)), dsigmavcx_dU(size(U))
     REAL*8              :: ddenom_dU(size(U))
     REAL*8              :: Dcoeff
+    INTEGER             :: inn
 
     Dnn_dU = 0.d0
+    inn = phys%idx_rhon_eq
 #ifndef CONSTANTNEUTRALDIFF
     CALL compute_Ti(U, Ti)
     CALL compute_dTi_dU(U, dTi_dU)
@@ -2416,10 +2444,10 @@ CONTAINS
     CALL compute_dsigmavnn_dU(U,dsigmavnn_dU)
     CALL compute_dsigmavcx_dU(U,dsigmavcx_dU)
 
-    denom = U(1)*(sigmaviz + sigmavcx) + U(5)*sigmavnn
-    ddenom_dU = U(1)*(dsigmaviz_dU + dsigmavcx_dU) + U(5)*dsigmavnn_dU
+    denom = U(1)*(sigmaviz + sigmavcx) + U(inn)*sigmavnn
+    ddenom_dU = U(1)*(dsigmaviz_dU + dsigmavcx_dU) + U(inn)*dsigmavnn_dU
     ddenom_dU(1) = ddenom_dU(1) + sigmaviz + sigmavcx
-    ddenom_dU(5) = ddenom_dU(5) + sigmavnn
+    ddenom_dU(inn) = ddenom_dU(inn) + sigmavnn
 
     Dcoeff = simpar%refval_charge*simpar%refval_temperature/(simpar%refval_mass*simpar%refval_density)
     Dnn = Dcoeff*Ti_limited/denom
@@ -2437,14 +2465,16 @@ CONTAINS
     REAL*8, INTENT(OUT) :: W5p(:)
     REAL*8, PARAMETER   :: ti_min = 1.d-6
     REAL*8              :: Dnn, Ti, Ti_limited, alpha, ti_factor
+    INTEGER             :: inn
 
     ti_factor = 2.d0/(3.d0*phys%Mref)
+    inn = phys%idx_rhon_eq
     CALL compute_Dnn(U, Dnn)
     CALL compute_Ti(U, Ti)
     Ti_limited = Ti
     CALL softplus(Ti_limited, ti_min/simpar%refval_temperature)
 
-    alpha = numer%neutralp_lambda*ti_factor*U(5)*Dnn/Ti_limited
+    alpha = numer%neutralp_lambda*ti_factor*U(inn)*Dnn/Ti_limited
     CALL computeVi(U, W5p)
     W5p = alpha*W5p
   ENDSUBROUTINE compute_W5p
@@ -2458,10 +2488,11 @@ CONTAINS
     REAL*8              :: Ti, Ti_limited, soft_deriv
     REAL*8              :: dTi_dU(size(U)), dTi_limited_dU(size(U))
     REAL*8              :: alpha, dalpha_dU(size(U)), ti_factor
-    INTEGER             :: j
+    INTEGER             :: inn, j
 
     dW5p_dU = 0.d0
     ti_factor = 2.d0/(3.d0*phys%Mref)
+    inn = phys%idx_rhon_eq
 
     CALL computeVi(U, Vi)
     CALL compute_dV_dUi(U, dVi_dU)
@@ -2474,9 +2505,9 @@ CONTAINS
     CALL softplus(Ti_limited, ti_min/simpar%refval_temperature)
     dTi_limited_dU = dTi_dU*soft_deriv
 
-    alpha = numer%neutralp_lambda*ti_factor*U(5)*Dnn/Ti_limited
-    dalpha_dU = numer%neutralp_lambda*ti_factor*(U(5)*Dnn_dU/Ti_limited - U(5)*Dnn*dTi_limited_dU/Ti_limited**2)
-    dalpha_dU(5) = dalpha_dU(5) + numer%neutralp_lambda*ti_factor*Dnn/Ti_limited
+    alpha = numer%neutralp_lambda*ti_factor*U(inn)*Dnn/Ti_limited
+    dalpha_dU = numer%neutralp_lambda*ti_factor*(U(inn)*Dnn_dU/Ti_limited - U(inn)*Dnn*dTi_limited_dU/Ti_limited**2)
+    dalpha_dU(inn) = dalpha_dU(inn) + numer%neutralp_lambda*ti_factor*Dnn/Ti_limited
 
     DO j = 1, SIZE(U)
       dW5p_dU(:,j) = Vi*dalpha_dU(j) + alpha*dVi_dU(:,j)
@@ -2560,8 +2591,10 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: fEiiz,U1,U3,U5
     REAL*8, PARAMETER :: tol = 1.e-20
+    INTEGER            :: inn
     U3 = U(3)
-    U5 = U(5)
+    inn = phys%idx_rhon_eq
+    U5 = U(inn)
     U1 = U(1)
     if (U1<tol) U1=tol
     if (U3<tol) U3=tol
@@ -2575,19 +2608,21 @@ CONTAINS
     real*8, intent(IN) :: U(:)
     real*8             :: res(:),U1,U3,U5
     REAL*8, PARAMETER :: tol = 1.e-20
+    INTEGER            :: inn
     U1 = U(1)
     U3 = U(3)
-    U5 = U(5)
+    inn = phys%idx_rhon_eq
+    U5 = U(inn)
     if (U1<tol) U1=tol
     if (U3<tol) U3=tol
     if (U5<tol) U5=tol
     res = 0.
     res(3) = U5
-    res(5) = U3
+    res(inn) = U3
     !PSI review
     res(1) = res(1)+0.5*U(2)**2/U1**2*U5
     res(2) = -1.*U(2)/U1*U5
-    res(5) = res(5) - 0.5*U(2)**2/U1
+    res(inn) = res(inn) - 0.5*U(2)**2/U1
   ENDSUBROUTINE compute_dfEiiz_dU
 
 
@@ -2623,9 +2658,11 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: fEicx,U1,U2,U5
     REAL*8, PARAMETER :: tol = 1.e-20
+    INTEGER            :: inn
     U1 = U(1)
     U2 = U(2)
-    U5 = U(5)
+    inn = phys%idx_rhon_eq
+    U5 = U(inn)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     fEicx = (U5*U2**2)/U1*0.5
@@ -2636,15 +2673,17 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),U1,U2,U5
     REAL*8, PARAMETER :: tol = 1.e-20
+    INTEGER            :: inn
     U1 = U(1)
     U2 = U(2)
-    U5 = U(5)
+    inn = phys%idx_rhon_eq
+    U5 = U(inn)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     res = 0.
     res(1) = -U5*(U2/U1)**2
     res(2) = 2.*U5*U2/U1
-    res(5) = (U2**2)/U1
+    res(inn) = (U2**2)/U1
     res(:) = res(:)*0.5
   ENDSUBROUTINE compute_dfEicx_dU
 
@@ -3068,7 +3107,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8,INTENT(IN)   :: diff_iso(:, :),diff_ani(:, :)
 #endif
     integer             :: ndim
-    integer             :: ik
+    integer             :: ik, inn
     real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
     REAL*8              :: q_fs_i, q_fs_e, flux_limiter_i, flux_limiter_e, q_sh_i, q_sh_e
     REAL*8              :: Qpr(simpar%Ndim,simpar%Neq)
@@ -3081,6 +3120,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 
     tau = 0.
     ik = phys%idx_k_eq
+    inn = phys%idx_rhon_eq
     ndim = SIZE(n)
     bn = dot_PRODUCT(b(1:ndim), n)
     bnorm = NORM2(b(1:ndim))
@@ -3126,10 +3166,10 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + Dnn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + Dnn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #endif
        ELSE
 #endif
@@ -3140,10 +3180,10 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + Dnn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + Dnn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #endif
 #ifdef TOR3D
        ENDIF
@@ -3168,10 +3208,10 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + Dnn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + Dnn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #endif
        ELSE
 #endif
@@ -3182,10 +3222,10 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + Dnn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + Dnn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #endif
 #ifdef TOR3D
        ENDIF
@@ -3214,10 +3254,10 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(4) = tau_aux(4) + phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = phys%diff_nn!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
+        tau_aux(inn) = phys%diff_nn!numer%tau(5) !tau_aux(inn) + diff_iso(inn,inn,1)
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + Dnn
+        tau_aux(inn) = tau_aux(inn) + Dnn
 #endif
        ELSE
 #endif
@@ -3228,13 +3268,13 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(4) = tau_aux(4) + diff_iso(4,4)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_e*ABS(bn)*phys%diff_pare*(MIN(phys%T_fluxlim_maxe,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + diff_iso(5,5)*refElPol%ndeg/Mesh%elemSize(iel) !! !numer%tau(5) diff_iso(5,5,1)
+        tau_aux(inn) = tau_aux(inn) + diff_iso(inn,inn)*refElPol%ndeg/Mesh%elemSize(iel) !! !numer%tau(5) diff_iso(inn,inn,1)
 #ifdef KEQUATION
         if (ik > 0) tau_aux(ik) = tau_aux(ik) + diff_iso(ik,ik)*refElPol%ndeg/Mesh%elemSize(iel)
 #endif
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + Dnn*refElPol%ndeg/Mesh%elemSize(iel)
+        tau_aux(inn) = tau_aux(inn) + Dnn*refElPol%ndeg/Mesh%elemSize(iel)
 #endif
 !        ! Toroidal face
 !        tau_aux(1) = tau_aux(1) +  diff_iso(1,1,1)
@@ -3257,7 +3297,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     tau(3, 3) = tau_aux(3)
     tau(4, 4) = tau_aux(4)
 #ifdef NEUTRAL
-    tau(5, 5) = tau_aux(5)
+    tau(inn, inn) = tau_aux(inn)
 #ifdef KEQUATION
     if (ik > 0) tau(ik,ik) = tau_aux(ik)
 #endif
