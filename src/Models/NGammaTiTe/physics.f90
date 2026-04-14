@@ -391,6 +391,11 @@ CONTAINS
     ua(:, 4) = up(:, 1)*up(:, 4)
 #ifdef NEUTRAL
     if (phys%idx_rhon_eq > 0 .and. phys%idx_rhon_pv > 0) ua(:,phys%idx_rhon_eq) = ABS(up(:,phys%idx_rhon_pv))
+#ifdef NEUTRALGAMMA
+    if (phys%idx_gamman_eq > 0 .and. phys%idx_un_pv > 0 .and. phys%idx_rhon_pv > 0) then
+      ua(:,phys%idx_gamman_eq) = ABS(MAX(up(:,phys%idx_rhon_pv), 1.d-7))*up(:,phys%idx_un_pv)
+    end if
+#endif
 #ifdef KEQUATION
     if (phys%idx_k_eq > 0 .and. phys%idx_k_pv > 0) ua(:,phys%idx_k_eq) = ABS(up(:,phys%idx_k_pv))
 #endif
@@ -406,8 +411,13 @@ CONTAINS
     REAL*8, DIMENSION(:, :), INTENT(in)  :: ua
     REAL*8, DIMENSION(:, :), INTENT(out) :: up
     REAL*8,  DIMENSION(SIZE(ua,1))       :: U1
+    REAL*8,  DIMENSION(SIZE(ua,1))       :: U5
 
     U1 = max(ua(:,1),1e-20)
+    U5 = 0.d0
+#ifdef NEUTRAL
+    if (phys%idx_rhon_eq > 0) U5 = ABS(ua(:,phys%idx_rhon_eq))
+#endif
 
     up(:, 1) = ABS(U1)                                                           ! density
     up(:, 2) = ua(:, 2)/U1                                            ! u parallel
@@ -421,6 +431,11 @@ CONTAINS
     up(:, 10) = up(:, 2)/up(:, 9)                                           ! Mach
 #ifdef NEUTRAL
     if (phys%idx_rhon_eq > 0 .and. phys%idx_rhon_pv > 0) up(:,phys%idx_rhon_pv) = ABS(ua(:,phys%idx_rhon_eq)) ! density neutral
+#ifdef NEUTRALGAMMA
+    if (phys%idx_gamman_eq > 0 .and. phys%idx_un_pv > 0) then
+      up(:,phys%idx_un_pv) = ua(:,phys%idx_gamman_eq)/ABS(MAX(U5, 1.d-7))
+    end if
+#endif
 #ifdef KEQUATION
     if (phys%idx_k_eq > 0 .and. phys%idx_k_pv > 0) up(:,phys%idx_k_pv) = ABS(ua(:,phys%idx_k_eq)) ! turbulent energy
 #endif
