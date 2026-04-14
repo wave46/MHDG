@@ -13,29 +13,64 @@ MODULE physics
 CONTAINS
 
   !*******************************************
+  ! Set model layout bookkeeping
+  !*******************************************
+  SUBROUTINE set_model_layout()
+
+    phys%idx_rhon_eq = 0
+    phys%idx_gamman_eq = 0
+    phys%idx_k_eq = 0
+    phys%idx_rhon_pv = 0
+    phys%idx_un_pv = 0
+    phys%idx_k_pv = 0
+
+    phys%Neq = 4
+    phys%npv = 10
+    simpar%model = 'N-Gamma-Ti-Te'
+
+#ifdef NEUTRAL
+    phys%idx_rhon_eq = 5
+    phys%idx_rhon_pv = 11
+    phys%Neq = phys%idx_rhon_eq
+    phys%npv = phys%idx_rhon_pv
+    simpar%model = 'N-Gamma-Ti-Te-Neutral'
+#endif
+
+#ifdef NEUTRALGAMMA
+    if (phys%idx_rhon_eq == 0) then
+      phys%idx_rhon_eq = 5
+      phys%idx_rhon_pv = 11
+    end if
+    phys%idx_gamman_eq = phys%idx_rhon_eq + 1
+    phys%idx_un_pv = phys%idx_rhon_pv + 1
+    phys%Neq = phys%idx_gamman_eq
+    phys%npv = phys%idx_un_pv
+    simpar%model = 'N-Gamma-Ti-Te-NeutralGamma'
+#endif
+
+#ifdef KEQUATION
+    phys%idx_k_eq = phys%Neq + 1
+    phys%idx_k_pv = phys%npv + 1
+    phys%Neq = phys%idx_k_eq
+    phys%npv = phys%idx_k_pv
+#ifdef NEUTRALGAMMA
+    simpar%model = 'N-Gamma-Ti-Te-NeutralGamma-k'
+#else
+#ifdef NEUTRAL
+    simpar%model = 'N-Gamma-Ti-Te-Neutral-k'
+#endif
+#endif
+#endif
+
+  END SUBROUTINE set_model_layout
+
+  !*******************************************
   ! Convert physical variable to conservative
   ! variables
   !*******************************************
   SUBROUTINE initPhys()
 
-    ! number of equation of the problem
-    phys%Neq = 4
-#ifdef NEUTRAL
-    phys%Neq = 5
-#ifdef KEQUATION
-    !so far we only use k equation with neutrals and the convention is that the k-equation is always the last
-    phys%Neq = 6
-#endif
-#endif
-
-    ! number of physical variables
-    phys%npv = 10
-#ifdef NEUTRAL
-    phys%npv = 11
-#ifdef KEQUATION
-    phys%npv = 12
-#endif
-#endif
+    call set_model_layout()
 
     ALLOCATE (phys%phyVarNam(phys%npv))
     ALLOCATE (phys%conVarNam(phys%Neq))
@@ -54,32 +89,19 @@ CONTAINS
     phys%phyVarNam(8) = "Te"  ! temperature of electrons
     phys%phyVarNam(9) = "Csi" ! sound speed
     phys%phyVarNam(10)= "M"   ! Mach
-#ifdef NEUTRAL
-    phys%phyVarNam(11)= "rhon"   ! density neutral
-#ifdef KEQUATION
-    phys%phyVarNam(12)= "k"   ! turbulent energy
-#endif
-#endif
+    if (phys%idx_rhon_pv > 0) phys%phyVarNam(phys%idx_rhon_pv)= "rhon" ! density neutral
+    if (phys%idx_un_pv > 0) phys%phyVarNam(phys%idx_un_pv)= "un" ! neutral parallel velocity
+    if (phys%idx_k_pv > 0) phys%phyVarNam(phys%idx_k_pv)= "k" ! turbulent energy
 
     ! Set the name of the conservative variables
     phys%conVarNam(1) = "rho"   ! U1 = rho
     phys%conVarNam(2) = "Gamma" ! U2 = rho*u
     phys%conVarNam(3) = "nEi"   ! U3 = rho*Ei
     phys%conVarNam(4) = "nEe"   ! U4 = rho*Ee
-#ifdef NEUTRAL
-    phys%conVarNam(5) = "rhon"  ! U5 = rhon
-#ifdef KEQUATION
-    phys%conVarNam(6) = "k"  ! U6 = k
-#endif
-#endif
+    if (phys%idx_rhon_eq > 0) phys%conVarNam(phys%idx_rhon_eq) = "rhon" ! neutral density
+    if (phys%idx_gamman_eq > 0) phys%conVarNam(phys%idx_gamman_eq) = "Gamman" ! neutral momentum
+    if (phys%idx_k_eq > 0) phys%conVarNam(phys%idx_k_eq) = "k" ! turbulent energy
 
-    simpar%model = 'N-Gamma-Ti-Te'
-#ifdef NEUTRAL
-    simpar%model = 'N-Gamma-Ti-Te-Neutral'
-#ifdef KEQUATION
-    simpar%model = 'N-Gamma-Ti-Te-Neutral-k'
-#endif
-#endif
     simpar%Ndim = 2
 #ifdef TOR3D
     simpar%Ndim = 3
@@ -101,21 +123,19 @@ CONTAINS
     simpar%physvar_refval(8) = simpar%refval_temperature
     simpar%physvar_refval(9) = simpar%refval_speed
     simpar%physvar_refval(10) = 1.
-#ifdef NEUTRAL
-    simpar%physvar_refval(11) = simpar%refval_neutral
+    if (phys%idx_rhon_pv > 0) simpar%physvar_refval(phys%idx_rhon_pv) = simpar%refval_neutral
+    if (phys%idx_un_pv > 0) simpar%physvar_refval(phys%idx_un_pv) = simpar%refval_speed
 #ifdef KEQUATION
-    simpar%physvar_refval(12) = simpar%refval_k
-#endif
+    if (phys%idx_k_pv > 0) simpar%physvar_refval(phys%idx_k_pv) = simpar%refval_k
 #endif
     simpar%consvar_refval(1) = simpar%refval_density
     simpar%consvar_refval(2) = simpar%refval_momentum
     simpar%consvar_refval(3) = simpar%refval_specenergydens
     simpar%consvar_refval(4) = simpar%refval_specenergydens
-#ifdef NEUTRAL
-    simpar%consvar_refval(5) = simpar%refval_neutral
+    if (phys%idx_rhon_eq > 0) simpar%consvar_refval(phys%idx_rhon_eq) = simpar%refval_neutral
+    if (phys%idx_gamman_eq > 0) simpar%consvar_refval(phys%idx_gamman_eq) = simpar%refval_momentum
 #ifdef KEQUATION
-    simpar%consvar_refval(6) = simpar%refval_k
-#endif
+    if (phys%idx_k_eq > 0) simpar%consvar_refval(phys%idx_k_eq) = simpar%refval_k
 #endif
 #ifdef EXPANDEDCX
 #ifdef AMJUELCX
