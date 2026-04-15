@@ -2225,7 +2225,7 @@ CONTAINS
     real*8                     :: kcoeff,exb(3)
     integer*4                  :: alpha,beta,ii
 #endif
-    integer*4                 :: i,j,k,iord,z,inn,ik
+    integer*4                 :: i,j,k,iord,z,inn,ign,ik
     real*8,dimension(neq,neq) :: A
     real*8,dimension(neq,Ndim):: APinch
     real*8                    :: Qpr(Ndim,Neq),bb(3)
@@ -2235,6 +2235,12 @@ CONTAINS
 
 #ifdef TEMPERATURE
     real*8,dimension(neq,neq) :: GG
+#ifdef NEUTRALGAMMA
+    real*8,dimension(neq,neq) :: GGn
+    real*8                    :: Etan
+    real*8                    :: dEtan_dU(Neq),gmGamman(Ndim)
+    real*8                    :: Vun(Neq),dVun_dU(Neq,Neq),TauGamman(Ndim,Neq)
+#endif
     real*8                    :: Telect
     real*8                    :: Vveci(Neq),dV_dUi(Neq,Neq),Alphai,dAlpha_dUi(Neq),gmi,taui(Ndim,Neq)
     real*8                    :: Vvece(Neq),dV_dUe(Neq,Neq),Alphae,dAlpha_dUe(Neq),gme,taue(Ndim,Neq)
@@ -2292,6 +2298,7 @@ CONTAINS
 
 
     inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
     ik = phys%idx_k_eq
 
     b = b3(1:Ndim)
@@ -2326,6 +2333,15 @@ CONTAINS
 #ifdef TEMPERATURE
     ! Jacobian for the curvature term
     CALL GimpMatrix(ue,divb,GG)
+#ifdef NEUTRALGAMMA
+    CALL GimpMatrixN(ue,divb,GGn)
+    CALL computeEtan(ue,Etan)
+    CALL compute_dEtan_dU(ue,dEtan_dU)
+    CALL computeVun(ue,Vun)
+    CALL compute_dVun_dU(ue,dVun_dU)
+    gmGamman = MATMUL(Qpr,Vun)
+    TauGamman = MATMUL(Qpr,dVun_dU)
+#endif
 
     ! Compute V(U^(k-1))
         CALL computeVi(ue,Vveci)
@@ -2782,6 +2798,21 @@ ENDIF
                     rhs(:,i) = rhs(:,i) + dot_PRODUCT(dDpn_dU,ue)*gmpn(k)*Nxyzg(:,k)
               !rhs(:,i) = rhs(:,i) - Gammaredpn*(Dpn*dot_product(Taui(k,:),ue) + dot_product(dDpn_dU,ue)*gmipn(k))*Nxyzg(:,k)
            END DO
+#endif
+#ifdef NEUTRALGAMMA
+        ELSEIF (i == ign) THEN
+          DO j = 1,Neq
+            z = i+(j-1)*Neq
+            Auu(:,:,z) = Auu(:,:,z) - GGn(i,j)*NNi
+            DO k = 1,Ndim
+              z = i+(k-1)*Neq+(j-1)*Neq*Ndim
+              Auu(:,:,i+(j-1)*Neq) = Auu(:,:,i+(j-1)*Neq) + Etan*TauGamman(k,j)*NxyzNi(:,:,k)
+              Auq(:,:,z) = Auq(:,:,z) + Etan*Vun(j)*NxyzNi(:,:,k)
+            END DO
+          END DO
+          DO k = 1,Ndim
+            rhs(:,i) = rhs(:,i) + Etan*dot_PRODUCT(TauGamman(k,:),ue)*Nxyzg(:,k)
+          END DO
 #endif
 		END IF
 #endif
