@@ -566,7 +566,8 @@ CONTAINS
   SUBROUTINE jacobianMatrices(U, A)
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: A(:, :)
-    INTEGER             :: ik, inn
+    REAL*8              :: Unn
+    INTEGER             :: ik, ign, inn
     ![ 0,                                           1,                              0,                0; ...
     ! -2/3*U(2)**2/U(1)**2                          4/3*U(2)/U(1)                   2/3,              2/3; ...
     ! -5/3*U(2)*U(3)/U(1)**2+2/3*U(2)**3/U(1)**3    5/3*U(3)/U(1)-U(2)**2/U(1)**2   5/3*U(2)/U(1),    0 ;   ...
@@ -575,6 +576,7 @@ CONTAINS
     ! -U(6)*U(2)/U(1)**2,                           U(6)/U(1),                      0,                0,            0,        U(2)/U(1)]
     A = 0.d0
     ik = phys%idx_k_eq
+    ign = phys%idx_gamman_eq
     inn = phys%idx_rhon_eq
     IF (switch%decoup) THEN
       A(1, 2) = 1.
@@ -595,6 +597,19 @@ CONTAINS
         A(ik, 2) = U(ik)/U(1)
         A(ik, ik) = U(2)/U(1)
       end if
+#endif
+#ifdef NEUTRAL
+#ifdef NEUTRALGAMMA
+      if (inn > 0 .and. ign > 0) then
+        Unn = MAX(1.d-7,U(inn))
+        A(inn, ign) = 1.d0
+        A(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
+        A(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
+        A(ign, 3) = 2.d0/3.d0*Unn/U(1)
+        A(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
+        A(ign, ign) = 2.d0*U(ign)/Unn
+      end if
+#endif
 #endif
     ELSE
 
@@ -622,6 +637,17 @@ CONTAINS
       end if
 #endif
 #ifdef NEUTRAL
+#ifdef NEUTRALGAMMA
+      if (inn > 0 .and. ign > 0) then
+        Unn = MAX(1.d-7,U(inn))
+        A(inn, ign) = 1.d0
+        A(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
+        A(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
+        A(ign, 3) = 2.d0/3.d0*Unn/U(1)
+        A(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
+        A(ign, ign) = 2.d0*U(ign)/Unn
+      end if
+#else
 #ifdef NEUTRALCONVECTION
       if (inn > 0) then
         A(inn, 1) = -U(inn)*U(2)/U(1)**2
@@ -629,6 +655,7 @@ CONTAINS
         A(inn, inn) = U(2)/U(1)
       end if
       !A(inn, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(inn,:)
+#endif
 #endif
 #endif
     END IF
@@ -656,9 +683,11 @@ CONTAINS
   SUBROUTINE jacobianMatricesFace(U, bn, An)
     REAL*8, INTENT(in)  :: U(:), bn
     REAL*8, INTENT(out) :: An(:, :)
-    INTEGER             :: ik, inn
+    REAL*8              :: Unn
+    INTEGER             :: ik, ign, inn
     An = 0.d0
     ik = phys%idx_k_eq
+    ign = phys%idx_gamman_eq
     inn = phys%idx_rhon_eq
     IF (switch%decoup) THEN
       An(1, 2) = 1.
@@ -679,6 +708,19 @@ CONTAINS
         An(ik, 2) = U(ik)/U(1)
         An(ik, ik) = U(2)/U(1)
       end if
+#endif
+#ifdef NEUTRAL
+#ifdef NEUTRALGAMMA
+      if (inn > 0 .and. ign > 0) then
+        Unn = MAX(1.d-7,U(inn))
+        An(inn, ign) = 1.d0
+        An(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
+        An(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
+        An(ign, 3) = 2.d0/3.d0*Unn/U(1)
+        An(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
+        An(ign, ign) = 2.d0*U(ign)/Unn
+      end if
+#endif
 #endif
     ELSE
       An(1, 2) = 1.
@@ -703,6 +745,17 @@ CONTAINS
       end if
 #endif
 #ifdef NEUTRAL
+#ifdef NEUTRALGAMMA
+      if (inn > 0 .and. ign > 0) then
+        Unn = MAX(1.d-7,U(inn))
+        An(inn, ign) = 1.d0
+        An(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
+        An(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
+        An(ign, 3) = 2.d0/3.d0*Unn/U(1)
+        An(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
+        An(ign, ign) = 2.d0*U(ign)/Unn
+      end if
+#else
 #ifdef NEUTRALCONVECTION
       if (inn > 0) then
         An(inn, 1) = -U(inn)*U(2)/U(1)**2
@@ -710,6 +763,7 @@ CONTAINS
         An(inn, inn) = U(2)/U(1)
       end if
       !An(inn, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*An(inn,:)
+#endif
 #endif
 #endif
     ENDIF
