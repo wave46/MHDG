@@ -1162,6 +1162,31 @@ CONTAINS
     G = divb*G
   ENDSUBROUTINE GimpMatrix
 
+#ifdef NEUTRALGAMMA
+  SUBROUTINE GimpMatrixN(U, divb, Gn)
+    REAL*8, INTENT(in)  :: U(:), divb
+    REAL*8, INTENT(out) :: Gn(:, :)
+    REAL*8              :: U1, U2, U3, Unn
+    INTEGER             :: inn, ign
+
+    Gn = 0.d0
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+
+    U1 = U(1)
+    U2 = U(2)
+    U3 = U(3)
+    Unn = MAX(U(inn),1.d-7)
+
+    Gn(ign, 1) = 2.d0/3.d0*Unn*(-U3/U1**2 + U2**2/U1**3)
+    Gn(ign, 2) = -2.d0/3.d0*Unn*U2/U1**2
+    Gn(ign, 3) = 2.d0/3.d0*Unn/U1
+    Gn(ign, inn) = 2.d0/3.d0*(U3/U1 - 0.5d0*U2**2/U1**2)
+
+    Gn = divb*Gn
+  ENDSUBROUTINE GimpMatrixN
+#endif
+
   !*****************************************
   ! Parallel diffusion terms
   !****************************************
@@ -1211,6 +1236,83 @@ CONTAINS
     dV_dU(1, 4) = -1/U(1)**2
     dV_dU(4, 1) = -1/U(1)**2
   ENDSUBROUTINE compute_dV_dUe
+
+#ifdef NEUTRALGAMMA
+  SUBROUTINE computeEtan(U,Etan)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: Etan
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: Dnn, Unn
+    INTEGER             :: inn
+
+    inn = phys%idx_rhon_eq
+    Unn = U(inn)
+    IF (Unn < tol) Unn = tol
+
+    CALL compute_Dnn(U, Dnn)
+    Etan = Unn*Dnn
+  ENDSUBROUTINE computeEtan
+
+
+  SUBROUTINE compute_dEtan_dU(U,dEtan_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: dEtan_dU(:)
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: Dnn, Unn
+    REAL*8              :: dDnn_dU(SIZE(U))
+    INTEGER             :: inn
+
+    dEtan_dU = 0.d0
+    inn = phys%idx_rhon_eq
+    Unn = U(inn)
+    IF (Unn < tol) Unn = tol
+
+    CALL compute_Dnn(U, Dnn)
+    CALL compute_Dnn_dU(U, dDnn_dU)
+
+    dEtan_dU = Unn*dDnn_dU
+    IF (U(inn) >= tol) dEtan_dU(inn) = dEtan_dU(inn) + Dnn
+  ENDSUBROUTINE compute_dEtan_dU
+
+
+  SUBROUTINE computeVun(U,Vun)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: Vun(:)
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: Unn
+    INTEGER             :: inn, ign
+
+    Vun = 0.d0
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+    Unn = U(inn)
+    IF (Unn < tol) Unn = tol
+
+    Vun(inn) = -U(ign)/Unn**2
+    Vun(ign) = 1.d0/Unn
+  ENDSUBROUTINE computeVun
+
+
+  SUBROUTINE compute_dVun_dU(U,dVun_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: dVun_dU(:, :)
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: Unn
+    INTEGER             :: inn, ign
+
+    dVun_dU = 0.d0
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+    Unn = U(inn)
+    IF (Unn < tol) Unn = tol
+
+    IF (U(inn) >= tol) THEN
+      dVun_dU(inn, inn) = 2.d0*U(ign)/Unn**3
+      dVun_dU(ign, inn) = -1.d0/Unn**2
+    END IF
+    dVun_dU(inn, ign) = -1.d0/Unn**2
+  ENDSUBROUTINE compute_dVun_dU
+#endif
 
   FUNCTION computeAlphai(U) RESULT(res)
     REAL*8 :: U(:)
@@ -1629,6 +1731,31 @@ CONTAINS
     res(1) = U2
     res(2) = U1
   ENDSUBROUTINE compute_dfGammarec_dU
+
+#ifdef NEUTRALGAMMA
+  SUBROUTINE compute_fGammaN(U,fGammaN)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: fGammaN
+    INTEGER             :: ign
+
+    fGammaN = 0.d0
+    ign = phys%idx_gamman_eq
+    fGammaN = U(1)*U(ign)
+  ENDSUBROUTINE compute_fGammaN
+
+
+  SUBROUTINE compute_dfGammaN_dU(U,res)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: res(:)
+    INTEGER             :: ign
+
+    res = 0.d0
+    ign = phys%idx_gamman_eq
+
+    res(1) = U(ign)
+    res(ign) = U(1)
+  ENDSUBROUTINE compute_dfGammaN_dU
+#endif
 
 
 #ifdef TEMPERATURE
@@ -2686,6 +2813,44 @@ CONTAINS
     res(inn) = (U2**2)/U1
     res(:) = res(:)*0.5
   ENDSUBROUTINE compute_dfEicx_dU
+
+#ifdef NEUTRALGAMMA
+  SUBROUTINE compute_fEiN(U,fEiN)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: fEiN
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: Unn
+    INTEGER             :: inn, ign
+
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+    Unn = U(inn)
+    IF (Unn < tol) Unn = tol
+
+    fEiN = 0.5d0*U(1)*U(ign)**2/Unn
+  ENDSUBROUTINE compute_fEiN
+
+
+  SUBROUTINE compute_dfEiN_dU(U,res)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: res(:)
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: Unn
+    INTEGER             :: inn, ign
+
+    res = 0.d0
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+    Unn = U(inn)
+    IF (Unn < tol) Unn = tol
+
+    res(1) = U(ign)**2/Unn
+    IF (U(inn) >= tol) res(inn) = -U(1)*(U(ign)/Unn)**2
+    res(ign) = 2.d0*U(1)*U(ign)/Unn
+
+    res = 0.5d0*res
+  ENDSUBROUTINE compute_dfEiN_dU
+#endif
 
 
 #ifdef NEUTRAL
