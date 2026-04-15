@@ -30,6 +30,11 @@ CONTAINS
     REAL*8, DIMENSION(SIZE(u, 1), phys%npv)  :: up
     INTEGER:: i, j, ind, N1D, N2D
     REAL*8 :: a, b, r, xx, yy, tt, xmax, xmin, ymax, ymin, xm, ym
+    INTEGER :: inn, ik, ign
+
+    inn = phys%idx_rhon_eq
+    ik = phys%idx_k_eq
+    ign = phys%idx_gamman_eq
 
 
     u = 0.
@@ -92,10 +97,13 @@ CONTAINS
              up(ind, 3) = 18.
              up(ind, 4) = 18.
 #ifdef NEUTRAL
-             up(ind,11) = 0.
-#ifdef KEQUATION
-             up(ind,12) = 1.8e-5
+             up(ind,inn) = 0.
 #endif
+#ifdef KEQUATION
+             up(ind,ik) = 1.8e-5
+#endif
+#ifdef NEUTRALGAMMA
+             up(ind,ign) = 0.
 #endif
           CASE (64)
              up(ind, 1) = 1.
