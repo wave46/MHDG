@@ -535,27 +535,127 @@ CONTAINS
     dTi_dU = dTi_dU*2.d0/(3.d0*phys%Mref)
   ENDSUBROUTINE compute_dTi_dU
 
-  SUBROUTINE compute_Dnn(U, Dnn)
+  SUBROUTINE compute_limited_Ti(U, Ti_limited)
     REAL*8, INTENT(IN)  :: U(:)
-    REAL*8, INTENT(OUT) :: Dnn
+    REAL*8, INTENT(OUT) :: Ti_limited
     REAL*8, PARAMETER   :: ti_min = 1.d-6
-    REAL*8              :: Ti, sigmaviz, sigmavnn, sigmavcx
+
+    CALL compute_Ti(U, Ti_limited)
+    CALL softplus(Ti_limited, ti_min/simpar%refval_temperature)
+  ENDSUBROUTINE compute_limited_Ti
+
+  SUBROUTINE compute_dlimited_Ti_dU(U, dTi_limited_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: dTi_limited_dU(:)
+    REAL*8, PARAMETER   :: ti_min = 1.d-6
+    REAL*8              :: Ti, soft_deriv
+    REAL*8              :: dTi_dU(size(U))
+
+    CALL compute_Ti(U, Ti)
+    CALL compute_dTi_dU(U, dTi_dU)
+    CALL softplus_deriv(Ti, ti_min/simpar%refval_temperature, soft_deriv)
+    dTi_limited_dU = dTi_dU*soft_deriv
+  ENDSUBROUTINE compute_dlimited_Ti_dU
+
+  SUBROUTINE compute_neutral_transport_prefactor(U, coeff)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: coeff
+    REAL*8              :: Ti_limited
+
+    CALL compute_limited_Ti(U, Ti_limited)
+    coeff = simpar%refval_charge*simpar%refval_temperature*Ti_limited/ &
+      &(simpar%refval_mass*simpar%refval_density)
+    coeff = coeff*simpar%refval_time/simpar%refval_length**2
+  ENDSUBROUTINE compute_neutral_transport_prefactor
+
+  SUBROUTINE compute_dneutral_transport_prefactor_dU(U, dcoeff_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: dcoeff_dU(:)
+    REAL*8              :: dTi_limited_dU(size(U))
+    REAL*8              :: coeff0
+
+    CALL compute_dlimited_Ti_dU(U, dTi_limited_dU)
+    coeff0 = simpar%refval_charge*simpar%refval_temperature/ &
+      &(simpar%refval_mass*simpar%refval_density)
+    dcoeff_dU = coeff0*dTi_limited_dU
+    dcoeff_dU = dcoeff_dU*simpar%refval_time/simpar%refval_length**2
+  ENDSUBROUTINE compute_dneutral_transport_prefactor_dU
+
+  SUBROUTINE compute_neutral_diffusion_denominator(U, denom)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: denom
+    REAL*8              :: sigmaviz, sigmavnn, sigmavcx
     INTEGER             :: inn
 
     inn = phys%idx_rhon_eq
+    CALL compute_sigmaviz(U, sigmaviz)
+    CALL compute_sigmavnn(U, sigmavnn)
+    CALL compute_sigmavcx(U, sigmavcx)
+    denom = U(1)*(sigmaviz + sigmavcx) + U(inn)*sigmavnn
+  ENDSUBROUTINE compute_neutral_diffusion_denominator
+
+  SUBROUTINE compute_dneutral_diffusion_denominator_dU(U, ddenom_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: ddenom_dU(:)
+    REAL*8              :: sigmaviz, sigmavnn, sigmavcx
+    REAL*8              :: dsigmaviz_dU(size(U)), dsigmavnn_dU(size(U)), dsigmavcx_dU(size(U))
+    INTEGER             :: inn
+
+    inn = phys%idx_rhon_eq
+    CALL compute_sigmaviz(U,sigmaviz)
+    CALL compute_sigmavnn(U,sigmavnn)
+    CALL compute_sigmavcx(U,sigmavcx)
+    CALL compute_dsigmaviz_dU(U,dsigmaviz_dU)
+    CALL compute_dsigmavnn_dU(U,dsigmavnn_dU)
+    CALL compute_dsigmavcx_dU(U,dsigmavcx_dU)
+
+    ddenom_dU = U(1)*(dsigmaviz_dU + dsigmavcx_dU) + U(inn)*dsigmavnn_dU
+    ddenom_dU(1) = ddenom_dU(1) + sigmaviz + sigmavcx
+    ddenom_dU(inn) = ddenom_dU(inn) + sigmavnn
+  ENDSUBROUTINE compute_dneutral_diffusion_denominator_dU
+
+#ifdef NEUTRALGAMMA
+  SUBROUTINE compute_neutral_gamma_denominator(U, denom)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: denom
+    REAL*8              :: sigmavcx, sigmavnn
+    INTEGER             :: inn
+
+    inn = phys%idx_rhon_eq
+    CALL compute_sigmavcx(U, sigmavcx)
+    CALL compute_sigmavnn(U, sigmavnn)
+    denom = U(1)*sigmavcx + U(inn)*sigmavnn
+  ENDSUBROUTINE compute_neutral_gamma_denominator
+
+  SUBROUTINE compute_dneutral_gamma_denominator_dU(U, ddenom_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: ddenom_dU(:)
+    REAL*8              :: sigmavcx, sigmavnn
+    REAL*8              :: dsigmavcx_dU(size(U)), dsigmavnn_dU(size(U))
+    INTEGER             :: inn
+
+    inn = phys%idx_rhon_eq
+    CALL compute_sigmavcx(U, sigmavcx)
+    CALL compute_sigmavnn(U, sigmavnn)
+    CALL compute_dsigmavcx_dU(U, dsigmavcx_dU)
+    CALL compute_dsigmavnn_dU(U, dsigmavnn_dU)
+    ddenom_dU = U(1)*dsigmavcx_dU + U(inn)*dsigmavnn_dU
+    ddenom_dU(1) = ddenom_dU(1) + sigmavcx
+    ddenom_dU(inn) = ddenom_dU(inn) + sigmavnn
+  ENDSUBROUTINE compute_dneutral_gamma_denominator_dU
+#endif
+
+  SUBROUTINE compute_Dnn(U, Dnn)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: Dnn
+    REAL*8              :: coeff, denom
 
 #ifdef CONSTANTNEUTRALDIFF
     Dnn = phys%diff_nn
 #else
-    CALL compute_Ti(U, Ti)
-    CALL softplus(Ti, ti_min/simpar%refval_temperature)
-    CALL compute_sigmaviz(U, sigmaviz)
-    CALL compute_sigmavnn(U, sigmavnn)
-    CALL compute_sigmavcx(U, sigmavcx)
-
-    Dnn = simpar%refval_charge*(simpar%refval_temperature*Ti)/ &
-      &(simpar%refval_mass*simpar%refval_density*(U(1)*(sigmaviz + sigmavcx) + U(inn)*sigmavnn))
-    Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
+    CALL compute_neutral_transport_prefactor(U, coeff)
+    CALL compute_neutral_diffusion_denominator(U, denom)
+    Dnn = coeff/denom
     CALL double_softplus(Dnn, 10.d0*phys%diff_n, phys%diff_nn)
 #endif
   ENDSUBROUTINE compute_Dnn
@@ -1296,15 +1396,23 @@ CONTAINS
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: Etan
     REAL*8, PARAMETER   :: tol = 1.d-7
-    REAL*8              :: Dnn, Unn
+    REAL*8              :: coeff, denom, eta_coeff, double_soft_deriv, Unn
     INTEGER             :: inn
 
     inn = phys%idx_rhon_eq
     Unn = U(inn)
     IF (Unn < tol) Unn = tol
 
-    CALL compute_Dnn(U, Dnn)
-    Etan = Unn*Dnn
+#ifdef CONSTANTNEUTRALDIFF
+    Etan = Unn*phys%diff_nn
+#else
+    CALL compute_neutral_transport_prefactor(U, coeff)
+    CALL compute_neutral_gamma_denominator(U, denom)
+    eta_coeff = coeff/denom
+    CALL double_softplus_deriv(eta_coeff, 10.d0*phys%diff_n, phys%diff_nn, double_soft_deriv)
+    CALL double_softplus(eta_coeff, 10.d0*phys%diff_n, phys%diff_nn)
+    Etan = Unn*eta_coeff
+#endif
   ENDSUBROUTINE computeEtan
 
 
@@ -1312,8 +1420,8 @@ CONTAINS
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: dEtan_dU(:)
     REAL*8, PARAMETER   :: tol = 1.d-7
-    REAL*8              :: Dnn, Unn
-    REAL*8              :: dDnn_dU(SIZE(U))
+    REAL*8              :: coeff, denom, eta_coeff, double_soft_deriv, Unn
+    REAL*8              :: dcoeff_dU(SIZE(U)), ddenom_dU(SIZE(U)), deta_dU(SIZE(U))
     INTEGER             :: inn
 
     dEtan_dU = 0.d0
@@ -1321,11 +1429,22 @@ CONTAINS
     Unn = U(inn)
     IF (Unn < tol) Unn = tol
 
-    CALL compute_Dnn(U, Dnn)
-    CALL compute_Dnn_dU(U, dDnn_dU)
+#ifdef CONSTANTNEUTRALDIFF
+    IF (U(inn) >= tol) dEtan_dU(inn) = phys%diff_nn
+#else
+    CALL compute_neutral_transport_prefactor(U, coeff)
+    CALL compute_dneutral_transport_prefactor_dU(U, dcoeff_dU)
+    CALL compute_neutral_gamma_denominator(U, denom)
+    CALL compute_dneutral_gamma_denominator_dU(U, ddenom_dU)
 
-    dEtan_dU = Unn*dDnn_dU
-    IF (U(inn) >= tol) dEtan_dU(inn) = dEtan_dU(inn) + Dnn
+    eta_coeff = coeff/denom
+    CALL double_softplus_deriv(eta_coeff, 10.d0*phys%diff_n, phys%diff_nn, double_soft_deriv)
+    deta_dU = (dcoeff_dU/denom - coeff*ddenom_dU/denom**2)*double_soft_deriv
+    CALL double_softplus(eta_coeff, 10.d0*phys%diff_n, phys%diff_nn)
+
+    dEtan_dU = Unn*deta_dU
+    IF (U(inn) >= tol) dEtan_dU(inn) = dEtan_dU(inn) + eta_coeff
+#endif
   ENDSUBROUTINE compute_dEtan_dU
 
 
@@ -2599,44 +2718,21 @@ CONTAINS
   SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: Dnn_dU(:)
-    REAL*8, PARAMETER   :: ti_min = 1.d-6
-    REAL*8              :: Ti, Ti_limited, soft_deriv, Dnn
-    REAL*8              :: sigmaviz, sigmavnn, sigmavcx, double_soft_deriv, denom
-    REAL*8              :: dTi_dU(size(U)), dTi_limited_dU(size(U))
-    REAL*8              :: dsigmaviz_dU(size(U)), dsigmavnn_dU(size(U)), dsigmavcx_dU(size(U))
+    REAL*8              :: Dnn, double_soft_deriv, denom
+    REAL*8              :: dcoeff_dU(size(U))
     REAL*8              :: ddenom_dU(size(U))
-    REAL*8              :: Dcoeff
-    INTEGER             :: inn
 
     Dnn_dU = 0.d0
-    inn = phys%idx_rhon_eq
 #ifndef CONSTANTNEUTRALDIFF
-    CALL compute_Ti(U, Ti)
-    CALL compute_dTi_dU(U, dTi_dU)
-    CALL softplus_deriv(Ti, ti_min/simpar%refval_temperature, soft_deriv)
-    Ti_limited = Ti
-    CALL softplus(Ti_limited, ti_min/simpar%refval_temperature)
-    dTi_limited_dU = dTi_dU*soft_deriv
+    CALL compute_neutral_transport_prefactor(U, Dnn)
+    CALL compute_dneutral_transport_prefactor_dU(U, dcoeff_dU)
+    CALL compute_neutral_diffusion_denominator(U, denom)
+    CALL compute_dneutral_diffusion_denominator_dU(U, ddenom_dU)
 
-    CALL compute_sigmaviz(U,sigmaviz)
-    CALL compute_sigmavnn(U,sigmavnn)
-    CALL compute_sigmavcx(U,sigmavcx)
-    CALL compute_dsigmaviz_dU(U,dsigmaviz_dU)
-    CALL compute_dsigmavnn_dU(U,dsigmavnn_dU)
-    CALL compute_dsigmavcx_dU(U,dsigmavcx_dU)
-
-    denom = U(1)*(sigmaviz + sigmavcx) + U(inn)*sigmavnn
-    ddenom_dU = U(1)*(dsigmaviz_dU + dsigmavcx_dU) + U(inn)*dsigmavnn_dU
-    ddenom_dU(1) = ddenom_dU(1) + sigmaviz + sigmavcx
-    ddenom_dU(inn) = ddenom_dU(inn) + sigmavnn
-
-    Dcoeff = simpar%refval_charge*simpar%refval_temperature/(simpar%refval_mass*simpar%refval_density)
-    Dnn = Dcoeff*Ti_limited/denom
-    Dnn = Dnn*simpar%refval_time/simpar%refval_length**2
+    Dnn = Dnn/denom
     CALL double_softplus_deriv(Dnn, 10.d0*phys%diff_n, phys%diff_nn, double_soft_deriv)
 
-    Dnn_dU = Dcoeff*(dTi_limited_dU/denom - Ti_limited*ddenom_dU/denom**2)
-    Dnn_dU = Dnn_dU*simpar%refval_time/simpar%refval_length**2
+    Dnn_dU = dcoeff_dU/denom - (Dnn*denom)*ddenom_dU/denom**2
     Dnn_dU = Dnn_dU*double_soft_deriv
 #endif
   ENDSUBROUTINE compute_Dnn_dU
