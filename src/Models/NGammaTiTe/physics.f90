@@ -3326,10 +3326,13 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     REAL*8,INTENT(IN)   :: diff_iso(:, :),diff_ani(:, :)
 #endif
     integer             :: ndim
-    integer             :: ik, inn
+    integer             :: ik, inn, ign
     real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
     REAL*8              :: q_fs_i, q_fs_e, flux_limiter_i, flux_limiter_e, q_sh_i, q_sh_e
     REAL*8              :: Qpr(simpar%Ndim,simpar%Neq)
+#ifdef NEUTRALGAMMA
+    REAL*8              :: Etan
+#endif
 
     real*8              :: U1, U2, U3, U4
     U1 = uc(1)
@@ -3340,6 +3343,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     tau = 0.
     ik = phys%idx_k_eq
     inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
     ndim = SIZE(n)
     bn = dot_PRODUCT(b(1:ndim), n)
     bnorm = NORM2(b(1:ndim))
@@ -3367,6 +3371,9 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 	   ! Compute Dpn(U^(k-1))
     CALL computeDpn(uc,Qpr,Vpn,Dpn)
     Dnn = (simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*up(7)*Dpn
+#endif
+#ifdef NEUTRALGAMMA
+    IF (ign > 0) CALL computeEtan(uc,Etan)
 #endif
 
     IF (numer%stab == 2) THEN
@@ -3491,6 +3498,9 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
 #ifdef KEQUATION
         if (ik > 0) tau_aux(ik) = tau_aux(ik) + diff_iso(ik,ik)*refElPol%ndeg/Mesh%elemSize(iel)
 #endif
+#ifdef NEUTRALGAMMA
+        if (ign > 0 .and. inn > 0) tau_aux(ign) = MAX(numer%tau(ign), tau_aux(ign) + Etan/MAX(uc(inn),1.d-7))*refElPol%ndeg/Mesh%elemSize(iel)
+#endif
 #endif
 #else
         tau_aux(inn) = tau_aux(inn) + Dnn*refElPol%ndeg/Mesh%elemSize(iel)
@@ -3517,6 +3527,9 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     tau(4, 4) = tau_aux(4)
 #ifdef NEUTRAL
     tau(inn, inn) = tau_aux(inn)
+#ifdef NEUTRALGAMMA
+    if (ign > 0) tau(ign, ign) = tau_aux(ign)
+#endif
 #ifdef KEQUATION
     if (ik > 0) tau(ik,ik) = tau_aux(ik)
 #endif

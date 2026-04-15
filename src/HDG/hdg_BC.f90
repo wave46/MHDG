@@ -1877,7 +1877,7 @@ CONTAINS
     logical          :: ntang
     real*8           :: qfg(:)
     real*8           :: bn,Abohm(Neq,Neq),APinch(Neq,Ndim)
-    integer          :: i,j,k,idm,Neqstab,Neqgrad,inn,ik
+    integer          :: i,j,k,idm,Neqstab,Neqgrad,inn,ik,ign
 #ifdef VORTICITY
     integer*4        :: indk(Npfl)
     real*8           :: kcoeff
@@ -1925,6 +1925,7 @@ CONTAINS
 
     inn = phys%idx_rhon_eq
     ik = phys%idx_k_eq
+    ign = phys%idx_gamman_eq
 
     Neqstab = Neq
     Neqgrad = Neq
@@ -1989,6 +1990,11 @@ CONTAINS
                   indj = j + ind_asf
                   elMat%Alu(ind_ff(ind),ind_fe(indj),iel) = elMat%Alu(ind_ff(ind),ind_fe(indj),iel) + tau(i,i)*delta*dcs_du(j)*ufg(1)*NiNi
                  ENDDO
+#ifdef NEUTRALGAMMA
+        ELSE IF (ign > 0 .AND. i == ign) THEN
+          indj = inn + ind_asf
+          elMat%Alu(ind_ff(ind),ind_fe(indj),iel) = elMat%Alu(ind_ff(ind),ind_fe(indj),iel) + tau(i,i)*delta*(-upfg(2))*NiNi
+#endif
         ELSE
           elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*NiNi
         END IF
@@ -2425,6 +2431,9 @@ CONTAINS
 #ifdef NEUTRALCONVECTION
     flgflux_neutral_conv = dot_product(Abohm(inn,:),ufg)*bn*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 #endif
+#ifdef NEUTRALGAMMA
+    if (ign > 0) flgflux_neutral_conv = flgflux_neutral_conv - ufg(ign)*bn*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+#endif
     flgflux_neutral = flgflux_neutral_diff + flgflux_neutral_pgrad + flgflux_neutral_conv
 
         !flux neutral numerical
@@ -2451,10 +2460,22 @@ CONTAINS
            elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) + Abohm(k,j)*NiNi*bn
        !elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + (Abohm(k,j) + AbohmNP(j))*NiNi*bn
     END DO
+#ifdef NEUTRALGAMMA
+    if (ign > 0) then
+      indj = ign + ind_asf
+      elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) + bn*NiNi
+    end if
+#endif
 !#endif
     !cryopump modification Should it be ALU?
     indj = k+ind_asf
     elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - cryopump_coeff*NiNi
+#ifdef NEUTRALGAMMA
+    if (ign > 0) then
+      indj = ign + ind_asf
+      elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - cryopump_coeff*NiNi*bn
+    end if
+#endif
 
     ! Neutrals velocity
     !indj = Neq+ind_asf
@@ -2511,6 +2532,17 @@ CONTAINS
 #endif
     END DO
     elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - puff_coeff*Ni
+
+#ifdef NEUTRALGAMMA
+    if (ign > 0 .and. ntang) then
+      k = ign
+      indi = ind_asf + k
+      DO idm = 1,Ndim
+        indj = ind_ash + idm + (k - 1)*Ndim
+        elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*ng(idm)
+      END DO
+    end if
+#endif
 
     ! diffusive non-diagonal part
     DO idm = 1,Ndim
