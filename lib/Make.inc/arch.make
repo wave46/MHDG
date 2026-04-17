@@ -112,8 +112,6 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  #MACROS+= -DNEUTRALPNEW
  #Actually not saves, but monitors in the output particle balance
  MACROS+= -DSAVEFLUX
- #The following 4 flags are development ones, should not be used
- #MACROS+= -DRHSBC
  ADDMOD+=hdg_LimitingTechniques.o
 else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
  RMDL=NGammaTiTe
@@ -122,9 +120,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
  MACROS+= -DNEUTRAL
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC
- #MACROS+= -DRHSBC
  #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
- #MACROS+= -DNEUTRALPUMP
  #MACROS+= -DLEGACYCX
  MACROS+= -DSAVEFLUX
  MACROS+= -DEXPANDEDCX

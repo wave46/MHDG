@@ -103,9 +103,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  MACROS+= -DNEUTRAL
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC
- #MACROS+= -DRHSBC
  #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
- #MACROS+= -DNEUTRALPUMP
  #MACROS+= -DLEGACYCX
  MACROS+= -DSAVEFLUX
  MACROS+= -DEXPANDEDCX
@@ -119,9 +117,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
  MACROS+= -DNEUTRAL
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC
- #MACROS+= -DRHSBC
  #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
- #MACROS+= -DNEUTRALPUMP
  #MACROS+= -DLEGACYCX
  MACROS+= -DSAVEFLUX
  MACROS+= -DEXPANDEDCX
