@@ -10,6 +10,31 @@ MODULE physics
   USE magnetic_field
   IMPLICIT NONE
 
+  REAL*8, PARAMETER :: eirene_rate_te_min_phys = 1.d-1
+  REAL*8, PARAMETER :: eirene_rate_te_max_phys = 2.d4
+  REAL*8, PARAMETER :: eirene_rate_ti_min_phys = 1.d-1
+  REAL*8, PARAMETER :: eirene_rate_ti_max_phys = 3.d3
+  REAL*8, PARAMETER :: eirene_rate_ne_min_phys = 1.d14
+  REAL*8, PARAMETER :: eirene_rate_ne_max_phys = 1.d22
+  REAL*8, PARAMETER :: neutral_state_tol_default = 1.d-20
+  REAL*8, PARAMETER :: neutral_te_floor_phys = 1.d-10
+  REAL*8, PARAMETER :: neutral_ti_floor_phys = 1.d-10
+  REAL*8, PARAMETER :: neutral_ne_floor = 1.d-20
+  REAL*8, PARAMETER :: neutral_sigmavnn_prefactor_phys = 5.2958d-11*1.d-6
+  REAL*8, PARAMETER :: boltzmann_constant_si = 1.38064852d-23
+  REAL*8, PARAMETER :: elementary_charge_si = 1.60217662d-19
+
+  REAL*8, SAVE :: eirene_rate_te_min
+  REAL*8, SAVE :: eirene_rate_te_max
+  REAL*8, SAVE :: eirene_rate_ti_min
+  REAL*8, SAVE :: eirene_rate_ti_max
+  REAL*8, SAVE :: eirene_rate_ne_min
+  REAL*8, SAVE :: eirene_rate_ne_max
+  REAL*8, SAVE :: neutral_state_tol
+  REAL*8, SAVE :: neutral_te_floor
+  REAL*8, SAVE :: neutral_ti_floor
+  REAL*8, SAVE :: neutral_sigmavnn_prefactor
+
 CONTAINS
 
   !*******************************************
@@ -372,9 +397,29 @@ CONTAINS
   phys%prandtl = 1.
   phys%c_bohm_n = 1.
 
+  call initialize_neutral_rate_runtime_constants()
   call adimensionalize_neutral_rate_coefficients()
 
   ENDSUBROUTINE initPhys
+
+  SUBROUTINE initialize_neutral_rate_runtime_constants()
+    REAL*8 :: density_scale
+
+    density_scale = simpar%refval_density/1.d14
+
+    eirene_rate_te_min = eirene_rate_te_min_phys/simpar%refval_temperature
+    eirene_rate_te_max = eirene_rate_te_max_phys/simpar%refval_temperature
+    eirene_rate_ti_min = eirene_rate_ti_min_phys/simpar%refval_temperature
+    eirene_rate_ti_max = eirene_rate_ti_max_phys/simpar%refval_temperature
+    eirene_rate_ne_min = eirene_rate_ne_min_phys/1.d14/density_scale
+    eirene_rate_ne_max = eirene_rate_ne_max_phys/1.d14/density_scale
+
+    neutral_state_tol = neutral_state_tol_default
+    neutral_te_floor = neutral_te_floor_phys/simpar%refval_temperature
+    neutral_ti_floor = neutral_ti_floor_phys/simpar%refval_temperature
+    neutral_sigmavnn_prefactor = simpar%refval_density*simpar%refval_time*neutral_sigmavnn_prefactor_phys* &
+      &(simpar%refval_temperature*elementary_charge_si/boltzmann_constant_si)**0.25d0
+  ENDSUBROUTINE initialize_neutral_rate_runtime_constants
 
   SUBROUTINE adimensionalize_neutral_rate_coefficients()
     REAL*8 :: log_temp_shift, log_density_shift
@@ -660,6 +705,22 @@ CONTAINS
     CALL computeVi(U, dTi_dU)
     dTi_dU = dTi_dU*2.d0/(3.d0*phys%Mref)
   ENDSUBROUTINE compute_dTi_dU
+
+  SUBROUTINE compute_Te(U, Te)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: Te
+
+    Te = 2.d0/(3.d0*phys%Mref)*U(4)/U(1)
+  ENDSUBROUTINE compute_Te
+
+  SUBROUTINE compute_dTe_dU(U, dTe_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: dTe_dU(:)
+
+    dTe_dU = 0.d0
+    dTe_dU(1) = -2.d0/(3.d0*phys%Mref)*U(4)/U(1)**2
+    dTe_dU(4) = 2.d0/(3.d0*phys%Mref)/U(1)
+  ENDSUBROUTINE compute_dTe_dU
 
   SUBROUTINE compute_limited_Ti(U, Ti_limited)
     REAL*8, INTENT(IN)  :: U(:)
@@ -2065,55 +2126,50 @@ CONTAINS
     ! if te<te_min or te>te_max then extrapolates in log space taking the derivative of the edge and linearly expanding
     REAL*8, INTENT(IN) :: te,ne,alpha(:,:)
     REAL*8, INTENT(OUT):: rate
-    REAL*8             :: te_min = 0.1
-    REAL*8             :: te_max = 2.e4
-    REAL*8             :: ne_min = 1.
-    REAL*8             :: ne_max = 1.e8
     REAL*8             :: dlograte_dlogte
 
-    ! In EIRENE the density is scaled to 1.e14
     rate = 0.
     ! region 1, where ne is applicable
-    IF ((ne>=ne_min) .AND. (ne<=ne_max)) THEN
-       IF ((te>=te_min) .AND.(te<=te_max)) THEN
+    IF ((ne>=eirene_rate_ne_min) .AND. (ne<=eirene_rate_ne_max)) THEN
+       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
           CALL compute_2D_logeirene_rate(te,ne,alpha,rate)
-       ELSEIF (te<te_min) THEN
-          CALL compute_2D_logeirene_rate(te_min,ne,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(te_min,ne,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(te_min))
-       ELSEIF (te>te_max) THEN
-          CALL compute_2D_logeirene_rate(te_max,ne,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(te_max,ne,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(te_max))
+       ELSEIF (te<eirene_rate_te_min) THEN
+          CALL compute_2D_logeirene_rate(eirene_rate_te_min,ne,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,ne,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_min))
+       ELSEIF (te>eirene_rate_te_max) THEN
+          CALL compute_2D_logeirene_rate(eirene_rate_te_max,ne,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,ne,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_max))
        ENDIF
     ! beyond range of ne applicability
-    ELSEIF(ne<ne_min) THEN
+    ELSEIF(ne<eirene_rate_ne_min) THEN
       ! if te is still applicable
-       IF ((te>=te_min) .AND.(te<=te_max)) THEN
-          CALL compute_2D_logeirene_rate(te,ne_min,alpha,rate)
+       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
+          CALL compute_2D_logeirene_rate(te,eirene_rate_ne_min,alpha,rate)
       ! if te < te_min
-       ELSEIF (te<te_min) THEN
-          CALL compute_2D_logeirene_rate(te_min,ne_min,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(te_min,ne_min,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(te_min))
+       ELSEIF (te<eirene_rate_te_min) THEN
+          CALL compute_2D_logeirene_rate(eirene_rate_te_min,eirene_rate_ne_min,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,eirene_rate_ne_min,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_min))
       ! if te>te_max
-       ELSEIF (te>te_max) THEN
-          CALL compute_2D_logeirene_rate(te_max,ne_min,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(te_max,ne_min,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(te_max))
+       ELSEIF (te>eirene_rate_te_max) THEN
+          CALL compute_2D_logeirene_rate(eirene_rate_te_max,eirene_rate_ne_min,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,eirene_rate_ne_min,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_max))
        ENDIF
     ! if ne>ne_max
-    ELSEIF (ne>ne_max) THEN
-       IF ((te>=te_min) .AND.(te<=te_max)) THEN
-          CALL compute_2D_logeirene_rate(te,ne_max,alpha,rate)
-       ELSEIF (te<te_min) THEN
-          CALL compute_2D_logeirene_rate(te_min,ne_max,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(te_min,ne_max,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(te_min))
-       ELSEIF (te>te_max) THEN
-          CALL compute_2D_logeirene_rate(te_max,ne_max,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(te_max,ne_max,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(te_max))
+    ELSEIF (ne>eirene_rate_ne_max) THEN
+       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
+          CALL compute_2D_logeirene_rate(te,eirene_rate_ne_max,alpha,rate)
+       ELSEIF (te<eirene_rate_te_min) THEN
+          CALL compute_2D_logeirene_rate(eirene_rate_te_min,eirene_rate_ne_max,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,eirene_rate_ne_max,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_min))
+       ELSEIF (te>eirene_rate_te_max) THEN
+          CALL compute_2D_logeirene_rate(eirene_rate_te_max,eirene_rate_ne_max,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,eirene_rate_ne_max,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_max))
        ENDIF
     ENDIF
     ! rate is in cm^3/s in EIRENE
@@ -2128,49 +2184,44 @@ CONTAINS
   SUBROUTINE compute_2D_eirene_rate_du(U1,U4,te,ne,alpha,rate_du)
     REAL*8, INTENT(IN) :: U1,U4,te,ne,alpha(:,:)
     REAL*8             :: rate
-    REAL*8             :: te_min = 0.1
-    REAL*8             :: te_max = 2.e4
-    REAL*8             :: ne_min = 1.
-    REAL*8             :: ne_max = 1.e8
     REAL*8             :: dlograte_dlogne, dlograte_dlogte
     REAL*8, INTENT(OUT):: rate_du(:)
 
     CALL compute_2D_eirene_rate(te,ne,alpha,rate)
-    ! In EIRENE the density is scaled to 1.e14
     rate_du = 0.
     dlograte_dlogne = 0.
     dlograte_dlogte = 0.
-    IF ((ne>=ne_min) .AND. (ne<=ne_max)) THEN
-       IF ((te>=te_min) .AND.(te<=te_max)) THEN
+    IF ((ne>=eirene_rate_ne_min) .AND. (ne<=eirene_rate_ne_max)) THEN
+       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
           CALL compute_dlogeirene_2D_dlogne_rate(te,ne,alpha,dlograte_dlogne)
           CALL compute_dlogeirene_2D_dlogte_rate(te,ne,alpha,dlograte_dlogte)
-       ELSEIF (te<te_min) THEN
-          CALL compute_dlogeirene_2D_dlogne_rate(te_min,ne,alpha,dlograte_dlogne)
-          CALL compute_dlogeirene_2D_dlogte_rate(te_min,ne,alpha,dlograte_dlogte)
-       ELSEIF (te>te_max) THEN
-          CALL compute_dlogeirene_2D_dlogne_rate(te_max,ne,alpha,dlograte_dlogne)
-          CALL compute_dlogeirene_2D_dlogte_rate(te_max,ne,alpha,dlograte_dlogte)
+       ELSEIF (te<eirene_rate_te_min) THEN
+          CALL compute_dlogeirene_2D_dlogne_rate(eirene_rate_te_min,ne,alpha,dlograte_dlogne)
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,ne,alpha,dlograte_dlogte)
+       ELSEIF (te>eirene_rate_te_max) THEN
+          CALL compute_dlogeirene_2D_dlogne_rate(eirene_rate_te_max,ne,alpha,dlograte_dlogne)
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,ne,alpha,dlograte_dlogte)
        ENDIF
     ! beyond range of ne applicability (ne derivative is now zero)
-    ELSEIF(ne<ne_min) THEN
+    ELSEIF(ne<eirene_rate_ne_min) THEN
       ! if te is still applicable
-       IF ((te>=te_min) .AND.(te<=te_max)) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(te,ne_min,alpha,dlograte_dlogte)
+       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(te,eirene_rate_ne_min,alpha,dlograte_dlogte)
       ! if te < te_min
-       ELSEIF (te<te_min) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(te_min,ne_min,alpha,dlograte_dlogte)
+       ELSEIF (te<eirene_rate_te_min) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,eirene_rate_ne_min,alpha,dlograte_dlogte)
       ! if te>te_max
-       ELSEIF (te>te_max) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(te_max,ne_min,alpha,dlograte_dlogte)
+       ELSEIF (te>eirene_rate_te_max) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,eirene_rate_ne_min,alpha,dlograte_dlogte)
        ENDIF
     ! if ne>ne_max (ne derivative is now zero)
-    ELSEIF (ne>ne_max) THEN
-       IF ((te>=te_min) .AND.(te<=te_max)) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(te,ne_max,alpha,dlograte_dlogte)
-       ELSEIF (te<te_min) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(te_min,ne_max,alpha,dlograte_dlogte)
-       ELSEIF (te>te_max) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(te_max,ne_max,alpha,dlograte_dlogte)
+    ELSEIF (ne>eirene_rate_ne_max) THEN
+       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(te,eirene_rate_ne_max,alpha,dlograte_dlogte)
+       ELSEIF (te<eirene_rate_te_min) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,eirene_rate_ne_max,alpha,dlograte_dlogte)
+       ELSEIF (te>eirene_rate_te_max) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,eirene_rate_ne_max,alpha,dlograte_dlogte)
        ENDIF
     ENDIF
     rate_du(1) = rate_du(1) + dlograte_dlogte*(-1./U1)
@@ -2232,20 +2283,17 @@ CONTAINS
 
   SUBROUTINE compute_sigmaviz(U,sigmaviz)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: sigmaviz,U1,U4,T0,te,ne,n0
-    REAL*8, PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8             :: sigmaviz,U1,U4,te,ne
 
     U1 = U(1)
     U4 = U(4)
-    T0 = 50.
-    n0 = 1.e19
 
-    IF ((U1>tol) .AND. (U4>tol)) THEN ! basically it's a below zero check
-      te = T0*2/3./phys%Mref*U4/U1
-      ne = n0*U1/1.e14
+    IF ((U1>neutral_state_tol) .AND. (U4>neutral_state_tol)) THEN ! basically it's a below zero check
+      CALL compute_Te(U, te)
+      ne = U1
     ELSE!some low values
-      ne = n0*1.e-20/1.e14
-      te = 1.e-10
+      ne = neutral_ne_floor
+      te = neutral_te_floor
     ENDIF
 
     sigmaviz = 0.
@@ -2255,18 +2303,15 @@ CONTAINS
 
   SUBROUTINE compute_dsigmaviz_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U1,U4,T0, te,ne,n0
-    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8             :: res(:),U1,U4,te,ne
 
     U1 = U(1)
     U4 = U(4)
-    T0 = 50.
-    n0 = 1.e19
 
     res = 0.
-    IF ((U1>tol) .AND. (U4>tol)) THEN ! basically it's a below zero check
-      ne = n0*U1/1.e14
-      te = T0*2/3./phys%Mref*U4/U1
+    IF ((U1>neutral_state_tol) .AND. (U4>neutral_state_tol)) THEN ! basically it's a below zero check
+      ne = U1
+      CALL compute_Te(U, te)
        CALL compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_iz,res)
     ENDIF !let non-linear part as zero if negative solutions
 
@@ -2274,19 +2319,16 @@ CONTAINS
 
   SUBROUTINE compute_sigmavEiz(U,sigmavEiz)
     real*8, intent(IN) :: U(:)
-    real*8             :: sigmavEiz,U1,U4,T0,te,ne,n0
-    REAL*8, PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real*8             :: sigmavEiz,U1,U4,te,ne
     U1 = U(1)
     U4 = U(4)
-    T0 = 50.
-    n0 = 1.e19
 
-    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      te = T0*2./3./phys%Mref*U4/U1
-      ne = n0*U1/1.e14
+    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+      CALL compute_Te(U, te)
+      ne = U1
     else!some low values
-      ne = n0*1.e-20/1.e14
-      te = 1.e-10
+      ne = neutral_ne_floor
+      te = neutral_te_floor
     endif
 
     sigmavEiz = 0.
@@ -2296,17 +2338,14 @@ CONTAINS
 
   SUBROUTINE compute_dsigmavEiz_dU(U,res)
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:),U1,U4,T0,te,ne,n0
-    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real*8             :: res(:),U1,U4,te,ne
     U1 = U(1)
     U4 = U(4)
-    T0 = 50.
-    n0 = 1.e19
 
     res = 0.
-    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      ne = n0*U1/1.e14
-      te = T0*2./3./phys%Mref*U4/U1
+    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+      ne = U1
+      CALL compute_Te(U, te)
       call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_energy_iz,res)
     endif !let non-linear part as zero if negative solutions
 
@@ -2315,125 +2354,85 @@ CONTAINS
   ! Neutral-neutral collision reaction rate
   SUBROUTINE compute_sigmavnn(U,sigmavnn)
     real*8, intent(IN) :: U(:)
-    real*8             :: sigmavnn,U1,U2,U3,T0,ti,n0, kb, e_const
-    real*8             :: s0
-    real, parameter    :: tol = 1.e-10  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    U1 = U(1)
-    U2 = U(2)
-    U3 = U(3)
-    T0 = 50.
-    n0 = 1.e19
-    kb = 1.38064852e-23
-    e_const = 1.60217662e-19
+    real*8             :: sigmavnn,ti
 
-    s0 = 5.2958e-11 * 1.e-6
-    ti = T0*2/3. /phys%Mref * (U3/U1 - 1./2. *U2**2/U1**2)
-    if (ti .LT. tol) then ! basically it's a below zero check
+    CALL compute_Ti(U, ti)
+    if (ti .LT. neutral_ti_floor) then ! basically it's a below zero check
       !some low values
-      ti = tol
+      ti = neutral_ti_floor
     endif
 
-    sigmavnn = 0.
-
-    sigmavnn = s0 * (ti * e_const/(1.38064852e-23))**0.25
+    sigmavnn = neutral_sigmavnn_prefactor*ti**0.25d0
   ENDSUBROUTINE compute_sigmavnn
 
   SUBROUTINE compute_dsigmavnn_dU(U,res)
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:),U1,U2,U3,T0,ti
-    real*8, allocatable :: dti_dU(:)
-    real*8             :: s0
-    real, parameter    :: tol = 1.e-10 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-
-    allocate(dti_dU(size(U)))
-
-    U1 = U(1)
-    U2 = U(2)
-    U3 = U(3)
-    T0 = 50.
-
-    s0 = 5.2958e-11 * 1.e-6
+    real*8             :: res(:),ti
+    real*8             :: dti_dU(size(U))
 
     res = 0.
-    dti_dU = 0.
-    ti = T0*2/3. /phys%Mref * (U3/U1 - 0.5*U2**2/U1**2)
-    if (ti>tol) then ! basically it's a below zero check
-
-      dti_dU(1) = dti_dU(1) + 1.*(-U3 + U2**2/U1) / U1**2
-      dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
-      dti_dU(3) = dti_dU(3) + 1./U1
-      dti_dU(:) = dti_dU(:) * T0*2./3. /phys%Mref
-      res = (0.25 *s0 / ti**0.75) * dti_dU
+    CALL compute_Ti(U, ti)
+    if (ti>neutral_ti_floor) then ! basically it's a below zero check
+      CALL compute_dTi_dU(U, dti_dU)
+      res = (0.25d0*neutral_sigmavnn_prefactor/ti**0.75d0) * dti_dU
     endif !let non-linear part as zero if negative solutions
   ENDSUBROUTINE compute_dsigmavnn_dU
   SUBROUTINE compute_sigmavrec(U,sigmavrec)
     real*8, intent(IN) :: U(:)
-    real*8             :: sigmavrec,U1,U4,T0,te,ne,n0
-    real*8, parameter    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real*8             :: sigmavrec,U1,U4,te,ne
     U1 = U(1)
     U4 = U(4)
-    T0 = 50.
-    n0 = 1.e19
 
-    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      te = T0*2./3./phys%Mref*U4/U1
-      ne = n0*U1/1.e14
+    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+      CALL compute_Te(U, te)
+      ne = U1
     else!some low values
-      ne = n0*1.e-20/1.e14
-      te = 1.e-10
+      ne = neutral_ne_floor
+      te = neutral_te_floor
     endif
     call compute_2D_eirene_rate(te,ne,phys%alpha_rec,sigmavrec)
   ENDSUBROUTINE compute_sigmavrec
 
   SUBROUTINE compute_dsigmavrec_dU(U,res)
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:),U1,U4,T0,te,ne,n0
-    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real*8             :: res(:),U1,U4,te,ne
     U1 = U(1)
     U4 = U(4)
-    T0 = 50.
-    n0 = 1.e19
 
     res = 0.
-    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      ne = n0*U1/1.e14
-      te = T0*2./3./phys%Mref*U4/U1
+    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+      ne = U1
+      CALL compute_Te(U, te)
       call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_rec,res)
     endif !let non-linear part as zero if negative solutions
   ENDSUBROUTINE compute_dsigmavrec_dU
 
   SUBROUTINE compute_sigmavErec(U,sigmavErec)
     real*8, intent(IN) :: U(:)
-    real*8             :: sigmavErec,U1,U4,T0,te,ne,n0
-    REAL*8, PARAMETER    :: tol = 1.e-20  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real*8             :: sigmavErec,U1,U4,te,ne
     U1 = U(1)
     U4 = U(4)
-    T0 = 50.
-    n0 = 1.e19
 
-    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      te = T0*2./3./phys%Mref*U4/U1
-      ne = n0*U1/1.e14
+    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+      CALL compute_Te(U, te)
+      ne = U1
     else!some low values
-      ne = n0*1.e-20/1.e14
-      te = 1.e-10
+      ne = neutral_ne_floor
+      te = neutral_te_floor
     endif
     call compute_2D_eirene_rate(te,ne,phys%alpha_energy_rec,sigmavErec)
   ENDSUBROUTINE compute_sigmavErec
 
   SUBROUTINE compute_dsigmavErec_dU(U,res)
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:),U1,U4,T0,te,ne,n0
-    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    real*8             :: res(:),U1,U4,te,ne
     U1 = U(1)
     U4 = U(4)
-    T0 = 50.
-    n0 = 1.e19
 
     res = 0.
-    if ((U1>tol) .and. (U4>tol)) then ! basically it's a below zero check
-      ne = n0*U1/1.e14
-      te = T0*2./3./phys%Mref*U4/U1
+    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+      ne = U1
+      CALL compute_Te(U, te)
       call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_energy_rec,res)
     endif !let non-linear part as zero if negative solutions
   ENDSUBROUTINE compute_dsigmavErec_dU
@@ -2546,20 +2545,18 @@ CONTAINS
     ! This routine calculates extrapolated AMJUEL 1D rate (here on ion temperature) for given temperature and coefficients
     real*8, intent(IN) :: t,alpha(:)
     real*8, intent(OUT):: rate
-    real*8             :: t_min=0.1
-    real*8             :: t_max=3.e3
     real*8             :: dlograte_dlogt
     rate = 0.
-    if ((t>=t_min) .AND. (t<=t_max)) then
+    if ((t>=eirene_rate_ti_min) .AND. (t<=eirene_rate_ti_max)) then
       call compute_logeirene_1D_rate(t,alpha,rate)
-    elseif(t<t_min) then
-      call compute_logeirene_1D_rate(t_min,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogt(t_min,alpha,dlograte_dlogt)
-      rate = rate + dlograte_dlogt*(log(t)- log(t_min))
+    elseif(t<eirene_rate_ti_min) then
+      call compute_logeirene_1D_rate(eirene_rate_ti_min,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_min,alpha,dlograte_dlogt)
+      rate = rate + dlograte_dlogt*(log(t)- log(eirene_rate_ti_min))
     else
-      call compute_logeirene_1D_rate(t_max,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogt(t_max,alpha,dlograte_dlogt)
-      rate = rate + dlograte_dlogt*(log(t)- log(t_max))
+      call compute_logeirene_1D_rate(eirene_rate_ti_max,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_max,alpha,dlograte_dlogt)
+      rate = rate + dlograte_dlogt*(log(t)- log(eirene_rate_ti_max))
     endif
     ! rates are not higher than 1 m^3/s, if rate is higher than that value, then there is something weird
     if (rate>6.*log(10.)) then
@@ -2579,28 +2576,26 @@ CONTAINS
     ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
     real*8, intent(IN) :: ti,dti_dU(:),alpha(:)
     real*8, intent(OUT):: res(:)
-    real*8             :: ti_min=0.1
-    real*8             :: ti_max=3.e3
     real*8             :: dlograte_dlogte,rate
     res = 0.
 
-    if ((ti>=ti_min) .AND. (ti<=ti_max)) then
+    if ((ti>=eirene_rate_ti_min) .AND. (ti<=eirene_rate_ti_max)) then
       call compute_eirene_1D_rate(ti,alpha,rate)
       call compute_d_logeirene_1D_rate_dlogt(ti,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
       res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
       res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
       res = rate*res
-    elseif(ti<ti_min) then
-      call compute_eirene_1D_rate(ti,phys%alpha_cx,rate)
-      call compute_d_logeirene_1D_rate_dlogt(ti_min,alpha,dlograte_dlogte)
+    elseif(ti<eirene_rate_ti_min) then
+      call compute_eirene_1D_rate(ti,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_min,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
       res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
       res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
       res = rate*res
     else
-      call compute_eirene_1D_rate(ti,phys%alpha_cx,rate)
-      call compute_d_logeirene_1D_rate_dlogt(ti_max,alpha,dlograte_dlogte)
+      call compute_eirene_1D_rate(ti,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_max,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
       res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
       res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
@@ -2613,26 +2608,24 @@ CONTAINS
     ! This routine calculates extrapolated AMJUEL 1D rate (typically on temperature) for given temperature and coefficients
     real*8, intent(IN) :: te,dte_dU(:),alpha(:)
     real*8, intent(OUT):: res(:)
-    real*8             :: te_min=0.1
-    real*8             :: te_max=3.e3
     real*8             :: dlograte_dlogte,rate
     res = 0.
 
-    if ((te>=te_min) .AND. (te<=te_max)) then
+    if ((te>=eirene_rate_ti_min) .AND. (te<=eirene_rate_ti_max)) then
       call compute_eirene_1D_rate(te,alpha,rate)
       call compute_d_logeirene_1D_rate_dlogt(te,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dte_dU(1)/te)
       res(4) = res(4) + dlograte_dlogte*(dte_dU(4)/te)
       res = rate*res
-    elseif(te<te_min) then
-      call compute_eirene_1D_rate(te,phys%alpha_cx,rate)
-      call compute_d_logeirene_1D_rate_dlogt(te_min,alpha,dlograte_dlogte)
+    elseif(te<eirene_rate_ti_min) then
+      call compute_eirene_1D_rate(te,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_min,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dte_dU(1)/te)
       res(4) = res(4) + dlograte_dlogte*(dte_dU(4)/te)
       res = rate*res
     else
-      call compute_eirene_1D_rate(te,phys%alpha_cx,rate)
-      call compute_d_logeirene_1D_rate_dlogt(te_max,alpha,dlograte_dlogte)
+      call compute_eirene_1D_rate(te,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_max,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dte_dU(1)/te)
       res(4) = res(4) + dlograte_dlogte*(dte_dU(4)/te)
       res = rate*res
@@ -2669,19 +2662,12 @@ CONTAINS
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     ! calculates AMJUEL CX rate
     real*8, intent(IN)  :: U(:)
-    real*8              :: sigmavcx,U1,U2,U3,T0,ti
-    real,parameter      :: tol = 1.e-10 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    U1 = U(1)
-    U2 = U(2)
-    U3 = U(3)
-    T0 = 50.
+    real*8              :: sigmavcx,ti
 
-    !if (U1<tol) U1=tol
-    !if (U4<tol) then
-    ti = T0*2/3. /phys%Mref * (U3/U1 - 0.5*U2**2/U1**2)
-    if (ti<tol) then ! basically it's a below zero check
+    CALL compute_Ti(U, ti)
+    if (ti<neutral_ti_floor) then ! basically it's a below zero check
       !some low values
-      ti = tol
+      ti = neutral_ti_floor
     endif
     sigmavcx = 0.
 
@@ -2692,25 +2678,13 @@ CONTAINS
   SUBROUTINE compute_dsigmavcx_dU(U,res)
     ! calculates derivative of AMJUEL CX rate for linearization
     real*8, intent(IN) :: U(:)
-    real*8             :: res(:), U1,U2,U3,T0,ti
-    real*8, allocatable :: dti_dU(:)
-    real, parameter    :: tol = 1.e-10  !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-
-    allocate(dti_dU(size(U)))
-
-    T0 = 50.
-    U1 = U(1)
-    U2 = U(2)
-    U3 = U(3)
+    real*8             :: res(:), ti
+    real*8             :: dti_dU(size(U))
     res = 0.
-    dti_dU = 0.
-    ti = T0*2/3. /phys%Mref * (U3/U1 - 0.5*U2**2/U1**2)
+    CALL compute_Ti(U, ti)
 
-    if (ti>tol) then
-      dti_dU(1) = dti_dU(1) + 1.*(-U3 + U2**2/U1) / U1**2
-      dti_dU(2) = dti_dU(2) - 1.*U2/U1**2
-      dti_dU(3) = dti_dU(3) + 1./U1
-      dti_dU(:) = dti_dU(:) * T0*2./3. /phys%Mref
+    if (ti>neutral_ti_floor) then
+      CALL compute_dTi_dU(U, dti_dU)
       call compute_eirene_1D_rate_vs_ti_dU(ti,dti_dU,phys%alpha_cx,res)
     endif
 
@@ -2718,17 +2692,13 @@ CONTAINS
 
   SUBROUTINE compute_cooling_factor(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res,U1,U4,T0,te
-    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8             :: res,U1,U4,te
+
     U1 = U(1)
     U4 = U(4)
-    T0 = 50.
-
     res = 0.
-    IF ((U1>tol) .AND. (U4>tol)) THEN ! basically it's a below zero check
-      te = T0*2/3./phys%Mref*U4/U1
-
-
+    IF ((U1>neutral_state_tol) .AND. (U4>neutral_state_tol)) THEN ! basically it's a below zero check
+      CALL compute_Te(U, te)
       CALL compute_eirene_1D_rate(te,phys%alpha_cooling_factor,res)
 
     ENDIF
@@ -2736,22 +2706,15 @@ CONTAINS
 
   SUBROUTINE compute_dcooling_factor_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U1,U4,T0,te
-    real*8, allocatable :: dte_dU(:)
-    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8             :: res(:),U1,U4,te
+    REAL*8             :: dte_dU(size(U))
 
-    allocate(dte_dU(size(U)))
     U1 = U(1)
     U4 = U(4)
-    T0 = 50.
-    dte_dU = 0.
-
     res = 0.
-    IF ((U1>tol) .AND. (U4>tol)) THEN ! basically it's a below zero check
-      te = T0*2/3./phys%Mref*U4/U1
-      dte_dU(1) = dte_dU(1) + 1.*(-U4) / U1**2
-      dte_dU(4) = dte_dU(4) + 1./U1
-      dte_dU(:) = dte_dU(:) * T0*2./3. /phys%Mref
+    IF ((U1>neutral_state_tol) .AND. (U4>neutral_state_tol)) THEN ! basically it's a below zero check
+      CALL compute_Te(U, te)
+      CALL compute_dTe_dU(U, dte_dU)
       CALL compute_eirene_1D_rate_vs_te_du(te,dte_dU,phys%alpha_cooling_factor,res)
       res = res!/simpar%refval_charge
     ENDIF
