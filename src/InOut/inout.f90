@@ -905,6 +905,7 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%diff_pot, 'diff_pot')
       CALL HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
       CALL HDF5_real_saving(group_id2, phys%Re, 'recycling')
+      CALL HDF5_real_saving(group_id2, phys%recycling_neutral_gamma, 'recycling_neutral_gamma')
       CALL HDF5_real_saving(group_id2, phys%impurity_concentration, 'impurity_concentration')
       CALL HDF5_string_saving(group_id2, phys%impurity_name, 'impurity_name')
       CALL HDF5_logical_saving(group_id2, phys%apply_trim, 'apply_trim')
@@ -1571,7 +1572,7 @@ CONTAINS
             CALL HDF5_real_reading(group_id2, phys%puff, 'puff')
             CALL HDF5_real_reading(group_id2, phys%impurity_concentration, 'impurity_concentration')
          ENDIF
-         
+
          IF (time%it .GT. 1) THEN
             CALL HDF5_real_reading(group_id2, phys%feedback_integral_error, 'feedback_integral_error')
             CALL HDF5_real_reading(group_id2, phys%feedback_previous_error, 'feedback_previous_error')

@@ -55,7 +55,7 @@ SUBROUTINE READ_input()
 
   ! Neutral and Ohmic heating
   LOGICAL               :: OhmicSrc, apply_trim
-  REAL*8                :: Zeff,Pohmic,diff_nn,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
+  REAL*8                :: Zeff,Pohmic,diff_nn,Re,Re_pump,recycling_neutral_gamma,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
   REAL*8                :: feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr
 #ifdef KEQUATION
   ! k equation
@@ -99,11 +99,11 @@ SUBROUTINE READ_input()
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
-  & Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
+  & Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
 #endif
@@ -124,6 +124,7 @@ SUBROUTINE READ_input()
   uinput = 100
   diagsource = 0.
   neutralp_lambda = 1.d0
+  recycling_neutral_gamma = 1.d0
   OPEN (uinput, file='param.txt', status='unknown')
   READ (uinput, SWITCH_LST)
   READ (uinput, INPUT_LST)
@@ -292,6 +293,7 @@ SUBROUTINE READ_input()
   phys%heating_equation   = heating_equation
   phys%Re                 = Re
   phys%Re_pump            = Re_pump
+  phys%recycling_neutral_gamma = recycling_neutral_gamma
   phys%apply_trim         = apply_trim
   phys%cryopump_power     = cryopump_power
   phys%puff               = puff
@@ -502,6 +504,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - diffusion in the neutral equation:                  ', phys%diff_nn
      PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
      PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
+     PRINT *, '                - recycling coefficient for NeutralGamma Bohm:        ', phys%recycling_neutral_gamma
      PRINT *, '                - applying trim:                                      ', phys%apply_trim
      PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
      PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power

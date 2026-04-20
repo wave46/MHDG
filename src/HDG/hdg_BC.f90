@@ -1973,7 +1973,8 @@ CONTAINS
 #ifdef NEUTRALGAMMA
         ELSE IF (ign > 0 .AND. i == ign) THEN
           indj = inn + ind_asf
-          elMat%Alu(ind_ff(ind),ind_fe(indj),iel) = elMat%Alu(ind_ff(ind),ind_fe(indj),iel) + tau(i,i)*delta*(-upfg(2))*NiNi
+          elMat%Alu(ind_ff(ind),ind_fe(indj),iel) = elMat%Alu(ind_ff(ind),ind_fe(indj),iel) + &
+            &tau(i,i)*delta*(-upfg(2))*NiNi*phys%recycling_neutral_gamma
 #endif
         ELSE
           elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*NiNi

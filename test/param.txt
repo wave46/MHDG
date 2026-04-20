@@ -4,7 +4,7 @@
                                         ! .true.  = steady state simulation
     read_gmsh           = .false.	! .true. = mesh is read from msh/mesh file format
     readMeshFromSol     = .true.	! .true. = mesh is read from solution file
-    set_2d_order	= .false.	! .true. = set the order of the 2d polynomial if not set already 
+    set_2d_order	= .true.	! .true. = set the order of the 2d polynomial if not set already 
     order_2d = 8 ! if read_gmsh = .true. and set_2d_order = .true., order of the 2d polynomial
     axisym              = .true.        ! Is it an axisymmetric simulation?
                                         ! true = yes (even for magnetic perturbation)
@@ -13,7 +13,8 @@
     flux_limiter        = .false.       ! use flux limiter for ion and electron parallel conductive heat fluxes (with provided c_fli,c_fle in physics)
     external_heating    = .false.       ! True will use external from the file provided in INPUT_LST
     impurity_radiation  = .false.        ! to take into account impurity radiaion with concentration provided in PHYS_LST
-    import_diffusion_1D = .false.        ! Import or not additional profile of diffuion in 1D as function of rho_pol, supply path to the file
+    import_diffusion_1D = .false.
+    transport_1d = .false.        ! Use the transport_1d model from transport_model.nml
     driftdia            = .false.       ! Set to FALSE to ignore diamagnetic drifts terms
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
     testcase            = 54            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
@@ -25,9 +26,9 @@
     Ripple              = .false.       ! True to set Ripple (non-axisymetrical perturbation)
     psdtime             = .true.        ! Reduce the diffusion every time we reach the steady state
                                         ! condition (only works if steady=.false.)
-    diffred             = 0.6  ! Reduction factor of the diffusion for psdtime simulation (set for 20*diff_x)
+    diffred             = 0.5  ! Reduction factor of the diffusion for psdtime simulation (set for 20*diff_x)
     !diffred             = 0.76923076923
-    diffmin             = 0.1           ! Minimum value of the diffusion for a psdtime simulation
+    diffmin             = 0.001           ! Minimum value of the diffusion for a psdtime simulation
     shockcp             = 0             ! Shock capturing option
                                         ! 0 - No shock capturing
                                         ! 1 - Constant in each element
@@ -66,35 +67,36 @@
 /
 
 &INPUT_LST
-    field_path          = '/path/to/magnetic/field'  ! Path to Bfield h5 file. 
+    transport_model_path = 'transport_model.nml'
+    field_path          = '/home/ikudashev/Documents/Github/HDG_postprocess/demos/data/solutions/limiter_case/field/B_field_k_5_60527_t_5_6.h5'  ! Path to Bfield h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'B_field/WEST_54487'
                                                                         ! If switch%ME = .false. then put the full part 'B_field/WEST_54487_0000.h5'
-    field_dimensions(1) = 1000                                   ! 1st dimension dimensions of magnetic field file 
-    field_dimensions(2) = 1000                                   ! 2nd dimension dimensions of magnetic field file
+    field_dimensions(1) = 2000                                   ! 1st dimension dimensions of magnetic field file 
+    field_dimensions(2) = 2000                                   ! 2nd dimension dimensions of magnetic field file
     field_from_grid = .true.                                   ! true then reads from cartesian grid and then biineary interpolates on nodes
                                                                 ! false then reads from files with field on nodes
     compute_from_flux   = .false.                                ! if the Br, Bz is computed from flux works not well, only with loading from nodes
     divide_by_2pi       = .false.                               ! if corresponding to poloidal flux definition it is needed to divide by 2pi. For NICE .true.
                                                                 ! for FEEQS .false.
-    jtor_path           = '/path/to/plasma/current'    ! Path to jtor h5 file. 
+    jtor_path           = '/home/ikudashev/Documents/Github/HDG_postprocess/demos/data/solutions/limiter_case/field/Jtor_k_5_60527_t_5_6.h5'    ! Path to jtor h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'Jtor/WEST_54487_Jtor'
                                                                         ! If switch%ME = .false. then put the full part 'Jtor/WEST_54487_Jtor_0000.h5'
-    jtor_dimensions(1) = 1000                                   ! 1st dimension dimensions of plasma current file 
-    jtor_dimensions(2) = 1000                                   ! 2nd dimension dimensions of plasma current file
-    save_folder = '/path/where/to/save/solution/'
-    external_heating_path = '/path/where/to/read/external/heating/from.h5'
+    jtor_dimensions(1) = 2000                                   ! 1st dimension dimensions of plasma current file 
+    jtor_dimensions(2) = 2000                                   ! 2nd dimension dimensions of plasma current file
+    external_heating_path = '/scratch/ikudashev/results_hdg/XPR_WEST/equilibrium/external_heating.h5'
     external_heating_from_grid = .true.
-    puff_path = '/path/where/to/read/puff/' ! only used in moving equilibrium
-    puff_dimension = 1000
-    target_density_path = '/path/where/to/read/target/density/'
+    save_folder = '/home/ikudashev/Documents/Github/HDG_postprocess/demos/data/solutions/limiter_case/diffred_test_neutralsgammapressure/'
+    puff_path = '/scratch/ikudashev/results_hdg/limiter_WEST/experimental_data/puff_60527.h5' ! only used in moving equilibrium
+    puff_dimension = 2244 ! only used in moving equilibrium
+    target_density_path = '/scratch/ikudashev/results_hdg/limiter_WEST/experimental_data/interf_channel_3_60527.h5'
     target_density_dimension = 10000
-    target_density_xpr_path = '/path/where/to/read/target/density/xpr/'
+    target_density_xpr_path = '/scratch/ikudashev/results_hdg/XPR_WEST/data/fourth_try_feedback_puff_xpr/interferometer_xpr.h5'
     target_density_xpr_dimension = 101
-    impurity_concentration_path = '/path/where/to/read/impurity/concentration/'
+    impurity_concentration_path = '/scratch/ikudashev/results_hdg/limiter_WEST/experimental_data/impurity_density_60527.h5'
     impurity_concentration_dimension = 10000
-    zeff_path = '/path/where/to/read/zeff/'
+    zeff_path = '/scratch/ikudashev/results_hdg/limiter_WEST/experimental_data/zeff_60527.h5'
     zeff_dimension = 10000
-    diffusion_1D_path = '/path/where/to/read/1d/diffsion/
+    diffusion_1D_path = '/scratch/ikudashev/results_hdg/limiter_WEST/data/simplified_transport_coeffs/rho_pol_pow_12_d0_0_9_dsep_2_5_rho0_1_02_chi_rho_pol_pow_12_d0_0_01_dsep_0_5_rho0_1_02.h5'
 /
 
 &NUMER_LST
@@ -117,7 +119,7 @@
     thrpre              = 1.e-12        ! Min value of pressure allowed (works only if the switch is activated)
     stab                = 5             ! Stabilization type (from 1 to 4 (5), 2 is good, 5 is better (simplified 2, only for N-Gamma(-T)))
     dumpnr_min          = 0.1           ! Dumping factor for Newton-Raphson (0<dumpnr<1, first parameter to decrease if NR fail) typical 0.1
-    dumpnr_max          = 1.            ! It is calculated each NR iteration based on the current number of iteration in a shape of tanh
+    dumpnr_max          = 1.           ! It is calculated each NR iteration based on the current number of iteration in a shape of tanh
     dumpnr_width        = 10.           ! dumpnr(n) = dumpnr_min+(dumpnr_max-dumpnr_min)/2.*(1+TANH((n-dumpnr_n0)/dumpnr_width))
     dumpnr_n0           = 10.           !
     ntor                = 3             ! Number of elements in the toroidal direction
@@ -126,32 +128,33 @@
     npartor             = 1             ! Number of MPI partition in the toroidal direction
     bohmtypebc          = 0             ! Implementation of the Bohm bc for Gamma (0-Old Bohm BC, 1-Dirichlet always, 2-Dirichlet+Neumann)
     exbdump             = 1.            ! Dumping for ExB drift
+    neutralp_lambda = 0.94
 /
 
 &ADAPT_LST
-    adaptivity		= .false.	! Enable or disable adaptivity [0,1]
-    shockcp_adapt       = 2             ! Shock capturing option for adaptivity (2)
+    adaptivity		= .true.	! Enable or disable adaptivity [0,1]
+    shockcp_adapt       = 1             ! Shock capturing option for adaptivity (2)
                                         ! 0 - No shock capturing
                                         ! 1 - Constant in each element
                                         ! 2 - Linear interpolation between nodes
                                         ! 3 - Linear interpolation between nodes+save parameter
     evaluator		= 0		! Mixed, indicator, estimator [0,1,2]
-    param_est = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10		! Specify all physical variables(gradients) to which you would like to apply estimator
-    thr_ind		= 1e-20		! Catch oscillations if higher than this value (indicator)
-    quant_ind		= 1		! 1,2,3 (physical variable(s), gradient of variable(s), both)
-    n_quant_ind = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10		! Specify all physical variables(gradients) to which you would like to apply indicator
-    tol_est		= 1.e-1	! Difference between p+1 and p solution (estimator)
+    param_est = 1,2, 7, 8	! Specify all physical variables(gradients) to which you would like to apply estimator
+    thr_ind		= 1.e-3		! Catch oscillations if higher than this value (indicator)
+    quant_ind		= 3		! 1,2,3 (physical variable(s), gradient of variable(s), both)
+    n_quant_ind =  1,2, 7, 8	! Specify all physical variables(gradients) to which you would like to apply indicator 1,2,3,4,5,6,7,8,9,10
+    tol_est		= 100.e-3	! Difference between p+1 and p solution (estimator)
     difference		= 1		! Type of difference: relative, absolute [0,1]
-    time_adapt		= .true.	! Refine at times steps (pseudo or not)
+    time_adapt		= .false.	! Refine at times steps (pseudo or not)
     NR_adapt		= .false.	! Refine at NR steps (pseudo or not)
     freq_t_adapt	= 1		! Frequency of time refinement, only if time_adapt = .true.
-    freq_NR_adapt	= 5		! Frequency of NR refinement, only if NR_adapt = .true.
+    freq_NR_adapt	= 10		! Frequency of NR refinement, only if NR_adapt = .true.
     div_adapt		= .false.	! Refine if NR diverges
-    rest_adapt		= .true.	! Call adaptivity at the very beginning, only for restart simulations
+    rest_adapt		= .false.	! Call adaptivity at the very beginning, only for restart simulations
     osc_adapt		= .true.	! Refine if oscillations are higher than threshold
-    osc_tol		= -2.		! Refine if oscillations are higher than this threshold, only if osc_adapt = .true.
+    osc_tol		= -0.15		! Refine if oscillations are higher than this threshold, only if osc_adapt = .true.
     osc_check		= -3.		! Save the solution as checkpoint if the maximum value of oscillations are lower than this threshold (-100 for no oscillations at all)
-    geometry_path	= '/path/to/geo/file/from/gmesh/geometry.geo
+    geometry_path	= '/home/ikudashev/Documents/Github/HDG_postprocess/demos/data/solutions/limiter_case/meshes/WEST_60527.geo' 
 /
 
 &GEOM_LST
@@ -186,28 +189,34 @@
 
 &PHYS_LST
     ! ****** Diffusion parameters in m^2/s (start at 20*diff_x if psdtime = true)
-    diff_n = 20.! diffusion in the continuity equation
-    diff_u =  20.! diffusion in the momentum equation
-    diff_e = 20. ! perpendicular diffusion for the energy equation
-    diff_ee =    20. ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
-    diff_vort =  20.! diffusion in the vorticity equation
-    diff_nn = 2e8 !max diffusion for neutral equation or if used DCONSTANTNEUTRALDIFF flag, then the value of neutral diffusion
-    I_0 = 0.3     ! [MA] Plasma current at flat-top for diffusion in moving equilibrium
+    diff_n = 1.25! diffusion in the continuity equation
+    diff_u = 1.25! diffusion in the momentum equation
+    diff_e =1.25! perpendicular diffusion for the energy equation
+    diff_ee = 1.25! perpendicular diffusion in the electron temperature equation (for the TiTe model)
+    diff_vort =1.25! diffusion in the vorticity equation
+    diff_nn = 20e8 ! max diffusion for neutral equation
+    I_0 = 0.685     ! [MA] Plasma current at flat-top for diffusion in moving equilibrium
     ! external heating in the form of shifted 2D gaussian ~exp(-(r-(R0+dr)**2/sigmar**2))*exp(-(z-(Z0+dz)**2/sigmaz**2))
-    heating_power = 0.              ! [W] Total power of heating 
+    heating_power = 0.             ! [W] Total power of heating 
     heating_dr = 0.0                 ! [m] displacement from magnetic axis alon R direction (can be positive and negative)
     heating_dz = 0.                 ! [m] displacement from magnetic axis alon R direction (can be positive and negative)
-    heating_sigmar = 0.15             ! [m] gaussian width in r-direction
-    heating_sigmaz = 0.15             ! [m] gaussian width in z-direction
-    heating_equation = 3            ! equation to which heating is applied
+    heating_sigmar = 0.1             ! [m] gaussian width in r-direction
+    heating_sigmaz = 0.1             ! [m] gaussian width in z-direction
+    heating_equation = 4            ! equation to which heating is applied
     ! ****** Option for neutral equation (available only if compile with NEUTRAL)
-    Re                  = 0.998     ! Recycling coefficient 0.997
+    Re                  = 0.935     ! Recycling coefficient 0.997
     Re_pump             = 0.95     ! Recycling coefficient in the pump region
     recycling_neutral_gamma = 1.0  ! Multiplier for the recycled NeutralGamma Bohm relation
     apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
-    puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
-    impurity_name       = 'W' ! name of impurity
-    impurity_concentration = 3.647395612815730E-004!fraction of electron density considered as impurity
+    puff                = 0.3e20 !2.725e20 puff coefficient (particles per second in the whole puff area) 6.45e20
+    impurity_name       = 'N' ! name of impurity
+    impurity_concentration = 0.00!fraction of electron density considered as impurity 3.6474e-4
+    feedback_propotional_gain = 3.6e-20 !100.e-21  10.e-21
+    feedback_integral_gain = 1.8e-20 !1000 200
+    feedback_derivative_gain = 6.e-22
+    feedback_propotional_gain_xpr = 1.e-22 
+    feedback_integral_gain_xpr = 2.e-22
+    feedback_derivative_gain_xpr = 0.5e-23
     cryopump_power      = 10.      ! cryopump power in [m^3/s]
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
     ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52 and 81)
@@ -217,13 +226,13 @@
     part_source         = 0.        ! source coefficient (particles per second in the whole core area [ONLY BC 6])
     ener_source         = 20e6      ! source coefficient (Watt in the whole core area [ONLY BC 6])
     ! kequation part
-    !diff_k_min = 10.  ! minimal diffusion in the k equation
-    !diff_k_max = 10. ! maximal diffusion in the k equation
+    !diff_k_min = 0.312  ! minimal diffusion in the k equation
+    !diff_k_max = 20. ! maximal diffusion in the k equation
     !k_max = 1.e10      ! maximal k
     !puff               = 1.8e-6
     !puff               = 2.e-5
-    ! ****** Ohmic heating: only for testcase 54 with core
-    Zeff                = 3.
+    ! ****** Ohmic heating: only for testcase 54 with core (not tested)
+    Zeff                = 1.
     Pohmic              = 4.8e-14       ! Ohmic Heating
     ! ****** Background temperature in eV for isothermal model (default is 50 eV)
     Tbg                 = 50
@@ -240,7 +249,7 @@
     bcflags(10)         = 50            ! Upper Limiter
     ! ****** Boundary threshold for Bohm
     bohmth              = 0.01           ! threshold for imposing the bohm boundary condition !for circ put 0.1 0.02
-    bohm_energy_thresh  = 2e-4           ! threshold on adimensional conservative ion energy for imposing Bohm, 2e-4 for density of 1e7 and no mach number corresponds to ~0.1 eV
+    bohm_energy_thresh  = 2e-4           ! threshold on adimensional conservative ion energy for imposing Bohm, 2e-4 for density of 1e17 and no mach number corresponds to ~0.1 eV
     ! ****** Boundary coefficients for the Bohm boundary condition of the temperature equations:
     Gmbohm              = 2.5           ! gamma for Bohm boundary condition for energy equation (usually 7) and for ions energy equation (usually 2.5)
     Gmbohme             = 4.5           ! gamma for Bohm boundary condition for electron energy equation (usually 4.5)
@@ -253,7 +262,7 @@
     diff_pot            = 4             ! diffusion in the potential equation (only used for analytic tests)
     ! **** Flux limiter coefficients
     c_fli               = 1e5            ! Fraction of the free streaming flux used in the ion flux limiter
-    c_fle               = 2e-1            ! Fraction of the free streaming flux used in the electron flux limiter
+    c_fle               = 1e5            ! Fraction of the free streaming flux used in the electron flux limiter
     T_fluxlim_maxi      = 50.              ! Max ion temperature [eV] in old heat flux limiter (limiting T in T^(5/2)), put some large value to turn it off
     T_fluxlim_maxe      = 50.              ! Max eletron temperature [eV] in old heat flux limiter (limiting T in T^(5/2)), put some large value to turn it off
     ! **** Non isothermal exponential
