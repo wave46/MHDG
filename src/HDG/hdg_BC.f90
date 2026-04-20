@@ -2395,10 +2395,6 @@ CONTAINS
     indj = k+ind_asf
     elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - cryopump_coeff*NiNi
 #ifdef NEUTRALGAMMA
-    if (ign > 0) then
-      indj = ign + ind_asf
-      elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - cryopump_coeff*NiNi*bn
-    end if
 #endif
 
     ! Neutrals velocity
