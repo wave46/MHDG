@@ -21,9 +21,21 @@ MODULE physics
   REAL*8, PARAMETER :: neutral_ti_floor_phys = 1.d-10
   REAL*8, PARAMETER :: neutral_ne_floor = 1.d-20
   REAL*8, PARAMETER :: neutral_sigmavnn_prefactor_phys = 5.2958d-11*1.d-6
+  REAL*8, PARAMETER :: neutral_rydberg_energy_phys = 13.6d0
+  REAL*8, PARAMETER :: neutral_iz_te_floor_phys = 0.05d0
+  REAL*8, PARAMETER :: neutral_rec_te_floor_phys = 0.1d0
+  REAL*8, PARAMETER :: neutral_cx_te_floor_phys = 0.05d0
+  REAL*8, PARAMETER :: neutral_tloss_offset_phys = 25.d0
+  REAL*8, PARAMETER :: neutral_tloss_amplitude_phys = 170.d0
+  REAL*8, PARAMETER :: neutral_tlossrec_prefactor_phys = 8.d0
+  REAL*8, PARAMETER :: neutral_tlossrec_cap_phys = 250.d0
+  REAL*8, PARAMETER :: neutral_legacy_cx_prefactor_phys = 2.5d-15/EXP(-0.5d0)
+  REAL*8, PARAMETER :: neutral_manuelcx_coeffs(5) = (/-6.837d-4, 8.004d-3, -3.581d-2, 4.518d-1, -3.259d1/)
   REAL*8, PARAMETER :: boltzmann_constant_si = 1.38064852d-23
   REAL*8, PARAMETER :: elementary_charge_si = 1.60217662d-19
 
+  REAL*8, SAVE :: neutral_rate_scale
+  REAL*8, SAVE :: neutral_energy_weight
   REAL*8, SAVE :: eirene_rate_te_min
   REAL*8, SAVE :: eirene_rate_te_max
   REAL*8, SAVE :: eirene_rate_ti_min
@@ -36,6 +48,19 @@ MODULE physics
   REAL*8, SAVE :: neutral_sigmavnn_prefactor
   REAL*8, SAVE :: neutral_transport_ti_floor
   REAL*8, SAVE :: neutral_transport_ti_supp
+  REAL*8, SAVE :: neutral_rydberg_energy
+  REAL*8, SAVE :: neutral_iz_te_floor
+  REAL*8, SAVE :: neutral_rec_te_floor
+  REAL*8, SAVE :: neutral_cx_te_floor
+  REAL*8, SAVE :: neutral_log_temperature_ref
+  REAL*8, SAVE :: neutral_tloss_offset
+  REAL*8, SAVE :: neutral_tloss_amplitude
+  REAL*8, SAVE :: neutral_tloss_decay
+  REAL*8, SAVE :: neutral_tlossrec_prefactor
+  REAL*8, SAVE :: neutral_tlossrec_cap
+  REAL*8, SAVE :: neutral_tlossrec_growth
+  REAL*8, SAVE :: neutral_tlossrec_cap_log
+  REAL*8, SAVE :: neutral_legacy_cx_prefactor
   REAL*8, SAVE :: neutral_recombination_energy
 
 CONTAINS
@@ -409,6 +434,8 @@ CONTAINS
     REAL*8 :: density_scale
 
     density_scale = simpar%refval_density/1.d14
+    neutral_rate_scale = simpar%refval_density*simpar%refval_time
+    neutral_energy_weight = phys%Mref/simpar%refval_temperature
 
     eirene_rate_te_min = eirene_rate_te_min_phys/simpar%refval_temperature
     eirene_rate_te_max = eirene_rate_te_max_phys/simpar%refval_temperature
@@ -420,11 +447,24 @@ CONTAINS
     neutral_state_tol = neutral_state_tol_default
     neutral_te_floor = neutral_te_floor_phys/simpar%refval_temperature
     neutral_ti_floor = neutral_ti_floor_phys/simpar%refval_temperature
-    neutral_sigmavnn_prefactor = simpar%refval_density*simpar%refval_time*neutral_sigmavnn_prefactor_phys* &
+    neutral_sigmavnn_prefactor = neutral_rate_scale*neutral_sigmavnn_prefactor_phys* &
       &(simpar%refval_temperature*elementary_charge_si/boltzmann_constant_si)**0.25d0
     neutral_transport_ti_floor = 1.d-6/simpar%refval_temperature
     neutral_transport_ti_supp = neutral_transport_ti_floor
-    neutral_recombination_energy = 13.6d0*phys%Mref/simpar%refval_temperature
+    neutral_rydberg_energy = neutral_rydberg_energy_phys/simpar%refval_temperature
+    neutral_iz_te_floor = neutral_iz_te_floor_phys/simpar%refval_temperature
+    neutral_rec_te_floor = neutral_rec_te_floor_phys/simpar%refval_temperature
+    neutral_cx_te_floor = neutral_cx_te_floor_phys/simpar%refval_temperature
+    neutral_log_temperature_ref = LOG(simpar%refval_temperature)
+    neutral_tloss_offset = neutral_tloss_offset_phys*neutral_energy_weight
+    neutral_tloss_amplitude = neutral_tloss_amplitude_phys*neutral_energy_weight
+    neutral_tloss_decay = 0.5d0*simpar%refval_temperature
+    neutral_tlossrec_prefactor = neutral_tlossrec_prefactor_phys*neutral_energy_weight
+    neutral_tlossrec_cap = neutral_tlossrec_cap_phys*neutral_energy_weight
+    neutral_tlossrec_growth = simpar%refval_temperature/9.d0
+    neutral_tlossrec_cap_log = LOG(neutral_tlossrec_cap_phys/neutral_tlossrec_prefactor_phys)
+    neutral_legacy_cx_prefactor = neutral_rate_scale*neutral_legacy_cx_prefactor_phys
+    neutral_recombination_energy = neutral_rydberg_energy_phys*neutral_energy_weight
   ENDSUBROUTINE initialize_neutral_rate_runtime_constants
 
   SUBROUTINE adimensionalize_neutral_rate_coefficients()
@@ -2039,80 +2079,117 @@ CONTAINS
 #ifndef AMJUELSPLINES
   SUBROUTINE compute_sigmaviz(U,sigmaviz)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: sigmaviz,U1,U4,T0,Ery,E0
-    REAL*8, PARAMETER    :: tol = 1.e-20
-   U1 = U(1)
-   U4 = U(4)
-   T0 = 50.
-   Ery = 13.6
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-   E0 = (2.*T0*U4)/(3.*phys%Mref*Ery*U1)
-   !Threshold on Te >= 0.2 eV
-    IF (E0*Ery .LE. 0.05) E0 = 0.05/Ery
-    sigmaviz = 1.e-11*SQRT(E0)*(1./((Ery**1.5)*(6. + E0)))*EXP(-1./E0)
+    REAL*8             :: sigmaviz, te, e0
+
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+    ELSE
+      te = neutral_iz_te_floor
+    ENDIF
+
+    te = MAX(te, neutral_iz_te_floor)
+    e0 = te/neutral_rydberg_energy
+    sigmaviz = neutral_rate_scale*1.d-11*SQRT(e0)/(neutral_rydberg_energy_phys**1.5d0*(6.d0 + e0))*EXP(-1.d0/e0)
   ENDSUBROUTINE compute_sigmaviz
 
 
   SUBROUTINE compute_dsigmaviz_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U1,U4,T0,Ery,E0
-    REAL*8, PARAMETER    :: tol = 1.e-20
-   U1 = U(1)
-   U4 = U(4)
-   T0 = 50.
-   Ery = 13.6
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-   res = 0.
-   E0 = (2.*T0*U4)/(3.*phys%Mref*Ery*U1)
-   !Threshold on Te >= 0.2 eV
-   !if (E0*Ery .le. 0.05)  E0 = 0.05/Ery
-    IF (E0*Ery .GE. 0.05) THEN
-      res(1) = (1./U1)*( - 1./2 + 1./((6./E0) + 1)   - 1./E0 )
-      res(4) = 1./(2.*U4) - 1./(6.*(U4/E0) + U4) + 1./(E0*U4)
-       res = 1.e-11*SQRT(E0)*(1./((Ery**1.5)*(6. + E0)))*EXP(-1./E0)*res
+    REAL*8             :: res(:), te, e0, sigmaviz, dlograte_dte
+    REAL*8             :: dte_dU(size(U))
+
+    res = 0.d0
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+      IF (te>neutral_iz_te_floor) THEN
+        CALL compute_dTe_dU(U, dte_dU)
+        CALL compute_sigmaviz(U, sigmaviz)
+        e0 = te/neutral_rydberg_energy
+        dlograte_dte = (0.5d0/e0 - 1.d0/(6.d0 + e0) + 1.d0/e0**2)/neutral_rydberg_energy
+        res = sigmaviz*dlograte_dte*dte_dU
+      END IF
     END IF
   ENDSUBROUTINE compute_dsigmaviz_dU
 
 
   SUBROUTINE compute_sigmavrec(U,sigmavrec)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: sigmavrec,U1,U4,T0,Ery,E0
-    REAL*8, PARAMETER    :: tol = 1.e-20
-   U1 = U(1)
-   U4 = U(4)
-   T0 = 50.
-   Ery = 13.6
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-   E0 = (Ery*3.*phys%Mref*U1)/(T0*2.*U4)
-   !Threshold on Te >= 0.1 eV
-    IF (E0/Ery .GE. 10.) E0 = 10.*Ery
-    sigmavrec = 5.2e-20*SQRT(E0)*(0.43 + 0.5*LOG(E0) + 0.469*(E0**(-1./3)))
+    REAL*8             :: sigmavrec, te, e0, g
+
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+    ELSE
+      te = neutral_rec_te_floor
+    ENDIF
+
+    te = MAX(te, neutral_rec_te_floor)
+    e0 = neutral_rydberg_energy/te
+    g = 0.43d0 + 0.5d0*LOG(e0) + 0.469d0*e0**(-1.d0/3.d0)
+    sigmavrec = neutral_rate_scale*5.2d-20*SQRT(e0)*g
   ENDSUBROUTINE compute_sigmavrec
 
 
   SUBROUTINE compute_dsigmavrec_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U1,U4,T0,Ery,E0
-    REAL*8, PARAMETER    :: tol = 1.e-20
-   U1 = U(1)
-   U4 = U(4)
-   T0 = 50.
-   Ery = 13.6
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-   E0 = (Ery*3.*phys%Mref*U1)/(T0*2.*U4)
-   res = 0.
-   !Threshold on Te >= 0.1 eV
-    IF (E0/Ery .LE. 10.) THEN
-       res(1) = 5.2e-20*SQRT(E0)*(0.43 + 0.5*LOG(E0) + 0.469*(E0**(-1./3)))/(2.*U1) + 5.2e-20*SQRT(E0)*(0.5/U1 +&
-      &0.469*(E0**(-1./3))*(-1./(3.*U1)))
-       res(4) = - 5.2e-20*SQRT(E0)*(0.43 + 0.5*LOG(E0) + 0.469*(E0**(-1./3)))/(2.*U4) + 5.2e-20*SQRT(E0)*( - 0.5/U4 +&
-      &0.469*(E0**(-1./3))*(1./(3.*U4)))
-    ENDIF
+    REAL*8             :: res(:), te, e0, g, dg_de0, sigmavrec, dlograte_dte
+    REAL*8             :: dte_dU(size(U))
+
+    res = 0.d0
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+      IF (te>neutral_rec_te_floor) THEN
+        CALL compute_dTe_dU(U, dte_dU)
+        CALL compute_sigmavrec(U, sigmavrec)
+        e0 = neutral_rydberg_energy/te
+        g = 0.43d0 + 0.5d0*LOG(e0) + 0.469d0*e0**(-1.d0/3.d0)
+        dg_de0 = 0.5d0/e0 - 0.469d0/3.d0*e0**(-4.d0/3.d0)
+        dlograte_dte = -(0.5d0/e0 + dg_de0/g)*e0/te
+        res = sigmavrec*dlograte_dte*dte_dU
+      END IF
+    END IF
   ENDSUBROUTINE compute_dsigmavrec_dU
+
+  SUBROUTINE compute_sigmavEiz(U,sigmavEiz)
+    REAL*8, INTENT(IN) :: U(:)
+    REAL*8             :: sigmavEiz, sigmaviz, Tloss
+
+    CALL compute_sigmaviz(U, sigmaviz)
+    CALL compute_Tloss(U, Tloss)
+    sigmavEiz = sigmaviz*Tloss
+  ENDSUBROUTINE compute_sigmavEiz
+
+  SUBROUTINE compute_dsigmavEiz_dU(U,res)
+    REAL*8, INTENT(IN) :: U(:)
+    REAL*8             :: res(:), sigmaviz, Tloss
+    REAL*8             :: dsigmaviz_dU(size(U)), dTloss_dU(size(U))
+
+    CALL compute_sigmaviz(U, sigmaviz)
+    CALL compute_dsigmaviz_dU(U, dsigmaviz_dU)
+    CALL compute_Tloss(U, Tloss)
+    CALL compute_dTloss_dU(U, dTloss_dU)
+    res = dsigmaviz_dU*Tloss + sigmaviz*dTloss_dU
+  ENDSUBROUTINE compute_dsigmavEiz_dU
+
+  SUBROUTINE compute_sigmavErec(U,sigmavErec)
+    REAL*8, INTENT(IN) :: U(:)
+    REAL*8             :: sigmavErec, sigmavrec, Tlossrec
+
+    CALL compute_sigmavrec(U, sigmavrec)
+    CALL compute_Tlossrec(U, Tlossrec)
+    sigmavErec = sigmavrec*Tlossrec
+  ENDSUBROUTINE compute_sigmavErec
+
+  SUBROUTINE compute_dsigmavErec_dU(U,res)
+    REAL*8, INTENT(IN) :: U(:)
+    REAL*8             :: res(:), sigmavrec, Tlossrec
+    REAL*8             :: dsigmavrec_dU(size(U)), dTlossrec_dU(size(U))
+
+    CALL compute_sigmavrec(U, sigmavrec)
+    CALL compute_dsigmavrec_dU(U, dsigmavrec_dU)
+    CALL compute_Tlossrec(U, Tlossrec)
+    CALL compute_dTlossrec_dU(U, dTlossrec_dU)
+    res = dsigmavrec_dU*Tlossrec + sigmavrec*dTlossrec_dU
+  ENDSUBROUTINE compute_dsigmavErec_dU
 #else
 
 
@@ -2439,102 +2516,72 @@ CONTAINS
 !ADAS truncated CX
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: sigmavcx,U1,U4,T0,E0
-    REAL*8              :: p1,p2,p3,p4,p5
-    REAL*8              :: logE0
-    REAL*8, PARAMETER :: tol = 1.e-20
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-    !Analytical expression from Hugo Bufferand
-    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-    !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
-    !Fit log log from ADAS database
-    p1 = -0.0006837
-    p2 = 0.008004
-    p3 = -0.03581
-    p4 = 0.4518
-    p5 = -32.59
-    E0 = T0*2./(3.*phys%Mref)*U4/U1
-    
-    !Threshold on Te >= 0.2 eV
-    IF (E0 .LE. 0.05) E0 = 0.05
-    logE0 = LOG(E0)
-    sigmavcx = EXP(p1*logE0**4 + p2*logE0**3 + p3*logE0**2 + p4*logE0 + p5)
+    REAL*8             :: sigmavcx, te, logte_dim
+
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+    ELSE
+      te = neutral_cx_te_floor
+    ENDIF
+
+    te = MAX(te, neutral_cx_te_floor)
+    logte_dim = LOG(te) + neutral_log_temperature_ref
+    sigmavcx = neutral_rate_scale*EXP(neutral_manuelcx_coeffs(1)*logte_dim**4 + neutral_manuelcx_coeffs(2)*logte_dim**3 + &
+      &neutral_manuelcx_coeffs(3)*logte_dim**2 + neutral_manuelcx_coeffs(4)*logte_dim + neutral_manuelcx_coeffs(5))
   ENDSUBROUTINE compute_sigmavcx
 
 
   SUBROUTINE compute_dsigmavcx_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U1,U4,T0,E0
-    REAL*8             :: p1,p2,p3,p4,p5
-    REAL*8, PARAMETER    :: tol = 1.e-20
-    T0 = 50.
-    U1 = U(1)
-    U4 = U(4)
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-    !Analytical expression from Hugo Bufferand
-    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-    !res = 0.
-    !res(1) = -1./U4
-    !res(4) = U1/(U4**2)
-    !res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/exp(-0.5))*exp(-E0)*res
-    !Fit log log from ADAS database
-    p1 = -0.0006837
-    p2 = 0.008004
-    p3 = -0.03581
-    p4 = 0.4518
-    p5 = -32.59
-    E0 = T0*2./(3.*phys%Mref)*U4/U1
-    res = 0.
-    !Threshold on Te >= 0.2 eV
-    !if (E0 .le. 0.05) E0 = 0.05
-    IF (E0 .GE. 0.05) THEN
-       res(1) = (4.*p1*LOG(E0)**3 + 3.*p2*LOG(E0)**2 + 2.*p3*LOG(E0) + p4)*(-U4/U1**2)
-       res(4) = (4.*p1*LOG(E0)**3 + 3.*p2*LOG(E0)**2 + 2.*p3*LOG(E0) + p4)*1./U1
-       res = EXP(p1*LOG(E0)**4 + p2*LOG(E0)**3 + p3*LOG(E0)**2 + p4*LOG(E0) + p5)*U1/U4*res
+    REAL*8             :: res(:), te, logte_dim, sigmavcx, dlograte_dte
+    REAL*8             :: dte_dU(size(U))
+
+    res = 0.d0
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+      IF (te>neutral_cx_te_floor) THEN
+        CALL compute_dTe_dU(U, dte_dU)
+        CALL compute_sigmavcx(U, sigmavcx)
+        logte_dim = LOG(te) + neutral_log_temperature_ref
+        dlograte_dte = (4.d0*neutral_manuelcx_coeffs(1)*logte_dim**3 + 3.d0*neutral_manuelcx_coeffs(2)*logte_dim**2 + &
+          &2.d0*neutral_manuelcx_coeffs(3)*logte_dim + neutral_manuelcx_coeffs(4))/te
+        res = sigmavcx*dlograte_dte*dte_dU
+      END IF
     END IF
   ENDSUBROUTINE compute_dsigmavcx_dU
 #endif
 #ifdef LEGACYCX
   SUBROUTINE compute_sigmavcx(U,sigmavcx)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: sigmavcx,U1,U4,T0,E0
-    REAL*8              :: p1,p2,p3,p4,p5
-    REAL*8, PARAMETER :: tol = 1.e-20
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-    !Analytical expression from Hugo Bufferand
-    !E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-    !sigmavcx = (2.5e-15/exp(-0.5))*exp(-E0)
+    REAL*8             :: sigmavcx, te, e0
 
-    E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-    sigmavcx = (2.5e-15/EXP(-0.5))*EXP(-E0)
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+    ELSE
+      te = neutral_te_floor
+    ENDIF
+
+    te = MAX(te, neutral_te_floor)
+    e0 = 0.5d0/(simpar%refval_temperature*te)
+    sigmavcx = neutral_legacy_cx_prefactor*EXP(-e0)
   ENDSUBROUTINE compute_sigmavcx
 
   SUBROUTINE compute_dsigmavcx_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U1,U4,T0,E0
-    REAL*8             :: p1,p2,p3,p4,p5
-    REAL*8, PARAMETER    :: tol = 1.e-20
-    T0 = 50.
-    U1 = U(1)
-    U4 = U(4)
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-    !Analytical expression from Hugo Bufferand
+    REAL*8             :: res(:), te, e0, sigmavcx, dlograte_dte
+    REAL*8             :: dte_dU(size(U))
 
-    E0 = (0.5*3.*phys%Mref*U1)/(2.*T0*U4)
-    res = 0.
-    res(1) = -1./U4
-    res(4) = U1/(U4**2)
-    res = (1.5*phys%Mref/(2.*T0))*(2.5e-15/EXP(-0.5))*EXP(-E0)*res
+    res = 0.d0
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+      IF (te>neutral_te_floor) THEN
+        CALL compute_dTe_dU(U, dte_dU)
+        CALL compute_sigmavcx(U, sigmavcx)
+        e0 = 0.5d0/(simpar%refval_temperature*te)
+        dlograte_dte = e0/te
+        res = sigmavcx*dlograte_dte*dte_dU
+      END IF
+    END IF
   ENDSUBROUTINE compute_dsigmavcx_dU
 #endif
 #ifdef EXPANDEDCX
@@ -2795,74 +2842,71 @@ CONTAINS
 
   SUBROUTINE compute_Tloss(U,Tloss)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: Tloss,U1,U4,T0
-    REAL*8, PARAMETER :: tol = 1.e-20
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-    Tloss = 25. + 170.*EXP(-(T0*U4)/(3.*phys%Mref*U1))
+    REAL*8             :: Tloss, te
+
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+    ELSE
+      te = neutral_te_floor
+    ENDIF
+
+    te = MAX(te, neutral_te_floor)
+    Tloss = neutral_tloss_offset + neutral_tloss_amplitude*EXP(-neutral_tloss_decay*te)
   ENDSUBROUTINE compute_Tloss
 
 
   SUBROUTINE compute_dTloss_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U1,U4,T0
-    REAL*8, PARAMETER :: tol = 1.e-20
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-    res = 0.
-    res(1) = U4/(U1**2)
-    res(4) = -1./U1
-    res = 170.*EXP(-(T0*U4)/(3.*phys%Mref*U1))*(T0/(3.*phys%Mref))*res
+    REAL*8             :: res(:), te
+    REAL*8             :: dte_dU(size(U))
+
+    res = 0.d0
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+      IF (te>neutral_te_floor) THEN
+        CALL compute_dTe_dU(U, dte_dU)
+        res = -neutral_tloss_amplitude*neutral_tloss_decay*EXP(-neutral_tloss_decay*te)*dte_dU
+      END IF
+    END IF
   ENDSUBROUTINE compute_dTloss_dU
 
 
   SUBROUTINE compute_Tlossrec(U,Tlossrec)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: Tlossrec,U1,U4,T0
-    REAL*8, PARAMETER :: tol = 1.e-20
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-    !Tlossrec = min(250.,8.*exp((2.*U4*T0)/(3.*phys%Mref*U1*9.)))
-    Tlossrec = (2.*U4*T0)/(3.*phys%Mref*U1*9.)
-    IF (Tlossrec .LE. LOG(250./8.)) THEN
-       Tlossrec = 8.*EXP(Tlossrec)
+    REAL*8             :: Tlossrec, te, logTlossrec
+
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
     ELSE
-       Tlossrec = 250.
+      te = neutral_te_floor
+    ENDIF
+
+    te = MAX(te, neutral_te_floor)
+    logTlossrec = neutral_tlossrec_growth*te
+    IF (logTlossrec .LE. neutral_tlossrec_cap_log) THEN
+       Tlossrec = neutral_tlossrec_prefactor*EXP(logTlossrec)
+    ELSE
+       Tlossrec = neutral_tlossrec_cap
     ENDIF
   ENDSUBROUTINE compute_Tlossrec
 
 
   SUBROUTINE compute_dTlossrec_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U1,U4,T0,Tlossrec
-    REAL*8, PARAMETER    :: tol = 1.e-20
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
-    IF (U1<tol) U1=tol
-    IF (U4<tol) U4=tol
-    res = 0.
-    !Tlossrec = 8.*exp((2.*U4*T0)/(3.*phys%Mref*U1*9.))
-    !if (Tlossrec .le. 250.) then
-    !  res(1) = -U4/(U1**2)
-    !  res(4) = 1./U1
-    !  res = Tlossrec*((2.*T0)/(27.*phys%Mref))*res
-    !endif
-    Tlossrec = (2.*U4*T0)/(3.*phys%Mref*U1*9.)
-    IF (Tlossrec .LE. LOG(250./8.)) THEN
-       res(1) = -U4/(U1**2)
-       res(4) = 1./U1
-       res = 8.*EXP(Tlossrec)*((2.*T0)/(27.*phys%Mref))*res
-    ENDIF
+    REAL*8             :: res(:), te, Tlossrec
+    REAL*8             :: dte_dU(size(U))
+
+    res = 0.d0
+    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+      CALL compute_Te(U, te)
+      IF (te>neutral_te_floor) THEN
+        IF (neutral_tlossrec_growth*te .LE. neutral_tlossrec_cap_log) THEN
+          CALL compute_dTe_dU(U, dte_dU)
+          CALL compute_Tlossrec(U, Tlossrec)
+          res = Tlossrec*neutral_tlossrec_growth*dte_dU
+        END IF
+      END IF
+    END IF
   ENDSUBROUTINE compute_dTlossrec_dU
 
 
