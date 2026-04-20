@@ -372,10 +372,136 @@ CONTAINS
   phys%prandtl = 1.
   phys%c_bohm_n = 1.
 
-
-
+  call adimensionalize_neutral_rate_coefficients()
 
   ENDSUBROUTINE initPhys
+
+  SUBROUTINE adimensionalize_neutral_rate_coefficients()
+    REAL*8 :: log_temp_shift, log_density_shift
+    REAL*8 :: log_rate_scale, log_energy_rate_scale
+
+    log_temp_shift = LOG(simpar%refval_temperature)
+    log_density_shift = LOG(simpar%refval_density/1.d14)
+    log_rate_scale = LOG(simpar%refval_density*simpar%refval_time)
+    log_energy_rate_scale = LOG(simpar%refval_density*simpar%refval_time* &
+      &simpar%refval_charge/simpar%refval_mass*simpar%refval_time**2/simpar%refval_length**2)
+
+#ifdef AMJUELSPLINES
+    call shift_logpoly_2d_9x9(phys%alpha_iz, log_temp_shift, log_density_shift, log_rate_scale)
+    call shift_logpoly_2d_9x9(phys%alpha_rec, log_temp_shift, log_density_shift, log_rate_scale)
+    call shift_logpoly_2d_9x9(phys%alpha_energy_iz, log_temp_shift, log_density_shift, log_energy_rate_scale)
+    call shift_logpoly_2d_9x9(phys%alpha_energy_rec, log_temp_shift, log_density_shift, log_energy_rate_scale)
+#endif
+#ifdef EXPANDEDCX
+#ifdef AMJUELCX
+    call shift_logpoly_1d_9(phys%alpha_cx, log_temp_shift, log_rate_scale)
+#endif
+#ifdef THERMALCX
+    call shift_logpoly_1d_5(phys%alpha_cx, log_temp_shift, log_rate_scale)
+#endif
+    call shift_logpoly_1d_17(phys%alpha_cooling_factor, log_temp_shift, log_energy_rate_scale)
+#endif
+  ENDSUBROUTINE adimensionalize_neutral_rate_coefficients
+
+  SUBROUTINE shift_logpoly_2d_9x9(alpha, shift_x, shift_y, log_scale)
+    REAL*8, INTENT(INOUT) :: alpha(9,9)
+    REAL*8, INTENT(IN)    :: shift_x, shift_y, log_scale
+
+    call shift_logpoly_2d(alpha, shift_x, shift_y, log_scale)
+  ENDSUBROUTINE shift_logpoly_2d_9x9
+
+  SUBROUTINE shift_logpoly_1d_9(alpha, shift_x, log_scale)
+    REAL*8, INTENT(INOUT) :: alpha(9)
+    REAL*8, INTENT(IN)    :: shift_x, log_scale
+
+    call shift_logpoly_1d(alpha, shift_x, log_scale)
+  ENDSUBROUTINE shift_logpoly_1d_9
+
+  SUBROUTINE shift_logpoly_1d_5(alpha, shift_x, log_scale)
+    REAL*8, INTENT(INOUT) :: alpha(5)
+    REAL*8, INTENT(IN)    :: shift_x, log_scale
+
+    call shift_logpoly_1d(alpha, shift_x, log_scale)
+  ENDSUBROUTINE shift_logpoly_1d_5
+
+  SUBROUTINE shift_logpoly_1d_17(alpha, shift_x, log_scale)
+    REAL*8, INTENT(INOUT) :: alpha(17)
+    REAL*8, INTENT(IN)    :: shift_x, log_scale
+
+    call shift_logpoly_1d(alpha, shift_x, log_scale)
+  ENDSUBROUTINE shift_logpoly_1d_17
+
+  SUBROUTINE shift_logpoly_2d(alpha, shift_x, shift_y, log_scale)
+    REAL*8, INTENT(INOUT) :: alpha(:,:)
+    REAL*8, INTENT(IN)    :: shift_x, shift_y, log_scale
+    REAL*8                :: shifted(size(alpha,1), size(alpha,2))
+    REAL*8                :: x_factor, y_factor
+    INTEGER               :: i, j, ip, jp, pow_x, pow_y
+
+    shifted = 0.d0
+    do j = 1, size(alpha,2)
+      do i = 1, size(alpha,1)
+        do jp = 1, j
+          pow_y = (j - jp)
+          y_factor = 1.d0
+          if (pow_y > 0) y_factor = shift_y**pow_y
+          do ip = 1, i
+            pow_x = (i - ip)
+            x_factor = 1.d0
+            if (pow_x > 0) x_factor = shift_x**pow_x
+            shifted(ip,jp) = shifted(ip,jp) + alpha(i,j)* &
+              &binomial_coefficient(i - 1, ip - 1)*binomial_coefficient(j - 1, jp - 1)* &
+              &x_factor*y_factor
+          end do
+        end do
+      end do
+    end do
+
+    shifted(1,1) = shifted(1,1) + log_scale
+    alpha = shifted
+  ENDSUBROUTINE shift_logpoly_2d
+
+  SUBROUTINE shift_logpoly_1d(alpha, shift_x, log_scale)
+    REAL*8, INTENT(INOUT) :: alpha(:)
+    REAL*8, INTENT(IN)    :: shift_x, log_scale
+    REAL*8                :: shifted(size(alpha))
+    REAL*8                :: x_factor
+    INTEGER               :: i, ip, pow_x
+
+    shifted = 0.d0
+    do i = 1, size(alpha)
+      do ip = 1, i
+        pow_x = (i - ip)
+        x_factor = 1.d0
+        if (pow_x > 0) x_factor = shift_x**pow_x
+        shifted(ip) = shifted(ip) + alpha(i)*binomial_coefficient(i - 1, ip - 1)*x_factor
+      end do
+    end do
+
+    shifted(1) = shifted(1) + log_scale
+    alpha = shifted
+  ENDSUBROUTINE shift_logpoly_1d
+
+  REAL*8 FUNCTION binomial_coefficient(n, k)
+    INTEGER, INTENT(IN) :: n, k
+    INTEGER             :: i, kk
+
+    if (k < 0 .or. k > n) then
+      binomial_coefficient = 0.d0
+      return
+    end if
+
+    if (k == 0 .or. k == n) then
+      binomial_coefficient = 1.d0
+      return
+    end if
+
+    kk = MIN(k, n - k)
+    binomial_coefficient = 1.d0
+    do i = 1, kk
+      binomial_coefficient = binomial_coefficient*DBLE(n - kk + i)/DBLE(i)
+    end do
+  ENDFUNCTION binomial_coefficient
 
   !*******************************************
   ! Convert physical variable to conservative
