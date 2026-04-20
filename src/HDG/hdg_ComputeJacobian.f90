@@ -3948,50 +3948,54 @@ END IF
       REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz,sigmavErec,dsigmavEiz_dU(:),dsigmavErec_dU(:)
       REAL*8, INTENT(IN), OPTIONAL :: cooling_factor,dcooling_factor_dU(:)
 #endif
-             REAL*8             :: ad,ad4,RE,Sn(:,:),Sn0(:), Ti,Te
+             REAL*8             :: RE,Sn(:,:),Sn0(:),Ti,Te
+#ifdef TEMPERATURE
+             REAL*8             :: recombination_energy
+#endif
              INTEGER*4          :: ign, inn
 
       Sn   = 0.
       Sn0  = 0.
       RE   = 0.
-      ad   = 1e19*1.374e-07 !n0*t0 !1e19*1.374e-07 !old 1.3737e12
-      ad4  =  1e19*1.374e-07**3/1.901e-3**2*1.60217662e-19/3.35e-27 ! n0*t0/u0^2/m_i*e = 1e19*1.374e-07**3/1.901e-3**2*1.60217662e-19/3.35e-27 !old (ad*1.6e-19)/((1.3839e4**2)*3.35e-27)
       inn  = phys%idx_rhon_eq
       ign  = phys%idx_gamman_eq
+#ifdef TEMPERATURE
+      recombination_energy = neutral_recombination_energy
+#endif
 
 #ifndef TEMPERATURE
-      sigmaviz   = 3.01e-14
-      sigmavrec  = 1.3638e-20
-      sigmavcx   = 4.0808e-15
+      sigmaviz   = 3.01e-14*simpar%refval_density*simpar%refval_time
+      sigmavrec  = 1.3638e-20*simpar%refval_density*simpar%refval_time
+      sigmavcx   = 4.0808e-15*simpar%refval_density*simpar%refval_time
 #endif
 
 
       !Assembly Source Terms in plasma density equation
-      Sn(1,:)   = ad*(-dniz_dU(:)*sigmaviz + dnrec_dU(:)*sigmavrec)
+      Sn(1,:)   = -dniz_dU(:)*sigmaviz + dnrec_dU(:)*sigmavrec
 #ifdef TEMPERATURE
 
-      Sn(1,:)   = Sn(1,:) + ad*(-niz*dsigmaviz_dU(:) + nrec*dsigmavrec_dU(:))
+      Sn(1,:)   = Sn(1,:) - niz*dsigmaviz_dU(:) + nrec*dsigmavrec_dU(:)
 #endif
       !Assembly Source Terms in plasma momentum equation
 
-      Sn(2,:) = ad*(dfGammacx_dU(:)*sigmavcx + dfGammarec_dU(:)*sigmavrec)
+      Sn(2,:) = dfGammacx_dU(:)*sigmavcx + dfGammarec_dU(:)*sigmavrec
 #ifdef NEUTRALGAMMA
-      Sn(2,:) = Sn(2,:) - ad*(dfGammaN_dU(:)*sigmaviz + dfGammaN_dU(:)*sigmavcx)
+      Sn(2,:) = Sn(2,:) - (dfGammaN_dU(:)*sigmaviz + dfGammaN_dU(:)*sigmavcx)
 #endif
 #ifdef TEMPERATURE
 
 
-      Sn(2,:)   = Sn(2,:) + ad*( fGammacx*dsigmavcx_dU(:) + fGammarec*dsigmavrec_dU(:))
+      Sn(2,:)   = Sn(2,:) + fGammacx*dsigmavcx_dU(:) + fGammarec*dsigmavrec_dU(:)
 #ifdef NEUTRALGAMMA
-      Sn(2,:)   = Sn(2,:) - ad*(fGammaN*dsigmaviz_dU(:) + fGammaN*dsigmavcx_dU(:))
+      Sn(2,:)   = Sn(2,:) - (fGammaN*dsigmaviz_dU(:) + fGammaN*dsigmavcx_dU(:))
 #endif
 
       !Assembly Source Terms in ion energy equation
 
-      Sn(3,:) = ad*(-RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec+dfEicx_dU(:)*sigmavcx)
-      Sn(3,:) = Sn(3,:) + ad*(-RE*fEiiz*dsigmaviz_dU(:) + fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:))
+      Sn(3,:) = -RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec + dfEicx_dU(:)*sigmavcx
+      Sn(3,:) = Sn(3,:) - RE*fEiiz*dsigmaviz_dU(:) + fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:)
 #ifdef NEUTRALGAMMA
-      Sn(3,:) = Sn(3,:) - ad*(dfEiN_dU(:)*sigmaviz + dfEiN_dU(:)*sigmavcx + &
+      Sn(3,:) = Sn(3,:) - (dfEiN_dU(:)*sigmaviz + dfEiN_dU(:)*sigmavcx + &
            &fEiN*dsigmaviz_dU(:) + fEiN*dsigmavcx_dU(:))
 #endif
       !Assembly Source Terms in electron energy equation
@@ -4000,15 +4004,15 @@ END IF
       !Sn(4,:) =  ad4*(dniz_dU(:)*sigmaviz*Tloss + niz*dsigmaviz_dU(:)*Tloss + niz*sigmaviz*dTloss_dU(:) +&
             !   &dnrec_dU(:)*sigmavrec*Tlossrec + nrec*dsigmavrec_dU(:)*Tlossrec + nrec*sigmavrec*dTlossrec_dU(:))
       !AMJUEL rates
-      Sn(4,:) =  ad4*(dniz_dU(:)*sigmavEiz + niz*dsigmavEiz_dU(:) +&
-        &dnrec_dU(:)*sigmavErec + nrec*dsigmavErec_dU(:))
+      Sn(4,:) = dniz_dU(:)*sigmavEiz + niz*dsigmavEiz_dU(:) + &
+        &dnrec_dU(:)*sigmavErec + nrec*dsigmavErec_dU(:)
       IF (PRESENT(cooling_factor)) THEN
       ! Cooling factor term
-        Sn(4,:) = Sn(4,:) + phys%impurity_concentration*ad4*(nrec*dcooling_factor_dU(:)+dnrec_dU(:)*cooling_factor)
+        Sn(4,:) = Sn(4,:) + phys%impurity_concentration*(nrec*dcooling_factor_dU(:) + dnrec_dU(:)*cooling_factor)
       endif
 
       !modification with recombination gain
-      Sn(4,:) =  Sn(4,:)+ ad4*(-1.*dnrec_dU(:)*sigmavrec*13.6 - nrec*dsigmavrec_dU(:)*13.6)
+      Sn(4,:) = Sn(4,:) - recombination_energy*(dnrec_dU(:)*sigmavrec + nrec*dsigmavrec_dU(:))
 
 
 #endif
@@ -4019,39 +4023,39 @@ END IF
 #endif
 
       !Assembly RHS Neutral Source Terms
-      Sn0(1)    = ad*(niz*sigmaviz - nrec*sigmavrec)
-      Sn0(2)    = ad*(-fGammacx*sigmavcx - fGammarec*sigmavrec)
+      Sn0(1)    = niz*sigmaviz - nrec*sigmavrec
+      Sn0(2)    = -fGammacx*sigmavcx - fGammarec*sigmavrec
 #ifdef NEUTRALGAMMA
-      Sn0(2)    = Sn0(2) + ad*(fGammaN*sigmaviz + fGammaN*sigmavcx)
+      Sn0(2)    = Sn0(2) + fGammaN*sigmaviz + fGammaN*sigmavcx
 #endif
 #ifdef AMJUELSPLINES
-             Sn0(1)    = Sn0(1) + ad*(niz*dot_PRODUCT(dsigmaviz_dU,U) - nrec*dot_PRODUCT(dsigmavrec_dU,U))
-             Sn0(2)    = Sn0(2) + ad*(- fGammarec*dot_PRODUCT(dsigmavrec_dU,U))
+             Sn0(1)    = Sn0(1) + niz*dot_PRODUCT(dsigmaviz_dU,U) - nrec*dot_PRODUCT(dsigmavrec_dU,U)
+             Sn0(2)    = Sn0(2) - fGammarec*dot_PRODUCT(dsigmavrec_dU,U)
 #ifdef NEUTRALGAMMA
-             Sn0(2)    = Sn0(2) + ad*fGammaN*dot_PRODUCT(dsigmaviz_dU,U)
+             Sn0(2)    = Sn0(2) + fGammaN*dot_PRODUCT(dsigmaviz_dU,U)
 #endif
 #endif
 #ifdef TEMPERATURE
-      Sn0(3)    = ad*(RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx)
+      Sn0(3)    = RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx
 #ifdef NEUTRALGAMMA
-      Sn0(3)    = Sn0(3) + ad*(fEiN*sigmaviz + fEiN*sigmavcx)
+      Sn0(3)    = Sn0(3) + fEiN*sigmaviz + fEiN*sigmavcx
 #endif
       !Sn0(4)    = ad4*(-niz*sigmaviz*Tloss - nrec*sigmavrec*Tlossrec)
       !modification with recombination gain
-      Sn0(4)    = ad4*(nrec*sigmavrec*13.6)
-      Sn0(4)    = Sn0(4) + ad4*(-niz*sigmavEiz- nrec*sigmavErec)
+      Sn0(4)    = nrec*sigmavrec*recombination_energy
+      Sn0(4)    = Sn0(4) - niz*sigmavEiz - nrec*sigmavErec
 #ifdef AMJUELSPLINES
-             Sn0(3)    = Sn0(3) + ad*(RE*fEiiz*dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U))
+             Sn0(3)    = Sn0(3) + RE*fEiiz*dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U)
 #ifdef NEUTRALGAMMA
-             Sn0(3)    = Sn0(3) + ad*(fEiN*dot_PRODUCT(dsigmaviz_dU,U))
+             Sn0(3)    = Sn0(3) + fEiN*dot_PRODUCT(dsigmaviz_dU,U)
 #endif
              !Sn0(4)    = Sn0(4) + ad4*(-niz*dot_PRODUCT(dsigmaviz_dU,U)*Tloss - nrec*dot_PRODUCT(dsigmavrec_dU,U)*Tlossrec)
-      Sn0(4)    = Sn0(4) + ad4*(-niz*dot_product(dsigmavEiz_dU,U) - nrec*dot_product(dsigmavErec_dU,U))
-      Sn0(4)    = Sn0(4) +  ad4*( nrec*dot_PRODUCT(dsigmavrec_dU,U)*13.6)
+      Sn0(4)    = Sn0(4) - niz*dot_product(dsigmavEiz_dU,U) - nrec*dot_product(dsigmavErec_dU,U)
+      Sn0(4)    = Sn0(4) + nrec*dot_PRODUCT(dsigmavrec_dU,U)*recombination_energy
 #endif
       IF (PRESENT(cooling_factor)) THEN
       ! Cooling factor term
-        Sn0(4)    = Sn0(4) + phys%impurity_concentration*ad4*(-nrec*cooling_factor)
+        Sn0(4)    = Sn0(4) - phys%impurity_concentration*nrec*cooling_factor
       ENDIF
 #endif
       Sn0(inn)  = -Sn0(1)

@@ -34,6 +34,9 @@ MODULE physics
   REAL*8, SAVE :: neutral_te_floor
   REAL*8, SAVE :: neutral_ti_floor
   REAL*8, SAVE :: neutral_sigmavnn_prefactor
+  REAL*8, SAVE :: neutral_transport_ti_floor
+  REAL*8, SAVE :: neutral_transport_ti_supp
+  REAL*8, SAVE :: neutral_recombination_energy
 
 CONTAINS
 
@@ -419,6 +422,9 @@ CONTAINS
     neutral_ti_floor = neutral_ti_floor_phys/simpar%refval_temperature
     neutral_sigmavnn_prefactor = simpar%refval_density*simpar%refval_time*neutral_sigmavnn_prefactor_phys* &
       &(simpar%refval_temperature*elementary_charge_si/boltzmann_constant_si)**0.25d0
+    neutral_transport_ti_floor = 1.d-6/simpar%refval_temperature
+    neutral_transport_ti_supp = neutral_transport_ti_floor
+    neutral_recombination_energy = 13.6d0*phys%Mref/simpar%refval_temperature
   ENDSUBROUTINE initialize_neutral_rate_runtime_constants
 
   SUBROUTINE adimensionalize_neutral_rate_coefficients()
@@ -725,22 +731,20 @@ CONTAINS
   SUBROUTINE compute_limited_Ti(U, Ti_limited)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: Ti_limited
-    REAL*8, PARAMETER   :: ti_min = 1.d-6
 
     CALL compute_Ti(U, Ti_limited)
-    CALL softplus(Ti_limited, ti_min/simpar%refval_temperature)
+    CALL softplus(Ti_limited, neutral_transport_ti_floor)
   ENDSUBROUTINE compute_limited_Ti
 
   SUBROUTINE compute_dlimited_Ti_dU(U, dTi_limited_dU)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: dTi_limited_dU(:)
-    REAL*8, PARAMETER   :: ti_min = 1.d-6
     REAL*8              :: Ti, soft_deriv
     REAL*8              :: dTi_dU(size(U))
 
     CALL compute_Ti(U, Ti)
     CALL compute_dTi_dU(U, dTi_dU)
-    CALL softplus_deriv(Ti, ti_min/simpar%refval_temperature, soft_deriv)
+    CALL softplus_deriv(Ti, neutral_transport_ti_floor, soft_deriv)
     dTi_limited_dU = dTi_dU*soft_deriv
   ENDSUBROUTINE compute_dlimited_Ti_dU
 
@@ -750,22 +754,16 @@ CONTAINS
     REAL*8              :: Ti_limited
 
     CALL compute_limited_Ti(U, Ti_limited)
-    coeff = simpar%refval_charge*simpar%refval_temperature*Ti_limited/ &
-      &(simpar%refval_mass*simpar%refval_density)
-    coeff = coeff*simpar%refval_time/simpar%refval_length**2
+    coeff = 0.5d0*phys%a*Ti_limited
   ENDSUBROUTINE compute_neutral_transport_prefactor
 
   SUBROUTINE compute_dneutral_transport_prefactor_dU(U, dcoeff_dU)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: dcoeff_dU(:)
     REAL*8              :: dTi_limited_dU(size(U))
-    REAL*8              :: coeff0
 
     CALL compute_dlimited_Ti_dU(U, dTi_limited_dU)
-    coeff0 = simpar%refval_charge*simpar%refval_temperature/ &
-      &(simpar%refval_mass*simpar%refval_density)
-    dcoeff_dU = coeff0*dTi_limited_dU
-    dcoeff_dU = dcoeff_dU*simpar%refval_time/simpar%refval_length**2
+    dcoeff_dU = 0.5d0*phys%a*dTi_limited_dU
   ENDSUBROUTINE compute_dneutral_transport_prefactor_dU
 
   SUBROUTINE compute_neutral_diffusion_denominator(U, denom)
@@ -2748,16 +2746,14 @@ CONTAINS
   SUBROUTINE compute_W5p(U, W5p)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: W5p(:)
-    REAL*8, PARAMETER   :: ti_supp_eV = 1.d-6
-    REAL*8              :: Dnn, Ti_limited, alpha, supp, ti_factor, ti_supp
+    REAL*8              :: Dnn, Ti_limited, alpha, supp, ti_factor
     INTEGER             :: inn
 
     ti_factor = 2.d0/(3.d0*phys%Mref)
     inn = phys%idx_rhon_eq
     CALL compute_Dnn(U, Dnn)
     CALL compute_limited_Ti(U, Ti_limited)
-    ti_supp = ti_supp_eV/simpar%refval_temperature
-    supp = Ti_limited/(Ti_limited + ti_supp)
+    supp = Ti_limited/(Ti_limited + neutral_transport_ti_supp)
 
     alpha = numer%neutralp_lambda*ti_factor*U(inn)*Dnn/Ti_limited
     CALL computeVi(U, W5p)
@@ -2767,13 +2763,12 @@ CONTAINS
   SUBROUTINE compute_dW5p_dU(U, dW5p_dU)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: dW5p_dU(:, :)
-    REAL*8, PARAMETER   :: ti_supp_eV = 1.d-6
     REAL*8              :: Vi(size(U)), dVi_dU(size(U), size(U))
     REAL*8              :: Dnn, Dnn_dU(size(U))
     REAL*8              :: Ti_limited
     REAL*8              :: dTi_limited_dU(size(U))
     REAL*8              :: alpha, dalpha_dU(size(U)), ti_factor
-    REAL*8              :: supp, dsupp_dU(size(U)), ti_supp
+    REAL*8              :: supp, dsupp_dU(size(U))
     INTEGER             :: inn, j
 
     dW5p_dU = 0.d0
@@ -2786,9 +2781,8 @@ CONTAINS
     CALL compute_Dnn_dU(U, Dnn_dU)
     CALL compute_limited_Ti(U, Ti_limited)
     CALL compute_dlimited_Ti_dU(U, dTi_limited_dU)
-    ti_supp = ti_supp_eV/simpar%refval_temperature
-    supp = Ti_limited/(Ti_limited + ti_supp)
-    dsupp_dU = ti_supp*dTi_limited_dU/(Ti_limited + ti_supp)**2
+    supp = Ti_limited/(Ti_limited + neutral_transport_ti_supp)
+    dsupp_dU = neutral_transport_ti_supp*dTi_limited_dU/(Ti_limited + neutral_transport_ti_supp)**2
 
     alpha = numer%neutralp_lambda*ti_factor*U(inn)*Dnn/Ti_limited
     dalpha_dU = numer%neutralp_lambda*ti_factor*(U(inn)*Dnn_dU/Ti_limited - U(inn)*Dnn*dTi_limited_dU/Ti_limited**2)
