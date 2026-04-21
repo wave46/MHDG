@@ -3930,7 +3930,7 @@ END IF
       inn  = phys%idx_rhon_eq
       ign  = phys%idx_gamman_eq
 #ifdef TEMPERATURE
-      recombination_energy = neutral_recombination_energy
+      recombination_energy = neutral_rt%recombination_energy
 #endif
 
 #ifndef TEMPERATURE

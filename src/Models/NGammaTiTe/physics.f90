@@ -34,34 +34,38 @@ MODULE physics
   REAL*8, PARAMETER :: boltzmann_constant_si = 1.38064852d-23
   REAL*8, PARAMETER :: elementary_charge_si = 1.60217662d-19
 
-  REAL*8, SAVE :: neutral_rate_scale
-  REAL*8, SAVE :: neutral_energy_weight
-  REAL*8, SAVE :: eirene_rate_te_min
-  REAL*8, SAVE :: eirene_rate_te_max
-  REAL*8, SAVE :: eirene_rate_ti_min
-  REAL*8, SAVE :: eirene_rate_ti_max
-  REAL*8, SAVE :: eirene_rate_ne_min
-  REAL*8, SAVE :: eirene_rate_ne_max
-  REAL*8, SAVE :: neutral_state_tol
-  REAL*8, SAVE :: neutral_te_floor
-  REAL*8, SAVE :: neutral_ti_floor
-  REAL*8, SAVE :: neutral_sigmavnn_prefactor
-  REAL*8, SAVE :: neutral_transport_ti_floor
-  REAL*8, SAVE :: neutral_transport_ti_supp
-  REAL*8, SAVE :: neutral_rydberg_energy
-  REAL*8, SAVE :: neutral_iz_te_floor
-  REAL*8, SAVE :: neutral_rec_te_floor
-  REAL*8, SAVE :: neutral_cx_te_floor
-  REAL*8, SAVE :: neutral_log_temperature_ref
-  REAL*8, SAVE :: neutral_tloss_offset
-  REAL*8, SAVE :: neutral_tloss_amplitude
-  REAL*8, SAVE :: neutral_tloss_decay
-  REAL*8, SAVE :: neutral_tlossrec_prefactor
-  REAL*8, SAVE :: neutral_tlossrec_cap
-  REAL*8, SAVE :: neutral_tlossrec_growth
-  REAL*8, SAVE :: neutral_tlossrec_cap_log
-  REAL*8, SAVE :: neutral_legacy_cx_prefactor
-  REAL*8, SAVE :: neutral_recombination_energy
+  TYPE neutral_runtime_constants_t
+    REAL*8 :: rate_scale
+    REAL*8 :: energy_weight
+    REAL*8 :: eirene_te_min
+    REAL*8 :: eirene_te_max
+    REAL*8 :: eirene_ti_min
+    REAL*8 :: eirene_ti_max
+    REAL*8 :: eirene_ne_min
+    REAL*8 :: eirene_ne_max
+    REAL*8 :: state_tol
+    REAL*8 :: te_floor
+    REAL*8 :: ti_floor
+    REAL*8 :: sigmavnn_prefactor
+    REAL*8 :: transport_ti_floor
+    REAL*8 :: transport_ti_supp
+    REAL*8 :: rydberg_energy
+    REAL*8 :: iz_te_floor
+    REAL*8 :: rec_te_floor
+    REAL*8 :: cx_te_floor
+    REAL*8 :: log_temperature_ref
+    REAL*8 :: tloss_offset
+    REAL*8 :: tloss_amplitude
+    REAL*8 :: tloss_decay
+    REAL*8 :: tlossrec_prefactor
+    REAL*8 :: tlossrec_cap
+    REAL*8 :: tlossrec_growth
+    REAL*8 :: tlossrec_cap_log
+    REAL*8 :: legacy_cx_prefactor
+    REAL*8 :: recombination_energy
+  END TYPE neutral_runtime_constants_t
+
+  TYPE(neutral_runtime_constants_t), SAVE :: neutral_rt
 
 CONTAINS
 
@@ -434,37 +438,37 @@ CONTAINS
     REAL*8 :: density_scale
 
     density_scale = simpar%refval_density/1.d14
-    neutral_rate_scale = simpar%refval_density*simpar%refval_time
-    neutral_energy_weight = phys%Mref/simpar%refval_temperature
+    neutral_rt%rate_scale = simpar%refval_density*simpar%refval_time
+    neutral_rt%energy_weight = phys%Mref/simpar%refval_temperature
 
-    eirene_rate_te_min = eirene_rate_te_min_phys/simpar%refval_temperature
-    eirene_rate_te_max = eirene_rate_te_max_phys/simpar%refval_temperature
-    eirene_rate_ti_min = eirene_rate_ti_min_phys/simpar%refval_temperature
-    eirene_rate_ti_max = eirene_rate_ti_max_phys/simpar%refval_temperature
-    eirene_rate_ne_min = eirene_rate_ne_min_phys/1.d14/density_scale
-    eirene_rate_ne_max = eirene_rate_ne_max_phys/1.d14/density_scale
+    neutral_rt%eirene_te_min = eirene_rate_te_min_phys/simpar%refval_temperature
+    neutral_rt%eirene_te_max = eirene_rate_te_max_phys/simpar%refval_temperature
+    neutral_rt%eirene_ti_min = eirene_rate_ti_min_phys/simpar%refval_temperature
+    neutral_rt%eirene_ti_max = eirene_rate_ti_max_phys/simpar%refval_temperature
+    neutral_rt%eirene_ne_min = eirene_rate_ne_min_phys/1.d14/density_scale
+    neutral_rt%eirene_ne_max = eirene_rate_ne_max_phys/1.d14/density_scale
 
-    neutral_state_tol = neutral_state_tol_default
-    neutral_te_floor = neutral_te_floor_phys/simpar%refval_temperature
-    neutral_ti_floor = neutral_ti_floor_phys/simpar%refval_temperature
-    neutral_sigmavnn_prefactor = neutral_rate_scale*neutral_sigmavnn_prefactor_phys* &
+    neutral_rt%state_tol = neutral_state_tol_default
+    neutral_rt%te_floor = neutral_te_floor_phys/simpar%refval_temperature
+    neutral_rt%ti_floor = neutral_ti_floor_phys/simpar%refval_temperature
+    neutral_rt%sigmavnn_prefactor = neutral_rt%rate_scale*neutral_sigmavnn_prefactor_phys* &
       &(simpar%refval_temperature*elementary_charge_si/boltzmann_constant_si)**0.25d0
-    neutral_transport_ti_floor = 1.d-6/simpar%refval_temperature
-    neutral_transport_ti_supp = neutral_transport_ti_floor
-    neutral_rydberg_energy = neutral_rydberg_energy_phys/simpar%refval_temperature
-    neutral_iz_te_floor = neutral_iz_te_floor_phys/simpar%refval_temperature
-    neutral_rec_te_floor = neutral_rec_te_floor_phys/simpar%refval_temperature
-    neutral_cx_te_floor = neutral_cx_te_floor_phys/simpar%refval_temperature
-    neutral_log_temperature_ref = LOG(simpar%refval_temperature)
-    neutral_tloss_offset = neutral_tloss_offset_phys*neutral_energy_weight
-    neutral_tloss_amplitude = neutral_tloss_amplitude_phys*neutral_energy_weight
-    neutral_tloss_decay = 0.5d0*simpar%refval_temperature
-    neutral_tlossrec_prefactor = neutral_tlossrec_prefactor_phys*neutral_energy_weight
-    neutral_tlossrec_cap = neutral_tlossrec_cap_phys*neutral_energy_weight
-    neutral_tlossrec_growth = simpar%refval_temperature/9.d0
-    neutral_tlossrec_cap_log = LOG(neutral_tlossrec_cap_phys/neutral_tlossrec_prefactor_phys)
-    neutral_legacy_cx_prefactor = neutral_rate_scale*neutral_legacy_cx_prefactor_phys
-    neutral_recombination_energy = neutral_rydberg_energy_phys*neutral_energy_weight
+    neutral_rt%transport_ti_floor = 1.d-6/simpar%refval_temperature
+    neutral_rt%transport_ti_supp = neutral_rt%transport_ti_floor
+    neutral_rt%rydberg_energy = neutral_rydberg_energy_phys/simpar%refval_temperature
+    neutral_rt%iz_te_floor = neutral_iz_te_floor_phys/simpar%refval_temperature
+    neutral_rt%rec_te_floor = neutral_rec_te_floor_phys/simpar%refval_temperature
+    neutral_rt%cx_te_floor = neutral_cx_te_floor_phys/simpar%refval_temperature
+    neutral_rt%log_temperature_ref = LOG(simpar%refval_temperature)
+    neutral_rt%tloss_offset = neutral_tloss_offset_phys*neutral_rt%energy_weight
+    neutral_rt%tloss_amplitude = neutral_tloss_amplitude_phys*neutral_rt%energy_weight
+    neutral_rt%tloss_decay = 0.5d0*simpar%refval_temperature
+    neutral_rt%tlossrec_prefactor = neutral_tlossrec_prefactor_phys*neutral_rt%energy_weight
+    neutral_rt%tlossrec_cap = neutral_tlossrec_cap_phys*neutral_rt%energy_weight
+    neutral_rt%tlossrec_growth = simpar%refval_temperature/9.d0
+    neutral_rt%tlossrec_cap_log = LOG(neutral_tlossrec_cap_phys/neutral_tlossrec_prefactor_phys)
+    neutral_rt%legacy_cx_prefactor = neutral_rt%rate_scale*neutral_legacy_cx_prefactor_phys
+    neutral_rt%recombination_energy = neutral_rydberg_energy_phys*neutral_rt%energy_weight
   ENDSUBROUTINE initialize_neutral_rate_runtime_constants
 
   SUBROUTINE adimensionalize_neutral_rate_coefficients()
@@ -773,7 +777,7 @@ CONTAINS
     REAL*8, INTENT(OUT) :: Ti_limited
 
     CALL compute_Ti(U, Ti_limited)
-    CALL softplus(Ti_limited, neutral_transport_ti_floor)
+    CALL softplus(Ti_limited, neutral_rt%transport_ti_floor)
   ENDSUBROUTINE compute_limited_Ti
 
   SUBROUTINE compute_dlimited_Ti_dU(U, dTi_limited_dU)
@@ -784,7 +788,7 @@ CONTAINS
 
     CALL compute_Ti(U, Ti)
     CALL compute_dTi_dU(U, dTi_dU)
-    CALL softplus_deriv(Ti, neutral_transport_ti_floor, soft_deriv)
+    CALL softplus_deriv(Ti, neutral_rt%transport_ti_floor, soft_deriv)
     dTi_limited_dU = dTi_dU*soft_deriv
   ENDSUBROUTINE compute_dlimited_Ti_dU
 
@@ -2081,15 +2085,15 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmaviz, te, e0
 
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
     ELSE
-      te = neutral_iz_te_floor
+      te = neutral_rt%iz_te_floor
     ENDIF
 
-    te = MAX(te, neutral_iz_te_floor)
-    e0 = te/neutral_rydberg_energy
-    sigmaviz = neutral_rate_scale*1.d-11*SQRT(e0)/(neutral_rydberg_energy_phys**1.5d0*(6.d0 + e0))*EXP(-1.d0/e0)
+    te = MAX(te, neutral_rt%iz_te_floor)
+    e0 = te/neutral_rt%rydberg_energy
+    sigmaviz = neutral_rt%rate_scale*1.d-11*SQRT(e0)/(neutral_rydberg_energy_phys**1.5d0*(6.d0 + e0))*EXP(-1.d0/e0)
   ENDSUBROUTINE compute_sigmaviz
 
 
@@ -2099,13 +2103,13 @@ CONTAINS
     REAL*8             :: dte_dU(size(U))
 
     res = 0.d0
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
-      IF (te>neutral_iz_te_floor) THEN
+      IF (te>neutral_rt%iz_te_floor) THEN
         CALL compute_dTe_dU(U, dte_dU)
         CALL compute_sigmaviz(U, sigmaviz)
-        e0 = te/neutral_rydberg_energy
-        dlograte_dte = (0.5d0/e0 - 1.d0/(6.d0 + e0) + 1.d0/e0**2)/neutral_rydberg_energy
+        e0 = te/neutral_rt%rydberg_energy
+        dlograte_dte = (0.5d0/e0 - 1.d0/(6.d0 + e0) + 1.d0/e0**2)/neutral_rt%rydberg_energy
         res = sigmaviz*dlograte_dte*dte_dU
       END IF
     END IF
@@ -2116,16 +2120,16 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmavrec, te, e0, g
 
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
     ELSE
-      te = neutral_rec_te_floor
+      te = neutral_rt%rec_te_floor
     ENDIF
 
-    te = MAX(te, neutral_rec_te_floor)
-    e0 = neutral_rydberg_energy/te
+    te = MAX(te, neutral_rt%rec_te_floor)
+    e0 = neutral_rt%rydberg_energy/te
     g = 0.43d0 + 0.5d0*LOG(e0) + 0.469d0*e0**(-1.d0/3.d0)
-    sigmavrec = neutral_rate_scale*5.2d-20*SQRT(e0)*g
+    sigmavrec = neutral_rt%rate_scale*5.2d-20*SQRT(e0)*g
   ENDSUBROUTINE compute_sigmavrec
 
 
@@ -2135,12 +2139,12 @@ CONTAINS
     REAL*8             :: dte_dU(size(U))
 
     res = 0.d0
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
-      IF (te>neutral_rec_te_floor) THEN
+      IF (te>neutral_rt%rec_te_floor) THEN
         CALL compute_dTe_dU(U, dte_dU)
         CALL compute_sigmavrec(U, sigmavrec)
-        e0 = neutral_rydberg_energy/te
+        e0 = neutral_rt%rydberg_energy/te
         g = 0.43d0 + 0.5d0*LOG(e0) + 0.469d0*e0**(-1.d0/3.d0)
         dg_de0 = 0.5d0/e0 - 0.469d0/3.d0*e0**(-4.d0/3.d0)
         dlograte_dte = -(0.5d0/e0 + dg_de0/g)*e0/te
@@ -2205,46 +2209,46 @@ CONTAINS
 
     rate = 0.
     ! region 1, where ne is applicable
-    IF ((ne>=eirene_rate_ne_min) .AND. (ne<=eirene_rate_ne_max)) THEN
-       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
+    IF ((ne>=neutral_rt%eirene_ne_min) .AND. (ne<=neutral_rt%eirene_ne_max)) THEN
+       IF ((te>=neutral_rt%eirene_te_min) .AND.(te<=neutral_rt%eirene_te_max)) THEN
           CALL compute_2D_logeirene_rate(te,ne,alpha,rate)
-       ELSEIF (te<eirene_rate_te_min) THEN
-          CALL compute_2D_logeirene_rate(eirene_rate_te_min,ne,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,ne,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_min))
-       ELSEIF (te>eirene_rate_te_max) THEN
-          CALL compute_2D_logeirene_rate(eirene_rate_te_max,ne,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,ne,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_max))
+       ELSEIF (te<neutral_rt%eirene_te_min) THEN
+          CALL compute_2D_logeirene_rate(neutral_rt%eirene_te_min,ne,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_min,ne,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(neutral_rt%eirene_te_min))
+       ELSEIF (te>neutral_rt%eirene_te_max) THEN
+          CALL compute_2D_logeirene_rate(neutral_rt%eirene_te_max,ne,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_max,ne,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(neutral_rt%eirene_te_max))
        ENDIF
     ! beyond range of ne applicability
-    ELSEIF(ne<eirene_rate_ne_min) THEN
+    ELSEIF(ne<neutral_rt%eirene_ne_min) THEN
       ! if te is still applicable
-       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
-          CALL compute_2D_logeirene_rate(te,eirene_rate_ne_min,alpha,rate)
+       IF ((te>=neutral_rt%eirene_te_min) .AND.(te<=neutral_rt%eirene_te_max)) THEN
+          CALL compute_2D_logeirene_rate(te,neutral_rt%eirene_ne_min,alpha,rate)
       ! if te < te_min
-       ELSEIF (te<eirene_rate_te_min) THEN
-          CALL compute_2D_logeirene_rate(eirene_rate_te_min,eirene_rate_ne_min,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,eirene_rate_ne_min,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_min))
+       ELSEIF (te<neutral_rt%eirene_te_min) THEN
+          CALL compute_2D_logeirene_rate(neutral_rt%eirene_te_min,neutral_rt%eirene_ne_min,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_min,neutral_rt%eirene_ne_min,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(neutral_rt%eirene_te_min))
       ! if te>te_max
-       ELSEIF (te>eirene_rate_te_max) THEN
-          CALL compute_2D_logeirene_rate(eirene_rate_te_max,eirene_rate_ne_min,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,eirene_rate_ne_min,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_max))
+       ELSEIF (te>neutral_rt%eirene_te_max) THEN
+          CALL compute_2D_logeirene_rate(neutral_rt%eirene_te_max,neutral_rt%eirene_ne_min,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_max,neutral_rt%eirene_ne_min,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(neutral_rt%eirene_te_max))
        ENDIF
     ! if ne>ne_max
-    ELSEIF (ne>eirene_rate_ne_max) THEN
-       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
-          CALL compute_2D_logeirene_rate(te,eirene_rate_ne_max,alpha,rate)
-       ELSEIF (te<eirene_rate_te_min) THEN
-          CALL compute_2D_logeirene_rate(eirene_rate_te_min,eirene_rate_ne_max,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,eirene_rate_ne_max,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_min))
-       ELSEIF (te>eirene_rate_te_max) THEN
-          CALL compute_2D_logeirene_rate(eirene_rate_te_max,eirene_rate_ne_max,alpha,rate)
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,eirene_rate_ne_max,alpha,dlograte_dlogte)
-          rate = rate+dlograte_dlogte*(LOG(te)-LOG(eirene_rate_te_max))
+    ELSEIF (ne>neutral_rt%eirene_ne_max) THEN
+       IF ((te>=neutral_rt%eirene_te_min) .AND.(te<=neutral_rt%eirene_te_max)) THEN
+          CALL compute_2D_logeirene_rate(te,neutral_rt%eirene_ne_max,alpha,rate)
+       ELSEIF (te<neutral_rt%eirene_te_min) THEN
+          CALL compute_2D_logeirene_rate(neutral_rt%eirene_te_min,neutral_rt%eirene_ne_max,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_min,neutral_rt%eirene_ne_max,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(neutral_rt%eirene_te_min))
+       ELSEIF (te>neutral_rt%eirene_te_max) THEN
+          CALL compute_2D_logeirene_rate(neutral_rt%eirene_te_max,neutral_rt%eirene_ne_max,alpha,rate)
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_max,neutral_rt%eirene_ne_max,alpha,dlograte_dlogte)
+          rate = rate+dlograte_dlogte*(LOG(te)-LOG(neutral_rt%eirene_te_max))
        ENDIF
     ENDIF
     ! rate is in cm^3/s in EIRENE
@@ -2266,37 +2270,37 @@ CONTAINS
     rate_du = 0.
     dlograte_dlogne = 0.
     dlograte_dlogte = 0.
-    IF ((ne>=eirene_rate_ne_min) .AND. (ne<=eirene_rate_ne_max)) THEN
-       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
+    IF ((ne>=neutral_rt%eirene_ne_min) .AND. (ne<=neutral_rt%eirene_ne_max)) THEN
+       IF ((te>=neutral_rt%eirene_te_min) .AND.(te<=neutral_rt%eirene_te_max)) THEN
           CALL compute_dlogeirene_2D_dlogne_rate(te,ne,alpha,dlograte_dlogne)
           CALL compute_dlogeirene_2D_dlogte_rate(te,ne,alpha,dlograte_dlogte)
-       ELSEIF (te<eirene_rate_te_min) THEN
-          CALL compute_dlogeirene_2D_dlogne_rate(eirene_rate_te_min,ne,alpha,dlograte_dlogne)
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,ne,alpha,dlograte_dlogte)
-       ELSEIF (te>eirene_rate_te_max) THEN
-          CALL compute_dlogeirene_2D_dlogne_rate(eirene_rate_te_max,ne,alpha,dlograte_dlogne)
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,ne,alpha,dlograte_dlogte)
+       ELSEIF (te<neutral_rt%eirene_te_min) THEN
+          CALL compute_dlogeirene_2D_dlogne_rate(neutral_rt%eirene_te_min,ne,alpha,dlograte_dlogne)
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_min,ne,alpha,dlograte_dlogte)
+       ELSEIF (te>neutral_rt%eirene_te_max) THEN
+          CALL compute_dlogeirene_2D_dlogne_rate(neutral_rt%eirene_te_max,ne,alpha,dlograte_dlogne)
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_max,ne,alpha,dlograte_dlogte)
        ENDIF
     ! beyond range of ne applicability (ne derivative is now zero)
-    ELSEIF(ne<eirene_rate_ne_min) THEN
+    ELSEIF(ne<neutral_rt%eirene_ne_min) THEN
       ! if te is still applicable
-       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(te,eirene_rate_ne_min,alpha,dlograte_dlogte)
+       IF ((te>=neutral_rt%eirene_te_min) .AND.(te<=neutral_rt%eirene_te_max)) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(te,neutral_rt%eirene_ne_min,alpha,dlograte_dlogte)
       ! if te < te_min
-       ELSEIF (te<eirene_rate_te_min) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,eirene_rate_ne_min,alpha,dlograte_dlogte)
+       ELSEIF (te<neutral_rt%eirene_te_min) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_min,neutral_rt%eirene_ne_min,alpha,dlograte_dlogte)
       ! if te>te_max
-       ELSEIF (te>eirene_rate_te_max) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,eirene_rate_ne_min,alpha,dlograte_dlogte)
+       ELSEIF (te>neutral_rt%eirene_te_max) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_max,neutral_rt%eirene_ne_min,alpha,dlograte_dlogte)
        ENDIF
     ! if ne>ne_max (ne derivative is now zero)
-    ELSEIF (ne>eirene_rate_ne_max) THEN
-       IF ((te>=eirene_rate_te_min) .AND.(te<=eirene_rate_te_max)) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(te,eirene_rate_ne_max,alpha,dlograte_dlogte)
-       ELSEIF (te<eirene_rate_te_min) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_min,eirene_rate_ne_max,alpha,dlograte_dlogte)
-       ELSEIF (te>eirene_rate_te_max) THEN
-          CALL compute_dlogeirene_2D_dlogte_rate(eirene_rate_te_max,eirene_rate_ne_max,alpha,dlograte_dlogte)
+    ELSEIF (ne>neutral_rt%eirene_ne_max) THEN
+       IF ((te>=neutral_rt%eirene_te_min) .AND.(te<=neutral_rt%eirene_te_max)) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(te,neutral_rt%eirene_ne_max,alpha,dlograte_dlogte)
+       ELSEIF (te<neutral_rt%eirene_te_min) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_min,neutral_rt%eirene_ne_max,alpha,dlograte_dlogte)
+       ELSEIF (te>neutral_rt%eirene_te_max) THEN
+          CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_max,neutral_rt%eirene_ne_max,alpha,dlograte_dlogte)
        ENDIF
     ENDIF
     rate_du(1) = rate_du(1) + dlograte_dlogte*(-1./U1)
@@ -2363,12 +2367,12 @@ CONTAINS
     U1 = U(1)
     U4 = U(4)
 
-    IF ((U1>neutral_state_tol) .AND. (U4>neutral_state_tol)) THEN ! basically it's a below zero check
+    IF ((U1>neutral_rt%state_tol) .AND. (U4>neutral_rt%state_tol)) THEN ! basically it's a below zero check
       CALL compute_Te(U, te)
       ne = U1
     ELSE!some low values
       ne = neutral_ne_floor
-      te = neutral_te_floor
+      te = neutral_rt%te_floor
     ENDIF
 
     sigmaviz = 0.
@@ -2384,7 +2388,7 @@ CONTAINS
     U4 = U(4)
 
     res = 0.
-    IF ((U1>neutral_state_tol) .AND. (U4>neutral_state_tol)) THEN ! basically it's a below zero check
+    IF ((U1>neutral_rt%state_tol) .AND. (U4>neutral_rt%state_tol)) THEN ! basically it's a below zero check
       ne = U1
       CALL compute_Te(U, te)
        CALL compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_iz,res)
@@ -2398,12 +2402,12 @@ CONTAINS
     U1 = U(1)
     U4 = U(4)
 
-    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+    if ((U1>neutral_rt%state_tol) .and. (U4>neutral_rt%state_tol)) then ! basically it's a below zero check
       CALL compute_Te(U, te)
       ne = U1
     else!some low values
       ne = neutral_ne_floor
-      te = neutral_te_floor
+      te = neutral_rt%te_floor
     endif
 
     sigmavEiz = 0.
@@ -2418,7 +2422,7 @@ CONTAINS
     U4 = U(4)
 
     res = 0.
-    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+    if ((U1>neutral_rt%state_tol) .and. (U4>neutral_rt%state_tol)) then ! basically it's a below zero check
       ne = U1
       CALL compute_Te(U, te)
       call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_energy_iz,res)
@@ -2432,12 +2436,12 @@ CONTAINS
     real*8             :: sigmavnn,ti
 
     CALL compute_Ti(U, ti)
-    if (ti .LT. neutral_ti_floor) then ! basically it's a below zero check
+    if (ti .LT. neutral_rt%ti_floor) then ! basically it's a below zero check
       !some low values
-      ti = neutral_ti_floor
+      ti = neutral_rt%ti_floor
     endif
 
-    sigmavnn = neutral_sigmavnn_prefactor*ti**0.25d0
+    sigmavnn = neutral_rt%sigmavnn_prefactor*ti**0.25d0
   ENDSUBROUTINE compute_sigmavnn
 
   SUBROUTINE compute_dsigmavnn_dU(U,res)
@@ -2447,9 +2451,9 @@ CONTAINS
 
     res = 0.
     CALL compute_Ti(U, ti)
-    if (ti>neutral_ti_floor) then ! basically it's a below zero check
+    if (ti>neutral_rt%ti_floor) then ! basically it's a below zero check
       CALL compute_dTi_dU(U, dti_dU)
-      res = (0.25d0*neutral_sigmavnn_prefactor/ti**0.75d0) * dti_dU
+      res = (0.25d0*neutral_rt%sigmavnn_prefactor/ti**0.75d0) * dti_dU
     endif !let non-linear part as zero if negative solutions
   ENDSUBROUTINE compute_dsigmavnn_dU
   SUBROUTINE compute_sigmavrec(U,sigmavrec)
@@ -2458,12 +2462,12 @@ CONTAINS
     U1 = U(1)
     U4 = U(4)
 
-    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+    if ((U1>neutral_rt%state_tol) .and. (U4>neutral_rt%state_tol)) then ! basically it's a below zero check
       CALL compute_Te(U, te)
       ne = U1
     else!some low values
       ne = neutral_ne_floor
-      te = neutral_te_floor
+      te = neutral_rt%te_floor
     endif
     call compute_2D_eirene_rate(te,ne,phys%alpha_rec,sigmavrec)
   ENDSUBROUTINE compute_sigmavrec
@@ -2475,7 +2479,7 @@ CONTAINS
     U4 = U(4)
 
     res = 0.
-    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+    if ((U1>neutral_rt%state_tol) .and. (U4>neutral_rt%state_tol)) then ! basically it's a below zero check
       ne = U1
       CALL compute_Te(U, te)
       call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_rec,res)
@@ -2488,12 +2492,12 @@ CONTAINS
     U1 = U(1)
     U4 = U(4)
 
-    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+    if ((U1>neutral_rt%state_tol) .and. (U4>neutral_rt%state_tol)) then ! basically it's a below zero check
       CALL compute_Te(U, te)
       ne = U1
     else!some low values
       ne = neutral_ne_floor
-      te = neutral_te_floor
+      te = neutral_rt%te_floor
     endif
     call compute_2D_eirene_rate(te,ne,phys%alpha_energy_rec,sigmavErec)
   ENDSUBROUTINE compute_sigmavErec
@@ -2505,7 +2509,7 @@ CONTAINS
     U4 = U(4)
 
     res = 0.
-    if ((U1>neutral_state_tol) .and. (U4>neutral_state_tol)) then ! basically it's a below zero check
+    if ((U1>neutral_rt%state_tol) .and. (U4>neutral_rt%state_tol)) then ! basically it's a below zero check
       ne = U1
       CALL compute_Te(U, te)
       call compute_2D_eirene_rate_du(U1,U4,te,ne,phys%alpha_energy_rec,res)
@@ -2518,15 +2522,15 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmavcx, te, logte_dim
 
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
     ELSE
-      te = neutral_cx_te_floor
+      te = neutral_rt%cx_te_floor
     ENDIF
 
-    te = MAX(te, neutral_cx_te_floor)
-    logte_dim = LOG(te) + neutral_log_temperature_ref
-    sigmavcx = neutral_rate_scale*EXP(neutral_manuelcx_coeffs(1)*logte_dim**4 + neutral_manuelcx_coeffs(2)*logte_dim**3 + &
+    te = MAX(te, neutral_rt%cx_te_floor)
+    logte_dim = LOG(te) + neutral_rt%log_temperature_ref
+    sigmavcx = neutral_rt%rate_scale*EXP(neutral_manuelcx_coeffs(1)*logte_dim**4 + neutral_manuelcx_coeffs(2)*logte_dim**3 + &
       &neutral_manuelcx_coeffs(3)*logte_dim**2 + neutral_manuelcx_coeffs(4)*logte_dim + neutral_manuelcx_coeffs(5))
   ENDSUBROUTINE compute_sigmavcx
 
@@ -2537,12 +2541,12 @@ CONTAINS
     REAL*8             :: dte_dU(size(U))
 
     res = 0.d0
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
-      IF (te>neutral_cx_te_floor) THEN
+      IF (te>neutral_rt%cx_te_floor) THEN
         CALL compute_dTe_dU(U, dte_dU)
         CALL compute_sigmavcx(U, sigmavcx)
-        logte_dim = LOG(te) + neutral_log_temperature_ref
+        logte_dim = LOG(te) + neutral_rt%log_temperature_ref
         dlograte_dte = (4.d0*neutral_manuelcx_coeffs(1)*logte_dim**3 + 3.d0*neutral_manuelcx_coeffs(2)*logte_dim**2 + &
           &2.d0*neutral_manuelcx_coeffs(3)*logte_dim + neutral_manuelcx_coeffs(4))/te
         res = sigmavcx*dlograte_dte*dte_dU
@@ -2555,15 +2559,15 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: sigmavcx, te, e0
 
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
     ELSE
-      te = neutral_te_floor
+      te = neutral_rt%te_floor
     ENDIF
 
-    te = MAX(te, neutral_te_floor)
+    te = MAX(te, neutral_rt%te_floor)
     e0 = 0.5d0/(simpar%refval_temperature*te)
-    sigmavcx = neutral_legacy_cx_prefactor*EXP(-e0)
+    sigmavcx = neutral_rt%legacy_cx_prefactor*EXP(-e0)
   ENDSUBROUTINE compute_sigmavcx
 
   SUBROUTINE compute_dsigmavcx_dU(U,res)
@@ -2572,9 +2576,9 @@ CONTAINS
     REAL*8             :: dte_dU(size(U))
 
     res = 0.d0
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
-      IF (te>neutral_te_floor) THEN
+      IF (te>neutral_rt%te_floor) THEN
         CALL compute_dTe_dU(U, dte_dU)
         CALL compute_sigmavcx(U, sigmavcx)
         e0 = 0.5d0/(simpar%refval_temperature*te)
@@ -2592,16 +2596,16 @@ CONTAINS
     real*8, intent(OUT):: rate
     real*8             :: dlograte_dlogt
     rate = 0.
-    if ((t>=eirene_rate_ti_min) .AND. (t<=eirene_rate_ti_max)) then
+    if ((t>=neutral_rt%eirene_ti_min) .AND. (t<=neutral_rt%eirene_ti_max)) then
       call compute_logeirene_1D_rate(t,alpha,rate)
-    elseif(t<eirene_rate_ti_min) then
-      call compute_logeirene_1D_rate(eirene_rate_ti_min,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_min,alpha,dlograte_dlogt)
-      rate = rate + dlograte_dlogt*(log(t)- log(eirene_rate_ti_min))
+    elseif(t<neutral_rt%eirene_ti_min) then
+      call compute_logeirene_1D_rate(neutral_rt%eirene_ti_min,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(neutral_rt%eirene_ti_min,alpha,dlograte_dlogt)
+      rate = rate + dlograte_dlogt*(log(t)- log(neutral_rt%eirene_ti_min))
     else
-      call compute_logeirene_1D_rate(eirene_rate_ti_max,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_max,alpha,dlograte_dlogt)
-      rate = rate + dlograte_dlogt*(log(t)- log(eirene_rate_ti_max))
+      call compute_logeirene_1D_rate(neutral_rt%eirene_ti_max,alpha,rate)
+      call compute_d_logeirene_1D_rate_dlogt(neutral_rt%eirene_ti_max,alpha,dlograte_dlogt)
+      rate = rate + dlograte_dlogt*(log(t)- log(neutral_rt%eirene_ti_max))
     endif
     ! rates are not higher than 1 m^3/s, if rate is higher than that value, then there is something weird
     if (rate>6.*log(10.)) then
@@ -2624,23 +2628,23 @@ CONTAINS
     real*8             :: dlograte_dlogte,rate
     res = 0.
 
-    if ((ti>=eirene_rate_ti_min) .AND. (ti<=eirene_rate_ti_max)) then
+    if ((ti>=neutral_rt%eirene_ti_min) .AND. (ti<=neutral_rt%eirene_ti_max)) then
       call compute_eirene_1D_rate(ti,alpha,rate)
       call compute_d_logeirene_1D_rate_dlogt(ti,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
       res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
       res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
       res = rate*res
-    elseif(ti<eirene_rate_ti_min) then
+    elseif(ti<neutral_rt%eirene_ti_min) then
       call compute_eirene_1D_rate(ti,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_min,alpha,dlograte_dlogte)
+      call compute_d_logeirene_1D_rate_dlogt(neutral_rt%eirene_ti_min,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
       res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
       res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
       res = rate*res
     else
       call compute_eirene_1D_rate(ti,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_max,alpha,dlograte_dlogte)
+      call compute_d_logeirene_1D_rate_dlogt(neutral_rt%eirene_ti_max,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dti_dU(1)/ti)
       res(2) = res(2) + dlograte_dlogte*(dti_dU(2)/ti)
       res(3) = res(3) + dlograte_dlogte*(dti_dU(3)/ti)
@@ -2656,21 +2660,21 @@ CONTAINS
     real*8             :: dlograte_dlogte,rate
     res = 0.
 
-    if ((te>=eirene_rate_ti_min) .AND. (te<=eirene_rate_ti_max)) then
+    if ((te>=neutral_rt%eirene_ti_min) .AND. (te<=neutral_rt%eirene_ti_max)) then
       call compute_eirene_1D_rate(te,alpha,rate)
       call compute_d_logeirene_1D_rate_dlogt(te,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dte_dU(1)/te)
       res(4) = res(4) + dlograte_dlogte*(dte_dU(4)/te)
       res = rate*res
-    elseif(te<eirene_rate_ti_min) then
+    elseif(te<neutral_rt%eirene_ti_min) then
       call compute_eirene_1D_rate(te,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_min,alpha,dlograte_dlogte)
+      call compute_d_logeirene_1D_rate_dlogt(neutral_rt%eirene_ti_min,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dte_dU(1)/te)
       res(4) = res(4) + dlograte_dlogte*(dte_dU(4)/te)
       res = rate*res
     else
       call compute_eirene_1D_rate(te,alpha,rate)
-      call compute_d_logeirene_1D_rate_dlogt(eirene_rate_ti_max,alpha,dlograte_dlogte)
+      call compute_d_logeirene_1D_rate_dlogt(neutral_rt%eirene_ti_max,alpha,dlograte_dlogte)
       res(1) = res(1) + dlograte_dlogte*(dte_dU(1)/te)
       res(4) = res(4) + dlograte_dlogte*(dte_dU(4)/te)
       res = rate*res
@@ -2710,9 +2714,9 @@ CONTAINS
     real*8              :: sigmavcx,ti
 
     CALL compute_Ti(U, ti)
-    if (ti<neutral_ti_floor) then ! basically it's a below zero check
+    if (ti<neutral_rt%ti_floor) then ! basically it's a below zero check
       !some low values
-      ti = neutral_ti_floor
+      ti = neutral_rt%ti_floor
     endif
     sigmavcx = 0.
 
@@ -2728,7 +2732,7 @@ CONTAINS
     res = 0.
     CALL compute_Ti(U, ti)
 
-    if (ti>neutral_ti_floor) then
+    if (ti>neutral_rt%ti_floor) then
       CALL compute_dTi_dU(U, dti_dU)
       call compute_eirene_1D_rate_vs_ti_dU(ti,dti_dU,phys%alpha_cx,res)
     endif
@@ -2742,7 +2746,7 @@ CONTAINS
     U1 = U(1)
     U4 = U(4)
     res = 0.
-    IF ((U1>neutral_state_tol) .AND. (U4>neutral_state_tol)) THEN ! basically it's a below zero check
+    IF ((U1>neutral_rt%state_tol) .AND. (U4>neutral_rt%state_tol)) THEN ! basically it's a below zero check
       CALL compute_Te(U, te)
       CALL compute_eirene_1D_rate(te,phys%alpha_cooling_factor,res)
 
@@ -2757,7 +2761,7 @@ CONTAINS
     U1 = U(1)
     U4 = U(4)
     res = 0.
-    IF ((U1>neutral_state_tol) .AND. (U4>neutral_state_tol)) THEN ! basically it's a below zero check
+    IF ((U1>neutral_rt%state_tol) .AND. (U4>neutral_rt%state_tol)) THEN ! basically it's a below zero check
       CALL compute_Te(U, te)
       CALL compute_dTe_dU(U, dte_dU)
       CALL compute_eirene_1D_rate_vs_te_du(te,dte_dU,phys%alpha_cooling_factor,res)
@@ -2800,7 +2804,7 @@ CONTAINS
     inn = phys%idx_rhon_eq
     CALL compute_Dnn(U, Dnn)
     CALL compute_limited_Ti(U, Ti_limited)
-    supp = Ti_limited/(Ti_limited + neutral_transport_ti_supp)
+    supp = Ti_limited/(Ti_limited + neutral_rt%transport_ti_supp)
 
     alpha = numer%neutralp_lambda*ti_factor*U(inn)*Dnn/Ti_limited
     CALL computeVi(U, W5p)
@@ -2828,8 +2832,8 @@ CONTAINS
     CALL compute_Dnn_dU(U, Dnn_dU)
     CALL compute_limited_Ti(U, Ti_limited)
     CALL compute_dlimited_Ti_dU(U, dTi_limited_dU)
-    supp = Ti_limited/(Ti_limited + neutral_transport_ti_supp)
-    dsupp_dU = neutral_transport_ti_supp*dTi_limited_dU/(Ti_limited + neutral_transport_ti_supp)**2
+    supp = Ti_limited/(Ti_limited + neutral_rt%transport_ti_supp)
+    dsupp_dU = neutral_rt%transport_ti_supp*dTi_limited_dU/(Ti_limited + neutral_rt%transport_ti_supp)**2
 
     alpha = numer%neutralp_lambda*ti_factor*U(inn)*Dnn/Ti_limited
     dalpha_dU = numer%neutralp_lambda*ti_factor*(U(inn)*Dnn_dU/Ti_limited - U(inn)*Dnn*dTi_limited_dU/Ti_limited**2)
@@ -2844,14 +2848,14 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: Tloss, te
 
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
     ELSE
-      te = neutral_te_floor
+      te = neutral_rt%te_floor
     ENDIF
 
-    te = MAX(te, neutral_te_floor)
-    Tloss = neutral_tloss_offset + neutral_tloss_amplitude*EXP(-neutral_tloss_decay*te)
+    te = MAX(te, neutral_rt%te_floor)
+    Tloss = neutral_rt%tloss_offset + neutral_rt%tloss_amplitude*EXP(-neutral_rt%tloss_decay*te)
   ENDSUBROUTINE compute_Tloss
 
 
@@ -2861,11 +2865,11 @@ CONTAINS
     REAL*8             :: dte_dU(size(U))
 
     res = 0.d0
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
-      IF (te>neutral_te_floor) THEN
+      IF (te>neutral_rt%te_floor) THEN
         CALL compute_dTe_dU(U, dte_dU)
-        res = -neutral_tloss_amplitude*neutral_tloss_decay*EXP(-neutral_tloss_decay*te)*dte_dU
+        res = -neutral_rt%tloss_amplitude*neutral_rt%tloss_decay*EXP(-neutral_rt%tloss_decay*te)*dte_dU
       END IF
     END IF
   ENDSUBROUTINE compute_dTloss_dU
@@ -2875,18 +2879,18 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: Tlossrec, te, logTlossrec
 
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
     ELSE
-      te = neutral_te_floor
+      te = neutral_rt%te_floor
     ENDIF
 
-    te = MAX(te, neutral_te_floor)
-    logTlossrec = neutral_tlossrec_growth*te
-    IF (logTlossrec .LE. neutral_tlossrec_cap_log) THEN
-       Tlossrec = neutral_tlossrec_prefactor*EXP(logTlossrec)
+    te = MAX(te, neutral_rt%te_floor)
+    logTlossrec = neutral_rt%tlossrec_growth*te
+    IF (logTlossrec .LE. neutral_rt%tlossrec_cap_log) THEN
+       Tlossrec = neutral_rt%tlossrec_prefactor*EXP(logTlossrec)
     ELSE
-       Tlossrec = neutral_tlossrec_cap
+       Tlossrec = neutral_rt%tlossrec_cap
     ENDIF
   ENDSUBROUTINE compute_Tlossrec
 
@@ -2897,13 +2901,13 @@ CONTAINS
     REAL*8             :: dte_dU(size(U))
 
     res = 0.d0
-    IF ((U(1)>neutral_state_tol) .AND. (U(4)>neutral_state_tol)) THEN
+    IF ((U(1)>neutral_rt%state_tol) .AND. (U(4)>neutral_rt%state_tol)) THEN
       CALL compute_Te(U, te)
-      IF (te>neutral_te_floor) THEN
-        IF (neutral_tlossrec_growth*te .LE. neutral_tlossrec_cap_log) THEN
+      IF (te>neutral_rt%te_floor) THEN
+        IF (neutral_rt%tlossrec_growth*te .LE. neutral_rt%tlossrec_cap_log) THEN
           CALL compute_dTe_dU(U, dte_dU)
           CALL compute_Tlossrec(U, Tlossrec)
-          res = Tlossrec*neutral_tlossrec_growth*dte_dU
+          res = Tlossrec*neutral_rt%tlossrec_growth*dte_dU
         END IF
       END IF
     END IF
