@@ -889,6 +889,60 @@ CONTAINS
 #endif
   ENDSUBROUTINE compute_Dnn
 
+  SUBROUTINE compute_neutral_free_streaming_speed(U, cn)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: cn
+    REAL*8              :: Ti_limited
+
+    CALL compute_limited_Ti(U, Ti_limited)
+    cn = SQRT(MAX(phys%Mref*Ti_limited, 0.d0))
+  ENDSUBROUTINE compute_neutral_free_streaming_speed
+
+  SUBROUTINE compute_neutral_flux_limiter(U, Q, phi, gamma_unlim, gamma_max, ratio)
+    REAL*8, INTENT(IN)  :: U(:), Q(:)
+    REAL*8, INTENT(OUT) :: phi, gamma_unlim(:), gamma_max, ratio
+    REAL*8              :: Qpr(simpar%Ndim, simpar%Neq)
+    REAL*8              :: Dnn, cn, gamma_abs_eps
+#ifdef NEUTRALPNEW
+    REAL*8              :: W5p(simpar%Neq)
+#endif
+    INTEGER             :: inn
+
+    inn = phys%idx_rhon_eq
+    gamma_unlim = 0.d0
+    gamma_max = 0.d0
+    ratio = 0.d0
+    phi = 1.d0
+    IF (inn <= 0) RETURN
+
+    Qpr = RESHAPE(Q, (/simpar%Ndim, simpar%Neq/))
+    CALL compute_Dnn(U, Dnn)
+    gamma_unlim = -Dnn*Qpr(:,inn)
+#ifdef NEUTRALPNEW
+    CALL compute_W5p(U, W5p)
+    gamma_unlim = gamma_unlim - MATMUL(Qpr, W5p)
+#endif
+
+    CALL compute_neutral_free_streaming_speed(U, cn)
+    gamma_max = MAX(phys%neutral_flux_limiter_fs_fraction*MAX(U(inn), 0.d0)*cn, &
+      &phys%neutral_flux_limiter_fs_flux_min)
+    gamma_abs_eps = SQRT(DOT_PRODUCT(gamma_unlim, gamma_unlim) + phys%neutral_flux_limiter_eps**2)
+
+    IF (gamma_max > 0.d0) THEN
+      ratio = gamma_abs_eps/gamma_max
+    ELSEIF (gamma_abs_eps > 0.d0) THEN
+      ratio = HUGE(1.d0)
+    ELSE
+      ratio = 0.d0
+    ENDIF
+
+    IF (ratio < HUGE(1.d0)) THEN
+      phi = (1.d0 + ratio**phys%neutral_flux_limiter_gamma)**(-1.d0/phys%neutral_flux_limiter_gamma)
+    ELSE
+      phi = 0.d0
+    ENDIF
+  ENDSUBROUTINE compute_neutral_flux_limiter
+
   !*****************************************
   ! Jacobian matrices
   !****************************************

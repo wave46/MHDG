@@ -417,6 +417,27 @@ CONTAINS
     IF (ALLOCATED(phys%v_nn_Bou)) THEN
        DEALLOCATE (phys%v_nn_Bou)
     END IF
+    IF (ALLOCATED(phys%neutral_flux_limiter_Dnn_Nod)) THEN
+       DEALLOCATE (phys%neutral_flux_limiter_Dnn_Nod)
+    END IF
+    IF (ALLOCATED(phys%neutral_flux_limiter_phi_Nod)) THEN
+       DEALLOCATE (phys%neutral_flux_limiter_phi_Nod)
+    END IF
+    IF (ALLOCATED(phys%neutral_flux_limiter_Deff_Nod)) THEN
+       DEALLOCATE (phys%neutral_flux_limiter_Deff_Nod)
+    END IF
+    IF (ALLOCATED(phys%neutral_flux_limiter_Gamma_unlim_Nod)) THEN
+       DEALLOCATE (phys%neutral_flux_limiter_Gamma_unlim_Nod)
+    END IF
+    IF (ALLOCATED(phys%neutral_flux_limiter_Gamma_max_Nod)) THEN
+       DEALLOCATE (phys%neutral_flux_limiter_Gamma_max_Nod)
+    END IF
+    IF (ALLOCATED(phys%neutral_flux_limiter_activation_ratio_Nod)) THEN
+       DEALLOCATE (phys%neutral_flux_limiter_activation_ratio_Nod)
+    END IF
+    IF (ALLOCATED(phys%neutral_flux_limiter_Gamma_lim_Nod)) THEN
+       DEALLOCATE (phys%neutral_flux_limiter_Gamma_lim_Nod)
+    END IF
     IF (ASSOCIATED(phys%puff_exp)) THEN
        DEALLOCATE (phys%puff_exp)
        NULLIFY(phys%puff_exp)

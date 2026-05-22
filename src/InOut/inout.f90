@@ -545,6 +545,8 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id1, sol%q, SIZE(sol%q), 'q')
     CALL HDF5_group_close(group_id1, ierr)
 
+    CALL save_neutral_flux_limiter_diagnostics()
+
     IF (switch%transport_1d) THEN
        CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
        CALL fs_transport%write_hdf5(group_id1)
@@ -700,6 +702,8 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
        CALL HDF5_group_close(group_id1)
 
+       CALL save_neutral_flux_limiter_diagnostics()
+
        IF (switch%transport_1d) THEN
           CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
           CALL fs_transport%write_hdf5(group_id1)
@@ -826,6 +830,86 @@ CONTAINS
     PRINT *, '        '
   ENDIF
   CONTAINS
+
+    SUBROUTINE save_neutral_flux_limiter_diagnostics()
+      INTEGER(HID_T) :: group_id
+#ifdef PARALL
+      INTEGER :: iel, g, ind_local, ind_global
+      REAL*8, ALLOCATABLE :: Dnn_glob(:), phi_glob(:), Deff_glob(:), Gamma_unlim_glob(:)
+      REAL*8, ALLOCATABLE :: Gamma_max_glob(:), activation_ratio_glob(:), Gamma_lim_glob(:)
+#endif
+
+      IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_phi_Nod)) RETURN
+
+      CALL HDF5_group_create('neutral_flux_limiter_diagnostics', file_id, group_id, ierr)
+#ifdef PARALL
+      ALLOCATE(Dnn_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
+      ALLOCATE(phi_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
+      ALLOCATE(Deff_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
+      ALLOCATE(Gamma_unlim_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
+      ALLOCATE(Gamma_max_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
+      ALLOCATE(activation_ratio_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
+      ALLOCATE(Gamma_lim_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
+      Dnn_glob = 0.d0
+      phi_glob = 0.d0
+      Deff_glob = 0.d0
+      Gamma_unlim_glob = 0.d0
+      Gamma_max_glob = 0.d0
+      activation_ratio_glob = 0.d0
+      Gamma_lim_glob = 0.d0
+
+      DO iel = 1, Mesh%Nelems
+        IF (Mesh%ghostElems(iel) .EQ. 0) THEN
+          DO g = 1, Mesh%Nnodesperelem
+            ind_local = (iel - 1)*Mesh%Nnodesperelem + g
+            ind_global = (Mesh%loc2glob_el(iel) - 1)*Mesh%Nnodesperelem + g
+            Dnn_glob(ind_global) = phys%neutral_flux_limiter_Dnn_Nod(ind_local)
+            phi_glob(ind_global) = phys%neutral_flux_limiter_phi_Nod(ind_local)
+            Deff_glob(ind_global) = phys%neutral_flux_limiter_Deff_Nod(ind_local)
+            Gamma_unlim_glob(ind_global) = phys%neutral_flux_limiter_Gamma_unlim_Nod(ind_local)
+            Gamma_max_glob(ind_global) = phys%neutral_flux_limiter_Gamma_max_Nod(ind_local)
+            activation_ratio_glob(ind_global) = phys%neutral_flux_limiter_activation_ratio_Nod(ind_local)
+            Gamma_lim_glob(ind_global) = phys%neutral_flux_limiter_Gamma_lim_Nod(ind_local)
+          ENDDO
+        ENDIF
+      ENDDO
+
+      CALL MPI_Allreduce(MPI_IN_PLACE, Dnn_glob, SIZE(Dnn_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+      CALL MPI_Allreduce(MPI_IN_PLACE, phi_glob, SIZE(phi_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+      CALL MPI_Allreduce(MPI_IN_PLACE, Deff_glob, SIZE(Deff_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+      CALL MPI_Allreduce(MPI_IN_PLACE, Gamma_unlim_glob, SIZE(Gamma_unlim_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+      CALL MPI_Allreduce(MPI_IN_PLACE, Gamma_max_glob, SIZE(Gamma_max_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+      CALL MPI_Allreduce(MPI_IN_PLACE, activation_ratio_glob, SIZE(activation_ratio_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+      CALL MPI_Allreduce(MPI_IN_PLACE, Gamma_lim_glob, SIZE(Gamma_lim_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+      CALL HDF5_array1D_saving(group_id, Dnn_glob, SIZE(Dnn_glob), 'Dnn')
+      CALL HDF5_array1D_saving(group_id, phi_glob, SIZE(phi_glob), 'phi')
+      CALL HDF5_array1D_saving(group_id, Deff_glob, SIZE(Deff_glob), 'D_eff')
+      CALL HDF5_array1D_saving(group_id, Gamma_unlim_glob, SIZE(Gamma_unlim_glob), 'Gamma_unlim')
+      CALL HDF5_array1D_saving(group_id, Gamma_max_glob, SIZE(Gamma_max_glob), 'Gamma_max')
+      CALL HDF5_array1D_saving(group_id, activation_ratio_glob, SIZE(activation_ratio_glob), 'activation_ratio')
+      CALL HDF5_array1D_saving(group_id, Gamma_lim_glob, SIZE(Gamma_lim_glob), 'Gamma_lim')
+
+      DEALLOCATE(Dnn_glob, phi_glob, Deff_glob, Gamma_unlim_glob)
+      DEALLOCATE(Gamma_max_glob, activation_ratio_glob, Gamma_lim_glob)
+#else
+      CALL HDF5_array1D_saving(group_id, phys%neutral_flux_limiter_Dnn_Nod, &
+        &SIZE(phys%neutral_flux_limiter_Dnn_Nod), 'Dnn')
+      CALL HDF5_array1D_saving(group_id, phys%neutral_flux_limiter_phi_Nod, &
+        &SIZE(phys%neutral_flux_limiter_phi_Nod), 'phi')
+      CALL HDF5_array1D_saving(group_id, phys%neutral_flux_limiter_Deff_Nod, &
+        &SIZE(phys%neutral_flux_limiter_Deff_Nod), 'D_eff')
+      CALL HDF5_array1D_saving(group_id, phys%neutral_flux_limiter_Gamma_unlim_Nod, &
+        &SIZE(phys%neutral_flux_limiter_Gamma_unlim_Nod), 'Gamma_unlim')
+      CALL HDF5_array1D_saving(group_id, phys%neutral_flux_limiter_Gamma_max_Nod, &
+        &SIZE(phys%neutral_flux_limiter_Gamma_max_Nod), 'Gamma_max')
+      CALL HDF5_array1D_saving(group_id, phys%neutral_flux_limiter_activation_ratio_Nod, &
+        &SIZE(phys%neutral_flux_limiter_activation_ratio_Nod), 'activation_ratio')
+      CALL HDF5_array1D_saving(group_id, phys%neutral_flux_limiter_Gamma_lim_Nod, &
+        &SIZE(phys%neutral_flux_limiter_Gamma_lim_Nod), 'Gamma_lim')
+#endif
+      CALL HDF5_group_close(group_id, ierr)
+    ENDSUBROUTINE save_neutral_flux_limiter_diagnostics
 
     !**********************************************************************
     ! Save simulation parameters

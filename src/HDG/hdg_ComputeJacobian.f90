@@ -52,7 +52,7 @@ SUBROUTINE HDG_computeJacobian()
   REAL*8                :: Jtorel(refElTor%Nnodes3d)
 #else
   ! Definitions in 2D
-  LOGICAL               :: save_tau
+  LOGICAL               :: save_tau, limiter_diagnostics
   INTEGER*4             :: inde(Mesh%Nnodesperelem)
   INTEGER*4             :: indf(refElPol%Nfacenodes)
   INTEGER*4             :: ind_loc(refElPol%Nfaces,refElPol%Nfacenodes*phys%Neq),perm(refElPol%Nfacenodes*phys%Neq)
@@ -177,11 +177,35 @@ SUBROUTINE HDG_computeJacobian()
   CALL set_permutations(Neq*Npfl,Neq,perm)
 
   save_tau = switch%saveTau
+  limiter_diagnostics = TRIM(ADJUSTL(phys%neutral_flux_limiter_mode)) .NE. 'off'
   IF (save_tau) THEN
      ALLOCATE (tau_save(refElPol%Nfaces*Mesh%Nelems*refElPol%Ngauss1d,phys%neq))
      ALLOCATE (xy_g_save(refElPol%Nfaces*Mesh%Nelems*refElPol%Ngauss1d,2))
     tau_save = 0.
     xy_g_save = 0.
+  ENDIF
+  IF (limiter_diagnostics) THEN
+    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Dnn_Nod)) &
+      ALLOCATE(phys%neutral_flux_limiter_Dnn_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
+    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_phi_Nod)) &
+      ALLOCATE(phys%neutral_flux_limiter_phi_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
+    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Deff_Nod)) &
+      ALLOCATE(phys%neutral_flux_limiter_Deff_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
+    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Gamma_unlim_Nod)) &
+      ALLOCATE(phys%neutral_flux_limiter_Gamma_unlim_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
+    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Gamma_max_Nod)) &
+      ALLOCATE(phys%neutral_flux_limiter_Gamma_max_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
+    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_activation_ratio_Nod)) &
+      ALLOCATE(phys%neutral_flux_limiter_activation_ratio_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
+    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Gamma_lim_Nod)) &
+      ALLOCATE(phys%neutral_flux_limiter_Gamma_lim_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
+    phys%neutral_flux_limiter_Dnn_Nod = 0.d0
+    phys%neutral_flux_limiter_phi_Nod = 0.d0
+    phys%neutral_flux_limiter_Deff_Nod = 0.d0
+    phys%neutral_flux_limiter_Gamma_unlim_Nod = 0.d0
+    phys%neutral_flux_limiter_Gamma_max_Nod = 0.d0
+    phys%neutral_flux_limiter_activation_ratio_Nod = 0.d0
+    phys%neutral_flux_limiter_Gamma_lim_Nod = 0.d0
   ENDIF
 
   ! Compute shock capturing diffusion
@@ -1335,7 +1359,7 @@ CONTAINS
       REAL*8,INTENT(IN)             :: ue(:,:),u0e(:,:,:)
       REAL*8,INTENT(OUT)            :: El_n,El_nn
       REAL*8,INTENT(OUT)            :: diff_nn_Vol_el(Ng2D),v_nn_Vol_el(Ng2D,ndim),Xg_el(Ng2D,ndim)
-      INTEGER*4                     :: g,NGauss,i,inn
+      INTEGER*4                     :: g,NGauss,i,inn,ind_limiter
       REAL*8                        :: dvolu
       REAL*8                        :: xy(Ng2d,ndim),ueg(Ng2d,neq),u0eg(Ng2d,neq,time%tis)
       REAL*8                        :: force(Ng2d,Neq)
@@ -1364,6 +1388,8 @@ CONTAINS
     real*8                        :: Pi,sigma,x0,A,r
     real*8                        :: th_n = 1.e-14
     real*8                        :: Vnng(Ndim)
+    REAL*8                        :: limiter_phi,limiter_Dnn,limiter_Gamma_max,limiter_ratio
+    REAL*8                        :: limiter_Gamma_unlim(Ndim),limiter_Gamma_unlim_abs
     REAL*8                        :: external_heating_ions_gauss(Ng2d), external_heating_electrons_gauss(Ng2d)
 
       inn = phys%idx_rhon_eq
@@ -1462,6 +1488,23 @@ CONTAINS
     if (save_tau) then
        diff_nn_Vol_el = diff_iso_vol(inn,inn,:)
       ENDIF
+
+    IF (limiter_diagnostics) THEN
+      DO i = 1,Npel
+        ind_limiter = (iel - 1)*Mesh%Nnodesperelem + i
+        CALL compute_Dnn(ue(i,:), limiter_Dnn)
+        CALL compute_neutral_flux_limiter(ue(i,:), qe(i,:), limiter_phi, limiter_Gamma_unlim, &
+          &limiter_Gamma_max, limiter_ratio)
+        limiter_Gamma_unlim_abs = SQRT(DOT_PRODUCT(limiter_Gamma_unlim, limiter_Gamma_unlim))
+        phys%neutral_flux_limiter_Dnn_Nod(ind_limiter) = limiter_Dnn
+        phys%neutral_flux_limiter_phi_Nod(ind_limiter) = limiter_phi
+        phys%neutral_flux_limiter_Deff_Nod(ind_limiter) = limiter_phi*limiter_Dnn
+        phys%neutral_flux_limiter_Gamma_unlim_Nod(ind_limiter) = limiter_Gamma_unlim_abs
+        phys%neutral_flux_limiter_Gamma_max_Nod(ind_limiter) = limiter_Gamma_max
+        phys%neutral_flux_limiter_activation_ratio_Nod(ind_limiter) = limiter_ratio
+        phys%neutral_flux_limiter_Gamma_lim_Nod(ind_limiter) = limiter_phi*limiter_Gamma_unlim_abs
+      END DO
+    ENDIF
 
       IF (switch%shockcp.GT.0) THEN
          auxdiffsc = MATMUL(refElPol%N2D,Mesh%scdiff_nodes(iel,:))
