@@ -702,8 +702,6 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
        CALL HDF5_group_close(group_id1)
 
-       CALL save_neutral_flux_limiter_diagnostics()
-
        IF (switch%transport_1d) THEN
           CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
           CALL fs_transport%write_hdf5(group_id1)
@@ -794,6 +792,9 @@ CONTAINS
        CALL HDF5_group_close(group_id1, ierr)
 
     END IF
+
+    CALL save_neutral_flux_limiter_diagnostics()
+
     IF (ASSOCIATED(T_glob)) THEN
       DEALLOCATE(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
       DEALLOCATE(u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob)      
@@ -841,7 +842,6 @@ CONTAINS
 
       IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_phi_Nod)) RETURN
 
-      CALL HDF5_group_create('neutral_flux_limiter_diagnostics', file_id, group_id, ierr)
 #ifdef PARALL
       ALLOCATE(Dnn_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
       ALLOCATE(phi_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
@@ -882,17 +882,22 @@ CONTAINS
       CALL MPI_Allreduce(MPI_IN_PLACE, activation_ratio_glob, SIZE(activation_ratio_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
       CALL MPI_Allreduce(MPI_IN_PLACE, Gamma_lim_glob, SIZE(Gamma_lim_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 
-      CALL HDF5_array1D_saving(group_id, Dnn_glob, SIZE(Dnn_glob), 'Dnn')
-      CALL HDF5_array1D_saving(group_id, phi_glob, SIZE(phi_glob), 'phi')
-      CALL HDF5_array1D_saving(group_id, Deff_glob, SIZE(Deff_glob), 'D_eff')
-      CALL HDF5_array1D_saving(group_id, Gamma_unlim_glob, SIZE(Gamma_unlim_glob), 'Gamma_unlim')
-      CALL HDF5_array1D_saving(group_id, Gamma_max_glob, SIZE(Gamma_max_glob), 'Gamma_max')
-      CALL HDF5_array1D_saving(group_id, activation_ratio_glob, SIZE(activation_ratio_glob), 'activation_ratio')
-      CALL HDF5_array1D_saving(group_id, Gamma_lim_glob, SIZE(Gamma_lim_glob), 'Gamma_lim')
+      IF (MPIvar%glob_id .EQ. 0) THEN
+        CALL HDF5_group_create('neutral_flux_limiter_diagnostics', file_id, group_id, ierr)
+        CALL HDF5_array1D_saving(group_id, Dnn_glob, SIZE(Dnn_glob), 'Dnn')
+        CALL HDF5_array1D_saving(group_id, phi_glob, SIZE(phi_glob), 'phi')
+        CALL HDF5_array1D_saving(group_id, Deff_glob, SIZE(Deff_glob), 'D_eff')
+        CALL HDF5_array1D_saving(group_id, Gamma_unlim_glob, SIZE(Gamma_unlim_glob), 'Gamma_unlim')
+        CALL HDF5_array1D_saving(group_id, Gamma_max_glob, SIZE(Gamma_max_glob), 'Gamma_max')
+        CALL HDF5_array1D_saving(group_id, activation_ratio_glob, SIZE(activation_ratio_glob), 'activation_ratio')
+        CALL HDF5_array1D_saving(group_id, Gamma_lim_glob, SIZE(Gamma_lim_glob), 'Gamma_lim')
+        CALL HDF5_group_close(group_id, ierr)
+      ENDIF
 
       DEALLOCATE(Dnn_glob, phi_glob, Deff_glob, Gamma_unlim_glob)
       DEALLOCATE(Gamma_max_glob, activation_ratio_glob, Gamma_lim_glob)
 #else
+      CALL HDF5_group_create('neutral_flux_limiter_diagnostics', file_id, group_id, ierr)
       CALL HDF5_array1D_saving(group_id, phys%neutral_flux_limiter_Dnn_Nod, &
         &SIZE(phys%neutral_flux_limiter_Dnn_Nod), 'Dnn')
       CALL HDF5_array1D_saving(group_id, phys%neutral_flux_limiter_phi_Nod, &
@@ -907,8 +912,8 @@ CONTAINS
         &SIZE(phys%neutral_flux_limiter_activation_ratio_Nod), 'activation_ratio')
       CALL HDF5_array1D_saving(group_id, phys%neutral_flux_limiter_Gamma_lim_Nod, &
         &SIZE(phys%neutral_flux_limiter_Gamma_lim_Nod), 'Gamma_lim')
-#endif
       CALL HDF5_group_close(group_id, ierr)
+#endif
     ENDSUBROUTINE save_neutral_flux_limiter_diagnostics
 
     !**********************************************************************
