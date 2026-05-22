@@ -1880,6 +1880,8 @@ CONTAINS
     real*8           :: Qpr(Ndim,Neq), recycling_coeff,  cryopump_coeff,puff_coeff
     real*8           :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
+    real*8           :: neutral_limiter_phi, neutral_limiter_gamma_max, neutral_limiter_ratio
+    real*8           :: neutral_limiter_gamma_unlim(Ndim), neutral_diffiso
 #ifdef TEMPERATURE
         REAL*8           :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
         REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
@@ -1929,6 +1931,15 @@ CONTAINS
 
     ! Compute Q^T^(k-1)
         Qpr = RESHAPE(qfg,(/Ndim,Neq/))
+    neutral_limiter_phi = 1.d0
+    neutral_diffiso = diffiso(inn,inn)
+#ifdef NEUTRAL
+    IF (TRIM(ADJUSTL(phys%neutral_flux_limiter_mode)) .EQ. 'lagged_flux_limiter') THEN
+      CALL compute_neutral_flux_limiter(ufg,qfg,neutral_limiter_phi,neutral_limiter_gamma_unlim, &
+        &neutral_limiter_gamma_max,neutral_limiter_ratio)
+      neutral_diffiso = neutral_limiter_phi*neutral_diffiso
+    ENDIF
+#endif
 
     ! Split diffusion matrices/vectors for the momentum equation
     CALL compute_W2(uf,W2,diffiso(1,1),diffiso(2,2))
@@ -2023,6 +2034,8 @@ CONTAINS
 #ifdef NEUTRALPNEW
       CALL compute_W5p(ufg,W5p)
       CALL compute_dW5p_dU(ufg,dW5p_dU)
+        W5p = neutral_limiter_phi*W5p
+        dW5p_dU = neutral_limiter_phi*dW5p_dU
         QdW5p = MATMUL(Qpr,dW5p_dU)
 #endif
 
@@ -2082,6 +2095,7 @@ CONTAINS
       END IF
 
       call compute_Dnn_dU(ufg,Dnn_dU)
+      Dnn_dU = neutral_limiter_phi*Dnn_dU
       Dnn_dU_u = dot_product(Dnn_dU,ufg)
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -2352,7 +2366,7 @@ CONTAINS
     flgflux_pinch = -recycling_coeff*uefg(1)*(APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
     !Neutral flux
-    flgflux_neutral_diff = (diffiso(inn,inn)*(Qpr(1,inn)*ng(1) + Qpr(2,inn)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    flgflux_neutral_diff = (neutral_diffiso*(Qpr(1,inn)*ng(1) + Qpr(2,inn)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
     flgflux_neutral_pgrad = 0.d0
     flgflux_neutral_conv = 0.d0
 #ifdef NEUTRALPNEW
@@ -2407,7 +2421,7 @@ CONTAINS
        indi = ind_asf+k
        indj = ind_ash+idm+(k-1)*Ndim
        !if (ntang) then
-          elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
+          elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*neutral_diffiso
        !else
        !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
        !endif
