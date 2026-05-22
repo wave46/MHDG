@@ -318,6 +318,12 @@ MODULE types
      REAL*8                    :: c_fle ! Fraction of the free streaming flux used in the electron flux limiter
      REAL*8                    :: T_fluxlim_maxi ! Max ion temperature [eV] in old heat flux limiter (limiting T in T^(5/2))
      REAL*8                    :: T_fluxlim_maxe ! Max electron temperature [eV] in old heat flux limiter (limiting T in T^(5/2))
+     ! Neutral flux limiter parameters
+     CHARACTER(LEN=40)         :: neutral_flux_limiter_mode
+     REAL*8                    :: neutral_flux_limiter_gamma
+     REAL*8                    :: neutral_flux_limiter_eps
+     REAL*8                    :: neutral_flux_limiter_fs_fraction
+     REAL*8                    :: neutral_flux_limiter_fs_flux_min
      ! Diffusion coefficients 1D imported from file
      REAL*8, POINTER           :: rho_1D(:) => NULL() ! Radial coordinate for 1D diffusion profiles
      REAL*8, POINTER           :: diff_n_1D(:) => NULL() ! Perpendicular diffusion in the continuity equation

@@ -170,6 +170,8 @@ SUBROUTINE adimensionalization()
   ! flux limiter max temperatures
   phys%T_fluxlim_maxi = phys%T_fluxlim_maxi/Tev
   phys%T_fluxlim_maxe = phys%T_fluxlim_maxe/Tev
+  phys%neutral_flux_limiter_eps = phys%neutral_flux_limiter_eps/(L0*n0/t0)
+  phys%neutral_flux_limiter_fs_flux_min = phys%neutral_flux_limiter_fs_flux_min/(L0*n0/t0)
 
   ! Store reference values
   simpar%refval_mass = mi
