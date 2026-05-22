@@ -52,7 +52,7 @@ SUBROUTINE HDG_computeJacobian()
   REAL*8                :: Jtorel(refElTor%Nnodes3d)
 #else
   ! Definitions in 2D
-  LOGICAL               :: save_tau, limiter_diagnostics
+  LOGICAL               :: save_tau, limiter_diagnostics, limiter_active
   INTEGER*4             :: inde(Mesh%Nnodesperelem)
   INTEGER*4             :: indf(refElPol%Nfacenodes)
   INTEGER*4             :: ind_loc(refElPol%Nfaces,refElPol%Nfacenodes*phys%Neq),perm(refElPol%Nfacenodes*phys%Neq)
@@ -178,6 +178,7 @@ SUBROUTINE HDG_computeJacobian()
 
   save_tau = switch%saveTau
   limiter_diagnostics = TRIM(ADJUSTL(phys%neutral_flux_limiter_mode)) .NE. 'off'
+  limiter_active = TRIM(ADJUSTL(phys%neutral_flux_limiter_mode)) .EQ. 'lagged_flux_limiter'
   IF (save_tau) THEN
      ALLOCATE (tau_save(refElPol%Nfaces*Mesh%Nelems*refElPol%Ngauss1d,phys%neq))
      ALLOCATE (xy_g_save(refElPol%Nfaces*Mesh%Nelems*refElPol%Ngauss1d,2))
@@ -1506,6 +1507,14 @@ CONTAINS
       END DO
     ENDIF
 
+    IF (limiter_active) THEN
+      DO g = 1,Ng2D
+        CALL compute_neutral_flux_limiter(ueg(g,:), qeg(g,:), limiter_phi, limiter_Gamma_unlim, &
+          &limiter_Gamma_max, limiter_ratio)
+        diff_iso_vol(inn,inn,g) = limiter_phi*diff_iso_vol(inn,inn,g)
+      END DO
+    ENDIF
+
       IF (switch%shockcp.GT.0) THEN
          auxdiffsc = MATMUL(refElPol%N2D,Mesh%scdiff_nodes(iel,:))
          DO i=1,Neq
@@ -1791,6 +1800,8 @@ CONTAINS
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: q_cyl(Ng1d)
     real*8                    :: omega(Ng1d)
+    REAL*8                    :: limiter_phi,limiter_Gamma_max,limiter_ratio
+    REAL*8                    :: limiter_Gamma_unlim(Ndim)
     inn = phys%idx_rhon_eq
 
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
@@ -1859,6 +1870,15 @@ CONTAINS
     IF (switch%transport_1d) THEN
       CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
     ENDIF
+
+    IF (limiter_active) THEN
+      DO g = 1,Ng1d
+        CALL compute_neutral_flux_limiter(uefg(g,:), qfg(g,:), limiter_phi, limiter_Gamma_unlim, &
+          &limiter_Gamma_max, limiter_ratio)
+        diff_iso_fac(inn,inn,g) = limiter_phi*diff_iso_fac(inn,inn,g)
+      END DO
+    ENDIF
+
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(inn,inn,:)
@@ -1969,6 +1989,8 @@ CONTAINS
     real*8                    :: Vnng(Ndim)
     real*8                    :: q_cyl(Ng1d)
     real*8                    :: omega(Ng1d)
+    REAL*8                    :: limiter_phi,limiter_Gamma_max,limiter_ratio
+    REAL*8                    :: limiter_Gamma_unlim(Ndim)
     inn = phys%idx_rhon_eq
 
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
@@ -2038,6 +2060,14 @@ CONTAINS
 
     IF (switch%transport_1d) THEN
       CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
+    ENDIF
+
+    IF (limiter_active) THEN
+      DO g = 1,Ng1d
+        CALL compute_neutral_flux_limiter(uefg(g,:), qfg(g,:), limiter_phi, limiter_Gamma_unlim, &
+          &limiter_Gamma_max, limiter_ratio)
+        diff_iso_fac(inn,inn,g) = limiter_phi*diff_iso_fac(inn,inn,g)
+      END DO
     ENDIF
 
     if (save_tau) then
