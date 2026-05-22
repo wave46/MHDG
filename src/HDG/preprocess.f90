@@ -133,6 +133,7 @@ CONTAINS
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
           WRITE (6, *) "Puff area:  ", Mesh%puff_area*phys%lscale*phys%lscale, " m^2"
+          WRITE (6, *) "Puff NeutralGamma eligible area:  ", Mesh%puff_gamma_area*phys%lscale*phys%lscale, " m^2"
        END IF
     ENDIF
     IF (MPIvar%glob_id .EQ. 0) THEN
@@ -146,8 +147,10 @@ CONTAINS
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
           WRITE (6, *) "Pump area:  ", Mesh%pump_area*phys%lscale*phys%lscale, " m^2"
+          WRITE (6, *) "Pump NeutralGamma eligible area:  ", Mesh%pump_gamma_area*phys%lscale*phys%lscale, " m^2"
        END IF
     ENDIF
+    CALL validateNeutralGammaWallAreas()
 #ifndef PARALL
     CALL computeCoreArea()
 #endif
@@ -282,10 +285,12 @@ CONTAINS
     CALL computePuffArea()
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%puff_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%puff_gamma_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
           WRITE (6, *) "Puff area:  ", Mesh%puff_area*phys%lscale*phys%lscale, " m^2"
+          WRITE (6, *) "Puff NeutralGamma eligible area:  ", Mesh%puff_gamma_area*phys%lscale*phys%lscale, " m^2"
        END IF
     ENDIF
     IF (MPIvar%glob_id .EQ. 0) THEN
@@ -296,12 +301,15 @@ CONTAINS
     CALL computePumpArea()
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%pump_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%pump_gamma_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
           WRITE (6, *) "Pump area:  ", Mesh%pump_area*phys%lscale*phys%lscale, " m^2"
+          WRITE (6, *) "Pump NeutralGamma eligible area:  ", Mesh%pump_gamma_area*phys%lscale*phys%lscale, " m^2"
        END IF
     ENDIF
+    CALL validateNeutralGammaWallAreas()
     CALL computeCoreArea()
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%core_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
@@ -1256,6 +1264,8 @@ CONTAINS
 
   SUBROUTINE computePuffArea()
     REAL*8   :: Xf(refElPol%Nfacenodes,2),xyg(refElPol%NGauss1D,2),xyg_d(refElPol%NGauss1D,2),dline
+    REAL*8   :: Bfl(refElPol%Nfacenodes,3),Bmod_nod(refElPol%Nfacenodes),b_nod(refElPol%Nfacenodes,3)
+    REAL*8   :: b(refElPol%NGauss1D,3),t_g(2),n_g(2),bn
     INTEGER  :: i,el,fa,fl,g, counterfl, counternogho, countergo
     REAL*8   :: xyDerNorm_g
 
@@ -1263,6 +1273,7 @@ CONTAINS
     counterfl = 0
     countergo = 0
     Mesh%puff_area = 0.
+    Mesh%puff_gamma_area = 0.
 
     DO i = 1, Mesh%Nextfaces
 
@@ -1283,8 +1294,14 @@ CONTAINS
        el = Mesh%extfaces(i,1)
        fa = Mesh%extfaces(i,2)
        Xf = Mesh%X(Mesh%T(el,refElPol%face_nodes(fa,:)),:)
+       Bfl = phys%B(Mesh%T(el,refElPol%face_nodes(fa,:)),:)
+       Bmod_nod = SQRT(Bfl(:,1)**2 + Bfl(:,2)**2 + Bfl(:,3)**2)
+       b_nod(:,1) = Bfl(:,1)/Bmod_nod
+       b_nod(:,2) = Bfl(:,2)/Bmod_nod
+       b_nod(:,3) = Bfl(:,3)/Bmod_nod
        xyg = MATMUL(refElPol%N1D,Xf)
        xyg_d = MATMUL(refElPol%Nxi1D,Xf)
+       b = MATMUL(refElPol%N1d,b_nod)
 #ifdef PARALL
        IF (Mesh%ghostFaces(Mesh%Nintfaces+i) .EQ. 0) THEN
 #endif
@@ -1294,6 +1311,10 @@ CONTAINS
              dline = refElPol%gauss_weights1D(g)*xyDerNorm_g
              dline = dline*xyg(g,1)
              Mesh%puff_area = Mesh%puff_area + 2*pi*dline
+             t_g = xyg_d(g,:)/xyDerNorm_g
+             n_g = [t_g(2),-t_g(1)]
+             bn = DOT_PRODUCT(b(g,1:2),n_g)
+             IF (ABS(bn) >= phys%neutral_gamma_wall_bn_min) Mesh%puff_gamma_area = Mesh%puff_gamma_area + 2*pi*dline
           END DO
 #ifdef PARALL
         ELSE
@@ -1306,11 +1327,14 @@ CONTAINS
 
   SUBROUTINE computePumpArea()
     REAL*8   :: Xf(refElPol%Nfacenodes,2),xyg(refElPol%NGauss1D,2),xyg_d(refElPol%NGauss1D,2),dline
+    REAL*8   :: Bfl(refElPol%Nfacenodes,3),Bmod_nod(refElPol%Nfacenodes),b_nod(refElPol%Nfacenodes,3)
+    REAL*8   :: b(refElPol%NGauss1D,3),t_g(2),n_g(2),bn
     INTEGER  :: i,el,fa,fl,g, counter
     REAL*8   :: xyDerNorm_g
 
     counter = 0
     Mesh%pump_area = 0.
+    Mesh%pump_gamma_area = 0.
 
     DO i = 1, Mesh%Nextfaces
 
@@ -1325,8 +1349,14 @@ CONTAINS
        el = Mesh%extfaces(i,1)
        fa = Mesh%extfaces(i,2)
        Xf = Mesh%X(Mesh%T(el,refElPol%face_nodes(fa,:)),:)
+       Bfl = phys%B(Mesh%T(el,refElPol%face_nodes(fa,:)),:)
+       Bmod_nod = SQRT(Bfl(:,1)**2 + Bfl(:,2)**2 + Bfl(:,3)**2)
+       b_nod(:,1) = Bfl(:,1)/Bmod_nod
+       b_nod(:,2) = Bfl(:,2)/Bmod_nod
+       b_nod(:,3) = Bfl(:,3)/Bmod_nod
        xyg = MATMUL(refElPol%N1D,Xf)
        xyg_d = MATMUL(refElPol%Nxi1D,Xf)
+       b = MATMUL(refElPol%N1d,b_nod)
 #ifdef PARALL
        IF (Mesh%ghostFaces(Mesh%Nintfaces+i) .EQ. 0) THEN
 #endif
@@ -1336,12 +1366,37 @@ CONTAINS
              dline = refElPol%gauss_weights1D(g)*xyDerNorm_g
              dline = dline*xyg(g,1)
              Mesh%pump_area = Mesh%pump_area + 2*pi*dline
+             t_g = xyg_d(g,:)/xyDerNorm_g
+             n_g = [t_g(2),-t_g(1)]
+             bn = DOT_PRODUCT(b(g,1:2),n_g)
+             IF (ABS(bn) >= phys%neutral_gamma_wall_bn_min) Mesh%pump_gamma_area = Mesh%pump_gamma_area + 2*pi*dline
           END DO
 #ifdef PARALL
        END IF
 #endif
     END DO
   ENDSUBROUTINE computePumpArea
+
+  SUBROUTINE validateNeutralGammaWallAreas()
+    IF (.NOT. phys%neutral_gamma_wall_sources) RETURN
+
+    IF (phys%idx_gamman_eq <= 0) THEN
+      IF (MPIvar%glob_id .EQ. 0) WRITE (6,*) 'neutral_gamma_wall_sources requires NEUTRALGAMMA.'
+      STOP
+    ENDIF
+    IF (phys%puff > 0.d0 .AND. Mesh%puff_gamma_area <= 0.d0) THEN
+      IF (MPIvar%glob_id .EQ. 0) THEN
+        WRITE (6,*) 'No puff faces satisfy neutral_gamma_wall_bn_min = ', phys%neutral_gamma_wall_bn_min
+      ENDIF
+      STOP
+    ENDIF
+    IF (phys%cryopump_power > 0.d0 .AND. Mesh%pump_gamma_area <= 0.d0) THEN
+      IF (MPIvar%glob_id .EQ. 0) THEN
+        WRITE (6,*) 'No pump faces satisfy neutral_gamma_wall_bn_min = ', phys%neutral_gamma_wall_bn_min
+      ENDIF
+      STOP
+    ENDIF
+  ENDSUBROUTINE validateNeutralGammaWallAreas
 
 
 

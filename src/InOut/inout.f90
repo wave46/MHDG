@@ -648,6 +648,9 @@ CONTAINS
     CALL HDF5_real_saving(group_id1, Mesh%ymax, 'ymax')
     CALL HDF5_real_saving(group_id1, Mesh%ymin, 'ymin')
     CALL HDF5_real_saving(group_id1, Mesh%puff_area, 'puff_area')
+    CALL HDF5_real_saving(group_id1, Mesh%pump_area, 'pump_area')
+    CALL HDF5_real_saving(group_id1, Mesh%puff_gamma_area, 'puff_gamma_area')
+    CALL HDF5_real_saving(group_id1, Mesh%pump_gamma_area, 'pump_gamma_area')
     CALL HDF5_real_saving(group_id1, Mesh%core_area, 'core_area')
     CALL HDF5_group_close(group_id1, ierr)
     
@@ -722,6 +725,9 @@ CONTAINS
       CALL HDF5_integer_saving(group_id1,Mesh%elemType,'elemType')
       ! these are already reduced in preprocess or load mesh
       CALL HDF5_real_saving(group_id1, Mesh%puff_area, 'puff_area')
+      CALL HDF5_real_saving(group_id1, Mesh%pump_area, 'pump_area')
+      CALL HDF5_real_saving(group_id1, Mesh%puff_gamma_area, 'puff_gamma_area')
+      CALL HDF5_real_saving(group_id1, Mesh%pump_gamma_area, 'pump_gamma_area')
       CALL HDF5_real_saving(group_id1, Mesh%core_area, 'core_area')
       CALL HDF5_real_saving(group_id1, Mesh%xmax, 'xmax')
       CALL HDF5_real_saving(group_id1, Mesh%xmin, 'xmin')
@@ -995,6 +1001,8 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
       CALL HDF5_real_saving(group_id2, phys%Re, 'recycling')
       CALL HDF5_real_saving(group_id2, phys%recycling_neutral_gamma, 'recycling_neutral_gamma')
+      CALL HDF5_logical_saving(group_id2, phys%neutral_gamma_wall_sources, 'neutral_gamma_wall_sources')
+      CALL HDF5_real_saving(group_id2, phys%neutral_gamma_wall_bn_min, 'neutral_gamma_wall_bn_min')
       CALL HDF5_real_saving(group_id2, phys%impurity_concentration, 'impurity_concentration')
       CALL HDF5_string_saving(group_id2, phys%impurity_name, 'impurity_name')
       CALL HDF5_logical_saving(group_id2, phys%apply_trim, 'apply_trim')

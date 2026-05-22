@@ -204,6 +204,8 @@
     Re                  = 0.9     ! Recycling coefficient 0.997
     Re_pump             = 0.9     ! Recycling coefficient in the pump region
     recycling_neutral_gamma = 1.0  ! Multiplier for the recycled NeutralGamma Bohm relation
+    neutral_gamma_wall_sources = .false. ! Move puff/pump/recycling wall sources to NeutralGamma equation
+    neutral_gamma_wall_bn_min = 1.e-4 ! Minimum |b.n| for NeutralGamma wall-source faces
     apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
     puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
     impurity_name       = 'W' ! name of impurity
