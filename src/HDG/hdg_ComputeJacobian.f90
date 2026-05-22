@@ -2355,6 +2355,8 @@ CONTAINS
         REAL*8                    :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq)
         REAL*8                    :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+    REAL*8                    :: neutral_limiter_phi,neutral_limiter_Gamma_max,neutral_limiter_ratio
+    REAL*8                    :: neutral_limiter_Gamma_unlim(Ndim)
 #endif
     real*8                    :: Sn(Neq,Neq),Sn0(Neq)
 #endif
@@ -2386,6 +2388,14 @@ CONTAINS
 
     ! Compute Q^T^(k-1)
         Qpr = RESHAPE(qe,(/Ndim,Neq/))
+
+#ifdef TEMPERATURE
+    neutral_limiter_phi = 1.d0
+    IF (limiter_active) THEN
+      CALL compute_neutral_flux_limiter(ue, qe, neutral_limiter_phi, neutral_limiter_Gamma_unlim, &
+        &neutral_limiter_Gamma_max, neutral_limiter_ratio)
+    ENDIF
+#endif
 
     ! Split diffusion matrices/vectors for the momentum equation
     CALL compute_W2(ue,W2,diffiso(1,1),diffiso(2,2))
@@ -2485,6 +2495,12 @@ CONTAINS
     CALL compute_dW5p_dU(ue,dW5p_dU)
         QdW5p = MATMUL(Qpr,dW5p_dU)
         dW5p_dU_u = MATMUL(dW5p_dU,ue)
+    IF (limiter_active) THEN
+      W5p = neutral_limiter_phi*W5p
+      dW5p_dU = neutral_limiter_phi*dW5p_dU
+      QdW5p = neutral_limiter_phi*QdW5p
+      dW5p_dU_u = neutral_limiter_phi*dW5p_dU_u
+    ENDIF
 #endif
 
     ! Temperature exchange terms
@@ -2592,6 +2608,10 @@ CONTAINS
 
         CALL compute_Dnn_dU(ue,Dnn_dU)
         Dnn_dU_u = dot_PRODUCT(Dnn_dU,Ue)
+        IF (limiter_active) THEN
+          Dnn_dU = neutral_limiter_phi*Dnn_dU
+          Dnn_dU_u = neutral_limiter_phi*Dnn_dU_u
+        ENDIF
 
 #endif
 
@@ -3055,6 +3075,8 @@ ENDIF
       real*8                    :: W5p(Neq),dW5p_dU(Neq,Neq),QdW5p(Ndim,Neq)
 #endif
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+      REAL*8                    :: neutral_limiter_phi,neutral_limiter_Gamma_max,neutral_limiter_ratio
+      REAL*8                    :: neutral_limiter_Gamma_unlim(Ndim)
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8                    :: ddk_dU(Neq), ddk_dU_U
@@ -3087,6 +3109,14 @@ ENDIF
       ! Compute Q^T^(k-1)
            Qpr = RESHAPE(qf,(/Ndim,Neq/))
 
+#ifdef TEMPERATURE
+      neutral_limiter_phi = 1.d0
+      IF (limiter_active) THEN
+        CALL compute_neutral_flux_limiter(uf, qf, neutral_limiter_phi, neutral_limiter_Gamma_unlim, &
+          &neutral_limiter_Gamma_max, neutral_limiter_ratio)
+      ENDIF
+#endif
+
       ! Split diffusion vector/matrix for momentum equation
       CALL compute_W2(uf,W2,diffiso(1,1),diffiso(2,2))
       CALL compute_dW2_dU(uf,dW2_dU,diffiso(1,1),diffiso(2,2))
@@ -3118,6 +3148,11 @@ ENDIF
       CALL compute_W5p(uf,W5p)
       CALL compute_dW5p_dU(uf,dW5p_dU)
            QdW5p = MATMUL(Qpr,dW5p_dU)
+      IF (limiter_active) THEN
+        W5p = neutral_limiter_phi*W5p
+        dW5p_dU = neutral_limiter_phi*dW5p_dU
+        QdW5p = neutral_limiter_phi*QdW5p
+      ENDIF
 #endif
 
       ! Compute Alpha(U^(k-1))
@@ -3168,6 +3203,10 @@ ENDIF
 
            CALL compute_Dnn_dU(uf,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,uf)
+      IF (limiter_active) THEN
+        Dnn_dU = neutral_limiter_phi*Dnn_dU
+        Dnn_dU_u = neutral_limiter_phi*Dnn_dU_u
+      ENDIF
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       call compute_ddk_dU(uf,xyf,q_cyl,ddk_dU)
@@ -3518,6 +3557,8 @@ ENDIF
       real*8                    :: W5p(Neq), dW5p_dU(Neq,Neq), QdW5p(Ndim,Neq)
 #endif
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+      REAL*8                    :: neutral_limiter_phi,neutral_limiter_Gamma_max,neutral_limiter_ratio
+      REAL*8                    :: neutral_limiter_Gamma_unlim(Ndim)
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8                    :: ddk_dU(Neq), ddk_dU_U
@@ -3549,6 +3590,14 @@ ENDIF
 
       ! Compute Q^T^(k-1)
            Qpr = RESHAPE(qf,(/Ndim,Neq/))
+
+#ifdef TEMPERATURE
+      neutral_limiter_phi = 1.d0
+      IF (limiter_active) THEN
+        CALL compute_neutral_flux_limiter(uf, qf, neutral_limiter_phi, neutral_limiter_Gamma_unlim, &
+          &neutral_limiter_Gamma_max, neutral_limiter_ratio)
+      ENDIF
+#endif
 
       ! Split diffusion vector/matrix for the momentum equation
       CALL compute_W2(uf,W2,diffiso(1,1),diffiso(2,2))
@@ -3582,6 +3631,11 @@ ENDIF
       CALL compute_W5p(uf,W5p)
       CALL compute_dW5p_dU(uf,dW5p_dU)
            QdW5p = MATMUL(Qpr,dW5p_dU)
+      IF (limiter_active) THEN
+        W5p = neutral_limiter_phi*W5p
+        dW5p_dU = neutral_limiter_phi*dW5p_dU
+        QdW5p = neutral_limiter_phi*QdW5p
+      ENDIF
 #endif
 
       ! Compute Alpha(U^(k-1))
@@ -3630,6 +3684,10 @@ ENDIF
       
            CALL compute_Dnn_dU(uf,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,uf)
+      IF (limiter_active) THEN
+        Dnn_dU = neutral_limiter_phi*Dnn_dU
+        Dnn_dU_u = neutral_limiter_phi*Dnn_dU_u
+      ENDIF
 
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
