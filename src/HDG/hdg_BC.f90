@@ -543,6 +543,7 @@ CONTAINS
 #ifdef SAVEFLUX
   real*8                    :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_pinch,totalflux_neutral,totalflux_numerical
   real*8                    :: totalflux_neutral_diff, totalflux_neutral_pgrad, totalflux_neutral_conv
+  real*8                    :: neutral_balance_physical,neutral_balance_hdg
   real*8                    :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_numerical
   real*8                    :: faceflux_neutral_diff, faceflux_neutral_pgrad, faceflux_neutral_conv
 #endif
@@ -831,6 +832,14 @@ CONTAINS
      WRITE(6,*) 'neutral flux = ',totalflux_neutral
      WRITE(6,*) 'numerical flux = ',totalflux_numerical
      WRITE(6,*) 'net flux = ',totalflux_parallel-totalflux_perpendicular-totalflux_pinch-totalflux_neutral+totalflux_puff-totalflux_pump+totalflux_numerical
+     IF (switch%neutral_wall_sources_in_elements) THEN
+        neutral_balance_physical = totalflux_parallel - totalflux_perpendicular - totalflux_pinch - totalflux_neutral &
+             &+ phys%neutral_wall_source_puff_total - phys%neutral_wall_source_pump_total
+        neutral_balance_hdg = neutral_balance_physical + totalflux_numerical
+        WRITE(6,*) 'element-source physical balance without tau = ',neutral_balance_physical
+        WRITE(6,*) 'element-source numerical tau flux = ',totalflux_numerical
+        WRITE(6,*) 'element-source corrected HDG balance = ',neutral_balance_hdg
+     ENDIF
   ENDIF
 #endif
   IF (save_tau) THEN
@@ -2343,6 +2352,11 @@ CONTAINS
       STOP
     END SELECT
 
+    IF (switch%neutral_wall_sources_in_elements) THEN
+      cryopump_coeff = 0.d0
+      puff_coeff = 0.d0
+    ENDIF
+
 #ifdef SAVEFLUX
     !***************** flux control part ****************************
 
@@ -2907,6 +2921,10 @@ CONTAINS
       WRITE (6,*) "Error: wrong boundary type"
       STOP
     END SELECT
+
+    IF (switch%neutral_wall_sources_in_elements) THEN
+       puff_coeff = 0.d0
+    ENDIF
 
     ! convective part
     k = Neq
