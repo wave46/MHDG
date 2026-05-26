@@ -335,6 +335,11 @@ MODULE types
      REAL*8,ALLOCATABLE        :: neutral_flux_limiter_Gamma_max_Nod(:)
      REAL*8,ALLOCATABLE        :: neutral_flux_limiter_activation_ratio_Nod(:)
      REAL*8,ALLOCATABLE        :: neutral_flux_limiter_Gamma_lim_Nod(:)
+     REAL*8                    :: neutral_wall_source_puff_total
+     REAL*8                    :: neutral_wall_source_pump_total
+     REAL*8,ALLOCATABLE        :: neutral_wall_source_puff_Nod(:)
+     REAL*8,ALLOCATABLE        :: neutral_wall_source_pump_Nod(:)
+     REAL*8,ALLOCATABLE        :: neutral_wall_source_net_Nod(:)
      ! Diffusion coefficients 1D imported from file
      REAL*8, POINTER           :: rho_1D(:) => NULL() ! Radial coordinate for 1D diffusion profiles
      REAL*8, POINTER           :: diff_n_1D(:) => NULL() ! Perpendicular diffusion in the continuity equation

@@ -53,7 +53,7 @@ SUBROUTINE HDG_computeJacobian()
 #else
   ! Definitions in 2D
   LOGICAL               :: save_tau, limiter_diagnostics, limiter_active
-  INTEGER*4             :: inde(Mesh%Nnodesperelem)
+  INTEGER*4             :: inde(Mesh%Nnodesperelem),expected_diag_size
   INTEGER*4             :: indf(refElPol%Nfacenodes)
   INTEGER*4             :: ind_loc(refElPol%Nfaces,refElPol%Nfacenodes*phys%Neq),perm(refElPol%Nfacenodes*phys%Neq)
   REAL*8                :: ue(Mesh%Nnodesperelem,phys%Neq),u0e(Mesh%Nnodesperelem,phys%Neq,time%tis)
@@ -185,21 +185,26 @@ SUBROUTINE HDG_computeJacobian()
     tau_save = 0.
     xy_g_save = 0.
   ENDIF
+  expected_diag_size = Mesh%Nelems*Mesh%Nnodesperelem
   IF (limiter_diagnostics) THEN
-    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Dnn_Nod)) &
-      ALLOCATE(phys%neutral_flux_limiter_Dnn_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
-    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_phi_Nod)) &
-      ALLOCATE(phys%neutral_flux_limiter_phi_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
-    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Deff_Nod)) &
-      ALLOCATE(phys%neutral_flux_limiter_Deff_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
-    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Gamma_unlim_Nod)) &
-      ALLOCATE(phys%neutral_flux_limiter_Gamma_unlim_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
-    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Gamma_max_Nod)) &
-      ALLOCATE(phys%neutral_flux_limiter_Gamma_max_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
-    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_activation_ratio_Nod)) &
-      ALLOCATE(phys%neutral_flux_limiter_activation_ratio_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
-    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Gamma_lim_Nod)) &
-      ALLOCATE(phys%neutral_flux_limiter_Gamma_lim_Nod(Mesh%Nelems*Mesh%Nnodesperelem))
+    IF (ALLOCATED(phys%neutral_flux_limiter_Dnn_Nod)) THEN
+      IF (SIZE(phys%neutral_flux_limiter_Dnn_Nod) .NE. expected_diag_size) THEN
+       DEALLOCATE(phys%neutral_flux_limiter_Dnn_Nod,phys%neutral_flux_limiter_phi_Nod,phys%neutral_flux_limiter_Deff_Nod, &
+          &phys%neutral_flux_limiter_Gamma_unlim_Nod,phys%neutral_flux_limiter_Gamma_max_Nod,phys%neutral_flux_limiter_activation_ratio_Nod, &
+          &phys%neutral_flux_limiter_Gamma_lim_Nod)
+      ENDIF
+    ENDIF
+
+    IF (.NOT. ALLOCATED(phys%neutral_flux_limiter_Dnn_Nod)) THEN
+      ALLOCATE(phys%neutral_flux_limiter_Dnn_Nod(expected_diag_size))
+      ALLOCATE(phys%neutral_flux_limiter_phi_Nod(expected_diag_size))
+      ALLOCATE(phys%neutral_flux_limiter_Deff_Nod(expected_diag_size))
+      ALLOCATE(phys%neutral_flux_limiter_Gamma_unlim_Nod(expected_diag_size))
+      ALLOCATE(phys%neutral_flux_limiter_Gamma_max_Nod(expected_diag_size))
+      ALLOCATE(phys%neutral_flux_limiter_activation_ratio_Nod(expected_diag_size))
+      ALLOCATE(phys%neutral_flux_limiter_Gamma_lim_Nod(expected_diag_size))
+    ENDIF
+
     phys%neutral_flux_limiter_Dnn_Nod = 0.d0
     phys%neutral_flux_limiter_phi_Nod = 0.d0
     phys%neutral_flux_limiter_Deff_Nod = 0.d0
@@ -208,6 +213,25 @@ SUBROUTINE HDG_computeJacobian()
     phys%neutral_flux_limiter_activation_ratio_Nod = 0.d0
     phys%neutral_flux_limiter_Gamma_lim_Nod = 0.d0
   ENDIF
+#ifdef NEUTRAL
+  phys%neutral_wall_source_puff_total = 0.d0
+  phys%neutral_wall_source_pump_total = 0.d0
+  IF (switch%neutral_wall_sources_in_elements) THEN
+    IF (ALLOCATED(phys%neutral_wall_source_puff_Nod)) THEN
+      IF (SIZE(phys%neutral_wall_source_puff_Nod) .NE. expected_diag_size) THEN
+       DEALLOCATE(phys%neutral_wall_source_puff_Nod,phys%neutral_wall_source_pump_Nod,phys%neutral_wall_source_net_Nod)
+      ENDIF
+    ENDIF
+    IF (.NOT. ALLOCATED(phys%neutral_wall_source_puff_Nod)) THEN
+      ALLOCATE(phys%neutral_wall_source_puff_Nod(expected_diag_size))
+      ALLOCATE(phys%neutral_wall_source_pump_Nod(expected_diag_size))
+      ALLOCATE(phys%neutral_wall_source_net_Nod(expected_diag_size))
+    ENDIF
+    phys%neutral_wall_source_puff_Nod = 0.d0
+    phys%neutral_wall_source_pump_Nod = 0.d0
+    phys%neutral_wall_source_net_Nod = 0.d0
+  ENDIF
+#endif
 
   ! Compute shock capturing diffusion
   IF (switch%shockcp.GT.0) THEN
@@ -228,6 +252,14 @@ SUBROUTINE HDG_computeJacobian()
   END DO
   ALLOCATE (qres(sizeu/Neq,Neq*Ndim))
   qres = TRANSPOSE(RESHAPE(sol%q,[Neq*Ndim,sizeu/Neq]))
+
+#ifndef TOR3D
+#ifdef NEUTRAL
+  IF (switch%neutral_wall_sources_in_elements) THEN
+    CALL print_neutral_wall_source_element_totals()
+  ENDIF
+#endif
+#endif
 
 #ifdef TOR3D
   !********************************************
@@ -1346,6 +1378,74 @@ CONTAINS
 
 CONTAINS
 
+#ifndef TOR3D
+#ifdef NEUTRAL
+  SUBROUTINE print_neutral_wall_source_element_totals()
+
+    INTEGER :: ifac,el,fa,fl,bc,g,inn
+    INTEGER :: ind_nodes(refElPol%Nfacenodes)
+    REAL*8  :: Xf(refElPol%Nfacenodes,2),uef(refElPol%Nfacenodes,phys%Neq)
+    REAL*8  :: xyg(refElPol%NGauss1D,2),xyder(refElPol%NGauss1D,2)
+    REAL*8  :: dline,nng,puff_coeff,pump_coeff
+    REAL*8  :: total_puff,total_pump
+
+    inn = phys%idx_rhon_eq
+    total_puff = 0.d0
+    total_pump = 0.d0
+
+    IF (inn <= 0) RETURN
+
+    DO ifac = 1,Mesh%Nextfaces
+      fl = Mesh%boundaryFlag(ifac)
+#ifdef PARALL
+      IF (fl .EQ. 0) CYCLE
+      IF (Mesh%ghostFaces(Mesh%Nintfaces + ifac) .NE. 0) CYCLE
+#endif
+
+      bc = phys%bcflags(fl)
+      IF ((bc .NE. bc_BohmPuff) .AND. (bc .NE. bc_BohmPump)) CYCLE
+
+      el = Mesh%extfaces(ifac,1)
+      fa = Mesh%extfaces(ifac,2)
+      ind_nodes = (el - 1)*Npel + refElPol%face_nodes(fa,:)
+      Xf = Mesh%X(Mesh%T(el,refElPol%face_nodes(fa,:)),:)
+      uef = ures(ind_nodes,:)
+      xyg = MATMUL(refElPol%N1D,Xf)
+      xyder = MATMUL(refElPol%Nxi1D,Xf)
+
+      puff_coeff = 0.d0
+      pump_coeff = 0.d0
+      SELECT CASE (bc)
+      CASE (bc_BohmPuff)
+        puff_coeff = phys%puff/simpar%refval_density/(Mesh%puff_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
+      CASE (bc_BohmPump)
+        pump_coeff = phys%cryopump_power/(Mesh%pump_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
+      END SELECT
+
+      DO g = 1,refElPol%NGauss1D
+        dline = refElPol%gauss_weights1D(g)*NORM2(xyder(g,:))
+        IF (switch%axisym) dline = dline*xyg(g,1)
+        nng = DOT_PRODUCT(refElPol%N1D(g,:),uef(:,inn))
+        total_puff = total_puff + puff_coeff*dline*2.d0*PI*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+        total_pump = total_pump + pump_coeff*nng*dline*2.d0*PI*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+      ENDDO
+    ENDDO
+
+#ifdef PARALL
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_puff, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_pump, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+    IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6,*) 'element neutral puff source = ', total_puff
+      WRITE(6,*) 'element neutral pump sink = ', total_pump
+    ENDIF
+    phys%neutral_wall_source_puff_total = total_puff
+    phys%neutral_wall_source_pump_total = total_pump
+
+  ENDSUBROUTINE print_neutral_wall_source_element_totals
+#endif
+#endif
+
   !***************************************************
   ! Volume computation in 2D
   !***************************************************
@@ -1781,11 +1881,11 @@ CONTAINS
     REAL*8,INTENT(IN)        :: Xel(:,:),ue(:,:)
     REAL*8,INTENT(INOUT)     :: Auu(:,:,:),rhs(:,:)
     INTEGER                  :: ifa,iface,ibf,fl,bc
-    INTEGER                  :: g,a,b,ia,ib,inn,z
+    INTEGER                  :: g,a,b,ia,ib,inn,z,ind_source
     REAL*8                   :: Xfl(refElPol%Nfacenodes,2)
     REAL*8                   :: xyg(refElPol%Ngauss1d,2)
     REAL*8                   :: xyder(refElPol%Ngauss1d,2)
-    REAL*8                   :: dline,puff_coeff,pump_coeff
+    REAL*8                   :: dline,puff_coeff,pump_coeff,puff_flux,pump_flux
 
     inn = phys%idx_rhon_eq
     IF (inn <= 0) RETURN
@@ -1843,6 +1943,20 @@ CONTAINS
           ENDIF
         ENDDO
       ENDDO
+
+      IF (ALLOCATED(phys%neutral_wall_source_puff_Nod)) THEN
+        DO a = 1,refElPol%Nfacenodes
+          ia = refElPol%face_nodes(ifa,a)
+          ind_source = (iel - 1)*Mesh%Nnodesperelem + ia
+          puff_flux = 0.d0
+          pump_flux = 0.d0
+          IF (bc .EQ. bc_BohmPuff) puff_flux = puff_coeff*simpar%refval_density*simpar%refval_speed
+          IF (bc .EQ. bc_BohmPump) pump_flux = pump_coeff*ue(ia,inn)*simpar%refval_density*simpar%refval_speed
+          phys%neutral_wall_source_puff_Nod(ind_source) = puff_flux
+          phys%neutral_wall_source_pump_Nod(ind_source) = pump_flux
+          phys%neutral_wall_source_net_Nod(ind_source) = puff_flux - pump_flux
+        ENDDO
+      ENDIF
     ENDDO
 
   ENDSUBROUTINE add_neutral_wall_sources_to_element
