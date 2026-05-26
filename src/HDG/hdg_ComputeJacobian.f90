@@ -1764,10 +1764,89 @@ CONTAINS
          ENDIF
 
     END DO ! END loop in volume Gauss points
+#ifdef NEUTRAL
+    IF (switch%neutral_wall_sources_in_elements) THEN
+      CALL add_neutral_wall_sources_to_element(iel,Xel,ue,Auu,rhs)
+    ENDIF
+#endif
       CALL do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)
       DEALLOCATE(Auq,Auu,rhs)
 
   ENDSUBROUTINE elemental_matrices_volume
+
+#ifdef NEUTRAL
+  SUBROUTINE add_neutral_wall_sources_to_element(iel,Xel,ue,Auu,rhs)
+
+    INTEGER,INTENT(IN)       :: iel
+    REAL*8,INTENT(IN)        :: Xel(:,:),ue(:,:)
+    REAL*8,INTENT(INOUT)     :: Auu(:,:,:),rhs(:,:)
+    INTEGER                  :: ifa,iface,ibf,fl,bc
+    INTEGER                  :: g,a,b,ia,ib,inn,z
+    REAL*8                   :: Xfl(refElPol%Nfacenodes,2)
+    REAL*8                   :: xyg(refElPol%Ngauss1d,2)
+    REAL*8                   :: xyder(refElPol%Ngauss1d,2)
+    REAL*8                   :: dline,puff_coeff,pump_coeff
+
+    inn = phys%idx_rhon_eq
+    IF (inn <= 0) RETURN
+
+#ifdef PARALL
+    IF (Mesh%ghostElems(iel) .NE. 0) RETURN
+#endif
+
+    z = inn + (inn - 1)*Neq
+
+    DO ifa = 1,refElPol%Nfaces
+      iface = Mesh%F(iel,ifa)
+      IF (iface <= Mesh%Nintfaces) CYCLE
+
+      ibf = iface - Mesh%Nintfaces
+      IF (Mesh%periodic_faces(ibf) .NE. 0) CYCLE
+
+      fl = Mesh%boundaryFlag(ibf)
+#ifdef PARALL
+      IF (fl .EQ. 0) CYCLE
+#endif
+      bc = phys%bcflags(fl)
+
+      IF ((bc .NE. bc_BohmPuff) .AND. (bc .NE. bc_BohmPump)) CYCLE
+
+      puff_coeff = 0.d0
+      pump_coeff = 0.d0
+      SELECT CASE (bc)
+      CASE (bc_BohmPuff)
+        puff_coeff = phys%puff/simpar%refval_density/(Mesh%puff_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
+      CASE (bc_BohmPump)
+        pump_coeff = phys%cryopump_power/(Mesh%pump_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
+      END SELECT
+
+      Xfl = Xel(refElPol%face_nodes(ifa,:),:)
+      xyg = MATMUL(refElPol%N1D,Xfl)
+      xyder = MATMUL(refElPol%Nxi1D,Xfl)
+
+      DO g = 1,refElPol%Ngauss1d
+        dline = refElPol%gauss_weights1D(g)*NORM2(xyder(g,:))
+        IF (switch%axisym) dline = dline*xyg(g,1)
+
+        DO a = 1,refElPol%Nfacenodes
+          ia = refElPol%face_nodes(ifa,a)
+
+          IF (bc .EQ. bc_BohmPuff) THEN
+            rhs(ia,inn) = rhs(ia,inn) + puff_coeff*refElPol%N1D(g,a)*dline
+          ENDIF
+
+          IF (bc .EQ. bc_BohmPump) THEN
+            DO b = 1,refElPol%Nfacenodes
+              ib = refElPol%face_nodes(ifa,b)
+              Auu(ia,ib,z) = Auu(ia,ib,z) + pump_coeff*refElPol%N1D(g,a)*refElPol%N1D(g,b)*dline
+            ENDDO
+          ENDIF
+        ENDDO
+      ENDDO
+    ENDDO
+
+  ENDSUBROUTINE add_neutral_wall_sources_to_element
+#endif
 
   !***************************************************
   ! Interior faces computation in 2D
