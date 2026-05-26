@@ -16,6 +16,7 @@ SUBROUTINE READ_input()
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
   LOGICAL               :: ckeramp,saveNR,filter,saveTau,transport_1d,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
+  LOGICAL               :: neutral_wall_sources_in_elements
   INTEGER               :: thresh, difcor, tis, stab,pertini,init,order_2d
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
   INTEGER               :: uinput, printint, testcase, nrp
@@ -97,7 +98,7 @@ SUBROUTINE READ_input()
   ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, transport_1d, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
-       & logrho,bxgradb,flux_limiter,import_diffusion_1D
+       & logrho,bxgradb,flux_limiter,import_diffusion_1D,neutral_wall_sources_in_elements
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump,neutralp_lambda
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
@@ -136,6 +137,7 @@ SUBROUTINE READ_input()
   diagsource = 0.
   neutralp_lambda = 1.d0
   recycling_neutral_gamma = 1.d0
+  neutral_wall_sources_in_elements = .false.
   neutral_gamma_wall_sources = .false.
   neutral_gamma_wall_bn_min = 1.d-4
   neutral_flux_limiter_mode = 'off'
@@ -236,6 +238,7 @@ SUBROUTINE READ_input()
   switch%external_heating = external_heating
   switch%impurity_radiation = impurity_radiation
   switch%import_diffusion_1D = import_diffusion_1D
+  switch%neutral_wall_sources_in_elements = neutral_wall_sources_in_elements
   input%field_path        = TRIM(ADJUSTL(field_path))
   input%field_dimensions  = field_dimensions
   input%field_from_grid   = field_from_grid
@@ -561,6 +564,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - recycling coefficient for NeutralGamma Bohm:        ', phys%recycling_neutral_gamma
      PRINT *, '                - NeutralGamma wall sources:                         ', phys%neutral_gamma_wall_sources
      PRINT *, '                - NeutralGamma wall source min |b.n|:                ', phys%neutral_gamma_wall_bn_min
+     PRINT *, '                - neutral wall sources in elements:                  ', switch%neutral_wall_sources_in_elements
      PRINT *, '                - applying trim:                                      ', phys%apply_trim
      PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
      PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power

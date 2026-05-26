@@ -1112,6 +1112,7 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%impurity_radiation, 'impurity_radiation')
       CALL HDF5_logical_saving(group_id2, switch%external_heating, 'external_heating')
       CALL HDF5_logical_saving(group_id2, switch%import_diffusion_1D, 'import_diffusion_1D')
+      CALL HDF5_logical_saving(group_id2, switch%neutral_wall_sources_in_elements, 'neutral_wall_sources_in_elements')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create numerics parameters group
