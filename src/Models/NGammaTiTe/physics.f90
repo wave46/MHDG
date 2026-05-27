@@ -937,7 +937,7 @@ CONTAINS
     ENDIF
 
     IF (ratio < HUGE(1.d0)) THEN
-      phi = (1.d0 + ratio**phys%neutral_flux_limiter_gamma)**(-1.d0/phys%neutral_flux_limiter_gamma)
+      phi = 1.d0/(1.d0 + ratio)
     ELSE
       phi = 0.d0
     ENDIF

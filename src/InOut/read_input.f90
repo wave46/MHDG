@@ -84,7 +84,6 @@ SUBROUTINE READ_input()
   REAL*8                :: c_fli, c_fle
   REAL*8                :: T_fluxlim_maxi, T_fluxlim_maxe
   CHARACTER(len=40)     :: neutral_flux_limiter_mode
-  REAL*8                :: neutral_flux_limiter_gamma
   REAL*8                :: neutral_flux_limiter_eps
   REAL*8                :: neutral_flux_limiter_fs_fraction
   REAL*8                :: neutral_flux_limiter_fs_flux_min
@@ -108,13 +107,13 @@ SUBROUTINE READ_input()
   & Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, &
-    &T_fluxlim_maxi, T_fluxlim_maxe, neutral_flux_limiter_mode, neutral_flux_limiter_gamma, neutral_flux_limiter_eps, &
+    &T_fluxlim_maxi, T_fluxlim_maxe, neutral_flux_limiter_mode, neutral_flux_limiter_eps, &
     &neutral_flux_limiter_fs_fraction, neutral_flux_limiter_fs_flux_min
 #else
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn, diff_nn_min,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, &
-    &T_fluxlim_maxi, T_fluxlim_maxe, neutral_flux_limiter_mode, neutral_flux_limiter_gamma, neutral_flux_limiter_eps, &
+    &T_fluxlim_maxi, T_fluxlim_maxe, neutral_flux_limiter_mode, neutral_flux_limiter_eps, &
     &neutral_flux_limiter_fs_fraction, neutral_flux_limiter_fs_flux_min
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
@@ -138,7 +137,6 @@ SUBROUTINE READ_input()
   recycling_neutral_gamma = 1.d0
   neutral_wall_sources_in_elements = .false.
   neutral_flux_limiter_mode = 'off'
-  neutral_flux_limiter_gamma = 1.d0
   neutral_flux_limiter_eps = 0.d0
   neutral_flux_limiter_fs_fraction = 1.d0
   neutral_flux_limiter_fs_flux_min = 0.d0
@@ -172,10 +170,6 @@ SUBROUTINE READ_input()
      PRINT *, 'Allowed values: off, diagnostics_only, lagged_flux_limiter'
      STOP
   END SELECT
-  IF (neutral_flux_limiter_gamma <= 0.d0) THEN
-     PRINT *, 'neutral_flux_limiter_gamma must be positive: ', neutral_flux_limiter_gamma
-     STOP
-  ENDIF
   IF (neutral_flux_limiter_eps < 0.d0) THEN
      PRINT *, 'neutral_flux_limiter_eps must be non-negative: ', neutral_flux_limiter_eps
      STOP
@@ -389,7 +383,6 @@ SUBROUTINE READ_input()
   phys%T_fluxlim_maxi     = T_fluxlim_maxi
   phys%T_fluxlim_maxe     = T_fluxlim_maxe
   phys%neutral_flux_limiter_mode = neutral_flux_limiter_mode
-  phys%neutral_flux_limiter_gamma = neutral_flux_limiter_gamma
   phys%neutral_flux_limiter_eps = neutral_flux_limiter_eps
   phys%neutral_flux_limiter_fs_fraction = neutral_flux_limiter_fs_fraction
   phys%neutral_flux_limiter_fs_flux_min = neutral_flux_limiter_fs_flux_min
@@ -575,7 +568,6 @@ SUBROUTINE READ_input()
      PRINT *, '                - T_maxi for the flux limiter:                       ', phys%T_fluxlim_maxi
      PRINT *, '                - T_maxe for the flux limiter:                       ', phys%T_fluxlim_maxe
      PRINT *, '                - neutral flux limiter mode:                         ', TRIM(ADJUSTL(phys%neutral_flux_limiter_mode))
-     PRINT *, '                - neutral flux limiter gamma:                        ', phys%neutral_flux_limiter_gamma
      PRINT *, '                - neutral flux limiter eps:                          ', phys%neutral_flux_limiter_eps
      PRINT *, '                - neutral flux limiter fs fraction:                  ', phys%neutral_flux_limiter_fs_fraction
      PRINT *, '                - neutral flux limiter fs flux min:                  ', phys%neutral_flux_limiter_fs_flux_min

@@ -1153,7 +1153,6 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%T_fluxlim_maxi, 'T_fluxlim_maxi')
       CALL HDF5_real_saving(group_id2, phys%T_fluxlim_maxe, 'T_fluxlim_maxe')
       CALL HDF5_string_saving(group_id2, phys%neutral_flux_limiter_mode, 'neutral_flux_limiter_mode')
-      CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_gamma, 'neutral_flux_limiter_gamma')
       CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_eps, 'neutral_flux_limiter_eps')
       CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_fs_fraction, 'neutral_flux_limiter_fs_fraction')
       CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_fs_flux_min, 'neutral_flux_limiter_fs_flux_min')

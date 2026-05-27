@@ -267,7 +267,6 @@
     T_fluxlim_maxe      = 50.              ! Max eletron temperature [eV] in old heat flux limiter (limiting T in T^(5/2)), put some large value to turn it off
     ! **** Neutral flux limiter coefficients
     neutral_flux_limiter_mode          = 'off' ! off, diagnostics_only, lagged_flux_limiter
-    neutral_flux_limiter_gamma         = 1.0   ! Limiter sharpness, dimensionless
     neutral_flux_limiter_eps           = 0.0   ! Dimensional neutral flux regularization [m^-2 s^-1]
     neutral_flux_limiter_fs_fraction   = 1.0   ! Fraction of neutral free-streaming flux, dimensionless
     neutral_flux_limiter_fs_flux_min   = 0.0   ! Dimensional minimum neutral free-streaming flux [m^-2 s^-1]

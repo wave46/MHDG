@@ -321,7 +321,6 @@ MODULE types
      REAL*8                    :: T_fluxlim_maxe ! Max electron temperature [eV] in old heat flux limiter (limiting T in T^(5/2))
      ! Neutral flux limiter parameters
      CHARACTER(LEN=40)         :: neutral_flux_limiter_mode
-     REAL*8                    :: neutral_flux_limiter_gamma
      REAL*8                    :: neutral_flux_limiter_eps
      REAL*8                    :: neutral_flux_limiter_fs_fraction
      REAL*8                    :: neutral_flux_limiter_fs_flux_min
