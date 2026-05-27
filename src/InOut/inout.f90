@@ -546,6 +546,7 @@ CONTAINS
     CALL HDF5_group_close(group_id1, ierr)
 
     CALL save_neutral_flux_limiter_diagnostics()
+    CALL save_neutral_reaction_source_diagnostics()
     CALL save_neutral_wall_source_diagnostics()
 
     IF (switch%transport_1d) THEN
@@ -801,6 +802,7 @@ CONTAINS
     END IF
 
     CALL save_neutral_flux_limiter_diagnostics()
+    CALL save_neutral_reaction_source_diagnostics()
     CALL save_neutral_wall_source_diagnostics()
 
     IF (ASSOCIATED(T_glob)) THEN
@@ -932,6 +934,18 @@ CONTAINS
       CALL HDF5_group_close(group_id, ierr)
 #endif
     ENDSUBROUTINE save_neutral_flux_limiter_diagnostics
+
+    SUBROUTINE save_neutral_reaction_source_diagnostics()
+      INTEGER(HID_T) :: group_id
+
+      IF (MPIvar%glob_id .EQ. 0) THEN
+        CALL HDF5_group_create('neutral_reaction_sources_diagnostics', file_id, group_id, ierr)
+        CALL HDF5_real_saving(group_id, phys%neutral_ionization_total, 'ionization_sink')
+        CALL HDF5_real_saving(group_id, phys%neutral_recombination_total, 'recombination_source')
+        CALL HDF5_real_saving(group_id, phys%neutral_charge_exchange_total, 'charge_exchange_rate')
+        CALL HDF5_group_close(group_id, ierr)
+      ENDIF
+    ENDSUBROUTINE save_neutral_reaction_source_diagnostics
 
     SUBROUTINE save_neutral_wall_source_diagnostics()
       INTEGER(HID_T) :: group_id

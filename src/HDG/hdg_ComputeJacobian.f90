@@ -216,6 +216,9 @@ SUBROUTINE HDG_computeJacobian()
 #ifdef NEUTRAL
   phys%neutral_wall_source_puff_total = 0.d0
   phys%neutral_wall_source_pump_total = 0.d0
+  phys%neutral_ionization_total = 0.d0
+  phys%neutral_recombination_total = 0.d0
+  phys%neutral_charge_exchange_total = 0.d0
   IF (switch%neutral_wall_sources_in_elements) THEN
     IF (ALLOCATED(phys%neutral_wall_source_puff_Nod)) THEN
       IF (SIZE(phys%neutral_wall_source_puff_Nod) .NE. expected_diag_size) THEN
@@ -255,6 +258,7 @@ SUBROUTINE HDG_computeJacobian()
 
 #ifndef TOR3D
 #ifdef NEUTRAL
+  CALL print_neutral_reaction_source_totals()
   IF (switch%neutral_wall_sources_in_elements) THEN
     CALL print_neutral_wall_source_element_totals()
   ENDIF
@@ -1380,6 +1384,68 @@ CONTAINS
 
 #ifndef TOR3D
 #ifdef NEUTRAL
+  SUBROUTINE print_neutral_reaction_source_totals()
+
+    INTEGER :: iel,g
+    INTEGER :: ind_nodes(Mesh%Nnodesperelem)
+    REAL*8  :: Xel(Mesh%Nnodesperelem,2),ue(Mesh%Nnodesperelem,phys%Neq)
+    REAL*8  :: xy(refElPol%Ngauss2d,2),ueg(refElPol%Ngauss2d,phys%Neq)
+    REAL*8  :: J11(refElPol%Ngauss2d),J12(refElPol%Ngauss2d)
+    REAL*8  :: J21(refElPol%Ngauss2d),J22(refElPol%Ngauss2d)
+    REAL*8  :: detJ(refElPol%Ngauss2d),dvolu,dim_factor
+    REAL*8  :: niz,nrec,sigmaviz,sigmavrec,sigmavcx
+    REAL*8  :: total_ionization,total_recombination,total_charge_exchange
+
+    total_ionization = 0.d0
+    total_recombination = 0.d0
+    total_charge_exchange = 0.d0
+    dim_factor = 2.d0*PI*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+
+    DO iel = 1,Mesh%Nelems
+#ifdef PARALL
+      IF (Mesh%ghostElems(iel) .NE. 0) CYCLE
+#endif
+      ind_nodes = (iel - 1)*Mesh%Nnodesperelem + (/(g,g=1,Mesh%Nnodesperelem)/)
+      Xel = Mesh%X(Mesh%T(iel,:),:)
+      ue = ures(ind_nodes,:)
+      xy = MATMUL(refElPol%N2D,Xel)
+      ueg = MATMUL(refElPol%N2D,ue)
+      J11 = MATMUL(refElPol%Nxi2D,Xel(:,1))
+      J12 = MATMUL(refElPol%Nxi2D,Xel(:,2))
+      J21 = MATMUL(refElPol%Neta2D,Xel(:,1))
+      J22 = MATMUL(refElPol%Neta2D,Xel(:,2))
+      detJ = J11*J22 - J21*J12
+
+      DO g = 1,refElPol%Ngauss2d
+        dvolu = refElPol%gauss_weights2D(g)*detJ(g)
+        IF (switch%axisym) dvolu = dvolu*xy(g,1)
+        CALL compute_niz(ueg(g,:),niz)
+        CALL compute_nrec(ueg(g,:),nrec)
+        CALL compute_sigmaviz(ueg(g,:),sigmaviz)
+        CALL compute_sigmavrec(ueg(g,:),sigmavrec)
+        CALL compute_sigmavcx(ueg(g,:),sigmavcx)
+        total_ionization = total_ionization + niz*sigmaviz*dvolu*dim_factor
+        total_recombination = total_recombination + nrec*sigmavrec*dvolu*dim_factor
+        total_charge_exchange = total_charge_exchange + niz*sigmavcx*dvolu*dim_factor
+      ENDDO
+    ENDDO
+
+#ifdef PARALL
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_ionization, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_recombination, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_charge_exchange, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+    IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6,*) 'neutral ionization sink = ', total_ionization
+      WRITE(6,*) 'neutral recombination source = ', total_recombination
+      WRITE(6,*) 'neutral charge-exchange rate = ', total_charge_exchange
+    ENDIF
+    phys%neutral_ionization_total = total_ionization
+    phys%neutral_recombination_total = total_recombination
+    phys%neutral_charge_exchange_total = total_charge_exchange
+
+  ENDSUBROUTINE print_neutral_reaction_source_totals
+
   SUBROUTINE print_neutral_wall_source_element_totals()
 
     INTEGER :: ifac,el,fa,fl,bc,g,inn
