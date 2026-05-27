@@ -880,12 +880,12 @@ CONTAINS
     REAL*8              :: coeff, denom
 
 #ifdef CONSTANTNEUTRALDIFF
-    Dnn = phys%diff_nn
+    Dnn = MAX(phys%diff_nn, phys%diff_nn_min)
 #else
     CALL compute_neutral_transport_prefactor(U, coeff)
     CALL compute_neutral_diffusion_denominator(U, denom)
     Dnn = coeff/denom
-    CALL double_softplus(Dnn, 10.d0*phys%diff_n, phys%diff_nn)
+    CALL double_softplus(Dnn, phys%diff_nn_min, phys%diff_nn)
 #endif
   ENDSUBROUTINE compute_Dnn
 
@@ -941,6 +941,7 @@ CONTAINS
     ELSE
       phi = 0.d0
     ENDIF
+    IF (Dnn > 0.d0) phi = MAX(phi, MIN(1.d0, phys%diff_nn_min/Dnn))
   ENDSUBROUTINE compute_neutral_flux_limiter
 
   !*****************************************
@@ -2841,7 +2842,7 @@ CONTAINS
     CALL compute_dneutral_diffusion_denominator_dU(U, ddenom_dU)
 
     Dnn = Dnn/denom
-    CALL double_softplus_deriv(Dnn, 10.d0*phys%diff_n, phys%diff_nn, double_soft_deriv)
+    CALL double_softplus_deriv(Dnn, phys%diff_nn_min, phys%diff_nn, double_soft_deriv)
 
     Dnn_dU = dcoeff_dU/denom - (Dnn*denom)*ddenom_dU/denom**2
     Dnn_dU = Dnn_dU*double_soft_deriv

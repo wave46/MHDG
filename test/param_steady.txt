@@ -194,6 +194,7 @@
     diff_ee =    0.5 ! perpendicular diffusion in the electron temperature equation (for the TiTe model)
     diff_vort =  0.5! diffusion in the vorticity equation
     diff_nn = 2e8 ! max diffusion for neutral equation or if used DCONSTANTNEUTRALDIFF flag, then the value of neutral diffusion
+    diff_nn_min = 5.0 ! minimum diffusion for neutral equation
     I_0 = 0.3     ! [MA] Plasma current at flat-top for diffusion in moving equilibrium
     ! external heating in the form of shifted 2D gaussian ~exp(-(r-(R0+dr)**2/sigmar**2))*exp(-(z-(Z0+dz)**2/sigmaz**2))
     heating_power = 0.              ! [W] Total power of heating 

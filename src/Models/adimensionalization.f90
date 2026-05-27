@@ -149,6 +149,7 @@ SUBROUTINE adimensionalization()
   phys%diff_vort = phys%diff_vort/D0
   phys%diff_pot = phys%diff_pot/D0
   phys%diff_nn = phys%diff_nn/D0
+  phys%diff_nn_min = phys%diff_nn_min/D0
   switch%diffmin = switch%diffmin/D0
 #ifdef KEQUATION
   phys%diff_k_max = phys%diff_k_max/D0

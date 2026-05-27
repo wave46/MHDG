@@ -1091,6 +1091,7 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%diff_vort, 'diff_vort')
       CALL HDF5_real_saving(group_id2, phys%diff_pot, 'diff_pot')
       CALL HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
+      CALL HDF5_real_saving(group_id2, phys%diff_nn_min, 'diff_nn_min')
       CALL HDF5_real_saving(group_id2, phys%Re, 'recycling')
       CALL HDF5_real_saving(group_id2, phys%recycling_neutral_gamma, 'recycling_neutral_gamma')
       CALL HDF5_logical_saving(group_id2, phys%neutral_gamma_wall_sources, 'neutral_gamma_wall_sources')
