@@ -564,7 +564,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - recycling coefficient for NeutralGamma Bohm:        ', phys%recycling_neutral_gamma
      PRINT *, '                - NeutralGamma wall sources:                         ', phys%neutral_gamma_wall_sources
      PRINT *, '                - NeutralGamma wall source min |b.n|:                ', phys%neutral_gamma_wall_bn_min
-     PRINT *, '                - neutral wall sources in elements:                  ', switch%neutral_wall_sources_in_elements
+     PRINT *, '                - neutral wall sources in element volumes:           ', switch%neutral_wall_sources_in_elements
      PRINT *, '                - applying trim:                                      ', phys%apply_trim
      PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
      PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power

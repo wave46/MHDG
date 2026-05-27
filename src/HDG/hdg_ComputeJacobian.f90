@@ -1881,11 +1881,19 @@ CONTAINS
     REAL*8,INTENT(IN)        :: Xel(:,:),ue(:,:)
     REAL*8,INTENT(INOUT)     :: Auu(:,:,:),rhs(:,:)
     INTEGER                  :: ifa,iface,ibf,fl,bc
-    INTEGER                  :: g,a,b,ia,ib,inn,z,ind_source
+    INTEGER                  :: g,a,inn,z,ind_source
     REAL*8                   :: Xfl(refElPol%Nfacenodes,2)
     REAL*8                   :: xyg(refElPol%Ngauss1d,2)
     REAL*8                   :: xyder(refElPol%Ngauss1d,2)
-    REAL*8                   :: dline,puff_coeff,pump_coeff,puff_flux,pump_flux
+    REAL*8                   :: xyv(refElPol%Ngauss2d,2)
+    REAL*8                   :: J11(refElPol%Ngauss2d),J12(refElPol%Ngauss2d)
+    REAL*8                   :: J21(refElPol%Ngauss2d),J22(refElPol%Ngauss2d)
+    REAL*8                   :: detJ(refElPol%Ngauss2d)
+    REAL*8                   :: dline,dvolu,element_volume
+    REAL*8                   :: puff_coeff,pump_coeff,puff_flux,pump_flux
+    REAL*8                   :: puff_integral,pump_integral,puff_source,pump_source
+    REAL*8,DIMENSION(Npel)   :: Ni
+    REAL*8,DIMENSION(Npel,Npel) :: NNi
 
     inn = phys%idx_rhon_eq
     IF (inn <= 0) RETURN
@@ -1895,6 +1903,8 @@ CONTAINS
 #endif
 
     z = inn + (inn - 1)*Neq
+    puff_integral = 0.d0
+    pump_integral = 0.d0
 
     DO ifa = 1,refElPol%Nfaces
       iface = Mesh%F(iel,ifa)
@@ -1928,36 +1938,54 @@ CONTAINS
         dline = refElPol%gauss_weights1D(g)*NORM2(xyder(g,:))
         IF (switch%axisym) dline = dline*xyg(g,1)
 
-        DO a = 1,refElPol%Nfacenodes
-          ia = refElPol%face_nodes(ifa,a)
+        puff_integral = puff_integral + puff_coeff*dline
+        pump_integral = pump_integral + pump_coeff*dline
+      ENDDO
+    ENDDO
 
-          IF (bc .EQ. bc_BohmPuff) THEN
-            rhs(ia,inn) = rhs(ia,inn) + puff_coeff*refElPol%N1D(g,a)*dline
-          ENDIF
+    IF ((puff_integral .NE. 0.d0) .OR. (pump_integral .NE. 0.d0)) THEN
+      xyv = MATMUL(refElPol%N2D,Xel)
+      J11 = MATMUL(refElPol%Nxi2D,Xel(:,1))
+      J12 = MATMUL(refElPol%Nxi2D,Xel(:,2))
+      J21 = MATMUL(refElPol%Neta2D,Xel(:,1))
+      J22 = MATMUL(refElPol%Neta2D,Xel(:,2))
+      detJ = J11*J22 - J21*J12
 
-          IF (bc .EQ. bc_BohmPump) THEN
-            DO b = 1,refElPol%Nfacenodes
-              ib = refElPol%face_nodes(ifa,b)
-              Auu(ia,ib,z) = Auu(ia,ib,z) + pump_coeff*refElPol%N1D(g,a)*refElPol%N1D(g,b)*dline
-            ENDDO
-          ENDIF
-        ENDDO
+      element_volume = 0.d0
+      DO g = 1,refElPol%Ngauss2d
+        dvolu = refElPol%gauss_weights2D(g)*detJ(g)
+        IF (switch%axisym) dvolu = dvolu*xyv(g,1)
+        element_volume = element_volume + dvolu
+      ENDDO
+
+      IF (element_volume <= 0.d0) THEN
+        WRITE(6,*) 'Negative or zero element volume while spreading neutral wall sources in element ',iel
+        STOP
+      ENDIF
+
+      puff_source = puff_integral/element_volume
+      pump_source = pump_integral/element_volume
+
+      DO g = 1,refElPol%Ngauss2d
+        dvolu = refElPol%gauss_weights2D(g)*detJ(g)
+        IF (switch%axisym) dvolu = dvolu*xyv(g,1)
+        Ni = refElPol%N2D(g,:)*dvolu
+        NNi = tensorProduct(Ni,refElPol%N2D(g,:))
+        rhs(:,inn) = rhs(:,inn) + puff_source*Ni
+        Auu(:,:,z) = Auu(:,:,z) + pump_source*NNi
       ENDDO
 
       IF (ALLOCATED(phys%neutral_wall_source_puff_Nod)) THEN
-        DO a = 1,refElPol%Nfacenodes
-          ia = refElPol%face_nodes(ifa,a)
-          ind_source = (iel - 1)*Mesh%Nnodesperelem + ia
-          puff_flux = 0.d0
-          pump_flux = 0.d0
-          IF (bc .EQ. bc_BohmPuff) puff_flux = puff_coeff*simpar%refval_density*simpar%refval_speed
-          IF (bc .EQ. bc_BohmPump) pump_flux = pump_coeff*ue(ia,inn)*simpar%refval_density*simpar%refval_speed
+        DO a = 1,Npel
+          ind_source = (iel - 1)*Mesh%Nnodesperelem + a
+          puff_flux = puff_source*simpar%refval_density*simpar%refval_speed/simpar%refval_length
+          pump_flux = pump_source*ue(a,inn)*simpar%refval_density*simpar%refval_speed/simpar%refval_length
           phys%neutral_wall_source_puff_Nod(ind_source) = puff_flux
           phys%neutral_wall_source_pump_Nod(ind_source) = pump_flux
           phys%neutral_wall_source_net_Nod(ind_source) = puff_flux - pump_flux
         ENDDO
       ENDIF
-    ENDDO
+    ENDIF
 
   ENDSUBROUTINE add_neutral_wall_sources_to_element
 #endif
