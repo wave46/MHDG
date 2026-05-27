@@ -543,7 +543,7 @@ CONTAINS
 #ifdef SAVEFLUX
   real*8                    :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_pinch,totalflux_neutral,totalflux_numerical
   real*8                    :: totalflux_neutral_diff, totalflux_neutral_pgrad, totalflux_neutral_conv
-  real*8                    :: neutral_balance_physical,neutral_balance_hdg
+  real*8                    :: neutral_balance_physical,neutral_balance_hdg,total_particle_balance
   real*8                    :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_numerical
   real*8                    :: faceflux_neutral_diff, faceflux_neutral_pgrad, faceflux_neutral_conv
 #endif
@@ -836,9 +836,15 @@ CONTAINS
         neutral_balance_physical = totalflux_parallel - totalflux_perpendicular - totalflux_pinch - totalflux_neutral &
              &+ phys%neutral_wall_source_puff_total - phys%neutral_wall_source_pump_total
         neutral_balance_hdg = neutral_balance_physical + totalflux_numerical
+        total_particle_balance = neutral_balance_hdg
+        WRITE(6,*) 'total particle balance = ',total_particle_balance
         WRITE(6,*) 'element-source physical balance without tau = ',neutral_balance_physical
         WRITE(6,*) 'element-source numerical tau flux = ',totalflux_numerical
         WRITE(6,*) 'element-source corrected HDG balance = ',neutral_balance_hdg
+     ELSE
+        total_particle_balance = totalflux_parallel - totalflux_perpendicular - totalflux_pinch - totalflux_neutral &
+             &+ totalflux_puff - totalflux_pump + totalflux_numerical
+        WRITE(6,*) 'total particle balance = ',total_particle_balance
      ENDIF
   ENDIF
 #endif
