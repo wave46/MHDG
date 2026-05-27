@@ -57,8 +57,6 @@ SUBROUTINE READ_input()
   ! Neutral and Ohmic heating
   LOGICAL               :: OhmicSrc, apply_trim
   REAL*8                :: Zeff,Pohmic,diff_nn,diff_nn_min,Re,Re_pump,recycling_neutral_gamma,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
-  LOGICAL               :: neutral_gamma_wall_sources
-  REAL*8                :: neutral_gamma_wall_bn_min
   REAL*8                :: feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr
 #ifdef KEQUATION
   ! k equation
@@ -108,12 +106,12 @@ SUBROUTINE READ_input()
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn, diff_nn_min,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
-  & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, neutral_gamma_wall_sources, neutral_gamma_wall_bn_min, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
+  & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, &
     &T_fluxlim_maxi, T_fluxlim_maxe, neutral_flux_limiter_mode, neutral_flux_limiter_gamma, neutral_flux_limiter_eps, &
     &neutral_flux_limiter_fs_fraction, neutral_flux_limiter_fs_flux_min
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn, diff_nn_min,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, neutral_gamma_wall_sources, neutral_gamma_wall_bn_min, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn, diff_nn_min,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, &
     &T_fluxlim_maxi, T_fluxlim_maxe, neutral_flux_limiter_mode, neutral_flux_limiter_gamma, neutral_flux_limiter_eps, &
@@ -139,8 +137,6 @@ SUBROUTINE READ_input()
   neutralp_lambda = 1.d0
   recycling_neutral_gamma = 1.d0
   neutral_wall_sources_in_elements = .false.
-  neutral_gamma_wall_sources = .false.
-  neutral_gamma_wall_bn_min = 1.d-4
   neutral_flux_limiter_mode = 'off'
   neutral_flux_limiter_gamma = 1.d0
   neutral_flux_limiter_eps = 0.d0
@@ -201,11 +197,6 @@ SUBROUTINE READ_input()
      PRINT *, 'diff_nn_min must not exceed diff_nn: ', diff_nn_min, diff_nn
      STOP
   ENDIF
-  IF (neutral_gamma_wall_bn_min <= 0.d0) THEN
-     PRINT *, 'neutral_gamma_wall_bn_min must be positive: ', neutral_gamma_wall_bn_min
-     STOP
-  ENDIF
-
   ! Storing at the right place
   switch%steady           = steady
   switch%read_gmsh        = read_gmsh
@@ -355,8 +346,6 @@ SUBROUTINE READ_input()
   phys%Re                 = Re
   phys%Re_pump            = Re_pump
   phys%recycling_neutral_gamma = recycling_neutral_gamma
-  phys%neutral_gamma_wall_sources = neutral_gamma_wall_sources
-  phys%neutral_gamma_wall_bn_min = neutral_gamma_wall_bn_min
   phys%apply_trim         = apply_trim
   phys%cryopump_power     = cryopump_power
   phys%puff               = puff
@@ -574,8 +563,6 @@ SUBROUTINE READ_input()
      PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
      PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
      PRINT *, '                - recycling coefficient for NeutralGamma Bohm:        ', phys%recycling_neutral_gamma
-     PRINT *, '                - NeutralGamma wall sources:                         ', phys%neutral_gamma_wall_sources
-     PRINT *, '                - NeutralGamma wall source min |b.n|:                ', phys%neutral_gamma_wall_bn_min
      PRINT *, '                - neutral wall sources in element volumes:           ', switch%neutral_wall_sources_in_elements
      PRINT *, '                - applying trim:                                      ', phys%apply_trim
      PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
