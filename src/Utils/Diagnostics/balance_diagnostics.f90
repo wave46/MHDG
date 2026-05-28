@@ -57,15 +57,23 @@ MODULE balance_diagnostics
    CONTAINS
      PROCEDURE :: reset => balance_diag_reset
      PROCEDURE :: reset_boundary_hdg => balance_diag_reset_boundary_hdg
+     PROCEDURE :: reset_particles_content => balance_diag_reset_particles_content
      PROCEDURE :: add => balance_diag_add
      PROCEDURE :: account_boundary_hdg => balance_diag_account_boundary_hdg
+     PROCEDURE :: account_volume_particle_reactions => balance_diag_account_volume_particle_reactions
+     PROCEDURE :: account_boundary_particles => balance_diag_account_boundary_particles
+     PROCEDURE :: account_wall_particle_sources => balance_diag_account_wall_particle_sources
+     PROCEDURE :: account_particle_content => balance_diag_account_particle_content
      PROCEDURE :: get => balance_diag_get
      PROCEDURE :: mpi_reduce => balance_diag_mpi_reduce
      PROCEDURE :: mpi_reduce_boundary_hdg => balance_diag_mpi_reduce_boundary_hdg
+     PROCEDURE :: mpi_reduce_particles_content => balance_diag_mpi_reduce_particles_content
      PROCEDURE :: print_summary => balance_diag_print_summary
      PROCEDURE :: print_boundary_hdg_summary => balance_diag_print_boundary_hdg_summary
+     PROCEDURE :: print_particle_summary => balance_diag_print_particle_summary
      PROCEDURE :: print_detail => balance_diag_print_detail
      PROCEDURE :: print_boundary_hdg_detail => balance_diag_print_boundary_hdg_detail
+     PROCEDURE :: print_particle_detail => balance_diag_print_particle_detail
      PROCEDURE :: write_hdf5 => balance_diag_write_hdf5
   END TYPE balance_diagnostics_type
 
@@ -87,6 +95,13 @@ CONTAINS
 
     this%boundary_hdg = 0.d0
   END SUBROUTINE balance_diag_reset_boundary_hdg
+
+  SUBROUTINE balance_diag_reset_particles_content(this)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+
+    this%particles = 0.d0
+    this%content = 0.d0
+  END SUBROUTINE balance_diag_reset_particles_content
 
   SUBROUTINE balance_diag_add(this, category_id, term_id, value)
     CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
@@ -136,6 +151,50 @@ CONTAINS
     ENDIF
   END SUBROUTINE balance_diag_account_boundary_hdg
 
+  SUBROUTINE balance_diag_account_volume_particle_reactions(this, ionization_rate, recombination_rate, charge_exchange_rate)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: ionization_rate, recombination_rate, charge_exchange_rate
+
+    CALL this%add(balance_diag_category_particles, balance_diag_particle_plasma_ionization, ionization_rate)
+    CALL this%add(balance_diag_category_particles, balance_diag_particle_neutral_ionization, -ionization_rate)
+    CALL this%add(balance_diag_category_particles, balance_diag_particle_plasma_recombination, -recombination_rate)
+    CALL this%add(balance_diag_category_particles, balance_diag_particle_neutral_recombination, recombination_rate)
+    CALL this%add(balance_diag_category_particles, balance_diag_particle_charge_exchange_rate, charge_exchange_rate)
+  END SUBROUTINE balance_diag_account_volume_particle_reactions
+
+  SUBROUTINE balance_diag_account_boundary_particles(this, plasma_boundary_flux, neutral_boundary_flux, recycling_source, &
+       &wall_puff_source, wall_pump_sink, include_wall_sources)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: plasma_boundary_flux, neutral_boundary_flux, recycling_source
+    REAL*8, INTENT(IN) :: wall_puff_source, wall_pump_sink
+    LOGICAL, INTENT(IN) :: include_wall_sources
+
+    CALL this%add(balance_diag_category_particles, balance_diag_particle_plasma_boundary_flux, plasma_boundary_flux)
+    CALL this%add(balance_diag_category_particles, balance_diag_particle_neutral_boundary_flux, neutral_boundary_flux)
+    CALL this%add(balance_diag_category_particles, balance_diag_particle_recycling_source, recycling_source)
+    IF (include_wall_sources) THEN
+       CALL this%add(balance_diag_category_particles, balance_diag_particle_puff_source, wall_puff_source)
+       CALL this%add(balance_diag_category_particles, balance_diag_particle_pump_sink, wall_pump_sink)
+    ENDIF
+  END SUBROUTINE balance_diag_account_boundary_particles
+
+  SUBROUTINE balance_diag_account_wall_particle_sources(this, puff_source, pump_sink)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: puff_source, pump_sink
+
+    CALL this%add(balance_diag_category_particles, balance_diag_particle_puff_source, puff_source)
+    CALL this%add(balance_diag_category_particles, balance_diag_particle_pump_sink, pump_sink)
+  END SUBROUTINE balance_diag_account_wall_particle_sources
+
+  SUBROUTINE balance_diag_account_particle_content(this, plasma_particles, neutral_particles)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: plasma_particles, neutral_particles
+
+    CALL this%add(balance_diag_category_content, balance_diag_content_plasma_particles, plasma_particles)
+    CALL this%add(balance_diag_category_content, balance_diag_content_neutral_particles, neutral_particles)
+    CALL this%add(balance_diag_category_content, balance_diag_content_total_particles, plasma_particles + neutral_particles)
+  END SUBROUTINE balance_diag_account_particle_content
+
   FUNCTION balance_diag_get(this, category_id, term_id) RESULT(value)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     INTEGER, INTENT(IN) :: category_id, term_id
@@ -175,6 +234,16 @@ CONTAINS
 #endif
   END SUBROUTINE balance_diag_mpi_reduce_boundary_hdg
 
+  SUBROUTINE balance_diag_mpi_reduce_particles_content(this)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+#ifdef PARALL
+    INTEGER :: ierr
+
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%particles, balance_diag_particle_term_count, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%content, balance_diag_content_term_count, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+  END SUBROUTINE balance_diag_mpi_reduce_particles_content
+
   SUBROUTINE balance_diag_print_summary(this)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     REAL*8 :: boundary_residual, plasma_balance, neutral_balance, total_balance
@@ -211,6 +280,27 @@ CONTAINS
        WRITE(6,'(A)') '----------------------------------------'
     ENDIF
   END SUBROUTINE balance_diag_print_boundary_hdg_summary
+
+  SUBROUTINE balance_diag_print_particle_summary(this)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    REAL*8 :: plasma_balance, neutral_balance, total_balance
+
+    plasma_balance = balance_diag_plasma_particle_balance(this)
+    neutral_balance = balance_diag_neutral_particle_balance(this)
+    total_balance = plasma_balance + neutral_balance
+
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE(6,'(A)') '----------------------------------------'
+       WRITE(6,'(A)') 'Physical particle diagnostics'
+       WRITE(6,'(A,1X,ES11.3)') '  plasma balance:', plasma_balance
+       WRITE(6,'(A,1X,ES11.3)') '  neutral balance:', neutral_balance
+       WRITE(6,'(A,1X,ES11.3)') '  total balance  :', total_balance
+       WRITE(6,'(A,1X,ES11.3)') '  plasma content :', this%content(balance_diag_content_plasma_particles)
+       WRITE(6,'(A,1X,ES11.3)') '  neutral content:', this%content(balance_diag_content_neutral_particles)
+       WRITE(6,'(A,1X,ES11.3)') '  total content  :', this%content(balance_diag_content_total_particles)
+       WRITE(6,'(A)') '----------------------------------------'
+    ENDIF
+  END SUBROUTINE balance_diag_print_particle_summary
 
   SUBROUTINE balance_diag_print_detail(this)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
@@ -266,6 +356,37 @@ CONTAINS
     WRITE(6,'(A)') '----------------------------------------'
   END SUBROUTINE balance_diag_print_boundary_hdg_detail
 
+  SUBROUTINE balance_diag_print_particle_detail(this)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER :: i
+    REAL*8 :: plasma_balance, neutral_balance, total_balance
+
+    IF (MPIvar%glob_id .NE. 0) RETURN
+
+    plasma_balance = balance_diag_plasma_particle_balance(this)
+    neutral_balance = balance_diag_neutral_particle_balance(this)
+    total_balance = plasma_balance + neutral_balance
+
+    WRITE(6,'(A)') '----------------------------------------'
+    WRITE(6,'(A)') 'Physical particle diagnostics'
+    WRITE(6,'(A,1X,ES11.3)') '  plasma balance:', plasma_balance
+    WRITE(6,'(A,1X,ES11.3)') '  neutral balance:', neutral_balance
+    WRITE(6,'(A,1X,ES11.3)') '  total balance  :', total_balance
+    WRITE(6,'(A,1X,ES11.3)') '  plasma content :', this%content(balance_diag_content_plasma_particles)
+    WRITE(6,'(A,1X,ES11.3)') '  neutral content:', this%content(balance_diag_content_neutral_particles)
+    WRITE(6,'(A,1X,ES11.3)') '  total content  :', this%content(balance_diag_content_total_particles)
+    WRITE(6,'(A)') '  particle components, inward-positive:'
+    DO i = 1, balance_diag_particle_term_count
+       WRITE(6,'(A,1X,ES11.3)') '    '//TRIM(balance_diag_particle_label(i))//':', this%particles(i)
+    ENDDO
+    WRITE(6,'(A)') '  particle content:'
+    DO i = 1, balance_diag_content_term_count
+       IF (i .EQ. balance_diag_content_total_energy) CYCLE
+       WRITE(6,'(A,1X,ES11.3)') '    '//TRIM(balance_diag_content_label(i))//':', this%content(i)
+    ENDDO
+    WRITE(6,'(A)') '----------------------------------------'
+  END SUBROUTINE balance_diag_print_particle_detail
+
   SUBROUTINE balance_diag_write_hdf5(this)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
 
@@ -302,7 +423,6 @@ CONTAINS
        &+ this%particles(balance_diag_particle_neutral_recombination) &
        &+ this%particles(balance_diag_particle_puff_source) &
        &+ this%particles(balance_diag_particle_pump_sink) &
-       &+ this%particles(balance_diag_particle_recycling_source) &
        &+ this%particles(balance_diag_particle_neutral_boundary_flux)
   END FUNCTION balance_diag_neutral_particle_balance
 

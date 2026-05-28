@@ -756,10 +756,13 @@ CONTAINS
 
 #ifdef SAVEFLUX
   CALL balance_diag%mpi_reduce_boundary_hdg()
+  CALL balance_diag%mpi_reduce_particles_content()
   IF (switch%balance_diagnostics_verbosity .GE. 1) THEN
      CALL balance_diag%print_boundary_hdg_detail()
+     CALL balance_diag%print_particle_detail()
   ELSE
      CALL balance_diag%print_boundary_hdg_summary()
+     CALL balance_diag%print_particle_summary()
   ENDIF
 #endif
   IF (save_tau) THEN
@@ -1804,9 +1807,12 @@ CONTAINS
     real*8, INTENT(IN)            :: dline
     real*8                        :: boundary_pump_sink, boundary_puff_source
     real*8                        :: recycled_parallel_source, recycled_diffusion_source, recycled_pinch_source
+    real*8                        :: plasma_parallel_boundary_flux, plasma_diffusion_boundary_flux
+    real*8                        :: plasma_pinch_boundary_flux, plasma_total_boundary_flux
     real*8                        :: neutral_diffusion_boundary_flux, neutral_pressure_boundary_flux
     real*8                        :: neutral_convection_boundary_flux, neutral_total_boundary_flux
     real*8                        :: tau_neutral_boundary_flux
+    real*8                        :: boundary_recycling_source, boundary_scale
 #endif
     inn = phys%idx_rhon_eq
     ik = phys%idx_k_eq
@@ -2254,39 +2260,47 @@ CONTAINS
 #ifdef SAVEFLUX
     !***************** boundary diagnostics part ****************************
 
+    boundary_scale = 2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+
     ! Contribution from pump.
     boundary_pump_sink = cryopump_coeff*ufg(inn)	!cryopump modification
     ! Dimensionalizing and multiplying by the surface under this Gauss point.
-    boundary_pump_sink = boundary_pump_sink*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    boundary_pump_sink = boundary_pump_sink*boundary_scale
 
     ! Contribution from puff.
     boundary_puff_source = puff_coeff
     ! Dimensionalizing and multiplying by the surface under this Gauss point.
-    boundary_puff_source = boundary_puff_source*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    boundary_puff_source = boundary_puff_source*boundary_scale
 
     ! Recycled source from parallel plasma flux onto the wall.
     recycled_parallel_source = uefg(2)*bn
     ! Dimensionalizing and multiplying by the surface under this Gauss point.
-    recycled_parallel_source = recycling_coeff*recycled_parallel_source*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    plasma_parallel_boundary_flux = -recycled_parallel_source*boundary_scale
+    recycled_parallel_source = recycling_coeff*recycled_parallel_source*boundary_scale
 
     ! Recycled sources from perpendicular plasma flux and pinch.
-    recycled_diffusion_source = -recycling_coeff*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(2,1)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)+Qpr(2,1)*bn*bg(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2))
-    recycled_pinch_source = recycling_coeff*uefg(1)*(APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    plasma_diffusion_boundary_flux = (diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(2,1)*ng(2)) &
+         &- diffani(1,1)*(Qpr(1,1)*bn*bg(1) + Qpr(2,1)*bn*bg(2)))*boundary_scale
+    recycled_diffusion_source = -recycling_coeff*plasma_diffusion_boundary_flux
+    plasma_pinch_boundary_flux = -uefg(1)*(APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*boundary_scale
+    recycled_pinch_source = -recycling_coeff*plasma_pinch_boundary_flux
+    plasma_total_boundary_flux = plasma_parallel_boundary_flux + plasma_diffusion_boundary_flux + plasma_pinch_boundary_flux
+    boundary_recycling_source = recycled_parallel_source + recycled_diffusion_source + recycled_pinch_source
 
     ! Neutral boundary flux.
-    neutral_diffusion_boundary_flux = (neutral_diffiso*(Qpr(1,inn)*ng(1) + Qpr(2,inn)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    neutral_diffusion_boundary_flux = (neutral_diffiso*(Qpr(1,inn)*ng(1) + Qpr(2,inn)*ng(2)))*boundary_scale
     neutral_pressure_boundary_flux = 0.d0
     neutral_convection_boundary_flux = 0.d0
 #ifdef NEUTRALPNEW
-    neutral_pressure_boundary_flux = dot_product(matmul(transpose(Qpr),ng),W5p)*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    neutral_pressure_boundary_flux = dot_product(matmul(transpose(Qpr),ng),W5p)*boundary_scale
 #endif
 #ifdef NEUTRALGAMMA
-    if (ign > 0) neutral_convection_boundary_flux = neutral_convection_boundary_flux - ufg(ign)*bn*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    if (ign > 0) neutral_convection_boundary_flux = neutral_convection_boundary_flux - ufg(ign)*bn*boundary_scale
 #endif
     neutral_total_boundary_flux = neutral_diffusion_boundary_flux + neutral_pressure_boundary_flux + neutral_convection_boundary_flux
 
     ! Neutral numerical tau flux.
-    tau_neutral_boundary_flux = tau(inn,inn)* (uefg(inn)-ufg(inn))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    tau_neutral_boundary_flux = tau(inn,inn)* (uefg(inn)-ufg(inn))*boundary_scale
 
 #ifdef PARALL
     IF (Mesh%ghostFaces(Fi) .EQ. 0) THEN
@@ -2294,6 +2308,9 @@ CONTAINS
     CALL balance_diag%account_boundary_hdg(recycled_parallel_source, recycled_diffusion_source, recycled_pinch_source, &
          &neutral_diffusion_boundary_flux, neutral_pressure_boundary_flux, neutral_convection_boundary_flux, &
          &neutral_total_boundary_flux, tau_neutral_boundary_flux, boundary_puff_source, -boundary_pump_sink, &
+         &.NOT. switch%neutral_wall_sources_in_elements)
+    CALL balance_diag%account_boundary_particles(plasma_total_boundary_flux, neutral_total_boundary_flux, &
+         &boundary_recycling_source, boundary_puff_source, -boundary_pump_sink, &
          &.NOT. switch%neutral_wall_sources_in_elements)
 #ifdef PARALL
     ENDIF
