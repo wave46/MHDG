@@ -11,6 +11,8 @@ MODULE balance_diagnostics
 
   ! All accumulated terms use the same sign convention:
   ! positive is directed into the domain, negative is loss from the domain.
+  ! Boundary plasma terms below are recycled neutral source terms in the
+  ! neutral-wall closure; physical plasma losses are tracked separately.
   INTEGER, PARAMETER, PUBLIC :: balance_diag_boundary_plasma_parallel_flux = 1
   INTEGER, PARAMETER, PUBLIC :: balance_diag_boundary_plasma_diffusion_flux = 2
   INTEGER, PARAMETER, PUBLIC :: balance_diag_boundary_plasma_pinch_flux = 3
@@ -54,11 +56,16 @@ MODULE balance_diagnostics
      REAL*8 :: energy(balance_diag_energy_term_count) = 0.d0
    CONTAINS
      PROCEDURE :: reset => balance_diag_reset
+     PROCEDURE :: reset_boundary_hdg => balance_diag_reset_boundary_hdg
      PROCEDURE :: add => balance_diag_add
+     PROCEDURE :: account_boundary_hdg => balance_diag_account_boundary_hdg
      PROCEDURE :: get => balance_diag_get
      PROCEDURE :: mpi_reduce => balance_diag_mpi_reduce
+     PROCEDURE :: mpi_reduce_boundary_hdg => balance_diag_mpi_reduce_boundary_hdg
      PROCEDURE :: print_summary => balance_diag_print_summary
+     PROCEDURE :: print_boundary_hdg_summary => balance_diag_print_boundary_hdg_summary
      PROCEDURE :: print_detail => balance_diag_print_detail
+     PROCEDURE :: print_boundary_hdg_detail => balance_diag_print_boundary_hdg_detail
      PROCEDURE :: write_hdf5 => balance_diag_write_hdf5
   END TYPE balance_diagnostics_type
 
@@ -74,6 +81,12 @@ CONTAINS
     this%content = 0.d0
     this%energy = 0.d0
   END SUBROUTINE balance_diag_reset
+
+  SUBROUTINE balance_diag_reset_boundary_hdg(this)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+
+    this%boundary_hdg = 0.d0
+  END SUBROUTINE balance_diag_reset_boundary_hdg
 
   SUBROUTINE balance_diag_add(this, category_id, term_id, value)
     CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
@@ -99,6 +112,29 @@ CONTAINS
        ENDIF
     END SELECT
   END SUBROUTINE balance_diag_add
+
+  SUBROUTINE balance_diag_account_boundary_hdg(this, plasma_parallel_flux, plasma_diffusion_flux, plasma_pinch_flux, &
+       &neutral_diffusion_flux, neutral_pressure_flux, neutral_convection_flux, neutral_total_flux, tau_numerical_flux, &
+       &wall_puff_source, wall_pump_sink, include_wall_sources)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: plasma_parallel_flux, plasma_diffusion_flux, plasma_pinch_flux
+    REAL*8, INTENT(IN) :: neutral_diffusion_flux, neutral_pressure_flux, neutral_convection_flux, neutral_total_flux
+    REAL*8, INTENT(IN) :: tau_numerical_flux, wall_puff_source, wall_pump_sink
+    LOGICAL, INTENT(IN) :: include_wall_sources
+
+    CALL this%add(balance_diag_category_boundary_hdg, balance_diag_boundary_plasma_parallel_flux, plasma_parallel_flux)
+    CALL this%add(balance_diag_category_boundary_hdg, balance_diag_boundary_plasma_diffusion_flux, plasma_diffusion_flux)
+    CALL this%add(balance_diag_category_boundary_hdg, balance_diag_boundary_plasma_pinch_flux, plasma_pinch_flux)
+    CALL this%add(balance_diag_category_boundary_hdg, balance_diag_boundary_neutral_diffusion_flux, neutral_diffusion_flux)
+    CALL this%add(balance_diag_category_boundary_hdg, balance_diag_boundary_neutral_pressure_flux, neutral_pressure_flux)
+    CALL this%add(balance_diag_category_boundary_hdg, balance_diag_boundary_neutral_convection_flux, neutral_convection_flux)
+    CALL this%add(balance_diag_category_boundary_hdg, balance_diag_boundary_neutral_total_flux, neutral_total_flux)
+    CALL this%add(balance_diag_category_boundary_hdg, balance_diag_boundary_tau_numerical_flux, tau_numerical_flux)
+    IF (include_wall_sources) THEN
+       CALL this%add(balance_diag_category_boundary_hdg, balance_diag_boundary_wall_puff_source, wall_puff_source)
+       CALL this%add(balance_diag_category_boundary_hdg, balance_diag_boundary_wall_pump_sink, wall_pump_sink)
+    ENDIF
+  END SUBROUTINE balance_diag_account_boundary_hdg
 
   FUNCTION balance_diag_get(this, category_id, term_id) RESULT(value)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
@@ -130,11 +166,20 @@ CONTAINS
 #endif
   END SUBROUTINE balance_diag_mpi_reduce
 
+  SUBROUTINE balance_diag_mpi_reduce_boundary_hdg(this)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+#ifdef PARALL
+    INTEGER :: ierr
+
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%boundary_hdg, balance_diag_boundary_term_count, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+  END SUBROUTINE balance_diag_mpi_reduce_boundary_hdg
+
   SUBROUTINE balance_diag_print_summary(this)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     REAL*8 :: boundary_residual, plasma_balance, neutral_balance, total_balance
 
-    boundary_residual = SUM(this%boundary_hdg)
+    boundary_residual = balance_diag_boundary_hdg_check(this)
 
     plasma_balance = balance_diag_plasma_particle_balance(this)
     neutral_balance = balance_diag_neutral_particle_balance(this)
@@ -151,6 +196,21 @@ CONTAINS
        WRITE(6,'(A,1X,ES16.8)') 'total particle content =', this%content(balance_diag_content_total_particles)
     ENDIF
   END SUBROUTINE balance_diag_print_summary
+
+  SUBROUTINE balance_diag_print_boundary_hdg_summary(this)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    REAL*8 :: boundary_residual
+
+    boundary_residual = balance_diag_boundary_hdg_check(this)
+
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE(6,'(A)') '----------------------------------------'
+       WRITE(6,'(A)') 'Boundary HDG / BC diagnostics'
+       WRITE(6,'(A,1X,ES11.3)') '  neutral closure residual:', boundary_residual
+       WRITE(6,'(A)') '  residual = recycled + wall + tau - neutral flux'
+       WRITE(6,'(A)') '----------------------------------------'
+    ENDIF
+  END SUBROUTINE balance_diag_print_boundary_hdg_summary
 
   SUBROUTINE balance_diag_print_detail(this)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
@@ -176,11 +236,54 @@ CONTAINS
     ENDDO
   END SUBROUTINE balance_diag_print_detail
 
+  SUBROUTINE balance_diag_print_boundary_hdg_detail(this)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER :: i
+    REAL*8 :: boundary_residual, recycled_source, neutral_flux, wall_flux, tau_flux
+
+    IF (MPIvar%glob_id .NE. 0) RETURN
+
+    boundary_residual = balance_diag_boundary_hdg_check(this)
+    recycled_source = this%boundary_hdg(balance_diag_boundary_plasma_parallel_flux) &
+       &+ this%boundary_hdg(balance_diag_boundary_plasma_diffusion_flux) &
+       &+ this%boundary_hdg(balance_diag_boundary_plasma_pinch_flux)
+    neutral_flux = this%boundary_hdg(balance_diag_boundary_neutral_total_flux)
+    wall_flux = this%boundary_hdg(balance_diag_boundary_wall_puff_source) &
+       &+ this%boundary_hdg(balance_diag_boundary_wall_pump_sink)
+    tau_flux = this%boundary_hdg(balance_diag_boundary_tau_numerical_flux)
+
+    WRITE(6,'(A)') '----------------------------------------'
+    WRITE(6,'(A)') 'Boundary HDG / BC diagnostics'
+    WRITE(6,'(A,1X,ES11.3)') '  neutral closure residual:', boundary_residual
+    WRITE(6,'(A,1X,ES11.3)') '  neutral flux into domain:', neutral_flux
+    WRITE(6,'(A,1X,ES11.3)') '  recycled source         :', recycled_source
+    WRITE(6,'(A,1X,ES11.3)') '  wall sources/sinks      :', wall_flux
+    WRITE(6,'(A,1X,ES11.3)') '  tau correction          :', tau_flux
+    WRITE(6,'(A)') '  components, inward-positive:'
+    DO i = 1, balance_diag_boundary_term_count
+       WRITE(6,'(A,1X,ES11.3)') '    '//TRIM(balance_diag_boundary_label(i))//':', this%boundary_hdg(i)
+    ENDDO
+    WRITE(6,'(A)') '----------------------------------------'
+  END SUBROUTINE balance_diag_print_boundary_hdg_detail
+
   SUBROUTINE balance_diag_write_hdf5(this)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
 
     ! HDF5 output is wired in a later stage once live terms are migrated.
   END SUBROUTINE balance_diag_write_hdf5
+
+  FUNCTION balance_diag_boundary_hdg_check(this) RESULT(value)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    REAL*8 :: value
+
+    value = this%boundary_hdg(balance_diag_boundary_plasma_parallel_flux) &
+       &+ this%boundary_hdg(balance_diag_boundary_plasma_diffusion_flux) &
+       &+ this%boundary_hdg(balance_diag_boundary_plasma_pinch_flux) &
+       &- this%boundary_hdg(balance_diag_boundary_neutral_total_flux) &
+       &+ this%boundary_hdg(balance_diag_boundary_tau_numerical_flux) &
+       &+ this%boundary_hdg(balance_diag_boundary_wall_puff_source) &
+       &+ this%boundary_hdg(balance_diag_boundary_wall_pump_sink)
+  END FUNCTION balance_diag_boundary_hdg_check
 
   FUNCTION balance_diag_plasma_particle_balance(this) RESULT(value)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
@@ -209,25 +312,25 @@ CONTAINS
 
     SELECT CASE (term_id)
     CASE (balance_diag_boundary_plasma_parallel_flux)
-       label = 'boundary HDG plasma parallel flux'
+       label = 'recycled plasma parallel source'
     CASE (balance_diag_boundary_plasma_diffusion_flux)
-       label = 'boundary HDG plasma diffusion flux'
+       label = 'recycled plasma diffusion source'
     CASE (balance_diag_boundary_plasma_pinch_flux)
-       label = 'boundary HDG plasma pinch flux'
+       label = 'recycled plasma pinch source'
     CASE (balance_diag_boundary_neutral_diffusion_flux)
-       label = 'boundary HDG neutral diffusion flux'
+       label = 'neutral diffusion boundary flux'
     CASE (balance_diag_boundary_neutral_pressure_flux)
-       label = 'boundary HDG neutral pressure flux'
+       label = 'neutral pressure boundary flux'
     CASE (balance_diag_boundary_neutral_convection_flux)
-       label = 'boundary HDG neutral convection flux'
+       label = 'neutral convection boundary flux'
     CASE (balance_diag_boundary_neutral_total_flux)
-       label = 'boundary HDG neutral total flux'
+       label = 'neutral total boundary flux'
     CASE (balance_diag_boundary_tau_numerical_flux)
-       label = 'boundary HDG tau numerical flux'
+       label = 'tau numerical boundary flux'
     CASE (balance_diag_boundary_wall_puff_source)
-       label = 'boundary HDG wall puff source'
+       label = 'wall puff source'
     CASE (balance_diag_boundary_wall_pump_sink)
-       label = 'boundary HDG wall pump sink'
+       label = 'wall pump sink'
     CASE DEFAULT
        label = 'boundary HDG unknown term'
     END SELECT
