@@ -1194,6 +1194,7 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%dirivortlim, 'dirivortlim')
       CALL HDF5_logical_saving(group_id2, switch%convvort, 'convvort')
       CALL HDF5_logical_saving(group_id2, switch%logrho, 'logrho')
+      CALL HDF5_integer_saving(group_id2, switch%balance_diagnostics_verbosity, 'balance_diagnostics_verbosity')
       CALL HDF5_logical_saving(group_id2, switch%flux_limiter, 'flux_limiter')
       CALL HDF5_logical_saving(group_id2, switch%impurity_radiation, 'impurity_radiation')
       CALL HDF5_logical_saving(group_id2, switch%external_heating, 'external_heating')

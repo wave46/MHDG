@@ -283,6 +283,7 @@
     dotiming            = true          ! timing of the code
     freqdisp            = 1             ! frequency of result display
     freqsave            = 1             ! frequency of solution save
+    balance_diagnostics_verbosity = 0   ! 0 compact summaries, 1 detailed components
 /
 
 &LSSOLV_LST

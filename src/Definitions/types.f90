@@ -457,6 +457,7 @@ MODULE types
      ! 1 -add sinusoidal perturbation
      ! 2 -add density blob
      LOGICAL :: logrho   ! solve for the density logarithm instead of density
+     INTEGER :: balance_diagnostics_verbosity ! 0 compact summaries, 1 detailed components
      LOGICAL :: flux_limiter ! use flux limiter for ion and electron parallel conductive heat fluxes (with provided c_fli,c_fle in physics)
      LOGICAL :: external_heating ! to read and apply external heating from input file
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys

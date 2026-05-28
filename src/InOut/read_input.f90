@@ -19,7 +19,7 @@ SUBROUTINE READ_input()
   LOGICAL               :: neutral_wall_sources_in_elements
   INTEGER               :: thresh, difcor, tis, stab,pertini,init,order_2d
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
-  INTEGER               :: uinput, printint, testcase, nrp
+  INTEGER               :: uinput, printint, testcase, nrp, balance_diagnostics_verbosity
   INTEGER               :: nts, tsw, freqdisp, freqsave, shockcp, limrho
   INTEGER               :: shockcp_adapt, evaluator, difference, freq_t_adapt,freq_NR_adapt, quant_ind
   INTEGER,ALLOCATABLE,DIMENSION(:) :: n_quant_ind,param_est
@@ -116,7 +116,7 @@ SUBROUTINE READ_input()
     &T_fluxlim_maxi, T_fluxlim_maxe, neutral_flux_limiter_mode, neutral_flux_limiter_eps, &
     &neutral_flux_limiter_fs_fraction, neutral_flux_limiter_fs_flux_min
 #endif
-  NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
+  NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave, balance_diagnostics_verbosity
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
        &smther, jsweeps,&
        &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
@@ -140,6 +140,7 @@ SUBROUTINE READ_input()
   neutral_flux_limiter_eps = 0.d0
   neutral_flux_limiter_fs_fraction = 1.d0
   neutral_flux_limiter_fs_flux_min = 0.d0
+  balance_diagnostics_verbosity = 0
   OPEN (uinput, file='param.txt', status='unknown')
   READ (uinput, SWITCH_LST)
   READ (uinput, INPUT_LST)
@@ -180,6 +181,10 @@ SUBROUTINE READ_input()
   ENDIF
   IF (neutral_flux_limiter_fs_flux_min < 0.d0) THEN
      PRINT *, 'neutral_flux_limiter_fs_flux_min must be non-negative: ', neutral_flux_limiter_fs_flux_min
+     STOP
+  ENDIF
+  IF ((balance_diagnostics_verbosity < 0) .OR. (balance_diagnostics_verbosity > 1)) THEN
+     PRINT *, 'balance_diagnostics_verbosity must be 0 or 1: ', balance_diagnostics_verbosity
      STOP
   ENDIF
   IF (diff_nn_min < 0.d0) diff_nn_min = 10.d0*diff_n
@@ -228,6 +233,7 @@ SUBROUTINE READ_input()
   switch%convvort         = convvort
   switch%pertini          = pertini
   switch%logrho           = logrho
+  switch%balance_diagnostics_verbosity = balance_diagnostics_verbosity
   switch%flux_limiter     = flux_limiter
   switch%bxgradb          = bxgradb
   switch%external_heating = external_heating
@@ -617,6 +623,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - shockcp:                                            ', shockcp
      PRINT *, '                - minrho:                                             ', minrho
      PRINT *, '                - logrho:                                             ', logrho
+     PRINT *, '                - balance diagnostics verbosity:                      ', switch%balance_diagnostics_verbosity
      PRINT *, '                - thresh:                                             ', thresh
      PRINT *, '                - filter:                                             ', filter
 #ifdef TEMPERATURE
