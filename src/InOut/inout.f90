@@ -11,6 +11,7 @@ MODULE in_out
   USE HDF5_io_module
   USE flux_surface_transport_data
   USE transport_models_1d
+  USE balance_diagnostics
   USE GLOBALS
   USE MPI_OMP
   USE printutils
@@ -548,6 +549,7 @@ CONTAINS
     CALL save_neutral_flux_limiter_diagnostics()
     CALL save_neutral_reaction_source_diagnostics()
     CALL save_neutral_wall_source_diagnostics()
+    CALL balance_diag%write_hdf5(file_id)
 
     IF (switch%transport_1d) THEN
        CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
@@ -800,6 +802,7 @@ CONTAINS
     CALL save_neutral_flux_limiter_diagnostics()
     CALL save_neutral_reaction_source_diagnostics()
     CALL save_neutral_wall_source_diagnostics()
+    CALL balance_diag%write_hdf5(file_id)
 
     IF (ASSOCIATED(T_glob)) THEN
       DEALLOCATE(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)

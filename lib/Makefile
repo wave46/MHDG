@@ -116,7 +116,7 @@ PrintUtils.o : PrintUtils.F matrices_types.o MPI_OMP.o
 balance_diagnostics.F : $(SDIR)/Utils/Diagnostics/balance_diagnostics.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-balance_diagnostics.o : balance_diagnostics.F MPI_OMP.o
+balance_diagnostics.o : balance_diagnostics.F MPI_OMP.o HDF5_io.o globals.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 Communications.F : $(SDIR)/MPI_OMP/Communications.f90
@@ -146,7 +146,7 @@ LinearAlgebra.o : LinearAlgebra.F
 inout.F : $(SDIR)/InOut/inout.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-inout.o : inout.F HDF5_io.o flux_surface_transport_data.o transport_models_1d.o globals.o PrintUtils.o LinearAlgebra.o gmsh_io.o MPI_OMP.o Communications.o
+inout.o : inout.F HDF5_io.o flux_surface_transport_data.o transport_models_1d.o balance_diagnostics.o globals.o PrintUtils.o LinearAlgebra.o gmsh_io.o MPI_OMP.o Communications.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 Debug.F : $(SDIR)/Utils/Debug.f90

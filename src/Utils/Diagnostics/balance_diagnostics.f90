@@ -1,4 +1,7 @@
 MODULE balance_diagnostics
+  USE HDF5
+  USE HDF5_io_module
+  USE GLOBALS, ONLY: Mesh, phys
   USE MPI_OMP
   IMPLICIT NONE
 
@@ -387,11 +390,202 @@ CONTAINS
     WRITE(6,'(A)') '----------------------------------------'
   END SUBROUTINE balance_diag_print_particle_detail
 
-  SUBROUTINE balance_diag_write_hdf5(this)
+  SUBROUTINE balance_diag_write_hdf5(this, file_id)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    INTEGER(HID_T) :: diagnostics_group_id, boundary_group_id, balance_group_id, content_group_id
+    INTEGER(HID_T) :: neutrals_group_id, plasma_group_id, total_group_id, particles_group_id, terms_group_id, summary_group_id
+    INTEGER :: ierr
 
-    ! HDF5 output is wired in a later stage once live terms are migrated.
+    diagnostics_group_id = -1
+    boundary_group_id = -1
+    balance_group_id = -1
+    content_group_id = -1
+    neutrals_group_id = -1
+    plasma_group_id = -1
+    total_group_id = -1
+    particles_group_id = -1
+    terms_group_id = -1
+    summary_group_id = -1
+
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       CALL HDF5_group_create('diagnostics', file_id, diagnostics_group_id, ierr)
+
+       CALL HDF5_group_create('boundary_conditions', diagnostics_group_id, boundary_group_id, ierr)
+       CALL HDF5_group_create('neutrals', boundary_group_id, neutrals_group_id, ierr)
+       CALL HDF5_group_create('terms', neutrals_group_id, terms_group_id, ierr)
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_plasma_parallel_flux), &
+          &'recycled_plasma_parallel_source')
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_plasma_diffusion_flux), &
+          &'recycled_plasma_diffusion_source')
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_plasma_pinch_flux), &
+          &'recycled_plasma_pinch_source')
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_plasma_parallel_flux) &
+          &+ this%boundary_hdg(balance_diag_boundary_plasma_diffusion_flux) &
+          &+ this%boundary_hdg(balance_diag_boundary_plasma_pinch_flux), 'recycling_source')
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_neutral_diffusion_flux), &
+          &'neutral_diffusion_boundary_flux')
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_neutral_pressure_flux), &
+          &'neutral_pressure_boundary_flux')
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_neutral_convection_flux), &
+          &'neutral_convection_boundary_flux')
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_neutral_total_flux), &
+          &'neutral_total_boundary_flux')
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_tau_numerical_flux), &
+          &'tau_numerical_boundary_flux')
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_wall_puff_source), 'wall_puff_source')
+       CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(balance_diag_boundary_wall_pump_sink), 'wall_pump_sink')
+       CALL HDF5_group_close(terms_group_id, ierr)
+
+       CALL HDF5_group_create('summary', neutrals_group_id, summary_group_id, ierr)
+       CALL HDF5_real_saving(summary_group_id, balance_diag_boundary_hdg_check(this), 'neutral_closure_residual')
+       CALL HDF5_group_close(summary_group_id, ierr)
+       CALL HDF5_group_close(neutrals_group_id, ierr)
+       CALL HDF5_group_close(boundary_group_id, ierr)
+
+       CALL HDF5_group_create('balance', diagnostics_group_id, balance_group_id, ierr)
+
+       CALL HDF5_group_create('plasma', balance_group_id, plasma_group_id, ierr)
+       CALL HDF5_group_create('particles', plasma_group_id, particles_group_id, ierr)
+       CALL HDF5_group_create('terms', particles_group_id, terms_group_id, ierr)
+       CALL HDF5_real_saving(terms_group_id, this%particles(balance_diag_particle_plasma_ionization), 'ionization')
+       CALL HDF5_real_saving(terms_group_id, this%particles(balance_diag_particle_plasma_recombination), 'recombination')
+       CALL HDF5_real_saving(terms_group_id, this%particles(balance_diag_particle_plasma_boundary_flux), 'boundary_flux')
+       CALL HDF5_group_close(terms_group_id, ierr)
+       CALL HDF5_group_create('summary', particles_group_id, summary_group_id, ierr)
+       CALL HDF5_real_saving(summary_group_id, balance_diag_plasma_particle_balance(this), 'particle_balance')
+       CALL HDF5_group_close(summary_group_id, ierr)
+       CALL HDF5_group_close(particles_group_id, ierr)
+       CALL HDF5_group_close(plasma_group_id, ierr)
+
+       CALL HDF5_group_create('neutrals', balance_group_id, neutrals_group_id, ierr)
+       CALL HDF5_group_create('particles', neutrals_group_id, particles_group_id, ierr)
+       CALL HDF5_group_create('terms', particles_group_id, terms_group_id, ierr)
+       CALL HDF5_real_saving(terms_group_id, this%particles(balance_diag_particle_neutral_ionization), 'ionization')
+       CALL HDF5_real_saving(terms_group_id, this%particles(balance_diag_particle_neutral_recombination), 'recombination')
+       CALL HDF5_real_saving(terms_group_id, this%particles(balance_diag_particle_neutral_boundary_flux), 'boundary_flux')
+       CALL HDF5_real_saving(terms_group_id, this%particles(balance_diag_particle_puff_source), 'puff_source')
+       CALL HDF5_real_saving(terms_group_id, this%particles(balance_diag_particle_pump_sink), 'pump_sink')
+       CALL HDF5_real_saving(terms_group_id, this%particles(balance_diag_particle_recycling_source), 'recycling_source')
+       CALL HDF5_real_saving(terms_group_id, this%particles(balance_diag_particle_charge_exchange_rate), 'charge_exchange_rate')
+       CALL HDF5_group_close(terms_group_id, ierr)
+       CALL HDF5_group_create('summary', particles_group_id, summary_group_id, ierr)
+       CALL HDF5_real_saving(summary_group_id, balance_diag_neutral_particle_balance(this), 'particle_balance')
+       CALL HDF5_group_close(summary_group_id, ierr)
+    ENDIF
+    CALL balance_diag_write_wall_source_nodal(particles_group_id)
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       CALL HDF5_group_close(particles_group_id, ierr)
+       CALL HDF5_group_close(neutrals_group_id, ierr)
+
+       CALL HDF5_group_create('total', balance_group_id, total_group_id, ierr)
+       CALL HDF5_group_create('particles', total_group_id, particles_group_id, ierr)
+       CALL HDF5_group_create('summary', particles_group_id, summary_group_id, ierr)
+       CALL HDF5_real_saving(summary_group_id, balance_diag_plasma_particle_balance(this) &
+          &+ balance_diag_neutral_particle_balance(this), 'particle_balance')
+       CALL HDF5_group_close(summary_group_id, ierr)
+       CALL HDF5_group_close(particles_group_id, ierr)
+       CALL HDF5_group_close(total_group_id, ierr)
+       CALL HDF5_group_close(balance_group_id, ierr)
+
+       CALL HDF5_group_create('content', diagnostics_group_id, content_group_id, ierr)
+       CALL HDF5_group_create('plasma', content_group_id, plasma_group_id, ierr)
+       CALL HDF5_real_saving(plasma_group_id, this%content(balance_diag_content_plasma_particles), 'particles')
+       CALL HDF5_group_close(plasma_group_id, ierr)
+       CALL HDF5_group_create('neutrals', content_group_id, neutrals_group_id, ierr)
+       CALL HDF5_real_saving(neutrals_group_id, this%content(balance_diag_content_neutral_particles), 'particles')
+       CALL HDF5_group_close(neutrals_group_id, ierr)
+       CALL HDF5_group_create('total', content_group_id, total_group_id, ierr)
+       CALL HDF5_real_saving(total_group_id, this%content(balance_diag_content_total_particles), 'particles')
+       CALL HDF5_group_close(total_group_id, ierr)
+       CALL HDF5_group_close(content_group_id, ierr)
+
+       CALL HDF5_group_close(diagnostics_group_id, ierr)
+    ENDIF
   END SUBROUTINE balance_diag_write_hdf5
+
+  SUBROUTINE balance_diag_write_wall_source_nodal(group_id)
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    INTEGER(HID_T) :: nodal_group_id
+    INTEGER :: expected_size, ierr
+#ifdef PARALL
+    INTEGER :: iel, g, ind_local, ind_global, available_local, available_global
+    REAL*8, ALLOCATABLE :: puff_glob(:), pump_glob(:), net_glob(:)
+#endif
+
+    expected_size = Mesh%Nelems*Mesh%Nnodesperelem
+#ifdef PARALL
+    available_local = 0
+    IF (ALLOCATED(phys%neutral_wall_source_puff_Nod) .AND. &
+       &ALLOCATED(phys%neutral_wall_source_pump_Nod) .AND. &
+       &ALLOCATED(phys%neutral_wall_source_net_Nod)) THEN
+       IF ((SIZE(phys%neutral_wall_source_puff_Nod) .EQ. expected_size) .AND. &
+          &(SIZE(phys%neutral_wall_source_pump_Nod) .EQ. expected_size) .AND. &
+          &(SIZE(phys%neutral_wall_source_net_Nod) .EQ. expected_size)) available_local = 1
+    ENDIF
+    CALL MPI_Allreduce(available_local, available_global, 1, MPI_INTEGER, MPI_MIN, MPI_COMM_WORLD, ierr)
+    IF (available_global .EQ. 0) RETURN
+#else
+    IF (.NOT. ALLOCATED(phys%neutral_wall_source_puff_Nod)) RETURN
+    IF (.NOT. ALLOCATED(phys%neutral_wall_source_pump_Nod)) RETURN
+    IF (.NOT. ALLOCATED(phys%neutral_wall_source_net_Nod)) RETURN
+    IF (SIZE(phys%neutral_wall_source_puff_Nod) .NE. expected_size) RETURN
+    IF (SIZE(phys%neutral_wall_source_pump_Nod) .NE. expected_size) RETURN
+    IF (SIZE(phys%neutral_wall_source_net_Nod) .NE. expected_size) RETURN
+#endif
+
+#ifdef PARALL
+    ALLOCATE(puff_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
+    ALLOCATE(pump_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
+    ALLOCATE(net_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
+    puff_glob = 0.d0
+    pump_glob = 0.d0
+    net_glob = 0.d0
+
+    DO iel = 1, Mesh%Nelems
+       IF (Mesh%ghostElems(iel) .EQ. 0) THEN
+          DO g = 1, Mesh%Nnodesperelem
+             ind_local = (iel - 1)*Mesh%Nnodesperelem + g
+             ind_global = (Mesh%loc2glob_el(iel) - 1)*Mesh%Nnodesperelem + g
+             puff_glob(ind_global) = phys%neutral_wall_source_puff_Nod(ind_local)
+             pump_glob(ind_global) = phys%neutral_wall_source_pump_Nod(ind_local)
+             net_glob(ind_global) = phys%neutral_wall_source_net_Nod(ind_local)
+          ENDDO
+       ENDIF
+    ENDDO
+
+    CALL MPI_Allreduce(MPI_IN_PLACE, puff_glob, SIZE(puff_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_Allreduce(MPI_IN_PLACE, pump_glob, SIZE(pump_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_Allreduce(MPI_IN_PLACE, net_glob, SIZE(net_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       CALL HDF5_group_create('nodal_wall_sources', group_id, nodal_group_id, ierr)
+       CALL HDF5_real_saving(nodal_group_id, phys%neutral_wall_source_puff_total, 'element_puff_total')
+       CALL HDF5_real_saving(nodal_group_id, phys%neutral_wall_source_pump_total, 'element_pump_total')
+       CALL HDF5_real_saving(nodal_group_id, phys%neutral_wall_source_puff_total - phys%neutral_wall_source_pump_total, &
+          &'element_net_total')
+       CALL HDF5_array1D_saving(nodal_group_id, puff_glob, SIZE(puff_glob), 'puff_flux_density')
+       CALL HDF5_array1D_saving(nodal_group_id, pump_glob, SIZE(pump_glob), 'pump_flux_density')
+       CALL HDF5_array1D_saving(nodal_group_id, net_glob, SIZE(net_glob), 'net_flux_density')
+       CALL HDF5_group_close(nodal_group_id, ierr)
+    ENDIF
+
+    DEALLOCATE(puff_glob, pump_glob, net_glob)
+#else
+    CALL HDF5_group_create('nodal_wall_sources', group_id, nodal_group_id, ierr)
+    CALL HDF5_real_saving(nodal_group_id, phys%neutral_wall_source_puff_total, 'element_puff_total')
+    CALL HDF5_real_saving(nodal_group_id, phys%neutral_wall_source_pump_total, 'element_pump_total')
+    CALL HDF5_real_saving(nodal_group_id, phys%neutral_wall_source_puff_total - phys%neutral_wall_source_pump_total, &
+       &'element_net_total')
+    CALL HDF5_array1D_saving(nodal_group_id, phys%neutral_wall_source_puff_Nod, &
+       &SIZE(phys%neutral_wall_source_puff_Nod), 'puff_flux_density')
+    CALL HDF5_array1D_saving(nodal_group_id, phys%neutral_wall_source_pump_Nod, &
+       &SIZE(phys%neutral_wall_source_pump_Nod), 'pump_flux_density')
+    CALL HDF5_array1D_saving(nodal_group_id, phys%neutral_wall_source_net_Nod, &
+       &SIZE(phys%neutral_wall_source_net_Nod), 'net_flux_density')
+    CALL HDF5_group_close(nodal_group_id, ierr)
+#endif
+  END SUBROUTINE balance_diag_write_wall_source_nodal
 
   FUNCTION balance_diag_boundary_hdg_check(this) RESULT(value)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
