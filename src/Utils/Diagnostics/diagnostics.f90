@@ -212,21 +212,6 @@ MODULE diagnostics
        REAL*8 :: value
      END FUNCTION diag_content_value
 
-     MODULE FUNCTION diag_boundary_label(term_id) RESULT(label)
-       INTEGER, INTENT(IN) :: term_id
-       CHARACTER(LEN=80) :: label
-     END FUNCTION diag_boundary_label
-
-     MODULE FUNCTION diag_particle_label(term_id) RESULT(label)
-       INTEGER, INTENT(IN) :: term_id
-       CHARACTER(LEN=80) :: label
-     END FUNCTION diag_particle_label
-
-     MODULE FUNCTION diag_content_label(term_id) RESULT(label)
-       INTEGER, INTENT(IN) :: term_id
-       CHARACTER(LEN=80) :: label
-     END FUNCTION diag_content_label
-
      MODULE FUNCTION diag_particle_integral_units() RESULT(units)
        CHARACTER(LEN=32) :: units
      END FUNCTION diag_particle_integral_units

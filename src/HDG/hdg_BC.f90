@@ -749,11 +749,11 @@ CONTAINS
   CALL diag%mpi_reduce_boundary_hdg()
   CALL diag%mpi_reduce_particles_content()
   IF (switch%balance_diagnostics_verbosity .GE. 1) THEN
-     CALL diag%print_boundary_hdg_detail()
      CALL diag%print_particle_detail()
+     CALL diag%print_boundary_hdg_detail()
   ELSE
-     CALL diag%print_boundary_hdg_summary()
      CALL diag%print_particle_summary()
+     CALL diag%print_boundary_hdg_summary()
   ENDIF
   IF (save_tau) THEN
      WRITE (6,*) "Saving tau in the boundary faces"
