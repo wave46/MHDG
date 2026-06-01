@@ -124,7 +124,6 @@ PROGRAM MHDG
      CALL initialize_magnetic_field()
      ! load magnetic field and Jtor
      CALL load_magnetic_field_Jtor()
-     CALL computeNeutralGammaWallAreas()
      ! initialise solution
      CALL initialize_solution()
   ELSEIF ((MPIvar%glob_size .EQ. 1)) THEN
@@ -134,13 +133,11 @@ PROGRAM MHDG
        CALL initialize_magnetic_field()
        ! load magnetic field and Jtor
        CALL load_magnetic_field_Jtor()
-       CALL computeNeutralGammaWallAreas()
   ELSE 
       ! initialise magnetic field (the mesh is needed)
       CALL initialize_magnetic_field()
       ! load magnetic field and Jtor
       CALL load_magnetic_field_Jtor()
-      CALL computeNeutralGammaWallAreas()
   ENDIF
 
   IF (switch%external_heating) THEN

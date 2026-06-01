@@ -305,7 +305,6 @@ CONTAINS
 
     ! Re-load magnetic field and Jtor
     CALL load_magnetic_field_Jtor()
-    CALL computeNeutralGammaWallAreas()
 
     IF (switch%external_heating) THEN
        CALL initialize_external_heating()

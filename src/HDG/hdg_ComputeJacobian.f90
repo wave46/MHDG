@@ -13,6 +13,7 @@ SUBROUTINE HDG_computeJacobian()
   USE physics
   USE transport_models_1d, ONLY: transport_model_1d
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
+  USE diagnostics
 
   IMPLICIT NONE
 
@@ -67,7 +68,7 @@ SUBROUTINE HDG_computeJacobian()
   REAL*8                :: external_heating_ions_el(refElPol%Nnodes2d),external_heating_electrons_el(refElPol%Nnodes2d)
   real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d),q_cylfl(refElPol%Nfacenodes),omegafl(refElPol%Nfacenodes)
   REAL*8                :: Jtorel(refElPol%Nnodes2d)
-  REAL*8                :: n,El_n,nn,El_nn,totaln
+  REAL*8                :: n,El_n,nn,El_nn
   REAL*8                :: diff_nn_Vol_el(refElPol%NGauss2D),v_nn_Vol_el(refElPol%NGauss2D,Mesh%Ndim),Xg_el(refElPol%NGauss2D,Mesh%Ndim)
   REAL*8                :: diff_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D),v_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D,Mesh%Ndim)
 #endif
@@ -216,9 +217,6 @@ SUBROUTINE HDG_computeJacobian()
 #ifdef NEUTRAL
   phys%neutral_wall_source_puff_total = 0.d0
   phys%neutral_wall_source_pump_total = 0.d0
-  phys%neutral_ionization_total = 0.d0
-  phys%neutral_recombination_total = 0.d0
-  phys%neutral_charge_exchange_total = 0.d0
   IF (switch%neutral_wall_sources_in_elements) THEN
     IF (ALLOCATED(phys%neutral_wall_source_puff_Nod)) THEN
       IF (SIZE(phys%neutral_wall_source_puff_Nod) .NE. expected_diag_size) THEN
@@ -258,9 +256,10 @@ SUBROUTINE HDG_computeJacobian()
 
 #ifndef TOR3D
 #ifdef NEUTRAL
-  CALL print_neutral_reaction_source_totals()
+  CALL diag%reset_particles_content()
+  CALL account_neutral_reaction_source_totals()
   IF (switch%neutral_wall_sources_in_elements) THEN
-    CALL print_neutral_wall_source_element_totals()
+    CALL account_neutral_wall_source_element_totals()
   ENDIF
 #endif
 #endif
@@ -1334,6 +1333,9 @@ CONTAINS
   DEALLOCATE(Xel,Xfl)
   !$OMP END PARALLEL
 
+#ifdef NEUTRAL
+  CALL diag%account_particle_content(n, nn)
+#endif
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, n, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, nn, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
@@ -1349,10 +1351,6 @@ CONTAINS
         WRITE(6,*) 'chi_i', phys%ME_diff_e*simpar%refval_length**2/simpar%refval_time
         WRITE(6,*) 'chi_e', phys%ME_diff_ee*simpar%refval_length**2/simpar%refval_time
      ENDIF
-     totaln = n + nn
-     WRITE(6,*) 'n = ',n
-     WRITE(6,*) 'nn = ',nn
-     WRITE(6,*) 'total n = ',totaln
    ENDIF
 
   DEALLOCATE (ures,lres,u0res)
@@ -1384,7 +1382,7 @@ CONTAINS
 
 #ifndef TOR3D
 #ifdef NEUTRAL
-  SUBROUTINE print_neutral_reaction_source_totals()
+  SUBROUTINE account_neutral_reaction_source_totals()
 
     INTEGER :: iel,g
     INTEGER :: ind_nodes(Mesh%Nnodesperelem)
@@ -1430,23 +1428,15 @@ CONTAINS
       ENDDO
     ENDDO
 
+    CALL diag%account_volume_particle_reactions(total_ionization, total_recombination, total_charge_exchange)
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_ionization, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_recombination, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_charge_exchange, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
-    IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6,*) 'neutral ionization sink = ', total_ionization
-      WRITE(6,*) 'neutral recombination source = ', total_recombination
-      WRITE(6,*) 'neutral charge-exchange rate = ', total_charge_exchange
-    ENDIF
-    phys%neutral_ionization_total = total_ionization
-    phys%neutral_recombination_total = total_recombination
-    phys%neutral_charge_exchange_total = total_charge_exchange
+  ENDSUBROUTINE account_neutral_reaction_source_totals
 
-  ENDSUBROUTINE print_neutral_reaction_source_totals
-
-  SUBROUTINE print_neutral_wall_source_element_totals()
+  SUBROUTINE account_neutral_wall_source_element_totals()
 
     INTEGER :: ifac,el,fa,fl,bc,g,inn
     INTEGER :: ind_nodes(refElPol%Nfacenodes)
@@ -1497,18 +1487,15 @@ CONTAINS
       ENDDO
     ENDDO
 
+    CALL diag%account_wall_particle_sources(total_puff, -total_pump)
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_puff, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_pump, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
-    IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6,*) 'element neutral puff source = ', total_puff
-      WRITE(6,*) 'element neutral pump sink = ', total_pump
-    ENDIF
     phys%neutral_wall_source_puff_total = total_puff
     phys%neutral_wall_source_pump_total = total_pump
 
-  ENDSUBROUTINE print_neutral_wall_source_element_totals
+  ENDSUBROUTINE account_neutral_wall_source_element_totals
 #endif
 #endif
 

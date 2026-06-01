@@ -207,8 +207,6 @@
     Re                  = 0.9     ! Recycling coefficient 0.997
     Re_pump             = 0.9     ! Recycling coefficient in the pump region
     recycling_neutral_gamma = 1.0  ! Multiplier for the recycled NeutralGamma Bohm relation
-    neutral_gamma_wall_sources = .false. ! Move puff/pump/recycling wall sources to NeutralGamma equation
-    neutral_gamma_wall_bn_min = 1.e-4 ! Minimum |b.n| for NeutralGamma wall-source faces
     apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
     puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
     impurity_name       = 'W' ! name of impurity
@@ -269,7 +267,6 @@
     T_fluxlim_maxe      = 50.              ! Max eletron temperature [eV] in old heat flux limiter (limiting T in T^(5/2)), put some large value to turn it off
     ! **** Neutral flux limiter coefficients
     neutral_flux_limiter_mode          = 'off' ! off, diagnostics_only, lagged_flux_limiter
-    neutral_flux_limiter_gamma         = 1.0   ! Limiter sharpness, dimensionless
     neutral_flux_limiter_eps           = 0.0   ! Dimensional neutral flux regularization [m^-2 s^-1]
     neutral_flux_limiter_fs_fraction   = 1.0   ! Fraction of neutral free-streaming flux, dimensionless
     neutral_flux_limiter_fs_flux_min   = 0.0   ! Dimensional minimum neutral free-streaming flux [m^-2 s^-1]
@@ -286,6 +283,7 @@
     dotiming            = true          ! timing of the code
     freqdisp            = 1             ! frequency of result display
     freqsave            = 1             ! frequency of solution save
+    balance_diagnostics_verbosity = 0   ! 0 compact summaries, 1 detailed components
 /
 
 &LSSOLV_LST

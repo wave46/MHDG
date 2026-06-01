@@ -143,8 +143,6 @@ MODULE types
      REAL*8                 :: xmax, xmin, ymax, ymin ! Limit of the GLOBAL matrix, across mpi partitions
      REAL*8                 :: puff_area ! area of the puff bounday condition
      REAL*8                 :: pump_area ! area of the pump bounday condition
-     REAL*8                 :: puff_gamma_area ! puff boundary area eligible for neutral gamma wall sources
-     REAL*8                 :: pump_gamma_area ! pump boundary area eligible for neutral gamma wall sources
      REAL*8                 :: core_area ! area of the core bounday condition
      REAL*8,ALLOCATABLE     :: Xg(:,:) ! 2D Gauss point coordinates
      REAL*8,ALLOCATABLE     :: Xgf(:,:) ! 1D Gauss point coordinates at interior faces
@@ -289,8 +287,6 @@ MODULE types
      REAL*8                    :: Re ! Recycling for the neutral equation
      REAL*8                    :: Re_pump ! Recycling for the neutral equation in the pump region
      REAL*8                    :: recycling_neutral_gamma ! Multiplier for the recycled NeutralGamma Bohm relation
-     LOGICAL                   :: neutral_gamma_wall_sources ! Move wall particle sources to NeutralGamma boundary equation
-     REAL*8                    :: neutral_gamma_wall_bn_min ! Minimum |b.n| for NeutralGamma wall source faces
      REAL*8                    :: puff ! Puff coefficient
      REAL*8                    :: feedback_propotional_gain ! relative feedback propotional gain
      REAL*8                    :: feedback_integral_gain ! feedback integral gain
@@ -325,7 +321,6 @@ MODULE types
      REAL*8                    :: T_fluxlim_maxe ! Max electron temperature [eV] in old heat flux limiter (limiting T in T^(5/2))
      ! Neutral flux limiter parameters
      CHARACTER(LEN=40)         :: neutral_flux_limiter_mode
-     REAL*8                    :: neutral_flux_limiter_gamma
      REAL*8                    :: neutral_flux_limiter_eps
      REAL*8                    :: neutral_flux_limiter_fs_fraction
      REAL*8                    :: neutral_flux_limiter_fs_flux_min
@@ -338,9 +333,6 @@ MODULE types
      REAL*8,ALLOCATABLE        :: neutral_flux_limiter_Gamma_lim_Nod(:)
      REAL*8                    :: neutral_wall_source_puff_total
      REAL*8                    :: neutral_wall_source_pump_total
-     REAL*8                    :: neutral_ionization_total
-     REAL*8                    :: neutral_recombination_total
-     REAL*8                    :: neutral_charge_exchange_total
      REAL*8,ALLOCATABLE        :: neutral_wall_source_puff_Nod(:)
      REAL*8,ALLOCATABLE        :: neutral_wall_source_pump_Nod(:)
      REAL*8,ALLOCATABLE        :: neutral_wall_source_net_Nod(:)
@@ -462,6 +454,7 @@ MODULE types
      ! 1 -add sinusoidal perturbation
      ! 2 -add density blob
      LOGICAL :: logrho   ! solve for the density logarithm instead of density
+     INTEGER :: balance_diagnostics_verbosity ! 0 compact summaries, 1 detailed components
      LOGICAL :: flux_limiter ! use flux limiter for ion and electron parallel conductive heat fluxes (with provided c_fli,c_fle in physics)
      LOGICAL :: external_heating ! to read and apply external heating from input file
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
@@ -1014,8 +1007,6 @@ CONTAINS
     Mesh2%ymin = Mesh1%ymin
     Mesh2%puff_area = Mesh1%puff_area
     Mesh2%pump_area = Mesh1%pump_area
-    Mesh2%puff_gamma_area = Mesh1%puff_gamma_area
-    Mesh2%pump_gamma_area = Mesh1%pump_gamma_area
     Mesh2%core_area = Mesh1%core_area
 
 #ifdef PARALL
