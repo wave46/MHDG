@@ -174,6 +174,12 @@ CONTAINS
     CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_puff_source), 'puff_source')
     CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_pump_sink), 'pump_sink')
     CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_recycling_source), 'recycling_source')
+    CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_recycling_parallel_source), &
+       &'recycling_parallel_source')
+    CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_recycling_diffusion_source), &
+       &'recycling_diffusion_source')
+    CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_recycling_pinch_source), &
+       &'recycling_pinch_source')
     CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_charge_exchange_rate), 'charge_exchange_rate')
     CALL HDF5_group_close(terms_group_id, ierr)
   END SUBROUTINE diag_write_neutral_particle_terms_hdf5

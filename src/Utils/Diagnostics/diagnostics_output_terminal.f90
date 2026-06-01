@@ -115,6 +115,10 @@ CONTAINS
     WRITE(6,'(A)') '  external sources:'
     WRITE(6,'(A,1X,ES11.3)') '    puff:', this%particles(diag_particle_puff_source)
     WRITE(6,'(A,1X,ES11.3)') '    pump:', this%particles(diag_particle_pump_sink)
+    WRITE(6,'(A,1X,ES11.3)') '    recycling:', this%particles(diag_particle_recycling_source)
+    WRITE(6,'(A,1X,ES11.3)') '      parallel convection    :', this%particles(diag_particle_recycling_parallel_source)
+    WRITE(6,'(A,1X,ES11.3)') '      perpendicular diffusion:', this%particles(diag_particle_recycling_diffusion_source)
+    WRITE(6,'(A,1X,ES11.3)') '      perpendicular pinch    :', this%particles(diag_particle_recycling_pinch_source)
     WRITE(6,'(A)') '----------------------------------------'
   END SUBROUTINE diag_print_particle_detail
 
