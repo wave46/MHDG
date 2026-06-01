@@ -547,8 +547,6 @@ CONTAINS
     CALL HDF5_group_close(group_id1, ierr)
 
     CALL save_neutral_flux_limiter_diagnostics()
-    CALL save_neutral_reaction_source_diagnostics()
-    CALL save_neutral_wall_source_diagnostics()
     CALL diag%write_hdf5(file_id)
 
     IF (switch%transport_1d) THEN
@@ -800,8 +798,6 @@ CONTAINS
     END IF
 
     CALL save_neutral_flux_limiter_diagnostics()
-    CALL save_neutral_reaction_source_diagnostics()
-    CALL save_neutral_wall_source_diagnostics()
     CALL diag%write_hdf5(file_id)
 
     IF (ASSOCIATED(T_glob)) THEN
@@ -933,85 +929,6 @@ CONTAINS
       CALL HDF5_group_close(group_id, ierr)
 #endif
     ENDSUBROUTINE save_neutral_flux_limiter_diagnostics
-
-    SUBROUTINE save_neutral_reaction_source_diagnostics()
-      INTEGER(HID_T) :: group_id
-
-      IF (MPIvar%glob_id .EQ. 0) THEN
-        CALL HDF5_group_create('neutral_reaction_sources_diagnostics', file_id, group_id, ierr)
-        CALL HDF5_real_saving(group_id, phys%neutral_ionization_total, 'ionization_sink')
-        CALL HDF5_real_saving(group_id, phys%neutral_recombination_total, 'recombination_source')
-        CALL HDF5_real_saving(group_id, phys%neutral_charge_exchange_total, 'charge_exchange_rate')
-        CALL HDF5_group_close(group_id, ierr)
-      ENDIF
-    ENDSUBROUTINE save_neutral_reaction_source_diagnostics
-
-    SUBROUTINE save_neutral_wall_source_diagnostics()
-      INTEGER(HID_T) :: group_id
-      INTEGER :: expected_size
-#ifdef PARALL
-      INTEGER :: iel, g, ind_local, ind_global
-      REAL*8, ALLOCATABLE :: puff_glob(:), pump_glob(:), net_glob(:)
-#endif
-
-      IF (.NOT. ALLOCATED(phys%neutral_wall_source_puff_Nod)) RETURN
-      expected_size = Mesh%Nelems*Mesh%Nnodesperelem
-      IF (SIZE(phys%neutral_wall_source_puff_Nod) .NE. expected_size) RETURN
-      IF (SIZE(phys%neutral_wall_source_pump_Nod) .NE. expected_size) RETURN
-      IF (SIZE(phys%neutral_wall_source_net_Nod) .NE. expected_size) RETURN
-
-#ifdef PARALL
-      ALLOCATE(puff_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
-      ALLOCATE(pump_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
-      ALLOCATE(net_glob(Mesh%Nel_glob*Mesh%Nnodesperelem))
-      puff_glob = 0.d0
-      pump_glob = 0.d0
-      net_glob = 0.d0
-
-      DO iel = 1, Mesh%Nelems
-        IF (Mesh%ghostElems(iel) .EQ. 0) THEN
-          DO g = 1, Mesh%Nnodesperelem
-            ind_local = (iel - 1)*Mesh%Nnodesperelem + g
-            ind_global = (Mesh%loc2glob_el(iel) - 1)*Mesh%Nnodesperelem + g
-            puff_glob(ind_global) = phys%neutral_wall_source_puff_Nod(ind_local)
-            pump_glob(ind_global) = phys%neutral_wall_source_pump_Nod(ind_local)
-            net_glob(ind_global) = phys%neutral_wall_source_net_Nod(ind_local)
-          ENDDO
-        ENDIF
-      ENDDO
-
-      CALL MPI_Allreduce(MPI_IN_PLACE, puff_glob, SIZE(puff_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-      CALL MPI_Allreduce(MPI_IN_PLACE, pump_glob, SIZE(pump_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-      CALL MPI_Allreduce(MPI_IN_PLACE, net_glob, SIZE(net_glob), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-
-      IF (MPIvar%glob_id .EQ. 0) THEN
-        CALL HDF5_group_create('neutral_wall_sources_diagnostics', file_id, group_id, ierr)
-        CALL HDF5_real_saving(group_id, phys%neutral_wall_source_puff_total, 'element_puff_total')
-        CALL HDF5_real_saving(group_id, phys%neutral_wall_source_pump_total, 'element_pump_total')
-        CALL HDF5_real_saving(group_id, phys%neutral_wall_source_puff_total - phys%neutral_wall_source_pump_total, &
-          &'element_net_total')
-        CALL HDF5_array1D_saving(group_id, puff_glob, SIZE(puff_glob), 'puff_flux_density')
-        CALL HDF5_array1D_saving(group_id, pump_glob, SIZE(pump_glob), 'pump_flux_density')
-        CALL HDF5_array1D_saving(group_id, net_glob, SIZE(net_glob), 'net_flux_density')
-        CALL HDF5_group_close(group_id, ierr)
-      ENDIF
-
-      DEALLOCATE(puff_glob, pump_glob, net_glob)
-#else
-      CALL HDF5_group_create('neutral_wall_sources_diagnostics', file_id, group_id, ierr)
-      CALL HDF5_real_saving(group_id, phys%neutral_wall_source_puff_total, 'element_puff_total')
-      CALL HDF5_real_saving(group_id, phys%neutral_wall_source_pump_total, 'element_pump_total')
-      CALL HDF5_real_saving(group_id, phys%neutral_wall_source_puff_total - phys%neutral_wall_source_pump_total, &
-        &'element_net_total')
-      CALL HDF5_array1D_saving(group_id, phys%neutral_wall_source_puff_Nod, &
-        &SIZE(phys%neutral_wall_source_puff_Nod), 'puff_flux_density')
-      CALL HDF5_array1D_saving(group_id, phys%neutral_wall_source_pump_Nod, &
-        &SIZE(phys%neutral_wall_source_pump_Nod), 'pump_flux_density')
-      CALL HDF5_array1D_saving(group_id, phys%neutral_wall_source_net_Nod, &
-        &SIZE(phys%neutral_wall_source_net_Nod), 'net_flux_density')
-      CALL HDF5_group_close(group_id, ierr)
-#endif
-    ENDSUBROUTINE save_neutral_wall_source_diagnostics
 
     !**********************************************************************
     ! Save simulation parameters

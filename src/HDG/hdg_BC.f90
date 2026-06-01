@@ -536,19 +536,11 @@ CONTAINS
   REAL*8                    :: diff_ani_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
   real*8                    :: q_cylfl(refElPol%Nfacenodes),q_cyl(refElPol%Ngauss1d)
   real*8                    :: omegafl(refElPol%Nfacenodes),omega(refElPol%Ngauss1d)
-#ifdef PARALL
-#ifdef SAVEFLUX
-  INTEGER                   :: ierr
-#endif
-#endif
-
   IF (utils%timing) THEN
     CALL cpu_TIME(timing%tps1)
     CALL system_CLOCK(timing%cks1,timing%clock_rate1)
   END IF
-#ifdef SAVEFLUX
   CALL diag%reset_boundary_hdg()
-#endif
   save_tau = switch%saveTau
   Ndim = 2
   Npel = refElPol%Nnodes2D
@@ -754,7 +746,6 @@ CONTAINS
 
   END DO
 
-#ifdef SAVEFLUX
   CALL diag%mpi_reduce_boundary_hdg()
   CALL diag%mpi_reduce_particles_content()
   IF (switch%balance_diagnostics_verbosity .GE. 1) THEN
@@ -764,7 +755,6 @@ CONTAINS
      CALL diag%print_boundary_hdg_summary()
      CALL diag%print_particle_summary()
   ENDIF
-#endif
   IF (save_tau) THEN
      WRITE (6,*) "Saving tau in the boundary faces"
      CALL saveMatrix(tau_save,'tau_save_bound')
@@ -1194,22 +1184,12 @@ CONTAINS
 
       ! Assembly Bohm contribution
          IF (numer%bohmtypebc.EQ.0) THEN
-#ifndef SAVEFLUX
-#ifndef DKLINEARIZED
-        CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang)
-#else
-        CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang)
-#endif
-#else
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
           &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang)
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
         &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang)
-#endif
 #endif
          ELSE
         CALL assembly_bohm_bc_new(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
@@ -1754,18 +1734,10 @@ CONTAINS
   !*********************************
   ! Assembly Bohm
   !*********************************
-#ifndef SAVEFLUX
-#ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang)
-#else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang)
-#endif
-#else
 #ifndef DKLINEARIZED
     SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang)
 #else
     SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang)
-#endif
 #endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
     real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),psig,ng(:),tau(:,:),setval,dcs_du(:)
@@ -1803,7 +1775,6 @@ CONTAINS
     real*8                 ::       q_cyl, xyf(:), ddk_dU(Neq), ddk_dU_u
 #endif
 #endif
-#ifdef SAVEFLUX
     real*8, INTENT(IN)            :: dline
     real*8                        :: boundary_pump_sink, boundary_puff_source
     real*8                        :: recycled_parallel_source, recycled_diffusion_source, recycled_pinch_source
@@ -1813,7 +1784,6 @@ CONTAINS
     real*8                        :: neutral_convection_boundary_flux, neutral_total_boundary_flux
     real*8                        :: tau_neutral_boundary_flux
     real*8                        :: boundary_recycling_source, boundary_scale
-#endif
     inn = phys%idx_rhon_eq
     ik = phys%idx_k_eq
     ign = phys%idx_gamman_eq
@@ -2257,7 +2227,6 @@ CONTAINS
       puff_coeff = 0.d0
     ENDIF
 
-#ifdef SAVEFLUX
     !***************** boundary diagnostics part ****************************
 
     boundary_scale = 2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
@@ -2317,7 +2286,6 @@ CONTAINS
 #endif
 
     !***************** end of boundary diagnostics part *********************
-#endif
     ! Convective part
     k = inn
     ! Plasma flux
