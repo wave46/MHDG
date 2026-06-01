@@ -1921,6 +1921,9 @@ CONTAINS
     IF (switch%neutral_wall_sources_in_elements) THEN
       CALL add_neutral_wall_sources_to_element(iel,Xel,ue,Auu,rhs)
     ENDIF
+    IF (switch%neutral_recycling_in_elements) THEN
+      CALL add_neutral_recycling_to_element(iel,Xel,ue,qe,Auu,Auq,rhs)
+    ENDIF
 #endif
       CALL do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)
       DEALLOCATE(Auq,Auu,rhs)
@@ -2041,6 +2044,17 @@ CONTAINS
     ENDIF
 
   ENDSUBROUTINE add_neutral_wall_sources_to_element
+
+  SUBROUTINE add_neutral_recycling_to_element(iel,Xel,ue,qe,Auu,Auq,rhs)
+
+    INTEGER,INTENT(IN)       :: iel
+    REAL*8,INTENT(IN)        :: Xel(:,:),ue(:,:),qe(:,:)
+    REAL*8,INTENT(INOUT)     :: Auu(:,:,:),Auq(:,:,:),rhs(:,:)
+
+    WRITE(6,*) 'neutral_recycling_in_elements is not implemented yet. Element = ',iel
+    STOP
+
+  ENDSUBROUTINE add_neutral_recycling_to_element
 #endif
 
   !***************************************************

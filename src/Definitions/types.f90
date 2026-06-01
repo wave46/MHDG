@@ -460,6 +460,7 @@ MODULE types
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
      LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs
      LOGICAL :: neutral_wall_sources_in_elements ! move neutral puff/pump wall sources to adjacent element volumes
+     LOGICAL :: neutral_recycling_in_elements ! move neutral recycling wall source to adjacent element volumes
   END TYPE Switches_type
 
   !***************************************************************
