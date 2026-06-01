@@ -2226,6 +2226,9 @@ CONTAINS
       cryopump_coeff = 0.d0
       puff_coeff = 0.d0
     ENDIF
+    IF (switch%neutral_recycling_in_elements) THEN
+      recycling_coeff = 0.d0
+    ENDIF
 
     !***************** boundary diagnostics part ****************************
 
@@ -2813,6 +2816,9 @@ CONTAINS
 
     IF (switch%neutral_wall_sources_in_elements) THEN
        puff_coeff = 0.d0
+    ENDIF
+    IF (switch%neutral_recycling_in_elements) THEN
+       recycling_coeff = 0.d0
     ENDIF
 
     ! convective part
