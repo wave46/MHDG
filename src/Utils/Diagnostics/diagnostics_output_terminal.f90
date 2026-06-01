@@ -13,10 +13,12 @@ CONTAINS
 
     IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,'(A)') '--- Balance diagnostics summary ---'
+       WRITE(6,'(A)') '  particle balances ['//TRIM(diag_particle_integral_units())//']'
        WRITE(6,'(A,1X,ES16.8)') 'boundary HDG / BC check =', boundary%residual
        WRITE(6,'(A,1X,ES16.8)') 'plasma particle balance =', particles%plasma_balance
        WRITE(6,'(A,1X,ES16.8)') 'neutral particle balance =', particles%neutral_balance
        WRITE(6,'(A,1X,ES16.8)') 'total particle balance =', particles%total_balance
+       WRITE(6,'(A)') '  particle content ['//TRIM(diag_content_units(diag_content_total_particles))//']'
        WRITE(6,'(A,1X,ES16.8)') 'plasma particle content =', particles%plasma_content
        WRITE(6,'(A,1X,ES16.8)') 'neutral particle content =', particles%neutral_content
        WRITE(6,'(A,1X,ES16.8)') 'total particle content =', particles%total_content
@@ -31,7 +33,7 @@ CONTAINS
 
     IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,'(A)') '----------------------------------------'
-       WRITE(6,'(A)') 'Boundary HDG / BC diagnostics'
+       WRITE(6,'(A)') 'Boundary HDG / BC diagnostics ['//TRIM(diag_particle_integral_units())//']'
        WRITE(6,'(A,1X,ES11.3)') '  neutral closure residual:', summary%residual
        WRITE(6,'(A)') '  residual = recycled + wall + tau - neutral flux'
        WRITE(6,'(A)') '----------------------------------------'
@@ -46,10 +48,11 @@ CONTAINS
 
     IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,'(A)') '----------------------------------------'
-       WRITE(6,'(A)') 'Physical particle diagnostics'
+       WRITE(6,'(A)') 'Physical particle diagnostics ['//TRIM(diag_particle_integral_units())//']'
        WRITE(6,'(A,1X,ES11.3)') '  plasma balance:', summary%plasma_balance
        WRITE(6,'(A,1X,ES11.3)') '  neutral balance:', summary%neutral_balance
        WRITE(6,'(A,1X,ES11.3)') '  total balance  :', summary%total_balance
+       WRITE(6,'(A)') '  particle content ['//TRIM(diag_content_units(diag_content_total_particles))//']'
        WRITE(6,'(A,1X,ES11.3)') '  plasma content :', summary%plasma_content
        WRITE(6,'(A,1X,ES11.3)') '  neutral content:', summary%neutral_content
        WRITE(6,'(A,1X,ES11.3)') '  total content  :', summary%total_content
@@ -63,17 +66,17 @@ CONTAINS
 
     IF (MPIvar%glob_id .NE. 0) RETURN
 
-    WRITE(6,'(A)') '--- Boundary HDG / BC components ---'
+    WRITE(6,'(A)') '--- Boundary HDG / BC components ['//TRIM(diag_particle_integral_units())//'] ---'
     DO i = 1, diag_boundary_term_count
        WRITE(6,'(A,1X,ES16.8)') TRIM(diag_boundary_label(i))//' =', this%boundary_hdg(i)
     ENDDO
-    WRITE(6,'(A)') '--- Physical particle components ---'
+    WRITE(6,'(A)') '--- Physical particle components ['//TRIM(diag_particle_integral_units())//'] ---'
     DO i = 1, diag_particle_term_count
        WRITE(6,'(A,1X,ES16.8)') TRIM(diag_particle_label(i))//' =', this%particles(i)
     ENDDO
-    WRITE(6,'(A)') '--- Global content components ---'
+    WRITE(6,'(A)') '--- Global content components ['//TRIM(diag_content_units(diag_content_total_particles))//'] ---'
     DO i = 1, diag_content_term_count
-       WRITE(6,'(A,1X,ES16.8)') TRIM(diag_content_label(i))//' =', this%content(i)
+       WRITE(6,'(A,1X,ES16.8)') TRIM(diag_content_label(i))//' =', diag_content_value(this, i)
     ENDDO
     WRITE(6,'(A)') '--- Reserved energy components ---'
     DO i = 1, diag_energy_term_count
@@ -91,7 +94,7 @@ CONTAINS
     summary = diag_boundary_summary(this)
 
     WRITE(6,'(A)') '----------------------------------------'
-    WRITE(6,'(A)') 'Boundary HDG / BC diagnostics'
+    WRITE(6,'(A)') 'Boundary HDG / BC diagnostics ['//TRIM(diag_particle_integral_units())//']'
     WRITE(6,'(A,1X,ES11.3)') '  neutral closure residual:', summary%residual
     WRITE(6,'(A,1X,ES11.3)') '  neutral flux into domain:', summary%neutral_flux
     WRITE(6,'(A,1X,ES11.3)') '  recycled source         :', summary%recycled_source
@@ -114,7 +117,7 @@ CONTAINS
     summary = diag_particle_summary(this)
 
     WRITE(6,'(A)') '----------------------------------------'
-    WRITE(6,'(A)') 'Physical particle diagnostics'
+    WRITE(6,'(A)') 'Physical particle diagnostics ['//TRIM(diag_particle_integral_units())//']'
     WRITE(6,'(A,1X,ES11.3)') '  plasma balance:', summary%plasma_balance
     WRITE(6,'(A,1X,ES11.3)') '  neutral balance:', summary%neutral_balance
     WRITE(6,'(A,1X,ES11.3)') '  total balance  :', summary%total_balance
@@ -125,10 +128,10 @@ CONTAINS
     DO i = 1, diag_particle_term_count
        WRITE(6,'(A,1X,ES11.3)') '    '//TRIM(diag_particle_label(i))//':', this%particles(i)
     ENDDO
-    WRITE(6,'(A)') '  particle content:'
+    WRITE(6,'(A)') '  particle content ['//TRIM(diag_content_units(diag_content_total_particles))//']:'
     DO i = 1, diag_content_term_count
        IF (i .EQ. diag_content_total_energy) CYCLE
-       WRITE(6,'(A,1X,ES11.3)') '    '//TRIM(diag_content_label(i))//':', this%content(i)
+       WRITE(6,'(A,1X,ES11.3)') '    '//TRIM(diag_content_label(i))//':', diag_content_value(this, i)
     ENDDO
     WRITE(6,'(A)') '----------------------------------------'
   END SUBROUTINE diag_print_particle_detail
@@ -228,5 +231,25 @@ CONTAINS
        label = 'energy unknown term'
     END SELECT
   END FUNCTION diag_energy_label
+
+  MODULE FUNCTION diag_particle_integral_units() RESULT(units)
+    CHARACTER(LEN=32) :: units
+
+    units = 'particles/s'
+  END FUNCTION diag_particle_integral_units
+
+  MODULE FUNCTION diag_content_units(term_id) RESULT(units)
+    INTEGER, INTENT(IN) :: term_id
+    CHARACTER(LEN=32) :: units
+
+    SELECT CASE (term_id)
+    CASE (diag_content_plasma_particles, diag_content_neutral_particles, diag_content_total_particles)
+       units = 'particles'
+    CASE (diag_content_total_energy)
+       units = 'not_implemented'
+    CASE DEFAULT
+       units = 'unknown'
+    END SELECT
+  END FUNCTION diag_content_units
 
 END SUBMODULE diagnostics_output_terminal

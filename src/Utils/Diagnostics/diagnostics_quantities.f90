@@ -1,4 +1,5 @@
 SUBMODULE (diagnostics) diagnostics_quantities
+  USE GLOBALS, ONLY: simpar
   IMPLICIT NONE
 
 CONTAINS
@@ -53,9 +54,26 @@ CONTAINS
     summary%plasma_balance = diag_plasma_particle_balance(this)
     summary%neutral_balance = diag_neutral_particle_balance(this)
     summary%total_balance = summary%plasma_balance + summary%neutral_balance
-    summary%plasma_content = this%content(diag_content_plasma_particles)
-    summary%neutral_content = this%content(diag_content_neutral_particles)
-    summary%total_content = this%content(diag_content_total_particles)
+    summary%plasma_content = diag_content_value(this, diag_content_plasma_particles)
+    summary%neutral_content = diag_content_value(this, diag_content_neutral_particles)
+    summary%total_content = diag_content_value(this, diag_content_total_particles)
   END FUNCTION diag_particle_summary
+
+  MODULE FUNCTION diag_content_value(this, term_id) RESULT(value)
+    CLASS(diagnostics_type), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: term_id
+    REAL*8 :: value
+
+    IF (term_id < 1 .OR. term_id > diag_content_term_count) THEN
+       value = 0.d0
+       RETURN
+    ENDIF
+
+    value = this%content(term_id)
+    SELECT CASE (term_id)
+    CASE (diag_content_plasma_particles, diag_content_neutral_particles, diag_content_total_particles)
+       value = value*simpar%refval_density
+    END SELECT
+  END FUNCTION diag_content_value
 
 END SUBMODULE diagnostics_quantities

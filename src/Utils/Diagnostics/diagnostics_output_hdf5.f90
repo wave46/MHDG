@@ -64,6 +64,7 @@ CONTAINS
     summary = diag_boundary_summary(this)
 
     CALL HDF5_group_create('terms', neutrals_group_id, terms_group_id, ierr)
+    CALL HDF5_string_saving(terms_group_id, diag_particle_integral_units(), 'units')
     CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(diag_boundary_plasma_parallel_flux), &
        &'recycled_plasma_parallel_source')
     CALL HDF5_real_saving(terms_group_id, this%boundary_hdg(diag_boundary_plasma_diffusion_flux), &
@@ -96,6 +97,7 @@ CONTAINS
     summary = diag_boundary_summary(this)
 
     CALL HDF5_group_create('summary', neutrals_group_id, summary_group_id, ierr)
+    CALL HDF5_string_saving(summary_group_id, diag_particle_integral_units(), 'units')
     CALL HDF5_real_saving(summary_group_id, summary%residual, 'neutral_closure_residual')
     CALL HDF5_group_close(summary_group_id, ierr)
   END SUBROUTINE diag_write_boundary_summary_hdf5
@@ -121,6 +123,7 @@ CONTAINS
     INTEGER :: ierr
 
     CALL HDF5_group_create('terms', particles_group_id, terms_group_id, ierr)
+    CALL HDF5_string_saving(terms_group_id, diag_particle_integral_units(), 'units')
     CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_plasma_ionization), 'ionization')
     CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_plasma_recombination), 'recombination')
     CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_plasma_boundary_flux), 'boundary_flux')
@@ -137,6 +140,7 @@ CONTAINS
     summary = diag_particle_summary(this)
 
     CALL HDF5_group_create('summary', particles_group_id, summary_group_id, ierr)
+    CALL HDF5_string_saving(summary_group_id, diag_particle_integral_units(), 'units')
     CALL HDF5_real_saving(summary_group_id, summary%plasma_balance, 'particle_balance')
     CALL HDF5_group_close(summary_group_id, ierr)
   END SUBROUTINE diag_write_plasma_particle_summary_hdf5
@@ -163,6 +167,7 @@ CONTAINS
     INTEGER :: ierr
 
     CALL HDF5_group_create('terms', particles_group_id, terms_group_id, ierr)
+    CALL HDF5_string_saving(terms_group_id, diag_particle_integral_units(), 'units')
     CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_neutral_ionization), 'ionization')
     CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_neutral_recombination), 'recombination')
     CALL HDF5_real_saving(terms_group_id, this%particles(diag_particle_neutral_boundary_flux), 'boundary_flux')
@@ -183,6 +188,7 @@ CONTAINS
     summary = diag_particle_summary(this)
 
     CALL HDF5_group_create('summary', particles_group_id, summary_group_id, ierr)
+    CALL HDF5_string_saving(summary_group_id, diag_particle_integral_units(), 'units')
     CALL HDF5_real_saving(summary_group_id, summary%neutral_balance, 'particle_balance')
     CALL HDF5_group_close(summary_group_id, ierr)
   END SUBROUTINE diag_write_neutral_particle_summary_hdf5
@@ -210,6 +216,7 @@ CONTAINS
     summary = diag_particle_summary(this)
 
     CALL HDF5_group_create('summary', particles_group_id, summary_group_id, ierr)
+    CALL HDF5_string_saving(summary_group_id, diag_particle_integral_units(), 'units')
     CALL HDF5_real_saving(summary_group_id, summary%total_balance, 'particle_balance')
     CALL HDF5_group_close(summary_group_id, ierr)
   END SUBROUTINE diag_write_total_particle_summary_hdf5
@@ -221,21 +228,23 @@ CONTAINS
     INTEGER :: ierr
 
     CALL HDF5_group_create('content', diagnostics_group_id, content_group_id, ierr)
-    CALL diag_write_content_entry_hdf5(content_group_id, 'plasma', this%content(diag_content_plasma_particles))
-    CALL diag_write_content_entry_hdf5(content_group_id, 'neutrals', this%content(diag_content_neutral_particles))
-    CALL diag_write_content_entry_hdf5(content_group_id, 'total', this%content(diag_content_total_particles))
+    CALL diag_write_content_entry_hdf5(this, content_group_id, 'plasma', diag_content_plasma_particles)
+    CALL diag_write_content_entry_hdf5(this, content_group_id, 'neutrals', diag_content_neutral_particles)
+    CALL diag_write_content_entry_hdf5(this, content_group_id, 'total', diag_content_total_particles)
     CALL HDF5_group_close(content_group_id, ierr)
   END SUBROUTINE diag_write_content_hdf5
 
-  SUBROUTINE diag_write_content_entry_hdf5(content_group_id, group_name, value)
+  SUBROUTINE diag_write_content_entry_hdf5(this, content_group_id, group_name, term_id)
+    CLASS(diagnostics_type), INTENT(IN) :: this
     INTEGER(HID_T), INTENT(IN) :: content_group_id
     CHARACTER(LEN=*), INTENT(IN) :: group_name
-    REAL*8, INTENT(IN) :: value
+    INTEGER, INTENT(IN) :: term_id
     INTEGER(HID_T) :: group_id
     INTEGER :: ierr
 
     CALL HDF5_group_create(group_name, content_group_id, group_id, ierr)
-    CALL HDF5_real_saving(group_id, value, 'particles')
+    CALL HDF5_string_saving(group_id, diag_content_units(term_id), 'units')
+    CALL HDF5_real_saving(group_id, diag_content_value(this, term_id), 'particles')
     CALL HDF5_group_close(group_id, ierr)
   END SUBROUTINE diag_write_content_entry_hdf5
 
@@ -247,6 +256,8 @@ CONTAINS
     IF (.NOT. diag_wall_source_nodal_ready) RETURN
 
     CALL HDF5_group_create('nodal_wall_sources', group_id, nodal_group_id, ierr)
+    CALL HDF5_string_saving(nodal_group_id, diag_particle_integral_units(), 'total_units')
+    CALL HDF5_string_saving(nodal_group_id, 'particles/(m^3 s)', 'nodal_units')
     CALL HDF5_real_saving(nodal_group_id, phys%neutral_wall_source_puff_total, 'element_puff_total')
     CALL HDF5_real_saving(nodal_group_id, phys%neutral_wall_source_pump_total, 'element_pump_total')
     CALL HDF5_real_saving(nodal_group_id, phys%neutral_wall_source_puff_total - phys%neutral_wall_source_pump_total, &

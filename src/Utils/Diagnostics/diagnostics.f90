@@ -233,6 +233,12 @@ MODULE diagnostics
        TYPE(diag_particle_summary_type) :: summary
      END FUNCTION diag_particle_summary
 
+     MODULE FUNCTION diag_content_value(this, term_id) RESULT(value)
+       CLASS(diagnostics_type), INTENT(IN) :: this
+       INTEGER, INTENT(IN) :: term_id
+       REAL*8 :: value
+     END FUNCTION diag_content_value
+
      MODULE FUNCTION diag_boundary_label(term_id) RESULT(label)
        INTEGER, INTENT(IN) :: term_id
        CHARACTER(LEN=80) :: label
@@ -252,6 +258,15 @@ MODULE diagnostics
        INTEGER, INTENT(IN) :: term_id
        CHARACTER(LEN=80) :: label
      END FUNCTION diag_energy_label
+
+     MODULE FUNCTION diag_particle_integral_units() RESULT(units)
+       CHARACTER(LEN=32) :: units
+     END FUNCTION diag_particle_integral_units
+
+     MODULE FUNCTION diag_content_units(term_id) RESULT(units)
+       INTEGER, INTENT(IN) :: term_id
+       CHARACTER(LEN=32) :: units
+     END FUNCTION diag_content_units
   END INTERFACE
 
 END MODULE diagnostics
