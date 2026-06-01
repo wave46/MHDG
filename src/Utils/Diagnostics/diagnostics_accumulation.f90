@@ -117,22 +117,4 @@ CONTAINS
     CALL this%add(diag_category_content, diag_content_total_particles, plasma_particles + neutral_particles)
   END SUBROUTINE diag_account_particle_content
 
-  MODULE FUNCTION diag_get(this, category_id, term_id) RESULT(value)
-    CLASS(diagnostics_type), INTENT(IN) :: this
-    INTEGER, INTENT(IN) :: category_id, term_id
-    REAL*8 :: value
-
-    value = 0.d0
-    SELECT CASE (category_id)
-    CASE (diag_category_boundary_hdg)
-       IF (term_id >= 1 .AND. term_id <= diag_boundary_term_count) value = this%boundary_hdg(term_id)
-    CASE (diag_category_particles)
-       IF (term_id >= 1 .AND. term_id <= diag_particle_term_count) value = this%particles(term_id)
-    CASE (diag_category_content)
-       IF (term_id >= 1 .AND. term_id <= diag_content_term_count) value = this%content(term_id)
-    CASE (diag_category_energy)
-       IF (term_id >= 1 .AND. term_id <= diag_energy_term_count) value = this%energy(term_id)
-    END SELECT
-  END FUNCTION diag_get
-
 END SUBMODULE diagnostics_accumulation

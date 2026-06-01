@@ -217,9 +217,6 @@ SUBROUTINE HDG_computeJacobian()
 #ifdef NEUTRAL
   phys%neutral_wall_source_puff_total = 0.d0
   phys%neutral_wall_source_pump_total = 0.d0
-  phys%neutral_ionization_total = 0.d0
-  phys%neutral_recombination_total = 0.d0
-  phys%neutral_charge_exchange_total = 0.d0
   IF (switch%neutral_wall_sources_in_elements) THEN
     IF (ALLOCATED(phys%neutral_wall_source_puff_Nod)) THEN
       IF (SIZE(phys%neutral_wall_source_puff_Nod) .NE. expected_diag_size) THEN
@@ -260,9 +257,9 @@ SUBROUTINE HDG_computeJacobian()
 #ifndef TOR3D
 #ifdef NEUTRAL
   CALL diag%reset_particles_content()
-  CALL print_neutral_reaction_source_totals()
+  CALL account_neutral_reaction_source_totals()
   IF (switch%neutral_wall_sources_in_elements) THEN
-    CALL print_neutral_wall_source_element_totals()
+    CALL account_neutral_wall_source_element_totals()
   ENDIF
 #endif
 #endif
@@ -1385,7 +1382,7 @@ CONTAINS
 
 #ifndef TOR3D
 #ifdef NEUTRAL
-  SUBROUTINE print_neutral_reaction_source_totals()
+  SUBROUTINE account_neutral_reaction_source_totals()
 
     INTEGER :: iel,g
     INTEGER :: ind_nodes(Mesh%Nnodesperelem)
@@ -1437,13 +1434,9 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_recombination, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_charge_exchange, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
-    phys%neutral_ionization_total = total_ionization
-    phys%neutral_recombination_total = total_recombination
-    phys%neutral_charge_exchange_total = total_charge_exchange
+  ENDSUBROUTINE account_neutral_reaction_source_totals
 
-  ENDSUBROUTINE print_neutral_reaction_source_totals
-
-  SUBROUTINE print_neutral_wall_source_element_totals()
+  SUBROUTINE account_neutral_wall_source_element_totals()
 
     INTEGER :: ifac,el,fa,fl,bc,g,inn
     INTEGER :: ind_nodes(refElPol%Nfacenodes)
@@ -1502,7 +1495,7 @@ CONTAINS
     phys%neutral_wall_source_puff_total = total_puff
     phys%neutral_wall_source_pump_total = total_pump
 
-  ENDSUBROUTINE print_neutral_wall_source_element_totals
+  ENDSUBROUTINE account_neutral_wall_source_element_totals
 #endif
 #endif
 

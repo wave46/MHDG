@@ -3,28 +3,6 @@ SUBMODULE (diagnostics) diagnostics_output_terminal
 
 CONTAINS
 
-  MODULE SUBROUTINE diag_print_summary(this)
-    CLASS(diagnostics_type), INTENT(IN) :: this
-    TYPE(diag_boundary_summary_type) :: boundary
-    TYPE(diag_particle_summary_type) :: particles
-
-    boundary = diag_boundary_summary(this)
-    particles = diag_particle_summary(this)
-
-    IF (MPIvar%glob_id .EQ. 0) THEN
-       WRITE(6,'(A)') '--- Balance diagnostics summary ---'
-       WRITE(6,'(A)') '  particle balances ['//TRIM(diag_particle_integral_units())//']'
-       WRITE(6,'(A,1X,ES16.8)') 'boundary HDG / BC check =', boundary%residual
-       WRITE(6,'(A,1X,ES16.8)') 'plasma particle balance =', particles%plasma_balance
-       WRITE(6,'(A,1X,ES16.8)') 'neutral particle balance =', particles%neutral_balance
-       WRITE(6,'(A,1X,ES16.8)') 'total particle balance =', particles%total_balance
-       WRITE(6,'(A)') '  particle content ['//TRIM(diag_content_units(diag_content_total_particles))//']'
-       WRITE(6,'(A,1X,ES16.8)') 'plasma particle content =', particles%plasma_content
-       WRITE(6,'(A,1X,ES16.8)') 'neutral particle content =', particles%neutral_content
-       WRITE(6,'(A,1X,ES16.8)') 'total particle content =', particles%total_content
-    ENDIF
-  END SUBROUTINE diag_print_summary
-
   MODULE SUBROUTINE diag_print_boundary_hdg_summary(this)
     CLASS(diagnostics_type), INTENT(IN) :: this
     TYPE(diag_boundary_summary_type) :: summary
@@ -59,30 +37,6 @@ CONTAINS
        WRITE(6,'(A)') '----------------------------------------'
     ENDIF
   END SUBROUTINE diag_print_particle_summary
-
-  MODULE SUBROUTINE diag_print_detail(this)
-    CLASS(diagnostics_type), INTENT(IN) :: this
-    INTEGER :: i
-
-    IF (MPIvar%glob_id .NE. 0) RETURN
-
-    WRITE(6,'(A)') '--- Boundary HDG / BC components ['//TRIM(diag_particle_integral_units())//'] ---'
-    DO i = 1, diag_boundary_term_count
-       WRITE(6,'(A,1X,ES16.8)') TRIM(diag_boundary_label(i))//' =', this%boundary_hdg(i)
-    ENDDO
-    WRITE(6,'(A)') '--- Physical particle components ['//TRIM(diag_particle_integral_units())//'] ---'
-    DO i = 1, diag_particle_term_count
-       WRITE(6,'(A,1X,ES16.8)') TRIM(diag_particle_label(i))//' =', this%particles(i)
-    ENDDO
-    WRITE(6,'(A)') '--- Global content components ['//TRIM(diag_content_units(diag_content_total_particles))//'] ---'
-    DO i = 1, diag_content_term_count
-       WRITE(6,'(A,1X,ES16.8)') TRIM(diag_content_label(i))//' =', diag_content_value(this, i)
-    ENDDO
-    WRITE(6,'(A)') '--- Reserved energy components ---'
-    DO i = 1, diag_energy_term_count
-       WRITE(6,'(A,1X,ES16.8)') TRIM(diag_energy_label(i))//' =', this%energy(i)
-    ENDDO
-  END SUBROUTINE diag_print_detail
 
   MODULE SUBROUTINE diag_print_boundary_hdg_detail(this)
     CLASS(diagnostics_type), INTENT(IN) :: this
@@ -213,24 +167,6 @@ CONTAINS
        label = 'content unknown term'
     END SELECT
   END FUNCTION diag_content_label
-
-  MODULE FUNCTION diag_energy_label(term_id) RESULT(label)
-    INTEGER, INTENT(IN) :: term_id
-    CHARACTER(LEN=80) :: label
-
-    SELECT CASE (term_id)
-    CASE (diag_energy_ion_balance)
-       label = 'ion energy balance'
-    CASE (diag_energy_electron_balance)
-       label = 'electron energy balance'
-    CASE (diag_energy_neutral_balance)
-       label = 'neutral energy balance'
-    CASE (diag_energy_total_balance)
-       label = 'total energy balance'
-    CASE DEFAULT
-       label = 'energy unknown term'
-    END SELECT
-  END FUNCTION diag_energy_label
 
   MODULE FUNCTION diag_particle_integral_units() RESULT(units)
     CHARACTER(LEN=32) :: units

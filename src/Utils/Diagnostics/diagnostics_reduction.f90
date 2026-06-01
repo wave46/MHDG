@@ -3,14 +3,6 @@ SUBMODULE (diagnostics) diagnostics_reduction
 
 CONTAINS
 
-  MODULE SUBROUTINE diag_mpi_reduce(this)
-    CLASS(diagnostics_type), INTENT(INOUT) :: this
-
-    CALL this%mpi_reduce_boundary_hdg()
-    CALL this%mpi_reduce_particles_content()
-    CALL diag_reduce_array(this%energy, diag_energy_term_count)
-  END SUBROUTINE diag_mpi_reduce
-
   MODULE SUBROUTINE diag_mpi_reduce_boundary_hdg(this)
     CLASS(diagnostics_type), INTENT(INOUT) :: this
 

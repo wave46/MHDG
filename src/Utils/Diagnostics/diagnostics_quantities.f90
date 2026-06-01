@@ -4,15 +4,6 @@ SUBMODULE (diagnostics) diagnostics_quantities
 
 CONTAINS
 
-  MODULE FUNCTION diag_boundary_hdg_check(this) RESULT(value)
-    CLASS(diagnostics_type), INTENT(IN) :: this
-    REAL*8 :: value
-    TYPE(diag_boundary_summary_type) :: summary
-
-    summary = diag_boundary_summary(this)
-    value = summary%residual
-  END FUNCTION diag_boundary_hdg_check
-
   MODULE FUNCTION diag_boundary_summary(this) RESULT(summary)
     CLASS(diagnostics_type), INTENT(IN) :: this
     TYPE(diag_boundary_summary_type) :: summary

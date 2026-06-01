@@ -333,9 +333,6 @@ MODULE types
      REAL*8,ALLOCATABLE        :: neutral_flux_limiter_Gamma_lim_Nod(:)
      REAL*8                    :: neutral_wall_source_puff_total
      REAL*8                    :: neutral_wall_source_pump_total
-     REAL*8                    :: neutral_ionization_total
-     REAL*8                    :: neutral_recombination_total
-     REAL*8                    :: neutral_charge_exchange_total
      REAL*8,ALLOCATABLE        :: neutral_wall_source_puff_Nod(:)
      REAL*8,ALLOCATABLE        :: neutral_wall_source_pump_Nod(:)
      REAL*8,ALLOCATABLE        :: neutral_wall_source_net_Nod(:)

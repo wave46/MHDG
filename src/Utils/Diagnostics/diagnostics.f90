@@ -82,14 +82,10 @@ MODULE diagnostics
      PROCEDURE :: account_boundary_particles => diag_account_boundary_particles
      PROCEDURE :: account_wall_particle_sources => diag_account_wall_particle_sources
      PROCEDURE :: account_particle_content => diag_account_particle_content
-     PROCEDURE :: get => diag_get
-     PROCEDURE :: mpi_reduce => diag_mpi_reduce
      PROCEDURE :: mpi_reduce_boundary_hdg => diag_mpi_reduce_boundary_hdg
      PROCEDURE :: mpi_reduce_particles_content => diag_mpi_reduce_particles_content
-     PROCEDURE :: print_summary => diag_print_summary
      PROCEDURE :: print_boundary_hdg_summary => diag_print_boundary_hdg_summary
      PROCEDURE :: print_particle_summary => diag_print_particle_summary
-     PROCEDURE :: print_detail => diag_print_detail
      PROCEDURE :: print_boundary_hdg_detail => diag_print_boundary_hdg_detail
      PROCEDURE :: print_particle_detail => diag_print_particle_detail
      PROCEDURE :: write_hdf5 => diag_write_hdf5
@@ -154,16 +150,6 @@ MODULE diagnostics
        REAL*8, INTENT(IN) :: plasma_particles, neutral_particles
      END SUBROUTINE diag_account_particle_content
 
-     MODULE FUNCTION diag_get(this, category_id, term_id) RESULT(value)
-       CLASS(diagnostics_type), INTENT(IN) :: this
-       INTEGER, INTENT(IN) :: category_id, term_id
-       REAL*8 :: value
-     END FUNCTION diag_get
-
-     MODULE SUBROUTINE diag_mpi_reduce(this)
-       CLASS(diagnostics_type), INTENT(INOUT) :: this
-     END SUBROUTINE diag_mpi_reduce
-
      MODULE SUBROUTINE diag_mpi_reduce_boundary_hdg(this)
        CLASS(diagnostics_type), INTENT(INOUT) :: this
      END SUBROUTINE diag_mpi_reduce_boundary_hdg
@@ -172,10 +158,6 @@ MODULE diagnostics
        CLASS(diagnostics_type), INTENT(INOUT) :: this
      END SUBROUTINE diag_mpi_reduce_particles_content
 
-     MODULE SUBROUTINE diag_print_summary(this)
-       CLASS(diagnostics_type), INTENT(IN) :: this
-     END SUBROUTINE diag_print_summary
-
      MODULE SUBROUTINE diag_print_boundary_hdg_summary(this)
        CLASS(diagnostics_type), INTENT(IN) :: this
      END SUBROUTINE diag_print_boundary_hdg_summary
@@ -183,10 +165,6 @@ MODULE diagnostics
      MODULE SUBROUTINE diag_print_particle_summary(this)
        CLASS(diagnostics_type), INTENT(IN) :: this
      END SUBROUTINE diag_print_particle_summary
-
-     MODULE SUBROUTINE diag_print_detail(this)
-       CLASS(diagnostics_type), INTENT(IN) :: this
-     END SUBROUTINE diag_print_detail
 
      MODULE SUBROUTINE diag_print_boundary_hdg_detail(this)
        CLASS(diagnostics_type), INTENT(IN) :: this
@@ -207,11 +185,6 @@ MODULE diagnostics
      MODULE SUBROUTINE diag_write_wall_source_nodal(group_id)
        INTEGER(HID_T), INTENT(IN) :: group_id
      END SUBROUTINE diag_write_wall_source_nodal
-
-     MODULE FUNCTION diag_boundary_hdg_check(this) RESULT(value)
-       CLASS(diagnostics_type), INTENT(IN) :: this
-       REAL*8 :: value
-     END FUNCTION diag_boundary_hdg_check
 
      MODULE FUNCTION diag_boundary_summary(this) RESULT(summary)
        CLASS(diagnostics_type), INTENT(IN) :: this
@@ -253,11 +226,6 @@ MODULE diagnostics
        INTEGER, INTENT(IN) :: term_id
        CHARACTER(LEN=80) :: label
      END FUNCTION diag_content_label
-
-     MODULE FUNCTION diag_energy_label(term_id) RESULT(label)
-       INTEGER, INTENT(IN) :: term_id
-       CHARACTER(LEN=80) :: label
-     END FUNCTION diag_energy_label
 
      MODULE FUNCTION diag_particle_integral_units() RESULT(units)
        CHARACTER(LEN=32) :: units
