@@ -13,7 +13,7 @@ SUBROUTINE HDG_computeJacobian()
   USE physics
   USE transport_models_1d, ONLY: transport_model_1d
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
-  USE balance_diagnostics
+  USE diagnostics
 
   IMPLICIT NONE
 
@@ -259,7 +259,7 @@ SUBROUTINE HDG_computeJacobian()
 
 #ifndef TOR3D
 #ifdef NEUTRAL
-  CALL balance_diag%reset_particles_content()
+  CALL diag%reset_particles_content()
   CALL print_neutral_reaction_source_totals()
   IF (switch%neutral_wall_sources_in_elements) THEN
     CALL print_neutral_wall_source_element_totals()
@@ -1337,7 +1337,7 @@ CONTAINS
   !$OMP END PARALLEL
 
 #ifdef NEUTRAL
-  CALL balance_diag%account_particle_content(n, nn)
+  CALL diag%account_particle_content(n, nn)
 #endif
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, n, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
@@ -1431,7 +1431,7 @@ CONTAINS
       ENDDO
     ENDDO
 
-    CALL balance_diag%account_volume_particle_reactions(total_ionization, total_recombination, total_charge_exchange)
+    CALL diag%account_volume_particle_reactions(total_ionization, total_recombination, total_charge_exchange)
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_ionization, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_recombination, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
@@ -1494,7 +1494,7 @@ CONTAINS
       ENDDO
     ENDDO
 
-    CALL balance_diag%account_wall_particle_sources(total_puff, -total_pump)
+    CALL diag%account_wall_particle_sources(total_puff, -total_pump)
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_puff, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_pump, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)

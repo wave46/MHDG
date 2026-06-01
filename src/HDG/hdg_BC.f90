@@ -12,7 +12,7 @@ SUBROUTINE HDG_BC()
   USE physics
   USE transport_models_1d, ONLY: transport_model_1d
   USE analytical, only: analytical_solution
-  USE balance_diagnostics
+  USE diagnostics
 
   IMPLICIT NONE
 #ifdef TOR3D
@@ -547,7 +547,7 @@ CONTAINS
     CALL system_CLOCK(timing%cks1,timing%clock_rate1)
   END IF
 #ifdef SAVEFLUX
-  CALL balance_diag%reset_boundary_hdg()
+  CALL diag%reset_boundary_hdg()
 #endif
   save_tau = switch%saveTau
   Ndim = 2
@@ -755,14 +755,14 @@ CONTAINS
   END DO
 
 #ifdef SAVEFLUX
-  CALL balance_diag%mpi_reduce_boundary_hdg()
-  CALL balance_diag%mpi_reduce_particles_content()
+  CALL diag%mpi_reduce_boundary_hdg()
+  CALL diag%mpi_reduce_particles_content()
   IF (switch%balance_diagnostics_verbosity .GE. 1) THEN
-     CALL balance_diag%print_boundary_hdg_detail()
-     CALL balance_diag%print_particle_detail()
+     CALL diag%print_boundary_hdg_detail()
+     CALL diag%print_particle_detail()
   ELSE
-     CALL balance_diag%print_boundary_hdg_summary()
-     CALL balance_diag%print_particle_summary()
+     CALL diag%print_boundary_hdg_summary()
+     CALL diag%print_particle_summary()
   ENDIF
 #endif
   IF (save_tau) THEN
@@ -2305,11 +2305,11 @@ CONTAINS
 #ifdef PARALL
     IF (Mesh%ghostFaces(Fi) .EQ. 0) THEN
 #endif
-    CALL balance_diag%account_boundary_hdg(recycled_parallel_source, recycled_diffusion_source, recycled_pinch_source, &
+    CALL diag%account_boundary_hdg(recycled_parallel_source, recycled_diffusion_source, recycled_pinch_source, &
          &neutral_diffusion_boundary_flux, neutral_pressure_boundary_flux, neutral_convection_boundary_flux, &
          &neutral_total_boundary_flux, tau_neutral_boundary_flux, boundary_puff_source, -boundary_pump_sink, &
          &.NOT. switch%neutral_wall_sources_in_elements)
-    CALL balance_diag%account_boundary_particles(plasma_total_boundary_flux, neutral_total_boundary_flux, &
+    CALL diag%account_boundary_particles(plasma_total_boundary_flux, neutral_total_boundary_flux, &
          &boundary_recycling_source, boundary_puff_source, -boundary_pump_sink, &
          &.NOT. switch%neutral_wall_sources_in_elements)
 #ifdef PARALL
