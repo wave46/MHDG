@@ -108,17 +108,6 @@ CONTAINS
     CALL this%add(diag_category_particles, diag_particle_pump_sink, pump_sink)
   END SUBROUTINE diag_account_wall_particle_sources
 
-  MODULE SUBROUTINE diag_account_recycling_particle_sources(this, parallel_source, diffusion_source, pinch_source)
-    CLASS(diagnostics_type), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN) :: parallel_source, diffusion_source, pinch_source
-
-    CALL this%add(diag_category_particles, diag_particle_recycling_parallel_source, parallel_source)
-    CALL this%add(diag_category_particles, diag_particle_recycling_diffusion_source, diffusion_source)
-    CALL this%add(diag_category_particles, diag_particle_recycling_pinch_source, pinch_source)
-    CALL this%add(diag_category_particles, diag_particle_recycling_source, &
-         &parallel_source + diffusion_source + pinch_source)
-  END SUBROUTINE diag_account_recycling_particle_sources
-
   MODULE SUBROUTINE diag_account_particle_content(this, plasma_particles, neutral_particles)
     CLASS(diagnostics_type), INTENT(INOUT) :: this
     REAL*8, INTENT(IN) :: plasma_particles, neutral_particles

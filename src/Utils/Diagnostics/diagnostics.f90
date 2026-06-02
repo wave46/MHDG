@@ -36,10 +36,7 @@ MODULE diagnostics
   INTEGER, PARAMETER, PUBLIC :: diag_particle_recycling_source = 8
   INTEGER, PARAMETER, PUBLIC :: diag_particle_neutral_boundary_flux = 9
   INTEGER, PARAMETER, PUBLIC :: diag_particle_charge_exchange_rate = 10
-  INTEGER, PARAMETER, PUBLIC :: diag_particle_recycling_parallel_source = 11
-  INTEGER, PARAMETER, PUBLIC :: diag_particle_recycling_diffusion_source = 12
-  INTEGER, PARAMETER, PUBLIC :: diag_particle_recycling_pinch_source = 13
-  INTEGER, PARAMETER :: diag_particle_term_count = 13
+  INTEGER, PARAMETER :: diag_particle_term_count = 10
 
   INTEGER, PARAMETER, PUBLIC :: diag_content_plasma_particles = 1
   INTEGER, PARAMETER, PUBLIC :: diag_content_neutral_particles = 2
@@ -84,7 +81,6 @@ MODULE diagnostics
      PROCEDURE :: account_volume_particle_reactions => diag_account_volume_particle_reactions
      PROCEDURE :: account_boundary_particles => diag_account_boundary_particles
      PROCEDURE :: account_wall_particle_sources => diag_account_wall_particle_sources
-     PROCEDURE :: account_recycling_particle_sources => diag_account_recycling_particle_sources
      PROCEDURE :: account_particle_content => diag_account_particle_content
      PROCEDURE :: mpi_reduce_boundary_hdg => diag_mpi_reduce_boundary_hdg
      PROCEDURE :: mpi_reduce_particles_content => diag_mpi_reduce_particles_content
@@ -148,11 +144,6 @@ MODULE diagnostics
        CLASS(diagnostics_type), INTENT(INOUT) :: this
        REAL*8, INTENT(IN) :: puff_source, pump_sink
      END SUBROUTINE diag_account_wall_particle_sources
-
-     MODULE SUBROUTINE diag_account_recycling_particle_sources(this, parallel_source, diffusion_source, pinch_source)
-       CLASS(diagnostics_type), INTENT(INOUT) :: this
-       REAL*8, INTENT(IN) :: parallel_source, diffusion_source, pinch_source
-     END SUBROUTINE diag_account_recycling_particle_sources
 
      MODULE SUBROUTINE diag_account_particle_content(this, plasma_particles, neutral_particles)
        CLASS(diagnostics_type), INTENT(INOUT) :: this
