@@ -1755,7 +1755,7 @@ CONTAINS
     real*8           :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
     real*8           :: neutral_limiter_phi, neutral_limiter_gamma_max, neutral_limiter_ratio
-    real*8           :: neutral_limiter_gamma_unlim(Ndim), neutral_diffiso
+    real*8           :: neutral_limiter_gamma_unlim(Ndim), neutral_diffiso, neutral_diffani, neutral_n
 #ifdef TEMPERATURE
         REAL*8           :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
         REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
@@ -1809,14 +1809,16 @@ CONTAINS
         bn = dot_PRODUCT(bg,ng)
 
     ! Compute Q^T^(k-1)
-        Qpr = RESHAPE(qfg,(/Ndim,Neq/))
+    Qpr = RESHAPE(qfg,(/Ndim,Neq/))
     neutral_limiter_phi = 1.d0
     neutral_diffiso = diffiso(inn,inn)
+    neutral_diffani = diffani(inn,inn)
 #ifdef NEUTRAL
     IF (TRIM(ADJUSTL(phys%neutral_flux_limiter_mode)) .EQ. 'lagged_flux_limiter') THEN
       CALL compute_neutral_flux_limiter(ufg,qfg,neutral_limiter_phi,neutral_limiter_gamma_unlim, &
-        &neutral_limiter_gamma_max,neutral_limiter_ratio)
+        &neutral_limiter_gamma_max,neutral_limiter_ratio,bg)
       neutral_diffiso = neutral_limiter_phi*neutral_diffiso
+      neutral_diffani = neutral_limiter_phi*neutral_diffani
     ENDIF
 #endif
 
@@ -2260,7 +2262,8 @@ CONTAINS
     boundary_recycling_source = recycled_parallel_source + recycled_diffusion_source + recycled_pinch_source
 
     ! Neutral boundary flux.
-    neutral_diffusion_boundary_flux = (neutral_diffiso*(Qpr(1,inn)*ng(1) + Qpr(2,inn)*ng(2)))*boundary_scale
+    neutral_diffusion_boundary_flux = (neutral_diffiso*DOT_PRODUCT(Qpr(:,inn),ng) &
+         &- neutral_diffani*bn*DOT_PRODUCT(Qpr(:,inn),bg(1:Ndim)))*boundary_scale
     neutral_pressure_boundary_flux = 0.d0
     neutral_convection_boundary_flux = 0.d0
 #ifdef NEUTRALPNEW
@@ -2326,28 +2329,26 @@ CONTAINS
        k = inn
        indi = ind_asf+k
        indj = ind_ash+idm+(k-1)*Ndim
-       !if (ntang) then
-          elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*neutral_diffiso
-       !else
-       !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
-       !endif
+       neutral_n = ng(idm)
+       IF (switch%neutral_perpendicular_diffusion) neutral_n = neutral_n - bn*bg(idm)
+          elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*neutral_n*neutral_diffiso
        DO j=1,Neq
         indj = ind_asf + j
-        kmult = Dnn_dU(j)*Qpr(idm,k)*ng(idm)*NiNi
+        kmult = Dnn_dU(j)*Qpr(idm,k)*neutral_n*NiNi
               elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
            ENDDO
-       kmultf = Dnn_dU_U*(Qpr(idm,k)*ng(idm))*Ni
+       kmultf = Dnn_dU_U*(Qpr(idm,k)*neutral_n)*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #ifdef NEUTRALPNEW
        DO j = 1,Neq
         indj = ind_asf + j
         indk = ind_ash + idm + (j-1)*Ndim
-        kmult = QdW5p(idm,j)*ng(idm)*NiNi
+        kmult = QdW5p(idm,j)*neutral_n*NiNi
               elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
-        kmult = W5p(j)*ng(idm)*NiNi
+        kmult = W5p(j)*neutral_n*NiNi
         elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
            ENDDO
-       kmultf = dot_product(QdW5p(idm,:),ufg)*ng(idm)*Ni
+       kmultf = dot_product(QdW5p(idm,:),ufg)*neutral_n*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #endif
     END DO

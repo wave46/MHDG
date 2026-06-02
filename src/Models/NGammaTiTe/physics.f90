@@ -901,9 +901,10 @@ CONTAINS
     cn = SQRT(MAX(phys%Mref*Ti_limited, 0.d0))
   ENDSUBROUTINE compute_neutral_free_streaming_speed
 
-  SUBROUTINE compute_neutral_flux_limiter(U, Q, phi, gamma_unlim, gamma_max, ratio)
+  SUBROUTINE compute_neutral_flux_limiter(U, Q, phi, gamma_unlim, gamma_max, ratio, b)
     REAL*8, INTENT(IN)  :: U(:), Q(:)
     REAL*8, INTENT(OUT) :: phi, gamma_unlim(:), gamma_max, ratio
+    REAL*8, INTENT(IN), OPTIONAL :: b(:)
     REAL*8              :: Qpr(simpar%Ndim, simpar%Neq)
     REAL*8              :: Dnn, cn, gamma_abs_eps
 #ifdef NEUTRALPNEW
@@ -925,6 +926,9 @@ CONTAINS
     CALL compute_W5p(U, W5p)
     gamma_unlim = gamma_unlim - MATMUL(Qpr, W5p)
 #endif
+    IF (switch%neutral_perpendicular_diffusion .AND. PRESENT(b)) THEN
+      gamma_unlim = gamma_unlim - DOT_PRODUCT(gamma_unlim, b(1:simpar%Ndim))*b(1:simpar%Ndim)
+    ENDIF
 
     CALL compute_neutral_free_streaming_speed(U, cn)
     gamma_max = MAX(phys%neutral_flux_limiter_fs_fraction*MAX(U(inn), 0.d0)*cn, &
@@ -1327,6 +1331,7 @@ CONTAINS
 #else
     d_iso(inn,inn,:)=phys%diff_nn
 #endif
+    IF (switch%neutral_perpendicular_diffusion) d_ani(inn,inn,:) = d_iso(inn,inn,:)
 
 #ifdef KEQUATION
     DO i= 1,SIZE(c_s, 1)

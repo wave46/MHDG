@@ -1121,6 +1121,7 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%import_diffusion_1D, 'import_diffusion_1D')
       CALL HDF5_logical_saving(group_id2, switch%neutral_wall_sources_in_elements, 'neutral_wall_sources_in_elements')
       CALL HDF5_logical_saving(group_id2, switch%neutral_recycling_in_elements, 'neutral_recycling_in_elements')
+      CALL HDF5_logical_saving(group_id2, switch%neutral_perpendicular_diffusion, 'neutral_perpendicular_diffusion')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create numerics parameters group

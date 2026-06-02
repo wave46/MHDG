@@ -16,6 +16,7 @@
     import_diffusion_1D = .false.        ! Import or not additional profile of diffuion in 1D as function of rho_pol, supply path to the file
     neutral_wall_sources_in_elements = .false. ! Move neutral puff/pump wall sources to adjacent element volumes
     neutral_recycling_in_elements = .false. ! Move neutral recycling wall source to adjacent element volumes
+    neutral_perpendicular_diffusion = .false. ! Use perpendicular, instead of isotropic, neutral density diffusion
     driftdia            = .false.       ! Set to FALSE to ignore diamagnetic drifts terms
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
     testcase            = 54            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case

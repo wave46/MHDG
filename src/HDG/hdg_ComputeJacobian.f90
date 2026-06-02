@@ -1772,7 +1772,7 @@ CONTAINS
         ind_limiter = (iel - 1)*Mesh%Nnodesperelem + i
         CALL compute_Dnn(ue(i,:), limiter_Dnn)
         CALL compute_neutral_flux_limiter(ue(i,:), qe(i,:), limiter_phi, limiter_Gamma_unlim, &
-          &limiter_Gamma_max, limiter_ratio)
+          &limiter_Gamma_max, limiter_ratio, b_nod(i,1:Ndim))
         limiter_Gamma_unlim_abs = SQRT(DOT_PRODUCT(limiter_Gamma_unlim, limiter_Gamma_unlim))
         phys%neutral_flux_limiter_Dnn_Nod(ind_limiter) = limiter_Dnn
         phys%neutral_flux_limiter_phi_Nod(ind_limiter) = limiter_phi
@@ -1787,8 +1787,9 @@ CONTAINS
     IF (limiter_active) THEN
       DO g = 1,Ng2D
         CALL compute_neutral_flux_limiter(ueg(g,:), qeg(g,:), limiter_phi, limiter_Gamma_unlim, &
-          &limiter_Gamma_max, limiter_ratio)
+          &limiter_Gamma_max, limiter_ratio, b(g,:))
         diff_iso_vol(inn,inn,g) = limiter_phi*diff_iso_vol(inn,inn,g)
+        diff_ani_vol(inn,inn,g) = limiter_phi*diff_ani_vol(inn,inn,g)
       END DO
     ENDIF
 
@@ -2428,8 +2429,9 @@ CONTAINS
     IF (limiter_active) THEN
       DO g = 1,Ng1d
         CALL compute_neutral_flux_limiter(uefg(g,:), qfg(g,:), limiter_phi, limiter_Gamma_unlim, &
-          &limiter_Gamma_max, limiter_ratio)
+          &limiter_Gamma_max, limiter_ratio, b(g,:))
         diff_iso_fac(inn,inn,g) = limiter_phi*diff_iso_fac(inn,inn,g)
+        diff_ani_fac(inn,inn,g) = limiter_phi*diff_ani_fac(inn,inn,g)
       END DO
     ENDIF
 
@@ -2624,8 +2626,9 @@ CONTAINS
     IF (limiter_active) THEN
       DO g = 1,Ng1d
         CALL compute_neutral_flux_limiter(uefg(g,:), qfg(g,:), limiter_phi, limiter_Gamma_unlim, &
-          &limiter_Gamma_max, limiter_ratio)
+          &limiter_Gamma_max, limiter_ratio, b(g,:))
         diff_iso_fac(inn,inn,g) = limiter_phi*diff_iso_fac(inn,inn,g)
+        diff_ani_fac(inn,inn,g) = limiter_phi*diff_ani_fac(inn,inn,g)
       END DO
     ENDIF
 
@@ -2865,6 +2868,8 @@ CONTAINS
     real*8                    :: W2(Neq),dW2_dU(Neq,Neq),QdW2(Ndim,Neq)
     real*8                    :: qq(3,Neq),b(Ndim)
     real*8                    :: grad_n(3),gradpar_n
+    real*8                    :: neutral_NxyzNi(size(NxyzNi,1),size(NxyzNi,2))
+    real*8                    :: neutral_Nxyzg(size(Nxyzg,1))
 
 #ifdef TEMPERATURE
     real*8,dimension(neq,neq) :: GG
@@ -2953,7 +2958,7 @@ CONTAINS
     neutral_limiter_phi = 1.d0
     IF (limiter_active) THEN
       CALL compute_neutral_flux_limiter(ue, qe, neutral_limiter_phi, neutral_limiter_Gamma_unlim, &
-        &neutral_limiter_Gamma_max, neutral_limiter_ratio)
+        &neutral_limiter_Gamma_max, neutral_limiter_ratio, b)
     ENDIF
 #endif
 
@@ -3335,17 +3340,21 @@ ENDIF
                  DO j = 1,Neq
               z = i+(j-1)*Neq
                     DO k = 1,Ndim
-                Auu(:,:,z) =Auu(:,:,z) + (NxyzNi(:,:,k)*Dnn_dU(j)*Qpr(k,i))
+                neutral_NxyzNi = NxyzNi(:,:,k)
+                IF (switch%neutral_perpendicular_diffusion) neutral_NxyzNi = neutral_NxyzNi - NNxy*b(k)
+                Auu(:,:,z) =Auu(:,:,z) + (neutral_NxyzNi*Dnn_dU(j)*Qpr(k,i))
 #ifdef NEUTRALPNEW
-                Auu(:,:,z) =Auu(:,:,z) + (NxyzNi(:,:,k)*QdW5p(k,j))
+                Auu(:,:,z) =Auu(:,:,z) + (neutral_NxyzNi*QdW5p(k,j))
 #endif
                     ENDDO
                  ENDDO
 
             DO k = 1, Ndim
-              rhs(:,i) = rhs(:,i)+Dnn_dU_U*Qpr(k,i)*Nxyzg(:,k)
+              neutral_Nxyzg = Nxyzg(:,k)
+              IF (switch%neutral_perpendicular_diffusion) neutral_Nxyzg = neutral_Nxyzg - NNbb*b(k)
+              rhs(:,i) = rhs(:,i)+Dnn_dU_U*Qpr(k,i)*neutral_Nxyzg
 #ifdef NEUTRALPNEW
-              rhs(:,i) = rhs(:,i)+dot_PRODUCT(Qpr(k,:),dW5p_dU_u)*Nxyzg(:,k)
+              rhs(:,i) = rhs(:,i)+dot_PRODUCT(Qpr(k,:),dW5p_dU_u)*neutral_Nxyzg
 #endif
                  ENDDO
 #ifdef KEQUATION
@@ -3443,7 +3452,9 @@ ENDIF
           ELSEIF(i==inn) THEN
             DO j = 1,Neq
                 z = i+(k-1)*Neq+(j-1)*Neq*Ndim
-                Auq(:,:,z) = Auq(:,:,z) + W5p(j)*NxyzNi(:,:,k)
+                neutral_NxyzNi = NxyzNi(:,:,k)
+                IF (switch%neutral_perpendicular_diffusion) neutral_NxyzNi = neutral_NxyzNi - NNxy*b(k)
+                Auq(:,:,z) = Auq(:,:,z) + W5p(j)*neutral_NxyzNi
             END DO
 #endif
 #endif
@@ -3622,6 +3633,7 @@ ENDIF
       real*8                    :: nn(3),qq(3,Neq),bb(3)
       real*8                    :: bn,kmult(size(ind_asf),size(ind_asf)),kmultf(size(ind_asf))
       real*8                    :: Qpr(Ndim,Neq)
+      real*8                    :: neutral_n
       real*8                    :: W2(Neq),dW2_dU(Neq,Neq),QdW2(Ndim,Neq)
 #ifdef TEMPERATURE
       real*8                    :: Vveci(Neq),dV_dUi(Neq,Neq),Alphai,dAlpha_dUi(Neq),gmi,taui(Ndim,Neq)
@@ -3673,7 +3685,7 @@ ENDIF
       neutral_limiter_phi = 1.d0
       IF (limiter_active) THEN
         CALL compute_neutral_flux_limiter(uf, qf, neutral_limiter_phi, neutral_limiter_Gamma_unlim, &
-          &neutral_limiter_Gamma_max, neutral_limiter_ratio)
+          &neutral_limiter_Gamma_max, neutral_limiter_ratio, b)
       ENDIF
 #endif
 
@@ -3970,12 +3982,16 @@ ENDIF
           ind_jf = ind_asf+j
                     DO k=1,Ndim
 
-            kmult = Dnn_dU(j)*Qpr(k,i)*n(k)*NNif
+            neutral_n = n(k)
+            IF (switch%neutral_perpendicular_diffusion) neutral_n = neutral_n - bn*b(k)
+            kmult = Dnn_dU(j)*Qpr(k,i)*neutral_n*NNif
             elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel)  = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
                        elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel)  = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
                     ENDDO
         END DO
-        kmultf = Dnn_dU_U*(Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif
+        kmultf = Dnn_dU_U*DOT_PRODUCT(Qpr(:,i), n)
+        IF (switch%neutral_perpendicular_diffusion) kmultf = kmultf - Dnn_dU_U*bn*DOT_PRODUCT(Qpr(:,i), b)
+        kmultf = kmultf*Nif
         elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
         elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
 #ifdef NEUTRALPNEW
@@ -3983,16 +3999,20 @@ ENDIF
           ind_jf = ind_asf + j
           DO k = 1,Ndim
             ind_kf = k + (j - 1)*Ndim + ind_ash
-            kmult = W5p(j)*n(k)*NNif
+            neutral_n = n(k)
+            IF (switch%neutral_perpendicular_diffusion) neutral_n = neutral_n - bn*b(k)
+            kmult = W5p(j)*neutral_n*NNif
             elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) = elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) - kmult
             elMat%Alq(ind_ff(ind_if),ind_fg(ind_kf),iel) = elMat%Alq(ind_ff(ind_if),ind_fg(ind_kf),iel) - kmult
 
-            kmult = QdW5p(k,j)*n(k)*NNif
+            kmult = QdW5p(k,j)*neutral_n*NNif
             elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
             elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
           END DO
         END DO
-        kmultf = dot_product(matmul(transpose(QdW5p),n),uf)*Nif
+        kmultf = dot_product(matmul(transpose(QdW5p),n),uf)
+        IF (switch%neutral_perpendicular_diffusion) kmultf = kmultf - bn*dot_product(matmul(transpose(QdW5p),b),uf)
+        kmultf = kmultf*Nif
         elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
         elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
 #endif
@@ -4104,6 +4124,7 @@ ENDIF
       real*8                    :: bn,kmult(Npfl,Npfl),kmultf(Npfl)
       real*8                    :: Qpr(Ndim,Neq)
       real*8                    :: nn(3),qq(3,Neq),b(Ndim),bb(3)
+      real*8                    :: neutral_n
       real*8                    :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
 #ifdef TEMPERATURE
       real*8                    :: Vveci(Neq),dV_dUi(Neq,Neq),Alphai,dAlpha_dUi(Neq),gmi,taui(Ndim,Neq)
@@ -4155,7 +4176,7 @@ ENDIF
       neutral_limiter_phi = 1.d0
       IF (limiter_active) THEN
         CALL compute_neutral_flux_limiter(uf, qf, neutral_limiter_phi, neutral_limiter_Gamma_unlim, &
-          &neutral_limiter_Gamma_max, neutral_limiter_ratio)
+          &neutral_limiter_Gamma_max, neutral_limiter_ratio, b)
       ENDIF
 #endif
 
@@ -4455,25 +4476,33 @@ END IF
               ind_jf = ind_asf+j
               DO k = 1,Ndim
 
-                kmult = Dnn_dU(j)*Qpr(k,i)*n(k)*NNif
+                neutral_n = n(k)
+                IF (switch%neutral_perpendicular_diffusion) neutral_n = neutral_n - bn*b(k)
+                kmult = Dnn_dU(j)*Qpr(k,i)*neutral_n*NNif
                 elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
                     ENDDO
                  ENDDO
-            kmultf = Dnn_dU_U*(Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif
+            kmultf = Dnn_dU_U*DOT_PRODUCT(Qpr(:,i), n)
+            IF (switch%neutral_perpendicular_diffusion) kmultf = kmultf - Dnn_dU_U*bn*DOT_PRODUCT(Qpr(:,i), b)
+            kmultf = kmultf*Nif
             elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
 #ifdef NEUTRALPNEW
             DO j = 1,Neq
               ind_jf = ind_asf + j
               DO k = 1,Ndim
                 ind_kf = k + (j - 1)*Ndim + ind_ash
-                kmult = W5p(j)*n(k)*NNif
+                neutral_n = n(k)
+                IF (switch%neutral_perpendicular_diffusion) neutral_n = neutral_n - bn*b(k)
+                kmult = W5p(j)*neutral_n*NNif
                 elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) = elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) - kmult
                 IF (.NOT. isdir) THEN
-                  elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - QdW5p(k,j)*n(k)*NNif
+                  elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - QdW5p(k,j)*neutral_n*NNif
                 END IF
               END DO
             END DO
-            kmultf = dot_product(matmul(transpose(QdW5p),n),uf)*Nif
+            kmultf = dot_product(matmul(transpose(QdW5p),n),uf)
+            IF (switch%neutral_perpendicular_diffusion) kmultf = kmultf - bn*dot_product(matmul(transpose(QdW5p),b),uf)
+            kmultf = kmultf*Nif
             elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
 #endif
 #ifdef NEUTRALGAMMA
