@@ -2860,18 +2860,17 @@ CONTAINS
   SUBROUTINE compute_W5p(U, W5p)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: W5p(:)
-    REAL*8              :: Dnn, Ti_limited, alpha, supp, ti_factor
+    REAL*8              :: Dnn, Ti_limited, alpha, ti_factor
     INTEGER             :: inn
 
     ti_factor = 2.d0/(3.d0*phys%Mref)
     inn = phys%idx_rhon_eq
     CALL compute_Dnn(U, Dnn)
     CALL compute_limited_Ti(U, Ti_limited)
-    supp = Ti_limited/(Ti_limited + neutral_rt%transport_ti_supp)
 
-    alpha = numer%neutralp_lambda*ti_factor*U(inn)*Dnn/Ti_limited
+    alpha = numer%neutralp_lambda*ti_factor*U(inn)*Dnn/(Ti_limited + neutral_rt%transport_ti_supp)
     CALL computeVi(U, W5p)
-    W5p = alpha*supp*W5p
+    W5p = alpha*W5p
   ENDSUBROUTINE compute_W5p
 
   SUBROUTINE compute_dW5p_dU(U, dW5p_dU)
@@ -2882,7 +2881,6 @@ CONTAINS
     REAL*8              :: Ti_limited
     REAL*8              :: dTi_limited_dU(size(U))
     REAL*8              :: alpha, dalpha_dU(size(U)), ti_factor
-    REAL*8              :: supp, dsupp_dU(size(U))
     INTEGER             :: inn, j
 
     dW5p_dU = 0.d0
@@ -2895,15 +2893,14 @@ CONTAINS
     CALL compute_Dnn_dU(U, Dnn_dU)
     CALL compute_limited_Ti(U, Ti_limited)
     CALL compute_dlimited_Ti_dU(U, dTi_limited_dU)
-    supp = Ti_limited/(Ti_limited + neutral_rt%transport_ti_supp)
-    dsupp_dU = neutral_rt%transport_ti_supp*dTi_limited_dU/(Ti_limited + neutral_rt%transport_ti_supp)**2
 
-    alpha = numer%neutralp_lambda*ti_factor*U(inn)*Dnn/Ti_limited
-    dalpha_dU = numer%neutralp_lambda*ti_factor*(U(inn)*Dnn_dU/Ti_limited - U(inn)*Dnn*dTi_limited_dU/Ti_limited**2)
-    dalpha_dU(inn) = dalpha_dU(inn) + numer%neutralp_lambda*ti_factor*Dnn/Ti_limited
+    alpha = numer%neutralp_lambda*ti_factor*U(inn)*Dnn/(Ti_limited + neutral_rt%transport_ti_supp)
+    dalpha_dU = numer%neutralp_lambda*ti_factor*(U(inn)*Dnn_dU/(Ti_limited + neutral_rt%transport_ti_supp) &
+      &- U(inn)*Dnn*dTi_limited_dU/(Ti_limited + neutral_rt%transport_ti_supp)**2)
+    dalpha_dU(inn) = dalpha_dU(inn) + numer%neutralp_lambda*ti_factor*Dnn/(Ti_limited + neutral_rt%transport_ti_supp)
 
     DO j = 1, SIZE(U)
-      dW5p_dU(:,j) = Vi*(supp*dalpha_dU(j) + alpha*dsupp_dU(j)) + alpha*supp*dVi_dU(:,j)
+      dW5p_dU(:,j) = Vi*dalpha_dU(j) + alpha*dVi_dU(:,j)
     END DO
   ENDSUBROUTINE compute_dW5p_dU
 
