@@ -2347,6 +2347,7 @@ CONTAINS
     real*8                    :: tau(Neq,Neq),Vnng(Ndim)
     real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d),rho_pol_norm(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
+    real*8                    :: diff_iso_tau(Neq,Neq,Ng1d),diff_ani_tau(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: q_cyl(Ng1d)
     real*8                    :: omega(Ng1d)
@@ -2421,6 +2422,9 @@ CONTAINS
       CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
     ENDIF
 
+    diff_iso_tau = diff_iso_fac
+    diff_ani_tau = diff_ani_fac
+
     IF (limiter_active) THEN
       DO g = 1,Ng1d
         CALL compute_neutral_flux_limiter(uefg(g,:), qfg(g,:), limiter_phi, limiter_Gamma_unlim, &
@@ -2438,6 +2442,7 @@ CONTAINS
          auxdiffsc = MATMUL(refElPol%N1D,Mesh%scdiff_nodes(iel,refElPol%face_nodes(ifa,:)))
          DO i=1,Neq
         diff_iso_fac(i,i,:) = diff_iso_fac(i,i,:)+auxdiffsc
+        diff_iso_tau(i,i,:) = diff_iso_tau(i,i,:)+auxdiffsc
          END DO
       ENDIF
 
@@ -2475,7 +2480,7 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
+            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_tau(:,:,g),diff_ani_tau(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),0.,iel,tau)
         ENDIF
@@ -2535,6 +2540,7 @@ CONTAINS
     real*8                    :: upgf(Ng1d,phys%npv)
     real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d), Psig(Ng1d), rho_pol_norm(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
+    real*8                    :: diff_iso_tau(Neq,Neq,Ng1d),diff_ani_tau(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: Vnng(Ndim)
     real*8                    :: q_cyl(Ng1d)
@@ -2612,6 +2618,9 @@ CONTAINS
       CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
     ENDIF
 
+    diff_iso_tau = diff_iso_fac
+    diff_ani_tau = diff_ani_fac
+
     IF (limiter_active) THEN
       DO g = 1,Ng1d
         CALL compute_neutral_flux_limiter(uefg(g,:), qfg(g,:), limiter_phi, limiter_Gamma_unlim, &
@@ -2629,6 +2638,7 @@ CONTAINS
          auxdiffsc = MATMUL(refElPol%N1D,Mesh%scdiff_nodes(iel,refElPol%face_nodes(ifa,:)))
          DO i=1,Neq
         diff_iso_fac(i,i,:) = diff_iso_fac(i,i,:)+auxdiffsc
+        diff_iso_tau(i,i,:) = diff_iso_tau(i,i,:)+auxdiffsc
          END DO
       ENDIF
 
@@ -2668,7 +2678,7 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
+            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_tau(:,:,g),diff_ani_tau(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),isext,iel,tau)
         ENDIF
