@@ -1157,7 +1157,7 @@ CONTAINS
     ENDIF
 
     IF(ANY(correl .EQ. 0)) THEN
-       nearest_tol = 1.d-4
+       nearest_tol = 2.d-4
 
        DO i=1,SIZE(xs,1)
           IF(correl(i) .NE. 0) CYCLE
