@@ -1068,6 +1068,60 @@ CONTAINS
     ENDDO
   ENDSUBROUTINE find_nearest_curved_element
 
+  PURE SUBROUTINE invert_2x2_matrix(matrix, inverse_matrix)
+    REAL*8, INTENT(IN)          :: matrix(2,2)
+    REAL*8, INTENT(OUT)         :: inverse_matrix(2,2)
+    REAL*8                      :: determinant
+
+    determinant = matrix(1,1)*matrix(2,2) - matrix(1,2)*matrix(2,1)
+
+    inverse_matrix(1,1) =  matrix(2,2)/determinant
+    inverse_matrix(1,2) = -matrix(1,2)/determinant
+    inverse_matrix(2,1) = -matrix(2,1)/determinant
+    inverse_matrix(2,2) =  matrix(1,1)/determinant
+  ENDSUBROUTINE invert_2x2_matrix
+
+  SUBROUTINE find_points_in_linear_elements(target_points, old_connectivity, old_coordinates, point_elements)
+    REAL*8, INTENT(IN)          :: target_points(:,:), old_coordinates(:,:)
+    INTEGER, INTENT(IN)         :: old_connectivity(:,:)
+    INTEGER, INTENT(INOUT)      :: point_elements(:)
+
+    REAL*8                      :: triangle_vertices(3, refElPol%Ndim)
+    REAL*8                      :: edge_matrix(2,2), inverse_edge_matrix(2,2)
+    REAL*8                      :: barycentric_weights(3), point_offset(2)
+    REAL*8                      :: barycentric_tolerance
+    INTEGER                     :: point, element
+
+!!$OMP parallel private(element, point, barycentric_tolerance, triangle_vertices, edge_matrix, inverse_edge_matrix, barycentric_weights, point_offset) shared(target_points, old_coordinates, old_connectivity, point_elements)
+    barycentric_tolerance = 1.d-10
+
+!!$OMP DO SCHEDULE(STATIC)
+    DO element = 1, SIZE(old_connectivity,1)
+       triangle_vertices = old_coordinates(old_connectivity(element,1:3),:)
+       edge_matrix(:,1) = triangle_vertices(2,:) - triangle_vertices(1,:)
+       edge_matrix(:,2) = triangle_vertices(3,:) - triangle_vertices(1,:)
+       CALL invert_2x2_matrix(edge_matrix, inverse_edge_matrix)
+
+       DO point = 1, SIZE(target_points,1)
+          IF(point_elements(point) .NE. 0) CYCLE
+          point_offset = target_points(point,:) - triangle_vertices(1,:)
+          barycentric_weights(2:3) = MATMUL(inverse_edge_matrix, point_offset)
+          barycentric_weights(1) = 1.d0 - SUM(barycentric_weights(2:3))
+
+          IF(barycentric_weights(1) .GE. -barycentric_tolerance .AND. &
+               barycentric_weights(2) .GE. -barycentric_tolerance .AND. &
+               barycentric_weights(3) .GE. -barycentric_tolerance .AND. &
+               barycentric_weights(1) .LE. 1.d0+barycentric_tolerance .AND. &
+               barycentric_weights(2) .LE. 1.d0+barycentric_tolerance .AND. &
+               barycentric_weights(3) .LE. 1.d0+barycentric_tolerance) THEN
+             point_elements(point) = element
+          ENDIF
+       ENDDO
+    ENDDO
+!!$OMP END DO
+!!$OMP END PARALLEL
+  ENDSUBROUTINE find_points_in_linear_elements
+
   SUBROUTINE projectSolutionDifferentMeshes_Mod(old_connectivity, old_coordinates, new_connectivity, new_coordinates, &
        u_old, q_old, u_new, q_new)
     USE linearAlgebra, ONLY: colint
@@ -1086,9 +1140,6 @@ CONTAINS
     REAL*8, OPTIONAL,INTENT(OUT):: q_new(:,:,:)
 
     REAL*8                      :: element_coordinates(Mesh%Nnodesperelem, refElPol%Ndim)
-    REAL*8                      :: vertex_coordinates(3, refElPol%Ndim)
-    REAL*8                      :: A(3,3), barycentric_coordinates(3)
-    REAL*8                      :: tol, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3
     REAL*8                      :: curved_tol, bbox_pad, xmin, xmax, ymin, ymax, elem_span
     REAL*8                      :: nearest_tol, nearest_distance, nearest_element_size
     REAL*8                      :: target_point(1,2), xieta_point(1,2), nearest_valid_point(1,2)
@@ -1139,47 +1190,7 @@ CONTAINS
        END IF
     ENDIF
 
-!!$OMP parallel private(iel, i, tol, vertex_coordinates, A, barycentric_coordinates, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3) shared(target_points, old_coordinates, old_connectivity, point_elements)
-    tol = 1.d-10
-    A(3,:) = 1.
-    b3 = 1.
-
-!!$OMP DO SCHEDULE(STATIC)
-    DO iel = 1, n_elements
-       vertex_coordinates = old_coordinates(old_connectivity(iel,1:3),:)
-       A(1,:) = vertex_coordinates(:,1)
-       A(2,:) = vertex_coordinates(:,2)
-
-       detA = (A(1,1)*A(2,2)*A(3,3) - A(1,1)*A(2,3)*A(3,2) - A(1,2)*A(2,1)*A(3,3) + &
-            &A(1,2)*A(2,3)*A(3,1) + A(1,3)*A(2,1)*A(3,2) - A(1,3)*A(2,2)*A(3,1))
-
-       a11 =   A(2,2)*A(3,3) - A(2,3)*A(3,2)
-       a12 = - A(1,2)*A(3,3) + A(1,3)*A(3,2)
-       a13 =   A(1,2)*A(2,3) - A(1,3)*A(2,2)
-       a21 = - A(2,1)*A(3,3) + A(2,3)*A(3,1)
-       a22 =   A(1,1)*A(3,3) - A(1,3)*A(3,1)
-       a23 = - A(1,1)*A(2,3) + A(1,3)*A(2,1)
-       a31 =   A(2,1)*A(3,2) - A(2,2)*A(3,1)
-       a32 = - A(1,1)*A(3,2) + A(1,2)*A(3,1)
-       a33 =   A(1,1)*A(2,2) - A(1,2)*A(2,1)
-
-       DO i=1,SIZE(target_points,1)
-          IF(point_elements(i) .NE. 0) CYCLE
-          b1 = target_points(i,1)
-          b2 = target_points(i,2)
-
-          barycentric_coordinates(1) = (a11*b1+a12*b2+a13*b3)/detA
-          barycentric_coordinates(2) = (a21*b1+a22*b2+a23*b3)/detA
-          barycentric_coordinates(3) = (a31*b1+a32*b2+a33*b3)/detA
-
-          IF ( barycentric_coordinates(1)>=-tol .AND. barycentric_coordinates(2)>=-tol .AND. barycentric_coordinates(3)>=-tol .AND. &
-               barycentric_coordinates(1)<=1+tol .AND. barycentric_coordinates(2)<=1+tol .AND. barycentric_coordinates(3)<=1+tol) THEN
-             point_elements(i) = iel
-          ENDIF
-       ENDDO
-    ENDDO
-!!$OMP END DO
-!!$OMP END PARALLEL
+    CALL find_points_in_linear_elements(target_points, old_connectivity, old_coordinates, point_elements)
 
     IF(ANY(point_elements .EQ. 0)) THEN
        curved_tol = 1.d-8
