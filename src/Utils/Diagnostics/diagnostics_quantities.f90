@@ -35,7 +35,6 @@ CONTAINS
        &+ this%particles(diag_particle_neutral_recombination) &
        &+ this%particles(diag_particle_puff_source) &
        &+ this%particles(diag_particle_pump_sink) &
-       &+ this%particles(diag_particle_recycling_source) &
        &+ this%particles(diag_particle_neutral_boundary_flux)
   END FUNCTION diag_neutral_particle_balance
 
