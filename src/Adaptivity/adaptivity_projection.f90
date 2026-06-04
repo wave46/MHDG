@@ -1,6 +1,7 @@
 MODULE adaptivity_projection_module
   USE globals
   USE MPI_OMP
+  USE element_mapping_module, ONLY: map_physical_to_reference, map_reference_to_physical
 
   IMPLICIT NONE
   PRIVATE
@@ -212,8 +213,6 @@ CONTAINS
   ENDFUNCTION point_in_padded_bounding_box
 
   SUBROUTINE clamp_to_curved_triangle(xieta, element_coordinates, refEl, clamped_point, valid)
-    USE adaptivity_common_module, ONLY: iso_transformation_high_order
-
     TYPE(Reference_element_type), INTENT(IN) :: refEl
     REAL*8, INTENT(IN)                      :: xieta(1,2), element_coordinates(:,:)
     REAL*8, INTENT(OUT)                     :: clamped_point(1,2)
@@ -235,13 +234,11 @@ CONTAINS
     barycentric_weights = barycentric_weights/weight_sum
     clamped_reference_point(1,1) = 2.d0*barycentric_weights(1)-1.d0
     clamped_reference_point(1,2) = 2.d0*barycentric_weights(2)-1.d0
-    CALL iso_transformation_high_order(clamped_reference_point, element_coordinates, refEl, clamped_point)
+    CALL map_reference_to_physical(clamped_reference_point, element_coordinates, refEl, clamped_point)
   ENDSUBROUTINE clamp_to_curved_triangle
 
   SUBROUTINE find_nearest_curved_element(target_point, old_connectivity, old_coordinates, candidate_box_padding_ratio, &
        nearest_element, nearest_valid_point, nearest_distance, nearest_element_size)
-    USE adaptivity_common_module, ONLY: inverse_isop_transf
-
     REAL*8, INTENT(IN)          :: target_point(1,2)
     INTEGER, INTENT(IN)         :: old_connectivity(:,:)
     REAL*8, INTENT(IN)          :: old_coordinates(:,:)
@@ -267,7 +264,7 @@ CONTAINS
 
        IF(.NOT. point_in_padded_bounding_box(target_point, xmin, xmax, ymin, ymax, bbox_pad)) CYCLE
 
-       CALL inverse_isop_transf(target_point, element_coordinates, refElPol, reference_point, inverse_converged)
+       CALL map_physical_to_reference(target_point, element_coordinates, refElPol, reference_point, inverse_converged)
        IF(.NOT. inverse_converged) CYCLE
 
        CALL clamp_to_curved_triangle(reference_point, element_coordinates, refElPol, clamped_point, clamp_valid)
@@ -406,8 +403,6 @@ CONTAINS
   ENDSUBROUTINE find_points_in_linear_elements
 
   SUBROUTINE find_points_in_curved_elements(target_points, old_connectivity, old_coordinates, point_elements)
-    USE adaptivity_common_module, ONLY: inverse_isop_transf
-
     REAL*8, INTENT(IN)          :: target_points(:,:), old_coordinates(:,:)
     INTEGER, INTENT(IN)         :: old_connectivity(:,:)
     INTEGER, INTENT(INOUT)      :: point_elements(:)
@@ -432,7 +427,7 @@ CONTAINS
 
           IF(.NOT. point_in_padded_bounding_box(target_point, xmin, xmax, ymin, ymax, bounding_box_padding)) CYCLE
 
-          CALL inverse_isop_transf(target_point, element_coordinates, refElPol, reference_point, inverse_converged)
+          CALL map_physical_to_reference(target_point, element_coordinates, refElPol, reference_point, inverse_converged)
           IF(.NOT. inverse_converged) CYCLE
 
           IF(reference_point(1,1) .GE. -1.d0-curved_tolerance .AND. &
@@ -465,7 +460,6 @@ CONTAINS
 
   SUBROUTINE interpolate_solution_at_projection_points(interpolation_points, point_elements, old_connectivity, &
        old_coordinates, u_old, q_old, u_new, q_new)
-    USE adaptivity_common_module, ONLY: inverse_isop_transf
     USE reference_element, ONLY: compute_shape_functions_at_points
 
     REAL*8, INTENT(IN)          :: interpolation_points(:,:), old_coordinates(:,:)
@@ -502,7 +496,7 @@ CONTAINS
        shape_functions = 0.d0
        element_coordinates = old_coordinates(old_connectivity(element,:),:)
 
-       CALL inverse_isop_transf(element_points, element_coordinates, refElPol, reference_points)
+       CALL map_physical_to_reference(element_points, element_coordinates, refElPol, reference_points)
 
        CALL compute_shape_functions_at_points(refElPol, reference_points, shape_functions)
 
