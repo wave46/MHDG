@@ -1250,11 +1250,85 @@ CONTAINS
     ENDDO
   ENDSUBROUTINE find_points_in_curved_elements
 
+  SUBROUTINE interpolate_solution_at_projection_points(interpolation_points, point_elements, old_connectivity, &
+       old_coordinates, u_old, q_old, u_new, q_new)
+    USE adaptivity_common_module, ONLY: find_matches_int, inverse_isop_transf
+    USE reference_element, ONLY: compute_shape_functions_at_points
+
+    REAL*8, INTENT(IN)          :: interpolation_points(:,:), old_coordinates(:,:)
+    INTEGER, INTENT(IN)         :: point_elements(:), old_connectivity(:,:)
+    REAL*8, INTENT(IN)          :: u_old(:,:)
+    REAL*8, OPTIONAL,INTENT(IN) :: q_old(:,:,:)
+    REAL*8, INTENT(OUT)         :: u_new(:,:)
+    REAL*8, OPTIONAL,INTENT(OUT):: q_new(:,:,:)
+
+    REAL*8                      :: element_coordinates(Mesh%Nnodesperelem, refElPol%Ndim)
+    INTEGER                     :: old_element_dofs(SIZE(old_connectivity,2))
+    INTEGER                     :: point, coordinate, element, nodes_per_element
+    REAL*8, ALLOCATABLE         :: shape_functions(:,:,:)
+    REAL*8, ALLOCATABLE         :: element_points(:,:), reference_points(:,:)
+    REAL*8, ALLOCATABLE         :: old_element_u(:,:), old_element_q(:,:,:)
+    INTEGER, ALLOCATABLE        :: point_indices(:)
+
+    u_new = 0.d0
+    IF(PRESENT(q_new)) q_new = 0.d0
+
+    nodes_per_element = SIZE(old_connectivity,2)
+    ALLOCATE(old_element_u(nodes_per_element, SIZE(u_old,2)))
+    IF(PRESENT(q_old)) ALLOCATE(old_element_q(nodes_per_element, SIZE(q_old,2),2))
+
+!!$OMP parallel private(element, point_indices, reference_points, shape_functions, element_coordinates, element_points, old_element_dofs, old_element_u, old_element_q) shared(interpolation_points, old_coordinates, old_connectivity, u_new, q_new, point_elements, refElPol, nodes_per_element)
+!!$OMP DO SCHEDULE(STATIC)
+    DO element = 1, SIZE(old_connectivity,1)
+       CALL find_matches_int(point_elements, element, point_indices)
+
+       ALLOCATE(reference_points(SIZE(point_indices), SIZE(interpolation_points,2)))
+       ALLOCATE(element_points(SIZE(point_indices), SIZE(interpolation_points,2)))
+       ALLOCATE(shape_functions(nodes_per_element, SIZE(point_indices), 3))
+
+       reference_points = 0.d0
+       element_points = interpolation_points(point_indices,:)
+       shape_functions = 0.d0
+       element_coordinates = old_coordinates(old_connectivity(element,:),:)
+
+       CALL inverse_isop_transf(element_points, element_coordinates, refElPol, reference_points)
+
+       ! Avoid evaluating shape functions exactly at a singular reference-coordinate endpoint.
+       DO coordinate = 1, SIZE(reference_points,2)
+          DO point = 1, SIZE(reference_points,1)
+             IF(ABS(reference_points(point,coordinate)-1.d0) .LT. 1.d-12) THEN
+                reference_points(point,coordinate) = reference_points(point,coordinate) - 1.d-10
+             ENDIF
+          ENDDO
+       ENDDO
+
+       CALL compute_shape_functions_at_points(refElPol, reference_points, shape_functions)
+
+       old_element_dofs = (element-1)*nodes_per_element + (/ (point, point=1, nodes_per_element) /)
+       old_element_u = u_old(old_element_dofs, :)
+       u_new(point_indices,:) = MATMUL(TRANSPOSE(shape_functions(:,:,1)), old_element_u)
+
+       IF(PRESENT(q_old)) THEN
+          old_element_q = q_old(old_element_dofs, :, :)
+          q_new(point_indices,:,1) = MATMUL(TRANSPOSE(shape_functions(:,:,1)), old_element_q(:,:,1))
+          q_new(point_indices,:,2) = MATMUL(TRANSPOSE(shape_functions(:,:,1)), old_element_q(:,:,2))
+       ENDIF
+
+       DEALLOCATE(reference_points)
+       DEALLOCATE(element_points)
+       DEALLOCATE(point_indices)
+       DEALLOCATE(shape_functions)
+    ENDDO
+!!$OMP END DO
+!!$OMP END PARALLEL
+
+    DEALLOCATE(old_element_u)
+    IF(PRESENT(q_old)) DEALLOCATE(old_element_q)
+  ENDSUBROUTINE interpolate_solution_at_projection_points
+
   SUBROUTINE projectSolutionDifferentMeshes_Mod(old_connectivity, old_coordinates, new_connectivity, new_coordinates, &
        u_old, q_old, u_new, q_new)
     USE linearAlgebra, ONLY: colint
-    USE adaptivity_common_module, ONLY: find_matches_int, inverse_isop_transf
-    USE reference_element, ONLY: compute_shape_functions_at_points
 
     INTEGER, INTENT(IN)         :: old_connectivity(:,:), new_connectivity(:,:)
     REAL*8, INTENT(IN)          :: old_coordinates(:,:), new_coordinates(:,:)
@@ -1267,30 +1341,7 @@ CONTAINS
     REAL*8, INTENT(OUT)         :: u_new(:,:)
     REAL*8, OPTIONAL,INTENT(OUT):: q_new(:,:,:)
 
-    REAL*8                      :: element_coordinates(Mesh%Nnodesperelem, refElPol%Ndim)
-    INTEGER                     :: old_element_dofs(SIZE(old_connectivity,2))
     INTEGER                     :: point_elements(SIZE(target_points,1))
-    INTEGER                     :: i, j, n_elements, np_perelem, iel
-    REAL*8,  ALLOCATABLE        :: shape_functions(:,:,:)
-    REAL*8,  ALLOCATABLE        :: element_points(:,:), reference_points(:,:)
-    REAL*8, ALLOCATABLE         :: old_element_u(:,:), old_element_q(:,:,:)
-    INTEGER, ALLOCATABLE        :: point_indices(:)
-    u_new = 0
-    IF(PRESENT(q_new)) THEN
-       q_new = 0
-    ENDIF
-
-    ALLOCATE(old_element_u(SIZE(old_connectivity,2), SIZE(u_old,2)))
-    old_element_u = 0
-
-    IF(PRESENT(q_old)) THEN
-       ALLOCATE(old_element_q(SIZE(old_connectivity,2), SIZE(q_old,2),2))
-       old_element_q = 0
-    ENDIF
-
-
-    n_elements = SIZE(old_connectivity,1)
-    np_perelem = SIZE(old_connectivity,2)
     target_points = new_coordinates(colint(TRANSPOSE(new_connectivity)),:)
     interpolation_points = target_points
 
@@ -1314,63 +1365,8 @@ CONTAINS
     CALL recover_nearest_projection_points(target_points, old_connectivity, old_coordinates, point_elements, &
          interpolation_points)
 
-
-!!$OMP parallel private(iel, point_indices, reference_points, shape_functions, element_coordinates, element_points, old_element_dofs, old_element_u, old_element_q) shared(interpolation_points, old_coordinates, old_connectivity, u_new, q_new, point_elements, n_elements, refElPol, np_perelem)
-!!$OMP DO SCHEDULE(STATIC)
-    DO iel = 1, n_elements
-       IF(iel .EQ. 0) CYCLE
-
-       CALL find_matches_int(point_elements, iel, point_indices)
-
-       ALLOCATE(reference_points(SIZE(point_indices), SIZE(interpolation_points,2)))
-       ALLOCATE(element_points(SIZE(point_indices), SIZE(interpolation_points,2)))
-       ALLOCATE(shape_functions(np_perelem, SIZE(point_indices), 3))
-
-       reference_points = 0
-       element_points = 0
-       shape_functions = 0
-
-       element_coordinates = old_coordinates(old_connectivity(iel,:),:)
-       element_points = interpolation_points(point_indices,:)
-
-       ! this goddamn function always gives problems
-       CALL inverse_isop_transf(element_points, element_coordinates, refElPol, reference_points)
-
-       ! just fucking brute force it
-       DO j = 1, SIZE(reference_points,2)
-          DO i = 1, SIZE(reference_points,1)
-             IF(ABS(reference_points(i,j)-1.0) .LT. 1e-12) THEN
-                reference_points(i,j) = reference_points(i,j) - 1.e-10
-             ENDIF
-          ENDDO
-       ENDDO
-
-       CALL compute_shape_functions_at_points(refElPol, reference_points, shape_functions)
-
-       old_element_dofs = (iel-1)*np_perelem + (/ (j, j=1, np_perelem) /)
-
-       old_element_u = u_old(old_element_dofs, :)
-       u_new(point_indices,:) = MATMUL(TRANSPOSE(shape_functions(:,:,1)), old_element_u)
-
-       IF(PRESENT(q_old)) THEN
-          old_element_q = q_old(old_element_dofs, :, :)
-          q_new(point_indices,:,1) = MATMUL(TRANSPOSE(shape_functions(:,:,1)), old_element_q(:,:,1))
-          q_new(point_indices,:,2) = MATMUL(TRANSPOSE(shape_functions(:,:,1)), old_element_q(:,:,2))
-       ENDIF
-
-       DEALLOCATE(reference_points)
-       DEALLOCATE(element_points)
-       DEALLOCATE(point_indices)
-       DEALLOCATE(shape_functions)
-    END DO
-!!$OMP END DO
-!!$OMP end parallel
-
-
-    DEALLOCATE(old_element_u)
-    IF(PRESENT(q_old)) THEN
-       DEALLOCATE(old_element_q)
-    ENDIF
+    CALL interpolate_solution_at_projection_points(interpolation_points, point_elements, old_connectivity, &
+         old_coordinates, u_old, q_old, u_new, q_new)
 
   END SUBROUTINE projectSolutionDifferentMeshes_Mod
 
