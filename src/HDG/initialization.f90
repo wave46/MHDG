@@ -1037,11 +1037,11 @@ CONTAINS
     REAL*8                      :: A(3,3), bcc(3)
     REAL*8                      :: tol, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3
     REAL*8                      :: curved_tol, bbox_pad, xmin, xmax, ymin, ymax, elem_span
-    REAL*8                      :: nearest_tol, best_dist, best_h, dist, max_accepted_dist, max_accepted_ratio
+    REAL*8                      :: nearest_tol, best_dist, best_h, dist
     REAL*8                      :: x_point(1,2), x_target(1,2), xieta_point(1,2), x_clamped(1,2), x_best(1,2)
     INTEGER                     :: T_old(SIZE(T1,1), SIZE(T1,2)), ind(SIZE(T1,2)), correl(SIZE(xs,1))
-    INTEGER                     :: i, j, n_elements, np_perelem, iel, n_missing_before, n_missing_after
-    INTEGER                     :: nearest_element, n_nearest_before, n_nearest_after
+    INTEGER                     :: i, j, n_elements, np_perelem, iel
+    INTEGER                     :: nearest_element
     INTEGER                     :: local_missing, global_missing, ierr
     REAL*8,  ALLOCATABLE        :: shapeFunctions(:,:,:)
     REAL*8,  ALLOCATABLE        :: x(:,:), xieta(:,:)
@@ -1122,7 +1122,6 @@ CONTAINS
 !!$OMP END PARALLEL
 
     IF(ANY(correl .EQ. 0)) THEN
-       n_missing_before = COUNT(correl .EQ. 0)
        curved_tol = 1.d-8
 
        DO i=1,SIZE(xs,1)
@@ -1155,15 +1154,10 @@ CONTAINS
           ENDDO
        ENDDO
 
-       n_missing_after = COUNT(correl .EQ. 0)
-       WRITE(*,*) "Curved projection search recovered points on rank: ", MPIvar%glob_id, n_missing_before - n_missing_after, " / ", n_missing_before
     ENDIF
 
     IF(ANY(correl .EQ. 0)) THEN
-       n_nearest_before = COUNT(correl .EQ. 0)
        nearest_tol = 1.d-4
-       max_accepted_dist = 0.d0
-       max_accepted_ratio = 0.d0
 
        DO i=1,SIZE(xs,1)
           IF(correl(i) .NE. 0) CYCLE
@@ -1203,20 +1197,15 @@ CONTAINS
           IF(nearest_element .NE. 0 .AND. best_dist .LE. nearest_tol*MAX(1.d-12, best_h)) THEN
              correl(i) = nearest_element
              xs(i,:) = x_best(1,:)
-             max_accepted_dist = MAX(max_accepted_dist, best_dist)
-             max_accepted_ratio = MAX(max_accepted_ratio, best_dist/MAX(1.d-12, best_h))
           ENDIF
        ENDDO
 
-       n_nearest_after = COUNT(correl .EQ. 0)
-       WRITE(*,*) "Nearest projection fallback recovered points on rank: ", MPIvar%glob_id, n_nearest_before - n_nearest_after, " / ", n_nearest_before
-       WRITE(*,*) "Nearest projection max accepted distance/local h on rank: ", MPIvar%glob_id, max_accepted_dist, max_accepted_ratio
     ENDIF
 
     local_missing = COUNT(correl .EQ. 0)
     global_missing = local_missing
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, global_missing, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
-    IF(MPIvar%glob_id .EQ. 0) THEN
+    IF(MPIvar%glob_id .EQ. 0 .AND. global_missing .NE. 0) THEN
        WRITE(*,*) "Projection unmatched points after fallbacks: ", global_missing
     ENDIF
 
