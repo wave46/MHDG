@@ -211,9 +211,36 @@ CONTAINS
          point(1,2) .GE. ymin-padding .AND. point(1,2) .LE. ymax+padding
   ENDFUNCTION point_in_padded_bounding_box
 
+  SUBROUTINE clamp_to_curved_triangle(xieta, element_coordinates, refEl, clamped_point, valid)
+    USE adaptivity_common_module, ONLY: iso_transformation_high_order
+
+    TYPE(Reference_element_type), INTENT(IN) :: refEl
+    REAL*8, INTENT(IN)                      :: xieta(1,2), element_coordinates(:,:)
+    REAL*8, INTENT(OUT)                     :: clamped_point(1,2)
+    LOGICAL, INTENT(OUT)                    :: valid
+    REAL*8                                  :: barycentric_weights(3), weight_sum
+    REAL*8                                  :: clamped_reference_point(1,2)
+
+    ! Clamp the linear barycentric coordinates to the reference triangle,
+    ! then map that reference point through the curved element geometry.
+    barycentric_weights(1) = 0.5d0*(xieta(1,1)+1.d0)
+    barycentric_weights(2) = 0.5d0*(xieta(1,2)+1.d0)
+    barycentric_weights(3) = 1.d0-barycentric_weights(1)-barycentric_weights(2)
+    barycentric_weights = MAX(0.d0, barycentric_weights)
+    weight_sum = SUM(barycentric_weights)
+
+    valid = weight_sum .GT. 0.d0
+    IF(.NOT. valid) RETURN
+
+    barycentric_weights = barycentric_weights/weight_sum
+    clamped_reference_point(1,1) = 2.d0*barycentric_weights(1)-1.d0
+    clamped_reference_point(1,2) = 2.d0*barycentric_weights(2)-1.d0
+    CALL iso_transformation_high_order(clamped_reference_point, element_coordinates, refEl, clamped_point)
+  ENDSUBROUTINE clamp_to_curved_triangle
+
   SUBROUTINE find_nearest_curved_element(target_point, old_connectivity, old_coordinates, candidate_box_padding_ratio, &
        nearest_element, nearest_valid_point, nearest_distance, nearest_element_size)
-    USE adaptivity_common_module, ONLY: inverse_isop_transf, clamp_to_curved_triangle
+    USE adaptivity_common_module, ONLY: inverse_isop_transf
 
     REAL*8, INTENT(IN)          :: target_point(1,2)
     INTEGER, INTENT(IN)         :: old_connectivity(:,:)
@@ -420,9 +447,25 @@ CONTAINS
     ENDDO
   ENDSUBROUTINE find_points_in_curved_elements
 
+  PURE SUBROUTINE find_matching_indices(values, target_value, indices)
+    INTEGER, INTENT(IN)                           :: values(:), target_value
+    INTEGER, ALLOCATABLE, INTENT(OUT)             :: indices(:)
+    INTEGER                                       :: point, match
+
+    ALLOCATE(indices(COUNT(values .EQ. target_value)))
+
+    match = 1
+    DO point = 1, SIZE(values)
+       IF(values(point) .EQ. target_value) THEN
+          indices(match) = point
+          match = match + 1
+       ENDIF
+    ENDDO
+  ENDSUBROUTINE find_matching_indices
+
   SUBROUTINE interpolate_solution_at_projection_points(interpolation_points, point_elements, old_connectivity, &
        old_coordinates, u_old, q_old, u_new, q_new)
-    USE adaptivity_common_module, ONLY: find_matches_int, inverse_isop_transf
+    USE adaptivity_common_module, ONLY: inverse_isop_transf
     USE reference_element, ONLY: compute_shape_functions_at_points
 
     REAL*8, INTENT(IN)          :: interpolation_points(:,:), old_coordinates(:,:)
@@ -448,7 +491,7 @@ CONTAINS
     IF(PRESENT(q_old)) ALLOCATE(old_element_q(nodes_per_element, SIZE(q_old,2),2))
 
     DO element = 1, SIZE(old_connectivity,1)
-       CALL find_matches_int(point_elements, element, point_indices)
+       CALL find_matching_indices(point_elements, element, point_indices)
 
        ALLOCATE(reference_points(SIZE(point_indices), SIZE(interpolation_points,2)))
        ALLOCATE(element_points(SIZE(point_indices), SIZE(interpolation_points,2)))

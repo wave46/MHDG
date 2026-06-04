@@ -648,53 +648,6 @@ CONTAINS
 
   ENDSUBROUTINE iso_transformation_high_order
 
-  SUBROUTINE clamp_to_curved_triangle(xieta, Xe, refEl, x_clamped, valid)
-    TYPE(Reference_element_type), INTENT(IN) :: refEl
-    REAL*8, INTENT(IN)                      :: xieta(1,2), Xe(:,:)
-    REAL*8, INTENT(OUT)                     :: x_clamped(1,2)
-    LOGICAL, INTENT(OUT)                    :: valid
-    REAL*8                                  :: lambda(3), lambda_sum
-    REAL*8                                  :: xieta_clamped(1,2)
-
-    ! Clamp the linear barycentric coordinates to the reference triangle,
-    ! then map that reference point through the curved element geometry.
-    lambda(1) = 0.5d0*(xieta(1,1)+1.d0)
-    lambda(2) = 0.5d0*(xieta(1,2)+1.d0)
-    lambda(3) = 1.d0-lambda(1)-lambda(2)
-    lambda = MAX(0.d0, lambda)
-    lambda_sum = SUM(lambda)
-
-    valid = lambda_sum .GT. 0.d0
-    IF(.NOT. valid) RETURN
-
-    lambda = lambda/lambda_sum
-    xieta_clamped(1,1) = 2.d0*lambda(1)-1.d0
-    xieta_clamped(1,2) = 2.d0*lambda(2)-1.d0
-    CALL iso_transformation_high_order(xieta_clamped, Xe, refEl, x_clamped)
-  ENDSUBROUTINE clamp_to_curved_triangle
-
-  PURE SUBROUTINE find_matches_int(a, b, indices)
-    INTEGER, DIMENSION(:), INTENT(IN)                 :: a
-    INTEGER, INTENT(IN)                               :: b
-    INTEGER, DIMENSION(:), INTENT(INOUT), ALLOCATABLE :: indices
-    INTEGER                                           :: counter
-    INTEGER                                           :: i
-
-    counter = COUNT(a .EQ. b)
-
-    ALLOCATE(indices(counter))
-
-    counter = 1
-    DO i = 1, SIZE(a)
-       IF (a(i) .EQ. b) THEN
-          indices(counter) = i
-          counter = counter +1
-       END IF
-    END DO
-
-  END SUBROUTINE find_matches_int
-
-
   SUBROUTINE delete_file(filename)
 
     CHARACTER(*), INTENT(IN)        :: filename
