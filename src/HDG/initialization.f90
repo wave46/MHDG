@@ -1018,6 +1018,25 @@ CONTAINS
 
   ENDSUBROUTINE projectSolutionDifferentMeshes_general_arrays
 
+  PURE SUBROUTINE curved_element_bounding_box(element_coordinates, xmin, xmax, ymin, ymax, element_size)
+    REAL*8, INTENT(IN)          :: element_coordinates(:,:)
+    REAL*8, INTENT(OUT)         :: xmin, xmax, ymin, ymax, element_size
+
+    xmin = MINVAL(element_coordinates(:,1))
+    xmax = MAXVAL(element_coordinates(:,1))
+    ymin = MINVAL(element_coordinates(:,2))
+    ymax = MAXVAL(element_coordinates(:,2))
+    element_size = MAX(xmax-xmin, ymax-ymin)
+  ENDSUBROUTINE curved_element_bounding_box
+
+  PURE LOGICAL FUNCTION point_in_padded_bounding_box(point, xmin, xmax, ymin, ymax, padding)
+    REAL*8, INTENT(IN)          :: point(1,2)
+    REAL*8, INTENT(IN)          :: xmin, xmax, ymin, ymax, padding
+
+    point_in_padded_bounding_box = point(1,1) .GE. xmin-padding .AND. point(1,1) .LE. xmax+padding .AND. &
+         point(1,2) .GE. ymin-padding .AND. point(1,2) .LE. ymax+padding
+  ENDFUNCTION point_in_padded_bounding_box
+
   SUBROUTINE find_nearest_curved_element(target_point, old_connectivity, old_coordinates, candidate_box_padding_ratio, &
        nearest_element, nearest_valid_point, nearest_distance, nearest_element_size)
     USE adaptivity_common_module, ONLY: inverse_isop_transf, clamp_to_curved_triangle
@@ -1042,15 +1061,10 @@ CONTAINS
 
     DO element = 1, SIZE(old_connectivity,1)
        element_coordinates = old_coordinates(old_connectivity(element,:),:)
-       xmin = MINVAL(element_coordinates(:,1))
-       xmax = MAXVAL(element_coordinates(:,1))
-       ymin = MINVAL(element_coordinates(:,2))
-       ymax = MAXVAL(element_coordinates(:,2))
-       element_size = MAX(xmax-xmin, ymax-ymin)
+       CALL curved_element_bounding_box(element_coordinates, xmin, xmax, ymin, ymax, element_size)
        bbox_pad = MAX(1.d-10, candidate_box_padding_ratio*element_size)
 
-       IF(target_point(1,1) .LT. xmin-bbox_pad .OR. target_point(1,1) .GT. xmax+bbox_pad) CYCLE
-       IF(target_point(1,2) .LT. ymin-bbox_pad .OR. target_point(1,2) .GT. ymax+bbox_pad) CYCLE
+       IF(.NOT. point_in_padded_bounding_box(target_point, xmin, xmax, ymin, ymax, bbox_pad)) CYCLE
 
        CALL inverse_isop_transf(target_point, element_coordinates, refElPol, reference_point, inverse_converged)
        IF(.NOT. inverse_converged) CYCLE
@@ -1122,6 +1136,48 @@ CONTAINS
 !!$OMP END PARALLEL
   ENDSUBROUTINE find_points_in_linear_elements
 
+  SUBROUTINE find_points_in_curved_elements(target_points, old_connectivity, old_coordinates, point_elements)
+    USE adaptivity_common_module, ONLY: inverse_isop_transf
+
+    REAL*8, INTENT(IN)          :: target_points(:,:), old_coordinates(:,:)
+    INTEGER, INTENT(IN)         :: old_connectivity(:,:)
+    INTEGER, INTENT(INOUT)      :: point_elements(:)
+
+    REAL*8                      :: element_coordinates(Mesh%Nnodesperelem, refElPol%Ndim)
+    REAL*8                      :: target_point(1,2), reference_point(1,2)
+    REAL*8                      :: curved_tolerance, bounding_box_padding
+    REAL*8                      :: xmin, xmax, ymin, ymax, element_size
+    INTEGER                     :: point, element
+    LOGICAL                     :: inverse_converged
+
+    curved_tolerance = 1.d-8
+
+    DO point = 1, SIZE(target_points,1)
+       IF(point_elements(point) .NE. 0) CYCLE
+       target_point(1,:) = target_points(point,:)
+
+       DO element = 1, SIZE(old_connectivity,1)
+          element_coordinates = old_coordinates(old_connectivity(element,:),:)
+          CALL curved_element_bounding_box(element_coordinates, xmin, xmax, ymin, ymax, element_size)
+          bounding_box_padding = MAX(1.d-12, curved_tolerance*MAX(1.d0, element_size))
+
+          IF(.NOT. point_in_padded_bounding_box(target_point, xmin, xmax, ymin, ymax, bounding_box_padding)) CYCLE
+
+          CALL inverse_isop_transf(target_point, element_coordinates, refElPol, reference_point, inverse_converged)
+          IF(.NOT. inverse_converged) CYCLE
+
+          IF(reference_point(1,1) .GE. -1.d0-curved_tolerance .AND. &
+               reference_point(1,2) .GE. -1.d0-curved_tolerance .AND. &
+               reference_point(1,1) .LE.  1.d0+curved_tolerance .AND. &
+               reference_point(1,2) .LE.  1.d0+curved_tolerance .AND. &
+               reference_point(1,1)+reference_point(1,2) .LE. curved_tolerance) THEN
+             point_elements(point) = element
+             EXIT
+          ENDIF
+       ENDDO
+    ENDDO
+  ENDSUBROUTINE find_points_in_curved_elements
+
   SUBROUTINE projectSolutionDifferentMeshes_Mod(old_connectivity, old_coordinates, new_connectivity, new_coordinates, &
        u_old, q_old, u_new, q_new)
     USE linearAlgebra, ONLY: colint
@@ -1140,9 +1196,8 @@ CONTAINS
     REAL*8, OPTIONAL,INTENT(OUT):: q_new(:,:,:)
 
     REAL*8                      :: element_coordinates(Mesh%Nnodesperelem, refElPol%Ndim)
-    REAL*8                      :: curved_tol, bbox_pad, xmin, xmax, ymin, ymax, elem_span
     REAL*8                      :: nearest_tol, nearest_distance, nearest_element_size
-    REAL*8                      :: target_point(1,2), xieta_point(1,2), nearest_valid_point(1,2)
+    REAL*8                      :: target_point(1,2), nearest_valid_point(1,2)
     INTEGER                     :: old_element_dofs(SIZE(old_connectivity,2))
     INTEGER                     :: point_elements(SIZE(target_points,1))
     INTEGER                     :: nearest_candidate_elements(SIZE(target_points,1))
@@ -1155,8 +1210,6 @@ CONTAINS
     REAL*8,  ALLOCATABLE        :: element_points(:,:), reference_points(:,:)
     REAL*8, ALLOCATABLE         :: old_element_u(:,:), old_element_q(:,:,:)
     INTEGER, ALLOCATABLE        :: point_indices(:)
-    LOGICAL                     :: inverse_converged
-
     u_new = 0
     IF(PRESENT(q_new)) THEN
        q_new = 0
@@ -1193,38 +1246,7 @@ CONTAINS
     CALL find_points_in_linear_elements(target_points, old_connectivity, old_coordinates, point_elements)
 
     IF(ANY(point_elements .EQ. 0)) THEN
-       curved_tol = 1.d-8
-
-       DO i=1,SIZE(target_points,1)
-          IF(point_elements(i) .NE. 0) CYCLE
-          target_point(1,:) = target_points(i,:)
-
-          DO iel = 1, n_elements
-             element_coordinates = old_coordinates(old_connectivity(iel,:),:)
-             xmin = MINVAL(element_coordinates(:,1))
-             xmax = MAXVAL(element_coordinates(:,1))
-             ymin = MINVAL(element_coordinates(:,2))
-             ymax = MAXVAL(element_coordinates(:,2))
-             elem_span = MAX(xmax-xmin, ymax-ymin)
-             bbox_pad = MAX(1.d-12, curved_tol*MAX(1.d0, elem_span))
-
-             IF(target_point(1,1) .LT. xmin-bbox_pad .OR. target_point(1,1) .GT. xmax+bbox_pad) CYCLE
-             IF(target_point(1,2) .LT. ymin-bbox_pad .OR. target_point(1,2) .GT. ymax+bbox_pad) CYCLE
-
-             CALL inverse_isop_transf(target_point, element_coordinates, refElPol, xieta_point, inverse_converged)
-             IF(.NOT. inverse_converged) CYCLE
-
-             IF(xieta_point(1,1) .GE. -1.d0-curved_tol .AND. &
-                xieta_point(1,2) .GE. -1.d0-curved_tol .AND. &
-                xieta_point(1,1) .LE.  1.d0+curved_tol .AND. &
-                xieta_point(1,2) .LE.  1.d0+curved_tol .AND. &
-                xieta_point(1,1)+xieta_point(1,2) .LE. curved_tol) THEN
-                point_elements(i) = iel
-                EXIT
-             ENDIF
-          ENDDO
-       ENDDO
-
+       CALL find_points_in_curved_elements(target_points, old_connectivity, old_coordinates, point_elements)
     ENDIF
 
     IF(ANY(point_elements .EQ. 0)) THEN
