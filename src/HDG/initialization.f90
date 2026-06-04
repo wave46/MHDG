@@ -1019,7 +1019,7 @@ CONTAINS
   ENDSUBROUTINE projectSolutionDifferentMeshes_general_arrays
 
   SUBROUTINE projectSolutionDifferentMeshes_Mod(T1, X1, T2, X2, u_old, q_old, u_new, q_new)
-    USE linearAlgebra, ONLY: solve_linear_system_sing, colint, invert_matrix
+    USE linearAlgebra, ONLY: colint
     USE adaptivity_common_module, ONLY: find_matches_int, inverse_isop_transf, clamp_to_curved_triangle
     USE reference_element, ONLY: compute_shape_functions_at_points
 
@@ -1039,16 +1039,14 @@ CONTAINS
     REAL*8                      :: curved_tol, bbox_pad, xmin, xmax, ymin, ymax, elem_span
     REAL*8                      :: nearest_tol, best_dist, best_h, dist, max_accepted_dist, max_accepted_ratio
     REAL*8                      :: x_point(1,2), x_target(1,2), xieta_point(1,2), x_clamped(1,2), x_best(1,2)
-    INTEGER                     :: T_old(SIZE(T1,1), SIZE(T1,2)), ind(SIZE(T1,2)), correl(SIZE(xs,1)), indcheck(SIZE(xs,1))
+    INTEGER                     :: T_old(SIZE(T1,1), SIZE(T1,2)), ind(SIZE(T1,2)), correl(SIZE(xs,1))
     INTEGER                     :: i, j, n_elements, np_perelem, iel, n_missing_before, n_missing_after
     INTEGER                     :: nearest_element, n_nearest_before, n_nearest_after
     INTEGER                     :: local_missing, global_missing, ierr
     REAL*8,  ALLOCATABLE        :: shapeFunctions(:,:,:)
     REAL*8,  ALLOCATABLE        :: x(:,:), xieta(:,:)
     REAL*8, ALLOCATABLE         :: u_old_ind(:,:), q_old_ind(:,:,:)
-    REAL*8, ALLOCATABLE         :: u_prov(:,:), q_prov(:,:,:)
     INTEGER, ALLOCATABLE        :: indices(:)
-    INTEGER                     :: elem_full(SIZE(T1,1))
     LOGICAL                     :: inverse_converged, clamp_valid
 
     u_new = 0
@@ -1058,13 +1056,9 @@ CONTAINS
 
     ALLOCATE(u_old_ind(SIZE(T1,2), SIZE(u_old,2)))
     u_old_ind = 0
-    ALLOCATE(u_prov(SIZE(xs,1), SIZE(u_old,2)))
-    u_prov = 0
 
     IF(PRESENT(q_old)) THEN
-       ALLOCATE(q_prov(SIZE(xs,1), SIZE(q_old,2), SIZE(q_old,3)))
        ALLOCATE(q_old_ind(SIZE(T1,2), SIZE(q_old,2),2))
-       q_prov = 0
        q_old_ind = 0
     ENDIF
 
@@ -1074,12 +1068,9 @@ CONTAINS
     xs = X2(colint(TRANSPOSE(T2)),:)
     X_old = X1
     T_old = T1
-    elem_full = 0
-    u_prov = 0
 
 
     correl = 0
-    indcheck = 0
 
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
@@ -1275,7 +1266,7 @@ CONTAINS
     ENDIF
 
 
-!!$OMP parallel private(iel, indices, xieta, shapeFunctions, Xe_elem, x, ind, u_old_ind, q_old_ind) shared(xs, X_old, T_old, u_new, q_new, correl, n_elements, refElPol, np_perelem, indcheck)
+!!$OMP parallel private(iel, indices, xieta, shapeFunctions, Xe_elem, x, ind, u_old_ind, q_old_ind) shared(xs, X_old, T_old, u_new, q_new, correl, n_elements, refElPol, np_perelem)
 !!$OMP DO SCHEDULE(STATIC)
     DO iel = 1, n_elements
        IF(iel .EQ. 0) CYCLE
@@ -1329,10 +1320,8 @@ CONTAINS
 
 
     DEALLOCATE(u_old_ind)
-    DEALLOCATE(u_prov)
     IF(PRESENT(q_old)) THEN
        DEALLOCATE(q_old_ind)
-       DEALLOCATE(q_prov)
     ENDIF
 
   END SUBROUTINE projectSolutionDifferentMeshes_Mod
