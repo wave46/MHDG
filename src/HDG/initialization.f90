@@ -1018,10 +1018,60 @@ CONTAINS
 
   ENDSUBROUTINE projectSolutionDifferentMeshes_general_arrays
 
+  SUBROUTINE find_nearest_curved_element(target_point, old_connectivity, old_coordinates, candidate_box_padding_ratio, &
+       nearest_element, nearest_valid_point, nearest_distance, nearest_element_size)
+    USE adaptivity_common_module, ONLY: inverse_isop_transf, clamp_to_curved_triangle
+
+    REAL*8, INTENT(IN)          :: target_point(1,2)
+    INTEGER, INTENT(IN)         :: old_connectivity(:,:)
+    REAL*8, INTENT(IN)          :: old_coordinates(:,:)
+    REAL*8, INTENT(IN)          :: candidate_box_padding_ratio
+    INTEGER, INTENT(OUT)        :: nearest_element
+    REAL*8, INTENT(OUT)         :: nearest_valid_point(1,2), nearest_distance, nearest_element_size
+
+    REAL*8                      :: element_coordinates(Mesh%Nnodesperelem, refElPol%Ndim)
+    REAL*8                      :: reference_point(1,2), clamped_point(1,2)
+    REAL*8                      :: xmin, xmax, ymin, ymax, element_size, bbox_pad, distance
+    INTEGER                     :: element
+    LOGICAL                     :: inverse_converged, clamp_valid
+
+    nearest_element = 0
+    nearest_valid_point = target_point
+    nearest_distance = HUGE(1.d0)
+    nearest_element_size = 0.d0
+
+    DO element = 1, SIZE(old_connectivity,1)
+       element_coordinates = old_coordinates(old_connectivity(element,:),:)
+       xmin = MINVAL(element_coordinates(:,1))
+       xmax = MAXVAL(element_coordinates(:,1))
+       ymin = MINVAL(element_coordinates(:,2))
+       ymax = MAXVAL(element_coordinates(:,2))
+       element_size = MAX(xmax-xmin, ymax-ymin)
+       bbox_pad = MAX(1.d-10, candidate_box_padding_ratio*element_size)
+
+       IF(target_point(1,1) .LT. xmin-bbox_pad .OR. target_point(1,1) .GT. xmax+bbox_pad) CYCLE
+       IF(target_point(1,2) .LT. ymin-bbox_pad .OR. target_point(1,2) .GT. ymax+bbox_pad) CYCLE
+
+       CALL inverse_isop_transf(target_point, element_coordinates, refElPol, reference_point, inverse_converged)
+       IF(.NOT. inverse_converged) CYCLE
+
+       CALL clamp_to_curved_triangle(reference_point, element_coordinates, refElPol, clamped_point, clamp_valid)
+       IF(.NOT. clamp_valid) CYCLE
+
+       distance = SQRT((target_point(1,1)-clamped_point(1,1))**2 + (target_point(1,2)-clamped_point(1,2))**2)
+       IF(distance .LT. nearest_distance) THEN
+          nearest_element = element
+          nearest_valid_point = clamped_point
+          nearest_distance = distance
+          nearest_element_size = element_size
+       ENDIF
+    ENDDO
+  ENDSUBROUTINE find_nearest_curved_element
+
   SUBROUTINE projectSolutionDifferentMeshes_Mod(old_connectivity, old_coordinates, new_connectivity, new_coordinates, &
        u_old, q_old, u_new, q_new)
     USE linearAlgebra, ONLY: colint
-    USE adaptivity_common_module, ONLY: find_matches_int, inverse_isop_transf, clamp_to_curved_triangle
+    USE adaptivity_common_module, ONLY: find_matches_int, inverse_isop_transf
     USE reference_element, ONLY: compute_shape_functions_at_points
 
     INTEGER, INTENT(IN)         :: old_connectivity(:,:), new_connectivity(:,:)
@@ -1040,10 +1090,13 @@ CONTAINS
     REAL*8                      :: A(3,3), barycentric_coordinates(3)
     REAL*8                      :: tol, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3
     REAL*8                      :: curved_tol, bbox_pad, xmin, xmax, ymin, ymax, elem_span
-    REAL*8                      :: nearest_tol, nearest_distance, nearest_element_size, dist
-    REAL*8                      :: target_point(1,2), xieta_point(1,2), x_clamped(1,2), nearest_valid_point(1,2)
+    REAL*8                      :: nearest_tol, nearest_distance, nearest_element_size
+    REAL*8                      :: target_point(1,2), xieta_point(1,2), nearest_valid_point(1,2)
     INTEGER                     :: old_element_dofs(SIZE(old_connectivity,2))
     INTEGER                     :: point_elements(SIZE(target_points,1))
+    INTEGER                     :: nearest_candidate_elements(SIZE(target_points,1))
+    REAL*8                      :: nearest_candidate_distances(SIZE(target_points,1))
+    REAL*8                      :: nearest_candidate_sizes(SIZE(target_points,1))
     INTEGER                     :: i, j, n_elements, np_perelem, iel
     INTEGER                     :: nearest_element
     INTEGER                     :: local_missing, global_missing, ierr
@@ -1051,7 +1104,7 @@ CONTAINS
     REAL*8,  ALLOCATABLE        :: element_points(:,:), reference_points(:,:)
     REAL*8, ALLOCATABLE         :: old_element_u(:,:), old_element_q(:,:,:)
     INTEGER, ALLOCATABLE        :: point_indices(:)
-    LOGICAL                     :: inverse_converged, clamp_valid
+    LOGICAL                     :: inverse_converged
 
     u_new = 0
     IF(PRESENT(q_new)) THEN
@@ -1074,6 +1127,9 @@ CONTAINS
 
 
     point_elements = 0
+    nearest_candidate_elements = 0
+    nearest_candidate_distances = HUGE(1.d0)
+    nearest_candidate_sizes = 0.d0
 
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
@@ -1166,37 +1222,11 @@ CONTAINS
        DO i=1,SIZE(target_points,1)
           IF(point_elements(i) .NE. 0) CYCLE
           target_point(1,:) = target_points(i,:)
-          nearest_distance = HUGE(1.d0)
-          nearest_element_size = 0.d0
-          nearest_element = 0
-          nearest_valid_point = target_point
-
-          DO iel = 1, n_elements
-             element_coordinates = old_coordinates(old_connectivity(iel,:),:)
-             xmin = MINVAL(element_coordinates(:,1))
-             xmax = MAXVAL(element_coordinates(:,1))
-             ymin = MINVAL(element_coordinates(:,2))
-             ymax = MAXVAL(element_coordinates(:,2))
-             elem_span = MAX(xmax-xmin, ymax-ymin)
-             bbox_pad = MAX(1.d-10, 0.25d0*elem_span)
-
-             IF(target_point(1,1) .LT. xmin-bbox_pad .OR. target_point(1,1) .GT. xmax+bbox_pad) CYCLE
-             IF(target_point(1,2) .LT. ymin-bbox_pad .OR. target_point(1,2) .GT. ymax+bbox_pad) CYCLE
-
-             CALL inverse_isop_transf(target_point, element_coordinates, refElPol, xieta_point, inverse_converged)
-             IF(.NOT. inverse_converged) CYCLE
-
-             CALL clamp_to_curved_triangle(xieta_point, element_coordinates, refElPol, x_clamped, clamp_valid)
-             IF(.NOT. clamp_valid) CYCLE
-             dist = SQRT((target_point(1,1)-x_clamped(1,1))**2 + (target_point(1,2)-x_clamped(1,2))**2)
-
-             IF(dist .LT. nearest_distance) THEN
-                nearest_distance = dist
-                nearest_element_size = elem_span
-                nearest_element = iel
-                nearest_valid_point = x_clamped
-             ENDIF
-          ENDDO
+          CALL find_nearest_curved_element(target_point, old_connectivity, old_coordinates, 0.5d0, nearest_element, &
+               nearest_valid_point, nearest_distance, nearest_element_size)
+          nearest_candidate_elements(i) = nearest_element
+          nearest_candidate_distances(i) = nearest_distance
+          nearest_candidate_sizes(i) = nearest_element_size
 
           IF(nearest_element .NE. 0 .AND. nearest_distance .LE. nearest_tol*MAX(1.d-12, nearest_element_size)) THEN
              point_elements(i) = nearest_element
@@ -1217,41 +1247,12 @@ CONTAINS
       WRITE(*,*) "Projection unmatched points on rank: ", MPIvar%glob_id, local_missing
       DO i=1,SIZE(target_points,1)
          IF(point_elements(i) .NE. 0) CYCLE
-         target_point(1,:) = target_points(i,:)
-         nearest_distance = HUGE(1.d0)
-         nearest_element_size = 0.d0
-         nearest_element = 0
 
-         DO iel = 1, n_elements
-            element_coordinates = old_coordinates(old_connectivity(iel,:),:)
-            xmin = MINVAL(element_coordinates(:,1))
-            xmax = MAXVAL(element_coordinates(:,1))
-            ymin = MINVAL(element_coordinates(:,2))
-            ymax = MAXVAL(element_coordinates(:,2))
-            elem_span = MAX(xmax-xmin, ymax-ymin)
-            bbox_pad = MAX(1.d-10, 0.5d0*elem_span)
-
-            IF(target_point(1,1) .LT. xmin-bbox_pad .OR. target_point(1,1) .GT. xmax+bbox_pad) CYCLE
-            IF(target_point(1,2) .LT. ymin-bbox_pad .OR. target_point(1,2) .GT. ymax+bbox_pad) CYCLE
-
-            CALL inverse_isop_transf(target_point, element_coordinates, refElPol, xieta_point, inverse_converged)
-            IF(.NOT. inverse_converged) CYCLE
-
-            CALL clamp_to_curved_triangle(xieta_point, element_coordinates, refElPol, x_clamped, clamp_valid)
-            IF(.NOT. clamp_valid) CYCLE
-            dist = SQRT((target_point(1,1)-x_clamped(1,1))**2 + (target_point(1,2)-x_clamped(1,2))**2)
-
-            IF(dist .LT. nearest_distance) THEN
-               nearest_distance = dist
-               nearest_element_size = elem_span
-               nearest_element = iel
-            ENDIF
-         ENDDO
-
-         IF(nearest_element .NE. 0) THEN
+         IF(nearest_candidate_elements(i) .NE. 0) THEN
             WRITE(*,*) "Unmatched projection point rank/index/xy/nearest/dist/local h/ratio: ", &
-                 MPIvar%glob_id, i, target_points(i,1), target_points(i,2), nearest_element, nearest_distance, nearest_element_size, &
-                 nearest_distance/MAX(1.d-12, nearest_element_size)
+                 MPIvar%glob_id, i, target_points(i,1), target_points(i,2), nearest_candidate_elements(i), &
+                 nearest_candidate_distances(i), nearest_candidate_sizes(i), &
+                 nearest_candidate_distances(i)/MAX(1.d-12, nearest_candidate_sizes(i))
          ELSE
             WRITE(*,*) "Unmatched projection point rank/index/xy/no nearest candidate: ", &
                  MPIvar%glob_id, i, target_points(i,1), target_points(i,2)
