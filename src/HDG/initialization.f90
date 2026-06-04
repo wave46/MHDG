@@ -1020,7 +1020,7 @@ CONTAINS
 
   SUBROUTINE projectSolutionDifferentMeshes_Mod(T1, X1, T2, X2, u_old, q_old, u_new, q_new)
     USE linearAlgebra, ONLY: solve_linear_system_sing, colint, invert_matrix
-    USE adaptivity_common_module, ONLY: find_matches_int, inverse_isop_transf
+    USE adaptivity_common_module, ONLY: find_matches_int, inverse_isop_transf, clamp_to_curved_triangle
     USE reference_element, ONLY: compute_shape_functions_at_points
 
     INTEGER, INTENT(IN)         :: T1(:,:), T2(:,:)
@@ -1036,14 +1036,20 @@ CONTAINS
     REAL*8                      :: X_old(SIZE(X1,1), SIZE(X1,2)), Xe_elem(Mesh%Nnodesperelem, refElPol%Ndim)
     REAL*8                      :: A(3,3), bcc(3)
     REAL*8                      :: tol, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3
+    REAL*8                      :: curved_tol, bbox_pad, xmin, xmax, ymin, ymax, elem_span
+    REAL*8                      :: nearest_tol, best_dist, best_h, dist, max_accepted_dist, max_accepted_ratio
+    REAL*8                      :: x_point(1,2), x_target(1,2), xieta_point(1,2), x_clamped(1,2), x_best(1,2)
     INTEGER                     :: T_old(SIZE(T1,1), SIZE(T1,2)), ind(SIZE(T1,2)), correl(SIZE(xs,1)), indcheck(SIZE(xs,1))
-    INTEGER                     :: i, j, n_elements, np_perelem, iel
+    INTEGER                     :: i, j, n_elements, np_perelem, iel, n_missing_before, n_missing_after
+    INTEGER                     :: nearest_element, n_nearest_before, n_nearest_after
+    INTEGER                     :: local_missing, global_missing, ierr
     REAL*8,  ALLOCATABLE        :: shapeFunctions(:,:,:)
     REAL*8,  ALLOCATABLE        :: x(:,:), xieta(:,:)
     REAL*8, ALLOCATABLE         :: u_old_ind(:,:), q_old_ind(:,:,:)
     REAL*8, ALLOCATABLE         :: u_prov(:,:), q_prov(:,:,:)
     INTEGER, ALLOCATABLE        :: indices(:)
     INTEGER                     :: elem_full(SIZE(T1,1))
+    LOGICAL                     :: inverse_converged, clamp_valid
 
     u_new = 0
     IF(PRESENT(q_new)) THEN
@@ -1084,58 +1090,187 @@ CONTAINS
     ENDIF
 
 !!$OMP parallel private(iel, counter, i, tol, Xe_elem, A, b, bcc, detA, a11,a12,a13,a21,a22,a23,a31,a32,a33, b1, b2, b3) shared( xs, X_old, T_old, correl)
-    tol = 1e-11
+    tol = 1.d-10
     A(3,:) = 1.
     b3 = 1.
 
-    DO WHILE(tol .LE. 0.1)
 !!$OMP DO SCHEDULE(STATIC)
-       DO iel = 1, n_elements
-          Xe_elem = X_old(T_old(iel,1:3),:)
-          A(1,:) = Xe_elem(1:3,1)
-          A(2,:) = Xe_elem(1:3,2)
+    DO iel = 1, n_elements
+       Xe_elem = X_old(T_old(iel,1:3),:)
+       A(1,:) = Xe_elem(1:3,1)
+       A(2,:) = Xe_elem(1:3,2)
 
-          detA = (A(1,1)*A(2,2)*A(3,3) - A(1,1)*A(2,3)*A(3,2) - A(1,2)*A(2,1)*A(3,3) + &
-               &A(1,2)*A(2,3)*A(3,1) + A(1,3)*A(2,1)*A(3,2) - A(1,3)*A(2,2)*A(3,1))
+       detA = (A(1,1)*A(2,2)*A(3,3) - A(1,1)*A(2,3)*A(3,2) - A(1,2)*A(2,1)*A(3,3) + &
+            &A(1,2)*A(2,3)*A(3,1) + A(1,3)*A(2,1)*A(3,2) - A(1,3)*A(2,2)*A(3,1))
 
-          a11 =   A(2,2)*A(3,3) - A(2,3)*A(3,2)
-          a12 = - A(1,2)*A(3,3) + A(1,3)*A(3,2)
-          a13 =   A(1,2)*A(2,3) - A(1,3)*A(2,2)
-          a21 = - A(2,1)*A(3,3) + A(2,3)*A(3,1)
-          a22 =   A(1,1)*A(3,3) - A(1,3)*A(3,1)
-          a23 = - A(1,1)*A(2,3) + A(1,3)*A(2,1)
-          a31 =   A(2,1)*A(3,2) - A(2,2)*A(3,1)
-          a32 = - A(1,1)*A(3,2) + A(1,2)*A(3,1)
-          a33 =   A(1,1)*A(2,2) - A(1,2)*A(2,1)
+       a11 =   A(2,2)*A(3,3) - A(2,3)*A(3,2)
+       a12 = - A(1,2)*A(3,3) + A(1,3)*A(3,2)
+       a13 =   A(1,2)*A(2,3) - A(1,3)*A(2,2)
+       a21 = - A(2,1)*A(3,3) + A(2,3)*A(3,1)
+       a22 =   A(1,1)*A(3,3) - A(1,3)*A(3,1)
+       a23 = - A(1,1)*A(2,3) + A(1,3)*A(2,1)
+       a31 =   A(2,1)*A(3,2) - A(2,2)*A(3,1)
+       a32 = - A(1,1)*A(3,2) + A(1,2)*A(3,1)
+       a33 =   A(1,1)*A(2,2) - A(1,2)*A(2,1)
 
-          DO i=1,SIZE(xs,1)
-             IF(correl(i) .NE. 0) CYCLE
-             b1 = xs(i,1)
-             b2 = xs(i,2)
+       DO i=1,SIZE(xs,1)
+          IF(correl(i) .NE. 0) CYCLE
+          b1 = xs(i,1)
+          b2 = xs(i,2)
 
-             bcc(1) = (a11*b1+a12*b2+a13*b3)/detA
-             bcc(2) = (a21*b1+a22*b2+a23*b3)/detA
-             bcc(3) = (a31*b1+a32*b2+a33*b3)/detA
+          bcc(1) = (a11*b1+a12*b2+a13*b3)/detA
+          bcc(2) = (a21*b1+a22*b2+a23*b3)/detA
+          bcc(3) = (a31*b1+a32*b2+a33*b3)/detA
 
-             IF ( bcc(1)>=-tol .AND. bcc(2)>=-tol .AND. bcc(3)>=-tol .AND. bcc(1)<=1+tol .AND. bcc(2)<=1+tol .AND. bcc(3)<=1+tol) THEN
+          IF ( bcc(1)>=-tol .AND. bcc(2)>=-tol .AND. bcc(3)>=-tol .AND. bcc(1)<=1+tol .AND. bcc(2)<=1+tol .AND. bcc(3)<=1+tol) THEN
+             correl(i) = iel
+          ENDIF
+       ENDDO
+    ENDDO
+!!$OMP END DO
+!!$OMP END PARALLEL
+
+    IF(ANY(correl .EQ. 0)) THEN
+       n_missing_before = COUNT(correl .EQ. 0)
+       curved_tol = 1.d-8
+
+       DO i=1,SIZE(xs,1)
+          IF(correl(i) .NE. 0) CYCLE
+          x_point(1,:) = xs(i,:)
+
+          DO iel = 1, n_elements
+             Xe_elem = X_old(T_old(iel,:),:)
+             xmin = MINVAL(Xe_elem(:,1))
+             xmax = MAXVAL(Xe_elem(:,1))
+             ymin = MINVAL(Xe_elem(:,2))
+             ymax = MAXVAL(Xe_elem(:,2))
+             elem_span = MAX(xmax-xmin, ymax-ymin)
+             bbox_pad = MAX(1.d-12, curved_tol*MAX(1.d0, elem_span))
+
+             IF(x_point(1,1) .LT. xmin-bbox_pad .OR. x_point(1,1) .GT. xmax+bbox_pad) CYCLE
+             IF(x_point(1,2) .LT. ymin-bbox_pad .OR. x_point(1,2) .GT. ymax+bbox_pad) CYCLE
+
+             CALL inverse_isop_transf(x_point, Xe_elem, refElPol, xieta_point, inverse_converged)
+             IF(.NOT. inverse_converged) CYCLE
+
+             IF(xieta_point(1,1) .GE. -1.d0-curved_tol .AND. &
+                xieta_point(1,2) .GE. -1.d0-curved_tol .AND. &
+                xieta_point(1,1) .LE.  1.d0+curved_tol .AND. &
+                xieta_point(1,2) .LE.  1.d0+curved_tol .AND. &
+                xieta_point(1,1)+xieta_point(1,2) .LE. curved_tol) THEN
                 correl(i) = iel
+                EXIT
              ENDIF
           ENDDO
        ENDDO
-!!$OMP END DO
 
-!!$OMP BARRIER
-       IF(ALL(correl .NE. 0)) THEN
-          EXIT
-       ENDIF
+       n_missing_after = COUNT(correl .EQ. 0)
+       WRITE(*,*) "Curved projection search recovered points on rank: ", MPIvar%glob_id, n_missing_before - n_missing_after, " / ", n_missing_before
+    ENDIF
 
-       tol = tol * 10
+    IF(ANY(correl .EQ. 0)) THEN
+       n_nearest_before = COUNT(correl .EQ. 0)
+       nearest_tol = 1.d-4
+       max_accepted_dist = 0.d0
+       max_accepted_ratio = 0.d0
 
-    ENDDO
-!!$OMP END PARALLEL
+       DO i=1,SIZE(xs,1)
+          IF(correl(i) .NE. 0) CYCLE
+          x_target(1,:) = xs(i,:)
+          best_dist = HUGE(1.d0)
+          best_h = 0.d0
+          nearest_element = 0
+          x_best = x_target
 
+          DO iel = 1, n_elements
+             Xe_elem = X_old(T_old(iel,:),:)
+             xmin = MINVAL(Xe_elem(:,1))
+             xmax = MAXVAL(Xe_elem(:,1))
+             ymin = MINVAL(Xe_elem(:,2))
+             ymax = MAXVAL(Xe_elem(:,2))
+             elem_span = MAX(xmax-xmin, ymax-ymin)
+             bbox_pad = MAX(1.d-10, 0.25d0*elem_span)
 
-    IF(ANY(correl .eq. 0)) THEN
+             IF(x_target(1,1) .LT. xmin-bbox_pad .OR. x_target(1,1) .GT. xmax+bbox_pad) CYCLE
+             IF(x_target(1,2) .LT. ymin-bbox_pad .OR. x_target(1,2) .GT. ymax+bbox_pad) CYCLE
+
+             CALL inverse_isop_transf(x_target, Xe_elem, refElPol, xieta_point, inverse_converged)
+             IF(.NOT. inverse_converged) CYCLE
+
+             CALL clamp_to_curved_triangle(xieta_point, Xe_elem, refElPol, x_clamped, clamp_valid)
+             IF(.NOT. clamp_valid) CYCLE
+             dist = SQRT((x_target(1,1)-x_clamped(1,1))**2 + (x_target(1,2)-x_clamped(1,2))**2)
+
+             IF(dist .LT. best_dist) THEN
+                best_dist = dist
+                best_h = elem_span
+                nearest_element = iel
+                x_best = x_clamped
+             ENDIF
+          ENDDO
+
+          IF(nearest_element .NE. 0 .AND. best_dist .LE. nearest_tol*MAX(1.d-12, best_h)) THEN
+             correl(i) = nearest_element
+             xs(i,:) = x_best(1,:)
+             max_accepted_dist = MAX(max_accepted_dist, best_dist)
+             max_accepted_ratio = MAX(max_accepted_ratio, best_dist/MAX(1.d-12, best_h))
+          ENDIF
+       ENDDO
+
+       n_nearest_after = COUNT(correl .EQ. 0)
+       WRITE(*,*) "Nearest projection fallback recovered points on rank: ", MPIvar%glob_id, n_nearest_before - n_nearest_after, " / ", n_nearest_before
+       WRITE(*,*) "Nearest projection max accepted distance/local h on rank: ", MPIvar%glob_id, max_accepted_dist, max_accepted_ratio
+    ENDIF
+
+    local_missing = COUNT(correl .EQ. 0)
+    global_missing = local_missing
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, global_missing, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       WRITE(*,*) "Projection unmatched points after fallbacks: ", global_missing
+    ENDIF
+
+    IF(local_missing .NE. 0) THEN
+      WRITE(*,*) "Projection unmatched points on rank: ", MPIvar%glob_id, local_missing
+      DO i=1,SIZE(xs,1)
+         IF(correl(i) .NE. 0) CYCLE
+         x_target(1,:) = xs(i,:)
+         best_dist = HUGE(1.d0)
+         best_h = 0.d0
+         nearest_element = 0
+
+         DO iel = 1, n_elements
+            Xe_elem = X_old(T_old(iel,:),:)
+            xmin = MINVAL(Xe_elem(:,1))
+            xmax = MAXVAL(Xe_elem(:,1))
+            ymin = MINVAL(Xe_elem(:,2))
+            ymax = MAXVAL(Xe_elem(:,2))
+            elem_span = MAX(xmax-xmin, ymax-ymin)
+            bbox_pad = MAX(1.d-10, 0.5d0*elem_span)
+
+            IF(x_target(1,1) .LT. xmin-bbox_pad .OR. x_target(1,1) .GT. xmax+bbox_pad) CYCLE
+            IF(x_target(1,2) .LT. ymin-bbox_pad .OR. x_target(1,2) .GT. ymax+bbox_pad) CYCLE
+
+            CALL inverse_isop_transf(x_target, Xe_elem, refElPol, xieta_point, inverse_converged)
+            IF(.NOT. inverse_converged) CYCLE
+
+            CALL clamp_to_curved_triangle(xieta_point, Xe_elem, refElPol, x_clamped, clamp_valid)
+            IF(.NOT. clamp_valid) CYCLE
+            dist = SQRT((x_target(1,1)-x_clamped(1,1))**2 + (x_target(1,2)-x_clamped(1,2))**2)
+
+            IF(dist .LT. best_dist) THEN
+               best_dist = dist
+               best_h = elem_span
+               nearest_element = iel
+            ENDIF
+         ENDDO
+
+         IF(nearest_element .NE. 0) THEN
+            WRITE(*,*) "Unmatched projection point rank/index/xy/nearest/dist/local h/ratio: ", &
+                 MPIvar%glob_id, i, xs(i,1), xs(i,2), nearest_element, best_dist, best_h, best_dist/MAX(1.d-12, best_h)
+         ELSE
+            WRITE(*,*) "Unmatched projection point rank/index/xy/no nearest candidate: ", MPIvar%glob_id, i, xs(i,1), xs(i,2)
+         ENDIF
+      ENDDO
       WRITE(*,*) "Couldn't find a point in projection. STOP."
     ENDIF
 

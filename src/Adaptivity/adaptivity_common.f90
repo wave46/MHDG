@@ -472,10 +472,11 @@ CONTAINS
 
   ENDSUBROUTINE linear_mapping
 
-  SUBROUTINE inverse_isop_transf(x, Xe, refEl, xieta)
+  SUBROUTINE inverse_isop_transf(x, Xe, refEl, xieta, converged)
     TYPE(Reference_element_type), INTENT(IN)  :: RefEl
     REAL*8, INTENT(OUT)                       :: xieta(:,:)
     REAL*8, INTENT(IN)                        :: x(:,:), Xe(:,:)
+    LOGICAL, OPTIONAL, INTENT(OUT)             :: converged
     REAL*8                                    :: x0(SIZE(x,1),SIZE(x,2))
     INTEGER                                   :: maxit, npoints, nnodes, i, j, k, counter, n
     REAL*8, ALLOCATABLE                       :: p(:), dpxi(:), dpeta(:), xind(:,:), x0ind(:,:), xietaind(:,:), rhs(:,:)
@@ -489,6 +490,9 @@ CONTAINS
     tol     = 1e-10
     npoints = SIZE(x,1)
     nnodes  = SIZE(Xe,1)
+    IF(PRESENT(converged)) THEN
+       converged = .TRUE.
+    ENDIF
 
     CALL inverse_linear_transformation(x, Xe, xieta0)
 
@@ -519,7 +523,7 @@ CONTAINS
        counter = 1
        DO i = 1, npoints
           IF((SQRT((x(i,1) - x0(i,1))**2+(x(i,2)-x0(i,2))**2)) .GT. (tol*SQRT(x(i,1)**2+x(i,2)**2)+1.e-14)) THEN
-             ind(counter) = counter
+             ind(counter) = i
              counter = counter + 1
           ENDIF
        ENDDO
@@ -574,8 +578,22 @@ CONTAINS
        ENDDO
 
        IF(ANY((SQRT((xind(:,1)-x0ind(:,1))**2+(xind(:,2)-x0ind(:,2))**2)) .GT. (tol*SQRT(xind(:,1)**2+xind(:,2)**2)+1.e-14))) THEN
-          WRITE(*,*) "inverse_isop_transf non converging."
-          STOP
+          IF(PRESENT(converged)) THEN
+             converged = .FALSE.
+             xieta = xieta0
+             DEALLOCATE(p)
+             DEALLOCATE(dpxi)
+             DEALLOCATE(dpeta)
+             DEALLOCATE(ind)
+             DEALLOCATE(xind)
+             DEALLOCATE(x0ind)
+             DEALLOCATE(xietaind)
+             DEALLOCATE(rhs)
+             RETURN
+          ELSE
+             WRITE(*,*) "inverse_isop_transf non converging."
+             STOP
+          ENDIF
        ENDIF
 
        aux_xieta = xieta0
@@ -636,6 +654,31 @@ CONTAINS
     x(:,2) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), Xe(:,2))
 
   ENDSUBROUTINE iso_transformation_high_order
+
+  SUBROUTINE clamp_to_curved_triangle(xieta, Xe, refEl, x_clamped, valid)
+    TYPE(Reference_element_type), INTENT(IN) :: refEl
+    REAL*8, INTENT(IN)                      :: xieta(1,2), Xe(:,:)
+    REAL*8, INTENT(OUT)                     :: x_clamped(1,2)
+    LOGICAL, INTENT(OUT)                    :: valid
+    REAL*8                                  :: lambda(3), lambda_sum
+    REAL*8                                  :: xieta_clamped(1,2)
+
+    ! Clamp the linear barycentric coordinates to the reference triangle,
+    ! then map that reference point through the curved element geometry.
+    lambda(1) = 0.5d0*(xieta(1,1)+1.d0)
+    lambda(2) = 0.5d0*(xieta(1,2)+1.d0)
+    lambda(3) = 1.d0-lambda(1)-lambda(2)
+    lambda = MAX(0.d0, lambda)
+    lambda_sum = SUM(lambda)
+
+    valid = lambda_sum .GT. 0.d0
+    IF(.NOT. valid) RETURN
+
+    lambda = lambda/lambda_sum
+    xieta_clamped(1,1) = 2.d0*lambda(1)-1.d0
+    xieta_clamped(1,2) = 2.d0*lambda(2)-1.d0
+    CALL iso_transformation_high_order(xieta_clamped, Xe, refEl, x_clamped)
+  ENDSUBROUTINE clamp_to_curved_triangle
 
   PURE SUBROUTINE find_matches_int(a, b, indices)
     INTEGER, DIMENSION(:), INTENT(IN)                 :: a
