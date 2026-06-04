@@ -1082,6 +1082,78 @@ CONTAINS
     ENDDO
   ENDSUBROUTINE find_nearest_curved_element
 
+  SUBROUTINE report_unmatched_projection_points(target_points, point_elements, nearest_candidate_elements, &
+       nearest_candidate_distances, nearest_candidate_sizes)
+    REAL*8, INTENT(IN)          :: target_points(:,:)
+    INTEGER, INTENT(IN)         :: point_elements(:), nearest_candidate_elements(:)
+    REAL*8, INTENT(IN)          :: nearest_candidate_distances(:), nearest_candidate_sizes(:)
+
+    INTEGER                     :: point, local_missing, global_missing, ierr
+
+    local_missing = COUNT(point_elements .EQ. 0)
+    global_missing = local_missing
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, global_missing, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+    IF(MPIvar%glob_id .EQ. 0 .AND. global_missing .NE. 0) THEN
+       WRITE(*,*) "Projection unmatched points after fallbacks: ", global_missing
+    ENDIF
+
+    IF(local_missing .EQ. 0) RETURN
+
+    WRITE(*,*) "Projection unmatched points on rank: ", MPIvar%glob_id, local_missing
+    DO point = 1, SIZE(target_points,1)
+       IF(point_elements(point) .NE. 0) CYCLE
+
+       IF(nearest_candidate_elements(point) .NE. 0) THEN
+          WRITE(*,*) "Unmatched projection point rank/index/xy/nearest/dist/local h/ratio: ", &
+               MPIvar%glob_id, point, target_points(point,1), target_points(point,2), nearest_candidate_elements(point), &
+               nearest_candidate_distances(point), nearest_candidate_sizes(point), &
+               nearest_candidate_distances(point)/MAX(1.d-12, nearest_candidate_sizes(point))
+       ELSE
+          WRITE(*,*) "Unmatched projection point rank/index/xy/no nearest candidate: ", &
+               MPIvar%glob_id, point, target_points(point,1), target_points(point,2)
+       ENDIF
+    ENDDO
+    WRITE(*,*) "Couldn't find a point in projection. STOP."
+  ENDSUBROUTINE report_unmatched_projection_points
+
+  SUBROUTINE recover_nearest_projection_points(target_points, old_connectivity, old_coordinates, point_elements, &
+       interpolation_points)
+    REAL*8, INTENT(IN)          :: target_points(:,:), old_coordinates(:,:)
+    INTEGER, INTENT(IN)         :: old_connectivity(:,:)
+    INTEGER, INTENT(INOUT)      :: point_elements(:)
+    REAL*8, INTENT(INOUT)       :: interpolation_points(:,:)
+
+    INTEGER                     :: nearest_candidate_elements(SIZE(target_points,1))
+    REAL*8                      :: nearest_candidate_distances(SIZE(target_points,1))
+    REAL*8                      :: nearest_candidate_sizes(SIZE(target_points,1))
+    REAL*8                      :: target_point(1,2), nearest_valid_point(1,2)
+    REAL*8                      :: nearest_tolerance, nearest_distance, nearest_element_size
+    INTEGER                     :: point, nearest_element
+
+    nearest_candidate_elements = 0
+    nearest_candidate_distances = HUGE(1.d0)
+    nearest_candidate_sizes = 0.d0
+    nearest_tolerance = 2.d-4
+
+    DO point = 1, SIZE(target_points,1)
+       IF(point_elements(point) .NE. 0) CYCLE
+       target_point(1,:) = target_points(point,:)
+       CALL find_nearest_curved_element(target_point, old_connectivity, old_coordinates, 0.5d0, nearest_element, &
+            nearest_valid_point, nearest_distance, nearest_element_size)
+       nearest_candidate_elements(point) = nearest_element
+       nearest_candidate_distances(point) = nearest_distance
+       nearest_candidate_sizes(point) = nearest_element_size
+
+       IF(nearest_element .NE. 0 .AND. nearest_distance .LE. nearest_tolerance*MAX(1.d-12, nearest_element_size)) THEN
+          point_elements(point) = nearest_element
+          interpolation_points(point,:) = nearest_valid_point(1,:)
+       ENDIF
+    ENDDO
+
+    CALL report_unmatched_projection_points(target_points, point_elements, nearest_candidate_elements, &
+         nearest_candidate_distances, nearest_candidate_sizes)
+  ENDSUBROUTINE recover_nearest_projection_points
+
   PURE SUBROUTINE invert_2x2_matrix(matrix, inverse_matrix)
     REAL*8, INTENT(IN)          :: matrix(2,2)
     REAL*8, INTENT(OUT)         :: inverse_matrix(2,2)
@@ -1196,16 +1268,9 @@ CONTAINS
     REAL*8, OPTIONAL,INTENT(OUT):: q_new(:,:,:)
 
     REAL*8                      :: element_coordinates(Mesh%Nnodesperelem, refElPol%Ndim)
-    REAL*8                      :: nearest_tol, nearest_distance, nearest_element_size
-    REAL*8                      :: target_point(1,2), nearest_valid_point(1,2)
     INTEGER                     :: old_element_dofs(SIZE(old_connectivity,2))
     INTEGER                     :: point_elements(SIZE(target_points,1))
-    INTEGER                     :: nearest_candidate_elements(SIZE(target_points,1))
-    REAL*8                      :: nearest_candidate_distances(SIZE(target_points,1))
-    REAL*8                      :: nearest_candidate_sizes(SIZE(target_points,1))
     INTEGER                     :: i, j, n_elements, np_perelem, iel
-    INTEGER                     :: nearest_element
-    INTEGER                     :: local_missing, global_missing, ierr
     REAL*8,  ALLOCATABLE        :: shape_functions(:,:,:)
     REAL*8,  ALLOCATABLE        :: element_points(:,:), reference_points(:,:)
     REAL*8, ALLOCATABLE         :: old_element_u(:,:), old_element_q(:,:,:)
@@ -1231,9 +1296,6 @@ CONTAINS
 
 
     point_elements = 0
-    nearest_candidate_elements = 0
-    nearest_candidate_distances = HUGE(1.d0)
-    nearest_candidate_sizes = 0.d0
 
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
@@ -1249,50 +1311,8 @@ CONTAINS
        CALL find_points_in_curved_elements(target_points, old_connectivity, old_coordinates, point_elements)
     ENDIF
 
-    IF(ANY(point_elements .EQ. 0)) THEN
-       nearest_tol = 2.d-4
-
-       DO i=1,SIZE(target_points,1)
-          IF(point_elements(i) .NE. 0) CYCLE
-          target_point(1,:) = target_points(i,:)
-          CALL find_nearest_curved_element(target_point, old_connectivity, old_coordinates, 0.5d0, nearest_element, &
-               nearest_valid_point, nearest_distance, nearest_element_size)
-          nearest_candidate_elements(i) = nearest_element
-          nearest_candidate_distances(i) = nearest_distance
-          nearest_candidate_sizes(i) = nearest_element_size
-
-          IF(nearest_element .NE. 0 .AND. nearest_distance .LE. nearest_tol*MAX(1.d-12, nearest_element_size)) THEN
-             point_elements(i) = nearest_element
-             interpolation_points(i,:) = nearest_valid_point(1,:)
-          ENDIF
-       ENDDO
-
-    ENDIF
-
-    local_missing = COUNT(point_elements .EQ. 0)
-    global_missing = local_missing
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, global_missing, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
-    IF(MPIvar%glob_id .EQ. 0 .AND. global_missing .NE. 0) THEN
-       WRITE(*,*) "Projection unmatched points after fallbacks: ", global_missing
-    ENDIF
-
-    IF(local_missing .NE. 0) THEN
-      WRITE(*,*) "Projection unmatched points on rank: ", MPIvar%glob_id, local_missing
-      DO i=1,SIZE(target_points,1)
-         IF(point_elements(i) .NE. 0) CYCLE
-
-         IF(nearest_candidate_elements(i) .NE. 0) THEN
-            WRITE(*,*) "Unmatched projection point rank/index/xy/nearest/dist/local h/ratio: ", &
-                 MPIvar%glob_id, i, target_points(i,1), target_points(i,2), nearest_candidate_elements(i), &
-                 nearest_candidate_distances(i), nearest_candidate_sizes(i), &
-                 nearest_candidate_distances(i)/MAX(1.d-12, nearest_candidate_sizes(i))
-         ELSE
-            WRITE(*,*) "Unmatched projection point rank/index/xy/no nearest candidate: ", &
-                 MPIvar%glob_id, i, target_points(i,1), target_points(i,2)
-         ENDIF
-      ENDDO
-      WRITE(*,*) "Couldn't find a point in projection. STOP."
-    ENDIF
+    CALL recover_nearest_projection_points(target_points, old_connectivity, old_coordinates, point_elements, &
+         interpolation_points)
 
 
 !!$OMP parallel private(iel, point_indices, reference_points, shape_functions, element_coordinates, element_points, old_element_dofs, old_element_u, old_element_q) shared(interpolation_points, old_coordinates, old_connectivity, u_new, q_new, point_elements, n_elements, refElPol, np_perelem)
