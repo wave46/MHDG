@@ -1113,7 +1113,7 @@ CONTAINS
                MPIvar%glob_id, point, target_points(point,1), target_points(point,2)
        ENDIF
     ENDDO
-    WRITE(*,*) "Couldn't find a point in projection. STOP."
+    WRITE(*,*) "WARNING: projection points remain unmatched; their projected values remain zero."
   ENDSUBROUTINE report_unmatched_projection_points
 
   SUBROUTINE recover_nearest_projection_points(target_points, old_connectivity, old_coordinates, point_elements, &
