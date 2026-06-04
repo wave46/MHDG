@@ -29,6 +29,7 @@ CONTAINS
     REAL*8                                  :: inverse_vandermonde(refEl%Nnodes2D, refEl%Nnodes2D)
     REAL*8                                  :: jacobian_x_xi, jacobian_x_eta, jacobian_y_xi, jacobian_y_eta, determinant
     REAL*8                                  :: tolerance
+    LOGICAL                                 :: singular_jacobian
 
     maxit = 5
     tolerance = 1e-10
@@ -67,6 +68,7 @@ CONTAINS
 
        ALLOCATE(polynomial(refEl%Nnodes2D), derivative_xi(refEl%Nnodes2D), derivative_eta(refEl%Nnodes2D))
 
+       singular_jacobian = .FALSE.
        DO iteration = 1, maxit
           IF(ALL(SQRT((unconverged_physical(:,1)-unconverged_mapped(:,1))**2 + &
                (unconverged_physical(:,2)-unconverged_mapped(:,2))**2) .LT. &
@@ -91,6 +93,11 @@ CONTAINS
              jacobian_y_xi = DOT_PRODUCT(shape_derivative_xi,element_coordinates(:,2))
              jacobian_y_eta = DOT_PRODUCT(shape_derivative_eta,element_coordinates(:,2))
              determinant = jacobian_x_xi*jacobian_y_eta-jacobian_x_eta*jacobian_y_xi
+             IF(mapping_jacobian_is_nearly_singular(jacobian_x_xi, jacobian_x_eta, jacobian_y_xi, &
+                  jacobian_y_eta, determinant)) THEN
+                singular_jacobian = .TRUE.
+                EXIT
+             ENDIF
              residual = unconverged_physical-unconverged_mapped
 
              unconverged_reference(point,1) = unconverged_reference(point,1) + &
@@ -99,11 +106,13 @@ CONTAINS
                   (residual(point,2)*jacobian_x_xi-residual(point,1)*jacobian_y_xi)/determinant
           ENDDO
 
+          IF(singular_jacobian) EXIT
+
           CALL regularize_reference_triangle_apex(unconverged_reference)
           CALL map_reference_to_physical(unconverged_reference, element_coordinates, refEl, unconverged_mapped)
        ENDDO
 
-       IF(ANY(SQRT((unconverged_physical(:,1)-unconverged_mapped(:,1))**2 + &
+       IF(singular_jacobian .OR. ANY(SQRT((unconverged_physical(:,1)-unconverged_mapped(:,1))**2 + &
             (unconverged_physical(:,2)-unconverged_mapped(:,2))**2) .GT. &
             (tolerance*SQRT(unconverged_physical(:,1)**2+unconverged_physical(:,2)**2)+1.e-14))) THEN
           IF(PRESENT(converged)) THEN
@@ -128,6 +137,16 @@ CONTAINS
        reference_points = initial_reference
     ENDIF
   ENDSUBROUTINE map_physical_to_reference
+
+  PURE LOGICAL FUNCTION mapping_jacobian_is_nearly_singular(jacobian_x_xi, jacobian_x_eta, jacobian_y_xi, &
+       jacobian_y_eta, determinant)
+    REAL*8, INTENT(IN) :: jacobian_x_xi, jacobian_x_eta, jacobian_y_xi, jacobian_y_eta, determinant
+    REAL*8             :: jacobian_scale, determinant_tolerance
+
+    jacobian_scale = MAX(ABS(jacobian_x_xi), ABS(jacobian_x_eta), ABS(jacobian_y_xi), ABS(jacobian_y_eta))
+    determinant_tolerance = 100.d0*EPSILON(1.d0)*jacobian_scale**2
+    mapping_jacobian_is_nearly_singular = ABS(determinant) .LE. determinant_tolerance
+  ENDFUNCTION mapping_jacobian_is_nearly_singular
 
   PURE SUBROUTINE regularize_reference_triangle_apex(reference_points)
     REAL*8, INTENT(INOUT) :: reference_points(:,:)
