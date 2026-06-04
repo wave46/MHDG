@@ -478,7 +478,7 @@ CONTAINS
     REAL*8, INTENT(IN)                        :: x(:,:), Xe(:,:)
     LOGICAL, OPTIONAL, INTENT(OUT)             :: converged
     REAL*8                                    :: x0(SIZE(x,1),SIZE(x,2))
-    INTEGER                                   :: maxit, npoints, nnodes, i, j, k, counter, n
+    INTEGER                                   :: maxit, npoints, nnodes, i, j, counter, n
     REAL*8, ALLOCATABLE                       :: p(:), dpxi(:), dpeta(:), xind(:,:), x0ind(:,:), xietaind(:,:), rhs(:,:)
     INTEGER, ALLOCATABLE                      :: ind(:)
     REAL*8                                    :: xieta0(SIZE(x,1),SIZE(x,2)), aux_xieta(SIZE(x,1),SIZE(x,2)), Nx(refEl%Nnodes2D), Ny(refEl%Nnodes2D)
@@ -495,15 +495,7 @@ CONTAINS
     ENDIF
 
     CALL inverse_linear_transformation(x, Xe, xieta0)
-
-    ! just fucking brute force it
-    DO j = 1, SIZE(xieta0,2)
-       DO i = 1, SIZE(xieta0,1)
-          IF(ABS(xieta0(i,j)-1.0) .LT. 1e-12) THEN
-             xieta0(i,j) = xieta0(i,j) - 1.e-10
-          ENDIF
-       ENDDO
-    ENDDO
+    CALL regularize_reference_triangle_apex(xieta0)
 
     CALL iso_transformation_high_order(xieta0, Xe, refEl, x0)
 
@@ -565,14 +557,7 @@ CONTAINS
 
           ENDDO
 
-          ! just fucking brute force it
-          DO k = 1, SIZE(xietaind,2)
-             DO j = 1, SIZE(xietaind,1)
-                IF(ABS(xietaind(j,k)-1.0) .LT. 1e-12) THEN
-                   xietaind(j,k) = xietaind(j,k) - 1.e-10
-                ENDIF
-             ENDDO
-          ENDDO
+          CALL regularize_reference_triangle_apex(xietaind)
 
           CALL iso_transformation_high_order(xietaind, Xe, refEl,x0ind)
        ENDDO
@@ -613,6 +598,14 @@ CONTAINS
        xieta = xieta0
     ENDIF
   ENDSUBROUTINE inverse_isop_transf
+
+  PURE SUBROUTINE regularize_reference_triangle_apex(reference_points)
+    REAL*8, INTENT(INOUT)       :: reference_points(:,:)
+
+    WHERE(ABS(reference_points(:,2)-1.d0) .LT. 1.d-12)
+       reference_points(:,2) = reference_points(:,2) - 1.d-10
+    ENDWHERE
+  ENDSUBROUTINE regularize_reference_triangle_apex
 
   SUBROUTINE inverse_linear_transformation(x,Xe,xieta)
     USE LinearAlgebra, only: solve_linear_system

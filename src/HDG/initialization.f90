@@ -1260,7 +1260,7 @@ CONTAINS
 
     REAL*8                      :: element_coordinates(Mesh%Nnodesperelem, refElPol%Ndim)
     INTEGER                     :: old_element_dofs(SIZE(old_connectivity,2))
-    INTEGER                     :: point, coordinate, element, nodes_per_element
+    INTEGER                     :: point, element, nodes_per_element
     REAL*8, ALLOCATABLE         :: shape_functions(:,:,:)
     REAL*8, ALLOCATABLE         :: element_points(:,:), reference_points(:,:)
     REAL*8, ALLOCATABLE         :: old_element_u(:,:), old_element_q(:,:,:)
@@ -1286,15 +1286,6 @@ CONTAINS
        element_coordinates = old_coordinates(old_connectivity(element,:),:)
 
        CALL inverse_isop_transf(element_points, element_coordinates, refElPol, reference_points)
-
-       ! Avoid evaluating shape functions exactly at a singular reference-coordinate endpoint.
-       DO coordinate = 1, SIZE(reference_points,2)
-          DO point = 1, SIZE(reference_points,1)
-             IF(ABS(reference_points(point,coordinate)-1.d0) .LT. 1.d-12) THEN
-                reference_points(point,coordinate) = reference_points(point,coordinate) - 1.d-10
-             ENDIF
-          ENDDO
-       ENDDO
 
        CALL compute_shape_functions_at_points(refElPol, reference_points, shape_functions)
 
