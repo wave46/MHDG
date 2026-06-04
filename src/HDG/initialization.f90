@@ -1178,10 +1178,8 @@ CONTAINS
     REAL*8                      :: barycentric_tolerance
     INTEGER                     :: point, element
 
-!!$OMP parallel private(element, point, barycentric_tolerance, triangle_vertices, edge_matrix, inverse_edge_matrix, barycentric_weights, point_offset) shared(target_points, old_coordinates, old_connectivity, point_elements)
     barycentric_tolerance = 1.d-10
 
-!!$OMP DO SCHEDULE(STATIC)
     DO element = 1, SIZE(old_connectivity,1)
        triangle_vertices = old_coordinates(old_connectivity(element,1:3),:)
        edge_matrix(:,1) = triangle_vertices(2,:) - triangle_vertices(1,:)
@@ -1204,8 +1202,6 @@ CONTAINS
           ENDIF
        ENDDO
     ENDDO
-!!$OMP END DO
-!!$OMP END PARALLEL
   ENDSUBROUTINE find_points_in_linear_elements
 
   SUBROUTINE find_points_in_curved_elements(target_points, old_connectivity, old_coordinates, point_elements)
@@ -1277,8 +1273,6 @@ CONTAINS
     ALLOCATE(old_element_u(nodes_per_element, SIZE(u_old,2)))
     IF(PRESENT(q_old)) ALLOCATE(old_element_q(nodes_per_element, SIZE(q_old,2),2))
 
-!!$OMP parallel private(element, point_indices, reference_points, shape_functions, element_coordinates, element_points, old_element_dofs, old_element_u, old_element_q) shared(interpolation_points, old_coordinates, old_connectivity, u_new, q_new, point_elements, refElPol, nodes_per_element)
-!!$OMP DO SCHEDULE(STATIC)
     DO element = 1, SIZE(old_connectivity,1)
        CALL find_matches_int(point_elements, element, point_indices)
 
@@ -1319,8 +1313,6 @@ CONTAINS
        DEALLOCATE(point_indices)
        DEALLOCATE(shape_functions)
     ENDDO
-!!$OMP END DO
-!!$OMP END PARALLEL
 
     DEALLOCATE(old_element_u)
     IF(PRESENT(q_old)) DEALLOCATE(old_element_q)
