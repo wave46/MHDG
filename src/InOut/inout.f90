@@ -1019,6 +1019,11 @@ CONTAINS
       IF (phys%n_impurities > 0 .AND. ALLOCATED(phys%impurity_concentrations)) THEN
          CALL HDF5_array1d_saving(group_id2, phys%impurity_concentrations, phys%n_impurities, 'impurity_concentrations')
       ENDIF
+      IF (ALLOCATED(phys%alpha_cooling_factor_impurities)) THEN
+         CALL HDF5_array2D_saving(group_id2, phys%alpha_cooling_factor_impurities, &
+            &SIZE(phys%alpha_cooling_factor_impurities, 1), SIZE(phys%alpha_cooling_factor_impurities, 2), &
+            &'impurity_cooling_coefficients_adim')
+      ENDIF
       CALL HDF5_logical_saving(group_id2, phys%apply_trim, 'apply_trim')
       CALL HDF5_real_saving(group_id2, phys%Zeff, 'Zeff')
       CALL HDF5_real_saving(group_id2, phys%Pohmic, 'ohmic_coeff')
