@@ -4433,7 +4433,7 @@ END IF
       Sn(4,:) = dniz_dU(:)*sigmavEiz + niz*dsigmavEiz_dU(:) + &
         &dnrec_dU(:)*sigmavErec + nrec*dsigmavErec_dU(:)
       IF (PRESENT(cooling_factor)) THEN
-        Sn(4,:) = Sn(4,:) + phys%impurity_concentration*(nrec*dcooling_factor_dU(:) + dnrec_dU(:)*cooling_factor)
+        Sn(4,:) = Sn(4,:) + nrec*dcooling_factor_dU(:) + dnrec_dU(:)*cooling_factor
       endif
 
       Sn(4,:) = Sn(4,:) - recombination_energy*(dnrec_dU(:)*sigmavrec + nrec*dsigmavrec_dU(:))
@@ -4471,7 +4471,7 @@ END IF
       Sn0(4)    = Sn0(4) - niz*dot_product(dsigmavEiz_dU,U) - nrec*dot_product(dsigmavErec_dU,U)
       Sn0(4)    = Sn0(4) + nrec*dot_PRODUCT(dsigmavrec_dU,U)*recombination_energy
       IF (PRESENT(cooling_factor)) THEN
-        Sn0(4)    = Sn0(4) - phys%impurity_concentration*nrec*cooling_factor
+        Sn0(4)    = Sn0(4) - nrec*cooling_factor
       ENDIF
 #endif
       Sn0(inn)  = -Sn0(1)
