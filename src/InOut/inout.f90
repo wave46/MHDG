@@ -1012,6 +1012,13 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%recycling_neutral_gamma, 'recycling_neutral_gamma')
       CALL HDF5_real_saving(group_id2, phys%impurity_concentration, 'impurity_concentration')
       CALL HDF5_string_saving(group_id2, phys%impurity_name, 'impurity_name')
+      CALL HDF5_integer_saving(group_id2, phys%n_impurities, 'n_impurities')
+      IF (phys%n_impurities > 0 .AND. ALLOCATED(phys%impurity_names)) THEN
+         CALL HDF5_string_array1D_saving(group_id2, phys%impurity_names, 'impurity_names')
+      ENDIF
+      IF (phys%n_impurities > 0 .AND. ALLOCATED(phys%impurity_concentrations)) THEN
+         CALL HDF5_array1d_saving(group_id2, phys%impurity_concentrations, phys%n_impurities, 'impurity_concentrations')
+      ENDIF
       CALL HDF5_logical_saving(group_id2, phys%apply_trim, 'apply_trim')
       CALL HDF5_real_saving(group_id2, phys%Zeff, 'Zeff')
       CALL HDF5_real_saving(group_id2, phys%Pohmic, 'ohmic_coeff')
@@ -1682,6 +1689,9 @@ CONTAINS
          ELSEIF (switch%target_variable == 3) THEN
             CALL HDF5_real_reading(group_id2, phys%puff, 'puff')
             CALL HDF5_real_reading(group_id2, phys%impurity_concentration, 'impurity_concentration')
+            IF (ALLOCATED(phys%impurity_concentrations) .AND. phys%n_impurities > 0) THEN
+               phys%impurity_concentrations(1) = phys%impurity_concentration
+            ENDIF
          ENDIF
 
          IF (time%it .GT. 1) THEN
