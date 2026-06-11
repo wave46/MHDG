@@ -203,7 +203,7 @@ physics.F : $(SDIR)/Models/$(RMDL)/physics.f90
 impurity_radiation.F : $(SDIR)/Models/$(RMDL)/impurity_radiation/impurity_radiation.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-impurity_radiation.o : impurity_radiation.F globals.o shift_logpoly.o
+impurity_radiation.o : impurity_radiation.F globals.o shift_logpoly.o MPI_OMP.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 physics.o : physics.F globals.o magnetic_field.o impurity_radiation.o shift_logpoly.o
@@ -242,7 +242,7 @@ endif
 read_input.F : $(SDIR)/InOut/read_input.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-read_input.o : read_input.F prec_const.o globals.o MPI_OMP.o
+read_input.o : read_input.F prec_const.o globals.o MPI_OMP.o impurity_radiation.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 reference_element.F : $(SDIR)/HDG/reference_element.f90

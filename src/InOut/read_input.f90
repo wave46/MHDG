@@ -12,6 +12,7 @@ SUBROUTINE READ_input()
   USE prec_const
   USE globals
   USE MPI_OMP
+  USE impurity_radiation, ONLY: read_impurity_radiation_input
   IMPLICIT NONE
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
@@ -71,8 +72,6 @@ SUBROUTINE READ_input()
 
   ! impurity radiation
   LOGICAL               :: impurity_radiation
-  CHARACTER(1000)       :: impurity_name
-  REAL*8                :: impurity_concentration
 
   ! target density
   INTEGER               :: target_variable
@@ -105,13 +104,13 @@ SUBROUTINE READ_input()
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn, diff_nn_min,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
-  & Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
+  & Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,& 
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, &
     &T_fluxlim_maxi, T_fluxlim_maxe, neutral_flux_limiter_mode, neutral_flux_limiter_eps, &
     &neutral_flux_limiter_fs_fraction, neutral_flux_limiter_fs_flux_min
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn, diff_nn_min,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,impurity_name,impurity_concentration,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn, diff_nn_min,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, recycling_neutral_gamma, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, &
     &T_fluxlim_maxi, T_fluxlim_maxe, neutral_flux_limiter_mode, neutral_flux_limiter_eps, &
@@ -344,8 +343,6 @@ SUBROUTINE READ_input()
   phys%apply_trim         = apply_trim
   phys%cryopump_power     = cryopump_power
   phys%puff               = puff
-  phys%impurity_name      = TRIM(ADJUSTL(impurity_name))
-  phys%impurity_concentration = impurity_concentration
   IF (switch%impurity_radiation) CALL read_impurity_radiation_input()
   phys%feedback_propotional_gain = feedback_propotional_gain
   phys%feedback_integral_gain = feedback_integral_gain
@@ -574,8 +571,6 @@ SUBROUTINE READ_input()
      PRINT *, '                - neutral flux limiter eps:                          ', phys%neutral_flux_limiter_eps
      PRINT *, '                - neutral flux limiter fs fraction:                  ', phys%neutral_flux_limiter_fs_fraction
      PRINT *, '                - neutral flux limiter fs flux min:                  ', phys%neutral_flux_limiter_fs_flux_min
-     PRINT *, '                - impurity name:                                     ', TRIM(ADJUSTL(phys%impurity_name))
-     PRINT *, '                - impurity concentration:                            ', phys%impurity_concentration
      IF (switch%impurity_radiation) THEN
         PRINT *, '                - impurity model path:                               ', TRIM(ADJUSTL(input%impurity_model_path))
         PRINT *, '                - number of impurity entries:                        ', phys%n_impurities
@@ -820,75 +815,3 @@ SUBROUTINE read_transport_model_input()
   transport_model_input%diff_e_min_phys = diff_e_min_phys
   transport_model_input%diff_ee_min_phys = diff_ee_min_phys
 END SUBROUTINE read_transport_model_input
-
-SUBROUTINE read_impurity_radiation_input()
-  USE globals
-  USE MPI_OMP
-  IMPLICIT NONE
-
-  INTEGER, PARAMETER :: max_impurity_entries = 64
-  INTEGER :: uimpurity, ios, i
-  INTEGER :: n_impurities
-  CHARACTER(LEN=20) :: impurity_names(max_impurity_entries)
-  REAL*8 :: impurity_concentrations(max_impurity_entries)
-  NAMELIST /IMPURITY_RADIATION_LST/ n_impurities, impurity_names, impurity_concentrations
-
-  IF (LEN_TRIM(input%impurity_model_path) == 0) THEN
-     IF (MPIvar%glob_id == 0) WRITE(6,*) 'impurity_model_path must be set when impurity_radiation is enabled'
-     STOP
-  END IF
-
-  n_impurities = 0
-  impurity_names = ''
-  impurity_concentrations = 0.d0
-
-  uimpurity = 102
-  OPEN(uimpurity, file=TRIM(ADJUSTL(input%impurity_model_path)), status='old', iostat=ios)
-  IF (ios /= 0) THEN
-     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Could not open impurity radiation settings file: ', TRIM(ADJUSTL(input%impurity_model_path))
-     STOP
-  END IF
-
-  READ(uimpurity, nml=IMPURITY_RADIATION_LST, iostat=ios)
-  CLOSE(uimpurity)
-  IF (ios /= 0) THEN
-     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Could not read IMPURITY_RADIATION_LST from file: ', TRIM(ADJUSTL(input%impurity_model_path))
-     STOP
-  END IF
-
-  IF (n_impurities < 1) THEN
-     IF (MPIvar%glob_id == 0) WRITE(6,*) 'n_impurities must be at least 1 for impurity radiation'
-     STOP
-  END IF
-  IF (n_impurities > max_impurity_entries) THEN
-     IF (MPIvar%glob_id == 0) WRITE(6,*) 'n_impurities exceeds maximum supported entries: ', n_impurities, max_impurity_entries
-     STOP
-  END IF
-
-  DO i = 1, n_impurities
-     impurity_names(i) = TRIM(ADJUSTL(impurity_names(i)))
-     SELECT CASE (TRIM(impurity_names(i)))
-     CASE ('N', 'W')
-     CASE DEFAULT
-        IF (MPIvar%glob_id == 0) WRITE(6,*) 'Unsupported impurity radiation species: ', TRIM(impurity_names(i))
-        STOP
-     END SELECT
-
-     IF (impurity_concentrations(i) < 0.d0) THEN
-        IF (MPIvar%glob_id == 0) WRITE(6,*) 'Impurity concentration must be non-negative for species ', TRIM(impurity_names(i)), ': ', impurity_concentrations(i)
-        STOP
-     END IF
-  END DO
-
-  IF (ALLOCATED(phys%impurity_names)) DEALLOCATE(phys%impurity_names)
-  IF (ALLOCATED(phys%impurity_concentrations)) DEALLOCATE(phys%impurity_concentrations)
-
-  phys%n_impurities = n_impurities
-  ALLOCATE(phys%impurity_names(n_impurities))
-  ALLOCATE(phys%impurity_concentrations(n_impurities))
-  phys%impurity_names = impurity_names(1:n_impurities)
-  phys%impurity_concentrations = impurity_concentrations(1:n_impurities)
-
-  phys%impurity_name = phys%impurity_names(1)
-  phys%impurity_concentration = phys%impurity_concentrations(1)
-END SUBROUTINE read_impurity_radiation_input
