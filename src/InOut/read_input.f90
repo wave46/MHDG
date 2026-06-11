@@ -20,7 +20,7 @@ SUBROUTINE READ_input()
   LOGICAL               :: neutral_perpendicular_diffusion
   INTEGER               :: thresh, difcor, tis, stab,pertini,init,order_2d
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
-  INTEGER               :: uinput, printint, testcase, nrp, balance_diagnostics_verbosity
+  INTEGER               :: uinput, printint, testcase, nrp, balance_diagnostics_verbosity, i
   INTEGER               :: nts, tsw, freqdisp, freqsave, shockcp, limrho
   INTEGER               :: shockcp_adapt, evaluator, difference, freq_t_adapt,freq_NR_adapt, quant_ind
   INTEGER,ALLOCATABLE,DIMENSION(:) :: n_quant_ind,param_est
@@ -46,7 +46,7 @@ SUBROUTINE READ_input()
 
   ! Info for input and output
   CHARACTER(len = 1000) :: field_path, jtor_path,save_folder, geometry_path,puff_path, target_density_path,target_density_xpr_path, impurity_concentration_path, zeff_path
-  CHARACTER(len = 1000) :: transport_model_path = 'transport_model.nml'
+  CHARACTER(len = 1000) :: transport_model_path = 'transport_model.nml', impurity_model_path = 'impurity_model.nml'
   INTEGER               :: field_dimensions(1:2), jtor_dimensions(1:2),puff_dimension, target_density_dimension,target_density_xpr_dimension,impurity_concentration_dimension, zeff_dimension
   LOGICAL               :: field_from_grid, compute_from_flux, divide_by_2pi
 

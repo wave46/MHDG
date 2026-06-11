@@ -1,0 +1,5 @@
+&IMPURITY_RADIATION_LST
+  n_impurities = 2
+  impurity_names = 'W', 'N'
+  impurity_concentrations = 0.0d0, 0.0d0
+/

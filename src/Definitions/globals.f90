@@ -395,6 +395,15 @@ CONTAINS
        DEALLOCATE (phys%conVarNam)
        NULLIFY(phys%conVarNam)
     END IF
+    IF (ALLOCATED(phys%impurity_names)) THEN
+       DEALLOCATE (phys%impurity_names)
+    END IF
+    IF (ALLOCATED(phys%impurity_concentrations)) THEN
+       DEALLOCATE (phys%impurity_concentrations)
+    END IF
+    IF (ALLOCATED(phys%alpha_cooling_factor_impurities)) THEN
+       DEALLOCATE (phys%alpha_cooling_factor_impurities)
+    END IF
     IF (ASSOCIATED(phys%Jtor)) THEN
        DEALLOCATE (phys%Jtor)
        NULLIFY(phys%Jtor)
