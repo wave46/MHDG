@@ -97,7 +97,7 @@ SUBROUTINE READ_input()
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, transport_1d, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb,flux_limiter,import_diffusion_1D,neutral_wall_sources_in_elements,neutral_perpendicular_diffusion
-  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path
+  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,impurity_concentration_path,impurity_concentration_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path, impurity_model_path
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump,neutralp_lambda
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
@@ -155,15 +155,6 @@ SUBROUTINE READ_input()
   READ (uinput, UTILS_LST)
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
-
-  IF (impurity_radiation) THEN
-     IF ((TRIM(ADJUSTL(impurity_name)) .NE. 'N') ) THEN
-         IF ((TRIM(ADJUSTL(impurity_name)) .NE. 'W')) THEN
-            PRINT *, 'Only nitrogen or tungsten is allowed for impurity radiation so far. Stopping'
-            STOP
-         ENDIF
-     ENDIF
-  ENDIF
 
   neutral_flux_limiter_mode = TRIM(ADJUSTL(neutral_flux_limiter_mode))
   SELECT CASE (neutral_flux_limiter_mode)
@@ -265,6 +256,7 @@ SUBROUTINE READ_input()
   input%puff_dimension   = puff_dimension
   input%diffusion_1D_path = TRIM(ADJUSTL(diffusion_1D_path))
   input%transport_model_path = TRIM(ADJUSTL(transport_model_path))
+  input%impurity_model_path = TRIM(ADJUSTL(impurity_model_path))
   numer%tau               = tau
   numer%nrp               = nrp
   numer%tNR               = tNR
@@ -354,6 +346,7 @@ SUBROUTINE READ_input()
   phys%puff               = puff
   phys%impurity_name      = TRIM(ADJUSTL(impurity_name))
   phys%impurity_concentration = impurity_concentration
+  IF (switch%impurity_radiation) CALL read_impurity_radiation_input()
   phys%feedback_propotional_gain = feedback_propotional_gain
   phys%feedback_integral_gain = feedback_integral_gain
   phys%feedback_derivative_gain = feedback_derivative_gain
@@ -583,6 +576,13 @@ SUBROUTINE READ_input()
      PRINT *, '                - neutral flux limiter fs flux min:                  ', phys%neutral_flux_limiter_fs_flux_min
      PRINT *, '                - impurity name:                                     ', TRIM(ADJUSTL(phys%impurity_name))
      PRINT *, '                - impurity concentration:                            ', phys%impurity_concentration
+     IF (switch%impurity_radiation) THEN
+        PRINT *, '                - impurity model path:                               ', TRIM(ADJUSTL(input%impurity_model_path))
+        PRINT *, '                - number of impurity entries:                        ', phys%n_impurities
+        DO i = 1, phys%n_impurities
+           PRINT *, '                  impurity entry ', i, ': ', TRIM(phys%impurity_names(i)), phys%impurity_concentrations(i)
+        END DO
+     END IF
      PRINT *, '                - import 1D diffusion profile:                       ', switch%import_diffusion_1D
      IF (switch%ME) THEN
         PRINT *, '                - I_0 for moving equilibrium:                         ', phys%I_0
@@ -638,6 +638,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - saveTau:                                            ', saveTau
      PRINT *, '                - transport_1d:                          ', transport_1d
      PRINT *, '                - transport_model_path:                  ', TRIM(ADJUSTL(input%transport_model_path))
+     PRINT *, '                - impurity_model_path:                   ', TRIM(ADJUSTL(input%impurity_model_path))
      PRINT *, '                - rho_core (transport model):            ', transport_model_input%rho_core
      PRINT *, '                - rho_edge (transport model):            ', transport_model_input%rho_edge
      PRINT *, '                - rho_diffusion_model_max (transport model):       ', transport_model_input%rho_diffusion_model_max
@@ -819,3 +820,75 @@ SUBROUTINE read_transport_model_input()
   transport_model_input%diff_e_min_phys = diff_e_min_phys
   transport_model_input%diff_ee_min_phys = diff_ee_min_phys
 END SUBROUTINE read_transport_model_input
+
+SUBROUTINE read_impurity_radiation_input()
+  USE globals
+  USE MPI_OMP
+  IMPLICIT NONE
+
+  INTEGER, PARAMETER :: max_impurity_entries = 64
+  INTEGER :: uimpurity, ios, i
+  INTEGER :: n_impurities
+  CHARACTER(LEN=20) :: impurity_names(max_impurity_entries)
+  REAL*8 :: impurity_concentrations(max_impurity_entries)
+  NAMELIST /IMPURITY_RADIATION_LST/ n_impurities, impurity_names, impurity_concentrations
+
+  IF (LEN_TRIM(input%impurity_model_path) == 0) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) 'impurity_model_path must be set when impurity_radiation is enabled'
+     STOP
+  END IF
+
+  n_impurities = 0
+  impurity_names = ''
+  impurity_concentrations = 0.d0
+
+  uimpurity = 102
+  OPEN(uimpurity, file=TRIM(ADJUSTL(input%impurity_model_path)), status='old', iostat=ios)
+  IF (ios /= 0) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Could not open impurity radiation settings file: ', TRIM(ADJUSTL(input%impurity_model_path))
+     STOP
+  END IF
+
+  READ(uimpurity, nml=IMPURITY_RADIATION_LST, iostat=ios)
+  CLOSE(uimpurity)
+  IF (ios /= 0) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Could not read IMPURITY_RADIATION_LST from file: ', TRIM(ADJUSTL(input%impurity_model_path))
+     STOP
+  END IF
+
+  IF (n_impurities < 1) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) 'n_impurities must be at least 1 for impurity radiation'
+     STOP
+  END IF
+  IF (n_impurities > max_impurity_entries) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) 'n_impurities exceeds maximum supported entries: ', n_impurities, max_impurity_entries
+     STOP
+  END IF
+
+  DO i = 1, n_impurities
+     impurity_names(i) = TRIM(ADJUSTL(impurity_names(i)))
+     SELECT CASE (TRIM(impurity_names(i)))
+     CASE ('N', 'W')
+     CASE DEFAULT
+        IF (MPIvar%glob_id == 0) WRITE(6,*) 'Unsupported impurity radiation species: ', TRIM(impurity_names(i))
+        STOP
+     END SELECT
+
+     IF (impurity_concentrations(i) < 0.d0) THEN
+        IF (MPIvar%glob_id == 0) WRITE(6,*) 'Impurity concentration must be non-negative for species ', TRIM(impurity_names(i)), ': ', impurity_concentrations(i)
+        STOP
+     END IF
+  END DO
+
+  IF (ALLOCATED(phys%impurity_names)) DEALLOCATE(phys%impurity_names)
+  IF (ALLOCATED(phys%impurity_concentrations)) DEALLOCATE(phys%impurity_concentrations)
+
+  phys%n_impurities = n_impurities
+  ALLOCATE(phys%impurity_names(n_impurities))
+  ALLOCATE(phys%impurity_concentrations(n_impurities))
+  phys%impurity_names = impurity_names(1:n_impurities)
+  phys%impurity_concentrations = impurity_concentrations(1:n_impurities)
+
+  phys%impurity_name = phys%impurity_names(1)
+  phys%impurity_concentration = phys%impurity_concentrations(1)
+END SUBROUTINE read_impurity_radiation_input

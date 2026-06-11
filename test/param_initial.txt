@@ -97,6 +97,7 @@
     zeff_path = '/path/where/to/read/zeff/'
     zeff_dimension = 10000
     diffusion_1D_path = '/path/where/to/read/1d/diffsion/
+    impurity_model_path = 'impurity_model.nml'
 /
 
 &NUMER_LST
