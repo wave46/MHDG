@@ -1,4 +1,4 @@
-MODULE impurity_radiation
+MODULE impurity_radiation_model
   USE globals, ONLY: phys, simpar
   USE globals, ONLY: input
   USE MPI_OMP, ONLY: MPIvar
@@ -159,4 +159,4 @@ CONTAINS
     END DO
   END SUBROUTINE compute_impurity_weighted_dcooling_dU
 
-END MODULE impurity_radiation
+END MODULE impurity_radiation_model

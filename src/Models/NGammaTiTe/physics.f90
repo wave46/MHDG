@@ -9,7 +9,7 @@ MODULE physics
   USE globals
   USE magnetic_field
   USE shift_logpoly
-  USE impurity_radiation, ONLY: init_impurity_radiation_model, adimensionalize_impurity_radiation_model, &
+  USE impurity_radiation_model, ONLY: init_impurity_radiation_model, adimensionalize_impurity_radiation_model, &
     &compute_impurity_weighted_cooling, compute_impurity_weighted_dcooling_dU
   IMPLICIT NONE
 

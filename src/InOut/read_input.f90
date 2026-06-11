@@ -12,7 +12,7 @@ SUBROUTINE READ_input()
   USE prec_const
   USE globals
   USE MPI_OMP
-  USE impurity_radiation, ONLY: read_impurity_radiation_input
+  USE impurity_radiation_model, ONLY: read_impurity_radiation_input
   IMPLICIT NONE
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
