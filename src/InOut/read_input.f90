@@ -642,6 +642,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - c_bohm_e (transport model):           ', transport_model_input%c_bohm_e
      PRINT *, '                - c_gyrobohm_e (transport model):       ', transport_model_input%c_gyrobohm_e
      PRINT *, '                - c_bohm_n (transport model):           ', transport_model_input%c_bohm_n
+     PRINT *, '                - c_bohm_n_rho_slope (transport model): ', transport_model_input%c_bohm_n_rho_slope
      PRINT *, '                - prandtl (transport model):            ', transport_model_input%prandtl
      PRINT *, '                - pinch_model (transport model):        ', transport_model_input%pinch_model
      PRINT *, '                - c_pinch (transport model):            ', transport_model_input%c_pinch
@@ -751,9 +752,9 @@ SUBROUTINE read_transport_model_input()
   IMPLICIT NONE
 
   INTEGER :: utransport, ios
-  REAL*8 :: rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+  REAL*8 :: rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
   INTEGER :: pinch_model
-  NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+  NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
 
   rho_core = transport_model_input%rho_core
   rho_edge = transport_model_input%rho_edge
@@ -763,6 +764,7 @@ SUBROUTINE read_transport_model_input()
   c_bohm_e = transport_model_input%c_bohm_e
   c_gyrobohm_e = transport_model_input%c_gyrobohm_e
   c_bohm_n = transport_model_input%c_bohm_n
+  c_bohm_n_rho_slope = transport_model_input%c_bohm_n_rho_slope
   prandtl = transport_model_input%prandtl
   pinch_model = transport_model_input%pinch_model
   c_pinch = transport_model_input%c_pinch
@@ -801,6 +803,7 @@ SUBROUTINE read_transport_model_input()
   transport_model_input%c_bohm_e = c_bohm_e
   transport_model_input%c_gyrobohm_e = c_gyrobohm_e
   transport_model_input%c_bohm_n = c_bohm_n
+  transport_model_input%c_bohm_n_rho_slope = c_bohm_n_rho_slope
   transport_model_input%prandtl = prandtl
   transport_model_input%pinch_model = pinch_model
   transport_model_input%c_pinch = c_pinch

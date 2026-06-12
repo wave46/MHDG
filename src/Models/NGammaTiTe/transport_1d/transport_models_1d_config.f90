@@ -28,6 +28,7 @@ MODULE transport_models_1d_config
      REAL*8 :: c_bohm_e = 8.d-5
      REAL*8 :: c_gyrobohm_e = 3.5d-2
      REAL*8 :: c_bohm_n = 1.d0
+     REAL*8 :: c_bohm_n_rho_slope = 0.7d0
      REAL*8 :: prandtl = 1.d0
   END TYPE transport_model_config_t
 
@@ -56,13 +57,14 @@ CONTAINS
     config%c_bohm_e = 8.d-5
     config%c_gyrobohm_e = 3.5d-2
     config%c_bohm_n = 1.d0
+    config%c_bohm_n_rho_slope = 0.7d0
     config%prandtl = 1.d0
   END SUBROUTINE tm1d_config_reset
 
-  SUBROUTINE tm1d_config_apply(config, refval_time, refval_length, rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys)
+  SUBROUTINE tm1d_config_apply(config, refval_time, refval_length, rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys)
     TYPE(transport_model_config_t), INTENT(INOUT) :: config
     REAL*8, INTENT(IN) :: refval_time, refval_length
-    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
 
     IF (PRESENT(rho_edge)) config%rho_edge = rho_edge
@@ -73,6 +75,7 @@ CONTAINS
     IF (PRESENT(c_bohm_e)) config%c_bohm_e = c_bohm_e
     IF (PRESENT(c_gyrobohm_e)) config%c_gyrobohm_e = c_gyrobohm_e
     IF (PRESENT(c_bohm_n)) config%c_bohm_n = c_bohm_n
+    IF (PRESENT(c_bohm_n_rho_slope)) config%c_bohm_n_rho_slope = c_bohm_n_rho_slope
     IF (PRESENT(prandtl)) config%prandtl = prandtl
     IF (PRESENT(pinch_model)) config%pinch_model = pinch_model
     IF (PRESENT(c_pinch)) config%c_pinch = c_pinch

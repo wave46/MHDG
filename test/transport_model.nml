@@ -19,6 +19,7 @@
   c_bohm_e = 8.e-5
   c_gyrobohm_e = 3.5e-2
   c_bohm_n = 1.0
+  c_bohm_n_rho_slope = 0.7
   prandtl = 1.0
 
   ! Pinch model selector.

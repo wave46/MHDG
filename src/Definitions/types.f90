@@ -502,6 +502,7 @@ MODULE types
      REAL*8 :: c_bohm_e = 8.d-5
      REAL*8 :: c_gyrobohm_e = 3.5d-2
      REAL*8 :: c_bohm_n = 1.d0
+     REAL*8 :: c_bohm_n_rho_slope = 0.7d0
      REAL*8 :: prandtl = 1.d0
      INTEGER :: pinch_model = 1
      REAL*8 :: c_pinch = 0.5d0

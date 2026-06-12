@@ -166,10 +166,16 @@ The particle and momentum transport are then built as
 $$
 d_{\mathrm{fs}}
 = c_{\mathrm{B},n}\,
+\max\!\left(1-c_{\mathrm{B},n,\rho}r/a,0\right)\,
 \frac{\chi_i\chi_e}{\max(\chi_i+\chi_e,\varepsilon)},
 \qquad
 \nu_{\mathrm{mom}} = \mathrm{Pr}\,\chi_i.
 $$
+
+The default radial particle-diffusion slope is
+`c_bohm_n_rho_slope = 0.7`, matching the usual JETTO mixed
+Bohm / gyro-Bohm density diffusivity factor in `r/a` when
+`c_bohm_n = 1`.
 
 Important normalization note:
 
