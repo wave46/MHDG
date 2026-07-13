@@ -8,7 +8,6 @@
 
 MODULE types
    USE prec_const
-   USE mod_splines
    IMPLICIT NONE
 
    !*******************************************************
@@ -22,7 +21,7 @@ MODULE types
    INTEGER, PARAMETER, PUBLIC   :: bc_Transmission = 4
    INTEGER, PARAMETER, PUBLIC   :: bc_dirichlet_and_Neumann = 5
    INTEGER, PARAMETER, PUBLIC   :: bc_iter_core = 6
-   ! 20-.. In out type
+   ! 20-.. in out type
    INTEGER, PARAMETER, PUBLIC   :: bc_inout = 20
    ! 30-.. Neumann type
    INTEGER, PARAMETER, PUBLIC   :: bc_NeumannH = 30
@@ -115,7 +114,7 @@ MODULE types
       INTEGER*4, POINTER        :: boundaryFlag(:) => NULL() ! Flag for the boundary condition for each external face (set in the mesh generator)
       INTEGER*4, ALLOCATABLE    :: F(:, :) ! Faces connectivity matrix
       INTEGER*4, ALLOCATABLE    :: N(:, :) ! Nodes connectivity matrix
-      INTEGER*4, ALLOCATABLE    :: face_info(:, :) ! Elemental face info
+      INTEGER*4, ALLOCATABLE    :: face_info(:, :) ! elemental face info
       INTEGER*4, ALLOCATABLE    :: faces(:, :, :) ! for each triangle i, stores info k on each face j: faces(i,j,1) = # of neighbouring triangle (0 if external
       ! boundary), faces(i,j,2) = type of boundary (), faces(i,j,3) = type of boundary condition
       INTEGER*4, ALLOCATABLE    :: extfaces(:, :) ! for each exterior face, stores the number of the triangle, the number of the face, and the type of BC
@@ -183,19 +182,6 @@ MODULE types
       !     integer,allocatable   :: connpro(:)        ! processes connected to the local process
 #endif
    END TYPE Mesh_type
-
-   TYPE Splines_DT
-      INTEGER                       :: boundaryFlag
-      INTEGER                       :: spline_number
-      INTEGER                       :: tot_n_splines
-      INTEGER                       :: n_points
-      REAL*8                        :: angle, xmax, xmin, ymax, ymin, xcenter, ycenter
-      REAL*8                        :: RotMat(2, 2), AntiRotMat(2, 2)
-      INTEGER, ALLOCATABLE          :: points_number(:)
-      REAL*8, ALLOCATABLE           :: points_coord(:, :)
-      TYPE(spline)                  :: spline
-
-   END TYPE Splines_DT
 
    !*******************************************************
    ! Physics: type for physical model info
@@ -333,8 +319,8 @@ MODULE types
       INTEGER                   :: nbRow              ! number of rows (1,2 or 3) of RMP coils, default is 2
       REAL*8                    :: amp_ripple         ! amplitude Ripple
       INTEGER                   :: nbCoils_ripple     ! number coils Ripple (full torus)
-      REAL*8                    :: triang             ! triangularity (0: None)
-      REAL*8                    :: ellip              ! ellipticity (1: None)
+      REAL*8                    :: triang             ! triangularity (0: none)
+      REAL*8                    :: ellip              ! ellipticity (1: none)
       REAL*8, POINTER           :: coils_rmp(:, :, :) => NULL()! Coil coordinates for RMP (nbCoils*4*Discr,start-stop*(xyz)=6,rowNb) (4 for square coils)
       REAL*8, POINTER           :: coils_ripple(:, :) => NULL()! Coil coordinates for Ripple (nbCoils*Discr,start-stop*(xyz)=6)
    END TYPE Magnetic_type
@@ -370,13 +356,13 @@ MODULE types
       INTEGER                   :: shockcp ! Shock capturing option
       INTEGER                   :: limrho  ! Add a source for limiting the min value of rho
       INTEGER                   :: difcor  ! Add diffusion in corners
-      INTEGER                   :: thresh  ! Use a threshold for limiting the min value of rho
+      INTEGER                   :: thresh  ! use a threshold for limiting the min value of rho
       ! (rho-rho*E in case of N-Gamma-Energy model, rho-rho*Ei-rho*Ee in case of N-Gamma-Ti-Te model)
       LOGICAL                   :: filter  ! Filter solution to avoid oscillation in empty zones
       LOGICAL                   :: decoup  ! Decouple N-Gamma from Te-Ti (only used for N-Gamma-Ti-Te model)
       LOGICAL                   :: ckeramp ! Chech the error amplification in the linear system solution (for very ill-conditioned matrices)
-      LOGICAL                   :: saveNR  ! Save solution at each NR iteration
-      LOGICAL                   :: saveTau ! Save tau on faces
+      LOGICAL                   :: saveNR  ! save solution at each NR iteration
+      LOGICAL                   :: saveTau ! save tau on faces
       LOGICAL                   :: fixdPotLim
       LOGICAL                   :: dirivortcore
       LOGICAL                   :: dirivortlim
@@ -487,8 +473,8 @@ MODULE types
    ! Utilities: type for printing/debugging/saving...
    !*******************************************************
    TYPE Utils_type
-      INTEGER                   :: printint       ! Integer for printing
-      LOGICAL                   :: printflux      ! Logical for printing wall fluxes
+      INTEGER                   :: printint       ! integer for printing
+      LOGICAL                   :: printflux      ! logical for printing wall fluxes
       LOGICAL                   :: timing         ! Timing of the code
       INTEGER                   :: freqdisp       ! Frequency of results display
       INTEGER                   :: freqsave       ! Frequency of solution save
@@ -519,7 +505,7 @@ MODULE types
       INTEGER                   :: gmresres   ! Restart value for GMRES
       INTEGER                   :: mgorder   ! Polynomial order to use in the MultiGrid preconditioner
       INTEGER                   :: mglevels   ! Number of levels for the MultiGrid preconditioner
-      INTEGER                   :: mgcycletype ! Cycle type for the MultiGrid preconditioner
+      INTEGER                   :: mgcycletype ! cycle type for the MultiGrid preconditioner
       INTEGER                   :: mgtypeform   ! Form type of the MultiGrid preconditioner
 
       ! Parameters relative to the library PSBLAS
@@ -541,7 +527,7 @@ MODULE types
       CHARACTER(len=20)         :: solve        ! local subsolver
       INTEGER                   :: fill         ! fill-in level p of the ILU factorizations
       REAL                      :: thr          ! threshold for ILUT
-      ! Second smoother/ AMG post-smoother (if NONE ignored in main)
+      ! Second smoother/ AMG post-smoother (if none ignored in main)
       CHARACTER(len=20)         :: smther2      ! smoother type
       INTEGER                   :: jsweeps2     ! (post-)smoother sweeps
       INTEGER                   :: novr2        ! number of overlap layers
@@ -575,13 +561,13 @@ MODULE types
    ! Solution: contains the solution at the current time step
    !**********************************************************
    TYPE Sol_type
-      REAL*8, POINTER           :: u(:) => NULL() ! Elemental solution
+      REAL*8, POINTER           :: u(:) => NULL() ! elemental solution
       REAL*8, POINTER           :: u_conv(:) => NULL()
       REAL*8, POINTER           :: u_tilde(:) => NULL() ! Face solution
       REAL*8, POINTER           :: u_tilde0(:) => NULL() ! Face solution
-      REAL*8, POINTER           :: q(:) => NULL() ! Elemental solution for the gradient
+      REAL*8, POINTER           :: q(:) => NULL() ! elemental solution for the gradient
       REAL*8, POINTER           :: q_conv(:) => NULL()
-      REAL*8, ALLOCATABLE       :: u0(:, :) ! Elemental solution at previous time steps
+      REAL*8, ALLOCATABLE       :: u0(:, :) ! elemental solution at previous time steps
       REAL*8, ALLOCATABLE       :: tres(:) ! Time residual
       REAL*8, ALLOCATABLE       :: time(:) ! Time evolution
       INTEGER                   :: Nt ! Number of time-steps
@@ -657,7 +643,7 @@ MODULE types
    END TYPE Simulationparams_type
 
    !**********************************************************
-   ! Elemental matrices: type to store the elemental matrices
+   ! elemental matrices: type to store the elemental matrices
    ! used during the computation
    !**********************************************************
    TYPE                         :: elmat_type
