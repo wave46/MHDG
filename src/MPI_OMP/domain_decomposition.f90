@@ -1275,6 +1275,9 @@ CONTAINS
       REAL*8                           :: xmin
       CHARACTER(10)                    :: str
       REAL*8                           :: tol = 1e-6
+#ifdef TOR3D
+      INTEGER                          :: i
+#endif
 
       CALL free_mesh
 
