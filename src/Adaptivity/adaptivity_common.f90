@@ -2,7 +2,7 @@
 ! project: MHDG
 ! file: inout.f90
 ! date: 06/09/2016
-! Module for schock capturing adaptivity
+! module for schock capturing adaptivity
 !************************************************************
 
 MODULE adaptivity_common_module
@@ -47,7 +47,7 @@ CONTAINS
 
          s = (side1 + side2 + side3)/2.0
          area = SQRT(s*(s - side1)*(s - side2)*(s - side3))
-         !Double circumradius
+         !double circumradius
          h_map(i) = (side1*side2*side3)/(2.0*area)
       END DO
    END SUBROUTINE calculate_h_map_elements
@@ -74,54 +74,54 @@ CONTAINS
       DEALLOCATE (h_target_nodal, nodes_repeats)
    END SUBROUTINE get_h_target_vertices
 
-   ! SUBROUTINE compute_nodal_characteristic_lengths_tri(num_nodes, num_elements, num_dims, &
+   ! subroutine compute_nodal_characteristic_lengths_tri(num_nodes, num_elements, num_dims, &
    !      X, T, estimated_lc)
    !   !
    !   ! Computes the average length of all edges connected to each node in a mesh
-   !   ! composed ONLY of triangles.
+   !   ! composed only of triangles.
    !   !
    !   ! Arguments:
-   !   INTEGER, INTENT(in)      :: num_nodes              ! Total number of nodes
-   !   INTEGER, INTENT(in)      :: num_elements           ! Total number of elements
-   !   INTEGER, INTENT(in)      :: num_dims               ! Number of spatial dimensions (2 or 3)
-   !   REAL(kind=8), INTENT(in) :: X(num_nodes, num_dims) ! Nodal coordinates (real(kind=8) for double precision)
-   !   INTEGER, INTENT(in)      :: T(num_elements, 3)     ! Connectivity matrix (1-based indexing assumed for Fortran)
+   !   integer, intent(in)      :: num_nodes              ! Total number of nodes
+   !   integer, intent(in)      :: num_elements           ! Total number of elements
+   !   integer, intent(in)      :: num_dims               ! Number of spatial dimensions (2 or 3)
+   !   real(kind=8), intent(in) :: X(num_nodes, num_dims) ! Nodal coordinates (real(kind=8) for double precision)
+   !   integer, intent(in)      :: T(num_elements, 3)     ! Connectivity matrix (1-based indexing assumed for Fortran)
    !   ! Fixed to 3 columns for triangles
-   !   REAL(kind=8), INTENT(out) :: estimated_lc(num_nodes) ! Output: Estimated characteristic lengths for each node
+   !   real(kind=8), intent(out) :: estimated_lc(num_nodes) ! Output: Estimated characteristic lengths for each node
    !
    !   ! Local variables
-   !   INTEGER                  :: i, j, k, elem_idx, node_idx_1, node_idx_2
-   !   REAL(kind=8)             :: edge_length
-   !   REAL(kind=8), ALLOCATABLE :: node_lc_sum(:)
-   !   INTEGER, ALLOCATABLE     :: node_edge_counts(:)
+   !   integer                  :: i, j, k, elem_idx, node_idx_1, node_idx_2
+   !   real(kind=8)             :: edge_length
+   !   real(kind=8), allocatable :: node_lc_sum(:)
+   !   integer, allocatable     :: node_edge_counts(:)
    !
    !   ! --- Define edges for triangles (local indices within the element's row in T) ---
    !   ! For a triangle with nodes (T_elem_row(1), T_elem_row(2), T_elem_row(3))
    !   ! Edges are: (node 1, node 2), (node 2, node 3), (node 3, node 1)
-   !   INTEGER, PARAMETER       :: local_triangle_edges(3, 2) = RESHAPE([1, 2, 2, 3, 3, 1], shape=[3, 2])
-   !   INTEGER, PARAMETER       :: num_nodes_per_elem = 3 ! Fixed for triangles
-   !   INTEGER, PARAMETER       :: num_edges_per_elem = 3 ! Fixed for triangles
+   !   integer, parameter       :: local_triangle_edges(3, 2) = RESHAPE([1, 2, 2, 3, 3, 1], shape=[3, 2])
+   !   integer, parameter       :: num_nodes_per_elem = 3 ! Fixed for triangles
+   !   integer, parameter       :: num_edges_per_elem = 3 ! Fixed for triangles
    !
    !
    !   ! --- Initialize arrays ---
-   !   ALLOCATE(node_lc_sum(num_nodes))
-   !   ALLOCATE(node_edge_counts(num_nodes))
+   !   allocate(node_lc_sum(num_nodes))
+   !   allocate(node_edge_counts(num_nodes))
    !   node_lc_sum = 0.0_8
    !   node_edge_counts = 0
    !
    !   ! --- Iterate through each element ---
-   !   DO elem_idx = 1, num_elements
+   !   do elem_idx = 1, num_elements
    !      ! --- Iterate through each edge of the current triangle ---
-   !      DO i = 1, num_edges_per_elem
+   !      do i = 1, num_edges_per_elem
    !         ! Get the global node indices (Fortran uses 1-based indexing, T is assumed 1-based)
    !         node_idx_1 = T(elem_idx, local_triangle_edges(i, 1))
    !         node_idx_2 = T(elem_idx, local_triangle_edges(i, 2))
    !
    !         ! Calculate the Euclidean distance (length) of the edge
    !         edge_length = 0.0_8
-   !         DO j = 1, num_dims
+   !         do j = 1, num_dims
    !            edge_length = edge_length + (X(node_idx_1, j) - X(node_idx_2, j))**2
-   !         END DO
+   !         end do
    !         edge_length = SQRT(edge_length)
    !
    !         ! Accumulate the sum of edge lengths and count for both nodes on this edge
@@ -129,29 +129,29 @@ CONTAINS
    !         node_edge_counts(node_idx_1) = node_edge_counts(node_idx_1) + 1
    !
    !         ! Make sure we don't double-count if the edge is self-referencing (shouldn't happen)
-   !         IF (node_idx_1 /= node_idx_2) THEN
+   !         if (node_idx_1 /= node_idx_2) then
    !            node_lc_sum(node_idx_2) = node_lc_sum(node_idx_2) + edge_length
    !            node_edge_counts(node_idx_2) = node_edge_counts(node_idx_2) + 1
-   !         END IF
-   !      END DO ! i (edges per element)
-   !   END DO ! elem_idx
+   !         end if
+   !      end do ! i (edges per element)
+   !   end do ! elem_idx
    !
    !   ! --- Calculate the average for each node ---
-   !   DO i = 1, num_nodes
-   !      IF (node_edge_counts(i) > 0) THEN
-   !         estimated_lc(i) = node_lc_sum(i) / REAL(node_edge_counts(i), kind=8)
-   !      ELSE
+   !   do i = 1, num_nodes
+   !      if (node_edge_counts(i) > 0) then
+   !         estimated_lc(i) = node_lc_sum(i) / real(node_edge_counts(i), kind=8)
+   !      else
    !         ! Handle isolated nodes (nodes with no connected edges).
    !         ! This shouldn't happen in a valid mesh.
    !         WRITE(*,*) 'Warning: Node', i, 'has no connected edges. Assigning default LC = 1.0_8'
    !         estimated_lc(i) = 1.0_8 ! Default value, adjust as needed
-   !      END IF
-   !   END DO
+   !      end if
+   !   end do
    !
-   !   DEALLOCATE(node_lc_sum)
-   !   DEALLOCATE(node_edge_counts)
+   !   deallocate(node_lc_sum)
+   !   deallocate(node_edge_counts)
    !
-   ! END SUBROUTINE compute_nodal_characteristic_lengths_tri
+   ! end subroutine compute_nodal_characteristic_lengths_tri
 
    SUBROUTINE load_new_mesh_gmsh(order)
       USE preprocess
@@ -460,7 +460,7 @@ CONTAINS
 
       CALL free_mesh
 
-      !CALL generate_elemface_info(Tp,Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, p+1, total_face_info)
+      !call generate_elemface_info(Tp,Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, p+1, total_face_info)
       CALL generate_boundary_names(Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_PUFF, Tb_PUMP, Tb_ULIM, Tb, boundaryFlag, element_order)
       CALL load_mesh2global_var(Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, Tp, Xp_aux, Tb, boundaryFlag)
 
@@ -664,7 +664,7 @@ CONTAINS
    END SUBROUTINE inverse_isop_transf
 
    SUBROUTINE inverse_linear_transformation(x, Xe, xieta)
-      USE LinearAlgebra, only: solve_linear_system
+      USE LinearAlgebra, ONLY: solve_linear_system
 
       REAL*8, INTENT(IN)        :: x(:, :), Xe(:, :)
       REAL*8, INTENT(OUT)       :: xieta(:, :)
@@ -759,7 +759,7 @@ CONTAINS
          END IF
 
          ! ! get the index at the dot of .msh
-         ! IF((mesh_name(i-2:i-2) .eq. 'm') .and. (mesh_name(i-1:i-1) .eq. 's') .and. (mesh_name(i:i) .eq. 'h')) THEN
+         ! if((mesh_name(i-2:i-2) .eq. 'm') .and. (mesh_name(i-1:i-1) .eq. 's') .and. (mesh_name(i:i) .eq. 'h')) then
          !   end = i-4
          ! ENDIF
          ! get the index at the first slash reading from right to left
@@ -777,7 +777,7 @@ CONTAINS
    PURE SUBROUTINE unique_1D(list_in, list_out)
       !! From a 1D array of integers list_in extracts the list of unique occurences of values
       !integer, dimension(:), intent(in) :: list_in
-      INTEGER, DIMENSION(:), INTENT(in) :: list_in
+      INTEGER, DIMENSION(:), INTENT(IN) :: list_in
       !! The list of integers to work on
       INTEGER, DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: list_out
       !! The list in output, with a single occurence of each value in list in
@@ -812,7 +812,7 @@ CONTAINS
       !! Author: t-nissie, some tweaks by 1AdAstra1
       !! License: GPLv3
       !! Gist: https://gist.github.com/t-nissie/479f0f16966925fa29ea
-      INTEGER, DIMENSION(:), INTENT(inout) :: a
+      INTEGER, DIMENSION(:), INTENT(INOUT) :: a
       INTEGER                   ::  x, t
       INTEGER                   :: first, last
       INTEGER i, j
@@ -847,7 +847,7 @@ CONTAINS
       !! Author: t-nissie, some tweaks by 1AdAstra1
       !! License: GPLv3
       !! Gist: https://gist.github.com/t-nissie/479f0f16966925fa29ea
-      REAL*8, DIMENSION(:), INTENT(inout) :: a
+      REAL*8, DIMENSION(:), INTENT(INOUT) :: a
       !! The array to sort
 
       REAL*8                    ::  x, t
@@ -902,7 +902,7 @@ CONTAINS
          END IF
       END DO
 
-      ! Allocate the unique array and populate it in the original order
+      ! allocate the unique array and populate it in the original order
       ALLOCATE (uniqueArr(nUnique))
       DO i = 1, nUnique
          uniqueArr(i) = arrayin(indices(i))
@@ -914,7 +914,7 @@ CONTAINS
 
       USE, INTRINSIC            :: iso_c_binding
       USE gmsh
-      USE MPI_OMP, only: OMPvar
+      USE MPI_OMP, ONLY: OMPvar
 
       TYPE(gmsh_t)              :: gmsh_l
       INTEGER, INTENT(IN)       :: p_order
@@ -958,32 +958,32 @@ CONTAINS
 
       ! Add h_target as a post-processing view
       size_view = gmsh_l%view%add("h_target")
-      call gmsh_l%view%addListData(size_view, "ST", number_of_triangles, data_for_gmsh)
+      CALL gmsh_l%view%addListData(size_view, "ST", number_of_triangles, data_for_gmsh)
       sf_index = gmsh_l%view%getIndex(size_view)
 
       ! Add the view as a field
       ret = gmsh_l%model%mesh%field%add("PostView")
-      call gmsh_l%model%mesh%field%setNumber(ret, "ViewIndex", 0d0)
+      CALL gmsh_l%model%mesh%field%setNumber(ret, "ViewIndex", 0d0)
 
       ! Apply the view as the current background mesh size field:
-      call gmsh_l%model%mesh%field%setAsBackgroundMesh(ret)
+      CALL gmsh_l%model%mesh%field%setAsBackgroundMesh(ret)
 
       ! ignore characteristic length from geometry
-      call gmsh_l%option%setNumber("Mesh.MeshSizeExtendFromBoundary", 0d0)
-      call gmsh_l%option%setNumber("Mesh.MeshSizeFromPoints", 0d0)
-      call gmsh_l%option%setNumber("Mesh.MeshSizeFromCurvature", 0d0)
+      CALL gmsh_l%option%setNumber("Mesh.MeshSizeExtendFromBoundary", 0d0)
+      CALL gmsh_l%option%setNumber("Mesh.MeshSizeFromPoints", 0d0)
+      CALL gmsh_l%option%setNumber("Mesh.MeshSizeFromCurvature", 0d0)
       CALL gmsh_l%option%setNumber("Mesh.MeshSizeFactor", 1d0)
-      !CALL gmsh_l%option%setNumber("General.NumThreads", 1d0) ! it should be use what specified by OMP_NUM_THREADS
+      CALL gmsh_l%option%setNumber("General.NumThreads", REAL(OMPvar%Nthreads)) ! it should be use what specified by OMP_NUM_THREADS
       CALL gmsh_l%option%setNumber("Mesh.MeshSizeMin", 0.5e-4)
 
       !Changing the algorithm to Delaunay, the default is Frontal-Delaunay (Don't Know if needed)
-      call gmsh_l%option%setNumber("Mesh.Algorithm", 5d0)
+      CALL gmsh_l%option%setNumber("Mesh.Algorithm", 5d0)
       ! Generate the refined mesh
-      call gmsh_l%model%mesh%generate(2)
-      call gmsh_l%model%mesh%setOrder(p_order)
-      call gmsh_l%model%mesh%optimize('HighOrder')
+      CALL gmsh_l%model%mesh%generate(2)
+      CALL gmsh_l%model%mesh%setOrder(p_order)
+      CALL gmsh_l%model%mesh%optimize('HighOrder')
       CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)
-      call gmsh_l%write('./res/temp.msh')
+      CALL gmsh_l%write('./res/temp.msh')
       CALL gmsh_l%finalize()
 
       DEALLOCATE (data_for_gmsh)
