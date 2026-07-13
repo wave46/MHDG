@@ -306,10 +306,12 @@ CONTAINS
   SUBROUTINE syncroprint_vector_int(Vec)
     USE MPI_OMP
     INTEGER, DIMENSION(:), INTENT(IN) :: Vec
-    INTEGER :: code, aux
+    INTEGER :: code, aux, source
     INTEGER, PARAMETER :: etiquette = 1000
-    INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
-
+    !INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
+    TYPE(MPI_Status) :: statut
+    
+    source = MPIvar%glob_id - 1
     aux = 1
 
     IF (MPIvar%glob_id == 0) THEN
@@ -317,11 +319,11 @@ CONTAINS
       CALL displayVectorInt(Vec)
       CALL MPI_SEND(aux, 1, MPI_INTEGER, MPIvar%glob_id + 1, etiquette, MPI_COMM_WORLD, code)
     ELSE IF (MPIvar%glob_id == MPIvar%glob_size - 1) THEN
-      CALL MPI_RECV(aux, 1, MPI_INTEGER, MPIvar%glob_id - 1, etiquette, MPI_COMM_WORLD, statut, code)
+      CALL MPI_RECV(aux, 1, MPI_INTEGER, source, etiquette, MPI_COMM_WORLD, statut, code)
       WRITE (6, *) "Process ", MPIvar%glob_id
       CALL displayVectorInt(Vec)
     ELSE
-      CALL MPI_RECV(aux, 1, MPI_INTEGER, MPIvar%glob_id - 1, etiquette, MPI_COMM_WORLD, statut, code)
+      CALL MPI_RECV(aux, 1, MPI_INTEGER, source, etiquette, MPI_COMM_WORLD, statut, code)
       WRITE (6, *) "Process ", MPIvar%glob_id
       CALL displayVectorInt(Vec)
       CALL MPI_SEND(aux, 1, MPI_INTEGER, MPIvar%glob_id + 1, etiquette, MPI_COMM_WORLD, code)
@@ -334,22 +336,24 @@ CONTAINS
   SUBROUTINE syncroprint_vector(Vec)
     USE MPI_OMP
     REAL, DIMENSION(:), INTENT(IN) :: Vec
-    INTEGER :: code, aux
+    INTEGER :: code, aux, source
     INTEGER, PARAMETER :: etiquette = 1000
-    INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
+    !INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
+    TYPE(MPI_Status) :: statut
 
     aux = 1
+    source = MPIvar%glob_id - 1
 
     IF (MPIvar%glob_id == 0) THEN
       WRITE (6, *) "Process ", MPIvar%glob_id
       CALL displayVector(Vec)
       CALL MPI_SEND(aux, 1, MPI_INTEGER, MPIvar%glob_id + 1, etiquette, MPI_COMM_WORLD, code)
     ELSE IF (MPIvar%glob_id == MPIvar%glob_size - 1) THEN
-      CALL MPI_RECV(aux, 1, MPI_INTEGER, MPIvar%glob_id - 1, etiquette, MPI_COMM_WORLD, statut, code)
+      CALL MPI_RECV(aux, 1, MPI_INTEGER, source, etiquette, MPI_COMM_WORLD, statut, code)
       WRITE (6, *) "Process ", MPIvar%glob_id
       CALL displayVector(Vec)
     ELSE
-      CALL MPI_RECV(aux, 1, MPI_INTEGER, MPIvar%glob_id - 1, etiquette, MPI_COMM_WORLD, statut, code)
+      CALL MPI_RECV(aux, 1, MPI_INTEGER, source, etiquette, MPI_COMM_WORLD, statut, code)
       WRITE (6, *) "Process ", MPIvar%glob_id
       CALL displayVector(Vec)
       CALL MPI_SEND(aux, 1, MPI_INTEGER, MPIvar%glob_id + 1, etiquette, MPI_COMM_WORLD, code)
@@ -362,10 +366,12 @@ CONTAINS
   SUBROUTINE syncroprint_matrix(Mat)
     USE MPI_OMP
     REAL, DIMENSION(:, :), INTENT(IN) :: Mat
-    INTEGER :: code,  aux
+    INTEGER :: code,  aux, source
     INTEGER, PARAMETER :: etiquette = 1000
-    INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
+    !INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
+    TYPE(MPI_Status) :: statut
 
+    source = MPIvar%glob_id - 1
     aux = 1
 
     IF (MPIvar%glob_id == 0) THEN
@@ -373,11 +379,11 @@ CONTAINS
       CALL displayMatrix(Mat)
       CALL MPI_SEND(aux, 1, MPI_INTEGER, MPIvar%glob_id + 1, etiquette, MPI_COMM_WORLD, code)
     ELSE IF (MPIvar%glob_id == MPIvar%glob_size - 1) THEN
-      CALL MPI_RECV(aux, 1, MPI_INTEGER, MPIvar%glob_id - 1, etiquette, MPI_COMM_WORLD, statut, code)
+      CALL MPI_RECV(aux, 1, MPI_INTEGER, source, etiquette, MPI_COMM_WORLD, statut, code)
       WRITE (6, *) "Process ", MPIvar%glob_id
       CALL displayMatrix(Mat)
     ELSE
-      CALL MPI_RECV(aux, 1, MPI_INTEGER, MPIvar%glob_id - 1, etiquette, MPI_COMM_WORLD, statut, code)
+      CALL MPI_RECV(aux, 1, MPI_INTEGER, source, etiquette, MPI_COMM_WORLD, statut, code)
       WRITE (6, *) "Process ", MPIvar%glob_id
       CALL displayMatrix(Mat)
       CALL MPI_SEND(aux, 1, MPI_INTEGER, MPIvar%glob_id + 1, etiquette, MPI_COMM_WORLD, code)
@@ -391,22 +397,24 @@ CONTAINS
   SUBROUTINE syncroprint_array(Mat)
     USE MPI_OMP
     REAL, DIMENSION(:, :, :), INTENT(IN) :: Mat
-    INTEGER :: code, aux
+    INTEGER :: code, aux, source    
     INTEGER, PARAMETER :: etiquette = 1000
-    INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
-
+    !INTEGER, DIMENSION(MPI_STATUS_SIZE) :: statut
+    TYPE(MPI_Status) :: statut
     aux = 1
+
+    source = MPIvar%glob_id - 1
 
     IF (MPIvar%glob_id == 0) THEN
       WRITE (6, *) "Process ", MPIvar%glob_id
       CALL displayArray(Mat)
       CALL MPI_SEND(aux, 1, MPI_INTEGER, MPIvar%glob_id + 1, etiquette, MPI_COMM_WORLD, code)
     ELSE IF (MPIvar%glob_id == MPIvar%glob_size - 1) THEN
-      CALL MPI_RECV(aux, 1, MPI_INTEGER, MPIvar%glob_id - 1, etiquette, MPI_COMM_WORLD, statut, code)
+      CALL MPI_RECV(aux, 1, MPI_INTEGER, source, etiquette, MPI_COMM_WORLD, statut, code)
       WRITE (6, *) "Process ", MPIvar%glob_id
       CALL displayArray(Mat)
     ELSE
-      CALL MPI_RECV(aux, 1, MPI_INTEGER, MPIvar%glob_id - 1, etiquette, MPI_COMM_WORLD, statut, code)
+      CALL MPI_RECV(aux, 1, MPI_INTEGER, source, etiquette, MPI_COMM_WORLD, statut, code)
       WRITE (6, *) "Process ", MPIvar%glob_id
       CALL displayArray(Mat)
       CALL MPI_SEND(aux, 1, MPI_INTEGER, MPIvar%glob_id + 1, etiquette, MPI_COMM_WORLD, code)
