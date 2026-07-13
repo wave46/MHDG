@@ -113,7 +113,6 @@ CONTAINS
       REAL*8, DIMENSION(SIZE(up, 1))       :: dens
 
 
-
       IF (switch%logrho) THEN
          up(:, 1) = EXP(ua(:, 1))                ! density
       ELSE
@@ -121,7 +120,7 @@ CONTAINS
       END IF
 
       IF (switch%thresh .NE. 0) THEN
-         dens = MAX(dens,numer%thr)
+         dens = MAX(up(:, 1),numer%thr)
       ELSE
          dens = up(:, 1)
       END IF
