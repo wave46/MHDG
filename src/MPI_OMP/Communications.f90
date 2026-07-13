@@ -587,30 +587,29 @@ CONTAINS
 
       DEALLOCATE (buffrv, buffsd, req, stat)
 
-   CONTAINS
-      !*****************************************
-      ! Set permutations for flipping faces
-      !****************************************
-      SUBROUTINE set_permutations(n, m, perm)
-         INTEGER, INTENT(IN)    :: n, m
-         INTEGER, INTENT(OUT)   :: perm(:)
-         INTEGER                :: i
-         INTEGER                :: temp(m, n/m), templr(m, n/m)
-
-         IF (MOD(n, m) .NE. 0) THEN
-            WRITE (6, *) 'Error! n must be a multiple of m'
-            STOP
-         END IF
-
-         templr = 0
-         temp = RESHAPE((/(i, i=1, n)/), (/m, n/m/))
-         DO i = 1, n/m
-            templr(:, i) = temp(:, n/m - i + 1)
-         END DO
-         perm = RESHAPE(templr, (/n/))
-      END SUBROUTINE set_permutations
-
    END SUBROUTINE exchangeSol
+
+   !*****************************************
+   ! Set permutations for flipping faces
+   !****************************************
+   SUBROUTINE set_permutations(n, m, perm)
+      INTEGER, INTENT(IN)       :: n, m
+      INTEGER, INTENT(OUT)      :: perm(:)
+      INTEGER                   :: i
+      INTEGER                   :: temp(m, n/m), templr(m, n/m)
+
+      IF (MOD(n, m) .NE. 0) THEN
+         WRITE (6, *) 'Error! n must be a multiple of m'
+         STOP
+      END IF
+
+      templr = 0
+      temp = RESHAPE((/(i, i=1, n)/), (/m, n/m/))
+      DO i = 1, n/m
+         templr(:, i) = temp(:, n/m - i + 1)
+      END DO
+      perm = RESHAPE(templr, (/n/))
+   END SUBROUTINE set_permutations
 #endif
 #endif
 
@@ -1411,27 +1410,27 @@ CONTAINS
       END DO
    END SUBROUTINE reshape_transpose_permute_4D
 
-   SUBROUTINE permute(input, output)
+   SUBROUTINE permute(input_arr, output_arr)
       IMPLICIT NONE
-      REAL*8, INTENT(IN)        :: input(:, :, :)
-      REAL*8, INTENT(OUT)       :: output(SIZE(input, 2), SIZE(input, 1), SIZE(input, 3))
+      REAL*8, INTENT(IN)        :: input_arr(:, :, :)
+      REAL*8, INTENT(OUT)       :: output_arr(SIZE(input_arr, 2), SIZE(input_arr, 1), SIZE(input_arr, 3))
       INTEGER                   :: i, j, k
 
       ! Swap the first two dimensions of the input array into the output array
-      DO k = 1, SIZE(input, 3)
-         DO j = 1, SIZE(input, 2)
-            DO i = 1, SIZE(input, 1)
-               output(j, i, k) = input(i, j, k)
+      DO k = 1, SIZE(input_arr, 3)
+         DO j = 1, SIZE(input_arr, 2)
+            DO i = 1, SIZE(input_arr, 1)
+               output_arr(j, i, k) = input_arr(i, j, k)
             END DO
          END DO
       END DO
    END SUBROUTINE permute
 
-   SUBROUTINE flatten_row_major(input, output, dim1, dim2, dim3)
+   SUBROUTINE flatten_row_major(input_arr, output_arr, dim1, dim2, dim3)
       IMPLICIT NONE
       INTEGER, INTENT(IN)       :: dim1, dim2, dim3
-      REAL*8, INTENT(IN)        :: input(dim1, dim2, dim3)
-      REAL*8, INTENT(OUT)       :: output(dim1*dim2*dim3)
+      REAL*8, INTENT(IN)        :: input_arr(dim1, dim2, dim3)
+      REAL*8, INTENT(OUT)       :: output_arr(dim1*dim2*dim3)
       INTEGER                   :: i, j, k, index
 
       index = 1  ! Initialize the index for the 1D output array
@@ -1440,28 +1439,28 @@ CONTAINS
       DO k = 1, dim1
          DO j = 1, dim2
             DO i = 1, dim3
-               output(index) = input(k, j, i)
+               output_arr(index) = input_arr(k, j, i)
                index = index + 1
             END DO
          END DO
       END DO
    END SUBROUTINE flatten_row_major
 
-   SUBROUTINE flatten_row_major_4D(input, output, dim1, dim2, dim3, dim4)
+   SUBROUTINE flatten_row_major_4D(input_arr, output_arr, dim1, dim2, dim3, dim4)
       IMPLICIT NONE
       INTEGER, INTENT(IN)       :: dim1, dim2, dim3, dim4
-      REAL*8, INTENT(IN)        :: input(dim1, dim2, dim3, dim4)
-      REAL*8, INTENT(OUT)       :: output(dim1*dim2*dim3*dim4)
+      REAL*8, INTENT(IN)        :: input_arr(dim1, dim2, dim3, dim4)
+      REAL*8, INTENT(OUT)       :: output_arr(dim1*dim2*dim3*dim4)
       INTEGER                   :: i, j, k, l, index
 
       index = 1  ! Initialize the index for the 1D output array
 
-      ! Iterate through the 3D array in row-major order
+      ! Iterate through the 4D array in row-major order
       DO l = 1, dim1
          DO k = 1, dim2
             DO j = 1, dim3
                DO i = 1, dim4
-                  output(index) = input(l, k, j, i)
+                  output_arr(index) = input_arr(l, k, j, i)
                   index = index + 1
                END DO
             END DO
