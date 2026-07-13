@@ -85,7 +85,7 @@ CONTAINS
          STOP
       END IF
       IF (MOD(MPIvar%glob_size, MPIvar%ntor) .NE. 0) THEN
-    WRITE (6, *) "Error: the number of MPI processes must be a multiple of the number of MPI toroidal divisions (set in input file)"
+         WRITE (6, *) "Error: the number of MPI processes must be a multiple of the number of MPI toroidal divisions (set in input file)"
          WRITE (6, *) "Number of processes: ", MPIvar%glob_size
          WRITE (6, *) "Number of MPI toroidal partitions: ", MPIvar%ntor
          STOP
