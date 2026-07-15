@@ -2,7 +2,7 @@
 ! project: MHDG
 ! file: READ_input.f90
 ! date: 04/09/2016
-! Subroutine for input file loading
+! subroutine for input file loading
 !**********************************
 
 !********************************
@@ -11,16 +11,16 @@
 SUBROUTINE READ_input()
    USE prec_const
    USE globals
-   USE MPI_OMP
+   USE MPI_OMP, ONLY: MPIvar
    IMPLICIT NONE
 
-  LOGICAL                       :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
+   LOGICAL                       :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
    LOGICAL                      :: ckeramp,saveNR,filter,saveTau,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho, printflux
    INTEGER                      :: thresh, difcor, tis, stab, pertini, init, order_2d
-  INTEGER                       :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres, mglevels, mgorder, mgcycletype, mgtypeform
+   INTEGER                       :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres, mglevels, mgorder, mgcycletype, mgtypeform
    INTEGER                      :: uinput, printint, testcase, nrp
    INTEGER                      :: nts, tsw, freqdisp, freqsave, shockcp, limrho
-INTEGER                         :: shockcp_adapt, evaluator, param_est, difference, freq_t_adapt, freq_NR_adapt, quant_ind, n_quant_ind
+   INTEGER                         :: shockcp_adapt, evaluator, param_est, difference, freq_t_adapt, freq_NR_adapt, quant_ind, n_quant_ind
    REAL*8                       :: thr_ind, tol_est, osc_tol, osc_check
    INTEGER                      :: bcflags(1:10), ntor, ptor, npartor, bohmtypebc
    REAL*8                       :: dt0, R0, diff_n, diff_u, v_p, tau(1:5), tNr, tTM, div, Tbg
@@ -38,7 +38,7 @@ INTEGER                         :: shockcp_adapt, evaluator, param_est, differen
    REAL*8                       :: thrsol, thrsol2, mncrratio, athres, cthres
    REAL*8                       :: heating_power, heating_dr, heating_dz, heating_sigmar, heating_sigmaz
    INTEGER                      :: heating_equation
-REAL*8                          :: exbdump, part_source, ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
+   REAL*8                          :: exbdump, part_source, ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
    ! Info for input and output
    CHARACTER(len=1000)          :: field_path, jtor_path, save_folder, geometry_path, puff_path
@@ -57,23 +57,23 @@ REAL*8                          :: exbdump, part_source, ener_source, density_so
    LOGICAL                      :: ME
 
    ! Defining the variables to READ from the file
-  NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
-       & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
-                     & logrho, bxgradb
-  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions, save_folder,puff_path,puff_dimension
-  NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
-  NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
+   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym, init, driftdia, driftexb, testcase, OhmicSrc, ME, RMP, Ripple, psdtime, diffred, diffmin, &
+   & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
+   & logrho, bxgradb
+   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions, save_folder,puff_path,puff_dimension
+   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
+   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
    NAMELIST /GEOM_LST/ R0, q
    NAMELIST /MAGN_LST/ amp_rmp, nbCoils_rmp, torElongCoils_rmp, parite, nbRow, amp_ripple, nbCoils_ripple, triang, ellip ! RMP and Ripple
    NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
-               &bohm_energy_thresh, Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat, diagsource
+   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
+   &bohm_energy_thresh, Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat, diagsource
    NAMELIST /UTILS_LST/ PRINTint, printflux, dotiming, freqdisp, freqsave
-  NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres, mglevels, mgorder, mgcycletype, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
-                     &smther, jsweeps,&
-                 &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
-                     &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
-                     &csolve, csbsolve, cmat, cfill, cthres, cjswp
+   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres, mglevels, mgorder, mgcycletype, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
+   &smther, jsweeps,&
+   &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
+   &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
+   &csolve, csbsolve, cmat, cfill, cthres, cjswp
 
    ! Reading the file
    uinput = 100
@@ -336,9 +336,9 @@ REAL*8                          :: exbdump, part_source, ener_source, density_so
       PRINT *, '                                                                      '
       PRINT *, '                                                                      '
 #ifdef TOR3D
-      PRINT *, '------------------------  MHDG SIMULATION IN 3D ----------------------'
+      PRINT *, '------------------------  MHDG SIMULATION in 3D ----------------------'
 #else
-      PRINT *, '------------------------  MHDG SIMULATION IN 2D ----------------------'
+      PRINT *, '------------------------  MHDG SIMULATION in 2D ----------------------'
 #endif
       PRINT *, '                                                                      '
 #ifndef TEMPERATURE
@@ -358,7 +358,7 @@ REAL*8                          :: exbdump, part_source, ener_source, density_so
       PRINT *, '----------------------------------------------------------------------'
       PRINT *, '  Simulation type: ', ADJUSTL(TRIM(msg))
       PRINT *, '----------------------------------------------------------------------'
-      PRINT *, 'Parameter file loaded:'
+      PRINT *, 'parameter file loaded:'
       PRINT *, '        ***************** Geometry ****************************'
       PRINT *, '                - R0:                                                 ', R0
       PRINT *, '                - Security factor:                                    ', q
