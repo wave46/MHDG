@@ -40,6 +40,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--tolerances", required=True, type=Path, help=argparse.SUPPRESS
     )
+    parser.add_argument(
+        "--require-bundle-class",
+        choices=("candidate", "golden"),
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -51,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
             args.suites,
             args.tolerances,
             args.run_id,
+            args.require_bundle_class,
         )
     except BundleError as exc:
         print(f"suite failed: {exc}", file=sys.stderr)
@@ -68,11 +74,15 @@ def run_suite(
     suites_path: Path,
     tolerances_path: Path,
     run_id: str | None = None,
+    required_bundle_class: str | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Execute all suite layouts, continue after failures, and write a summary."""
     suite = _load_suite(suite_id, suites_path, layouts_path, case_dir)
     settings = read_settings(settings_path)
-    validate_bundle_root(bundle_root_from_settings(settings), case_dir)
+    bundle_root = bundle_root_from_settings(settings)
+    validate_bundle_root(bundle_root, case_dir)
+    if required_bundle_class is not None:
+        _require_bundle_class(bundle_root, case_dir, required_bundle_class)
     run_id = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     if not SUITE_ID_RE.fullmatch(run_id):
         raise BundleError(f"invalid suite run identifier: {run_id}")
@@ -193,6 +203,20 @@ def _load_suite(
             f"suite {suite_id} refers to unknown workflow {suite['workflow_id']}"
         )
     return suite
+
+
+def _require_bundle_class(
+    bundle_root: Path, case_dir: Path, required: str
+) -> None:
+    schema = case_dir.parent / "schemas" / "bundle-manifest.schema.json"
+    manifest = load_validated_json(
+        bundle_root / "manifest.json", schema, "bundle manifest"
+    )
+    actual = manifest.get("bundle_class", "unspecified")
+    if actual != required:
+        raise BundleError(
+            f"golden-check requires bundle_class={required}; found {actual}"
+        )
 
 
 def _suite_directory(

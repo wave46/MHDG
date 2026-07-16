@@ -159,6 +159,7 @@ def _populate_bundle(
         "schema_version": 1,
         "bundle_id": f"{data_id}_bundle",
         "bundle_version": bundle_version,
+        "bundle_class": "candidate",
         "created_utc": created.replace("+00:00", "Z"),
         "artifacts": artifacts,
         "case_data": {

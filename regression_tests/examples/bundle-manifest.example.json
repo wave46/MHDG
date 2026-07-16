@@ -2,6 +2,7 @@
   "schema_version": 1,
   "bundle_id": "primary_case_bundle",
   "bundle_version": "1.0.0",
+  "bundle_class": "candidate",
   "artifacts": {
     "legacy_mesh": {
       "path": "case_data/legacy_fixed/mesh.msh",

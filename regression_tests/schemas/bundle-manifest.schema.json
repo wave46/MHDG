@@ -23,6 +23,13 @@
       "type": "string",
       "minLength": 1
     },
+    "bundle_class": {
+      "type": "string",
+      "enum": [
+        "candidate",
+        "golden"
+      ]
+    },
     "created_utc": {
       "type": "string",
       "format": "date-time"

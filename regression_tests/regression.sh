@@ -10,20 +10,24 @@ Usage:
   regression_tests/regression.sh help
   regression_tests/regression.sh --help
   regression_tests/regression.sh bundle create --case CASE --source DIR --output DIR
+  regression_tests/regression.sh --settings FILE bundle promote SUITE_SUMMARY --output DIR --bundle-version VERSION
   regression_tests/regression.sh --settings FILE check-data
   regression_tests/regression.sh --settings FILE prepare CASE WORKFLOW --layout LAYOUT
   regression_tests/regression.sh --settings FILE run CASE WORKFLOW --layout LAYOUT
   regression_tests/regression.sh compare RUN_DIRECTORY
   regression_tests/regression.sh --settings FILE suite SUITE
+  regression_tests/regression.sh golden-check [SUITE]
 
 Available commands:
   help           Show this help text.
   bundle create  Create and validate a bundle from prepared case files.
+  bundle promote Create a complete golden bundle from a passing canonical run.
   check-data     Validate an external bundle without modifying it.
   prepare        Create an isolated run directory without executing the solver.
   run            Prepare and execute one isolated solver run.
   compare        Compare a completed fixed-mesh run with its reference.
   suite          Run and compare every layout in a tracked suite.
+  golden-check   Check rebuilt executables against the configured golden bundle.
 
 Options:
   --settings FILE  Local bundle, run, executable, and launcher settings.
@@ -36,10 +40,12 @@ EOF
 settings_file=""
 command=""
 bundle_arguments=()
+promotion_arguments=()
 prepare_arguments=()
 run_arguments=()
 compare_arguments=()
 suite_arguments=()
+golden_arguments=()
 
 while (($# > 0)); do
   case "$1" in
@@ -72,13 +78,17 @@ while (($# > 0)); do
         echo "error: only one command may be specified" >&2
         exit 2
       fi
-      if (($# < 2)) || [[ "$2" != "create" ]]; then
-        echo "error: expected 'bundle create'" >&2
+      if (($# < 2)) || [[ "$2" != "create" && "$2" != "promote" ]]; then
+        echo "error: expected 'bundle create' or 'bundle promote'" >&2
         exit 2
       fi
-      command="bundle-create"
+      command="bundle-$2"
       shift 2
-      bundle_arguments=("$@")
+      if [[ "$command" == "bundle-create" ]]; then
+        bundle_arguments=("$@")
+      else
+        promotion_arguments=("$@")
+      fi
       break
       ;;
     prepare)
@@ -121,6 +131,16 @@ while (($# > 0)); do
       suite_arguments=("$@")
       break
       ;;
+    golden-check)
+      if [[ -n "$command" ]]; then
+        echo "error: only one command may be specified" >&2
+        exit 2
+      fi
+      command="golden-check"
+      shift
+      golden_arguments=("$@")
+      break
+      ;;
     *)
       echo "error: unknown argument: $1" >&2
       usage >&2
@@ -154,6 +174,16 @@ case "$command" in
     exec "$python_command" "$SCRIPT_DIR/tools/create_bundle.py" \
       --cases "$SCRIPT_DIR/cases" \
       "${bundle_arguments[@]}"
+    ;;
+  bundle-promote)
+    if [[ -z "$settings_file" ]]; then
+      echo "error: bundle promote requires --settings FILE" >&2
+      exit 2
+    fi
+    exec "$python_command" "$SCRIPT_DIR/tools/promote_bundle.py" \
+      --settings "$settings_file" \
+      --cases "$SCRIPT_DIR/cases" \
+      "${promotion_arguments[@]}"
     ;;
   prepare)
     if [[ -z "$settings_file" ]]; then
@@ -199,5 +229,28 @@ case "$command" in
       --suites "$SCRIPT_DIR/suites.json" \
       --tolerances "$SCRIPT_DIR/tolerances.json" \
       "${suite_arguments[@]}"
+    ;;
+  golden-check)
+    if ((${#golden_arguments[@]} > 1)); then
+      echo "error: golden-check accepts at most one suite name" >&2
+      exit 2
+    fi
+    if [[ -z "$settings_file" ]]; then
+      settings_file=${MHDG_REGRESSION_GOLDEN_SETTINGS:-$SCRIPT_DIR/golden.local.env}
+    fi
+    if [[ ! -f "$settings_file" ]]; then
+      echo "error: golden settings file not found: $settings_file" >&2
+      echo "copy settings.example.env to golden.local.env or set MHDG_REGRESSION_GOLDEN_SETTINGS" >&2
+      exit 2
+    fi
+    golden_suite=${golden_arguments[0]:-warm}
+    exec "$python_command" "$SCRIPT_DIR/tools/run_suite.py" \
+      --settings "$settings_file" \
+      --cases "$SCRIPT_DIR/cases" \
+      --layouts "$SCRIPT_DIR/layouts.json" \
+      --suites "$SCRIPT_DIR/suites.json" \
+      --tolerances "$SCRIPT_DIR/tolerances.json" \
+      --require-bundle-class golden \
+      "$golden_suite"
     ;;
 esac

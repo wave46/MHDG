@@ -5,9 +5,9 @@ regression tests. Physical case data, complete parameter files, restart
 solutions, and golden outputs are distributed separately in an external case
 bundle.
 
-Status: external-data contract, bundle tools, isolated warm-run execution,
-fixed-mesh HDF5 comparison, and warm suite orchestration. Additional workflows
-and build automation are not implemented yet.
+Status: external-data contract, candidate and golden bundle tools, isolated
+warm-run execution, fixed-mesh HDF5 comparison, and warm suite orchestration.
+Additional workflows and build automation are not implemented yet.
 
 ## Repository boundary
 
@@ -91,6 +91,10 @@ same artifacts and write only their own run outputs.
 The bundle can be unpacked anywhere. A user supplies its root through a local
 settings file based on `settings.example.env`.
 
+The optional manifest field `bundle_class` distinguishes a hand-prepared
+`candidate` from an accepted `golden` bundle. Both obey the same physical-file
+contract and are executed by the same harness commands.
+
 ### Preparing case data
 
 Prepare one private, flat directory outside the repository. Use these generic
@@ -131,7 +135,7 @@ regression_tests/regression.sh bundle create \
   --output /private/path/mhdg_case_bundle
 ```
 
-The command will:
+The command creates a candidate bundle and will:
 
 - recognize the conventional filenames above;
 - require every file listed above;
@@ -317,6 +321,9 @@ regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed
 regression_tests/regression.sh compare /path/to/completed/run
 regression_tests/regression.sh --settings /path/to/settings.env suite warm
 regression_tests/regression.sh --settings /path/to/settings.env suite warm_parallelism
+regression_tests/regression.sh --settings /path/to/settings.env bundle promote /path/to/suite_summary.json --output /path/to/golden --bundle-version VERSION
+regression_tests/regression.sh golden-check
+regression_tests/regression.sh golden-check warm_parallelism
 ```
 
 The regression commands require Python 3 and the packages in `requirements.txt`;
@@ -362,6 +369,78 @@ The executor uses isolated run directories and prebuilt executables. It does
 not switch Git branches, rebuild the solver, or overwrite reference files.
 
 Fixed-mesh bootstrap and cold-adaptive workflows remain planned.
+
+## Candidate and golden test flows
+
+There are two bundle sources, but only one execution and comparison path.
+
+1. A candidate bundle is created from the private hand-prepared directory with
+   `bundle create`. Use it to reproduce manual regressions, characterize
+   layouts, and decide whether the inputs and canonical result are suitable.
+2. A golden bundle is an immutable copy of that complete candidate package in
+   which the passing canonical result has become `warm_reference`. Use it for
+   routine comparisons of newly built executables.
+
+After the candidate's full suite passes and has been checked against the
+manual regressions, promote it explicitly:
+
+```bash
+regression_tests/regression.sh \
+  --settings /path/to/candidate-settings.env \
+  bundle promote /path/to/suite_summary.json \
+  --output /path/to/golden-bundles/legacy_fixed_v1 \
+  --bundle-version 1.0.0-golden.1
+```
+
+Promotion requires a passing suite containing the workflow's canonical
+layout, currently `mpi4_omp4`. It verifies that the canonical solution and its
+comparison inputs have not changed, copies the complete source bundle, replaces
+only the reference artifact, updates its checksum, and validates the finished
+bundle. It never modifies the candidate bundle or replaces an existing output.
+
+The golden bundle therefore contains the warm starting solution together with
+the mesh, equilibrium, geometry, parameters, transport configuration, and
+accepted reference. Canonical run metadata, comparison, logs, suite summary,
+executable checksum, and optional solver revision/build description are stored
+under `provenance/golden_reference/` and registered in the manifest.
+
+For a convenient routine check, copy the settings example to the default
+untracked location:
+
+```bash
+cp regression_tests/settings.example.env regression_tests/golden.local.env
+```
+
+Fill its executable, run-root, launcher, and environment-script paths, and set:
+
+```text
+MHDG_REGRESSION_DATA_ROOT=/path/to/golden-bundles/legacy_fixed_v1
+```
+
+Then the short command validates that the selected bundle is golden and runs
+the canonical four-by-four warm suite:
+
+```bash
+regression_tests/regression.sh golden-check
+```
+
+Run all characterized layouts with:
+
+```bash
+regression_tests/regression.sh golden-check warm_parallelism
+```
+
+`regression_tests/golden.local.env` is ignored by Git. A settings file stored
+elsewhere can be selected with `MHDG_REGRESSION_GOLDEN_SETTINGS` or the usual
+`--settings FILE` option.
+
+The explicit `--settings FILE suite SUITE` interface remains available for
+handmade candidate bundles and other development runs. Both interfaces use the
+same preparation, execution, and comparison implementation.
+
+The executable paths still come from the settings file. Automatic build
+orchestration remains a later step; compiled binaries are not stored in the
+portable golden bundle.
 
 ## Run outputs and provenance
 

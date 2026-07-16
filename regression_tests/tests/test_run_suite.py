@@ -78,6 +78,41 @@ class SuiteCommandTests(unittest.TestCase):
         )
         self.assertIn("mpi4_omp4", completed.stdout)
 
+    def test_golden_check_uses_default_settings_and_warm_suite(self) -> None:
+        self._set_bundle_class("golden")
+        completed = subprocess.run(
+            [str(REGRESSION_ROOT / "regression.sh"), "golden-check"],
+            check=False,
+            capture_output=True,
+            env={
+                **os.environ,
+                "PYTHON": sys.executable,
+                "MHDG_REGRESSION_GOLDEN_SETTINGS": str(self.settings),
+            },
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("suite: warm", completed.stdout)
+        self.assertIn("mpi4_omp4", completed.stdout)
+
+    def test_golden_check_rejects_candidate_bundle(self) -> None:
+        completed = subprocess.run(
+            [
+                str(REGRESSION_ROOT / "regression.sh"),
+                "--settings",
+                str(self.settings),
+                "golden-check",
+            ],
+            check=False,
+            capture_output=True,
+            env={**os.environ, "PYTHON": sys.executable},
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("requires bundle_class=golden", completed.stderr)
+
     def _create_bundle(self) -> None:
         source = self.root / "source"
         source.mkdir()
@@ -105,6 +140,12 @@ class SuiteCommandTests(unittest.TestCase):
         (bin_dir / "positionFeketeNodesTri2D.h5").write_text(
             "synthetic Fekete nodes\n", encoding="utf-8"
         )
+
+    def _set_bundle_class(self, bundle_class: str) -> None:
+        path = self.bundle / "manifest.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["bundle_class"] = bundle_class
+        path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
     @staticmethod
     def _executable(path: Path, contents: str) -> Path:

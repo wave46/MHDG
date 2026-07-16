@@ -80,7 +80,7 @@ def compare_run(
         tolerances_path, workflow, plan["layout_id"], profile_override
     )
 
-    candidate = _candidate_path(run_directory, metadata, candidate_override)
+    candidate = select_candidate(run_directory, metadata, candidate_override)
     reference = _input_path(
         run_directory, reference_override, "inputs/reference.h5", "reference"
     )
@@ -190,11 +190,12 @@ def _pass_label(passed: bool) -> str:
     return "PASS" if passed else "FAIL"
 
 
-def _candidate_path(
+def select_candidate(
     run_directory: Path,
     metadata: dict[str, Any],
-    override: Path | None,
+    override: Path | None = None,
 ) -> Path:
+    """Select the final HDF5 result recorded for a completed run."""
     if override is not None:
         return _input_path(run_directory, override, "", "candidate")
 
