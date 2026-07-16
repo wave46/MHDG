@@ -38,6 +38,84 @@
       "artifact_id": "legacy_transport_configuration",
       "media_type": "text/plain"
     },
+    "cold_fixed_time_init_parameters": {
+      "filename": "param_cold_fixed_time_init.txt",
+      "artifact_id": "legacy_cold_fixed_time_init_parameters",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_diffusion_reduction_parameters": {
+      "filename": "param_cold_fixed_diffusion_reduction.txt",
+      "artifact_id": "legacy_cold_fixed_diffusion_reduction_parameters",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_continuation_01_parameters": {
+      "filename": "param_cold_fixed_continuation_01.txt",
+      "artifact_id": "legacy_cold_fixed_continuation_01_parameters",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_continuation_02_parameters": {
+      "filename": "param_cold_fixed_continuation_02.txt",
+      "artifact_id": "legacy_cold_fixed_continuation_02_parameters",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_continuation_03_parameters": {
+      "filename": "param_cold_fixed_continuation_03.txt",
+      "artifact_id": "legacy_cold_fixed_continuation_03_parameters",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_continuation_04_parameters": {
+      "filename": "param_cold_fixed_continuation_04.txt",
+      "artifact_id": "legacy_cold_fixed_continuation_04_parameters",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_continuation_05_parameters": {
+      "filename": "param_cold_fixed_continuation_05.txt",
+      "artifact_id": "legacy_cold_fixed_continuation_05_parameters",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_initial_transport_configuration": {
+      "filename": "transport_cold_fixed_initial.nml",
+      "artifact_id": "legacy_cold_fixed_initial_transport_configuration",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_continuation_01_transport_configuration": {
+      "filename": "transport_cold_fixed_continuation_01.nml",
+      "artifact_id": "legacy_cold_fixed_continuation_01_transport_configuration",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_continuation_02_transport_configuration": {
+      "filename": "transport_cold_fixed_continuation_02.nml",
+      "artifact_id": "legacy_cold_fixed_continuation_02_transport_configuration",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_continuation_03_transport_configuration": {
+      "filename": "transport_cold_fixed_continuation_03.nml",
+      "artifact_id": "legacy_cold_fixed_continuation_03_transport_configuration",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_continuation_04_transport_configuration": {
+      "filename": "transport_cold_fixed_continuation_04.nml",
+      "artifact_id": "legacy_cold_fixed_continuation_04_transport_configuration",
+      "media_type": "text/plain",
+      "optional": true
+    },
+    "cold_fixed_continuation_05_transport_configuration": {
+      "filename": "transport_cold_fixed_continuation_05.nml",
+      "artifact_id": "legacy_cold_fixed_continuation_05_transport_configuration",
+      "media_type": "text/plain",
+      "optional": true
+    },
     "warm_restart": {
       "filename": "restart.h5",
       "artifact_id": "legacy_warm_restart",
@@ -55,6 +133,7 @@
       "description": "Reconverge an unchanged steady restart on the fixed mesh",
       "required_artifact_roles": [
         "mesh",
+        "geometry",
         "equilibrium_magnetic_field",
         "equilibrium_current_density",
         "warm_parameters",
@@ -64,6 +143,62 @@
       ],
       "default_layout": "mpi4_omp4",
       "tolerance_profile": "fixed_same_layout"
+    },
+    "cold_fixed": {
+      "kind": "staged_fixed_mesh",
+      "description": "Reach the canonical state from analytical initialization on the fixed mesh",
+      "required_artifact_roles": [
+        "geometry",
+        "equilibrium_magnetic_field",
+        "equilibrium_current_density"
+      ],
+      "mesh_role": "mesh",
+      "reference_role": "warm_reference",
+      "stages": [
+        {
+          "stage_id": "time_init",
+          "parameter_role": "cold_fixed_time_init_parameters",
+          "transport_configuration_role": "cold_fixed_initial_transport_configuration",
+          "restart_from": "analytical"
+        },
+        {
+          "stage_id": "diffusion_reduction",
+          "parameter_role": "cold_fixed_diffusion_reduction_parameters",
+          "transport_configuration_role": "cold_fixed_initial_transport_configuration",
+          "restart_from": "previous_stage"
+        },
+        {
+          "stage_id": "continuation_01",
+          "parameter_role": "cold_fixed_continuation_01_parameters",
+          "transport_configuration_role": "cold_fixed_continuation_01_transport_configuration",
+          "restart_from": "previous_stage"
+        },
+        {
+          "stage_id": "continuation_02",
+          "parameter_role": "cold_fixed_continuation_02_parameters",
+          "transport_configuration_role": "cold_fixed_continuation_02_transport_configuration",
+          "restart_from": "previous_stage"
+        },
+        {
+          "stage_id": "continuation_03",
+          "parameter_role": "cold_fixed_continuation_03_parameters",
+          "transport_configuration_role": "cold_fixed_continuation_03_transport_configuration",
+          "restart_from": "previous_stage"
+        },
+        {
+          "stage_id": "continuation_04",
+          "parameter_role": "cold_fixed_continuation_04_parameters",
+          "transport_configuration_role": "cold_fixed_continuation_04_transport_configuration",
+          "restart_from": "previous_stage"
+        },
+        {
+          "stage_id": "continuation_05",
+          "parameter_role": "cold_fixed_continuation_05_parameters",
+          "transport_configuration_role": "cold_fixed_continuation_05_transport_configuration",
+          "restart_from": "previous_stage"
+        }
+      ],
+      "default_layout": "mpi4_omp4"
     }
   }
 }

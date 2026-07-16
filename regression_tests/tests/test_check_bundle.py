@@ -13,7 +13,12 @@ from pathlib import Path
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from check_bundle import BundleError, validate_bundle  # noqa: E402
+from check_bundle import (  # noqa: E402
+    BundleError,
+    load_case_definition,
+    required_case_roles,
+    validate_bundle,
+)
 
 
 class BundleValidationTests(unittest.TestCase):
@@ -89,6 +94,13 @@ class BundleValidationTests(unittest.TestCase):
         self.assertEqual(summary.artifact_count, 8)
         self.assertEqual(summary.verified_artifact_count, 8)
         self.assertEqual(summary.checked_cases, ["legacy_fixed"])
+
+    def test_cold_roles_are_required_only_by_cold_workflow(self) -> None:
+        case = load_case_definition("legacy_fixed", REGRESSION_ROOT / "cases")
+        role = "cold_fixed_time_init_parameters"
+
+        self.assertNotIn(role, required_case_roles(case))
+        self.assertIn(role, required_case_roles(case, "cold_fixed"))
 
     def test_public_check_data_command(self) -> None:
         completed = subprocess.run(

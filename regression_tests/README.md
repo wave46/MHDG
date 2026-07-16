@@ -58,8 +58,9 @@ may be added without changing the external-data contract.
 - `archived_compare`: inspect or compare a stored historical result without
   routinely rerunning its source branch.
 
-Only `legacy_fixed/warm` is defined as a routine executable workflow in this
-first contract.
+`legacy_fixed/warm` is executable. `legacy_fixed/cold_fixed` now defines the
+seven-stage external-data contract; staged execution is the next implementation
+step.
 
 ## External bundle contract
 
@@ -125,6 +126,27 @@ Physical filenames before preparation may contain case-specific names, but the
 prepared directory and all tracked examples use only these generic names. The
 prepared entries may be regular files or symlinks to a private source archive;
 the creator copies symlink targets into the final bundle.
+
+To add the fixed-mesh cold workflow, prepare these optional files in the same
+directory:
+
+```text
+param_cold_fixed_time_init.txt
+param_cold_fixed_diffusion_reduction.txt
+param_cold_fixed_continuation_01.txt ... continuation_05.txt
+transport_cold_fixed_initial.nml
+transport_cold_fixed_continuation_01.nml ... continuation_05.nml
+```
+
+The tracked stage names deliberately omit physical diffusion values. The
+external parameter and transport files contain those numerical choices. The
+sequence is analytical `time_init`, restart `diffusion_reduction`, then five
+restart continuations ending at the warm reference state. The fixed refined
+`mesh.msh` is reused at every stage; its cold parameter files must disable
+restart adaptivity.
+
+These cold files are optional so existing warm-only candidate and golden
+bundles remain valid. A `cold_fixed` run will require the complete cold set.
 
 ### Creating a bundle
 

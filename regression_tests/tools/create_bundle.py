@@ -17,7 +17,7 @@ from check_bundle import (
     BundleError,
     ValidationSummary,
     load_case_definition,
-    required_case_roles,
+    workflow_required_roles,
     validate_bundle_root,
 )
 
@@ -90,8 +90,12 @@ def create_bundle(
     if _is_within(output, source):
         raise BundleError("output must be outside the prepared source directory")
 
-    required_roles = required_case_roles(case)
-    undefined_roles = sorted(required_roles - file_contract.keys())
+    workflow_roles = {
+        role
+        for workflow in case["workflows"].values()
+        for role in workflow_required_roles(workflow)
+    }
+    undefined_roles = sorted(workflow_roles - file_contract.keys())
     if undefined_roles:
         raise BundleError(
             "required roles have no bundle file definition: "
@@ -128,6 +132,8 @@ def _populate_bundle(
     for role, file_spec in case["bundle_files"].items():
         source_path = source / file_spec["filename"]
         if not source_path.exists():
+            if file_spec.get("optional", False):
+                continue
             raise BundleError(
                 f"required file missing for role {role}: {source_path.name}"
             )

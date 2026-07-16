@@ -97,6 +97,10 @@
         },
         "description": {
           "type": "string"
+        },
+        "optional": {
+          "type": "boolean",
+          "default": false
         }
       }
     },
@@ -131,6 +135,47 @@
         },
         "comparison_policy": {
           "$ref": "#/$defs/identifier"
+        },
+        "mesh_role": {
+          "$ref": "#/$defs/identifier"
+        },
+        "reference_role": {
+          "$ref": "#/$defs/identifier"
+        },
+        "stages": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/stage"
+          }
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage_id",
+        "parameter_role",
+        "transport_configuration_role",
+        "restart_from"
+      ],
+      "properties": {
+        "stage_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "parameter_role": {
+          "$ref": "#/$defs/identifier"
+        },
+        "transport_configuration_role": {
+          "$ref": "#/$defs/identifier"
+        },
+        "restart_from": {
+          "type": "string",
+          "enum": [
+            "analytical",
+            "previous_stage"
+          ]
         }
       }
     }

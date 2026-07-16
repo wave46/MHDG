@@ -117,7 +117,9 @@ def prepare_run(
         raise BundleError("run preparation currently supports warm_same_state only")
 
     layout = _load_layout(layout_id, layouts_path)
-    artifacts, manifest = _case_artifacts(bundle_root, case, case_dir)
+    artifacts, manifest = _case_artifacts(
+        bundle_root, case, workflow_id, case_dir
+    )
     run_root = _absolute_setting(settings, "MHDG_REGRESSION_RUN_ROOT")
     executable = _solver_executable(settings, layout["execution"])
     runtime_files = _runtime_files(executable)
@@ -213,7 +215,10 @@ def _load_layout(layout_id: str, layouts_path: Path) -> dict[str, Any]:
 
 
 def _case_artifacts(
-    bundle_root: Path, case: dict[str, Any], case_dir: Path
+    bundle_root: Path,
+    case: dict[str, Any],
+    workflow_id: str,
+    case_dir: Path,
 ) -> tuple[dict[str, Path], dict[str, Any]]:
     schema_path = case_dir.parent / "schemas" / "bundle-manifest.schema.json"
     manifest = load_validated_json(
@@ -225,8 +230,13 @@ def _case_artifacts(
         raise BundleError(f"bundle does not contain case data for {case['case_id']}")
 
     paths = {}
-    for role in required_case_roles(case):
-        artifact_id = case_data["roles"][role]
+    for role in required_case_roles(case, workflow_id):
+        try:
+            artifact_id = case_data["roles"][role]
+        except KeyError as exc:
+            raise BundleError(
+                f"bundle does not provide role {role} for workflow {workflow_id}"
+            ) from exc
         relative_path = manifest["artifacts"][artifact_id]["path"]
         paths[role] = (bundle_root / relative_path).resolve(strict=True)
     return paths, manifest

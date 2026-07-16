@@ -84,6 +84,28 @@ class BundleCreationTests(unittest.TestCase):
         self.assertFalse(copied.is_symlink())
         self.assertEqual(copied.read_text(encoding="utf-8"), "shared equilibrium\n")
 
+    def test_available_optional_cold_file_is_recorded(self) -> None:
+        filename = "param_cold_fixed_time_init.txt"
+        (self.source / filename).write_text(
+            "synthetic cold parameters\n", encoding="utf-8"
+        )
+
+        summary = create_bundle(
+            "legacy_fixed", self.source, self.output, REGRESSION_ROOT / "cases"
+        )
+
+        manifest = json.loads(
+            (self.output / "manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(summary.artifact_count, 9)
+        self.assertIn(
+            "cold_fixed_time_init_parameters",
+            manifest["case_data"]["legacy_fixed"]["roles"],
+        )
+        self.assertTrue(
+            (self.output / "case_data" / "legacy_fixed" / filename).is_file()
+        )
+
     def test_missing_geometry_leaves_no_output(self) -> None:
         (self.source / "geometry.geo").unlink()
 
