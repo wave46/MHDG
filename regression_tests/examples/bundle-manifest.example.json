@@ -9,38 +9,38 @@
       "size_bytes": 0,
       "media_type": "application/x-gmsh"
     },
-    "shared_magnetic_field": {
-      "path": "shared/magnetic_field.h5",
+    "legacy_magnetic_field": {
+      "path": "case_data/legacy_fixed/equilibrium.h5",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "application/x-hdf5"
     },
-    "shared_current_density": {
-      "path": "shared/current_density.h5",
+    "legacy_current_density": {
+      "path": "case_data/legacy_fixed/current_density.h5",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "application/x-hdf5"
     },
     "legacy_warm_parameters": {
-      "path": "case_data/legacy_fixed/inputs/warm/param.txt",
+      "path": "case_data/legacy_fixed/param.txt",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "text/plain"
     },
     "legacy_transport_configuration": {
-      "path": "case_data/legacy_fixed/inputs/warm/transport_model.nml",
+      "path": "case_data/legacy_fixed/transport_model.nml",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "text/plain"
     },
     "legacy_warm_restart": {
-      "path": "case_data/legacy_fixed/restarts/warm.h5",
+      "path": "case_data/legacy_fixed/restart.h5",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "application/x-hdf5"
     },
     "legacy_warm_reference_mpi4_omp4": {
-      "path": "case_data/legacy_fixed/references/warm.h5",
+      "path": "case_data/legacy_fixed/reference_mpi4_omp4.h5",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "application/x-hdf5"
@@ -52,8 +52,8 @@
       "description": "Example minimum case data for the routine warm regression",
       "roles": {
         "mesh": "legacy_mesh",
-        "equilibrium_magnetic_field": "shared_magnetic_field",
-        "equilibrium_current_density": "shared_current_density",
+        "equilibrium_magnetic_field": "legacy_magnetic_field",
+        "equilibrium_current_density": "legacy_current_density",
         "warm_parameters": "legacy_warm_parameters",
         "transport_configuration": "legacy_transport_configuration",
         "warm_restart": "legacy_warm_restart",

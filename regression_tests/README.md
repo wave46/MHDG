@@ -5,7 +5,8 @@ regression tests. Physical case data, complete parameter files, restart
 solutions, and golden outputs are distributed separately in an external case
 bundle.
 
-Status: contract only. The runner and HDF5 comparator are not implemented yet.
+Status: external-data contract and read-only bundle checker. Automated bundle
+creation, the solver runner, and the HDF5 comparator are not implemented yet.
 
 ## Repository boundary
 
@@ -63,8 +64,9 @@ top-level artifact registry, with a bundle-relative path, SHA-256 checksum, and
 size. Entries under `case_data` map the generic roles required by a case to
 those reusable artifact identifiers.
 A SHA-256 checksum is a 64-character fingerprint of a file's exact contents;
-it detects a missing, substituted, or changed external artifact. It can be
-generated with `sha256sum <file>`.
+it detects a missing, substituted, or changed external artifact. The planned
+bundle-creation command will calculate checksums and sizes automatically; users
+should not enter them manually.
 
 The minimum `legacy_fixed/warm` roles are:
 
@@ -76,12 +78,85 @@ The minimum `legacy_fixed/warm` roles are:
 - `warm_restart`;
 - `warm_reference`.
 
-The same artifact may be referenced by multiple cases or workflows. Shared
-meshes, equilibria, and reference solutions therefore do not need to be copied
-or described more than once.
+The same artifact may be referenced by multiple cases or workflows. The
+manifest can therefore reuse a mesh, equilibrium, or reference solution
+without requiring a special `shared` directory or another physical copy.
 
 The bundle can be unpacked anywhere. A user supplies its root through a local
 settings file based on `settings.example.env`.
+
+### Preparing case data
+
+Prepare one private, flat directory outside the repository. Use these generic
+names for the initial warm case:
+
+```text
+legacy_fixed/
+├── param.txt
+├── mesh.msh
+├── geometry.geo                 # optional
+├── transport_model.nml
+├── equilibrium.h5
+├── current_density.h5
+├── restart.h5
+└── reference_mpi4_omp4.h5
+```
+
+The parameter, mesh, optional geometry, transport-model, equilibrium, and
+current-density files specify the physical case. `restart.h5` is the converged
+solution supplied to the solver. `reference_mpi4_omp4.h5` is the accepted
+result produced after reconverging that restart with four MPI ranks and four
+OpenMP threads. They are kept separate because a warm run can make small but
+measurable changes to the starting solution.
+
+Physical filenames before preparation may contain case-specific names, but the
+prepared directory and all tracked examples use only these generic names.
+
+### Planned bundle creation
+
+The intended user-facing command is:
+
+```bash
+regression_tests/regression.sh bundle create \
+  --case legacy_fixed \
+  --source /private/path/legacy_fixed \
+  --output /private/path/mhdg_case_bundle
+```
+
+This command is not implemented yet. It will:
+
+- recognize the conventional filenames above;
+- require all files needed by `legacy_fixed/warm` and accept `geometry.geo`
+  when present;
+- copy the files into a self-contained output bundle;
+- calculate every size and SHA-256 checksum;
+- generate `manifest.json` with the required role mappings;
+- validate the completed bundle without changing the prepared source folder.
+
+The generated physical layout inside the bundle is an implementation detail;
+users only prepare the flat source directory. The example manifest documents
+the generated data contract and is not intended for manual checksum editing.
+
+After creation, copy `settings.example.env` to a private location and set:
+
+```text
+MHDG_REGRESSION_SETTINGS_VERSION=1
+MHDG_REGRESSION_DATA_ROOT=/private/path/mhdg_case_bundle
+```
+
+Then verify the bundle from the repository root:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/regression-settings.env \
+  check-data
+```
+
+The checker reads settings as data rather than sourcing them as shell code. It
+verifies manifest fields, safe bundle-relative paths, artifact sizes and
+SHA-256 checksums, role mappings, and the roles required by tracked case
+definitions. It does not modify the bundle. Automated manifest creation can be
+added as the next separate implementation step.
 
 ## Initial comparison contract
 
@@ -102,15 +177,36 @@ The core comparator will use HDF5 directly and support both grouped and older
 flat solution layouts. `HDG_postprocess` remains an optional richer layer for
 mesh-independent adaptive comparisons.
 
-## Planned user interface
-
-These commands document the intended interface; they are not available until
-the runner is implemented:
+## Available user interface
 
 ```bash
 regression_tests/regression.sh help
 regression_tests/regression.sh --help
 regression_tests/regression.sh --settings /path/to/settings.env check-data
+```
+
+`check-data` requires Python 3 and the packages in `requirements.txt`; install
+them into the selected Python environment with:
+
+```bash
+python -m pip install -r regression_tests/requirements.txt
+```
+
+The existing `hdg-postprocess-py312` environment already provides
+`jsonschema`. The checker does not depend on HDF5 or `HDG_postprocess`
+libraries. Set the `PYTHON` environment variable when a non-default interpreter
+should run the command:
+
+```bash
+PYTHON=/path/to/environment/bin/python \
+  regression_tests/regression.sh --settings /path/to/settings.env check-data
+```
+
+## Planned solver interface
+
+These commands document the intended interface; they are not available yet:
+
+```bash
 regression_tests/regression.sh --settings /path/to/settings.env suite warm
 regression_tests/regression.sh --settings /path/to/settings.env suite parallelism
 regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed fixed-bootstrap

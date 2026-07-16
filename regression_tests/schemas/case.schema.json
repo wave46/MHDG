@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/wave46/MHDG/develop/regression_tests/schemas/case.schema.json",
+  "title": "MHDG regression case definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_id",
+    "description",
+    "external_data_id",
+    "reference_class",
+    "reference_branch",
+    "reference_revision",
+    "execution_policy",
+    "workflows"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "case_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "external_data_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "reference_class": {
+      "$ref": "#/$defs/identifier"
+    },
+    "reference_branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reference_revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "execution_policy": {
+      "$ref": "#/$defs/identifier"
+    },
+    "workflows": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/workflow"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "description",
+        "required_artifact_roles"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/identifier"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_artifact_roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "uniqueItems": true
+        },
+        "default_layout": {
+          "$ref": "#/$defs/identifier"
+        },
+        "tolerance_profile": {
+          "$ref": "#/$defs/identifier"
+        },
+        "comparison_policy": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    }
+  }
+}
