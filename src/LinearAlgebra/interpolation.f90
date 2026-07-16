@@ -246,31 +246,6 @@ CONTAINS
 
    END SUBROUTINE spline_eval_vec
 
-   ! real pure function spline2d(x_len, x_array, y_len, y_array, f, x, y)
-   !    implicit none
-   !    integer, intent(in)           :: x_len, y_len
-   !    real, dimension(x_len), intent(in) :: x_array
-   !    real, dimension(y_len), intent(in) :: y_array
-   !    real, dimension(x_len, y_len), intent(in) :: f
-   !    real, intent(in)              :: x, y
-
-   !    real                          :: y2(y_len), temp(y_len), x2(x_len)
-   !    integer                       :: j
-   !    real                          :: val
-
-   !    ! Spline along x for each y_j (contiguous memory access in Fortran)
-   !    do j = 1, y_len
-   !       call spline_coeff(x_array, f(:, j), x_len, x2)
-   !       call spline_eval(x_array, f(:, j), x2, x_len, x, temp(j))
-   !    end do
-
-   !    ! Spline along y
-   !    call spline_coeff(y_array, temp, y_len, y2)
-   !    call spline_eval(y_array, temp, y2, y_len, y, val)
-   !    spline2d = val
-
-   ! end function spline2d
-
    PURE SUBROUTINE spline2d_vec(x_len, x_array, y_len, y_array, f, xv, yv, fv)
       IMPLICIT NONE
       INTEGER, INTENT(IN)           :: x_len, y_len
