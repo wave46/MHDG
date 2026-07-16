@@ -5,8 +5,8 @@ regression tests. Physical case data, complete parameter files, restart
 solutions, and golden outputs are distributed separately in an external case
 bundle.
 
-Status: external-data contract, bundle creator, and read-only bundle checker.
-The solver runner and HDF5 comparator are not implemented yet.
+Status: external-data contract, bundle tools, and isolated run preparation.
+Solver execution and HDF5 comparison are not implemented yet.
 
 ## Repository boundary
 
@@ -15,8 +15,9 @@ Tracked here:
 - generic case identifiers and workflow definitions;
 - the local-settings example;
 - external-bundle schemas and examples;
+- generic serial, MPI, and OpenMP layouts;
 - comparison tolerances;
-- later, the runner, comparator, and their synthetic tests.
+- later, the executor, comparator, and their synthetic tests.
 
 Not tracked here:
 
@@ -145,8 +146,8 @@ The default bundle version is `1.0.0`. Supply another label when needed with
 The generated physical layout inside the bundle is an implementation detail;
 users only prepare the flat source directory. The example manifest documents
 the generated data contract and is not intended for manual checksum editing.
-`param.txt` is preserved exactly at this stage. The future runner will render
-active data paths and `save_folder` into a private run copy; it will not modify
+`param.txt` is preserved exactly at this stage. The `prepare` command renders
+active data paths and `save_folder` into a private run copy; it does not modify
 the bundled parameter file.
 
 After creation, copy `settings.example.env` to a private location and set:
@@ -168,6 +169,44 @@ The checker reads settings as data rather than sourcing them as shell code. It
 verifies manifest fields, safe bundle-relative paths, artifact sizes and
 SHA-256 checksums, role mappings, and the roles required by tracked case
 definitions. It does not modify the bundle.
+
+## Preparing an isolated warm run
+
+Add the private run root and the executable required by the selected layout.
+MPI layouts also require the launcher:
+
+```text
+MHDG_REGRESSION_RUN_ROOT=/private/path/regression_runs
+MHDG_SERIAL_EXECUTABLE=/absolute/path/to/serial/solver
+MHDG_PARALLEL_EXECUTABLE=/absolute/path/to/parallel/solver
+MHDG_MPI_LAUNCHER=mpirun.openmpi
+```
+
+Then prepare the characterized 4-by-4 layout:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/regression-settings.env \
+  prepare legacy_fixed warm --layout mpi4_omp4
+```
+
+Preparation creates a timestamped run directory under
+`MHDG_REGRESSION_RUN_ROOT`. It contains:
+
+```text
+legacy_fixed/warm/mpi4_omp4/<run-id>/
+├── inputs/             # symlinks to read-only bundle artifacts
+├── outputs/            # writable solver output directory
+├── param.txt           # rendered private run copy
+└── run_plan.json       # command, environment, layout, and provenance
+```
+
+The rendered parameter file replaces `transport_model_path`, `field_path`,
+`jtor_path`, `geometry_path`, and `save_folder`. The bundled parameter file is
+not changed. The solver command is reported and recorded but is not executed.
+
+The tracked layouts are `serial_omp1`, `mpi1_omp1`, `mpi1_omp4`, `mpi4_omp1`,
+and `mpi4_omp4`. Every layout reuses the same bundle files.
 
 ## Initial comparison contract
 
@@ -195,6 +234,7 @@ regression_tests/regression.sh help
 regression_tests/regression.sh --help
 regression_tests/regression.sh bundle create --case legacy_fixed --source /path/to/case --output /path/to/bundle
 regression_tests/regression.sh --settings /path/to/settings.env check-data
+regression_tests/regression.sh --settings /path/to/settings.env prepare legacy_fixed warm --layout mpi4_omp4
 ```
 
 The bundle commands require Python 3 and the packages in `requirements.txt`;
@@ -229,16 +269,13 @@ The `warm` suite is the canonical same-state warm restart. The `parallelism`
 suite runs that inexpensive case using the selected serial, MPI, and OpenMP
 layouts. The help command will list all suites, workflows, and layouts.
 
-The runner will use isolated run directories and prebuilt executables. It will
-reuse read-only bundle artifacts directly or through symlinks, while rendering
-only mutable inputs such as `param.txt`. It will not switch Git branches,
-rebuild the solver, or overwrite reference files.
+The executor will use the prepared run directories and prebuilt executables. It
+will not switch Git branches, rebuild the solver, or overwrite reference files.
 
 ## Planned run outputs
 
-Each run directory will contain rendered input copies, the executed command,
-stdout, the accepted HDF5 result, a machine-readable comparison report, and a
-companion `run_metadata.json` file. This metadata file will record the
-executable checksum, supplied solver revision/build description, MPI/OpenMP
-layout, input/data checksums, and output checksum without embedding
-machine-specific paths in tracked files.
+Execution will add stdout, the accepted HDF5 result, a machine-readable
+comparison report, and a companion `run_metadata.json` file to the prepared run
+directory. This metadata file will record the executable checksum, supplied
+solver revision/build description, MPI/OpenMP layout, input/data checksums, and
+output checksum without embedding machine-specific paths in tracked files.

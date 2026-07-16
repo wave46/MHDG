@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/wave46/MHDG/develop/regression_tests/schemas/layouts.schema.json",
+  "title": "MHDG regression execution layouts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "layouts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "layouts": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/layout"
+      }
+    }
+  },
+  "$defs": {
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description",
+        "execution",
+        "mpi_ranks",
+        "omp_threads"
+      ],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "execution": {
+          "type": "string",
+          "enum": [
+            "serial",
+            "mpi"
+          ]
+        },
+        "mpi_ranks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "omp_threads": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "execution": {
+                "const": "serial"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "mpi_ranks": {
+                "const": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

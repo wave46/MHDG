@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def validate_bundle(settings_path: Path, case_dir: Path) -> ValidationSummary:
     """Validate bundle structure, physical artifacts, and tracked case roles."""
-    bundle_root = _bundle_root(_read_settings(settings_path))
+    bundle_root = bundle_root_from_settings(read_settings(settings_path))
     return validate_bundle_root(bundle_root, case_dir)
 
 
@@ -86,9 +86,8 @@ def validate_bundle_root(bundle_root: Path, case_dir: Path) -> ValidationSummary
 
     schema_dir = case_dir.parent / "schemas"
 
-    manifest = _load_json(bundle_root / "manifest.json", "bundle manifest")
-    _validate_json(
-        manifest,
+    manifest = load_validated_json(
+        bundle_root / "manifest.json",
         schema_dir / "bundle-manifest.schema.json",
         "bundle manifest",
     )
@@ -118,9 +117,8 @@ def load_case_definition(case_id: str, case_dir: Path) -> dict[str, Any]:
         raise BundleError(f"invalid case identifier: {case_id}")
 
     path = case_dir / f"{case_id}.json"
-    case = _load_json(path, f"case definition {path.name}")
     schema_path = case_dir.parent / "schemas" / "case.schema.json"
-    _validate_json(case, schema_path, path.name)
+    case = load_validated_json(path, schema_path, f"case definition {path.name}")
     if case["case_id"] != case_id:
         raise BundleError(f"{path.name}: case_id must equal its filename")
     return case
@@ -132,6 +130,60 @@ def required_case_roles(case: dict[str, Any]) -> set[str]:
     for workflow in case["workflows"].values():
         roles.update(workflow.get("required_artifact_roles", []))
     return roles
+
+
+def load_validated_json(
+    path: Path, schema_path: Path, label: str
+) -> dict[str, Any]:
+    """Load a JSON object and validate it against a regression schema."""
+    document = _load_json(path, label)
+    _validate_json(document, schema_path, label)
+    return document
+
+
+def read_settings(settings_path: Path) -> dict[str, str]:
+    """Parse KEY=VALUE settings without executing shell code."""
+    try:
+        lines = settings_path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise BundleError(f"cannot read settings file {settings_path}: {exc}") from exc
+
+    settings: dict[str, str] = {}
+    for line_number, raw_line in enumerate(lines, start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            raise BundleError(
+                f"{settings_path}:{line_number}: expected a KEY=VALUE setting"
+            )
+        key, value = (part.strip() for part in line.split("=", 1))
+        if not SETTING_RE.fullmatch(key):
+            raise BundleError(f"{settings_path}:{line_number}: invalid setting name")
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        settings[key] = value
+    return settings
+
+
+def bundle_root_from_settings(settings: dict[str, str]) -> Path:
+    """Resolve the required bundle root from parsed settings."""
+    if settings.get("MHDG_REGRESSION_SETTINGS_VERSION") != "1":
+        raise BundleError("settings must define MHDG_REGRESSION_SETTINGS_VERSION=1")
+    data_root = settings.get("MHDG_REGRESSION_DATA_ROOT")
+    if not data_root:
+        raise BundleError("settings must define MHDG_REGRESSION_DATA_ROOT")
+
+    root = Path(data_root).expanduser()
+    if not root.is_absolute():
+        raise BundleError("MHDG_REGRESSION_DATA_ROOT must be an absolute path")
+    try:
+        root = root.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise BundleError(f"bundle root does not exist: {root}") from exc
+    if not root.is_dir():
+        raise BundleError(f"bundle root is not a directory: {root}")
+    return root
 
 
 def _load_cases(case_dir: Path) -> list[dict[str, Any]]:
@@ -161,50 +213,6 @@ def _validate_json(document: Any, schema_path: Path, label: str) -> None:
     location = ".".join(str(part) for part in error.absolute_path)
     where = f".{location}" if location else ""
     raise BundleError(f"{label}{where}: {error.message}")
-
-
-def _read_settings(settings_path: Path) -> dict[str, str]:
-    """Parse KEY=VALUE settings without executing shell code."""
-    try:
-        lines = settings_path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        raise BundleError(f"cannot read settings file {settings_path}: {exc}") from exc
-
-    settings: dict[str, str] = {}
-    for line_number, raw_line in enumerate(lines, start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            raise BundleError(
-                f"{settings_path}:{line_number}: expected a KEY=VALUE setting"
-            )
-        key, value = (part.strip() for part in line.split("=", 1))
-        if not SETTING_RE.fullmatch(key):
-            raise BundleError(f"{settings_path}:{line_number}: invalid setting name")
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-            value = value[1:-1]
-        settings[key] = value
-    return settings
-
-
-def _bundle_root(settings: dict[str, str]) -> Path:
-    if settings.get("MHDG_REGRESSION_SETTINGS_VERSION") != "1":
-        raise BundleError("settings must define MHDG_REGRESSION_SETTINGS_VERSION=1")
-    data_root = settings.get("MHDG_REGRESSION_DATA_ROOT")
-    if not data_root:
-        raise BundleError("settings must define MHDG_REGRESSION_DATA_ROOT")
-
-    root = Path(data_root).expanduser()
-    if not root.is_absolute():
-        raise BundleError("MHDG_REGRESSION_DATA_ROOT must be an absolute path")
-    try:
-        root = root.resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise BundleError(f"bundle root does not exist: {root}") from exc
-    if not root.is_dir():
-        raise BundleError(f"bundle root is not a directory: {root}")
-    return root
 
 
 def _verify_artifacts(

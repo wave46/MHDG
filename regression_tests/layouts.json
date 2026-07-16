@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "layouts": {
+    "serial_omp1": {
+      "description": "Serial solver with one OpenMP thread",
+      "execution": "serial",
+      "mpi_ranks": 1,
+      "omp_threads": 1
+    },
+    "mpi1_omp1": {
+      "description": "Parallel solver with one MPI rank and one OpenMP thread",
+      "execution": "mpi",
+      "mpi_ranks": 1,
+      "omp_threads": 1
+    },
+    "mpi1_omp4": {
+      "description": "Parallel solver with one MPI rank and four OpenMP threads",
+      "execution": "mpi",
+      "mpi_ranks": 1,
+      "omp_threads": 4
+    },
+    "mpi4_omp1": {
+      "description": "Parallel solver with four MPI ranks and one OpenMP thread",
+      "execution": "mpi",
+      "mpi_ranks": 4,
+      "omp_threads": 1
+    },
+    "mpi4_omp4": {
+      "description": "Parallel solver with four MPI ranks and four OpenMP threads",
+      "execution": "mpi",
+      "mpi_ranks": 4,
+      "omp_threads": 4
+    }
+  }
+}
