@@ -73,6 +73,7 @@ def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
     openmp = openmp_environment(prepared.omp_threads)
     environment.update(openmp)
     executable = _file_record(prepared.executable, str(prepared.executable))
+    build_manifest = _optional_file_record(settings, "MHDG_BUILD_MANIFEST")
 
     started_utc = _utc_now()
     started_clock = time.monotonic()
@@ -121,6 +122,7 @@ def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
         "solver": {
             "revision": settings.get("MHDG_SOLVER_REVISION") or None,
             "build_description": settings.get("MHDG_BUILD_DESCRIPTION") or None,
+            "build_manifest": build_manifest,
         },
         "output_files": output_files,
         "hdf5_outputs": hdf5_outputs,
@@ -194,6 +196,18 @@ def _output_records(run_dir: Path) -> list[dict[str, Any]]:
         for path in sorted(output_dir.rglob("*"))
         if path.is_file()
     ]
+
+
+def _optional_file_record(
+    settings: dict[str, str], key: str
+) -> dict[str, Any] | None:
+    value = settings.get(key)
+    if not value:
+        return None
+    path = Path(value).expanduser()
+    if not path.is_absolute() or not path.is_file():
+        raise BundleError(f"{key} must be an absolute path to a file")
+    return _file_record(path, str(path))
 
 
 def _file_record(path: Path, display_path: str) -> dict[str, Any]:

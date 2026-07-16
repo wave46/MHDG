@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from build_solver import build_solver
 from check_bundle import (
     BundleError,
     bundle_root_from_settings,
@@ -45,11 +46,30 @@ def main(argv: list[str] | None = None) -> int:
         choices=("candidate", "golden"),
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--build",
+        action="store_true",
+        help="build clean serial and parallel executables before running",
+    )
+    parser.add_argument("--build-jobs", type=_positive_integer, metavar="N")
+    parser.add_argument(
+        "--repository-root",
+        type=Path,
+        default=Path(__file__).resolve().parents[2],
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args(argv)
 
     try:
+        settings_path = args.settings
+        if args.build:
+            build = build_solver(settings_path, args.repository_root, args.build_jobs)
+            settings_path = build.settings_path
+            print(f"using build: {build.path}")
+        elif args.build_jobs is not None:
+            raise BundleError("--build-jobs requires --build")
         summary_path, summary = run_suite(
-            args.settings,
+            settings_path,
             args.suite_id,
             args.cases,
             args.layouts,
@@ -276,6 +296,16 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
         "+00:00", "Z"
     )
+
+
+def _positive_integer(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("build jobs must be a positive integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("build jobs must be a positive integer")
+    return parsed
 
 
 if __name__ == "__main__":

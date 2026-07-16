@@ -7,7 +7,8 @@ bundle.
 
 Status: external-data contract, candidate and golden bundle tools, isolated
 warm-run execution, fixed-mesh HDF5 comparison, and warm suite orchestration.
-Additional workflows and build automation are not implemented yet.
+Clean serial/parallel build orchestration is available; additional workflows
+remain planned.
 
 ## Repository boundary
 
@@ -19,6 +20,7 @@ Tracked here:
 - generic serial, MPI, and OpenMP layouts;
 - comparison tolerances and a library-independent fixed-mesh comparator;
 - tracked suite definitions and orchestration;
+- clean serial/parallel build orchestration and provenance recording;
 - later, additional workflows.
 
 Not tracked here:
@@ -176,6 +178,32 @@ verifies manifest fields, safe bundle-relative paths, artifact sizes and
 SHA-256 checksums, role mappings, and the roles required by tracked case
 definitions. It does not modify the bundle.
 
+## Building regression executables
+
+Build the optimized `NGammaTiTeNeutral` 2D serial and parallel executables from
+the current checkout with:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/regression-settings.env \
+  build
+```
+
+The build sources `lib/Make.inc/init_vars_libs.sh` by default. Set
+`MHDG_ENVIRONMENT_SCRIPT` only when another absolute path is needed.
+`MHDG_REGRESSION_BUILD_JOBS` defaults to 8 and `--jobs N` overrides it once.
+
+Serial and parallel modes share the same `.o` and `.mod` files in `lib/`, so
+the harness performs two sequential clean builds. It stores both executables,
+the generic Fekete-node file, logs, `build_metadata.json`, and generated
+`settings.env` under `MHDG_REGRESSION_BUILD_ROOT`. If that setting is omitted,
+the default is `MHDG_REGRESSION_RUN_ROOT/builds`.
+
+The metadata records the Git revision and dirty state, build commands,
+environment-script checksum, toolchain versions, and executable checksums.
+The generated settings preserve the original private data and run paths while
+selecting the new executables.
+
 ## Preparing an isolated warm run
 
 Add the private run root and the executable required by the selected layout.
@@ -315,14 +343,17 @@ the run directory, and returns zero only when all checks pass. Use
 regression_tests/regression.sh help
 regression_tests/regression.sh --help
 regression_tests/regression.sh bundle create --case legacy_fixed --source /path/to/case --output /path/to/bundle
+regression_tests/regression.sh --settings /path/to/settings.env build
 regression_tests/regression.sh --settings /path/to/settings.env check-data
 regression_tests/regression.sh --settings /path/to/settings.env prepare legacy_fixed warm --layout mpi4_omp4
 regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed warm --layout mpi4_omp4
 regression_tests/regression.sh compare /path/to/completed/run
 regression_tests/regression.sh --settings /path/to/settings.env suite warm
+regression_tests/regression.sh --settings /path/to/settings.env suite warm --build
 regression_tests/regression.sh --settings /path/to/settings.env suite warm_parallelism
 regression_tests/regression.sh --settings /path/to/settings.env bundle promote /path/to/suite_summary.json --output /path/to/golden --bundle-version VERSION
 regression_tests/regression.sh golden-check
+regression_tests/regression.sh golden-check --build
 regression_tests/regression.sh golden-check warm_parallelism
 ```
 
@@ -365,8 +396,9 @@ running. The command returns nonzero if any run or comparison fails and writes
 `MHDG_REGRESSION_RUN_ROOT/suites/SUITE/RUN_ID/`. Use `--run-id ID` when a
 stable label is useful; otherwise a UTC timestamp is generated.
 
-The executor uses isolated run directories and prebuilt executables. It does
-not switch Git branches, rebuild the solver, or overwrite reference files.
+Without `--build`, the executor uses the prebuilt executable paths from the
+settings file. Add `--build` to either suite command to build the current
+checkout first. It never switches Git branches or overwrites reference files.
 
 Fixed-mesh bootstrap and cold-adaptive workflows remain planned.
 
@@ -424,11 +456,20 @@ the canonical four-by-four warm suite:
 regression_tests/regression.sh golden-check
 ```
 
+Build the current checkout first and automatically use its generated settings
+and provenance with:
+
+```bash
+regression_tests/regression.sh golden-check --build
+```
+
 Run all characterized layouts with:
 
 ```bash
 regression_tests/regression.sh golden-check warm_parallelism
 ```
+
+Append `--build` to rebuild before the full-layout suite.
 
 `regression_tests/golden.local.env` is ignored by Git. A settings file stored
 elsewhere can be selected with `MHDG_REGRESSION_GOLDEN_SETTINGS` or the usual
@@ -438,14 +479,13 @@ The explicit `--settings FILE suite SUITE` interface remains available for
 handmade candidate bundles and other development runs. Both interfaces use the
 same preparation, execution, and comparison implementation.
 
-The executable paths still come from the settings file. Automatic build
-orchestration remains a later step; compiled binaries are not stored in the
+Compiled binaries remain in the private build root; they are not stored in the
 portable golden bundle.
 
 ## Run outputs and provenance
 
 Execution adds stdout, stderr, produced HDF5 files, and `run_metadata.json` to
-the prepared directory. Comparison adds `comparison.json`. Build automation
-will supply the solver revision and build description that can currently be
-entered as `MHDG_SOLVER_REVISION` and `MHDG_BUILD_DESCRIPTION` in the private
-settings file.
+the prepared directory. Comparison adds `comparison.json`. Automated builds
+supply the solver revision, build description, and build-manifest checksum;
+prebuilt executables may still provide revision and description manually in
+the private settings file.

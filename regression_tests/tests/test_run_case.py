@@ -45,6 +45,8 @@ class RunCommandTests(unittest.TestCase):
         self.environment_script.write_text(
             "export MHDG_TEST_ENV=loaded\n", encoding="utf-8"
         )
+        self.build_manifest = bin_dir / "build_metadata.json"
+        self.build_manifest.write_text("{}\n", encoding="utf-8")
         self.run_root = self.root / "runs"
         self.settings = self.root / "settings.env"
         self.settings.write_text(
@@ -56,7 +58,8 @@ class RunCommandTests(unittest.TestCase):
             f"MHDG_MPI_LAUNCHER={self.mpi_launcher}\n"
             f"MHDG_ENVIRONMENT_SCRIPT={self.environment_script}\n"
             f"MHDG_SOLVER_REVISION={'a' * 40}\n"
-            "MHDG_BUILD_DESCRIPTION=synthetic-test-build\n",
+            "MHDG_BUILD_DESCRIPTION=synthetic-test-build\n"
+            f"MHDG_BUILD_MANIFEST={self.build_manifest}\n",
             encoding="utf-8",
         )
 
@@ -114,6 +117,10 @@ class RunCommandTests(unittest.TestCase):
         self.assertEqual(metadata["environment"]["OMP_PROC_BIND"], "spread")
         self.assertEqual(metadata["executable"]["path"], str(self.parallel_executable))
         self.assertEqual(metadata["solver"]["revision"], "a" * 40)
+        self.assertEqual(
+            metadata["solver"]["build_manifest"]["path"],
+            str(self.build_manifest),
+        )
         self.assertEqual(
             metadata["runtime_files"]["positionFeketeNodesTri2D.h5"]["path"],
             str(self.runtime_file),

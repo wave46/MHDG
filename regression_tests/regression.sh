@@ -11,23 +11,25 @@ Usage:
   regression_tests/regression.sh --help
   regression_tests/regression.sh bundle create --case CASE --source DIR --output DIR
   regression_tests/regression.sh --settings FILE bundle promote SUITE_SUMMARY --output DIR --bundle-version VERSION
+  regression_tests/regression.sh --settings FILE build [--jobs N]
   regression_tests/regression.sh --settings FILE check-data
   regression_tests/regression.sh --settings FILE prepare CASE WORKFLOW --layout LAYOUT
   regression_tests/regression.sh --settings FILE run CASE WORKFLOW --layout LAYOUT
   regression_tests/regression.sh compare RUN_DIRECTORY
   regression_tests/regression.sh --settings FILE suite SUITE
-  regression_tests/regression.sh golden-check [SUITE]
+  regression_tests/regression.sh golden-check [SUITE] [--build] [--build-jobs N]
 
 Available commands:
   help           Show this help text.
   bundle create  Create and validate a bundle from prepared case files.
   bundle promote Create a complete golden bundle from a passing canonical run.
+  build          Build clean serial and parallel regression executables.
   check-data     Validate an external bundle without modifying it.
   prepare        Create an isolated run directory without executing the solver.
   run            Prepare and execute one isolated solver run.
   compare        Compare a completed fixed-mesh run with its reference.
   suite          Run and compare every layout in a tracked suite.
-  golden-check   Check rebuilt executables against the configured golden bundle.
+  golden-check   Check executables against the configured golden bundle.
 
 Options:
   --settings FILE  Local bundle, run, executable, and launcher settings.
@@ -41,6 +43,7 @@ settings_file=""
 command=""
 bundle_arguments=()
 promotion_arguments=()
+build_arguments=()
 prepare_arguments=()
 run_arguments=()
 compare_arguments=()
@@ -72,6 +75,16 @@ while (($# > 0)); do
       fi
       command=$1
       shift
+      ;;
+    build)
+      if [[ -n "$command" ]]; then
+        echo "error: only one command may be specified" >&2
+        exit 2
+      fi
+      command="build"
+      shift
+      build_arguments=("$@")
+      break
       ;;
     bundle)
       if [[ -n "$command" ]]; then
@@ -185,6 +198,15 @@ case "$command" in
       --cases "$SCRIPT_DIR/cases" \
       "${promotion_arguments[@]}"
     ;;
+  build)
+    if [[ -z "$settings_file" ]]; then
+      echo "error: build requires --settings FILE" >&2
+      exit 2
+    fi
+    exec "$python_command" "$SCRIPT_DIR/tools/build_solver.py" \
+      --settings "$settings_file" \
+      "${build_arguments[@]}"
+    ;;
   prepare)
     if [[ -z "$settings_file" ]]; then
       echo "error: prepare requires --settings FILE" >&2
@@ -231,10 +253,6 @@ case "$command" in
       "${suite_arguments[@]}"
     ;;
   golden-check)
-    if ((${#golden_arguments[@]} > 1)); then
-      echo "error: golden-check accepts at most one suite name" >&2
-      exit 2
-    fi
     if [[ -z "$settings_file" ]]; then
       settings_file=${MHDG_REGRESSION_GOLDEN_SETTINGS:-$SCRIPT_DIR/golden.local.env}
     fi
@@ -243,7 +261,11 @@ case "$command" in
       echo "copy settings.example.env to golden.local.env or set MHDG_REGRESSION_GOLDEN_SETTINGS" >&2
       exit 2
     fi
-    golden_suite=${golden_arguments[0]:-warm}
+    golden_suite=warm
+    if ((${#golden_arguments[@]} > 0)) && [[ "${golden_arguments[0]}" != -* ]]; then
+      golden_suite=${golden_arguments[0]}
+      golden_arguments=("${golden_arguments[@]:1}")
+    fi
     exec "$python_command" "$SCRIPT_DIR/tools/run_suite.py" \
       --settings "$settings_file" \
       --cases "$SCRIPT_DIR/cases" \
@@ -251,6 +273,7 @@ case "$command" in
       --suites "$SCRIPT_DIR/suites.json" \
       --tolerances "$SCRIPT_DIR/tolerances.json" \
       --require-bundle-class golden \
-      "$golden_suite"
+      "$golden_suite" \
+      "${golden_arguments[@]}"
     ;;
 esac
