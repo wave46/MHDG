@@ -14,6 +14,7 @@ CONTAINS
    SUBROUTINE init_Com()
       INTEGER, PARAMETER                   :: etq = 100
       TYPE(MPI_Status)          :: stat
+      !integer, dimension(MPI_STATUS_SIZE) :: stat
       INTEGER                             :: code
       INTEGER                             :: npro, rbuf, lpro, i, nf2sd, ct
       INTEGER                             :: psd, prv, ifa, fcount
@@ -209,9 +210,9 @@ CONTAINS
       INTEGER                   :: nf2sd, ne2sd
       REAL*8, ALLOCATABLE       :: buffrv(:, :), buffsd(:, :)
       INTEGER                   :: code
-      !INTEGER, ALLOCATABLE     :: req(:), stat(:, :)
+      !integer, allocatable     :: req(:), stat(:, :)
       TYPE(MPI_Request), ALLOCATABLE :: req(:)
-      !TYPE(MPI_Status), ALLOCATABLE :: stat(:,:)
+      !TYPE(MPI_Status), allocatable :: stat(:,:)
       TYPE(MPI_Status), ALLOCATABLE :: stat(:)
       INTEGER                   :: dd, delta
       INTEGER                   :: prtorsd, prtorrv, iel, ifa
@@ -247,7 +248,7 @@ CONTAINS
       ALLOCATE (stat(ne2sd + Mesh%nghostelems))
       req = mpi_request_null
 
-      ! Allocate buffers
+      ! allocate buffers
       ALLOCATE (buffrv(Np2D*phys%Neq, Mesh%nghostelems))
       ALLOCATE (buffsd(Np2D*phys%Neq, ne2sd))
 
@@ -296,7 +297,7 @@ CONTAINS
       ALLOCATE (stat(nf2sd + Mesh%nghostfaces))
       req = mpi_request_null
 
-      ! Allocate buffers
+      ! allocate buffers
       ALLOCATE (buffrv(Nfl*phys%Neq, Mesh%nghostfaces))
       ALLOCATE (buffsd(Nfl*phys%Neq, nf2sd))
 
@@ -368,7 +369,7 @@ CONTAINS
          ALLOCATE (req(2*(Mesh%Nfaces - Nfdir)))
          ALLOCATE (stat(2*(Mesh%Nfaces - Nfdir)))
          req = mpi_request_null
-         ! Allocate buffers
+         ! allocate buffers
          ALLOCATE (buffrv(Nfl*phys%Neq, (Mesh%Nfaces - Nfdir)))
          ALLOCATE (buffsd(Nfl*phys%Neq, (Mesh%Nfaces - Nfdir)))
          buffrv = 0.
@@ -433,7 +434,7 @@ CONTAINS
          ALLOCATE (stat(2*Mesh%Nelems))
          req = mpi_request_null
 
-         ! Allocate buffers
+         ! allocate buffers
          ALLOCATE (buffrv(Np2D*phys%Neq, Mesh%Nelems))
          ALLOCATE (buffsd(Np2D*phys%Neq, Mesh%Nelems))
          buffsd = 0.
@@ -537,6 +538,9 @@ CONTAINS
       INTEGER                   :: nf2sd
       REAL*8, ALLOCATABLE       :: buffrv(:, :), buffsd(:, :)
       INTEGER                   :: code
+
+      !integer, allocatable      :: req(:)
+      !integer, allocatable      :: stat(:, :)
       TYPE(MPI_Request), ALLOCATABLE:: req(:)
       TYPE(MPI_Status), ALLOCATABLE :: stat(:)
       INTEGER                   :: perm(refElPol%Nfacenodes*phys%Neq), aux(phys%Neq*Mesh%Nnodesperface)
@@ -549,10 +553,11 @@ CONTAINS
       CALL set_permutations(Neq*Nfp, Neq, perm)
 
       ALLOCATE (req(nf2sd + Mesh%nghostfaces))
-      ALLOCATE (stat(nf2sd + Mesh%nghostfaces))
+      !allocate(stat(MPI_STATUS_SIZE, nf2sd + Mesh%nghostfaces))
+      ALLOCATE(stat(nf2sd + Mesh%nghostfaces))
       req = mpi_request_null
 
-      ! Allocate buffers
+      ! allocate buffers
       ALLOCATE (buffrv(Mesh%Nnodesperface*phys%Neq, Mesh%nghostfaces))
       ALLOCATE (buffsd(Mesh%Nnodesperface*phys%Neq, nf2sd))
       buffrv = 0.
@@ -729,7 +734,7 @@ CONTAINS
       recvcounts(MPIvar%glob_id + 1) = SIZE(matrix_local, 1)*SIZE(matrix_local, 2)
       CALL MPI_Allgather(recvcounts(MPIvar%glob_id + 1), 1, MPI_INTEGER, recvcounts, 1, MPI_INTEGER, MPI_COMM_WORLD, ierr)
 
-      !ALLOCATE(matrix_global(SUM(recvcounts)/SIZE(matrix_local,2),SIZE(matrix_local,2)))
+      !allocate(matrix_global(sum(recvcounts)/SIZE(matrix_local,2),SIZE(matrix_local,2)))
       ALLOCATE (matrix_global_transpose(SIZE(matrix_local, 2), SUM(recvcounts)/SIZE(matrix_local, 2)))
       ALLOCATE (matrix_global(SUM(recvcounts)/SIZE(matrix_local, 2), SIZE(matrix_local, 2)))
       matrix_global_transpose = 0.
@@ -1033,7 +1038,7 @@ CONTAINS
          END IF
       END IF
 
-      ! Allocate the indices array
+      ! allocate the indices array
       ALLOCATE (indices(Nelems_local, Nnodesperelem_tor1d*ndofperelem*ntor))
       indices = 0
 
