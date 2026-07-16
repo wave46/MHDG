@@ -7,16 +7,16 @@
       "mpi_ranks": 1,
       "omp_threads": 1
     },
-    "mpi1_omp1": {
-      "description": "Parallel solver with one MPI rank and one OpenMP thread",
+    "mpi2_omp1": {
+      "description": "Parallel solver with two MPI ranks and one OpenMP thread",
       "execution": "mpi",
-      "mpi_ranks": 1,
+      "mpi_ranks": 2,
       "omp_threads": 1
     },
-    "mpi1_omp4": {
-      "description": "Parallel solver with one MPI rank and four OpenMP threads",
+    "mpi2_omp4": {
+      "description": "Parallel solver with two MPI ranks and four OpenMP threads",
       "execution": "mpi",
-      "mpi_ranks": 1,
+      "mpi_ranks": 2,
       "omp_threads": 4
     },
     "mpi4_omp1": {

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import BundleError, read_settings
-from prepare_run import PreparedRun, prepare_run
+from prepare_run import PreparedRun, openmp_environment, prepare_run
 
 
 @dataclass(frozen=True)
@@ -70,7 +70,8 @@ def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
     stdout_path = prepared.path / "stdout.log"
     stderr_path = prepared.path / "stderr.log"
     environment, environment_script = _runtime_environment(settings)
-    environment["OMP_NUM_THREADS"] = str(prepared.omp_threads)
+    openmp = openmp_environment(prepared.omp_threads)
+    environment.update(openmp)
     executable = _file_record(prepared.executable, str(prepared.executable))
 
     started_utc = _utc_now()
@@ -109,10 +110,7 @@ def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
         "exit_code": exit_code,
         "launch_error": launch_error,
         "working_directory": str(prepared.path),
-        "environment": {
-            "OMP_NUM_THREADS": str(prepared.omp_threads),
-            "setup_script": environment_script,
-        },
+        "environment": {**openmp, "setup_script": environment_script},
         "command": prepared.command,
         "logs": {"stdout": "stdout.log", "stderr": "stderr.log"},
         "executable": executable,

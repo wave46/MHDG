@@ -5,8 +5,9 @@ regression tests. Physical case data, complete parameter files, restart
 solutions, and golden outputs are distributed separately in an external case
 bundle.
 
-Status: external-data contract, bundle tools, isolated warm-run execution, and
-fixed-mesh HDF5 comparison. Suite orchestration is not implemented yet.
+Status: external-data contract, bundle tools, isolated warm-run execution,
+fixed-mesh HDF5 comparison, and warm suite orchestration. Additional workflows
+and build automation are not implemented yet.
 
 ## Repository boundary
 
@@ -17,7 +18,8 @@ Tracked here:
 - external-bundle schemas and examples;
 - generic serial, MPI, and OpenMP layouts;
 - comparison tolerances and a library-independent fixed-mesh comparator;
-- later, suite orchestration and additional workflows.
+- tracked suite definitions and orchestration;
+- later, additional workflows.
 
 Not tracked here:
 
@@ -211,7 +213,7 @@ stored in the external bundle. The preparer requires
 `positionFeketeNodesTri2D.h5` beside the selected executable and links it into
 the run directory, matching the solver's fixed runtime filename.
 
-The tracked layouts are `serial_omp1`, `mpi1_omp1`, `mpi1_omp4`, `mpi4_omp1`,
+The tracked layouts are `serial_omp1`, `mpi2_omp1`, `mpi2_omp4`, `mpi4_omp1`,
 and `mpi4_omp4`. Every layout reuses the same bundle files.
 
 ## Executing a warm run
@@ -224,8 +226,9 @@ MHDG_ENVIRONMENT_SCRIPT=/absolute/path/to/lib/Make.inc/init_vars_libs.sh
 ```
 
 The script is sourced in a child Bash process. Its exported environment is used
-for MHDG, after which the selected layout sets `OMP_NUM_THREADS`. If this
-setting is omitted, the runner inherits the environment from the calling shell.
+for MHDG, after which the selected layout sets `OMP_NUM_THREADS`, `OMP_PLACES`,
+and `OMP_PROC_BIND`. If the script setting is omitted, the runner otherwise
+inherits the environment from the calling shell.
 
 Use `run` instead of `prepare` to create the run directory and execute its
 recorded command:
@@ -236,15 +239,18 @@ regression_tests/regression.sh \
   run legacy_fixed warm --layout mpi4_omp4
 ```
 
-The solver runs from the isolated directory with the layout's
-`OMP_NUM_THREADS`. Standard output and error are written to `stdout.log` and
-`stderr.log`. `run_metadata.json` records the command, exit status, runtime,
+The solver runs from the isolated directory with the layout's OpenMP thread
+count. MPI commands use Open MPI's `--bind-to core --map-by slot:PE=THREADS` so
+each rank receives exclusive cores for its threads. `OMP_PLACES=cores` and
+`OMP_PROC_BIND=spread` distribute those threads within the assigned cores.
+Standard output and error are written to `stdout.log` and `stderr.log`.
+`run_metadata.json` records the command, environment, exit status, runtime,
 executable checksum, optional revision/build description, and checksums of all
 files produced under `outputs/`.
 
 A run is `completed` only when the solver exits successfully and produces at
-least one HDF5 file. This status describes execution only; numerical acceptance
-will be added with the comparator. Existing run directories are never reused or
+least one HDF5 file. This status describes execution only; comparison records
+numerical acceptance separately. Existing run directories are never reused or
 overwritten.
 
 ## Initial comparison contract
@@ -262,8 +268,13 @@ four-MPI-by-four-OpenMP warm case, the initial requirements are:
 Normalized Linf is the largest absolute pointwise difference divided by the
 largest absolute reference value for that equation.
 
+Cross-layout comparisons initially allow relative L2 `5e-8` and normalized
+Linf `1e-6`. These provisional limits cover the characterized serial, two-rank,
+and four-rank reduction orderings and should be revisited with more runs and
+solver builds.
+
 Runtime is recorded but is not initially a correctness failure. Suite-level
-runtime warnings require a reference median and will be added with orchestration.
+runtime warnings require a characterized reference median and remain planned.
 
 The core comparator uses HDF5 directly and supports both grouped and older flat
 solution/mesh layouts. `HDG_postprocess` remains an optional richer layer for
@@ -304,6 +315,8 @@ regression_tests/regression.sh --settings /path/to/settings.env check-data
 regression_tests/regression.sh --settings /path/to/settings.env prepare legacy_fixed warm --layout mpi4_omp4
 regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed warm --layout mpi4_omp4
 regression_tests/regression.sh compare /path/to/completed/run
+regression_tests/regression.sh --settings /path/to/settings.env suite warm
+regression_tests/regression.sh --settings /path/to/settings.env suite warm_parallelism
 ```
 
 The regression commands require Python 3 and the packages in `requirements.txt`;
@@ -323,23 +336,32 @@ PYTHON=/path/to/environment/bin/python \
   regression_tests/regression.sh --settings /path/to/settings.env check-data
 ```
 
-## Planned solver interface
+## Running suites
 
-These commands document the intended interface; they are not available yet:
+The canonical warm suite runs and compares the characterized 4-by-4 layout:
 
 ```bash
 regression_tests/regression.sh --settings /path/to/settings.env suite warm
-regression_tests/regression.sh --settings /path/to/settings.env suite parallelism
-regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed fixed-bootstrap
-regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed cold-adaptive
 ```
 
-The `warm` suite is the canonical same-state warm restart. The `parallelism`
-suite runs that inexpensive case using the selected serial, MPI, and OpenMP
-layouts. The help command will list all suites, workflows, and layouts.
+The `warm_parallelism` suite exercises the warm workflow across all tracked
+serial, MPI, and OpenMP layouts:
+
+```bash
+regression_tests/regression.sh --settings /path/to/settings.env suite warm_parallelism
+```
+
+Each suite validates the bundle once, then gives every layout a distinct
+isolated run directory. A failed layout does not prevent later layouts from
+running. The command returns nonzero if any run or comparison fails and writes
+`suite_summary.json` under
+`MHDG_REGRESSION_RUN_ROOT/suites/SUITE/RUN_ID/`. Use `--run-id ID` when a
+stable label is useful; otherwise a UTC timestamp is generated.
 
 The executor uses isolated run directories and prebuilt executables. It does
 not switch Git branches, rebuild the solver, or overwrite reference files.
+
+Fixed-mesh bootstrap and cold-adaptive workflows remain planned.
 
 ## Run outputs and provenance
 

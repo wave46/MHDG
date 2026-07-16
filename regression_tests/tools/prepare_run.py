@@ -53,6 +53,15 @@ class PreparedRun:
     runtime_files: dict[str, Path]
 
 
+def openmp_environment(threads: int) -> dict[str, str]:
+    """Return deterministic OpenMP placement for one solver process."""
+    return {
+        "OMP_NUM_THREADS": str(threads),
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "spread",
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("case_id", metavar="CASE")
@@ -92,11 +101,13 @@ def prepare_run(
     case_dir: Path,
     layouts_path: Path,
     run_id: str | None = None,
+    validate_bundle: bool = True,
 ) -> PreparedRun:
     """Create one validated, isolated run directory."""
     settings = read_settings(settings_path)
     bundle_root = bundle_root_from_settings(settings)
-    validate_bundle_root(bundle_root, case_dir)
+    if validate_bundle:
+        validate_bundle_root(bundle_root, case_dir)
 
     case = load_case_definition(case_id, case_dir)
     workflow = case["workflows"].get(workflow_id)
@@ -263,7 +274,16 @@ def _solver_command(
     ]
     if launcher is None:
         return arguments
-    return [str(launcher), "-n", str(layout["mpi_ranks"]), *arguments]
+    return [
+        str(launcher),
+        "--bind-to",
+        "core",
+        "--map-by",
+        f"slot:PE={layout['omp_threads']}",
+        "-n",
+        str(layout["mpi_ranks"]),
+        *arguments,
+    ]
 
 
 def _write_plan(
@@ -288,7 +308,7 @@ def _write_plan(
         "layout_id": layout_id,
         "layout": layout,
         "working_directory": str(run_dir),
-        "environment": {"OMP_NUM_THREADS": str(layout["omp_threads"])},
+        "environment": openmp_environment(layout["omp_threads"]),
         "command": command,
         "bundle": {
             "root": str(bundle_root),

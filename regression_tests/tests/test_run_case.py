@@ -83,6 +83,14 @@ class RunCommandTests(unittest.TestCase):
             (run_dir / "outputs/environment.txt").read_text(encoding="utf-8"),
             "loaded\n",
         )
+        self.assertEqual(
+            (run_dir / "outputs/omp_places.txt").read_text(encoding="utf-8"),
+            "cores\n",
+        )
+        self.assertEqual(
+            (run_dir / "outputs/omp_proc_bind.txt").read_text(encoding="utf-8"),
+            "spread\n",
+        )
 
         metadata = json.loads(
             (run_dir / "run_metadata.json").read_text(encoding="utf-8")
@@ -91,8 +99,19 @@ class RunCommandTests(unittest.TestCase):
         self.assertEqual(metadata["exit_code"], 0)
         self.assertEqual(metadata["environment"]["OMP_NUM_THREADS"], "4")
         self.assertEqual(
-            metadata["command"][:3], [str(self.mpi_launcher), "-n", "4"]
+            metadata["command"][:7],
+            [
+                str(self.mpi_launcher),
+                "--bind-to",
+                "core",
+                "--map-by",
+                "slot:PE=4",
+                "-n",
+                "4",
+            ],
         )
+        self.assertEqual(metadata["environment"]["OMP_PLACES"], "cores")
+        self.assertEqual(metadata["environment"]["OMP_PROC_BIND"], "spread")
         self.assertEqual(metadata["executable"]["path"], str(self.parallel_executable))
         self.assertEqual(metadata["solver"]["revision"], "a" * 40)
         self.assertEqual(
@@ -192,6 +211,8 @@ set -euo pipefail
 printf 'solver stdout\n'
 printf 'solver stderr\n' >&2
 printf '%s\n' "$OMP_NUM_THREADS" > outputs/omp_threads.txt
+printf '%s\n' "$OMP_PLACES" > outputs/omp_places.txt
+printf '%s\n' "$OMP_PROC_BIND" > outputs/omp_proc_bind.txt
 printf '%s\n' "$MHDG_TEST_ENV" > outputs/environment.txt
 printf 'synthetic hdf5\n' > outputs/result.h5
 """
@@ -208,6 +229,11 @@ exit 7
 
 MPI_LAUNCHER = """#!/usr/bin/env bash
 set -euo pipefail
+test "$1" = '--bind-to'
+test "$2" = 'core'
+test "$3" = '--map-by'
+test "$4" = 'slot:PE=4'
+shift 4
 test "$1" = '-n'
 printf '%s\n' "$2" > outputs/mpi_ranks.txt
 shift 2

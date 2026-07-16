@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "suites": {
+    "warm": {
+      "description": "Canonical four-MPI-by-four-OpenMP warm restart",
+      "case_id": "legacy_fixed",
+      "workflow_id": "warm",
+      "layouts": [
+        "mpi4_omp4"
+      ]
+    },
+    "warm_parallelism": {
+      "description": "Warm restart across serial, MPI, and OpenMP layouts",
+      "case_id": "legacy_fixed",
+      "workflow_id": "warm",
+      "layouts": [
+        "serial_omp1",
+        "mpi2_omp1",
+        "mpi2_omp4",
+        "mpi4_omp1",
+        "mpi4_omp4"
+      ]
+    }
+  }
+}

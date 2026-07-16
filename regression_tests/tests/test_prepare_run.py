@@ -98,8 +98,17 @@ class RunPreparationTests(unittest.TestCase):
         self.assertEqual(prepared.path, expected)
         self.assertEqual(prepared.omp_threads, 4)
         self.assertEqual(
-            prepared.command[:4],
-            [str(self.mpi_launcher), "-n", "4", str(self.parallel_executable)],
+            prepared.command[:8],
+            [
+                str(self.mpi_launcher),
+                "--bind-to",
+                "core",
+                "--map-by",
+                "slot:PE=4",
+                "-n",
+                "4",
+                str(self.parallel_executable),
+            ],
         )
         self.assertEqual(
             prepared.command[-2:],
@@ -163,6 +172,8 @@ class RunPreparationTests(unittest.TestCase):
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
         self.assertEqual(plan["command"][0], str(self.serial_executable))
         self.assertNotIn(str(self.mpi_launcher), plan["command"])
+        self.assertEqual(plan["environment"]["OMP_PLACES"], "cores")
+        self.assertEqual(plan["environment"]["OMP_PROC_BIND"], "spread")
 
     def test_missing_parameter_assignment_fails(self) -> None:
         source = self.root / "incomplete_param.txt"

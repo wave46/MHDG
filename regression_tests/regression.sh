@@ -14,6 +14,7 @@ Usage:
   regression_tests/regression.sh --settings FILE prepare CASE WORKFLOW --layout LAYOUT
   regression_tests/regression.sh --settings FILE run CASE WORKFLOW --layout LAYOUT
   regression_tests/regression.sh compare RUN_DIRECTORY
+  regression_tests/regression.sh --settings FILE suite SUITE
 
 Available commands:
   help           Show this help text.
@@ -22,12 +23,13 @@ Available commands:
   prepare        Create an isolated run directory without executing the solver.
   run            Prepare and execute one isolated solver run.
   compare        Compare a completed fixed-mesh run with its reference.
+  suite          Run and compare every layout in a tracked suite.
 
 Options:
   --settings FILE  Local bundle, run, executable, and launcher settings.
   -h, --help       Show this help text.
 
-Suite orchestration is not implemented yet.
+Suites: warm, warm_parallelism.
 EOF
 }
 
@@ -37,6 +39,7 @@ bundle_arguments=()
 prepare_arguments=()
 run_arguments=()
 compare_arguments=()
+suite_arguments=()
 
 while (($# > 0)); do
   case "$1" in
@@ -108,6 +111,16 @@ while (($# > 0)); do
       compare_arguments=("$@")
       break
       ;;
+    suite)
+      if [[ -n "$command" ]]; then
+        echo "error: only one command may be specified" >&2
+        exit 2
+      fi
+      command="suite"
+      shift
+      suite_arguments=("$@")
+      break
+      ;;
     *)
       echo "error: unknown argument: $1" >&2
       usage >&2
@@ -173,5 +186,18 @@ case "$command" in
       --cases "$SCRIPT_DIR/cases" \
       --tolerances "$SCRIPT_DIR/tolerances.json" \
       "${compare_arguments[@]}"
+    ;;
+  suite)
+    if [[ -z "$settings_file" ]]; then
+      echo "error: suite requires --settings FILE" >&2
+      exit 2
+    fi
+    exec "$python_command" "$SCRIPT_DIR/tools/run_suite.py" \
+      --settings "$settings_file" \
+      --cases "$SCRIPT_DIR/cases" \
+      --layouts "$SCRIPT_DIR/layouts.json" \
+      --suites "$SCRIPT_DIR/suites.json" \
+      --tolerances "$SCRIPT_DIR/tolerances.json" \
+      "${suite_arguments[@]}"
     ;;
 esac
