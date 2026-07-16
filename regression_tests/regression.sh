@@ -13,6 +13,7 @@ Usage:
   regression_tests/regression.sh --settings FILE check-data
   regression_tests/regression.sh --settings FILE prepare CASE WORKFLOW --layout LAYOUT
   regression_tests/regression.sh --settings FILE run CASE WORKFLOW --layout LAYOUT
+  regression_tests/regression.sh compare RUN_DIRECTORY
 
 Available commands:
   help           Show this help text.
@@ -20,12 +21,13 @@ Available commands:
   check-data     Validate an external bundle without modifying it.
   prepare        Create an isolated run directory without executing the solver.
   run            Prepare and execute one isolated solver run.
+  compare        Compare a completed fixed-mesh run with its reference.
 
 Options:
   --settings FILE  Local bundle, run, executable, and launcher settings.
   -h, --help       Show this help text.
 
-Result comparison is not implemented yet.
+Suite orchestration is not implemented yet.
 EOF
 }
 
@@ -34,6 +36,7 @@ command=""
 bundle_arguments=()
 prepare_arguments=()
 run_arguments=()
+compare_arguments=()
 
 while (($# > 0)); do
   case "$1" in
@@ -95,6 +98,16 @@ while (($# > 0)); do
       run_arguments=("$@")
       break
       ;;
+    compare)
+      if [[ -n "$command" ]]; then
+        echo "error: only one command may be specified" >&2
+        exit 2
+      fi
+      command="compare"
+      shift
+      compare_arguments=("$@")
+      break
+      ;;
     *)
       echo "error: unknown argument: $1" >&2
       usage >&2
@@ -150,5 +163,15 @@ case "$command" in
       --cases "$SCRIPT_DIR/cases" \
       --layouts "$SCRIPT_DIR/layouts.json" \
       "${run_arguments[@]}"
+    ;;
+  compare)
+    if [[ -n "$settings_file" ]]; then
+      echo "error: compare does not use --settings" >&2
+      exit 2
+    fi
+    exec "$python_command" "$SCRIPT_DIR/tools/compare_run.py" \
+      --cases "$SCRIPT_DIR/cases" \
+      --tolerances "$SCRIPT_DIR/tolerances.json" \
+      "${compare_arguments[@]}"
     ;;
 esac

@@ -5,8 +5,8 @@ regression tests. Physical case data, complete parameter files, restart
 solutions, and golden outputs are distributed separately in an external case
 bundle.
 
-Status: external-data contract, bundle tools, and isolated warm-run execution.
-HDF5 comparison is not implemented yet.
+Status: external-data contract, bundle tools, isolated warm-run execution, and
+fixed-mesh HDF5 comparison. Suite orchestration is not implemented yet.
 
 ## Repository boundary
 
@@ -16,8 +16,8 @@ Tracked here:
 - the local-settings example;
 - external-bundle schemas and examples;
 - generic serial, MPI, and OpenMP layouts;
-- comparison tolerances;
-- later, the comparator and its synthetic tests.
+- comparison tolerances and a library-independent fixed-mesh comparator;
+- later, suite orchestration and additional workflows.
 
 Not tracked here:
 
@@ -259,12 +259,40 @@ four-MPI-by-four-OpenMP warm case, the initial requirements are:
 - per-equation relative L2 tolerance `1e-10`;
 - per-equation normalized Linf tolerance `1e-9`.
 
-Runtime is reported and may warn when it exceeds twice the reference median; it
-is not initially a correctness failure.
+Normalized Linf is the largest absolute pointwise difference divided by the
+largest absolute reference value for that equation.
 
-The core comparator will use HDF5 directly and support both grouped and older
-flat solution layouts. `HDG_postprocess` remains an optional richer layer for
+Runtime is recorded but is not initially a correctness failure. Suite-level
+runtime warnings require a reference median and will be added with orchestration.
+
+The core comparator uses HDF5 directly and supports both grouped and older flat
+solution/mesh layouts. `HDG_postprocess` remains an optional richer layer for
 mesh-independent adaptive comparisons.
+
+## Comparing a completed run
+
+Run the comparator on the directory printed by `run`:
+
+```bash
+regression_tests/regression.sh compare /private/path/to/completed/run
+```
+
+It selects the final HDF5 save reported in `stdout.log`, falling back to the
+unique output without a `_NNNN` time-save suffix. `--candidate` and
+`--reference` can resolve an ambiguous or manual comparison. The selected
+tolerance profile comes from the tracked workflow; non-default layouts use
+`fixed_cross_layout`.
+
+The comparator checks:
+
+- the final `Error:` value from `stdout.log`;
+- exact `T`, `Tlin`, and `Tb` connectivity and tolerance-based `X` coordinates;
+- finite, per-equation `u`, `q`, and `u_tilde` values;
+- transport-1D coefficient and profile datasets present in the reference.
+
+It prints a short pass/fail and worst-error summary, writes `comparison.json` in
+the run directory, and returns zero only when all checks pass. Use
+`--report /path/report.json` to write it elsewhere.
 
 ## Available user interface
 
@@ -275,19 +303,20 @@ regression_tests/regression.sh bundle create --case legacy_fixed --source /path/
 regression_tests/regression.sh --settings /path/to/settings.env check-data
 regression_tests/regression.sh --settings /path/to/settings.env prepare legacy_fixed warm --layout mpi4_omp4
 regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed warm --layout mpi4_omp4
+regression_tests/regression.sh compare /path/to/completed/run
 ```
 
-The bundle commands require Python 3 and the packages in `requirements.txt`;
+The regression commands require Python 3 and the packages in `requirements.txt`;
 install them into the selected Python environment with:
 
 ```bash
 python -m pip install -r regression_tests/requirements.txt
 ```
 
-The existing `hdg-postprocess-py312` environment already provides
-`jsonschema`. The checker does not depend on HDF5 or `HDG_postprocess`
-libraries. Set the `PYTHON` environment variable when a non-default interpreter
-should run the command:
+The existing `hdg-postprocess-py312` environment already provides `jsonschema`,
+NumPy, and h5py. The comparator does not depend on `HDG_postprocess` itself. Set
+the `PYTHON` environment variable when a non-default interpreter should run the
+command:
 
 ```bash
 PYTHON=/path/to/environment/bin/python \
@@ -312,10 +341,10 @@ layouts. The help command will list all suites, workflows, and layouts.
 The executor uses isolated run directories and prebuilt executables. It does
 not switch Git branches, rebuild the solver, or overwrite reference files.
 
-## Planned run outputs
+## Run outputs and provenance
 
 Execution adds stdout, stderr, produced HDF5 files, and `run_metadata.json` to
-the prepared directory. Comparison will later add a machine-readable report.
-Build automation will supply the solver revision and build description that can
-currently be entered as `MHDG_SOLVER_REVISION` and `MHDG_BUILD_DESCRIPTION` in
-the private settings file.
+the prepared directory. Comparison adds `comparison.json`. Build automation
+will supply the solver revision and build description that can currently be
+entered as `MHDG_SOLVER_REVISION` and `MHDG_BUILD_DESCRIPTION` in the private
+settings file.
