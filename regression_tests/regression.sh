@@ -12,18 +12,20 @@ Usage:
   regression_tests/regression.sh bundle create --case CASE --source DIR --output DIR
   regression_tests/regression.sh --settings FILE check-data
   regression_tests/regression.sh --settings FILE prepare CASE WORKFLOW --layout LAYOUT
+  regression_tests/regression.sh --settings FILE run CASE WORKFLOW --layout LAYOUT
 
 Available commands:
   help           Show this help text.
   bundle create  Create and validate a bundle from prepared case files.
   check-data     Validate an external bundle without modifying it.
   prepare        Create an isolated run directory without executing the solver.
+  run            Prepare and execute one isolated solver run.
 
 Options:
   --settings FILE  Local bundle, run, executable, and launcher settings.
   -h, --help       Show this help text.
 
-Solver execution and result comparison are not implemented yet.
+Result comparison is not implemented yet.
 EOF
 }
 
@@ -31,6 +33,7 @@ settings_file=""
 command=""
 bundle_arguments=()
 prepare_arguments=()
+run_arguments=()
 
 while (($# > 0)); do
   case "$1" in
@@ -82,6 +85,16 @@ while (($# > 0)); do
       prepare_arguments=("$@")
       break
       ;;
+    run)
+      if [[ -n "$command" ]]; then
+        echo "error: only one command may be specified" >&2
+        exit 2
+      fi
+      command="run"
+      shift
+      run_arguments=("$@")
+      break
+      ;;
     *)
       echo "error: unknown argument: $1" >&2
       usage >&2
@@ -126,5 +139,16 @@ case "$command" in
       --cases "$SCRIPT_DIR/cases" \
       --layouts "$SCRIPT_DIR/layouts.json" \
       "${prepare_arguments[@]}"
+    ;;
+  run)
+    if [[ -z "$settings_file" ]]; then
+      echo "error: run requires --settings FILE" >&2
+      exit 2
+    fi
+    exec "$python_command" "$SCRIPT_DIR/tools/run_case.py" \
+      --settings "$settings_file" \
+      --cases "$SCRIPT_DIR/cases" \
+      --layouts "$SCRIPT_DIR/layouts.json" \
+      "${run_arguments[@]}"
     ;;
 esac

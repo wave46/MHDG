@@ -41,6 +41,7 @@ INPUT_LINKS = {
     "warm_restart": "restart.h5",
     "warm_reference": "reference.h5",
 }
+RUNTIME_FILENAMES = ("positionFeketeNodesTri2D.h5",)
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,8 @@ class PreparedRun:
     path: Path
     command: list[str]
     omp_threads: int
+    executable: Path
+    runtime_files: dict[str, Path]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -106,6 +109,7 @@ def prepare_run(
     artifacts, manifest = _case_artifacts(bundle_root, case, case_dir)
     run_root = _absolute_setting(settings, "MHDG_REGRESSION_RUN_ROOT")
     executable = _solver_executable(settings, layout["execution"])
+    runtime_files = _runtime_files(executable)
     launcher = _mpi_launcher(settings) if layout["execution"] == "mpi" else None
 
     run_id = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -124,7 +128,7 @@ def prepare_run(
         ) as workspace:
             staging = Path(workspace) / "run"
             staging.mkdir()
-            _populate_run(staging, run_dir, artifacts)
+            _populate_run(staging, run_dir, artifacts, runtime_files)
             _write_plan(
                 staging,
                 run_dir,
@@ -136,12 +140,15 @@ def prepare_run(
                 bundle_root,
                 manifest,
                 artifacts,
+                runtime_files,
             )
             staging.rename(run_dir)
     except OSError as exc:
         raise BundleError(f"cannot prepare run {run_dir}: {exc}") from exc
 
-    return PreparedRun(run_dir, command, layout["omp_threads"])
+    return PreparedRun(
+        run_dir, command, layout["omp_threads"], executable, runtime_files
+    )
 
 
 def render_parameter_file(
@@ -215,7 +222,10 @@ def _case_artifacts(
 
 
 def _populate_run(
-    staging: Path, final_run_dir: Path, artifacts: dict[str, Path]
+    staging: Path,
+    final_run_dir: Path,
+    artifacts: dict[str, Path],
+    runtime_files: dict[str, Path],
 ) -> None:
     staging_inputs = staging / "inputs"
     staging_outputs = staging / "outputs"
@@ -224,6 +234,8 @@ def _populate_run(
 
     for role, filename in INPUT_LINKS.items():
         (staging_inputs / filename).symlink_to(artifacts[role])
+    for filename, source in runtime_files.items():
+        (staging / filename).symlink_to(source)
 
     final_inputs = final_run_dir / "inputs"
     replacements = {
@@ -265,6 +277,7 @@ def _write_plan(
     bundle_root: Path,
     manifest: dict[str, Any],
     artifacts: dict[str, Path],
+    runtime_files: dict[str, Path],
 ) -> None:
     created = datetime.now(timezone.utc).isoformat(timespec="seconds")
     plan = {
@@ -283,6 +296,9 @@ def _write_plan(
             "bundle_version": manifest["bundle_version"],
         },
         "artifacts": {role: str(path) for role, path in sorted(artifacts.items())},
+        "runtime_files": {
+            name: str(path) for name, path in sorted(runtime_files.items())
+        },
     }
     (staging / "run_plan.json").write_text(
         json.dumps(plan, indent=2) + "\n", encoding="utf-8"
@@ -309,6 +325,16 @@ def _solver_executable(settings: dict[str, str], execution: str) -> Path:
     if not path.is_file() or not os.access(path, os.X_OK):
         raise BundleError(f"{key} is not an executable file: {path}")
     return path
+
+
+def _runtime_files(executable: Path) -> dict[str, Path]:
+    files = {}
+    for filename in RUNTIME_FILENAMES:
+        path = executable.parent / filename
+        if not path.is_file():
+            raise BundleError(f"required runtime file is missing: {path}")
+        files[filename] = path.resolve()
+    return files
 
 
 def _mpi_launcher(settings: dict[str, str]) -> Path:

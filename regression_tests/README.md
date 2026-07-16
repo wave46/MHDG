@@ -5,8 +5,8 @@ regression tests. Physical case data, complete parameter files, restart
 solutions, and golden outputs are distributed separately in an external case
 bundle.
 
-Status: external-data contract, bundle tools, and isolated run preparation.
-Solver execution and HDF5 comparison are not implemented yet.
+Status: external-data contract, bundle tools, and isolated warm-run execution.
+HDF5 comparison is not implemented yet.
 
 ## Repository boundary
 
@@ -17,7 +17,7 @@ Tracked here:
 - external-bundle schemas and examples;
 - generic serial, MPI, and OpenMP layouts;
 - comparison tolerances;
-- later, the executor, comparator, and their synthetic tests.
+- later, the comparator and its synthetic tests.
 
 Not tracked here:
 
@@ -197,6 +197,7 @@ Preparation creates a timestamped run directory under
 legacy_fixed/warm/mpi4_omp4/<run-id>/
 ├── inputs/             # symlinks to read-only bundle artifacts
 ├── outputs/            # writable solver output directory
+├── positionFeketeNodesTri2D.h5  # symlink to generic solver data
 ├── param.txt           # rendered private run copy
 └── run_plan.json       # command, environment, layout, and provenance
 ```
@@ -205,8 +206,46 @@ The rendered parameter file replaces `transport_model_path`, `field_path`,
 `jtor_path`, `geometry_path`, and `save_folder`. The bundled parameter file is
 not changed. The solver command is reported and recorded but is not executed.
 
+The generic Fekete-node file is not physical case data and is therefore not
+stored in the external bundle. The preparer requires
+`positionFeketeNodesTri2D.h5` beside the selected executable and links it into
+the run directory, matching the solver's fixed runtime filename.
+
 The tracked layouts are `serial_omp1`, `mpi1_omp1`, `mpi1_omp4`, `mpi4_omp1`,
 and `mpi4_omp4`. Every layout reuses the same bundle files.
+
+## Executing a warm run
+
+If the executable depends on library paths exported by the build setup, add
+its absolute path to the private settings file:
+
+```text
+MHDG_ENVIRONMENT_SCRIPT=/absolute/path/to/lib/Make.inc/init_vars_libs.sh
+```
+
+The script is sourced in a child Bash process. Its exported environment is used
+for MHDG, after which the selected layout sets `OMP_NUM_THREADS`. If this
+setting is omitted, the runner inherits the environment from the calling shell.
+
+Use `run` instead of `prepare` to create the run directory and execute its
+recorded command:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/regression-settings.env \
+  run legacy_fixed warm --layout mpi4_omp4
+```
+
+The solver runs from the isolated directory with the layout's
+`OMP_NUM_THREADS`. Standard output and error are written to `stdout.log` and
+`stderr.log`. `run_metadata.json` records the command, exit status, runtime,
+executable checksum, optional revision/build description, and checksums of all
+files produced under `outputs/`.
+
+A run is `completed` only when the solver exits successfully and produces at
+least one HDF5 file. This status describes execution only; numerical acceptance
+will be added with the comparator. Existing run directories are never reused or
+overwritten.
 
 ## Initial comparison contract
 
@@ -235,6 +274,7 @@ regression_tests/regression.sh --help
 regression_tests/regression.sh bundle create --case legacy_fixed --source /path/to/case --output /path/to/bundle
 regression_tests/regression.sh --settings /path/to/settings.env check-data
 regression_tests/regression.sh --settings /path/to/settings.env prepare legacy_fixed warm --layout mpi4_omp4
+regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed warm --layout mpi4_omp4
 ```
 
 The bundle commands require Python 3 and the packages in `requirements.txt`;
@@ -269,13 +309,13 @@ The `warm` suite is the canonical same-state warm restart. The `parallelism`
 suite runs that inexpensive case using the selected serial, MPI, and OpenMP
 layouts. The help command will list all suites, workflows, and layouts.
 
-The executor will use the prepared run directories and prebuilt executables. It
-will not switch Git branches, rebuild the solver, or overwrite reference files.
+The executor uses isolated run directories and prebuilt executables. It does
+not switch Git branches, rebuild the solver, or overwrite reference files.
 
 ## Planned run outputs
 
-Execution will add stdout, the accepted HDF5 result, a machine-readable
-comparison report, and a companion `run_metadata.json` file to the prepared run
-directory. This metadata file will record the executable checksum, supplied
-solver revision/build description, MPI/OpenMP layout, input/data checksums, and
-output checksum without embedding machine-specific paths in tracked files.
+Execution adds stdout, stderr, produced HDF5 files, and `run_metadata.json` to
+the prepared directory. Comparison will later add a machine-readable report.
+Build automation will supply the solver revision and build description that can
+currently be entered as `MHDG_SOLVER_REVISION` and `MHDG_BUILD_DESCRIPTION` in
+the private settings file.

@@ -63,6 +63,8 @@ class RunPreparationTests(unittest.TestCase):
         self.serial_executable = self._executable(bin_dir / "serial_solver")
         self.parallel_executable = self._executable(bin_dir / "parallel_solver")
         self.mpi_launcher = self._executable(bin_dir / "mpirun")
+        self.runtime_file = bin_dir / "positionFeketeNodesTri2D.h5"
+        self.runtime_file.write_text("synthetic Fekete nodes\n", encoding="utf-8")
 
         self.settings = self.root / "settings.env"
         self.settings.write_text(
@@ -106,6 +108,10 @@ class RunPreparationTests(unittest.TestCase):
         self.assertTrue((expected / "outputs").is_dir())
         self.assertTrue((expected / "inputs" / "equilibrium.h5").is_symlink())
         self.assertTrue((expected / "inputs" / "reference.h5").is_symlink())
+        self.assertEqual(
+            (expected / "positionFeketeNodesTri2D.h5").resolve(),
+            self.runtime_file.resolve(),
+        )
 
         parameters = (expected / "param.txt").read_text(encoding="utf-8")
         self.assertNotIn("/old/", parameters)
@@ -198,6 +204,29 @@ class RunPreparationTests(unittest.TestCase):
             )
 
         self.assertEqual(marker.read_text(encoding="utf-8"), "keep\n")
+
+    def test_missing_runtime_file_fails_before_preparation(self) -> None:
+        self.runtime_file.unlink()
+
+        with self.assertRaisesRegex(BundleError, "required runtime file is missing"):
+            prepare_run(
+                self.settings,
+                "legacy_fixed",
+                "warm",
+                "mpi4_omp4",
+                REGRESSION_ROOT / "cases",
+                REGRESSION_ROOT / "layouts.json",
+                "missing-runtime-file",
+            )
+
+        run_dir = (
+            self.run_root
+            / "legacy_fixed"
+            / "warm"
+            / "mpi4_omp4"
+            / "missing-runtime-file"
+        )
+        self.assertFalse(run_dir.exists())
 
 
 if __name__ == "__main__":
