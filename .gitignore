@@ -18,3 +18,4 @@
 *lib_*
 test/*.sh*
 code_tests
+regression_tests/*.local.env

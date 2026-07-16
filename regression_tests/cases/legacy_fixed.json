@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "case_id": "legacy_fixed",
+  "description": "Routine fixed-mesh legacy regression case",
+  "external_data_id": "legacy_fixed",
+  "reference_class": "legacy",
+  "reference_branch": "develop",
+  "reference_revision": "29f442db67bac169b2616f2cbe399289d137993c",
+  "execution_policy": "routine",
+  "workflows": {
+    "warm": {
+      "kind": "warm_same_state",
+      "description": "Reconverge an unchanged steady restart on the fixed mesh",
+      "required_artifact_roles": [
+        "mesh",
+        "equilibrium_magnetic_field",
+        "equilibrium_current_density",
+        "warm_parameters",
+        "transport_configuration",
+        "warm_restart",
+        "warm_reference"
+      ],
+      "default_layout": "mpi4_omp4",
+      "tolerance_profile": "fixed_same_layout"
+    }
+  }
+}
