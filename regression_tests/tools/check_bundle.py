@@ -72,6 +72,18 @@ def main(argv: list[str] | None = None) -> int:
 def validate_bundle(settings_path: Path, case_dir: Path) -> ValidationSummary:
     """Validate bundle structure, physical artifacts, and tracked case roles."""
     bundle_root = _bundle_root(_read_settings(settings_path))
+    return validate_bundle_root(bundle_root, case_dir)
+
+
+def validate_bundle_root(bundle_root: Path, case_dir: Path) -> ValidationSummary:
+    """Validate a bundle root without requiring a local settings file."""
+    try:
+        bundle_root = bundle_root.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise BundleError(f"bundle root does not exist: {bundle_root}") from exc
+    if not bundle_root.is_dir():
+        raise BundleError(f"bundle root is not a directory: {bundle_root}")
+
     schema_dir = case_dir.parent / "schemas"
 
     manifest = _load_json(bundle_root / "manifest.json", "bundle manifest")
@@ -80,13 +92,13 @@ def validate_bundle(settings_path: Path, case_dir: Path) -> ValidationSummary:
         schema_dir / "bundle-manifest.schema.json",
         "bundle manifest",
     )
-    cases = _load_cases(case_dir, schema_dir / "case.schema.json")
+    cases = _load_cases(case_dir)
 
     available, verified_bytes, warnings = _verify_artifacts(
         bundle_root, manifest["artifacts"]
     )
-    roles_by_case = _resolve_roles(manifest)
-    checked_cases = _verify_case_requirements(cases, roles_by_case, available)
+    case_data = _resolve_case_data(manifest)
+    checked_cases = _verify_case_requirements(cases, case_data, available)
 
     return ValidationSummary(
         bundle_id=manifest["bundle_id"],
@@ -94,21 +106,41 @@ def validate_bundle(settings_path: Path, case_dir: Path) -> ValidationSummary:
         artifact_count=len(manifest["artifacts"]),
         verified_artifact_count=len(available),
         verified_bytes=verified_bytes,
-        case_data=sorted(roles_by_case),
+        case_data=sorted(case_data),
         checked_cases=checked_cases,
         warnings=warnings,
     )
 
 
-def _load_cases(case_dir: Path, schema_path: Path) -> list[dict[str, Any]]:
+def load_case_definition(case_id: str, case_dir: Path) -> dict[str, Any]:
+    """Load and validate one tracked case definition by its identifier."""
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", case_id):
+        raise BundleError(f"invalid case identifier: {case_id}")
+
+    path = case_dir / f"{case_id}.json"
+    case = _load_json(path, f"case definition {path.name}")
+    schema_path = case_dir.parent / "schemas" / "case.schema.json"
+    _validate_json(case, schema_path, path.name)
+    if case["case_id"] != case_id:
+        raise BundleError(f"{path.name}: case_id must equal its filename")
+    return case
+
+
+def required_case_roles(case: dict[str, Any]) -> set[str]:
+    """Return all roles required by the case package or one of its workflows."""
+    roles = set(case.get("bundle_files", {}))
+    for workflow in case["workflows"].values():
+        roles.update(workflow.get("required_artifact_roles", []))
+    return roles
+
+
+def _load_cases(case_dir: Path) -> list[dict[str, Any]]:
     if not case_dir.is_dir():
         raise BundleError(f"tracked case directory does not exist: {case_dir}")
-    cases = []
-    for path in sorted(case_dir.glob("*.json")):
-        case = _load_json(path, f"case definition {path.name}")
-        _validate_json(case, schema_path, f"case definition {path.name}")
-        cases.append(case)
-    return cases
+    return [
+        load_case_definition(path.stem, case_dir)
+        for path in sorted(case_dir.glob("*.json"))
+    ]
 
 
 def _validate_json(document: Any, schema_path: Path, label: str) -> None:
@@ -206,42 +238,41 @@ def _verify_artifacts(
     return available, verified_bytes, warnings
 
 
-def _resolve_roles(manifest: dict[str, Any]) -> dict[str, dict[str, str]]:
+def _resolve_case_data(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
     artifact_ids = set(manifest["artifacts"])
-    roles_by_case = {}
+    resolved = {}
     for data_id, case_data in manifest["case_data"].items():
-        if case_data["case_id"] != data_id:
-            raise BundleError(
-                f"manifest.case_data.{data_id}.case_id must equal its case_data identifier"
-            )
         for role, artifact_id in case_data["roles"].items():
             if artifact_id not in artifact_ids:
                 raise BundleError(
                     f"manifest.case_data.{data_id}.roles.{role} refers to "
                     f"unknown artifact {artifact_id}"
                 )
-        roles_by_case[data_id] = case_data["roles"]
-    return roles_by_case
+        resolved[data_id] = case_data
+    return resolved
 
 
 def _verify_case_requirements(
     cases: list[dict[str, Any]],
-    roles_by_case: dict[str, dict[str, str]],
+    case_data_by_id: dict[str, dict[str, Any]],
     available: set[str],
 ) -> list[str]:
     checked = []
     for case in cases:
         case_id = case["case_id"]
         data_id = case["external_data_id"]
-        if data_id not in roles_by_case:
+        if data_id not in case_data_by_id:
             continue
 
-        required = {
-            role
-            for workflow in case["workflows"].values()
-            for role in workflow.get("required_artifact_roles", [])
-        }
-        mapping = roles_by_case[data_id]
+        case_data = case_data_by_id[data_id]
+        if case_data["case_id"] != case_id:
+            raise BundleError(
+                f"manifest.case_data.{data_id}.case_id is "
+                f"{case_data['case_id']}, expected {case_id}"
+            )
+
+        required = required_case_roles(case)
+        mapping = case_data["roles"]
         missing = sorted(required - mapping.keys())
         if missing:
             raise BundleError(

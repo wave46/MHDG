@@ -5,8 +5,8 @@ regression tests. Physical case data, complete parameter files, restart
 solutions, and golden outputs are distributed separately in an external case
 bundle.
 
-Status: external-data contract and read-only bundle checker. Automated bundle
-creation, the solver runner, and the HDF5 comparator are not implemented yet.
+Status: external-data contract, bundle creator, and read-only bundle checker.
+The solver runner and HDF5 comparator are not implemented yet.
 
 ## Repository boundary
 
@@ -64,13 +64,14 @@ top-level artifact registry, with a bundle-relative path, SHA-256 checksum, and
 size. Entries under `case_data` map the generic roles required by a case to
 those reusable artifact identifiers.
 A SHA-256 checksum is a 64-character fingerprint of a file's exact contents;
-it detects a missing, substituted, or changed external artifact. The planned
-bundle-creation command will calculate checksums and sizes automatically; users
-should not enter them manually.
+it detects a missing, substituted, or changed external artifact. The bundle
+creator calculates checksums and sizes automatically; users do not enter them
+manually.
 
-The minimum `legacy_fixed/warm` roles are:
+The complete `legacy_fixed` case package contains these roles:
 
 - `mesh`;
+- `geometry`;
 - `equilibrium_magnetic_field`;
 - `equilibrium_current_density`;
 - `warm_parameters`;
@@ -81,6 +82,8 @@ The minimum `legacy_fixed/warm` roles are:
 The same artifact may be referenced by multiple cases or workflows. The
 manifest can therefore reuse a mesh, equilibrium, or reference solution
 without requiring a special `shared` directory or another physical copy.
+The case bundle is created once; serial, MPI, and OpenMP layouts all read these
+same artifacts and write only their own run outputs.
 
 The bundle can be unpacked anywhere. A user supplies its root through a local
 settings file based on `settings.example.env`.
@@ -94,7 +97,7 @@ names for the initial warm case:
 legacy_fixed/
 ├── param.txt
 ├── mesh.msh
-├── geometry.geo                 # optional
+├── geometry.geo
 ├── transport_model.nml
 ├── equilibrium.h5
 ├── current_density.h5
@@ -102,7 +105,7 @@ legacy_fixed/
 └── reference_mpi4_omp4.h5
 ```
 
-The parameter, mesh, optional geometry, transport-model, equilibrium, and
+The parameter, mesh, geometry, transport-model, equilibrium, and
 current-density files specify the physical case. `restart.h5` is the converged
 solution supplied to the solver. `reference_mpi4_omp4.h5` is the accepted
 result produced after reconverging that restart with four MPI ranks and four
@@ -110,11 +113,13 @@ OpenMP threads. They are kept separate because a warm run can make small but
 measurable changes to the starting solution.
 
 Physical filenames before preparation may contain case-specific names, but the
-prepared directory and all tracked examples use only these generic names.
+prepared directory and all tracked examples use only these generic names. The
+prepared entries may be regular files or symlinks to a private source archive;
+the creator copies symlink targets into the final bundle.
 
-### Planned bundle creation
+### Creating a bundle
 
-The intended user-facing command is:
+From the repository root, run:
 
 ```bash
 regression_tests/regression.sh bundle create \
@@ -123,19 +128,26 @@ regression_tests/regression.sh bundle create \
   --output /private/path/mhdg_case_bundle
 ```
 
-This command is not implemented yet. It will:
+The command will:
 
 - recognize the conventional filenames above;
-- require all files needed by `legacy_fixed/warm` and accept `geometry.geo`
-  when present;
-- copy the files into a self-contained output bundle;
+- require every file listed above;
+- refuse to replace an existing output path;
+- copy the physical artifacts into a self-contained output bundle;
 - calculate every size and SHA-256 checksum;
 - generate `manifest.json` with the required role mappings;
-- validate the completed bundle without changing the prepared source folder.
+- validate the completed bundle before publishing it at the output path;
+- leave the prepared source directory unchanged.
+
+The default bundle version is `1.0.0`. Supply another label when needed with
+`--bundle-version VERSION`.
 
 The generated physical layout inside the bundle is an implementation detail;
 users only prepare the flat source directory. The example manifest documents
 the generated data contract and is not intended for manual checksum editing.
+`param.txt` is preserved exactly at this stage. The future runner will render
+active data paths and `save_folder` into a private run copy; it will not modify
+the bundled parameter file.
 
 After creation, copy `settings.example.env` to a private location and set:
 
@@ -155,8 +167,7 @@ regression_tests/regression.sh \
 The checker reads settings as data rather than sourcing them as shell code. It
 verifies manifest fields, safe bundle-relative paths, artifact sizes and
 SHA-256 checksums, role mappings, and the roles required by tracked case
-definitions. It does not modify the bundle. Automated manifest creation can be
-added as the next separate implementation step.
+definitions. It does not modify the bundle.
 
 ## Initial comparison contract
 
@@ -182,11 +193,12 @@ mesh-independent adaptive comparisons.
 ```bash
 regression_tests/regression.sh help
 regression_tests/regression.sh --help
+regression_tests/regression.sh bundle create --case legacy_fixed --source /path/to/case --output /path/to/bundle
 regression_tests/regression.sh --settings /path/to/settings.env check-data
 ```
 
-`check-data` requires Python 3 and the packages in `requirements.txt`; install
-them into the selected Python environment with:
+The bundle commands require Python 3 and the packages in `requirements.txt`;
+install them into the selected Python environment with:
 
 ```bash
 python -m pip install -r regression_tests/requirements.txt
@@ -218,7 +230,9 @@ suite runs that inexpensive case using the selected serial, MPI, and OpenMP
 layouts. The help command will list all suites, workflows, and layouts.
 
 The runner will use isolated run directories and prebuilt executables. It will
-not switch Git branches, rebuild the solver, or overwrite reference files.
+reuse read-only bundle artifacts directly or through symlinks, while rendering
+only mutable inputs such as `param.txt`. It will not switch Git branches,
+rebuild the solver, or overwrite reference files.
 
 ## Planned run outputs
 

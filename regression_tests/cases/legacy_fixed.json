@@ -7,6 +7,48 @@
   "reference_branch": "develop",
   "reference_revision": "29f442db67bac169b2616f2cbe399289d137993c",
   "execution_policy": "routine",
+  "bundle_files": {
+    "mesh": {
+      "filename": "mesh.msh",
+      "artifact_id": "legacy_mesh",
+      "media_type": "application/x-gmsh"
+    },
+    "geometry": {
+      "filename": "geometry.geo",
+      "artifact_id": "legacy_geometry",
+      "media_type": "text/plain"
+    },
+    "equilibrium_magnetic_field": {
+      "filename": "equilibrium.h5",
+      "artifact_id": "legacy_magnetic_field",
+      "media_type": "application/x-hdf5"
+    },
+    "equilibrium_current_density": {
+      "filename": "current_density.h5",
+      "artifact_id": "legacy_current_density",
+      "media_type": "application/x-hdf5"
+    },
+    "warm_parameters": {
+      "filename": "param.txt",
+      "artifact_id": "legacy_warm_parameters",
+      "media_type": "text/plain"
+    },
+    "transport_configuration": {
+      "filename": "transport_model.nml",
+      "artifact_id": "legacy_transport_configuration",
+      "media_type": "text/plain"
+    },
+    "warm_restart": {
+      "filename": "restart.h5",
+      "artifact_id": "legacy_warm_restart",
+      "media_type": "application/x-hdf5"
+    },
+    "warm_reference": {
+      "filename": "reference_mpi4_omp4.h5",
+      "artifact_id": "legacy_warm_reference_mpi4_omp4",
+      "media_type": "application/x-hdf5"
+    }
+  },
   "workflows": {
     "warm": {
       "kind": "warm_same_state",

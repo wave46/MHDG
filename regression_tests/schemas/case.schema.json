@@ -43,6 +43,17 @@
     "execution_policy": {
       "$ref": "#/$defs/identifier"
     },
+    "bundle_files": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Files required in a complete external case package",
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/bundle_file"
+      }
+    },
     "workflows": {
       "type": "object",
       "minProperties": 1,
@@ -58,6 +69,36 @@
     "identifier": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "bundle_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "artifact_id",
+        "media_type"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string",
+          "pattern": "^(?!\\.\\.?$)[^/\\\\]+$"
+        },
+        "artifact_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "media_type": {
+          "type": "string",
+          "enum": [
+            "application/x-hdf5",
+            "application/x-gmsh",
+            "application/json",
+            "text/plain"
+          ]
+        },
+        "description": {
+          "type": "string"
+        }
+      }
     },
     "workflow": {
       "type": "object",

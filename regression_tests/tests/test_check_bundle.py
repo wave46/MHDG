@@ -32,6 +32,7 @@ class BundleValidationTests(unittest.TestCase):
 
         roles = {
             "mesh": "legacy_mesh",
+            "geometry": "legacy_geometry",
             "equilibrium_magnetic_field": "legacy_magnetic_field",
             "equilibrium_current_density": "legacy_current_density",
             "warm_parameters": "legacy_warm_parameters",
@@ -41,6 +42,7 @@ class BundleValidationTests(unittest.TestCase):
         }
         media_types = {
             "legacy_mesh": "application/x-gmsh",
+            "legacy_geometry": "text/plain",
             "legacy_magnetic_field": "application/x-hdf5",
             "legacy_current_density": "application/x-hdf5",
             "legacy_warm_parameters": "text/plain",
@@ -84,8 +86,8 @@ class BundleValidationTests(unittest.TestCase):
 
     def test_valid_bundle(self) -> None:
         summary = validate_bundle(self.settings, REGRESSION_ROOT / "cases")
-        self.assertEqual(summary.artifact_count, 7)
-        self.assertEqual(summary.verified_artifact_count, 7)
+        self.assertEqual(summary.artifact_count, 8)
+        self.assertEqual(summary.verified_artifact_count, 8)
         self.assertEqual(summary.checked_cases, ["legacy_fixed"])
 
     def test_public_check_data_command(self) -> None:
@@ -128,43 +130,49 @@ class BundleValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(BundleError, "legacy_mesh.path"):
             validate_bundle(self.settings, REGRESSION_ROOT / "cases")
 
-    def test_optional_symlink_escape_fails(self) -> None:
+    def test_symlink_escape_fails(self) -> None:
         outside = self.root / "outside"
         outside.mkdir()
         (outside / "mesh.msh").write_text("outside\n", encoding="utf-8")
         (self.bundle / "escape").symlink_to(outside, target_is_directory=True)
         artifact = self.manifest["artifacts"]["legacy_mesh"]
         artifact["path"] = "escape/mesh.msh"
-        artifact["optional"] = True
         self._write_manifest()
         with self.assertRaisesRegex(BundleError, "resolves outside"):
             validate_bundle(self.settings, REGRESSION_ROOT / "cases")
 
     def test_missing_optional_artifact_warns(self) -> None:
-        self.manifest["artifacts"]["legacy_geometry"] = {
-            "path": "files/geometry.geo",
+        self.manifest["artifacts"]["supplemental_notes"] = {
+            "path": "files/notes.txt",
             "sha256": "0" * 64,
             "size_bytes": 0,
             "media_type": "text/plain",
             "optional": True,
         }
         self.manifest["case_data"]["legacy_fixed"]["roles"][
-            "geometry"
-        ] = "legacy_geometry"
+            "supplemental_notes"
+        ] = "supplemental_notes"
         self._write_manifest()
 
         summary = validate_bundle(self.settings, REGRESSION_ROOT / "cases")
 
-        self.assertEqual(summary.artifact_count, 8)
-        self.assertEqual(summary.verified_artifact_count, 7)
+        self.assertEqual(summary.artifact_count, 9)
+        self.assertEqual(summary.verified_artifact_count, 8)
         self.assertIn(
-            "optional artifact unavailable: legacy_geometry", summary.warnings
+            "optional artifact unavailable: supplemental_notes", summary.warnings
         )
 
-    def test_missing_required_role_fails(self) -> None:
-        del self.manifest["case_data"]["legacy_fixed"]["roles"]["warm_reference"]
+    def test_missing_required_case_file_role_fails(self) -> None:
+        del self.manifest["case_data"]["legacy_fixed"]["roles"]["geometry"]
         self._write_manifest()
         with self.assertRaisesRegex(BundleError, "missing required artifact roles"):
+            validate_bundle(self.settings, REGRESSION_ROOT / "cases")
+
+    def test_case_id_mismatch_fails(self) -> None:
+        case_data = self.manifest["case_data"]["legacy_fixed"]
+        case_data["case_id"] = "historical_feature"
+        self._write_manifest()
+        with self.assertRaisesRegex(BundleError, "expected legacy_fixed"):
             validate_bundle(self.settings, REGRESSION_ROOT / "cases")
 
 

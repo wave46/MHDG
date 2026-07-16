@@ -9,11 +9,13 @@ usage() {
 Usage:
   regression_tests/regression.sh help
   regression_tests/regression.sh --help
+  regression_tests/regression.sh bundle create --case CASE --source DIR --output DIR
   regression_tests/regression.sh --settings FILE check-data
 
 Available commands:
-  help        Show this help text.
-  check-data  Validate an external bundle without modifying it.
+  help           Show this help text.
+  bundle create  Create and validate a bundle from prepared case files.
+  check-data     Validate an external bundle without modifying it.
 
 Options:
   --settings FILE  Local settings file containing MHDG_REGRESSION_DATA_ROOT.
@@ -25,6 +27,7 @@ EOF
 
 settings_file=""
 command=""
+bundle_arguments=()
 
 while (($# > 0)); do
   case "$1" in
@@ -52,6 +55,20 @@ while (($# > 0)); do
       command=$1
       shift
       ;;
+    bundle)
+      if [[ -n "$command" ]]; then
+        echo "error: only one command may be specified" >&2
+        exit 2
+      fi
+      if (($# < 2)) || [[ "$2" != "create" ]]; then
+        echo "error: expected 'bundle create'" >&2
+        exit 2
+      fi
+      command="bundle-create"
+      shift 2
+      bundle_arguments=("$@")
+      break
+      ;;
     *)
       echo "error: unknown argument: $1" >&2
       usage >&2
@@ -65,12 +82,25 @@ if [[ -z "$command" ]]; then
   exit 0
 fi
 
-if [[ -z "$settings_file" ]]; then
-  echo "error: check-data requires --settings FILE" >&2
-  exit 2
-fi
-
 python_command=${PYTHON:-python3}
-exec "$python_command" "$SCRIPT_DIR/tools/check_bundle.py" \
-  --settings "$settings_file" \
-  --cases "$SCRIPT_DIR/cases"
+
+case "$command" in
+  check-data)
+    if [[ -z "$settings_file" ]]; then
+      echo "error: check-data requires --settings FILE" >&2
+      exit 2
+    fi
+    exec "$python_command" "$SCRIPT_DIR/tools/check_bundle.py" \
+      --settings "$settings_file" \
+      --cases "$SCRIPT_DIR/cases"
+    ;;
+  bundle-create)
+    if [[ -n "$settings_file" ]]; then
+      echo "error: bundle create does not use --settings" >&2
+      exit 2
+    fi
+    exec "$python_command" "$SCRIPT_DIR/tools/create_bundle.py" \
+      --cases "$SCRIPT_DIR/cases" \
+      "${bundle_arguments[@]}"
+    ;;
+esac
