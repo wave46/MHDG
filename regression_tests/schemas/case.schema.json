@@ -133,6 +133,9 @@
         "tolerance_profile": {
           "$ref": "#/$defs/identifier"
         },
+        "cross_layout_tolerance_profile": {
+          "$ref": "#/$defs/identifier"
+        },
         "comparison_policy": {
           "$ref": "#/$defs/identifier"
         },

@@ -17,6 +17,7 @@ Usage:
   regression_tests/regression.sh --settings FILE run CASE WORKFLOW [WORKFLOW ...] --layout LAYOUT
   regression_tests/regression.sh compare RUN_DIRECTORY
   regression_tests/regression.sh --settings FILE suite SUITE [--run-only] [--resume]
+  regression_tests/regression.sh suite-verify SUITE_SUMMARY
   regression_tests/regression.sh golden-check [SUITE] [--build] [--build-jobs N]
 
 Available commands:
@@ -29,6 +30,7 @@ Available commands:
   run            Prepare and execute one or more isolated workflows.
   compare        Compare a completed fixed-mesh run with its reference.
   suite          Run every workflow/layout in a tracked suite.
+  suite-verify   Compare every recorded result without rerunning the solver.
   golden-check   Check executables against the configured golden bundle.
 
 Options:
@@ -48,6 +50,7 @@ prepare_arguments=()
 run_arguments=()
 compare_arguments=()
 suite_arguments=()
+verify_arguments=()
 golden_arguments=()
 
 while (($# > 0)); do
@@ -142,6 +145,16 @@ while (($# > 0)); do
       command="suite"
       shift
       suite_arguments=("$@")
+      break
+      ;;
+    suite-verify)
+      if [[ -n "$command" ]]; then
+        echo "error: only one command may be specified" >&2
+        exit 2
+      fi
+      command="suite-verify"
+      shift
+      verify_arguments=("$@")
       break
       ;;
     golden-check)
@@ -251,6 +264,16 @@ case "$command" in
       --suites "$SCRIPT_DIR/suites.json" \
       --tolerances "$SCRIPT_DIR/tolerances.json" \
       "${suite_arguments[@]}"
+    ;;
+  suite-verify)
+    if [[ -n "$settings_file" ]]; then
+      echo "error: suite-verify does not use --settings" >&2
+      exit 2
+    fi
+    exec "$python_command" "$SCRIPT_DIR/tools/verify_suite.py" \
+      --cases "$SCRIPT_DIR/cases" \
+      --tolerances "$SCRIPT_DIR/tolerances.json" \
+      "${verify_arguments[@]}"
     ;;
   golden-check)
     if [[ -z "$settings_file" ]]; then

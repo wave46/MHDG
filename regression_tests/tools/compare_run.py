@@ -236,12 +236,8 @@ def _tolerance_profile(
 ) -> tuple[str, dict[str, Any]]:
     document = _load_json(path, "tolerance definitions")
     profile_id = override or workflow.get("tolerance_profile")
-    if (
-        override is None
-        and layout_id != workflow.get("default_layout")
-        and "fixed_cross_layout" in document.get("profiles", {})
-    ):
-        profile_id = "fixed_cross_layout"
+    if override is None and layout_id != workflow.get("default_layout"):
+        profile_id = workflow.get("cross_layout_tolerance_profile", profile_id)
     profiles = document.get("profiles", {})
     if not profile_id or profile_id not in profiles:
         raise ComparisonError(f"unknown tolerance profile: {profile_id}")

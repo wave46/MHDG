@@ -423,6 +423,32 @@ The core comparator uses HDF5 directly and supports both grouped and older flat
 solution/mesh layouts. `HDG_postprocess` remains an optional richer layer for
 mesh-independent adaptive comparisons.
 
+The provisional cold profiles are based on the initial serial and two-rank
+overnight runs. Fixed cold runs allow relative L2 and normalized Linf errors up
+to `1e-5`. Adaptive runs require full common-point coverage, solution errors of
+at most `0.05` relative L2 and `0.1` normalized Linf, and gradient errors of at
+most `0.25` and `0.2`, respectively. Both require a final Newton error no larger
+than `2e-4`. These tolerances characterize the legacy workflow, including its
+known mesh sensitivity; they are not general accuracy targets.
+
+## Verifying a saved matrix
+
+Verification consumes the run-only suite summary and never launches the solver:
+
+```bash
+PYTHON=/path/to/hdg-postprocess-python \
+PYTHONPATH=/path/to/HDG_postprocess \
+regression_tests/regression.sh suite-verify \
+  /path/to/suites/cold_matrix/overnight-01/suite_summary.json
+```
+
+Fixed workflows use the library-independent HDF5 comparator. Adaptive
+workflows use `HDG_postprocess` to evaluate the reference and candidate at four
+interior points per reference triangle. Each run receives its own
+`comparison.json`; the matrix result is written beside the source summary as
+`verification_summary.json`. A failed comparison does not prevent later cells
+from being checked.
+
 ## Comparing a completed run
 
 Run the comparator on the directory printed by `run`:
@@ -466,6 +492,7 @@ regression_tests/regression.sh --settings /path/to/settings.env suite warm --bui
 regression_tests/regression.sh --settings /path/to/settings.env suite warm_parallelism
 regression_tests/regression.sh --settings /path/to/settings.env suite cold_matrix --run-only --run-id overnight-01
 regression_tests/regression.sh --settings /path/to/settings.env suite cold_matrix --run-only --run-id overnight-01 --resume
+regression_tests/regression.sh suite-verify /path/to/suite_summary.json
 regression_tests/regression.sh --settings /path/to/settings.env bundle promote /path/to/suite_summary.json --output /path/to/golden --bundle-version VERSION
 regression_tests/regression.sh golden-check
 regression_tests/regression.sh golden-check --build
@@ -523,6 +550,10 @@ fails and writes
 stable label is useful; otherwise a UTC timestamp is generated. The summary is
 updated after every completed cell. Reuse that identifier with `--resume` to
 continue without repeating recorded cells.
+
+After the run-only matrix finishes, pass its summary to `suite-verify`. This is
+a separate command specifically so comparison logic or tolerances can be rerun
+without repeating the overnight solver calculations.
 
 Without `--build`, the executor uses the prebuilt executable paths from the
 settings file. Add `--build` to a suite command to build the current

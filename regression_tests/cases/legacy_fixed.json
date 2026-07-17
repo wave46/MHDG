@@ -148,7 +148,9 @@
         "warm_reference"
       ],
       "default_layout": "mpi4_omp4",
-      "tolerance_profile": "fixed_same_layout"
+      "tolerance_profile": "fixed_same_layout",
+      "cross_layout_tolerance_profile": "fixed_cross_layout",
+      "comparison_policy": "fixed_hdf5"
     },
     "cold_fixed": {
       "kind": "staged_fixed_mesh",
@@ -161,6 +163,8 @@
       "mesh_role": "mesh",
       "reference_role": "warm_reference",
       "comparison_policy": "fixed_hdf5",
+      "tolerance_profile": "cold_fixed_reference",
+      "cross_layout_tolerance_profile": "cold_fixed_reference",
       "logical_overrides": {
         "rest_adapt": false
       },
@@ -221,6 +225,7 @@
       "mesh_role": "adaptive_initial_mesh",
       "reference_role": "warm_reference",
       "comparison_policy": "mesh_independent",
+      "tolerance_profile": "adaptive_reference",
       "logical_overrides": {
         "rest_adapt": false
       },
