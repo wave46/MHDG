@@ -53,6 +53,22 @@ class PreparedRun:
     runtime_files: dict[str, Path]
 
 
+@dataclass(frozen=True)
+class PreparedStage:
+    stage_id: str
+    restart_from: str
+    run: PreparedRun
+
+
+@dataclass(frozen=True)
+class PreparedStagedRun:
+    path: Path
+    stages: list[PreparedStage]
+
+
+PreparedExecution = PreparedRun | PreparedStagedRun
+
+
 def openmp_environment(threads: int) -> dict[str, str]:
     """Return deterministic OpenMP placement for one solver process."""
     return {
@@ -88,8 +104,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"run prepared: {prepared.path}")
-    print(f"OMP_NUM_THREADS={prepared.omp_threads}")
-    print(f"command: {shlex.join(prepared.command)}")
+    if isinstance(prepared, PreparedRun):
+        print(f"OMP_NUM_THREADS={prepared.omp_threads}")
+        print(f"command: {shlex.join(prepared.command)}")
+    else:
+        for stage in prepared.stages:
+            print(f"stage {stage.stage_id}: {shlex.join(stage.run.command)}")
     return 0
 
 
@@ -102,8 +122,8 @@ def prepare_run(
     layouts_path: Path,
     run_id: str | None = None,
     validate_bundle: bool = True,
-) -> PreparedRun:
-    """Create one validated, isolated run directory."""
+) -> PreparedExecution:
+    """Create one validated, isolated run or staged workflow directory."""
     settings = read_settings(settings_path)
     bundle_root = bundle_root_from_settings(settings)
     if validate_bundle:
@@ -113,9 +133,6 @@ def prepare_run(
     workflow = case["workflows"].get(workflow_id)
     if workflow is None:
         raise BundleError(f"case {case_id} has no workflow {workflow_id}")
-    if workflow["kind"] != "warm_same_state":
-        raise BundleError("run preparation currently supports warm_same_state only")
-
     layout = _load_layout(layout_id, layouts_path)
     artifacts, manifest = _case_artifacts(
         bundle_root, case, workflow_id, case_dir
@@ -133,15 +150,62 @@ def prepare_run(
     if run_dir.exists():
         raise BundleError(f"run directory already exists: {run_dir}")
 
-    command = _solver_command(run_dir, executable, launcher, layout)
+    if workflow["kind"] == "warm_same_state":
+        return _prepare_warm_run(
+            run_dir,
+            executable,
+            launcher,
+            layout,
+            artifacts,
+            runtime_files,
+            case,
+            workflow_id,
+            layout_id,
+            bundle_root,
+            manifest,
+        )
+    if workflow["kind"] in {"staged_fixed_mesh", "staged_adaptive_mesh"}:
+        return _prepare_staged_run(
+            run_dir,
+            executable,
+            launcher,
+            layout,
+            artifacts,
+            runtime_files,
+            case,
+            workflow_id,
+            workflow,
+            layout_id,
+            bundle_root,
+            manifest,
+        )
+    raise BundleError(
+        f"run preparation does not support workflow kind {workflow['kind']}"
+    )
+
+
+def _prepare_warm_run(
+    run_dir: Path,
+    executable: Path,
+    launcher: Path | None,
+    layout: dict[str, Any],
+    artifacts: dict[str, Path],
+    runtime_files: dict[str, Path],
+    case: dict[str, Any],
+    workflow_id: str,
+    layout_id: str,
+    bundle_root: Path,
+    manifest: dict[str, Any],
+) -> PreparedRun:
+    command = _solver_command(run_dir, executable, launcher, layout, restart=True)
     try:
         run_dir.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(
-            prefix=f".{run_id}.", dir=run_dir.parent
+            prefix=f".{run_dir.name}.", dir=run_dir.parent
         ) as workspace:
             staging = Path(workspace) / "run"
             staging.mkdir()
-            _populate_run(staging, run_dir, artifacts, runtime_files)
+            _populate_warm_run(staging, run_dir, artifacts, runtime_files)
             _write_plan(
                 staging,
                 run_dir,
@@ -164,16 +228,126 @@ def prepare_run(
     )
 
 
+def _prepare_staged_run(
+    run_dir: Path,
+    executable: Path,
+    launcher: Path | None,
+    layout: dict[str, Any],
+    artifacts: dict[str, Path],
+    runtime_files: dict[str, Path],
+    case: dict[str, Any],
+    workflow_id: str,
+    workflow: dict[str, Any],
+    layout_id: str,
+    bundle_root: Path,
+    manifest: dict[str, Any],
+) -> PreparedStagedRun:
+    prepared_stages = []
+    try:
+        run_dir.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix=f".{run_dir.name}.", dir=run_dir.parent
+        ) as workspace:
+            staging = Path(workspace) / "run"
+            (staging / "inputs").mkdir(parents=True)
+            (staging / "stages").mkdir()
+            (staging / "inputs" / "reference.h5").symlink_to(
+                artifacts[workflow["reference_role"]]
+            )
+
+            for index, stage in enumerate(workflow["stages"], start=1):
+                directory_name = f"{index:02d}_{stage['stage_id']}"
+                stage_dir = run_dir / "stages" / directory_name
+                staging_stage = staging / "stages" / directory_name
+                command = _solver_command(
+                    stage_dir,
+                    executable,
+                    launcher,
+                    layout,
+                    restart=stage["restart_from"] == "previous_stage",
+                )
+                _populate_stage_run(
+                    staging_stage,
+                    stage_dir,
+                    artifacts,
+                    runtime_files,
+                    workflow,
+                    stage,
+                )
+                logical_overrides = _logical_overrides(workflow, stage)
+                _write_plan(
+                    staging_stage,
+                    stage_dir,
+                    command,
+                    case,
+                    workflow_id,
+                    layout_id,
+                    layout,
+                    bundle_root,
+                    manifest,
+                    artifacts,
+                    runtime_files,
+                    stage,
+                    logical_overrides,
+                )
+                prepared_stages.append(
+                    PreparedStage(
+                        stage["stage_id"],
+                        stage["restart_from"],
+                        PreparedRun(
+                            stage_dir,
+                            command,
+                            layout["omp_threads"],
+                            executable,
+                            runtime_files,
+                        ),
+                    )
+                )
+
+            _write_staged_plan(
+                staging,
+                run_dir,
+                case,
+                workflow_id,
+                layout_id,
+                layout,
+                bundle_root,
+                manifest,
+                artifacts,
+                runtime_files,
+                prepared_stages,
+                workflow,
+            )
+            staging.rename(run_dir)
+    except OSError as exc:
+        raise BundleError(f"cannot prepare run {run_dir}: {exc}") from exc
+
+    return PreparedStagedRun(run_dir, prepared_stages)
+
+
 def render_parameter_file(
-    source: Path, destination: Path, replacements: dict[str, Path | str]
+    source: Path,
+    destination: Path,
+    replacements: dict[str, Path | str],
+    logical_overrides: dict[str, bool] | None = None,
 ) -> None:
-    """Replace selected namelist path assignments in a copied parameter file."""
+    """Render selected path and logical assignments in a parameter-file copy."""
     try:
         lines = source.read_text(encoding="utf-8").splitlines(keepends=True)
     except OSError as exc:
         raise BundleError(f"cannot read parameter file {source}: {exc}") from exc
 
-    values = {key.lower(): str(value) for key, value in replacements.items()}
+    values = {}
+    for key, value in replacements.items():
+        value = str(value)
+        if "'" in value:
+            raise BundleError(f"cannot render a path containing a quote: {value}")
+        values[key.lower()] = f"'{value}'"
+    for key, value in (logical_overrides or {}).items():
+        normalized = key.lower()
+        if normalized in values:
+            raise BundleError(f"duplicate parameter replacement: {key}")
+        values[normalized] = ".true." if value else ".false."
     counts = dict.fromkeys(values, 0)
     rendered = []
     for line in lines:
@@ -186,17 +360,14 @@ def render_parameter_file(
             rendered.append(line)
             continue
 
-        value = values[key]
-        if "'" in value:
-            raise BundleError(f"cannot render a path containing a quote: {value}")
         suffix = f" !{comment}" if marker else ""
-        rendered.append(f"{match.group('prefix')}'{value}'{suffix}{ending}")
+        rendered.append(f"{match.group('prefix')}{values[key]}{suffix}{ending}")
         counts[key] += 1
 
     invalid = [key for key, count in counts.items() if count != 1]
     if invalid:
         details = ", ".join(f"{key} ({counts[key]} matches)" for key in invalid)
-        raise BundleError(f"parameter path assignments must appear once: {details}")
+        raise BundleError(f"parameter assignments must appear once: {details}")
 
     try:
         destination.write_text("".join(rendered), encoding="utf-8")
@@ -242,7 +413,7 @@ def _case_artifacts(
     return paths, manifest
 
 
-def _populate_run(
+def _populate_warm_run(
     staging: Path,
     final_run_dir: Path,
     artifacts: dict[str, Path],
@@ -252,6 +423,7 @@ def _populate_run(
     staging_outputs = staging / "outputs"
     staging_inputs.mkdir()
     staging_outputs.mkdir()
+    (staging / "res").mkdir()
 
     for role, filename in INPUT_LINKS.items():
         (staging_inputs / filename).symlink_to(artifacts[role])
@@ -271,17 +443,69 @@ def _populate_run(
     )
 
 
+def _populate_stage_run(
+    staging: Path,
+    final_run_dir: Path,
+    artifacts: dict[str, Path],
+    runtime_files: dict[str, Path],
+    workflow: dict[str, Any],
+    stage: dict[str, Any],
+) -> None:
+    staging_inputs = staging / "inputs"
+    staging_inputs.mkdir(parents=True)
+    (staging / "outputs").mkdir()
+    (staging / "res").mkdir()
+
+    input_sources = {
+        "mesh.msh": artifacts[workflow["mesh_role"]],
+        "geometry.geo": artifacts["geometry"],
+        "equilibrium.h5": artifacts["equilibrium_magnetic_field"],
+        "current_density.h5": artifacts["equilibrium_current_density"],
+        "transport_model.nml": artifacts[stage["transport_configuration_role"]],
+    }
+    for filename, source in input_sources.items():
+        (staging_inputs / filename).symlink_to(source)
+    for filename, source in runtime_files.items():
+        (staging / filename).symlink_to(source)
+
+    final_inputs = final_run_dir / "inputs"
+    replacements = {
+        "transport_model_path": final_inputs / "transport_model.nml",
+        "field_path": final_inputs / "equilibrium.h5",
+        "jtor_path": final_inputs / "current_density.h5",
+        "geometry_path": final_inputs / "geometry.geo",
+        "save_folder": f"{final_run_dir / 'outputs'}/",
+    }
+    render_parameter_file(
+        artifacts[stage["parameter_role"]],
+        staging / "param.txt",
+        replacements,
+        _logical_overrides(workflow, stage),
+    )
+
+
+def _logical_overrides(
+    workflow: dict[str, Any], stage: dict[str, Any]
+) -> dict[str, bool]:
+    return {
+        **workflow.get("logical_overrides", {}),
+        **stage.get("logical_overrides", {}),
+    }
+
+
 def _solver_command(
     run_dir: Path,
     executable: Path,
     launcher: Path | None,
     layout: dict[str, Any],
+    restart: bool,
 ) -> list[str]:
     arguments = [
         str(executable),
         str(run_dir / "inputs" / "mesh"),
-        str(run_dir / "inputs" / "restart"),
     ]
+    if restart:
+        arguments.append(str(run_dir / "inputs" / "restart"))
     if launcher is None:
         return arguments
     return [
@@ -308,6 +532,8 @@ def _write_plan(
     manifest: dict[str, Any],
     artifacts: dict[str, Path],
     runtime_files: dict[str, Path],
+    stage: dict[str, Any] | None = None,
+    logical_overrides: dict[str, bool] | None = None,
 ) -> None:
     created = datetime.now(timezone.utc).isoformat(timespec="seconds")
     plan = {
@@ -329,6 +555,62 @@ def _write_plan(
         "runtime_files": {
             name: str(path) for name, path in sorted(runtime_files.items())
         },
+    }
+    if stage is not None:
+        plan["stage_id"] = stage["stage_id"]
+        plan["restart_from"] = stage["restart_from"]
+        plan["logical_overrides"] = logical_overrides or {}
+    (staging / "run_plan.json").write_text(
+        json.dumps(plan, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def _write_staged_plan(
+    staging: Path,
+    run_dir: Path,
+    case: dict[str, Any],
+    workflow_id: str,
+    layout_id: str,
+    layout: dict[str, Any],
+    bundle_root: Path,
+    manifest: dict[str, Any],
+    artifacts: dict[str, Path],
+    runtime_files: dict[str, Path],
+    stages: list[PreparedStage],
+    workflow: dict[str, Any],
+) -> None:
+    created = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    plan = {
+        "schema_version": 1,
+        "created_utc": created.replace("+00:00", "Z"),
+        "case_id": case["case_id"],
+        "workflow_id": workflow_id,
+        "workflow_kind": workflow["kind"],
+        "layout_id": layout_id,
+        "layout": layout,
+        "working_directory": str(run_dir),
+        "environment": openmp_environment(layout["omp_threads"]),
+        "bundle": {
+            "root": str(bundle_root),
+            "bundle_id": manifest["bundle_id"],
+            "bundle_version": manifest["bundle_version"],
+        },
+        "artifacts": {role: str(path) for role, path in sorted(artifacts.items())},
+        "runtime_files": {
+            name: str(path) for name, path in sorted(runtime_files.items())
+        },
+        "stages": [
+            {
+                "stage_id": stage.stage_id,
+                "restart_from": stage.restart_from,
+                "working_directory": str(stage.run.path),
+                "command": stage.run.command,
+                "logical_overrides": _logical_overrides(
+                    workflow, workflow["stages"][index]
+                ),
+            }
+            for index, stage in enumerate(stages)
+        ],
     }
     (staging / "run_plan.json").write_text(
         json.dumps(plan, indent=2) + "\n", encoding="utf-8"

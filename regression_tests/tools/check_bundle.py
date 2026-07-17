@@ -169,7 +169,10 @@ def _validate_case_workflows(case: dict[str, Any]) -> None:
                 f"workflow {workflow_id} uses undefined artifact roles: "
                 + ", ".join(unknown)
             )
-        if workflow["kind"] != "staged_fixed_mesh":
+        if workflow["kind"] not in {
+            "staged_fixed_mesh",
+            "staged_adaptive_mesh",
+        }:
             continue
 
         missing = [

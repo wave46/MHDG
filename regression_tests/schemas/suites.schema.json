@@ -30,8 +30,29 @@
       "required": [
         "description",
         "case_id",
-        "workflow_id",
         "layouts"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "workflow_id"
+          ],
+          "not": {
+            "required": [
+              "workflow_ids"
+            ]
+          }
+        },
+        {
+          "required": [
+            "workflow_ids"
+          ],
+          "not": {
+            "required": [
+              "workflow_id"
+            ]
+          }
+        }
       ],
       "properties": {
         "description": {
@@ -45,6 +66,15 @@
         "workflow_id": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "workflow_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
         },
         "layouts": {
           "type": "array",

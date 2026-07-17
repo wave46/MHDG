@@ -14,7 +14,11 @@ sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 from check_bundle import BundleError  # noqa: E402
 from create_bundle import create_bundle  # noqa: E402
-from prepare_run import prepare_run, render_parameter_file  # noqa: E402
+from prepare_run import (  # noqa: E402
+    PreparedStagedRun,
+    prepare_run,
+    render_parameter_file,
+)
 
 
 PARAMETERS = """&INPUT_LST
@@ -24,9 +28,24 @@ PARAMETERS = """&INPUT_LST
     save_folder = '/old/output/'
 /
 &ADAPT_LST
+    adaptivity = .true.
+    rest_adapt = .true.
     geometry_path = '/old/geometry.geo'
 /
 """
+
+COLD_PARAMETER_FILES = (
+    "param_cold_fixed_time_init.txt",
+    "param_cold_fixed_diffusion_reduction.txt",
+    *(f"param_cold_fixed_continuation_{index:02d}.txt" for index in range(1, 6)),
+)
+COLD_TRANSPORT_FILES = (
+    "transport_cold_fixed_initial.nml",
+    *(
+        f"transport_cold_fixed_continuation_{index:02d}.nml"
+        for index in range(1, 6)
+    ),
+)
 
 
 class RunPreparationTests(unittest.TestCase):
@@ -39,6 +58,7 @@ class RunPreparationTests(unittest.TestCase):
 
         filenames = (
             "mesh.msh",
+            "mesh_adaptive_initial.msh",
             "geometry.geo",
             "equilibrium.h5",
             "current_density.h5",
@@ -51,6 +71,12 @@ class RunPreparationTests(unittest.TestCase):
                 f"synthetic {filename}\n", encoding="utf-8"
             )
         (self.source / "param.txt").write_text(PARAMETERS, encoding="utf-8")
+        for filename in COLD_PARAMETER_FILES:
+            (self.source / filename).write_text(PARAMETERS, encoding="utf-8")
+        for filename in COLD_TRANSPORT_FILES:
+            (self.source / filename).write_text(
+                f"synthetic {filename}\n", encoding="utf-8"
+            )
 
         self.bundle = self.root / "bundle"
         create_bundle(
@@ -115,6 +141,7 @@ class RunPreparationTests(unittest.TestCase):
             [str(expected / "inputs" / "mesh"), str(expected / "inputs" / "restart")],
         )
         self.assertTrue((expected / "outputs").is_dir())
+        self.assertTrue((expected / "res").is_dir())
         self.assertTrue((expected / "inputs" / "equilibrium.h5").is_symlink())
         self.assertTrue((expected / "inputs" / "reference.h5").is_symlink())
         self.assertEqual(
@@ -174,6 +201,81 @@ class RunPreparationTests(unittest.TestCase):
         self.assertNotIn(str(self.mpi_launcher), plan["command"])
         self.assertEqual(plan["environment"]["OMP_PLACES"], "cores")
         self.assertEqual(plan["environment"]["OMP_PROC_BIND"], "spread")
+
+    def test_prepares_seven_stage_fixed_mesh_workflow(self) -> None:
+        prepared = prepare_run(
+            self.settings,
+            "legacy_fixed",
+            "cold_fixed",
+            "serial_omp1",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "cold",
+        )
+
+        self.assertIsInstance(prepared, PreparedStagedRun)
+        self.assertEqual(len(prepared.stages), 7)
+        first = prepared.stages[0].run
+        second = prepared.stages[1].run
+        self.assertEqual(len(first.command), 2)
+        self.assertEqual(len(second.command), 3)
+        self.assertFalse((first.path / "inputs/restart.h5").exists())
+        self.assertFalse((second.path / "inputs/restart.h5").exists())
+        self.assertTrue(
+            all((stage.run.path / "res").is_dir() for stage in prepared.stages)
+        )
+        self.assertTrue((prepared.path / "inputs/reference.h5").is_symlink())
+
+        first_parameters = (first.path / "param.txt").read_text(encoding="utf-8")
+        self.assertIn(str(first.path / "inputs/transport_model.nml"), first_parameters)
+        self.assertIn(f"{first.path / 'outputs'}/", first_parameters)
+        self.assertIn("rest_adapt = .false.", first_parameters)
+
+        plan = json.loads(
+            (prepared.path / "run_plan.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(plan["workflow_kind"], "staged_fixed_mesh")
+        self.assertEqual(
+            [stage["stage_id"] for stage in plan["stages"]],
+            [
+                "time_init",
+                "diffusion_reduction",
+                "continuation_01",
+                "continuation_02",
+                "continuation_03",
+                "continuation_04",
+                "continuation_05",
+            ],
+        )
+
+        adaptive = prepare_run(
+            self.settings,
+            "legacy_fixed",
+            "cold_adaptive",
+            "serial_omp1",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "adaptive",
+        )
+        adaptive_parameters = [
+            (stage.run.path / "param.txt").read_text(encoding="utf-8")
+            for stage in adaptive.stages
+        ]
+        self.assertEqual(
+            (adaptive.stages[0].run.path / "inputs/mesh.msh").resolve(),
+            (
+                self.bundle
+                / "case_data/legacy_fixed/mesh_adaptive_initial.msh"
+            ).resolve(),
+        )
+        self.assertEqual(
+            (first.path / "inputs/mesh.msh").resolve(),
+            (self.bundle / "case_data/legacy_fixed/mesh.msh").resolve(),
+        )
+        self.assertIn("rest_adapt = .true.", adaptive_parameters[0])
+        self.assertIn("rest_adapt = .true.", adaptive_parameters[1])
+        for index in (2, 3, 4, 5, 6):
+            self.assertIn("rest_adapt = .false.", adaptive_parameters[index])
 
     def test_missing_parameter_assignment_fails(self) -> None:
         source = self.root / "incomplete_param.txt"

@@ -101,6 +101,12 @@ class BundleValidationTests(unittest.TestCase):
 
         self.assertNotIn(role, required_case_roles(case))
         self.assertIn(role, required_case_roles(case, "cold_fixed"))
+        self.assertNotIn(
+            "adaptive_initial_mesh", required_case_roles(case, "cold_fixed")
+        )
+        self.assertIn(
+            "adaptive_initial_mesh", required_case_roles(case, "cold_adaptive")
+        )
 
     def test_public_check_data_command(self) -> None:
         completed = subprocess.run(

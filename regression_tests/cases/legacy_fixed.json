@@ -13,6 +13,12 @@
       "artifact_id": "legacy_mesh",
       "media_type": "application/x-gmsh"
     },
+    "adaptive_initial_mesh": {
+      "filename": "mesh_adaptive_initial.msh",
+      "artifact_id": "legacy_adaptive_initial_mesh",
+      "media_type": "application/x-gmsh",
+      "optional": true
+    },
     "geometry": {
       "filename": "geometry.geo",
       "artifact_id": "legacy_geometry",
@@ -154,6 +160,10 @@
       ],
       "mesh_role": "mesh",
       "reference_role": "warm_reference",
+      "comparison_policy": "fixed_hdf5",
+      "logical_overrides": {
+        "rest_adapt": false
+      },
       "stages": [
         {
           "stage_id": "time_init",
@@ -166,6 +176,72 @@
           "parameter_role": "cold_fixed_diffusion_reduction_parameters",
           "transport_configuration_role": "cold_fixed_initial_transport_configuration",
           "restart_from": "previous_stage"
+        },
+        {
+          "stage_id": "continuation_01",
+          "parameter_role": "cold_fixed_continuation_01_parameters",
+          "transport_configuration_role": "cold_fixed_continuation_01_transport_configuration",
+          "restart_from": "previous_stage"
+        },
+        {
+          "stage_id": "continuation_02",
+          "parameter_role": "cold_fixed_continuation_02_parameters",
+          "transport_configuration_role": "cold_fixed_continuation_02_transport_configuration",
+          "restart_from": "previous_stage"
+        },
+        {
+          "stage_id": "continuation_03",
+          "parameter_role": "cold_fixed_continuation_03_parameters",
+          "transport_configuration_role": "cold_fixed_continuation_03_transport_configuration",
+          "restart_from": "previous_stage"
+        },
+        {
+          "stage_id": "continuation_04",
+          "parameter_role": "cold_fixed_continuation_04_parameters",
+          "transport_configuration_role": "cold_fixed_continuation_04_transport_configuration",
+          "restart_from": "previous_stage"
+        },
+        {
+          "stage_id": "continuation_05",
+          "parameter_role": "cold_fixed_continuation_05_parameters",
+          "transport_configuration_role": "cold_fixed_continuation_05_transport_configuration",
+          "restart_from": "previous_stage"
+        }
+      ],
+      "default_layout": "mpi4_omp4"
+    },
+    "cold_adaptive": {
+      "kind": "staged_adaptive_mesh",
+      "description": "Reach the canonical state with one restart refinement during diffusion reduction",
+      "required_artifact_roles": [
+        "geometry",
+        "equilibrium_magnetic_field",
+        "equilibrium_current_density"
+      ],
+      "mesh_role": "adaptive_initial_mesh",
+      "reference_role": "warm_reference",
+      "comparison_policy": "mesh_independent",
+      "logical_overrides": {
+        "rest_adapt": false
+      },
+      "stages": [
+        {
+          "stage_id": "time_init",
+          "parameter_role": "cold_fixed_time_init_parameters",
+          "transport_configuration_role": "cold_fixed_initial_transport_configuration",
+          "restart_from": "analytical",
+          "logical_overrides": {
+            "rest_adapt": true
+          }
+        },
+        {
+          "stage_id": "diffusion_reduction",
+          "parameter_role": "cold_fixed_diffusion_reduction_parameters",
+          "transport_configuration_role": "cold_fixed_initial_transport_configuration",
+          "restart_from": "previous_stage",
+          "logical_overrides": {
+            "rest_adapt": true
+          }
         },
         {
           "stage_id": "continuation_01",

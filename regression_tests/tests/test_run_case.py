@@ -22,9 +22,24 @@ PARAMETERS = """&INPUT_LST
     save_folder = '/old/output/'
 /
 &ADAPT_LST
+    adaptivity = .true.
+    rest_adapt = .true.
     geometry_path = '/old/geometry.geo'
 /
 """
+
+COLD_PARAMETER_FILES = (
+    "param_cold_fixed_time_init.txt",
+    "param_cold_fixed_diffusion_reduction.txt",
+    *(f"param_cold_fixed_continuation_{index:02d}.txt" for index in range(1, 6)),
+)
+COLD_TRANSPORT_FILES = (
+    "transport_cold_fixed_initial.nml",
+    *(
+        f"transport_cold_fixed_continuation_{index:02d}.nml"
+        for index in range(1, 6)
+    ),
+)
 
 
 class RunCommandTests(unittest.TestCase):
@@ -161,11 +176,124 @@ class RunCommandTests(unittest.TestCase):
             (run_dir / "stderr.log").read_text(encoding="utf-8"), "failed\n"
         )
 
+    def test_zero_exit_fatal_file_error_is_rejected(self) -> None:
+        self._executable(self.serial_executable, FATAL_FILE_ERROR_SOLVER)
+        completed = self._run(
+            "serial_omp1", "reported-file-error", workflow="cold_adaptive"
+        )
+        self.assertEqual(completed.returncode, 1)
+
+        run_dir = self._run_dir(
+            "serial_omp1", "reported-file-error", workflow="cold_adaptive"
+        )
+        metadata = json.loads(
+            (run_dir / "run_metadata.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(metadata["status"], "solver_reported_error")
+        self.assertEqual(
+            [stage["status"] for stage in metadata["stages"]],
+            ["solver_reported_error"] + ["not_run"] * 6,
+        )
+
+        first_stage = run_dir / "stages/01_time_init"
+        stage_metadata = json.loads(
+            (first_stage / "run_metadata.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(stage_metadata["exit_code"], 0)
+        self.assertEqual(stage_metadata["hdf5_outputs"], ["outputs/result.h5"])
+        self.assertEqual(len(stage_metadata["fatal_log_messages"]), 2)
+        self.assertIn(
+            "Error opening destination file:./res/temp.msh",
+            stage_metadata["fatal_log_messages"][0],
+        )
+
+    def test_staged_run_passes_each_output_to_the_next_stage(self) -> None:
+        self._executable(self.serial_executable, STAGED_SOLVER)
+        completed = self._run(
+            "serial_omp1", "cold-success", workflow="cold_fixed"
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        run_dir = self._run_dir(
+            "serial_omp1", "cold-success", workflow="cold_fixed"
+        )
+        metadata = json.loads(
+            (run_dir / "run_metadata.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(metadata["status"], "completed")
+        self.assertEqual(
+            [stage["status"] for stage in metadata["stages"]],
+            ["completed"] * 7,
+        )
+        self.assertEqual(
+            metadata["hdf5_outputs"],
+            ["stages/07_continuation_05/outputs/result.h5"],
+        )
+
+        stage_dirs = sorted((run_dir / "stages").iterdir())
+        expected_history = ">".join(path.name for path in stage_dirs) + "\n"
+        self.assertEqual(
+            (stage_dirs[-1] / "outputs/result.h5").read_text(encoding="utf-8"),
+            expected_history,
+        )
+        self.assertFalse((stage_dirs[0] / "inputs/restart.h5").exists())
+        for previous, current in zip(stage_dirs, stage_dirs[1:]):
+            self.assertEqual(
+                (current / "inputs/restart.h5").resolve(),
+                (previous / "outputs/result.h5").resolve(),
+            )
+        self.assertEqual(
+            (run_dir / "stdout.log").resolve(),
+            (stage_dirs[-1] / "stdout.log").resolve(),
+        )
+
+    def test_staged_run_stops_after_failed_stage(self) -> None:
+        self._executable(self.serial_executable, FAILING_STAGED_SOLVER)
+        completed = self._run(
+            "serial_omp1", "cold-failure", workflow="cold_fixed"
+        )
+        self.assertEqual(completed.returncode, 1)
+
+        run_dir = self._run_dir(
+            "serial_omp1", "cold-failure", workflow="cold_fixed"
+        )
+        metadata = json.loads(
+            (run_dir / "run_metadata.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(metadata["status"], "solver_failed")
+        self.assertEqual(
+            [stage["status"] for stage in metadata["stages"]],
+            ["completed", "completed", "solver_failed"] + ["not_run"] * 4,
+        )
+        self.assertFalse(
+            (run_dir / "stages/04_continuation_02/run_metadata.json").exists()
+        )
+
+    def test_multiple_workflows_continue_after_first_failure(self) -> None:
+        self._executable(self.serial_executable, FAILING_SOLVER)
+        completed = self._run_workflows(
+            "serial_omp1",
+            "overnight-failure",
+            ["cold_fixed", "cold_adaptive"],
+        )
+        self.assertEqual(completed.returncode, 1)
+
+        for workflow in ("cold_fixed", "cold_adaptive"):
+            metadata_path = (
+                self._run_dir(
+                    "serial_omp1", "overnight-failure", workflow=workflow
+                )
+                / "run_metadata.json"
+            )
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["status"], "solver_failed")
+
     def _create_bundle(self) -> None:
         source = self.root / "source"
         source.mkdir()
         for filename in (
             "mesh.msh",
+            "mesh_adaptive_initial.msh",
             "geometry.geo",
             "equilibrium.h5",
             "current_density.h5",
@@ -177,6 +305,12 @@ class RunCommandTests(unittest.TestCase):
                 f"synthetic {filename}\n", encoding="utf-8"
             )
         (source / "param.txt").write_text(PARAMETERS, encoding="utf-8")
+        for filename in COLD_PARAMETER_FILES:
+            (source / filename).write_text(PARAMETERS, encoding="utf-8")
+        for filename in COLD_TRANSPORT_FILES:
+            (source / filename).write_text(
+                f"synthetic {filename}\n", encoding="utf-8"
+            )
 
         self.bundle = self.root / "bundle"
         create_bundle(
@@ -189,7 +323,14 @@ class RunCommandTests(unittest.TestCase):
         path.chmod(0o755)
         return path
 
-    def _run(self, layout: str, run_id: str) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self, layout: str, run_id: str, workflow: str = "warm"
+    ) -> subprocess.CompletedProcess[str]:
+        return self._run_workflows(layout, run_id, [workflow])
+
+    def _run_workflows(
+        self, layout: str, run_id: str, workflows: list[str]
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 str(REGRESSION_ROOT / "regression.sh"),
@@ -197,7 +338,7 @@ class RunCommandTests(unittest.TestCase):
                 str(self.settings),
                 "run",
                 "legacy_fixed",
-                "warm",
+                *workflows,
                 "--layout",
                 layout,
                 "--run-id",
@@ -209,12 +350,13 @@ class RunCommandTests(unittest.TestCase):
             text=True,
         )
 
-    def _run_dir(self, layout: str, run_id: str) -> Path:
-        return self.run_root / "legacy_fixed" / "warm" / layout / run_id
+    def _run_dir(self, layout: str, run_id: str, workflow: str = "warm") -> Path:
+        return self.run_root / "legacy_fixed" / workflow / layout / run_id
 
 
 SOLVER = """#!/usr/bin/env bash
 set -euo pipefail
+test -d res
 printf 'solver stdout\n'
 printf 'solver stderr\n' >&2
 printf '%s\n' "$OMP_NUM_THREADS" > outputs/omp_threads.txt
@@ -232,6 +374,40 @@ printf '%s\n' "$OMP_NUM_THREADS" > outputs/omp_threads.txt
 FAILING_SOLVER = """#!/usr/bin/env bash
 printf 'failed\n' >&2
 exit 7
+"""
+
+STAGED_SOLVER = """#!/usr/bin/env bash
+set -euo pipefail
+test -d res
+stage=${PWD##*/}
+if (($# == 1)); then
+  history=$stage
+else
+  history=$(<"$2.h5")
+  history=${history%$'\\n'}">"$stage
+fi
+printf '%s\n' "$history" > outputs/result.h5
+printf 'Error: 1.0E-5\n'
+printf 'Output written to file %s\n' "$PWD/outputs/result.h5"
+"""
+
+FATAL_FILE_ERROR_SOLVER = """#!/usr/bin/env bash
+set -euo pipefail
+test -d res
+printf 'synthetic hdf5\n' > outputs/result.h5
+printf 'Error opening destination file:./res/temp.msh\n'
+printf "Error   : Unable to open file './res/temp.msh'\n" >&2
+"""
+
+FAILING_STAGED_SOLVER = """#!/usr/bin/env bash
+set -euo pipefail
+stage=${PWD##*/}
+if [[ "$stage" == '03_continuation_01' ]]; then
+  printf 'failed stage\n' >&2
+  exit 7
+fi
+printf '%s\n' "$stage" > outputs/result.h5
+printf 'Output written to file %s\n' "$PWD/outputs/result.h5"
 """
 
 MPI_LAUNCHER = """#!/usr/bin/env bash

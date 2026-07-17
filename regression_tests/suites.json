@@ -20,6 +20,21 @@
         "mpi4_omp1",
         "mpi4_omp4"
       ]
+    },
+    "cold_matrix": {
+      "description": "Cold fixed and adaptive workflows across all tracked layouts",
+      "case_id": "legacy_fixed",
+      "workflow_ids": [
+        "cold_fixed",
+        "cold_adaptive"
+      ],
+      "layouts": [
+        "serial_omp1",
+        "mpi2_omp1",
+        "mpi2_omp4",
+        "mpi4_omp1",
+        "mpi4_omp4"
+      ]
     }
   }
 }

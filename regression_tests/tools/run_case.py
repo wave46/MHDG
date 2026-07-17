@@ -17,7 +17,23 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import BundleError, read_settings
-from prepare_run import PreparedRun, openmp_environment, prepare_run
+from compare_hdf5 import ComparisonError
+from compare_run import select_candidate
+from prepare_run import (
+    PreparedExecution,
+    PreparedRun,
+    PreparedStagedRun,
+    openmp_environment,
+    prepare_run,
+)
+
+
+FATAL_LOG_MARKERS = (
+    "Error opening source file:",
+    "Error opening destination file:",
+    "Error   : Unable to open file",
+)
+MAX_FATAL_LOG_MESSAGES = 20
 
 
 @dataclass(frozen=True)
@@ -32,7 +48,7 @@ class RunResult:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("case_id", metavar="CASE")
-    parser.add_argument("workflow_id", metavar="WORKFLOW")
+    parser.add_argument("workflow_ids", metavar="WORKFLOW", nargs="+")
     parser.add_argument("--layout", required=True, dest="layout_id")
     parser.add_argument("--run-id")
     parser.add_argument("--settings", required=True, type=Path)
@@ -41,28 +57,58 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        prepared = prepare_run(
-            args.settings,
-            args.case_id,
-            args.workflow_id,
-            args.layout_id,
-            args.cases,
-            args.layouts,
-            args.run_id,
-        )
-        print(f"run directory: {prepared.path}")
-        print(f"command: {shlex.join(prepared.command)}")
-        print("solver output: stdout.log and stderr.log", flush=True)
-        result = execute_run(prepared, read_settings(args.settings))
+        settings = read_settings(args.settings)
     except BundleError as exc:
         print(f"run failed: {exc}", file=sys.stderr)
         return 1
 
+    completed = True
+    for workflow_id in args.workflow_ids:
+        print(f"workflow: {workflow_id}")
+        try:
+            prepared = prepare_run(
+                args.settings,
+                args.case_id,
+                workflow_id,
+                args.layout_id,
+                args.cases,
+                args.layouts,
+                args.run_id,
+            )
+            _print_prepared(prepared)
+            result = execute_prepared(prepared, settings)
+        except BundleError as exc:
+            print(f"run failed: {exc}", file=sys.stderr)
+            completed = False
+            continue
+        _print_result(result)
+        completed = completed and result.status == "completed"
+    return 0 if completed else 1
+
+
+def _print_prepared(prepared: PreparedExecution) -> None:
+    print(f"run directory: {prepared.path}")
+    if isinstance(prepared, PreparedRun):
+        print(f"command: {shlex.join(prepared.command)}")
+        print("solver output: stdout.log and stderr.log", flush=True)
+    else:
+        print(f"stages: {len(prepared.stages)}", flush=True)
+
+
+def _print_result(result: RunResult) -> None:
     print(f"status: {result.status}")
     print(f"solver exit code: {result.exit_code}")
     print(f"runtime: {result.duration_seconds:.3f} s")
     print(f"HDF5 outputs: {len(result.hdf5_outputs)}")
-    return 0 if result.status == "completed" else 1
+
+
+def execute_prepared(
+    prepared: PreparedExecution, settings: dict[str, str]
+) -> RunResult:
+    """Execute either one warm run or a sequential staged workflow."""
+    if isinstance(prepared, PreparedStagedRun):
+        return execute_staged_run(prepared, settings)
+    return execute_run(prepared, settings)
 
 
 def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
@@ -100,7 +146,10 @@ def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
     hdf5_outputs = [
         record["path"] for record in output_files if record["path"].endswith(".h5")
     ]
-    status = _run_status(exit_code, launch_error, hdf5_outputs)
+    fatal_log_messages = _fatal_log_messages(stdout_path, stderr_path)
+    status = _run_status(
+        exit_code, launch_error, hdf5_outputs, fatal_log_messages
+    )
 
     metadata = {
         "schema_version": 1,
@@ -110,6 +159,7 @@ def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
         "duration_seconds": duration,
         "exit_code": exit_code,
         "launch_error": launch_error,
+        "fatal_log_messages": fatal_log_messages,
         "working_directory": str(prepared.path),
         "environment": {**openmp, "setup_script": environment_script},
         "command": prepared.command,
@@ -130,6 +180,116 @@ def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
     _write_json(prepared.path / "run_metadata.json", metadata)
 
     return RunResult(prepared.path, status, exit_code, duration, hdf5_outputs)
+
+
+def execute_staged_run(
+    prepared: PreparedStagedRun, settings: dict[str, str]
+) -> RunResult:
+    """Run stages in order, passing each selected HDF5 result to the next."""
+    started_utc = _utc_now()
+    started_clock = time.monotonic()
+    stage_records = []
+    selected_output: Path | None = None
+    last_result: RunResult | None = None
+    status = "completed"
+
+    for index, stage in enumerate(prepared.stages, start=1):
+        if stage.restart_from == "previous_stage":
+            if selected_output is None:
+                raise BundleError(f"stage {stage.stage_id} has no restart source")
+            _link_restart(stage.run.path, selected_output)
+
+        print(
+            f"stage {index}/{len(prepared.stages)}: {stage.stage_id}", flush=True
+        )
+        result = execute_run(stage.run, settings)
+        last_result = result
+        record = {
+            "stage_id": stage.stage_id,
+            "restart_from": stage.restart_from,
+            "run_directory": str(stage.run.path),
+            "status": result.status,
+            "exit_code": result.exit_code,
+            "duration_seconds": result.duration_seconds,
+            "selected_hdf5": None,
+        }
+        stage_records.append(record)
+        if result.status != "completed":
+            status = result.status
+            break
+
+        try:
+            selected_output = select_candidate(
+                result.path, {"hdf5_outputs": result.hdf5_outputs}
+            )
+        except ComparisonError as exc:
+            record["status"] = "output_selection_failed"
+            record["selection_error"] = str(exc)
+            status = "output_selection_failed"
+            selected_output = None
+            break
+        record["selected_hdf5"] = str(selected_output)
+
+    for stage in prepared.stages[len(stage_records) :]:
+        stage_records.append(
+            {
+                "stage_id": stage.stage_id,
+                "restart_from": stage.restart_from,
+                "run_directory": str(stage.run.path),
+                "status": "not_run",
+                "exit_code": None,
+                "duration_seconds": None,
+                "selected_hdf5": None,
+            }
+        )
+
+    if last_result is not None:
+        _link_summary_logs(prepared.path, last_result.path)
+    hdf5_outputs = []
+    if status == "completed" and selected_output is not None:
+        hdf5_outputs = [selected_output.relative_to(prepared.path).as_posix()]
+
+    metadata = {
+        "schema_version": 1,
+        "status": status,
+        "started_utc": started_utc,
+        "finished_utc": _utc_now(),
+        "duration_seconds": time.monotonic() - started_clock,
+        "exit_code": last_result.exit_code if last_result is not None else None,
+        "working_directory": str(prepared.path),
+        "logs": {"stdout": "stdout.log", "stderr": "stderr.log"},
+        "stages": stage_records,
+        "hdf5_outputs": hdf5_outputs,
+    }
+    if last_result is not None:
+        stage_metadata = _read_json(last_result.path / "run_metadata.json")
+        for name in ("environment", "executable", "runtime_files", "solver"):
+            metadata[name] = stage_metadata[name]
+    _write_json(prepared.path / "run_metadata.json", metadata)
+
+    return RunResult(
+        prepared.path,
+        status,
+        metadata["exit_code"],
+        metadata["duration_seconds"],
+        hdf5_outputs,
+    )
+
+
+def _link_restart(run_dir: Path, source: Path) -> None:
+    try:
+        (run_dir / "inputs" / "restart.h5").symlink_to(source)
+    except OSError as exc:
+        raise BundleError(f"cannot link restart for {run_dir.name}: {exc}") from exc
+
+
+def _link_summary_logs(workflow_dir: Path, stage_dir: Path) -> None:
+    for filename in ("stdout.log", "stderr.log"):
+        link = workflow_dir / filename
+        try:
+            link.symlink_to((stage_dir / filename).relative_to(workflow_dir))
+        except OSError as exc:
+            raise BundleError(f"cannot link workflow log {link}: {exc}") from exc
 
 
 def _runtime_environment(
@@ -178,15 +338,33 @@ def _runtime_environment(
 
 
 def _run_status(
-    exit_code: int | None, launch_error: str | None, hdf5_outputs: list[str]
+    exit_code: int | None,
+    launch_error: str | None,
+    hdf5_outputs: list[str],
+    fatal_log_messages: list[str],
 ) -> str:
     if launch_error is not None:
         return "launch_failed"
     if exit_code != 0:
         return "solver_failed"
+    if fatal_log_messages:
+        return "solver_reported_error"
     if not hdf5_outputs:
         return "missing_hdf5_output"
     return "completed"
+
+
+def _fatal_log_messages(*paths: Path) -> list[str]:
+    messages = []
+    for path in paths:
+        with path.open("r", encoding="utf-8", errors="replace") as stream:
+            for line_number, line in enumerate(stream, start=1):
+                if not any(marker in line for marker in FATAL_LOG_MARKERS):
+                    continue
+                messages.append(f"{path.name}:{line_number}: {line.rstrip()}")
+                if len(messages) == MAX_FATAL_LOG_MESSAGES:
+                    return messages
+    return messages
 
 
 def _output_records(run_dir: Path) -> list[dict[str, Any]]:
@@ -220,6 +398,16 @@ def _file_record(path: Path, display_path: str) -> dict[str, Any]:
     except OSError as exc:
         raise BundleError(f"cannot inspect file {path}: {exc}") from exc
     return {"path": display_path, "size_bytes": size, "sha256": digest.hexdigest()}
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BundleError(f"cannot read run metadata {path}: {exc}") from exc
+    if not isinstance(document, dict):
+        raise BundleError(f"run metadata must contain an object: {path}")
+    return document
 
 
 def _write_json(path: Path, document: dict[str, Any]) -> None:

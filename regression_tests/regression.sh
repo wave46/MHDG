@@ -14,9 +14,9 @@ Usage:
   regression_tests/regression.sh --settings FILE build [--jobs N]
   regression_tests/regression.sh --settings FILE check-data
   regression_tests/regression.sh --settings FILE prepare CASE WORKFLOW --layout LAYOUT
-  regression_tests/regression.sh --settings FILE run CASE WORKFLOW --layout LAYOUT
+  regression_tests/regression.sh --settings FILE run CASE WORKFLOW [WORKFLOW ...] --layout LAYOUT
   regression_tests/regression.sh compare RUN_DIRECTORY
-  regression_tests/regression.sh --settings FILE suite SUITE
+  regression_tests/regression.sh --settings FILE suite SUITE [--run-only] [--resume]
   regression_tests/regression.sh golden-check [SUITE] [--build] [--build-jobs N]
 
 Available commands:
@@ -26,16 +26,16 @@ Available commands:
   build          Build clean serial and parallel regression executables.
   check-data     Validate an external bundle without modifying it.
   prepare        Create an isolated run directory without executing the solver.
-  run            Prepare and execute one isolated solver run.
+  run            Prepare and execute one or more isolated workflows.
   compare        Compare a completed fixed-mesh run with its reference.
-  suite          Run and compare every layout in a tracked suite.
+  suite          Run every workflow/layout in a tracked suite.
   golden-check   Check executables against the configured golden bundle.
 
 Options:
   --settings FILE  Local bundle, run, executable, and launcher settings.
   -h, --help       Show this help text.
 
-Suites: warm, warm_parallelism.
+Suites: warm, warm_parallelism, cold_matrix.
 EOF
 }
 

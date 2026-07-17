@@ -6,9 +6,9 @@ solutions, and golden outputs are distributed separately in an external case
 bundle.
 
 Status: external-data contract, candidate and golden bundle tools, isolated
-warm-run execution, fixed-mesh HDF5 comparison, and warm suite orchestration.
-Clean serial/parallel build orchestration is available; additional workflows
-remain planned.
+warm and staged cold execution, fixed-mesh HDF5 comparison, and tracked
+workflow-by-layout suites. Clean serial/parallel build orchestration is also
+available.
 
 ## Repository boundary
 
@@ -21,7 +21,7 @@ Tracked here:
 - comparison tolerances and a library-independent fixed-mesh comparator;
 - tracked suite definitions and orchestration;
 - clean serial/parallel build orchestration and provenance recording;
-- later, additional workflows.
+- staged fixed-mesh and adaptive-mesh workflows.
 
 Not tracked here:
 
@@ -49,18 +49,17 @@ may be added without changing the external-data contract.
 
 - `warm_same_state`: restart from a converged solution without changing the
   physical or numerical settings.
-- `continuation_fixed`: restart on the same mesh while enabling a feature or
-  changing one continuation parameter.
-- `fixed_mesh_bootstrap`: start from the analytical initialization on the
-  already refined mesh, without adaptivity.
-- `cold_adaptive`: start from the analytical initialization on the coarse mesh
-  and exercise refinement and projection.
+- `staged_fixed_mesh`: start analytically on the refined mesh, then pass each
+  stage output to the next stage without adaptivity.
+- `staged_adaptive_mesh`: start analytically on the coarse mesh, refine during
+  the first two stages, then finish the same continuations on that mesh.
 - `archived_compare`: inspect or compare a stored historical result without
   routinely rerunning its source branch.
 
-`legacy_fixed/warm` is executable. `legacy_fixed/cold_fixed` now defines the
-seven-stage external-data contract; staged execution is the next implementation
-step.
+`legacy_fixed/warm`, `legacy_fixed/cold_fixed`, and
+`legacy_fixed/cold_adaptive` are executable. The `cold_matrix` suite records
+both cold workflows across every tracked layout; numerical verification is a
+separate step so an overnight run is never repeated merely to compare it.
 
 ## External bundle contract
 
@@ -127,10 +126,11 @@ prepared directory and all tracked examples use only these generic names. The
 prepared entries may be regular files or symlinks to a private source archive;
 the creator copies symlink targets into the final bundle.
 
-To add the fixed-mesh cold workflow, prepare these optional files in the same
-directory:
+To add the fixed-mesh and adaptive cold workflows, prepare these optional files
+in the same directory:
 
 ```text
+mesh_adaptive_initial.msh
 param_cold_fixed_time_init.txt
 param_cold_fixed_diffusion_reduction.txt
 param_cold_fixed_continuation_01.txt ... continuation_05.txt
@@ -141,12 +141,17 @@ transport_cold_fixed_continuation_01.nml ... continuation_05.nml
 The tracked stage names deliberately omit physical diffusion values. The
 external parameter and transport files contain those numerical choices. The
 sequence is analytical `time_init`, restart `diffusion_reduction`, then five
-restart continuations ending at the warm reference state. The fixed refined
-`mesh.msh` is reused at every stage; its cold parameter files must disable
-restart adaptivity.
+restart continuations ending at the warm reference state. Both workflows reuse
+the parameter and transport files. `cold_fixed` starts on the refined
+`mesh.msh`, while `cold_adaptive` starts analytically on the coarse
+`mesh_adaptive_initial.msh` and carries each resulting mesh through the HDF5
+restart. The renderer forces `rest_adapt = .false.` throughout `cold_fixed`.
+For `cold_adaptive`, it forces `.true.` in `time_init` and
+`diffusion_reduction`, then `.false.` in the continuations. All other
+adaptivity and physical settings remain external.
 
 These cold files are optional so existing warm-only candidate and golden
-bundles remain valid. A `cold_fixed` run will require the complete cold set.
+bundles remain valid. Either cold workflow requires the complete cold set.
 
 ### Creating a bundle
 
@@ -226,7 +231,7 @@ environment-script checksum, toolchain versions, and executable checksums.
 The generated settings preserve the original private data and run paths while
 selecting the new executables.
 
-## Preparing an isolated warm run
+## Preparing an isolated run
 
 Add the private run root and the executable required by the selected layout.
 MPI layouts also require the launcher:
@@ -253,6 +258,7 @@ Preparation creates a timestamped run directory under
 legacy_fixed/warm/mpi4_omp4/<run-id>/
 ├── inputs/             # symlinks to read-only bundle artifacts
 ├── outputs/            # writable solver output directory
+├── res/                # writable mesh/adaptivity workspace
 ├── positionFeketeNodesTri2D.h5  # symlink to generic solver data
 ├── param.txt           # rendered private run copy
 └── run_plan.json       # command, environment, layout, and provenance
@@ -270,7 +276,32 @@ the run directory, matching the solver's fixed runtime filename.
 The tracked layouts are `serial_omp1`, `mpi2_omp1`, `mpi2_omp4`, `mpi4_omp1`,
 and `mpi4_omp4`. Every layout reuses the same bundle files.
 
-## Executing a warm run
+For the complete fixed-mesh cold workflow, replace `warm` with `cold_fixed`:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/regression-settings.env \
+  prepare legacy_fixed cold_fixed --layout mpi4_omp4
+```
+
+Its run root contains the shared reference and seven isolated stage directories:
+
+```text
+legacy_fixed/cold_fixed/mpi4_omp4/<run-id>/
+├── inputs/reference.h5
+├── run_plan.json
+└── stages/
+    ├── 01_time_init/
+    ├── 02_diffusion_reduction/
+    └── 03_continuation_01/ ... 07_continuation_05/
+```
+
+Each stage has its own rendered `param.txt`, inputs, outputs, writable `res/`
+mesh workspace, runtime file, and `run_plan.json`. Restart links are deliberately
+absent during preparation because they are created only after the preceding
+stage has completed.
+
+## Executing runs
 
 If the executable depends on library paths exported by the build setup, add
 its absolute path to the private settings file:
@@ -302,10 +333,68 @@ Standard output and error are written to `stdout.log` and `stderr.log`.
 executable checksum, optional revision/build description, and checksums of all
 files produced under `outputs/`.
 
-A run is `completed` only when the solver exits successfully and produces at
-least one HDF5 file. This status describes execution only; comparison records
-numerical acceptance separately. Existing run directories are never reused or
-overwritten.
+A run is `completed` only when the solver exits successfully, produces at least
+one HDF5 file, and does not report a fatal source/destination file-opening error.
+The last condition catches serial Fortran stops that return exit code zero.
+Generic Newton `Error:` diagnostics are not treated as failures. This status
+describes execution only; comparison records numerical acceptance separately.
+Existing run directories are never reused or overwritten.
+
+Execute the fixed-mesh cold sequence with:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/regression-settings.env \
+  run legacy_fixed cold_fixed --layout mpi4_omp4
+```
+
+To launch both complete cold workflows sequentially for an overnight run, list
+both workflow IDs in one command:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/regression-settings.env \
+  run legacy_fixed cold_fixed cold_adaptive \
+  --layout mpi4_omp4 --run-id overnight-01
+```
+
+The adaptive workflow still starts analytically, refines on the `time_init` to
+`diffusion_reduction` restart, and then completes the same five continuations
+on the resulting mesh. If one workflow fails, its later stages stop, but the
+next workflow in the command is still attempted.
+
+For the complete two-workflow by five-layout overnight matrix, use the tracked
+suite instead:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/regression-settings.env \
+  suite cold_matrix --run-only --run-id overnight-01
+```
+
+`--run-only` deliberately defers numerical comparison. All ten result paths
+are retained in the suite summary for the later verification pass. The summary
+is updated after every cell; after an interruption, repeat the same command
+with `--resume` to skip all cells already recorded there.
+
+`time_init` runs without a restart. The runner waits for each solver process,
+selects its final HDF5 output, links that result as the next stage's restart,
+and only then starts the next stage. Any failed stage stops the sequence; its
+logs and all earlier stage results remain available, while later stages are
+recorded as `not_run`. The workflow-level `stdout.log` and `stderr.log` point
+to the last attempted stage, and `run_metadata.json` summarizes the sequence.
+
+The completed workflow root is compatible with the fixed-mesh comparator. Until
+cold tolerances are characterized, select a profile explicitly for inspection:
+
+```bash
+regression_tests/regression.sh compare \
+  /path/to/completed/cold_fixed/run --profile fixed_same_layout
+```
+
+The adaptive output is collected with full provenance but is not passed to the
+fixed-mesh HDF5 comparator. Its mesh-independent comparison remains a separate
+follow-up.
 
 ## Initial comparison contract
 
@@ -369,10 +458,14 @@ regression_tests/regression.sh --settings /path/to/settings.env build
 regression_tests/regression.sh --settings /path/to/settings.env check-data
 regression_tests/regression.sh --settings /path/to/settings.env prepare legacy_fixed warm --layout mpi4_omp4
 regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed warm --layout mpi4_omp4
+regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed cold_fixed --layout mpi4_omp4
+regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed cold_fixed cold_adaptive --layout mpi4_omp4 --run-id overnight-01
 regression_tests/regression.sh compare /path/to/completed/run
 regression_tests/regression.sh --settings /path/to/settings.env suite warm
 regression_tests/regression.sh --settings /path/to/settings.env suite warm --build
 regression_tests/regression.sh --settings /path/to/settings.env suite warm_parallelism
+regression_tests/regression.sh --settings /path/to/settings.env suite cold_matrix --run-only --run-id overnight-01
+regression_tests/regression.sh --settings /path/to/settings.env suite cold_matrix --run-only --run-id overnight-01 --resume
 regression_tests/regression.sh --settings /path/to/settings.env bundle promote /path/to/suite_summary.json --output /path/to/golden --bundle-version VERSION
 regression_tests/regression.sh golden-check
 regression_tests/regression.sh golden-check --build
@@ -411,18 +504,29 @@ serial, MPI, and OpenMP layouts:
 regression_tests/regression.sh --settings /path/to/settings.env suite warm_parallelism
 ```
 
-Each suite validates the bundle once, then gives every layout a distinct
-isolated run directory. A failed layout does not prevent later layouts from
-running. The command returns nonzero if any run or comparison fails and writes
+The `cold_matrix` suite executes `cold_fixed` and `cold_adaptive` for each of
+the five layouts. Run it without comparisons while producing the golden
+overnight evidence:
+
+```bash
+regression_tests/regression.sh \
+  --settings /path/to/settings.env \
+  suite cold_matrix --run-only --run-id overnight-01
+```
+
+Each suite validates the bundle once, then gives every workflow/layout cell a
+distinct isolated run directory. A failed cell does not prevent later cells
+from running. The command returns nonzero if any requested run or comparison
+fails and writes
 `suite_summary.json` under
 `MHDG_REGRESSION_RUN_ROOT/suites/SUITE/RUN_ID/`. Use `--run-id ID` when a
-stable label is useful; otherwise a UTC timestamp is generated.
+stable label is useful; otherwise a UTC timestamp is generated. The summary is
+updated after every completed cell. Reuse that identifier with `--resume` to
+continue without repeating recorded cells.
 
 Without `--build`, the executor uses the prebuilt executable paths from the
-settings file. Add `--build` to either suite command to build the current
+settings file. Add `--build` to a suite command to build the current
 checkout first. It never switches Git branches or overwrites reference files.
-
-Fixed-mesh bootstrap and cold-adaptive workflows remain planned.
 
 ## Candidate and golden test flows
 

@@ -25,9 +25,24 @@ PARAMETERS = """&INPUT_LST
     save_folder = '/old/output/'
 /
 &ADAPT_LST
+    adaptivity = .true.
+    rest_adapt = .true.
     geometry_path = '/old/geometry.geo'
 /
 """
+
+COLD_PARAMETER_FILES = (
+    "param_cold_fixed_time_init.txt",
+    "param_cold_fixed_diffusion_reduction.txt",
+    *(f"param_cold_fixed_continuation_{index:02d}.txt" for index in range(1, 6)),
+)
+COLD_TRANSPORT_FILES = (
+    "transport_cold_fixed_initial.nml",
+    *(
+        f"transport_cold_fixed_continuation_{index:02d}.nml"
+        for index in range(1, 6)
+    ),
+)
 
 
 class SuiteCommandTests(unittest.TestCase):
@@ -59,9 +74,61 @@ class SuiteCommandTests(unittest.TestCase):
         self.assertEqual(len(summary["results"]), 1)
         result = summary["results"][0]
         self.assertEqual(result["layout_id"], "mpi4_omp4")
+        self.assertEqual(result["workflow_id"], "warm")
         self.assertEqual(result["run_status"], "completed")
         self.assertEqual(result["comparison_status"], "passed")
         self.assertIn("mpi4_omp4", completed.stdout)
+
+    def test_cold_matrix_run_only_saves_all_workflow_layout_results(self) -> None:
+        self._executable(self.serial_executable, WORKFLOW_SOLVER)
+        self._executable(self.parallel_executable, WORKFLOW_SOLVER)
+        completed = self._suite("cold_matrix", "cold-test", "--run-only")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        summary = self._summary("cold_matrix", "cold-test")
+        self.assertEqual(summary["status"], "passed")
+        self.assertEqual(summary["comparison_mode"], "deferred")
+        self.assertEqual(summary["workflow_ids"], ["cold_fixed", "cold_adaptive"])
+        self.assertNotIn("workflow_id", summary)
+        self.assertEqual(len(summary["results"]), 10)
+        self.assertEqual(
+            {
+                (result["workflow_id"], result["layout_id"])
+                for result in summary["results"]
+            },
+            {
+                (workflow, layout)
+                for workflow in ("cold_fixed", "cold_adaptive")
+                for layout in (
+                    "serial_omp1",
+                    "mpi2_omp1",
+                    "mpi2_omp4",
+                    "mpi4_omp1",
+                    "mpi4_omp4",
+                )
+            },
+        )
+        self.assertTrue(
+            all(result["status"] == "passed" for result in summary["results"])
+        )
+        self.assertTrue(
+            all(
+                result["comparison_status"] == "not_run"
+                for result in summary["results"]
+            )
+        )
+        self.assertIn("cold_adaptive  mpi4_omp4", completed.stdout)
+
+        self._executable(self.serial_executable, FAILING_SOLVER)
+        self._executable(self.parallel_executable, FAILING_SOLVER)
+        resumed = self._suite(
+            "cold_matrix", "cold-test", "--run-only", "--resume"
+        )
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
+        self.assertEqual(
+            len(self._summary("cold_matrix", "cold-test")["results"]), 10
+        )
+        self.assertIn("skipping recorded cold_fixed / serial_omp1", resumed.stdout)
         self.assertIn("suite passed:", completed.stdout)
 
     def test_warm_parallelism_suite_continues_after_one_layout_fails(self) -> None:
@@ -118,6 +185,7 @@ class SuiteCommandTests(unittest.TestCase):
         source.mkdir()
         for filename in (
             "mesh.msh",
+            "mesh_adaptive_initial.msh",
             "geometry.geo",
             "equilibrium.h5",
             "current_density.h5",
@@ -126,6 +194,12 @@ class SuiteCommandTests(unittest.TestCase):
         ):
             (source / filename).write_text(f"synthetic {filename}\n", encoding="utf-8")
         (source / "param.txt").write_text(PARAMETERS, encoding="utf-8")
+        for filename in COLD_PARAMETER_FILES:
+            (source / filename).write_text(PARAMETERS, encoding="utf-8")
+        for filename in COLD_TRANSPORT_FILES:
+            (source / filename).write_text(
+                f"synthetic {filename}\n", encoding="utf-8"
+            )
         _write_solution(source / "reference_mpi4_omp4.h5")
 
         self.bundle = self.root / "bundle"
@@ -153,7 +227,9 @@ class SuiteCommandTests(unittest.TestCase):
         path.chmod(0o755)
         return path
 
-    def _suite(self, suite: str, run_id: str) -> subprocess.CompletedProcess[str]:
+    def _suite(
+        self, suite: str, run_id: str, *arguments: str
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 str(REGRESSION_ROOT / "regression.sh"),
@@ -163,6 +239,7 @@ class SuiteCommandTests(unittest.TestCase):
                 suite,
                 "--run-id",
                 run_id,
+                *arguments,
             ],
             check=False,
             capture_output=True,
@@ -205,6 +282,24 @@ printf 'Error: 1.0E-5\n'
 printf 'Output written to file outputs/result.h5\n'
 """
 
+WORKFLOW_SOLVER = """#!/usr/bin/env bash
+set -euo pipefail
+if [[ -e inputs/reference.h5 ]]; then
+  cp inputs/reference.h5 outputs/result.h5
+else
+  stage=${PWD##*/}
+  if (($# == 1)); then
+    history=$stage
+  else
+    history=$(<"$2.h5")
+    history=${history%$'\\n'}">"$stage
+  fi
+  printf '%s\n' "$history" > outputs/result.h5
+fi
+printf 'Error: 1.0E-5\n'
+printf 'Output written to file outputs/result.h5\n'
+"""
+
 FAILING_SOLVER = """#!/usr/bin/env bash
 printf 'failed\n' >&2
 exit 7
@@ -215,6 +310,7 @@ set -euo pipefail
 test "$1" = '--bind-to'
 test "$2" = 'core'
 test "$3" = '--map-by'
+[[ "$4" == slot:PE=* ]]
 shift 4
 test "$1" = '-n'
 shift 2

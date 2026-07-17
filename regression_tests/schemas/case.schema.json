@@ -136,6 +136,9 @@
         "comparison_policy": {
           "$ref": "#/$defs/identifier"
         },
+        "logical_overrides": {
+          "$ref": "#/$defs/logical_overrides"
+        },
         "mesh_role": {
           "$ref": "#/$defs/identifier"
         },
@@ -176,7 +179,19 @@
             "analytical",
             "previous_stage"
           ]
+        },
+        "logical_overrides": {
+          "$ref": "#/$defs/logical_overrides"
         }
+      }
+    },
+    "logical_overrides": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "boolean"
       }
     }
   }
