@@ -20,6 +20,10 @@ from comparison.adaptive.sampling import (  # noqa: E402
     SampledFields,
     reference_sample_points,
 )
+from comparison.inputs import (  # noqa: E402
+    ComparisonOverrides,
+    load_comparison_inputs,
+)
 
 
 class AdaptiveComparisonTests(unittest.TestCase):
@@ -66,11 +70,12 @@ class AdaptiveComparisonTests(unittest.TestCase):
                 "tolerances": {},
             }
 
-            path, report = compare_adaptive_run(
+            inputs = load_comparison_inputs(
                 run,
                 REGRESSION_ROOT / "cases",
                 REGRESSION_ROOT / "tolerances.json",
             )
+            path, report = compare_adaptive_run(inputs, ComparisonOverrides())
 
         self.assertEqual(report["status"], "passed")
         self.assertTrue(report["convergence"]["passed"])
@@ -117,14 +122,17 @@ class AdaptiveComparisonTests(unittest.TestCase):
                 "tolerances": {},
             }
 
-            _, report = compare_adaptive_run(
+            inputs = load_comparison_inputs(
                 run,
                 REGRESSION_ROOT / "cases",
                 REGRESSION_ROOT / "tolerances.json",
-                candidate_override=candidate,
-                reference_override=reference,
-                tolerance_profile_override="adaptive_reference",
             )
+            overrides = ComparisonOverrides(
+                candidate=candidate,
+                reference=reference,
+                tolerance_profile="adaptive_reference",
+            )
+            _, report = compare_adaptive_run(inputs, overrides)
 
         self.assertEqual(report["status"], "passed")
         self.assertEqual(compare_files.call_args.args[:2], (reference, candidate))

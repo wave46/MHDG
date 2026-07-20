@@ -6,10 +6,14 @@ from pathlib import Path
 from typing import Any
 
 from comparison.adaptive.run import compare_adaptive_run
-from comparison.fixed.run import compare_run
-from comparison.inputs import ComparisonInputs
+from comparison.fixed.run import compare_fixed_run
+from comparison.inputs import (
+    ComparisonInputs,
+    ComparisonOverrides,
+    load_stage_inputs,
+)
 from reference_matrix import ReferenceMatrix, load_reference_matrix
-from support.documents import load_json, write_json_atomic
+from support.documents import write_json_atomic
 from support.errors import BundleError, ComparisonError
 from support.paths import recorded_directory, recorded_file
 from support.time import utc_now
@@ -21,10 +25,11 @@ def compare_reference_matrix(
     report_override: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Compare recorded workflow stages until completion or first failure."""
-    metadata = load_json(
-        context.run_directory / "run_metadata.json", "run metadata"
+    stages = _validated_stage_records(
+        context.plan,
+        context.workflow,
+        context.metadata,
     )
-    stages = _validated_stage_records(context.plan, context.workflow, metadata)
 
     stage_reports = []
     failures = []
@@ -96,14 +101,16 @@ def _compare_stage(
     reference = matrix.reference_for(
         context.plan["workflow_id"], context.plan["layout_id"], stage_id
     )
+    stage_inputs = load_stage_inputs(context, stage_directory)
+    overrides = ComparisonOverrides(
+        candidate=candidate,
+        reference=reference,
+        tolerance_profile=context.workflow.get("stage_tolerance_profile"),
+    )
     report_path, report = _run_stage_comparison(
         context.workflow["comparison_policy"],
-        stage_directory,
-        candidate,
-        reference,
-        context.workflow.get("stage_tolerance_profile"),
-        context.case_directory,
-        context.tolerances_path,
+        stage_inputs,
+        overrides,
     )
     return {
         "stage_id": stage_id,
@@ -117,33 +124,21 @@ def _compare_stage(
 
 def _run_stage_comparison(
     policy: str,
-    stage_directory: Path,
-    candidate: Path,
-    reference: Path,
-    tolerance_profile: str | None,
-    case_dir: Path,
-    tolerances_path: Path,
+    inputs: ComparisonInputs,
+    overrides: ComparisonOverrides,
 ) -> tuple[Path, dict[str, Any]]:
-    report_path = stage_directory / "comparison.json"
+    report_path = inputs.run_directory / "comparison.json"
     if policy == "fixed_hdf5":
-        return compare_run(
-            stage_directory,
-            case_dir,
-            tolerances_path,
-            candidate_override=candidate,
-            reference_override=reference,
-            tolerance_profile_override=tolerance_profile,
-            report_override=report_path,
+        return compare_fixed_run(
+            inputs,
+            overrides=overrides,
+            report_path=report_path,
         )
     if policy == "mesh_independent":
         return compare_adaptive_run(
-            stage_directory,
-            case_dir,
-            tolerances_path,
+            inputs,
+            overrides=overrides,
             report_path=report_path,
-            candidate_override=candidate,
-            reference_override=reference,
-            tolerance_profile_override=tolerance_profile,
         )
     raise ComparisonError(f"unsupported comparison policy: {policy}")
 

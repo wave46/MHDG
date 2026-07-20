@@ -15,20 +15,20 @@ from comparison.workflow import compare_completed_run  # noqa: E402
 
 
 class MatrixComparisonTests(unittest.TestCase):
-    @patch("comparison.matrix.compare_run")
+    @patch("comparison.matrix.compare_fixed_run")
     def test_fixed_comparison_stops_at_first_divergent_stage(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             run, references = self._fixture(root, "cold_fixed")
 
             def result(*args, **kwargs):
-                stage_id = Path(args[0]).name.split("_", 1)[1]
+                stage_id = args[0].run_directory.name.split("_", 1)[1]
                 failures = (
                     ["solution/u exceeds tolerance"]
                     if stage_id == "diffusion_reduction"
                     else []
                 )
-                return kwargs["report_override"], {
+                return kwargs["report_path"], {
                     "status": "failed" if failures else "passed",
                     "failures": failures,
                 }
@@ -47,11 +47,11 @@ class MatrixComparisonTests(unittest.TestCase):
         self.assertEqual(report["first_failed_stage"], "diffusion_reduction")
         self.assertEqual(compare.call_count, 2)
         self.assertEqual(
-            compare.call_args.kwargs["reference_override"],
+            compare.call_args.kwargs["overrides"].reference,
             references["diffusion_reduction"],
         )
         self.assertEqual(
-            compare.call_args.kwargs["tolerance_profile_override"],
+            compare.call_args.kwargs["overrides"].tolerance_profile,
             "fixed_stage_reference",
         )
 
@@ -77,7 +77,7 @@ class MatrixComparisonTests(unittest.TestCase):
         self.assertIsNone(report["first_failed_stage"])
         self.assertEqual(compare.call_count, 7)
         self.assertEqual(
-            compare.call_args.kwargs["tolerance_profile_override"],
+            compare.call_args.kwargs["overrides"].tolerance_profile,
             "adaptive_reference",
         )
 
@@ -164,6 +164,10 @@ class MatrixComparisonTests(unittest.TestCase):
             stage_dir.mkdir(parents=True)
             candidate = stage_dir / "candidate.h5"
             candidate.write_text(f"candidate {stage_id}\n", encoding="utf-8")
+            (stage_dir / "run_metadata.json").write_text(
+                json.dumps({"status": "completed"}),
+                encoding="utf-8",
+            )
             stage_records.append(
                 {
                     "stage_id": stage_id,

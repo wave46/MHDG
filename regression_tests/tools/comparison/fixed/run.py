@@ -5,46 +5,41 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from check_bundle import load_case_definition
 from comparison.shared.convergence import (
     NEWTON_CONVERGENCE_FAILURE,
     NewtonConvergence,
     read_newton_convergence,
 )
 from comparison.fixed.hdf5 import compare_hdf5_files
-from comparison.inputs import ComparisonInputs
+from comparison.inputs import ComparisonInputs, ComparisonOverrides
 from comparison.shared.outputs import resolve_run_file, select_candidate
 from comparison.shared.tolerances import load_fixed_tolerances
-from support.documents import load_json, write_json_atomic
+from support.documents import write_json_atomic
 from support.errors import ComparisonError
 from support.files import file_identity
-from support.paths import require_directory
 from support.time import utc_now
 
 
-def compare_run(
-    run_directory: Path,
-    case_dir: Path,
-    tolerances_path: Path,
-    candidate_override: Path | None = None,
-    reference_override: Path | None = None,
-    tolerance_profile_override: str | None = None,
-    report_override: Path | None = None,
+def compare_fixed_run(
+    inputs: ComparisonInputs,
+    overrides: ComparisonOverrides,
+    report_path: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Compare a completed fixed-mesh run and save its JSON report."""
-    inputs, metadata = _load_inputs(run_directory, case_dir, tolerances_path)
     profile_id, tolerances = load_fixed_tolerances(
         inputs.tolerances_path,
         inputs.workflow,
         inputs.plan["layout_id"],
-        tolerance_profile_override,
+        overrides.tolerance_profile,
     )
     candidate = select_candidate(
-        inputs.run_directory, metadata, candidate_override
+        inputs.run_directory,
+        inputs.metadata,
+        overrides.candidate,
     )
     reference = resolve_run_file(
         inputs.run_directory,
-        reference_override,
+        overrides.reference,
         "inputs/reference.h5",
         "reference",
     )
@@ -68,36 +63,10 @@ def compare_run(
         inputs.run_directory,
         candidate,
         reference,
-        report_override,
+        report_path,
         report,
     )
     return report_path, report
-
-
-def _load_inputs(
-    run_directory: Path,
-    case_dir: Path,
-    tolerances_path: Path,
-) -> tuple[ComparisonInputs, dict[str, Any]]:
-    run_directory = require_directory(run_directory, "run directory")
-    plan = load_json(run_directory / "run_plan.json", "run plan")
-    metadata = load_json(run_directory / "run_metadata.json", "run metadata")
-    if metadata.get("status") != "completed":
-        raise ComparisonError("run metadata status is not completed")
-
-    case = load_case_definition(plan["case_id"], case_dir)
-    workflow = case["workflows"].get(plan["workflow_id"])
-    if workflow is None:
-        raise ComparisonError("run plan refers to an unknown workflow")
-    inputs = ComparisonInputs(
-        run_directory=run_directory,
-        case_directory=case_dir,
-        tolerances_path=tolerances_path,
-        plan=plan,
-        case=case,
-        workflow=workflow,
-    )
-    return inputs, metadata
 
 
 def _comparison_failures(
@@ -145,10 +114,10 @@ def _save_report(
     run_directory: Path,
     candidate: Path,
     reference: Path,
-    report_override: Path | None,
+    report_path: Path | None,
     report: dict[str, Any],
 ) -> Path:
-    report_path = report_override or run_directory / "comparison.json"
+    report_path = report_path or run_directory / "comparison.json"
     if not report_path.is_absolute():
         report_path = report_path.resolve()
     if report_path.resolve() in {candidate, reference}:

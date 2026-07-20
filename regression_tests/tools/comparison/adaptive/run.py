@@ -5,13 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from check_bundle import load_case_definition
 from comparison.shared.convergence import (
     NEWTON_CONVERGENCE_FAILURE,
     NewtonConvergence,
     read_newton_convergence,
 )
-from comparison.inputs import ComparisonInputs
+from comparison.inputs import ComparisonInputs, ComparisonOverrides
 from comparison.shared.outputs import resolve_run_file, select_candidate
 from comparison.adaptive.fields import compare_sampled_fields
 from comparison.adaptive.sampling import (
@@ -20,9 +19,9 @@ from comparison.adaptive.sampling import (
     sample_solution,
 )
 from comparison.shared.tolerances import load_adaptive_tolerances
-from support.documents import load_json, write_json_atomic
+from support.documents import write_json_atomic
 from support.errors import ComparisonError
-from support.paths import recorded_file, require_directory, require_file
+from support.paths import recorded_file, require_file
 from support.time import utc_now
 
 
@@ -55,33 +54,30 @@ def compare_adaptive_files(
 
 
 def compare_adaptive_run(
-    run_directory: Path,
-    case_dir: Path,
-    tolerances_path: Path,
+    inputs: ComparisonInputs,
+    overrides: ComparisonOverrides,
     report_path: Path | None = None,
-    candidate_override: Path | None = None,
-    reference_override: Path | None = None,
-    tolerance_profile_override: str | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Compare one completed adaptive run with its bundled reference."""
-    inputs, metadata = _load_inputs(run_directory, case_dir, tolerances_path)
+    if inputs.workflow.get("comparison_policy") != "mesh_independent":
+        raise ComparisonError("run does not define mesh-independent comparison")
     profile_id, tolerances = load_adaptive_tolerances(
         inputs.tolerances_path,
         inputs.workflow,
-        tolerance_profile_override,
+        overrides.tolerance_profile,
     )
     candidate = select_candidate(
         inputs.run_directory,
-        metadata,
-        candidate_override,
+        inputs.metadata,
+        overrides.candidate,
     )
     reference = resolve_run_file(
         inputs.run_directory,
-        reference_override,
+        overrides.reference,
         "inputs/reference.h5",
         "reference",
     )
-    fekete = _fekete_nodes(metadata)
+    fekete = _fekete_nodes(inputs.metadata)
 
     field_report = compare_adaptive_files(
         reference,
@@ -110,32 +106,6 @@ def compare_adaptive_run(
         report,
     )
     return output, report
-
-
-def _load_inputs(
-    run_directory: Path,
-    case_dir: Path,
-    tolerances_path: Path,
-) -> tuple[ComparisonInputs, dict[str, Any]]:
-    run_directory = require_directory(run_directory, "run")
-    plan = load_json(run_directory / "run_plan.json", "run plan")
-    metadata = load_json(run_directory / "run_metadata.json", "run metadata")
-    if metadata.get("status") != "completed":
-        raise ComparisonError("run metadata status is not completed")
-
-    case = load_case_definition(plan["case_id"], case_dir)
-    workflow = case["workflows"].get(plan["workflow_id"])
-    if workflow is None or workflow.get("comparison_policy") != "mesh_independent":
-        raise ComparisonError("run does not define mesh-independent comparison")
-    inputs = ComparisonInputs(
-        run_directory=run_directory,
-        case_directory=case_dir,
-        tolerances_path=tolerances_path,
-        plan=plan,
-        case=case,
-        workflow=workflow,
-    )
-    return inputs, metadata
 
 
 def _comparison_report(
