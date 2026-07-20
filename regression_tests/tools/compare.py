@@ -19,7 +19,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("run_directory", metavar="RUN_DIRECTORY", type=Path)
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--reference", type=Path)
-    parser.add_argument("--profile")
+    parser.add_argument(
+        "--tolerance-profile",
+        dest="tolerance_profile",
+    )
     parser.add_argument("--report", type=Path)
     parser.add_argument("--cases", required=True, type=Path, help=argparse.SUPPRESS)
     parser.add_argument(
@@ -34,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
             args.tolerances,
             candidate_override=args.candidate,
             reference_override=args.reference,
-            profile_override=args.profile,
+            tolerance_profile_override=args.tolerance_profile,
             report_override=args.report,
         )
     except HarnessError as exc:

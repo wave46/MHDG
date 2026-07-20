@@ -123,7 +123,7 @@ class AdaptiveComparisonTests(unittest.TestCase):
                 REGRESSION_ROOT / "tolerances.json",
                 candidate_override=candidate,
                 reference_override=reference,
-                profile_override="adaptive_reference",
+                tolerance_profile_override="adaptive_reference",
             )
 
         self.assertEqual(report["status"], "passed")

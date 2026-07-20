@@ -114,7 +114,7 @@ def compare_adaptive_run(
     report_path: Path | None = None,
     candidate_override: Path | None = None,
     reference_override: Path | None = None,
-    profile_override: str | None = None,
+    tolerance_profile_override: str | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Compare one completed adaptive run with its bundled reference."""
     run_directory = require_directory(run_directory, "run")
@@ -128,7 +128,7 @@ def compare_adaptive_run(
     if workflow is None or workflow.get("comparison_policy") != "mesh_independent":
         raise ComparisonError("run does not define mesh-independent comparison")
     profile_id, tolerances = _adaptive_tolerance_profile(
-        tolerances_path, workflow, profile_override
+        tolerances_path, workflow, tolerance_profile_override
     )
     candidate = select_candidate(run_directory, metadata, candidate_override)
     reference = _run_input(
@@ -389,10 +389,10 @@ def _fekete_nodes(metadata: dict[str, Any]) -> Path:
 def _adaptive_tolerance_profile(
     path: Path,
     workflow: dict[str, Any],
-    profile_override: str | None = None,
+    tolerance_profile_override: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     document = load_json(path, "tolerance definitions")
-    profile_id = profile_override or workflow.get("tolerance_profile")
+    profile_id = tolerance_profile_override or workflow.get("tolerance_profile")
     profile = document.get("profiles", {}).get(profile_id)
     required = {
         "newton_error_max",

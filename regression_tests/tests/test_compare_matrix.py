@@ -15,7 +15,7 @@ from comparison.workflow import compare_completed_run  # noqa: E402
 
 
 class MatrixComparisonTests(unittest.TestCase):
-    @patch("comparison.workflow.compare_run")
+    @patch("comparison.matrix.compare_run")
     def test_fixed_comparison_stops_at_first_divergent_stage(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -51,10 +51,11 @@ class MatrixComparisonTests(unittest.TestCase):
             references["diffusion_reduction"],
         )
         self.assertEqual(
-            compare.call_args.kwargs["profile_override"], "fixed_stage_reference"
+            compare.call_args.kwargs["tolerance_profile_override"],
+            "fixed_stage_reference",
         )
 
-    @patch("comparison.workflow.compare_adaptive_run")
+    @patch("comparison.matrix.compare_adaptive_run")
     def test_adaptive_comparison_checks_every_matching_stage(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -76,7 +77,8 @@ class MatrixComparisonTests(unittest.TestCase):
         self.assertIsNone(report["first_failed_stage"])
         self.assertEqual(compare.call_count, 7)
         self.assertEqual(
-            compare.call_args.kwargs["profile_override"], "adaptive_reference"
+            compare.call_args.kwargs["tolerance_profile_override"],
+            "adaptive_reference",
         )
 
     @staticmethod

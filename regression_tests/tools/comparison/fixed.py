@@ -32,7 +32,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("run_directory", metavar="RUN_DIRECTORY", type=Path)
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--reference", type=Path)
-    parser.add_argument("--profile")
+    parser.add_argument(
+        "--tolerance-profile",
+        dest="tolerance_profile",
+    )
     parser.add_argument("--report", type=Path)
     parser.add_argument("--cases", required=True, type=Path, help=argparse.SUPPRESS)
     parser.add_argument(
@@ -47,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
             args.tolerances,
             args.candidate,
             args.reference,
-            args.profile,
+            args.tolerance_profile,
             args.report,
         )
     except HarnessError as exc:
@@ -68,7 +71,7 @@ def compare_run(
     tolerances_path: Path,
     candidate_override: Path | None = None,
     reference_override: Path | None = None,
-    profile_override: str | None = None,
+    tolerance_profile_override: str | None = None,
     report_override: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Compare a completed run and atomically write its JSON report."""
@@ -83,7 +86,10 @@ def compare_run(
     if workflow is None:
         raise ComparisonError("run plan refers to an unknown workflow")
     profile_id, tolerances = _tolerance_profile(
-        tolerances_path, workflow, plan["layout_id"], profile_override
+        tolerances_path,
+        workflow,
+        plan["layout_id"],
+        tolerance_profile_override,
     )
 
     candidate = select_candidate(run_directory, metadata, candidate_override)
