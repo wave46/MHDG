@@ -102,6 +102,37 @@ class GoldenBundlePromotionTests(unittest.TestCase):
             "candidate",
         )
 
+    def test_matrix_promotion_collects_every_stage_without_manual_roles(self) -> None:
+        summary = self._create_matrix_summary()
+
+        promote_bundle(
+            self.settings,
+            summary,
+            self.output,
+            "matrix-golden-1",
+            REGRESSION_ROOT / "cases",
+        )
+
+        validate_bundle_root(self.output, REGRESSION_ROOT / "cases")
+        manifest = _load_json(self.output / "manifest.json")
+        roles = manifest["case_data"]["legacy_fixed"]["roles"]
+        self.assertEqual(roles["reference_matrix"], "golden_matrix_index")
+        index_path = self.output / manifest["artifacts"][
+            "golden_matrix_index"
+        ]["path"]
+        references = _load_json(index_path)["references"]
+        self.assertEqual(len(references), 28)
+        self.assertEqual(
+            len({entry["artifact_id"] for entry in references}), 28
+        )
+        for entry in references:
+            artifact = manifest["artifacts"][entry["artifact_id"]]
+            self.assertTrue((self.output / artifact["path"]).is_file())
+        reference = self.output / manifest["artifacts"][
+            "legacy_warm_reference_mpi4_omp4"
+        ]["path"]
+        self.assertEqual(reference.read_text(encoding="utf-8"), "old reference\n")
+
     def test_failed_suite_is_rejected(self) -> None:
         summary = _load_json(self.summary)
         summary["status"] = "failed"
@@ -209,6 +240,86 @@ class GoldenBundlePromotionTests(unittest.TestCase):
             "comparison_status": "passed",
             "run_directory": str(run),
         }
+
+    def _create_matrix_summary(self) -> Path:
+        manifest = _load_json(self.source_bundle / "manifest.json")
+        case = _load_json(REGRESSION_ROOT / "cases/legacy_fixed.json")
+        workflows = ["cold_fixed", "cold_adaptive"]
+        layouts = ["serial_omp1", "mpi2_omp4"]
+        results = []
+
+        for workflow_id in workflows:
+            stage_ids = [
+                stage["stage_id"]
+                for stage in case["workflows"][workflow_id]["stages"]
+            ]
+            for layout_id in layouts:
+                run = self.root / f"run_{workflow_id}_{layout_id}"
+                run.mkdir()
+                plan_stages = []
+                metadata_stages = []
+                for number, stage_id in enumerate(stage_ids, start=1):
+                    stage_dir = run / "stages" / f"{number:02d}_{stage_id}"
+                    outputs = stage_dir / "outputs"
+                    outputs.mkdir(parents=True)
+                    solution = outputs / "result.h5"
+                    solution.write_text(
+                        f"{workflow_id} {layout_id} {stage_id}\n",
+                        encoding="utf-8",
+                    )
+                    plan_stages.append({"stage_id": stage_id})
+                    metadata_stages.append(
+                        {
+                            "stage_id": stage_id,
+                            "run_directory": str(stage_dir),
+                            "selected_hdf5": str(solution),
+                            "status": "completed",
+                        }
+                    )
+
+                plan = {
+                    "case_id": "legacy_fixed",
+                    "workflow_id": workflow_id,
+                    "layout_id": layout_id,
+                    "bundle": {
+                        "root": str(self.source_bundle),
+                        "bundle_id": manifest["bundle_id"],
+                        "bundle_version": manifest["bundle_version"],
+                    },
+                    "stages": plan_stages,
+                }
+                metadata = {"status": "completed", "stages": metadata_stages}
+                (run / "run_plan.json").write_text(
+                    json.dumps(plan), encoding="utf-8"
+                )
+                (run / "run_metadata.json").write_text(
+                    json.dumps(metadata), encoding="utf-8"
+                )
+                results.append(
+                    {
+                        "workflow_id": workflow_id,
+                        "layout_id": layout_id,
+                        "status": "passed",
+                        "run_status": "completed",
+                        "comparison_status": "not_run",
+                        "run_directory": str(run),
+                    }
+                )
+
+        summary = {
+            "schema_version": 1,
+            "status": "passed",
+            "suite_id": "cold_matrix",
+            "run_id": "matrix-test",
+            "case_id": "legacy_fixed",
+            "workflow_ids": workflows,
+            "layout_ids": layouts,
+            "comparison_mode": "deferred",
+            "results": results,
+        }
+        path = self.root / "matrix_summary.json"
+        path.write_text(json.dumps(summary), encoding="utf-8")
+        return path
 
 
 def _load_json(path: Path) -> dict[str, object]:

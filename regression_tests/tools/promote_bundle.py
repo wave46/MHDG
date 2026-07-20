@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Promote a passing canonical run into a complete golden bundle."""
+"""Promote accepted regression results into a complete golden bundle."""
 
 from __future__ import annotations
 
@@ -25,6 +25,12 @@ from check_bundle import (
 )
 from compare_hdf5 import ComparisonError
 from compare_run import select_candidate
+from reference_matrix import (
+    MatrixRun,
+    collect_matrix_runs,
+    install_reference_matrix,
+    validate_matrix_summary,
+)
 
 
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -81,7 +87,7 @@ def promote_bundle(
     bundle_version: str,
     case_dir: Path,
 ) -> ValidationSummary:
-    """Copy a source bundle and install its passing canonical result as golden."""
+    """Copy a source bundle and install accepted reference results."""
     if not bundle_version.strip():
         raise BundleError("golden bundle version must not be empty")
 
@@ -90,18 +96,27 @@ def promote_bundle(
     source_manifest = _load_json(source_bundle / "manifest.json", "bundle manifest")
     summary_path = _existing_file(summary_path, "suite summary")
     summary = _load_json(summary_path, "suite summary")
-    _validate_summary(summary)
+    promotion_kind = _validate_summary(summary)
 
     case = load_case_definition(summary["case_id"], case_dir)
-    workflow = case["workflows"].get(summary["workflow_id"])
-    if workflow is None:
-        raise BundleError("suite summary refers to an unknown workflow")
-    canonical_layout = workflow["default_layout"]
-    run = _canonical_run(summary, canonical_layout)
-    reference_id, source_reference = _source_reference(
-        source_bundle, source_manifest, case
-    )
-    _validate_run_sources(run, source_bundle, source_manifest, source_reference)
+    run = None
+    matrix_runs: list[MatrixRun] = []
+    reference_id = None
+    if promotion_kind == "canonical":
+        workflow = case["workflows"].get(summary["workflow_id"])
+        if workflow is None:
+            raise BundleError("suite summary refers to an unknown workflow")
+        run = _canonical_run(summary, workflow["default_layout"])
+        reference_id, source_reference = _source_reference(
+            source_bundle, source_manifest, case
+        )
+        _validate_run_sources(
+            run, source_bundle, source_manifest, source_reference
+        )
+    else:
+        matrix_runs = collect_matrix_runs(
+            summary, case, source_bundle, source_manifest
+        )
 
     output = output.expanduser().resolve()
     if output.exists():
@@ -117,17 +132,28 @@ def promote_bundle(
             staging = Path(workspace) / "bundle"
             shutil.copytree(source_bundle, staging)
             manifest = _load_json(staging / "manifest.json", "bundle manifest")
-            _install_reference(staging, manifest, reference_id, run.solution)
-            _install_provenance(
-                staging,
-                manifest,
-                summary_path,
-                summary,
-                run,
-                case,
-                source_manifest,
-                reference_id,
-            )
+            if run is not None and reference_id is not None:
+                _install_reference(staging, manifest, reference_id, run.solution)
+                _install_provenance(
+                    staging,
+                    manifest,
+                    summary_path,
+                    summary,
+                    run,
+                    case,
+                    source_manifest,
+                    reference_id,
+                )
+            else:
+                install_reference_matrix(
+                    staging,
+                    manifest,
+                    summary_path,
+                    summary,
+                    matrix_runs,
+                    case,
+                    source_manifest,
+                )
             manifest["bundle_version"] = bundle_version
             manifest["bundle_class"] = "golden"
             manifest["created_utc"] = _utc_now()
@@ -190,16 +216,7 @@ def _validate_run_sources(
     manifest: dict[str, Any],
     source_reference: Path,
 ) -> None:
-    bundle = run.plan.get("bundle")
-    if not isinstance(bundle, dict) or not isinstance(bundle.get("root"), str):
-        raise BundleError("canonical run plan has no bundle identity")
-    if _existing_directory(Path(bundle["root"]), "run bundle") != source_bundle:
-        raise BundleError("canonical run did not use the configured source bundle")
-    if (
-        bundle.get("bundle_id") != manifest.get("bundle_id")
-        or bundle.get("bundle_version") != manifest.get("bundle_version")
-    ):
-        raise BundleError("canonical run and source bundle identities differ")
+    _validate_bundle_identity(run.plan, source_bundle, manifest)
 
     comparison = run.comparison
     reported = _existing_file(Path(comparison.get("reference", "")), "reference")
@@ -210,6 +227,21 @@ def _validate_run_sources(
         comparison.get("files", {}).get("reference"),
     ):
         raise BundleError("source reference changed after comparison")
+
+
+def _validate_bundle_identity(
+    plan: dict[str, Any], source_bundle: Path, manifest: dict[str, Any]
+) -> None:
+    bundle = plan.get("bundle")
+    if not isinstance(bundle, dict) or not isinstance(bundle.get("root"), str):
+        raise BundleError("run plan has no bundle identity")
+    if _existing_directory(Path(bundle["root"]), "run bundle") != source_bundle:
+        raise BundleError("run did not use the configured source bundle")
+    if (
+        bundle.get("bundle_id") != manifest.get("bundle_id")
+        or bundle.get("bundle_version") != manifest.get("bundle_version")
+    ):
+        raise BundleError("run and source bundle identities differ")
 
 
 def _install_reference(
@@ -303,14 +335,13 @@ def _register_artifact(
     }
 
 
-def _validate_summary(summary: dict[str, Any]) -> None:
+def _validate_summary(summary: dict[str, Any]) -> str:
     required = {
         "schema_version",
         "status",
         "suite_id",
         "run_id",
         "case_id",
-        "workflow_id",
         "results",
     }
     missing = sorted(required - summary.keys())
@@ -318,9 +349,21 @@ def _validate_summary(summary: dict[str, Any]) -> None:
         raise BundleError(f"suite summary is missing: {', '.join(missing)}")
     if summary["schema_version"] != 1 or summary["status"] != "passed":
         raise BundleError("only a passing version-1 suite summary can be promoted")
-    for name in ("suite_id", "run_id", "case_id", "workflow_id"):
+    for name in ("suite_id", "run_id", "case_id"):
         if not isinstance(summary[name], str) or not ID_RE.fullmatch(summary[name]):
             raise BundleError(f"suite summary has invalid {name}")
+
+    if "workflow_id" in summary:
+        _validate_canonical_summary(summary)
+        return "canonical"
+    validate_matrix_summary(summary)
+    return "matrix"
+
+
+def _validate_canonical_summary(summary: dict[str, Any]) -> None:
+    workflow_id = summary["workflow_id"]
+    if not isinstance(workflow_id, str) or not ID_RE.fullmatch(workflow_id):
+        raise BundleError("suite summary has invalid workflow_id")
     results = summary["results"]
     if not isinstance(results, list) or not results:
         raise BundleError("suite summary contains no layout results")

@@ -1,0 +1,355 @@
+"""Collect staged workflow outputs into a portable golden-reference matrix."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import shutil
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from check_bundle import BundleError
+
+
+ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+REFERENCE_MATRIX_ROLE = "reference_matrix"
+REFERENCE_MATRIX_ID = "golden_matrix_index"
+
+
+@dataclass(frozen=True)
+class StageReference:
+    stage_id: str
+    solution: Path
+
+
+@dataclass(frozen=True)
+class MatrixRun:
+    workflow_id: str
+    layout_id: str
+    directory: Path
+    stages: tuple[StageReference, ...]
+
+
+def validate_matrix_summary(summary: dict[str, Any]) -> None:
+    """Require one completed deferred result for every declared matrix cell."""
+    workflow_ids = summary.get("workflow_ids")
+    layout_ids = summary.get("layout_ids")
+    if (
+        summary.get("comparison_mode") != "deferred"
+        or not _valid_id_list(workflow_ids)
+        or not _valid_id_list(layout_ids)
+    ):
+        raise BundleError(
+            "reference matrix requires deferred workflow_ids and layout_ids"
+        )
+
+    results = summary.get("results")
+    if not isinstance(results, list) or not results:
+        raise BundleError("suite summary contains no matrix results")
+    cells = []
+    for result in results:
+        if not isinstance(result, dict) or any(
+            result.get(name) != expected
+            for name, expected in (
+                ("status", "passed"),
+                ("run_status", "completed"),
+                ("comparison_status", "not_run"),
+            )
+        ):
+            raise BundleError("reference matrix contains an incomplete run")
+        cell = (result.get("workflow_id"), result.get("layout_id"))
+        if any(
+            not isinstance(value, str) or not ID_RE.fullmatch(value)
+            for value in cell
+        ):
+            raise BundleError("reference matrix contains an invalid cell")
+        cells.append(cell)
+
+    expected = {
+        (workflow_id, layout_id)
+        for workflow_id in workflow_ids
+        for layout_id in layout_ids
+    }
+    if len(cells) != len(set(cells)) or set(cells) != expected:
+        raise BundleError("reference matrix is incomplete or contains duplicate cells")
+
+
+def collect_matrix_runs(
+    summary: dict[str, Any],
+    case: dict[str, Any],
+    source_bundle: Path,
+    source_manifest: dict[str, Any],
+) -> list[MatrixRun]:
+    """Validate staged run provenance and select one output per stage."""
+    runs = []
+    for result in summary["results"]:
+        workflow_id = result["workflow_id"]
+        layout_id = result["layout_id"]
+        workflow = case["workflows"].get(workflow_id)
+        if workflow is None or not workflow.get("stages"):
+            raise BundleError(f"matrix refers to unsupported workflow {workflow_id}")
+
+        directory = _existing_directory(Path(result["run_directory"]), "run")
+        plan = _load_json(directory / "run_plan.json", "run plan")
+        metadata = _load_json(directory / "run_metadata.json", "run metadata")
+        expected = {
+            "case_id": summary["case_id"],
+            "workflow_id": workflow_id,
+            "layout_id": layout_id,
+        }
+        if any(plan.get(name) != value for name, value in expected.items()):
+            raise BundleError(
+                f"matrix run has inconsistent identity: {workflow_id}/{layout_id}"
+            )
+        if metadata.get("status") != "completed":
+            raise BundleError(f"matrix run is incomplete: {workflow_id}/{layout_id}")
+        _validate_bundle_identity(plan, source_bundle, source_manifest)
+
+        expected_stages = [stage["stage_id"] for stage in workflow["stages"]]
+        plan_stages = [stage.get("stage_id") for stage in plan.get("stages", [])]
+        metadata_stages = metadata.get("stages", [])
+        recorded_stages = [stage.get("stage_id") for stage in metadata_stages]
+        if plan_stages != expected_stages or recorded_stages != expected_stages:
+            raise BundleError(
+                f"matrix run stages differ from {workflow_id} definition"
+            )
+
+        stages = tuple(
+            _stage_reference(stage, workflow_id, layout_id)
+            for stage in metadata_stages
+        )
+        runs.append(MatrixRun(workflow_id, layout_id, directory, stages))
+    return runs
+
+
+def install_reference_matrix(
+    staging: Path,
+    manifest: dict[str, Any],
+    summary_path: Path,
+    summary: dict[str, Any],
+    runs: list[MatrixRun],
+    case: dict[str, Any],
+    source_manifest: dict[str, Any],
+) -> None:
+    """Copy selected stage outputs and add one generated bundle role."""
+    references_dir = staging / "references/matrix"
+    provenance_dir = staging / "provenance/golden_matrix"
+    for directory in (references_dir, provenance_dir):
+        if directory.exists():
+            shutil.rmtree(directory)
+        directory.mkdir(parents=True)
+    for artifact_id in list(manifest["artifacts"]):
+        if artifact_id.startswith("golden_matrix_"):
+            del manifest["artifacts"][artifact_id]
+
+    entries = []
+    for run in runs:
+        entries.extend(_install_run(staging, manifest, references_dir, run))
+        _install_run_provenance(staging, manifest, provenance_dir, run)
+
+    suite_target = provenance_dir / "suite_summary.json"
+    shutil.copy2(summary_path, suite_target)
+    _register_artifact(
+        staging,
+        manifest,
+        "golden_matrix_suite_summary",
+        suite_target,
+        "application/json",
+    )
+
+    index_path = references_dir / "index.json"
+    _write_json(
+        index_path,
+        {
+            "schema_version": 1,
+            "created_utc": _utc_now(),
+            "case_id": summary["case_id"],
+            "suite_id": summary["suite_id"],
+            "suite_run_id": summary["run_id"],
+            "source_bundle": {
+                "bundle_id": source_manifest["bundle_id"],
+                "bundle_version": source_manifest["bundle_version"],
+            },
+            "tracked_reference": {
+                "branch": case["reference_branch"],
+                "revision": case["reference_revision"],
+            },
+            "references": entries,
+        },
+    )
+    _register_artifact(
+        staging, manifest, REFERENCE_MATRIX_ID, index_path, "application/json"
+    )
+    try:
+        roles = manifest["case_data"][case["external_data_id"]]["roles"]
+    except KeyError as exc:
+        raise BundleError("source bundle has no matching case-data entry") from exc
+    roles[REFERENCE_MATRIX_ROLE] = REFERENCE_MATRIX_ID
+
+
+def _stage_reference(
+    stage: dict[str, Any], workflow_id: str, layout_id: str
+) -> StageReference:
+    if stage.get("status") != "completed":
+        raise BundleError(
+            f"matrix stage is incomplete: {workflow_id}/{layout_id}/"
+            f"{stage.get('stage_id')}"
+        )
+    stage_directory = _existing_directory(
+        Path(stage.get("run_directory", "")), "stage run"
+    )
+    solution = _existing_file(
+        Path(stage.get("selected_hdf5", "")), "stage solution"
+    )
+    if not _is_within(solution, stage_directory):
+        raise BundleError("selected stage solution is outside its run directory")
+    return StageReference(stage["stage_id"], solution)
+
+
+def _install_run(
+    staging: Path,
+    manifest: dict[str, Any],
+    references_dir: Path,
+    run: MatrixRun,
+) -> list[dict[str, str]]:
+    target_dir = references_dir / run.workflow_id / run.layout_id
+    target_dir.mkdir(parents=True)
+    entries = []
+    for number, stage in enumerate(run.stages, start=1):
+        artifact_id = (
+            f"golden_matrix_{run.workflow_id}_{run.layout_id}_{stage.stage_id}"
+        )
+        target = target_dir / f"{number:02d}_{stage.stage_id}.h5"
+        shutil.copy2(stage.solution, target)
+        _register_artifact(
+            staging, manifest, artifact_id, target, "application/x-hdf5"
+        )
+        entries.append(
+            {
+                "workflow_id": run.workflow_id,
+                "layout_id": run.layout_id,
+                "stage_id": stage.stage_id,
+                "artifact_id": artifact_id,
+            }
+        )
+    return entries
+
+
+def _install_run_provenance(
+    staging: Path,
+    manifest: dict[str, Any],
+    provenance_dir: Path,
+    run: MatrixRun,
+) -> None:
+    target_dir = provenance_dir / run.workflow_id / run.layout_id
+    target_dir.mkdir(parents=True)
+    for filename in ("run_plan.json", "run_metadata.json"):
+        target = target_dir / filename
+        shutil.copy2(_existing_file(run.directory / filename, filename), target)
+        artifact_id = (
+            f"golden_matrix_{run.workflow_id}_{run.layout_id}_"
+            f"{Path(filename).stem}"
+        )
+        _register_artifact(
+            staging, manifest, artifact_id, target, "application/json"
+        )
+
+
+def _validate_bundle_identity(
+    plan: dict[str, Any], source_bundle: Path, manifest: dict[str, Any]
+) -> None:
+    bundle = plan.get("bundle")
+    if not isinstance(bundle, dict) or not isinstance(bundle.get("root"), str):
+        raise BundleError("run plan has no bundle identity")
+    if _existing_directory(Path(bundle["root"]), "run bundle") != source_bundle:
+        raise BundleError("run did not use the configured source bundle")
+    if (
+        bundle.get("bundle_id") != manifest.get("bundle_id")
+        or bundle.get("bundle_version") != manifest.get("bundle_version")
+    ):
+        raise BundleError("run and source bundle identities differ")
+
+
+def _valid_id_list(value: Any) -> bool:
+    return (
+        isinstance(value, list)
+        and bool(value)
+        and len(value) == len(set(value))
+        and all(isinstance(item, str) and ID_RE.fullmatch(item) for item in value)
+    )
+
+
+def _register_artifact(
+    staging: Path,
+    manifest: dict[str, Any],
+    artifact_id: str,
+    path: Path,
+    media_type: str,
+) -> None:
+    manifest["artifacts"][artifact_id] = {
+        "path": path.relative_to(staging).as_posix(),
+        **_file_identity(path),
+        "media_type": media_type,
+    }
+
+
+def _file_identity(path: Path) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return {"size_bytes": path.stat().st_size, "sha256": digest.hexdigest()}
+    except OSError as exc:
+        raise BundleError(f"cannot checksum {path}: {exc}") from exc
+
+
+def _existing_file(path: Path, label: str) -> Path:
+    try:
+        path = path.expanduser().resolve(strict=True)
+    except (FileNotFoundError, OSError) as exc:
+        raise BundleError(f"{label} does not exist: {path}") from exc
+    if not path.is_file():
+        raise BundleError(f"{label} is not a file: {path}")
+    return path
+
+
+def _existing_directory(path: Path, label: str) -> Path:
+    try:
+        path = path.expanduser().resolve(strict=True)
+    except (FileNotFoundError, OSError) as exc:
+        raise BundleError(f"{label} does not exist: {path}") from exc
+    if not path.is_dir():
+        raise BundleError(f"{label} is not a directory: {path}")
+    return path
+
+
+def _load_json(path: Path, label: str) -> dict[str, Any]:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BundleError(f"cannot read {label} {path}: {exc}") from exc
+    if not isinstance(document, dict):
+        raise BundleError(f"{label} must contain a JSON object")
+    return document
+
+
+def _write_json(path: Path, document: dict[str, Any]) -> None:
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+
+
+def _is_within(path: Path, directory: Path) -> bool:
+    try:
+        path.relative_to(directory)
+    except ValueError:
+        return False
+    return True
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )

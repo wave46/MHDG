@@ -97,6 +97,9 @@ def validate_bundle_root(bundle_root: Path, case_dir: Path) -> ValidationSummary
         bundle_root, manifest["artifacts"]
     )
     case_data = _resolve_case_data(manifest)
+    _verify_reference_matrices(
+        bundle_root, manifest, case_data, available, schema_dir
+    )
     checked_cases = _verify_case_requirements(cases, case_data, available)
 
     return ValidationSummary(
@@ -325,6 +328,56 @@ def _resolve_case_data(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 )
         resolved[data_id] = case_data
     return resolved
+
+
+def _verify_reference_matrices(
+    bundle_root: Path,
+    manifest: dict[str, Any],
+    case_data_by_id: dict[str, dict[str, Any]],
+    available: set[str],
+    schema_dir: Path,
+) -> None:
+    artifacts = manifest["artifacts"]
+    for data_id, case_data in case_data_by_id.items():
+        index_id = case_data["roles"].get("reference_matrix")
+        if index_id is None:
+            continue
+        index_artifact = artifacts[index_id]
+        index_path = _artifact_path(
+            bundle_root,
+            index_artifact["path"],
+            f"manifest.artifacts.{index_id}",
+        )
+        matrix = load_validated_json(
+            index_path,
+            schema_dir / "reference-matrix.schema.json",
+            f"reference matrix {data_id}",
+        )
+        if matrix["case_id"] != case_data["case_id"]:
+            raise BundleError(f"reference matrix {data_id} has the wrong case_id")
+
+        cells = []
+        for reference in matrix["references"]:
+            artifact_id = reference["artifact_id"]
+            artifact = artifacts.get(artifact_id)
+            if artifact is None or artifact_id not in available:
+                raise BundleError(
+                    f"reference matrix {data_id} uses unavailable artifact "
+                    f"{artifact_id}"
+                )
+            if artifact["media_type"] != "application/x-hdf5":
+                raise BundleError(
+                    f"reference matrix artifact {artifact_id} is not HDF5"
+                )
+            cells.append(
+                (
+                    reference["workflow_id"],
+                    reference["layout_id"],
+                    reference["stage_id"],
+                )
+            )
+        if len(cells) != len(set(cells)):
+            raise BundleError(f"reference matrix {data_id} contains duplicate cells")
 
 
 def _verify_case_requirements(

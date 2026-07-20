@@ -23,7 +23,7 @@ Usage:
 Available commands:
   help           Show this help text.
   bundle create  Create and validate a bundle from prepared case files.
-  bundle promote Create a complete golden bundle from a passing canonical run.
+  bundle promote Create a golden bundle from accepted suite results.
   build          Build clean serial and parallel regression executables.
   check-data     Validate an external bundle without modifying it.
   prepare        Create an isolated run directory without executing the solver.
