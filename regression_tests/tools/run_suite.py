@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
 from pathlib import Path
@@ -21,7 +20,7 @@ from check_bundle import (
 from compare_matrix import compare_completed_run
 from prepare_run import prepare_run
 from run_case import execute_prepared
-from support.documents import write_json_atomic
+from support.documents import load_json, write_json_atomic
 from support.errors import BundleError, HarnessError
 from support.identifiers import IDENTIFIER_RE
 from support.time import utc_now, utc_run_id
@@ -209,10 +208,7 @@ def _resume_summary(
     layout_ids: list[str],
     comparison_mode: str,
 ) -> dict[str, Any]:
-    try:
-        summary = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise BundleError(f"cannot resume suite from {path}: {exc}") from exc
+    summary = load_json(path, "suite summary")
     expected = {
         "suite_id": suite_id,
         "run_id": run_id,

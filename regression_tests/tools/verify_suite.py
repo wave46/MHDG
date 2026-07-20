@@ -10,8 +10,7 @@ from typing import Any
 
 from check_bundle import load_case_definition
 from compare_matrix import compare_completed_run
-from support.bundles import load_bundle_json
-from support.documents import write_json_atomic
+from support.documents import load_json, write_json_atomic
 from support.errors import BundleError, HarnessError
 from support.paths import require_file
 from support.time import utc_now
@@ -45,7 +44,7 @@ def verify_suite(
 ) -> tuple[Path, dict[str, Any]]:
     """Compare all recorded suite runs without executing the solver."""
     suite_summary_path = require_file(suite_summary_path, "suite summary")
-    source = load_bundle_json(suite_summary_path, "suite summary")
+    source = load_json(suite_summary_path, "suite summary")
     _validate_source_summary(source)
     case = load_case_definition(source["case_id"], case_dir)
 

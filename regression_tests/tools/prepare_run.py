@@ -23,7 +23,7 @@ from check_bundle import (
     validate_bundle_root,
 )
 from support.documents import write_json_direct
-from support.errors import BundleError
+from support.errors import BundleError, HarnessError
 from support.identifiers import IDENTIFIER_RE
 from support.time import utc_now, utc_run_id
 
@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
             args.layouts,
             args.run_id,
         )
-    except BundleError as exc:
+    except HarnessError as exc:
         print(f"run preparation failed: {exc}", file=sys.stderr)
         return 1
 

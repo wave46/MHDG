@@ -18,7 +18,7 @@ from comparison.metrics import format_metric, maximum_metric
 from compare_hdf5 import compare_hdf5_files
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
-from support.files import sha256_digest
+from support.files import file_identity
 from support.paths import recorded_file, require_directory, require_file
 from support.time import utc_now
 
@@ -110,8 +110,8 @@ def compare_run(
         "candidate": str(candidate),
         "reference": str(reference),
         "files": {
-            "candidate": _file_identity(candidate),
-            "reference": _file_identity(reference),
+            "candidate": {"path": str(candidate), **file_identity(candidate)},
+            "reference": {"path": str(reference), **file_identity(reference)},
         },
         "tolerance_profile": {"id": profile_id, **tolerances},
         "convergence": convergence.as_report(),
@@ -260,16 +260,5 @@ def _input_path(
     if not path.is_absolute():
         path = run_directory / path
     return require_file(path, label)
-
-
-def _file_identity(path: Path) -> dict[str, Any]:
-    try:
-        digest = sha256_digest(path)
-        size = path.stat().st_size
-    except OSError as exc:
-        raise ComparisonError(f"cannot checksum comparison file {path}: {exc}") from exc
-    return {"path": str(path), "size_bytes": size, "sha256": digest}
-
-
 if __name__ == "__main__":
     raise SystemExit(main())

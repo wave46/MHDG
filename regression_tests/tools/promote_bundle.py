@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import shutil
 import sys
 import tempfile
@@ -27,13 +26,12 @@ from reference_matrix import (
     validate_matrix_summary,
 )
 from support.bundles import (
-    file_identity,
     register_artifact,
     validate_bundle_identity,
 )
-from support.documents import write_json_direct
+from support.documents import load_json, write_json_direct
 from support.errors import BundleError, HarnessError
-from support.files import is_within
+from support.files import file_identity, is_within
 from support.identifiers import IDENTIFIER_RE
 from support.paths import recorded_directory, recorded_file, require_file
 from support.time import utc_now
@@ -98,9 +96,9 @@ def promote_bundle(
 
     source_bundle = bundle_root_from_settings(read_settings(settings_path))
     validate_bundle_root(source_bundle, case_dir)
-    source_manifest = _load_json(source_bundle / "manifest.json", "bundle manifest")
+    source_manifest = load_json(source_bundle / "manifest.json", "bundle manifest")
     summary_path = require_file(summary_path, "suite summary")
-    summary = _load_json(summary_path, "suite summary")
+    summary = load_json(summary_path, "suite summary")
     promotion_kind = _validate_summary(summary)
 
     case = load_case_definition(summary["case_id"], case_dir)
@@ -136,7 +134,7 @@ def promote_bundle(
         ) as workspace:
             staging = Path(workspace) / "bundle"
             shutil.copytree(source_bundle, staging)
-            manifest = _load_json(staging / "manifest.json", "bundle manifest")
+            manifest = load_json(staging / "manifest.json", "bundle manifest")
             if run is not None and reference_id is not None:
                 _install_reference(staging, manifest, reference_id, run.solution)
                 _install_provenance(
@@ -178,9 +176,9 @@ def _canonical_run(summary: dict[str, Any], layout_id: str) -> CanonicalRun:
         raise BundleError(f"suite must contain canonical layout {layout_id} once")
 
     directory = recorded_directory(matching[0].get("run_directory"), "run")
-    plan = _load_json(directory / "run_plan.json", "run plan")
-    metadata = _load_json(directory / "run_metadata.json", "run metadata")
-    comparison = _load_json(directory / "comparison.json", "comparison")
+    plan = load_json(directory / "run_plan.json", "run plan")
+    metadata = load_json(directory / "run_metadata.json", "run metadata")
+    comparison = load_json(directory / "comparison.json", "comparison")
     expected = {
         "case_id": summary["case_id"],
         "workflow_id": summary["workflow_id"],
@@ -371,19 +369,5 @@ def _same_file(first: dict[str, Any], second: Any) -> bool:
         first["size_bytes"] == second.get("size_bytes")
         and first["sha256"] == second.get("sha256")
     )
-
-
-def _load_json(path: Path, label: str) -> dict[str, Any]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise BundleError(f"cannot read {label} {path}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise BundleError(f"invalid JSON in {label} {path}: {exc.msg}") from exc
-    if not isinstance(document, dict):
-        raise BundleError(f"{label} must contain a JSON object")
-    return document
-
-
 if __name__ == "__main__":
     raise SystemExit(main())

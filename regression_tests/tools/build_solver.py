@@ -16,8 +16,8 @@ from typing import Any, TextIO
 
 from check_bundle import read_settings
 from support.documents import write_json_direct
-from support.errors import BundleError
-from support.files import sha256_digest
+from support.errors import BundleError, HarnessError
+from support.files import file_identity
 from support.time import utc_now
 
 
@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         result = build_solver(args.settings, args.repository_root, args.jobs)
-    except BundleError as exc:
+    except HarnessError as exc:
         print(f"build failed: {exc}", file=sys.stderr)
         return 1
 
@@ -320,10 +320,11 @@ def _optional_version(command: list[str], environment: dict[str, str]) -> str | 
 
 def _file_record(path: Path) -> dict[str, Any]:
     resolved = path.resolve()
+    identity = file_identity(resolved)
     return {
         "path": str(resolved),
-        "size": resolved.stat().st_size,
-        "sha256": sha256_digest(resolved),
+        "size": identity["size_bytes"],
+        "sha256": identity["sha256"],
     }
 
 

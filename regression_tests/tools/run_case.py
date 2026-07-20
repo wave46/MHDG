@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shlex
 import subprocess
@@ -23,9 +22,9 @@ from prepare_run import (
     openmp_environment,
     prepare_run,
 )
-from support.documents import write_json_atomic
+from support.documents import load_json, write_json_atomic
 from support.errors import BundleError, ComparisonError, HarnessError
-from support.files import sha256_digest
+from support.files import file_identity
 from support.time import utc_now
 
 
@@ -265,7 +264,9 @@ def execute_staged_run(
         "hdf5_outputs": hdf5_outputs,
     }
     if last_result is not None:
-        stage_metadata = _read_json(last_result.path / "run_metadata.json")
+        stage_metadata = load_json(
+            last_result.path / "run_metadata.json", "stage run metadata"
+        )
         for name in ("environment", "executable", "runtime_files", "solver"):
             metadata[name] = stage_metadata[name]
     write_json_atomic(
@@ -394,22 +395,7 @@ def _optional_file_record(
 
 
 def _file_record(path: Path, display_path: str) -> dict[str, Any]:
-    try:
-        size = path.stat().st_size
-        digest = sha256_digest(path)
-    except OSError as exc:
-        raise BundleError(f"cannot inspect file {path}: {exc}") from exc
-    return {"path": display_path, "size_bytes": size, "sha256": digest}
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise BundleError(f"cannot read run metadata {path}: {exc}") from exc
-    if not isinstance(document, dict):
-        raise BundleError(f"run metadata must contain an object: {path}")
-    return document
+    return {"path": display_path, **file_identity(path)}
 
 
 if __name__ == "__main__":

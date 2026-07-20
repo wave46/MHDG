@@ -18,7 +18,7 @@ from check_bundle import (
 )
 from support.documents import write_json_direct
 from support.errors import BundleError, HarnessError
-from support.files import is_within, sha256_digest
+from support.files import file_identity, is_within
 from support.paths import require_directory
 from support.time import utc_now
 
@@ -153,8 +153,7 @@ def _populate_bundle(
         relative_path = target_path.relative_to(staging).as_posix()
         artifacts[artifact_id] = {
             "path": relative_path,
-            "sha256": sha256_digest(target_path),
-            "size_bytes": target_path.stat().st_size,
+            **file_identity(target_path),
             "media_type": file_spec["media_type"],
         }
         if "description" in file_spec:

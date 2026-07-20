@@ -4,14 +4,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from support.errors import BundleError, MissingArtifactError
+from support.documents import load_json
+from support.errors import BundleError, HarnessError, MissingArtifactError
 from support.files import sha256_digest
 
 try:
@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         summary = validate_bundle(args.settings, args.cases)
-    except BundleError as exc:
+    except HarnessError as exc:
         print(f"bundle validation failed: {exc}", file=sys.stderr)
         return 1
 
@@ -200,7 +200,7 @@ def load_validated_json(
     path: Path, schema_path: Path, label: str
 ) -> dict[str, Any]:
     """Load a JSON object and validate it against a regression schema."""
-    document = _load_json(path, label)
+    document = load_json(path, label)
     _validate_json(document, schema_path, label)
     return document
 
@@ -260,7 +260,7 @@ def _load_cases(case_dir: Path) -> list[dict[str, Any]]:
 
 
 def _validate_json(document: Any, schema_path: Path, label: str) -> None:
-    schema = _load_json(schema_path, f"schema {schema_path.name}")
+    schema = load_json(schema_path, f"schema {schema_path.name}")
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as exc:
@@ -408,19 +408,6 @@ def _verify_case_requirements(
             )
         checked.append(case_id)
     return checked
-
-
-def _load_json(path: Path, label: str) -> dict[str, Any]:
-    try:
-        with path.open(encoding="utf-8") as stream:
-            document = json.load(stream)
-    except OSError as exc:
-        raise BundleError(f"cannot read {label} {path}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise BundleError(f"invalid JSON in {path}: {exc}") from exc
-    if not isinstance(document, dict):
-        raise BundleError(f"{label} must be a JSON object")
-    return document
 
 
 def _artifact_path(root: Path, relative_path: str, label: str) -> Path:

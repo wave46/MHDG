@@ -9,11 +9,10 @@ from typing import Any
 
 from check_bundle import load_validated_json
 from support.bundles import (
-    load_bundle_json,
     register_artifact,
     validate_bundle_identity,
 )
-from support.documents import write_json_direct
+from support.documents import load_json, write_json_direct
 from support.errors import BundleError
 from support.files import is_within
 from support.identifiers import IDENTIFIER_RE
@@ -179,8 +178,8 @@ def collect_matrix_runs(
             raise BundleError(f"matrix refers to unsupported workflow {workflow_id}")
 
         directory = recorded_directory(result.get("run_directory"), "run")
-        plan = load_bundle_json(directory / "run_plan.json", "run plan")
-        metadata = load_bundle_json(directory / "run_metadata.json", "run metadata")
+        plan = load_json(directory / "run_plan.json", "run plan")
+        metadata = load_json(directory / "run_metadata.json", "run metadata")
         expected = {
             "case_id": summary["case_id"],
             "workflow_id": workflow_id,

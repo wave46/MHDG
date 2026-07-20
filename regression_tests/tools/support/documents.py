@@ -10,6 +10,7 @@ from support.errors import DocumentError
 
 
 def load_json(path: Path, label: str) -> dict[str, Any]:
+    """Read one JSON object and reject arrays or scalar documents."""
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
