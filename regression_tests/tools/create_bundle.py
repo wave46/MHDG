@@ -11,14 +11,15 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import (
-    BundleError,
     ValidationSummary,
     load_case_definition,
     workflow_required_roles,
     validate_bundle_root,
 )
 from support.documents import write_json_direct
+from support.errors import BundleError, HarnessError
 from support.files import is_within, sha256_digest
+from support.paths import require_directory
 from support.time import utc_now
 
 
@@ -56,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
             args.cases,
             args.bundle_version,
         )
-    except BundleError as exc:
+    except HarnessError as exc:
         print(f"bundle creation failed: {exc}", file=sys.stderr)
         return 1
 
@@ -83,7 +84,7 @@ def create_bundle(
     if not bundle_version:
         raise BundleError("bundle version must not be empty")
 
-    source = _source_directory(source)
+    source = require_directory(source, "source")
     output = output.expanduser().resolve()
     if output.exists():
         raise BundleError(f"output already exists: {output}")
@@ -175,17 +176,5 @@ def _populate_bundle(
             }
         },
     }
-
-
-def _source_directory(source: Path) -> Path:
-    try:
-        source = source.expanduser().resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise BundleError(f"source directory does not exist: {source}") from exc
-    if not source.is_dir():
-        raise BundleError(f"source is not a directory: {source}")
-    return source
-
-
 if __name__ == "__main__":
     raise SystemExit(main())

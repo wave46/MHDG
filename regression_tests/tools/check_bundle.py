@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from support.errors import BundleError, MissingArtifactError
 from support.files import sha256_digest
 
 try:
@@ -23,14 +24,6 @@ except ImportError as exc:  # pragma: no cover - depends on the local environmen
 
 
 SETTING_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
-
-
-class BundleError(ValueError):
-    """Raised when settings or bundle data violate the regression contract."""
-
-
-class MissingArtifactError(BundleError):
-    """Raised when a declared artifact path does not exist."""
 
 
 @dataclass(frozen=True)

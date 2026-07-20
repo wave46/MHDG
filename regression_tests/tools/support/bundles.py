@@ -6,8 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from check_bundle import BundleError
+from support.errors import BundleError
 from support.files import sha256_digest
+from support.paths import recorded_directory
 
 
 def validate_bundle_identity(
@@ -17,7 +18,7 @@ def validate_bundle_identity(
     bundle = plan.get("bundle")
     if not isinstance(bundle, dict) or not isinstance(bundle.get("root"), str):
         raise BundleError("run plan has no bundle identity")
-    if existing_directory(Path(bundle["root"]), "run bundle") != source_bundle:
+    if recorded_directory(bundle["root"], "run bundle") != source_bundle:
         raise BundleError("run did not use the configured source bundle")
     if (
         bundle.get("bundle_id") != manifest.get("bundle_id")
@@ -48,28 +49,6 @@ def file_identity(path: Path) -> dict[str, Any]:
         return {"size_bytes": path.stat().st_size, "sha256": digest}
     except OSError as exc:
         raise BundleError(f"cannot checksum {path}: {exc}") from exc
-
-
-def existing_file(path: Path, label: str) -> Path:
-    """Resolve an existing regular file or raise a bundle error."""
-    try:
-        path = path.expanduser().resolve(strict=True)
-    except (FileNotFoundError, OSError) as exc:
-        raise BundleError(f"{label} does not exist: {path}") from exc
-    if not path.is_file():
-        raise BundleError(f"{label} is not a file: {path}")
-    return path
-
-
-def existing_directory(path: Path, label: str) -> Path:
-    """Resolve an existing directory or raise a bundle error."""
-    try:
-        path = path.expanduser().resolve(strict=True)
-    except (FileNotFoundError, OSError) as exc:
-        raise BundleError(f"{label} does not exist: {path}") from exc
-    if not path.is_dir():
-        raise BundleError(f"{label} is not a directory: {path}")
-    return path
 
 
 def load_bundle_json(path: Path, label: str) -> dict[str, Any]:

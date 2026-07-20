@@ -22,6 +22,7 @@ from comparison.metrics import calculate_error_norms, format_metric, maximum_met
 from compare_run import select_candidate
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
+from support.paths import recorded_file, require_directory, require_file
 from support.time import utc_now
 
 
@@ -81,9 +82,9 @@ def compare_adaptive_files(
     tolerances: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Interpolate both files at fixed interior points and compare their fields."""
-    reference_path = _existing_file(reference_path, "reference")
-    candidate_path = _existing_file(candidate_path, "candidate")
-    fekete_path = _existing_file(fekete_path, "Fekete-node")
+    reference_path = require_file(reference_path, "reference")
+    candidate_path = require_file(candidate_path, "candidate")
+    fekete_path = require_file(fekete_path, "Fekete-node")
     points = reference_sample_points(reference_path, samples_per_element)
     reference = _sample_solution(reference_path, points, fekete_path)
     candidate = _sample_solution(candidate_path, points, fekete_path)
@@ -111,7 +112,7 @@ def compare_adaptive_run(
     profile_override: str | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Compare one completed adaptive run with its bundled reference."""
-    run_directory = _existing_directory(run_directory, "run")
+    run_directory = require_directory(run_directory, "run")
     plan = load_json(run_directory / "run_plan.json", "run plan")
     metadata = load_json(run_directory / "run_metadata.json", "run metadata")
     if metadata.get("status") != "completed":
@@ -373,28 +374,11 @@ def _triangle_rows(array: np.ndarray) -> np.ndarray:
     return (array.T if array.shape[0] == 3 else array).astype(np.int64)
 
 
-def _existing_file(path: Path, label: str) -> Path:
-    path = path.expanduser().resolve()
-    if not path.is_file():
-        raise ComparisonError(f"{label} file does not exist: {path}")
-    return path
-
-
-def _existing_directory(path: Path, label: str) -> Path:
-    path = path.expanduser().resolve()
-    if not path.is_dir():
-        raise ComparisonError(f"{label} directory does not exist: {path}")
-    return path
-
-
 def _fekete_nodes(metadata: dict[str, Any]) -> Path:
     runtime = metadata.get("runtime_files", {}).get(
         "positionFeketeNodesTri2D.h5", {}
     )
-    path = runtime.get("path")
-    if not isinstance(path, str):
-        raise ComparisonError("run metadata has no Fekete-node path")
-    return _existing_file(Path(path), "Fekete-node")
+    return recorded_file(runtime.get("path"), "Fekete-node")
 
 
 def _adaptive_tolerance_profile(
@@ -436,7 +420,7 @@ def _run_input(
     path = path.expanduser()
     if not path.is_absolute():
         path = run_directory / path
-    return _existing_file(path, label)
+    return require_file(path, label)
 
 
 if __name__ == "__main__":

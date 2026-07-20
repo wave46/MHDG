@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from check_bundle import BundleError, load_case_definition
+from check_bundle import load_case_definition
 from comparison.convergence import (
     NEWTON_CONVERGENCE_FAILURE,
     read_newton_convergence,
@@ -19,6 +19,7 @@ from compare_hdf5 import compare_hdf5_files
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
 from support.files import sha256_digest
+from support.paths import recorded_file, require_directory, require_file
 from support.time import utc_now
 
 
@@ -49,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
             args.profile,
             args.report,
         )
-    except (BundleError, HarnessError) as exc:
+    except HarnessError as exc:
         print(f"comparison failed: {exc}", file=sys.stderr)
         return 1
 
@@ -71,7 +72,7 @@ def compare_run(
     report_override: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Compare a completed run and atomically write its JSON report."""
-    run_directory = _existing_directory(run_directory, "run directory")
+    run_directory = require_directory(run_directory, "run directory")
     plan = load_json(run_directory / "run_plan.json", "run plan")
     metadata = load_json(run_directory / "run_metadata.json", "run metadata")
     if metadata.get("status") != "completed":
@@ -192,13 +193,13 @@ def select_candidate(
     if override is not None:
         return _input_path(run_directory, override, "", "candidate")
 
+    recorded_outputs = metadata.get("hdf5_outputs")
+    if not isinstance(recorded_outputs, list) or not recorded_outputs:
+        raise ComparisonError("run metadata contains no HDF5 output")
     declared = [
-        (run_directory / path).resolve()
-        for path in metadata.get("hdf5_outputs", [])
+        recorded_file(value, "HDF5 output", run_directory)
+        for value in recorded_outputs
     ]
-    declared = [path for path in declared if path.is_file()]
-    if not declared:
-        raise ComparisonError("run metadata contains no available HDF5 output")
 
     stdout_path = run_directory / "stdout.log"
     if stdout_path.is_file():
@@ -258,23 +259,7 @@ def _input_path(
     path = path.expanduser()
     if not path.is_absolute():
         path = run_directory / path
-    try:
-        path = path.resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise ComparisonError(f"{label} file does not exist: {path}") from exc
-    if not path.is_file():
-        raise ComparisonError(f"{label} is not a file: {path}")
-    return path
-
-
-def _existing_directory(path: Path, label: str) -> Path:
-    try:
-        path = path.expanduser().resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise ComparisonError(f"{label} does not exist: {path}") from exc
-    if not path.is_dir():
-        raise ComparisonError(f"{label} is not a directory: {path}")
-    return path
+    return require_file(path, label)
 
 
 def _file_identity(path: Path) -> dict[str, Any]:

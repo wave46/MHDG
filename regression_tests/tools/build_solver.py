@@ -14,8 +14,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
-from check_bundle import BundleError, read_settings
+from check_bundle import read_settings
 from support.documents import write_json_direct
+from support.errors import BundleError
 from support.files import sha256_digest
 from support.time import utc_now
 

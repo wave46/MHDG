@@ -5,12 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from check_bundle import BundleError, load_case_definition
+from check_bundle import load_case_definition
 from compare_adaptive import compare_adaptive_run
 from compare_run import compare_run
 from reference_matrix import ReferenceMatrix, load_reference_matrix
 from support.documents import load_json, write_json_atomic
-from support.errors import ComparisonError
+from support.errors import BundleError, ComparisonError
+from support.paths import recorded_directory, recorded_file, require_directory
 from support.time import utc_now
 
 
@@ -20,7 +21,7 @@ def compare_completed_run(
     tolerances_path: Path,
 ) -> tuple[str, Path, dict[str, Any]]:
     """Use a matching stage matrix when present, otherwise compare the final state."""
-    run_directory = _existing_directory(run_directory)
+    run_directory = require_directory(run_directory, "run")
     plan = load_json(run_directory / "run_plan.json", "run plan")
     case = load_case_definition(plan["case_id"], case_dir)
     workflow = case["workflows"].get(plan.get("workflow_id"))
@@ -81,8 +82,10 @@ def _compare_stages(
         stage_id = stage["stage_id"]
         if stage.get("status") != "completed":
             raise ComparisonError(f"stage {stage_id} did not complete")
-        stage_directory = _existing_directory(Path(stage["run_directory"]))
-        candidate = _existing_file(stage.get("selected_hdf5"), "stage result")
+        stage_directory = recorded_directory(
+            stage.get("run_directory"), "stage run"
+        )
+        candidate = recorded_file(stage.get("selected_hdf5"), "stage result")
         reference = matrix.reference_for(
             plan["workflow_id"], plan["layout_id"], stage_id
         )
@@ -161,19 +164,3 @@ def _matrix_for_plan(
     ):
         raise BundleError("run and golden-matrix bundle identities differ")
     return matrix
-
-
-def _existing_directory(path: Path) -> Path:
-    path = path.expanduser().resolve()
-    if not path.is_dir():
-        raise ComparisonError(f"run directory does not exist: {path}")
-    return path
-
-
-def _existing_file(value: Any, label: str) -> Path:
-    if not isinstance(value, str) or not value:
-        raise ComparisonError(f"{label} is not recorded")
-    path = Path(value).expanduser().resolve()
-    if not path.is_file():
-        raise ComparisonError(f"{label} file does not exist: {path}")
-    return path

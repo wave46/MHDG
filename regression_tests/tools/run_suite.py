@@ -12,7 +12,6 @@ from typing import Any
 
 from build_solver import build_solver, parse_build_jobs
 from check_bundle import (
-    BundleError,
     bundle_root_from_settings,
     load_case_definition,
     load_validated_json,
@@ -23,7 +22,7 @@ from compare_matrix import compare_completed_run
 from prepare_run import prepare_run
 from run_case import execute_prepared
 from support.documents import write_json_atomic
-from support.errors import HarnessError
+from support.errors import BundleError, HarnessError
 from support.identifiers import IDENTIFIER_RE
 from support.time import utc_now, utc_run_id
 
@@ -88,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
             compare=not args.run_only,
             resume=args.resume,
         )
-    except (BundleError, HarnessError) as exc:
+    except HarnessError as exc:
         print(f"suite failed: {exc}", file=sys.stderr)
         return 1
 
@@ -305,7 +304,7 @@ def _run_cell(
         result["status"] = (
             "passed" if comparison["status"] == "passed" else "comparison_failed"
         )
-    except (BundleError, HarnessError) as exc:
+    except HarnessError as exc:
         result["failures"] = [str(exc)]
     return result
 

@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import (
-    BundleError,
     bundle_root_from_settings,
     load_case_definition,
     load_validated_json,
@@ -24,6 +23,7 @@ from check_bundle import (
     validate_bundle_root,
 )
 from support.documents import write_json_direct
+from support.errors import BundleError
 from support.identifiers import IDENTIFIER_RE
 from support.time import utc_now, utc_run_id
 

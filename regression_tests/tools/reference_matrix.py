@@ -7,17 +7,22 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from check_bundle import BundleError, load_validated_json
+from check_bundle import load_validated_json
 from support.bundles import (
-    existing_directory,
-    existing_file,
     load_bundle_json,
     register_artifact,
     validate_bundle_identity,
 )
 from support.documents import write_json_direct
+from support.errors import BundleError
 from support.files import is_within
 from support.identifiers import IDENTIFIER_RE
+from support.paths import (
+    recorded_directory,
+    recorded_file,
+    require_directory,
+    require_file,
+)
 from support.time import utc_now
 
 
@@ -63,7 +68,7 @@ def load_reference_matrix(
     schema_dir: Path,
 ) -> ReferenceMatrix | None:
     """Load the optional staged-reference index without rehashing the bundle."""
-    bundle_root = existing_directory(bundle_root, "golden bundle")
+    bundle_root = require_directory(bundle_root, "golden bundle")
     manifest = load_validated_json(
         bundle_root / "manifest.json",
         schema_dir / "bundle-manifest.schema.json",
@@ -173,7 +178,7 @@ def collect_matrix_runs(
         if workflow is None or not workflow.get("stages"):
             raise BundleError(f"matrix refers to unsupported workflow {workflow_id}")
 
-        directory = existing_directory(Path(result["run_directory"]), "run")
+        directory = recorded_directory(result.get("run_directory"), "run")
         plan = load_bundle_json(directory / "run_plan.json", "run plan")
         metadata = load_bundle_json(directory / "run_metadata.json", "run metadata")
         expected = {
@@ -281,12 +286,8 @@ def _stage_reference(
             f"matrix stage is incomplete: {workflow_id}/{layout_id}/"
             f"{stage.get('stage_id')}"
         )
-    stage_directory = existing_directory(
-        Path(stage.get("run_directory", "")), "stage run"
-    )
-    solution = existing_file(
-        Path(stage.get("selected_hdf5", "")), "stage solution"
-    )
+    stage_directory = recorded_directory(stage.get("run_directory"), "stage run")
+    solution = recorded_file(stage.get("selected_hdf5"), "stage solution")
     if not is_within(solution, stage_directory):
         raise BundleError("selected stage solution is outside its run directory")
     return StageReference(stage["stage_id"], solution)
@@ -331,7 +332,7 @@ def _install_run_provenance(
     target_dir.mkdir(parents=True)
     for filename in ("run_plan.json", "run_metadata.json"):
         target = target_dir / filename
-        shutil.copy2(existing_file(run.directory / filename, filename), target)
+        shutil.copy2(require_file(run.directory / filename, filename), target)
         artifact_id = (
             f"golden_matrix_{run.workflow_id}_{run.layout_id}_"
             f"{Path(filename).stem}"
@@ -360,7 +361,7 @@ def _manifest_artifact_path(
         candidate.relative_to(bundle_root)
     except ValueError as exc:
         raise BundleError(f"{label} resolves outside the golden bundle") from exc
-    return existing_file(candidate, label)
+    return require_file(candidate, label)
 
 
 def _valid_id_list(value: Any) -> bool:

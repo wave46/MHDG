@@ -13,14 +13,12 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import (
-    BundleError,
     ValidationSummary,
     bundle_root_from_settings,
     load_case_definition,
     read_settings,
     validate_bundle_root,
 )
-from compare_hdf5 import ComparisonError
 from compare_run import select_candidate
 from reference_matrix import (
     MatrixRun,
@@ -29,15 +27,15 @@ from reference_matrix import (
     validate_matrix_summary,
 )
 from support.bundles import (
-    existing_directory,
-    existing_file,
     file_identity,
     register_artifact,
     validate_bundle_identity,
 )
 from support.documents import write_json_direct
+from support.errors import BundleError, HarnessError
 from support.files import is_within
 from support.identifiers import IDENTIFIER_RE
+from support.paths import recorded_directory, recorded_file, require_file
 from support.time import utc_now
 
 
@@ -77,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             args.bundle_version,
             args.cases,
         )
-    except (BundleError, ComparisonError) as exc:
+    except HarnessError as exc:
         print(f"golden bundle promotion failed: {exc}", file=sys.stderr)
         return 1
 
@@ -101,7 +99,7 @@ def promote_bundle(
     source_bundle = bundle_root_from_settings(read_settings(settings_path))
     validate_bundle_root(source_bundle, case_dir)
     source_manifest = _load_json(source_bundle / "manifest.json", "bundle manifest")
-    summary_path = existing_file(summary_path, "suite summary")
+    summary_path = require_file(summary_path, "suite summary")
     summary = _load_json(summary_path, "suite summary")
     promotion_kind = _validate_summary(summary)
 
@@ -179,7 +177,7 @@ def _canonical_run(summary: dict[str, Any], layout_id: str) -> CanonicalRun:
     if len(matching) != 1:
         raise BundleError(f"suite must contain canonical layout {layout_id} once")
 
-    directory = existing_directory(Path(matching[0]["run_directory"]), "run")
+    directory = recorded_directory(matching[0].get("run_directory"), "run")
     plan = _load_json(directory / "run_plan.json", "run plan")
     metadata = _load_json(directory / "run_metadata.json", "run metadata")
     comparison = _load_json(directory / "comparison.json", "comparison")
@@ -195,7 +193,7 @@ def _canonical_run(summary: dict[str, Any], layout_id: str) -> CanonicalRun:
         raise BundleError("canonical run evidence is not fully passing")
 
     solution = select_candidate(directory, metadata)
-    reported = existing_file(Path(comparison.get("candidate", "")), "candidate")
+    reported = recorded_file(comparison.get("candidate"), "candidate")
     if solution != reported:
         raise BundleError("selected and compared canonical solutions differ")
     if not _same_file(
@@ -216,7 +214,7 @@ def _source_reference(
         relative_path = manifest["artifacts"][reference_id]["path"]
     except KeyError as exc:
         raise BundleError("source bundle has no warm reference artifact") from exc
-    return reference_id, existing_file(bundle / relative_path, "warm reference")
+    return reference_id, require_file(bundle / relative_path, "warm reference")
 
 
 def _validate_run_sources(
@@ -228,7 +226,7 @@ def _validate_run_sources(
     validate_bundle_identity(run.plan, source_bundle, manifest)
 
     comparison = run.comparison
-    reported = existing_file(Path(comparison.get("reference", "")), "reference")
+    reported = recorded_file(comparison.get("reference"), "reference")
     if reported != source_reference:
         raise BundleError("canonical run compared against another reference")
     if not _same_file(
@@ -311,7 +309,7 @@ def _install_provenance(
     for filename, source in sources.items():
         artifact_id, media_type = PROVENANCE_FILES[filename]
         target = directory / filename
-        shutil.copy2(existing_file(source, filename), target)
+        shutil.copy2(require_file(source, filename), target)
         register_artifact(staging, manifest, artifact_id, target, media_type)
 
 

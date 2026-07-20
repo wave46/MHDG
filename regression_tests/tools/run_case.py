@@ -14,8 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from check_bundle import BundleError, read_settings
-from compare_hdf5 import ComparisonError
+from check_bundle import read_settings
 from compare_run import select_candidate
 from prepare_run import (
     PreparedExecution,
@@ -25,7 +24,7 @@ from prepare_run import (
     prepare_run,
 )
 from support.documents import write_json_atomic
-from support.errors import HarnessError
+from support.errors import BundleError, ComparisonError, HarnessError
 from support.files import sha256_digest
 from support.time import utc_now
 
@@ -60,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         settings = read_settings(args.settings)
-    except BundleError as exc:
+    except HarnessError as exc:
         print(f"run failed: {exc}", file=sys.stderr)
         return 1
 
@@ -79,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             _print_prepared(prepared)
             result = execute_prepared(prepared, settings)
-        except (BundleError, HarnessError) as exc:
+        except HarnessError as exc:
             print(f"run failed: {exc}", file=sys.stderr)
             completed = False
             continue
