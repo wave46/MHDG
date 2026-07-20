@@ -60,5 +60,22 @@ def print_fixed_summary(report: dict[str, Any]) -> None:
         print(f"... {len(failures) - 10} more failures; see the JSON report")
 
 
+def print_adaptive_summary(report: dict[str, Any]) -> None:
+    """Print the human-readable summary for an adaptive-mesh report."""
+    sampling = report["sampling"]
+    print(
+        f"common points: {sampling['common_points']}/{sampling['point_count']} "
+        f"({sampling['common_coverage']:.3%})"
+    )
+    for dataset_name, dataset in report["datasets"].items():
+        metrics = list(dataset["equations"].values())
+        print(
+            f"{dataset_name}: max relL2="
+            f"{format_metric(maximum_metric(metrics, 'relative_l2'))} "
+            f"max nLinf="
+            f"{format_metric(maximum_metric(metrics, 'normalized_linf'))}"
+        )
+
+
 def _pass_label(passed: bool) -> str:
     return "PASS" if passed else "FAIL"

@@ -39,3 +39,33 @@ def load_fixed_tolerances(
     if missing:
         raise ComparisonError(f"tolerance profile is missing: {', '.join(missing)}")
     return profile_id, profile
+
+
+def load_adaptive_tolerances(
+    path: Path,
+    workflow: dict[str, Any],
+    tolerance_profile_override: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Select and validate the tolerance profile for an adaptive run."""
+    document = load_json(path, "tolerance definitions")
+    profile_id = tolerance_profile_override or workflow.get("tolerance_profile")
+    profile = document.get("profiles", {}).get(profile_id)
+    required = {
+        "newton_error_max",
+        "samples_per_element",
+        "minimum_point_coverage",
+        "solution",
+        "gradient",
+    }
+    if not isinstance(profile, dict) or not required <= profile.keys():
+        raise ComparisonError(f"invalid adaptive tolerance profile: {profile_id}")
+    for dataset in ("solution", "gradient"):
+        limits = profile[dataset]
+        if not isinstance(limits, dict) or not {
+            "relative_l2_max",
+            "normalized_linf_max",
+        } <= limits.keys():
+            raise ComparisonError(
+                f"adaptive tolerance profile has invalid {dataset} limits"
+            )
+    return profile_id, profile

@@ -8,8 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from comparison.adaptive import print_adaptive_summary
-from comparison.reporting import print_fixed_summary
+from comparison.reporting import print_adaptive_summary, print_fixed_summary
 from comparison.workflow import compare_completed_run
 from support.errors import HarnessError
 
