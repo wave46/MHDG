@@ -15,7 +15,7 @@ import numpy as np
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from comparison.hdf5 import compare_hdf5_files  # noqa: E402
+from comparison.fixed.hdf5 import compare_hdf5_files  # noqa: E402
 
 
 TOLERANCES = {

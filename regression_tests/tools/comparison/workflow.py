@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import load_case_definition
-from comparison.adaptive import compare_adaptive_run
-from comparison.fixed import compare_run
+from comparison.adaptive.run import compare_adaptive_run
+from comparison.fixed.run import compare_run
 from comparison.inputs import ComparisonInputs, ComparisonOverrides
 from comparison.matrix import compare_reference_matrix, load_plan_matrix
 from support.documents import load_json

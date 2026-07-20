@@ -8,7 +8,7 @@ from typing import Any
 import h5py
 import numpy as np
 
-from comparison.metrics import calculate_error_norms
+from comparison.shared.metrics import calculate_error_norms
 from support.errors import ComparisonError
 
 

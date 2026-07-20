@@ -18,7 +18,7 @@ from check_bundle import (
     read_settings,
     validate_bundle_root,
 )
-from comparison.outputs import select_candidate
+from comparison.shared.outputs import select_candidate
 from reference_matrix import (
     MatrixRun,
     collect_matrix_runs,

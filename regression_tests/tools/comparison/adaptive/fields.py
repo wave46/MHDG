@@ -6,8 +6,8 @@ from typing import Any
 
 import numpy as np
 
-from comparison.metrics import calculate_error_norms
-from comparison.sampling import SampledFields
+from comparison.shared.metrics import calculate_error_norms
+from comparison.adaptive.sampling import SampledFields
 from support.errors import ComparisonError
 
 

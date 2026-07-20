@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from comparison.adaptive import compare_adaptive_run
-from comparison.fixed import compare_run
+from comparison.adaptive.run import compare_adaptive_run
+from comparison.fixed.run import compare_run
 from comparison.inputs import ComparisonInputs
 from reference_matrix import ReferenceMatrix, load_reference_matrix
 from support.documents import load_json, write_json_atomic

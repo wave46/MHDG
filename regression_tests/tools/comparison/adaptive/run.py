@@ -6,20 +6,20 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import load_case_definition
-from comparison.convergence import (
+from comparison.shared.convergence import (
     NEWTON_CONVERGENCE_FAILURE,
     NewtonConvergence,
     read_newton_convergence,
 )
 from comparison.inputs import ComparisonInputs
-from comparison.outputs import resolve_run_file, select_candidate
-from comparison.sampled_fields import compare_sampled_fields
-from comparison.sampling import (
+from comparison.shared.outputs import resolve_run_file, select_candidate
+from comparison.adaptive.fields import compare_sampled_fields
+from comparison.adaptive.sampling import (
     SampledFields,
     reference_sample_points,
     sample_solution,
 )
-from comparison.tolerances import load_adaptive_tolerances
+from comparison.shared.tolerances import load_adaptive_tolerances
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError
 from support.paths import recorded_file, require_directory, require_file

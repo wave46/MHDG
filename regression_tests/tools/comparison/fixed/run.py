@@ -6,15 +6,15 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import load_case_definition
-from comparison.convergence import (
+from comparison.shared.convergence import (
     NEWTON_CONVERGENCE_FAILURE,
     NewtonConvergence,
     read_newton_convergence,
 )
-from comparison.hdf5 import compare_hdf5_files
+from comparison.fixed.hdf5 import compare_hdf5_files
 from comparison.inputs import ComparisonInputs
-from comparison.outputs import resolve_run_file, select_candidate
-from comparison.tolerances import load_fixed_tolerances
+from comparison.shared.outputs import resolve_run_file, select_candidate
+from comparison.shared.tolerances import load_fixed_tolerances
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError
 from support.files import file_identity

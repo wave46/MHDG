@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from comparison.metrics import format_metric, maximum_metric
+from comparison.shared.metrics import format_metric, maximum_metric
 
 
 def print_fixed_summary(report: dict[str, Any]) -> None:
