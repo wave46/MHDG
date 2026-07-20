@@ -13,7 +13,7 @@ from unittest.mock import patch
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from verify_suite import verify_suite  # noqa: E402
+from suite.verification import verify_suite  # noqa: E402
 
 
 class SuiteVerificationTests(unittest.TestCase):
@@ -40,7 +40,7 @@ class SuiteVerificationTests(unittest.TestCase):
             self.assertIn("verification failed:", completed.stdout)
             self.assertTrue((root / "verification_summary.json").is_file())
 
-    @patch("verify_suite.compare_completed_run")
+    @patch("suite.verification.compare_completed_run")
     def test_verification_dispatches_without_running_solver(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -77,7 +77,7 @@ class SuiteVerificationTests(unittest.TestCase):
             self.assertTrue(path.is_file())
             self.assertEqual(compare.call_count, 2)
 
-    @patch("verify_suite.compare_completed_run")
+    @patch("suite.verification.compare_completed_run")
     def test_incomplete_run_fails_without_comparison(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
