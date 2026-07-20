@@ -17,7 +17,7 @@ from check_bundle import (
     read_settings,
     validate_bundle_root,
 )
-from compare_matrix import compare_completed_run
+from comparison.workflow import compare_completed_run
 from prepare_run import prepare_run
 from run_case import execute_prepared
 from support.documents import load_json, write_json_atomic

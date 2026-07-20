@@ -1,4 +1,4 @@
-"""Library-independent fixed-mesh comparison for MHDG HDF5 solutions."""
+"""Fixed-mesh comparison for grouped and legacy MHDG HDF5 solutions."""
 
 from __future__ import annotations
 

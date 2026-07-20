@@ -11,11 +11,11 @@ from unittest.mock import patch
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from compare_matrix import compare_completed_run  # noqa: E402
+from comparison.workflow import compare_completed_run  # noqa: E402
 
 
 class MatrixComparisonTests(unittest.TestCase):
-    @patch("compare_matrix.compare_run")
+    @patch("comparison.workflow.compare_run")
     def test_fixed_comparison_stops_at_first_divergent_stage(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -54,7 +54,7 @@ class MatrixComparisonTests(unittest.TestCase):
             compare.call_args.kwargs["profile_override"], "fixed_stage_reference"
         )
 
-    @patch("compare_matrix.compare_adaptive_run")
+    @patch("comparison.workflow.compare_adaptive_run")
     def test_adaptive_comparison_checks_every_matching_stage(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

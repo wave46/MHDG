@@ -14,7 +14,7 @@ import numpy as np
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from compare_adaptive import (  # noqa: E402
+from comparison.adaptive import (  # noqa: E402
     SampledFields,
     compare_adaptive_run,
     compare_sampled_fields,
@@ -23,7 +23,7 @@ from compare_adaptive import (  # noqa: E402
 
 
 class AdaptiveComparisonTests(unittest.TestCase):
-    @patch("compare_adaptive.compare_adaptive_files")
+    @patch("comparison.adaptive.compare_adaptive_files")
     def test_run_comparison_adds_profile_and_convergence(self, compare_files) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             run = Path(temporary)
@@ -78,7 +78,7 @@ class AdaptiveComparisonTests(unittest.TestCase):
         self.assertEqual(path.name, "comparison.json")
         self.assertEqual(compare_files.call_args.args[3], 4)
 
-    @patch("compare_adaptive.compare_adaptive_files")
+    @patch("comparison.adaptive.compare_adaptive_files")
     def test_run_comparison_accepts_stage_file_overrides(self, compare_files) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             run = Path(temporary)

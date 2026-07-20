@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import load_case_definition
-from compare_matrix import compare_completed_run
+from comparison.workflow import compare_completed_run
 from support.documents import load_json, write_json_atomic
 from support.errors import BundleError, HarnessError
 from support.paths import require_file

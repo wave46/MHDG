@@ -19,7 +19,7 @@ from comparison.convergence import (
     read_newton_convergence,
 )
 from comparison.metrics import calculate_error_norms, format_metric, maximum_metric
-from compare_run import select_candidate
+from comparison.fixed import select_candidate
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
 from support.paths import recorded_file, require_directory, require_file

@@ -15,7 +15,7 @@ from comparison.convergence import (
     read_newton_convergence,
 )
 from comparison.metrics import format_metric, maximum_metric
-from compare_hdf5 import compare_hdf5_files
+from comparison.hdf5 import compare_hdf5_files
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
 from support.files import file_identity
