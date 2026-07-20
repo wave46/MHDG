@@ -15,6 +15,7 @@ import h5py
 import numpy as np
 
 from check_bundle import load_case_definition
+from comparison.metrics import calculate_error_norms
 from compare_run import select_candidate
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
@@ -314,22 +315,10 @@ def _numeric_metrics(
     candidate: np.ndarray,
     limits: dict[str, float] | None,
 ) -> dict[str, Any]:
-    finite = bool(
-        reference.size
-        and np.isfinite(reference).all()
-        and np.isfinite(candidate).all()
-    )
-    relative_l2 = None
-    normalized_linf = None
-    if finite:
-        difference = candidate - reference
-        scale = np.finfo(float).tiny
-        relative_l2 = float(
-            np.linalg.norm(difference) / max(np.linalg.norm(reference), scale)
-        )
-        normalized_linf = float(
-            np.max(np.abs(difference)) / max(np.max(np.abs(reference)), scale)
-        )
+    norms = calculate_error_norms(reference, candidate) if reference.size else None
+    finite = bool(norms and norms.finite)
+    relative_l2 = norms.relative_l2 if norms else None
+    normalized_linf = norms.normalized_linf if norms else None
     passed = None
     if limits is not None:
         passed = bool(

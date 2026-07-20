@@ -8,6 +8,7 @@ from typing import Any
 import h5py
 import numpy as np
 
+from comparison.metrics import calculate_error_norms
 from support.errors import ComparisonError
 
 
@@ -217,41 +218,28 @@ def _numeric_metrics(
     candidate: np.ndarray,
     tolerances: dict[str, Any],
 ) -> dict[str, Any]:
-    same_shape = reference.shape == candidate.shape
-    finite = _finite(reference) and _finite(candidate)
-    if not same_shape or not finite:
+    norms = calculate_error_norms(reference, candidate)
+    if not norms.compatible or not norms.finite:
         return {
             "passed": False,
-            "finite": finite,
+            "finite": norms.finite,
             "reference_shape": list(reference.shape),
             "candidate_shape": list(candidate.shape),
             "relative_l2": None,
             "normalized_linf": None,
         }
 
-    first = np.asarray(reference, dtype=float)
-    second = np.asarray(candidate, dtype=float)
-    difference = second - first
-    tiny = np.finfo(float).tiny
-    if first.size == 0:
-        relative_l2 = 0.0
-        normalized_linf = 0.0
-    else:
-        relative_l2 = float(
-            np.linalg.norm(difference.ravel())
-            / max(float(np.linalg.norm(first.ravel())), tiny)
-        )
-        normalized_linf = float(
-            np.max(np.abs(difference)) / max(float(np.max(np.abs(first))), tiny)
-        )
+    relative_l2 = norms.relative_l2
+    normalized_linf = norms.normalized_linf
+    assert relative_l2 is not None and normalized_linf is not None
     passed = (
-        (finite or not tolerances["require_finite"])
+        (norms.finite or not tolerances["require_finite"])
         and relative_l2 <= tolerances["relative_l2_max"]
         and normalized_linf <= tolerances["normalized_linf_max"]
     )
     return {
         "passed": passed,
-        "finite": finite,
+        "finite": norms.finite,
         "reference_shape": list(reference.shape),
         "candidate_shape": list(candidate.shape),
         "relative_l2": relative_l2,
