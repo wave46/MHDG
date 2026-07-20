@@ -14,11 +14,9 @@ sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 from check_bundle import BundleError  # noqa: E402
 from create_bundle import create_bundle  # noqa: E402
-from prepare_run import (  # noqa: E402
-    PreparedStagedRun,
-    prepare_run,
-    render_parameter_file,
-)
+from preparation.models import PreparedStagedRun  # noqa: E402
+from preparation.parameters import render_parameter_file  # noqa: E402
+from prepare_run import prepare_run  # noqa: E402
 
 
 PARAMETERS = """&INPUT_LST

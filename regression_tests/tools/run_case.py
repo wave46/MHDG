@@ -15,13 +15,13 @@ from typing import Any
 
 from check_bundle import read_settings
 from comparison.shared.outputs import select_candidate
-from prepare_run import (
+from preparation.commands import openmp_environment
+from preparation.models import (
     PreparedExecution,
     PreparedRun,
     PreparedStagedRun,
-    openmp_environment,
-    prepare_run,
 )
+from prepare_run import prepare_run
 from support.documents import load_json, write_json_atomic
 from support.environments import source_environment
 from support.errors import BundleError, ComparisonError, HarnessError
