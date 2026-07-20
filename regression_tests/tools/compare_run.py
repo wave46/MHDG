@@ -11,13 +11,16 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import BundleError, load_case_definition
+from comparison.convergence import (
+    NEWTON_CONVERGENCE_FAILURE,
+    read_newton_convergence,
+)
 from compare_hdf5 import compare_hdf5_files
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
 from support.time import utc_now
 
 
-ERROR_RE = re.compile(r"^\s*Error:\s*([-+0-9.eE]+)\s*$", re.MULTILINE)
 TIME_SAVE_RE = re.compile(r"_\d{4}\.h5$")
 OUTPUT_RE = re.compile(r"Output written to file\s+(.+\.h5)\s*$", re.MULTILINE)
 
@@ -87,13 +90,12 @@ def compare_run(
     )
     hdf5_report = compare_hdf5_files(reference, candidate, tolerances)
 
-    newton_error = _last_newton_error(run_directory / "stdout.log")
-    convergence_passed = (
-        newton_error is not None and newton_error <= tolerances["newton_error_max"]
+    convergence = read_newton_convergence(
+        run_directory / "stdout.log", tolerances["newton_error_max"]
     )
     failures = list(hdf5_report["failures"])
-    if not convergence_passed:
-        failures.append("final Newton error is missing or exceeds tolerance")
+    if not convergence.passed:
+        failures.append(NEWTON_CONVERGENCE_FAILURE)
 
     report = {
         "schema_version": 1,
@@ -110,11 +112,7 @@ def compare_run(
             "reference": _file_identity(reference),
         },
         "tolerance_profile": {"id": profile_id, **tolerances},
-        "convergence": {
-            "passed": convergence_passed,
-            "final_newton_error": newton_error,
-            "maximum": tolerances["newton_error_max"],
-        },
+        "convergence": convergence.as_report(),
         "hdf5": hdf5_report,
         "failures": failures,
     }
@@ -256,15 +254,6 @@ def _tolerance_profile(
     if missing:
         raise ComparisonError(f"tolerance profile is missing: {', '.join(missing)}")
     return profile_id, profile
-
-
-def _last_newton_error(path: Path) -> float | None:
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError as exc:
-        raise ComparisonError(f"cannot read solver output {path}: {exc}") from exc
-    matches = ERROR_RE.findall(text)
-    return float(matches[-1]) if matches else None
 
 
 def _input_path(

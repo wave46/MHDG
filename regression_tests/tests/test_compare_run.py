@@ -141,7 +141,8 @@ class CompareCommandTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.run / "stdout.log").write_text(
-            f"Error: 1.0E-5\nOutput written to file {self.checkpoint}\n"
+            f"Error: 8.0E-4\nError: 1.0E-5\n"
+            f"Output written to file {self.checkpoint}\n"
             f"Output written to file {self.final}\n",
             encoding="utf-8",
         )

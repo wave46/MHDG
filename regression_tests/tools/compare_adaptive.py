@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,14 +14,15 @@ import h5py
 import numpy as np
 
 from check_bundle import load_case_definition
+from comparison.convergence import (
+    NEWTON_CONVERGENCE_FAILURE,
+    read_newton_convergence,
+)
 from comparison.metrics import calculate_error_norms
 from compare_run import select_candidate
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
 from support.time import utc_now
-
-
-ERROR_RE = re.compile(r"^\s*Error:\s*([-+0-9.eE]+)\s*$", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -136,15 +136,11 @@ def compare_adaptive_run(
         tolerances,
     )
 
-    newton_error = _last_newton_error(run_directory / "stdout.log")
-    convergence_passed = bool(
-        newton_error is not None
-        and newton_error <= tolerances["newton_error_max"]
+    convergence = read_newton_convergence(
+        run_directory / "stdout.log", tolerances["newton_error_max"]
     )
-    if not convergence_passed:
-        report["failures"].append(
-            "final Newton error is missing or exceeds tolerance"
-        )
+    if not convergence.passed:
+        report["failures"].append(NEWTON_CONVERGENCE_FAILURE)
     report.update(
         {
             "created_utc": utc_now(),
@@ -154,11 +150,7 @@ def compare_adaptive_run(
             "workflow_id": plan["workflow_id"],
             "layout_id": plan["layout_id"],
             "tolerance_profile": {"id": profile_id, **tolerances},
-            "convergence": {
-                "passed": convergence_passed,
-                "final_newton_error": newton_error,
-                "maximum": tolerances["newton_error_max"],
-            },
+            "convergence": convergence.as_report(),
         }
     )
     report.pop("tolerances", None)
@@ -444,14 +436,6 @@ def _run_input(
     if not path.is_absolute():
         path = run_directory / path
     return _existing_file(path, label)
-
-
-def _last_newton_error(path: Path) -> float | None:
-    try:
-        values = ERROR_RE.findall(path.read_text(encoding="utf-8", errors="replace"))
-    except OSError as exc:
-        raise ComparisonError(f"cannot read solver log {path}: {exc}") from exc
-    return float(values[-1]) if values else None
 
 
 def _maximum(metrics: list[dict[str, Any]], key: str) -> float:
