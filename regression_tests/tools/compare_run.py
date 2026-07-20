@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import re
 import sys
 from pathlib import Path
@@ -18,6 +17,7 @@ from comparison.convergence import (
 from compare_hdf5 import compare_hdf5_files
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
+from support.files import sha256_digest
 from support.time import utc_now
 
 
@@ -286,15 +286,12 @@ def _existing_directory(path: Path, label: str) -> Path:
 
 
 def _file_identity(path: Path) -> dict[str, Any]:
-    digest = hashlib.sha256()
     try:
-        with path.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
+        digest = sha256_digest(path)
         size = path.stat().st_size
     except OSError as exc:
         raise ComparisonError(f"cannot checksum comparison file {path}: {exc}") from exc
-    return {"path": str(path), "size_bytes": size, "sha256": digest.hexdigest()}
+    return {"path": str(path), "size_bytes": size, "sha256": digest}
 
 
 if __name__ == "__main__":

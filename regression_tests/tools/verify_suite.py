@@ -4,13 +4,13 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import Any
 
 from check_bundle import BundleError, load_case_definition
 from compare_matrix import compare_completed_run
+from support.bundles import load_bundle_json
 from support.documents import write_json_atomic
 from support.errors import HarnessError
 from support.time import utc_now
@@ -44,7 +44,7 @@ def verify_suite(
 ) -> tuple[Path, dict[str, Any]]:
     """Compare all recorded suite runs without executing the solver."""
     suite_summary_path = _existing_file(suite_summary_path, "suite summary")
-    source = _load_json(suite_summary_path, "suite summary")
+    source = load_bundle_json(suite_summary_path, "suite summary")
     _validate_source_summary(source)
     case = load_case_definition(source["case_id"], case_dir)
 
@@ -150,16 +150,6 @@ def _existing_file(path: Path, label: str) -> Path:
     if not path.is_file():
         raise BundleError(f"{label} does not exist: {path}")
     return path
-
-
-def _load_json(path: Path, label: str) -> dict[str, Any]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise BundleError(f"cannot read {label} {path}: {exc}") from exc
-    if not isinstance(document, dict):
-        raise BundleError(f"{label} must contain a JSON object")
-    return document
 
 
 if __name__ == "__main__":

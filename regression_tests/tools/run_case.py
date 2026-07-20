@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shlex
@@ -27,6 +26,7 @@ from prepare_run import (
 )
 from support.documents import write_json_atomic
 from support.errors import HarnessError
+from support.files import sha256_digest
 from support.time import utc_now
 
 
@@ -397,13 +397,10 @@ def _optional_file_record(
 def _file_record(path: Path, display_path: str) -> dict[str, Any]:
     try:
         size = path.stat().st_size
-        digest = hashlib.sha256()
-        with path.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
+        digest = sha256_digest(path)
     except OSError as exc:
         raise BundleError(f"cannot inspect file {path}: {exc}") from exc
-    return {"path": display_path, "size_bytes": size, "sha256": digest.hexdigest()}
+    return {"path": display_path, "size_bytes": size, "sha256": digest}
 
 
 def _read_json(path: Path) -> dict[str, Any]:

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import shlex
@@ -12,7 +11,6 @@ import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +23,11 @@ from check_bundle import (
     required_case_roles,
     validate_bundle_root,
 )
+from support.documents import write_json_direct
+from support.identifiers import IDENTIFIER_RE
+from support.time import utc_now, utc_run_id
 
 
-RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 ASSIGNMENT_RE = re.compile(
     r"^(?P<prefix>\s*(?P<key>[A-Za-z][A-Za-z0-9_]*)\s*=\s*).*$"
 )
@@ -142,8 +142,8 @@ def prepare_run(
     runtime_files = _runtime_files(executable)
     launcher = _mpi_launcher(settings) if layout["execution"] == "mpi" else None
 
-    run_id = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    if not RUN_ID_RE.fullmatch(run_id):
+    run_id = run_id or utc_run_id()
+    if not IDENTIFIER_RE.fullmatch(run_id):
         raise BundleError(f"invalid run identifier: {run_id}")
 
     run_dir = run_root / case_id / workflow_id / layout_id / run_id
@@ -538,10 +538,9 @@ def _write_plan(
     stage: dict[str, Any] | None = None,
     logical_overrides: dict[str, bool] | None = None,
 ) -> None:
-    created = datetime.now(timezone.utc).isoformat(timespec="seconds")
     plan = {
         "schema_version": 1,
-        "created_utc": created.replace("+00:00", "Z"),
+        "created_utc": utc_now(),
         "case_id": case["case_id"],
         "workflow_id": workflow_id,
         "layout_id": layout_id,
@@ -563,9 +562,7 @@ def _write_plan(
         plan["stage_id"] = stage["stage_id"]
         plan["restart_from"] = stage["restart_from"]
         plan["logical_overrides"] = logical_overrides or {}
-    (staging / "run_plan.json").write_text(
-        json.dumps(plan, indent=2) + "\n", encoding="utf-8"
-    )
+    write_json_direct(staging / "run_plan.json", plan)
 
 
 def _write_staged_plan(
@@ -582,10 +579,9 @@ def _write_staged_plan(
     stages: list[PreparedStage],
     workflow: dict[str, Any],
 ) -> None:
-    created = datetime.now(timezone.utc).isoformat(timespec="seconds")
     plan = {
         "schema_version": 1,
-        "created_utc": created.replace("+00:00", "Z"),
+        "created_utc": utc_now(),
         "case_id": case["case_id"],
         "workflow_id": workflow_id,
         "workflow_kind": workflow["kind"],
@@ -615,9 +611,7 @@ def _write_staged_plan(
             for index, stage in enumerate(stages)
         ],
     }
-    (staging / "run_plan.json").write_text(
-        json.dumps(plan, indent=2) + "\n", encoding="utf-8"
-    )
+    write_json_direct(staging / "run_plan.json", plan)
 
 
 def _absolute_setting(settings: dict[str, str], key: str) -> Path:

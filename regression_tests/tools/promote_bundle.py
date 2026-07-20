@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import re
 import shutil
 import sys
 import tempfile
@@ -30,10 +28,19 @@ from reference_matrix import (
     install_reference_matrix,
     validate_matrix_summary,
 )
+from support.bundles import (
+    existing_directory,
+    existing_file,
+    file_identity,
+    register_artifact,
+    validate_bundle_identity,
+)
+from support.documents import write_json_direct
+from support.files import is_within
+from support.identifiers import IDENTIFIER_RE
 from support.time import utc_now
 
 
-ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 PROVENANCE_FILES = {
     "suite_summary.json": ("golden_reference_suite_summary", "application/json"),
     "run_plan.json": ("golden_reference_run_plan", "application/json"),
@@ -94,7 +101,7 @@ def promote_bundle(
     source_bundle = bundle_root_from_settings(read_settings(settings_path))
     validate_bundle_root(source_bundle, case_dir)
     source_manifest = _load_json(source_bundle / "manifest.json", "bundle manifest")
-    summary_path = _existing_file(summary_path, "suite summary")
+    summary_path = existing_file(summary_path, "suite summary")
     summary = _load_json(summary_path, "suite summary")
     promotion_kind = _validate_summary(summary)
 
@@ -121,7 +128,7 @@ def promote_bundle(
     output = output.expanduser().resolve()
     if output.exists():
         raise BundleError(f"output already exists: {output}")
-    if _is_within(output, source_bundle):
+    if is_within(output, source_bundle):
         raise BundleError("golden output must be outside the source bundle")
 
     try:
@@ -157,7 +164,7 @@ def promote_bundle(
             manifest["bundle_version"] = bundle_version
             manifest["bundle_class"] = "golden"
             manifest["created_utc"] = utc_now()
-            _write_json(staging / "manifest.json", manifest)
+            write_json_direct(staging / "manifest.json", manifest)
             result = validate_bundle_root(staging, case_dir)
             staging.rename(output)
     except OSError as exc:
@@ -172,7 +179,7 @@ def _canonical_run(summary: dict[str, Any], layout_id: str) -> CanonicalRun:
     if len(matching) != 1:
         raise BundleError(f"suite must contain canonical layout {layout_id} once")
 
-    directory = _existing_directory(Path(matching[0]["run_directory"]), "run")
+    directory = existing_directory(Path(matching[0]["run_directory"]), "run")
     plan = _load_json(directory / "run_plan.json", "run plan")
     metadata = _load_json(directory / "run_metadata.json", "run metadata")
     comparison = _load_json(directory / "comparison.json", "comparison")
@@ -188,10 +195,12 @@ def _canonical_run(summary: dict[str, Any], layout_id: str) -> CanonicalRun:
         raise BundleError("canonical run evidence is not fully passing")
 
     solution = select_candidate(directory, metadata)
-    reported = _existing_file(Path(comparison.get("candidate", "")), "candidate")
+    reported = existing_file(Path(comparison.get("candidate", "")), "candidate")
     if solution != reported:
         raise BundleError("selected and compared canonical solutions differ")
-    if not _same_file(_file_identity(solution), comparison.get("files", {}).get("candidate")):
+    if not _same_file(
+        file_identity(solution), comparison.get("files", {}).get("candidate")
+    ):
         raise BundleError("canonical solution changed after comparison")
     return CanonicalRun(directory, plan, metadata, comparison, solution)
 
@@ -207,7 +216,7 @@ def _source_reference(
         relative_path = manifest["artifacts"][reference_id]["path"]
     except KeyError as exc:
         raise BundleError("source bundle has no warm reference artifact") from exc
-    return reference_id, _existing_file(bundle / relative_path, "warm reference")
+    return reference_id, existing_file(bundle / relative_path, "warm reference")
 
 
 def _validate_run_sources(
@@ -216,32 +225,17 @@ def _validate_run_sources(
     manifest: dict[str, Any],
     source_reference: Path,
 ) -> None:
-    _validate_bundle_identity(run.plan, source_bundle, manifest)
+    validate_bundle_identity(run.plan, source_bundle, manifest)
 
     comparison = run.comparison
-    reported = _existing_file(Path(comparison.get("reference", "")), "reference")
+    reported = existing_file(Path(comparison.get("reference", "")), "reference")
     if reported != source_reference:
         raise BundleError("canonical run compared against another reference")
     if not _same_file(
-        _file_identity(source_reference),
+        file_identity(source_reference),
         comparison.get("files", {}).get("reference"),
     ):
         raise BundleError("source reference changed after comparison")
-
-
-def _validate_bundle_identity(
-    plan: dict[str, Any], source_bundle: Path, manifest: dict[str, Any]
-) -> None:
-    bundle = plan.get("bundle")
-    if not isinstance(bundle, dict) or not isinstance(bundle.get("root"), str):
-        raise BundleError("run plan has no bundle identity")
-    if _existing_directory(Path(bundle["root"]), "run bundle") != source_bundle:
-        raise BundleError("run did not use the configured source bundle")
-    if (
-        bundle.get("bundle_id") != manifest.get("bundle_id")
-        or bundle.get("bundle_version") != manifest.get("bundle_version")
-    ):
-        raise BundleError("run and source bundle identities differ")
 
 
 def _install_reference(
@@ -253,7 +247,7 @@ def _install_reference(
     artifact = manifest["artifacts"][artifact_id]
     target = staging / artifact["path"]
     shutil.copy2(solution, target)
-    artifact.update(_file_identity(target))
+    artifact.update(file_identity(target))
     artifact["path"] = target.relative_to(staging).as_posix()
 
 
@@ -297,8 +291,8 @@ def _install_provenance(
         "executable": run.metadata.get("executable", {}),
     }
     record_path = directory / "golden_reference.json"
-    _write_json(record_path, record)
-    _register_artifact(
+    write_json_direct(record_path, record)
+    register_artifact(
         staging,
         manifest,
         "golden_reference_record",
@@ -317,22 +311,8 @@ def _install_provenance(
     for filename, source in sources.items():
         artifact_id, media_type = PROVENANCE_FILES[filename]
         target = directory / filename
-        shutil.copy2(_existing_file(source, filename), target)
-        _register_artifact(staging, manifest, artifact_id, target, media_type)
-
-
-def _register_artifact(
-    staging: Path,
-    manifest: dict[str, Any],
-    artifact_id: str,
-    path: Path,
-    media_type: str,
-) -> None:
-    manifest["artifacts"][artifact_id] = {
-        "path": path.relative_to(staging).as_posix(),
-        **_file_identity(path),
-        "media_type": media_type,
-    }
+        shutil.copy2(existing_file(source, filename), target)
+        register_artifact(staging, manifest, artifact_id, target, media_type)
 
 
 def _validate_summary(summary: dict[str, Any]) -> str:
@@ -350,7 +330,9 @@ def _validate_summary(summary: dict[str, Any]) -> str:
     if summary["schema_version"] != 1 or summary["status"] != "passed":
         raise BundleError("only a passing version-1 suite summary can be promoted")
     for name in ("suite_id", "run_id", "case_id"):
-        if not isinstance(summary[name], str) or not ID_RE.fullmatch(summary[name]):
+        if not isinstance(summary[name], str) or not IDENTIFIER_RE.fullmatch(
+            summary[name]
+        ):
             raise BundleError(f"suite summary has invalid {name}")
 
     if "workflow_id" in summary:
@@ -362,7 +344,7 @@ def _validate_summary(summary: dict[str, Any]) -> str:
 
 def _validate_canonical_summary(summary: dict[str, Any]) -> None:
     workflow_id = summary["workflow_id"]
-    if not isinstance(workflow_id, str) or not ID_RE.fullmatch(workflow_id):
+    if not isinstance(workflow_id, str) or not IDENTIFIER_RE.fullmatch(workflow_id):
         raise BundleError("suite summary has invalid workflow_id")
     results = summary["results"]
     if not isinstance(results, list) or not results:
@@ -379,7 +361,7 @@ def _validate_canonical_summary(summary: dict[str, Any]) -> None:
         ):
             raise BundleError("suite summary contains a non-passing layout")
         layout = result.get("layout_id")
-        if not isinstance(layout, str) or not ID_RE.fullmatch(layout):
+        if not isinstance(layout, str) or not IDENTIFIER_RE.fullmatch(layout):
             raise BundleError("suite summary has an invalid layout identifier")
         layouts.append(layout)
     if len(set(layouts)) != len(layouts):
@@ -393,37 +375,6 @@ def _same_file(first: dict[str, Any], second: Any) -> bool:
     )
 
 
-def _file_identity(path: Path) -> dict[str, Any]:
-    digest = hashlib.sha256()
-    try:
-        with path.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return {"size_bytes": path.stat().st_size, "sha256": digest.hexdigest()}
-    except OSError as exc:
-        raise BundleError(f"cannot checksum {path}: {exc}") from exc
-
-
-def _existing_file(path: Path, label: str) -> Path:
-    try:
-        path = path.expanduser().resolve(strict=True)
-    except (FileNotFoundError, OSError) as exc:
-        raise BundleError(f"{label} does not exist: {path}") from exc
-    if not path.is_file():
-        raise BundleError(f"{label} is not a file: {path}")
-    return path
-
-
-def _existing_directory(path: Path, label: str) -> Path:
-    try:
-        path = path.expanduser().resolve(strict=True)
-    except (FileNotFoundError, OSError) as exc:
-        raise BundleError(f"{label} does not exist: {path}") from exc
-    if not path.is_dir():
-        raise BundleError(f"{label} is not a directory: {path}")
-    return path
-
-
 def _load_json(path: Path, label: str) -> dict[str, Any]:
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -434,18 +385,6 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
     if not isinstance(document, dict):
         raise BundleError(f"{label} must contain a JSON object")
     return document
-
-
-def _write_json(path: Path, document: dict[str, Any]) -> None:
-    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-
-
-def _is_within(path: Path, directory: Path) -> bool:
-    try:
-        path.relative_to(directory)
-    except ValueError:
-        return False
-    return True
 
 
 if __name__ == "__main__":

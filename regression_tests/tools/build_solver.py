@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import os
 import shlex
 import shutil
@@ -17,6 +15,8 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from check_bundle import BundleError, read_settings
+from support.documents import write_json_direct
+from support.files import sha256_digest
 from support.time import utc_now
 
 
@@ -43,7 +43,7 @@ class BuildResult:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--settings", required=True, type=Path)
-    parser.add_argument("--jobs", type=_positive_integer)
+    parser.add_argument("--jobs", type=parse_build_jobs)
     parser.add_argument(
         "--repository-root", type=Path, default=Path(__file__).resolve().parents[2],
         help=argparse.SUPPRESS,
@@ -151,7 +151,7 @@ def build_solver(
         },
         "runtime_files": {RUNTIME_FILE: _file_record(runtime_destination)},
     }
-    _write_json(metadata_path, metadata)
+    write_json_direct(metadata_path, metadata)
 
     generated_settings = dict(settings)
     generated_settings.update(
@@ -177,9 +177,22 @@ def _configured_jobs(settings: dict[str, str]) -> int:
     if value is None:
         return DEFAULT_JOBS
     try:
-        return _positive_integer(value)
+        return parse_build_jobs(value)
     except argparse.ArgumentTypeError as exc:
         raise BuildError(str(exc)) from exc
+
+
+def parse_build_jobs(value: str) -> int:
+    """Parse a positive build-job count for CLI and settings inputs."""
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "build jobs must be a positive integer"
+        ) from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("build jobs must be a positive integer")
+    return parsed
 
 
 def _build_root(settings: dict[str, str]) -> Path:
@@ -309,20 +322,8 @@ def _file_record(path: Path) -> dict[str, Any]:
     return {
         "path": str(resolved),
         "size": resolved.stat().st_size,
-        "sha256": _sha256(resolved),
+        "sha256": sha256_digest(resolved),
     }
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _write_json(path: Path, document: dict[str, Any]) -> None:
-    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
 
 def _write_settings(path: Path, settings: dict[str, str]) -> None:
@@ -351,16 +352,6 @@ def _require_file(path: Path, label: str) -> None:
 def _require_executable(path: Path, label: str) -> None:
     if not path.is_file() or not os.access(path, os.X_OK):
         raise BuildError(f"{label} was not produced: {path}")
-
-
-def _positive_integer(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("build jobs must be a positive integer") from exc
-    if parsed < 1:
-        raise argparse.ArgumentTypeError("build jobs must be a positive integer")
-    return parsed
 
 
 if __name__ == "__main__":

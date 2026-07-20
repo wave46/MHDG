@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from support.files import sha256_digest
 
 try:
     from jsonschema import Draft202012Validator, FormatChecker
@@ -308,7 +309,7 @@ def _verify_artifacts(
                 f"{label}.size_bytes is {artifact['size_bytes']}, "
                 f"but the file contains {actual_size} bytes"
             )
-        if _sha256(path) != artifact["sha256"]:
+        if sha256_digest(path) != artifact["sha256"]:
             raise BundleError(f"{label}.sha256 does not match the file")
         available.add(artifact_id)
         verified_bytes += actual_size
@@ -451,14 +452,6 @@ def _artifact_path(root: Path, relative_path: str, label: str) -> Path:
     if not resolved.is_file():
         raise BundleError(f"{label}.path is not a regular file: {relative_path}")
     return resolved
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 if __name__ == "__main__":

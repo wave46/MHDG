@@ -4,12 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import shutil
 import sys
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +17,9 @@ from check_bundle import (
     workflow_required_roles,
     validate_bundle_root,
 )
+from support.documents import write_json_direct
+from support.files import is_within, sha256_digest
+from support.time import utc_now
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -87,7 +87,7 @@ def create_bundle(
     output = output.expanduser().resolve()
     if output.exists():
         raise BundleError(f"output already exists: {output}")
-    if _is_within(output, source):
+    if is_within(output, source):
         raise BundleError("output must be outside the prepared source directory")
 
     workflow_roles = {
@@ -110,7 +110,7 @@ def create_bundle(
             staging = Path(workspace) / "bundle"
             staging.mkdir()
             manifest = _populate_bundle(staging, source, case, bundle_version)
-            _write_manifest(staging, manifest)
+            write_json_direct(staging / "manifest.json", manifest)
             summary = validate_bundle_root(staging, case_dir)
             staging.rename(output)
     except OSError as exc:
@@ -152,7 +152,7 @@ def _populate_bundle(
         relative_path = target_path.relative_to(staging).as_posix()
         artifacts[artifact_id] = {
             "path": relative_path,
-            "sha256": _sha256(target_path),
+            "sha256": sha256_digest(target_path),
             "size_bytes": target_path.stat().st_size,
             "media_type": file_spec["media_type"],
         }
@@ -160,13 +160,12 @@ def _populate_bundle(
             artifacts[artifact_id]["description"] = file_spec["description"]
         roles[role] = artifact_id
 
-    created = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return {
         "schema_version": 1,
         "bundle_id": f"{data_id}_bundle",
         "bundle_version": bundle_version,
         "bundle_class": "candidate",
-        "created_utc": created.replace("+00:00", "Z"),
+        "created_utc": utc_now(),
         "artifacts": artifacts,
         "case_data": {
             data_id: {
@@ -178,12 +177,6 @@ def _populate_bundle(
     }
 
 
-def _write_manifest(staging: Path, manifest: dict[str, Any]) -> None:
-    (staging / "manifest.json").write_text(
-        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-    )
-
-
 def _source_directory(source: Path) -> Path:
     try:
         source = source.expanduser().resolve(strict=True)
@@ -192,22 +185,6 @@ def _source_directory(source: Path) -> Path:
     if not source.is_dir():
         raise BundleError(f"source is not a directory: {source}")
     return source
-
-
-def _is_within(path: Path, directory: Path) -> bool:
-    try:
-        path.relative_to(directory)
-    except ValueError:
-        return False
-    return True
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 if __name__ == "__main__":

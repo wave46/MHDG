@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from check_bundle import BundleError, load_validated_json
+from support.bundles import (
+    existing_directory,
+    existing_file,
+    load_bundle_json,
+    register_artifact,
+    validate_bundle_identity,
+)
+from support.documents import write_json_direct
+from support.files import is_within
+from support.identifiers import IDENTIFIER_RE
 from support.time import utc_now
 
 
-ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 REFERENCE_MATRIX_ROLE = "reference_matrix"
 REFERENCE_MATRIX_ID = "golden_matrix_index"
 
@@ -57,7 +63,7 @@ def load_reference_matrix(
     schema_dir: Path,
 ) -> ReferenceMatrix | None:
     """Load the optional staged-reference index without rehashing the bundle."""
-    bundle_root = _existing_directory(bundle_root, "golden bundle")
+    bundle_root = existing_directory(bundle_root, "golden bundle")
     manifest = load_validated_json(
         bundle_root / "manifest.json",
         schema_dir / "bundle-manifest.schema.json",
@@ -137,7 +143,7 @@ def validate_matrix_summary(summary: dict[str, Any]) -> None:
             raise BundleError("reference matrix contains an incomplete run")
         cell = (result.get("workflow_id"), result.get("layout_id"))
         if any(
-            not isinstance(value, str) or not ID_RE.fullmatch(value)
+            not isinstance(value, str) or not IDENTIFIER_RE.fullmatch(value)
             for value in cell
         ):
             raise BundleError("reference matrix contains an invalid cell")
@@ -167,9 +173,9 @@ def collect_matrix_runs(
         if workflow is None or not workflow.get("stages"):
             raise BundleError(f"matrix refers to unsupported workflow {workflow_id}")
 
-        directory = _existing_directory(Path(result["run_directory"]), "run")
-        plan = _load_json(directory / "run_plan.json", "run plan")
-        metadata = _load_json(directory / "run_metadata.json", "run metadata")
+        directory = existing_directory(Path(result["run_directory"]), "run")
+        plan = load_bundle_json(directory / "run_plan.json", "run plan")
+        metadata = load_bundle_json(directory / "run_metadata.json", "run metadata")
         expected = {
             "case_id": summary["case_id"],
             "workflow_id": workflow_id,
@@ -181,7 +187,7 @@ def collect_matrix_runs(
             )
         if metadata.get("status") != "completed":
             raise BundleError(f"matrix run is incomplete: {workflow_id}/{layout_id}")
-        _validate_bundle_identity(plan, source_bundle, source_manifest)
+        validate_bundle_identity(plan, source_bundle, source_manifest)
 
         expected_stages = [stage["stage_id"] for stage in workflow["stages"]]
         plan_stages = [stage.get("stage_id") for stage in plan.get("stages", [])]
@@ -227,7 +233,7 @@ def install_reference_matrix(
 
     suite_target = provenance_dir / "suite_summary.json"
     shutil.copy2(summary_path, suite_target)
-    _register_artifact(
+    register_artifact(
         staging,
         manifest,
         "golden_matrix_suite_summary",
@@ -236,7 +242,7 @@ def install_reference_matrix(
     )
 
     index_path = references_dir / "index.json"
-    _write_json(
+    write_json_direct(
         index_path,
         {
             "schema_version": 1,
@@ -255,7 +261,7 @@ def install_reference_matrix(
             "references": entries,
         },
     )
-    _register_artifact(
+    register_artifact(
         staging, manifest, REFERENCE_MATRIX_ID, index_path, "application/json"
     )
     try:
@@ -275,13 +281,13 @@ def _stage_reference(
             f"matrix stage is incomplete: {workflow_id}/{layout_id}/"
             f"{stage.get('stage_id')}"
         )
-    stage_directory = _existing_directory(
+    stage_directory = existing_directory(
         Path(stage.get("run_directory", "")), "stage run"
     )
-    solution = _existing_file(
+    solution = existing_file(
         Path(stage.get("selected_hdf5", "")), "stage solution"
     )
-    if not _is_within(solution, stage_directory):
+    if not is_within(solution, stage_directory):
         raise BundleError("selected stage solution is outside its run directory")
     return StageReference(stage["stage_id"], solution)
 
@@ -301,7 +307,7 @@ def _install_run(
         )
         target = target_dir / f"{number:02d}_{stage.stage_id}.h5"
         shutil.copy2(stage.solution, target)
-        _register_artifact(
+        register_artifact(
             staging, manifest, artifact_id, target, "application/x-hdf5"
         )
         entries.append(
@@ -325,29 +331,14 @@ def _install_run_provenance(
     target_dir.mkdir(parents=True)
     for filename in ("run_plan.json", "run_metadata.json"):
         target = target_dir / filename
-        shutil.copy2(_existing_file(run.directory / filename, filename), target)
+        shutil.copy2(existing_file(run.directory / filename, filename), target)
         artifact_id = (
             f"golden_matrix_{run.workflow_id}_{run.layout_id}_"
             f"{Path(filename).stem}"
         )
-        _register_artifact(
+        register_artifact(
             staging, manifest, artifact_id, target, "application/json"
         )
-
-
-def _validate_bundle_identity(
-    plan: dict[str, Any], source_bundle: Path, manifest: dict[str, Any]
-) -> None:
-    bundle = plan.get("bundle")
-    if not isinstance(bundle, dict) or not isinstance(bundle.get("root"), str):
-        raise BundleError("run plan has no bundle identity")
-    if _existing_directory(Path(bundle["root"]), "run bundle") != source_bundle:
-        raise BundleError("run did not use the configured source bundle")
-    if (
-        bundle.get("bundle_id") != manifest.get("bundle_id")
-        or bundle.get("bundle_version") != manifest.get("bundle_version")
-    ):
-        raise BundleError("run and source bundle identities differ")
 
 
 def _manifest_artifact_path(
@@ -369,7 +360,7 @@ def _manifest_artifact_path(
         candidate.relative_to(bundle_root)
     except ValueError as exc:
         raise BundleError(f"{label} resolves outside the golden bundle") from exc
-    return _existing_file(candidate, label)
+    return existing_file(candidate, label)
 
 
 def _valid_id_list(value: Any) -> bool:
@@ -377,72 +368,8 @@ def _valid_id_list(value: Any) -> bool:
         isinstance(value, list)
         and bool(value)
         and len(value) == len(set(value))
-        and all(isinstance(item, str) and ID_RE.fullmatch(item) for item in value)
+        and all(
+            isinstance(item, str) and IDENTIFIER_RE.fullmatch(item)
+            for item in value
+        )
     )
-
-
-def _register_artifact(
-    staging: Path,
-    manifest: dict[str, Any],
-    artifact_id: str,
-    path: Path,
-    media_type: str,
-) -> None:
-    manifest["artifacts"][artifact_id] = {
-        "path": path.relative_to(staging).as_posix(),
-        **_file_identity(path),
-        "media_type": media_type,
-    }
-
-
-def _file_identity(path: Path) -> dict[str, Any]:
-    digest = hashlib.sha256()
-    try:
-        with path.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return {"size_bytes": path.stat().st_size, "sha256": digest.hexdigest()}
-    except OSError as exc:
-        raise BundleError(f"cannot checksum {path}: {exc}") from exc
-
-
-def _existing_file(path: Path, label: str) -> Path:
-    try:
-        path = path.expanduser().resolve(strict=True)
-    except (FileNotFoundError, OSError) as exc:
-        raise BundleError(f"{label} does not exist: {path}") from exc
-    if not path.is_file():
-        raise BundleError(f"{label} is not a file: {path}")
-    return path
-
-
-def _existing_directory(path: Path, label: str) -> Path:
-    try:
-        path = path.expanduser().resolve(strict=True)
-    except (FileNotFoundError, OSError) as exc:
-        raise BundleError(f"{label} does not exist: {path}") from exc
-    if not path.is_dir():
-        raise BundleError(f"{label} is not a directory: {path}")
-    return path
-
-
-def _load_json(path: Path, label: str) -> dict[str, Any]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise BundleError(f"cannot read {label} {path}: {exc}") from exc
-    if not isinstance(document, dict):
-        raise BundleError(f"{label} must contain a JSON object")
-    return document
-
-
-def _write_json(path: Path, document: dict[str, Any]) -> None:
-    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-
-
-def _is_within(path: Path, directory: Path) -> bool:
-    try:
-        path.relative_to(directory)
-    except ValueError:
-        return False
-    return True

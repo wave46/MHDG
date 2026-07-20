@@ -5,14 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from build_solver import build_solver
+from build_solver import build_solver, parse_build_jobs
 from check_bundle import (
     BundleError,
     bundle_root_from_settings,
@@ -26,10 +24,8 @@ from prepare_run import prepare_run
 from run_case import execute_prepared
 from support.documents import write_json_atomic
 from support.errors import HarnessError
-from support.time import utc_now
-
-
-SUITE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+from support.identifiers import IDENTIFIER_RE
+from support.time import utc_now, utc_run_id
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="build clean serial and parallel executables before running",
     )
-    parser.add_argument("--build-jobs", type=_positive_integer, metavar="N")
+    parser.add_argument("--build-jobs", type=parse_build_jobs, metavar="N")
     parser.add_argument(
         "--repository-root",
         type=Path,
@@ -119,8 +115,8 @@ def run_suite(
     validate_bundle_root(bundle_root, case_dir)
     if required_bundle_class is not None:
         _require_bundle_class(bundle_root, case_dir, required_bundle_class)
-    run_id = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    if not SUITE_ID_RE.fullmatch(run_id):
+    run_id = run_id or utc_run_id()
+    if not IDENTIFIER_RE.fullmatch(run_id):
         raise BundleError(f"invalid suite run identifier: {run_id}")
 
     suite_dir = _suite_directory(settings, suite_id, run_id, resume)
@@ -411,16 +407,6 @@ def _print_summary(summary: dict[str, Any], path: Path) -> None:
 
 def _passed(result: dict[str, Any]) -> bool:
     return result["status"] == "passed"
-
-
-def _positive_integer(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("build jobs must be a positive integer") from exc
-    if parsed < 1:
-        raise argparse.ArgumentTypeError("build jobs must be a positive integer")
-    return parsed
 
 
 if __name__ == "__main__":
