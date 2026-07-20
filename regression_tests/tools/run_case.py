@@ -23,6 +23,7 @@ from prepare_run import (
     prepare_run,
 )
 from support.documents import load_json, write_json_atomic
+from support.environments import source_environment
 from support.errors import BundleError, ComparisonError, HarnessError
 from support.files import file_identity
 from support.time import utc_now
@@ -301,45 +302,17 @@ def _link_summary_logs(workflow_dir: Path, stage_dir: Path) -> None:
 def _runtime_environment(
     settings: dict[str, str],
 ) -> tuple[dict[str, str], dict[str, Any] | None]:
-    environment = os.environ.copy()
     configured_path = settings.get("MHDG_ENVIRONMENT_SCRIPT")
     if not configured_path:
-        return environment, None
+        return dict(os.environ), None
 
     script = Path(configured_path).expanduser()
-    if not script.is_absolute() or not script.is_file():
+    if not script.is_absolute():
         raise BundleError(
-            "MHDG_ENVIRONMENT_SCRIPT must be an absolute path to a file"
+            "MHDG_ENVIRONMENT_SCRIPT must be an absolute path"
         )
 
-    command = [
-        "bash",
-        "-c",
-        'source "$1" >/dev/null && env -0',
-        "mhdg-regression-environment",
-        str(script),
-    ]
-    try:
-        completed = subprocess.run(
-            command,
-            env=environment,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
-    except OSError as exc:
-        raise BundleError(f"cannot source environment script {script}: {exc}") from exc
-    if completed.returncode != 0:
-        error = completed.stderr.decode(errors="replace").strip()
-        detail = f": {error}" if error else ""
-        raise BundleError(f"environment script failed ({completed.returncode}){detail}")
-
-    sourced_environment = {}
-    for entry in completed.stdout.split(b"\0"):
-        if not entry:
-            continue
-        key, value = entry.split(b"=", 1)
-        sourced_environment[os.fsdecode(key)] = os.fsdecode(value)
+    script, sourced_environment = source_environment(script)
     return sourced_environment, _file_record(script, str(script))
 
 

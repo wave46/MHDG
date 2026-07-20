@@ -16,6 +16,7 @@ from typing import Any, TextIO
 
 from check_bundle import read_settings
 from support.documents import write_json_direct
+from support.environments import source_environment
 from support.errors import BundleError, HarnessError
 from support.files import file_identity
 from support.time import utc_now
@@ -80,8 +81,7 @@ def build_solver(
             str(lib_dir / "Make.inc" / "init_vars_libs.sh"),
         )
     ).expanduser()
-    _require_file(environment_script, "build environment script")
-    environment = _environment_from_script(environment_script)
+    environment_script, environment = source_environment(environment_script)
 
     jobs = jobs or _configured_jobs(settings)
     revision, changes = _git_state(repository_root)
@@ -215,28 +215,6 @@ def _build_root(settings: dict[str, str]) -> Path:
     except OSError as exc:
         raise BuildError(f"cannot create regression build root {root}: {exc}") from exc
     return root.resolve()
-
-
-def _environment_from_script(script: Path) -> dict[str, str]:
-    command = [
-        "bash",
-        "-c",
-        'source "$1" >/dev/null && env -0',
-        "mhdg-build-environment",
-        str(script.resolve()),
-    ]
-    try:
-        completed = subprocess.run(command, check=True, capture_output=True)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        detail = getattr(exc, "stderr", b"").decode(errors="replace").strip()
-        suffix = f": {detail}" if detail else ""
-        raise BuildError(f"cannot load build environment {script}{suffix}") from exc
-    return {
-        key.decode(errors="surrogateescape"): value.decode(errors="surrogateescape")
-        for entry in completed.stdout.split(b"\0")
-        if entry
-        for key, value in [entry.split(b"=", 1)]
-    }
 
 
 def _run_logged(
