@@ -54,9 +54,6 @@ def _compare_mesh(
     failures: list[str],
 ) -> dict[str, Any]:
     report: dict[str, Any] = {"connectivity": {}}
-    if tolerances["mesh_connectivity"] != "exact":
-        raise ComparisonError("only exact mesh connectivity is supported")
-
     for name in ("T", "Tlin", "Tb"):
         first = _optional_array(reference, "mesh", name)
         second = _optional_array(candidate, "mesh", name)
@@ -219,7 +216,7 @@ def _numeric_metrics(
     tolerances: dict[str, Any],
 ) -> dict[str, Any]:
     norms = calculate_error_norms(reference, candidate)
-    if not norms.compatible or not norms.finite:
+    if not norms.available:
         return {
             "passed": False,
             "finite": norms.finite,
@@ -233,8 +230,7 @@ def _numeric_metrics(
     normalized_linf = norms.normalized_linf
     assert relative_l2 is not None and normalized_linf is not None
     passed = (
-        (norms.finite or not tolerances["require_finite"])
-        and relative_l2 <= tolerances["relative_l2_max"]
+        relative_l2 <= tolerances["relative_l2_max"]
         and normalized_linf <= tolerances["normalized_linf_max"]
     )
     return {

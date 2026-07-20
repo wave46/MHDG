@@ -18,7 +18,7 @@ from comparison.convergence import (
     NEWTON_CONVERGENCE_FAILURE,
     read_newton_convergence,
 )
-from comparison.metrics import calculate_error_norms
+from comparison.metrics import calculate_error_norms, format_metric, maximum_metric
 from compare_run import select_candidate
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
@@ -64,8 +64,9 @@ def main(argv: list[str] | None = None) -> int:
     for dataset_name, dataset in report["datasets"].items():
         metrics = list(dataset["equations"].values())
         print(
-            f"{dataset_name}: max relL2={_maximum(metrics, 'relative_l2'):.3e} "
-            f"max nLinf={_maximum(metrics, 'normalized_linf'):.3e}"
+            f"{dataset_name}: max relL2="
+            f"{format_metric(maximum_metric(metrics, 'relative_l2'))} "
+            f"max nLinf={format_metric(maximum_metric(metrics, 'normalized_linf'))}"
         )
     if args.report:
         print(f"report: {args.report.expanduser().resolve()}")
@@ -307,14 +308,14 @@ def _numeric_metrics(
     candidate: np.ndarray,
     limits: dict[str, float] | None,
 ) -> dict[str, Any]:
-    norms = calculate_error_norms(reference, candidate) if reference.size else None
-    finite = bool(norms and norms.finite)
-    relative_l2 = norms.relative_l2 if norms else None
-    normalized_linf = norms.normalized_linf if norms else None
+    norms = calculate_error_norms(reference, candidate)
+    finite = norms.finite
+    relative_l2 = norms.relative_l2
+    normalized_linf = norms.normalized_linf
     passed = None
     if limits is not None:
         passed = bool(
-            finite
+            norms.available
             and relative_l2 <= limits["relative_l2_max"]
             and normalized_linf <= limits["normalized_linf_max"]
         )
@@ -436,11 +437,6 @@ def _run_input(
     if not path.is_absolute():
         path = run_directory / path
     return _existing_file(path, label)
-
-
-def _maximum(metrics: list[dict[str, Any]], key: str) -> float:
-    values = [metric[key] for metric in metrics if metric[key] is not None]
-    return max(values, default=float("nan"))
 
 
 if __name__ == "__main__":

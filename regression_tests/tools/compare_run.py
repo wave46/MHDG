@@ -14,6 +14,7 @@ from comparison.convergence import (
     NEWTON_CONVERGENCE_FAILURE,
     read_newton_convergence,
 )
+from comparison.metrics import format_metric, maximum_metric
 from compare_hdf5 import compare_hdf5_files
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
@@ -131,8 +132,8 @@ def _print_summary(report: dict[str, Any]) -> None:
     print(
         "Newton error: "
         f"{_pass_label(convergence['passed'])} "
-        f"{_metric(convergence['final_newton_error'])} "
-        f"<= {_metric(convergence['maximum'])}"
+        f"{format_metric(convergence['final_newton_error'])} "
+        f"<= {format_metric(convergence['maximum'])}"
     )
 
     mesh = report["hdf5"].get("mesh", {})
@@ -146,7 +147,7 @@ def _print_summary(report: dict[str, Any]) -> None:
         "Mesh: "
         f"{_pass_label(mesh_passed)} connectivity="
         f"{_pass_label(connectivity_passed)} max|dX|="
-        f"{_metric(coordinates.get('maximum_absolute_error'))}"
+        f"{format_metric(coordinates.get('maximum_absolute_error'))}"
     )
 
     solution = report["hdf5"].get("solution", {}).get("datasets", {})
@@ -155,8 +156,8 @@ def _print_summary(report: dict[str, Any]) -> None:
         metrics = list(dataset.get("equations", {}).values())
         print(
             f"solution/{name}: {_pass_label(dataset.get('passed', False))} "
-            f"max relL2={_maximum(metrics, 'relative_l2')} "
-            f"max nLinf={_maximum(metrics, 'normalized_linf')}"
+            f"max relL2={format_metric(maximum_metric(metrics, 'relative_l2'))} "
+            f"max nLinf={format_metric(maximum_metric(metrics, 'normalized_linf'))}"
         )
 
     transport = report["hdf5"].get("transport_1d", {})
@@ -165,8 +166,10 @@ def _print_summary(report: dict[str, Any]) -> None:
         print(
             "transport_1d: "
             f"{_pass_label(transport.get('passed', False))} "
-            f"max relL2={_maximum(transport_metrics, 'relative_l2')} "
-            f"max nLinf={_maximum(transport_metrics, 'normalized_linf')}"
+            "max relL2="
+            f"{format_metric(maximum_metric(transport_metrics, 'relative_l2'))} "
+            "max nLinf="
+            f"{format_metric(maximum_metric(transport_metrics, 'normalized_linf'))}"
         )
 
     failures = report["failures"]
@@ -174,15 +177,6 @@ def _print_summary(report: dict[str, Any]) -> None:
         print(f"FAIL: {failure}")
     if len(failures) > 10:
         print(f"... {len(failures) - 10} more failures; see the JSON report")
-
-
-def _maximum(metrics: list[dict[str, Any]], key: str) -> str:
-    values = [item.get(key) for item in metrics if item.get(key) is not None]
-    return _metric(max(values)) if values else "n/a"
-
-
-def _metric(value: float | None) -> str:
-    return f"{value:.3e}" if value is not None else "n/a"
 
 
 def _pass_label(passed: bool) -> str:
@@ -243,9 +237,7 @@ def _tolerance_profile(
 
     profile = profiles[profile_id]
     required = {
-        "require_finite",
         "newton_error_max",
-        "mesh_connectivity",
         "mesh_coordinate_atol",
         "relative_l2_max",
         "normalized_linf_max",

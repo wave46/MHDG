@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -13,6 +14,15 @@ class ErrorNorms:
     finite: bool
     relative_l2: float | None
     normalized_linf: float | None
+
+    @property
+    def available(self) -> bool:
+        return (
+            self.compatible
+            and self.finite
+            and self.relative_l2 is not None
+            and self.normalized_linf is not None
+        )
 
 
 def calculate_error_norms(
@@ -26,7 +36,7 @@ def calculate_error_norms(
     if not compatible or not finite:
         return ErrorNorms(compatible, finite, None, None)
     if first.size == 0:
-        return ErrorNorms(True, True, 0.0, 0.0)
+        return ErrorNorms(True, True, None, None)
 
     difference = second - first
     tiny = np.finfo(float).tiny
@@ -38,3 +48,16 @@ def calculate_error_norms(
         np.max(np.abs(difference)) / max(float(np.max(np.abs(first))), tiny)
     )
     return ErrorNorms(True, True, relative_l2, normalized_linf)
+
+
+def maximum_metric(
+    metrics: Iterable[Mapping[str, float | None]], key: str
+) -> float | None:
+    """Return the largest available metric value."""
+    values = (metric.get(key) for metric in metrics)
+    return max((value for value in values if value is not None), default=None)
+
+
+def format_metric(value: float | None) -> str:
+    """Format an available metric or a readable missing-value marker."""
+    return f"{value:.3e}" if value is not None else "n/a"
