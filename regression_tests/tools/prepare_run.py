@@ -397,7 +397,10 @@ def _case_artifacts(
     )
     data_id = case["external_data_id"]
     case_data = manifest["case_data"].get(data_id)
-    if case_data is None or case_data["case_id"] != case["case_id"]:
+    if case_data is None or case_data["case_id"] not in {
+        case["case_id"],
+        data_id,
+    }:
         raise BundleError(f"bundle does not contain case data for {case['case_id']}")
 
     paths = {}

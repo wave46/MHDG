@@ -78,6 +78,57 @@ class AdaptiveComparisonTests(unittest.TestCase):
         self.assertEqual(path.name, "comparison.json")
         self.assertEqual(compare_files.call_args.args[3], 4)
 
+    @patch("compare_adaptive.compare_adaptive_files")
+    def test_run_comparison_accepts_stage_file_overrides(self, compare_files) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run = Path(temporary)
+            candidate = run / "candidate.h5"
+            reference = run / "golden.h5"
+            fekete = run / "positionFeketeNodesTri2D.h5"
+            for path in (candidate, reference, fekete):
+                path.write_text("synthetic\n", encoding="utf-8")
+            (run / "stdout.log").write_text("Error: 1.0E-4\n", encoding="utf-8")
+            (run / "run_plan.json").write_text(
+                json.dumps(
+                    {
+                        "case_id": "legacy_case",
+                        "workflow_id": "cold_adaptive",
+                        "layout_id": "mpi4_omp4",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (run / "run_metadata.json").write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "hdf5_outputs": ["candidate.h5"],
+                        "runtime_files": {
+                            "positionFeketeNodesTri2D.h5": {"path": str(fekete)}
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            compare_files.return_value = {
+                "schema_version": 1,
+                "status": "passed",
+                "failures": [],
+                "tolerances": {},
+            }
+
+            _, report = compare_adaptive_run(
+                run,
+                REGRESSION_ROOT / "cases",
+                REGRESSION_ROOT / "tolerances.json",
+                candidate_override=candidate,
+                reference_override=reference,
+                profile_override="adaptive_reference",
+            )
+
+        self.assertEqual(report["status"], "passed")
+        self.assertEqual(compare_files.call_args.args[:2], (reference, candidate))
+
     def test_reference_points_are_inside_each_triangle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "reference.h5"

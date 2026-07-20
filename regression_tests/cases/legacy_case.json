@@ -165,6 +165,7 @@
       "comparison_policy": "fixed_hdf5",
       "tolerance_profile": "cold_fixed_reference",
       "cross_layout_tolerance_profile": "cold_fixed_reference",
+      "stage_tolerance_profile": "fixed_stage_reference",
       "logical_overrides": {
         "rest_adapt": false
       },
@@ -226,6 +227,7 @@
       "reference_role": "warm_reference",
       "comparison_policy": "mesh_independent",
       "tolerance_profile": "adaptive_reference",
+      "stage_tolerance_profile": "adaptive_reference",
       "logical_overrides": {
         "rest_adapt": false
       },

@@ -104,6 +104,9 @@ def compare_adaptive_run(
     case_dir: Path,
     tolerances_path: Path,
     report_path: Path | None = None,
+    candidate_override: Path | None = None,
+    reference_override: Path | None = None,
+    profile_override: str | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Compare one completed adaptive run with its bundled reference."""
     run_directory = _existing_directory(run_directory, "run")
@@ -117,10 +120,12 @@ def compare_adaptive_run(
     if workflow is None or workflow.get("comparison_policy") != "mesh_independent":
         raise ComparisonError("run does not define mesh-independent comparison")
     profile_id, tolerances = _adaptive_tolerance_profile(
-        tolerances_path, workflow
+        tolerances_path, workflow, profile_override
     )
-    candidate = select_candidate(run_directory, metadata)
-    reference = _existing_file(run_directory / "inputs/reference.h5", "reference")
+    candidate = select_candidate(run_directory, metadata, candidate_override)
+    reference = _run_input(
+        run_directory, reference_override, "inputs/reference.h5", "reference"
+    )
     fekete = _fekete_nodes(metadata)
     report = compare_adaptive_files(
         reference,
@@ -411,10 +416,12 @@ def _fekete_nodes(metadata: dict[str, Any]) -> Path:
 
 
 def _adaptive_tolerance_profile(
-    path: Path, workflow: dict[str, Any]
+    path: Path,
+    workflow: dict[str, Any],
+    profile_override: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     document = _load_json(path, "tolerance definitions")
-    profile_id = workflow.get("tolerance_profile")
+    profile_id = profile_override or workflow.get("tolerance_profile")
     profile = document.get("profiles", {}).get(profile_id)
     required = {
         "newton_error_max",
@@ -435,6 +442,19 @@ def _adaptive_tolerance_profile(
                 f"adaptive tolerance profile has invalid {dataset} limits"
             )
     return profile_id, profile
+
+
+def _run_input(
+    run_directory: Path,
+    override: Path | None,
+    default: str,
+    label: str,
+) -> Path:
+    path = override if override is not None else Path(default)
+    path = path.expanduser()
+    if not path.is_absolute():
+        path = run_directory / path
+    return _existing_file(path, label)
 
 
 def _last_newton_error(path: Path) -> float | None:

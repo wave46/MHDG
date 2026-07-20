@@ -11,9 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import BundleError, load_case_definition
-from compare_adaptive import compare_adaptive_run
 from compare_hdf5 import ComparisonError
-from compare_run import compare_run
+from compare_matrix import compare_completed_run
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -102,20 +101,12 @@ def _verify_result(
     if workflow is None:
         result["failures"] = [f"unknown workflow: {workflow_id}"]
         return result
-    policy = workflow.get("comparison_policy")
-    result["comparison_policy"] = policy
     try:
         run_directory = Path(source["run_directory"])
-        if policy == "fixed_hdf5":
-            report_path, report = compare_run(
-                run_directory, case_dir, tolerances_path
-            )
-        elif policy == "mesh_independent":
-            report_path, report = compare_adaptive_run(
-                run_directory, case_dir, tolerances_path
-            )
-        else:
-            raise ComparisonError(f"unsupported comparison policy: {policy}")
+        policy, report_path, report = compare_completed_run(
+            run_directory, case_dir, tolerances_path
+        )
+        result["comparison_policy"] = policy
         result["comparison_report"] = str(report_path)
         result["failures"] = report["failures"]
         result["status"] = report["status"]

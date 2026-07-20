@@ -21,8 +21,8 @@ from check_bundle import (
     read_settings,
     validate_bundle_root,
 )
+from compare_matrix import compare_completed_run
 from compare_hdf5 import ComparisonError
-from compare_run import compare_run
 from prepare_run import prepare_run
 from run_case import execute_prepared
 
@@ -266,6 +266,7 @@ def _run_cell(
         "layout_id": layout_id,
         "status": "error",
         "run_status": None,
+        "comparison_policy": None,
         "comparison_status": None,
         "duration_seconds": None,
         "run_directory": None,
@@ -296,9 +297,10 @@ def _run_cell(
             result["status"] = "passed"
             return result
 
-        report_path, comparison = compare_run(
+        policy, report_path, comparison = compare_completed_run(
             run.path, case_dir, tolerances_path
         )
+        result["comparison_policy"] = policy
         result["comparison_status"] = comparison["status"]
         result["comparison_report"] = str(report_path)
         result["failures"] = comparison["failures"]

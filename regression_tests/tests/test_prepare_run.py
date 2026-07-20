@@ -202,6 +202,26 @@ class RunPreparationTests(unittest.TestCase):
         self.assertEqual(plan["environment"]["OMP_PLACES"], "cores")
         self.assertEqual(plan["environment"]["OMP_PROC_BIND"], "spread")
 
+    def test_prepares_from_bundle_using_previous_case_id(self) -> None:
+        manifest_path = self.bundle / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["case_data"]["legacy_fixed"]["case_id"] = "legacy_fixed"
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
+
+        prepared = prepare_run(
+            self.settings,
+            "legacy_case",
+            "warm",
+            "serial_omp1",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "previous-case-id",
+        )
+
+        self.assertTrue((prepared.path / "inputs/reference.h5").is_symlink())
+
     def test_prepares_seven_stage_fixed_mesh_workflow(self) -> None:
         prepared = prepare_run(
             self.settings,

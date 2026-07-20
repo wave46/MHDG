@@ -37,7 +37,7 @@ Options:
   --settings FILE  Local bundle, run, executable, and launcher settings.
   -h, --help       Show this help text.
 
-Suites: warm, warm_parallelism, cold_matrix.
+Suites: warm, warm_parallelism, cold, cold_matrix.
 EOF
 }
 

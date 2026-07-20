@@ -21,6 +21,17 @@
         "mpi4_omp4"
       ]
     },
+    "cold": {
+      "description": "Routine cold fixed and adaptive checks in the canonical layout",
+      "case_id": "legacy_case",
+      "workflow_ids": [
+        "cold_fixed",
+        "cold_adaptive"
+      ],
+      "layouts": [
+        "mpi4_omp4"
+      ]
+    },
     "cold_matrix": {
       "description": "Cold fixed and adaptive workflows across all tracked layouts",
       "case_id": "legacy_case",

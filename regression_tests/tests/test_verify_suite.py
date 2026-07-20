@@ -40,11 +40,8 @@ class SuiteVerificationTests(unittest.TestCase):
             self.assertIn("verification failed:", completed.stdout)
             self.assertTrue((root / "verification_summary.json").is_file())
 
-    @patch("verify_suite.compare_adaptive_run")
-    @patch("verify_suite.compare_run")
-    def test_verification_dispatches_without_running_solver(
-        self, fixed_compare, adaptive_compare
-    ) -> None:
+    @patch("verify_suite.compare_completed_run")
+    def test_verification_dispatches_without_running_solver(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = self._summary(
@@ -54,13 +51,17 @@ class SuiteVerificationTests(unittest.TestCase):
                     self._result(root, "cold_adaptive"),
                 ],
             )
-            fixed_compare.return_value = (
-                root / "fixed.json",
-                {"status": "passed", "failures": []},
-            )
-            adaptive_compare.return_value = (
-                root / "adaptive.json",
-                {"status": "passed", "failures": []},
+            compare.side_effect = (
+                (
+                    "fixed_hdf5",
+                    root / "fixed.json",
+                    {"status": "passed", "failures": []},
+                ),
+                (
+                    "mesh_independent",
+                    root / "adaptive.json",
+                    {"status": "passed", "failures": []},
+                ),
             )
 
             path, report = verify_suite(
@@ -74,14 +75,10 @@ class SuiteVerificationTests(unittest.TestCase):
             )
             self.assertEqual(path.name, "verification_summary.json")
             self.assertTrue(path.is_file())
-            fixed_compare.assert_called_once()
-            adaptive_compare.assert_called_once()
+            self.assertEqual(compare.call_count, 2)
 
-    @patch("verify_suite.compare_adaptive_run")
-    @patch("verify_suite.compare_run")
-    def test_incomplete_run_fails_without_comparison(
-        self, fixed_compare, adaptive_compare
-    ) -> None:
+    @patch("verify_suite.compare_completed_run")
+    def test_incomplete_run_fails_without_comparison(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             result = self._result(root, "cold_fixed")
@@ -96,8 +93,7 @@ class SuiteVerificationTests(unittest.TestCase):
             self.assertEqual(
                 report["results"][0]["failures"], ["solver run did not complete"]
             )
-            fixed_compare.assert_not_called()
-            adaptive_compare.assert_not_called()
+            compare.assert_not_called()
 
     @staticmethod
     def _summary(root: Path, results: list[dict[str, object]]) -> Path:
