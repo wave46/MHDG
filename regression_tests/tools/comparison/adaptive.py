@@ -19,7 +19,7 @@ from comparison.convergence import (
     read_newton_convergence,
 )
 from comparison.metrics import calculate_error_norms, format_metric, maximum_metric
-from comparison.fixed import select_candidate
+from comparison.outputs import resolve_run_file, select_candidate
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
 from support.paths import recorded_file, require_directory, require_file
@@ -131,7 +131,7 @@ def compare_adaptive_run(
         tolerances_path, workflow, tolerance_profile_override
     )
     candidate = select_candidate(run_directory, metadata, candidate_override)
-    reference = _run_input(
+    reference = resolve_run_file(
         run_directory, reference_override, "inputs/reference.h5", "reference"
     )
     fekete = _fekete_nodes(metadata)
@@ -413,20 +413,5 @@ def _adaptive_tolerance_profile(
                 f"adaptive tolerance profile has invalid {dataset} limits"
             )
     return profile_id, profile
-
-
-def _run_input(
-    run_directory: Path,
-    override: Path | None,
-    default: str,
-    label: str,
-) -> Path:
-    path = override if override is not None else Path(default)
-    path = path.expanduser()
-    if not path.is_absolute():
-        path = run_directory / path
-    return require_file(path, label)
-
-
 if __name__ == "__main__":
     raise SystemExit(main())

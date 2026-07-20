@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from check_bundle import read_settings
-from comparison.fixed import select_candidate
+from comparison.outputs import select_candidate
 from prepare_run import (
     PreparedExecution,
     PreparedRun,
