@@ -22,9 +22,11 @@ from check_bundle import (
     validate_bundle_root,
 )
 from compare_matrix import compare_completed_run
-from compare_hdf5 import ComparisonError
 from prepare_run import prepare_run
 from run_case import execute_prepared
+from support.documents import write_json_atomic
+from support.errors import HarnessError
+from support.time import utc_now
 
 
 SUITE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -90,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
             compare=not args.run_only,
             resume=args.resume,
         )
-    except BundleError as exc:
+    except (BundleError, HarnessError) as exc:
         print(f"suite failed: {exc}", file=sys.stderr)
         return 1
 
@@ -137,7 +139,7 @@ def run_suite(
         )
     else:
         summary = _new_summary(suite_id, run_id, suite, workflow_ids, comparison_mode)
-        _write_json(summary_path, summary)
+        write_json_atomic(summary_path, summary, "suite summary")
 
     print(f"suite: {suite_id} ({run_id})")
     completed_cells = {
@@ -166,14 +168,14 @@ def run_suite(
             )
             summary["duration_seconds"] += time.monotonic() - started_clock
             started_clock = time.monotonic()
-            _write_json(summary_path, summary)
+            write_json_atomic(summary_path, summary, "suite summary")
 
     summary["duration_seconds"] += time.monotonic() - started_clock
-    summary["finished_utc"] = _utc_now()
+    summary["finished_utc"] = utc_now()
     summary["status"] = (
         "passed" if all(_passed(item) for item in summary["results"]) else "failed"
     )
-    _write_json(summary_path, summary)
+    write_json_atomic(summary_path, summary, "suite summary")
     return summary_path, summary
 
 
@@ -186,7 +188,7 @@ def _new_summary(
 ) -> dict[str, Any]:
     summary = {
         "schema_version": 1,
-        "started_utc": _utc_now(),
+        "started_utc": utc_now(),
         "finished_utc": None,
         "duration_seconds": 0.0,
         "status": "running",
@@ -307,7 +309,7 @@ def _run_cell(
         result["status"] = (
             "passed" if comparison["status"] == "passed" else "comparison_failed"
         )
-    except (BundleError, ComparisonError) as exc:
+    except (BundleError, HarnessError) as exc:
         result["failures"] = [str(exc)]
     return result
 
@@ -409,21 +411,6 @@ def _print_summary(summary: dict[str, Any], path: Path) -> None:
 
 def _passed(result: dict[str, Any]) -> bool:
     return result["status"] == "passed"
-
-
-def _write_json(path: Path, document: dict[str, Any]) -> None:
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    try:
-        temporary.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-        temporary.replace(path)
-    except OSError as exc:
-        raise BundleError(f"cannot write suite summary {path}: {exc}") from exc
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
 
 
 def _positive_integer(value: str) -> int:

@@ -8,9 +8,7 @@ from typing import Any
 import h5py
 import numpy as np
 
-
-class ComparisonError(ValueError):
-    """Raised when an HDF5 file cannot satisfy the comparison contract."""
+from support.errors import ComparisonError
 
 
 def compare_hdf5_files(

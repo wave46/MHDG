@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from check_bundle import BundleError, read_settings
+from support.time import utc_now
 
 
 MODEL = "NGammaTiTeNeutral"
@@ -94,7 +95,7 @@ def build_solver(
     except OSError as exc:
         raise BuildError(f"cannot create build directory {build_dir}: {exc}") from exc
 
-    started = _utc_now()
+    started = utc_now()
     commands: list[list[str]] = []
     executables: dict[str, Path] = {}
     for variant, mode in VARIANTS.items():
@@ -128,7 +129,7 @@ def build_solver(
         "build_id": build_id,
         "status": "completed",
         "started_utc": started,
-        "finished_utc": _utc_now(),
+        "finished_utc": utc_now(),
         "repository": {
             "root": str(repository_root),
             "revision": revision,
@@ -335,12 +336,6 @@ def _build_id(revision: str, dirty: bool) -> str:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     suffix = "-dirty" if dirty else ""
     return f"{timestamp}-{revision[:8]}{suffix}"
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
 
 
 def _require_directory(path: Path, label: str) -> None:

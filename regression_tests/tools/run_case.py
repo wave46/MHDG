@@ -12,7 +12,6 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +25,9 @@ from prepare_run import (
     openmp_environment,
     prepare_run,
 )
+from support.documents import write_json_atomic
+from support.errors import HarnessError
+from support.time import utc_now
 
 
 FATAL_LOG_MARKERS = (
@@ -77,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             _print_prepared(prepared)
             result = execute_prepared(prepared, settings)
-        except BundleError as exc:
+        except (BundleError, HarnessError) as exc:
             print(f"run failed: {exc}", file=sys.stderr)
             completed = False
             continue
@@ -121,7 +123,7 @@ def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
     executable = _file_record(prepared.executable, str(prepared.executable))
     build_manifest = _optional_file_record(settings, "MHDG_BUILD_MANIFEST")
 
-    started_utc = _utc_now()
+    started_utc = utc_now()
     started_clock = time.monotonic()
     exit_code: int | None = None
     launch_error: str | None = None
@@ -155,7 +157,7 @@ def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
         "schema_version": 1,
         "status": status,
         "started_utc": started_utc,
-        "finished_utc": _utc_now(),
+        "finished_utc": utc_now(),
         "duration_seconds": duration,
         "exit_code": exit_code,
         "launch_error": launch_error,
@@ -177,7 +179,9 @@ def execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
         "output_files": output_files,
         "hdf5_outputs": hdf5_outputs,
     }
-    _write_json(prepared.path / "run_metadata.json", metadata)
+    write_json_atomic(
+        prepared.path / "run_metadata.json", metadata, "run metadata"
+    )
 
     return RunResult(prepared.path, status, exit_code, duration, hdf5_outputs)
 
@@ -186,7 +190,7 @@ def execute_staged_run(
     prepared: PreparedStagedRun, settings: dict[str, str]
 ) -> RunResult:
     """Run stages in order, passing each selected HDF5 result to the next."""
-    started_utc = _utc_now()
+    started_utc = utc_now()
     started_clock = time.monotonic()
     stage_records = []
     selected_output: Path | None = None
@@ -253,7 +257,7 @@ def execute_staged_run(
         "schema_version": 1,
         "status": status,
         "started_utc": started_utc,
-        "finished_utc": _utc_now(),
+        "finished_utc": utc_now(),
         "duration_seconds": time.monotonic() - started_clock,
         "exit_code": last_result.exit_code if last_result is not None else None,
         "working_directory": str(prepared.path),
@@ -265,7 +269,9 @@ def execute_staged_run(
         stage_metadata = _read_json(last_result.path / "run_metadata.json")
         for name in ("environment", "executable", "runtime_files", "solver"):
             metadata[name] = stage_metadata[name]
-    _write_json(prepared.path / "run_metadata.json", metadata)
+    write_json_atomic(
+        prepared.path / "run_metadata.json", metadata, "run metadata"
+    )
 
     return RunResult(
         prepared.path,
@@ -408,21 +414,6 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(document, dict):
         raise BundleError(f"run metadata must contain an object: {path}")
     return document
-
-
-def _write_json(path: Path, document: dict[str, Any]) -> None:
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    try:
-        temporary.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-        temporary.replace(path)
-    except OSError as exc:
-        raise BundleError(f"cannot write run metadata {path}: {exc}") from exc
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
 
 
 if __name__ == "__main__":

@@ -7,11 +7,11 @@ import json
 import re
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from check_bundle import BundleError, load_validated_json
+from support.time import utc_now
 
 
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -240,7 +240,7 @@ def install_reference_matrix(
         index_path,
         {
             "schema_version": 1,
-            "created_utc": _utc_now(),
+            "created_utc": utc_now(),
             "case_id": summary["case_id"],
             "suite_id": summary["suite_id"],
             "suite_run_id": summary["run_id"],
@@ -446,9 +446,3 @@ def _is_within(path: Path, directory: Path) -> bool:
     except ValueError:
         return False
     return True
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )

@@ -11,7 +11,6 @@ import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +30,7 @@ from reference_matrix import (
     install_reference_matrix,
     validate_matrix_summary,
 )
+from support.time import utc_now
 
 
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -156,7 +156,7 @@ def promote_bundle(
                 )
             manifest["bundle_version"] = bundle_version
             manifest["bundle_class"] = "golden"
-            manifest["created_utc"] = _utc_now()
+            manifest["created_utc"] = utc_now()
             _write_json(staging / "manifest.json", manifest)
             result = validate_bundle_root(staging, case_dir)
             staging.rename(output)
@@ -278,7 +278,7 @@ def _install_provenance(
     record = {
         "schema_version": 1,
         "status": "golden",
-        "created_utc": _utc_now(),
+        "created_utc": utc_now(),
         "case_id": summary["case_id"],
         "workflow_id": summary["workflow_id"],
         "canonical_layout": run.plan["layout_id"],
@@ -446,12 +446,6 @@ def _is_within(path: Path, directory: Path) -> bool:
     except ValueError:
         return False
     return True
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
 
 
 if __name__ == "__main__":

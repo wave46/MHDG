@@ -4,12 +4,10 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +15,10 @@ import h5py
 import numpy as np
 
 from check_bundle import load_case_definition
-from compare_hdf5 import ComparisonError
 from compare_run import select_candidate
+from support.documents import load_json, write_json_atomic
+from support.errors import ComparisonError, HarnessError
+from support.time import utc_now
 
 
 ERROR_RE = re.compile(r"^\s*Error:\s*([-+0-9.eE]+)\s*$", re.MULTILINE)
@@ -49,8 +49,8 @@ def main(argv: list[str] | None = None) -> int:
             args.samples_per_element,
         )
         if args.report:
-            _write_json(args.report, report)
-    except ComparisonError as exc:
+            write_json_atomic(args.report, report, "adaptive report")
+    except HarnessError as exc:
         print(f"adaptive comparison failed: {exc}", file=sys.stderr)
         return 1
 
@@ -110,8 +110,8 @@ def compare_adaptive_run(
 ) -> tuple[Path, dict[str, Any]]:
     """Compare one completed adaptive run with its bundled reference."""
     run_directory = _existing_directory(run_directory, "run")
-    plan = _load_json(run_directory / "run_plan.json", "run plan")
-    metadata = _load_json(run_directory / "run_metadata.json", "run metadata")
+    plan = load_json(run_directory / "run_plan.json", "run plan")
+    metadata = load_json(run_directory / "run_metadata.json", "run metadata")
     if metadata.get("status") != "completed":
         raise ComparisonError("run metadata status is not completed")
 
@@ -146,7 +146,7 @@ def compare_adaptive_run(
         )
     report.update(
         {
-            "created_utc": _utc_now(),
+            "created_utc": utc_now(),
             "status": "passed" if not report["failures"] else "failed",
             "run_directory": str(run_directory),
             "case_id": plan["case_id"],
@@ -164,7 +164,7 @@ def compare_adaptive_run(
     report_path = (report_path or run_directory / "comparison.json").expanduser().resolve()
     if report_path in {candidate, reference, fekete}:
         raise ComparisonError("adaptive report cannot replace a comparison input")
-    _write_json(report_path, report)
+    write_json_atomic(report_path, report, "adaptive report")
     return report_path, report
 
 
@@ -420,7 +420,7 @@ def _adaptive_tolerance_profile(
     workflow: dict[str, Any],
     profile_override: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    document = _load_json(path, "tolerance definitions")
+    document = load_json(path, "tolerance definitions")
     profile_id = profile_override or workflow.get("tolerance_profile")
     profile = document.get("profiles", {}).get(profile_id)
     required = {
@@ -465,36 +465,9 @@ def _last_newton_error(path: Path) -> float | None:
     return float(values[-1]) if values else None
 
 
-def _load_json(path: Path, label: str) -> dict[str, Any]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ComparisonError(f"cannot read {label} {path}: {exc}") from exc
-    if not isinstance(document, dict):
-        raise ComparisonError(f"{label} must contain a JSON object")
-    return document
-
-
 def _maximum(metrics: list[dict[str, Any]], key: str) -> float:
     values = [metric[key] for metric in metrics if metric[key] is not None]
     return max(values, default=float("nan"))
-
-
-def _write_json(path: Path, document: dict[str, Any]) -> None:
-    path = path.expanduser().resolve()
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-        temporary.replace(path)
-    except OSError as exc:
-        raise ComparisonError(f"cannot write adaptive report {path}: {exc}") from exc
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
 
 
 if __name__ == "__main__":

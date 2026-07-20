@@ -5,15 +5,16 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from check_bundle import BundleError, load_case_definition
-from compare_hdf5 import ComparisonError, compare_hdf5_files
+from compare_hdf5 import compare_hdf5_files
+from support.documents import load_json, write_json_atomic
+from support.errors import ComparisonError, HarnessError
+from support.time import utc_now
 
 
 ERROR_RE = re.compile(r"^\s*Error:\s*([-+0-9.eE]+)\s*$", re.MULTILINE)
@@ -44,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
             args.profile,
             args.report,
         )
-    except (BundleError, ComparisonError) as exc:
+    except (BundleError, HarnessError) as exc:
         print(f"comparison failed: {exc}", file=sys.stderr)
         return 1
 
@@ -67,8 +68,8 @@ def compare_run(
 ) -> tuple[Path, dict[str, Any]]:
     """Compare a completed run and atomically write its JSON report."""
     run_directory = _existing_directory(run_directory, "run directory")
-    plan = _load_json(run_directory / "run_plan.json", "run plan")
-    metadata = _load_json(run_directory / "run_metadata.json", "run metadata")
+    plan = load_json(run_directory / "run_plan.json", "run plan")
+    metadata = load_json(run_directory / "run_metadata.json", "run metadata")
     if metadata.get("status") != "completed":
         raise ComparisonError("run metadata status is not completed")
 
@@ -96,7 +97,7 @@ def compare_run(
 
     report = {
         "schema_version": 1,
-        "created_utc": _utc_now(),
+        "created_utc": utc_now(),
         "status": "passed" if not failures else "failed",
         "run_directory": str(run_directory),
         "case_id": plan["case_id"],
@@ -123,7 +124,7 @@ def compare_run(
         report_path = report_path.resolve()
     if report_path.resolve() in {candidate, reference}:
         raise ComparisonError("comparison report cannot replace an HDF5 input")
-    _write_json(report_path, report)
+    write_json_atomic(report_path, report, "comparison report")
     return report_path, report
 
 
@@ -234,7 +235,7 @@ def _tolerance_profile(
     layout_id: str,
     override: str | None,
 ) -> tuple[str, dict[str, Any]]:
-    document = _load_json(path, "tolerance definitions")
+    document = load_json(path, "tolerance definitions")
     profile_id = override or workflow.get("tolerance_profile")
     if override is None and layout_id != workflow.get("default_layout"):
         profile_id = workflow.get("cross_layout_tolerance_profile", profile_id)
@@ -295,18 +296,6 @@ def _existing_directory(path: Path, label: str) -> Path:
     return path
 
 
-def _load_json(path: Path, label: str) -> dict[str, Any]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise ComparisonError(f"cannot read {label} {path}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise ComparisonError(f"invalid JSON in {label} {path}: {exc.msg}") from exc
-    if not isinstance(document, dict):
-        raise ComparisonError(f"{label} must contain a JSON object")
-    return document
-
-
 def _file_identity(path: Path) -> dict[str, Any]:
     digest = hashlib.sha256()
     try:
@@ -317,22 +306,6 @@ def _file_identity(path: Path) -> dict[str, Any]:
     except OSError as exc:
         raise ComparisonError(f"cannot checksum comparison file {path}: {exc}") from exc
     return {"path": str(path), "size_bytes": size, "sha256": digest.hexdigest()}
-
-
-def _write_json(path: Path, document: dict[str, Any]) -> None:
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-        temporary.replace(path)
-    except OSError as exc:
-        raise ComparisonError(f"cannot write comparison report {path}: {exc}") from exc
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
 
 
 if __name__ == "__main__":

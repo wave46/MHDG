@@ -6,13 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from check_bundle import BundleError, load_case_definition
-from compare_hdf5 import ComparisonError
 from compare_matrix import compare_completed_run
+from support.documents import write_json_atomic
+from support.errors import HarnessError
+from support.time import utc_now
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
         path, summary = verify_suite(
             args.suite_summary, args.cases, args.tolerances
         )
-    except (BundleError, ComparisonError) as exc:
+    except (BundleError, HarnessError) as exc:
         print(f"suite verification failed: {exc}", file=sys.stderr)
         return 1
 
@@ -50,7 +51,7 @@ def verify_suite(
     output_path = suite_summary_path.parent / "verification_summary.json"
     summary = {
         "schema_version": 1,
-        "created_utc": _utc_now(),
+        "created_utc": utc_now(),
         "status": "running",
         "source_summary": str(suite_summary_path),
         "suite_id": source["suite_id"],
@@ -58,20 +59,20 @@ def verify_suite(
         "case_id": source["case_id"],
         "results": [],
     }
-    _write_json(output_path, summary)
+    write_json_atomic(output_path, summary, "verification summary")
     for source_result in source["results"]:
         summary["results"].append(
             _verify_result(source_result, case, case_dir, tolerances_path)
         )
-        _write_json(output_path, summary)
+        write_json_atomic(output_path, summary, "verification summary")
 
     summary["status"] = (
         "passed"
         if all(result["status"] == "passed" for result in summary["results"])
         else "failed"
     )
-    summary["finished_utc"] = _utc_now()
-    _write_json(output_path, summary)
+    summary["finished_utc"] = utc_now()
+    write_json_atomic(output_path, summary, "verification summary")
     return output_path, summary
 
 
@@ -110,7 +111,7 @@ def _verify_result(
         result["comparison_report"] = str(report_path)
         result["failures"] = report["failures"]
         result["status"] = report["status"]
-    except (BundleError, ComparisonError, TypeError) as exc:
+    except (BundleError, HarnessError, TypeError) as exc:
         result["failures"] = [str(exc)]
     return result
 
@@ -159,21 +160,6 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
     if not isinstance(document, dict):
         raise BundleError(f"{label} must contain a JSON object")
     return document
-
-
-def _write_json(path: Path, document: dict[str, Any]) -> None:
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    try:
-        temporary.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-        temporary.replace(path)
-    except OSError as exc:
-        raise BundleError(f"cannot write verification summary {path}: {exc}") from exc
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
 
 
 if __name__ == "__main__":
