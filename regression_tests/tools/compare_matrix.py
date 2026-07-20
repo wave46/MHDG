@@ -19,6 +19,10 @@ def compare_completed_run(
     run_directory: Path,
     case_dir: Path,
     tolerances_path: Path,
+    candidate_override: Path | None = None,
+    reference_override: Path | None = None,
+    profile_override: str | None = None,
+    report_override: Path | None = None,
 ) -> tuple[str, Path, dict[str, Any]]:
     """Use a matching stage matrix when present, otherwise compare the final state."""
     run_directory = require_directory(run_directory, "run")
@@ -31,6 +35,18 @@ def compare_completed_run(
     if workflow.get("stages"):
         matrix = _matrix_for_plan(plan, case, case_dir.parent / "schemas")
         if matrix is not None:
+            if any(
+                value is not None
+                for value in (
+                    candidate_override,
+                    reference_override,
+                    profile_override,
+                )
+            ):
+                raise ComparisonError(
+                    "candidate, reference, and profile overrides are not supported "
+                    "for staged comparisons"
+                )
             path, report = _compare_stages(
                 run_directory,
                 plan,
@@ -39,15 +55,30 @@ def compare_completed_run(
                 matrix,
                 case_dir,
                 tolerances_path,
+                report_override,
             )
             return "reference_matrix", path, report
 
     policy = workflow.get("comparison_policy")
     if policy == "fixed_hdf5":
-        path, report = compare_run(run_directory, case_dir, tolerances_path)
+        path, report = compare_run(
+            run_directory,
+            case_dir,
+            tolerances_path,
+            candidate_override=candidate_override,
+            reference_override=reference_override,
+            profile_override=profile_override,
+            report_override=report_override,
+        )
     elif policy == "mesh_independent":
         path, report = compare_adaptive_run(
-            run_directory, case_dir, tolerances_path
+            run_directory,
+            case_dir,
+            tolerances_path,
+            report_path=report_override,
+            candidate_override=candidate_override,
+            reference_override=reference_override,
+            profile_override=profile_override,
         )
     else:
         raise ComparisonError(f"unsupported comparison policy: {policy}")
@@ -62,6 +93,7 @@ def _compare_stages(
     matrix: ReferenceMatrix,
     case_dir: Path,
     tolerances_path: Path,
+    report_override: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     metadata = load_json(run_directory / "run_metadata.json", "run metadata")
     if metadata.get("status") != "completed":
@@ -144,7 +176,14 @@ def _compare_stages(
         "stages": stage_reports,
         "failures": failures,
     }
-    output = run_directory / "matrix_comparison.json"
+    output = (report_override or run_directory / "matrix_comparison.json").resolve()
+    reserved = {
+        Path(stage[name]).resolve()
+        for stage in stage_reports
+        for name in ("candidate", "reference", "comparison_report")
+    }
+    if output in reserved:
+        raise ComparisonError("matrix report cannot replace a stage artifact")
     write_json_atomic(output, aggregate, "matrix report")
     return output, aggregate
 

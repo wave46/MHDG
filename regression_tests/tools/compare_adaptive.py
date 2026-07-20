@@ -57,6 +57,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"adaptive comparison {report['status']}")
+    print_adaptive_summary(report)
+    if args.report:
+        print(f"report: {args.report.expanduser().resolve()}")
+    return 0 if report["status"] != "failed" else 1
+
+
+def print_adaptive_summary(report: dict[str, Any]) -> None:
+    """Print the human-readable summary for an adaptive-mesh report."""
     print(
         f"common points: {report['sampling']['common_points']}/"
         f"{report['sampling']['point_count']} "
@@ -69,9 +77,6 @@ def main(argv: list[str] | None = None) -> int:
             f"{format_metric(maximum_metric(metrics, 'relative_l2'))} "
             f"max nLinf={format_metric(maximum_metric(metrics, 'normalized_linf'))}"
         )
-    if args.report:
-        print(f"report: {args.report.expanduser().resolve()}")
-    return 0 if report["status"] != "failed" else 1
 
 
 def compare_adaptive_files(

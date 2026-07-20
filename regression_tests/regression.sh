@@ -28,7 +28,7 @@ Available commands:
   check-data     Validate an external bundle without modifying it.
   prepare        Create an isolated run directory without executing the solver.
   run            Prepare and execute one or more isolated workflows.
-  compare        Compare a completed fixed-mesh run with its reference.
+  compare        Compare a completed run using its workflow policy.
   suite          Run every workflow/layout in a tracked suite.
   suite-verify   Compare every recorded result without rerunning the solver.
   golden-check   Check executables against the configured golden bundle.
@@ -247,7 +247,7 @@ case "$command" in
       echo "error: compare does not use --settings" >&2
       exit 2
     fi
-    exec "$python_command" "$SCRIPT_DIR/tools/compare_run.py" \
+    exec "$python_command" "$SCRIPT_DIR/tools/compare.py" \
       --cases "$SCRIPT_DIR/cases" \
       --tolerances "$SCRIPT_DIR/tolerances.json" \
       "${compare_arguments[@]}"

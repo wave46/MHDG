@@ -228,13 +228,17 @@ pointwise difference divided by the largest absolute reference value.
 These are regression tolerances for the characterized legacy workflow, not
 general physical-accuracy targets.
 
-Compare one completed fixed-mesh run manually with:
+Compare any completed run manually with:
 
 ```bash
 regression_tests/regression.sh compare /path/to/completed/run
 ```
 
-The command prints a short summary and writes `comparison.json`.
+The command reads the run plan and selects fixed-mesh, adaptive-mesh, or staged
+reference-matrix comparison automatically.
+
+The command prints a short summary and writes `comparison.json`, or
+`matrix_comparison.json` for a staged reference matrix.
 
 ## Suites, saved verification, and promotion
 

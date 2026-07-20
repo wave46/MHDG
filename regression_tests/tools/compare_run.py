@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"candidate: {report['candidate']}")
     print(f"reference: {report['reference']}")
     print(f"tolerance profile: {report['tolerance_profile']['id']}")
-    _print_summary(report)
+    print_fixed_summary(report)
     return 0 if report["status"] == "passed" else 1
 
 
@@ -128,7 +128,8 @@ def compare_run(
     return report_path, report
 
 
-def _print_summary(report: dict[str, Any]) -> None:
+def print_fixed_summary(report: dict[str, Any]) -> None:
+    """Print the human-readable summary for a fixed-mesh report."""
     convergence = report["convergence"]
     print(
         "Newton error: "
