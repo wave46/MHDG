@@ -1,110 +1,86 @@
-# MHDG regression harness
+# MHDG regression tests
 
-This directory contains the tracked, non-sensitive contract for solver
-regression tests. Physical case data, complete parameter files, restart
-solutions, and golden outputs are distributed separately in an external case
-bundle.
+This directory contains the tracked, non-sensitive regression-test contract.
+Meshes, equilibria, parameter files, restarts, reference solutions, logs, and
+machine-specific paths remain in external bundles and private run directories.
 
-Status: external-data contract, candidate and golden bundle tools, isolated
-warm and staged cold execution, fixed-mesh HDF5 comparison, and tracked
-workflow-by-layout suites. Clean serial/parallel build orchestration is also
-available.
+The harness can build the solver, execute isolated warm or staged cold runs,
+compare their HDF5 outputs, collect accepted references, and check a new build
+against a golden bundle.
 
-## Repository boundary
+## Quick start with a golden bundle
 
-Tracked here:
+Install the Python dependencies once:
 
-- generic case identifiers and workflow definitions;
-- the local-settings example;
-- external-bundle schemas and examples;
-- generic serial, MPI, and OpenMP layouts;
-- comparison tolerances and a library-independent fixed-mesh comparator;
-- tracked suite definitions and orchestration;
-- clean serial/parallel build orchestration and provenance recording;
-- staged fixed-mesh and adaptive-mesh workflows.
+```bash
+python -m pip install -r regression_tests/requirements.txt
+```
 
-Not tracked here:
+Copy `settings.example.env` to the ignored `golden.local.env` and fill in its
+absolute data, run, executable, launcher, and environment-script paths. Then
+run from the repository root:
 
-- equilibria, meshes, geometry names, or experiment identifiers;
-- solver parameter and model files containing physical case specifications;
-- restart solutions, reference solutions, or run logs;
-- machine-specific executable, data, or scratch paths.
+```bash
+# Lightweight canonical warm restart.
+regression_tests/regression.sh golden-check
 
-## Initial cases
+# Build optimized serial and parallel executables first.
+regression_tests/regression.sh golden-check --build
 
-`legacy_case` is the routine integration case for branch `develop` at commit
-`29f442db67bac169b2616f2cbe399289d137993c`. Its first workflow is a same-state
-warm restart on a fixed mesh. The characterized run takes about ten seconds
-with four MPI ranks and four OpenMP threads.
+# Fixed and adaptive cold workflows in the canonical 4x4 layout.
+regression_tests/regression.sh golden-check cold --build
 
-Its external-data identifier remains `legacy_fixed` so bundles created before
-the case rename stay valid. Users select `legacy_case`; the compatibility
-identifier is internal to the bundle manifest.
+# Periodic full workflow-by-layout matrix.
+regression_tests/regression.sh golden-check cold_matrix --build
+```
 
-`historical_feature` identifies archived output from branch
-`feautre/neutrals_pressure` at commit
-`224fe346acb82c52a3efe5ee1fd6e35de43e3e4e`. It is comparison evidence, not a
-routine solver run and not an unquestioned correctness oracle.
+Set `MHDG_REGRESSION_GOLDEN_SETTINGS=/path/to/settings.env` or pass
+`--settings FILE` to use another private settings file. `golden.local.env` is
+ignored by Git.
 
-As cleaned features are accepted on `develop`, new case definitions and goldens
-may be added without changing the external-data contract.
+## Cases, workflows, and suites
 
-## Workflow vocabulary
+The tracked case is `legacy_case`, pinned to `develop` commit
+`29f442db67bac169b2616f2cbe399289d137993c`. Its external-data identifier
+remains `legacy_fixed` so bundles created before the rename still work.
 
-- `warm_same_state`: restart from a converged solution without changing the
-  physical or numerical settings.
-- `staged_fixed_mesh`: start analytically on the refined mesh, then pass each
-  stage output to the next stage without adaptivity.
-- `staged_adaptive_mesh`: start analytically on the coarse mesh, refine during
-  the first two stages, then finish the same continuations on that mesh.
-- `archived_compare`: inspect or compare a stored historical result without
-  routinely rerunning its source branch.
+The archived `historical_feature` case records evidence from
+`feautre/neutrals_pressure`; it is not a routine run or a correctness oracle.
 
-`legacy_case/warm`, `legacy_case/cold_fixed`, and
-`legacy_case/cold_adaptive` are executable. The `cold_matrix` suite records
-both cold workflows across every tracked layout; numerical verification is a
-separate step so an overnight run is never repeated merely to compare it.
+| Workflow | Purpose |
+| --- | --- |
+| `warm` | Reconverge an unchanged steady restart on a fixed mesh. |
+| `cold_fixed` | Start analytically on the refined mesh and complete seven continuation stages without adaptivity. |
+| `cold_adaptive` | Start analytically on the coarse mesh, adapt during the first two stages, then complete the same continuations. |
+
+Both cold workflows run `time_init`, `diffusion_reduction`, and five numbered
+continuations. Each stage waits for its predecessor and uses its selected HDF5
+output as the next restart.
+
+| Suite | Workflows and layouts | Intended use |
+| --- | --- | --- |
+| `warm` | `warm`, `mpi4_omp4` | Fast routine check. |
+| `warm_parallelism` | `warm`, all five layouts | MPI/OpenMP characterization. |
+| `cold` | Both cold workflows, `mpi4_omp4` | Routine feature-integration check. |
+| `cold_matrix` | Both cold workflows, all five layouts | Periodic or overnight evidence. |
+
+The characterized warm run takes seconds. The canonical cold suite is a
+longer routine check, while the initial ten-cell cold matrix took about six
+hours on the reference workstation. Runtime is recorded but is not currently
+a pass/fail metric.
+
+Tracked layouts are `serial_omp1`, `mpi2_omp1`, `mpi2_omp4`, `mpi4_omp1`, and
+`mpi4_omp4`. MPI layouts use Open MPI core binding and assign exclusive cores
+to each rank's OpenMP threads.
 
 ## External bundle contract
 
-The bundle root contains a `manifest.json` conforming to
-`schemas/bundle-manifest.schema.json`. Each physical file is recorded once in a
-top-level artifact registry, with a bundle-relative path, SHA-256 checksum, and
-size. Entries under `case_data` map the generic roles required by a case to
-those reusable artifact identifiers.
-A SHA-256 checksum is a 64-character fingerprint of a file's exact contents;
-it detects a missing, substituted, or changed external artifact. The bundle
-creator calculates checksums and sizes automatically; users do not enter them
-manually.
+A bundle is a self-contained directory with a validated `manifest.json`. The
+manifest records each artifact once using a generic role, bundle-relative
+path, size, media type, and SHA-256 checksum. Checksums are generated and
+checked automatically; users do not write them by hand.
 
-The complete `legacy_case` case package contains these roles:
-
-- `mesh`;
-- `geometry`;
-- `equilibrium_magnetic_field`;
-- `equilibrium_current_density`;
-- `warm_parameters`;
-- `transport_configuration`;
-- `warm_restart`;
-- `warm_reference`.
-
-The same artifact may be referenced by multiple cases or workflows. The
-manifest can therefore reuse a mesh, equilibrium, or reference solution
-without requiring a special `shared` directory or another physical copy.
-The case bundle is created once; serial, MPI, and OpenMP layouts all read these
-same artifacts and write only their own run outputs.
-
-The bundle can be unpacked anywhere. A user supplies its root through a local
-settings file based on `settings.example.env`.
-
-The optional manifest field `bundle_class` distinguishes a hand-prepared
-`candidate` from an accepted `golden` bundle. Both obey the same physical-file
-contract and are executed by the same harness commands.
-
-### Preparing case data
-
-Prepare one private, flat directory outside the repository. Use these generic
-names for the initial warm case:
+The basic prepared directory uses these generic names:
 
 ```text
 legacy_case/
@@ -118,20 +94,7 @@ legacy_case/
 └── reference_mpi4_omp4.h5
 ```
 
-The parameter, mesh, geometry, transport-model, equilibrium, and
-current-density files specify the physical case. `restart.h5` is the converged
-solution supplied to the solver. `reference_mpi4_omp4.h5` is the accepted
-result produced after reconverging that restart with four MPI ranks and four
-OpenMP threads. They are kept separate because a warm run can make small but
-measurable changes to the starting solution.
-
-Physical filenames before preparation may contain case-specific names, but the
-prepared directory and all tracked examples use only these generic names. The
-prepared entries may be regular files or symlinks to a private source archive;
-the creator copies symlink targets into the final bundle.
-
-To add the fixed-mesh and adaptive cold workflows, prepare these optional files
-in the same directory:
+Cold workflows additionally use:
 
 ```text
 mesh_adaptive_initial.msh
@@ -142,511 +105,209 @@ transport_cold_fixed_initial.nml
 transport_cold_fixed_continuation_01.nml ... continuation_05.nml
 ```
 
-The tracked stage names deliberately omit physical diffusion values. The
-external parameter and transport files contain those numerical choices. The
-sequence is analytical `time_init`, restart `diffusion_reduction`, then five
-restart continuations ending at the warm reference state. Both workflows reuse
-the parameter and transport files. `cold_fixed` starts on the refined
-`mesh.msh`, while `cold_adaptive` starts analytically on the coarse
-`mesh_adaptive_initial.msh` and carries each resulting mesh through the HDF5
-restart. The renderer forces `rest_adapt = .false.` throughout `cold_fixed`.
-For `cold_adaptive`, it forces `.true.` in `time_init` and
-`diffusion_reduction`, then `.false.` in the continuations. All other
-adaptivity and physical settings remain external.
+The prepared entries may be files or symlinks to a private archive. Bundle
+creation copies their contents, producing a portable bundle without external
+symlinks. Physical names and paths must never appear in tracked files.
 
-These cold files are optional so existing warm-only candidate and golden
-bundles remain valid. Either cold workflow requires the complete cold set.
-
-### Creating a bundle
-
-From the repository root, run:
+Create and validate a candidate bundle with:
 
 ```bash
 regression_tests/regression.sh bundle create \
   --case legacy_case \
   --source /private/path/legacy_case \
-  --output /private/path/mhdg_case_bundle
-```
+  --output /private/path/candidate_bundle
 
-The command creates a candidate bundle and will:
-
-- recognize the conventional filenames above;
-- require every file listed above;
-- refuse to replace an existing output path;
-- copy the physical artifacts into a self-contained output bundle;
-- calculate every size and SHA-256 checksum;
-- generate `manifest.json` with the required role mappings;
-- validate the completed bundle before publishing it at the output path;
-- leave the prepared source directory unchanged.
-
-The default bundle version is `1.0.0`. Supply another label when needed with
-`--bundle-version VERSION`.
-
-The generated physical layout inside the bundle is an implementation detail;
-users only prepare the flat source directory. The example manifest documents
-the generated data contract and is not intended for manual checksum editing.
-`param.txt` is preserved exactly at this stage. The `prepare` command renders
-active data paths and `save_folder` into a private run copy; it does not modify
-the bundled parameter file.
-
-After creation, copy `settings.example.env` to a private location and set:
-
-```text
-MHDG_REGRESSION_SETTINGS_VERSION=1
-MHDG_REGRESSION_DATA_ROOT=/private/path/mhdg_case_bundle
-```
-
-Then verify the bundle from the repository root:
-
-```bash
 regression_tests/regression.sh \
-  --settings /private/path/regression-settings.env \
+  --settings /private/path/candidate-settings.env \
   check-data
 ```
 
-The checker reads settings as data rather than sourcing them as shell code. It
-verifies manifest fields, safe bundle-relative paths, artifact sizes and
-SHA-256 checksums, role mappings, and the roles required by tracked case
-definitions. It does not modify the bundle.
+`bundle create` refuses to replace an existing output. A `candidate` and a
+`golden` bundle use the same data contract; the class records whether its
+references have been accepted for regression checks.
 
-## Building regression executables
+## Local settings and builds
 
-Build the optimized `NGammaTiTeNeutral` 2D serial and parallel executables from
-the current checkout with:
-
-```bash
-regression_tests/regression.sh \
-  --settings /private/path/regression-settings.env \
-  build
-```
-
-The build sources `lib/Make.inc/init_vars_libs.sh` by default. Set
-`MHDG_ENVIRONMENT_SCRIPT` only when another absolute path is needed.
-`MHDG_REGRESSION_BUILD_JOBS` defaults to 8 and `--jobs N` overrides it once.
-
-Serial and parallel modes share the same `.o` and `.mod` files in `lib/`, so
-the harness performs two sequential clean builds. It stores both executables,
-the generic Fekete-node file, logs, `build_metadata.json`, and generated
-`settings.env` under `MHDG_REGRESSION_BUILD_ROOT`. If that setting is omitted,
-the default is `MHDG_REGRESSION_RUN_ROOT/builds`.
-
-The metadata records the Git revision and dirty state, build commands,
-environment-script checksum, toolchain versions, and executable checksums.
-The generated settings preserve the original private data and run paths while
-selecting the new executables.
-
-## Preparing an isolated run
-
-Add the private run root and the executable required by the selected layout.
-MPI layouts also require the launcher:
+Start from `settings.example.env`. The important settings are:
 
 ```text
-MHDG_REGRESSION_RUN_ROOT=/private/path/regression_runs
+MHDG_REGRESSION_DATA_ROOT=/absolute/path/to/bundle
+MHDG_REGRESSION_RUN_ROOT=/absolute/path/to/scratch
 MHDG_SERIAL_EXECUTABLE=/absolute/path/to/serial/solver
 MHDG_PARALLEL_EXECUTABLE=/absolute/path/to/parallel/solver
 MHDG_MPI_LAUNCHER=mpirun.openmpi
-```
-
-Then prepare the characterized 4-by-4 layout:
-
-```bash
-regression_tests/regression.sh \
-  --settings /private/path/regression-settings.env \
-  prepare legacy_case warm --layout mpi4_omp4
-```
-
-Preparation creates a timestamped run directory under
-`MHDG_REGRESSION_RUN_ROOT`. It contains:
-
-```text
-legacy_case/warm/mpi4_omp4/<run-id>/
-├── inputs/             # symlinks to read-only bundle artifacts
-├── outputs/            # writable solver output directory
-├── res/                # writable mesh/adaptivity workspace
-├── positionFeketeNodesTri2D.h5  # symlink to generic solver data
-├── param.txt           # rendered private run copy
-└── run_plan.json       # command, environment, layout, and provenance
-```
-
-The rendered parameter file replaces `transport_model_path`, `field_path`,
-`jtor_path`, `geometry_path`, and `save_folder`. The bundled parameter file is
-not changed. The solver command is reported and recorded but is not executed.
-
-The generic Fekete-node file is not physical case data and is therefore not
-stored in the external bundle. The preparer requires
-`positionFeketeNodesTri2D.h5` beside the selected executable and links it into
-the run directory, matching the solver's fixed runtime filename.
-
-The tracked layouts are `serial_omp1`, `mpi2_omp1`, `mpi2_omp4`, `mpi4_omp1`,
-and `mpi4_omp4`. Every layout reuses the same bundle files.
-
-For the complete fixed-mesh cold workflow, replace `warm` with `cold_fixed`:
-
-```bash
-regression_tests/regression.sh \
-  --settings /private/path/regression-settings.env \
-  prepare legacy_case cold_fixed --layout mpi4_omp4
-```
-
-Its run root contains the shared reference and seven isolated stage directories:
-
-```text
-legacy_case/cold_fixed/mpi4_omp4/<run-id>/
-├── inputs/reference.h5
-├── run_plan.json
-└── stages/
-    ├── 01_time_init/
-    ├── 02_diffusion_reduction/
-    └── 03_continuation_01/ ... 07_continuation_05/
-```
-
-Each stage has its own rendered `param.txt`, inputs, outputs, writable `res/`
-mesh workspace, runtime file, and `run_plan.json`. Restart links are deliberately
-absent during preparation because they are created only after the preceding
-stage has completed.
-
-## Executing runs
-
-If the executable depends on library paths exported by the build setup, add
-its absolute path to the private settings file:
-
-```text
 MHDG_ENVIRONMENT_SCRIPT=/absolute/path/to/lib/Make.inc/init_vars_libs.sh
 ```
 
-The script is sourced in a child Bash process. Its exported environment is used
-for MHDG, after which the selected layout sets `OMP_NUM_THREADS`, `OMP_PLACES`,
-and `OMP_PROC_BIND`. If the script setting is omitted, the runner otherwise
-inherits the environment from the calling shell.
-
-Use `run` instead of `prepare` to create the run directory and execute its
-recorded command:
+Build clean optimized serial and parallel executables with:
 
 ```bash
 regression_tests/regression.sh \
-  --settings /private/path/regression-settings.env \
+  --settings /private/path/settings.env \
+  build --jobs 8
+```
+
+The two builds are sequential because they share `.o` and `.mod` files.
+Their commands, logs, Git revision and dirty state, toolchain versions,
+environment-script checksum, executable checksums, and generated settings are
+stored under the private build root. `--build` on a suite performs this step
+and uses the generated executables automatically.
+
+Build and run provenance is stored in JSON sidecars. Writing solver commit or
+build metadata directly into HDF5 remains deferred.
+
+## Preparing and executing runs
+
+Preparation creates an isolated run directory and renders private paths into a
+copy of `param.txt`; it never changes the bundle:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/settings.env \
+  prepare legacy_case warm --layout mpi4_omp4
+```
+
+Use `run` to prepare and execute:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/settings.env \
   run legacy_case warm --layout mpi4_omp4
-```
 
-The solver runs from the isolated directory with the layout's OpenMP thread
-count. MPI commands use Open MPI's `--bind-to core --map-by slot:PE=THREADS` so
-each rank receives exclusive cores for its threads. `OMP_PLACES=cores` and
-`OMP_PROC_BIND=spread` distribute those threads within the assigned cores.
-Standard output and error are written to `stdout.log` and `stderr.log`.
-`run_metadata.json` records the command, environment, exit status, runtime,
-executable checksum, optional revision/build description, and checksums of all
-files produced under `outputs/`.
-
-A run is `completed` only when the solver exits successfully, produces at least
-one HDF5 file, and does not report a fatal source/destination file-opening error.
-The last condition catches serial Fortran stops that return exit code zero.
-Generic Newton `Error:` diagnostics are not treated as failures. This status
-describes execution only; comparison records numerical acceptance separately.
-Existing run directories are never reused or overwritten.
-
-Execute the fixed-mesh cold sequence with:
-
-```bash
 regression_tests/regression.sh \
-  --settings /private/path/regression-settings.env \
-  run legacy_case cold_fixed --layout mpi4_omp4
-```
-
-To launch both complete cold workflows sequentially for an overnight run, list
-both workflow IDs in one command:
-
-```bash
-regression_tests/regression.sh \
-  --settings /private/path/regression-settings.env \
+  --settings /private/path/settings.env \
   run legacy_case cold_fixed cold_adaptive \
-  --layout mpi4_omp4 --run-id overnight-01
+  --layout mpi4_omp4 --run-id cold-01
 ```
 
-The adaptive workflow still starts analytically, refines on the `time_init` to
-`diffusion_reduction` restart, and then completes the same five continuations
-on the resulting mesh. If one workflow fails, its later stages stop, but the
-next workflow in the command is still attempted.
+Run directories contain read-only input links, writable `outputs/` and `res/`
+directories, rendered parameters, `stdout.log`, `stderr.log`, `run_plan.json`,
+and `run_metadata.json`. Staged workflows contain one isolated directory per
+stage. A failed stage stops that workflow, while a suite continues with its
+next workflow/layout cell.
 
-For the complete two-workflow by five-layout overnight matrix, use the tracked
-suite instead:
+The generic `positionFeketeNodesTri2D.h5` file must be beside the selected
+executable. It is solver runtime data, not physical case data.
 
-```bash
-regression_tests/regression.sh \
-  --settings /private/path/regression-settings.env \
-  suite cold_matrix --run-only --run-id overnight-01
-```
+## Comparison contract
 
-`--run-only` deliberately defers numerical comparison. All ten result paths
-are retained in the suite summary for the later verification pass. The summary
-is updated after every cell; after an interruption, repeat the same command
-with `--resume` to skip all cells already recorded there.
+Fixed-mesh comparison reads HDF5 directly and supports both current grouped
+files and older flat `develop` files. It checks:
 
-`time_init` runs without a restart. The runner waits for each solver process,
-selects its final HDF5 output, links that result as the next stage's restart,
-and only then starts the next stage. Any failed stage stops the sequence; its
-logs and all earlier stage results remain available, while later stages are
-recorded as `not_run`. The workflow-level `stdout.log` and `stderr.log` point
-to the last attempted stage, and `run_metadata.json` summarizes the sequence.
+- final Newton error and finite values;
+- exact mesh connectivity and tolerance-based coordinates;
+- per-equation `u`, `q`, and `u_tilde` errors;
+- reference transport-1D coefficients and profiles when present.
 
-The completed workflow root is compatible with the fixed-mesh comparator. Until
-cold tolerances are characterized, select a profile explicitly for inspection:
+Adaptive comparison uses `HDG_postprocess` to interpolate both solutions at
+deterministic interior points. The selected Python environment must therefore
+be able to import `hdg_postprocess`; use `PYTHON` and, when necessary,
+`PYTHONPATH` to select it.
 
-```bash
-regression_tests/regression.sh compare \
-  /path/to/completed/cold_fixed/run --profile fixed_same_layout
-```
+A golden matrix stores a reference for every accepted
+`(workflow, layout, stage)` tuple. New staged runs compare each stage with the
+matching tuple, stop comparison at the first divergence, and write a compact
+`matrix_comparison.json`. Warm runs and bundles without a stage matrix retain
+the final-state comparison path.
 
-The adaptive output is collected with full provenance but is not passed to the
-fixed-mesh HDF5 comparator. Its mesh-independent comparison remains a separate
-follow-up.
+The initial numerical limits in `tolerances.json` are:
 
-## Initial comparison contract
+| Comparison | Relative L2 | Normalized Linf |
+| --- | ---: | ---: |
+| Warm, same layout | `1e-10` | `1e-9` |
+| Warm, cross layout | `5e-8` | `1e-6` |
+| Matching fixed cold stage | `1e-8` | `1e-7` |
+| Fixed cold fallback against warm reference | `1e-5` | `1e-5` |
+| Adaptive solution | `0.05` | `0.1` |
+| Adaptive gradient | `0.25` | `0.2` |
 
-The named profiles are in `tolerances.json`. For the repeated same-build,
-four-MPI-by-four-OpenMP warm case, the initial requirements are:
+All profiles require final Newton error at most `2e-4`. Fixed-mesh coordinates
+use absolute tolerance `1e-12`. Normalized Linf is the largest absolute
+pointwise difference divided by the largest absolute reference value.
 
-- final Newton error no larger than `2e-4`;
-- finite selected solution and transport datasets;
-- exact mesh connectivity;
-- mesh-coordinate absolute tolerance `1e-12`;
-- per-equation relative L2 tolerance `1e-10`;
-- per-equation normalized Linf tolerance `1e-9`.
+These are regression tolerances for the characterized legacy workflow, not
+general physical-accuracy targets.
 
-Normalized Linf is the largest absolute pointwise difference divided by the
-largest absolute reference value for that equation.
-
-Cross-layout comparisons initially allow relative L2 `5e-8` and normalized
-Linf `1e-6`. These provisional limits cover the characterized serial, two-rank,
-and four-rank reduction orderings and should be revisited with more runs and
-solver builds.
-
-Runtime is recorded but is not initially a correctness failure. Suite-level
-runtime warnings require a characterized reference median and remain planned.
-
-The core comparator uses HDF5 directly and supports both grouped and older flat
-solution/mesh layouts. `HDG_postprocess` remains an optional richer layer for
-mesh-independent adaptive comparisons.
-
-The provisional cold profiles are based on the initial serial and two-rank
-overnight runs. Fixed cold runs allow relative L2 and normalized Linf errors up
-to `1e-5`. Adaptive runs require full common-point coverage, solution errors of
-at most `0.05` relative L2 and `0.1` normalized Linf, and gradient errors of at
-most `0.25` and `0.2`, respectively. Both require a final Newton error no larger
-than `2e-4`. These tolerances characterize the legacy workflow, including its
-known mesh sensitivity; they are not general accuracy targets.
-
-## Verifying a saved matrix
-
-Verification consumes the run-only suite summary and never launches the solver:
+Compare one completed fixed-mesh run manually with:
 
 ```bash
-PYTHON=/path/to/hdg-postprocess-python \
-PYTHONPATH=/path/to/HDG_postprocess \
-regression_tests/regression.sh suite-verify \
-  /path/to/suites/cold_matrix/overnight-01/suite_summary.json
-```
-
-Fixed workflows use the library-independent HDF5 comparator. Adaptive
-workflows use `HDG_postprocess` to evaluate the reference and candidate at four
-interior points per reference triangle. Each run receives its own
-`comparison.json`; the matrix result is written beside the source summary as
-`verification_summary.json`. A failed comparison does not prevent later cells
-from being checked.
-
-## Comparing a completed run
-
-Run the comparator on the directory printed by `run`:
-
-```bash
-regression_tests/regression.sh compare /private/path/to/completed/run
-```
-
-It selects the final HDF5 save reported in `stdout.log`, falling back to the
-unique output without a `_NNNN` time-save suffix. `--candidate` and
-`--reference` can resolve an ambiguous or manual comparison. The selected
-tolerance profile comes from the tracked workflow; non-default layouts use
-`fixed_cross_layout`.
-
-The comparator checks:
-
-- the final `Error:` value from `stdout.log`;
-- exact `T`, `Tlin`, and `Tb` connectivity and tolerance-based `X` coordinates;
-- finite, per-equation `u`, `q`, and `u_tilde` values;
-- transport-1D coefficient and profile datasets present in the reference.
-
-It prints a short pass/fail and worst-error summary, writes `comparison.json` in
-the run directory, and returns zero only when all checks pass. Use
-`--report /path/report.json` to write it elsewhere.
-
-## Available user interface
-
-```bash
-regression_tests/regression.sh help
-regression_tests/regression.sh --help
-regression_tests/regression.sh bundle create --case legacy_case --source /path/to/case --output /path/to/bundle
-regression_tests/regression.sh --settings /path/to/settings.env build
-regression_tests/regression.sh --settings /path/to/settings.env check-data
-regression_tests/regression.sh --settings /path/to/settings.env prepare legacy_case warm --layout mpi4_omp4
-regression_tests/regression.sh --settings /path/to/settings.env run legacy_case warm --layout mpi4_omp4
-regression_tests/regression.sh --settings /path/to/settings.env run legacy_case cold_fixed --layout mpi4_omp4
-regression_tests/regression.sh --settings /path/to/settings.env run legacy_case cold_fixed cold_adaptive --layout mpi4_omp4 --run-id overnight-01
 regression_tests/regression.sh compare /path/to/completed/run
-regression_tests/regression.sh --settings /path/to/settings.env suite warm
-regression_tests/regression.sh --settings /path/to/settings.env suite warm --build
-regression_tests/regression.sh --settings /path/to/settings.env suite warm_parallelism
-regression_tests/regression.sh --settings /path/to/settings.env suite cold_matrix --run-only --run-id overnight-01
-regression_tests/regression.sh --settings /path/to/settings.env suite cold_matrix --run-only --run-id overnight-01 --resume
-regression_tests/regression.sh suite-verify /path/to/suite_summary.json
-regression_tests/regression.sh --settings /path/to/settings.env bundle promote /path/to/suite_summary.json --output /path/to/golden --bundle-version VERSION
-regression_tests/regression.sh golden-check
-regression_tests/regression.sh golden-check --build
-regression_tests/regression.sh golden-check warm_parallelism
 ```
 
-The regression commands require Python 3 and the packages in `requirements.txt`;
-install them into the selected Python environment with:
+The command prints a short summary and writes `comparison.json`.
 
-```bash
-python -m pip install -r regression_tests/requirements.txt
-```
+## Suites, saved verification, and promotion
 
-The existing `hdg-postprocess-py312` environment already provides `jsonschema`,
-NumPy, and h5py. The comparator does not depend on `HDG_postprocess` itself. Set
-the `PYTHON` environment variable when a non-default interpreter should run the
-command:
-
-```bash
-PYTHON=/path/to/environment/bin/python \
-  regression_tests/regression.sh --settings /path/to/settings.env check-data
-```
-
-## Running suites
-
-The canonical warm suite runs and compares the characterized 4-by-4 layout:
-
-```bash
-regression_tests/regression.sh --settings /path/to/settings.env suite warm
-```
-
-The `warm_parallelism` suite exercises the warm workflow across all tracked
-serial, MPI, and OpenMP layouts:
-
-```bash
-regression_tests/regression.sh --settings /path/to/settings.env suite warm_parallelism
-```
-
-The `cold_matrix` suite executes `cold_fixed` and `cold_adaptive` for each of
-the five layouts. Run it without comparisons while producing the golden
-overnight evidence:
+Run a suite against a candidate bundle with explicit settings:
 
 ```bash
 regression_tests/regression.sh \
-  --settings /path/to/settings.env \
+  --settings /private/path/settings.env \
+  suite warm
+```
+
+For the expensive matrix, save all results before deciding on references:
+
+```bash
+regression_tests/regression.sh \
+  --settings /private/path/settings.env \
   suite cold_matrix --run-only --run-id overnight-01
 ```
 
-Each suite validates the bundle once, then gives every workflow/layout cell a
-distinct isolated run directory. A failed cell does not prevent later cells
-from running. The command returns nonzero if any requested run or comparison
-fails and writes
-`suite_summary.json` under
-`MHDG_REGRESSION_RUN_ROOT/suites/SUITE/RUN_ID/`. Use `--run-id ID` when a
-stable label is useful; otherwise a UTC timestamp is generated. The summary is
-updated after every completed cell. Reuse that identifier with `--resume` to
-continue without repeating recorded cells.
+The suite summary is updated after every cell. Reuse the same command with
+`--resume` after an interruption. Re-run comparison logic without launching
+the solver using:
 
-After the run-only matrix finishes, pass its summary to `suite-verify`. This is
-a separate command specifically so comparison logic or tolerances can be rerun
-without repeating the overnight solver calculations.
+```bash
+regression_tests/regression.sh suite-verify /path/to/suite_summary.json
+```
 
-Without `--build`, the executor uses the prebuilt executable paths from the
-settings file. Add `--build` to a suite command to build the current
-checkout first. It never switches Git branches or overwrites reference files.
-
-## Candidate and golden test flows
-
-There are two bundle sources, but only one execution and comparison path.
-
-1. A candidate bundle is created from the private hand-prepared directory with
-   `bundle create`. Use it to reproduce manual regressions, characterize
-   layouts, and decide whether the inputs and canonical result are suitable.
-2. A golden bundle is an immutable copy of that complete candidate package in
-   which the passing canonical result has become `warm_reference`. Use it for
-   routine comparisons of newly built executables.
-
-After the candidate's full suite passes and has been checked against the
-manual regressions, promote it explicitly:
+Promotion is always explicit and never overwrites an existing bundle:
 
 ```bash
 regression_tests/regression.sh \
-  --settings /path/to/candidate-settings.env \
+  --settings /private/path/candidate-settings.env \
   bundle promote /path/to/suite_summary.json \
-  --output /path/to/golden-bundles/legacy_case_v1 \
+  --output /private/path/golden_bundle \
   --bundle-version 1.0.0-golden.1
 ```
 
-Promotion requires a passing suite containing the workflow's canonical
-layout, currently `mpi4_omp4`. It verifies that the canonical solution and its
-comparison inputs have not changed, copies the complete source bundle, replaces
-only the reference artifact, updates its checksum, and validates the finished
-bundle. It never modifies the candidate bundle or replaces an existing output.
+Promoting a canonical warm suite replaces the warm reference and records its
+run evidence. Promoting a deferred cold matrix copies every stage output into
+a reference matrix and records its suite/run provenance. Promotion validates
+bundle integrity and recorded run completion, but physical acceptance remains
+a human decision. Ordinary tests never trigger promotion.
 
-The golden bundle therefore contains the warm starting solution together with
-the mesh, equilibrium, geometry, parameters, transport configuration, and
-accepted reference. Canonical run metadata, comparison, logs, suite summary,
-executable checksum, and optional solver revision/build description are stored
-under `provenance/golden_reference/` and registered in the manifest.
+The short `golden-check` interface and the explicit `--settings FILE suite`
+interface share the same runner and comparator.
 
-For a convenient routine check, copy the settings example to the default
-untracked location:
+## Adding cases or parameter variants
 
-```bash
-cp regression_tests/settings.example.env regression_tests/golden.local.env
-```
+The current extension points are deliberately generic:
 
-Fill its executable, run-root, launcher, and environment-script paths, and set:
+1. Put new private parameter or model files in the external prepared data.
+2. Give them generic artifact roles in a tracked case definition.
+3. Define the workflow stages, layouts, tolerance profile, and suite selection.
+4. Run and review a candidate suite before promoting new references.
 
-```text
-MHDG_REGRESSION_DATA_ROOT=/path/to/golden-bundles/legacy_case_v1
-```
+Do not encode machine names, experiment identifiers, physical values, or
+private paths in tracked identifiers. The follow-up harness audit will focus
+on making common parameter variants declarative, reducing the amount of schema
+and Python knowledge required from a new user.
 
-Then the short command validates that the selected bundle is golden and runs
-the canonical four-by-four warm suite:
+## Known limitations and follow-up
 
-```bash
-regression_tests/regression.sh golden-check
-```
+- Adaptive meshes can diverge after OpenMP-dependent reduction ordering crosses
+  refinement thresholds. Mesh-independent comparison is required; identical
+  adapted meshes are not promised.
+- The legacy `a_minor` estimate is mesh-sensitive and belongs to the
+  Bohm/gyro-Bohm follow-up, not this harness.
+- Selected conservation and balance diagnostics belong to the diagnostics PR.
+- Historical feature outputs remain reference evidence rather than golden
+  truth.
+- Golden promotion currently treats one accepted summary at a time.
+- A follow-up audit will minimize routine suites, simplify the harness tests and
+  fixtures, split multi-purpose functions, reduce unstructured dictionaries,
+  and make new parameter variants easier to add.
 
-Build the current checkout first and automatically use its generated settings
-and provenance with:
-
-```bash
-regression_tests/regression.sh golden-check --build
-```
-
-Run all characterized layouts with:
-
-```bash
-regression_tests/regression.sh golden-check warm_parallelism
-```
-
-Append `--build` to rebuild before the full-layout suite.
-
-`regression_tests/golden.local.env` is ignored by Git. A settings file stored
-elsewhere can be selected with `MHDG_REGRESSION_GOLDEN_SETTINGS` or the usual
-`--settings FILE` option.
-
-The explicit `--settings FILE suite SUITE` interface remains available for
-handmade candidate bundles and other development runs. Both interfaces use the
-same preparation, execution, and comparison implementation.
-
-Compiled binaries remain in the private build root; they are not stored in the
-portable golden bundle.
-
-## Run outputs and provenance
-
-Execution adds stdout, stderr, produced HDF5 files, and `run_metadata.json` to
-the prepared directory. Comparison adds `comparison.json`. Automated builds
-supply the solver revision, build description, and build-manifest checksum;
-prebuilt executables may still provide revision and description manually in
-the private settings file.
+Run `regression_tests/regression.sh help` for the compact command reference.

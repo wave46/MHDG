@@ -18,6 +18,12 @@ source Make.inc/init_vars_libs.sh
 make
 ```
 
+## Regression testing
+
+The tracked regression harness supports external case bundles, isolated
+warm/cold workflows, MPI/OpenMP layouts, and golden-reference comparison. See
+the [regression test guide](regression_tests/README.md).
+
 ## Mesh generation
 
 The machine wall outline is needed with knowing the locations of puff and pump.
