@@ -80,7 +80,7 @@ class RunPreparationTests(unittest.TestCase):
 
         self.bundle = self.root / "bundle"
         create_bundle(
-            "legacy_fixed", self.source, self.bundle, REGRESSION_ROOT / "cases"
+            "legacy_case", self.source, self.bundle, REGRESSION_ROOT / "cases"
         )
 
         self.run_root = self.root / "runs"
@@ -112,7 +112,7 @@ class RunPreparationTests(unittest.TestCase):
     def test_prepares_isolated_parallel_run(self) -> None:
         prepared = prepare_run(
             self.settings,
-            "legacy_fixed",
+            "legacy_case",
             "warm",
             "mpi4_omp4",
             REGRESSION_ROOT / "cases",
@@ -120,7 +120,7 @@ class RunPreparationTests(unittest.TestCase):
             "fixture",
         )
 
-        expected = self.run_root / "legacy_fixed" / "warm" / "mpi4_omp4" / "fixture"
+        expected = self.run_root / "legacy_case" / "warm" / "mpi4_omp4" / "fixture"
         self.assertEqual(prepared.path, expected)
         self.assertEqual(prepared.omp_threads, 4)
         self.assertEqual(
@@ -173,7 +173,7 @@ class RunPreparationTests(unittest.TestCase):
                 "--settings",
                 str(self.settings),
                 "prepare",
-                "legacy_fixed",
+                "legacy_case",
                 "warm",
                 "--layout",
                 "serial_omp1",
@@ -190,7 +190,7 @@ class RunPreparationTests(unittest.TestCase):
         self.assertIn("OMP_NUM_THREADS=1", completed.stdout)
         plan_path = (
             self.run_root
-            / "legacy_fixed"
+            / "legacy_case"
             / "warm"
             / "serial_omp1"
             / "public"
@@ -205,7 +205,7 @@ class RunPreparationTests(unittest.TestCase):
     def test_prepares_seven_stage_fixed_mesh_workflow(self) -> None:
         prepared = prepare_run(
             self.settings,
-            "legacy_fixed",
+            "legacy_case",
             "cold_fixed",
             "serial_omp1",
             REGRESSION_ROOT / "cases",
@@ -250,7 +250,7 @@ class RunPreparationTests(unittest.TestCase):
 
         adaptive = prepare_run(
             self.settings,
-            "legacy_fixed",
+            "legacy_case",
             "cold_adaptive",
             "serial_omp1",
             REGRESSION_ROOT / "cases",
@@ -299,7 +299,7 @@ class RunPreparationTests(unittest.TestCase):
 
     def test_existing_run_directory_is_not_replaced(self) -> None:
         run_dir = (
-            self.run_root / "legacy_fixed" / "warm" / "mpi4_omp4" / "existing"
+            self.run_root / "legacy_case" / "warm" / "mpi4_omp4" / "existing"
         )
         run_dir.mkdir(parents=True)
         marker = run_dir / "keep.txt"
@@ -308,7 +308,7 @@ class RunPreparationTests(unittest.TestCase):
         with self.assertRaisesRegex(BundleError, "run directory already exists"):
             prepare_run(
                 self.settings,
-                "legacy_fixed",
+                "legacy_case",
                 "warm",
                 "mpi4_omp4",
                 REGRESSION_ROOT / "cases",
@@ -324,7 +324,7 @@ class RunPreparationTests(unittest.TestCase):
         with self.assertRaisesRegex(BundleError, "required runtime file is missing"):
             prepare_run(
                 self.settings,
-                "legacy_fixed",
+                "legacy_case",
                 "warm",
                 "mpi4_omp4",
                 REGRESSION_ROOT / "cases",
@@ -334,7 +334,7 @@ class RunPreparationTests(unittest.TestCase):
 
         run_dir = (
             self.run_root
-            / "legacy_fixed"
+            / "legacy_case"
             / "warm"
             / "mpi4_omp4"
             / "missing-runtime-file"

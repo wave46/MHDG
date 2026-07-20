@@ -314,7 +314,7 @@ class RunCommandTests(unittest.TestCase):
 
         self.bundle = self.root / "bundle"
         create_bundle(
-            "legacy_fixed", source, self.bundle, REGRESSION_ROOT / "cases"
+            "legacy_case", source, self.bundle, REGRESSION_ROOT / "cases"
         )
 
     @staticmethod
@@ -337,7 +337,7 @@ class RunCommandTests(unittest.TestCase):
                 "--settings",
                 str(self.settings),
                 "run",
-                "legacy_fixed",
+                "legacy_case",
                 *workflows,
                 "--layout",
                 layout,
@@ -351,7 +351,7 @@ class RunCommandTests(unittest.TestCase):
         )
 
     def _run_dir(self, layout: str, run_id: str, workflow: str = "warm") -> Path:
-        return self.run_root / "legacy_fixed" / workflow / layout / run_id
+        return self.run_root / "legacy_case" / workflow / layout / run_id
 
 
 SOLVER = """#!/usr/bin/env bash

@@ -32,10 +32,14 @@ Not tracked here:
 
 ## Initial cases
 
-`legacy_fixed` is the routine integration case for branch `develop` at commit
+`legacy_case` is the routine integration case for branch `develop` at commit
 `29f442db67bac169b2616f2cbe399289d137993c`. Its first workflow is a same-state
 warm restart on a fixed mesh. The characterized run takes about ten seconds
 with four MPI ranks and four OpenMP threads.
+
+Its external-data identifier remains `legacy_fixed` so bundles created before
+the case rename stay valid. Users select `legacy_case`; the compatibility
+identifier is internal to the bundle manifest.
 
 `historical_feature` identifies archived output from branch
 `feautre/neutrals_pressure` at commit
@@ -56,8 +60,8 @@ may be added without changing the external-data contract.
 - `archived_compare`: inspect or compare a stored historical result without
   routinely rerunning its source branch.
 
-`legacy_fixed/warm`, `legacy_fixed/cold_fixed`, and
-`legacy_fixed/cold_adaptive` are executable. The `cold_matrix` suite records
+`legacy_case/warm`, `legacy_case/cold_fixed`, and
+`legacy_case/cold_adaptive` are executable. The `cold_matrix` suite records
 both cold workflows across every tracked layout; numerical verification is a
 separate step so an overnight run is never repeated merely to compare it.
 
@@ -73,7 +77,7 @@ it detects a missing, substituted, or changed external artifact. The bundle
 creator calculates checksums and sizes automatically; users do not enter them
 manually.
 
-The complete `legacy_fixed` case package contains these roles:
+The complete `legacy_case` case package contains these roles:
 
 - `mesh`;
 - `geometry`;
@@ -103,7 +107,7 @@ Prepare one private, flat directory outside the repository. Use these generic
 names for the initial warm case:
 
 ```text
-legacy_fixed/
+legacy_case/
 ├── param.txt
 ├── mesh.msh
 ├── geometry.geo
@@ -159,8 +163,8 @@ From the repository root, run:
 
 ```bash
 regression_tests/regression.sh bundle create \
-  --case legacy_fixed \
-  --source /private/path/legacy_fixed \
+  --case legacy_case \
+  --source /private/path/legacy_case \
   --output /private/path/mhdg_case_bundle
 ```
 
@@ -248,14 +252,14 @@ Then prepare the characterized 4-by-4 layout:
 ```bash
 regression_tests/regression.sh \
   --settings /private/path/regression-settings.env \
-  prepare legacy_fixed warm --layout mpi4_omp4
+  prepare legacy_case warm --layout mpi4_omp4
 ```
 
 Preparation creates a timestamped run directory under
 `MHDG_REGRESSION_RUN_ROOT`. It contains:
 
 ```text
-legacy_fixed/warm/mpi4_omp4/<run-id>/
+legacy_case/warm/mpi4_omp4/<run-id>/
 ├── inputs/             # symlinks to read-only bundle artifacts
 ├── outputs/            # writable solver output directory
 ├── res/                # writable mesh/adaptivity workspace
@@ -281,13 +285,13 @@ For the complete fixed-mesh cold workflow, replace `warm` with `cold_fixed`:
 ```bash
 regression_tests/regression.sh \
   --settings /private/path/regression-settings.env \
-  prepare legacy_fixed cold_fixed --layout mpi4_omp4
+  prepare legacy_case cold_fixed --layout mpi4_omp4
 ```
 
 Its run root contains the shared reference and seven isolated stage directories:
 
 ```text
-legacy_fixed/cold_fixed/mpi4_omp4/<run-id>/
+legacy_case/cold_fixed/mpi4_omp4/<run-id>/
 ├── inputs/reference.h5
 ├── run_plan.json
 └── stages/
@@ -321,7 +325,7 @@ recorded command:
 ```bash
 regression_tests/regression.sh \
   --settings /private/path/regression-settings.env \
-  run legacy_fixed warm --layout mpi4_omp4
+  run legacy_case warm --layout mpi4_omp4
 ```
 
 The solver runs from the isolated directory with the layout's OpenMP thread
@@ -345,7 +349,7 @@ Execute the fixed-mesh cold sequence with:
 ```bash
 regression_tests/regression.sh \
   --settings /private/path/regression-settings.env \
-  run legacy_fixed cold_fixed --layout mpi4_omp4
+  run legacy_case cold_fixed --layout mpi4_omp4
 ```
 
 To launch both complete cold workflows sequentially for an overnight run, list
@@ -354,7 +358,7 @@ both workflow IDs in one command:
 ```bash
 regression_tests/regression.sh \
   --settings /private/path/regression-settings.env \
-  run legacy_fixed cold_fixed cold_adaptive \
+  run legacy_case cold_fixed cold_adaptive \
   --layout mpi4_omp4 --run-id overnight-01
 ```
 
@@ -479,13 +483,13 @@ the run directory, and returns zero only when all checks pass. Use
 ```bash
 regression_tests/regression.sh help
 regression_tests/regression.sh --help
-regression_tests/regression.sh bundle create --case legacy_fixed --source /path/to/case --output /path/to/bundle
+regression_tests/regression.sh bundle create --case legacy_case --source /path/to/case --output /path/to/bundle
 regression_tests/regression.sh --settings /path/to/settings.env build
 regression_tests/regression.sh --settings /path/to/settings.env check-data
-regression_tests/regression.sh --settings /path/to/settings.env prepare legacy_fixed warm --layout mpi4_omp4
-regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed warm --layout mpi4_omp4
-regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed cold_fixed --layout mpi4_omp4
-regression_tests/regression.sh --settings /path/to/settings.env run legacy_fixed cold_fixed cold_adaptive --layout mpi4_omp4 --run-id overnight-01
+regression_tests/regression.sh --settings /path/to/settings.env prepare legacy_case warm --layout mpi4_omp4
+regression_tests/regression.sh --settings /path/to/settings.env run legacy_case warm --layout mpi4_omp4
+regression_tests/regression.sh --settings /path/to/settings.env run legacy_case cold_fixed --layout mpi4_omp4
+regression_tests/regression.sh --settings /path/to/settings.env run legacy_case cold_fixed cold_adaptive --layout mpi4_omp4 --run-id overnight-01
 regression_tests/regression.sh compare /path/to/completed/run
 regression_tests/regression.sh --settings /path/to/settings.env suite warm
 regression_tests/regression.sh --settings /path/to/settings.env suite warm --build
@@ -577,7 +581,7 @@ manual regressions, promote it explicitly:
 regression_tests/regression.sh \
   --settings /path/to/candidate-settings.env \
   bundle promote /path/to/suite_summary.json \
-  --output /path/to/golden-bundles/legacy_fixed_v1 \
+  --output /path/to/golden-bundles/legacy_case_v1 \
   --bundle-version 1.0.0-golden.1
 ```
 
@@ -603,7 +607,7 @@ cp regression_tests/settings.example.env regression_tests/golden.local.env
 Fill its executable, run-root, launcher, and environment-script paths, and set:
 
 ```text
-MHDG_REGRESSION_DATA_ROOT=/path/to/golden-bundles/legacy_fixed_v1
+MHDG_REGRESSION_DATA_ROOT=/path/to/golden-bundles/legacy_case_v1
 ```
 
 Then the short command validates that the selected bundle is golden and runs

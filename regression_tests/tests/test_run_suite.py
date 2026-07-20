@@ -203,7 +203,7 @@ class SuiteCommandTests(unittest.TestCase):
         _write_solution(source / "reference_mpi4_omp4.h5")
 
         self.bundle = self.root / "bundle"
-        create_bundle("legacy_fixed", source, self.bundle, REGRESSION_ROOT / "cases")
+        create_bundle("legacy_case", source, self.bundle, REGRESSION_ROOT / "cases")
 
     def _create_executables(self) -> None:
         bin_dir = self.root / "bin"

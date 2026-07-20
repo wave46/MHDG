@@ -108,7 +108,7 @@ class SuiteVerificationTests(unittest.TestCase):
                     "schema_version": 1,
                     "suite_id": "cold_matrix",
                     "run_id": "overnight-test",
-                    "case_id": "legacy_fixed",
+                    "case_id": "legacy_case",
                     "results": results,
                 }
             ),

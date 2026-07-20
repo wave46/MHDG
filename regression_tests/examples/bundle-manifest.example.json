@@ -49,7 +49,7 @@
   },
   "case_data": {
     "legacy_fixed": {
-      "case_id": "legacy_fixed",
+      "case_id": "legacy_case",
       "description": "Example minimum case data for the routine warm regression",
       "roles": {
         "mesh": "legacy_mesh",

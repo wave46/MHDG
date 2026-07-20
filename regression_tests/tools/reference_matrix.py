@@ -184,9 +184,11 @@ def install_reference_matrix(
         staging, manifest, REFERENCE_MATRIX_ID, index_path, "application/json"
     )
     try:
-        roles = manifest["case_data"][case["external_data_id"]]["roles"]
+        case_data = manifest["case_data"][case["external_data_id"]]
     except KeyError as exc:
         raise BundleError("source bundle has no matching case-data entry") from exc
+    case_data["case_id"] = case["case_id"]
+    roles = case_data["roles"]
     roles[REFERENCE_MATRIX_ROLE] = REFERENCE_MATRIX_ID
 
 

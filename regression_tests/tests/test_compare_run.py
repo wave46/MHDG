@@ -121,7 +121,7 @@ class CompareCommandTests(unittest.TestCase):
         (self.run / "run_plan.json").write_text(
             json.dumps(
                 {
-                    "case_id": "legacy_fixed",
+                    "case_id": "legacy_case",
                     "workflow_id": "warm",
                     "layout_id": "mpi4_omp4",
                 }
@@ -208,7 +208,7 @@ class CompareCommandTests(unittest.TestCase):
         (self.run / "run_plan.json").write_text(
             json.dumps(
                 {
-                    "case_id": "legacy_fixed",
+                    "case_id": "legacy_case",
                     "workflow_id": "warm",
                     "layout_id": "mpi2_omp1",
                 }

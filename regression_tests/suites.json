@@ -3,7 +3,7 @@
   "suites": {
     "warm": {
       "description": "Canonical four-MPI-by-four-OpenMP warm restart",
-      "case_id": "legacy_fixed",
+      "case_id": "legacy_case",
       "workflow_id": "warm",
       "layouts": [
         "mpi4_omp4"
@@ -11,7 +11,7 @@
     },
     "warm_parallelism": {
       "description": "Warm restart across serial, MPI, and OpenMP layouts",
-      "case_id": "legacy_fixed",
+      "case_id": "legacy_case",
       "workflow_id": "warm",
       "layouts": [
         "serial_omp1",
@@ -23,7 +23,7 @@
     },
     "cold_matrix": {
       "description": "Cold fixed and adaptive workflows across all tracked layouts",
-      "case_id": "legacy_fixed",
+      "case_id": "legacy_case",
       "workflow_ids": [
         "cold_fixed",
         "cold_adaptive"

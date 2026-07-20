@@ -93,10 +93,10 @@ class BundleValidationTests(unittest.TestCase):
         summary = validate_bundle(self.settings, REGRESSION_ROOT / "cases")
         self.assertEqual(summary.artifact_count, 8)
         self.assertEqual(summary.verified_artifact_count, 8)
-        self.assertEqual(summary.checked_cases, ["legacy_fixed"])
+        self.assertEqual(summary.checked_cases, ["legacy_case"])
 
     def test_cold_roles_are_required_only_by_cold_workflow(self) -> None:
-        case = load_case_definition("legacy_fixed", REGRESSION_ROOT / "cases")
+        case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
         role = "cold_fixed_time_init_parameters"
 
         self.assertNotIn(role, required_case_roles(case))
@@ -190,7 +190,7 @@ class BundleValidationTests(unittest.TestCase):
         case_data = self.manifest["case_data"]["legacy_fixed"]
         case_data["case_id"] = "historical_feature"
         self._write_manifest()
-        with self.assertRaisesRegex(BundleError, "expected legacy_fixed"):
+        with self.assertRaisesRegex(BundleError, "expected legacy_case"):
             validate_bundle(self.settings, REGRESSION_ROOT / "cases")
 
 

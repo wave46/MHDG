@@ -38,7 +38,7 @@ class AdaptiveComparisonTests(unittest.TestCase):
             (run / "run_plan.json").write_text(
                 json.dumps(
                     {
-                        "case_id": "legacy_fixed",
+                        "case_id": "legacy_case",
                         "workflow_id": "cold_adaptive",
                         "layout_id": "serial_omp1",
                     }

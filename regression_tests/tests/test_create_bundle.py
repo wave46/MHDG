@@ -44,11 +44,11 @@ class BundleCreationTests(unittest.TestCase):
 
     def test_creates_and_validates_bundle(self) -> None:
         summary = create_bundle(
-            "legacy_fixed", self.source, self.output, REGRESSION_ROOT / "cases"
+            "legacy_case", self.source, self.output, REGRESSION_ROOT / "cases"
         )
 
         self.assertEqual(summary.artifact_count, 8)
-        self.assertEqual(summary.checked_cases, ["legacy_fixed"])
+        self.assertEqual(summary.checked_cases, ["legacy_case"])
         self.assertTrue(
             (self.output / "case_data" / "legacy_fixed" / "geometry.geo").is_file()
         )
@@ -66,7 +66,7 @@ class BundleCreationTests(unittest.TestCase):
                 "bundle",
                 "create",
                 "--case",
-                "legacy_fixed",
+                "legacy_case",
                 "--source",
                 str(self.source),
                 "--output",
@@ -91,7 +91,7 @@ class BundleCreationTests(unittest.TestCase):
         )
 
         summary = create_bundle(
-            "legacy_fixed", self.source, self.output, REGRESSION_ROOT / "cases"
+            "legacy_case", self.source, self.output, REGRESSION_ROOT / "cases"
         )
 
         manifest = json.loads(
@@ -113,7 +113,7 @@ class BundleCreationTests(unittest.TestCase):
             BundleError, "required file missing.*geometry"
         ):
             create_bundle(
-                "legacy_fixed", self.source, self.output, REGRESSION_ROOT / "cases"
+                "legacy_case", self.source, self.output, REGRESSION_ROOT / "cases"
             )
 
         self.assertFalse(self.output.exists())
@@ -125,7 +125,7 @@ class BundleCreationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(BundleError, "output already exists"):
             create_bundle(
-                "legacy_fixed", self.source, self.output, REGRESSION_ROOT / "cases"
+                "legacy_case", self.source, self.output, REGRESSION_ROOT / "cases"
             )
 
         self.assertEqual(marker.read_text(encoding="utf-8"), "keep\n")
@@ -137,25 +137,25 @@ class BundleCreationTests(unittest.TestCase):
         shutil.copytree(REGRESSION_ROOT / "schemas", contract_root / "schemas")
 
         case = json.loads(
-            (REGRESSION_ROOT / "cases" / "legacy_fixed.json").read_text(
+            (REGRESSION_ROOT / "cases" / "legacy_case.json").read_text(
                 encoding="utf-8"
             )
         )
         case["external_data_id"] = "fixture_data"
-        (case_dir / "legacy_fixed.json").write_text(
+        (case_dir / "legacy_case.json").write_text(
             json.dumps(case, indent=2) + "\n", encoding="utf-8"
         )
 
         summary = create_bundle(
-            "legacy_fixed", self.source, self.output, case_dir
+            "legacy_case", self.source, self.output, case_dir
         )
 
         manifest = json.loads(
             (self.output / "manifest.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(summary.checked_cases, ["legacy_fixed"])
+        self.assertEqual(summary.checked_cases, ["legacy_case"])
         self.assertEqual(
-            manifest["case_data"]["fixture_data"]["case_id"], "legacy_fixed"
+            manifest["case_data"]["fixture_data"]["case_id"], "legacy_case"
         )
 
 

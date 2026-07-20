@@ -169,7 +169,7 @@ class GoldenBundlePromotionTests(unittest.TestCase):
             contents = "old reference\n" if filename.startswith("reference") else filename
             (prepared / filename).write_text(contents, encoding="utf-8")
         bundle = self.root / "candidate"
-        create_bundle("legacy_fixed", prepared, bundle, REGRESSION_ROOT / "cases")
+        create_bundle("legacy_case", prepared, bundle, REGRESSION_ROOT / "cases")
         return bundle
 
     def _create_summary(self) -> Path:
@@ -179,7 +179,7 @@ class GoldenBundlePromotionTests(unittest.TestCase):
             "status": "passed",
             "suite_id": "warm",
             "run_id": "suite-test",
-            "case_id": "legacy_fixed",
+            "case_id": "legacy_case",
             "workflow_id": "warm",
             "results": [result],
         }
@@ -197,7 +197,7 @@ class GoldenBundlePromotionTests(unittest.TestCase):
             "legacy_warm_reference_mpi4_omp4"
         ]["path"]
         plan = {
-            "case_id": "legacy_fixed",
+            "case_id": "legacy_case",
             "workflow_id": "warm",
             "layout_id": "mpi4_omp4",
             "bundle": {
@@ -214,7 +214,7 @@ class GoldenBundlePromotionTests(unittest.TestCase):
         }
         comparison = {
             "status": "passed",
-            "case_id": "legacy_fixed",
+            "case_id": "legacy_case",
             "workflow_id": "warm",
             "layout_id": "mpi4_omp4",
             "candidate": str(solution),
@@ -243,7 +243,7 @@ class GoldenBundlePromotionTests(unittest.TestCase):
 
     def _create_matrix_summary(self) -> Path:
         manifest = _load_json(self.source_bundle / "manifest.json")
-        case = _load_json(REGRESSION_ROOT / "cases/legacy_fixed.json")
+        case = _load_json(REGRESSION_ROOT / "cases/legacy_case.json")
         workflows = ["cold_fixed", "cold_adaptive"]
         layouts = ["serial_omp1", "mpi2_omp4"]
         results = []
@@ -278,7 +278,7 @@ class GoldenBundlePromotionTests(unittest.TestCase):
                     )
 
                 plan = {
-                    "case_id": "legacy_fixed",
+                    "case_id": "legacy_case",
                     "workflow_id": workflow_id,
                     "layout_id": layout_id,
                     "bundle": {
@@ -311,7 +311,7 @@ class GoldenBundlePromotionTests(unittest.TestCase):
             "status": "passed",
             "suite_id": "cold_matrix",
             "run_id": "matrix-test",
-            "case_id": "legacy_fixed",
+            "case_id": "legacy_case",
             "workflow_ids": workflows,
             "layout_ids": layouts,
             "comparison_mode": "deferred",
