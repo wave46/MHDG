@@ -71,6 +71,48 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertIn("suite: warm", completed.stdout)
         self.assertIn("mpi4_omp4", completed.stdout)
 
+    def test_race_suite_compares_layout_pairs_and_can_recompare(self) -> None:
+        write_solution(self.fixture.serial_executable.parent / "race_result.h5")
+        self.fixture.install_solver(RACE_SOLVER)
+        completed = self._run_suite("race", "race-test")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        summary_path = (
+            self.fixture.run_root
+            / "suites/race/race-test/suite_summary.json"
+        )
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        self.assertEqual(summary["comparison_mode"], "layout_pairs")
+        self.assertEqual(
+            summary["layout_ids"],
+            ["serial_omp1", "serial_omp16"],
+        )
+        self.assertEqual(len(summary["results"]), 4)
+        self.assertTrue(
+            all(
+                result["comparison_status"] == "not_run"
+                for result in summary["results"]
+            )
+        )
+        self.assertEqual(len(summary["comparisons"]), 2)
+        self.assertTrue(
+            all(item["status"] == "passed" for item in summary["comparisons"])
+        )
+
+        report = json.loads(
+            Path(summary["comparisons"][0]["comparison_report"]).read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(report["convergence"]["final_newton_error"], 1.0e5)
+        self.assertIsNone(report["convergence"]["maximum"])
+        self.assertTrue(report["convergence"]["passed"])
+
+        rechecked = run_command("suite", "compare", str(summary_path))
+        self.assertEqual(rechecked.returncode, 0, rechecked.stderr)
+        self.assertIn("serial_omp1", rechecked.stdout)
+        self.assertIn("serial_omp16", rechecked.stdout)
+
     @patch("suite.verification.compare_completed_run")
     def test_offline_verification_dispatches_only_completed_runs(self, compare) -> None:
         compare.side_effect = (
@@ -160,6 +202,13 @@ else
   cp "$2.h5" outputs/result.h5
 fi
 printf 'Error: 1.0E-5\n'
+printf 'Output written to file outputs/result.h5\n'
+"""
+
+RACE_SOLVER = """#!/usr/bin/env bash
+set -euo pipefail
+cp "$(dirname "$0")/race_result.h5" outputs/result.h5
+printf 'Error: 1.0E+5\n'
 printf 'Output written to file outputs/result.h5\n'
 """
 

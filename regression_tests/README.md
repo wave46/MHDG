@@ -24,6 +24,10 @@ run from the repository root:
 # Lightweight canonical warm restart.
 regression_tests/regression.sh suite check
 
+# Coarse one-step OpenMP race checks; no golden output is required.
+regression_tests/regression.sh suite run race \
+  --settings regression_tests/golden.local.env
+
 # Build optimized serial and parallel executables first.
 regression_tests/regression.sh suite check --build
 
@@ -52,6 +56,8 @@ The archived `historical_feature` case records evidence from
 | `warm` | Reconverge an unchanged steady restart on a fixed mesh. |
 | `cold_fixed` | Start analytically on the refined mesh and complete seven continuation stages without adaptivity. |
 | `cold_adaptive` | Start analytically on the coarse mesh, adapt during the first two stages, then complete the same continuations. |
+| `cold_step_fixed` | Run one time step and one Newton iteration on the coarse mesh without adaptivity. |
+| `cold_step_adaptive` | Repeat the one-step probe with exactly one initial adaptivity pass. |
 
 Both cold workflows run `time_init`, `diffusion_reduction`, and five numbered
 continuations. Each stage waits for its predecessor and uses its selected HDF5
@@ -60,16 +66,18 @@ output as the next restart.
 | Suite | Workflows and layouts | Intended use |
 | --- | --- | --- |
 | `warm` | `warm`, `mpi4_omp4` | Fast routine check. |
-| `warm_parallelism` | `warm`, all five layouts | MPI/OpenMP characterization. |
+| `race` | Both coarse one-step probes, `serial_omp1` → `serial_omp16` | Routine OpenMP race check. |
 | `cold` | Both cold workflows, `mpi4_omp4` | Routine feature-integration check. |
-| `cold_matrix` | Both cold workflows, all five layouts | Periodic or overnight evidence. |
+| `warm_parallelism` | `warm`, all four layouts | Restart-path parallelism characterization. |
+| `race_matrix` | Both coarse one-step probes, serial and MPI layout pairs | Periodic OpenMP race check. |
+| `cold_matrix` | Both full cold workflows, all four layouts | Periodic or overnight evidence. |
 
 The characterized warm run takes seconds. The canonical cold suite is a
 longer routine check, while the initial ten-cell cold matrix took about six
 hours on the reference workstation. Runtime is recorded but is not currently
 a pass/fail metric.
 
-Tracked layouts are `serial_omp1`, `mpi2_omp1`, `mpi2_omp4`, `mpi4_omp1`, and
+Tracked layouts are `serial_omp1`, `serial_omp16`, `mpi4_omp1`, and
 `mpi4_omp4`. MPI layouts use Open MPI core binding and assign exclusive cores
 to each rank's OpenMP threads. `layouts.json` only lists these identifiers;
 `serial_ompN` and `mpiM_ompN` directly determine the executable type, MPI
@@ -104,7 +112,7 @@ legacy_case/
 Cold workflows additionally use:
 
 ```text
-mesh_adaptive_initial.msh
+mesh_adaptive_initial.msh  # catalog role: coarse_mesh
 param_cold_fixed_time_init.txt
 param_cold_fixed_diffusion_reduction.txt
 param_cold_fixed_continuation_01.txt ... continuation_05.txt
@@ -230,14 +238,17 @@ The initial numerical limits in `tolerances.json` are:
 | --- | ---: | ---: |
 | Warm, same layout | `1e-10` | `1e-9` |
 | Warm, cross layout | `5e-8` | `1e-6` |
+| One-step race probe | `5e-8` | `1e-6` |
 | Matching fixed cold stage | `1e-8` | `1e-7` |
 | Fixed cold fallback against warm reference | `1e-5` | `1e-5` |
 | Adaptive solution | `0.05` | `0.1` |
 | Adaptive gradient | `0.25` | `0.2` |
 
-All profiles require final Newton error at most `2e-4`. Fixed-mesh coordinates
-use absolute tolerance `1e-12`. Normalized Linf is the largest absolute
-pointwise difference divided by the largest absolute reference value.
+The race profile requires a finite Newton error but does not require Newton
+convergence. All other profiles require final Newton error at most `2e-4`.
+Fixed-mesh coordinates use absolute tolerance `1e-12`. Normalized Linf is the
+largest absolute pointwise difference divided by the largest absolute
+reference value.
 
 These are regression tolerances for the characterized legacy workflow, not
 general physical-accuracy targets. Shared Newton and fixed-mesh coordinate
@@ -255,6 +266,16 @@ reference-matrix comparison automatically.
 
 The command prints a short summary and writes `comparison.json`, or
 `matrix_comparison.json` for a staged reference matrix.
+
+The paired race suites compare outputs produced by the same build directly,
+without accepting or reading golden solutions. `race` checks
+`serial_omp1` → `serial_omp16`; `race_matrix` additionally checks
+`mpi4_omp1` → `mpi4_omp4`. Both workflows start from the same coarse mesh.
+Repeat only their comparisons with:
+
+```bash
+regression_tests/regression.sh suite compare /path/to/suite_summary.json
+```
 
 ## Suites, saved verification, and promotion
 

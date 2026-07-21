@@ -5,11 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from comparison.shared.convergence import (
-    NEWTON_CONVERGENCE_FAILURE,
-    NewtonConvergence,
-    read_newton_convergence,
-)
+from comparison.shared.convergence import NewtonConvergence, read_newton_convergence
 from comparison.fixed.hdf5 import compare_hdf5_files
 from comparison.inputs import ComparisonInputs, ComparisonOverrides
 from comparison.shared.outputs import resolve_run_file, select_candidate
@@ -74,8 +70,8 @@ def _comparison_failures(
     convergence: NewtonConvergence,
 ) -> list[str]:
     failures = list(hdf5_report["failures"])
-    if not convergence.passed:
-        failures.append(NEWTON_CONVERGENCE_FAILURE)
+    if convergence.failure is not None:
+        failures.append(convergence.failure)
     return failures
 
 

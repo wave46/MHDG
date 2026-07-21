@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from suite.configuration import (
     suite_directory,
 )
 from suite.models import SuiteRunInputs
+from suite.pairs import compare_layout_pairs
 from suite.summary import (
     completed_cells,
     finalize_summary,
@@ -64,14 +66,14 @@ def run_suite(
     )
     summary_path = output_directory / "suite_summary.json"
     selected_workflows = suite["workflow_ids"]
-    comparison_mode = "immediate" if compare else "deferred"
+    pairs = suite.get("layout_comparisons")
+    comparison_mode = _comparison_mode(bool(pairs), compare)
     if resume:
         summary = resume_summary(
             summary_path,
             suite_id,
             selected_run_id,
-            selected_workflows,
-            suite["layouts"],
+            suite,
             comparison_mode,
         )
     else:
@@ -79,7 +81,6 @@ def run_suite(
             suite_id,
             selected_run_id,
             suite,
-            selected_workflows,
             comparison_mode,
         )
         write_json_atomic(summary_path, summary, "suite summary")
@@ -94,17 +95,30 @@ def run_suite(
         tolerances_path=tolerances_path,
         compare=compare,
     )
+    cell_inputs = replace(inputs, compare=False) if pairs else inputs
     _run_pending_cells(
-        inputs,
+        cell_inputs,
         suite_id,
         selected_workflows,
         suite["layouts"],
         summary_path,
         summary,
     )
+    if pairs and compare:
+        summary["comparisons"] = compare_layout_pairs(
+            summary,
+            case_directory,
+            tolerances_path,
+        )
     finalize_summary(summary)
     write_json_atomic(summary_path, summary, "suite summary")
     return summary_path, summary
+
+
+def _comparison_mode(layout_pairs: bool, compare: bool) -> str:
+    if layout_pairs:
+        return "layout_pairs" if compare else "deferred_layout_pairs"
+    return "immediate" if compare else "deferred"
 
 
 def _run_pending_cells(

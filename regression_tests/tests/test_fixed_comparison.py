@@ -190,7 +190,7 @@ class CompareCommandTests(unittest.TestCase):
                 {
                     "case_id": "legacy_case",
                     "workflow_id": "warm",
-                    "layout_id": "mpi2_omp1",
+                    "layout_id": "serial_omp16",
                 }
             ),
             encoding="utf-8",

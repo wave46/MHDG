@@ -32,7 +32,7 @@ Commands:
   suite compare    Recompare saved suite results without running the solver.
   suite check      Run a suite against a required golden bundle (default: warm).
 
-Suites: warm, warm_parallelism, cold, cold_matrix.
+Suites: warm, race, cold, warm_parallelism, race_matrix, cold_matrix.
 EOF
 }
 

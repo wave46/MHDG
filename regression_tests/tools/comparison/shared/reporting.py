@@ -10,11 +10,17 @@ from comparison.shared.metrics import format_metric, maximum_metric
 def print_fixed_summary(report: dict[str, Any]) -> None:
     """Print the human-readable summary for a fixed-mesh report."""
     convergence = report["convergence"]
+    maximum = convergence["maximum"]
+    acceptance = (
+        "finite"
+        if maximum is None
+        else f"<= {format_metric(maximum)}"
+    )
     print(
         "Newton error: "
         f"{_pass_label(convergence['passed'])} "
         f"{format_metric(convergence['final_newton_error'])} "
-        f"<= {format_metric(convergence['maximum'])}"
+        f"({acceptance})"
     )
 
     mesh = report["hdf5"].get("mesh", {})

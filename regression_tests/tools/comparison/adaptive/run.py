@@ -5,11 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from comparison.shared.convergence import (
-    NEWTON_CONVERGENCE_FAILURE,
-    NewtonConvergence,
-    read_newton_convergence,
-)
+from comparison.shared.convergence import NewtonConvergence, read_newton_convergence
 from comparison.inputs import ComparisonInputs, ComparisonOverrides
 from comparison.shared.outputs import resolve_run_file, select_candidate
 from comparison.adaptive.fields import compare_sampled_fields
@@ -116,8 +112,8 @@ def _comparison_report(
     field_report: dict[str, Any],
 ) -> dict[str, Any]:
     failures = list(field_report["failures"])
-    if not convergence.passed:
-        failures.append(NEWTON_CONVERGENCE_FAILURE)
+    if convergence.failure is not None:
+        failures.append(convergence.failure)
     report = {
         **field_report,
         "created_utc": utc_now(),

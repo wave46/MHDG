@@ -14,11 +14,10 @@ def new_summary(
     suite_id: str,
     run_id: str,
     suite: dict[str, Any],
-    workflow_ids: list[str],
     comparison_mode: str,
 ) -> dict[str, Any]:
     """Create the initial running summary for a new suite."""
-    return {
+    summary = {
         "schema_version": 2,
         "started_utc": utc_now(),
         "finished_utc": None,
@@ -28,19 +27,23 @@ def new_summary(
         "run_id": run_id,
         "description": suite["description"],
         "case_id": suite["case_id"],
-        "workflow_ids": workflow_ids,
+        "workflow_ids": suite["workflow_ids"],
         "layout_ids": suite["layouts"],
         "comparison_mode": comparison_mode,
         "results": [],
     }
+    if suite.get("layout_comparisons"):
+        summary["layout_comparisons"] = suite["layout_comparisons"]
+        summary["tolerance_profile"] = suite["tolerance_profile"]
+        summary["comparisons"] = []
+    return summary
 
 
 def resume_summary(
     path: Path,
     suite_id: str,
     run_id: str,
-    workflow_ids: list[str],
-    layout_ids: list[str],
+    suite: dict[str, Any],
     comparison_mode: str,
 ) -> dict[str, Any]:
     """Load an existing compatible summary and mark it running again."""
@@ -48,16 +51,25 @@ def resume_summary(
     expected = {
         "suite_id": suite_id,
         "run_id": run_id,
-        "workflow_ids": workflow_ids,
-        "layout_ids": layout_ids,
+        "workflow_ids": suite["workflow_ids"],
+        "layout_ids": suite["layouts"],
         "comparison_mode": comparison_mode,
     }
+    if suite.get("layout_comparisons"):
+        expected["layout_comparisons"] = suite["layout_comparisons"]
+        expected["tolerance_profile"] = suite["tolerance_profile"]
     mismatched = [key for key, value in expected.items() if summary.get(key) != value]
     if mismatched:
         raise BundleError(f"suite summary does not match: {', '.join(mismatched)}")
     if not isinstance(summary.get("results"), list):
         raise BundleError("suite summary has invalid results")
-    _validate_recorded_cells(summary["results"], workflow_ids, layout_ids)
+    _validate_recorded_cells(
+        summary["results"],
+        suite["workflow_ids"],
+        suite["layouts"],
+    )
+    if suite.get("layout_comparisons"):
+        summary["comparisons"] = []
     summary["status"] = "running"
     summary["finished_utc"] = None
     return summary
@@ -74,9 +86,10 @@ def completed_cells(summary: dict[str, Any]) -> set[tuple[str, str]]:
 def finalize_summary(summary: dict[str, Any]) -> None:
     """Mark a completed summary passed or failed from its cell results."""
     summary["finished_utc"] = utc_now()
+    checks = [*summary["results"], *summary.get("comparisons", [])]
     summary["status"] = (
         "passed"
-        if all(result["status"] == "passed" for result in summary["results"])
+        if all(check["status"] == "passed" for check in checks)
         else "failed"
     )
 

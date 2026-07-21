@@ -7,6 +7,7 @@ from typing import Any
 
 from bundle.cases import load_case_definition
 from comparison.workflow import compare_completed_run
+from suite.pairs import compare_layout_pairs
 from support.documents import load_json, write_json_atomic
 from support.errors import BundleError, HarnessError
 from support.paths import require_file
@@ -27,6 +28,21 @@ def verify_suite(
     output_path = suite_summary_path.parent / "verification_summary.json"
     summary = _new_verification_summary(source, suite_summary_path)
     write_json_atomic(output_path, summary, "verification summary")
+    if source.get("layout_comparisons"):
+        summary["comparisons"] = compare_layout_pairs(
+            source,
+            case_directory,
+            tolerances_path,
+        )
+        summary["status"] = (
+            "passed"
+            if all(item["status"] == "passed" for item in summary["comparisons"])
+            else "failed"
+        )
+        summary["finished_utc"] = utc_now()
+        write_json_atomic(output_path, summary, "verification summary")
+        return output_path, summary
+
     for source_result in source["results"]:
         summary["results"].append(
             _verify_result(
@@ -117,3 +133,16 @@ def _validate_source_summary(summary: dict[str, Any]) -> None:
     for result in summary["results"]:
         if not isinstance(result, dict) or not result_fields <= result.keys():
             raise BundleError("suite summary contains an invalid result")
+    if "layout_comparisons" in summary:
+        pair_fields = {"workflow_ids", "tolerance_profile"}
+        if not pair_fields <= summary.keys():
+            raise BundleError("paired suite summary is incomplete")
+        pairs = summary["layout_comparisons"]
+        if not isinstance(pairs, list) or not pairs:
+            raise BundleError("paired suite summary has no layout comparisons")
+        if any(
+            not isinstance(pair, dict)
+            or set(pair) != {"baseline", "candidate"}
+            for pair in pairs
+        ):
+            raise BundleError("paired suite summary has an invalid comparison")

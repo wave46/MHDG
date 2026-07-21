@@ -13,10 +13,10 @@
       "equilibrium_current_density": "current_density.h5",
       "warm_parameters": "param.txt",
       "transport_configuration": "transport_model.nml",
-      "warm_restart": "restart.h5",
-      "warm_reference": "reference_mpi4_omp4.h5"
+      "warm_restart": "restart.h5"
     },
     "optional": {
+      "warm_reference": "reference_mpi4_omp4.h5",
       "coarse_mesh": "mesh_adaptive_initial.msh",
       "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
       "cold_fixed_diffusion_reduction_parameters": "param_cold_fixed_diffusion_reduction.txt",
@@ -136,8 +136,13 @@
         "equilibrium_current_density"
       ],
       "mesh": "coarse_mesh",
-      "reference": "warm_reference",
       "layout": "serial_omp1",
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "race_step",
+        "cross_layout_profile": "race_step",
+        "stage_profile": "race_step"
+      },
       "parameter_overrides": {
         "adaptivity": false,
         "rest_adapt": false

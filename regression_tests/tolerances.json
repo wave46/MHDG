@@ -17,6 +17,12 @@
       "relative_l2_max": 5e-8,
       "normalized_linf_max": 1e-6
     },
+    "race_step": {
+      "description": "Finite one-step output compared directly across OpenMP layouts",
+      "newton_error_max": null,
+      "relative_l2_max": 5e-8,
+      "normalized_linf_max": 1e-6
+    },
     "fixed_stage_reference": {
       "description": "Matching workflow stage and execution layout on a fixed mesh",
       "relative_l2_max": 1e-8,

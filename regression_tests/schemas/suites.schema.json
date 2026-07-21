@@ -42,8 +42,20 @@
       "required": [
         "description",
         "case",
-        "workflows",
-        "layouts"
+        "workflows"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "layouts"
+          ]
+        },
+        {
+          "required": [
+            "layout_comparisons",
+            "tolerance_profile"
+          ]
+        }
       ],
       "properties": {
         "description": {
@@ -58,6 +70,32 @@
         },
         "layouts": {
           "$ref": "#/$defs/identifier_list"
+        },
+        "layout_comparisons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/layout_comparison"
+          }
+        },
+        "tolerance_profile": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "layout_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline",
+        "candidate"
+      ],
+      "properties": {
+        "baseline": {
+          "$ref": "#/$defs/identifier"
+        },
+        "candidate": {
+          "$ref": "#/$defs/identifier"
         }
       }
     }

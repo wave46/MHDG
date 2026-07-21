@@ -81,7 +81,7 @@ def _validate_case_workflows(case: dict[str, Any]) -> None:
 
         missing = [
             name
-            for name in ("mesh_role", "reference_role", "stages")
+            for name in ("mesh_role", "stages")
             if not workflow.get(name)
         ]
         if missing:

@@ -16,6 +16,31 @@ from comparison.workflow import compare_completed_run  # noqa: E402
 
 
 class ReferenceMatrixComparisonTests(unittest.TestCase):
+    @patch("comparison.workflow.compare_fixed_run")
+    def test_explicit_reference_bypasses_stage_matrix(self, compare) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run, references = self._fixture(root, "cold_fixed")
+            report_path = root / "direct.json"
+            compare.return_value = (
+                report_path,
+                {"status": "passed", "failures": []},
+            )
+
+            policy, path, _ = compare_completed_run(
+                run,
+                REGRESSION_ROOT / "cases",
+                REGRESSION_ROOT / "tolerances.json",
+                reference_override=references["time_init"],
+                tolerance_profile_override="race_step",
+            )
+
+        self.assertEqual(policy, "fixed_hdf5")
+        self.assertEqual(path, report_path)
+        overrides = compare.call_args.args[1]
+        self.assertEqual(overrides.reference, references["time_init"])
+        self.assertEqual(overrides.tolerance_profile, "race_step")
+
     @patch("comparison.matrix.compare_fixed_run")
     def test_fixed_comparison_stops_at_first_divergent_stage(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -33,14 +33,21 @@ def compare_completed_run(
         tolerance_profile=tolerance_profile_override,
     )
 
-    if inputs.workflow.get("stages"):
+    explicit_final_state = any(
+        value is not None
+        for value in (
+            overrides.candidate,
+            overrides.reference,
+            overrides.tolerance_profile,
+        )
+    )
+    if inputs.workflow.get("stages") and not explicit_final_state:
         matrix = load_plan_matrix(
             inputs.plan,
             inputs.case,
             inputs.case_directory.parent / "schemas",
         )
         if matrix is not None:
-            _reject_staged_overrides(overrides)
             path, report = compare_reference_matrix(
                 inputs,
                 matrix,
@@ -72,18 +79,3 @@ def _compare_final_state(
     else:
         raise ComparisonError(f"unsupported comparison policy: {policy}")
     return policy, path, report
-
-
-def _reject_staged_overrides(overrides: ComparisonOverrides) -> None:
-    if any(
-        value is not None
-        for value in (
-            overrides.candidate,
-            overrides.reference,
-            overrides.tolerance_profile,
-        )
-    ):
-        raise ComparisonError(
-            "candidate, reference, and tolerance-profile overrides are not supported "
-            "for staged comparisons"
-        )

@@ -47,9 +47,11 @@ def prepare_staged_run(inputs: PreparationInputs) -> PreparedStagedRun:
     with temporary_run_directory(inputs.run_directory) as staging:
         (staging / "inputs").mkdir()
         (staging / "stages").mkdir()
-        (staging / "inputs" / "reference.h5").symlink_to(
-            inputs.artifacts[inputs.workflow["reference_role"]]
-        )
+        reference_role = inputs.workflow.get("reference_role")
+        if reference_role is not None:
+            (staging / "inputs" / "reference.h5").symlink_to(
+                inputs.artifacts[reference_role]
+            )
         for index, stage in enumerate(inputs.workflow["stages"], start=1):
             prepared_stages.append(_prepare_stage(inputs, staging, index, stage))
         write_staged_plan(staging, inputs, prepared_stages)

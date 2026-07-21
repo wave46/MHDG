@@ -23,6 +23,7 @@ def print_run_summary(summary: dict[str, Any], path: Path) -> None:
             print(f"  FAIL: {failure}")
         if len(result["failures"]) > 3:
             print(f"  ... {len(result['failures']) - 3} more failures")
+    _print_layout_comparisons(summary.get("comparisons", []))
     print(
         f"suite {summary['status']}: {path} "
         f"({summary['duration_seconds']:.3f} s)"
@@ -31,6 +32,10 @@ def print_run_summary(summary: dict[str, Any], path: Path) -> None:
 
 def print_verification_summary(summary: dict[str, Any], path: Path) -> None:
     """Print comparison status for every recorded suite cell."""
+    if summary.get("comparisons") is not None:
+        _print_layout_comparisons(summary["comparisons"])
+        print(f"verification {summary['status']}: {path}")
+        return
     print("workflow       layout        policy             result")
     for result in summary["results"]:
         print(
@@ -42,3 +47,19 @@ def print_verification_summary(summary: dict[str, Any], path: Path) -> None:
         for failure in result["failures"][:3]:
             print(f"  FAIL: {failure}")
     print(f"verification {summary['status']}: {path}")
+
+
+def _print_layout_comparisons(comparisons: list[dict[str, Any]]) -> None:
+    if not comparisons:
+        return
+    print("workflow             baseline       candidate      policy             result")
+    for comparison in comparisons:
+        print(
+            f"{comparison['workflow_id']:<20} "
+            f"{comparison['baseline_layout_id']:<14} "
+            f"{comparison['candidate_layout_id']:<14} "
+            f"{str(comparison['comparison_policy'] or 'n/a'):<18} "
+            f"{comparison['status']}"
+        )
+        for failure in comparison["failures"][:3]:
+            print(f"  FAIL: {failure}")
