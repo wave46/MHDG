@@ -44,9 +44,7 @@ def _print_summary(summary: ValidationSummary) -> None:
         f"verified {summary.verified_artifact_count} of "
         f"{summary.artifact_count} artifacts ({summary.verified_bytes} bytes)"
     )
-    print(f"case data: {', '.join(summary.case_data)}")
-    checked = ", ".join(summary.checked_cases) or "none from this checkout"
-    print(f"required roles checked: {checked}")
+    print(f"required roles checked for case: {summary.case_id}")
     for warning in summary.warnings:
         print(f"warning: {warning}", file=sys.stderr)
 

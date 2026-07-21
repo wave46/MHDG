@@ -82,6 +82,11 @@ manifest records each artifact once using a generic role, bundle-relative
 path, size, media type, and SHA-256 checksum. Checksums are generated and
 checked automatically; users do not write them by hand.
 
+The V2 manifest is generated rather than user-authored. Each bundle contains
+one top-level `case_id`, one role-to-artifact mapping, and an artifact registry;
+physical case files are stored under `inputs/`. The manifest has no repeated
+case-data layer and should not be edited manually.
+
 The basic prepared directory uses these generic names:
 
 ```text

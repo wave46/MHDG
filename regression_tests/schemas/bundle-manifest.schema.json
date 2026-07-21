@@ -1,30 +1,31 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/wave46/MHDG/develop/regression_tests/schemas/bundle-manifest.schema.json",
-  "title": "MHDG external regression case bundle manifest",
+  "title": "MHDG external regression bundle manifest",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "bundle_id",
     "bundle_version",
-    "artifacts",
-    "case_data"
+    "bundle_class",
+    "created_utc",
+    "case_id",
+    "roles",
+    "artifacts"
   ],
   "properties": {
     "schema_version": {
       "const": 2
     },
     "bundle_id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_]*$"
+      "$ref": "#/$defs/identifier"
     },
     "bundle_version": {
       "type": "string",
       "minLength": 1
     },
     "bundle_class": {
-      "type": "string",
       "enum": [
         "candidate",
         "golden"
@@ -34,56 +35,34 @@
       "type": "string",
       "format": "date-time"
     },
+    "case_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "roles": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
     "artifacts": {
       "type": "object",
       "minProperties": 1,
       "propertyNames": {
-        "pattern": "^[a-z][a-z0-9_]*$"
+        "$ref": "#/$defs/identifier"
       },
       "additionalProperties": {
         "$ref": "#/$defs/artifact"
       }
-    },
-    "case_data": {
-      "type": "object",
-      "minProperties": 1,
-      "propertyNames": {
-        "pattern": "^[a-z][a-z0-9_]*$"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/case_data"
-      }
     }
   },
   "$defs": {
-    "case_data": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "case_id",
-        "roles"
-      ],
-      "properties": {
-        "case_id": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9_]*$"
-        },
-        "description": {
-          "type": "string"
-        },
-        "roles": {
-          "type": "object",
-          "minProperties": 1,
-          "propertyNames": {
-            "pattern": "^[a-z][a-z0-9_]*$"
-          },
-          "additionalProperties": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9_]*$",
-            "description": "Identifier of an entry in the top-level artifacts registry"
-          }
-        }
-      }
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
     },
     "artifact": {
       "type": "object",
@@ -98,8 +77,7 @@
         "path": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$",
-          "description": "POSIX-style path relative to the bundle root"
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
         },
         "sha256": {
           "type": "string",
@@ -110,16 +88,12 @@
           "minimum": 0
         },
         "media_type": {
-          "type": "string",
           "enum": [
             "application/x-hdf5",
             "application/x-gmsh",
             "application/json",
             "text/plain"
           ]
-        },
-        "description": {
-          "type": "string"
         },
         "optional": {
           "type": "boolean",

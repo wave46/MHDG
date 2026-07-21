@@ -12,6 +12,5 @@ class ValidationSummary:
     artifact_count: int
     verified_artifact_count: int
     verified_bytes: int
-    case_data: list[str]
-    checked_cases: list[str]
+    case_id: str
     warnings: list[str]

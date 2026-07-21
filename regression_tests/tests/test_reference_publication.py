@@ -175,7 +175,9 @@ class ReferencePublicationTests(unittest.TestCase):
                 "suite_id": "warm",
                 "run_id": "suite-test",
                 "case_id": "legacy_case",
-                "workflow_id": "warm",
+                "workflow_ids": ["warm"],
+                "layout_ids": ["mpi4_omp4"],
+                "comparison_mode": "immediate",
                 "results": [
                     {
                         "layout_id": "mpi4_omp4",

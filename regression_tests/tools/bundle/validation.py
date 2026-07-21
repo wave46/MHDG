@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from bundle.cases import load_case_definitions, required_case_roles
+from bundle.cases import load_case_definition, required_case_roles
 from bundle.models import ValidationSummary
 from bundle.schemas import load_validated_json
 from bundle.settings import bundle_root_from_settings, read_settings
@@ -35,16 +35,16 @@ def validate_bundle_root(bundle_root: Path, case_dir: Path) -> ValidationSummary
         schema_dir / "bundle-manifest.schema.json",
         "bundle manifest",
     )
-    cases = load_case_definitions(case_dir)
+    case = load_case_definition(manifest["case_id"], case_dir)
 
     available, verified_bytes, warnings = _verify_artifacts(
         bundle_root, manifest["artifacts"]
     )
-    case_data = _resolve_case_data(manifest)
-    _verify_reference_matrices(
-        bundle_root, manifest, case_data, available, schema_dir
+    roles = _verify_roles(manifest)
+    _verify_reference_matrix(
+        bundle_root, manifest, roles, available, schema_dir
     )
-    checked_cases = _verify_case_requirements(cases, case_data, available)
+    _verify_case_requirements(case, roles, available)
 
     return ValidationSummary(
         bundle_id=manifest["bundle_id"],
@@ -52,8 +52,7 @@ def validate_bundle_root(bundle_root: Path, case_dir: Path) -> ValidationSummary
         artifact_count=len(manifest["artifacts"]),
         verified_artifact_count=len(available),
         verified_bytes=verified_bytes,
-        case_data=sorted(case_data),
-        checked_cases=checked_cases,
+        case_id=case["case_id"],
         warnings=warnings,
     )
 
@@ -89,103 +88,83 @@ def _verify_artifacts(
     return available, verified_bytes, warnings
 
 
-def _resolve_case_data(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _verify_roles(manifest: dict[str, Any]) -> dict[str, str]:
     artifact_ids = set(manifest["artifacts"])
-    resolved = {}
-    for data_id, case_data in manifest["case_data"].items():
-        for role, artifact_id in case_data["roles"].items():
-            if artifact_id not in artifact_ids:
-                raise BundleError(
-                    f"manifest.case_data.{data_id}.roles.{role} refers to "
-                    f"unknown artifact {artifact_id}"
-                )
-        resolved[data_id] = case_data
-    return resolved
+    roles = manifest["roles"]
+    for role, artifact_id in roles.items():
+        if artifact_id not in artifact_ids:
+            raise BundleError(
+                f"manifest.roles.{role} refers to unknown artifact {artifact_id}"
+            )
+    return roles
 
 
-def _verify_reference_matrices(
+def _verify_reference_matrix(
     bundle_root: Path,
     manifest: dict[str, Any],
-    case_data_by_id: dict[str, dict[str, Any]],
+    roles: dict[str, str],
     available: set[str],
     schema_dir: Path,
 ) -> None:
     artifacts = manifest["artifacts"]
-    for data_id, case_data in case_data_by_id.items():
-        index_id = case_data["roles"].get("reference_matrix")
-        if index_id is None:
-            continue
-        index_artifact = artifacts[index_id]
-        index_path = _artifact_path(
-            bundle_root,
-            index_artifact["path"],
-            f"manifest.artifacts.{index_id}",
-        )
-        matrix = load_validated_json(
-            index_path,
-            schema_dir / "reference-matrix.schema.json",
-            f"reference matrix {data_id}",
-        )
-        if matrix["case_id"] != case_data["case_id"]:
-            raise BundleError(f"reference matrix {data_id} has the wrong case_id")
+    index_id = roles.get("reference_matrix")
+    if index_id is None:
+        return
+    index_artifact = artifacts[index_id]
+    index_path = _artifact_path(
+        bundle_root,
+        index_artifact["path"],
+        f"manifest.artifacts.{index_id}",
+    )
+    matrix = load_validated_json(
+        index_path,
+        schema_dir / "reference-matrix.schema.json",
+        "reference matrix",
+    )
+    if matrix["case_id"] != manifest["case_id"]:
+        raise BundleError("reference matrix has the wrong case_id")
 
-        cells = []
-        for reference in matrix["references"]:
-            artifact_id = reference["artifact_id"]
-            artifact = artifacts.get(artifact_id)
-            if artifact is None or artifact_id not in available:
-                raise BundleError(
-                    f"reference matrix {data_id} uses unavailable artifact "
-                    f"{artifact_id}"
-                )
-            if artifact["media_type"] != "application/x-hdf5":
-                raise BundleError(
-                    f"reference matrix artifact {artifact_id} is not HDF5"
-                )
-            cells.append(
-                (
-                    reference["workflow_id"],
-                    reference["layout_id"],
-                    reference["stage_id"],
-                )
+    cells = []
+    for reference in matrix["references"]:
+        artifact_id = reference["artifact_id"]
+        artifact = artifacts.get(artifact_id)
+        if artifact is None or artifact_id not in available:
+            raise BundleError(
+                f"reference matrix uses unavailable artifact {artifact_id}"
             )
-        if len(cells) != len(set(cells)):
-            raise BundleError(f"reference matrix {data_id} contains duplicate cells")
+        if artifact["media_type"] != "application/x-hdf5":
+            raise BundleError(
+                f"reference matrix artifact {artifact_id} is not HDF5"
+            )
+        cells.append(
+            (
+                reference["workflow_id"],
+                reference["layout_id"],
+                reference["stage_id"],
+            )
+        )
+    if len(cells) != len(set(cells)):
+        raise BundleError("reference matrix contains duplicate cells")
 
 
 def _verify_case_requirements(
-    cases: list[dict[str, Any]],
-    case_data_by_id: dict[str, dict[str, Any]],
+    case: dict[str, Any],
+    roles: dict[str, str],
     available: set[str],
-) -> list[str]:
-    checked = []
-    for case in cases:
-        case_id = case["case_id"]
-        if case_id not in case_data_by_id:
-            continue
-
-        case_data = case_data_by_id[case_id]
-        if case_data["case_id"] != case_id:
-            raise BundleError(
-                f"manifest.case_data.{case_id}.case_id is "
-                f"{case_data['case_id']}, expected {case_id}"
-            )
-
-        required = required_case_roles(case)
-        mapping = case_data["roles"]
-        missing = sorted(required - mapping.keys())
-        if missing:
-            raise BundleError(
-                f"case {case_id} is missing required artifact roles: {', '.join(missing)}"
-            )
-        unavailable = sorted(role for role in required if mapping[role] not in available)
-        if unavailable:
-            raise BundleError(
-                f"case {case_id} has unavailable required artifacts for roles: "
-                f"{', '.join(unavailable)}"
-            )
-        checked.append(case_id)
-    return checked
+) -> None:
+    required = required_case_roles(case)
+    missing = sorted(required - roles.keys())
+    if missing:
+        raise BundleError(
+            f"case {case['case_id']} is missing required artifact roles: "
+            + ", ".join(missing)
+        )
+    unavailable = sorted(role for role in required if roles[role] not in available)
+    if unavailable:
+        raise BundleError(
+            f"case {case['case_id']} has unavailable required artifacts for roles: "
+            + ", ".join(unavailable)
+        )
 
 
 def _artifact_path(root: Path, relative_path: str, label: str) -> Path:

@@ -80,12 +80,9 @@ def install_reference_matrix(
         index_path,
         "application/json",
     )
-    try:
-        case_data = manifest["case_data"][case["case_id"]]
-    except KeyError as exc:
-        raise BundleError("source bundle has no matching case-data entry") from exc
-    case_data["case_id"] = case["case_id"]
-    case_data["roles"][REFERENCE_MATRIX_ROLE] = REFERENCE_MATRIX_ID
+    if manifest["case_id"] != case["case_id"]:
+        raise BundleError("source bundle contains another case")
+    manifest["roles"][REFERENCE_MATRIX_ROLE] = REFERENCE_MATRIX_ID
 
 
 def _install_run(

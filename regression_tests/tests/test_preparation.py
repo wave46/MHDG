@@ -84,7 +84,7 @@ class RunPreparationTests(unittest.TestCase):
         self.assertIn(f"{expected / 'outputs'}/", parameters)
 
         bundled_parameters = (
-            self.bundle / "case_data" / "legacy_case" / "param.txt"
+            self.bundle / "inputs" / "param.txt"
         ).read_text(encoding="utf-8")
         self.assertEqual(bundled_parameters, PARAMETERS)
 
@@ -151,12 +151,12 @@ class RunPreparationTests(unittest.TestCase):
             (adaptive.stages[0].run.path / "inputs/mesh.msh").resolve(),
             (
                 self.bundle
-                / "case_data/legacy_case/mesh_adaptive_initial.msh"
+                / "inputs/mesh_adaptive_initial.msh"
             ).resolve(),
         )
         self.assertEqual(
             (first.path / "inputs/mesh.msh").resolve(),
-            (self.bundle / "case_data/legacy_case/mesh.msh").resolve(),
+            (self.bundle / "inputs/mesh.msh").resolve(),
         )
         self.assertIn("rest_adapt = .true.", adaptive_parameters[0])
         self.assertIn("rest_adapt = .true.", adaptive_parameters[1])

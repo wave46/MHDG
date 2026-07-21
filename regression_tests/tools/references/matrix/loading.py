@@ -24,11 +24,10 @@ def load_reference_matrix(
         "bundle manifest",
     )
     case_id = case["case_id"]
-    case_data = manifest["case_data"].get(case_id)
-    if case_data is None or case_data["case_id"] != case_id:
+    if manifest["case_id"] != case_id:
         raise BundleError(f"bundle does not contain case data for {case['case_id']}")
 
-    index_id = case_data["roles"].get(REFERENCE_MATRIX_ROLE)
+    index_id = manifest["roles"].get(REFERENCE_MATRIX_ROLE)
     if index_id is None:
         return None
     index_path = _manifest_artifact_path(
@@ -43,7 +42,7 @@ def load_reference_matrix(
         schema_directory / "reference-matrix.schema.json",
         "reference matrix",
     )
-    if matrix["case_id"] != case_data["case_id"]:
+    if matrix["case_id"] != case_id:
         raise BundleError("reference matrix has the wrong case_id")
 
     references: dict[tuple[str, str, str], Path] = {}

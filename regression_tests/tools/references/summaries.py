@@ -19,6 +19,9 @@ def validate_promotion_summary(
         "suite_id",
         "run_id",
         "case_id",
+        "workflow_ids",
+        "layout_ids",
+        "comparison_mode",
         "results",
     }
     missing = sorted(required - summary.keys())
@@ -32,7 +35,7 @@ def validate_promotion_summary(
         ):
             raise BundleError(f"suite summary has invalid {name}")
 
-    if "workflow_id" in summary:
+    if summary["comparison_mode"] == "immediate":
         _validate_canonical_summary(summary)
         return "canonical"
     validate_matrix_summary(summary)
@@ -40,9 +43,14 @@ def validate_promotion_summary(
 
 
 def _validate_canonical_summary(summary: dict[str, Any]) -> None:
-    workflow_id = summary["workflow_id"]
-    if not isinstance(workflow_id, str) or not IDENTIFIER_RE.fullmatch(workflow_id):
-        raise BundleError("suite summary has invalid workflow_id")
+    workflow_ids = summary["workflow_ids"]
+    if (
+        not isinstance(workflow_ids, list)
+        or len(workflow_ids) != 1
+        or not isinstance(workflow_ids[0], str)
+        or not IDENTIFIER_RE.fullmatch(workflow_ids[0])
+    ):
+        raise BundleError("canonical suite must declare exactly one workflow")
     results = summary["results"]
     if not isinstance(results, list) or not results:
         raise BundleError("suite summary contains no layout results")

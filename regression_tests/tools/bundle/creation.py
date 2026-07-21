@@ -74,7 +74,7 @@ def _populate_bundle(
     bundle_version: str,
 ) -> dict[str, Any]:
     case_id = case["case_id"]
-    target_directory = staging / "case_data" / case_id
+    target_directory = staging / "inputs"
     artifacts: dict[str, dict[str, Any]] = {}
     roles: dict[str, str] = {}
 
@@ -104,8 +104,8 @@ def _populate_bundle(
             **file_identity(target_path),
             "media_type": file_spec["media_type"],
         }
-        if "description" in file_spec:
-            artifacts[artifact_id]["description"] = file_spec["description"]
+        if file_spec["optional"]:
+            artifacts[artifact_id]["optional"] = True
         roles[role] = artifact_id
 
     return {
@@ -114,12 +114,7 @@ def _populate_bundle(
         "bundle_version": bundle_version,
         "bundle_class": "candidate",
         "created_utc": utc_now(),
+        "case_id": case_id,
+        "roles": roles,
         "artifacts": artifacts,
-        "case_data": {
-            case_id: {
-                "case_id": case_id,
-                "description": case["description"],
-                "roles": roles,
-            }
-        },
     }

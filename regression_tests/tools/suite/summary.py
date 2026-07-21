@@ -18,7 +18,7 @@ def new_summary(
     comparison_mode: str,
 ) -> dict[str, Any]:
     """Create the initial running summary for a new suite."""
-    summary = {
+    return {
         "schema_version": 2,
         "started_utc": utc_now(),
         "finished_utc": None,
@@ -33,9 +33,6 @@ def new_summary(
         "comparison_mode": comparison_mode,
         "results": [],
     }
-    if len(workflow_ids) == 1:
-        summary["workflow_id"] = workflow_ids[0]
-    return summary
 
 
 def resume_summary(

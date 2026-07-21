@@ -28,18 +28,6 @@ def load_case_definition(case_id: str, case_directory: Path) -> dict[str, Any]:
     return case
 
 
-def load_case_definitions(case_directory: Path) -> list[dict[str, Any]]:
-    """Load every tracked case definition in filename order."""
-    if not case_directory.is_dir():
-        raise BundleError(
-            f"tracked case directory does not exist: {case_directory}"
-        )
-    return [
-        load_case_definition(path.stem, case_directory)
-        for path in sorted(case_directory.glob("*.json"))
-    ]
-
-
 def required_case_roles(
     case: dict[str, Any],
     workflow_id: str | None = None,

@@ -143,13 +143,10 @@ class ReferenceMatrixComparisonTests(unittest.TestCase):
                     "bundle_id": "golden_bundle",
                     "bundle_version": "golden-1",
                     "bundle_class": "golden",
+                    "created_utc": "2026-07-20T00:00:00Z",
+                    "case_id": "legacy_case",
+                    "roles": {"reference_matrix": "golden_index"},
                     "artifacts": artifacts,
-                    "case_data": {
-                        "legacy_case": {
-                            "case_id": "legacy_case",
-                            "roles": {"reference_matrix": "golden_index"},
-                        }
-                    },
                 }
             ),
             encoding="utf-8",

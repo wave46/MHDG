@@ -104,14 +104,13 @@ def _case_artifacts(
         "bundle manifest",
     )
     case_id = case["case_id"]
-    case_data = manifest["case_data"].get(case_id)
-    if case_data is None or case_data["case_id"] != case_id:
+    if manifest["case_id"] != case_id:
         raise BundleError(f"bundle does not contain case data for {case['case_id']}")
 
     paths = {}
     for role in required_case_roles(case, workflow_id):
         try:
-            artifact_id = case_data["roles"][role]
+            artifact_id = manifest["roles"][role]
         except KeyError as exc:
             raise BundleError(
                 f"bundle does not provide role {role} for workflow {workflow_id}"

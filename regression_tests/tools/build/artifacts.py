@@ -99,11 +99,9 @@ def write_generated_settings(
 
 def _file_record(path: Path) -> dict[str, Any]:
     resolved = path.resolve()
-    identity = file_identity(resolved)
     return {
         "path": str(resolved),
-        "size": identity["size_bytes"],
-        "sha256": identity["sha256"],
+        **file_identity(resolved),
     }
 
 

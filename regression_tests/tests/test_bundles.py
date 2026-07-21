@@ -43,11 +43,11 @@ class BundleWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        copied = self.bundle / "case_data/legacy_case/equilibrium.h5"
+        copied = self.bundle / "inputs/equilibrium.h5"
         self.assertFalse(copied.is_symlink())
         self.assertEqual(copied.read_text(encoding="utf-8"), "shared equilibrium\n")
         summary = validate_bundle_root(self.bundle, REGRESSION_ROOT / "cases")
-        self.assertEqual(summary.checked_cases, ["legacy_case"])
+        self.assertEqual(summary.case_id, "legacy_case")
 
     def test_checksum_mismatch_is_rejected(self) -> None:
         self._create_bundle()
@@ -76,8 +76,6 @@ class BundleWorkflowTests(unittest.TestCase):
         manifest = self._read_manifest()
         artifact_id = "legacy_case_cold_fixed_time_init_parameters"
         artifact = manifest["artifacts"][artifact_id]
-        artifact["optional"] = True
-        self._write_manifest(manifest)
         (self.bundle / artifact["path"]).unlink()
 
         summary = validate_bundle_root(self.bundle, REGRESSION_ROOT / "cases")

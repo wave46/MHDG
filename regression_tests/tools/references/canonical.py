@@ -48,7 +48,8 @@ def collect_canonical_reference(
     source_manifest: dict[str, Any],
 ) -> CanonicalReference:
     """Validate the canonical result and its source-reference identity."""
-    workflow = case["workflows"].get(summary["workflow_id"])
+    workflow_id = summary["workflow_ids"][0]
+    workflow = case["workflows"].get(workflow_id)
     if workflow is None:
         raise BundleError("suite summary refers to an unknown workflow")
     run = _canonical_run(summary, workflow["default_layout"])
@@ -94,6 +95,7 @@ def install_canonical_reference(
 
 
 def _canonical_run(summary: dict[str, Any], layout_id: str) -> CanonicalRun:
+    workflow_id = summary["workflow_ids"][0]
     matching = [
         result for result in summary["results"] if result["layout_id"] == layout_id
     ]
@@ -106,7 +108,7 @@ def _canonical_run(summary: dict[str, Any], layout_id: str) -> CanonicalRun:
     comparison = load_json(directory / "comparison.json", "comparison")
     expected = {
         "case_id": summary["case_id"],
-        "workflow_id": summary["workflow_id"],
+        "workflow_id": workflow_id,
         "layout_id": layout_id,
     }
     for name, value in expected.items():
@@ -133,8 +135,10 @@ def _source_reference(
     case: dict[str, Any],
 ) -> tuple[str, Path]:
     case_id = case["case_id"]
+    if manifest["case_id"] != case_id:
+        raise BundleError("source bundle contains another case")
     try:
-        artifact_id = manifest["case_data"][case_id]["roles"]["warm_reference"]
+        artifact_id = manifest["roles"]["warm_reference"]
         relative_path = manifest["artifacts"][artifact_id]["path"]
     except KeyError as exc:
         raise BundleError("source bundle has no warm reference artifact") from exc
@@ -194,7 +198,7 @@ def _install_provenance(
         "status": "golden",
         "created_utc": utc_now(),
         "case_id": summary["case_id"],
-        "workflow_id": summary["workflow_id"],
+        "workflow_id": summary["workflow_ids"][0],
         "canonical_layout": run.plan["layout_id"],
         "suite_id": summary["suite_id"],
         "suite_run_id": summary["run_id"],
