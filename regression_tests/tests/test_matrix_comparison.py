@@ -11,6 +11,7 @@ from unittest.mock import patch
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
+from bundle.cases import load_case_definition  # noqa: E402
 from comparison.workflow import compare_completed_run  # noqa: E402
 
 
@@ -83,9 +84,7 @@ class ReferenceMatrixComparisonTests(unittest.TestCase):
 
     @staticmethod
     def _fixture(root: Path, workflow_id: str) -> tuple[Path, dict[str, Path]]:
-        case = json.loads(
-            (REGRESSION_ROOT / "cases/legacy_case.json").read_text(encoding="utf-8")
-        )
+        case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
         stage_ids = [
             stage["stage_id"] for stage in case["workflows"][workflow_id]["stages"]
         ]

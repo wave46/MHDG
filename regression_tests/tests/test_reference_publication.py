@@ -10,6 +10,7 @@ from pathlib import Path
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
+from bundle.cases import load_case_definition  # noqa: E402
 from bundle.creation import create_bundle  # noqa: E402
 from bundle.promotion import promote_bundle  # noqa: E402
 from bundle.validation import validate_bundle_root  # noqa: E402
@@ -48,7 +49,7 @@ class ReferencePublicationTests(unittest.TestCase):
     def test_publication_creates_a_valid_golden_without_mutating_source(self) -> None:
         source_manifest = _load_json(self.candidate / "manifest.json")
         source_reference = self.candidate / source_manifest["artifacts"][
-            "legacy_warm_reference_mpi4_omp4"
+            "legacy_case_warm_reference"
         ]["path"]
 
         completed = run_command(
@@ -67,7 +68,7 @@ class ReferencePublicationTests(unittest.TestCase):
         validate_bundle_root(self.output, REGRESSION_ROOT / "cases")
         manifest = _load_json(self.output / "manifest.json")
         reference = self.output / manifest["artifacts"][
-            "legacy_warm_reference_mpi4_omp4"
+            "legacy_case_warm_reference"
         ]["path"]
         self.assertEqual(manifest["bundle_class"], "golden")
         self.assertEqual(manifest["bundle_version"], "golden-1")
@@ -124,7 +125,7 @@ class ReferencePublicationTests(unittest.TestCase):
         solution.write_text("new golden\n", encoding="utf-8")
         manifest = _load_json(self.candidate / "manifest.json")
         reference = self.candidate / manifest["artifacts"][
-            "legacy_warm_reference_mpi4_omp4"
+            "legacy_case_warm_reference"
         ]["path"]
         identity = {
             "case_id": "legacy_case",
@@ -191,7 +192,7 @@ class ReferencePublicationTests(unittest.TestCase):
     def _write_matrix_summary(self) -> Path:
         workflow_id = "cold_fixed"
         layout_id = "serial_omp1"
-        case = _load_json(REGRESSION_ROOT / "cases/legacy_case.json")
+        case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
         stage_ids = [
             stage["stage_id"] for stage in case["workflows"][workflow_id]["stages"]
         ]

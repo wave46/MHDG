@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from bundle.case_definition import normalize_case_definition
 from bundle.schemas import load_validated_json
 from support.errors import BundleError
 
@@ -17,9 +18,12 @@ def load_case_definition(case_id: str, case_directory: Path) -> dict[str, Any]:
 
     path = case_directory / f"{case_id}.json"
     schema_path = case_directory.parent / "schemas" / "case.schema.json"
-    case = load_validated_json(path, schema_path, f"case definition {path.name}")
-    if case["case_id"] != case_id:
-        raise BundleError(f"{path.name}: case_id must equal its filename")
+    declaration = load_validated_json(
+        path,
+        schema_path,
+        f"case definition {path.name}",
+    )
+    case = normalize_case_definition(case_id, declaration)
     _validate_case_workflows(case)
     return case
 

@@ -52,7 +52,7 @@ class BundleWorkflowTests(unittest.TestCase):
     def test_checksum_mismatch_is_rejected(self) -> None:
         self._create_bundle()
         manifest = self._read_manifest()
-        manifest["artifacts"]["legacy_mesh"]["sha256"] = "0" * 64
+        manifest["artifacts"]["legacy_case_mesh"]["sha256"] = "0" * 64
         self._write_manifest(manifest)
 
         with self.assertRaisesRegex(BundleError, "sha256 does not match"):
@@ -65,7 +65,7 @@ class BundleWorkflowTests(unittest.TestCase):
         (outside / "mesh.msh").write_text("outside\n", encoding="utf-8")
         (self.bundle / "escape").symlink_to(outside, target_is_directory=True)
         manifest = self._read_manifest()
-        manifest["artifacts"]["legacy_mesh"]["path"] = "escape/mesh.msh"
+        manifest["artifacts"]["legacy_case_mesh"]["path"] = "escape/mesh.msh"
         self._write_manifest(manifest)
 
         with self.assertRaisesRegex(BundleError, "resolves outside"):
@@ -74,7 +74,7 @@ class BundleWorkflowTests(unittest.TestCase):
     def test_missing_optional_artifact_is_reported_as_a_warning(self) -> None:
         self._create_bundle()
         manifest = self._read_manifest()
-        artifact_id = "legacy_cold_fixed_time_init_parameters"
+        artifact_id = "legacy_case_cold_fixed_time_init_parameters"
         artifact = manifest["artifacts"][artifact_id]
         artifact["optional"] = True
         self._write_manifest(manifest)

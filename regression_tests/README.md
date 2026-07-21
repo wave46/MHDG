@@ -109,6 +109,14 @@ The prepared entries may be files or symlinks to a private archive. Bundle
 creation copies their contents, producing a portable bundle without external
 symlinks. Physical names and paths must never appear in tracked files.
 
+The case catalog is intentionally declarative. Its filename supplies the case
+identifier, `files.required` and `files.optional` map roles to conventional
+filenames, and file suffixes determine media types. Artifact identifiers,
+checksums, sizes, and bundle paths are generated. Staged workflows declare the
+stage order once; the first stage starts analytically and later stages restart
+from their predecessor. A workflow may `extend` another one, as
+`cold_adaptive` extends `cold_fixed`, without repeating the stage sequence.
+
 Create and validate a candidate bundle with:
 
 ```bash
@@ -289,8 +297,10 @@ the local golden settings by default.
 The current extension points are deliberately generic:
 
 1. Put new private parameter or model files in the external prepared data.
-2. Give them generic artifact roles in a tracked case definition.
-3. Define the workflow stages, layouts, tolerance profile, and suite selection.
+2. Map generic roles to their filenames under `files.required` or
+   `files.optional`; artifact metadata is derived automatically.
+3. Define or extend a workflow with its inputs, stages, comparison profile, and
+   suite selection.
 4. Run and review a candidate suite before promoting new references.
 
 Do not encode machine names, experiment identifiers, physical values, or

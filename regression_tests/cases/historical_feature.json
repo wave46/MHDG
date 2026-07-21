@@ -1,19 +1,20 @@
 {
   "schema_version": 2,
-  "case_id": "historical_feature",
   "description": "Archived historical feature-branch characterization",
-  "reference_class": "historical_feature",
-  "reference_branch": "feautre/neutrals_pressure",
-  "reference_revision": "224fe346acb82c52a3efe5ee1fd6e35de43e3e4e",
-  "execution_policy": "archive_only",
+  "reference": {
+    "branch": "feautre/neutrals_pressure",
+    "revision": "224fe346acb82c52a3efe5ee1fd6e35de43e3e4e"
+  },
   "workflows": {
     "characterization": {
-      "kind": "archived_compare",
-      "description": "Inspect a stored historical result without routinely rerunning the source branch",
-      "required_artifact_roles": [
+      "type": "archived_compare",
+      "description": "Inspect a stored historical result without rerunning its source branch",
+      "inputs": [
         "historical_reference"
       ],
-      "comparison_policy": "report_only"
+      "comparison": {
+        "method": "report_only"
+      }
     }
   }
 }

@@ -1,54 +1,27 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/wave46/MHDG/develop/regression_tests/schemas/case.schema.json",
-  "title": "MHDG regression case definition",
+  "title": "MHDG regression case declaration",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
-    "case_id",
     "description",
-    "reference_class",
-    "reference_branch",
-    "reference_revision",
-    "execution_policy",
+    "reference",
     "workflows"
   ],
   "properties": {
     "schema_version": {
       "const": 2
     },
-    "case_id": {
-      "$ref": "#/$defs/identifier"
-    },
     "description": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "#/$defs/description"
     },
-    "reference_class": {
-      "$ref": "#/$defs/identifier"
+    "reference": {
+      "$ref": "#/$defs/reference"
     },
-    "reference_branch": {
-      "type": "string",
-      "minLength": 1
-    },
-    "reference_revision": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{40}$"
-    },
-    "execution_policy": {
-      "$ref": "#/$defs/identifier"
-    },
-    "bundle_files": {
-      "type": "object",
-      "minProperties": 1,
-      "description": "Files required in a complete external case package",
-      "propertyNames": {
-        "$ref": "#/$defs/identifier"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/bundle_file"
-      }
+    "files": {
+      "$ref": "#/$defs/files"
     },
     "workflows": {
       "type": "object",
@@ -66,86 +39,96 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]*$"
     },
-    "bundle_file": {
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "filename": {
+      "type": "string",
+      "pattern": "^(?!\\.\\.?$)[^/\\\\]+$"
+    },
+    "identifier_list": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "uniqueItems": true
+    },
+    "reference": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "filename",
-        "artifact_id",
-        "media_type"
+        "branch",
+        "revision"
       ],
       "properties": {
-        "filename": {
+        "branch": {
           "type": "string",
-          "pattern": "^(?!\\.\\.?$)[^/\\\\]+$"
+          "minLength": 1
         },
-        "artifact_id": {
-          "$ref": "#/$defs/identifier"
-        },
-        "media_type": {
+        "revision": {
           "type": "string",
-          "enum": [
-            "application/x-hdf5",
-            "application/x-gmsh",
-            "application/json",
-            "text/plain"
-          ]
-        },
-        "description": {
-          "type": "string"
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "$ref": "#/$defs/file_group"
         },
         "optional": {
-          "type": "boolean",
-          "default": false
+          "$ref": "#/$defs/file_group"
         }
+      }
+    },
+    "file_group": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/filename"
       }
     },
     "workflow": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "kind",
-        "description",
-        "required_artifact_roles"
+        "description"
       ],
       "properties": {
-        "kind": {
-          "$ref": "#/$defs/identifier"
-        },
         "description": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/description"
         },
-        "required_artifact_roles": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/identifier"
-          },
-          "uniqueItems": true
-        },
-        "default_layout": {
+        "extends": {
           "$ref": "#/$defs/identifier"
         },
-        "tolerance_profile": {
+        "type": {
           "$ref": "#/$defs/identifier"
         },
-        "cross_layout_tolerance_profile": {
+        "inputs": {
+          "$ref": "#/$defs/identifier_list"
+        },
+        "layout": {
           "$ref": "#/$defs/identifier"
         },
-        "stage_tolerance_profile": {
+        "mesh": {
           "$ref": "#/$defs/identifier"
         },
-        "comparison_policy": {
+        "reference": {
           "$ref": "#/$defs/identifier"
         },
-        "logical_overrides": {
-          "$ref": "#/$defs/logical_overrides"
+        "comparison": {
+          "$ref": "#/$defs/comparison"
         },
-        "mesh_role": {
-          "$ref": "#/$defs/identifier"
+        "parameter_overrides": {
+          "$ref": "#/$defs/parameter_overrides"
         },
-        "reference_role": {
-          "$ref": "#/$defs/identifier"
+        "adaptive_stages": {
+          "$ref": "#/$defs/identifier_list"
         },
         "stages": {
           "type": "array",
@@ -154,40 +137,65 @@
             "$ref": "#/$defs/stage"
           }
         }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "required": [
+            "extends"
+          ]
+        }
+      ]
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method"
+      ],
+      "properties": {
+        "method": {
+          "$ref": "#/$defs/identifier"
+        },
+        "profile": {
+          "$ref": "#/$defs/identifier"
+        },
+        "cross_layout_profile": {
+          "$ref": "#/$defs/identifier"
+        },
+        "stage_profile": {
+          "$ref": "#/$defs/identifier"
+        }
       }
     },
     "stage": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "stage_id",
-        "parameter_role",
-        "transport_configuration_role",
-        "restart_from"
+        "id",
+        "parameters",
+        "transport"
       ],
       "properties": {
-        "stage_id": {
+        "id": {
           "$ref": "#/$defs/identifier"
         },
-        "parameter_role": {
+        "parameters": {
           "$ref": "#/$defs/identifier"
         },
-        "transport_configuration_role": {
+        "transport": {
           "$ref": "#/$defs/identifier"
         },
-        "restart_from": {
-          "type": "string",
-          "enum": [
-            "analytical",
-            "previous_stage"
-          ]
-        },
-        "logical_overrides": {
-          "$ref": "#/$defs/logical_overrides"
+        "parameter_overrides": {
+          "$ref": "#/$defs/parameter_overrides"
         }
       }
     },
-    "logical_overrides": {
+    "parameter_overrides": {
       "type": "object",
       "propertyNames": {
         "pattern": "^[A-Za-z][A-Za-z0-9_]*$"

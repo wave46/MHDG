@@ -1,142 +1,43 @@
 {
   "schema_version": 2,
-  "case_id": "legacy_case",
   "description": "Routine legacy regression case",
-  "reference_class": "legacy",
-  "reference_branch": "develop",
-  "reference_revision": "29f442db67bac169b2616f2cbe399289d137993c",
-  "execution_policy": "routine",
-  "bundle_files": {
-    "mesh": {
-      "filename": "mesh.msh",
-      "artifact_id": "legacy_mesh",
-      "media_type": "application/x-gmsh"
+  "reference": {
+    "branch": "develop",
+    "revision": "29f442db67bac169b2616f2cbe399289d137993c"
+  },
+  "files": {
+    "required": {
+      "mesh": "mesh.msh",
+      "geometry": "geometry.geo",
+      "equilibrium_magnetic_field": "equilibrium.h5",
+      "equilibrium_current_density": "current_density.h5",
+      "warm_parameters": "param.txt",
+      "transport_configuration": "transport_model.nml",
+      "warm_restart": "restart.h5",
+      "warm_reference": "reference_mpi4_omp4.h5"
     },
-    "adaptive_initial_mesh": {
-      "filename": "mesh_adaptive_initial.msh",
-      "artifact_id": "legacy_adaptive_initial_mesh",
-      "media_type": "application/x-gmsh",
-      "optional": true
-    },
-    "geometry": {
-      "filename": "geometry.geo",
-      "artifact_id": "legacy_geometry",
-      "media_type": "text/plain"
-    },
-    "equilibrium_magnetic_field": {
-      "filename": "equilibrium.h5",
-      "artifact_id": "legacy_magnetic_field",
-      "media_type": "application/x-hdf5"
-    },
-    "equilibrium_current_density": {
-      "filename": "current_density.h5",
-      "artifact_id": "legacy_current_density",
-      "media_type": "application/x-hdf5"
-    },
-    "warm_parameters": {
-      "filename": "param.txt",
-      "artifact_id": "legacy_warm_parameters",
-      "media_type": "text/plain"
-    },
-    "transport_configuration": {
-      "filename": "transport_model.nml",
-      "artifact_id": "legacy_transport_configuration",
-      "media_type": "text/plain"
-    },
-    "cold_fixed_time_init_parameters": {
-      "filename": "param_cold_fixed_time_init.txt",
-      "artifact_id": "legacy_cold_fixed_time_init_parameters",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_diffusion_reduction_parameters": {
-      "filename": "param_cold_fixed_diffusion_reduction.txt",
-      "artifact_id": "legacy_cold_fixed_diffusion_reduction_parameters",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_continuation_01_parameters": {
-      "filename": "param_cold_fixed_continuation_01.txt",
-      "artifact_id": "legacy_cold_fixed_continuation_01_parameters",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_continuation_02_parameters": {
-      "filename": "param_cold_fixed_continuation_02.txt",
-      "artifact_id": "legacy_cold_fixed_continuation_02_parameters",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_continuation_03_parameters": {
-      "filename": "param_cold_fixed_continuation_03.txt",
-      "artifact_id": "legacy_cold_fixed_continuation_03_parameters",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_continuation_04_parameters": {
-      "filename": "param_cold_fixed_continuation_04.txt",
-      "artifact_id": "legacy_cold_fixed_continuation_04_parameters",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_continuation_05_parameters": {
-      "filename": "param_cold_fixed_continuation_05.txt",
-      "artifact_id": "legacy_cold_fixed_continuation_05_parameters",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_initial_transport_configuration": {
-      "filename": "transport_cold_fixed_initial.nml",
-      "artifact_id": "legacy_cold_fixed_initial_transport_configuration",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_continuation_01_transport_configuration": {
-      "filename": "transport_cold_fixed_continuation_01.nml",
-      "artifact_id": "legacy_cold_fixed_continuation_01_transport_configuration",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_continuation_02_transport_configuration": {
-      "filename": "transport_cold_fixed_continuation_02.nml",
-      "artifact_id": "legacy_cold_fixed_continuation_02_transport_configuration",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_continuation_03_transport_configuration": {
-      "filename": "transport_cold_fixed_continuation_03.nml",
-      "artifact_id": "legacy_cold_fixed_continuation_03_transport_configuration",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_continuation_04_transport_configuration": {
-      "filename": "transport_cold_fixed_continuation_04.nml",
-      "artifact_id": "legacy_cold_fixed_continuation_04_transport_configuration",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "cold_fixed_continuation_05_transport_configuration": {
-      "filename": "transport_cold_fixed_continuation_05.nml",
-      "artifact_id": "legacy_cold_fixed_continuation_05_transport_configuration",
-      "media_type": "text/plain",
-      "optional": true
-    },
-    "warm_restart": {
-      "filename": "restart.h5",
-      "artifact_id": "legacy_warm_restart",
-      "media_type": "application/x-hdf5"
-    },
-    "warm_reference": {
-      "filename": "reference_mpi4_omp4.h5",
-      "artifact_id": "legacy_warm_reference_mpi4_omp4",
-      "media_type": "application/x-hdf5"
+    "optional": {
+      "adaptive_initial_mesh": "mesh_adaptive_initial.msh",
+      "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
+      "cold_fixed_diffusion_reduction_parameters": "param_cold_fixed_diffusion_reduction.txt",
+      "cold_fixed_continuation_01_parameters": "param_cold_fixed_continuation_01.txt",
+      "cold_fixed_continuation_02_parameters": "param_cold_fixed_continuation_02.txt",
+      "cold_fixed_continuation_03_parameters": "param_cold_fixed_continuation_03.txt",
+      "cold_fixed_continuation_04_parameters": "param_cold_fixed_continuation_04.txt",
+      "cold_fixed_continuation_05_parameters": "param_cold_fixed_continuation_05.txt",
+      "cold_fixed_initial_transport_configuration": "transport_cold_fixed_initial.nml",
+      "cold_fixed_continuation_01_transport_configuration": "transport_cold_fixed_continuation_01.nml",
+      "cold_fixed_continuation_02_transport_configuration": "transport_cold_fixed_continuation_02.nml",
+      "cold_fixed_continuation_03_transport_configuration": "transport_cold_fixed_continuation_03.nml",
+      "cold_fixed_continuation_04_transport_configuration": "transport_cold_fixed_continuation_04.nml",
+      "cold_fixed_continuation_05_transport_configuration": "transport_cold_fixed_continuation_05.nml"
     }
   },
   "workflows": {
     "warm": {
-      "kind": "warm_same_state",
+      "type": "warm_same_state",
       "description": "Reconverge an unchanged steady restart on the fixed mesh",
-      "required_artifact_roles": [
+      "inputs": [
         "mesh",
         "geometry",
         "equilibrium_magnetic_field",
@@ -146,141 +47,85 @@
         "warm_restart",
         "warm_reference"
       ],
-      "default_layout": "mpi4_omp4",
-      "tolerance_profile": "fixed_same_layout",
-      "cross_layout_tolerance_profile": "fixed_cross_layout",
-      "comparison_policy": "fixed_hdf5"
+      "layout": "mpi4_omp4",
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "fixed_same_layout",
+        "cross_layout_profile": "fixed_cross_layout"
+      }
     },
     "cold_fixed": {
-      "kind": "staged_fixed_mesh",
+      "type": "staged_fixed_mesh",
       "description": "Reach the canonical state from analytical initialization on the fixed mesh",
-      "required_artifact_roles": [
+      "inputs": [
         "geometry",
         "equilibrium_magnetic_field",
         "equilibrium_current_density"
       ],
-      "mesh_role": "mesh",
-      "reference_role": "warm_reference",
-      "comparison_policy": "fixed_hdf5",
-      "tolerance_profile": "cold_fixed_reference",
-      "cross_layout_tolerance_profile": "cold_fixed_reference",
-      "stage_tolerance_profile": "fixed_stage_reference",
-      "logical_overrides": {
+      "mesh": "mesh",
+      "reference": "warm_reference",
+      "layout": "mpi4_omp4",
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "cold_fixed_reference",
+        "cross_layout_profile": "cold_fixed_reference",
+        "stage_profile": "fixed_stage_reference"
+      },
+      "parameter_overrides": {
         "rest_adapt": false
       },
       "stages": [
         {
-          "stage_id": "time_init",
-          "parameter_role": "cold_fixed_time_init_parameters",
-          "transport_configuration_role": "cold_fixed_initial_transport_configuration",
-          "restart_from": "analytical"
+          "id": "time_init",
+          "parameters": "cold_fixed_time_init_parameters",
+          "transport": "cold_fixed_initial_transport_configuration"
         },
         {
-          "stage_id": "diffusion_reduction",
-          "parameter_role": "cold_fixed_diffusion_reduction_parameters",
-          "transport_configuration_role": "cold_fixed_initial_transport_configuration",
-          "restart_from": "previous_stage"
+          "id": "diffusion_reduction",
+          "parameters": "cold_fixed_diffusion_reduction_parameters",
+          "transport": "cold_fixed_initial_transport_configuration"
         },
         {
-          "stage_id": "continuation_01",
-          "parameter_role": "cold_fixed_continuation_01_parameters",
-          "transport_configuration_role": "cold_fixed_continuation_01_transport_configuration",
-          "restart_from": "previous_stage"
+          "id": "continuation_01",
+          "parameters": "cold_fixed_continuation_01_parameters",
+          "transport": "cold_fixed_continuation_01_transport_configuration"
         },
         {
-          "stage_id": "continuation_02",
-          "parameter_role": "cold_fixed_continuation_02_parameters",
-          "transport_configuration_role": "cold_fixed_continuation_02_transport_configuration",
-          "restart_from": "previous_stage"
+          "id": "continuation_02",
+          "parameters": "cold_fixed_continuation_02_parameters",
+          "transport": "cold_fixed_continuation_02_transport_configuration"
         },
         {
-          "stage_id": "continuation_03",
-          "parameter_role": "cold_fixed_continuation_03_parameters",
-          "transport_configuration_role": "cold_fixed_continuation_03_transport_configuration",
-          "restart_from": "previous_stage"
+          "id": "continuation_03",
+          "parameters": "cold_fixed_continuation_03_parameters",
+          "transport": "cold_fixed_continuation_03_transport_configuration"
         },
         {
-          "stage_id": "continuation_04",
-          "parameter_role": "cold_fixed_continuation_04_parameters",
-          "transport_configuration_role": "cold_fixed_continuation_04_transport_configuration",
-          "restart_from": "previous_stage"
+          "id": "continuation_04",
+          "parameters": "cold_fixed_continuation_04_parameters",
+          "transport": "cold_fixed_continuation_04_transport_configuration"
         },
         {
-          "stage_id": "continuation_05",
-          "parameter_role": "cold_fixed_continuation_05_parameters",
-          "transport_configuration_role": "cold_fixed_continuation_05_transport_configuration",
-          "restart_from": "previous_stage"
+          "id": "continuation_05",
+          "parameters": "cold_fixed_continuation_05_parameters",
+          "transport": "cold_fixed_continuation_05_transport_configuration"
         }
-      ],
-      "default_layout": "mpi4_omp4"
+      ]
     },
     "cold_adaptive": {
-      "kind": "staged_adaptive_mesh",
-      "description": "Reach the canonical state with one restart refinement during diffusion reduction",
-      "required_artifact_roles": [
-        "geometry",
-        "equilibrium_magnetic_field",
-        "equilibrium_current_density"
-      ],
-      "mesh_role": "adaptive_initial_mesh",
-      "reference_role": "warm_reference",
-      "comparison_policy": "mesh_independent",
-      "tolerance_profile": "adaptive_reference",
-      "stage_tolerance_profile": "adaptive_reference",
-      "logical_overrides": {
-        "rest_adapt": false
+      "extends": "cold_fixed",
+      "type": "staged_adaptive_mesh",
+      "description": "Repeat the cold workflow with early-stage mesh adaptation",
+      "mesh": "adaptive_initial_mesh",
+      "comparison": {
+        "method": "mesh_independent",
+        "profile": "adaptive_reference",
+        "stage_profile": "adaptive_reference"
       },
-      "stages": [
-        {
-          "stage_id": "time_init",
-          "parameter_role": "cold_fixed_time_init_parameters",
-          "transport_configuration_role": "cold_fixed_initial_transport_configuration",
-          "restart_from": "analytical",
-          "logical_overrides": {
-            "rest_adapt": true
-          }
-        },
-        {
-          "stage_id": "diffusion_reduction",
-          "parameter_role": "cold_fixed_diffusion_reduction_parameters",
-          "transport_configuration_role": "cold_fixed_initial_transport_configuration",
-          "restart_from": "previous_stage",
-          "logical_overrides": {
-            "rest_adapt": true
-          }
-        },
-        {
-          "stage_id": "continuation_01",
-          "parameter_role": "cold_fixed_continuation_01_parameters",
-          "transport_configuration_role": "cold_fixed_continuation_01_transport_configuration",
-          "restart_from": "previous_stage"
-        },
-        {
-          "stage_id": "continuation_02",
-          "parameter_role": "cold_fixed_continuation_02_parameters",
-          "transport_configuration_role": "cold_fixed_continuation_02_transport_configuration",
-          "restart_from": "previous_stage"
-        },
-        {
-          "stage_id": "continuation_03",
-          "parameter_role": "cold_fixed_continuation_03_parameters",
-          "transport_configuration_role": "cold_fixed_continuation_03_transport_configuration",
-          "restart_from": "previous_stage"
-        },
-        {
-          "stage_id": "continuation_04",
-          "parameter_role": "cold_fixed_continuation_04_parameters",
-          "transport_configuration_role": "cold_fixed_continuation_04_transport_configuration",
-          "restart_from": "previous_stage"
-        },
-        {
-          "stage_id": "continuation_05",
-          "parameter_role": "cold_fixed_continuation_05_parameters",
-          "transport_configuration_role": "cold_fixed_continuation_05_transport_configuration",
-          "restart_from": "previous_stage"
-        }
-      ],
-      "default_layout": "mpi4_omp4"
+      "adaptive_stages": [
+        "time_init",
+        "diffusion_reduction"
+      ]
     }
   }
 }
