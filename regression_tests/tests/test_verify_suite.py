@@ -27,7 +27,8 @@ class SuiteVerificationTests(unittest.TestCase):
             completed = subprocess.run(
                 [
                     str(REGRESSION_ROOT / "regression.sh"),
-                    "suite-verify",
+                    "suite",
+                    "compare",
                     str(source),
                 ],
                 check=False,

@@ -50,11 +50,11 @@ class GoldenBundlePromotionTests(unittest.TestCase):
         completed = subprocess.run(
             [
                 str(REGRESSION_ROOT / "regression.sh"),
-                "--settings",
-                str(self.settings),
                 "bundle",
                 "promote",
                 str(self.summary),
+                "--settings",
+                str(self.settings),
                 "--output",
                 str(self.output),
                 "--bundle-version",

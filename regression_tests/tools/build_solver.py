@@ -13,8 +13,18 @@ from support.errors import HarnessError
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--settings", required=True, type=Path)
-    parser.add_argument("--jobs", type=configuration.parse_build_jobs)
+    parser.add_argument(
+        "--settings",
+        required=True,
+        type=Path,
+        help="local regression settings file",
+    )
+    parser.add_argument(
+        "--jobs",
+        type=configuration.parse_build_jobs,
+        metavar="N",
+        help="parallel jobs for each make invocation",
+    )
     parser.add_argument(
         "--repository-root",
         type=Path,

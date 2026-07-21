@@ -334,11 +334,11 @@ class RunCommandTests(unittest.TestCase):
         return subprocess.run(
             [
                 str(REGRESSION_ROOT / "regression.sh"),
-                "--settings",
-                str(self.settings),
                 "run",
                 "legacy_case",
                 *workflows,
+                "--settings",
+                str(self.settings),
                 "--layout",
                 layout,
                 "--run-id",

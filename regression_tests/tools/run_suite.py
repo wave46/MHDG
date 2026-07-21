@@ -16,7 +16,11 @@ from support.errors import BundleError, HarnessError
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("suite_id", metavar="SUITE")
+    parser.add_argument(
+        "suite_id",
+        metavar="SUITE",
+        help="tracked suite identifier",
+    )
     parser.add_argument("--run-id")
     parser.add_argument(
         "--run-only",
@@ -28,7 +32,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="continue an existing suite run without repeating recorded cells",
     )
-    parser.add_argument("--settings", required=True, type=Path)
+    parser.add_argument(
+        "--settings",
+        required=True,
+        type=Path,
+        help="local regression settings file",
+    )
     parser.add_argument("--cases", required=True, type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--layouts", required=True, type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--suites", required=True, type=Path, help=argparse.SUPPRESS)
@@ -48,7 +57,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="build clean serial and parallel executables before running",
     )
-    parser.add_argument("--build-jobs", type=parse_build_jobs, metavar="N")
+    parser.add_argument(
+        "--build-jobs",
+        type=parse_build_jobs,
+        metavar="N",
+        help="parallel jobs for each make invocation; requires --build",
+    )
     parser.add_argument(
         "--repository-root",
         type=Path,

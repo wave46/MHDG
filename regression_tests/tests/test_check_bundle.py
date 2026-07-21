@@ -105,13 +105,14 @@ class BundleValidationTests(unittest.TestCase):
             "adaptive_initial_mesh", required_case_roles(case, "cold_adaptive")
         )
 
-    def test_public_check_data_command(self) -> None:
+    def test_public_bundle_validate_command(self) -> None:
         completed = subprocess.run(
             [
                 str(REGRESSION_ROOT / "regression.sh"),
+                "bundle",
+                "validate",
                 "--settings",
                 str(self.settings),
-                "check-data",
             ],
             check=False,
             capture_output=True,

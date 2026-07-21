@@ -14,8 +14,18 @@ from support.errors import HarnessError
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--settings", required=True, type=Path)
-    parser.add_argument("--cases", required=True, type=Path)
+    parser.add_argument(
+        "--settings",
+        required=True,
+        type=Path,
+        help="local regression settings file",
+    )
+    parser.add_argument(
+        "--cases",
+        required=True,
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args(argv)
 
     try:

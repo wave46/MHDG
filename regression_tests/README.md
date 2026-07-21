@@ -22,16 +22,16 @@ run from the repository root:
 
 ```bash
 # Lightweight canonical warm restart.
-regression_tests/regression.sh golden-check
+regression_tests/regression.sh suite check
 
 # Build optimized serial and parallel executables first.
-regression_tests/regression.sh golden-check --build
+regression_tests/regression.sh suite check --build
 
 # Fixed and adaptive cold workflows in the canonical 4x4 layout.
-regression_tests/regression.sh golden-check cold --build
+regression_tests/regression.sh suite check cold --build
 
 # Periodic full workflow-by-layout matrix.
-regression_tests/regression.sh golden-check cold_matrix --build
+regression_tests/regression.sh suite check cold_matrix --build
 ```
 
 Set `MHDG_REGRESSION_GOLDEN_SETTINGS=/path/to/settings.env` or pass
@@ -117,9 +117,8 @@ regression_tests/regression.sh bundle create \
   --source /private/path/legacy_case \
   --output /private/path/candidate_bundle
 
-regression_tests/regression.sh \
-  --settings /private/path/candidate-settings.env \
-  check-data
+regression_tests/regression.sh bundle validate \
+  --settings /private/path/candidate-settings.env
 ```
 
 `bundle create` refuses to replace an existing output. A `candidate` and a
@@ -142,9 +141,9 @@ MHDG_ENVIRONMENT_SCRIPT=/absolute/path/to/lib/Make.inc/init_vars_libs.sh
 Build clean optimized serial and parallel executables with:
 
 ```bash
-regression_tests/regression.sh \
+regression_tests/regression.sh build \
   --settings /private/path/settings.env \
-  build --jobs 8
+  --jobs 8
 ```
 
 The two builds are sequential because they share `.o` and `.mod` files.
@@ -162,22 +161,22 @@ Preparation creates an isolated run directory and renders private paths into a
 copy of `param.txt`; it never changes the bundle:
 
 ```bash
-regression_tests/regression.sh \
-  --settings /private/path/settings.env \
-  prepare legacy_case warm --layout mpi4_omp4
+regression_tests/regression.sh prepare legacy_case warm \
+  --layout mpi4_omp4 \
+  --settings /private/path/settings.env
 ```
 
 Use `run` to prepare and execute:
 
 ```bash
-regression_tests/regression.sh \
-  --settings /private/path/settings.env \
-  run legacy_case warm --layout mpi4_omp4
+regression_tests/regression.sh run legacy_case warm \
+  --layout mpi4_omp4 \
+  --settings /private/path/settings.env
 
-regression_tests/regression.sh \
-  --settings /private/path/settings.env \
-  run legacy_case cold_fixed cold_adaptive \
-  --layout mpi4_omp4 --run-id cold-01
+regression_tests/regression.sh run legacy_case cold_fixed cold_adaptive \
+  --layout mpi4_omp4 \
+  --run-id cold-01 \
+  --settings /private/path/settings.env
 ```
 
 Run directories contain read-only input links, writable `outputs/` and `res/`
@@ -245,17 +244,17 @@ The command prints a short summary and writes `comparison.json`, or
 Run a suite against a candidate bundle with explicit settings:
 
 ```bash
-regression_tests/regression.sh \
-  --settings /private/path/settings.env \
-  suite warm
+regression_tests/regression.sh suite run warm \
+  --settings /private/path/settings.env
 ```
 
 For the expensive matrix, save all results before deciding on references:
 
 ```bash
-regression_tests/regression.sh \
+regression_tests/regression.sh suite run cold_matrix \
   --settings /private/path/settings.env \
-  suite cold_matrix --run-only --run-id overnight-01
+  --run-only \
+  --run-id overnight-01
 ```
 
 The suite summary is updated after every cell. Reuse the same command with
@@ -263,15 +262,14 @@ The suite summary is updated after every cell. Reuse the same command with
 the solver using:
 
 ```bash
-regression_tests/regression.sh suite-verify /path/to/suite_summary.json
+regression_tests/regression.sh suite compare /path/to/suite_summary.json
 ```
 
 Promotion is always explicit and never overwrites an existing bundle:
 
 ```bash
-regression_tests/regression.sh \
+regression_tests/regression.sh bundle promote /path/to/suite_summary.json \
   --settings /private/path/candidate-settings.env \
-  bundle promote /path/to/suite_summary.json \
   --output /private/path/golden_bundle \
   --bundle-version 1.0.0-golden.1
 ```
@@ -282,8 +280,9 @@ a reference matrix and records its suite/run provenance. Promotion validates
 bundle integrity and recorded run completion, but physical acceptance remains
 a human decision. Ordinary tests never trigger promotion.
 
-The short `golden-check` interface and the explicit `--settings FILE suite`
-interface share the same runner and comparator.
+`suite check` and `suite run --settings FILE` share the same runner and
+comparator. The former additionally requires a golden-class bundle and uses
+the local golden settings by default.
 
 ## Adding cases or parameter variants
 

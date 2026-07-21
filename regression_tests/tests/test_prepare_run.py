@@ -168,11 +168,11 @@ class RunPreparationTests(unittest.TestCase):
         completed = subprocess.run(
             [
                 str(REGRESSION_ROOT / "regression.sh"),
-                "--settings",
-                str(self.settings),
                 "prepare",
                 "legacy_case",
                 "warm",
+                "--settings",
+                str(self.settings),
                 "--layout",
                 "serial_omp1",
                 "--run-id",

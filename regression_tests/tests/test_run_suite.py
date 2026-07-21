@@ -145,10 +145,14 @@ class SuiteCommandTests(unittest.TestCase):
         )
         self.assertIn("mpi4_omp4", completed.stdout)
 
-    def test_golden_check_uses_default_settings_and_warm_suite(self) -> None:
+    def test_suite_check_uses_default_settings_and_warm_suite(self) -> None:
         self._set_bundle_class("golden")
         completed = subprocess.run(
-            [str(REGRESSION_ROOT / "regression.sh"), "golden-check"],
+            [
+                str(REGRESSION_ROOT / "regression.sh"),
+                "suite",
+                "check",
+            ],
             check=False,
             capture_output=True,
             env={
@@ -163,13 +167,14 @@ class SuiteCommandTests(unittest.TestCase):
         self.assertIn("suite: warm", completed.stdout)
         self.assertIn("mpi4_omp4", completed.stdout)
 
-    def test_golden_check_rejects_candidate_bundle(self) -> None:
+    def test_suite_check_rejects_candidate_bundle(self) -> None:
         completed = subprocess.run(
             [
                 str(REGRESSION_ROOT / "regression.sh"),
+                "suite",
+                "check",
                 "--settings",
                 str(self.settings),
-                "golden-check",
             ],
             check=False,
             capture_output=True,
@@ -233,10 +238,11 @@ class SuiteCommandTests(unittest.TestCase):
         return subprocess.run(
             [
                 str(REGRESSION_ROOT / "regression.sh"),
+                "suite",
+                "run",
+                suite,
                 "--settings",
                 str(self.settings),
-                "suite",
-                suite,
                 "--run-id",
                 run_id,
                 *arguments,
