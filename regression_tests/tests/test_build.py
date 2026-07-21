@@ -42,21 +42,27 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertTrue((result.path / "logs/serial.log").is_file())
         self.assertTrue((result.path / "logs/parallel.log").is_file())
 
+        metadata = json.loads(result.metadata_path.read_text(encoding="utf-8"))
         invocations = self.make_log.read_text(encoding="utf-8").splitlines()
+        revision = metadata["repository"]["revision"]
+        build_id = result.path.name
         self.assertEqual(
             invocations,
             [
                 "loaded|clean",
                 "loaded|-j3 MODE=serial COMPTYPE=opt "
+                f"MHDG_GIT_COMMIT={revision} MHDG_GIT_DIRTY=false "
+                f"MHDG_BUILD_ID={build_id} "
                 "MHDG-NGammaTiTeNeutral-serial-2D",
                 "loaded|clean",
                 "loaded|-j3 MODE=parall COMPTYPE=opt "
+                f"MHDG_GIT_COMMIT={revision} MHDG_GIT_DIRTY=false "
+                f"MHDG_BUILD_ID={build_id} "
                 "MHDG-NGammaTiTeNeutral-parall-2D",
                 "loaded|--version",
             ],
         )
 
-        metadata = json.loads(result.metadata_path.read_text(encoding="utf-8"))
         self.assertEqual(metadata["status"], "completed")
         self.assertFalse(metadata["repository"]["dirty"])
         self.assertEqual(metadata["profile"]["jobs"], 3)

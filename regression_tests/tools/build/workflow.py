@@ -68,6 +68,9 @@ def _build_variants(
             f"-j{configuration.jobs}",
             f"MODE={mode}",
             f"COMPTYPE={COMPILE_TYPE}",
+            f"MHDG_GIT_COMMIT={configuration.revision}",
+            f"MHDG_GIT_DIRTY={'true' if configuration.changes else 'false'}",
+            f"MHDG_BUILD_ID={configuration.build_id}",
             target,
         ]
         commands.extend((clean, compile_command))
