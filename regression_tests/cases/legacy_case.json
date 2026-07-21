@@ -17,7 +17,7 @@
       "warm_reference": "reference_mpi4_omp4.h5"
     },
     "optional": {
-      "adaptive_initial_mesh": "mesh_adaptive_initial.msh",
+      "coarse_mesh": "mesh_adaptive_initial.msh",
       "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
       "cold_fixed_diffusion_reduction_parameters": "param_cold_fixed_diffusion_reduction.txt",
       "cold_fixed_continuation_01_parameters": "param_cold_fixed_continuation_01.txt",
@@ -116,7 +116,7 @@
       "extends": "cold_fixed",
       "type": "staged_adaptive_mesh",
       "description": "Repeat the cold workflow with early-stage mesh adaptation",
-      "mesh": "adaptive_initial_mesh",
+      "mesh": "coarse_mesh",
       "comparison": {
         "method": "mesh_independent",
         "profile": "adaptive_reference",
@@ -125,6 +125,50 @@
       "adaptive_stages": [
         "time_init",
         "diffusion_reduction"
+      ]
+    },
+    "cold_step_fixed": {
+      "type": "staged_fixed_mesh",
+      "description": "Run one Newton iteration on the coarse mesh without adaptation",
+      "inputs": [
+        "geometry",
+        "equilibrium_magnetic_field",
+        "equilibrium_current_density"
+      ],
+      "mesh": "coarse_mesh",
+      "reference": "warm_reference",
+      "layout": "serial_omp1",
+      "parameter_overrides": {
+        "adaptivity": false,
+        "rest_adapt": false
+      },
+      "stages": [
+        {
+          "id": "single_step",
+          "parameters": "cold_fixed_time_init_parameters",
+          "transport": "cold_fixed_initial_transport_configuration",
+          "parameter_overrides": {
+            "steady": false,
+            "saveNR": false,
+            "nrp": 1,
+            "time_adapt": false,
+            "NR_adapt": false,
+            "div_adapt": false,
+            "osc_adapt": false,
+            "nts": 1
+          }
+        }
+      ]
+    },
+    "cold_step_adaptive": {
+      "extends": "cold_step_fixed",
+      "type": "staged_adaptive_mesh",
+      "description": "Run one Newton iteration with one coarse-mesh adaptation pass",
+      "parameter_overrides": {
+        "adaptivity": true
+      },
+      "adaptive_stages": [
+        "single_step"
       ]
     }
   }

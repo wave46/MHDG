@@ -132,7 +132,7 @@
         },
         "stages": {
           "type": "array",
-          "minItems": 2,
+          "minItems": 1,
           "items": {
             "$ref": "#/$defs/stage"
           }
@@ -201,7 +201,11 @@
         "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
       },
       "additionalProperties": {
-        "type": "boolean"
+        "type": [
+          "boolean",
+          "number",
+          "string"
+        ]
       }
     }
   }

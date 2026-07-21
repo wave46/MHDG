@@ -67,7 +67,7 @@ def populate_stage_run(
     runtime_files: dict[str, Path],
     workflow: dict[str, Any],
     stage: dict[str, Any],
-    logical_overrides: dict[str, bool],
+    parameter_overrides: dict[str, Any],
 ) -> None:
     """Link one stage's inputs and render its parameter file."""
     inputs = _create_run_directories(staging)
@@ -85,7 +85,7 @@ def populate_stage_run(
         artifacts[stage["parameter_role"]],
         staging / "param.txt",
         _parameter_replacements(final_directory),
-        logical_overrides,
+        parameter_overrides,
     )
 
 

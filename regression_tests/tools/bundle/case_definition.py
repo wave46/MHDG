@@ -124,7 +124,7 @@ def _normalize_workflow(declaration: dict[str, Any]) -> dict[str, Any]:
         declaration,
         workflow,
         "parameter_overrides",
-        "logical_overrides",
+        "parameter_overrides",
     )
     for source, target in COMPARISON_KEYS.items():
         _copy_if_present(declaration.get("comparison", {}), workflow, source, target)
@@ -161,7 +161,7 @@ def _normalize_stage(
     if stage_id in adaptive_stages:
         overrides["rest_adapt"] = True
     if overrides:
-        stage["logical_overrides"] = overrides
+        stage["parameter_overrides"] = overrides
     return stage
 
 

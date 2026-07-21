@@ -16,14 +16,14 @@ def write_run_plan(
     inputs: PreparationInputs,
     command: list[str],
     stage: dict[str, Any] | None = None,
-    stage_overrides: dict[str, bool] | None = None,
+    stage_overrides: dict[str, Any] | None = None,
 ) -> None:
     """Write the plan for one warm run or one workflow stage."""
     plan = _base_plan(inputs, inputs.run_directory, command=command)
     if stage is not None:
         plan["stage_id"] = stage["stage_id"]
         plan["restart_from"] = stage["restart_from"]
-        plan["logical_overrides"] = stage_overrides or {}
+        plan["parameter_overrides"] = stage_overrides or {}
     write_json_direct(staging_directory / "run_plan.json", plan)
 
 
@@ -44,7 +44,7 @@ def write_staged_plan(
             "restart_from": stage.restart_from,
             "working_directory": str(stage.run.path),
             "command": stage.run.command,
-            "logical_overrides": logical_overrides(
+            "parameter_overrides": parameter_overrides(
                 inputs.workflow,
                 inputs.workflow["stages"][index],
             ),
@@ -54,14 +54,14 @@ def write_staged_plan(
     write_json_direct(staging_directory / "run_plan.json", plan)
 
 
-def logical_overrides(
+def parameter_overrides(
     workflow: dict[str, Any],
     stage: dict[str, Any],
-) -> dict[str, bool]:
-    """Merge workflow-wide and stage-specific logical parameter values."""
+) -> dict[str, Any]:
+    """Merge workflow-wide and stage-specific parameter values."""
     return {
-        **workflow.get("logical_overrides", {}),
-        **stage.get("logical_overrides", {}),
+        **workflow.get("parameter_overrides", {}),
+        **stage.get("parameter_overrides", {}),
     }
 
 

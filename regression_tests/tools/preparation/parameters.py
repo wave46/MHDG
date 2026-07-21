@@ -1,7 +1,8 @@
-"""Render path and logical overrides into MHDG parameter files."""
+"""Render selected values into copied MHDG parameter files."""
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
@@ -17,11 +18,11 @@ def render_parameter_file(
     source: Path,
     destination: Path,
     replacements: dict[str, Path | str],
-    logical_overrides: dict[str, bool] | None = None,
+    parameter_overrides: dict[str, bool | float | int | str] | None = None,
 ) -> None:
-    """Render selected path and logical assignments in a parameter-file copy."""
+    """Render selected path and parameter assignments in a copied input file."""
     lines = _read_parameter_lines(source)
-    values = _replacement_values(replacements, logical_overrides)
+    values = _replacement_values(replacements, parameter_overrides)
     rendered, counts = _render_assignments(lines, values)
     _require_single_assignment(counts)
     _write_parameter_file(destination, rendered)
@@ -36,7 +37,7 @@ def _read_parameter_lines(source: Path) -> list[str]:
 
 def _replacement_values(
     replacements: dict[str, Path | str],
-    logical_overrides: dict[str, bool] | None,
+    parameter_overrides: dict[str, bool | float | int | str] | None,
 ) -> dict[str, str]:
     values = {}
     for key, raw_value in replacements.items():
@@ -45,12 +46,28 @@ def _replacement_values(
             raise BundleError(f"cannot render a path containing a quote: {value}")
         values[key.lower()] = f"'{value}'"
 
-    for key, value in (logical_overrides or {}).items():
+    for key, value in (parameter_overrides or {}).items():
         normalized = key.lower()
         if normalized in values:
             raise BundleError(f"duplicate parameter replacement: {key}")
-        values[normalized] = ".true." if value else ".false."
+        values[normalized] = _format_parameter_value(key, value)
     return values
+
+
+def _format_parameter_value(key: str, value: bool | float | int | str) -> str:
+    if isinstance(value, bool):
+        return ".true." if value else ".false."
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise BundleError(f"parameter override must be finite: {key}")
+        return repr(value)
+    if isinstance(value, str):
+        if "'" in value or "\n" in value or "\r" in value:
+            raise BundleError(f"parameter override contains invalid text: {key}")
+        return f"'{value}'"
+    raise BundleError(f"unsupported parameter override: {key}")
 
 
 def _render_assignments(

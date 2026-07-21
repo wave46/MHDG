@@ -13,7 +13,7 @@ from preparation.models import (
     PreparedStage,
     PreparedStagedRun,
 )
-from preparation.plans import logical_overrides, write_run_plan, write_staged_plan
+from preparation.plans import parameter_overrides, write_run_plan, write_staged_plan
 from preparation.workspace import (
     populate_stage_run,
     populate_warm_run,
@@ -72,7 +72,7 @@ def _prepare_stage(
         inputs.layout,
         restart=stage["restart_from"] == "previous_stage",
     )
-    overrides = logical_overrides(inputs.workflow, stage)
+    overrides = parameter_overrides(inputs.workflow, stage)
     populate_stage_run(
         staging_stage,
         stage_directory,

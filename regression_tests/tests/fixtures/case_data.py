@@ -12,10 +12,24 @@ PARAMETERS = """&INPUT_LST
     jtor_path = '/old/current_density.h5'
     save_folder = '/old/output/'
 /
+&SWITCH_LST
+    steady = .false.
+    saveNR = .true.
+/
+&NUMER_LST
+    nrp = 40
+/
 &ADAPT_LST
     adaptivity = .true.
+    time_adapt = .true.
+    NR_adapt = .true.
+    div_adapt = .true.
     rest_adapt = .true.
+    osc_adapt = .true.
     geometry_path = '/old/geometry.geo'
+/
+&TIME_LST
+    nts = 10
 /
 """
 

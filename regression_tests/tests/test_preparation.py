@@ -183,6 +183,65 @@ class RunPreparationTests(unittest.TestCase):
 
         self.assertFalse(destination.exists())
 
+    def test_prepares_coarse_one_step_race_workflows(self) -> None:
+        fixed = prepare_run(
+            self.settings,
+            "legacy_case",
+            "cold_step_fixed",
+            "serial_omp1",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "race-fixed",
+        )
+        adaptive = prepare_run(
+            self.settings,
+            "legacy_case",
+            "cold_step_adaptive",
+            "serial_omp1",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "race-adaptive",
+        )
+
+        self.assertEqual(len(fixed.stages), 1)
+        self.assertEqual(len(adaptive.stages), 1)
+        coarse_mesh = self.bundle / "inputs/mesh_adaptive_initial.msh"
+        for prepared in (fixed, adaptive):
+            stage = prepared.stages[0].run
+            self.assertEqual(
+                (stage.path / "inputs/mesh.msh").resolve(),
+                coarse_mesh.resolve(),
+            )
+            self.assertEqual(len(stage.command), 2)
+            parameters = (stage.path / "param.txt").read_text(encoding="utf-8")
+            for assignment in (
+                "steady = .false.",
+                "saveNR = .false.",
+                "nrp = 1",
+                "time_adapt = .false.",
+                "NR_adapt = .false.",
+                "div_adapt = .false.",
+                "osc_adapt = .false.",
+                "nts = 1",
+            ):
+                self.assertIn(assignment, parameters)
+
+        fixed_parameters = (
+            fixed.stages[0].run.path / "param.txt"
+        ).read_text(encoding="utf-8")
+        adaptive_parameters = (
+            adaptive.stages[0].run.path / "param.txt"
+        ).read_text(encoding="utf-8")
+        self.assertIn("adaptivity = .false.", fixed_parameters)
+        self.assertIn("rest_adapt = .false.", fixed_parameters)
+        self.assertIn("adaptivity = .true.", adaptive_parameters)
+        self.assertIn("rest_adapt = .true.", adaptive_parameters)
+
+        plan = json.loads(
+            (adaptive.path / "run_plan.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(plan["stages"][0]["parameter_overrides"]["nrp"], 1)
+
     def test_existing_run_directory_is_not_replaced(self) -> None:
         run_dir = (
             self.run_root / "legacy_case" / "warm" / "mpi4_omp4" / "existing"
