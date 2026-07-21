@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -16,6 +14,8 @@ REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 from comparison.fixed.hdf5 import compare_hdf5_files  # noqa: E402
+from tests.fixtures.harness import run_command  # noqa: E402
+from tests.fixtures.solutions import write_solution  # noqa: E402
 
 
 TOLERANCES = {
@@ -39,6 +39,9 @@ class Hdf5ComparisonTests(unittest.TestCase):
         write_solution(self.candidate, grouped=False)
 
     def test_grouped_reference_matches_legacy_flat_candidate(self) -> None:
+        with h5py.File(self.candidate, "r+") as handle:
+            del handle["conservative_variable_names"]
+
         report = compare_hdf5_files(
             self.reference, self.candidate, TOLERANCES
         )
@@ -53,6 +56,7 @@ class Hdf5ComparisonTests(unittest.TestCase):
             ],
             0.0,
         )
+        self.assertEqual(report["solution"]["equation_names"], ["rho", "Gamma"])
 
     def test_per_equation_difference_fails(self) -> None:
         with h5py.File(self.candidate, "r+") as handle:
@@ -66,17 +70,6 @@ class Hdf5ComparisonTests(unittest.TestCase):
         equations = report["solution"]["datasets"]["u"]["equations"]
         self.assertTrue(equations["rho"]["passed"])
         self.assertFalse(equations["Gamma"]["passed"])
-
-    def test_missing_legacy_variable_names_uses_reference_names(self) -> None:
-        with h5py.File(self.candidate, "r+") as handle:
-            del handle["conservative_variable_names"]
-
-        report = compare_hdf5_files(
-            self.reference, self.candidate, TOLERANCES
-        )
-
-        self.assertEqual(report["status"], "passed")
-        self.assertEqual(report["solution"]["equation_names"], ["rho", "Gamma"])
 
     def test_nonfinite_candidate_fails(self) -> None:
         with h5py.File(self.candidate, "r+") as handle:
@@ -149,18 +142,11 @@ class CompareCommandTests(unittest.TestCase):
 
     def test_public_command_selects_final_output_and_writes_report(self) -> None:
         report_path = self.root / "comparison.json"
-        completed = subprocess.run(
-            [
-                str(REGRESSION_ROOT / "regression.sh"),
-                "compare",
-                str(self.run),
-                "--report",
-                str(report_path),
-            ],
-            check=False,
-            capture_output=True,
-            env={**os.environ, "PYTHON": sys.executable},
-            text=True,
+        completed = run_command(
+            "compare",
+            str(self.run),
+            "--report",
+            str(report_path),
         )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -181,18 +167,11 @@ class CompareCommandTests(unittest.TestCase):
             encoding="utf-8",
         )
         report_path = self.root / "failed-comparison.json"
-        completed = subprocess.run(
-            [
-                str(REGRESSION_ROOT / "regression.sh"),
-                "compare",
-                str(self.run),
-                "--report",
-                str(report_path),
-            ],
-            check=False,
-            capture_output=True,
-            env={**os.environ, "PYTHON": sys.executable},
-            text=True,
+        completed = run_command(
+            "compare",
+            str(self.run),
+            "--report",
+            str(report_path),
         )
 
         self.assertEqual(completed.returncode, 1)
@@ -217,18 +196,11 @@ class CompareCommandTests(unittest.TestCase):
             encoding="utf-8",
         )
         report_path = self.root / "cross-layout.json"
-        completed = subprocess.run(
-            [
-                str(REGRESSION_ROOT / "regression.sh"),
-                "compare",
-                str(self.run),
-                "--report",
-                str(report_path),
-            ],
-            check=False,
-            capture_output=True,
-            env={**os.environ, "PYTHON": sys.executable},
-            text=True,
+        completed = run_command(
+            "compare",
+            str(self.run),
+            "--report",
+            str(report_path),
         )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -237,75 +209,14 @@ class CompareCommandTests(unittest.TestCase):
 
     def test_report_cannot_replace_candidate_hdf5(self) -> None:
         original_size = self.final.stat().st_size
-        completed = subprocess.run(
-            [
-                str(REGRESSION_ROOT / "regression.sh"),
-                "compare",
-                str(self.run),
-                "--report",
-                str(self.final),
-            ],
-            check=False,
-            capture_output=True,
-            env={**os.environ, "PYTHON": sys.executable},
-            text=True,
+        completed = run_command(
+            "compare",
+            str(self.run),
+            "--report",
+            str(self.final),
         )
 
         self.assertEqual(completed.returncode, 1)
         self.assertEqual(self.final.stat().st_size, original_size)
         with h5py.File(self.final, "r") as handle:
             self.assertIn("u", handle)
-
-
-def write_solution(
-    path: Path,
-    *,
-    grouped: bool,
-    solution_offset: float = 0.0,
-) -> None:
-    mesh_values = {
-        "X": np.array([[1.0, 2.0, 3.0, 4.0], [0.0, 1.0, 0.0, 1.0]]),
-        "T": np.array([[1, 2], [2, 3]], dtype=np.int32),
-        "Tlin": np.array([[1, 2], [2, 3]], dtype=np.int32),
-        "Tb": np.array([[1, 2], [3, 4]], dtype=np.int32),
-        "Nelems": np.array([2], dtype=np.int32),
-        "Nnodesperelem": np.array([2], dtype=np.int32),
-    }
-    solution_values = {
-        "u": np.arange(1.0, 9.0) + solution_offset,
-        "q": np.arange(1.0, 17.0) + solution_offset,
-        "u_tilde": np.arange(1.0, 13.0) + solution_offset,
-    }
-
-    with h5py.File(path, "w") as handle:
-        mesh = handle.create_group("mesh") if grouped else handle
-        solution = handle.create_group("solution") if grouped else handle
-        for name, values in mesh_values.items():
-            mesh.create_dataset(name, data=values)
-        for name, values in solution_values.items():
-            solution.create_dataset(name, data=values)
-
-        if grouped:
-            parameters = handle.create_group("simulation_parameters")
-            parameters.create_dataset("Neq", data=np.array([2], dtype=np.int32))
-            physics = parameters.create_group("physics")
-            physics.create_dataset(
-                "conservative_variable_names", data=np.array([b"rho", b"Gamma"])
-            )
-        else:
-            handle.create_dataset("Neq", data=np.array([2], dtype=np.int32))
-            handle.create_dataset(
-                "conservative_variable_names", data=np.array([b"rho", b"Gamma"])
-            )
-
-        transport = handle.create_group("transport_1d")
-        transport.create_group("coefficients").create_dataset(
-            "d_fs", data=np.array([1.0, 2.0])
-        )
-        transport.create_group("profiles").create_dataset(
-            "rho_grid", data=np.array([0.0, 1.0])
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()

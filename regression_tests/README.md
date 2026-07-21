@@ -298,6 +298,29 @@ private paths in tracked identifiers. The follow-up harness audit will focus
 on making common parameter variants declarative, reducing the amount of schema
 and Python knowledge required from a new user.
 
+## Synthetic harness tests
+
+The harness tests use temporary bundles, small HDF5 arrays, and fake shell
+executables. They do not launch MHDG or require physical regression data.
+Run only the behavior group touched by a change, for example:
+
+```bash
+cd regression_tests
+PYTHONPATH=tools python -m unittest tests.test_preparation
+PYTHONPATH=tools python -m unittest tests.test_execution
+PYTHONPATH=tools python -m unittest tests.test_fixed_comparison
+```
+
+The remaining groups are `test_build`, `test_bundles`,
+`test_adaptive_comparison`, `test_matrix_comparison`,
+`test_reference_publication`, and `test_suites`. Run the complete synthetic
+set only when a change crosses those boundaries:
+
+```bash
+cd regression_tests
+PYTHONPATH=tools python -m unittest discover -s tests -p 'test_*.py'
+```
+
 ## Known limitations and follow-up
 
 - Adaptive meshes can diverge after OpenMP-dependent reduction ordering crosses
@@ -309,8 +332,7 @@ and Python knowledge required from a new user.
 - Historical feature outputs remain reference evidence rather than golden
   truth.
 - Golden promotion currently treats one accepted summary at a time.
-- A follow-up audit will minimize routine suites, simplify the harness tests and
-  fixtures, split multi-purpose functions, reduce unstructured dictionaries,
-  and make new parameter variants easier to add.
+- Remaining cleanup will reduce unstructured configuration dictionaries and
+  make new parameter variants easier to add.
 
 Run `regression_tests/regression.sh help` for the compact command reference.

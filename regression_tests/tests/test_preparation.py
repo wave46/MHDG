@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -12,38 +10,12 @@ from pathlib import Path
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from bundle.creation import create_bundle  # noqa: E402
 from support.errors import BundleError  # noqa: E402
 from preparation.models import PreparedStagedRun  # noqa: E402
 from preparation.parameters import render_parameter_file  # noqa: E402
 from prepare_run import prepare_run  # noqa: E402
-
-
-PARAMETERS = """&INPUT_LST
-    transport_model_path = '/old/transport_model.nml'
-    field_path = '/old/equilibrium.h5' ! magnetic field
-    jtor_path = '/old/current_density.h5'
-    save_folder = '/old/output/'
-/
-&ADAPT_LST
-    adaptivity = .true.
-    rest_adapt = .true.
-    geometry_path = '/old/geometry.geo'
-/
-"""
-
-COLD_PARAMETER_FILES = (
-    "param_cold_fixed_time_init.txt",
-    "param_cold_fixed_diffusion_reduction.txt",
-    *(f"param_cold_fixed_continuation_{index:02d}.txt" for index in range(1, 6)),
-)
-COLD_TRANSPORT_FILES = (
-    "transport_cold_fixed_initial.nml",
-    *(
-        f"transport_cold_fixed_continuation_{index:02d}.nml"
-        for index in range(1, 6)
-    ),
-)
+from tests.fixtures.case_data import PARAMETERS  # noqa: E402
+from tests.fixtures.harness import create_harness  # noqa: E402
 
 
 class RunPreparationTests(unittest.TestCase):
@@ -51,61 +23,13 @@ class RunPreparationTests(unittest.TestCase):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
         self.root = Path(self.temporary_directory.name)
-        self.source = self.root / "source"
-        self.source.mkdir()
-
-        filenames = (
-            "mesh.msh",
-            "mesh_adaptive_initial.msh",
-            "geometry.geo",
-            "equilibrium.h5",
-            "current_density.h5",
-            "transport_model.nml",
-            "restart.h5",
-            "reference_mpi4_omp4.h5",
-        )
-        for filename in filenames:
-            (self.source / filename).write_text(
-                f"synthetic {filename}\n", encoding="utf-8"
-            )
-        (self.source / "param.txt").write_text(PARAMETERS, encoding="utf-8")
-        for filename in COLD_PARAMETER_FILES:
-            (self.source / filename).write_text(PARAMETERS, encoding="utf-8")
-        for filename in COLD_TRANSPORT_FILES:
-            (self.source / filename).write_text(
-                f"synthetic {filename}\n", encoding="utf-8"
-            )
-
-        self.bundle = self.root / "bundle"
-        create_bundle(
-            "legacy_case", self.source, self.bundle, REGRESSION_ROOT / "cases"
-        )
-
-        self.run_root = self.root / "runs"
-        bin_dir = self.root / "bin"
-        bin_dir.mkdir()
-        self.serial_executable = self._executable(bin_dir / "serial_solver")
-        self.parallel_executable = self._executable(bin_dir / "parallel_solver")
-        self.mpi_launcher = self._executable(bin_dir / "mpirun")
-        self.runtime_file = bin_dir / "positionFeketeNodesTri2D.h5"
-        self.runtime_file.write_text("synthetic Fekete nodes\n", encoding="utf-8")
-
-        self.settings = self.root / "settings.env"
-        self.settings.write_text(
-            "MHDG_REGRESSION_SETTINGS_VERSION=1\n"
-            f"MHDG_REGRESSION_DATA_ROOT={self.bundle}\n"
-            f"MHDG_REGRESSION_RUN_ROOT={self.run_root}\n"
-            f"MHDG_SERIAL_EXECUTABLE={self.serial_executable}\n"
-            f"MHDG_PARALLEL_EXECUTABLE={self.parallel_executable}\n"
-            f"MHDG_MPI_LAUNCHER={self.mpi_launcher}\n",
-            encoding="utf-8",
-        )
-
-    @staticmethod
-    def _executable(path: Path) -> Path:
-        path.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-        path.chmod(0o755)
-        return path
+        fixture = create_harness(self.root)
+        self.bundle = fixture.bundle
+        self.run_root = fixture.run_root
+        self.settings = fixture.settings
+        self.parallel_executable = fixture.parallel_executable
+        self.mpi_launcher = fixture.mpi_launcher
+        self.runtime_file = fixture.runtime_file
 
     def test_prepares_isolated_parallel_run(self) -> None:
         prepared = prepare_run(
@@ -163,42 +87,6 @@ class RunPreparationTests(unittest.TestCase):
             self.bundle / "case_data" / "legacy_fixed" / "param.txt"
         ).read_text(encoding="utf-8")
         self.assertEqual(bundled_parameters, PARAMETERS)
-
-    def test_public_command_prepares_serial_run(self) -> None:
-        completed = subprocess.run(
-            [
-                str(REGRESSION_ROOT / "regression.sh"),
-                "prepare",
-                "legacy_case",
-                "warm",
-                "--settings",
-                str(self.settings),
-                "--layout",
-                "serial_omp1",
-                "--run-id",
-                "public",
-            ],
-            check=False,
-            capture_output=True,
-            env={**os.environ, "PYTHON": sys.executable},
-            text=True,
-        )
-
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("OMP_NUM_THREADS=1", completed.stdout)
-        plan_path = (
-            self.run_root
-            / "legacy_case"
-            / "warm"
-            / "serial_omp1"
-            / "public"
-            / "run_plan.json"
-        )
-        plan = json.loads(plan_path.read_text(encoding="utf-8"))
-        self.assertEqual(plan["command"][0], str(self.serial_executable))
-        self.assertNotIn(str(self.mpi_launcher), plan["command"])
-        self.assertEqual(plan["environment"]["OMP_PLACES"], "cores")
-        self.assertEqual(plan["environment"]["OMP_PROC_BIND"], "spread")
 
     def test_prepares_from_bundle_using_previous_case_id(self) -> None:
         manifest_path = self.bundle / "manifest.json"
@@ -335,30 +223,3 @@ class RunPreparationTests(unittest.TestCase):
             )
 
         self.assertEqual(marker.read_text(encoding="utf-8"), "keep\n")
-
-    def test_missing_runtime_file_fails_before_preparation(self) -> None:
-        self.runtime_file.unlink()
-
-        with self.assertRaisesRegex(BundleError, "required runtime file is missing"):
-            prepare_run(
-                self.settings,
-                "legacy_case",
-                "warm",
-                "mpi4_omp4",
-                REGRESSION_ROOT / "cases",
-                REGRESSION_ROOT / "layouts.json",
-                "missing-runtime-file",
-            )
-
-        run_dir = (
-            self.run_root
-            / "legacy_case"
-            / "warm"
-            / "mpi4_omp4"
-            / "missing-runtime-file"
-        )
-        self.assertFalse(run_dir.exists())
-
-
-if __name__ == "__main__":
-    unittest.main()

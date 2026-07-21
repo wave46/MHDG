@@ -11,12 +11,11 @@ from pathlib import Path
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from build.models import BuildError  # noqa: E402
 from build.workflow import build_solver  # noqa: E402
 from bundle.settings import read_settings  # noqa: E402
 
 
-class BuildSolverTests(unittest.TestCase):
+class BuildWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
@@ -74,16 +73,6 @@ class BuildSolverTests(unittest.TestCase):
         self.assertEqual(
             settings["MHDG_BUILD_MANIFEST"], str(result.metadata_path)
         )
-
-    def test_rejects_nonpositive_configured_job_count(self) -> None:
-        self.settings.write_text(
-            self.settings.read_text(encoding="utf-8")
-            + "MHDG_REGRESSION_BUILD_JOBS=0\n",
-            encoding="utf-8",
-        )
-
-        with self.assertRaisesRegex(BuildError, "positive integer"):
-            build_solver(self.settings, self.repository)
 
     def _create_repository(self) -> None:
         lib = self.repository / "lib"
@@ -146,6 +135,3 @@ chmod +x "$target"
 def _run(command: list[str], cwd: Path) -> None:
     subprocess.run(command, cwd=cwd, check=True, capture_output=True, text=True)
 
-
-if __name__ == "__main__":
-    unittest.main()

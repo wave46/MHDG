@@ -14,7 +14,7 @@ sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 from comparison.workflow import compare_completed_run  # noqa: E402
 
 
-class MatrixComparisonTests(unittest.TestCase):
+class ReferenceMatrixComparisonTests(unittest.TestCase):
     @patch("comparison.matrix.compare_fixed_run")
     def test_fixed_comparison_stops_at_first_divergent_stage(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -100,7 +100,7 @@ class MatrixComparisonTests(unittest.TestCase):
             reference.write_text(f"golden {stage_id}\n", encoding="utf-8")
             artifact_id = f"golden_{stage_id}"
             references[stage_id] = reference.resolve()
-            artifacts[artifact_id] = MatrixComparisonTests._artifact(
+            artifacts[artifact_id] = ReferenceMatrixComparisonTests._artifact(
                 reference.relative_to(bundle), "application/x-hdf5"
             )
             entries.append(
@@ -134,7 +134,7 @@ class MatrixComparisonTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        artifacts["golden_index"] = MatrixComparisonTests._artifact(
+        artifacts["golden_index"] = ReferenceMatrixComparisonTests._artifact(
             index.relative_to(bundle), "application/json"
         )
         (bundle / "manifest.json").write_text(
@@ -208,6 +208,3 @@ class MatrixComparisonTests(unittest.TestCase):
             "media_type": media_type,
         }
 
-
-if __name__ == "__main__":
-    unittest.main()
