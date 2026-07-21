@@ -7,7 +7,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from build_solver import build_solver, parse_build_jobs
+from build.configuration import parse_build_jobs
+from build.workflow import build_solver
 from suite.reporting import print_run_summary
 from suite.runner import run_suite
 from support.errors import BundleError, HarnessError

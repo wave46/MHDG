@@ -11,7 +11,8 @@ from pathlib import Path
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from build_solver import BuildError, build_solver  # noqa: E402
+from build.models import BuildError  # noqa: E402
+from build.workflow import build_solver  # noqa: E402
 from bundle.settings import read_settings  # noqa: E402
 
 
