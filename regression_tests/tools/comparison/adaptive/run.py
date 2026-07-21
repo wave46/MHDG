@@ -5,20 +5,23 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from comparison.shared.convergence import NewtonConvergence, read_newton_convergence
-from comparison.inputs import ComparisonInputs, ComparisonOverrides
-from comparison.shared.outputs import resolve_run_file, select_candidate
 from comparison.adaptive.fields import compare_sampled_fields
 from comparison.adaptive.sampling import (
     SampledFields,
     reference_sample_points,
     sample_solution,
 )
+from comparison.inputs import ComparisonInputs, ComparisonOverrides
+from comparison.shared.convergence import NewtonConvergence, read_newton_convergence
+from comparison.shared.outputs import resolve_run_file, select_candidate
+from comparison.shared.report import (
+    comparison_report_fields,
+    merge_comparison_failures,
+    save_comparison_report,
+)
 from comparison.shared.tolerances import load_adaptive_tolerances
-from support.documents import write_json_atomic
 from support.errors import ComparisonError
 from support.paths import recorded_file, require_file
-from support.time import utc_now
 
 
 def compare_adaptive_files(
@@ -86,20 +89,20 @@ def compare_adaptive_run(
         inputs.run_directory / "stdout.log",
         tolerances["newton_error_max"],
     )
+    failures = merge_comparison_failures(field_report["failures"], convergence)
     report = _comparison_report(
         inputs,
         profile_id,
         tolerances,
         convergence,
         field_report,
+        failures,
     )
-    output = _save_report(
+    output = save_comparison_report(
         inputs.run_directory,
         report_path,
-        candidate,
-        reference,
-        fekete,
         report,
+        (candidate, reference, fekete),
     )
     return output, report
 
@@ -110,39 +113,20 @@ def _comparison_report(
     tolerances: dict[str, Any],
     convergence: NewtonConvergence,
     field_report: dict[str, Any],
+    failures: list[str],
 ) -> dict[str, Any]:
-    failures = list(field_report["failures"])
-    if convergence.failure is not None:
-        failures.append(convergence.failure)
     report = {
         **field_report,
-        "created_utc": utc_now(),
-        "status": "passed" if not failures else "failed",
-        "run_directory": str(inputs.run_directory),
-        "case_id": inputs.plan["case_id"],
-        "workflow_id": inputs.plan["workflow_id"],
-        "layout_id": inputs.plan["layout_id"],
-        "tolerance_profile": {"id": tolerance_profile_id, **tolerances},
-        "convergence": convergence.as_report(),
-        "failures": failures,
+        **comparison_report_fields(
+            inputs,
+            tolerance_profile_id,
+            tolerances,
+            convergence,
+            failures,
+        ),
     }
     report.pop("tolerances", None)
     return report
-
-
-def _save_report(
-    run_directory: Path,
-    report_path: Path | None,
-    candidate: Path,
-    reference: Path,
-    fekete: Path,
-    report: dict[str, Any],
-) -> Path:
-    output = (report_path or run_directory / "comparison.json").expanduser().resolve()
-    if output in {candidate, reference, fekete}:
-        raise ComparisonError("adaptive report cannot replace a comparison input")
-    write_json_atomic(output, report, "adaptive report")
-    return output
 
 
 def _fekete_nodes(metadata: dict[str, Any]) -> Path:
