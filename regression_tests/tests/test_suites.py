@@ -11,6 +11,8 @@ from unittest.mock import patch
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
+from suite.configuration import load_suite_definition  # noqa: E402
+from suite.summary import new_summary  # noqa: E402
 from suite.verification import verify_suite  # noqa: E402
 from tests.fixtures.harness import create_harness, run_command  # noqa: E402
 from tests.fixtures.solutions import write_solution  # noqa: E402
@@ -48,6 +50,38 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertEqual(resumed.returncode, 0, resumed.stderr)
         self.assertEqual(len(self._summary("cold", "cold-test")["results"]), 2)
         self.assertIn("skipping recorded cold_fixed / mpi4_omp4", resumed.stdout)
+
+    def test_resume_preserves_and_retries_an_unrecorded_cell(self) -> None:
+        run_id = "interrupted-test"
+        partial = self.fixture.run_directory("warm", "mpi4_omp4", run_id)
+        partial.mkdir(parents=True)
+        marker = partial / "partial-output.txt"
+        marker.write_text("keep\n", encoding="utf-8")
+
+        suite = load_suite_definition(
+            "warm",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+        summary_directory = self.fixture.run_root / "suites/warm" / run_id
+        summary_directory.mkdir(parents=True)
+        summary = new_summary("warm", run_id, suite, "deferred")
+        (summary_directory / "suite_summary.json").write_text(
+            json.dumps(summary, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        resumed = self._run_suite("warm", run_id, "--run-only", "--resume")
+
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
+        self.assertEqual(marker.read_text(encoding="utf-8"), "keep\n")
+        result = self._summary("warm", run_id)["results"][0]
+        self.assertEqual(
+            Path(result["run_directory"]).name,
+            "interrupted-test-resume-1",
+        )
+        self.assertIn("preserving unrecorded run", resumed.stdout)
 
     def test_suite_check_requires_golden_data_and_runs_warm_defaults(self) -> None:
         rejected = run_command(

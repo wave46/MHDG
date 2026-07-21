@@ -103,6 +103,7 @@ def run_suite(
         suite["layouts"],
         summary_path,
         summary,
+        resume,
     )
     if pairs and compare:
         summary["comparisons"] = compare_layout_pairs(
@@ -128,6 +129,7 @@ def _run_pending_cells(
     layout_ids: list[str],
     summary_path: Path,
     summary: dict[str, Any],
+    resume: bool,
 ) -> None:
     print(f"suite: {suite_id} ({inputs.run_id})")
     recorded = completed_cells(summary)
@@ -137,9 +139,44 @@ def _run_pending_cells(
             if (workflow_id, layout_id) in recorded:
                 print(f"skipping recorded {workflow_id} / {layout_id}", flush=True)
                 continue
+            cell_inputs = _resumable_cell_inputs(
+                inputs,
+                workflow_id,
+                layout_id,
+                resume,
+            )
             print(f"running {workflow_id} / {layout_id} ...", flush=True)
-            summary["results"].append(run_cell(inputs, workflow_id, layout_id))
+            summary["results"].append(
+                run_cell(cell_inputs, workflow_id, layout_id)
+            )
             summary["duration_seconds"] += time.monotonic() - started_clock
             started_clock = time.monotonic()
             write_json_atomic(summary_path, summary, "suite summary")
     summary["duration_seconds"] += time.monotonic() - started_clock
+
+
+def _resumable_cell_inputs(
+    inputs: SuiteRunInputs,
+    workflow_id: str,
+    layout_id: str,
+    resume: bool,
+) -> SuiteRunInputs:
+    """Preserve an unrecorded run and select a new attempt identifier."""
+    if not resume:
+        return inputs
+
+    run_root = Path(inputs.settings["MHDG_REGRESSION_RUN_ROOT"]).expanduser()
+    cell_root = run_root / inputs.case_id / workflow_id / layout_id
+    existing = cell_root / inputs.run_id
+    if not existing.exists():
+        return inputs
+
+    attempt = 1
+    while (cell_root / f"{inputs.run_id}-resume-{attempt}").exists():
+        attempt += 1
+    retry_id = f"{inputs.run_id}-resume-{attempt}"
+    print(
+        f"preserving unrecorded run {existing}; retrying as {retry_id}",
+        flush=True,
+    )
+    return replace(inputs, run_id=retry_id)
