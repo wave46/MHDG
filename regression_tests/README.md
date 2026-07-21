@@ -57,7 +57,7 @@ The archived `historical_feature` case records evidence from
 | `cold_fixed` | Start analytically on the refined mesh and complete seven continuation stages without adaptivity. |
 | `cold_adaptive` | Start analytically on the coarse mesh, adapt during the first two stages, then complete the same continuations. |
 | `cold_step_fixed` | Run one time step and one Newton iteration on the coarse mesh without adaptivity. |
-| `cold_step_adaptive` | Repeat the one-step probe with exactly one initial adaptivity pass. |
+| `cold_step_adaptive` | Run two Newton iterations with exactly one initial adaptivity pass. |
 
 Both cold workflows run `time_init`, `diffusion_reduction`, and five numbered
 continuations. Each stage waits for its predecessor and uses its selected HDF5

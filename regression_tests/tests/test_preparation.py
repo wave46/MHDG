@@ -217,7 +217,6 @@ class RunPreparationTests(unittest.TestCase):
             for assignment in (
                 "steady = .false.",
                 "saveNR = .false.",
-                "nrp = 1",
                 "time_adapt = .false.",
                 "NR_adapt = .false.",
                 "div_adapt = .false.",
@@ -234,13 +233,23 @@ class RunPreparationTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("adaptivity = .false.", fixed_parameters)
         self.assertIn("rest_adapt = .false.", fixed_parameters)
+        self.assertIn("nrp = 1", fixed_parameters)
         self.assertIn("adaptivity = .true.", adaptive_parameters)
         self.assertIn("rest_adapt = .true.", adaptive_parameters)
+        self.assertIn("nrp = 2", adaptive_parameters)
 
-        plan = json.loads(
+        fixed_plan = json.loads(
+            (fixed.path / "run_plan.json").read_text(encoding="utf-8")
+        )
+        adaptive_plan = json.loads(
             (adaptive.path / "run_plan.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(plan["stages"][0]["parameter_overrides"]["nrp"], 1)
+        self.assertEqual(
+            fixed_plan["stages"][0]["parameter_overrides"]["nrp"], 1
+        )
+        self.assertEqual(
+            adaptive_plan["stages"][0]["parameter_overrides"]["nrp"], 2
+        )
 
     def test_existing_run_directory_is_not_replaced(self) -> None:
         run_dir = (
