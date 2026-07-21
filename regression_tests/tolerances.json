@@ -1,37 +1,34 @@
 {
   "schema_version": 2,
+  "defaults": {
+    "newton_error_max": 0.0002
+  },
+  "fixed_defaults": {
+    "mesh_coordinate_atol": 1e-12
+  },
   "profiles": {
     "fixed_same_layout": {
       "description": "Same solver build and MPI/OpenMP layout on a fixed mesh",
-      "newton_error_max": 0.0002,
-      "mesh_coordinate_atol": 1e-12,
       "relative_l2_max": 1e-10,
       "normalized_linf_max": 1e-9
     },
     "fixed_cross_layout": {
       "description": "Initial tolerances across serial, MPI, and OpenMP layouts",
-      "newton_error_max": 0.0002,
-      "mesh_coordinate_atol": 1e-12,
       "relative_l2_max": 5e-8,
       "normalized_linf_max": 1e-6
     },
     "fixed_stage_reference": {
       "description": "Matching workflow stage and execution layout on a fixed mesh",
-      "newton_error_max": 0.0002,
-      "mesh_coordinate_atol": 1e-12,
       "relative_l2_max": 1e-8,
       "normalized_linf_max": 1e-7
     },
     "cold_fixed_reference": {
       "description": "Cold fixed-mesh continuation compared with the warm reference",
-      "newton_error_max": 0.0002,
-      "mesh_coordinate_atol": 1e-12,
       "relative_l2_max": 1e-5,
       "normalized_linf_max": 1e-5
     },
     "adaptive_reference": {
       "description": "Initial mesh-independent cold-adaptive tolerances",
-      "newton_error_max": 0.0002,
       "samples_per_element": 4,
       "minimum_point_coverage": 1.0,
       "solution": {

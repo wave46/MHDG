@@ -71,7 +71,9 @@ a pass/fail metric.
 
 Tracked layouts are `serial_omp1`, `mpi2_omp1`, `mpi2_omp4`, `mpi4_omp1`, and
 `mpi4_omp4`. MPI layouts use Open MPI core binding and assign exclusive cores
-to each rank's OpenMP threads.
+to each rank's OpenMP threads. `layouts.json` only lists these identifiers;
+`serial_ompN` and `mpiM_ompN` directly determine the executable type, MPI
+ranks, and OpenMP threads.
 
 ## External bundle contract
 
@@ -233,7 +235,9 @@ use absolute tolerance `1e-12`. Normalized Linf is the largest absolute
 pointwise difference divided by the largest absolute reference value.
 
 These are regression tolerances for the characterized legacy workflow, not
-general physical-accuracy targets.
+general physical-accuracy targets. Shared Newton and fixed-mesh coordinate
+limits are declared once; each named profile contains only its distinct L2,
+Linf, sampling, or coverage limits.
 
 Compare any completed run manually with:
 

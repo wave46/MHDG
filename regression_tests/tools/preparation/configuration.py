@@ -11,6 +11,7 @@ from bundle.cases import load_case_definition, required_case_roles
 from bundle.schemas import load_validated_json
 from bundle.settings import bundle_root_from_settings, read_settings
 from bundle.validation import validate_bundle_root
+from catalogs.layouts import load_layout
 from preparation.models import PreparationInputs
 from support.errors import BundleError
 from support.identifiers import IDENTIFIER_RE
@@ -40,7 +41,7 @@ def load_preparation_inputs(
     workflow = case["workflows"].get(workflow_id)
     if workflow is None:
         raise BundleError(f"case {case_id} has no workflow {workflow_id}")
-    layout = _load_layout(layout_id, layouts_path)
+    layout = load_layout(layout_id, layouts_path)
     artifacts, manifest = _case_artifacts(
         bundle_root,
         case,
@@ -88,16 +89,6 @@ def _run_directory(
     if run_directory.exists():
         raise BundleError(f"run directory already exists: {run_directory}")
     return run_directory
-
-
-def _load_layout(layout_id: str, layouts_path: Path) -> dict[str, Any]:
-    schema_path = layouts_path.parent / "schemas" / "layouts.schema.json"
-    document = load_validated_json(layouts_path, schema_path, "layout definitions")
-    layout = document["layouts"].get(layout_id)
-    if layout is None:
-        available = ", ".join(sorted(document["layouts"]))
-        raise BundleError(f"unknown layout {layout_id}; available: {available}")
-    return layout
 
 
 def _case_artifacts(

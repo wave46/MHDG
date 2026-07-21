@@ -7,6 +7,7 @@ from typing import Any
 
 from bundle.cases import load_case_definition
 from bundle.schemas import load_validated_json
+from catalogs.layouts import load_layouts
 from support.errors import BundleError
 
 
@@ -19,17 +20,18 @@ def load_suite_definition(
     """Load one suite and validate its workflow and layout references."""
     schema_path = suites_path.parent / "schemas" / "suites.schema.json"
     document = load_validated_json(suites_path, schema_path, "suite definitions")
-    suite = document["suites"].get(suite_id)
-    if suite is None:
+    declaration = document["suites"].get(suite_id)
+    if declaration is None:
         available = ", ".join(sorted(document["suites"]))
         raise BundleError(f"unknown suite {suite_id}; available: {available}")
+    suite = {
+        "description": declaration["description"],
+        "case_id": declaration["case"],
+        "workflow_ids": declaration["workflows"],
+        "layouts": declaration["layouts"],
+    }
 
-    layouts_schema = layouts_path.parent / "schemas" / "layouts.schema.json"
-    layouts = load_validated_json(
-        layouts_path,
-        layouts_schema,
-        "layout definitions",
-    )["layouts"]
+    layouts = load_layouts(layouts_path)
     unknown_layouts = [
         layout for layout in suite["layouts"] if layout not in layouts
     ]
@@ -41,7 +43,7 @@ def load_suite_definition(
     case = load_case_definition(suite["case_id"], case_directory)
     unknown_workflows = [
         workflow_id
-        for workflow_id in workflow_ids(suite)
+        for workflow_id in suite["workflow_ids"]
         if workflow_id not in case["workflows"]
     ]
     if unknown_workflows:
@@ -50,12 +52,6 @@ def load_suite_definition(
             f"{', '.join(unknown_workflows)}"
         )
     return suite
-
-
-def workflow_ids(suite: dict[str, Any]) -> list[str]:
-    """Return the suite's normalized workflow list."""
-    workflow_id = suite.get("workflow_id")
-    return [workflow_id] if workflow_id else suite["workflow_ids"]
 
 
 def require_bundle_class(

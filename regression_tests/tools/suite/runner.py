@@ -13,7 +13,6 @@ from suite.configuration import (
     load_suite_definition,
     require_bundle_class,
     suite_directory,
-    workflow_ids,
 )
 from suite.models import SuiteRunInputs
 from suite.summary import (
@@ -64,7 +63,7 @@ def run_suite(
         resume,
     )
     summary_path = output_directory / "suite_summary.json"
-    selected_workflows = workflow_ids(suite)
+    selected_workflows = suite["workflow_ids"]
     comparison_mode = "immediate" if compare else "deferred"
     if resume:
         summary = resume_summary(
