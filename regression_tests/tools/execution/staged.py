@@ -141,7 +141,7 @@ def _staged_metadata(
     hdf5_outputs: list[str],
 ) -> dict[str, Any]:
     metadata = {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": status,
         "started_utc": started_utc,
         "finished_utc": utc_now(),

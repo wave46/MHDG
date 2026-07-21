@@ -8,7 +8,6 @@
     "schema_version",
     "case_id",
     "description",
-    "external_data_id",
     "reference_class",
     "reference_branch",
     "reference_revision",
@@ -17,7 +16,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": 1
+      "const": 2
     },
     "case_id": {
       "$ref": "#/$defs/identifier"
@@ -25,9 +24,6 @@
     "description": {
       "type": "string",
       "minLength": 1
-    },
-    "external_data_id": {
-      "$ref": "#/$defs/identifier"
     },
     "reference_class": {
       "$ref": "#/$defs/identifier"

@@ -1,8 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "case_id": "historical_feature",
   "description": "Archived historical feature-branch characterization",
-  "external_data_id": "historical_feature",
   "reference_class": "historical_feature",
   "reference_branch": "feautre/neutrals_pressure",
   "reference_revision": "224fe346acb82c52a3efe5ee1fd6e35de43e3e4e",

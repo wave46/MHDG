@@ -161,15 +161,14 @@ def _verify_case_requirements(
     checked = []
     for case in cases:
         case_id = case["case_id"]
-        data_id = case["external_data_id"]
-        if data_id not in case_data_by_id:
+        if case_id not in case_data_by_id:
             continue
 
-        case_data = case_data_by_id[data_id]
-        if case_data["case_id"] not in {case_id, data_id}:
+        case_data = case_data_by_id[case_id]
+        if case_data["case_id"] != case_id:
             raise BundleError(
-                f"manifest.case_data.{data_id}.case_id is "
-                f"{case_data['case_id']}, expected {case_id} or {data_id}"
+                f"manifest.case_data.{case_id}.case_id is "
+                f"{case_data['case_id']}, expected {case_id}"
             )
 
         required = required_case_roles(case)

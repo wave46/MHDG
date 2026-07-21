@@ -46,7 +46,7 @@ def write_build_metadata(
     """Write the reproducible build record."""
     metadata_path = configuration.build_directory / "build_metadata.json"
     metadata = {
-        "schema_version": 1,
+        "schema_version": 2,
         "build_id": configuration.build_id,
         "status": "completed",
         "started_utc": started_utc,

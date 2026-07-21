@@ -24,8 +24,8 @@ def validate_promotion_summary(
     missing = sorted(required - summary.keys())
     if missing:
         raise BundleError(f"suite summary is missing: {', '.join(missing)}")
-    if summary["schema_version"] != 1 or summary["status"] != "passed":
-        raise BundleError("only a passing version-1 suite summary can be promoted")
+    if summary["schema_version"] != 2 or summary["status"] != "passed":
+        raise BundleError("only a passing version-2 suite summary can be promoted")
     for name in ("suite_id", "run_id", "case_id"):
         if not isinstance(summary[name], str) or not IDENTIFIER_RE.fullmatch(
             summary[name]

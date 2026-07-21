@@ -158,7 +158,7 @@ def _matrix_report(
     failures: list[str],
 ) -> dict[str, Any]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_utc": utc_now(),
         "status": (
             "passed"

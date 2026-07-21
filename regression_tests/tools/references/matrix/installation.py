@@ -57,7 +57,7 @@ def install_reference_matrix(
     write_json_direct(
         index_path,
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "created_utc": utc_now(),
             "case_id": summary["case_id"],
             "suite_id": summary["suite_id"],
@@ -81,7 +81,7 @@ def install_reference_matrix(
         "application/json",
     )
     try:
-        case_data = manifest["case_data"][case["external_data_id"]]
+        case_data = manifest["case_data"][case["case_id"]]
     except KeyError as exc:
         raise BundleError("source bundle has no matching case-data entry") from exc
     case_data["case_id"] = case["case_id"]

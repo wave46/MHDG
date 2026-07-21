@@ -1,8 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "case_id": "legacy_case",
   "description": "Routine legacy regression case",
-  "external_data_id": "legacy_fixed",
   "reference_class": "legacy",
   "reference_branch": "develop",
   "reference_revision": "29f442db67bac169b2616f2cbe399289d137993c",

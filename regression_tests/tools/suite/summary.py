@@ -19,7 +19,7 @@ def new_summary(
 ) -> dict[str, Any]:
     """Create the initial running summary for a new suite."""
     summary = {
-        "schema_version": 1,
+        "schema_version": 2,
         "started_utc": utc_now(),
         "finished_utc": None,
         "duration_seconds": 0.0,

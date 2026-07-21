@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "layouts": {
     "serial_omp1": {
       "description": "Serial solver with one OpenMP thread",

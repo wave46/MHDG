@@ -90,7 +90,7 @@ def _comparison_report(
     failures: list[str],
 ) -> dict[str, Any]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_utc": utc_now(),
         "status": "passed" if not failures else "failed",
         "run_directory": str(inputs.run_directory),

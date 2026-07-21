@@ -38,8 +38,8 @@ def read_settings(settings_path: Path) -> dict[str, str]:
 
 def bundle_root_from_settings(settings: dict[str, str]) -> Path:
     """Resolve the required bundle root from parsed settings."""
-    if settings.get("MHDG_REGRESSION_SETTINGS_VERSION") != "1":
-        raise BundleError("settings must define MHDG_REGRESSION_SETTINGS_VERSION=1")
+    if settings.get("MHDG_REGRESSION_SETTINGS_VERSION") != "2":
+        raise BundleError("settings must define MHDG_REGRESSION_SETTINGS_VERSION=2")
     data_root = settings.get("MHDG_REGRESSION_DATA_ROOT")
     if not data_root:
         raise BundleError("settings must define MHDG_REGRESSION_DATA_ROOT")

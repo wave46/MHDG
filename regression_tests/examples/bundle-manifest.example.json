@@ -1,54 +1,54 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "bundle_id": "primary_case_bundle",
   "bundle_version": "1.0.0",
   "bundle_class": "candidate",
   "artifacts": {
     "legacy_mesh": {
-      "path": "case_data/legacy_fixed/mesh.msh",
+      "path": "case_data/legacy_case/mesh.msh",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "application/x-gmsh"
     },
     "legacy_magnetic_field": {
-      "path": "case_data/legacy_fixed/equilibrium.h5",
+      "path": "case_data/legacy_case/equilibrium.h5",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "application/x-hdf5"
     },
     "legacy_current_density": {
-      "path": "case_data/legacy_fixed/current_density.h5",
+      "path": "case_data/legacy_case/current_density.h5",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "application/x-hdf5"
     },
     "legacy_warm_parameters": {
-      "path": "case_data/legacy_fixed/param.txt",
+      "path": "case_data/legacy_case/param.txt",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "text/plain"
     },
     "legacy_transport_configuration": {
-      "path": "case_data/legacy_fixed/transport_model.nml",
+      "path": "case_data/legacy_case/transport_model.nml",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "text/plain"
     },
     "legacy_warm_restart": {
-      "path": "case_data/legacy_fixed/restart.h5",
+      "path": "case_data/legacy_case/restart.h5",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "application/x-hdf5"
     },
     "legacy_warm_reference_mpi4_omp4": {
-      "path": "case_data/legacy_fixed/reference_mpi4_omp4.h5",
+      "path": "case_data/legacy_case/reference_mpi4_omp4.h5",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "size_bytes": 0,
       "media_type": "application/x-hdf5"
     }
   },
   "case_data": {
-    "legacy_fixed": {
+    "legacy_case": {
       "case_id": "legacy_case",
       "description": "Example minimum case data for the routine warm regression",
       "roles": {

@@ -116,9 +116,9 @@ class ReferenceMatrixComparisonTests(unittest.TestCase):
         index.write_text(
             json.dumps(
                 {
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "created_utc": "2026-07-20T00:00:00Z",
-                    "case_id": "legacy_fixed",
+                    "case_id": "legacy_case",
                     "suite_id": "cold_matrix",
                     "suite_run_id": "golden-1",
                     "source_bundle": {
@@ -140,14 +140,14 @@ class ReferenceMatrixComparisonTests(unittest.TestCase):
         (bundle / "manifest.json").write_text(
             json.dumps(
                 {
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "bundle_id": "golden_bundle",
                     "bundle_version": "golden-1",
                     "bundle_class": "golden",
                     "artifacts": artifacts,
                     "case_data": {
-                        "legacy_fixed": {
-                            "case_id": "legacy_fixed",
+                        "legacy_case": {
+                            "case_id": "legacy_case",
                             "roles": {"reference_matrix": "golden_index"},
                         }
                     },
@@ -207,4 +207,3 @@ class ReferenceMatrixComparisonTests(unittest.TestCase):
             "size_bytes": 1,
             "media_type": media_type,
         }
-

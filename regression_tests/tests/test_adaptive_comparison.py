@@ -60,7 +60,7 @@ class AdaptiveComparisonTests(unittest.TestCase):
                 encoding="utf-8",
             )
             compare_files.return_value = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "status": "passed",
                 "failures": [],
                 "tolerances": {},
@@ -137,4 +137,3 @@ class AdaptiveComparisonTests(unittest.TestCase):
             solution,
             gradient,
         )
-

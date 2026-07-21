@@ -53,7 +53,7 @@ def _new_verification_summary(
     source_path: Path,
 ) -> dict[str, Any]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_utc": utc_now(),
         "status": "running",
         "source_summary": str(source_path),
@@ -109,7 +109,7 @@ def _validate_source_summary(summary: dict[str, Any]) -> None:
     missing = sorted(required - summary.keys())
     if missing:
         raise BundleError(f"suite summary is missing: {', '.join(missing)}")
-    if summary["schema_version"] != 1:
+    if summary["schema_version"] != 2:
         raise BundleError("suite summary has unsupported schema version")
     if not isinstance(summary["results"], list) or not summary["results"]:
         raise BundleError("suite summary contains no results")

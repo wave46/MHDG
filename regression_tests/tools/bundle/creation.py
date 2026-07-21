@@ -73,8 +73,8 @@ def _populate_bundle(
     case: dict[str, Any],
     bundle_version: str,
 ) -> dict[str, Any]:
-    data_id = case["external_data_id"]
-    target_directory = staging / "case_data" / data_id
+    case_id = case["case_id"]
+    target_directory = staging / "case_data" / case_id
     artifacts: dict[str, dict[str, Any]] = {}
     roles: dict[str, str] = {}
 
@@ -109,15 +109,15 @@ def _populate_bundle(
         roles[role] = artifact_id
 
     return {
-        "schema_version": 1,
-        "bundle_id": f"{data_id}_bundle",
+        "schema_version": 2,
+        "bundle_id": f"{case_id}_bundle",
         "bundle_version": bundle_version,
         "bundle_class": "candidate",
         "created_utc": utc_now(),
         "artifacts": artifacts,
         "case_data": {
-            data_id: {
-                "case_id": case["case_id"],
+            case_id: {
+                "case_id": case_id,
                 "description": case["description"],
                 "roles": roles,
             }

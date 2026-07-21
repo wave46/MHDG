@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "profiles": {
     "fixed_same_layout": {
       "description": "Same solver build and MPI/OpenMP layout on a fixed mesh",

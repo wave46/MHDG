@@ -84,29 +84,9 @@ class RunPreparationTests(unittest.TestCase):
         self.assertIn(f"{expected / 'outputs'}/", parameters)
 
         bundled_parameters = (
-            self.bundle / "case_data" / "legacy_fixed" / "param.txt"
+            self.bundle / "case_data" / "legacy_case" / "param.txt"
         ).read_text(encoding="utf-8")
         self.assertEqual(bundled_parameters, PARAMETERS)
-
-    def test_prepares_from_bundle_using_previous_case_id(self) -> None:
-        manifest_path = self.bundle / "manifest.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["case_data"]["legacy_fixed"]["case_id"] = "legacy_fixed"
-        manifest_path.write_text(
-            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-        )
-
-        prepared = prepare_run(
-            self.settings,
-            "legacy_case",
-            "warm",
-            "serial_omp1",
-            REGRESSION_ROOT / "cases",
-            REGRESSION_ROOT / "layouts.json",
-            "previous-case-id",
-        )
-
-        self.assertTrue((prepared.path / "inputs/reference.h5").is_symlink())
 
     def test_prepares_seven_stage_fixed_mesh_workflow(self) -> None:
         prepared = prepare_run(
@@ -171,12 +151,12 @@ class RunPreparationTests(unittest.TestCase):
             (adaptive.stages[0].run.path / "inputs/mesh.msh").resolve(),
             (
                 self.bundle
-                / "case_data/legacy_fixed/mesh_adaptive_initial.msh"
+                / "case_data/legacy_case/mesh_adaptive_initial.msh"
             ).resolve(),
         )
         self.assertEqual(
             (first.path / "inputs/mesh.msh").resolve(),
-            (self.bundle / "case_data/legacy_fixed/mesh.msh").resolve(),
+            (self.bundle / "case_data/legacy_case/mesh.msh").resolve(),
         )
         self.assertIn("rest_adapt = .true.", adaptive_parameters[0])
         self.assertIn("rest_adapt = .true.", adaptive_parameters[1])

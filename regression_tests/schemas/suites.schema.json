@@ -10,7 +10,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": 1
+      "const": 2
     },
     "suites": {
       "type": "object",

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "suites": {
     "warm": {
       "description": "Canonical four-MPI-by-four-OpenMP warm restart",

@@ -41,8 +41,8 @@ ignored by Git.
 ## Cases, workflows, and suites
 
 The tracked case is `legacy_case`, pinned to `develop` commit
-`29f442db67bac169b2616f2cbe399289d137993c`. Its external-data identifier
-remains `legacy_fixed` so bundles created before the rename still work.
+`29f442db67bac169b2616f2cbe399289d137993c`. V2 bundles use that identifier
+consistently; pre-rename `legacy_fixed` bundles are not accepted.
 
 The archived `historical_feature` case records evidence from
 `feautre/neutrals_pressure`; it is not a routine run or a correctness oracle.

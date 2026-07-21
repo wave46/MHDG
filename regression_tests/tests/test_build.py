@@ -27,7 +27,7 @@ class BuildWorkflowTests(unittest.TestCase):
 
         self.settings = self.root / "settings.env"
         self.settings.write_text(
-            "MHDG_REGRESSION_SETTINGS_VERSION=1\n"
+            "MHDG_REGRESSION_SETTINGS_VERSION=2\n"
             f"MHDG_REGRESSION_BUILD_ROOT={self.build_root}\n"
             f"MHDG_ENVIRONMENT_SCRIPT={self.environment_script}\n",
             encoding="utf-8",
@@ -134,4 +134,3 @@ chmod +x "$target"
 
 def _run(command: list[str], cwd: Path) -> None:
     subprocess.run(command, cwd=cwd, check=True, capture_output=True, text=True)
-

@@ -112,7 +112,7 @@ def create_harness(
     run_root = root / "runs"
     settings = root / "settings.env"
     settings.write_text(
-        "MHDG_REGRESSION_SETTINGS_VERSION=1\n"
+        "MHDG_REGRESSION_SETTINGS_VERSION=2\n"
         f"MHDG_REGRESSION_DATA_ROOT={bundle}\n"
         f"MHDG_REGRESSION_RUN_ROOT={run_root}\n"
         f"MHDG_SERIAL_EXECUTABLE={serial}\n"

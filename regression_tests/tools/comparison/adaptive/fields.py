@@ -60,7 +60,7 @@ def compare_sampled_fields(
         failures.append("common point coverage is below tolerance")
     status = "failed" if failures else "passed" if tolerances else "characterized"
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": status,
         "sampling": {
             "method": "reference_triangle_interior",

@@ -100,7 +100,7 @@ def _run_metadata(
     settings: dict[str, str],
 ) -> dict[str, Any]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": observations.status,
         "started_utc": process.started_utc,
         "finished_utc": utc_now(),

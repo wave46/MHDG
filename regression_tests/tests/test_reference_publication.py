@@ -38,7 +38,7 @@ class ReferencePublicationTests(unittest.TestCase):
         )
         self.settings = self.root / "settings.env"
         self.settings.write_text(
-            "MHDG_REGRESSION_SETTINGS_VERSION=1\n"
+            "MHDG_REGRESSION_SETTINGS_VERSION=2\n"
             f"MHDG_REGRESSION_DATA_ROOT={self.candidate}\n",
             encoding="utf-8",
         )
@@ -169,7 +169,7 @@ class ReferencePublicationTests(unittest.TestCase):
         _write_json(
             path,
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "status": "passed",
                 "suite_id": "warm",
                 "run_id": "suite-test",
@@ -235,7 +235,7 @@ class ReferencePublicationTests(unittest.TestCase):
         _write_json(
             path,
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "status": "passed",
                 "suite_id": "cold_matrix",
                 "run_id": "matrix-test",

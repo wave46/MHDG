@@ -132,9 +132,9 @@ def _source_reference(
     manifest: dict[str, Any],
     case: dict[str, Any],
 ) -> tuple[str, Path]:
-    data_id = case["external_data_id"]
+    case_id = case["case_id"]
     try:
-        artifact_id = manifest["case_data"][data_id]["roles"]["warm_reference"]
+        artifact_id = manifest["case_data"][case_id]["roles"]["warm_reference"]
         relative_path = manifest["artifacts"][artifact_id]["path"]
     except KeyError as exc:
         raise BundleError("source bundle has no warm reference artifact") from exc
@@ -190,7 +190,7 @@ def _install_provenance(
 
     run = reference.run
     record = {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "golden",
         "created_utc": utc_now(),
         "case_id": summary["case_id"],

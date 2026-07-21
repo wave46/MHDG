@@ -72,7 +72,7 @@ def _base_plan(
     command: list[str] | None = None,
 ) -> dict[str, Any]:
     plan = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_utc": utc_now(),
         "case_id": inputs.case["case_id"],
         "workflow_id": inputs.workflow_id,

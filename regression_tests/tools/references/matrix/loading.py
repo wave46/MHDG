@@ -23,10 +23,9 @@ def load_reference_matrix(
         schema_directory / "bundle-manifest.schema.json",
         "bundle manifest",
     )
-    data_id = case["external_data_id"]
-    case_data = manifest["case_data"].get(data_id)
-    valid_case_ids = {case["case_id"], data_id}
-    if case_data is None or case_data["case_id"] not in valid_case_ids:
+    case_id = case["case_id"]
+    case_data = manifest["case_data"].get(case_id)
+    if case_data is None or case_data["case_id"] != case_id:
         raise BundleError(f"bundle does not contain case data for {case['case_id']}")
 
     index_id = case_data["roles"].get(REFERENCE_MATRIX_ROLE)
