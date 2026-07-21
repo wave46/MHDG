@@ -10,10 +10,11 @@ from pathlib import Path
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from support.errors import BundleError  # noqa: E402
+from bundle.case_definition import normalize_case_definition  # noqa: E402
 from preparation.models import PreparedStagedRun  # noqa: E402
 from preparation.parameters import render_parameter_file  # noqa: E402
 from prepare_run import prepare_run  # noqa: E402
+from support.errors import BundleError  # noqa: E402
 from tests.fixtures.case_data import PARAMETERS  # noqa: E402
 from tests.fixtures.harness import create_harness  # noqa: E402
 
@@ -182,6 +183,47 @@ class RunPreparationTests(unittest.TestCase):
             )
 
         self.assertFalse(destination.exists())
+
+    def test_derived_workflow_overlays_parameter_values(self) -> None:
+        case = normalize_case_definition(
+            "example",
+            {
+                "schema_version": 2,
+                "description": "Synthetic inheritance contract",
+                "reference": {"branch": "develop", "revision": "a" * 40},
+                "workflows": {
+                    "base": {
+                        "type": "warm_same_state",
+                        "description": "Base workflow",
+                        "parameter_overrides": {
+                            "rest_adapt": False,
+                            "nrp": 1,
+                        },
+                    },
+                    "variant": {
+                        "extends": "base",
+                        "description": "Derived parameter variant",
+                        "parameter_overrides": {
+                            "nrp": 2,
+                            "neutral_pressure_option": 1,
+                        },
+                    },
+                },
+            },
+        )
+
+        self.assertEqual(
+            case["workflows"]["variant"]["parameter_overrides"],
+            {
+                "rest_adapt": False,
+                "nrp": 2,
+                "neutral_pressure_option": 1,
+            },
+        )
+        self.assertEqual(
+            case["workflows"]["base"]["parameter_overrides"]["nrp"],
+            1,
+        )
 
     def test_prepares_coarse_one_step_race_workflows(self) -> None:
         fixed = prepare_run(

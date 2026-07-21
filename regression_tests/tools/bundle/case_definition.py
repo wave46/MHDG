@@ -89,16 +89,14 @@ def _workflows(
                 raise BundleError(
                     f"workflow {workflow_id} extends unknown workflow {parent_id}"
                 )
-            merged = deepcopy(resolve(parent_id))
-            merged.update(
-                deepcopy(
-                    {
-                        key: value
-                        for key, value in declaration.items()
-                        if key != "extends"
-                    }
-                )
+            changes = deepcopy(
+                {
+                    key: value
+                    for key, value in declaration.items()
+                    if key != "extends"
+                }
             )
+            merged = _extend_workflow(resolve(parent_id), changes)
         else:
             merged = deepcopy(declaration)
         active.remove(workflow_id)
@@ -109,6 +107,21 @@ def _workflows(
         workflow_id: _normalize_workflow(resolve(workflow_id))
         for workflow_id in declarations
     }
+
+
+def _extend_workflow(
+    base: dict[str, Any],
+    changes: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply one derived declaration while retaining base parameter values."""
+    extended = deepcopy(base)
+    extended.update(changes)
+    if "parameter_overrides" in changes:
+        extended["parameter_overrides"] = {
+            **base.get("parameter_overrides", {}),
+            **changes["parameter_overrides"],
+        }
+    return extended
 
 
 def _normalize_workflow(declaration: dict[str, Any]) -> dict[str, Any]:
