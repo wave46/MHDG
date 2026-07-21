@@ -72,6 +72,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.build and args.resume:
+            raise BundleError(
+                "--build cannot be used with --resume; reuse the generated "
+                "settings file from the original suite run"
+            )
         settings_path = args.settings
         if args.build:
             build = build_solver(settings_path, args.repository_root, args.build_jobs)

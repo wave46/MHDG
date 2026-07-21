@@ -17,6 +17,7 @@ from suite.configuration import (
 )
 from suite.models import SuiteRunInputs
 from suite.pairs import compare_layout_pairs
+from suite.provenance import suite_execution_inputs
 from suite.summary import (
     completed_cells,
     finalize_summary,
@@ -58,6 +59,21 @@ def run_suite(
     if not IDENTIFIER_RE.fullmatch(selected_run_id):
         raise BundleError(f"invalid suite run identifier: {selected_run_id}")
 
+    selected_workflows = suite["workflow_ids"]
+    pairs = suite.get("layout_comparisons")
+    comparison_mode = _comparison_mode(bool(pairs), compare)
+    execution_inputs = suite_execution_inputs(
+        settings_path,
+        settings,
+        bundle_root,
+        suite["layouts"],
+        {
+            "case_definition": case_directory / f"{suite['case_id']}.json",
+            "layout_catalog": layouts_path,
+            "suite_catalog": suites_path,
+            "tolerance_catalog": tolerances_path,
+        },
+    )
     output_directory = suite_directory(
         settings,
         suite_id,
@@ -65,9 +81,6 @@ def run_suite(
         resume,
     )
     summary_path = output_directory / "suite_summary.json"
-    selected_workflows = suite["workflow_ids"]
-    pairs = suite.get("layout_comparisons")
-    comparison_mode = _comparison_mode(bool(pairs), compare)
     if resume:
         summary = resume_summary(
             summary_path,
@@ -75,6 +88,7 @@ def run_suite(
             selected_run_id,
             suite,
             comparison_mode,
+            execution_inputs,
         )
     else:
         summary = new_summary(
@@ -82,6 +96,7 @@ def run_suite(
             selected_run_id,
             suite,
             comparison_mode,
+            execution_inputs,
         )
         write_json_atomic(summary_path, summary, "suite summary")
 

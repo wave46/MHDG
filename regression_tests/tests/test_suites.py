@@ -4,6 +4,8 @@ import json
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,8 +13,7 @@ from unittest.mock import patch
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from suite.configuration import load_suite_definition  # noqa: E402
-from suite.summary import new_summary  # noqa: E402
+from suite.runner import run_suite  # noqa: E402
 from suite.verification import verify_suite  # noqa: E402
 from tests.fixtures.harness import create_harness, run_command  # noqa: E402
 from tests.fixtures.solutions import write_solution  # noqa: E402
@@ -45,7 +46,6 @@ class SuiteWorkflowTests(unittest.TestCase):
             all(result["comparison_status"] == "not_run" for result in summary["results"])
         )
 
-        self.fixture.install_solver(FAILING_SOLVER)
         resumed = self._run_suite("cold", "cold-test", "--run-only", "--resume")
         self.assertEqual(resumed.returncode, 0, resumed.stderr)
         self.assertEqual(len(self._summary("cold", "cold-test")["results"]), 2)
@@ -54,23 +54,28 @@ class SuiteWorkflowTests(unittest.TestCase):
     def test_resume_preserves_and_retries_an_unrecorded_cell(self) -> None:
         run_id = "interrupted-test"
         partial = self.fixture.run_directory("warm", "mpi4_omp4", run_id)
-        partial.mkdir(parents=True)
         marker = partial / "partial-output.txt"
-        marker.write_text("keep\n", encoding="utf-8")
 
-        suite = load_suite_definition(
-            "warm",
-            REGRESSION_ROOT / "suites.json",
-            REGRESSION_ROOT / "layouts.json",
-            REGRESSION_ROOT / "cases",
-        )
-        summary_directory = self.fixture.run_root / "suites/warm" / run_id
-        summary_directory.mkdir(parents=True)
-        summary = new_summary("warm", run_id, suite, "deferred")
-        (summary_directory / "suite_summary.json").write_text(
-            json.dumps(summary, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        def interrupt_cell(*_args) -> None:
+            partial.mkdir(parents=True)
+            marker.write_text("keep\n", encoding="utf-8")
+            raise KeyboardInterrupt
+
+        with (
+            redirect_stdout(StringIO()),
+            patch("suite.runner.run_cell", side_effect=interrupt_cell),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            run_suite(
+                self.fixture.settings,
+                "warm",
+                REGRESSION_ROOT / "cases",
+                REGRESSION_ROOT / "layouts.json",
+                REGRESSION_ROOT / "suites.json",
+                REGRESSION_ROOT / "tolerances.json",
+                run_id,
+                compare=False,
+            )
 
         resumed = self._run_suite("warm", run_id, "--run-only", "--resume")
 
@@ -82,6 +87,26 @@ class SuiteWorkflowTests(unittest.TestCase):
             "interrupted-test-resume-1",
         )
         self.assertIn("preserving unrecorded run", resumed.stdout)
+
+    def test_resume_rejects_changed_execution_inputs_and_new_build(self) -> None:
+        run_id = "stable-inputs"
+        completed = self._run_suite("warm", run_id, "--run-only")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        self.fixture.install_solver(FAILING_SOLVER, "parallel")
+        changed = self._run_suite("warm", run_id, "--run-only", "--resume")
+        self.assertEqual(changed.returncode, 1)
+        self.assertIn("parallel_executable", changed.stderr)
+
+        rebuilt = self._run_suite(
+            "warm",
+            run_id,
+            "--run-only",
+            "--resume",
+            "--build",
+        )
+        self.assertEqual(rebuilt.returncode, 1)
+        self.assertIn("--build cannot be used with --resume", rebuilt.stderr)
 
     def test_suite_check_requires_golden_data_and_runs_warm_defaults(self) -> None:
         rejected = run_command(

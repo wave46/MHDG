@@ -15,6 +15,7 @@ def new_summary(
     run_id: str,
     suite: dict[str, Any],
     comparison_mode: str,
+    execution_inputs: dict[str, Any],
 ) -> dict[str, Any]:
     """Create the initial running summary for a new suite."""
     summary = {
@@ -30,6 +31,7 @@ def new_summary(
         "workflow_ids": suite["workflow_ids"],
         "layout_ids": suite["layouts"],
         "comparison_mode": comparison_mode,
+        "execution_inputs": execution_inputs,
         "results": [],
     }
     if suite.get("layout_comparisons"):
@@ -45,6 +47,7 @@ def resume_summary(
     run_id: str,
     suite: dict[str, Any],
     comparison_mode: str,
+    execution_inputs: dict[str, Any],
 ) -> dict[str, Any]:
     """Load an existing compatible summary and mark it running again."""
     summary = load_json(path, "suite summary")
@@ -61,6 +64,7 @@ def resume_summary(
     mismatched = [key for key, value in expected.items() if summary.get(key) != value]
     if mismatched:
         raise BundleError(f"suite summary does not match: {', '.join(mismatched)}")
+    _validate_execution_inputs(summary.get("execution_inputs"), execution_inputs)
     if not isinstance(summary.get("results"), list):
         raise BundleError("suite summary has invalid results")
     _validate_recorded_cells(
@@ -73,6 +77,18 @@ def resume_summary(
     summary["status"] = "running"
     summary["finished_utc"] = None
     return summary
+
+
+def _validate_execution_inputs(recorded: Any, current: dict[str, Any]) -> None:
+    if not isinstance(recorded, dict):
+        raise BundleError("suite summary has no execution input identity")
+    changed = sorted(
+        name
+        for name in recorded.keys() | current.keys()
+        if recorded.get(name) != current.get(name)
+    )
+    if changed:
+        raise BundleError(f"suite execution inputs changed: {', '.join(changed)}")
 
 
 def completed_cells(summary: dict[str, Any]) -> set[tuple[str, str]]:
