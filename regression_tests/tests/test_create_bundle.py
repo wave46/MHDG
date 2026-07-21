@@ -13,8 +13,9 @@ from pathlib import Path
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from check_bundle import BundleError, validate_bundle_root  # noqa: E402
-from create_bundle import create_bundle  # noqa: E402
+from bundle.creation import create_bundle  # noqa: E402
+from bundle.validation import validate_bundle_root  # noqa: E402
+from support.errors import BundleError  # noqa: E402
 
 
 REQUIRED_FILES = (

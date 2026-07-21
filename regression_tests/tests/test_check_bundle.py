@@ -13,12 +13,9 @@ from pathlib import Path
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from check_bundle import (  # noqa: E402
-    BundleError,
-    load_case_definition,
-    required_case_roles,
-    validate_bundle,
-)
+from bundle.cases import load_case_definition, required_case_roles  # noqa: E402
+from bundle.validation import validate_bundle  # noqa: E402
+from support.errors import BundleError  # noqa: E402
 
 
 class BundleValidationTests(unittest.TestCase):

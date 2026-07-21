@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
-from check_bundle import read_settings
+from bundle.settings import read_settings
 from support.documents import write_json_direct
 from support.environments import source_environment
 from support.errors import BundleError, HarnessError

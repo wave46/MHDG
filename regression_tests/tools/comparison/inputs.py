@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from check_bundle import load_case_definition
+from bundle.cases import load_case_definition
 from support.documents import load_json
 from support.errors import ComparisonError
 from support.paths import require_directory

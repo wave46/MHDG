@@ -6,11 +6,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from check_bundle import (
-    bundle_root_from_settings,
-    read_settings,
-    validate_bundle_root,
-)
+from bundle.settings import bundle_root_from_settings, read_settings
+from bundle.validation import validate_bundle_root
 from suite.cells import run_cell
 from suite.configuration import (
     load_suite_definition,

@@ -12,7 +12,7 @@ REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 from build_solver import BuildError, build_solver  # noqa: E402
-from check_bundle import read_settings  # noqa: E402
+from bundle.settings import read_settings  # noqa: E402
 
 
 class BuildSolverTests(unittest.TestCase):

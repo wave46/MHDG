@@ -8,7 +8,7 @@ import shlex
 import sys
 from pathlib import Path
 
-from check_bundle import read_settings
+from bundle.settings import read_settings
 from execution.models import RunResult
 from execution.single import execute_run
 from execution.staged import execute_staged_run

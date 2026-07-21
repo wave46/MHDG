@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from check_bundle import load_case_definition, load_validated_json
+from bundle.cases import load_case_definition
+from bundle.schemas import load_validated_json
 from support.errors import BundleError
 
 

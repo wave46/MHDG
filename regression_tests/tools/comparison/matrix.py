@@ -12,7 +12,8 @@ from comparison.inputs import (
     ComparisonOverrides,
     load_stage_inputs,
 )
-from reference_matrix import ReferenceMatrix, load_reference_matrix
+from references.matrix.loading import load_reference_matrix
+from references.matrix.models import ReferenceMatrix
 from support.documents import write_json_atomic
 from support.errors import BundleError, ComparisonError
 from support.paths import recorded_directory, recorded_file

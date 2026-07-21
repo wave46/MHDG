@@ -1,4 +1,4 @@
-"""Shared operations for creating and publishing regression bundles."""
+"""Register bundle artifacts and validate recorded bundle identities."""
 
 from __future__ import annotations
 

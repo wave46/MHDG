@@ -12,7 +12,7 @@ from pathlib import Path
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from create_bundle import create_bundle  # noqa: E402
+from bundle.creation import create_bundle  # noqa: E402
 
 
 PARAMETERS = """&INPUT_LST
