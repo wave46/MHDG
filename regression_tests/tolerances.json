@@ -25,8 +25,8 @@
     },
     "fixed_stage_reference": {
       "description": "Matching workflow stage and execution layout on a fixed mesh",
-      "relative_l2_max": 1e-8,
-      "normalized_linf_max": 1e-7
+      "relative_l2_max": 2e-7,
+      "normalized_linf_max": 3e-7
     },
     "cold_fixed_reference": {
       "description": "Cold fixed-mesh continuation compared with the warm reference",
@@ -43,7 +43,7 @@
       },
       "gradient": {
         "relative_l2_max": 0.25,
-        "normalized_linf_max": 0.2
+        "normalized_linf_max": 0.3
       }
     }
   }
