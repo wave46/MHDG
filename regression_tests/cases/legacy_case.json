@@ -130,7 +130,7 @@
     },
     "cold_step_fixed": {
       "type": "staged_fixed_mesh",
-      "description": "Run one Newton iteration on the coarse mesh without adaptation",
+      "description": "Run two Newton iterations on the coarse mesh without adaptation",
       "inputs": [
         "geometry",
         "equilibrium_magnetic_field",
@@ -147,7 +147,7 @@
       "parameter_overrides": {
         "adaptivity": false,
         "rest_adapt": false,
-        "nrp": 1
+        "nrp": 2
       },
       "stages": [
         {
@@ -171,8 +171,7 @@
       "type": "staged_adaptive_mesh",
       "description": "Run two Newton iterations with one coarse-mesh adaptation pass",
       "parameter_overrides": {
-        "adaptivity": true,
-        "nrp": 2
+        "adaptivity": true
       },
       "adaptive_stages": [
         "single_step"

@@ -275,7 +275,7 @@ class RunPreparationTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("adaptivity = .false.", fixed_parameters)
         self.assertIn("rest_adapt = .false.", fixed_parameters)
-        self.assertIn("nrp = 1", fixed_parameters)
+        self.assertIn("nrp = 2", fixed_parameters)
         self.assertIn("adaptivity = .true.", adaptive_parameters)
         self.assertIn("rest_adapt = .true.", adaptive_parameters)
         self.assertIn("nrp = 2", adaptive_parameters)
@@ -287,7 +287,7 @@ class RunPreparationTests(unittest.TestCase):
             (adaptive.path / "run_plan.json").read_text(encoding="utf-8")
         )
         self.assertEqual(
-            fixed_plan["stages"][0]["parameter_overrides"]["nrp"], 1
+            fixed_plan["stages"][0]["parameter_overrides"]["nrp"], 2
         )
         self.assertEqual(
             adaptive_plan["stages"][0]["parameter_overrides"]["nrp"], 2
