@@ -36,7 +36,7 @@ class AdaptiveComparisonTests(unittest.TestCase):
             fekete = run / "positionFeketeNodesTri2D.h5"
             for path in (candidate, reference, fekete):
                 path.write_text("synthetic\n", encoding="utf-8")
-            (run / "stdout.log").write_text("Error: 1.0E-4\n", encoding="utf-8")
+            (run / "stdout.log").write_text("Error: 1.0\n", encoding="utf-8")
             (run / "run_plan.json").write_text(
                 json.dumps(
                     {
@@ -75,11 +75,14 @@ class AdaptiveComparisonTests(unittest.TestCase):
                 candidate=candidate,
                 reference=reference,
                 tolerance_profile="adaptive_reference",
+                newton_check="finite_only",
             )
             path, report = compare_adaptive_run(inputs, overrides)
 
         self.assertEqual(report["status"], "passed")
         self.assertTrue(report["convergence"]["passed"])
+        self.assertEqual(report["convergence"]["final_newton_error"], 1.0)
+        self.assertIsNone(report["convergence"]["maximum"])
         self.assertEqual(report["tolerance_profile"]["id"], "adaptive_reference")
         self.assertEqual(path.name, "comparison.json")
         self.assertEqual(compare_files.call_args.args[:2], (reference, candidate))

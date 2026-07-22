@@ -34,8 +34,8 @@ def compare_reference_matrix(
 
     stage_reports = []
     failures = []
-    for stage in stages:
-        stage_report = _compare_stage(stage, context, matrix)
+    for stage, definition in zip(stages, context.workflow["stages"]):
+        stage_report = _compare_stage(stage, definition, context, matrix)
         stage_reports.append(stage_report)
         failures = _stage_failures(stage_report)
         if failures:
@@ -90,6 +90,7 @@ def _validated_stage_records(
 
 def _compare_stage(
     stage: dict[str, Any],
+    definition: dict[str, Any],
     context: ComparisonInputs,
     matrix: ReferenceMatrix,
 ) -> dict[str, Any]:
@@ -107,6 +108,7 @@ def _compare_stage(
         candidate=candidate,
         reference=reference,
         tolerance_profile=context.workflow.get("stage_tolerance_profile"),
+        newton_check=definition["newton_check"],
     )
     report_path, report = _run_stage_comparison(
         context.workflow["comparison_policy"],

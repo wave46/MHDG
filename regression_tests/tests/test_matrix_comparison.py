@@ -80,6 +80,12 @@ class ReferenceMatrixComparisonTests(unittest.TestCase):
             compare.call_args.kwargs["overrides"].tolerance_profile,
             "fixed_stage_reference",
         )
+        first_overrides = compare.call_args_list[0].kwargs["overrides"]
+        self.assertEqual(first_overrides.newton_check, "finite_only")
+        self.assertEqual(
+            compare.call_args.kwargs["overrides"].newton_check,
+            "bounded",
+        )
 
     @patch("comparison.matrix.compare_adaptive_run")
     def test_adaptive_comparison_checks_every_matching_stage(self, compare) -> None:

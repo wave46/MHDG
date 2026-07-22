@@ -6,13 +6,15 @@ import re
 from math import isfinite
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from support.errors import ComparisonError
 
 
-NEWTON_CONVERGENCE_FAILURE = "final Newton error is missing or exceeds tolerance"
+NEWTON_CONVERGENCE_FAILURE = "final Newton error exceeds tolerance"
 NEWTON_FINITE_FAILURE = "final Newton error is missing or non-finite"
 _ERROR_RE = re.compile(r"^\s*Error:\s*([-+0-9.eE]+)\s*$", re.MULTILINE)
+NewtonCheck = Literal["bounded", "finite_only"]
 
 
 @dataclass(frozen=True)
@@ -57,3 +59,15 @@ def read_newton_convergence(
     errors = _ERROR_RE.findall(solver_output)
     final_error = float(errors[-1]) if errors else None
     return NewtonConvergence(final_error=final_error, maximum=maximum)
+
+
+def effective_newton_maximum(
+    configured_maximum: float | None,
+    check: NewtonCheck,
+) -> float | None:
+    """Apply the stage's declared Newton-convergence policy."""
+    if check == "bounded":
+        return configured_maximum
+    if check == "finite_only":
+        return None
+    raise ComparisonError(f"unsupported Newton check: {check}")

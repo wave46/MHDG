@@ -192,6 +192,12 @@
         },
         "parameter_overrides": {
           "$ref": "#/$defs/parameter_overrides"
+        },
+        "newton_check": {
+          "enum": [
+            "bounded",
+            "finite_only"
+          ]
         }
       }
     },

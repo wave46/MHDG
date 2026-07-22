@@ -78,7 +78,8 @@
         {
           "id": "time_init",
           "parameters": "cold_fixed_time_init_parameters",
-          "transport": "cold_fixed_initial_transport_configuration"
+          "transport": "cold_fixed_initial_transport_configuration",
+          "newton_check": "finite_only"
         },
         {
           "id": "diffusion_reduction",

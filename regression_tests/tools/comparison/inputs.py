@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from bundle.cases import load_case_definition
+from comparison.shared.convergence import NewtonCheck
 from support.documents import load_json
 from support.errors import ComparisonError
 from support.paths import require_directory
@@ -28,6 +29,7 @@ class ComparisonOverrides:
     candidate: Path | None = None
     reference: Path | None = None
     tolerance_profile: str | None = None
+    newton_check: NewtonCheck = "bounded"
 
 
 def load_comparison_inputs(

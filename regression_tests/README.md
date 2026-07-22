@@ -327,7 +327,8 @@ compare layout pairs produced by the same build directly.
 
 Normalized Linf divides the largest pointwise difference by the largest
 absolute reference value. Fixed coordinates use absolute tolerance `1e-12`.
-Except for race probes, final Newton error must not exceed `2e-4`. These are
+Except for transient initialization and race probes, final Newton error must
+not exceed `2e-4`. These are
 regression limits for `legacy_case`, not physical-accuracy targets.
 
 ## Focused synthetic tests

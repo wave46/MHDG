@@ -180,7 +180,7 @@ class CompareCommandTests(unittest.TestCase):
         self.assertFalse(report["convergence"]["passed"])
         self.assertIn("Newton error: FAIL", completed.stdout)
         self.assertIn(
-            "FAIL: final Newton error is missing or exceeds tolerance",
+            "FAIL: final Newton error exceeds tolerance",
             completed.stdout,
         )
 

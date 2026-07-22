@@ -7,7 +7,11 @@ from typing import Any
 
 from comparison.fixed.hdf5 import compare_hdf5_files
 from comparison.inputs import ComparisonInputs, ComparisonOverrides
-from comparison.shared.convergence import NewtonConvergence, read_newton_convergence
+from comparison.shared.convergence import (
+    NewtonConvergence,
+    effective_newton_maximum,
+    read_newton_convergence,
+)
 from comparison.shared.outputs import resolve_run_file, select_candidate
 from comparison.shared.report import (
     comparison_report_fields,
@@ -29,6 +33,9 @@ def compare_fixed_run(
         inputs.workflow,
         inputs.plan["layout_id"],
         overrides.tolerance_profile,
+    )
+    tolerances["newton_error_max"] = effective_newton_maximum(
+        tolerances["newton_error_max"], overrides.newton_check
     )
     candidate = select_candidate(
         inputs.run_directory,

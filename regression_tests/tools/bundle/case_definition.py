@@ -169,6 +169,7 @@ def _normalize_stage(
         "parameter_role": declaration["parameters"],
         "transport_configuration_role": declaration["transport"],
         "restart_from": "analytical" if index == 0 else "previous_stage",
+        "newton_check": declaration.get("newton_check", "bounded"),
     }
     overrides = declaration.get("parameter_overrides", {}).copy()
     if stage_id in adaptive_stages:
