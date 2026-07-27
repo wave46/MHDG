@@ -11,6 +11,7 @@ REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 from bundle.creation import create_bundle  # noqa: E402
+from bundle.cases import load_case_definition, required_case_roles  # noqa: E402
 from bundle.validation import validate_bundle_root  # noqa: E402
 from support.errors import BundleError  # noqa: E402
 from tests.fixtures.case_data import write_case_source  # noqa: E402
@@ -84,6 +85,17 @@ class BundleWorkflowTests(unittest.TestCase):
             f"optional artifact unavailable: {artifact_id}",
             summary.warnings,
         )
+
+    def test_cold_only_bundle_can_omit_warm_restart(self) -> None:
+        (self.source / "restart.h5").unlink()
+
+        self._create_bundle()
+
+        case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
+        summary = validate_bundle_root(self.bundle, REGRESSION_ROOT / "cases")
+        self.assertNotIn("warm_restart", required_case_roles(case))
+        self.assertIn("warm_restart", required_case_roles(case, "warm"))
+        self.assertEqual(summary.case_id, "legacy_case")
 
     def test_creation_failures_do_not_replace_existing_data(self) -> None:
         (self.source / "geometry.geo").unlink()
