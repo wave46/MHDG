@@ -14,6 +14,8 @@ MODULE Main_utils
   USE printutils
   USE debug
   USE initialization
+  USE adaptivity_projection_module, ONLY: projectSolutionDifferentMeshes_general, &
+       projectSolutionDifferentMeshes_general_arrays
   USE external_heating
 #ifdef WITH_PETSC
    USE solve_petsc, only: matPETSC, InitPETSC
