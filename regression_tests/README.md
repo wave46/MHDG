@@ -24,8 +24,7 @@ suite                    -> selected runs and comparisons
 accepted suite results   -> golden bundle
 ```
 
-The routine case is `legacy_case`. `historical_feature` only archives earlier
-feature evidence and is not a correctness oracle.
+The routine case is `legacy_case`.
 
 ## First-time setup
 
