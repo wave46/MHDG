@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/wave46/MHDG/develop/regression_tests/schemas/case.schema.json",
+  "title": "MHDG regression case declaration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "description",
+    "reference",
+    "workflows"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "description": {
+      "$ref": "#/$defs/description"
+    },
+    "reference": {
+      "$ref": "#/$defs/reference"
+    },
+    "files": {
+      "$ref": "#/$defs/files"
+    },
+    "workflows": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/workflow"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "filename": {
+      "type": "string",
+      "pattern": "^(?!\\.\\.?$)[^/\\\\]+$"
+    },
+    "identifier_list": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "uniqueItems": true
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "revision"
+      ],
+      "properties": {
+        "branch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "$ref": "#/$defs/file_group"
+        },
+        "optional": {
+          "$ref": "#/$defs/file_group"
+        }
+      }
+    },
+    "file_group": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/filename"
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description"
+      ],
+      "properties": {
+        "description": {
+          "$ref": "#/$defs/description"
+        },
+        "extends": {
+          "$ref": "#/$defs/identifier"
+        },
+        "type": {
+          "$ref": "#/$defs/identifier"
+        },
+        "inputs": {
+          "$ref": "#/$defs/identifier_list"
+        },
+        "layout": {
+          "$ref": "#/$defs/identifier"
+        },
+        "mesh": {
+          "$ref": "#/$defs/identifier"
+        },
+        "reference": {
+          "$ref": "#/$defs/identifier"
+        },
+        "comparison": {
+          "$ref": "#/$defs/comparison"
+        },
+        "parameter_overrides": {
+          "$ref": "#/$defs/parameter_overrides"
+        },
+        "adaptive_stages": {
+          "$ref": "#/$defs/identifier_list"
+        },
+        "stages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/stage"
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "required": [
+            "extends"
+          ]
+        }
+      ]
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method"
+      ],
+      "properties": {
+        "method": {
+          "$ref": "#/$defs/identifier"
+        },
+        "profile": {
+          "$ref": "#/$defs/identifier"
+        },
+        "cross_layout_profile": {
+          "$ref": "#/$defs/identifier"
+        },
+        "stage_profile": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "parameters",
+        "transport"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "parameters": {
+          "$ref": "#/$defs/identifier"
+        },
+        "transport": {
+          "$ref": "#/$defs/identifier"
+        },
+        "parameter_overrides": {
+          "$ref": "#/$defs/parameter_overrides"
+        },
+        "newton_check": {
+          "enum": [
+            "bounded",
+            "finite_only"
+          ]
+        }
+      }
+    },
+    "parameter_overrides": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": [
+          "boolean",
+          "number",
+          "string"
+        ]
+      }
+    }
+  }
+}

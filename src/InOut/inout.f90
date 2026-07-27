@@ -11,6 +11,7 @@ MODULE in_out
   USE HDF5_io_module
   USE flux_surface_transport_data
   USE transport_models_1d
+  USE build_provenance, ONLY: solver_git_commit, solver_git_dirty, solver_build_id
   USE GLOBALS
   USE MPI_OMP
   USE printutils
@@ -530,6 +531,7 @@ CONTAINS
 
     ! Save simulation parameters
     CALL save_simulation_parameters()
+    CALL save_build_provenance()
 
     ! save time iteration number
     IF (switch%steady .OR. switch%psdtime) THEN
@@ -693,6 +695,7 @@ CONTAINS
 
        ! Save simulation parameters
        CALL save_simulation_parameters()
+       CALL save_build_provenance()
 
        CALL HDF5_group_create('solution', file_id, group_id1, ierr)
        CALL HDF5_array1D_saving(group_id1, u_tilde_glob, SIZE(u_tilde_glob), 'u_tilde')
@@ -826,6 +829,19 @@ CONTAINS
     PRINT *, '        '
   ENDIF
   CONTAINS
+
+    !**********************************************************************
+    ! Save the identity of the executable that produced this solution
+    !**********************************************************************
+    SUBROUTINE save_build_provenance()
+      INTEGER(HID_T) :: provenance_group_id
+
+      CALL HDF5_group_create('provenance', file_id, provenance_group_id, ierr)
+      CALL HDF5_string_saving(provenance_group_id, solver_git_commit, 'git_commit')
+      CALL HDF5_logical_saving(provenance_group_id, solver_git_dirty, 'git_dirty')
+      CALL HDF5_string_saving(provenance_group_id, solver_build_id, 'build_id')
+      CALL HDF5_group_close(provenance_group_id, ierr)
+    END SUBROUTINE save_build_provenance
 
     !**********************************************************************
     ! Save simulation parameters

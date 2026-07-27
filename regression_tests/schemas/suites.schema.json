@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/wave46/MHDG/develop/regression_tests/schemas/suites.schema.json",
+  "title": "MHDG regression suites",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "suites"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "suites": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/suite"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "identifier_list": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description",
+        "case",
+        "workflows"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "layouts"
+          ]
+        },
+        {
+          "required": [
+            "layout_comparisons",
+            "tolerance_profile"
+          ]
+        }
+      ],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case": {
+          "$ref": "#/$defs/identifier"
+        },
+        "workflows": {
+          "$ref": "#/$defs/identifier_list"
+        },
+        "layouts": {
+          "$ref": "#/$defs/identifier_list"
+        },
+        "layout_comparisons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/layout_comparison"
+          }
+        },
+        "tolerance_profile": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "layout_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline",
+        "candidate"
+      ],
+      "properties": {
+        "baseline": {
+          "$ref": "#/$defs/identifier"
+        },
+        "candidate": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    }
+  }
+}

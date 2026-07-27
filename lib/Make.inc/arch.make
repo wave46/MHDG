@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 # Source directory
 #-------------------------------------------------------------------------------
-SDIR=$(PWD)/../src/
+SDIR=$(CURDIR)/../src/
 
 #-------------------------------------------------------------------------------
 # Compiling type: optimized - debugging - profiling
@@ -9,8 +9,8 @@ SDIR=$(PWD)/../src/
 COMPTYPE_OPT = opt
 COMPTYPE_DEB = deb
 COMPTYPE_PRO = pro
-#COMPTYPE = $(COMPTYPE_OPT)
-COMPTYPE = $(COMPTYPE_DEB)
+COMPTYPE = $(COMPTYPE_OPT)
+#COMPTYPE = $(COMPTYPE_DEB)
 #COMPTYPE = $(COMPTYPE_PRO)
 
 #-------------------------------------------------------------------------------

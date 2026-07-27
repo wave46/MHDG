@@ -1,0 +1,86 @@
+"""Fixed-mesh connectivity and coordinate comparison."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import h5py
+import numpy as np
+
+from comparison.fixed.data import optional_array, required_array
+
+
+def compare_mesh(
+    reference: h5py.File,
+    candidate: h5py.File,
+    tolerances: dict[str, Any],
+    failures: list[str],
+) -> dict[str, Any]:
+    """Compare mesh connectivity exactly and coordinates by tolerance."""
+    connectivity = {}
+    for name in ("T", "Tlin", "Tb"):
+        details = _compare_connectivity(reference, candidate, name)
+        if details is None:
+            continue
+        connectivity[name] = details
+        if not details["passed"]:
+            failures.append(f"mesh/{name} connectivity differs")
+
+    coordinates = _compare_coordinates(reference, candidate, tolerances)
+    if not coordinates["passed"]:
+        failures.append("mesh/X coordinates exceed tolerance")
+    return {
+        "connectivity": connectivity,
+        "coordinates": coordinates,
+    }
+
+
+def _compare_connectivity(
+    reference: h5py.File,
+    candidate: h5py.File,
+    name: str,
+) -> dict[str, Any] | None:
+    first = optional_array(reference, "mesh", name)
+    second = optional_array(candidate, "mesh", name)
+    if first is None and second is None and name == "Tb":
+        return None
+    if first is None or second is None:
+        return {"passed": False, "reason": "dataset missing"}
+
+    return {
+        "passed": first.shape == second.shape and np.array_equal(first, second),
+        "reference_shape": list(first.shape),
+        "candidate_shape": list(second.shape),
+    }
+
+
+def _compare_coordinates(
+    reference: h5py.File,
+    candidate: h5py.File,
+    tolerances: dict[str, Any],
+) -> dict[str, Any]:
+    first = required_array(reference, "mesh", "X")
+    second = required_array(candidate, "mesh", "X")
+    finite = _finite(first) and _finite(second)
+    same_shape = first.shape == second.shape
+    maximum_error = (
+        float(np.max(np.abs(second - first))) if finite and same_shape else None
+    )
+    passed = (
+        finite
+        and same_shape
+        and maximum_error is not None
+        and maximum_error <= tolerances["mesh_coordinate_atol"]
+    )
+    return {
+        "passed": passed,
+        "finite": finite,
+        "reference_shape": list(first.shape),
+        "candidate_shape": list(second.shape),
+        "maximum_absolute_error": maximum_error,
+        "absolute_tolerance": tolerances["mesh_coordinate_atol"],
+    }
+
+
+def _finite(array: np.ndarray) -> bool:
+    return bool(np.isfinite(np.asarray(array, dtype=float)).all())

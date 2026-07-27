@@ -1,0 +1,9 @@
+{
+  "schema_version": 2,
+  "layouts": [
+    "serial_omp1",
+    "serial_omp16",
+    "mpi4_omp1",
+    "mpi4_omp4"
+  ]
+}

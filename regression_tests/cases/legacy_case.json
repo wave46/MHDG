@@ -1,0 +1,181 @@
+{
+  "schema_version": 2,
+  "description": "Routine legacy regression case",
+  "reference": {
+    "branch": "develop",
+    "revision": "29f442db67bac169b2616f2cbe399289d137993c"
+  },
+  "files": {
+    "required": {
+      "mesh": "mesh.msh",
+      "geometry": "geometry.geo",
+      "equilibrium_magnetic_field": "equilibrium.h5",
+      "equilibrium_current_density": "current_density.h5",
+      "warm_parameters": "param.txt",
+      "transport_configuration": "transport_model.nml",
+      "warm_restart": "restart.h5"
+    },
+    "optional": {
+      "warm_reference": "reference_mpi4_omp4.h5",
+      "coarse_mesh": "mesh_adaptive_initial.msh",
+      "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
+      "cold_fixed_diffusion_reduction_parameters": "param_cold_fixed_diffusion_reduction.txt",
+      "cold_fixed_continuation_01_parameters": "param_cold_fixed_continuation_01.txt",
+      "cold_fixed_continuation_02_parameters": "param_cold_fixed_continuation_02.txt",
+      "cold_fixed_continuation_03_parameters": "param_cold_fixed_continuation_03.txt",
+      "cold_fixed_continuation_04_parameters": "param_cold_fixed_continuation_04.txt",
+      "cold_fixed_continuation_05_parameters": "param_cold_fixed_continuation_05.txt",
+      "cold_fixed_initial_transport_configuration": "transport_cold_fixed_initial.nml",
+      "cold_fixed_continuation_01_transport_configuration": "transport_cold_fixed_continuation_01.nml",
+      "cold_fixed_continuation_02_transport_configuration": "transport_cold_fixed_continuation_02.nml",
+      "cold_fixed_continuation_03_transport_configuration": "transport_cold_fixed_continuation_03.nml",
+      "cold_fixed_continuation_04_transport_configuration": "transport_cold_fixed_continuation_04.nml",
+      "cold_fixed_continuation_05_transport_configuration": "transport_cold_fixed_continuation_05.nml"
+    }
+  },
+  "workflows": {
+    "warm": {
+      "type": "warm_same_state",
+      "description": "Reconverge an unchanged steady restart on the fixed mesh",
+      "inputs": [
+        "mesh",
+        "geometry",
+        "equilibrium_magnetic_field",
+        "equilibrium_current_density",
+        "warm_parameters",
+        "transport_configuration",
+        "warm_restart",
+        "warm_reference"
+      ],
+      "layout": "mpi4_omp4",
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "fixed_same_layout",
+        "cross_layout_profile": "fixed_cross_layout"
+      }
+    },
+    "cold_fixed": {
+      "type": "staged_fixed_mesh",
+      "description": "Reach the canonical state from analytical initialization on the fixed mesh",
+      "inputs": [
+        "geometry",
+        "equilibrium_magnetic_field",
+        "equilibrium_current_density"
+      ],
+      "mesh": "mesh",
+      "reference": "warm_reference",
+      "layout": "mpi4_omp4",
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "cold_fixed_reference",
+        "cross_layout_profile": "cold_fixed_reference",
+        "stage_profile": "fixed_stage_reference"
+      },
+      "parameter_overrides": {
+        "rest_adapt": false
+      },
+      "stages": [
+        {
+          "id": "time_init",
+          "parameters": "cold_fixed_time_init_parameters",
+          "transport": "cold_fixed_initial_transport_configuration",
+          "newton_check": "finite_only"
+        },
+        {
+          "id": "diffusion_reduction",
+          "parameters": "cold_fixed_diffusion_reduction_parameters",
+          "transport": "cold_fixed_initial_transport_configuration"
+        },
+        {
+          "id": "continuation_01",
+          "parameters": "cold_fixed_continuation_01_parameters",
+          "transport": "cold_fixed_continuation_01_transport_configuration"
+        },
+        {
+          "id": "continuation_02",
+          "parameters": "cold_fixed_continuation_02_parameters",
+          "transport": "cold_fixed_continuation_02_transport_configuration"
+        },
+        {
+          "id": "continuation_03",
+          "parameters": "cold_fixed_continuation_03_parameters",
+          "transport": "cold_fixed_continuation_03_transport_configuration"
+        },
+        {
+          "id": "continuation_04",
+          "parameters": "cold_fixed_continuation_04_parameters",
+          "transport": "cold_fixed_continuation_04_transport_configuration"
+        },
+        {
+          "id": "continuation_05",
+          "parameters": "cold_fixed_continuation_05_parameters",
+          "transport": "cold_fixed_continuation_05_transport_configuration"
+        }
+      ]
+    },
+    "cold_adaptive": {
+      "extends": "cold_fixed",
+      "type": "staged_adaptive_mesh",
+      "description": "Repeat the cold workflow with early-stage mesh adaptation",
+      "mesh": "coarse_mesh",
+      "comparison": {
+        "method": "mesh_independent",
+        "profile": "adaptive_reference",
+        "stage_profile": "adaptive_reference"
+      },
+      "adaptive_stages": [
+        "time_init",
+        "diffusion_reduction"
+      ]
+    },
+    "cold_step_fixed": {
+      "type": "staged_fixed_mesh",
+      "description": "Run two Newton iterations on the coarse mesh without adaptation",
+      "inputs": [
+        "geometry",
+        "equilibrium_magnetic_field",
+        "equilibrium_current_density"
+      ],
+      "mesh": "coarse_mesh",
+      "layout": "serial_omp1",
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "race_step",
+        "cross_layout_profile": "race_step",
+        "stage_profile": "race_step"
+      },
+      "parameter_overrides": {
+        "adaptivity": false,
+        "rest_adapt": false,
+        "nrp": 2
+      },
+      "stages": [
+        {
+          "id": "single_step",
+          "parameters": "cold_fixed_time_init_parameters",
+          "transport": "cold_fixed_initial_transport_configuration",
+          "parameter_overrides": {
+            "steady": false,
+            "saveNR": false,
+            "time_adapt": false,
+            "NR_adapt": false,
+            "div_adapt": false,
+            "osc_adapt": false,
+            "nts": 1
+          }
+        }
+      ]
+    },
+    "cold_step_adaptive": {
+      "extends": "cold_step_fixed",
+      "type": "staged_adaptive_mesh",
+      "description": "Run two Newton iterations with one coarse-mesh adaptation pass",
+      "parameter_overrides": {
+        "adaptivity": true
+      },
+      "adaptive_stages": [
+        "single_step"
+      ]
+    }
+  }
+}
