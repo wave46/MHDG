@@ -4,6 +4,7 @@
     "newton_error_max": 0.0002
   },
   "fixed_defaults": {
+    "mesh_connectivity": "exact",
     "mesh_coordinate_atol": 1e-12
   },
   "profiles": {
@@ -18,8 +19,10 @@
       "normalized_linf_max": 1e-6
     },
     "race_step": {
-      "description": "Finite one-step output compared directly across OpenMP layouts",
+      "description": "Finite one-step output compared across OpenMP layouts after mesh renumbering",
       "newton_error_max": null,
+      "mesh_connectivity": "numbering_invariant",
+      "mesh_coordinate_atol": 1e-8,
       "relative_l2_max": 5e-8,
       "normalized_linf_max": 1e-6
     },

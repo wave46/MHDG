@@ -95,6 +95,76 @@ class Hdf5ComparisonTests(unittest.TestCase):
         self.assertFalse(report["mesh"]["connectivity"]["T"]["passed"])
 
 
+class NumberingInvariantComparisonTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.root = Path(self.temporary_directory.name)
+        self.reference = self.root / "reference.h5"
+        self.candidate = self.root / "candidate.h5"
+        write_solution(self.reference, grouped=True)
+        write_solution(self.candidate, grouped=True)
+        _permute_solution_numbering(self.candidate)
+        self.tolerances = {
+            **TOLERANCES,
+            "mesh_connectivity": "numbering_invariant",
+            "mesh_coordinate_atol": 1.0e-8,
+        }
+
+    def test_node_element_and_face_renumbering_matches(self) -> None:
+        report = compare_hdf5_files(
+            self.reference,
+            self.candidate,
+            self.tolerances,
+        )
+
+        self.assertEqual(report["status"], "passed", report["failures"])
+        self.assertEqual(report["mesh"]["mode"], "numbering_invariant")
+        self.assertTrue(report["mesh"]["coordinates"]["passed"])
+        topology = report["mesh"]["connectivity"]["topology"]
+        self.assertTrue(topology["passed"])
+        self.assertEqual(topology["reversed_face_count"], 1)
+        for dataset in ("u", "q", "u_tilde"):
+            details = report["solution"]["datasets"][dataset]
+            self.assertTrue(details["mesh_alignment_applied"])
+            self.assertTrue(details["passed"])
+
+    def test_different_element_topology_still_fails(self) -> None:
+        with h5py.File(self.candidate, "r+") as handle:
+            handle["mesh/T"][2, 0] = 3
+
+        report = compare_hdf5_files(
+            self.reference,
+            self.candidate,
+            self.tolerances,
+        )
+
+        self.assertEqual(report["status"], "failed")
+        topology = report["mesh"]["connectivity"]["topology"]
+        self.assertFalse(topology["passed"])
+        self.assertIn("elements differ", topology["reason"])
+        self.assertEqual(
+            report["solution"]["reason"], "mesh comparison failed"
+        )
+
+    def test_changed_element_local_ordering_fails(self) -> None:
+        with h5py.File(self.candidate, "r+") as handle:
+            for name in ("T", "Tlin"):
+                handle[f"mesh/{name}"][:, 0] = np.roll(
+                    handle[f"mesh/{name}"][:, 0], -1
+                )
+
+        report = compare_hdf5_files(
+            self.reference,
+            self.candidate,
+            self.tolerances,
+        )
+
+        topology = report["mesh"]["connectivity"]["topology"]
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("local node ordering", topology["reason"])
+
+
 class CompareCommandTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -220,3 +290,49 @@ class CompareCommandTests(unittest.TestCase):
         self.assertEqual(self.final.stat().st_size, original_size)
         with h5py.File(self.final, "r") as handle:
             self.assertIn("u", handle)
+
+
+def _permute_solution_numbering(path: Path) -> None:
+    reference_node_to_candidate = np.array([3, 1, 4, 2], dtype=np.int32)
+    candidate_element_order = np.array([1, 0])
+    candidate_boundary_order = np.array([2, 0, 3, 1])
+
+    with h5py.File(path, "r+") as handle:
+        mesh = handle["mesh"]
+        coordinates = np.asarray(mesh["X"]).T
+        candidate_coordinates = np.empty_like(coordinates)
+        candidate_coordinates[reference_node_to_candidate - 1] = coordinates
+        mesh["X"][...] = candidate_coordinates.T
+
+        for name in ("T", "Tlin"):
+            nodes = np.asarray(mesh[name]).T
+            candidate_nodes = reference_node_to_candidate[
+                nodes[candidate_element_order] - 1
+            ]
+            mesh[name][...] = candidate_nodes.T
+
+        boundary_nodes = np.asarray(mesh["Tb"]).T
+        mesh["Tb"][...] = reference_node_to_candidate[
+            boundary_nodes[candidate_boundary_order] - 1
+        ].T
+        boundary_flags = np.asarray(mesh["boundaryFlag"])
+        mesh["boundaryFlag"][...] = boundary_flags[candidate_boundary_order]
+        mesh["intfaces"][...] = np.array([[1, 3, 2, 2, 2]]).T
+        mesh["extfaces"][...] = np.array(
+            [[1, 2], [2, 1], [2, 3], [1, 1]]
+        ).T
+
+        solution = handle["solution"]
+        equation_count = int(handle["simulation_parameters/Neq"][0])
+        for name, shape in {
+            "u": (2, 3, equation_count),
+            "q": (2, 3, equation_count, 2),
+        }.items():
+            values = np.asarray(solution[name]).reshape(shape)
+            solution[name][...] = values[candidate_element_order].reshape(-1)
+
+        traces = np.asarray(solution["u_tilde"]).reshape(5, 2, equation_count)
+        candidate_traces = np.empty_like(traces)
+        candidate_traces[0] = traces[0, ::-1]
+        candidate_traces[1:] = traces[1 + candidate_boundary_order]
+        solution["u_tilde"][...] = candidate_traces.reshape(-1)

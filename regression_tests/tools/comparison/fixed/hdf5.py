@@ -31,18 +31,25 @@ def compare_hdf5_files(
                 "reference": storage_format(reference),
                 "candidate": storage_format(candidate),
             }
-            report["mesh"] = compare_mesh(
+            report["mesh"], alignment = compare_mesh(
                 reference,
                 candidate,
                 tolerances,
                 failures,
             )
-            report["solution"] = compare_solution(
-                reference,
-                candidate,
-                tolerances,
-                failures,
-            )
+            if not report["mesh"]["passed"]:
+                report["solution"] = {
+                    "passed": False,
+                    "reason": "mesh comparison failed",
+                }
+            else:
+                report["solution"] = compare_solution(
+                    reference,
+                    candidate,
+                    tolerances,
+                    failures,
+                    alignment=alignment,
+                )
             report["transport_1d"] = compare_transport(
                 reference,
                 candidate,

@@ -310,11 +310,12 @@ Adaptive meshes may differ across layouts. Adaptive comparison uses
 `HDG_postprocess` to interpolate both solutions at deterministic interior
 points instead of requiring equal connectivity.
 
-The adaptive race probes intentionally require identical connectivity. They
-currently expose a known OpenMP defect: repeated multi-threaded runs can
-build different meshes, while the corresponding one-thread runs reproduce
-exactly. Fixed-mesh race probes pass. Keep this diagnostic failure visible
-until the adaptation path is made deterministic.
+Race probes compare meshes modulo storage numbering. They require a
+one-to-one coordinate match, identical high-order element and boundary
+topology after node matching, identical element-local ordering, and matching
+boundary flags. Element and face rows are aligned before comparing `u`, `q`,
+and `u_tilde`; a global trace face may also be reversed. A changed refinement
+topology still fails.
 
 Golden matrices keep a reference for each workflow, layout, and stage. A
 staged comparison stops at the first divergent stage. Race suites instead
@@ -331,7 +332,8 @@ compare layout pairs produced by the same build directly.
 | Adaptive gradient | `0.25` | `0.3` |
 
 Normalized Linf divides the largest pointwise difference by the largest
-absolute reference value. Fixed coordinates use absolute tolerance `1e-12`.
+absolute reference value. Fixed coordinates use absolute tolerance `1e-12`;
+race comparisons use `1e-8` to absorb Gmsh coordinate roundoff only.
 Except for transient initialization and race probes, final Newton error must
 not exceed `2e-4`. These are
 regression limits for `legacy_case`, not physical-accuracy targets.
