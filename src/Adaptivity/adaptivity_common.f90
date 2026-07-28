@@ -775,8 +775,6 @@ CONTAINS
 
       USE, INTRINSIC :: iso_c_binding
       USE gmsh
-      USE MPI_OMP, only: OMPvar
-
       TYPE(gmsh_t) :: gmsh_l
       INTEGER, INTENT(IN) :: p_order
       REAL*8, DIMENSION(:), INTENT(IN) :: h_target_on_elements ! on the elements
@@ -838,7 +836,8 @@ CONTAINS
       call gmsh_l%option%setNumber("Mesh.MeshSizeFromPoints", 0d0)
       call gmsh_l%option%setNumber("Mesh.MeshSizeFromCurvature", 0d0)
       CALL gmsh_l%option%setNumber("Mesh.MeshSizeFactor", 1d0)
-      CALL gmsh_l%option%setNumber("General.NumThreads", REAL(OMPvar%Nthreads))
+      ! Stabilize adaptive topology and avoid Gmsh's multi-threaded 2D meshing stall.
+      CALL gmsh_l%option%setNumber("General.NumThreads", 1.d0)
 
       !Changing the algorithm to Delaunay, the default is Frontal-Delaunay (Don't Know if needed)
       call gmsh_l%option%setNumber("Mesh.Algorithm", 5d0)
