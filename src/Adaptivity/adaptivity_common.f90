@@ -47,40 +47,48 @@ CONTAINS
       INTEGER, INTENT(IN)               :: connectivity(:,:)
       REAL*8, INTENT(OUT)               :: h_map(SIZE(connectivity,1))
       INTEGER                           :: i
-      REAL*8                            :: side1, side2, side3
 
       DO i = 1, SIZE(connectivity,1)
-         side1 = SQRT((nodes(connectivity(i,1),1) - nodes(connectivity(i,2),1))**2 + (nodes(connectivity(i,1),2) - nodes(connectivity(i,2),2))**2)
-         side2 = SQRT((nodes(connectivity(i,2),1) - nodes(connectivity(i,3),1))**2 + (nodes(connectivity(i,2),2) - nodes(connectivity(i,3),2))**2)
-         side3 = SQRT((nodes(connectivity(i,3),1) - nodes(connectivity(i,1),1))**2 + (nodes(connectivity(i,3),2) - nodes(connectivity(i,1),2))**2)
-
-
-         h_map(i) = (side1 + side2 + side3)/3
+         ! Gmsh's isotropic size field represents a desired linear edge length.
+         h_map(i) = triangle_max_edge(nodes, connectivity(i,:))
       ENDDO
    END SUBROUTINE calculate_h_map_elements
 
-   SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices,T)
-      REAL*8, INTENT(IN)                              :: h_map_elements(:)
-      INTEGER,INTENT(IN)                              :: T(:,:)
-      REAL*8, DIMENSION(:), POINTER, INTENT(INOUT)    :: h_target_vertices
-      REAL*8, ALLOCATABLE                             :: h_target_nodal(:)
-      INTEGER, ALLOCATABLE                            :: nodes_repeats(:)
-      INTEGER                                         :: number_of_vertices
+   PURE FUNCTION triangle_max_edge(nodes, triangle) RESULT(max_edge)
+      REAL*8, INTENT(IN) :: nodes(:,:)
+      INTEGER, INTENT(IN) :: triangle(:)
+      REAL*8 :: max_edge, edge_lengths(3)
 
+      edge_lengths(1) = NORM2(nodes(triangle(1),:) - nodes(triangle(2),:))
+      edge_lengths(2) = NORM2(nodes(triangle(2),:) - nodes(triangle(3),:))
+      edge_lengths(3) = NORM2(nodes(triangle(3),:) - nodes(triangle(1),:))
+      max_edge = MAXVAL(edge_lengths)
+   END FUNCTION triangle_max_edge
 
-      ALLOCATE(h_target_nodal(MAXVAL(T)))
-      ALLOCATE(nodes_repeats(MAXVAL(T)))      
+   SUBROUTINE average_element_targets_on_nodes(element_targets, connectivity, node_targets)
+      REAL*8, INTENT(IN)  :: element_targets(:)
+      INTEGER, INTENT(IN) :: connectivity(:,:)
+      REAL*8, INTENT(OUT) :: node_targets(:)
+      INTEGER, ALLOCATABLE :: node_counts(:)
+      INTEGER              :: i, j, node
 
-      CALL sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
+      ALLOCATE(node_counts(SIZE(node_targets)))
+      node_targets = 0.d0
+      node_counts = 0
+      DO i = 1, SIZE(connectivity,1)
+         DO j = 1, SIZE(connectivity,2)
+            node = connectivity(i,j)
+            node_targets(node) = node_targets(node) + element_targets(i)
+            node_counts(node) = node_counts(node) + 1
+         ENDDO
+      ENDDO
 
-      number_of_vertices = COUNT(nodes_repeats /= 0)
-
-      ALLOCATE(h_target_vertices(number_of_vertices))
-
-      CALL average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
-
-      DEALLOCATE(h_target_nodal, nodes_repeats)
-   END SUBROUTINE get_h_target_vertices
+      DO node = 1, SIZE(node_targets)
+         IF (node_counts(node) .GT. 0) &
+            node_targets(node) = node_targets(node)/REAL(node_counts(node), KIND=8)
+      ENDDO
+      DEALLOCATE(node_counts)
+   END SUBROUTINE average_element_targets_on_nodes
 
 
    SUBROUTINE load_new_mesh_gmsh(order)
@@ -125,38 +133,6 @@ CONTAINS
          h_target_elements = h_target_elements_ind
       END WHERE
    ENDSUBROUTINE combine_h_target_ind_est
-
-   SUBROUTINE sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
-      INTEGER, INTENT(IN)               :: T(:,:)
-      REAL*8, INTENT(IN)                :: h_map_elements(:)
-      REAL*8, INTENT(OUT)               :: h_target_nodal(:)
-      INTEGER, INTENT(OUT)              :: nodes_repeats(:)
-      INTEGER                           :: i, j
-
-      h_target_nodal = 0.
-      nodes_repeats = 0
-      DO i=1,SIZE(T,1)
-         DO j=1,3
-            h_target_nodal(T(i,j)) = h_target_nodal(T(i,j)) + h_map_elements(i)
-            nodes_repeats(T(i,j)) = nodes_repeats(T(i,j)) + 1
-         ENDDO
-      ENDDO
-   END SUBROUTINE sum_h_target_nodal
-
-   SUBROUTINE average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
-      REAL*8, INTENT(IN)                              :: h_target_nodal(:)
-      INTEGER, INTENT(IN)                             :: nodes_repeats(:)
-      REAL*8, DIMENSION(:), POINTER, INTENT(INOUT)      :: h_target_vertices
-      INTEGER                                         :: i, j
-
-      j = 1
-      DO i=1,SIZE(h_target_nodal)
-         IF(nodes_repeats(i) /= 0) THEN
-            h_target_vertices(j) = h_target_nodal(i)/REAL(nodes_repeats(i))
-            j = j + 1
-         ENDIF
-      ENDDO
-  END SUBROUTINE average_h_target
 
   SUBROUTINE set_order_mesh(mesh_filename, geometry_filename, p, ordered_mesh_name)
     USE mpi, ONLY: MPI_BARRIER, MPI_COMM_WORLD
@@ -780,10 +756,10 @@ CONTAINS
       REAL*8, DIMENSION(:), INTENT(IN) :: h_target_on_elements ! on the elements
       REAL*8, DIMENSION(:,:), INTENT(IN) :: vertices_coordinates ! coordinates of the vertices
       INTEGER, DIMENSION(:,:), INTENT(IN) :: connectivity ! connectivity of the triangles
-      REAL*8, ALLOCATABLE :: data_for_gmsh(:)
+      REAL*8, ALLOCATABLE :: data_for_gmsh(:), h_target_on_nodes(:)
       INTEGER*8           :: gmsh_dim, number_of_vertices_per_triangle, i, j, start_index
       INTEGER*4           :: size_view,number_of_triangles,ret
-      REAL*8              :: sf_index, vertex_coordinates(2),h_target_on_vertex
+      REAL*8              :: sf_index, vertex_coordinates(2)
       !GMSH always have (X,Y,Z) coordinates
       gmsh_dim = 3 
       number_of_vertices_per_triangle = 3 
@@ -805,17 +781,20 @@ CONTAINS
 
 
       ALLOCATE(data_for_gmsh((number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))*number_of_triangles))
+      ALLOCATE(h_target_on_nodes(SIZE(vertices_coordinates,1)))
+      ! Shared view nodes must carry one value for continuous linear interpolation.
+      CALL average_element_targets_on_nodes(h_target_on_elements, connectivity, h_target_on_nodes)
 
       ! Prepare data in gmsh format
       DO i = 1, number_of_triangles
          start_index = (i-1)*(number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))
          DO j = 1, number_of_vertices_per_triangle
             vertex_coordinates = vertices_coordinates(connectivity(i,j),:)
-            h_target_on_vertex = h_target_on_elements(i)
             data_for_gmsh(start_index+j) = vertex_coordinates(1)
             data_for_gmsh(start_index+number_of_vertices_per_triangle+j) = vertex_coordinates(2)
             data_for_gmsh(start_index+2*number_of_vertices_per_triangle+j) = 0.0 ! no Z coordinate
-            data_for_gmsh(start_index+3*number_of_vertices_per_triangle+j) = h_target_on_vertex
+            data_for_gmsh(start_index+3*number_of_vertices_per_triangle+j) = &
+               h_target_on_nodes(connectivity(i,j))
          ENDDO
       ENDDO
 
@@ -826,7 +805,7 @@ CONTAINS
 
       ! Add the view as a field
       ret = gmsh_l%model%mesh%field%add("PostView")
-      call gmsh_l%model%mesh%field%setNumber(ret, "ViewIndex", 0d0)
+      call gmsh_l%model%mesh%field%setNumber(ret, "ViewIndex", sf_index)
 
       ! Apply the view as the current background mesh size field:
       call gmsh_l%model%mesh%field%setAsBackgroundMesh(ret)
@@ -850,7 +829,7 @@ CONTAINS
       call gmsh_l%write('./res/temp.msh')
       CALL gmsh_l%finalize()
 
-      DEALLOCATE(data_for_gmsh)
+      DEALLOCATE(data_for_gmsh, h_target_on_nodes)
 
    END SUBROUTINE gmsh_create_from_h_target
 

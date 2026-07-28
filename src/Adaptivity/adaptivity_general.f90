@@ -16,7 +16,6 @@ CONTAINS
         INTEGER, INTENT(IN) :: order
         REAL*8 :: h_map_elements(SIZE(Mesh%T, 1))
         REAL*8 :: h_target_elements(SIZE(Mesh%T, 1))
-        REAL*8, POINTER :: h_target_vertices(:)
 #ifdef PARALL
         INTEGER :: ierr
         INTEGER, POINTER :: T_global(:, :)
@@ -24,8 +23,6 @@ CONTAINS
         REAL*8, POINTER :: h_target_elements_global(:)
         NULLIFY(T_global, h_target_elements_global, X_global)
 #endif
-        NULLIFY(h_target_vertices)
-
         CALL adaptivity_console_output()
         CALL calculate_h_map_elements(Mesh%X, Mesh%T(:, 1:3), h_map_elements)
         CALL evaluate_adaptivity(h_map_elements, order, h_target_elements)
@@ -45,10 +42,6 @@ CONTAINS
 #endif
         CALL load_new_mesh_gmsh(order)
 
-        IF (ASSOCIATED(h_target_vertices)) THEN
-            DEALLOCATE(h_target_vertices)
-            NULLIFY(h_target_vertices)
-        ENDIF
 #ifdef PARALL
         IF (ASSOCIATED(T_global)) THEN
             DEALLOCATE(T_global)
