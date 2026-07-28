@@ -9,7 +9,7 @@ MODULE adaptivity_projection_module
 
   REAL*8, PARAMETER :: linear_candidate_tolerance = 1.d-10
   REAL*8, PARAMETER :: curved_owner_tolerance = 1.d-8
-  REAL*8, PARAMETER :: recovery_distance_ratio = 1.d-3
+  REAL*8, PARAMETER :: recovery_distance_ratio = 1.d-2
   REAL*8, PARAMETER :: recovery_box_padding_ratio = 0.5d0
 
   PUBLIC :: projectSolutionDifferentMeshes_general
