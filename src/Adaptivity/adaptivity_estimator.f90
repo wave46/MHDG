@@ -540,7 +540,7 @@ CONTAINS
     REAL*8                                      :: ue_p1(refEl1%Nnodes2D), ue_p2(refEl2%Nnodes2D)
     INTEGER                                     :: ind_p1(refEl1%Nnodes2D), ind_p2(refEl2%Nnodes2D)
     INTEGER                                     :: nnodes_p1, nnodes_p2, n_elements, iElem, i
-    REAL*8                                      :: elem_area, elem_sol_norm, elem_error, total_area, total_norm_sol
+    REAL*8                                      :: elem_area, elem_sol_norm, elem_error, totals(3)
 #ifdef PARALL
       INTEGER                                     :: ierr
 #endif
@@ -581,32 +581,30 @@ CONTAINS
 
     ENDDO
 
+#ifdef PARALL
+    ! Ghost values are needed locally, but global norms must count each element once.
+    totals(1) = SUM(error2, MASK=Mesh%ghostElems .EQ. 0)
+    totals(2) = SUM(sol_norm, MASK=Mesh%ghostElems .EQ. 0)
+    totals(3) = SUM(dom_area, MASK=Mesh%ghostElems .EQ. 0)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totals, SIZE(totals), MPI_REAL8, &
+         MPI_SUM, MPI_COMM_WORLD, ierr)
+#else
+    totals = (/SUM(error2), SUM(sol_norm), SUM(dom_area)/)
+#endif
+
     IF(adapt%difference .EQ. 0) THEN
        ! relative error
        error = SQRT(error2/sol_norm)
 
     ELSEIF(adapt%difference .EQ. 1) THEN
-       total_norm_sol = SUM(sol_norm)
-       total_area = SUM(dom_area)
-
-#ifdef PARALL
-       CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_norm_sol, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-       CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-
-       DO iElem = 1, n_elements
-         error(iElem) = SQRT(error2(iElem)/total_norm_sol*total_area/dom_area(iElem))
-       ENDDO
-#else
-       error = SQRT(error2/total_norm_sol*total_area/dom_area)
-#endif
-
+       error = SQRT(error2/totals(2)*totals(3)/dom_area)
 
     ELSE
        WRITE(*,*) "Choice of relative/absolute difference for the adaptivity not valid. STOP."
        STOP
     ENDIF
 
-    eg = SQRT(SUM(error2)/SUM(dom_area))
+    eg = SQRT(totals(1)/totals(3))
 
   ENDSUBROUTINE calculate_L2_error_two_sols_different_p_scalar
 
