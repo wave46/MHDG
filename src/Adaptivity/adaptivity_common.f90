@@ -760,6 +760,9 @@ CONTAINS
       INTEGER*8           :: gmsh_dim, number_of_vertices_per_triangle, i, j, start_index
       INTEGER*4           :: size_view,number_of_triangles,ret
       REAL*8              :: sf_index, vertex_coordinates(2)
+      REAL*8, PARAMETER   :: minimum_mesh_size = 0.5d-4
+      REAL*8, PARAMETER   :: target_size_quantum = 2.d-3*minimum_mesh_size
+      REAL*8, PARAMETER   :: view_coordinate_quantum = 1.d-11
       !GMSH always have (X,Y,Z) coordinates
       gmsh_dim = 3 
       number_of_vertices_per_triangle = 3 
@@ -777,19 +780,24 @@ CONTAINS
       CALL gmsh_l%merge(adapt%geometry_path)
 
       !Set minimal size for mesh elements
-      CALL gmsh_l%option%setNumber("Mesh.MeshSizeMin", 0.5e-4)
+      CALL gmsh_l%option%setNumber("Mesh.MeshSizeMin", minimum_mesh_size)
 
 
       ALLOCATE(data_for_gmsh((number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))*number_of_triangles))
       ALLOCATE(h_target_on_nodes(SIZE(vertices_coordinates,1)))
       ! Shared view nodes must carry one value for continuous linear interpolation.
       CALL average_element_targets_on_nodes(h_target_on_elements, connectivity, h_target_on_nodes)
+      ! Solver roundoff must not select a different Gmsh topology.
+      WHERE (h_target_on_nodes .GT. 0.d0)
+         h_target_on_nodes = target_size_quantum*ANINT(h_target_on_nodes/target_size_quantum)
+      END WHERE
 
       ! Prepare data in gmsh format
       DO i = 1, number_of_triangles
          start_index = (i-1)*(number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))
          DO j = 1, number_of_vertices_per_triangle
-            vertex_coordinates = vertices_coordinates(connectivity(i,j),:)
+            vertex_coordinates = view_coordinate_quantum*ANINT(&
+               vertices_coordinates(connectivity(i,j),:)/view_coordinate_quantum)
             data_for_gmsh(start_index+j) = vertex_coordinates(1)
             data_for_gmsh(start_index+number_of_vertices_per_triangle+j) = vertex_coordinates(2)
             data_for_gmsh(start_index+2*number_of_vertices_per_triangle+j) = 0.0 ! no Z coordinate
