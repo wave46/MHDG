@@ -7,10 +7,6 @@ from typing import Any
 import h5py
 import numpy as np
 
-from comparison.fixed.alignment import (
-    MeshAlignment,
-    compare_numbering_invariant,
-)
 from comparison.fixed.data import optional_array, required_array
 
 
@@ -19,26 +15,8 @@ def compare_mesh(
     candidate: h5py.File,
     tolerances: dict[str, Any],
     failures: list[str],
-) -> tuple[dict[str, Any], MeshAlignment | None]:
-    """Compare mesh connectivity using the configured numbering policy."""
-    if tolerances["mesh_connectivity"] == "numbering_invariant":
-        report, alignment = compare_numbering_invariant(
-            reference,
-            candidate,
-            tolerances["mesh_coordinate_atol"],
-        )
-    else:
-        report = _compare_exact_mesh(reference, candidate, tolerances)
-        alignment = None
-    _record_mesh_failures(report, failures)
-    return report, alignment
-
-
-def _compare_exact_mesh(
-    reference: h5py.File,
-    candidate: h5py.File,
-    tolerances: dict[str, Any],
 ) -> dict[str, Any]:
+    """Compare mesh coordinates and connectivity in storage order."""
     connectivity = {}
     for name in ("T", "Tlin", "Tb"):
         details = _compare_connectivity(reference, candidate, name)
@@ -55,6 +33,7 @@ def _compare_exact_mesh(
     report["passed"] = coordinates["passed"] and all(
         details["passed"] for details in connectivity.values()
     )
+    _record_mesh_failures(report, failures)
     return report
 
 

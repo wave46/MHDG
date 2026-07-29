@@ -14,6 +14,7 @@ REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 from suite.runner import run_suite  # noqa: E402
+from suite.pairs import compare_generated_meshes  # noqa: E402
 from suite.verification import verify_suite  # noqa: E402
 from tests.fixtures.harness import create_harness, run_command  # noqa: E402
 from tests.fixtures.solutions import write_solution  # noqa: E402
@@ -171,6 +172,27 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertEqual(rechecked.returncode, 0, rechecked.stderr)
         self.assertIn("serial_omp1", rechecked.stdout)
         self.assertIn("serial_omp16", rechecked.stdout)
+
+    def test_generated_adaptive_mesh_comparison_is_byte_exact(self) -> None:
+        reference = self.root / "reference/stages/01_single_step/res/temp.msh"
+        candidate = self.root / "candidate/stages/01_single_step/res/temp.msh"
+        reference.parent.mkdir(parents=True)
+        candidate.parent.mkdir(parents=True)
+        reference.write_text("same mesh\n", encoding="utf-8")
+        candidate.write_text("same mesh\n", encoding="utf-8")
+
+        matching = compare_generated_meshes(
+            self.root / "reference", self.root / "candidate"
+        )
+        self.assertIsNotNone(matching)
+        self.assertTrue(matching["passed"])
+
+        candidate.write_text("different mesh\n", encoding="utf-8")
+        differing = compare_generated_meshes(
+            self.root / "reference", self.root / "candidate"
+        )
+        self.assertIsNotNone(differing)
+        self.assertFalse(differing["passed"])
 
     @patch("suite.verification.compare_completed_run")
     def test_offline_verification_dispatches_only_completed_runs(self, compare) -> None:

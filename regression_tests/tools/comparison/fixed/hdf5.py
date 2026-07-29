@@ -31,7 +31,7 @@ def compare_hdf5_files(
                 "reference": storage_format(reference),
                 "candidate": storage_format(candidate),
             }
-            report["mesh"], alignment = compare_mesh(
+            report["mesh"] = compare_mesh(
                 reference,
                 candidate,
                 tolerances,
@@ -48,7 +48,6 @@ def compare_hdf5_files(
                     candidate,
                     tolerances,
                     failures,
-                    alignment=alignment,
                 )
             report["transport_1d"] = compare_transport(
                 reference,

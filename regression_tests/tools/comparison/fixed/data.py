@@ -24,15 +24,6 @@ def required_scalar(handle: h5py.File, group: str, name: str) -> int | float:
     return required_array(handle, group, name).reshape(-1)[0].item()
 
 
-def mesh_rows(
-    handle: h5py.File,
-    name: str,
-    dtype: type[float] | type[np.int64],
-) -> np.ndarray:
-    """Read an MHDG mesh matrix with one entity per returned row."""
-    return np.asarray(required_array(handle, "mesh", name), dtype=dtype).T
-
-
 def optional_array(
     handle: h5py.File,
     group: str,

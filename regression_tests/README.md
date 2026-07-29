@@ -310,12 +310,11 @@ Adaptive meshes may differ across layouts. Adaptive comparison uses
 `HDG_postprocess` to interpolate both solutions at deterministic interior
 points instead of requiring equal connectivity.
 
-Race probes compare meshes modulo storage numbering. They require a
-one-to-one coordinate match, identical high-order element and boundary
-topology after node matching, identical element-local ordering, and matching
-boundary flags. Element and face rows are aligned before comparing `u`, `q`,
-and `u_tilde`; a global trace face may also be reversed. A changed refinement
-topology still fails.
+Race probes require identical connectivity arrays, including node, element,
+and boundary ordering. The generated adaptive `temp.msh` files must also be
+byte-identical, which rejects tag swaps even when the physical topology is
+unchanged. The full race matrix applies that check to every pair of tracked
+layouts before comparing `u`, `q`, and `u_tilde` with the race tolerances.
 
 Golden matrices keep a reference for each workflow, layout, and stage. A
 staged comparison stops at the first divergent stage. Race suites instead
@@ -332,8 +331,8 @@ compare layout pairs produced by the same build directly.
 | Adaptive gradient | `0.25` | `0.3` |
 
 Normalized Linf divides the largest pointwise difference by the largest
-absolute reference value. Fixed coordinates use absolute tolerance `1e-12`;
-race comparisons use `1e-8` to absorb Gmsh coordinate roundoff only.
+absolute reference value. Fixed and race HDF5 coordinates use absolute
+tolerance `1e-12`; generated adaptive mesh files are compared byte-for-byte.
 Except for transient initialization and race probes, final Newton error must
 not exceed `2e-4`. These are
 regression limits for `legacy_case`, not physical-accuracy targets.

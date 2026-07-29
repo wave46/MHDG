@@ -7,7 +7,6 @@ from typing import Any
 import h5py
 import numpy as np
 
-from comparison.fixed.alignment import MeshAlignment
 from comparison.fixed.data import (
     numeric_comparison,
     required_array,
@@ -21,7 +20,6 @@ def compare_solution(
     candidate: h5py.File,
     tolerances: dict[str, Any],
     failures: list[str],
-    alignment: MeshAlignment | None = None,
 ) -> dict[str, Any]:
     """Compare each conservative field equation by equation."""
     equation_count = _matching_equation_count(reference, candidate)
@@ -38,7 +36,6 @@ def compare_solution(
             names,
             tolerances,
             failures,
-            alignment,
         )
         for name in ("u", "q", "u_tilde")
     }
@@ -59,7 +56,6 @@ def _compare_dataset(
     equation_names: list[str],
     tolerances: dict[str, Any],
     failures: list[str],
-    alignment: MeshAlignment | None,
 ) -> dict[str, Any]:
     reference_values = required_array(
         reference, "solution", dataset_name
@@ -70,7 +66,6 @@ def _compare_dataset(
     report: dict[str, Any] = {
         "reference_size": int(reference_values.size),
         "candidate_size": int(candidate_values.size),
-        "mesh_alignment_applied": alignment is not None,
         "equations": {},
     }
     if (
@@ -87,12 +82,6 @@ def _compare_dataset(
     candidate_values = _reshape_dataset(
         candidate, dataset_name, candidate_values, equation_count
     )
-    if alignment is not None:
-        candidate_values = _align_dataset(
-            candidate_values,
-            dataset_name,
-            alignment,
-        )
 
     reference_by_equation = np.moveaxis(reference_values, 2, -1).reshape(
         -1, equation_count
@@ -137,26 +126,6 @@ def _reshape_dataset(
         )
         shape = (face_count, nodes_per_face, equation_count)
     return values.reshape(shape)
-
-
-def _align_dataset(
-    candidate_values: np.ndarray,
-    name: str,
-    alignment: MeshAlignment,
-) -> np.ndarray:
-    aligned_candidate = np.empty_like(candidate_values)
-    if name in ("u", "q"):
-        element_map = alignment.candidate_element_to_reference
-        aligned_candidate[element_map] = candidate_values
-        return aligned_candidate
-
-    face_map = alignment.candidate_face_to_reference
-    aligned_candidate[face_map] = candidate_values
-    reversed_faces = np.flatnonzero(alignment.reverse_candidate_faces)
-    aligned_candidate[face_map[reversed_faces]] = candidate_values[
-        reversed_faces, ::-1
-    ]
-    return aligned_candidate
 
 
 def _matching_equation_count(reference: h5py.File, candidate: h5py.File) -> int:

@@ -29,7 +29,6 @@ def load_fixed_tolerances(
 
     required = {
         "newton_error_max",
-        "mesh_connectivity",
         "mesh_coordinate_atol",
         "relative_l2_max",
         "normalized_linf_max",
@@ -37,10 +36,6 @@ def load_fixed_tolerances(
     missing = sorted(required - profile.keys())
     if missing:
         raise ComparisonError(f"tolerance profile is missing: {', '.join(missing)}")
-    if profile["mesh_connectivity"] not in ("exact", "numbering_invariant"):
-        raise ComparisonError(
-            f"invalid mesh connectivity mode: {profile['mesh_connectivity']}"
-        )
     return profile_id, profile
 
 
