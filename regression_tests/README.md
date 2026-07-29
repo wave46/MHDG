@@ -94,7 +94,7 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | `race` | Both one-step workflows, `serial_omp1` vs `serial_omp16` | Routine OpenMP race check. |
 | `cold` | Both full cold workflows, `mpi4_omp4` | Canonical integration check. |
 | `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |
-| `race_matrix` | Both one-step workflows, serial and MPI pairs | Periodic race check. |
+| `race_matrix` | Both one-step workflows, every pair of tracked layouts | Periodic race check. |
 | `cold_matrix` | Both full cold workflows, all layouts | Overnight evidence. |
 
 Warm and race suites are short. Full cold workflows are longer, and

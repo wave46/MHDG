@@ -59,17 +59,16 @@ def load_suite_definition(
 
 def _paired_layouts(declaration: dict[str, Any]) -> list[str]:
     pairs = declaration["layout_comparisons"]
-    layouts = [
-        layout
-        for pair in pairs
-        for layout in (pair["baseline"], pair["candidate"])
-    ]
-    if len(layouts) != len(set(layouts)):
-        raise BundleError("each layout may appear in only one direct comparison")
     for pair in pairs:
         if pair["baseline"] == pair["candidate"]:
             raise BundleError("a layout cannot be compared with itself")
-    return layouts
+    return list(
+        dict.fromkeys(
+            layout
+            for pair in pairs
+            for layout in (pair["baseline"], pair["candidate"])
+        )
+    )
 
 
 def require_bundle_class(
