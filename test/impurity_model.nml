@@ -1,0 +1,7 @@
+&IMPURITY_RADIATION_LST
+  n_impurities = 1
+  impurity_names = 'W'
+  impurity_concentrations = 0.0d0
+  impurity_concentration_path = '/path/where/to/read/impurity/concentration/'
+  impurity_concentration_dimension = 10000
+/

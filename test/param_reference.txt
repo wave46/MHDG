@@ -66,6 +66,7 @@
 /
 
 &INPUT_LST
+    impurity_model_path = 'impurity_model.nml'
     field_path          = 'path/to/magnetic/field.h5'  ! Path to Bfield h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'B_field/WEST_54487'
                                                                         ! If switch%ME = .false. then put the full part 'B_field/WEST_54487_0000.h5'
@@ -90,8 +91,6 @@
     target_density_dimension = 10000
     target_density_xpr_path = '/path/where/to/read/target/density/xpr/'
     target_density_xpr_dimension = 101
-    impurity_concentration_path = '/path/where/to/read/impurity/concentration/'
-    impurity_concentration_dimension = 10000
     zeff_path = '/path/where/to/read/zeff/'
     zeff_dimension = 10000
     diffusion_1D_path = '/path/where/to/read/1d/diffsion/

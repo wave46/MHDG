@@ -265,6 +265,10 @@ MODULE types
      ! Impurity radiation details
      CHARACTER(LEN=20)         :: impurity_name ! Name of the impurity
      REAL*8                    :: impurity_concentration ! Impurity concentration as a fraction of the electron density
+     INTEGER                   :: n_impurities = 0 ! Number of configured impurity radiation entries
+     CHARACTER(LEN=20), ALLOCATABLE :: impurity_names(:) ! Names of configured impurity radiation entries
+     REAL*8, ALLOCATABLE       :: impurity_concentrations(:) ! Concentrations as fractions of electron density
+     REAL*8, ALLOCATABLE       :: alpha_cooling_factor_impurities(:,:) ! Per-entry cooling coefficients
      ! Coefficients for the neutral equations
      REAL*8                    :: diff_nn ! Diffusion in the neutral equation
      LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
@@ -441,6 +445,7 @@ MODULE types
   TYPE Inputs_type
      CHARACTER(len=1000) :: field_path ! where do we read magnetic field from (WEST cases so far)
      CHARACTER(len=1000) :: transport_model_path ! where do we read transport model settings from
+     CHARACTER(len=1000) :: impurity_model_path ! where do we read impurity radiation mixture settings from
      CHARACTER(len=1000) :: jtor_path ! where do we read plasma current from (WEST cases so far)
      CHARACTER(len=1000) :: save_folder ! where to save last solution
      CHARACTER(len=1000) :: external_heating_path ! where do we read external heating from (only used if the external_heating is on)
