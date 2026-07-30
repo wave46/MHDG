@@ -306,15 +306,19 @@ Fixed-mesh comparison checks finite values and Newton error, exact
 connectivity, tolerance-based coordinates, each equation in `u`, `q`, and
 `u_tilde`, and transport-1D data when present.
 
-Adaptive meshes may differ across layouts. Adaptive comparison uses
-`HDG_postprocess` to interpolate both solutions at deterministic interior
-points instead of requiring equal connectivity.
+Adaptive golden references may come from a different mesh after an intentional
+adaptivity change. Their comparison uses `HDG_postprocess` to interpolate both
+solutions at deterministic interior points instead of requiring equal
+connectivity.
 
 Race probes require identical connectivity arrays, including node, element,
 and boundary ordering. The generated adaptive `temp.msh` files must also be
 byte-identical, which rejects tag swaps even when the physical topology is
 unchanged. The full race matrix applies that check to every pair of tracked
 layouts before comparing `u`, `q`, and `u_tilde` with the race tolerances.
+Cold-matrix layout pairs likewise require exact final and retained meshes, then
+compare the final HDF5 solution and transport data with the cold cross-layout
+tolerances.
 
 Golden matrices keep a reference for each workflow, layout, and stage. A
 staged comparison stops at the first divergent stage. Race suites instead
@@ -326,6 +330,7 @@ compare layout pairs produced by the same build directly.
 | Warm, cross layout | `5e-8` | `1e-6` |
 | One-step race probe | `5e-8` | `1e-6` |
 | Matching fixed cold stage | `2e-7` | `3e-7` |
+| Converged cold, cross layout | `3e-7` | `3e-7` |
 | Fixed cold final state against warm reference | `1e-5` | `1e-5` |
 | Adaptive solution | `0.05` | `0.1` |
 | Adaptive gradient | `0.25` | `0.3` |
@@ -370,8 +375,9 @@ PYTHONPATH=tools python -m unittest discover -s tests -p 'test_*.py'
 
 ## Limitations
 
-- Adaptive refinement may cross different thresholds after reduction-order
-  changes; identical adapted meshes are not promised.
+- Adaptive refinement may cross different thresholds between code revisions;
+  adaptive golden-reference comparisons therefore do not promise identical
+  meshes. Layout pairs within one race or cold matrix do require exact meshes.
 - Runtime is recorded without a timing threshold.
 - Promotion verifies technical evidence but physical acceptance remains human.
 - One promotion consumes one accepted suite summary.
