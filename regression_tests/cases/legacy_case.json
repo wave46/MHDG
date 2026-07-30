@@ -62,6 +62,7 @@
       "extends": "warm",
       "description": "Reconverge the accepted state with impurity radiation disabled",
       "restart": "warm_impurity_off_restart",
+      "reference": "warm_impurity_off_reference",
       "parameter_overrides": {
         "impurity_radiation": false
       }
@@ -70,6 +71,7 @@
       "extends": "warm",
       "description": "Reconverge the accepted state with legacy single-nitrogen radiation",
       "restart": "warm_impurity_n_restart",
+      "reference": "warm_impurity_n_reference",
       "parameter_overrides": {
         "impurity_radiation": true,
         "impurity_name": "N",
