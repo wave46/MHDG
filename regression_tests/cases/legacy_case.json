@@ -43,15 +43,31 @@
         "equilibrium_magnetic_field",
         "equilibrium_current_density",
         "warm_parameters",
-        "transport_configuration",
-        "warm_restart",
-        "warm_reference"
+        "transport_configuration"
       ],
       "layout": "mpi4_omp4",
+      "restart": "warm_restart",
+      "reference": "warm_reference",
       "comparison": {
         "method": "fixed_hdf5",
         "profile": "fixed_same_layout",
         "cross_layout_profile": "fixed_cross_layout"
+      }
+    },
+    "warm_impurity_off": {
+      "extends": "warm",
+      "description": "Reconverge the accepted state with impurity radiation disabled",
+      "parameter_overrides": {
+        "impurity_radiation": false
+      }
+    },
+    "warm_impurity_n": {
+      "extends": "warm",
+      "description": "Reconverge the accepted state with legacy single-nitrogen radiation",
+      "parameter_overrides": {
+        "impurity_radiation": true,
+        "impurity_name": "N",
+        "impurity_concentration": 0.01
       }
     },
     "cold_fixed": {

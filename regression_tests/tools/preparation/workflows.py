@@ -23,6 +23,7 @@ from preparation.workspace import (
 
 def prepare_warm_run(inputs: PreparationInputs) -> PreparedRun:
     """Prepare one warm restart and fixed-reference comparison run."""
+    overrides = inputs.workflow.get("parameter_overrides", {})
     command = solver_command(
         inputs.run_directory,
         inputs.executable,
@@ -36,8 +37,10 @@ def prepare_warm_run(inputs: PreparationInputs) -> PreparedRun:
             inputs.run_directory,
             inputs.artifacts,
             inputs.runtime_files,
+            inputs.workflow,
+            overrides,
         )
-        write_run_plan(staging, inputs, command)
+        write_run_plan(staging, inputs, command, applied_overrides=overrides)
     return _prepared_run(inputs, command)
 
 
@@ -90,7 +93,7 @@ def _prepare_stage(
         stage_inputs,
         command,
         stage,
-        overrides,
+        applied_overrides=overrides,
     )
     return PreparedStage(
         stage["stage_id"],

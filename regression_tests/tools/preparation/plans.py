@@ -16,14 +16,15 @@ def write_run_plan(
     inputs: PreparationInputs,
     command: list[str],
     stage: dict[str, Any] | None = None,
-    stage_overrides: dict[str, Any] | None = None,
+    applied_overrides: dict[str, Any] | None = None,
 ) -> None:
     """Write the plan for one warm run or one workflow stage."""
     plan = _base_plan(inputs, inputs.run_directory, command=command)
     if stage is not None:
         plan["stage_id"] = stage["stage_id"]
         plan["restart_from"] = stage["restart_from"]
-        plan["parameter_overrides"] = stage_overrides or {}
+    if applied_overrides is not None:
+        plan["parameter_overrides"] = applied_overrides
     write_json_direct(staging_directory / "run_plan.json", plan)
 
 

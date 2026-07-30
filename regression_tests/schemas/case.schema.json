@@ -118,6 +118,9 @@
         "mesh": {
           "$ref": "#/$defs/identifier"
         },
+        "restart": {
+          "$ref": "#/$defs/identifier"
+        },
         "reference": {
           "$ref": "#/$defs/identifier"
         },

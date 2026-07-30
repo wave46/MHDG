@@ -15,6 +15,11 @@ PARAMETERS = """&INPUT_LST
 &SWITCH_LST
     steady = .false.
     saveNR = .true.
+    impurity_radiation = .true.
+/
+&PHYS_LST
+    impurity_name = 'W'
+    impurity_concentration = 1e-4
 /
 &NUMER_LST
     nrp = 40

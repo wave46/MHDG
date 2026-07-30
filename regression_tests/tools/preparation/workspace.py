@@ -18,8 +18,6 @@ WARM_INPUT_LINKS = {
     "equilibrium_magnetic_field": "equilibrium.h5",
     "equilibrium_current_density": "current_density.h5",
     "transport_configuration": "transport_model.nml",
-    "warm_restart": "restart.h5",
-    "warm_reference": "reference.h5",
 }
 
 
@@ -47,16 +45,25 @@ def populate_warm_run(
     final_directory: Path,
     artifacts: dict[str, Path],
     runtime_files: dict[str, Path],
+    workflow: dict[str, Any],
+    parameter_overrides: dict[str, Any],
 ) -> None:
     """Link warm-run inputs and render its parameter file."""
     inputs = _create_run_directories(staging)
     for role, filename in WARM_INPUT_LINKS.items():
         (inputs / filename).symlink_to(artifacts[role])
+    (inputs / "restart.h5").symlink_to(
+        artifacts[workflow.get("restart_role", "warm_restart")]
+    )
+    (inputs / "reference.h5").symlink_to(
+        artifacts[workflow.get("reference_role", "warm_reference")]
+    )
     _link_runtime_files(staging, runtime_files)
     render_parameter_file(
         artifacts["warm_parameters"],
         staging / "param.txt",
         _parameter_replacements(final_directory),
+        parameter_overrides,
     )
 
 
