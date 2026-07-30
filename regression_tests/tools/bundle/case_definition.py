@@ -137,6 +137,12 @@ def _normalize_workflow(declaration: dict[str, Any]) -> dict[str, Any]:
     _copy_if_present(
         declaration,
         workflow,
+        "impurity_configuration",
+        "impurity_configuration_role",
+    )
+    _copy_if_present(
+        declaration,
+        workflow,
         "parameter_overrides",
         "parameter_overrides",
     )

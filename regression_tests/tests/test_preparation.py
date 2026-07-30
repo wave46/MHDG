@@ -85,6 +85,7 @@ class RunPreparationTests(unittest.TestCase):
         self.assertNotIn("/old/", parameters)
         rendered_paths = (
             expected / "inputs" / "transport_model.nml",
+            expected / "inputs" / "impurity_model.nml",
             expected / "inputs" / "equilibrium.h5",
             expected / "inputs" / "current_density.h5",
             expected / "inputs" / "geometry.geo",
@@ -98,7 +99,7 @@ class RunPreparationTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertEqual(bundled_parameters, PARAMETERS)
 
-    def test_applies_warm_workflow_parameter_overrides(self) -> None:
+    def test_selects_warm_impurity_configuration(self) -> None:
         prepared = prepare_run(
             self.settings,
             "legacy_case",
@@ -111,8 +112,12 @@ class RunPreparationTests(unittest.TestCase):
 
         parameters = (prepared.path / "param.txt").read_text(encoding="utf-8")
         self.assertIn("impurity_radiation = .true.", parameters)
-        self.assertIn("impurity_name = 'N'", parameters)
-        self.assertIn("impurity_concentration = 0.01", parameters)
+        impurity_configuration = prepared.path / "inputs/impurity_model.nml"
+        self.assertEqual(
+            impurity_configuration.resolve(),
+            (self.bundle / "inputs/impurity_model_n.nml").resolve(),
+        )
+        self.assertIn("impurity_names = 'N'", impurity_configuration.read_text())
 
         plan = json.loads(
             (prepared.path / "run_plan.json").read_text(encoding="utf-8")
@@ -120,8 +125,6 @@ class RunPreparationTests(unittest.TestCase):
         self.assertEqual(
             plan["parameter_overrides"],
             {
-                "impurity_concentration": 0.01,
-                "impurity_name": "N",
                 "impurity_radiation": True,
             },
         )
@@ -137,6 +140,7 @@ class RunPreparationTests(unittest.TestCase):
             "equilibrium_current_density",
             "transport_configuration",
             "warm_parameters",
+            "impurity_configuration",
             "selected_restart",
             "selected_reference",
         }
@@ -157,6 +161,7 @@ class RunPreparationTests(unittest.TestCase):
             {
                 "restart_role": "selected_restart",
                 "reference_role": "selected_reference",
+                "impurity_configuration_role": "impurity_configuration",
             },
             {},
         )

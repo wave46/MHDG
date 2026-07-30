@@ -91,6 +91,8 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | Suite | Coverage | Use |
 | --- | --- | --- |
 | `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
+| `impurity_scalar_baseline` | Impurity off and N, `mpi4_omp4` | Focused compatibility check. |
+| `impurity_mixture` | Impurity off, W, N, and N+W, `mpi4_omp4` | Manual mixture-reference check. |
 | `race` | Both one-step workflows, `serial_omp1` vs `serial_omp16` | Routine OpenMP race check. |
 | `cold` | Both full cold workflows, `mpi4_omp4` | Canonical integration check. |
 | `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |

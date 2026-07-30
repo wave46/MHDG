@@ -124,6 +124,9 @@
         "reference": {
           "$ref": "#/$defs/identifier"
         },
+        "impurity_configuration": {
+          "$ref": "#/$defs/identifier"
+        },
         "comparison": {
           "$ref": "#/$defs/comparison"
         },

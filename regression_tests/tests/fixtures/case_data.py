@@ -8,6 +8,7 @@ from pathlib import Path
 
 PARAMETERS = """&INPUT_LST
     transport_model_path = '/old/transport_model.nml'
+    impurity_model_path = '/old/impurity_model.nml'
     field_path = '/old/equilibrium.h5'
     jtor_path = '/old/current_density.h5'
     save_folder = '/old/output/'
@@ -18,8 +19,6 @@ PARAMETERS = """&INPUT_LST
     impurity_radiation = .true.
 /
 &PHYS_LST
-    impurity_name = 'W'
-    impurity_concentration = 1e-4
 /
 &NUMER_LST
     nrp = 40
@@ -57,12 +56,23 @@ BASE_FILES = (
     "equilibrium.h5",
     "current_density.h5",
     "transport_model.nml",
+    "impurity_model_w.nml",
+    "impurity_model_n.nml",
+    "impurity_model_nw.nml",
     "restart.h5",
     "restart_impurity_off.h5",
     "reference_impurity_off_mpi4_omp4.h5",
     "restart_impurity_n.h5",
     "reference_impurity_n_mpi4_omp4.h5",
+    "restart_impurity_nw.h5",
+    "reference_impurity_nw_mpi4_omp4.h5",
 )
+
+IMPURITY_CONFIGURATIONS = {
+    "impurity_model_w.nml": ("'W'", "1.0d-4"),
+    "impurity_model_n.nml": ("'N'", "1.0d-2"),
+    "impurity_model_nw.nml": ("'N', 'W'", "1.0d-2, 1.0d-4"),
+}
 
 
 def write_case_source(
@@ -82,6 +92,16 @@ def write_case_source(
     for filename in COLD_TRANSPORT_FILES:
         (directory / filename).write_text(
             f"synthetic {filename}\n",
+            encoding="utf-8",
+        )
+    for filename, (names, concentrations) in IMPURITY_CONFIGURATIONS.items():
+        count = names.count("'") // 2
+        (directory / filename).write_text(
+            "&IMPURITY_RADIATION_LST\n"
+            f"  n_impurities = {count}\n"
+            f"  impurity_names = {names}\n"
+            f"  impurity_concentrations = {concentrations}\n"
+            "/\n",
             encoding="utf-8",
         )
 

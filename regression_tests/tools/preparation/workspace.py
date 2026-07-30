@@ -52,6 +52,7 @@ def populate_warm_run(
     inputs = _create_run_directories(staging)
     for role, filename in WARM_INPUT_LINKS.items():
         (inputs / filename).symlink_to(artifacts[role])
+    _link_impurity_configuration(inputs, artifacts, workflow)
     (inputs / "restart.h5").symlink_to(
         artifacts[workflow.get("restart_role", "warm_restart")]
     )
@@ -87,6 +88,7 @@ def populate_stage_run(
     }
     for filename, source in input_sources.items():
         (inputs / filename).symlink_to(source)
+    _link_impurity_configuration(inputs, artifacts, workflow)
     _link_runtime_files(staging, runtime_files)
     render_parameter_file(
         artifacts[stage["parameter_role"]],
@@ -112,10 +114,21 @@ def _link_runtime_files(
         (staging / filename).symlink_to(source)
 
 
+def _link_impurity_configuration(
+    inputs: Path,
+    artifacts: dict[str, Path],
+    workflow: dict[str, Any],
+) -> None:
+    role = workflow.get("impurity_configuration_role")
+    if role is not None:
+        (inputs / "impurity_model.nml").symlink_to(artifacts[role])
+
+
 def _parameter_replacements(final_directory: Path) -> dict[str, Path | str]:
     inputs = final_directory / "inputs"
     return {
         "transport_model_path": inputs / "transport_model.nml",
+        "impurity_model_path": inputs / "impurity_model.nml",
         "field_path": inputs / "equilibrium.h5",
         "jtor_path": inputs / "current_density.h5",
         "geometry_path": inputs / "geometry.geo",
