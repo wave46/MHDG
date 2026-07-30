@@ -12,10 +12,10 @@
       "equilibrium_magnetic_field": "equilibrium.h5",
       "equilibrium_current_density": "current_density.h5",
       "warm_parameters": "param.txt",
-      "transport_configuration": "transport_model.nml",
-      "warm_restart": "restart.h5"
+      "transport_configuration": "transport_model.nml"
     },
     "optional": {
+      "warm_restart": "restart.h5",
       "warm_reference": "reference_mpi4_omp4.h5",
       "coarse_mesh": "mesh_adaptive_initial.msh",
       "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",

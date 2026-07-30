@@ -19,6 +19,11 @@ def required_array(handle: h5py.File, group: str, name: str) -> np.ndarray:
     return array
 
 
+def required_scalar(handle: h5py.File, group: str, name: str) -> int | float:
+    """Read the scalar value stored in a required MHDG dataset."""
+    return required_array(handle, group, name).reshape(-1)[0].item()
+
+
 def optional_array(
     handle: h5py.File,
     group: str,

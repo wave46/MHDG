@@ -33,6 +33,9 @@ def load_suite_definition(
     if "layout_comparisons" in declaration:
         suite["layout_comparisons"] = declaration["layout_comparisons"]
         suite["tolerance_profile"] = declaration["tolerance_profile"]
+        for option in ("layout_comparison_policy", "reference_comparisons"):
+            if option in declaration:
+                suite[option] = declaration[option]
 
     layouts = load_layouts(layouts_path)
     unknown_layouts = [
@@ -59,17 +62,16 @@ def load_suite_definition(
 
 def _paired_layouts(declaration: dict[str, Any]) -> list[str]:
     pairs = declaration["layout_comparisons"]
-    layouts = [
-        layout
-        for pair in pairs
-        for layout in (pair["baseline"], pair["candidate"])
-    ]
-    if len(layouts) != len(set(layouts)):
-        raise BundleError("each layout may appear in only one direct comparison")
     for pair in pairs:
         if pair["baseline"] == pair["candidate"]:
             raise BundleError("a layout cannot be compared with itself")
-    return layouts
+    return list(
+        dict.fromkeys(
+            layout
+            for pair in pairs
+            for layout in (pair["baseline"], pair["candidate"])
+        )
+    )
 
 
 def require_bundle_class(

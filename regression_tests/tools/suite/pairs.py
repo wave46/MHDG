@@ -9,6 +9,7 @@ from comparison.shared.outputs import select_candidate
 from comparison.workflow import compare_completed_run
 from support.documents import load_json
 from support.errors import ComparisonError, HarnessError
+from support.files import file_identity
 from support.paths import recorded_directory
 
 
@@ -49,6 +50,7 @@ def _compare_pair(
         "baseline_output": None,
         "comparison_policy": None,
         "comparison_report": None,
+        "generated_meshes": None,
         "status": "failed",
         "failures": [],
     }
@@ -65,14 +67,62 @@ def _compare_pair(
             tolerances_path,
             reference_override=reference,
             tolerance_profile_override=summary["tolerance_profile"],
+            comparison_policy_override=summary.get("layout_comparison_policy"),
+            report_override=candidate / f"comparison_from_{baseline_layout}.json",
         )
         result["comparison_policy"] = policy
         result["comparison_report"] = str(report_path)
         result["status"] = report["status"]
-        result["failures"] = report["failures"]
+        result["failures"] = list(report["failures"])
+        generated_meshes = compare_generated_meshes(baseline, candidate)
+        result["generated_meshes"] = generated_meshes
+        if generated_meshes and not generated_meshes["passed"]:
+            result["status"] = "failed"
+            result["failures"].extend(generated_meshes["failures"])
     except HarnessError as exc:
         result["failures"] = [str(exc)]
     return result
+
+
+def compare_generated_meshes(
+    reference_run: Path,
+    candidate_run: Path,
+) -> dict[str, Any] | None:
+    """Require retained Gmsh adaptation outputs to be byte-identical."""
+    reference = _generated_meshes(reference_run)
+    candidate = _generated_meshes(candidate_run)
+    if not reference and not candidate:
+        return None
+
+    failures = []
+    files = {}
+    for relative_path in sorted(reference.keys() | candidate.keys()):
+        first = reference.get(relative_path)
+        second = candidate.get(relative_path)
+        first_identity = file_identity(first) if first else None
+        second_identity = file_identity(second) if second else None
+        passed = first_identity == second_identity
+        files[relative_path] = {
+            "passed": passed,
+            "reference": first_identity,
+            "candidate": second_identity,
+        }
+        if not passed:
+            failures.append(f"generated mesh differs: {relative_path}")
+
+    return {
+        "mode": "byte_exact",
+        "passed": not failures,
+        "files": files,
+        "failures": failures,
+    }
+
+
+def _generated_meshes(run_directory: Path) -> dict[str, Path]:
+    return {
+        str(path.relative_to(run_directory)): path
+        for path in run_directory.glob("**/res/temp.msh")
+    }
 
 
 def _completed_run(

@@ -7,7 +7,11 @@ from typing import Any
 import h5py
 import numpy as np
 
-from comparison.fixed.data import numeric_comparison, required_array
+from comparison.fixed.data import (
+    numeric_comparison,
+    required_array,
+    required_scalar,
+)
 from support.errors import ComparisonError
 
 
@@ -53,22 +57,44 @@ def _compare_dataset(
     tolerances: dict[str, Any],
     failures: list[str],
 ) -> dict[str, Any]:
-    first = required_array(reference, "solution", dataset_name).reshape(-1)
-    second = required_array(candidate, "solution", dataset_name).reshape(-1)
+    reference_values = required_array(
+        reference, "solution", dataset_name
+    ).reshape(-1)
+    candidate_values = required_array(
+        candidate, "solution", dataset_name
+    ).reshape(-1)
     report: dict[str, Any] = {
-        "reference_size": int(first.size),
-        "candidate_size": int(second.size),
+        "reference_size": int(reference_values.size),
+        "candidate_size": int(candidate_values.size),
         "equations": {},
     }
-    if first.size != second.size or first.size % equation_count:
+    if (
+        reference_values.size != candidate_values.size
+        or reference_values.size % equation_count
+    ):
         report["passed"] = False
         failures.append(f"solution/{dataset_name} has incompatible size")
         return report
 
-    first = first.reshape(-1, equation_count)
-    second = second.reshape(-1, equation_count)
+    reference_values = _reshape_dataset(
+        reference, dataset_name, reference_values, equation_count
+    )
+    candidate_values = _reshape_dataset(
+        candidate, dataset_name, candidate_values, equation_count
+    )
+
+    reference_by_equation = np.moveaxis(reference_values, 2, -1).reshape(
+        -1, equation_count
+    )
+    candidate_by_equation = np.moveaxis(candidate_values, 2, -1).reshape(
+        -1, equation_count
+    )
     for index, name in enumerate(equation_names):
-        metrics = numeric_comparison(first[:, index], second[:, index], tolerances)
+        metrics = numeric_comparison(
+            reference_by_equation[:, index],
+            candidate_by_equation[:, index],
+            tolerances,
+        )
         report["equations"][name] = metrics
         if not metrics["passed"]:
             failures.append(f"solution/{dataset_name}/{name} exceeds tolerance")
@@ -76,6 +102,30 @@ def _compare_dataset(
         result["passed"] for result in report["equations"].values()
     )
     return report
+
+
+def _reshape_dataset(
+    handle: h5py.File,
+    name: str,
+    values: np.ndarray,
+    equation_count: int,
+) -> np.ndarray:
+    element_count = int(required_scalar(handle, "mesh", "Nelems"))
+    nodes_per_element = int(
+        required_scalar(handle, "mesh", "Nnodesperelem")
+    )
+    if name == "u":
+        shape = (element_count, nodes_per_element, equation_count)
+    elif name == "q":
+        dimension = int(required_scalar(handle, "mesh", "Ndim"))
+        shape = (element_count, nodes_per_element, equation_count, dimension)
+    else:
+        face_count = int(required_scalar(handle, "mesh", "Nfaces"))
+        nodes_per_face = int(
+            required_scalar(handle, "mesh", "Nnodesperface")
+        )
+        shape = (face_count, nodes_per_face, equation_count)
+    return values.reshape(shape)
 
 
 def _matching_equation_count(reference: h5py.File, candidate: h5py.File) -> int:
@@ -114,8 +164,8 @@ def _equation_count(handle: h5py.File) -> int:
         return len(names)
 
     values = required_array(handle, "solution", "u").size
-    elements = int(required_array(handle, "mesh", "Nelems").reshape(-1)[0])
-    nodes = int(required_array(handle, "mesh", "Nnodesperelem").reshape(-1)[0])
+    elements = int(required_scalar(handle, "mesh", "Nelems"))
+    nodes = int(required_scalar(handle, "mesh", "Nnodesperelem"))
     if elements <= 0 or nodes <= 0 or values % (elements * nodes):
         raise ComparisonError("cannot infer the number of equations")
     return values // (elements * nodes)

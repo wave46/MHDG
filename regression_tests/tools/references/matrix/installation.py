@@ -14,6 +14,7 @@ from references.matrix.models import (
 )
 from support.documents import write_json_direct
 from support.errors import BundleError
+from support.files import file_identity
 from support.paths import require_file
 from support.time import utc_now
 
@@ -83,6 +84,36 @@ def install_reference_matrix(
     if manifest["case_id"] != case["case_id"]:
         raise BundleError("source bundle contains another case")
     manifest["roles"][REFERENCE_MATRIX_ROLE] = REFERENCE_MATRIX_ID
+    if summary["suite_id"] == "cold_matrix":
+        _install_canonical_warm_state(staging, manifest, runs, case)
+
+
+def _install_canonical_warm_state(
+    staging: Path,
+    manifest: dict[str, Any],
+    runs: list[MatrixRun],
+    case: dict[str, Any],
+) -> None:
+    """Use the canonical cold final state for warm restart and reference."""
+    canonical_layout = case["workflows"]["cold_fixed"]["default_layout"]
+    matching = [
+        run
+        for run in runs
+        if run.workflow_id == "cold_fixed" and run.layout_id == canonical_layout
+    ]
+    if len(matching) != 1:
+        raise BundleError(
+            "cold matrix has no unique canonical cold_fixed final state"
+        )
+    solution = matching[0].stages[-1].solution
+    for role in ("warm_restart", "warm_reference"):
+        artifact_id = manifest["roles"].get(role)
+        artifact = manifest["artifacts"].get(artifact_id)
+        if artifact is None:
+            raise BundleError(f"source bundle has no {role} artifact")
+        target = staging / artifact["path"]
+        shutil.copy2(solution, target)
+        artifact.update(file_identity(target))
 
 
 def _install_run(

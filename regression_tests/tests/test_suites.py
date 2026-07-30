@@ -13,7 +13,9 @@ from unittest.mock import patch
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
-from suite.runner import run_suite  # noqa: E402
+from suite.configuration import load_suite_definition  # noqa: E402
+from suite.pairs import compare_generated_meshes  # noqa: E402
+from suite.runner import _comparison_mode, run_suite  # noqa: E402
 from suite.verification import verify_suite  # noqa: E402
 from tests.fixtures.harness import create_harness, run_command  # noqa: E402
 from tests.fixtures.solutions import write_solution  # noqa: E402
@@ -157,6 +159,10 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertTrue(
             all(item["status"] == "passed" for item in summary["comparisons"])
         )
+        self.assertEqual(
+            Path(summary["comparisons"][0]["comparison_report"]).name,
+            "comparison_from_serial_omp1.json",
+        )
 
         report = json.loads(
             Path(summary["comparisons"][0]["comparison_report"]).read_text(
@@ -171,6 +177,45 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertEqual(rechecked.returncode, 0, rechecked.stderr)
         self.assertIn("serial_omp1", rechecked.stdout)
         self.assertIn("serial_omp16", rechecked.stdout)
+
+    def test_cold_matrix_combines_golden_and_all_pair_checks(self) -> None:
+        suite = load_suite_definition(
+            "cold_matrix",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+
+        self.assertEqual(len(suite["layout_comparisons"]), 6)
+        self.assertEqual(len(suite["layouts"]), 4)
+        self.assertTrue(suite["reference_comparisons"])
+        self.assertEqual(suite["layout_comparison_policy"], "fixed_hdf5")
+        self.assertEqual(_comparison_mode(True, True, False), "deferred")
+        self.assertEqual(
+            _comparison_mode(True, False, False),
+            "deferred_layout_pairs",
+        )
+
+    def test_generated_adaptive_mesh_comparison_is_byte_exact(self) -> None:
+        reference = self.root / "reference/stages/01_single_step/res/temp.msh"
+        candidate = self.root / "candidate/stages/01_single_step/res/temp.msh"
+        reference.parent.mkdir(parents=True)
+        candidate.parent.mkdir(parents=True)
+        reference.write_text("same mesh\n", encoding="utf-8")
+        candidate.write_text("same mesh\n", encoding="utf-8")
+
+        matching = compare_generated_meshes(
+            self.root / "reference", self.root / "candidate"
+        )
+        self.assertIsNotNone(matching)
+        self.assertTrue(matching["passed"])
+
+        candidate.write_text("different mesh\n", encoding="utf-8")
+        differing = compare_generated_meshes(
+            self.root / "reference", self.root / "candidate"
+        )
+        self.assertIsNotNone(differing)
+        self.assertFalse(differing["passed"])
 
     @patch("suite.verification.compare_completed_run")
     def test_offline_verification_dispatches_only_completed_runs(self, compare) -> None:
@@ -214,6 +259,69 @@ class SuiteWorkflowTests(unittest.TestCase):
             ["solver run did not complete"],
         )
 
+    @patch("suite.verification.compare_layout_pairs")
+    @patch("suite.verification.compare_completed_run")
+    def test_offline_verification_combines_references_and_pairs(
+        self,
+        compare,
+        compare_pairs,
+    ) -> None:
+        compare.return_value = (
+            "fixed_hdf5",
+            self.root / "reference.json",
+            _passing_report(),
+        )
+        compare_pairs.return_value = [
+            {
+                "workflow_id": "cold_fixed",
+                "baseline_layout_id": "serial_omp1",
+                "candidate_layout_id": "serial_omp16",
+                "status": "passed",
+                "failures": [],
+            }
+        ]
+        source = self.root / "suite_summary.json"
+        source.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "suite_id": "cold_matrix",
+                    "run_id": "combined-test",
+                    "case_id": "legacy_case",
+                    "workflow_ids": ["cold_fixed"],
+                    "tolerance_profile": "cold_cross_layout",
+                    "reference_comparisons": True,
+                    "layout_comparisons": [
+                        {
+                            "baseline": "serial_omp1",
+                            "candidate": "serial_omp16",
+                        }
+                    ],
+                    "results": [
+                        _suite_result(self.root, "cold_fixed"),
+                        _suite_result(
+                            self.root,
+                            "cold_fixed",
+                            layout="serial_omp16",
+                        ),
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        _, report = verify_suite(
+            source,
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "tolerances.json",
+        )
+
+        self.assertEqual(compare.call_count, 2)
+        compare_pairs.assert_called_once()
+        self.assertEqual(len(report["results"]), 2)
+        self.assertEqual(len(report["comparisons"]), 1)
+        self.assertEqual(report["status"], "passed")
+
     def _run_suite(self, suite: str, run_id: str, *arguments: str):
         return run_command(
             "suite",
@@ -231,11 +339,16 @@ class SuiteWorkflowTests(unittest.TestCase):
         return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _suite_result(root: Path, workflow: str, status: str = "completed") -> dict:
+def _suite_result(
+    root: Path,
+    workflow: str,
+    status: str = "completed",
+    layout: str = "serial_omp1",
+) -> dict:
     return {
         "workflow_id": workflow,
-        "layout_id": "serial_omp1",
-        "run_directory": str(root / workflow),
+        "layout_id": layout,
+        "run_directory": str(root / workflow / layout),
         "run_status": status,
     }
 

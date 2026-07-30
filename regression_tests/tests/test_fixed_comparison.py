@@ -21,7 +21,6 @@ from tests.fixtures.solutions import write_solution  # noqa: E402
 TOLERANCES = {
     "require_finite": True,
     "newton_error_max": 2.0e-4,
-    "mesh_connectivity": "exact",
     "mesh_coordinate_atol": 1.0e-12,
     "relative_l2_max": 1.0e-10,
     "normalized_linf_max": 1.0e-9,
@@ -93,7 +92,6 @@ class Hdf5ComparisonTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "failed")
         self.assertFalse(report["mesh"]["connectivity"]["T"]["passed"])
-
 
 class CompareCommandTests(unittest.TestCase):
     def setUp(self) -> None:

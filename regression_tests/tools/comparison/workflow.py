@@ -23,6 +23,7 @@ def compare_completed_run(
     candidate_override: Path | None = None,
     reference_override: Path | None = None,
     tolerance_profile_override: str | None = None,
+    comparison_policy_override: str | None = None,
     report_override: Path | None = None,
 ) -> tuple[str, Path, dict[str, Any]]:
     """Dispatch one completed run to its final-state or staged comparison."""
@@ -39,6 +40,7 @@ def compare_completed_run(
             overrides.candidate,
             overrides.reference,
             overrides.tolerance_profile,
+            comparison_policy_override,
         )
     )
     if inputs.workflow.get("stages") and not explicit_final_state:
@@ -55,15 +57,21 @@ def compare_completed_run(
             )
             return "reference_matrix", path, report
 
-    return _compare_final_state(inputs, overrides, report_override)
+    return _compare_final_state(
+        inputs,
+        overrides,
+        report_override,
+        comparison_policy_override,
+    )
 
 
 def _compare_final_state(
     inputs: ComparisonInputs,
     overrides: ComparisonOverrides,
     report_path: Path | None,
+    policy_override: str | None = None,
 ) -> tuple[str, Path, dict[str, Any]]:
-    policy = inputs.workflow.get("comparison_policy")
+    policy = policy_override or inputs.workflow.get("comparison_policy")
     if policy == "fixed_hdf5":
         path, report = compare_fixed_run(
             inputs,

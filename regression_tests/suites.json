@@ -25,15 +25,38 @@
       "layouts": ["mpi4_omp4"]
     },
     "cold_matrix": {
-      "description": "Cold workflows across every tracked layout",
+      "description": "Cold workflows with golden and all-pairs layout checks",
       "case": "legacy_case",
       "workflows": ["cold_fixed", "cold_adaptive"],
-      "layouts": [
-        "serial_omp1",
-        "serial_omp16",
-        "mpi4_omp1",
-        "mpi4_omp4"
-      ]
+      "layout_comparisons": [
+        {
+          "baseline": "serial_omp1",
+          "candidate": "serial_omp16"
+        },
+        {
+          "baseline": "serial_omp1",
+          "candidate": "mpi4_omp1"
+        },
+        {
+          "baseline": "serial_omp1",
+          "candidate": "mpi4_omp4"
+        },
+        {
+          "baseline": "serial_omp16",
+          "candidate": "mpi4_omp1"
+        },
+        {
+          "baseline": "serial_omp16",
+          "candidate": "mpi4_omp4"
+        },
+        {
+          "baseline": "mpi4_omp1",
+          "candidate": "mpi4_omp4"
+        }
+      ],
+      "tolerance_profile": "cold_cross_layout",
+      "layout_comparison_policy": "fixed_hdf5",
+      "reference_comparisons": true
     },
     "race": {
       "description": "One-step fixed and adaptive OpenMP race checks on the coarse mesh",
@@ -48,13 +71,29 @@
       "tolerance_profile": "race_step"
     },
     "race_matrix": {
-      "description": "Serial and MPI one-step race checks on the coarse mesh",
+      "description": "All-pairs one-step race checks on the coarse mesh",
       "case": "legacy_case",
       "workflows": ["cold_step_fixed", "cold_step_adaptive"],
       "layout_comparisons": [
         {
           "baseline": "serial_omp1",
           "candidate": "serial_omp16"
+        },
+        {
+          "baseline": "serial_omp1",
+          "candidate": "mpi4_omp1"
+        },
+        {
+          "baseline": "serial_omp1",
+          "candidate": "mpi4_omp4"
+        },
+        {
+          "baseline": "serial_omp16",
+          "candidate": "mpi4_omp1"
+        },
+        {
+          "baseline": "serial_omp16",
+          "candidate": "mpi4_omp4"
         },
         {
           "baseline": "mpi4_omp1",

@@ -98,54 +98,6 @@ CONTAINS
 
   ENDSUBROUTINE post_process_matrix_solution
 
-  SUBROUTINE L2_error_estimator_eval(X,T,u,q,error_param,error_L2,eg_L2)
-    USE physics, ONLY: cons2phys
-
-    REAL*8, INTENT(IN)                :: X(:,:)
-    INTEGER, INTENT(IN)               :: T(:,:)
-    REAL*8, INTENT(IN)                :: u(:), q(:)
-    INTEGER, INTENT(IN)               :: error_param
-    REAL*8, INTENT(OUT)               :: error_L2(:)
-    REAL*8, INTENT(OUT)               :: eg_L2
-
-    TYPE(Reference_element_type)      :: refElv_star
-    REAL*8, ALLOCATABLE               :: K(:,:,:), Bt(:,:,:), int_N(:,:,:)
-    REAL*8, ALLOCATABLE               :: u_star(:), u_int(:), u_sol(:,:), u_star_sol(:,:)
-    INTEGER                           :: n_elements
-
-    n_elements = Mesh%Nelems
-
-    ALLOCATE(K((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq, n_elements))
-    ALLOCATE(Bt((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq*mesh%ndim*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2, n_elements))
-    ALLOCATE(int_N((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq, n_elements))
-    ALLOCATE(u_star((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements))
-    ALLOCATE(u_int((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements))
-    ALLOCATE(u_sol(Mesh%Nnodesperelem*n_elements*phys%neq/phys%Neq, phys%npv))
-    ALLOCATE(u_star_sol((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements/phys%Neq, phys%npv))
-
-    CALL create_reference_element(refElv_star,2,refElPol%Ndeg+1, verbose = 0)
-
-    ! local calculation of the p+1 solution u_star
-    CALL hdg_post_process_matrix(X,T,refElv_star,refElPol%Ndeg,refElPol%Ndeg+1, K, Bt, int_N)
-    CALL hdg_postprocess_solution(q,u,K,Bt,int_N,refElv_star,refElPol,n_elements, u_star, u_int)
-
-    CALL cons2phys(TRANSPOSE(RESHAPE(u, (/phys%Neq, SIZE(T,1)*SIZE(T,2)/))), u_sol)
-    CALL cons2phys(TRANSPOSE(RESHAPE(u_star, (/phys%Neq, SIZE(T,1)*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2/))), u_star_sol)
-
-    ! elemental error,global error, area elements
-    CALL calculate_L2_error_two_sols_different_p_scalar(X,T,u_sol(:,error_param),refElPol,X,T,u_star_sol(:,error_param),refElv_star,error_L2,eg_L2)
-    CALL free_reference_element_pol(refElv_star)
-
-    DEALLOCATE(K)
-    DEALLOCATE(Bt)
-    DEALLOCATE(int_N)
-    DEALLOCATE(u_sol)
-    DEALLOCATE(u_star_sol)
-    DEALLOCATE(u_star)
-    DEALLOCATE(u_int)
-
-  ENDSUBROUTINE L2_error_estimator_eval
-
   SUBROUTINE hdg_post_process_matrix(X, T, refElv, p1, p2, K, Bt, int_N, M)
     TYPE(Reference_element_type), INTENT(IN) :: refElv
     REAL*8, INTENT(IN)                       :: X(:,:)
@@ -540,7 +492,7 @@ CONTAINS
     REAL*8                                      :: ue_p1(refEl1%Nnodes2D), ue_p2(refEl2%Nnodes2D)
     INTEGER                                     :: ind_p1(refEl1%Nnodes2D), ind_p2(refEl2%Nnodes2D)
     INTEGER                                     :: nnodes_p1, nnodes_p2, n_elements, iElem, i
-    REAL*8                                      :: elem_area, elem_sol_norm, elem_error, total_area, total_norm_sol
+    REAL*8                                      :: elem_area, elem_sol_norm, elem_error, totals(3)
 #ifdef PARALL
       INTEGER                                     :: ierr
 #endif
@@ -581,32 +533,30 @@ CONTAINS
 
     ENDDO
 
+#ifdef PARALL
+    ! Ghost values are needed locally, but global norms must count each element once.
+    totals(1) = SUM(error2, MASK=Mesh%ghostElems .EQ. 0)
+    totals(2) = SUM(sol_norm, MASK=Mesh%ghostElems .EQ. 0)
+    totals(3) = SUM(dom_area, MASK=Mesh%ghostElems .EQ. 0)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totals, SIZE(totals), MPI_REAL8, &
+         MPI_SUM, MPI_COMM_WORLD, ierr)
+#else
+    totals = (/SUM(error2), SUM(sol_norm), SUM(dom_area)/)
+#endif
+
     IF(adapt%difference .EQ. 0) THEN
        ! relative error
        error = SQRT(error2/sol_norm)
 
     ELSEIF(adapt%difference .EQ. 1) THEN
-       total_norm_sol = SUM(sol_norm)
-       total_area = SUM(dom_area)
-
-#ifdef PARALL
-       CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_norm_sol, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-       CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-
-       DO iElem = 1, n_elements
-         error(iElem) = SQRT(error2(iElem)/total_norm_sol*total_area/dom_area(iElem))
-       ENDDO
-#else
-       error = SQRT(error2/total_norm_sol*total_area/dom_area)
-#endif
-
+       error = SQRT(error2/totals(2)*totals(3)/dom_area)
 
     ELSE
        WRITE(*,*) "Choice of relative/absolute difference for the adaptivity not valid. STOP."
        STOP
     ENDIF
 
-    eg = SQRT(SUM(error2)/SUM(dom_area))
+    eg = SQRT(totals(1)/totals(3))
 
   ENDSUBROUTINE calculate_L2_error_two_sols_different_p_scalar
 

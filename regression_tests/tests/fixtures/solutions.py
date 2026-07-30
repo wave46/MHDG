@@ -15,17 +15,28 @@ def write_solution(
     solution_offset: float = 0.0,
 ) -> None:
     mesh_values = {
-        "X": np.array([[1.0, 2.0, 3.0, 4.0], [0.0, 1.0, 0.0, 1.0]]),
-        "T": np.array([[1, 2], [2, 3]], dtype=np.int32),
-        "Tlin": np.array([[1, 2], [2, 3]], dtype=np.int32),
-        "Tb": np.array([[1, 2], [3, 4]], dtype=np.int32),
+        "X": np.array([[0.0, 1.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]),
+        "T": np.array([[1, 2], [2, 4], [3, 3]], dtype=np.int32),
+        "Tlin": np.array([[1, 2], [2, 4], [3, 3]], dtype=np.int32),
+        "Tb": np.array([[1, 2, 4, 3], [2, 4, 3, 1]], dtype=np.int32),
+        "intfaces": np.array([[1], [2], [2], [3], [2]], dtype=np.int32),
+        "extfaces": np.array(
+            [[1, 2, 2, 1], [1, 1, 2, 3]], dtype=np.int32
+        ),
+        "boundaryFlag": np.array([1, 2, 3, 4], dtype=np.int32),
+        "Ndim": np.array([2], dtype=np.int32),
+        "Nnodes": np.array([4], dtype=np.int32),
         "Nelems": np.array([2], dtype=np.int32),
-        "Nnodesperelem": np.array([2], dtype=np.int32),
+        "Nnodesperelem": np.array([3], dtype=np.int32),
+        "Nnodesperface": np.array([2], dtype=np.int32),
+        "Nintfaces": np.array([1], dtype=np.int32),
+        "Nextfaces": np.array([4], dtype=np.int32),
+        "Nfaces": np.array([5], dtype=np.int32),
     }
     solution_values = {
-        "u": np.arange(1.0, 9.0) + solution_offset,
-        "q": np.arange(1.0, 17.0) + solution_offset,
-        "u_tilde": np.arange(1.0, 13.0) + solution_offset,
+        "u": np.arange(1.0, 13.0) + solution_offset,
+        "q": np.arange(1.0, 25.0) + solution_offset,
+        "u_tilde": np.arange(1.0, 21.0) + solution_offset,
     }
 
     with h5py.File(path, "w") as handle:

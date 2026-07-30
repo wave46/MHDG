@@ -14,6 +14,9 @@ MODULE Main_utils
   USE printutils
   USE debug
   USE initialization
+  USE adaptivity_common_module, ONLY: set_order_mesh
+  USE adaptivity_projection_module, ONLY: projectSolutionDifferentMeshes_general, &
+       projectSolutionDifferentMeshes_general_arrays
   USE external_heating
 #ifdef WITH_PETSC
    USE solve_petsc, only: matPETSC, InitPETSC
@@ -791,6 +794,8 @@ ENDSUBROUTINE update_delta_te
   ENDSUBROUTINE initialize_solution
 
   SUBROUTINE load_mesh()
+    CHARACTER(LEN=1024) :: ordered_mesh_name
+    INTEGER             :: mesh_flip
 
     IF (nb_args .EQ. 3) THEN
        ! find projection points
@@ -818,22 +823,17 @@ ENDSUBROUTINE update_delta_te
 
        ! Load the mesh file from gmsh input or h5
        
-      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
-         CALL load_gmsh_mesh(mesh_name, 0)
-      ELSE
-         CALL load_gmsh_mesh(mesh_name, 1)
-      ENDIF
+      mesh_flip = 1
+      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) mesh_flip = 0
+      CALL load_gmsh_mesh(mesh_name, mesh_flip)
       CALL create_reference_element(refElPol, 2, verbose = 1)
 
       IF((switch%set_2d_order) .AND. (refElPol%nDeg .NE. switch%order_2d) ) THEN
-         CALL mesh_preprocess_serial(ierr)
-         CALL set_order_mesh(switch%order_2d)
+         CALL set_order_mesh(TRIM(mesh_name)//'.msh', adapt%geometry_path, switch%order_2d, &
+              ordered_mesh_name)
+         CALL free_mesh()
+         CALL load_gmsh_mesh(ordered_mesh_name, mesh_flip)
          CALL free_reference_element_pol(refElPol)
-         Mesh%X = Mesh%X*phys%lscale
-         Mesh%xmax = Mesh%xmax*phys%lscale
-         Mesh%xmin = Mesh%xmin*phys%lscale
-         Mesh%ymax = Mesh%ymax*phys%lscale
-         Mesh%ymin = Mesh%ymin*phys%lscale
       ENDIF
 
       IF(switch%gmsh2h5) THEN

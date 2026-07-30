@@ -35,8 +35,7 @@ def new_summary(
         "results": [],
     }
     if suite.get("layout_comparisons"):
-        summary["layout_comparisons"] = suite["layout_comparisons"]
-        summary["tolerance_profile"] = suite["tolerance_profile"]
+        summary.update(_layout_comparison_settings(suite))
         summary["comparisons"] = []
     return summary
 
@@ -59,8 +58,7 @@ def resume_summary(
         "comparison_mode": comparison_mode,
     }
     if suite.get("layout_comparisons"):
-        expected["layout_comparisons"] = suite["layout_comparisons"]
-        expected["tolerance_profile"] = suite["tolerance_profile"]
+        expected.update(_layout_comparison_settings(suite))
     mismatched = [key for key, value in expected.items() if summary.get(key) != value]
     if mismatched:
         raise BundleError(f"suite summary does not match: {', '.join(mismatched)}")
@@ -77,6 +75,16 @@ def resume_summary(
     summary["status"] = "running"
     summary["finished_utc"] = None
     return summary
+
+
+def _layout_comparison_settings(suite: dict[str, Any]) -> dict[str, Any]:
+    names = (
+        "layout_comparisons",
+        "tolerance_profile",
+        "layout_comparison_policy",
+        "reference_comparisons",
+    )
+    return {name: suite[name] for name in names if name in suite}
 
 
 def _validate_execution_inputs(recorded: Any, current: dict[str, Any]) -> None:

@@ -37,12 +37,18 @@ def compare_hdf5_files(
                 tolerances,
                 failures,
             )
-            report["solution"] = compare_solution(
-                reference,
-                candidate,
-                tolerances,
-                failures,
-            )
+            if not report["mesh"]["passed"]:
+                report["solution"] = {
+                    "passed": False,
+                    "reason": "mesh comparison failed",
+                }
+            else:
+                report["solution"] = compare_solution(
+                    reference,
+                    candidate,
+                    tolerances,
+                    failures,
+                )
             report["transport_1d"] = compare_transport(
                 reference,
                 candidate,

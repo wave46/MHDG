@@ -6,11 +6,33 @@
 !************************************************************
 
 MODULE adaptivity_common_module
-  USE globals
-  USE reference_element
-  USE gmsh
-  USE GMSH_io_module
+  USE, INTRINSIC :: iso_c_binding, ONLY: c_double, c_int, c_size_t
+  USE globals, ONLY: adapt, free_mesh, geom, Mesh, phys, refElPol, switch
+  USE MPI_OMP, ONLY: MPIvar
+  USE reference_element, ONLY: create_reference_element, free_reference_element_pol
+  USE gmsh, ONLY: gmsh_t
+  USE GMSH_io_module, ONLY: load_gmsh_mesh
   IMPLICIT NONE
+  PRIVATE
+
+  PUBLIC :: adaptivity_console_output
+  PUBLIC :: calculate_h_map_elements
+  PUBLIC :: combine_h_target_ind_est
+  PUBLIC :: gmsh_create_from_h_target
+  PUBLIC :: load_new_mesh_gmsh
+  PUBLIC :: quicksort_int
+  PUBLIC :: save_copy_new_mesh
+  PUBLIC :: set_order_mesh
+  PUBLIC :: unique_1D
+  PUBLIC :: unique_stable
+
+  TYPE :: gmsh_entity_mesh_data
+     INTEGER :: dimension = -1
+     INTEGER :: tag = -1
+     INTEGER :: element_type = -1
+     INTEGER(c_size_t), ALLOCATABLE :: element_tags(:)
+     INTEGER(c_size_t), ALLOCATABLE :: node_tags(:)
+  END TYPE gmsh_entity_mesh_data
 
 CONTAINS
 
@@ -38,44 +60,52 @@ CONTAINS
       INTEGER, INTENT(IN)               :: connectivity(:,:)
       REAL*8, INTENT(OUT)               :: h_map(SIZE(connectivity,1))
       INTEGER                           :: i
-      REAL*8                            :: side1, side2, side3
 
       DO i = 1, SIZE(connectivity,1)
-         side1 = SQRT((nodes(connectivity(i,1),1) - nodes(connectivity(i,2),1))**2 + (nodes(connectivity(i,1),2) - nodes(connectivity(i,2),2))**2)
-         side2 = SQRT((nodes(connectivity(i,2),1) - nodes(connectivity(i,3),1))**2 + (nodes(connectivity(i,2),2) - nodes(connectivity(i,3),2))**2)
-         side3 = SQRT((nodes(connectivity(i,3),1) - nodes(connectivity(i,1),1))**2 + (nodes(connectivity(i,3),2) - nodes(connectivity(i,1),2))**2)
-
-
-         h_map(i) = (side1 + side2 + side3)/3
+         ! Gmsh's isotropic size field represents a desired linear edge length.
+         h_map(i) = triangle_max_edge(nodes, connectivity(i,:))
       ENDDO
    END SUBROUTINE calculate_h_map_elements
 
-   SUBROUTINE get_h_target_vertices(h_map_elements,h_target_vertices,T)
-      REAL*8, INTENT(IN)                              :: h_map_elements(:)
-      INTEGER,INTENT(IN)                              :: T(:,:)
-      REAL*8, DIMENSION(:), POINTER, INTENT(INOUT)    :: h_target_vertices
-      REAL*8, ALLOCATABLE                             :: h_target_nodal(:)
-      INTEGER, ALLOCATABLE                            :: nodes_repeats(:)
-      INTEGER                                         :: number_of_vertices
+   PURE FUNCTION triangle_max_edge(nodes, triangle) RESULT(max_edge)
+      REAL*8, INTENT(IN) :: nodes(:,:)
+      INTEGER, INTENT(IN) :: triangle(:)
+      REAL*8 :: max_edge, edge_lengths(3)
 
+      edge_lengths(1) = NORM2(nodes(triangle(1),:) - nodes(triangle(2),:))
+      edge_lengths(2) = NORM2(nodes(triangle(2),:) - nodes(triangle(3),:))
+      edge_lengths(3) = NORM2(nodes(triangle(3),:) - nodes(triangle(1),:))
+      max_edge = MAXVAL(edge_lengths)
+   END FUNCTION triangle_max_edge
 
-      ALLOCATE(h_target_nodal(MAXVAL(T)))
-      ALLOCATE(nodes_repeats(MAXVAL(T)))      
+   SUBROUTINE average_element_targets_on_nodes(element_targets, connectivity, node_targets)
+      REAL*8, INTENT(IN)  :: element_targets(:)
+      INTEGER, INTENT(IN) :: connectivity(:,:)
+      REAL*8, INTENT(OUT) :: node_targets(:)
+      INTEGER, ALLOCATABLE :: node_counts(:)
+      INTEGER              :: i, j, node
 
-      CALL sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
+      ALLOCATE(node_counts(SIZE(node_targets)))
+      node_targets = 0.d0
+      node_counts = 0
+      DO i = 1, SIZE(connectivity,1)
+         DO j = 1, SIZE(connectivity,2)
+            node = connectivity(i,j)
+            node_targets(node) = node_targets(node) + element_targets(i)
+            node_counts(node) = node_counts(node) + 1
+         ENDDO
+      ENDDO
 
-      number_of_vertices = COUNT(nodes_repeats /= 0)
-
-      ALLOCATE(h_target_vertices(number_of_vertices))
-
-      CALL average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
-
-      DEALLOCATE(h_target_nodal, nodes_repeats)
-   END SUBROUTINE get_h_target_vertices
+      DO node = 1, SIZE(node_targets)
+         IF (node_counts(node) .GT. 0) &
+            node_targets(node) = node_targets(node)/REAL(node_counts(node), KIND=8)
+      ENDDO
+      DEALLOCATE(node_counts)
+   END SUBROUTINE average_element_targets_on_nodes
 
 
    SUBROUTINE load_new_mesh_gmsh(order)
-      USE preprocess
+      USE preprocess, ONLY: mesh_preprocess_serial
       INTEGER, INTENT(IN) :: order
       INTEGER                     :: ierr
 
@@ -117,567 +147,241 @@ CONTAINS
       END WHERE
    ENDSUBROUTINE combine_h_target_ind_est
 
-   SUBROUTINE sum_h_target_nodal(T, h_map_elements, h_target_nodal, nodes_repeats)
-      INTEGER, INTENT(IN)               :: T(:,:)
-      REAL*8, INTENT(IN)                :: h_map_elements(:)
-      REAL*8, INTENT(OUT)               :: h_target_nodal(:)
-      INTEGER, INTENT(OUT)              :: nodes_repeats(:)
-      INTEGER                           :: i, j
+  SUBROUTINE set_order_mesh(mesh_filename, geometry_filename, p, ordered_mesh_name)
+    USE mpi, ONLY: MPI_BARRIER, MPI_COMM_WORLD
 
-      h_target_nodal = 0.
-      nodes_repeats = 0
-      DO i=1,SIZE(T,1)
-         DO j=1,3
-            h_target_nodal(T(i,j)) = h_target_nodal(T(i,j)) + h_map_elements(i)
-            nodes_repeats(T(i,j)) = nodes_repeats(T(i,j)) + 1
-         ENDDO
-      ENDDO
-   END SUBROUTINE sum_h_target_nodal
+    CHARACTER(*), INTENT(IN)  :: mesh_filename, geometry_filename
+    INTEGER, INTENT(IN)       :: p
+    CHARACTER(*), INTENT(OUT) :: ordered_mesh_name
+    INTEGER                   :: barrier_error
 
-   SUBROUTINE average_h_target(h_target_nodal, nodes_repeats, h_target_vertices)
-      REAL*8, INTENT(IN)                              :: h_target_nodal(:)
-      INTEGER, INTENT(IN)                             :: nodes_repeats(:)
-      REAL*8, DIMENSION(:), POINTER, INTENT(INOUT)      :: h_target_vertices
-      INTEGER                                         :: i, j
+    IF (LEN_TRIM(geometry_filename) .EQ. 0) &
+       CALL mesh_order_error('set_2d_order requires geometry_path')
 
-      j = 1
-      DO i=1,SIZE(h_target_nodal)
-         IF(nodes_repeats(i) /= 0) THEN
-            h_target_vertices(j) = h_target_nodal(i)/REAL(nodes_repeats(i))
-            j = j + 1
-         ENDIF
-      ENDDO
-   END SUBROUTINE average_h_target
-
-  SUBROUTINE set_order_mesh(p)
-
-    INTEGER, INTENT(IN)                      :: p
-    TYPE(Reference_element_type)             :: refElLocal
-    INTEGER                                  :: n_element_nodes, n_face_nodes, n_int_faces, n_nodes, ini,ind, i, j, elem, iface, counter, element_order, elemType, ielem, meshed_face, &
-                                                n_already_meshed_faces, n_boundaries, n_boundary_elements, Nnodesperelem, n_elements,Ndim, Nelems, Nextfaces, Nnodes, &
-                                                Nnodesperface, counter1, start, stop_index
-    INTEGER                                  :: temp(p-1), elem_pos(2), face_pos(2), face_nodes(3,p-1), face_info(3), elements(2), nodes_face(2, p-1), element_face(2), already_meshed_face_nodes(2, p-1), already_meshed_element_faces(2), &
-                                                already_meshed_element(2), ifacenode(p+1)
-    INTEGER, ALLOCATABLE, DIMENSION(:,:)     :: int_faces, elem_int_face, Tp, Tb, total_face_info
-    INTEGER, ALLOCATABLE, DIMENSION(:)       :: boundaryFlag, unique_boundary_flag
-    LOGICAL, ALLOCATABLE, DIMENSION(:)       :: aux_coord_logical, local_coord_logical, int_face_meshed
-    REAL*8, ALLOCATABLE, DIMENSION(:,:)      :: Xp, Xp_aux, elem_nodes_mod, coord_ref
-    INTEGER , ALLOCATABLE, DIMENSION(:,:)    :: Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_ULIM, Tb_PUFF, Tb_PUMP, mesh_info
-
-    IF (utils%printint > 0) THEN
-      IF (MPIvar%glob_id .EQ. 0) THEN
-       WRITE (6, *) '*************************************************'
-       WRITE (6, *) '*              INCREASE ORDER MESH              *'
-       WRITE (6, *) '*************************************************'
-      ENDIF
+    ordered_mesh_name = './res/mesh_ordered_input'
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE(*,*) 'Increasing mesh order on the supplied CAD geometry.'
+       CALL elevate_mesh_order_with_gmsh(TRIM(mesh_filename), TRIM(geometry_filename), &
+            TRIM(ordered_mesh_name)//'.msh', p)
     ENDIF
+    CALL MPI_BARRIER(MPI_COMM_WORLD, barrier_error)
+  END SUBROUTINE set_order_mesh
 
-    CALL create_reference_element(refElLocal,2, p, verbose = 1)
+  SUBROUTINE elevate_mesh_order_with_gmsh(mesh_filename, geometry_filename, output_filename, p)
+    CHARACTER(*), INTENT(IN)                   :: mesh_filename, geometry_filename, output_filename
+    INTEGER, INTENT(IN)                        :: p
+    TYPE(gmsh_t)                               :: gmsh_l
+    TYPE(gmsh_entity_mesh_data), ALLOCATABLE   :: source_entities(:)
+    INTEGER(c_size_t), ALLOCATABLE             :: source_node_tags(:)
+    REAL(c_double), ALLOCATABLE                :: source_coordinates(:)
+    INTEGER, ALLOCATABLE                       :: source_node_dimensions(:), source_node_entities(:)
+    INTEGER                                    :: source_entity_count
 
-    face_nodes = refElLocal%face_nodes(:,2:SIZE(refElLocal%face_nodes,2)-1); ! without vertices
-    ALLOCATE(coord_ref(SIZE(refElLocal%coord2d,1), SIZE(refElLocal%coord2d,2)))
-    ALLOCATE(int_faces(SIZE(Mesh%intfaces,1), SIZE(Mesh%intfaces,2)))
+    CALL gmsh_l%initialize()
+    CALL gmsh_l%option%setNumber('General.Verbosity', 2.d0)
+    CALL gmsh_l%open(mesh_filename)
+    CALL capture_source_mesh(gmsh_l, source_node_tags, source_coordinates, source_node_dimensions, &
+         source_node_entities, source_entities, source_entity_count)
 
-    coord_ref = refElLocal%coord2d;
-    n_element_nodes = SIZE(coord_ref,1);
-    n_face_nodes = SIZE(face_nodes,2);
+    CALL gmsh_l%clear()
+    CALL gmsh_l%open(geometry_filename)
+    CALL classify_cad_point_nodes(gmsh_l, source_coordinates, source_node_dimensions, source_node_entities, &
+         source_entities, source_entity_count)
+    CALL add_source_nodes_to_cad(gmsh_l, source_node_tags, source_coordinates, source_node_dimensions, &
+         source_node_entities)
+    CALL add_source_elements_to_cad(gmsh_l, source_entities, source_entity_count)
 
+    CALL gmsh_l%model%mesh%setOrder(p)
+    CALL gmsh_l%model%mesh%optimize('HighOrder')
+    CALL gmsh_l%option%setNumber('Mesh.MshFileVersion', 2.2d0)
+    CALL gmsh_l%write(output_filename)
+    CALL gmsh_l%finalize()
+  END SUBROUTINE elevate_mesh_order_with_gmsh
 
-    int_faces = Mesh%intfaces
-    elem_int_face = Mesh%F
+  SUBROUTINE capture_source_mesh(gmsh_l, node_tags, coordinates, node_dimensions, node_entities, &
+       entity_data, entity_count)
+    TYPE(gmsh_t), INTENT(INOUT)                         :: gmsh_l
+    INTEGER(c_size_t), ALLOCATABLE, INTENT(OUT)         :: node_tags(:)
+    REAL(c_double), ALLOCATABLE, INTENT(OUT)            :: coordinates(:)
+    INTEGER, ALLOCATABLE, INTENT(OUT)                   :: node_dimensions(:), node_entities(:)
+    TYPE(gmsh_entity_mesh_data), ALLOCATABLE, INTENT(OUT) :: entity_data(:)
+    INTEGER, INTENT(OUT)                                :: entity_count
+    INTEGER(c_int), ALLOCATABLE                         :: dimension_tags(:,:), element_types(:)
+    INTEGER(c_size_t), ALLOCATABLE                      :: entity_node_tags(:)
+    REAL(c_double), ALLOCATABLE                         :: unused_coordinates(:), unused_parameters(:)
+    INTEGER, ALLOCATABLE                                :: node_index(:)
+    INTEGER                                             :: entity, node, position, dimension, tag, source_element_type
 
-    n_int_faces = SIZE(int_faces,1);
+    CALL gmsh_l%model%mesh%getNodes(node_tags, coordinates, unused_parameters, returnParametricCoord=.FALSE.)
+    IF (SIZE(node_tags) .EQ. 0) CALL mesh_order_error('source mesh has no nodes')
+    ALLOCATE(node_index(INT(MAXVAL(node_tags))))
+    node_index = 0
+    DO node = 1, SIZE(node_tags)
+       node_index(INT(node_tags(node))) = node
+    ENDDO
 
-    DO i = 1, SIZE(elem_int_face,1)
-       DO j = 1, SIZE(elem_int_face,2)
-          IF(elem_int_face(i,j) .GT. n_int_faces) THEN
-             elem_int_face(i,j) = 0
+    ALLOCATE(node_dimensions(SIZE(node_tags)), node_entities(SIZE(node_tags)))
+    node_dimensions = -1
+    node_entities = -1
+    CALL gmsh_l%model%getEntities(dimension_tags)
+    ALLOCATE(entity_data(SIZE(dimension_tags,2)))
+    entity_count = 0
+
+    DO entity = 1, SIZE(dimension_tags,2)
+       dimension = INT(dimension_tags(1,entity))
+       tag = INT(dimension_tags(2,entity))
+       IF (dimension .LT. 0 .OR. dimension .GT. 2) CYCLE
+       CALL gmsh_l%model%mesh%getNodes(entity_node_tags, unused_coordinates, unused_parameters, &
+            dim=dimension, tag=tag, includeBoundary=.FALSE., returnParametricCoord=.FALSE.)
+       DO node = 1, SIZE(entity_node_tags)
+          position = node_index(INT(entity_node_tags(node)))
+          node_dimensions(position) = dimension
+          node_entities(position) = tag
+       ENDDO
+
+       IF (dimension .EQ. 0) CYCLE
+       source_element_type = MERGE(1, 2, dimension .EQ. 1)
+       CALL gmsh_l%model%mesh%getElementTypes(element_types, dim=dimension, tag=tag)
+       IF (ANY(element_types .NE. source_element_type)) &
+          CALL mesh_order_error('set_2d_order requires a first-order line/triangle mesh')
+       IF (SIZE(element_types) .EQ. 0) CYCLE
+
+       entity_count = entity_count + 1
+       entity_data(entity_count)%dimension = dimension
+       entity_data(entity_count)%tag = tag
+       entity_data(entity_count)%element_type = source_element_type
+       CALL gmsh_l%model%mesh%getElementsByType(source_element_type, &
+            entity_data(entity_count)%element_tags, entity_data(entity_count)%node_tags, tag=tag)
+    ENDDO
+
+    IF (entity_count .EQ. 0) CALL mesh_order_error('source mesh has no line or triangle elements')
+    IF (ANY(node_dimensions .EQ. -1)) CALL mesh_order_error('source mesh contains unclassified nodes')
+  END SUBROUTINE capture_source_mesh
+
+  SUBROUTINE classify_cad_point_nodes(gmsh_l, coordinates, node_dimensions, node_entities, &
+       entity_data, entity_count)
+    TYPE(gmsh_t), INTENT(INOUT)              :: gmsh_l
+    REAL(c_double), INTENT(IN)                :: coordinates(:)
+    INTEGER, INTENT(INOUT)                    :: node_dimensions(:), node_entities(:)
+    TYPE(gmsh_entity_mesh_data), INTENT(IN)   :: entity_data(:)
+    INTEGER, INTENT(IN)                       :: entity_count
+    INTEGER(c_int), ALLOCATABLE               :: curves(:,:), curve_boundary(:,:)
+    INTEGER, ALLOCATABLE                      :: point_tags(:)
+    REAL(c_double), ALLOCATABLE               :: point_coordinates(:), no_parameters(:)
+    REAL(c_double)                            :: tolerance, distance, nearest_distance, coordinate_scale
+    INTEGER                                   :: curve, boundary, point_count, point, node, nearest_node, point_tag
+
+    CALL gmsh_l%model%getEntities(curves, dim=1)
+    ALLOCATE(point_tags(MAX(1,2*SIZE(curves,2))), no_parameters(0))
+    point_count = 0
+    DO curve = 1, SIZE(curves,2)
+       IF (.NOT. entity_has_elements(entity_data, entity_count, 1, INT(curves(2,curve)))) CYCLE
+       CALL gmsh_l%model%getBoundary(curves(:,curve:curve), curve_boundary, combined=.FALSE., oriented=.FALSE.)
+       DO boundary = 1, SIZE(curve_boundary,2)
+          IF (curve_boundary(1,boundary) .NE. 0_c_int) CYCLE
+          point_tag = ABS(INT(curve_boundary(2,boundary)))
+          IF (point_count .EQ. 0 .OR. .NOT. ANY(point_tags(1:point_count) .EQ. point_tag)) THEN
+             point_count = point_count + 1
+             point_tags(point_count) = point_tag
           ENDIF
        ENDDO
     ENDDO
 
-    n_elements = SIZE(Mesh%T,1);
-    n_nodes = SIZE(Mesh%X,1);
-
-    ALLOCATE(Xp(n_element_nodes*n_elements,2))
-    ALLOCATE(Tp(n_elements,n_element_nodes))
-    ALLOCATE(aux_coord_logical(n_element_nodes))
-    ALLOCATE(local_coord_logical(n_element_nodes))
-    ALLOCATE(int_face_meshed(n_int_faces))
-    ALLOCATE(elem_nodes_mod(n_element_nodes,2))
-
-    Xp(1:n_nodes,:) = Mesh%X
-    Tp(:,1:3) = Mesh%T
-
-    elem_pos(1) = 1
-    elem_pos(2) = 3
-    face_pos(1) = 2
-    face_pos(2) = 4
-
-    aux_coord_logical = .TRUE.
-    aux_coord_logical(1:3) = .FALSE.
-    int_face_meshed = .FALSE.
-
-    ini = n_nodes + 1;
-    counter1 = 1
-
-    DO elem = 1, n_elements
-
-       local_coord_logical = aux_coord_logical
-
-       ! read the faces infos
-       face_info = elem_int_face(elem,:)
-
-       ! count how many faces are valid .neq. 0
-       n_already_meshed_faces = 0
-       DO iface = 1, 3
-          IF(face_info(iface) .NE. 0) THEN
-             IF(int_face_meshed(face_info(iface)) .EQV. .TRUE.) THEN
-                n_already_meshed_faces = n_already_meshed_faces + 1
-             ENDIF
+    coordinate_scale = MAX(1.d0, MAXVAL(coordinates(1::3))-MINVAL(coordinates(1::3)), &
+         MAXVAL(coordinates(2::3))-MINVAL(coordinates(2::3)))
+    tolerance = 1.d-8*coordinate_scale
+    DO point = 1, point_count
+       CALL gmsh_l%model%getValue(0, point_tags(point), no_parameters, point_coordinates)
+       nearest_node = 0
+       nearest_distance = HUGE(1.d0)
+       DO node = 1, SIZE(node_dimensions)
+          IF (node_dimensions(node) .GT. 1) CYCLE
+          distance = SQRT(SUM((coordinates(3*node-2:3*node)-point_coordinates(1:3))**2))
+          IF (distance .LT. nearest_distance) THEN
+             nearest_distance = distance
+             nearest_node = node
           ENDIF
        ENDDO
-
-       ! if there is at least one face valid
-       IF(n_already_meshed_faces .LE. 3) THEN
-          ! loop through all faces of the element
-          DO iface = 1, 3
-             ! if the face is valid
-             IF(face_info(iface) .NE. 0) THEN
-                ! if it is already remeshed
-                IF(int_face_meshed(face_info(iface)) .EQV. .TRUE.) THEN
-                   meshed_face = face_info(iface)
-                   elements(1) = int_faces(face_info(iface),elem_pos(1))
-                   elements(2) = int_faces(face_info(iface),elem_pos(2))
-
-                   IF(elements(1) .NE. elem) THEN
-                      already_meshed_element(1) = elements(1)
-                      already_meshed_element_faces(1) = int_faces(meshed_face,face_pos(1));
-                      already_meshed_face_nodes(1,:) = face_nodes(already_meshed_element_faces(1),:);
-                   ELSE
-                      element_face(1) = int_faces(meshed_face,face_pos(1));
-                      nodes_face(1,:) = face_nodes(element_face(1),:);
-                      local_coord_logical(nodes_face(1,:)) = .FALSE.
-                   ENDIF
-
-                   IF(elements(2) .NE. elem) THEN
-                      already_meshed_element(2) = elements(2)
-                      already_meshed_element_faces(2) = int_faces(meshed_face,face_pos(2));
-                      already_meshed_face_nodes(2,:) = face_nodes(already_meshed_element_faces(2),:);
-                   ELSE
-                      element_face(2) = int_faces(meshed_face,face_pos(2));
-                      nodes_face(2,:) = face_nodes(element_face(2),:);
-                      local_coord_logical(nodes_face(2,:)) = .FALSE.
-                   ENDIF
-
-                   IF((elements(1) .NE. elem) .AND. (elements(2) .EQ. elem)) THEN
-                      CALL fliplr_int(Tp(already_meshed_element(1),already_meshed_face_nodes(1,:)),temp);
-                      Tp(elem,nodes_face(2,:)) = temp
-                   ENDIF
-
-                   IF((elements(1) .EQ. elem) .AND. (elements(2) .NE. elem)) THEN
-                      CALL fliplr_int(Tp(already_meshed_element(2),already_meshed_face_nodes(2,:)),temp)
-                      Tp(elem,nodes_face(1,:)) = temp
-                   ENDIF
-                ENDIF
-                int_face_meshed(face_info(iface)) = .TRUE.
-             ENDIF
-          ENDDO
-       ENDIF
-
-       elem_nodes_mod = 0
-
-       DO i = 1, SIZE(local_coord_logical)
-          IF(local_coord_logical(i) .EQV. .TRUE.) THEN
-             CALL linear_mapping(Mesh%X(Mesh%T(elem,:),:),coord_ref(i,:), elem_nodes_mod(i,:))
-          ENDIF
-       ENDDO
-
-       ind = ini
-
-       DO i = 1, SIZE(local_coord_logical)
-          IF(local_coord_logical(i) .EQV. .TRUE.) THEN
-             Xp(ind,:) = elem_nodes_mod(i,:)
-             Tp(elem, i) = ind
-             ind = ind + 1
-          ENDIF
-       ENDDO
-
-       IF((n_element_nodes - n_already_meshed_faces*n_face_nodes - 3 - 1) .GE. 0) THEN
-          ini = ini - 1 + n_element_nodes - n_already_meshed_faces*n_face_nodes - 3 + 1
-       ENDIF
-
+       IF (nearest_node .EQ. 0 .OR. nearest_distance .GT. tolerance) &
+          CALL mesh_order_error('CAD endpoint does not match a source mesh vertex')
+       node_dimensions(nearest_node) = 0
+       node_entities(nearest_node) = point_tags(point)
     ENDDO
+  END SUBROUTINE classify_cad_point_nodes
 
-    ALLOCATE(Xp_aux(ini-1,2))
-    Xp_aux(:,:) = Xp(1:ini-1,:)
+  LOGICAL FUNCTION entity_has_elements(entity_data, entity_count, dimension, tag)
+    TYPE(gmsh_entity_mesh_data), INTENT(IN) :: entity_data(:)
+    INTEGER, INTENT(IN)                     :: entity_count, dimension, tag
+    INTEGER                                 :: entity
 
-    n_face_nodes = SIZE(refElLocal%Face_nodes,2)
-
-    CALL unique_stable(Mesh%boundaryFlag,unique_boundary_flag)
-
-    n_boundaries = SIZE(unique_boundary_flag)
-
-    DO i = 1, n_boundaries
-       n_boundary_elements = COUNT(Mesh%boundaryFlag .EQ. unique_boundary_flag(i))
-       IF(n_boundary_elements .NE. 0) THEN
-          IF(unique_boundary_flag(i) .EQ. 5) THEN
-             ALLOCATE(Tb_PUMP(n_boundary_elements, n_face_nodes))
-          ELSEIF(unique_boundary_flag(i) .EQ. 6) THEN
-             ALLOCATE(Tb_PUFF(n_boundary_elements, n_face_nodes))
-          ELSEIF(unique_boundary_flag(i) .EQ. 7) THEN
-             ALLOCATE(Tb_LIM(n_boundary_elements, n_face_nodes))
-          ELSEIF (unique_boundary_flag(i) .EQ. 8) THEN
-             ALLOCATE(Tb_IN(n_boundary_elements, n_face_nodes))
-          ELSEIF (unique_boundary_flag(i) .EQ. 9) THEN
-             ALLOCATE(Tb_OUT(n_boundary_elements, n_face_nodes))
-          ENDIF
+    entity_has_elements = .FALSE.
+    DO entity = 1, entity_count
+       IF (entity_data(entity)%dimension .EQ. dimension .AND. entity_data(entity)%tag .EQ. tag) THEN
+          entity_has_elements = .TRUE.
+          RETURN
        ENDIF
     ENDDO
+  END FUNCTION entity_has_elements
 
-    start = 0
-    stop_index = 0
-    DO i = 1, n_boundaries
+  SUBROUTINE add_source_nodes_to_cad(gmsh_l, node_tags, coordinates, node_dimensions, node_entities)
+    TYPE(gmsh_t), INTENT(INOUT)          :: gmsh_l
+    INTEGER(c_size_t), INTENT(IN)        :: node_tags(:)
+    REAL(c_double), INTENT(IN)           :: coordinates(:)
+    INTEGER, INTENT(IN)                  :: node_dimensions(:), node_entities(:)
+    INTEGER(c_int), ALLOCATABLE          :: cad_entities(:,:)
+    INTEGER(c_size_t), ALLOCATABLE       :: entity_node_tags(:)
+    REAL(c_double), ALLOCATABLE          :: entity_coordinates(:), parameters(:)
+    INTEGER                              :: dimension, entity, tag, count_nodes, node, local_node, added_nodes
 
-       start = stop_index + 1
-       n_boundary_elements = COUNT(Mesh%boundaryFlag .EQ. unique_boundary_flag(i))
-       stop_index = start + n_boundary_elements - 1
-
-       counter = 1
-       DO j = start,stop_index
-          ielem = Mesh%face_info(j,1)
-          iface = Mesh%face_info(j,2)
-          ifacenode = refElLocal%face_nodes(iface,:)
-          IF(unique_boundary_flag(i) .EQ. 5)  Tb_PUMP(counter,:)  = Tp(ielem,ifacenode)
-          IF(unique_boundary_flag(i) .EQ. 6)  Tb_PUFF(counter,:)  = Tp(ielem,ifacenode)
-          IF(unique_boundary_flag(i) .EQ. 7)  Tb_LIM(counter,:)   = Tp(ielem,ifacenode)
-          IF(unique_boundary_flag(i) .EQ. 8)  Tb_IN(counter,:)    = Tp(ielem,ifacenode)
-          IF(unique_boundary_flag(i) .EQ. 9)  Tb_OUT(counter,:)   = Tp(ielem,ifacenode)
-          counter = counter + 1
-       ENDDO
-    ENDDO
-
-    Ndim = SIZE(Xp_aux,2)
-    Nelems = SIZE(Tp,1)
-
-    Nextfaces = 0
-    IF(ALLOCATED(Tb_IN)) THEN
-       Nextfaces = SIZE(Tb_IN,1)
-    ENDIF
-    IF(ALLOCATED(Tb_LIM)) THEN
-       Nextfaces = Nextfaces + SIZE(Tb_LIM,1)
-    ENDIF
-    IF(ALLOCATED(Tb_OUT)) THEN
-       Nextfaces = Nextfaces + SIZE(Tb_OUT,1)
-    ENDIF
-    IF(ALLOCATED(Tb_PUFF)) THEN
-       Nextfaces = Nextfaces + SIZE(Tb_PUFF,1)
-    ENDIF
-    IF(ALLOCATED(Tb_PUMP)) THEN
-       Nextfaces = Nextfaces + SIZE(Tb_PUMP,1)
-    ENDIF
-
-    Nnodes = SIZE(Xp_aux,1)
-    Nnodesperelem = SIZE(Tp,2)
-    Nnodesperface = n_face_nodes
-    elemType = Mesh%elemType
-    element_order = n_face_nodes
-
-    ALLOCATE(mesh_info(SIZE(Mesh%face_info,1),SIZE(Mesh%face_info,2)))
-
-    mesh_info = Mesh%face_info
-
-    CALL free_mesh
-
-    CALL generate_elemface_info(Tp,Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, p+1, total_face_info)
-    CALL generate_boundary_names(Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_PUFF, Tb_PUMP, Tb_ULIM, Tb, boundaryFlag, element_order)
-    CALL load_mesh2global_var(Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, Tp, Xp_aux, Tb, boundaryFlag, total_face_info)
-
-    CALL free_reference_element_pol(refElLocal)
-    DEALLOCATE(int_faces, elem_int_face, Tp, Tb)
-    DEALLOCATE(total_face_info)
-    DEALLOCATE(boundaryFlag, unique_boundary_flag)
-    DEALLOCATE(aux_coord_logical, local_coord_logical, int_face_meshed)
-    DEALLOCATE(Xp, Xp_aux, elem_nodes_mod, coord_ref)
-    IF(ALLOCATED(Tb_Dirichlet)) DEALLOCATE(Tb_Dirichlet)
-    IF(ALLOCATED(Tb_PUMP)) DEALLOCATE(Tb_PUMP)
-    IF(ALLOCATED(Tb_PUFF)) DEALLOCATE(Tb_PUFF)
-    IF(ALLOCATED(Tb_LEFT)) DEALLOCATE(Tb_LEFT)
-    IF(ALLOCATED(Tb_RIGHT)) DEALLOCATE(Tb_RIGHT)
-    IF(ALLOCATED(Tb_UP)) DEALLOCATE(Tb_UP)
-    IF(ALLOCATED(Tb_DOWN)) DEALLOCATE(Tb_DOWN)
-    IF(ALLOCATED(Tb_WALL)) DEALLOCATE(Tb_WALL)
-    IF(ALLOCATED(Tb_LIM)) DEALLOCATE(Tb_LIM)
-    IF(ALLOCATED(Tb_IN)) DEALLOCATE(Tb_IN)
-    IF(ALLOCATED(Tb_OUT)) DEALLOCATE(Tb_OUT)
-    IF(ALLOCATED(Tb_ULIM)) DEALLOCATE(Tb_ULIM)
-  ENDSUBROUTINE set_order_mesh
-
-  SUBROUTINE fliplr_int(arrin, arrout)
-    INTEGER, DIMENSION(:), INTENT(IN) :: arrin
-    INTEGER, DIMENSION(:), INTENT(INOUT) :: arrout
-    INTEGER :: i, n
-    INTEGER :: temp
-
-    n = SIZE(arrin)
-
-    DO i = 1, n / 2
-       ! Swap elements from the left and right sides
-       temp = arrin(i)
-       arrout(i) = arrin(n - i + 1)
-       arrout(n - i + 1) = temp
-    END DO
-
-    ! swap middle element
-    IF(MOD(n,2) .EQ. 1) arrout(INT(n/2)+1) = arrin(INT(n/2)+1)
-  END SUBROUTINE fliplr_int
-
-  SUBROUTINE linear_mapping(vertCoord, xiVector, X)
-    ! Linear mapping between local and cartesian coordinates
-    ! Input:
-    !   vertCoord: vertexes of the element
-    !   xiVector:  point in local coordinates
-    ! Output:
-    !   X: point in cartesian coordinates
-
-    REAL(8), DIMENSION(:,:), INTENT(IN) :: vertCoord
-    REAL(8), DIMENSION(:), INTENT(IN)   :: xiVector
-    REAL(8), DIMENSION(:), INTENT(OUT)  :: X
-
-    REAL*8                              :: N(3)
-
-
-    CALL linear_shape_functions_2D(xiVector, N)
-
-    X(1) = dot_PRODUCT(N, vertCoord(:,1))
-    X(2) = dot_PRODUCT(N, vertCoord(:,2))
-
-  CONTAINS
-
-    SUBROUTINE linear_shape_functions_2D(xiVector, N)
-      ! Reference triangle is [-1,-1; 1,-1; -1,1]
-      REAL(8), DIMENSION(:), INTENT(IN) :: xiVector
-      REAL(8), DIMENSION(3), INTENT(OUT) :: N
-
-      REAL(8) :: xi, eta
-
-      xi = xiVector(1)
-      eta = xiVector(2)
-      N(1) = -xi - eta
-      N(2) = 1.0d0 + xi
-      N(3) = 1.0d0 + eta
-      N = 0.5*N
-
-    ENDSUBROUTINE linear_shape_functions_2D
-
-  ENDSUBROUTINE linear_mapping
-
-  SUBROUTINE inverse_isop_transf(x, Xe, refEl, xieta)
-    TYPE(Reference_element_type), INTENT(IN)  :: RefEl
-    REAL*8, INTENT(OUT)                       :: xieta(:,:)
-    REAL*8, INTENT(IN)                        :: x(:,:), Xe(:,:)
-    REAL*8                                    :: x0(SIZE(x,1),SIZE(x,2))
-    INTEGER                                   :: maxit, npoints, nnodes, i, j, k, counter, n
-    REAL*8, ALLOCATABLE                       :: p(:), dpxi(:), dpeta(:), xind(:,:), x0ind(:,:), xietaind(:,:), rhs(:,:)
-    INTEGER, ALLOCATABLE                      :: ind(:)
-    REAL*8                                    :: xieta0(SIZE(x,1),SIZE(x,2)), aux_xieta(SIZE(x,1),SIZE(x,2)), Nx(refEl%Nnodes2D), Ny(refEl%Nnodes2D)
-    REAL*8                                    :: Vand(refEl%Nnodes2D, refEl%Nnodes2D), invV(refEl%Nnodes2D, refEl%Nnodes2D)
-    REAL*8                                    :: Jxx, Jxy, Jyx, Jyy, detJ
-    REAL*8                                    :: tol
-
-    maxit   = 5
-    tol     = 1e-10
-    npoints = SIZE(x,1)
-    nnodes  = SIZE(Xe,1)
-
-    CALL inverse_linear_transformation(x, Xe, xieta0)
-
-    ! just fucking brute force it
-    DO j = 1, SIZE(xieta0,2)
-       DO i = 1, SIZE(xieta0,1)
-          IF(ABS(xieta0(i,j)-1.0) .LT. 1e-12) THEN
-             xieta0(i,j) = xieta0(i,j) - 1.e-10
-          ENDIF
-       ENDDO
-    ENDDO
-
-    CALL iso_transformation_high_order(xieta0, Xe, refEl, x0)
-
-
-    n = COUNT(SQRT((x(:,1) - x0(:,1))**2+(x(:,2)-x0(:,2))**2) .GT. (tol*SQRT(x(:,1)**2+x(:,2)**2)+1.e-14))
-
-    IF(n .NE. 0) THEN
-
-       ALLOCATE(ind(n))
-       ALLOCATE(rhs(n,SIZE(x,2)))
-       ALLOCATE(xind(n,SIZE(x,2)))
-       ALLOCATE(x0ind(n, SIZE(x0,2)))
-       ALLOCATE(xietaind(n,SIZE(xieta,2)))
-
-       ind = 0.
-
-       counter = 1
-       DO i = 1, npoints
-          IF((SQRT((x(i,1) - x0(i,1))**2+(x(i,2)-x0(i,2))**2)) .GT. (tol*SQRT(x(i,1)**2+x(i,2)**2)+1.e-14)) THEN
-             ind(counter) = counter
-             counter = counter + 1
-          ENDIF
-       ENDDO
-
-       xind     = x(ind,:)
-       x0ind    = x0(ind,:)
-       xietaind = xieta0(ind,:)
-
-       ALLOCATE (p(refEl%Nnodes2D), dpxi(refEl%Nnodes2D), dpeta(refEl%Nnodes2D))
-
-       DO i = 1, maxit
-          IF (ALL((SQRT((xind(:,1)-x0ind(:,1))**2+(xind(:,2)-x0ind(:,2))**2)) .LT. (tol*SQRT(xind(:,1)**2+xind(:,2)**2)+1.e-14))) THEN
-             EXIT
-          ENDIF
-
-          CALL vandermonde_2d(Vand, refEl)
-          CALL invert_matrix(TRANSPOSE(Vand), invV)
-
-
-          p = 0.d0
-          dpxi = 0.d0
-          dpeta = 0.d0
-
-          DO j = 1, SIZE(xietaind,1)
-             CALL orthopoly2d_deriv(xietaind(j,1), xietaind(j,2), refEl%Ndeg, refEl%Nnodes2D, p, dpxi, dpeta)
-
-             Nx = MATMUL(invV, dpxi)
-             Ny = MATMUL(invV, dpeta)
-
-             Jxx = dot_PRODUCT(Nx,Xe(:,1))
-             Jxy = dot_PRODUCT(Ny,Xe(:,1))
-             Jyx = dot_PRODUCT(Nx,Xe(:,2))
-             Jyy = dot_PRODUCT(Ny,Xe(:,2))
-             detJ = Jxx*Jyy-Jxy*Jyx
-             rhs = xind-x0ind
-
-             xietaind(j,1)=xietaind(j,1)+(rhs(j,1)*Jyy-rhs(j,2)*Jxy)/detJ
-             xietaind(j,2)=xietaind(j,2)+(rhs(j,2)*Jxx-rhs(j,1)*Jyx)/detJ
-
+    added_nodes = 0
+    DO dimension = 0, 2
+       CALL gmsh_l%model%getEntities(cad_entities, dim=dimension)
+       DO entity = 1, SIZE(cad_entities,2)
+          tag = INT(cad_entities(2,entity))
+          count_nodes = COUNT(node_dimensions .EQ. dimension .AND. node_entities .EQ. tag)
+          IF (count_nodes .EQ. 0) CYCLE
+          ALLOCATE(entity_node_tags(count_nodes), entity_coordinates(3*count_nodes))
+          local_node = 0
+          DO node = 1, SIZE(node_tags)
+             IF (node_dimensions(node) .NE. dimension .OR. node_entities(node) .NE. tag) CYCLE
+             local_node = local_node + 1
+             entity_node_tags(local_node) = node_tags(node)
+             entity_coordinates(3*local_node-2:3*local_node) = coordinates(3*node-2:3*node)
           ENDDO
 
-          ! just fucking brute force it
-          DO k = 1, SIZE(xietaind,2)
-             DO j = 1, SIZE(xietaind,1)
-                IF(ABS(xietaind(j,k)-1.0) .LT. 1e-12) THEN
-                   xietaind(j,k) = xietaind(j,k) - 1.e-10
-                ENDIF
-             ENDDO
-          ENDDO
-
-          CALL iso_transformation_high_order(xietaind, Xe, refEl,x0ind)
+          IF (dimension .EQ. 0) THEN
+             CALL gmsh_l%model%mesh%addNodes(dimension, tag, entity_node_tags, entity_coordinates)
+          ELSE
+             CALL gmsh_l%model%getParametrization(dimension, tag, entity_coordinates, parameters)
+             CALL gmsh_l%model%mesh%addNodes(dimension, tag, entity_node_tags, entity_coordinates, &
+                  parametricCoord=parameters)
+             DEALLOCATE(parameters)
+          ENDIF
+          added_nodes = added_nodes + count_nodes
+          DEALLOCATE(entity_node_tags, entity_coordinates)
        ENDDO
+    ENDDO
+    IF (added_nodes .NE. SIZE(node_tags)) CALL mesh_order_error('source mesh and CAD entity tags do not match')
+  END SUBROUTINE add_source_nodes_to_cad
 
-       IF(ANY((SQRT((xind(:,1)-x0ind(:,1))**2+(xind(:,2)-x0ind(:,2))**2)) .GT. (tol*SQRT(xind(:,1)**2+xind(:,2)**2)+1.e-14))) THEN
-          WRITE(*,*) "inverse_isop_transf non converging."
-          STOP
-       ENDIF
+  SUBROUTINE add_source_elements_to_cad(gmsh_l, entity_data, entity_count)
+    TYPE(gmsh_t), INTENT(INOUT)             :: gmsh_l
+    TYPE(gmsh_entity_mesh_data), INTENT(IN) :: entity_data(:)
+    INTEGER, INTENT(IN)                     :: entity_count
+    INTEGER                                 :: entity
 
-       aux_xieta = xieta0
-       aux_xieta(ind,:) = xietaind
-       xieta = aux_xieta
+    DO entity = 1, entity_count
+       CALL gmsh_l%model%mesh%addElementsByType(entity_data(entity)%tag, entity_data(entity)%element_type, &
+            entity_data(entity)%element_tags, entity_data(entity)%node_tags)
+    ENDDO
+  END SUBROUTINE add_source_elements_to_cad
 
-       DEALLOCATE(p)
-       DEALLOCATE(dpxi)
-       DEALLOCATE(dpeta)
-       DEALLOCATE(ind)
-       DEALLOCATE(xind)
-       DEALLOCATE(x0ind)
-       DEALLOCATE(xietaind)
-       DEALLOCATE(rhs)
+  SUBROUTINE mesh_order_error(message)
+    CHARACTER(*), INTENT(IN) :: message
 
-    ELSE
-       xieta = xieta0
-    ENDIF
-  ENDSUBROUTINE inverse_isop_transf
-
-  SUBROUTINE inverse_linear_transformation(x,Xe,xieta)
-    USE LinearAlgebra, only: solve_linear_system
-
-    REAL*8, INTENT(IN)      :: x(:,:), Xe(:,:)
-    REAL*8, INTENT(OUT)     :: xieta(:,:)
-    REAL*8                  :: x1(2),x2(2),x3(2), J(2,2), aux(SIZE(x,1), 2), xieta_temp(SIZE(xieta,2), SIZE(xieta,1))
-
-    ! take vertices
-    x1 = Xe(1,:)
-    x2 = Xe(2,:)
-    x3 = Xe(3,:)
-
-
-    J(:,1) = (x2-x1)/2
-    J(:,2) = (x3-x1)/2
-
-    aux(:,1)  = x(:,1)-(x2(1)+x3(1))/2
-    aux(:,2) = x(:,2)-(x2(2)+x3(2))/2
-
-    CALL solve_linear_system(J,TRANSPOSE(aux),xieta_temp)
-    xieta = TRANSPOSE(xieta_temp)
-
-  ENDSUBROUTINE inverse_linear_transformation
-
-  SUBROUTINE iso_transformation_high_order(xieta, Xe, refEl, x)
-    TYPE(Reference_element_type)      :: refEl
-    REAL*8,  INTENT(IN)               :: xieta(:,:)
-    REAL*8,  INTENT(IN)               :: Xe(:,:)
-    REAL*8,  INTENT(OUT)              :: x(:,:)
-    REAL*8                            :: shapeFunctions(refEl%Nnodes2D,SIZE(xieta,1),3)
-
-    shapeFunctions = 0.d0
-
-    CALL compute_shape_functions_at_points(refEl, xieta, shapeFunctions)
-
-    ! take only shape function and not its derivatives in xi and eta
-    x(:,1) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), Xe(:,1))
-    x(:,2) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), Xe(:,2))
-
-  ENDSUBROUTINE iso_transformation_high_order
-
-  PURE SUBROUTINE find_matches_int(a, b, indices)
-    INTEGER, DIMENSION(:), INTENT(IN)                 :: a
-    INTEGER, INTENT(IN)                               :: b
-    INTEGER, DIMENSION(:), INTENT(INOUT), ALLOCATABLE :: indices
-    INTEGER                                           :: counter
-    INTEGER                                           :: i
-
-    counter = COUNT(a .EQ. b)
-
-    ALLOCATE(indices(counter))
-
-    counter = 1
-    DO i = 1, SIZE(a)
-       IF (a(i) .EQ. b) THEN
-          indices(counter) = i
-          counter = counter +1
-       END IF
-    END DO
-
-  END SUBROUTINE find_matches_int
-
-
-  SUBROUTINE delete_file(filename)
-
-    CHARACTER(*), INTENT(IN)        :: filename
-    INTEGER                         :: fileID, stat
-
-    CALL get_unit ( fileID )   ! get unit file and open it
-
-    OPEN(unit=fileID, iostat=stat, file=filename, status='old')
-    IF(stat .NE. 0) THEN
-       WRITE(*,*) "Problem opening file to delete."
-    ELSE
-       CLOSE(unit=fileID, iostat=stat, status='delete')
-    ENDIF
-
-    IF(stat .NE. 0) THEN
-       WRITE(*,*) "Problem deleting file."
-    ENDIF
-
-  ENDSUBROUTINE delete_file
+    WRITE(*,*) 'Unable to increase mesh order on the CAD geometry: ', TRIM(message)
+    ERROR STOP 1
+  END SUBROUTINE mesh_order_error
 
   SUBROUTINE extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
     CHARACTER(1024), INTENT(IN)             :: mesh_name
@@ -777,42 +481,6 @@ CONTAINS
 
   ENDSUBROUTINE quicksort_int
 
-  PURE RECURSIVE SUBROUTINE quicksort_real(a)
-    !! quicksort.f -*-f90-*-
-    !! Author: t-nissie, some tweaks by 1AdAstra1
-    !! License: GPLv3
-    !! Gist: https://gist.github.com/t-nissie/479f0f16966925fa29ea
-    REAL*8, DIMENSION(:), INTENT(inout) :: a
-    !! The array to sort
-
-    REAL*8 ::  x, t
-    INTEGER :: first, last
-    INTEGER i, j
-
-    first = 1
-    last = SIZE(a, 1)
-    x = a( (first+last) / 2 )
-    i = first
-    j = last
-
-    DO
-       DO WHILE (a(i) < x)
-          i=i+1
-       ENDDO
-       DO WHILE (x < a(j))
-          j=j-1
-       ENDDO
-       IF (i .GE. j) EXIT
-       t = a(i);  a(i) = a(j);  a(j) = t
-       i=i+1
-       j=j-1
-    ENDDO
-
-    IF (first < i - 1) CALL quicksort_real(a(first : i - 1))
-    IF (j + 1 < last)  CALL quicksort_real(a(j + 1 : last))
-
-  ENDSUBROUTINE quicksort_real
-
   PURE SUBROUTINE unique_stable(arrayin, uniqueArr)
     INTEGER, DIMENSION(:), INTENT(IN) :: arrayin
     INTEGER, DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: uniqueArr
@@ -848,22 +516,18 @@ CONTAINS
 
 
   SUBROUTINE gmsh_create_from_h_target(h_target_on_elements,vertices_coordinates, connectivity, p_order)
-
-      USE, INTRINSIC :: iso_c_binding
-      USE gmsh
-      USE MPI_OMP, only: OMPvar
-
       TYPE(gmsh_t) :: gmsh_l
       INTEGER, INTENT(IN) :: p_order
       REAL*8, DIMENSION(:), INTENT(IN) :: h_target_on_elements ! on the elements
       REAL*8, DIMENSION(:,:), INTENT(IN) :: vertices_coordinates ! coordinates of the vertices
       INTEGER, DIMENSION(:,:), INTENT(IN) :: connectivity ! connectivity of the triangles
-      REAL*8, ALLOCATABLE :: data_for_gmsh(:)
-      INTEGER*8           :: gmsh_dim, number_of_vertices_per_triangle, i, j, start_index
+      REAL*8, ALLOCATABLE :: data_for_gmsh(:), h_target_on_nodes(:)
+      INTEGER*8           :: number_of_vertices_per_triangle, i, j, start_index
       INTEGER*4           :: size_view,number_of_triangles,ret
-      REAL*8              :: sf_index, vertex_coordinates(2),h_target_on_vertex
-      !GMSH always have (X,Y,Z) coordinates
-      gmsh_dim = 3 
+      REAL*8              :: sf_index, vertex_coordinates(2)
+      REAL*8, PARAMETER   :: minimum_mesh_size = 0.5d-4
+      REAL*8, PARAMETER   :: target_size_quantum = 2.d-3*minimum_mesh_size
+      REAL*8, PARAMETER   :: view_coordinate_quantum = 1.d-11
       number_of_vertices_per_triangle = 3 
       number_of_triangles = SIZE(connectivity,1)
 
@@ -879,21 +543,29 @@ CONTAINS
       CALL gmsh_l%merge(adapt%geometry_path)
 
       !Set minimal size for mesh elements
-      CALL gmsh_l%option%setNumber("Mesh.MeshSizeMin", 0.5e-4)
+      CALL gmsh_l%option%setNumber("Mesh.MeshSizeMin", minimum_mesh_size)
 
 
       ALLOCATE(data_for_gmsh((number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))*number_of_triangles))
+      ALLOCATE(h_target_on_nodes(SIZE(vertices_coordinates,1)))
+      ! Shared view nodes must carry one value for continuous linear interpolation.
+      CALL average_element_targets_on_nodes(h_target_on_elements, connectivity, h_target_on_nodes)
+      ! Solver roundoff must not select a different Gmsh topology.
+      WHERE (h_target_on_nodes .GT. 0.d0)
+         h_target_on_nodes = target_size_quantum*ANINT(h_target_on_nodes/target_size_quantum)
+      END WHERE
 
       ! Prepare data in gmsh format
       DO i = 1, number_of_triangles
          start_index = (i-1)*(number_of_vertices_per_triangle*(number_of_vertices_per_triangle+1))
          DO j = 1, number_of_vertices_per_triangle
-            vertex_coordinates = vertices_coordinates(connectivity(i,j),:)
-            h_target_on_vertex = h_target_on_elements(i)
+            vertex_coordinates = view_coordinate_quantum*ANINT(&
+               vertices_coordinates(connectivity(i,j),:)/view_coordinate_quantum)
             data_for_gmsh(start_index+j) = vertex_coordinates(1)
             data_for_gmsh(start_index+number_of_vertices_per_triangle+j) = vertex_coordinates(2)
             data_for_gmsh(start_index+2*number_of_vertices_per_triangle+j) = 0.0 ! no Z coordinate
-            data_for_gmsh(start_index+3*number_of_vertices_per_triangle+j) = h_target_on_vertex
+            data_for_gmsh(start_index+3*number_of_vertices_per_triangle+j) = &
+               h_target_on_nodes(connectivity(i,j))
          ENDDO
       ENDDO
 
@@ -904,7 +576,7 @@ CONTAINS
 
       ! Add the view as a field
       ret = gmsh_l%model%mesh%field%add("PostView")
-      call gmsh_l%model%mesh%field%setNumber(ret, "ViewIndex", 0d0)
+      call gmsh_l%model%mesh%field%setNumber(ret, "ViewIndex", sf_index)
 
       ! Apply the view as the current background mesh size field:
       call gmsh_l%model%mesh%field%setAsBackgroundMesh(ret)
@@ -914,7 +586,8 @@ CONTAINS
       call gmsh_l%option%setNumber("Mesh.MeshSizeFromPoints", 0d0)
       call gmsh_l%option%setNumber("Mesh.MeshSizeFromCurvature", 0d0)
       CALL gmsh_l%option%setNumber("Mesh.MeshSizeFactor", 1d0)
-      CALL gmsh_l%option%setNumber("General.NumThreads", REAL(OMPvar%Nthreads))
+      ! Stabilize adaptive topology and avoid Gmsh's multi-threaded 2D meshing stall.
+      CALL gmsh_l%option%setNumber("General.NumThreads", 1.d0)
 
       !Changing the algorithm to Delaunay, the default is Frontal-Delaunay (Don't Know if needed)
       call gmsh_l%option%setNumber("Mesh.Algorithm", 5d0)
@@ -927,7 +600,7 @@ CONTAINS
       call gmsh_l%write('./res/temp.msh')
       CALL gmsh_l%finalize()
 
-      DEALLOCATE(data_for_gmsh)
+      DEALLOCATE(data_for_gmsh, h_target_on_nodes)
 
    END SUBROUTINE gmsh_create_from_h_target
 

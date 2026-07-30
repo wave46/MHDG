@@ -16,23 +16,41 @@ def compare_mesh(
     tolerances: dict[str, Any],
     failures: list[str],
 ) -> dict[str, Any]:
-    """Compare mesh connectivity exactly and coordinates by tolerance."""
+    """Compare mesh coordinates and connectivity in storage order."""
     connectivity = {}
     for name in ("T", "Tlin", "Tb"):
         details = _compare_connectivity(reference, candidate, name)
         if details is None:
             continue
         connectivity[name] = details
-        if not details["passed"]:
-            failures.append(f"mesh/{name} connectivity differs")
 
     coordinates = _compare_coordinates(reference, candidate, tolerances)
-    if not coordinates["passed"]:
-        failures.append("mesh/X coordinates exceed tolerance")
-    return {
+    report = {
+        "mode": "exact",
         "connectivity": connectivity,
         "coordinates": coordinates,
     }
+    report["passed"] = coordinates["passed"] and all(
+        details["passed"] for details in connectivity.values()
+    )
+    _record_mesh_failures(report, failures)
+    return report
+
+
+def _record_mesh_failures(
+    report: dict[str, Any], failures: list[str]
+) -> None:
+    coordinates = report.get("coordinates", {})
+    if not coordinates.get("passed"):
+        failures.append(
+            f"mesh/X: {coordinates.get('reason', 'coordinates differ')}"
+        )
+        return
+    connectivity = report.get("connectivity", {})
+    for name, details in connectivity.items():
+        if not details.get("passed"):
+            reason = details.get("reason", "connectivity differs")
+            failures.append(f"mesh/{name}: {reason}")
 
 
 def _compare_connectivity(

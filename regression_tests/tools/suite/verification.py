@@ -28,35 +28,33 @@ def verify_suite(
     output_path = suite_summary_path.parent / "verification_summary.json"
     summary = _new_verification_summary(source, suite_summary_path)
     write_json_atomic(output_path, summary, "verification summary")
+    reference_comparisons = source.get(
+        "reference_comparisons",
+        not source.get("layout_comparisons"),
+    )
+    if reference_comparisons:
+        for source_result in source["results"]:
+            summary["results"].append(
+                _verify_result(
+                    source_result,
+                    case,
+                    case_directory,
+                    tolerances_path,
+                )
+            )
+            write_json_atomic(output_path, summary, "verification summary")
+
     if source.get("layout_comparisons"):
         summary["comparisons"] = compare_layout_pairs(
             source,
             case_directory,
             tolerances_path,
         )
-        summary["status"] = (
-            "passed"
-            if all(item["status"] == "passed" for item in summary["comparisons"])
-            else "failed"
-        )
-        summary["finished_utc"] = utc_now()
-        write_json_atomic(output_path, summary, "verification summary")
-        return output_path, summary
 
-    for source_result in source["results"]:
-        summary["results"].append(
-            _verify_result(
-                source_result,
-                case,
-                case_directory,
-                tolerances_path,
-            )
-        )
-        write_json_atomic(output_path, summary, "verification summary")
-
+    checks = [*summary["results"], *summary.get("comparisons", [])]
     summary["status"] = (
         "passed"
-        if all(result["status"] == "passed" for result in summary["results"])
+        if all(result["status"] == "passed" for result in checks)
         else "failed"
     )
     summary["finished_utc"] = utc_now()

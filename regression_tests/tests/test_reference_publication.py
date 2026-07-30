@@ -103,6 +103,12 @@ class ReferencePublicationTests(unittest.TestCase):
             self.assertTrue(
                 (self.output / manifest["artifacts"][entry["artifact_id"]]["path"]).is_file()
             )
+        for role in ("warm_restart", "warm_reference"):
+            artifact = manifest["artifacts"][manifest["roles"][role]]
+            self.assertEqual(
+                (self.output / artifact["path"]).read_text(encoding="utf-8"),
+                "continuation_05\n",
+            )
 
     def test_failed_suite_is_not_publishable(self) -> None:
         summary = _load_json(self.summary)
@@ -193,7 +199,7 @@ class ReferencePublicationTests(unittest.TestCase):
 
     def _write_matrix_summary(self) -> Path:
         workflow_id = "cold_fixed"
-        layout_id = "serial_omp1"
+        layout_id = "mpi4_omp4"
         case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
         stage_ids = [
             stage["stage_id"] for stage in case["workflows"][workflow_id]["stages"]

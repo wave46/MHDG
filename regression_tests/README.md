@@ -94,8 +94,8 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | `race` | Both one-step workflows, `serial_omp1` vs `serial_omp16` | Routine OpenMP race check. |
 | `cold` | Both full cold workflows, `mpi4_omp4` | Canonical integration check. |
 | `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |
-| `race_matrix` | Both one-step workflows, serial and MPI pairs | Periodic race check. |
-| `cold_matrix` | Both full cold workflows, all layouts | Overnight evidence. |
+| `race_matrix` | Both one-step workflows, every pair of tracked layouts | Periodic race check. |
+| `cold_matrix` | Both full cold workflows, all layouts and all layout pairs | Overnight golden and reproducibility evidence. |
 
 Warm and race suites are short. Full cold workflows are longer, and
 `cold_matrix` can take hours. Runtime is recorded but is not a pass criterion.
@@ -181,7 +181,7 @@ Neither command below launches MHDG:
 # One completed run; policy comes from run_plan.json.
 regression_tests/regression.sh compare /path/to/completed/run
 
-# Every recorded cell or layout pair in a suite.
+# Every same-layout golden check and declared layout pair in a suite.
 regression_tests/regression.sh suite compare \
   /path/to/suites/cold_matrix/overnight-01/suite_summary.json
 ```
@@ -306,15 +306,19 @@ Fixed-mesh comparison checks finite values and Newton error, exact
 connectivity, tolerance-based coordinates, each equation in `u`, `q`, and
 `u_tilde`, and transport-1D data when present.
 
-Adaptive meshes may differ across layouts. Adaptive comparison uses
-`HDG_postprocess` to interpolate both solutions at deterministic interior
-points instead of requiring equal connectivity.
+Adaptive golden references may come from a different mesh after an intentional
+adaptivity change. Their comparison uses `HDG_postprocess` to interpolate both
+solutions at deterministic interior points instead of requiring equal
+connectivity.
 
-The adaptive race probes intentionally require identical connectivity. They
-currently expose a known OpenMP defect: repeated multi-threaded runs can
-build different meshes, while the corresponding one-thread runs reproduce
-exactly. Fixed-mesh race probes pass. Keep this diagnostic failure visible
-until the adaptation path is made deterministic.
+Race probes require identical connectivity arrays, including node, element,
+and boundary ordering. The generated adaptive `temp.msh` files must also be
+byte-identical, which rejects tag swaps even when the physical topology is
+unchanged. The full race matrix applies that check to every pair of tracked
+layouts before comparing `u`, `q`, and `u_tilde` with the race tolerances.
+Cold-matrix layout pairs likewise require exact final and retained meshes, then
+compare the final HDF5 solution and transport data with the cold cross-layout
+tolerances.
 
 Golden matrices keep a reference for each workflow, layout, and stage. A
 staged comparison stops at the first divergent stage. Race suites instead
@@ -326,12 +330,14 @@ compare layout pairs produced by the same build directly.
 | Warm, cross layout | `5e-8` | `1e-6` |
 | One-step race probe | `5e-8` | `1e-6` |
 | Matching fixed cold stage | `2e-7` | `3e-7` |
+| Converged cold, cross layout | `3e-7` | `3e-7` |
 | Fixed cold final state against warm reference | `1e-5` | `1e-5` |
 | Adaptive solution | `0.05` | `0.1` |
 | Adaptive gradient | `0.25` | `0.3` |
 
 Normalized Linf divides the largest pointwise difference by the largest
-absolute reference value. Fixed coordinates use absolute tolerance `1e-12`.
+absolute reference value. Fixed and race HDF5 coordinates use absolute
+tolerance `1e-12`; generated adaptive mesh files are compared byte-for-byte.
 Except for transient initialization and race probes, final Newton error must
 not exceed `2e-4`. These are
 regression limits for `legacy_case`, not physical-accuracy targets.
@@ -369,8 +375,9 @@ PYTHONPATH=tools python -m unittest discover -s tests -p 'test_*.py'
 
 ## Limitations
 
-- Adaptive refinement may cross different thresholds after reduction-order
-  changes; identical adapted meshes are not promised.
+- Adaptive refinement may cross different thresholds between code revisions;
+  adaptive golden-reference comparisons therefore do not promise identical
+  meshes. Layout pairs within one race or cold matrix do require exact meshes.
 - Runtime is recorded without a timing threshold.
 - Promotion verifies technical evidence but physical acceptance remains human.
 - One promotion consumes one accepted suite summary.

@@ -80,6 +80,15 @@
         },
         "tolerance_profile": {
           "$ref": "#/$defs/identifier"
+        },
+        "layout_comparison_policy": {
+          "enum": [
+            "fixed_hdf5",
+            "mesh_independent"
+          ]
+        },
+        "reference_comparisons": {
+          "type": "boolean"
         }
       }
     },
