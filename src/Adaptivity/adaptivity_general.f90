@@ -16,6 +16,7 @@ CONTAINS
 #ifdef PARALL
         USE Communications, only: gather_mesh, gather_elemental_values
         USE mpi, ONLY: MPI_BARRIER, MPI_COMM_WORLD
+        USE MPI_OMP, ONLY: MPIvar
 #endif
         CHARACTER(1024), INTENT(IN) :: mesh_name
         INTEGER, INTENT(IN) :: count_adapt
