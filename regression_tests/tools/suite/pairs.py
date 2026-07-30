@@ -67,6 +67,8 @@ def _compare_pair(
             tolerances_path,
             reference_override=reference,
             tolerance_profile_override=summary["tolerance_profile"],
+            comparison_policy_override=summary.get("layout_comparison_policy"),
+            report_override=candidate / f"comparison_from_{baseline_layout}.json",
         )
         result["comparison_policy"] = policy
         result["comparison_report"] = str(report_path)

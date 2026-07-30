@@ -61,7 +61,12 @@ def run_suite(
 
     selected_workflows = suite["workflow_ids"]
     pairs = suite.get("layout_comparisons")
-    comparison_mode = _comparison_mode(bool(pairs), compare)
+    reference_comparisons = suite.get("reference_comparisons", not pairs)
+    comparison_mode = _comparison_mode(
+        bool(pairs),
+        reference_comparisons,
+        compare,
+    )
     execution_inputs = suite_execution_inputs(
         settings_path,
         settings,
@@ -110,7 +115,9 @@ def run_suite(
         tolerances_path=tolerances_path,
         compare=compare,
     )
-    cell_inputs = replace(inputs, compare=False) if pairs else inputs
+    cell_inputs = (
+        inputs if reference_comparisons else replace(inputs, compare=False)
+    )
     _run_pending_cells(
         cell_inputs,
         suite_id,
@@ -131,10 +138,16 @@ def run_suite(
     return summary_path, summary
 
 
-def _comparison_mode(layout_pairs: bool, compare: bool) -> str:
-    if layout_pairs:
-        return "layout_pairs" if compare else "deferred_layout_pairs"
-    return "immediate" if compare else "deferred"
+def _comparison_mode(
+    layout_pairs: bool,
+    reference_comparisons: bool,
+    compare: bool,
+) -> str:
+    if not compare:
+        return "deferred" if reference_comparisons else "deferred_layout_pairs"
+    if layout_pairs and reference_comparisons:
+        return "reference_and_layout_pairs"
+    return "layout_pairs" if layout_pairs else "immediate"
 
 
 def _run_pending_cells(

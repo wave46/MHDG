@@ -41,6 +41,32 @@ class ReferenceMatrixComparisonTests(unittest.TestCase):
         self.assertEqual(overrides.reference, references["time_init"])
         self.assertEqual(overrides.tolerance_profile, "race_step")
 
+    @patch("comparison.workflow.compare_fixed_run")
+    def test_policy_override_uses_fixed_comparison_for_adaptive_run(
+        self,
+        compare,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run, references = self._fixture(root, "cold_adaptive")
+            report_path = root / "cross-layout.json"
+            compare.return_value = (
+                report_path,
+                {"status": "passed", "failures": []},
+            )
+
+            policy, path, _ = compare_completed_run(
+                run,
+                REGRESSION_ROOT / "cases",
+                REGRESSION_ROOT / "tolerances.json",
+                reference_override=references["time_init"],
+                tolerance_profile_override="cold_cross_layout",
+                comparison_policy_override="fixed_hdf5",
+            )
+
+        self.assertEqual(policy, "fixed_hdf5")
+        self.assertEqual(path, report_path)
+
     @patch("comparison.matrix.compare_fixed_run")
     def test_fixed_comparison_stops_at_first_divergent_stage(self, compare) -> None:
         with tempfile.TemporaryDirectory() as temporary:

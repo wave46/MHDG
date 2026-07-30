@@ -95,7 +95,7 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | `cold` | Both full cold workflows, `mpi4_omp4` | Canonical integration check. |
 | `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |
 | `race_matrix` | Both one-step workflows, every pair of tracked layouts | Periodic race check. |
-| `cold_matrix` | Both full cold workflows, all layouts | Overnight evidence. |
+| `cold_matrix` | Both full cold workflows, all layouts and all layout pairs | Overnight golden and reproducibility evidence. |
 
 Warm and race suites are short. Full cold workflows are longer, and
 `cold_matrix` can take hours. Runtime is recorded but is not a pass criterion.
@@ -181,7 +181,7 @@ Neither command below launches MHDG:
 # One completed run; policy comes from run_plan.json.
 regression_tests/regression.sh compare /path/to/completed/run
 
-# Every recorded cell or layout pair in a suite.
+# Every same-layout golden check and declared layout pair in a suite.
 regression_tests/regression.sh suite compare \
   /path/to/suites/cold_matrix/overnight-01/suite_summary.json
 ```
