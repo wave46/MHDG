@@ -17,6 +17,10 @@
     "optional": {
       "warm_restart": "restart.h5",
       "warm_reference": "reference_mpi4_omp4.h5",
+      "warm_impurity_off_restart": "restart_impurity_off.h5",
+      "warm_impurity_off_reference": "reference_impurity_off_mpi4_omp4.h5",
+      "warm_impurity_n_restart": "restart_impurity_n.h5",
+      "warm_impurity_n_reference": "reference_impurity_n_mpi4_omp4.h5",
       "coarse_mesh": "mesh_adaptive_initial.msh",
       "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
       "cold_fixed_diffusion_reduction_parameters": "param_cold_fixed_diffusion_reduction.txt",
@@ -57,6 +61,7 @@
     "warm_impurity_off": {
       "extends": "warm",
       "description": "Reconverge the accepted state with impurity radiation disabled",
+      "restart": "warm_impurity_off_restart",
       "parameter_overrides": {
         "impurity_radiation": false
       }
@@ -64,6 +69,7 @@
     "warm_impurity_n": {
       "extends": "warm",
       "description": "Reconverge the accepted state with legacy single-nitrogen radiation",
+      "restart": "warm_impurity_n_restart",
       "parameter_overrides": {
         "impurity_radiation": true,
         "impurity_name": "N",

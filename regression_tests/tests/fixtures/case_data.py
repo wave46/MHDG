@@ -58,6 +58,10 @@ BASE_FILES = (
     "current_density.h5",
     "transport_model.nml",
     "restart.h5",
+    "restart_impurity_off.h5",
+    "reference_impurity_off_mpi4_omp4.h5",
+    "restart_impurity_n.h5",
+    "reference_impurity_n_mpi4_omp4.h5",
 )
 
 
