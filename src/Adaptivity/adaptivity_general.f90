@@ -1,15 +1,21 @@
 MODULE adaptivity_general_module
-    USE globals
-    USE adaptivity_common_module
-    USE adaptivity_indicator_module
-    USE adaptivity_estimator_module
-    USE MPI_OMP
+    USE globals, ONLY: adapt, Mesh
+    USE adaptivity_common_module, ONLY: adaptivity_console_output, calculate_h_map_elements, &
+         combine_h_target_ind_est, gmsh_create_from_h_target, load_new_mesh_gmsh, save_copy_new_mesh
+    USE adaptivity_indicator_module, ONLY: apply_indicator
+    USE adaptivity_estimator_module, ONLY: apply_estimator
+
+    IMPLICIT NONE
+    PRIVATE
+
+    PUBLIC :: adaptively_refine_mesh
 
 CONTAINS
 
     SUBROUTINE adaptively_refine_mesh(mesh_name, count_adapt, order)
 #ifdef PARALL
         USE Communications, only: gather_mesh, gather_elemental_values
+        USE mpi, ONLY: MPI_BARRIER, MPI_COMM_WORLD
 #endif
         CHARACTER(1024), INTENT(IN) :: mesh_name
         INTEGER, INTENT(IN) :: count_adapt

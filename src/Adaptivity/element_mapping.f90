@@ -15,7 +15,7 @@ MODULE element_mapping_module
 
   PUBLIC :: map_physical_to_reference
   PUBLIC :: map_physical_to_nearest_reference
-  PUBLIC :: map_reference_to_physical
+  PUBLIC :: reference_point_is_in_triangle
 
 CONTAINS
 
@@ -46,14 +46,14 @@ CONTAINS
   ENDSUBROUTINE map_physical_to_reference
 
   SUBROUTINE map_physical_to_nearest_reference(physical_point, element_coordinates, refEl, reference_point, &
-       mapped_point, distance, valid)
+       distance, valid)
     TYPE(Reference_element_type), INTENT(IN) :: refEl
     REAL*8, INTENT(IN)                      :: physical_point(2), element_coordinates(:,:)
-    REAL*8, INTENT(OUT)                     :: reference_point(2), mapped_point(2), distance
+    REAL*8, INTENT(OUT)                     :: reference_point(2), distance
     LOGICAL, INTENT(OUT)                    :: valid
 
     REAL*8                                  :: inverse_vandermonde(refEl%Nnodes2D,refEl%Nnodes2D)
-    REAL*8                                  :: seeds(8,2), candidate_reference(2), candidate_mapped(2)
+    REAL*8                                  :: seeds(8,2), candidate_reference(2)
     REAL*8                                  :: candidate_distance
     LOGICAL                                 :: candidate_valid
     INTEGER                                 :: seed
@@ -64,15 +64,14 @@ CONTAINS
 
     valid = .FALSE.
     reference_point = 0.d0
-    mapped_point = 0.d0
     distance = HUGE(1.d0)
 
     DO seed = 1, SIZE(seeds,1)
        candidate_reference = seeds(seed,:)
        CALL solve_closest_mapping_point(physical_point, element_coordinates, refEl, inverse_vandermonde, &
-            candidate_reference, candidate_mapped, candidate_distance, candidate_valid)
-       CALL retain_closer_candidate(candidate_reference, candidate_mapped, candidate_distance, candidate_valid, &
-            reference_point, mapped_point, distance, valid)
+            candidate_reference, candidate_distance, candidate_valid)
+       CALL retain_closer_candidate(candidate_reference, candidate_distance, candidate_valid, &
+            reference_point, distance, valid)
     ENDDO
   ENDSUBROUTINE map_physical_to_nearest_reference
 
@@ -122,14 +121,14 @@ CONTAINS
   ENDSUBROUTINE solve_inverse_mapping_point
 
   SUBROUTINE solve_closest_mapping_point(physical_point, element_coordinates, refEl, inverse_vandermonde, &
-       reference_point, mapped_point, distance, valid)
+       reference_point, distance, valid)
     TYPE(Reference_element_type), INTENT(IN) :: refEl
     REAL*8, INTENT(IN)                      :: physical_point(2), element_coordinates(:,:), inverse_vandermonde(:,:)
     REAL*8, INTENT(INOUT)                   :: reference_point(2)
-    REAL*8, INTENT(OUT)                     :: mapped_point(2), distance
+    REAL*8, INTENT(OUT)                     :: distance
     LOGICAL, INTENT(OUT)                    :: valid
 
-    REAL*8                                  :: projected_reference(2), trial_reference(2), trial_mapped(2)
+    REAL*8                                  :: mapped_point(2), projected_reference(2), trial_reference(2), trial_mapped(2)
     REAL*8                                  :: residual(2), update(2), objective, trial_objective, step_size
     REAL*8                                  :: improvement_tolerance
     LOGICAL                                 :: update_valid, step_accepted
@@ -325,11 +324,11 @@ CONTAINS
     seeds(8,:) = (/-1.d0,  0.d0/)
   ENDSUBROUTINE build_closest_point_seeds
 
-  SUBROUTINE retain_closer_candidate(candidate_reference, candidate_mapped, candidate_distance, candidate_valid, &
-       reference_point, mapped_point, distance, valid)
-    REAL*8, INTENT(IN)    :: candidate_reference(2), candidate_mapped(2), candidate_distance
+  SUBROUTINE retain_closer_candidate(candidate_reference, candidate_distance, candidate_valid, &
+       reference_point, distance, valid)
+    REAL*8, INTENT(IN)    :: candidate_reference(2), candidate_distance
     LOGICAL, INTENT(IN)   :: candidate_valid
-    REAL*8, INTENT(INOUT) :: reference_point(2), mapped_point(2), distance
+    REAL*8, INTENT(INOUT) :: reference_point(2), distance
     LOGICAL, INTENT(INOUT):: valid
 
     IF(.NOT. candidate_valid) RETURN
@@ -337,7 +336,6 @@ CONTAINS
 
     valid = .TRUE.
     reference_point = candidate_reference
-    mapped_point = candidate_mapped
     distance = candidate_distance
   ENDSUBROUTINE retain_closer_candidate
 

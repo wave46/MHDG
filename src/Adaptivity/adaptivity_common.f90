@@ -7,11 +7,24 @@
 
 MODULE adaptivity_common_module
   USE, INTRINSIC :: iso_c_binding, ONLY: c_double, c_int, c_size_t
-  USE globals
-  USE reference_element
-  USE gmsh
-  USE GMSH_io_module
+  USE globals, ONLY: adapt, free_mesh, geom, Mesh, phys, refElPol, switch
+  USE MPI_OMP, ONLY: MPIvar
+  USE reference_element, ONLY: create_reference_element, free_reference_element_pol
+  USE gmsh, ONLY: gmsh_t
+  USE GMSH_io_module, ONLY: load_gmsh_mesh
   IMPLICIT NONE
+  PRIVATE
+
+  PUBLIC :: adaptivity_console_output
+  PUBLIC :: calculate_h_map_elements
+  PUBLIC :: combine_h_target_ind_est
+  PUBLIC :: gmsh_create_from_h_target
+  PUBLIC :: load_new_mesh_gmsh
+  PUBLIC :: quicksort_int
+  PUBLIC :: save_copy_new_mesh
+  PUBLIC :: set_order_mesh
+  PUBLIC :: unique_1D
+  PUBLIC :: unique_stable
 
   TYPE :: gmsh_entity_mesh_data
      INTEGER :: dimension = -1
@@ -92,7 +105,7 @@ CONTAINS
 
 
    SUBROUTINE load_new_mesh_gmsh(order)
-      USE preprocess
+      USE preprocess, ONLY: mesh_preprocess_serial
       INTEGER, INTENT(IN) :: order
       INTEGER                     :: ierr
 
@@ -370,215 +383,6 @@ CONTAINS
     ERROR STOP 1
   END SUBROUTINE mesh_order_error
 
-
-
-  SUBROUTINE inverse_isop_transf(x, Xe, refEl, xieta)
-    TYPE(Reference_element_type), INTENT(IN)  :: RefEl
-    REAL*8, INTENT(OUT)                       :: xieta(:,:)
-    REAL*8, INTENT(IN)                        :: x(:,:), Xe(:,:)
-    REAL*8                                    :: x0(SIZE(x,1),SIZE(x,2))
-    INTEGER                                   :: maxit, npoints, nnodes, i, j, k, counter, n
-    REAL*8, ALLOCATABLE                       :: p(:), dpxi(:), dpeta(:), xind(:,:), x0ind(:,:), xietaind(:,:), rhs(:,:)
-    INTEGER, ALLOCATABLE                      :: ind(:)
-    REAL*8                                    :: xieta0(SIZE(x,1),SIZE(x,2)), aux_xieta(SIZE(x,1),SIZE(x,2)), Nx(refEl%Nnodes2D), Ny(refEl%Nnodes2D)
-    REAL*8                                    :: Vand(refEl%Nnodes2D, refEl%Nnodes2D), invV(refEl%Nnodes2D, refEl%Nnodes2D)
-    REAL*8                                    :: Jxx, Jxy, Jyx, Jyy, detJ
-    REAL*8                                    :: tol
-
-    maxit   = 5
-    tol     = 1e-10
-    npoints = SIZE(x,1)
-    nnodes  = SIZE(Xe,1)
-
-    CALL inverse_linear_transformation(x, Xe, xieta0)
-
-    ! just fucking brute force it
-    DO j = 1, SIZE(xieta0,2)
-       DO i = 1, SIZE(xieta0,1)
-          IF(ABS(xieta0(i,j)-1.0) .LT. 1e-12) THEN
-             xieta0(i,j) = xieta0(i,j) - 1.e-10
-          ENDIF
-       ENDDO
-    ENDDO
-
-    CALL iso_transformation_high_order(xieta0, Xe, refEl, x0)
-
-
-    n = COUNT(SQRT((x(:,1) - x0(:,1))**2+(x(:,2)-x0(:,2))**2) .GT. (tol*SQRT(x(:,1)**2+x(:,2)**2)+1.e-14))
-
-    IF(n .NE. 0) THEN
-
-       ALLOCATE(ind(n))
-       ALLOCATE(rhs(n,SIZE(x,2)))
-       ALLOCATE(xind(n,SIZE(x,2)))
-       ALLOCATE(x0ind(n, SIZE(x0,2)))
-       ALLOCATE(xietaind(n,SIZE(xieta,2)))
-
-       ind = 0.
-
-       counter = 1
-       DO i = 1, npoints
-          IF((SQRT((x(i,1) - x0(i,1))**2+(x(i,2)-x0(i,2))**2)) .GT. (tol*SQRT(x(i,1)**2+x(i,2)**2)+1.e-14)) THEN
-             ind(counter) = counter
-             counter = counter + 1
-          ENDIF
-       ENDDO
-
-       xind     = x(ind,:)
-       x0ind    = x0(ind,:)
-       xietaind = xieta0(ind,:)
-
-       ALLOCATE (p(refEl%Nnodes2D), dpxi(refEl%Nnodes2D), dpeta(refEl%Nnodes2D))
-
-       DO i = 1, maxit
-          IF (ALL((SQRT((xind(:,1)-x0ind(:,1))**2+(xind(:,2)-x0ind(:,2))**2)) .LT. (tol*SQRT(xind(:,1)**2+xind(:,2)**2)+1.e-14))) THEN
-             EXIT
-          ENDIF
-
-          CALL vandermonde_2d(Vand, refEl)
-          CALL invert_matrix(TRANSPOSE(Vand), invV)
-
-
-          p = 0.d0
-          dpxi = 0.d0
-          dpeta = 0.d0
-
-          DO j = 1, SIZE(xietaind,1)
-             CALL orthopoly2d_deriv(xietaind(j,1), xietaind(j,2), refEl%Ndeg, refEl%Nnodes2D, p, dpxi, dpeta)
-
-             Nx = MATMUL(invV, dpxi)
-             Ny = MATMUL(invV, dpeta)
-
-             Jxx = dot_PRODUCT(Nx,Xe(:,1))
-             Jxy = dot_PRODUCT(Ny,Xe(:,1))
-             Jyx = dot_PRODUCT(Nx,Xe(:,2))
-             Jyy = dot_PRODUCT(Ny,Xe(:,2))
-             detJ = Jxx*Jyy-Jxy*Jyx
-             rhs = xind-x0ind
-
-             xietaind(j,1)=xietaind(j,1)+(rhs(j,1)*Jyy-rhs(j,2)*Jxy)/detJ
-             xietaind(j,2)=xietaind(j,2)+(rhs(j,2)*Jxx-rhs(j,1)*Jyx)/detJ
-
-          ENDDO
-
-          ! just fucking brute force it
-          DO k = 1, SIZE(xietaind,2)
-             DO j = 1, SIZE(xietaind,1)
-                IF(ABS(xietaind(j,k)-1.0) .LT. 1e-12) THEN
-                   xietaind(j,k) = xietaind(j,k) - 1.e-10
-                ENDIF
-             ENDDO
-          ENDDO
-
-          CALL iso_transformation_high_order(xietaind, Xe, refEl,x0ind)
-       ENDDO
-
-       IF(ANY((SQRT((xind(:,1)-x0ind(:,1))**2+(xind(:,2)-x0ind(:,2))**2)) .GT. (tol*SQRT(xind(:,1)**2+xind(:,2)**2)+1.e-14))) THEN
-          WRITE(*,*) "inverse_isop_transf non converging."
-          STOP
-       ENDIF
-
-       aux_xieta = xieta0
-       aux_xieta(ind,:) = xietaind
-       xieta = aux_xieta
-
-       DEALLOCATE(p)
-       DEALLOCATE(dpxi)
-       DEALLOCATE(dpeta)
-       DEALLOCATE(ind)
-       DEALLOCATE(xind)
-       DEALLOCATE(x0ind)
-       DEALLOCATE(xietaind)
-       DEALLOCATE(rhs)
-
-    ELSE
-       xieta = xieta0
-    ENDIF
-  ENDSUBROUTINE inverse_isop_transf
-
-  SUBROUTINE inverse_linear_transformation(x,Xe,xieta)
-    USE LinearAlgebra, only: solve_linear_system
-
-    REAL*8, INTENT(IN)      :: x(:,:), Xe(:,:)
-    REAL*8, INTENT(OUT)     :: xieta(:,:)
-    REAL*8                  :: x1(2),x2(2),x3(2), J(2,2), aux(SIZE(x,1), 2), xieta_temp(SIZE(xieta,2), SIZE(xieta,1))
-
-    ! take vertices
-    x1 = Xe(1,:)
-    x2 = Xe(2,:)
-    x3 = Xe(3,:)
-
-
-    J(:,1) = (x2-x1)/2
-    J(:,2) = (x3-x1)/2
-
-    aux(:,1)  = x(:,1)-(x2(1)+x3(1))/2
-    aux(:,2) = x(:,2)-(x2(2)+x3(2))/2
-
-    CALL solve_linear_system(J,TRANSPOSE(aux),xieta_temp)
-    xieta = TRANSPOSE(xieta_temp)
-
-  ENDSUBROUTINE inverse_linear_transformation
-
-  SUBROUTINE iso_transformation_high_order(xieta, Xe, refEl, x)
-    TYPE(Reference_element_type)      :: refEl
-    REAL*8,  INTENT(IN)               :: xieta(:,:)
-    REAL*8,  INTENT(IN)               :: Xe(:,:)
-    REAL*8,  INTENT(OUT)              :: x(:,:)
-    REAL*8                            :: shapeFunctions(refEl%Nnodes2D,SIZE(xieta,1),3)
-
-    shapeFunctions = 0.d0
-
-    CALL compute_shape_functions_at_points(refEl, xieta, shapeFunctions)
-
-    ! take only shape function and not its derivatives in xi and eta
-    x(:,1) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), Xe(:,1))
-    x(:,2) = MATMUL(TRANSPOSE(shapeFunctions(:,:,1)), Xe(:,2))
-
-  ENDSUBROUTINE iso_transformation_high_order
-
-  PURE SUBROUTINE find_matches_int(a, b, indices)
-    INTEGER, DIMENSION(:), INTENT(IN)                 :: a
-    INTEGER, INTENT(IN)                               :: b
-    INTEGER, DIMENSION(:), INTENT(INOUT), ALLOCATABLE :: indices
-    INTEGER                                           :: counter
-    INTEGER                                           :: i
-
-    counter = COUNT(a .EQ. b)
-
-    ALLOCATE(indices(counter))
-
-    counter = 1
-    DO i = 1, SIZE(a)
-       IF (a(i) .EQ. b) THEN
-          indices(counter) = i
-          counter = counter +1
-       END IF
-    END DO
-
-  END SUBROUTINE find_matches_int
-
-
-  SUBROUTINE delete_file(filename)
-
-    CHARACTER(*), INTENT(IN)        :: filename
-    INTEGER                         :: fileID, stat
-
-    CALL get_unit ( fileID )   ! get unit file and open it
-
-    OPEN(unit=fileID, iostat=stat, file=filename, status='old')
-    IF(stat .NE. 0) THEN
-       WRITE(*,*) "Problem opening file to delete."
-    ELSE
-       CLOSE(unit=fileID, iostat=stat, status='delete')
-    ENDIF
-
-    IF(stat .NE. 0) THEN
-       WRITE(*,*) "Problem deleting file."
-    ENDIF
-
-  ENDSUBROUTINE delete_file
-
   SUBROUTINE extract_mesh_name_from_fullpath_woext(mesh_name, mesh_name_npne)
     CHARACTER(1024), INTENT(IN)             :: mesh_name
     CHARACTER(1024), INTENT(OUT)            :: mesh_name_npne
@@ -677,42 +481,6 @@ CONTAINS
 
   ENDSUBROUTINE quicksort_int
 
-  PURE RECURSIVE SUBROUTINE quicksort_real(a)
-    !! quicksort.f -*-f90-*-
-    !! Author: t-nissie, some tweaks by 1AdAstra1
-    !! License: GPLv3
-    !! Gist: https://gist.github.com/t-nissie/479f0f16966925fa29ea
-    REAL*8, DIMENSION(:), INTENT(inout) :: a
-    !! The array to sort
-
-    REAL*8 ::  x, t
-    INTEGER :: first, last
-    INTEGER i, j
-
-    first = 1
-    last = SIZE(a, 1)
-    x = a( (first+last) / 2 )
-    i = first
-    j = last
-
-    DO
-       DO WHILE (a(i) < x)
-          i=i+1
-       ENDDO
-       DO WHILE (x < a(j))
-          j=j-1
-       ENDDO
-       IF (i .GE. j) EXIT
-       t = a(i);  a(i) = a(j);  a(j) = t
-       i=i+1
-       j=j-1
-    ENDDO
-
-    IF (first < i - 1) CALL quicksort_real(a(first : i - 1))
-    IF (j + 1 < last)  CALL quicksort_real(a(j + 1 : last))
-
-  ENDSUBROUTINE quicksort_real
-
   PURE SUBROUTINE unique_stable(arrayin, uniqueArr)
     INTEGER, DIMENSION(:), INTENT(IN) :: arrayin
     INTEGER, DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: uniqueArr
@@ -748,23 +516,18 @@ CONTAINS
 
 
   SUBROUTINE gmsh_create_from_h_target(h_target_on_elements,vertices_coordinates, connectivity, p_order)
-
-      USE, INTRINSIC :: iso_c_binding
-      USE gmsh
       TYPE(gmsh_t) :: gmsh_l
       INTEGER, INTENT(IN) :: p_order
       REAL*8, DIMENSION(:), INTENT(IN) :: h_target_on_elements ! on the elements
       REAL*8, DIMENSION(:,:), INTENT(IN) :: vertices_coordinates ! coordinates of the vertices
       INTEGER, DIMENSION(:,:), INTENT(IN) :: connectivity ! connectivity of the triangles
       REAL*8, ALLOCATABLE :: data_for_gmsh(:), h_target_on_nodes(:)
-      INTEGER*8           :: gmsh_dim, number_of_vertices_per_triangle, i, j, start_index
+      INTEGER*8           :: number_of_vertices_per_triangle, i, j, start_index
       INTEGER*4           :: size_view,number_of_triangles,ret
       REAL*8              :: sf_index, vertex_coordinates(2)
       REAL*8, PARAMETER   :: minimum_mesh_size = 0.5d-4
       REAL*8, PARAMETER   :: target_size_quantum = 2.d-3*minimum_mesh_size
       REAL*8, PARAMETER   :: view_coordinate_quantum = 1.d-11
-      !GMSH always have (X,Y,Z) coordinates
-      gmsh_dim = 3 
       number_of_vertices_per_triangle = 3 
       number_of_triangles = SIZE(connectivity,1)
 

@@ -1,7 +1,9 @@
 MODULE adaptivity_projection_module
   USE globals, ONLY: phys, refElPol, utils
-  USE MPI_OMP
-  USE element_mapping_module, ONLY: map_physical_to_nearest_reference, map_physical_to_reference
+  USE MPI_OMP, ONLY: MPIvar
+  USE mpi, ONLY: MPI_ALLREDUCE, MPI_COMM_WORLD, MPI_IN_PLACE, MPI_INTEGER, MPI_SUM
+  USE element_mapping_module, ONLY: map_physical_to_nearest_reference, map_physical_to_reference, &
+       reference_point_is_in_triangle
   USE reference_element, ONLY: compute_shape_functions_at_points
 
   IMPLICIT NONE
@@ -237,7 +239,7 @@ CONTAINS
     INTEGER, INTENT(INOUT)                 :: point_elements(:), nearest_elements(:)
     REAL*8, INTENT(INOUT)                  :: reference_points(:,:), nearest_distances(:), nearest_sizes(:)
 
-    REAL*8                                 :: nearest_reference(2), nearest_mapped(2), nearest_distance, nearest_size
+    REAL*8                                 :: nearest_reference(2), nearest_distance, nearest_size
     LOGICAL                                :: nearest_valid
     INTEGER                                :: nearest_element, point
 
@@ -245,10 +247,10 @@ CONTAINS
        IF(point_elements(point) .NE. 0) CYCLE
 
        CALL find_nearest_old_element(target_points(point,:), old_connectivity, old_coordinates, .TRUE., &
-            nearest_element, nearest_reference, nearest_mapped, nearest_distance, nearest_size, nearest_valid)
+            nearest_element, nearest_reference, nearest_distance, nearest_size, nearest_valid)
        IF(.NOT. nearest_valid) THEN
           CALL find_nearest_old_element(target_points(point,:), old_connectivity, old_coordinates, .FALSE., &
-               nearest_element, nearest_reference, nearest_mapped, nearest_distance, nearest_size, nearest_valid)
+               nearest_element, nearest_reference, nearest_distance, nearest_size, nearest_valid)
        ENDIF
 
        IF(nearest_valid) THEN
@@ -264,16 +266,16 @@ CONTAINS
   ENDSUBROUTINE recover_nearest_projection_points
 
   SUBROUTINE find_nearest_old_element(target_point, old_connectivity, old_coordinates, padded_candidates_only, &
-       nearest_element, nearest_reference, nearest_mapped, nearest_distance, nearest_size, valid)
+       nearest_element, nearest_reference, nearest_distance, nearest_size, valid)
     REAL*8, INTENT(IN)                     :: target_point(2), old_coordinates(:,:)
     INTEGER, INTENT(IN)                    :: old_connectivity(:,:)
     LOGICAL, INTENT(IN)                    :: padded_candidates_only
     INTEGER, INTENT(OUT)                   :: nearest_element
-    REAL*8, INTENT(OUT)                    :: nearest_reference(2), nearest_mapped(2), nearest_distance, nearest_size
+    REAL*8, INTENT(OUT)                    :: nearest_reference(2), nearest_distance, nearest_size
     LOGICAL, INTENT(OUT)                   :: valid
 
     REAL*8                                 :: element_coordinates(SIZE(old_connectivity,2),2)
-    REAL*8                                 :: candidate_reference(2), candidate_mapped(2), candidate_distance
+    REAL*8                                 :: candidate_reference(2), candidate_distance
     REAL*8                                 :: candidate_size, xmin, xmax, ymin, ymax, bounding_scale, padding
     LOGICAL                                :: candidate_valid
     INTEGER                                :: element
@@ -281,7 +283,6 @@ CONTAINS
     valid = .FALSE.
     nearest_element = 0
     nearest_reference = 0.d0
-    nearest_mapped = 0.d0
     nearest_distance = HUGE(1.d0)
     nearest_size = 0.d0
 
@@ -294,21 +295,20 @@ CONTAINS
             .NOT. point_is_in_padded_box(target_point, xmin, xmax, ymin, ymax, padding)) CYCLE
 
        CALL map_physical_to_nearest_reference(target_point, element_coordinates, refElPol, candidate_reference, &
-            candidate_mapped, candidate_distance, candidate_valid)
-       CALL retain_nearest_element(element, candidate_reference, candidate_mapped, candidate_distance, candidate_size, &
-            candidate_valid, nearest_element, nearest_reference, nearest_mapped, nearest_distance, nearest_size, valid)
+            candidate_distance, candidate_valid)
+       CALL retain_nearest_element(element, candidate_reference, candidate_distance, candidate_size, &
+            candidate_valid, nearest_element, nearest_reference, nearest_distance, nearest_size, valid)
     ENDDO
   ENDSUBROUTINE find_nearest_old_element
 
-  SUBROUTINE retain_nearest_element(candidate_element, candidate_reference, candidate_mapped, candidate_distance, &
-       candidate_size, candidate_valid, nearest_element, nearest_reference, nearest_mapped, nearest_distance, &
-       nearest_size, valid)
+  SUBROUTINE retain_nearest_element(candidate_element, candidate_reference, candidate_distance, candidate_size, &
+       candidate_valid, nearest_element, nearest_reference, nearest_distance, nearest_size, valid)
     INTEGER, INTENT(IN)                    :: candidate_element
-    REAL*8, INTENT(IN)                     :: candidate_reference(2), candidate_mapped(2), candidate_distance
+    REAL*8, INTENT(IN)                     :: candidate_reference(2), candidate_distance
     REAL*8, INTENT(IN)                     :: candidate_size
     LOGICAL, INTENT(IN)                    :: candidate_valid
     INTEGER, INTENT(INOUT)                 :: nearest_element
-    REAL*8, INTENT(INOUT)                  :: nearest_reference(2), nearest_mapped(2), nearest_distance, nearest_size
+    REAL*8, INTENT(INOUT)                  :: nearest_reference(2), nearest_distance, nearest_size
     LOGICAL, INTENT(INOUT)                 :: valid
 
     REAL*8                                 :: tie_tolerance
@@ -322,7 +322,6 @@ CONTAINS
     valid = .TRUE.
     nearest_element = candidate_element
     nearest_reference = candidate_reference
-    nearest_mapped = candidate_mapped
     nearest_distance = candidate_distance
     nearest_size = candidate_size
   ENDSUBROUTINE retain_nearest_element
@@ -434,13 +433,6 @@ CONTAINS
     point_is_in_linear_triangle = ALL(barycentric .GE. -tolerance) .AND. &
          ALL(barycentric .LE. 1.d0+tolerance)
   ENDFUNCTION point_is_in_linear_triangle
-
-  PURE LOGICAL FUNCTION reference_point_is_in_triangle(point, tolerance)
-    REAL*8, INTENT(IN)                     :: point(2), tolerance
-
-    reference_point_is_in_triangle = point(1) .GE. -1.d0-tolerance .AND. &
-         point(2) .GE. -1.d0-tolerance .AND. point(1)+point(2) .LE. tolerance
-  ENDFUNCTION reference_point_is_in_triangle
 
   PURE SUBROUTINE curved_element_bounding_box(element_coordinates, xmin, xmax, ymin, ymax, scale)
     REAL*8, INTENT(IN)                     :: element_coordinates(:,:)

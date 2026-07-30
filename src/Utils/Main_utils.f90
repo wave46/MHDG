@@ -14,6 +14,7 @@ MODULE Main_utils
   USE printutils
   USE debug
   USE initialization
+  USE adaptivity_common_module, ONLY: set_order_mesh
   USE adaptivity_projection_module, ONLY: projectSolutionDifferentMeshes_general, &
        projectSolutionDifferentMeshes_general_arrays
   USE external_heating

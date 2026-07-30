@@ -98,54 +98,6 @@ CONTAINS
 
   ENDSUBROUTINE post_process_matrix_solution
 
-  SUBROUTINE L2_error_estimator_eval(X,T,u,q,error_param,error_L2,eg_L2)
-    USE physics, ONLY: cons2phys
-
-    REAL*8, INTENT(IN)                :: X(:,:)
-    INTEGER, INTENT(IN)               :: T(:,:)
-    REAL*8, INTENT(IN)                :: u(:), q(:)
-    INTEGER, INTENT(IN)               :: error_param
-    REAL*8, INTENT(OUT)               :: error_L2(:)
-    REAL*8, INTENT(OUT)               :: eg_L2
-
-    TYPE(Reference_element_type)      :: refElv_star
-    REAL*8, ALLOCATABLE               :: K(:,:,:), Bt(:,:,:), int_N(:,:,:)
-    REAL*8, ALLOCATABLE               :: u_star(:), u_int(:), u_sol(:,:), u_star_sol(:,:)
-    INTEGER                           :: n_elements
-
-    n_elements = Mesh%Nelems
-
-    ALLOCATE(K((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq, n_elements))
-    ALLOCATE(Bt((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq*mesh%ndim*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2, n_elements))
-    ALLOCATE(int_N((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq, n_elements))
-    ALLOCATE(u_star((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements))
-    ALLOCATE(u_int((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements))
-    ALLOCATE(u_sol(Mesh%Nnodesperelem*n_elements*phys%neq/phys%Neq, phys%npv))
-    ALLOCATE(u_star_sol((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements/phys%Neq, phys%npv))
-
-    CALL create_reference_element(refElv_star,2,refElPol%Ndeg+1, verbose = 0)
-
-    ! local calculation of the p+1 solution u_star
-    CALL hdg_post_process_matrix(X,T,refElv_star,refElPol%Ndeg,refElPol%Ndeg+1, K, Bt, int_N)
-    CALL hdg_postprocess_solution(q,u,K,Bt,int_N,refElv_star,refElPol,n_elements, u_star, u_int)
-
-    CALL cons2phys(TRANSPOSE(RESHAPE(u, (/phys%Neq, SIZE(T,1)*SIZE(T,2)/))), u_sol)
-    CALL cons2phys(TRANSPOSE(RESHAPE(u_star, (/phys%Neq, SIZE(T,1)*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2/))), u_star_sol)
-
-    ! elemental error,global error, area elements
-    CALL calculate_L2_error_two_sols_different_p_scalar(X,T,u_sol(:,error_param),refElPol,X,T,u_star_sol(:,error_param),refElv_star,error_L2,eg_L2)
-    CALL free_reference_element_pol(refElv_star)
-
-    DEALLOCATE(K)
-    DEALLOCATE(Bt)
-    DEALLOCATE(int_N)
-    DEALLOCATE(u_sol)
-    DEALLOCATE(u_star_sol)
-    DEALLOCATE(u_star)
-    DEALLOCATE(u_int)
-
-  ENDSUBROUTINE L2_error_estimator_eval
-
   SUBROUTINE hdg_post_process_matrix(X, T, refElv, p1, p2, K, Bt, int_N, M)
     TYPE(Reference_element_type), INTENT(IN) :: refElv
     REAL*8, INTENT(IN)                       :: X(:,:)

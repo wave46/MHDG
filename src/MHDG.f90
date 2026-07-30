@@ -1,6 +1,7 @@
 PROGRAM MHDG
   USE Main_utils
   USE MPI_OMP
+  USE adaptivity_indicator_module, ONLY: compute_error_oscillations
 
   IMPLICIT NONE
 
