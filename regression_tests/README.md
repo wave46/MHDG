@@ -71,6 +71,7 @@ analytically. Fixed and adaptive indicate whether the mesh can change.
 | `cold_fixed` | Analytical start; refined fixed mesh | `time_init`, `diffusion_reduction`, then five continuations. |
 | `cold_adaptive` | Analytical start; coarse mesh | Same seven stages; adapt in the first two. |
 | `cold_step_fixed` | Analytical start; coarse fixed mesh | One time step and two Newton iterations. |
+| `cold_step_impurity_off` | Analytical start; coarse fixed mesh | Short disabled-impurity lifecycle check. |
 | `cold_step_adaptive` | Analytical start; coarse adaptive mesh | One time step, two Newton iterations, and one adaptation pass. |
 
 Full cold stages run sequentially and restart from their predecessor. The

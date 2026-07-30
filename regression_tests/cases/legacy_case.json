@@ -206,6 +206,13 @@
         }
       ]
     },
+    "cold_step_impurity_off": {
+      "extends": "cold_step_fixed",
+      "description": "Exercise analytical initialization with impurity radiation disabled",
+      "parameter_overrides": {
+        "impurity_radiation": false
+      }
+    },
     "cold_step_adaptive": {
       "extends": "cold_step_fixed",
       "type": "staged_adaptive_mesh",

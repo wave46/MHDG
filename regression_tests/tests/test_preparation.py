@@ -379,6 +379,24 @@ class RunPreparationTests(unittest.TestCase):
             adaptive_plan["stages"][0]["parameter_overrides"]["nrp"], 2
         )
 
+    def test_prepares_disabled_impurity_scratch_workflow(self) -> None:
+        prepared = prepare_run(
+            self.settings,
+            "legacy_case",
+            "cold_step_impurity_off",
+            "mpi4_omp4",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "impurity-off-scratch",
+        )
+
+        stage = prepared.stages[0].run
+        self.assertFalse((stage.path / "inputs/restart.h5").exists())
+        parameters = (stage.path / "param.txt").read_text(encoding="utf-8")
+        self.assertIn("impurity_radiation = .false.", parameters)
+        self.assertIn("nrp = 2", parameters)
+        self.assertIn("nts = 1", parameters)
+
     def test_existing_run_directory_is_not_replaced(self) -> None:
         run_dir = (
             self.run_root / "legacy_case" / "warm" / "mpi4_omp4" / "existing"
