@@ -19,6 +19,8 @@ Usage:
   regression_tests/regression.sh suite run SUITE --settings FILE [--run-only] [--resume]
   regression_tests/regression.sh suite compare SUITE_SUMMARY
   regression_tests/regression.sh suite check [SUITE] [--settings FILE] [--build]
+  regression_tests/regression.sh golden update CASE --settings FILE --run-id ID --output DIR --bundle-version VERSION
+  regression_tests/regression.sh golden status WORKSPACE
 
 Commands:
   bundle create    Create a validated candidate bundle from prepared files.
@@ -31,6 +33,8 @@ Commands:
   suite run        Execute every workflow-layout cell in a tracked suite.
   suite compare    Recompare saved suite results without running the solver.
   suite check      Run a suite against a required golden bundle (default: warm).
+  golden update    Start or continue an ordered golden-reference update.
+  golden status    Show persisted golden-update state.
 
 Suites: warm, impurity_scalar_baseline, impurity_mixture, race, cold,
         warm_parallelism, race_matrix, cold_matrix.
@@ -123,6 +127,21 @@ run_golden_suite() {
     "$@"
 }
 
+run_golden_command() {
+  local action=${1:-}
+  case "$action" in
+    update|status)
+      run_python golden_update.py "$@"
+      ;;
+    help|-h|--help)
+      run_python golden_update.py --help
+      ;;
+    *)
+      fail "expected 'golden update' or 'golden status'"
+      ;;
+  esac
+}
+
 if (($# == 0)); then
   usage
   exit 0
@@ -160,6 +179,9 @@ case "$command" in
     ;;
   suite)
     run_suite_command "$@"
+    ;;
+  golden)
+    run_golden_command "$@"
     ;;
   *)
     fail "unknown command: $command"

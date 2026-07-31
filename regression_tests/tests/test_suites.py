@@ -322,6 +322,16 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertEqual(len(report["comparisons"]), 1)
         self.assertEqual(report["status"], "passed")
 
+        compare_pairs.reset_mock()
+        _, references_only = verify_suite(
+            source,
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "tolerances.json",
+            include_layout_pairs=False,
+        )
+        compare_pairs.assert_not_called()
+        self.assertNotIn("comparisons", references_only)
+
     def _run_suite(self, suite: str, run_id: str, *arguments: str):
         return run_command(
             "suite",

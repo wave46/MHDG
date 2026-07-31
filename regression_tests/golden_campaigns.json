@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "campaigns": {
+    "legacy_case": {
+      "case": "legacy_case",
+      "stages": [
+        {
+          "id": "cold_matrix",
+          "kind": "matrix",
+          "suite": "cold_matrix",
+          "acceptance_required": true
+        },
+        {
+          "id": "race_evidence",
+          "kind": "suite",
+          "suite": "race",
+          "acceptance_required": false
+        }
+      ]
+    }
+  }
+}

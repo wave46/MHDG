@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/wave46/MHDG/develop/regression_tests/schemas/golden-campaigns.schema.json",
+  "title": "MHDG golden campaigns",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "campaigns"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "campaigns": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/identifier"},
+      "additionalProperties": {"$ref": "#/$defs/campaign"}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case", "stages"],
+      "properties": {
+        "case": {"$ref": "#/$defs/identifier"},
+        "stages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/stage"}
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "suite", "acceptance_required"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "kind": {"enum": ["matrix", "suite"]},
+        "suite": {"$ref": "#/$defs/identifier"},
+        "acceptance_required": {"type": "boolean"}
+      }
+    }
+  }
+}

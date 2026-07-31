@@ -18,6 +18,8 @@ def verify_suite(
     suite_summary_path: Path,
     case_directory: Path,
     tolerances_path: Path,
+    *,
+    include_layout_pairs: bool = True,
 ) -> tuple[Path, dict[str, Any]]:
     """Compare all recorded suite runs without executing the solver."""
     suite_summary_path = require_file(suite_summary_path, "suite summary")
@@ -44,7 +46,7 @@ def verify_suite(
             )
             write_json_atomic(output_path, summary, "verification summary")
 
-    if source.get("layout_comparisons"):
+    if include_layout_pairs and source.get("layout_comparisons"):
         summary["comparisons"] = compare_layout_pairs(
             source,
             case_directory,
