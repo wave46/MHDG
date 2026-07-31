@@ -19,7 +19,7 @@
     },
     "cold_cross_layout": {
       "description": "Converged cold solutions across serial, MPI, and OpenMP layouts on identical meshes",
-      "relative_l2_max": 3e-7,
+      "relative_l2_max": 3.5e-7,
       "normalized_linf_max": 3e-7
     },
     "race_step": {

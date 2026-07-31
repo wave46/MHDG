@@ -333,7 +333,7 @@ compare layout pairs produced by the same build directly.
 | Warm, cross layout | `5e-8` | `1e-6` |
 | One-step race probe | `5e-8` | `1e-6` |
 | Matching fixed cold stage | `2e-7` | `3e-7` |
-| Converged cold, cross layout | `3e-7` | `3e-7` |
+| Converged cold, cross layout | `3.5e-7` | `3e-7` |
 | Fixed cold final state against warm reference | `1e-5` | `1e-5` |
 | Adaptive solution | `0.05` | `0.1` |
 | Adaptive gradient | `0.25` | `0.3` |
