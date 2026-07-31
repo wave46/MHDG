@@ -7,6 +7,23 @@
       "workflows": ["warm"],
       "layouts": ["mpi4_omp4"]
     },
+    "impurity_scalar_baseline": {
+      "description": "Disabled and single-nitrogen warm mixture baselines",
+      "case": "legacy_case",
+      "workflows": ["warm_impurity_off", "warm_impurity_n"],
+      "layouts": ["mpi4_omp4"]
+    },
+    "impurity_mixture": {
+      "description": "Manual off, tungsten, nitrogen, and mixed-impurity references",
+      "case": "legacy_case",
+      "workflows": [
+        "warm_impurity_off",
+        "warm",
+        "warm_impurity_n",
+        "warm_impurity_nw"
+      ],
+      "layouts": ["mpi4_omp4"]
+    },
     "warm_parallelism": {
       "description": "Warm restart across serial, MPI, and OpenMP layouts",
       "case": "legacy_case",

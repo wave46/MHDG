@@ -3989,7 +3989,7 @@ END IF
         &dnrec_dU(:)*sigmavErec + nrec*dsigmavErec_dU(:))
       IF (PRESENT(cooling_factor)) THEN
       ! Cooling factor term
-        Sn(4,:) = Sn(4,:) + phys%impurity_concentration*ad4*(nrec*dcooling_factor_dU(:)+dnrec_dU(:)*cooling_factor)
+        Sn(4,:) = Sn(4,:) + nrec*dcooling_factor_dU(:)+dnrec_dU(:)*cooling_factor
       endif
 
       !modification with recombination gain
@@ -4021,7 +4021,7 @@ END IF
 #endif
       IF (PRESENT(cooling_factor)) THEN
       ! Cooling factor term
-        Sn0(4)    = Sn0(4) + phys%impurity_concentration*ad4*(-nrec*cooling_factor)
+        Sn0(4)    = Sn0(4) - nrec*cooling_factor
       ENDIF
 #endif
       Sn0(5)  = -Sn0(1)

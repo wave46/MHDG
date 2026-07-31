@@ -51,7 +51,12 @@ def required_case_roles(
 def workflow_required_roles(workflow: dict[str, Any]) -> set[str]:
     """Return explicit and staged artifact roles for one workflow."""
     roles = set(workflow.get("required_artifact_roles", []))
-    for name in ("mesh_role", "reference_role"):
+    for name in (
+        "mesh_role",
+        "restart_role",
+        "reference_role",
+        "impurity_configuration_role",
+    ):
         if workflow.get(name):
             roles.add(workflow[name])
     for stage in workflow.get("stages", []):

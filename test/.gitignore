@@ -3,6 +3,7 @@ Jtor*
 logs/
 MHDG-*
 param.txt
+impurity_model.local.nml
 Puff*
 Sol*
 Meshes/

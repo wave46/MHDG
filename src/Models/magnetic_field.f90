@@ -1576,7 +1576,7 @@ SUBROUTINE adjust_impurity_concentration_to_target_density_xpr(fname_xpr_density
    DEALLOCATE(target_density_time, target_density_exp)
    NULLIFY(target_density_time, target_density_exp)
    IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentration
+      WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentrations(1)
    END IF
 END SUBROUTINE adjust_impurity_concentration_to_target_density_xpr
 
@@ -1651,9 +1651,9 @@ SUBROUTINE load_impurity_concentration(fname_impurity, impurity_concentration_le
    impurity_concentration = impurity_concentration_exp(impurity_concentration_idx)*(impurity_concentration_time(impurity_concentration_idx+1)-time%t_ME)/(impurity_concentration_time(impurity_concentration_idx+1)-impurity_concentration_time(impurity_concentration_idx)) + &
                             impurity_concentration_exp(impurity_concentration_idx+1)*(time%t_ME-impurity_concentration_time(impurity_concentration_idx))/(impurity_concentration_time(impurity_concentration_idx+1)-impurity_concentration_time(impurity_concentration_idx))
 
-   phys%impurity_concentration = impurity_concentration
+   phys%impurity_concentrations(1) = impurity_concentration
    IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentration
+      WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentrations(1)
    END IF
    DEALLOCATE(impurity_concentration_time, impurity_concentration_exp)
    NULLIFY(impurity_concentration_time, impurity_concentration_exp)
@@ -1782,7 +1782,7 @@ SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
    END IF
 
    ! Calculate the control signal
-   control_signal = phys%impurity_concentration + phys%feedback_propotional_gain_xpr * (target_density - nli) + &
+   control_signal = phys%impurity_concentrations(1) + phys%feedback_propotional_gain_xpr * (target_density - nli) + &
                             phys%feedback_integral_gain_xpr * phys%feedback_integral_error_xpr + &
                             phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/time%dt_ME
    IF (MPIvar%glob_id .EQ. 0) THEN
@@ -1792,15 +1792,15 @@ SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
    END IF
 
    ! Saturate the control signal
-   phys%impurity_concentration = MAX(control_signal, 0.0)
+   phys%impurity_concentrations(1) = MAX(control_signal, 0.0)
 
    ! Back-calculate the integral error to prevent windup
    anti_windup_gain = 0.1  ! Tunable parameter
    phys%feedback_integral_error_xpr = phys%feedback_integral_error_xpr + &
-                                                 anti_windup_gain * (phys%impurity_concentration - control_signal)
+                                                 anti_windup_gain * (phys%impurity_concentrations(1) - control_signal)
 
    ! Update the integral error only if the output is not saturated
-   IF (phys%impurity_concentration > 0.0) THEN
+   IF (phys%impurity_concentrations(1) > 0.0) THEN
        phys%feedback_integral_error_xpr = phys%feedback_integral_error_xpr + (target_density - nli) * time%dt_ME
    END IF
 
@@ -1871,4 +1871,3 @@ SUBROUTINE adjust_ITER_puff(nli)
 END SUBROUTINE adjust_ITER_puff
 
 END MODULE Magnetic_field
- 

@@ -921,8 +921,12 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%diff_pot, 'diff_pot')
       CALL HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
       CALL HDF5_real_saving(group_id2, phys%Re, 'recycling')
-      CALL HDF5_real_saving(group_id2, phys%impurity_concentration, 'impurity_concentration')
-      CALL HDF5_string_saving(group_id2, phys%impurity_name, 'impurity_name')
+      CALL HDF5_integer_saving(group_id2, phys%n_impurities, 'n_impurities')
+      IF (phys%n_impurities > 0) THEN
+         CALL HDF5_string_array1D_saving(group_id2, phys%impurity_names, 'impurity_names')
+         CALL HDF5_array1D_saving(group_id2, phys%impurity_concentrations, phys%n_impurities, &
+              &'impurity_concentrations')
+      ENDIF
       CALL HDF5_logical_saving(group_id2, phys%apply_trim, 'apply_trim')
       CALL HDF5_real_saving(group_id2, phys%Zeff, 'Zeff')
       CALL HDF5_real_saving(group_id2, phys%Pohmic, 'ohmic_coeff')
@@ -1305,8 +1309,10 @@ CONTAINS
 #endif
     INTEGER :: Neq, Ndim, Nel, Np, Nfg, Nf, sizeutilde, sizeu, it
     REAL*8, ALLOCATABLE       :: uaux(:,:),utaux(:,:),qaux(:,:)
-    INTEGER              :: logrho_ptr = 0
+    REAL*8, POINTER           :: impurity_concentrations_saved(:)
+    INTEGER              :: logrho_ptr = 0, n_impurities_saved
 
+    NULLIFY(impurity_concentrations_saved)
     Neq = phys%Neq
     mod_ptr => model_string
 #ifdef TOR3D
@@ -1583,7 +1589,16 @@ CONTAINS
             CALL HDF5_real_reading(group_id2, phys%Re, 'recycling')
          ELSEIF (switch%target_variable == 3) THEN
             CALL HDF5_real_reading(group_id2, phys%puff, 'puff')
-            CALL HDF5_real_reading(group_id2, phys%impurity_concentration, 'impurity_concentration')
+            IF (switch%impurity_radiation) THEN
+               CALL HDF5_integer_reading(group_id2, n_impurities_saved, 'n_impurities')
+               IF (n_impurities_saved > 0) THEN
+                  ALLOCATE(impurity_concentrations_saved(n_impurities_saved))
+                  CALL HDF5_array1D_reading(group_id2, impurity_concentrations_saved, 'impurity_concentrations')
+                  phys%impurity_concentrations(1) = impurity_concentrations_saved(1)
+                  DEALLOCATE(impurity_concentrations_saved)
+                  NULLIFY(impurity_concentrations_saved)
+               ENDIF
+            ENDIF
          ENDIF
          
          IF (time%it .GT. 1) THEN

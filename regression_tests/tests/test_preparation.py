@@ -13,6 +13,7 @@ sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 from bundle.case_definition import normalize_case_definition  # noqa: E402
 from preparation.models import PreparedStagedRun  # noqa: E402
 from preparation.parameters import render_parameter_file  # noqa: E402
+from preparation.workspace import populate_warm_run  # noqa: E402
 from prepare_run import prepare_run  # noqa: E402
 from support.errors import BundleError  # noqa: E402
 from tests.fixtures.case_data import PARAMETERS  # noqa: E402
@@ -68,6 +69,14 @@ class RunPreparationTests(unittest.TestCase):
         self.assertTrue((expected / "inputs" / "equilibrium.h5").is_symlink())
         self.assertTrue((expected / "inputs" / "reference.h5").is_symlink())
         self.assertEqual(
+            (expected / "inputs/restart.h5").resolve(),
+            (self.bundle / "inputs/restart.h5").resolve(),
+        )
+        self.assertEqual(
+            (expected / "inputs/reference.h5").resolve(),
+            (self.bundle / "inputs/reference_mpi4_omp4.h5").resolve(),
+        )
+        self.assertEqual(
             (expected / "positionFeketeNodesTri2D.h5").resolve(),
             self.runtime_file.resolve(),
         )
@@ -76,6 +85,7 @@ class RunPreparationTests(unittest.TestCase):
         self.assertNotIn("/old/", parameters)
         rendered_paths = (
             expected / "inputs" / "transport_model.nml",
+            expected / "inputs" / "impurity_model.nml",
             expected / "inputs" / "equilibrium.h5",
             expected / "inputs" / "current_density.h5",
             expected / "inputs" / "geometry.geo",
@@ -88,6 +98,82 @@ class RunPreparationTests(unittest.TestCase):
             self.bundle / "inputs" / "param.txt"
         ).read_text(encoding="utf-8")
         self.assertEqual(bundled_parameters, PARAMETERS)
+
+    def test_selects_warm_impurity_configuration(self) -> None:
+        prepared = prepare_run(
+            self.settings,
+            "legacy_case",
+            "warm_impurity_n",
+            "mpi4_omp4",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "nitrogen",
+        )
+
+        parameters = (prepared.path / "param.txt").read_text(encoding="utf-8")
+        self.assertIn("impurity_radiation = .true.", parameters)
+        impurity_configuration = prepared.path / "inputs/impurity_model.nml"
+        self.assertEqual(
+            impurity_configuration.resolve(),
+            (self.bundle / "inputs/impurity_model_n.nml").resolve(),
+        )
+        self.assertIn("impurity_names = 'N'", impurity_configuration.read_text())
+
+        plan = json.loads(
+            (prepared.path / "run_plan.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            plan["parameter_overrides"],
+            {
+                "impurity_radiation": True,
+            },
+        )
+
+    def test_warm_workflow_selects_restart_and_reference_independently(self) -> None:
+        staging = self.root / "selected_staging"
+        final = self.root / "selected_final"
+        staging.mkdir()
+        artifact_roles = {
+            "mesh",
+            "geometry",
+            "equilibrium_magnetic_field",
+            "equilibrium_current_density",
+            "transport_configuration",
+            "warm_parameters",
+            "impurity_configuration",
+            "selected_restart",
+            "selected_reference",
+        }
+        artifacts = {}
+        for role in artifact_roles:
+            artifact = self.root / role
+            artifact.write_text(
+                PARAMETERS if role == "warm_parameters" else role,
+                encoding="utf-8",
+            )
+            artifacts[role] = artifact
+
+        populate_warm_run(
+            staging,
+            final,
+            artifacts,
+            {},
+            {
+                "restart_role": "selected_restart",
+                "reference_role": "selected_reference",
+                "impurity_configuration_role": "impurity_configuration",
+            },
+            {},
+        )
+
+        self.assertEqual(
+            (staging / "inputs/restart.h5").resolve(),
+            artifacts["selected_restart"].resolve(),
+        )
+        self.assertEqual(
+            (staging / "inputs/reference.h5").resolve(),
+            artifacts["selected_reference"].resolve(),
+        )
 
     def test_prepares_seven_stage_fixed_mesh_workflow(self) -> None:
         prepared = prepare_run(
@@ -292,6 +378,24 @@ class RunPreparationTests(unittest.TestCase):
         self.assertEqual(
             adaptive_plan["stages"][0]["parameter_overrides"]["nrp"], 2
         )
+
+    def test_prepares_disabled_impurity_scratch_workflow(self) -> None:
+        prepared = prepare_run(
+            self.settings,
+            "legacy_case",
+            "cold_step_impurity_off",
+            "mpi4_omp4",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "impurity-off-scratch",
+        )
+
+        stage = prepared.stages[0].run
+        self.assertFalse((stage.path / "inputs/restart.h5").exists())
+        parameters = (stage.path / "param.txt").read_text(encoding="utf-8")
+        self.assertIn("impurity_radiation = .false.", parameters)
+        self.assertIn("nrp = 2", parameters)
+        self.assertIn("nts = 1", parameters)
 
     def test_existing_run_directory_is_not_replaced(self) -> None:
         run_dir = (

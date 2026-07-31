@@ -8,6 +8,8 @@
 MODULE physics
   USE globals
   USE magnetic_field
+  USE impurity_radiation_model, ONLY: init_impurity_radiation_model, &
+       &adimensionalize_impurity_radiation_model, compute_impurity_cooling
   IMPLICIT NONE
 
 CONTAINS
@@ -214,23 +216,6 @@ CONTAINS
     phys%alpha_energy_rec(:,9) = (/-9.34985789e-09, -1.81807973e-09,  1.07345881e-09,&
     7.81029308e-10, -2.98409303e-10,  2.44276577e-11,&
     1.16076211e-12, -1.87744627e-13,  3.92930028e-15/)
-    !Cooling factor for Nitrogen. 1D fit in loglog space for ADAS data in coronal limit, fitted in the range of 0.2 eV to 4e3 eV
-    IF (phys%impurity_name == 'N') THEN
-      phys%alpha_cooling_factor = (/-2.49348163e+01,  9.52628451e+00, -4.39511346e+00,  2.00446916e+00,&
-      -2.27166819e+00,  9.95587194e-01,  1.11209167e+00, -1.13089140e+00,&
-       2.22902131e-01,  1.37491696e-01, -9.74320916e-02,  2.88337222e-02,&
-      -5.03419501e-03,  5.54252119e-04, -3.80153983e-05,  1.49061146e-06,&
-      -2.56122449e-08/)
-    ELSEIF (phys%impurity_name == 'W') THEN
-      phys%alpha_cooling_factor = (/-3.29798537e+01,  3.38045169e+01, -3.81202398e+01,  2.47450333e+01,&
-      -9.04921504e+00,  1.91417658e+00, -2.32405139e-01,  1.46022765e-02,&
-      -2.46177645e-04, -1.89159754e-05,  7.73790432e-07,  0.,&
-      0.,  0., 0.,  0.,&
-      0./)
-    ELSE 
-      WRITE(6,*) 'Warning: cooling factor not defined for impurity ', TRIM(phys%impurity_name)
-      STOP
-    ENDIF
     ! coefficients for AMJUEL 2.1.8JH
 #ifdef THREEBODYREC
     phys%alpha_rec(:,1) = (/-2.85572848e+01, -7.66404261e-01, -4.93042400e-03,&
@@ -349,6 +334,11 @@ CONTAINS
   phys%c_gyroBohm_e = 3.5e-2
   phys%prandtl = 1.
   phys%c_bohm_n = 1.
+
+  IF (switch%impurity_radiation) THEN
+    CALL init_impurity_radiation_model()
+    CALL adimensionalize_impurity_radiation_model()
+  END IF
 
 
 
@@ -2296,49 +2286,38 @@ CONTAINS
 
   ENDSUBROUTINE compute_dsigmavcx_dU
 
+#endif
+
   SUBROUTINE compute_cooling_factor(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res,U1,U4,T0,te
-    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
+    REAL*8, INTENT(OUT) :: res
+    REAL*8 :: te
+    REAL*8, PARAMETER :: tol = 1.d-20
 
-    res = 0.
-    IF ((U1>tol) .AND. (U4>tol)) THEN ! basically it's a below zero check
-      te = T0*2/3./phys%Mref*U4/U1
-
-
-      CALL compute_eirene_1D_rate(te,phys%alpha_cooling_factor,res)
-
-    ENDIF
-  ENDSUBROUTINE compute_cooling_factor
+    res = 0.d0
+    IF ((U(1)>tol) .AND. (U(4)>tol)) THEN
+      te = 2.d0/(3.d0*phys%Mref)*U(4)/U(1)
+      CALL compute_impurity_cooling(te,res)
+    END IF
+  END SUBROUTINE compute_cooling_factor
 
   SUBROUTINE compute_dcooling_factor_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U1,U4,T0,te
-    real*8, allocatable :: dte_dU(:)
-    REAL*8, PARAMETER    :: tol = 1.e-20 !tolerance for U4 = 3/2*Mref*U1min*te_min/T0
+    REAL*8, INTENT(OUT) :: res(:)
+    REAL*8 :: te, cooling, dcooling_dte
+    REAL*8 :: dte_dU(SIZE(U))
+    REAL*8, PARAMETER :: tol = 1.d-20
 
-    allocate(dte_dU(size(U)))
-    U1 = U(1)
-    U4 = U(4)
-    T0 = 50.
-    dte_dU = 0.
-
-    res = 0.
-    IF ((U1>tol) .AND. (U4>tol)) THEN ! basically it's a below zero check
-      te = T0*2/3./phys%Mref*U4/U1
-      dte_dU(1) = dte_dU(1) + 1.*(-U4) / U1**2
-      dte_dU(4) = dte_dU(4) + 1./U1
-      dte_dU(:) = dte_dU(:) * T0*2./3. /phys%Mref
-      CALL compute_eirene_1D_rate_vs_te_du(te,dte_dU,phys%alpha_cooling_factor,res)
-      res = res!/simpar%refval_charge
-    ENDIF
-  ENDSUBROUTINE compute_dcooling_factor_dU
-
-
-#endif
+    res = 0.d0
+    IF ((U(1)>tol) .AND. (U(4)>tol)) THEN
+      te = 2.d0/(3.d0*phys%Mref)*U(4)/U(1)
+      dte_dU = 0.d0
+      dte_dU(1) = -2.d0/(3.d0*phys%Mref)*U(4)/U(1)**2
+      dte_dU(4) = 2.d0/(3.d0*phys%Mref)/U(1)
+      CALL compute_impurity_cooling(te,cooling,dcooling_dte)
+      res = dcooling_dte*dte_dU
+    END IF
+  END SUBROUTINE compute_dcooling_factor_dU
 
 
 #ifdef DNNLINEARIZED

@@ -12,11 +12,20 @@
       "equilibrium_magnetic_field": "equilibrium.h5",
       "equilibrium_current_density": "current_density.h5",
       "warm_parameters": "param.txt",
-      "transport_configuration": "transport_model.nml"
+      "transport_configuration": "transport_model.nml",
+      "impurity_configuration": "impurity_model_w.nml"
     },
     "optional": {
       "warm_restart": "restart.h5",
       "warm_reference": "reference_mpi4_omp4.h5",
+      "warm_impurity_off_restart": "restart_impurity_off.h5",
+      "warm_impurity_off_reference": "reference_impurity_off_mpi4_omp4.h5",
+      "warm_impurity_n_restart": "restart_impurity_n.h5",
+      "warm_impurity_n_reference": "reference_impurity_n_mpi4_omp4.h5",
+      "impurity_n_configuration": "impurity_model_n.nml",
+      "warm_impurity_nw_restart": "restart_impurity_nw.h5",
+      "warm_impurity_nw_reference": "reference_impurity_nw_mpi4_omp4.h5",
+      "impurity_nw_configuration": "impurity_model_nw.nml",
       "coarse_mesh": "mesh_adaptive_initial.msh",
       "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
       "cold_fixed_diffusion_reduction_parameters": "param_cold_fixed_diffusion_reduction.txt",
@@ -43,15 +52,45 @@
         "equilibrium_magnetic_field",
         "equilibrium_current_density",
         "warm_parameters",
-        "transport_configuration",
-        "warm_restart",
-        "warm_reference"
+        "transport_configuration"
       ],
+      "impurity_configuration": "impurity_configuration",
       "layout": "mpi4_omp4",
+      "restart": "warm_restart",
+      "reference": "warm_reference",
       "comparison": {
         "method": "fixed_hdf5",
         "profile": "fixed_same_layout",
         "cross_layout_profile": "fixed_cross_layout"
+      }
+    },
+    "warm_impurity_off": {
+      "extends": "warm",
+      "description": "Reconverge the accepted state with impurity radiation disabled",
+      "restart": "warm_impurity_off_restart",
+      "reference": "warm_impurity_off_reference",
+      "parameter_overrides": {
+        "impurity_radiation": false
+      }
+    },
+    "warm_impurity_n": {
+      "extends": "warm",
+      "description": "Reconverge the accepted state with single-nitrogen radiation",
+      "restart": "warm_impurity_n_restart",
+      "reference": "warm_impurity_n_reference",
+      "impurity_configuration": "impurity_n_configuration",
+      "parameter_overrides": {
+        "impurity_radiation": true
+      }
+    },
+    "warm_impurity_nw": {
+      "extends": "warm",
+      "description": "Reconverge the accepted state with nitrogen-tungsten radiation",
+      "restart": "warm_impurity_nw_restart",
+      "reference": "warm_impurity_nw_reference",
+      "impurity_configuration": "impurity_nw_configuration",
+      "parameter_overrides": {
+        "impurity_radiation": true
       }
     },
     "cold_fixed": {
@@ -62,6 +101,7 @@
         "equilibrium_magnetic_field",
         "equilibrium_current_density"
       ],
+      "impurity_configuration": "impurity_configuration",
       "mesh": "mesh",
       "reference": "warm_reference",
       "layout": "mpi4_omp4",
@@ -165,6 +205,13 @@
           }
         }
       ]
+    },
+    "cold_step_impurity_off": {
+      "extends": "cold_step_fixed",
+      "description": "Exercise analytical initialization with impurity radiation disabled",
+      "parameter_overrides": {
+        "impurity_radiation": false
+      }
     },
     "cold_step_adaptive": {
       "extends": "cold_step_fixed",

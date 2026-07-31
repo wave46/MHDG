@@ -66,6 +66,7 @@
 /
 
 &INPUT_LST
+    impurity_model_path = 'impurity_model.nml'
     field_path          = 'path/to/magnetic/field.h5'  ! Path to Bfield h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'B_field/WEST_54487'
                                                                         ! If switch%ME = .false. then put the full part 'B_field/WEST_54487_0000.h5'
@@ -90,8 +91,6 @@
     target_density_dimension = 10000
     target_density_xpr_path = '/path/where/to/read/target/density/xpr/'
     target_density_xpr_dimension = 101
-    impurity_concentration_path = '/path/where/to/read/impurity/concentration/'
-    impurity_concentration_dimension = 10000
     zeff_path = '/path/where/to/read/zeff/'
     zeff_dimension = 10000
     diffusion_1D_path = '/path/where/to/read/1d/diffsion/
@@ -205,8 +204,6 @@
     Re_pump             = 0.9     ! Recycling coefficient in the pump region
     apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
     puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
-    impurity_name       = 'W' ! name of impurity
-    impurity_concentration = 0.!fraction of electron density considered as impurity
     feedback_propotional_gain = 10.e-21 !100.e-21  10.e-21
     feedback_integral_gain = 200.e-22 !1000 200
     feedback_derivative_gain = 8.e-22

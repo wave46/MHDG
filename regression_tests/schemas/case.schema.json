@@ -118,7 +118,13 @@
         "mesh": {
           "$ref": "#/$defs/identifier"
         },
+        "restart": {
+          "$ref": "#/$defs/identifier"
+        },
         "reference": {
+          "$ref": "#/$defs/identifier"
+        },
+        "impurity_configuration": {
           "$ref": "#/$defs/identifier"
         },
         "comparison": {

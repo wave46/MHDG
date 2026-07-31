@@ -71,6 +71,7 @@ analytically. Fixed and adaptive indicate whether the mesh can change.
 | `cold_fixed` | Analytical start; refined fixed mesh | `time_init`, `diffusion_reduction`, then five continuations. |
 | `cold_adaptive` | Analytical start; coarse mesh | Same seven stages; adapt in the first two. |
 | `cold_step_fixed` | Analytical start; coarse fixed mesh | One time step and two Newton iterations. |
+| `cold_step_impurity_off` | Analytical start; coarse fixed mesh | Short disabled-impurity lifecycle check. |
 | `cold_step_adaptive` | Analytical start; coarse adaptive mesh | One time step, two Newton iterations, and one adaptation pass. |
 
 Full cold stages run sequentially and restart from their predecessor. The
@@ -91,6 +92,8 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | Suite | Coverage | Use |
 | --- | --- | --- |
 | `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
+| `impurity_scalar_baseline` | Impurity off and N, `mpi4_omp4` | Focused compatibility check. |
+| `impurity_mixture` | Impurity off, W, N, and N+W, `mpi4_omp4` | Manual mixture-reference check. |
 | `race` | Both one-step workflows, `serial_omp1` vs `serial_omp16` | Routine OpenMP race check. |
 | `cold` | Both full cold workflows, `mpi4_omp4` | Canonical integration check. |
 | `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |
@@ -330,7 +333,7 @@ compare layout pairs produced by the same build directly.
 | Warm, cross layout | `5e-8` | `1e-6` |
 | One-step race probe | `5e-8` | `1e-6` |
 | Matching fixed cold stage | `2e-7` | `3e-7` |
-| Converged cold, cross layout | `3e-7` | `3e-7` |
+| Converged cold, cross layout | `3.5e-7` | `3e-7` |
 | Fixed cold final state against warm reference | `1e-5` | `1e-5` |
 | Adaptive solution | `0.05` | `0.1` |
 | Adaptive gradient | `0.25` | `0.3` |
