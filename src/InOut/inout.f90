@@ -1584,6 +1584,7 @@ CONTAINS
          ELSEIF (switch%target_variable == 3) THEN
             CALL HDF5_real_reading(group_id2, phys%puff, 'puff')
             CALL HDF5_real_reading(group_id2, phys%impurity_concentration, 'impurity_concentration')
+            phys%impurity_concentrations(1) = phys%impurity_concentration
          ENDIF
          
          IF (time%it .GT. 1) THEN
