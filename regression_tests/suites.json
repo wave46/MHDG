@@ -34,6 +34,13 @@
       ],
       "layouts": ["mpi4_omp4"]
     },
+    "initialization_smoke": {
+      "description": "One-step analytical initialization without reference comparison",
+      "case": "legacy_case",
+      "workflows": ["cold_step_impurity_off"],
+      "layouts": ["mpi4_omp4"],
+      "reference_comparisons": false
+    },
     "warm_parallelism": {
       "description": "Warm restart across serial, MPI, and OpenMP layouts",
       "case": "legacy_case",

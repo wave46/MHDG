@@ -25,6 +25,15 @@
       "required": ["case", "stages"],
       "properties": {
         "case": {"$ref": "#/$defs/identifier"},
+        "update_together": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "uniqueItems": true,
+            "items": {"$ref": "#/$defs/identifier"}
+          }
+        },
         "stages": {
           "type": "array",
           "minItems": 1,
@@ -38,8 +47,9 @@
       "required": ["id", "kind", "suite", "acceptance_required"],
       "properties": {
         "id": {"$ref": "#/$defs/identifier"},
-        "kind": {"enum": ["matrix", "reference", "suite"]},
+        "kind": {"enum": ["matrix", "reference", "suite", "verification"]},
         "suite": {"$ref": "#/$defs/identifier"},
+        "component": {"$ref": "#/$defs/identifier"},
         "acceptance_required": {"type": "boolean"},
         "role_mappings": {
           "type": "array",

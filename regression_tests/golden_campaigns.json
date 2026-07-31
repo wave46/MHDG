@@ -3,17 +3,22 @@
   "campaigns": {
     "legacy_case": {
       "case": "legacy_case",
+      "update_together": [
+        ["warm", "impurity_mixture"]
+      ],
       "stages": [
         {
           "id": "cold_matrix",
           "kind": "matrix",
           "suite": "cold_matrix",
+          "component": "cold_matrix",
           "acceptance_required": true
         },
         {
           "id": "warm_reference",
           "kind": "reference",
           "suite": "warm",
+          "component": "warm",
           "acceptance_required": true,
           "role_mappings": [
             {
@@ -26,6 +31,7 @@
           "id": "impurity_restarts",
           "kind": "reference",
           "suite": "impurity_references",
+          "component": "impurity_mixture",
           "acceptance_required": false,
           "role_mappings": [
             {
@@ -46,6 +52,7 @@
           "id": "impurity_references",
           "kind": "reference",
           "suite": "impurity_references",
+          "component": "impurity_mixture",
           "acceptance_required": true,
           "role_mappings": [
             {
@@ -72,9 +79,27 @@
           ]
         },
         {
+          "id": "initialization_smoke",
+          "kind": "suite",
+          "suite": "initialization_smoke",
+          "acceptance_required": false
+        },
+        {
           "id": "race_evidence",
           "kind": "suite",
           "suite": "race",
+          "acceptance_required": false
+        },
+        {
+          "id": "verify_warm",
+          "kind": "verification",
+          "suite": "warm",
+          "acceptance_required": false
+        },
+        {
+          "id": "verify_impurity_mixture",
+          "kind": "verification",
+          "suite": "impurity_mixture",
           "acceptance_required": false
         }
       ]

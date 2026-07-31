@@ -143,6 +143,8 @@ def _comparison_mode(
     reference_comparisons: bool,
     compare: bool,
 ) -> str:
+    if not layout_pairs and not reference_comparisons:
+        return "execution_only"
     if not compare:
         return "deferred" if reference_comparisons else "deferred_layout_pairs"
     if layout_pairs and reference_comparisons:

@@ -195,6 +195,14 @@ class SuiteWorkflowTests(unittest.TestCase):
             _comparison_mode(True, False, False),
             "deferred_layout_pairs",
         )
+        smoke = load_suite_definition(
+            "initialization_smoke",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+        self.assertFalse(smoke["reference_comparisons"])
+        self.assertEqual(_comparison_mode(False, False, True), "execution_only")
 
     def test_generated_adaptive_mesh_comparison_is_byte_exact(self) -> None:
         reference = self.root / "reference/stages/01_single_step/res/temp.msh"

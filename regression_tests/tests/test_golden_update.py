@@ -49,11 +49,11 @@ class GoldenUpdateTests(unittest.TestCase):
         )
         self.promote_bundle = self._patch(
             "promote_bundle",
-            side_effect=lambda *args, **kwargs: args[2].mkdir(parents=True),
+            side_effect=lambda *args, **kwargs: self._create_candidate(args[2]),
         )
         self.promote_mapped_bundle = self._patch(
             "promote_mapped_bundle",
-            side_effect=lambda *args, **kwargs: args[3].mkdir(parents=True),
+            side_effect=lambda *args, **kwargs: self._create_candidate(args[3]),
         )
 
     def test_update_stops_at_gate_then_continues_in_order(self) -> None:
@@ -94,7 +94,10 @@ class GoldenUpdateTests(unittest.TestCase):
                 "warm",
                 "impurity_references",
                 "impurity_references",
+                "initialization_smoke",
                 "race",
+                "warm",
+                "impurity_mixture",
             ],
         )
         self.assertEqual(self.promote_bundle.call_count, 1)
@@ -102,7 +105,7 @@ class GoldenUpdateTests(unittest.TestCase):
         calls = self.run_suite.call_args_list
         self.assertEqual(
             [call.args[7] for call in calls],
-            ["golden", "candidate", "candidate", "candidate", "candidate"],
+            ["golden", *("candidate" for _ in range(7))],
         )
         self.assertEqual(
             [Path(call.args[0]).name for call in calls[1:]],
@@ -111,15 +114,48 @@ class GoldenUpdateTests(unittest.TestCase):
                 "warm_reference.env",
                 "impurity_restarts.env",
                 "impurity_references.env",
+                "impurity_references.env",
+                "impurity_references.env",
+                "impurity_references.env",
             ],
+        )
+        self.assertEqual(
+            self.promote_bundle.call_args.kwargs["matrix_warm_roles"],
+            ("warm_restart",),
         )
         state = self._state()
         self.assertEqual(state["status"], "stages_completed")
+        self.assertEqual(
+            state["verification_candidate"]["root"],
+            state["active_bundle"],
+        )
         self.assertIsNotNone(state["stages"][0].get("accepted_utc"))
         self.assertFalse(self.output.exists())
         completed = run_command("golden", "status", str(self.workspace))
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("cold_matrix: completed", completed.stdout)
+
+    def test_partial_warm_update_warns_and_preserves_other_components(self) -> None:
+        self.assertEqual(self._run("--only", "warm"), 0)
+        state = self._state()
+        self.assertEqual(state["stages"][0]["status"], "skipped")
+        self.assertEqual(state["stages"][1]["status"], "awaiting_acceptance")
+        self.assertEqual(len(state["warnings"]), 1)
+
+        self.assertEqual(
+            self._run("--only", "warm", "--accept", "warm_reference"),
+            0,
+        )
+        self.assertEqual(
+            [call.args[1] for call in self.run_suite.call_args_list],
+            ["warm", "warm", "impurity_mixture"],
+        )
+        state = self._state()
+        self.assertEqual(state["status"], "stages_completed")
+        self.assertEqual(state["stages"][2]["status"], "skipped")
+        self.assertEqual(state["stages"][3]["status"], "skipped")
+        self.assertEqual(self.promote_bundle.call_count, 0)
+        self.assertEqual(self.promote_mapped_bundle.call_count, 1)
 
     def test_interrupted_suite_uses_existing_resume(self) -> None:
         calls = []
@@ -172,6 +208,10 @@ class GoldenUpdateTests(unittest.TestCase):
         path = self.root / f"{args[1]}-summary.json"
         path.write_text("{}\n", encoding="utf-8")
         return path, {"status": "passed"}
+
+    def _create_candidate(self, path: Path) -> None:
+        path.mkdir(parents=True)
+        (path / "manifest.json").write_text("{}\n", encoding="utf-8")
 
     def _patch(self, name: str, **kwargs):
         patcher = patch.object(golden_update, name, **kwargs)

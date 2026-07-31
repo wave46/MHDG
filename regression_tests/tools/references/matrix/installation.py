@@ -27,6 +27,7 @@ def install_reference_matrix(
     runs: list[MatrixRun],
     case: dict[str, Any],
     source_manifest: dict[str, Any],
+    canonical_warm_roles: tuple[str, ...] = ("warm_restart", "warm_reference"),
 ) -> None:
     """Copy selected stage outputs and add one generated bundle role."""
     references_directory = staging / "references/matrix"
@@ -84,8 +85,14 @@ def install_reference_matrix(
     if manifest["case_id"] != case["case_id"]:
         raise BundleError("source bundle contains another case")
     manifest["roles"][REFERENCE_MATRIX_ROLE] = REFERENCE_MATRIX_ID
-    if summary["suite_id"] == "cold_matrix":
-        _install_canonical_warm_state(staging, manifest, runs, case)
+    if summary["suite_id"] == "cold_matrix" and canonical_warm_roles:
+        _install_canonical_warm_state(
+            staging,
+            manifest,
+            runs,
+            case,
+            canonical_warm_roles,
+        )
 
 
 def _install_canonical_warm_state(
@@ -93,6 +100,7 @@ def _install_canonical_warm_state(
     manifest: dict[str, Any],
     runs: list[MatrixRun],
     case: dict[str, Any],
+    roles: tuple[str, ...],
 ) -> None:
     """Use the canonical cold final state for warm restart and reference."""
     canonical_layout = case["workflows"]["cold_fixed"]["default_layout"]
@@ -106,7 +114,7 @@ def _install_canonical_warm_state(
             "cold matrix has no unique canonical cold_fixed final state"
         )
     solution = matching[0].stages[-1].solution
-    for role in ("warm_restart", "warm_reference"):
+    for role in roles:
         artifact_id = manifest["roles"].get(role)
         artifact = manifest["artifacts"].get(artifact_id)
         if artifact is None:

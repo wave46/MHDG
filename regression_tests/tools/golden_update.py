@@ -63,6 +63,8 @@ def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
     if source_manifest["case_id"] != args.case_id:
         raise BundleError("campaign and source bundle use different cases")
 
+    selected = _selected_components(args.only, declaration)
+    partial = args.only is not None
     workspace = _workspace(args.workspace, settings, args.run_id)
     inputs = {
         "case_id": args.case_id,
@@ -74,8 +76,16 @@ def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
         "output": str(args.output.expanduser().resolve()),
         "bundle_version": args.bundle_version,
         "build_jobs": args.build_jobs,
+        "only": sorted(selected) if partial else None,
     }
-    state = _load_or_create(workspace, inputs, declaration, args.output)
+    state = _load_or_create(
+        workspace,
+        inputs,
+        declaration,
+        args.output,
+        selected,
+        partial,
+    )
     if args.accept:
         _accept(state, args.accept)
     return _advance(state, args)
@@ -86,6 +96,8 @@ def _load_or_create(
     inputs: dict[str, Any],
     declaration: dict[str, Any],
     output: Path,
+    selected: set[str],
+    partial: bool,
 ) -> dict[str, Any]:
     state_path = workspace / STATE_FILE
     if state_path.is_file():
@@ -108,10 +120,17 @@ def _load_or_create(
         "active_bundle": inputs["source_bundle"],
         "active_bundle_class": "golden",
         "active_settings": None,
+        "warnings": _selection_warnings(declaration, selected, partial),
         "stages": [
             {
                 **stage,
-                "status": "pending",
+                "status": (
+                    "pending"
+                    if not partial
+                    or stage["kind"] == "verification"
+                    or stage.get("component") in selected
+                    else "skipped"
+                ),
             }
             for stage in declaration["stages"]
         ],
@@ -129,7 +148,7 @@ def _advance(state: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
             state["status"] = "awaiting_acceptance"
             _save(state)
             return state
-        if stage["status"] == "completed":
+        if stage["status"] in {"completed", "skipped"}:
             continue
         if stage["status"] == "failed":
             raise BundleError(f"golden stage failed: {stage['id']}")
@@ -171,6 +190,8 @@ def _run_stage(
     settings_path = Path(settings_record["path"])
     if _file_record(settings_path) != settings_record:
         raise BundleError("campaign settings changed")
+    if stage["kind"] == "verification":
+        _record_verification_candidate(state)
     summary_path, summary = run_suite(
         settings_path,
         stage["suite"],
@@ -304,6 +325,7 @@ def _compose_stage(
             f"{state['inputs']['bundle_version']}-{stage['id']}",
             args.cases,
             bundle_class="candidate",
+            matrix_warm_roles=("warm_restart",),
         )
     else:
         promote_mapped_bundle(
@@ -325,6 +347,19 @@ def _activate_candidate(state: dict[str, Any], stage: dict[str, Any]) -> None:
     state["active_bundle"] = stage["candidate"]
     state["active_bundle_class"] = "candidate"
     state["active_settings"] = stage["candidate_settings"]
+
+
+def _record_verification_candidate(state: dict[str, Any]) -> None:
+    root = Path(state["active_bundle"])
+    candidate = {
+        "root": str(root),
+        "manifest": _file_record(root / "manifest.json"),
+    }
+    recorded = state.get("verification_candidate")
+    if recorded is not None and recorded != candidate:
+        raise BundleError("verification candidate manifest changed")
+    state["verification_candidate"] = candidate
+    _save(state)
 
 
 def _write_bundle_settings(template: Path, output: Path, bundle: Path) -> None:
@@ -363,6 +398,44 @@ def _workspace(
     return path.resolve()
 
 
+def _selected_components(
+    requested: list[str] | None,
+    declaration: dict[str, Any],
+) -> set[str]:
+    available = {
+        stage["component"]
+        for stage in declaration["stages"]
+        if "component" in stage
+    }
+    if requested is None:
+        return available
+    selected = set(requested)
+    unknown = sorted(selected - available)
+    if unknown:
+        raise BundleError(
+            "unknown golden update component: " + ", ".join(unknown)
+        )
+    return selected
+
+
+def _selection_warnings(
+    declaration: dict[str, Any],
+    selected: set[str],
+    partial: bool,
+) -> list[str]:
+    if not partial:
+        return []
+    warnings = []
+    for group in declaration.get("update_together", []):
+        chosen = selected.intersection(group)
+        if chosen and chosen != set(group):
+            warnings.append(
+                "components normally updated together were split: "
+                + ", ".join(group)
+            )
+    return warnings
+
+
 def _file_record(path: Path) -> dict[str, Any]:
     path = path.expanduser().resolve()
     return {"path": str(path), **file_identity(path)}
@@ -382,6 +455,8 @@ def _print_status(state: dict[str, Any]) -> None:
     print(f"build: {state['build']['status']}")
     for stage in state["stages"]:
         print(f"{stage['id']}: {stage['status']}")
+    for warning in state.get("warnings", []):
+        print(f"warning: {warning}")
 
 
 def _argument_parser() -> argparse.ArgumentParser:
@@ -395,6 +470,7 @@ def _argument_parser() -> argparse.ArgumentParser:
     update.add_argument("--bundle-version", required=True, metavar="VERSION")
     update.add_argument("--workspace", type=Path)
     update.add_argument("--accept", metavar="STAGE")
+    update.add_argument("--only", action="append", metavar="COMPONENT")
     update.add_argument("--build-jobs", type=parse_build_jobs, metavar="N")
     update.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
     update.add_argument(

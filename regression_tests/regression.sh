@@ -19,7 +19,7 @@ Usage:
   regression_tests/regression.sh suite run SUITE --settings FILE [--run-only] [--resume]
   regression_tests/regression.sh suite compare SUITE_SUMMARY
   regression_tests/regression.sh suite check [SUITE] [--settings FILE] [--build]
-  regression_tests/regression.sh golden update CASE --settings FILE --run-id ID --output DIR --bundle-version VERSION
+  regression_tests/regression.sh golden update CASE --settings FILE --run-id ID --output DIR --bundle-version VERSION [--only COMPONENT]
   regression_tests/regression.sh golden status WORKSPACE
 
 Commands:
@@ -36,7 +36,8 @@ Commands:
   golden update    Start or continue an ordered golden-reference update.
   golden status    Show persisted golden-update state.
 
-Suites: warm, impurity_scalar_baseline, impurity_mixture, impurity_references, race, cold,
+Suites: warm, impurity_scalar_baseline, impurity_mixture, impurity_references,
+        initialization_smoke, race, cold,
         warm_parallelism, race_matrix, cold_matrix.
 EOF
 }

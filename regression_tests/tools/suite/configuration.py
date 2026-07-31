@@ -33,9 +33,11 @@ def load_suite_definition(
     if "layout_comparisons" in declaration:
         suite["layout_comparisons"] = declaration["layout_comparisons"]
         suite["tolerance_profile"] = declaration["tolerance_profile"]
-        for option in ("layout_comparison_policy", "reference_comparisons"):
+        for option in ("layout_comparison_policy",):
             if option in declaration:
                 suite[option] = declaration[option]
+    if "reference_comparisons" in declaration:
+        suite["reference_comparisons"] = declaration["reference_comparisons"]
 
     layouts = load_layouts(layouts_path)
     unknown_layouts = [

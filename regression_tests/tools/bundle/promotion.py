@@ -44,6 +44,7 @@ def promote_bundle(
     case_directory: Path,
     *,
     bundle_class: str = "golden",
+    matrix_warm_roles: tuple[str, ...] = ("warm_restart", "warm_reference"),
 ) -> ValidationSummary:
     """Copy a source bundle and install accepted reference results in order."""
     source_bundle = bundle_root_from_settings(read_settings(settings_path))
@@ -76,6 +77,7 @@ def promote_bundle(
         bundle_version,
         bundle_class,
         case_directory,
+        matrix_warm_roles,
     )
 
 
@@ -111,6 +113,7 @@ def promote_mapped_bundle(
         bundle_version,
         bundle_class,
         case_directory,
+        ("warm_restart", "warm_reference"),
     )
 
 
@@ -124,6 +127,7 @@ def _publish_bundle(
     bundle_version: str,
     bundle_class: str,
     case_directory: Path,
+    matrix_warm_roles: tuple[str, ...],
 ) -> ValidationSummary:
     if not bundle_version.strip():
         raise BundleError("bundle version must not be empty")
@@ -154,6 +158,7 @@ def _publish_bundle(
                     accepted,
                     case,
                     source_manifest,
+                    matrix_warm_roles,
                 )
             manifest["bundle_version"] = bundle_version
             manifest["bundle_class"] = bundle_class
@@ -196,6 +201,7 @@ def _install_references(
     accepted: AcceptedReferences,
     case: dict[str, Any],
     source_manifest: dict[str, Any],
+    matrix_warm_roles: tuple[str, ...],
 ) -> None:
     if isinstance(accepted, CanonicalReference):
         install_canonical_reference(
@@ -219,4 +225,5 @@ def _install_references(
         accepted,
         case,
         source_manifest,
+        matrix_warm_roles,
     )
