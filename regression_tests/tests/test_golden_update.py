@@ -35,6 +35,8 @@ class GoldenUpdateTests(unittest.TestCase):
             settings_path=self.harness.settings,
             metadata_path=self.root / "build/metadata.json",
         )
+        self.build.metadata_path.parent.mkdir()
+        self.build.metadata_path.write_text("{}\n", encoding="utf-8")
         self.build_solver = self._patch("build_solver", return_value=self.build)
         self.run_suite = self._patch("run_suite", side_effect=self._passing_suite)
         self.compare_pairs = self._patch(
@@ -55,6 +57,11 @@ class GoldenUpdateTests(unittest.TestCase):
             "promote_mapped_bundle",
             side_effect=lambda *args, **kwargs: self._create_candidate(args[3]),
         )
+        self.publish_campaign_bundle = self._patch(
+            "publish_campaign_bundle",
+            side_effect=lambda *args, **kwargs: self._create_candidate(args[1]),
+        )
+        self.validate_published = self._patch("_validate_published")
 
     def test_update_stops_at_gate_then_continues_in_order(self) -> None:
         suites = []
@@ -124,13 +131,24 @@ class GoldenUpdateTests(unittest.TestCase):
             ("warm_restart",),
         )
         state = self._state()
-        self.assertEqual(state["status"], "stages_completed")
+        self.assertEqual(state["status"], "published")
         self.assertEqual(
             state["verification_candidate"]["root"],
             state["active_bundle"],
         )
         self.assertIsNotNone(state["stages"][0].get("accepted_utc"))
-        self.assertFalse(self.output.exists())
+        self.assertTrue(self.output.exists())
+        self.assertEqual(self.publish_campaign_bundle.call_count, 1)
+        published_files = dict(self.publish_campaign_bundle.call_args.args[4])
+        self.assertIn("campaign.json", published_files)
+        self.assertIn("build/build_metadata.json", published_files)
+        self.assertIn(
+            "stages/verify_impurity_mixture/suite_summary.json",
+            published_files,
+        )
+        self.assertEqual(self._run(), 0)
+        self.assertEqual(self.publish_campaign_bundle.call_count, 1)
+        self.validate_published.assert_called_once()
         completed = run_command("golden", "status", str(self.workspace))
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("cold_matrix: completed", completed.stdout)
@@ -151,7 +169,7 @@ class GoldenUpdateTests(unittest.TestCase):
             ["warm", "warm", "impurity_mixture"],
         )
         state = self._state()
-        self.assertEqual(state["status"], "stages_completed")
+        self.assertEqual(state["status"], "published")
         self.assertEqual(state["stages"][2]["status"], "skipped")
         self.assertEqual(state["stages"][3]["status"], "skipped")
         self.assertEqual(self.promote_bundle.call_count, 0)
@@ -206,8 +224,17 @@ class GoldenUpdateTests(unittest.TestCase):
 
     def _passing_suite(self, *args, **kwargs):
         path = self.root / f"{args[1]}-summary.json"
-        path.write_text("{}\n", encoding="utf-8")
-        return path, {"status": "passed"}
+        summary = {
+            "status": "passed",
+            "execution_inputs": {
+                "build_manifest": golden_update._file_record(
+                    self.build.metadata_path,
+                )
+            },
+            "results": [],
+        }
+        path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
+        return path, summary
 
     def _create_candidate(self, path: Path) -> None:
         path.mkdir(parents=True)

@@ -94,6 +94,7 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
 | `impurity_scalar_baseline` | Impurity off and N, `mpi4_omp4` | Focused compatibility check. |
 | `impurity_mixture` | Impurity off, W, N, and N+W, `mpi4_omp4` | Manual mixture-reference check. |
+| `initialization_smoke` | Disabled-impurity analytical start, `mpi4_omp4` | Execution-only initialization evidence. |
 | `race` | Both one-step workflows, `serial_omp1` vs `serial_omp16` | Routine OpenMP race check. |
 | `cold` | Both full cold workflows, `mpi4_omp4` | Canonical integration check. |
 | `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |
@@ -191,7 +192,39 @@ regression_tests/regression.sh suite compare \
 
 ### Publish accepted references
 
-After human review, create a new golden bundle:
+For a complete refresh, one command starts or continues the persisted golden
+campaign, stops at each required review gate, and publishes after final checks:
+
+```bash
+regression_tests/regression.sh golden update legacy_case \
+  --settings /private/path/source.env --run-id refresh-01 \
+  --output /private/path/new_golden_bundle --bundle-version 2.5.0
+```
+
+Run the same command again with `--accept STAGE` after reviewing a reported
+gate. `golden status WORKSPACE` shows progress; without `--workspace`, the
+workspace is `MHDG_REGRESSION_RUN_ROOT/golden_campaigns/RUN_ID`. Resumes reject
+changed inputs and never overwrite a workspace, candidate, or output.
+
+The default refresh includes cold matrices, warm and mixture references,
+initialization/race evidence, and final warm/mixture verification. Repeat
+`--only` to select `cold_matrix`, `warm`, or `impurity_mixture`. A cold-matrix
+refresh also updates the canonical warm restart, while `warm` updates the warm
+reference. Updating only warm or only mixture references records a consistency
+warning; select both together to avoid it.
+
+The verified candidate is published atomically as a golden bundle. Campaign
+state, declaration, build metadata, suite summaries, run plans/metadata, and
+comparison reports are registered below `provenance/golden_campaign/`.
+
+The `legacy_case` order was checked against the accepted PR 02 record: clean
+builds at `7ce486f`, its full cold-matrix refresh, the passing disabled
+initialization probe, final mixture verification, and the validated 118-artifact
+`legacy_case_2.4.0-pr02-mixture-golden.1` bundle. Those results defined the
+campaign shape; they were not rerun or treated as resumable campaign state
+because the historical record does not retain every suite path and fingerprint.
+
+For a smaller manually reviewed promotion, create a golden bundle directly:
 
 ```bash
 regression_tests/regression.sh bundle promote \

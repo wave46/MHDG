@@ -10,7 +10,11 @@ from typing import Any
 
 from build.configuration import parse_build_jobs
 from build.workflow import build_solver
-from bundle.promotion import promote_bundle, promote_mapped_bundle
+from bundle.promotion import (
+    promote_bundle,
+    promote_mapped_bundle,
+    publish_campaign_bundle,
+)
 from bundle.schemas import load_validated_json
 from bundle.settings import bundle_root_from_settings, read_settings
 from bundle.validation import validate_bundle_root
@@ -121,6 +125,7 @@ def _load_or_create(
         "active_bundle_class": "golden",
         "active_settings": None,
         "warnings": _selection_warnings(declaration, selected, partial),
+        "publication": {"status": "pending"},
         "stages": [
             {
                 **stage,
@@ -156,9 +161,7 @@ def _advance(state: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
         if stage["status"] == "awaiting_acceptance":
             return state
 
-    state["status"] = "stages_completed"
-    _save(state)
-    return state
+    return _publish(state, args)
 
 
 def _run_build(state: dict[str, Any], args: argparse.Namespace) -> None:
@@ -170,7 +173,7 @@ def _run_build(state: dict[str, Any], args: argparse.Namespace) -> None:
         "status": "completed",
         "directory": str(result.path),
         "settings": _file_record(result.settings_path),
-        "metadata": str(result.metadata_path),
+        "metadata": _file_record(result.metadata_path),
     }
     state["active_settings"] = state["build"]["settings"]
     _save(state)
@@ -205,7 +208,7 @@ def _run_stage(
         resume=resume,
     )
     passed = summary["status"] == "passed"
-    stage["summary"] = str(summary_path)
+    stage["summary"] = _file_record(summary_path)
     if stage["kind"] == "matrix" and passed:
         passed = _record_matrix_reports(state, stage, summary_path, summary, args)
     elif (
@@ -218,7 +221,7 @@ def _run_stage(
             args.cases,
             args.tolerances,
         )
-        stage["old_golden_report"] = str(old_golden_path)
+        stage["old_golden_report"] = _file_record(old_golden_path)
     if not passed:
         stage["status"] = "failed"
         state["status"] = "failed"
@@ -258,7 +261,7 @@ def _record_matrix_reports(
     }
     report_path = Path(state["workspace"]) / "reports" / f"{stage['id']}.json"
     write_json_atomic(report_path, report, "matrix layout-pair report")
-    stage["layout_pair_report"] = str(report_path)
+    stage["layout_pair_report"] = _file_record(report_path)
     if report["status"] != "passed":
         return False
     old_golden_path, _ = verify_suite(
@@ -267,7 +270,7 @@ def _record_matrix_reports(
         args.tolerances,
         include_layout_pairs=False,
     )
-    stage["old_golden_report"] = str(old_golden_path)
+    stage["old_golden_report"] = _file_record(old_golden_path)
     return True
 
 
@@ -360,6 +363,153 @@ def _record_verification_candidate(state: dict[str, Any]) -> None:
         raise BundleError("verification candidate manifest changed")
     state["verification_candidate"] = candidate
     _save(state)
+
+
+def _publish(state: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    _record_verification_candidate(state)
+    output = Path(state["inputs"]["output"])
+    publication = state["publication"]
+    if publication["status"] == "completed":
+        if _file_record(output / "manifest.json") != publication["manifest"]:
+            raise BundleError("published golden manifest changed")
+        _validate_published(state, output, args.cases)
+        state["status"] = "published"
+        return state
+
+    if output.exists():
+        if publication["status"] != "publishing":
+            raise BundleError(f"golden output already exists: {output}")
+        _validate_published(state, output, args.cases)
+    else:
+        publication.update({"status": "publishing", "started_utc": utc_now()})
+        state["status"] = "publishing"
+        _save(state)
+        publish_campaign_bundle(
+            Path(state["active_bundle"]),
+            output,
+            state["inputs"]["bundle_version"],
+            args.cases,
+            _campaign_provenance_files(state),
+        )
+
+    publication.update(
+        {
+            "status": "completed",
+            "finished_utc": utc_now(),
+            "manifest": _file_record(output / "manifest.json"),
+        }
+    )
+    state["status"] = "published"
+    _save(state)
+    return state
+
+
+def _validate_published(
+    state: dict[str, Any],
+    output: Path,
+    case_directory: Path,
+) -> None:
+    validate_bundle_root(output, case_directory)
+    manifest = load_json(output / "manifest.json", "published bundle manifest")
+    candidate = load_json(
+        Path(state["active_bundle"]) / "manifest.json",
+        "candidate bundle manifest",
+    )
+    expected = {
+        "bundle_id": candidate["bundle_id"],
+        "bundle_version": state["inputs"]["bundle_version"],
+        "bundle_class": "golden",
+        "case_id": state["inputs"]["case_id"],
+    }
+    if any(manifest.get(name) != value for name, value in expected.items()):
+        raise BundleError("published golden bundle does not match campaign")
+    records = [
+        artifact
+        for artifact in manifest["artifacts"].values()
+        if artifact["path"] == "provenance/golden_campaign/campaign.json"
+    ]
+    if len(records) != 1:
+        raise BundleError("published golden bundle has no campaign state")
+    recorded = load_json(output / records[0]["path"], "published campaign state")
+    if (
+        recorded.get("workspace") != state["workspace"]
+        or recorded.get("verification_candidate")
+        != state["verification_candidate"]
+    ):
+        raise BundleError("published golden bundle belongs to another campaign")
+
+
+def _campaign_provenance_files(state: dict[str, Any]) -> list[tuple[str, Path]]:
+    workspace = Path(state["workspace"])
+    build_record = state["build"]["metadata"]
+    build_metadata = Path(build_record["path"])
+    if _file_record(build_metadata) != build_record:
+        raise BundleError("campaign build metadata changed")
+    files = [
+        ("campaign.json", workspace / STATE_FILE),
+        ("declaration.json", Path(state["inputs"]["campaign_catalog"]["path"])),
+        ("build/build_metadata.json", build_metadata),
+    ]
+    for stage in state["stages"]:
+        summary_record = stage.get("summary")
+        if summary_record is None:
+            continue
+        summary_path = _recorded_path(summary_record, "suite summary")
+        prefix = f"stages/{stage['id']}"
+        documents = [("suite_summary.json", summary_path)]
+        documents.extend(
+            (f"{name}.json", _recorded_path(stage[name], name))
+            for name in ("layout_pair_report", "old_golden_report")
+            if name in stage
+        )
+        report_paths = set()
+        for name, path in documents:
+            files.append((f"{prefix}/{name}", path))
+            report_paths.update(_comparison_report_paths(load_json(path, name)))
+
+        summary = load_json(summary_path, "suite summary")
+        if summary.get("execution_inputs", {}).get("build_manifest") != build_record:
+            raise BundleError(f"golden stage used another build: {stage['id']}")
+        for number, result in enumerate(summary.get("results", []), start=1):
+            run = Path(result["run_directory"])
+            run_prefix = f"{prefix}/runs/{number:03d}"
+            for name in ("run_plan.json", "run_metadata.json"):
+                files.append((f"{run_prefix}/{name}", run / name))
+                for nested in sorted(run.glob(f"stages/*/{name}")):
+                    files.append(
+                        (
+                            f"{run_prefix}/stages/{nested.parent.name}/{name}",
+                            nested,
+                        )
+                    )
+        for number, path in enumerate(sorted(report_paths), start=1):
+            files.append((f"{prefix}/comparisons/{number:03d}.json", path))
+    return files
+
+
+def _comparison_report_paths(document: Any) -> set[Path]:
+    if isinstance(document, dict):
+        paths = {
+            Path(value)
+            for name, value in document.items()
+            if name == "comparison_report" and isinstance(value, str)
+        }
+        for value in document.values():
+            paths.update(_comparison_report_paths(value))
+        return paths
+    if isinstance(document, list):
+        paths = set()
+        for value in document:
+            paths.update(_comparison_report_paths(value))
+        return paths
+    return set()
+
+
+def _recorded_path(record: dict[str, Any], label: str) -> Path:
+    path = Path(record["path"])
+    if _file_record(path) != record:
+        raise BundleError(f"campaign {label} changed")
+    return path
 
 
 def _write_bundle_settings(template: Path, output: Path, bundle: Path) -> None:
@@ -457,6 +607,8 @@ def _print_status(state: dict[str, Any]) -> None:
         print(f"{stage['id']}: {stage['status']}")
     for warning in state.get("warnings", []):
         print(f"warning: {warning}")
+    if state.get("publication", {}).get("status") == "completed":
+        print(f"output: {state['inputs']['output']}")
 
 
 def _argument_parser() -> argparse.ArgumentParser:

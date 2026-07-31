@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from bundle.artifacts import register_artifact
 from bundle.cases import load_case_definition
 from bundle.models import ValidationSummary
 from bundle.settings import bundle_root_from_settings, read_settings
@@ -34,6 +35,32 @@ from support.time import utc_now
 
 
 AcceptedReferences = CanonicalReference | MappedReferences | list[MatrixRun]
+
+
+def publish_campaign_bundle(
+    source_bundle: Path,
+    output: Path,
+    bundle_version: str,
+    case_directory: Path,
+    provenance_files: list[tuple[str, Path]],
+) -> ValidationSummary:
+    """Publish one assembled candidate with its campaign evidence."""
+    source_bundle = source_bundle.expanduser().resolve()
+    validate_bundle_root(source_bundle, case_directory)
+    source_manifest = load_json(source_bundle / "manifest.json", "bundle manifest")
+    if not provenance_files:
+        raise BundleError("golden campaign provenance must not be empty")
+    return _publish_bundle(
+        source_bundle,
+        source_manifest,
+        [],
+        output,
+        bundle_version,
+        "golden",
+        case_directory,
+        ("warm_restart", "warm_reference"),
+        provenance_files,
+    )
 
 
 def promote_bundle(
@@ -128,6 +155,7 @@ def _publish_bundle(
     bundle_class: str,
     case_directory: Path,
     matrix_warm_roles: tuple[str, ...],
+    campaign_files: list[tuple[str, Path]] | None = None,
 ) -> ValidationSummary:
     if not bundle_version.strip():
         raise BundleError("bundle version must not be empty")
@@ -160,6 +188,8 @@ def _publish_bundle(
                     source_manifest,
                     matrix_warm_roles,
                 )
+            if campaign_files is not None:
+                _install_campaign_provenance(staging, manifest, campaign_files)
             manifest["bundle_version"] = bundle_version
             manifest["bundle_class"] = bundle_class
             manifest["created_utc"] = utc_now()
@@ -169,6 +199,33 @@ def _publish_bundle(
     except OSError as exc:
         raise BundleError(f"cannot create bundle {output}: {exc}") from exc
     return result
+
+
+def _install_campaign_provenance(
+    staging: Path,
+    manifest: dict[str, Any],
+    files: list[tuple[str, Path]],
+) -> None:
+    directory = staging / "provenance/golden_campaign"
+    if directory.exists():
+        shutil.rmtree(directory)
+    for artifact_id in list(manifest["artifacts"]):
+        if artifact_id.startswith("golden_campaign_"):
+            del manifest["artifacts"][artifact_id]
+
+    for number, (relative_path, source) in enumerate(files, start=1):
+        target = directory / relative_path
+        if target.exists():
+            raise BundleError(f"duplicate campaign provenance: {relative_path}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(require_file(source, "campaign provenance"), target)
+        register_artifact(
+            staging,
+            manifest,
+            f"golden_campaign_{number:04d}",
+            target,
+            "application/json",
+        )
 
 
 def _collect_references(

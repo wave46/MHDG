@@ -12,7 +12,11 @@ sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 from bundle.cases import load_case_definition  # noqa: E402
 from bundle.creation import create_bundle  # noqa: E402
-from bundle.promotion import promote_bundle, promote_mapped_bundle  # noqa: E402
+from bundle.promotion import (  # noqa: E402
+    promote_bundle,
+    promote_mapped_bundle,
+    publish_campaign_bundle,
+)
 from bundle.validation import validate_bundle_root  # noqa: E402
 from support.errors import BundleError  # noqa: E402
 from support.files import file_identity  # noqa: E402
@@ -145,6 +149,27 @@ class ReferencePublicationTests(unittest.TestCase):
         self.assertTrue(
             (self.output / "provenance/golden_reference/suite_summary.json").is_file()
         )
+
+    def test_campaign_publication_registers_compact_provenance(self) -> None:
+        campaign = self.root / "campaign.json"
+        declaration = self.root / "declaration.json"
+        _write_json(campaign, {"status": "publishing"})
+        _write_json(declaration, {"stages": []})
+
+        publish_campaign_bundle(
+            self.candidate,
+            self.output,
+            "campaign-golden-1",
+            REGRESSION_ROOT / "cases",
+            [("campaign.json", campaign), ("declaration.json", declaration)],
+        )
+
+        validate_bundle_root(self.output, REGRESSION_ROOT / "cases")
+        manifest = _load_json(self.output / "manifest.json")
+        paths = {artifact["path"] for artifact in manifest["artifacts"].values()}
+        self.assertIn("provenance/golden_campaign/campaign.json", paths)
+        self.assertIn("provenance/golden_campaign/declaration.json", paths)
+        self.assertEqual(manifest["bundle_class"], "golden")
 
     def test_mapped_publication_replaces_declared_workflow_roles(self) -> None:
         summary = self._write_mapped_summary(
