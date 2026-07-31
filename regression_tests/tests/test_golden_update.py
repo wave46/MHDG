@@ -47,6 +47,14 @@ class GoldenUpdateTests(unittest.TestCase):
             "verify_suite",
             return_value=(old_report, {"status": "failed"}),
         )
+        self.promote_bundle = self._patch(
+            "promote_bundle",
+            side_effect=lambda *args, **kwargs: args[2].mkdir(parents=True),
+        )
+        self.promote_mapped_bundle = self._patch(
+            "promote_mapped_bundle",
+            side_effect=lambda *args, **kwargs: args[3].mkdir(parents=True),
+        )
 
     def test_update_stops_at_gate_then_continues_in_order(self) -> None:
         suites = []
@@ -63,10 +71,47 @@ class GoldenUpdateTests(unittest.TestCase):
         self.assertEqual(state["status"], "awaiting_acceptance")
         self.assertEqual(state["stages"][0]["status"], "awaiting_acceptance")
         self.assertEqual(self._run("--accept", "cold_matrix"), 0)
+        self.assertEqual(suites[-1][0], "warm")
+        self.assertEqual(
+            self._state()["stages"][1]["status"],
+            "awaiting_acceptance",
+        )
+        self.assertEqual(self._run("--accept", "warm_reference"), 0)
+        self.assertEqual(
+            [suite for suite, _, _ in suites[-2:]],
+            ["impurity_references", "impurity_references"],
+        )
+        self.assertEqual(
+            self._state()["stages"][3]["status"],
+            "awaiting_acceptance",
+        )
+        self.assertEqual(self._run("--accept", "impurity_references"), 0)
 
         self.assertEqual(
-            suites,
-            [("cold_matrix", False, False), ("race", True, False)],
+            [suite for suite, _, _ in suites],
+            [
+                "cold_matrix",
+                "warm",
+                "impurity_references",
+                "impurity_references",
+                "race",
+            ],
+        )
+        self.assertEqual(self.promote_bundle.call_count, 1)
+        self.assertEqual(self.promote_mapped_bundle.call_count, 3)
+        calls = self.run_suite.call_args_list
+        self.assertEqual(
+            [call.args[7] for call in calls],
+            ["golden", "candidate", "candidate", "candidate", "candidate"],
+        )
+        self.assertEqual(
+            [Path(call.args[0]).name for call in calls[1:]],
+            [
+                "cold_matrix.env",
+                "warm_reference.env",
+                "impurity_restarts.env",
+                "impurity_references.env",
+            ],
         )
         state = self._state()
         self.assertEqual(state["status"], "stages_completed")

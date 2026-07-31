@@ -11,6 +11,67 @@
           "acceptance_required": true
         },
         {
+          "id": "warm_reference",
+          "kind": "reference",
+          "suite": "warm",
+          "acceptance_required": true,
+          "role_mappings": [
+            {
+              "workflow": "warm",
+              "roles": ["warm_reference"]
+            }
+          ]
+        },
+        {
+          "id": "impurity_restarts",
+          "kind": "reference",
+          "suite": "impurity_references",
+          "acceptance_required": false,
+          "role_mappings": [
+            {
+              "workflow": "warm_impurity_off",
+              "roles": ["warm_impurity_off_restart"]
+            },
+            {
+              "workflow": "warm_impurity_n",
+              "roles": ["warm_impurity_n_restart"]
+            },
+            {
+              "workflow": "warm_impurity_nw",
+              "roles": ["warm_impurity_nw_restart"]
+            }
+          ]
+        },
+        {
+          "id": "impurity_references",
+          "kind": "reference",
+          "suite": "impurity_references",
+          "acceptance_required": true,
+          "role_mappings": [
+            {
+              "workflow": "warm_impurity_off",
+              "roles": [
+                "warm_impurity_off_restart",
+                "warm_impurity_off_reference"
+              ]
+            },
+            {
+              "workflow": "warm_impurity_n",
+              "roles": [
+                "warm_impurity_n_restart",
+                "warm_impurity_n_reference"
+              ]
+            },
+            {
+              "workflow": "warm_impurity_nw",
+              "roles": [
+                "warm_impurity_nw_restart",
+                "warm_impurity_nw_reference"
+              ]
+            }
+          ]
+        },
+        {
           "id": "race_evidence",
           "kind": "suite",
           "suite": "race",

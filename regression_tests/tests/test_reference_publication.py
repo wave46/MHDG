@@ -12,7 +12,7 @@ sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 from bundle.cases import load_case_definition  # noqa: E402
 from bundle.creation import create_bundle  # noqa: E402
-from bundle.promotion import promote_bundle  # noqa: E402
+from bundle.promotion import promote_bundle, promote_mapped_bundle  # noqa: E402
 from bundle.validation import validate_bundle_root  # noqa: E402
 from support.errors import BundleError  # noqa: E402
 from support.files import file_identity  # noqa: E402
@@ -145,6 +145,47 @@ class ReferencePublicationTests(unittest.TestCase):
         self.assertTrue(
             (self.output / "provenance/golden_reference/suite_summary.json").is_file()
         )
+
+    def test_mapped_publication_replaces_declared_workflow_roles(self) -> None:
+        summary = self._write_mapped_summary(
+            "warm_impurity_off",
+            "warm_impurity_n",
+        )
+
+        promote_mapped_bundle(
+            self.settings,
+            summary,
+            [
+                {
+                    "workflow": "warm_impurity_off",
+                    "roles": [
+                        "warm_impurity_off_restart",
+                        "warm_impurity_off_reference",
+                    ],
+                },
+                {
+                    "workflow": "warm_impurity_n",
+                    "roles": ["warm_impurity_n_reference"],
+                },
+            ],
+            self.output,
+            "mapped-candidate-1",
+            REGRESSION_ROOT / "cases",
+        )
+
+        validate_bundle_root(self.output, REGRESSION_ROOT / "cases")
+        manifest = _load_json(self.output / "manifest.json")
+        self.assertEqual(manifest["bundle_class"], "candidate")
+        for role, expected in (
+            ("warm_impurity_off_restart", "warm_impurity_off\n"),
+            ("warm_impurity_off_reference", "warm_impurity_off\n"),
+            ("warm_impurity_n_reference", "warm_impurity_n\n"),
+        ):
+            artifact = manifest["artifacts"][manifest["roles"][role]]
+            self.assertEqual(
+                (self.output / artifact["path"]).read_text(encoding="utf-8"),
+                expected,
+            )
 
     def test_failed_suite_is_not_publishable(self) -> None:
         summary = _load_json(self.summary)
@@ -298,6 +339,61 @@ class ReferencePublicationTests(unittest.TestCase):
                         "run_directory": str(run),
                     }
                 ],
+            },
+        )
+        return path
+
+    def _write_mapped_summary(self, *workflow_ids: str) -> Path:
+        manifest = _load_json(self.candidate / "manifest.json")
+        results = []
+        for workflow_id in workflow_ids:
+            run = self.root / f"{workflow_id}_run"
+            (run / "outputs").mkdir(parents=True)
+            solution = run / "outputs/result.h5"
+            solution.write_text(f"{workflow_id}\n", encoding="utf-8")
+            _write_json(
+                run / "run_plan.json",
+                {
+                    "case_id": "legacy_case",
+                    "workflow_id": workflow_id,
+                    "layout_id": "mpi4_omp4",
+                    "bundle": {
+                        "root": str(self.candidate),
+                        "bundle_id": manifest["bundle_id"],
+                        "bundle_version": manifest["bundle_version"],
+                    },
+                },
+            )
+            _write_json(
+                run / "run_metadata.json",
+                {
+                    "status": "completed",
+                    "hdf5_outputs": ["outputs/result.h5"],
+                },
+            )
+            results.append(
+                {
+                    "workflow_id": workflow_id,
+                    "layout_id": "mpi4_omp4",
+                    "status": "passed",
+                    "run_status": "completed",
+                    "comparison_status": "not_run",
+                    "run_directory": str(run),
+                }
+            )
+        path = self.root / "mapped_summary.json"
+        _write_json(
+            path,
+            {
+                "schema_version": 2,
+                "status": "passed",
+                "suite_id": "impurity_references",
+                "run_id": "mapped-test",
+                "case_id": "legacy_case",
+                "workflow_ids": list(workflow_ids),
+                "layout_ids": ["mpi4_omp4"],
+                "comparison_mode": "deferred",
+                "results": results,
             },
         )
         return path

@@ -1,4 +1,4 @@
-"""Promote accepted regression results into complete golden bundles."""
+"""Promote accepted regression results into complete bundles."""
 
 from __future__ import annotations
 
@@ -20,6 +20,11 @@ from references.canonical import (
 from references.matrix.collection import collect_matrix_runs
 from references.matrix.installation import install_reference_matrix
 from references.matrix.models import MatrixRun
+from references.mapped import (
+    MappedReferences,
+    collect_mapped_references,
+    install_mapped_references,
+)
 from references.summaries import validate_promotion_summary
 from support.documents import load_json, write_json_direct
 from support.errors import BundleError
@@ -28,7 +33,7 @@ from support.paths import require_file
 from support.time import utc_now
 
 
-AcceptedReferences = CanonicalReference | list[MatrixRun]
+AcceptedReferences = CanonicalReference | MappedReferences | list[MatrixRun]
 
 
 def promote_bundle(
@@ -37,11 +42,10 @@ def promote_bundle(
     output: Path,
     bundle_version: str,
     case_directory: Path,
+    *,
+    bundle_class: str = "golden",
 ) -> ValidationSummary:
     """Copy a source bundle and install accepted reference results in order."""
-    if not bundle_version.strip():
-        raise BundleError("golden bundle version must not be empty")
-
     source_bundle = bundle_root_from_settings(read_settings(settings_path))
     validate_bundle_root(source_bundle, case_directory)
     source_manifest = load_json(source_bundle / "manifest.json", "bundle manifest")
@@ -64,11 +68,73 @@ def promote_bundle(
         )
         accepted_summaries.append((path, summary, accepted, case))
 
+    return _publish_bundle(
+        source_bundle,
+        source_manifest,
+        accepted_summaries,
+        output,
+        bundle_version,
+        bundle_class,
+        case_directory,
+    )
+
+
+def promote_mapped_bundle(
+    settings_path: Path,
+    summary_path: Path,
+    mappings: list[dict[str, Any]],
+    output: Path,
+    bundle_version: str,
+    case_directory: Path,
+    *,
+    bundle_class: str = "candidate",
+) -> ValidationSummary:
+    """Copy a source bundle and install workflow-mapped suite outputs."""
+    source_bundle = bundle_root_from_settings(read_settings(settings_path))
+    validate_bundle_root(source_bundle, case_directory)
+    source_manifest = load_json(source_bundle / "manifest.json", "bundle manifest")
+    summary_path = require_file(summary_path, "suite summary")
+    summary = load_json(summary_path, "suite summary")
+    case = load_case_definition(summary.get("case_id", ""), case_directory)
+    accepted = collect_mapped_references(
+        summary,
+        mappings,
+        case,
+        source_bundle,
+        source_manifest,
+    )
+    return _publish_bundle(
+        source_bundle,
+        source_manifest,
+        [(summary_path, summary, accepted, case)],
+        output,
+        bundle_version,
+        bundle_class,
+        case_directory,
+    )
+
+
+def _publish_bundle(
+    source_bundle: Path,
+    source_manifest: dict[str, Any],
+    accepted_summaries: list[
+        tuple[Path, dict[str, Any], AcceptedReferences, dict[str, Any]]
+    ],
+    output: Path,
+    bundle_version: str,
+    bundle_class: str,
+    case_directory: Path,
+) -> ValidationSummary:
+    if not bundle_version.strip():
+        raise BundleError("bundle version must not be empty")
+    if bundle_class not in {"candidate", "golden"}:
+        raise BundleError(f"unsupported bundle class: {bundle_class}")
+
     output = output.expanduser().resolve()
     if output.exists():
         raise BundleError(f"output already exists: {output}")
     if is_within(output, source_bundle):
-        raise BundleError("golden output must be outside the source bundle")
+        raise BundleError("bundle output must be outside the source bundle")
 
     try:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -90,13 +156,13 @@ def promote_bundle(
                     source_manifest,
                 )
             manifest["bundle_version"] = bundle_version
-            manifest["bundle_class"] = "golden"
+            manifest["bundle_class"] = bundle_class
             manifest["created_utc"] = utc_now()
             write_json_direct(staging / "manifest.json", manifest)
             result = validate_bundle_root(staging, case_directory)
             staging.rename(output)
     except OSError as exc:
-        raise BundleError(f"cannot create golden bundle {output}: {exc}") from exc
+        raise BundleError(f"cannot create bundle {output}: {exc}") from exc
     return result
 
 
@@ -141,6 +207,9 @@ def _install_references(
             case,
             source_manifest,
         )
+        return
+    if isinstance(accepted, MappedReferences):
+        install_mapped_references(staging, manifest, accepted, case)
         return
     install_reference_matrix(
         staging,

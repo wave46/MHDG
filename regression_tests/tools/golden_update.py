@@ -10,6 +10,7 @@ from typing import Any
 
 from build.configuration import parse_build_jobs
 from build.workflow import build_solver
+from bundle.promotion import promote_bundle, promote_mapped_bundle
 from bundle.schemas import load_validated_json
 from bundle.settings import bundle_root_from_settings, read_settings
 from bundle.validation import validate_bundle_root
@@ -104,6 +105,9 @@ def _load_or_create(
         "status": "ready",
         "inputs": inputs,
         "build": {"status": "pending"},
+        "active_bundle": inputs["source_bundle"],
+        "active_bundle_class": "golden",
+        "active_settings": None,
         "stages": [
             {
                 **stage,
@@ -149,6 +153,7 @@ def _run_build(state: dict[str, Any], args: argparse.Namespace) -> None:
         "settings": _file_record(result.settings_path),
         "metadata": str(result.metadata_path),
     }
+    state["active_settings"] = state["build"]["settings"]
     _save(state)
 
 
@@ -162,9 +167,10 @@ def _run_stage(
     state["status"] = "running"
     _save(state)
 
-    settings_path = Path(state["build"]["settings"]["path"])
-    if _file_record(settings_path) != state["build"]["settings"]:
-        raise BundleError("generated build settings changed")
+    settings_record = state["active_settings"]
+    settings_path = Path(settings_record["path"])
+    if _file_record(settings_path) != settings_record:
+        raise BundleError("campaign settings changed")
     summary_path, summary = run_suite(
         settings_path,
         stage["suite"],
@@ -173,25 +179,41 @@ def _run_stage(
         args.suites,
         args.tolerances,
         f"{state['inputs']['run_id']}-{stage['id']}",
-        "golden",
-        compare=stage["kind"] != "matrix",
+        state["active_bundle_class"],
+        compare=stage["kind"] not in {"matrix", "reference"},
         resume=resume,
     )
     passed = summary["status"] == "passed"
     stage["summary"] = str(summary_path)
     if stage["kind"] == "matrix" and passed:
         passed = _record_matrix_reports(state, stage, summary_path, summary, args)
+    elif (
+        stage["kind"] == "reference"
+        and stage["acceptance_required"]
+        and passed
+    ):
+        old_golden_path, _ = verify_suite(
+            summary_path,
+            args.cases,
+            args.tolerances,
+        )
+        stage["old_golden_report"] = str(old_golden_path)
     if not passed:
         stage["status"] = "failed"
         state["status"] = "failed"
         _save(state)
         raise BundleError(f"golden stage failed: {stage['id']}")
 
+    if stage["kind"] in {"matrix", "reference"}:
+        _compose_stage(state, stage, summary_path, settings_path, args)
+
     stage["status"] = (
         "awaiting_acceptance"
         if stage["acceptance_required"]
         else "completed"
     )
+    if stage["status"] == "completed" and stage.get("candidate"):
+        _activate_candidate(state, stage)
     state["status"] = stage["status"]
     _save(state)
 
@@ -234,6 +256,8 @@ def _accept(state: dict[str, Any], stage_id: str) -> None:
         raise BundleError(f"golden stage is not awaiting acceptance: {stage_id}")
     matching[0]["status"] = "completed"
     matching[0]["accepted_utc"] = utc_now()
+    if matching[0].get("candidate"):
+        _activate_candidate(state, matching[0])
     state["status"] = "ready"
     _save(state)
 
@@ -252,7 +276,74 @@ def _load_declaration(path: Path, case_id: str) -> dict[str, Any]:
     ids = [stage["id"] for stage in declaration["stages"]]
     if len(ids) != len(set(ids)):
         raise BundleError("golden campaign contains duplicate stage identifiers")
+    if any(
+        stage["kind"] == "reference" and not stage.get("role_mappings")
+        for stage in declaration["stages"]
+    ):
+        raise BundleError("reference stages require role_mappings")
     return declaration
+
+
+def _compose_stage(
+    state: dict[str, Any],
+    stage: dict[str, Any],
+    summary_path: Path,
+    settings_path: Path,
+    args: argparse.Namespace,
+) -> None:
+    candidate = Path(state["workspace"]) / "candidates" / stage["id"]
+    stage["candidate"] = str(candidate)
+    _save(state)
+    if candidate.exists():
+        validate_bundle_root(candidate, args.cases)
+    elif stage["kind"] == "matrix":
+        promote_bundle(
+            settings_path,
+            summary_path,
+            candidate,
+            f"{state['inputs']['bundle_version']}-{stage['id']}",
+            args.cases,
+            bundle_class="candidate",
+        )
+    else:
+        promote_mapped_bundle(
+            settings_path,
+            summary_path,
+            stage["role_mappings"],
+            candidate,
+            f"{state['inputs']['bundle_version']}-{stage['id']}",
+            args.cases,
+        )
+
+    generated = Path(state["workspace"]) / "settings" / f"{stage['id']}.env"
+    _write_bundle_settings(settings_path, generated, candidate)
+    stage["candidate_settings"] = _file_record(generated)
+    _save(state)
+
+
+def _activate_candidate(state: dict[str, Any], stage: dict[str, Any]) -> None:
+    state["active_bundle"] = stage["candidate"]
+    state["active_bundle_class"] = "candidate"
+    state["active_settings"] = stage["candidate_settings"]
+
+
+def _write_bundle_settings(template: Path, output: Path, bundle: Path) -> None:
+    settings = read_settings(template)
+    settings["MHDG_REGRESSION_DATA_ROOT"] = str(bundle.resolve())
+    contents = "".join(
+        f"{key}={value}\n" for key, value in sorted(settings.items())
+    )
+    if output.exists():
+        if output.read_text(encoding="utf-8") != contents:
+            raise BundleError(f"generated campaign settings changed: {output}")
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_suffix(".env.tmp")
+    try:
+        temporary.write_text(contents, encoding="utf-8")
+        temporary.replace(output)
+    except OSError as exc:
+        raise BundleError(f"cannot write campaign settings {output}: {exc}") from exc
 
 
 def _workspace(

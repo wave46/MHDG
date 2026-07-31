@@ -24,6 +24,16 @@
       ],
       "layouts": ["mpi4_omp4"]
     },
+    "impurity_references": {
+      "description": "Off, nitrogen, and mixed-impurity reference producers",
+      "case": "legacy_case",
+      "workflows": [
+        "warm_impurity_off",
+        "warm_impurity_n",
+        "warm_impurity_nw"
+      ],
+      "layouts": ["mpi4_omp4"]
+    },
     "warm_parallelism": {
       "description": "Warm restart across serial, MPI, and OpenMP layouts",
       "case": "legacy_case",
