@@ -1652,7 +1652,6 @@ SUBROUTINE load_impurity_concentration(fname_impurity, impurity_concentration_le
                             impurity_concentration_exp(impurity_concentration_idx+1)*(time%t_ME-impurity_concentration_time(impurity_concentration_idx))/(impurity_concentration_time(impurity_concentration_idx+1)-impurity_concentration_time(impurity_concentration_idx))
 
    phys%impurity_concentrations(1) = impurity_concentration
-   phys%impurity_concentration = phys%impurity_concentrations(1)
    IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentrations(1)
    END IF
@@ -1794,7 +1793,6 @@ SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
 
    ! Saturate the control signal
    phys%impurity_concentrations(1) = MAX(control_signal, 0.0)
-   phys%impurity_concentration = phys%impurity_concentrations(1)
 
    ! Back-calculate the integral error to prevent windup
    anti_windup_gain = 0.1  ! Tunable parameter

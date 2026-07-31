@@ -283,8 +283,6 @@ SUBROUTINE READ_input()
   phys%apply_trim         = apply_trim
   phys%cryopump_power     = cryopump_power
   phys%puff               = puff
-  phys%impurity_name = ''
-  phys%impurity_concentration = 0.d0
   IF (switch%impurity_radiation) CALL read_impurity_radiation_input()
   phys%feedback_propotional_gain = feedback_propotional_gain
   phys%feedback_integral_gain = feedback_integral_gain
@@ -820,7 +818,4 @@ SUBROUTINE read_impurity_radiation_input()
   input%impurity_concentration_path = TRIM(ADJUSTL(impurity_concentration_path))
   input%impurity_concentration_dimension = impurity_concentration_dimension
 
-  ! Temporary mirrors for the existing scalar physics and moving-equilibrium paths.
-  phys%impurity_name = phys%impurity_names(1)
-  phys%impurity_concentration = phys%impurity_concentrations(1)
 END SUBROUTINE read_impurity_radiation_input

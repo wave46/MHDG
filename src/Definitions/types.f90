@@ -263,8 +263,6 @@ MODULE types
      REAL*8, POINTER           :: external_heating_ions(:) => NULL() ! External heating on ions on nodes of the mesh
      REAL*8, POINTER           :: external_heating_electrons(:) => NULL() ! External heating on electrons on nodes of the mesh
      ! Impurity radiation details
-     CHARACTER(LEN=20)         :: impurity_name ! Name of the impurity
-     REAL*8                    :: impurity_concentration ! Impurity concentration as a fraction of the electron density
      INTEGER                   :: n_impurities = 0 ! Number of configured impurity radiation entries
      CHARACTER(LEN=20), ALLOCATABLE :: impurity_names(:) ! Names of configured impurity radiation entries
      REAL*8, ALLOCATABLE       :: impurity_concentrations(:) ! Concentrations as fractions of electron density
@@ -339,7 +337,6 @@ MODULE types
 #ifdef THERMALCX
      REAL*8, DIMENSION(5)      :: alpha_cx ! Coefficients for charge exchange coefficients spline
 #endif
-     REAL*8, DIMENSION(17)     :: alpha_cooling_factor ! coefficients for cooling factor spline or Nitrogen. 1D fit in loglog space for ADAS data in coronal limit, fitted in the range of 0.2 eV to 4e3 eV
 #endif
 #ifdef AMJUELSPLINES
      ! Atomic rates coefficients
