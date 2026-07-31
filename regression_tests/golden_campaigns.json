@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "campaigns": {
+    "legacy_case": {
+      "case": "legacy_case",
+      "update_together": [
+        ["warm", "impurity_mixture"]
+      ],
+      "stages": [
+        {
+          "id": "cold_matrix",
+          "kind": "matrix",
+          "suite": "cold_matrix",
+          "component": "cold_matrix",
+          "acceptance_required": true
+        },
+        {
+          "id": "warm_reference",
+          "kind": "reference",
+          "suite": "warm",
+          "component": "warm",
+          "acceptance_required": true,
+          "role_mappings": [
+            {
+              "workflow": "warm",
+              "roles": ["warm_reference"]
+            }
+          ]
+        },
+        {
+          "id": "impurity_restarts",
+          "kind": "reference",
+          "suite": "impurity_references",
+          "component": "impurity_mixture",
+          "acceptance_required": false,
+          "role_mappings": [
+            {
+              "workflow": "warm_impurity_off",
+              "roles": ["warm_impurity_off_restart"]
+            },
+            {
+              "workflow": "warm_impurity_n",
+              "roles": ["warm_impurity_n_restart"]
+            },
+            {
+              "workflow": "warm_impurity_nw",
+              "roles": ["warm_impurity_nw_restart"]
+            }
+          ]
+        },
+        {
+          "id": "impurity_references",
+          "kind": "reference",
+          "suite": "impurity_references",
+          "component": "impurity_mixture",
+          "acceptance_required": true,
+          "role_mappings": [
+            {
+              "workflow": "warm_impurity_off",
+              "roles": [
+                "warm_impurity_off_restart",
+                "warm_impurity_off_reference"
+              ]
+            },
+            {
+              "workflow": "warm_impurity_n",
+              "roles": [
+                "warm_impurity_n_restart",
+                "warm_impurity_n_reference"
+              ]
+            },
+            {
+              "workflow": "warm_impurity_nw",
+              "roles": [
+                "warm_impurity_nw_restart",
+                "warm_impurity_nw_reference"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "initialization_smoke",
+          "kind": "suite",
+          "suite": "initialization_smoke",
+          "acceptance_required": false
+        },
+        {
+          "id": "race_evidence",
+          "kind": "suite",
+          "suite": "race",
+          "acceptance_required": false
+        },
+        {
+          "id": "verify_warm",
+          "kind": "verification",
+          "suite": "warm",
+          "acceptance_required": false
+        },
+        {
+          "id": "verify_impurity_mixture",
+          "kind": "verification",
+          "suite": "impurity_mixture",
+          "acceptance_required": false
+        }
+      ]
+    }
+  }
+}

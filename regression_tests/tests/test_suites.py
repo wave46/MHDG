@@ -195,6 +195,14 @@ class SuiteWorkflowTests(unittest.TestCase):
             _comparison_mode(True, False, False),
             "deferred_layout_pairs",
         )
+        smoke = load_suite_definition(
+            "initialization_smoke",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+        self.assertFalse(smoke["reference_comparisons"])
+        self.assertEqual(_comparison_mode(False, False, True), "execution_only")
 
     def test_generated_adaptive_mesh_comparison_is_byte_exact(self) -> None:
         reference = self.root / "reference/stages/01_single_step/res/temp.msh"
@@ -321,6 +329,16 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertEqual(len(report["results"]), 2)
         self.assertEqual(len(report["comparisons"]), 1)
         self.assertEqual(report["status"], "passed")
+
+        compare_pairs.reset_mock()
+        _, references_only = verify_suite(
+            source,
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "tolerances.json",
+            include_layout_pairs=False,
+        )
+        compare_pairs.assert_not_called()
+        self.assertNotIn("comparisons", references_only)
 
     def _run_suite(self, suite: str, run_id: str, *arguments: str):
         return run_command(
