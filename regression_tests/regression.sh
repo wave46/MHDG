@@ -11,7 +11,7 @@ Usage:
   regression_tests/regression.sh help
   regression_tests/regression.sh bundle create --case CASE --source DIR --output DIR
   regression_tests/regression.sh bundle validate --settings FILE
-  regression_tests/regression.sh bundle promote SUITE_SUMMARY --settings FILE --output DIR --bundle-version VERSION
+  regression_tests/regression.sh bundle promote SUITE_SUMMARY [SUITE_SUMMARY ...] --settings FILE --output DIR --bundle-version VERSION
   regression_tests/regression.sh build --settings FILE [--jobs N]
   regression_tests/regression.sh prepare CASE WORKFLOW --layout LAYOUT --settings FILE
   regression_tests/regression.sh run CASE WORKFLOW [WORKFLOW ...] --layout LAYOUT --settings FILE

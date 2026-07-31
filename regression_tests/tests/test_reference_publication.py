@@ -110,6 +110,42 @@ class ReferencePublicationTests(unittest.TestCase):
                 "continuation_05\n",
             )
 
+    def test_publication_applies_multiple_summaries_in_order(self) -> None:
+        matrix_summary = self._write_matrix_summary()
+
+        completed = run_command(
+            "bundle",
+            "promote",
+            str(matrix_summary),
+            str(self.summary),
+            "--settings",
+            str(self.settings),
+            "--output",
+            str(self.output),
+            "--bundle-version",
+            "composed-golden-1",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        validate_bundle_root(self.output, REGRESSION_ROOT / "cases")
+        manifest = _load_json(self.output / "manifest.json")
+        warm_reference = manifest["artifacts"][manifest["roles"]["warm_reference"]]
+        warm_restart = manifest["artifacts"][manifest["roles"]["warm_restart"]]
+        self.assertEqual(
+            (self.output / warm_reference["path"]).read_text(encoding="utf-8"),
+            "new golden\n",
+        )
+        self.assertEqual(
+            (self.output / warm_restart["path"]).read_text(encoding="utf-8"),
+            "continuation_05\n",
+        )
+        self.assertTrue(
+            (self.output / "provenance/golden_matrix/suite_summary.json").is_file()
+        )
+        self.assertTrue(
+            (self.output / "provenance/golden_reference/suite_summary.json").is_file()
+        )
+
     def test_failed_suite_is_not_publishable(self) -> None:
         summary = _load_json(self.summary)
         summary["status"] = "failed"

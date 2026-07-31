@@ -13,7 +13,13 @@ from support.errors import HarnessError
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("suite_summary", metavar="SUITE_SUMMARY", type=Path)
+    parser.add_argument(
+        "suite_summaries",
+        metavar="SUITE_SUMMARY",
+        nargs="+",
+        type=Path,
+        help="accepted summaries to apply in order",
+    )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--bundle-version", required=True, metavar="VERSION")
     parser.add_argument("--settings", required=True, type=Path)
@@ -23,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = promotion.promote_bundle(
             args.settings,
-            args.suite_summary,
+            args.suite_summaries,
             args.output,
             args.bundle_version,
             args.cases,

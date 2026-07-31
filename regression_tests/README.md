@@ -195,14 +195,16 @@ After human review, create a new golden bundle:
 
 ```bash
 regression_tests/regression.sh bundle promote \
-  /path/to/suite_summary.json \
+  /path/to/cold_matrix/suite_summary.json \
+  /path/to/warm/suite_summary.json \
   --settings /private/path/candidate-settings.env \
   --output /private/path/new_golden_bundle \
   --bundle-version 1.0.0-golden.1
 ```
 
-Promotion validates and copies references and provenance. It never overwrites
-an output, and tests never promote automatically.
+Promotion validates and applies one or more accepted summaries in the given
+order, including their references and provenance. It never overwrites an
+output, and tests never promote automatically.
 
 ## Outputs and provenance
 
@@ -383,6 +385,7 @@ PYTHONPATH=tools python -m unittest discover -s tests -p 'test_*.py'
   meshes. Layout pairs within one race or cold matrix do require exact meshes.
 - Runtime is recorded without a timing threshold.
 - Promotion verifies technical evidence but physical acceptance remains human.
-- One promotion consumes one accepted suite summary.
+- Promotion inputs must all describe accepted results from the configured source
+  bundle.
 
 Run `regression_tests/regression.sh help` for the command synopsis.

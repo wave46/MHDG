@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -32,29 +33,36 @@ AcceptedReferences = CanonicalReference | list[MatrixRun]
 
 def promote_bundle(
     settings_path: Path,
-    summary_path: Path,
+    summary_paths: Path | Sequence[Path],
     output: Path,
     bundle_version: str,
     case_directory: Path,
 ) -> ValidationSummary:
-    """Copy a source bundle and install accepted reference results."""
+    """Copy a source bundle and install accepted reference results in order."""
     if not bundle_version.strip():
         raise BundleError("golden bundle version must not be empty")
 
     source_bundle = bundle_root_from_settings(read_settings(settings_path))
     validate_bundle_root(source_bundle, case_directory)
     source_manifest = load_json(source_bundle / "manifest.json", "bundle manifest")
-    summary_path = require_file(summary_path, "suite summary")
-    summary = load_json(summary_path, "suite summary")
-    promotion_kind = validate_promotion_summary(summary)
-    case = load_case_definition(summary["case_id"], case_directory)
-    accepted = _collect_references(
-        promotion_kind,
-        summary,
-        case,
-        source_bundle,
-        source_manifest,
-    )
+    if isinstance(summary_paths, Path):
+        summary_paths = [summary_paths]
+    if not summary_paths:
+        raise BundleError("at least one suite summary is required")
+    accepted_summaries = []
+    for path in summary_paths:
+        path = require_file(path, "suite summary")
+        summary = load_json(path, "suite summary")
+        promotion_kind = validate_promotion_summary(summary)
+        case = load_case_definition(summary["case_id"], case_directory)
+        accepted = _collect_references(
+            promotion_kind,
+            summary,
+            case,
+            source_bundle,
+            source_manifest,
+        )
+        accepted_summaries.append((path, summary, accepted, case))
 
     output = output.expanduser().resolve()
     if output.exists():
@@ -71,15 +79,16 @@ def promote_bundle(
             staging = Path(workspace) / "bundle"
             shutil.copytree(source_bundle, staging)
             manifest = load_json(staging / "manifest.json", "bundle manifest")
-            _install_references(
-                staging,
-                manifest,
-                summary_path,
-                summary,
-                accepted,
-                case,
-                source_manifest,
-            )
+            for summary_path, summary, accepted, case in accepted_summaries:
+                _install_references(
+                    staging,
+                    manifest,
+                    summary_path,
+                    summary,
+                    accepted,
+                    case,
+                    source_manifest,
+                )
             manifest["bundle_version"] = bundle_version
             manifest["bundle_class"] = "golden"
             manifest["created_utc"] = utc_now()
