@@ -37,8 +37,10 @@ Commands:
   golden status    Show persisted golden-update state.
 
 Suites: warm, impurity_scalar_baseline, impurity_mixture, impurity_references,
-        initialization_smoke, race, cold,
-        warm_parallelism, race_matrix, cold_matrix.
+        initialization_smoke, stored_field_compatibility, race, cold,
+        warm_parallelism, race_matrix, cold_matrix, diverted_warm,
+        diverted_warm_parallelism, diverted_cold_adaptive,
+        diverted_race_matrix.
 EOF
 }
 

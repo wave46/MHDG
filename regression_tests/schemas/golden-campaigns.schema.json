@@ -25,6 +25,7 @@
       "required": ["case", "stages"],
       "properties": {
         "case": {"$ref": "#/$defs/identifier"},
+        "source_bundle_class": {"enum": ["candidate", "golden"]},
         "update_together": {
           "type": "array",
           "items": {

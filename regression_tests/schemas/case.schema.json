@@ -124,6 +124,9 @@
         "reference": {
           "$ref": "#/$defs/identifier"
         },
+        "outputs": {
+          "$ref": "#/$defs/identifier_list"
+        },
         "impurity_configuration": {
           "$ref": "#/$defs/identifier"
         },

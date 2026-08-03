@@ -52,7 +52,7 @@ def collect_mapped_references(
             role
             for name in ("restart_role", "reference_role")
             if (role := workflow.get(name))
-        }
+        } | set(workflow.get("output_roles", []))
         unknown = sorted(set(mapping["roles"]) - allowed_roles)
         if unknown:
             raise BundleError(

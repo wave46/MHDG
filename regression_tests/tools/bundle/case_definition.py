@@ -134,6 +134,7 @@ def _normalize_workflow(declaration: dict[str, Any]) -> dict[str, Any]:
     _copy_if_present(declaration, workflow, "mesh", "mesh_role")
     _copy_if_present(declaration, workflow, "restart", "restart_role")
     _copy_if_present(declaration, workflow, "reference", "reference_role")
+    _copy_if_present(declaration, workflow, "outputs", "output_roles")
     _copy_if_present(
         declaration,
         workflow,

@@ -68,8 +68,11 @@ def workflow_required_roles(workflow: dict[str, Any]) -> set[str]:
 def _validate_case_workflows(case: dict[str, Any]) -> None:
     declared_roles = set(case.get("bundle_files", {}))
     for workflow_id, workflow in case["workflows"].items():
+        used_roles = workflow_required_roles(workflow) | set(
+            workflow.get("output_roles", [])
+        )
         unknown = (
-            sorted(workflow_required_roles(workflow) - declared_roles)
+            sorted(used_roles - declared_roles)
             if declared_roles
             else []
         )

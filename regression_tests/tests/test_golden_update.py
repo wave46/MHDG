@@ -102,7 +102,9 @@ class GoldenUpdateTests(unittest.TestCase):
                 "impurity_references",
                 "impurity_references",
                 "initialization_smoke",
-                "race",
+                "stored_field_compatibility",
+                "warm_parallelism",
+                "race_matrix",
                 "warm",
                 "impurity_mixture",
             ],
@@ -112,7 +114,7 @@ class GoldenUpdateTests(unittest.TestCase):
         calls = self.run_suite.call_args_list
         self.assertEqual(
             [call.args[7] for call in calls],
-            ["golden", *("candidate" for _ in range(7))],
+            ["golden", *("candidate" for _ in range(9))],
         )
         self.assertEqual(
             [Path(call.args[0]).name for call in calls[1:]],
@@ -120,10 +122,7 @@ class GoldenUpdateTests(unittest.TestCase):
                 "cold_matrix.env",
                 "warm_reference.env",
                 "impurity_restarts.env",
-                "impurity_references.env",
-                "impurity_references.env",
-                "impurity_references.env",
-                "impurity_references.env",
+                *("impurity_references.env" for _ in range(6)),
             ],
         )
         self.assertEqual(
@@ -200,6 +199,35 @@ class GoldenUpdateTests(unittest.TestCase):
             self.assertEqual(self._run(), 1)
 
         self.assertIn("campaign inputs changed", errors.getvalue())
+
+    def test_candidate_bootstrap_must_be_declared(self) -> None:
+        self.harness.set_bundle_class("candidate")
+        declaration = golden_update._load_declaration(
+            golden_update.REGRESSION_ROOT / "golden_campaigns.json",
+            "legacy_case",
+        )
+        declaration["source_bundle_class"] = "candidate"
+
+        with patch.object(
+            golden_update,
+            "_load_declaration",
+            return_value=declaration,
+        ):
+            self.assertEqual(self._run(), 0)
+
+        self.assertEqual(self.run_suite.call_args.args[7], "candidate")
+        self.assertEqual(
+            self._state()["inputs"]["source_bundle_class"],
+            "candidate",
+        )
+
+    def test_candidate_bootstrap_is_rejected_by_default(self) -> None:
+        self.harness.set_bundle_class("candidate")
+
+        with redirect_stderr(StringIO()) as errors:
+            self.assertEqual(self._run(), 1)
+
+        self.assertIn("requires bundle_class=golden", errors.getvalue())
 
     def _arguments(self, *extra: str) -> list[str]:
         return [

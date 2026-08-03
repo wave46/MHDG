@@ -1,9 +1,9 @@
 {
   "schema_version": 2,
-  "description": "Routine legacy regression case",
+  "description": "Lower-single-null transport regression case",
   "reference": {
     "branch": "develop",
-    "revision": "29f442db67bac169b2616f2cbe399289d137993c"
+    "revision": "db468f73f899457bf9104055e953cf2465532750"
   },
   "files": {
     "required": {
@@ -18,14 +18,6 @@
     "optional": {
       "warm_restart": "restart.h5",
       "warm_reference": "reference_mpi4_omp4.h5",
-      "warm_impurity_off_restart": "restart_impurity_off.h5",
-      "warm_impurity_off_reference": "reference_impurity_off_mpi4_omp4.h5",
-      "warm_impurity_n_restart": "restart_impurity_n.h5",
-      "warm_impurity_n_reference": "reference_impurity_n_mpi4_omp4.h5",
-      "impurity_n_configuration": "impurity_model_n.nml",
-      "warm_impurity_nw_restart": "restart_impurity_nw.h5",
-      "warm_impurity_nw_reference": "reference_impurity_nw_mpi4_omp4.h5",
-      "impurity_nw_configuration": "impurity_model_nw.nml",
       "coarse_mesh": "mesh_adaptive_initial.msh",
       "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
       "cold_fixed_diffusion_reduction_parameters": "param_cold_fixed_diffusion_reduction.txt",
@@ -45,7 +37,7 @@
   "workflows": {
     "warm": {
       "type": "warm_same_state",
-      "description": "Reconverge an unchanged steady restart on the fixed mesh",
+      "description": "Reconverge the accepted diverted state on the fixed mesh",
       "inputs": [
         "mesh",
         "geometry",
@@ -67,38 +59,9 @@
         "compute_from_flux": true
       }
     },
-    "warm_impurity_off": {
-      "extends": "warm",
-      "description": "Reconverge the accepted state with impurity radiation disabled",
-      "restart": "warm_impurity_off_restart",
-      "reference": "warm_impurity_off_reference",
-      "parameter_overrides": {
-        "impurity_radiation": false
-      }
-    },
-    "warm_impurity_n": {
-      "extends": "warm",
-      "description": "Reconverge the accepted state with single-nitrogen radiation",
-      "restart": "warm_impurity_n_restart",
-      "reference": "warm_impurity_n_reference",
-      "impurity_configuration": "impurity_n_configuration",
-      "parameter_overrides": {
-        "impurity_radiation": true
-      }
-    },
-    "warm_impurity_nw": {
-      "extends": "warm",
-      "description": "Reconverge the accepted state with nitrogen-tungsten radiation",
-      "restart": "warm_impurity_nw_restart",
-      "reference": "warm_impurity_nw_reference",
-      "impurity_configuration": "impurity_nw_configuration",
-      "parameter_overrides": {
-        "impurity_radiation": true
-      }
-    },
     "cold_fixed": {
       "type": "staged_fixed_mesh",
-      "description": "Reach the canonical state from analytical initialization on the fixed mesh",
+      "description": "Reach the diverted state from analytical initialization on the fixed mesh",
       "inputs": [
         "geometry",
         "equilibrium_magnetic_field",
@@ -106,7 +69,7 @@
       ],
       "impurity_configuration": "impurity_configuration",
       "mesh": "mesh",
-      "reference": "warm_reference",
+      "outputs": ["warm_restart", "warm_reference"],
       "layout": "mpi4_omp4",
       "comparison": {
         "method": "fixed_hdf5",
@@ -160,7 +123,7 @@
     "cold_adaptive": {
       "extends": "cold_fixed",
       "type": "staged_adaptive_mesh",
-      "description": "Repeat the cold workflow with early-stage mesh adaptation",
+      "description": "Generate the canonical diverted state with early-stage mesh adaptation",
       "mesh": "coarse_mesh",
       "comparison": {
         "method": "mesh_independent",
@@ -174,12 +137,13 @@
     },
     "cold_step_fixed": {
       "type": "staged_fixed_mesh",
-      "description": "Run two Newton iterations on the coarse mesh without adaptation",
+      "description": "Run two diverted Newton iterations without adaptation",
       "inputs": [
         "geometry",
         "equilibrium_magnetic_field",
         "equilibrium_current_density"
       ],
+      "impurity_configuration": "impurity_configuration",
       "mesh": "coarse_mesh",
       "layout": "serial_omp1",
       "comparison": {
@@ -211,30 +175,14 @@
         }
       ]
     },
-    "cold_step_impurity_off": {
-      "extends": "cold_step_fixed",
-      "description": "Exercise analytical initialization with impurity radiation disabled",
-      "parameter_overrides": {
-        "impurity_radiation": false
-      }
-    },
-    "cold_step_stored_field": {
-      "extends": "cold_step_fixed",
-      "description": "Exercise the explicit stored-field compatibility path",
-      "parameter_overrides": {
-        "compute_from_flux": false
-      }
-    },
     "cold_step_adaptive": {
       "extends": "cold_step_fixed",
       "type": "staged_adaptive_mesh",
-      "description": "Run two Newton iterations with one coarse-mesh adaptation pass",
+      "description": "Run two diverted Newton iterations with one adaptation pass",
       "parameter_overrides": {
         "adaptivity": true
       },
-      "adaptive_stages": [
-        "single_step"
-      ]
+      "adaptive_stages": ["single_step"]
     }
   }
 }

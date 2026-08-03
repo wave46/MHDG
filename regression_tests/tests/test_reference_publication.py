@@ -20,6 +20,7 @@ from bundle.promotion import (  # noqa: E402
 from bundle.validation import validate_bundle_root  # noqa: E402
 from support.errors import BundleError  # noqa: E402
 from support.files import file_identity  # noqa: E402
+from references.mapped import collect_mapped_references  # noqa: E402
 from tests.fixtures.case_data import write_case_source  # noqa: E402
 from tests.fixtures.harness import run_command  # noqa: E402
 
@@ -211,6 +212,34 @@ class ReferencePublicationTests(unittest.TestCase):
                 (self.output / artifact["path"]).read_text(encoding="utf-8"),
                 expected,
             )
+
+    def test_mapped_reference_accepts_a_declared_output_role(self) -> None:
+        summary_path = self._write_mapped_summary("cold_step_fixed")
+        summary = _load_json(summary_path)
+        manifest = _load_json(self.candidate / "manifest.json")
+        case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
+        workflow = case["workflows"]["cold_step_fixed"]
+        workflow["default_layout"] = "mpi4_omp4"
+        workflow["output_roles"] = ["warm_reference"]
+
+        references = collect_mapped_references(
+            summary,
+            [
+                {
+                    "workflow": "cold_step_fixed",
+                    "roles": ["warm_reference"],
+                }
+            ],
+            case,
+            self.candidate,
+            manifest,
+        )
+
+        self.assertEqual(references.items[0].role, "warm_reference")
+        self.assertEqual(
+            references.items[0].solution.read_text(encoding="utf-8"),
+            "cold_step_fixed\n",
+        )
 
     def test_failed_suite_is_not_publishable(self) -> None:
         summary = _load_json(self.summary)

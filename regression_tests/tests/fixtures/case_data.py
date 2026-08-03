@@ -11,6 +11,7 @@ PARAMETERS = """&INPUT_LST
     impurity_model_path = '/old/impurity_model.nml'
     field_path = '/old/equilibrium.h5'
     jtor_path = '/old/current_density.h5'
+    compute_from_flux = .false.
     save_folder = '/old/output/'
 /
 &SWITCH_LST

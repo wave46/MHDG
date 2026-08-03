@@ -62,7 +62,8 @@ def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
     settings = read_settings(source_settings)
     source_bundle = bundle_root_from_settings(settings)
     validate_bundle_root(source_bundle, args.cases)
-    require_bundle_class(source_bundle, args.cases, "golden")
+    source_bundle_class = declaration.get("source_bundle_class", "golden")
+    require_bundle_class(source_bundle, args.cases, source_bundle_class)
     source_manifest = load_json(source_bundle / "manifest.json", "bundle manifest")
     if source_manifest["case_id"] != args.case_id:
         raise BundleError("campaign and source bundle use different cases")
@@ -75,6 +76,7 @@ def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
         "run_id": args.run_id,
         "source_settings": _file_record(source_settings),
         "source_bundle": str(source_bundle),
+        "source_bundle_class": source_bundle_class,
         "source_manifest": _file_record(source_bundle / "manifest.json"),
         "campaign_catalog": _file_record(args.campaigns),
         "output": str(args.output.expanduser().resolve()),
@@ -122,7 +124,7 @@ def _load_or_create(
         "inputs": inputs,
         "build": {"status": "pending"},
         "active_bundle": inputs["source_bundle"],
-        "active_bundle_class": "golden",
+        "active_bundle_class": inputs["source_bundle_class"],
         "active_settings": None,
         "warnings": _selection_warnings(declaration, selected, partial),
         "publication": {"status": "pending"},

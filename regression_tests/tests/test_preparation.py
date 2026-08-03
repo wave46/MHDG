@@ -125,6 +125,7 @@ class RunPreparationTests(unittest.TestCase):
         self.assertEqual(
             plan["parameter_overrides"],
             {
+                "compute_from_flux": True,
                 "impurity_radiation": True,
             },
         )
