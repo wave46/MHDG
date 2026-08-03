@@ -17,7 +17,8 @@ MODULE in_out
   USE printutils
   USE magnetic_geometry_state, ONLY: magnetic_equilibrium, &
        magnetic_geometry_cache, poloidal_field_fit, &
-       set_restart_geometry_reference
+       set_restart_geometry_reference, toroidal_current_from_flux, &
+       toroidal_current_comparison
   USE magnetic_topology, ONLY: topology_limited, topology_lower_single_null, &
        lcfs_source_wall, lcfs_source_xpoint, magnetic_region_core, &
        magnetic_region_main_sol, magnetic_region_private_flux
@@ -863,7 +864,7 @@ CONTAINS
       INTEGER, INTENT(IN) :: region(:)
       REAL*8 :: point(2)
       REAL*8, ALLOCATABLE :: lcfs_contour(:, :)
-      CHARACTER(LEN=32) :: topology_name, source_name
+      CHARACTER(LEN=32) :: topology_name, source_name, jtor_source_name
 
       SELECT CASE (magnetic_equilibrium%topology_kind)
       CASE (topology_limited)
@@ -881,6 +882,13 @@ CONTAINS
       CASE DEFAULT
          source_name = 'unknown'
       END SELECT
+      IF (.NOT. switch%ohmicsrc) THEN
+         jtor_source_name = 'disabled'
+      ELSEIF (toroidal_current_from_flux) THEN
+         jtor_source_name = 'bicubic_psi'
+      ELSE
+         jtor_source_name = 'stored_hdf5'
+      ENDIF
 
       CALL HDF5_real_saving(magnetic_group_id, magnetic_equilibrium%psi_lcfs, &
            'psiSep')
@@ -935,8 +943,46 @@ CONTAINS
            'field_fit_alpha')
       CALL HDF5_real_saving(magnetic_group_id, poloidal_field_fit%relative_rms, &
            'field_fit_relative_rms')
+      CALL HDF5_real_saving(magnetic_group_id, poloidal_field_fit%applied_alpha, &
+           'field_applied_alpha')
+      CALL HDF5_real_saving(magnetic_group_id, &
+           poloidal_field_fit%applied_relative_rms, 'field_applied_relative_rms')
+      CALL HDF5_real_saving(magnetic_group_id, &
+           poloidal_field_fit%canonical_relative_difference, &
+           'field_alpha_canonical_relative_difference')
+      CALL HDF5_integer_saving(magnetic_group_id, &
+           poloidal_field_fit%convention_id, 'field_alpha_convention_id')
       CALL HDF5_integer_saving(magnetic_group_id, poloidal_field_fit%sample_count, &
            'field_fit_sample_count')
+      CALL HDF5_logical_saving(magnetic_group_id, toroidal_current_from_flux, &
+           'jtor_from_flux')
+      CALL HDF5_string_saving(magnetic_group_id, TRIM(jtor_source_name), &
+           'jtor_source')
+      CALL HDF5_logical_saving(magnetic_group_id, &
+           toroidal_current_comparison%is_valid, 'jtor_comparison_valid')
+      CALL HDF5_integer_saving(magnetic_group_id, &
+           toroidal_current_comparison%applied_sign, 'jtor_applied_sign')
+      CALL HDF5_real_saving(magnetic_group_id, &
+           toroidal_current_comparison%core_raw_relative_l2, &
+           'jtor_core_raw_relative_l2')
+      CALL HDF5_real_saving(magnetic_group_id, &
+           toroidal_current_comparison%core_relative_l2, &
+           'jtor_core_relative_l2')
+      CALL HDF5_real_saving(magnetic_group_id, &
+           toroidal_current_comparison%core_norm_ratio, &
+           'jtor_core_norm_ratio')
+      CALL HDF5_real_saving(magnetic_group_id, &
+           toroidal_current_comparison%core_best_scale, &
+           'jtor_core_best_scale')
+      CALL HDF5_real_saving(magnetic_group_id, &
+           toroidal_current_comparison%stored_outside_core_relative_l2, &
+           'jtor_stored_outside_core_relative_l2')
+      CALL HDF5_integer_saving(magnetic_group_id, &
+           toroidal_current_comparison%core_sample_count, &
+           'jtor_comparison_core_sample_count')
+      CALL HDF5_integer_saving(magnetic_group_id, &
+           toroidal_current_comparison%outside_sample_count, &
+           'jtor_comparison_outside_sample_count')
       CALL HDF5_integer_saving(magnetic_group_id, magnetic_equilibrium%generation, &
            'equilibrium_generation')
       CALL HDF5_integer_saving(magnetic_group_id, magnetic_geometry_cache%generation, &

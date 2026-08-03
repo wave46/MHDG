@@ -14,15 +14,24 @@ MODULE magnetic_field
   USE HDF5_io_module
   USE HDF5
   USE interpolation
-  USE magnetic_topology, ONLY: topology_limited, topology_lower_single_null
+  USE magnetic_topology, ONLY: topology_limited, topology_lower_single_null, &
+       magnetic_region_core
   USE magnetic_geometry_state, ONLY: magnetic_equilibrium, &
        magnetic_geometry_cache, poloidal_field_fit, &
        fit_poloidal_field_scale, reset_magnetic_geometry_state, &
-       compare_restart_geometry
+       compare_restart_geometry, fit_toroidal_current_sign, &
+       evaluate_flux_derived_toroidal_current, &
+       toroidal_current_from_flux, &
+       toroidal_current_comparison, toroidal_current_comparison_t, &
+       field_alpha_plus_one, field_alpha_minus_one, &
+       field_alpha_plus_inverse_two_pi, field_alpha_minus_inverse_two_pi
   IMPLICIT NONE
 
   REAL*8, PARAMETER :: field_fit_accepted_rms = 0.10d0
   REAL*8, PARAMETER :: field_fit_fatal_rms = 0.25d0
+  REAL*8, PARAMETER :: field_alpha_canonical_warning = 0.10d0
+  REAL*8, PARAMETER :: jtor_comparison_warning = 0.25d0
+  REAL*8, PARAMETER :: stored_jtor_outside_core_warning = 0.01d0
 CONTAINS
 
   !**********************************************
@@ -53,7 +62,7 @@ CONTAINS
 
   SUBROUTINE load_magnetic_field_Jtor
       CALL load_magnetic_field()
-      IF (switch%ohmicsrc) CALL loadJtorMap()
+      IF (switch%ohmicsrc) CALL set_toroidal_current()
   ENDSUBROUTINE load_magnetic_field_Jtor
 
   !**********************************************
@@ -363,12 +372,13 @@ CONTAINS
     CALL fit_poloidal_field_scale(magnetic_equilibrium, xvec, yvec, Br2D, &
          Bz2D, simpar%refval_length, poloidal_field_fit)
     IF (poloidal_field_fit%is_valid) THEN
-       alpha = poloidal_field_fit%alpha
+       alpha = poloidal_field_fit%applied_alpha
     ELSE
        fac_2pi_field = 1.d0
        IF (input%divide_by_2pi) fac_2pi_field = 2.d0*PI
        alpha = determine_flux_sign(ip, jp, xvec, yvec, Br2D, Bz2D)/fac_2pi_field
     ENDIF
+    poloidal_field_fit%applied_alpha = alpha
     CALL report_field_fit(alpha)
 
     CALL magnetic_geometry_cache%build(magnetic_equilibrium, Mesh%X(:, 1:2), &
@@ -515,11 +525,13 @@ CONTAINS
 
    SUBROUTINE report_field_fit(alpha)
      REAL*8, INTENT(IN) :: alpha
-     CHARACTER(LEN=32) :: topology_name
+     CHARACTER(LEN=32) :: topology_name, convention_name
      LOGICAL :: fatal_fit
+     REAL*8 :: inverse_two_pi
 
+     inverse_two_pi = 1.d0/(2.d0*PI)
      fatal_fit = poloidal_field_fit%is_valid .AND. input%compute_from_flux .AND. &
-          poloidal_field_fit%relative_rms > field_fit_fatal_rms
+          poloidal_field_fit%applied_relative_rms > field_fit_fatal_rms
      IF (MPIvar%glob_id == 0) THEN
         SELECT CASE (magnetic_equilibrium%topology_kind)
         CASE (topology_limited)
@@ -532,26 +544,54 @@ CONTAINS
         WRITE (6, '(A,A)') ' Magnetic topology: ', TRIM(topology_name)
         WRITE (6, '(A,2ES16.7)') ' Effective/input psiSep: ', &
              magnetic_equilibrium%psi_lcfs, magnetic_equilibrium%psi_sep_input
-        WRITE (6, '(A,3ES16.7)') ' Axis R/Z and a_minor [solver units]: ', &
-             magnetic_equilibrium%r_axis, magnetic_equilibrium%z_axis, &
-             magnetic_equilibrium%a_minor
+        WRITE (6, '(A,3ES16.7)') ' Axis R/Z and a_minor [m]: ', &
+             magnetic_equilibrium%r_axis*phys%lscale, &
+             magnetic_equilibrium%z_axis*phys%lscale, &
+             magnetic_equilibrium%a_minor*phys%lscale
+        WRITE (6, '(A)') &
+             ' Poloidal-field convention: (Br,Bz) = alpha/R*(-dpsi/dZ,dpsi/dR)'
         IF (poloidal_field_fit%is_valid) THEN
-           WRITE (6, '(A,ES16.7,A,F7.3,A,I0)') ' Poloidal-field fit alpha: ', &
-                alpha, ', relative RMS: ', 100.d0*poloidal_field_fit%relative_rms, &
+           SELECT CASE (poloidal_field_fit%convention_id)
+           CASE (field_alpha_plus_one)
+              convention_name = '+1'
+           CASE (field_alpha_minus_one)
+              convention_name = '-1'
+           CASE (field_alpha_plus_inverse_two_pi)
+              convention_name = '+1/(2*pi)'
+           CASE (field_alpha_minus_inverse_two_pi)
+              convention_name = '-1/(2*pi)'
+           CASE DEFAULT
+              convention_name = 'unknown'
+           END SELECT
+           WRITE (6, '(A,ES16.7,A,A,A,ES16.7)') &
+                ' Poloidal-field unconstrained alpha: ', poloidal_field_fit%alpha, &
+                '; selected ', TRIM(convention_name), ': ', alpha
+           WRITE (6, '(A,F7.3,A,F7.3,A,I0)') &
+                ' Poloidal-field RMS unconstrained/applied: ', &
+                100.d0*poloidal_field_fit%relative_rms, ' / ', &
+                100.d0*poloidal_field_fit%applied_relative_rms, &
                 ' %, samples: ', poloidal_field_fit%sample_count
+           IF (poloidal_field_fit%canonical_relative_difference > &
+                field_alpha_canonical_warning) THEN
+              WRITE (6, '(A,F7.2,A)') &
+                   ' WARNING: fitted alpha differs from the nearest supported convention by ', &
+                   100.d0*poloidal_field_fit%canonical_relative_difference, ' %.'
+           ENDIF
            IF (fatal_fit) THEN
               WRITE (6, *) 'ERROR: poloidal-field fit residual exceeds 25% for flux-derived operation.'
-           ELSEIF (poloidal_field_fit%relative_rms > field_fit_fatal_rms) THEN
+           ELSEIF (poloidal_field_fit%applied_relative_rms > field_fit_fatal_rms) THEN
               WRITE (6, *) 'WARNING: stored Bpol is inconsistent with psi by more than 25%.'
-           ELSEIF (poloidal_field_fit%relative_rms > field_fit_accepted_rms) THEN
+           ELSEIF (poloidal_field_fit%applied_relative_rms > field_fit_accepted_rms) THEN
               WRITE (6, *) 'WARNING: poloidal-field fit residual is between 10% and 25%.'
            ENDIF
         ELSE
-           WRITE (6, '(A,ES16.7)') &
-                ' WARNING: no valid Bpol/psi fit; using divide_by_2pi fallback alpha ', alpha
+           WRITE (6, '(A,ES16.7,A,ES16.7)') &
+                ' WARNING: no valid Bpol/psi fit; fallback alpha: ', alpha, &
+                ', 1/(2*pi): ', inverse_two_pi
         ENDIF
         IF (.NOT. input%compute_from_flux) THEN
-           WRITE (6, *) 'WARNING: topology/rho come from bicubic psi, while physics uses stored HDF5 Br/Bz.'
+           WRITE (6, *) &
+                'WARNING: topology/rho come from bicubic psi, while physics uses stored HDF5 Br/Bz and Jtor.'
         ENDIF
      ENDIF
      IF (fatal_fit) STOP
@@ -1097,13 +1137,79 @@ CONTAINS
   END SUBROUTINE calcRippleField
 #endif
 
-  ! Below are routines from Manuel MHDG v2.1. Copy as it without any check: TODO adapt it to global magnetic field
+  SUBROUTINE set_toroidal_current()
+    REAL*8, ALLOCATABLE :: stored_toroidal_current(:)
 
-  SUBROUTINE loadJtorMap()
+    toroidal_current_from_flux = .FALSE.
+    toroidal_current_comparison = toroidal_current_comparison_t()
 
+    IF (utils%printint > 0 .AND. MPIvar%glob_id == 0) THEN
+       WRITE (6, *) '*************************************************'
+       WRITE (6, *) '*          SETTING TOROIDAL CURRENT             *'
+       WRITE (6, *) '*************************************************'
+    ENDIF
 
+    IF (input%compute_from_flux .AND. magnetic_equilibrium%is_initialized) THEN
+       CALL derive_toroidal_current_from_flux()
+       toroidal_current_from_flux = .TRUE.
+       ALLOCATE(stored_toroidal_current(SIZE(phys%Jtor)))
+       CALL load_stored_toroidal_current(stored_toroidal_current)
+       CALL fit_and_apply_toroidal_current_sign(stored_toroidal_current)
+       DEALLOCATE(stored_toroidal_current)
+    ELSE
+       IF (input%compute_from_flux .AND. MPIvar%glob_id == 0) THEN
+          WRITE (6, *) &
+               'WARNING: no bicubic psi geometry; falling back to stored HDF5 Jtor.'
+       ENDIF
+       CALL load_stored_toroidal_current(phys%Jtor)
+    ENDIF
 
+    CALL computeIplasma()
+    IF (MPIvar%glob_id == 0) WRITE (6, *) 'I_p =  ', phys%I_p, '[MA]'
+  END SUBROUTINE set_toroidal_current
 
+  SUBROUTINE derive_toroidal_current_from_flux()
+    INTEGER :: i, ind
+#ifdef TOR3D
+    INTEGER :: j
+#endif
+    REAL*8 :: x, y, jtor_value, alpha
+    LOGICAL :: is_valid
+
+    alpha = poloidal_field_fit%applied_alpha
+    IF (ABS(alpha) <= TINY(1.d0)) THEN
+       IF (MPIvar%glob_id == 0) WRITE (6, *) &
+            'ERROR: flux-derived Jtor requires the applied poloidal-field alpha.'
+       STOP
+    ENDIF
+
+    phys%Jtor = 0.d0
+    DO i = 1, Mesh%Nnodes
+       IF (magnetic_geometry_cache%nodal_region(i) /= magnetic_region_core) CYCLE
+       x = Mesh%X(i, 1)
+       y = Mesh%X(i, 2)
+       CALL evaluate_flux_derived_toroidal_current(magnetic_equilibrium, x, y, &
+            simpar%refval_length, alpha, jtor_value, is_valid)
+       IF (.NOT. is_valid) THEN
+          IF (MPIvar%glob_id == 0) WRITE (6, *) &
+               'ERROR: invalid flux-derived Jtor at solver node ', i, x, y
+          STOP
+       ENDIF
+       ind = i
+#ifdef TOR3D
+       DO j = 1, Mesh%Nnodes_toroidal
+          ind = (j - 1)*Mesh%Nnodes + i
+#endif
+          phys%Jtor(ind) = jtor_value
+#ifdef TOR3D
+       ENDDO
+#endif
+    ENDDO
+
+  END SUBROUTINE derive_toroidal_current_from_flux
+
+  SUBROUTINE load_stored_toroidal_current(jtor_at_nodes)
+    REAL*8, INTENT(OUT) :: jtor_at_nodes(:)
     INTEGER        :: i,ierr,ip,jp,ind, k
 #ifdef TOR3D
     INTEGER        :: j
@@ -1113,24 +1219,14 @@ CONTAINS
     CHARACTER(LEN=1000)    :: fname
     CHARACTER(70)        :: nit
 
-   REAL*8,POINTER,DIMENSION(:,:) :: r2D,z2D,Jtor
-   REAL*8,ALLOCATABLE,DIMENSION(:)   :: xvec,yvec
-   REAL*8,ALLOCATABLE,DIMENSION(:,:) :: Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D
+    REAL*8, POINTER, DIMENSION(:,:) :: r2D, z2D, Jtor
+    REAL*8, ALLOCATABLE, DIMENSION(:) :: xvec, yvec
+    REAL*8, ALLOCATABLE, DIMENSION(:,:) :: Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D
     REAL*8                            :: dt_ME,t_ME
     REAL*8                            :: x,y
     REAL*8,PARAMETER                  :: tol = 1.e-12
-
-
-    IF (utils%printint > 0) THEN
-       IF(MPIvar%glob_id .EQ. 0) THEN
-          WRITE (6, *) '*************************************************'
-          WRITE (6, *) '*          LOADING TOROIDAL CURRENT             *'
-          WRITE (6, *) '*************************************************'
-       ENDIF
-    END IF
-
     ! Allocate storing space in phys
-    phys%Jtor = 0.
+    jtor_at_nodes = 0.d0
 
     ! Read file
     IF (switch%testcase>=50 .AND. switch%testcase<60) THEN
@@ -1195,12 +1291,13 @@ CONTAINS
     ALLOCATE(yvec(ip))
     xvec = r2D(1,:)
     yvec = z2D(:,1)
-       ALLOCATE(Jtor_dx2D(ip,jp))
-       ALLOCATE(Jtor_dy2D(ip,jp))
-       ALLOCATE(Jtor_dxy2D(ip,jp))
-       CALL build_bicubic_derivatives(ip, yvec, jp, xvec, Jtor, Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D)
+    ALLOCATE(Jtor_dx2D(ip,jp))
+    ALLOCATE(Jtor_dy2D(ip,jp))
+    ALLOCATE(Jtor_dxy2D(ip,jp))
+    CALL build_bicubic_derivatives(ip, yvec, jp, xvec, Jtor, Jtor_dx2D, &
+         Jtor_dy2D, Jtor_dxy2D)
 
-       DO i = 1,Mesh%Nnodes
+    DO i = 1, Mesh%Nnodes
        x = Mesh%X(i,1)
        y = Mesh%X(i,2)
        ind = i
@@ -1208,18 +1305,12 @@ CONTAINS
        DO j = 1, Mesh%Nnodes_toroidal
           ind = (j - 1)*Mesh%Nnodes + i
 #endif
-         CALL eval_bicubic_value(ip, yvec, jp, xvec, Jtor, Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D, y, x, phys%Jtor(ind))
+          CALL eval_bicubic_value(ip, yvec, jp, xvec, Jtor, Jtor_dx2D, &
+               Jtor_dy2D, Jtor_dxy2D, y, x, jtor_at_nodes(ind))
 #ifdef TOR3D
-       END DO
+       ENDDO
 #endif
-    END DO
-
-    !Compute Ip
-    CALL computeIplasma()
-
-    IF (MPIvar%glob_id .EQ. 0) THEN
-       WRITE(6,*) 'I_p =  ', phys%I_p, '[MA]'
-    ENDIF
+    ENDDO
 
     ! check that time is the same
     IF (switch%ME) THEN
@@ -1230,10 +1321,93 @@ CONTAINS
     ENDIF
 
     ! Free memory
-   DEALLOCATE(r2D,z2D,Jtor,xvec,yvec,Jtor_dx2D,Jtor_dy2D,Jtor_dxy2D)
+    DEALLOCATE(r2D, z2D, Jtor, xvec, yvec, Jtor_dx2D, Jtor_dy2D, &
+         Jtor_dxy2D)
     NULLIFY(r2D,z2D,Jtor)
 
-  END SUBROUTINE loadJtorMap
+  END SUBROUTINE load_stored_toroidal_current
+
+  SUBROUTINE fit_and_apply_toroidal_current_sign(stored_toroidal_current)
+    REAL*8, INTENT(IN) :: stored_toroidal_current(:)
+    REAL*8 :: element_coordinates(refElPol%Nnodes2D, 2)
+    REAL*8 :: derived_nodes(refElPol%Nnodes2D), stored_nodes(refElPol%Nnodes2D)
+    REAL*8 :: derived_gauss(refElPol%NGauss2D), stored_gauss(refElPol%NGauss2D)
+    REAL*8 :: jacobian_11(refElPol%NGauss2D), jacobian_12(refElPol%NGauss2D)
+    REAL*8 :: jacobian_21(refElPol%NGauss2D), jacobian_22(refElPol%NGauss2D)
+    REAL*8 :: det_jacobian(refElPol%NGauss2D), stats(4), weight
+    INTEGER :: sample_counts(2), iel, igauss
+#ifdef PARALL
+    INTEGER :: ierr
+#endif
+
+    IF (.NOT. magnetic_geometry_cache%is_initialized) RETURN
+    stats = 0.d0
+    sample_counts = 0
+    DO iel = 1, Mesh%Nelems
+#ifdef PARALL
+       IF (Mesh%ghostElems(iel) /= 0) CYCLE
+#endif
+       element_coordinates = Mesh%X(Mesh%T(iel, :), 1:2)
+       derived_nodes = phys%Jtor(Mesh%T(iel, :))
+       stored_nodes = stored_toroidal_current(Mesh%T(iel, :))
+       derived_gauss = MATMUL(refElPol%N2D, derived_nodes)
+       stored_gauss = MATMUL(refElPol%N2D, stored_nodes)
+       jacobian_11 = MATMUL(refElPol%Nxi2D, element_coordinates(:, 1))
+       jacobian_12 = MATMUL(refElPol%Nxi2D, element_coordinates(:, 2))
+       jacobian_21 = MATMUL(refElPol%Neta2D, element_coordinates(:, 1))
+       jacobian_22 = MATMUL(refElPol%Neta2D, element_coordinates(:, 2))
+       det_jacobian = jacobian_11*jacobian_22 - jacobian_21*jacobian_12
+
+       DO igauss = 1, refElPol%NGauss2D
+          weight = refElPol%gauss_weights2D(igauss)*ABS(det_jacobian(igauss))
+          IF (magnetic_geometry_cache%volume_region(igauss, iel) == &
+               magnetic_region_core) THEN
+             stats(1) = stats(1) + weight*stored_gauss(igauss)**2
+             stats(2) = stats(2) + weight*derived_gauss(igauss)**2
+             stats(3) = stats(3) + weight*derived_gauss(igauss)* &
+                  stored_gauss(igauss)
+             sample_counts(1) = sample_counts(1) + 1
+          ELSE
+             stats(4) = stats(4) + weight*stored_gauss(igauss)**2
+             sample_counts(2) = sample_counts(2) + 1
+          ENDIF
+       ENDDO
+    ENDDO
+
+#ifdef PARALL
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, stats, SIZE(stats), MPI_REAL8, MPI_SUM, &
+         MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, sample_counts, SIZE(sample_counts), &
+         MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+    CALL fit_toroidal_current_sign(stats(2), stats(1), stats(3), &
+         toroidal_current_comparison)
+    toroidal_current_comparison%core_sample_count = sample_counts(1)
+    toroidal_current_comparison%outside_sample_count = sample_counts(2)
+    IF (.NOT. toroidal_current_comparison%is_valid) THEN
+       IF (MPIvar%glob_id == 0) WRITE (6, '(A)') &
+            ' WARNING: no valid stored-current fit; using raw Ampere-law Jtor sign.'
+       RETURN
+    ENDIF
+
+    phys%Jtor = REAL(toroidal_current_comparison%applied_sign, 8)*phys%Jtor
+    toroidal_current_comparison%stored_outside_core_relative_l2 = &
+         SQRT(stats(4)/stats(1))
+    IF (MPIvar%glob_id == 0) THEN
+       WRITE (6, '(A,I0,A,F8.3,A)') &
+            ' Jtor convention: ', &
+            toroidal_current_comparison%applied_sign, &
+            '; core RMS vs stored: ', &
+            100.d0*toroidal_current_comparison%core_relative_l2, &
+            ' %'
+       IF (toroidal_current_comparison%core_relative_l2 > &
+            jtor_comparison_warning) WRITE (6, '(A)') &
+            ' WARNING: flux-derived and stored core Jtor differ by more than 25% in relative L2.'
+       IF (toroidal_current_comparison%stored_outside_core_relative_l2 > &
+            stored_jtor_outside_core_warning) WRITE (6, '(A)') &
+            ' WARNING: stored Jtor outside the detected core exceeds 1% of its core L2 norm.'
+    ENDIF
+  END SUBROUTINE fit_and_apply_toroidal_current_sign
 
   SUBROUTINE loadMagneticFieldFromExperimentalData()
 
@@ -1352,6 +1526,11 @@ CONTAINS
 
        ! Toroidal current at Gauss points
        Jtorg = MATMUL(refElPol%N2D,Jtorel)
+       IF (toroidal_current_from_flux .AND. &
+            magnetic_geometry_cache%is_initialized) THEN
+          WHERE (magnetic_geometry_cache%volume_region(:, iel) /= &
+               magnetic_region_core) Jtorg = 0.d0
+       ENDIF
 
        ! Jacobian
        J11 = MATMUL(refElPol%Nxi2D,Xel(:,1))                             ! ng x 1

@@ -12,7 +12,9 @@ SUBROUTINE HDG_computeJacobian()
   USE analytical, only: body_force, analytical_solution
   USE physics
   USE transport_models_1d, ONLY: transport_model_1d
-  USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
+  USE magnetic_geometry_state, ONLY: magnetic_geometry_cache, &
+       toroidal_current_from_flux
+  USE magnetic_topology, ONLY: magnetic_region_core
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
 
   IMPLICIT NONE
@@ -1434,6 +1436,10 @@ CONTAINS
     ! toroidal current at Gauss points
     IF (switch%ohmicsrc) THEN
          Jtor = MATMUL(refElPol%N2D,Jtorel)
+         IF (toroidal_current_from_flux .AND. &
+              magnetic_geometry_cache%is_initialized) THEN
+            WHERE (topology_region /= magnetic_region_core) Jtor = 0.d0
+         ENDIF
     ELSE
       Jtor = 0.
     END IF

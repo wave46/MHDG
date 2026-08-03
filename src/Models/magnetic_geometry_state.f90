@@ -1,5 +1,6 @@
 MODULE magnetic_geometry_state
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
+  USE prec_const, ONLY: PI
   USE magnetic_topology, ONLY: equilibrium_geometry_t
   IMPLICIT NONE
 
@@ -7,13 +8,34 @@ MODULE magnetic_geometry_state
 
   REAL*8, PARAMETER :: near_null_fraction = 1.d-6
   REAL*8, PARAMETER :: restart_comparison_tolerance = 1.d-6
+  REAL*8, PARAMETER :: vacuum_permeability = 4.d-7*PI
+  INTEGER, PARAMETER, PUBLIC :: field_alpha_plus_one = 1
+  INTEGER, PARAMETER, PUBLIC :: field_alpha_minus_one = 2
+  INTEGER, PARAMETER, PUBLIC :: field_alpha_plus_inverse_two_pi = 3
+  INTEGER, PARAMETER, PUBLIC :: field_alpha_minus_inverse_two_pi = 4
 
   TYPE, PUBLIC :: poloidal_field_fit_t
      LOGICAL :: is_valid = .FALSE.
      REAL*8 :: alpha = 0.d0
      REAL*8 :: relative_rms = HUGE(0.d0)
+     REAL*8 :: applied_alpha = 0.d0
+     REAL*8 :: applied_relative_rms = HUGE(0.d0)
+     REAL*8 :: canonical_relative_difference = HUGE(0.d0)
+     INTEGER :: convention_id = 0
      INTEGER :: sample_count = 0
   END TYPE poloidal_field_fit_t
+
+  TYPE, PUBLIC :: toroidal_current_comparison_t
+     LOGICAL :: is_valid = .FALSE.
+     INTEGER :: applied_sign = 1
+     REAL*8 :: core_raw_relative_l2 = 0.d0
+     REAL*8 :: core_relative_l2 = 0.d0
+     REAL*8 :: core_norm_ratio = 0.d0
+     REAL*8 :: core_best_scale = 0.d0
+     REAL*8 :: stored_outside_core_relative_l2 = 0.d0
+     INTEGER :: core_sample_count = 0
+     INTEGER :: outside_sample_count = 0
+  END TYPE toroidal_current_comparison_t
 
   TYPE, PUBLIC :: magnetic_geometry_cache_t
      LOGICAL :: is_initialized = .FALSE.
@@ -39,6 +61,8 @@ MODULE magnetic_geometry_state
   TYPE(equilibrium_geometry_t), SAVE, PUBLIC :: magnetic_equilibrium
   TYPE(magnetic_geometry_cache_t), SAVE, PUBLIC :: magnetic_geometry_cache
   TYPE(poloidal_field_fit_t), SAVE, PUBLIC :: poloidal_field_fit
+  TYPE(toroidal_current_comparison_t), SAVE, PUBLIC :: toroidal_current_comparison
+  LOGICAL, SAVE, PUBLIC :: toroidal_current_from_flux = .FALSE.
 
   LOGICAL, SAVE :: restart_reference_is_present = .FALSE.
   REAL*8, SAVE :: restart_psi_lcfs = 0.d0
@@ -47,6 +71,8 @@ MODULE magnetic_geometry_state
   REAL*8, SAVE :: restart_a_minor = 0.d0
 
   PUBLIC :: fit_poloidal_field_scale
+  PUBLIC :: fit_toroidal_current_sign
+  PUBLIC :: evaluate_flux_derived_toroidal_current
   PUBLIC :: reset_magnetic_geometry_state
   PUBLIC :: set_restart_geometry_reference
   PUBLIC :: compare_restart_geometry
@@ -57,6 +83,8 @@ CONTAINS
     CALL magnetic_equilibrium%clear()
     CALL magnetic_geometry_cache%clear()
     poloidal_field_fit = poloidal_field_fit_t()
+    toroidal_current_comparison = toroidal_current_comparison_t()
+    toroidal_current_from_flux = .FALSE.
   END SUBROUTINE reset_magnetic_geometry_state
 
   SUBROUTINE fit_poloidal_field_scale(geometry, r, z, br, bz, length_scale, fit)
@@ -65,10 +93,12 @@ CONTAINS
     REAL*8, INTENT(IN) :: br(:, :), bz(:, :)
     REAL*8, INTENT(IN) :: length_scale
     TYPE(poloidal_field_fit_t), INTENT(OUT) :: fit
-    INTEGER :: ir, iz
+    INTEGER :: ir, iz, candidate_index
     REAL*8 :: psi, psi_r, psi_z, gr, gz, gnorm, bnorm
     REAL*8 :: max_gnorm, max_bnorm, numerator, denominator
     REAL*8 :: residual, reference_norm, r_safe, length_scale_squared
+    REAL*8 :: applied_residual, inverse_two_pi
+    REAL*8 :: canonical_alpha(4)
 
     fit = poloidal_field_fit_t()
     IF (.NOT. geometry%is_initialized) RETURN
@@ -119,9 +149,70 @@ CONTAINS
     residual = MAX(reference_norm - 2.d0*fit%alpha*numerator + &
          fit%alpha*fit%alpha*denominator, 0.d0)
     fit%relative_rms = SQRT(residual/reference_norm)
+    inverse_two_pi = 1.d0/(2.d0*ACOS(-1.d0))
+    canonical_alpha = (/1.d0, -1.d0, inverse_two_pi, -inverse_two_pi/)
+    candidate_index = MINLOC(ABS(canonical_alpha - fit%alpha), DIM=1)
+    fit%convention_id = candidate_index
+    fit%applied_alpha = canonical_alpha(candidate_index)
+    fit%canonical_relative_difference = ABS(fit%alpha - fit%applied_alpha)/ &
+         ABS(fit%applied_alpha)
+    applied_residual = MAX(reference_norm - 2.d0*fit%applied_alpha*numerator + &
+         fit%applied_alpha*fit%applied_alpha*denominator, 0.d0)
+    fit%applied_relative_rms = SQRT(applied_residual/reference_norm)
     fit%is_valid = ieee_is_finite(fit%alpha) .AND. &
-         ieee_is_finite(fit%relative_rms)
+         ieee_is_finite(fit%relative_rms) .AND. &
+         ieee_is_finite(fit%applied_relative_rms) .AND. &
+         ieee_is_finite(fit%canonical_relative_difference)
   END SUBROUTINE fit_poloidal_field_scale
+
+  SUBROUTINE fit_toroidal_current_sign(derived_norm_squared, &
+       stored_norm_squared, cross_product, fit)
+    REAL*8, INTENT(IN) :: derived_norm_squared, stored_norm_squared
+    REAL*8, INTENT(IN) :: cross_product
+    TYPE(toroidal_current_comparison_t), INTENT(OUT) :: fit
+    REAL*8 :: applied_cross_product, raw_residual, applied_residual
+
+    fit = toroidal_current_comparison_t()
+    IF (.NOT. ieee_is_finite(derived_norm_squared) .OR. &
+         .NOT. ieee_is_finite(stored_norm_squared) .OR. &
+         .NOT. ieee_is_finite(cross_product)) RETURN
+    IF (derived_norm_squared <= TINY(1.d0) .OR. &
+         stored_norm_squared <= TINY(1.d0)) RETURN
+
+    IF (cross_product < 0.d0) fit%applied_sign = -1
+    applied_cross_product = REAL(fit%applied_sign, 8)*cross_product
+    raw_residual = MAX(derived_norm_squared + stored_norm_squared - &
+         2.d0*cross_product, 0.d0)
+    applied_residual = MAX(derived_norm_squared + stored_norm_squared - &
+         2.d0*applied_cross_product, 0.d0)
+
+    fit%is_valid = .TRUE.
+    fit%core_raw_relative_l2 = SQRT(raw_residual/stored_norm_squared)
+    fit%core_relative_l2 = SQRT(applied_residual/stored_norm_squared)
+    fit%core_norm_ratio = SQRT(derived_norm_squared/stored_norm_squared)
+    fit%core_best_scale = applied_cross_product/derived_norm_squared
+  END SUBROUTINE fit_toroidal_current_sign
+
+  SUBROUTINE evaluate_flux_derived_toroidal_current(geometry, r, z, &
+       length_scale, alpha, jtor, is_valid)
+    TYPE(equilibrium_geometry_t), INTENT(IN) :: geometry
+    REAL*8, INTENT(IN) :: r, z, length_scale, alpha
+    REAL*8, INTENT(OUT) :: jtor
+    LOGICAL, INTENT(OUT) :: is_valid
+    REAL*8 :: psi, psi_r, psi_z, psi_rr, psi_zz, psi_rz
+    REAL*8 :: grad_shafranov_psi
+
+    jtor = 0.d0
+    is_valid = .FALSE.
+    IF (.NOT. geometry%is_initialized .OR. length_scale <= 0.d0) RETURN
+    IF (ABS(r) <= 1.d-12) RETURN
+
+    CALL geometry%evaluate_flux(r, z, psi, psi_r, psi_z, psi_rr, psi_zz, psi_rz)
+    grad_shafranov_psi = psi_rr - psi_r/r + psi_zz
+    jtor = -alpha*grad_shafranov_psi/ &
+         (vacuum_permeability*r*length_scale**3)
+    is_valid = ieee_is_finite(jtor)
+  END SUBROUTINE evaluate_flux_derived_toroidal_current
 
   SUBROUTINE magnetic_geometry_cache_build(this, geometry, node_coordinates, &
        elements, volume_shape, face_nodes, face_shape)

@@ -107,7 +107,7 @@ magnetic_topology.o : magnetic_topology.F interpolation.o
 magnetic_geometry_state.F : $(SDIR)/Models/magnetic_geometry_state.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-magnetic_geometry_state.o : magnetic_geometry_state.F magnetic_topology.o
+magnetic_geometry_state.o : magnetic_geometry_state.F magnetic_topology.o prec_const.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 external_heating.F : $(SDIR)/Models/external_heating.f90
