@@ -117,6 +117,8 @@ SUBROUTINE READ_input()
   ALLOCATE(n_quant_ind(1000))
   param_est = -1
   n_quant_ind = -1
+  compute_from_flux = .TRUE.
+  divide_by_2pi = .FALSE.
 
   ! Reading the file
   uinput = 100

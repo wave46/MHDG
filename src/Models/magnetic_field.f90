@@ -14,6 +14,15 @@ MODULE magnetic_field
   USE HDF5_io_module
   USE HDF5
   USE interpolation
+  USE magnetic_topology, ONLY: topology_limited, topology_lower_single_null
+  USE magnetic_geometry_state, ONLY: magnetic_equilibrium, &
+       magnetic_geometry_cache, poloidal_field_fit, &
+       fit_poloidal_field_scale, reset_magnetic_geometry_state, &
+       compare_restart_geometry
+  IMPLICIT NONE
+
+  REAL*8, PARAMETER :: field_fit_accepted_rms = 0.10d0
+  REAL*8, PARAMETER :: field_fit_fatal_rms = 0.25d0
 CONTAINS
 
   !**********************************************
@@ -52,6 +61,7 @@ CONTAINS
   !**********************************************
   SUBROUTINE load_magnetic_field
 
+    CALL reset_magnetic_geometry_state()
     phys%B = 0.
     phys%magnetic_flux = 0.
     phys%magnetic_psi = 0.
@@ -71,6 +81,9 @@ CONTAINS
        IF (input%field_from_grid) THEN
           CALL load_magnetic_field_grid
        ELSE
+          IF (MPIvar%glob_id == 0) THEN
+             WRITE (6, *) 'WARNING: node-based equilibrium input has no PR03 topology cache; using stored magnetic data.'
+          ENDIF
           CALL load_magnetic_field_nodes
        ENDIF
 
@@ -222,17 +235,19 @@ CONTAINS
     INTEGER(HID_T)                    :: file_id
     REAL*8, POINTER, DIMENSION(:, :)  :: r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D
     REAL*8, ALLOCATABLE, DIMENSION(:) :: xvec, yvec
-   REAL*8, ALLOCATABLE, DIMENSION(:, :) :: flux_dx2D, flux_dy2D, flux_dxy2D
-   REAL*8, ALLOCATABLE, DIMENSION(:, :) :: Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D
+    REAL*8, ALLOCATABLE, DIMENSION(:, :) :: Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D
+    REAL*8, ALLOCATABLE :: wall_coordinates(:, :)
+    INTEGER, ALLOCATABLE :: wall_faces(:, :)
     REAL*8                            :: x, y
-   REAL*8                            :: x_safe, dflux_dx, dflux_dy
+    REAL*8                            :: x_safe, dflux_dx, dflux_dy
     REAL*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
     CHARACTER(LEN=1000) :: fname
     CHARACTER(50)  :: nit
-    INTEGER                           :: axis_ind_tmp(2)
+    CHARACTER(LEN=256) :: geometry_message, restart_message
 
-   REAL*8                            :: q_cyl, omega,a,flux_axis,flux_span
-   REAL*8                            :: sign_psi, fac_2pi_field
+    REAL*8                            :: q_cyl, omega,a
+    REAL*8                            :: alpha, fac_2pi_field
+    LOGICAL                           :: restart_mismatch
 
 
 
@@ -316,46 +331,67 @@ CONTAINS
     xvec = r2D(1, :)
     yvec = z2D(:, 1)
 
-   ! Refine axis to mesh domain (find minimum flux only within mesh bounds)
-   CALL find_axis_in_mesh_domain(ip, jp, flux2D, yvec, xvec, axis_ind_tmp, phys%r_axis, phys%z_axis)
+    CALL magnetic_equilibrium%init(xvec, yvec, flux2D, ierr, geometry_message)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE (6, *) 'Magnetic topology initialization failed: ', TRIM(geometry_message)
+       STOP
+    ENDIF
+    CALL collect_physical_wall(wall_coordinates, wall_faces)
+    CALL magnetic_equilibrium%analyze(psiSep, wall_coordinates, wall_faces, &
+         refElPol%coord1d, ierr, geometry_message)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE (6, *) 'Magnetic topology analysis failed: ', TRIM(geometry_message)
+       STOP
+    ENDIF
+    DEALLOCATE(wall_coordinates, wall_faces)
 
-   ALLOCATE (Bphi_dx2D(ip, jp))
-   ALLOCATE (Bphi_dy2D(ip, jp))
-   ALLOCATE (Bphi_dxy2D(ip, jp))
-   CALL build_bicubic_derivatives(ip, yvec, jp, xvec, Bphi2D, Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D)
+    phys%r_axis = magnetic_equilibrium%r_axis
+    phys%z_axis = magnetic_equilibrium%z_axis
+    phys%a_minor = magnetic_equilibrium%a_minor
+    phys%Flux2Dmin = magnetic_equilibrium%psi_axis
+    CALL compare_restart_geometry(phys%lscale, restart_mismatch, restart_message)
+    IF (restart_mismatch .AND. MPIvar%glob_id == 0) THEN
+       WRITE (6, *) 'WARNING: ', TRIM(restart_message)
+    ENDIF
 
-    IF (input%compute_from_flux) THEN
-       ALLOCATE (flux_dx2D(ip, jp))
-       ALLOCATE (flux_dy2D(ip, jp))
-       ALLOCATE (flux_dxy2D(ip, jp))
-       CALL build_bicubic_derivatives(ip, yvec, jp, xvec, flux2D, flux_dx2D, flux_dy2D, flux_dxy2D)
+    ALLOCATE (Bphi_dx2D(ip, jp))
+    ALLOCATE (Bphi_dy2D(ip, jp))
+    ALLOCATE (Bphi_dxy2D(ip, jp))
+    CALL build_bicubic_derivatives(ip, yvec, jp, xvec, Bphi2D, &
+         Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D)
 
+    CALL fit_poloidal_field_scale(magnetic_equilibrium, xvec, yvec, Br2D, &
+         Bz2D, simpar%refval_length, poloidal_field_fit)
+    IF (poloidal_field_fit%is_valid) THEN
+       alpha = poloidal_field_fit%alpha
+    ELSE
        fac_2pi_field = 1.d0
        IF (input%divide_by_2pi) fac_2pi_field = 2.d0*PI
+       alpha = determine_flux_sign(ip, jp, xvec, yvec, Br2D, Bz2D)/fac_2pi_field
+    ENDIF
+    CALL report_field_fit(alpha)
 
-       sign_psi = determine_flux_sign(ip, jp, r2D, Br2D, Bz2D, flux_dx2D, flux_dy2D, fac_2pi_field)
-    ELSE
-       sign_psi = 1.d0
+    CALL magnetic_geometry_cache%build(magnetic_equilibrium, Mesh%X(:, 1:2), &
+         Mesh%T, refElPol%N2D, refElPol%face_nodes, refElPol%N1D)
+    IF (.NOT. magnetic_geometry_cache%is_initialized) THEN
+       IF (MPIvar%glob_id == 0) WRITE (6, *) 'Magnetic topology cache initialization failed.'
+       STOP
     ENDIF
 
     DO i = 1, Mesh%Nnodes
        x = Mesh%X(i, 1)
        y = Mesh%X(i, 2)
+       CALL magnetic_equilibrium%evaluate_flux(x, y, flux, dflux_dx, dflux_dy)
        IF (input%compute_from_flux) THEN
-          CALL eval_bicubic_with_derivatives(ip, yvec, jp, xvec, flux2D, flux_dx2D, flux_dy2D, flux_dxy2D, y, x, flux, dflux_dy, dflux_dx)
           x_safe = MAX(ABS(x), 1.d-12)
-          Br = -sign_psi*dflux_dy/x_safe/simpar%refval_length**2
-          Bz = sign_psi*dflux_dx/x_safe/simpar%refval_length**2
-          IF (input%divide_by_2pi) THEN
-             Br = Br/2.d0/PI
-             Bz = Bz/2.d0/PI
-          ENDIF
+          Br = -alpha*dflux_dy/x_safe/simpar%refval_length**2
+          Bz =  alpha*dflux_dx/x_safe/simpar%refval_length**2
        ELSE
           Br = interpolate(ip, yvec, jp, xvec, Br2D, y, x, 1e-12)
           Bz = interpolate(ip, yvec, jp, xvec, Bz2D, y, x, 1e-12)
-          flux = interpolate(ip, yvec, jp, xvec, flux2D, y, x, 1e-12)
        ENDIF
-      CALL eval_bicubic_value(ip, yvec, jp, xvec, Bphi2D, Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D, y, x, Bt)
+       CALL eval_bicubic_value(ip, yvec, jp, xvec, Bphi2D, Bphi_dx2D, &
+            Bphi_dy2D, Bphi_dxy2D, y, x, Bt)
 
        omega = simpar%refval_charge/simpar%refval_mass*SQRT(Br**2+Bz**2+Bt**2)*simpar%refval_time
        a = SQRT((x-phys%r_axis)**2+(y-phys%z_axis)**2)
@@ -373,6 +409,7 @@ CONTAINS
           phys%B(ind, 2) = Bz
           phys%B(ind, 3) = Bt
           phys%magnetic_flux(ind) = flux
+          phys%magnetic_psi(ind) = magnetic_geometry_cache%nodal_psi_normalized(i)
 
           phys%omega(ind) = omega
           phys%q_cyl(ind) = q_cyl
@@ -381,33 +418,13 @@ CONTAINS
        END DO
 #endif
     END DO
-    IF (input%compute_from_flux) THEN
-       DEALLOCATE (flux_dx2D, flux_dy2D, flux_dxy2D)
-    ENDIF
     DEALLOCATE (Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D)
 
-
-   ! Flux at magnetic axis for normalization (avoid using global minimum over full mesh)
-   flux_axis = flux2D(axis_ind_tmp(1), axis_ind_tmp(2))
-   phys%Flux2Dmin = flux_axis
     phys%Flux2Dmax = MAXVAL(phys%magnetic_flux)
 
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmax, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmin, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
 #endif
-
-    ! Magnetic flux normalized to separatrix: PSI (axis-referenced)
-    flux_span = psiSep - phys%Flux2Dmin
-    IF (ABS(flux_span) > 1.d-14) THEN
-       phys%magnetic_psi = (phys%magnetic_flux - phys%Flux2Dmin)/flux_span
-    ELSE
-       phys%magnetic_psi = 0.d0
-    ENDIF
-
-    ! Find a_minor from mesh nodes on psi~1 contour (robust on actual computation mesh)
-    CALL compute_a_minor_from_mesh_psi(phys%a_minor)
-
 
     IF (switch%ME) THEN
        time%dt_ME = dt_ME
@@ -420,90 +437,19 @@ CONTAINS
 
   END SUBROUTINE load_magnetic_field_grid
 
-  SUBROUTINE compute_a_minor_from_mesh_psi(a_minor)
-    REAL*8, INTENT(OUT) :: a_minor
-    REAL*8 :: r_min, r_max
-    INTEGER :: i
-#ifdef PARALL
-    INTEGER :: ierr
-#endif
-
-    r_min = HUGE(0.d0)
-    r_max = -HUGE(0.d0)
-    DO i = 1, Mesh%Nnodes
-       IF (ABS(phys%magnetic_psi(i) - 1.d0) < 1.d-3) THEN
-          r_min = MIN(r_min, Mesh%X(i, 1))
-          r_max = MAX(r_max, Mesh%X(i, 1))
-       ENDIF
-    ENDDO
-#ifdef PARALL
-    CALL MPI_ALLREDUCE(r_min, r_min, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(r_max, r_max, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
-#endif
-
-    a_minor = 0.d0
-    IF (r_max > r_min) a_minor = 0.5d0*(r_max - r_min)
-  END SUBROUTINE compute_a_minor_from_mesh_psi
-
-   SUBROUTINE find_axis_in_mesh_domain(ny, nx, flux2D, yvec, xvec, axis_ind, r_axis, z_axis)
-    ! Find magnetic axis (minimum flux) within specified mesh domain bounds
-    INTEGER, INTENT(IN) :: ny, nx
-    REAL*8, INTENT(IN) :: flux2D(ny, nx)
-    REAL*8, INTENT(IN) :: yvec(ny), xvec(nx)
-    INTEGER, INTENT(OUT) :: axis_ind(2)
-    REAL*8, INTENT(OUT) :: r_axis, z_axis
-    
-         REAL*8 :: flux_min, r_mesh_min, r_mesh_max, z_mesh_min, z_mesh_max
-#ifdef PARALL
-      INTEGER :: ierr
-#endif
-    INTEGER :: ii, jj
-
-      r_mesh_min = MINVAL(Mesh%X(:,1))
-      r_mesh_max = MAXVAL(Mesh%X(:,1))
-      z_mesh_min = MINVAL(Mesh%X(:,2))
-      z_mesh_max = MAXVAL(Mesh%X(:,2))
-
-#ifdef PARALL
-         CALL MPI_ALLREDUCE(MPI_IN_PLACE, r_mesh_min, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
-         CALL MPI_ALLREDUCE(MPI_IN_PLACE, r_mesh_max, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
-         CALL MPI_ALLREDUCE(MPI_IN_PLACE, z_mesh_min, 1, MPI_REAL8, MPI_MIN, MPI_COMM_WORLD, ierr)
-         CALL MPI_ALLREDUCE(MPI_IN_PLACE, z_mesh_max, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
-#endif
-    
-    flux_min = HUGE(0.d0)
-    axis_ind = (/1, 1/)
-    
-    DO ii = 1, ny
-       DO jj = 1, nx
-          IF (xvec(jj) >= r_mesh_min .AND. xvec(jj) <= r_mesh_max .AND. &
-              yvec(ii) >= z_mesh_min .AND. yvec(ii) <= z_mesh_max) THEN
-             IF (flux2D(ii,jj) < flux_min) THEN
-                flux_min = flux2D(ii,jj)
-                axis_ind = (/ii, jj/)
-             ENDIF
-          ENDIF
-       ENDDO
-    ENDDO
-    
-    r_axis = xvec(axis_ind(2))
-    z_axis = yvec(axis_ind(1))
-  END SUBROUTINE find_axis_in_mesh_domain
-
-   REAL*8 FUNCTION determine_flux_sign(ny, nx, r2D, Br2D, Bz2D, flux_dx2D, flux_dy2D, fac_2pi_field)
+   REAL*8 FUNCTION determine_flux_sign(ny, nx, r, z, Br2D, Bz2D)
       INTEGER, INTENT(IN) :: ny, nx
-      REAL*8, INTENT(IN) :: r2D(ny, nx), Br2D(ny, nx), Bz2D(ny, nx)
-      REAL*8, INTENT(IN) :: flux_dx2D(ny, nx), flux_dy2D(ny, nx)
-      REAL*8, INTENT(IN) :: fac_2pi_field
+      REAL*8, INTENT(IN) :: r(nx), z(ny), Br2D(ny, nx), Bz2D(ny, nx)
       INTEGER :: ii, jj
-      REAL*8 :: score_sign, x_safe, Br_ref, Bz_ref
+      REAL*8 :: score_sign, x_safe, Br_ref, Bz_ref, psi, psi_r, psi_z
 
       score_sign = 0.d0
       DO ii = 1, ny
           DO jj = 1, nx
-               x_safe = MAX(ABS(r2D(ii,jj)), 1.d-12)
-               Br_ref = -flux_dy2D(ii,jj)/x_safe/simpar%refval_length**2/fac_2pi_field
-               Bz_ref = flux_dx2D(ii,jj)/x_safe/simpar%refval_length**2/fac_2pi_field
+               CALL magnetic_equilibrium%evaluate_flux(r(jj), z(ii), psi, psi_r, psi_z)
+               x_safe = MAX(ABS(r(jj)), 1.d-12)
+               Br_ref = -psi_z/x_safe/simpar%refval_length**2
+               Bz_ref = psi_r/x_safe/simpar%refval_length**2
                score_sign = score_sign + Br_ref*Br2D(ii,jj) + Bz_ref*Bz2D(ii,jj)
           ENDDO
       ENDDO
@@ -511,6 +457,105 @@ CONTAINS
       determine_flux_sign = 1.d0
       IF (score_sign < 0.d0) determine_flux_sign = -1.d0
    END FUNCTION determine_flux_sign
+
+   SUBROUTINE collect_physical_wall(wall_coordinates, wall_faces)
+     REAL*8, ALLOCATABLE, INTENT(OUT) :: wall_coordinates(:, :)
+     INTEGER, ALLOCATABLE, INTENT(OUT) :: wall_faces(:, :)
+     INTEGER :: i, index, nwall
+     INTEGER, ALLOCATABLE :: all_faces(:, :), keep_face(:)
+#ifdef PARALL
+     INTEGER :: ierr
+
+     ALLOCATE(wall_coordinates(Mesh%Nno_glob, 2))
+     ALLOCATE(all_faces(Mesh%Nextfaces_glob, Mesh%Nnodesperface))
+     ALLOCATE(keep_face(Mesh%Nextfaces_glob))
+     wall_coordinates = -HUGE(0.d0)
+     all_faces = 0
+     keep_face = 0
+     DO i = 1, Mesh%Nelems
+        IF (Mesh%ghostElems(i) == 0) THEN
+           wall_coordinates(Mesh%loc2glob_nodes(Mesh%T(i, :)), :) = &
+                Mesh%X(Mesh%T(i, :), 1:2)
+        ENDIF
+     ENDDO
+     DO i = 1, Mesh%Nextfaces
+        IF (Mesh%ghostFaces(Mesh%Nintfaces + i) /= 0) CYCLE
+        index = Mesh%loc2glob_fa(Mesh%Nintfaces + i) - Mesh%Nintfaces_glob
+        all_faces(index, :) = Mesh%loc2glob_nodes(Mesh%Tb(i, :))
+        IF (.NOT. ALLOCATED(Mesh%periodic_faces) .OR. &
+             Mesh%periodic_faces(i) == 0) keep_face(index) = 1
+     ENDDO
+     CALL MPI_ALLREDUCE(MPI_IN_PLACE, wall_coordinates, SIZE(wall_coordinates), &
+          MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+     CALL MPI_ALLREDUCE(MPI_IN_PLACE, all_faces, SIZE(all_faces), MPI_INTEGER, &
+          MPI_SUM, MPI_COMM_WORLD, ierr)
+     CALL MPI_ALLREDUCE(MPI_IN_PLACE, keep_face, SIZE(keep_face), MPI_INTEGER, &
+          MPI_MAX, MPI_COMM_WORLD, ierr)
+#else
+     ALLOCATE(wall_coordinates(Mesh%Nnodes, 2))
+     ALLOCATE(all_faces(Mesh%Nextfaces, Mesh%Nnodesperface))
+     ALLOCATE(keep_face(Mesh%Nextfaces))
+     wall_coordinates = Mesh%X(:, 1:2)
+     all_faces = Mesh%Tb
+     keep_face = 1
+     IF (ALLOCATED(Mesh%periodic_faces)) THEN
+        WHERE (Mesh%periodic_faces /= 0) keep_face = 0
+     ENDIF
+#endif
+     nwall = COUNT(keep_face == 1)
+     ALLOCATE(wall_faces(nwall, Mesh%Nnodesperface))
+     index = 0
+     DO i = 1, SIZE(all_faces, 1)
+        IF (keep_face(i) == 0) CYCLE
+        index = index + 1
+        wall_faces(index, :) = all_faces(i, :)
+     ENDDO
+     DEALLOCATE(all_faces, keep_face)
+   END SUBROUTINE collect_physical_wall
+
+   SUBROUTINE report_field_fit(alpha)
+     REAL*8, INTENT(IN) :: alpha
+     CHARACTER(LEN=32) :: topology_name
+     LOGICAL :: fatal_fit
+
+     fatal_fit = poloidal_field_fit%is_valid .AND. input%compute_from_flux .AND. &
+          poloidal_field_fit%relative_rms > field_fit_fatal_rms
+     IF (MPIvar%glob_id == 0) THEN
+        SELECT CASE (magnetic_equilibrium%topology_kind)
+        CASE (topology_limited)
+           topology_name = 'limited'
+        CASE (topology_lower_single_null)
+           topology_name = 'lower_single_null'
+        CASE DEFAULT
+           topology_name = 'unknown'
+        END SELECT
+        WRITE (6, '(A,A)') ' Magnetic topology: ', TRIM(topology_name)
+        WRITE (6, '(A,2ES16.7)') ' Effective/input psiSep: ', &
+             magnetic_equilibrium%psi_lcfs, magnetic_equilibrium%psi_sep_input
+        WRITE (6, '(A,3ES16.7)') ' Axis R/Z and a_minor [solver units]: ', &
+             magnetic_equilibrium%r_axis, magnetic_equilibrium%z_axis, &
+             magnetic_equilibrium%a_minor
+        IF (poloidal_field_fit%is_valid) THEN
+           WRITE (6, '(A,ES16.7,A,F7.3,A,I0)') ' Poloidal-field fit alpha: ', &
+                alpha, ', relative RMS: ', 100.d0*poloidal_field_fit%relative_rms, &
+                ' %, samples: ', poloidal_field_fit%sample_count
+           IF (fatal_fit) THEN
+              WRITE (6, *) 'ERROR: poloidal-field fit residual exceeds 25% for flux-derived operation.'
+           ELSEIF (poloidal_field_fit%relative_rms > field_fit_fatal_rms) THEN
+              WRITE (6, *) 'WARNING: stored Bpol is inconsistent with psi by more than 25%.'
+           ELSEIF (poloidal_field_fit%relative_rms > field_fit_accepted_rms) THEN
+              WRITE (6, *) 'WARNING: poloidal-field fit residual is between 10% and 25%.'
+           ENDIF
+        ELSE
+           WRITE (6, '(A,ES16.7)') &
+                ' WARNING: no valid Bpol/psi fit; using divide_by_2pi fallback alpha ', alpha
+        ENDIF
+        IF (.NOT. input%compute_from_flux) THEN
+           WRITE (6, *) 'WARNING: topology/rho come from bicubic psi, while physics uses stored HDF5 Br/Bz.'
+        ENDIF
+     ENDIF
+     IF (fatal_fit) STOP
+   END SUBROUTINE report_field_fit
 
   !***********************************************************************
   ! Magnetic field loaded by a hdf5 file in the nodes !TODO modify for 3D

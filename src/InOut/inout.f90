@@ -15,6 +15,12 @@ MODULE in_out
   USE GLOBALS
   USE MPI_OMP
   USE printutils
+  USE magnetic_geometry_state, ONLY: magnetic_equilibrium, &
+       magnetic_geometry_cache, poloidal_field_fit, &
+       set_restart_geometry_reference
+  USE magnetic_topology, ONLY: topology_limited, topology_lower_single_null, &
+       lcfs_source_wall, lcfs_source_xpoint, magnetic_region_core, &
+       magnetic_region_main_sol, magnetic_region_private_flux
 
   IMPLICIT NONE
 
@@ -487,7 +493,8 @@ CONTAINS
   SUBROUTINE HDF5_save_solution(fname)
 
 #ifdef PARALL
-    USE communications, ONLY: gather_mesh, gather_solution, gather_additional, gather_magnetic_field, gather_nodal_values
+    USE communications, ONLY: gather_mesh, gather_solution, gather_additional, &
+         gather_magnetic_field, gather_nodal_values, gather_magnetic_geometry
 #endif
     IMPLICIT NONE
 
@@ -503,11 +510,14 @@ CONTAINS
     INTEGER, POINTER        :: T_glob(:,:), Tb_glob(:,:), extfaces_glob(:,:), intfaces_glob(:,:), boundaryFlag_glob(:), periodic_faces_glob(:), F_glob(:,:), N_glob(:,:), face_info_glob(:,:), Tlin_glob(:,:), flag_elems_sc_glob(:)
     REAL*8, POINTER         :: u_tilde_glob(:), u_glob(:), q_glob(:), magnetic_psi_glob(:), magnetic_flux_glob(:), Jtor_glob(:), elemSize_glob(:), scdiff_nodes_glob(:,:)
     REAL*8, POINTER         :: X_glob(:,:), B_glob(:,:), Bperturb_glob(:,:)
+    REAL*8, POINTER         :: rho_glob(:), topology_normal_glob(:, :)
+    INTEGER, POINTER        :: topology_region_glob(:)
     REAL*8, POINTER         :: external_heating_ions_glob(:), external_heating_electrons_glob(:)
 
     NULLIFY(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, face_info_glob, Tlin_glob, flag_elems_sc_glob)
     NULLIFY(u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, Jtor_glob, elemSize_glob, scdiff_nodes_glob)
     NULLIFY(X_glob, B_glob, Bperturb_glob)
+    NULLIFY(rho_glob, topology_normal_glob, topology_region_glob)
     NULLIFY(external_heating_ions_glob, external_heating_electrons_glob)
 
 #endif
@@ -575,6 +585,10 @@ CONTAINS
     ENDIF
     IF (switch%ripple) THEN
        CALL HDF5_array2D_saving(group_id1, magn%coils_ripple, SIZE(magn%coils_ripple, 1), SIZE(magn%coils_ripple, 2), 'coils_ripple')
+    ENDIF
+    IF (magnetic_geometry_cache%is_initialized) THEN
+       CALL save_magnetic_geometry(group_id1, magnetic_geometry_cache%nodal_rho, &
+            magnetic_geometry_cache%nodal_normal, magnetic_geometry_cache%nodal_region)
     ENDIF
     CALL HDF5_group_close(group_id1, ierr)
 
@@ -669,6 +683,11 @@ CONTAINS
        ELSE
           CALL gather_magnetic_field(Mesh_in = Mesh, B_glob = B_glob, magnetic_flux_glob = magnetic_flux_glob, magnetic_psi_glob = magnetic_psi_glob)
        ENDIF
+    ENDIF
+
+    IF (magnetic_geometry_cache%is_initialized) THEN
+       CALL gather_magnetic_geometry(Mesh, rho_glob, topology_normal_glob, &
+            topology_region_glob)
     ENDIF
 
     IF (switch%external_heating) THEN
@@ -790,6 +809,10 @@ CONTAINS
        IF (switch%shockcp .EQ. 3) THEN
           CALL HDF5_array2D_saving(group_id1, scdiff_nodes_glob, SIZE(scdiff_nodes_glob, 1), SIZE(scdiff_nodes_glob, 2), 'scdiff_nodes')
        END IF
+       IF (magnetic_geometry_cache%is_initialized) THEN
+          CALL save_magnetic_geometry(group_id1, rho_glob, &
+               topology_normal_glob, topology_region_glob)
+       ENDIF
        CALL HDF5_group_close(group_id1, ierr)
 
     END IF
@@ -820,6 +843,10 @@ CONTAINS
       DEALLOCATE(scdiff_nodes_glob)
       NULLIFY(scdiff_nodes_glob)
     ENDIF
+    IF (ASSOCIATED(rho_glob)) THEN
+       DEALLOCATE(rho_glob, topology_normal_glob, topology_region_glob)
+       NULLIFY(rho_glob, topology_normal_glob, topology_region_glob)
+    ENDIF
 #endif
 
   IF(MPIvar%glob_id .eq. 0) THEN
@@ -829,6 +856,92 @@ CONTAINS
     PRINT *, '        '
   ENDIF
   CONTAINS
+
+    SUBROUTINE save_magnetic_geometry(magnetic_group_id, rho, normal, region)
+      INTEGER(HID_T), INTENT(IN) :: magnetic_group_id
+      REAL*8, INTENT(IN) :: rho(:), normal(:, :)
+      INTEGER, INTENT(IN) :: region(:)
+      REAL*8 :: point(2)
+      REAL*8, ALLOCATABLE :: lcfs_contour(:, :)
+      CHARACTER(LEN=32) :: topology_name, source_name
+
+      SELECT CASE (magnetic_equilibrium%topology_kind)
+      CASE (topology_limited)
+         topology_name = 'limited'
+      CASE (topology_lower_single_null)
+         topology_name = 'lower_single_null'
+      CASE DEFAULT
+         topology_name = 'unknown'
+      END SELECT
+      SELECT CASE (magnetic_equilibrium%lcfs_source)
+      CASE (lcfs_source_wall)
+         source_name = 'wall_contact'
+      CASE (lcfs_source_xpoint)
+         source_name = 'x_point'
+      CASE DEFAULT
+         source_name = 'unknown'
+      END SELECT
+
+      CALL HDF5_real_saving(magnetic_group_id, magnetic_equilibrium%psi_lcfs, &
+           'psiSep')
+      CALL HDF5_real_saving(magnetic_group_id, magnetic_equilibrium%psi_sep_input, &
+           'psiSep_input')
+      CALL HDF5_real_saving(magnetic_group_id, magnetic_equilibrium%psi_axis, &
+           'psi_axis')
+      CALL HDF5_string_saving(magnetic_group_id, TRIM(topology_name), 'topology')
+      CALL HDF5_integer_saving(magnetic_group_id, &
+           magnetic_equilibrium%topology_kind, 'topology_id')
+      CALL HDF5_string_saving(magnetic_group_id, TRIM(source_name), 'lcfs_source')
+      CALL HDF5_integer_saving(magnetic_group_id, &
+           magnetic_equilibrium%lcfs_source, 'lcfs_source_id')
+
+      point = (/magnetic_equilibrium%r_axis, magnetic_equilibrium%z_axis/)*phys%lscale
+      CALL HDF5_array1D_saving(magnetic_group_id, point, 2, 'axis')
+      CALL HDF5_real_saving(magnetic_group_id, point(1), 'r_axis')
+      CALL HDF5_real_saving(magnetic_group_id, point(2), 'z_axis')
+      point = (/magnetic_equilibrium%r_wall_contact, &
+           magnetic_equilibrium%z_wall_contact/)*phys%lscale
+      CALL HDF5_array1D_saving(magnetic_group_id, point, 2, 'wall_contact')
+      point = (/magnetic_equilibrium%r_xpoint, &
+           magnetic_equilibrium%z_xpoint/)*phys%lscale
+      CALL HDF5_array1D_saving(magnetic_group_id, point, 2, 'x_point')
+      CALL HDF5_real_saving(magnetic_group_id, &
+           magnetic_equilibrium%a_minor*phys%lscale, 'a_minor')
+
+      ALLOCATE(lcfs_contour(SIZE(magnetic_equilibrium%lcfs_r), 2))
+      lcfs_contour(:, 1) = magnetic_equilibrium%lcfs_r*phys%lscale
+      lcfs_contour(:, 2) = magnetic_equilibrium%lcfs_z*phys%lscale
+      CALL HDF5_array2D_saving(magnetic_group_id, lcfs_contour, &
+           SIZE(lcfs_contour, 1), 2, 'lcfs_contour')
+      DEALLOCATE(lcfs_contour)
+
+      CALL HDF5_array1D_saving(magnetic_group_id, rho, SIZE(rho), 'rho_pol_norm')
+      CALL HDF5_array2D_saving(magnetic_group_id, normal, SIZE(normal, 1), 2, &
+           'topology_normal')
+      CALL HDF5_array1D_saving_int(magnetic_group_id, region, SIZE(region), &
+           'topology_region')
+      CALL HDF5_integer_saving(magnetic_group_id, magnetic_region_core, &
+           'region_id_core')
+      CALL HDF5_integer_saving(magnetic_group_id, magnetic_region_main_sol, &
+           'region_id_main_sol')
+      CALL HDF5_integer_saving(magnetic_group_id, magnetic_region_private_flux, &
+           'region_id_private_flux')
+
+      CALL HDF5_logical_saving(magnetic_group_id, input%compute_from_flux, &
+           'compute_from_flux')
+      CALL HDF5_logical_saving(magnetic_group_id, poloidal_field_fit%is_valid, &
+           'field_fit_valid')
+      CALL HDF5_real_saving(magnetic_group_id, poloidal_field_fit%alpha, &
+           'field_fit_alpha')
+      CALL HDF5_real_saving(magnetic_group_id, poloidal_field_fit%relative_rms, &
+           'field_fit_relative_rms')
+      CALL HDF5_integer_saving(magnetic_group_id, poloidal_field_fit%sample_count, &
+           'field_fit_sample_count')
+      CALL HDF5_integer_saving(magnetic_group_id, magnetic_equilibrium%generation, &
+           'equilibrium_generation')
+      CALL HDF5_integer_saving(magnetic_group_id, magnetic_geometry_cache%generation, &
+           'cache_generation')
+    END SUBROUTINE save_magnetic_geometry
 
     !**********************************************************************
     ! Save the identity of the executable that produced this solution
@@ -1626,6 +1739,7 @@ CONTAINS
     CALL HDF5_array1D_reading(group_id, sol%q, 'q')
     CALL HDF5_group_close(group_id, ierr)
 
+    CALL load_restart_geometry_reference(file_id)
     CALL HDF5_close(file_id)
 #endif
 
@@ -1673,6 +1787,33 @@ CONTAINS
     END IF
 
   ENDSUBROUTINE HDF5_load_solution
+
+  SUBROUTINE load_restart_geometry_reference(file_id)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    INTEGER(HID_T) :: magnetic_group_id
+    INTEGER :: ierr
+    LOGICAL :: exists
+    REAL*8 :: psi_lcfs, r_axis, z_axis, a_minor
+
+    CALL H5Lexists_f(file_id, 'magnetic/psiSep', exists, ierr)
+    IF (ierr /= 0 .OR. .NOT. exists) RETURN
+    CALL H5Lexists_f(file_id, 'magnetic/r_axis', exists, ierr)
+    IF (ierr /= 0 .OR. .NOT. exists) RETURN
+    CALL H5Lexists_f(file_id, 'magnetic/z_axis', exists, ierr)
+    IF (ierr /= 0 .OR. .NOT. exists) RETURN
+    CALL H5Lexists_f(file_id, 'magnetic/a_minor', exists, ierr)
+    IF (ierr /= 0 .OR. .NOT. exists) RETURN
+    CALL HDF5_group_open(file_id, 'magnetic', magnetic_group_id, ierr)
+    IF (ierr /= 0) RETURN
+    CALL HDF5_real_reading(magnetic_group_id, psi_lcfs, 'psiSep')
+    CALL HDF5_real_reading(magnetic_group_id, r_axis, 'r_axis')
+    CALL HDF5_real_reading(magnetic_group_id, z_axis, 'z_axis')
+    CALL HDF5_real_reading(magnetic_group_id, a_minor, 'a_minor')
+    CALL HDF5_group_close(magnetic_group_id, ierr)
+    IF (ierr == 0) THEN
+       CALL set_restart_geometry_reference(psi_lcfs, r_axis, z_axis, a_minor)
+    ENDIF
+  END SUBROUTINE load_restart_geometry_reference
 
   !**********************************************************************
   ! Save HDG matrix (CSR) in HDF5 file format

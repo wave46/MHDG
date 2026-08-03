@@ -10,6 +10,9 @@ environment:
 ```bash
 source Make.inc/init_vars_libs.sh
 make check-magnetic-topology
+make check-magnetic-geometry
 ```
 
-The test executable is generated in `lib/` and removed by `make clean`.
+The second target checks the signed poloidal-field fit, percent-level field
+perturbations, exact nodal/quadrature topology caches, and cache generation
+refresh.  Test executables are generated in `lib/` and removed by `make clean`.
