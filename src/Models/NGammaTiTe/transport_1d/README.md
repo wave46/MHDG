@@ -193,10 +193,19 @@ The particle and momentum transport are then built as
 $$
 d_{\mathrm{fs}}
 = c_{\mathrm{B},n}\,
+\max\!\left(1-c_{\mathrm{B},n,\rho}\rho_{\mathrm{pol,n}},0\right)\,
 \frac{\chi_i\chi_e}{\max(\chi_i+\chi_e,\varepsilon)},
 \qquad
 \nu_{\mathrm{mom}} = \mathrm{Pr}\,\chi_i.
 $$
+
+The default is `c_bohm_n_rho_slope = 0.7`.  The taper coordinate is the
+topology-correct normalized poloidal radius stored in `rho_grid`, rather than
+the historical geometric `r/a`.  It therefore remains consistent in shaped
+and diverted equilibria and is intentionally evaluated for selected main-SOL
+profiles with `rho_pol_norm > 1`.  The lower bound prevents negative particle
+diffusion; setting the slope to zero recovers the topology-corrected untapered
+formula exactly.
 
 Important normalization note:
 

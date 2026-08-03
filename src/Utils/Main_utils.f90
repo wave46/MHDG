@@ -188,6 +188,7 @@ CONTAINS
          transport_region_policy=transport_model_input%transport_region_policy, &
          c_gyrobohm_i=transport_model_input%c_gyrobohm_i, c_bohm_e=transport_model_input%c_bohm_e, &
          c_gyrobohm_e=transport_model_input%c_gyrobohm_e, c_bohm_n=transport_model_input%c_bohm_n, &
+         c_bohm_n_rho_slope=transport_model_input%c_bohm_n_rho_slope, &
          prandtl=transport_model_input%prandtl, pinch_model=transport_model_input%pinch_model, &
          c_pinch=transport_model_input%c_pinch, nu_th=transport_model_input%nu_th, &
          vpinch_const_phys=transport_model_input%vpinch_const_phys, rho_pinch_axis_width=transport_model_input%rho_pinch_axis_width, &

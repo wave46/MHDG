@@ -40,6 +40,8 @@ CONTAINS
     CALL HDF5_real_saving(params_group_id, this%config%c_bohm_e, 'c_bohm_e')
     CALL HDF5_real_saving(params_group_id, this%config%c_gyrobohm_e, 'c_gyrobohm_e')
     CALL HDF5_real_saving(params_group_id, this%config%c_bohm_n, 'c_bohm_n')
+    CALL HDF5_real_saving(params_group_id, this%config%c_bohm_n_rho_slope, &
+         'c_bohm_n_rho_slope')
     CALL HDF5_real_saving(params_group_id, this%config%prandtl, 'prandtl')
     CALL HDF5_integer_saving(params_group_id, this%config%pinch_model, 'pinch_model')
     CALL HDF5_real_saving(params_group_id, this%config%c_pinch, 'c_pinch')

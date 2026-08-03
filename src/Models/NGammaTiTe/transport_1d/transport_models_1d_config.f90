@@ -6,6 +6,7 @@ MODULE transport_models_1d_config
   PUBLIC :: transport_model_config_t, tm1d_config_reset, tm1d_config_apply
   PUBLIC :: tm1d_region_policy_from_name, tm1d_region_policy_name
   PUBLIC :: tm1d_region_is_included, tm1d_build_pinch_velocity
+  PUBLIC :: tm1d_particle_taper_factor
   PUBLIC :: transport_region_legacy_all_regions
   PUBLIC :: transport_region_core_and_main_sol, transport_region_core_only
 
@@ -40,6 +41,7 @@ MODULE transport_models_1d_config
      REAL*8 :: c_bohm_e = 8.d-5
      REAL*8 :: c_gyrobohm_e = 3.5d-2
      REAL*8 :: c_bohm_n = 1.d0
+     REAL*8 :: c_bohm_n_rho_slope = 0.7d0
      REAL*8 :: prandtl = 1.d0
   END TYPE transport_model_config_t
 
@@ -69,18 +71,20 @@ CONTAINS
     config%c_bohm_e = 8.d-5
     config%c_gyrobohm_e = 3.5d-2
     config%c_bohm_n = 1.d0
+    config%c_bohm_n_rho_slope = 0.7d0
     config%prandtl = 1.d0
   END SUBROUTINE tm1d_config_reset
 
   SUBROUTINE tm1d_config_apply(config, refval_time, refval_length, rho_edge, &
        rho_core, rho_diffusion_model_max, transport_region_policy, c_bohm_i, &
-       c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, &
-       c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, &
+       c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, &
+       c_bohm_n_rho_slope, prandtl, pinch_model, c_pinch, nu_th, &
+       vpinch_const_phys, rho_pinch_axis_width, &
        rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, &
        diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys)
     TYPE(transport_model_config_t), INTENT(INOUT) :: config
     REAL*8, INTENT(IN) :: refval_time, refval_length
-    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
     CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: transport_region_policy
     INTEGER :: policy
@@ -99,6 +103,8 @@ CONTAINS
     IF (PRESENT(c_bohm_e)) config%c_bohm_e = c_bohm_e
     IF (PRESENT(c_gyrobohm_e)) config%c_gyrobohm_e = c_gyrobohm_e
     IF (PRESENT(c_bohm_n)) config%c_bohm_n = c_bohm_n
+    IF (PRESENT(c_bohm_n_rho_slope)) &
+         config%c_bohm_n_rho_slope = c_bohm_n_rho_slope
     IF (PRESENT(prandtl)) config%prandtl = prandtl
     IF (PRESENT(pinch_model)) config%pinch_model = pinch_model
     IF (PRESENT(c_pinch)) config%c_pinch = c_pinch
@@ -187,5 +193,11 @@ CONTAINS
 
     velocity = vpinch*direction/direction_norm
   END SUBROUTINE tm1d_build_pinch_velocity
+
+  PURE ELEMENTAL REAL*8 FUNCTION tm1d_particle_taper_factor(rho_pol_norm, slope)
+    REAL*8, INTENT(IN) :: rho_pol_norm, slope
+
+    tm1d_particle_taper_factor = MAX(1.d0 - slope*rho_pol_norm, 0.d0)
+  END FUNCTION tm1d_particle_taper_factor
 
 END MODULE transport_models_1d_config

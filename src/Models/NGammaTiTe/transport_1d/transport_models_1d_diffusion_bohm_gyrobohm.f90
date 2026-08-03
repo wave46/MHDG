@@ -49,13 +49,18 @@ CONTAINS
   MODULE SUBROUTINE tm1d_compute_mixed_transport(this, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(transport_model_derived_t), INTENT(INOUT) :: work
+    REAL*8 :: particle_factor(this%nrho)
 
     IF (.NOT. this%is_initialized) RETURN
     IF (this%nrho <= 0) RETURN
 
     this%chi_i_fs = MAX(this%config%c_bohm_i*work%chi_bohm_fs + this%config%c_gyrobohm_i*work%chi_gyrobohm_fs, 1.d-10)
     this%chi_e_fs = MAX(this%config%c_bohm_e*work%chi_bohm_fs + this%config%c_gyrobohm_e*work%chi_gyrobohm_fs, 1.d-10)
-    this%d_fs = this%config%c_bohm_n * this%chi_i_fs*this%chi_e_fs / MAX(this%chi_i_fs + this%chi_e_fs, 1.d-10)
+    particle_factor = this%config%c_bohm_n * &
+         tm1d_particle_taper_factor(this%rho_grid, &
+         this%config%c_bohm_n_rho_slope)
+    this%d_fs = particle_factor * this%chi_i_fs*this%chi_e_fs / &
+         MAX(this%chi_i_fs + this%chi_e_fs, 1.d-10)
     this%nu_mom_fs = this%config%prandtl * this%chi_i_fs
   END SUBROUTINE tm1d_compute_mixed_transport
 

@@ -5,7 +5,7 @@
 #---------------------------------------
 include Make.inc/arch.make
 
-.PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy
+.PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper
 
 all : allseq
 
@@ -36,7 +36,7 @@ clean:
 	$(RM) *.o *.mod *.kmo  *.F *.f90 *.F90
 	$(RM) MHDG-* Convergence *~
 	$(RM) magnetic_topology_check magnetic_geometry_check
-	$(RM) transport_region_policy_check
+	$(RM) transport_region_policy_check transport_taper_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_magnetic_topology.f90 interpolation.o magnetic_topology.o -o magnetic_topology_check
@@ -49,6 +49,10 @@ check-magnetic-geometry : interpolation.o magnetic_topology.o magnetic_geometry_
 check-transport-region-policy : interpolation.o magnetic_topology.o transport_models_1d_config.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_transport_region_policy.f90 interpolation.o magnetic_topology.o transport_models_1d_config.o -o transport_region_policy_check
 	./transport_region_policy_check
+
+check-transport-taper : interpolation.o magnetic_topology.o transport_models_1d_config.o
+	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_transport_taper.f90 interpolation.o magnetic_topology.o transport_models_1d_config.o -o transport_taper_check
+	./transport_taper_check
 
 include Make.inc/build_provenance.mk
 
