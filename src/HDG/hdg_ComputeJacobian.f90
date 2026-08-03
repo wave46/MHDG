@@ -12,6 +12,7 @@ SUBROUTINE HDG_computeJacobian()
   USE analytical, only: body_force, analytical_solution
   USE physics
   USE transport_models_1d, ONLY: transport_model_1d
+  USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
 
   IMPLICIT NONE
@@ -1346,6 +1347,8 @@ CONTAINS
       REAL*8                        :: iJ11(Ng2d),iJ12(Ng2d)
       REAL*8                        :: iJ21(Ng2d),iJ22(Ng2d)
       REAL*8                        :: fluxg(Ng2d),max_flux2D,min_flux2D, Psig(Ng2d),rho_pol_norm(Ng2d)
+      REAL*8                        :: topology_normal(Ng2d,2)
+      INTEGER                       :: topology_region(Ng2d)
       INTEGER*4,DIMENSION(Npel)     :: ind_ass,ind_asq
       REAL*8                        :: ktis(time%tis + 1)
       REAL*8,DIMENSION(Npel)        :: Ni,Nxg,Nyg,NNbb,Nx_ax
@@ -1420,6 +1423,13 @@ CONTAINS
     ! Normalized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N2D,psiel)
       rho_pol_norm = SQRT(MAX(Psig,1.e-10))
+      topology_normal = 0.d0
+      topology_region = 0
+      IF (magnetic_geometry_cache%is_initialized) THEN
+        rho_pol_norm = magnetic_geometry_cache%volume_rho(:,iel)
+        topology_normal = magnetic_geometry_cache%volume_normal(:,iel,:)
+        topology_region = magnetic_geometry_cache%volume_region(:,iel)
+      ENDIF
 
     ! toroidal current at Gauss points
     IF (switch%ohmicsrc) THEN
@@ -1453,7 +1463,8 @@ CONTAINS
     ENDIF
 
     IF (switch%transport_1d) THEN
-      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_vol,diff_ani_vol)
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_vol,&
+        diff_ani_vol,topology_region)
     ENDIF
 
 
@@ -1696,13 +1707,15 @@ CONTAINS
          gradbtor(2) = dot_PRODUCT(Nyg,b_tor_nod)
 #endif
 #ifndef KEQUATION
-      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,force(g,:),&
+      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),rho_pol_norm(g),divbg,driftg,force(g,:),&
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
-        &ueg(g,:),qeg(g,:),u0eg(g,:,:),Jtor(g))
+        &ueg(g,:),qeg(g,:),u0eg(g,:,:),Jtor(g),topology_region=topology_region(g),&
+        &outward_normal=topology_normal(g,:))
 #else
-      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),Psig(g),divbg,driftg,b_tor(g),gradbtor,omega(g),q_cyl(g),force(g,:),&
+      CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),rho_pol_norm(g),divbg,driftg,b_tor(g),gradbtor,omega(g),q_cyl(g),force(g,:),&
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
-        &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g))
+        &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g),topology_region=topology_region(g),&
+        &outward_normal=topology_normal(g,:))
 #endif
 
          IF (save_tau) THEN
@@ -1742,6 +1755,8 @@ CONTAINS
     real*8                    :: upgf(Ng1d,phys%npv)
     real*8                    :: tau(Neq,Neq),Vnng(Ndim)
     real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d),rho_pol_norm(Ng1d)
+    real*8                    :: topology_normal(Ng1d,2)
+    integer                   :: topology_region(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: q_cyl(Ng1d)
@@ -1792,6 +1807,13 @@ CONTAINS
     ! Normalaized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N1d,psifl)
       rho_pol_norm = SQRT(MAX(Psig,1.e-10))
+      topology_normal = 0.d0
+      topology_region = 0
+      IF (magnetic_geometry_cache%is_initialized) THEN
+        rho_pol_norm = magnetic_geometry_cache%face_rho(:,ifa,iel)
+        topology_normal = magnetic_geometry_cache%face_normal(:,ifa,iel,:)
+        topology_region = magnetic_geometry_cache%face_region(:,ifa,iel)
+      ENDIF
 
     ! Element solution at face Gauss points
       uefg = MATMUL(refElPol%N1D,uef)
@@ -1810,7 +1832,8 @@ CONTAINS
     ENDIF
 
     IF (switch%transport_1d) THEN
-      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,&
+        diff_ani_fac,topology_region)
     ENDIF
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
@@ -1866,11 +1889,13 @@ CONTAINS
 
 ! Assembly local contributions
 #ifdef DKLINEARIZED
-      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
-      n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
+      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
+      n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+      topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
-      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
+      CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+        topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
 
          IF (save_tau) THEN
@@ -1917,6 +1942,8 @@ CONTAINS
     real*8                    :: tau(Neq,Neq)
     real*8                    :: upgf(Ng1d,phys%npv)
     real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d), Psig(Ng1d), rho_pol_norm(Ng1d)
+    real*8                    :: topology_normal(Ng1d,2)
+    integer                   :: topology_region(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: Vnng(Ndim)
@@ -1954,6 +1981,13 @@ CONTAINS
     ! Normalaized magnetic flux at Gauss points: PSI
     Psig = MATMUL(refElPol%N1D,psifl)
     rho_pol_norm = SQRT(MAX(Psig,1.e-10))
+    topology_normal = 0.d0
+    topology_region = 0
+    IF (magnetic_geometry_cache%is_initialized) THEN
+      rho_pol_norm = magnetic_geometry_cache%face_rho(:,ifa,iel)
+      topology_normal = magnetic_geometry_cache%face_normal(:,ifa,iel,:)
+      topology_region = magnetic_geometry_cache%face_region(:,ifa,iel)
+    ENDIF
 
     ! Trace solution at face Gauss points
     xyf = MATMUL(refElPol%N1D,Xfl)
@@ -1988,7 +2022,8 @@ CONTAINS
     ENDIF
 
     IF (switch%transport_1d) THEN
-      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,&
+        diff_ani_fac,topology_region)
     ENDIF
 
     if (save_tau) then
@@ -2062,30 +2097,36 @@ CONTAINS
          IF (Mesh%boundaryFlag(Mesh%F(iel,ifa) - Mesh%Nintfaces) .EQ. 0) THEN
         ! Ghost face: assembly it as interior
 #ifndef DKLINEARIZED
-        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
+        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+          topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 
       ELSE
-        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
+        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+          topology_region=topology_region(g),outward_normal=topology_normal(g,:))
       ENDIF
 #else
 
-        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),,Psig(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
+        CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+        topology_region=topology_region(g),outward_normal=topology_normal(g,:))
       ELSE
-        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
+        CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+          topology_region=topology_region(g),outward_normal=topology_normal(g,:))
       ENDIF
 #endif
 
 #else
 #ifndef DKLINEARIZED
-      CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
+      CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+        topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
-      CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),Psig(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau)
+      CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+        topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
 
 #endif
@@ -2195,14 +2236,18 @@ CONTAINS
   !
   !********************************************************************
 #ifndef KEQUATION
-  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,f,&
-      &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,Jtor)
+  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,rho,divb,drift,f,&
+      &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,Jtor,&
+      &topology_region,outward_normal)
 #else
-  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,psi,divb,drift,btor,gradBtor,omega,q_cyl,f,&
-    &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor)
+  SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,rho,divb,drift,btor,gradBtor,omega,q_cyl,f,&
+    &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor,&
+    &topology_region,outward_normal)
 #endif
         REAL*8,INTENT(inout)      :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
-        REAL*8,INTENT(IN)         :: b3(:),psi,divb,drift(:),f(:),ktis(:)
+        REAL*8,INTENT(IN)         :: b3(:),rho,divb,drift(:),f(:),ktis(:)
+        INTEGER, INTENT(IN), OPTIONAL :: topology_region
+        REAL*8, INTENT(IN), OPTIONAL :: outward_normal(:)
 #ifdef KEQUATION
     real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl,xy(:)
 #ifdef DKLINEARIZED
@@ -2287,7 +2332,8 @@ CONTAINS
     ! Jacobian for pinch term
     APinch = 0.d0
     IF (switch%transport_1d) THEN
-      CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
+      CALL transport_model_1d%compute_1D_pinch_matrix(b,rho,APinch,&
+        topology_region,outward_normal)
     ENDIF
 
     ! Compute Q^T^(k-1)
@@ -2943,13 +2989,17 @@ ENDIF
 
 #ifdef DKLINEARIZED
   SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
-    &ind_fg,b3,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
+    &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau,&
+    &topology_region,outward_normal)
 #else
     SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
-        &ind_fg,b3,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
+        &ind_fg,b3,rho,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau,&
+        &topology_region,outward_normal)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
-      real*8,intent(IN)         :: b3(:),n(:), psi
+      real*8,intent(IN)         :: b3(:),n(:), rho
+      integer,intent(IN),optional :: topology_region
+      real*8,intent(IN),optional :: outward_normal(:)
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
       real*8,intent(IN)         :: uf(:)
@@ -3008,7 +3058,8 @@ ENDIF
       ! Jacobian for pinch term
       APinch = 0.d0
       IF (switch%transport_1d) THEN
-      CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
+      CALL transport_model_1d%compute_1D_pinch_matrix(b,rho,APinch,&
+        topology_region,outward_normal)
     ENDIF
 
       ! Compute Q^T^(k-1)
@@ -3425,14 +3476,18 @@ ENDIF
 
 #ifdef DKLINEARIZED
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-      &ind_fg,b3,psi,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
+      &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau,&
+      &topology_region,outward_normal)
 #else
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-        &ind_fg,b3,psi,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau)
+        &ind_fg,b3,rho,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau,&
+        &topology_region,outward_normal)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       logical                   :: isdir
-      real*8,intent(IN)         :: b3(:),n(:), psi
+      real*8,intent(IN)         :: b3(:),n(:), rho
+      integer,intent(IN),optional :: topology_region
+      real*8,intent(IN),optional :: outward_normal(:)
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
       real*8,intent(IN)         :: uf(:)
@@ -3490,7 +3545,8 @@ ENDIF
       ! Jacobian matrices Pinch
       APinch = 0.d0
       IF (switch%transport_1d) THEN
-      CALL transport_model_1d%compute_1D_pinch_matrix(b,SQRT(MAX(psi,0.d0)),APinch)
+      CALL transport_model_1d%compute_1D_pinch_matrix(b,rho,APinch,&
+        topology_region,outward_normal)
     ENDIF
 
       ! Compute Q^T^(k-1)

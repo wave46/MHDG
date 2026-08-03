@@ -59,6 +59,15 @@ CONTAINS
     CALL assert_true(normal(1) > 0.999d0, 'limited outward normal')
     CALL geometry%evaluate_topology(r0 + 0.6d0, 0.d0, psi_n, rho, normal, region)
     CALL assert_true(region == magnetic_region_main_sol, 'limited SOL classification')
+
+    psi = -psi
+    CALL geometry%init(r, z, psi, ierr, message)
+    CALL assert_ok(ierr, message)
+    CALL geometry%analyze(-1.03d0*a*a, wall, faces, ref_nodes, ierr, message)
+    CALL assert_ok(ierr, message)
+    CALL geometry%evaluate_topology(r0 + 0.25d0, 0.d0, psi_n, rho, normal, region)
+    CALL assert_close(rho, 0.5d0, 2.d-5, 'reversed-flux normalized poloidal radius')
+    CALL assert_true(normal(1) > 0.999d0, 'reversed-flux outward normal')
   END SUBROUTINE test_limited_wall_contact
 
   SUBROUTINE test_limited_sharp_corner_contact()

@@ -185,6 +185,7 @@ CONTAINS
 
     CALL transport_model_1d%set_config(rho_edge=transport_model_input%rho_edge, rho_core=transport_model_input%rho_core, &
          rho_diffusion_model_max=transport_model_input%rho_diffusion_model_max, c_bohm_i=transport_model_input%c_bohm_i, &
+         transport_region_policy=transport_model_input%transport_region_policy, &
          c_gyrobohm_i=transport_model_input%c_gyrobohm_i, c_bohm_e=transport_model_input%c_bohm_e, &
          c_gyrobohm_e=transport_model_input%c_gyrobohm_e, c_bohm_n=transport_model_input%c_bohm_n, &
          prandtl=transport_model_input%prandtl, pinch_model=transport_model_input%pinch_model, &
@@ -194,7 +195,7 @@ CONTAINS
          rho_blend_width=transport_model_input%rho_blend_width, diff_n_min_phys=transport_model_input%diff_n_min_phys, &
          diff_u_min_phys=transport_model_input%diff_u_min_phys, diff_e_min_phys=transport_model_input%diff_e_min_phys, &
          diff_ee_min_phys=transport_model_input%diff_ee_min_phys)
-    CALL fs_transport%build_profiles()
+    CALL fs_transport%build_profiles(transport_model_1d%config%transport_region_policy)
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
   END SUBROUTINE update_reduced_transport_profiles
 

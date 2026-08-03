@@ -469,6 +469,7 @@ MODULE types
      REAL*8 :: rho_core = 0.8d0
      REAL*8 :: rho_edge = 0.99d0
      REAL*8 :: rho_diffusion_model_max = 1.d0
+     CHARACTER(LEN=32) :: transport_region_policy = 'legacy_all_regions'
      REAL*8 :: c_bohm_i = 1.6d-4
      REAL*8 :: c_gyrobohm_i = 1.75d-2
      REAL*8 :: c_bohm_e = 8.d-5

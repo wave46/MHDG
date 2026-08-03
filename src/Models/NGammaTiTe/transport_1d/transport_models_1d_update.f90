@@ -66,8 +66,8 @@ CONTAINS
     work%q_fs = fs_data%q_fs
     work%omega_fs = fs_data%omega_fs
     work%Rmaj_fs = fs_data%Rmaj_fs
-    work%rmin_fs = fs_data%rmin_fs
-    work%eps_fs = fs_data%eps_fs
+    work%eps_fs = work%a_minor*fs_data%rho_grid / &
+         MAX(ABS(work%Rmaj_fs), model_tol)
 
     DEALLOCATE(ua, up)
   END SUBROUTINE tm1d_fill_derived_from_fs

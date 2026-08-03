@@ -565,6 +565,8 @@ SUBROUTINE READ_input()
      PRINT *, '                - rho_core (transport model):            ', transport_model_input%rho_core
      PRINT *, '                - rho_edge (transport model):            ', transport_model_input%rho_edge
      PRINT *, '                - rho_diffusion_model_max (transport model):       ', transport_model_input%rho_diffusion_model_max
+     PRINT *, '                - transport_region_policy (transport model):       ', &
+          TRIM(transport_model_input%transport_region_policy)
      PRINT *, '                - c_bohm_i (transport model):           ', transport_model_input%c_bohm_i
      PRINT *, '                - c_gyrobohm_i (transport model):       ', transport_model_input%c_gyrobohm_i
      PRINT *, '                - c_bohm_e (transport model):           ', transport_model_input%c_bohm_e
@@ -679,11 +681,18 @@ SUBROUTINE read_transport_model_input()
   INTEGER :: utransport, ios
   REAL*8 :: rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
   INTEGER :: pinch_model
-  NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+  CHARACTER(LEN=32) :: transport_region_policy
+  NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge, rho_diffusion_model_max, &
+       transport_region_policy, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, &
+       c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, &
+       rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, &
+       rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, &
+       diff_ee_min_phys
 
   rho_core = transport_model_input%rho_core
   rho_edge = transport_model_input%rho_edge
   rho_diffusion_model_max = transport_model_input%rho_diffusion_model_max
+  transport_region_policy = transport_model_input%transport_region_policy
   c_bohm_i = transport_model_input%c_bohm_i
   c_gyrobohm_i = transport_model_input%c_gyrobohm_i
   c_bohm_e = transport_model_input%c_bohm_e
@@ -722,6 +731,7 @@ SUBROUTINE read_transport_model_input()
   transport_model_input%rho_core = rho_core
   transport_model_input%rho_edge = rho_edge
   transport_model_input%rho_diffusion_model_max = rho_diffusion_model_max
+  transport_model_input%transport_region_policy = TRIM(ADJUSTL(transport_region_policy))
   transport_model_input%c_bohm_i = c_bohm_i
   transport_model_input%c_gyrobohm_i = c_gyrobohm_i
   transport_model_input%c_bohm_e = c_bohm_e

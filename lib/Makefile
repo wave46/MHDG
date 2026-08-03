@@ -5,7 +5,7 @@
 #---------------------------------------
 include Make.inc/arch.make
 
-.PHONY : clean check-magnetic-topology check-magnetic-geometry
+.PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy
 
 all : allseq
 
@@ -36,6 +36,7 @@ clean:
 	$(RM) *.o *.mod *.kmo  *.F *.f90 *.F90
 	$(RM) MHDG-* Convergence *~
 	$(RM) magnetic_topology_check magnetic_geometry_check
+	$(RM) transport_region_policy_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_magnetic_topology.f90 interpolation.o magnetic_topology.o -o magnetic_topology_check
@@ -44,6 +45,10 @@ check-magnetic-topology : interpolation.o magnetic_topology.o
 check-magnetic-geometry : interpolation.o magnetic_topology.o magnetic_geometry_state.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_magnetic_geometry_state.f90 interpolation.o magnetic_topology.o magnetic_geometry_state.o -o magnetic_geometry_check
 	./magnetic_geometry_check
+
+check-transport-region-policy : interpolation.o magnetic_topology.o transport_models_1d_config.o
+	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_transport_region_policy.f90 interpolation.o magnetic_topology.o transport_models_1d_config.o -o transport_region_policy_check
+	./transport_region_policy_check
 
 include Make.inc/build_provenance.mk
 
@@ -240,13 +245,13 @@ preprocess.o : preprocess.F globals.o PrintUtils.o types.o MPI_OMP.o
 flux_surface_transport_data.F : $(SDIR)/Models/$(RMDL)/transport_1d/flux_surface_transport_data.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-flux_surface_transport_data.o : flux_surface_transport_data.F globals.o MPI_OMP.o HDF5_io.o interpolation.o
+flux_surface_transport_data.o : flux_surface_transport_data.F globals.o MPI_OMP.o HDF5_io.o interpolation.o magnetic_geometry_state.o transport_models_1d_config.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 transport_models_1d_config.F : $(SDIR)/Models/$(RMDL)/transport_1d/transport_models_1d_config.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-transport_models_1d_config.o : transport_models_1d_config.F
+transport_models_1d_config.o : transport_models_1d_config.F magnetic_topology.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 transport_models_1d_derived.F : $(SDIR)/Models/$(RMDL)/transport_1d/transport_models_1d_derived.f90

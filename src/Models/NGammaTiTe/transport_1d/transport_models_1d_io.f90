@@ -25,6 +25,11 @@ CONTAINS
     CALL HDF5_real_saving(params_group_id, this%config%rho_core, 'rho_core')
     CALL HDF5_real_saving(params_group_id, this%config%rho_edge, 'rho_edge')
     CALL HDF5_real_saving(params_group_id, this%config%rho_diffusion_model_max, 'rho_diffusion_model_max')
+    CALL HDF5_string_saving(params_group_id, &
+         TRIM(tm1d_region_policy_name(this%config%transport_region_policy)), &
+         'transport_region_policy')
+    CALL HDF5_integer_saving(params_group_id, this%config%transport_region_policy, &
+         'transport_region_policy_id')
     CALL HDF5_real_saving(params_group_id, this%config%rho_blend_width, 'rho_blend_width')
     CALL HDF5_real_saving(params_group_id, this%config%diff_n_min, 'diff_n_min')
     CALL HDF5_real_saving(params_group_id, this%config%diff_u_min, 'diff_u_min')
