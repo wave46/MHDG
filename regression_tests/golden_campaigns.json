@@ -118,7 +118,6 @@
     },
     "diverted_case": {
       "case": "diverted_case",
-      "source_bundle_class": "candidate",
       "update_together": [
         ["cold_adaptive", "warm"]
       ],

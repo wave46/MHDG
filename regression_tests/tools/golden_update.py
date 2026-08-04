@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
-    """Create or continue one campaign until its next acceptance gate."""
+    """Create or continue one campaign until completion or final review."""
     if not IDENTIFIER_RE.fullmatch(args.run_id):
         raise BundleError(f"invalid golden run identifier: {args.run_id}")
     if not args.bundle_version.strip():
@@ -62,7 +62,7 @@ def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
     settings = read_settings(source_settings)
     source_bundle = bundle_root_from_settings(settings)
     validate_bundle_root(source_bundle, args.cases)
-    source_bundle_class = declaration.get("source_bundle_class", "golden")
+    source_bundle_class = "candidate" if args.bootstrap_candidate else "golden"
     require_bundle_class(source_bundle, args.cases, source_bundle_class)
     source_manifest = load_json(source_bundle / "manifest.json", "bundle manifest")
     if source_manifest["case_id"] != args.case_id:
@@ -77,6 +77,7 @@ def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
         "source_settings": _file_record(source_settings),
         "source_bundle": str(source_bundle),
         "source_bundle_class": source_bundle_class,
+        "bootstrap_candidate": args.bootstrap_candidate,
         "source_manifest": _file_record(source_bundle / "manifest.json"),
         "campaign_catalog": _file_record(args.campaigns),
         "output": str(args.output.expanduser().resolve()),
@@ -93,7 +94,7 @@ def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
         partial,
     )
     if args.accept:
-        _accept(state, args.accept)
+        _accept_campaign(state, args.accept)
     return _advance(state, args)
 
 
@@ -117,6 +118,24 @@ def _load_or_create(
         raise BundleError(f"golden output already exists: {output}")
 
     workspace.mkdir(parents=True)
+    stages = [
+        {
+            **stage,
+            "status": (
+                "pending"
+                if not partial
+                or stage["kind"] == "verification"
+                or stage.get("component") in selected
+                else "skipped"
+            ),
+        }
+        for stage in declaration["stages"]
+    ]
+    review_stages = [
+        stage["id"]
+        for stage in stages
+        if stage["status"] != "skipped" and stage["acceptance_required"]
+    ]
     state = {
         "schema_version": 1,
         "workspace": str(workspace),
@@ -127,20 +146,12 @@ def _load_or_create(
         "active_bundle_class": inputs["source_bundle_class"],
         "active_settings": None,
         "warnings": _selection_warnings(declaration, selected, partial),
+        "acceptance": {
+            "status": "pending" if review_stages else "not_required",
+            "required_stages": review_stages,
+        },
         "publication": {"status": "pending"},
-        "stages": [
-            {
-                **stage,
-                "status": (
-                    "pending"
-                    if not partial
-                    or stage["kind"] == "verification"
-                    or stage.get("component") in selected
-                    else "skipped"
-                ),
-            }
-            for stage in declaration["stages"]
-        ],
+        "stages": stages,
     }
     _save(state)
     return state
@@ -151,18 +162,17 @@ def _advance(state: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
         _run_build(state, args)
 
     for stage in state["stages"]:
-        if stage["status"] == "awaiting_acceptance":
-            state["status"] = "awaiting_acceptance"
-            _save(state)
-            return state
         if stage["status"] in {"completed", "skipped"}:
             continue
         if stage["status"] == "failed":
             raise BundleError(f"golden stage failed: {stage['id']}")
         _run_stage(state, stage, args)
-        if stage["status"] == "awaiting_acceptance":
-            return state
 
+    _record_verification_candidate(state)
+    if state["acceptance"]["status"] == "pending":
+        state["status"] = "awaiting_acceptance"
+        _save(state)
+        return state
     return _publish(state, args)
 
 
@@ -233,12 +243,8 @@ def _run_stage(
     if stage["kind"] in {"matrix", "reference"}:
         _compose_stage(state, stage, summary_path, settings_path, args)
 
-    stage["status"] = (
-        "awaiting_acceptance"
-        if stage["acceptance_required"]
-        else "completed"
-    )
-    if stage["status"] == "completed" and stage.get("candidate"):
+    stage["status"] = "completed"
+    if stage.get("candidate"):
         _activate_candidate(state, stage)
     state["status"] = stage["status"]
     _save(state)
@@ -276,14 +282,23 @@ def _record_matrix_reports(
     return True
 
 
-def _accept(state: dict[str, Any], stage_id: str) -> None:
-    matching = [stage for stage in state["stages"] if stage["id"] == stage_id]
-    if len(matching) != 1 or matching[0]["status"] != "awaiting_acceptance":
-        raise BundleError(f"golden stage is not awaiting acceptance: {stage_id}")
-    matching[0]["status"] = "completed"
-    matching[0]["accepted_utc"] = utc_now()
-    if matching[0].get("candidate"):
-        _activate_candidate(state, matching[0])
+def _accept_campaign(state: dict[str, Any], acceptance: str) -> None:
+    if acceptance != "campaign":
+        raise BundleError("golden acceptance target must be 'campaign'")
+    if (
+        state["status"] != "awaiting_acceptance"
+        or state["acceptance"]["status"] != "pending"
+    ):
+        raise BundleError("golden campaign is not awaiting acceptance")
+    _record_verification_candidate(state)
+    accepted_utc = utc_now()
+    state["acceptance"].update(
+        {"status": "accepted", "accepted_utc": accepted_utc}
+    )
+    required = set(state["acceptance"]["required_stages"])
+    for stage in state["stages"]:
+        if stage["id"] in required:
+            stage["accepted_utc"] = accepted_utc
     state["status"] = "ready"
     _save(state)
 
@@ -607,6 +622,9 @@ def _print_status(state: dict[str, Any]) -> None:
     print(f"build: {state['build']['status']}")
     for stage in state["stages"]:
         print(f"{stage['id']}: {stage['status']}")
+    acceptance = state.get("acceptance")
+    if acceptance is not None:
+        print(f"campaign acceptance: {acceptance['status']}")
     for warning in state.get("warnings", []):
         print(f"warning: {warning}")
     if state.get("publication", {}).get("status") == "completed":
@@ -623,7 +641,12 @@ def _argument_parser() -> argparse.ArgumentParser:
     update.add_argument("--output", required=True, type=Path)
     update.add_argument("--bundle-version", required=True, metavar="VERSION")
     update.add_argument("--workspace", type=Path)
-    update.add_argument("--accept", metavar="STAGE")
+    update.add_argument("--accept", choices=("campaign",))
+    update.add_argument(
+        "--bootstrap-candidate",
+        action="store_true",
+        help="allow a candidate source for the first promotion of a new case",
+    )
     update.add_argument("--only", action="append", metavar="COMPONENT")
     update.add_argument("--build-jobs", type=parse_build_jobs, metavar="N")
     update.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)

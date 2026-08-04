@@ -198,7 +198,8 @@ regression_tests/regression.sh suite compare \
 ### Publish accepted references
 
 For a complete refresh, one command starts or continues the persisted golden
-campaign, stops at each required review gate, and publishes after final checks:
+campaign and runs every producer and verification stage. It stops once, after
+the complete candidate is ready for review:
 
 ```bash
 regression_tests/regression.sh golden update legacy_case \
@@ -206,8 +207,9 @@ regression_tests/regression.sh golden update legacy_case \
   --output /private/path/new_golden_bundle --bundle-version 2.5.0
 ```
 
-Run the same command again with `--accept STAGE` after reviewing a reported
-gate. `golden status WORKSPACE` shows progress; without `--workspace`, the
+Run the same command again with `--accept campaign` after reviewing the final
+candidate. This second command only publishes; it does not rerun completed
+stages. `golden status WORKSPACE` shows progress; without `--workspace`, the
 workspace is `MHDG_REGRESSION_RUN_ROOT/golden_campaigns/RUN_ID`. Resumes reject
 changed inputs and never overwrite a workspace, candidate, or output.
 
@@ -267,29 +269,29 @@ regression_tests/regression.sh golden update diverted_case \
   --workspace /private/path/campaigns/pr03-diverted-refresh-01 \
   --output /private/path/golden_bundles/diverted_case_pr03_golden \
   --bundle-version 1.0.0-pr03-golden.1 \
+  --bootstrap-candidate \
   --build-jobs 8
 ```
 
-The first invocation runs only the full adaptive `mpi4_omp4` cold producer and
-stops at `cold_adaptive_reference`. Its accepted final output is mapped to both
-`warm_restart` and `warm_reference`; workflow `outputs` declare these as
-publishable roles without making them cold-run inputs. Inspect status and then
-accept the gate with the otherwise identical update command:
+The first invocation runs the full adaptive `mpi4_omp4` cold producer, maps its
+final output to `warm_restart` and `warm_reference`, generates a reconverged
+warm reference, runs the warm-layout and race checks, and finishes with final
+warm verification. It then stops at `awaiting_acceptance` without publishing.
+Inspect status and the reports below the workspace, then repeat the identical
+update command with `--accept campaign`:
 
 ```bash
 regression_tests/regression.sh golden status \
   /private/path/campaigns/pr03-diverted-refresh-01
 
 # Add this to the identical `golden update` command:
---accept cold_adaptive_reference
+--accept campaign
 ```
 
-That continuation generates a reconverged warm reference and stops at
-`warm_reference`. After reviewing it, continue with `--accept warm_reference`.
-The campaign then runs all-layout warm checks, the diverted two-step race
-matrix, final warm verification, and atomically publishes the golden bundle.
 If a run is interrupted, repeat the identical command without `--accept`; the
-recorded stage resumes. Never delete or reuse the workspace or output path.
+recorded stage resumes. `--bootstrap-candidate` is only for the first diverted
+promotion; future refreshes start from the accepted golden and omit it. Never
+delete or reuse the workspace or output path.
 
 Refresh the limited golden with the same lifecycle but `legacy_case`, an
 accepted golden source settings file, and distinct run/workspace/output names:
@@ -304,8 +306,10 @@ regression_tests/regression.sh golden update legacy_case \
   --build-jobs 8
 ```
 
-It pauses at `cold_matrix`, `warm_reference`, and `impurity_references`; review
-and accept each reported gate with the identical command plus `--accept ID`.
+It runs through the cold matrix, warm reference, impurity references, smoke and
+race checks, and final verification in one invocation. Review the composed
+candidate once, then publish it with the identical command plus
+`--accept campaign`.
 
 The `legacy_case` order was checked against the accepted PR 02 record: clean
 builds at `7ce486f`, its full cold-matrix refresh, the passing disabled

@@ -63,7 +63,7 @@ class GoldenUpdateTests(unittest.TestCase):
         )
         self.validate_published = self._patch("_validate_published")
 
-    def test_update_stops_at_gate_then_continues_in_order(self) -> None:
+    def test_update_runs_through_then_publishes_after_campaign_acceptance(self) -> None:
         suites = []
 
         def run_suite(*args, **kwargs):
@@ -73,27 +73,8 @@ class GoldenUpdateTests(unittest.TestCase):
 
         self.run_suite.side_effect = run_suite
         self.assertEqual(self._run(), 0)
-        self.assertEqual(suites, [("cold_matrix", False, False)])
         state = self._state()
         self.assertEqual(state["status"], "awaiting_acceptance")
-        self.assertEqual(state["stages"][0]["status"], "awaiting_acceptance")
-        self.assertEqual(self._run("--accept", "cold_matrix"), 0)
-        self.assertEqual(suites[-1][0], "warm")
-        self.assertEqual(
-            self._state()["stages"][1]["status"],
-            "awaiting_acceptance",
-        )
-        self.assertEqual(self._run("--accept", "warm_reference"), 0)
-        self.assertEqual(
-            [suite for suite, _, _ in suites[-2:]],
-            ["impurity_references", "impurity_references"],
-        )
-        self.assertEqual(
-            self._state()["stages"][3]["status"],
-            "awaiting_acceptance",
-        )
-        self.assertEqual(self._run("--accept", "impurity_references"), 0)
-
         self.assertEqual(
             [suite for suite, _, _ in suites],
             [
@@ -109,6 +90,13 @@ class GoldenUpdateTests(unittest.TestCase):
                 "impurity_mixture",
             ],
         )
+        self.assertEqual(state["acceptance"]["status"], "pending")
+        self.assertEqual(
+            state["acceptance"]["required_stages"],
+            ["cold_matrix", "warm_reference", "impurity_references"],
+        )
+        self.assertFalse(self.output.exists())
+        self.assertEqual(self._run("--accept", "campaign"), 0)
         self.assertEqual(self.promote_bundle.call_count, 1)
         self.assertEqual(self.promote_mapped_bundle.call_count, 3)
         calls = self.run_suite.call_args_list
@@ -135,6 +123,7 @@ class GoldenUpdateTests(unittest.TestCase):
             state["verification_candidate"]["root"],
             state["active_bundle"],
         )
+        self.assertEqual(state["acceptance"]["status"], "accepted")
         self.assertIsNotNone(state["stages"][0].get("accepted_utc"))
         self.assertTrue(self.output.exists())
         self.assertEqual(self.publish_campaign_bundle.call_count, 1)
@@ -156,11 +145,12 @@ class GoldenUpdateTests(unittest.TestCase):
         self.assertEqual(self._run("--only", "warm"), 0)
         state = self._state()
         self.assertEqual(state["stages"][0]["status"], "skipped")
-        self.assertEqual(state["stages"][1]["status"], "awaiting_acceptance")
+        self.assertEqual(state["stages"][1]["status"], "completed")
+        self.assertEqual(state["status"], "awaiting_acceptance")
         self.assertEqual(len(state["warnings"]), 1)
 
         self.assertEqual(
-            self._run("--only", "warm", "--accept", "warm_reference"),
+            self._run("--only", "warm", "--accept", "campaign"),
             0,
         )
         self.assertEqual(
@@ -188,8 +178,10 @@ class GoldenUpdateTests(unittest.TestCase):
             self.assertEqual(self._run(), 1)
             self.assertEqual(self._run(), 0)
 
-        self.assertEqual(calls, [False, True])
-        self.assertEqual(self._state()["stages"][0]["status"], "awaiting_acceptance")
+        self.assertEqual(calls[:2], [False, True])
+        self.assertEqual(len(calls), 11)
+        self.assertEqual(self._state()["stages"][0]["status"], "completed")
+        self.assertEqual(self._state()["status"], "awaiting_acceptance")
 
     def test_changed_source_settings_reject_resume(self) -> None:
         self.assertEqual(self._run(), 0)
@@ -200,20 +192,9 @@ class GoldenUpdateTests(unittest.TestCase):
 
         self.assertIn("campaign inputs changed", errors.getvalue())
 
-    def test_candidate_bootstrap_must_be_declared(self) -> None:
+    def test_candidate_bootstrap_must_be_explicit(self) -> None:
         self.harness.set_bundle_class("candidate")
-        declaration = golden_update._load_declaration(
-            golden_update.REGRESSION_ROOT / "golden_campaigns.json",
-            "legacy_case",
-        )
-        declaration["source_bundle_class"] = "candidate"
-
-        with patch.object(
-            golden_update,
-            "_load_declaration",
-            return_value=declaration,
-        ):
-            self.assertEqual(self._run(), 0)
+        self.assertEqual(self._run("--bootstrap-candidate"), 0)
 
         self.assertEqual(self.run_suite.call_args.args[7], "candidate")
         self.assertEqual(
