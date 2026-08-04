@@ -28,9 +28,12 @@ CONTAINS
     REAL*8, DIMENSION(:), INTENT(IN)        :: x, y, t
     REAL*8, DIMENSION(:, :), INTENT(OUT)     :: u
     REAL*8, DIMENSION(SIZE(u, 1), phys%npv)  :: up
-    INTEGER:: i, j, ind, N1D, N2D
+    INTEGER:: i, j, ind, N1D, N2D, inn_pv, ik_pv
     REAL*8 :: a, b, r, xx, yy, tt, xmax, xmin, ymax, ymin, xm, ym
 
+
+    inn_pv = phys%idx_rhon_pv
+    ik_pv = phys%idx_k_pv
 
     u = 0.
     up = 0.
@@ -92,9 +95,9 @@ CONTAINS
              up(ind, 3) = 18.
              up(ind, 4) = 18.
 #ifdef NEUTRAL
-             up(ind,11) = 0.
+             up(ind,inn_pv) = 0.
 #ifdef KEQUATION
-             up(ind,12) = 1.8e-5
+             up(ind,ik_pv) = 1.8e-5
 #endif
 #endif
           CASE (64)
@@ -1228,10 +1231,13 @@ CONTAINS
     real*8, dimension(:), intent(IN)         :: x, y
     real*8, dimension(:, :), intent(OUT)     :: u
     real*8, dimension(size(u, 1), phys%npv)  :: up
-    integer                                  :: i
+    integer                                  :: i, inn_pv, ik_pv
     real*8                                   :: a, r(size(x))
     real*8                                   :: sigma,fluxel(refElPol%Nnodes2d)
     real*8                                   :: xmax, xmin, ymax, ymin, xm, ym
+
+    inn_pv = phys%idx_rhon_pv
+    ik_pv = phys%idx_k_pv
 
     up = 0.
     a = 2*pi
@@ -1285,9 +1291,9 @@ CONTAINS
          up(:, 4) = 18.
        ENDIF
 #ifdef NEUTRAL
-       up(:,11)= 1.e-8
+       up(:,inn_pv)= 1.e-8
 #ifdef KEQUATION
-       up(:,12)= 1.8e-5
+       up(:,ik_pv)= 1.8e-5
 #endif
 #endif
 
@@ -1302,9 +1308,9 @@ CONTAINS
        up(:, 3) = 18.
        up(:, 4) = 18.
 #ifdef NEUTRAL
-       up(:,11)= 1.e-8
+       up(:,inn_pv)= 1.e-8
 #ifdef KEQUATION
-       up(:,12)= 1.e-5
+       up(:,ik_pv)= 1.e-5
 #endif
 #endif
     CASE (65)
@@ -1329,9 +1335,9 @@ CONTAINS
        !  up(:, 3) = 18.*exp(-((x*phys%lscale - xm*phys%lscale)**2 + (y*phys%lscale - ym*phys%lscale)**2)/(2*sigma**2))
        !  up(:, 4) = 18.*exp(-((x*phys%lscale - xm*phys%lscale)**2 + (y*phys%lscale - ym*phys%lscale)**2)/(2*sigma**2))
 #ifdef NEUTRAL
-       up(:,11) = 1.e-8
+       up(:,inn_pv) = 1.e-8
 #ifdef KEQUATION
-       up(:,12)= 1.8e-5
+       up(:,ik_pv)= 1.8e-5
 #endif
 #endif
     CASE DEFAULT
@@ -1352,6 +1358,12 @@ CONTAINS
     REAL*8, DIMENSION(SIZE(u, 1), phys%npv)  :: upx, upy
     REAL*8, DIMENSION(SIZE(u, 1), phys%npv)  :: up
     REAL*8 :: a
+    INTEGER :: inn_eq, inn_pv, ik_eq, ik_pv
+
+    inn_eq = phys%idx_rhon_eq
+    inn_pv = phys%idx_rhon_pv
+    ik_eq = phys%idx_k_eq
+    ik_pv = phys%idx_k_pv
 
     upx = 0.
     upy = 0.
@@ -1415,11 +1427,11 @@ CONTAINS
     ux(:, 4) = (upx(:, 1)*up(:, 4) + up(:, 1)*upx(:, 4))
     uy(:, 4) = (upy(:, 1)*up(:, 4) + up(:, 1)*upy(:, 4))
 #ifdef NEUTRAL
-    ux(:,5) = upx(:,5)
-    uy(:,5) = upy(:,5)
+    ux(:,inn_eq) = upx(:,inn_pv)
+    uy(:,inn_eq) = upy(:,inn_pv)
 #ifdef KEQUATION
-    ux(:,6) = upx(:,6)*up(:,6)
-    uy(:,6) = upy(:,6)*up(:,6)
+    ux(:,ik_eq) = upx(:,ik_pv)*up(:,ik_pv)
+    uy(:,ik_eq) = upy(:,ik_pv)*up(:,ik_pv)
 #endif
 #endif
   END SUBROUTINE analytical_gradient

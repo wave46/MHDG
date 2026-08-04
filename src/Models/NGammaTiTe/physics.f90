@@ -72,29 +72,64 @@ MODULE physics
 CONTAINS
 
   !*******************************************
+  ! Set model layout bookkeeping
+  !*******************************************
+  SUBROUTINE set_model_layout()
+
+    phys%idx_rhon_eq = 0
+    phys%idx_gamman_eq = 0
+    phys%idx_k_eq = 0
+    phys%idx_rhon_pv = 0
+    phys%idx_un_pv = 0
+    phys%idx_k_pv = 0
+
+    phys%Neq = 4
+    phys%npv = 10
+    simpar%model = 'N-Gamma-Ti-Te'
+
+#ifdef NEUTRAL
+    phys%idx_rhon_eq = 5
+    phys%idx_rhon_pv = 11
+    phys%Neq = phys%idx_rhon_eq
+    phys%npv = phys%idx_rhon_pv
+    simpar%model = 'N-Gamma-Ti-Te-Neutral'
+#endif
+
+#ifdef NEUTRALGAMMA
+    IF (phys%idx_rhon_eq == 0) THEN
+      phys%idx_rhon_eq = 5
+      phys%idx_rhon_pv = 11
+    END IF
+    phys%idx_gamman_eq = phys%idx_rhon_eq + 1
+    phys%idx_un_pv = phys%idx_rhon_pv + 1
+    phys%Neq = phys%idx_gamman_eq
+    phys%npv = phys%idx_un_pv
+    simpar%model = 'N-Gamma-Ti-Te-NeutralGamma'
+#endif
+
+#ifdef KEQUATION
+    phys%idx_k_eq = phys%Neq + 1
+    phys%idx_k_pv = phys%npv + 1
+    phys%Neq = phys%idx_k_eq
+    phys%npv = phys%idx_k_pv
+#ifdef NEUTRALGAMMA
+    simpar%model = 'N-Gamma-Ti-Te-NeutralGamma-k'
+#else
+#ifdef NEUTRAL
+    simpar%model = 'N-Gamma-Ti-Te-Neutral-k'
+#endif
+#endif
+#endif
+
+  END SUBROUTINE set_model_layout
+
+  !*******************************************
   ! Convert physical variable to conservative
   ! variables
   !*******************************************
   SUBROUTINE initPhys()
 
-    ! number of equation of the problem
-    phys%Neq = 4
-#ifdef NEUTRAL
-    phys%Neq = 5
-#ifdef KEQUATION
-    !so far we only use k equation with neutrals and the convention is that the k-equation is always the last
-    phys%Neq = 6
-#endif
-#endif
-
-    ! number of physical variables
-    phys%npv = 10
-#ifdef NEUTRAL
-    phys%npv = 11
-#ifdef KEQUATION
-    phys%npv = 12
-#endif
-#endif
+    CALL set_model_layout()
 
     ALLOCATE (phys%phyVarNam(phys%npv))
     ALLOCATE (phys%conVarNam(phys%Neq))
@@ -113,32 +148,18 @@ CONTAINS
     phys%phyVarNam(8) = "Te"  ! temperature of electrons
     phys%phyVarNam(9) = "Csi" ! sound speed
     phys%phyVarNam(10)= "M"   ! Mach
-#ifdef NEUTRAL
-    phys%phyVarNam(11)= "rhon"   ! density neutral
-#ifdef KEQUATION
-    phys%phyVarNam(12)= "k"   ! turbulent energy
-#endif
-#endif
+    IF (phys%idx_rhon_pv > 0) phys%phyVarNam(phys%idx_rhon_pv) = "rhon" ! neutral density
+    IF (phys%idx_un_pv > 0) phys%phyVarNam(phys%idx_un_pv) = "un" ! neutral parallel velocity
+    IF (phys%idx_k_pv > 0) phys%phyVarNam(phys%idx_k_pv) = "k" ! turbulent energy
 
     ! Set the name of the conservative variables
     phys%conVarNam(1) = "rho"   ! U1 = rho
     phys%conVarNam(2) = "Gamma" ! U2 = rho*u
     phys%conVarNam(3) = "nEi"   ! U3 = rho*Ei
     phys%conVarNam(4) = "nEe"   ! U4 = rho*Ee
-#ifdef NEUTRAL
-    phys%conVarNam(5) = "rhon"  ! U5 = rhon
-#ifdef KEQUATION
-    phys%conVarNam(6) = "k"  ! U6 = k
-#endif
-#endif
-
-    simpar%model = 'N-Gamma-Ti-Te'
-#ifdef NEUTRAL
-    simpar%model = 'N-Gamma-Ti-Te-Neutral'
-#ifdef KEQUATION
-    simpar%model = 'N-Gamma-Ti-Te-Neutral-k'
-#endif
-#endif
+    IF (phys%idx_rhon_eq > 0) phys%conVarNam(phys%idx_rhon_eq) = "rhon" ! neutral density
+    IF (phys%idx_gamman_eq > 0) phys%conVarNam(phys%idx_gamman_eq) = "Gamman" ! neutral momentum
+    IF (phys%idx_k_eq > 0) phys%conVarNam(phys%idx_k_eq) = "k" ! turbulent energy
     simpar%Ndim = 2
 #ifdef TOR3D
     simpar%Ndim = 3
@@ -160,21 +181,19 @@ CONTAINS
     simpar%physvar_refval(8) = simpar%refval_temperature
     simpar%physvar_refval(9) = simpar%refval_speed
     simpar%physvar_refval(10) = 1.
-#ifdef NEUTRAL
-    simpar%physvar_refval(11) = simpar%refval_neutral
+    IF (phys%idx_rhon_pv > 0) simpar%physvar_refval(phys%idx_rhon_pv) = simpar%refval_neutral
+    IF (phys%idx_un_pv > 0) simpar%physvar_refval(phys%idx_un_pv) = simpar%refval_speed
 #ifdef KEQUATION
-    simpar%physvar_refval(12) = simpar%refval_k
-#endif
+    IF (phys%idx_k_pv > 0) simpar%physvar_refval(phys%idx_k_pv) = simpar%refval_k
 #endif
     simpar%consvar_refval(1) = simpar%refval_density
     simpar%consvar_refval(2) = simpar%refval_momentum
     simpar%consvar_refval(3) = simpar%refval_specenergydens
     simpar%consvar_refval(4) = simpar%refval_specenergydens
-#ifdef NEUTRAL
-    simpar%consvar_refval(5) = simpar%refval_neutral
+    IF (phys%idx_rhon_eq > 0) simpar%consvar_refval(phys%idx_rhon_eq) = simpar%refval_neutral
+    IF (phys%idx_gamman_eq > 0) simpar%consvar_refval(phys%idx_gamman_eq) = simpar%refval_momentum
 #ifdef KEQUATION
-    simpar%consvar_refval(6) = simpar%refval_k
-#endif
+    IF (phys%idx_k_eq > 0) simpar%consvar_refval(phys%idx_k_eq) = simpar%refval_k
 #endif
 #ifdef EXPANDEDCX
 #ifdef AMJUELCX
@@ -571,9 +590,11 @@ CONTAINS
     ua(:, 3) = up(:, 1)*up(:, 3)
     ua(:, 4) = up(:, 1)*up(:, 4)
 #ifdef NEUTRAL
-    ua(:,5) = ABS(up(:,11))
+    IF (phys%idx_rhon_eq > 0 .AND. phys%idx_rhon_pv > 0) &
+      &ua(:,phys%idx_rhon_eq) = ABS(up(:,phys%idx_rhon_pv))
 #ifdef KEQUATION
-    ua(:,6) = ABS(up(:,12))
+    IF (phys%idx_k_eq > 0 .AND. phys%idx_k_pv > 0) &
+      &ua(:,phys%idx_k_eq) = ABS(up(:,phys%idx_k_pv))
 #endif
 #endif
 
@@ -601,9 +622,11 @@ CONTAINS
     up(:, 9) = SQRT(max((up(:, 5) + up(:, 6))/U1*phys%Mref,1e-20))                        ! sound speed
     up(:, 10) = up(:, 2)/up(:, 9)                                           ! Mach
 #ifdef NEUTRAL
-    up(:,11) = ABS(ua(:,5))                                                 ! density neutral
+    IF (phys%idx_rhon_eq > 0 .AND. phys%idx_rhon_pv > 0) &
+      &up(:,phys%idx_rhon_pv) = ABS(ua(:,phys%idx_rhon_eq)) ! neutral density
 #ifdef KEQUATION
-    up(:,12) = ABS(ua(:,6))                                                ! turbulent energy
+    IF (phys%idx_k_eq > 0 .AND. phys%idx_k_pv > 0) &
+      &up(:,phys%idx_k_pv) = ABS(ua(:,phys%idx_k_eq)) ! turbulent energy
 #endif
 #endif
 
@@ -763,7 +786,7 @@ CONTAINS
     CALL compute_sigmaviz(U, sigmaviz)
     CALL compute_sigmavnn(U, sigmavnn)
     CALL compute_sigmavcx(U, sigmavcx)
-    denom = U(1)*(sigmaviz + sigmavcx) + U(5)*sigmavnn
+    denom = U(1)*(sigmaviz + sigmavcx) + U(phys%idx_rhon_eq)*sigmavnn
   ENDSUBROUTINE compute_neutral_diffusion_denominator
 
   SUBROUTINE compute_dneutral_diffusion_denominator_dU(U, ddenom_dU)
@@ -779,9 +802,10 @@ CONTAINS
     CALL compute_dsigmavnn_dU(U,dsigmavnn_dU)
     CALL compute_dsigmavcx_dU(U,dsigmavcx_dU)
 
-    ddenom_dU = U(1)*(dsigmaviz_dU + dsigmavcx_dU) + U(5)*dsigmavnn_dU
+    ddenom_dU = U(1)*(dsigmaviz_dU + dsigmavcx_dU) + &
+      &U(phys%idx_rhon_eq)*dsigmavnn_dU
     ddenom_dU(1) = ddenom_dU(1) + sigmaviz + sigmavcx
-    ddenom_dU(5) = ddenom_dU(5) + sigmavnn
+    ddenom_dU(phys%idx_rhon_eq) = ddenom_dU(phys%idx_rhon_eq) + sigmavnn
   ENDSUBROUTINE compute_dneutral_diffusion_denominator_dU
 
   SUBROUTINE compute_Dnn(U, Dnn)
@@ -809,6 +833,7 @@ CONTAINS
   SUBROUTINE jacobianMatrices(U, A)
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: A(:, :)
+    INTEGER             :: inn, ik
     ![ 0,                                           1,                              0,                0; ...
     ! -2/3*U(2)**2/U(1)**2                          4/3*U(2)/U(1)                   2/3,              2/3; ...
     ! -5/3*U(2)*U(3)/U(1)**2+2/3*U(2)**3/U(1)**3    5/3*U(3)/U(1)-U(2)**2/U(1)**2   5/3*U(2)/U(1),    0 ;   ...
@@ -816,6 +841,8 @@ CONTAINS
     ! k equation line
     ! -U(6)*U(2)/U(1)**2,                           U(6)/U(1),                      0,                0,            0,        U(2)/U(1)]
     A = 0.d0
+    inn = phys%idx_rhon_eq
+    ik = phys%idx_k_eq
     IF (switch%decoup) THEN
       A(1, 2) = 1.
 
@@ -830,9 +857,11 @@ CONTAINS
       A(4, 2) = 5./3.*U(4)/U(1)
       A(4, 4) = 5./3.*U(2)/U(1)
 #ifdef KEQUATION
-      A(6, 1) = -U(6)*U(2)/U(1)**2
-      A(6, 2) = U(6)/U(1)
-      A(6, 6) = U(2)/U(1)
+      IF (ik > 0) THEN
+        A(ik, 1) = -U(ik)*U(2)/U(1)**2
+        A(ik, 2) = U(ik)/U(1)
+        A(ik, ik) = U(2)/U(1)
+      END IF
 #endif
     ELSE
 
@@ -851,18 +880,21 @@ CONTAINS
       A(4, 2) = 5./3.*U(4)/U(1)
       A(4, 4) = 5./3.*U(2)/U(1)
 #ifdef KEQUATION
-      A(6, 1) = -U(6)*U(2)/U(1)**2
-      A(6, 2) = U(6)/U(1)
+      IF (ik > 0) THEN
+        A(ik, 1) = -U(ik)*U(2)/U(1)**2
+        A(ik, 2) = U(ik)/U(1)
       !IF (U(6) >= 0.) THEN
-        A(6, 6) = U(2)/U(1)
+        A(ik, ik) = U(2)/U(1)
       !ENDIF
+      END IF
 #endif
 #ifdef NEUTRAL
 #ifdef NEUTRALCONVECTION
-      A(5, 1) = -U(5)*U(2)/U(1)**2
-      A(5, 2) = U(5)/U(1)
-      A(5, 5) = U(2)/U(1)
-      !A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
+      IF (inn > 0) THEN
+        A(inn, 1) = -U(inn)*U(2)/U(1)**2
+        A(inn, 2) = U(inn)/U(1)
+        A(inn, inn) = U(2)/U(1)
+      END IF
 #endif
 #endif
     END IF
@@ -873,14 +905,16 @@ CONTAINS
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: Anp(:)
     REAL*8              :: cs_n
+    INTEGER             :: inn
 
     Anp = 0.d0
+    inn = phys%idx_rhon_eq
     cs_n = SQRT(ABS(2./3.*(U(3)/U(1) - 1./2.*U(2)**2/U(1)**2)))
 
     Anp(1) = 1./(3.*cs_n)*(U(2)**2/U(1)**3 - U(3)/U(1)**2)
-    Anp(2) = - 1./(3.*cs_n)*U(2)*U(5)/U(1)**2
-    Anp(3) = 1./(3.*cs_n)*U(5)/U(1)
-    Anp(5) = cs_n
+    Anp(2) = - 1./(3.*cs_n)*U(2)*U(inn)/U(1)**2
+    Anp(3) = 1./(3.*cs_n)*U(inn)/U(1)
+    Anp(inn) = cs_n
   ENDSUBROUTINE jacobianMatricesNP
 #endif
 
@@ -890,7 +924,10 @@ CONTAINS
   SUBROUTINE jacobianMatricesFace(U, bn, An)
     REAL*8, INTENT(in)  :: U(:), bn
     REAL*8, INTENT(out) :: An(:, :)
+    INTEGER             :: inn, ik
     An = 0.d0
+    inn = phys%idx_rhon_eq
+    ik = phys%idx_k_eq
     IF (switch%decoup) THEN
       An(1, 2) = 1.
 
@@ -905,9 +942,11 @@ CONTAINS
       An(4, 2) = 5./3.*U(4)/U(1)
       An(4, 4) = 5./3.*U(2)/U(1)
 #ifdef KEQUATION
-      An(6, 1) = -U(6)*U(2)/U(1)**2
-      An(6, 2) = U(6)/U(1)
-      An(6, 6) = U(2)/U(1)
+      IF (ik > 0) THEN
+        An(ik, 1) = -U(ik)*U(2)/U(1)**2
+        An(ik, 2) = U(ik)/U(1)
+        An(ik, ik) = U(2)/U(1)
+      END IF
 #endif
     ELSE
       An(1, 2) = 1.
@@ -925,16 +964,19 @@ CONTAINS
       An(4, 2) = 5./3.*U(4)/U(1)
       An(4, 4) = 5./3.*U(2)/U(1)
 #ifdef KEQUATION
-      An(6, 1) = -U(6)*U(2)/U(1)**2
-      An(6, 2) = U(6)/U(1)
-      An(6, 6) = U(2)/U(1)
+      IF (ik > 0) THEN
+        An(ik, 1) = -U(ik)*U(2)/U(1)**2
+        An(ik, 2) = U(ik)/U(1)
+        An(ik, ik) = U(2)/U(1)
+      END IF
 #endif
 #ifdef NEUTRAL
 #ifdef NEUTRALCONVECTION
-      An(5, 1) = -U(5)*U(2)/U(1)**2
-      An(5, 2) = U(5)/U(1)
-      An(5, 5) = U(2)/U(1)
-      !An(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*An(5,:)
+      IF (inn > 0) THEN
+        An(inn, 1) = -U(inn)*U(2)/U(1)**2
+        An(inn, 2) = U(inn)/U(1)
+        An(inn, inn) = U(2)/U(1)
+      END IF
 #endif
 #endif
     ENDIF
@@ -946,14 +988,16 @@ CONTAINS
     REAL*8, INTENT(in)  :: U(:), bn
     REAL*8, INTENT(out) :: Anpn(:)
     REAL*8              :: cs_n
+    INTEGER             :: inn
 
     Anpn = 0.d0
+    inn = phys%idx_rhon_eq
     cs_n = SQRT(2./3.*(U(3)/U(1) - 1./2.*U(2)**2/U(1)**2))
 
     Anpn(1) = 1./(3.*cs_n)*(U(2)**2/U(1)**3 - U(3)/U(1)**2)
-    Anpn(2) = - 1./(3.*cs_n)*U(2)*U(5)/U(1)**2
-    Anpn(3) = 1./(3.*cs_n)*U(5)/U(1)
-    Anpn(5) = cs_n
+    Anpn(2) = - 1./(3.*cs_n)*U(2)*U(inn)/U(1)**2
+    Anpn(3) = 1./(3.*cs_n)*U(inn)/U(1)
+    Anpn(inn) = cs_n
 
     Anpn = bn*Anpn
   ENDSUBROUTINE jacobianMatricesFaceNP
@@ -966,8 +1010,10 @@ CONTAINS
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: A(:, :)
     REAL*8              :: auxi, auxe
+    INTEGER             :: inn
 
     A = 0.
+    inn = phys%idx_rhon_eq
     auxi = (5.-2.*phys%Gmbohm)/3.
     auxe = (5.-2.*phys%Gmbohme)/3.
     A(1, 1) = -auxi*(U(2)**3/U(1)**3 - U(2)*U(3)/U(1)**2)
@@ -980,10 +1026,11 @@ CONTAINS
 
 #ifdef NEUTRAL
 #ifdef NEUTRALCONVECTION
-    A(5, 1) = -U(5)*U(2)/U(1)**2
-    A(5, 2) = U(5)/U(1)
-    A(5, 5) = U(2)/U(1)
-    !A(5, :) = simpar%refval_time/(simpar%refval_length**2*phys%diff_n)*A(5,:)
+    IF (inn > 0) THEN
+      A(inn, 1) = -U(inn)*U(2)/U(1)**2
+      A(inn, 2) = U(inn)/U(1)
+      A(inn, inn) = U(2)/U(1)
+    END IF
 #endif
 #endif
 
@@ -994,14 +1041,16 @@ CONTAINS
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: Anp(:)
     REAL*8              :: cs_n
+    INTEGER             :: inn
 
     Anp = 0.d0
+    inn = phys%idx_rhon_eq
     cs_n = SQRT(ABS(2./3.*(U(3)/U(1) - 1./2.*U(2)**2/U(1)**2)))
 
     Anp(1) = 1./(3.*cs_n)*(U(2)**2/U(1)**3 - U(3)/U(1)**2)
-    Anp(2) = - 1./(3.*cs_n)*U(2)*U(5)/U(1)**2
-    Anp(3) = 1./(3.*cs_n)*U(5)/U(1)
-    Anp(5) = cs_n
+    Anp(2) = - 1./(3.*cs_n)*U(2)*U(inn)/U(1)**2
+    Anp(3) = 1./(3.*cs_n)*U(inn)/U(1)
+    Anp(inn) = cs_n
   ENDSUBROUTINE jacobianMatricesBohmNP
 #endif
 
@@ -1013,6 +1062,9 @@ CONTAINS
     REAL*8, INTENT(in)  :: U(:), Up(:), Q(:,:), b(:), sigmaviz, sigmavcx
     REAL*8, INTENT(out) :: Ax(:,:),Ay(:,:)
     REAL*8              :: GradTi(simpar%Ndim), GradTimod, Vnn, Csnn
+    INTEGER             :: inn
+
+    inn = phys%idx_rhon_eq
 
   GradTi(1) = 2./(3*phys%Mref)*( (U(2)**2/U(1)**3 - U(3)/U(1)**2)*Q(1,1) - (U(2)/U(1)**2)*Q(1,2) + 1./U(1)*Q(1,3) )
   GradTi(2) = 2./(3*phys%Mref)*( (U(2)**2/U(1)**3 - U(3)/U(1)**2)*Q(2,1) - (U(2)/U(1)**2)*Q(2,2) + 1./U(1)*Q(2,3) )
@@ -1032,7 +1084,7 @@ CONTAINS
 !  endif
 !  Ax = Ax/simpar%refval_speed
   !Neutral velocity parallel to magnetic field
-  Ax(5,5) = Ax(5,5) - Up(2)*b(1)
+  Ax(inn,inn) = Ax(inn,inn) - Up(2)*b(1)
 
   Ay = 0.d0
 !  if (Csnn .ge. Vnn) then
@@ -1042,7 +1094,7 @@ CONTAINS
 !  endif
 !  Ay = Ay/simpar%refval_speed
   !Neutral velocity parallel to magnetic field
-  Ay(5,5) = Ay(5,5) - Up(2)*b(2)
+  Ay(inn,inn) = Ay(inn,inn) - Up(2)*b(2)
 
   Ax = 0.
   Ay = 0.
@@ -1110,11 +1162,12 @@ CONTAINS
     real*8, intent(out)		 :: d_iso(:, :, :), d_ani(:, :, :)
     real*8		              :: iperdiff(size(xy, 1))
 #ifdef NEUTRAL
-    integer             		:: i
+    integer             		:: i, inn
     real*8, dimension(size(u,1))	:: Dnn
 #ifdef KEQUATION
     real*8, dimension(size(u,1))          :: D_k,U6,c_s
     real*8                         :: r
+    integer                        :: ik
 #endif
 #endif
 
@@ -1169,16 +1222,18 @@ CONTAINS
     ENDIF
 #ifndef NEUTRALP
 #ifdef NEUTRAL
+    inn = phys%idx_rhon_eq
 #ifdef KEQUATION
-    U6 = u(:,6)
+    ik = phys%idx_k_eq
+    U6 = u(:,ik)
 #endif
 #ifndef CONSTANTNEUTRALDIFF
     DO i=1,SIZE(u,1)
        CALL compute_Dnn(u(i,:), Dnn(i))
-       d_iso(5,5,i) = Dnn(i)
+       d_iso(inn,inn,i) = Dnn(i)
     END DO
 #else
-    d_iso(5,5,:)=phys%diff_nn
+    d_iso(inn,inn,:)=phys%diff_nn
 #endif
 
 #ifdef KEQUATION
@@ -1216,8 +1271,8 @@ CONTAINS
 
 
     enddo
-    d_iso(6,6,:) = D_k+phys%diff_n
-    d_ani(6,6,:) = d_iso(6,6,:)
+    d_iso(ik,ik,:) = D_k+phys%diff_n
+    d_ani(ik,ik,:) = d_iso(ik,ik,:)
     d_iso(1,1,:) = d_iso(1,1,:) + D_k
     d_iso(2,2,:) = d_iso(2,2,:) + D_k
     d_iso(3,3,:) = d_iso(3,3,:) + D_k
@@ -1228,7 +1283,8 @@ CONTAINS
     !Dnn = sum(Dnn)/size(u,1)
 #endif
 #else
-    d_iso(5,5,:) = 0.
+    inn = phys%idx_rhon_eq
+    d_iso(inn,inn,:) = 0.
 #endif
     d_ani(1, 1, :) = d_iso(1,1,:)
     d_ani(2, 2, :) = d_iso(2,2,:)
@@ -1253,7 +1309,7 @@ CONTAINS
        ENDIF
     ENDIF
 #ifdef NEUTRAL
-    d_ani(5,5,:) = 0.
+    d_ani(phys%idx_rhon_eq,phys%idx_rhon_eq,:) = 0.
 #endif
 
     !*****************************
@@ -1747,7 +1803,7 @@ CONTAINS
     REAL*8             :: niz,U1,U5
     REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     niz = U1*U5
@@ -1759,12 +1815,12 @@ CONTAINS
     REAL*8             :: res(:),U1,U5
     REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     res = 0.
     res(1) = U5
-    res(5) = U1
+    res(phys%idx_rhon_eq) = U1
   ENDSUBROUTINE compute_dniz_dU
 
 
@@ -1794,7 +1850,7 @@ CONTAINS
     REAL*8             :: fGammacx,U2,U5
     REAL*8, PARAMETER :: tol = 1.e-20
     U2 = U(2)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U5<tol) U5=tol
     fGammacx = U2*U5
   ENDSUBROUTINE compute_fGammacx
@@ -1805,11 +1861,11 @@ CONTAINS
     REAL*8             :: res(:),U2,U5
     REAL*8, PARAMETER :: tol = 1.e-20
     U2 = U(2)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U5<tol) U5=tol
     res = 0.
     res(2) = U5
-    res(5) = U2
+    res(phys%idx_rhon_eq) = U2
   ENDSUBROUTINE compute_dfGammacx_dU
 
 
@@ -2623,7 +2679,7 @@ CONTAINS
     real*8             :: fEiiz,U1,U3,U5
     REAL*8, PARAMETER :: tol = 1.e-20
     U3 = U(3)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     U1 = U(1)
     if (U1<tol) U1=tol
     if (U3<tol) U3=tol
@@ -2639,17 +2695,17 @@ CONTAINS
     REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U3 = U(3)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     if (U1<tol) U1=tol
     if (U3<tol) U3=tol
     if (U5<tol) U5=tol
     res = 0.
     res(3) = U5
-    res(5) = U3
+    res(phys%idx_rhon_eq) = U3
     !PSI review
     res(1) = res(1)+0.5*U(2)**2/U1**2*U5
     res(2) = -1.*U(2)/U1*U5
-    res(5) = res(5) - 0.5*U(2)**2/U1
+    res(phys%idx_rhon_eq) = res(phys%idx_rhon_eq) - 0.5*U(2)**2/U1
   ENDSUBROUTINE compute_dfEiiz_dU
 
 
@@ -2687,7 +2743,7 @@ CONTAINS
     REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U2 = U(2)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     fEicx = (U5*U2**2)/U1*0.5
@@ -2700,13 +2756,13 @@ CONTAINS
     REAL*8, PARAMETER :: tol = 1.e-20
     U1 = U(1)
     U2 = U(2)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     res = 0.
     res(1) = -U5*(U2/U1)**2
     res(2) = 2.*U5*U2/U1
-    res(5) = (U2**2)/U1
+    res(phys%idx_rhon_eq) = (U2**2)/U1
     res(:) = res(:)*0.5
   ENDSUBROUTINE compute_dfEicx_dU
 
@@ -2858,7 +2914,7 @@ SUBROUTINE compute_dissip(U, dissip)
     REAL*8             :: U6
     REAL*8             :: dissip
     REAL*8, PARAMETER :: tol = 1.e-10
-  U6 = U(6)
+  U6 = U(phys%idx_k_eq)
   dissip = U6**2
 ENDSUBROUTINE  compute_dissip
 
@@ -2867,10 +2923,10 @@ SUBROUTINE compute_ddissip_du(U, res)
     REAL*8             :: U6
     REAL*8             :: res(:)
     REAL*8, PARAMETER :: tol = 1.e-10
-  U6 = U(6)
+  U6 = U(phys%idx_k_eq)
   !if (U6 < tol) U6 = tol
   res = 0.
-  res(6) = 2.*U6
+  res(phys%idx_k_eq) = 2.*U6
 ENDSUBROUTINE  compute_ddissip_du
 
 #endif
@@ -2889,7 +2945,7 @@ ENDSUBROUTINE  compute_ddissip_du
 	   U2 = U(2)
 	   U3 = U(3)
     U4 = U(4)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U2<tol) U2=tol
     IF (U3<tol) U3=tol
@@ -2925,7 +2981,7 @@ ENDSUBROUTINE  compute_ddissip_du
     U2 = U(2)
 	   U3 = U(3)
 	   U4 = U(4)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     res = 0.
@@ -2952,13 +3008,13 @@ ENDSUBROUTINE  compute_ddissip_du
     U1 = U(1)
     U2 = U(2)
 	   U3 = U(3)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     Vpn(1) = U5*(U2**2/U1**3 - U3/U1**2)
 	   Vpn(2) = - U5*U2/U1**2
 	   Vpn(3) = U5/U1
-	   Vpn(5) = U3/U1 - 1./2.*U2**2/U1**2
+	   Vpn(phys%idx_rhon_eq) = U3/U1 - 1./2.*U2**2/U1**2
   ENDSUBROUTINE computeVpn
 
   SUBROUTINE compute_dVpn_dU(U,dVpn_dU)
@@ -2969,7 +3025,7 @@ ENDSUBROUTINE  compute_ddissip_du
 	   U1 = U(1)
     U2 = U(2)
 	   U3 = U(3)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     dVpn_dU = 0.
@@ -2977,18 +3033,18 @@ ENDSUBROUTINE  compute_ddissip_du
     dVpn_dU(1, 1) = (2.*U3/U1**3 - 3.*U2**2/U1**4)*U5
     dVpn_dU(1, 2) = (2.*U2/U1**3)*U5
 	   dVpn_dU(1, 3) = -U5/U1**2
-   	dVpn_dU(1, 5) = U2**2/U1**3 - U3/U1**2
+	   dVpn_dU(1, phys%idx_rhon_eq) = U2**2/U1**3 - U3/U1**2
 
 	   dVpn_dU(2, 1) = (2.*U2/U1**3)*U5
 	   dVpn_dU(2, 2) = - U5/U1**2
-	   dVpn_dU(2, 5) = - U2/U1**2
+	   dVpn_dU(2, phys%idx_rhon_eq) = - U2/U1**2
 
 	   dVpn_dU(3, 1) = -U5/U1**2
-	   dVpn_dU(3, 5) = 1./U1
+	   dVpn_dU(3, phys%idx_rhon_eq) = 1./U1
 
-	   dVpn_dU(5, 1) = U2**2/U1**3 - U3/U1**2
-    dVpn_dU(5, 2) = -U2/U1**2
-    dVpn_dU(5, 3) = 1./U1
+	   dVpn_dU(phys%idx_rhon_eq, 1) = U2**2/U1**3 - U3/U1**2
+    dVpn_dU(phys%idx_rhon_eq, 2) = -U2/U1**2
+    dVpn_dU(phys%idx_rhon_eq, 3) = 1./U1
   ENDSUBROUTINE compute_dVpn_dU
 
   SUBROUTINE computeGammared(U,res)
@@ -2999,7 +3055,7 @@ ENDSUBROUTINE  compute_ddissip_du
 	   U1 = U(1)
     U2 = U(2)
 	   U3 = U(3)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
 
@@ -3028,7 +3084,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     U2 = U(2)
     U3 = U(3)
     U4 = U(4)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     res = 1.
@@ -3055,7 +3111,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     U2 = U(2)
     U3 = U(3)
     U4 = U(4)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     res = 0.
@@ -3082,7 +3138,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     U2 = U(2)
     U3 = U(3)
     U4 = U(4)
-    U5 = U(5)
+    U5 = U(phys%idx_rhon_eq)
     IF (U1<tol) U1=tol
     IF (U5<tol) U5=tol
     res = 0.
@@ -3119,22 +3175,17 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     integer, intent(in) ::  iel
     real*8, intent(out) :: tau(:, :)
 #ifdef NEUTRAL
-#ifndef KEQUATION
-    REAL*8              :: tau_aux(5)
-    REAL*8,INTENT(IN)   :: diff_iso(5,5,1),diff_ani(5,5,1)
-#else
-    REAL*8              :: tau_aux(6)
-    REAL*8,INTENT(IN)   :: diff_iso(6,6,1),diff_ani(6,6,1)
-#endif
+    REAL*8              :: tau_aux(SIZE(uc))
+    REAL*8,INTENT(IN)   :: diff_iso(:,:),diff_ani(:,:)
 #ifdef NEUTRALP
     REAL*8              :: Dpn
     REAL*8              :: Vpn(simpar%Neq)
 #endif
 #else
-    REAL*8              :: tau_aux(4)
-    REAL*8,INTENT(IN)   :: diff_iso(4,4,1),diff_ani(4,4,1)
+    REAL*8              :: tau_aux(SIZE(uc))
+    REAL*8,INTENT(IN)   :: diff_iso(:,:),diff_ani(:,:)
 #endif
-    integer             :: ndim
+    integer             :: ndim, inn, ik
     real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
     REAL*8              :: q_fs_i, q_fs_e, flux_limiter_i, flux_limiter_e, q_sh_i, q_sh_e
     REAL*8              :: Qpr(simpar%Ndim,simpar%Neq)
@@ -3146,6 +3197,8 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     U4 = uc(4)
 
     tau = 0.
+    inn = phys%idx_rhon_eq
+    ik = phys%idx_k_eq
     ndim = SIZE(n)
     bn = dot_PRODUCT(b(1:ndim), n)
     bnorm = NORM2(b(1:ndim))
@@ -3190,7 +3243,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #endif
        ELSE
 #endif
@@ -3200,7 +3253,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #endif
 #ifdef TOR3D
        ENDIF
@@ -3224,7 +3277,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #endif
        ELSE
 #endif
@@ -3234,7 +3287,7 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
           tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
+        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
 #endif
 #ifdef TOR3D
        ENDIF
@@ -3263,27 +3316,27 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
           tau_aux(4) = tau_aux(4) + phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = phys%diff_nn!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
+        tau_aux(inn) = phys%diff_nn
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + phys%diff_nn!phys%diff_nn
+        tau_aux(inn) = tau_aux(inn) + phys%diff_nn
 #endif
        ELSE
 #endif
         ! Toroidal face
-        tau_aux(1) = tau_aux(1) + diff_iso(1,1,1)*refElPol%ndeg/Mesh%elemSize(iel)
-        tau_aux(2) = tau_aux(2) + diff_iso(2,2,1)*refElPol%ndeg/Mesh%elemSize(iel)
-          tau_aux(3) = tau_aux(3) + diff_iso(3,3,1)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_i*ABS(bn)*phys%diff_pari*(MIN(phys%T_fluxlim_maxi,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
-          tau_aux(4) = tau_aux(4) + diff_iso(4,4,1)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_e*ABS(bn)*phys%diff_pare*(MIN(phys%T_fluxlim_maxe,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
+        tau_aux(1) = tau_aux(1) + diff_iso(1,1)*refElPol%ndeg/Mesh%elemSize(iel)
+        tau_aux(2) = tau_aux(2) + diff_iso(2,2)*refElPol%ndeg/Mesh%elemSize(iel)
+          tau_aux(3) = tau_aux(3) + diff_iso(3,3)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_i*ABS(bn)*phys%diff_pari*(MIN(phys%T_fluxlim_maxi,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
+          tau_aux(4) = tau_aux(4) + diff_iso(4,4)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_e*ABS(bn)*phys%diff_pare*(MIN(phys%T_fluxlim_maxe,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
 #ifndef NEUTRALP
 #ifdef NEUTRAL
-        tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)*refElPol%ndeg/Mesh%elemSize(iel) !! !numer%tau(5) diff_iso(5,5,1)
+        tau_aux(inn) = tau_aux(inn) + diff_iso(inn,inn)*refElPol%ndeg/Mesh%elemSize(iel)
 #ifdef KEQUATION
-        tau_aux(6) = tau_aux(6) + diff_iso(6,6,1)*refElPol%ndeg/Mesh%elemSize(iel)
+        IF (ik > 0) tau_aux(ik) = tau_aux(ik) + diff_iso(ik,ik)*refElPol%ndeg/Mesh%elemSize(iel)
 #endif
 #endif
 #else
-        tau_aux(5) = tau_aux(5) + numer%tau(5)
+        tau_aux(inn) = tau_aux(inn) + numer%tau(inn)
 #endif
 !        ! Toroidal face
 !        tau_aux(1) = tau_aux(1) +  diff_iso(1,1,1)
@@ -3306,9 +3359,9 @@ SUBROUTINE computeAlphaCoeff(U,Q,Vpn,res)
     tau(3, 3) = tau_aux(3)
     tau(4, 4) = tau_aux(4)
 #ifdef NEUTRAL
-    tau(5, 5) = tau_aux(5)
+    tau(inn, inn) = tau_aux(inn)
 #ifdef KEQUATION
-    tau(6,6) = tau_aux(6)
+    IF (ik > 0) tau(ik,ik) = tau_aux(ik)
 #endif
 #endif
   ENDSUBROUTINE computeTauGaussPoints

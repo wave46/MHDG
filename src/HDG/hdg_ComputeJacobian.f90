@@ -1338,7 +1338,7 @@ CONTAINS
       REAL*8,INTENT(IN)             :: ue(:,:),u0e(:,:,:)
       REAL*8,INTENT(OUT)            :: El_n,El_nn
       REAL*8,INTENT(OUT)            :: diff_nn_Vol_el(Ng2D),v_nn_Vol_el(Ng2D,ndim),Xg_el(Ng2D,ndim)
-      INTEGER*4                     :: g,NGauss,i
+      INTEGER*4                     :: g,NGauss,i,inn
       REAL*8                        :: dvolu
       REAL*8                        :: xy(Ng2d,ndim),ueg(Ng2d,neq),u0eg(Ng2d,neq,time%tis)
       REAL*8                        :: force(Ng2d,Neq)
@@ -1369,7 +1369,9 @@ CONTAINS
     real*8                        :: Pi,sigma,x0,A,r
     real*8                        :: th_n = 1.e-14
     real*8                        :: Vnng(Ndim)
-    REAL*8                        :: external_heating_ions_gauss(Ng2d), external_heating_electrons_gauss(Ng2d)
+      REAL*8                        :: external_heating_ions_gauss(Ng2d), external_heating_electrons_gauss(Ng2d)
+
+      inn = phys%idx_rhon_eq
 
       IF (save_tau) THEN
        Xg_el = 0.
@@ -1475,7 +1477,7 @@ CONTAINS
 
 
     if (save_tau) then
-       diff_nn_Vol_el = diff_iso_vol(5,5,:)
+       diff_nn_Vol_el = diff_iso_vol(inn,inn,:)
       ENDIF
 
       IF (switch%shockcp.GT.0) THEN
@@ -1669,7 +1671,7 @@ CONTAINS
       ! Check if total density is costant
       El_n  = El_n  + ueg(g,1)*2*3.1416*dvolu*phys%lscale**3
 #ifdef NEUTRAL
-      El_nn = El_nn + ueg(g,5)*2*3.1416*dvolu*phys%lscale**3
+      El_nn = El_nn + ueg(g,inn)*2*3.1416*dvolu*phys%lscale**3
 #endif
       ! x and y derivatives of the shape functions
       Nxg = iJ11(g)*refElPol%Nxi2D(g,:) + iJ12(g)*refElPol%Neta2D(g,:)
@@ -1748,7 +1750,7 @@ CONTAINS
     real*8,intent(IN)             :: q_cylfl(:)
     real*8,intent(in)         :: omegafl(:)
     real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
-    integer*4                 :: g,NGauss,i,indsave(Ng1d)
+    integer*4                 :: g,NGauss,i,indsave(Ng1d),inn
     real*8                    :: dline,xyDerNorm_g
     real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq)
     real*8                    :: xyf(Ng1d,ndim)
@@ -1767,6 +1769,7 @@ CONTAINS
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: q_cyl(Ng1d)
     real*8                    :: omega(Ng1d)
+    inn = phys%idx_rhon_eq
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
 
@@ -1843,7 +1846,7 @@ CONTAINS
     ENDIF
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
-       diff_nn_Fac_el(indsave) = diff_iso_fac(5,5,:)
+       diff_nn_Fac_el(indsave) = diff_iso_fac(inn,inn,:)
       END IF
 
       IF (switch%shockcp.GT.0) THEN
@@ -1934,7 +1937,7 @@ CONTAINS
     real*8,intent(IN)             :: q_cylfl(:)
     real*8,intent(in)         :: omegafl(:)
     real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
-    integer*4                 :: g,NGauss,i,indsave(Ng1d)
+    integer*4                 :: g,NGauss,i,indsave(Ng1d),inn
     real*8                    :: dline,xyDerNorm_g
     real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq)
     real*8                    :: xyf(Ng1d,ndim)
@@ -1955,6 +1958,7 @@ CONTAINS
     real*8                    :: Vnng(Ndim)
     real*8                    :: q_cyl(Ng1d)
     real*8                    :: omega(Ng1d)
+    inn = phys%idx_rhon_eq
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
 
@@ -2034,7 +2038,7 @@ CONTAINS
 
     if (save_tau) then
        indsave = (ifa -1)*Ngauss + (/(i,i=1,Ngauss)/)
-       diff_nn_Fac_el(indsave) = diff_iso_fac(5,5,:)
+       diff_nn_Fac_el(indsave) = diff_iso_fac(inn,inn,:)
       END IF
 
       IF (switch%shockcp.GT.0) THEN
@@ -2270,7 +2274,7 @@ CONTAINS
     real*8                     :: kcoeff,exb(3)
     integer*4                  :: alpha,beta,ii
 #endif
-    integer*4                 :: i,j,k,iord,z
+    integer*4                 :: i,j,k,iord,z,inn,ik
     real*8,dimension(neq,neq) :: A
     real*8,dimension(neq,Ndim):: APinch
     real*8                    :: Qpr(Ndim,Neq),bb(3)
@@ -2324,6 +2328,9 @@ CONTAINS
         REAL*8 :: kmult(SIZE(Auq,1),SIZE(Auq,2))
 
 
+
+    inn = phys%idx_rhon_eq
+    ik = phys%idx_k_eq
 
     b = b3(1:Ndim)
 
@@ -2498,11 +2505,11 @@ CONTAINS
     call compute_ce(ue,qq,btor,gradBtor,r,omega,q_cyl,ce)
     call compute_dissip(ue,dissip)
     call compute_ddissip_du(ue,ddissip_du)
-    IF ((ue(6)<1.e-20) .or. (ue(1)<1.e-20) .or.(ue(3)<1.e-20) .or. (ue(4)<1.e-20)) THEN
+    IF ((ue(ik)<1.e-20) .or. (ue(1)<1.e-20) .or.(ue(3)<1.e-20) .or. (ue(4)<1.e-20)) THEN
       dissip =  abs(gamma_I)*dissip/phys%k_max
       ddissip_du = abs(gamma_I)
       gamma_I = 0.
-        ELSEIF (ue(6)>phys%k_max) THEN
+        ELSEIF (ue(ik)>phys%k_max) THEN
            dissip =  -1.*ABS(gamma_I)*dissip/phys%k_max
            ddissip_du = -1.*ABS(gamma_I)
       gamma_I = 0.
@@ -2711,8 +2718,8 @@ ENDIF
             rhs(:,i) = rhs(:,i) + Sohmic*(Jtor**2)*Ni
           ENDIF
 #ifndef NEUTRALP
-          ELSEIF (i == 5) THEN
-                 DO j = 1,5
+          ELSEIF (i == inn) THEN
+                 DO j = 1,Neq
               z = i+(j-1)*Neq
                     DO k = 1,Ndim
                 Auu(:,:,z) =Auu(:,:,z) + (NxyzNi(:,:,k)*Dnn_dU(j)*Qpr(k,i))
@@ -2724,25 +2731,25 @@ ENDIF
                  ENDDO
 #endif
 #ifdef KEQUATION
-        ELSEIF (i==6) THEN
-          DO j=1,6
+        ELSEIF (i==ik) THEN
+          DO j=1,Neq
             z = i+(j-1)*Neq
-                    IF (j==6) THEN
+                    IF (j==ik) THEN
               Auu(:,:,z) = Auu(:,:, z) - (gamma_I-ddissip_du(j))*NNi
             ENDIF
           END DO
           rhs(:,i) = rhs(:,i) + dissip*Ni
 #endif
 #ifdef NEUTRALP
-		      ELSEIF (i == 5) THEN
-		         DO j = 1,5
+		      ELSEIF (i == inn) THEN
+		         DO j = 1,Neq
 			           DO k = 1,Ndim
 			              z = i+(k-1)*Neq+(j-1)*Neq*Ndim
                     Auu(:,:,i+(j-1)*Neq) = Auu(:,:,i+(j-1)*Neq) + (Dpn*Taupn(k,j) + dDpn_dU(j)*gmpn(k))*NxyzNi(:,:,k)
                     !Auu(:,:,i+(j-1)*Neq) = Auu(:,:,i+(j-1)*Neq) - Gammaredpn*(Dpn*Taui(k,j) + dDpn_dU(j)*gmipn(k))*NxyzNi(:,:,k)
                     Auq(:,:,z) = Auq(:,:,z) + Dpn*Vpn(j)*NxyzNi(:,:,k)
                     !Auq(:,:,z) = Auq(:,:,z) - Gammaredpn*Dpn*Vveci(j)*NxyzNi(:,:,k)
-                    IF (j == 5) THEN
+                    IF (j == inn) THEN
                        Auq(:,:,z) = Auq(:,:,z) + Dnn*NxyzNi(:,:,k)
                     END IF
 				         END DO
@@ -2757,8 +2764,8 @@ ENDIF
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
     ! Contribution from linearized dk term assuming so far that Dk is the same in all plasma equations
-        if (i .ne. 5) then
-          DO j = 1,6
+        if (i .ne. inn) then
+          DO j = 1,Neq
             z = i+(j-1)*Neq
             do k = 1,Ndim
               Auu(:,:,z) =Auu(:,:,z) + ddk_dU(j)*Qpr(k,i)*(NxyzNi(:,:,k)-b(k)*NNxy)
@@ -2994,7 +3001,7 @@ ENDIF
       real*8                     :: kcoeff,exb(3)
       integer*4                  :: alpha,beta,ii
 #endif
-      integer*4                  :: i,j,k
+      integer*4                  :: i,j,k,inn,ik
       integer*4,dimension(size(ind_asf))  :: ind_if,ind_jf,ind_kf
       real*8,dimension(neq,neq) :: A
       real*8,dimension(neq,Ndim):: APinch
@@ -3025,6 +3032,9 @@ ENDIF
    	  real*8                    :: Anp(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq),dDpn_dU(Neq)
 #endif
 #endif
+
+      inn = phys%idx_rhon_eq
+      ik = phys%idx_k_eq
 
       b = b3(1:Ndim)
       bb = b3
@@ -3355,7 +3365,7 @@ ENDIF
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
 #ifndef NEUTRALP
-      ELSEIF (i == 5) THEN
+      ELSEIF (i == inn) THEN
         DO j=1,Neq
           ind_jf = ind_asf+j
                     DO k=1,Ndim
@@ -3370,7 +3380,7 @@ ENDIF
         elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
 #endif
 #ifdef NEUTRALP
-       ELSEIF (i == 5) THEN
+       ELSEIF (i == inn) THEN
           DO j = 1,Neq
              ind_jf = ind_asf + j
              DO k = 1,Ndim
@@ -3381,7 +3391,7 @@ ENDIF
                        elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
                 kmult = Dpn*Vpn(j)*n(k)*NNif
                 !kmult = kmult - Gammaredpn*Dpn*Vveci(j)*n(k)*NNif
-                IF (j == 5) THEN
+                IF (j == inn) THEN
                    kmult = kmult + Dnn*n(k)*NNif
                 END IF
                 elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) = elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) - kmult
@@ -3396,7 +3406,7 @@ ENDIF
        END IF
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
-       if (i .ne. 5) then
+       if (i .ne. inn) then
         DO j=1,Neq
           ind_jf = ind_asf+j
           do k=1,Ndim
@@ -3476,7 +3486,7 @@ ENDIF
       integer*4                 :: alpha,beta,ii
       real*8                    :: exb(3),kcoeff
 #endif
-      integer*4                 :: i,j,k
+      integer*4                 :: i,j,k,inn,ik
       integer*4,dimension(Npfl)  :: ind_if,ind_jf,ind_kf
       real*8,dimension(neq,neq) :: A
       real*8,dimension(neq,Ndim):: APinch
@@ -3507,6 +3517,9 @@ ENDIF
       real*8                    :: Anp(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq),dDpn_dU(Neq)
 #endif
 #endif
+
+      inn = phys%idx_rhon_eq
+      ik = phys%idx_k_eq
 
       b = b3(1:Ndim)
       bb = b3
@@ -3841,7 +3854,7 @@ END IF
                  kmultf = flux_limiter_e**2*coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
 #ifndef NEUTRALP
-        ELSEIF (i == 5) THEN
+        ELSEIF (i == inn) THEN
             DO j=1,Neq
               ind_jf = ind_asf+j
               DO k = 1,Ndim
@@ -3855,7 +3868,7 @@ END IF
 #endif
 
 #ifdef NEUTRALP
-       ELSEIF (i == 5) THEN
+       ELSEIF (i == inn) THEN
           DO j = 1,Neq
              ind_jf = ind_asf + j
              DO k = 1,Ndim
@@ -3865,7 +3878,7 @@ END IF
                 elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
                 kmult = Dpn*Vpn(j)*n(k)*NNif
                 !kmult = kmult - Gammaredpn*Dpn*Vveci(j)*n(k)*NNif
-                IF (j == 5) THEN
+                IF (j == inn) THEN
                    kmult = kmult + Dnn*n(k)*NNif
                 END IF
                 elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) = elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) - kmult
@@ -3879,7 +3892,7 @@ END IF
 
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
-        if (i .ne. 5) then
+        if (i .ne. inn) then
           DO j = 1,Neq
             ind_jf = ind_asf + j
             DO k = 1,Ndim
@@ -3972,6 +3985,7 @@ END IF
       REAL*8, INTENT(IN), OPTIONAL :: cooling_factor,dcooling_factor_dU(:)
 #endif
              REAL*8             :: RE,Sn(:,:),Sn0(:)
+             INTEGER            :: inn
 #ifdef TEMPERATURE
              REAL*8             :: recombination_energy
 #endif
@@ -3979,6 +3993,7 @@ END IF
       Sn   = 0.
       Sn0  = 0.
       RE   = 0.
+      inn  = phys%idx_rhon_eq
 #ifdef TEMPERATURE
       recombination_energy = neutral_rt%recombination_energy
 #endif
@@ -4024,7 +4039,7 @@ END IF
 
 #endif
       !Assembly Source Terms in neutral density equation
-      Sn(5,:) = -Sn(1,:)
+      Sn(inn,:) = -Sn(1,:)
 
       !Assembly RHS Neutral Source Terms
       Sn0(1)    = niz*sigmaviz - nrec*sigmavrec
@@ -4044,7 +4059,7 @@ END IF
         Sn0(4)    = Sn0(4) - nrec*cooling_factor
       ENDIF
 #endif
-      Sn0(5)  = -Sn0(1)
+      Sn0(inn)  = -Sn0(1)
 
     ENDSUBROUTINE assemblyNeutral
 #endif

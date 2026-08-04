@@ -204,6 +204,12 @@ MODULE types
   TYPE Physics_type
      INTEGER                   :: neq ! Number of equations
      INTEGER                   :: npv ! Number of physical variables
+     INTEGER                   :: idx_rhon_eq = 0 ! Conservative-variable index of neutral density equation, 0 if absent
+     INTEGER                   :: idx_gamman_eq = 0 ! Conservative-variable index of neutral momentum equation, 0 if absent
+     INTEGER                   :: idx_k_eq = 0 ! Conservative-variable index of k equation, 0 if absent
+     INTEGER                   :: idx_rhon_pv = 0 ! Physical-variable index of neutral density, 0 if absent
+     INTEGER                   :: idx_un_pv = 0 ! Physical-variable index of neutral parallel velocity, 0 if absent
+     INTEGER                   :: idx_k_pv = 0 ! Physical-variable index of turbulent energy, 0 if absent
      REAL*8                    :: diff_n, diff_u ! Perpendicular diffusion in the continuity and momentum equation
      REAL*8                    :: a ! Proportionality constant between pressure and density for isothermal model (p = a*rho)
      REAL*8                    :: dfcoef ! Constant related to the diamagnetic drift velocity

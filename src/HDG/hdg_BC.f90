@@ -712,7 +712,8 @@ CONTAINS
 
     if (save_tau) then
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
-       phys%diff_nn_Bou(indtausave) = diff_iso_fac(5,5,:)
+       phys%diff_nn_Bou(indtausave) = &
+         &diff_iso_fac(phys%idx_rhon_eq,phys%idx_rhon_eq,:)
      ENDIF
 
     ! Physical variables at Gauss points (division by 0 during convergence test!!!)
@@ -1874,7 +1875,7 @@ CONTAINS
     logical          :: ntang
     real*8           :: qfg(:)
     real*8           :: bn,Abohm(Neq,Neq),APinch(Neq,Ndim)
-    integer          :: i,j,k,idm,Neqstab,Neqgrad
+    integer          :: i,j,k,idm,Neqstab,Neqgrad,inn,ik
 #ifdef VORTICITY
     integer*4        :: indk(Npfl)
     real*8           :: kcoeff
@@ -1916,6 +1917,9 @@ CONTAINS
     endif
 
 #endif
+
+    inn = phys%idx_rhon_eq
+    ik = phys%idx_k_eq
 
     Neqstab = Neq
     Neqgrad = Neq
@@ -2138,7 +2142,7 @@ CONTAINS
 
       DO k = 1,Neqgrad
 #ifdef NEUTRAL
-              IF (k .EQ. 5) CYCLE
+              IF (k .EQ. inn) CYCLE
 #endif
         DO idm = 1,Ndim
           indi = ind_asf + k
@@ -2205,7 +2209,7 @@ CONTAINS
 
       DO k = 1,Neq
 #ifdef NEUTRAL
-              IF (k .EQ. 5) CYCLE
+              IF (k .EQ. inn) CYCLE
 #endif
         DO idm = 1,Ndim
           indi = ind_asf + k
@@ -2384,7 +2388,7 @@ CONTAINS
     !***************** flux control part ****************************
 
     !contribution from pump
-    flgflux_pump = cryopump_coeff*ufg(5)	!cryopump modification
+    flgflux_pump = cryopump_coeff*ufg(inn)	!cryopump modification
     !dimensionalizing and multiplying by the surface under this gauss point
     flgflux_pump = flgflux_pump*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
@@ -2403,17 +2407,17 @@ CONTAINS
     flgflux_pinch = -recycling_coeff*uefg(1)*(APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
     !Neutral flux
-    flgflux_neutral = (diffiso(5,5)*(Qpr(1,5)*ng(1) + Qpr(2,5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    flgflux_neutral = (diffiso(inn,inn)*(Qpr(1,inn)*ng(1) + Qpr(2,inn)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
         !flux neutral numerical
-        flgflux_numerical = tau(5,5)* (uefg(5)-ufg(5))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+        flgflux_numerical = tau(inn,inn)* (uefg(inn)-ufg(inn))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
 
     !***************** end of flux control part *********************
 #endif
 #ifndef RHSBC
     ! Convective part
-    k = 5
+    k = inn
     ! Plasma flux
     indi = k+ind_asf
     indj = 2+ind_asf
@@ -2441,7 +2445,7 @@ CONTAINS
 
     ! diffusive diagonal part
     DO idm = 1,Ndim
-       k = 5
+       k = inn
 #ifndef NEUTRALP
        indi = ind_asf+k
        indj = ind_ash+idm+(k-1)*Ndim
@@ -2467,7 +2471,7 @@ CONTAINS
               elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
           kmult = Dpn*Vpn(j)*ng(idm)*NiNi
           !kmult = kmult - Gammaredpn*Dpn*Vveci(j)*ng(idm)*NiNi
-          IF (j == 5) THEN
+          IF (j == inn) THEN
              kmult = kmult + Dnn*ng(idm)*NiNi
           END IF
           elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
@@ -2481,7 +2485,7 @@ CONTAINS
 
     ! diffusive non-diagonal part
     DO idm = 1,Ndim
-      k = 5
+      k = inn
       j=1
       indi = ind_asf+k
       indj = ind_ash+idm+(j-1)*Ndim
@@ -2493,7 +2497,7 @@ CONTAINS
     END DO
 #else
   ! diffusive diagonal part
-       k  = 5
+       k  = inn
        indi = ind_asf+k
        DO idm = 1,Ndim
 #ifndef NEUTRALP
