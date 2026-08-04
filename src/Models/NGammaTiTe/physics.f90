@@ -787,15 +787,18 @@ CONTAINS
   SUBROUTINE compute_Dnn(U, Dnn)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: Dnn
-    REAL*8              :: coeff, denom
+    REAL*8              :: coeff, denom, denom_eff, denom_floor
 
 #ifdef CONSTANTNEUTRALDIFF
-    Dnn = phys%diff_nn
+    Dnn = MAX(phys%diff_nn, phys%diff_nn_min)
 #else
     CALL compute_neutral_transport_prefactor(U, coeff)
     CALL compute_neutral_diffusion_denominator(U, denom)
-    Dnn = coeff/denom
-    CALL double_softplus(Dnn, 10.d0*phys%diff_n, phys%diff_nn)
+    denom_floor = 0.d0
+    IF (phys%diff_nn > 0.d0) denom_floor = coeff/(1.1d0*phys%diff_nn)
+    denom_eff = MAX(denom, denom_floor)
+    Dnn = coeff/denom_eff
+    CALL double_softplus(Dnn, phys%diff_nn_min, phys%diff_nn)
 #endif
   ENDSUBROUTINE compute_Dnn
 
@@ -2522,21 +2525,26 @@ CONTAINS
   SUBROUTINE compute_Dnn_dU(U, Dnn_dU)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: Dnn_dU(:)
-    REAL*8              :: Dnn, double_soft_deriv, denom
+    REAL*8              :: Dnn, double_soft_deriv, coeff, denom, denom_eff, denom_floor
     REAL*8              :: dcoeff_dU(SIZE(U))
     REAL*8              :: ddenom_dU(SIZE(U))
 
     Dnn_dU = 0.d0
 #ifndef CONSTANTNEUTRALDIFF
-    CALL compute_neutral_transport_prefactor(U, Dnn)
+    CALL compute_neutral_transport_prefactor(U, coeff)
     CALL compute_dneutral_transport_prefactor_dU(U, dcoeff_dU)
     CALL compute_neutral_diffusion_denominator(U, denom)
     CALL compute_dneutral_diffusion_denominator_dU(U, ddenom_dU)
 
-    Dnn = Dnn/denom
-    CALL double_softplus_deriv(Dnn, 10.d0*phys%diff_n, phys%diff_nn, double_soft_deriv)
+    denom_floor = 0.d0
+    IF (phys%diff_nn > 0.d0) denom_floor = coeff/(1.1d0*phys%diff_nn)
+    denom_eff = MAX(denom, denom_floor)
+    Dnn = coeff/denom_eff
+    CALL double_softplus_deriv(Dnn, phys%diff_nn_min, phys%diff_nn, double_soft_deriv)
 
-    Dnn_dU = dcoeff_dU/denom - (Dnn*denom)*ddenom_dU/denom**2
+    IF (denom > denom_floor) THEN
+      Dnn_dU = dcoeff_dU/denom_eff - coeff*ddenom_dU/denom_eff**2
+    ENDIF
     Dnn_dU = Dnn_dU*double_soft_deriv
 #endif
   ENDSUBROUTINE compute_Dnn_dU

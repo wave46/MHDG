@@ -55,7 +55,8 @@ SUBROUTINE READ_input()
 
   ! Neutral and Ohmic heating
   LOGICAL               :: OhmicSrc, apply_trim
-  REAL*8                :: Zeff,Pohmic,diff_nn,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
+  REAL*8                :: Zeff,Pohmic,diff_nn,diff_nn_min,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
+  REAL*8, PARAMETER     :: diff_nn_min_unset = -HUGE(1.d0)
   REAL*8                :: feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr
 #ifdef KEQUATION
   ! k equation
@@ -96,12 +97,12 @@ SUBROUTINE READ_input()
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
 #endif
@@ -119,6 +120,7 @@ SUBROUTINE READ_input()
   n_quant_ind = -1
   compute_from_flux = .TRUE.
   divide_by_2pi = .FALSE.
+  diff_nn_min = diff_nn_min_unset
 
   ! Reading the file
   uinput = 100
@@ -135,6 +137,16 @@ SUBROUTINE READ_input()
   READ (uinput, UTILS_LST)
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
+
+  IF (diff_nn_min == diff_nn_min_unset) diff_nn_min = 10.d0*diff_n
+  IF (diff_nn_min < 0.d0) THEN
+     PRINT *, 'diff_nn_min must be non-negative: ', diff_nn_min
+     STOP
+  ENDIF
+  IF (diff_nn_min > diff_nn) THEN
+     PRINT *, 'diff_nn_min must not exceed diff_nn: ', diff_nn_min, diff_nn
+     STOP
+  ENDIF
 
   ! Storing at the right place
   switch%steady           = steady
@@ -273,6 +285,7 @@ SUBROUTINE READ_input()
   phys%diff_ee            = diff_ee
   phys%diff_vort          = diff_vort
   phys%diff_nn            = diff_nn
+  phys%diff_nn_min        = diff_nn_min
   phys%I_0                = I_0
   phys%heating_power      = heating_power
   phys%heating_dr         = heating_dr
@@ -489,6 +502,7 @@ SUBROUTINE READ_input()
 #endif
 #ifdef NEUTRAL
      PRINT *, '                - diffusion in the neutral equation:                  ', phys%diff_nn
+     PRINT *, '                - minimum diffusion in the neutral equation:          ', phys%diff_nn_min
      PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
      PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
      PRINT *, '                - applying trim:                                      ', phys%apply_trim

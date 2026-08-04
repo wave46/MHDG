@@ -269,6 +269,7 @@ MODULE types
      REAL*8, ALLOCATABLE       :: alpha_cooling_factor_impurities(:,:) ! Per-entry cooling coefficients
      ! Coefficients for the neutral equations
      REAL*8                    :: diff_nn ! Diffusion in the neutral equation
+     REAL*8                    :: diff_nn_min ! Minimum diffusion in the neutral equation
      LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
      REAL*8,DIMENSION(22)      :: E           ! Energy values from TRIM
      REAL*8,DIMENSION(19)      :: theta       ! Incidence angle values from TRIM
