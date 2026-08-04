@@ -74,9 +74,8 @@
     field_dimensions(2) = 1000                                   ! 2nd dimension dimensions of magnetic field file
     field_from_grid = .true.                                   ! true then reads from cartesian grid and then biineary interpolates on nodes
                                                                 ! false then reads from files with field on nodes
-    compute_from_flux   = .false.                                ! if the Br, Bz is computed from flux works not well, only with loading from nodes
-    divide_by_2pi       = .false.                               ! if corresponding to poloidal flux definition it is needed to divide by 2pi. For NICE .true.
-                                                                ! for FEEQS .false.
+    compute_from_flux   = .true.                                ! derive Br, Bz, and Jtor from psi using the fitted field convention
+    divide_by_2pi       = .false.                               ! fallback convention only when the field fit is unavailable
     jtor_path           = '/path/to/plasma/current'    ! Path to jtor h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'Jtor/WEST_54487_Jtor'
                                                                         ! If switch%ME = .false. then put the full part 'Jtor/WEST_54487_Jtor_0000.h5'
