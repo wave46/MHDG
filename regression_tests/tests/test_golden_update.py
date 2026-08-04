@@ -183,6 +183,62 @@ class GoldenUpdateTests(unittest.TestCase):
         self.assertEqual(self._state()["stages"][0]["status"], "completed")
         self.assertEqual(self._state()["status"], "awaiting_acceptance")
 
+    def test_failed_stage_retry_preserves_evidence_and_completed_stages(self) -> None:
+        attempted_run_ids = []
+        failed_once = False
+
+        def run_suite(*args, **kwargs):
+            nonlocal failed_once
+            run_id = args[6]
+            attempted_run_ids.append(run_id)
+            if args[1] == "stored_field_compatibility" and not failed_once:
+                failed_once = True
+                return self._suite_summary(run_id, "failed")
+            return self._passing_suite(*args, **kwargs)
+
+        self.run_suite.side_effect = run_suite
+        with redirect_stderr(StringIO()):
+            self.assertEqual(self._run(), 1)
+
+        failed_state = self._state()
+        failed_stage = failed_state["stages"][5]
+        failed_summary = failed_stage["summary"]
+        self.assertEqual(failed_state["status"], "failed")
+        self.assertEqual(failed_stage["status"], "failed")
+        self.assertEqual(len(attempted_run_ids), 6)
+
+        self.assertEqual(self._run("--retry-failed"), 0)
+        state = self._state()
+        retried_stage = state["stages"][5]
+        self.assertEqual(state["status"], "awaiting_acceptance")
+        self.assertEqual(retried_stage["status"], "completed")
+        self.assertEqual(retried_stage["retry_count"], 1)
+        self.assertEqual(len(retried_stage["failed_attempts"]), 1)
+        self.assertEqual(
+            retried_stage["failed_attempts"][0]["summary"], failed_summary
+        )
+        self.assertEqual(
+            attempted_run_ids[6],
+            "golden-test-stored_field_compatibility-retry-1",
+        )
+        self.assertEqual(
+            attempted_run_ids.count("golden-test-cold_matrix"), 1
+        )
+        self.assertFalse(self.run_suite.call_args_list[6].kwargs["resume"])
+
+        self.assertEqual(self._run("--accept", "campaign"), 0)
+        published_files = dict(self.publish_campaign_bundle.call_args.args[4])
+        self.assertIn(
+            "stages/stored_field_compatibility/failed_attempts/001/"
+            "suite_summary.json",
+            published_files,
+        )
+
+    def test_retry_requires_one_failed_stage(self) -> None:
+        with redirect_stderr(StringIO()) as errors:
+            self.assertEqual(self._run("--retry-failed"), 1)
+        self.assertIn("no single failed stage", errors.getvalue())
+
     def test_changed_source_settings_reject_resume(self) -> None:
         self.assertEqual(self._run(), 0)
         with self.harness.settings.open("a", encoding="utf-8") as stream:
@@ -232,9 +288,12 @@ class GoldenUpdateTests(unittest.TestCase):
             return golden_update.main(self._arguments(*extra))
 
     def _passing_suite(self, *args, **kwargs):
-        path = self.root / f"{args[1]}-summary.json"
+        return self._suite_summary(args[6], "passed")
+
+    def _suite_summary(self, run_id: str, status: str):
+        path = self.root / f"{run_id}-summary.json"
         summary = {
-            "status": "passed",
+            "status": status,
             "execution_inputs": {
                 "build_manifest": golden_update._file_record(
                     self.build.metadata_path,

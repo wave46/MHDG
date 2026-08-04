@@ -293,6 +293,11 @@ recorded stage resumes. `--bootstrap-candidate` is only for the first diverted
 promotion; future refreshes start from the accepted golden and omit it. Never
 delete or reuse the workspace or output path.
 
+If a stage records a failure, correct its tracked workflow or source bundle,
+then repeat the identical command with `--retry-failed`. The failed attempt is
+retained in campaign provenance and the corrected stage receives a distinct
+`-retry-N` run ID. Completed producer stages are not rerun.
+
 Refresh the limited golden with the same lifecycle but `legacy_case`, an
 accepted golden source settings file, and distinct run/workspace/output names:
 

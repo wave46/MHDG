@@ -181,6 +181,7 @@
         "equilibrium_current_density"
       ],
       "mesh": "coarse_mesh",
+      "impurity_configuration": "impurity_configuration",
       "layout": "serial_omp1",
       "comparison": {
         "method": "fixed_hdf5",

@@ -33,6 +33,11 @@ from support.time import utc_now
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = REGRESSION_ROOT.parent
 STATE_FILE = "campaign.json"
+ATTEMPT_RECORD_FIELDS = (
+    "summary",
+    "layout_pair_report",
+    "old_golden_report",
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -93,9 +98,35 @@ def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
         selected,
         partial,
     )
+    if args.retry_failed:
+        _retry_failed_stage(state)
     if args.accept:
         _accept_campaign(state, args.accept)
     return _advance(state, args)
+
+
+def _retry_failed_stage(state: dict[str, Any]) -> None:
+    """Archive one failed stage attempt and make the stage runnable again."""
+    failed = [stage for stage in state["stages"] if stage["status"] == "failed"]
+    if state["status"] != "failed" or len(failed) != 1:
+        raise BundleError("golden campaign has no single failed stage to retry")
+
+    stage = failed[0]
+    retry_count = stage.get("retry_count", 0) + 1
+    attempt = {
+        "attempt": retry_count - 1,
+        "archived_utc": utc_now(),
+    }
+    for name in ATTEMPT_RECORD_FIELDS:
+        if name in stage:
+            attempt[name] = stage.pop(name)
+    if "failed_utc" in stage:
+        attempt["failed_utc"] = stage.pop("failed_utc")
+    stage.setdefault("failed_attempts", []).append(attempt)
+    stage["retry_count"] = retry_count
+    stage["status"] = "pending"
+    state["status"] = "ready"
+    _save(state)
 
 
 def _load_or_create(
@@ -214,7 +245,7 @@ def _run_stage(
         args.layouts,
         args.suites,
         args.tolerances,
-        f"{state['inputs']['run_id']}-{stage['id']}",
+        _stage_run_id(state, stage),
         state["active_bundle_class"],
         compare=stage["kind"] not in {"matrix", "reference"},
         resume=resume,
@@ -236,6 +267,7 @@ def _run_stage(
         stage["old_golden_report"] = _file_record(old_golden_path)
     if not passed:
         stage["status"] = "failed"
+        stage["failed_utc"] = utc_now()
         state["status"] = "failed"
         _save(state)
         raise BundleError(f"golden stage failed: {stage['id']}")
@@ -248,6 +280,14 @@ def _run_stage(
         _activate_candidate(state, stage)
     state["status"] = stage["status"]
     _save(state)
+
+
+def _stage_run_id(state: dict[str, Any], stage: dict[str, Any]) -> str:
+    run_id = f"{state['inputs']['run_id']}-{stage['id']}"
+    retry_count = stage.get("retry_count", 0)
+    if retry_count:
+        run_id += f"-retry-{retry_count}"
+    return run_id
 
 
 def _record_matrix_reports(
@@ -468,40 +508,59 @@ def _campaign_provenance_files(state: dict[str, Any]) -> list[tuple[str, Path]]:
         ("build/build_metadata.json", build_metadata),
     ]
     for stage in state["stages"]:
-        summary_record = stage.get("summary")
-        if summary_record is None:
-            continue
-        summary_path = _recorded_path(summary_record, "suite summary")
         prefix = f"stages/{stage['id']}"
-        documents = [("suite_summary.json", summary_path)]
-        documents.extend(
-            (f"{name}.json", _recorded_path(stage[name], name))
-            for name in ("layout_pair_report", "old_golden_report")
-            if name in stage
-        )
-        report_paths = set()
-        for name, path in documents:
-            files.append((f"{prefix}/{name}", path))
-            report_paths.update(_comparison_report_paths(load_json(path, name)))
-
-        summary = load_json(summary_path, "suite summary")
-        if summary.get("execution_inputs", {}).get("build_manifest") != build_record:
-            raise BundleError(f"golden stage used another build: {stage['id']}")
-        for number, result in enumerate(summary.get("results", []), start=1):
-            run = Path(result["run_directory"])
-            run_prefix = f"{prefix}/runs/{number:03d}"
-            for name in ("run_plan.json", "run_metadata.json"):
-                files.append((f"{run_prefix}/{name}", run / name))
-                for nested in sorted(run.glob(f"stages/*/{name}")):
-                    files.append(
-                        (
-                            f"{run_prefix}/stages/{nested.parent.name}/{name}",
-                            nested,
-                        )
-                    )
-        for number, path in enumerate(sorted(report_paths), start=1):
-            files.append((f"{prefix}/comparisons/{number:03d}.json", path))
+        if stage.get("summary") is not None:
+            _append_attempt_provenance(
+                files, prefix, stage, build_record, stage["id"]
+            )
+        for attempt in stage.get("failed_attempts", []):
+            attempt_number = attempt["attempt"] + 1
+            _append_attempt_provenance(
+                files,
+                f"{prefix}/failed_attempts/{attempt_number:03d}",
+                attempt,
+                build_record,
+                f"{stage['id']} failed attempt {attempt_number}",
+            )
     return files
+
+
+def _append_attempt_provenance(
+    files: list[tuple[str, Path]],
+    prefix: str,
+    attempt: dict[str, Any],
+    build_record: dict[str, Any],
+    label: str,
+) -> None:
+    summary_path = _recorded_path(attempt["summary"], "suite summary")
+    documents = [("suite_summary.json", summary_path)]
+    documents.extend(
+        (f"{name}.json", _recorded_path(attempt[name], name))
+        for name in ("layout_pair_report", "old_golden_report")
+        if name in attempt
+    )
+    report_paths = set()
+    for name, path in documents:
+        files.append((f"{prefix}/{name}", path))
+        report_paths.update(_comparison_report_paths(load_json(path, name)))
+
+    summary = load_json(summary_path, "suite summary")
+    if summary.get("execution_inputs", {}).get("build_manifest") != build_record:
+        raise BundleError(f"golden stage used another build: {label}")
+    for number, result in enumerate(summary.get("results", []), start=1):
+        run = Path(result["run_directory"])
+        run_prefix = f"{prefix}/runs/{number:03d}"
+        for name in ("run_plan.json", "run_metadata.json"):
+            files.append((f"{run_prefix}/{name}", run / name))
+            for nested in sorted(run.glob(f"stages/*/{name}")):
+                files.append(
+                    (
+                        f"{run_prefix}/stages/{nested.parent.name}/{name}",
+                        nested,
+                    )
+                )
+    for number, path in enumerate(sorted(report_paths), start=1):
+        files.append((f"{prefix}/comparisons/{number:03d}.json", path))
 
 
 def _comparison_report_paths(document: Any) -> set[Path]:
@@ -642,6 +701,11 @@ def _argument_parser() -> argparse.ArgumentParser:
     update.add_argument("--bundle-version", required=True, metavar="VERSION")
     update.add_argument("--workspace", type=Path)
     update.add_argument("--accept", choices=("campaign",))
+    update.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="archive and rerun the campaign's failed stage",
+    )
     update.add_argument(
         "--bootstrap-candidate",
         action="store_true",
