@@ -97,6 +97,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  MACROS+= -DTEMPERATURE
  #turns on neutral contimuity equations
  MACROS+= -DNEUTRAL
+ MACROS+= -DNEUTRALP
  #Uses AMJUEL splines for recombination and ionization, better turn on. If not, Te splines from NRL formulas employed
  MACROS+= -DAMJUELSPLINES
  #Uses AMJUEL splines for three-body recombination spline. If turned off, takes the one without three-body recombination, may be more stable
@@ -120,6 +121,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
  MACROS+= -DNGAMMA 
  MACROS+= -DTEMPERATURE
  MACROS+= -DNEUTRAL
+ MACROS+= -DNEUTRALP
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC
  #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
@@ -139,6 +141,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALGAMMA))
  MACROS+= -DNGAMMA
  MACROS+= -DTEMPERATURE
  MACROS+= -DNEUTRAL
+ MACROS+= -DNEUTRALP
  MACROS+= -DNEUTRALGAMMA
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC
@@ -152,6 +155,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALGAMMAK))
  MACROS+= -DNGAMMA
  MACROS+= -DTEMPERATURE
  MACROS+= -DNEUTRAL
+ MACROS+= -DNEUTRALP
  MACROS+= -DNEUTRALGAMMA
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC

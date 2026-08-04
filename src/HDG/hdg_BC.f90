@@ -1886,16 +1886,15 @@ CONTAINS
         REAL*8           :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)
         REAL*8           :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
         REAL*8           :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
+#ifdef NEUTRALP
+        REAL*8           :: W5p(Neq), dW5p_dU(Neq,Neq), QdW5p(Ndim,Neq)
+#endif
 #ifdef NEUTRAL
         REAL*8           :: E, theta, RN
         REAL*8           :: Dnn_dU(Neq), Dnn_dU_U
 #endif
 #ifdef DKLINEARIZED
     real*8                 ::       q_cyl, xyf(:), ddk_dU(Neq), ddk_dU_u
-#endif
-#ifdef NEUTRALP
-        REAL*8           :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
-        REAL*8           :: AbohmNP(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq),dDpn_dU(Neq)
 #endif
 #endif
 #ifdef SAVEFLUX
@@ -2019,6 +2018,11 @@ CONTAINS
       CALL compute_W4(uf,W4,diffiso(1,1),diffiso(4,4))
       CALL compute_dW4_dU(uf,dW4_dU,diffiso(1,1),diffiso(4,4))
         QdW4 = MATMUL(Qpr,dW4_dU)
+#ifdef NEUTRALP
+      CALL compute_W5p(ufg,W5p)
+      CALL compute_dW5p_dU(ufg,dW5p_dU)
+      QdW5p = MATMUL(Qpr,dW5p_dU)
+#endif
 
       ! Compute Alpha(U^(k-1))
       Alphai = computeAlphai(ufg)
@@ -2303,50 +2307,6 @@ CONTAINS
       ELSE
         RN=1.
       ENDIF
-#ifdef NEUTRALP
-      ! Compute Vpn(U^(k-1))
-      CALL computeVpn(ufg,Vpn)
-        gmpn = MATMUL(Qpr,Vpn)                       ! Ndim x 1
-	     ! Compute dVpn-dU(U^(k-1))
-	     CALL compute_dVpn_dU(ufg,dVpn_dU)
-        Taupn = MATMUL(Qpr,dVpn_dU)                 ! Ndim x Neq
-	     ! Compute Dpn(U^(k-1))
-      CALL computeDpn(ufg,Qpr,Vpn,Dpn)
-      ! Compute dDpn_dU(U^(k-1))
-      CALL compute_dDpn_dU(ufg,Qpr,Vpn,dDpn_dU)
-      ! Reduce Grad Pn for low collision regime
-      ! Threshold set at 0.5xGradPn for Ti = 0.2 eV
-      Gammaredpn = 1.
-      Tmin = 0.2/simpar%refval_temperature
-        IF (Tmin/upfg(7) .LE. 1.) Gammaredpn = Gammaredpn*Tmin/upfg(7)
-      Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*Dpn
-      ! Comput Gammaredpn(U^(k-1))
-      !CALL computeGammared(ufg,Gammaredpn)
-      !gmipn = matmul(Qpr,Vveci)
-      !CALL computeGammaLim(ue,Qpr,Vpn,GammaLim)
-      ! Set Grad Ti = 0. for low collision regime
-      ! (back to diffusion equation for neutral density)
-      !CALL computeAlphaCoeff(ufg,Qpr,Vpn,Alphanp)
-      !CALL computeBetaCoeff(ufg,Qpr,Vpn,Betanp)
-      !Dpn = Alphanp*Dpn
-      !dDpn_dU = Alphanp*dDpn_dU
-      !Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*Dpn
-      !IF (Dnn .gt. phys%diff_nn) Dnn = phys%diff_nn
-      !IF (Dpn .gt. phys%diff_nn) THEN
-      !   Dpn = Alphanp*Dpn !0.
-      !   dDpn_dU = Alphanp*dDpn_dU !0.
-      !   Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*phys%diff_nn
-       !END IF
-      ! Set Gamma Convective = cs_n*n_n for low collision regime
-      !IF (Dpn .gt. phys%diff_nn) THEN
-      !   Dpn = 0.
-      !   dDpn_dU = 0.
-      !   CALL jacobianMatricesBohmNP(ufg,AbohmNP)
-      !ELSE
-      !   AbohmNP = 0.
-      !END IF
-#endif
-
     bc = phys%bcflags(fl)
 
     SELECT CASE (bc)
@@ -2411,11 +2371,9 @@ CONTAINS
     indj = 1+ind_asf
     elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + (APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*NiNi*recycling_coeff
     !Neutrals flux
-!#ifdef NEUTRALP
     DO j=1,Neq
        indj = ind_asf + j
            elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) + Abohm(k,j)*NiNi*bn
-       !elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + (Abohm(k,j) + AbohmNP(j))*NiNi*bn
     END DO
 #ifdef NEUTRALGAMMA
     IF (ign > 0) THEN
@@ -2423,7 +2381,6 @@ CONTAINS
       elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) + bn*NiNi
     END IF
 #endif
-!#endif
     !cryopump modification Should it be ALU?
     indj = k+ind_asf !5th equation and 5th conservative variable: pump_power*U5
     elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - cryopump_coeff*NiNi
@@ -2435,7 +2392,6 @@ CONTAINS
     ! diffusive diagonal part
     DO idm = 1,Ndim
        k = inn
-#ifndef NEUTRALP
        indi = ind_asf+k
        indj = ind_ash+idm+(k-1)*Ndim
        !if (ntang) then
@@ -2446,27 +2402,19 @@ CONTAINS
        DO j=1,Neq
         indj = ind_asf + j
         kmult = Dnn_dU(j)*Qpr(idm,k)*ng(idm)*NiNi
-              elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
-           ENDDO
+        elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
+#ifdef NEUTRALP
+        ind_kf = ind_ash + idm + (j-1)*Ndim
+        kmult = QdW5p(idm,j)*ng(idm)*NiNi
+        elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
+        kmult = W5p(j)*ng(idm)*NiNi
+        elMat%Alq(ind_ff(indi),ind_fG(ind_kf),iel) = elMat%Alq(ind_ff(indi),ind_fG(ind_kf),iel) - kmult
+#endif
+       ENDDO
        kmultf = Dnn_dU_U*(Qpr(idm,k)*ng(idm))*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
-#else
-       indi = ind_asf + k
-       DO j=1,Neq
-          indj = ind_asf + j
-          indk = ind_ash + idm + (j-1)*Ndim
-          kmult = (Dpn*Taupn(idm,j) + dDpn_dU(j)*gmpn(idm))*ng(idm)*NiNi
-          !kmult = kmult - Gammaredpn*(Dpn*Taui(idm,j) + dDpn_dU(j)*gmipn(idm))*ng(idm)*NiNi
-              elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
-          kmult = Dpn*Vpn(j)*ng(idm)*NiNi
-          !kmult = kmult - Gammaredpn*Dpn*Vveci(j)*ng(idm)*NiNi
-          IF (j == inn) THEN
-             kmult = kmult + Dnn*ng(idm)*NiNi
-          END IF
-          elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
-       END DO
-           kmultf = dot_PRODUCT(dDpn_dU,ufg)*gmpn(idm)*ng(idm)*Ni
-       !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),ufg)*ng(1) + dot_product(Taui(2,:),ufg)*ng(2)) + dot_product(dDpn_dU,ufg)*(gmipn(1)*ng(1) + gmipn(2)*ng(2)))*Ni
+#ifdef NEUTRALP
+       kmultf = DOT_PRODUCT(QdW5p(idm,:),ufg)*ng(idm)*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #endif
     END DO

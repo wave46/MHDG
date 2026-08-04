@@ -25,7 +25,7 @@ SUBROUTINE READ_input()
   INTEGER               :: num_param_est, num_n_quant_ind
   REAL*8                :: thr_ind, tol_est, osc_tol, osc_check
   INTEGER               :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
-  REAL*8                :: dt0, R0, diff_n, diff_u, tau(1:5), tNr, tTM, div, Tbg
+  REAL*8                :: dt0, R0, diff_n, diff_u, tau(1:6), tNr, tTM, div, Tbg, neutralp_lambda
   REAL*8                :: tfi, a, bohmth,bohm_energy_thresh, q, diffred, diffmin
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
@@ -55,7 +55,7 @@ SUBROUTINE READ_input()
 
   ! Neutral and Ohmic heating
   LOGICAL               :: OhmicSrc, apply_trim
-  REAL*8                :: Zeff,Pohmic,diff_nn,diff_nn_min,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
+  REAL*8                :: Zeff,Pohmic,diff_nn,diff_nn_min,neutralp_ti_supp_eV,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
   REAL*8, PARAMETER     :: diff_nn_min_unset = -HUGE(1.d0)
   REAL*8                :: feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr
 #ifdef KEQUATION
@@ -91,18 +91,18 @@ SUBROUTINE READ_input()
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, transport_1d, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb,flux_limiter,import_diffusion_1D
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path, impurity_model_path
-  NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump
+  NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump,neutralp_lambda
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
 #endif
@@ -121,6 +121,8 @@ SUBROUTINE READ_input()
   compute_from_flux = .TRUE.
   divide_by_2pi = .FALSE.
   diff_nn_min = diff_nn_min_unset
+  neutralp_lambda = 0.d0
+  neutralp_ti_supp_eV = 1.d-6
 
   ! Reading the file
   uinput = 100
@@ -145,6 +147,10 @@ SUBROUTINE READ_input()
   ENDIF
   IF (diff_nn_min > diff_nn) THEN
      PRINT *, 'diff_nn_min must not exceed diff_nn: ', diff_nn_min, diff_nn
+     STOP
+  ENDIF
+  IF (neutralp_ti_supp_eV < 0.d0) THEN
+     PRINT *, 'neutralp_ti_supp_eV must be non-negative: ', neutralp_ti_supp_eV
      STOP
   ENDIF
 
@@ -238,6 +244,7 @@ SUBROUTINE READ_input()
   numer%npartor           = npartor
   numer%bohmtypebc        = bohmtypebc
   numer%exbdump           = exbdump
+  numer%neutralp_lambda   = neutralp_lambda
   adapt%adaptivity        = adaptivity
   adapt%shockcp_adapt     = shockcp_adapt
   num_param_est        = COUNT(param_est /= -1.0)
@@ -286,6 +293,7 @@ SUBROUTINE READ_input()
   phys%diff_vort          = diff_vort
   phys%diff_nn            = diff_nn
   phys%diff_nn_min        = diff_nn_min
+  phys%neutralp_ti_supp   = neutralp_ti_supp_eV
   phys%I_0                = I_0
   phys%heating_power      = heating_power
   phys%heating_dr         = heating_dr
@@ -503,6 +511,8 @@ SUBROUTINE READ_input()
 #ifdef NEUTRAL
      PRINT *, '                - diffusion in the neutral equation:                  ', phys%diff_nn
      PRINT *, '                - minimum diffusion in the neutral equation:          ', phys%diff_nn_min
+     PRINT *, '                - neutral-pressure continuation:                       ', numer%neutralp_lambda
+     PRINT *, '                - neutral-pressure Ti suppression:                     ', phys%neutralp_ti_supp
      PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
      PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
      PRINT *, '                - applying trim:                                      ', phys%apply_trim
@@ -599,6 +609,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - tau(3):                                             ', numer%tau(3)
      PRINT *, '                - tau(4):                                             ', numer%tau(4)
      PRINT *, '                - tau(5):                                             ', numer%tau(5)
+     PRINT *, '                - tau(6):                                             ', numer%tau(6)
      PRINT *, '                - max number of N-R iterations:                       ', numer%nrp
      PRINT *, '                - tolerance for the N-R scheme:                       ', numer%tNR
      PRINT *, '                - tolerance for the steady state achievement:         ', numer%tTM

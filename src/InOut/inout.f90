@@ -1080,6 +1080,7 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%diff_pot, 'diff_pot')
       CALL HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
       CALL HDF5_real_saving(group_id2, phys%diff_nn_min, 'diff_nn_min')
+      CALL HDF5_real_saving(group_id2, phys%neutralp_ti_supp, 'neutralp_ti_supp')
       CALL HDF5_real_saving(group_id2, phys%Re, 'recycling')
       CALL HDF5_integer_saving(group_id2, phys%n_impurities, 'n_impurities')
       IF (phys%n_impurities > 0) THEN
@@ -1212,6 +1213,7 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, numer%tmax, 'Max_extention_in_the_toroidal_direction')
       CALL HDF5_integer_saving(group_id2, numer%npartor, 'Number_of_MPI_divisions_in_the_toroidal_direction')
       CALL HDF5_real_saving(group_id2, numer%exbdump, 'Dumping_for_ExB_drift')
+      CALL HDF5_real_saving(group_id2, numer%neutralp_lambda, 'NeutralP_lambda')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create time parameters group

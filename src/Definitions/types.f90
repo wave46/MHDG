@@ -276,6 +276,7 @@ MODULE types
      ! Coefficients for the neutral equations
      REAL*8                    :: diff_nn ! Diffusion in the neutral equation
      REAL*8                    :: diff_nn_min ! Minimum diffusion in the neutral equation
+     REAL*8                    :: neutralp_ti_supp ! Ion-temperature suppression scale for neutral pressure
      LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
      REAL*8,DIMENSION(22)      :: E           ! Energy values from TRIM
      REAL*8,DIMENSION(19)      :: theta       ! Incidence angle values from TRIM
@@ -526,7 +527,7 @@ MODULE types
      REAL*8         :: tNR      ! Tolerance of the Newton-Raphson scheme
      REAL*8         :: tTM      ! Tolerance for the steady state achievement
      REAL*8         :: div      ! Divergence detector
-     REAL*8         :: tau(1:5) ! Stabilization parameter for each equation (4 values max for now...)
+     REAL*8         :: tau(1:6) ! Stabilization parameter for each equation
      REAL*8         :: sc_coe   ! Shock capturing coefficient
      REAL*8         :: sc_sen   ! Shock capturing sensibility
      REAL*8         :: minrho   ! Value of rho to start applying limiting
@@ -550,6 +551,7 @@ MODULE types
      INTEGER        :: npartor  ! Number of MPI divisions in the toroidal direction
      INTEGER        :: bohmtypebc ! Implementation of the Bohm bc for Gamma
      REAL*8         :: exbdump ! Dumping for ExB drifts
+     REAL*8         :: neutralp_lambda ! Continuation factor for the additive neutral-pressure term
   END TYPE Numeric_type
 
   !*******************************************************
