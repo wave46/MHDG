@@ -303,6 +303,12 @@ If the correction affects an earlier campaign declaration, use
 restores the preceding candidate, archives superseded downstream attempts, and
 uses distinct run, candidate, report, and settings paths for the replacements.
 
+Because multiple cases share the campaign catalog, a change confined to another
+case does not invalidate an in-progress campaign. Resume records the old and new
+catalog identities in `campaign_catalog_refreshes` after confirming that the
+selected case declaration is unchanged. A change to the selected case still
+requires an explicit `--retry-from STAGE`.
+
 Refresh the limited golden with the same lifecycle but `legacy_case`, an
 accepted golden source settings file, and distinct run/workspace/output names:
 

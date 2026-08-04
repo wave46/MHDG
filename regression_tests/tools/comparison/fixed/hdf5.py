@@ -8,6 +8,7 @@ from typing import Any
 import h5py
 
 from comparison.fixed.data import storage_format
+from comparison.fixed.magnetic import compare_magnetic
 from comparison.fixed.mesh import compare_mesh
 from comparison.fixed.solution import compare_solution
 from comparison.fixed.transport import compare_transport
@@ -50,6 +51,12 @@ def compare_hdf5_files(
                     failures,
                 )
             report["transport_1d"] = compare_transport(
+                reference,
+                candidate,
+                tolerances,
+                failures,
+            )
+            report["magnetic"] = compare_magnetic(
                 reference,
                 candidate,
                 tolerances,

@@ -256,11 +256,19 @@ def _load_or_create(
     state_path = workspace / STATE_FILE
     if state_path.is_file():
         state = load_json(state_path, "golden campaign state")
-        if state.get("inputs") != inputs and not (
-            allow_catalog_update
-            and _only_campaign_catalog_changed(state.get("inputs"), inputs)
-        ):
-            raise BundleError("golden campaign inputs changed")
+        if state.get("inputs") != inputs:
+            catalog_only = _only_campaign_catalog_changed(
+                state.get("inputs"), inputs
+            )
+            if catalog_only and allow_catalog_update:
+                return state
+            if catalog_only and _declaration_matches_state(state, declaration):
+                _refresh_campaign_catalog(
+                    state,
+                    inputs["campaign_catalog"],
+                )
+            else:
+                raise BundleError("golden campaign inputs changed")
         return state
     if workspace.exists():
         raise BundleError(f"campaign workspace already exists: {workspace}")
@@ -318,6 +326,46 @@ def _only_campaign_catalog_changed(
         return False
     old_inputs = {**recorded, "campaign_catalog": new_catalog}
     return old_inputs == current
+
+
+def _declaration_matches_state(
+    state: dict[str, Any], declaration: dict[str, Any]
+) -> bool:
+    recorded_stages = [
+        {
+            name: stage[name]
+            for name in DECLARATION_STAGE_FIELDS
+            if name in stage
+        }
+        for stage in state.get("stages", [])
+    ]
+    current_stages = [
+        {
+            name: stage[name]
+            for name in DECLARATION_STAGE_FIELDS
+            if name in stage
+        }
+        for stage in declaration["stages"]
+    ]
+    return recorded_stages == current_stages
+
+
+def _refresh_campaign_catalog(
+    state: dict[str, Any], campaign_catalog: dict[str, Any]
+) -> None:
+    """Record an unrelated shared-catalog update without rewinding stages."""
+    previous_catalog = state["inputs"]["campaign_catalog"]
+    state.setdefault("campaign_catalog_refreshes", []).append(
+        {
+            "refreshed_utc": utc_now(),
+            "case_id": state["inputs"]["case_id"],
+            "reason": "selected case declaration unchanged",
+            "previous_campaign_catalog": previous_catalog,
+            "campaign_catalog": campaign_catalog,
+        }
+    )
+    state["inputs"]["campaign_catalog"] = campaign_catalog
+    _save(state)
 
 
 def _advance(state: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:

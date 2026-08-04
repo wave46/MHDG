@@ -335,6 +335,46 @@ class GoldenUpdateTests(unittest.TestCase):
 
         self.assertIn("campaign inputs changed", errors.getvalue())
 
+    def test_unrelated_shared_catalog_change_allows_acceptance(self) -> None:
+        self.assertEqual(self._run(), 0)
+        run_count = self.run_suite.call_count
+        document = json.loads(self.campaigns.read_text(encoding="utf-8"))
+        diverted = document["campaigns"]["diverted_case"]
+        diverted["stages"][0]["acceptance_required"] = False
+        self.campaigns.write_text(
+            json.dumps(document, indent=2) + "\n", encoding="utf-8"
+        )
+
+        self.assertEqual(self._run("--accept", "campaign"), 0)
+
+        state = self._state()
+        refresh = state["campaign_catalog_refreshes"][0]
+        self.assertEqual(state["status"], "published")
+        self.assertEqual(self.run_suite.call_count, run_count)
+        self.assertEqual(refresh["case_id"], "legacy_case")
+        self.assertNotEqual(
+            refresh["previous_campaign_catalog"]["sha256"],
+            refresh["campaign_catalog"]["sha256"],
+        )
+        self.assertEqual(
+            state["inputs"]["campaign_catalog"],
+            refresh["campaign_catalog"],
+        )
+
+    def test_selected_case_catalog_change_still_rejects_acceptance(self) -> None:
+        self.assertEqual(self._run(), 0)
+        document = json.loads(self.campaigns.read_text(encoding="utf-8"))
+        legacy = document["campaigns"]["legacy_case"]
+        legacy["stages"][0]["acceptance_required"] = False
+        self.campaigns.write_text(
+            json.dumps(document, indent=2) + "\n", encoding="utf-8"
+        )
+
+        with redirect_stderr(StringIO()) as errors:
+            self.assertEqual(self._run("--accept", "campaign"), 1)
+
+        self.assertIn("campaign inputs changed", errors.getvalue())
+
     def test_candidate_bootstrap_must_be_explicit(self) -> None:
         self.harness.set_bundle_class("candidate")
         self.assertEqual(self._run("--bootstrap-candidate"), 0)

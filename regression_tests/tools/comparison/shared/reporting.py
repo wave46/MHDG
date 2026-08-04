@@ -59,6 +59,18 @@ def print_fixed_summary(report: dict[str, Any]) -> None:
             f"{format_metric(maximum_metric(transport_metrics, 'normalized_linf'))}"
         )
 
+    magnetic = report["hdf5"].get("magnetic", {})
+    magnetic_metrics = list(magnetic.get("datasets", {}).values())
+    if magnetic.get("present", False):
+        print(
+            "magnetic: "
+            f"{_pass_label(magnetic.get('passed', False))} "
+            "max relL2="
+            f"{format_metric(maximum_metric(magnetic_metrics, 'relative_l2'))} "
+            "max nLinf="
+            f"{format_metric(maximum_metric(magnetic_metrics, 'normalized_linf'))}"
+        )
+
     failures = report["failures"]
     for failure in failures[:10]:
         print(f"FAIL: {failure}")
