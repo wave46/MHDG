@@ -52,6 +52,8 @@ CONTAINS
     CALL assert_close(geometry%z_axis, 0.d0, 2.d-6, 'limited magnetic-axis Z')
     CALL assert_close(geometry%psi_lcfs, a*a, 2.d-6, 'wall-derived LCFS flux')
     CALL assert_close(geometry%a_minor, a, 2.d-5, 'wall-derived minor radius')
+    CALL assert_true(geometry%lcfs_extrema_refined, &
+         'limited LCFS extrema were not refined')
 
     CALL geometry%evaluate_topology(r0 + 0.25d0, 0.d0, psi_n, rho, normal, region)
     CALL assert_true(region == magnetic_region_core, 'limited core classification')
@@ -202,6 +204,8 @@ CONTAINS
     CALL assert_close(geometry%psi_lcfs, psi_x, 4.d-4, 'X-point LCFS flux')
     CALL assert_close(geometry%a_minor, SQRT(psi_x), 2.d-3, &
          'diverted LCFS half width')
+    CALL assert_true(geometry%lcfs_extrema_refined, &
+         'diverted LCFS extrema were not refined')
 
     CALL geometry%evaluate_topology(r0, 0.15d0, psi_n, rho, normal, region)
     CALL assert_true(region == magnetic_region_core, 'diverted core classification')

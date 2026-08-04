@@ -352,6 +352,11 @@ CONTAINS
        IF (MPIvar%glob_id == 0) WRITE (6, *) 'Magnetic topology analysis failed: ', TRIM(geometry_message)
        STOP
     ENDIF
+    IF (.NOT. magnetic_equilibrium%lcfs_extrema_refined .AND. &
+         MPIvar%glob_id == 0) THEN
+       WRITE (6, *) &
+            'WARNING: LCFS radial-extremum refinement did not converge; using sampled extrema.'
+    ENDIF
     DEALLOCATE(wall_coordinates, wall_faces)
 
     phys%r_axis = magnetic_equilibrium%r_axis

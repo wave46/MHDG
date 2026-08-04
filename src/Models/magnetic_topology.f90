@@ -53,6 +53,7 @@ MODULE magnetic_topology
      REAL*8 :: r_lcfs_min = 0.d0
      REAL*8 :: r_lcfs_max = 0.d0
      REAL*8 :: a_minor = 0.d0
+     LOGICAL :: lcfs_extrema_refined = .FALSE.
      REAL*8, ALLOCATABLE :: r(:)
      REAL*8, ALLOCATABLE :: z(:)
      REAL*8, ALLOCATABLE :: psi(:, :)
@@ -143,6 +144,7 @@ CONTAINS
     this%r_lcfs_min = 0.d0
     this%r_lcfs_max = 0.d0
     this%a_minor = 0.d0
+    this%lcfs_extrema_refined = .FALSE.
   END SUBROUTINE equilibrium_geometry_clear
 
   SUBROUTINE equilibrium_geometry_finalize(this)
@@ -782,6 +784,7 @@ CONTAINS
     CLASS(equilibrium_geometry_t), INTENT(INOUT) :: this
     INTEGER :: imin(1), imax(1)
     REAL*8 :: rmin, zmin, rmax, zmax
+    REAL*8 :: rmin_refined, zmin_refined, rmax_refined, zmax_refined
     LOGICAL :: okmin, okmax
 
     imin = MINLOC(this%lcfs_r)
@@ -790,10 +793,17 @@ CONTAINS
     zmin = this%lcfs_z(imin(1))
     rmax = this%lcfs_r(imax(1))
     zmax = this%lcfs_z(imax(1))
-    CALL refine_radial_extremum(this, rmin, zmin, okmin)
-    CALL refine_radial_extremum(this, rmax, zmax, okmax)
+    rmin_refined = rmin
+    zmin_refined = zmin
+    rmax_refined = rmax
+    zmax_refined = zmax
+    CALL refine_radial_extremum(this, rmin_refined, zmin_refined, okmin)
+    CALL refine_radial_extremum(this, rmax_refined, zmax_refined, okmax)
+    IF (okmin) rmin = rmin_refined
+    IF (okmax) rmax = rmax_refined
     this%r_lcfs_min = rmin
     this%r_lcfs_max = rmax
+    this%lcfs_extrema_refined = okmin .AND. okmax
   END SUBROUTINE refine_lcfs_radial_extrema
 
   SUBROUTINE refine_radial_extremum(this, r, z, converged)
