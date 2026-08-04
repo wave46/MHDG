@@ -3064,7 +3064,7 @@ ENDIF
       real*8                     :: kcoeff,exb(3)
       integer*4                  :: alpha,beta,ii
 #endif
-      integer*4                  :: i,j,k,inn,ik
+      integer*4                  :: i,j,k,inn,ign,ik
       integer*4,dimension(size(ind_asf))  :: ind_if,ind_jf,ind_kf
       real*8,dimension(neq,neq) :: A
       real*8,dimension(neq,Ndim):: APinch
@@ -3094,9 +3094,15 @@ ENDIF
       real*8                    :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
    	  real*8                    :: Anp(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq),dDpn_dU(Neq)
 #endif
+#ifdef NEUTRALGAMMA
+      real*8                    :: Etan
+      real*8                    :: Vun(Neq),dEtan_dU(Neq),gmGamman(Ndim)
+      real*8                    :: dVun_dU(Neq,Neq),TauGamman(Ndim,Neq)
+#endif
 #endif
 
       inn = phys%idx_rhon_eq
+      ign = phys%idx_gamman_eq
       ik = phys%idx_k_eq
 
       b = b3(1:Ndim)
@@ -3240,6 +3246,15 @@ ENDIF
     !ELSE
     !   Anp = 0.
     !END IF
+#endif
+#ifdef NEUTRALGAMMA
+      CALL computeEtan(uf,Etan)
+      CALL compute_dEtan_dU(uf,dEtan_dU)
+      CALL computeVun(uf,Vun)
+      CALL compute_dVun_dU(uf,dVun_dU)
+
+      gmGamman = MATMUL(Qpr,Vun)
+      TauGamman = MATMUL(Qpr,dVun_dU)
 #endif
 #endif
 
@@ -3466,6 +3481,24 @@ ENDIF
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
 #endif
+#ifdef NEUTRALGAMMA
+       ELSEIF (i == ign) THEN
+          DO j = 1,Neq
+             ind_jf = ind_asf + j
+             DO k = 1,Ndim
+                ind_kf = k + (j - 1)*Ndim + ind_ash
+                kmult = Etan*TauGamman(k,j)*NNif*n(k)
+                elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
+                elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
+                kmult = Etan*Vun(j)*NNif*n(k)
+                elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) = elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) - kmult
+                elMat%Alq(ind_ff(ind_if),ind_fg(ind_kf),iel) = elMat%Alq(ind_ff(ind_if),ind_fg(ind_kf),iel) - kmult
+             END DO
+          END DO
+          kmultf = Etan*(dot_PRODUCT(TauGamman(1,:),uf)*n(1) + dot_PRODUCT(TauGamman(2,:),uf)*n(2))*Nif
+          elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+          elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
+#endif
        END IF
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -3549,7 +3582,7 @@ ENDIF
       integer*4                 :: alpha,beta,ii
       real*8                    :: exb(3),kcoeff
 #endif
-      integer*4                 :: i,j,k,inn,ik
+      integer*4                 :: i,j,k,inn,ign,ik
       integer*4,dimension(Npfl)  :: ind_if,ind_jf,ind_kf
       real*8,dimension(neq,neq) :: A
       real*8,dimension(neq,Ndim):: APinch
@@ -3579,9 +3612,15 @@ ENDIF
       real*8                    :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
       real*8                    :: Anp(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq),dDpn_dU(Neq)
 #endif
+#ifdef NEUTRALGAMMA
+      real*8                    :: Etan
+      real*8                    :: Vun(Neq),dEtan_dU(Neq),gmGamman(Ndim)
+      real*8                    :: dVun_dU(Neq,Neq),TauGamman(Ndim,Neq)
+#endif
 #endif
 
       inn = phys%idx_rhon_eq
+      ign = phys%idx_gamman_eq
       ik = phys%idx_k_eq
 
       b = b3(1:Ndim)
@@ -3725,6 +3764,15 @@ ENDIF
       !ELSE
       !   Anp = 0.
       !END IF
+#endif
+#ifdef NEUTRALGAMMA
+      CALL computeEtan(uf,Etan)
+      CALL compute_dEtan_dU(uf,dEtan_dU)
+      CALL computeVun(uf,Vun)
+      CALL compute_dVun_dU(uf,dVun_dU)
+
+      gmGamman = MATMUL(Qpr,Vun)
+      TauGamman = MATMUL(Qpr,dVun_dU)
 #endif
 #endif
 
@@ -3949,6 +3997,23 @@ END IF
           END DO
                  kmultf = dot_PRODUCT(dDpn_dU,uf)*(gmpn(1)*n(1) + gmpn(2)*n(2))*Nif
           !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),uf)*n(1) + dot_product(Taui(2,:),uf)*n(2)) + dot_product(dDpn_dU,uf)*(gmipn(1)*n(1) + gmipn(2)*n(2)))*Nif
+          elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+#endif
+#ifdef NEUTRALGAMMA
+       ELSEIF (i == ign) THEN
+          DO j = 1,Neq
+             ind_jf = ind_asf + j
+             DO k = 1,Ndim
+                ind_kf = k + (j - 1)*Ndim + ind_ash
+                kmult = Etan*TauGamman(k,j)*NNif*n(k)
+                IF (.NOT. isdir) THEN
+                  elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
+                END IF
+                kmult = Etan*Vun(j)*NNif*n(k)
+                elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) = elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) - kmult
+             END DO
+          END DO
+          kmultf = Etan*(dot_PRODUCT(TauGamman(1,:),uf)*n(1) + dot_PRODUCT(TauGamman(2,:),uf)*n(2))*Nif
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
 #endif
       END IF
