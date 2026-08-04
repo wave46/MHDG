@@ -2301,17 +2301,15 @@ CONTAINS
     real*8                    :: niz,nrec,fGammacx,fGammarec
     real*8                    :: dniz_dU(Neq),dnrec_dU(Neq),dfGammacx_dU(Neq),dfGammarec_dU(Neq)
 #ifdef TEMPERATURE
-        REAL*8                    :: sigmaviz,sigmavrec,sigmavcx,Tloss,Tlossrec,fEiiz,fEirec,fEicx
+        REAL*8                    :: sigmaviz,sigmavrec,sigmavcx,fEiiz,fEirec,fEicx
     !amjuel radiation losses
     real*8                    :: sigmavEiz,sigmavErec
     real*8                    :: dsigmavEiz_dU(Neq),dsigmavErec_dU(Neq)
     real*8                    :: cooling_factor
     real*8                    :: dcooling_factor_dU(Neq)
-        REAL*8                    :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq),dTloss_dU(Neq),dTlossrec_dU(Neq)
+        REAL*8                    :: dsigmaviz_dU(Neq),dsigmavrec_dU(Neq),dsigmavcx_dU(Neq)
         REAL*8                    :: dfEiiz_dU(Neq),dfEirec_dU(Neq),dfEicx_dU(Neq)
-#ifdef DNNLINEARIZED
     real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
 #ifdef NEUTRALP
         REAL*8                    :: Dnn,Dpn,Alphanp,Betanp,GammaLim,Gammaredpn,Tmin
         REAL*8                    :: Anp(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),dDpn_dU(Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq)
@@ -2554,12 +2552,6 @@ CONTAINS
         CALL compute_dfEirec_dU(ue,dfEirec_dU)
         CALL compute_fEicx(ue,fEicx)
         CALL compute_dfEicx_dU(ue,dfEicx_dU)
-    !Neutral Source Terms needed in the electron energy equation
-        CALL compute_Tloss(ue,Tloss)
-        CALL compute_dTloss_dU(ue,dTloss_dU)
-        CALL compute_Tlossrec(ue,Tlossrec)
-        CALL compute_dTlossrec_dU(ue,dTlossrec_dU)
-
     IF (switch%impurity_radiation) THEN
         CALL compute_cooling_factor(ue,cooling_factor)
         !WRITE(*,*) "cooling_factor", cooling_factor
@@ -2569,32 +2561,20 @@ CONTAINS
         dcooling_factor_dU = 0.
     ENDIF
 
-#ifdef AMJUELSPLINES
-    !Amjuel energy losses
+    ! Neutral energy-rate coefficients
     call compute_sigmavEiz(ue,sigmavEiz)
     call compute_sigmavErec(ue,sigmavErec)
     call compute_dsigmavEiz_dU(ue,dsigmavEiz_dU)
     call compute_dsigmavErec_dU(ue,dsigmavErec_dU)
-#else
-    !! hot fix DO NOT USE
-    WRITE(*,*) "this is a hotfix. Do not use. STOPPING."
-    STOP
-    sigmavEiz = sigmaviz*Tloss
-    sigmavErec = sigmavrec*Tlossrec
-#endif
 
 
-#ifdef DNNLINEARIZED
         CALL compute_Dnn_dU(ue,Dnn_dU)
-
         Dnn_dU_u = dot_PRODUCT(Dnn_dU,Ue)
-#endif
 
 #endif
 
     !Assembly the matrix for neutral sources
 #ifdef TEMPERATURE
-#ifdef AMJUELSPLINES
 IF (switch%impurity_radiation) THEN
   call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
     &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
@@ -2607,12 +2587,6 @@ ELSE
     &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0, &
     sigmavEiz=sigmavEiz,dsigmavEiz_dU=dsigmavEiz_dU,sigmavErec=sigmavErec,dsigmavErec_dU=dsigmavErec_dU)
 ENDIF
-#else
-    call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
-      &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
-      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0,&
-      Tloss=Tloss,dTloss_dU=dTloss_dU,Tlossrec=Tlossrec,dTlossrec_dU=dTlossrec_dU)
-#endif
 #else
         CALL assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,Sn,Sn0)
 #endif
@@ -2736,12 +2710,11 @@ ENDIF
           IF (switch%ohmicsrc) THEN
             rhs(:,i) = rhs(:,i) + Sohmic*(Jtor**2)*Ni
           ENDIF
-#ifdef DNNLINEARIZED
+#ifndef NEUTRALP
           ELSEIF (i == 5) THEN
                  DO j = 1,5
               z = i+(j-1)*Neq
                     DO k = 1,Ndim
-                !z = i+(k-1)*Neq+(j-1)*Neq*Ndim
                 Auu(:,:,z) =Auu(:,:,z) + (NxyzNi(:,:,k)*Dnn_dU(j)*Qpr(k,i))
                     ENDDO
                  ENDDO
@@ -3040,9 +3013,7 @@ ENDIF
       real*8                    :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)
       real*8                    :: W3(Neq),dW3_dU(Neq,Neq),QdW3(Ndim,Neq)
       real*8                    :: W4(Neq),dW4_dU(Neq,Neq),QdW4(Ndim,Neq)
-#ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8                    :: ddk_dU(Neq), ddk_dU_U
@@ -3145,11 +3116,8 @@ ENDIF
         dq_fs_i_dU = 0.
       END IF
 
-#ifdef DNNLINEARIZED
            CALL compute_Dnn_dU(uf,Dnn_dU)
-
       Dnn_dU_u = dot_product(Dnn_dU,uf)
-#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       call compute_ddk_dU(uf,xyf,q_cyl,ddk_dU)
@@ -3386,7 +3354,7 @@ ENDIF
                  kmultf = flux_limiter_e**2*coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
-#ifdef DNNLINEARIZED
+#ifndef NEUTRALP
       ELSEIF (i == 5) THEN
         DO j=1,Neq
           ind_jf = ind_asf+j
@@ -3527,9 +3495,7 @@ ENDIF
       real*8                    :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)  
       real*8                    :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
       real*8                    :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
-#ifdef DNNLINEARIZED
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8                    :: ddk_dU(Neq), ddk_dU_U
@@ -3631,11 +3597,8 @@ ENDIF
         dq_fs_i_dU = 0.
       END IF
       
-#ifdef DNNLINEARIZED
            CALL compute_Dnn_dU(uf,Dnn_dU)
-
       Dnn_dU_u = dot_product(Dnn_dU,uf)
-#endif
 
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -3877,7 +3840,7 @@ END IF
           END DO
                  kmultf = flux_limiter_e**2*coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
-#ifdef DNNLINEARIZED
+#ifndef NEUTRALP
         ELSEIF (i == 5) THEN
             DO j=1,Neq
               ind_jf = ind_asf+j
@@ -4008,54 +3971,55 @@ END IF
       REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz,sigmavErec,dsigmavEiz_dU(:),dsigmavErec_dU(:)
       REAL*8, INTENT(IN), OPTIONAL :: cooling_factor,dcooling_factor_dU(:)
 #endif
-             REAL*8             :: ad,ad4,RE,Sn(:,:),Sn0(:), Ti,Te
+             REAL*8             :: RE,Sn(:,:),Sn0(:)
+#ifdef TEMPERATURE
+             REAL*8             :: recombination_energy
+#endif
 
       Sn   = 0.
       Sn0  = 0.
       RE   = 0.
-      ad   = 1e19*1.374e-07 !n0*t0 !1e19*1.374e-07 !old 1.3737e12
-      ad4  =  1e19*1.374e-07**3/1.901e-3**2*1.60217662e-19/3.35e-27 ! n0*t0/u0^2/m_i*e = 1e19*1.374e-07**3/1.901e-3**2*1.60217662e-19/3.35e-27 !old (ad*1.6e-19)/((1.3839e4**2)*3.35e-27)
+#ifdef TEMPERATURE
+      recombination_energy = neutral_rt%recombination_energy
+#endif
 
 #ifndef TEMPERATURE
-      sigmaviz   = 3.01e-14
-      sigmavrec  = 1.3638e-20
-      sigmavcx   = 4.0808e-15
+      sigmaviz   = 3.01e-14*simpar%refval_density*simpar%refval_time
+      sigmavrec  = 1.3638e-20*simpar%refval_density*simpar%refval_time
+      sigmavcx   = 4.0808e-15*simpar%refval_density*simpar%refval_time
 #endif
 
 
       !Assembly Source Terms in plasma density equation
-      Sn(1,:)   = ad*(-dniz_dU(:)*sigmaviz + dnrec_dU(:)*sigmavrec)
+      Sn(1,:)   = -dniz_dU(:)*sigmaviz + dnrec_dU(:)*sigmavrec
 #ifdef TEMPERATURE
 
-      Sn(1,:)   = Sn(1,:) + ad*(-niz*dsigmaviz_dU(:) + nrec*dsigmavrec_dU(:))
+      Sn(1,:)   = Sn(1,:) - niz*dsigmaviz_dU(:) + nrec*dsigmavrec_dU(:)
 #endif
       !Assembly Source Terms in plasma momentum equation
 
-      Sn(2,:) = ad*(dfGammacx_dU(:)*sigmavcx + dfGammarec_dU(:)*sigmavrec)
+      Sn(2,:) = dfGammacx_dU(:)*sigmavcx + dfGammarec_dU(:)*sigmavrec
 #ifdef TEMPERATURE
 
 
-      Sn(2,:)   = Sn(2,:) + ad*( fGammacx*dsigmavcx_dU(:) + fGammarec*dsigmavrec_dU(:))
+      Sn(2,:)   = Sn(2,:) + fGammacx*dsigmavcx_dU(:) + fGammarec*dsigmavrec_dU(:)
 
       !Assembly Source Terms in ion energy equation
 
-      Sn(3,:) = ad*(-RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec+dfEicx_dU(:)*sigmavcx)
-      Sn(3,:) = Sn(3,:) + ad*(-RE*fEiiz*dsigmaviz_dU(:) + fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:))
+      Sn(3,:) = -RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec + dfEicx_dU(:)*sigmavcx
+      Sn(3,:) = Sn(3,:) - RE*fEiiz*dsigmaviz_dU(:) + fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:)
       !Assembly Source Terms in electron energy equation
 
 
-      !Sn(4,:) =  ad4*(dniz_dU(:)*sigmaviz*Tloss + niz*dsigmaviz_dU(:)*Tloss + niz*sigmaviz*dTloss_dU(:) +&
-            !   &dnrec_dU(:)*sigmavrec*Tlossrec + nrec*dsigmavrec_dU(:)*Tlossrec + nrec*sigmavrec*dTlossrec_dU(:))
-      !AMJUEL rates
-      Sn(4,:) =  ad4*(dniz_dU(:)*sigmavEiz + niz*dsigmavEiz_dU(:) +&
-        &dnrec_dU(:)*sigmavErec + nrec*dsigmavErec_dU(:))
+      Sn(4,:) = dniz_dU(:)*sigmavEiz + niz*dsigmavEiz_dU(:) + &
+        &dnrec_dU(:)*sigmavErec + nrec*dsigmavErec_dU(:)
       IF (PRESENT(cooling_factor)) THEN
       ! Cooling factor term
         Sn(4,:) = Sn(4,:) + nrec*dcooling_factor_dU(:)+dnrec_dU(:)*cooling_factor
       endif
 
       !modification with recombination gain
-      Sn(4,:) =  Sn(4,:)+ ad4*(-1.*dnrec_dU(:)*sigmavrec*13.6 - nrec*dsigmavrec_dU(:)*13.6)
+      Sn(4,:) = Sn(4,:) - recombination_energy*(dnrec_dU(:)*sigmavrec + nrec*dsigmavrec_dU(:))
 
 
 #endif
@@ -4063,65 +4027,24 @@ END IF
       Sn(5,:) = -Sn(1,:)
 
       !Assembly RHS Neutral Source Terms
-      Sn0(1)    = ad*(niz*sigmaviz - nrec*sigmavrec)
-      Sn0(2)    = ad*(-fGammacx*sigmavcx - fGammarec*sigmavrec)
-#ifdef AMJUELSPLINES
-             Sn0(1)    = Sn0(1) + ad*(niz*dot_PRODUCT(dsigmaviz_dU,U) - nrec*dot_PRODUCT(dsigmavrec_dU,U))
-             Sn0(2)    = Sn0(2) + ad*(- fGammarec*dot_PRODUCT(dsigmavrec_dU,U))
-#endif
+      Sn0(1)    = niz*sigmaviz - nrec*sigmavrec
+      Sn0(2)    = -fGammacx*sigmavcx - fGammarec*sigmavrec
 #ifdef TEMPERATURE
-      Sn0(3)    = ad*(RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx)
-      !Sn0(4)    = ad4*(-niz*sigmaviz*Tloss - nrec*sigmavrec*Tlossrec)
+      Sn0(1)    = Sn0(1) + niz*dot_PRODUCT(dsigmaviz_dU,U) - nrec*dot_PRODUCT(dsigmavrec_dU,U)
+      Sn0(2)    = Sn0(2) - fGammarec*dot_PRODUCT(dsigmavrec_dU,U)
+      Sn0(3)    = RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx
       !modification with recombination gain
-      Sn0(4)    = ad4*(nrec*sigmavrec*13.6)
-      Sn0(4)    = Sn0(4) + ad4*(-niz*sigmavEiz- nrec*sigmavErec)
-#ifdef AMJUELSPLINES
-             Sn0(3)    = Sn0(3) + ad*(RE*fEiiz*dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U))
-             !Sn0(4)    = Sn0(4) + ad4*(-niz*dot_PRODUCT(dsigmaviz_dU,U)*Tloss - nrec*dot_PRODUCT(dsigmavrec_dU,U)*Tlossrec)
-      Sn0(4)    = Sn0(4) + ad4*(-niz*dot_product(dsigmavEiz_dU,U) - nrec*dot_product(dsigmavErec_dU,U))
-      Sn0(4)    = Sn0(4) +  ad4*( nrec*dot_PRODUCT(dsigmavrec_dU,U)*13.6)
-#endif
+      Sn0(4)    = nrec*sigmavrec*recombination_energy
+      Sn0(4)    = Sn0(4) - niz*sigmavEiz - nrec*sigmavErec
+      Sn0(3)    = Sn0(3) + RE*fEiiz*dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U)
+      Sn0(4)    = Sn0(4) - niz*dot_product(dsigmavEiz_dU,U) - nrec*dot_product(dsigmavErec_dU,U)
+      Sn0(4)    = Sn0(4) + nrec*dot_PRODUCT(dsigmavrec_dU,U)*recombination_energy
       IF (PRESENT(cooling_factor)) THEN
       ! Cooling factor term
         Sn0(4)    = Sn0(4) - nrec*cooling_factor
       ENDIF
 #endif
       Sn0(5)  = -Sn0(1)
-
-      !Thresholds:
-#ifdef TEMPERATURE
-                   Ti = 2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
-                   Te = 2./(3.*phys%Mref)*U(4)/U(1)
-                   !if ((Ti .le. 2.e-5) .or. (Te .le. 2.e-5)) then
-             !         Sn(1,:) = - abs(Sn(1,:))
-             !         Sn0(1) = - abs(Sn0(1))
-             !         Sn(2,:) = - abs(Sn(2,:))
-             !         Sn0(2) = - abs(Sn0(2))
-                      !Sn(3,1) = ad*( - RE*fEiiz*dsigmaviz_dU(1))
-                      !Sn(3,2) = 0.
-                      !Sn(3,3) = ad*(-RE*dfEiiz_dU(3)*sigmaviz)
-                      !Sn(3,4) = ad*(-RE*fEiiz*dsigmaviz_dU(4))
-                      !Sn(3,5) = ad*(-RE*dfEiiz_dU(Neq)*sigmaviz)
-                      !Sn0(3) = ad*(RE*fEiiz*sigmaviz)
-                     !Sn(3,:) = - abs(Sn(3,:))
-                     !Sn0(3)  = abs(Sn0(3))
-                     !Sn(4,:) = - abs(Sn(4,:))
-                     !Sn0(4)  = abs(Sn0(4))
-#ifdef AMJUELSPLINES
-                      !Sn0(3)    = Sn0(3) + ad*(RE*fEiiz*dot_product(dsigmaviz_dU,U))
-#endif
-                      !Sn(4,1) = 0. !3./2.*6.e-10
-                      !Sn(4,2) = 0.
-                      !Sn(4,3) = 0.
-                      !Sn(4,4) = 0. !-1.
-                      !Sn(4,5) = 0.
-                      !Sn0(4) = 0.
-             !         Sn(5,:) = - abs(Sn(5,:))
-             !         Sn0(5) = - abs(Sn0(5))
-             !         Sn(:,:) = 0.
-             !         Sn0(:) = 0.
-                   !endif
-#endif
 
     ENDSUBROUTINE assemblyNeutral
 #endif

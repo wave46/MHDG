@@ -1893,9 +1893,7 @@ CONTAINS
         REAL*8           :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
 #ifdef NEUTRAL
         REAL*8           :: E, theta, RN
-#ifdef DNNLINEARIZED
-    real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
+        REAL*8           :: Dnn_dU(Neq), Dnn_dU_U
 #endif
 #ifdef DKLINEARIZED
     real*8                 ::       q_cyl, xyf(:), ddk_dU(Neq), ddk_dU_u
@@ -2083,10 +2081,8 @@ CONTAINS
         dq_fs_i_dU = 0.0
       END IF
 
-#ifdef DNNLINEARIZED
       call compute_Dnn_dU(ufg,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,ufg)
-#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       call compute_ddk_dU(ufg,xyf,q_cyl,ddk_dU)
@@ -2454,7 +2450,6 @@ CONTAINS
        !else
        !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
        !endif
-#ifdef DNNLINEARIZED
        DO j=1,Neq
         indj = ind_asf + j
         kmult = Dnn_dU(j)*Qpr(idm,k)*ng(idm)*NiNi
@@ -2462,7 +2457,6 @@ CONTAINS
            ENDDO
        kmultf = Dnn_dU_U*(Qpr(idm,k)*ng(idm))*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
-#endif
 #else
        indi = ind_asf + k
        DO j=1,Neq
