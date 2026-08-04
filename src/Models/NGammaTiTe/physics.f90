@@ -99,6 +99,8 @@ CONTAINS
     IF (phys%idx_rhon_eq == 0) THEN
       phys%idx_rhon_eq = 5
       phys%idx_rhon_pv = 11
+      phys%Neq = phys%idx_rhon_eq
+      phys%npv = phys%idx_rhon_pv
     END IF
     phys%idx_gamman_eq = phys%idx_rhon_eq + 1
     phys%idx_un_pv = phys%idx_rhon_pv + 1
@@ -592,6 +594,11 @@ CONTAINS
 #ifdef NEUTRAL
     IF (phys%idx_rhon_eq > 0 .AND. phys%idx_rhon_pv > 0) &
       &ua(:,phys%idx_rhon_eq) = ABS(up(:,phys%idx_rhon_pv))
+#ifdef NEUTRALGAMMA
+    IF (phys%idx_gamman_eq > 0 .AND. phys%idx_un_pv > 0 .AND. phys%idx_rhon_pv > 0) THEN
+      ua(:,phys%idx_gamman_eq) = ABS(MAX(up(:,phys%idx_rhon_pv), 1.d-7))*up(:,phys%idx_un_pv)
+    END IF
+#endif
 #ifdef KEQUATION
     IF (phys%idx_k_eq > 0 .AND. phys%idx_k_pv > 0) &
       &ua(:,phys%idx_k_eq) = ABS(up(:,phys%idx_k_pv))
@@ -608,8 +615,13 @@ CONTAINS
     REAL*8, DIMENSION(:, :), INTENT(in)  :: ua
     REAL*8, DIMENSION(:, :), INTENT(out) :: up
     REAL*8,  DIMENSION(SIZE(ua,1))       :: U1
+    REAL*8,  DIMENSION(SIZE(ua,1))       :: Unn
 
     U1 = max(ua(:,1),1e-20)
+    Unn = 0.d0
+#ifdef NEUTRAL
+    IF (phys%idx_rhon_eq > 0) Unn = ABS(ua(:,phys%idx_rhon_eq))
+#endif
 
     up(:, 1) = ABS(U1)                                                           ! density
     up(:, 2) = ua(:, 2)/U1                                            ! u parallel
@@ -624,6 +636,11 @@ CONTAINS
 #ifdef NEUTRAL
     IF (phys%idx_rhon_eq > 0 .AND. phys%idx_rhon_pv > 0) &
       &up(:,phys%idx_rhon_pv) = ABS(ua(:,phys%idx_rhon_eq)) ! neutral density
+#ifdef NEUTRALGAMMA
+    IF (phys%idx_gamman_eq > 0 .AND. phys%idx_un_pv > 0) THEN
+      up(:,phys%idx_un_pv) = ua(:,phys%idx_gamman_eq)/ABS(MAX(Unn, 1.d-7))
+    END IF
+#endif
 #ifdef KEQUATION
     IF (phys%idx_k_eq > 0 .AND. phys%idx_k_pv > 0) &
       &up(:,phys%idx_k_pv) = ABS(ua(:,phys%idx_k_eq)) ! turbulent energy
@@ -808,6 +825,33 @@ CONTAINS
     ddenom_dU(phys%idx_rhon_eq) = ddenom_dU(phys%idx_rhon_eq) + sigmavnn
   ENDSUBROUTINE compute_dneutral_diffusion_denominator_dU
 
+#ifdef NEUTRALGAMMA
+  SUBROUTINE compute_neutral_gamma_denominator(U, denom)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: denom
+    REAL*8              :: sigmavcx, sigmavnn
+
+    CALL compute_sigmavcx(U, sigmavcx)
+    CALL compute_sigmavnn(U, sigmavnn)
+    denom = U(1)*sigmavcx + U(phys%idx_rhon_eq)*sigmavnn
+  ENDSUBROUTINE compute_neutral_gamma_denominator
+
+  SUBROUTINE compute_dneutral_gamma_denominator_dU(U, ddenom_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: ddenom_dU(:)
+    REAL*8              :: sigmavcx, sigmavnn
+    REAL*8              :: dsigmavcx_dU(SIZE(U)), dsigmavnn_dU(SIZE(U))
+
+    CALL compute_sigmavcx(U, sigmavcx)
+    CALL compute_sigmavnn(U, sigmavnn)
+    CALL compute_dsigmavcx_dU(U, dsigmavcx_dU)
+    CALL compute_dsigmavnn_dU(U, dsigmavnn_dU)
+    ddenom_dU = U(1)*dsigmavcx_dU + U(phys%idx_rhon_eq)*dsigmavnn_dU
+    ddenom_dU(1) = ddenom_dU(1) + sigmavcx
+    ddenom_dU(phys%idx_rhon_eq) = ddenom_dU(phys%idx_rhon_eq) + sigmavnn
+  ENDSUBROUTINE compute_dneutral_gamma_denominator_dU
+#endif
+
   SUBROUTINE compute_Dnn(U, Dnn)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: Dnn
@@ -833,7 +877,8 @@ CONTAINS
   SUBROUTINE jacobianMatrices(U, A)
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: A(:, :)
-    INTEGER             :: inn, ik
+    REAL*8              :: Unn
+    INTEGER             :: inn, ign, ik
     ![ 0,                                           1,                              0,                0; ...
     ! -2/3*U(2)**2/U(1)**2                          4/3*U(2)/U(1)                   2/3,              2/3; ...
     ! -5/3*U(2)*U(3)/U(1)**2+2/3*U(2)**3/U(1)**3    5/3*U(3)/U(1)-U(2)**2/U(1)**2   5/3*U(2)/U(1),    0 ;   ...
@@ -842,6 +887,7 @@ CONTAINS
     ! -U(6)*U(2)/U(1)**2,                           U(6)/U(1),                      0,                0,            0,        U(2)/U(1)]
     A = 0.d0
     inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
     ik = phys%idx_k_eq
     IF (switch%decoup) THEN
       A(1, 2) = 1.
@@ -861,6 +907,17 @@ CONTAINS
         A(ik, 1) = -U(ik)*U(2)/U(1)**2
         A(ik, 2) = U(ik)/U(1)
         A(ik, ik) = U(2)/U(1)
+      END IF
+#endif
+#ifdef NEUTRALGAMMA
+      IF (inn > 0 .AND. ign > 0) THEN
+        Unn = MAX(1.d-7,U(inn))
+        A(inn, ign) = 1.d0
+        A(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
+        A(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
+        A(ign, 3) = 2.d0/3.d0*Unn/U(1)
+        A(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
+        A(ign, ign) = 2.d0*U(ign)/Unn
       END IF
 #endif
     ELSE
@@ -889,12 +946,24 @@ CONTAINS
       END IF
 #endif
 #ifdef NEUTRAL
+#ifdef NEUTRALGAMMA
+      IF (inn > 0 .AND. ign > 0) THEN
+        Unn = MAX(1.d-7,U(inn))
+        A(inn, ign) = 1.d0
+        A(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
+        A(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
+        A(ign, 3) = 2.d0/3.d0*Unn/U(1)
+        A(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
+        A(ign, ign) = 2.d0*U(ign)/Unn
+      END IF
+#else
 #ifdef NEUTRALCONVECTION
       IF (inn > 0) THEN
         A(inn, 1) = -U(inn)*U(2)/U(1)**2
         A(inn, 2) = U(inn)/U(1)
         A(inn, inn) = U(2)/U(1)
       END IF
+#endif
 #endif
 #endif
     END IF
@@ -924,9 +993,11 @@ CONTAINS
   SUBROUTINE jacobianMatricesFace(U, bn, An)
     REAL*8, INTENT(in)  :: U(:), bn
     REAL*8, INTENT(out) :: An(:, :)
-    INTEGER             :: inn, ik
+    REAL*8              :: Unn
+    INTEGER             :: inn, ign, ik
     An = 0.d0
     inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
     ik = phys%idx_k_eq
     IF (switch%decoup) THEN
       An(1, 2) = 1.
@@ -946,6 +1017,17 @@ CONTAINS
         An(ik, 1) = -U(ik)*U(2)/U(1)**2
         An(ik, 2) = U(ik)/U(1)
         An(ik, ik) = U(2)/U(1)
+      END IF
+#endif
+#ifdef NEUTRALGAMMA
+      IF (inn > 0 .AND. ign > 0) THEN
+        Unn = MAX(1.d-7,U(inn))
+        An(inn, ign) = 1.d0
+        An(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
+        An(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
+        An(ign, 3) = 2.d0/3.d0*Unn/U(1)
+        An(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
+        An(ign, ign) = 2.d0*U(ign)/Unn
       END IF
 #endif
     ELSE
@@ -971,12 +1053,24 @@ CONTAINS
       END IF
 #endif
 #ifdef NEUTRAL
+#ifdef NEUTRALGAMMA
+      IF (inn > 0 .AND. ign > 0) THEN
+        Unn = MAX(1.d-7,U(inn))
+        An(inn, ign) = 1.d0
+        An(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
+        An(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
+        An(ign, 3) = 2.d0/3.d0*Unn/U(1)
+        An(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
+        An(ign, ign) = 2.d0*U(ign)/Unn
+      END IF
+#else
 #ifdef NEUTRALCONVECTION
       IF (inn > 0) THEN
         An(inn, 1) = -U(inn)*U(2)/U(1)**2
         An(inn, 2) = U(inn)/U(1)
         An(inn, inn) = U(2)/U(1)
       END IF
+#endif
 #endif
 #endif
     ENDIF
@@ -1432,6 +1526,31 @@ CONTAINS
     G = divb*G
   ENDSUBROUTINE GimpMatrix
 
+#ifdef NEUTRALGAMMA
+  SUBROUTINE GimpMatrixN(U, divb, Gn)
+    REAL*8, INTENT(IN)  :: U(:), divb
+    REAL*8, INTENT(OUT) :: Gn(:, :)
+    REAL*8              :: U1, U2, U3, Unn
+    INTEGER             :: inn, ign
+
+    Gn = 0.d0
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+
+    U1 = U(1)
+    U2 = U(2)
+    U3 = U(3)
+    Unn = MAX(U(inn), 1.d-7)
+
+    Gn(ign, 1) = 2.d0/3.d0*Unn*(-U3/U1**2 + U2**2/U1**3)
+    Gn(ign, 2) = -2.d0/3.d0*Unn*U2/U1**2
+    Gn(ign, 3) = 2.d0/3.d0*Unn/U1
+    Gn(ign, inn) = 2.d0/3.d0*(U3/U1 - 0.5d0*U2**2/U1**2)
+
+    Gn = divb*Gn
+  ENDSUBROUTINE GimpMatrixN
+#endif
+
   !*****************************************
   ! Parallel diffusion terms
   !****************************************
@@ -1481,6 +1600,92 @@ CONTAINS
     dV_dU(1, 4) = -1/U(1)**2
     dV_dU(4, 1) = -1/U(1)**2
   ENDSUBROUTINE compute_dV_dUe
+
+#ifdef NEUTRALGAMMA
+  SUBROUTINE computeEtan(U, Etan)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: Etan
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: coeff, denom, eta_coeff, Unn
+
+    Unn = MAX(U(phys%idx_rhon_eq), tol)
+
+#ifdef CONSTANTNEUTRALDIFF
+    Etan = Unn*phys%diff_nn
+#else
+    CALL compute_neutral_transport_prefactor(U, coeff)
+    CALL compute_neutral_gamma_denominator(U, denom)
+    eta_coeff = coeff/denom
+    CALL double_softplus(eta_coeff, 10.d0*phys%diff_n, phys%diff_nn)
+    Etan = Unn*eta_coeff
+#endif
+  ENDSUBROUTINE computeEtan
+
+  SUBROUTINE compute_dEtan_dU(U, dEtan_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: dEtan_dU(:)
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: coeff, denom, eta_coeff, double_soft_deriv, Unn
+    REAL*8              :: dcoeff_dU(SIZE(U)), ddenom_dU(SIZE(U)), deta_dU(SIZE(U))
+    INTEGER             :: inn
+
+    dEtan_dU = 0.d0
+    inn = phys%idx_rhon_eq
+    Unn = MAX(U(inn), tol)
+
+#ifdef CONSTANTNEUTRALDIFF
+    IF (U(inn) >= tol) dEtan_dU(inn) = phys%diff_nn
+#else
+    CALL compute_neutral_transport_prefactor(U, coeff)
+    CALL compute_dneutral_transport_prefactor_dU(U, dcoeff_dU)
+    CALL compute_neutral_gamma_denominator(U, denom)
+    CALL compute_dneutral_gamma_denominator_dU(U, ddenom_dU)
+
+    eta_coeff = coeff/denom
+    CALL double_softplus_deriv(eta_coeff, 10.d0*phys%diff_n, phys%diff_nn, double_soft_deriv)
+    deta_dU = (dcoeff_dU/denom - coeff*ddenom_dU/denom**2)*double_soft_deriv
+    CALL double_softplus(eta_coeff, 10.d0*phys%diff_n, phys%diff_nn)
+
+    dEtan_dU = Unn*deta_dU
+    IF (U(inn) >= tol) dEtan_dU(inn) = dEtan_dU(inn) + eta_coeff
+#endif
+  ENDSUBROUTINE compute_dEtan_dU
+
+  SUBROUTINE computeVun(U, Vun)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: Vun(:)
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: Unn
+    INTEGER             :: inn, ign
+
+    Vun = 0.d0
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+    Unn = MAX(U(inn), tol)
+
+    Vun(inn) = -U(ign)/Unn**2
+    Vun(ign) = 1.d0/Unn
+  ENDSUBROUTINE computeVun
+
+  SUBROUTINE compute_dVun_dU(U, dVun_dU)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: dVun_dU(:, :)
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: Unn
+    INTEGER             :: inn, ign
+
+    dVun_dU = 0.d0
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+    Unn = MAX(U(inn), tol)
+
+    IF (U(inn) >= tol) THEN
+      dVun_dU(inn, inn) = 2.d0*U(ign)/Unn**3
+      dVun_dU(ign, inn) = -1.d0/Unn**2
+    END IF
+    dVun_dU(inn, ign) = -1.d0/Unn**2
+  ENDSUBROUTINE compute_dVun_dU
+#endif
 
   FUNCTION computeAlphai(U) RESULT(res)
     REAL*8 :: U(:)
@@ -1891,6 +2096,26 @@ CONTAINS
     res(1) = U2
     res(2) = U1
   ENDSUBROUTINE compute_dfGammarec_dU
+
+#ifdef NEUTRALGAMMA
+  SUBROUTINE compute_fGammaN(U, fGammaN)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: fGammaN
+
+    fGammaN = U(1)*U(phys%idx_gamman_eq)
+  ENDSUBROUTINE compute_fGammaN
+
+  SUBROUTINE compute_dfGammaN_dU(U, res)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: res(:)
+    INTEGER             :: ign
+
+    res = 0.d0
+    ign = phys%idx_gamman_eq
+    res(1) = U(ign)
+    res(ign) = U(1)
+  ENDSUBROUTINE compute_dfGammaN_dU
+#endif
 
 
 #ifdef TEMPERATURE
@@ -2765,6 +2990,39 @@ CONTAINS
     res(phys%idx_rhon_eq) = (U2**2)/U1
     res(:) = res(:)*0.5
   ENDSUBROUTINE compute_dfEicx_dU
+
+#ifdef NEUTRALGAMMA
+  SUBROUTINE compute_fEiN(U, fEiN)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: fEiN
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: Unn
+    INTEGER             :: inn, ign
+
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+    Unn = MAX(U(inn), tol)
+    fEiN = 0.5d0*U(1)*U(ign)**2/Unn
+  ENDSUBROUTINE compute_fEiN
+
+  SUBROUTINE compute_dfEiN_dU(U, res)
+    REAL*8, INTENT(IN)  :: U(:)
+    REAL*8, INTENT(OUT) :: res(:)
+    REAL*8, PARAMETER   :: tol = 1.d-7
+    REAL*8              :: Unn
+    INTEGER             :: inn, ign
+
+    res = 0.d0
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+    Unn = MAX(U(inn), tol)
+
+    res(1) = U(ign)**2/Unn
+    IF (U(inn) >= tol) res(inn) = -U(1)*(U(ign)/Unn)**2
+    res(ign) = 2.d0*U(1)*U(ign)/Unn
+    res = 0.5d0*res
+  ENDSUBROUTINE compute_dfEiN_dU
+#endif
 
 
 #ifdef NEUTRAL

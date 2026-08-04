@@ -2274,7 +2274,7 @@ CONTAINS
     real*8                     :: kcoeff,exb(3)
     integer*4                  :: alpha,beta,ii
 #endif
-    integer*4                 :: i,j,k,iord,z,inn,ik
+    integer*4                 :: i,j,k,iord,z,inn,ign,ik
     real*8,dimension(neq,neq) :: A
     real*8,dimension(neq,Ndim):: APinch
     real*8                    :: Qpr(Ndim,Neq),bb(3)
@@ -2284,6 +2284,11 @@ CONTAINS
 
 #ifdef TEMPERATURE
     real*8,dimension(neq,neq) :: GG
+#ifdef NEUTRALGAMMA
+    real*8,dimension(neq,neq) :: GGn
+    real*8                    :: Etan,dEtan_dU(Neq),gmGamman(Ndim)
+    real*8                    :: Vun(Neq),dVun_dU(Neq,Neq),TauGamman(Ndim,Neq)
+#endif
     real*8                    :: Telect
     real*8                    :: Vveci(Neq),dV_dUi(Neq,Neq),Alphai,dAlpha_dUi(Neq),gmi,taui(Ndim,Neq)
     real*8                    :: Vvece(Neq),dV_dUe(Neq,Neq),Alphae,dAlpha_dUe(Neq),gme,taue(Ndim,Neq)
@@ -2304,8 +2309,14 @@ CONTAINS
 #endif
     real*8                    :: niz,nrec,fGammacx,fGammarec
     real*8                    :: dniz_dU(Neq),dnrec_dU(Neq),dfGammacx_dU(Neq),dfGammarec_dU(Neq)
+#ifdef NEUTRALGAMMA
+    real*8                    :: fGammaN,dfGammaN_dU(Neq)
+#endif
 #ifdef TEMPERATURE
         REAL*8                    :: sigmaviz,sigmavrec,sigmavcx,fEiiz,fEirec,fEicx
+#ifdef NEUTRALGAMMA
+    real*8                    :: fEiN,dfEiN_dU(Neq)
+#endif
     !amjuel radiation losses
     real*8                    :: sigmavEiz,sigmavErec
     real*8                    :: dsigmavEiz_dU(Neq),dsigmavErec_dU(Neq)
@@ -2330,6 +2341,7 @@ CONTAINS
 
 
     inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
     ik = phys%idx_k_eq
 
     b = b3(1:Ndim)
@@ -2365,6 +2377,15 @@ CONTAINS
 #ifdef TEMPERATURE
     ! Jacobian for the curvature term
     CALL GimpMatrix(ue,divb,GG)
+#ifdef NEUTRALGAMMA
+    CALL GimpMatrixN(ue,divb,GGn)
+    CALL computeEtan(ue,Etan)
+    CALL compute_dEtan_dU(ue,dEtan_dU)
+    CALL computeVun(ue,Vun)
+    CALL compute_dVun_dU(ue,dVun_dU)
+    gmGamman = MATMUL(Qpr,Vun)
+    TauGamman = MATMUL(Qpr,dVun_dU)
+#endif
 
     ! Compute V(U^(k-1))
         CALL computeVi(ue,Vveci)
@@ -2549,6 +2570,10 @@ CONTAINS
         CALL compute_dfGammacx_dU(ue,dfGammacx_dU)
         CALL compute_fGammarec(ue,fGammarec)
         CALL compute_dfGammarec_dU(ue,dfGammarec_dU)
+#ifdef NEUTRALGAMMA
+        CALL compute_fGammaN(ue,fGammaN)
+        CALL compute_dfGammaN_dU(ue,dfGammaN_dU)
+#endif
 #ifdef TEMPERATURE
         CALL compute_sigmavcx(ue,sigmavcx)
         CALL compute_dsigmavcx_dU(ue,dsigmavcx_dU)
@@ -2559,6 +2584,10 @@ CONTAINS
         CALL compute_dfEirec_dU(ue,dfEirec_dU)
         CALL compute_fEicx(ue,fEicx)
         CALL compute_dfEicx_dU(ue,dfEicx_dU)
+#ifdef NEUTRALGAMMA
+        CALL compute_fEiN(ue,fEiN)
+        CALL compute_dfEiN_dU(ue,dfEiN_dU)
+#endif
     IF (switch%impurity_radiation) THEN
         CALL compute_cooling_factor(ue,cooling_factor)
         !WRITE(*,*) "cooling_factor", cooling_factor
@@ -2583,19 +2612,38 @@ CONTAINS
     !Assembly the matrix for neutral sources
 #ifdef TEMPERATURE
 IF (switch%impurity_radiation) THEN
+#ifdef NEUTRALGAMMA
+  call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
+    &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,fGammaN,dfGammaN_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
+    &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,fEiN,dfEiN_dU,Sn,Sn0, &
+    sigmavEiz=sigmavEiz,dsigmavEiz_dU=dsigmavEiz_dU,sigmavErec=sigmavErec,dsigmavErec_dU=dsigmavErec_dU,&
+    cooling_factor=cooling_factor,dcooling_factor_dU=dcooling_factor_dU)
+#else
   call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
     &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
     &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0, &
     sigmavEiz=sigmavEiz,dsigmavEiz_dU=dsigmavEiz_dU,sigmavErec=sigmavErec,dsigmavErec_dU=dsigmavErec_dU,&
     cooling_factor=cooling_factor,dcooling_factor_dU=dcooling_factor_dU)
+#endif
 ELSE
+#ifdef NEUTRALGAMMA
+  call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
+    &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,fGammaN,dfGammaN_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
+    &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,fEiN,dfEiN_dU,Sn,Sn0, &
+    sigmavEiz=sigmavEiz,dsigmavEiz_dU=dsigmavEiz_dU,sigmavErec=sigmavErec,dsigmavErec_dU=dsigmavErec_dU)
+#else
   call assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
     &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
     &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0, &
     sigmavEiz=sigmavEiz,dsigmavEiz_dU=dsigmavEiz_dU,sigmavErec=sigmavErec,dsigmavErec_dU=dsigmavErec_dU)
+#endif
 ENDIF
 #else
+#ifdef NEUTRALGAMMA
+        CALL assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,fGammaN,dfGammaN_dU,Sn,Sn0)
+#else
         CALL assemblyNeutral(ue,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,Sn,Sn0)
+#endif
 #endif
 #endif
 !NEUTRAL
@@ -2758,6 +2806,21 @@ ENDIF
                     rhs(:,i) = rhs(:,i) + dot_PRODUCT(dDpn_dU,ue)*gmpn(k)*Nxyzg(:,k)
               !rhs(:,i) = rhs(:,i) - Gammaredpn*(Dpn*dot_product(Taui(k,:),ue) + dot_product(dDpn_dU,ue)*gmipn(k))*Nxyzg(:,k)
            END DO
+#endif
+#ifdef NEUTRALGAMMA
+        ELSEIF (i == ign) THEN
+          DO j = 1,Neq
+            z = i+(j-1)*Neq
+            Auu(:,:,z) = Auu(:,:,z) - GGn(i,j)*NNi
+            DO k = 1,Ndim
+              z = i+(k-1)*Neq+(j-1)*Neq*Ndim
+              Auu(:,:,i+(j-1)*Neq) = Auu(:,:,i+(j-1)*Neq) + Etan*TauGamman(k,j)*NxyzNi(:,:,k)
+              Auq(:,:,z) = Auq(:,:,z) + Etan*Vun(j)*NxyzNi(:,:,k)
+            END DO
+          END DO
+          DO k = 1,Ndim
+            rhs(:,i) = rhs(:,i) + Etan*dot_PRODUCT(TauGamman(k,:),ue)*Nxyzg(:,k)
+          END DO
 #endif
 		END IF
 #endif
@@ -3966,26 +4029,43 @@ END IF
   !
   !********************************************************************
 #ifdef TEMPERATURE
+#ifdef NEUTRALGAMMA
+  SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
+      &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,fGammaN,dfGammaN_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
+      &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,fEiN,dfEiN_dU,Sn,Sn0,&
+      sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU,cooling_factor,dcooling_factor_dU)
+#else
   SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,sigmaviz,dsigmaviz_dU,sigmavrec,dsigmavrec_dU,&
       &fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,sigmavcx,dsigmavcx_dU,fEiiz,&
       &dfEiiz_dU,fEirec,dfEirec_dU,fEicx,dfEicx_dU,Sn,Sn0,&
       sigmavEiz,dsigmavEiz_dU,sigmavErec,dsigmavErec_dU,cooling_factor,dcooling_factor_dU)
+#endif
+#else
+#ifdef NEUTRALGAMMA
+    SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,fGammaN,dfGammaN_dU,Sn,Sn0)
 #else
     SUBROUTINE assemblyNeutral(U,niz,dniz_dU,nrec,dnrec_dU,fGammacx,dfGammacx_dU,fGammarec,dfGammarec_dU,Sn,Sn0)
 #endif
+#endif
              REAL*8, INTENT(IN) :: niz,nrec,fGammacx,fGammarec
              REAL*8, INTENT(IN) :: U(:),dniz_dU(:),dnrec_dU(:),dfGammacx_dU(:),dfGammarec_dU(:)
+#ifdef NEUTRALGAMMA
+             REAL*8, INTENT(IN) :: fGammaN,dfGammaN_dU(:)
+#endif
 #ifndef TEMPERATURE
              REAL*8             :: sigmaviz,sigmavrec,sigmavcx
 #else
       REAL*8, INTENT(IN)        :: sigmaviz,sigmavrec,sigmavcx,fEiiz,fEirec,fEicx      
       REAL*8, INTENT(IN)        :: dsigmaviz_dU(:),dsigmavrec_dU(:),dsigmavcx_dU(:)
       REAL*8, INTENT(IN)        :: dfEiiz_dU(:),dfEirec_dU(:),dfEicx_dU(:)
+#ifdef NEUTRALGAMMA
+      REAL*8, INTENT(IN)        :: fEiN,dfEiN_dU(:)
+#endif
       REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz,sigmavErec,dsigmavEiz_dU(:),dsigmavErec_dU(:)
       REAL*8, INTENT(IN), OPTIONAL :: cooling_factor,dcooling_factor_dU(:)
 #endif
              REAL*8             :: RE,Sn(:,:),Sn0(:)
-             INTEGER            :: inn
+             INTEGER            :: inn,ign
 #ifdef TEMPERATURE
              REAL*8             :: recombination_energy
 #endif
@@ -3994,6 +4074,7 @@ END IF
       Sn0  = 0.
       RE   = 0.
       inn  = phys%idx_rhon_eq
+      ign  = phys%idx_gamman_eq
 #ifdef TEMPERATURE
       recombination_energy = neutral_rt%recombination_energy
 #endif
@@ -4014,15 +4095,25 @@ END IF
       !Assembly Source Terms in plasma momentum equation
 
       Sn(2,:) = dfGammacx_dU(:)*sigmavcx + dfGammarec_dU(:)*sigmavrec
+#ifdef NEUTRALGAMMA
+      Sn(2,:) = Sn(2,:) - dfGammaN_dU(:)*(sigmaviz + sigmavcx)
+#endif
 #ifdef TEMPERATURE
 
 
       Sn(2,:)   = Sn(2,:) + fGammacx*dsigmavcx_dU(:) + fGammarec*dsigmavrec_dU(:)
+#ifdef NEUTRALGAMMA
+      Sn(2,:) = Sn(2,:) - fGammaN*(dsigmaviz_dU(:) + dsigmavcx_dU(:))
+#endif
 
       !Assembly Source Terms in ion energy equation
 
       Sn(3,:) = -RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec + dfEicx_dU(:)*sigmavcx
       Sn(3,:) = Sn(3,:) - RE*fEiiz*dsigmaviz_dU(:) + fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:)
+#ifdef NEUTRALGAMMA
+      Sn(3,:) = Sn(3,:) - dfEiN_dU(:)*(sigmaviz + sigmavcx) - &
+        &fEiN*(dsigmaviz_dU(:) + dsigmavcx_dU(:))
+#endif
       !Assembly Source Terms in electron energy equation
 
 
@@ -4040,18 +4131,33 @@ END IF
 #endif
       !Assembly Source Terms in neutral density equation
       Sn(inn,:) = -Sn(1,:)
+#ifdef NEUTRALGAMMA
+      Sn(ign,:) = -Sn(2,:)
+#endif
 
       !Assembly RHS Neutral Source Terms
       Sn0(1)    = niz*sigmaviz - nrec*sigmavrec
       Sn0(2)    = -fGammacx*sigmavcx - fGammarec*sigmavrec
+#ifdef NEUTRALGAMMA
+      Sn0(2)    = Sn0(2) + fGammaN*(sigmaviz + sigmavcx)
+#endif
 #ifdef TEMPERATURE
       Sn0(1)    = Sn0(1) + niz*dot_PRODUCT(dsigmaviz_dU,U) - nrec*dot_PRODUCT(dsigmavrec_dU,U)
       Sn0(2)    = Sn0(2) - fGammarec*dot_PRODUCT(dsigmavrec_dU,U)
+#ifdef NEUTRALGAMMA
+      Sn0(2)    = Sn0(2) + fGammaN*dot_PRODUCT(dsigmaviz_dU,U)
+#endif
       Sn0(3)    = RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx
+#ifdef NEUTRALGAMMA
+      Sn0(3)    = Sn0(3) + fEiN*(sigmaviz + sigmavcx)
+#endif
       !modification with recombination gain
       Sn0(4)    = nrec*sigmavrec*recombination_energy
       Sn0(4)    = Sn0(4) - niz*sigmavEiz - nrec*sigmavErec
       Sn0(3)    = Sn0(3) + RE*fEiiz*dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U)
+#ifdef NEUTRALGAMMA
+      Sn0(3)    = Sn0(3) + fEiN*dot_PRODUCT(dsigmaviz_dU,U)
+#endif
       Sn0(4)    = Sn0(4) - niz*dot_product(dsigmavEiz_dU,U) - nrec*dot_product(dsigmavErec_dU,U)
       Sn0(4)    = Sn0(4) + nrec*dot_PRODUCT(dsigmavrec_dU,U)*recombination_energy
       IF (PRESENT(cooling_factor)) THEN
@@ -4060,6 +4166,9 @@ END IF
       ENDIF
 #endif
       Sn0(inn)  = -Sn0(1)
+#ifdef NEUTRALGAMMA
+      Sn0(ign)  = -Sn0(2)
+#endif
 
     ENDSUBROUTINE assemblyNeutral
 #endif
