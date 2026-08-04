@@ -315,21 +315,23 @@ CONTAINS
    ! derivatives at (x,y).
    !
    ! d2val_dx2 and d2val_dy2 are formed from second derivatives of the
-   ! Hermite basis. Mixed derivative d2/dxdy is not returned here because
-   ! current callers only need pure second derivatives.
+   ! Hermite basis.  The optional mixed derivative is useful when the
+   ! interpolant is used to refine magnetic critical points.
    !-----------------------------------------------------------------------
-   SUBROUTINE eval_bicubic_with_2nd_derivatives(ny, yvec, nx, xvec, f, fx, fy, fxy, y, x, val, dval_dy, dval_dx, d2val_dy2, d2val_dx2)
+   SUBROUTINE eval_bicubic_with_2nd_derivatives(ny, yvec, nx, xvec, f, fx, fy, fxy, y, x, val, dval_dy, dval_dx, d2val_dy2, d2val_dx2, d2val_dxdy)
       INTEGER, INTENT(IN) :: ny, nx
       REAL*8, INTENT(IN) :: yvec(ny), xvec(nx)
       REAL*8, INTENT(IN) :: f(ny, nx), fx(ny, nx), fy(ny, nx), fxy(ny, nx)
       REAL*8, INTENT(IN) :: y, x
       REAL*8, INTENT(OUT) :: val, dval_dy, dval_dx, d2val_dy2, d2val_dx2
+      REAL*8, INTENT(OUT), OPTIONAL :: d2val_dxdy
       INTEGER :: iy, ix
       REAL*8 :: ty, tx, dy, dx
       REAL*8 :: h00x, h10x, h01x, h11x, h00y, h10y, h01y, h11y
       REAL*8 :: dh00x, dh10x, dh01x, dh11x, dh00y, dh10y, dh01y, dh11y
       REAL*8 :: d2h00x, d2h10x, d2h01x, d2h11x, d2h00y, d2h10y, d2h01y, d2h11y
       REAL*8 :: a0, a1, b0, b1
+      REAL*8 :: da0_dx, da1_dx, db0_dx, db1_dx
 
       CALL find_cell_and_local_coordinate(ny, yvec, y, iy, ty)
       CALL find_cell_and_local_coordinate(nx, xvec, x, ix, tx)
@@ -374,10 +376,12 @@ CONTAINS
 
       val = h00y*a0 + h10y*b0 + h01y*a1 + h11y*b1
 
-      dval_dx = h00y*(dh00x*f(iy,ix)/dx + dh10x*fx(iy,ix) + dh01x*f(iy,ix+1)/dx + dh11x*fx(iy,ix+1)) + &
-                     h10y*(dh00x*dy*fy(iy,ix)/dx + dh10x*dy*fxy(iy,ix) + dh01x*dy*fy(iy,ix+1)/dx + dh11x*dy*fxy(iy,ix+1)) + &
-                     h01y*(dh00x*f(iy+1,ix)/dx + dh10x*fx(iy+1,ix) + dh01x*f(iy+1,ix+1)/dx + dh11x*fx(iy+1,ix+1)) + &
-                     h11y*(dh00x*dy*fy(iy+1,ix)/dx + dh10x*dy*fxy(iy+1,ix) + dh01x*dy*fy(iy+1,ix+1)/dx + dh11x*dy*fxy(iy+1,ix+1))
+      da0_dx = dh00x*f(iy,ix)/dx + dh10x*fx(iy,ix) + dh01x*f(iy,ix+1)/dx + dh11x*fx(iy,ix+1)
+      da1_dx = dh00x*f(iy+1,ix)/dx + dh10x*fx(iy+1,ix) + dh01x*f(iy+1,ix+1)/dx + dh11x*fx(iy+1,ix+1)
+      db0_dx = dh00x*dy*fy(iy,ix)/dx + dh10x*dy*fxy(iy,ix) + dh01x*dy*fy(iy,ix+1)/dx + dh11x*dy*fxy(iy,ix+1)
+      db1_dx = dh00x*dy*fy(iy+1,ix)/dx + dh10x*dy*fxy(iy+1,ix) + dh01x*dy*fy(iy+1,ix+1)/dx + dh11x*dy*fxy(iy+1,ix+1)
+
+      dval_dx = h00y*da0_dx + h10y*db0_dx + h01y*da1_dx + h11y*db1_dx
 
       dval_dy = dh00y*a0/dy + dh10y*b0/dy + dh01y*a1/dy + dh11y*b1/dy
 
@@ -387,6 +391,10 @@ CONTAINS
                         h11y*(d2h00x*dy*fy(iy+1,ix)/dx**2 + d2h10x*dy*fxy(iy+1,ix)/dx + d2h01x*dy*fy(iy+1,ix+1)/dx**2 + d2h11x*dy*fxy(iy+1,ix+1)/dx)
 
       d2val_dy2 = d2h00y*a0/dy**2 + d2h10y*b0/dy**2 + d2h01y*a1/dy**2 + d2h11y*b1/dy**2
+
+      IF (PRESENT(d2val_dxdy)) THEN
+         d2val_dxdy = (dh00y*da0_dx + dh10y*db0_dx + dh01y*da1_dx + dh11y*db1_dx)/dy
+      ENDIF
    END SUBROUTINE eval_bicubic_with_2nd_derivatives
 
   FUNCTION nodesearch(x, y, xy_len, x_array, y_array)
@@ -564,4 +572,3 @@ CONTAINS
   !end function lineintegration
 
 END MODULE interpolation
- 

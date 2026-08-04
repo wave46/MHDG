@@ -11,6 +11,7 @@ SUBROUTINE HDG_BC()
   USE LinearAlgebra
   USE physics
   USE transport_models_1d, ONLY: transport_model_1d
+  USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
   USE analytical, only: analytical_solution
 
   IMPLICIT NONE
@@ -527,6 +528,8 @@ CONTAINS
   REAL*8                    :: Bmod_nod(refElPol%Nfacenodes),b_nod(refElPol%Nfacenodes,3)
   REAL*8                    :: xyg(refElPol%Ngauss1d,2),xyder(refElPol%Ngauss1d,2)
   REAL*8                    :: Bmod(refElPol%Ngauss1d),b(refElPol%Ngauss1d,3), psig(refElPol%Ngauss1d), rho_pol_norm(refElPol%Ngauss1d)
+  REAL*8                    :: topology_normal(refElPol%Ngauss1d,2)
+  INTEGER                   :: topology_region(refElPol%Ngauss1d)
   REAL*8                    :: ufg(refElPol%Ngauss1d,phys%neq),qfg(refElPol%Ngauss1d,phys%neq*2)
   REAL*8                    :: ueg(refElPol%Ngauss1d,phys%neq)
   REAL*8                    :: upg(refElPol%Ngauss1d,phys%npv),uexpg(refElPol%Ngauss1d,phys%npv)
@@ -677,6 +680,13 @@ CONTAINS
     ! Normalized magnetic flux at Gauss points: PSI
      psig = MATMUL(refElPol%N1d,psifl)
      rho_pol_norm = SQRT(MAX(psig,1.e-10))
+     topology_normal = 0.d0
+     topology_region = 0
+     IF (magnetic_geometry_cache%is_initialized) THEN
+       rho_pol_norm = magnetic_geometry_cache%face_rho(:,ifl,iel)
+       topology_normal = magnetic_geometry_cache%face_normal(:,ifl,iel,:)
+       topology_region = magnetic_geometry_cache%face_region(:,ifl,iel)
+     ENDIF
 
     ! q_cylicdrical and omega
 
@@ -696,7 +706,8 @@ CONTAINS
     ENDIF
 
     IF (switch%transport_1d) THEN
-      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,diff_ani_fac)
+      CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,&
+        diff_ani_fac,topology_region)
     ENDIF
 
     if (save_tau) then
@@ -1273,18 +1284,22 @@ CONTAINS
 #ifndef SAVEFLUX
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang)
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,&
+          &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang)
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,&
+          &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
 #else
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical)
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,&
+          &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),psig(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical)
+        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,&
+        &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
         !summing conribution from each part of the face
         faceflux_pump = faceflux_pump+flgflux_pump
@@ -1840,19 +1855,21 @@ CONTAINS
   !*********************************
 #ifndef SAVEFLUX
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang,topology_region,outward_normal)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang,topology_region,outward_normal)
 #endif
 #else
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,topology_region,outward_normal)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,psig,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,topology_region,outward_normal)
 #endif
 #endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
-    real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),psig,ng(:),tau(:,:),setval,dcs_du(:)
+    real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),rho,ng(:),tau(:,:),setval,dcs_du(:)
+    integer,intent(IN)         :: topology_region
+    real*8,intent(IN)          :: outward_normal(:)
     real*8           :: diffiso(:,:),diffani(:,:)
     logical          :: ntang
     real*8           :: qfg(:)
@@ -2024,7 +2041,8 @@ CONTAINS
       ! Jacobian matrix for pinch part
       APinch = 0.d0
       IF (switch%transport_1d) THEN
-        CALL transport_model_1d%compute_1D_pinch_matrix(bg,SQRT(MAX(psig,0.d0)),APinch)
+        CALL transport_model_1d%compute_1D_pinch_matrix(bg,rho,APinch,&
+          topology_region,outward_normal)
       ENDIF
 
         gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),bg)  ! scalar

@@ -125,6 +125,7 @@ class RunPreparationTests(unittest.TestCase):
         self.assertEqual(
             plan["parameter_overrides"],
             {
+                "compute_from_flux": True,
                 "impurity_radiation": True,
             },
         )
@@ -341,6 +342,10 @@ class RunPreparationTests(unittest.TestCase):
                 coarse_mesh.resolve(),
             )
             self.assertEqual(len(stage.command), 2)
+            self.assertEqual(
+                (stage.path / "inputs/impurity_model.nml").resolve(),
+                (self.bundle / "inputs/impurity_model_w.nml").resolve(),
+            )
             parameters = (stage.path / "param.txt").read_text(encoding="utf-8")
             for assignment in (
                 "steady = .false.",

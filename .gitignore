@@ -10,6 +10,7 @@
 *lib/*.o
 *lib/*.*mod
 *lib/MHDG-*
+*lib/*_check
 *MHDG-*
 *src_*
 *test/res*

@@ -25,18 +25,23 @@ CONTAINS
     CALL tm1d_interp_profile(this, rho, this%vpinch_fs, vpinch)
   END SUBROUTINE tm1d_interp_transport
 
-  MODULE SUBROUTINE tm1d_apply_1D_diffusion(this, rho_pol_norm, diff_iso, diff_ani)
+  MODULE SUBROUTINE tm1d_apply_1D_diffusion(this, rho_pol_norm, diff_iso, &
+       diff_ani, region)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     REAL*8, INTENT(IN) :: rho_pol_norm(:)
     REAL*8, INTENT(INOUT) :: diff_iso(:, :, :), diff_ani(:, :, :)
+    INTEGER, INTENT(IN) :: region(:)
     INTEGER :: g
     REAL*8 :: rho_g, w, chi_i, chi_e, d, nu_mom, vpinch
 
     IF (.NOT. this%is_initialized) RETURN
     IF (SIZE(diff_iso, 3) /= SIZE(rho_pol_norm)) RETURN
     IF (SIZE(diff_ani, 3) /= SIZE(rho_pol_norm)) RETURN
+    IF (SIZE(region) /= SIZE(rho_pol_norm)) RETURN
 
     DO g = 1, SIZE(rho_pol_norm)
+       IF (.NOT. tm1d_region_is_included(&
+            this%config%transport_region_policy, region(g))) CYCLE
        rho_g = MAX(rho_pol_norm(g), 0.d0)
        w = tm1d_blend_weight(this, rho_g)
        IF (w <= 0.d0) CYCLE
@@ -60,15 +65,20 @@ CONTAINS
     END DO
   END SUBROUTINE tm1d_apply_1D_diffusion
 
-  MODULE SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch)
+  MODULE SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch, &
+       region, outward_normal)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     REAL*8, INTENT(IN) :: b(:), rho
     REAL*8, INTENT(OUT) :: APinch(:,:)
-    REAL*8 :: vpinch, bnorm(2), bnorm_norm, pinch_weight
+    INTEGER, INTENT(IN) :: region
+    REAL*8, INTENT(IN) :: outward_normal(:)
+    REAL*8 :: vpinch, velocity(2), pinch_weight
     REAL*8 :: chi_i, chi_e, d, nu_mom
 
     APinch = 0.d0
     IF (.NOT. this%is_initialized) RETURN
+    IF (.NOT. tm1d_region_is_included(&
+         this%config%transport_region_policy, region)) RETURN
 
     pinch_weight = tm1d_pinch_window(this, rho)
     IF (pinch_weight <= model_tol) RETURN
@@ -77,13 +87,9 @@ CONTAINS
     vpinch = pinch_weight*vpinch
     IF (ABS(vpinch) <= model_tol) RETURN
 
-    bnorm = b(1:2)
-    bnorm_norm = NORM2(bnorm)
-    IF (bnorm_norm <= model_tol) RETURN
-    bnorm = bnorm/bnorm_norm
-
-    APinch(1,1) = vpinch*bnorm(2)
-    APinch(1,2) = -vpinch*bnorm(1)
+    CALL tm1d_build_pinch_velocity(vpinch, &
+         this%config%transport_region_policy, b, outward_normal, velocity)
+    APinch(1,1:2) = velocity
   END SUBROUTINE tm1d_compute_1D_pinch_matrix
 
 END SUBMODULE transport_models_1d_runtime

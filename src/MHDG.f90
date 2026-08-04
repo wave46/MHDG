@@ -476,7 +476,7 @@ PROGRAM MHDG
            IF(switch%ME) THEN
               ! ReLoad magnetic field and Jtor
               CALL load_magnetic_field()
-              CALL loadJtorMap()
+              CALL set_toroidal_current()
               CALL SetParticleSource()
               time%dt = time%dt_ME/simpar%refval_time
            ENDIF

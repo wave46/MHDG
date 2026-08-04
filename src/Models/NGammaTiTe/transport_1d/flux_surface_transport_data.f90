@@ -3,6 +3,9 @@ MODULE flux_surface_transport_data
   USE MPI_OMP
   USE HDF5_io_module
   USE interpolation, ONLY: find_cell_and_local_coordinate
+  USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
+  USE transport_models_1d_config, ONLY: tm1d_region_is_included, &
+       transport_region_legacy_all_regions
   IMPLICIT NONE
 
   PRIVATE
@@ -27,14 +30,11 @@ MODULE flux_surface_transport_data
      REAL*8, ALLOCATABLE :: q_sum(:)
      REAL*8, ALLOCATABLE :: omega_sum(:)
      REAL*8, ALLOCATABLE :: Rmaj_sum(:)
-     REAL*8, ALLOCATABLE :: rmin_sum(:)
      REAL*8, ALLOCATABLE :: U_fs(:, :)
      REAL*8, ALLOCATABLE :: Q_rad_fs(:, :)
      REAL*8, ALLOCATABLE :: q_fs(:)
      REAL*8, ALLOCATABLE :: omega_fs(:)
      REAL*8, ALLOCATABLE :: Rmaj_fs(:)
-     REAL*8, ALLOCATABLE :: rmin_fs(:)
-     REAL*8, ALLOCATABLE :: eps_fs(:)
    CONTAINS
      PROCEDURE :: init => fs_init
      PROCEDURE :: destroy => fs_destroy
@@ -75,14 +75,11 @@ CONTAINS
     ALLOCATE(this%q_sum(this%nrho))
     ALLOCATE(this%omega_sum(this%nrho))
     ALLOCATE(this%Rmaj_sum(this%nrho))
-    ALLOCATE(this%rmin_sum(this%nrho))
     ALLOCATE(this%U_fs(this%neq, this%nrho))
     ALLOCATE(this%Q_rad_fs(this%neq, this%nrho))
     ALLOCATE(this%q_fs(this%nrho))
     ALLOCATE(this%omega_fs(this%nrho))
     ALLOCATE(this%Rmaj_fs(this%nrho))
-    ALLOCATE(this%rmin_fs(this%nrho))
-    ALLOCATE(this%eps_fs(this%nrho))
 
     DO i = 1, this%nrho
        this%rho_grid(i) = (i - 1)*this%drho
@@ -102,14 +99,11 @@ CONTAINS
     IF (ALLOCATED(this%q_sum)) DEALLOCATE(this%q_sum)
     IF (ALLOCATED(this%omega_sum)) DEALLOCATE(this%omega_sum)
     IF (ALLOCATED(this%Rmaj_sum)) DEALLOCATE(this%Rmaj_sum)
-    IF (ALLOCATED(this%rmin_sum)) DEALLOCATE(this%rmin_sum)
     IF (ALLOCATED(this%U_fs)) DEALLOCATE(this%U_fs)
     IF (ALLOCATED(this%Q_rad_fs)) DEALLOCATE(this%Q_rad_fs)
     IF (ALLOCATED(this%q_fs)) DEALLOCATE(this%q_fs)
     IF (ALLOCATED(this%omega_fs)) DEALLOCATE(this%omega_fs)
     IF (ALLOCATED(this%Rmaj_fs)) DEALLOCATE(this%Rmaj_fs)
-    IF (ALLOCATED(this%rmin_fs)) DEALLOCATE(this%rmin_fs)
-    IF (ALLOCATED(this%eps_fs)) DEALLOCATE(this%eps_fs)
 
     this%is_initialized = .FALSE.
     this%profiles_built = .FALSE.
@@ -136,26 +130,29 @@ CONTAINS
     this%q_sum = 0.d0
     this%omega_sum = 0.d0
     this%Rmaj_sum = 0.d0
-    this%rmin_sum = 0.d0
     this%U_fs = 0.d0
     this%Q_rad_fs = 0.d0
     this%q_fs = 0.d0
     this%omega_fs = 0.d0
     this%Rmaj_fs = 0.d0
-    this%rmin_fs = 0.d0
-    this%eps_fs = 0.d0
     this%profiles_built = .FALSE.
   END SUBROUTINE fs_reset_accumulators
 
-  SUBROUTINE fs_build_profiles(this)
+  SUBROUTINE fs_build_profiles(this, region_policy)
     CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
+    INTEGER, INTENT(IN) :: region_policy
     REAL*8, ALLOCATABLE :: ures(:, :), qres(:, :)
     REAL*8 :: rho_max_glob
 
     CALL fs_reshape_solution_fields(ures, qres)
-    rho_max_glob = fs_compute_rho_max()
+    IF (region_policy /= transport_region_legacy_all_regions .AND. &
+         .NOT. magnetic_geometry_cache%is_initialized) THEN
+       ERROR STOP 'A topology-aware transport region policy requires the magnetic geometry cache'
+    ENDIF
+
+    rho_max_glob = fs_compute_rho_max(region_policy)
     CALL fs_ensure_grid(this, rho_max_glob)
-    CALL fs_accumulate_profiles(this, ures, qres)
+    CALL fs_accumulate_profiles(this, ures, qres, region_policy)
     CALL this%reduce_profile_sums()
     CALL this%finalize_profiles()
 
@@ -173,7 +170,6 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%q_sum, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%omega_sum, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%Rmaj_sum, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%rmin_sum, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
   END SUBROUTINE fs_reduce_profile_sums
 
@@ -188,8 +184,6 @@ CONTAINS
     this%q_fs = 0.d0
     this%omega_fs = 0.d0
     this%Rmaj_fs = 0.d0
-    this%rmin_fs = 0.d0
-    this%eps_fs = 0.d0
     DO irho = 1, this%nrho
        IF (this%shell_weight(irho) > shell_weight_tol) THEN
           this%U_fs(:, irho) = this%U_sum(:, irho)/this%shell_weight(irho)
@@ -197,8 +191,6 @@ CONTAINS
           this%q_fs(irho) = this%q_sum(irho)/this%shell_weight(irho)
           this%omega_fs(irho) = this%omega_sum(irho)/this%shell_weight(irho)
           this%Rmaj_fs(irho) = this%Rmaj_sum(irho)/this%shell_weight(irho)
-          this%rmin_fs(irho) = this%rmin_sum(irho)/this%shell_weight(irho)
-          this%eps_fs(irho) = this%rmin_fs(irho)/MAX(this%Rmaj_fs(irho), shell_weight_tol)
        END IF
     END DO
     this%profiles_built = .TRUE.
@@ -309,10 +301,11 @@ CONTAINS
     qres = TRANSPOSE(RESHAPE(sol%q, [phys%Neq*Mesh%Ndim, sizeu/phys%Neq]))
   END SUBROUTINE fs_reshape_solution_fields
 
-  FUNCTION fs_compute_rho_max() RESULT(rho_max_glob)
+  FUNCTION fs_compute_rho_max(region_policy) RESULT(rho_max_glob)
+    INTEGER, INTENT(IN) :: region_policy
     REAL*8 :: rho_max_glob
     REAL*8 :: rho_max_local
-    INTEGER :: iel
+    INTEGER :: iel, g
 #ifdef PARALL
     INTEGER :: ierr
 #endif
@@ -320,7 +313,17 @@ CONTAINS
     rho_max_local = 0.d0
     DO iel = 1, Mesh%Nelems
        IF (.NOT. fs_is_local_element(iel)) CYCLE
-       rho_max_local = MAX(rho_max_local, SQRT(MAX(0.d0, MAXVAL(phys%magnetic_psi(Mesh%T(iel, :))))))
+       IF (magnetic_geometry_cache%is_initialized) THEN
+          DO g = 1, refElPol%NGauss2D
+             IF (.NOT. tm1d_region_is_included(region_policy, &
+                  magnetic_geometry_cache%volume_region(g, iel))) CYCLE
+             rho_max_local = MAX(rho_max_local, &
+                  magnetic_geometry_cache%volume_rho(g, iel))
+          ENDDO
+       ELSE
+          rho_max_local = MAX(rho_max_local, &
+               SQRT(MAX(0.d0, MAXVAL(phys%magnetic_psi(Mesh%T(iel, :))))))
+       ENDIF
     END DO
 
     rho_max_glob = rho_max_local
@@ -340,21 +343,23 @@ CONTAINS
     END IF
   END SUBROUTINE fs_ensure_grid
 
-  SUBROUTINE fs_accumulate_profiles(this, ures, qres)
+  SUBROUTINE fs_accumulate_profiles(this, ures, qres, region_policy)
     CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
     REAL*8, INTENT(IN) :: ures(:, :), qres(:, :)
+    INTEGER, INTENT(IN) :: region_policy
     INTEGER :: iel
 
     DO iel = 1, Mesh%Nelems
        IF (.NOT. fs_is_local_element(iel)) CYCLE
-       CALL fs_accumulate_element(this, iel, ures, qres)
+       CALL fs_accumulate_element(this, iel, ures, qres, region_policy)
     END DO
   END SUBROUTINE fs_accumulate_profiles
 
-  SUBROUTINE fs_accumulate_element(this, iel, ures, qres)
+  SUBROUTINE fs_accumulate_element(this, iel, ures, qres, region_policy)
     CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
     INTEGER, INTENT(IN) :: iel
     REAL*8, INTENT(IN) :: ures(:, :), qres(:, :)
+    INTEGER, INTENT(IN) :: region_policy
     INTEGER :: g, ieq, irho
     REAL*8 :: rho_g, weight_g, dpsi_dxi, dpsi_deta, gradpsi_norm
     REAL*8 :: Xel(refElPol%Nnodes2D, 2)
@@ -394,7 +399,24 @@ CONTAINS
     iJ22 = J11/detJ
 
     DO g = 1, refElPol%NGauss2D
-       rho_g = SQRT(MAX(0.d0, psig(g)))
+       IF (magnetic_geometry_cache%is_initialized) THEN
+          IF (.NOT. tm1d_region_is_included(region_policy, &
+               magnetic_geometry_cache%volume_region(g, iel))) CYCLE
+          rho_g = magnetic_geometry_cache%volume_rho(g, iel)
+          npsi = magnetic_geometry_cache%volume_normal(g, iel, :)
+       ELSE
+          rho_g = SQRT(MAX(0.d0, psig(g)))
+          dpsi_dxi = DOT_PRODUCT(refElPol%Nxi2D(g, :), psiel)
+          dpsi_deta = DOT_PRODUCT(refElPol%Neta2D(g, :), psiel)
+          gradpsi(1) = iJ11(g)*dpsi_dxi + iJ12(g)*dpsi_deta
+          gradpsi(2) = iJ21(g)*dpsi_dxi + iJ22(g)*dpsi_deta
+          gradpsi_norm = SQRT(DOT_PRODUCT(gradpsi, gradpsi))
+          IF (gradpsi_norm > gradpsi_tol) THEN
+             npsi = gradpsi/gradpsi_norm
+          ELSE
+             npsi = 0.d0
+          ENDIF
+       ENDIF
        irho = FLOOR(rho_g/this%drho) + 1
        irho = MIN(MAX(irho, 1), this%nrho)
        weight_g = refElPol%gauss_weights2D(g)*ABS(detJ(g))
@@ -405,20 +427,6 @@ CONTAINS
        this%q_sum(irho) = this%q_sum(irho) + q_cylg(g)*weight_g
        this%omega_sum(irho) = this%omega_sum(irho) + omegag(g)*weight_g
        this%Rmaj_sum(irho) = this%Rmaj_sum(irho) + xy(g, 1)*weight_g
-       this%rmin_sum(irho) = this%rmin_sum(irho) + SQRT((xy(g, 1) - phys%r_axis)**2 + (xy(g, 2) - phys%z_axis)**2)*weight_g
-
-       dpsi_dxi = DOT_PRODUCT(refElPol%Nxi2D(g, :), psiel)
-       dpsi_deta = DOT_PRODUCT(refElPol%Neta2D(g, :), psiel)
-       gradpsi(1) = iJ11(g)*dpsi_dxi + iJ12(g)*dpsi_deta
-       gradpsi(2) = iJ21(g)*dpsi_dxi + iJ22(g)*dpsi_deta
-       gradpsi_norm = SQRT(DOT_PRODUCT(gradpsi, gradpsi))
-
-       IF (gradpsi_norm > gradpsi_tol) THEN
-          npsi = gradpsi/gradpsi_norm
-       ELSE
-          npsi = 0.d0
-       END IF
-
        DO ieq = 1, this%neq
           gradu(1) = qeg(g, (ieq - 1)*Mesh%Ndim + 1)
           gradu(2) = qeg(g, (ieq - 1)*Mesh%Ndim + 2)

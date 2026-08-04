@@ -93,6 +93,70 @@ class Hdf5ComparisonTests(unittest.TestCase):
         self.assertEqual(report["status"], "failed")
         self.assertFalse(report["mesh"]["connectivity"]["T"]["passed"])
 
+    def test_magnetic_contract_matches(self) -> None:
+        self._write_magnetic(self.reference)
+        self._write_magnetic(self.candidate)
+
+        report = compare_hdf5_files(
+            self.reference, self.candidate, TOLERANCES
+        )
+
+        magnetic = report["magnetic"]
+        self.assertEqual(report["status"], "passed")
+        self.assertTrue(magnetic["present"])
+        self.assertTrue(magnetic["passed"])
+        self.assertEqual(magnetic["datasets"]["topology"]["mode"], "exact")
+        self.assertEqual(
+            magnetic["datasets"]["rho_pol_norm"]["relative_l2"],
+            0.0,
+        )
+
+    def test_magnetic_region_difference_fails(self) -> None:
+        self._write_magnetic(self.reference)
+        self._write_magnetic(self.candidate)
+        with h5py.File(self.candidate, "r+") as handle:
+            handle["magnetic/topology_region"][2] = 3
+
+        report = compare_hdf5_files(
+            self.reference, self.candidate, TOLERANCES
+        )
+
+        self.assertEqual(report["status"], "failed")
+        self.assertFalse(
+            report["magnetic"]["datasets"]["topology_region"]["passed"]
+        )
+        self.assertIn("magnetic/topology_region differs", report["failures"])
+
+    def test_missing_candidate_magnetic_contract_fails(self) -> None:
+        self._write_magnetic(self.reference)
+
+        report = compare_hdf5_files(
+            self.reference, self.candidate, TOLERANCES
+        )
+
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("candidate is missing magnetic data", report["failures"])
+
+    @staticmethod
+    def _write_magnetic(path: Path) -> None:
+        with h5py.File(path, "r+") as handle:
+            magnetic = handle.create_group("magnetic")
+            magnetic.create_dataset("topology", data=np.asarray([b"limited"]))
+            magnetic.create_dataset("topology_id", data=np.asarray([1]))
+            magnetic.create_dataset(
+                "topology_region", data=np.asarray([1, 1, 2, 2])
+            )
+            magnetic.create_dataset(
+                "rho_pol_norm", data=np.asarray([0.0, 0.5, 1.0, 1.2])
+            )
+            magnetic.create_dataset(
+                "topology_normal",
+                data=np.asarray(
+                    [[1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0]]
+                ),
+            )
+
+
 class CompareCommandTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()

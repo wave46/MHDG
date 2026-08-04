@@ -97,6 +97,19 @@ class BundleWorkflowTests(unittest.TestCase):
         self.assertIn("warm_restart", required_case_roles(case, "warm"))
         self.assertEqual(summary.case_id, "legacy_case")
 
+    def test_workflow_outputs_are_not_runtime_inputs(self) -> None:
+        case = load_case_definition("diverted_case", REGRESSION_ROOT / "cases")
+        workflow = case["workflows"]["cold_adaptive"]
+
+        self.assertEqual(
+            workflow["output_roles"],
+            ["warm_restart", "warm_reference"],
+        )
+        self.assertNotIn(
+            "warm_restart",
+            required_case_roles(case, "cold_adaptive"),
+        )
+
     def test_creation_failures_do_not_replace_existing_data(self) -> None:
         (self.source / "geometry.geo").unlink()
         with self.assertRaisesRegex(BundleError, "required file missing.*geometry"):

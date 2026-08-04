@@ -1140,6 +1140,38 @@ CONTAINS
 
   ENDSUBROUTINE gather_magnetic_field
 
+  SUBROUTINE gather_magnetic_geometry(Mesh_in, rho_glob, normal_glob, region_glob)
+    USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
+    TYPE(Mesh_type), INTENT(IN) :: Mesh_in
+    REAL*8, POINTER, INTENT(OUT) :: rho_glob(:), normal_glob(:, :)
+    INTEGER, POINTER, INTENT(OUT) :: region_glob(:)
+    INTEGER :: i, ierr
+
+    ALLOCATE(rho_glob(Mesh_in%Nno_glob))
+    ALLOCATE(normal_glob(Mesh_in%Nno_glob, 2))
+    ALLOCATE(region_glob(Mesh_in%Nno_glob))
+    rho_glob = -HUGE(0.d0)
+    normal_glob = -HUGE(0.d0)
+    region_glob = -HUGE(0)
+
+    DO i = 1, SIZE(Mesh_in%T, 1)
+       IF (Mesh_in%ghostElems(i) == 1) CYCLE
+       rho_glob(Mesh_in%loc2glob_nodes(Mesh_in%T(i, :))) = &
+            magnetic_geometry_cache%nodal_rho(Mesh_in%T(i, :))
+       normal_glob(Mesh_in%loc2glob_nodes(Mesh_in%T(i, :)), :) = &
+            magnetic_geometry_cache%nodal_normal(Mesh_in%T(i, :), :)
+       region_glob(Mesh_in%loc2glob_nodes(Mesh_in%T(i, :))) = &
+            magnetic_geometry_cache%nodal_region(Mesh_in%T(i, :))
+    ENDDO
+
+    CALL MPI_Allreduce(MPI_IN_PLACE, rho_glob, SIZE(rho_glob), MPI_REAL8, &
+         MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_Allreduce(MPI_IN_PLACE, normal_glob, SIZE(normal_glob), MPI_REAL8, &
+         MPI_MAX, MPI_COMM_WORLD, ierr)
+    CALL MPI_Allreduce(MPI_IN_PLACE, region_glob, SIZE(region_glob), MPI_INTEGER, &
+         MPI_MAX, MPI_COMM_WORLD, ierr)
+  END SUBROUTINE gather_magnetic_geometry
+
   SUBROUTINE gather_additional(Mesh_in, scdiff_nodes_glob)
 
     TYPE(Mesh_type)                         :: Mesh_in

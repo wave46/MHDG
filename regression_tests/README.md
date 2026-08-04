@@ -100,6 +100,11 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |
 | `race_matrix` | Both one-step workflows, every pair of tracked layouts | Periodic race check. |
 | `cold_matrix` | Both full cold workflows, all layouts and all layout pairs | Overnight golden and reproducibility evidence. |
+| `stored_field_compatibility` | Limited two-Newton-step scratch start, stored `Br/Bz` | Compatibility smoke for `compute_from_flux=false`. |
+| `diverted_warm` | Diverted warm restart, `mpi4_omp4` | Routine diverted topology/transport check. |
+| `diverted_warm_parallelism` | Diverted warm restart, all layouts | Diverted layout characterization. |
+| `diverted_cold_adaptive` | Full diverted adaptive cold start, `mpi4_omp4` | Canonical diverted reference producer. |
+| `diverted_race_matrix` | Diverted two-step fixed/adaptive starts, every layout pair | Lightweight diverted race and cache-refresh evidence. |
 
 Warm and race suites are short. Full cold workflows are longer, and
 `cold_matrix` can take hours. Runtime is recorded but is not a pass criterion.
@@ -193,7 +198,8 @@ regression_tests/regression.sh suite compare \
 ### Publish accepted references
 
 For a complete refresh, one command starts or continues the persisted golden
-campaign, stops at each required review gate, and publishes after final checks:
+campaign and runs every producer and verification stage. It stops once, after
+the complete candidate is ready for review:
 
 ```bash
 regression_tests/regression.sh golden update legacy_case \
@@ -201,13 +207,15 @@ regression_tests/regression.sh golden update legacy_case \
   --output /private/path/new_golden_bundle --bundle-version 2.5.0
 ```
 
-Run the same command again with `--accept STAGE` after reviewing a reported
-gate. `golden status WORKSPACE` shows progress; without `--workspace`, the
+Run the same command again with `--accept campaign` after reviewing the final
+candidate. This second command only publishes; it does not rerun completed
+stages. `golden status WORKSPACE` shows progress; without `--workspace`, the
 workspace is `MHDG_REGRESSION_RUN_ROOT/golden_campaigns/RUN_ID`. Resumes reject
 changed inputs and never overwrite a workspace, candidate, or output.
 
 The default refresh includes cold matrices, warm and mixture references,
-initialization/race evidence, and final warm/mixture verification. Repeat
+initialization/stored-field/race evidence, warm layout checks, and final
+warm/mixture verification. Repeat
 `--only` to select `cold_matrix`, `warm`, or `impurity_mixture`. A cold-matrix
 refresh also updates the canonical warm restart, while `warm` updates the warm
 reference. Updating only warm or only mixture references records a consistency
@@ -216,6 +224,108 @@ warning; select both together to avoid it.
 The verified candidate is published atomically as a golden bundle. Campaign
 state, declaration, build metadata, suite summaries, run plans/metadata, and
 comparison reports are registered below `provenance/golden_campaign/`.
+
+### PR03 limited and diverted refresh
+
+PR03 keeps the exhaustive limited campaign and adds an independent diverted
+campaign. Run them sequentially: each campaign performs clean serial and MPI
+builds in the same worktree.
+
+The limited source remains the last accepted `legacy_case` golden bundle. Its
+full campaign runs the fixed/adaptive cold layout matrix, impurity references,
+the stored-field compatibility smoke, warm layouts, the two-step race matrix,
+and final verification. The tracked workflows render `compute_from_flux=true`;
+the compatibility smoke alone renders it false.
+
+The first diverted source is a candidate bundle, because no diverted golden
+exists yet. Prepare the filenames declared by `cases/diverted_case.json`. All
+transport namelists used by the cold and warm workflows must contain:
+
+```text
+transport_region_policy = 'core_and_main_sol'
+c_bohm_n_rho_slope = 0.7
+```
+
+Use `puff = 5.0e21` in every staged parameter file and
+`diff_n_min_phys = 0.1` in the final continuation and warm transport files.
+The case workflows explicitly render `compute_from_flux=true`, even if a
+prepared parameter file still contains false. Create the source candidate:
+
+```bash
+regression_tests/regression.sh bundle create \
+  --case diverted_case \
+  --source /private/path/prepared_diverted_case \
+  --output /private/path/diverted_case_pr03_source \
+  --bundle-version pr03-source.1
+```
+
+Point a private settings file at that candidate and start the resumable cold
+overnight in `tmux` or another persistent shell:
+
+```bash
+regression_tests/regression.sh golden update diverted_case \
+  --settings /private/path/diverted-source.env \
+  --run-id pr03-diverted-refresh-01 \
+  --workspace /private/path/campaigns/pr03-diverted-refresh-01 \
+  --output /private/path/golden_bundles/diverted_case_pr03_golden \
+  --bundle-version 1.0.0-pr03-golden.1 \
+  --bootstrap-candidate \
+  --build-jobs 8
+```
+
+The first invocation runs the full adaptive `mpi4_omp4` cold producer, maps its
+final output to `warm_restart` and `warm_reference`, generates a reconverged
+warm reference, runs the warm-layout and race checks, and finishes with final
+warm verification. It then stops at `awaiting_acceptance` without publishing.
+Inspect status and the reports below the workspace, then repeat the identical
+update command with `--accept campaign`:
+
+```bash
+regression_tests/regression.sh golden status \
+  /private/path/campaigns/pr03-diverted-refresh-01
+
+# Add this to the identical `golden update` command:
+--accept campaign
+```
+
+If a run is interrupted, repeat the identical command without `--accept`; the
+recorded stage resumes. `--bootstrap-candidate` is only for the first diverted
+promotion; future refreshes start from the accepted golden and omit it. Never
+delete or reuse the workspace or output path.
+
+If a stage records a failure, correct its tracked workflow or source bundle,
+then repeat the identical command with `--retry-failed`. The failed attempt is
+retained in campaign provenance and the corrected stage receives a distinct
+`-retry-N` run ID. Completed producer stages are not rerun.
+
+If the correction affects an earlier campaign declaration, use
+`--retry-from STAGE` instead. The campaign records the declaration amendment,
+restores the preceding candidate, archives superseded downstream attempts, and
+uses distinct run, candidate, report, and settings paths for the replacements.
+
+Because multiple cases share the campaign catalog, a change confined to another
+case does not invalidate an in-progress campaign. Resume records the old and new
+catalog identities in `campaign_catalog_refreshes` after confirming that the
+selected case declaration is unchanged. A change to the selected case still
+requires an explicit `--retry-from STAGE`.
+
+Refresh the limited golden with the same lifecycle but `legacy_case`, an
+accepted golden source settings file, and distinct run/workspace/output names:
+
+```bash
+regression_tests/regression.sh golden update legacy_case \
+  --settings /private/path/limited-golden-source.env \
+  --run-id pr03-limited-refresh-01 \
+  --workspace /private/path/campaigns/pr03-limited-refresh-01 \
+  --output /private/path/golden_bundles/legacy_case_pr03_golden \
+  --bundle-version 2.5.0-pr03-golden.1 \
+  --build-jobs 8
+```
+
+It runs through the cold matrix, warm reference, impurity references, smoke and
+race checks, and final verification in one invocation. Review the composed
+candidate once, then publish it with the identical command plus
+`--accept campaign`.
 
 The `legacy_case` order was checked against the accepted PR 02 record: clean
 builds at `7ce486f`, its full cold-matrix refresh, the passing disabled

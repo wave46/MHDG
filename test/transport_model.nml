@@ -11,6 +11,12 @@
   ! rho_pol_norm >= rho_diffusion_model_max.
   rho_diffusion_model_max = 0.99
 
+  ! Topology regions in which reduced 1D transport is applied.
+  ! legacy_all_regions keeps the historical behavior.
+  ! core_and_main_sol excludes private flux while allowing rho_pol_norm > 1.
+  ! core_only restricts reduction, diffusion, and pinch to the confined core.
+  transport_region_policy = 'legacy_all_regions'
+
   ! Mixed Bohm / gyro-Bohm coefficients.
   ! Reference: JETTO/NTCC mixed Bohm / gyro-Bohm model description.
 
@@ -19,13 +25,16 @@
   c_bohm_e = 8.e-5
   c_gyrobohm_e = 3.5e-2
   c_bohm_n = 1.0
+  ! Particle diffusivity factor: max(1-c_bohm_n_rho_slope*rho_pol_norm,0).
+  ! Set to zero for the topology-corrected untapered reference behavior.
+  c_bohm_n_rho_slope = 0.7
   prandtl = 1.0
 
   ! Pinch model selector.
   ! 1 -> Militello collisionality-dependent pinch
   !      Reference: E. Militello-Asp et al., NF 2022-style suppression factor.
   ! 2 -> Polevoi-style geometric pinch baseline
-  !      with v_pinch = C * D * r / a^2.
+  !      with v_pinch = C * D * rho_pol_norm / a_minor.
   !      Reference for integrated-model usage: Polevoi et al., Nuclear Fusion (2020).
   ! 3 -> Constant pinch for steady-state checks.
   !      Positive values mean outward pinch (along increasing minor radius);

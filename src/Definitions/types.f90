@@ -454,8 +454,8 @@ MODULE types
      CHARACTER(len=1000) :: diffusion_1D_path ! where do we read 1D diffusion profiles from (only used if the import_diffusion_1D is on)
      LOGICAL             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: external_heating_from_grid !if true, then reads external heating file n rectangular grid; if false - on nodes of the mesh
-     LOGICAL             :: compute_from_flux ! if components B_R, B_Z are computed from flux or not
-     LOGICAL             :: divide_by_2pi     ! correspondng to flux definition if it is needed to divide by 2pi or not
+     LOGICAL             :: compute_from_flux = .TRUE. ! derive B_R, B_Z and Jtor from bicubic psi when available
+     LOGICAL             :: divide_by_2pi = .FALSE.    ! fallback convention when the field fit is unavailable
      INTEGER             :: field_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
      INTEGER             :: jtor_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
      INTEGER             :: puff_dimension ! number of timeslices in the puff file
@@ -469,11 +469,13 @@ MODULE types
      REAL*8 :: rho_core = 0.8d0
      REAL*8 :: rho_edge = 0.99d0
      REAL*8 :: rho_diffusion_model_max = 1.d0
+     CHARACTER(LEN=32) :: transport_region_policy = 'legacy_all_regions'
      REAL*8 :: c_bohm_i = 1.6d-4
      REAL*8 :: c_gyrobohm_i = 1.75d-2
      REAL*8 :: c_bohm_e = 8.d-5
      REAL*8 :: c_gyrobohm_e = 3.5d-2
      REAL*8 :: c_bohm_n = 1.d0
+     REAL*8 :: c_bohm_n_rho_slope = 0.7d0
      REAL*8 :: prandtl = 1.d0
      INTEGER :: pinch_model = 1
      REAL*8 :: c_pinch = 0.5d0

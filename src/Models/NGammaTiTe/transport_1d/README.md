@@ -7,6 +7,7 @@ The user-facing settings for this module are read from
 `test/transport_model.nml`. That namelist controls:
 
 - the reference radii used by the Bohm / gyro-Bohm model,
+- the topology regions in which reduced transport is applied,
 - the diffusion replacement window,
 - the pinch model and pinch windows,
 - the coefficient floors.
@@ -62,7 +63,7 @@ The 1D model is refreshed once per NR iteration before Jacobian assembly.
 
 High-level sequence:
 
-1. `fs_transport%build_profiles()`
+1. `fs_transport%build_profiles(region_policy)`
 2. `transport_model_1d%update_from_flux_surfaces(fs_transport)`
 3. HDG uses:
    - `transport_model_1d%apply_1D_diffusion(...)`
@@ -75,6 +76,32 @@ Inside `update_from_flux_surfaces(...)`:
 3. build projected gradients and `delta_te`,
 4. compute Bohm / gyro-Bohm transport,
 5. compute pinch.
+
+## Radial coordinate and topology policy
+
+When magnetic equilibrium geometry is available, reduction and HDG assembly
+read `rho_pol_norm`, the increasing-flux normal, and the topology region at the
+exact volume or face quadrature point from `magnetic_geometry_cache`.  They do
+not interpolate nodal `rho` and do not take a square root of interpolated nodal
+psi.  The legacy nodal-psi path remains only as a compatibility fallback when
+no equilibrium cache exists.
+
+`transport_region_policy` is independent of the radial coordinate:
+
+- `legacy_all_regions` applies reduced transport everywhere and is the
+  compatibility default;
+- `core_and_main_sol` includes the axis-connected core and main SOL but leaves
+  private flux and undefined regions on parameter-file diffusion with zero 1D
+  pinch;
+- `core_only` applies reduced transport only in the axis-connected core.
+
+The policy therefore distinguishes equal-rho points in disconnected topology
+regions.  The main-SOL profile is not clipped at the LCFS and may extend through
+`rho_pol_norm > 1`.
+
+The pinch vector uses the cached increasing-flux normal, so its orientation is
+independent of magnetic-field sign.  Its radial scale is `rho_pol_norm/a_minor`;
+collisionality uses `a_minor*rho_pol_norm/Rmaj`.
 
 ## Persistent vs Derived State
 
@@ -166,10 +193,19 @@ The particle and momentum transport are then built as
 $$
 d_{\mathrm{fs}}
 = c_{\mathrm{B},n}\,
+\max\!\left(1-c_{\mathrm{B},n,\rho}\rho_{\mathrm{pol,n}},0\right)\,
 \frac{\chi_i\chi_e}{\max(\chi_i+\chi_e,\varepsilon)},
 \qquad
 \nu_{\mathrm{mom}} = \mathrm{Pr}\,\chi_i.
 $$
+
+The default is `c_bohm_n_rho_slope = 0.7`.  The taper coordinate is the
+topology-correct normalized poloidal radius stored in `rho_grid`, rather than
+the historical geometric `r/a`.  It therefore remains consistent in shaped
+and diverted equilibria and is intentionally evaluated for selected main-SOL
+profiles with `rho_pol_norm > 1`.  The lower bound prevents negative particle
+diffusion; setting the slope to zero recovers the topology-corrected untapered
+formula exactly.
 
 Important normalization note:
 
@@ -186,14 +222,16 @@ The pinch models are:
 $$
 V_{\mathrm{pinch}}
 = \min\!\left(1,\exp\!\left[1-\frac{\nu_*}{\max(\nu_{\mathrm{th}},\varepsilon)}\right]\right)
-\; c_{\mathrm{pinch}}\, d_{\mathrm{fs}}\, \frac{r}{\max(a,\varepsilon)^2}
+\; c_{\mathrm{pinch}}\, d_{\mathrm{fs}}\,
+\frac{\rho_{\mathrm{pol,n}}}{\max(a_{\mathrm{minor}},\varepsilon)}
 $$
 
 2. Geometric / Polevoi-style baseline
 
 $$
 V_{\mathrm{pinch}}
-= c_{\mathrm{pinch}}\, d_{\mathrm{fs}}\, \frac{r}{\max(a,\varepsilon)^2}
+= c_{\mathrm{pinch}}\, d_{\mathrm{fs}}\,
+\frac{\rho_{\mathrm{pol,n}}}{\max(a_{\mathrm{minor}},\varepsilon)}
 $$
 
 3. Constant pinch

@@ -5,7 +5,10 @@ MODULE transport_models_1d
   USE flux_surface_transport_data, ONLY: flux_surface_transport_t
   USE interpolation, ONLY: find_cell_and_local_coordinate
   USE physics, ONLY: cons2phys
-  USE transport_models_1d_config, ONLY: transport_model_config_t, tm1d_config_reset, tm1d_config_apply
+  USE transport_models_1d_config, ONLY: transport_model_config_t, &
+       tm1d_config_reset, tm1d_config_apply, tm1d_region_policy_name, &
+       tm1d_region_is_included, tm1d_build_pinch_velocity, &
+       tm1d_particle_taper_factor
   USE transport_models_1d_derived, ONLY: transport_model_derived_t
   IMPLICIT NONE
 
@@ -81,10 +84,13 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(transport_model_derived_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_constant_pinch
-     MODULE SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch)
+     MODULE SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch, &
+          region, outward_normal)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
        REAL*8, INTENT(IN) :: b(:), rho
        REAL*8, INTENT(OUT) :: APinch(:,:)
+       INTEGER, INTENT(IN) :: region
+       REAL*8, INTENT(IN) :: outward_normal(:)
      END SUBROUTINE tm1d_compute_1D_pinch_matrix
      MODULE REAL*8 FUNCTION tm1d_pinch_window(this, rho)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
@@ -118,10 +124,12 @@ MODULE transport_models_1d
        REAL*8, INTENT(IN) :: rho
        REAL*8, INTENT(OUT) :: chi_i, chi_e, d, nu_mom, vpinch
      END SUBROUTINE tm1d_interp_transport
-     MODULE SUBROUTINE tm1d_apply_1D_diffusion(this, rho_pol_norm, diff_iso, diff_ani)
+     MODULE SUBROUTINE tm1d_apply_1D_diffusion(this, rho_pol_norm, diff_iso, &
+          diff_ani, region)
        CLASS(transport_model_1d_t), INTENT(IN) :: this
        REAL*8, INTENT(IN) :: rho_pol_norm(:)
        REAL*8, INTENT(INOUT) :: diff_iso(:, :, :), diff_ani(:, :, :)
+       INTEGER, INTENT(IN) :: region(:)
      END SUBROUTINE tm1d_apply_1D_diffusion
   END INTERFACE
 
@@ -177,15 +185,24 @@ CONTAINS
     this%nrho = 0
   END SUBROUTINE tm1d_clear_storage
 
-  SUBROUTINE tm1d_set_config(this, rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, pinch_model, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys)
+  SUBROUTINE tm1d_set_config(this, rho_edge, rho_core, rho_diffusion_model_max, &
+       transport_region_policy, c_bohm_i, c_gyrobohm_i, c_bohm_e, &
+       c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, pinch_model, &
+       c_pinch, nu_th, &
+       vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, &
+       rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, &
+       diff_e_min_phys, diff_ee_min_phys)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+    REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
+    CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: transport_region_policy
 
     CALL tm1d_config_apply(this%config, simpar%refval_time, simpar%refval_length, &
          rho_edge=rho_edge, rho_core=rho_core, rho_diffusion_model_max=rho_diffusion_model_max, &
+         transport_region_policy=transport_region_policy, &
          c_bohm_i=c_bohm_i, c_gyrobohm_i=c_gyrobohm_i, c_bohm_e=c_bohm_e, &
-         c_gyrobohm_e=c_gyrobohm_e, c_bohm_n=c_bohm_n, prandtl=prandtl, &
+         c_gyrobohm_e=c_gyrobohm_e, c_bohm_n=c_bohm_n, &
+         c_bohm_n_rho_slope=c_bohm_n_rho_slope, prandtl=prandtl, &
          pinch_model=pinch_model, c_pinch=c_pinch, nu_th=nu_th, &
          vpinch_const_phys=vpinch_const_phys, rho_pinch_axis_width=rho_pinch_axis_width, &
          rho_pinch_model_max=rho_pinch_model_max, rho_pinch_edge_width=rho_pinch_edge_width, &

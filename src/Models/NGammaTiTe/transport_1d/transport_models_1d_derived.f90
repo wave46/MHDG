@@ -14,7 +14,6 @@ MODULE transport_models_1d_derived
      REAL*8, ALLOCATABLE :: q_fs(:)
      REAL*8, ALLOCATABLE :: omega_fs(:)
      REAL*8, ALLOCATABLE :: Rmaj_fs(:)
-     REAL*8, ALLOCATABLE :: rmin_fs(:)
      REAL*8, ALLOCATABLE :: eps_fs(:)
      REAL*8, ALLOCATABLE :: nuestar_fs(:)
      REAL*8, ALLOCATABLE :: dpe_dr_fs(:)
@@ -46,7 +45,6 @@ CONTAINS
     ALLOCATE(this%q_fs(nrho))
     ALLOCATE(this%omega_fs(nrho))
     ALLOCATE(this%Rmaj_fs(nrho))
-    ALLOCATE(this%rmin_fs(nrho))
     ALLOCATE(this%eps_fs(nrho))
     ALLOCATE(this%nuestar_fs(nrho))
     ALLOCATE(this%dpe_dr_fs(nrho))
@@ -61,7 +59,6 @@ CONTAINS
     this%q_fs = 0.d0
     this%omega_fs = 0.d0
     this%Rmaj_fs = 0.d0
-    this%rmin_fs = 0.d0
     this%eps_fs = 0.d0
     this%nuestar_fs = 0.d0
     this%dpe_dr_fs = 0.d0
@@ -83,7 +80,6 @@ CONTAINS
     IF (ALLOCATED(this%q_fs)) DEALLOCATE(this%q_fs)
     IF (ALLOCATED(this%omega_fs)) DEALLOCATE(this%omega_fs)
     IF (ALLOCATED(this%Rmaj_fs)) DEALLOCATE(this%Rmaj_fs)
-    IF (ALLOCATED(this%rmin_fs)) DEALLOCATE(this%rmin_fs)
     IF (ALLOCATED(this%eps_fs)) DEALLOCATE(this%eps_fs)
     IF (ALLOCATED(this%nuestar_fs)) DEALLOCATE(this%nuestar_fs)
     IF (ALLOCATED(this%dpe_dr_fs)) DEALLOCATE(this%dpe_dr_fs)
