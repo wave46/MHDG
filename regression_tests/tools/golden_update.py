@@ -38,6 +38,20 @@ ATTEMPT_RECORD_FIELDS = (
     "layout_pair_report",
     "old_golden_report",
 )
+STAGE_RESULT_FIELDS = ATTEMPT_RECORD_FIELDS + (
+    "candidate",
+    "candidate_settings",
+    "accepted_utc",
+    "failed_utc",
+)
+DECLARATION_STAGE_FIELDS = (
+    "id",
+    "kind",
+    "suite",
+    "component",
+    "acceptance_required",
+    "role_mappings",
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -97,7 +111,15 @@ def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
         args.output,
         selected,
         partial,
+        allow_catalog_update=args.retry_from is not None,
     )
+    if args.retry_from:
+        _retry_from_stage(
+            state,
+            declaration,
+            args.retry_from,
+            inputs["campaign_catalog"],
+        )
     if args.retry_failed:
         _retry_failed_stage(state)
     if args.accept:
@@ -129,6 +151,99 @@ def _retry_failed_stage(state: dict[str, Any]) -> None:
     _save(state)
 
 
+def _retry_from_stage(
+    state: dict[str, Any],
+    declaration: dict[str, Any],
+    stage_id: str,
+    campaign_catalog: dict[str, Any],
+) -> None:
+    """Rewind a failed campaign to a corrected declaration stage."""
+    if state["status"] != "failed":
+        raise BundleError("golden campaign is not failed")
+    stages = state["stages"]
+    declared = declaration["stages"]
+    if [stage["id"] for stage in stages] != [stage["id"] for stage in declared]:
+        raise BundleError("golden campaign stage order changed")
+    indices = [index for index, stage in enumerate(stages) if stage["id"] == stage_id]
+    if not indices:
+        raise BundleError(f"unknown golden retry stage: {stage_id}")
+    start = indices[0]
+    if not any(stage["status"] == "failed" for stage in stages[start:]):
+        raise BundleError("golden retry stage is after the recorded failure")
+
+    _restore_preceding_candidate(state, start)
+    for stage in stages[start:]:
+        if stage["status"] == "skipped":
+            continue
+        if any(name in stage for name in ATTEMPT_RECORD_FIELDS):
+            _archive_stage_attempt(stage)
+            stage["retry_count"] = stage.get("retry_count", 0) + 1
+        for name in STAGE_RESULT_FIELDS:
+            stage.pop(name, None)
+        stage["status"] = "pending"
+    for stage, current in zip(stages, declared):
+        _update_stage_declaration(stage, current)
+
+    previous_catalog = state["inputs"]["campaign_catalog"]
+    state.setdefault("campaign_amendments", []).append(
+        {
+            "amended_utc": utc_now(),
+            "retry_from": stage_id,
+            "previous_campaign_catalog": previous_catalog,
+            "campaign_catalog": campaign_catalog,
+        }
+    )
+    state["inputs"]["campaign_catalog"] = campaign_catalog
+    state["acceptance"] = {
+        "status": "pending",
+        "required_stages": [
+            stage["id"]
+            for stage in stages
+            if stage["status"] != "skipped" and stage["acceptance_required"]
+        ],
+    }
+    state["publication"] = {"status": "pending"}
+    state.pop("verification_candidate", None)
+    state["status"] = "ready"
+    _save(state)
+
+
+def _restore_preceding_candidate(state: dict[str, Any], start: int) -> None:
+    state["active_bundle"] = state["inputs"]["source_bundle"]
+    state["active_bundle_class"] = state["inputs"]["source_bundle_class"]
+    state["active_settings"] = state["build"].get("settings")
+    for stage in reversed(state["stages"][:start]):
+        if stage.get("candidate") and stage["status"] == "completed":
+            _activate_candidate(state, stage)
+            return
+
+
+def _update_stage_declaration(
+    stage: dict[str, Any], declaration: dict[str, Any]
+) -> None:
+    for name in DECLARATION_STAGE_FIELDS:
+        stage.pop(name, None)
+        if name in declaration:
+            stage[name] = declaration[name]
+
+
+def _archive_stage_attempt(stage: dict[str, Any]) -> None:
+    attempt = {
+        "attempt": stage.get("retry_count", 0),
+        "status": stage["status"],
+        "archived_utc": utc_now(),
+        "declaration": {
+            name: stage[name]
+            for name in DECLARATION_STAGE_FIELDS
+            if name in stage
+        },
+    }
+    for name in STAGE_RESULT_FIELDS:
+        if name in stage:
+            attempt[name] = stage[name]
+    stage.setdefault("archived_attempts", []).append(attempt)
+
+
 def _load_or_create(
     workspace: Path,
     inputs: dict[str, Any],
@@ -136,11 +251,15 @@ def _load_or_create(
     output: Path,
     selected: set[str],
     partial: bool,
+    allow_catalog_update: bool = False,
 ) -> dict[str, Any]:
     state_path = workspace / STATE_FILE
     if state_path.is_file():
         state = load_json(state_path, "golden campaign state")
-        if state.get("inputs") != inputs:
+        if state.get("inputs") != inputs and not (
+            allow_catalog_update
+            and _only_campaign_catalog_changed(state.get("inputs"), inputs)
+        ):
             raise BundleError("golden campaign inputs changed")
         return state
     if workspace.exists():
@@ -186,6 +305,19 @@ def _load_or_create(
     }
     _save(state)
     return state
+
+
+def _only_campaign_catalog_changed(
+    recorded: dict[str, Any] | None, current: dict[str, Any]
+) -> bool:
+    if recorded is None:
+        return False
+    old_catalog = recorded.get("campaign_catalog", {})
+    new_catalog = current.get("campaign_catalog", {})
+    if old_catalog.get("path") != new_catalog.get("path"):
+        return False
+    old_inputs = {**recorded, "campaign_catalog": new_catalog}
+    return old_inputs == current
 
 
 def _advance(state: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
@@ -283,11 +415,17 @@ def _run_stage(
 
 
 def _stage_run_id(state: dict[str, Any], stage: dict[str, Any]) -> str:
-    run_id = f"{state['inputs']['run_id']}-{stage['id']}"
+    run_id = f"{state['inputs']['run_id']}-{_stage_attempt_name(stage)}"
+
+    return run_id
+
+
+def _stage_attempt_name(stage: dict[str, Any]) -> str:
+    name = stage["id"]
     retry_count = stage.get("retry_count", 0)
     if retry_count:
-        run_id += f"-retry-{retry_count}"
-    return run_id
+        name += f"-retry-{retry_count}"
+    return name
 
 
 def _record_matrix_reports(
@@ -307,7 +445,11 @@ def _record_matrix_reports(
         ),
         "comparisons": comparisons,
     }
-    report_path = Path(state["workspace"]) / "reports" / f"{stage['id']}.json"
+    report_path = (
+        Path(state["workspace"])
+        / "reports"
+        / f"{_stage_attempt_name(stage)}.json"
+    )
     write_json_atomic(report_path, report, "matrix layout-pair report")
     stage["layout_pair_report"] = _file_record(report_path)
     if report["status"] != "passed":
@@ -372,7 +514,8 @@ def _compose_stage(
     settings_path: Path,
     args: argparse.Namespace,
 ) -> None:
-    candidate = Path(state["workspace"]) / "candidates" / stage["id"]
+    attempt_name = _stage_attempt_name(stage)
+    candidate = Path(state["workspace"]) / "candidates" / attempt_name
     stage["candidate"] = str(candidate)
     _save(state)
     if candidate.exists():
@@ -382,7 +525,7 @@ def _compose_stage(
             settings_path,
             summary_path,
             candidate,
-            f"{state['inputs']['bundle_version']}-{stage['id']}",
+            f"{state['inputs']['bundle_version']}-{attempt_name}",
             args.cases,
             bundle_class="candidate",
             matrix_warm_roles=("warm_restart",),
@@ -393,11 +536,11 @@ def _compose_stage(
             summary_path,
             stage["role_mappings"],
             candidate,
-            f"{state['inputs']['bundle_version']}-{stage['id']}",
+            f"{state['inputs']['bundle_version']}-{attempt_name}",
             args.cases,
         )
 
-    generated = Path(state["workspace"]) / "settings" / f"{stage['id']}.env"
+    generated = Path(state["workspace"]) / "settings" / f"{attempt_name}.env"
     _write_bundle_settings(settings_path, generated, candidate)
     stage["candidate_settings"] = _file_record(generated)
     _save(state)
@@ -521,6 +664,15 @@ def _campaign_provenance_files(state: dict[str, Any]) -> list[tuple[str, Path]]:
                 attempt,
                 build_record,
                 f"{stage['id']} failed attempt {attempt_number}",
+            )
+        for attempt in stage.get("archived_attempts", []):
+            attempt_number = attempt["attempt"] + 1
+            _append_attempt_provenance(
+                files,
+                f"{prefix}/archived_attempts/{attempt_number:03d}",
+                attempt,
+                build_record,
+                f"{stage['id']} archived attempt {attempt_number}",
             )
     return files
 
@@ -700,11 +852,17 @@ def _argument_parser() -> argparse.ArgumentParser:
     update.add_argument("--output", required=True, type=Path)
     update.add_argument("--bundle-version", required=True, metavar="VERSION")
     update.add_argument("--workspace", type=Path)
-    update.add_argument("--accept", choices=("campaign",))
-    update.add_argument(
+    recovery = update.add_mutually_exclusive_group()
+    recovery.add_argument("--accept", choices=("campaign",))
+    recovery.add_argument(
         "--retry-failed",
         action="store_true",
         help="archive and rerun the campaign's failed stage",
+    )
+    recovery.add_argument(
+        "--retry-from",
+        metavar="STAGE",
+        help="archive and rerun a failed campaign from a corrected stage",
     )
     update.add_argument(
         "--bootstrap-candidate",

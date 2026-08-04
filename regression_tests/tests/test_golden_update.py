@@ -28,6 +28,21 @@ class GoldenUpdateTests(unittest.TestCase):
         harness_root.mkdir()
         self.harness = create_harness(harness_root)
         self.harness.set_bundle_class("golden")
+        self.campaigns = self.root / "golden_campaigns.json"
+        self.campaigns.write_text(
+            (REGRESSION_ROOT / "golden_campaigns.json").read_text(
+                encoding="utf-8"
+            ),
+            encoding="utf-8",
+        )
+        schemas = self.root / "schemas"
+        schemas.mkdir()
+        (schemas / "golden-campaigns.schema.json").write_text(
+            (
+                REGRESSION_ROOT / "schemas/golden-campaigns.schema.json"
+            ).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
         self.workspace = self.root / "campaign"
         self.output = self.root / "new-golden"
         self.build = SimpleNamespace(
@@ -116,6 +131,15 @@ class GoldenUpdateTests(unittest.TestCase):
         self.assertEqual(
             self.promote_bundle.call_args.kwargs["matrix_warm_roles"],
             ("warm_restart",),
+        )
+        impurity_mappings = self.promote_mapped_bundle.call_args_list[2].args[2]
+        self.assertEqual(
+            [mapping["roles"] for mapping in impurity_mappings],
+            [
+                ["warm_impurity_off_reference"],
+                ["warm_impurity_n_reference"],
+                ["warm_impurity_nw_reference"],
+            ],
         )
         state = self._state()
         self.assertEqual(state["status"], "published")
@@ -239,6 +263,69 @@ class GoldenUpdateTests(unittest.TestCase):
             self.assertEqual(self._run("--retry-failed"), 1)
         self.assertIn("no single failed stage", errors.getvalue())
 
+    def test_retry_from_rewinds_to_preceding_candidate(self) -> None:
+        failed_once = False
+
+        def run_suite(*args, **kwargs):
+            nonlocal failed_once
+            if args[1] == "impurity_mixture" and not failed_once:
+                failed_once = True
+                return self._suite_summary(args[6], "failed")
+            return self._passing_suite(*args, **kwargs)
+
+        self.run_suite.side_effect = run_suite
+        with redirect_stderr(StringIO()):
+            self.assertEqual(self._run(), 1)
+
+        document = json.loads(self.campaigns.read_text(encoding="utf-8"))
+        stages = document["campaigns"]["legacy_case"]["stages"]
+        corrected = next(
+            stage for stage in stages if stage["id"] == "impurity_references"
+        )
+        corrected["role_mappings"][0]["roles"].append(
+            "warm_impurity_off_restart"
+        )
+        self.campaigns.write_text(
+            json.dumps(document, indent=2) + "\n", encoding="utf-8"
+        )
+
+        calls_before_retry = self.run_suite.call_count
+        self.assertEqual(self._run("--retry-from", "impurity_references"), 0)
+        self.assertEqual(self.run_suite.call_count - calls_before_retry, 7)
+
+        state = self._state()
+        impurity_restarts = state["stages"][2]
+        impurity_references = state["stages"][3]
+        verification = state["stages"][-1]
+        self.assertEqual(impurity_restarts.get("retry_count", 0), 0)
+        self.assertEqual(impurity_references["retry_count"], 1)
+        self.assertEqual(verification["retry_count"], 1)
+        self.assertEqual(len(impurity_references["archived_attempts"]), 1)
+        self.assertEqual(
+            impurity_references["archived_attempts"][0]["declaration"]
+            ["role_mappings"][0]["roles"],
+            ["warm_impurity_off_reference"],
+        )
+        self.assertTrue(
+            impurity_references["candidate"].endswith(
+                "candidates/impurity_references-retry-1"
+            )
+        )
+        self.assertEqual(
+            self.run_suite.call_args_list[calls_before_retry].args[6],
+            "golden-test-impurity_references-retry-1",
+        )
+        self.assertEqual(len(state["campaign_amendments"]), 1)
+        self.assertEqual(state["status"], "awaiting_acceptance")
+
+        self.assertEqual(self._run("--accept", "campaign"), 0)
+        published_files = dict(self.publish_campaign_bundle.call_args.args[4])
+        self.assertIn(
+            "stages/impurity_references/archived_attempts/001/"
+            "suite_summary.json",
+            published_files,
+        )
+
     def test_changed_source_settings_reject_resume(self) -> None:
         self.assertEqual(self._run(), 0)
         with self.harness.settings.open("a", encoding="utf-8") as stream:
@@ -280,6 +367,8 @@ class GoldenUpdateTests(unittest.TestCase):
             str(self.output),
             "--bundle-version",
             "golden-test-1",
+            "--campaigns",
+            str(self.campaigns),
             *extra,
         ]
 

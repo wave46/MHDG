@@ -19,7 +19,7 @@ Usage:
   regression_tests/regression.sh suite run SUITE --settings FILE [--run-only] [--resume]
   regression_tests/regression.sh suite compare SUITE_SUMMARY
   regression_tests/regression.sh suite check [SUITE] [--settings FILE] [--build]
-  regression_tests/regression.sh golden update CASE --settings FILE --run-id ID --output DIR --bundle-version VERSION [--only COMPONENT] [--bootstrap-candidate] [--retry-failed]
+  regression_tests/regression.sh golden update CASE --settings FILE --run-id ID --output DIR --bundle-version VERSION [--only COMPONENT] [--bootstrap-candidate] [--retry-failed | --retry-from STAGE]
   regression_tests/regression.sh golden status WORKSPACE
 
 Commands:

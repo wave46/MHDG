@@ -57,24 +57,15 @@
           "role_mappings": [
             {
               "workflow": "warm_impurity_off",
-              "roles": [
-                "warm_impurity_off_restart",
-                "warm_impurity_off_reference"
-              ]
+              "roles": ["warm_impurity_off_reference"]
             },
             {
               "workflow": "warm_impurity_n",
-              "roles": [
-                "warm_impurity_n_restart",
-                "warm_impurity_n_reference"
-              ]
+              "roles": ["warm_impurity_n_reference"]
             },
             {
               "workflow": "warm_impurity_nw",
-              "roles": [
-                "warm_impurity_nw_restart",
-                "warm_impurity_nw_reference"
-              ]
+              "roles": ["warm_impurity_nw_reference"]
             }
           ]
         },

@@ -298,6 +298,11 @@ then repeat the identical command with `--retry-failed`. The failed attempt is
 retained in campaign provenance and the corrected stage receives a distinct
 `-retry-N` run ID. Completed producer stages are not rerun.
 
+If the correction affects an earlier campaign declaration, use
+`--retry-from STAGE` instead. The campaign records the declaration amendment,
+restores the preceding candidate, archives superseded downstream attempts, and
+uses distinct run, candidate, report, and settings paths for the replacements.
+
 Refresh the limited golden with the same lifecycle but `legacy_case`, an
 accepted golden source settings file, and distinct run/workspace/output names:
 
