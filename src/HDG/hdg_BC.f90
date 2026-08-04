@@ -1868,8 +1868,8 @@ CONTAINS
 #endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
     real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),rho,ng(:),tau(:,:),setval,dcs_du(:)
-    integer,intent(IN),optional :: topology_region
-    real*8,intent(IN),optional :: outward_normal(:)
+    integer,intent(IN)         :: topology_region
+    real*8,intent(IN)          :: outward_normal(:)
     real*8           :: diffiso(:,:),diffani(:,:)
     logical          :: ntang
     real*8           :: qfg(:)

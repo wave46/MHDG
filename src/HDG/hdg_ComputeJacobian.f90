@@ -2252,8 +2252,8 @@ CONTAINS
 #endif
         REAL*8,INTENT(inout)      :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
         REAL*8,INTENT(IN)         :: b3(:),rho,divb,drift(:),f(:),ktis(:)
-        INTEGER, INTENT(IN), OPTIONAL :: topology_region
-        REAL*8, INTENT(IN), OPTIONAL :: outward_normal(:)
+        INTEGER, INTENT(IN)           :: topology_region
+        REAL*8, INTENT(IN)            :: outward_normal(:)
 #ifdef KEQUATION
     real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl,xy(:)
 #ifdef DKLINEARIZED
@@ -3004,8 +3004,8 @@ ENDIF
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       real*8,intent(IN)         :: b3(:),n(:), rho
-      integer,intent(IN),optional :: topology_region
-      real*8,intent(IN),optional :: outward_normal(:)
+      integer,intent(IN)         :: topology_region
+      real*8,intent(IN)          :: outward_normal(:)
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
       real*8,intent(IN)         :: uf(:)
@@ -3492,8 +3492,8 @@ ENDIF
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       logical                   :: isdir
       real*8,intent(IN)         :: b3(:),n(:), rho
-      integer,intent(IN),optional :: topology_region
-      real*8,intent(IN),optional :: outward_normal(:)
+      integer,intent(IN)         :: topology_region
+      real*8,intent(IN)          :: outward_normal(:)
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
       real*8,intent(IN)         :: uf(:)

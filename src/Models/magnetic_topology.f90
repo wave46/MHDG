@@ -161,7 +161,7 @@ CONTAINS
     CHARACTER(LEN=*), INTENT(OUT) :: message
     TYPE(critical_point_t) :: points(max_critical_points)
     INTEGER :: npoints, iaxis, ixpoint
-    REAL*8 :: psi_wall, x_seed_error, span_seed, outward_sign
+    REAL*8 :: psi_wall, span_seed, outward_sign
     REAL*8 :: wall_event_delta, x_event_delta, event_tolerance
     LOGICAL :: wall_found
 
@@ -203,7 +203,7 @@ CONTAINS
     ENDIF
 
     outward_sign = SIGN(1.d0, span_seed)
-    CALL select_lower_xpoint(this, points, npoints, span_seed, ixpoint, x_seed_error)
+    CALL select_lower_xpoint(this, points, npoints, span_seed, ixpoint)
     CALL find_wall_contact(this, wall_coordinates, wall_faces, wall_reference_nodes, &
          outward_sign, psi_wall, this%r_wall_contact, &
          this%z_wall_contact, wall_found)
@@ -443,19 +443,18 @@ CONTAINS
     ENDIF
   END SUBROUTINE select_axis
 
-  SUBROUTINE select_lower_xpoint(this, points, npoints, span_seed, ixpoint, score)
+  SUBROUTINE select_lower_xpoint(this, points, npoints, span_seed, ixpoint)
     CLASS(equilibrium_geometry_t), INTENT(IN) :: this
     TYPE(critical_point_t), INTENT(IN) :: points(max_critical_points)
     INTEGER, INTENT(IN) :: npoints
     REAL*8, INTENT(IN) :: span_seed
     INTEGER, INTENT(OUT) :: ixpoint
-    REAL*8, INTENT(OUT) :: score
     INTEGER :: i
-    REAL*8 :: candidate_score, theta, radius, distance, domain_scale
+    REAL*8 :: candidate_score, best_score, theta, radius, distance, domain_scale
     LOGICAL :: connected
 
     ixpoint = 0
-    score = HUGE(0.d0)
+    best_score = HUGE(0.d0)
     domain_scale = MAX(this%r(this%nr) - this%r(1), &
          this%z(this%nz) - this%z(1))
     DO i = 1, npoints
@@ -468,9 +467,9 @@ CONTAINS
        IF (.NOT. connected) CYCLE
        IF (ABS(radius - distance) > 1.d-5*domain_scale) CYCLE
        candidate_score = ABS((points(i)%psi - this%psi_sep_input)/span_seed)
-       IF (candidate_score < score) THEN
+       IF (candidate_score < best_score) THEN
           ixpoint = i
-          score = candidate_score
+          best_score = candidate_score
        ENDIF
     ENDDO
   END SUBROUTINE select_lower_xpoint
@@ -484,7 +483,7 @@ CONTAINS
     REAL*8, INTENT(OUT) :: psi_contact, r_contact, z_contact
     LOGICAL, INTENT(OUT) :: found
     INTEGER :: iface, isample, nsample
-    REAL*8 :: s0, s1, s2, f0, f1, f2, smin, fmin, r, z, psi, pr, pz
+    REAL*8 :: s0, s1, s2, f0, f1, f2, smin, r, z, psi
     REAL*8 :: best_delta, delta
 
     found = .FALSE.
@@ -510,7 +509,7 @@ CONTAINS
           CALL consider_wall_candidate(f2, r, z, psi)
           IF (f1 <= f0 .AND. f1 <= f2) THEN
              CALL minimize_wall_interval(this, wall_coordinates, wall_faces(iface, :), &
-                  wall_reference_nodes, outward_sign, s0, s2, smin, fmin)
+                  wall_reference_nodes, outward_sign, s0, s2, smin)
              CALL wall_flux(this, wall_coordinates, wall_faces(iface, :), &
                   wall_reference_nodes, smin, outward_sign, delta, r, z, psi)
              CALL consider_wall_candidate(delta, r, z, psi)
@@ -546,12 +545,12 @@ CONTAINS
   END SUBROUTINE find_wall_contact
 
   SUBROUTINE minimize_wall_interval(this, wall_coordinates, wall_face, &
-       wall_reference_nodes, outward_sign, sa, sb, smin, fmin)
+       wall_reference_nodes, outward_sign, sa, sb, smin)
     CLASS(equilibrium_geometry_t), INTENT(IN) :: this
     REAL*8, INTENT(IN) :: wall_coordinates(:, :), wall_reference_nodes(:)
     INTEGER, INTENT(IN) :: wall_face(:)
     REAL*8, INTENT(IN) :: outward_sign, sa, sb
-    REAL*8, INTENT(OUT) :: smin, fmin
+    REAL*8, INTENT(OUT) :: smin
     INTEGER :: iteration
     REAL*8, PARAMETER :: golden = 0.6180339887498948482d0
     REAL*8 :: left, right, s1, s2, f1, f2, r, z, psi
@@ -584,10 +583,8 @@ CONTAINS
     ENDDO
     IF (f1 <= f2) THEN
        smin = s1
-       fmin = f1
     ELSE
        smin = s2
-       fmin = f2
     ENDIF
   END SUBROUTINE minimize_wall_interval
 
@@ -598,47 +595,33 @@ CONTAINS
     INTEGER, INTENT(IN) :: wall_face(:)
     REAL*8, INTENT(IN) :: s, outward_sign
     REAL*8, INTENT(OUT) :: delta, r, z, psi
-    REAL*8 :: drds, dzds, pr, pz
+    REAL*8 :: pr, pz
 
     CALL evaluate_wall_position(wall_coordinates, wall_face, wall_reference_nodes, &
-         s, r, z, drds, dzds)
+         s, r, z)
     CALL this%evaluate_flux(r, z, psi, pr, pz)
     delta = outward_sign*(psi - this%psi_axis)
   END SUBROUTINE wall_flux
 
   SUBROUTINE evaluate_wall_position(wall_coordinates, wall_face, reference_nodes, &
-       s, r, z, drds, dzds)
+       s, r, z)
     REAL*8, INTENT(IN) :: wall_coordinates(:, :), reference_nodes(:), s
     INTEGER, INTENT(IN) :: wall_face(:)
-    REAL*8, INTENT(OUT) :: r, z, drds, dzds
-    INTEGER :: i, j, k, n
-    REAL*8 :: basis, derivative, product
+    REAL*8, INTENT(OUT) :: r, z
+    INTEGER :: i, j, n
+    REAL*8 :: basis
 
     n = SIZE(reference_nodes)
     r = 0.d0
     z = 0.d0
-    drds = 0.d0
-    dzds = 0.d0
     DO i = 1, n
        basis = 1.d0
        DO j = 1, n
           IF (j == i) CYCLE
           basis = basis*(s - reference_nodes(j))/(reference_nodes(i) - reference_nodes(j))
        ENDDO
-       derivative = 0.d0
-       DO k = 1, n
-          IF (k == i) CYCLE
-          product = 1.d0/(reference_nodes(i) - reference_nodes(k))
-          DO j = 1, n
-             IF (j == i .OR. j == k) CYCLE
-             product = product*(s - reference_nodes(j))/(reference_nodes(i) - reference_nodes(j))
-          ENDDO
-          derivative = derivative + product
-       ENDDO
        r = r + basis*wall_coordinates(wall_face(i), 1)
        z = z + basis*wall_coordinates(wall_face(i), 2)
-       drds = drds + derivative*wall_coordinates(wall_face(i), 1)
-       dzds = dzds + derivative*wall_coordinates(wall_face(i), 2)
     ENDDO
   END SUBROUTINE evaluate_wall_position
 
@@ -646,17 +629,17 @@ CONTAINS
     REAL*8, INTENT(IN) :: r, z, wall_coordinates(:, :), reference_nodes(:)
     INTEGER, INTENT(IN) :: wall_faces(:, :)
     INTEGER :: iface, isample, nsample
-    REAL*8 :: s, r0, z0, r1, z1, drds, dzds, intersection_r
+    REAL*8 :: s, r0, z0, r1, z1, intersection_r
 
     point_inside_wall = .FALSE.
     nsample = MAX(8, 3*SIZE(reference_nodes))
     DO iface = 1, SIZE(wall_faces, 1)
        CALL evaluate_wall_position(wall_coordinates, wall_faces(iface, :), &
-            reference_nodes, -1.d0, r0, z0, drds, dzds)
+            reference_nodes, -1.d0, r0, z0)
        DO isample = 1, nsample
           s = -1.d0 + 2.d0*REAL(isample)/REAL(nsample)
           CALL evaluate_wall_position(wall_coordinates, wall_faces(iface, :), &
-               reference_nodes, s, r1, z1, drds, dzds)
+               reference_nodes, s, r1, z1)
           IF ((z0 > z) .NEQV. (z1 > z)) THEN
              intersection_r = r0 + (z - z0)*(r1 - r0)/(z1 - z0)
              IF (intersection_r > r) point_inside_wall = .NOT. point_inside_wall
