@@ -1552,17 +1552,20 @@ CONTAINS
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: Etan
     REAL*8, PARAMETER   :: tol = 1.d-7
-    REAL*8              :: coeff, denom, eta_coeff, Unn
+    REAL*8              :: coeff, denom, denom_eff, denom_floor, eta_coeff, Unn
 
     Unn = MAX(U(phys%idx_rhon_eq), tol)
 
 #ifdef CONSTANTNEUTRALDIFF
-    Etan = Unn*phys%diff_nn
+    Etan = Unn*MAX(phys%diff_nn, phys%diff_nn_min)
 #else
     CALL compute_neutral_transport_prefactor(U, coeff)
     CALL compute_neutral_gamma_denominator(U, denom)
-    eta_coeff = coeff/denom
-    CALL double_softplus(eta_coeff, 10.d0*phys%diff_n, phys%diff_nn)
+    denom_floor = 0.d0
+    IF (phys%diff_nn > 0.d0) denom_floor = coeff/(1.1d0*phys%diff_nn)
+    denom_eff = MAX(denom, denom_floor)
+    eta_coeff = coeff/denom_eff
+    CALL double_softplus(eta_coeff, phys%diff_nn_min, phys%diff_nn)
     Etan = Unn*eta_coeff
 #endif
   ENDSUBROUTINE computeEtan
@@ -1571,7 +1574,7 @@ CONTAINS
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: dEtan_dU(:)
     REAL*8, PARAMETER   :: tol = 1.d-7
-    REAL*8              :: coeff, denom, eta_coeff, double_soft_deriv, Unn
+    REAL*8              :: coeff, denom, denom_eff, denom_floor, eta_coeff, double_soft_deriv, Unn
     REAL*8              :: dcoeff_dU(SIZE(U)), ddenom_dU(SIZE(U)), deta_dU(SIZE(U))
     INTEGER             :: inn
 
@@ -1580,17 +1583,25 @@ CONTAINS
     Unn = MAX(U(inn), tol)
 
 #ifdef CONSTANTNEUTRALDIFF
-    IF (U(inn) >= tol) dEtan_dU(inn) = phys%diff_nn
+    IF (U(inn) >= tol) dEtan_dU(inn) = MAX(phys%diff_nn, phys%diff_nn_min)
 #else
     CALL compute_neutral_transport_prefactor(U, coeff)
     CALL compute_dneutral_transport_prefactor_dU(U, dcoeff_dU)
     CALL compute_neutral_gamma_denominator(U, denom)
     CALL compute_dneutral_gamma_denominator_dU(U, ddenom_dU)
 
-    eta_coeff = coeff/denom
-    CALL double_softplus_deriv(eta_coeff, 10.d0*phys%diff_n, phys%diff_nn, double_soft_deriv)
-    deta_dU = (dcoeff_dU/denom - coeff*ddenom_dU/denom**2)*double_soft_deriv
-    CALL double_softplus(eta_coeff, 10.d0*phys%diff_n, phys%diff_nn)
+    denom_floor = 0.d0
+    IF (phys%diff_nn > 0.d0) denom_floor = coeff/(1.1d0*phys%diff_nn)
+    denom_eff = MAX(denom, denom_floor)
+    eta_coeff = coeff/denom_eff
+    CALL double_softplus_deriv(eta_coeff, phys%diff_nn_min, phys%diff_nn, double_soft_deriv)
+
+    deta_dU = 0.d0
+    IF (denom > denom_floor) THEN
+      deta_dU = dcoeff_dU/denom_eff - coeff*ddenom_dU/denom_eff**2
+    ENDIF
+    deta_dU = deta_dU*double_soft_deriv
+    CALL double_softplus(eta_coeff, phys%diff_nn_min, phys%diff_nn)
 
     dEtan_dU = Unn*deta_dU
     IF (U(inn) >= tol) dEtan_dU(inn) = dEtan_dU(inn) + eta_coeff
