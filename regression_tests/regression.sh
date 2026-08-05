@@ -36,7 +36,8 @@ Commands:
   golden update    Start or continue an ordered golden-reference update.
   golden status    Show persisted golden-update state.
 
-Suites: warm, impurity_scalar_baseline, impurity_mixture, impurity_references,
+Suites: warm, neutral_pressure_warm, neutralgamma_race,
+        impurity_scalar_baseline, impurity_mixture, impurity_references,
         initialization_smoke, stored_field_compatibility, race, cold,
         warm_parallelism, race_matrix, cold_matrix, diverted_warm,
         diverted_warm_parallelism, diverted_cold_adaptive,

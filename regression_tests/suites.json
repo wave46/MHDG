@@ -7,6 +7,13 @@
       "workflows": ["warm"],
       "layouts": ["mpi4_omp4"]
     },
+    "neutral_pressure_warm": {
+      "description": "Execution-only limited warm attempt with neutral pressure enabled",
+      "case": "legacy_case",
+      "workflows": ["warm_neutral_pressure"],
+      "layouts": ["mpi4_omp4"],
+      "reference_comparisons": false
+    },
     "impurity_scalar_baseline": {
       "description": "Disabled and single-nitrogen warm mixture baselines",
       "case": "legacy_case",
@@ -110,6 +117,19 @@
         }
       ],
       "tolerance_profile": "race_step"
+    },
+    "neutralgamma_race": {
+      "description": "One-step two-Newton-iteration NeutralGamma OpenMP race check",
+      "case": "legacy_case",
+      "workflows": ["cold_step_neutralgamma"],
+      "layout_comparisons": [
+        {
+          "baseline": "serial_omp1",
+          "candidate": "serial_omp16"
+        }
+      ],
+      "tolerance_profile": "race_step",
+      "reference_comparisons": false
     },
     "race_matrix": {
       "description": "All-pairs one-step race checks on the coarse mesh",

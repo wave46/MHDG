@@ -130,6 +130,42 @@ class RunPreparationTests(unittest.TestCase):
             },
         )
 
+    def test_prepares_pr04_neutral_variants(self) -> None:
+        pressure = prepare_run(
+            self.settings,
+            "legacy_case",
+            "warm_neutral_pressure",
+            "mpi4_omp4",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "pressure-on",
+        )
+        pressure_parameters = (pressure.path / "param.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("neutralp_lambda = 1", pressure_parameters)
+        self.assertIn("compute_from_flux = .true.", pressure_parameters)
+
+        neutralgamma = prepare_run(
+            self.settings,
+            "legacy_case",
+            "cold_step_neutralgamma",
+            "serial_omp1",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "neutralgamma",
+        )
+        neutralgamma_parameters = (
+            neutralgamma.stages[0].run.path / "param.txt"
+        ).read_text(encoding="utf-8")
+        for assignment in (
+            "impurity_radiation = .false.",
+            "nrp = 2",
+            "nts = 1",
+            "tau(6) = 1.0",
+        ):
+            self.assertIn(assignment, neutralgamma_parameters)
+
     def test_warm_workflow_selects_restart_and_reference_independently(self) -> None:
         staging = self.root / "selected_staging"
         final = self.root / "selected_final"
