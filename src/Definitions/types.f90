@@ -528,7 +528,7 @@ MODULE types
      REAL*8         :: tNR      ! Tolerance of the Newton-Raphson scheme
      REAL*8         :: tTM      ! Tolerance for the steady state achievement
      REAL*8         :: div      ! Divergence detector
-     REAL*8         :: tau(1:6) ! Stabilization parameter for each equation
+     REAL*8         :: tau(1:7) ! Stabilization parameter for each equation
      REAL*8         :: sc_coe   ! Shock capturing coefficient
      REAL*8         :: sc_sen   ! Shock capturing sensibility
      REAL*8         :: minrho   ! Value of rho to start applying limiting

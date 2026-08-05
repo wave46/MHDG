@@ -163,6 +163,7 @@ class RunPreparationTests(unittest.TestCase):
             "nrp = 2",
             "nts = 1",
             "tau(6) = 1.0",
+            "tau(7) = 1.0",
         ):
             self.assertIn(assignment, neutralgamma_parameters)
 

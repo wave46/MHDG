@@ -1198,7 +1198,7 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, numer%tnr, 'NR_convergence_criterium')
       CALL HDF5_real_saving(group_id2, numer%ttm, 'Time_convergence_criterium')
       CALL HDF5_real_saving(group_id2, numer%div, 'Divergence_criterium')
-      CALL HDF5_array1d_saving(group_id2, numer%tau, 4, 'Stabilization_parameter')
+      CALL HDF5_array1d_saving(group_id2, numer%tau, SIZE(numer%tau), 'Stabilization_parameter')
       CALL HDF5_real_saving(group_id2, numer%sc_coe, 'Shock_capturing_parameter')
       CALL HDF5_real_saving(group_id2, numer%sc_sen, 'Shock_capturing_sensibility')
       CALL HDF5_real_saving(group_id2, numer%minrho, 'Value_of_rho_to_start_applying_limiting')

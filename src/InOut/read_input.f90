@@ -25,7 +25,7 @@ SUBROUTINE READ_input()
   INTEGER               :: num_param_est, num_n_quant_ind
   REAL*8                :: thr_ind, tol_est, osc_tol, osc_check
   INTEGER               :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
-  REAL*8                :: dt0, R0, diff_n, diff_u, tau(1:6), tNr, tTM, div, Tbg, neutralp_lambda
+  REAL*8                :: dt0, R0, diff_n, diff_u, tau(1:7), tNr, tTM, div, Tbg, neutralp_lambda
   REAL*8                :: tfi, a, bohmth,bohm_energy_thresh, q, diffred, diffmin
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
@@ -120,6 +120,7 @@ SUBROUTINE READ_input()
   n_quant_ind = -1
   compute_from_flux = .TRUE.
   divide_by_2pi = .FALSE.
+  tau = 1.d0
   diff_nn_min = diff_nn_min_unset
   neutralp_lambda = 0.d0
   neutralp_ti_supp_eV = 1.d-6
@@ -613,6 +614,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - tau(4):                                             ', numer%tau(4)
      PRINT *, '                - tau(5):                                             ', numer%tau(5)
      PRINT *, '                - tau(6):                                             ', numer%tau(6)
+     PRINT *, '                - tau(7):                                             ', numer%tau(7)
      PRINT *, '                - max number of N-R iterations:                       ', numer%nrp
      PRINT *, '                - tolerance for the N-R scheme:                       ', numer%tNR
      PRINT *, '                - tolerance for the steady state achievement:         ', numer%tTM

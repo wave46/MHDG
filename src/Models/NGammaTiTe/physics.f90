@@ -3354,7 +3354,7 @@ ENDSUBROUTINE  compute_ddissip_du
 #endif
 #ifdef NEUTRALGAMMA
         IF (ign > 0 .AND. inn > 0) tau_aux(ign) = &
-          &MAX(numer%tau(ign), tau_aux(ign) + Etan/MAX(uc(inn),1.d-7))*refElPol%ndeg/Mesh%elemSize(iel)
+          &tau_aux(ign) + Etan/MAX(uc(inn),1.d-7)*refElPol%ndeg/Mesh%elemSize(iel)
 #endif
 #endif
 !        ! Toroidal face

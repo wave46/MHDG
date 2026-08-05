@@ -103,6 +103,7 @@
     tau(4)              = 1.E+0         ! Stabilization parameter 4th equation
     tau(5)              = 1.E-0         ! Stabilization parameter 5th equation
     tau(6)              = 1.E-0         ! Stabilization parameter 6th equation
+    tau(7)              = 1.E-0         ! Stabilization parameter 7th equation
     neutralp_lambda     = 0.d0           ! Neutral-pressure continuation factor
     nrp                 = 3          ! Max number of Newton-Raphson iterations
     tNR                 = 2e-4          ! Tolerance of the Newton-Raphson scheme
