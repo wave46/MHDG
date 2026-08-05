@@ -442,6 +442,7 @@ MODULE types
      LOGICAL :: external_heating ! to read and apply external heating from input file
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
      LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs
+     LOGICAL :: neutral_perpendicular_diffusion ! use perpendicular instead of isotropic neutral density diffusion
   END TYPE Switches_type
 
   !***************************************************************

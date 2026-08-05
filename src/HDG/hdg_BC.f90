@@ -2351,7 +2351,9 @@ CONTAINS
     flgflux_pinch = -recycling_coeff*uefg(1)*(APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
     !Neutral flux
-    flgflux_neutral = (diffiso(inn,inn)*(Qpr(1,inn)*ng(1) + Qpr(2,inn)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    flgflux_neutral = diffiso(inn,inn)*DOT_PRODUCT(Qpr(:,inn),ng) &
+      &- diffani(inn,inn)*bn*DOT_PRODUCT(Qpr(:,inn),bg)
+    flgflux_neutral = flgflux_neutral*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
         !flux neutral numerical
         flgflux_numerical = tau(inn,inn)* (uefg(inn)-ufg(inn))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
@@ -2394,27 +2396,32 @@ CONTAINS
        k = inn
        indi = ind_asf+k
        indj = ind_ash+idm+(k-1)*Ndim
-       !if (ntang) then
-          elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
-       !else
-       !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
-       !endif
+       kmult = NiNi*(ng(idm)*diffiso(k,k) - bn*bg(idm)*diffani(k,k))
+       elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - kmult
        DO j=1,Neq
         indj = ind_asf + j
         kmult = Dnn_dU(j)*Qpr(idm,k)*ng(idm)*NiNi
+        IF (switch%neutral_perpendicular_diffusion) &
+          &kmult = kmult - Dnn_dU(j)*Qpr(idm,k)*bn*bg(idm)*NiNi
         elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
 #ifdef NEUTRALP
         ind_kf = ind_ash + idm + (j-1)*Ndim
         kmult = QdW5p(idm,j)*ng(idm)*NiNi
+        IF (switch%neutral_perpendicular_diffusion) kmult = kmult - QdW5p(idm,j)*bn*bg(idm)*NiNi
         elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
         kmult = W5p(j)*ng(idm)*NiNi
+        IF (switch%neutral_perpendicular_diffusion) kmult = kmult - W5p(j)*bn*bg(idm)*NiNi
         elMat%Alq(ind_ff(indi),ind_fG(ind_kf),iel) = elMat%Alq(ind_ff(indi),ind_fG(ind_kf),iel) - kmult
 #endif
        ENDDO
-       kmultf = Dnn_dU_U*(Qpr(idm,k)*ng(idm))*Ni
+       kmultf = Dnn_dU_U*Qpr(idm,k)*ng(idm)*Ni
+       IF (switch%neutral_perpendicular_diffusion) &
+         &kmultf = kmultf - Dnn_dU_U*Qpr(idm,k)*bn*bg(idm)*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #ifdef NEUTRALP
        kmultf = DOT_PRODUCT(QdW5p(idm,:),ufg)*ng(idm)*Ni
+       IF (switch%neutral_perpendicular_diffusion) &
+         &kmultf = kmultf - DOT_PRODUCT(QdW5p(idm,:),ufg)*bn*bg(idm)*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #endif
     END DO

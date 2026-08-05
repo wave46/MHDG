@@ -1345,7 +1345,11 @@ CONTAINS
        ENDIF
     ENDIF
 #ifdef NEUTRAL
-    d_ani(phys%idx_rhon_eq,phys%idx_rhon_eq,:) = 0.
+    IF (switch%neutral_perpendicular_diffusion) THEN
+      d_ani(phys%idx_rhon_eq,phys%idx_rhon_eq,:) = d_iso(phys%idx_rhon_eq,phys%idx_rhon_eq,:)
+    ELSE
+      d_ani(phys%idx_rhon_eq,phys%idx_rhon_eq,:) = 0.d0
+    ENDIF
 #endif
 
     !*****************************

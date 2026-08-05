@@ -2731,17 +2731,25 @@ ENDIF
                  DO j = 1,Neq
               z = i+(j-1)*Neq
                     DO k = 1,Ndim
-                Auu(:,:,z) =Auu(:,:,z) + (NxyzNi(:,:,k)*Dnn_dU(j)*Qpr(k,i))
+                Auu(:,:,z) = Auu(:,:,z) + NxyzNi(:,:,k)*Dnn_dU(j)*Qpr(k,i)
+                IF (switch%neutral_perpendicular_diffusion) &
+                  &Auu(:,:,z) = Auu(:,:,z) - NNxy*b(k)*Dnn_dU(j)*Qpr(k,i)
 #ifdef NEUTRALP
                 Auu(:,:,z) = Auu(:,:,z) + NxyzNi(:,:,k)*QdW5p(k,j)
+                IF (switch%neutral_perpendicular_diffusion) &
+                  &Auu(:,:,z) = Auu(:,:,z) - NNxy*b(k)*QdW5p(k,j)
 #endif
                     ENDDO
                  ENDDO
 
             DO k = 1, Ndim
-              rhs(:,i) = rhs(:,i)+Dnn_dU_U*Qpr(k,i)*Nxyzg(:,k)
+              rhs(:,i) = rhs(:,i) + Dnn_dU_U*Qpr(k,i)*Nxyzg(:,k)
+              IF (switch%neutral_perpendicular_diffusion) &
+                &rhs(:,i) = rhs(:,i) - Dnn_dU_U*Qpr(k,i)*NNbb*b(k)
 #ifdef NEUTRALP
               rhs(:,i) = rhs(:,i) + DOT_PRODUCT(Qpr(k,:),dW5p_dU_u)*Nxyzg(:,k)
+              IF (switch%neutral_perpendicular_diffusion) &
+                &rhs(:,i) = rhs(:,i) - DOT_PRODUCT(Qpr(k,:),dW5p_dU_u)*NNbb*b(k)
 #endif
                  ENDDO
 #ifdef KEQUATION
@@ -2840,6 +2848,8 @@ ENDIF
             DO j = 1,Neq
               z = i+(k-1)*Neq+(j-1)*Neq*Ndim
               Auq(:,:,z) = Auq(:,:,z) + W5p(j)*NxyzNi(:,:,k)
+              IF (switch%neutral_perpendicular_diffusion) &
+                &Auq(:,:,z) = Auq(:,:,z) - W5p(j)*NNxy*b(k)
             END DO
 #endif
 #endif
@@ -3353,25 +3363,33 @@ ENDIF
           ind_jf = ind_asf+j
           DO k=1,Ndim
             kmult = Dnn_dU(j)*Qpr(k,i)*n(k)*NNif
+            IF (switch%neutral_perpendicular_diffusion) &
+              &kmult = kmult - Dnn_dU(j)*Qpr(k,i)*bn*b(k)*NNif
             elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel)  = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
             elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel)  = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
 #ifdef NEUTRALP
             ind_kf = k + (j - 1)*Ndim + ind_ash
             kmult = W5p(j)*n(k)*NNif
+            IF (switch%neutral_perpendicular_diffusion) kmult = kmult - W5p(j)*bn*b(k)*NNif
             elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) = elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) - kmult
             elMat%Alq(ind_ff(ind_if),ind_fg(ind_kf),iel) = elMat%Alq(ind_ff(ind_if),ind_fg(ind_kf),iel) - kmult
 
             kmult = QdW5p(k,j)*n(k)*NNif
+            IF (switch%neutral_perpendicular_diffusion) kmult = kmult - QdW5p(k,j)*bn*b(k)*NNif
             elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
             elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
 #endif
           ENDDO
         END DO
-        kmultf = Dnn_dU_U*(Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif
+        kmultf = Dnn_dU_U*DOT_PRODUCT(Qpr(:,i),n)
+        IF (switch%neutral_perpendicular_diffusion) kmultf = kmultf - Dnn_dU_U*bn*DOT_PRODUCT(Qpr(:,i),b)
+        kmultf = kmultf*Nif
         elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
         elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
 #ifdef NEUTRALP
-        kmultf = DOT_PRODUCT(MATMUL(TRANSPOSE(QdW5p),n),uf)*Nif
+        kmultf = DOT_PRODUCT(MATMUL(TRANSPOSE(QdW5p),n),uf)
+        IF (switch%neutral_perpendicular_diffusion) kmultf = kmultf - bn*DOT_PRODUCT(MATMUL(TRANSPOSE(QdW5p),b),uf)
+        kmultf = kmultf*Nif
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
 #endif
@@ -3821,22 +3839,30 @@ END IF
             ind_jf = ind_asf+j
             DO k = 1,Ndim
               kmult = Dnn_dU(j)*Qpr(k,i)*n(k)*NNif
+              IF (switch%neutral_perpendicular_diffusion) &
+                &kmult = kmult - Dnn_dU(j)*Qpr(k,i)*bn*b(k)*NNif
               elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
 #ifdef NEUTRALP
               ind_kf = k + (j - 1)*Ndim + ind_ash
               kmult = W5p(j)*n(k)*NNif
+              IF (switch%neutral_perpendicular_diffusion) kmult = kmult - W5p(j)*bn*b(k)*NNif
               elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) = elMat%Auq(ind_fe(ind_if),ind_fg(ind_kf),iel) - kmult
               IF (.NOT. isdir) THEN
                 kmult = QdW5p(k,j)*n(k)*NNif
+                IF (switch%neutral_perpendicular_diffusion) kmult = kmult - QdW5p(k,j)*bn*b(k)*NNif
                 elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
               END IF
 #endif
             END DO
           END DO
-          kmultf = Dnn_dU_U*(Qpr(1,i)*n(1)+Qpr(2,i)*n(2))*Nif
+          kmultf = Dnn_dU_U*DOT_PRODUCT(Qpr(:,i),n)
+          IF (switch%neutral_perpendicular_diffusion) kmultf = kmultf - Dnn_dU_U*bn*DOT_PRODUCT(Qpr(:,i),b)
+          kmultf = kmultf*Nif
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
 #ifdef NEUTRALP
-          kmultf = DOT_PRODUCT(MATMUL(TRANSPOSE(QdW5p),n),uf)*Nif
+          kmultf = DOT_PRODUCT(MATMUL(TRANSPOSE(QdW5p),n),uf)
+          IF (switch%neutral_perpendicular_diffusion) kmultf = kmultf - bn*DOT_PRODUCT(MATMUL(TRANSPOSE(QdW5p),b),uf)
+          kmultf = kmultf*Nif
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
 #endif
 #ifdef NEUTRALGAMMA
