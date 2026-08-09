@@ -92,6 +92,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  MACROS+= -DNGAMMA 
  MACROS+= -DTEMPERATURE
  MACROS+= -DNEUTRAL
+ MACROS+= -DNEUTRALP
  ADDMOD+=hdg_LimitingTechniques.o
 else ifeq ($(MDL),$(MDL_NGAMMAVORT))
  RMDL=NGammaVort

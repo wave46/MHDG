@@ -35,6 +35,8 @@ MDL_NGAMMANEUTRAL=NGammaNeutral
 MDL_NGAMMATITE=NGammaTiTe
 MDL_NGAMMATITENEUTRAL=NGammaTiTeNeutral
 MDL_NGAMMATITENEUTRALK=NGammaTiTeNeutralk
+MDL_NGAMMATITENEUTRALGAMMA=NGammaTiTeNeutralGamma
+MDL_NGAMMATITENEUTRALGAMMAK=NGammaTiTeNeutralGammak
 MDL_NGAMMAVORT=NGammaVort
 # Model chosen
 #MDL=$(MDL_NGAMMA)
@@ -42,6 +44,8 @@ MDL_NGAMMAVORT=NGammaVort
 #MDL=$(MDL_NGAMMATITE)
 MDL=$(MDL_NGAMMATITENEUTRAL)
 #MDL=$(MDL_NGAMMATITENEUTRALK)
+#MDL=$(MDL_NGAMMATITENEUTRALGAMMA)
+#MDL=$(MDL_NGAMMATITENEUTRALGAMMAK)
 #MDL=$(MDL_NGAMMAVORT)
 #MDL=$(MDL_LAPLACE)
 
@@ -93,6 +97,7 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  MACROS+= -DTEMPERATURE
  #turns on neutral contimuity equations
  MACROS+= -DNEUTRAL
+ MACROS+= -DNEUTRALP
  #Uses AMJUEL splines for recombination and ionization, better turn on. If not, Te splines from NRL formulas employed
  MACROS+= -DAMJUELSPLINES
  #Uses AMJUEL splines for three-body recombination spline. If turned off, takes the one without three-body recombination, may be more stable
@@ -102,30 +107,24 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  #The combination of the two flags applies OpenADAS spline for thermal cx coefficient            
  MACROS+= -DEXPANDEDCX
  MACROS+= -DTHERMALCX
- #Applies soft min and max on neutral diffusion coefficient. Should be more stable
- MACROS+= -DDNNSMOOTH
- #Turns on linearization of neutral diffusion. Better to keep it on
- MACROS+= -DDNNLINEARIZED
- #Model with constant neutral diffusion. If turned on, turn off the previous two flags
+ #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
+ #Model with constant neutral diffusion
  #MACROS+= -DCONSTANTNEUTRALDIFF
  #Actually not saves, but monitors in the output particle balance
  MACROS+= -DSAVEFLUX
- #The following 4 flags are development ones, should not be used
- #MACROS+= -DBOHMLIMIT
+ #The following flags are development ones, should not be used
  #MACROS+= -DNEUTRALCONVECTION
  #MACROS+= -DPINCH
- #MACROS+= -DRHSBC
  ADDMOD+=hdg_LimitingTechniques.o
 else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
  RMDL=NGammaTiTe
  MACROS+= -DNGAMMA 
  MACROS+= -DTEMPERATURE
  MACROS+= -DNEUTRAL
+ MACROS+= -DNEUTRALP
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC
- #MACROS+= -DRHSBC
- MACROS+= -DDNNSMOOTH
- MACROS+= -DDNNLINEARIZED
+ #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
  #MACROS+= -DNEUTRALPUMP
  #MACROS+= -DLEGACYCX
  MACROS+= -DSAVEFLUX
@@ -133,10 +132,38 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
  MACROS+= -DTHERMALCX
  #MACROS+= -DCONSTANTNEUTRALDIFF
  MACROS+= -DKEQUATION
- #MACROS+= -DBOHMLIMIT
  #MACROS+= -DNEUTRALCONVECTION
  #MACROS+= -DDKLINEARIZED
  #MACROS+= -DPINCH
+ ADDMOD+=hdg_LimitingTechniques.o
+else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALGAMMA))
+ RMDL=NGammaTiTe
+ MACROS+= -DNGAMMA
+ MACROS+= -DTEMPERATURE
+ MACROS+= -DNEUTRAL
+ MACROS+= -DNEUTRALP
+ MACROS+= -DNEUTRALGAMMA
+ MACROS+= -DAMJUELSPLINES
+ MACROS+= -DTHREEBODYREC
+ MACROS+= -DSAVEFLUX
+ MACROS+= -DEXPANDEDCX
+ MACROS+= -DTHERMALCX
+ #MACROS+= -DCONSTANTNEUTRALDIFF
+ ADDMOD+=hdg_LimitingTechniques.o
+else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALGAMMAK))
+ RMDL=NGammaTiTe
+ MACROS+= -DNGAMMA
+ MACROS+= -DTEMPERATURE
+ MACROS+= -DNEUTRAL
+ MACROS+= -DNEUTRALP
+ MACROS+= -DNEUTRALGAMMA
+ MACROS+= -DAMJUELSPLINES
+ MACROS+= -DTHREEBODYREC
+ MACROS+= -DSAVEFLUX
+ MACROS+= -DEXPANDEDCX
+ MACROS+= -DTHERMALCX
+ #MACROS+= -DCONSTANTNEUTRALDIFF
+ MACROS+= -DKEQUATION
  ADDMOD+=hdg_LimitingTechniques.o
 else ifeq ($(MDL),$(MDL_NGAMMAVORT))
  RMDL=NGammaVort

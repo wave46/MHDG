@@ -712,7 +712,8 @@ CONTAINS
 
     if (save_tau) then
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
-       phys%diff_nn_Bou(indtausave) = diff_iso_fac(5,5,:)
+       phys%diff_nn_Bou(indtausave) = &
+         &diff_iso_fac(phys%idx_rhon_eq,phys%idx_rhon_eq,:)
      ENDIF
 
     ! Physical variables at Gauss points (division by 0 during convergence test!!!)
@@ -1192,12 +1193,6 @@ CONTAINS
 #endif
       ! tangency
       ntang = .TRUE.
-#ifdef BOHMLIMIT
-      !use this flag as a proxy for turning off/on the bohm limit technique
-      if (any(ufg(:,4)<2.e-7)) then
-        ntang = .false.
-      endif
-#endif
       inc = bn
 
 #ifdef NGAMMA
@@ -1874,7 +1869,7 @@ CONTAINS
     logical          :: ntang
     real*8           :: qfg(:)
     real*8           :: bn,Abohm(Neq,Neq),APinch(Neq,Ndim)
-    integer          :: i,j,k,idm,Neqstab,Neqgrad
+    integer          :: i,j,k,idm,Neqstab,Neqgrad,inn,ign,ik
 #ifdef VORTICITY
     integer*4        :: indk(Npfl)
     real*8           :: kcoeff
@@ -1891,33 +1886,24 @@ CONTAINS
         REAL*8           :: dq_fs_i_dU(Neq), dq_fs_e_dU(Neq)
         REAL*8           :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
         REAL*8           :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
+#ifdef NEUTRALP
+        REAL*8           :: W5p(Neq), dW5p_dU(Neq,Neq), QdW5p(Ndim,Neq)
+#endif
 #ifdef NEUTRAL
         REAL*8           :: E, theta, RN
-#ifdef DNNLINEARIZED
-    real*8                    :: Dnn_dU(Neq), Dnn_dU_U
-#endif
+        REAL*8           :: Dnn_dU(Neq), Dnn_dU_U
 #endif
 #ifdef DKLINEARIZED
     real*8                 ::       q_cyl, xyf(:), ddk_dU(Neq), ddk_dU_u
-#endif
-#ifdef NEUTRALP
-        REAL*8           :: Dnn,Dpn,GammaLim,Alphanp,Betanp,Gammaredpn,Tmin
-        REAL*8           :: AbohmNP(Neq),Vpn(Neq),dVpn_dU(Neq,Neq),gmpn(Ndim),gmipn(Ndim),Taupn(Ndim,Neq),dDpn_dU(Neq)
 #endif
 #endif
 #ifdef SAVEFLUX
     real*8, INTENT(IN)            :: dline
     real*8,intent(out)::  flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical
 #endif
-#ifdef BOHMLIMIT
-    real*8           :: U3_min = 2.e-8 ! 1e16[m^-3]*0.01^[eV]/n0/T0
-    logical          :: bohm_limit = .true.    ! false if U3<U3_min
-
-    if (ufg(3)<U3_min) then
-      bohm_limit = .false.
-    endif
-
-#endif
+    inn = phys%idx_rhon_eq
+    ign = phys%idx_gamman_eq
+    ik = phys%idx_k_eq
 
     Neqstab = Neq
     Neqgrad = Neq
@@ -1982,6 +1968,12 @@ CONTAINS
                   indj = j + ind_asf
                   elMat%Alu(ind_ff(ind),ind_fe(indj),iel) = elMat%Alu(ind_ff(ind),ind_fe(indj),iel) + tau(i,i)*delta*dcs_du(j)*ufg(1)*NiNi
                  ENDDO
+#ifdef NEUTRALGAMMA
+        ELSE IF (ign > 0 .AND. i == ign) THEN
+          indj = inn + ind_asf
+          elMat%Alu(ind_ff(ind),ind_fe(indj),iel) = elMat%Alu(ind_ff(ind),ind_fe(indj),iel) + &
+            &tau(i,i)*delta*(-upfg(2))*NiNi
+#endif
         ELSE
           elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*NiNi
         END IF
@@ -2026,6 +2018,11 @@ CONTAINS
       CALL compute_W4(uf,W4,diffiso(1,1),diffiso(4,4))
       CALL compute_dW4_dU(uf,dW4_dU,diffiso(1,1),diffiso(4,4))
         QdW4 = MATMUL(Qpr,dW4_dU)
+#ifdef NEUTRALP
+      CALL compute_W5p(ufg,W5p)
+      CALL compute_dW5p_dU(ufg,dW5p_dU)
+      QdW5p = MATMUL(Qpr,dW5p_dU)
+#endif
 
       ! Compute Alpha(U^(k-1))
       Alphai = computeAlphai(ufg)
@@ -2083,18 +2080,13 @@ CONTAINS
         dq_fs_i_dU = 0.0
       END IF
 
-#ifdef DNNLINEARIZED
       call compute_Dnn_dU(ufg,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,ufg)
-#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       call compute_ddk_dU(ufg,xyf,q_cyl,ddk_dU)
       ddk_dU_u = dot_product(ddk_dU,ufg)
 #endif
-#endif
-#ifdef BOHMLIMIT
-    IF (ntang) then
 #endif
       ! Parallel diffusion for temperature
       !if (.not. ((ufg(1)<1e-5) .or. (ufg(3)<1.e-8*3/2*phys%Mref) .or. (ufg(4)<1.e-8*3/2*phys%Mref))) then
@@ -2134,15 +2126,11 @@ CONTAINS
 #endif
 
     ! Perpendicular diffusion
-#ifdef BOHMLIMIT
-    IF (ntang)  then
-#else
     IF (ntang) THEN
-#endif
 
       DO k = 1,Neqgrad
 #ifdef NEUTRAL
-              IF (k .EQ. 5) CYCLE
+              IF (k .EQ. inn) CYCLE
 #endif
         DO idm = 1,Ndim
           indi = ind_asf + k
@@ -2209,7 +2197,7 @@ CONTAINS
 
       DO k = 1,Neq
 #ifdef NEUTRAL
-              IF (k .EQ. 5) CYCLE
+              IF (k .EQ. inn) CYCLE
 #endif
         DO idm = 1,Ndim
           indi = ind_asf + k
@@ -2319,50 +2307,6 @@ CONTAINS
       ELSE
         RN=1.
       ENDIF
-#ifdef NEUTRALP
-      ! Compute Vpn(U^(k-1))
-      CALL computeVpn(ufg,Vpn)
-        gmpn = MATMUL(Qpr,Vpn)                       ! Ndim x 1
-	     ! Compute dVpn-dU(U^(k-1))
-	     CALL compute_dVpn_dU(ufg,dVpn_dU)
-        Taupn = MATMUL(Qpr,dVpn_dU)                 ! Ndim x Neq
-	     ! Compute Dpn(U^(k-1))
-      CALL computeDpn(ufg,Qpr,Vpn,Dpn)
-      ! Compute dDpn_dU(U^(k-1))
-      CALL compute_dDpn_dU(ufg,Qpr,Vpn,dDpn_dU)
-      ! Reduce Grad Pn for low collision regime
-      ! Threshold set at 0.5xGradPn for Ti = 0.2 eV
-      Gammaredpn = 1.
-      Tmin = 0.2/simpar%refval_temperature
-        IF (Tmin/upfg(7) .LE. 1.) Gammaredpn = Gammaredpn*Tmin/upfg(7)
-      Dnn = Gammaredpn*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*Dpn
-      ! Comput Gammaredpn(U^(k-1))
-      !CALL computeGammared(ufg,Gammaredpn)
-      !gmipn = matmul(Qpr,Vveci)
-      !CALL computeGammaLim(ue,Qpr,Vpn,GammaLim)
-      ! Set Grad Ti = 0. for low collision regime
-      ! (back to diffusion equation for neutral density)
-      !CALL computeAlphaCoeff(ufg,Qpr,Vpn,Alphanp)
-      !CALL computeBetaCoeff(ufg,Qpr,Vpn,Betanp)
-      !Dpn = Alphanp*Dpn
-      !dDpn_dU = Alphanp*dDpn_dU
-      !Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*Dpn
-      !IF (Dnn .gt. phys%diff_nn) Dnn = phys%diff_nn
-      !IF (Dpn .gt. phys%diff_nn) THEN
-      !   Dpn = Alphanp*Dpn !0.
-      !   dDpn_dU = Alphanp*dDpn_dU !0.
-      !   Dnn = Betanp*(simpar%refval_time**2/simpar%refval_length**2*simpar%refval_charge*simpar%refval_temperature/simpar%refval_mass)*upfg(7)*phys%diff_nn
-       !END IF
-      ! Set Gamma Convective = cs_n*n_n for low collision regime
-      !IF (Dpn .gt. phys%diff_nn) THEN
-      !   Dpn = 0.
-      !   dDpn_dU = 0.
-      !   CALL jacobianMatricesBohmNP(ufg,AbohmNP)
-      !ELSE
-      !   AbohmNP = 0.
-      !END IF
-#endif
-
     bc = phys%bcflags(fl)
 
     SELECT CASE (bc)
@@ -2388,7 +2332,7 @@ CONTAINS
     !***************** flux control part ****************************
 
     !contribution from pump
-    flgflux_pump = cryopump_coeff*ufg(5)	!cryopump modification
+    flgflux_pump = cryopump_coeff*ufg(inn)	!cryopump modification
     !dimensionalizing and multiplying by the surface under this gauss point
     flgflux_pump = flgflux_pump*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
@@ -2407,17 +2351,18 @@ CONTAINS
     flgflux_pinch = -recycling_coeff*uefg(1)*(APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
     !Neutral flux
-    flgflux_neutral = (diffiso(5,5)*(Qpr(1,5)*ng(1) + Qpr(2,5)*ng(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    flgflux_neutral = diffiso(inn,inn)*DOT_PRODUCT(Qpr(:,inn),ng) &
+      &- diffani(inn,inn)*bn*DOT_PRODUCT(Qpr(:,inn),bg)
+    flgflux_neutral = flgflux_neutral*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
         !flux neutral numerical
-        flgflux_numerical = tau(5,5)* (uefg(5)-ufg(5))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+        flgflux_numerical = tau(inn,inn)* (uefg(inn)-ufg(inn))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
 
     !***************** end of flux control part *********************
 #endif
-#ifndef RHSBC
     ! Convective part
-    k = 5
+    k = inn
     ! Plasma flux
     indi = k+ind_asf
     indj = 2+ind_asf
@@ -2428,13 +2373,16 @@ CONTAINS
     indj = 1+ind_asf
     elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + (APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*NiNi*recycling_coeff
     !Neutrals flux
-!#ifdef NEUTRALP
     DO j=1,Neq
        indj = ind_asf + j
            elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) + Abohm(k,j)*NiNi*bn
-       !elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + (Abohm(k,j) + AbohmNP(j))*NiNi*bn
     END DO
-!#endif
+#ifdef NEUTRALGAMMA
+    IF (ign > 0) THEN
+      indj = ign + ind_asf
+      elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) + bn*NiNi
+    END IF
+#endif
     !cryopump modification Should it be ALU?
     indj = k+ind_asf !5th equation and 5th conservative variable: pump_power*U5
     elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - cryopump_coeff*NiNi
@@ -2445,49 +2393,54 @@ CONTAINS
 
     ! diffusive diagonal part
     DO idm = 1,Ndim
-       k = 5
-#ifndef NEUTRALP
+       k = inn
        indi = ind_asf+k
        indj = ind_ash+idm+(k-1)*Ndim
-       !if (ntang) then
-          elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
-       !else
-       !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
-       !endif
-#ifdef DNNLINEARIZED
+       kmult = NiNi*(ng(idm)*diffiso(k,k) - bn*bg(idm)*diffani(k,k))
+       elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - kmult
        DO j=1,Neq
         indj = ind_asf + j
         kmult = Dnn_dU(j)*Qpr(idm,k)*ng(idm)*NiNi
-              elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
-           ENDDO
-       kmultf = Dnn_dU_U*(Qpr(idm,k)*ng(idm))*Ni
-       elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
+        IF (switch%neutral_perpendicular_diffusion) &
+          &kmult = kmult - Dnn_dU(j)*Qpr(idm,k)*bn*bg(idm)*NiNi
+        elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
+#ifdef NEUTRALP
+        ind_kf = ind_ash + idm + (j-1)*Ndim
+        kmult = QdW5p(idm,j)*ng(idm)*NiNi
+        IF (switch%neutral_perpendicular_diffusion) kmult = kmult - QdW5p(idm,j)*bn*bg(idm)*NiNi
+        elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
+        kmult = W5p(j)*ng(idm)*NiNi
+        IF (switch%neutral_perpendicular_diffusion) kmult = kmult - W5p(j)*bn*bg(idm)*NiNi
+        elMat%Alq(ind_ff(indi),ind_fG(ind_kf),iel) = elMat%Alq(ind_ff(indi),ind_fG(ind_kf),iel) - kmult
 #endif
-#else
-       indi = ind_asf + k
-       DO j=1,Neq
-          indj = ind_asf + j
-          indk = ind_ash + idm + (j-1)*Ndim
-          kmult = (Dpn*Taupn(idm,j) + dDpn_dU(j)*gmpn(idm))*ng(idm)*NiNi
-          !kmult = kmult - Gammaredpn*(Dpn*Taui(idm,j) + dDpn_dU(j)*gmipn(idm))*ng(idm)*NiNi
-              elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
-          kmult = Dpn*Vpn(j)*ng(idm)*NiNi
-          !kmult = kmult - Gammaredpn*Dpn*Vveci(j)*ng(idm)*NiNi
-          IF (j == 5) THEN
-             kmult = kmult + Dnn*ng(idm)*NiNi
-          END IF
-          elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
-       END DO
-           kmultf = dot_PRODUCT(dDpn_dU,ufg)*gmpn(idm)*ng(idm)*Ni
-       !kmultf = kmultf - Gammaredpn*(Dpn*(dot_product(Taui(1,:),ufg)*ng(1) + dot_product(Taui(2,:),ufg)*ng(2)) + dot_product(dDpn_dU,ufg)*(gmipn(1)*ng(1) + gmipn(2)*ng(2)))*Ni
+       ENDDO
+       kmultf = Dnn_dU_U*Qpr(idm,k)*ng(idm)*Ni
+       IF (switch%neutral_perpendicular_diffusion) &
+         &kmultf = kmultf - Dnn_dU_U*Qpr(idm,k)*bn*bg(idm)*Ni
+       elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
+#ifdef NEUTRALP
+       kmultf = DOT_PRODUCT(QdW5p(idm,:),ufg)*ng(idm)*Ni
+       IF (switch%neutral_perpendicular_diffusion) &
+         &kmultf = kmultf - DOT_PRODUCT(QdW5p(idm,:),ufg)*bn*bg(idm)*Ni
        elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
 #endif
     END DO
     elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - puff_coeff*Ni
 
+#ifdef NEUTRALGAMMA
+    IF (ign > 0 .AND. ntang) THEN
+      k = ign
+      indi = ind_asf + k
+      DO idm = 1,Ndim
+        indj = ind_ash + idm + (k - 1)*Ndim
+        elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*ng(idm)
+      END DO
+    END IF
+#endif
+
     ! diffusive non-diagonal part
     DO idm = 1,Ndim
-      k = 5
+      k = inn
       j=1
       indi = ind_asf+k
       indj = ind_ash+idm+(j-1)*Ndim
@@ -2497,32 +2450,6 @@ CONTAINS
       !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*phys%diff_n*recycling_coeff
       !endif
     END DO
-#else
-  ! diffusive diagonal part
-       k  = 5
-       indi = ind_asf+k
-       DO idm = 1,Ndim
-#ifndef NEUTRALP
-          indj = ind_ash+idm+(k-1)*Ndim
-          elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*diffiso(k,k)
-#else
-          DO j=1,Neq
-              indj = ind_asf + j
-              indk = ind_ash + idm + (j-1)*Ndim
-              kmult = (Dpn*Taupn(idm,j) + dDpn_dU(j)*gmpn(idm))*NiNi*(ng(idm) - bn*bg(idm))
-              elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - kmult
-              kmult = Dpn*Vpn(j)*NiNi*(ng(idm) - bn*bg(idm))
-              elMat%Alq(ind_ff(indi),ind_fG(indk),iel) = elMat%Alq(ind_ff(indi),ind_fG(indk),iel) - kmult
-          END DO
-           kmultf = dot_PRODUCT(dDpn_dU,ufg)*gmpn(idm)*Ni*(ng(idm) - bn*bg(idm))
-          elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - kmultf
-#endif
-      END DO
-      ! Plasma outflux: now in the RHS
-      elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - recycling_coeff*(ufg(2)*bn - diffiso(1,1)*(Qpr(1,1)*(ng(1) - bn*bg(1)) + Qpr(2,1)*(ng(2)- bn*bg(2))))*Ni
-      ! Puff
-      elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - puff_coeff*Ni
-#endif
 #endif
 
 

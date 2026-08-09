@@ -204,6 +204,33 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertFalse(smoke["reference_comparisons"])
         self.assertEqual(_comparison_mode(False, False, True), "execution_only")
 
+    def test_pr04_neutral_suites_are_minimal(self) -> None:
+        pressure = load_suite_definition(
+            "neutral_pressure_warm",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+        self.assertEqual(pressure["workflow_ids"], ["warm_neutral_pressure"])
+        self.assertEqual(pressure["layouts"], ["mpi4_omp4"])
+        self.assertFalse(pressure["reference_comparisons"])
+
+        neutralgamma = load_suite_definition(
+            "neutralgamma_race",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+        self.assertEqual(neutralgamma["workflow_ids"], ["cold_step_neutralgamma"])
+        self.assertEqual(
+            neutralgamma["layouts"], ["serial_omp1", "serial_omp16"]
+        )
+        self.assertEqual(
+            neutralgamma["layout_comparisons"],
+            [{"baseline": "serial_omp1", "candidate": "serial_omp16"}],
+        )
+        self.assertFalse(neutralgamma["reference_comparisons"])
+
     def test_generated_adaptive_mesh_comparison_is_byte_exact(self) -> None:
         reference = self.root / "reference/stages/01_single_step/res/temp.msh"
         candidate = self.root / "candidate/stages/01_single_step/res/temp.msh"

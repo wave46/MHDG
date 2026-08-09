@@ -204,6 +204,12 @@ MODULE types
   TYPE Physics_type
      INTEGER                   :: neq ! Number of equations
      INTEGER                   :: npv ! Number of physical variables
+     INTEGER                   :: idx_rhon_eq = 0 ! Conservative-variable index of neutral density equation, 0 if absent
+     INTEGER                   :: idx_gamman_eq = 0 ! Conservative-variable index of neutral momentum equation, 0 if absent
+     INTEGER                   :: idx_k_eq = 0 ! Conservative-variable index of k equation, 0 if absent
+     INTEGER                   :: idx_rhon_pv = 0 ! Physical-variable index of neutral density, 0 if absent
+     INTEGER                   :: idx_un_pv = 0 ! Physical-variable index of neutral parallel velocity, 0 if absent
+     INTEGER                   :: idx_k_pv = 0 ! Physical-variable index of turbulent energy, 0 if absent
      REAL*8                    :: diff_n, diff_u ! Perpendicular diffusion in the continuity and momentum equation
      REAL*8                    :: a ! Proportionality constant between pressure and density for isothermal model (p = a*rho)
      REAL*8                    :: dfcoef ! Constant related to the diamagnetic drift velocity
@@ -269,6 +275,8 @@ MODULE types
      REAL*8, ALLOCATABLE       :: alpha_cooling_factor_impurities(:,:) ! Per-entry cooling coefficients
      ! Coefficients for the neutral equations
      REAL*8                    :: diff_nn ! Diffusion in the neutral equation
+     REAL*8                    :: diff_nn_min ! Minimum diffusion in the neutral equation
+     REAL*8                    :: neutralp_ti_supp ! Ion-temperature suppression scale for neutral pressure
      LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
      REAL*8,DIMENSION(22)      :: E           ! Energy values from TRIM
      REAL*8,DIMENSION(19)      :: theta       ! Incidence angle values from TRIM
@@ -434,6 +442,7 @@ MODULE types
      LOGICAL :: external_heating ! to read and apply external heating from input file
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
      LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs
+     LOGICAL :: neutral_perpendicular_diffusion ! use perpendicular instead of isotropic neutral density diffusion
   END TYPE Switches_type
 
   !***************************************************************
@@ -519,7 +528,7 @@ MODULE types
      REAL*8         :: tNR      ! Tolerance of the Newton-Raphson scheme
      REAL*8         :: tTM      ! Tolerance for the steady state achievement
      REAL*8         :: div      ! Divergence detector
-     REAL*8         :: tau(1:5) ! Stabilization parameter for each equation (4 values max for now...)
+     REAL*8         :: tau(1:7) ! Stabilization parameter for each equation
      REAL*8         :: sc_coe   ! Shock capturing coefficient
      REAL*8         :: sc_sen   ! Shock capturing sensibility
      REAL*8         :: minrho   ! Value of rho to start applying limiting
@@ -543,6 +552,7 @@ MODULE types
      INTEGER        :: npartor  ! Number of MPI divisions in the toroidal direction
      INTEGER        :: bohmtypebc ! Implementation of the Bohm bc for Gamma
      REAL*8         :: exbdump ! Dumping for ExB drifts
+     REAL*8         :: neutralp_lambda ! Continuation factor for the additive neutral-pressure term
   END TYPE Numeric_type
 
   !*******************************************************

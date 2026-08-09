@@ -23,6 +23,9 @@ PARAMETERS = """&INPUT_LST
 /
 &NUMER_LST
     nrp = 40
+    tau(6) = 1.0
+    tau(7) = 1.0
+    neutralp_lambda = 0.0
 /
 &ADAPT_LST
     adaptivity = .true.
