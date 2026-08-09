@@ -1211,6 +1211,8 @@ CONTAINS
        nn = 26
     CASE (30)
        nn = 36
+    CASE DEFAULT
+       ERROR STOP 'Unsupported triangular quadrature order'
     END SELECT
 
     ALLOCATE (M(1:nn), X(1:nn), Y(1:nn), w(1:nn))

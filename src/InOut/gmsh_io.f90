@@ -372,10 +372,6 @@ CONTAINS
 
     close ( unit = inputt )
 
-    IF (element_order-1 .gt. 5) THEN
-      allocate(indices(element_order*(element_order+1)/2))
-    ENDIF
-
     ! Reshape Tb_PUFF
     ! shift colomns to the left by one
     IF (n_Tb_PUFF .ne. 0) THEN
@@ -466,6 +462,7 @@ CONTAINS
 
     ! Reshape T based on the value of p
     IF(element_order-1 .ge. 5) THEN
+      ALLOCATE(indices(element_order*(element_order+1)/2))
       select case (element_order-1)
       case (5)
         indices = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,19,17,21,20,18]
@@ -478,6 +475,8 @@ CONTAINS
       case (8)
         !indices = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,19,22,23,25,28,29,30,31,33,34,35,36,37,38,39,40,41,42,43,44,45]
         indices = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,28,29,30,31,26,39,40,43,41,32,38,45,44,33,37,42,34,36,35,27]
+      case default
+        ERROR STOP 'Gmsh node reordering is only available through polynomial degree 8'
       end select
       T = T(:, indices)
       DEALLOCATE(indices)

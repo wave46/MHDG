@@ -921,90 +921,70 @@ CONTAINS
     REAL*8, ALLOCATABLE                     :: q_4d(:,:,:,:), q_nogho_4d(:,:,:,:)
     INTEGER                                 :: i, ierr
 
-    ! reshape u_in and q_in as 3d and 4d arrays of shape [Nelems,Nnodesperelem, nphys] and [Nelems,Nnodesperelem, nphys, ndim]
+    IF (PRESENT(q_in) .NEQV. PRESENT(q_glob)) THEN
+       ERROR STOP 'gather_solution requires q_in and q_glob together'
+    ENDIF
+    IF (PRESENT(u_tilde_in) .NEQV. PRESENT(u_tilde_glob)) THEN
+       ERROR STOP 'gather_solution requires u_tilde_in and u_tilde_glob together'
+    ENDIF
+    IF (PRESENT(u_tilde_in) .AND. .NOT. PRESENT(Nnodesperface)) THEN
+       ERROR STOP 'gather_solution requires Nnodesperface with u_tilde_in'
+    ENDIF
+
+    ! Gather the volume solution, which is always present.
     ALLOCATE(u_3d(Mesh_in%Nelems, Nnodesperelem,phys%neq))
     u_3d = 0.
-
-    IF(PRESENT(u_tilde_in)) THEN
-       ALLOCATE(u_tilde_3d(Mesh_in%Nfaces, Nnodesperface, phys%neq))
-       u_tilde_3d = 0.
-    ENDIF
-    IF(PRESENT(q_in)) THEN
-       ALLOCATE(q_4d(Mesh_in%Nelems, Nnodesperelem,phys%neq, Mesh_in%Ndim))
-       q_4D = 0.
-    ENDIF
-
-    ! equivalent to:
-    ! u_2d = TRANSPOSE(RESHAPE(u_in,[phys%neq, SIZE(u_in)/phys%neq]))
-    ! temp3d = RESHAPE(u_2d, [Nnodesperelem, Mesh_in%Nelems, phys%neq])
-    ! permute(temp3d,u_3d)
     CALL reshape_transpose_permute(u_in, u_3d, phys%neq, Mesh_in%Nelems, Nnodesperelem)
-    IF(PRESENT(u_tilde_in)) CALL reshape_transpose_permute(u_tilde_in, u_tilde_3d, phys%neq, Mesh_in%Nfaces, Nnodesperface)
-    IF(PRESENT(q_in))       CALL reshape_transpose_permute_4D(q_in, q_4D, Mesh_in%Ndim, phys%neq, Mesh_in%Nelems, Nnodesperelem)
-
-    ! allocation
     ALLOCATE(u_nogho_3d(Mesh_in%Nel_glob, Nnodesperelem, phys%neq))
     u_nogho_3d = 0.
-    IF(PRESENT(u_tilde_in)) THEN
-       ALLOCATE(u_tilde_nogho_3d(Mesh_in%Nfa_glob, Nnodesperface, phys%neq))
-       u_tilde_nogho_3d = 0.
-    ENDIF
-    IF(PRESENT(q_in)) THEN
-       ALLOCATE(q_nogho_4d(Mesh_in%Nel_glob, Nnodesperelem, phys%neq, Mesh_in%Ndim))
-       q_nogho_4d = 0.
-    ENDIF
-
-    ! filtering out ghost cells
     DO i = 1, Mesh_in%Nelems
        IF(Mesh_in%ghostElems(i) .EQ. 0) THEN
           u_nogho_3d(Mesh_in%loc2glob_el(i),:,:) = u_3d(i,:,:)
        ENDIF
     ENDDO
+    CALL MPI_Allreduce(MPI_IN_PLACE, u_nogho_3d, SIZE(u_nogho_3d,1)*SIZE(u_nogho_3d,2)*SIZE(u_nogho_3d,3), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    ALLOCATE(u_glob(SIZE(u_nogho_3d,1)*SIZE(u_nogho_3d,2)*SIZE(u_nogho_3d,3)))
+    u_glob = 0.
+    CALL flatten_row_major(u_nogho_3d, u_glob, SIZE(u_nogho_3d,1), SIZE(u_nogho_3d,2), SIZE(u_nogho_3d,3))
+    DEALLOCATE(u_3d, u_nogho_3d)
 
-    IF(PRESENT(q_in)) THEN
-       ! filtering out ghost cells
-       DO i = 1, Mesh_in%Nelems
-          IF(Mesh_in%ghostElems(i) .EQ. 0) THEN
-             q_nogho_4d(Mesh_in%loc2glob_el(i),:,:,:) = q_4d(i,:,:,:)
-          ENDIF
-       ENDDO
-    ENDIF
-
-    ! filtering out ghost faces
+    ! Gather the face solution when requested.
     IF(PRESENT(u_tilde_in)) THEN
+       ALLOCATE(u_tilde_3d(Mesh_in%Nfaces, Nnodesperface, phys%neq))
+       u_tilde_3d = 0.
+       CALL reshape_transpose_permute(u_tilde_in, u_tilde_3d, phys%neq, Mesh_in%Nfaces, Nnodesperface)
+       ALLOCATE(u_tilde_nogho_3d(Mesh_in%Nfa_glob, Nnodesperface, phys%neq))
+       u_tilde_nogho_3d = 0.
        DO i = 1, Mesh_in%Nfaces
           IF(Mesh_in%ghostFaces(i) .EQ. 0) THEN
              u_tilde_nogho_3d(Mesh_in%loc2glob_fa(i),:,:) = u_tilde_3d(i,:,:)
           ENDIF
        ENDDO
-    ENDIF
-
-    ! reduce results over processes
-    CALL MPI_Allreduce(MPI_IN_PLACE, u_nogho_3d, SIZE(u_nogho_3d,1)*SIZE(u_nogho_3d,2)*SIZE(u_nogho_3d,3), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    IF(PRESENT(u_tilde_in)) CALL MPI_Allreduce(MPI_IN_PLACE, u_tilde_nogho_3d, SIZE(u_tilde_nogho_3d,1)*SIZE(u_tilde_nogho_3d,2)*SIZE(u_tilde_nogho_3d,3), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    IF(PRESENT(q_in))       CALL MPI_Allreduce(MPI_IN_PLACE, q_nogho_4d, SIZE(q_nogho_4d,1)*SIZE(q_nogho_4d,2)*SIZE(q_nogho_4d,3)*SIZE(q_nogho_4d,4), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-
-    ! reflatten back the arrays
-    ALLOCATE(u_glob(SIZE(u_nogho_3d,1)*SIZE(u_nogho_3d,2)*SIZE(u_nogho_3d,3)))
-    u_glob = 0.
-
-    IF(PRESENT(u_tilde_in)) THEN
+       CALL MPI_Allreduce(MPI_IN_PLACE, u_tilde_nogho_3d, SIZE(u_tilde_nogho_3d), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
        ALLOCATE(u_tilde_glob(SIZE(u_tilde_nogho_3d,1)*SIZE(u_tilde_nogho_3d,2)*SIZE(u_tilde_nogho_3d,3)))
        u_tilde_glob = 0.
+       CALL flatten_row_major(u_tilde_nogho_3d, u_tilde_glob, SIZE(u_tilde_nogho_3d,1), SIZE(u_tilde_nogho_3d,2), SIZE(u_tilde_nogho_3d,3))
+       DEALLOCATE(u_tilde_3d, u_tilde_nogho_3d)
     ENDIF
 
+    ! Gather the volume gradients when requested.
     IF(PRESENT(q_in)) THEN
+       ALLOCATE(q_4d(Mesh_in%Nelems, Nnodesperelem, phys%neq, Mesh_in%Ndim))
+       q_4D = 0.
+       CALL reshape_transpose_permute_4D(q_in, q_4D, Mesh_in%Ndim, phys%neq, Mesh_in%Nelems, Nnodesperelem)
+       ALLOCATE(q_nogho_4d(Mesh_in%Nel_glob, Nnodesperelem, phys%neq, Mesh_in%Ndim))
+       q_nogho_4d = 0.
+       DO i = 1, Mesh_in%Nelems
+          IF(Mesh_in%ghostElems(i) .EQ. 0) THEN
+             q_nogho_4d(Mesh_in%loc2glob_el(i),:,:,:) = q_4d(i,:,:,:)
+          ENDIF
+       ENDDO
+       CALL MPI_Allreduce(MPI_IN_PLACE, q_nogho_4d, SIZE(q_nogho_4d), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
        ALLOCATE(q_glob(SIZE(q_nogho_4d,1)*SIZE(q_nogho_4d,2)*SIZE(q_nogho_4d,3)*SIZE(q_nogho_4d,4)))
        q_glob = 0.
+       CALL flatten_row_major_4D(q_nogho_4d, q_glob, SIZE(q_nogho_4d,1), SIZE(q_nogho_4d,2), SIZE(q_nogho_4d,3),SIZE(q_nogho_4d,4))
+       DEALLOCATE(q_4d, q_nogho_4d)
     ENDIF
-
-    CALL flatten_row_major(u_nogho_3d, u_glob, SIZE(u_nogho_3d,1), SIZE(u_nogho_3d,2), SIZE(u_nogho_3d,3))
-    IF(PRESENT(u_tilde_in)) CALL flatten_row_major(u_tilde_nogho_3d, u_tilde_glob, SIZE(u_tilde_nogho_3d,1), SIZE(u_tilde_nogho_3d,2), SIZE(u_tilde_nogho_3d,3))
-    IF(PRESENT(q_in))       CALL flatten_row_major_4D(q_nogho_4d, q_glob, SIZE(q_nogho_4d,1), SIZE(q_nogho_4d,2), SIZE(q_nogho_4d,3),SIZE(q_nogho_4d,4))
-
-    DEALLOCATE(u_3d, u_nogho_3d)
-    IF(PRESENT(q_in))       DEALLOCATE(q_4d, q_nogho_4d)
-    IF(PRESENT(u_tilde_in)) DEALLOCATE(u_tilde_3d, u_tilde_nogho_3d)
 
   ENDSUBROUTINE gather_solution
 

@@ -6,6 +6,7 @@
 !  ******** N-Gamma-Ti-Te system     ****
 !*****************************************
 MODULE physics
+  USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_quiet_nan, ieee_value
   USE globals
   USE magnetic_field
   USE impurity_radiation_model, ONLY: init_impurity_radiation_model, &
@@ -3608,6 +3609,7 @@ ENDSUBROUTINE  compute_ddissip_du
       REAL*8, INTENT(IN) :: x,xmin, xmax
       REAL*8, INTENT(OUT):: deriv
       REAL*8             :: w, width
+      deriv = ieee_value(0.d0, ieee_quiet_nan)
       w = 0.01
       width = 10
       IF (x>=xmax+w*width*xmax) THEN
@@ -3656,6 +3658,7 @@ ENDSUBROUTINE  compute_ddissip_du
       REAL*8, INTENT(IN) :: x, xmin
       REAL*8, INTENT(OUT):: deriv
       REAL*8             :: w, width
+      deriv = ieee_value(0.d0, ieee_quiet_nan)
       w = 0.01
       width = 10
       IF (x>=xmin+w*width*xmin) THEN

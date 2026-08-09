@@ -31,8 +31,10 @@
   REAL, ALLOCATABLE   :: rhspert(:)
   REAL                :: pertamp, errsol
   INTEGER*4           :: seed(34)
-  REAL, ALLOCATABLE   :: u_tilde_exact(:), u_tilde_check(:)
+  REAL, ALLOCATABLE   :: u_tilde_exact(:)
+  REAL, POINTER       :: u_tilde_check(:)
   INTEGER             :: i
+  LOGICAL             :: check_error_amplification
 #if defined(PARALL) || defined(WITH_PETSC)
   REAL*8, ALLOCATABLE :: aux_sol(:)
 #endif
@@ -63,7 +65,9 @@
   !********************************
   ! Save rhs for accuracy check
   !********************************
-  IF (switch%ckeramp .AND. lssolver%sollib .EQ. 1) THEN
+  NULLIFY(u_tilde_check)
+  check_error_amplification = switch%ckeramp .AND. lssolver%sollib .EQ. 1
+  IF (check_error_amplification) THEN
      errsol = 0.
      pertamp = 1.e-6
      seed = 10
@@ -311,7 +315,10 @@
   !********************************
   ! Check accuracy of the solution
   !********************************
-  IF (switch%ckeramp .AND. lssolver%sollib .EQ. 1) THEN
+  IF (check_error_amplification) THEN
+     IF (.NOT. ASSOCIATED(u_tilde_check)) THEN
+        ERROR STOP 'Missing saved trace solution for error-amplification check'
+     ENDIF
 
      ! make a copy of sol%u_tilde
      ALLOCATE(u_tilde_exact(SIZE(sol%u_tilde)))
