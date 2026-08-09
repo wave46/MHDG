@@ -21,7 +21,7 @@ CONTAINS
     work%a_minor = phys%a_minor
     CALL tm1d_fill_derived_from_fs(fs_data, work)
 
-    CALL tm1d_build_projected_gradients(this, fs_data, work)
+    CALL tm1d_build_projected_gradients(fs_data, work)
     CALL tm1d_fill_delta_te(this, fs_data, work)
     CALL tm1d_compute_collisionality_profile(this, work)
     work%cs_te_fs = SQRT(MAX(work%te_fs*phys%Mref, model_tol))

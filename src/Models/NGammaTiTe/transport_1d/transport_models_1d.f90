@@ -63,8 +63,7 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(transport_model_derived_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_compute_mixed_transport
-     MODULE SUBROUTINE tm1d_build_projected_gradients(this, fs_data, work)
-       CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+     MODULE SUBROUTINE tm1d_build_projected_gradients(fs_data, work)
        TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
        TYPE(transport_model_derived_t), INTENT(INOUT) :: work
      END SUBROUTINE tm1d_build_projected_gradients
@@ -80,9 +79,8 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(transport_model_derived_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_geometric_pinch
-     MODULE SUBROUTINE tm1d_compute_constant_pinch(this, work)
+     MODULE SUBROUTINE tm1d_compute_constant_pinch(this)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-       TYPE(transport_model_derived_t), INTENT(IN) :: work
      END SUBROUTINE tm1d_compute_constant_pinch
      MODULE SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch, &
           region, outward_normal)

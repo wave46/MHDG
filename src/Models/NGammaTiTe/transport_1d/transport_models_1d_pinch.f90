@@ -16,7 +16,7 @@ CONTAINS
     CASE (2)
        CALL tm1d_compute_geometric_pinch(this, work)
     CASE (3)
-       CALL tm1d_compute_constant_pinch(this, work)
+       CALL tm1d_compute_constant_pinch(this)
     CASE DEFAULT
        this%vpinch_fs = 0.d0
     END SELECT
@@ -48,9 +48,8 @@ CONTAINS
     END WHERE
   END SUBROUTINE tm1d_compute_geometric_pinch
 
-  MODULE SUBROUTINE tm1d_compute_constant_pinch(this, work)
+  MODULE SUBROUTINE tm1d_compute_constant_pinch(this)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
-    TYPE(transport_model_derived_t), INTENT(IN) :: work
 
     this%vpinch_fs = this%config%vpinch_const
 

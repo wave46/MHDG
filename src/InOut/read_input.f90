@@ -142,7 +142,7 @@ SUBROUTINE READ_input()
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
 
-  IF (diff_nn_min == diff_nn_min_unset) diff_nn_min = 10.d0*diff_n
+  IF (diff_nn_min <= diff_nn_min_unset) diff_nn_min = 10.d0*diff_n
   IF (diff_nn_min < 0.d0) THEN
      PRINT *, 'diff_nn_min must be non-negative: ', diff_nn_min
      STOP
@@ -250,14 +250,14 @@ SUBROUTINE READ_input()
   numer%neutralp_lambda   = neutralp_lambda
   adapt%adaptivity        = adaptivity
   adapt%shockcp_adapt     = shockcp_adapt
-  num_param_est        = COUNT(param_est /= -1.0)
+  num_param_est        = COUNT(param_est /= -1)
   ALLOCATE(adapt%param_est(num_param_est))
   adapt%param_est         = param_est(1:num_param_est)
   adapt%evaluator         = evaluator
   adapt%difference        = difference
   adapt%thr_ind           = thr_ind
   adapt%quant_ind         = quant_ind
-  num_n_quant_ind    = COUNT(n_quant_ind /= -1.0)
+  num_n_quant_ind    = COUNT(n_quant_ind /= -1)
   ALLOCATE(adapt%n_quant_ind(num_n_quant_ind))
   adapt%n_quant_ind       = n_quant_ind(1:num_n_quant_ind)
   adapt%tol_est           = tol_est

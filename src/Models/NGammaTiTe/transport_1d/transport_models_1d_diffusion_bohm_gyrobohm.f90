@@ -64,8 +64,7 @@ CONTAINS
     this%nu_mom_fs = this%config%prandtl * this%chi_i_fs
   END SUBROUTINE tm1d_compute_mixed_transport
 
-  MODULE SUBROUTINE tm1d_build_projected_gradients(this, fs_data, work)
-    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+  MODULE SUBROUTINE tm1d_build_projected_gradients(fs_data, work)
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
     TYPE(transport_model_derived_t), INTENT(INOUT) :: work
     REAL*8 :: u1_safe(fs_data%nrho)

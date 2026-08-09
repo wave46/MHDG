@@ -877,7 +877,9 @@ CONTAINS
   SUBROUTINE jacobianMatrices(U, A)
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: A(:, :)
+#ifdef NEUTRALGAMMA
     REAL*8              :: Unn
+#endif
     INTEGER             :: inn, ign, ik
     ![ 0,                                           1,                              0,                0; ...
     ! -2/3*U(2)**2/U(1)**2                          4/3*U(2)/U(1)                   2/3,              2/3; ...
@@ -975,7 +977,9 @@ CONTAINS
   SUBROUTINE jacobianMatricesFace(U, bn, An)
     REAL*8, INTENT(in)  :: U(:), bn
     REAL*8, INTENT(out) :: An(:, :)
+#ifdef NEUTRALGAMMA
     REAL*8              :: Unn
+#endif
     INTEGER             :: inn, ign, ik
     An = 0.d0
     inn = phys%idx_rhon_eq
@@ -3211,20 +3215,20 @@ ENDSUBROUTINE  compute_ddissip_du
   !*******************************************
   ! Compute the stabilization tensor tau
   !*******************************************
-  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau,diff_iso,diff_ani)
+  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau,diff_iso)
     real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
     REAL*8, intent(in)    :: isext
     integer, intent(in) ::  iel
     real*8, intent(out) :: tau(:, :)
 #ifdef NEUTRAL
     REAL*8              :: tau_aux(SIZE(uc))
-    REAL*8,INTENT(IN)   :: diff_iso(:,:),diff_ani(:,:)
+    REAL*8,INTENT(IN)   :: diff_iso(:,:)
 #ifdef NEUTRALGAMMA
     REAL*8              :: Etan
 #endif
 #else
     REAL*8              :: tau_aux(SIZE(uc))
-    REAL*8,INTENT(IN)   :: diff_iso(:,:),diff_ani(:,:)
+    REAL*8,INTENT(IN)   :: diff_iso(:,:)
 #endif
     integer             :: ndim, inn, ign, ik
     real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))

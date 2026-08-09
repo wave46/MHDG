@@ -944,7 +944,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -995,7 +995,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1076,7 +1076,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1254,7 +1254,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
+            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF

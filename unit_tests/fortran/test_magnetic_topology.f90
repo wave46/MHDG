@@ -77,7 +77,7 @@ CONTAINS
     INTEGER, PARAMETER :: nr = 41, nz = 41
     REAL*8, PARAMETER :: r0 = 2.d0, a = 0.5d0
     REAL*8 :: r(nr), z(nz), psi(nz, nr), wall(7, 2), ref_nodes(2)
-    INTEGER :: faces(7, 2), ierr, ir, iz
+    INTEGER :: faces(7, 2), ierr, ir
     CHARACTER(LEN=256) :: message
 
     CALL fill_circular_flux(r0, nr, nz, r, z, psi)

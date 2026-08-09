@@ -40,7 +40,9 @@ MODULE flux_surface_transport_data
      PROCEDURE :: destroy => fs_destroy
      PROCEDURE :: reset_accumulators => fs_reset_accumulators
      PROCEDURE :: build_profiles => fs_build_profiles
+#ifdef PARALL
      PROCEDURE :: reduce_profile_sums => fs_reduce_profile_sums
+#endif
      PROCEDURE :: finalize_profiles => fs_finalize_profiles
      PROCEDURE :: interp_U => fs_interp_U
      PROCEDURE :: interp_Q_rad => fs_interp_Q_rad
@@ -153,15 +155,17 @@ CONTAINS
     rho_max_glob = fs_compute_rho_max(region_policy)
     CALL fs_ensure_grid(this, rho_max_glob)
     CALL fs_accumulate_profiles(this, ures, qres, region_policy)
+#ifdef PARALL
     CALL this%reduce_profile_sums()
+#endif
     CALL this%finalize_profiles()
 
     DEALLOCATE(ures, qres)
   END SUBROUTINE fs_build_profiles
 
+#ifdef PARALL
   SUBROUTINE fs_reduce_profile_sums(this)
     CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
-#ifdef PARALL
     INTEGER :: ierr
 
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%shell_weight, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
@@ -170,8 +174,8 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%q_sum, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%omega_sum, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%Rmaj_sum, this%nrho, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
   END SUBROUTINE fs_reduce_profile_sums
+#endif
 
   SUBROUTINE fs_finalize_profiles(this)
     CLASS(flux_surface_transport_t), INTENT(INOUT) :: this
@@ -312,7 +316,9 @@ CONTAINS
 
     rho_max_local = 0.d0
     DO iel = 1, Mesh%Nelems
+#ifdef PARALL
        IF (.NOT. fs_is_local_element(iel)) CYCLE
+#endif
        IF (magnetic_geometry_cache%is_initialized) THEN
           DO g = 1, refElPol%NGauss2D
              IF (.NOT. tm1d_region_is_included(region_policy, &
@@ -350,7 +356,9 @@ CONTAINS
     INTEGER :: iel
 
     DO iel = 1, Mesh%Nelems
+#ifdef PARALL
        IF (.NOT. fs_is_local_element(iel)) CYCLE
+#endif
        CALL fs_accumulate_element(this, iel, ures, qres, region_policy)
     END DO
   END SUBROUTINE fs_accumulate_profiles
@@ -520,15 +528,15 @@ CONTAINS
     END DO
   END FUNCTION fs_find_valid_right
 
+#ifdef PARALL
   LOGICAL FUNCTION fs_is_local_element(iel)
     INTEGER, INTENT(IN) :: iel
 
     fs_is_local_element = .TRUE.
-#ifdef PARALL
     IF (ASSOCIATED(Mesh%ghostElems)) THEN
        fs_is_local_element = Mesh%ghostElems(iel) == 0
     END IF
-#endif
   END FUNCTION fs_is_local_element
+#endif
 
 END MODULE flux_surface_transport_data

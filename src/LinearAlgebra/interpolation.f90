@@ -159,45 +159,41 @@ CONTAINS
       INTEGER :: i, j
       REAL*8 :: dx, dy
 
-      DO i = 1, ny
-          DO j = 1, nx
-               IF (j == 1) THEN
-                   dx = xvec(2) - xvec(1)
-                   fx(i, j) = (f(i, 2) - f(i, 1))/dx
-               ELSEIF (j == nx) THEN
-                   dx = xvec(nx) - xvec(nx - 1)
-                   fx(i, j) = (f(i, nx) - f(i, nx - 1))/dx
-               ELSE
-                   dx = xvec(j + 1) - xvec(j - 1)
-                   fx(i, j) = (f(i, j + 1) - f(i, j - 1))/dx
-               ENDIF
+      IF (nx < 2 .OR. ny < 2) THEN
+         ERROR STOP 'Bicubic derivative grids need at least two points in each direction'
+      ENDIF
 
-               IF (i == 1) THEN
-                   dy = yvec(2) - yvec(1)
-                   fy(i, j) = (f(2, j) - f(1, j))/dy
-               ELSEIF (i == ny) THEN
-                   dy = yvec(ny) - yvec(ny - 1)
-                   fy(i, j) = (f(ny, j) - f(ny - 1, j))/dy
-               ELSE
-                   dy = yvec(i + 1) - yvec(i - 1)
-                   fy(i, j) = (f(i + 1, j) - f(i - 1, j))/dy
-               ENDIF
-          ENDDO
+      DO i = 1, ny
+         dx = xvec(2) - xvec(1)
+         fx(i, 1) = (f(i, 2) - f(i, 1))/dx
+         DO j = 2, nx - 1
+            dx = xvec(j + 1) - xvec(j - 1)
+            fx(i, j) = (f(i, j + 1) - f(i, j - 1))/dx
+         ENDDO
+         dx = xvec(nx) - xvec(nx - 1)
+         fx(i, nx) = (f(i, nx) - f(i, nx - 1))/dx
       ENDDO
 
-      DO i = 1, ny
-          DO j = 1, nx
-               IF (i == 1) THEN
-                   dy = yvec(2) - yvec(1)
-                   fxy(i, j) = (fx(2, j) - fx(1, j))/dy
-               ELSEIF (i == ny) THEN
-                   dy = yvec(ny) - yvec(ny - 1)
-                   fxy(i, j) = (fx(ny, j) - fx(ny - 1, j))/dy
-               ELSE
-                   dy = yvec(i + 1) - yvec(i - 1)
-                   fxy(i, j) = (fx(i + 1, j) - fx(i - 1, j))/dy
-               ENDIF
-          ENDDO
+      DO j = 1, nx
+         dy = yvec(2) - yvec(1)
+         fy(1, j) = (f(2, j) - f(1, j))/dy
+         DO i = 2, ny - 1
+            dy = yvec(i + 1) - yvec(i - 1)
+            fy(i, j) = (f(i + 1, j) - f(i - 1, j))/dy
+         ENDDO
+         dy = yvec(ny) - yvec(ny - 1)
+         fy(ny, j) = (f(ny, j) - f(ny - 1, j))/dy
+      ENDDO
+
+      DO j = 1, nx
+         dy = yvec(2) - yvec(1)
+         fxy(1, j) = (fx(2, j) - fx(1, j))/dy
+         DO i = 2, ny - 1
+            dy = yvec(i + 1) - yvec(i - 1)
+            fxy(i, j) = (fx(i + 1, j) - fx(i - 1, j))/dy
+         ENDDO
+         dy = yvec(ny) - yvec(ny - 1)
+         fxy(ny, j) = (fx(ny, j) - fx(ny - 1, j))/dy
       ENDDO
    END SUBROUTINE build_bicubic_derivatives
 
@@ -422,7 +418,7 @@ CONTAINS
    INTEGER, INTENT(IN) :: qp_len, nodes2D, T(:,:)
    REAL*8, INTENT(IN)  :: x_vec(:), y_vec(:), f(:), Xc(:,:)
    REAL*8, INTENT(OUT) :: nli
-   INTEGER             :: i, inp, n_ind, f_ind(2), np_len
+   INTEGER             :: i, inp, np_len
    REAL*8              :: x, y, x_prev, y_prev, f_prev, dl, f_cur, d(nodes2D)
    LOGICAL             :: is_inside
    INTEGER             :: element_index

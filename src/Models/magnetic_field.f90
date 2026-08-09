@@ -1597,7 +1597,7 @@ CONTAINS
 SUBROUTINE read_1D_diffusion_profiles()
    CHARACTER(LEN=1000) :: fname
    INTEGER(HID_T)    :: file_id
-   INTEGER           :: ip, IERR
+   INTEGER           :: IERR
 
    fname = input%diffusion_1D_path
    CALL HDF5_open(fname, file_id, IERR)
@@ -1628,9 +1628,7 @@ END SUBROUTINE read_1D_diffusion_profiles
 SUBROUTINE SetParticleSource()
 
    CHARACTER(LEN=1000) :: fname, fname_density, fname_impurity,fname_xpr_density, fname_zeff
-   INTEGER(HID_T)    :: file_id
-   INTEGER           :: qp, Nn2D
-   REAL*8            :: lower, upper, nli, n_Gw, n_la, a = 2.
+   REAL*8            :: nli
    REAL*8, POINTER, DIMENSION(:) :: puff_time, target_density_time, target_density_exp
    INTEGER           :: puff_len, density_len, impurity_concentration_len,density_xpr_len, zeff_len
 
