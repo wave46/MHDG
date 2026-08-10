@@ -205,8 +205,9 @@ regression_tests/regression.sh suite compare \
 ```
 
 The focused checker verifies every marked puff and pump wall/volume pair at
-relative tolerance `1e-12`, then compares final totals for every layout pair
-declared in a completed suite at `5e-8`:
+relative tolerance `1e-12`, requires positive final source totals, then
+compares final totals for every layout pair declared in a completed suite at
+`5e-8`:
 
 ```bash
 python regression_tests/tools/check_neutral_wall_sources.py \

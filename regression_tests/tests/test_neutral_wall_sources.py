@@ -68,6 +68,22 @@ class NeutralWallSourceCheckTests(unittest.TestCase):
         self.assertEqual(failed["status"], "failed")
         self.assertTrue(any("final puff" in item for item in failed["failures"]))
 
+    def test_rejects_nonpositive_final_totals(self) -> None:
+        run = self._write_run(
+            "nonpositive",
+            [("puff", 0.0, 0.0), ("pump", -2.0e20, -2.0e20)],
+        )
+
+        report = check_run(run)
+
+        self.assertEqual(report["status"], "failed")
+        self.assertTrue(
+            any("final puff totals must be positive" in item for item in report["failures"])
+        )
+        self.assertTrue(
+            any("final pump totals must be positive" in item for item in report["failures"])
+        )
+
     def _write_run(
         self,
         name: str,

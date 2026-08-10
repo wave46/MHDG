@@ -68,6 +68,18 @@ def check_run(run_directory: Path) -> dict:
     missing = [source for source in SOURCES if source not in final]
     if missing:
         failures.append("missing final source totals: " + ", ".join(missing))
+    for source in SOURCES:
+        if source not in final:
+            continue
+        nonpositive = [
+            f"{measure}={final[source][measure]:.16e}"
+            for measure in ("wall", "volume")
+            if math.isfinite(final[source][measure]) and final[source][measure] <= 0.0
+        ]
+        if nonpositive:
+            failures.append(
+                f"final {source} totals must be positive: " + ", ".join(nonpositive)
+            )
     return {
         "run_directory": str(run_directory),
         "record_counts": counts,
