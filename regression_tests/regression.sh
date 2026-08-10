@@ -37,6 +37,8 @@ Commands:
   golden status    Show persisted golden-update state.
 
 Suites: warm, neutral_pressure_warm, neutralgamma_race,
+        neutral_wall_sources_warm, neutral_wall_sources_race_matrix,
+        neutral_wall_sources_cold_adaptive,
         impurity_scalar_baseline, impurity_mixture, impurity_references,
         initialization_smoke, stored_field_compatibility, race, cold,
         warm_parallelism, race_matrix, cold_matrix, diverted_warm,

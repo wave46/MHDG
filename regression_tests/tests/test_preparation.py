@@ -167,6 +167,22 @@ class RunPreparationTests(unittest.TestCase):
         ):
             self.assertIn(assignment, neutralgamma_parameters)
 
+    def test_prepares_pr05_wall_source_variants_from_pr04_parameters(self) -> None:
+        warm = prepare_run(
+            self.settings,
+            "legacy_case",
+            "warm_neutral_wall_sources",
+            "mpi4_omp4",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "wall-sources-warm",
+        )
+        warm_parameters = (warm.path / "param.txt").read_text(encoding="utf-8")
+        self.assertIn(
+            "neutral_wall_sources_in_elements = .true.",
+            warm_parameters,
+        )
+
     def test_warm_workflow_selects_restart_and_reference_independently(self) -> None:
         staging = self.root / "selected_staging"
         final = self.root / "selected_final"

@@ -443,6 +443,7 @@ MODULE types
      LOGICAL :: impurity_radiation ! if to apply cooling factor mimicking impurity radiation, complemented by impurity name and concentration in phys
      LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs
      LOGICAL :: neutral_perpendicular_diffusion ! use perpendicular instead of isotropic neutral density diffusion
+     LOGICAL :: neutral_wall_sources_in_elements ! move neutral puff/pump wall sources into adjacent element volumes
   END TYPE Switches_type
 
   !***************************************************************
@@ -992,6 +993,7 @@ CONTAINS
     Mesh2%ymax = Mesh1%ymax
     Mesh2%ymin = Mesh1%ymin
     Mesh2%puff_area = Mesh1%puff_area
+    Mesh2%pump_area = Mesh1%pump_area
     Mesh2%core_area = Mesh1%core_area
 
 #ifdef PARALL

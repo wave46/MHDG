@@ -231,6 +231,32 @@ class SuiteWorkflowTests(unittest.TestCase):
         )
         self.assertFalse(neutralgamma["reference_comparisons"])
 
+    def test_pr05_wall_source_suites_are_focused(self) -> None:
+        warm = load_suite_definition(
+            "neutral_wall_sources_warm",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+        race = load_suite_definition(
+            "neutral_wall_sources_race_matrix",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+        cold_adaptive = load_suite_definition(
+            "neutral_wall_sources_cold_adaptive",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+
+        self.assertFalse(warm["reference_comparisons"])
+        self.assertEqual(len(race["layouts"]), 4)
+        self.assertEqual(len(race["layout_comparisons"]), 6)
+        self.assertEqual(cold_adaptive["layouts"], ["mpi4_omp4"])
+        self.assertFalse(cold_adaptive["reference_comparisons"])
+
     def test_generated_adaptive_mesh_comparison_is_byte_exact(self) -> None:
         reference = self.root / "reference/stages/01_single_step/res/temp.msh"
         candidate = self.root / "candidate/stages/01_single_step/res/temp.msh"

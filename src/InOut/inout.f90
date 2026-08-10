@@ -663,6 +663,7 @@ CONTAINS
     CALL HDF5_real_saving(group_id1, Mesh%ymax, 'ymax')
     CALL HDF5_real_saving(group_id1, Mesh%ymin, 'ymin')
     CALL HDF5_real_saving(group_id1, Mesh%puff_area, 'puff_area')
+    CALL HDF5_real_saving(group_id1, Mesh%pump_area, 'pump_area')
     CALL HDF5_real_saving(group_id1, Mesh%core_area, 'core_area')
     CALL HDF5_group_close(group_id1, ierr)
     
@@ -743,6 +744,7 @@ CONTAINS
       CALL HDF5_integer_saving(group_id1,Mesh%elemType,'elemType')
       ! these are already reduced in preprocess or load mesh
       CALL HDF5_real_saving(group_id1, Mesh%puff_area, 'puff_area')
+      CALL HDF5_real_saving(group_id1, Mesh%pump_area, 'pump_area')
       CALL HDF5_real_saving(group_id1, Mesh%core_area, 'core_area')
       CALL HDF5_real_saving(group_id1, Mesh%xmax, 'xmax')
       CALL HDF5_real_saving(group_id1, Mesh%xmin, 'xmin')
@@ -1190,6 +1192,7 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%external_heating, 'external_heating')
       CALL HDF5_logical_saving(group_id2, switch%import_diffusion_1D, 'import_diffusion_1D')
       CALL HDF5_logical_saving(group_id2, switch%neutral_perpendicular_diffusion, 'neutral_perpendicular_diffusion')
+      CALL HDF5_logical_saving(group_id2, switch%neutral_wall_sources_in_elements, 'neutral_wall_sources_in_elements')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create numerics parameters group

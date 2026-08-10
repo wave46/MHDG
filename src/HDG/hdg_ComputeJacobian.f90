@@ -73,6 +73,8 @@ SUBROUTINE HDG_computeJacobian()
   REAL*8                :: n,El_n,nn,El_nn,totaln
   REAL*8                :: diff_nn_Vol_el(refElPol%NGauss2D),v_nn_Vol_el(refElPol%NGauss2D,Mesh%Ndim),Xg_el(refElPol%NGauss2D,Mesh%Ndim)
   REAL*8                :: diff_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D),v_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D,Mesh%Ndim)
+  REAL*8                :: wall_source_totals_el(4),wall_source_totals(4),wall_source_scale
+  REAL*8,ALLOCATABLE    :: wall_source_element_totals(:,:)
 #endif
 #ifdef PARALL
   INTEGER               :: ierr
@@ -1120,8 +1122,13 @@ CONTAINS
   !   Loop in elements in 2D
   !************************************
 
+  IF (switch%neutral_wall_sources_in_elements) THEN
+    ALLOCATE(wall_source_element_totals(4,N2D))
+    wall_source_element_totals = 0.d0
+  ENDIF
+
   !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,omegafl,isdir,Jtorel,El_n,El_nn) &
+  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,omegafl,isdir,Jtorel,El_n,El_nn,wall_source_totals_el) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
   !$OMP FIRSTPRIVATE(phys)
 
@@ -1180,7 +1187,8 @@ CONTAINS
     u0e = u0res(inde,:,:)
 
     ! Compute the matrices for the element
-    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
+    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el)
+    IF (switch%neutral_wall_sources_in_elements) wall_source_element_totals(:,iel) = wall_source_totals_el
 
      IF (save_tau) THEN
        inddiff_nn_Vol = (iel - 1)*refElPol%NGauss2D+(/(i,i=1,refElPol%NGauss2D)/)
@@ -1276,6 +1284,22 @@ CONTAINS
   DEALLOCATE(Xel,Xfl)
   !$OMP END PARALLEL
 
+  IF (switch%neutral_wall_sources_in_elements) THEN
+    wall_source_totals = SUM(wall_source_element_totals,DIM=2)
+#ifdef PARALL
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, wall_source_totals, 4, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+#ifdef SAVEFLUX
+    wall_source_scale = 2.d0*PI*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    wall_source_totals = wall_source_totals*wall_source_scale
+    IF (MPIvar%glob_id .EQ. 0) THEN
+      WRITE(6,'(A,ES24.16,A,ES24.16)') 'NEUTRAL_WALL_SOURCE_CONSERVATION puff wall=',wall_source_totals(1),' volume=',wall_source_totals(2)
+      WRITE(6,'(A,ES24.16,A,ES24.16)') 'NEUTRAL_WALL_SOURCE_CONSERVATION pump wall=',wall_source_totals(3),' volume=',wall_source_totals(4)
+    ENDIF
+#endif
+    DEALLOCATE(wall_source_element_totals)
+  ENDIF
+
 #ifdef PARALL
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, n, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, nn, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
@@ -1327,7 +1351,7 @@ CONTAINS
   !***************************************************
   ! Volume computation in 2D
   !***************************************************
-  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el)
+  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el)
 
       INTEGER,INTENT(IN)            :: iel
       REAL*8,INTENT(IN)             :: Xel(:,:)
@@ -1338,6 +1362,7 @@ CONTAINS
       REAL*8,INTENT(IN)             :: ue(:,:),u0e(:,:,:)
       REAL*8,INTENT(OUT)            :: El_n,El_nn
       REAL*8,INTENT(OUT)            :: diff_nn_Vol_el(Ng2D),v_nn_Vol_el(Ng2D,ndim),Xg_el(Ng2D,ndim)
+      REAL*8,INTENT(OUT)            :: wall_source_totals_el(4)
       INTEGER*4                     :: g,NGauss,i,inn
       REAL*8                        :: dvolu
       REAL*8                        :: xy(Ng2d,ndim),ueg(Ng2d,neq),u0eg(Ng2d,neq,time%tis)
@@ -1386,6 +1411,7 @@ CONTAINS
     force = 0.
     El_n  = 0.
     El_nn  = 0.
+    wall_source_totals_el = 0.d0
     Pi = 3.1415926535
     !***********************************
     !    Volume computation
@@ -1731,10 +1757,203 @@ CONTAINS
          ENDIF
 
     END DO ! END loop in volume Gauss points
+#ifdef NEUTRAL
+    IF (switch%neutral_wall_sources_in_elements) THEN
+      CALL assemble_neutral_wall_sources(iel,Xel,ue,Auu,rhs,wall_source_totals_el)
+    ENDIF
+#endif
       CALL do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)
       DEALLOCATE(Auq,Auu,rhs)
 
   ENDSUBROUTINE elemental_matrices_volume
+
+#ifdef NEUTRAL
+  SUBROUTINE assemble_neutral_wall_sources(iel,Xel,ue,Auu,rhs,source_totals)
+
+    INTEGER,INTENT(IN)              :: iel
+    REAL*8,INTENT(IN)               :: Xel(:,:),ue(:,:)
+    REAL*8,INTENT(INOUT)            :: Auu(:,:,:),rhs(:,:)
+    REAL*8,INTENT(OUT)              :: source_totals(4)
+    INTEGER                         :: inn
+    REAL*8                          :: element_volume,puff_wall_integral
+    REAL*8                          :: volume_load(Npel),pump_wall_load(Npel)
+
+    source_totals = 0.d0
+    inn = phys%idx_rhon_eq
+    IF (inn <= 0) RETURN
+
+#ifdef PARALL
+    IF (Mesh%ghostElems(iel) .NE. 0) RETURN
+#endif
+
+    CALL collect_neutral_wall_source_loads(iel,Xel,puff_wall_integral,pump_wall_load)
+    IF ((puff_wall_integral .EQ. 0.d0) .AND. ALL(pump_wall_load .EQ. 0.d0)) RETURN
+
+    CALL compute_element_volume_load(iel,Xel,volume_load,element_volume)
+    CALL assemble_neutral_puff_source(puff_wall_integral,volume_load,element_volume,rhs,source_totals(1:2))
+    CALL assemble_neutral_pump_source(pump_wall_load,volume_load,element_volume,ue,Auu,source_totals(3:4))
+
+  ENDSUBROUTINE assemble_neutral_wall_sources
+
+  SUBROUTINE collect_neutral_wall_source_loads(iel,Xel,puff_wall_integral,pump_wall_load)
+
+    INTEGER,INTENT(IN)              :: iel
+    REAL*8,INTENT(IN)               :: Xel(:,:)
+    REAL*8,INTENT(OUT)              :: puff_wall_integral,pump_wall_load(Npel)
+    INTEGER                         :: ifa,iface,ibf,fl,bc
+    REAL*8                          :: wall_face_load(Npel)
+
+    puff_wall_integral = 0.d0
+    pump_wall_load = 0.d0
+
+    DO ifa = 1,refElPol%Nfaces
+      iface = Mesh%F(iel,ifa)
+      IF (iface <= Mesh%Nintfaces) CYCLE
+
+      ibf = iface - Mesh%Nintfaces
+      IF (Mesh%periodic_faces(ibf) .NE. 0) CYCLE
+
+      fl = Mesh%boundaryFlag(ibf)
+#ifdef PARALL
+      IF (fl .EQ. 0) CYCLE
+#endif
+      bc = phys%bcflags(fl)
+      IF ((bc .NE. bc_BohmPuff) .AND. (bc .NE. bc_BohmPump)) CYCLE
+
+      CALL compute_neutral_wall_face_load(ifa,Xel,wall_face_load)
+      SELECT CASE (bc)
+      CASE (bc_BohmPuff)
+        CALL accumulate_neutral_puff_wall_load(wall_face_load,puff_wall_integral)
+      CASE (bc_BohmPump)
+        CALL accumulate_neutral_pump_wall_load(wall_face_load,pump_wall_load)
+      END SELECT
+    ENDDO
+
+  ENDSUBROUTINE collect_neutral_wall_source_loads
+
+  SUBROUTINE compute_neutral_wall_face_load(ifa,Xel,wall_face_load)
+
+    INTEGER,INTENT(IN)              :: ifa
+    REAL*8,INTENT(IN)               :: Xel(:,:)
+    REAL*8,INTENT(OUT)              :: wall_face_load(Npel)
+    INTEGER                         :: g,a,ia
+    REAL*8                          :: Xfl(refElPol%Nfacenodes,2)
+    REAL*8                          :: xyg(refElPol%Ngauss1d,2),xyder(refElPol%Ngauss1d,2)
+    REAL*8                          :: dline
+
+    wall_face_load = 0.d0
+    Xfl = Xel(refElPol%face_nodes(ifa,:),:)
+    xyg = MATMUL(refElPol%N1D,Xfl)
+    xyder = MATMUL(refElPol%Nxi1D,Xfl)
+
+    DO g = 1,refElPol%Ngauss1d
+      dline = refElPol%gauss_weights1D(g)*NORM2(xyder(g,:))
+      IF (switch%axisym) dline = dline*xyg(g,1)
+
+      DO a = 1,refElPol%Nfacenodes
+        ia = refElPol%face_nodes(ifa,a)
+        wall_face_load(ia) = wall_face_load(ia) + refElPol%N1D(g,a)*dline
+      ENDDO
+    ENDDO
+
+  ENDSUBROUTINE compute_neutral_wall_face_load
+
+  SUBROUTINE accumulate_neutral_puff_wall_load(wall_face_load,puff_wall_integral)
+
+    REAL*8,INTENT(IN)               :: wall_face_load(Npel)
+    REAL*8,INTENT(INOUT)            :: puff_wall_integral
+    REAL*8                          :: puff_coeff
+
+    puff_coeff = phys%puff/simpar%refval_density/(Mesh%puff_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
+    puff_wall_integral = puff_wall_integral + puff_coeff*SUM(wall_face_load)
+
+  ENDSUBROUTINE accumulate_neutral_puff_wall_load
+
+  SUBROUTINE accumulate_neutral_pump_wall_load(wall_face_load,pump_wall_load)
+
+    REAL*8,INTENT(IN)               :: wall_face_load(Npel)
+    REAL*8,INTENT(INOUT)            :: pump_wall_load(Npel)
+    REAL*8                          :: pump_coeff
+
+    pump_coeff = phys%cryopump_power/(Mesh%pump_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
+    pump_wall_load = pump_wall_load + pump_coeff*wall_face_load
+
+  ENDSUBROUTINE accumulate_neutral_pump_wall_load
+
+  SUBROUTINE compute_element_volume_load(iel,Xel,volume_load,element_volume)
+
+    INTEGER,INTENT(IN)              :: iel
+    REAL*8,INTENT(IN)               :: Xel(:,:)
+    REAL*8,INTENT(OUT)              :: volume_load(Npel),element_volume
+    INTEGER                         :: g
+    REAL*8                          :: xyv(refElPol%Ngauss2d,2)
+    REAL*8                          :: J11(refElPol%Ngauss2d),J12(refElPol%Ngauss2d)
+    REAL*8                          :: J21(refElPol%Ngauss2d),J22(refElPol%Ngauss2d)
+    REAL*8                          :: detJ(refElPol%Ngauss2d),dvolu
+
+    xyv = MATMUL(refElPol%N2D,Xel)
+    J11 = MATMUL(refElPol%Nxi2D,Xel(:,1))
+    J12 = MATMUL(refElPol%Nxi2D,Xel(:,2))
+    J21 = MATMUL(refElPol%Neta2D,Xel(:,1))
+    J22 = MATMUL(refElPol%Neta2D,Xel(:,2))
+    detJ = J11*J22 - J21*J12
+
+    element_volume = 0.d0
+    volume_load = 0.d0
+    DO g = 1,refElPol%Ngauss2d
+      dvolu = refElPol%gauss_weights2D(g)*detJ(g)
+      IF (switch%axisym) dvolu = dvolu*xyv(g,1)
+      element_volume = element_volume + dvolu
+      volume_load = volume_load + refElPol%N2D(g,:)*dvolu
+    ENDDO
+
+    IF (element_volume <= 0.d0) THEN
+      WRITE(6,*) 'Negative or zero element volume while spreading neutral wall sources in element ',iel
+      STOP
+    ENDIF
+
+  ENDSUBROUTINE compute_element_volume_load
+
+  SUBROUTINE assemble_neutral_puff_source(puff_wall_integral,volume_load,element_volume,rhs,puff_totals)
+
+    REAL*8,INTENT(IN)               :: puff_wall_integral,volume_load(Npel),element_volume
+    REAL*8,INTENT(INOUT)            :: rhs(:,:)
+    REAL*8,INTENT(OUT)              :: puff_totals(2)
+    INTEGER                         :: inn
+    REAL*8                          :: puff_rhs(Npel)
+
+    inn = phys%idx_rhon_eq
+    puff_totals = 0.d0
+    puff_totals(1) = puff_wall_integral
+    IF (puff_wall_integral .EQ. 0.d0) RETURN
+
+    puff_rhs = puff_wall_integral*volume_load/element_volume
+    rhs(:,inn) = rhs(:,inn) + puff_rhs
+    puff_totals(2) = SUM(puff_rhs)
+
+  ENDSUBROUTINE assemble_neutral_puff_source
+
+  SUBROUTINE assemble_neutral_pump_source(pump_wall_load,volume_load,element_volume,ue,Auu,pump_totals)
+
+    REAL*8,INTENT(IN)               :: pump_wall_load(Npel),volume_load(Npel),element_volume
+    REAL*8,INTENT(IN)               :: ue(:,:)
+    REAL*8,INTENT(INOUT)            :: Auu(:,:,:)
+    REAL*8,INTENT(OUT)              :: pump_totals(2)
+    INTEGER                         :: inn,z
+    REAL*8                          :: pump_matrix(Npel,Npel)
+
+    inn = phys%idx_rhon_eq
+    z = inn + (inn - 1)*Neq
+    pump_totals = 0.d0
+    pump_totals(1) = DOT_PRODUCT(pump_wall_load,ue(:,inn))
+    IF (ALL(pump_wall_load .EQ. 0.d0)) RETURN
+
+    pump_matrix = tensorProduct(volume_load/element_volume,pump_wall_load)
+    Auu(:,:,z) = Auu(:,:,z) + pump_matrix
+    pump_totals(2) = SUM(MATMUL(pump_matrix,ue(:,inn)))
+
+  ENDSUBROUTINE assemble_neutral_pump_source
+#endif
 
   !***************************************************
   ! Interior faces computation in 2D
