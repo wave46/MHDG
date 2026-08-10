@@ -14,6 +14,13 @@
       "layouts": ["mpi4_omp4"],
       "reference_comparisons": false
     },
+    "neutral_wall_sources_warm": {
+      "description": "Source-relocated warm reconvergence and conservation check",
+      "case": "legacy_case",
+      "workflows": ["warm_neutral_wall_sources"],
+      "layouts": ["mpi4_omp4"],
+      "reference_comparisons": false
+    },
     "impurity_scalar_baseline": {
       "description": "Disabled and single-nitrogen warm mixture baselines",
       "case": "legacy_case",
@@ -162,6 +169,49 @@
         }
       ],
       "tolerance_profile": "race_step"
+    },
+    "neutral_wall_sources_race_matrix": {
+      "description": "Source-relocated fixed and adaptive race and conservation checks",
+      "case": "legacy_case",
+      "workflows": [
+        "cold_step_fixed_neutral_wall_sources",
+        "cold_step_adaptive_neutral_wall_sources"
+      ],
+      "layout_comparisons": [
+        {
+          "baseline": "serial_omp1",
+          "candidate": "serial_omp16"
+        },
+        {
+          "baseline": "serial_omp1",
+          "candidate": "mpi4_omp1"
+        },
+        {
+          "baseline": "serial_omp1",
+          "candidate": "mpi4_omp4"
+        },
+        {
+          "baseline": "serial_omp16",
+          "candidate": "mpi4_omp1"
+        },
+        {
+          "baseline": "serial_omp16",
+          "candidate": "mpi4_omp4"
+        },
+        {
+          "baseline": "mpi4_omp1",
+          "candidate": "mpi4_omp4"
+        }
+      ],
+      "tolerance_profile": "race_step",
+      "reference_comparisons": false
+    },
+    "neutral_wall_sources_cold_adaptive": {
+      "description": "Complete source-relocated adaptive cold workflow",
+      "case": "legacy_case",
+      "workflows": ["cold_adaptive_neutral_wall_sources"],
+      "layouts": ["mpi4_omp4"],
+      "reference_comparisons": false
     },
     "diverted_warm": {
       "description": "Canonical diverted warm restart",

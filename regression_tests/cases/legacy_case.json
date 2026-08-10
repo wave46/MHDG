@@ -74,6 +74,13 @@
         "neutralp_lambda": 1.0
       }
     },
+    "warm_neutral_wall_sources": {
+      "extends": "warm",
+      "description": "Reconverge the accepted restart with neutral puff and pump in elements",
+      "parameter_overrides": {
+        "neutral_wall_sources_in_elements": true
+      }
+    },
     "warm_impurity_off": {
       "extends": "warm",
       "description": "Reconverge the accepted state with impurity radiation disabled",
@@ -179,6 +186,13 @@
         "diffusion_reduction"
       ]
     },
+    "cold_adaptive_neutral_wall_sources": {
+      "extends": "cold_adaptive",
+      "description": "Reach a source-relocated state from an adaptive cold start",
+      "parameter_overrides": {
+        "neutral_wall_sources_in_elements": true
+      }
+    },
     "cold_step_fixed": {
       "type": "staged_fixed_mesh",
       "description": "Run two Newton iterations on the coarse mesh without adaptation",
@@ -247,6 +261,20 @@
       "adaptive_stages": [
         "single_step"
       ]
+    },
+    "cold_step_fixed_neutral_wall_sources": {
+      "extends": "cold_step_fixed",
+      "description": "Run a fixed one-step race check with neutral wall sources in elements",
+      "parameter_overrides": {
+        "neutral_wall_sources_in_elements": true
+      }
+    },
+    "cold_step_adaptive_neutral_wall_sources": {
+      "extends": "cold_step_adaptive",
+      "description": "Run an adaptive one-step race check with neutral wall sources in elements",
+      "parameter_overrides": {
+        "neutral_wall_sources_in_elements": true
+      }
     }
   }
 }

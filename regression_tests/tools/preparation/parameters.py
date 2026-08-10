@@ -12,6 +12,9 @@ from support.errors import BundleError
 ASSIGNMENT_RE = re.compile(
     r"^(?P<prefix>\s*(?P<key>[A-Za-z][A-Za-z0-9_]*)\s*=\s*).*$"
 )
+INSERTABLE_PARAMETERS = {
+    "neutral_wall_sources_in_elements": "switch_lst",
+}
 
 
 def render_parameter_file(
@@ -24,6 +27,7 @@ def render_parameter_file(
     lines = _read_parameter_lines(source)
     values = _replacement_values(replacements, parameter_overrides)
     rendered, counts = _render_assignments(lines, values)
+    rendered = _insert_supported_missing_assignments(rendered, values, counts)
     _require_single_assignment(counts)
     _write_parameter_file(destination, rendered)
 
@@ -97,6 +101,31 @@ def _require_single_assignment(counts: dict[str, int]) -> None:
     if invalid:
         details = ", ".join(f"{key} ({counts[key]} matches)" for key in invalid)
         raise BundleError(f"parameter assignments must appear once: {details}")
+
+
+def _insert_supported_missing_assignments(
+    lines: list[str],
+    values: dict[str, str],
+    counts: dict[str, int],
+) -> list[str]:
+    """Insert new runtime switches into parameter files from older bundles."""
+    rendered = list(lines)
+    for key, namelist in INSERTABLE_PARAMETERS.items():
+        if key not in values or counts[key] != 0:
+            continue
+        header = re.compile(rf"^\s*&{re.escape(namelist)}\s*(?:!.*)?$", re.IGNORECASE)
+        matches = [
+            index
+            for index, line in enumerate(rendered)
+            if header.match(line.rstrip("\r\n"))
+        ]
+        if len(matches) != 1:
+            continue
+        index = matches[0] + 1
+        ending = "\r\n" if rendered[matches[0]].endswith("\r\n") else "\n"
+        rendered.insert(index, f"    {key} = {values[key]}{ending}")
+        counts[key] = 1
+    return rendered
 
 
 def _write_parameter_file(destination: Path, rendered: list[str]) -> None:
