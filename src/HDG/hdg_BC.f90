@@ -2328,6 +2328,11 @@ CONTAINS
       STOP
     END SELECT
 
+    IF (switch%neutral_wall_sources_in_elements) THEN
+      cryopump_coeff = 0.d0
+      puff_coeff = 0.d0
+    ENDIF
+
 #ifdef SAVEFLUX
     !***************** flux control part ****************************
 
@@ -2887,6 +2892,8 @@ CONTAINS
       WRITE (6,*) "Error: wrong boundary type"
       STOP
     END SELECT
+
+    IF (switch%neutral_wall_sources_in_elements) puff_coeff = 0.d0
 
     ! convective part
     k = Neq
