@@ -1,4 +1,5 @@
 PROGRAM test_neutral_flux_limiter
+  USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   USE neutral_flux_limiter, ONLY: neutral_tn_source_invalid, &
        neutral_tn_source_ti, neutral_tn_source_fixed, &
        neutral_flux_limiter_config_t, neutral_flux_limiter_result_t, &
@@ -102,6 +103,17 @@ CONTAINS
     CALL assert_close(result%activation_ratio, 0.5d0, &
          'minimum-cap activation ratio')
 
+    config%fs_flux_min = 0.d0
+    config%diff_nn_min = 0.d0
+    unlimited_flux = 0.d0
+    CALL evaluate_neutral_flux_limiter(config=config, ti=1.d0, &
+         neutral_density=1.d0, dnn=4.d0, &
+         unlimited_flux=unlimited_flux, result=result)
+    CALL assert_close(result%flux_cap, 0.d0, 'zero cap with zero flux')
+    CALL assert_close(result%activation_ratio, 0.d0, &
+         'zero-cap inactive ratio')
+    CALL assert_close(result%phi, 1.d0, 'zero-cap inactive limiter')
+
     config%fs_fraction = 1.d0
     config%fs_flux_min = 0.d0
     config%diff_nn_min = 2.d0
@@ -128,6 +140,11 @@ CONTAINS
     REAL*8, INTENT(IN) :: value, expected
     CHARACTER(LEN=*), INTENT(IN) :: label
 
+    IF (.NOT. ieee_is_finite(value) .OR. &
+         .NOT. ieee_is_finite(expected)) THEN
+       WRITE (*, '(A,1X,A,2(1X,ES12.4))') 'FAIL:', TRIM(label), value, expected
+       ERROR STOP 1
+    ENDIF
     IF (ABS(value - expected) > 1.d-12) THEN
        WRITE (*, '(A,1X,A,2(1X,ES12.4))') 'FAIL:', TRIM(label), value, expected
        ERROR STOP 1
@@ -138,6 +155,13 @@ CONTAINS
     REAL*8, INTENT(IN) :: value(:), expected(:)
     CHARACTER(LEN=*), INTENT(IN) :: label
 
+    IF (.NOT. ALL(ieee_is_finite(value)) .OR. &
+         .NOT. ALL(ieee_is_finite(expected))) THEN
+       WRITE (*, '(A,1X,A)') 'FAIL:', TRIM(label)
+       WRITE (*, '(A,*(1X,ES12.4))') 'value:', value
+       WRITE (*, '(A,*(1X,ES12.4))') 'expected:', expected
+       ERROR STOP 1
+    ENDIF
     IF (MAXVAL(ABS(value - expected)) > 1.d-12) THEN
        WRITE (*, '(A,1X,A)') 'FAIL:', TRIM(label)
        WRITE (*, '(A,*(1X,ES12.4))') 'value:', value
