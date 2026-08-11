@@ -451,6 +451,7 @@ MODULE types
      LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs
      LOGICAL :: neutral_perpendicular_diffusion ! use perpendicular instead of isotropic neutral density diffusion
      LOGICAL :: neutral_wall_sources_in_elements ! move neutral puff/pump wall sources into adjacent element volumes
+     LOGICAL :: neutral_flux_limiter ! apply the lagged neutral flux limiter
      LOGICAL :: neutral_flux_limiter_save_2d ! save optional HDG nodal limiter diagnostics
   END TYPE Switches_type
 

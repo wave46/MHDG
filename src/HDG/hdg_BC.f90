@@ -536,6 +536,8 @@ CONTAINS
   REAL*8                    :: uex(refElPol%Ngauss1d,phys%neq)
   REAL*8                    :: diff_iso_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
   REAL*8                    :: diff_ani_fac(phys%neq,phys%neq,refElPol%Ngauss1d)
+  REAL*8                    :: diff_iso_tau(phys%neq,phys%neq,refElPol%Ngauss1d)
+  REAL*8                    :: neutral_limiter_phi(refElPol%Ngauss1d)
   real*8                    :: q_cylfl(refElPol%Nfacenodes),q_cyl(refElPol%Ngauss1d)
   real*8                    :: omegafl(refElPol%Nfacenodes),omega(refElPol%Ngauss1d)
 #ifdef PARALL
@@ -709,6 +711,21 @@ CONTAINS
       CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,&
         diff_ani_fac,topology_region)
     ENDIF
+
+    diff_iso_tau = diff_iso_fac
+    neutral_limiter_phi = 1.d0
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+    IF (switch%neutral_flux_limiter) THEN
+      DO i = 1,Ng1d
+        CALL compute_neutral_flux_limiter_phi(ufg(i,:),qfg(i,:),b(i,:),&
+          &neutral_limiter_phi(i))
+        diff_iso_fac(phys%idx_rhon_eq,phys%idx_rhon_eq,i) = &
+          &neutral_limiter_phi(i)*diff_iso_fac(phys%idx_rhon_eq,phys%idx_rhon_eq,i)
+        diff_ani_fac(phys%idx_rhon_eq,phys%idx_rhon_eq,i) = &
+          &neutral_limiter_phi(i)*diff_ani_fac(phys%idx_rhon_eq,phys%idx_rhon_eq,i)
+      END DO
+    ENDIF
+#endif
 
     if (save_tau) then
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
@@ -944,7 +961,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g))
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -995,7 +1012,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g))
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1076,7 +1093,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g))
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1254,7 +1271,7 @@ CONTAINS
       IF (numer%stab > 1) THEN
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_fac(:,:,g))
+            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
@@ -1279,21 +1296,21 @@ CONTAINS
 #ifndef SAVEFLUX
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,&
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),ntang,&
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),ntang,&
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),ntang,&
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
 #else
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,&
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,&
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,&
+        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,&
         &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
         !summing conribution from each part of the face
@@ -1850,22 +1867,22 @@ CONTAINS
   !*********************************
 #ifndef SAVEFLUX
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,ntang,topology_region,outward_normal)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,ntang,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,ntang,topology_region,outward_normal)
 #endif
 #else
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,topology_region,outward_normal)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,topology_region,outward_normal)
 #endif
 #endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
     real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),rho,ng(:),tau(:,:),setval,dcs_du(:)
     integer,intent(IN)         :: topology_region
     real*8,intent(IN)          :: outward_normal(:)
-    real*8           :: diffiso(:,:),diffani(:,:)
+    real*8           :: diffiso(:,:),diffani(:,:),neutral_limiter_phi
     logical          :: ntang
     real*8           :: qfg(:)
     real*8           :: bn,Abohm(Neq,Neq),APinch(Neq,Ndim)
@@ -2022,6 +2039,9 @@ CONTAINS
       CALL compute_W5p(ufg,W5p)
       CALL compute_dW5p_dU(ufg,dW5p_dU)
       QdW5p = MATMUL(Qpr,dW5p_dU)
+      W5p = neutral_limiter_phi*W5p
+      dW5p_dU = neutral_limiter_phi*dW5p_dU
+      QdW5p = neutral_limiter_phi*QdW5p
 #endif
 
       ! Compute Alpha(U^(k-1))
@@ -2082,6 +2102,8 @@ CONTAINS
 
       call compute_Dnn_dU(ufg,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,ufg)
+      Dnn_dU = neutral_limiter_phi*Dnn_dU
+      Dnn_dU_u = neutral_limiter_phi*Dnn_dU_u
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       call compute_ddk_dU(ufg,xyf,q_cyl,ddk_dU)

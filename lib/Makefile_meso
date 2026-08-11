@@ -155,7 +155,7 @@ neutral_flux_limiter.o : neutral_flux_limiter.F
 physics.F : $(SDIR)/Models/$(RMDL)/physics.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-physics.o : physics.F globals.o magnetic_field.o
+physics.o : physics.F globals.o magnetic_field.o neutral_flux_limiter.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 ifeq ($(PASTIX),$(LIB_YES))

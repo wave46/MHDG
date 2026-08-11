@@ -260,6 +260,8 @@ SUBROUTINE READ_input()
   switch%import_diffusion_1D = import_diffusion_1D
   switch%neutral_perpendicular_diffusion = neutral_perpendicular_diffusion
   switch%neutral_wall_sources_in_elements = neutral_wall_sources_in_elements
+  switch%neutral_flux_limiter = &
+       &neutral_flux_limiter_mode == 'lagged_flux_limiter'
   switch%neutral_flux_limiter_save_2d = neutral_flux_limiter_save_2d
   input%field_path        = TRIM(ADJUSTL(field_path))
   input%field_dimensions  = field_dimensions

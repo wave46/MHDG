@@ -206,7 +206,7 @@ impurity_radiation.o : impurity_radiation.F globals.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 endif
 
-physics.o : physics.F globals.o magnetic_field.o $(IMPURITY_RADIATION_OBJECT)
+physics.o : physics.F globals.o magnetic_field.o neutral_flux_limiter.o $(IMPURITY_RADIATION_OBJECT)
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 ifeq ($(PASTIX),$(LIB_YES))
