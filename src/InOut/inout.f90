@@ -1083,6 +1083,12 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
       CALL HDF5_real_saving(group_id2, phys%diff_nn_min, 'diff_nn_min')
       CALL HDF5_real_saving(group_id2, phys%neutralp_ti_supp, 'neutralp_ti_supp')
+      CALL HDF5_string_saving(group_id2, phys%neutral_flux_limiter_mode, 'neutral_flux_limiter_mode')
+      CALL HDF5_string_saving(group_id2, phys%neutral_flux_limiter_tn_source, 'neutral_flux_limiter_tn_source')
+      CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_tn, 'neutral_flux_limiter_tn')
+      CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_eps, 'neutral_flux_limiter_eps')
+      CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_fs_fraction, 'neutral_flux_limiter_fs_fraction')
+      CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_fs_flux_min, 'neutral_flux_limiter_fs_flux_min')
       CALL HDF5_real_saving(group_id2, phys%Re, 'recycling')
       CALL HDF5_integer_saving(group_id2, phys%n_impurities, 'n_impurities')
       IF (phys%n_impurities > 0) THEN
@@ -1193,6 +1199,7 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%import_diffusion_1D, 'import_diffusion_1D')
       CALL HDF5_logical_saving(group_id2, switch%neutral_perpendicular_diffusion, 'neutral_perpendicular_diffusion')
       CALL HDF5_logical_saving(group_id2, switch%neutral_wall_sources_in_elements, 'neutral_wall_sources_in_elements')
+      CALL HDF5_logical_saving(group_id2, switch%neutral_flux_limiter_save_2d, 'neutral_flux_limiter_save_2d')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create numerics parameters group

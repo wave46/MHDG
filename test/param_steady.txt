@@ -16,6 +16,7 @@
     import_diffusion_1D = .false.        ! Import or not additional profile of diffuion in 1D as function of rho_pol, supply path to the file
     neutral_perpendicular_diffusion = .false. ! Use perpendicular instead of isotropic neutral density diffusion
     neutral_wall_sources_in_elements = .false. ! Move neutral puff/pump wall sources into adjacent element volumes
+    neutral_flux_limiter_save_2d = .false. ! Save optional HDG nodal neutral limiter diagnostics
     driftdia            = .false.       ! Set to FALSE to ignore diamagnetic drifts terms
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
     testcase            = 54            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
@@ -197,6 +198,13 @@
     diff_nn = 2e8 ! max diffusion for neutral equation or if used DCONSTANTNEUTRALDIFF flag, then the value of neutral diffusion
     diff_nn_min = 1. ! minimum diffusion for neutral equation
     neutralp_ti_supp_eV = 1.d-6 ! ion-temperature suppression for neutral pressure [eV]
+    ! ****** Neutral flux limiter
+    neutral_flux_limiter_mode = 'off'
+    neutral_flux_limiter_tn_source = 'ti'
+    neutral_flux_limiter_tn_eV = 0. ! Fixed neutral cap temperature [eV]
+    neutral_flux_limiter_eps = 0. ! Flux-magnitude regularization [m^-2 s^-1]
+    neutral_flux_limiter_fs_fraction = 1. ! Fraction of the neutral free-streaming flux
+    neutral_flux_limiter_fs_flux_min = 0. ! Minimum neutral cap flux [m^-2 s^-1]
     I_0 = 0.3     ! [MA] Plasma current at flat-top for diffusion in moving equilibrium
     ! external heating in the form of shifted 2D gaussian ~exp(-(r-(R0+dr)**2/sigmar**2))*exp(-(z-(Z0+dz)**2/sigmaz**2))
     heating_power = 0.              ! [W] Total power of heating 

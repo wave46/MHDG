@@ -277,6 +277,12 @@ MODULE types
      REAL*8                    :: diff_nn ! Diffusion in the neutral equation
      REAL*8                    :: diff_nn_min ! Minimum diffusion in the neutral equation
      REAL*8                    :: neutralp_ti_supp ! Ion-temperature suppression scale for neutral pressure
+     CHARACTER(LEN=40)         :: neutral_flux_limiter_mode ! off or lagged_flux_limiter
+     CHARACTER(LEN=16)         :: neutral_flux_limiter_tn_source ! ti or fixed
+     REAL*8                    :: neutral_flux_limiter_tn ! Neutral cap temperature
+     REAL*8                    :: neutral_flux_limiter_eps ! Neutral flux regularization
+     REAL*8                    :: neutral_flux_limiter_fs_fraction ! Fraction of free-streaming flux
+     REAL*8                    :: neutral_flux_limiter_fs_flux_min ! Minimum free-streaming flux
      LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
      REAL*8,DIMENSION(22)      :: E           ! Energy values from TRIM
      REAL*8,DIMENSION(19)      :: theta       ! Incidence angle values from TRIM
@@ -444,6 +450,7 @@ MODULE types
      LOGICAL :: import_diffusion_1D ! import 1D diffusion profiles from file, complemented by path in inputs
      LOGICAL :: neutral_perpendicular_diffusion ! use perpendicular instead of isotropic neutral density diffusion
      LOGICAL :: neutral_wall_sources_in_elements ! move neutral puff/pump wall sources into adjacent element volumes
+     LOGICAL :: neutral_flux_limiter_save_2d ! save optional HDG nodal limiter diagnostics
   END TYPE Switches_type
 
   !***************************************************************
