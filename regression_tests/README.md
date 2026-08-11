@@ -73,13 +73,35 @@ analytically. Fixed and adaptive indicate whether the mesh can change.
 | `cold_step_fixed` | Analytical start; coarse fixed mesh | One time step and two Newton iterations. |
 | `cold_step_impurity_off` | Analytical start; coarse fixed mesh | Short disabled-impurity lifecycle check. |
 | `cold_step_adaptive` | Analytical start; coarse adaptive mesh | One time step, two Newton iterations, and one adaptation pass. |
-| `warm_neutral_wall_sources` | Existing steady restart; fixed mesh | Reconverge with puff and pump relocated into elements. |
-| `cold_step_fixed_neutral_wall_sources` | Analytical start; coarse fixed mesh | Short relocated-source race and conservation check. |
-| `cold_step_adaptive_neutral_wall_sources` | Analytical start; coarse adaptive mesh | Short relocated-source adaptation check. |
-| `cold_adaptive_neutral_wall_sources` | Analytical start; coarse adaptive mesh | Complete relocated-source cold workflow. |
+| `warm_neutral_sources_in_elements` | Accepted source-relocated restart; fixed mesh | Reconverge with puff and pump in elements. |
+| `warm_neutral_pressure` | Source-relocated warm restart; fixed mesh | Exercise `neutralp_lambda=0.05`. |
+| `warm_neutral_perpendicular` | Source-relocated warm restart; fixed mesh | Exercise projected perpendicular neutral diffusion. |
+| `warm_neutral_limiter_fixed` | Source-relocated warm restart; fixed mesh | Exercise active limiting with fixed `Tn=2.5 eV`. |
+| `warm_neutral_limiter_ti` | Source-relocated warm restart; fixed mesh | Exercise active limiting with `Tn=Ti`. |
+| `cold_step_fixed_neutral_sources_in_elements` | Analytical start; coarse fixed mesh | Short relocated-source race and conservation check. |
+| `cold_step_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Short relocated-source adaptation check. |
+| `cold_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Complete relocated-source cold workflow. |
 
 Full cold stages run sequentially and restart from their predecessor. The
 one-step workflows probe mesh construction and races, not convergence.
+The PR06 golden workflows all use the same accepted source-relocated restart.
+Each then enables exactly one feature: source relocation alone, neutral
+pressure, perpendicular diffusion, fixed-`Tn` limiting, or `Tn=Ti` limiting.
+The active limiter declarations always retain
+`neutral_wall_sources_in_elements=true`.
+The source-only golden keeps the strict fixed-layout tolerance. Repeated
+MPI4-by-OMP4 feature solves showed converged endpoint variation up to
+`2.90e-7` relative L2, so the other four use the measured
+`neutral_feature_same_layout` profile (`5e-7` for relative L2 and normalized
+L-infinity). A reference refresh updates the source reference but deliberately
+keeps its accepted restart fixed, so every feature continues from the same
+state.
+
+The two-Newton-iteration feature race uses a separate `1e-7` relative-L2
+profile. Repeating an identical nonlinear `mpi4_omp1` limiter cell varied by
+`7.40e-8`, while the source-only control remained near `1e-11`; the larger
+threshold avoids treating amplified parallel solver ordering as an assembly
+race. It remains five times tighter than the converged-feature profile.
 
 Tracked layouts are:
 
@@ -98,9 +120,12 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
 | `neutral_pressure_warm` | Pressure-on warm restart, `mpi4_omp4` | Execution-only pressure continuation attempt. |
 | `neutralgamma_race` | NeutralGamma fixed cold step, `serial_omp1` vs `serial_omp16` | Two-Newton-iteration OpenMP race check. |
-| `neutral_wall_sources_warm` | Relocated-source warm restart, `mpi4_omp4` | Reconvergence and wall/volume conservation. |
-| `neutral_wall_sources_race_matrix` | Relocated-source fixed/adaptive steps, every layout pair | Mesh, field, race, and source-total checks. |
-| `neutral_wall_sources_cold_adaptive` | Full relocated-source adaptive cold start, `mpi4_omp4` | Canonical convergence and conservation evidence. |
+| `neutral_sources_in_elements_warm` | Relocated-source warm restart, `mpi4_omp4` | Golden reconvergence and wall/volume conservation. |
+| `neutral_feature_references` | Pressure, projection, fixed-`Tn`, and `Tn=Ti`, `mpi4_omp4` | Reference producer used by golden refreshes. |
+| `neutral_features_warm` | Relocation plus the four independent feature variants, `mpi4_omp4` | Routine golden comparison. |
+| `neutral_feature_race_matrix` | The five independent neutral variants, every layout pair | Two-Newton-iteration race check without 2D diagnostics. |
+| `neutral_sources_in_elements_race_matrix` | Relocated-source fixed/adaptive steps, every layout pair | Mesh, field, race, and source-total checks. |
+| `neutral_sources_in_elements_cold_adaptive` | Full relocated-source adaptive cold start, `mpi4_omp4` | Canonical convergence and conservation evidence. |
 | `impurity_scalar_baseline` | Impurity off and N, `mpi4_omp4` | Focused compatibility check. |
 | `impurity_mixture` | Impurity off, W, N, and N+W, `mpi4_omp4` | Manual mixture-reference check. |
 | `initialization_smoke` | Disabled-impurity analytical start, `mpi4_omp4` | Execution-only initialization evidence. |
@@ -118,6 +143,11 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 Warm and race suites are short. Full cold workflows are longer, and
 `cold_matrix` can take hours. Runtime is recorded but is not a pass criterion.
 
+Future harness work may reduce the shared cold bootstrap to time
+initialization, diffusion reduction, and at most one steady stage, then branch
+into independent feature continuations plus one small single-layout combined
+integration run. This is not part of the current PR06 harness changes.
+
 ## Common tasks
 
 ### Check accepted references
@@ -131,6 +161,10 @@ regression_tests/regression.sh suite check --build --build-jobs 8
 
 # Canonical fixed and adaptive cold workflows.
 regression_tests/regression.sh suite check cold --build --build-jobs 8
+
+# Five independent PR06 neutral-feature goldens with a private setup.
+MHDG_REGRESSION_GOLDEN_SETTINGS=/private/path/pr06-neutral-features.local.env \
+  regression_tests/regression.sh suite check neutral_features_warm
 ```
 
 ### Run candidate or race evidence
@@ -141,6 +175,10 @@ regression_tests/regression.sh suite check cold --build --build-jobs 8
 # Direct serial_omp1 versus serial_omp16 race comparison; no golden output.
 regression_tests/regression.sh suite run race \
   --settings /private/path/settings.env
+
+# Five PR06 neutral variants across all six pairs of the four tracked layouts.
+regression_tests/regression.sh suite run neutral_feature_race_matrix \
+  --settings /private/path/pr06-neutral-features.local.env
 
 # Save an expensive matrix before comparison or acceptance.
 regression_tests/regression.sh suite run cold_matrix \
@@ -232,13 +270,16 @@ stages. `golden status WORKSPACE` shows progress; without `--workspace`, the
 workspace is `MHDG_REGRESSION_RUN_ROOT/golden_campaigns/RUN_ID`. Resumes reject
 changed inputs and never overwrite a workspace, candidate, or output.
 
-The default refresh includes cold matrices, warm and mixture references,
-initialization/stored-field/race evidence, warm layout checks, and final
-warm/mixture verification. Repeat
-`--only` to select `cold_matrix`, `warm`, or `impurity_mixture`. A cold-matrix
-refresh also updates the canonical warm restart, while `warm` updates the warm
-reference. Updating only warm or only mixture references records a consistency
-warning; select both together to avoid it.
+The default refresh includes cold matrices, warm, mixture, and independent
+neutral-feature references, initialization/stored-field/race evidence, warm
+layout checks, and final warm/mixture/neutral verification. Repeat `--only` to
+select `cold_matrix`, `warm`, `impurity_mixture`, or `neutral_features`. A
+cold-matrix refresh also updates the canonical warm restart, while `warm`
+updates the warm reference. Updating only warm or only mixture references
+records a consistency warning; select both together to avoid it.
+Reference producers may differ from the old fields under review, but golden
+promotion stops automatically if any producer fails its declared Newton
+convergence check.
 
 The verified candidate is published atomically as a golden bundle. Campaign
 state, declaration, build metadata, suite summaries, run plans/metadata, and

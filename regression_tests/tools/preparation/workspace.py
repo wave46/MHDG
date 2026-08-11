@@ -56,9 +56,9 @@ def populate_warm_run(
     (inputs / "restart.h5").symlink_to(
         artifacts[workflow.get("restart_role", "warm_restart")]
     )
-    (inputs / "reference.h5").symlink_to(
-        artifacts[workflow.get("reference_role", "warm_reference")]
-    )
+    reference_role = workflow.get("reference_role")
+    if reference_role is not None:
+        (inputs / "reference.h5").symlink_to(artifacts[reference_role])
     _link_runtime_files(staging, runtime_files)
     render_parameter_file(
         artifacts["warm_parameters"],

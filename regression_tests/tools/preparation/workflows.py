@@ -22,7 +22,7 @@ from preparation.workspace import (
 
 
 def prepare_warm_run(inputs: PreparationInputs) -> PreparedRun:
-    """Prepare one warm restart and fixed-reference comparison run."""
+    """Prepare one warm-restart run, with a reference when declared."""
     overrides = inputs.workflow.get("parameter_overrides", {})
     command = solver_command(
         inputs.run_directory,

@@ -14,11 +14,75 @@
       "layouts": ["mpi4_omp4"],
       "reference_comparisons": false
     },
-    "neutral_wall_sources_warm": {
-      "description": "Source-relocated warm reconvergence and conservation check",
+    "neutral_sources_in_elements_warm": {
+      "description": "Source-relocated warm golden reconvergence and conservation check",
       "case": "legacy_case",
-      "workflows": ["warm_neutral_wall_sources"],
+      "workflows": ["warm_neutral_sources_in_elements"],
       "layouts": ["mpi4_omp4"],
+      "reference_comparisons": true
+    },
+    "neutral_features_warm": {
+      "description": "Independent source relocation, neutral pressure, projection, and limiter goldens",
+      "case": "legacy_case",
+      "workflows": [
+        "warm_neutral_sources_in_elements",
+        "warm_neutral_pressure",
+        "warm_neutral_perpendicular",
+        "warm_neutral_limiter_fixed",
+        "warm_neutral_limiter_ti"
+      ],
+      "layouts": ["mpi4_omp4"],
+      "reference_comparisons": true
+    },
+    "neutral_feature_references": {
+      "description": "Independent neutral pressure, projection, and limiter reference producers",
+      "case": "legacy_case",
+      "workflows": [
+        "warm_neutral_pressure",
+        "warm_neutral_perpendicular",
+        "warm_neutral_limiter_fixed",
+        "warm_neutral_limiter_ti"
+      ],
+      "layouts": ["mpi4_omp4"],
+      "reference_comparisons": true
+    },
+    "neutral_feature_race_matrix": {
+      "description": "Two-Newton-iteration all-layout race checks for independent neutral features",
+      "case": "legacy_case",
+      "workflows": [
+        "race_neutral_sources_in_elements",
+        "race_neutral_pressure",
+        "race_neutral_perpendicular",
+        "race_neutral_limiter_fixed",
+        "race_neutral_limiter_ti"
+      ],
+      "layout_comparisons": [
+        {
+          "baseline": "serial_omp1",
+          "candidate": "serial_omp16"
+        },
+        {
+          "baseline": "serial_omp1",
+          "candidate": "mpi4_omp1"
+        },
+        {
+          "baseline": "serial_omp1",
+          "candidate": "mpi4_omp4"
+        },
+        {
+          "baseline": "serial_omp16",
+          "candidate": "mpi4_omp1"
+        },
+        {
+          "baseline": "serial_omp16",
+          "candidate": "mpi4_omp4"
+        },
+        {
+          "baseline": "mpi4_omp1",
+          "candidate": "mpi4_omp4"
+        }
+      ],
+      "tolerance_profile": "neutral_feature_race_step",
       "reference_comparisons": false
     },
     "impurity_scalar_baseline": {
@@ -170,12 +234,12 @@
       ],
       "tolerance_profile": "race_step"
     },
-    "neutral_wall_sources_race_matrix": {
+    "neutral_sources_in_elements_race_matrix": {
       "description": "Source-relocated fixed and adaptive race and conservation checks",
       "case": "legacy_case",
       "workflows": [
-        "cold_step_fixed_neutral_wall_sources",
-        "cold_step_adaptive_neutral_wall_sources"
+        "cold_step_fixed_neutral_sources_in_elements",
+        "cold_step_adaptive_neutral_sources_in_elements"
       ],
       "layout_comparisons": [
         {
@@ -206,10 +270,10 @@
       "tolerance_profile": "race_step",
       "reference_comparisons": false
     },
-    "neutral_wall_sources_cold_adaptive": {
+    "neutral_sources_in_elements_cold_adaptive": {
       "description": "Complete source-relocated adaptive cold workflow",
       "case": "legacy_case",
-      "workflows": ["cold_adaptive_neutral_wall_sources"],
+      "workflows": ["cold_adaptive_neutral_sources_in_elements"],
       "layouts": ["mpi4_omp4"],
       "reference_comparisons": false
     },

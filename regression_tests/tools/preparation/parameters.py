@@ -14,6 +14,17 @@ ASSIGNMENT_RE = re.compile(
 )
 INSERTABLE_PARAMETERS = {
     "neutral_wall_sources_in_elements": "switch_lst",
+    "neutral_perpendicular_diffusion": "switch_lst",
+    "neutral_flux_limiter_save_2d": "switch_lst",
+    "neutral_flux_limiter_mode": "phys_lst",
+    "neutral_flux_limiter_tn_source": "phys_lst",
+    "neutral_flux_limiter_tn_ev": "phys_lst",
+    "neutral_flux_limiter_eps": "phys_lst",
+    "neutral_flux_limiter_fs_fraction": "phys_lst",
+    "neutral_flux_limiter_fs_flux_min": "phys_lst",
+}
+INSERTED_PARAMETER_SPELLINGS = {
+    "neutral_flux_limiter_tn_ev": "neutral_flux_limiter_tn_eV",
 }
 
 
@@ -123,7 +134,8 @@ def _insert_supported_missing_assignments(
             continue
         index = matches[0] + 1
         ending = "\r\n" if rendered[matches[0]].endswith("\r\n") else "\n"
-        rendered.insert(index, f"    {key} = {values[key]}{ending}")
+        spelling = INSERTED_PARAMETER_SPELLINGS.get(key, key)
+        rendered.insert(index, f"    {spelling} = {values[key]}{ending}")
         counts[key] = 1
     return rendered
 
