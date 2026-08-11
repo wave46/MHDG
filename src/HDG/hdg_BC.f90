@@ -546,8 +546,8 @@ CONTAINS
 #endif
 #endif
 #ifdef SAVEFLUX
-  real*8                    :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_pinch,totalflux_neutral,totalflux_numerical
-  real*8                    :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_numerical
+  real*8                    :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_pinch,totalflux_neutral,totalflux_neutral_unlimited,totalflux_numerical
+  real*8                    :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical
 #endif
 
   IF (utils%timing) THEN
@@ -561,6 +561,7 @@ CONTAINS
   totalflux_perpendicular = 0.
   totalflux_pinch = 0.
   totalflux_neutral = 0.
+  totalflux_neutral_unlimited = 0.
   totalflux_numerical = 0.
 #endif
   save_tau = switch%saveTau
@@ -750,6 +751,7 @@ CONTAINS
     faceflux_perpendicular = 0.
     faceflux_pinch = 0.
     faceflux_neutral = 0.
+    faceflux_neutral_unlimited = 0.
     faceflux_numerical = 0.
 #endif
     ! Type of boundary
@@ -790,11 +792,11 @@ CONTAINS
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
 #else
     CASE (bc_Bohm)
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_numerical)
+      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical)
     CASE (bc_BohmPump)
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_numerical)
+      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical)
     CASE (bc_BohmPuff)
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_numerical)
+      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical)
 #endif
     CASE (bc_iter_core)
       CALL set_itercore_bc()
@@ -812,6 +814,7 @@ CONTAINS
     totalflux_perpendicular = totalflux_perpendicular + faceflux_perpendicular
     totalflux_pinch = totalflux_pinch + faceflux_pinch
     totalflux_neutral = totalflux_neutral + faceflux_neutral
+    totalflux_neutral_unlimited = totalflux_neutral_unlimited + faceflux_neutral_unlimited
     totalflux_numerical = totalflux_numerical + faceflux_numerical
 #ifdef PARALL
   ENDIF
@@ -835,6 +838,7 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_perpendicular, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_pinch, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_neutral, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_neutral_unlimited, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_numerical, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
   IF (MPIvar%glob_id.EQ.0) THEN
@@ -843,7 +847,8 @@ CONTAINS
      WRITE(6,*) 'plasma parallel flux = ',totalflux_parallel
      WRITE(6,*) 'plasma diffusion flux = ',totalflux_perpendicular
      WRITE(6,*) 'plasma pinch flux = ',totalflux_pinch
-     WRITE(6,*) 'neutral flux = ',totalflux_neutral
+     WRITE(6,*) 'neutral flux limited = ',totalflux_neutral
+     WRITE(6,*) 'neutral flux unlimited = ',totalflux_neutral_unlimited
      WRITE(6,*) 'numerical flux = ',totalflux_numerical
      WRITE(6,*) 'net flux = ',totalflux_parallel-totalflux_perpendicular-totalflux_pinch-totalflux_neutral+totalflux_puff-totalflux_pump+totalflux_numerical
   ENDIF
@@ -1152,7 +1157,7 @@ CONTAINS
 #ifndef SAVEFLUX
   SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
 #else
-  SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_numerical)
+  SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical)
 #endif
       INTEGER                   :: g,i
       REAL*8                    :: dline,xyDerNorm_g
@@ -1170,8 +1175,8 @@ CONTAINS
       REAL                      :: tau_stab(Neq,Neq)
       REAL*8                    :: bohm_suppresion, energy_zero_threshold
 #ifdef SAVEFLUX
-    real*8,intent(out)        :: faceflux_pump, faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_numerical
-    real*8                    :: flgflux_pump, flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical
+    real*8,intent(out)        :: faceflux_pump, faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical
+    real*8                    :: flgflux_pump, flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical
 
     faceflux_pump = 0.
     faceflux_puff = 0.
@@ -1179,6 +1184,7 @@ CONTAINS
     faceflux_perpendicular = 0.
     faceflux_pinch = 0.
     faceflux_neutral = 0.
+    faceflux_neutral_unlimited = 0.
     faceflux_numerical = 0.
 #endif
     energy_zero_threshold=1.e-20
@@ -1306,11 +1312,11 @@ CONTAINS
 #else
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,&
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical,&
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,&
+        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical,&
         &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
         !summing conribution from each part of the face
@@ -1320,6 +1326,7 @@ CONTAINS
         faceflux_perpendicular = faceflux_perpendicular+flgflux_perpendicular
         faceflux_pinch = faceflux_pinch+flgflux_pinch
         faceflux_neutral = faceflux_neutral+flgflux_neutral
+        faceflux_neutral_unlimited = faceflux_neutral_unlimited+flgflux_neutral_unlimited
             faceflux_numerical = faceflux_numerical+flgflux_numerical
 #endif
          ELSE
@@ -1873,9 +1880,9 @@ CONTAINS
 #endif
 #else
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical,topology_region,outward_normal)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical,topology_region,outward_normal)
 #endif
 #endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
@@ -1916,7 +1923,7 @@ CONTAINS
 #endif
 #ifdef SAVEFLUX
     real*8, INTENT(IN)            :: dline
-    real*8,intent(out)::  flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_numerical
+    real*8,intent(out)::  flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical
 #endif
     inn = phys%idx_rhon_eq
     ign = phys%idx_gamman_eq
@@ -2380,7 +2387,14 @@ CONTAINS
     !Neutral flux
     flgflux_neutral = diffiso(inn,inn)*DOT_PRODUCT(Qpr(:,inn),ng) &
       &- diffani(inn,inn)*bn*DOT_PRODUCT(Qpr(:,inn),bg)
+#ifdef NEUTRALP
+    flgflux_neutral = flgflux_neutral + DOT_PRODUCT(MATMUL(Qpr,W5p),ng)
+    IF (switch%neutral_perpendicular_diffusion) &
+      &flgflux_neutral = flgflux_neutral - bn*DOT_PRODUCT(MATMUL(Qpr,W5p),bg)
+#endif
+    flgflux_neutral_unlimited = flgflux_neutral/neutral_limiter_phi
     flgflux_neutral = flgflux_neutral*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
+    flgflux_neutral_unlimited = flgflux_neutral_unlimited*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
 
         !flux neutral numerical
         flgflux_numerical = tau(inn,inn)* (uefg(inn)-ufg(inn))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2

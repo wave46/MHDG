@@ -19,6 +19,7 @@ MODULE neutral_flux_limiter
   TYPE, PUBLIC :: neutral_flux_limiter_result_t
      REAL*8 :: phi = 1.d0
      REAL*8 :: flux_cap = 0.d0
+     REAL*8 :: unlimited_flux_norm = 0.d0
      REAL*8 :: activation_ratio = 0.d0
   END TYPE neutral_flux_limiter_result_t
 
@@ -89,7 +90,9 @@ CONTAINS
     free_streaming_speed = neutral_free_streaming_speed(config, ti)
     result%flux_cap = MAX(config%fs_fraction*MAX(neutral_density, 0.d0)* &
          free_streaming_speed, config%fs_flux_min)
-    gamma_regularized = SQRT(DOT_PRODUCT(unlimited_flux, unlimited_flux) + &
+    result%unlimited_flux_norm = &
+         SQRT(DOT_PRODUCT(unlimited_flux, unlimited_flux))
+    gamma_regularized = SQRT(result%unlimited_flux_norm**2 + &
          config%epsilon**2)
 
     IF (result%flux_cap > 0.d0) THEN

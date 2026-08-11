@@ -892,11 +892,12 @@ CONTAINS
 #ifdef TEMPERATURE
   ! Evaluate the neutral limiter from one local HDG state.  The caller owns
   ! when this value is frozen and how it is applied to the local Jacobian.
-  SUBROUTINE compute_neutral_flux_limiter_phi(U, Q, magnetic_direction, phi)
+  SUBROUTINE evaluate_neutral_flux_limiter_state(U, Q, magnetic_direction, &
+       &Dnn, result)
     REAL*8, INTENT(IN)  :: U(:), Q(:), magnetic_direction(:)
-    REAL*8, INTENT(OUT) :: phi
-    TYPE(neutral_flux_limiter_result_t) :: result
-    REAL*8 :: Dnn, Ti, Qpr(simpar%Ndim,simpar%Neq)
+    REAL*8, INTENT(OUT) :: Dnn
+    TYPE(neutral_flux_limiter_result_t), INTENT(OUT) :: result
+    REAL*8 :: Ti, Qpr(simpar%Ndim,simpar%Neq)
     REAL*8 :: pressure_flux(simpar%Ndim)
     REAL*8 :: unlimited_flux(simpar%Ndim)
 #ifdef NEUTRALP
@@ -924,6 +925,16 @@ CONTAINS
     CALL evaluate_neutral_flux_limiter(neutral_limiter_config, Ti, &
          &U(inn), Dnn, &
          &unlimited_flux, result)
+  END SUBROUTINE evaluate_neutral_flux_limiter_state
+
+  SUBROUTINE compute_neutral_flux_limiter_phi(U, Q, magnetic_direction, phi)
+    REAL*8, INTENT(IN)  :: U(:), Q(:), magnetic_direction(:)
+    REAL*8, INTENT(OUT) :: phi
+    TYPE(neutral_flux_limiter_result_t) :: result
+    REAL*8 :: Dnn
+
+    CALL evaluate_neutral_flux_limiter_state(U, Q, magnetic_direction, &
+         &Dnn, result)
     phi = result%phi
   END SUBROUTINE compute_neutral_flux_limiter_phi
 #endif

@@ -75,6 +75,8 @@ CONTAINS
          unlimited_flux=unlimited_flux, result=result)
     CALL assert_close(result%flux_cap, 10.d0, &
          'density free-streaming cap')
+    CALL assert_close(result%unlimited_flux_norm, 5.d0, &
+         'unregularized complete-flux norm')
     CALL assert_close(result%activation_ratio, 0.5d0, &
          'unregularized activation ratio')
     CALL assert_close(result%phi, 2.d0/3.d0, 'gamma-one limiter law')
