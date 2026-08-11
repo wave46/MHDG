@@ -12,6 +12,8 @@ SUBROUTINE READ_input()
   USE prec_const
   USE globals
   USE MPI_OMP
+  USE neutral_flux_limiter, ONLY: neutral_tn_source_invalid, &
+       neutral_tn_source_ti, neutral_tn_source_fixed, parse_neutral_tn_source
   IMPLICIT NONE
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
@@ -19,6 +21,7 @@ SUBROUTINE READ_input()
   INTEGER               :: thresh, difcor, tis, stab,pertini,init,order_2d
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
   INTEGER               :: uinput, printint, testcase, nrp, i
+  INTEGER               :: neutral_flux_limiter_tn_source_id
   INTEGER               :: nts, tsw, freqdisp, freqsave, shockcp, limrho
   INTEGER               :: shockcp_adapt, evaluator, difference, freq_t_adapt,freq_NR_adapt, quant_ind
   INTEGER,ALLOCATABLE,DIMENSION(:) :: n_quant_ind,param_est
@@ -182,18 +185,20 @@ SUBROUTINE READ_input()
      STOP
   END SELECT
   neutral_flux_limiter_tn_source = TRIM(ADJUSTL(neutral_flux_limiter_tn_source))
-  SELECT CASE (neutral_flux_limiter_tn_source)
-  CASE ('ti')
+  neutral_flux_limiter_tn_source_id = &
+       parse_neutral_tn_source(neutral_flux_limiter_tn_source)
+  SELECT CASE (neutral_flux_limiter_tn_source_id)
+  CASE (neutral_tn_source_ti)
      IF (neutral_flux_limiter_tn_eV < 0.d0) THEN
         PRINT *, 'neutral_flux_limiter_tn_eV must be non-negative: ', neutral_flux_limiter_tn_eV
         STOP
      ENDIF
-  CASE ('fixed')
+  CASE (neutral_tn_source_fixed)
      IF (neutral_flux_limiter_tn_eV <= 0.d0) THEN
         PRINT *, 'neutral_flux_limiter_tn_eV must be positive for fixed Tn: ', neutral_flux_limiter_tn_eV
         STOP
      ENDIF
-  CASE DEFAULT
+  CASE (neutral_tn_source_invalid)
      PRINT *, 'Unknown neutral_flux_limiter_tn_source: ', TRIM(neutral_flux_limiter_tn_source)
      PRINT *, 'Allowed values: ti, fixed'
      STOP
@@ -356,6 +361,7 @@ SUBROUTINE READ_input()
   phys%neutralp_ti_supp   = neutralp_ti_supp_eV
   phys%neutral_flux_limiter_mode = neutral_flux_limiter_mode
   phys%neutral_flux_limiter_tn_source = neutral_flux_limiter_tn_source
+  phys%neutral_flux_limiter_tn_source_id = neutral_flux_limiter_tn_source_id
   phys%neutral_flux_limiter_tn = neutral_flux_limiter_tn_eV
   phys%neutral_flux_limiter_eps = neutral_flux_limiter_eps
   phys%neutral_flux_limiter_fs_fraction = neutral_flux_limiter_fs_fraction

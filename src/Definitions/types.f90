@@ -279,6 +279,7 @@ MODULE types
      REAL*8                    :: neutralp_ti_supp ! Ion-temperature suppression scale for neutral pressure
      CHARACTER(LEN=40)         :: neutral_flux_limiter_mode ! off or lagged_flux_limiter
      CHARACTER(LEN=16)         :: neutral_flux_limiter_tn_source ! ti or fixed
+     INTEGER                   :: neutral_flux_limiter_tn_source_id ! parsed source selector
      REAL*8                    :: neutral_flux_limiter_tn ! Neutral cap temperature
      REAL*8                    :: neutral_flux_limiter_eps ! Neutral flux regularization
      REAL*8                    :: neutral_flux_limiter_fs_fraction ! Fraction of free-streaming flux
