@@ -143,7 +143,11 @@ class RunPreparationTests(unittest.TestCase):
         pressure_parameters = (pressure.path / "param.txt").read_text(
             encoding="utf-8"
         )
-        self.assertIn("neutralp_lambda = 1", pressure_parameters)
+        self.assertIn("neutralp_lambda = 0.05", pressure_parameters)
+        self.assertIn(
+            "neutral_wall_sources_in_elements = .true.",
+            pressure_parameters,
+        )
         self.assertIn("compute_from_flux = .true.", pressure_parameters)
 
         neutralgamma = prepare_run(
@@ -171,7 +175,7 @@ class RunPreparationTests(unittest.TestCase):
         warm = prepare_run(
             self.settings,
             "legacy_case",
-            "warm_neutral_wall_sources",
+            "warm_neutral_sources_in_elements",
             "mpi4_omp4",
             REGRESSION_ROOT / "cases",
             REGRESSION_ROOT / "layouts.json",
@@ -182,6 +186,169 @@ class RunPreparationTests(unittest.TestCase):
             "neutral_wall_sources_in_elements = .true.",
             warm_parameters,
         )
+
+    def test_prepares_pr06_neutral_feature_variants(self) -> None:
+        expected_assignments = {
+            "warm_neutral_sources_in_elements": (
+                "neutralp_lambda = 0.0",
+                "neutral_perpendicular_diffusion = .false.",
+                "neutral_flux_limiter_mode = 'off'",
+            ),
+            "warm_neutral_pressure": (
+                "neutralp_lambda = 0.05",
+                "neutral_perpendicular_diffusion = .false.",
+                "neutral_flux_limiter_mode = 'off'",
+            ),
+            "warm_neutral_perpendicular": (
+                "neutralp_lambda = 0.0",
+                "neutral_perpendicular_diffusion = .true.",
+                "neutral_flux_limiter_mode = 'off'",
+            ),
+            "warm_neutral_limiter_fixed": (
+                "neutralp_lambda = 0.0",
+                "neutral_perpendicular_diffusion = .false.",
+                "neutral_flux_limiter_mode = 'lagged_flux_limiter'",
+                "neutral_flux_limiter_tn_source = 'fixed'",
+                "neutral_flux_limiter_tn_eV = 2.5",
+                "neutral_flux_limiter_fs_fraction = 1.0",
+            ),
+            "warm_neutral_limiter_ti": (
+                "neutralp_lambda = 0.0",
+                "neutral_perpendicular_diffusion = .false.",
+                "neutral_flux_limiter_mode = 'lagged_flux_limiter'",
+                "neutral_flux_limiter_tn_source = 'ti'",
+                "neutral_flux_limiter_tn_eV = 0.0",
+            ),
+        }
+
+        for workflow, assignments in expected_assignments.items():
+            with self.subTest(workflow=workflow):
+                prepared = prepare_run(
+                    self.settings,
+                    "legacy_case",
+                    workflow,
+                    "serial_omp1",
+                    REGRESSION_ROOT / "cases",
+                    REGRESSION_ROOT / "layouts.json",
+                    workflow,
+                )
+                parameters = (prepared.path / "param.txt").read_text(
+                    encoding="utf-8"
+                )
+                for assignment in (
+                    "neutral_wall_sources_in_elements = .true.",
+                    "neutral_flux_limiter_save_2d = .false.",
+                    *assignments,
+                ):
+                    self.assertIn(assignment, parameters)
+
+    def test_pr06_neutral_features_select_common_restart_and_own_goldens(
+        self,
+    ) -> None:
+        expected_references = {
+            "warm_neutral_sources_in_elements": (
+                "restart_neutral_sources_in_elements.h5",
+                "reference_neutral_sources_in_elements_mpi4_omp4.h5",
+            ),
+            "warm_neutral_pressure": (
+                "restart_neutral_sources_in_elements.h5",
+                "reference_neutral_pressure_mpi4_omp4.h5",
+            ),
+            "warm_neutral_perpendicular": (
+                "restart_neutral_sources_in_elements.h5",
+                "reference_neutral_perpendicular_mpi4_omp4.h5",
+            ),
+            "warm_neutral_limiter_fixed": (
+                "restart_neutral_sources_in_elements.h5",
+                "reference_neutral_limiter_fixed_mpi4_omp4.h5",
+            ),
+            "warm_neutral_limiter_ti": (
+                "restart_neutral_sources_in_elements.h5",
+                "reference_neutral_limiter_ti_mpi4_omp4.h5",
+            ),
+        }
+
+        for workflow, (restart_name, reference_name) in expected_references.items():
+            with self.subTest(workflow=workflow):
+                prepared = prepare_run(
+                    self.settings,
+                    "legacy_case",
+                    workflow,
+                    "mpi4_omp4",
+                    REGRESSION_ROOT / "cases",
+                    REGRESSION_ROOT / "layouts.json",
+                    f"{workflow}-golden-inputs",
+                )
+                self.assertEqual(
+                    (prepared.path / "inputs/restart.h5").resolve().name,
+                    restart_name,
+                )
+                self.assertEqual(
+                    (prepared.path / "inputs/reference.h5").resolve().name,
+                    reference_name,
+                )
+
+    def test_prepares_pr06_neutral_feature_race_variants(self) -> None:
+        expected_assignments = {
+            "race_neutral_sources_in_elements": (
+                "neutralp_lambda = 0.0",
+                "neutral_perpendicular_diffusion = .false.",
+                "neutral_flux_limiter_mode = 'off'",
+            ),
+            "race_neutral_pressure": (
+                "neutralp_lambda = 0.05",
+                "neutral_perpendicular_diffusion = .false.",
+                "neutral_flux_limiter_mode = 'off'",
+            ),
+            "race_neutral_perpendicular": (
+                "neutralp_lambda = 0.0",
+                "neutral_perpendicular_diffusion = .true.",
+                "neutral_flux_limiter_mode = 'off'",
+            ),
+            "race_neutral_limiter_fixed": (
+                "neutralp_lambda = 0.0",
+                "neutral_perpendicular_diffusion = .false.",
+                "neutral_flux_limiter_mode = 'lagged_flux_limiter'",
+                "neutral_flux_limiter_tn_source = 'fixed'",
+                "neutral_flux_limiter_tn_eV = 2.5",
+                "neutral_flux_limiter_fs_fraction = 1.0",
+            ),
+            "race_neutral_limiter_ti": (
+                "neutralp_lambda = 0.0",
+                "neutral_perpendicular_diffusion = .false.",
+                "neutral_flux_limiter_mode = 'lagged_flux_limiter'",
+                "neutral_flux_limiter_tn_source = 'ti'",
+                "neutral_flux_limiter_tn_eV = 0.0",
+            ),
+        }
+
+        for workflow, feature_assignments in expected_assignments.items():
+            with self.subTest(workflow=workflow):
+                prepared = prepare_run(
+                    self.settings,
+                    "legacy_case",
+                    workflow,
+                    "serial_omp1",
+                    REGRESSION_ROOT / "cases",
+                    REGRESSION_ROOT / "layouts.json",
+                    workflow,
+                )
+                parameters = (prepared.path / "param.txt").read_text(
+                    encoding="utf-8"
+                )
+                for assignment in (
+                    "compute_from_flux = .true.",
+                    "neutral_wall_sources_in_elements = .true.",
+                    "neutral_flux_limiter_save_2d = .false.",
+                    "nrp = 2",
+                    *feature_assignments,
+                ):
+                    self.assertIn(assignment, parameters)
+                self.assertEqual(
+                    (prepared.path / "inputs/restart.h5").resolve().name,
+                    "restart_neutral_sources_in_elements.h5",
+                )
+                self.assertFalse((prepared.path / "inputs/reference.h5").exists())
 
     def test_warm_workflow_selects_restart_and_reference_independently(self) -> None:
         staging = self.root / "selected_staging"

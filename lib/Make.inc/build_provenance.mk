@@ -3,13 +3,15 @@
 # stable values from the repository and remain buildable outside a Git checkout.
 MHDG_REPOSITORY_ROOT ?= $(abspath $(CURDIR)/..)
 MHDG_GIT_COMMIT ?= $(shell \
-	git -C "$(MHDG_REPOSITORY_ROOT)" rev-parse HEAD 2>/dev/null \
+	cd "$(MHDG_REPOSITORY_ROOT)" 2>/dev/null \
+	&& git rev-parse HEAD 2>/dev/null \
 	|| printf unknown)
 MHDG_GIT_DIRTY ?= $(shell \
-	if git -C "$(MHDG_REPOSITORY_ROOT)" rev-parse \
+	if cd "$(MHDG_REPOSITORY_ROOT)" 2>/dev/null \
+		&& git rev-parse \
 		--is-inside-work-tree >/dev/null 2>&1; then \
-	  if test -n "$$(git -C "$(MHDG_REPOSITORY_ROOT)" status \
-			--porcelain=v1 --untracked-files=all)"; then \
+	  if test -n "$$(git status \
+			--porcelain --untracked-files=all)"; then \
 	    printf true; \
 	  else \
 	    printf false; \

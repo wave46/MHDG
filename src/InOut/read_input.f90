@@ -12,6 +12,8 @@ SUBROUTINE READ_input()
   USE prec_const
   USE globals
   USE MPI_OMP
+  USE neutral_flux_limiter, ONLY: neutral_tn_source_invalid, &
+       neutral_tn_source_ti, neutral_tn_source_fixed, parse_neutral_tn_source
   IMPLICIT NONE
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
@@ -19,6 +21,7 @@ SUBROUTINE READ_input()
   INTEGER               :: thresh, difcor, tis, stab,pertini,init,order_2d
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
   INTEGER               :: uinput, printint, testcase, nrp, i
+  INTEGER               :: neutral_flux_limiter_tn_source_id
   INTEGER               :: nts, tsw, freqdisp, freqsave, shockcp, limrho
   INTEGER               :: shockcp_adapt, evaluator, difference, freq_t_adapt,freq_NR_adapt, quant_ind
   INTEGER,ALLOCATABLE,DIMENSION(:) :: n_quant_ind,param_est
@@ -56,6 +59,10 @@ SUBROUTINE READ_input()
   ! Neutral and Ohmic heating
   LOGICAL               :: OhmicSrc, apply_trim
   REAL*8                :: Zeff,Pohmic,diff_nn,diff_nn_min,neutralp_ti_supp_eV,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
+  CHARACTER(LEN=40)     :: neutral_flux_limiter_mode
+  CHARACTER(LEN=16)     :: neutral_flux_limiter_tn_source
+  REAL*8                :: neutral_flux_limiter_tn_eV,neutral_flux_limiter_eps
+  REAL*8                :: neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min
   REAL*8, PARAMETER     :: diff_nn_min_unset = -HUGE(1.d0)
   REAL*8                :: feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr
 #ifdef KEQUATION
@@ -84,12 +91,14 @@ SUBROUTINE READ_input()
 
   ! 1D diffusion
   LOGICAL               :: import_diffusion_1D, neutral_perpendicular_diffusion, neutral_wall_sources_in_elements
+  LOGICAL               :: neutral_flux_limiter_save_2d
   CHARACTER(1000)       :: diffusion_1D_path
 
   ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
        & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, transport_1d, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
-       & logrho,bxgradb,flux_limiter,import_diffusion_1D,neutral_perpendicular_diffusion,neutral_wall_sources_in_elements
+       & logrho,bxgradb,flux_limiter,import_diffusion_1D,neutral_perpendicular_diffusion,&
+       & neutral_wall_sources_in_elements,neutral_flux_limiter_save_2d
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path, impurity_model_path
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump,neutralp_lambda
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
@@ -100,11 +109,15 @@ SUBROUTINE READ_input()
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
-    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
+    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
+    &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
+    &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min
 #else
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
-    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe
+    &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
+    &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
+    &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
@@ -126,6 +139,13 @@ SUBROUTINE READ_input()
   neutralp_ti_supp_eV = 1.d-6
   neutral_perpendicular_diffusion = .FALSE.
   neutral_wall_sources_in_elements = .FALSE.
+  neutral_flux_limiter_mode = 'off'
+  neutral_flux_limiter_save_2d = .FALSE.
+  neutral_flux_limiter_tn_source = 'ti'
+  neutral_flux_limiter_tn_eV = 0.d0
+  neutral_flux_limiter_eps = 0.d0
+  neutral_flux_limiter_fs_fraction = 1.d0
+  neutral_flux_limiter_fs_flux_min = 0.d0
 
   ! Reading the file
   uinput = 100
@@ -154,6 +174,45 @@ SUBROUTINE READ_input()
   ENDIF
   IF (neutralp_ti_supp_eV < 0.d0) THEN
      PRINT *, 'neutralp_ti_supp_eV must be non-negative: ', neutralp_ti_supp_eV
+     STOP
+  ENDIF
+  neutral_flux_limiter_mode = TRIM(ADJUSTL(neutral_flux_limiter_mode))
+  SELECT CASE (neutral_flux_limiter_mode)
+  CASE ('off', 'lagged_flux_limiter')
+  CASE DEFAULT
+     PRINT *, 'Unknown neutral_flux_limiter_mode: ', TRIM(neutral_flux_limiter_mode)
+     PRINT *, 'Allowed values: off, lagged_flux_limiter'
+     STOP
+  END SELECT
+  neutral_flux_limiter_tn_source = TRIM(ADJUSTL(neutral_flux_limiter_tn_source))
+  neutral_flux_limiter_tn_source_id = &
+       parse_neutral_tn_source(neutral_flux_limiter_tn_source)
+  SELECT CASE (neutral_flux_limiter_tn_source_id)
+  CASE (neutral_tn_source_ti)
+     IF (neutral_flux_limiter_tn_eV < 0.d0) THEN
+        PRINT *, 'neutral_flux_limiter_tn_eV must be non-negative: ', neutral_flux_limiter_tn_eV
+        STOP
+     ENDIF
+  CASE (neutral_tn_source_fixed)
+     IF (neutral_flux_limiter_tn_eV <= 0.d0) THEN
+        PRINT *, 'neutral_flux_limiter_tn_eV must be positive for fixed Tn: ', neutral_flux_limiter_tn_eV
+        STOP
+     ENDIF
+  CASE (neutral_tn_source_invalid)
+     PRINT *, 'Unknown neutral_flux_limiter_tn_source: ', TRIM(neutral_flux_limiter_tn_source)
+     PRINT *, 'Allowed values: ti, fixed'
+     STOP
+  END SELECT
+  IF (neutral_flux_limiter_eps < 0.d0) THEN
+     PRINT *, 'neutral_flux_limiter_eps must be non-negative: ', neutral_flux_limiter_eps
+     STOP
+  ENDIF
+  IF (neutral_flux_limiter_fs_fraction < 0.d0) THEN
+     PRINT *, 'neutral_flux_limiter_fs_fraction must be non-negative: ', neutral_flux_limiter_fs_fraction
+     STOP
+  ENDIF
+  IF (neutral_flux_limiter_fs_flux_min < 0.d0) THEN
+     PRINT *, 'neutral_flux_limiter_fs_flux_min must be non-negative: ', neutral_flux_limiter_fs_flux_min
      STOP
   ENDIF
 
@@ -201,6 +260,9 @@ SUBROUTINE READ_input()
   switch%import_diffusion_1D = import_diffusion_1D
   switch%neutral_perpendicular_diffusion = neutral_perpendicular_diffusion
   switch%neutral_wall_sources_in_elements = neutral_wall_sources_in_elements
+  switch%neutral_flux_limiter = &
+       &neutral_flux_limiter_mode == 'lagged_flux_limiter'
+  switch%neutral_flux_limiter_save_2d = neutral_flux_limiter_save_2d
   input%field_path        = TRIM(ADJUSTL(field_path))
   input%field_dimensions  = field_dimensions
   input%field_from_grid   = field_from_grid
@@ -299,6 +361,13 @@ SUBROUTINE READ_input()
   phys%diff_nn            = diff_nn
   phys%diff_nn_min        = diff_nn_min
   phys%neutralp_ti_supp   = neutralp_ti_supp_eV
+  phys%neutral_flux_limiter_mode = neutral_flux_limiter_mode
+  phys%neutral_flux_limiter_tn_source = neutral_flux_limiter_tn_source
+  phys%neutral_flux_limiter_tn_source_id = neutral_flux_limiter_tn_source_id
+  phys%neutral_flux_limiter_tn = neutral_flux_limiter_tn_eV
+  phys%neutral_flux_limiter_eps = neutral_flux_limiter_eps
+  phys%neutral_flux_limiter_fs_fraction = neutral_flux_limiter_fs_fraction
+  phys%neutral_flux_limiter_fs_flux_min = neutral_flux_limiter_fs_flux_min
   phys%I_0                = I_0
   phys%heating_power      = heating_power
   phys%heating_dr         = heating_dr
@@ -518,6 +587,18 @@ SUBROUTINE READ_input()
      PRINT *, '                - minimum diffusion in the neutral equation:          ', phys%diff_nn_min
      PRINT *, '                - neutral-pressure continuation:                       ', numer%neutralp_lambda
      PRINT *, '                - neutral-pressure Ti suppression:                     ', phys%neutralp_ti_supp
+     PRINT *, '                - neutral flux limiter mode:                           ', &
+          TRIM(phys%neutral_flux_limiter_mode)
+     PRINT *, '                - neutral flux limiter 2D diagnostics:                 ', &
+          switch%neutral_flux_limiter_save_2d
+     PRINT *, '                - neutral flux limiter Tn source:                      ', &
+          TRIM(phys%neutral_flux_limiter_tn_source)
+     PRINT *, '                - neutral flux limiter Tn:                             ', phys%neutral_flux_limiter_tn
+     PRINT *, '                - neutral flux limiter epsilon:                        ', phys%neutral_flux_limiter_eps
+     PRINT *, '                - neutral flux limiter free-streaming fraction:        ', &
+          phys%neutral_flux_limiter_fs_fraction
+     PRINT *, '                - neutral flux limiter minimum free-streaming flux:    ', &
+          phys%neutral_flux_limiter_fs_flux_min
      PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
      PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
      PRINT *, '                - applying trim:                                      ', phys%apply_trim

@@ -439,12 +439,13 @@ def _run_stage(
         and stage["acceptance_required"]
         and passed
     ):
-        old_golden_path, _ = verify_suite(
+        old_golden_path, old_golden = verify_suite(
             summary_path,
             args.cases,
             args.tolerances,
         )
         stage["old_golden_report"] = _file_record(old_golden_path)
+        passed = _reference_runs_converged(old_golden)
     if not passed:
         stage["status"] = "failed"
         stage["failed_utc"] = utc_now()
@@ -460,6 +461,14 @@ def _run_stage(
         _activate_candidate(state, stage)
     state["status"] = stage["status"]
     _save(state)
+
+
+def _reference_runs_converged(verification: dict[str, Any]) -> bool:
+    """Accept changed reference fields only when every producer converged."""
+    results = verification.get("results")
+    return bool(results) and all(
+        result.get("convergence_status") == "passed" for result in results
+    )
 
 
 def _stage_run_id(state: dict[str, Any], stage: dict[str, Any]) -> str:

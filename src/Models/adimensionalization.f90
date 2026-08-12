@@ -151,6 +151,9 @@ SUBROUTINE adimensionalization()
   phys%diff_nn = phys%diff_nn/D0
   phys%diff_nn_min = phys%diff_nn_min/D0
   phys%neutralp_ti_supp = phys%neutralp_ti_supp/Tev
+  phys%neutral_flux_limiter_tn = phys%neutral_flux_limiter_tn/Tev
+  phys%neutral_flux_limiter_eps = phys%neutral_flux_limiter_eps/(L0*n0/t0)
+  phys%neutral_flux_limiter_fs_flux_min = phys%neutral_flux_limiter_fs_flux_min/(L0*n0/t0)
   switch%diffmin = switch%diffmin/D0
 #ifdef KEQUATION
   phys%diff_k_max = phys%diff_k_max/D0

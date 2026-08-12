@@ -11,6 +11,9 @@ MODULE physics
   USE magnetic_field
   USE impurity_radiation_model, ONLY: init_impurity_radiation_model, &
        &adimensionalize_impurity_radiation_model, compute_impurity_cooling
+  USE neutral_flux_limiter, ONLY: neutral_flux_limiter_config_t, &
+       &neutral_flux_limiter_result_t, compute_neutral_unlimited_flux, &
+       &apply_neutral_perpendicular_operator, evaluate_neutral_flux_limiter
   IMPLICIT NONE
 
   REAL*8, PARAMETER :: eirene_rate_te_min_phys = 1.d-1
@@ -69,6 +72,7 @@ MODULE physics
   END TYPE neutral_runtime_constants_t
 
   TYPE(neutral_runtime_constants_t), SAVE :: neutral_rt
+  TYPE(neutral_flux_limiter_config_t), SAVE :: neutral_limiter_config
 
 CONTAINS
 
@@ -421,8 +425,22 @@ CONTAINS
 
   CALL initialize_neutral_rate_runtime_constants()
   CALL adimensionalize_neutral_rate_coefficients()
+  CALL initialize_neutral_flux_limiter_config()
 
   ENDSUBROUTINE initPhys
+
+  SUBROUTINE initialize_neutral_flux_limiter_config()
+    neutral_limiter_config%tn_source = &
+         &phys%neutral_flux_limiter_tn_source_id
+    neutral_limiter_config%fixed_tn = phys%neutral_flux_limiter_tn
+    neutral_limiter_config%mref = phys%Mref
+    neutral_limiter_config%epsilon = phys%neutral_flux_limiter_eps
+    neutral_limiter_config%fs_fraction = &
+         &phys%neutral_flux_limiter_fs_fraction
+    neutral_limiter_config%fs_flux_min = &
+         &phys%neutral_flux_limiter_fs_flux_min
+    neutral_limiter_config%diff_nn_min = phys%diff_nn_min
+  END SUBROUTINE initialize_neutral_flux_limiter_config
 
   SUBROUTINE initialize_neutral_rate_runtime_constants()
     REAL*8 :: density_scale
@@ -870,6 +888,56 @@ CONTAINS
     CALL double_softplus(Dnn, phys%diff_nn_min, phys%diff_nn)
 #endif
   ENDSUBROUTINE compute_Dnn
+
+#ifdef TEMPERATURE
+  ! Evaluate the neutral limiter from one local HDG state.  The caller owns
+  ! when this value is frozen and how it is applied to the local Jacobian.
+  SUBROUTINE evaluate_neutral_flux_limiter_state(U, Q, magnetic_direction, &
+       &Dnn, result)
+    REAL*8, INTENT(IN)  :: U(:), Q(:), magnetic_direction(:)
+    REAL*8, INTENT(OUT) :: Dnn
+    TYPE(neutral_flux_limiter_result_t), INTENT(OUT) :: result
+    REAL*8 :: Ti, Qpr(simpar%Ndim,simpar%Neq)
+    REAL*8 :: pressure_flux(simpar%Ndim)
+    REAL*8 :: unlimited_flux(simpar%Ndim)
+#ifdef NEUTRALP
+    REAL*8 :: W5p(simpar%Neq)
+#endif
+    INTEGER :: inn
+
+    inn = phys%idx_rhon_eq
+    Qpr = RESHAPE(Q, (/simpar%Ndim, simpar%Neq/))
+    CALL compute_Dnn(U, Dnn)
+
+    pressure_flux = 0.d0
+#ifdef NEUTRALP
+    CALL compute_W5p(U, W5p)
+    pressure_flux = MATMUL(Qpr, W5p)
+#endif
+    CALL compute_neutral_unlimited_flux(Dnn, Qpr(:,inn), pressure_flux, &
+         &unlimited_flux)
+    IF (switch%neutral_perpendicular_diffusion) THEN
+      CALL apply_neutral_perpendicular_operator(unlimited_flux, &
+           &magnetic_direction(1:simpar%Ndim))
+    ENDIF
+
+    CALL compute_limited_Ti(U, Ti)
+    CALL evaluate_neutral_flux_limiter(neutral_limiter_config, Ti, &
+         &U(inn), Dnn, &
+         &unlimited_flux, result)
+  END SUBROUTINE evaluate_neutral_flux_limiter_state
+
+  SUBROUTINE compute_neutral_flux_limiter_phi(U, Q, magnetic_direction, phi)
+    REAL*8, INTENT(IN)  :: U(:), Q(:), magnetic_direction(:)
+    REAL*8, INTENT(OUT) :: phi
+    TYPE(neutral_flux_limiter_result_t) :: result
+    REAL*8 :: Dnn
+
+    CALL evaluate_neutral_flux_limiter_state(U, Q, magnetic_direction, &
+         &Dnn, result)
+    phi = result%phi
+  END SUBROUTINE compute_neutral_flux_limiter_phi
+#endif
 
 
   !*****************************************

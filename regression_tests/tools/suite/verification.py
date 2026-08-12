@@ -6,6 +6,14 @@ from pathlib import Path
 from typing import Any
 
 from bundle.cases import load_case_definition
+from comparison.shared.convergence import (
+    effective_newton_maximum,
+    read_newton_convergence,
+)
+from comparison.shared.tolerances import (
+    load_adaptive_tolerances,
+    load_fixed_tolerances,
+)
 from comparison.workflow import compare_completed_run
 from suite.pairs import compare_layout_pairs
 from support.documents import load_json, write_json_atomic
@@ -94,6 +102,7 @@ def _verify_result(
         "run_status": source.get("run_status"),
         "comparison_policy": None,
         "comparison_report": None,
+        "convergence_status": None,
         "status": "failed",
         "failures": [],
     }
@@ -113,11 +122,93 @@ def _verify_result(
         )
         result["comparison_policy"] = policy
         result["comparison_report"] = str(report_path)
+        result["convergence_status"] = (
+            "passed"
+            if _producer_converged(
+                source,
+                case["workflows"][workflow_id],
+                policy,
+                report,
+                tolerances_path,
+            )
+            else "failed"
+        )
         result["failures"] = report["failures"]
         result["status"] = report["status"]
     except (HarnessError, TypeError) as exc:
         result["failures"] = [str(exc)]
     return result
+
+
+def _producer_converged(
+    source: dict[str, Any],
+    workflow: dict[str, Any],
+    policy: str,
+    report: dict[str, Any],
+    tolerances_path: Path,
+) -> bool:
+    """Check convergence independently of old-reference field agreement."""
+    convergence = report.get("convergence")
+    if isinstance(convergence, dict):
+        return convergence.get("passed") is True
+    if policy != "reference_matrix" or not workflow.get("stages"):
+        return False
+
+    run_directory = Path(source["run_directory"])
+    metadata = load_json(
+        run_directory / "run_metadata.json",
+        "staged run metadata",
+    )
+    records = metadata.get("stages")
+    definitions = workflow["stages"]
+    if not isinstance(records, list) or len(records) != len(definitions):
+        return False
+    if any(
+        record.get("stage_id") != definition["stage_id"]
+        or record.get("status") != "completed"
+        for record, definition in zip(records, definitions)
+    ):
+        return False
+
+    maximum = _stage_newton_maximum(
+        workflow,
+        source["layout_id"],
+        tolerances_path,
+    )
+    for record, definition in zip(records, definitions):
+        effective_maximum = effective_newton_maximum(
+            maximum,
+            definition["newton_check"],
+        )
+        convergence = read_newton_convergence(
+            Path(record["run_directory"]) / "stdout.log",
+            effective_maximum,
+        )
+        if not convergence.passed:
+            return False
+    return True
+
+
+def _stage_newton_maximum(
+    workflow: dict[str, Any],
+    layout_id: str,
+    tolerances_path: Path,
+) -> float | None:
+    profile = workflow.get("stage_tolerance_profile")
+    if workflow.get("comparison_policy") == "fixed_hdf5":
+        _, tolerances = load_fixed_tolerances(
+            tolerances_path,
+            workflow,
+            layout_id,
+            profile,
+        )
+    else:
+        _, tolerances = load_adaptive_tolerances(
+            tolerances_path,
+            workflow,
+            profile,
+        )
+    return tolerances["newton_error_max"]
 
 
 def _validate_source_summary(summary: dict[str, Any]) -> None:

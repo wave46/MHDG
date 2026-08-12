@@ -18,6 +18,12 @@
     "optional": {
       "warm_restart": "restart.h5",
       "warm_reference": "reference_mpi4_omp4.h5",
+      "warm_neutral_sources_in_elements_restart": "restart_neutral_sources_in_elements.h5",
+      "warm_neutral_sources_in_elements_reference": "reference_neutral_sources_in_elements_mpi4_omp4.h5",
+      "warm_neutral_pressure_reference": "reference_neutral_pressure_mpi4_omp4.h5",
+      "warm_neutral_perpendicular_reference": "reference_neutral_perpendicular_mpi4_omp4.h5",
+      "warm_neutral_limiter_fixed_reference": "reference_neutral_limiter_fixed_mpi4_omp4.h5",
+      "warm_neutral_limiter_ti_reference": "reference_neutral_limiter_ti_mpi4_omp4.h5",
       "warm_impurity_off_restart": "restart_impurity_off.h5",
       "warm_impurity_off_reference": "reference_impurity_off_mpi4_omp4.h5",
       "warm_impurity_n_restart": "restart_impurity_n.h5",
@@ -68,17 +74,133 @@
       }
     },
     "warm_neutral_pressure": {
-      "extends": "warm",
-      "description": "Attempt a limited warm restart with neutral pressure fully enabled",
+      "extends": "warm_neutral_sources_in_elements",
+      "description": "Reconverge the source-relocated state with neutral pressure enabled",
+      "reference": "warm_neutral_pressure_reference",
+      "outputs": ["warm_neutral_pressure_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "neutral_feature_same_layout",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
       "parameter_overrides": {
-        "neutralp_lambda": 1.0
+        "neutralp_lambda": 0.05
       }
     },
-    "warm_neutral_wall_sources": {
+    "warm_neutral_sources_in_elements": {
       "extends": "warm",
       "description": "Reconverge the accepted restart with neutral puff and pump in elements",
+      "restart": "warm_neutral_sources_in_elements_restart",
+      "reference": "warm_neutral_sources_in_elements_reference",
+      "outputs": ["warm_neutral_sources_in_elements_reference"],
       "parameter_overrides": {
-        "neutral_wall_sources_in_elements": true
+        "neutral_wall_sources_in_elements": true,
+        "neutralp_lambda": 0.0,
+        "neutral_perpendicular_diffusion": false,
+        "neutral_flux_limiter_mode": "off",
+        "neutral_flux_limiter_save_2d": false
+      }
+    },
+    "warm_neutral_perpendicular": {
+      "extends": "warm_neutral_sources_in_elements",
+      "description": "Reconverge the source-relocated state with perpendicular neutral diffusion",
+      "reference": "warm_neutral_perpendicular_reference",
+      "outputs": ["warm_neutral_perpendicular_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "neutral_feature_same_layout",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
+      "parameter_overrides": {
+        "neutral_perpendicular_diffusion": true
+      }
+    },
+    "warm_neutral_limiter_fixed": {
+      "extends": "warm_neutral_sources_in_elements",
+      "description": "Reconverge the source-relocated state with fixed-temperature neutral limiting",
+      "reference": "warm_neutral_limiter_fixed_reference",
+      "outputs": ["warm_neutral_limiter_fixed_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "neutral_feature_same_layout",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
+      "parameter_overrides": {
+        "neutral_flux_limiter_mode": "lagged_flux_limiter",
+        "neutral_flux_limiter_tn_source": "fixed",
+        "neutral_flux_limiter_tn_eV": 2.5,
+        "neutral_flux_limiter_fs_fraction": 1.0
+      }
+    },
+    "warm_neutral_limiter_ti": {
+      "extends": "warm_neutral_limiter_fixed",
+      "description": "Reconverge the source-relocated state with ion-temperature neutral limiting",
+      "reference": "warm_neutral_limiter_ti_reference",
+      "outputs": ["warm_neutral_limiter_ti_reference"],
+      "parameter_overrides": {
+        "neutral_flux_limiter_tn_source": "ti",
+        "neutral_flux_limiter_tn_eV": 0.0
+      }
+    },
+    "race_neutral_sources_in_elements": {
+      "type": "warm_same_state",
+      "description": "Run two Newton iterations with source relocation only",
+      "inputs": [
+        "mesh",
+        "geometry",
+        "equilibrium_magnetic_field",
+        "equilibrium_current_density",
+        "warm_parameters",
+        "transport_configuration"
+      ],
+      "impurity_configuration": "impurity_configuration",
+      "layout": "serial_omp1",
+      "restart": "warm_neutral_sources_in_elements_restart",
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "neutral_feature_race_step",
+        "cross_layout_profile": "neutral_feature_race_step"
+      },
+      "parameter_overrides": {
+        "compute_from_flux": true,
+        "neutral_wall_sources_in_elements": true,
+        "neutralp_lambda": 0.0,
+        "neutral_perpendicular_diffusion": false,
+        "neutral_flux_limiter_mode": "off",
+        "neutral_flux_limiter_save_2d": false,
+        "nrp": 2
+      }
+    },
+    "race_neutral_pressure": {
+      "extends": "race_neutral_sources_in_elements",
+      "description": "Run two Newton iterations with neutral pressure",
+      "parameter_overrides": {
+        "neutralp_lambda": 0.05
+      }
+    },
+    "race_neutral_perpendicular": {
+      "extends": "race_neutral_sources_in_elements",
+      "description": "Run two Newton iterations with perpendicular neutral diffusion",
+      "parameter_overrides": {
+        "neutral_perpendicular_diffusion": true
+      }
+    },
+    "race_neutral_limiter_fixed": {
+      "extends": "race_neutral_sources_in_elements",
+      "description": "Run two Newton iterations with fixed-temperature neutral limiting",
+      "parameter_overrides": {
+        "neutral_flux_limiter_mode": "lagged_flux_limiter",
+        "neutral_flux_limiter_tn_source": "fixed",
+        "neutral_flux_limiter_tn_eV": 2.5,
+        "neutral_flux_limiter_fs_fraction": 1.0
+      }
+    },
+    "race_neutral_limiter_ti": {
+      "extends": "race_neutral_limiter_fixed",
+      "description": "Run two Newton iterations with ion-temperature neutral limiting",
+      "parameter_overrides": {
+        "neutral_flux_limiter_tn_source": "ti",
+        "neutral_flux_limiter_tn_eV": 0.0
       }
     },
     "warm_impurity_off": {
@@ -186,7 +308,7 @@
         "diffusion_reduction"
       ]
     },
-    "cold_adaptive_neutral_wall_sources": {
+    "cold_adaptive_neutral_sources_in_elements": {
       "extends": "cold_adaptive",
       "description": "Reach a source-relocated state from an adaptive cold start",
       "parameter_overrides": {
@@ -262,14 +384,14 @@
         "single_step"
       ]
     },
-    "cold_step_fixed_neutral_wall_sources": {
+    "cold_step_fixed_neutral_sources_in_elements": {
       "extends": "cold_step_fixed",
       "description": "Run a fixed one-step race check with neutral wall sources in elements",
       "parameter_overrides": {
         "neutral_wall_sources_in_elements": true
       }
     },
-    "cold_step_adaptive_neutral_wall_sources": {
+    "cold_step_adaptive_neutral_sources_in_elements": {
       "extends": "cold_step_adaptive",
       "description": "Run an adaptive one-step race check with neutral wall sources in elements",
       "parameter_overrides": {

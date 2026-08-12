@@ -1394,6 +1394,7 @@ CONTAINS
     real*8                        :: Pi,sigma,x0,A,r
     real*8                        :: th_n = 1.e-14
     real*8                        :: Vnng(Ndim)
+    real*8                        :: neutral_limiter_phi(Ng2d)
       REAL*8                        :: external_heating_ions_gauss(Ng2d), external_heating_electrons_gauss(Ng2d)
 
       inn = phys%idx_rhon_eq
@@ -1501,6 +1502,17 @@ CONTAINS
         diff_ani_vol,topology_region)
     ENDIF
 
+    neutral_limiter_phi = 1.d0
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+    IF (switch%neutral_flux_limiter) THEN
+      DO g = 1,Ng2d
+        CALL compute_neutral_flux_limiter_phi(ueg(g,:),qeg(g,:),b(g,:),&
+          &neutral_limiter_phi(g))
+        diff_iso_vol(inn,inn,g) = neutral_limiter_phi(g)*diff_iso_vol(inn,inn,g)
+        diff_ani_vol(inn,inn,g) = neutral_limiter_phi(g)*diff_ani_vol(inn,inn,g)
+      END DO
+    ENDIF
+#endif
 
     if (save_tau) then
        diff_nn_Vol_el = diff_iso_vol(inn,inn,:)
@@ -1742,12 +1754,12 @@ CONTAINS
 #endif
 #ifndef KEQUATION
       CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),rho_pol_norm(g),divbg,driftg,force(g,:),&
-        &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
+        &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),neutral_limiter_phi(g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
         &ueg(g,:),qeg(g,:),u0eg(g,:,:),Jtor(g),topology_region=topology_region(g),&
         &outward_normal=topology_normal(g,:))
 #else
       CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),rho_pol_norm(g),divbg,driftg,b_tor(g),gradbtor,omega(g),q_cyl(g),force(g,:),&
-        &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
+        &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),neutral_limiter_phi(g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
         &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g),topology_region=topology_region(g),&
         &outward_normal=topology_normal(g,:))
 #endif
@@ -1985,6 +1997,8 @@ CONTAINS
     real*8                    :: topology_normal(Ng1d,2)
     integer                   :: topology_region(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
+    real*8                    :: diff_iso_tau(Neq,Neq,Ng1d)
+    real*8                    :: neutral_limiter_phi(Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: q_cyl(Ng1d)
     real*8                    :: omega(Ng1d)
@@ -2063,6 +2077,20 @@ CONTAINS
       CALL transport_model_1d%apply_1D_diffusion(rho_pol_norm,diff_iso_fac,&
         diff_ani_fac,topology_region)
     ENDIF
+
+    diff_iso_tau = diff_iso_fac
+    neutral_limiter_phi = 1.d0
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+    IF (switch%neutral_flux_limiter) THEN
+      DO g = 1,Ng1d
+        CALL compute_neutral_flux_limiter_phi(uefg(g,:),qfg(g,:),b(g,:),&
+          &neutral_limiter_phi(g))
+        diff_iso_fac(inn,inn,g) = neutral_limiter_phi(g)*diff_iso_fac(inn,inn,g)
+        diff_ani_fac(inn,inn,g) = neutral_limiter_phi(g)*diff_ani_fac(inn,inn,g)
+      END DO
+    ENDIF
+#endif
+
     if (save_tau) then
        indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(inn,inn,:)
@@ -2072,6 +2100,7 @@ CONTAINS
          auxdiffsc = MATMUL(refElPol%N1D,Mesh%scdiff_nodes(iel,refElPol%face_nodes(ifa,:)))
          DO i=1,Neq
         diff_iso_fac(i,i,:) = diff_iso_fac(i,i,:)+auxdiffsc
+        diff_iso_tau(i,i,:) = diff_iso_tau(i,i,:)+auxdiffsc
          END DO
       ENDIF
 
@@ -2109,7 +2138,7 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_fac(:,:,g))
+            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_tau(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),0.,iel,tau)
         ENDIF
@@ -2118,11 +2147,11 @@ CONTAINS
 ! Assembly local contributions
 #ifdef DKLINEARIZED
       CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
-      n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+      n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
       topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
       CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
         topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
 
@@ -2173,6 +2202,8 @@ CONTAINS
     real*8                    :: topology_normal(Ng1d,2)
     integer                   :: topology_region(Ng1d)
     real*8                    :: diff_iso_fac(Neq,Neq,Ng1d),diff_ani_fac(Neq,Neq,Ng1d)
+    real*8                    :: diff_iso_tau(Neq,Neq,Ng1d)
+    real*8                    :: neutral_limiter_phi(Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: Vnng(Ndim)
     real*8                    :: q_cyl(Ng1d)
@@ -2255,6 +2286,19 @@ CONTAINS
         diff_ani_fac,topology_region)
     ENDIF
 
+    diff_iso_tau = diff_iso_fac
+    neutral_limiter_phi = 1.d0
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+    IF (switch%neutral_flux_limiter) THEN
+      DO g = 1,Ng1d
+        CALL compute_neutral_flux_limiter_phi(uefg(g,:),qfg(g,:),b(g,:),&
+          &neutral_limiter_phi(g))
+        diff_iso_fac(inn,inn,g) = neutral_limiter_phi(g)*diff_iso_fac(inn,inn,g)
+        diff_ani_fac(inn,inn,g) = neutral_limiter_phi(g)*diff_ani_fac(inn,inn,g)
+      END DO
+    ENDIF
+#endif
+
     if (save_tau) then
        indsave = (ifa -1)*Ngauss + (/(i,i=1,Ngauss)/)
        diff_nn_Fac_el(indsave) = diff_iso_fac(inn,inn,:)
@@ -2264,6 +2308,7 @@ CONTAINS
          auxdiffsc = MATMUL(refElPol%N1D,Mesh%scdiff_nodes(iel,refElPol%face_nodes(ifa,:)))
          DO i=1,Neq
         diff_iso_fac(i,i,:) = diff_iso_fac(i,i,:)+auxdiffsc
+        diff_iso_tau(i,i,:) = diff_iso_tau(i,i,:)+auxdiffsc
          END DO
       ENDIF
 
@@ -2303,7 +2348,7 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_fac(:,:,g))
+            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_tau(:,:,g))
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),isext,iel,tau)
         ENDIF
@@ -2327,22 +2372,22 @@ CONTAINS
         ! Ghost face: assembly it as interior
 #ifndef DKLINEARIZED
         CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
           topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
           topology_region=topology_region(g),outward_normal=topology_normal(g,:))
       ENDIF
 #else
 
         CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
         topology_region=topology_region(g),outward_normal=topology_normal(g,:))
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
           topology_region=topology_region(g),outward_normal=topology_normal(g,:))
       ENDIF
 #endif
@@ -2350,11 +2395,11 @@ CONTAINS
 #else
 #ifndef DKLINEARIZED
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
         topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
         topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
 
@@ -2466,11 +2511,11 @@ CONTAINS
   !********************************************************************
 #ifndef KEQUATION
   SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,rho,divb,drift,f,&
-      &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,Jtor,&
+      &ktis,diffiso,diffani,neutral_limiter_phi,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,Jtor,&
       &topology_region,outward_normal)
 #else
   SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,rho,divb,drift,btor,gradBtor,omega,q_cyl,f,&
-    &ktis,diffiso,diffani,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor,&
+    &ktis,diffiso,diffani,neutral_limiter_phi,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor,&
     &topology_region,outward_normal)
 #endif
         REAL*8,INTENT(inout)      :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
@@ -2484,7 +2529,7 @@ CONTAINS
     real*8                    :: gradddk(Ndim)
 #endif
 #endif
-    real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
+    real*8,intent(IN)         :: diffiso(:,:),diffani(:,:),neutral_limiter_phi
     real*8,intent(IN)         :: Ni(:),NNi(:,:),Nxyzg(:,:),NNxy(:,:),NxyzNi(:,:,:),NNbb(:)
     real*8,intent(IN)         :: upe(:),ue(:),Jtor
     real*8,intent(INOUT)      :: u0e(:,:)
@@ -2678,6 +2723,10 @@ CONTAINS
     CALL compute_dW5p_dU(ue,dW5p_dU)
     QdW5p = MATMUL(Qpr,dW5p_dU)
     dW5p_dU_u = MATMUL(dW5p_dU,ue)
+    W5p = neutral_limiter_phi*W5p
+    dW5p_dU = neutral_limiter_phi*dW5p_dU
+    QdW5p = neutral_limiter_phi*QdW5p
+    dW5p_dU_u = neutral_limiter_phi*dW5p_dU_u
 #endif
 
     ! Temperature exchange terms
@@ -2787,6 +2836,8 @@ CONTAINS
 
         CALL compute_Dnn_dU(ue,Dnn_dU)
         Dnn_dU_u = dot_PRODUCT(Dnn_dU,Ue)
+        Dnn_dU = neutral_limiter_phi*Dnn_dU
+        Dnn_dU_u = neutral_limiter_phi*Dnn_dU_u
 
 #endif
 
@@ -3215,18 +3266,18 @@ ENDIF
 
 #ifdef DKLINEARIZED
   SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
-    &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau,&
+    &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uf,qf,tau,&
     &topology_region,outward_normal)
 #else
     SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
-        &ind_fg,b3,rho,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau,&
+        &ind_fg,b3,rho,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uf,qf,tau,&
         &topology_region,outward_normal)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       real*8,intent(IN)         :: b3(:),n(:), rho
       integer,intent(IN)         :: topology_region
       real*8,intent(IN)          :: outward_normal(:)
-      real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
+      real*8,intent(IN)         :: diffiso(:,:),diffani(:,:),neutral_limiter_phi
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
       real*8,intent(IN)         :: uf(:)
       real*8,intent(IN)         :: qf(:)
@@ -3328,6 +3379,9 @@ ENDIF
       CALL compute_W5p(uf,W5p)
       CALL compute_dW5p_dU(uf,dW5p_dU)
       QdW5p = MATMUL(Qpr,dW5p_dU)
+      W5p = neutral_limiter_phi*W5p
+      dW5p_dU = neutral_limiter_phi*dW5p_dU
+      QdW5p = neutral_limiter_phi*QdW5p
 #endif
 
       ! Compute Alpha(U^(k-1))
@@ -3378,6 +3432,8 @@ ENDIF
 
            CALL compute_Dnn_dU(uf,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,uf)
+      Dnn_dU = neutral_limiter_phi*Dnn_dU
+      Dnn_dU_u = neutral_limiter_phi*Dnn_dU_u
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       call compute_ddk_dU(uf,xyf,q_cyl,ddk_dU)
@@ -3687,11 +3743,11 @@ ENDIF
 
 #ifdef DKLINEARIZED
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-      &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau,&
+      &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uf,qf,tau,&
       &topology_region,outward_normal)
 #else
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-        &ind_fg,b3,rho,n,diffiso,diffani,NNif,Nif,Nfbn,uf,qf,tau,&
+        &ind_fg,b3,rho,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uf,qf,tau,&
         &topology_region,outward_normal)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
@@ -3699,7 +3755,7 @@ ENDIF
       real*8,intent(IN)         :: b3(:),n(:), rho
       integer,intent(IN)         :: topology_region
       real*8,intent(IN)          :: outward_normal(:)
-      real*8,intent(IN)         :: diffiso(:,:),diffani(:,:)
+      real*8,intent(IN)         :: diffiso(:,:),diffani(:,:),neutral_limiter_phi
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
       real*8,intent(IN)         :: uf(:)
       real*8,intent(IN)         :: qf(:)
@@ -3801,6 +3857,9 @@ ENDIF
       CALL compute_W5p(uf,W5p)
       CALL compute_dW5p_dU(uf,dW5p_dU)
       QdW5p = MATMUL(Qpr,dW5p_dU)
+      W5p = neutral_limiter_phi*W5p
+      dW5p_dU = neutral_limiter_phi*dW5p_dU
+      QdW5p = neutral_limiter_phi*QdW5p
 #endif
 
       ! Compute Alpha(U^(k-1))
@@ -3849,6 +3908,8 @@ ENDIF
       
            CALL compute_Dnn_dU(uf,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,uf)
+      Dnn_dU = neutral_limiter_phi*Dnn_dU
+      Dnn_dU_u = neutral_limiter_phi*Dnn_dU_u
 
 #ifdef KEQUATION
 #ifdef DKLINEARIZED

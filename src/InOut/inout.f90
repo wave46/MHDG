@@ -22,6 +22,10 @@ MODULE in_out
   USE magnetic_topology, ONLY: topology_limited, topology_lower_single_null, &
        lcfs_source_wall, lcfs_source_xpoint, magnetic_region_core, &
        magnetic_region_main_sol, magnetic_region_private_flux
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+  USE physics, ONLY: evaluate_neutral_flux_limiter_state
+  USE neutral_flux_limiter, ONLY: neutral_flux_limiter_result_t
+#endif
 
   IMPLICIT NONE
 
@@ -558,6 +562,13 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id1, sol%q, SIZE(sol%q), 'q')
     CALL HDF5_group_close(group_id1, ierr)
 
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+    IF (switch%neutral_flux_limiter_save_2d) THEN
+       CALL save_neutral_flux_limiter_diagnostics(file_id, sol%u, sol%q, &
+            &Mesh%T, phys%B)
+    ENDIF
+#endif
+
     IF (switch%transport_1d) THEN
        CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
        CALL fs_transport%write_hdf5(group_id1)
@@ -724,6 +735,13 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
        CALL HDF5_group_close(group_id1)
 
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+       IF (switch%neutral_flux_limiter_save_2d) THEN
+          CALL save_neutral_flux_limiter_diagnostics(file_id, u_glob, &
+               &q_glob, T_glob, B_glob)
+       ENDIF
+#endif
+
        IF (switch%transport_1d) THEN
           CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
           CALL fs_transport%write_hdf5(group_id1)
@@ -859,6 +877,69 @@ CONTAINS
     PRINT *, '        '
   ENDIF
   CONTAINS
+
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+    SUBROUTINE save_neutral_flux_limiter_diagnostics(root_id, u_values, &
+         &q_values, connectivity, magnetic_field)
+      INTEGER(HID_T), INTENT(IN) :: root_id
+      REAL*8, INTENT(IN) :: u_values(:), q_values(:)
+      INTEGER, INTENT(IN) :: connectivity(:, :)
+      REAL*8, INTENT(IN) :: magnetic_field(:, :)
+      TYPE(neutral_flux_limiter_result_t) :: limiter_result
+      INTEGER(HID_T) :: diagnostics_id, limiter_id, fields_id
+      INTEGER :: iel, inode, field_index, u_index, q_index, node, ierr_local
+      INTEGER :: nelems, nodes_per_element
+      REAL*8 :: dnn, magnetic_norm
+      REAL*8 :: u_local(simpar%Neq), q_local(simpar%Ndim*simpar%Neq)
+      REAL*8 :: magnetic_direction(simpar%Ndim)
+      REAL*8, ALLOCATABLE :: dnn_field(:), phi_field(:)
+      REAL*8, ALLOCATABLE :: unlimited_norm_field(:), cap_field(:)
+
+      nelems = SIZE(connectivity, 1)
+      nodes_per_element = SIZE(connectivity, 2)
+      ALLOCATE(dnn_field(nelems*nodes_per_element))
+      ALLOCATE(phi_field(nelems*nodes_per_element))
+      ALLOCATE(unlimited_norm_field(nelems*nodes_per_element))
+      ALLOCATE(cap_field(nelems*nodes_per_element))
+
+      DO iel = 1, nelems
+         DO inode = 1, nodes_per_element
+            field_index = inode + (iel - 1)*nodes_per_element
+            u_index = 1 + (field_index - 1)*simpar%Neq
+            q_index = 1 + (field_index - 1)*simpar%Ndim*simpar%Neq
+            node = connectivity(iel, inode)
+            u_local = u_values(u_index:u_index + simpar%Neq - 1)
+            q_local = q_values(q_index:q_index + simpar%Ndim*simpar%Neq - 1)
+            magnetic_norm = SQRT(SUM(magnetic_field(node, :)**2))
+            magnetic_direction = magnetic_field(node, 1:simpar%Ndim)/magnetic_norm
+
+            CALL evaluate_neutral_flux_limiter_state(u_local, q_local, &
+                 &magnetic_direction, dnn, limiter_result)
+            dnn_field(field_index) = dnn
+            phi_field(field_index) = limiter_result%phi
+            unlimited_norm_field(field_index) = &
+                 &limiter_result%unlimited_flux_norm
+            cap_field(field_index) = limiter_result%flux_cap
+         ENDDO
+      ENDDO
+
+      CALL HDF5_group_create('diagnostics', root_id, diagnostics_id, ierr_local)
+      CALL HDF5_group_create('neutral_flux_limiter', diagnostics_id, &
+           &limiter_id, ierr_local)
+      CALL HDF5_group_create('fields', limiter_id, fields_id, ierr_local)
+      CALL HDF5_array1D_saving(fields_id, dnn_field, SIZE(dnn_field), 'dnn')
+      CALL HDF5_array1D_saving(fields_id, phi_field, SIZE(phi_field), 'phi')
+      CALL HDF5_array1D_saving(fields_id, unlimited_norm_field, &
+           &SIZE(unlimited_norm_field), 'gamma_unlimited_norm')
+      CALL HDF5_array1D_saving(fields_id, cap_field, SIZE(cap_field), &
+           &'gamma_cap')
+      CALL HDF5_group_close(fields_id, ierr_local)
+      CALL HDF5_group_close(limiter_id, ierr_local)
+      CALL HDF5_group_close(diagnostics_id, ierr_local)
+
+      DEALLOCATE(dnn_field, phi_field, unlimited_norm_field, cap_field)
+    END SUBROUTINE save_neutral_flux_limiter_diagnostics
+#endif
 
     SUBROUTINE save_magnetic_geometry(magnetic_group_id, rho, normal, region)
       INTEGER(HID_T), INTENT(IN) :: magnetic_group_id
@@ -1083,6 +1164,12 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
       CALL HDF5_real_saving(group_id2, phys%diff_nn_min, 'diff_nn_min')
       CALL HDF5_real_saving(group_id2, phys%neutralp_ti_supp, 'neutralp_ti_supp')
+      CALL HDF5_string_saving(group_id2, phys%neutral_flux_limiter_mode, 'neutral_flux_limiter_mode')
+      CALL HDF5_string_saving(group_id2, phys%neutral_flux_limiter_tn_source, 'neutral_flux_limiter_tn_source')
+      CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_tn, 'neutral_flux_limiter_tn')
+      CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_eps, 'neutral_flux_limiter_eps')
+      CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_fs_fraction, 'neutral_flux_limiter_fs_fraction')
+      CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_fs_flux_min, 'neutral_flux_limiter_fs_flux_min')
       CALL HDF5_real_saving(group_id2, phys%Re, 'recycling')
       CALL HDF5_integer_saving(group_id2, phys%n_impurities, 'n_impurities')
       IF (phys%n_impurities > 0) THEN
@@ -1193,6 +1280,7 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%import_diffusion_1D, 'import_diffusion_1D')
       CALL HDF5_logical_saving(group_id2, switch%neutral_perpendicular_diffusion, 'neutral_perpendicular_diffusion')
       CALL HDF5_logical_saving(group_id2, switch%neutral_wall_sources_in_elements, 'neutral_wall_sources_in_elements')
+      CALL HDF5_logical_saving(group_id2, switch%neutral_flux_limiter_save_2d, 'neutral_flux_limiter_save_2d')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create numerics parameters group

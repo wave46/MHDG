@@ -13,6 +13,7 @@ from unittest.mock import patch
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
+from bundle.cases import load_case_definition  # noqa: E402
 from suite.configuration import load_suite_definition  # noqa: E402
 from suite.pairs import compare_generated_meshes  # noqa: E402
 from suite.runner import _comparison_mode, run_suite  # noqa: E402
@@ -233,29 +234,100 @@ class SuiteWorkflowTests(unittest.TestCase):
 
     def test_pr05_wall_source_suites_are_focused(self) -> None:
         warm = load_suite_definition(
-            "neutral_wall_sources_warm",
+            "neutral_sources_in_elements_warm",
             REGRESSION_ROOT / "suites.json",
             REGRESSION_ROOT / "layouts.json",
             REGRESSION_ROOT / "cases",
         )
         race = load_suite_definition(
-            "neutral_wall_sources_race_matrix",
+            "neutral_sources_in_elements_race_matrix",
             REGRESSION_ROOT / "suites.json",
             REGRESSION_ROOT / "layouts.json",
             REGRESSION_ROOT / "cases",
         )
         cold_adaptive = load_suite_definition(
-            "neutral_wall_sources_cold_adaptive",
+            "neutral_sources_in_elements_cold_adaptive",
             REGRESSION_ROOT / "suites.json",
             REGRESSION_ROOT / "layouts.json",
             REGRESSION_ROOT / "cases",
         )
 
-        self.assertFalse(warm["reference_comparisons"])
+        self.assertTrue(warm["reference_comparisons"])
         self.assertEqual(len(race["layouts"]), 4)
         self.assertEqual(len(race["layout_comparisons"]), 6)
         self.assertEqual(cold_adaptive["layouts"], ["mpi4_omp4"])
         self.assertFalse(cold_adaptive["reference_comparisons"])
+
+    def test_pr06_neutral_feature_suites_are_focused(self) -> None:
+        warm = load_suite_definition(
+            "neutral_features_warm",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+        producers = load_suite_definition(
+            "neutral_feature_references",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+        race = load_suite_definition(
+            "neutral_feature_race_matrix",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+
+        self.assertEqual(
+            warm["workflow_ids"],
+            [
+                "warm_neutral_sources_in_elements",
+                "warm_neutral_pressure",
+                "warm_neutral_perpendicular",
+                "warm_neutral_limiter_fixed",
+                "warm_neutral_limiter_ti",
+            ],
+        )
+        self.assertEqual(warm["layouts"], ["mpi4_omp4"])
+        self.assertTrue(warm["reference_comparisons"])
+        self.assertEqual(
+            producers["workflow_ids"],
+            [
+                "warm_neutral_pressure",
+                "warm_neutral_perpendicular",
+                "warm_neutral_limiter_fixed",
+                "warm_neutral_limiter_ti",
+            ],
+        )
+        self.assertEqual(producers["layouts"], ["mpi4_omp4"])
+        self.assertTrue(producers["reference_comparisons"])
+        self.assertEqual(
+            race["workflow_ids"],
+            [
+                "race_neutral_sources_in_elements",
+                "race_neutral_pressure",
+                "race_neutral_perpendicular",
+                "race_neutral_limiter_fixed",
+                "race_neutral_limiter_ti",
+            ],
+        )
+        self.assertEqual(len(race["layouts"]), 4)
+        self.assertEqual(len(race["layout_comparisons"]), 6)
+        self.assertEqual(race["tolerance_profile"], "neutral_feature_race_step")
+        self.assertFalse(race["reference_comparisons"])
+
+        case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
+        self.assertEqual(
+            case["workflows"]["warm_neutral_sources_in_elements"][
+                "tolerance_profile"
+            ],
+            "fixed_same_layout",
+        )
+        for workflow in producers["workflow_ids"]:
+            self.assertEqual(
+                case["workflows"][workflow]["tolerance_profile"],
+                "neutral_feature_same_layout",
+            )
 
     def test_generated_adaptive_mesh_comparison_is_byte_exact(self) -> None:
         reference = self.root / "reference/stages/01_single_step/res/temp.msh"
@@ -313,6 +385,10 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertEqual(
             [result["comparison_policy"] for result in report["results"]],
             ["fixed_hdf5", "mesh_independent", None],
+        )
+        self.assertEqual(
+            [result["convergence_status"] for result in report["results"]],
+            ["passed", "passed", None],
         )
         self.assertEqual(report["status"], "failed")
         self.assertEqual(
@@ -393,6 +469,78 @@ class SuiteWorkflowTests(unittest.TestCase):
         compare_pairs.assert_not_called()
         self.assertNotIn("comparisons", references_only)
 
+    @patch("suite.verification.compare_completed_run")
+    def test_offline_verification_checks_every_staged_producer_log(
+        self,
+        compare,
+    ) -> None:
+        workflow = load_case_definition(
+            "legacy_case",
+            REGRESSION_ROOT / "cases",
+        )["workflows"]["cold_fixed"]
+        run_directory = self.root / "cold_fixed/serial_omp1"
+        records = []
+        for index, stage in enumerate(workflow["stages"], start=1):
+            stage_directory = run_directory / f"stage-{index}"
+            stage_directory.mkdir(parents=True)
+            (stage_directory / "stdout.log").write_text(
+                "Error: 1.0E-5\n",
+                encoding="utf-8",
+            )
+            records.append(
+                {
+                    "stage_id": stage["stage_id"],
+                    "status": "completed",
+                    "run_directory": str(stage_directory),
+                }
+            )
+        (run_directory / "run_metadata.json").write_text(
+            json.dumps({"stages": records}),
+            encoding="utf-8",
+        )
+        compare.return_value = (
+            "reference_matrix",
+            self.root / "matrix.json",
+            {"status": "failed", "failures": ["old fields differ"]},
+        )
+        source = self.root / "staged_suite_summary.json"
+        source.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "suite_id": "cold",
+                    "run_id": "staged-convergence",
+                    "case_id": "legacy_case",
+                    "results": [
+                        _suite_result(self.root, "cold_fixed"),
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        _, passing = verify_suite(
+            source,
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "tolerances.json",
+        )
+        self.assertEqual(
+            passing["results"][0]["convergence_status"],
+            "passed",
+        )
+
+        last_log = Path(records[-1]["run_directory"]) / "stdout.log"
+        last_log.write_text("Error: 1.0E-3\n", encoding="utf-8")
+        _, failing = verify_suite(
+            source,
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "tolerances.json",
+        )
+        self.assertEqual(
+            failing["results"][0]["convergence_status"],
+            "failed",
+        )
+
     def _run_suite(self, suite: str, run_id: str, *arguments: str):
         return run_command(
             "suite",
@@ -425,7 +573,11 @@ def _suite_result(
 
 
 def _passing_report() -> dict:
-    return {"status": "passed", "failures": []}
+    return {
+        "status": "passed",
+        "failures": [],
+        "convergence": {"passed": True},
+    }
 
 
 SOLVER = """#!/usr/bin/env bash
