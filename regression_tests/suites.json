@@ -8,7 +8,7 @@
       "layouts": ["mpi4_omp4"]
     },
     "neutral_pressure_warm": {
-      "description": "Execution-only limited warm attempt with neutral pressure enabled",
+      "description": "Execution-only warm continuation with neutral pressure enabled",
       "case": "legacy_case",
       "workflows": ["warm_neutral_pressure"],
       "layouts": ["mpi4_omp4"],
