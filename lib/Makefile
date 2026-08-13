@@ -100,7 +100,7 @@ MPI_OMP.o : MPI_OMP.F globals.o
 balance_diagnostics.F : $(SDIR)/Utils/Diagnostics/balance_diagnostics.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-balance_diagnostics.o : balance_diagnostics.F MPI_OMP.o
+balance_diagnostics.o : balance_diagnostics.F MPI_OMP.o HDF5_io.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 magnetic_field.F : $(SDIR)/Models/magnetic_field.f90
@@ -183,7 +183,7 @@ LinearAlgebra.o : LinearAlgebra.F
 inout.F : $(SDIR)/InOut/inout.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-inout.o : inout.F $(BUILD_PROVENANCE_OBJECT) HDF5_io.o flux_surface_transport_data.o transport_models_1d.o globals.o PrintUtils.o LinearAlgebra.o gmsh_io.o MPI_OMP.o Communications.o magnetic_geometry_state.o magnetic_topology.o physics.o neutral_flux_limiter.o
+inout.o : inout.F $(BUILD_PROVENANCE_OBJECT) HDF5_io.o flux_surface_transport_data.o transport_models_1d.o globals.o PrintUtils.o LinearAlgebra.o gmsh_io.o MPI_OMP.o Communications.o magnetic_geometry_state.o magnetic_topology.o physics.o neutral_flux_limiter.o balance_diagnostics.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 Debug.F : $(SDIR)/Utils/Debug.f90

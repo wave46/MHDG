@@ -7,6 +7,9 @@
 ! boundary-condition evaluation of those terms.
 !**********************************************************************
 MODULE balance_diagnostics
+  USE HDF5, ONLY: HID_T
+  USE HDF5_io_module, ONLY: HDF5_group_create, HDF5_group_close, &
+       &HDF5_real_saving, HDF5_string_saving
   USE MPI_OMP
   IMPLICIT NONE
 
@@ -192,6 +195,7 @@ MODULE balance_diagnostics
      PROCEDURE, PUBLIC :: finalize => balance_diagnostics_finalize
      PROCEDURE, PUBLIC :: has_values => balance_diagnostics_has_values
      PROCEDURE, PUBLIC :: report => balance_diagnostics_report
+     PROCEDURE, PUBLIC :: write_hdf5 => balance_diagnostics_write_hdf5
   END TYPE balance_diagnostics_type
 
   TYPE(balance_diagnostics_type), PUBLIC, SAVE :: balance_diag
@@ -326,6 +330,236 @@ CONTAINS
        CALL print_detailed(this)
     END SELECT
   END SUBROUTINE balance_diagnostics_report
+
+  SUBROUTINE balance_diagnostics_write_hdf5(this, diagnostics_group_id)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: diagnostics_group_id
+    INTEGER(HID_T) :: particles_group_id, wall_group_id
+    INTEGER :: ierr
+
+    IF (.NOT. this%has_values()) RETURN
+    IF (MPIvar%glob_id /= 0) RETURN
+
+    CALL HDF5_group_create('particles',diagnostics_group_id, &
+         particles_group_id,ierr)
+    CALL write_particle_summary_hdf5(this,particles_group_id)
+    IF (this%detailed()) &
+         CALL write_particle_detail_hdf5(this,particles_group_id)
+    CALL HDF5_group_close(particles_group_id,ierr)
+
+    CALL HDF5_group_create('wall_closure',diagnostics_group_id,wall_group_id, &
+         ierr)
+    CALL write_wall_hdf5(this,wall_group_id)
+    CALL HDF5_group_close(wall_group_id,ierr)
+  END SUBROUTINE balance_diagnostics_write_hdf5
+
+  SUBROUTINE write_particle_summary_hdf5(this, particles_group_id)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: particles_group_id
+    REAL*8 :: content(3), temporal(3), volume(3), boundary(3)
+    REAL*8 :: physical_imbalance(3), tau(3), discrete_residual(3)
+
+    CALL particle_aggregates(this,content,temporal,volume,boundary, &
+         physical_imbalance,tau,discrete_residual)
+    CALL write_species_group(particles_group_id,'content',content,'particles')
+    CALL write_species_group(particles_group_id,'conservation', &
+         discrete_residual,'particles/s')
+    CALL write_species_group(particles_group_id,'physical_imbalance', &
+         physical_imbalance,'particles/s')
+    CALL write_species_group(particles_group_id,'hdg_tau_inward',tau, &
+         'particles/s')
+  END SUBROUTINE write_particle_summary_hdf5
+
+  SUBROUTINE write_particle_detail_hdf5(this, particles_group_id)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: particles_group_id
+    INTEGER(HID_T) :: components_group_id, exchange_group_id
+    REAL*8 :: content(3), temporal(3), volume(3), boundary(3)
+    REAL*8 :: physical_imbalance(3), tau(3), discrete_residual(3)
+    INTEGER :: ierr
+
+    CALL particle_aggregates(this,content,temporal,volume,boundary, &
+         physical_imbalance,tau,discrete_residual)
+    CALL write_species_group(particles_group_id,'temporal',temporal, &
+         'particles/s')
+    CALL write_species_group(particles_group_id,'volume',volume, &
+         'particles/s')
+    CALL write_species_group(particles_group_id,'boundary_physical_inward', &
+         boundary,'particles/s')
+
+    CALL HDF5_group_create('components',particles_group_id, &
+         components_group_id,ierr)
+    CALL write_particle_components_hdf5(this,components_group_id)
+    CALL HDF5_group_close(components_group_id,ierr)
+
+    CALL HDF5_group_create('exchange',particles_group_id,exchange_group_id, &
+         ierr)
+    CALL HDF5_string_saving(exchange_group_id,'particles/s','units')
+    CALL HDF5_real_saving(exchange_group_id, &
+         this%finalized_values(particle_charge_exchange),'charge_exchange')
+    CALL HDF5_group_close(exchange_group_id,ierr)
+  END SUBROUTINE write_particle_detail_hdf5
+
+  SUBROUTINE write_species_group(parent_group_id, name, values, units)
+    INTEGER(HID_T), INTENT(IN) :: parent_group_id
+    CHARACTER(LEN=*), INTENT(IN) :: name, units
+    REAL*8, INTENT(IN) :: values(3)
+    INTEGER(HID_T) :: group_id
+    INTEGER :: ierr
+
+    CALL HDF5_group_create(name,parent_group_id,group_id,ierr)
+    CALL HDF5_string_saving(group_id,units,'units')
+    CALL HDF5_real_saving(group_id,values(1),'plasma')
+    CALL HDF5_real_saving(group_id,values(2),'neutral')
+    CALL HDF5_real_saving(group_id,values(3),'total')
+    CALL HDF5_group_close(group_id,ierr)
+  END SUBROUTINE write_species_group
+
+  SUBROUTINE write_particle_components_hdf5(this, components_group_id)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: components_group_id
+    INTEGER(HID_T) :: plasma_group_id, neutral_group_id
+    INTEGER(HID_T) :: volume_group_id, boundary_group_id
+    INTEGER :: ierr
+
+    CALL HDF5_group_create('plasma',components_group_id,plasma_group_id,ierr)
+    CALL HDF5_group_create('volume',plasma_group_id,volume_group_id,ierr)
+    CALL HDF5_string_saving(volume_group_id,'particles/s','units')
+    CALL HDF5_real_saving(volume_group_id, &
+         this%finalized_values(particle_plasma_ionization),'ionization')
+    CALL HDF5_real_saving(volume_group_id, &
+         this%finalized_values(particle_plasma_recombination),'recombination')
+    CALL HDF5_real_saving(volume_group_id, &
+         this%finalized_values(particle_plasma_other_source),'other_source')
+    CALL HDF5_group_close(volume_group_id,ierr)
+    CALL HDF5_group_create('boundary_inward',plasma_group_id, &
+         boundary_group_id,ierr)
+    CALL HDF5_string_saving(boundary_group_id,'particles/s','units')
+    CALL HDF5_real_saving(boundary_group_id, &
+         this%finalized_values(particle_plasma_parallel_flux),'parallel')
+    CALL HDF5_real_saving(boundary_group_id, &
+         this%finalized_values(particle_plasma_diffusion_flux),'diffusion')
+    CALL HDF5_real_saving(boundary_group_id, &
+         this%finalized_values(particle_plasma_pinch_flux),'pinch')
+    CALL HDF5_group_close(boundary_group_id,ierr)
+    CALL HDF5_group_close(plasma_group_id,ierr)
+
+    CALL HDF5_group_create('neutral',components_group_id,neutral_group_id,ierr)
+    CALL HDF5_group_create('volume',neutral_group_id,volume_group_id,ierr)
+    CALL HDF5_string_saving(volume_group_id,'particles/s','units')
+    CALL HDF5_real_saving(volume_group_id, &
+         this%finalized_values(particle_neutral_ionization),'ionization')
+    CALL HDF5_real_saving(volume_group_id, &
+         this%finalized_values(particle_neutral_recombination),'recombination')
+    CALL HDF5_real_saving(volume_group_id, &
+         this%finalized_values(particle_neutral_other_source),'other_source')
+    CALL HDF5_real_saving(volume_group_id, &
+         this%finalized_values(particle_neutral_puff_source),'puff_source')
+    CALL HDF5_real_saving(volume_group_id, &
+         this%finalized_values(particle_neutral_pump_source),'pump_source')
+    CALL HDF5_group_close(volume_group_id,ierr)
+    CALL HDF5_group_create('boundary_inward',neutral_group_id, &
+         boundary_group_id,ierr)
+    CALL HDF5_string_saving(boundary_group_id,'particles/s','units')
+    CALL HDF5_real_saving(boundary_group_id, &
+         this%finalized_values(particle_neutral_diffusion_flux), &
+         'limited_diffusion')
+#ifdef NEUTRALP
+    CALL HDF5_real_saving(boundary_group_id, &
+         this%finalized_values(particle_neutral_pressure_flux), &
+         'limited_pressure')
+#endif
+#ifdef NEUTRALGAMMA
+    CALL HDF5_real_saving(boundary_group_id, &
+         this%finalized_values(particle_neutral_convection_flux), &
+         'neutral_gamma_convection')
+#elif defined(NEUTRALCONVECTION)
+    CALL HDF5_real_saving(boundary_group_id, &
+         this%finalized_values(particle_neutral_convection_flux), &
+         'neutral_convection')
+#endif
+    CALL HDF5_group_close(boundary_group_id,ierr)
+    CALL HDF5_group_close(neutral_group_id,ierr)
+  END SUBROUTINE write_particle_components_hdf5
+
+  SUBROUTINE write_wall_hdf5(this, wall_group_id)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: wall_group_id
+    TYPE(particle_wall_balance_type) :: wall
+    INTEGER(HID_T) :: plasma_group_id, neutral_group_id
+    INTEGER :: ierr
+
+    wall = compute_wall_balance(this)
+    CALL HDF5_group_create('plasma_particles',wall_group_id, &
+         plasma_group_id,ierr)
+    CALL HDF5_string_saving(plasma_group_id,'particles/s','units')
+    CALL HDF5_real_saving(plasma_group_id,wall%plasma_diffusion, &
+         'diffusion_inward')
+    CALL HDF5_real_saving(plasma_group_id,wall%plasma_tau, &
+         'stabilization_inward')
+    CALL HDF5_real_saving(plasma_group_id,wall%plasma_residual,'residual')
+    CALL HDF5_group_close(plasma_group_id,ierr)
+
+    CALL HDF5_group_create('neutral',wall_group_id,neutral_group_id,ierr)
+    CALL HDF5_string_saving(neutral_group_id,'particles/s','units')
+    CALL HDF5_real_saving(neutral_group_id, &
+         wall%recycled_plasma+wall%puff_source-wall%pump_sink,'source_inward')
+    CALL HDF5_real_saving(neutral_group_id,wall%neutral_physical_flux, &
+         'physical_flux_inward')
+    CALL HDF5_real_saving(neutral_group_id,wall%neutral_tau, &
+         'stabilization_inward')
+    CALL HDF5_real_saving(neutral_group_id,wall%neutral_residual,'residual')
+    IF (this%detailed()) THEN
+       CALL HDF5_real_saving(neutral_group_id,wall%recycled_plasma, &
+            'recycled_plasma_inward')
+       CALL HDF5_real_saving(neutral_group_id,wall%puff_source,'puff_source')
+       CALL HDF5_real_saving(neutral_group_id,wall%pump_sink,'pump_sink')
+       CALL write_wall_components_hdf5(this,neutral_group_id)
+    ENDIF
+    CALL HDF5_group_close(neutral_group_id,ierr)
+  END SUBROUTINE write_wall_hdf5
+
+  SUBROUTINE write_wall_components_hdf5(this, neutral_group_id)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: neutral_group_id
+    INTEGER(HID_T) :: physical_group_id, recycling_group_id
+    INTEGER :: ierr
+
+    CALL HDF5_group_create('physical_flux_components',neutral_group_id, &
+         physical_group_id,ierr)
+    CALL HDF5_string_saving(physical_group_id,'particles/s','units')
+    CALL HDF5_real_saving(physical_group_id, &
+         this%finalized_values(wall_neutral_diffusion_flux), &
+         'limited_diffusion_inward')
+#ifdef NEUTRALP
+    CALL HDF5_real_saving(physical_group_id, &
+         this%finalized_values(wall_neutral_pressure_flux), &
+         'limited_pressure_inward')
+#endif
+#ifdef NEUTRALGAMMA
+    CALL HDF5_real_saving(physical_group_id, &
+         this%finalized_values(wall_neutral_convection_flux), &
+         'neutral_gamma_inward')
+#elif defined(NEUTRALCONVECTION)
+    CALL HDF5_real_saving(physical_group_id, &
+         this%finalized_values(wall_neutral_convection_flux), &
+         'neutral_convection_inward')
+#endif
+    CALL HDF5_group_close(physical_group_id,ierr)
+
+    CALL HDF5_group_create('recycled_plasma_components',neutral_group_id, &
+         recycling_group_id,ierr)
+    CALL HDF5_string_saving(recycling_group_id,'particles/s','units')
+    CALL HDF5_real_saving(recycling_group_id, &
+         this%finalized_values(wall_recycling_parallel_source), &
+         'parallel_source')
+    CALL HDF5_real_saving(recycling_group_id, &
+         this%finalized_values(wall_recycling_diffusion_source), &
+         'diffusion_source')
+    CALL HDF5_real_saving(recycling_group_id, &
+         this%finalized_values(wall_recycling_pinch_source),'pinch_source')
+    CALL HDF5_group_close(recycling_group_id,ierr)
+  END SUBROUTINE write_wall_components_hdf5
 
   SUBROUTINE particle_aggregates(this, content, temporal, volume, boundary, &
        &physical_imbalance, tau, discrete_residual)
