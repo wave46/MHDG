@@ -344,7 +344,7 @@ hdg_PrecalculatedFirstEquation.o : hdg_PrecalculatedFirstEquation.F globals.o Li
 hdg_ComputeJacobian.F : $(SDIR)/HDG/hdg_ComputeJacobian.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-hdg_ComputeJacobian.o : hdg_ComputeJacobian.F globals.o analytical.o LinearAlgebra.o physics.o hdg_LimitingTechniques.o
+hdg_ComputeJacobian.o : hdg_ComputeJacobian.F globals.o analytical.o LinearAlgebra.o physics.o hdg_LimitingTechniques.o balance_diagnostics.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 hdg_Mapping.F : $(SDIR)/HDG/hdg_Mapping.f90

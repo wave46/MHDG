@@ -16,7 +16,7 @@ SUBROUTINE READ_input()
        neutral_tn_source_ti, neutral_tn_source_fixed, parse_neutral_tn_source
   USE balance_diagnostics, ONLY: balance_mode_invalid, balance_mode_off, &
        parse_balance_diagnostics_mode, balance_diagnostics_mode_name, &
-       balance_diagnostics_configure
+       balance_diag
   IMPLICIT NONE
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
@@ -242,7 +242,7 @@ SUBROUTINE READ_input()
      STOP
   ENDIF
 #endif
-  CALL balance_diagnostics_configure(balance_diagnostics_mode_id)
+  CALL balance_diag%configure(balance_diagnostics_mode_id)
 
   ! Storing at the right place
   switch%steady           = steady
