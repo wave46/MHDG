@@ -143,6 +143,16 @@
       "workflows": ["cold_fixed", "cold_adaptive"],
       "layouts": ["mpi4_omp4"]
     },
+    "balance_diagnostics_cold": {
+      "description": "Detailed particle diagnostics through fixed and adaptive cold workflows",
+      "case": "legacy_case",
+      "workflows": [
+        "cold_fixed_balance_diagnostics",
+        "cold_adaptive_balance_diagnostics"
+      ],
+      "layouts": ["mpi4_omp4"],
+      "reference_comparisons": false
+    },
     "cold_matrix": {
       "description": "Cold workflows with golden and all-pairs layout checks",
       "case": "legacy_case",

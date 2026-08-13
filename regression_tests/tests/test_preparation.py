@@ -471,6 +471,33 @@ class RunPreparationTests(unittest.TestCase):
         for index in (2, 3, 4, 5, 6):
             self.assertIn("rest_adapt = .false.", adaptive_parameters[index])
 
+    def test_enables_detailed_diagnostics_in_every_cold_stage(self) -> None:
+        for workflow in (
+            "cold_fixed_balance_diagnostics",
+            "cold_adaptive_balance_diagnostics",
+        ):
+            with self.subTest(workflow=workflow):
+                prepared = prepare_run(
+                    self.settings,
+                    "legacy_case",
+                    workflow,
+                    "serial_omp1",
+                    REGRESSION_ROOT / "cases",
+                    REGRESSION_ROOT / "layouts.json",
+                    workflow,
+                )
+                self.assertEqual(len(prepared.stages), 7)
+                for stage in prepared.stages:
+                    parameters = (stage.run.path / "param.txt").read_text(
+                        encoding="utf-8"
+                    )
+                    self.assertEqual(
+                        parameters.count(
+                            "balance_diagnostics_mode = 'detailed'"
+                        ),
+                        1,
+                    )
+
     def test_missing_parameter_assignment_fails(self) -> None:
         source = self.root / "incomplete_param.txt"
         source.write_text(

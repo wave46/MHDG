@@ -21,6 +21,8 @@ PARAMETERS = """&INPUT_LST
 /
 &PHYS_LST
 /
+&UTILS_LST
+/
 &NUMER_LST
     nrp = 40
     tau(6) = 1.0

@@ -70,6 +70,8 @@ analytically. Fixed and adaptive indicate whether the mesh can change.
 | `warm` | Existing steady restart; fixed mesh | Reconverge the same state. |
 | `cold_fixed` | Analytical start; refined fixed mesh | `time_init`, `diffusion_reduction`, then five continuations. |
 | `cold_adaptive` | Analytical start; coarse mesh | Same seven stages; adapt in the first two. |
+| `cold_fixed_balance_diagnostics` | Analytical start; refined fixed mesh | Detailed particle diagnostics through all seven fixed stages. |
+| `cold_adaptive_balance_diagnostics` | Analytical start; coarse mesh | Detailed particle diagnostics through all seven adaptive stages. |
 | `cold_step_fixed` | Analytical start; coarse fixed mesh | One time step and two Newton iterations. |
 | `cold_step_impurity_off` | Analytical start; coarse fixed mesh | Short disabled-impurity lifecycle check. |
 | `cold_step_adaptive` | Analytical start; coarse adaptive mesh | One time step, two Newton iterations, and one adaptation pass. |
@@ -131,6 +133,7 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | `initialization_smoke` | Disabled-impurity analytical start, `mpi4_omp4` | Execution-only initialization evidence. |
 | `race` | Both one-step workflows, `serial_omp1` vs `serial_omp16` | Routine OpenMP race check. |
 | `cold` | Both full cold workflows, `mpi4_omp4` | Canonical integration check. |
+| `balance_diagnostics_cold` | Detailed fixed and adaptive cold workflows, `mpi4_omp4` | Overnight particle-balance history and HDF5-contract check. |
 | `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |
 | `race_matrix` | Both one-step workflows, every pair of tracked layouts | Periodic race check. |
 | `cold_matrix` | Both full cold workflows, all layouts and all layout pairs | Overnight golden and reproducibility evidence. |
@@ -199,6 +202,20 @@ Recorded cells are skipped. An incomplete run is preserved and retried as
 executables, or launcher. `--build` cannot be combined with `--resume`; after
 an initial `--build`, use the generated `settings.env` printed by that build.
 
+Run the opt-in balance suite in the background with the PR06 neutral-feature
+bundle and the existing MPI/OpenMP executable:
+
+```bash
+nohup regression_tests/regression.sh suite run balance_diagnostics_cold \
+  --settings regression_tests/pr06-neutral-features.local.env \
+  --run-only --run-id pr07-balance-overnight-01 \
+  > pr07-balance-overnight-01.log 2>&1 &
+```
+
+Use the same command plus `--resume` after an interruption. Existing workflows
+remain diagnostics-off; only the two diagnostic workflow variants request
+`balance_diagnostics_mode='detailed'`.
+
 ### Build reusable executables
 
 ```bash
@@ -251,6 +268,19 @@ compares final totals for every layout pair declared in a completed suite at
 python regression_tests/tools/check_neutral_wall_sources.py \
   /path/to/source-suite/suite_summary.json
 ```
+
+After the balance suite completes, validate every selected stage HDF5 file,
+terminal/HDF5 agreement, particle identities, reaction cancellation, and both
+wall closures:
+
+```bash
+regression_tests/regression.sh diagnostics check \
+  /path/to/balance_diagnostics_cold/RUN_ID/suite_summary.json
+```
+
+The generated `balance_diagnostics_check.json` retains every detailed
+terminal block with its time and Newton iteration, making the onset of a
+physical imbalance visible across the cold workflow.
 
 ### Publish accepted references
 

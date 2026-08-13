@@ -308,6 +308,20 @@
         "diffusion_reduction"
       ]
     },
+    "cold_fixed_balance_diagnostics": {
+      "extends": "cold_fixed",
+      "description": "Trace detailed particle balances through the fixed-mesh cold workflow",
+      "parameter_overrides": {
+        "balance_diagnostics_mode": "detailed"
+      }
+    },
+    "cold_adaptive_balance_diagnostics": {
+      "extends": "cold_adaptive",
+      "description": "Trace detailed particle balances through the adaptive cold workflow",
+      "parameter_overrides": {
+        "balance_diagnostics_mode": "detailed"
+      }
+    },
     "cold_adaptive_neutral_sources_in_elements": {
       "extends": "cold_adaptive",
       "description": "Reach a source-relocated state from an adaptive cold start",

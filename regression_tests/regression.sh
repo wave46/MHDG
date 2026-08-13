@@ -19,6 +19,7 @@ Usage:
   regression_tests/regression.sh suite run SUITE --settings FILE [--run-only] [--resume]
   regression_tests/regression.sh suite compare SUITE_SUMMARY
   regression_tests/regression.sh suite check [SUITE] [--settings FILE] [--build]
+  regression_tests/regression.sh diagnostics check SUITE_SUMMARY
   regression_tests/regression.sh golden update CASE --settings FILE --run-id ID --output DIR --bundle-version VERSION [--only COMPONENT] [--bootstrap-candidate] [--retry-failed | --retry-from STAGE]
   regression_tests/regression.sh golden status WORKSPACE
 
@@ -33,6 +34,7 @@ Commands:
   suite run        Execute every workflow-layout cell in a tracked suite.
   suite compare    Recompare saved suite results without running the solver.
   suite check      Run a suite against a required golden bundle (default: warm).
+  diagnostics check  Validate detailed balance output and retain its history.
   golden update    Start or continue an ordered golden-reference update.
   golden status    Show persisted golden-update state.
 
@@ -44,6 +46,7 @@ Suites: warm, neutral_pressure_warm, neutralgamma_race,
         neutral_sources_in_elements_cold_adaptive,
         impurity_scalar_baseline, impurity_mixture, impurity_references,
         initialization_smoke, stored_field_compatibility, race, cold,
+        balance_diagnostics_cold,
         warm_parallelism, race_matrix, cold_matrix, diverted_warm,
         diverted_warm_parallelism, diverted_cold_adaptive,
         diverted_race_matrix.
@@ -151,6 +154,24 @@ run_golden_command() {
   esac
 }
 
+run_diagnostics_command() {
+  local action=${1:-}
+  if (($# > 0)); then
+    shift
+  fi
+  case "$action" in
+    check)
+      run_python check_balance_diagnostics.py "$@"
+      ;;
+    help|-h|--help)
+      usage
+      ;;
+    *)
+      fail "expected 'diagnostics check'"
+      ;;
+  esac
+}
+
 if (($# == 0)); then
   usage
   exit 0
@@ -188,6 +209,9 @@ case "$command" in
     ;;
   suite)
     run_suite_command "$@"
+    ;;
+  diagnostics)
+    run_diagnostics_command "$@"
     ;;
   golden)
     run_golden_command "$@"
