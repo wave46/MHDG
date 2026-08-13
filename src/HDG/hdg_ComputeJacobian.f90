@@ -2417,7 +2417,7 @@ CONTAINS
 
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
           topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
           diagnostics_on=diagnostics_on,diagnostics=diagnostics)
       ENDIF
@@ -2428,7 +2428,7 @@ CONTAINS
         topology_region=topology_region(g),outward_normal=topology_normal(g,:))
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
           topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
           diagnostics_on=diagnostics_on,diagnostics=diagnostics)
       ENDIF
@@ -2437,12 +2437,12 @@ CONTAINS
 #else
 #ifndef DKLINEARIZED
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
         topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
         diagnostics_on=diagnostics_on,diagnostics=diagnostics)
 #else
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
         topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
         diagnostics_on=diagnostics_on,diagnostics=diagnostics)
 #endif
@@ -3816,11 +3816,11 @@ ENDIF
 
 #ifdef DKLINEARIZED
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-      &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uf,qf,tau,&
+      &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uef,uf,qf,tau,&
       &topology_region,outward_normal,diagnostics_on,diagnostics)
 #else
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-        &ind_fg,b3,rho,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uf,qf,tau,&
+        &ind_fg,b3,rho,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uef,uf,qf,tau,&
         &topology_region,outward_normal,diagnostics_on,diagnostics)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
@@ -3832,7 +3832,7 @@ ENDIF
       TYPE(balance_accumulator_type),INTENT(INOUT) :: diagnostics
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:),neutral_limiter_phi
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
-      real*8,intent(IN)         :: uf(:)
+      real*8,intent(IN)         :: uef(:),uf(:)
       real*8,intent(IN)         :: qf(:)
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -4021,6 +4021,12 @@ ENDIF
           &diffusion_ani=diffani,neutral_perpendicular_diffusion= &
           &switch%neutral_perpendicular_diffusion)
 #endif
+#endif
+#ifdef NEUTRAL
+        CALL diagnostics%accumulate_particle_tau( &
+          &measure=SUM(Nif), &
+          &plasma_tau_inward=DOT_PRODUCT(tau(1,:),uf-uef), &
+          &neutral_tau_inward=DOT_PRODUCT(tau(inn,:),uf-uef))
 #endif
       ENDIF
 

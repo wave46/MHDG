@@ -2,8 +2,9 @@
 ! Central lifecycle and accumulation for balance diagnostics.
 !
 ! Physical rates use the convention "positive into the domain". Global
-! particle imbalance contains physical fluxes only; HDG stabilization is
-! retained exclusively by the separate wall/BC closure category.
+! particle diagnostics retain the physical flux and the stabilization term
+! from the element numerical flux separately. Wall/BC closure uses its own
+! boundary-condition evaluation of those terms.
 !**********************************************************************
 MODULE balance_diagnostics
   USE MPI_OMP
@@ -47,8 +48,14 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: particle_boundary_neutral = &
        particle_boundary_start + neutral_slot
 
-  INTEGER, PARAMETER :: particle_volume_components_start = &
+  INTEGER, PARAMETER :: particle_tau_start = &
        particle_boundary_start + species_count
+  INTEGER, PARAMETER :: particle_tau_plasma = particle_tau_start + plasma_slot
+  INTEGER, PARAMETER :: particle_tau_neutral = &
+       particle_tau_start + neutral_slot
+
+  INTEGER, PARAMETER :: particle_volume_components_start = &
+       particle_tau_start + species_count
   INTEGER, PARAMETER :: particle_plasma_ionization = &
        particle_volume_components_start
   INTEGER, PARAMETER :: particle_plasma_recombination = &
@@ -107,6 +114,38 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: balance_diagnostics_value_count = &
        wall_neutral_tau_flux
 
+  ! Nondimensional flux densities evaluated from one owned Bohm-boundary
+  ! Gauss point. Sources are positive into the neutral population; all
+  ! physical and tau fluxes are positive into the computational domain.
+  TYPE, PUBLIC :: particle_wall_flux_type
+     REAL*8 :: plasma_diffusion_inward = 0.d0
+     REAL*8 :: plasma_tau_inward = 0.d0
+     REAL*8 :: recycling_parallel_source = 0.d0
+     REAL*8 :: recycling_diffusion_source = 0.d0
+     REAL*8 :: recycling_pinch_source = 0.d0
+     REAL*8 :: puff_source = 0.d0
+     REAL*8 :: pump_sink = 0.d0
+     REAL*8 :: neutral_diffusion_inward = 0.d0
+     REAL*8 :: neutral_pressure_inward = 0.d0
+     REAL*8 :: neutral_convection_inward = 0.d0
+     REAL*8 :: neutral_tau_inward = 0.d0
+  END TYPE particle_wall_flux_type
+
+  ! Final dimensional terms of the two particle wall equations. Keeping the
+  ! equation terms together avoids positional scalar interfaces in reporters
+  ! and future HDF5 category writers.
+  TYPE :: particle_wall_balance_type
+     REAL*8 :: plasma_diffusion = 0.d0
+     REAL*8 :: plasma_tau = 0.d0
+     REAL*8 :: plasma_residual = 0.d0
+     REAL*8 :: recycled_plasma = 0.d0
+     REAL*8 :: puff_source = 0.d0
+     REAL*8 :: pump_sink = 0.d0
+     REAL*8 :: neutral_physical_flux = 0.d0
+     REAL*8 :: neutral_tau = 0.d0
+     REAL*8 :: neutral_residual = 0.d0
+  END TYPE particle_wall_balance_type
+
   ! Thread-local, fixed-size accumulator for every diagnostic category. It
   ! hides term indices, dimensional scaling, signs, and component bookkeeping
   ! from assembly code and is merged once per OpenMP worker.
@@ -120,6 +159,8 @@ MODULE balance_diagnostics
      PROCEDURE, PUBLIC :: accumulate_particle_volume
      PROCEDURE, PUBLIC :: accumulate_relocated_sources
      PROCEDURE, PUBLIC :: accumulate_particle_face
+     PROCEDURE, PUBLIC :: accumulate_particle_tau
+     PROCEDURE, PUBLIC :: accumulate_particle_wall
      PROCEDURE, PRIVATE :: reset => accumulator_reset
      PROCEDURE, PRIVATE :: add_content
      PROCEDURE, PRIVATE :: add_temporal
@@ -150,6 +191,7 @@ MODULE balance_diagnostics
      PROCEDURE, PUBLIC :: merge => balance_diagnostics_merge
      PROCEDURE, PUBLIC :: finalize => balance_diagnostics_finalize
      PROCEDURE, PUBLIC :: has_values => balance_diagnostics_has_values
+     PROCEDURE, PUBLIC :: report => balance_diagnostics_report
   END TYPE balance_diagnostics_type
 
   TYPE(balance_diagnostics_type), PUBLIC, SAVE :: balance_diag
@@ -270,6 +312,251 @@ CONTAINS
 
     has_values = this%enabled() .AND. this%finalized_values_valid
   END FUNCTION balance_diagnostics_has_values
+
+  SUBROUTINE balance_diagnostics_report(this)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+
+    IF (.NOT. this%has_values()) RETURN
+    IF (MPIvar%glob_id /= 0) RETURN
+
+    SELECT CASE (this%mode)
+    CASE (balance_mode_summary)
+       CALL print_summary(this)
+    CASE (balance_mode_detailed)
+       CALL print_detailed(this)
+    END SELECT
+  END SUBROUTINE balance_diagnostics_report
+
+  SUBROUTINE particle_aggregates(this, content, temporal, volume, boundary, &
+       &physical_imbalance, tau, discrete_residual)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    REAL*8, INTENT(OUT) :: content(3), temporal(3), volume(3), boundary(3)
+    REAL*8, INTENT(OUT) :: physical_imbalance(3), tau(3)
+    REAL*8, INTENT(OUT) :: discrete_residual(3)
+
+    content(1) = this%finalized_values(particle_content_plasma)
+    content(2) = this%finalized_values(particle_content_neutral)
+    temporal(1) = this%finalized_values(particle_temporal_plasma)
+    temporal(2) = this%finalized_values(particle_temporal_neutral)
+    volume(1) = this%finalized_values(particle_volume_plasma)
+    volume(2) = this%finalized_values(particle_volume_neutral)
+    boundary(1) = this%finalized_values(particle_boundary_plasma)
+    boundary(2) = this%finalized_values(particle_boundary_neutral)
+    tau(1) = this%finalized_values(particle_tau_plasma)
+    tau(2) = this%finalized_values(particle_tau_neutral)
+    content(3) = content(1) + content(2)
+    temporal(3) = temporal(1) + temporal(2)
+    volume(3) = volume(1) + volume(2)
+    boundary(3) = boundary(1) + boundary(2)
+    tau(3) = tau(1) + tau(2)
+    physical_imbalance = temporal-volume-boundary
+    discrete_residual = physical_imbalance-tau
+  END SUBROUTINE particle_aggregates
+
+  FUNCTION compute_wall_balance(this) RESULT(balance)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    TYPE(particle_wall_balance_type) :: balance
+
+    balance%plasma_diffusion = &
+         this%finalized_values(wall_plasma_diffusion_flux)
+    balance%plasma_tau = this%finalized_values(wall_plasma_tau_flux)
+    balance%plasma_residual = &
+         balance%plasma_diffusion+balance%plasma_tau
+    balance%recycled_plasma = &
+         this%finalized_values(wall_recycling_parallel_source) + &
+         this%finalized_values(wall_recycling_diffusion_source) + &
+         this%finalized_values(wall_recycling_pinch_source)
+    balance%puff_source = this%finalized_values(wall_puff_source)
+    balance%pump_sink = -this%finalized_values(wall_pump_source)
+    balance%neutral_physical_flux = &
+         this%finalized_values(wall_neutral_diffusion_flux) + &
+         this%finalized_values(wall_neutral_pressure_flux) + &
+         this%finalized_values(wall_neutral_convection_flux)
+    balance%neutral_tau = this%finalized_values(wall_neutral_tau_flux)
+    balance%neutral_residual = balance%recycled_plasma+ &
+         balance%puff_source-balance%pump_sink- &
+         balance%neutral_physical_flux-balance%neutral_tau
+  END FUNCTION compute_wall_balance
+
+  SUBROUTINE print_summary(this)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    REAL*8 :: content(3), temporal(3), volume(3), boundary(3)
+    REAL*8 :: physical_imbalance(3), tau(3), discrete_residual(3)
+    TYPE(particle_wall_balance_type) :: wall
+
+    CALL particle_aggregates(this,content,temporal,volume,boundary, &
+         physical_imbalance,tau,discrete_residual)
+    wall = compute_wall_balance(this)
+
+    WRITE(6,'(A)') 'Particle diagnostics'
+    WRITE(6,'(A)') '  Content [particles]'
+    WRITE(6,'(A,1X,ES12.3)') '    plasma n   ', content(1)
+    WRITE(6,'(A,1X,ES12.3)') '    neutral nn ', content(2)
+    WRITE(6,'(A,1X,ES12.3)') '    total n+nn ', content(3)
+    WRITE(6,'(A)') '  Physical / discrete conservation [particles/s]'
+    WRITE(6,'(A)') '                   physical imbalance  HDG tau inward  discrete residual'
+    WRITE(6,'(A,3(1X,ES12.3))') '    plasma          ', &
+         physical_imbalance(1),tau(1),discrete_residual(1)
+    WRITE(6,'(A,3(1X,ES12.3))') '    neutral         ', &
+         physical_imbalance(2),tau(2),discrete_residual(2)
+    WRITE(6,'(A,3(1X,ES12.3))') '    total           ', &
+         physical_imbalance(3),tau(3),discrete_residual(3)
+    WRITE(6,'(A)') '  Wall / HDG boundary-condition residuals [particles/s]'
+    WRITE(6,'(A,3(1X,ES12.3))') &
+         '    plasma: diffusion, stabilization, residual', &
+         wall%plasma_diffusion,wall%plasma_tau,wall%plasma_residual
+    WRITE(6,'(A,4(1X,ES12.3))') &
+         '    neutral: recycled+puff-pump, physical flux, stabilization, residual', &
+         wall%recycled_plasma+wall%puff_source-wall%pump_sink, &
+         wall%neutral_physical_flux,wall%neutral_tau,wall%neutral_residual
+  END SUBROUTINE print_summary
+
+  SUBROUTINE print_detailed(this)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    REAL*8 :: content(3), temporal(3), volume(3), boundary(3)
+    REAL*8 :: physical_imbalance(3), tau(3), discrete_residual(3)
+    TYPE(particle_wall_balance_type) :: wall
+
+    CALL particle_aggregates(this,content,temporal,volume,boundary, &
+         physical_imbalance,tau,discrete_residual)
+    wall = compute_wall_balance(this)
+
+    WRITE(6,'(A)') 'Particle diagnostics (detailed)'
+    WRITE(6,'(A)') '  Content [particles]'
+    CALL print_detail_value('plasma n',content(1))
+    CALL print_detail_value('neutral nn',content(2))
+    CALL print_detail_value('total n+nn',content(3))
+    CALL print_particle_detail(this,'plasma',1,temporal(1),volume(1), &
+         boundary(1),physical_imbalance(1),tau(1),discrete_residual(1))
+    CALL print_particle_detail(this,'neutral',2,temporal(2),volume(2), &
+         boundary(2),physical_imbalance(2),tau(2),discrete_residual(2))
+    WRITE(6,'(A)') '  total conservation [particles/s]'
+    CALL print_detail_value('temporal',temporal(3))
+    CALL print_detail_value('volume',volume(3))
+    CALL print_detail_value('boundary physical, inward',boundary(3))
+    CALL print_detail_value('physical imbalance',physical_imbalance(3))
+    CALL print_detail_value('HDG tau inward',tau(3))
+    CALL print_detail_value('discrete residual',discrete_residual(3))
+    WRITE(6,'(A)') '  exchange information [particles/s]'
+    CALL print_detail_value('charge exchange', &
+         this%finalized_values(particle_charge_exchange))
+    WRITE(6,'(A)') '  Wall / HDG boundary-condition residuals [particles/s]'
+    CALL print_wall_detail(this,wall)
+  END SUBROUTINE print_detailed
+
+  SUBROUTINE print_particle_detail(this, name, species, temporal, volume, &
+       &boundary, physical_imbalance, tau, discrete_residual)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    CHARACTER(LEN=*), INTENT(IN) :: name
+    INTEGER, INTENT(IN) :: species
+    REAL*8, INTENT(IN) :: temporal, volume, boundary, physical_imbalance
+    REAL*8, INTENT(IN) :: tau, discrete_residual
+
+    WRITE(6,'(A)') '  '//TRIM(name)//' conservation [particles/s]'
+    CALL print_detail_value('temporal',temporal)
+    CALL print_detail_value('volume',volume)
+    CALL print_detail_value('boundary physical, inward',boundary)
+    CALL print_detail_value('physical imbalance',physical_imbalance)
+    CALL print_detail_value('HDG tau inward',tau)
+    CALL print_detail_value('discrete residual',discrete_residual)
+    WRITE(6,'(A)') '    volume components'
+    IF (species == 1) THEN
+       CALL print_detail_value('ionization', &
+            this%finalized_values(particle_plasma_ionization))
+       CALL print_detail_value('recombination', &
+            this%finalized_values(particle_plasma_recombination))
+       CALL print_detail_value('other source', &
+            this%finalized_values(particle_plasma_other_source))
+       WRITE(6,'(A)') '    boundary components, inward-positive'
+       CALL print_detail_value('parallel', &
+            this%finalized_values(particle_plasma_parallel_flux))
+       CALL print_detail_value('diffusion', &
+            this%finalized_values(particle_plasma_diffusion_flux))
+       CALL print_detail_value('pinch', &
+            this%finalized_values(particle_plasma_pinch_flux))
+    ELSE
+       CALL print_detail_value('ionization', &
+            this%finalized_values(particle_neutral_ionization))
+       CALL print_detail_value('recombination', &
+            this%finalized_values(particle_neutral_recombination))
+       CALL print_detail_value('other source', &
+            this%finalized_values(particle_neutral_other_source))
+       CALL print_detail_value('puff source', &
+            this%finalized_values(particle_neutral_puff_source))
+       CALL print_detail_value('pump source', &
+            this%finalized_values(particle_neutral_pump_source))
+       WRITE(6,'(A)') '    boundary components, inward-positive'
+       CALL print_detail_value('limited diffusion', &
+            this%finalized_values(particle_neutral_diffusion_flux))
+#ifdef NEUTRALP
+       CALL print_detail_value('limited pressure', &
+            this%finalized_values(particle_neutral_pressure_flux))
+#endif
+#ifdef NEUTRALGAMMA
+       CALL print_detail_value('NeutralGamma convection', &
+            this%finalized_values(particle_neutral_convection_flux))
+#elif defined(NEUTRALCONVECTION)
+       CALL print_detail_value('neutral advective flux', &
+            this%finalized_values(particle_neutral_convection_flux))
+#endif
+    ENDIF
+  END SUBROUTINE print_particle_detail
+
+  SUBROUTINE print_wall_detail(this, wall)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    TYPE(particle_wall_balance_type), INTENT(IN) :: wall
+
+    WRITE(6,'(A)') '    Plasma density BC: diffusion + stabilization = 0'
+    CALL print_detail_value('plasma diffusive flux inward', &
+         wall%plasma_diffusion)
+    CALL print_detail_value('HDG stabilization flux inward',wall%plasma_tau)
+    CALL print_detail_value('residual',wall%plasma_residual)
+    WRITE(6,'(A)') '    Neutral density BC:'
+    WRITE(6,'(A)') '      recycled + puff - pump - neutral flux - stabilization = 0'
+    CALL print_detail_value('neutral physical flux inward', &
+         wall%neutral_physical_flux)
+    WRITE(6,'(A)') '      physical-flux components, inward-positive'
+    CALL print_detail_component('limited neutral diffusion', &
+         this%finalized_values(wall_neutral_diffusion_flux))
+#ifdef NEUTRALP
+    CALL print_detail_component('limited neutral-pressure flux', &
+         this%finalized_values(wall_neutral_pressure_flux))
+#endif
+#ifdef NEUTRALGAMMA
+    CALL print_detail_component('NeutralGamma flux', &
+         this%finalized_values(wall_neutral_convection_flux))
+#elif defined(NEUTRALCONVECTION)
+    CALL print_detail_component('neutral advective flux', &
+         this%finalized_values(wall_neutral_convection_flux))
+#endif
+    CALL print_detail_value('recycled plasma flux into neutrals', &
+         wall%recycled_plasma)
+    WRITE(6,'(A)') '      recycled-flux components'
+    CALL print_detail_component('parallel contribution', &
+         this%finalized_values(wall_recycling_parallel_source))
+    CALL print_detail_component('diffusion contribution', &
+         this%finalized_values(wall_recycling_diffusion_source))
+    CALL print_detail_component('pinch contribution', &
+         this%finalized_values(wall_recycling_pinch_source))
+    CALL print_detail_value('puff source',wall%puff_source)
+    CALL print_detail_value('pump sink',wall%pump_sink)
+    CALL print_detail_value('HDG stabilization flux inward',wall%neutral_tau)
+    CALL print_detail_value('residual',wall%neutral_residual)
+  END SUBROUTINE print_wall_detail
+
+  SUBROUTINE print_detail_value(label, value)
+    CHARACTER(LEN=*), INTENT(IN) :: label
+    REAL*8, INTENT(IN) :: value
+
+    WRITE(6,'(A,1X,ES12.3)') '      '//TRIM(label), value
+  END SUBROUTINE print_detail_value
+
+  SUBROUTINE print_detail_component(label, value)
+    CHARACTER(LEN=*), INTENT(IN) :: label
+    REAL*8, INTENT(IN) :: value
+
+    WRITE(6,'(A,1X,ES12.3)') '        '//TRIM(label), value
+  END SUBROUTINE print_detail_component
 
   SUBROUTINE accumulator_reset(this, detailed, content_scale, rate_scale)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
@@ -452,6 +739,19 @@ CONTAINS
          neutral_convection)
   END SUBROUTINE accumulate_particle_face
 
+  SUBROUTINE accumulate_particle_tau(this, measure, plasma_tau_inward, &
+       &neutral_tau_inward)
+    CLASS(balance_accumulator_type), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: measure, plasma_tau_inward, neutral_tau_inward
+    REAL*8 :: scale
+
+    scale = measure*this%rate_scale
+    this%values(particle_tau_plasma) = &
+         this%values(particle_tau_plasma) + plasma_tau_inward*scale
+    this%values(particle_tau_neutral) = &
+         this%values(particle_tau_neutral) + neutral_tau_inward*scale
+  END SUBROUTINE accumulate_particle_tau
+
   SUBROUTINE add_plasma_flux(this, parallel_flux, diffusion_flux, pinch_flux)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
     REAL*8, INTENT(IN) :: parallel_flux, diffusion_flux, pinch_flux
@@ -486,5 +786,44 @@ CONTAINS
     this%values(particle_neutral_convection_flux) = &
          this%values(particle_neutral_convection_flux) + convection_flux
   END SUBROUTINE add_neutral_flux
+
+  SUBROUTINE accumulate_particle_wall(this, integration_weight, fluxes)
+    CLASS(balance_accumulator_type), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: integration_weight
+    TYPE(particle_wall_flux_type), INTENT(IN) :: fluxes
+    REAL*8 :: weight
+
+    weight = integration_weight*this%rate_scale
+    this%values(wall_plasma_diffusion_flux) = &
+         this%values(wall_plasma_diffusion_flux) + &
+         fluxes%plasma_diffusion_inward*weight
+    this%values(wall_plasma_tau_flux) = &
+         this%values(wall_plasma_tau_flux) + &
+         fluxes%plasma_tau_inward*weight
+    this%values(wall_recycling_parallel_source) = &
+         this%values(wall_recycling_parallel_source) + &
+         fluxes%recycling_parallel_source*weight
+    this%values(wall_recycling_diffusion_source) = &
+         this%values(wall_recycling_diffusion_source) + &
+         fluxes%recycling_diffusion_source*weight
+    this%values(wall_recycling_pinch_source) = &
+         this%values(wall_recycling_pinch_source) + &
+         fluxes%recycling_pinch_source*weight
+    this%values(wall_puff_source) = this%values(wall_puff_source) + &
+         fluxes%puff_source*weight
+    this%values(wall_pump_source) = this%values(wall_pump_source) - &
+         fluxes%pump_sink*weight
+    this%values(wall_neutral_diffusion_flux) = &
+         this%values(wall_neutral_diffusion_flux) + &
+         fluxes%neutral_diffusion_inward*weight
+    this%values(wall_neutral_pressure_flux) = &
+         this%values(wall_neutral_pressure_flux) + &
+         fluxes%neutral_pressure_inward*weight
+    this%values(wall_neutral_convection_flux) = &
+         this%values(wall_neutral_convection_flux) + &
+         fluxes%neutral_convection_inward*weight
+    this%values(wall_neutral_tau_flux) = &
+         this%values(wall_neutral_tau_flux) + fluxes%neutral_tau_inward*weight
+  END SUBROUTINE accumulate_particle_wall
 
 END MODULE balance_diagnostics

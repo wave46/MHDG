@@ -356,7 +356,7 @@ hdg_Mapping.o : hdg_Mapping.F globals.o LinearAlgebra.o MPI_OMP.o
 hdg_BC.F : $(SDIR)/HDG/hdg_BC.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-hdg_BC.o : hdg_BC.F globals.o analytical.o LinearAlgebra.o physics.o
+hdg_BC.o : hdg_BC.F globals.o analytical.o LinearAlgebra.o physics.o balance_diagnostics.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 hdg_Assembly.F : $(SDIR)/HDG/hdg_Assembly.f90

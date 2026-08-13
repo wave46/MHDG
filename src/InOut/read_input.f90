@@ -242,6 +242,12 @@ SUBROUTINE READ_input()
      STOP
   ENDIF
 #endif
+#ifndef TEMPERATURE
+  IF (balance_diagnostics_mode_id /= balance_mode_off) THEN
+     PRINT *, 'Particle wall diagnostics require a temperature neutral model.'
+     STOP
+  ENDIF
+#endif
   CALL balance_diag%configure(balance_diagnostics_mode_id)
 
   ! Storing at the right place

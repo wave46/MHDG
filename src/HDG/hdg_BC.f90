@@ -13,6 +13,8 @@ SUBROUTINE HDG_BC()
   USE transport_models_1d, ONLY: transport_model_1d
   USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
   USE analytical, only: analytical_solution
+  USE balance_diagnostics, ONLY: balance_accumulator_type, &
+       particle_wall_flux_type, balance_diag
 
   IMPLICIT NONE
 #ifdef TOR3D
@@ -540,6 +542,8 @@ CONTAINS
   REAL*8                    :: neutral_limiter_phi(refElPol%Ngauss1d)
   real*8                    :: q_cylfl(refElPol%Nfacenodes),q_cyl(refElPol%Ngauss1d)
   real*8                    :: omegafl(refElPol%Nfacenodes),omega(refElPol%Ngauss1d)
+  LOGICAL                   :: diagnostics_on,face_diagnostics_on
+  TYPE(balance_accumulator_type) :: boundary_diagnostics
 #ifdef PARALL
 #ifdef SAVEFLUX
   INTEGER                   :: ierr
@@ -570,6 +574,9 @@ CONTAINS
   Npfl = refElPol%Nfacenodes
   Neq = phys%neq
   Ng1d = refElPol%Ngauss1d
+  diagnostics_on = balance_diag%enabled()
+  IF (diagnostics_on) &
+    &CALL balance_diag%initialize_accumulator(boundary_diagnostics)
 
   coefi = phys%diff_pari*(2./(3.*phys%Mref))**(1 + phys%epn)
   coefe = phys%diff_pare*(2./(3.*phys%Mref))**(1 + phys%epn)
@@ -759,6 +766,10 @@ CONTAINS
 #ifdef PARALL
      IF (fl .EQ. 0) CYCLE
 #endif
+    face_diagnostics_on = diagnostics_on
+#ifdef PARALL
+    IF (Mesh%ghostFaces(Fi) .NE. 0) face_diagnostics_on = .FALSE.
+#endif
     bc = phys%bcflags(fl)
 
     SELECT CASE (bc)
@@ -829,6 +840,12 @@ CONTAINS
      ENDIF
 
   END DO
+
+  IF (diagnostics_on) THEN
+    CALL balance_diag%merge(boundary_diagnostics)
+    CALL balance_diag%finalize()
+    CALL balance_diag%report()
+  ENDIF
 
 #ifdef SAVEFLUX
 #ifdef PARALL
@@ -1302,11 +1319,11 @@ CONTAINS
 #ifndef SAVEFLUX
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),ntang,&
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,&
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),ntang,&
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,&
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
 #else
@@ -1874,9 +1891,9 @@ CONTAINS
   !*********************************
 #ifndef SAVEFLUX
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,ntang,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,ntang,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal)
 #endif
 #else
 #ifndef DKLINEARIZED
@@ -1889,7 +1906,7 @@ CONTAINS
     real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),rho,ng(:),tau(:,:),setval,dcs_du(:)
     integer,intent(IN)         :: topology_region
     real*8,intent(IN)          :: outward_normal(:)
-    real*8           :: diffiso(:,:),diffani(:,:),neutral_limiter_phi
+    real*8           :: diffiso(:,:),diffani(:,:),neutral_limiter_phi,dline
     logical          :: ntang
     real*8           :: qfg(:)
     real*8           :: bn,Abohm(Neq,Neq),APinch(Neq,Ndim)
@@ -1902,6 +1919,7 @@ CONTAINS
     real*8           :: Qpr(Ndim,Neq), recycling_coeff,  cryopump_coeff,puff_coeff
     real*8           :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
+    TYPE(particle_wall_flux_type) :: wall_fluxes
 #ifdef TEMPERATURE
         REAL*8           :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
         REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
@@ -1922,7 +1940,6 @@ CONTAINS
 #endif
 #endif
 #ifdef SAVEFLUX
-    real*8, INTENT(IN)            :: dline
     real*8,intent(out)::  flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical
 #endif
     inn = phys%idx_rhon_eq
@@ -2361,6 +2378,46 @@ CONTAINS
       cryopump_coeff = 0.d0
       puff_coeff = 0.d0
     ENDIF
+
+#ifdef TEMPERATURE
+    IF (face_diagnostics_on) THEN
+      wall_fluxes = particle_wall_flux_type()
+      wall_fluxes%plasma_diffusion_inward = &
+        &diffiso(1,1)*DOT_PRODUCT(Qpr(:,1),ng) - &
+        &diffani(1,1)*bn*DOT_PRODUCT(Qpr(:,1),bg)
+      wall_fluxes%plasma_tau_inward = DOT_PRODUCT(tau(1,:),ufg-uefg)
+      wall_fluxes%recycling_parallel_source = &
+        &recycling_coeff*uefg(2)*bn
+      wall_fluxes%recycling_diffusion_source = &
+        &-recycling_coeff*wall_fluxes%plasma_diffusion_inward
+      wall_fluxes%recycling_pinch_source = recycling_coeff*uefg(1)* &
+        &DOT_PRODUCT(APinch(1,:),ng)
+      wall_fluxes%puff_source = puff_coeff
+      wall_fluxes%pump_sink = cryopump_coeff*ufg(inn)
+      wall_fluxes%neutral_diffusion_inward = &
+        &diffiso(inn,inn)*DOT_PRODUCT(Qpr(:,inn),ng) - &
+        &diffani(inn,inn)*bn*DOT_PRODUCT(Qpr(:,inn),bg)
+#ifdef NEUTRALP
+      wall_fluxes%neutral_pressure_inward = &
+        &DOT_PRODUCT(MATMUL(Qpr,W5p),ng)
+      IF (switch%neutral_perpendicular_diffusion) THEN
+        wall_fluxes%neutral_pressure_inward = &
+          &wall_fluxes%neutral_pressure_inward - &
+          &bn*DOT_PRODUCT(MATMUL(Qpr,W5p),bg)
+      ENDIF
+#endif
+      wall_fluxes%neutral_convection_inward = &
+        &-DOT_PRODUCT(Abohm(inn,:),ufg)*bn
+#ifdef NEUTRALGAMMA
+      IF (ign > 0) wall_fluxes%neutral_convection_inward = &
+        &wall_fluxes%neutral_convection_inward-ufg(ign)*bn
+#endif
+      wall_fluxes%neutral_tau_inward = &
+        &DOT_PRODUCT(tau(inn,:),ufg-uefg)
+      CALL boundary_diagnostics%accumulate_particle_wall( &
+        &integration_weight=dline,fluxes=wall_fluxes)
+    ENDIF
+#endif
 
 #ifdef SAVEFLUX
     !***************** flux control part ****************************
