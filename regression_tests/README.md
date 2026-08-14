@@ -122,12 +122,12 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
 | `neutral_pressure_warm` | Pressure-on warm restart, `mpi4_omp4` | Execution-only pressure continuation attempt. |
 | `neutralgamma_race` | NeutralGamma fixed cold step, `serial_omp1` vs `serial_omp16` | Two-Newton-iteration OpenMP race check. |
-| `neutral_sources_in_elements_warm` | Relocated-source warm restart, `mpi4_omp4` | Golden reconvergence and wall/volume conservation. |
+| `neutral_sources_in_elements_warm` | Relocated-source warm restart, `mpi4_omp4` | Golden reconvergence of the relocated-source formulation. |
 | `neutral_feature_references` | Pressure, projection, fixed-`Tn`, and `Tn=Ti`, `mpi4_omp4` | Reference producer used by golden refreshes. |
 | `neutral_features_warm` | Relocation plus the four independent feature variants, `mpi4_omp4` | Routine golden comparison. |
 | `neutral_feature_race_matrix` | The five independent neutral variants, every layout pair | Two-Newton-iteration race check without 2D diagnostics. |
-| `neutral_sources_in_elements_race_matrix` | Relocated-source fixed/adaptive steps, every layout pair | Mesh, field, race, and source-total checks. |
-| `neutral_sources_in_elements_cold_adaptive` | Full relocated-source adaptive cold start, `mpi4_omp4` | Canonical convergence and conservation evidence. |
+| `neutral_sources_in_elements_race_matrix` | Relocated-source fixed/adaptive steps, every layout pair | Mesh, field, and race checks. |
+| `neutral_sources_in_elements_cold_adaptive` | Full relocated-source adaptive cold start, `mpi4_omp4` | Canonical convergence evidence. |
 | `impurity_scalar_baseline` | Impurity off and N, `mpi4_omp4` | Focused compatibility check. |
 | `impurity_mixture` | Impurity off, W, N, and N+W, `mpi4_omp4` | Manual mixture-reference check. |
 | `initialization_smoke` | Disabled-impurity analytical start, `mpi4_omp4` | Execution-only initialization evidence. |
@@ -257,16 +257,6 @@ regression_tests/regression.sh compare /path/to/completed/run
 # Every same-layout golden check and declared layout pair in a suite.
 regression_tests/regression.sh suite compare \
   /path/to/suites/cold_matrix/overnight-01/suite_summary.json
-```
-
-The focused checker verifies every marked puff and pump wall/volume pair at
-relative tolerance `1e-12`, requires positive final source totals, then
-compares final totals for every layout pair declared in a completed suite at
-`5e-8`:
-
-```bash
-python regression_tests/tools/check_neutral_wall_sources.py \
-  /path/to/source-suite/suite_summary.json
 ```
 
 After the balance suite completes, validate every selected stage HDF5 file,

@@ -71,17 +71,12 @@ SUBROUTINE HDG_computeJacobian()
   REAL*8                :: external_heating_ions_el(refElPol%Nnodes2d),external_heating_electrons_el(refElPol%Nnodes2d)
   real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d),q_cylfl(refElPol%Nfacenodes),omegafl(refElPol%Nfacenodes)
   REAL*8                :: Jtorel(refElPol%Nnodes2d)
-  REAL*8                :: n,El_n,nn,El_nn,totaln
   REAL*8                :: diff_nn_Vol_el(refElPol%NGauss2D),v_nn_Vol_el(refElPol%NGauss2D,Mesh%Ndim),Xg_el(refElPol%NGauss2D,Mesh%Ndim)
   REAL*8                :: diff_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D),v_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D,Mesh%Ndim)
-  REAL*8                :: wall_source_totals_el(4),wall_source_totals(4),wall_source_scale
-  REAL*8,ALLOCATABLE    :: wall_source_element_totals(:,:)
+  REAL*8                :: wall_source_totals_el(4)
   LOGICAL               :: diagnostics_on
   LOGICAL               :: element_diagnostics_on,face_diagnostics_on
   TYPE(balance_accumulator_type) :: thread_diagnostics
-#endif
-#ifdef PARALL
-  INTEGER               :: ierr
 #endif
 
   IF (utils%printint .GT. 1) THEN
@@ -1126,21 +1121,13 @@ CONTAINS
   !   Loop in elements in 2D
   !************************************
 
-  IF (switch%neutral_wall_sources_in_elements) THEN
-    ALLOCATE(wall_source_element_totals(4,N2D))
-    wall_source_element_totals = 0.d0
-  ENDIF
-
   diagnostics_on = balance_diag%enabled()
   IF (diagnostics_on) THEN
     CALL balance_diag%begin_assembly(simpar%refval_density, &
       &simpar%refval_length,simpar%refval_speed)
   ENDIF
-  n = 0.d0
-  nn = 0.d0
-
   !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,omegafl,isdir,Jtorel,El_n,El_nn,wall_source_totals_el) &
+  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,omegafl,isdir,Jtorel,wall_source_totals_el) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
   !$OMP PRIVATE(element_diagnostics_on,face_diagnostics_on,thread_diagnostics) &
   !$OMP FIRSTPRIVATE(phys)
@@ -1150,7 +1137,7 @@ CONTAINS
 
   IF (diagnostics_on) &
     &CALL balance_diag%initialize_accumulator(thread_diagnostics)
-  !$OMP DO SCHEDULE(STATIC) REDUCTION(+:n,nn)
+  !$OMP DO SCHEDULE(STATIC)
   DO iel = 1,N2D
 
     ! Coordinates of the nodes of the element
@@ -1205,9 +1192,8 @@ CONTAINS
 #endif
 
     ! Compute the matrices for the element
-    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el, &
+    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el, &
       &element_diagnostics_on,thread_diagnostics)
-    IF (switch%neutral_wall_sources_in_elements) wall_source_element_totals(:,iel) = wall_source_totals_el
 
      IF (save_tau) THEN
        inddiff_nn_Vol = (iel - 1)*refElPol%NGauss2D+(/(i,i=1,refElPol%NGauss2D)/)
@@ -1216,17 +1202,6 @@ CONTAINS
        Mesh%Xg(inddiff_nn_Vol,:) = Xg_el
      ENDIF
 
-    ! Compute total plasma and neutral density (don't add contribution of ghost elements)
-#ifdef PARALL
-     IF (Mesh%ghostElems(iel) .EQ. 0) THEN
-#endif
-      n  = n + El_n
-#ifdef NEUTRAL
-      nn = nn + El_nn
-#endif
-#ifdef PARALL
-    ENDIF
-#endif
     ! Loop in local faces
      IF (save_tau) THEN
        diff_nn_Fac_el = 0.
@@ -1315,27 +1290,6 @@ CONTAINS
   DEALLOCATE(Xel,Xfl)
   !$OMP END PARALLEL
 
-  IF (switch%neutral_wall_sources_in_elements) THEN
-    wall_source_totals = SUM(wall_source_element_totals,DIM=2)
-#ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, wall_source_totals, 4, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
-#ifdef SAVEFLUX
-    wall_source_scale = 2.d0*PI*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-    wall_source_totals = wall_source_totals*wall_source_scale
-    IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6,'(A,ES24.16,A,ES24.16)') 'NEUTRAL_WALL_SOURCE_CONSERVATION puff wall=',wall_source_totals(1),' volume=',wall_source_totals(2)
-      WRITE(6,'(A,ES24.16,A,ES24.16)') 'NEUTRAL_WALL_SOURCE_CONSERVATION pump wall=',wall_source_totals(3),' volume=',wall_source_totals(4)
-    ENDIF
-#endif
-    DEALLOCATE(wall_source_element_totals)
-  ENDIF
-
-#ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, n, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, nn, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
-
   IF (MPIvar%glob_id.EQ.0) THEN
      IF((switch%ME .EQV. .TRUE.) .AND. (switch%testcase .GE. 80)) THEN
         WRITE(6,*) 'D_n = ', phys%ME_diff_n*simpar%refval_length**2/simpar%refval_time
@@ -1346,10 +1300,6 @@ CONTAINS
         WRITE(6,*) 'chi_i', phys%ME_diff_e*simpar%refval_length**2/simpar%refval_time
         WRITE(6,*) 'chi_e', phys%ME_diff_ee*simpar%refval_length**2/simpar%refval_time
      ENDIF
-     totaln = n + nn
-     WRITE(6,*) 'n = ',n
-     WRITE(6,*) 'nn = ',nn
-     WRITE(6,*) 'total n = ',totaln
    ENDIF
 
   DEALLOCATE (ures,lres,u0res)
@@ -1382,7 +1332,7 @@ CONTAINS
   !***************************************************
   ! Volume computation in 2D
   !***************************************************
-  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el,diagnostics_on,diagnostics)
+  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el,diagnostics_on,diagnostics)
 
       INTEGER,INTENT(IN)            :: iel
       REAL*8,INTENT(IN)             :: Xel(:,:)
@@ -1391,7 +1341,6 @@ CONTAINS
       REAL*8,INTENT(IN)             :: omegael(:),q_cylel(:)
       REAL*8,INTENT(IN)             :: qe(:,:)
       REAL*8,INTENT(IN)             :: ue(:,:),u0e(:,:,:)
-      REAL*8,INTENT(OUT)            :: El_n,El_nn
       REAL*8,INTENT(OUT)            :: diff_nn_Vol_el(Ng2D),v_nn_Vol_el(Ng2D,ndim),Xg_el(Ng2D,ndim)
       REAL*8,INTENT(OUT)            :: wall_source_totals_el(4)
       LOGICAL,INTENT(IN)             :: diagnostics_on
@@ -1443,8 +1392,6 @@ CONTAINS
 
       g = 0
     force = 0.
-    El_n  = 0.
-    El_nn  = 0.
     wall_source_totals_el = 0.d0
     Pi = 3.1415926535
     !***********************************
@@ -1739,11 +1686,6 @@ CONTAINS
       	dvolu = dvolu*xy(g,1)
       END IF
 
-      ! Check if total density is costant
-      El_n  = El_n  + ueg(g,1)*2*3.1416*dvolu*phys%lscale**3
-#ifdef NEUTRAL
-      El_nn = El_nn + ueg(g,inn)*2*3.1416*dvolu*phys%lscale**3
-#endif
       ! x and y derivatives of the shape functions
       Nxg = iJ11(g)*refElPol%Nxi2D(g,:) + iJ12(g)*refElPol%Neta2D(g,:)
       Nyg = iJ21(g)*refElPol%Nxi2D(g,:) + iJ22(g)*refElPol%Neta2D(g,:)

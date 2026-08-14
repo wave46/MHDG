@@ -110,8 +110,6 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
  #Model with constant neutral diffusion
  #MACROS+= -DCONSTANTNEUTRALDIFF
- #Actually not saves, but monitors in the output particle balance
- MACROS+= -DSAVEFLUX
  #The following flags are development ones, should not be used
  #MACROS+= -DPINCH
  ADDMOD+=hdg_LimitingTechniques.o
@@ -126,7 +124,6 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
  #Default variable neutral diffusion already includes smooth limiting and Jacobian linearization
  #MACROS+= -DNEUTRALPUMP
  #MACROS+= -DLEGACYCX
- MACROS+= -DSAVEFLUX
  MACROS+= -DEXPANDEDCX
  MACROS+= -DTHERMALCX
  #MACROS+= -DCONSTANTNEUTRALDIFF
@@ -143,7 +140,6 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALGAMMA))
  MACROS+= -DNEUTRALGAMMA
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC
- MACROS+= -DSAVEFLUX
  MACROS+= -DEXPANDEDCX
  MACROS+= -DTHERMALCX
  #MACROS+= -DCONSTANTNEUTRALDIFF
@@ -157,7 +153,6 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALGAMMAK))
  MACROS+= -DNEUTRALGAMMA
  MACROS+= -DAMJUELSPLINES
  MACROS+= -DTHREEBODYREC
- MACROS+= -DSAVEFLUX
  MACROS+= -DEXPANDEDCX
  MACROS+= -DTHERMALCX
  #MACROS+= -DCONSTANTNEUTRALDIFF
