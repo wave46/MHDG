@@ -113,7 +113,6 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRAL))
  #Actually not saves, but monitors in the output particle balance
  MACROS+= -DSAVEFLUX
  #The following flags are development ones, should not be used
- #MACROS+= -DNEUTRALCONVECTION
  #MACROS+= -DPINCH
  ADDMOD+=hdg_LimitingTechniques.o
 else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
@@ -132,7 +131,6 @@ else ifeq ($(MDL),$(MDL_NGAMMATITENEUTRALK))
  MACROS+= -DTHERMALCX
  #MACROS+= -DCONSTANTNEUTRALDIFF
  MACROS+= -DKEQUATION
- #MACROS+= -DNEUTRALCONVECTION
  #MACROS+= -DDKLINEARIZED
  #MACROS+= -DPINCH
  ADDMOD+=hdg_LimitingTechniques.o

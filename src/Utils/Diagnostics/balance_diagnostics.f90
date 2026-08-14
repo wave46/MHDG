@@ -473,10 +473,6 @@ CONTAINS
     CALL HDF5_real_saving(boundary_group_id, &
          this%finalized_values(particle_neutral_convection_flux), &
          'neutral_gamma_convection')
-#elif defined(NEUTRALCONVECTION)
-    CALL HDF5_real_saving(boundary_group_id, &
-         this%finalized_values(particle_neutral_convection_flux), &
-         'neutral_convection')
 #endif
     CALL HDF5_group_close(boundary_group_id,ierr)
     CALL HDF5_group_close(neutral_group_id,ierr)
@@ -540,10 +536,6 @@ CONTAINS
     CALL HDF5_real_saving(physical_group_id, &
          this%finalized_values(wall_neutral_convection_flux), &
          'neutral_gamma_inward')
-#elif defined(NEUTRALCONVECTION)
-    CALL HDF5_real_saving(physical_group_id, &
-         this%finalized_values(wall_neutral_convection_flux), &
-         'neutral_convection_inward')
 #endif
     CALL HDF5_group_close(physical_group_id,ierr)
 
@@ -729,9 +721,6 @@ CONTAINS
 #ifdef NEUTRALGAMMA
        CALL print_detail_value('NeutralGamma convection', &
             this%finalized_values(particle_neutral_convection_flux))
-#elif defined(NEUTRALCONVECTION)
-       CALL print_detail_value('neutral advective flux', &
-            this%finalized_values(particle_neutral_convection_flux))
 #endif
     ENDIF
   END SUBROUTINE print_particle_detail
@@ -758,9 +747,6 @@ CONTAINS
 #endif
 #ifdef NEUTRALGAMMA
     CALL print_detail_component('NeutralGamma flux', &
-         this%finalized_values(wall_neutral_convection_flux))
-#elif defined(NEUTRALCONVECTION)
-    CALL print_detail_component('neutral advective flux', &
          this%finalized_values(wall_neutral_convection_flux))
 #endif
     CALL print_detail_value('recycled plasma flux into neutrals', &
