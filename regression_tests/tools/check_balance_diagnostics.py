@@ -7,6 +7,7 @@ import argparse
 import math
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +91,13 @@ REQUIRED_COMPONENTS = {
 }
 
 
+@dataclass(frozen=True)
+class DiagnosticContext:
+    neutral_gamma: bool = False
+    relocated_sources: bool = False
+    configured_puff: float | None = None
+
+
 def check_suite(summary_path: Path) -> dict[str, Any]:
     """Check every completed stage and retain its terminal history."""
     summary_path = require_file(summary_path, "balance diagnostics suite summary")
@@ -162,10 +170,11 @@ def check_run(run_directory: Path) -> dict[str, Any]:
 def check_stage(stage_id: str, solution: Path, terminal: Path) -> dict[str, Any]:
     """Validate one detailed HDF5 file and its matching terminal block."""
     failures: list[str] = []
-    values = _read_hdf5(solution, failures)
+    values, context = _read_hdf5(solution, failures)
     if values:
         _check_particle_identities(values, failures)
         _check_wall_identities(values, failures)
+        _check_relocated_sources(values, context, failures)
     history = parse_terminal_history(terminal)
     if not history:
         failures.append("terminal log contains no detailed diagnostic blocks")
@@ -181,9 +190,12 @@ def check_stage(stage_id: str, solution: Path, terminal: Path) -> dict[str, Any]
     }
 
 
-def _read_hdf5(path: Path, failures: list[str]) -> dict[str, float]:
+def _read_hdf5(
+    path: Path, failures: list[str]
+) -> tuple[dict[str, float], DiagnosticContext]:
     values: dict[str, float] = {}
     units: dict[str, str] = {}
+    context = DiagnosticContext()
     try:
         with h5py.File(path, "r") as handle:
             mode = _text(
@@ -196,7 +208,30 @@ def _read_hdf5(path: Path, failures: list[str]) -> dict[str, float]:
             root = handle.get("diagnostics")
             if not isinstance(root, h5py.Group):
                 failures.append("required group is missing: /diagnostics")
-                return {}
+                return {}, context
+
+            conservative_variables = _string_values(
+                handle.get(
+                    "simulation_parameters/physics/conservative_variable_names"
+                )
+            )
+            relocated_sources = _optional_value(
+                handle,
+                "simulation_parameters/switches/"
+                "neutral_wall_sources_in_elements",
+            )
+            configured_puff = _optional_value(
+                handle, "simulation_parameters/physics/puff"
+            )
+            context = DiagnosticContext(
+                neutral_gamma="Gamman" in conservative_variables,
+                relocated_sources=relocated_sources == 1.0,
+                configured_puff=(
+                    configured_puff
+                    if isinstance(configured_puff, float)
+                    else None
+                ),
+            )
 
             def collect(name: str, item: h5py.Group | h5py.Dataset) -> None:
                 if not isinstance(item, h5py.Dataset) or item.size != 1:
@@ -210,7 +245,7 @@ def _read_hdf5(path: Path, failures: list[str]) -> dict[str, float]:
             root.visititems(collect)
     except OSError as exc:
         failures.append(f"cannot read HDF5 solution: {exc}")
-        return {}
+        return {}, context
 
     expected_units = {
         **{
@@ -226,13 +261,46 @@ def _read_hdf5(path: Path, failures: list[str]) -> dict[str, float]:
                 f"expected {expected!r}"
             )
 
+    required_components = dict(REQUIRED_COMPONENTS)
+    required_components["particles/components/neutral/boundary_inward"] += (
+        "limited_pressure",
+    )
+    required_components[
+        "wall_closure/neutral/physical_flux_components"
+    ] += ("limited_pressure_inward",)
+    if context.neutral_gamma:
+        required_components[
+            "particles/components/neutral/boundary_inward"
+        ] += ("neutral_gamma_convection",)
+        required_components[
+            "wall_closure/neutral/physical_flux_components"
+        ] += ("neutral_gamma_inward",)
+
     required = {
-        *(f"particles/{group}/{species}" for group in PARTICLE_GROUPS for species in SPECIES),
-        *(f"{group}/{name}" for group, names in REQUIRED_COMPONENTS.items() for name in names),
+        *(
+            f"particles/{group}/{species}"
+            for group in PARTICLE_GROUPS
+            for species in SPECIES
+        ),
+        *(
+            f"{group}/{name}"
+            for group, names in required_components.items()
+            for name in names
+        ),
     }
     missing = sorted(required - values.keys())
-    failures.extend(f"required scalar dataset is missing: /diagnostics/{key}" for key in missing)
-    return values if not missing else {}
+    failures.extend(
+        f"required scalar dataset is missing: /diagnostics/{key}"
+        for key in missing
+    )
+    nonfinite = sorted(
+        key for key in required & values.keys() if not math.isfinite(values[key])
+    )
+    failures.extend(
+        f"required scalar dataset is non-finite: /diagnostics/{key}"
+        for key in nonfinite
+    )
+    return (values, context) if not missing and not nonfinite else ({}, context)
 
 
 def _check_particle_identities(values: dict[str, float], failures: list[str]) -> None:
@@ -349,6 +417,39 @@ def _check_wall_identities(values: dict[str, float], failures: list[str]) -> Non
         residual_terms,
         failures,
     )
+
+
+def _check_relocated_sources(
+    values: dict[str, float],
+    context: DiagnosticContext,
+    failures: list[str],
+) -> None:
+    """Check that relocated puff/pump appear in volume terms, not the wall BC."""
+    if not context.relocated_sources:
+        return
+
+    puff = values["particles/components/neutral/volume/puff_source"]
+    pump = values["particles/components/neutral/volume/pump_source"]
+    if context.configured_puff is None:
+        failures.append(
+            "relocated-source check requires /simulation_parameters/physics/puff"
+        )
+    else:
+        _identity(
+            "particles/components/neutral/volume/puff_source",
+            puff,
+            context.configured_puff,
+            (puff, context.configured_puff),
+            failures,
+        )
+    if pump > IDENTITY_TOLERANCE * max(abs(pump), 1.0):
+        failures.append(
+            "relocated neutral pump must be a non-positive volume contribution"
+        )
+
+    for name in ("puff_source", "pump_sink"):
+        path = f"wall_closure/neutral/{name}"
+        _identity(path, values[path], 0.0, (values[path],), failures)
 
 
 def parse_terminal_history(path: Path) -> list[dict[str, Any]]:
@@ -500,6 +601,30 @@ def _dataset_value(dataset: h5py.Dataset) -> float | str | None:
     except (TypeError, ValueError):
         return None
     return result
+
+
+def _optional_value(handle: h5py.File, path: str) -> float | str | None:
+    dataset = handle.get(path)
+    if not isinstance(dataset, h5py.Dataset) or dataset.size != 1:
+        return None
+    return _dataset_value(dataset)
+
+
+def _string_values(dataset: h5py.Dataset | h5py.Group | None) -> tuple[str, ...]:
+    if not isinstance(dataset, h5py.Dataset):
+        return ()
+    values = dataset[()]
+    if hasattr(values, "reshape"):
+        values = values.reshape(-1)
+    else:
+        values = (values,)
+    result = []
+    for value in values:
+        if isinstance(value, bytes):
+            result.append(value.decode("utf-8").strip(" \x00"))
+        elif isinstance(value, str):
+            result.append(value.strip(" \x00"))
+    return tuple(result)
 
 
 def _text(dataset: h5py.Dataset | h5py.Group | None) -> str | None:

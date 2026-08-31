@@ -163,6 +163,7 @@ class RunPreparationTests(unittest.TestCase):
             neutralgamma.stages[0].run.path / "param.txt"
         ).read_text(encoding="utf-8")
         for assignment in (
+            "balance_diagnostics_mode = 'detailed'",
             "impurity_radiation = .false.",
             "nrp = 2",
             "nts = 1",
@@ -497,6 +498,28 @@ class RunPreparationTests(unittest.TestCase):
                         ),
                         1,
                     )
+
+        for workflow in (
+            "cold_step_fixed_neutral_sources_in_elements",
+            "cold_step_adaptive_neutral_sources_in_elements",
+        ):
+            with self.subTest(workflow=workflow):
+                prepared = prepare_run(
+                    self.settings,
+                    "legacy_case",
+                    workflow,
+                    "serial_omp1",
+                    REGRESSION_ROOT / "cases",
+                    REGRESSION_ROOT / "layouts.json",
+                    workflow,
+                )
+                parameters = (
+                    prepared.stages[0].run.path / "param.txt"
+                ).read_text(encoding="utf-8")
+                self.assertEqual(
+                    parameters.count("balance_diagnostics_mode = 'detailed'"),
+                    1,
+                )
 
     def test_missing_parameter_assignment_fails(self) -> None:
         source = self.root / "incomplete_param.txt"

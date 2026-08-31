@@ -200,7 +200,7 @@
       "tolerance_profile": "race_step"
     },
     "neutralgamma_race": {
-      "description": "One-step two-Newton-iteration NeutralGamma OpenMP race check",
+      "description": "One-step two-Newton-iteration NeutralGamma OpenMP and detailed-balance check",
       "case": "legacy_case",
       "workflows": ["cold_step_neutralgamma"],
       "layout_comparisons": [
@@ -245,7 +245,7 @@
       "tolerance_profile": "race_step"
     },
     "neutral_sources_in_elements_race_matrix": {
-      "description": "Source-relocated fixed and adaptive race and conservation checks",
+      "description": "Source-relocated fixed/adaptive race and detailed source-placement checks",
       "case": "legacy_case",
       "workflows": [
         "cold_step_fixed_neutral_sources_in_elements",

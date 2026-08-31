@@ -43,6 +43,71 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
             )
         )
 
+    def test_rejects_nonfinite_detailed_component(self) -> None:
+        summary, solution = self._write_suite()
+        with h5py.File(solution, "r+") as handle:
+            handle["diagnostics/particles/exchange/charge_exchange"][()] = float(
+                "nan"
+            )
+
+        report = check_suite(summary)
+
+        self.assertEqual(report["status"], "failed")
+        self.assertTrue(
+            any("charge_exchange" in failure for failure in report["failures"])
+        )
+
+    def test_requires_neutralgamma_components_for_neutralgamma_model(self) -> None:
+        summary, solution = self._write_suite()
+        with h5py.File(solution, "r+") as handle:
+            names = "simulation_parameters/physics/conservative_variable_names"
+            del handle[names]
+            handle.create_dataset(
+                names,
+                data=[b"n", b"Gamma", b"Ei", b"Ee", b"nn", b"Gamman"],
+            )
+
+        report = check_suite(summary)
+
+        self.assertEqual(report["status"], "failed")
+        self.assertTrue(
+            any(
+                "neutral_gamma_convection" in failure
+                for failure in report["failures"]
+            )
+        )
+        self.assertTrue(
+            any("neutral_gamma_inward" in failure for failure in report["failures"])
+        )
+
+    def test_checks_relocated_puff_and_pump_placement(self) -> None:
+        summary, solution = self._write_suite()
+        with h5py.File(solution, "r+") as handle:
+            handle[
+                "simulation_parameters/switches/neutral_wall_sources_in_elements"
+            ][()] = 1
+            wall = "diagnostics/wall_closure/neutral"
+            handle[f"{wall}/puff_source"][()] = 0.0
+            handle[f"{wall}/pump_sink"][()] = 0.0
+            handle[f"{wall}/source_inward"][()] = 3.8
+            handle[f"{wall}/physical_flux_inward"][()] = 3.7
+            handle[
+                f"{wall}/physical_flux_components/limited_diffusion_inward"
+            ][()] = 3.6
+
+        report = check_suite(summary)
+        self.assertEqual(report["status"], "passed")
+
+        with h5py.File(solution, "r+") as handle:
+            handle[
+                "diagnostics/particles/components/neutral/volume/puff_source"
+            ][()] = 0.75
+        failed = check_suite(summary)
+        self.assertEqual(failed["status"], "failed")
+        self.assertTrue(
+            any("puff_source" in failure for failure in failed["failures"])
+        )
+
     def _write_suite(self) -> tuple[Path, Path]:
         run = self.root / "run"
         stage = run / "stages" / "time_init"
@@ -151,6 +216,15 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
             handle.create_dataset(
                 "simulation_parameters/switches/balance_diagnostics_mode",
                 data="detailed",
+            )
+            handle.create_dataset(
+                "simulation_parameters/switches/neutral_wall_sources_in_elements",
+                data=0,
+            )
+            handle.create_dataset("simulation_parameters/physics/puff", data=1.0)
+            handle.create_dataset(
+                "simulation_parameters/physics/conservative_variable_names",
+                data=[b"n", b"Gamma", b"Ei", b"Ee", b"nn"],
             )
             for group, values in particle_groups.items():
                 prefix = f"diagnostics/particles/{group}"

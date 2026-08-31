@@ -74,14 +74,15 @@ analytically. Fixed and adaptive indicate whether the mesh can change.
 | `cold_adaptive_balance_diagnostics` | Analytical start; coarse mesh | Detailed particle diagnostics through all seven adaptive stages. |
 | `cold_step_fixed` | Analytical start; coarse fixed mesh | One time step and two Newton iterations. |
 | `cold_step_impurity_off` | Analytical start; coarse fixed mesh | Short disabled-impurity lifecycle check. |
+| `cold_step_neutralgamma` | Analytical start; coarse fixed mesh | Short NeutralGamma race check with detailed particle diagnostics. |
 | `cold_step_adaptive` | Analytical start; coarse adaptive mesh | One time step, two Newton iterations, and one adaptation pass. |
 | `warm_neutral_sources_in_elements` | Accepted source-relocated restart; fixed mesh | Reconverge with puff and pump in elements. |
 | `warm_neutral_pressure` | Source-relocated warm restart; fixed mesh | Exercise `neutralp_lambda=0.05`. |
 | `warm_neutral_perpendicular` | Source-relocated warm restart; fixed mesh | Exercise projected perpendicular neutral diffusion. |
 | `warm_neutral_limiter_fixed` | Source-relocated warm restart; fixed mesh | Exercise active limiting with fixed `Tn=2.5 eV`. |
 | `warm_neutral_limiter_ti` | Source-relocated warm restart; fixed mesh | Exercise active limiting with `Tn=Ti`. |
-| `cold_step_fixed_neutral_sources_in_elements` | Analytical start; coarse fixed mesh | Short relocated-source race and conservation check. |
-| `cold_step_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Short relocated-source adaptation check. |
+| `cold_step_fixed_neutral_sources_in_elements` | Analytical start; coarse fixed mesh | Short relocated-source race and detailed-balance check. |
+| `cold_step_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Short relocated-source adaptation and detailed-balance check. |
 | `cold_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Complete relocated-source cold workflow. |
 
 Full cold stages run sequentially and restart from their predecessor. The
@@ -121,12 +122,12 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | --- | --- | --- |
 | `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
 | `neutral_pressure_warm` | Pressure-on warm restart, `mpi4_omp4` | Execution-only pressure continuation attempt. |
-| `neutralgamma_race` | NeutralGamma fixed cold step, `serial_omp1` vs `serial_omp16` | Two-Newton-iteration OpenMP race check. |
+| `neutralgamma_race` | NeutralGamma fixed cold step, `serial_omp1` vs `serial_omp16` | Two-Newton-iteration OpenMP and detailed-balance check. |
 | `neutral_sources_in_elements_warm` | Relocated-source warm restart, `mpi4_omp4` | Golden reconvergence of the relocated-source formulation. |
 | `neutral_feature_references` | Pressure, projection, fixed-`Tn`, and `Tn=Ti`, `mpi4_omp4` | Reference producer used by golden refreshes. |
 | `neutral_features_warm` | Relocation plus the four independent feature variants, `mpi4_omp4` | Routine golden comparison. |
 | `neutral_feature_race_matrix` | The five independent neutral variants, every layout pair | Two-Newton-iteration race check without 2D diagnostics. |
-| `neutral_sources_in_elements_race_matrix` | Relocated-source fixed/adaptive steps, every layout pair | Mesh, field, and race checks. |
+| `neutral_sources_in_elements_race_matrix` | Relocated-source fixed/adaptive steps, every layout pair | Mesh, field, race, and detailed source-placement checks. |
 | `neutral_sources_in_elements_cold_adaptive` | Full relocated-source adaptive cold start, `mpi4_omp4` | Canonical convergence evidence. |
 | `impurity_scalar_baseline` | Impurity off and N, `mpi4_omp4` | Focused compatibility check. |
 | `impurity_mixture` | Impurity off, W, N, and N+W, `mpi4_omp4` | Manual mixture-reference check. |
@@ -270,7 +271,10 @@ regression_tests/regression.sh diagnostics check \
 
 The generated `balance_diagnostics_check.json` retains every detailed
 terminal block with its time and Newton iteration, making the onset of a
-physical imbalance visible across the cold workflow.
+physical imbalance visible across the cold workflow. The same command accepts
+completed `neutralgamma_race` and `neutral_sources_in_elements_race_matrix`
+suite summaries; it then requires NeutralGamma flux components or verifies
+that relocated puff/pump terms occur in the volume balance and not the wall BC.
 
 ### Publish accepted references
 
