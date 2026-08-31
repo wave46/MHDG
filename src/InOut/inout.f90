@@ -506,9 +506,8 @@ CONTAINS
 
     CHARACTER(LEN=*)        :: fname
     CHARACTER(len=1000)     :: fname_complete
-    INTEGER(HID_T)          :: file_id, group_id1, diagnostics_id
+    INTEGER(HID_T)          :: file_id, group_id1
     INTEGER                 :: ierr
-    LOGICAL                 :: write_diagnostics
 
 #ifdef TOR3D
     CHARACTER(70)           :: nip, nit, ngd
@@ -564,22 +563,7 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id1, sol%q, SIZE(sol%q), 'q')
     CALL HDF5_group_close(group_id1, ierr)
 
-    write_diagnostics = balance_diag%has_values()
-#if defined(NEUTRAL) && defined(TEMPERATURE)
-    write_diagnostics = write_diagnostics .OR. &
-         switch%neutral_flux_limiter_save_2d
-#endif
-    IF (write_diagnostics) THEN
-       CALL HDF5_group_create('diagnostics',file_id,diagnostics_id,ierr)
-       CALL balance_diag%write_hdf5(diagnostics_id)
-#if defined(NEUTRAL) && defined(TEMPERATURE)
-       IF (switch%neutral_flux_limiter_save_2d) THEN
-          CALL save_neutral_flux_limiter_diagnostics(diagnostics_id,sol%u, &
-               sol%q,Mesh%T,phys%B)
-       ENDIF
-#endif
-       CALL HDF5_group_close(diagnostics_id,ierr)
-    ENDIF
+    CALL save_diagnostics(file_id, sol%u, sol%q, Mesh%T, phys%B)
 
     IF (switch%transport_1d) THEN
        CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
@@ -747,22 +731,7 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
        CALL HDF5_group_close(group_id1)
 
-       write_diagnostics = balance_diag%has_values()
-#if defined(NEUTRAL) && defined(TEMPERATURE)
-       write_diagnostics = write_diagnostics .OR. &
-            switch%neutral_flux_limiter_save_2d
-#endif
-       IF (write_diagnostics) THEN
-          CALL HDF5_group_create('diagnostics',file_id,diagnostics_id,ierr)
-          CALL balance_diag%write_hdf5(diagnostics_id)
-#if defined(NEUTRAL) && defined(TEMPERATURE)
-          IF (switch%neutral_flux_limiter_save_2d) THEN
-             CALL save_neutral_flux_limiter_diagnostics(diagnostics_id, &
-                  u_glob,q_glob,T_glob,B_glob)
-          ENDIF
-#endif
-          CALL HDF5_group_close(diagnostics_id,ierr)
-       ENDIF
+       CALL save_diagnostics(file_id, u_glob, q_glob, T_glob, B_glob)
 
        IF (switch%transport_1d) THEN
           CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
@@ -899,6 +868,35 @@ CONTAINS
     PRINT *, '        '
   ENDIF
   CONTAINS
+
+    SUBROUTINE save_diagnostics(parent_id, u_values, q_values, connectivity, &
+         &magnetic_field)
+      INTEGER(HID_T), INTENT(IN) :: parent_id
+      REAL*8, INTENT(IN) :: u_values(:), q_values(:)
+      INTEGER, INTENT(IN) :: connectivity(:, :)
+      REAL*8, INTENT(IN) :: magnetic_field(:, :)
+      INTEGER(HID_T) :: diagnostics_id
+      INTEGER :: ierr_local
+      LOGICAL :: diagnostics_enabled
+
+      diagnostics_enabled = balance_diag%has_values()
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+      diagnostics_enabled = diagnostics_enabled .OR. &
+           &switch%neutral_flux_limiter_save_2d
+#endif
+      IF (.NOT. diagnostics_enabled) RETURN
+
+      CALL HDF5_group_create('diagnostics', parent_id, diagnostics_id, &
+           &ierr_local)
+      CALL balance_diag%write_hdf5(diagnostics_id)
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+      IF (switch%neutral_flux_limiter_save_2d) THEN
+         CALL save_neutral_flux_limiter_diagnostics(diagnostics_id, u_values, &
+              &q_values, connectivity, magnetic_field)
+      ENDIF
+#endif
+      CALL HDF5_group_close(diagnostics_id, ierr_local)
+    END SUBROUTINE save_diagnostics
 
 #if defined(NEUTRAL) && defined(TEMPERATURE)
     SUBROUTINE save_neutral_flux_limiter_diagnostics(diagnostics_id, u_values, &
