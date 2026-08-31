@@ -69,6 +69,7 @@
       ],
       "impurity_configuration": "impurity_configuration",
       "mesh": "mesh",
+      "reference": "warm_reference",
       "outputs": ["warm_restart", "warm_reference"],
       "layout": "mpi4_omp4",
       "comparison": {
