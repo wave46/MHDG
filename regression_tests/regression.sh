@@ -40,11 +40,13 @@ Commands:
 
 Suites: warm, neutral_pressure_warm, neutralgamma_race,
         neutral_sources_in_elements_warm,
+        neutral_sources_in_elements_restart_producer,
         neutral_feature_references, neutral_features_warm,
         neutral_feature_race_matrix,
         neutral_sources_in_elements_race_matrix,
         neutral_sources_in_elements_cold_adaptive,
         impurity_scalar_baseline, impurity_mixture, impurity_references,
+        impurity_restart_producers,
         initialization_smoke, stored_field_compatibility, race, cold,
         balance_diagnostics_cold,
         warm_parallelism, race_matrix, cold_matrix, diverted_warm,

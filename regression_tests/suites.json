@@ -21,6 +21,13 @@
       "layouts": ["mpi4_omp4"],
       "reference_comparisons": true
     },
+    "neutral_sources_in_elements_restart_producer": {
+      "description": "Create a source-relocated restart from the current canonical warm state",
+      "case": "legacy_case",
+      "workflows": ["bootstrap_neutral_sources_in_elements"],
+      "layouts": ["mpi4_omp4"],
+      "reference_comparisons": false
+    },
     "neutral_features_warm": {
       "description": "Independent source relocation, neutral pressure, projection, and limiter goldens",
       "case": "legacy_case",
@@ -111,6 +118,17 @@
         "warm_impurity_nw"
       ],
       "layouts": ["mpi4_omp4"]
+    },
+    "impurity_restart_producers": {
+      "description": "Create off, nitrogen, and mixed-impurity restarts from the current canonical warm state",
+      "case": "legacy_case",
+      "workflows": [
+        "bootstrap_impurity_off",
+        "bootstrap_impurity_n",
+        "bootstrap_impurity_nw"
+      ],
+      "layouts": ["mpi4_omp4"],
+      "reference_comparisons": false
     },
     "initialization_smoke": {
       "description": "One-step analytical initialization without reference comparison",

@@ -105,8 +105,9 @@ class GoldenUpdateTests(unittest.TestCase):
             [
                 "cold_matrix",
                 "warm",
+                "impurity_restart_producers",
                 "impurity_references",
-                "impurity_references",
+                "neutral_sources_in_elements_restart_producer",
                 "neutral_sources_in_elements_warm",
                 "neutral_feature_references",
                 "initialization_smoke",
@@ -136,11 +137,11 @@ class GoldenUpdateTests(unittest.TestCase):
         self.assertFalse(self.output.exists())
         self.assertEqual(self._run("--accept", "campaign"), 0)
         self.assertEqual(self.promote_bundle.call_count, 1)
-        self.assertEqual(self.promote_mapped_bundle.call_count, 5)
+        self.assertEqual(self.promote_mapped_bundle.call_count, 6)
         calls = self.run_suite.call_args_list
         self.assertEqual(
             [call.args[7] for call in calls],
-            ["golden", *("candidate" for _ in range(16))],
+            ["golden", *("candidate" for _ in range(17))],
         )
         self.assertEqual(
             [Path(call.args[0]).name for call in calls[1:]],
@@ -149,6 +150,7 @@ class GoldenUpdateTests(unittest.TestCase):
                 "warm_reference.env",
                 "impurity_restarts.env",
                 "impurity_references.env",
+                "neutral_sources_in_elements_restart.env",
                 "neutral_sources_in_elements_reference.env",
                 *("neutral_feature_references.env" for _ in range(11)),
             ],
@@ -172,6 +174,27 @@ class GoldenUpdateTests(unittest.TestCase):
                     "workflow": "warm_neutral_sources_in_elements",
                     "roles": ["warm_neutral_sources_in_elements_reference"],
                 }
+            ],
+        )
+        restart_mapping = promotions[
+            "neutral_sources_in_elements_restart"
+        ].args[2]
+        self.assertEqual(
+            restart_mapping,
+            [
+                {
+                    "workflow": "bootstrap_neutral_sources_in_elements",
+                    "roles": ["warm_neutral_sources_in_elements_restart"],
+                }
+            ],
+        )
+        impurity_restart_mappings = promotions["impurity_restarts"].args[2]
+        self.assertEqual(
+            [mapping["workflow"] for mapping in impurity_restart_mappings],
+            [
+                "bootstrap_impurity_off",
+                "bootstrap_impurity_n",
+                "bootstrap_impurity_nw",
             ],
         )
         neutral_mappings = promotions["neutral_feature_references"].args[2]
@@ -260,7 +283,7 @@ class GoldenUpdateTests(unittest.TestCase):
             self.assertEqual(self._run(), 0)
 
         self.assertEqual(calls[:2], [False, True])
-        self.assertEqual(len(calls), 18)
+        self.assertEqual(len(calls), 19)
         self.assertEqual(self._state()["stages"][0]["status"], "completed")
         self.assertEqual(self._state()["status"], "awaiting_acceptance")
 
@@ -290,7 +313,7 @@ class GoldenUpdateTests(unittest.TestCase):
         failed_summary = failed_stage["summary"]
         self.assertEqual(failed_state["status"], "failed")
         self.assertEqual(failed_stage["status"], "failed")
-        self.assertEqual(len(attempted_run_ids), 8)
+        self.assertEqual(len(attempted_run_ids), 9)
 
         self.assertEqual(self._run("--retry-failed"), 0)
         state = self._state()
@@ -307,7 +330,7 @@ class GoldenUpdateTests(unittest.TestCase):
             retried_stage["failed_attempts"][0]["summary"], failed_summary
         )
         self.assertEqual(
-            attempted_run_ids[8],
+            attempted_run_ids[9],
             "golden-test-stored_field_compatibility-retry-1",
         )
         self.assertEqual(
@@ -402,7 +425,7 @@ class GoldenUpdateTests(unittest.TestCase):
 
         calls_before_retry = self.run_suite.call_count
         self.assertEqual(self._run("--retry-from", "impurity_references"), 0)
-        self.assertEqual(self.run_suite.call_count - calls_before_retry, 14)
+        self.assertEqual(self.run_suite.call_count - calls_before_retry, 15)
 
         state = self._state()
         impurity_restarts = state["stages"][2]

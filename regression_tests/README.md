@@ -312,6 +312,14 @@ Reference producers may differ from the old fields under review, but golden
 promotion stops automatically if any producer fails its declared Newton
 convergence check.
 
+The legacy campaign does not carry specialized restart states directly from
+the source bundle. Its analytical cold matrix first creates the canonical warm
+restart. Dedicated producer stages then derive the impurity-off, nitrogen,
+nitrogen-tungsten, and relocated-source restarts from that current warm state.
+Reference and race stages consume those regenerated restarts. The previous
+golden therefore supplies immutable inputs and comparison references, but not
+the solution-state lineage published by the new campaign.
+
 The verified candidate is published atomically as a golden bundle. Campaign
 state, declaration, build metadata, suite summaries, run plans/metadata, and
 comparison reports are registered below `provenance/golden_campaign/`.

@@ -290,6 +290,28 @@ class RunPreparationTests(unittest.TestCase):
                     reference_name,
                 )
 
+    def test_specialized_restart_bootstraps_use_canonical_warm_state(self) -> None:
+        for workflow in (
+            "bootstrap_neutral_sources_in_elements",
+            "bootstrap_impurity_off",
+            "bootstrap_impurity_n",
+            "bootstrap_impurity_nw",
+        ):
+            with self.subTest(workflow=workflow):
+                prepared = prepare_run(
+                    self.settings,
+                    "legacy_case",
+                    workflow,
+                    "mpi4_omp4",
+                    REGRESSION_ROOT / "cases",
+                    REGRESSION_ROOT / "layouts.json",
+                    workflow,
+                )
+                self.assertEqual(
+                    (prepared.path / "inputs/restart.h5").resolve().name,
+                    "restart.h5",
+                )
+
     def test_prepares_pr06_neutral_feature_race_variants(self) -> None:
         expected_assignments = {
             "race_neutral_sources_in_elements": (
