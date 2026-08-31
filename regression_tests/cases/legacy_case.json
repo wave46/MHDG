@@ -324,8 +324,9 @@
     },
     "cold_adaptive_neutral_sources_in_elements": {
       "extends": "cold_adaptive",
-      "description": "Reach a source-relocated state from an adaptive cold start",
+      "description": "Reach a source-relocated state from an adaptive cold start with detailed particle diagnostics",
       "parameter_overrides": {
+        "balance_diagnostics_mode": "detailed",
         "neutral_wall_sources_in_elements": true
       }
     },

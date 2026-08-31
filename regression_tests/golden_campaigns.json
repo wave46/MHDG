@@ -132,6 +132,33 @@
           "acceptance_required": false
         },
         {
+          "id": "neutral_feature_race_evidence",
+          "kind": "suite",
+          "suite": "neutral_feature_race_matrix",
+          "acceptance_required": false
+        },
+        {
+          "id": "neutral_sources_race_evidence",
+          "kind": "suite",
+          "suite": "neutral_sources_in_elements_race_matrix",
+          "checker": "balance_diagnostics",
+          "acceptance_required": false
+        },
+        {
+          "id": "balance_diagnostics_evidence",
+          "kind": "suite",
+          "suite": "balance_diagnostics_cold",
+          "checker": "balance_diagnostics",
+          "acceptance_required": false
+        },
+        {
+          "id": "neutral_sources_cold_evidence",
+          "kind": "suite",
+          "suite": "neutral_sources_in_elements_cold_adaptive",
+          "checker": "balance_diagnostics",
+          "acceptance_required": false
+        },
+        {
           "id": "verify_warm",
           "kind": "verification",
           "suite": "warm",

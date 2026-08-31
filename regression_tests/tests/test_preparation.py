@@ -477,6 +477,7 @@ class RunPreparationTests(unittest.TestCase):
         for workflow in (
             "cold_fixed_balance_diagnostics",
             "cold_adaptive_balance_diagnostics",
+            "cold_adaptive_neutral_sources_in_elements",
         ):
             with self.subTest(workflow=workflow):
                 prepared = prepare_run(

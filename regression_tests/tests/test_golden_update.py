@@ -58,6 +58,10 @@ class GoldenUpdateTests(unittest.TestCase):
             "compare_layout_pairs",
             return_value=[{"status": "passed"}],
         )
+        self.check_balance = self._patch(
+            "check_balance_diagnostics",
+            return_value={"status": "passed", "failures": [], "runs": []},
+        )
         old_report = self.root / "old-golden.json"
         old_report.write_text("{}\n", encoding="utf-8")
         self.verify_suite = self._patch(
@@ -109,6 +113,10 @@ class GoldenUpdateTests(unittest.TestCase):
                 "stored_field_compatibility",
                 "warm_parallelism",
                 "race_matrix",
+                "neutral_feature_race_matrix",
+                "neutral_sources_in_elements_race_matrix",
+                "balance_diagnostics_cold",
+                "neutral_sources_in_elements_cold_adaptive",
                 "warm",
                 "impurity_mixture",
                 "neutral_features_warm",
@@ -132,7 +140,7 @@ class GoldenUpdateTests(unittest.TestCase):
         calls = self.run_suite.call_args_list
         self.assertEqual(
             [call.args[7] for call in calls],
-            ["golden", *("candidate" for _ in range(12))],
+            ["golden", *("candidate" for _ in range(16))],
         )
         self.assertEqual(
             [Path(call.args[0]).name for call in calls[1:]],
@@ -142,9 +150,10 @@ class GoldenUpdateTests(unittest.TestCase):
                 "impurity_restarts.env",
                 "impurity_references.env",
                 "neutral_sources_in_elements_reference.env",
-                *("neutral_feature_references.env" for _ in range(7)),
+                *("neutral_feature_references.env" for _ in range(11)),
             ],
         )
+        self.assertEqual(self.check_balance.call_count, 3)
         self.assertEqual(
             self.promote_bundle.call_args.kwargs["matrix_warm_roles"],
             ("warm_restart",),
@@ -194,6 +203,11 @@ class GoldenUpdateTests(unittest.TestCase):
         )
         self.assertIn(
             "stages/verify_neutral_features/suite_summary.json",
+            published_files,
+        )
+        self.assertIn(
+            "stages/balance_diagnostics_evidence/"
+            "balance_diagnostics_report.json",
             published_files,
         )
         self.assertEqual(self._run(), 0)
@@ -246,7 +260,7 @@ class GoldenUpdateTests(unittest.TestCase):
             self.assertEqual(self._run(), 0)
 
         self.assertEqual(calls[:2], [False, True])
-        self.assertEqual(len(calls), 14)
+        self.assertEqual(len(calls), 18)
         self.assertEqual(self._state()["stages"][0]["status"], "completed")
         self.assertEqual(self._state()["status"], "awaiting_acceptance")
 
@@ -343,6 +357,23 @@ class GoldenUpdateTests(unittest.TestCase):
         self.assertEqual(self.promote_bundle.call_count, 1)
         self.assertEqual(self.promote_mapped_bundle.call_count, 0)
 
+    def test_balance_checker_failure_stops_campaign(self) -> None:
+        self.check_balance.return_value = {
+            "status": "failed",
+            "failures": ["synthetic balance failure"],
+            "runs": [],
+        }
+
+        with redirect_stderr(StringIO()):
+            self.assertEqual(self._run(), 1)
+
+        state = self._state()
+        failed = next(
+            stage for stage in state["stages"] if stage["status"] == "failed"
+        )
+        self.assertEqual(failed["id"], "neutral_sources_race_evidence")
+        self.assertIn("balance_diagnostics_report", failed)
+
     def test_retry_from_rewinds_to_preceding_candidate(self) -> None:
         failed_once = False
 
@@ -371,7 +402,7 @@ class GoldenUpdateTests(unittest.TestCase):
 
         calls_before_retry = self.run_suite.call_count
         self.assertEqual(self._run("--retry-from", "impurity_references"), 0)
-        self.assertEqual(self.run_suite.call_count - calls_before_retry, 10)
+        self.assertEqual(self.run_suite.call_count - calls_before_retry, 14)
 
         state = self._state()
         impurity_restarts = state["stages"][2]

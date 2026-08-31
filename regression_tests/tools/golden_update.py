@@ -10,6 +10,7 @@ from typing import Any
 
 from build.configuration import parse_build_jobs
 from build.workflow import build_solver
+from check_balance_diagnostics import check_suite as check_balance_diagnostics
 from bundle.promotion import (
     promote_bundle,
     promote_mapped_bundle,
@@ -37,6 +38,7 @@ ATTEMPT_RECORD_FIELDS = (
     "summary",
     "layout_pair_report",
     "old_golden_report",
+    "balance_diagnostics_report",
 )
 STAGE_RESULT_FIELDS = ATTEMPT_RECORD_FIELDS + (
     "candidate",
@@ -50,6 +52,7 @@ DECLARATION_STAGE_FIELDS = (
     "suite",
     "component",
     "acceptance_required",
+    "checker",
     "role_mappings",
 )
 
@@ -432,6 +435,20 @@ def _run_stage(
     )
     passed = summary["status"] == "passed"
     stage["summary"] = _file_record(summary_path)
+    if passed and stage.get("checker") == "balance_diagnostics":
+        report = check_balance_diagnostics(summary_path)
+        report_path = (
+            Path(state["workspace"])
+            / "reports"
+            / f"{_stage_attempt_name(stage)}-balance-diagnostics.json"
+        )
+        write_json_atomic(
+            report_path,
+            report,
+            "balance diagnostics report",
+        )
+        stage["balance_diagnostics_report"] = _file_record(report_path)
+        passed = report["status"] == "passed"
     if stage["kind"] == "matrix" and passed:
         passed = _record_matrix_reports(state, stage, summary_path, summary, args)
     elif (
@@ -745,7 +762,11 @@ def _append_attempt_provenance(
     documents = [("suite_summary.json", summary_path)]
     documents.extend(
         (f"{name}.json", _recorded_path(attempt[name], name))
-        for name in ("layout_pair_report", "old_golden_report")
+        for name in (
+            "layout_pair_report",
+            "old_golden_report",
+            "balance_diagnostics_report",
+        )
         if name in attempt
     )
     report_paths = set()

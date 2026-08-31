@@ -294,10 +294,17 @@ stages. `golden status WORKSPACE` shows progress; without `--workspace`, the
 workspace is `MHDG_REGRESSION_RUN_ROOT/golden_campaigns/RUN_ID`. Resumes reject
 changed inputs and never overwrite a workspace, candidate, or output.
 
-The default refresh includes cold matrices, warm, mixture, and independent
-neutral-feature references, initialization/stored-field/race evidence, warm
-layout checks, and final warm/mixture/neutral verification. Repeat `--only` to
-select `cold_matrix`, `warm`, `impurity_mixture`, or `neutral_features`. A
+The default legacy refresh includes cold matrices, warm, mixture, and
+independent neutral-feature references; initialization and stored-field checks;
+ordinary, limiter/pressure/perpendicular, and relocated-source race matrices;
+the fixed/adaptive detailed-balance overnight; the full relocated-source
+adaptive cold workflow; warm layout checks; and final warm/mixture/neutral
+verification. Detailed-balance campaign stages run the diagnostics checker
+automatically and fail the campaign if their algebra, terminal/HDF5 agreement,
+or relocated puff/pump accounting fails. NeutralGamma is deliberately outside
+this canonical campaign because it uses a different solver model. Repeat
+`--only` to select `cold_matrix`, `warm`, `impurity_mixture`, or
+`neutral_features`. A
 cold-matrix refresh also updates the canonical warm restart, while `warm`
 updates the warm reference. Updating only warm or only mixture references
 records a consistency warning; select both together to avoid it.
