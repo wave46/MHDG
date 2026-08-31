@@ -165,6 +165,7 @@ class RunPreparationTests(unittest.TestCase):
         for assignment in (
             "balance_diagnostics_mode = 'detailed'",
             "impurity_radiation = .false.",
+            "neutral_wall_sources_in_elements = .false.",
             "nrp = 2",
             "nts = 1",
             "tau(6) = 1.0",

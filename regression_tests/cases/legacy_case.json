@@ -380,7 +380,8 @@
       "extends": "cold_step_impurity_off",
       "description": "Exercise NeutralGamma with detailed particle diagnostics for one fixed cold step and two Newton iterations",
       "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed"
+        "balance_diagnostics_mode": "detailed",
+        "neutral_wall_sources_in_elements": false
       }
     },
     "cold_step_stored_field": {
