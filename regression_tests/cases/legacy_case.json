@@ -313,7 +313,10 @@
         {
           "id": "continuation_05",
           "parameters": "cold_fixed_continuation_05_parameters",
-          "transport": "cold_fixed_continuation_05_transport_configuration"
+          "transport": "cold_fixed_continuation_05_transport_configuration",
+          "parameter_overrides": {
+            "tNR": 1e-5
+          }
         }
       ]
     },

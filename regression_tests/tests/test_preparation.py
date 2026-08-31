@@ -445,9 +445,13 @@ class RunPreparationTests(unittest.TestCase):
         self.assertTrue((prepared.path / "inputs/reference.h5").is_symlink())
 
         first_parameters = (first.path / "param.txt").read_text(encoding="utf-8")
+        final_parameters = (prepared.stages[-1].run.path / "param.txt").read_text(
+            encoding="utf-8"
+        )
         self.assertIn(str(first.path / "inputs/transport_model.nml"), first_parameters)
         self.assertIn(f"{first.path / 'outputs'}/", first_parameters)
         self.assertIn("rest_adapt = .false.", first_parameters)
+        self.assertIn("tNR = 1e-05", final_parameters)
 
         plan = json.loads(
             (prepared.path / "run_plan.json").read_text(encoding="utf-8")
@@ -465,6 +469,7 @@ class RunPreparationTests(unittest.TestCase):
                 "continuation_05",
             ],
         )
+        self.assertEqual(plan["stages"][-1]["parameter_overrides"]["tNR"], 1e-5)
 
         adaptive = prepare_run(
             self.settings,
@@ -492,6 +497,7 @@ class RunPreparationTests(unittest.TestCase):
         )
         self.assertIn("rest_adapt = .true.", adaptive_parameters[0])
         self.assertIn("rest_adapt = .true.", adaptive_parameters[1])
+        self.assertIn("tNR = 1e-05", adaptive_parameters[-1])
         for index in (2, 3, 4, 5, 6):
             self.assertIn("rest_adapt = .false.", adaptive_parameters[index])
 
