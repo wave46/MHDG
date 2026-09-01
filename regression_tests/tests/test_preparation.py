@@ -163,7 +163,9 @@ class RunPreparationTests(unittest.TestCase):
             neutralgamma.stages[0].run.path / "param.txt"
         ).read_text(encoding="utf-8")
         for assignment in (
+            "balance_diagnostics_mode = 'detailed'",
             "impurity_radiation = .false.",
+            "neutral_wall_sources_in_elements = .false.",
             "nrp = 2",
             "nts = 1",
             "tau(6) = 1.0",
@@ -286,6 +288,28 @@ class RunPreparationTests(unittest.TestCase):
                 self.assertEqual(
                     (prepared.path / "inputs/reference.h5").resolve().name,
                     reference_name,
+                )
+
+    def test_specialized_restart_bootstraps_use_canonical_warm_state(self) -> None:
+        for workflow in (
+            "bootstrap_neutral_sources_in_elements",
+            "bootstrap_impurity_off",
+            "bootstrap_impurity_n",
+            "bootstrap_impurity_nw",
+        ):
+            with self.subTest(workflow=workflow):
+                prepared = prepare_run(
+                    self.settings,
+                    "legacy_case",
+                    workflow,
+                    "mpi4_omp4",
+                    REGRESSION_ROOT / "cases",
+                    REGRESSION_ROOT / "layouts.json",
+                    workflow,
+                )
+                self.assertEqual(
+                    (prepared.path / "inputs/restart.h5").resolve().name,
+                    "restart.h5",
                 )
 
     def test_prepares_pr06_neutral_feature_race_variants(self) -> None:
@@ -421,9 +445,13 @@ class RunPreparationTests(unittest.TestCase):
         self.assertTrue((prepared.path / "inputs/reference.h5").is_symlink())
 
         first_parameters = (first.path / "param.txt").read_text(encoding="utf-8")
+        final_parameters = (prepared.stages[-1].run.path / "param.txt").read_text(
+            encoding="utf-8"
+        )
         self.assertIn(str(first.path / "inputs/transport_model.nml"), first_parameters)
         self.assertIn(f"{first.path / 'outputs'}/", first_parameters)
         self.assertIn("rest_adapt = .false.", first_parameters)
+        self.assertIn("tNR = 1e-05", final_parameters)
 
         plan = json.loads(
             (prepared.path / "run_plan.json").read_text(encoding="utf-8")
@@ -441,6 +469,7 @@ class RunPreparationTests(unittest.TestCase):
                 "continuation_05",
             ],
         )
+        self.assertEqual(plan["stages"][-1]["parameter_overrides"]["tNR"], 1e-5)
 
         adaptive = prepare_run(
             self.settings,
@@ -468,8 +497,59 @@ class RunPreparationTests(unittest.TestCase):
         )
         self.assertIn("rest_adapt = .true.", adaptive_parameters[0])
         self.assertIn("rest_adapt = .true.", adaptive_parameters[1])
+        self.assertIn("tNR = 1e-05", adaptive_parameters[-1])
         for index in (2, 3, 4, 5, 6):
             self.assertIn("rest_adapt = .false.", adaptive_parameters[index])
+
+    def test_enables_detailed_diagnostics_in_every_cold_stage(self) -> None:
+        for workflow in (
+            "cold_fixed_balance_diagnostics",
+            "cold_adaptive_balance_diagnostics",
+            "cold_adaptive_neutral_sources_in_elements",
+        ):
+            with self.subTest(workflow=workflow):
+                prepared = prepare_run(
+                    self.settings,
+                    "legacy_case",
+                    workflow,
+                    "serial_omp1",
+                    REGRESSION_ROOT / "cases",
+                    REGRESSION_ROOT / "layouts.json",
+                    workflow,
+                )
+                self.assertEqual(len(prepared.stages), 7)
+                for stage in prepared.stages:
+                    parameters = (stage.run.path / "param.txt").read_text(
+                        encoding="utf-8"
+                    )
+                    self.assertEqual(
+                        parameters.count(
+                            "balance_diagnostics_mode = 'detailed'"
+                        ),
+                        1,
+                    )
+
+        for workflow in (
+            "cold_step_fixed_neutral_sources_in_elements",
+            "cold_step_adaptive_neutral_sources_in_elements",
+        ):
+            with self.subTest(workflow=workflow):
+                prepared = prepare_run(
+                    self.settings,
+                    "legacy_case",
+                    workflow,
+                    "serial_omp1",
+                    REGRESSION_ROOT / "cases",
+                    REGRESSION_ROOT / "layouts.json",
+                    workflow,
+                )
+                parameters = (
+                    prepared.stages[0].run.path / "param.txt"
+                ).read_text(encoding="utf-8")
+                self.assertEqual(
+                    parameters.count("balance_diagnostics_mode = 'detailed'"),
+                    1,
+                )
 
     def test_missing_parameter_assignment_fails(self) -> None:
         source = self.root / "incomplete_param.txt"

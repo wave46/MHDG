@@ -1027,14 +1027,6 @@ CONTAINS
         A(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
         A(ign, ign) = 2.d0*U(ign)/Unn
       END IF
-#else
-#ifdef NEUTRALCONVECTION
-      IF (inn > 0) THEN
-        A(inn, 1) = -U(inn)*U(2)/U(1)**2
-        A(inn, 2) = U(inn)/U(1)
-        A(inn, inn) = U(2)/U(1)
-      END IF
-#endif
 #endif
 #endif
     END IF
@@ -1118,14 +1110,6 @@ CONTAINS
         An(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
         An(ign, ign) = 2.d0*U(ign)/Unn
       END IF
-#else
-#ifdef NEUTRALCONVECTION
-      IF (inn > 0) THEN
-        An(inn, 1) = -U(inn)*U(2)/U(1)**2
-        An(inn, 2) = U(inn)/U(1)
-        An(inn, inn) = U(2)/U(1)
-      END IF
-#endif
 #endif
 #endif
     ENDIF
@@ -1139,10 +1123,8 @@ CONTAINS
     REAL*8, INTENT(in)  :: U(:)
     REAL*8, INTENT(out) :: A(:, :)
     REAL*8              :: auxi, auxe
-    INTEGER             :: inn
 
     A = 0.
-    inn = phys%idx_rhon_eq
     auxi = (5.-2.*phys%Gmbohm)/3.
     auxe = (5.-2.*phys%Gmbohme)/3.
     A(1, 1) = -auxi*(U(2)**3/U(1)**3 - U(2)*U(3)/U(1)**2)
@@ -1152,16 +1134,6 @@ CONTAINS
     A(2, 1) = -auxe*U(2)*U(4)/U(1)**2
     A(2, 2) = auxe*U(4)/U(1)
     A(2, 4) = auxe*U(2)/U(1)
-
-#ifdef NEUTRAL
-#ifdef NEUTRALCONVECTION
-    IF (inn > 0) THEN
-      A(inn, 1) = -U(inn)*U(2)/U(1)**2
-      A(inn, 2) = U(inn)/U(1)
-      A(inn, inn) = U(2)/U(1)
-    END IF
-#endif
-#endif
 
   ENDSUBROUTINE jacobianMatricesBohm
 

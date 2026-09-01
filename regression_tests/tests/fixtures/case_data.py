@@ -21,8 +21,11 @@ PARAMETERS = """&INPUT_LST
 /
 &PHYS_LST
 /
+&UTILS_LST
+/
 &NUMER_LST
     nrp = 40
+    tNR = 2e-4
     tau(6) = 1.0
     tau(7) = 1.0
     neutralp_lambda = 0.0

@@ -251,12 +251,23 @@ class SuiteWorkflowTests(unittest.TestCase):
             REGRESSION_ROOT / "layouts.json",
             REGRESSION_ROOT / "cases",
         )
+        restart_producer = load_suite_definition(
+            "neutral_sources_in_elements_restart_producer",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
 
         self.assertTrue(warm["reference_comparisons"])
         self.assertEqual(len(race["layouts"]), 4)
         self.assertEqual(len(race["layout_comparisons"]), 6)
         self.assertEqual(cold_adaptive["layouts"], ["mpi4_omp4"])
         self.assertFalse(cold_adaptive["reference_comparisons"])
+        self.assertEqual(
+            restart_producer["workflow_ids"],
+            ["bootstrap_neutral_sources_in_elements"],
+        )
+        self.assertFalse(restart_producer["reference_comparisons"])
 
     def test_pr06_neutral_feature_suites_are_focused(self) -> None:
         warm = load_suite_definition(
@@ -273,6 +284,12 @@ class SuiteWorkflowTests(unittest.TestCase):
         )
         race = load_suite_definition(
             "neutral_feature_race_matrix",
+            REGRESSION_ROOT / "suites.json",
+            REGRESSION_ROOT / "layouts.json",
+            REGRESSION_ROOT / "cases",
+        )
+        impurity_restarts = load_suite_definition(
+            "impurity_restart_producers",
             REGRESSION_ROOT / "suites.json",
             REGRESSION_ROOT / "layouts.json",
             REGRESSION_ROOT / "cases",
@@ -315,6 +332,15 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertEqual(len(race["layout_comparisons"]), 6)
         self.assertEqual(race["tolerance_profile"], "neutral_feature_race_step")
         self.assertFalse(race["reference_comparisons"])
+        self.assertEqual(
+            impurity_restarts["workflow_ids"],
+            [
+                "bootstrap_impurity_off",
+                "bootstrap_impurity_n",
+                "bootstrap_impurity_nw",
+            ],
+        )
+        self.assertFalse(impurity_restarts["reference_comparisons"])
 
         case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
         self.assertEqual(

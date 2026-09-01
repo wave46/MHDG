@@ -30,20 +30,20 @@
         {
           "id": "impurity_restarts",
           "kind": "reference",
-          "suite": "impurity_references",
+          "suite": "impurity_restart_producers",
           "component": "impurity_mixture",
           "acceptance_required": false,
           "role_mappings": [
             {
-              "workflow": "warm_impurity_off",
+              "workflow": "bootstrap_impurity_off",
               "roles": ["warm_impurity_off_restart"]
             },
             {
-              "workflow": "warm_impurity_n",
+              "workflow": "bootstrap_impurity_n",
               "roles": ["warm_impurity_n_restart"]
             },
             {
-              "workflow": "warm_impurity_nw",
+              "workflow": "bootstrap_impurity_nw",
               "roles": ["warm_impurity_nw_restart"]
             }
           ]
@@ -66,6 +66,19 @@
             {
               "workflow": "warm_impurity_nw",
               "roles": ["warm_impurity_nw_reference"]
+            }
+          ]
+        },
+        {
+          "id": "neutral_sources_in_elements_restart",
+          "kind": "reference",
+          "suite": "neutral_sources_in_elements_restart_producer",
+          "component": "neutral_features",
+          "acceptance_required": false,
+          "role_mappings": [
+            {
+              "workflow": "bootstrap_neutral_sources_in_elements",
+              "roles": ["warm_neutral_sources_in_elements_restart"]
             }
           ]
         },
@@ -129,6 +142,33 @@
           "id": "race_evidence",
           "kind": "suite",
           "suite": "race_matrix",
+          "acceptance_required": false
+        },
+        {
+          "id": "neutral_feature_race_evidence",
+          "kind": "suite",
+          "suite": "neutral_feature_race_matrix",
+          "acceptance_required": false
+        },
+        {
+          "id": "neutral_sources_race_evidence",
+          "kind": "suite",
+          "suite": "neutral_sources_in_elements_race_matrix",
+          "checker": "balance_diagnostics",
+          "acceptance_required": false
+        },
+        {
+          "id": "balance_diagnostics_evidence",
+          "kind": "suite",
+          "suite": "balance_diagnostics_cold",
+          "checker": "balance_diagnostics",
+          "acceptance_required": false
+        },
+        {
+          "id": "neutral_sources_cold_evidence",
+          "kind": "suite",
+          "suite": "neutral_sources_in_elements_cold_adaptive",
+          "checker": "balance_diagnostics",
           "acceptance_required": false
         },
         {

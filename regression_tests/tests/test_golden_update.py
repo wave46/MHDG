@@ -58,6 +58,10 @@ class GoldenUpdateTests(unittest.TestCase):
             "compare_layout_pairs",
             return_value=[{"status": "passed"}],
         )
+        self.check_balance = self._patch(
+            "check_balance_diagnostics",
+            return_value={"status": "passed", "failures": [], "runs": []},
+        )
         old_report = self.root / "old-golden.json"
         old_report.write_text("{}\n", encoding="utf-8")
         self.verify_suite = self._patch(
@@ -101,14 +105,19 @@ class GoldenUpdateTests(unittest.TestCase):
             [
                 "cold_matrix",
                 "warm",
+                "impurity_restart_producers",
                 "impurity_references",
-                "impurity_references",
+                "neutral_sources_in_elements_restart_producer",
                 "neutral_sources_in_elements_warm",
                 "neutral_feature_references",
                 "initialization_smoke",
                 "stored_field_compatibility",
                 "warm_parallelism",
                 "race_matrix",
+                "neutral_feature_race_matrix",
+                "neutral_sources_in_elements_race_matrix",
+                "balance_diagnostics_cold",
+                "neutral_sources_in_elements_cold_adaptive",
                 "warm",
                 "impurity_mixture",
                 "neutral_features_warm",
@@ -128,11 +137,11 @@ class GoldenUpdateTests(unittest.TestCase):
         self.assertFalse(self.output.exists())
         self.assertEqual(self._run("--accept", "campaign"), 0)
         self.assertEqual(self.promote_bundle.call_count, 1)
-        self.assertEqual(self.promote_mapped_bundle.call_count, 5)
+        self.assertEqual(self.promote_mapped_bundle.call_count, 6)
         calls = self.run_suite.call_args_list
         self.assertEqual(
             [call.args[7] for call in calls],
-            ["golden", *("candidate" for _ in range(12))],
+            ["golden", *("candidate" for _ in range(17))],
         )
         self.assertEqual(
             [Path(call.args[0]).name for call in calls[1:]],
@@ -141,10 +150,12 @@ class GoldenUpdateTests(unittest.TestCase):
                 "warm_reference.env",
                 "impurity_restarts.env",
                 "impurity_references.env",
+                "neutral_sources_in_elements_restart.env",
                 "neutral_sources_in_elements_reference.env",
-                *("neutral_feature_references.env" for _ in range(7)),
+                *("neutral_feature_references.env" for _ in range(11)),
             ],
         )
+        self.assertEqual(self.check_balance.call_count, 3)
         self.assertEqual(
             self.promote_bundle.call_args.kwargs["matrix_warm_roles"],
             ("warm_restart",),
@@ -163,6 +174,27 @@ class GoldenUpdateTests(unittest.TestCase):
                     "workflow": "warm_neutral_sources_in_elements",
                     "roles": ["warm_neutral_sources_in_elements_reference"],
                 }
+            ],
+        )
+        restart_mapping = promotions[
+            "neutral_sources_in_elements_restart"
+        ].args[2]
+        self.assertEqual(
+            restart_mapping,
+            [
+                {
+                    "workflow": "bootstrap_neutral_sources_in_elements",
+                    "roles": ["warm_neutral_sources_in_elements_restart"],
+                }
+            ],
+        )
+        impurity_restart_mappings = promotions["impurity_restarts"].args[2]
+        self.assertEqual(
+            [mapping["workflow"] for mapping in impurity_restart_mappings],
+            [
+                "bootstrap_impurity_off",
+                "bootstrap_impurity_n",
+                "bootstrap_impurity_nw",
             ],
         )
         neutral_mappings = promotions["neutral_feature_references"].args[2]
@@ -194,6 +226,11 @@ class GoldenUpdateTests(unittest.TestCase):
         )
         self.assertIn(
             "stages/verify_neutral_features/suite_summary.json",
+            published_files,
+        )
+        self.assertIn(
+            "stages/balance_diagnostics_evidence/"
+            "balance_diagnostics_report.json",
             published_files,
         )
         self.assertEqual(self._run(), 0)
@@ -246,7 +283,7 @@ class GoldenUpdateTests(unittest.TestCase):
             self.assertEqual(self._run(), 0)
 
         self.assertEqual(calls[:2], [False, True])
-        self.assertEqual(len(calls), 14)
+        self.assertEqual(len(calls), 19)
         self.assertEqual(self._state()["stages"][0]["status"], "completed")
         self.assertEqual(self._state()["status"], "awaiting_acceptance")
 
@@ -276,7 +313,7 @@ class GoldenUpdateTests(unittest.TestCase):
         failed_summary = failed_stage["summary"]
         self.assertEqual(failed_state["status"], "failed")
         self.assertEqual(failed_stage["status"], "failed")
-        self.assertEqual(len(attempted_run_ids), 8)
+        self.assertEqual(len(attempted_run_ids), 9)
 
         self.assertEqual(self._run("--retry-failed"), 0)
         state = self._state()
@@ -293,7 +330,7 @@ class GoldenUpdateTests(unittest.TestCase):
             retried_stage["failed_attempts"][0]["summary"], failed_summary
         )
         self.assertEqual(
-            attempted_run_ids[8],
+            attempted_run_ids[9],
             "golden-test-stored_field_compatibility-retry-1",
         )
         self.assertEqual(
@@ -343,6 +380,23 @@ class GoldenUpdateTests(unittest.TestCase):
         self.assertEqual(self.promote_bundle.call_count, 1)
         self.assertEqual(self.promote_mapped_bundle.call_count, 0)
 
+    def test_balance_checker_failure_stops_campaign(self) -> None:
+        self.check_balance.return_value = {
+            "status": "failed",
+            "failures": ["synthetic balance failure"],
+            "runs": [],
+        }
+
+        with redirect_stderr(StringIO()):
+            self.assertEqual(self._run(), 1)
+
+        state = self._state()
+        failed = next(
+            stage for stage in state["stages"] if stage["status"] == "failed"
+        )
+        self.assertEqual(failed["id"], "neutral_sources_race_evidence")
+        self.assertIn("balance_diagnostics_report", failed)
+
     def test_retry_from_rewinds_to_preceding_candidate(self) -> None:
         failed_once = False
 
@@ -371,7 +425,7 @@ class GoldenUpdateTests(unittest.TestCase):
 
         calls_before_retry = self.run_suite.call_count
         self.assertEqual(self._run("--retry-from", "impurity_references"), 0)
-        self.assertEqual(self.run_suite.call_count - calls_before_retry, 10)
+        self.assertEqual(self.run_suite.call_count - calls_before_retry, 15)
 
         state = self._state()
         impurity_restarts = state["stages"][2]

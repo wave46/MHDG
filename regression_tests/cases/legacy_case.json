@@ -101,6 +101,12 @@
         "neutral_flux_limiter_save_2d": false
       }
     },
+    "bootstrap_neutral_sources_in_elements": {
+      "extends": "warm_neutral_sources_in_elements",
+      "description": "Create the source-relocated restart from the current canonical warm state",
+      "restart": "warm_restart",
+      "outputs": ["warm_neutral_sources_in_elements_restart"]
+    },
     "warm_neutral_perpendicular": {
       "extends": "warm_neutral_sources_in_elements",
       "description": "Reconverge the source-relocated state with perpendicular neutral diffusion",
@@ -232,6 +238,24 @@
         "impurity_radiation": true
       }
     },
+    "bootstrap_impurity_off": {
+      "extends": "warm_impurity_off",
+      "description": "Create the impurity-off restart from the current canonical warm state",
+      "restart": "warm_restart",
+      "outputs": ["warm_impurity_off_restart"]
+    },
+    "bootstrap_impurity_n": {
+      "extends": "warm_impurity_n",
+      "description": "Create the nitrogen restart from the current canonical warm state",
+      "restart": "warm_restart",
+      "outputs": ["warm_impurity_n_restart"]
+    },
+    "bootstrap_impurity_nw": {
+      "extends": "warm_impurity_nw",
+      "description": "Create the nitrogen-tungsten restart from the current canonical warm state",
+      "restart": "warm_restart",
+      "outputs": ["warm_impurity_nw_restart"]
+    },
     "cold_fixed": {
       "type": "staged_fixed_mesh",
       "description": "Reach the canonical state from analytical initialization on the fixed mesh",
@@ -289,7 +313,10 @@
         {
           "id": "continuation_05",
           "parameters": "cold_fixed_continuation_05_parameters",
-          "transport": "cold_fixed_continuation_05_transport_configuration"
+          "transport": "cold_fixed_continuation_05_transport_configuration",
+          "parameter_overrides": {
+            "tNR": 1e-5
+          }
         }
       ]
     },
@@ -308,10 +335,25 @@
         "diffusion_reduction"
       ]
     },
+    "cold_fixed_balance_diagnostics": {
+      "extends": "cold_fixed",
+      "description": "Trace detailed particle balances through the fixed-mesh cold workflow",
+      "parameter_overrides": {
+        "balance_diagnostics_mode": "detailed"
+      }
+    },
+    "cold_adaptive_balance_diagnostics": {
+      "extends": "cold_adaptive",
+      "description": "Trace detailed particle balances through the adaptive cold workflow",
+      "parameter_overrides": {
+        "balance_diagnostics_mode": "detailed"
+      }
+    },
     "cold_adaptive_neutral_sources_in_elements": {
       "extends": "cold_adaptive",
-      "description": "Reach a source-relocated state from an adaptive cold start",
+      "description": "Reach a source-relocated state from an adaptive cold start with detailed particle diagnostics",
       "parameter_overrides": {
+        "balance_diagnostics_mode": "detailed",
         "neutral_wall_sources_in_elements": true
       }
     },
@@ -364,7 +406,11 @@
     },
     "cold_step_neutralgamma": {
       "extends": "cold_step_impurity_off",
-      "description": "Exercise NeutralGamma for one fixed cold step and two Newton iterations"
+      "description": "Exercise NeutralGamma with detailed particle diagnostics for one fixed cold step and two Newton iterations",
+      "parameter_overrides": {
+        "balance_diagnostics_mode": "detailed",
+        "neutral_wall_sources_in_elements": false
+      }
     },
     "cold_step_stored_field": {
       "extends": "cold_step_fixed",
@@ -386,15 +432,17 @@
     },
     "cold_step_fixed_neutral_sources_in_elements": {
       "extends": "cold_step_fixed",
-      "description": "Run a fixed one-step race check with neutral wall sources in elements",
+      "description": "Run a fixed one-step race and detailed-balance check with neutral wall sources in elements",
       "parameter_overrides": {
+        "balance_diagnostics_mode": "detailed",
         "neutral_wall_sources_in_elements": true
       }
     },
     "cold_step_adaptive_neutral_sources_in_elements": {
       "extends": "cold_step_adaptive",
-      "description": "Run an adaptive one-step race check with neutral wall sources in elements",
+      "description": "Run an adaptive one-step race and detailed-balance check with neutral wall sources in elements",
       "parameter_overrides": {
+        "balance_diagnostics_mode": "detailed",
         "neutral_wall_sources_in_elements": true
       }
     }

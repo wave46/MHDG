@@ -70,16 +70,19 @@ analytically. Fixed and adaptive indicate whether the mesh can change.
 | `warm` | Existing steady restart; fixed mesh | Reconverge the same state. |
 | `cold_fixed` | Analytical start; refined fixed mesh | `time_init`, `diffusion_reduction`, then five continuations. |
 | `cold_adaptive` | Analytical start; coarse mesh | Same seven stages; adapt in the first two. |
+| `cold_fixed_balance_diagnostics` | Analytical start; refined fixed mesh | Detailed particle diagnostics through all seven fixed stages. |
+| `cold_adaptive_balance_diagnostics` | Analytical start; coarse mesh | Detailed particle diagnostics through all seven adaptive stages. |
 | `cold_step_fixed` | Analytical start; coarse fixed mesh | One time step and two Newton iterations. |
 | `cold_step_impurity_off` | Analytical start; coarse fixed mesh | Short disabled-impurity lifecycle check. |
+| `cold_step_neutralgamma` | Analytical start; coarse fixed mesh | Short NeutralGamma race check with detailed particle diagnostics. |
 | `cold_step_adaptive` | Analytical start; coarse adaptive mesh | One time step, two Newton iterations, and one adaptation pass. |
 | `warm_neutral_sources_in_elements` | Accepted source-relocated restart; fixed mesh | Reconverge with puff and pump in elements. |
 | `warm_neutral_pressure` | Source-relocated warm restart; fixed mesh | Exercise `neutralp_lambda=0.05`. |
 | `warm_neutral_perpendicular` | Source-relocated warm restart; fixed mesh | Exercise projected perpendicular neutral diffusion. |
 | `warm_neutral_limiter_fixed` | Source-relocated warm restart; fixed mesh | Exercise active limiting with fixed `Tn=2.5 eV`. |
 | `warm_neutral_limiter_ti` | Source-relocated warm restart; fixed mesh | Exercise active limiting with `Tn=Ti`. |
-| `cold_step_fixed_neutral_sources_in_elements` | Analytical start; coarse fixed mesh | Short relocated-source race and conservation check. |
-| `cold_step_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Short relocated-source adaptation check. |
+| `cold_step_fixed_neutral_sources_in_elements` | Analytical start; coarse fixed mesh | Short relocated-source race and detailed-balance check. |
+| `cold_step_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Short relocated-source adaptation and detailed-balance check. |
 | `cold_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Complete relocated-source cold workflow. |
 
 Full cold stages run sequentially and restart from their predecessor. The
@@ -119,18 +122,19 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | --- | --- | --- |
 | `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
 | `neutral_pressure_warm` | Pressure-on warm restart, `mpi4_omp4` | Execution-only pressure continuation attempt. |
-| `neutralgamma_race` | NeutralGamma fixed cold step, `serial_omp1` vs `serial_omp16` | Two-Newton-iteration OpenMP race check. |
-| `neutral_sources_in_elements_warm` | Relocated-source warm restart, `mpi4_omp4` | Golden reconvergence and wall/volume conservation. |
+| `neutralgamma_race` | NeutralGamma fixed cold step, `serial_omp1` vs `serial_omp16` | Two-Newton-iteration OpenMP and detailed-balance check. |
+| `neutral_sources_in_elements_warm` | Relocated-source warm restart, `mpi4_omp4` | Golden reconvergence of the relocated-source formulation. |
 | `neutral_feature_references` | Pressure, projection, fixed-`Tn`, and `Tn=Ti`, `mpi4_omp4` | Reference producer used by golden refreshes. |
 | `neutral_features_warm` | Relocation plus the four independent feature variants, `mpi4_omp4` | Routine golden comparison. |
 | `neutral_feature_race_matrix` | The five independent neutral variants, every layout pair | Two-Newton-iteration race check without 2D diagnostics. |
-| `neutral_sources_in_elements_race_matrix` | Relocated-source fixed/adaptive steps, every layout pair | Mesh, field, race, and source-total checks. |
-| `neutral_sources_in_elements_cold_adaptive` | Full relocated-source adaptive cold start, `mpi4_omp4` | Canonical convergence and conservation evidence. |
+| `neutral_sources_in_elements_race_matrix` | Relocated-source fixed/adaptive steps, every layout pair | Mesh, field, race, and detailed source-placement checks. |
+| `neutral_sources_in_elements_cold_adaptive` | Full relocated-source adaptive cold start, `mpi4_omp4` | Canonical convergence evidence. |
 | `impurity_scalar_baseline` | Impurity off and N, `mpi4_omp4` | Focused compatibility check. |
 | `impurity_mixture` | Impurity off, W, N, and N+W, `mpi4_omp4` | Manual mixture-reference check. |
 | `initialization_smoke` | Disabled-impurity analytical start, `mpi4_omp4` | Execution-only initialization evidence. |
 | `race` | Both one-step workflows, `serial_omp1` vs `serial_omp16` | Routine OpenMP race check. |
 | `cold` | Both full cold workflows, `mpi4_omp4` | Canonical integration check. |
+| `balance_diagnostics_cold` | Detailed fixed and adaptive cold workflows, `mpi4_omp4` | Overnight particle-balance history and HDF5-contract check. |
 | `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |
 | `race_matrix` | Both one-step workflows, every pair of tracked layouts | Periodic race check. |
 | `cold_matrix` | Both full cold workflows, all layouts and all layout pairs | Overnight golden and reproducibility evidence. |
@@ -199,6 +203,20 @@ Recorded cells are skipped. An incomplete run is preserved and retried as
 executables, or launcher. `--build` cannot be combined with `--resume`; after
 an initial `--build`, use the generated `settings.env` printed by that build.
 
+Run the opt-in balance suite in the background with the PR06 neutral-feature
+bundle and the existing MPI/OpenMP executable:
+
+```bash
+nohup regression_tests/regression.sh suite run balance_diagnostics_cold \
+  --settings regression_tests/pr06-neutral-features.local.env \
+  --run-only --run-id pr07-balance-overnight-01 \
+  > pr07-balance-overnight-01.log 2>&1 &
+```
+
+Use the same command plus `--resume` after an interruption. Existing workflows
+remain diagnostics-off; only the two diagnostic workflow variants request
+`balance_diagnostics_mode='detailed'`.
+
 ### Build reusable executables
 
 ```bash
@@ -242,15 +260,21 @@ regression_tests/regression.sh suite compare \
   /path/to/suites/cold_matrix/overnight-01/suite_summary.json
 ```
 
-The focused checker verifies every marked puff and pump wall/volume pair at
-relative tolerance `1e-12`, requires positive final source totals, then
-compares final totals for every layout pair declared in a completed suite at
-`5e-8`:
+After the balance suite completes, validate every selected stage HDF5 file,
+terminal/HDF5 agreement, particle identities, reaction cancellation, and both
+wall closures:
 
 ```bash
-python regression_tests/tools/check_neutral_wall_sources.py \
-  /path/to/source-suite/suite_summary.json
+regression_tests/regression.sh diagnostics check \
+  /path/to/balance_diagnostics_cold/RUN_ID/suite_summary.json
 ```
+
+The generated `balance_diagnostics_check.json` retains every detailed
+terminal block with its time and Newton iteration, making the onset of a
+physical imbalance visible across the cold workflow. The same command accepts
+completed `neutralgamma_race` and `neutral_sources_in_elements_race_matrix`
+suite summaries; it then requires NeutralGamma flux components or verifies
+that relocated puff/pump terms occur in the volume balance and not the wall BC.
 
 ### Publish accepted references
 
@@ -270,16 +294,31 @@ stages. `golden status WORKSPACE` shows progress; without `--workspace`, the
 workspace is `MHDG_REGRESSION_RUN_ROOT/golden_campaigns/RUN_ID`. Resumes reject
 changed inputs and never overwrite a workspace, candidate, or output.
 
-The default refresh includes cold matrices, warm, mixture, and independent
-neutral-feature references, initialization/stored-field/race evidence, warm
-layout checks, and final warm/mixture/neutral verification. Repeat `--only` to
-select `cold_matrix`, `warm`, `impurity_mixture`, or `neutral_features`. A
+The default legacy refresh includes cold matrices, warm, mixture, and
+independent neutral-feature references; initialization and stored-field checks;
+ordinary, limiter/pressure/perpendicular, and relocated-source race matrices;
+the fixed/adaptive detailed-balance overnight; the full relocated-source
+adaptive cold workflow; warm layout checks; and final warm/mixture/neutral
+verification. Detailed-balance campaign stages run the diagnostics checker
+automatically and fail the campaign if their algebra, terminal/HDF5 agreement,
+or relocated puff/pump accounting fails. NeutralGamma is deliberately outside
+this canonical campaign because it uses a different solver model. Repeat
+`--only` to select `cold_matrix`, `warm`, `impurity_mixture`, or
+`neutral_features`. A
 cold-matrix refresh also updates the canonical warm restart, while `warm`
 updates the warm reference. Updating only warm or only mixture references
 records a consistency warning; select both together to avoid it.
 Reference producers may differ from the old fields under review, but golden
 promotion stops automatically if any producer fails its declared Newton
 convergence check.
+
+The legacy campaign does not carry specialized restart states directly from
+the source bundle. Its analytical cold matrix first creates the canonical warm
+restart. Dedicated producer stages then derive the impurity-off, nitrogen,
+nitrogen-tungsten, and relocated-source restarts from that current warm state.
+Reference and race stages consume those regenerated restarts. The previous
+golden therefore supplies immutable inputs and comparison references, but not
+the solution-state lineage published by the new campaign.
 
 The verified candidate is published atomically as a golden bundle. Campaign
 state, declaration, build metadata, suite summaries, run plans/metadata, and

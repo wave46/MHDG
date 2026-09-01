@@ -12,6 +12,7 @@ MODULE in_out
   USE flux_surface_transport_data
   USE transport_models_1d
   USE build_provenance, ONLY: solver_git_commit, solver_git_dirty, solver_build_id
+  USE balance_diagnostics, ONLY: balance_diag, balance_diagnostics_mode_name
   USE GLOBALS
   USE MPI_OMP
   USE printutils
@@ -562,12 +563,7 @@ CONTAINS
     CALL HDF5_array1D_saving(group_id1, sol%q, SIZE(sol%q), 'q')
     CALL HDF5_group_close(group_id1, ierr)
 
-#if defined(NEUTRAL) && defined(TEMPERATURE)
-    IF (switch%neutral_flux_limiter_save_2d) THEN
-       CALL save_neutral_flux_limiter_diagnostics(file_id, sol%u, sol%q, &
-            &Mesh%T, phys%B)
-    ENDIF
-#endif
+    CALL save_diagnostics(file_id, sol%u, sol%q, Mesh%T, phys%B)
 
     IF (switch%transport_1d) THEN
        CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
@@ -735,12 +731,7 @@ CONTAINS
        CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
        CALL HDF5_group_close(group_id1)
 
-#if defined(NEUTRAL) && defined(TEMPERATURE)
-       IF (switch%neutral_flux_limiter_save_2d) THEN
-          CALL save_neutral_flux_limiter_diagnostics(file_id, u_glob, &
-               &q_glob, T_glob, B_glob)
-       ENDIF
-#endif
+       CALL save_diagnostics(file_id, u_glob, q_glob, T_glob, B_glob)
 
        IF (switch%transport_1d) THEN
           CALL HDF5_group_create('transport_1d', file_id, group_id1, ierr)
@@ -878,15 +869,44 @@ CONTAINS
   ENDIF
   CONTAINS
 
+    SUBROUTINE save_diagnostics(parent_id, u_values, q_values, connectivity, &
+         &magnetic_field)
+      INTEGER(HID_T), INTENT(IN) :: parent_id
+      REAL*8, INTENT(IN) :: u_values(:), q_values(:)
+      INTEGER, INTENT(IN) :: connectivity(:, :)
+      REAL*8, INTENT(IN) :: magnetic_field(:, :)
+      INTEGER(HID_T) :: diagnostics_id
+      INTEGER :: ierr_local
+      LOGICAL :: diagnostics_enabled
+
+      diagnostics_enabled = balance_diag%has_values()
 #if defined(NEUTRAL) && defined(TEMPERATURE)
-    SUBROUTINE save_neutral_flux_limiter_diagnostics(root_id, u_values, &
+      diagnostics_enabled = diagnostics_enabled .OR. &
+           &switch%neutral_flux_limiter_save_2d
+#endif
+      IF (.NOT. diagnostics_enabled) RETURN
+
+      CALL HDF5_group_create('diagnostics', parent_id, diagnostics_id, &
+           &ierr_local)
+      CALL balance_diag%write_hdf5(diagnostics_id)
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+      IF (switch%neutral_flux_limiter_save_2d) THEN
+         CALL save_neutral_flux_limiter_diagnostics(diagnostics_id, u_values, &
+              &q_values, connectivity, magnetic_field)
+      ENDIF
+#endif
+      CALL HDF5_group_close(diagnostics_id, ierr_local)
+    END SUBROUTINE save_diagnostics
+
+#if defined(NEUTRAL) && defined(TEMPERATURE)
+    SUBROUTINE save_neutral_flux_limiter_diagnostics(diagnostics_id, u_values, &
          &q_values, connectivity, magnetic_field)
-      INTEGER(HID_T), INTENT(IN) :: root_id
+      INTEGER(HID_T), INTENT(IN) :: diagnostics_id
       REAL*8, INTENT(IN) :: u_values(:), q_values(:)
       INTEGER, INTENT(IN) :: connectivity(:, :)
       REAL*8, INTENT(IN) :: magnetic_field(:, :)
       TYPE(neutral_flux_limiter_result_t) :: limiter_result
-      INTEGER(HID_T) :: diagnostics_id, limiter_id, fields_id
+      INTEGER(HID_T) :: limiter_id, fields_id
       INTEGER :: iel, inode, field_index, u_index, q_index, node, ierr_local
       INTEGER :: nelems, nodes_per_element
       REAL*8 :: dnn, magnetic_norm
@@ -923,7 +943,6 @@ CONTAINS
          ENDDO
       ENDDO
 
-      CALL HDF5_group_create('diagnostics', root_id, diagnostics_id, ierr_local)
       CALL HDF5_group_create('neutral_flux_limiter', diagnostics_id, &
            &limiter_id, ierr_local)
       CALL HDF5_group_create('fields', limiter_id, fields_id, ierr_local)
@@ -935,8 +954,6 @@ CONTAINS
            &'gamma_cap')
       CALL HDF5_group_close(fields_id, ierr_local)
       CALL HDF5_group_close(limiter_id, ierr_local)
-      CALL HDF5_group_close(diagnostics_id, ierr_local)
-
       DEALLOCATE(dnn_field, phi_field, unlimited_norm_field, cap_field)
     END SUBROUTINE save_neutral_flux_limiter_diagnostics
 #endif
@@ -1281,6 +1298,9 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%neutral_perpendicular_diffusion, 'neutral_perpendicular_diffusion')
       CALL HDF5_logical_saving(group_id2, switch%neutral_wall_sources_in_elements, 'neutral_wall_sources_in_elements')
       CALL HDF5_logical_saving(group_id2, switch%neutral_flux_limiter_save_2d, 'neutral_flux_limiter_save_2d')
+      CALL HDF5_string_saving(group_id2, &
+           balance_diagnostics_mode_name(balance_diag%get_mode()), &
+           'balance_diagnostics_mode')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create numerics parameters group

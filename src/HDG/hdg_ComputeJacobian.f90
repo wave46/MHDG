@@ -16,6 +16,7 @@ SUBROUTINE HDG_computeJacobian()
        toroidal_current_from_flux
   USE magnetic_topology, ONLY: magnetic_region_core
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
+  USE balance_diagnostics, ONLY: balance_accumulator_type, balance_diag
 
   IMPLICIT NONE
 
@@ -70,14 +71,12 @@ SUBROUTINE HDG_computeJacobian()
   REAL*8                :: external_heating_ions_el(refElPol%Nnodes2d),external_heating_electrons_el(refElPol%Nnodes2d)
   real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d),q_cylfl(refElPol%Nfacenodes),omegafl(refElPol%Nfacenodes)
   REAL*8                :: Jtorel(refElPol%Nnodes2d)
-  REAL*8                :: n,El_n,nn,El_nn,totaln
   REAL*8                :: diff_nn_Vol_el(refElPol%NGauss2D),v_nn_Vol_el(refElPol%NGauss2D,Mesh%Ndim),Xg_el(refElPol%NGauss2D,Mesh%Ndim)
   REAL*8                :: diff_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D),v_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D,Mesh%Ndim)
-  REAL*8                :: wall_source_totals_el(4),wall_source_totals(4),wall_source_scale
-  REAL*8,ALLOCATABLE    :: wall_source_element_totals(:,:)
-#endif
-#ifdef PARALL
-  INTEGER               :: ierr
+  REAL*8                :: wall_source_totals_el(4)
+  LOGICAL               :: diagnostics_on
+  LOGICAL               :: element_diagnostics_on,face_diagnostics_on
+  TYPE(balance_accumulator_type) :: thread_diagnostics
 #endif
 
   IF (utils%printint .GT. 1) THEN
@@ -1122,22 +1121,23 @@ CONTAINS
   !   Loop in elements in 2D
   !************************************
 
-  IF (switch%neutral_wall_sources_in_elements) THEN
-    ALLOCATE(wall_source_element_totals(4,N2D))
-    wall_source_element_totals = 0.d0
+  diagnostics_on = balance_diag%enabled()
+  IF (diagnostics_on) THEN
+    CALL balance_diag%begin_assembly(simpar%refval_density, &
+      &simpar%refval_length,simpar%refval_speed)
   ENDIF
-
   !$OMP PARALLEL DEFAULT(SHARED) &
-  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,omegafl,isdir,Jtorel,El_n,El_nn,wall_source_totals_el) &
+  !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,omegafl,isdir,Jtorel,wall_source_totals_el) &
   !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
+  !$OMP PRIVATE(element_diagnostics_on,face_diagnostics_on,thread_diagnostics) &
   !$OMP FIRSTPRIVATE(phys)
 
   ALLOCATE(Xel(Mesh%Nnodesperelem,2))
   ALLOCATE(Xfl(refElPol%Nfacenodes,2))
 
-  n = 0.
-  nn = 0.
-  !$OMP DO SCHEDULE(STATIC) REDUCTION(+:n,nn)
+  IF (diagnostics_on) &
+    &CALL balance_diag%initialize_accumulator(thread_diagnostics)
+  !$OMP DO SCHEDULE(STATIC)
   DO iel = 1,N2D
 
     ! Coordinates of the nodes of the element
@@ -1186,9 +1186,14 @@ CONTAINS
     ue = ures(inde,:)
     u0e = u0res(inde,:,:)
 
+    element_diagnostics_on = diagnostics_on
+#ifdef PARALL
+    IF (Mesh%ghostElems(iel) .NE. 0) element_diagnostics_on = .FALSE.
+#endif
+
     ! Compute the matrices for the element
-    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el)
-    IF (switch%neutral_wall_sources_in_elements) wall_source_element_totals(:,iel) = wall_source_totals_el
+    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el, &
+      &element_diagnostics_on,thread_diagnostics)
 
      IF (save_tau) THEN
        inddiff_nn_Vol = (iel - 1)*refElPol%NGauss2D+(/(i,i=1,refElPol%NGauss2D)/)
@@ -1197,17 +1202,6 @@ CONTAINS
        Mesh%Xg(inddiff_nn_Vol,:) = Xg_el
      ENDIF
 
-    ! Compute total plasma and neutral density (don't add contribution of ghost elements)
-#ifdef PARALL
-     IF (Mesh%ghostElems(iel) .EQ. 0) THEN
-#endif
-      n  = n + El_n
-#ifdef NEUTRAL
-      nn = nn + El_nn
-#endif
-#ifdef PARALL
-    ENDIF
-#endif
     ! Loop in local faces
      IF (save_tau) THEN
        diff_nn_Fac_el = 0.
@@ -1251,7 +1245,14 @@ CONTAINS
       else
 
         if (Mesh%periodic_faces(iface-Mesh%Nintfaces).eq.0) then
-          CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+          ! Element and boundary-face ownership are independent in MPI.
+          face_diagnostics_on = diagnostics_on
+#ifdef PARALL
+          IF (Mesh%boundaryFlag(iface-Mesh%Nintfaces) .EQ. 0) face_diagnostics_on = .FALSE.
+          IF (Mesh%ghostFaces(iface) .NE. 0) face_diagnostics_on = .FALSE.
+#endif
+          CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el, &
+            &face_diagnostics_on,thread_diagnostics)
         else
           ! periodic face
           CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
@@ -1281,29 +1282,13 @@ CONTAINS
 
   END DO
   !$OMP END DO
+  IF (diagnostics_on) THEN
+    !$OMP CRITICAL(balance_diagnostics_thread_merge)
+    CALL balance_diag%merge(thread_diagnostics)
+    !$OMP END CRITICAL(balance_diagnostics_thread_merge)
+  ENDIF
   DEALLOCATE(Xel,Xfl)
   !$OMP END PARALLEL
-
-  IF (switch%neutral_wall_sources_in_elements) THEN
-    wall_source_totals = SUM(wall_source_element_totals,DIM=2)
-#ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, wall_source_totals, 4, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
-#ifdef SAVEFLUX
-    wall_source_scale = 2.d0*PI*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-    wall_source_totals = wall_source_totals*wall_source_scale
-    IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6,'(A,ES24.16,A,ES24.16)') 'NEUTRAL_WALL_SOURCE_CONSERVATION puff wall=',wall_source_totals(1),' volume=',wall_source_totals(2)
-      WRITE(6,'(A,ES24.16,A,ES24.16)') 'NEUTRAL_WALL_SOURCE_CONSERVATION pump wall=',wall_source_totals(3),' volume=',wall_source_totals(4)
-    ENDIF
-#endif
-    DEALLOCATE(wall_source_element_totals)
-  ENDIF
-
-#ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, n, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, nn, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
 
   IF (MPIvar%glob_id.EQ.0) THEN
      IF((switch%ME .EQV. .TRUE.) .AND. (switch%testcase .GE. 80)) THEN
@@ -1315,10 +1300,6 @@ CONTAINS
         WRITE(6,*) 'chi_i', phys%ME_diff_e*simpar%refval_length**2/simpar%refval_time
         WRITE(6,*) 'chi_e', phys%ME_diff_ee*simpar%refval_length**2/simpar%refval_time
      ENDIF
-     totaln = n + nn
-     WRITE(6,*) 'n = ',n
-     WRITE(6,*) 'nn = ',nn
-     WRITE(6,*) 'total n = ',totaln
    ENDIF
 
   DEALLOCATE (ures,lres,u0res)
@@ -1351,7 +1332,7 @@ CONTAINS
   !***************************************************
   ! Volume computation in 2D
   !***************************************************
-  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,El_n,El_nn,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el)
+  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el,diagnostics_on,diagnostics)
 
       INTEGER,INTENT(IN)            :: iel
       REAL*8,INTENT(IN)             :: Xel(:,:)
@@ -1360,9 +1341,10 @@ CONTAINS
       REAL*8,INTENT(IN)             :: omegael(:),q_cylel(:)
       REAL*8,INTENT(IN)             :: qe(:,:)
       REAL*8,INTENT(IN)             :: ue(:,:),u0e(:,:,:)
-      REAL*8,INTENT(OUT)            :: El_n,El_nn
       REAL*8,INTENT(OUT)            :: diff_nn_Vol_el(Ng2D),v_nn_Vol_el(Ng2D,ndim),Xg_el(Ng2D,ndim)
       REAL*8,INTENT(OUT)            :: wall_source_totals_el(4)
+      LOGICAL,INTENT(IN)             :: diagnostics_on
+      TYPE(balance_accumulator_type),INTENT(INOUT) :: diagnostics
       INTEGER*4                     :: g,NGauss,i,inn
       REAL*8                        :: dvolu
       REAL*8                        :: xy(Ng2d,ndim),ueg(Ng2d,neq),u0eg(Ng2d,neq,time%tis)
@@ -1410,8 +1392,6 @@ CONTAINS
 
       g = 0
     force = 0.
-    El_n  = 0.
-    El_nn  = 0.
     wall_source_totals_el = 0.d0
     Pi = 3.1415926535
     !***********************************
@@ -1706,11 +1686,6 @@ CONTAINS
       	dvolu = dvolu*xy(g,1)
       END IF
 
-      ! Check if total density is costant
-      El_n  = El_n  + ueg(g,1)*2*3.1416*dvolu*phys%lscale**3
-#ifdef NEUTRAL
-      El_nn = El_nn + ueg(g,inn)*2*3.1416*dvolu*phys%lscale**3
-#endif
       ! x and y derivatives of the shape functions
       Nxg = iJ11(g)*refElPol%Nxi2D(g,:) + iJ12(g)*refElPol%Neta2D(g,:)
       Nyg = iJ21(g)*refElPol%Nxi2D(g,:) + iJ22(g)*refElPol%Neta2D(g,:)
@@ -1756,12 +1731,12 @@ CONTAINS
       CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),rho_pol_norm(g),divbg,driftg,force(g,:),&
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),neutral_limiter_phi(g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
         &ueg(g,:),qeg(g,:),u0eg(g,:,:),Jtor(g),topology_region=topology_region(g),&
-        &outward_normal=topology_normal(g,:))
+        &outward_normal=topology_normal(g,:),diagnostics_on=diagnostics_on,diagnostics=diagnostics)
 #else
       CALL assemblyVolumeContribution(Auq,Auu,rhs,b(g,:),rho_pol_norm(g),divbg,driftg,b_tor(g),gradbtor,omega(g),q_cyl(g),force(g,:),&
         &ktis,diff_iso_vol(:,:,g),diff_ani_vol(:,:,g),neutral_limiter_phi(g),Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upg(g,:),&
         &ueg(g,:),qeg(g,:),u0eg(g,:,:),xy(g,:),Jtor(g),topology_region=topology_region(g),&
-        &outward_normal=topology_normal(g,:))
+        &outward_normal=topology_normal(g,:),diagnostics_on=diagnostics_on,diagnostics=diagnostics)
 #endif
 
          IF (save_tau) THEN
@@ -1772,6 +1747,11 @@ CONTAINS
 #ifdef NEUTRAL
     IF (switch%neutral_wall_sources_in_elements) THEN
       CALL assemble_neutral_wall_sources(iel,Xel,ue,Auu,rhs,wall_source_totals_el)
+      IF (diagnostics_on) THEN
+        CALL diagnostics%accumulate_relocated_sources( &
+          &puff_source=wall_source_totals_el(2), &
+          &pump_sink=wall_source_totals_el(4))
+      ENDIF
     ENDIF
 #endif
       CALL do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)
@@ -2174,7 +2154,7 @@ CONTAINS
   ! Exterior faces computation in 2D
   !***************************************************
 
-  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el,diagnostics_on,diagnostics)
 
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
@@ -2185,6 +2165,8 @@ CONTAINS
     real*8,intent(IN)             :: q_cylfl(:)
     real*8,intent(in)         :: omegafl(:)
     real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
+    logical,intent(IN) :: diagnostics_on
+    TYPE(balance_accumulator_type),INTENT(INOUT) :: diagnostics
     integer*4                 :: g,NGauss,i,indsave(Ng1d),inn
     real*8                    :: dline,xyDerNorm_g
     real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq)
@@ -2377,8 +2359,9 @@ CONTAINS
 
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
-          topology_region=topology_region(g),outward_normal=topology_normal(g,:))
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
+          topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
+          diagnostics_on=diagnostics_on,diagnostics=diagnostics)
       ENDIF
 #else
 
@@ -2387,20 +2370,23 @@ CONTAINS
         topology_region=topology_region(g),outward_normal=topology_normal(g,:))
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
-          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
-          topology_region=topology_region(g),outward_normal=topology_normal(g,:))
+          n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
+          topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
+          diagnostics_on=diagnostics_on,diagnostics=diagnostics)
       ENDIF
 #endif
 
 #else
 #ifndef DKLINEARIZED
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
-        topology_region=topology_region(g),outward_normal=topology_normal(g,:))
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
+        topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
+        diagnostics_on=diagnostics_on,diagnostics=diagnostics)
 #else
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
-        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
-        topology_region=topology_region(g),outward_normal=topology_normal(g,:))
+        n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
+        topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
+        diagnostics_on=diagnostics_on,diagnostics=diagnostics)
 #endif
 
 #endif
@@ -2512,16 +2498,18 @@ CONTAINS
 #ifndef KEQUATION
   SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,rho,divb,drift,f,&
       &ktis,diffiso,diffani,neutral_limiter_phi,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,Jtor,&
-      &topology_region,outward_normal)
+      &topology_region,outward_normal,diagnostics_on,diagnostics)
 #else
   SUBROUTINE assemblyVolumeContribution(Auq,Auu,rhs,b3,rho,divb,drift,btor,gradBtor,omega,q_cyl,f,&
     &ktis,diffiso,diffani,neutral_limiter_phi,Ni,NNi,Nxyzg,NNxy,NxyzNi,NNbb,upe,ue,qe,u0e,xy,Jtor,&
-    &topology_region,outward_normal)
+    &topology_region,outward_normal,diagnostics_on,diagnostics)
 #endif
         REAL*8,INTENT(inout)      :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
         REAL*8,INTENT(IN)         :: b3(:),rho,divb,drift(:),f(:),ktis(:)
         INTEGER, INTENT(IN)           :: topology_region
         REAL*8, INTENT(IN)            :: outward_normal(:)
+        LOGICAL,INTENT(IN)             :: diagnostics_on
+        TYPE(balance_accumulator_type),INTENT(INOUT) :: diagnostics
 #ifdef KEQUATION
     real*8,intent(IN)         :: btor,gradBtor(:), omega, q_cyl,xy(:)
 #ifdef DKLINEARIZED
@@ -2545,6 +2533,7 @@ CONTAINS
     real*8                    :: W2(Neq),dW2_dU(Neq,Neq),QdW2(Ndim,Neq)
     real*8                    :: qq(3,Neq),b(Ndim)
     real*8                    :: grad_n(3),gradpar_n
+    real*8                    :: ionization_rate,recombination_rate,charge_exchange_rate
 
 #ifdef TEMPERATURE
     real*8,dimension(neq,neq) :: GG
@@ -2879,6 +2868,32 @@ ENDIF
 #endif
 #endif
 !NEUTRAL
+
+    IF (diagnostics_on) THEN
+      ionization_rate = 0.d0
+      recombination_rate = 0.d0
+      charge_exchange_rate = 0.d0
+#ifdef NEUTRAL
+#ifdef TEMPERATURE
+      ionization_rate = niz*sigmaviz
+      recombination_rate = nrec*sigmavrec
+      charge_exchange_rate = niz*sigmavcx
+#else
+      ionization_rate = niz*3.01d-14*simpar%refval_density*simpar%refval_time
+      recombination_rate = nrec*1.3638d-20*simpar%refval_density*simpar%refval_time
+      charge_exchange_rate = niz*4.0808d-15*simpar%refval_density*simpar%refval_time
+#endif
+#endif
+#ifdef NEUTRAL
+      CALL diagnostics%accumulate_particle_volume( &
+        &measure=SUM(Ni),plasma_density=ue(1),neutral_density=ue(inn), &
+        &plasma_history=u0e(1,:),neutral_history=u0e(inn,:), &
+        &time_coefficients=ktis,time_step=time%dt,steady=switch%steady, &
+        &ionization_rate=ionization_rate,recombination_rate=recombination_rate, &
+        &plasma_other_source=f(1),neutral_other_source=f(inn), &
+        &charge_exchange_rate=charge_exchange_rate)
+#endif
+    ENDIF
 
     ! Assembly local matrix
     ! Loop in equations
@@ -3743,21 +3758,23 @@ ENDIF
 
 #ifdef DKLINEARIZED
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-      &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uf,qf,tau,&
-      &topology_region,outward_normal)
+      &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uef,uf,qf,tau,&
+      &topology_region,outward_normal,diagnostics_on,diagnostics)
 #else
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
-        &ind_fg,b3,rho,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uf,qf,tau,&
-        &topology_region,outward_normal)
+        &ind_fg,b3,rho,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uef,uf,qf,tau,&
+        &topology_region,outward_normal,diagnostics_on,diagnostics)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       logical                   :: isdir
       real*8,intent(IN)         :: b3(:),n(:), rho
       integer,intent(IN)         :: topology_region
       real*8,intent(IN)          :: outward_normal(:)
+      logical,intent(IN)        :: diagnostics_on
+      TYPE(balance_accumulator_type),INTENT(INOUT) :: diagnostics
       real*8,intent(IN)         :: diffiso(:,:),diffani(:,:),neutral_limiter_phi
       real*8,intent(IN)         :: NNif(:,:),Nif(:),Nfbn(:)
-      real*8,intent(IN)         :: uf(:)
+      real*8,intent(IN)         :: uef(:),uf(:)
       real*8,intent(IN)         :: qf(:)
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -3928,6 +3945,32 @@ ENDIF
       TauGamman = MATMUL(Qpr,dVun_dU)
 #endif
 #endif
+
+      IF (diagnostics_on) THEN
+#ifdef NEUTRAL
+#ifdef NEUTRALP
+        CALL diagnostics%accumulate_particle_face( &
+          &measure=SUM(Nif),plasma_equation=1,neutral_equation=inn, &
+          &trace_state=uf,flux_jacobian=A,pinch_matrix=APinch,gradient=Qpr, &
+          &normal=n,magnetic_direction=b,diffusion_iso=diffiso, &
+          &diffusion_ani=diffani,neutral_perpendicular_diffusion= &
+          &switch%neutral_perpendicular_diffusion,neutral_pressure_vector=W5p)
+#else
+        CALL diagnostics%accumulate_particle_face( &
+          &measure=SUM(Nif),plasma_equation=1,neutral_equation=inn, &
+          &trace_state=uf,flux_jacobian=A,pinch_matrix=APinch,gradient=Qpr, &
+          &normal=n,magnetic_direction=b,diffusion_iso=diffiso, &
+          &diffusion_ani=diffani,neutral_perpendicular_diffusion= &
+          &switch%neutral_perpendicular_diffusion)
+#endif
+#endif
+#ifdef NEUTRAL
+        CALL diagnostics%accumulate_particle_tau( &
+          &measure=SUM(Nif), &
+          &plasma_tau_inward=DOT_PRODUCT(tau(1,:),uf-uef), &
+          &neutral_tau_inward=DOT_PRODUCT(tau(inn,:),uf-uef))
+#endif
+      ENDIF
 
       ! Assembly local matrix
       DO i = 1,Neq

@@ -13,6 +13,8 @@ SUBROUTINE HDG_BC()
   USE transport_models_1d, ONLY: transport_model_1d
   USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
   USE analytical, only: analytical_solution
+  USE balance_diagnostics, ONLY: balance_accumulator_type, &
+       particle_wall_flux_type, balance_diag
 
   IMPLICIT NONE
 #ifdef TOR3D
@@ -540,36 +542,22 @@ CONTAINS
   REAL*8                    :: neutral_limiter_phi(refElPol%Ngauss1d)
   real*8                    :: q_cylfl(refElPol%Nfacenodes),q_cyl(refElPol%Ngauss1d)
   real*8                    :: omegafl(refElPol%Nfacenodes),omega(refElPol%Ngauss1d)
-#ifdef PARALL
-#ifdef SAVEFLUX
-  INTEGER                   :: ierr
-#endif
-#endif
-#ifdef SAVEFLUX
-  real*8                    :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular,totalflux_pinch,totalflux_neutral,totalflux_neutral_unlimited,totalflux_numerical
-  real*8                    :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical
-#endif
+  LOGICAL                   :: diagnostics_on,face_diagnostics_on
+  TYPE(balance_accumulator_type) :: boundary_diagnostics
 
   IF (utils%timing) THEN
     CALL cpu_TIME(timing%tps1)
     CALL system_CLOCK(timing%cks1,timing%clock_rate1)
   END IF
-#ifdef SAVEFLUX
-  totalflux_pump = 0.
-  totalflux_puff = 0.
-  totalflux_parallel = 0.
-  totalflux_perpendicular = 0.
-  totalflux_pinch = 0.
-  totalflux_neutral = 0.
-  totalflux_neutral_unlimited = 0.
-  totalflux_numerical = 0.
-#endif
   save_tau = switch%saveTau
   Ndim = 2
   Npel = refElPol%Nnodes2D
   Npfl = refElPol%Nfacenodes
   Neq = phys%neq
   Ng1d = refElPol%Ngauss1d
+  diagnostics_on = balance_diag%enabled()
+  IF (diagnostics_on) &
+    &CALL balance_diag%initialize_accumulator(boundary_diagnostics)
 
   coefi = phys%diff_pari*(2./(3.*phys%Mref))**(1 + phys%epn)
   coefe = phys%diff_pare*(2./(3.*phys%Mref))**(1 + phys%epn)
@@ -742,22 +730,14 @@ CONTAINS
     ! Physical variables at Gauss points with analytical sol
     CALL cons2phys(uex,uexpg)
 
-
-#ifdef SAVEFLUX
-    !Initialization of variables for flux control to avoid NaN if not Bohm boundary
-    faceflux_pump = 0.
-    faceflux_puff = 0.
-    faceflux_parallel = 0.
-    faceflux_perpendicular = 0.
-    faceflux_pinch = 0.
-    faceflux_neutral = 0.
-    faceflux_neutral_unlimited = 0.
-    faceflux_numerical = 0.
-#endif
     ! Type of boundary
     fl = Mesh%boundaryFlag(ifa)
 #ifdef PARALL
      IF (fl .EQ. 0) CYCLE
+#endif
+    face_diagnostics_on = diagnostics_on
+#ifdef PARALL
+    IF (Mesh%ghostFaces(Fi) .NE. 0) face_diagnostics_on = .FALSE.
 #endif
     bc = phys%bcflags(fl)
 
@@ -782,7 +762,6 @@ CONTAINS
     CASE(bc_periodic)
       CYCLE ! done in assembly
       !         CALL set_periodic_bc()
-#ifndef SAVEFLUX
     CASE (bc_Bohm)
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
     CASE (bc_BohmPump)
@@ -790,36 +769,12 @@ CONTAINS
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
     CASE (bc_BohmPuff)
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
-#else
-    CASE (bc_Bohm)
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical)
-    CASE (bc_BohmPump)
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical)
-    CASE (bc_BohmPuff)
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical)
-#endif
     CASE (bc_iter_core)
       CALL set_itercore_bc()
     CASE DEFAULT
       WRITE (6,*) "Error: wrong boundary type"
       STOP
     END SELECT
-#ifdef SAVEFLUX
-#ifdef PARALL
-     IF (Mesh%ghostFaces(Fi) .EQ. 0) THEN
-#endif
-    totalflux_pump = totalflux_pump + faceflux_pump
-    totalflux_puff = totalflux_puff + faceflux_puff
-    totalflux_parallel = totalflux_parallel + faceflux_parallel
-    totalflux_perpendicular = totalflux_perpendicular + faceflux_perpendicular
-    totalflux_pinch = totalflux_pinch + faceflux_pinch
-    totalflux_neutral = totalflux_neutral + faceflux_neutral
-    totalflux_neutral_unlimited = totalflux_neutral_unlimited + faceflux_neutral_unlimited
-    totalflux_numerical = totalflux_numerical + faceflux_numerical
-#ifdef PARALL
-  ENDIF
-#endif
-#endif
      IF (save_tau) THEN
        indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
        phys%v_nn_Bou(indtausave,:) = v_nn_Bou_el
@@ -830,29 +785,12 @@ CONTAINS
 
   END DO
 
-#ifdef SAVEFLUX
-#ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_pump, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_puff, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_parallel, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_perpendicular, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_pinch, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_neutral, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_neutral_unlimited, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, totalflux_numerical, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
-  IF (MPIvar%glob_id.EQ.0) THEN
-     WRITE(6,*) 'pump = ',totalflux_pump
-     WRITE(6,*) 'puff = ',totalflux_puff
-     WRITE(6,*) 'plasma parallel flux = ',totalflux_parallel
-     WRITE(6,*) 'plasma diffusion flux = ',totalflux_perpendicular
-     WRITE(6,*) 'plasma pinch flux = ',totalflux_pinch
-     WRITE(6,*) 'neutral flux limited = ',totalflux_neutral
-     WRITE(6,*) 'neutral flux unlimited = ',totalflux_neutral_unlimited
-     WRITE(6,*) 'numerical flux = ',totalflux_numerical
-     WRITE(6,*) 'net flux = ',totalflux_parallel-totalflux_perpendicular-totalflux_pinch-totalflux_neutral+totalflux_puff-totalflux_pump+totalflux_numerical
+  IF (diagnostics_on) THEN
+    CALL balance_diag%merge(boundary_diagnostics)
+    CALL balance_diag%finalize()
+    CALL balance_diag%report()
   ENDIF
-#endif
+
   IF (save_tau) THEN
      WRITE (6,*) "Saving tau in the boundary faces"
      CALL saveMatrix(tau_save,'tau_save_bound')
@@ -1154,11 +1092,7 @@ CONTAINS
   !****************************
   ! Bohm
   !****************************
-#ifndef SAVEFLUX
   SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
-#else
-  SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el,faceflux_pump,faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical)
-#endif
       INTEGER                   :: g,i
       REAL*8                    :: dline,xyDerNorm_g
       REAL*8                    :: setval
@@ -1174,19 +1108,6 @@ CONTAINS
       REAL*8                    :: Vnng(Ndim)
       REAL                      :: tau_stab(Neq,Neq)
       REAL*8                    :: bohm_suppresion, energy_zero_threshold
-#ifdef SAVEFLUX
-    real*8,intent(out)        :: faceflux_pump, faceflux_puff,faceflux_parallel,faceflux_perpendicular,faceflux_pinch,faceflux_neutral,faceflux_neutral_unlimited,faceflux_numerical
-    real*8                    :: flgflux_pump, flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical
-
-    faceflux_pump = 0.
-    faceflux_puff = 0.
-    faceflux_parallel = 0.
-    faceflux_perpendicular = 0.
-    faceflux_pinch = 0.
-    faceflux_neutral = 0.
-    faceflux_neutral_unlimited = 0.
-    faceflux_numerical = 0.
-#endif
     energy_zero_threshold=1.e-20
     ! Loop in 1D Gauss points
     DO g = 1,Ng1d
@@ -1299,35 +1220,14 @@ CONTAINS
 
       ! Assembly Bohm contribution
          IF (numer%bohmtypebc.EQ.0) THEN
-#ifndef SAVEFLUX
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),ntang,&
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,&
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),ntang,&
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,&
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
-#endif
-#else
-#ifndef DKLINEARIZED
-        CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical,&
-          &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
-#else
-        CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-        &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical,&
-        &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
-#endif
-        !summing conribution from each part of the face
-        faceflux_pump = faceflux_pump+flgflux_pump
-        faceflux_puff = faceflux_puff+flgflux_puff
-        faceflux_parallel = faceflux_parallel+flgflux_parallel
-        faceflux_perpendicular = faceflux_perpendicular+flgflux_perpendicular
-        faceflux_pinch = faceflux_pinch+flgflux_pinch
-        faceflux_neutral = faceflux_neutral+flgflux_neutral
-        faceflux_neutral_unlimited = faceflux_neutral_unlimited+flgflux_neutral_unlimited
-            faceflux_numerical = faceflux_numerical+flgflux_numerical
 #endif
          ELSE
         CALL assembly_bohm_bc_new(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
@@ -1872,24 +1772,16 @@ CONTAINS
   !*********************************
   ! Assembly Bohm
   !*********************************
-#ifndef SAVEFLUX
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,ntang,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,ntang,topology_region,outward_normal)
-#endif
-#else
-#ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical,topology_region,outward_normal)
-#else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical,topology_region,outward_normal)
-#endif
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal)
 #endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
     real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),rho,ng(:),tau(:,:),setval,dcs_du(:)
     integer,intent(IN)         :: topology_region
     real*8,intent(IN)          :: outward_normal(:)
-    real*8           :: diffiso(:,:),diffani(:,:),neutral_limiter_phi
+    real*8           :: diffiso(:,:),diffani(:,:),neutral_limiter_phi,dline
     logical          :: ntang
     real*8           :: qfg(:)
     real*8           :: bn,Abohm(Neq,Neq),APinch(Neq,Ndim)
@@ -1902,6 +1794,7 @@ CONTAINS
     real*8           :: Qpr(Ndim,Neq), recycling_coeff,  cryopump_coeff,puff_coeff
     real*8           :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
+    TYPE(particle_wall_flux_type) :: wall_fluxes
 #ifdef TEMPERATURE
         REAL*8           :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
         REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
@@ -1920,10 +1813,6 @@ CONTAINS
 #ifdef DKLINEARIZED
     real*8                 ::       q_cyl, xyf(:), ddk_dU(Neq), ddk_dU_u
 #endif
-#endif
-#ifdef SAVEFLUX
-    real*8, INTENT(IN)            :: dline
-    real*8,intent(out)::  flgflux_pump,flgflux_puff,flgflux_parallel,flgflux_perpendicular,flgflux_pinch,flgflux_neutral,flgflux_neutral_unlimited,flgflux_numerical
 #endif
     inn = phys%idx_rhon_eq
     ign = phys%idx_gamman_eq
@@ -2362,46 +2251,46 @@ CONTAINS
       puff_coeff = 0.d0
     ENDIF
 
-#ifdef SAVEFLUX
-    !***************** flux control part ****************************
-
-    !contribution from pump
-    flgflux_pump = cryopump_coeff*ufg(inn)	!cryopump modification
-    !dimensionalizing and multiplying by the surface under this gauss point
-    flgflux_pump = flgflux_pump*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-
-    !contribution from puff
-    flgflux_puff = puff_coeff
-    !dimensionalizing and multiplying by the surface under this gauss point
-    flgflux_puff = flgflux_puff*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-
-    !contribution from parallel flux onto the wall
-        flgflux_parallel = uefg(2)*bn
-    !dimensionalizing and multiplying by the surface under this gauss point (multiplied by the local recycling)
-    flgflux_parallel = recycling_coeff*flgflux_parallel*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-
-    !Contribution from perpendicular plasma flux
-    flgflux_perpendicular = recycling_coeff*(diffiso(1,1)*(Qpr(1,1)*ng(1) + Qpr(2,1)*ng(2))-diffani(1,1)*(Qpr(1,1)*bn*bg(1)+Qpr(2,1)*bn*bg(2)))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2!-diffani(1,1)*(Qpr(1,1)*bn*bg(1)-Qpr(1,2)*bn*bg(2))
-    flgflux_pinch = -recycling_coeff*uefg(1)*(APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-
-    !Neutral flux
-    flgflux_neutral = diffiso(inn,inn)*DOT_PRODUCT(Qpr(:,inn),ng) &
-      &- diffani(inn,inn)*bn*DOT_PRODUCT(Qpr(:,inn),bg)
+#ifdef TEMPERATURE
+    IF (face_diagnostics_on) THEN
+      wall_fluxes = particle_wall_flux_type()
+      wall_fluxes%plasma_diffusion_inward = &
+        &diffiso(1,1)*DOT_PRODUCT(Qpr(:,1),ng) - &
+        &diffani(1,1)*bn*DOT_PRODUCT(Qpr(:,1),bg)
+      wall_fluxes%plasma_tau_inward = DOT_PRODUCT(tau(1,:),ufg-uefg)
+      wall_fluxes%recycling_parallel_source = &
+        &recycling_coeff*uefg(2)*bn
+      wall_fluxes%recycling_diffusion_source = &
+        &-recycling_coeff*wall_fluxes%plasma_diffusion_inward
+      wall_fluxes%recycling_pinch_source = recycling_coeff*uefg(1)* &
+        &DOT_PRODUCT(APinch(1,:),ng)
+      wall_fluxes%puff_source = puff_coeff
+      wall_fluxes%pump_sink = cryopump_coeff*ufg(inn)
+      wall_fluxes%neutral_diffusion_inward = &
+        &diffiso(inn,inn)*DOT_PRODUCT(Qpr(:,inn),ng) - &
+        &diffani(inn,inn)*bn*DOT_PRODUCT(Qpr(:,inn),bg)
 #ifdef NEUTRALP
-    flgflux_neutral = flgflux_neutral + DOT_PRODUCT(MATMUL(Qpr,W5p),ng)
-    IF (switch%neutral_perpendicular_diffusion) &
-      &flgflux_neutral = flgflux_neutral - bn*DOT_PRODUCT(MATMUL(Qpr,W5p),bg)
+      wall_fluxes%neutral_pressure_inward = &
+        &DOT_PRODUCT(MATMUL(Qpr,W5p),ng)
+      IF (switch%neutral_perpendicular_diffusion) THEN
+        wall_fluxes%neutral_pressure_inward = &
+          &wall_fluxes%neutral_pressure_inward - &
+          &bn*DOT_PRODUCT(MATMUL(Qpr,W5p),bg)
+      ENDIF
 #endif
-    flgflux_neutral_unlimited = flgflux_neutral/neutral_limiter_phi
-    flgflux_neutral = flgflux_neutral*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-    flgflux_neutral_unlimited = flgflux_neutral_unlimited*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-
-        !flux neutral numerical
-        flgflux_numerical = tau(inn,inn)* (uefg(inn)-ufg(inn))*2.*PI*dline*simpar%refval_density*simpar%refval_speed*simpar%refval_length**2
-
-
-    !***************** end of flux control part *********************
+      wall_fluxes%neutral_convection_inward = &
+        &-DOT_PRODUCT(Abohm(inn,:),ufg)*bn
+#ifdef NEUTRALGAMMA
+      IF (ign > 0) wall_fluxes%neutral_convection_inward = &
+        &wall_fluxes%neutral_convection_inward-ufg(ign)*bn
 #endif
+      wall_fluxes%neutral_tau_inward = &
+        &DOT_PRODUCT(tau(inn,:),ufg-uefg)
+      CALL boundary_diagnostics%accumulate_particle_wall( &
+        &integration_weight=dline,fluxes=wall_fluxes)
+    ENDIF
+#endif
+
     ! Convective part
     k = inn
     ! Plasma flux

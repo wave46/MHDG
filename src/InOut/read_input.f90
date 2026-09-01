@@ -14,6 +14,9 @@ SUBROUTINE READ_input()
   USE MPI_OMP
   USE neutral_flux_limiter, ONLY: neutral_tn_source_invalid, &
        neutral_tn_source_ti, neutral_tn_source_fixed, parse_neutral_tn_source
+  USE balance_diagnostics, ONLY: balance_mode_invalid, balance_mode_off, &
+       parse_balance_diagnostics_mode, balance_diagnostics_mode_name, &
+       balance_diag
   IMPLICIT NONE
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
@@ -22,6 +25,7 @@ SUBROUTINE READ_input()
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
   INTEGER               :: uinput, printint, testcase, nrp, i
   INTEGER               :: neutral_flux_limiter_tn_source_id
+  INTEGER               :: balance_diagnostics_mode_id
   INTEGER               :: nts, tsw, freqdisp, freqsave, shockcp, limrho
   INTEGER               :: shockcp_adapt, evaluator, difference, freq_t_adapt,freq_NR_adapt, quant_ind
   INTEGER,ALLOCATABLE,DIMENSION(:) :: n_quant_ind,param_est
@@ -61,6 +65,7 @@ SUBROUTINE READ_input()
   REAL*8                :: Zeff,Pohmic,diff_nn,diff_nn_min,neutralp_ti_supp_eV,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
   CHARACTER(LEN=40)     :: neutral_flux_limiter_mode
   CHARACTER(LEN=16)     :: neutral_flux_limiter_tn_source
+  CHARACTER(LEN=16)     :: balance_diagnostics_mode
   REAL*8                :: neutral_flux_limiter_tn_eV,neutral_flux_limiter_eps
   REAL*8                :: neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min
   REAL*8, PARAMETER     :: diff_nn_min_unset = -HUGE(1.d0)
@@ -119,7 +124,7 @@ SUBROUTINE READ_input()
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
     &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min
 #endif
-  NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave
+  NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave, balance_diagnostics_mode
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
        &smther, jsweeps,&
        &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
@@ -146,6 +151,7 @@ SUBROUTINE READ_input()
   neutral_flux_limiter_eps = 0.d0
   neutral_flux_limiter_fs_fraction = 1.d0
   neutral_flux_limiter_fs_flux_min = 0.d0
+  balance_diagnostics_mode = 'off'
 
   ! Reading the file
   uinput = 100
@@ -215,6 +221,34 @@ SUBROUTINE READ_input()
      PRINT *, 'neutral_flux_limiter_fs_flux_min must be non-negative: ', neutral_flux_limiter_fs_flux_min
      STOP
   ENDIF
+  balance_diagnostics_mode = TRIM(ADJUSTL(balance_diagnostics_mode))
+  balance_diagnostics_mode_id = &
+       parse_balance_diagnostics_mode(balance_diagnostics_mode)
+  IF (balance_diagnostics_mode_id == balance_mode_invalid) THEN
+     PRINT *, 'Unknown balance_diagnostics_mode: ', &
+          TRIM(balance_diagnostics_mode)
+     PRINT *, 'Allowed values: off, summary, detailed'
+     STOP
+  ENDIF
+#ifdef TOR3D
+  IF (balance_diagnostics_mode_id /= balance_mode_off) THEN
+     PRINT *, 'Balance diagnostics are not supported in toroidal 3D builds.'
+     STOP
+  ENDIF
+#endif
+#ifndef NEUTRAL
+  IF (balance_diagnostics_mode_id /= balance_mode_off) THEN
+     PRINT *, 'Particle balance diagnostics require a neutral model.'
+     STOP
+  ENDIF
+#endif
+#ifndef TEMPERATURE
+  IF (balance_diagnostics_mode_id /= balance_mode_off) THEN
+     PRINT *, 'Particle wall diagnostics require a temperature neutral model.'
+     STOP
+  ENDIF
+#endif
+  CALL balance_diag%configure(balance_diagnostics_mode_id)
 
   ! Storing at the right place
   switch%steady           = steady
@@ -591,6 +625,8 @@ SUBROUTINE READ_input()
           TRIM(phys%neutral_flux_limiter_mode)
      PRINT *, '                - neutral flux limiter 2D diagnostics:                 ', &
           switch%neutral_flux_limiter_save_2d
+     PRINT *, '                - balance diagnostics mode:                            ', &
+          TRIM(balance_diagnostics_mode_name(balance_diagnostics_mode_id))
      PRINT *, '                - neutral flux limiter Tn source:                      ', &
           TRIM(phys%neutral_flux_limiter_tn_source)
      PRINT *, '                - neutral flux limiter Tn:                             ', phys%neutral_flux_limiter_tn

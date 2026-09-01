@@ -13,6 +13,7 @@ ASSIGNMENT_RE = re.compile(
     r"^(?P<prefix>\s*(?P<key>[A-Za-z][A-Za-z0-9_]*)\s*=\s*).*$"
 )
 INSERTABLE_PARAMETERS = {
+    "balance_diagnostics_mode": "utils_lst",
     "neutral_wall_sources_in_elements": "switch_lst",
     "neutral_perpendicular_diffusion": "switch_lst",
     "neutral_flux_limiter_save_2d": "switch_lst",
