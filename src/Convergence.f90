@@ -21,6 +21,7 @@ PROGRAM Convergence
   USE Communications
 #endif
   USE HDG_LimitingTechniques
+  USE residual_norm_module, ONLY: computeResidual
   IMPLICIT NONE
 
   INTEGER             :: it, ir, nts, nu, nb_args, n_points, n_polyns, IERR
@@ -339,24 +340,6 @@ PROGRAM Convergence
   CALL MPI_finalize(IERR)
 #endif
 CONTAINS
-
-  !************************************************
-  ! Compute the residual
-  !************************************************
-  FUNCTION computeResidual(u, uref, coeff) RESULT(res)
-    REAL*8   :: u(nu), uref(nu)
-    INTEGER  :: nglo, ierr
-    REAL     :: res, sum2, coeff
-
-    sum2 = SUM((u - uref)**2)
-    nglo = nu
-
-#ifdef PARALL
-    CALL mpi_allreduce(MPI_IN_PLACE, sum2, 1, MPI_REAL8, mpi_sum, MPI_COMM_WORLD, ierr)
-    CALL mpi_allreduce(nu, nglo, 1, mpi_integer, mpi_sum, MPI_COMM_WORLD, ierr)
-#endif
-    res = SQRT(sum2)/SQRT(DBLE(nglo))/coeff
-  END FUNCTION computeResidual
 
   !**********************************************
   ! Definition of the toroidal discretization

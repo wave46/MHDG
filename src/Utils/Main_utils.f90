@@ -30,6 +30,7 @@ MODULE Main_utils
   USE HDG_LimitingTechniques
   USE flux_surface_transport_data
   USE transport_models_1d
+  USE residual_norm_module, ONLY: computeResidual
 
   IMPLICIT NONE
 
@@ -427,28 +428,6 @@ CONTAINS
     DEALLOCATE (uphy)
 
   END SUBROUTINE displayResults
-
-  !************************************************
-  ! Compute the residual
-  !************************************************
-  FUNCTION computeResidual(u, uref, coeff) RESULT(res)
-    REAL*8   :: u(:), uref(:)
-    INTEGER  :: nglo
-    REAL*8   :: res, sum2, coeff
-#ifdef PARALL
-    INTEGER  :: ierr
-#endif
-
-    sum2 = SUM((u - uref)**2)
-    nglo = SIZE(u)
-
-#ifdef PARALL
-    CALL mpi_allreduce(MPI_IN_PLACE, sum2, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL mpi_allreduce(nu, nglo, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
-
-    res = SQRT(sum2)/SQRT(REAL(nglo))/coeff
-  END FUNCTION computeResidual
 
   !************************************************
   ! Set the name of the solution
