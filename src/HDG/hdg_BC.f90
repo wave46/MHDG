@@ -1842,8 +1842,8 @@ CONTAINS
         Qpr = RESHAPE(qfg,(/Ndim,Neq/))
 
     ! Split diffusion matrices/vectors for the momentum equation
-    CALL compute_W2(uf,W2,diffiso(1,1),diffiso(2,2))
-    CALL compute_dW2_dU(uf,dW2_dU,diffiso(1,1),diffiso(2,2))
+    CALL compute_W2(ufg,W2,diffiso(1,1),diffiso(2,2))
+    CALL compute_dW2_dU(ufg,dW2_dU,diffiso(1,1),diffiso(2,2))
         QdW2 = MATMUL(Qpr,dW2_dU)
 
     ! Case diagonal matrix stabilization
@@ -1924,12 +1924,12 @@ CONTAINS
         CALL compute_dV_dUe(ufg,dV_dUe)
 
       ! Split diffusion matrices/vectors for the energies equations
-      CALL compute_W3(uf,W3,diffiso(1,1),diffiso(2,2),diffiso(3,3))
-      CALL compute_dW3_dU(uf,dW3_dU,diffiso(1,1),diffiso(2,2),diffiso(3,3))
+      CALL compute_W3(ufg,W3,diffiso(1,1),diffiso(2,2),diffiso(3,3))
+      CALL compute_dW3_dU(ufg,dW3_dU,diffiso(1,1),diffiso(2,2),diffiso(3,3))
         QdW3 = MATMUL(Qpr,dW3_dU)
 
-      CALL compute_W4(uf,W4,diffiso(1,1),diffiso(4,4))
-      CALL compute_dW4_dU(uf,dW4_dU,diffiso(1,1),diffiso(4,4))
+      CALL compute_W4(ufg,W4,diffiso(1,1),diffiso(4,4))
+      CALL compute_dW4_dU(ufg,dW4_dU,diffiso(1,1),diffiso(4,4))
         QdW4 = MATMUL(Qpr,dW4_dU)
 #ifdef NEUTRALP
       CALL compute_W5p(ufg,W5p)
