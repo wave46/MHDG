@@ -4318,7 +4318,7 @@ END IF
       REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz,sigmavErec,dsigmavEiz_dU(:),dsigmavErec_dU(:)
       REAL*8, INTENT(IN), OPTIONAL :: cooling_factor,dcooling_factor_dU(:)
 #endif
-             REAL*8             :: RE,Sn(:,:),Sn0(:)
+             REAL*8             :: Sn(:,:),Sn0(:)
              INTEGER            :: inn,ign
 #ifdef TEMPERATURE
              REAL*8             :: recombination_energy
@@ -4326,7 +4326,6 @@ END IF
 
       Sn   = 0.
       Sn0  = 0.
-      RE   = 0.
       inn  = phys%idx_rhon_eq
       ign  = phys%idx_gamman_eq
 #ifdef TEMPERATURE
@@ -4362,8 +4361,10 @@ END IF
 
       !Assembly Source Terms in ion energy equation
 
-      Sn(3,:) = -RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec + dfEicx_dU(:)*sigmavcx
-      Sn(3,:) = Sn(3,:) - RE*fEiiz*dsigmaviz_dU(:) + fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:)
+      Sn(3,:) = -phys%ionization_ion_energy_fraction*dfEiiz_dU(:)*sigmaviz + &
+        &dfEirec_dU(:)*sigmavrec + dfEicx_dU(:)*sigmavcx
+      Sn(3,:) = Sn(3,:) - phys%ionization_ion_energy_fraction*fEiiz*dsigmaviz_dU(:) + &
+        &fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:)
 #ifdef NEUTRALGAMMA
       Sn(3,:) = Sn(3,:) - dfEiN_dU(:)*(sigmaviz + sigmavcx) - &
         &fEiN*(dsigmaviz_dU(:) + dsigmavcx_dU(:))
@@ -4401,14 +4402,16 @@ END IF
 #ifdef NEUTRALGAMMA
       Sn0(2)    = Sn0(2) + fGammaN*dot_PRODUCT(dsigmaviz_dU,U)
 #endif
-      Sn0(3)    = RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx
+      Sn0(3)    = phys%ionization_ion_energy_fraction*fEiiz*sigmaviz - &
+        &fEirec*sigmavrec - fEicx*sigmavcx
 #ifdef NEUTRALGAMMA
       Sn0(3)    = Sn0(3) + fEiN*(sigmaviz + sigmavcx)
 #endif
       !modification with recombination gain
       Sn0(4)    = nrec*sigmavrec*recombination_energy
       Sn0(4)    = Sn0(4) - niz*sigmavEiz - nrec*sigmavErec
-      Sn0(3)    = Sn0(3) + RE*fEiiz*dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U)
+      Sn0(3)    = Sn0(3) + phys%ionization_ion_energy_fraction*fEiiz* &
+        &dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U)
 #ifdef NEUTRALGAMMA
       Sn0(3)    = Sn0(3) + fEiN*dot_PRODUCT(dsigmaviz_dU,U)
 #endif

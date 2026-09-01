@@ -36,6 +36,7 @@ SUBROUTINE READ_input()
   REAL*8                :: tfi, a, bohmth,bohm_energy_thresh, q, diffred, diffmin
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
+  REAL*8                :: ionization_ion_energy_fraction
   REAL*8                :: diff_pare, diff_ee, tie, dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0, tmax, tol, rtol, atol
   REAL*8                :: diff_vort, diff_pot, etapar, Potfloat,diagsource(10)
   CHARACTER(100)        :: msg
@@ -116,13 +117,15 @@ SUBROUTINE READ_input()
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
-    &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min
+    &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min,&
+    &ionization_ion_energy_fraction
 #else
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
-    &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min
+    &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min,&
+    &ionization_ion_energy_fraction
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave, balance_diagnostics_mode
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
@@ -142,6 +145,7 @@ SUBROUTINE READ_input()
   diff_nn_min = diff_nn_min_unset
   neutralp_lambda = 0.d0
   neutralp_ti_supp_eV = 1.d-6
+  ionization_ion_energy_fraction = 0.d0
   neutral_perpendicular_diffusion = .FALSE.
   neutral_wall_sources_in_elements = .FALSE.
   neutral_flux_limiter_mode = 'off'
@@ -180,6 +184,12 @@ SUBROUTINE READ_input()
   ENDIF
   IF (neutralp_ti_supp_eV < 0.d0) THEN
      PRINT *, 'neutralp_ti_supp_eV must be non-negative: ', neutralp_ti_supp_eV
+     STOP
+  ENDIF
+  IF (ionization_ion_energy_fraction < 0.d0 .OR. &
+       &ionization_ion_energy_fraction > 1.d0) THEN
+     PRINT *, 'ionization_ion_energy_fraction must be in [0,1]: ', &
+          &ionization_ion_energy_fraction
      STOP
   ENDIF
   neutral_flux_limiter_mode = TRIM(ADJUSTL(neutral_flux_limiter_mode))
@@ -395,6 +405,7 @@ SUBROUTINE READ_input()
   phys%diff_nn            = diff_nn
   phys%diff_nn_min        = diff_nn_min
   phys%neutralp_ti_supp   = neutralp_ti_supp_eV
+  phys%ionization_ion_energy_fraction = ionization_ion_energy_fraction
   phys%neutral_flux_limiter_mode = neutral_flux_limiter_mode
   phys%neutral_flux_limiter_tn_source = neutral_flux_limiter_tn_source
   phys%neutral_flux_limiter_tn_source_id = neutral_flux_limiter_tn_source_id
@@ -607,6 +618,8 @@ SUBROUTINE READ_input()
      PRINT *, '                - reference Mach number:                              ', phys%Mref
      PRINT *, '                - gamma for Bohm boundary condition on ions:          ', phys%Gmbohm
      PRINT *, '                - gamma for Bohm boundary condition for electrons:    ', phys%Gmbohme
+     PRINT *, '                - ionization ion-energy fraction R_E:                 ', &
+          &phys%ionization_ion_energy_fraction
      IF(switch%ohmicsrc) THEN
        PRINT *, '             - Zeff                                                ', phys%Zeff
        PRINT *, '             - Ohmic heating                                       ', phys%Pohmic
