@@ -23,9 +23,7 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
 
     def test_checks_schema_identities_and_terminal_history(self) -> None:
         summary, solution = self._write_suite()
-
         report = check_suite(summary)
-
         self.assertEqual(report["status"], "passed")
         history = report["runs"][0]["stages"][0]["terminal_history"]
         self.assertEqual(len(history), 2)
@@ -33,29 +31,45 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
         self.assertEqual(history[-1]["newton_iteration"], 3)
 
         with h5py.File(solution, "r+") as handle:
-            handle["diagnostics/particles/conservation/total"][()] = 8.5
+            handle["diagnostics/discrete/total_n/residual"][()] = 8.5
         failed = check_suite(summary)
         self.assertEqual(failed["status"], "failed")
         self.assertTrue(
-            any(
-                "particles/conservation/total" in failure
-                for failure in failed["failures"]
-            )
+            any("discrete/total_n/residual" in item for item in failed["failures"])
         )
+
+    def test_checks_warm_run_output(self) -> None:
+        summary, solution = self._write_suite()
+        run = self.root / "run"
+        (run / "stdout.log").write_text(
+            self._terminal_block(1, 2) + self._terminal_block(2, 3),
+            encoding="utf-8",
+        )
+        (run / "run_metadata.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "status": "completed",
+                    "hdf5_outputs": [str(solution.relative_to(run))],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = check_suite(summary)
+
+        self.assertEqual(report["status"], "passed")
+        self.assertEqual(report["runs"][0]["stages"][0]["stage_id"], "warm")
 
     def test_rejects_nonfinite_detailed_component(self) -> None:
         summary, solution = self._write_suite()
         with h5py.File(solution, "r+") as handle:
-            handle["diagnostics/particles/exchange/charge_exchange"][()] = float(
-                "nan"
-            )
-
+            handle[
+                "diagnostics/physical/n/exchange/charge_exchange_rate"
+            ][()] = float("nan")
         report = check_suite(summary)
-
         self.assertEqual(report["status"], "failed")
-        self.assertTrue(
-            any("charge_exchange" in failure for failure in report["failures"])
-        )
+        self.assertTrue(any("charge_exchange" in item for item in report["failures"]))
 
     def test_requires_neutralgamma_components_for_neutralgamma_model(self) -> None:
         summary, solution = self._write_suite()
@@ -63,21 +77,12 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
             names = "simulation_parameters/physics/conservative_variable_names"
             del handle[names]
             handle.create_dataset(
-                names,
-                data=[b"n", b"Gamma", b"Ei", b"Ee", b"nn", b"Gamman"],
+                names, data=[b"n", b"Gamma", b"Ei", b"Ee", b"nn", b"Gamman"]
             )
-
         report = check_suite(summary)
-
         self.assertEqual(report["status"], "failed")
         self.assertTrue(
-            any(
-                "neutral_gamma_convection" in failure
-                for failure in report["failures"]
-            )
-        )
-        self.assertTrue(
-            any("neutral_gamma_inward" in failure for failure in report["failures"])
+            any("neutral_gamma_convection" in item for item in report["failures"])
         )
 
     def test_checks_relocated_puff_and_pump_placement(self) -> None:
@@ -86,27 +91,38 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
             handle[
                 "simulation_parameters/switches/neutral_wall_sources_in_elements"
             ][()] = 1
-            wall = "diagnostics/wall_closure/neutral"
-            handle[f"{wall}/puff_source"][()] = 0.0
-            handle[f"{wall}/pump_sink"][()] = 0.0
-            handle[f"{wall}/source_inward"][()] = 3.8
-            handle[f"{wall}/physical_flux_inward"][()] = 3.7
+            source = "diagnostics/bc/n_n/source_components"
+            handle[f"{source}/puff_source"][()] = 0.0
+            handle[f"{source}/pump_sink"][()] = 0.0
+            handle["diagnostics/bc/n_n/imposed_source_inward"][()] = 3.8
+            handle["diagnostics/bc/n_n/physical_flux_inward"][()] = 3.7
             handle[
-                f"{wall}/physical_flux_components/limited_diffusion_inward"
+                "diagnostics/bc/n_n/physical_flux_components_inward/limited_diffusion"
             ][()] = 3.6
+        terminal = solution.parent / "stdout.log"
+        text = terminal.read_text(encoding="utf-8")
+        for old, new in {
+            "puff source 5.000E-01": "puff source 0.000E+00",
+            "pump sink (subtracted) 1.000E-01": (
+                "pump sink (subtracted) 0.000E+00"
+            ),
+            "imposed source inward 4.200E+00": "imposed source inward 3.800E+00",
+            "limited diffusion 4.000E+00": "limited diffusion 3.600E+00",
+            "physical flux inward 4.100E+00": "physical flux inward 3.700E+00",
+        }.items():
+            text = text.replace(old, new)
+        terminal.write_text(text, encoding="utf-8")
 
         report = check_suite(summary)
         self.assertEqual(report["status"], "passed")
 
         with h5py.File(solution, "r+") as handle:
             handle[
-                "diagnostics/particles/components/neutral/volume/puff_source"
+                "diagnostics/physical/n_n/volume_components/puff_source"
             ][()] = 0.75
         failed = check_suite(summary)
         self.assertEqual(failed["status"], "failed")
-        self.assertTrue(
-            any("puff_source" in failure for failure in failed["failures"])
-        )
+        self.assertTrue(any("puff_source" in item for item in failed["failures"]))
 
     def _write_suite(self) -> tuple[Path, Path]:
         run = self.root / "run"
@@ -154,61 +170,68 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
         return summary, solution
 
     def _write_solution(self, path: Path) -> None:
-        particle_groups = {
-            "content": (10.0, 2.0, 12.0),
-            "temporal": (5.0, 1.0, 6.0),
-            "volume": (2.0, -1.5, 0.5),
-            "boundary_physical_inward": (-3.0, -0.5, -3.5),
-            "physical_imbalance": (6.0, 3.0, 9.0),
-            "hdg_tau_inward": (1.0, 0.5, 1.5),
-            "conservation": (5.0, 2.5, 7.5),
+        physical = {
+            "n": (10.0, 5.0, 2.0, -3.0, 6.0),
+            "n_n": (2.0, 1.0, -1.5, -0.5, 3.0),
+            "total_n": (12.0, 6.0, 0.5, -3.5, 9.0),
+        }
+        physical_fields = (
+            "content",
+            "temporal",
+            "volume",
+            "boundary_physical_inward",
+            "physical_imbalance",
+        )
+        discrete = {
+            "n": (1.0, 5.0),
+            "n_n": (0.5, 2.5),
+            "total_n": (1.5, 7.5),
         }
         components = {
-            "plasma/volume": {
+            "n/volume_components": {
                 "ionization": 3.0,
                 "recombination": -1.0,
-                "other_source": 0.0,
+                "prescribed_source": 0.0,
             },
-            "plasma/boundary_inward": {
+            "n/boundary_components_inward": {
                 "parallel": -4.0,
                 "diffusion": 1.0,
                 "pinch": 0.0,
             },
-            "neutral/volume": {
+            "n_n/volume_components": {
                 "ionization": -3.0,
                 "recombination": 1.0,
-                "other_source": 0.0,
+                "prescribed_source": 0.0,
                 "puff_source": 1.0,
                 "pump_source": -0.5,
             },
-            "neutral/boundary_inward": {
+            "n_n/boundary_components_inward": {
                 "limited_diffusion": -1.0,
                 "limited_pressure": 0.5,
             },
         }
-        wall_groups = {
-            "plasma_particles": {
+        bc = {
+            "n": {
                 "diffusion_inward": -1.0,
-                "stabilization_inward": 1.0,
+                "hdg_tau_inward": 1.0,
                 "residual": 0.0,
             },
-            "neutral": {
-                "source_inward": 4.2,
+            "n_n": {
+                "imposed_source_inward": 4.2,
                 "physical_flux_inward": 4.1,
-                "stabilization_inward": 0.1,
+                "hdg_tau_inward": 0.1,
                 "residual": 0.0,
-                "recycled_plasma_inward": 3.8,
+            },
+            "n_n/source_components": {
+                "recycling_parallel_inward": 4.0,
+                "recycling_diffusion_inward": -0.2,
+                "recycling_pinch_inward": 0.0,
                 "puff_source": 0.5,
                 "pump_sink": 0.1,
             },
-            "neutral/recycled_plasma_components": {
-                "parallel_source": 4.0,
-                "diffusion_source": -0.2,
-                "pinch_source": 0.0,
-            },
-            "neutral/physical_flux_components": {
-                "limited_diffusion_inward": 4.0,
-                "limited_pressure_inward": 0.1,
+            "n_n/physical_flux_components_inward": {
+                "limited_diffusion": 4.0,
+                "limited_pressure": 0.1,
             },
         }
 
@@ -226,63 +249,84 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
                 "simulation_parameters/physics/conservative_variable_names",
                 data=[b"n", b"Gamma", b"Ei", b"Ee", b"nn"],
             )
-            for group, values in particle_groups.items():
-                prefix = f"diagnostics/particles/{group}"
-                units = "particles" if group == "content" else "particles/s"
-                handle.create_dataset(f"{prefix}/units", data=units)
-                for species, value in zip(("plasma", "neutral", "total"), values):
-                    handle.create_dataset(f"{prefix}/{species}", data=value)
-            for group, values in components.items():
-                prefix = f"diagnostics/particles/components/{group}"
+            for equation, fields in physical.items():
+                prefix = f"diagnostics/physical/{equation}"
+                handle.create_dataset(f"{prefix}/content_units", data="particles")
+                handle.create_dataset(f"{prefix}/rate_units", data="particles/s")
+                for name, value in zip(physical_fields, fields):
+                    handle.create_dataset(f"{prefix}/{name}", data=value)
+            for equation, fields in discrete.items():
+                prefix = f"diagnostics/discrete/{equation}"
                 handle.create_dataset(f"{prefix}/units", data="particles/s")
-                for name, value in values.items():
+                for name, value in zip(("hdg_tau_inward", "residual"), fields):
+                    handle.create_dataset(f"{prefix}/{name}", data=value)
+            for group, fields in components.items():
+                prefix = f"diagnostics/physical/{group}"
+                handle.create_dataset(f"{prefix}/units", data="particles/s")
+                for name, value in fields.items():
                     handle.create_dataset(f"{prefix}/{name}", data=value)
             handle.create_dataset(
-                "diagnostics/particles/exchange/units", data="particles/s"
+                "diagnostics/physical/n/exchange/units", data="particles/s"
             )
             handle.create_dataset(
-                "diagnostics/particles/exchange/charge_exchange", data=7.0
+                "diagnostics/physical/n/exchange/charge_exchange_rate", data=7.0
             )
-            for group, values in wall_groups.items():
-                prefix = f"diagnostics/wall_closure/{group}"
+            for group, fields in bc.items():
+                prefix = f"diagnostics/bc/{group}"
                 handle.create_dataset(f"{prefix}/units", data="particles/s")
-                for name, value in values.items():
+                for name, value in fields.items():
                     handle.create_dataset(f"{prefix}/{name}", data=value)
 
     @staticmethod
     def _terminal_block(time_iteration: int, newton_iteration: int) -> str:
         return f"""Time iteration = {time_iteration}
 NR iteration: {newton_iteration}
-Particle diagnostics (detailed)
-  Content [particles]
-      plasma n 1.000E+01
-      neutral nn 2.000E+00
-      total n+nn 1.200E+01
-  plasma conservation [particles/s]
-      temporal 5.000E+00
+Balance diagnostics (detailed)
+  Physical n
+      content [particles] 1.000E+01
+      temporal [particles/s] 5.000E+00
       volume 2.000E+00
-      boundary physical, inward -3.000E+00
+      boundary physical inward -3.000E+00
       physical imbalance 6.000E+00
+    Discrete
       HDG tau inward 1.000E+00
-      discrete residual 5.000E+00
-  neutral conservation [particles/s]
-      temporal 1.000E+00
+      residual 5.000E+00
+  Physical n_n
+      content [particles] 2.000E+00
+      temporal [particles/s] 1.000E+00
       volume -1.500E+00
-      boundary physical, inward -5.000E-01
+      boundary physical inward -5.000E-01
       physical imbalance 3.000E+00
+    Discrete
       HDG tau inward 5.000E-01
-      discrete residual 2.500E+00
-  total conservation [particles/s]
-      temporal 6.000E+00
+      residual 2.500E+00
+  Physical total_n (derived)
+      content [particles] 1.200E+01
+      temporal [particles/s] 6.000E+00
       volume 5.000E-01
-      boundary physical, inward -3.500E+00
+      boundary physical inward -3.500E+00
       physical imbalance 9.000E+00
+    Discrete
       HDG tau inward 1.500E+00
-      discrete residual 7.500E+00
-  Wall / HDG boundary-condition residuals [particles/s]
-    Plasma density BC: diffusion + stabilization = 0
+      residual 7.500E+00
+  Independent boundary-condition checks [particles/s]
+    n: diffusion + HDG tau = 0
+      diffusion inward -1.000E+00
+      HDG tau inward 1.000E+00
       residual 0.000E+00
-    Neutral density BC:
+    n_n: imposed source - physical flux - HDG tau = 0
+      Imposed-source components: recycling + puff - pump
+        recycling parallel inward 4.000E+00
+        recycling diffusion inward -2.000E-01
+        recycling pinch inward 0.000E+00
+        puff source 5.000E-01
+        pump sink (subtracted) 1.000E-01
+      imposed source inward 4.200E+00
+      Physical-flux components inward
+        limited diffusion 4.000E+00
+        limited pressure 1.000E-01
+      physical flux inward 4.100E+00
+      HDG tau inward 1.000E-01
       residual 0.000E+00
 """
 

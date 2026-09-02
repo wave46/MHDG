@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate detailed particle diagnostics in a completed staged suite."""
+"""Validate detailed equation-oriented balance diagnostics."""
 
 from __future__ import annotations
 
@@ -13,8 +13,9 @@ from typing import Any
 
 import h5py
 
+from comparison.shared.outputs import select_candidate
 from support.documents import load_json, write_json_atomic
-from support.errors import HarnessError
+from support.errors import ComparisonError, HarnessError
 from support.paths import require_directory, require_file
 
 
@@ -24,71 +25,8 @@ NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][+-]?\d+)?"
 VALUE_LINE = re.compile(rf"^\s*(?P<label>.*?)\s+(?P<value>{NUMBER})\s*$")
 TIME_ITERATION = re.compile(r"Time iteration\s*=\s*(\d+)")
 NEWTON_ITERATION = re.compile(r"NR iteration:\s*(\d+)")
-BLOCK_START = "Particle diagnostics (detailed)"
-
-SPECIES = ("plasma", "neutral", "total")
-RATE_GROUPS = (
-    "temporal",
-    "volume",
-    "boundary_physical_inward",
-    "physical_imbalance",
-    "hdg_tau_inward",
-    "conservation",
-)
-PARTICLE_GROUPS = ("content", *RATE_GROUPS)
-COMPONENT_GROUPS = {
-    "particles/volume/plasma": "particles/components/plasma/volume",
-    "particles/boundary_physical_inward/plasma": (
-        "particles/components/plasma/boundary_inward"
-    ),
-    "particles/volume/neutral": "particles/components/neutral/volume",
-    "particles/boundary_physical_inward/neutral": (
-        "particles/components/neutral/boundary_inward"
-    ),
-}
-REQUIRED_COMPONENTS = {
-    "particles/components/plasma/volume": (
-        "ionization",
-        "recombination",
-        "other_source",
-    ),
-    "particles/components/plasma/boundary_inward": (
-        "parallel",
-        "diffusion",
-        "pinch",
-    ),
-    "particles/components/neutral/volume": (
-        "ionization",
-        "recombination",
-        "other_source",
-        "puff_source",
-        "pump_source",
-    ),
-    "particles/components/neutral/boundary_inward": ("limited_diffusion",),
-    "particles/exchange": ("charge_exchange",),
-    "wall_closure/plasma_particles": (
-        "diffusion_inward",
-        "stabilization_inward",
-        "residual",
-    ),
-    "wall_closure/neutral": (
-        "source_inward",
-        "physical_flux_inward",
-        "stabilization_inward",
-        "residual",
-        "recycled_plasma_inward",
-        "puff_source",
-        "pump_sink",
-    ),
-    "wall_closure/neutral/recycled_plasma_components": (
-        "parallel_source",
-        "diffusion_source",
-        "pinch_source",
-    ),
-    "wall_closure/neutral/physical_flux_components": (
-        "limited_diffusion_inward",
-    ),
-}
+BLOCK_START = "Balance diagnostics (detailed)"
+EQUATIONS = ("n", "n_n", "total_n")
 
 
 @dataclass(frozen=True)
@@ -99,11 +37,10 @@ class DiagnosticContext:
 
 
 def check_suite(summary_path: Path) -> dict[str, Any]:
-    """Check every completed stage and retain its terminal history."""
     summary_path = require_file(summary_path, "balance diagnostics suite summary")
     summary = load_json(summary_path, "balance diagnostics suite summary")
-    reports = []
-    failures = []
+    reports: list[dict[str, Any]] = []
+    failures: list[str] = []
     for result in summary.get("results", []):
         workflow = result.get("workflow_id")
         layout = result.get("layout_id")
@@ -133,32 +70,30 @@ def check_suite(summary_path: Path) -> dict[str, Any]:
 
 
 def check_run(run_directory: Path) -> dict[str, Any]:
-    """Check every completed stage output in one staged workflow."""
     metadata = load_json(run_directory / "run_metadata.json", "run metadata")
+    reports: list[dict[str, Any]] = []
+    failures: list[str] = []
     stages = metadata.get("stages")
-    reports = []
-    failures = []
-    if not isinstance(stages, list) or not stages:
-        failures.append("run metadata contains no staged outputs")
-    for stage in stages or []:
-        stage_id = stage.get("stage_id")
-        if stage.get("status") != "completed" or not stage.get("selected_hdf5"):
-            failure = f"stage is incomplete or has no selected HDF5: {stage_id}"
-            report = {"stage_id": stage_id, "status": "failed", "failures": [failure]}
+    if isinstance(stages, list) and stages:
+        for stage in stages:
+            report = _check_staged_output(stage)
+            reports.append(report)
+            failures.extend(
+                f"{report['stage_id']}: {failure}" for failure in report["failures"]
+            )
+    else:
+        try:
+            solution = select_candidate(run_directory, metadata)
+        except ComparisonError as exc:
+            failures.append(f"warm: {exc}")
         else:
-            stage_directory = require_directory(
-                Path(stage["run_directory"]), f"diagnostic stage {stage_id}"
-            )
-            solution = Path(stage["selected_hdf5"])
-            if not solution.is_absolute():
-                solution = stage_directory / solution
             report = check_stage(
-                stage_id,
-                require_file(solution, f"diagnostic stage solution {stage_id}"),
-                require_file(stage_directory / "stdout.log", f"stage log {stage_id}"),
+                "warm",
+                solution,
+                require_file(run_directory / "stdout.log", "warm diagnostic log"),
             )
-        reports.append(report)
-        failures.extend(f"{stage_id}: {failure}" for failure in report["failures"])
+            reports.append(report)
+            failures.extend(f"warm: {failure}" for failure in report["failures"])
     return {
         "run_directory": str(run_directory),
         "stages": reports,
@@ -167,13 +102,31 @@ def check_run(run_directory: Path) -> dict[str, Any]:
     }
 
 
+def _check_staged_output(stage: dict[str, Any]) -> dict[str, Any]:
+    stage_id = stage.get("stage_id")
+    if stage.get("status") != "completed" or not stage.get("selected_hdf5"):
+        failure = f"stage is incomplete or has no selected HDF5: {stage_id}"
+        return {"stage_id": stage_id, "status": "failed", "failures": [failure]}
+
+    stage_directory = require_directory(
+        Path(stage["run_directory"]), f"diagnostic stage {stage_id}"
+    )
+    solution = Path(stage["selected_hdf5"])
+    if not solution.is_absolute():
+        solution = stage_directory / solution
+    return check_stage(
+        stage_id,
+        require_file(solution, f"diagnostic stage solution {stage_id}"),
+        require_file(stage_directory / "stdout.log", f"stage log {stage_id}"),
+    )
+
+
 def check_stage(stage_id: str, solution: Path, terminal: Path) -> dict[str, Any]:
-    """Validate one detailed HDF5 file and its matching terminal block."""
     failures: list[str] = []
     values, context = _read_hdf5(solution, failures)
     if values:
-        _check_particle_identities(values, failures)
-        _check_wall_identities(values, failures)
+        _check_physical(values, failures)
+        _check_bc(values, failures)
         _check_relocated_sources(values, context, failures)
     history = parse_terminal_history(terminal)
     if not history:
@@ -194,7 +147,7 @@ def _read_hdf5(
     path: Path, failures: list[str]
 ) -> tuple[dict[str, float], DiagnosticContext]:
     values: dict[str, float] = {}
-    units: dict[str, str] = {}
+    texts: dict[str, str] = {}
     context = DiagnosticContext()
     try:
         with h5py.File(path, "r") as handle:
@@ -205,260 +158,240 @@ def _read_hdf5(
                 failures.append(
                     f"balance_diagnostics_mode is {mode!r}, expected 'detailed'"
                 )
-            root = handle.get("diagnostics")
-            if not isinstance(root, h5py.Group):
-                failures.append("required group is missing: /diagnostics")
-                return {}, context
-
-            conservative_variables = _string_values(
-                handle.get(
-                    "simulation_parameters/physics/conservative_variable_names"
-                )
+            names = _string_values(
+                handle.get("simulation_parameters/physics/conservative_variable_names")
             )
-            relocated_sources = _optional_value(
+            relocated = _optional_value(
                 handle,
-                "simulation_parameters/switches/"
-                "neutral_wall_sources_in_elements",
+                "simulation_parameters/switches/neutral_wall_sources_in_elements",
             )
             configured_puff = _optional_value(
                 handle, "simulation_parameters/physics/puff"
             )
             context = DiagnosticContext(
-                neutral_gamma="Gamman" in conservative_variables,
-                relocated_sources=relocated_sources == 1.0,
-                configured_puff=(
-                    configured_puff
-                    if isinstance(configured_puff, float)
-                    else None
-                ),
+                neutral_gamma="Gamman" in names,
+                relocated_sources=relocated == 1.0,
+                configured_puff=(configured_puff if isinstance(configured_puff, float) else None),
             )
+            root = handle.get("diagnostics")
+            if not isinstance(root, h5py.Group):
+                failures.append("required group is missing: /diagnostics")
+                return {}, context
 
             def collect(name: str, item: h5py.Group | h5py.Dataset) -> None:
                 if not isinstance(item, h5py.Dataset) or item.size != 1:
                     return
-                value = _dataset_value(item)
-                if name.endswith("/units") and isinstance(value, str):
-                    units[name.removesuffix("/units")] = value
-                elif isinstance(value, float):
-                    values[name] = value
+                item_value = _dataset_value(item)
+                if isinstance(item_value, str):
+                    texts[name] = item_value
+                elif isinstance(item_value, float):
+                    values[name] = item_value
 
             root.visititems(collect)
     except OSError as exc:
         failures.append(f"cannot read HDF5 solution: {exc}")
         return {}, context
 
-    expected_units = {
-        **{
-            f"particles/{group}": "particles" if group == "content" else "particles/s"
-            for group in PARTICLE_GROUPS
-        },
-        **{group: "particles/s" for group in REQUIRED_COMPONENTS},
-    }
-    for group, expected in expected_units.items():
-        if units.get(group) != expected:
-            failures.append(
-                f"/diagnostics/{group}/units is {units.get(group)!r}, "
-                f"expected {expected!r}"
-            )
-
-    required_components = dict(REQUIRED_COMPONENTS)
-    required_components["particles/components/neutral/boundary_inward"] += (
-        "limited_pressure",
-    )
-    required_components[
-        "wall_closure/neutral/physical_flux_components"
-    ] += ("limited_pressure_inward",)
-    if context.neutral_gamma:
-        required_components[
-            "particles/components/neutral/boundary_inward"
-        ] += ("neutral_gamma_convection",)
-        required_components[
-            "wall_closure/neutral/physical_flux_components"
-        ] += ("neutral_gamma_inward",)
-
-    required = {
-        *(
-            f"particles/{group}/{species}"
-            for group in PARTICLE_GROUPS
-            for species in SPECIES
-        ),
-        *(
-            f"{group}/{name}"
-            for group, names in required_components.items()
-            for name in names
-        ),
-    }
+    required = _required_paths(context)
     missing = sorted(required - values.keys())
     failures.extend(
-        f"required scalar dataset is missing: /diagnostics/{key}"
-        for key in missing
+        f"required scalar dataset is missing: /diagnostics/{name}" for name in missing
     )
     nonfinite = sorted(
-        key for key in required & values.keys() if not math.isfinite(values[key])
+        name for name in required & values.keys() if not math.isfinite(values[name])
     )
     failures.extend(
-        f"required scalar dataset is non-finite: /diagnostics/{key}"
-        for key in nonfinite
+        f"required scalar dataset is non-finite: /diagnostics/{name}"
+        for name in nonfinite
     )
+    expected_units = {
+        **{f"physical/{eq}/content_units": "particles" for eq in EQUATIONS},
+        **{f"physical/{eq}/rate_units": "particles/s" for eq in EQUATIONS},
+        **{f"discrete/{eq}/units": "particles/s" for eq in EQUATIONS},
+        "bc/n/units": "particles/s",
+        "bc/n_n/units": "particles/s",
+    }
+    for name, expected in expected_units.items():
+        if texts.get(name) != expected:
+            failures.append(
+                f"/diagnostics/{name} is {texts.get(name)!r}, expected {expected!r}"
+            )
     return (values, context) if not missing and not nonfinite else ({}, context)
 
 
-def _check_particle_identities(values: dict[str, float], failures: list[str]) -> None:
-    for group in PARTICLE_GROUPS:
-        species_terms = tuple(values[f"particles/{group}/{name}"] for name in SPECIES[:2])
-        activity = _total_activity(group, values, species_terms)
-        _identity(
-            f"particles/{group}/total",
-            values[f"particles/{group}/total"],
-            sum(species_terms),
-            activity,
-            failures,
+def _required_paths(context: DiagnosticContext) -> set[str]:
+    required = {
+        *(f"physical/{eq}/{field}" for eq in EQUATIONS for field in (
+            "content", "temporal", "volume", "boundary_physical_inward",
+            "physical_imbalance",
+        )),
+        *(f"discrete/{eq}/{field}" for eq in EQUATIONS for field in (
+            "hdg_tau_inward", "residual",
+        )),
+        "physical/n/volume_components/ionization",
+        "physical/n/volume_components/recombination",
+        "physical/n/volume_components/prescribed_source",
+        "physical/n/boundary_components_inward/parallel",
+        "physical/n/boundary_components_inward/diffusion",
+        "physical/n/boundary_components_inward/pinch",
+        "physical/n/exchange/charge_exchange_rate",
+        "physical/n_n/volume_components/ionization",
+        "physical/n_n/volume_components/recombination",
+        "physical/n_n/volume_components/prescribed_source",
+        "physical/n_n/volume_components/puff_source",
+        "physical/n_n/volume_components/pump_source",
+        "physical/n_n/boundary_components_inward/limited_diffusion",
+        "physical/n_n/boundary_components_inward/limited_pressure",
+        "bc/n/diffusion_inward",
+        "bc/n/hdg_tau_inward",
+        "bc/n/residual",
+        "bc/n_n/imposed_source_inward",
+        "bc/n_n/physical_flux_inward",
+        "bc/n_n/hdg_tau_inward",
+        "bc/n_n/residual",
+        "bc/n_n/source_components/recycling_parallel_inward",
+        "bc/n_n/source_components/recycling_diffusion_inward",
+        "bc/n_n/source_components/recycling_pinch_inward",
+        "bc/n_n/source_components/puff_source",
+        "bc/n_n/source_components/pump_sink",
+        "bc/n_n/physical_flux_components_inward/limited_diffusion",
+        "bc/n_n/physical_flux_components_inward/limited_pressure",
+    }
+    if context.neutral_gamma:
+        required.update(
+            {
+                "physical/n_n/boundary_components_inward/neutral_gamma_convection",
+                "bc/n_n/physical_flux_components_inward/neutral_gamma_convection",
+            }
         )
-    for species in SPECIES:
-        temporal = values[f"particles/temporal/{species}"]
-        volume = values[f"particles/volume/{species}"]
-        boundary = values[f"particles/boundary_physical_inward/{species}"]
-        physical = values[f"particles/physical_imbalance/{species}"]
-        tau = values[f"particles/hdg_tau_inward/{species}"]
+    return required
+
+
+def _check_physical(values: dict[str, float], failures: list[str]) -> None:
+    for equation in EQUATIONS:
+        temporal = values[f"physical/{equation}/temporal"]
+        volume = values[f"physical/{equation}/volume"]
+        boundary = values[f"physical/{equation}/boundary_physical_inward"]
+        imbalance = values[f"physical/{equation}/physical_imbalance"]
+        tau = values[f"discrete/{equation}/hdg_tau_inward"]
         _identity(
-            f"particles/physical_imbalance/{species}",
-            physical,
+            f"physical/{equation}/physical_imbalance",
+            imbalance,
             temporal - volume - boundary,
             (temporal, volume, boundary),
             failures,
         )
         _identity(
-            f"particles/conservation/{species}",
-            values[f"particles/conservation/{species}"],
-            physical - tau,
-            (physical, tau),
+            f"discrete/{equation}/residual",
+            values[f"discrete/{equation}/residual"],
+            imbalance - tau,
+            (imbalance, tau),
             failures,
         )
-    for aggregate, prefix in COMPONENT_GROUPS.items():
-        terms = _terms(values, prefix)
-        _identity(aggregate, values[aggregate], sum(terms), terms, failures)
-    for reaction in ("ionization", "recombination"):
-        terms = tuple(
-            values[f"particles/components/{species}/volume/{reaction}"]
-            for species in SPECIES[:2]
-        )
+    for field in (
+        "content", "temporal", "volume", "boundary_physical_inward",
+        "physical_imbalance",
+    ):
+        terms = tuple(values[f"physical/{eq}/{field}"] for eq in EQUATIONS[:2])
         _identity(
-            f"particles/components/{reaction}/plasma_plus_neutral",
+            f"physical/total_n/{field}",
+            values[f"physical/total_n/{field}"],
             sum(terms),
-            0.0,
             terms,
             failures,
         )
-
-
-def _total_activity(
-    group: str, values: dict[str, float], species_terms: Sequence[float]
-) -> tuple[float, ...]:
-    """Scale cancellation-prone totals by the terms that formed them."""
-    dependencies = {
-        "physical_imbalance": ("temporal", "volume", "boundary_physical_inward"),
-        "conservation": ("physical_imbalance", "hdg_tau_inward"),
-    }
-    return tuple(
-        values[f"particles/{term}/{species}"]
-        for term in dependencies.get(group, ())
-        for species in SPECIES[:2]
-    ) or tuple(species_terms)
-
-
-def _check_wall_identities(values: dict[str, float], failures: list[str]) -> None:
-    plasma = "wall_closure/plasma_particles"
-    plasma_terms = (
-        values[f"{plasma}/diffusion_inward"],
-        values[f"{plasma}/stabilization_inward"],
-    )
-    _identity(
-        f"{plasma}/residual",
-        values[f"{plasma}/residual"],
-        sum(plasma_terms),
-        plasma_terms,
+    for field in ("hdg_tau_inward", "residual"):
+        terms = tuple(values[f"discrete/{eq}/{field}"] for eq in EQUATIONS[:2])
+        _identity(
+            f"discrete/total_n/{field}",
+            values[f"discrete/total_n/{field}"],
+            sum(terms),
+            terms,
+            failures,
+        )
+    _component_sum(values, "physical/n/volume", "physical/n/volume_components", failures)
+    _component_sum(
+        values,
+        "physical/n/boundary_physical_inward",
+        "physical/n/boundary_components_inward",
         failures,
     )
+    _component_sum(values, "physical/n_n/volume", "physical/n_n/volume_components", failures)
+    _component_sum(
+        values,
+        "physical/n_n/boundary_physical_inward",
+        "physical/n_n/boundary_components_inward",
+        failures,
+    )
+    for reaction in ("ionization", "recombination"):
+        terms = tuple(
+            values[f"physical/{eq}/volume_components/{reaction}"]
+            for eq in EQUATIONS[:2]
+        )
+        _identity(f"physical/particle_exchange/{reaction}", sum(terms), 0.0, terms, failures)
 
-    neutral = "wall_closure/neutral"
-    source_terms = (
-        values[f"{neutral}/recycled_plasma_inward"],
-        values[f"{neutral}/puff_source"],
-        -values[f"{neutral}/pump_sink"],
+
+def _check_bc(values: dict[str, float], failures: list[str]) -> None:
+    density_terms = (values["bc/n/diffusion_inward"], values["bc/n/hdg_tau_inward"])
+    _identity("bc/n/residual", values["bc/n/residual"], sum(density_terms), density_terms, failures)
+    source_terms = tuple(_values_under(values, "bc/n_n/source_components"))
+    source_expected = sum(
+        -value if name.endswith("/pump_sink") else value
+        for name, value in _items_under(values, "bc/n_n/source_components")
     )
     _identity(
-        f"{neutral}/source_inward",
-        values[f"{neutral}/source_inward"],
-        sum(source_terms),
+        "bc/n_n/imposed_source_inward",
+        values["bc/n_n/imposed_source_inward"],
+        source_expected,
         source_terms,
         failures,
     )
-    for aggregate, prefix in (
-        ("recycled_plasma_inward", f"{neutral}/recycled_plasma_components"),
-        ("physical_flux_inward", f"{neutral}/physical_flux_components"),
-    ):
-        terms = _terms(values, prefix)
-        _identity(
-            f"{neutral}/{aggregate}",
-            values[f"{neutral}/{aggregate}"],
-            sum(terms),
-            terms,
-            failures,
-        )
-    residual_terms = (
-        values[f"{neutral}/source_inward"],
-        -values[f"{neutral}/physical_flux_inward"],
-        -values[f"{neutral}/stabilization_inward"],
-    )
+    flux_terms = tuple(_values_under(values, "bc/n_n/physical_flux_components_inward"))
     _identity(
-        f"{neutral}/residual",
-        values[f"{neutral}/residual"],
-        sum(residual_terms),
-        residual_terms,
+        "bc/n_n/physical_flux_inward",
+        values["bc/n_n/physical_flux_inward"],
+        sum(flux_terms),
+        flux_terms,
         failures,
     )
+    residual_terms = (
+        values["bc/n_n/imposed_source_inward"],
+        -values["bc/n_n/physical_flux_inward"],
+        -values["bc/n_n/hdg_tau_inward"],
+    )
+    _identity("bc/n_n/residual", values["bc/n_n/residual"], sum(residual_terms), residual_terms, failures)
 
 
 def _check_relocated_sources(
-    values: dict[str, float],
-    context: DiagnosticContext,
-    failures: list[str],
+    values: dict[str, float], context: DiagnosticContext, failures: list[str]
 ) -> None:
-    """Check that relocated puff/pump appear in volume terms, not the wall BC."""
     if not context.relocated_sources:
         return
-
-    puff = values["particles/components/neutral/volume/puff_source"]
-    pump = values["particles/components/neutral/volume/pump_source"]
+    puff = values["physical/n_n/volume_components/puff_source"]
+    pump = values["physical/n_n/volume_components/pump_source"]
     if context.configured_puff is None:
-        failures.append(
-            "relocated-source check requires /simulation_parameters/physics/puff"
-        )
+        failures.append("relocated-source check requires /simulation_parameters/physics/puff")
     else:
         _identity(
-            "particles/components/neutral/volume/puff_source",
+            "physical/n_n/volume_components/puff_source",
             puff,
             context.configured_puff,
             (puff, context.configured_puff),
             failures,
         )
     if pump > IDENTITY_TOLERANCE * max(abs(pump), 1.0):
-        failures.append(
-            "relocated neutral pump must be a non-positive volume contribution"
-        )
-
+        failures.append("relocated neutral pump must be a non-positive volume contribution")
     for name in ("puff_source", "pump_sink"):
-        path = f"wall_closure/neutral/{name}"
+        path = f"bc/n_n/source_components/{name}"
         _identity(path, values[path], 0.0, (values[path],), failures)
 
 
 def parse_terminal_history(path: Path) -> list[dict[str, Any]]:
-    """Return aggregate values from every detailed terminal block."""
-    history = []
+    history: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None
+    equation = ""
     section = ""
-    species = ""
-    wall_species = ""
+    bc_equation = ""
     time_iteration = None
     newton_iteration = None
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -473,101 +406,146 @@ def parse_terminal_history(path: Path) -> list[dict[str, Any]]:
             current = {
                 "time_iteration": time_iteration,
                 "newton_iteration": newton_iteration,
-                "content": {},
-                "conservation": {name: {} for name in SPECIES},
-                "wall_residual": {},
+                "values": {},
             }
-            section = ""
-            species = ""
-            wall_species = ""
+            equation = section = bc_equation = ""
             continue
         if current is None:
             continue
-        if stripped == "Content [particles]":
-            section = "content"
+        if stripped.startswith("Physical "):
+            equation = stripped.split()[1]
+            section = "physical"
             continue
-        if stripped.endswith(" conservation [particles/s]"):
-            candidate = stripped.split()[0]
-            if candidate in SPECIES:
-                section, species = "conservation", candidate
+        if stripped == "Discrete":
+            section = "discrete"
             continue
-        if stripped.startswith("Wall / HDG boundary-condition residuals"):
-            section = "wall"
+        if stripped.startswith("Independent boundary-condition checks"):
+            section = "bc"
+            equation = ""
             continue
-        if stripped.startswith("Plasma density BC:"):
-            wall_species = "plasma"
-            continue
-        if stripped.startswith("Neutral density BC:"):
-            wall_species = "neutral"
+        if section == "bc" and stripped.startswith(("n:", "n_n:")):
+            bc_equation = stripped.split(":", 1)[0]
             continue
         match = VALUE_LINE.match(line)
         if match is None:
             continue
         label = match.group("label").strip()
-        value = float(match.group("value").replace("D", "E").replace("d", "e"))
-        if section == "content":
-            labels = {"plasma n": "plasma", "neutral nn": "neutral", "total n+nn": "total"}
-            if label in labels:
-                current["content"][labels[label]] = value
-        elif section == "conservation" and species:
-            labels = {
-                "temporal": "temporal",
-                "volume": "volume",
-                "boundary physical, inward": "boundary_physical_inward",
-                "physical imbalance": "physical_imbalance",
-                "HDG tau inward": "hdg_tau_inward",
-                "discrete residual": "conservation",
-            }
-            if label in labels:
-                current["conservation"][species][labels[label]] = value
-        elif section == "wall" and label == "residual" and wall_species:
-            current["wall_residual"][wall_species] = value
+        number = float(match.group("value").replace("D", "E").replace("d", "e"))
+        if section == "physical" and equation in EQUATIONS:
+            field = _terminal_physical_field(label)
+            if field:
+                current["values"][f"physical/{equation}/{field}"] = number
+        elif section == "discrete" and equation in EQUATIONS:
+            field = {"HDG tau inward": "hdg_tau_inward", "residual": "residual"}.get(label)
+            if field:
+                current["values"][f"discrete/{equation}/{field}"] = number
+        elif section == "bc" and bc_equation:
+            path = _terminal_bc_path(bc_equation, label)
+            if path:
+                current["values"][path] = number
     if current is not None:
         history.append(current)
     return history
 
 
+def _terminal_physical_field(label: str) -> str | None:
+    if label.startswith("content ["):
+        return "content"
+    return {
+        "temporal [particles/s]": "temporal",
+        "volume": "volume",
+        "boundary physical inward": "boundary_physical_inward",
+        "physical imbalance": "physical_imbalance",
+    }.get(label)
+
+
+def _terminal_bc_path(equation: str, label: str) -> str | None:
+    fields = {
+        "n": {
+            "diffusion inward": "diffusion_inward",
+            "HDG tau inward": "hdg_tau_inward",
+            "residual": "residual",
+        },
+        "n_n": {
+            "recycling parallel inward": (
+                "source_components/recycling_parallel_inward"
+            ),
+            "recycling diffusion inward": (
+                "source_components/recycling_diffusion_inward"
+            ),
+            "recycling pinch inward": "source_components/recycling_pinch_inward",
+            "puff source": "source_components/puff_source",
+            "pump sink (subtracted)": "source_components/pump_sink",
+            "imposed source inward": "imposed_source_inward",
+            "limited diffusion": (
+                "physical_flux_components_inward/limited_diffusion"
+            ),
+            "limited pressure": (
+                "physical_flux_components_inward/limited_pressure"
+            ),
+            "neutral-gamma convection": (
+                "physical_flux_components_inward/neutral_gamma_convection"
+            ),
+            "physical flux inward": "physical_flux_inward",
+            "HDG tau inward": "hdg_tau_inward",
+            "residual": "residual",
+        },
+    }
+    field = fields.get(equation, {}).get(label)
+    return f"bc/{equation}/{field}" if field else None
+
+
 def _check_terminal_values(
     block: dict[str, Any], values: dict[str, float], failures: list[str]
 ) -> None:
-    terminal_values = {
-        **{
-            f"particles/content/{species}": value
-            for species, value in block["content"].items()
-        },
-        **{
-            f"particles/{term}/{species}": value
-            for species, terms in block["conservation"].items()
-            for term, value in terms.items()
-        },
-        **{
-            "wall_closure/"
-            f"{'plasma_particles' if species == 'plasma' else 'neutral'}"
-            f"/residual": value
-            for species, value in block["wall_residual"].items()
-        },
-    }
+    printed = block["values"]
     expected = {
-        *(f"particles/{group}/{species}" for group in PARTICLE_GROUPS for species in SPECIES),
-        "wall_closure/plasma_particles/residual",
-        "wall_closure/neutral/residual",
+        *(f"physical/{eq}/{field}" for eq in EQUATIONS for field in (
+            "content", "temporal", "volume", "boundary_physical_inward",
+            "physical_imbalance",
+        )),
+        *(f"discrete/{eq}/{field}" for eq in EQUATIONS for field in (
+            "hdg_tau_inward", "residual",
+        )),
+        "bc/n/diffusion_inward",
+        "bc/n/hdg_tau_inward",
+        "bc/n/residual",
+        "bc/n_n/imposed_source_inward",
+        "bc/n_n/physical_flux_inward",
+        "bc/n_n/hdg_tau_inward",
+        "bc/n_n/residual",
+        *(name for name in values if name.startswith("bc/n_n/source_components/")),
+        *(
+            name
+            for name in values
+            if name.startswith("bc/n_n/physical_flux_components_inward/")
+        ),
     }
-    failures.extend(
-        f"terminal block is missing {key}" for key in sorted(expected - terminal_values.keys())
-    )
-    for key in sorted(expected & terminal_values.keys()):
-        exact = values[key]
-        printed = terminal_values[key]
-        difference = abs(exact - printed) / max(abs(exact), abs(printed), 1.0)
-        if not math.isfinite(printed) or difference > TERMINAL_TOLERANCE:
+    failures.extend(f"terminal block is missing {name}" for name in sorted(expected - printed.keys()))
+    for name in sorted(expected & printed.keys()):
+        exact = values[name]
+        shown = printed[name]
+        difference = abs(exact - shown) / max(abs(exact), abs(shown), 1.0)
+        if not math.isfinite(shown) or difference > TERMINAL_TOLERANCE:
             failures.append(
-                f"terminal/HDF5 mismatch for {key}: relative difference "
+                f"terminal/HDF5 mismatch for {name}: relative difference "
                 f"{difference:.6e} exceeds {TERMINAL_TOLERANCE:.6e}"
             )
 
 
-def _terms(values: dict[str, float], prefix: str) -> tuple[float, ...]:
-    return tuple(value for key, value in values.items() if key.startswith(prefix + "/"))
+def _component_sum(
+    values: dict[str, float], aggregate: str, prefix: str, failures: list[str]
+) -> None:
+    terms = tuple(_values_under(values, prefix))
+    _identity(aggregate, values[aggregate], sum(terms), terms, failures)
+
+
+def _items_under(values: dict[str, float], prefix: str) -> list[tuple[str, float]]:
+    return [(name, value) for name, value in values.items() if name.startswith(prefix + "/")]
+
+
+def _values_under(values: dict[str, float], prefix: str) -> list[float]:
+    return [value for _, value in _items_under(values, prefix)]
 
 
 def _identity(
@@ -597,10 +575,9 @@ def _dataset_value(dataset: h5py.Dataset) -> float | str | None:
     if isinstance(value, str):
         return value.strip()
     try:
-        result = float(value)
+        return float(value)
     except (TypeError, ValueError):
         return None
-    return result
 
 
 def _optional_value(handle: h5py.File, path: str) -> float | str | None:
@@ -614,17 +591,12 @@ def _string_values(dataset: h5py.Dataset | h5py.Group | None) -> tuple[str, ...]
     if not isinstance(dataset, h5py.Dataset):
         return ()
     values = dataset[()]
-    if hasattr(values, "reshape"):
-        values = values.reshape(-1)
-    else:
-        values = (values,)
-    result = []
-    for value in values:
-        if isinstance(value, bytes):
-            result.append(value.decode("utf-8").strip(" \x00"))
-        elif isinstance(value, str):
-            result.append(value.strip(" \x00"))
-    return tuple(result)
+    values = values.reshape(-1) if hasattr(values, "reshape") else (values,)
+    return tuple(
+        value.decode("utf-8").strip(" \x00") if isinstance(value, bytes) else value.strip(" \x00")
+        for value in values
+        if isinstance(value, (bytes, str))
+    )
 
 
 def _text(dataset: h5py.Dataset | h5py.Group | None) -> str | None:
