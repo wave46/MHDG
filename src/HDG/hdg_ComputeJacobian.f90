@@ -1124,7 +1124,7 @@ CONTAINS
   diagnostics_on = balance_diag%enabled()
   IF (diagnostics_on) THEN
     CALL balance_diag%begin_assembly(simpar%refval_density, &
-      &simpar%refval_length,simpar%refval_speed)
+      &simpar%refval_length,simpar%refval_speed,simpar%refval_mass)
   ENDIF
   !$OMP PARALLEL DEFAULT(SHARED) &
   !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,omegafl,isdir,Jtorel,wall_source_totals_el) &

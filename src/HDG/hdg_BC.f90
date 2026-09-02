@@ -13,8 +13,7 @@ SUBROUTINE HDG_BC()
   USE transport_models_1d, ONLY: transport_model_1d
   USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
   USE analytical, only: analytical_solution
-  USE balance_diagnostics, ONLY: balance_accumulator_type, &
-       particle_wall_flux_type, balance_diag
+  USE balance_diagnostics, ONLY: balance_accumulator_type, balance_diag
 
   IMPLICIT NONE
 #ifdef TOR3D
@@ -1794,7 +1793,6 @@ CONTAINS
     real*8           :: Qpr(Ndim,Neq), recycling_coeff,  cryopump_coeff,puff_coeff
     real*8           :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
-    TYPE(particle_wall_flux_type) :: wall_fluxes
 #ifdef TEMPERATURE
         REAL*8           :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
         REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
@@ -2253,41 +2251,21 @@ CONTAINS
 
 #ifdef TEMPERATURE
     IF (face_diagnostics_on) THEN
-      wall_fluxes = particle_wall_flux_type()
-      wall_fluxes%plasma_diffusion_inward = &
-        &diffiso(1,1)*DOT_PRODUCT(Qpr(:,1),ng) - &
-        &diffani(1,1)*bn*DOT_PRODUCT(Qpr(:,1),bg)
-      wall_fluxes%plasma_tau_inward = DOT_PRODUCT(tau(1,:),ufg-uefg)
-      wall_fluxes%recycling_parallel_source = &
-        &recycling_coeff*uefg(2)*bn
-      wall_fluxes%recycling_diffusion_source = &
-        &-recycling_coeff*wall_fluxes%plasma_diffusion_inward
-      wall_fluxes%recycling_pinch_source = recycling_coeff*uefg(1)* &
-        &DOT_PRODUCT(APinch(1,:),ng)
-      wall_fluxes%puff_source = puff_coeff
-      wall_fluxes%pump_sink = cryopump_coeff*ufg(inn)
-      wall_fluxes%neutral_diffusion_inward = &
-        &diffiso(inn,inn)*DOT_PRODUCT(Qpr(:,inn),ng) - &
-        &diffani(inn,inn)*bn*DOT_PRODUCT(Qpr(:,inn),bg)
+      CALL boundary_diagnostics%accumulate_particle_bc( &
+        &integration_weight=dline,density_equation=1,neutral_equation=inn, &
+        &trace_state=ufg,exterior_state=uefg,gradient=Qpr,normal=ng, &
+        &magnetic_direction=bg,magnetic_normal=bn,tau=tau, &
+        &diffusion_iso=diffiso,diffusion_ani=diffani,pinch_matrix=APinch, &
+        &flux_jacobian=Abohm,recycling_coefficient=recycling_coeff, &
+        &puff_source=puff_coeff,pump_coefficient=cryopump_coeff, &
 #ifdef NEUTRALP
-      wall_fluxes%neutral_pressure_inward = &
-        &DOT_PRODUCT(MATMUL(Qpr,W5p),ng)
-      IF (switch%neutral_perpendicular_diffusion) THEN
-        wall_fluxes%neutral_pressure_inward = &
-          &wall_fluxes%neutral_pressure_inward - &
-          &bn*DOT_PRODUCT(MATMUL(Qpr,W5p),bg)
-      ENDIF
+        &neutral_pressure_vector=W5p, &
 #endif
-      wall_fluxes%neutral_convection_inward = &
-        &-DOT_PRODUCT(Abohm(inn,:),ufg)*bn
 #ifdef NEUTRALGAMMA
-      IF (ign > 0) wall_fluxes%neutral_convection_inward = &
-        &wall_fluxes%neutral_convection_inward-ufg(ign)*bn
+        &neutral_momentum_equation=ign, &
 #endif
-      wall_fluxes%neutral_tau_inward = &
-        &DOT_PRODUCT(tau(inn,:),ufg-uefg)
-      CALL boundary_diagnostics%accumulate_particle_wall( &
-        &integration_weight=dline,fluxes=wall_fluxes)
+        &neutral_perpendicular_diffusion= &
+        &switch%neutral_perpendicular_diffusion)
     ENDIF
 #endif
 
