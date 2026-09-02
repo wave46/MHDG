@@ -16,7 +16,9 @@ SUBROUTINE HDG_computeJacobian()
        toroidal_current_from_flux
   USE magnetic_topology, ONLY: magnetic_region_core
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
-  USE balance_diagnostics, ONLY: balance_accumulator_type, balance_diag
+  USE balance_diagnostics, ONLY: balance_accumulator_type, balance_diag, &
+       &balance_atomic_volume_type, balance_momentum_volume_type, &
+       &balance_energy_volume_type
 
   IMPLICIT NONE
 
@@ -2533,8 +2535,6 @@ CONTAINS
     real*8                    :: W2(Neq),dW2_dU(Neq,Neq),QdW2(Ndim,Neq)
     real*8                    :: qq(3,Neq),b(Ndim)
     real*8                    :: grad_n(3),gradpar_n
-    real*8                    :: ionization_rate,recombination_rate,charge_exchange_rate
-
 #ifdef TEMPERATURE
     real*8,dimension(neq,neq) :: GG
 #ifdef NEUTRALGAMMA
@@ -2588,7 +2588,12 @@ CONTAINS
 
 
 
-        REAL*8 :: kmult(SIZE(Auq,1),SIZE(Auq,2))
+    REAL*8 :: kmult(SIZE(Auq,1),SIZE(Auq,2))
+    TYPE(balance_atomic_volume_type) :: diagnostic_atomic
+#ifdef TEMPERATURE
+    TYPE(balance_momentum_volume_type) :: diagnostic_momentum
+    TYPE(balance_energy_volume_type) :: diagnostic_energy
+#endif
 
 
 
@@ -2870,28 +2875,56 @@ ENDIF
 !NEUTRAL
 
     IF (diagnostics_on) THEN
-      ionization_rate = 0.d0
-      recombination_rate = 0.d0
-      charge_exchange_rate = 0.d0
 #ifdef NEUTRAL
 #ifdef TEMPERATURE
-      ionization_rate = niz*sigmaviz
-      recombination_rate = nrec*sigmavrec
-      charge_exchange_rate = niz*sigmavcx
+      IF (.NOT. switch%ohmicsrc) Sohmic = 0.d0
+      diagnostic_atomic = balance_atomic_volume_type( &
+          &ionization_density=niz,recombination_density=nrec, &
+          &ionization_rate_coefficient=sigmaviz, &
+          &recombination_rate_coefficient=sigmavrec, &
+          &charge_exchange_rate_coefficient=sigmavcx)
+      diagnostic_momentum = balance_momentum_volume_type( &
+          &pressure_divergence=DOT_PRODUCT(GG(2,:),ue), &
+          &charge_exchange_factor=fGammacx, &
+          &recombination_factor=fGammarec &
+#ifdef NEUTRALGAMMA
+          &,neutral_factor=fGammaN &
+#endif
+          &)
+      diagnostic_energy = balance_energy_volume_type( &
+          &ion_ionization_factor= &
+            &phys%ionization_ion_energy_fraction*fEiiz, &
+          &ion_recombination_factor=fEirec, &
+          &ion_charge_exchange_factor=fEicx, &
+#ifdef NEUTRALGAMMA
+          &neutral_factor=fEiN, &
+#endif
+          &electron_ionization_loss_coefficient=sigmavEiz, &
+          &electron_recombination_loss_coefficient=sigmavErec, &
+          &recombination_energy=neutral_rt%recombination_energy, &
+          &impurity_cooling_factor=cooling_factor, &
+          &ohmic_heating=Sohmic*Jtor**2, &
+          &parallel_electric_transfer=W*DOT_PRODUCT(Qpr(:,4),b), &
+          &temperature_transfer=s)
 #else
-      ionization_rate = niz*3.01d-14*simpar%refval_density*simpar%refval_time
-      recombination_rate = nrec*1.3638d-20*simpar%refval_density*simpar%refval_time
-      charge_exchange_rate = niz*4.0808d-15*simpar%refval_density*simpar%refval_time
+      diagnostic_atomic = balance_atomic_volume_type( &
+          &ionization_density=niz,recombination_density=nrec, &
+          &ionization_rate_coefficient=3.01d-14* &
+            &simpar%refval_density*simpar%refval_time, &
+          &recombination_rate_coefficient=1.3638d-20* &
+            &simpar%refval_density*simpar%refval_time, &
+          &charge_exchange_rate_coefficient=4.0808d-15* &
+            &simpar%refval_density*simpar%refval_time)
 #endif
-#endif
-#ifdef NEUTRAL
-      CALL diagnostics%accumulate_particle_volume( &
-        &measure=SUM(Ni),plasma_density=ue(1),neutral_density=ue(inn), &
-        &plasma_history=u0e(1,:),neutral_history=u0e(inn,:), &
+      CALL diagnostics%accumulate_volume( &
+        &measure=SUM(Ni),state=ue,history=u0e, &
         &time_coefficients=ktis,time_step=time%dt,steady=switch%steady, &
-        &ionization_rate=ionization_rate,recombination_rate=recombination_rate, &
-        &plasma_other_source=f(1),neutral_other_source=f(inn), &
-        &charge_exchange_rate=charge_exchange_rate)
+        &prescribed_source=f,neutral_state_index=inn, &
+        &atomic=diagnostic_atomic &
+#ifdef TEMPERATURE
+        &,momentum=diagnostic_momentum,energy=diagnostic_energy &
+#endif
+        &)
 #endif
     ENDIF
 

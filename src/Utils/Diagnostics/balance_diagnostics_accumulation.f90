@@ -16,110 +16,209 @@ CONTAINS
     this%rate_scale = rate_scale
   END SUBROUTINE accumulator_reset
 
-  MODULE SUBROUTINE accumulate_particle_volume(this, measure, &
-       &plasma_density, neutral_density, plasma_history, neutral_history, &
-       &time_coefficients, time_step, steady, ionization_rate, &
-       &recombination_rate, &
-       &plasma_other_source, neutral_other_source, charge_exchange_rate)
+  MODULE SUBROUTINE accumulate_volume(this, measure, state, history, &
+       &time_coefficients, time_step, steady, prescribed_source, &
+       &neutral_state_index, atomic, momentum, energy)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN) :: measure, plasma_density, neutral_density
-    REAL*8, INTENT(IN) :: plasma_history(:), neutral_history(:)
+    REAL*8, INTENT(IN) :: measure, state(:), history(:,:)
     REAL*8, INTENT(IN) :: time_coefficients(:), time_step
     LOGICAL, INTENT(IN) :: steady
-    REAL*8, INTENT(IN) :: ionization_rate, recombination_rate
-    REAL*8, INTENT(IN) :: plasma_other_source, neutral_other_source
-    REAL*8, INTENT(IN) :: charge_exchange_rate
-    REAL*8 :: plasma_rate_coefficient, neutral_rate_coefficient
+    REAL*8, INTENT(IN) :: prescribed_source(:)
+    INTEGER, INTENT(IN) :: neutral_state_index
+    TYPE(balance_atomic_volume_type), INTENT(IN) :: atomic
+    TYPE(balance_momentum_volume_type), INTENT(IN), OPTIONAL :: momentum
+    TYPE(balance_energy_volume_type), INTENT(IN), OPTIONAL :: energy
+    LOGICAL :: active(balance_equation_count)
+    INTEGER :: state_index(balance_equation_count)
+    REAL*8 :: rate_coefficient(balance_equation_count)
 
-    plasma_rate_coefficient = measure*this%rate_scale(equation_n)
-    neutral_rate_coefficient = measure*this%rate_scale(equation_nn)
+    rate_coefficient = measure*this%rate_scale
+    CALL select_active_equations(active,state_index,neutral_state_index, &
+         &PRESENT(momentum),PRESENT(energy))
+    CALL add_conserved_content(this,measure,state,active,state_index)
+    CALL add_conserved_temporal(this,steady,state,history, &
+         &time_coefficients,time_step,rate_coefficient,active,state_index)
+    CALL add_particle_volume_terms(this,atomic,prescribed_source, &
+         &neutral_state_index,rate_coefficient)
+    IF (PRESENT(momentum)) CALL add_momentum_volume_terms(this,atomic, &
+         &momentum,prescribed_source(equation_nu), &
+         &rate_coefficient(equation_nu))
+    IF (PRESENT(energy)) CALL add_energy_volume_terms(this,atomic,energy, &
+         &prescribed_source,rate_coefficient)
+  END SUBROUTINE accumulate_volume
 
-    CALL add_particle_content(this,measure,plasma_density,neutral_density)
-    CALL add_particle_temporal(this,steady,time_coefficients,time_step, &
-         &plasma_density, &
-         &neutral_density,plasma_history,neutral_history, &
-         &plasma_rate_coefficient,neutral_rate_coefficient)
-    CALL add_particle_reactions(this,ionization_rate,recombination_rate, &
-         &plasma_rate_coefficient,neutral_rate_coefficient)
-    CALL add_particle_sources(this,plasma_other_source,neutral_other_source, &
-         &plasma_rate_coefficient,neutral_rate_coefficient)
-    IF (this%detailed) CALL add_value(this,equation_n, &
-         &term_charge_exchange,section_physical, &
-         &charge_exchange_rate*plasma_rate_coefficient)
-  END SUBROUTINE accumulate_particle_volume
+  SUBROUTINE select_active_equations(active, state_index, &
+       &neutral_state_index, include_momentum, include_energy)
+    LOGICAL, INTENT(OUT) :: active(balance_equation_count)
+    INTEGER, INTENT(OUT) :: state_index(balance_equation_count)
+    INTEGER, INTENT(IN) :: neutral_state_index
+    LOGICAL, INTENT(IN) :: include_momentum, include_energy
 
-  SUBROUTINE add_particle_content(this, measure, plasma_density, &
-       &neutral_density)
+    active = .FALSE.
+    active(equation_n) = .TRUE.
+    active(equation_nu) = include_momentum
+    active(equation_nEi:equation_nEe) = include_energy
+    active(equation_nn) = .TRUE.
+    state_index = (/equation_n,equation_nu,equation_nEi, &
+         &equation_nEe,neutral_state_index/)
+  END SUBROUTINE select_active_equations
+
+  SUBROUTINE add_conserved_content(this, measure, state, active, state_index)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN) :: measure, plasma_density, neutral_density
+    REAL*8, INTENT(IN) :: measure, state(:)
+    LOGICAL, INTENT(IN) :: active(balance_equation_count)
+    INTEGER, INTENT(IN) :: state_index(balance_equation_count)
+    INTEGER :: equation
 
-    CALL add_value(this,equation_n,term_content,section_physical, &
-         &plasma_density*measure*this%content_scale(equation_n))
-    CALL add_value(this,equation_nn,term_content,section_physical, &
-         &neutral_density*measure*this%content_scale(equation_nn))
-  END SUBROUTINE add_particle_content
+    DO equation = equation_n,equation_nn
+       IF (.NOT. active(equation)) CYCLE
+       CALL add_value(this,equation,term_content,section_physical, &
+            &state(state_index(equation))*measure* &
+            &this%content_scale(equation))
+    ENDDO
+  END SUBROUTINE add_conserved_content
 
-  SUBROUTINE add_particle_temporal(this, steady, time_coefficients, &
-       &time_step, plasma_density, neutral_density, plasma_history, &
-       &neutral_history, &
-       &plasma_rate_coefficient, neutral_rate_coefficient)
+  SUBROUTINE add_conserved_temporal(this, steady, state, history, &
+       &time_coefficients, time_step, rate_coefficient, active, state_index)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
     LOGICAL, INTENT(IN) :: steady
-    REAL*8, INTENT(IN) :: time_coefficients(:), time_step
-    REAL*8, INTENT(IN) :: plasma_density, neutral_density
-    REAL*8, INTENT(IN) :: plasma_history(:), neutral_history(:)
-    REAL*8, INTENT(IN) :: plasma_rate_coefficient, neutral_rate_coefficient
+    REAL*8, INTENT(IN) :: state(:), history(:,:), time_coefficients(:)
+    REAL*8, INTENT(IN) :: time_step
+    REAL*8, INTENT(IN) :: rate_coefficient(balance_equation_count)
+    LOGICAL, INTENT(IN) :: active(balance_equation_count)
+    INTEGER, INTENT(IN) :: state_index(balance_equation_count)
+    INTEGER :: equation
 
     IF (steady) RETURN
-    CALL add_value(this,equation_n,term_temporal,section_physical, &
-         &discrete_time_derivative(plasma_density,plasma_history, &
-         &time_coefficients,time_step)* &
-         &plasma_rate_coefficient)
-    CALL add_value(this,equation_nn,term_temporal,section_physical, &
-         &discrete_time_derivative(neutral_density,neutral_history, &
-         &time_coefficients,time_step)* &
-         &neutral_rate_coefficient)
-  END SUBROUTINE add_particle_temporal
+    DO equation = equation_n,equation_nn
+       IF (.NOT. active(equation)) CYCLE
+       CALL add_value(this,equation,term_temporal,section_physical, &
+            &discrete_time_derivative(state(state_index(equation)), &
+            &history(state_index(equation),:),time_coefficients,time_step)* &
+            &rate_coefficient(equation))
+    ENDDO
+  END SUBROUTINE add_conserved_temporal
 
-  SUBROUTINE add_particle_reactions(this, ionization_rate, &
-       &recombination_rate, plasma_rate_coefficient, neutral_rate_coefficient)
+  SUBROUTINE add_particle_volume_terms(this, atomic, prescribed_source, &
+       &neutral_state_index, rate_coefficient)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN) :: ionization_rate, recombination_rate
-    REAL*8, INTENT(IN) :: plasma_rate_coefficient, neutral_rate_coefficient
-    REAL*8 :: net_reaction
+    TYPE(balance_atomic_volume_type), INTENT(IN) :: atomic
+    REAL*8, INTENT(IN) :: prescribed_source(:)
+    INTEGER, INTENT(IN) :: neutral_state_index
+    REAL*8, INTENT(IN) :: rate_coefficient(balance_equation_count)
+    REAL*8 :: ionization, recombination
 
-    net_reaction = ionization_rate-recombination_rate
-    CALL add_value(this,equation_n,term_volume,section_physical, &
-         &net_reaction*plasma_rate_coefficient)
-    CALL add_value(this,equation_nn,term_volume,section_physical, &
-         &-net_reaction*neutral_rate_coefficient)
-    IF (.NOT. this%detailed) RETURN
-    CALL add_value(this,equation_n,term_ionization,section_physical, &
-         &ionization_rate*plasma_rate_coefficient)
-    CALL add_value(this,equation_n,term_recombination,section_physical, &
-         &-recombination_rate*plasma_rate_coefficient)
-    CALL add_value(this,equation_nn,term_ionization,section_physical, &
-         &-ionization_rate*neutral_rate_coefficient)
-    CALL add_value(this,equation_nn,term_recombination,section_physical, &
-         &recombination_rate*neutral_rate_coefficient)
-  END SUBROUTINE add_particle_reactions
+    ionization = atomic%ionization_density* &
+         &atomic%ionization_rate_coefficient
+    recombination = atomic%recombination_density* &
+         &atomic%recombination_rate_coefficient
+    CALL add_volume_component(this,equation_n,term_ionization,ionization, &
+         &rate_coefficient(equation_n))
+    CALL add_volume_component(this,equation_n,term_recombination, &
+         &-recombination,rate_coefficient(equation_n))
+    CALL add_volume_component(this,equation_n,term_prescribed_source, &
+         &prescribed_source(equation_n),rate_coefficient(equation_n))
+    CALL add_volume_component(this,equation_nn,term_ionization,-ionization, &
+         &rate_coefficient(equation_nn))
+    CALL add_volume_component(this,equation_nn,term_recombination, &
+         &recombination,rate_coefficient(equation_nn))
+    CALL add_volume_component(this,equation_nn,term_prescribed_source, &
+         &prescribed_source(neutral_state_index),rate_coefficient(equation_nn))
+    IF (this%detailed) CALL add_value(this,equation_n,term_charge_exchange, &
+         &section_physical,atomic%ionization_density* &
+         &atomic%charge_exchange_rate_coefficient*rate_coefficient(equation_n))
+  END SUBROUTINE add_particle_volume_terms
 
-  SUBROUTINE add_particle_sources(this, plasma_source, neutral_source, &
-       &plasma_rate_coefficient, neutral_rate_coefficient)
+  SUBROUTINE add_momentum_volume_terms(this, atomic, momentum, &
+       &prescribed_source, rate_coefficient)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN) :: plasma_source, neutral_source
-    REAL*8, INTENT(IN) :: plasma_rate_coefficient, neutral_rate_coefficient
+    TYPE(balance_atomic_volume_type), INTENT(IN) :: atomic
+    TYPE(balance_momentum_volume_type), INTENT(IN) :: momentum
+    REAL*8, INTENT(IN) :: prescribed_source, rate_coefficient
+    REAL*8 :: ionization, charge_exchange
 
-    CALL add_value(this,equation_n,term_volume,section_physical, &
-         &plasma_source*plasma_rate_coefficient)
-    CALL add_value(this,equation_nn,term_volume,section_physical, &
-         &neutral_source*neutral_rate_coefficient)
-    IF (.NOT. this%detailed) RETURN
-    CALL add_value(this,equation_n,term_prescribed_source,section_physical, &
-         &plasma_source*plasma_rate_coefficient)
-    CALL add_value(this,equation_nn,term_prescribed_source,section_physical, &
-         &neutral_source*neutral_rate_coefficient)
-  END SUBROUTINE add_particle_sources
+    ionization = momentum%neutral_factor* &
+         &atomic%ionization_rate_coefficient
+    charge_exchange = (momentum%neutral_factor- &
+         &momentum%charge_exchange_factor)* &
+         &atomic%charge_exchange_rate_coefficient
+    CALL add_volume_component(this,equation_nu,term_ionization,ionization, &
+         &rate_coefficient)
+    CALL add_volume_component(this,equation_nu,term_recombination, &
+         &-momentum%recombination_factor* &
+         &atomic%recombination_rate_coefficient, &
+         &rate_coefficient)
+    CALL add_volume_component(this,equation_nu,term_charge_exchange, &
+         &charge_exchange,rate_coefficient)
+    CALL add_volume_component(this,equation_nu,term_pressure_divergence, &
+         &momentum%pressure_divergence,rate_coefficient)
+    CALL add_volume_component(this,equation_nu,term_prescribed_source, &
+         &prescribed_source,rate_coefficient)
+  END SUBROUTINE add_momentum_volume_terms
+
+  SUBROUTINE add_energy_volume_terms(this, atomic, energy, prescribed_source, &
+       &rate_coefficient)
+    CLASS(balance_accumulator_type), INTENT(INOUT) :: this
+    TYPE(balance_atomic_volume_type), INTENT(IN) :: atomic
+    TYPE(balance_energy_volume_type), INTENT(IN) :: energy
+    REAL*8, INTENT(IN) :: prescribed_source(:)
+    REAL*8, INTENT(IN) :: rate_coefficient(balance_equation_count)
+    REAL*8 :: ion_ionization, ion_charge_exchange
+
+    ion_ionization = (energy%ion_ionization_factor+ &
+         &energy%neutral_factor)*atomic%ionization_rate_coefficient
+    ion_charge_exchange = (energy%neutral_factor- &
+         &energy%ion_charge_exchange_factor)* &
+         &atomic%charge_exchange_rate_coefficient
+    CALL add_volume_component(this,equation_nEi,term_ionization, &
+         &ion_ionization,rate_coefficient(equation_nEi))
+    CALL add_volume_component(this,equation_nEi,term_recombination, &
+         &-energy%ion_recombination_factor* &
+         &atomic%recombination_rate_coefficient, &
+         &rate_coefficient(equation_nEi))
+    CALL add_volume_component(this,equation_nEi,term_charge_exchange, &
+         &ion_charge_exchange,rate_coefficient(equation_nEi))
+    CALL add_volume_component(this,equation_nEi,term_parallel_electric_work, &
+         &-energy%parallel_electric_transfer, &
+         &rate_coefficient(equation_nEi))
+    CALL add_volume_component(this,equation_nEi,term_temperature_exchange, &
+         &-energy%temperature_transfer,rate_coefficient(equation_nEi))
+    CALL add_volume_component(this,equation_nEi,term_prescribed_source, &
+         &prescribed_source(equation_nEi),rate_coefficient(equation_nEi))
+
+    CALL add_volume_component(this,equation_nEe,term_ionization, &
+         &-atomic%ionization_density* &
+         &energy%electron_ionization_loss_coefficient, &
+         &rate_coefficient(equation_nEe))
+    CALL add_volume_component(this,equation_nEe,term_recombination, &
+         &atomic%recombination_density*(energy%recombination_energy* &
+         &atomic%recombination_rate_coefficient- &
+         &energy%electron_recombination_loss_coefficient), &
+         &rate_coefficient(equation_nEe))
+    CALL add_volume_component(this,equation_nEe,term_radiation, &
+         &-atomic%recombination_density*energy%impurity_cooling_factor, &
+         &rate_coefficient(equation_nEe))
+    CALL add_volume_component(this,equation_nEe,term_ohmic, &
+         &energy%ohmic_heating, &
+         &rate_coefficient(equation_nEe))
+    CALL add_volume_component(this,equation_nEe,term_parallel_electric_work, &
+         &energy%parallel_electric_transfer,rate_coefficient(equation_nEe))
+    CALL add_volume_component(this,equation_nEe,term_temperature_exchange, &
+         &energy%temperature_transfer,rate_coefficient(equation_nEe))
+    CALL add_volume_component(this,equation_nEe,term_prescribed_source, &
+         &prescribed_source(equation_nEe),rate_coefficient(equation_nEe))
+  END SUBROUTINE add_energy_volume_terms
+
+  SUBROUTINE add_volume_component(this, equation, term, source, coefficient)
+    CLASS(balance_accumulator_type), INTENT(INOUT) :: this
+    INTEGER, INTENT(IN) :: equation, term
+    REAL*8, INTENT(IN) :: source, coefficient
+
+    CALL add_value(this,equation,term_volume,section_physical, &
+         &source*coefficient)
+    IF (this%detailed) CALL add_value(this,equation,term,section_physical, &
+         &source*coefficient)
+  END SUBROUTINE add_volume_component
 
   MODULE SUBROUTINE accumulate_relocated_sources(this, puff_source, &
        &pump_sink)

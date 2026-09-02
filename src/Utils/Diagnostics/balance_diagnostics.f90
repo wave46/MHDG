@@ -60,7 +60,45 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: term_recycling_parallel = 17
   INTEGER, PARAMETER :: term_recycling_diffusion = 18
   INTEGER, PARAMETER :: term_recycling_pinch = 19
-  INTEGER, PARAMETER :: balance_term_count = 19
+
+  ! Detailed non-boundary terms used by momentum and energy equations.
+  INTEGER, PARAMETER :: term_parallel_electric_work = 20
+  INTEGER, PARAMETER :: term_temperature_exchange = 21
+  INTEGER, PARAMETER :: term_pressure_divergence = 22
+  INTEGER, PARAMETER :: term_radiation = 23
+  INTEGER, PARAMETER :: term_ohmic = 24
+  INTEGER, PARAMETER :: balance_term_count = 24
+
+  ! Evaluated physical inputs shared by the particle, momentum, and energy
+  ! source mappings. Equation ownership and signs remain private below.
+  TYPE, PUBLIC :: balance_atomic_volume_type
+     REAL*8 :: ionization_density = 0.d0
+     REAL*8 :: recombination_density = 0.d0
+     REAL*8 :: ionization_rate_coefficient = 0.d0
+     REAL*8 :: recombination_rate_coefficient = 0.d0
+     REAL*8 :: charge_exchange_rate_coefficient = 0.d0
+  END TYPE balance_atomic_volume_type
+
+  TYPE, PUBLIC :: balance_momentum_volume_type
+     REAL*8 :: pressure_divergence = 0.d0
+     REAL*8 :: charge_exchange_factor = 0.d0
+     REAL*8 :: recombination_factor = 0.d0
+     REAL*8 :: neutral_factor = 0.d0
+  END TYPE balance_momentum_volume_type
+
+  TYPE, PUBLIC :: balance_energy_volume_type
+     REAL*8 :: ion_ionization_factor = 0.d0
+     REAL*8 :: ion_recombination_factor = 0.d0
+     REAL*8 :: ion_charge_exchange_factor = 0.d0
+     REAL*8 :: neutral_factor = 0.d0
+     REAL*8 :: electron_ionization_loss_coefficient = 0.d0
+     REAL*8 :: electron_recombination_loss_coefficient = 0.d0
+     REAL*8 :: recombination_energy = 0.d0
+     REAL*8 :: impurity_cooling_factor = 0.d0
+     REAL*8 :: ohmic_heating = 0.d0
+     REAL*8 :: parallel_electric_transfer = 0.d0
+     REAL*8 :: temperature_transfer = 0.d0
+  END TYPE balance_energy_volume_type
 
   ! Read-only equation results shared by terminal and HDF5 presenters.
   TYPE :: physical_balance_type
@@ -90,7 +128,7 @@ MODULE balance_diagnostics
      REAL*8 :: content_scale(balance_equation_count) = 0.d0
      REAL*8 :: rate_scale(balance_equation_count) = 0.d0
    CONTAINS
-     PROCEDURE, PUBLIC :: accumulate_particle_volume
+     PROCEDURE, PUBLIC :: accumulate_volume
      PROCEDURE, PUBLIC :: accumulate_relocated_sources
      PROCEDURE, PUBLIC :: accumulate_particle_face
      PROCEDURE, PUBLIC :: accumulate_particle_tau
@@ -139,20 +177,19 @@ MODULE balance_diagnostics
        REAL*8, INTENT(IN) :: rate_scale(balance_equation_count)
      END SUBROUTINE accumulator_reset
 
-     MODULE SUBROUTINE accumulate_particle_volume(this, measure, &
-          &plasma_density, neutral_density, plasma_history, neutral_history, &
-          &time_coefficients, time_step, steady, ionization_rate, &
-          &recombination_rate, plasma_other_source, neutral_other_source, &
-          &charge_exchange_rate)
+     MODULE SUBROUTINE accumulate_volume(this, measure, state, history, &
+          &time_coefficients, time_step, steady, prescribed_source, &
+          &neutral_state_index, atomic, momentum, energy)
        CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-       REAL*8, INTENT(IN) :: measure, plasma_density, neutral_density
-       REAL*8, INTENT(IN) :: plasma_history(:), neutral_history(:)
+       REAL*8, INTENT(IN) :: measure, state(:), history(:,:)
        REAL*8, INTENT(IN) :: time_coefficients(:), time_step
        LOGICAL, INTENT(IN) :: steady
-       REAL*8, INTENT(IN) :: ionization_rate, recombination_rate
-       REAL*8, INTENT(IN) :: plasma_other_source, neutral_other_source
-       REAL*8, INTENT(IN) :: charge_exchange_rate
-     END SUBROUTINE accumulate_particle_volume
+       REAL*8, INTENT(IN) :: prescribed_source(:)
+       INTEGER, INTENT(IN) :: neutral_state_index
+       TYPE(balance_atomic_volume_type), INTENT(IN) :: atomic
+       TYPE(balance_momentum_volume_type), INTENT(IN), OPTIONAL :: momentum
+       TYPE(balance_energy_volume_type), INTENT(IN), OPTIONAL :: energy
+     END SUBROUTINE accumulate_volume
 
      MODULE SUBROUTINE accumulate_relocated_sources(this, puff_source, &
           &pump_sink)
