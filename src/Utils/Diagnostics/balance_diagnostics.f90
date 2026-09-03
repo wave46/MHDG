@@ -67,7 +67,8 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: term_pressure_divergence = 22
   INTEGER, PARAMETER :: term_radiation = 23
   INTEGER, PARAMETER :: term_ohmic = 24
-  INTEGER, PARAMETER :: balance_term_count = 24
+  INTEGER, PARAMETER :: term_parallel_conduction = 25
+  INTEGER, PARAMETER :: balance_term_count = 25
 
   ! Evaluated physical inputs shared by the particle, momentum, and energy
   ! source mappings. Equation ownership and signs remain private below.
@@ -100,6 +101,21 @@ MODULE balance_diagnostics
      REAL*8 :: temperature_transfer = 0.d0
   END TYPE balance_energy_volume_type
 
+  ! Equation-specific physical-flux data. Common convection, diagonal
+  ! diffusion, pinch, signs, and scaling stay internal to the accumulator.
+  TYPE, PUBLIC :: balance_plasma_face_type
+     REAL*8 :: momentum_split_diffusive_flux = 0.d0
+     LOGICAL :: energy_enabled = .FALSE.
+     REAL*8 :: ion_energy_split_diffusive_flux = 0.d0
+     REAL*8 :: electron_energy_split_diffusive_flux = 0.d0
+     REAL*8 :: ion_parallel_conductive_flux = 0.d0
+     REAL*8 :: electron_parallel_conductive_flux = 0.d0
+  END TYPE balance_plasma_face_type
+
+  TYPE, PUBLIC :: balance_neutral_face_type
+     REAL*8 :: pressure_diffusive_flux = 0.d0
+  END TYPE balance_neutral_face_type
+
   ! Read-only equation results shared by terminal and HDF5 presenters.
   TYPE :: physical_balance_type
      REAL*8 :: content = 0.d0
@@ -130,8 +146,7 @@ MODULE balance_diagnostics
    CONTAINS
      PROCEDURE, PUBLIC :: accumulate_volume
      PROCEDURE, PUBLIC :: accumulate_relocated_sources
-     PROCEDURE, PUBLIC :: accumulate_particle_face
-     PROCEDURE, PUBLIC :: accumulate_particle_tau
+     PROCEDURE, PUBLIC :: accumulate_face
      PROCEDURE, PUBLIC :: accumulate_particle_bc
      PROCEDURE, PRIVATE :: reset => accumulator_reset
   END TYPE balance_accumulator_type
@@ -197,27 +212,20 @@ MODULE balance_diagnostics
        REAL*8, INTENT(IN) :: puff_source, pump_sink
      END SUBROUTINE accumulate_relocated_sources
 
-     MODULE SUBROUTINE accumulate_particle_face(this, measure, &
-          &plasma_equation, neutral_equation, trace_state, flux_jacobian, &
-          &pinch_matrix, gradient, normal, magnetic_direction, diffusion_iso, &
-          &diffusion_ani, neutral_perpendicular_diffusion, &
-          &neutral_pressure_vector)
+     MODULE SUBROUTINE accumulate_face(this, measure, &
+          &trace_state, flux_jacobian, pinch_matrix, gradient, normal, &
+          &magnetic_direction, diffusion_iso, diffusion_ani, element_state, &
+          &tau, plasma, neutral)
        CLASS(balance_accumulator_type), INTENT(INOUT) :: this
        REAL*8, INTENT(IN) :: measure
-       INTEGER, INTENT(IN) :: plasma_equation, neutral_equation
        REAL*8, INTENT(IN) :: trace_state(:), flux_jacobian(:,:)
        REAL*8, INTENT(IN) :: pinch_matrix(:,:), gradient(:,:), normal(:)
        REAL*8, INTENT(IN) :: magnetic_direction(:), diffusion_iso(:,:)
        REAL*8, INTENT(IN) :: diffusion_ani(:,:)
-       LOGICAL, INTENT(IN) :: neutral_perpendicular_diffusion
-       REAL*8, INTENT(IN), OPTIONAL :: neutral_pressure_vector(:)
-     END SUBROUTINE accumulate_particle_face
-
-     MODULE SUBROUTINE accumulate_particle_tau(this, measure, &
-          &plasma_tau_inward, neutral_tau_inward)
-       CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-       REAL*8, INTENT(IN) :: measure, plasma_tau_inward, neutral_tau_inward
-     END SUBROUTINE accumulate_particle_tau
+       REAL*8, INTENT(IN) :: element_state(:), tau(:,:)
+       TYPE(balance_plasma_face_type), INTENT(IN) :: plasma
+       TYPE(balance_neutral_face_type), INTENT(IN) :: neutral
+     END SUBROUTINE accumulate_face
 
      MODULE SUBROUTINE accumulate_particle_bc(this, integration_weight, &
           &density_equation, neutral_equation, trace_state, exterior_state, &

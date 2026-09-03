@@ -18,7 +18,8 @@ SUBROUTINE HDG_computeJacobian()
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
   USE balance_diagnostics, ONLY: balance_accumulator_type, balance_diag, &
        &balance_atomic_volume_type, balance_momentum_volume_type, &
-       &balance_energy_volume_type
+       &balance_energy_volume_type, balance_plasma_face_type, &
+       &balance_neutral_face_type
 
   IMPLICIT NONE
 
@@ -3830,6 +3831,12 @@ ENDIF
       real*8                    :: Qpr(Ndim,Neq)
       real*8                    :: nn(3),qq(3,Neq),b(Ndim),bb(3)
       real*8                    :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
+      TYPE(balance_plasma_face_type) :: diagnostic_plasma_face
+      TYPE(balance_neutral_face_type) :: diagnostic_neutral_face
+      real*8                    :: diagnostic_perpendicular_normal(Ndim)
+#ifdef NEUTRALP
+      real*8                    :: diagnostic_neutral_pressure_normal(Ndim)
+#endif
 #ifdef TEMPERATURE
       real*8                    :: Vveci(Neq),dV_dUi(Neq,Neq),Alphai,dAlpha_dUi(Neq),gmi,taui(Ndim,Neq)
       real*8                    :: Vvece(Neq),dV_dUe(Neq,Neq),Alphae,dAlpha_dUe(Neq),gme,taue(Ndim,Neq)
@@ -3981,27 +3988,38 @@ ENDIF
 
       IF (diagnostics_on) THEN
 #ifdef NEUTRAL
+        diagnostic_perpendicular_normal = n-bn*b
+        diagnostic_plasma_face = balance_plasma_face_type( &
+             &momentum_split_diffusive_flux=DOT_PRODUCT( &
+             &MATMUL(Qpr,W2),diagnostic_perpendicular_normal))
+#ifdef TEMPERATURE
+        diagnostic_plasma_face%energy_enabled = .TRUE.
+        diagnostic_plasma_face%ion_energy_split_diffusive_flux = &
+             &DOT_PRODUCT(MATMUL(Qpr,W3),diagnostic_perpendicular_normal)
+        diagnostic_plasma_face%electron_energy_split_diffusive_flux = &
+             &DOT_PRODUCT(MATMUL(Qpr,W4),diagnostic_perpendicular_normal)
+        diagnostic_plasma_face%ion_parallel_conductive_flux = &
+             &flux_limiter_i*coefi*Alphai*gmi
+        diagnostic_plasma_face%electron_parallel_conductive_flux = &
+             &flux_limiter_e*coefe*Alphae*gme
+#endif
+        diagnostic_neutral_face = balance_neutral_face_type()
 #ifdef NEUTRALP
-        CALL diagnostics%accumulate_particle_face( &
-          &measure=SUM(Nif),plasma_equation=1,neutral_equation=inn, &
-          &trace_state=uf,flux_jacobian=A,pinch_matrix=APinch,gradient=Qpr, &
-          &normal=n,magnetic_direction=b,diffusion_iso=diffiso, &
-          &diffusion_ani=diffani,neutral_perpendicular_diffusion= &
-          &switch%neutral_perpendicular_diffusion,neutral_pressure_vector=W5p)
-#else
-        CALL diagnostics%accumulate_particle_face( &
-          &measure=SUM(Nif),plasma_equation=1,neutral_equation=inn, &
-          &trace_state=uf,flux_jacobian=A,pinch_matrix=APinch,gradient=Qpr, &
-          &normal=n,magnetic_direction=b,diffusion_iso=diffiso, &
-          &diffusion_ani=diffani,neutral_perpendicular_diffusion= &
-          &switch%neutral_perpendicular_diffusion)
+        diagnostic_neutral_pressure_normal = n
+        IF (switch%neutral_perpendicular_diffusion) &
+             &diagnostic_neutral_pressure_normal = &
+             &diagnostic_perpendicular_normal
+        diagnostic_neutral_face%pressure_diffusive_flux = &
+             &DOT_PRODUCT(MATMUL(Qpr,W5p), &
+             &diagnostic_neutral_pressure_normal)
 #endif
-#endif
-#ifdef NEUTRAL
-        CALL diagnostics%accumulate_particle_tau( &
-          &measure=SUM(Nif), &
-          &plasma_tau_inward=DOT_PRODUCT(tau(1,:),uf-uef), &
-          &neutral_tau_inward=DOT_PRODUCT(tau(inn,:),uf-uef))
+        CALL diagnostics%accumulate_face( &
+             &measure=SUM(Nif),trace_state=uf, &
+             &flux_jacobian=A,pinch_matrix=APinch, &
+             &gradient=Qpr,normal=n,magnetic_direction=b, &
+             &diffusion_iso=diffiso,diffusion_ani=diffani, &
+             &element_state=uef,tau=tau, &
+             &plasma=diagnostic_plasma_face,neutral=diagnostic_neutral_face)
 #endif
       ENDIF
 

@@ -236,79 +236,109 @@ CONTAINS
          &-pump_sink*rate_scale)
   END SUBROUTINE accumulate_relocated_sources
 
-  MODULE SUBROUTINE accumulate_particle_face(this, measure, &
-       &plasma_equation, neutral_equation, trace_state, flux_jacobian, &
-       &pinch_matrix, gradient, normal, magnetic_direction, diffusion_iso, &
-       &diffusion_ani, neutral_perpendicular_diffusion, &
-       &neutral_pressure_vector)
+  MODULE SUBROUTINE accumulate_face(this, measure, &
+       &trace_state, flux_jacobian, pinch_matrix, gradient, normal, &
+       &magnetic_direction, diffusion_iso, diffusion_ani, element_state, tau, &
+       &plasma, neutral)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
     REAL*8, INTENT(IN) :: measure
-    INTEGER, INTENT(IN) :: plasma_equation, neutral_equation
     REAL*8, INTENT(IN) :: trace_state(:), flux_jacobian(:,:)
     REAL*8, INTENT(IN) :: pinch_matrix(:,:), gradient(:,:), normal(:)
     REAL*8, INTENT(IN) :: magnetic_direction(:), diffusion_iso(:,:)
     REAL*8, INTENT(IN) :: diffusion_ani(:,:)
-    LOGICAL, INTENT(IN) :: neutral_perpendicular_diffusion
-    REAL*8, INTENT(IN), OPTIONAL :: neutral_pressure_vector(:)
-    REAL*8 :: plasma_coefficient, neutral_coefficient, magnetic_normal
+    REAL*8, INTENT(IN) :: element_state(:), tau(:,:)
+    TYPE(balance_plasma_face_type), INTENT(IN) :: plasma
+    TYPE(balance_neutral_face_type), INTENT(IN) :: neutral
+    LOGICAL :: active(balance_equation_count)
+    INTEGER :: state_index(balance_equation_count)
+    REAL*8 :: coefficient(balance_equation_count), magnetic_normal
 
-    plasma_coefficient = measure*this%rate_scale(equation_n)
-    neutral_coefficient = measure*this%rate_scale(equation_nn)
+    coefficient = measure*this%rate_scale
     magnetic_normal = DOT_PRODUCT(magnetic_direction,normal)
-    CALL add_plasma_particle_flux(this,plasma_equation,trace_state, &
+    CALL add_plasma_equation_flux(this,equation_n,trace_state, &
          &flux_jacobian,pinch_matrix,gradient,normal,magnetic_direction, &
-         &magnetic_normal,diffusion_iso,diffusion_ani,plasma_coefficient)
-    CALL add_neutral_particle_flux(this,neutral_equation,trace_state, &
+         &magnetic_normal,diffusion_iso,diffusion_ani, &
+         &coefficient(equation_n),0.d0,0.d0)
+    CALL add_plasma_equation_flux(this,equation_nu,trace_state, &
+         &flux_jacobian,pinch_matrix,gradient,normal, &
+         &magnetic_direction,magnetic_normal,diffusion_iso,diffusion_ani, &
+         &coefficient(equation_nu),plasma%momentum_split_diffusive_flux,0.d0)
+    IF (plasma%energy_enabled) THEN
+       CALL add_plasma_equation_flux(this,equation_nEi,trace_state, &
+            &flux_jacobian,pinch_matrix,gradient,normal,magnetic_direction, &
+            &magnetic_normal,diffusion_iso,diffusion_ani, &
+            &coefficient(equation_nEi), &
+            &plasma%ion_energy_split_diffusive_flux, &
+            &plasma%ion_parallel_conductive_flux)
+       CALL add_plasma_equation_flux(this,equation_nEe,trace_state, &
+            &flux_jacobian,pinch_matrix,gradient,normal,magnetic_direction, &
+            &magnetic_normal,diffusion_iso,diffusion_ani, &
+            &coefficient(equation_nEe), &
+            &plasma%electron_energy_split_diffusive_flux, &
+            &plasma%electron_parallel_conductive_flux)
+    ENDIF
+    CALL add_neutral_particle_flux(this,trace_state, &
          &flux_jacobian,gradient,normal,magnetic_direction,magnetic_normal, &
-         &diffusion_iso,diffusion_ani,neutral_perpendicular_diffusion, &
-         &neutral_coefficient,neutral_pressure_vector)
-  END SUBROUTINE accumulate_particle_face
+         &diffusion_iso,diffusion_ani,coefficient(equation_nn),neutral)
+    CALL select_active_equations(active,state_index,equation_nn,.TRUE., &
+         &plasma%energy_enabled)
+    CALL add_face_tau(this,trace_state,element_state,tau,coefficient,active, &
+         &state_index)
+  END SUBROUTINE accumulate_face
 
-  SUBROUTINE add_plasma_particle_flux(this, equation, state, flux_jacobian, &
-       &pinch_matrix, gradient, normal, magnetic_direction, magnetic_normal, &
-       &diffusion_iso, diffusion_ani, coefficient)
+  SUBROUTINE add_plasma_equation_flux(this, equation, state, flux_jacobian, &
+       &pinch_matrix, gradient, normal, &
+       &magnetic_direction, magnetic_normal, diffusion_iso, diffusion_ani, &
+       &coefficient, split_diffusion, parallel_conduction)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
     INTEGER, INTENT(IN) :: equation
     REAL*8, INTENT(IN) :: state(:), flux_jacobian(:,:), pinch_matrix(:,:)
     REAL*8, INTENT(IN) :: gradient(:,:), normal(:), magnetic_direction(:)
     REAL*8, INTENT(IN) :: magnetic_normal, diffusion_iso(:,:), diffusion_ani(:,:)
-    REAL*8, INTENT(IN) :: coefficient
-    REAL*8 :: parallel, diffusion, pinch
+    REAL*8, INTENT(IN) :: coefficient, split_diffusion, parallel_conduction
+    REAL*8 :: convection, diffusion, pinch, conduction
 
-    parallel = -DOT_PRODUCT(flux_jacobian(equation,:),state)* &
+    convection = -DOT_PRODUCT(flux_jacobian(equation,:),state)* &
          &magnetic_normal*coefficient
     diffusion = perpendicular_diffusive_flux(equation,gradient,normal, &
          &magnetic_direction,magnetic_normal,diffusion_iso,diffusion_ani)* &
+         &coefficient+split_diffusion*coefficient
+    conduction = parallel_conduction*magnetic_normal*coefficient
+    pinch = -state(equation)* &
+         &DOT_PRODUCT(pinch_matrix(equation,:),normal)* &
          &coefficient
-    pinch = -state(equation)*DOT_PRODUCT(pinch_matrix(equation,:),normal)* &
-         &coefficient
-    CALL add_value(this,equation_n,term_boundary_physical_inward, &
-         &section_physical,parallel+diffusion+pinch)
+    CALL add_value(this,equation,term_boundary_physical_inward, &
+         &section_physical,convection+diffusion+conduction+pinch)
     IF (.NOT. this%detailed) RETURN
-    CALL add_value(this,equation_n,term_parallel,section_physical,parallel)
-    CALL add_value(this,equation_n,term_diffusion,section_physical,diffusion)
-    CALL add_value(this,equation_n,term_pinch,section_physical,pinch)
-  END SUBROUTINE add_plasma_particle_flux
+    IF (equation == equation_n) THEN
+       CALL add_value(this,equation,term_parallel, &
+            &section_physical,convection)
+    ELSE
+       CALL add_value(this,equation,term_convection, &
+            &section_physical,convection)
+    ENDIF
+    CALL add_value(this,equation,term_diffusion, &
+         &section_physical,diffusion)
+    CALL add_value(this,equation,term_parallel_conduction, &
+         &section_physical,conduction)
+    CALL add_value(this,equation,term_pinch,section_physical,pinch)
+  END SUBROUTINE add_plasma_equation_flux
 
-  SUBROUTINE add_neutral_particle_flux(this, equation, state, flux_jacobian, &
+  SUBROUTINE add_neutral_particle_flux(this, state, flux_jacobian, &
        &gradient, normal, magnetic_direction, magnetic_normal, diffusion_iso, &
-       &diffusion_ani, perpendicular_enabled, coefficient, pressure_vector)
+       &diffusion_ani, coefficient, neutral)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    INTEGER, INTENT(IN) :: equation
     REAL*8, INTENT(IN) :: state(:), flux_jacobian(:,:), gradient(:,:)
     REAL*8, INTENT(IN) :: normal(:), magnetic_direction(:), magnetic_normal
     REAL*8, INTENT(IN) :: diffusion_iso(:,:), diffusion_ani(:,:), coefficient
-    LOGICAL, INTENT(IN) :: perpendicular_enabled
-    REAL*8, INTENT(IN), OPTIONAL :: pressure_vector(:)
+    TYPE(balance_neutral_face_type), INTENT(IN) :: neutral
     REAL*8 :: diffusion, pressure, convection
 
-    diffusion = perpendicular_diffusive_flux(equation,gradient,normal, &
+    diffusion = perpendicular_diffusive_flux(equation_nn,gradient,normal, &
          &magnetic_direction,magnetic_normal,diffusion_iso,diffusion_ani)* &
          &coefficient
-    pressure = optional_neutral_pressure_flux(gradient,normal, &
-         &magnetic_direction,magnetic_normal,perpendicular_enabled, &
-         &pressure_vector)*coefficient
-    convection = -DOT_PRODUCT(flux_jacobian(equation,:),state)* &
+    pressure = neutral%pressure_diffusive_flux*coefficient
+    convection = -DOT_PRODUCT(flux_jacobian(equation_nn,:),state)* &
          &magnetic_normal*coefficient
     CALL add_value(this,equation_nn,term_boundary_physical_inward, &
          &section_physical,diffusion+pressure+convection)
@@ -318,16 +348,23 @@ CONTAINS
     CALL add_value(this,equation_nn,term_convection,section_physical,convection)
   END SUBROUTINE add_neutral_particle_flux
 
-  MODULE SUBROUTINE accumulate_particle_tau(this, measure, &
-       &plasma_tau_inward, neutral_tau_inward)
+  SUBROUTINE add_face_tau(this, trace_state, element_state, tau, coefficient, &
+       &active, state_index)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    REAL*8, INTENT(IN) :: measure, plasma_tau_inward, neutral_tau_inward
+    REAL*8, INTENT(IN) :: trace_state(:), element_state(:), tau(:,:)
+    REAL*8, INTENT(IN) :: coefficient(balance_equation_count)
+    LOGICAL, INTENT(IN) :: active(balance_equation_count)
+    INTEGER, INTENT(IN) :: state_index(balance_equation_count)
+    INTEGER :: equation, model_equation
 
-    CALL add_value(this,equation_n,term_tau_inward,section_physical, &
-         &plasma_tau_inward*measure*this%rate_scale(equation_n))
-    CALL add_value(this,equation_nn,term_tau_inward,section_physical, &
-         &neutral_tau_inward*measure*this%rate_scale(equation_nn))
-  END SUBROUTINE accumulate_particle_tau
+    DO equation = equation_n,equation_nn
+       IF (.NOT. active(equation)) CYCLE
+       model_equation = state_index(equation)
+       CALL add_value(this,equation,term_tau_inward,section_physical, &
+            &DOT_PRODUCT(tau(model_equation,:),trace_state-element_state)* &
+            &coefficient(equation))
+    ENDDO
+  END SUBROUTINE add_face_tau
 
   SUBROUTINE add_value(this, equation, term, section, value)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
