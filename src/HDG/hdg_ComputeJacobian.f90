@@ -2591,8 +2591,8 @@ CONTAINS
 
     REAL*8 :: kmult(SIZE(Auq,1),SIZE(Auq,2))
     TYPE(balance_atomic_volume_type) :: diagnostic_atomic
-#ifdef TEMPERATURE
     TYPE(balance_momentum_volume_type) :: diagnostic_momentum
+#ifdef TEMPERATURE
     TYPE(balance_energy_volume_type) :: diagnostic_energy
 #endif
 
@@ -2884,14 +2884,6 @@ ENDIF
           &ionization_rate_coefficient=sigmaviz, &
           &recombination_rate_coefficient=sigmavrec, &
           &charge_exchange_rate_coefficient=sigmavcx)
-      diagnostic_momentum = balance_momentum_volume_type( &
-          &pressure_divergence=DOT_PRODUCT(GG(2,:),ue), &
-          &charge_exchange_factor=fGammacx, &
-          &recombination_factor=fGammarec &
-#ifdef NEUTRALGAMMA
-          &,neutral_factor=fGammaN &
-#endif
-          &)
       diagnostic_energy = balance_energy_volume_type( &
           &ion_ionization_factor= &
             &phys%ionization_ion_energy_fraction*fEiiz, &
@@ -2917,13 +2909,25 @@ ENDIF
           &charge_exchange_rate_coefficient=4.0808d-15* &
             &simpar%refval_density*simpar%refval_time)
 #endif
+      diagnostic_momentum = balance_momentum_volume_type( &
+#ifdef TEMPERATURE
+          &pressure_divergence=DOT_PRODUCT(GG(2,:),ue), &
+#else
+          &pressure_divergence=phys%a*divb*ue(1), &
+#endif
+          &charge_exchange_factor=fGammacx, &
+          &recombination_factor=fGammarec &
+#ifdef NEUTRALGAMMA
+          &,neutral_factor=fGammaN &
+#endif
+          &)
       CALL diagnostics%accumulate_volume( &
         &measure=SUM(Ni),state=ue,history=u0e, &
         &time_coefficients=ktis,time_step=time%dt,steady=switch%steady, &
         &prescribed_source=f,neutral_state_index=inn, &
-        &atomic=diagnostic_atomic &
+        &atomic=diagnostic_atomic,momentum=diagnostic_momentum &
 #ifdef TEMPERATURE
-        &,momentum=diagnostic_momentum,energy=diagnostic_energy &
+        &,energy=diagnostic_energy &
 #endif
         &)
 #endif
