@@ -1,9 +1,11 @@
 !**********************************************************************
 ! Public contract and lifecycle for equation-oriented balance diagnostics.
 !
-! Physical fluxes and HDG stabilization are inward-positive. Primary
-! equations follow the conservative model order; total particle and total
-! plasma-energy balances are derived after reduction and are never stored.
+! Boundary fluxes and HDG stabilization are inward-positive. The physical
+! balance uses the boundary value prescribed by the physical BC; the discrete
+! balance keeps the equation face flux and HDG stabilization separate.
+! Primary equations follow the conservative model order; total particle and
+! total plasma-energy balances are derived after reduction and are never stored.
 !**********************************************************************
 MODULE balance_diagnostics
   USE HDF5, ONLY: HID_T
@@ -15,7 +17,8 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER, PUBLIC :: balance_mode_invalid = -1
   INTEGER, PARAMETER, PUBLIC :: balance_mode_off = 0
   INTEGER, PARAMETER, PUBLIC :: balance_mode_summary = 1
-  INTEGER, PARAMETER, PUBLIC :: balance_mode_detailed = 2
+  INTEGER, PARAMETER, PUBLIC :: balance_mode_equations = 2
+  INTEGER, PARAMETER, PUBLIC :: balance_mode_detailed = 3
 
   ! Stored equation columns mirror U1:U5. Neutral momentum is deliberately
   ! excluded from the independent diagnostic scope.
@@ -25,6 +28,15 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: equation_nEe = 4
   INTEGER, PARAMETER :: equation_nn = 5
   INTEGER, PARAMETER :: balance_equation_count = 5
+  CHARACTER(LEN=8), PARAMETER :: balance_equation_names( &
+       &balance_equation_count) = [CHARACTER(LEN=8) :: &
+       &'n','nu','nEi','nEe','n_n']
+  CHARACTER(LEN=12), PARAMETER :: balance_content_units( &
+       &balance_equation_count) = [CHARACTER(LEN=12) :: &
+       &'particles','kg m s^-1','J','J','particles']
+  CHARACTER(LEN=12), PARAMETER :: balance_rate_units( &
+       &balance_equation_count) = [CHARACTER(LEN=12) :: &
+       &'particles/s','N','W','W','particles/s']
 
   ! Each accumulated value is addressed as values(equation,term,section). Terms
   ! describe physics and are reused between the physical and independent-BC
@@ -37,7 +49,7 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: term_content = 1
   INTEGER, PARAMETER :: term_temporal = 2
   INTEGER, PARAMETER :: term_volume = 3
-  INTEGER, PARAMETER :: term_boundary_physical_inward = 4
+  INTEGER, PARAMETER :: term_equation_boundary_inward = 4
   INTEGER, PARAMETER :: term_tau_inward = 5
 
   ! Detailed volume fields. A field is used only for equations to which its
@@ -49,7 +61,7 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: term_pump = 10
   INTEGER, PARAMETER :: term_charge_exchange = 11
 
-  ! Detailed exterior physical-flux fields.
+  ! Detailed boundary-flux fields, reused by equation and physical-BC views.
   INTEGER, PARAMETER :: term_parallel = 12
   INTEGER, PARAMETER :: term_diffusion = 13
   INTEGER, PARAMETER :: term_pinch = 14
@@ -68,7 +80,9 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: term_radiation = 23
   INTEGER, PARAMETER :: term_ohmic = 24
   INTEGER, PARAMETER :: term_parallel_conduction = 25
-  INTEGER, PARAMETER :: balance_term_count = 25
+  INTEGER, PARAMETER :: term_boundary_physical_inward = 26
+  INTEGER, PARAMETER :: term_sheath = 27
+  INTEGER, PARAMETER :: balance_term_count = 27
 
   ! Evaluated physical inputs shared by the particle, momentum, and energy
   ! source mappings. Equation ownership and signs remain private below.
@@ -123,7 +137,9 @@ MODULE balance_diagnostics
      REAL*8 :: volume = 0.d0
      REAL*8 :: boundary_inward = 0.d0
      REAL*8 :: physical_imbalance = 0.d0
+     REAL*8 :: equation_boundary_inward = 0.d0
      REAL*8 :: tau_inward = 0.d0
+     REAL*8 :: numerical_boundary_inward = 0.d0
      REAL*8 :: discrete_residual = 0.d0
   END TYPE physical_balance_type
 
@@ -147,7 +163,7 @@ MODULE balance_diagnostics
      PROCEDURE, PUBLIC :: accumulate_volume
      PROCEDURE, PUBLIC :: accumulate_relocated_sources
      PROCEDURE, PUBLIC :: accumulate_face
-     PROCEDURE, PUBLIC :: accumulate_particle_bc
+     PROCEDURE, PUBLIC :: accumulate_bc
      PROCEDURE, PRIVATE :: reset => accumulator_reset
   END TYPE balance_accumulator_type
 
@@ -227,11 +243,12 @@ MODULE balance_diagnostics
        TYPE(balance_neutral_face_type), INTENT(IN) :: neutral
      END SUBROUTINE accumulate_face
 
-     MODULE SUBROUTINE accumulate_particle_bc(this, integration_weight, &
+     MODULE SUBROUTINE accumulate_bc(this, integration_weight, &
           &density_equation, neutral_equation, trace_state, exterior_state, &
           &gradient, normal, magnetic_direction, magnetic_normal, tau, &
           &diffusion_iso, diffusion_ani, pinch_matrix, flux_jacobian, &
           &recycling_coefficient, puff_source, pump_coefficient, &
+          &ion_sheath_coefficient, electron_sheath_coefficient, &
           &neutral_perpendicular_diffusion, neutral_pressure_vector, &
           &neutral_momentum_equation)
        CLASS(balance_accumulator_type), INTENT(INOUT) :: this
@@ -244,10 +261,12 @@ MODULE balance_diagnostics
        REAL*8, INTENT(IN) :: pinch_matrix(:,:), flux_jacobian(:,:)
        REAL*8, INTENT(IN) :: recycling_coefficient, puff_source
        REAL*8, INTENT(IN) :: pump_coefficient
+       REAL*8, INTENT(IN) :: ion_sheath_coefficient
+       REAL*8, INTENT(IN) :: electron_sheath_coefficient
        LOGICAL, INTENT(IN) :: neutral_perpendicular_diffusion
        REAL*8, INTENT(IN), OPTIONAL :: neutral_pressure_vector(:)
        INTEGER, INTENT(IN), OPTIONAL :: neutral_momentum_equation
-     END SUBROUTINE accumulate_particle_bc
+     END SUBROUTINE accumulate_bc
 
      MODULE SUBROUTINE balance_diagnostics_report(this)
        CLASS(balance_diagnostics_type), INTENT(IN) :: this
@@ -281,6 +300,24 @@ MODULE balance_diagnostics
        TYPE(particle_bc_balance_type) :: balance
      END FUNCTION neutral_density_bc
 
+     MODULE FUNCTION equation_bc_residual(this, equation, available) &
+          &RESULT(residual)
+       CLASS(balance_diagnostics_type), INTENT(IN) :: this
+       INTEGER, INTENT(IN) :: equation
+       LOGICAL, INTENT(OUT) :: available
+       REAL*8 :: residual
+     END FUNCTION equation_bc_residual
+
+     MODULE FUNCTION external_puff_input(this) RESULT(value)
+       CLASS(balance_diagnostics_type), INTENT(IN) :: this
+       REAL*8 :: value
+     END FUNCTION external_puff_input
+
+     MODULE FUNCTION external_pump_output(this) RESULT(value)
+       CLASS(balance_diagnostics_type), INTENT(IN) :: this
+       REAL*8 :: value
+     END FUNCTION external_pump_output
+
      MODULE FUNCTION perpendicular_diffusive_flux(equation, gradient, &
           &normal, magnetic_direction, magnetic_normal, diffusion_iso, &
           &diffusion_ani) RESULT(flux)
@@ -312,6 +349,8 @@ CONTAINS
        mode = balance_mode_off
     CASE ('summary')
        mode = balance_mode_summary
+    CASE ('equations')
+       mode = balance_mode_equations
     CASE ('detailed')
        mode = balance_mode_detailed
     CASE DEFAULT
@@ -319,7 +358,7 @@ CONTAINS
     END SELECT
   END FUNCTION parse_balance_diagnostics_mode
 
-  CHARACTER(LEN=8) FUNCTION balance_diagnostics_mode_name(mode) RESULT(name)
+  CHARACTER(LEN=9) FUNCTION balance_diagnostics_mode_name(mode) RESULT(name)
     INTEGER, INTENT(IN) :: mode
 
     SELECT CASE (mode)
@@ -327,6 +366,8 @@ CONTAINS
        name = 'off'
     CASE (balance_mode_summary)
        name = 'summary'
+    CASE (balance_mode_equations)
+       name = 'equations'
     CASE (balance_mode_detailed)
        name = 'detailed'
     CASE DEFAULT

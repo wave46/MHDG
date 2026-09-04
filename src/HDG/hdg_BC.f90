@@ -2251,13 +2251,15 @@ CONTAINS
 
 #ifdef TEMPERATURE
     IF (face_diagnostics_on) THEN
-      CALL boundary_diagnostics%accumulate_particle_bc( &
+      CALL boundary_diagnostics%accumulate_bc( &
         &integration_weight=dline,density_equation=1,neutral_equation=inn, &
         &trace_state=ufg,exterior_state=uefg,gradient=Qpr,normal=ng, &
         &magnetic_direction=bg,magnetic_normal=bn,tau=tau, &
         &diffusion_iso=diffiso,diffusion_ani=diffani,pinch_matrix=APinch, &
         &flux_jacobian=Abohm,recycling_coefficient=recycling_coeff, &
         &puff_source=puff_coeff,pump_coefficient=cryopump_coeff, &
+        &ion_sheath_coefficient=phys%Gmbohm, &
+        &electron_sheath_coefficient=phys%Gmbohme, &
 #ifdef NEUTRALP
         &neutral_pressure_vector=W5p, &
 #endif

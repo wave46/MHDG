@@ -216,7 +216,8 @@ CONTAINS
 
     CALL add_value(this,equation,term_volume,section_physical, &
          &source*coefficient)
-    IF (this%detailed) CALL add_value(this,equation,term,section_physical, &
+    IF (this%detailed .OR. term == term_prescribed_source) &
+         &CALL add_value(this,equation,term,section_physical, &
          &source*coefficient)
   END SUBROUTINE add_volume_component
 
@@ -229,7 +230,6 @@ CONTAINS
     rate_scale = this%rate_scale(equation_nn)
     CALL add_value(this,equation_nn,term_volume,section_physical, &
          &(puff_source-pump_sink)*rate_scale)
-    IF (.NOT. this%detailed) RETURN
     CALL add_value(this,equation_nn,term_puff,section_physical, &
          &puff_source*rate_scale)
     CALL add_value(this,equation_nn,term_pump,section_physical, &
@@ -307,8 +307,13 @@ CONTAINS
     pinch = -state(equation)* &
          &DOT_PRODUCT(pinch_matrix(equation,:),normal)* &
          &coefficient
-    CALL add_value(this,equation,term_boundary_physical_inward, &
+    CALL add_value(this,equation,term_equation_boundary_inward, &
          &section_physical,convection+diffusion+conduction+pinch)
+    ! Bohm constrains momentum state rather than prescribing its total flux.
+    ! Its physical boundary term is therefore the evaluated equation flux.
+    IF (equation == equation_nu) CALL add_value(this,equation, &
+         &term_boundary_physical_inward,section_bc, &
+         &convection+diffusion+conduction+pinch)
     IF (.NOT. this%detailed) RETURN
     IF (equation == equation_n) THEN
        CALL add_value(this,equation,term_parallel, &
@@ -340,7 +345,7 @@ CONTAINS
     pressure = neutral%pressure_diffusive_flux*coefficient
     convection = -DOT_PRODUCT(flux_jacobian(equation_nn,:),state)* &
          &magnetic_normal*coefficient
-    CALL add_value(this,equation_nn,term_boundary_physical_inward, &
+    CALL add_value(this,equation_nn,term_equation_boundary_inward, &
          &section_physical,diffusion+pressure+convection)
     IF (.NOT. this%detailed) RETURN
     CALL add_value(this,equation_nn,term_diffusion,section_physical,diffusion)

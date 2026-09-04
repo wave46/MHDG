@@ -237,7 +237,7 @@ SUBROUTINE READ_input()
   IF (balance_diagnostics_mode_id == balance_mode_invalid) THEN
      PRINT *, 'Unknown balance_diagnostics_mode: ', &
           TRIM(balance_diagnostics_mode)
-     PRINT *, 'Allowed values: off, summary, detailed'
+     PRINT *, 'Allowed values: off, summary, equations, detailed'
      STOP
   ENDIF
 #ifdef TOR3D

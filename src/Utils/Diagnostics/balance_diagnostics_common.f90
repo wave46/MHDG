@@ -21,13 +21,17 @@ CONTAINS
          balance_value(this,equation,term_temporal,section_physical)
     balance%volume = balance_value(this,equation,term_volume,section_physical)
     balance%boundary_inward = balance_value(this,equation, &
-         &term_boundary_physical_inward,section_physical)
+         &term_boundary_physical_inward,section_bc)
+    balance%equation_boundary_inward = balance_value(this,equation, &
+         &term_equation_boundary_inward,section_physical)
     balance%tau_inward = &
          balance_value(this,equation,term_tau_inward,section_physical)
-    balance%physical_imbalance = balance%temporal-balance%volume- &
-         balance%boundary_inward
-    balance%discrete_residual = &
-         balance%physical_imbalance-balance%tau_inward
+    balance%numerical_boundary_inward = balance%equation_boundary_inward+ &
+         &balance%tau_inward
+    balance%physical_imbalance = balance%volume+balance%boundary_inward- &
+         &balance%temporal
+    balance%discrete_residual = balance%volume+ &
+         &balance%numerical_boundary_inward-balance%temporal
   END FUNCTION physical_balance
 
   MODULE FUNCTION add_physical_balances(left, right) RESULT(total)
@@ -40,7 +44,11 @@ CONTAINS
     total%boundary_inward = left%boundary_inward+right%boundary_inward
     total%physical_imbalance = &
          left%physical_imbalance+right%physical_imbalance
+    total%equation_boundary_inward = &
+         left%equation_boundary_inward+right%equation_boundary_inward
     total%tau_inward = left%tau_inward+right%tau_inward
+    total%numerical_boundary_inward = &
+         left%numerical_boundary_inward+right%numerical_boundary_inward
     total%discrete_residual = &
          left%discrete_residual+right%discrete_residual
   END FUNCTION add_physical_balances
@@ -64,6 +72,44 @@ CONTAINS
     balance%residual = balance%imposed_source_inward- &
          balance%physical_flux_inward-balance%tau_inward
   END FUNCTION neutral_density_bc
+
+  MODULE FUNCTION equation_bc_residual(this, equation, available) &
+       &RESULT(residual)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: equation
+    LOGICAL, INTENT(OUT) :: available
+    REAL*8 :: residual
+    TYPE(particle_bc_balance_type) :: neutral
+
+    available = .TRUE.
+    SELECT CASE (equation)
+    CASE (equation_n)
+       residual = balance_value(this,equation_n,term_diffusion,section_bc)+ &
+            balance_value(this,equation_n,term_tau_inward,section_bc)
+    CASE (equation_nn)
+       neutral = neutral_density_bc(this)
+       residual = neutral%residual
+    CASE DEFAULT
+       available = .FALSE.
+       residual = 0.d0
+    END SELECT
+  END FUNCTION equation_bc_residual
+
+  MODULE FUNCTION external_puff_input(this) RESULT(value)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    REAL*8 :: value
+
+    value = balance_value(this,equation_nn,term_puff,section_bc)+ &
+         balance_value(this,equation_nn,term_puff,section_physical)
+  END FUNCTION external_puff_input
+
+  MODULE FUNCTION external_pump_output(this) RESULT(value)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    REAL*8 :: value
+
+    value = balance_value(this,equation_nn,term_pump,section_bc)- &
+         balance_value(this,equation_nn,term_pump,section_physical)
+  END FUNCTION external_pump_output
 
   MODULE FUNCTION perpendicular_diffusive_flux(equation, gradient, normal, &
        &magnetic_direction, magnetic_normal, diffusion_iso, diffusion_ani) &
