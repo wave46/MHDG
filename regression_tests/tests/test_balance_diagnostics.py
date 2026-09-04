@@ -222,7 +222,7 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
                 for name, value in zip(
                     (
                         "equation_boundary_inward",
-                        "hdg_tau_inward",
+                        "tau_stabilization_inward",
                         "numerical_boundary_inward",
                         "residual",
                     ),
@@ -236,13 +236,58 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
             for equation, components in equation_boundary.items():
                 self._write_components(handle, equation, "discrete/boundary_components_inward", components)
             self._put(handle, "diagnostics/equations/n/physical/exchange/charge_exchange_rate", 7.0)
+            self._put(handle, "diagnostics/equations/n/bc/units", "particles/s")
             self._put(handle, "diagnostics/equations/n/bc/diffusion_inward", -1.0)
-            self._put(handle, "diagnostics/equations/n/bc/hdg_tau_inward", 1.0)
+            self._put(
+                handle,
+                "diagnostics/equations/n/bc/tau_stabilization_inward",
+                1.0,
+            )
             self._put(handle, "diagnostics/equations/n/bc/residual", 0.0)
+            plasma_bc = {
+                "nu": {
+                    "units": "N",
+                    "perpendicular_diffusion_inward": 0.2,
+                    "split_diffusion_inward": 0.1,
+                    "tau_stabilization_inward": -0.3,
+                    "residual": 0.0,
+                },
+                "nEi": {
+                    "units": "W",
+                    "perpendicular_diffusion_inward": 0.4,
+                    "split_diffusion_inward": 0.1,
+                    "parallel_conduction_inward": -0.2,
+                    "sheath_minus_bulk_inward": -0.1,
+                    "tau_stabilization_inward": -0.2,
+                    "residual": 0.0,
+                },
+                "nEe": {
+                    "units": "W",
+                    "perpendicular_diffusion_inward": 0.3,
+                    "split_diffusion_inward": 0.1,
+                    "parallel_conduction_inward": -0.15,
+                    "sheath_minus_bulk_inward": -0.05,
+                    "tau_stabilization_inward": -0.2,
+                    "residual": 0.0,
+                },
+                "total_E": {
+                    "units": "W",
+                    "perpendicular_diffusion_inward": 0.7,
+                    "split_diffusion_inward": 0.2,
+                    "parallel_conduction_inward": -0.35,
+                    "sheath_minus_bulk_inward": -0.15,
+                    "tau_stabilization_inward": -0.4,
+                    "residual": 0.0,
+                },
+            }
+            for equation, components in plasma_bc.items():
+                for name, value in components.items():
+                    self._put(handle, f"diagnostics/equations/{equation}/bc/{name}", value)
             neutral_bc = {
+                "units": "particles/s",
                 "imposed_source_inward": 4.2,
                 "physical_flux_inward": 4.1,
-                "hdg_tau_inward": 0.1,
+                "tau_stabilization_inward": 0.1,
                 "residual": 0.0,
                 "source_components/recycling_parallel_inward": 4.0,
                 "source_components/recycling_diffusion_inward": -0.2,
@@ -293,7 +338,7 @@ Balance diagnostics (detailed)
                 1.3000E+01  7.0000E+00 -3.0000E+00 -9.0000E+00
   Discrete equations
     volume + numerical boundary - temporal = residual
-    equation boundary + HDG tau = numerical boundary
+    equation boundary + tau stabilization = numerical boundary
     n [particles/s]
                 5.0000E+00  2.0000E+00 -3.0000E+00  1.0000E+00 -2.0000E+00 -5.0000E+00
     nu [N]

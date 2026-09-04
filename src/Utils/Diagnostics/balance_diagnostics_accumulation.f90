@@ -365,7 +365,8 @@ CONTAINS
     DO equation = equation_n,equation_nn
        IF (.NOT. active(equation)) CYCLE
        model_equation = state_index(equation)
-       CALL add_value(this,equation,term_tau_inward,section_physical, &
+       CALL add_value(this,equation,term_tau_stabilization_inward, &
+            &section_physical, &
             &DOT_PRODUCT(tau(model_equation,:),trace_state-element_state)* &
             &coefficient(equation))
     ENDDO

@@ -13,7 +13,8 @@ SUBROUTINE HDG_BC()
   USE transport_models_1d, ONLY: transport_model_1d
   USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
   USE analytical, only: analytical_solution
-  USE balance_diagnostics, ONLY: balance_accumulator_type, balance_diag
+  USE balance_diagnostics, ONLY: balance_accumulator_type, &
+       &balance_plasma_bc_type, balance_diag
 
   IMPLICIT NONE
 #ifdef TOR3D
@@ -1792,6 +1793,7 @@ CONTAINS
     integer*4        :: ind(Npfl),indi(Npfl),indj(Npfl),ind_jf(Npfl),ind_kf(Npfl)
     real*8           :: Qpr(Ndim,Neq), recycling_coeff,  cryopump_coeff,puff_coeff
     real*8           :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
+    TYPE(balance_plasma_bc_type) :: diagnostic_plasma_bc
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
 #ifdef TEMPERATURE
         REAL*8           :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
@@ -2251,6 +2253,19 @@ CONTAINS
 
 #ifdef TEMPERATURE
     IF (face_diagnostics_on) THEN
+      diagnostic_plasma_bc = balance_plasma_bc_type( &
+        &momentum_target=DBLE(delta)*setval*uefg(1)+ &
+        &(1.d0-DBLE(delta))*uefg(2), &
+        &momentum_split_diffusive_flux=DOT_PRODUCT(MATMUL(Qpr,W2),ng-bn*bg), &
+        &ion_energy_split_diffusive_flux= &
+        &DOT_PRODUCT(MATMUL(Qpr,W3),ng-bn*bg), &
+        &electron_energy_split_diffusive_flux= &
+        &DOT_PRODUCT(MATMUL(Qpr,W4),ng-bn*bg), &
+        &ion_parallel_conductive_flux=flux_limiter_i*coefi*Alphai*gmi, &
+        &electron_parallel_conductive_flux= &
+        &flux_limiter_e*coefe*Alphae*gme, &
+        &ion_sheath_coefficient=phys%Gmbohm, &
+        &electron_sheath_coefficient=phys%Gmbohme)
       CALL boundary_diagnostics%accumulate_bc( &
         &integration_weight=dline,density_equation=1,neutral_equation=inn, &
         &trace_state=ufg,exterior_state=uefg,gradient=Qpr,normal=ng, &
@@ -2258,8 +2273,7 @@ CONTAINS
         &diffusion_iso=diffiso,diffusion_ani=diffani,pinch_matrix=APinch, &
         &flux_jacobian=Abohm,recycling_coefficient=recycling_coeff, &
         &puff_source=puff_coeff,pump_coefficient=cryopump_coeff, &
-        &ion_sheath_coefficient=phys%Gmbohm, &
-        &electron_sheath_coefficient=phys%Gmbohme, &
+        &plasma=diagnostic_plasma_bc, &
 #ifdef NEUTRALP
         &neutral_pressure_vector=W5p, &
 #endif

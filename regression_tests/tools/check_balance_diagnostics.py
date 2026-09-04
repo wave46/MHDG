@@ -122,6 +122,18 @@ DERIVED_EQUATIONS = {
 }
 PRIMARY_NAMES = tuple(spec.name for spec in PRIMARY_EQUATIONS)
 EQUATIONS = (*PRIMARY_NAMES, *DERIVED_EQUATIONS)
+MOMENTUM_BC_COMPONENTS = (
+    "perpendicular_diffusion_inward",
+    "split_diffusion_inward",
+    "tau_stabilization_inward",
+)
+ENERGY_BC_COMPONENTS = (
+    "perpendicular_diffusion_inward",
+    "split_diffusion_inward",
+    "parallel_conduction_inward",
+    "sheath_minus_bulk_inward",
+    "tau_stabilization_inward",
+)
 
 
 @dataclass(frozen=True)
@@ -315,7 +327,7 @@ def _required_paths(context: DiagnosticContext) -> set[str]:
                 "physical/boundary_inward",
                 "physical/imbalance",
                 "discrete/equation_boundary_inward",
-                "discrete/hdg_tau_inward",
+                "discrete/tau_stabilization_inward",
                 "discrete/numerical_boundary_inward",
                 "discrete/residual",
             )
@@ -337,11 +349,21 @@ def _required_paths(context: DiagnosticContext) -> set[str]:
         ),
         "n/physical/exchange/charge_exchange_rate",
         "n/bc/diffusion_inward",
-        "n/bc/hdg_tau_inward",
+        "n/bc/tau_stabilization_inward",
         "n/bc/residual",
+        *(f"nu/bc/{component}" for component in MOMENTUM_BC_COMPONENTS),
+        "nu/bc/residual",
+        *(
+            f"{equation}/bc/{component}"
+            for equation in ("nEi", "nEe", "total_E")
+            for component in ENERGY_BC_COMPONENTS
+        ),
+        "nEi/bc/residual",
+        "nEe/bc/residual",
+        "total_E/bc/residual",
         "n_n/bc/imposed_source_inward",
         "n_n/bc/physical_flux_inward",
-        "n_n/bc/hdg_tau_inward",
+        "n_n/bc/tau_stabilization_inward",
         "n_n/bc/residual",
         "n_n/bc/source_components/recycling_parallel_inward",
         "n_n/bc/source_components/recycling_diffusion_inward",
@@ -373,6 +395,8 @@ def _check_units(texts: dict[str, str], failures: list[str]) -> None:
             f"{equation}/physical/units": rate_units,
             f"{equation}/discrete/units": rate_units,
         }
+        if equation in ("n", "nu", "nEi", "nEe", "n_n", "total_E"):
+            expected[f"{equation}/bc/units"] = rate_units
         for name, value in expected.items():
             if texts.get(name) != value:
                 failures.append(
@@ -390,7 +414,7 @@ def _check_equation_identities(
         volume = values[f"{prefix}/physical/volume"]
         boundary = values[f"{prefix}/physical/boundary_inward"]
         equation_boundary = values[f"{prefix}/discrete/equation_boundary_inward"]
-        tau = values[f"{prefix}/discrete/hdg_tau_inward"]
+        tau = values[f"{prefix}/discrete/tau_stabilization_inward"]
         numerical = values[f"{prefix}/discrete/numerical_boundary_inward"]
         _identity(
             f"{prefix}/physical/imbalance",
@@ -421,7 +445,7 @@ def _check_equation_identities(
         "physical/boundary_inward",
         "physical/imbalance",
         "discrete/equation_boundary_inward",
-        "discrete/hdg_tau_inward",
+        "discrete/tau_stabilization_inward",
         "discrete/numerical_boundary_inward",
         "discrete/residual",
     )
@@ -472,8 +496,24 @@ def _check_equation_identities(
 
 
 def _check_bc(values: dict[str, float], failures: list[str]) -> None:
-    density_terms = (values["n/bc/diffusion_inward"], values["n/bc/hdg_tau_inward"])
+    density_terms = (
+        values["n/bc/diffusion_inward"],
+        values["n/bc/tau_stabilization_inward"],
+    )
     _identity("n/bc/residual", values["n/bc/residual"], sum(density_terms), density_terms, failures)
+    _check_bc_component_sum(values, "nu", MOMENTUM_BC_COMPONENTS, failures)
+    for equation in ("nEi", "nEe"):
+        _check_bc_component_sum(values, equation, ENERGY_BC_COMPONENTS, failures)
+    for component in ENERGY_BC_COMPONENTS:
+        terms = tuple(values[f"{equation}/bc/{component}"] for equation in ("nEi", "nEe"))
+        _identity(
+            f"total_E/bc/{component}",
+            values[f"total_E/bc/{component}"],
+            sum(terms),
+            terms,
+            failures,
+        )
+    _check_bc_component_sum(values, "total_E", ENERGY_BC_COMPONENTS, failures)
     source_prefix = "n_n/bc/source_components"
     source_terms = tuple(_values_under(values, source_prefix))
     source_expected = sum(
@@ -499,9 +539,25 @@ def _check_bc(values: dict[str, float], failures: list[str]) -> None:
     residual_terms = (
         values["n_n/bc/imposed_source_inward"],
         -values["n_n/bc/physical_flux_inward"],
-        -values["n_n/bc/hdg_tau_inward"],
+        -values["n_n/bc/tau_stabilization_inward"],
     )
     _identity("n_n/bc/residual", values["n_n/bc/residual"], sum(residual_terms), residual_terms, failures)
+
+
+def _check_bc_component_sum(
+    values: dict[str, float],
+    equation: str,
+    components: Sequence[str],
+    failures: list[str],
+) -> None:
+    terms = tuple(values[f"{equation}/bc/{component}"] for component in components)
+    _identity(
+        f"{equation}/bc/residual",
+        values[f"{equation}/bc/residual"],
+        sum(terms),
+        terms,
+        failures,
+    )
 
 
 def _check_relocated_sources(

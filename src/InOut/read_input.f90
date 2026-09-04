@@ -258,6 +258,10 @@ SUBROUTINE READ_input()
      STOP
   ENDIF
 #endif
+  IF (balance_diagnostics_mode_id /= balance_mode_off .AND. bohmtypebc /= 0) THEN
+     PRINT *, 'Balance diagnostics require bohmtypebc=0; received ',bohmtypebc
+     STOP
+  ENDIF
   CALL balance_diag%configure(balance_diagnostics_mode_id)
 
   ! Storing at the right place

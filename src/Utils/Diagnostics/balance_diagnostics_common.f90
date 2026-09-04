@@ -24,10 +24,10 @@ CONTAINS
          &term_boundary_physical_inward,section_bc)
     balance%equation_boundary_inward = balance_value(this,equation, &
          &term_equation_boundary_inward,section_physical)
-    balance%tau_inward = &
-         balance_value(this,equation,term_tau_inward,section_physical)
+    balance%tau_stabilization_inward = balance_value(this,equation, &
+         &term_tau_stabilization_inward,section_physical)
     balance%numerical_boundary_inward = balance%equation_boundary_inward+ &
-         &balance%tau_inward
+         &balance%tau_stabilization_inward
     balance%physical_imbalance = balance%volume+balance%boundary_inward- &
          &balance%temporal
     balance%discrete_residual = balance%volume+ &
@@ -46,7 +46,8 @@ CONTAINS
          left%physical_imbalance+right%physical_imbalance
     total%equation_boundary_inward = &
          left%equation_boundary_inward+right%equation_boundary_inward
-    total%tau_inward = left%tau_inward+right%tau_inward
+    total%tau_stabilization_inward = left%tau_stabilization_inward+ &
+         &right%tau_stabilization_inward
     total%numerical_boundary_inward = &
          left%numerical_boundary_inward+right%numerical_boundary_inward
     total%discrete_residual = &
@@ -67,10 +68,10 @@ CONTAINS
          balance_value(this,equation_nn,term_diffusion,section_bc)+ &
          balance_value(this,equation_nn,term_pressure,section_bc)+ &
          balance_value(this,equation_nn,term_convection,section_bc)
-    balance%tau_inward = &
-         balance_value(this,equation_nn,term_tau_inward,section_bc)
+    balance%tau_stabilization_inward = balance_value(this,equation_nn, &
+         &term_tau_stabilization_inward,section_bc)
     balance%residual = balance%imposed_source_inward- &
-         balance%physical_flux_inward-balance%tau_inward
+         balance%physical_flux_inward-balance%tau_stabilization_inward
   END FUNCTION neutral_density_bc
 
   MODULE FUNCTION equation_bc_residual(this, equation, available) &
@@ -85,7 +86,20 @@ CONTAINS
     SELECT CASE (equation)
     CASE (equation_n)
        residual = balance_value(this,equation_n,term_diffusion,section_bc)+ &
-            balance_value(this,equation_n,term_tau_inward,section_bc)
+            balance_value(this,equation_n,term_tau_stabilization_inward, &
+            &section_bc)
+    CASE (equation_nu)
+       residual = balance_value(this,equation,term_diffusion,section_bc)+ &
+            balance_value(this,equation,term_split_diffusion,section_bc)+ &
+            balance_value(this,equation,term_tau_stabilization_inward, &
+            &section_bc)
+    CASE (equation_nEi,equation_nEe)
+       residual = balance_value(this,equation,term_diffusion,section_bc)+ &
+            balance_value(this,equation,term_split_diffusion,section_bc)+ &
+            balance_value(this,equation,term_parallel_conduction,section_bc)+ &
+            balance_value(this,equation,term_sheath_minus_bulk,section_bc)+ &
+            balance_value(this,equation,term_tau_stabilization_inward, &
+            &section_bc)
     CASE (equation_nn)
        neutral = neutral_density_bc(this)
        residual = neutral%residual
@@ -94,6 +108,17 @@ CONTAINS
        residual = 0.d0
     END SELECT
   END FUNCTION equation_bc_residual
+
+  MODULE FUNCTION total_energy_bc_residual(this) RESULT(residual)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    REAL*8 :: residual
+    REAL*8 :: ion, electron
+    LOGICAL :: available
+
+    ion = equation_bc_residual(this,equation_nEi,available)
+    electron = equation_bc_residual(this,equation_nEe,available)
+    residual = ion+electron
+  END FUNCTION total_energy_bc_residual
 
   MODULE FUNCTION external_puff_input(this) RESULT(value)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this

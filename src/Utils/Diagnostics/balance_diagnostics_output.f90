@@ -162,7 +162,8 @@ CONTAINS
          &'particles','particles/s')
     total = add_physical_balances(physical_balance(this,equation_nEi), &
          &physical_balance(this,equation_nEe))
-    CALL write_equation(this,equations_group_id,'total_E',total,'J','W')
+    CALL write_equation(this,equations_group_id,'total_E',total,'J','W', &
+         &bc_equations=(/equation_nEi,equation_nEe/))
     CALL HDF5_group_close(equations_group_id,ierr)
   END SUBROUTINE write_equations_hdf5
 
@@ -177,12 +178,13 @@ CONTAINS
   END SUBROUTINE write_primary_equation
 
   SUBROUTINE write_equation(this, parent_group_id, name, balance, &
-       &content_units, rate_units, equation)
+       &content_units, rate_units, equation, bc_equations)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     INTEGER(HID_T), INTENT(IN) :: parent_group_id
     CHARACTER(LEN=*), INTENT(IN) :: name, content_units, rate_units
     TYPE(physical_balance_type), INTENT(IN) :: balance
     INTEGER, INTENT(IN), OPTIONAL :: equation
+    INTEGER, INTENT(IN), OPTIONAL :: bc_equations(:)
     INTEGER(HID_T) :: equation_group_id
     INTEGER :: ierr
 
@@ -194,6 +196,8 @@ CONTAINS
     CALL write_discrete_view(this,equation_group_id,balance,rate_units,equation)
     IF (PRESENT(equation)) CALL write_bc_view(this,equation_group_id,equation, &
          &rate_units)
+    IF (PRESENT(bc_equations)) CALL write_combined_bc_view(this, &
+         &equation_group_id,bc_equations,rate_units)
     CALL HDF5_group_close(equation_group_id,ierr)
   END SUBROUTINE write_equation
 
@@ -237,7 +241,8 @@ CONTAINS
     IF (this%detailed()) THEN
        CALL HDF5_real_saving(group_id,balance%equation_boundary_inward, &
             &'equation_boundary_inward')
-       CALL HDF5_real_saving(group_id,balance%tau_inward,'hdg_tau_inward')
+       CALL HDF5_real_saving(group_id,balance%tau_stabilization_inward, &
+            &'tau_stabilization_inward')
        CALL HDF5_real_saving(group_id,balance%numerical_boundary_inward, &
             &'numerical_boundary_inward')
        IF (PRESENT(equation)) CALL write_equation_boundary_components( &
@@ -465,6 +470,9 @@ CONTAINS
     CALL HDF5_real_saving(group_id,residual,'residual')
     IF (this%detailed()) THEN
        IF (equation == equation_n) CALL write_density_bc_detail(this,group_id)
+       IF (equation == equation_nu) CALL write_momentum_bc_detail(this,group_id)
+       IF (equation == equation_nEi .OR. equation == equation_nEe) &
+            &CALL write_energy_bc_detail(this,group_id,equation)
        IF (equation == equation_nn) CALL write_neutral_bc_detail(this,group_id)
     ENDIF
     CALL HDF5_group_close(group_id,ierr)
@@ -477,8 +485,103 @@ CONTAINS
     CALL HDF5_real_saving(group_id,balance_value(this,equation_n, &
          &term_diffusion,section_bc),'diffusion_inward')
     CALL HDF5_real_saving(group_id,balance_value(this,equation_n, &
-         &term_tau_inward,section_bc),'hdg_tau_inward')
+         &term_tau_stabilization_inward,section_bc), &
+         &'tau_stabilization_inward')
   END SUBROUTINE write_density_bc_detail
+
+  SUBROUTINE write_momentum_bc_detail(this, group_id)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: group_id
+
+    CALL write_bc_term(this,group_id,equation_nu,term_diffusion, &
+         &'perpendicular_diffusion_inward')
+    CALL write_bc_term(this,group_id,equation_nu,term_split_diffusion, &
+         &'split_diffusion_inward')
+    CALL write_bc_term(this,group_id,equation_nu, &
+         &term_tau_stabilization_inward,'tau_stabilization_inward')
+  END SUBROUTINE write_momentum_bc_detail
+
+  SUBROUTINE write_energy_bc_detail(this, group_id, equation)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    INTEGER, INTENT(IN) :: equation
+
+    CALL write_bc_term(this,group_id,equation,term_diffusion, &
+         &'perpendicular_diffusion_inward')
+    CALL write_bc_term(this,group_id,equation,term_split_diffusion, &
+         &'split_diffusion_inward')
+    CALL write_bc_term(this,group_id,equation,term_parallel_conduction, &
+         &'parallel_conduction_inward')
+    CALL write_bc_term(this,group_id,equation,term_sheath_minus_bulk, &
+         &'sheath_minus_bulk_inward')
+    CALL write_bc_term(this,group_id,equation, &
+         &term_tau_stabilization_inward,'tau_stabilization_inward')
+  END SUBROUTINE write_energy_bc_detail
+
+  SUBROUTINE write_bc_term(this, group_id, equation, term, name)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    INTEGER, INTENT(IN) :: equation, term
+    CHARACTER(LEN=*), INTENT(IN) :: name
+
+    CALL HDF5_real_saving(group_id,balance_value(this,equation,term, &
+         &section_bc),name)
+  END SUBROUTINE write_bc_term
+
+  SUBROUTINE write_combined_bc_view(this, equation_group_id, equations, units)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: equation_group_id
+    INTEGER, INTENT(IN) :: equations(:)
+    CHARACTER(LEN=*), INTENT(IN) :: units
+    INTEGER(HID_T) :: group_id
+    INTEGER :: ierr, item
+    LOGICAL :: available
+    REAL*8 :: residual
+
+    residual = 0.d0
+    DO item = 1,SIZE(equations)
+       residual = residual+equation_bc_residual(this,equations(item),available)
+       IF (.NOT. available) RETURN
+    ENDDO
+    CALL HDF5_group_create('bc',equation_group_id,group_id,ierr)
+    CALL HDF5_string_saving(group_id,units,'units')
+    CALL HDF5_real_saving(group_id,residual,'residual')
+    IF (this%detailed()) CALL write_combined_energy_bc_detail(this,group_id, &
+         &equations)
+    CALL HDF5_group_close(group_id,ierr)
+  END SUBROUTINE write_combined_bc_view
+
+  SUBROUTINE write_combined_energy_bc_detail(this, group_id, equations)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    INTEGER, INTENT(IN) :: equations(:)
+
+    CALL write_combined_bc_term(this,group_id,equations,term_diffusion, &
+         &'perpendicular_diffusion_inward')
+    CALL write_combined_bc_term(this,group_id,equations, &
+         &term_split_diffusion,'split_diffusion_inward')
+    CALL write_combined_bc_term(this,group_id,equations, &
+         &term_parallel_conduction,'parallel_conduction_inward')
+    CALL write_combined_bc_term(this,group_id,equations, &
+         &term_sheath_minus_bulk,'sheath_minus_bulk_inward')
+    CALL write_combined_bc_term(this,group_id,equations, &
+         &term_tau_stabilization_inward,'tau_stabilization_inward')
+  END SUBROUTINE write_combined_energy_bc_detail
+
+  SUBROUTINE write_combined_bc_term(this, group_id, equations, term, name)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    INTEGER, INTENT(IN) :: equations(:), term
+    CHARACTER(LEN=*), INTENT(IN) :: name
+    REAL*8 :: value
+    INTEGER :: item
+
+    value = 0.d0
+    DO item = 1,SIZE(equations)
+       value = value+balance_value(this,equations(item),term,section_bc)
+    ENDDO
+    CALL HDF5_real_saving(group_id,value,name)
+  END SUBROUTINE write_combined_bc_term
 
   SUBROUTINE write_neutral_bc_detail(this, group_id)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
@@ -490,7 +593,8 @@ CONTAINS
          &'imposed_source_inward')
     CALL HDF5_real_saving(group_id,balance%physical_flux_inward, &
          &'physical_flux_inward')
-    CALL HDF5_real_saving(group_id,balance%tau_inward,'hdg_tau_inward')
+    CALL HDF5_real_saving(group_id,balance%tau_stabilization_inward, &
+         &'tau_stabilization_inward')
     CALL write_neutral_bc_sources(this,group_id)
     CALL write_neutral_bc_fluxes(this,group_id)
   END SUBROUTINE write_neutral_bc_detail

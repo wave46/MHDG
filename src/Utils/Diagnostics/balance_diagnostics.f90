@@ -50,7 +50,7 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: term_temporal = 2
   INTEGER, PARAMETER :: term_volume = 3
   INTEGER, PARAMETER :: term_equation_boundary_inward = 4
-  INTEGER, PARAMETER :: term_tau_inward = 5
+  INTEGER, PARAMETER :: term_tau_stabilization_inward = 5
 
   ! Detailed volume fields. A field is used only for equations to which its
   ! physical meaning applies.
@@ -82,7 +82,9 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: term_parallel_conduction = 25
   INTEGER, PARAMETER :: term_boundary_physical_inward = 26
   INTEGER, PARAMETER :: term_sheath = 27
-  INTEGER, PARAMETER :: balance_term_count = 27
+  INTEGER, PARAMETER :: term_split_diffusion = 28
+  INTEGER, PARAMETER :: term_sheath_minus_bulk = 29
+  INTEGER, PARAMETER :: balance_term_count = 29
 
   ! Evaluated physical inputs shared by the particle, momentum, and energy
   ! source mappings. Equation ownership and signs remain private below.
@@ -130,6 +132,19 @@ MODULE balance_diagnostics
      REAL*8 :: pressure_diffusive_flux = 0.d0
   END TYPE balance_neutral_face_type
 
+  ! Default-Bohm data already evaluated by hdg_BC. The accumulator owns signs,
+  ! dimensional scaling, target-aware tau, and equation bookkeeping.
+  TYPE, PUBLIC :: balance_plasma_bc_type
+     REAL*8 :: momentum_target = 0.d0
+     REAL*8 :: momentum_split_diffusive_flux = 0.d0
+     REAL*8 :: ion_energy_split_diffusive_flux = 0.d0
+     REAL*8 :: electron_energy_split_diffusive_flux = 0.d0
+     REAL*8 :: ion_parallel_conductive_flux = 0.d0
+     REAL*8 :: electron_parallel_conductive_flux = 0.d0
+     REAL*8 :: ion_sheath_coefficient = 0.d0
+     REAL*8 :: electron_sheath_coefficient = 0.d0
+  END TYPE balance_plasma_bc_type
+
   ! Read-only equation results shared by terminal and HDF5 presenters.
   TYPE :: physical_balance_type
      REAL*8 :: content = 0.d0
@@ -138,7 +153,7 @@ MODULE balance_diagnostics
      REAL*8 :: boundary_inward = 0.d0
      REAL*8 :: physical_imbalance = 0.d0
      REAL*8 :: equation_boundary_inward = 0.d0
-     REAL*8 :: tau_inward = 0.d0
+     REAL*8 :: tau_stabilization_inward = 0.d0
      REAL*8 :: numerical_boundary_inward = 0.d0
      REAL*8 :: discrete_residual = 0.d0
   END TYPE physical_balance_type
@@ -146,7 +161,7 @@ MODULE balance_diagnostics
   TYPE :: particle_bc_balance_type
      REAL*8 :: imposed_source_inward = 0.d0
      REAL*8 :: physical_flux_inward = 0.d0
-     REAL*8 :: tau_inward = 0.d0
+     REAL*8 :: tau_stabilization_inward = 0.d0
      REAL*8 :: residual = 0.d0
   END TYPE particle_bc_balance_type
 
@@ -248,7 +263,7 @@ MODULE balance_diagnostics
           &gradient, normal, magnetic_direction, magnetic_normal, tau, &
           &diffusion_iso, diffusion_ani, pinch_matrix, flux_jacobian, &
           &recycling_coefficient, puff_source, pump_coefficient, &
-          &ion_sheath_coefficient, electron_sheath_coefficient, &
+          &plasma, &
           &neutral_perpendicular_diffusion, neutral_pressure_vector, &
           &neutral_momentum_equation)
        CLASS(balance_accumulator_type), INTENT(INOUT) :: this
@@ -261,8 +276,7 @@ MODULE balance_diagnostics
        REAL*8, INTENT(IN) :: pinch_matrix(:,:), flux_jacobian(:,:)
        REAL*8, INTENT(IN) :: recycling_coefficient, puff_source
        REAL*8, INTENT(IN) :: pump_coefficient
-       REAL*8, INTENT(IN) :: ion_sheath_coefficient
-       REAL*8, INTENT(IN) :: electron_sheath_coefficient
+       TYPE(balance_plasma_bc_type), INTENT(IN) :: plasma
        LOGICAL, INTENT(IN) :: neutral_perpendicular_diffusion
        REAL*8, INTENT(IN), OPTIONAL :: neutral_pressure_vector(:)
        INTEGER, INTENT(IN), OPTIONAL :: neutral_momentum_equation
@@ -307,6 +321,11 @@ MODULE balance_diagnostics
        LOGICAL, INTENT(OUT) :: available
        REAL*8 :: residual
      END FUNCTION equation_bc_residual
+
+     MODULE FUNCTION total_energy_bc_residual(this) RESULT(residual)
+       CLASS(balance_diagnostics_type), INTENT(IN) :: this
+       REAL*8 :: residual
+     END FUNCTION total_energy_bc_residual
 
      MODULE FUNCTION external_puff_input(this) RESULT(value)
        CLASS(balance_diagnostics_type), INTENT(IN) :: this
