@@ -85,6 +85,8 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: term_split_diffusion = 28
   INTEGER, PARAMETER :: term_sheath_minus_bulk = 29
   INTEGER, PARAMETER :: balance_term_count = 29
+  INTEGER, PARAMETER :: summary_volume_terms(2) = &
+       &(/term_prescribed_source,term_ohmic/)
 
   ! Evaluated physical inputs shared by the particle, momentum, and energy
   ! source mappings. Equation ownership and signs remain private below.
@@ -165,13 +167,21 @@ MODULE balance_diagnostics
      REAL*8 :: residual = 0.d0
   END TYPE particle_bc_balance_type
 
+  TYPE :: plasma_heating_summary_type
+     REAL*8 :: total = 0.d0
+     REAL*8 :: ion = 0.d0
+     REAL*8 :: electron = 0.d0
+     REAL*8 :: ohmic = 0.d0
+     REAL*8 :: external = 0.d0
+  END TYPE plasma_heating_summary_type
+
   ! One instance is owned by each OpenMP worker. The equation-oriented matrix
   ! is contiguous and can be merged and reduced without packing.
   TYPE, PUBLIC :: balance_accumulator_type
      PRIVATE
      REAL*8 :: values(balance_equation_count,balance_term_count, &
           balance_section_count) = 0.d0
-     LOGICAL :: detailed = .FALSE.
+     INTEGER :: mode = balance_mode_off
      REAL*8 :: content_scale(balance_equation_count) = 0.d0
      REAL*8 :: rate_scale(balance_equation_count) = 0.d0
    CONTAINS
@@ -215,10 +225,10 @@ MODULE balance_diagnostics
   PUBLIC :: balance_diagnostics_mode_name
 
   INTERFACE
-     MODULE SUBROUTINE accumulator_reset(this, detailed, content_scale, &
+     MODULE SUBROUTINE accumulator_reset(this, mode, content_scale, &
           &rate_scale)
        CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-       LOGICAL, INTENT(IN) :: detailed
+       INTEGER, INTENT(IN) :: mode
        REAL*8, INTENT(IN) :: content_scale(balance_equation_count)
        REAL*8, INTENT(IN) :: rate_scale(balance_equation_count)
      END SUBROUTINE accumulator_reset
@@ -336,6 +346,11 @@ MODULE balance_diagnostics
        CLASS(balance_diagnostics_type), INTENT(IN) :: this
        REAL*8 :: value
      END FUNCTION external_pump_output
+
+     MODULE FUNCTION plasma_heating_summary(this) RESULT(heating)
+       CLASS(balance_diagnostics_type), INTENT(IN) :: this
+       TYPE(plasma_heating_summary_type) :: heating
+     END FUNCTION plasma_heating_summary
 
      MODULE FUNCTION perpendicular_diffusive_flux(equation, gradient, &
           &normal, magnetic_direction, magnetic_normal, diffusion_iso, &
@@ -460,7 +475,7 @@ CONTAINS
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     TYPE(balance_accumulator_type), INTENT(OUT) :: accumulator
 
-    CALL accumulator%reset(this%detailed(),this%content_scale,this%rate_scale)
+    CALL accumulator%reset(this%mode,this%content_scale,this%rate_scale)
   END SUBROUTINE balance_diagnostics_initialize_accumulator
 
   SUBROUTINE balance_diagnostics_merge(this, accumulator)

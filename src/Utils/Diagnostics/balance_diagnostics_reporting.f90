@@ -42,7 +42,9 @@ CONTAINS
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     TYPE(physical_balance_type), INTENT(IN) :: &
          &balances(balance_equation_count), total_particles, total_energy
+    TYPE(plasma_heating_summary_type) :: heating
 
+    heating = plasma_heating_summary(this)
     WRITE(6,'(A)') 'Balance diagnostics (summary)'
     CALL print_inventory(balances,total_particles,total_energy,'Inventory')
 
@@ -55,9 +57,13 @@ CONTAINS
          &'n_n',prescribed_source(this,equation_nn)
     WRITE(6,'(A,2X,A,1X,ES11.3)') '    momentum [N]', &
          &'nu',prescribed_source(this,equation_nu)
-    WRITE(6,'(A,2(2X,A,1X,ES11.3))') '    energy [W]', &
-         &'nEi',prescribed_source(this,equation_nEi), &
-         &'nEe',prescribed_source(this,equation_nEe)
+    WRITE(6,'(A,3(2X,A,1X,ES11.3))') '    plasma heating [W]', &
+         &'total',heating%total, &
+         &'ions',heating%ion, &
+         &'electrons',heating%electron
+    WRITE(6,'(A,2(2X,A,1X,ES11.3))') '      components', &
+         &'Ohmic',heating%ohmic, &
+         &'external',heating%external
 
     WRITE(6,'(A)') '  Balances'
     WRITE(6,'(A,2(2X,A,1X,ES11.3))') '    physical imbalance', &

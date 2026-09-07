@@ -76,8 +76,10 @@ CONTAINS
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     INTEGER(HID_T), INTENT(IN) :: summary_group_id
     INTEGER(HID_T) :: sources_group_id, family_group_id
+    TYPE(plasma_heating_summary_type) :: heating
     INTEGER :: ierr
 
+    heating = plasma_heating_summary(this)
     CALL HDF5_group_create('external_sources',summary_group_id, &
          &sources_group_id,ierr)
     CALL HDF5_group_create('particles',sources_group_id,family_group_id,ierr)
@@ -95,8 +97,11 @@ CONTAINS
 
     CALL HDF5_group_create('energy',sources_group_id,family_group_id,ierr)
     CALL HDF5_string_saving(family_group_id,'W','units')
-    CALL write_prescribed_source(this,family_group_id,equation_nEi,'volume_nEi')
-    CALL write_prescribed_source(this,family_group_id,equation_nEe,'volume_nEe')
+    CALL HDF5_real_saving(family_group_id,heating%total,'total_heating')
+    CALL HDF5_real_saving(family_group_id,heating%ion,'ion_heating')
+    CALL HDF5_real_saving(family_group_id,heating%electron,'electron_heating')
+    CALL HDF5_real_saving(family_group_id,heating%ohmic,'ohmic_heating')
+    CALL HDF5_real_saving(family_group_id,heating%external,'external')
     CALL HDF5_group_close(family_group_id,ierr)
     CALL HDF5_group_close(sources_group_id,ierr)
   END SUBROUTINE write_summary_external_sources

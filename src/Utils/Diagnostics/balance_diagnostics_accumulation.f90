@@ -3,15 +3,15 @@ SUBMODULE (balance_diagnostics) balance_diagnostics_accumulation
 
 CONTAINS
 
-  MODULE SUBROUTINE accumulator_reset(this, detailed, content_scale, &
+  MODULE SUBROUTINE accumulator_reset(this, mode, content_scale, &
        &rate_scale)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    LOGICAL, INTENT(IN) :: detailed
+    INTEGER, INTENT(IN) :: mode
     REAL*8, INTENT(IN) :: content_scale(balance_equation_count)
     REAL*8, INTENT(IN) :: rate_scale(balance_equation_count)
 
     this%values = 0.d0
-    this%detailed = detailed
+    this%mode = mode
     this%content_scale = content_scale
     this%rate_scale = rate_scale
   END SUBROUTINE accumulator_reset
@@ -124,7 +124,8 @@ CONTAINS
          &recombination,rate_coefficient(equation_nn))
     CALL add_volume_component(this,equation_nn,term_prescribed_source, &
          &prescribed_source(neutral_state_index),rate_coefficient(equation_nn))
-    IF (this%detailed) CALL add_value(this,equation_n,term_charge_exchange, &
+    IF (stores_detailed_components(this)) &
+         &CALL add_value(this,equation_n,term_charge_exchange, &
          &section_physical,atomic%ionization_density* &
          &atomic%charge_exchange_rate_coefficient*rate_coefficient(equation_n))
   END SUBROUTINE add_particle_volume_terms
@@ -214,12 +215,49 @@ CONTAINS
     INTEGER, INTENT(IN) :: equation, term
     REAL*8, INTENT(IN) :: source, coefficient
 
-    CALL add_value(this,equation,term_volume,section_physical, &
-         &source*coefficient)
-    IF (this%detailed .OR. term == term_prescribed_source) &
-         &CALL add_value(this,equation,term,section_physical, &
-         &source*coefficient)
+    REAL*8 :: scaled_source
+
+    scaled_source = source*coefficient
+    CALL add_volume_total(this,equation,scaled_source)
+    IF (stores_volume_component(this,term)) &
+         &CALL add_named_volume_component(this,equation,term,scaled_source)
   END SUBROUTINE add_volume_component
+
+  SUBROUTINE add_volume_total(this, equation, source)
+    CLASS(balance_accumulator_type), INTENT(INOUT) :: this
+    INTEGER, INTENT(IN) :: equation
+    REAL*8, INTENT(IN) :: source
+
+    CALL add_value(this,equation,term_volume,section_physical,source)
+  END SUBROUTINE add_volume_total
+
+  SUBROUTINE add_named_volume_component(this, equation, term, source)
+    CLASS(balance_accumulator_type), INTENT(INOUT) :: this
+    INTEGER, INTENT(IN) :: equation, term
+    REAL*8, INTENT(IN) :: source
+
+    CALL add_value(this,equation,term,section_physical,source)
+  END SUBROUTINE add_named_volume_component
+
+  LOGICAL FUNCTION stores_volume_component(this, term) RESULT(stores)
+    CLASS(balance_accumulator_type), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: term
+
+    SELECT CASE (this%mode)
+    CASE (balance_mode_summary)
+       stores = ANY(term == summary_volume_terms)
+    CASE (balance_mode_detailed)
+       stores = .TRUE.
+    CASE DEFAULT
+       stores = .FALSE.
+    END SELECT
+  END FUNCTION stores_volume_component
+
+  LOGICAL FUNCTION stores_detailed_components(this) RESULT(stores)
+    CLASS(balance_accumulator_type), INTENT(IN) :: this
+
+    stores = this%mode == balance_mode_detailed
+  END FUNCTION stores_detailed_components
 
   MODULE SUBROUTINE accumulate_relocated_sources(this, puff_source, &
        &pump_sink)
@@ -314,7 +352,7 @@ CONTAINS
     IF (equation == equation_nu) CALL add_value(this,equation, &
          &term_boundary_physical_inward,section_bc, &
          &convection+diffusion+conduction+pinch)
-    IF (.NOT. this%detailed) RETURN
+    IF (.NOT. stores_detailed_components(this)) RETURN
     IF (equation == equation_n) THEN
        CALL add_value(this,equation,term_parallel, &
             &section_physical,convection)
@@ -347,7 +385,7 @@ CONTAINS
          &magnetic_normal*coefficient
     CALL add_value(this,equation_nn,term_equation_boundary_inward, &
          &section_physical,diffusion+pressure+convection)
-    IF (.NOT. this%detailed) RETURN
+    IF (.NOT. stores_detailed_components(this)) RETURN
     CALL add_value(this,equation_nn,term_diffusion,section_physical,diffusion)
     CALL add_value(this,equation_nn,term_pressure,section_physical,pressure)
     CALL add_value(this,equation_nn,term_convection,section_physical,convection)

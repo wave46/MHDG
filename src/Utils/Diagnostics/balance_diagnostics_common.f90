@@ -136,6 +136,23 @@ CONTAINS
          balance_value(this,equation_nn,term_pump,section_physical)
   END FUNCTION external_pump_output
 
+  MODULE FUNCTION plasma_heating_summary(this) RESULT(heating)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    TYPE(plasma_heating_summary_type) :: heating
+    REAL*8 :: external_ion, external_electron
+
+    external_ion = balance_value(this,equation_nEi, &
+         &term_prescribed_source,section_physical)
+    external_electron = balance_value(this,equation_nEe, &
+         &term_prescribed_source,section_physical)
+    heating%ohmic = balance_value(this,equation_nEe,term_ohmic, &
+         &section_physical)
+    heating%ion = external_ion
+    heating%electron = external_electron+heating%ohmic
+    heating%external = external_ion+external_electron
+    heating%total = heating%ion+heating%electron
+  END FUNCTION plasma_heating_summary
+
   MODULE FUNCTION perpendicular_diffusive_flux(equation, gradient, normal, &
        &magnetic_direction, magnetic_normal, diffusion_iso, diffusion_ani) &
        &RESULT(flux)
