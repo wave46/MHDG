@@ -59,6 +59,9 @@ regression_tests/regression.sh suite check
 `suite check` defaults to the `warm` suite and
 `regression_tests/golden.local.env`. Override the file with `--settings FILE`
 or `MHDG_REGRESSION_GOLDEN_SETTINGS`. It must point to a golden-class bundle.
+Use `--diagnostics off|summary|equations|detailed` to run the same suite with
+an explicit balance-diagnostics mode. The selected override is recorded in
+the suite summary and each run plan.
 
 ## Test matrix
 
@@ -262,10 +265,11 @@ regression_tests/regression.sh suite compare \
   /path/to/suites/cold_matrix/overnight-01/suite_summary.json
 ```
 
-For a short warm solve that also performs the ordinary golden comparison, run:
+For a short warm solve with detailed diagnostics and the ordinary golden
+comparison, run:
 
 ```bash
-regression_tests/regression.sh suite check balance_diagnostics_warm \
+regression_tests/regression.sh suite check warm --diagnostics detailed \
   --build --run-id warm-balance-01
 ```
 
@@ -273,8 +277,13 @@ Then validate its HDF5 and terminal diagnostics without launching MHDG again:
 
 ```bash
 regression_tests/regression.sh diagnostics check \
-  /path/to/balance_diagnostics_warm/warm-balance-01/suite_summary.json
+  /path/to/suites/warm/warm-balance-01/suite_summary.json
 ```
+
+Replace `detailed` with `off`, `summary`, or `equations` to inspect the other
+terminal and HDF5 presentation levels. The diagnostics checker currently
+validates the detailed contract; ordinary golden comparison still applies to
+all four modes.
 
 The same checker validates every selected stage after the longer cold balance
 suite completes:

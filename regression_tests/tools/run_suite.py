@@ -64,6 +64,11 @@ def main(argv: list[str] | None = None) -> int:
         help="parallel jobs for each make invocation; requires --build",
     )
     parser.add_argument(
+        "--diagnostics",
+        choices=("off", "summary", "equations", "detailed"),
+        help="override balance diagnostics mode for every suite cell",
+    )
+    parser.add_argument(
         "--repository-root",
         type=Path,
         default=Path(__file__).resolve().parents[2],
@@ -95,6 +100,11 @@ def main(argv: list[str] | None = None) -> int:
             args.require_bundle_class,
             compare=not args.run_only,
             resume=args.resume,
+            parameter_overrides=(
+                {"balance_diagnostics_mode": args.diagnostics}
+                if args.diagnostics is not None
+                else None
+            ),
         )
     except HarnessError as exc:
         print(f"suite failed: {exc}", file=sys.stderr)

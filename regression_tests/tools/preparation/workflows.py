@@ -23,7 +23,10 @@ from preparation.workspace import (
 
 def prepare_warm_run(inputs: PreparationInputs) -> PreparedRun:
     """Prepare one warm-restart run, with a reference when declared."""
-    overrides = inputs.workflow.get("parameter_overrides", {})
+    overrides = {
+        **inputs.workflow.get("parameter_overrides", {}),
+        **inputs.requested_overrides,
+    }
     command = solver_command(
         inputs.run_directory,
         inputs.executable,
@@ -77,7 +80,11 @@ def _prepare_stage(
         inputs.layout,
         restart=stage["restart_from"] == "previous_stage",
     )
-    overrides = parameter_overrides(inputs.workflow, stage)
+    overrides = parameter_overrides(
+        inputs.workflow,
+        stage,
+        inputs.requested_overrides,
+    )
     populate_stage_run(
         staging_stage,
         stage_directory,

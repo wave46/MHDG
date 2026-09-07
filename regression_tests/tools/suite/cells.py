@@ -28,6 +28,7 @@ def run_cell(
             inputs.layouts_path,
             inputs.run_id,
             validate_bundle=False,
+            requested_overrides=inputs.parameter_overrides,
         )
         result["run_directory"] = str(prepared.path)
         run = execute_prepared(prepared, inputs.settings)

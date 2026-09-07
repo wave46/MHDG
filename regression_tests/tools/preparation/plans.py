@@ -48,6 +48,7 @@ def write_staged_plan(
             "parameter_overrides": parameter_overrides(
                 inputs.workflow,
                 inputs.workflow["stages"][index],
+                inputs.requested_overrides,
             ),
         }
         for index, stage in enumerate(stages)
@@ -58,11 +59,13 @@ def write_staged_plan(
 def parameter_overrides(
     workflow: dict[str, Any],
     stage: dict[str, Any],
+    requested: dict[str, bool | float | int | str] | None = None,
 ) -> dict[str, Any]:
     """Merge workflow-wide and stage-specific parameter values."""
     return {
         **workflow.get("parameter_overrides", {}),
         **stage.get("parameter_overrides", {}),
+        **(requested or {}),
     }
 
 
