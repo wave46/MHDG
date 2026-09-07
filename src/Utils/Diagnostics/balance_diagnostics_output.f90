@@ -29,16 +29,16 @@ CONTAINS
 
     CALL HDF5_group_create('summary',diagnostics_group_id, &
          &summary_group_id,ierr)
-    CALL write_summary_inventory(this,summary_group_id)
+    CALL write_summary_content(this,summary_group_id)
     CALL write_summary_external_sources(this,summary_group_id)
     CALL write_summary_balances(this,summary_group_id)
     CALL HDF5_group_close(summary_group_id,ierr)
   END SUBROUTINE write_summary_hdf5
 
-  SUBROUTINE write_summary_inventory(this, summary_group_id)
+  SUBROUTINE write_summary_content(this, summary_group_id)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     INTEGER(HID_T), INTENT(IN) :: summary_group_id
-    INTEGER(HID_T) :: inventory_group_id, family_group_id
+    INTEGER(HID_T) :: content_group_id, family_group_id
     TYPE(physical_balance_type) :: n, nn, nu, nEi, nEe
     INTEGER :: ierr
 
@@ -47,30 +47,29 @@ CONTAINS
     nu = physical_balance(this,equation_nu)
     nEi = physical_balance(this,equation_nEi)
     nEe = physical_balance(this,equation_nEe)
-    CALL HDF5_group_create('inventory',summary_group_id, &
-         &inventory_group_id,ierr)
+    CALL HDF5_group_create('content',summary_group_id,content_group_id,ierr)
 
-    CALL HDF5_group_create('particles',inventory_group_id,family_group_id,ierr)
+    CALL HDF5_group_create('particles',content_group_id,family_group_id,ierr)
     CALL HDF5_string_saving(family_group_id,'particles','units')
     CALL HDF5_real_saving(family_group_id,n%content,'n')
     CALL HDF5_real_saving(family_group_id,nn%content,'n_n')
     CALL HDF5_real_saving(family_group_id,n%content+nn%content,'total_n')
     CALL HDF5_group_close(family_group_id,ierr)
 
-    CALL HDF5_group_create('momentum',inventory_group_id,family_group_id,ierr)
+    CALL HDF5_group_create('momentum',content_group_id,family_group_id,ierr)
     CALL HDF5_string_saving(family_group_id,'kg m s^-1','units')
     CALL HDF5_real_saving(family_group_id,nu%content,'nu')
     CALL HDF5_group_close(family_group_id,ierr)
 
-    CALL HDF5_group_create('plasma_energy',inventory_group_id, &
+    CALL HDF5_group_create('plasma_energy',content_group_id, &
          &family_group_id,ierr)
     CALL HDF5_string_saving(family_group_id,'J','units')
     CALL HDF5_real_saving(family_group_id,nEi%content,'nEi')
     CALL HDF5_real_saving(family_group_id,nEe%content,'nEe')
     CALL HDF5_real_saving(family_group_id,nEi%content+nEe%content,'total_E')
     CALL HDF5_group_close(family_group_id,ierr)
-    CALL HDF5_group_close(inventory_group_id,ierr)
-  END SUBROUTINE write_summary_inventory
+    CALL HDF5_group_close(content_group_id,ierr)
+  END SUBROUTINE write_summary_content
 
   SUBROUTINE write_summary_external_sources(this, summary_group_id)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this

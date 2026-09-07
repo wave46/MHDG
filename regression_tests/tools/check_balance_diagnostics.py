@@ -20,7 +20,7 @@ from support.paths import require_directory, require_file
 
 
 IDENTITY_TOLERANCE = 1.0e-12
-TERMINAL_TOLERANCE = 5.1e-4
+TERMINAL_TOLERANCE = 5.1e-3
 NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][+-]?\d+)?"
 CONTENT_PAIR = re.compile(
     rf"(?<!\S)(?P<equation>nEi\+nEe|n\+n_n|nEi|nEe|n_n|nu|n)\s+"
@@ -603,7 +603,7 @@ def parse_terminal_history(path: Path) -> list[dict[str, Any]]:
             continue
         if current is None:
             continue
-        if line.strip() == "Conserved contents":
+        if line.strip() == "Content":
             section = "content"
             equation = None
             continue

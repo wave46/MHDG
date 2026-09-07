@@ -316,7 +316,7 @@ class BalanceDiagnosticsCheckTests(unittest.TestCase):
         return f"""Time iteration = {time_iteration}
 NR iteration: {newton_iteration}
 Balance diagnostics (detailed)
-  Conserved contents
+  Content
     particles [particles]  n   1.0000E+01  n_n 2.0000E+00  n+n_n 1.2000E+01
     momentum [kg m s^-1]  nu 4.0000E+00
     plasma energy [J]  nEi 2.0000E+01  nEe 3.0000E+01  nEi+nEe 5.0000E+01

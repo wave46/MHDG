@@ -46,48 +46,47 @@ CONTAINS
 
     heating = plasma_heating_summary(this)
     WRITE(6,'(A)') 'Balance diagnostics (summary)'
-    CALL print_inventory(balances,total_particles,total_energy,'Inventory')
+    CALL print_content(balances,total_particles,total_energy)
 
     WRITE(6,'(A)') '  External sources'
-    WRITE(6,'(A,2(2X,A,1X,ES11.3))') '    particles [particles/s]', &
+    WRITE(6,'(A,2(2X,A,1X,ES11.2))') '    particles [particles/s]', &
          &'puff in',external_puff_input(this), &
          &'pump out',external_pump_output(this)
-    WRITE(6,'(A,2(2X,A,1X,ES11.3))') '      volume', &
+    WRITE(6,'(A,2(2X,A,1X,ES11.2))') '      volume', &
          &'n',prescribed_source(this,equation_n), &
          &'n_n',prescribed_source(this,equation_nn)
-    WRITE(6,'(A,2X,A,1X,ES11.3)') '    momentum [N]', &
+    WRITE(6,'(A,2X,A,1X,ES11.2)') '    momentum [N]', &
          &'nu',prescribed_source(this,equation_nu)
-    WRITE(6,'(A,3(2X,A,1X,ES11.3))') '    plasma heating [W]', &
+    WRITE(6,'(A,3(2X,A,1X,ES11.2))') '    plasma heating [W]', &
          &'total',heating%total, &
          &'ions',heating%ion, &
          &'electrons',heating%electron
-    WRITE(6,'(A,2(2X,A,1X,ES11.3))') '      components', &
+    WRITE(6,'(A,2(2X,A,1X,ES11.2))') '      components', &
          &'Ohmic',heating%ohmic, &
          &'external',heating%external
 
     WRITE(6,'(A)') '  Balances'
-    WRITE(6,'(A,2(2X,A,1X,ES11.3))') '    physical imbalance', &
+    WRITE(6,'(A,2(2X,A,1X,ES11.2))') '    physical imbalance', &
          &'total particles [particles/s]',total_particles%physical_imbalance, &
          &'total plasma energy [W]',total_energy%physical_imbalance
   END SUBROUTINE print_summary
 
-  SUBROUTINE print_inventory(balances, total_particles, total_energy, title)
+  SUBROUTINE print_content(balances, total_particles, total_energy)
     TYPE(physical_balance_type), INTENT(IN) :: &
          &balances(balance_equation_count), total_particles, total_energy
-    CHARACTER(LEN=*), INTENT(IN) :: title
 
-    WRITE(6,'(A)') '  '//TRIM(title)
-    WRITE(6,'(A,3(2X,A,1X,ES11.3))') '    particles [particles]', &
+    WRITE(6,'(A)') '  Content'
+    WRITE(6,'(A,3(2X,A,1X,ES11.2))') '    particles [particles]', &
          &'n',balances(equation_n)%content, &
          &'n_n',balances(equation_nn)%content, &
          &'n+n_n',total_particles%content
-    WRITE(6,'(A,2X,A,1X,ES11.3)') '    momentum [kg m s^-1]', &
+    WRITE(6,'(A,2X,A,1X,ES11.2)') '    momentum [kg m s^-1]', &
          &'nu',balances(equation_nu)%content
-    WRITE(6,'(A,3(2X,A,1X,ES11.3))') '    plasma energy [J]', &
+    WRITE(6,'(A,3(2X,A,1X,ES11.2))') '    plasma energy [J]', &
          &'nEi',balances(equation_nEi)%content, &
          &'nEe',balances(equation_nEe)%content, &
          &'nEi+nEe',total_energy%content
-  END SUBROUTINE print_inventory
+  END SUBROUTINE print_content
 
   REAL*8 FUNCTION prescribed_source(this, equation) RESULT(value)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
@@ -105,28 +104,35 @@ CONTAINS
     CHARACTER(LEN=*), INTENT(IN) :: mode_name
 
     WRITE(6,'(A)') 'Balance diagnostics ('//TRIM(mode_name)//')'
-    WRITE(6,'(A)') '  Particle equations [content: particles; rate: particles/s]'
-    CALL print_equation_header()
+    WRITE(6,'(A)') '  Particle equations'
+    CALL print_equation_header('particles','particles/s')
     CALL print_equation_row(this,'n',equation_n,balances(equation_n))
     CALL print_equation_row(this,'n_n',equation_nn,balances(equation_nn))
     CALL print_derived_row('total_n',total_particles)
 
-    WRITE(6,'(A)') '  Momentum equation [content: kg m s^-1; rate: N]'
-    CALL print_equation_header()
+    WRITE(6,'(A)') '  Momentum equation'
+    CALL print_equation_header('kg m s^-1','N')
     CALL print_equation_row(this,'nu',equation_nu,balances(equation_nu))
 
-    WRITE(6,'(A)') '  Energy equations [content: J; rate: W]'
-    CALL print_equation_header()
+    WRITE(6,'(A)') '  Energy equations'
+    CALL print_equation_header('J','W')
     CALL print_equation_row(this,'nEi',equation_nEi,balances(equation_nEi))
     CALL print_equation_row(this,'nEe',equation_nEe,balances(equation_nEe))
     CALL print_derived_row('total_E',total_energy,total_energy_bc_residual(this))
   END SUBROUTINE print_equation_tables
 
-  SUBROUTINE print_equation_header()
-    WRITE(6,'(4X,A10,3(1X,A13),1X,A12)') &
+  SUBROUTINE print_equation_header(content_units, rate_units)
+    CHARACTER(LEN=*), INTENT(IN) :: content_units, rate_units
+
+    WRITE(6,'(4X,A10,4(1X,A13))') &
          &'equation','content','physical','discrete','BC'
-    WRITE(6,'(4X,A10,3(1X,A13),1X,A12)') &
+    WRITE(6,'(4X,A10,4(1X,A13))') &
          &'','','imbalance','residual','residual'
+    WRITE(6,'(4X,A10,4(1X,A13))') '', &
+         &'['//TRIM(content_units)//']', &
+         &'['//TRIM(rate_units)//']', &
+         &'['//TRIM(rate_units)//']', &
+         &'['//TRIM(rate_units)//']'
   END SUBROUTINE print_equation_header
 
   SUBROUTINE print_equation_row(this, name, equation, balance)
@@ -140,8 +146,8 @@ CONTAINS
 
     bc_residual = equation_bc_residual(this,equation,bc_available)
     bc_text = ADJUSTR('--')
-    IF (bc_available) WRITE(bc_text,'(ES12.4)') bc_residual
-    WRITE(6,'(4X,A10,3(1X,ES13.4),1X,A12)') TRIM(name),balance%content, &
+    IF (bc_available) WRITE(bc_text,'(ES12.2)') bc_residual
+    WRITE(6,'(4X,A10,3(1X,ES13.2),1X,A12)') TRIM(name),balance%content, &
          &balance%physical_imbalance,balance%discrete_residual,bc_text
   END SUBROUTINE print_equation_row
 
@@ -152,8 +158,8 @@ CONTAINS
     CHARACTER(LEN=12) :: bc_text
 
     bc_text = ADJUSTR('--')
-    IF (PRESENT(bc_residual)) WRITE(bc_text,'(ES12.4)') bc_residual
-    WRITE(6,'(4X,A10,3(1X,ES13.4),1X,A12)') TRIM(name),balance%content, &
+    IF (PRESENT(bc_residual)) WRITE(bc_text,'(ES12.2)') bc_residual
+    WRITE(6,'(4X,A10,3(1X,ES13.2),1X,A12)') TRIM(name),balance%content, &
          &balance%physical_imbalance,balance%discrete_residual,bc_text
   END SUBROUTINE print_derived_row
 
@@ -163,8 +169,7 @@ CONTAINS
     TYPE(physical_balance_type), INTENT(IN) :: total_particles, total_energy
 
     WRITE(6,'(A)') 'Balance diagnostics (detailed)'
-    CALL print_inventory(balances,total_particles,total_energy, &
-         &'Conserved contents')
+    CALL print_content(balances,total_particles,total_energy)
     CALL print_physical_balances(this,balances,total_particles,total_energy)
     CALL print_discrete_equations(this,balances,total_particles,total_energy)
     CALL print_independent_bc_checks(this)
@@ -198,7 +203,7 @@ CONTAINS
 
     WRITE(6,'(A,4(1X,A13))') '              ', &
          &'temporal','volume','boundary','imbalance'
-    WRITE(6,'(A,4(1X,ES13.4))') '              ',balance%temporal, &
+    WRITE(6,'(A,4(1X,ES13.2))') '              ',balance%temporal, &
          &balance%volume,balance%boundary_inward,balance%physical_imbalance
   END SUBROUTINE print_physical_aggregate
 
@@ -218,10 +223,10 @@ CONTAINS
     WRITE(6,'(A,3(1X,A13))') '              ','ion','electron','sum'
     ion = term_value(this,equation_nEi,term_parallel_electric_work)
     electron = term_value(this,equation_nEe,term_parallel_electric_work)
-    WRITE(6,'(A18,3(1X,ES13.4))') 'parallel electric',ion,electron,ion+electron
+    WRITE(6,'(A18,3(1X,ES13.2))') 'parallel electric',ion,electron,ion+electron
     ion = term_value(this,equation_nEi,term_temperature_exchange)
     electron = term_value(this,equation_nEe,term_temperature_exchange)
-    WRITE(6,'(A18,3(1X,ES13.4))') 'temperature',ion,electron,ion+electron
+    WRITE(6,'(A18,3(1X,ES13.2))') 'temperature',ion,electron,ion+electron
   END SUBROUTINE print_energy_exchange_cancellation
 
   SUBROUTINE print_discrete_equations(this, balances, total_particles, &
@@ -252,7 +257,7 @@ CONTAINS
     WRITE(6,'(A,6(1X,A13))') '              ', &
          &'temporal','volume','equation bnd.','tau stabil.','numerical', &
          &'residual'
-    WRITE(6,'(A,6(1X,ES13.4))') '              ',balance%temporal, &
+    WRITE(6,'(A,6(1X,ES13.2))') '              ',balance%temporal, &
          &balance%volume,balance%equation_boundary_inward, &
          &balance%tau_stabilization_inward,balance%numerical_boundary_inward, &
          &balance%discrete_residual
@@ -584,10 +589,10 @@ CONTAINS
     WRITE(6,'(A)') '      '//TRIM(title)
     DO item = 1,SIZE(values),2
        IF (item < SIZE(values)) THEN
-          WRITE(6,'(8X,2(A24,1X,ES12.4,2X))') labels(item),values(item), &
+          WRITE(6,'(8X,2(A24,1X,ES12.2,2X))') labels(item),values(item), &
                &labels(item+1),values(item+1)
        ELSE
-          WRITE(6,'(8X,A24,1X,ES12.4)') labels(item),values(item)
+          WRITE(6,'(8X,A24,1X,ES12.2)') labels(item),values(item)
        ENDIF
     ENDDO
   END SUBROUTINE print_component_pairs
