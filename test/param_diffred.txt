@@ -12,8 +12,9 @@
     init                = 1             ! Initialization type: 1-analytical at nodes; 2-L2 projection
     flux_limiter        = .false.       ! use flux limiter for ion and electron parallel conductive heat fluxes (with provided c_fli,c_fle in physics)
     external_heating    = .false.       ! True will use external from the file provided in INPUT_LST
-    impurity_radiation  = .false.        ! to take into account impurity radiaion with concentration provided in PHYS_LST
+    impurity_radiation  = .false.        ! Enable the mixture configured in impurity_model_path
     import_diffusion_1D = .false.        ! Import or not additional profile of diffuion in 1D as function of rho_pol, supply path to the file
+    transport_1d        = .false.       ! Use the reduced Bohm / gyro-Bohm transport and pinch model
     neutral_perpendicular_diffusion = .false. ! Use perpendicular instead of isotropic neutral density diffusion
     neutral_wall_sources_in_elements = .false. ! Move neutral puff/pump wall sources into adjacent element volumes
     neutral_flux_limiter_save_2d = .false. ! Save optional HDG nodal neutral limiter diagnostics
@@ -69,7 +70,8 @@
 /
 
 &INPUT_LST
-    impurity_model_path = 'impurity_model.nml'
+    transport_model_path = 'transport_model.nml' ! Settings used when transport_1d = .true.
+    impurity_model_path = 'impurity_model.nml' ! Required when impurity_radiation = .true.
     field_path          = '/path/to/magnetic/field'  ! Path to Bfield h5 file. 
                                                                         ! If switch%ME = .true. then omit numbering part like 'B_field/WEST_54487'
                                                                         ! If switch%ME = .false. then put the full part 'B_field/WEST_54487_0000.h5'
@@ -95,7 +97,7 @@
     target_density_xpr_dimension = 101
     zeff_path = '/path/where/to/read/zeff/'
     zeff_dimension = 10000
-    diffusion_1D_path = '/path/where/to/read/1d/diffsion/
+    diffusion_1D_path = '/path/where/to/read/1d/diffusion/'
 /
 
 &NUMER_LST
@@ -155,7 +157,7 @@
     osc_adapt		= .true.	! Refine if oscillations are higher than threshold
     osc_tol		= -2.		! Refine if oscillations are higher than this threshold, only if osc_adapt = .true.
     osc_check		= -3.		! Save the solution as checkpoint if the maximum value of oscillations are lower than this threshold (-100 for no oscillations at all)
-    geometry_path	= '/path/to/geo/file/from/gmesh/geometry.geo
+    geometry_path	= '/path/to/geo/file/from/gmsh/geometry.geo'
 /
 
 &GEOM_LST
@@ -199,9 +201,9 @@
     diff_nn_min = 1. ! minimum diffusion for neutral equation
     neutralp_ti_supp_eV = 1.d-6 ! ion-temperature suppression for neutral pressure [eV]
     ! ****** Neutral flux limiter
-    neutral_flux_limiter_mode = 'off'
-    neutral_flux_limiter_tn_source = 'ti'
-    neutral_flux_limiter_tn_eV = 0. ! Fixed neutral cap temperature [eV]
+    neutral_flux_limiter_mode = 'off' ! off, lagged_flux_limiter
+    neutral_flux_limiter_tn_source = 'ti' ! ti: local ion temperature; fixed: use tn_eV below
+    neutral_flux_limiter_tn_eV = 0. ! Fixed neutral cap temperature [eV]; must be > 0 for fixed source
     neutral_flux_limiter_eps = 0. ! Flux-magnitude regularization [m^-2 s^-1]
     neutral_flux_limiter_fs_fraction = 1. ! Fraction of the neutral free-streaming flux
     neutral_flux_limiter_fs_flux_min = 0. ! Minimum neutral cap flux [m^-2 s^-1]
@@ -214,10 +216,18 @@
     heating_sigmaz = 0.15             ! [m] gaussian width in z-direction
     heating_equation = 3            ! equation to which heating is applied
     ! ****** Option for neutral equation (available only if compile with NEUTRAL)
+    ionization_ion_energy_fraction = 0.d0 ! Fraction of local ion thermal energy assigned to newly ionized particles [0,1]
     Re                  = 0.998     ! Recycling coefficient 0.997
     Re_pump             = 0.95     ! Recycling coefficient in the pump region
     apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
     puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
+    feedback_propotional_gain = 10.e-21 !100.e-21  10.e-21
+    feedback_integral_gain = 200.e-22 !1000 200
+    feedback_derivative_gain = 8.e-22
+    feedback_propotional_gain_xpr = 1.e-22
+    feedback_integral_gain_xpr = 2.e-22
+    feedback_derivative_gain_xpr = 0.5e-23
+    puff_slope          = 0.           ! Legacy testcase 80-89 moving-equilibrium puff target as a fraction of Greenwald density
     cryopump_power      = 10.      ! cryopump power in [m^3/s]
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
     ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52 and 81)
@@ -233,7 +243,7 @@
     !puff               = 1.8e-6
     !puff               = 2.e-5
     ! ****** Ohmic heating: only for testcase 54 with core
-    Zeff                = 3.
+    Zeff                = 1.
     Pohmic              = 4.8e-14       ! Ohmic Heating
     ! ****** Background temperature in eV for isothermal model (default is 50 eV)
     Tbg                 = 50
@@ -275,6 +285,8 @@
 /
 
 &UTILS_LST
+    balance_diagnostics_mode = 'summary' ! off, summary, equations, detailed
+                                        ! Enabled modes require a 2D neutral-temperature model and bohmtypebc = 0
     printint            = 1             ! how much info we want to print
     dotiming            = true          ! timing of the code
     freqdisp            = 1             ! frequency of result display
