@@ -741,6 +741,8 @@ CONTAINS
 #endif
     bc = phys%bcflags(fl)
 
+    IF (face_diagnostics_on) CALL balance_diag%observe_boundary_type(bc)
+
     SELECT CASE (bc)
 
     CASE (bc_dirichlet)

@@ -176,7 +176,7 @@ MODULE balance_diagnostics
   END TYPE plasma_heating_summary_type
 
   ! One instance is owned by each OpenMP worker. The equation-oriented matrix
-  ! is contiguous and can be merged and reduced without packing.
+  ! is contiguous for merging; finalization appends boundary coverage for MPI.
   TYPE, PUBLIC :: balance_accumulator_type
      PRIVATE
      REAL*8 :: values(balance_equation_count,balance_term_count, &
@@ -198,6 +198,8 @@ MODULE balance_diagnostics
      PRIVATE
      INTEGER :: mode = balance_mode_off
      LOGICAL :: finalized_values_valid = .FALSE.
+     LOGICAL :: unsupported_boundary_seen = .FALSE.
+     LOGICAL :: boundary_warning_emitted = .FALSE.
      REAL*8 :: content_scale(balance_equation_count) = 0.d0
      REAL*8 :: rate_scale(balance_equation_count) = 0.d0
      REAL*8 :: local_values(balance_equation_count,balance_term_count, &
@@ -213,6 +215,7 @@ MODULE balance_diagnostics
      PROCEDURE, PUBLIC :: initialize_accumulator => &
           balance_diagnostics_initialize_accumulator
      PROCEDURE, PUBLIC :: merge => balance_diagnostics_merge
+     PROCEDURE, PUBLIC :: observe_boundary_type
      PROCEDURE, PUBLIC :: finalize => balance_diagnostics_finalize
      PROCEDURE, PUBLIC :: has_values => balance_diagnostics_has_values
      PROCEDURE, PUBLIC :: report => balance_diagnostics_report
@@ -225,6 +228,15 @@ MODULE balance_diagnostics
   PUBLIC :: balance_diagnostics_mode_name
 
   INTERFACE
+     MODULE SUBROUTINE observe_boundary_type(this, boundary_type)
+       CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+       INTEGER, INTENT(IN) :: boundary_type
+     END SUBROUTINE observe_boundary_type
+
+     MODULE SUBROUTINE warn_unsupported_boundary(this)
+       CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+     END SUBROUTINE warn_unsupported_boundary
+
      MODULE SUBROUTINE accumulator_reset(this, mode, content_scale, &
           &rate_scale)
        CLASS(balance_accumulator_type), INTENT(INOUT) :: this
@@ -419,6 +431,8 @@ CONTAINS
     ENDIF
     this%mode = mode
     this%finalized_values_valid = .FALSE.
+    this%unsupported_boundary_seen = .FALSE.
+    this%boundary_warning_emitted = .FALSE.
   END SUBROUTINE balance_diagnostics_configure
 
   INTEGER FUNCTION balance_diagnostics_get_mode(this) RESULT(mode)
@@ -469,6 +483,7 @@ CONTAINS
     this%rate_scale(equation_nn) = particle_rate_scale
     this%local_values = 0.d0
     this%finalized_values_valid = .FALSE.
+    this%unsupported_boundary_seen = .FALSE.
   END SUBROUTINE balance_diagnostics_begin_assembly
 
   SUBROUTINE balance_diagnostics_initialize_accumulator(this, accumulator)
@@ -490,18 +505,28 @@ CONTAINS
     CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
 #ifdef PARALL
     INTEGER :: ierr
+    REAL*8 :: reduction_values(SIZE(this%finalized_values)+1)
 #endif
 
     IF (.NOT. this%enabled()) RETURN
 
     this%finalized_values = this%local_values
 #ifdef PARALL
-    CALL MPI_ALLREDUCE(MPI_IN_PLACE, this%finalized_values, &
-         balance_equation_count*balance_term_count*balance_section_count, &
-         MPI_REAL8, MPI_SUM, &
-         MPI_COMM_WORLD, ierr)
+    ! Carry boundary coverage with the balances, without a second collective.
+    reduction_values(1:SIZE(this%finalized_values)) = &
+         RESHAPE(this%finalized_values,(/SIZE(this%finalized_values)/))
+    reduction_values(SIZE(reduction_values)) = &
+         MERGE(1.d0,0.d0,this%unsupported_boundary_seen)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE,reduction_values,SIZE(reduction_values), &
+         MPI_REAL8,MPI_SUM,MPI_COMM_WORLD,ierr)
+    this%finalized_values = RESHAPE( &
+         reduction_values(1:SIZE(this%finalized_values)), &
+         SHAPE(this%finalized_values))
+    this%unsupported_boundary_seen = &
+         reduction_values(SIZE(reduction_values)) > 0.d0
 #endif
     this%finalized_values_valid = .TRUE.
+    CALL warn_unsupported_boundary(this)
   END SUBROUTINE balance_diagnostics_finalize
 
   LOGICAL FUNCTION balance_diagnostics_has_values(this) RESULT(has_values)

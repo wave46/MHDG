@@ -1,7 +1,21 @@
 SUBMODULE (balance_diagnostics) balance_diagnostics_bc
+  USE types, ONLY: bc_Bohm, bc_BohmPump, bc_BohmPuff, bc_periodic
   IMPLICIT NONE
 
 CONTAINS
+
+  MODULE SUBROUTINE observe_boundary_type(this, boundary_type)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+    INTEGER, INTENT(IN) :: boundary_type
+
+    IF (.NOT. this%enabled()) RETURN
+    SELECT CASE (boundary_type)
+    CASE (bc_Bohm,bc_BohmPump,bc_BohmPuff,bc_periodic)
+       RETURN
+    CASE DEFAULT
+       this%unsupported_boundary_seen = .TRUE.
+    END SELECT
+  END SUBROUTINE observe_boundary_type
 
   MODULE SUBROUTINE accumulate_bc(this, integration_weight, &
        &neutral_equation, trace_state, exterior_state, &

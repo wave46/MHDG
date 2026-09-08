@@ -3,6 +3,20 @@ SUBMODULE (balance_diagnostics) balance_diagnostics_reporting
 
 CONTAINS
 
+  MODULE SUBROUTINE warn_unsupported_boundary(this)
+    CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
+
+    IF (.NOT. this%unsupported_boundary_seen) RETURN
+    IF (this%boundary_warning_emitted) RETURN
+    IF (MPIvar%glob_id == 0) THEN
+       WRITE(6,'(A)') &
+            'WARNING: Balance diagnostics support only Bohm/BohmPump/BohmPuff boundaries.', &
+            'Other physical boundary types were encountered; physical balances and BC', &
+            'checks do not cover the complete boundary.'
+    ENDIF
+    this%boundary_warning_emitted = .TRUE.
+  END SUBROUTINE warn_unsupported_boundary
+
   MODULE SUBROUTINE balance_diagnostics_report(this)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     TYPE(physical_balance_type) :: balances(balance_equation_count)
