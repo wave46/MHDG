@@ -16,9 +16,9 @@ Usage:
   regression_tests/regression.sh prepare CASE WORKFLOW --layout LAYOUT --settings FILE
   regression_tests/regression.sh run CASE WORKFLOW [WORKFLOW ...] --layout LAYOUT --settings FILE
   regression_tests/regression.sh compare RUN_DIRECTORY
-  regression_tests/regression.sh suite run SUITE --settings FILE [--run-only] [--resume]
+  regression_tests/regression.sh suite run SUITE --settings FILE [--run-only] [--resume] [--diagnostics MODE]
   regression_tests/regression.sh suite compare SUITE_SUMMARY
-  regression_tests/regression.sh suite check [SUITE] [--settings FILE] [--build]
+  regression_tests/regression.sh suite check [SUITE] [--settings FILE] [--build] [--diagnostics MODE]
   regression_tests/regression.sh diagnostics check SUITE_SUMMARY
   regression_tests/regression.sh golden update CASE --settings FILE --run-id ID --output DIR --bundle-version VERSION [--only COMPONENT] [--bootstrap-candidate] [--retry-failed | --retry-from STAGE]
   regression_tests/regression.sh golden status WORKSPACE

@@ -16,7 +16,10 @@ SUBROUTINE HDG_computeJacobian()
        toroidal_current_from_flux
   USE magnetic_topology, ONLY: magnetic_region_core
   USE hdg_limitingtechniques, ONLY:HDG_ShockCapturing
-  USE balance_diagnostics, ONLY: balance_accumulator_type, balance_diag
+  USE balance_diagnostics, ONLY: balance_accumulator_type, balance_diag, &
+       &balance_atomic_volume_type, balance_momentum_volume_type, &
+       &balance_energy_volume_type, balance_plasma_face_type, &
+       &balance_neutral_face_type
 
   IMPLICIT NONE
 
@@ -1124,7 +1127,7 @@ CONTAINS
   diagnostics_on = balance_diag%enabled()
   IF (diagnostics_on) THEN
     CALL balance_diag%begin_assembly(simpar%refval_density, &
-      &simpar%refval_length,simpar%refval_speed)
+      &simpar%refval_length,simpar%refval_speed,simpar%refval_mass)
   ENDIF
   !$OMP PARALLEL DEFAULT(SHARED) &
   !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,omegafl,isdir,Jtorel,wall_source_totals_el) &
@@ -2533,8 +2536,6 @@ CONTAINS
     real*8                    :: W2(Neq),dW2_dU(Neq,Neq),QdW2(Ndim,Neq)
     real*8                    :: qq(3,Neq),b(Ndim)
     real*8                    :: grad_n(3),gradpar_n
-    real*8                    :: ionization_rate,recombination_rate,charge_exchange_rate
-
 #ifdef TEMPERATURE
     real*8,dimension(neq,neq) :: GG
 #ifdef NEUTRALGAMMA
@@ -2588,7 +2589,12 @@ CONTAINS
 
 
 
-        REAL*8 :: kmult(SIZE(Auq,1),SIZE(Auq,2))
+    REAL*8 :: kmult(SIZE(Auq,1),SIZE(Auq,2))
+    TYPE(balance_atomic_volume_type) :: diagnostic_atomic
+    TYPE(balance_momentum_volume_type) :: diagnostic_momentum
+#ifdef TEMPERATURE
+    TYPE(balance_energy_volume_type) :: diagnostic_energy
+#endif
 
 
 
@@ -2870,28 +2876,60 @@ ENDIF
 !NEUTRAL
 
     IF (diagnostics_on) THEN
-      ionization_rate = 0.d0
-      recombination_rate = 0.d0
-      charge_exchange_rate = 0.d0
 #ifdef NEUTRAL
 #ifdef TEMPERATURE
-      ionization_rate = niz*sigmaviz
-      recombination_rate = nrec*sigmavrec
-      charge_exchange_rate = niz*sigmavcx
+      IF (.NOT. switch%ohmicsrc) Sohmic = 0.d0
+      diagnostic_atomic = balance_atomic_volume_type( &
+          &ionization_density=niz,recombination_density=nrec, &
+          &ionization_rate_coefficient=sigmaviz, &
+          &recombination_rate_coefficient=sigmavrec, &
+          &charge_exchange_rate_coefficient=sigmavcx)
+      diagnostic_energy = balance_energy_volume_type( &
+          &ion_ionization_factor= &
+            &phys%ionization_ion_energy_fraction*fEiiz, &
+          &ion_recombination_factor=fEirec, &
+          &ion_charge_exchange_factor=fEicx, &
+#ifdef NEUTRALGAMMA
+          &neutral_factor=fEiN, &
+#endif
+          &electron_ionization_loss_coefficient=sigmavEiz, &
+          &electron_recombination_loss_coefficient=sigmavErec, &
+          &recombination_energy=neutral_rt%recombination_energy, &
+          &impurity_cooling_factor=cooling_factor, &
+          &ohmic_heating=Sohmic*Jtor**2, &
+          &parallel_electric_transfer=W*DOT_PRODUCT(Qpr(:,4),b), &
+          &temperature_transfer=s)
 #else
-      ionization_rate = niz*3.01d-14*simpar%refval_density*simpar%refval_time
-      recombination_rate = nrec*1.3638d-20*simpar%refval_density*simpar%refval_time
-      charge_exchange_rate = niz*4.0808d-15*simpar%refval_density*simpar%refval_time
+      diagnostic_atomic = balance_atomic_volume_type( &
+          &ionization_density=niz,recombination_density=nrec, &
+          &ionization_rate_coefficient=3.01d-14* &
+            &simpar%refval_density*simpar%refval_time, &
+          &recombination_rate_coefficient=1.3638d-20* &
+            &simpar%refval_density*simpar%refval_time, &
+          &charge_exchange_rate_coefficient=4.0808d-15* &
+            &simpar%refval_density*simpar%refval_time)
 #endif
+      diagnostic_momentum = balance_momentum_volume_type( &
+#ifdef TEMPERATURE
+          &pressure_divergence=DOT_PRODUCT(GG(2,:),ue), &
+#else
+          &pressure_divergence=phys%a*divb*ue(1), &
 #endif
-#ifdef NEUTRAL
-      CALL diagnostics%accumulate_particle_volume( &
-        &measure=SUM(Ni),plasma_density=ue(1),neutral_density=ue(inn), &
-        &plasma_history=u0e(1,:),neutral_history=u0e(inn,:), &
+          &charge_exchange_factor=fGammacx, &
+          &recombination_factor=fGammarec &
+#ifdef NEUTRALGAMMA
+          &,neutral_factor=fGammaN &
+#endif
+          &)
+      CALL diagnostics%accumulate_volume( &
+        &measure=SUM(Ni),state=ue,history=u0e, &
         &time_coefficients=ktis,time_step=time%dt,steady=switch%steady, &
-        &ionization_rate=ionization_rate,recombination_rate=recombination_rate, &
-        &plasma_other_source=f(1),neutral_other_source=f(inn), &
-        &charge_exchange_rate=charge_exchange_rate)
+        &prescribed_source=f,neutral_state_index=inn, &
+        &atomic=diagnostic_atomic,momentum=diagnostic_momentum &
+#ifdef TEMPERATURE
+        &,energy=diagnostic_energy &
+#endif
+        &)
 #endif
     ENDIF
 
@@ -3797,6 +3835,12 @@ ENDIF
       real*8                    :: Qpr(Ndim,Neq)
       real*8                    :: nn(3),qq(3,Neq),b(Ndim),bb(3)
       real*8                    :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
+      TYPE(balance_plasma_face_type) :: diagnostic_plasma_face
+      TYPE(balance_neutral_face_type) :: diagnostic_neutral_face
+      real*8                    :: diagnostic_perpendicular_normal(Ndim)
+#ifdef NEUTRALP
+      real*8                    :: diagnostic_neutral_pressure_normal(Ndim)
+#endif
 #ifdef TEMPERATURE
       real*8                    :: Vveci(Neq),dV_dUi(Neq,Neq),Alphai,dAlpha_dUi(Neq),gmi,taui(Ndim,Neq)
       real*8                    :: Vvece(Neq),dV_dUe(Neq,Neq),Alphae,dAlpha_dUe(Neq),gme,taue(Ndim,Neq)
@@ -3948,27 +3992,38 @@ ENDIF
 
       IF (diagnostics_on) THEN
 #ifdef NEUTRAL
+        diagnostic_perpendicular_normal = n-bn*b
+        diagnostic_plasma_face = balance_plasma_face_type( &
+             &momentum_split_diffusive_flux=DOT_PRODUCT( &
+             &MATMUL(Qpr,W2),diagnostic_perpendicular_normal))
+#ifdef TEMPERATURE
+        diagnostic_plasma_face%energy_enabled = .TRUE.
+        diagnostic_plasma_face%ion_energy_split_diffusive_flux = &
+             &DOT_PRODUCT(MATMUL(Qpr,W3),diagnostic_perpendicular_normal)
+        diagnostic_plasma_face%electron_energy_split_diffusive_flux = &
+             &DOT_PRODUCT(MATMUL(Qpr,W4),diagnostic_perpendicular_normal)
+        diagnostic_plasma_face%ion_parallel_conductive_flux = &
+             &flux_limiter_i*coefi*Alphai*gmi
+        diagnostic_plasma_face%electron_parallel_conductive_flux = &
+             &flux_limiter_e*coefe*Alphae*gme
+#endif
+        diagnostic_neutral_face = balance_neutral_face_type()
 #ifdef NEUTRALP
-        CALL diagnostics%accumulate_particle_face( &
-          &measure=SUM(Nif),plasma_equation=1,neutral_equation=inn, &
-          &trace_state=uf,flux_jacobian=A,pinch_matrix=APinch,gradient=Qpr, &
-          &normal=n,magnetic_direction=b,diffusion_iso=diffiso, &
-          &diffusion_ani=diffani,neutral_perpendicular_diffusion= &
-          &switch%neutral_perpendicular_diffusion,neutral_pressure_vector=W5p)
-#else
-        CALL diagnostics%accumulate_particle_face( &
-          &measure=SUM(Nif),plasma_equation=1,neutral_equation=inn, &
-          &trace_state=uf,flux_jacobian=A,pinch_matrix=APinch,gradient=Qpr, &
-          &normal=n,magnetic_direction=b,diffusion_iso=diffiso, &
-          &diffusion_ani=diffani,neutral_perpendicular_diffusion= &
-          &switch%neutral_perpendicular_diffusion)
+        diagnostic_neutral_pressure_normal = n
+        IF (switch%neutral_perpendicular_diffusion) &
+             &diagnostic_neutral_pressure_normal = &
+             &diagnostic_perpendicular_normal
+        diagnostic_neutral_face%pressure_diffusive_flux = &
+             &DOT_PRODUCT(MATMUL(Qpr,W5p), &
+             &diagnostic_neutral_pressure_normal)
 #endif
-#endif
-#ifdef NEUTRAL
-        CALL diagnostics%accumulate_particle_tau( &
-          &measure=SUM(Nif), &
-          &plasma_tau_inward=DOT_PRODUCT(tau(1,:),uf-uef), &
-          &neutral_tau_inward=DOT_PRODUCT(tau(inn,:),uf-uef))
+        CALL diagnostics%accumulate_face( &
+             &measure=SUM(Nif),trace_state=uf, &
+             &flux_jacobian=A,pinch_matrix=APinch, &
+             &gradient=Qpr,normal=n,magnetic_direction=b, &
+             &diffusion_iso=diffiso,diffusion_ani=diffani, &
+             &element_state=uef,tau=tau, &
+             &plasma=diagnostic_plasma_face,neutral=diagnostic_neutral_face)
 #endif
       ENDIF
 
@@ -4318,7 +4373,7 @@ END IF
       REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz,sigmavErec,dsigmavEiz_dU(:),dsigmavErec_dU(:)
       REAL*8, INTENT(IN), OPTIONAL :: cooling_factor,dcooling_factor_dU(:)
 #endif
-             REAL*8             :: RE,Sn(:,:),Sn0(:)
+             REAL*8             :: Sn(:,:),Sn0(:)
              INTEGER            :: inn,ign
 #ifdef TEMPERATURE
              REAL*8             :: recombination_energy
@@ -4326,7 +4381,6 @@ END IF
 
       Sn   = 0.
       Sn0  = 0.
-      RE   = 0.
       inn  = phys%idx_rhon_eq
       ign  = phys%idx_gamman_eq
 #ifdef TEMPERATURE
@@ -4362,8 +4416,10 @@ END IF
 
       !Assembly Source Terms in ion energy equation
 
-      Sn(3,:) = -RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec + dfEicx_dU(:)*sigmavcx
-      Sn(3,:) = Sn(3,:) - RE*fEiiz*dsigmaviz_dU(:) + fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:)
+      Sn(3,:) = -phys%ionization_ion_energy_fraction*dfEiiz_dU(:)*sigmaviz + &
+        &dfEirec_dU(:)*sigmavrec + dfEicx_dU(:)*sigmavcx
+      Sn(3,:) = Sn(3,:) - phys%ionization_ion_energy_fraction*fEiiz*dsigmaviz_dU(:) + &
+        &fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:)
 #ifdef NEUTRALGAMMA
       Sn(3,:) = Sn(3,:) - dfEiN_dU(:)*(sigmaviz + sigmavcx) - &
         &fEiN*(dsigmaviz_dU(:) + dsigmavcx_dU(:))
@@ -4401,14 +4457,16 @@ END IF
 #ifdef NEUTRALGAMMA
       Sn0(2)    = Sn0(2) + fGammaN*dot_PRODUCT(dsigmaviz_dU,U)
 #endif
-      Sn0(3)    = RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx
+      Sn0(3)    = phys%ionization_ion_energy_fraction*fEiiz*sigmaviz - &
+        &fEirec*sigmavrec - fEicx*sigmavcx
 #ifdef NEUTRALGAMMA
       Sn0(3)    = Sn0(3) + fEiN*(sigmaviz + sigmavcx)
 #endif
       !modification with recombination gain
       Sn0(4)    = nrec*sigmavrec*recombination_energy
       Sn0(4)    = Sn0(4) - niz*sigmavEiz - nrec*sigmavErec
-      Sn0(3)    = Sn0(3) + RE*fEiiz*dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U)
+      Sn0(3)    = Sn0(3) + phys%ionization_ion_energy_fraction*fEiiz* &
+        &dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U)
 #ifdef NEUTRALGAMMA
       Sn0(3)    = Sn0(3) + fEiN*dot_PRODUCT(dsigmaviz_dU,U)
 #endif

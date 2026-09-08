@@ -73,6 +73,13 @@
         "compute_from_flux": true
       }
     },
+    "warm_balance_diagnostics": {
+      "extends": "warm",
+      "description": "Reconverge the unchanged warm restart with detailed balance diagnostics",
+      "parameter_overrides": {
+        "balance_diagnostics_mode": "detailed"
+      }
+    },
     "warm_neutral_pressure": {
       "extends": "warm_neutral_sources_in_elements",
       "description": "Reconverge the source-relocated state with neutral pressure enabled",

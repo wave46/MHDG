@@ -133,6 +133,54 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertIn("suite: warm", completed.stdout)
         self.assertIn("mpi4_omp4", completed.stdout)
 
+    def test_suite_diagnostics_override_supports_every_mode(self) -> None:
+        for mode in ("off", "summary", "equations", "detailed"):
+            with self.subTest(mode=mode):
+                run_id = f"diagnostics-{mode}"
+                completed = self._run_suite(
+                    "warm",
+                    run_id,
+                    "--run-only",
+                    "--diagnostics",
+                    mode,
+                )
+
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                run_directory = self.fixture.run_directory(
+                    "warm",
+                    "mpi4_omp4",
+                    run_id,
+                )
+                parameters = (run_directory / "param.txt").read_text(
+                    encoding="utf-8"
+                )
+                self.assertIn(
+                    f"balance_diagnostics_mode = '{mode}'",
+                    parameters,
+                )
+                plan = json.loads(
+                    (run_directory / "run_plan.json").read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    plan["parameter_overrides"]["balance_diagnostics_mode"],
+                    mode,
+                )
+                self.assertEqual(
+                    self._summary("warm", run_id)["parameter_overrides"],
+                    {"balance_diagnostics_mode": mode},
+                )
+
+        rejected = self._run_suite(
+            "warm",
+            "diagnostics-off",
+            "--run-only",
+            "--resume",
+            "--diagnostics",
+            "summary",
+        )
+        self.assertEqual(rejected.returncode, 1)
+        self.assertIn("parameter_overrides", rejected.stderr)
+
     def test_race_suite_compares_layout_pairs_and_can_recompare(self) -> None:
         write_solution(self.fixture.serial_executable.parent / "race_result.h5")
         self.fixture.install_solver(RACE_SOLVER)

@@ -59,6 +59,9 @@ regression_tests/regression.sh suite check
 `suite check` defaults to the `warm` suite and
 `regression_tests/golden.local.env`. Override the file with `--settings FILE`
 or `MHDG_REGRESSION_GOLDEN_SETTINGS`. It must point to a golden-class bundle.
+Use `--diagnostics off|summary|equations|detailed` to run the same suite with
+an explicit balance-diagnostics mode. The selected override is recorded in
+the suite summary and each run plan.
 
 ## Test matrix
 
@@ -68,6 +71,7 @@ analytically. Fixed and adaptive indicate whether the mesh can change.
 | Workflow | Start and mesh | Work |
 | --- | --- | --- |
 | `warm` | Existing steady restart; fixed mesh | Reconverge the same state. |
+| `warm_balance_diagnostics` | Existing steady restart; fixed mesh | Reconverge once with detailed balance diagnostics. |
 | `cold_fixed` | Analytical start; refined fixed mesh | `time_init`, `diffusion_reduction`, then five continuations. |
 | `cold_adaptive` | Analytical start; coarse mesh | Same seven stages; adapt in the first two. |
 | `cold_fixed_balance_diagnostics` | Analytical start; refined fixed mesh | Detailed particle diagnostics through all seven fixed stages. |
@@ -121,6 +125,7 @@ ranks, and threads. MPI runs bind each rank to exclusive cores.
 | Suite | Coverage | Use |
 | --- | --- | --- |
 | `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
+| `balance_diagnostics_warm` | Detailed warm restart, `mpi4_omp4` | Fast golden run for balance-diagnostics validation. |
 | `neutral_pressure_warm` | Pressure-on warm restart, `mpi4_omp4` | Execution-only pressure continuation attempt. |
 | `neutralgamma_race` | NeutralGamma fixed cold step, `serial_omp1` vs `serial_omp16` | Two-Newton-iteration OpenMP and detailed-balance check. |
 | `neutral_sources_in_elements_warm` | Relocated-source warm restart, `mpi4_omp4` | Golden reconvergence of the relocated-source formulation. |
@@ -260,9 +265,28 @@ regression_tests/regression.sh suite compare \
   /path/to/suites/cold_matrix/overnight-01/suite_summary.json
 ```
 
-After the balance suite completes, validate every selected stage HDF5 file,
-terminal/HDF5 agreement, particle identities, reaction cancellation, and both
-wall closures:
+For a short warm solve with detailed diagnostics and the ordinary golden
+comparison, run:
+
+```bash
+regression_tests/regression.sh suite check warm --diagnostics detailed \
+  --build --run-id warm-balance-01
+```
+
+Then validate its HDF5 and terminal diagnostics without launching MHDG again:
+
+```bash
+regression_tests/regression.sh diagnostics check \
+  /path/to/suites/warm/warm-balance-01/suite_summary.json
+```
+
+Replace `detailed` with `off`, `summary`, or `equations` to inspect the other
+terminal and HDF5 presentation levels. The diagnostics checker currently
+validates the detailed contract; ordinary golden comparison still applies to
+all four modes.
+
+The same checker validates every selected stage after the longer cold balance
+suite completes:
 
 ```bash
 regression_tests/regression.sh diagnostics check \

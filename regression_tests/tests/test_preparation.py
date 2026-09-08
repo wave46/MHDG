@@ -130,6 +130,21 @@ class RunPreparationTests(unittest.TestCase):
             },
         )
 
+    def test_prepares_warm_balance_diagnostics(self) -> None:
+        prepared = prepare_run(
+            self.settings,
+            "legacy_case",
+            "warm_balance_diagnostics",
+            "mpi4_omp4",
+            REGRESSION_ROOT / "cases",
+            REGRESSION_ROOT / "layouts.json",
+            "warm-balance",
+        )
+
+        parameters = (prepared.path / "param.txt").read_text(encoding="utf-8")
+        self.assertIn("compute_from_flux = .true.", parameters)
+        self.assertIn("balance_diagnostics_mode = 'detailed'", parameters)
+
     def test_prepares_pr04_neutral_variants(self) -> None:
         pressure = prepare_run(
             self.settings,

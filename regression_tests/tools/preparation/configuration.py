@@ -30,6 +30,7 @@ def load_preparation_inputs(
     layouts_path: Path,
     run_id: str | None,
     validate_bundle: bool,
+    requested_overrides: dict[str, bool | float | int | str] | None = None,
 ) -> PreparationInputs:
     """Resolve the files and declarations needed to prepare one run."""
     settings = read_settings(settings_path)
@@ -73,6 +74,7 @@ def load_preparation_inputs(
         layout_id=layout_id,
         bundle_root=bundle_root,
         manifest=manifest,
+        requested_overrides=dict(requested_overrides or {}),
     )
 
 

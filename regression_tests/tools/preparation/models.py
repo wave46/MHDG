@@ -46,3 +46,4 @@ class PreparationInputs:
     layout_id: str
     bundle_root: Path
     manifest: dict[str, Any]
+    requested_overrides: dict[str, bool | float | int | str]

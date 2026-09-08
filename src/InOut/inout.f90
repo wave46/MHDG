@@ -1181,6 +1181,8 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%diff_nn, 'diff_nn')
       CALL HDF5_real_saving(group_id2, phys%diff_nn_min, 'diff_nn_min')
       CALL HDF5_real_saving(group_id2, phys%neutralp_ti_supp, 'neutralp_ti_supp')
+      CALL HDF5_real_saving(group_id2, phys%ionization_ion_energy_fraction, &
+           &'ionization_ion_energy_fraction')
       CALL HDF5_string_saving(group_id2, phys%neutral_flux_limiter_mode, 'neutral_flux_limiter_mode')
       CALL HDF5_string_saving(group_id2, phys%neutral_flux_limiter_tn_source, 'neutral_flux_limiter_tn_source')
       CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_tn, 'neutral_flux_limiter_tn')

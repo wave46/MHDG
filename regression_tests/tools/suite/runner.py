@@ -41,6 +41,7 @@ def run_suite(
     required_bundle_class: str | None = None,
     compare: bool = True,
     resume: bool = False,
+    parameter_overrides: dict[str, Any] | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Execute every workflow-layout cell and write a reusable summary."""
     suite = load_suite_definition(
@@ -60,6 +61,7 @@ def run_suite(
         raise BundleError(f"invalid suite run identifier: {selected_run_id}")
 
     selected_workflows = suite["workflow_ids"]
+    selected_overrides = dict(parameter_overrides or {})
     pairs = suite.get("layout_comparisons")
     reference_comparisons = suite.get("reference_comparisons", not pairs)
     comparison_mode = _comparison_mode(
@@ -94,6 +96,7 @@ def run_suite(
             suite,
             comparison_mode,
             execution_inputs,
+            selected_overrides,
         )
     else:
         summary = new_summary(
@@ -102,6 +105,7 @@ def run_suite(
             suite,
             comparison_mode,
             execution_inputs,
+            selected_overrides,
         )
         write_json_atomic(summary_path, summary, "suite summary")
 
@@ -114,6 +118,7 @@ def run_suite(
         layouts_path=layouts_path,
         tolerances_path=tolerances_path,
         compare=compare,
+        parameter_overrides=selected_overrides,
     )
     cell_inputs = (
         inputs if reference_comparisons else replace(inputs, compare=False)

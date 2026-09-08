@@ -16,6 +16,7 @@ def new_summary(
     suite: dict[str, Any],
     comparison_mode: str,
     execution_inputs: dict[str, Any],
+    parameter_overrides: dict[str, Any],
 ) -> dict[str, Any]:
     """Create the initial running summary for a new suite."""
     summary = {
@@ -31,6 +32,7 @@ def new_summary(
         "workflow_ids": suite["workflow_ids"],
         "layout_ids": suite["layouts"],
         "comparison_mode": comparison_mode,
+        "parameter_overrides": parameter_overrides,
         "execution_inputs": execution_inputs,
         "results": [],
     }
@@ -47,6 +49,7 @@ def resume_summary(
     suite: dict[str, Any],
     comparison_mode: str,
     execution_inputs: dict[str, Any],
+    parameter_overrides: dict[str, Any],
 ) -> dict[str, Any]:
     """Load an existing compatible summary and mark it running again."""
     summary = load_json(path, "suite summary")
@@ -60,6 +63,8 @@ def resume_summary(
     if suite.get("layout_comparisons"):
         expected.update(_layout_comparison_settings(suite))
     mismatched = [key for key, value in expected.items() if summary.get(key) != value]
+    if summary.get("parameter_overrides", {}) != parameter_overrides:
+        mismatched.append("parameter_overrides")
     if mismatched:
         raise BundleError(f"suite summary does not match: {', '.join(mismatched)}")
     _validate_execution_inputs(summary.get("execution_inputs"), execution_inputs)

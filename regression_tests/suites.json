@@ -7,6 +7,12 @@
       "workflows": ["warm"],
       "layouts": ["mpi4_omp4"]
     },
+    "balance_diagnostics_warm": {
+      "description": "Detailed balance diagnostics on the canonical warm restart",
+      "case": "legacy_case",
+      "workflows": ["warm_balance_diagnostics"],
+      "layouts": ["mpi4_omp4"]
+    },
     "neutral_pressure_warm": {
       "description": "Execution-only warm continuation with neutral pressure enabled",
       "case": "legacy_case",

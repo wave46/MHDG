@@ -244,6 +244,7 @@ MODULE types
      REAL*8                    :: Mref ! Reference Mach number
      REAL*8                    :: diff_pari ! Parallel diffusion for the temperature (usually 1e7)
      REAL*8                    :: Gmbohm ! gamma for Bohm boundary condition on energy:
+     REAL*8                    :: ionization_ion_energy_fraction ! Fraction R_E of ion thermal energy assigned on ionization
      ! Temperature equations coefficients (the ions coefficients are the ones defined previously)
      REAL*8                    :: diff_ee ! Perpendicular diffusion in the elcetron energy equation
      REAL*8                    :: diff_pare ! Parallel diffusion for the electron temperature

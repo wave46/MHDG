@@ -16,3 +16,4 @@ class SuiteRunInputs:
     layouts_path: Path
     tolerances_path: Path
     compare: bool
+    parameter_overrides: dict[str, bool | float | int | str]

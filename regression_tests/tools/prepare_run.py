@@ -58,6 +58,7 @@ def prepare_run(
     layouts_path: Path,
     run_id: str | None = None,
     validate_bundle: bool = True,
+    requested_overrides: dict[str, bool | float | int | str] | None = None,
 ) -> PreparedExecution:
     """Create one validated, isolated run or staged workflow directory."""
     inputs = load_preparation_inputs(
@@ -69,6 +70,7 @@ def prepare_run(
         layouts_path,
         run_id,
         validate_bundle,
+        requested_overrides,
     )
     workflow_kind = inputs.workflow["kind"]
     if workflow_kind == "warm_same_state":
