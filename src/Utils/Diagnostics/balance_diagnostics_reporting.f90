@@ -38,6 +38,8 @@ CONTAINS
          &balances(equation_nEe))
   END SUBROUTINE collect_balances
 
+  ! Summary.
+
   SUBROUTINE print_summary(this, balances, total_particles, total_energy)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     TYPE(physical_balance_type), INTENT(IN) :: &
@@ -71,23 +73,6 @@ CONTAINS
          &'total plasma energy [W]',total_energy%physical_imbalance
   END SUBROUTINE print_summary
 
-  SUBROUTINE print_content(balances, total_particles, total_energy)
-    TYPE(physical_balance_type), INTENT(IN) :: &
-         &balances(balance_equation_count), total_particles, total_energy
-
-    WRITE(6,'(A)') '  Content'
-    WRITE(6,'(A,3(2X,A,1X,ES11.2))') '    particles [particles]', &
-         &'n',balances(equation_n)%content, &
-         &'n_n',balances(equation_nn)%content, &
-         &'n+n_n',total_particles%content
-    WRITE(6,'(A,2X,A,1X,ES11.2)') '    momentum [kg m s^-1]', &
-         &'nu',balances(equation_nu)%content
-    WRITE(6,'(A,3(2X,A,1X,ES11.2))') '    plasma energy [J]', &
-         &'nEi',balances(equation_nEi)%content, &
-         &'nEe',balances(equation_nEe)%content, &
-         &'nEi+nEe',total_energy%content
-  END SUBROUTINE print_content
-
   REAL*8 FUNCTION prescribed_source(this, equation) RESULT(value)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     INTEGER, INTENT(IN) :: equation
@@ -95,6 +80,8 @@ CONTAINS
     value = balance_value(this,equation,term_prescribed_source, &
          &section_physical)
   END FUNCTION prescribed_source
+
+  ! Equation tables.
 
   SUBROUTINE print_equation_tables(this, balances, total_particles, &
        &total_energy, mode_name)
@@ -163,6 +150,8 @@ CONTAINS
          &balance%physical_imbalance,balance%discrete_residual,bc_text
   END SUBROUTINE print_derived_row
 
+  ! Detailed physical balances.
+
   SUBROUTINE print_detailed(this, balances, total_particles, total_energy)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     TYPE(physical_balance_type), INTENT(IN) :: balances(balance_equation_count)
@@ -206,81 +195,6 @@ CONTAINS
     WRITE(6,'(A,4(1X,ES13.2))') '              ',balance%temporal, &
          &balance%volume,balance%boundary_inward,balance%physical_imbalance
   END SUBROUTINE print_physical_aggregate
-
-  SUBROUTINE print_physical_total(name, units, balance)
-    CHARACTER(LEN=*), INTENT(IN) :: name, units
-    TYPE(physical_balance_type), INTENT(IN) :: balance
-
-    WRITE(6,'(A)') '    '//TRIM(name)//' ['//TRIM(units)//'] (derived)'
-    CALL print_physical_aggregate(balance)
-  END SUBROUTINE print_physical_total
-
-  SUBROUTINE print_energy_exchange_cancellation(this)
-    CLASS(balance_diagnostics_type), INTENT(IN) :: this
-    REAL*8 :: ion, electron
-
-    WRITE(6,'(A)') '    Internal energy exchange [W]'
-    WRITE(6,'(A,3(1X,A13))') '              ','ion','electron','sum'
-    ion = term_value(this,equation_nEi,term_parallel_electric_work)
-    electron = term_value(this,equation_nEe,term_parallel_electric_work)
-    WRITE(6,'(A18,3(1X,ES13.2))') 'parallel electric',ion,electron,ion+electron
-    ion = term_value(this,equation_nEi,term_temperature_exchange)
-    electron = term_value(this,equation_nEe,term_temperature_exchange)
-    WRITE(6,'(A18,3(1X,ES13.2))') 'temperature',ion,electron,ion+electron
-  END SUBROUTINE print_energy_exchange_cancellation
-
-  SUBROUTINE print_discrete_equations(this, balances, total_particles, &
-       &total_energy)
-    CLASS(balance_diagnostics_type), INTENT(IN) :: this
-    TYPE(physical_balance_type), INTENT(IN) :: &
-         &balances(balance_equation_count), total_particles, total_energy
-    INTEGER :: equation
-
-    WRITE(6,'(A)') '  Discrete equations'
-    WRITE(6,'(A)') &
-         &'    volume + numerical boundary - temporal = residual'
-    WRITE(6,'(A)') &
-         &'    equation boundary + tau stabilization = numerical boundary'
-    DO equation = equation_n,equation_nn
-       WRITE(6,'(A)') '    '//TRIM(balance_equation_names(equation))//' ['// &
-            &TRIM(balance_rate_units(equation))//']'
-       CALL print_discrete_aggregate(balances(equation))
-       CALL print_equation_boundary_components(this,equation)
-    ENDDO
-    CALL print_discrete_total('n+n_n','particles/s',total_particles)
-    CALL print_discrete_total('nEi+nEe','W',total_energy)
-  END SUBROUTINE print_discrete_equations
-
-  SUBROUTINE print_discrete_aggregate(balance)
-    TYPE(physical_balance_type), INTENT(IN) :: balance
-
-    WRITE(6,'(A,6(1X,A13))') '              ', &
-         &'temporal','volume','equation bnd.','tau stabil.','numerical', &
-         &'residual'
-    WRITE(6,'(A,6(1X,ES13.2))') '              ',balance%temporal, &
-         &balance%volume,balance%equation_boundary_inward, &
-         &balance%tau_stabilization_inward,balance%numerical_boundary_inward, &
-         &balance%discrete_residual
-  END SUBROUTINE print_discrete_aggregate
-
-  SUBROUTINE print_discrete_total(name, units, balance)
-    CHARACTER(LEN=*), INTENT(IN) :: name, units
-    TYPE(physical_balance_type), INTENT(IN) :: balance
-
-    WRITE(6,'(A)') '    '//TRIM(name)//' ['//TRIM(units)//'] (derived)'
-    CALL print_discrete_aggregate(balance)
-  END SUBROUTINE print_discrete_total
-
-  SUBROUTINE print_independent_bc_checks(this)
-    CLASS(balance_diagnostics_type), INTENT(IN) :: this
-    INTEGER :: equation
-
-    WRITE(6,'(A)') '  Independent boundary-condition checks'
-    DO equation = equation_n,equation_nn
-       CALL print_bc_components(this,equation)
-    ENDDO
-    CALL print_total_energy_bc_components(this)
-  END SUBROUTINE print_independent_bc_checks
 
   SUBROUTINE print_volume_components(this, equation)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
@@ -367,6 +281,72 @@ CONTAINS
     END SELECT
   END SUBROUTINE print_physical_boundary_components
 
+  SUBROUTINE print_particle_exchange(this)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+
+    CALL print_component_pairs('exchange', &
+         [CHARACTER(LEN=24) :: 'charge exchange rate'], &
+         (/term_value(this,equation_n,term_charge_exchange)/))
+  END SUBROUTINE print_particle_exchange
+
+  SUBROUTINE print_physical_total(name, units, balance)
+    CHARACTER(LEN=*), INTENT(IN) :: name, units
+    TYPE(physical_balance_type), INTENT(IN) :: balance
+
+    WRITE(6,'(A)') '    '//TRIM(name)//' ['//TRIM(units)//'] (derived)'
+    CALL print_physical_aggregate(balance)
+  END SUBROUTINE print_physical_total
+
+  SUBROUTINE print_energy_exchange_cancellation(this)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    REAL*8 :: ion, electron
+
+    WRITE(6,'(A)') '    Internal energy exchange [W]'
+    WRITE(6,'(A,3(1X,A13))') '              ','ion','electron','sum'
+    ion = term_value(this,equation_nEi,term_parallel_electric_work)
+    electron = term_value(this,equation_nEe,term_parallel_electric_work)
+    WRITE(6,'(A18,3(1X,ES13.2))') 'parallel electric',ion,electron,ion+electron
+    ion = term_value(this,equation_nEi,term_temperature_exchange)
+    electron = term_value(this,equation_nEe,term_temperature_exchange)
+    WRITE(6,'(A18,3(1X,ES13.2))') 'temperature',ion,electron,ion+electron
+  END SUBROUTINE print_energy_exchange_cancellation
+
+  ! Detailed discrete balances.
+
+  SUBROUTINE print_discrete_equations(this, balances, total_particles, &
+       &total_energy)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    TYPE(physical_balance_type), INTENT(IN) :: &
+         &balances(balance_equation_count), total_particles, total_energy
+    INTEGER :: equation
+
+    WRITE(6,'(A)') '  Discrete equations'
+    WRITE(6,'(A)') &
+         &'    volume + numerical boundary - temporal = residual'
+    WRITE(6,'(A)') &
+         &'    equation boundary + tau stabilization = numerical boundary'
+    DO equation = equation_n,equation_nn
+       WRITE(6,'(A)') '    '//TRIM(balance_equation_names(equation))//' ['// &
+            &TRIM(balance_rate_units(equation))//']'
+       CALL print_discrete_aggregate(balances(equation))
+       CALL print_equation_boundary_components(this,equation)
+    ENDDO
+    CALL print_discrete_total('n+n_n','particles/s',total_particles)
+    CALL print_discrete_total('nEi+nEe','W',total_energy)
+  END SUBROUTINE print_discrete_equations
+
+  SUBROUTINE print_discrete_aggregate(balance)
+    TYPE(physical_balance_type), INTENT(IN) :: balance
+
+    WRITE(6,'(A,6(1X,A13))') '              ', &
+         &'temporal','volume','equation bnd.','tau stabil.','numerical', &
+         &'residual'
+    WRITE(6,'(A,6(1X,ES13.2))') '              ',balance%temporal, &
+         &balance%volume,balance%equation_boundary_inward, &
+         &balance%tau_stabilization_inward,balance%numerical_boundary_inward, &
+         &balance%discrete_residual
+  END SUBROUTINE print_discrete_aggregate
+
   SUBROUTINE print_equation_boundary_components(this, equation)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     INTEGER, INTENT(IN) :: equation
@@ -411,28 +391,26 @@ CONTAINS
     END SELECT
   END SUBROUTINE print_equation_boundary_components
 
-  SUBROUTINE print_transport_boundary_components(this, equation, energy, title)
-    CLASS(balance_diagnostics_type), INTENT(IN) :: this
-    INTEGER, INTENT(IN) :: equation
-    LOGICAL, INTENT(IN) :: energy
-    CHARACTER(LEN=*), INTENT(IN) :: title
+  SUBROUTINE print_discrete_total(name, units, balance)
+    CHARACTER(LEN=*), INTENT(IN) :: name, units
+    TYPE(physical_balance_type), INTENT(IN) :: balance
 
-    IF (energy) THEN
-       CALL print_component_pairs(title, &
-            [CHARACTER(LEN=24) :: 'convection','diffusion', &
-            &'parallel conduction','pinch'], &
-            (/term_value(this,equation,term_convection), &
-            &term_value(this,equation,term_diffusion), &
-            &term_value(this,equation,term_parallel_conduction), &
-            &term_value(this,equation,term_pinch)/))
-    ELSE
-       CALL print_component_pairs(title, &
-            [CHARACTER(LEN=24) :: 'convection','diffusion','pinch'], &
-            (/term_value(this,equation,term_convection), &
-            &term_value(this,equation,term_diffusion), &
-            &term_value(this,equation,term_pinch)/))
-    ENDIF
-  END SUBROUTINE print_transport_boundary_components
+    WRITE(6,'(A)') '    '//TRIM(name)//' ['//TRIM(units)//'] (derived)'
+    CALL print_discrete_aggregate(balance)
+  END SUBROUTINE print_discrete_total
+
+  ! Independent boundary-condition checks.
+
+  SUBROUTINE print_independent_bc_checks(this)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER :: equation
+
+    WRITE(6,'(A)') '  Independent boundary-condition checks'
+    DO equation = equation_n,equation_nn
+       CALL print_bc_components(this,equation)
+    ENDDO
+    CALL print_total_energy_bc_components(this)
+  END SUBROUTINE print_independent_bc_checks
 
   SUBROUTINE print_bc_components(this, equation)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
@@ -509,41 +487,6 @@ CONTAINS
          &equation_bc_residual_value(this,equation)/))
   END SUBROUTINE print_energy_bc_terms
 
-  SUBROUTINE print_total_energy_bc_components(this)
-    CLASS(balance_diagnostics_type), INTENT(IN) :: this
-
-    WRITE(6,'(A)') '    nEi+nEe [W] (derived)'
-    WRITE(6,'(A)') '      perpendicular diffusion + split diffusion + '// &
-         &'conduction + '// &
-         &'sheath minus bulk + tau stabilization = residual'
-    CALL print_component_pairs('terms', &
-         [CHARACTER(LEN=24) :: 'perpendicular diffusion','split diffusion', &
-         &'parallel conduction','sheath minus bulk','tau stabilization', &
-         &'residual'], &
-         (/total_energy_bc_value(this,term_diffusion), &
-         &total_energy_bc_value(this,term_split_diffusion), &
-         &total_energy_bc_value(this,term_parallel_conduction), &
-         &total_energy_bc_value(this,term_sheath_minus_bulk), &
-         &total_energy_bc_value(this,term_tau_stabilization_inward), &
-         &total_energy_bc_residual(this)/))
-  END SUBROUTINE print_total_energy_bc_components
-
-  REAL*8 FUNCTION equation_bc_residual_value(this, equation) RESULT(value)
-    CLASS(balance_diagnostics_type), INTENT(IN) :: this
-    INTEGER, INTENT(IN) :: equation
-    LOGICAL :: available
-
-    value = equation_bc_residual(this,equation,available)
-  END FUNCTION equation_bc_residual_value
-
-  REAL*8 FUNCTION total_energy_bc_value(this, term) RESULT(value)
-    CLASS(balance_diagnostics_type), INTENT(IN) :: this
-    INTEGER, INTENT(IN) :: term
-
-    value = section_value(this,equation_nEi,term,section_bc)+ &
-         &section_value(this,equation_nEe,term,section_bc)
-  END FUNCTION total_energy_bc_value
-
   SUBROUTINE print_neutral_bc_flux_components(this)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
 
@@ -572,13 +515,82 @@ CONTAINS
 #endif
   END SUBROUTINE print_neutral_bc_flux_components
 
-  SUBROUTINE print_particle_exchange(this)
+  REAL*8 FUNCTION equation_bc_residual_value(this, equation) RESULT(value)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: equation
+    LOGICAL :: available
+
+    value = equation_bc_residual(this,equation,available)
+  END FUNCTION equation_bc_residual_value
+
+  SUBROUTINE print_total_energy_bc_components(this)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
 
-    CALL print_component_pairs('exchange', &
-         [CHARACTER(LEN=24) :: 'charge exchange rate'], &
-         (/term_value(this,equation_n,term_charge_exchange)/))
-  END SUBROUTINE print_particle_exchange
+    WRITE(6,'(A)') '    nEi+nEe [W] (derived)'
+    WRITE(6,'(A)') '      perpendicular diffusion + split diffusion + '// &
+         &'conduction + '// &
+         &'sheath minus bulk + tau stabilization = residual'
+    CALL print_component_pairs('terms', &
+         [CHARACTER(LEN=24) :: 'perpendicular diffusion','split diffusion', &
+         &'parallel conduction','sheath minus bulk','tau stabilization', &
+         &'residual'], &
+         (/total_energy_bc_value(this,term_diffusion), &
+         &total_energy_bc_value(this,term_split_diffusion), &
+         &total_energy_bc_value(this,term_parallel_conduction), &
+         &total_energy_bc_value(this,term_sheath_minus_bulk), &
+         &total_energy_bc_value(this,term_tau_stabilization_inward), &
+         &total_energy_bc_residual(this)/))
+  END SUBROUTINE print_total_energy_bc_components
+
+  REAL*8 FUNCTION total_energy_bc_value(this, term) RESULT(value)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: term
+
+    value = section_value(this,equation_nEi,term,section_bc)+ &
+         &section_value(this,equation_nEe,term,section_bc)
+  END FUNCTION total_energy_bc_value
+
+  ! Shared presentation helpers.
+
+  SUBROUTINE print_content(balances, total_particles, total_energy)
+    TYPE(physical_balance_type), INTENT(IN) :: &
+         &balances(balance_equation_count), total_particles, total_energy
+
+    WRITE(6,'(A)') '  Content'
+    WRITE(6,'(A,3(2X,A,1X,ES11.2))') '    particles [particles]', &
+         &'n',balances(equation_n)%content, &
+         &'n_n',balances(equation_nn)%content, &
+         &'n+n_n',total_particles%content
+    WRITE(6,'(A,2X,A,1X,ES11.2)') '    momentum [kg m s^-1]', &
+         &'nu',balances(equation_nu)%content
+    WRITE(6,'(A,3(2X,A,1X,ES11.2))') '    plasma energy [J]', &
+         &'nEi',balances(equation_nEi)%content, &
+         &'nEe',balances(equation_nEe)%content, &
+         &'nEi+nEe',total_energy%content
+  END SUBROUTINE print_content
+
+  SUBROUTINE print_transport_boundary_components(this, equation, energy, title)
+    CLASS(balance_diagnostics_type), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: equation
+    LOGICAL, INTENT(IN) :: energy
+    CHARACTER(LEN=*), INTENT(IN) :: title
+
+    IF (energy) THEN
+       CALL print_component_pairs(title, &
+            [CHARACTER(LEN=24) :: 'convection','diffusion', &
+            &'parallel conduction','pinch'], &
+            (/term_value(this,equation,term_convection), &
+            &term_value(this,equation,term_diffusion), &
+            &term_value(this,equation,term_parallel_conduction), &
+            &term_value(this,equation,term_pinch)/))
+    ELSE
+       CALL print_component_pairs(title, &
+            [CHARACTER(LEN=24) :: 'convection','diffusion','pinch'], &
+            (/term_value(this,equation,term_convection), &
+            &term_value(this,equation,term_diffusion), &
+            &term_value(this,equation,term_pinch)/))
+    ENDIF
+  END SUBROUTINE print_transport_boundary_components
 
   SUBROUTINE print_component_pairs(title, labels, values)
     CHARACTER(LEN=*), INTENT(IN) :: title

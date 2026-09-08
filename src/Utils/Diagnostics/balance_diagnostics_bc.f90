@@ -4,21 +4,21 @@ SUBMODULE (balance_diagnostics) balance_diagnostics_bc
 CONTAINS
 
   MODULE SUBROUTINE accumulate_bc(this, integration_weight, &
-       &density_equation, neutral_equation, trace_state, exterior_state, &
+       &neutral_equation, trace_state, exterior_state, &
        &gradient, normal, magnetic_direction, magnetic_normal, tau, &
-       &diffusion_iso, diffusion_ani, pinch_matrix, flux_jacobian, &
+       &diffusion_iso, diffusion_ani, pinch_matrix, &
        &recycling_coefficient, puff_source, pump_coefficient, &
        &plasma, &
        &neutral_perpendicular_diffusion, neutral_pressure_vector, &
        &neutral_momentum_equation)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
     REAL*8, INTENT(IN) :: integration_weight
-    INTEGER, INTENT(IN) :: density_equation, neutral_equation
+    INTEGER, INTENT(IN) :: neutral_equation
     REAL*8, INTENT(IN) :: trace_state(:), exterior_state(:)
     REAL*8, INTENT(IN) :: gradient(:,:), normal(:), magnetic_direction(:)
     REAL*8, INTENT(IN) :: magnetic_normal, tau(:,:)
     REAL*8, INTENT(IN) :: diffusion_iso(:,:), diffusion_ani(:,:)
-    REAL*8, INTENT(IN) :: pinch_matrix(:,:), flux_jacobian(:,:)
+    REAL*8, INTENT(IN) :: pinch_matrix(:,:)
     REAL*8, INTENT(IN) :: recycling_coefficient, puff_source
     REAL*8, INTENT(IN) :: pump_coefficient
     TYPE(balance_plasma_bc_type), INTENT(IN) :: plasma
@@ -27,29 +27,28 @@ CONTAINS
     INTEGER, INTENT(IN), OPTIONAL :: neutral_momentum_equation
     REAL*8 :: density_diffusion
 
-    density_diffusion = perpendicular_diffusive_flux(density_equation, &
+    density_diffusion = perpendicular_diffusive_flux(equation_n, &
          &gradient,normal, &
          &magnetic_direction,magnetic_normal,diffusion_iso,diffusion_ani)
 
-    CALL accumulate_plasma_bc(this,density_equation,trace_state,exterior_state, &
+    CALL accumulate_plasma_bc(this,trace_state,exterior_state, &
          &gradient,normal,magnetic_direction,magnetic_normal,tau, &
          &diffusion_iso,diffusion_ani,pinch_matrix,density_diffusion,plasma, &
          &integration_weight)
-    CALL accumulate_neutral_bc(this,density_equation,neutral_equation, &
+    CALL accumulate_neutral_bc(this,neutral_equation, &
          &trace_state,exterior_state,gradient,normal,magnetic_direction, &
          &magnetic_normal, &
-         &tau,diffusion_iso,diffusion_ani,pinch_matrix,flux_jacobian, &
+         &tau,diffusion_iso,diffusion_ani,pinch_matrix, &
          &density_diffusion,recycling_coefficient,puff_source,pump_coefficient, &
          &neutral_perpendicular_diffusion,integration_weight, &
          &neutral_pressure_vector,neutral_momentum_equation)
   END SUBROUTINE accumulate_bc
 
-  SUBROUTINE accumulate_plasma_bc(this, density_equation, state, &
+  SUBROUTINE accumulate_plasma_bc(this, state, &
        &exterior_state, gradient, normal, magnetic_direction, magnetic_normal, &
        &tau, diffusion_iso, diffusion_ani, pinch_matrix, density_diffusion, &
        &plasma, integration_weight)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    INTEGER, INTENT(IN) :: density_equation
     REAL*8, INTENT(IN) :: state(:), exterior_state(:), gradient(:,:)
     REAL*8, INTENT(IN) :: normal(:), magnetic_direction(:), magnetic_normal
     REAL*8, INTENT(IN) :: tau(:,:), diffusion_iso(:,:), diffusion_ani(:,:)
@@ -61,9 +60,9 @@ CONTAINS
     target = exterior_state
     target(equation_nu) = plasma%momentum_target
 
-    CALL accumulate_plasma_physical_fluxes(this,density_equation,state, &
+    CALL accumulate_plasma_physical_fluxes(this,state, &
          &normal,magnetic_normal,pinch_matrix,plasma,integration_weight)
-    CALL accumulate_density_closure(this,density_equation,state,target,tau, &
+    CALL accumulate_density_closure(this,state,target,tau, &
          &density_diffusion,integration_weight*this%rate_scale(equation_n))
     CALL accumulate_momentum_closure(this,state,target,gradient,normal, &
          &magnetic_direction,magnetic_normal,tau,diffusion_iso,diffusion_ani, &
@@ -84,41 +83,10 @@ CONTAINS
          &integration_weight*this%rate_scale(equation_nEe))
   END SUBROUTINE accumulate_plasma_bc
 
-  SUBROUTINE accumulate_neutral_bc(this, density_equation, neutral_equation, &
-       &state, exterior_state, gradient, normal, magnetic_direction, &
-       &magnetic_normal, tau, diffusion_iso, diffusion_ani, pinch_matrix, &
-       &flux_jacobian, density_diffusion, recycling_coefficient, puff_source, &
-       &pump_coefficient, perpendicular_enabled, integration_weight, &
-       &pressure_vector, neutral_momentum_equation)
-    CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    INTEGER, INTENT(IN) :: density_equation, neutral_equation
-    REAL*8, INTENT(IN) :: state(:), exterior_state(:), gradient(:,:)
-    REAL*8, INTENT(IN) :: normal(:), magnetic_direction(:), magnetic_normal
-    REAL*8, INTENT(IN) :: tau(:,:), diffusion_iso(:,:), diffusion_ani(:,:)
-    REAL*8, INTENT(IN) :: pinch_matrix(:,:), flux_jacobian(:,:)
-    REAL*8, INTENT(IN) :: density_diffusion
-    REAL*8, INTENT(IN) :: recycling_coefficient, puff_source, pump_coefficient
-    LOGICAL, INTENT(IN) :: perpendicular_enabled
-    REAL*8, INTENT(IN) :: integration_weight
-    REAL*8, INTENT(IN), OPTIONAL :: pressure_vector(:)
-    INTEGER, INTENT(IN), OPTIONAL :: neutral_momentum_equation
-    REAL*8 :: coefficient
-
-    coefficient = integration_weight*this%rate_scale(equation_nn)
-    CALL accumulate_recycling_bc(this,density_equation,neutral_equation,state, &
-         &exterior_state,normal,magnetic_normal,pinch_matrix,density_diffusion, &
-         &recycling_coefficient,puff_source,pump_coefficient,coefficient)
-    CALL accumulate_neutral_transport_bc(this,neutral_equation,state, &
-         &exterior_state,gradient,normal,magnetic_direction,magnetic_normal, &
-         &tau,diffusion_iso,diffusion_ani,flux_jacobian,perpendicular_enabled, &
-         &coefficient,pressure_vector,neutral_momentum_equation)
-  END SUBROUTINE accumulate_neutral_bc
-
-  SUBROUTINE accumulate_plasma_physical_fluxes(this, density_equation, &
+  SUBROUTINE accumulate_plasma_physical_fluxes(this, &
        &state, normal, magnetic_normal, pinch_matrix, plasma, &
        &integration_weight)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    INTEGER, INTENT(IN) :: density_equation
     REAL*8, INTENT(IN) :: state(:), normal(:), magnetic_normal
     REAL*8, INTENT(IN) :: pinch_matrix(:,:)
     TYPE(balance_plasma_bc_type), INTENT(IN) :: plasma
@@ -131,8 +99,8 @@ CONTAINS
     ion_scale = integration_weight*this%rate_scale(equation_nEi)
     electron_scale = integration_weight*this%rate_scale(equation_nEe)
     density_parallel = -state(equation_nu)*magnetic_normal*density_scale
-    density_pinch = -state(density_equation)* &
-         &DOT_PRODUCT(pinch_matrix(density_equation,:),normal)*density_scale
+    density_pinch = -state(equation_n)* &
+         &DOT_PRODUCT(pinch_matrix(equation_n,:),normal)*density_scale
     ion_pinch = -state(equation_nEi)* &
          &DOT_PRODUCT(pinch_matrix(equation_nEi,:),normal)*ion_scale
     electron_pinch = -state(equation_nEe)* &
@@ -173,6 +141,19 @@ CONTAINS
     flux = 2.d0/3.d0*sheath_coefficient*state(equation_nu)* &
          &state(equation_nEe)/state(equation_n)
   END FUNCTION electron_sheath_flux
+
+  SUBROUTINE accumulate_density_closure(this, state, exterior_state, &
+       &tau, diffusion, coefficient)
+    CLASS(balance_accumulator_type), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: state(:), exterior_state(:), tau(:,:)
+    REAL*8, INTENT(IN) :: diffusion, coefficient
+    REAL*8 :: stabilization
+
+    stabilization = DOT_PRODUCT(tau(equation_n,:),state-exterior_state)
+    CALL add_bc_value(this,equation_n,term_diffusion,diffusion*coefficient)
+    CALL add_bc_value(this,equation_n,term_tau_stabilization_inward, &
+         &stabilization*coefficient)
+  END SUBROUTINE accumulate_density_closure
 
   SUBROUTINE accumulate_momentum_closure(this, state, target, gradient, normal, &
        &magnetic_direction, magnetic_normal, tau, diffusion_iso, &
@@ -243,26 +224,42 @@ CONTAINS
     END SELECT
   END FUNCTION sheath_minus_bulk_flux
 
-  SUBROUTINE accumulate_density_closure(this, equation, state, exterior_state, &
-       &tau, diffusion, coefficient)
+  SUBROUTINE accumulate_neutral_bc(this, neutral_equation, &
+       &state, exterior_state, gradient, normal, magnetic_direction, &
+       &magnetic_normal, tau, diffusion_iso, diffusion_ani, pinch_matrix, &
+       &density_diffusion, recycling_coefficient, puff_source, &
+       &pump_coefficient, perpendicular_enabled, integration_weight, &
+       &pressure_vector, neutral_momentum_equation)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    INTEGER, INTENT(IN) :: equation
-    REAL*8, INTENT(IN) :: state(:), exterior_state(:), tau(:,:)
-    REAL*8, INTENT(IN) :: diffusion, coefficient
-    REAL*8 :: stabilization
+    INTEGER, INTENT(IN) :: neutral_equation
+    REAL*8, INTENT(IN) :: state(:), exterior_state(:), gradient(:,:)
+    REAL*8, INTENT(IN) :: normal(:), magnetic_direction(:), magnetic_normal
+    REAL*8, INTENT(IN) :: tau(:,:), diffusion_iso(:,:), diffusion_ani(:,:)
+    REAL*8, INTENT(IN) :: pinch_matrix(:,:)
+    REAL*8, INTENT(IN) :: density_diffusion
+    REAL*8, INTENT(IN) :: recycling_coefficient, puff_source, pump_coefficient
+    LOGICAL, INTENT(IN) :: perpendicular_enabled
+    REAL*8, INTENT(IN) :: integration_weight
+    REAL*8, INTENT(IN), OPTIONAL :: pressure_vector(:)
+    INTEGER, INTENT(IN), OPTIONAL :: neutral_momentum_equation
+    REAL*8 :: coefficient
 
-    stabilization = DOT_PRODUCT(tau(equation,:),state-exterior_state)
-    CALL add_bc_value(this,equation_n,term_diffusion,diffusion*coefficient)
-    CALL add_bc_value(this,equation_n,term_tau_stabilization_inward, &
-         &stabilization*coefficient)
-  END SUBROUTINE accumulate_density_closure
+    coefficient = integration_weight*this%rate_scale(equation_nn)
+    CALL accumulate_recycling_bc(this,neutral_equation,state, &
+         &exterior_state,normal,magnetic_normal,pinch_matrix,density_diffusion, &
+         &recycling_coefficient,puff_source,pump_coefficient,coefficient)
+    CALL accumulate_neutral_transport_bc(this,neutral_equation,state, &
+         &exterior_state,gradient,normal,magnetic_direction,magnetic_normal, &
+         &tau,diffusion_iso,diffusion_ani,perpendicular_enabled, &
+         &coefficient,pressure_vector,neutral_momentum_equation)
+  END SUBROUTINE accumulate_neutral_bc
 
-  SUBROUTINE accumulate_recycling_bc(this, density_equation, &
+  SUBROUTINE accumulate_recycling_bc(this, &
        &neutral_equation, state, exterior_state, normal, magnetic_normal, &
        &pinch_matrix, density_diffusion, recycling_coefficient, puff_source, &
        &pump_coefficient, coefficient)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
-    INTEGER, INTENT(IN) :: density_equation, neutral_equation
+    INTEGER, INTENT(IN) :: neutral_equation
     REAL*8, INTENT(IN) :: state(:), exterior_state(:), normal(:)
     REAL*8, INTENT(IN) :: magnetic_normal, pinch_matrix(:,:)
     REAL*8, INTENT(IN) :: density_diffusion
@@ -270,10 +267,10 @@ CONTAINS
     REAL*8, INTENT(IN) :: coefficient
     REAL*8 :: parallel, diffusion, pinch
 
-    parallel = recycling_coefficient*exterior_state(2)*magnetic_normal
+    parallel = recycling_coefficient*exterior_state(equation_nu)*magnetic_normal
     diffusion = -recycling_coefficient*density_diffusion
-    pinch = recycling_coefficient*exterior_state(density_equation)* &
-         &DOT_PRODUCT(pinch_matrix(density_equation,:),normal)
+    pinch = recycling_coefficient*exterior_state(equation_n)* &
+         &DOT_PRODUCT(pinch_matrix(equation_n,:),normal)
     CALL add_bc_value(this,equation_nn,term_recycling_parallel, &
          &parallel*coefficient)
     CALL add_bc_value(this,equation_nn,term_recycling_diffusion, &
@@ -289,7 +286,7 @@ CONTAINS
 
   SUBROUTINE accumulate_neutral_transport_bc(this, equation, state, &
        &exterior_state, gradient, normal, magnetic_direction, magnetic_normal, &
-       &tau, diffusion_iso, diffusion_ani, flux_jacobian, &
+       &tau, diffusion_iso, diffusion_ani, &
        &perpendicular_enabled, coefficient, pressure_vector, &
        &neutral_momentum_equation)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
@@ -297,7 +294,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: state(:), exterior_state(:), gradient(:,:)
     REAL*8, INTENT(IN) :: normal(:), magnetic_direction(:), magnetic_normal
     REAL*8, INTENT(IN) :: tau(:,:), diffusion_iso(:,:), diffusion_ani(:,:)
-    REAL*8, INTENT(IN) :: flux_jacobian(:,:), coefficient
+    REAL*8, INTENT(IN) :: coefficient
     LOGICAL, INTENT(IN) :: perpendicular_enabled
     REAL*8, INTENT(IN), OPTIONAL :: pressure_vector(:)
     INTEGER, INTENT(IN), OPTIONAL :: neutral_momentum_equation
@@ -308,7 +305,8 @@ CONTAINS
     pressure = optional_neutral_pressure_flux(gradient,normal, &
          &magnetic_direction, &
          &magnetic_normal,perpendicular_enabled,pressure_vector)
-    convection = -DOT_PRODUCT(flux_jacobian(equation,:),state)*magnetic_normal
+    ! The default Bohm neutral flux has only the optional NeutralGamma term.
+    convection = 0.d0
     IF (PRESENT(neutral_momentum_equation)) THEN
        IF (neutral_momentum_equation > 0) convection = convection- &
             &state(neutral_momentum_equation)*magnetic_normal

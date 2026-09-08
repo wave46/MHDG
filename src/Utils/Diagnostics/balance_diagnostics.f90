@@ -269,21 +269,21 @@ MODULE balance_diagnostics
      END SUBROUTINE accumulate_face
 
      MODULE SUBROUTINE accumulate_bc(this, integration_weight, &
-          &density_equation, neutral_equation, trace_state, exterior_state, &
+          &neutral_equation, trace_state, exterior_state, &
           &gradient, normal, magnetic_direction, magnetic_normal, tau, &
-          &diffusion_iso, diffusion_ani, pinch_matrix, flux_jacobian, &
+          &diffusion_iso, diffusion_ani, pinch_matrix, &
           &recycling_coefficient, puff_source, pump_coefficient, &
           &plasma, &
           &neutral_perpendicular_diffusion, neutral_pressure_vector, &
           &neutral_momentum_equation)
        CLASS(balance_accumulator_type), INTENT(INOUT) :: this
        REAL*8, INTENT(IN) :: integration_weight
-       INTEGER, INTENT(IN) :: density_equation, neutral_equation
+       INTEGER, INTENT(IN) :: neutral_equation
        REAL*8, INTENT(IN) :: trace_state(:), exterior_state(:)
        REAL*8, INTENT(IN) :: gradient(:,:), normal(:), magnetic_direction(:)
        REAL*8, INTENT(IN) :: magnetic_normal, tau(:,:)
        REAL*8, INTENT(IN) :: diffusion_iso(:,:), diffusion_ani(:,:)
-       REAL*8, INTENT(IN) :: pinch_matrix(:,:), flux_jacobian(:,:)
+       REAL*8, INTENT(IN) :: pinch_matrix(:,:)
        REAL*8, INTENT(IN) :: recycling_coefficient, puff_source
        REAL*8, INTENT(IN) :: pump_coefficient
        TYPE(balance_plasma_bc_type), INTENT(IN) :: plasma
