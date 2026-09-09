@@ -16,7 +16,7 @@ sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 import golden_update  # noqa: E402
 from support.errors import BundleError  # noqa: E402
-from tests.fixtures.harness import create_harness, run_command  # noqa: E402
+from tests.fixtures.harness import create_harness  # noqa: E402
 
 
 class GoldenUpdateTests(unittest.TestCase):
@@ -236,9 +236,11 @@ class GoldenUpdateTests(unittest.TestCase):
         self.assertEqual(self._run(), 0)
         self.assertEqual(self.publish_campaign_bundle.call_count, 1)
         self.validate_published.assert_called_once()
-        completed = run_command("golden", "status", str(self.workspace))
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("cold_matrix: completed", completed.stdout)
+        output = StringIO()
+        with redirect_stdout(output):
+            result = golden_update.main(["status", str(self.workspace)])
+        self.assertEqual(result, 0)
+        self.assertIn("cold_matrix: completed", output.getvalue())
 
     def test_partial_warm_update_warns_and_preserves_other_components(self) -> None:
         self.assertEqual(self._run("--only", "warm"), 0)

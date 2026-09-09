@@ -26,6 +26,26 @@ accepted suite results   -> golden bundle
 
 The routine case is `legacy_case`.
 
+The Python package is the public entry point; the shell dispatcher has been
+removed. During migration, `check` still defaults to limited `warm`, and settings
+still use the existing `.env` format. Machine settings/doctor come next; the
+routine/full profiles and bundle readiness follow at their planned checkpoints.
+Golden campaigns and detailed diagnostics temporarily remain standalone tools;
+the new CLI does not expose the campaign recovery/publication state machine.
+
+```bash
+python -m regression_tests --help
+python -m regression_tests list cases
+python -m regression_tests list workflows diverted_case
+python -m regression_tests list suites
+python -m regression_tests list layouts
+```
+
+Catalogs are discovered inside the package; their paths are not CLI options.
+Commands return 0 for success, 1 for failed checks/runtime input errors, 2 for
+invalid command usage, and 130 for interruption. Solver completion from `run`
+is distinct from a passing scientific comparison from `check`.
+
 ## First-time setup
 
 Run commands from the repository root. Install the Python dependencies:
@@ -34,8 +54,8 @@ Run commands from the repository root. Install the Python dependencies:
 python -m pip install -r regression_tests/requirements.txt
 ```
 
-Adaptive comparisons also need `hdg_postprocess`. Set
-`PYTHON=/path/to/python` if the required environment is not `python3`.
+Adaptive comparisons also need `hdg_postprocess`. Activate that Python environment
+or invoke its interpreter directly instead of `python`.
 
 Create the ignored local settings file:
 
@@ -50,13 +70,12 @@ only needed for prebuilt runs; `--build` generates them automatically.
 Validate the configured bundle and run the smallest accepted-reference check:
 
 ```bash
-regression_tests/regression.sh bundle validate \
-  --settings regression_tests/golden.local.env
+python -m regression_tests bundle validate /path/to/golden_bundle
 
-regression_tests/regression.sh suite check
+python -m regression_tests check
 ```
 
-`suite check` defaults to the `warm` suite and
+`check` defaults to the `warm` suite and
 `regression_tests/golden.local.env`. Override the file with `--settings FILE`
 or `MHDG_REGRESSION_GOLDEN_SETTINGS`. It must point to a golden-class bundle.
 Use `--diagnostics off|summary|equations|detailed` to run the same suite with
@@ -173,34 +192,34 @@ integration run. This is not part of the current PR06 harness changes.
 
 ```bash
 # Existing executables; warm suite by default.
-regression_tests/regression.sh suite check
+python -m regression_tests check
 
 # Build clean serial and MPI executables first.
-regression_tests/regression.sh suite check --build --build-jobs 8
+python -m regression_tests check --build --build-jobs 8
 
 # Canonical fixed and adaptive cold workflows.
-regression_tests/regression.sh suite check cold --build --build-jobs 8
+python -m regression_tests check cold --build --build-jobs 8
 
 # Five independent PR06 neutral-feature goldens with a private setup.
 MHDG_REGRESSION_GOLDEN_SETTINGS=/private/path/pr06-neutral-features.local.env \
-  regression_tests/regression.sh suite check neutral_features_warm
+  python -m regression_tests check neutral_features_warm
 ```
 
 ### Run candidate or race evidence
 
-`suite run` accepts candidate or golden bundles and requires explicit settings:
+`check --allow-candidate` accepts candidate or golden bundles:
 
 ```bash
 # Direct serial_omp1 versus serial_omp16 race comparison; no golden output.
-regression_tests/regression.sh suite run race \
+python -m regression_tests check --allow-candidate race \
   --settings /private/path/settings.env
 
 # Five PR06 neutral variants across all six pairs of the four tracked layouts.
-regression_tests/regression.sh suite run neutral_feature_race_matrix \
+python -m regression_tests check --allow-candidate neutral_feature_race_matrix \
   --settings /private/path/pr06-neutral-features.local.env
 
 # Save an expensive matrix before comparison or acceptance.
-regression_tests/regression.sh suite run cold_matrix \
+python -m regression_tests check --allow-candidate cold_matrix \
   --settings /private/path/settings.env \
   --run-only --run-id overnight-01
 ```
@@ -208,7 +227,7 @@ regression_tests/regression.sh suite run cold_matrix \
 Resume an interrupted matrix with the same suite, settings, and run ID:
 
 ```bash
-regression_tests/regression.sh suite run cold_matrix \
+python -m regression_tests check --allow-candidate cold_matrix \
   --settings /private/path/settings.env \
   --run-only --run-id overnight-01 --resume
 ```
@@ -222,7 +241,7 @@ Run the opt-in balance suite in the background with the PR06 neutral-feature
 bundle and the existing MPI/OpenMP executable:
 
 ```bash
-nohup regression_tests/regression.sh suite run balance_diagnostics_cold \
+nohup python -m regression_tests check --allow-candidate balance_diagnostics_cold \
   --settings regression_tests/pr06-neutral-features.local.env \
   --run-only --run-id pr07-balance-overnight-01 \
   > pr07-balance-overnight-01.log 2>&1 &
@@ -235,7 +254,7 @@ remain diagnostics-off; only the two diagnostic workflow variants request
 ### Build reusable executables
 
 ```bash
-regression_tests/regression.sh build \
+python -m regression_tests build \
   --settings /private/path/settings.env --jobs 8
 ```
 
@@ -248,14 +267,14 @@ toolchain versions, environment checksum, and executable checksums.
 Preparation validates and renders an isolated run but does not launch MHDG:
 
 ```bash
-regression_tests/regression.sh prepare legacy_case cold_step_adaptive \
+python -m regression_tests prepare legacy_case cold_step_adaptive \
   --layout serial_omp16 --settings /private/path/settings.env
 ```
 
-Execute one or more workflows directly when debugging:
+Execute one workflow directly when debugging:
 
 ```bash
-regression_tests/regression.sh run legacy_case cold_fixed cold_adaptive \
+python -m regression_tests run legacy_case cold_fixed \
   --layout mpi4_omp4 --run-id investigation-01 \
   --settings /private/path/settings.env
 ```
@@ -268,10 +287,10 @@ Neither command below launches MHDG:
 
 ```bash
 # One completed run; policy comes from run_plan.json.
-regression_tests/regression.sh compare /path/to/completed/run
+python -m regression_tests compare /path/to/completed/run
 
 # Every same-layout golden check and declared layout pair in a suite.
-regression_tests/regression.sh suite compare \
+python -m regression_tests compare --suite \
   /path/to/suites/cold_matrix/overnight-01/suite_summary.json
 ```
 
@@ -279,14 +298,14 @@ For a short warm solve with detailed diagnostics and the ordinary golden
 comparison, run:
 
 ```bash
-regression_tests/regression.sh suite check warm --diagnostics detailed \
+python -m regression_tests check warm --diagnostics detailed \
   --build --run-id warm-balance-01
 ```
 
 Then validate its HDF5 and terminal diagnostics without launching MHDG again:
 
 ```bash
-regression_tests/regression.sh diagnostics check \
+python regression_tests/tools/check_balance_diagnostics.py \
   /path/to/suites/warm/warm-balance-01/suite_summary.json
 ```
 
@@ -299,7 +318,7 @@ The same checker validates every selected stage after the longer cold balance
 suite completes:
 
 ```bash
-regression_tests/regression.sh diagnostics check \
+python regression_tests/tools/check_balance_diagnostics.py \
   /path/to/balance_diagnostics_cold/RUN_ID/suite_summary.json
 ```
 
@@ -317,7 +336,7 @@ campaign and runs every producer and verification stage. It stops once, after
 the complete candidate is ready for review:
 
 ```bash
-regression_tests/regression.sh golden update legacy_case \
+python regression_tests/tools/golden_update.py update legacy_case \
   --settings /private/path/source.env --run-id refresh-01 \
   --output /private/path/new_golden_bundle --bundle-version 2.5.0
 ```
@@ -385,7 +404,7 @@ The case workflows explicitly render `compute_from_flux=true`, even if a
 prepared parameter file still contains false. Create the source candidate:
 
 ```bash
-regression_tests/regression.sh bundle create \
+python -m regression_tests bundle create \
   --case diverted_case \
   --source /private/path/prepared_diverted_case \
   --output /private/path/diverted_case_pr03_source \
@@ -396,7 +415,7 @@ Point a private settings file at that candidate and start the resumable cold
 overnight in `tmux` or another persistent shell:
 
 ```bash
-regression_tests/regression.sh golden update diverted_case \
+python regression_tests/tools/golden_update.py update diverted_case \
   --settings /private/path/diverted-source.env \
   --run-id pr03-diverted-refresh-01 \
   --workspace /private/path/campaigns/pr03-diverted-refresh-01 \
@@ -414,7 +433,7 @@ Inspect status and the reports below the workspace, then repeat the identical
 update command with `--accept campaign`:
 
 ```bash
-regression_tests/regression.sh golden status \
+python regression_tests/tools/golden_update.py status \
   /private/path/campaigns/pr03-diverted-refresh-01
 
 # Add this to the identical `golden update` command:
@@ -446,7 +465,7 @@ Refresh the limited golden with the same lifecycle but `legacy_case`, an
 accepted golden source settings file, and distinct run/workspace/output names:
 
 ```bash
-regression_tests/regression.sh golden update legacy_case \
+python regression_tests/tools/golden_update.py update legacy_case \
   --settings /private/path/limited-golden-source.env \
   --run-id pr03-limited-refresh-01 \
   --workspace /private/path/campaigns/pr03-limited-refresh-01 \
@@ -466,21 +485,6 @@ initialization probe, final mixture verification, and the validated 118-artifact
 `legacy_case_2.4.0-pr02-mixture-golden.1` bundle. Those results defined the
 campaign shape; they were not rerun or treated as resumable campaign state
 because the historical record does not retain every suite path and fingerprint.
-
-For a smaller manually reviewed promotion, create a golden bundle directly:
-
-```bash
-regression_tests/regression.sh bundle promote \
-  /path/to/cold_matrix/suite_summary.json \
-  /path/to/warm/suite_summary.json \
-  --settings /private/path/candidate-settings.env \
-  --output /private/path/new_golden_bundle \
-  --bundle-version 1.0.0-golden.1
-```
-
-Promotion validates and applies one or more accepted summaries in the given
-order, including their references and provenance. It never overwrites an
-output, and tests never promote automatically.
 
 ## Outputs and provenance
 
@@ -522,7 +526,7 @@ filenames declared in `regression_tests/cases/CASE.json`, then create a
 candidate bundle:
 
 ```bash
-regression_tests/regression.sh bundle create \
+python -m regression_tests bundle create \
   --case legacy_case \
   --source /private/path/prepared_legacy_case \
   --output /private/path/candidate_bundle
@@ -655,6 +659,7 @@ not launch MHDG or need physical data.
 
 | Changed area | Test group |
 | --- | --- |
+| Public package CLI smoke | `tests/test_cli.py` (pytest) |
 | Shared workflows and inheritance | `tests/test_catalog.py` (pytest) |
 | Generated layout relations and suite defaults | `tests/test_layouts.py` (pytest) |
 | Build | `tests.test_build` |
@@ -698,4 +703,4 @@ python -m pytest tests
 - Promotion inputs must all describe accepted results from the configured source
   bundle.
 
-Run `regression_tests/regression.sh help` for the command synopsis.
+Run `python -m regression_tests --help` for the command synopsis.

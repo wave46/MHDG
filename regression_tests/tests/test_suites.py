@@ -17,6 +17,7 @@ sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 from bundle.cases import load_case_definition  # noqa: E402
 from suite.pairs import compare_generated_meshes  # noqa: E402
 from suite.runner import run_suite  # noqa: E402
+from support.errors import BundleError  # noqa: E402
 from suite.verification import verify_suite  # noqa: E402
 from tests.fixtures.harness import create_harness, run_command  # noqa: E402
 from tests.fixtures.solutions import write_solution  # noqa: E402
@@ -98,23 +99,29 @@ class SuiteWorkflowTests(unittest.TestCase):
             shutil.copytree(REGRESSION_ROOT / directory, catalog / directory)
         shared = catalog / "workflows.json"
         shutil.copy2(REGRESSION_ROOT / "workflows.json", shared)
-        options = ("--run-only", "--cases", str(catalog / "cases"))
-        completed = self._run_suite("warm", run_id, *options)
-        self.assertEqual(completed.returncode, 0, completed.stderr)
 
+        def run(resume=False):
+            with redirect_stdout(StringIO()):
+                return run_suite(
+                    self.fixture.settings, "warm", catalog / "cases",
+                    REGRESSION_ROOT / "layouts.json", REGRESSION_ROOT / "suites.json",
+                    REGRESSION_ROOT / "tolerances.json", run_id,
+                    compare=False, resume=resume,
+                )
+
+        _, summary = run()
+        self.assertEqual(summary["status"], "passed")
         original = shared.read_text()
         workflows = json.loads(original)
         workflows["workflows"]["warm"]["parameter_overrides"]["nrp"] = 2
         shared.write_text(json.dumps(workflows))
-        changed = self._run_suite("warm", run_id, *options, "--resume")
-        self.assertEqual(changed.returncode, 1)
-        self.assertIn("workflow_catalog", changed.stderr)
+        with self.assertRaisesRegex(BundleError, "workflow_catalog"):
+            run(resume=True)
         shared.write_text(original)
 
         self.fixture.install_solver(FAILING_SOLVER, "parallel")
-        changed = self._run_suite("warm", run_id, *options, "--resume")
-        self.assertEqual(changed.returncode, 1)
-        self.assertIn("parallel_executable", changed.stderr)
+        with self.assertRaisesRegex(BundleError, "parallel_executable"):
+            run(resume=True)
 
         rebuilt = self._run_suite(
             "warm",
@@ -128,7 +135,6 @@ class SuiteWorkflowTests(unittest.TestCase):
 
     def test_suite_check_requires_golden_data_and_runs_warm_defaults(self) -> None:
         rejected = run_command(
-            "suite",
             "check",
             "--settings",
             str(self.fixture.settings),
@@ -138,7 +144,6 @@ class SuiteWorkflowTests(unittest.TestCase):
 
         self.fixture.set_bundle_class("golden")
         completed = run_command(
-            "suite",
             "check",
             environment={
                 "MHDG_REGRESSION_GOLDEN_SETTINGS": str(self.fixture.settings)
@@ -237,7 +242,7 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertIsNone(report["convergence"]["maximum"])
         self.assertTrue(report["convergence"]["passed"])
 
-        rechecked = run_command("suite", "compare", str(summary_path))
+        rechecked = run_command("compare", "--suite", str(summary_path))
         self.assertEqual(rechecked.returncode, 0, rechecked.stderr)
         self.assertIn("serial_omp1", rechecked.stdout)
         self.assertIn("serial_omp16", rechecked.stdout)
@@ -456,9 +461,9 @@ class SuiteWorkflowTests(unittest.TestCase):
 
     def _run_suite(self, suite: str, run_id: str, *arguments: str):
         return run_command(
-            "suite",
-            "run",
+            "check",
             suite,
+            "--allow-candidate",
             "--settings",
             str(self.fixture.settings),
             "--run-id",

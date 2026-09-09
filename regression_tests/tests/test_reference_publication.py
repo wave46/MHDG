@@ -22,7 +22,6 @@ from support.errors import BundleError  # noqa: E402
 from support.files import file_identity  # noqa: E402
 from references.mapped import collect_mapped_references  # noqa: E402
 from tests.fixtures.case_data import write_case_source  # noqa: E402
-from tests.fixtures.harness import run_command  # noqa: E402
 
 
 class ReferencePublicationTests(unittest.TestCase):
@@ -57,19 +56,10 @@ class ReferencePublicationTests(unittest.TestCase):
             "legacy_case_warm_reference"
         ]["path"]
 
-        completed = run_command(
-            "bundle",
-            "promote",
-            str(self.summary),
-            "--settings",
-            str(self.settings),
-            "--output",
-            str(self.output),
-            "--bundle-version",
-            "golden-1",
+        promote_bundle(
+            self.settings, [self.summary], self.output, "golden-1", REGRESSION_ROOT / "cases",
         )
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
         validate_bundle_root(self.output, REGRESSION_ROOT / "cases")
         manifest = _load_json(self.output / "manifest.json")
         reference = self.output / manifest["artifacts"][
@@ -118,20 +108,11 @@ class ReferencePublicationTests(unittest.TestCase):
     def test_publication_applies_multiple_summaries_in_order(self) -> None:
         matrix_summary = self._write_matrix_summary()
 
-        completed = run_command(
-            "bundle",
-            "promote",
-            str(matrix_summary),
-            str(self.summary),
-            "--settings",
-            str(self.settings),
-            "--output",
-            str(self.output),
-            "--bundle-version",
-            "composed-golden-1",
+        promote_bundle(
+            self.settings, [matrix_summary, self.summary], self.output,
+            "composed-golden-1", REGRESSION_ROOT / "cases",
         )
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
         validate_bundle_root(self.output, REGRESSION_ROOT / "cases")
         manifest = _load_json(self.output / "manifest.json")
         warm_reference = manifest["artifacts"][manifest["roles"]["warm_reference"]]

@@ -141,12 +141,12 @@ def run_command(
     environment: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [str(REGRESSION_ROOT / "regression.sh"), *arguments],
+        [sys.executable, "-B", "-m", "regression_tests", *arguments],
+        cwd=REGRESSION_ROOT.parent,
         check=False,
         capture_output=True,
         env={
             **os.environ,
-            "PYTHON": sys.executable,
             **(environment or {}),
         },
         text=True,
