@@ -76,6 +76,7 @@ def run_suite(
         suite["layouts"],
         {
             "case_definition": case_directory / f"{suite['case_id']}.json",
+            "workflow_catalog": case_directory.parent / "workflows.json",
             "layout_catalog": layouts_path,
             "suite_catalog": suites_path,
             "tolerance_catalog": tolerances_path,

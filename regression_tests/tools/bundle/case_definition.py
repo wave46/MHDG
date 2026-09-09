@@ -28,8 +28,10 @@ COMPARISON_KEYS = {
 def normalize_case_definition(
     case_id: str,
     declaration: dict[str, Any],
+    shared: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Derive machine-oriented fields from one readable case declaration."""
+    shared = shared or {}
     reference = declaration["reference"]
     return {
         "schema_version": declaration["schema_version"],
@@ -38,7 +40,11 @@ def normalize_case_definition(
         "reference_branch": reference["branch"],
         "reference_revision": reference["revision"],
         "bundle_files": _bundle_files(case_id, declaration.get("files", {})),
-        "workflows": _workflows(declaration["workflows"]),
+        "workflows": _workflows(
+            declaration["workflows"],
+            shared.get("workflows", {}),
+            shared.get("sequences", {}),
+        ),
     }
 
 
@@ -72,7 +78,18 @@ def _bundle_files(
 
 def _workflows(
     declarations: dict[str, dict[str, Any]],
+    shared: dict[str, dict[str, Any]],
+    sequences: dict[str, list[dict[str, Any]]],
 ) -> dict[str, dict[str, Any]]:
+    # Overlay case choices before resolving parents, so adaptive/feature
+    # workflows inherit this case's base inputs and stage adjustments.
+    available = {
+        **shared,
+        **{
+            name: _extend_workflow(shared.get(name, {}), changes)
+            for name, changes in declarations.items()
+        },
+    }
     resolved: dict[str, dict[str, Any]] = {}
     active: set[str] = set()
 
@@ -82,10 +99,10 @@ def _workflows(
         if workflow_id in active:
             raise BundleError(f"workflow inheritance cycle at {workflow_id}")
         active.add(workflow_id)
-        declaration = declarations[workflow_id]
+        declaration = available[workflow_id]
         parent_id = declaration.get("extends")
         if parent_id:
-            if parent_id not in declarations:
+            if parent_id not in available:
                 raise BundleError(
                     f"workflow {workflow_id} extends unknown workflow {parent_id}"
                 )
@@ -104,7 +121,7 @@ def _workflows(
         return merged
 
     return {
-        workflow_id: _normalize_workflow(resolve(workflow_id))
+        workflow_id: _normalize_workflow(resolve(workflow_id), sequences)
         for workflow_id in declarations
     }
 
@@ -121,10 +138,25 @@ def _extend_workflow(
             **base.get("parameter_overrides", {}),
             **changes["parameter_overrides"],
         }
+    if "stage_overrides" in changes:
+        previous = base.get("stage_overrides", {})
+        extended["stage_overrides"] = {
+            **deepcopy(previous),
+            **{
+                name: _extend_workflow(previous.get(name, {}), stage)
+                for name, stage in changes["stage_overrides"].items()
+            },
+        }
     return extended
 
 
-def _normalize_workflow(declaration: dict[str, Any]) -> dict[str, Any]:
+def _normalize_workflow(
+    declaration: dict[str, Any],
+    sequences: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    missing = [key for key in ("type", "description") if key not in declaration]
+    if missing:
+        raise BundleError("resolved workflow is missing: " + ", ".join(missing))
     workflow = {
         "kind": declaration["type"],
         "description": declaration["description"],
@@ -150,7 +182,20 @@ def _normalize_workflow(declaration: dict[str, Any]) -> dict[str, Any]:
     for source, target in COMPARISON_KEYS.items():
         _copy_if_present(declaration.get("comparison", {}), workflow, source, target)
 
-    stages = declaration.get("stages")
+    stages = []
+    for entry in declaration.get("stages", []):
+        if isinstance(entry, str):
+            if entry not in sequences:
+                raise BundleError(f"unknown stage sequence: {entry}")
+            stages.extend(sequences[entry])
+        else:
+            stages.append(entry)
+    stage_changes = declaration.get("stage_overrides", {})
+    unknown = sorted(stage_changes.keys() - {stage["id"] for stage in stages})
+    if unknown:
+        raise BundleError(
+            "stage_overrides contains unknown stages: " + ", ".join(unknown)
+        )
     if stages:
         adaptive_stages = set(declaration.get("adaptive_stages", []))
         stage_ids = {stage["id"] for stage in stages}
@@ -160,7 +205,11 @@ def _normalize_workflow(declaration: dict[str, Any]) -> dict[str, Any]:
                 "adaptive_stages contains unknown stages: " + ", ".join(unknown)
             )
         workflow["stages"] = [
-            _normalize_stage(stage, index, adaptive_stages)
+            _normalize_stage(
+                _extend_workflow(stage, stage_changes.get(stage["id"], {})),
+                index,
+                adaptive_stages,
+            )
             for index, stage in enumerate(stages)
         ]
     return workflow

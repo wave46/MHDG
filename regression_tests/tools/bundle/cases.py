@@ -23,7 +23,13 @@ def load_case_definition(case_id: str, case_directory: Path) -> dict[str, Any]:
         schema_path,
         f"case definition {path.name}",
     )
-    case = normalize_case_definition(case_id, declaration)
+    shared = load_validated_json(
+        case_directory.parent / "workflows.json",
+        schema_path,
+        "shared workflows",
+        definition="workflow_catalog",
+    )
+    case = normalize_case_definition(case_id, declaration, shared)
     _validate_case_workflows(case)
     return case
 

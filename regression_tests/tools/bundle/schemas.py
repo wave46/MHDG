@@ -21,15 +21,21 @@ def load_validated_json(
     path: Path,
     schema_path: Path,
     label: str,
+    *,
+    definition: str | None = None,
 ) -> dict[str, Any]:
     """Load a JSON object and validate it against a regression schema."""
     document = load_json(path, label)
-    _validate_json(document, schema_path, label)
+    _validate_json(document, schema_path, label, definition)
     return document
 
 
-def _validate_json(document: Any, schema_path: Path, label: str) -> None:
+def _validate_json(
+    document: Any, schema_path: Path, label: str, definition: str | None = None,
+) -> None:
     schema = load_json(schema_path, f"schema {schema_path.name}")
+    if definition is not None:
+        schema = {"$defs": schema["$defs"], "$ref": f"#/$defs/{definition}"}
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as exc:

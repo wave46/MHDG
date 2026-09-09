@@ -102,6 +102,7 @@ def update_campaign(args: argparse.Namespace) -> dict[str, Any]:
         "bootstrap_candidate": args.bootstrap_candidate,
         "source_manifest": _file_record(source_bundle / "manifest.json"),
         "campaign_catalog": _file_record(args.campaigns),
+        "workflow_catalog": _file_record(args.cases.parent / "workflows.json"),
         "output": str(args.output.expanduser().resolve()),
         "bundle_version": args.bundle_version,
         "build_jobs": args.build_jobs,
@@ -722,6 +723,7 @@ def _campaign_provenance_files(state: dict[str, Any]) -> list[tuple[str, Path]]:
     files = [
         ("campaign.json", workspace / STATE_FILE),
         ("declaration.json", Path(state["inputs"]["campaign_catalog"]["path"])),
+        ("workflows.json", Path(state["inputs"]["workflow_catalog"]["path"])),
         ("build/build_metadata.json", build_metadata),
     ]
     for stage in state["stages"]:

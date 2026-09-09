@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -93,11 +94,26 @@ class SuiteWorkflowTests(unittest.TestCase):
 
     def test_resume_rejects_changed_execution_inputs_and_new_build(self) -> None:
         run_id = "stable-inputs"
-        completed = self._run_suite("warm", run_id, "--run-only")
+        catalog = self.root / "catalog"
+        for directory in ("cases", "schemas"):
+            shutil.copytree(REGRESSION_ROOT / directory, catalog / directory)
+        shared = catalog / "workflows.json"
+        shutil.copy2(REGRESSION_ROOT / "workflows.json", shared)
+        options = ("--run-only", "--cases", str(catalog / "cases"))
+        completed = self._run_suite("warm", run_id, *options)
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+        original = shared.read_text()
+        workflows = json.loads(original)
+        workflows["workflows"]["warm"]["parameter_overrides"]["nrp"] = 2
+        shared.write_text(json.dumps(workflows))
+        changed = self._run_suite("warm", run_id, *options, "--resume")
+        self.assertEqual(changed.returncode, 1)
+        self.assertIn("workflow_catalog", changed.stderr)
+        shared.write_text(original)
+
         self.fixture.install_solver(FAILING_SOLVER, "parallel")
-        changed = self._run_suite("warm", run_id, "--run-only", "--resume")
+        changed = self._run_suite("warm", run_id, *options, "--resume")
         self.assertEqual(changed.returncode, 1)
         self.assertIn("parallel_executable", changed.stderr)
 

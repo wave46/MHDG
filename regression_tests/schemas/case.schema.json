@@ -24,14 +24,7 @@
       "$ref": "#/$defs/files"
     },
     "workflows": {
-      "type": "object",
-      "minProperties": 1,
-      "propertyNames": {
-        "$ref": "#/$defs/identifier"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/workflow"
-      }
+      "$ref": "#/$defs/workflows"
     }
   },
   "$defs": {
@@ -96,9 +89,6 @@
     "workflow": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "description"
-      ],
       "properties": {
         "description": {
           "$ref": "#/$defs/description"
@@ -143,22 +133,26 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "$ref": "#/$defs/stage"
+            "anyOf": [
+              {
+                "$ref": "#/$defs/identifier"
+              },
+              {
+                "$ref": "#/$defs/stage"
+              }
+            ]
+          }
+        },
+        "stage_overrides": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/stage_changes"
           }
         }
-      },
-      "anyOf": [
-        {
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "required": [
-            "extends"
-          ]
-        }
-      ]
+      }
     },
     "comparison": {
       "type": "object",
@@ -182,13 +176,76 @@
       }
     },
     "stage": {
-      "type": "object",
-      "additionalProperties": false,
+      "$ref": "#/$defs/stage_fields",
       "required": [
         "id",
         "parameters",
         "transport"
+      ]
+    },
+    "parameter_overrides": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": [
+          "boolean",
+          "number",
+          "string"
+        ]
+      }
+    },
+    "workflows": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/workflow"
+      }
+    },
+    "stage_changes": {
+      "$ref": "#/$defs/stage_fields",
+      "not": {
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "workflow_catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "workflows"
       ],
+      "properties": {
+        "schema_version": {
+          "const": 2
+        },
+        "workflows": {
+          "$ref": "#/$defs/workflows"
+        },
+        "sequences": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/stage"
+            }
+          }
+        }
+      }
+    },
+    "stage_fields": {
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "id": {
           "$ref": "#/$defs/identifier"
@@ -208,19 +265,6 @@
             "finite_only"
           ]
         }
-      }
-    },
-    "parameter_overrides": {
-      "type": "object",
-      "propertyNames": {
-        "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
-      },
-      "additionalProperties": {
-        "type": [
-          "boolean",
-          "number",
-          "string"
-        ]
       }
     }
   }

@@ -528,10 +528,34 @@ solver runtime data, not case-specific bundle data.
 | Edit directly | Generated; do not edit |
 | --- | --- |
 | Private settings and prepared physical files | Bundle manifest, identifiers, sizes, checksums |
-| `cases/*.json` | Rendered parameter files, input links, run/build metadata |
+| `workflows.json`, `cases/*.json` | Rendered parameter files, input links, run/build metadata |
 | `suites.json`, `layouts.json`, `tolerances.json` | Summaries, comparison reports, HDF5 provenance |
 
 ## Adding a parameter variant
+
+`workflows.json` defines the shared warm, fixed/adaptive cold and short-step
+procedures. Its `cold_bootstrap` and `transport_continuation` sequences compose
+the unchanged seven-stage cold recipe. Each case declares its own physical file
+roles and selects workflows by name; `{}` uses the shared definition unchanged.
+Only workflows selected in the case are exposed, but `extends` can also name an
+unselected shared parent. Case overrides are applied before parent resolution,
+so derived workflows inherit that case's changes. Descriptions are inherited.
+
+To adjust one stage without repeating the recipe, use `stage_overrides`:
+
+```json
+"cold_fixed": {
+  "stage_overrides": {
+    "continuation_05": {"parameter_overrides": {"tNR": 1e-5}}
+  }
+}
+```
+
+This limited-case override also reaches its adaptive and diagnostic variants.
+Stage overrides are keyed by existing stage IDs and can change parameter/transport
+roles, parameter values, or the Newton check. Unknown IDs fail during loading.
+Sequences contain explicit stages; workflows may combine sequence names and
+inline stages. Sequence expansion does not change restart order or execution.
 
 Common variants require JSON, not Python. In `cases/CASE.json`, inherit the
 closest workflow and override only changed parameters:
@@ -555,9 +579,10 @@ must occur exactly once in the selected MHDG parameter file. Preparation
 formats it in a private copy and records the effective values in
 `run_plan.json`; the bundle is unchanged.
 
-Workflow overrides apply to every stage. Stage overrides take precedence for
-that stage. With `extends`, `parameter_overrides` merge with the parent;
-another supplied field replaces the complete parent field.
+Workflow parameter overrides apply to every stage; stage parameter values take
+precedence there. With `extends`, `parameter_overrides` merge with the parent,
+and `stage_overrides` merge by stage ID (including their parameter values).
+Other supplied fields, including the `stages` list, replace the parent field.
 
 For a variant requiring another physical file:
 
@@ -620,6 +645,7 @@ not launch MHDG or need physical data.
 
 | Changed area | Test group |
 | --- | --- |
+| Shared workflows and inheritance | `tests/test_catalog.py` (pytest) |
 | Build | `tests.test_build` |
 | Bundles and case loading | `tests.test_bundles` |
 | Preparation and parameters | `tests.test_preparation` |
@@ -630,7 +656,14 @@ not launch MHDG or need physical data.
 | Suites, layout pairs, resume | `tests.test_suites` |
 | Promotion | `tests.test_reference_publication` |
 
-Run only the affected group:
+Run the focused catalog tests with pytest (from the repository root):
+
+```bash
+python -m pytest regression_tests/tests/test_catalog.py
+```
+
+The remaining test groups are being migrated incrementally. Run only the
+affected group:
 
 ```bash
 cd regression_tests
@@ -641,7 +674,7 @@ For a cross-cutting change, run all synthetic tests:
 
 ```bash
 cd regression_tests
-PYTHONPATH=tools python -m unittest discover -s tests -p 'test_*.py'
+python -m pytest tests
 ```
 
 ## Limitations
