@@ -7,7 +7,7 @@ from typing import Any
 
 from bundle.cases import load_case_definition
 from bundle.schemas import load_validated_json
-from catalogs.layouts import load_layouts
+from catalogs.layouts import layout_pairs, load_layouts
 from support.errors import BundleError
 
 
@@ -24,29 +24,34 @@ def load_suite_definition(
     if declaration is None:
         available = ", ".join(sorted(document["suites"]))
         raise BundleError(f"unknown suite {suite_id}; available: {available}")
-    suite = {
-        "description": declaration["description"],
-        "case_id": declaration["case"],
-        "workflow_ids": declaration["workflows"],
-        "layouts": declaration.get("layouts") or _paired_layouts(declaration),
-    }
-    if "layout_comparisons" in declaration:
-        suite["layout_comparisons"] = declaration["layout_comparisons"]
-        suite["tolerance_profile"] = declaration["tolerance_profile"]
-        for option in ("layout_comparison_policy",):
-            if option in declaration:
-                suite[option] = declaration[option]
-    if "reference_comparisons" in declaration:
-        suite["reference_comparisons"] = declaration["reference_comparisons"]
-
     layouts = load_layouts(layouts_path)
-    unknown_layouts = [
-        layout for layout in suite["layouts"] if layout not in layouts
-    ]
+    defaults = document["defaults"]
+    relations = declaration.get("relations", [])
+    selected = declaration.get(
+        "layouts", "all" if relations else [defaults["layout"]]
+    )
+    selected = list(layouts) if selected == "all" else selected
+    unknown_layouts = [layout for layout in selected if layout not in layouts]
     if unknown_layouts:
         raise BundleError(
             f"suite {suite_id} has unknown layouts: {', '.join(unknown_layouts)}"
         )
+
+    pairs = layout_pairs({name: layouts[name] for name in selected}, relations)
+    suite = {
+        "description": declaration["description"],
+        "case_id": declaration.get("case", defaults["case"]),
+        "workflow_ids": declaration["workflows"],
+        "layouts": list(dict.fromkeys(
+            layout for pair in pairs for layout in pair.values()
+        )) if pairs else selected,
+        "reference_comparisons": declaration.get("reference_comparisons", not pairs),
+    }
+    if pairs:
+        suite["layout_comparisons"] = pairs
+        suite["tolerance_profile"] = declaration["tolerance_profile"]
+        if "layout_comparison_policy" in declaration:
+            suite["layout_comparison_policy"] = declaration["layout_comparison_policy"]
 
     case = load_case_definition(suite["case_id"], case_directory)
     unknown_workflows = [
@@ -60,20 +65,6 @@ def load_suite_definition(
             f"{', '.join(unknown_workflows)}"
         )
     return suite
-
-
-def _paired_layouts(declaration: dict[str, Any]) -> list[str]:
-    pairs = declaration["layout_comparisons"]
-    for pair in pairs:
-        if pair["baseline"] == pair["candidate"]:
-            raise BundleError("a layout cannot be compared with itself")
-    return list(
-        dict.fromkeys(
-            layout
-            for pair in pairs
-            for layout in (pair["baseline"], pair["candidate"])
-        )
-    )
 
 
 def require_bundle_class(

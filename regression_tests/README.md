@@ -122,6 +122,16 @@ Tracked layouts are:
 Identifiers matching `serial_ompN` or `mpiM_ompN` determine the executable,
 ranks, and threads. MPI runs bind each rank to exclusive cores.
 
+`suites.json` supplies common case/layout defaults. A suite can override them,
+select `layouts: "all"`, or request generated `relations`: `openmp` compares
+serial thread counts against one thread; `mpi` compares serial against MPI with
+one thread per rank; `hybrid` compares MPI thread counts at the same rank count;
+`all_pairs` compares every selected pair. Relations use the selected layouts
+(all registered layouts if omitted), deduplicate pairs and run each participating
+layout once. A relation with no matching pair is an error. Reference comparisons
+default to enabled for ordinary suites and disabled for relation suites;
+`reference_comparisons: true` enables both kinds of evidence together.
+
 | Suite | Coverage | Use |
 | --- | --- | --- |
 | `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
@@ -646,6 +656,7 @@ not launch MHDG or need physical data.
 | Changed area | Test group |
 | --- | --- |
 | Shared workflows and inheritance | `tests/test_catalog.py` (pytest) |
+| Generated layout relations and suite defaults | `tests/test_layouts.py` (pytest) |
 | Build | `tests.test_build` |
 | Bundles and case loading | `tests.test_bundles` |
 | Preparation and parameters | `tests.test_preparation` |

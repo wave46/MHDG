@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema_version",
+    "defaults",
     "suites"
   ],
   "properties": {
@@ -20,6 +21,22 @@
       },
       "additionalProperties": {
         "$ref": "#/$defs/suite"
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case",
+        "layout"
+      ],
+      "properties": {
+        "case": {
+          "$ref": "#/$defs/identifier"
+        },
+        "layout": {
+          "$ref": "#/$defs/identifier"
+        }
       }
     }
   },
@@ -41,21 +58,7 @@
       "additionalProperties": false,
       "required": [
         "description",
-        "case",
         "workflows"
-      ],
-      "oneOf": [
-        {
-          "required": [
-            "layouts"
-          ]
-        },
-        {
-          "required": [
-            "layout_comparisons",
-            "tolerance_profile"
-          ]
-        }
       ],
       "properties": {
         "description": {
@@ -69,14 +72,14 @@
           "$ref": "#/$defs/identifier_list"
         },
         "layouts": {
-          "$ref": "#/$defs/identifier_list"
-        },
-        "layout_comparisons": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/layout_comparison"
-          }
+          "oneOf": [
+            {
+              "const": "all"
+            },
+            {
+              "$ref": "#/$defs/identifier_list"
+            }
+          ]
         },
         "tolerance_profile": {
           "$ref": "#/$defs/identifier"
@@ -89,23 +92,31 @@
         },
         "reference_comparisons": {
           "type": "boolean"
-        }
-      }
-    },
-    "layout_comparison": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "baseline",
-        "candidate"
-      ],
-      "properties": {
-        "baseline": {
-          "$ref": "#/$defs/identifier"
         },
-        "candidate": {
-          "$ref": "#/$defs/identifier"
+        "relations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "openmp",
+              "mpi",
+              "hybrid",
+              "all_pairs"
+            ]
+          }
         }
+      },
+      "dependentRequired": {
+        "relations": [
+          "tolerance_profile"
+        ],
+        "tolerance_profile": [
+          "relations"
+        ],
+        "layout_comparison_policy": [
+          "relations"
+        ]
       }
     }
   }

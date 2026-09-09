@@ -1,67 +1,53 @@
 {
   "schema_version": 2,
+  "defaults": {
+    "case": "legacy_case",
+    "layout": "mpi4_omp4"
+  },
   "suites": {
     "warm": {
       "description": "Canonical four-MPI-by-four-OpenMP warm restart",
-      "case": "legacy_case",
-      "workflows": ["warm"],
-      "layouts": ["mpi4_omp4"]
+      "workflows": ["warm"]
     },
     "balance_diagnostics_warm": {
       "description": "Detailed balance diagnostics on the canonical warm restart",
-      "case": "legacy_case",
-      "workflows": ["warm_balance_diagnostics"],
-      "layouts": ["mpi4_omp4"]
+      "workflows": ["warm_balance_diagnostics"]
     },
     "neutral_pressure_warm": {
       "description": "Execution-only warm continuation with neutral pressure enabled",
-      "case": "legacy_case",
       "workflows": ["warm_neutral_pressure"],
-      "layouts": ["mpi4_omp4"],
       "reference_comparisons": false
     },
     "neutral_sources_in_elements_warm": {
       "description": "Source-relocated warm golden reconvergence and conservation check",
-      "case": "legacy_case",
-      "workflows": ["warm_neutral_sources_in_elements"],
-      "layouts": ["mpi4_omp4"],
-      "reference_comparisons": true
+      "workflows": ["warm_neutral_sources_in_elements"]
     },
     "neutral_sources_in_elements_restart_producer": {
       "description": "Create a source-relocated restart from the current canonical warm state",
-      "case": "legacy_case",
       "workflows": ["bootstrap_neutral_sources_in_elements"],
-      "layouts": ["mpi4_omp4"],
       "reference_comparisons": false
     },
     "neutral_features_warm": {
       "description": "Independent source relocation, neutral pressure, projection, and limiter goldens",
-      "case": "legacy_case",
       "workflows": [
         "warm_neutral_sources_in_elements",
         "warm_neutral_pressure",
         "warm_neutral_perpendicular",
         "warm_neutral_limiter_fixed",
         "warm_neutral_limiter_ti"
-      ],
-      "layouts": ["mpi4_omp4"],
-      "reference_comparisons": true
+      ]
     },
     "neutral_feature_references": {
       "description": "Independent neutral pressure, projection, and limiter reference producers",
-      "case": "legacy_case",
       "workflows": [
         "warm_neutral_pressure",
         "warm_neutral_perpendicular",
         "warm_neutral_limiter_fixed",
         "warm_neutral_limiter_ti"
-      ],
-      "layouts": ["mpi4_omp4"],
-      "reference_comparisons": true
+      ]
     },
     "neutral_feature_race_matrix": {
       "description": "Two-Newton-iteration all-layout race checks for independent neutral features",
-      "case": "legacy_case",
       "workflows": [
         "race_neutral_sources_in_elements",
         "race_neutral_pressure",
@@ -69,303 +55,114 @@
         "race_neutral_limiter_fixed",
         "race_neutral_limiter_ti"
       ],
-      "layout_comparisons": [
-        {
-          "baseline": "serial_omp1",
-          "candidate": "serial_omp16"
-        },
-        {
-          "baseline": "serial_omp1",
-          "candidate": "mpi4_omp1"
-        },
-        {
-          "baseline": "serial_omp1",
-          "candidate": "mpi4_omp4"
-        },
-        {
-          "baseline": "serial_omp16",
-          "candidate": "mpi4_omp1"
-        },
-        {
-          "baseline": "serial_omp16",
-          "candidate": "mpi4_omp4"
-        },
-        {
-          "baseline": "mpi4_omp1",
-          "candidate": "mpi4_omp4"
-        }
-      ],
       "tolerance_profile": "neutral_feature_race_step",
-      "reference_comparisons": false
+      "relations": ["all_pairs"]
     },
     "impurity_scalar_baseline": {
       "description": "Disabled and single-nitrogen warm mixture baselines",
-      "case": "legacy_case",
-      "workflows": ["warm_impurity_off", "warm_impurity_n"],
-      "layouts": ["mpi4_omp4"]
+      "workflows": ["warm_impurity_off", "warm_impurity_n"]
     },
     "impurity_mixture": {
       "description": "Manual off, tungsten, nitrogen, and mixed-impurity references",
-      "case": "legacy_case",
-      "workflows": [
-        "warm_impurity_off",
-        "warm",
-        "warm_impurity_n",
-        "warm_impurity_nw"
-      ],
-      "layouts": ["mpi4_omp4"]
+      "workflows": ["warm_impurity_off", "warm", "warm_impurity_n", "warm_impurity_nw"]
     },
     "impurity_references": {
       "description": "Off, nitrogen, and mixed-impurity reference producers",
-      "case": "legacy_case",
-      "workflows": [
-        "warm_impurity_off",
-        "warm_impurity_n",
-        "warm_impurity_nw"
-      ],
-      "layouts": ["mpi4_omp4"]
+      "workflows": ["warm_impurity_off", "warm_impurity_n", "warm_impurity_nw"]
     },
     "impurity_restart_producers": {
       "description": "Create off, nitrogen, and mixed-impurity restarts from the current canonical warm state",
-      "case": "legacy_case",
-      "workflows": [
-        "bootstrap_impurity_off",
-        "bootstrap_impurity_n",
-        "bootstrap_impurity_nw"
-      ],
-      "layouts": ["mpi4_omp4"],
+      "workflows": ["bootstrap_impurity_off", "bootstrap_impurity_n", "bootstrap_impurity_nw"],
       "reference_comparisons": false
     },
     "initialization_smoke": {
       "description": "One-step analytical initialization without reference comparison",
-      "case": "legacy_case",
       "workflows": ["cold_step_impurity_off"],
-      "layouts": ["mpi4_omp4"],
       "reference_comparisons": false
     },
     "stored_field_compatibility": {
       "description": "One-step limited compatibility check using stored Br and Bz",
-      "case": "legacy_case",
       "workflows": ["cold_step_stored_field"],
       "layouts": ["serial_omp1"],
       "reference_comparisons": false
     },
     "warm_parallelism": {
       "description": "Warm restart across serial, MPI, and OpenMP layouts",
-      "case": "legacy_case",
       "workflows": ["warm"],
-      "layouts": [
-        "serial_omp1",
-        "serial_omp16",
-        "mpi4_omp1",
-        "mpi4_omp4"
-      ]
+      "layouts": "all"
     },
     "cold": {
       "description": "Routine cold fixed and adaptive checks in the canonical layout",
-      "case": "legacy_case",
-      "workflows": ["cold_fixed", "cold_adaptive"],
-      "layouts": ["mpi4_omp4"]
+      "workflows": ["cold_fixed", "cold_adaptive"]
     },
     "balance_diagnostics_cold": {
       "description": "Detailed particle diagnostics through fixed and adaptive cold workflows",
-      "case": "legacy_case",
-      "workflows": [
-        "cold_fixed_balance_diagnostics",
-        "cold_adaptive_balance_diagnostics"
-      ],
-      "layouts": ["mpi4_omp4"],
+      "workflows": ["cold_fixed_balance_diagnostics", "cold_adaptive_balance_diagnostics"],
       "reference_comparisons": false
     },
     "cold_matrix": {
       "description": "Cold workflows with golden and all-pairs layout checks",
-      "case": "legacy_case",
       "workflows": ["cold_fixed", "cold_adaptive"],
-      "layout_comparisons": [
-        {
-          "baseline": "serial_omp1",
-          "candidate": "serial_omp16"
-        },
-        {
-          "baseline": "serial_omp1",
-          "candidate": "mpi4_omp1"
-        },
-        {
-          "baseline": "serial_omp1",
-          "candidate": "mpi4_omp4"
-        },
-        {
-          "baseline": "serial_omp16",
-          "candidate": "mpi4_omp1"
-        },
-        {
-          "baseline": "serial_omp16",
-          "candidate": "mpi4_omp4"
-        },
-        {
-          "baseline": "mpi4_omp1",
-          "candidate": "mpi4_omp4"
-        }
-      ],
       "tolerance_profile": "cold_cross_layout",
       "layout_comparison_policy": "fixed_hdf5",
-      "reference_comparisons": true
+      "reference_comparisons": true,
+      "relations": ["all_pairs"]
     },
     "race": {
       "description": "One-step fixed and adaptive OpenMP race checks on the coarse mesh",
-      "case": "legacy_case",
       "workflows": ["cold_step_fixed", "cold_step_adaptive"],
-      "layout_comparisons": [
-        {
-          "baseline": "serial_omp1",
-          "candidate": "serial_omp16"
-        }
-      ],
-      "tolerance_profile": "race_step"
+      "tolerance_profile": "race_step",
+      "relations": ["openmp"]
     },
     "neutralgamma_race": {
       "description": "One-step two-Newton-iteration NeutralGamma OpenMP and detailed-balance check",
-      "case": "legacy_case",
       "workflows": ["cold_step_neutralgamma"],
-      "layout_comparisons": [
-        {
-          "baseline": "serial_omp1",
-          "candidate": "serial_omp16"
-        }
-      ],
       "tolerance_profile": "race_step",
-      "reference_comparisons": false
+      "relations": ["openmp"]
     },
     "race_matrix": {
       "description": "All-pairs one-step race checks on the coarse mesh",
-      "case": "legacy_case",
       "workflows": ["cold_step_fixed", "cold_step_adaptive"],
-      "layout_comparisons": [
-        {
-          "baseline": "serial_omp1",
-          "candidate": "serial_omp16"
-        },
-        {
-          "baseline": "serial_omp1",
-          "candidate": "mpi4_omp1"
-        },
-        {
-          "baseline": "serial_omp1",
-          "candidate": "mpi4_omp4"
-        },
-        {
-          "baseline": "serial_omp16",
-          "candidate": "mpi4_omp1"
-        },
-        {
-          "baseline": "serial_omp16",
-          "candidate": "mpi4_omp4"
-        },
-        {
-          "baseline": "mpi4_omp1",
-          "candidate": "mpi4_omp4"
-        }
-      ],
-      "tolerance_profile": "race_step"
+      "tolerance_profile": "race_step",
+      "relations": ["all_pairs"]
     },
     "neutral_sources_in_elements_race_matrix": {
       "description": "Source-relocated fixed/adaptive race and detailed source-placement checks",
-      "case": "legacy_case",
       "workflows": [
         "cold_step_fixed_neutral_sources_in_elements",
         "cold_step_adaptive_neutral_sources_in_elements"
       ],
-      "layout_comparisons": [
-        {
-          "baseline": "serial_omp1",
-          "candidate": "serial_omp16"
-        },
-        {
-          "baseline": "serial_omp1",
-          "candidate": "mpi4_omp1"
-        },
-        {
-          "baseline": "serial_omp1",
-          "candidate": "mpi4_omp4"
-        },
-        {
-          "baseline": "serial_omp16",
-          "candidate": "mpi4_omp1"
-        },
-        {
-          "baseline": "serial_omp16",
-          "candidate": "mpi4_omp4"
-        },
-        {
-          "baseline": "mpi4_omp1",
-          "candidate": "mpi4_omp4"
-        }
-      ],
       "tolerance_profile": "race_step",
-      "reference_comparisons": false
+      "relations": ["all_pairs"]
     },
     "neutral_sources_in_elements_cold_adaptive": {
       "description": "Complete source-relocated adaptive cold workflow",
-      "case": "legacy_case",
       "workflows": ["cold_adaptive_neutral_sources_in_elements"],
-      "layouts": ["mpi4_omp4"],
       "reference_comparisons": false
     },
     "diverted_warm": {
       "description": "Canonical diverted warm restart",
       "case": "diverted_case",
-      "workflows": ["warm"],
-      "layouts": ["mpi4_omp4"]
+      "workflows": ["warm"]
     },
     "diverted_warm_parallelism": {
       "description": "Diverted warm restart across all tracked layouts",
       "case": "diverted_case",
       "workflows": ["warm"],
-      "layouts": [
-        "serial_omp1",
-        "serial_omp16",
-        "mpi4_omp1",
-        "mpi4_omp4"
-      ]
+      "layouts": "all"
     },
     "diverted_cold_adaptive": {
       "description": "Full diverted adaptive cold start in the canonical layout",
       "case": "diverted_case",
       "workflows": ["cold_adaptive"],
-      "layouts": ["mpi4_omp4"],
       "reference_comparisons": false
     },
     "diverted_race_matrix": {
       "description": "Diverted fixed and adaptive two-Newton-step layout checks",
       "case": "diverted_case",
       "workflows": ["cold_step_fixed", "cold_step_adaptive"],
-      "layout_comparisons": [
-        {
-          "baseline": "serial_omp1",
-          "candidate": "serial_omp16"
-        },
-        {
-          "baseline": "serial_omp1",
-          "candidate": "mpi4_omp1"
-        },
-        {
-          "baseline": "serial_omp1",
-          "candidate": "mpi4_omp4"
-        },
-        {
-          "baseline": "serial_omp16",
-          "candidate": "mpi4_omp1"
-        },
-        {
-          "baseline": "serial_omp16",
-          "candidate": "mpi4_omp4"
-        },
-        {
-          "baseline": "mpi4_omp1",
-          "candidate": "mpi4_omp4"
-        }
-      ],
-      "tolerance_profile": "race_step"
+      "tolerance_profile": "race_step",
+      "relations": ["all_pairs"]
     }
   }
 }
