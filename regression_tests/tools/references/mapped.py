@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from bundle.artifacts import validate_bundle_identity
-from comparison.shared.outputs import select_candidate
+from regression_tests.compare_common import select_candidate
 from support.documents import load_json
 from support.errors import BundleError
 from support.files import file_identity, is_within

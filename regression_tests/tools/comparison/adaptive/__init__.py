@@ -1,1 +1,0 @@
-"""Adaptive-mesh comparison implementation."""

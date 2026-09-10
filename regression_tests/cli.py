@@ -246,7 +246,7 @@ def _compare(args: argparse.Namespace) -> int:
         path, summary = verify_suite(args.path, ROOT / "cases", ROOT / "tolerances.json")
         print_verification_summary(summary, path)
         return 0 if summary["status"] == "passed" else 1
-    from comparison.workflow import compare_completed_run
+    from regression_tests.compare import compare_completed_run
 
     policy, path, report = compare_completed_run(
         args.path, ROOT / "cases", ROOT / "tolerances.json",

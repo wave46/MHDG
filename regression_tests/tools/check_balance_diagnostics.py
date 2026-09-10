@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import math
 import re
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,7 +14,10 @@ from typing import Any
 
 import h5py
 
-from comparison.shared.outputs import select_candidate
+# Temporary standalone entry point until diagnostics moves into the package in 4b.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from regression_tests.compare_common import select_candidate
 from support.documents import load_json, write_json_atomic
 from support.errors import ComparisonError, HarnessError
 from support.paths import require_directory, require_file

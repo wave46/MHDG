@@ -714,9 +714,9 @@ not launch MHDG or need physical data.
 | Bundles and case loading | `tests.test_bundles` |
 | Preparation and parameters | `tests/test_preparation.py` (pytest) |
 | Execution and run metadata | `tests/test_execution.py` (pytest) |
-| Fixed comparison | `tests.test_fixed_comparison` |
-| Adaptive comparison | `tests.test_adaptive_comparison` |
-| Reference matrices | `tests.test_matrix_comparison` |
+| Fixed comparison | `tests/test_fixed_comparison.py` (pytest) |
+| Adaptive comparison | `tests/test_adaptive_comparison.py` (pytest) |
+| Reference matrices | `tests/test_matrix_comparison.py` (pytest) |
 | Suites, layout pairs, resume | `tests.test_suites` |
 | Promotion | `tests.test_reference_publication` |
 

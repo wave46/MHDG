@@ -1,142 +1,73 @@
-from __future__ import annotations
+"""Adaptive sampling, field tolerances and run-level convergence."""
 
 import json
-import sys
-import tempfile
-import unittest
-from pathlib import Path
-from unittest.mock import patch
 
 import h5py
 import numpy as np
 
-
-REGRESSION_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
-
-from comparison.adaptive.fields import compare_sampled_fields  # noqa: E402
-from comparison.adaptive.run import compare_adaptive_run  # noqa: E402
-from comparison.adaptive.sampling import (  # noqa: E402
-    SampledFields,
-    reference_sample_points,
-)
-from comparison.inputs import (  # noqa: E402
-    ComparisonOverrides,
-    load_comparison_inputs,
-)
+from regression_tests import compare
+from regression_tests.compare_adaptive import SampledFields, compare_sampled_fields, reference_sample_points
+from tests.fixtures.harness import REGRESSION_ROOT
 
 
-class AdaptiveComparisonTests(unittest.TestCase):
-    @patch("comparison.adaptive.run.compare_adaptive_files")
-    def test_run_comparison_uses_overrides_and_convergence(self, compare_files) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            run = Path(temporary)
-            candidate = run / "candidate.h5"
-            reference = run / "golden.h5"
-            fekete = run / "positionFeketeNodesTri2D.h5"
-            for path in (candidate, reference, fekete):
-                path.write_text("synthetic\n", encoding="utf-8")
-            (run / "stdout.log").write_text("Error: 1.0\n", encoding="utf-8")
-            (run / "run_plan.json").write_text(
-                json.dumps(
-                    {
-                        "case_id": "legacy_case",
-                        "workflow_id": "cold_adaptive",
-                        "layout_id": "mpi4_omp4",
-                    }
-                ),
-                encoding="utf-8",
-            )
-            (run / "run_metadata.json").write_text(
-                json.dumps(
-                    {
-                        "status": "completed",
-                        "hdf5_outputs": ["candidate.h5"],
-                        "runtime_files": {
-                            "positionFeketeNodesTri2D.h5": {"path": str(fekete)}
-                        },
-                    }
-                ),
-                encoding="utf-8",
-            )
-            compare_files.return_value = {
-                "schema_version": 2,
-                "status": "passed",
-                "failures": [],
-                "tolerances": {},
-            }
+def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
+    candidate, reference, fekete = (tmp_path / name for name in (
+        "candidate.h5", "golden.h5", "positionFeketeNodesTri2D.h5",
+    ))
+    for path in (candidate, reference, fekete):
+        path.write_text("fixture\n")
+    (tmp_path / "stdout.log").write_text("Error: 1.0\n")
+    (tmp_path / "run_plan.json").write_text(json.dumps({
+        "case_id": "legacy_case", "workflow_id": "cold_adaptive", "layout_id": "mpi4_omp4",
+    }))
+    (tmp_path / "run_metadata.json").write_text(json.dumps({
+        "status": "completed", "hdf5_outputs": ["candidate.h5"],
+        "runtime_files": {fekete.name: {"path": str(fekete)}},
+    }))
+    calls = []
 
-            inputs = load_comparison_inputs(
-                run,
-                REGRESSION_ROOT / "cases",
-                REGRESSION_ROOT / "tolerances.json",
-            )
-            overrides = ComparisonOverrides(
-                candidate=candidate,
-                reference=reference,
-                tolerance_profile="adaptive_reference",
-                newton_check="finite_only",
-            )
-            path, report = compare_adaptive_run(inputs, overrides)
+    def fields(*args):
+        calls.append(args)
+        return {"status": "passed", "failures": [], "tolerances": {}}
 
-        self.assertEqual(report["status"], "passed")
-        self.assertTrue(report["convergence"]["passed"])
-        self.assertEqual(report["convergence"]["final_newton_error"], 1.0)
-        self.assertIsNone(report["convergence"]["maximum"])
-        self.assertEqual(report["tolerance_profile"]["id"], "adaptive_reference")
-        self.assertEqual(path.name, "comparison.json")
-        self.assertEqual(compare_files.call_args.args[:2], (reference, candidate))
-        self.assertEqual(compare_files.call_args.args[3], 4)
+    monkeypatch.setattr(compare, "compare_adaptive_files", fields)
+    inputs = compare.load_comparison_inputs(tmp_path, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json")
+    path, report = compare.compare_run(inputs, compare.ComparisonOverrides(
+        candidate, reference, "adaptive_reference", "finite_only",
+    ))
+    assert report["status"] == "passed"
+    assert report["convergence"] == {"passed": True, "final_newton_error": 1., "maximum": None}
+    assert report["tolerance_profile"]["id"] == "adaptive_reference"
+    assert path.name == "comparison.json"
+    assert calls[0][:4] == (reference, candidate, fekete, 4)
 
-    def test_reference_points_are_inside_each_triangle(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "reference.h5"
-            with h5py.File(path, "w") as handle:
-                mesh = handle.create_group("mesh")
-                mesh["X"] = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-                mesh["Tlin"] = np.array([[1], [2], [3]])
 
-            points = reference_sample_points(path, 4)
+def test_reference_points_are_deterministic_and_interior(tmp_path):
+    path = tmp_path / "reference.h5"
+    with h5py.File(path, "w") as handle:
+        mesh = handle.create_group("mesh")
+        mesh["X"] = np.array([[0., 1., 0.], [0., 0., 1.]])
+        mesh["Tlin"] = np.array([[1], [2], [3]])
+    points = reference_sample_points(path, 4)
+    assert points.shape == (4, 2)
+    assert (points > 0).all() and (points.sum(axis=1) < 1).all()
+    np.testing.assert_allclose(points[0], [1/3, 1/3])
 
-        self.assertEqual(points.shape, (4, 2))
-        self.assertTrue((points > 0).all())
-        self.assertTrue((points.sum(axis=1) < 1).all())
-        np.testing.assert_allclose(points[0], [1 / 3, 1 / 3])
 
-    def test_tolerances_and_coverage_produce_failure(self) -> None:
-        reference = self._sampled()
-        candidate = self._sampled(offset=0.1, inside=[True, True, False])
-        tolerances = {
-            "minimum_point_coverage": 1.0,
-            "solution": {
-                "relative_l2_max": 1.0,
-                "normalized_linf_max": 1.0,
-            },
-            "gradient": {
-                "relative_l2_max": 1e-3,
-                "normalized_linf_max": 1e-3,
-            },
-        }
+def test_gradient_tolerances_and_point_coverage():
+    def fields(offset, inside):
+        solution = np.array([[1., 2.], [2., 4.], [3., 6.]]) + offset
+        return SampledFields(["rho", "Gamma"], np.array(inside), solution,
+                             np.stack((solution * .1, solution * .2), axis=2))
 
-        report = compare_sampled_fields(reference, candidate, 1, tolerances)
-
-        self.assertEqual(report["status"], "failed")
-        self.assertAlmostEqual(report["sampling"]["common_coverage"], 2 / 3)
-        self.assertIn("common point coverage is below tolerance", report["failures"])
-        self.assertTrue(report["datasets"]["solution"]["equations"]["rho"]["passed"])
-        self.assertTrue(
-            any("gradient_x/rho exceeds tolerance" in item for item in report["failures"])
-        )
-
-    @staticmethod
-    def _sampled(
-        offset: float = 0.0, inside: list[bool] | None = None
-    ) -> SampledFields:
-        solution = np.array([[1.0, 2.0], [2.0, 4.0], [3.0, 6.0]]) + offset
-        gradient = np.stack((solution * 0.1, solution * 0.2), axis=2)
-        return SampledFields(
-            ["rho", "Gamma"],
-            np.array(inside if inside is not None else [True] * 3),
-            solution,
-            gradient,
-        )
+    report = compare_sampled_fields(
+        fields(0., [True] * 3), fields(.1, [True, True, False]), 1,
+        {"minimum_point_coverage": 1.,
+         "solution": {"relative_l2_max": 1., "normalized_linf_max": 1.},
+         "gradient": {"relative_l2_max": 1e-3, "normalized_linf_max": 1e-3}},
+    )
+    assert report["status"] == "failed"
+    assert report["sampling"]["common_coverage"] == 2/3
+    assert "common point coverage is below tolerance" in report["failures"]
+    assert report["datasets"]["solution"]["equations"]["rho"]["passed"]
+    assert any("gradient_x/rho exceeds tolerance" in item for item in report["failures"])

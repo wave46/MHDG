@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from comparison.workflow import compare_completed_run
+from regression_tests.compare import compare_completed_run
 from regression_tests.prepare import prepare_run
 from regression_tests.execute import execute_prepared
 from suite.models import SuiteRunInputs

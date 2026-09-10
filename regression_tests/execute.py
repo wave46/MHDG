@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from comparison.shared.outputs import select_candidate
+from regression_tests.compare_common import select_candidate
 from support.documents import load_json, write_json_atomic
 from support.environments import source_environment
 from support.errors import BundleError, ComparisonError

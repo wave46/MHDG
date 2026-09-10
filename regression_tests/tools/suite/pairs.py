@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from comparison.shared.outputs import select_candidate
-from comparison.workflow import compare_completed_run
+from regression_tests.compare_common import select_candidate
+from regression_tests.compare import compare_completed_run
 from support.documents import load_json
 from support.errors import ComparisonError, HarnessError
 from support.files import file_identity

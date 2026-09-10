@@ -1,1 +1,0 @@
-"""Fixed-mesh comparison implementation."""

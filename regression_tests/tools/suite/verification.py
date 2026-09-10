@@ -6,15 +6,15 @@ from pathlib import Path
 from typing import Any
 
 from bundle.cases import load_case_definition
-from comparison.shared.convergence import (
+from regression_tests.compare_common import (
     effective_newton_maximum,
     read_newton_convergence,
 )
-from comparison.shared.tolerances import (
+from regression_tests.compare_common import (
     load_adaptive_tolerances,
     load_fixed_tolerances,
 )
-from comparison.workflow import compare_completed_run
+from regression_tests.compare import compare_completed_run
 from suite.pairs import compare_layout_pairs
 from support.documents import load_json, write_json_atomic
 from support.errors import BundleError, HarnessError
