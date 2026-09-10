@@ -221,7 +221,7 @@ integration run. This is not part of the current PR06 harness changes.
 # Existing executables; warm suite by default.
 python -m regression_tests check
 
-# Build clean serial and MPI executables first.
+# Build the executable variants required by this suite first.
 python -m regression_tests check --build --build-jobs 8
 
 # Canonical fixed and adaptive cold workflows.
@@ -285,9 +285,17 @@ python -m regression_tests build \
   --settings /private/path/settings.json --jobs 8
 ```
 
-Serial and MPI builds run sequentially because they share objects. The command
-prints the generated manifest path and records commands, logs, Git state,
-toolchain versions, environment checksum, and executable checksums.
+`build` produces both serial and MPI executables. `check --build` builds only
+the variants required by the selected suite, once each. Builds run sequentially
+because they share objects in `lib/`. Existing objects have an unknown manual
+build configuration, so the harness cleans them before building; it also cleans
+between serial and MPI variants. An empty build tree needs no initial clean.
+
+The command prints the generated manifest path and records commands, logs, Git
+state, toolchain versions, environment checksum, and executable checksums. It
+writes no `settings.env`: the manifest selects the new executables directly.
+A manifest may contain just one variant; a suite needing another reports the
+missing build. Use `build` to produce both for subsequent mixed-layout suites.
 
 ### Inspect or run one workflow
 
@@ -520,7 +528,7 @@ Runs are stored below `MHDG_REGRESSION_RUN_ROOT`. Builds use
 
 ```text
 runs/
-├── builds/.../                    executables, logs, metadata, settings.env
+├── builds/.../                    executables, logs, build_metadata.json
 ├── suites/SUITE/RUN_ID/           suite_summary.json
 └── CASE/WORKFLOW/LAYOUT/RUN_ID/
     ├── run_plan.json              requested inputs and comparison policy
@@ -702,7 +710,7 @@ not launch MHDG or need physical data.
 | Public package CLI smoke | `tests/test_cli.py` (pytest) |
 | Shared workflows and inheritance | `tests/test_catalog.py` (pytest) |
 | Generated layout relations and suite defaults | `tests/test_layouts.py` (pytest) |
-| Build | `tests.test_build` |
+| Build | `tests/test_build.py` (pytest) |
 | Bundles and case loading | `tests.test_bundles` |
 | Preparation and parameters | `tests/test_preparation.py` (pytest) |
 | Execution and run metadata | `tests/test_execution.py` (pytest) |

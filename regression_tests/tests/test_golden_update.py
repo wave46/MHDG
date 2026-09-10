@@ -47,11 +47,21 @@ class GoldenUpdateTests(unittest.TestCase):
         self.output = self.root / "new-golden"
         self.build = SimpleNamespace(
             path=self.root / "build",
-            settings_path=self.harness.settings,
             metadata_path=self.root / "build/metadata.json",
         )
         self.build.metadata_path.parent.mkdir()
-        self.build.metadata_path.write_text("{}\n", encoding="utf-8")
+        self.build.metadata_path.write_text(json.dumps({
+            "schema_version": 2, "status": "completed", "build_id": "test-build",
+            "repository": {"revision": "a" * 40},
+            "profile": {"model": "NGammaTiTeNeutral", "dimension": "2D"},
+            "artifacts": {
+                "serial": golden_update._file_record(self.harness.serial_executable),
+                "parallel": golden_update._file_record(self.harness.parallel_executable),
+            },
+            "runtime_files": {
+                self.harness.runtime_file.name: golden_update._file_record(self.harness.runtime_file),
+            },
+        }) + "\n", encoding="utf-8")
         self.build_solver = self._patch("build_solver", return_value=self.build)
         self.run_suite = self._patch("run_suite", side_effect=self._passing_suite)
         self.compare_pairs = self._patch(

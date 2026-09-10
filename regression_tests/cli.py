@@ -148,7 +148,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         result = execute_prepared(prepared, settings)
         return reporting.run_result(result)
     if args.command == "build":
-        from build.workflow import build_solver
+        from .build import build_solver
         from .config import settings
 
         result = build_solver(settings(args.settings, use_build=False), ROOT.parent, args.jobs)
@@ -175,14 +175,13 @@ def _dispatch(args: argparse.Namespace) -> int:
 
 
 def _check(args: argparse.Namespace) -> int:
-    from build.workflow import build_solver
+    from .build import build_solver
     from suite.runner import run_suite
     from suite.reporting import print_run_summary
     from support.errors import BundleError
     from suite.configuration import load_suite_definition
     from catalogs.layouts import load_layouts
-    from bundle.settings import read_settings
-    from .config import runtime_settings
+    from .config import build_settings, runtime_settings
 
     if args.build and args.resume:
         raise BundleError("--build cannot be used with --resume; reuse the original build settings")
@@ -194,12 +193,14 @@ def _check(args: argparse.Namespace) -> int:
         args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases",
     )
     settings = _settings(args, suite["case_id"], use_build=not args.build)
+    layouts = load_layouts(ROOT / "layouts.json")
     if args.build:
-        build = build_solver(settings, ROOT.parent, args.build_jobs)
-        settings = read_settings(build.settings_path)
+        variants = {"serial" if layouts[name]["execution"] == "serial" else "parallel"
+                    for name in suite["layouts"]}
+        build = build_solver(settings, ROOT.parent, args.build_jobs, variants=variants)
+        settings.update(build_settings(build.metadata_path))
         reporting.status("build", "completed", build.path)
         print(f"select with --build-manifest {build.metadata_path}")
-    layouts = load_layouts(ROOT / "layouts.json")
     runtime_settings(settings, [layouts[name] for name in suite["layouts"]])
     path, summary = run_suite(
         settings, args.suite, ROOT / "cases", ROOT / "layouts.json",

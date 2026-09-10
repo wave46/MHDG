@@ -67,6 +67,11 @@ def settings(path=None, *, case=None, bundle=None, build_manifest=None, use_buil
     values.setdefault("MHDG_REGRESSION_BUILD_ROOT", str(Path(values["MHDG_REGRESSION_RUN_ROOT"]) / "builds"))
     if bundle is not None:
         values["MHDG_REGRESSION_DATA_ROOT"] = str(Path(bundle).expanduser().resolve())
+    if not use_build or build_manifest is not None:
+        # A partial new build must not inherit an executable from an old selection.
+        for key in ("MHDG_SERIAL_EXECUTABLE", "MHDG_PARALLEL_EXECUTABLE", "MHDG_SOLVER_REVISION",
+                    "MHDG_BUILD_DESCRIPTION", "MHDG_BUILD_MANIFEST"):
+            values.pop(key, None)
     if build_manifest is not None and use_build:
         values.update(build_settings(Path(build_manifest).expanduser()))
     return values
@@ -93,8 +98,17 @@ def build_settings(path: Path) -> dict[str, str]:
         "MHDG_SOLVER_REVISION": _text(repository.get("revision"), "repository.revision"),
     }
     runtime = _artifact(record.get("runtime_files"), "positionFeketeNodesTri2D.h5", path.parent)
+    artifacts = record.get("artifacts")
+    if not isinstance(artifacts, dict) or not artifacts or artifacts.keys() - {"serial", "parallel"}:
+        raise BundleError("build manifest must contain serial and/or parallel executables")
+    if "variants" in profile and profile["variants"] != {
+        name: "serial" if name == "serial" else "parall" for name in artifacts
+    }:
+        raise BundleError("build artifacts do not match the declared variants")
     for variant, key in (("serial", "MHDG_SERIAL_EXECUTABLE"), ("parallel", "MHDG_PARALLEL_EXECUTABLE")):
-        executable = _artifact(record.get("artifacts"), variant, path.parent)
+        if variant not in artifacts:
+            continue
+        executable = _artifact(artifacts, variant, path.parent)
         if not os.access(executable, os.X_OK):
             raise BundleError(f"build executable is not executable: {executable}")
         if (executable.parent / "positionFeketeNodesTri2D.h5").resolve() != runtime:
@@ -156,7 +170,7 @@ def runtime_settings(values, layouts):
     for execution in {layout["execution"] for layout in layouts}:
         key = "MHDG_SERIAL_EXECUTABLE" if execution == "serial" else "MHDG_PARALLEL_EXECUTABLE"
         if key not in values:
-            raise BundleError("no build selected; pass --build-manifest FILE or use check --build")
+            raise BundleError(f"no build selected for {execution}; pass --build-manifest FILE or use check --build")
         _runtime_files(_solver_executable(values, execution))
     environment = execution_environment(values)
     if any(layout["execution"] == "mpi" for layout in layouts):

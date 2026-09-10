@@ -11,8 +11,9 @@ from typing import Any
 # Temporary standalone entry point while the campaign is replaced in step 6.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from build.configuration import parse_build_jobs
-from build.workflow import build_solver
+from regression_tests.build import build_solver
+from regression_tests.cli import _positive_integer as parse_build_jobs
+from regression_tests.config import build_settings
 from check_balance_diagnostics import check_suite as check_balance_diagnostics
 from bundle.promotion import (
     promote_bundle,
@@ -398,11 +399,16 @@ def _run_build(state: dict[str, Any], args: argparse.Namespace) -> None:
     state["build"]["status"] = "running"
     state["status"] = "running"
     _save(state)
-    result = build_solver(args.settings, args.repository_root, args.build_jobs)
+    settings = read_settings(args.settings)
+    result = build_solver(settings, args.repository_root, args.build_jobs)
+    settings.update(build_settings(result.metadata_path))
+    # Campaign-only bridge until its replacement in step 6; builds emit no .env.
+    generated = Path(state["workspace"]) / "settings" / "build.env"
+    _write_bundle_settings(settings, generated, bundle_root_from_settings(settings))
     state["build"] = {
         "status": "completed",
         "directory": str(result.path),
-        "settings": _file_record(result.settings_path),
+        "settings": _file_record(generated),
         "metadata": _file_record(result.metadata_path),
     }
     state["active_settings"] = state["build"]["settings"]
@@ -823,7 +829,7 @@ def _recorded_path(record: dict[str, Any], label: str) -> Path:
     return path
 
 
-def _write_bundle_settings(template: Path, output: Path, bundle: Path) -> None:
+def _write_bundle_settings(template: Path | dict[str, str], output: Path, bundle: Path) -> None:
     settings = read_settings(template)
     settings["MHDG_REGRESSION_DATA_ROOT"] = str(bundle.resolve())
     contents = "".join(
