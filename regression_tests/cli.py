@@ -132,7 +132,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.command in {"run", "prepare"}:
         from catalogs.layouts import load_layout
         from .prepare import prepare_run
-        from run_case import execute_prepared
+        from .execute import execute_prepared
 
         settings = _settings(args, args.case)
         from .config import runtime_settings

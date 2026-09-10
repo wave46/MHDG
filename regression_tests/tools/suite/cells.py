@@ -6,7 +6,7 @@ from typing import Any
 
 from comparison.workflow import compare_completed_run
 from regression_tests.prepare import prepare_run
-from run_case import execute_prepared
+from regression_tests.execute import execute_prepared
 from suite.models import SuiteRunInputs
 from support.errors import HarnessError
 

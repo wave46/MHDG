@@ -704,8 +704,8 @@ not launch MHDG or need physical data.
 | Generated layout relations and suite defaults | `tests/test_layouts.py` (pytest) |
 | Build | `tests.test_build` |
 | Bundles and case loading | `tests.test_bundles` |
-| Preparation and parameters | `tests.test_preparation` |
-| Execution and run metadata | `tests.test_execution` |
+| Preparation and parameters | `tests/test_preparation.py` (pytest) |
+| Execution and run metadata | `tests/test_execution.py` (pytest) |
 | Fixed comparison | `tests.test_fixed_comparison` |
 | Adaptive comparison | `tests.test_adaptive_comparison` |
 | Reference matrices | `tests.test_matrix_comparison` |
@@ -723,7 +723,7 @@ affected group:
 
 ```bash
 cd regression_tests
-PYTHONPATH=tools python -m unittest tests.test_preparation
+python -m pytest tests/test_preparation.py tests/test_execution.py
 ```
 
 For a cross-cutting change, run all synthetic tests:

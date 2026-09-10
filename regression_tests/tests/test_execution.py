@@ -1,179 +1,129 @@
-from __future__ import annotations
+"""Process outcomes and restart propagation, using tiny executable fixtures."""
 
 import json
-import subprocess
-import sys
-import tempfile
-import unittest
-from pathlib import Path
+from dataclasses import replace
+
+import pytest
+
+from regression_tests.execute import execute_prepared
+from regression_tests.prepare import prepare_run
+from support.files import file_identity
+from tests.fixtures.harness import REGRESSION_ROOT, create_harness, run_command
 
 
-REGRESSION_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
+@pytest.fixture
+def harness(tmp_path):
+    return create_harness(tmp_path, solver=SOLVER, include_provenance=True)
 
-from tests.fixtures.harness import create_harness, run_command  # noqa: E402
+
+def run(harness, workflow="warm", layout="serial_omp1"):
+    completed = run_command(
+        "run", "legacy_case", workflow, "--settings", str(harness.settings),
+        "--layout", layout, "--run-id", "execution-test",
+    )
+    directory = harness.run_directory(workflow, layout, "execution-test")
+    metadata = json.loads((directory / "run_metadata.json").read_text())
+    return completed, directory, metadata
 
 
-class ExecutionWorkflowTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temporary_directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary_directory.cleanup)
-        self.root = Path(self.temporary_directory.name)
-        self.fixture = create_harness(
-            self.root,
-            solver=SOLVER,
-            include_provenance=True,
-        )
+def test_parallel_logs_environment_and_provenance(harness):
+    completed, directory, metadata = run(harness, layout="mpi4_omp4")
+    assert completed.returncode == 0, completed.stderr
+    assert (directory / "stdout.log").read_text() == "solver stdout\n"
+    assert (directory / "stderr.log").read_text() == "solver stderr\n"
+    for filename, value in {
+        "mpi_ranks": "4", "omp_threads": "4", "omp_places": "cores",
+        "omp_proc_bind": "spread", "environment": "loaded",
+    }.items():
+        assert (directory / f"outputs/{filename}.txt").read_text() == value + "\n"
+    assert metadata["status"] == "completed"
+    assert metadata["environment"]["OMP_NUM_THREADS"] == "4"
+    assert metadata["solver"]["revision"] == "a" * 40
+    assert metadata["solver"]["build_manifest"]["path"] == str(harness.build_manifest)
+    assert metadata["hdf5_outputs"] == ["outputs/result.h5"]
+    for record, path in (
+        (metadata["executable"], harness.parallel_executable),
+        (metadata["environment"]["setup_script"], harness.environment_script),
+        (metadata["solver"]["build_manifest"], harness.build_manifest),
+        (metadata["runtime_files"][harness.runtime_file.name], harness.runtime_file),
+    ):
+        assert record == {"path": str(path), **file_identity(path)}
+    for record in metadata["output_files"]:
+        assert record == {"path": record["path"], **file_identity(directory / record["path"])}
 
-    def test_parallel_run_records_logs_outputs_and_metadata(self) -> None:
-        completed = self._run("mpi4_omp4", "parallel")
-        self.assertEqual(completed.returncode, 0, completed.stderr)
 
-        run_dir = self._run_dir("mpi4_omp4", "parallel")
-        self.assertEqual((run_dir / "stdout.log").read_text(), "solver stdout\n")
-        self.assertEqual((run_dir / "stderr.log").read_text(), "solver stderr\n")
-        self.assertEqual(
-            (run_dir / "outputs/mpi_ranks.txt").read_text(encoding="utf-8"),
-            "4\n",
-        )
-        self.assertEqual(
-            (run_dir / "outputs/omp_threads.txt").read_text(encoding="utf-8"),
-            "4\n",
-        )
-        self.assertEqual(
-            (run_dir / "outputs/environment.txt").read_text(encoding="utf-8"),
-            "loaded\n",
-        )
-        metadata = json.loads(
-            (run_dir / "run_metadata.json").read_text(encoding="utf-8")
-        )
-        self.assertEqual(metadata["status"], "completed")
-        self.assertEqual(metadata["environment"]["OMP_NUM_THREADS"], "4")
-        self.assertEqual(metadata["solver"]["revision"], "a" * 40)
-        self.assertEqual(
-            metadata["solver"]["build_manifest"]["path"],
-            str(self.fixture.build_manifest),
-        )
-        self.assertEqual(metadata["hdf5_outputs"], ["outputs/result.h5"])
+@pytest.mark.parametrize("solver,workflow,status,exit_code", [
+    ("no_output", "warm", "missing_hdf5_output", 0),
+    ("failure", "warm", "solver_failed", 7),
+    ("file_error", "cold_adaptive", "solver_reported_error", 0),
+])
+def test_solver_outcomes(harness, solver, workflow, status, exit_code):
+    harness.install_solver({
+        "no_output": NO_OUTPUT_SOLVER, "failure": FAILING_SOLVER,
+        "file_error": FATAL_FILE_ERROR_SOLVER,
+    }[solver], "serial")
+    completed, directory, metadata = run(harness, workflow)
+    assert completed.returncode == 1
+    assert metadata["status"] == status
+    assert metadata["exit_code"] == exit_code
+    if solver == "file_error":
+        first = json.loads((directory / "stages/01_time_init/run_metadata.json").read_text())
+        assert len(first["fatal_log_messages"]) == 2
+        assert all(stage["status"] == "not_run" for stage in metadata["stages"][1:])
 
-    def test_solver_outcomes_have_distinct_statuses(self) -> None:
-        cases = (
-            (NO_OUTPUT_SOLVER, "warm", "missing-output", "missing_hdf5_output", 0),
-            (FAILING_SOLVER, "warm", "solver-failure", "solver_failed", 7),
-            (
-                FATAL_FILE_ERROR_SOLVER,
-                "cold_adaptive",
-                "reported-file-error",
-                "solver_reported_error",
-                0,
-            ),
-        )
-        for solver, workflow, run_id, status, exit_code in cases:
-            with self.subTest(status=status):
-                self.fixture.install_solver(solver, "serial")
-                completed = self._run("serial_omp1", run_id, workflow)
-                self.assertEqual(completed.returncode, 1)
-                metadata = json.loads(
-                    (
-                        self._run_dir("serial_omp1", run_id, workflow)
-                        / "run_metadata.json"
-                    ).read_text()
-                )
-                self.assertEqual(metadata["status"], status)
-                self.assertEqual(metadata["exit_code"], exit_code)
 
-        fatal_stage = self._run_dir(
-            "serial_omp1",
-            "reported-file-error",
-            "cold_adaptive",
-        ) / "stages/01_time_init/run_metadata.json"
-        stage_metadata = json.loads(fatal_stage.read_text())
-        self.assertEqual(len(stage_metadata["fatal_log_messages"]), 2)
+def test_stages_pass_selected_output_to_next_restart(harness):
+    # Multiple outputs force selection from the solver log, not filename ordering.
+    harness.install_solver(STAGED_SOLVER + "printf 'decoy\\n' > outputs/another.h5\n", "serial")
+    completed, directory, metadata = run(harness, "cold_fixed")
+    assert completed.returncode == 0, completed.stderr
+    stages = sorted((directory / "stages").iterdir())
+    assert metadata["status"] == "completed"
+    assert [stage["status"] for stage in metadata["stages"]] == ["completed"] * len(stages)
+    final = stages[-1] / "outputs/result.h5"
+    assert metadata["hdf5_outputs"] == [final.relative_to(directory).as_posix()]
+    assert final.read_text() == ">".join(path.name for path in stages) + "\n"
+    assert not (stages[0] / "inputs/restart.h5").exists()
+    for previous, current in zip(stages, stages[1:]):
+        assert (current / "inputs/restart.h5").resolve() == previous / "outputs/result.h5"
+    assert (directory / "stdout.log").resolve() == stages[-1] / "stdout.log"
 
-    def test_staged_run_passes_each_output_to_the_next_stage(self) -> None:
-        self.fixture.install_solver(STAGED_SOLVER, "serial")
-        completed = self._run(
-            "serial_omp1", "cold-success", workflow="cold_fixed"
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
 
-        run_dir = self._run_dir(
-            "serial_omp1", "cold-success", workflow="cold_fixed"
+@pytest.mark.parametrize("ambiguous", [False, True])
+def test_stages_stop_when_producer_fails_or_output_is_ambiguous(harness, ambiguous):
+    solver = FAILING_STAGED_SOLVER
+    if ambiguous:
+        solver = solver.replace(
+            "exit 7", "touch outputs/one.h5 outputs/two.h5\n  exit 0",
         )
-        metadata = json.loads(
-            (run_dir / "run_metadata.json").read_text(encoding="utf-8")
-        )
-        self.assertEqual(metadata["status"], "completed")
-        self.assertEqual(
-            [stage["status"] for stage in metadata["stages"]],
-            ["completed"] * 7,
-        )
-        self.assertEqual(
-            metadata["hdf5_outputs"],
-            ["stages/07_continuation_05/outputs/result.h5"],
-        )
+    harness.install_solver(solver, "serial")
+    completed, directory, metadata = run(harness, "cold_fixed")
+    expected = "output_selection_failed" if ambiguous else "solver_failed"
+    assert completed.returncode == 1
+    assert metadata["status"] == expected
+    assert [stage["status"] for stage in metadata["stages"]] == [
+        "completed", "completed", expected, *(["not_run"] * 4),
+    ]
+    assert metadata["hdf5_outputs"] == []
+    assert not (directory / "stages/04_continuation_02/run_metadata.json").exists()
+    assert not (directory / "stages/04_continuation_02/inputs/restart.h5").exists()
 
-        stage_dirs = sorted((run_dir / "stages").iterdir())
-        expected_history = ">".join(path.name for path in stage_dirs) + "\n"
-        self.assertEqual(
-            (stage_dirs[-1] / "outputs/result.h5").read_text(encoding="utf-8"),
-            expected_history,
-        )
-        self.assertFalse((stage_dirs[0] / "inputs/restart.h5").exists())
-        for previous, current in zip(stage_dirs, stage_dirs[1:]):
-            self.assertEqual(
-                (current / "inputs/restart.h5").resolve(),
-                (previous / "outputs/result.h5").resolve(),
-            )
-        self.assertEqual(
-            (run_dir / "stdout.log").resolve(),
-            (stage_dirs[-1] / "stdout.log").resolve(),
-        )
 
-    def test_staged_run_stops_after_failed_stage(self) -> None:
-        self.fixture.install_solver(FAILING_STAGED_SOLVER, "serial")
-        completed = self._run(
-            "serial_omp1", "cold-failure", workflow="cold_fixed"
-        )
-        self.assertEqual(completed.returncode, 1)
-
-        run_dir = self._run_dir(
-            "serial_omp1", "cold-failure", workflow="cold_fixed"
-        )
-        metadata = json.loads(
-            (run_dir / "run_metadata.json").read_text(encoding="utf-8")
-        )
-        self.assertEqual(metadata["status"], "solver_failed")
-        self.assertEqual(
-            [stage["status"] for stage in metadata["stages"]],
-            ["completed", "completed", "solver_failed"] + ["not_run"] * 4,
-        )
-        self.assertFalse(
-            (run_dir / "stages/04_continuation_02/run_metadata.json").exists()
-        )
-
-    def _run(
-        self, layout: str, run_id: str, workflow: str = "warm"
-    ) -> subprocess.CompletedProcess[str]:
-        return self._run_workflows(layout, run_id, [workflow])
-
-    def _run_workflows(
-        self, layout: str, run_id: str, workflows: list[str]
-    ) -> subprocess.CompletedProcess[str]:
-        return run_command(
-            "run",
-            "legacy_case",
-            *workflows,
-            "--settings",
-            str(self.fixture.settings),
-            "--layout",
-            layout,
-            "--run-id",
-            run_id,
-        )
-
-    def _run_dir(self, layout: str, run_id: str, workflow: str = "warm") -> Path:
-        return self.fixture.run_directory(workflow, layout, run_id)
+@pytest.mark.parametrize("log_failure", [False, True])
+def test_launch_failure_is_recorded(harness, log_failure):
+    prepared = prepare_run(
+        harness.settings, "legacy_case", "warm", "serial_omp1",
+        REGRESSION_ROOT / "cases", REGRESSION_ROOT / "layouts.json", "launch-failure",
+    )
+    if log_failure:
+        (prepared.path / "stdout.log").mkdir()
+    else:
+        prepared = replace(prepared, command=[str(harness.root / "missing-command")])
+    result = execute_prepared(prepared, {})
+    metadata = json.loads((prepared.path / "run_metadata.json").read_text())
+    assert result.status == metadata["status"] == "launch_failed"
+    assert result.exit_code is None
+    assert metadata["launch_error"]
 
 
 SOLVER = """#!/usr/bin/env bash
