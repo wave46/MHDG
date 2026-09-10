@@ -12,7 +12,6 @@ from support.paths import require_file
 
 
 def suite_execution_inputs(
-    settings_path: Path,
     settings: dict[str, str],
     bundle_root: Path,
     layout_ids: list[str],
@@ -20,7 +19,8 @@ def suite_execution_inputs(
 ) -> dict[str, Any]:
     """Describe files that must remain stable across suite resumes."""
     records = {
-        "settings": _file_record(settings_path, "settings"),
+        "settings": {key: value for key, value in settings.items()
+                     if key not in {"MHDG_REGRESSION_BUILD_ROOT", "MHDG_REGRESSION_BUILD_JOBS"}},
         "bundle_manifest": _file_record(
             bundle_root / "manifest.json",
             "bundle manifest",

@@ -8,7 +8,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class SuiteRunInputs:
-    settings_path: Path
+    settings_path: Path | dict[str, str]
     settings: dict[str, str]
     case_id: str
     run_id: str

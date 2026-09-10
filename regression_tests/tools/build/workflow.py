@@ -25,7 +25,7 @@ RUNTIME_FILE = "positionFeketeNodesTri2D.h5"
 
 
 def build_solver(
-    settings_path: Path,
+    settings_path: Path | dict[str, str],
     repository_root: Path,
     jobs: int | None = None,
 ) -> BuildResult:

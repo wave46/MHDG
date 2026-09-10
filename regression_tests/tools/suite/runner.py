@@ -31,7 +31,7 @@ from support.time import utc_run_id
 
 
 def run_suite(
-    settings_path: Path,
+    settings_path: Path | dict[str, str],
     suite_id: str,
     case_directory: Path,
     layouts_path: Path,
@@ -70,7 +70,6 @@ def run_suite(
         compare,
     )
     execution_inputs = suite_execution_inputs(
-        settings_path,
         settings,
         bundle_root,
         suite["layouts"],

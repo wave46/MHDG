@@ -11,7 +11,7 @@ from support.errors import BundleError
 
 
 def prepare_run(
-    settings_path: Path,
+    settings_path: Path | dict[str, str],
     case_id: str,
     workflow_id: str,
     layout_id: str,

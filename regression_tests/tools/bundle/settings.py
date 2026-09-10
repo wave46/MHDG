@@ -11,8 +11,10 @@ from support.errors import BundleError
 SETTING_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
-def read_settings(settings_path: Path) -> dict[str, str]:
-    """Parse KEY=VALUE settings without executing shell code."""
+def read_settings(settings_path: Path | dict[str, str]) -> dict[str, str]:
+    """Accept resolved settings or parse legacy KEY=VALUE campaign inputs."""
+    if isinstance(settings_path, dict):
+        return dict(settings_path)
     try:
         lines = settings_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:

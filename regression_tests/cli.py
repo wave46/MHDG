@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -24,14 +23,16 @@ def parser() -> argparse.ArgumentParser:
         if settings:
             child.add_argument(
                 "--settings", type=Path,
-                default=Path(os.environ.get(
-                    "MHDG_REGRESSION_GOLDEN_SETTINGS", ROOT / "golden.local.env",
-                )),
-                help="local settings file (migration format; default: golden.local.env)",
+                help="machine JSON (default: settings.local.json or MHDG_REGRESSION_SETTINGS)",
             )
         return child
 
+    def selection(child):
+        child.add_argument("--bundle", type=Path, help="external bundle; overrides the selected case default")
+        child.add_argument("--build-manifest", type=Path, help="build_metadata.json; overrides the default build")
+
     check = command("check", "Run a suite and its scientific comparisons.", settings=True)
+    selection(check)
     check.add_argument("suite", nargs="?", default="warm", metavar="SUITE")
     check.add_argument("--run-id")
     check.add_argument("--resume", action="store_true", help="resume an existing suite run")
@@ -46,6 +47,7 @@ def parser() -> argparse.ArgumentParser:
         ("prepare", "Debug: prepare one workflow without execution."),
     ):
         run = command(name, help, settings=True)
+        selection(run)
         run.add_argument("case", metavar="CASE")
         run.add_argument("workflow", metavar="WORKFLOW")
         run.add_argument("--layout", default="mpi4_omp4", metavar="LAYOUT")
@@ -60,6 +62,10 @@ def parser() -> argparse.ArgumentParser:
 
     build = command("build", "Build regression executables.", settings=True)
     build.add_argument("--jobs", type=_positive_integer, metavar="N")
+
+    doctor = command("doctor", "Check selected catalogs, data, build and machine prerequisites.", settings=True)
+    selection(doctor)
+    doctor.add_argument("suite", nargs="?", default="warm", metavar="SUITE")
 
     compare = command("compare", "Debug: compare a saved run or suite summary.")
     compare.add_argument("path", type=Path, metavar="RUN_OR_SUITE_SUMMARY")
@@ -119,26 +125,35 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _list(args)
     if args.command == "check":
         return _check(args)
+    if args.command == "doctor":
+        from .doctor import diagnose
+
+        return diagnose(args)
     if args.command in {"run", "prepare"}:
-        from bundle.settings import read_settings
+        from catalogs.layouts import load_layout
         from prepare_run import prepare_run
         from run_case import execute_prepared
 
+        settings = _settings(args, args.case)
+        from .config import runtime_settings
+
+        runtime_settings(settings, [load_layout(args.layout, ROOT / "layouts.json")])
         prepared = prepare_run(
-            args.settings, args.case, args.workflow, args.layout,
+            settings, args.case, args.workflow, args.layout,
             ROOT / "cases", ROOT / "layouts.json", args.run_id,
         )
         reporting.prepared(prepared)
         if args.command == "prepare":
             return 0
-        result = execute_prepared(prepared, read_settings(args.settings))
+        result = execute_prepared(prepared, settings)
         return reporting.run_result(result)
     if args.command == "build":
         from build.workflow import build_solver
+        from .config import settings
 
-        result = build_solver(args.settings, ROOT.parent, args.jobs)
+        result = build_solver(settings(args.settings, use_build=False), ROOT.parent, args.jobs)
         reporting.status("build", "completed", result.path)
-        print(f"generated settings: {result.settings_path}")
+        print(f"select with --build-manifest {result.metadata_path}")
         return 0
     if args.command == "compare":
         return _compare(args)
@@ -164,16 +179,28 @@ def _check(args: argparse.Namespace) -> int:
     from suite.runner import run_suite
     from suite.reporting import print_run_summary
     from support.errors import BundleError
+    from suite.configuration import load_suite_definition
+    from catalogs.layouts import load_layouts
+    from bundle.settings import read_settings
+    from .config import runtime_settings
 
     if args.build and args.resume:
         raise BundleError("--build cannot be used with --resume; reuse the original build settings")
     if args.build_jobs is not None and not args.build:
         raise BundleError("--build-jobs requires --build")
-    settings = args.settings
+    if args.build and args.build_manifest:
+        raise BundleError("select --build or --build-manifest, not both")
+    suite = load_suite_definition(
+        args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases",
+    )
+    settings = _settings(args, suite["case_id"], use_build=not args.build)
     if args.build:
         build = build_solver(settings, ROOT.parent, args.build_jobs)
-        settings = build.settings_path
+        settings = read_settings(build.settings_path)
         reporting.status("build", "completed", build.path)
+        print(f"select with --build-manifest {build.metadata_path}")
+    layouts = load_layouts(ROOT / "layouts.json")
+    runtime_settings(settings, [layouts[name] for name in suite["layouts"]])
     path, summary = run_suite(
         settings, args.suite, ROOT / "cases", ROOT / "layouts.json",
         ROOT / "suites.json", ROOT / "tolerances.json", args.run_id,
@@ -185,6 +212,25 @@ def _check(args: argparse.Namespace) -> int:
     )
     print_run_summary(summary, path)
     return 0 if summary["status"] == "passed" else 1
+
+
+def _settings(args, case, *, use_build=True):
+    from .config import settings
+    from support.errors import BundleError
+
+    values = settings(
+        args.settings, case=case, bundle=args.bundle,
+        build_manifest=args.build_manifest, use_build=use_build,
+    )
+    if not values.get("MHDG_REGRESSION_DATA_ROOT"):
+        raise BundleError(f"no bundle selected for {case}; pass --bundle DIR or set defaults.bundles")
+    print(f"case: {case}")
+    print(f"bundle: {values['MHDG_REGRESSION_DATA_ROOT']}")
+    selected_build = values.get("MHDG_BUILD_MANIFEST", "prebuilt executable settings")
+    print(f"build: {selected_build if use_build else 'new build requested'}")
+    if use_build and values.get("MHDG_SOLVER_REVISION"):
+        print(f"solver revision: {values['MHDG_SOLVER_REVISION']}")
+    return values
 
 
 def _compare(args: argparse.Namespace) -> int:

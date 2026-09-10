@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -79,6 +81,16 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertEqual(
             settings["MHDG_BUILD_MANIFEST"], str(result.metadata_path)
         )
+
+    def test_build_uses_configured_shell_without_environment_script(self) -> None:
+        with patch.dict(os.environ, {
+            "PATH": f"{self.repository / 'fake-bin'}:{os.environ['PATH']}",
+            "MHDG_FAKE_ENV": "loaded", "MHDG_FAKE_LOG": str(self.make_log),
+        }):
+            result = build_solver({"MHDG_REGRESSION_BUILD_ROOT": str(self.build_root)}, self.repository)
+        metadata = json.loads(result.metadata_path.read_text())
+        self.assertIsNone(metadata["environment_script"])
+        self.assertNotIn("MHDG_ENVIRONMENT_SCRIPT", read_settings(result.settings_path))
 
     def _create_repository(self) -> None:
         lib = self.repository / "lib"

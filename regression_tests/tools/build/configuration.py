@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,7 +17,7 @@ DEFAULT_JOBS = 8
 
 
 def configure_build(
-    settings_path: Path,
+    settings_path: Path | dict[str, str],
     repository_root: Path,
     jobs: int | None,
 ) -> BuildConfiguration:
@@ -27,13 +28,11 @@ def configure_build(
     test_directory = repository_root / "test"
     _require_directory(library_directory, "solver library directory")
 
-    environment_script = Path(
-        settings.get(
-            "MHDG_ENVIRONMENT_SCRIPT",
-            str(library_directory / "Make.inc" / "init_vars_libs.sh"),
-        )
-    ).expanduser()
-    environment_script, environment = source_environment(environment_script)
+    configured_script = settings.get("MHDG_ENVIRONMENT_SCRIPT")
+    if configured_script:
+        environment_script, environment = source_environment(Path(configured_script).expanduser())
+    else:
+        environment_script, environment = None, dict(os.environ)
 
     selected_jobs = jobs or _configured_jobs(settings)
     revision, changes = git_state(repository_root)

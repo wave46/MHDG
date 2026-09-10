@@ -20,6 +20,7 @@
 test/*.sh*
 code_tests
 regression_tests/*.local.env
+regression_tests/*.local.json
 
 # Python-generated files
 __pycache__/

@@ -22,7 +22,7 @@ RUNTIME_FILENAMES = ("positionFeketeNodesTri2D.h5",)
 
 
 def load_preparation_inputs(
-    settings_path: Path,
+    settings_path: Path | dict[str, str],
     case_id: str,
     workflow_id: str,
     layout_id: str,

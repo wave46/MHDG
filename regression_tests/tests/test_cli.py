@@ -22,7 +22,7 @@ def test_help_and_discovery_need_no_machine_setup():
     )
     assert help_result.returncode == 0, help_result.stderr
     assert "--cases" not in help_result.stdout
-    environment = {"MHDG_REGRESSION_GOLDEN_SETTINGS": "/nonexistent/settings.env"}
+    environment = {"MHDG_REGRESSION_SETTINGS": "/nonexistent/settings.env"}
     for listing in ("cases", "suites", "layouts", "workflows"):
         result = run_command("list", listing, environment=environment)
         assert result.returncode == 0, result.stderr

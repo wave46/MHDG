@@ -18,6 +18,10 @@ REGRESSION_ROOT = Path(__file__).resolve().parents[2]
 EXIT_SOLVER = "#!/usr/bin/env bash\nexit 0\n"
 MPI_LAUNCHER = """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "$1" == '--version' ]]; then
+  printf 'mpirun (Open MPI) test launcher\n'
+  exit 0
+fi
 test "$1" = '--bind-to'
 test "$2" = 'core'
 test "$3" = '--map-by'

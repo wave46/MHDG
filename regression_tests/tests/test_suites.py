@@ -146,7 +146,7 @@ class SuiteWorkflowTests(unittest.TestCase):
         completed = run_command(
             "check",
             environment={
-                "MHDG_REGRESSION_GOLDEN_SETTINGS": str(self.fixture.settings)
+                "MHDG_REGRESSION_SETTINGS": str(self.fixture.settings)
             },
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)

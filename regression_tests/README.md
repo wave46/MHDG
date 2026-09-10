@@ -27,9 +27,8 @@ accepted suite results   -> golden bundle
 The routine case is `legacy_case`.
 
 The Python package is the public entry point; the shell dispatcher has been
-removed. During migration, `check` still defaults to limited `warm`, and settings
-still use the existing `.env` format. Machine settings/doctor come next; the
-routine/full profiles and bundle readiness follow at their planned checkpoints.
+removed. During migration, `check` still defaults to limited `warm`; routine/full
+profiles and bundle readiness follow at their planned checkpoints.
 Golden campaigns and detailed diagnostics temporarily remain standalone tools;
 the new CLI does not expose the campaign recovery/publication state machine.
 
@@ -57,27 +56,55 @@ python -m pip install -r regression_tests/requirements.txt
 Adaptive comparisons also need `hdg_postprocess`. Activate that Python environment
 or invoke its interpreter directly instead of `python`.
 
-Create the ignored local settings file:
+Machine preferences live in one ignored JSON file. Copy the example and select
+an existing build manifest and accepted bundles, or pass those selections on the
+command line:
 
 ```bash
-cp regression_tests/settings.example.env regression_tests/golden.local.env
+cp regression_tests/settings.example.json regression_tests/settings.local.json
+python -m regression_tests doctor
+python -m regression_tests check warm
+python -m regression_tests check race_matrix
+
+# Explicit selections override local defaults.
+python -m regression_tests check diverted_warm \
+  --bundle /path/to/diverted/golden_bundle \
+  --build-manifest /path/to/build/build_metadata.json
 ```
 
-Fill in absolute paths for the external bundle, private run root, solver
-executables, Open MPI launcher, and environment script. Executable paths are
-only needed for prebuilt runs; `--build` generates them automatically.
+| Owner | Settings |
+| --- | --- |
+| Repository | Automatically discovered cases, workflows, suites, layouts and tolerances |
+| Machine | `run_root`, optional `build_root`, `build_jobs`, `mpi_launcher`, `environment_script` |
+| Invocation/defaults | `--bundle`, `--build-manifest`; optional `defaults.bundles` per case and `defaults.build` |
+| Generated build manifest | Executables, solver revision, binary/runtime checksums; never enter these manually |
 
-Validate the configured bundle and run the smallest accepted-reference check:
+Use `--settings FILE` or `MHDG_REGRESSION_SETTINGS` to select a different machine
+file. Relative paths inside JSON are relative to that file; command-line paths
+are relative to the current directory. Without a machine file, the scratch root
+is `~/.cache/mhdg-regression`; build output defaults to its `builds/` directory.
+No bundle or build is chosen implicitly. `check` prints its effective selections.
 
-```bash
-python -m regression_tests bundle validate /path/to/golden_bundle
+Open MPI is discovered from the configured shell environment. Set `mpi_launcher`
+only when discovery is insufficient. `environment_script` is optional when the
+current shell already provides the runtime libraries/toolchain. A supplied build
+needs no compiler setup. `doctor [SUITE]` verifies Python prerequisites, catalogs,
+bundle checksums, build artifacts, launcher and scratch accessibility without
+creating runs. It does not execute the solver or prove numerical convergence.
 
-python -m regression_tests check
-```
+`build` and `check --build` produce a manifest; select the printed
+`--build-manifest` path for later runs/resume, or save it as `defaults.build`.
+A new build ignores the old default build. Build manifests must describe completed
+NGammaTiTeNeutral 2D builds; selected binaries and Fekete data must match their
+recorded checksums. Runtime environment setup remains machine-owned rather than
+being copied from another machine's build provenance.
 
-`check` defaults to the `warm` suite and
-`regression_tests/golden.local.env`. Override the file with `--settings FILE`
-or `MHDG_REGRESSION_GOLDEN_SETTINGS`. It must point to a golden-class bundle.
+Existing `.env` files remain accepted through explicit `--settings FILE` during
+migration. Their old executable-path contract is unchanged. Golden campaigns
+still use that format until their replacement; no new `.env` file is needed for
+the package CLI. Existing suite summaries made before this settings refactor
+cannot be resumed: start a new run ID; their output remains available to compare.
+
 Use `--diagnostics off|summary|equations|detailed` to run the same suite with
 an explicit balance-diagnostics mode. The selected override is recorded in
 the suite summary and each run plan.
@@ -201,7 +228,7 @@ python -m regression_tests check --build --build-jobs 8
 python -m regression_tests check cold --build --build-jobs 8
 
 # Five independent PR06 neutral-feature goldens with a private setup.
-MHDG_REGRESSION_GOLDEN_SETTINGS=/private/path/pr06-neutral-features.local.env \
+MHDG_REGRESSION_SETTINGS=/private/path/settings.json \
   python -m regression_tests check neutral_features_warm
 ```
 
@@ -212,15 +239,15 @@ MHDG_REGRESSION_GOLDEN_SETTINGS=/private/path/pr06-neutral-features.local.env \
 ```bash
 # Direct serial_omp1 versus serial_omp16 race comparison; no golden output.
 python -m regression_tests check --allow-candidate race \
-  --settings /private/path/settings.env
+  --settings /private/path/settings.json
 
 # Five PR06 neutral variants across all six pairs of the four tracked layouts.
 python -m regression_tests check --allow-candidate neutral_feature_race_matrix \
-  --settings /private/path/pr06-neutral-features.local.env
+  --settings /private/path/settings.json
 
 # Save an expensive matrix before comparison or acceptance.
 python -m regression_tests check --allow-candidate cold_matrix \
-  --settings /private/path/settings.env \
+  --settings /private/path/settings.json \
   --run-only --run-id overnight-01
 ```
 
@@ -228,21 +255,21 @@ Resume an interrupted matrix with the same suite, settings, and run ID:
 
 ```bash
 python -m regression_tests check --allow-candidate cold_matrix \
-  --settings /private/path/settings.env \
+  --settings /private/path/settings.json \
   --run-only --run-id overnight-01 --resume
 ```
 
 Recorded cells are skipped. An incomplete run is preserved and retried as
 `RUN_ID-resume-N`. Resume rejects changed settings, bundle data, catalogs,
 executables, or launcher. `--build` cannot be combined with `--resume`; after
-an initial `--build`, use the generated `settings.env` printed by that build.
+an initial `--build`, select the printed `--build-manifest` path.
 
 Run the opt-in balance suite in the background with the PR06 neutral-feature
 bundle and the existing MPI/OpenMP executable:
 
 ```bash
 nohup python -m regression_tests check --allow-candidate balance_diagnostics_cold \
-  --settings regression_tests/pr06-neutral-features.local.env \
+  --settings regression_tests/settings.local.json \
   --run-only --run-id pr07-balance-overnight-01 \
   > pr07-balance-overnight-01.log 2>&1 &
 ```
@@ -255,11 +282,11 @@ remain diagnostics-off; only the two diagnostic workflow variants request
 
 ```bash
 python -m regression_tests build \
-  --settings /private/path/settings.env --jobs 8
+  --settings /private/path/settings.json --jobs 8
 ```
 
 Serial and MPI builds run sequentially because they share objects. The command
-prints the generated settings path and records commands, logs, Git state,
+prints the generated manifest path and records commands, logs, Git state,
 toolchain versions, environment checksum, and executable checksums.
 
 ### Inspect or run one workflow
@@ -268,7 +295,7 @@ Preparation validates and renders an isolated run but does not launch MHDG:
 
 ```bash
 python -m regression_tests prepare legacy_case cold_step_adaptive \
-  --layout serial_omp16 --settings /private/path/settings.env
+  --layout serial_omp16 --settings /private/path/settings.json
 ```
 
 Execute one workflow directly when debugging:
@@ -276,7 +303,7 @@ Execute one workflow directly when debugging:
 ```bash
 python -m regression_tests run legacy_case cold_fixed \
   --layout mpi4_omp4 --run-id investigation-01 \
-  --settings /private/path/settings.env
+  --settings /private/path/settings.json
 ```
 
 Prefer suites for routine work because they preserve one resumable summary.
@@ -659,6 +686,7 @@ not launch MHDG or need physical data.
 
 | Changed area | Test group |
 | --- | --- |
+| Settings/build selection and doctor | `tests/test_settings.py` (pytest) |
 | Public package CLI smoke | `tests/test_cli.py` (pytest) |
 | Shared workflows and inheritance | `tests/test_catalog.py` (pytest) |
 | Generated layout relations and suite defaults | `tests/test_layouts.py` (pytest) |

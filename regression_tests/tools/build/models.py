@@ -23,7 +23,7 @@ class BuildConfiguration:
     build_directory: Path
     binary_directory: Path
     log_directory: Path
-    environment_script: Path
+    environment_script: Path | None
     environment: dict[str, str]
     jobs: int
     revision: str

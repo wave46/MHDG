@@ -59,7 +59,7 @@ def write_build_metadata(
         },
         "profile": profile,
         "commands": commands,
-        "environment_script": _file_record(configuration.environment_script),
+        "environment_script": _file_record(configuration.environment_script) if configuration.environment_script else None,
         "toolchain": toolchain_record(configuration.environment),
         "artifacts": {
             name: _file_record(path) for name, path in executables.items()
@@ -82,9 +82,6 @@ def write_generated_settings(
             "MHDG_REGRESSION_BUILD_ROOT": str(configuration.build_root),
             "MHDG_SERIAL_EXECUTABLE": str(executables["serial"]),
             "MHDG_PARALLEL_EXECUTABLE": str(executables["parallel"]),
-            "MHDG_ENVIRONMENT_SCRIPT": str(
-                configuration.environment_script.resolve()
-            ),
             "MHDG_SOLVER_REVISION": configuration.revision,
             "MHDG_BUILD_DESCRIPTION": (
                 f"regression build {configuration.build_id}"
