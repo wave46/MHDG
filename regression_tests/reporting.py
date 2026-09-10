@@ -14,7 +14,7 @@ def status(subject, outcome, path) -> None:
 
 
 def prepared(run) -> None:
-    from preparation.models import PreparedRun
+    from .prepare import PreparedRun
 
     status("run", "prepared", run.path)
     if isinstance(run, PreparedRun):

@@ -5,7 +5,7 @@ from __future__ import annotations
 from execution.models import RunResult
 from execution.single import execute_run
 from execution.staged import execute_staged_run
-from preparation.models import (
+from regression_tests.prepare import (
     PreparedExecution,
     PreparedStagedRun,
 )

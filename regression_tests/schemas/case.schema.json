@@ -25,6 +25,9 @@
     },
     "workflows": {
       "$ref": "#/$defs/workflows"
+    },
+    "parameter_namelists": {
+      "$ref": "#/$defs/parameter_namelists"
     }
   },
   "$defs": {
@@ -151,6 +154,9 @@
           "additionalProperties": {
             "$ref": "#/$defs/stage_changes"
           }
+        },
+        "parameter_namelists": {
+          "$ref": "#/$defs/parameter_namelists"
         }
       }
     },
@@ -240,6 +246,9 @@
               "$ref": "#/$defs/stage"
             }
           }
+        },
+        "parameter_namelists": {
+          "$ref": "#/$defs/parameter_namelists"
         }
       }
     },
@@ -264,7 +273,20 @@
             "bounded",
             "finite_only"
           ]
+        },
+        "parameter_namelists": {
+          "$ref": "#/$defs/parameter_namelists"
         }
+      }
+    },
+    "parameter_namelists": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
       }
     }
   }

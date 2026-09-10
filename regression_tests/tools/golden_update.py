@@ -8,6 +8,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Temporary standalone entry point while the campaign is replaced in step 6.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from build.configuration import parse_build_jobs
 from build.workflow import build_solver
 from check_balance_diagnostics import check_suite as check_balance_diagnostics

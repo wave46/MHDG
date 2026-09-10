@@ -74,11 +74,18 @@ def test_case_overrides_reach_derived_workflows_without_changing_shared_inputs(c
     original_shared = (cases.parent / "workflows.json").read_bytes()
     declaration["workflows"]["cold_fixed"] = {
         "parameter_overrides": {"nrp": 12},
-        "stage_overrides": {"settle": {"parameter_overrides": {"tNR": 0.0001}}},
+        "parameter_namelists": {"nrp": "numerics"},
+        "stage_overrides": {"settle": {
+            "parameter_overrides": {"tNR": 0.0001},
+            "parameter_namelists": {"tNR": "convergence"},
+        }},
     }
+    declaration["parameter_namelists"] = {"new_knob": "case_physics"}
     case = load_case(catalog)
     adaptive = case["workflows"]["cold_adaptive"]
     assert adaptive["parameter_overrides"] == {"nrp": 12, "rest_adapt": False}
+    assert adaptive["parameter_namelists"] == {"new_knob": "case_physics", "nrp": "numerics"}
+    assert adaptive["stages"][1]["parameter_namelists"] == {"tNR": "convergence"}
     assert [stage["restart_from"] for stage in adaptive["stages"]] == [
         "analytical", "previous_stage",
     ]

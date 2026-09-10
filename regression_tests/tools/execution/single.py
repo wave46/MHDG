@@ -17,7 +17,7 @@ from execution.models import (
     SolverProcessResult,
 )
 from execution.process import launch_solver, runtime_environment
-from preparation.models import PreparedRun
+from regression_tests.prepare import PreparedRun
 from support.documents import write_json_atomic
 from support.time import utc_now
 

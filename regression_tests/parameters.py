@@ -12,34 +12,18 @@ from support.errors import BundleError
 ASSIGNMENT_RE = re.compile(
     r"^(?P<prefix>\s*(?P<key>[A-Za-z][A-Za-z0-9_]*)\s*=\s*).*$"
 )
-INSERTABLE_PARAMETERS = {
-    "balance_diagnostics_mode": "utils_lst",
-    "neutral_wall_sources_in_elements": "switch_lst",
-    "neutral_perpendicular_diffusion": "switch_lst",
-    "neutral_flux_limiter_save_2d": "switch_lst",
-    "neutral_flux_limiter_mode": "phys_lst",
-    "neutral_flux_limiter_tn_source": "phys_lst",
-    "neutral_flux_limiter_tn_ev": "phys_lst",
-    "neutral_flux_limiter_eps": "phys_lst",
-    "neutral_flux_limiter_fs_fraction": "phys_lst",
-    "neutral_flux_limiter_fs_flux_min": "phys_lst",
-}
-INSERTED_PARAMETER_SPELLINGS = {
-    "neutral_flux_limiter_tn_ev": "neutral_flux_limiter_tn_eV",
-}
-
-
 def render_parameter_file(
     source: Path,
     destination: Path,
     replacements: dict[str, Path | str],
     parameter_overrides: dict[str, bool | float | int | str] | None = None,
+    parameter_namelists: dict[str, str] | None = None,
 ) -> None:
     """Render selected path and parameter assignments in a copied input file."""
     lines = _read_parameter_lines(source)
     values = _replacement_values(replacements, parameter_overrides)
     rendered, counts = _render_assignments(lines, values)
-    rendered = _insert_supported_missing_assignments(rendered, values, counts)
+    rendered = _insert_missing_assignments(rendered, values, counts, parameter_namelists or {})
     _require_single_assignment(counts)
     _write_parameter_file(destination, rendered)
 
@@ -95,12 +79,20 @@ def _render_assignments(
     for line in lines:
         body = line.rstrip("\r\n")
         ending = line[len(body) :]
-        code, marker, comment = body.partition("!")
+        code, marker, comment = body, "", ""
+        for token in re.finditer(r"'[^']*'|\"[^\"]*\"|!", body):
+            if token.group() == "!":
+                code, marker, comment = body[:token.start()], "!", body[token.end():]
+                break
         match = ASSIGNMENT_RE.match(code)
         key = match.group("key").lower() if match else ""
         if key not in values:
             rendered.append(line)
             continue
+
+        scalar_code = re.sub(r"'[^']*'|\"[^\"]*\"", "''", code)
+        if re.search(r",\s*[A-Za-z][A-Za-z0-9_]*(?:\([^)]*\))?\s*=", scalar_code) or scalar_code.rstrip().endswith("&"):
+            raise BundleError(f"parameter replacement requires one complete assignment per line: {key}")
 
         suffix = f" !{comment}" if marker else ""
         rendered.append(f"{match.group('prefix')}{values[key]}{suffix}{ending}")
@@ -115,14 +107,16 @@ def _require_single_assignment(counts: dict[str, int]) -> None:
         raise BundleError(f"parameter assignments must appear once: {details}")
 
 
-def _insert_supported_missing_assignments(
+def _insert_missing_assignments(
     lines: list[str],
     values: dict[str, str],
     counts: dict[str, int],
+    namelists: dict[str, str],
 ) -> list[str]:
-    """Insert new runtime switches into parameter files from older bundles."""
+    """Insert absent scalars only into explicitly declared namelists."""
     rendered = list(lines)
-    for key, namelist in INSERTABLE_PARAMETERS.items():
+    for spelling, namelist in namelists.items():
+        key = spelling.lower()
         if key not in values or counts[key] != 0:
             continue
         header = re.compile(rf"^\s*&{re.escape(namelist)}\s*(?:!.*)?$", re.IGNORECASE)
@@ -135,7 +129,6 @@ def _insert_supported_missing_assignments(
             continue
         index = matches[0] + 1
         ending = "\r\n" if rendered[matches[0]].endswith("\r\n") else "\n"
-        spelling = INSERTED_PARAMETER_SPELLINGS.get(key, key)
         rendered.insert(index, f"    {spelling} = {values[key]}{ending}")
         counts[key] = 1
     return rendered

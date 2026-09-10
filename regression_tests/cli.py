@@ -131,7 +131,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         return diagnose(args)
     if args.command in {"run", "prepare"}:
         from catalogs.layouts import load_layout
-        from prepare_run import prepare_run
+        from .prepare import prepare_run
         from run_case import execute_prepared
 
         settings = _settings(args, args.case)

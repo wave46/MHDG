@@ -44,6 +44,7 @@ def normalize_case_definition(
             declaration["workflows"],
             shared.get("workflows", {}),
             shared.get("sequences", {}),
+            {**shared.get("parameter_namelists", {}), **declaration.get("parameter_namelists", {})},
         ),
     }
 
@@ -80,6 +81,7 @@ def _workflows(
     declarations: dict[str, dict[str, Any]],
     shared: dict[str, dict[str, Any]],
     sequences: dict[str, list[dict[str, Any]]],
+    parameter_namelists: dict[str, str],
 ) -> dict[str, dict[str, Any]]:
     # Overlay case choices before resolving parents, so adaptive/feature
     # workflows inherit this case's base inputs and stage adjustments.
@@ -121,7 +123,10 @@ def _workflows(
         return merged
 
     return {
-        workflow_id: _normalize_workflow(resolve(workflow_id), sequences)
+        workflow_id: _normalize_workflow(
+            _extend_workflow({"parameter_namelists": parameter_namelists}, resolve(workflow_id)),
+            sequences,
+        )
         for workflow_id in declarations
     }
 
@@ -133,11 +138,9 @@ def _extend_workflow(
     """Apply one derived declaration while retaining base parameter values."""
     extended = deepcopy(base)
     extended.update(changes)
-    if "parameter_overrides" in changes:
-        extended["parameter_overrides"] = {
-            **base.get("parameter_overrides", {}),
-            **changes["parameter_overrides"],
-        }
+    for key in ("parameter_overrides", "parameter_namelists"):
+        if key in changes:
+            extended[key] = {**base.get(key, {}), **changes[key]}
     if "stage_overrides" in changes:
         previous = base.get("stage_overrides", {})
         extended["stage_overrides"] = {
@@ -167,6 +170,7 @@ def _normalize_workflow(
     _copy_if_present(declaration, workflow, "restart", "restart_role")
     _copy_if_present(declaration, workflow, "reference", "reference_role")
     _copy_if_present(declaration, workflow, "outputs", "output_roles")
+    _copy_if_present(declaration, workflow, "parameter_namelists", "parameter_namelists")
     _copy_if_present(
         declaration,
         workflow,
@@ -229,6 +233,7 @@ def _normalize_stage(
         "newton_check": declaration.get("newton_check", "bounded"),
     }
     overrides = declaration.get("parameter_overrides", {}).copy()
+    _copy_if_present(declaration, stage, "parameter_namelists", "parameter_namelists")
     if stage_id in adaptive_stages:
         overrides["rest_adapt"] = True
     if overrides:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from comparison.workflow import compare_completed_run
-from prepare_run import prepare_run
+from regression_tests.prepare import prepare_run
 from run_case import execute_prepared
 from suite.models import SuiteRunInputs
 from support.errors import HarnessError

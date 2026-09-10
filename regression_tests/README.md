@@ -616,12 +616,24 @@ parameter overrides. Add the new workflow identifier to an existing or new
 suite in `suites.json`.
 
 Overrides accept booleans, finite numbers, and strings. The named assignment
-must occur exactly once in the selected MHDG parameter file. Preparation
-formats it in a private copy and records the effective values in
-`run_plan.json`; the bundle is unchanged.
+must occur exactly once, or declare its insertion namelist:
+
+```json
+"parameter_overrides": {"new_coefficient": 0.25},
+"parameter_namelists": {"new_coefficient": "phys_lst"}
+```
+
+`parameter_namelists` can supply shared defaults in `workflows.json`, case
+defaults, or workflow/stage overrides. It only inserts missing assignments;
+existing assignments retain their location. A missing/ambiguous assignment or
+insertion group fails. No Python physics-key whitelist is needed. The renderer
+handles one complete scalar assignment per line; keep arrays and more complex
+Fortran syntax in the supplied input files. Comments and untouched lines are
+preserved. Preparation renders a private copy and records effective values in
+`run_plan.json`; immutable bundle inputs remain symlinked and unchanged.
 
 Workflow parameter overrides apply to every stage; stage parameter values take
-precedence there. With `extends`, `parameter_overrides` merge with the parent,
+precedence there. With `extends`, `parameter_overrides` and `parameter_namelists` merge with the parent,
 and `stage_overrides` merge by stage ID (including their parameter values).
 Other supplied fields, including the `stages` list, replace the parent field.
 

@@ -151,7 +151,7 @@ def openmpi_version(launcher, environment):
 
 def runtime_settings(values, layouts):
     """Check selected execution prerequisites before creating run directories."""
-    from preparation.configuration import _runtime_files, _solver_executable
+    from .prepare import _runtime_files, _solver_executable
 
     for execution in {layout["execution"] for layout in layouts}:
         key = "MHDG_SERIAL_EXECUTABLE" if execution == "serial" else "MHDG_PARALLEL_EXECUTABLE"

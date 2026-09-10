@@ -8,8 +8,8 @@ import time
 from pathlib import Path
 
 from execution.models import RuntimeEnvironment, SolverProcessResult
-from preparation.commands import openmp_environment
-from preparation.models import PreparedRun
+from regression_tests.prepare import openmp_environment
+from regression_tests.prepare import PreparedRun
 from support.environments import source_environment
 from support.errors import BundleError
 from support.time import utc_now

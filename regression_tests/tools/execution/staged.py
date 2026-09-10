@@ -9,7 +9,7 @@ from typing import Any
 from comparison.shared.outputs import select_candidate
 from execution.models import RunResult
 from execution.single import execute_run
-from preparation.models import PreparedStage, PreparedStagedRun
+from regression_tests.prepare import PreparedStage, PreparedStagedRun
 from support.documents import load_json, write_json_atomic
 from support.errors import BundleError, ComparisonError
 from support.time import utc_now
