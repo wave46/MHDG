@@ -442,6 +442,7 @@ def _run_stage(
         state["active_bundle_class"],
         compare=stage["kind"] not in {"matrix", "reference"},
         resume=resume,
+        case_id=args.case_id,
     )
     passed = summary["status"] == "passed"
     stage["summary"] = _file_record(summary_path)

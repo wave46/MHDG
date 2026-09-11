@@ -31,9 +31,10 @@ def parser() -> argparse.ArgumentParser:
         child.add_argument("--bundle", type=Path, help="external bundle; overrides the selected case default")
         child.add_argument("--build-manifest", type=Path, help="build_metadata.json; overrides the default build")
 
-    check = command("check", "Run a suite and its scientific comparisons.", settings=True)
+    check = command("check", "Run a scientific profile or focused suite.", settings=True)
     selection(check)
-    check.add_argument("suite", nargs="?", default="warm", metavar="SUITE")
+    check.add_argument("suite", nargs="?", default="routine", metavar="PROFILE_OR_SUITE")
+    check.add_argument("--case", help="case override for a focused suite")
     check.add_argument("--run-id")
     check.add_argument("--resume", action="store_true", help="resume an existing suite run")
     check.add_argument("--run-only", action="store_true", help="record runs without comparisons")
@@ -65,7 +66,8 @@ def parser() -> argparse.ArgumentParser:
 
     doctor = command("doctor", "Check selected catalogs, data, build and machine prerequisites.", settings=True)
     selection(doctor)
-    doctor.add_argument("suite", nargs="?", default="warm", metavar="SUITE")
+    doctor.add_argument("--case", help="case override for a focused suite")
+    doctor.add_argument("suite", nargs="?", default="routine", metavar="PROFILE_OR_SUITE")
 
     compare = command("compare", "Debug: compare a saved run or suite summary.")
     compare.add_argument("path", type=Path, metavar="RUN_OR_SUITE_SUMMARY")
@@ -177,12 +179,10 @@ def _dispatch(args: argparse.Namespace) -> int:
 
 def _check(args: argparse.Namespace) -> int:
     from .build import build_solver
-    from regression_tests.suites import run_suite
-    from regression_tests.reporting import print_run_summary
-    from support.errors import BundleError
-    from regression_tests.config import load_suite_definition
+    from .suites import run_suite, run_profile
+    from .config import load_selection, build_settings, runtime_settings
     from catalogs.layouts import load_layouts
-    from .config import build_settings, runtime_settings
+    from support.errors import BundleError
 
     if args.build and args.resume:
         raise BundleError("--build cannot be used with --resume; reuse the original build settings")
@@ -190,29 +190,40 @@ def _check(args: argparse.Namespace) -> int:
         raise BundleError("--build-jobs requires --build")
     if args.build and args.build_manifest:
         raise BundleError("select --build or --build-manifest, not both")
-    suite = load_suite_definition(
-        args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases",
+    profile, checks = load_selection(
+        args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases", case_id=args.case,
     )
-    settings = _settings(args, suite["case_id"], use_build=not args.build)
+    cases = list(dict.fromkeys(check["case_id"] for check in checks))
+    if args.bundle and len(cases) != 1:
+        raise BundleError("--bundle requires a single-case selection; configure defaults.bundles for this profile")
+    values = {case: _settings(args, case, use_build=not args.build) for case in cases}
     layouts = load_layouts(ROOT / "layouts.json")
     if args.build:
         variants = {"serial" if layouts[name]["execution"] == "serial" else "parallel"
-                    for name in suite["layouts"]}
-        build = build_solver(settings, ROOT.parent, args.build_jobs, variants=variants)
-        settings.update(build_settings(build.metadata_path))
+                    for check in checks for name in check["layouts"]}
+        build = build_solver(values[cases[0]], ROOT.parent, args.build_jobs, variants=variants)
+        selected_build = build_settings(build.metadata_path)
+        for settings in values.values():
+            settings.update(selected_build)
         reporting.status("build", "completed", build.path)
         print(f"select with --build-manifest {build.metadata_path}")
-    runtime_settings(settings, [layouts[name] for name in suite["layouts"]])
-    path, summary = run_suite(
-        settings, args.suite, ROOT / "cases", ROOT / "layouts.json",
-        ROOT / "suites.json", ROOT / "tolerances.json", args.run_id,
+    for case, settings in values.items():
+        selected = {name for check in checks if check["case_id"] == case for name in check["layouts"]}
+        runtime_settings(settings, [layouts[name] for name in selected])
+    options = dict(
         required_bundle_class=None if args.allow_candidate else "golden",
         compare=not args.run_only, resume=args.resume,
-        parameter_overrides=(
-            {"balance_diagnostics_mode": args.diagnostics} if args.diagnostics else None
-        ),
+        parameter_overrides={"balance_diagnostics_mode": args.diagnostics} if args.diagnostics else None,
     )
-    print_run_summary(summary, path)
+    if profile:
+        path, summary = run_profile(args.suite, checks, values, ROOT, args.run_id, **options)
+        reporting.status("profile", summary["status"], path)
+    else:
+        path, summary = run_suite(
+            values[cases[0]], args.suite, ROOT / "cases", ROOT / "layouts.json",
+            ROOT / "suites.json", ROOT / "tolerances.json", args.run_id, case_id=cases[0], **options,
+        )
+        reporting.print_run_summary(summary, path)
     return 0 if summary["status"] == "passed" else 1
 
 
@@ -277,9 +288,10 @@ def _list(args: argparse.Namespace) -> int:
     if args.listing == "layouts":
         entries = load_layouts(ROOT / "layouts.json")
     elif args.listing == "suites":
-        entries = load_validated_json(
+        catalog = load_validated_json(
             ROOT / "suites.json", ROOT / "schemas/suites.schema.json", "suites",
-        )["suites"]
+        )
+        entries = {**catalog.get("profiles", {}), **catalog["suites"]}
     else:
         names = [args.case] if getattr(args, "case", None) else [
             path.stem for path in sorted((ROOT / "cases").glob("*.json"))

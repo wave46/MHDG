@@ -101,3 +101,29 @@ def test_suite_defaults_overrides_and_relations_select_runs_once(catalog, monkey
     declaration["layouts"] = ["unknown_layout"]
     with pytest.raises(BundleError, match="unknown layouts"):
         load()
+
+
+def test_profiles_compose_cases_without_duplicate_runs(catalog, monkeypatch):
+    from regression_tests.config import load_selection
+
+    root, _ = catalog
+    monkeypatch.setattr("regression_tests.config.load_case_definition",
+                        lambda *_: {"workflows": {"probe": {}}})
+    document = {
+        "schema_version": 2, "defaults": {"case": "first", "layout": "mpi2_omp3"},
+        "suites": {"probe": {"description": "Probe", "workflows": ["probe"]}},
+        "profiles": {
+            "daily": {"description": "Daily", "checks": [{"suite": "probe"}]},
+            "all": {"description": "All", "include": ["daily"],
+                    "checks": [{"suite": "probe"}, {"suite": "probe", "case": "second"}]},
+        },
+    }
+    def select():
+        (root / "suites.json").write_text(json.dumps(document))
+        return load_selection("all", root / "suites.json", root / "layouts.json", root / "cases")
+    is_profile, checks = select()
+    assert is_profile
+    assert [(item["suite_id"], item["case_id"]) for item in checks] == [("probe", "first"), ("probe", "second")]
+    document["profiles"]["daily"]["include"] = ["all"]
+    with pytest.raises(BundleError, match="cyclic profile inclusion"):
+        select()

@@ -38,6 +38,51 @@
           "$ref": "#/$defs/identifier"
         }
       }
+    },
+    "profiles": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "description",
+          "checks"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "include": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "suite"
+              ],
+              "properties": {
+                "suite": {
+                  "$ref": "#/$defs/identifier"
+                },
+                "case": {
+                  "$ref": "#/$defs/identifier"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {
@@ -105,6 +150,14 @@
               "all_pairs"
             ]
           }
+        },
+        "diagnostics": {
+          "enum": [
+            "off",
+            "summary",
+            "equations",
+            "detailed"
+          ]
         }
       },
       "dependentRequired": {

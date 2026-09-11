@@ -206,6 +206,7 @@ def load_suite_definition(
     suites_path: Path,
     layouts_path: Path,
     case_directory: Path,
+    *, case_id: str | None = None,
 ) -> dict[str, Any]:
     """Load one suite and validate its workflow and layout references."""
     schema_path = suites_path.parent / "schemas" / "suites.schema.json"
@@ -230,7 +231,8 @@ def load_suite_definition(
     pairs = layout_pairs({name: layouts[name] for name in selected}, relations)
     suite = {
         "description": declaration["description"],
-        "case_id": declaration.get("case", defaults["case"]),
+        "case_id": case_id or declaration.get("case", defaults["case"]),
+        "diagnostics": declaration.get("diagnostics", "off"),
         "workflow_ids": declaration["workflows"],
         "layouts": list(dict.fromkeys(
             layout for pair in pairs for layout in pair.values()
@@ -255,6 +257,39 @@ def load_suite_definition(
             f"{', '.join(unknown_workflows)}"
         )
     return suite
+
+
+def load_selection(name, suites_path, layouts_path, case_directory, *, case_id=None):
+    """Expand a profile into unique case/suite selections; focused suites use the same loader."""
+    document = load_validated_json(
+        suites_path, suites_path.parent / "schemas/suites.schema.json", "suite definitions",
+    )
+    profiles = document.get("profiles", {})
+    if profiles.keys() & document["suites"].keys():
+        raise BundleError("profile and suite names must be distinct")
+    is_profile = name in profiles
+    if is_profile and case_id:
+        raise BundleError("--case applies to a focused suite; profiles declare their cases")
+
+    def expand(profile, ancestors=()):
+        if profile in ancestors:
+            raise BundleError(f"cyclic profile inclusion: {' -> '.join((*ancestors, profile))}")
+        if profile not in profiles:
+            raise BundleError(f"unknown included profile: {profile}")
+        for parent in profiles[profile].get("include", []):
+            yield from expand(parent, (*ancestors, profile))
+        yield from profiles[profile]["checks"]
+
+    entries = expand(name) if is_profile else [{"suite": name, "case": case_id}]
+    selected = {}
+    for entry in entries:
+        suite = load_suite_definition(
+            entry["suite"], suites_path, layouts_path, case_directory, case_id=entry.get("case"),
+        )
+        selected[(entry["suite"], suite["case_id"])] = {"suite_id": entry["suite"], **suite}
+    if not selected:
+        raise BundleError(f"selection {name} contains no checks")
+    return is_profile, list(selected.values())
 
 
 def require_bundle_class(

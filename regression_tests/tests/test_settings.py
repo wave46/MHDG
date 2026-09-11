@@ -85,7 +85,7 @@ def test_build_selection_rejects_failed_or_changed_artifacts(setup):
 
 def test_json_check_resumes_with_same_effective_selection(setup):
     harness, path, manifest, document = setup
-    arguments = ("check", "--allow-candidate", "--run-only", "--run-id", "json-settings",
+    arguments = ("check", "warm", "--case", "legacy_case", "--allow-candidate", "--run-only", "--run-id", "json-settings",
                  "--settings", str(path), "--build-manifest", str(manifest))
     result = run_command(*arguments)
     assert result.returncode == 0, result.stderr
@@ -96,25 +96,25 @@ def test_json_check_resumes_with_same_effective_selection(setup):
     resumed = run_command(*arguments, "--resume")
     assert resumed.returncode == 0, resumed.stderr
     assert "reusing completed" in resumed.stdout
-    summary = json.loads((harness.run_root / "suites/warm/json-settings/suite_summary.json").read_text())
+    summary = json.loads((harness.run_root / "suites/warm/legacy_case/json-settings/suite_summary.json").read_text())
     assert summary["execution_inputs"]["build_manifest"]["path"] == str(manifest)
 
 
 def test_doctor_checks_artifacts_without_creating_scratch(setup):
     harness, path, _, _ = setup
-    result = run_command("doctor", "--settings", str(path))
+    result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path))
     assert result.returncode == 0, result.stdout + result.stderr
     assert "doctor: passed" in result.stdout
     assert not harness.run_root.exists()
     manifest = json.loads((harness.bundle / "manifest.json").read_text())
     artifact = next(iter(manifest["artifacts"].values()))
     (harness.bundle / artifact["path"]).write_text("changed bundle input")
-    result = run_command("doctor", "--settings", str(path))
+    result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path))
     assert result.returncode == 1
-    assert "FAIL bundle:" in result.stdout
+    assert "FAIL legacy_case bundle:" in result.stdout
     assert not harness.run_root.exists()
     path.write_text("{}")
-    result = run_command("doctor", "--settings", str(path))
+    result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path))
     assert result.returncode == 1
     assert "no bundle selected" in result.stdout
     assert "no build selected" in result.stdout

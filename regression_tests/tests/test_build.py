@@ -1,6 +1,7 @@
 """Build selection, object isolation and provenance with a fake make process."""
 
 import json
+from pathlib import Path
 import os
 import subprocess
 from types import SimpleNamespace
@@ -113,26 +114,37 @@ def test_failed_build_keeps_log_without_a_completed_manifest(setup, monkeypatch)
     assert len(list(root.rglob("bin/MHDG-*"))) == 1  # Earlier serial copy is only partial evidence.
 
 
-def test_check_builds_only_its_layouts_and_runs_from_manifest(setup, tmp_path, monkeypatch):
+@pytest.mark.parametrize("profile", [False, True])
+def test_check_builds_only_its_layouts_and_runs_from_manifest(setup, tmp_path, monkeypatch, profile):
     harness_root = tmp_path / "harness"
     harness_root.mkdir()
     harness = create_harness(harness_root)
+    from bundle.creation import create_bundle
+    diverted = tmp_path / "diverted"
+    create_bundle("diverted_case", harness.source, diverted, Path(__file__).resolve().parents[1] / "cases")
     settings = tmp_path / "machine.json"
     settings.write_text(json.dumps({
         "run_root": str(harness.run_root), "build_root": setup.settings["MHDG_REGRESSION_BUILD_ROOT"],
         "mpi_launcher": str(harness.mpi_launcher),
-        "defaults": {"build": "nonexistent-old-build.json", "bundles": {"legacy_case": str(harness.bundle)}},
+        "defaults": {"build": "nonexistent-old-build.json", "bundles": {"legacy_case": str(harness.bundle), "diverted_case": str(diverted)}},
     }))
     real_build = build.build_solver
-    monkeypatch.setattr(build, "build_solver", lambda values, repository, jobs, **kwargs:
-                        real_build(values, setup.repository, jobs, **kwargs))
+    calls = []
+    def build_once(values, repository, jobs, **kwargs):
+        calls.append(kwargs["variants"])
+        return real_build(values, setup.repository, jobs, **kwargs)
+    monkeypatch.setattr(build, "build_solver", build_once)
     assert cli.main([
-        "check", "warm", "--build", "--build-jobs", "2", "--allow-candidate",
+        "check", *( ["routine-extended"] if profile else ["warm", "--case", "legacy_case"] ),
+        "--build", "--build-jobs", "2", "--allow-candidate",
         "--run-only", "--settings", str(settings), "--run-id", "new-build",
     ]) == 0
     manifest = next((tmp_path / "builds").rglob("build_metadata.json"))
-    assert set(json.loads(manifest.read_text())["artifacts"]) == {"parallel"}
-    summary = json.loads((harness.run_root / "suites/warm/new-build/suite_summary.json").read_text())
+    variants = {"parallel", "serial"} if profile else {"parallel"}
+    assert calls == [variants]
+    assert set(json.loads(manifest.read_text())["artifacts"]) == variants
+    case = "diverted_case" if profile else "legacy_case"
+    summary = json.loads((harness.run_root / f"suites/warm/{case}/new-build/suite_summary.json").read_text())
     assert summary["execution_inputs"]["build_manifest"]["path"] == str(manifest)
     assert not list(manifest.parent.rglob("*.env"))
 

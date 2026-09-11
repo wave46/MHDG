@@ -1,95 +1,62 @@
 {
   "schema_version": 2,
   "defaults": {
-    "case": "legacy_case",
+    "case": "diverted_case",
     "layout": "mpi4_omp4"
+  },
+  "profiles": {
+    "routine": {
+      "description": "Fast diverted warm golden and adaptive execution smoke",
+      "checks": [
+        {"suite": "warm"},
+        {"suite": "adaptive"}
+      ]
+    },
+    "routine-extended": {
+      "description": "Diverted warm golden and fixed/adaptive parallel checks with diagnostics",
+      "checks": [
+        {"suite": "warm"},
+        {"suite": "parallel"}
+      ]
+    },
+    "full": {
+      "description": "Extended checks plus full cold runs for both topologies and distinct limited features",
+      "include": ["routine-extended"],
+      "checks": [
+        {"suite": "cold"},
+        {"suite": "warm", "case": "legacy_case"},
+        {"suite": "cold", "case": "legacy_case"},
+        {"suite": "fixed_cold", "case": "legacy_case"},
+        {"suite": "neutrals"},
+        {"suite": "neutral_parallel"},
+        {"suite": "sources"},
+        {"suite": "source_cold"},
+        {"suite": "neutralgamma"},
+        {"suite": "impurities"},
+        {"suite": "initialization"}
+      ]
+    }
   },
   "suites": {
     "warm": {
-      "description": "Canonical four-MPI-by-four-OpenMP warm restart",
+      "description": "Warm golden regression with transport_1d in the production hybrid layout",
       "workflows": ["warm"]
-    },
-    "neutral_pressure_warm": {
-      "description": "Execution-only warm continuation with neutral pressure enabled",
-      "workflows": ["warm_neutral_pressure"],
-      "reference_comparisons": false
-    },
-    "neutral_sources_in_elements_warm": {
-      "description": "Source-relocated warm golden reconvergence and conservation check",
-      "workflows": ["warm_neutral_sources_in_elements"]
-    },
-    "neutral_sources_in_elements_restart_producer": {
-      "description": "Create a source-relocated restart from the current canonical warm state",
-      "workflows": ["bootstrap_neutral_sources_in_elements"],
-      "reference_comparisons": false
-    },
-    "neutral_features_warm": {
-      "description": "Independent source relocation, neutral pressure, projection, and limiter goldens",
-      "workflows": [
-        "warm_neutral_sources_in_elements",
-        "warm_neutral_pressure",
-        "warm_neutral_perpendicular",
-        "warm_neutral_limiter_fixed",
-        "warm_neutral_limiter_ti"
-      ]
-    },
-    "neutral_feature_references": {
-      "description": "Independent neutral pressure, projection, and limiter reference producers",
-      "workflows": [
-        "warm_neutral_pressure",
-        "warm_neutral_perpendicular",
-        "warm_neutral_limiter_fixed",
-        "warm_neutral_limiter_ti"
-      ]
-    },
-    "neutral_feature_race_matrix": {
-      "description": "Two-Newton-iteration all-layout race checks for independent neutral features",
-      "workflows": [
-        "race_neutral_sources_in_elements",
-        "race_neutral_pressure",
-        "race_neutral_perpendicular",
-        "race_neutral_limiter_fixed",
-        "race_neutral_limiter_ti"
-      ],
-      "tolerance_profile": "neutral_feature_race_step",
-      "relations": ["all_pairs"]
-    },
-    "impurity_scalar_baseline": {
-      "description": "Disabled and single-nitrogen warm mixture baselines",
-      "workflows": ["warm_impurity_off", "warm_impurity_n"]
-    },
-    "impurity_mixture": {
-      "description": "Manual off, tungsten, nitrogen, and mixed-impurity references",
-      "workflows": ["warm_impurity_off", "warm", "warm_impurity_n", "warm_impurity_nw"]
-    },
-    "impurity_references": {
-      "description": "Off, nitrogen, and mixed-impurity reference producers",
-      "workflows": ["warm_impurity_off", "warm_impurity_n", "warm_impurity_nw"]
-    },
-    "impurity_restart_producers": {
-      "description": "Create off, nitrogen, and mixed-impurity restarts from the current canonical warm state",
-      "workflows": ["bootstrap_impurity_off", "bootstrap_impurity_n", "bootstrap_impurity_nw"],
-      "reference_comparisons": false
-    },
-    "initialization_smoke": {
-      "description": "One-step analytical initialization without reference comparison",
-      "workflows": ["cold_step_impurity_off"],
-      "reference_comparisons": false
-    },
-    "stored_field_compatibility": {
-      "description": "One-step limited compatibility check using stored Br and Bz",
-      "workflows": ["cold_step_stored_field"],
-      "layouts": ["serial_omp1"],
-      "reference_comparisons": false
     },
     "warm_parallelism": {
       "description": "Warm restart across serial, MPI, and OpenMP layouts",
       "workflows": ["warm"],
       "layouts": "all"
     },
+    "parallel": {
+      "description": "Short fixed/adaptive OpenMP, MPI and hybrid consistency",
+      "workflows": ["cold_step_fixed", "cold_step_adaptive"],
+      "tolerance_profile": "race_step",
+      "relations": ["openmp", "mpi", "hybrid"],
+      "diagnostics": "detailed"
+    },
     "cold": {
-      "description": "Routine cold fixed and adaptive checks in the canonical layout",
-      "workflows": ["cold_fixed", "cold_adaptive"]
+      "description": "Full seven-stage adaptive cold regression",
+      "workflows": ["cold_adaptive"]
     },
     "cold_matrix": {
       "description": "Cold workflows with golden and all-pairs layout checks",
@@ -99,61 +66,94 @@
       "reference_comparisons": true,
       "relations": ["all_pairs"]
     },
-    "race": {
-      "description": "One-step fixed and adaptive OpenMP race checks on the coarse mesh",
-      "workflows": ["cold_step_fixed", "cold_step_adaptive"],
-      "tolerance_profile": "race_step",
-      "relations": ["openmp"]
+    "neutrals": {
+      "description": "Independent source relocation, neutral pressure, projection, and limiter goldens",
+      "workflows": [
+        "warm_neutral_sources_in_elements",
+        "warm_neutral_pressure",
+        "warm_neutral_perpendicular",
+        "warm_neutral_limiter_fixed",
+        "warm_neutral_limiter_ti"
+      ],
+      "case": "legacy_case"
     },
-    "neutralgamma_race": {
+    "neutral_parallel": {
+      "description": "Short parallel checks for distinct neutral features",
+      "workflows": [
+        "race_neutral_sources_in_elements",
+        "race_neutral_pressure",
+        "race_neutral_perpendicular",
+        "race_neutral_limiter_fixed",
+        "race_neutral_limiter_ti"
+      ],
+      "tolerance_profile": "neutral_feature_race_step",
+      "relations": ["openmp", "mpi", "hybrid"],
+      "case": "legacy_case"
+    },
+    "neutralgamma": {
       "description": "One-step two-Newton-iteration NeutralGamma OpenMP and detailed-balance check",
       "workflows": ["cold_step_neutralgamma"],
       "tolerance_profile": "race_step",
-      "relations": ["openmp"]
+      "relations": ["openmp"],
+      "case": "legacy_case",
+      "diagnostics": "detailed"
     },
-    "race_matrix": {
-      "description": "All-pairs one-step race checks on the coarse mesh",
-      "workflows": ["cold_step_fixed", "cold_step_adaptive"],
+    "sources": {
+      "description": "Source-placement diagnostics on short fixed/adaptive parallel runs",
+      "workflows": ["cold_step_fixed_neutral_sources_in_elements", "cold_step_adaptive_neutral_sources_in_elements"],
       "tolerance_profile": "race_step",
-      "relations": ["all_pairs"]
+      "relations": ["openmp", "mpi", "hybrid"],
+      "case": "legacy_case",
+      "diagnostics": "detailed"
     },
-    "neutral_sources_in_elements_race_matrix": {
-      "description": "Source-relocated fixed/adaptive race and detailed source-placement checks",
-      "workflows": [
-        "cold_step_fixed_neutral_sources_in_elements",
-        "cold_step_adaptive_neutral_sources_in_elements"
-      ],
-      "tolerance_profile": "race_step",
-      "relations": ["all_pairs"]
-    },
-    "neutral_sources_in_elements_cold_adaptive": {
-      "description": "Complete source-relocated adaptive cold workflow",
+    "source_cold": {
+      "description": "Full source-relocated adaptive cold execution",
       "workflows": ["cold_adaptive_neutral_sources_in_elements"],
+      "reference_comparisons": false,
+      "case": "legacy_case"
+    },
+    "impurities": {
+      "description": "Disabled, nitrogen and mixed-impurity warm goldens; tungsten is covered by warm",
+      "workflows": ["warm_impurity_off", "warm_impurity_n", "warm_impurity_nw"],
+      "case": "legacy_case"
+    },
+    "initialization": {
+      "description": "Analytical initialization and stored-field compatibility on real limited geometry",
+      "workflows": ["cold_step_impurity_off", "cold_step_stored_field"],
+      "reference_comparisons": false,
+      "case": "legacy_case",
+      "layouts": ["serial_omp1"]
+    },
+    "source_reference": {
+      "description": "Source-relocated warm golden regression",
+      "workflows": ["warm_neutral_sources_in_elements"],
+      "case": "legacy_case"
+    },
+    "source_restart": {
+      "description": "Create a source-relocated restart from the current canonical warm state",
+      "workflows": ["bootstrap_neutral_sources_in_elements"],
+      "reference_comparisons": false,
+      "case": "legacy_case"
+    },
+    "neutral_references": {
+      "description": "Independent neutral pressure, projection, and limiter reference producers",
+      "workflows": ["warm_neutral_pressure", "warm_neutral_perpendicular", "warm_neutral_limiter_fixed", "warm_neutral_limiter_ti"],
+      "case": "legacy_case"
+    },
+    "impurity_restarts": {
+      "description": "Create off, nitrogen, and mixed-impurity restarts from the current canonical warm state",
+      "workflows": ["bootstrap_impurity_off", "bootstrap_impurity_n", "bootstrap_impurity_nw"],
+      "reference_comparisons": false,
+      "case": "legacy_case"
+    },
+    "fixed_cold": {
+      "description": "Full seven-stage fixed-mesh cold regression",
+      "workflows": ["cold_fixed"]
+    },
+    "adaptive": {
+      "description": "Short adaptive execution smoke; field/mesh parity is checked by parallel",
+      "workflows": ["cold_step_adaptive"],
       "reference_comparisons": false
-    },
-    "diverted_warm": {
-      "description": "Canonical diverted warm restart",
-      "case": "diverted_case",
-      "workflows": ["warm"]
-    },
-    "diverted_warm_parallelism": {
-      "description": "Diverted warm restart across all tracked layouts",
-      "case": "diverted_case",
-      "workflows": ["warm"],
-      "layouts": "all"
-    },
-    "diverted_cold_adaptive": {
-      "description": "Full diverted adaptive cold start in the canonical layout",
-      "case": "diverted_case",
-      "workflows": ["cold_adaptive"],
-      "reference_comparisons": false
-    },
-    "diverted_race_matrix": {
-      "description": "Diverted fixed and adaptive two-Newton-step layout checks",
-      "case": "diverted_case",
-      "workflows": ["cold_step_fixed", "cold_step_adaptive"],
-      "tolerance_profile": "race_step",
-      "relations": ["all_pairs"]
     }
   }
 }

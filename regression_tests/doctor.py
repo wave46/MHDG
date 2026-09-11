@@ -31,49 +31,52 @@ def diagnose(args):
     from bundle.settings import bundle_root_from_settings
     from bundle.cases import load_case_definition
     from catalogs.layouts import load_layouts
-    from regression_tests.config import load_suite_definition
-
-    def catalogs():
-        for path in (config.ROOT / "cases").glob("*.json"):
-            load_case_definition(path.stem, config.ROOT / "cases")
-        return load_suite_definition(
-            args.suite, config.ROOT / "suites.json", config.ROOT / "layouts.json",
-            config.ROOT / "cases",
-        )
-
-    # Keep detailed objects out of the terminal while sharing the actual loader.
     try:
-        suite = catalogs()
-        layouts = load_layouts(config.ROOT / "layouts.json")
-        values = config.settings(
-            args.settings, case=suite["case_id"], bundle=args.bundle,
-            build_manifest=args.build_manifest,
+        _, checks = config.load_selection(
+            args.suite, config.ROOT / "suites.json", config.ROOT / "layouts.json",
+            config.ROOT / "cases", case_id=args.case,
         )
+        layouts = load_layouts(config.ROOT / "layouts.json")
+        cases = list(dict.fromkeys(item["case_id"] for item in checks))
+        if args.bundle and len(cases) != 1:
+            raise BundleError("--bundle requires a single-case selection; configure defaults.bundles")
     except (HarnessError, OSError) as exc:
         print(f"FAIL configuration: {exc}")
         return 1
-    print(f"PASS catalogs: {args.suite} / {suite['case_id']}")
-    case = load_case_definition(suite["case_id"], config.ROOT / "cases")
-    if any(case["workflows"][name].get("comparison_policy") == "mesh_independent"
-           for name in suite["workflow_ids"]):
+    print(f"PASS catalogs: {args.suite} / {', '.join(cases)}")
+    needs_interpolation = False
+    for case_id in cases:
+        case = load_case_definition(case_id, config.ROOT / "cases")
+        selected = [item for item in checks if item["case_id"] == case_id]
+        needs_interpolation |= any(case["workflows"][name].get("comparison_policy") == "mesh_independent"
+                                   for item in selected for name in item["workflow_ids"])
+        try:
+            values = config.settings(args.settings, case=case_id, bundle=args.bundle,
+                                     build_manifest=args.build_manifest)
+        except (HarnessError, OSError) as exc:
+            failures.append(case_id)
+            print(f"FAIL {case_id} settings: {exc}")
+            continue
+
+        def bundle():
+            if not values.get("MHDG_REGRESSION_DATA_ROOT"):
+                raise BundleError("no bundle selected; pass --bundle DIR or set defaults.bundles")
+            root = bundle_root_from_settings(values)
+            summary = validate_bundle_root(root, config.ROOT / "cases")
+            if summary.case_id != case_id:
+                raise BundleError(f"selected check needs {case_id}, bundle contains {summary.case_id}")
+            return f"{root} ({summary.verified_artifact_count} artifacts verified)"
+
+        def runtime():
+            names = {name for item in selected for name in item["layouts"]}
+            config.runtime_settings(values, [layouts[name] for name in names])
+            return values.get("MHDG_BUILD_MANIFEST", "prebuilt executable settings")
+
+        check(f"{case_id} bundle", bundle)
+        check(f"{case_id} build/runtime", runtime)
+        check("run root", lambda: writable_root(Path(values["MHDG_REGRESSION_RUN_ROOT"])))
+    if needs_interpolation:
         check("Python hdg_postprocess", lambda: importlib.import_module("hdg_postprocess").__name__)
-
-    def bundle():
-        if not values.get("MHDG_REGRESSION_DATA_ROOT"):
-            raise BundleError("no bundle selected; pass --bundle DIR or set defaults.bundles")
-        root = bundle_root_from_settings(values)
-        summary = validate_bundle_root(root, config.ROOT / "cases")
-        if summary.case_id != suite["case_id"]:
-            raise BundleError(f"selected suite needs {suite['case_id']}, bundle contains {summary.case_id}")
-        return f"{root} ({summary.verified_artifact_count} artifacts verified)"
-
-    def runtime():
-        config.runtime_settings(values, [layouts[name] for name in suite["layouts"]])
-        return values.get("MHDG_BUILD_MANIFEST", "legacy executable settings")
-
-    check("bundle", bundle)
-    check("build/runtime", runtime)
-    check("run root", lambda: writable_root(Path(values["MHDG_REGRESSION_RUN_ROOT"])))
     print(f"doctor: {'failed' if failures else 'passed'}")
     return 1 if failures else 0
 

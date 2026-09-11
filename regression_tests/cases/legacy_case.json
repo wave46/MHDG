@@ -245,9 +245,8 @@
     "cold_adaptive": {},
     "cold_adaptive_neutral_sources_in_elements": {
       "extends": "cold_adaptive",
-      "description": "Reach a source-relocated state from an adaptive cold start with detailed particle diagnostics",
+      "description": "Reach a source-relocated state from an adaptive cold start",
       "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed",
         "neutral_wall_sources_in_elements": true
       }
     },
@@ -261,9 +260,8 @@
     },
     "cold_step_neutralgamma": {
       "extends": "cold_step_impurity_off",
-      "description": "Exercise NeutralGamma with detailed particle diagnostics for one fixed cold step and two Newton iterations",
+      "description": "Exercise NeutralGamma for one fixed cold step and two Newton iterations",
       "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed",
         "neutral_wall_sources_in_elements": false
       }
     },
@@ -279,7 +277,6 @@
       "extends": "cold_step_fixed",
       "description": "Run a fixed one-step race and detailed-balance check with neutral wall sources in elements",
       "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed",
         "neutral_wall_sources_in_elements": true
       }
     },
@@ -287,7 +284,6 @@
       "extends": "cold_step_adaptive",
       "description": "Run an adaptive one-step race and detailed-balance check with neutral wall sources in elements",
       "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed",
         "neutral_wall_sources_in_elements": true
       }
     }
