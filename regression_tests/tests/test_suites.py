@@ -1,536 +1,195 @@
-from __future__ import annotations
+"""Suite execution, trustworthy resume and saved scientific comparisons."""
 
 import json
 import shutil
-import sys
-import tempfile
-import unittest
-from contextlib import redirect_stdout
-from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock
 
+import pytest
 
-REGRESSION_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
-
-from bundle.cases import load_case_definition  # noqa: E402
-from suite.pairs import compare_generated_meshes  # noqa: E402
-from suite.runner import run_suite  # noqa: E402
-from support.errors import BundleError  # noqa: E402
-from suite.verification import verify_suite  # noqa: E402
-from tests.fixtures.harness import create_harness, run_command  # noqa: E402
-from tests.fixtures.solutions import write_solution  # noqa: E402
-
-
-class SuiteWorkflowTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temporary_directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary_directory.cleanup)
-        self.root = Path(self.temporary_directory.name)
-        self.fixture = create_harness(
-            self.root,
-            solver=SOLVER,
-            reference_writer=write_solution,
-        )
-
-    def test_cold_suite_records_deferred_workflows_and_resumes(self) -> None:
-        self.fixture.install_solver(WORKFLOW_SOLVER)
-        completed = self._run_suite("cold", "cold-test", "--run-only")
-
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        summary = self._summary("cold", "cold-test")
-        self.assertEqual(summary["status"], "passed")
-        self.assertEqual(summary["comparison_mode"], "deferred")
-        self.assertEqual(
-            {result["workflow_id"] for result in summary["results"]},
-            {"cold_fixed", "cold_adaptive"},
-        )
-        self.assertTrue(
-            all(result["comparison_status"] == "not_run" for result in summary["results"])
-        )
-
-        resumed = self._run_suite("cold", "cold-test", "--run-only", "--resume")
-        self.assertEqual(resumed.returncode, 0, resumed.stderr)
-        self.assertEqual(len(self._summary("cold", "cold-test")["results"]), 2)
-        self.assertIn("skipping recorded cold_fixed / mpi4_omp4", resumed.stdout)
-
-    def test_resume_preserves_and_retries_an_unrecorded_cell(self) -> None:
-        run_id = "interrupted-test"
-        partial = self.fixture.run_directory("warm", "mpi4_omp4", run_id)
-        marker = partial / "partial-output.txt"
-
-        def interrupt_cell(*_args) -> None:
-            partial.mkdir(parents=True)
-            marker.write_text("keep\n", encoding="utf-8")
-            raise KeyboardInterrupt
-
-        with (
-            redirect_stdout(StringIO()),
-            patch("suite.runner.run_cell", side_effect=interrupt_cell),
-            self.assertRaises(KeyboardInterrupt),
-        ):
-            run_suite(
-                self.fixture.settings,
-                "warm",
-                REGRESSION_ROOT / "cases",
-                REGRESSION_ROOT / "layouts.json",
-                REGRESSION_ROOT / "suites.json",
-                REGRESSION_ROOT / "tolerances.json",
-                run_id,
-                compare=False,
-            )
-
-        resumed = self._run_suite("warm", run_id, "--run-only", "--resume")
-
-        self.assertEqual(resumed.returncode, 0, resumed.stderr)
-        self.assertEqual(marker.read_text(encoding="utf-8"), "keep\n")
-        result = self._summary("warm", run_id)["results"][0]
-        self.assertEqual(
-            Path(result["run_directory"]).name,
-            "interrupted-test-resume-1",
-        )
-        self.assertIn("preserving unrecorded run", resumed.stdout)
-
-    def test_resume_rejects_changed_execution_inputs_and_new_build(self) -> None:
-        run_id = "stable-inputs"
-        catalog = self.root / "catalog"
-        for directory in ("cases", "schemas"):
-            shutil.copytree(REGRESSION_ROOT / directory, catalog / directory)
-        shared = catalog / "workflows.json"
-        shutil.copy2(REGRESSION_ROOT / "workflows.json", shared)
-
-        def run(resume=False):
-            with redirect_stdout(StringIO()):
-                return run_suite(
-                    self.fixture.settings, "warm", catalog / "cases",
-                    REGRESSION_ROOT / "layouts.json", REGRESSION_ROOT / "suites.json",
-                    REGRESSION_ROOT / "tolerances.json", run_id,
-                    compare=False, resume=resume,
-                )
-
-        _, summary = run()
-        self.assertEqual(summary["status"], "passed")
-        original = shared.read_text()
-        workflows = json.loads(original)
-        workflows["workflows"]["warm"]["parameter_overrides"]["nrp"] = 2
-        shared.write_text(json.dumps(workflows))
-        with self.assertRaisesRegex(BundleError, "workflow_catalog"):
-            run(resume=True)
-        shared.write_text(original)
-
-        self.fixture.install_solver(FAILING_SOLVER, "parallel")
-        with self.assertRaisesRegex(BundleError, "parallel_executable"):
-            run(resume=True)
-
-        rebuilt = self._run_suite(
-            "warm",
-            run_id,
-            "--run-only",
-            "--resume",
-            "--build",
-        )
-        self.assertEqual(rebuilt.returncode, 1)
-        self.assertIn("--build cannot be used with --resume", rebuilt.stderr)
-
-    def test_suite_check_requires_golden_data_and_runs_warm_defaults(self) -> None:
-        rejected = run_command(
-            "check",
-            "--settings",
-            str(self.fixture.settings),
-        )
-        self.assertEqual(rejected.returncode, 1)
-        self.assertIn("requires bundle_class=golden", rejected.stderr)
-
-        self.fixture.set_bundle_class("golden")
-        completed = run_command(
-            "check",
-            environment={
-                "MHDG_REGRESSION_SETTINGS": str(self.fixture.settings)
-            },
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("suite: warm", completed.stdout)
-        self.assertIn("mpi4_omp4", completed.stdout)
-
-    def test_suite_diagnostics_override_supports_every_mode(self) -> None:
-        for mode in ("off", "summary", "equations", "detailed"):
-            with self.subTest(mode=mode):
-                run_id = f"diagnostics-{mode}"
-                completed = self._run_suite(
-                    "warm",
-                    run_id,
-                    "--run-only",
-                    "--diagnostics",
-                    mode,
-                )
-
-                self.assertEqual(completed.returncode, 0, completed.stderr)
-                run_directory = self.fixture.run_directory(
-                    "warm",
-                    "mpi4_omp4",
-                    run_id,
-                )
-                parameters = (run_directory / "param.txt").read_text(
-                    encoding="utf-8"
-                )
-                self.assertIn(
-                    f"balance_diagnostics_mode = '{mode}'",
-                    parameters,
-                )
-                plan = json.loads(
-                    (run_directory / "run_plan.json").read_text(encoding="utf-8")
-                )
-                self.assertEqual(
-                    plan["parameter_overrides"]["balance_diagnostics_mode"],
-                    mode,
-                )
-                self.assertEqual(
-                    self._summary("warm", run_id)["parameter_overrides"],
-                    {"balance_diagnostics_mode": mode},
-                )
-
-        rejected = self._run_suite(
-            "warm",
-            "diagnostics-off",
-            "--run-only",
-            "--resume",
-            "--diagnostics",
-            "summary",
-        )
-        self.assertEqual(rejected.returncode, 1)
-        self.assertIn("parameter_overrides", rejected.stderr)
-
-    def test_race_suite_compares_layout_pairs_and_can_recompare(self) -> None:
-        write_solution(self.fixture.serial_executable.parent / "race_result.h5")
-        self.fixture.install_solver(RACE_SOLVER)
-        completed = self._run_suite("race", "race-test")
-
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        summary_path = (
-            self.fixture.run_root
-            / "suites/race/race-test/suite_summary.json"
-        )
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        self.assertEqual(summary["comparison_mode"], "layout_pairs")
-        self.assertEqual(
-            summary["layout_ids"],
-            ["serial_omp1", "serial_omp16"],
-        )
-        self.assertEqual(len(summary["results"]), 4)
-        self.assertTrue(
-            all(
-                result["comparison_status"] == "not_run"
-                for result in summary["results"]
-            )
-        )
-        self.assertEqual(len(summary["comparisons"]), 2)
-        self.assertTrue(
-            all(item["status"] == "passed" for item in summary["comparisons"])
-        )
-        self.assertEqual(
-            Path(summary["comparisons"][0]["comparison_report"]).name,
-            "comparison_from_serial_omp1.json",
-        )
-
-        report = json.loads(
-            Path(summary["comparisons"][0]["comparison_report"]).read_text(
-                encoding="utf-8"
-            )
-        )
-        self.assertEqual(report["convergence"]["final_newton_error"], 1.0e5)
-        self.assertIsNone(report["convergence"]["maximum"])
-        self.assertTrue(report["convergence"]["passed"])
-
-        rechecked = run_command("compare", "--suite", str(summary_path))
-        self.assertEqual(rechecked.returncode, 0, rechecked.stderr)
-        self.assertIn("serial_omp1", rechecked.stdout)
-        self.assertIn("serial_omp16", rechecked.stdout)
-
-    def test_generated_adaptive_mesh_comparison_is_byte_exact(self) -> None:
-        reference = self.root / "reference/stages/01_single_step/res/temp.msh"
-        candidate = self.root / "candidate/stages/01_single_step/res/temp.msh"
-        reference.parent.mkdir(parents=True)
-        candidate.parent.mkdir(parents=True)
-        reference.write_text("same mesh\n", encoding="utf-8")
-        candidate.write_text("same mesh\n", encoding="utf-8")
-
-        matching = compare_generated_meshes(
-            self.root / "reference", self.root / "candidate"
-        )
-        self.assertIsNotNone(matching)
-        self.assertTrue(matching["passed"])
-
-        candidate.write_text("different mesh\n", encoding="utf-8")
-        differing = compare_generated_meshes(
-            self.root / "reference", self.root / "candidate"
-        )
-        self.assertIsNotNone(differing)
-        self.assertFalse(differing["passed"])
-
-    @patch("suite.verification.compare_completed_run")
-    def test_offline_verification_dispatches_only_completed_runs(self, compare) -> None:
-        compare.side_effect = (
-            ("fixed_hdf5", self.root / "fixed.json", _passing_report()),
-            ("mesh_independent", self.root / "adaptive.json", _passing_report()),
-        )
-        source = self.root / "suite_summary.json"
-        source.write_text(
-            json.dumps(
-                {
-                    "schema_version": 2,
-                    "suite_id": "cold_matrix",
-                    "run_id": "offline-test",
-                    "case_id": "legacy_case",
-                    "results": [
-                        _suite_result(self.root, "cold_fixed"),
-                        _suite_result(self.root, "cold_adaptive"),
-                        _suite_result(self.root, "cold_fixed", "solver_failed"),
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        path, report = verify_suite(
-            source,
-            REGRESSION_ROOT / "cases",
-            REGRESSION_ROOT / "tolerances.json",
-        )
-
-        self.assertEqual(path.name, "verification_summary.json")
-        self.assertEqual(compare.call_count, 2)
-        self.assertEqual(
-            [result["comparison_policy"] for result in report["results"]],
-            ["fixed_hdf5", "mesh_independent", None],
-        )
-        self.assertEqual(
-            [result["convergence_status"] for result in report["results"]],
-            ["passed", "passed", None],
-        )
-        self.assertEqual(report["status"], "failed")
-        self.assertEqual(
-            report["results"][-1]["failures"],
-            ["solver run did not complete"],
-        )
-
-    @patch("regression_tests.diagnostics.check_suite", return_value={"status": "passed", "outputs": [], "failures": []})
-    @patch("suite.verification.compare_layout_pairs")
-    @patch("suite.verification.compare_completed_run")
-    def test_offline_verification_combines_references_and_pairs(
-        self,
-        compare,
-        compare_pairs,
-        diagnostics,
-    ) -> None:
-        compare.return_value = (
-            "fixed_hdf5",
-            self.root / "reference.json",
-            _passing_report(),
-        )
-        compare_pairs.return_value = [
-            {
-                "workflow_id": "cold_fixed",
-                "baseline_layout_id": "serial_omp1",
-                "candidate_layout_id": "serial_omp16",
-                "status": "passed",
-                "failures": [],
-            }
-        ]
-        source = self.root / "suite_summary.json"
-        source.write_text(
-            json.dumps(
-                {
-                    "schema_version": 2,
-                    "suite_id": "cold_matrix",
-                    "run_id": "combined-test",
-                    "case_id": "legacy_case",
-                    "workflow_ids": ["cold_fixed"],
-                    "tolerance_profile": "cold_cross_layout",
-                    "reference_comparisons": True,
-                    "layout_comparisons": [
-                        {
-                            "baseline": "serial_omp1",
-                            "candidate": "serial_omp16",
-                        }
-                    ],
-                    "results": [
-                        _suite_result(self.root, "cold_fixed"),
-                        _suite_result(
-                            self.root,
-                            "cold_fixed",
-                            layout="serial_omp16",
-                        ),
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        _, report = verify_suite(
-            source,
-            REGRESSION_ROOT / "cases",
-            REGRESSION_ROOT / "tolerances.json",
-        )
-
-        self.assertEqual(compare.call_count, 2)
-        compare_pairs.assert_called_once()
-        self.assertEqual(len(report["results"]), 2)
-        self.assertEqual(len(report["comparisons"]), 1)
-        self.assertEqual(report["status"], "passed")
-        diagnostics.assert_called_once()
-        diagnostics.return_value = {"status": "failed", "outputs": [], "failures": ["missing diagnostic output"]}
-        _, report = verify_suite(source, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json")
-        self.assertEqual(report["status"], "failed")
-
-        compare_pairs.reset_mock()
-        _, references_only = verify_suite(
-            source,
-            REGRESSION_ROOT / "cases",
-            REGRESSION_ROOT / "tolerances.json",
-            include_layout_pairs=False,
-        )
-        compare_pairs.assert_not_called()
-        self.assertNotIn("comparisons", references_only)
-
-    @patch("suite.verification.compare_completed_run")
-    def test_offline_verification_checks_every_staged_producer_log(
-        self,
-        compare,
-    ) -> None:
-        workflow = load_case_definition(
-            "legacy_case",
-            REGRESSION_ROOT / "cases",
-        )["workflows"]["cold_fixed"]
-        run_directory = self.root / "cold_fixed/serial_omp1"
-        records = []
-        for index, stage in enumerate(workflow["stages"], start=1):
-            stage_directory = run_directory / f"stage-{index}"
-            stage_directory.mkdir(parents=True)
-            (stage_directory / "stdout.log").write_text(
-                "Error: 1.0E-5\n",
-                encoding="utf-8",
-            )
-            records.append(
-                {
-                    "stage_id": stage["stage_id"],
-                    "status": "completed",
-                    "run_directory": str(stage_directory),
-                }
-            )
-        (run_directory / "run_metadata.json").write_text(
-            json.dumps({"stages": records}),
-            encoding="utf-8",
-        )
-        compare.return_value = (
-            "reference_matrix",
-            self.root / "matrix.json",
-            {"status": "failed", "failures": ["old fields differ"]},
-        )
-        source = self.root / "staged_suite_summary.json"
-        source.write_text(
-            json.dumps(
-                {
-                    "schema_version": 2,
-                    "suite_id": "cold",
-                    "run_id": "staged-convergence",
-                    "case_id": "legacy_case",
-                    "results": [
-                        _suite_result(self.root, "cold_fixed"),
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        _, passing = verify_suite(
-            source,
-            REGRESSION_ROOT / "cases",
-            REGRESSION_ROOT / "tolerances.json",
-        )
-        self.assertEqual(
-            passing["results"][0]["convergence_status"],
-            "passed",
-        )
-
-        last_log = Path(records[-1]["run_directory"]) / "stdout.log"
-        last_log.write_text("Error: 1.0E-3\n", encoding="utf-8")
-        _, failing = verify_suite(
-            source,
-            REGRESSION_ROOT / "cases",
-            REGRESSION_ROOT / "tolerances.json",
-        )
-        self.assertEqual(
-            failing["results"][0]["convergence_status"],
-            "failed",
-        )
-
-    def _run_suite(self, suite: str, run_id: str, *arguments: str):
-        return run_command(
-            "check",
-            suite,
-            "--allow-candidate",
-            "--settings",
-            str(self.fixture.settings),
-            "--run-id",
-            run_id,
-            *arguments,
-        )
-
-    def _summary(self, suite: str, run_id: str) -> dict:
-        path = self.fixture.run_root / "suites" / suite / run_id / "suite_summary.json"
-        return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _suite_result(
-    root: Path,
-    workflow: str,
-    status: str = "completed",
-    layout: str = "serial_omp1",
-) -> dict:
-    return {
-        "workflow_id": workflow,
-        "layout_id": layout,
-        "run_directory": str(root / workflow / layout),
-        "run_status": status,
-    }
-
-
-def _passing_report() -> dict:
-    return {
-        "status": "passed",
-        "failures": [],
-        "convergence": {"passed": True},
-    }
-
+from regression_tests import suites
+from regression_tests.compare import compare_generated_meshes, producer_converged
+from support.errors import BundleError
+from tests.fixtures.harness import create_harness, run_command, REGRESSION_ROOT as ROOT
+from tests.fixtures.solutions import write_solution
 
 SOLVER = """#!/usr/bin/env bash
 set -euo pipefail
 cp inputs/reference.h5 outputs/result.h5
-printf 'Error: 1.0E-5\n'
-printf 'Output written to file outputs/result.h5\n'
+printf 'Error: 1.0E-5\\nOutput written to file outputs/result.h5\\n'
 """
 
-WORKFLOW_SOLVER = """#!/usr/bin/env bash
-set -euo pipefail
-if [[ -e inputs/reference.h5 ]]; then
-  cp inputs/reference.h5 outputs/result.h5
-elif (($# == 1)); then
-  printf '%s\n' "${PWD##*/}" > outputs/result.h5
-else
-  cp "$2.h5" outputs/result.h5
+
+@pytest.fixture
+def harness(tmp_path):
+    return create_harness(tmp_path, solver=SOLVER, reference_writer=write_solution)
+
+
+def run(harness, name="warm", run_id="check", **kwargs):
+    return suites.run_suite(harness.settings, name, ROOT / "cases", ROOT / "layouts.json",
+                            ROOT / "suites.json", ROOT / "tolerances.json", run_id, **kwargs)
+
+
+def test_resume_reuses_good_outputs_retries_failed_and_changed_runs(harness):
+    # Same executable throughout; one serial launch fails once.
+    harness.install_solver(SOLVER.replace('cp inputs', '''if [[ "$0" == */serial && "$OMP_NUM_THREADS" == 1 && ! -e "$(dirname "$0")/failed-once" ]]; then
+  touch "$(dirname "$0")/failed-once"
+  exit 7
 fi
-printf 'Error: 1.0E-5\n'
-printf 'Output written to file outputs/result.h5\n'
-"""
+cp inputs'''))
+    _, first = run(harness, "warm_parallelism", compare=False)
+    assert first["status"] == "failed"
+    failed = next(item for item in first["results"] if item["run_status"] == "solver_failed")
+    good = {item["layout_id"]: item["run_directory"] for item in first["results"] if item["run_status"] == "completed"}
+    assert good
+    _, resumed = run(harness, "warm_parallelism", compare=False, resume=True)
+    assert resumed["status"] == "passed"
+    assert len(resumed["results"]) == len(first["results"])
+    for item in resumed["results"]:
+        if item["layout_id"] in good:
+            assert item["run_directory"] == good[item["layout_id"]]
+        else:
+            assert Path(item["run_directory"]).name == "check-resume-1"
+    assert (Path(failed["run_directory"]) / "run_metadata.json").is_file()
+    damaged = next(iter(good))
+    output = Path(good[damaged]) / "outputs/result.h5"
+    output.write_bytes(b"changed output")
+    _, repaired = run(harness, "warm_parallelism", compare=False, resume=True)
+    changed = next(item for item in repaired["results"] if item["layout_id"] == damaged)
+    assert repaired["status"] == "passed"
+    assert changed["run_directory"] != good[damaged]
+    assert output.read_bytes() == b"changed output"  # Old evidence is not overwritten.
 
-RACE_SOLVER = """#!/usr/bin/env bash
-set -euo pipefail
-cp "$(dirname "$0")/race_result.h5" outputs/result.h5
-printf 'Error: 1.0E+5\n'
-printf 'Output written to file outputs/result.h5\n'
-"""
 
-FAILING_SOLVER = """#!/usr/bin/env bash
-exit 7
-"""
+def test_interruption_preserves_partial_directory(harness, monkeypatch):
+    partial = harness.run_directory("warm", "mpi4_omp4", "check")
+    def interrupt(*args):
+        partial.mkdir(parents=True)
+        (partial / "evidence.txt").write_text("keep")
+        raise KeyboardInterrupt
+    with monkeypatch.context() as patch:
+        patch.setattr(suites, "run_cell", interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            run(harness, compare=False)
+    _, summary = run(harness, compare=False, resume=True)
+    assert summary["status"] == "passed"
+    assert (partial / "evidence.txt").read_text() == "keep"
+    assert Path(summary["results"][0]["run_directory"]).name == "check-resume-1"
+
+
+def test_resume_rechecks_comparisons_and_rejects_changed_inputs(harness, monkeypatch, tmp_path):
+    catalog = tmp_path / "catalog"
+    shutil.copytree(ROOT / "cases", catalog / "cases")
+    shutil.copytree(ROOT / "schemas", catalog / "schemas")
+    shutil.copy2(ROOT / "workflows.json", catalog / "workflows.json")
+    def check(resume=False):
+        return suites.run_suite(harness.settings, "warm", catalog / "cases", ROOT / "layouts.json",
+                                 ROOT / "suites.json", ROOT / "tolerances.json", "checked", resume=resume)
+    _, first = check()
+    assert first["status"] == "passed"
+    monkeypatch.setattr(suites, "run_cell", lambda *args: pytest.fail("valid output should be reused"))
+    comparison = Mock(return_value=("fixed_hdf5", tmp_path / "comparison.json", {
+        "status": "failed", "failures": ["changed acceptance result"],
+    }))
+    monkeypatch.setattr(suites, "compare_completed_run", comparison)
+    _, resumed = check(resume=True)
+    comparison.assert_called_once()
+    assert resumed["status"] == "failed"
+    assert resumed["results"][0]["run_directory"] == first["results"][0]["run_directory"]
+    shared = catalog / "workflows.json"
+    original = shared.read_text()
+    shared.write_text(original + "\n")
+    with pytest.raises(BundleError, match="workflow_catalog"):
+        check(resume=True)
+    shared.write_text(original)
+    harness.install_solver("#!/usr/bin/env bash\nexit 7\n", "parallel")
+    with pytest.raises(BundleError, match="parallel_executable"):
+        check(resume=True)
+
+
+def test_cli_requires_golden_and_records_diagnostic_overrides(harness):
+    result = run_command("check", "--settings", str(harness.settings))
+    assert result.returncode == 1 and "requires bundle_class=golden" in result.stderr
+    harness.set_bundle_class("golden")
+    args = ("check", "--settings", str(harness.settings), "--run-id", "mode", "--run-only")
+    result = run_command(*args, "--diagnostics", "detailed")
+    assert result.returncode == 0, result.stderr
+    directory = harness.run_directory("warm", "mpi4_omp4", "mode")
+    assert "balance_diagnostics_mode = 'detailed'" in (directory / "param.txt").read_text()
+    result = run_command(*args, "--diagnostics", "off", "--resume")
+    assert result.returncode == 1 and "parameter_overrides" in result.stderr
+    result = run_command(*args, "--build", "--resume")
+    assert result.returncode == 1 and "--build cannot be used with --resume" in result.stderr
+
+
+def test_parallel_comparison_and_saved_recheck(harness):
+    write_solution(harness.serial_executable.parent / "race_result.h5")
+    harness.install_solver(SOLVER.replace('cp inputs/reference.h5', 'cp "$(dirname "$0")/race_result.h5"').replace('1.0E-5', '1.0E5'))
+    path, summary = run(harness, "race")
+    assert summary["status"] == "passed"
+    assert summary["comparisons"]
+    report = json.loads(Path(summary["comparisons"][0]["comparison_report"]).read_text())
+    assert report["convergence"] == {"passed": True, "final_newton_error": 1e5, "maximum": None}
+    result = run_command("compare", "--suite", str(path))
+    assert result.returncode == 0, result.stderr
+
+
+def test_generated_mesh_comparison_is_byte_exact(tmp_path):
+    left, right = tmp_path / "left", tmp_path / "right"
+    for root in (left, right):
+        (root / "res").mkdir(parents=True)
+        (root / "res/temp.msh").write_text("mesh\n")
+    assert compare_generated_meshes(left, right)["passed"]
+    (right / "res/temp.msh").write_text("mesh\n\n")
+    assert not compare_generated_meshes(left, right)["passed"]
+
+
+def test_offline_checks_references_pairs_and_diagnostics(tmp_path, monkeypatch):
+    passed = {"status": "passed", "failures": [], "convergence": {"passed": True}}
+    compare = Mock(return_value=("fixed_hdf5", tmp_path / "compare.json", passed))
+    pairs = Mock(return_value=[{"status": "passed"}])
+    diagnostics = Mock(return_value={"status": "passed", "outputs": [], "failures": []})
+    monkeypatch.setattr(suites, "compare_completed_run", compare)
+    monkeypatch.setattr(suites, "compare_layout_pairs", pairs)
+    monkeypatch.setattr("regression_tests.diagnostics.check_suite", diagnostics)
+    results = [dict(workflow_id="cold_fixed", layout_id="serial_omp1", run_status="completed", run_directory=str(tmp_path))]
+    source = tmp_path / "suite_summary.json"
+    data = {"schema_version": 2, "suite_id": "example", "run_id": "example", "case_id": "legacy_case",
+            "workflow_ids": ["cold_fixed"], "reference_comparisons": True, "results": results,
+            "layout_comparisons": [{"baseline": "serial_omp1", "candidate": "serial_omp16"}], "tolerance_profile": "cold_cross_layout"}
+    def check():
+        source.write_text(json.dumps(data))
+        return suites.verify_suite(source, ROOT / "cases", ROOT / "tolerances.json")[1]
+    assert check()["status"] == "passed"
+    compare.assert_called_once()
+    pairs.assert_called_once()
+    diagnostics.return_value = {"status": "failed", "outputs": [], "failures": ["missing diagnostics"]}
+    assert check()["status"] == "failed"
+    results.append({**results[0], "run_status": "solver_failed"})
+    compare.reset_mock()
+    report = check()
+    compare.assert_called_once()  # Incomplete runs do not reach the field comparator.
+    assert report["results"][-1]["convergence_status"] is None
+    assert report["status"] == "failed"
+    pairs.reset_mock()
+    suites.verify_suite(source, ROOT / "cases", ROOT / "tolerances.json", include_layout_pairs=False)
+    pairs.assert_not_called()
+
+
+def test_staged_convergence_is_independent_of_old_reference_failure(tmp_path):
+    stages = [{"stage_id": "initial", "newton_check": "finite_only"}, {"stage_id": "settle", "newton_check": "bounded"}]
+    records = []
+    for stage, error in zip(stages, (1., 1e-5)):
+        directory = tmp_path / stage["stage_id"]
+        directory.mkdir()
+        (directory / "stdout.log").write_text(f"Error: {error}\n")
+        records.append({**stage, "status": "completed", "run_directory": str(directory)})
+    (tmp_path / "run_metadata.json").write_text(json.dumps({"stages": records}))
+    source = {"run_directory": str(tmp_path), "layout_id": "serial_omp1"}
+    workflow = {"stages": stages, "comparison_policy": "fixed_hdf5", "stage_tolerance_profile": "fixed_stage_reference"}
+    report = {"status": "failed", "failures": ["old fields differ"]}
+    def converged():
+        return producer_converged(source, workflow, "reference_matrix", report, ROOT / "tolerances.json")
+    assert converged()
+    (tmp_path / "settle/stdout.log").write_text("Error: 1e-3\n")
+    assert not converged()

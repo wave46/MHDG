@@ -31,7 +31,7 @@ def diagnose(args):
     from bundle.settings import bundle_root_from_settings
     from bundle.cases import load_case_definition
     from catalogs.layouts import load_layouts
-    from suite.configuration import load_suite_definition
+    from regression_tests.config import load_suite_definition
 
     def catalogs():
         for path in (config.ROOT / "cases").glob("*.json"):

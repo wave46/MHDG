@@ -177,10 +177,10 @@ def _dispatch(args: argparse.Namespace) -> int:
 
 def _check(args: argparse.Namespace) -> int:
     from .build import build_solver
-    from suite.runner import run_suite
-    from suite.reporting import print_run_summary
+    from regression_tests.suites import run_suite
+    from regression_tests.reporting import print_run_summary
     from support.errors import BundleError
-    from suite.configuration import load_suite_definition
+    from regression_tests.config import load_suite_definition
     from catalogs.layouts import load_layouts
     from .config import build_settings, runtime_settings
 
@@ -252,8 +252,8 @@ def _compare(args: argparse.Namespace) -> int:
             write_json_atomic(path, report, "balance diagnostics report")
             reporting.diagnostics(report, path)
             return 0 if report["status"] == "passed" else 1
-        from suite.verification import verify_suite
-        from suite.reporting import print_verification_summary
+        from regression_tests.suites import verify_suite
+        from regression_tests.reporting import print_verification_summary
 
         path, summary = verify_suite(args.path, ROOT / "cases", ROOT / "tolerances.json")
         print_verification_summary(summary, path)

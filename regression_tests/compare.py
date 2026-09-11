@@ -266,3 +266,116 @@ def compare_reference_matrix(
         raise ComparisonError("matrix report cannot replace a stage artifact")
     write_json_atomic(output, report, "matrix report")
     return output, report
+
+
+def compare_generated_meshes(
+    reference_run: Path,
+    candidate_run: Path,
+) -> dict[str, Any] | None:
+    """Require retained Gmsh adaptation outputs to be byte-identical."""
+    reference = _generated_meshes(reference_run)
+    candidate = _generated_meshes(candidate_run)
+    if not reference and not candidate:
+        return None
+
+    failures = []
+    files = {}
+    for relative_path in sorted(reference.keys() | candidate.keys()):
+        first = reference.get(relative_path)
+        second = candidate.get(relative_path)
+        first_identity = file_identity(first) if first else None
+        second_identity = file_identity(second) if second else None
+        passed = first_identity == second_identity
+        files[relative_path] = {
+            "passed": passed,
+            "reference": first_identity,
+            "candidate": second_identity,
+        }
+        if not passed:
+            failures.append(f"generated mesh differs: {relative_path}")
+
+    return {
+        "mode": "byte_exact",
+        "passed": not failures,
+        "files": files,
+        "failures": failures,
+    }
+
+
+def _generated_meshes(run_directory: Path) -> dict[str, Path]:
+    return {
+        str(path.relative_to(run_directory)): path
+        for path in run_directory.glob("**/res/temp.msh")
+    }
+
+
+
+def producer_converged(
+    source: dict[str, Any],
+    workflow: dict[str, Any],
+    policy: str,
+    report: dict[str, Any],
+    tolerances_path: Path,
+) -> bool:
+    """Check convergence independently of old-reference field agreement."""
+    convergence = report.get("convergence")
+    if isinstance(convergence, dict):
+        return convergence.get("passed") is True
+    if policy != "reference_matrix" or not workflow.get("stages"):
+        return False
+
+    run_directory = Path(source["run_directory"])
+    metadata = load_json(
+        run_directory / "run_metadata.json",
+        "staged run metadata",
+    )
+    records = metadata.get("stages")
+    definitions = workflow["stages"]
+    if not isinstance(records, list) or len(records) != len(definitions):
+        return False
+    if any(
+        record.get("stage_id") != definition["stage_id"]
+        or record.get("status") != "completed"
+        for record, definition in zip(records, definitions)
+    ):
+        return False
+
+    maximum = _stage_newton_maximum(
+        workflow,
+        source["layout_id"],
+        tolerances_path,
+    )
+    for record, definition in zip(records, definitions):
+        effective_maximum = effective_newton_maximum(
+            maximum,
+            definition["newton_check"],
+        )
+        convergence = read_newton_convergence(
+            Path(record["run_directory"]) / "stdout.log",
+            effective_maximum,
+        )
+        if not convergence.passed:
+            return False
+    return True
+
+
+def _stage_newton_maximum(
+    workflow: dict[str, Any],
+    layout_id: str,
+    tolerances_path: Path,
+) -> float | None:
+    profile = workflow.get("stage_tolerance_profile")
+    if workflow.get("comparison_policy") == "fixed_hdf5":
+        _, tolerances = load_fixed_tolerances(
+            tolerances_path,
+            workflow,
+            layout_id,
+            profile,
+        )
+    else:
+        _, tolerances = load_adaptive_tolerances(
+            tolerances_path,
+            workflow,
+            profile,
+        )
+    return tolerances["newton_error_max"]

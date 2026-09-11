@@ -254,8 +254,10 @@ python -m regression_tests check --allow-candidate cold_matrix \
   --run-only --run-id overnight-01 --resume
 ```
 
-Recorded cells are skipped. An incomplete run is preserved and retried as
-`RUN_ID-resume-N`. Resume rejects changed settings, bundle data, catalogs,
+Completed runs are reused only while their recorded output hashes still match;
+comparisons are rerun. Failed, incomplete or changed runs are preserved and the
+whole workflow starts in a fresh `RUN_ID-resume-N` directory. Resume rejects
+changed effective settings, bundle data, catalogs,
 executables, or launcher. `--build` cannot be combined with `--resume`; after
 an initial `--build`, select the printed `--build-manifest` path.
 

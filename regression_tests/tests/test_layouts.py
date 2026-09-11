@@ -12,7 +12,7 @@ REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 from catalogs.layouts import layout_pairs, load_layouts  # noqa: E402
-from suite.configuration import load_suite_definition  # noqa: E402
+from regression_tests.config import load_suite_definition  # noqa: E402
 from support.errors import BundleError  # noqa: E402
 
 
@@ -62,7 +62,7 @@ def test_requested_relation_cannot_silently_lose_its_comparison(catalog, relatio
 def test_suite_defaults_overrides_and_relations_select_runs_once(catalog, monkeypatch):
     root, layouts = catalog
     monkeypatch.setattr(
-        "suite.configuration.load_case_definition",
+        "regression_tests.config.load_case_definition",
         lambda *_: {"workflows": {"probe": {}}},
     )
     declaration = {"description": "Probe", "workflows": ["probe"]}

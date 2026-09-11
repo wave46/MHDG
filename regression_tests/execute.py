@@ -12,7 +12,7 @@ from typing import Any
 from regression_tests.compare_common import select_candidate
 from support.documents import load_json, write_json_atomic
 from support.environments import source_environment
-from support.errors import BundleError, ComparisonError
+from support.errors import BundleError, ComparisonError, HarnessError
 from support.files import file_identity
 from support.time import utc_now
 from .prepare import PreparedExecution, PreparedRun, PreparedStagedRun, openmp_environment
@@ -227,3 +227,21 @@ def _fatal_log_messages(run_directory: Path, *, missing_ok: bool = False) -> lis
                     if len(messages) == 20:
                         return messages
     return messages
+
+
+def reusable_outputs(directory):
+    """Use per-run output identities; no suite-level copies or stage retries."""
+    try:
+        metadata = load_json(directory / "run_metadata.json", "run metadata")
+        if metadata.get("status") != "completed":
+            return False
+        if metadata.get("stages"):
+            return all(stage.get("status") == "completed" and reusable_outputs(Path(stage["run_directory"]))
+                       for stage in metadata["stages"])
+        outputs = metadata.get("output_files", [])
+        return bool(outputs) and bool(metadata.get("hdf5_outputs")) and all(
+            file_identity(directory / item["path"]) == {key: item[key] for key in ("sha256", "size_bytes")}
+            for item in outputs
+        )
+    except (HarnessError, OSError, KeyError, TypeError):
+        return False

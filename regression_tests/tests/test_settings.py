@@ -95,7 +95,7 @@ def test_json_check_resumes_with_same_effective_selection(setup):
     path.write_text(json.dumps(document))
     resumed = run_command(*arguments, "--resume")
     assert resumed.returncode == 0, resumed.stderr
-    assert "skipping recorded" in resumed.stdout
+    assert "reusing completed" in resumed.stdout
     summary = json.loads((harness.run_root / "suites/warm/json-settings/suite_summary.json").read_text())
     assert summary["execution_inputs"]["settings"]["MHDG_BUILD_MANIFEST"] == str(manifest)
 
