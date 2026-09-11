@@ -25,6 +25,8 @@ def write_solution(
         ),
         "boundaryFlag": np.array([1, 2, 3, 4], dtype=np.int32),
         "Ndim": np.array([2], dtype=np.int32),
+        "elemType": np.array([0], dtype=np.int32),
+        "F": np.array([[2, 3], [1, 4], [5, 1]], dtype=np.int32),
         "Nnodes": np.array([4], dtype=np.int32),
         "Nelems": np.array([2], dtype=np.int32),
         "Nnodesperelem": np.array([3], dtype=np.int32),

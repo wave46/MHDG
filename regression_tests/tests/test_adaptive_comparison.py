@@ -4,18 +4,24 @@ import json
 
 import h5py
 import numpy as np
+import pytest
 
 from regression_tests import compare
 from regression_tests.compare_adaptive import SampledFields, compare_sampled_fields, reference_sample_points
 from tests.fixtures.harness import REGRESSION_ROOT
+from tests.fixtures.solutions import write_solution
+from support.errors import ComparisonError
 
 
 def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
     candidate, reference, fekete = (tmp_path / name for name in (
         "candidate.h5", "golden.h5", "positionFeketeNodesTri2D.h5",
     ))
-    for path in (candidate, reference, fekete):
-        path.write_text("fixture\n")
+    for path in (candidate, reference):
+        write_solution(path)
+    with h5py.File(candidate, "r+") as handle:
+        handle["mesh/X"][0] *= 1.01
+    fekete.write_text("fixture\n")
     (tmp_path / "stdout.log").write_text("Error: 1.0\n")
     (tmp_path / "run_plan.json").write_text(json.dumps({
         "case_id": "legacy_case", "workflow_id": "cold_adaptive", "layout_id": "mpi4_omp4",
@@ -40,6 +46,8 @@ def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
     assert report["tolerance_profile"]["id"] == "adaptive_reference"
     assert path.name == "comparison.json"
     assert calls[0][:4] == (reference, candidate, fekete, 4)
+    assert report["comparison_policy"] == "mesh_independent"
+    assert report["method_selection"]["differences"] == ["X"]
 
 
 def test_reference_points_are_deterministic_and_interior(tmp_path):
@@ -71,3 +79,98 @@ def test_gradient_tolerances_and_point_coverage():
     assert "common point coverage is below tolerance" in report["failures"]
     assert report["datasets"]["solution"]["equations"]["rho"]["passed"]
     assert any("gradient_x/rho exceeds tolerance" in item for item in report["failures"])
+
+
+@pytest.fixture
+def adaptive_run(tmp_path):
+    reference, candidate = tmp_path / "reference.h5", tmp_path / "candidate.h5"
+    write_solution(reference)
+    write_solution(candidate, grouped=False)
+    (tmp_path / "stdout.log").write_text("Error: 1e-5\n")
+    (tmp_path / "run_plan.json").write_text(json.dumps({
+        "case_id": "legacy_case", "workflow_id": "cold_adaptive", "layout_id": "mpi4_omp4",
+    }))
+    (tmp_path / "run_metadata.json").write_text(json.dumps({
+        "status": "completed", "hdf5_outputs": [candidate.name],
+    }))
+    inputs = compare.load_comparison_inputs(tmp_path, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json")
+    return inputs, reference, candidate
+
+
+@pytest.mark.parametrize("perturbed", [False, True])
+def test_matching_mesh_uses_direct_check_without_fallback(adaptive_run, monkeypatch, perturbed):
+    inputs, reference, candidate = adaptive_run
+    with h5py.File(candidate, "r+") as handle:
+        handle["X"][0, 0] += 1e-13  # Within the declared mesh tolerance.
+        if perturbed:
+            handle["u"][1] += .001
+    def no_interpolation(*args):
+        pytest.fail("matching-mesh comparisons must not interpolate, even after a failed direct check")
+    monkeypatch.setattr(compare, "compare_adaptive_files", no_interpolation)
+    policy, path, report = compare.compare_completed_run(
+        inputs.run_directory, inputs.case_directory, inputs.tolerances_path, reference_override=reference,
+    )
+    assert policy == "fixed_hdf5"
+    assert report["status"] == ("failed" if perturbed else "passed")
+    assert report["method_selection"]["reason"] == "matching discrete meshes"
+    assert report["tolerance_profile"]["id"] == "cold_fixed_reference"
+    assert "hdf5" in report and "sampling" not in report
+    assert json.loads(path.read_text())["comparison_policy"] == policy
+
+
+def test_matching_stage_uses_stage_profile_and_preserves_finite_only(adaptive_run):
+    inputs, reference, candidate = adaptive_run
+    (inputs.run_directory / "stdout.log").write_text("Error: 1.0\n")
+    _, report = compare.compare_run(inputs, compare.ComparisonOverrides(
+        candidate, reference, "adaptive_reference", "finite_only", "fixed_stage_reference",
+    ))
+    assert report["status"] == "passed"
+    assert report["tolerance_profile"]["id"] == "fixed_stage_reference"
+    assert report["convergence"]["maximum"] is None
+
+
+@pytest.mark.parametrize("corruption", ["nonfinite", "index", "fractional_index", "degenerate", "order", "field_size"])
+def test_malformed_mesh_or_storage_never_interpolates(adaptive_run, monkeypatch, corruption):
+    inputs, reference, candidate = adaptive_run
+    with h5py.File(candidate, "r+") as handle:
+        if corruption == "nonfinite":
+            handle["X"][0, 0] = np.nan
+        elif corruption == "index":
+            handle["Tlin"][0, 0] = 99
+        elif corruption == "fractional_index":
+            data = handle["Tlin"][()].astype(float)
+            del handle["Tlin"]
+            handle["Tlin"] = data + .1
+        elif corruption == "degenerate":
+            handle["X"][1] = 0.
+        elif corruption == "order":
+            handle["Nnodesperface"][0] = 3
+        else:
+            del handle["u"]
+            handle["u"] = [1.]
+    monkeypatch.setattr(compare, "compare_adaptive_files", lambda *args: pytest.fail("invalid mesh fell back to interpolation"))
+    with pytest.raises(ComparisonError):
+        compare.compare_run(inputs, compare.ComparisonOverrides(reference=reference))
+
+
+def test_face_order_is_part_of_mesh_identity_and_parallel_checks_stay_strict(adaptive_run, monkeypatch):
+    inputs, reference, candidate = adaptive_run
+    with h5py.File(candidate, "r+") as handle:
+        faces = handle["F"][()]
+        # Permute two boundary-face IDs and their records consistently.
+        faces[faces == 2] = 99
+        faces[faces == 3] = 2
+        faces[faces == 99] = 3
+        handle["F"][...] = faces
+        for name in ("Tb", "extfaces"):
+            data = handle[name][()]
+            data[:, [0, 1]] = data[:, [1, 0]]
+            handle[name][...] = data
+    differences = compare.mesh_differences(reference, candidate, 1e-12)
+    assert "F" in differences and "extfaces" in differences
+    monkeypatch.setattr(compare, "compare_adaptive_files", lambda *args: pytest.fail("parallel check interpolated"))
+    _, report = compare.compare_run(inputs, compare.ComparisonOverrides(
+        reference=reference, tolerance_profile="cold_cross_layout",
+    ), policy="fixed_hdf5")
+    assert report["status"] == "failed"
+    assert report["tolerance_profile"]["id"] == "cold_cross_layout"

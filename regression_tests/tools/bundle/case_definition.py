@@ -22,6 +22,8 @@ COMPARISON_KEYS = {
     "profile": "tolerance_profile",
     "cross_layout_profile": "cross_layout_tolerance_profile",
     "stage_profile": "stage_tolerance_profile",
+    "direct_profile": "direct_tolerance_profile",
+    "direct_stage_profile": "direct_stage_tolerance_profile",
 }
 
 

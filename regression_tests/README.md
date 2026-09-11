@@ -663,13 +663,24 @@ Fixed-mesh comparison checks finite values and Newton error, exact
 connectivity, tolerance-based coordinates, each equation in `u`, `q`, and
 `u_tilde`, and transport-1D data when present.
 
-Adaptive golden references may come from a different mesh after an intentional
-adaptivity change. Their comparison uses `HDG_postprocess` to interpolate both
-solutions at deterministic interior points instead of requiring equal
-connectivity.
+Adaptive comparisons first validate both meshes and inspect coordinates,
+connectivity, polynomial order and face numbering. Matching discrete meshes use
+direct comparison of `u`, `q`, `u_tilde`, transport and magnetic data. Matching
+cold stages use `fixed_stage_reference`; final cold-versus-warm checks use
+`cold_fixed_reference`. Shared workflow declarations own these selections through
+`comparison.direct_profile` and `comparison.direct_stage_profile`.
+
+Only differing valid meshes use `HDG_postprocess` to interpolate conservative
+fields and gradients at deterministic interior points, with `adaptive_reference`
+tolerances and full required point coverage. Malformed input is an error; a failed
+direct comparison never retries through interpolation. Reports record the selected
+method, profile and reason. A debugging `--tolerance-profile` override must fit the
+selected method: fixed-field limits for matching meshes, sampled-field limits for
+different meshes.
 
 Race probes require identical connectivity arrays, including node, element,
-and boundary ordering. The generated adaptive `temp.msh` files must also be
+face and boundary ordering, and matching discretization metadata. The generated
+adaptive `temp.msh` files must also be
 byte-identical, which rejects tag swaps even when the physical topology is
 unchanged. The full race matrix applies that check to every pair of tracked
 layouts before comparing `u`, `q`, and `u_tilde` with the race tolerances.

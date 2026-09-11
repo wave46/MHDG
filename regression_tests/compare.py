@@ -14,7 +14,7 @@ from support.errors import BundleError, ComparisonError
 from support.files import file_identity
 from support.paths import recorded_directory, recorded_file, require_directory
 from support.time import utc_now
-from .compare_adaptive import compare_adaptive_files
+from .compare_adaptive import compare_adaptive_files, mesh_differences
 from .compare_fixed import compare_hdf5_files
 from .compare_common import (
     NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
@@ -39,6 +39,7 @@ class ComparisonOverrides:
     reference: Path | None = None
     tolerance_profile: str | None = None
     newton_check: NewtonCheck = "bounded"
+    direct_tolerance_profile: str | None = None
 
 
 def load_comparison_inputs(
@@ -139,7 +140,7 @@ def compare_completed_run(
             return "reference_matrix", path, report
     policy = comparison_policy_override or inputs.workflow.get("comparison_policy")
     path, report = compare_run(inputs, overrides, report_override, policy=policy)
-    return policy, path, report
+    return report["comparison_policy"], path, report
 
 
 def compare_run(
@@ -148,9 +149,26 @@ def compare_run(
 ) -> tuple[Path, dict[str, Any]]:
     """Share file selection, Newton acceptance and report writing across methods."""
     policy = policy or inputs.workflow.get("comparison_policy")
+    candidate = select_candidate(inputs.run_directory, inputs.metadata, overrides.candidate)
+    reference = resolve_run_file(inputs.run_directory, overrides.reference, "inputs/reference.h5", "reference")
+    profile_override = overrides.tolerance_profile
+    selection = {"requested_policy": policy, "reason": "fixed mesh required"}
+    if policy == "mesh_independent":
+        coordinate_atol = load_json(inputs.tolerances_path, "tolerance definitions")["fixed_defaults"]["mesh_coordinate_atol"]
+        differences = mesh_differences(reference, candidate, coordinate_atol)
+        selection.update(mesh_coordinate_atol=coordinate_atol, differences=differences)
+        if differences:
+            selection["reason"] = "different discrete meshes"
+        else:
+            policy = "fixed_hdf5"
+            selection["reason"] = "matching discrete meshes"
+            profile_override = (overrides.direct_tolerance_profile or overrides.tolerance_profile
+                                or inputs.workflow.get("direct_tolerance_profile"))
+            if not profile_override:
+                raise ComparisonError("adaptive workflow must declare a direct comparison profile")
     if policy == "fixed_hdf5":
         profile_id, tolerances = load_fixed_tolerances(
-            inputs.tolerances_path, inputs.workflow, inputs.plan["layout_id"], overrides.tolerance_profile,
+            inputs.tolerances_path, inputs.workflow, inputs.plan["layout_id"], profile_override,
         )
     elif policy == "mesh_independent":
         if inputs.workflow.get("comparison_policy") != "mesh_independent":
@@ -163,8 +181,6 @@ def compare_run(
     tolerances["newton_error_max"] = effective_newton_maximum(
         tolerances["newton_error_max"], overrides.newton_check,
     )
-    candidate = select_candidate(inputs.run_directory, inputs.metadata, overrides.candidate)
-    reference = resolve_run_file(inputs.run_directory, overrides.reference, "inputs/reference.h5", "reference")
     protected = [candidate, reference]
     if policy == "fixed_hdf5":
         field_report = compare_hdf5_files(reference, candidate, tolerances)
@@ -188,6 +204,7 @@ def compare_run(
         failures.append(convergence.failure)
     report = {
         **details,
+        "comparison_policy": policy, "method_selection": selection,
         "schema_version": 2, "created_utc": utc_now(),
         "status": "passed" if not failures else "failed",
         "run_directory": str(inputs.run_directory),
@@ -220,6 +237,7 @@ def compare_reference_matrix(
         inputs = load_stage_inputs(context, directory)
         overrides = ComparisonOverrides(
             candidate, reference, context.workflow.get("stage_tolerance_profile"), definition["newton_check"],
+            context.workflow.get("direct_stage_tolerance_profile"),
         )
         path, report = compare_run(
             inputs, overrides, directory / "comparison.json", policy=context.workflow["comparison_policy"],
@@ -227,6 +245,7 @@ def compare_reference_matrix(
         reports.append({
             "stage_id": stage_id, "status": report["status"], "comparison_report": str(path),
             "reference": str(reference), "candidate": str(candidate), "failures": report["failures"],
+            "comparison_policy": report["comparison_policy"],
         })
         if report["status"] != "passed":
             failures = [f"{stage_id}: {failure}" for failure in report["failures"] or ["comparison failed"]]

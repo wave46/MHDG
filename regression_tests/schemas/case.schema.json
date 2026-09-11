@@ -178,6 +178,12 @@
         },
         "stage_profile": {
           "$ref": "#/$defs/identifier"
+        },
+        "direct_profile": {
+          "$ref": "#/$defs/identifier"
+        },
+        "direct_stage_profile": {
+          "$ref": "#/$defs/identifier"
         }
       }
     },

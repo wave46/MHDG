@@ -107,7 +107,9 @@
       "comparison": {
         "method": "mesh_independent",
         "profile": "adaptive_reference",
-        "stage_profile": "adaptive_reference"
+        "stage_profile": "adaptive_reference",
+        "direct_profile": "cold_fixed_reference",
+        "direct_stage_profile": "fixed_stage_reference"
       },
       "adaptive_stages": ["time_init", "diffusion_reduction"]
     },

@@ -20,7 +20,7 @@ def test_explicit_final_check_bypasses_stage_matrix(tmp_path, monkeypatch, workf
 
     def run_comparison(inputs, overrides, path, **kwargs):
         calls.append((overrides, kwargs["policy"]))
-        return report_path, {"status": "passed", "failures": []}
+        return report_path, {"status": "passed", "failures": [], "comparison_policy": kwargs["policy"]}
 
     monkeypatch.setattr(compare, "compare_run", run_comparison)
     policy, path, _ = compare.compare_completed_run(
@@ -42,7 +42,8 @@ def test_stage_references_and_stop_at_first_divergence(tmp_path, monkeypatch, wo
     def stage_comparison(inputs, overrides, path, **kwargs):
         calls.append(overrides)
         failures = ["solution/u exceeds tolerance"] if fail_second and len(calls) == 2 else []
-        return path, {"status": "failed" if failures else "passed", "failures": failures}
+        return path, {"status": "failed" if failures else "passed", "failures": failures,
+                      "comparison_policy": kwargs["policy"]}
 
     monkeypatch.setattr(compare, "compare_run", stage_comparison)
     policy, path, report = compare.compare_completed_run(
@@ -56,6 +57,8 @@ def test_stage_references_and_stop_at_first_divergence(tmp_path, monkeypatch, wo
     assert [overrides.reference for overrides in calls] == list(references.values())[:expected]
     assert calls[0].newton_check == "finite_only" and calls[-1].newton_check == "bounded"
     assert calls[-1].tolerance_profile == ("fixed_stage_reference" if fail_second else "adaptive_reference")
+    if workflow == "cold_adaptive":
+        assert calls[-1].direct_tolerance_profile == "fixed_stage_reference"
 
 
 def fixture(root, workflow_id):

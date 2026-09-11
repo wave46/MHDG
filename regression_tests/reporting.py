@@ -48,6 +48,8 @@ def bundle(summary) -> None:
 
 def comparison(policy, path, report) -> None:
     print(f"comparison policy: {policy}")
+    if "method_selection" in report:
+        print(f"method selection: {report['method_selection']['reason']}")
     status("comparison", report["status"], path)
     if policy in {"fixed_hdf5", "mesh_independent"}:
         files = report if policy == "fixed_hdf5" else report["files"]

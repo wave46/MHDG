@@ -152,7 +152,8 @@ def compare_mesh(
 ) -> dict[str, Any]:
     """Compare mesh coordinates and connectivity in storage order."""
     connectivity = {}
-    for name in ("T", "Tlin", "Tb"):
+    for name in ("T", "Tlin", "Tb", "F", "intfaces", "extfaces", "Ndim", "elemType",
+                 "Nnodes", "Nelems", "Nnodesperelem", "Nnodesperface", "Nfaces", "Nintfaces", "Nextfaces"):
         details = _compare_connectivity(reference, candidate, name)
         if details is None:
             continue
