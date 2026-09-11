@@ -57,8 +57,6 @@ def _execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
             for name, path in sorted(prepared.runtime_files.items())
         },
         "solver": {
-            "revision": settings.get("MHDG_SOLVER_REVISION") or None,
-            "build_description": settings.get("MHDG_BUILD_DESCRIPTION") or None,
             "build_manifest": _optional_file_record(settings, "MHDG_BUILD_MANIFEST"),
         },
     }
@@ -187,12 +185,16 @@ def _execute_staged(prepared: PreparedStagedRun, settings: dict[str, str]) -> Ru
         "stages": records,
         "hdf5_outputs": hdf5_outputs,
     }
-    if last_result is not None:
-        last_metadata = load_json(last_result.path / "run_metadata.json", "stage run metadata")
-        for name in ("environment", "executable", "runtime_files", "solver"):
-            metadata[name] = last_metadata[name]
     write_json_atomic(prepared.path / "run_metadata.json", metadata, "run metadata")
     return RunResult(prepared.path, status, exit_code, duration, hdf5_outputs)
+
+
+def final_execution(directory: Path, metadata: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
+    """Read final-stage observations from their owner, without copying them upward."""
+    if not metadata.get("stages"):
+        return directory, metadata
+    directory = Path(metadata["stages"][-1]["run_directory"])
+    return directory, load_json(directory / "run_metadata.json", "final stage metadata")
 
 
 def _file_record(path: Path, display_path: str) -> dict[str, Any]:

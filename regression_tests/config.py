@@ -75,7 +75,7 @@ def settings(path=None, *, case=None, bundle=None, build_manifest=None, use_buil
     if not use_build or build_manifest is not None:
         # A partial new build must not inherit an executable from an old selection.
         for key in ("MHDG_SERIAL_EXECUTABLE", "MHDG_PARALLEL_EXECUTABLE", "MHDG_SOLVER_REVISION",
-                    "MHDG_BUILD_DESCRIPTION", "MHDG_BUILD_MANIFEST"):
+                    "MHDG_BUILD_MANIFEST"):
             values.pop(key, None)
     if build_manifest is not None and use_build:
         values.update(build_settings(Path(build_manifest).expanduser()))
@@ -93,13 +93,12 @@ def build_settings(path: Path) -> dict[str, str]:
         profile.get("model"), profile.get("dimension")
     ) != ("NGammaTiTeNeutral", "2D"):
         raise BundleError("this harness currently supports NGammaTiTeNeutral 2D builds")
-    build_id = _text(record.get("build_id"), "build_id")
+    _text(record.get("build_id"), "build_id")
     repository = record.get("repository")
     if not isinstance(repository, dict):
         raise BundleError("build manifest is missing repository provenance")
     values = {
         "MHDG_BUILD_MANIFEST": str(path),
-        "MHDG_BUILD_DESCRIPTION": f"regression build {build_id}",
         "MHDG_SOLVER_REVISION": _text(repository.get("revision"), "repository.revision"),
     }
     runtime = _artifact(record.get("runtime_files"), "positionFeketeNodesTri2D.h5", path.parent)

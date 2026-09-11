@@ -16,6 +16,7 @@ from support.paths import recorded_directory, recorded_file, require_directory
 from support.time import utc_now
 from .compare_adaptive import compare_adaptive_files, mesh_differences
 from .compare_fixed import compare_hdf5_files
+from .execute import final_execution
 from .compare_common import (
     NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
     load_fixed_tolerances, read_newton_convergence, resolve_run_file, select_candidate,
@@ -191,7 +192,8 @@ def compare_run(
             "hdf5": field_report,
         }
     else:
-        runtime = inputs.metadata.get("runtime_files", {}).get("positionFeketeNodesTri2D.h5", {})
+        _, execution = final_execution(inputs.run_directory, inputs.metadata)
+        runtime = execution.get("runtime_files", {}).get("positionFeketeNodesTri2D.h5", {})
         fekete = recorded_file(runtime.get("path"), "Fekete-node")
         protected.append(fekete)
         field_report = compare_adaptive_files(

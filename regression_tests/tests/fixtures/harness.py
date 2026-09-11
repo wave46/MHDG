@@ -108,8 +108,6 @@ def create_harness(
         build_manifest.write_text("{}\n", encoding="utf-8")
         extra_settings = (
             f"MHDG_ENVIRONMENT_SCRIPT={environment_script}\n"
-            f"MHDG_SOLVER_REVISION={'a' * 40}\n"
-            "MHDG_BUILD_DESCRIPTION=synthetic-test-build\n"
             f"MHDG_BUILD_MANIFEST={build_manifest}\n"
         )
 

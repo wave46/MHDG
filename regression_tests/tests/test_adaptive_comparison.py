@@ -13,7 +13,8 @@ from tests.fixtures.solutions import write_solution
 from support.errors import ComparisonError
 
 
-def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
+@pytest.mark.parametrize("staged", [False, True])
+def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch, staged):
     candidate, reference, fekete = (tmp_path / name for name in (
         "candidate.h5", "golden.h5", "positionFeketeNodesTri2D.h5",
     ))
@@ -30,6 +31,16 @@ def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
         "status": "completed", "hdf5_outputs": ["candidate.h5"],
         "runtime_files": {fekete.name: {"path": str(fekete)}},
     }))
+    if staged:
+        stage = tmp_path / "final-stage"
+        stage.mkdir()
+        (stage / "run_metadata.json").write_text(json.dumps({
+            "runtime_files": {fekete.name: {"path": str(fekete)}},
+        }))
+        (tmp_path / "run_metadata.json").write_text(json.dumps({
+            "status": "completed", "hdf5_outputs": ["candidate.h5"],
+            "stages": [{"run_directory": str(stage), "status": "completed"}],
+        }))
     calls = []
 
     def fields(*args):

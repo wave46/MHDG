@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from regression_tests.execute import execute_prepared
+from regression_tests.execute import execute_prepared, final_execution
 from regression_tests.prepare import prepare_run
 from support.files import file_identity
 from tests.fixtures.harness import REGRESSION_ROOT, create_harness, run_command
@@ -38,7 +38,6 @@ def test_parallel_logs_environment_and_provenance(harness):
         assert (directory / f"outputs/{filename}.txt").read_text() == value + "\n"
     assert metadata["status"] == "completed"
     assert metadata["environment"]["OMP_NUM_THREADS"] == "4"
-    assert metadata["solver"]["revision"] == "a" * 40
     assert metadata["solver"]["build_manifest"]["path"] == str(harness.build_manifest)
     assert metadata["hdf5_outputs"] == ["outputs/result.h5"]
     for record, path in (
@@ -87,6 +86,9 @@ def test_stages_pass_selected_output_to_next_restart(harness):
     for previous, current in zip(stages, stages[1:]):
         assert (current / "inputs/restart.h5").resolve() == previous / "outputs/result.h5"
     assert (directory / "stdout.log").resolve() == stages[-1] / "stdout.log"
+    observed_directory, observed = final_execution(directory, metadata)
+    assert observed_directory == stages[-1]
+    assert observed["executable"] == {"path": str(harness.serial_executable), **file_identity(harness.serial_executable)}
 
 
 @pytest.mark.parametrize("ambiguous", [False, True])

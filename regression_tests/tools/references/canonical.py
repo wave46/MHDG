@@ -9,6 +9,7 @@ from typing import Any
 
 from bundle.artifacts import register_artifact, validate_bundle_identity
 from regression_tests.compare_common import select_candidate
+from regression_tests.execute import final_execution
 from support.documents import load_json, write_json_direct
 from support.errors import BundleError
 from support.files import file_identity
@@ -20,6 +21,7 @@ PROVENANCE_FILES = {
     "suite_summary.json": ("golden_reference_suite_summary", "application/json"),
     "run_plan.json": ("golden_reference_run_plan", "application/json"),
     "run_metadata.json": ("golden_reference_run_metadata", "application/json"),
+    "execution_metadata.json": ("golden_reference_execution_metadata", "application/json"),
     "comparison.json": ("golden_reference_comparison", "application/json"),
     "stdout.log": ("golden_reference_stdout", "text/plain"),
     "stderr.log": ("golden_reference_stderr", "text/plain"),
@@ -193,6 +195,7 @@ def _install_provenance(
             del manifest["artifacts"][artifact_id]
 
     run = reference.run
+    execution_directory, execution = final_execution(run.directory, run.metadata)
     record = {
         "schema_version": 2,
         "status": "golden",
@@ -211,8 +214,8 @@ def _install_provenance(
             "branch": case["reference_branch"],
             "revision": case["reference_revision"],
         },
-        "solver": run.metadata.get("solver", {}),
-        "executable": run.metadata.get("executable", {}),
+        "solver": execution.get("solver", {}),
+        "executable": execution.get("executable", {}),
     }
     record_path = directory / "golden_reference.json"
     write_json_direct(record_path, record)
@@ -229,9 +232,11 @@ def _install_provenance(
         **{
             filename: run.directory / filename
             for filename in PROVENANCE_FILES
-            if filename != "suite_summary.json"
+            if filename not in {"suite_summary.json", "execution_metadata.json"}
         },
     }
+    if execution_directory != run.directory:
+        sources["execution_metadata.json"] = execution_directory / "run_metadata.json"
     for filename, source in sources.items():
         artifact_id, media_type = PROVENANCE_FILES[filename]
         target = directory / filename

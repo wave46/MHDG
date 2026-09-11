@@ -543,6 +543,24 @@ runs/
 Comparisons write `comparison.json`, `matrix_comparison.json`, or
 `verification_summary.json`. Suite summaries are updated after every cell.
 
+Metadata has four owners:
+
+| Record | Contents |
+| --- | --- |
+| Build metadata | Revision, dirty state and changed-file list, build configuration, toolchain and produced artifact identities |
+| Executed run/stage metadata | Actual command, environment, observed executable/runtime hashes, build-manifest identity, outcome and output hashes |
+| Staged workflow metadata | Stage order, directories, outcomes and selected outputs; detailed observations remain in each stage |
+| Suite summary | Selected checks, results and file identities needed for resume |
+
+Run observations retain binary hashes because they identify what was actually
+launched. Revision and build configuration are read from the build manifest.
+Suite summaries do not copy the machine settings dictionary; unused executables
+and build-only preferences do not affect resume. Selected runtime files are
+checked even when using prebuilt executables without a build manifest.
+Summaries from before this metadata change require a new run ID; saved outputs
+remain available for comparison. Published canonical references from staged runs
+include a local copy of the final execution metadata.
+
 Each newly built solver writes automatic compile-time identity into its HDF5
 solutions:
 

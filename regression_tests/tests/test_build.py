@@ -133,7 +133,7 @@ def test_check_builds_only_its_layouts_and_runs_from_manifest(setup, tmp_path, m
     manifest = next((tmp_path / "builds").rglob("build_metadata.json"))
     assert set(json.loads(manifest.read_text())["artifacts"]) == {"parallel"}
     summary = json.loads((harness.run_root / "suites/warm/new-build/suite_summary.json").read_text())
-    assert summary["execution_inputs"]["settings"]["MHDG_BUILD_MANIFEST"] == str(manifest)
+    assert summary["execution_inputs"]["build_manifest"]["path"] == str(manifest)
     assert not list(manifest.parent.rglob("*.env"))
 
 

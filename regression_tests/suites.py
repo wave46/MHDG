@@ -279,8 +279,6 @@ def suite_execution_inputs(
 ) -> dict[str, Any]:
     """Describe files that must remain stable across suite resumes."""
     records = {
-        "settings": {key: value for key, value in settings.items()
-                     if key not in {"MHDG_REGRESSION_BUILD_ROOT", "MHDG_REGRESSION_BUILD_JOBS"}},
         "bundle_manifest": _file_record(
             bundle_root / "manifest.json",
             "bundle manifest",
@@ -308,6 +306,15 @@ def suite_execution_inputs(
             Path(resolved_launcher),
             "MPI launcher",
         )
+    # Runtime inputs may also come from a prebuilt executable without a manifest.
+    # Record only selected paths, once even when both variants share the file.
+    from .prepare import _runtime_files
+
+    records["runtime_files"] = {
+        str(path): file_identity(path)
+        for name in ("serial_executable", "parallel_executable") if name in records
+        for path in _runtime_files(Path(records[name]["path"])).values()
+    }
     for key, name in (
         ("MHDG_ENVIRONMENT_SCRIPT", "environment_script"),
         ("MHDG_BUILD_MANIFEST", "build_manifest"),

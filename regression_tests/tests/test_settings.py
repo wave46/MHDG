@@ -97,7 +97,7 @@ def test_json_check_resumes_with_same_effective_selection(setup):
     assert resumed.returncode == 0, resumed.stderr
     assert "reusing completed" in resumed.stdout
     summary = json.loads((harness.run_root / "suites/warm/json-settings/suite_summary.json").read_text())
-    assert summary["execution_inputs"]["settings"]["MHDG_BUILD_MANIFEST"] == str(manifest)
+    assert summary["execution_inputs"]["build_manifest"]["path"] == str(manifest)
 
 
 def test_doctor_checks_artifacts_without_creating_scratch(setup):

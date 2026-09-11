@@ -10,6 +10,7 @@ import pytest
 from regression_tests import suites
 from regression_tests.compare import compare_generated_meshes, producer_converged
 from support.errors import BundleError
+from bundle.settings import read_settings
 from tests.fixtures.harness import create_harness, run_command, REGRESSION_ROOT as ROOT
 from tests.fixtures.solutions import write_solution
 
@@ -82,11 +83,15 @@ def test_resume_rechecks_comparisons_and_rejects_changed_inputs(harness, monkeyp
     shutil.copytree(ROOT / "cases", catalog / "cases")
     shutil.copytree(ROOT / "schemas", catalog / "schemas")
     shutil.copy2(ROOT / "workflows.json", catalog / "workflows.json")
+    selected = read_settings(harness.settings)
     def check(resume=False):
-        return suites.run_suite(harness.settings, "warm", catalog / "cases", ROOT / "layouts.json",
+        return suites.run_suite(selected, "warm", catalog / "cases", ROOT / "layouts.json",
                                  ROOT / "suites.json", ROOT / "tolerances.json", "checked", resume=resume)
     _, first = check()
     assert first["status"] == "passed"
+    # An unused executable and build-only preferences do not affect these runs.
+    selected["MHDG_SERIAL_EXECUTABLE"] = "/unused/serial"
+    selected["MHDG_REGRESSION_BUILD_JOBS"] = "3"
     monkeypatch.setattr(suites, "run_cell", lambda *args: pytest.fail("valid output should be reused"))
     comparison = Mock(return_value=("fixed_hdf5", tmp_path / "comparison.json", {
         "status": "failed", "failures": ["changed acceptance result"],
@@ -102,6 +107,11 @@ def test_resume_rechecks_comparisons_and_rejects_changed_inputs(harness, monkeyp
     with pytest.raises(BundleError, match="workflow_catalog"):
         check(resume=True)
     shared.write_text(original)
+    runtime = harness.runtime_file.read_bytes()
+    harness.runtime_file.write_bytes(b"changed runtime input")
+    with pytest.raises(BundleError, match="runtime_files"):
+        check(resume=True)
+    harness.runtime_file.write_bytes(runtime)
     harness.install_solver("#!/usr/bin/env bash\nexit 7\n", "parallel")
     with pytest.raises(BundleError, match="parallel_executable"):
         check(resume=True)
