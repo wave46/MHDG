@@ -29,7 +29,7 @@ The routine case is `legacy_case`.
 The Python package is the public entry point; the shell dispatcher has been
 removed. During migration, `check` still defaults to limited `warm`; routine/full
 profiles and bundle readiness follow at their planned checkpoints.
-Golden campaigns and detailed diagnostics temporarily remain standalone tools;
+Golden campaigns temporarily remain a standalone tool;
 the new CLI does not expose the campaign recovery/publication state machine.
 
 ```bash
@@ -117,11 +117,8 @@ analytically. Fixed and adaptive indicate whether the mesh can change.
 | Workflow | Start and mesh | Work |
 | --- | --- | --- |
 | `warm` | Existing steady restart; fixed mesh | Reconverge the same state. |
-| `warm_balance_diagnostics` | Existing steady restart; fixed mesh | Reconverge once with detailed balance diagnostics. |
 | `cold_fixed` | Analytical start; refined fixed mesh | `time_init`, `diffusion_reduction`, then five continuations. |
 | `cold_adaptive` | Analytical start; coarse mesh | Same seven stages; adapt in the first two. |
-| `cold_fixed_balance_diagnostics` | Analytical start; refined fixed mesh | Detailed particle diagnostics through all seven fixed stages. |
-| `cold_adaptive_balance_diagnostics` | Analytical start; coarse mesh | Detailed particle diagnostics through all seven adaptive stages. |
 | `cold_step_fixed` | Analytical start; coarse fixed mesh | One time step and two Newton iterations. |
 | `cold_step_impurity_off` | Analytical start; coarse fixed mesh | Short disabled-impurity lifecycle check. |
 | `cold_step_neutralgamma` | Analytical start; coarse fixed mesh | Short NeutralGamma race check with detailed particle diagnostics. |
@@ -181,7 +178,6 @@ default to enabled for ordinary suites and disabled for relation suites;
 | Suite | Coverage | Use |
 | --- | --- | --- |
 | `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
-| `balance_diagnostics_warm` | Detailed warm restart, `mpi4_omp4` | Fast golden run for balance-diagnostics validation. |
 | `neutral_pressure_warm` | Pressure-on warm restart, `mpi4_omp4` | Execution-only pressure continuation attempt. |
 | `neutralgamma_race` | NeutralGamma fixed cold step, `serial_omp1` vs `serial_omp16` | Two-Newton-iteration OpenMP and detailed-balance check. |
 | `neutral_sources_in_elements_warm` | Relocated-source warm restart, `mpi4_omp4` | Golden reconvergence of the relocated-source formulation. |
@@ -195,7 +191,6 @@ default to enabled for ordinary suites and disabled for relation suites;
 | `initialization_smoke` | Disabled-impurity analytical start, `mpi4_omp4` | Execution-only initialization evidence. |
 | `race` | Both one-step workflows, `serial_omp1` vs `serial_omp16` | Routine OpenMP race check. |
 | `cold` | Both full cold workflows, `mpi4_omp4` | Canonical integration check. |
-| `balance_diagnostics_cold` | Detailed fixed and adaptive cold workflows, `mpi4_omp4` | Overnight particle-balance history and HDF5-contract check. |
 | `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |
 | `race_matrix` | Both one-step workflows, every pair of tracked layouts | Periodic race check. |
 | `cold_matrix` | Both full cold workflows, all layouts and all layout pairs | Overnight golden and reproducibility evidence. |
@@ -264,19 +259,15 @@ Recorded cells are skipped. An incomplete run is preserved and retried as
 executables, or launcher. `--build` cannot be combined with `--resume`; after
 an initial `--build`, select the printed `--build-manifest` path.
 
-Run the opt-in balance suite in the background with the PR06 neutral-feature
-bundle and the existing MPI/OpenMP executable:
+To collect diagnostics during an already-needed cold regression, add the mode
+selection to the ordinary suite:
 
 ```bash
-nohup python -m regression_tests check --allow-candidate balance_diagnostics_cold \
-  --settings regression_tests/settings.local.json \
-  --run-only --run-id pr07-balance-overnight-01 \
-  > pr07-balance-overnight-01.log 2>&1 &
+python -m regression_tests check cold --diagnostics detailed --run-id cold-detailed
 ```
 
-Use the same command plus `--resume` after an interruption. Existing workflows
-remain diagnostics-off; only the two diagnostic workflow variants request
-`balance_diagnostics_mode='detailed'`.
+Diagnostics checks reuse those outputs. No separate diagnostic cold chain is
+required. `--run-only` defers validation; `compare --suite` checks saved outputs.
 
 ### Build reusable executables
 
@@ -329,40 +320,49 @@ python -m regression_tests compare --suite \
   /path/to/suites/cold_matrix/overnight-01/suite_summary.json
 ```
 
-For a short warm solve with detailed diagnostics and the ordinary golden
-comparison, run:
+Enable diagnostics on an existing suite; its normal checks also validate the
+saved diagnostic output:
 
 ```bash
-python -m regression_tests check warm --diagnostics detailed \
-  --build --run-id warm-balance-01
+python -m regression_tests check warm --diagnostics detailed --run-id warm-detailed
+python -m regression_tests check race_matrix --diagnostics detailed --run-id race-detailed
 ```
 
-Then validate its HDF5 and terminal diagnostics without launching MHDG again:
+The first command validates output presence, finite values, core units and
+terminal/HDF5 content agreement. The second also compares diagnostic scalars
+across the existing layout pairs, after the solution and mesh checks pass.
+For equation output, rate differences are bounded by `max(1e-12, 1e-9 * scale)`,
+where `scale` is the largest absolute rate in that equation across both files;
+content is scaled separately. Summary aggregates are scaled individually. The
+absolute floor uses each quantity's reported physical units.
+
+`off`, `summary`, `equations`, and `detailed` are supported. Off requires absence
+of balance output. The other modes require their core output and readable finite
+quantities; detailed source-relocation runs additionally compare the integrated
+puff with the configured input and require zero relocated wall puff/pump.
+These checks do not establish physical convergence or independently validate all
+source and BC terms. There are no exhaustive arithmetic-identity checks.
+
+To check saved diagnostic output alone:
 
 ```bash
-python regression_tests/tools/check_balance_diagnostics.py \
-  /path/to/suites/warm/warm-balance-01/suite_summary.json
+python -m regression_tests compare --suite --diagnostics /path/to/suite_summary.json
 ```
 
-Replace `detailed` with `off`, `summary`, or `equations` to inspect the other
-terminal and HDF5 presentation levels. The diagnostics checker currently
-validates the detailed contract; ordinary golden comparison still applies to
-all four modes.
+This writes a compact `balance_diagnostics_check.json`; full history remains in
+`stdout.log`. Ordinary `compare --suite` includes diagnostic output validation and
+any declared parallel comparisons in its verification summary.
 
-The same checker validates every selected stage after the longer cold balance
-suite completes:
+For a focused real mode check, reuse the same `warm` workflow, build, bundle and
+layout with distinct run IDs for the four modes. Compare enabled solutions directly
+with the off result using the existing comparator:
 
 ```bash
-python regression_tests/tools/check_balance_diagnostics.py \
-  /path/to/balance_diagnostics_cold/RUN_ID/suite_summary.json
+python -m regression_tests compare /path/to/warm-detailed/run \
+  --reference /path/to/warm-off/final-solution.h5 --tolerance-profile fixed_same_layout
 ```
 
-The generated `balance_diagnostics_check.json` retains every detailed
-terminal block with its time and Newton iteration, making the onset of a
-physical imbalance visible across the cold workflow. The same command accepts
-completed `neutralgamma_race` and `neutral_sources_in_elements_race_matrix`
-suite summaries; it then requires NeutralGamma flux components or verifies
-that relocated puff/pump terms occur in the volume balance and not the wall BC.
+Mode changes do not require dedicated workflow aliases or a cold-chain matrix.
 
 ### Publish accepted references
 

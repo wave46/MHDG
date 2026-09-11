@@ -70,6 +70,7 @@ def parser() -> argparse.ArgumentParser:
     compare = command("compare", "Debug: compare a saved run or suite summary.")
     compare.add_argument("path", type=Path, metavar="RUN_OR_SUITE_SUMMARY")
     compare.add_argument("--suite", action="store_true", help="compare a saved suite summary")
+    compare.add_argument("--diagnostics", action="store_true", help="with --suite, validate saved balance diagnostics")
     compare.add_argument("--candidate", type=Path)
     compare.add_argument("--reference", type=Path)
     compare.add_argument("--tolerance-profile")
@@ -237,12 +238,23 @@ def _settings(args, case, *, use_build=True):
 def _compare(args: argparse.Namespace) -> int:
     from support.errors import BundleError
 
+    if args.diagnostics and not args.suite:
+        raise BundleError("--diagnostics requires --suite")
     if args.suite:
+        if any((args.candidate, args.reference, args.tolerance_profile, args.report)):
+            raise BundleError("--suite cannot be combined with individual comparison overrides")
+        if args.diagnostics:
+            from .diagnostics import check_suite
+            from support.documents import write_json_atomic
+
+            report = check_suite(args.path)
+            path = args.path.parent / "balance_diagnostics_check.json"
+            write_json_atomic(path, report, "balance diagnostics report")
+            reporting.diagnostics(report, path)
+            return 0 if report["status"] == "passed" else 1
         from suite.verification import verify_suite
         from suite.reporting import print_verification_summary
 
-        if any((args.candidate, args.reference, args.tolerance_profile, args.report)):
-            raise BundleError("--suite cannot be combined with individual comparison overrides")
         path, summary = verify_suite(args.path, ROOT / "cases", ROOT / "tolerances.json")
         print_verification_summary(summary, path)
         return 0 if summary["status"] == "passed" else 1

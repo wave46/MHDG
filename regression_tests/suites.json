@@ -9,10 +9,6 @@
       "description": "Canonical four-MPI-by-four-OpenMP warm restart",
       "workflows": ["warm"]
     },
-    "balance_diagnostics_warm": {
-      "description": "Detailed balance diagnostics on the canonical warm restart",
-      "workflows": ["warm_balance_diagnostics"]
-    },
     "neutral_pressure_warm": {
       "description": "Execution-only warm continuation with neutral pressure enabled",
       "workflows": ["warm_neutral_pressure"],
@@ -94,11 +90,6 @@
     "cold": {
       "description": "Routine cold fixed and adaptive checks in the canonical layout",
       "workflows": ["cold_fixed", "cold_adaptive"]
-    },
-    "balance_diagnostics_cold": {
-      "description": "Detailed particle diagnostics through fixed and adaptive cold workflows",
-      "workflows": ["cold_fixed_balance_diagnostics", "cold_adaptive_balance_diagnostics"],
-      "reference_comparisons": false
     },
     "cold_matrix": {
       "description": "Cold workflows with golden and all-pairs layout checks",

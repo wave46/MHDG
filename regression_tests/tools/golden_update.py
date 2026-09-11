@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from regression_tests.build import build_solver
 from regression_tests.cli import _positive_integer as parse_build_jobs
 from regression_tests.config import build_settings
-from check_balance_diagnostics import check_suite as check_balance_diagnostics
+from regression_tests.diagnostics import check_suite as check_balance_diagnostics
 from bundle.promotion import (
     promote_bundle,
     promote_mapped_bundle,

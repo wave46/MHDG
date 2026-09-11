@@ -314,12 +314,14 @@ class SuiteWorkflowTests(unittest.TestCase):
             ["solver run did not complete"],
         )
 
+    @patch("regression_tests.diagnostics.check_suite", return_value={"status": "passed", "outputs": [], "failures": []})
     @patch("suite.verification.compare_layout_pairs")
     @patch("suite.verification.compare_completed_run")
     def test_offline_verification_combines_references_and_pairs(
         self,
         compare,
         compare_pairs,
+        diagnostics,
     ) -> None:
         compare.return_value = (
             "fixed_hdf5",
@@ -376,6 +378,10 @@ class SuiteWorkflowTests(unittest.TestCase):
         self.assertEqual(len(report["results"]), 2)
         self.assertEqual(len(report["comparisons"]), 1)
         self.assertEqual(report["status"], "passed")
+        diagnostics.assert_called_once()
+        diagnostics.return_value = {"status": "failed", "outputs": [], "failures": ["missing diagnostic output"]}
+        _, report = verify_suite(source, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json")
+        self.assertEqual(report["status"], "failed")
 
         compare_pairs.reset_mock()
         _, references_only = verify_suite(

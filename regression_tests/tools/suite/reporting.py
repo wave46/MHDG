@@ -24,6 +24,7 @@ def print_run_summary(summary: dict[str, Any], path: Path) -> None:
         if len(result["failures"]) > 3:
             print(f"  ... {len(result['failures']) - 3} more failures")
     _print_layout_comparisons(summary.get("comparisons", []))
+    _print_diagnostics(summary, path)
     print(
         f"suite {summary['status']}: {path} "
         f"({summary['duration_seconds']:.3f} s)"
@@ -32,6 +33,7 @@ def print_run_summary(summary: dict[str, Any], path: Path) -> None:
 
 def print_verification_summary(summary: dict[str, Any], path: Path) -> None:
     """Print comparison status for every recorded suite cell."""
+    _print_diagnostics(summary, path)
     if summary.get("comparisons") is not None:
         _print_layout_comparisons(summary["comparisons"])
         print(f"verification {summary['status']}: {path}")
@@ -47,6 +49,14 @@ def print_verification_summary(summary: dict[str, Any], path: Path) -> None:
         for failure in result["failures"][:3]:
             print(f"  FAIL: {failure}")
     print(f"verification {summary['status']}: {path}")
+
+
+def _print_diagnostics(summary, path):
+    report = summary.get("diagnostics", {})
+    if report.get("outputs") or report.get("failures"):
+        from regression_tests.reporting import diagnostics
+
+        diagnostics(report, path)
 
 
 def _print_layout_comparisons(comparisons: list[dict[str, Any]]) -> None:

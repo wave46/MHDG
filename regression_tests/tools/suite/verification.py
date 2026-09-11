@@ -62,6 +62,10 @@ def verify_suite(
         )
 
     checks = [*summary["results"], *summary.get("comparisons", [])]
+    from regression_tests.diagnostics import check_suite
+
+    summary["diagnostics"] = check_suite(source, required=False)
+    checks.append(summary["diagnostics"])
     summary["status"] = (
         "passed"
         if all(result["status"] == "passed" for result in checks)

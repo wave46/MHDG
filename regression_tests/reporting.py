@@ -66,6 +66,12 @@ def comparison(policy, path, report) -> None:
             print(f"FAIL: {failure}")
 
 
+def diagnostics(report, path) -> None:
+    status("balance diagnostics", report["status"], path)
+    for failure in report["failures"]:
+        print(f"FAIL: {failure}")
+
+
 def maximum_metric(
     metrics: Iterable[Mapping[str, float | None]], key: str
 ) -> float | None:

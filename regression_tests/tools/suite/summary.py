@@ -116,6 +116,8 @@ def finalize_summary(summary: dict[str, Any]) -> None:
     """Mark a completed summary passed or failed from its cell results."""
     summary["finished_utc"] = utc_now()
     checks = [*summary["results"], *summary.get("comparisons", [])]
+    if summary.get("diagnostics"):
+        checks.append(summary["diagnostics"])
     summary["status"] = (
         "passed"
         if all(check["status"] == "passed" for check in checks)

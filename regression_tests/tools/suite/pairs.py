@@ -79,6 +79,14 @@ def _compare_pair(
         if generated_meshes and not generated_meshes["passed"]:
             result["status"] = "failed"
             result["failures"].extend(generated_meshes["failures"])
+        if result["status"] == "passed":
+            from regression_tests.diagnostics import compare_outputs
+
+            diagnostic_report = compare_outputs(reference, _selected_output(candidate))
+            result["diagnostics"] = diagnostic_report
+            if diagnostic_report["status"] != "passed":
+                result["status"] = "failed"
+                result["failures"].extend(diagnostic_report["failures"])
     except HarnessError as exc:
         result["failures"] = [str(exc)]
     return result

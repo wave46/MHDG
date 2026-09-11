@@ -138,6 +138,10 @@ def run_suite(
             case_directory,
             tolerances_path,
         )
+    if compare:
+        from regression_tests.diagnostics import check_suite
+
+        summary["diagnostics"] = check_suite(summary, required=False)
     finalize_summary(summary)
     write_json_atomic(summary_path, summary, "suite summary")
     return summary_path, summary
