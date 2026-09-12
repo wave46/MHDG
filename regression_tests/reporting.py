@@ -60,6 +60,16 @@ def readiness(report) -> None:
     print("Presence check only; bundle validate checks recorded sizes and checksums.")
 
 
+def golden_review(path, report) -> None:
+    status("golden refresh", report["status"], path)
+    print(f"producers: {len(report['producers'])}; validation suites: {len(report['checks'])}")
+    for item in report["producers"]:
+        previous = item.get("old_reference", {})
+        print(f"  {item['workflow_id']} / {item['layout_id']}: old reference {previous.get('status', 'unavailable')}")
+    print(f"candidate: {path.parent / 'candidate'}")
+    print("Review refresh.json and comparison reports, then use golden publish with a reason and provenance.")
+
+
 def comparison(policy, path, report) -> None:
     print(f"comparison policy: {policy}")
     if "method_selection" in report:

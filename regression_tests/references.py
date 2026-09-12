@@ -1,14 +1,39 @@
-"""Load golden-reference matrix indexes from validated bundles."""
+"""Load staged reference indexes used by scientific comparisons."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from bundle.schemas import load_validated_json
-from references.matrix.models import REFERENCE_MATRIX_ROLE, ReferenceMatrix
 from support.errors import BundleError
 from support.paths import require_directory, require_file
+
+REFERENCE_MATRIX_ROLE = "reference_matrix"
+
+
+@dataclass(frozen=True)
+class ReferenceMatrix:
+    bundle_root: Path
+    bundle_id: str
+    bundle_version: str
+    references: dict[tuple[str, str, str], Path]
+
+    def reference_for(
+        self,
+        workflow_id: str,
+        layout_id: str,
+        stage_id: str,
+    ) -> Path:
+        key = (workflow_id, layout_id, stage_id)
+        try:
+            return self.references[key]
+        except KeyError as exc:
+            cell = "/".join(key)
+            raise BundleError(
+                f"golden matrix has no reference for {cell}"
+            ) from exc
 
 
 def load_reference_matrix(

@@ -1,0 +1,29 @@
+{
+  "matrix": {
+    "relations": ["all_pairs"],
+    "tolerance_profile": "cold_cross_layout",
+    "layout_comparison_policy": "fixed_hdf5"
+  },
+  "cases": {
+    "legacy_case": {
+      "producers": [
+        {"workflow": "cold_fixed", "matrix": true},
+        {"workflow": "cold_adaptive", "matrix": true},
+        "warm",
+        "bootstrap_impurity_off", "bootstrap_impurity_n", "bootstrap_impurity_nw",
+        "warm_impurity_off", "warm_impurity_n", "warm_impurity_nw",
+        "bootstrap_neutral_sources_in_elements", "warm_neutral_sources_in_elements",
+        "warm_neutral_pressure", "warm_neutral_perpendicular",
+        "warm_neutral_limiter_fixed", "warm_neutral_limiter_ti"
+      ],
+      "checks": [
+        "warm_parallelism", "parallel", "neutral_parallel", "sources",
+        "source_cold", "neutralgamma", "initialization", "impurities", "neutrals"
+      ]
+    },
+    "diverted_case": {
+      "producers": ["cold_adaptive", "warm"],
+      "checks": ["warm_parallelism", "parallel"]
+    }
+  }
+}

@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from bundle.cases import load_case_definition
-from references.matrix.loading import load_reference_matrix
-from references.matrix.models import ReferenceMatrix
+from .references import ReferenceMatrix, load_reference_matrix
 from support.documents import load_json, write_json_atomic
 from support.errors import BundleError, ComparisonError
 from support.files import file_identity
@@ -323,7 +322,7 @@ def producer_converged(
     convergence = report.get("convergence")
     if isinstance(convergence, dict):
         return convergence.get("passed") is True
-    if policy != "reference_matrix" or not workflow.get("stages"):
+    if policy not in {"reference_matrix", "producer"}:
         return False
 
     run_directory = Path(source["run_directory"])
@@ -331,12 +330,14 @@ def producer_converged(
         run_directory / "run_metadata.json",
         "staged run metadata",
     )
-    records = metadata.get("stages")
-    definitions = workflow["stages"]
+    definitions = workflow.get("stages", [{"newton_check": "bounded"}])
+    records = metadata.get("stages") if workflow.get("stages") else [
+        {"run_directory": str(run_directory), "status": metadata.get("status")}
+    ]
     if not isinstance(records, list) or len(records) != len(definitions):
         return False
     if any(
-        record.get("stage_id") != definition["stage_id"]
+        record.get("stage_id") != definition.get("stage_id")
         or record.get("status") != "completed"
         for record, definition in zip(records, definitions)
     ):

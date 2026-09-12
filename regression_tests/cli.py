@@ -93,6 +93,19 @@ def parser() -> argparse.ArgumentParser:
     for item in (readiness, create, validate):
         item.add_argument("--workflow", action="append", default=[], metavar="WORKFLOW",
                           help="require this workflow's files too; repeat to select several")
+    golden = command("golden", "Refresh reference data, then explicitly publish reviewed results.")
+    actions = golden.add_subparsers(dest="action", required=True)
+    refresh = command("refresh", "Build once, run producers and validate a review candidate.", parent=actions, settings=True)
+    refresh.add_argument("case", metavar="CASE")
+    refresh.add_argument("--bundle", type=Path, help="source bundle; overrides the case default")
+    refresh.add_argument("--workspace", required=True, type=Path)
+    refresh.add_argument("--jobs", type=_positive_integer)
+    publish = command("publish", "Revalidate and publish a reviewed refresh workspace.", parent=actions)
+    publish.add_argument("workspace", type=Path, metavar="WORKSPACE")
+    publish.add_argument("--output", required=True, type=Path)
+    publish.add_argument("--bundle-version", required=True)
+    publish.add_argument("--reason", required=True)
+    publish.add_argument("--provenance", required=True, help="review or scientific-change context; build identity is recorded automatically")
     return result
 
 
@@ -166,6 +179,21 @@ def _dispatch(args: argparse.Namespace) -> int:
         return 0
     if args.command == "compare":
         return _compare(args)
+    if args.command == "golden":
+        from . import golden, config
+        from support.errors import BundleError
+
+        if args.action == "refresh":
+            values = config.settings(args.settings, case=args.case, bundle=args.bundle, use_build=False)
+            if not values.get("MHDG_REGRESSION_DATA_ROOT"):
+                raise BundleError("no source bundle selected; pass --bundle DIR or set defaults.bundles")
+            path, report = golden.refresh(args.case, values, args.workspace, args.jobs)
+            reporting.golden_review(path, report)
+        else:
+            summary = golden.publish(args.workspace, args.output, args.bundle_version, args.reason, args.provenance)
+            reporting.status("golden", "published", args.output)
+            reporting.bundle(summary)
+        return 0
     if args.command == "bundle":
         from .bundles import bundle_readiness, create_bundle, validate_bundle_root
 

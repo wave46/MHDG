@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from bundle.cases import load_case_definition, required_case_roles
+from bundle.cases import load_case_definition, workflow_required_roles
 from bundle.schemas import load_validated_json
 from bundle.settings import bundle_root_from_settings, read_settings
 from regression_tests.bundles import validate_bundle_root
@@ -115,6 +115,8 @@ def load_preparation_inputs(
     run_id: str | None,
     validate_bundle: bool,
     requested_overrides: dict[str, bool | float | int | str] | None = None,
+    artifact_overrides: dict[str, Path] | None = None,
+    require_reference: bool = True,
 ) -> PreparationInputs:
     """Resolve the files and declarations needed to prepare one run."""
     settings = read_settings(settings_path)
@@ -126,12 +128,16 @@ def load_preparation_inputs(
     workflow = case["workflows"].get(workflow_id)
     if workflow is None:
         raise BundleError(f"case {case_id} has no workflow {workflow_id}")
+    if not require_reference:
+        workflow = {key: value for key, value in workflow.items() if key != "reference_role"}
     layout = load_layout(layout_id, layouts_path)
     artifacts, manifest = _case_artifacts(
         bundle_root,
         case,
         workflow_id,
         case_directory,
+        workflow,
+        artifact_overrides or {},
     )
 
     run_root = _absolute_setting(settings, "MHDG_REGRESSION_RUN_ROOT")
@@ -182,6 +188,8 @@ def _case_artifacts(
     case: dict[str, Any],
     workflow_id: str,
     case_directory: Path,
+    workflow: dict[str, Any],
+    overrides: dict[str, Path],
 ) -> tuple[dict[str, Path], dict[str, Any]]:
     schema_path = case_directory.parent / "schemas" / "bundle-manifest.schema.json"
     manifest = load_validated_json(
@@ -194,7 +202,12 @@ def _case_artifacts(
         raise BundleError(f"bundle does not contain case data for {case['case_id']}")
 
     paths = {}
-    for role in required_case_roles(case, workflow_id):
+    for role in workflow_required_roles(workflow):
+        if role in overrides:
+            paths[role] = overrides[role].resolve(strict=True)
+            if not paths[role].is_file():
+                raise BundleError(f"producer input is not a file: {paths[role]}")
+            continue
         try:
             artifact_id = manifest["roles"][role]
         except KeyError as exc:
@@ -500,6 +513,8 @@ def prepare_run(
     run_id: str | None = None,
     validate_bundle: bool = True,
     requested_overrides: dict[str, bool | float | int | str] | None = None,
+    *, artifact_overrides: dict[str, Path] | None = None,
+    require_reference: bool = True,
 ) -> PreparedExecution:
     """Create one validated, isolated run or staged workflow directory."""
     inputs = load_preparation_inputs(
@@ -512,6 +527,8 @@ def prepare_run(
         run_id,
         validate_bundle,
         requested_overrides,
+        artifact_overrides,
+        require_reference,
     )
     workflow_kind = inputs.workflow["kind"]
     if workflow_kind == "warm_same_state":

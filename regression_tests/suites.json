@@ -124,28 +124,10 @@
       "case": "legacy_case",
       "layouts": ["serial_omp1"]
     },
-    "source_reference": {
-      "description": "Source-relocated warm golden regression",
-      "workflows": ["warm_neutral_sources_in_elements"],
-      "case": "legacy_case"
-    },
-    "source_restart": {
-      "description": "Create a source-relocated restart from the current canonical warm state",
-      "workflows": ["bootstrap_neutral_sources_in_elements"],
-      "reference_comparisons": false,
-      "case": "legacy_case"
-    },
-    "neutral_references": {
-      "description": "Independent neutral pressure, projection, and limiter reference producers",
-      "workflows": ["warm_neutral_pressure", "warm_neutral_perpendicular", "warm_neutral_limiter_fixed", "warm_neutral_limiter_ti"],
-      "case": "legacy_case"
-    },
-    "impurity_restarts": {
-      "description": "Create off, nitrogen, and mixed-impurity restarts from the current canonical warm state",
-      "workflows": ["bootstrap_impurity_off", "bootstrap_impurity_n", "bootstrap_impurity_nw"],
-      "reference_comparisons": false,
-      "case": "legacy_case"
-    },
+
+
+
+
     "fixed_cold": {
       "description": "Full seven-stage fixed-mesh cold regression",
       "workflows": ["cold_fixed"]
