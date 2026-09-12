@@ -8,6 +8,7 @@ from pathlib import Path
 
 import shlex
 import sys
+import textwrap
 
 
 def error(message: str) -> int:
@@ -244,6 +245,30 @@ def print_verification_summary(summary: dict[str, Any], path: Path) -> None:
         for failure in result["failures"][:3]:
             print(f"  FAIL: {failure}")
     print(f"verification {summary['status']}: {path}")
+
+
+def suggestions(report):
+    scope = f"merge base with {report['base']} plus local changes" if report["base"] else "local changes only"
+    print(f"suggestions: {scope}; {len(report['paths'])} changed files (advisory; nothing executed)")
+    for check in report["checks"]:
+        print(shlex.join(check["command"]))
+        grouped = {}
+        for path, reason in sorted(check["reasons"].items()):
+            grouped.setdefault(reason, []).append(shlex.quote(path))
+        for reason, paths in grouped.items():
+            print(f"  {reason}:")
+            print(textwrap.fill(", ".join(paths), width=100, initial_indent="    ", subsequent_indent="    ",
+                                break_long_words=False, break_on_hyphens=False))
+    for path in report["unmapped"]:
+        print(f"unmapped: {path}; choose verification manually")
+    if report["documentation"]:
+        print(f"documentation: {len(report['documentation'])} files; review without solver checks")
+    if not report["paths"]:
+        print("no changes found; use --base REVISION to include committed work")
+    if any("--build" in item["command"] for item in report["checks"]):
+        print("Solver suggestions build the current tree. To share the first build, replace --build")
+        print("on subsequent checks with --build-manifest PATH printed by that build.")
+        print("File mapping does not establish complete coverage; assess cold convergence and diagnostic format changes separately.")
 
 
 def cleanup(report):

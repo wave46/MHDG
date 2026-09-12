@@ -714,3 +714,35 @@ before removing anything. Removal does not follow symlinks. Sources and unrecogn
 legacy campaigns stay for manual review. An old golden requires explicit selection
 and must no longer be a configured default or a retained run's dependency. Nothing
 is removed by `check`, refresh or publication, and no cleanup database is created.
+
+### Suggest checks from code changes
+
+```bash
+python -m regression_tests suggest                 # staged, unstaged, untracked
+python -m regression_tests suggest --base develop  # also include branch commits
+```
+
+With `--base`, committed changes are measured from the merge base of that revision
+and HEAD. Local changes are added separately, including both sides of renames;
+Git-ignored files are excluded. The command reads Git and the repository catalogs,
+prints suggestions with the changed files/reasons, and executes nothing. It needs
+no machine settings, solver build or external scientific bundle.
+
+A small explicit mapping in `suggest.py` connects current code owners to checks.
+For example, parallel/adaptivity changes suggest routine-extended; shared physics
+or initialization changes suggest full, including the cold chains. Shared harness
+workflow/comparison/catalog changes suggest pytest plus full real-data regression;
+helper-only changes (cleanup, suggestions, reporting, doctor, build-helper tests)
+suggest pytest. Harness diagnostics suggest pytest and the existing parallel/source
+diagnostic checks. Reasons are printed once per command, with matching files grouped
+underneath, and Python tests appear first. Profile membership comes from the suite
+catalog so a broader suggested profile absorbs already-covered focused checks.
+Unmapped files need manual assessment; Markdown/reStructuredText needs document review.
+
+Harness-only changes use existing executables for their real-data checks. Changes
+under solver sources or build files add `--build`. For several such checks, reuse
+the first build by replacing subsequent `--build` options with its printed
+`--build-manifest PATH`. Suggestions are not a complete verification plan:
+file names cannot establish numerical impact. Assess long cold convergence and
+focused diagnostic format/on–off solver checks when those behaviors change;
+Python diagnostic-checker tests do not establish solver format coverage.

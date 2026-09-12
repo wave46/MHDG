@@ -113,6 +113,9 @@ def parser() -> argparse.ArgumentParser:
     clean.add_argument("--keep", action="append", default=[], type=Path, metavar="DIRECTORY",
                        help="retain this directory and inspect its dependencies, including outside STORAGE_ROOT")
     clean.add_argument("--delete", action="store_true", help="remove the explicitly selected, unprotected directories")
+    suggest = command("suggest", "Suggest checks from changed files; never execute them.")
+    suggest.add_argument("--base", metavar="REVISION",
+                         help="include committed changes since the merge base with this revision, plus local changes")
     return result
 
 
@@ -192,6 +195,11 @@ def _dispatch(args: argparse.Namespace) -> int:
         report = cleanup(args.root, args.paths, delete=args.delete, keep=args.keep, settings=args.settings)
         reporting.cleanup(report)
         return 1 if report["blocked"] else 0
+    if args.command == "suggest":
+        from .suggest import suggest
+
+        reporting.suggestions(suggest(ROOT.parent, args.base))
+        return 0
     if args.command == "golden":
         from . import golden, config
         from support.errors import BundleError
