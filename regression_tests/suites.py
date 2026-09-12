@@ -10,7 +10,7 @@ from typing import Any
 
 from bundle.cases import load_case_definition
 from bundle.settings import bundle_root_from_settings, read_settings
-from bundle.validation import validate_bundle_root
+from regression_tests.bundles import validate_bundle_root
 from .config import load_suite_definition, require_bundle_class
 from .prepare import prepare_run
 from .execute import execute_prepared, reusable_outputs

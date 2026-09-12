@@ -14,7 +14,7 @@ from typing import Any
 from bundle.cases import load_case_definition, required_case_roles
 from bundle.schemas import load_validated_json
 from bundle.settings import bundle_root_from_settings, read_settings
-from bundle.validation import validate_bundle_root
+from regression_tests.bundles import validate_bundle_root
 from catalogs.layouts import load_layout
 from support.documents import write_json_direct
 from support.errors import BundleError

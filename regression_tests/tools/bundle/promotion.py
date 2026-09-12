@@ -10,9 +10,8 @@ from typing import Any
 
 from bundle.artifacts import register_artifact
 from bundle.cases import load_case_definition
-from bundle.models import ValidationSummary
+from regression_tests.bundles import ValidationSummary, validate_bundle_root
 from bundle.settings import bundle_root_from_settings, read_settings
-from bundle.validation import validate_bundle_root
 from references.canonical import (
     CanonicalReference,
     collect_canonical_reference,

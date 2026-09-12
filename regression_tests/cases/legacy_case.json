@@ -49,7 +49,7 @@
     }
   },
   "workflows": {
-    "warm": {},
+    "warm": {"outputs": ["warm_reference"]},
     "warm_neutral_pressure": {
       "extends": "warm_neutral_sources_in_elements",
       "description": "Reconverge the source-relocated state with neutral pressure enabled",
@@ -191,6 +191,7 @@
       "description": "Reconverge the accepted state with impurity radiation disabled",
       "restart": "warm_impurity_off_restart",
       "reference": "warm_impurity_off_reference",
+      "outputs": ["warm_impurity_off_reference"],
       "parameter_overrides": {
         "impurity_radiation": false
       }
@@ -200,6 +201,7 @@
       "description": "Reconverge the accepted state with single-nitrogen radiation",
       "restart": "warm_impurity_n_restart",
       "reference": "warm_impurity_n_reference",
+      "outputs": ["warm_impurity_n_reference"],
       "impurity_configuration": "impurity_n_configuration",
       "parameter_overrides": {
         "impurity_radiation": true
@@ -210,6 +212,7 @@
       "description": "Reconverge the accepted state with nitrogen-tungsten radiation",
       "restart": "warm_impurity_nw_restart",
       "reference": "warm_impurity_nw_reference",
+      "outputs": ["warm_impurity_nw_reference"],
       "impurity_configuration": "impurity_nw_configuration",
       "parameter_overrides": {
         "impurity_radiation": true
@@ -234,6 +237,7 @@
       "outputs": ["warm_impurity_nw_restart"]
     },
     "cold_fixed": {
+      "outputs": ["warm_restart"],
       "stage_overrides": {
         "continuation_05": {
           "parameter_overrides": {
@@ -242,7 +246,7 @@
         }
       }
     },
-    "cold_adaptive": {},
+    "cold_adaptive": {"outputs": []},
     "cold_adaptive_neutral_sources_in_elements": {
       "extends": "cold_adaptive",
       "description": "Reach a source-relocated state from an adaptive cold start",

@@ -47,6 +47,19 @@ def bundle(summary) -> None:
         print(f"warning: {warning}", file=sys.stderr)
 
 
+def readiness(report) -> None:
+    status("bundle readiness", report["status"], report["source"])
+    print(f"case: {report['case_id']}; workflows: {', '.join(report['workflows']) or 'base bundle'}")
+    print("role  |  requirement  |  presence  |  origin  |  file")
+    for row in report["artifacts"]:
+        print("  |  ".join(str(row[key] or "—") for key in
+                           ("role", "requirement", "presence", "origin", "path")))
+        if row["presence"] == "missing":
+            for workflow, required in row["producers"].items():
+                print(f"  producer {workflow}; requires: {', '.join(required)}")
+    print("Presence check only; bundle validate checks recorded sizes and checksums.")
+
+
 def comparison(policy, path, report) -> None:
     print(f"comparison policy: {policy}")
     if "method_selection" in report:

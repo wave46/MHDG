@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from bundle.creation import create_bundle
+from regression_tests.bundles import create_bundle
 from tests.fixtures.case_data import write_case_source
 
 

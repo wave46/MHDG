@@ -107,6 +107,13 @@ def test_doctor_checks_artifacts_without_creating_scratch(setup):
     assert "doctor: passed" in result.stdout
     assert not harness.run_root.exists()
     manifest = json.loads((harness.bundle / "manifest.json").read_text())
+    restart = harness.bundle / manifest["artifacts"][manifest["roles"]["warm_restart"]]["path"]
+    original = restart.read_bytes()
+    restart.unlink()  # Optional for the base bundle, required by the selected warm check.
+    result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path))
+    assert result.returncode == 1 and "missing required artifact roles: warm_restart" in result.stdout
+    assert not harness.run_root.exists()
+    restart.write_bytes(original)
     artifact = next(iter(manifest["artifacts"].values()))
     (harness.bundle / artifact["path"]).write_text("changed bundle input")
     result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path))

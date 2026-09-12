@@ -1,146 +1,104 @@
-from __future__ import annotations
+"""Bundle readiness, standalone copies and validation of selected inputs."""
 
 import json
-import sys
-import tempfile
-import unittest
-from pathlib import Path
+import pytest
+
+from regression_tests.bundles import bundle_readiness, create_bundle, validate_bundle_root
+from support.errors import BundleError
+from tests.fixtures.case_data import write_case_source
+from tests.fixtures.harness import run_command
 
 
-REGRESSION_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
-
-from bundle.creation import create_bundle  # noqa: E402
-from bundle.cases import load_case_definition, required_case_roles  # noqa: E402
-from bundle.validation import validate_bundle_root  # noqa: E402
-from support.errors import BundleError  # noqa: E402
-from tests.fixtures.case_data import write_case_source  # noqa: E402
-from tests.fixtures.harness import run_command  # noqa: E402
+@pytest.fixture
+def data(tmp_path, request):
+    return getattr(request, "param", "legacy_case"), write_case_source(tmp_path / "source"), tmp_path / "bundle"
 
 
-class BundleWorkflowTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temporary_directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary_directory.cleanup)
-        self.root = Path(self.temporary_directory.name)
-        self.source = write_case_source(self.root / "source")
-        self.bundle = self.root / "bundle"
+@pytest.mark.parametrize("data", ["legacy_case", "diverted_case"], indirect=True)
+def test_readiness_and_selected_creation_require_actual_files(data):
+    case, source, output = data
+    (source / "restart.h5").unlink()
+    base = bundle_readiness(case, source)
+    selected = bundle_readiness(case, source, workflows=["warm"])
+    rows = {row["role"]: row for row in selected["artifacts"]}
+    assert base["status"] == "ready"
+    assert selected["missing"] == ["warm_restart"]
+    assert rows["warm_restart"]["origin"] == "workflow-producible"
+    assert rows["warm_restart"]["presence"] == "missing"
+    assert rows["warm_restart"]["producers"]
+    assert rows["geometry"]["origin"] == "user-supplied"
+    command = run_command("bundle", "readiness", case, "--source", str(source), "--workflow", "warm")
+    assert command.returncode == 1 and "workflow-producible" in command.stdout
+    with pytest.raises(BundleError, match="required files missing.*warm_restart"):
+        create_bundle(case, source, output, workflows=["warm"])
+    assert not output.exists()
+    create_bundle(case, source, output)
+    validate_bundle_root(output)
+    with pytest.raises(BundleError, match="missing required artifact roles.*warm_restart"):
+        validate_bundle_root(output, workflows=["warm"])
+    with pytest.raises(BundleError, match="no workflow"):
+        bundle_readiness(case, source, workflows=["unknown"])
 
-    def test_public_creation_copies_links_and_produces_a_valid_bundle(self) -> None:
-        equilibrium = self.root / "shared_equilibrium.h5"
-        equilibrium.write_text("shared equilibrium\n", encoding="utf-8")
-        (self.source / "equilibrium.h5").unlink()
-        (self.source / "equilibrium.h5").symlink_to(equilibrium)
 
-        completed = run_command(
-            "bundle",
-            "create",
-            "--case",
-            "legacy_case",
-            "--source",
-            str(self.source),
-            "--output",
-            str(self.bundle),
-        )
+@pytest.mark.parametrize("data", ["legacy_case", "diverted_case"], indirect=True)
+def test_creation_copies_links_and_validation_uses_manifest_paths(data, tmp_path):
+    case, source, output = data
+    shared = tmp_path / "equilibrium.h5"
+    (source / "equilibrium.h5").rename(shared)
+    (source / "equilibrium.h5").symlink_to(shared)
+    result = run_command("bundle", "create", "--case", case, "--source", str(source),
+                         "--output", str(output), "--workflow", "cold_step_adaptive")
+    assert result.returncode == 0, result.stderr
+    copied = output / "inputs/equilibrium.h5"
+    assert copied.read_bytes() == shared.read_bytes() and not copied.is_symlink()
+    shared.unlink()
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    artifact = manifest["artifacts"][manifest["roles"]["equilibrium_magnetic_field"]]
+    copied.rename(output / "different.h5")
+    artifact["path"] = "different.h5"
+    manifest_path.write_text(json.dumps(manifest))
+    assert validate_bundle_root(output, workflows=["cold_step_adaptive"]).case_id == case
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        copied = self.bundle / "inputs/equilibrium.h5"
-        self.assertFalse(copied.is_symlink())
-        self.assertEqual(copied.read_text(encoding="utf-8"), "shared equilibrium\n")
-        summary = validate_bundle_root(self.bundle, REGRESSION_ROOT / "cases")
-        self.assertEqual(summary.case_id, "legacy_case")
 
-    def test_checksum_mismatch_is_rejected(self) -> None:
-        self._create_bundle()
-        manifest = self._read_manifest()
-        manifest["artifacts"]["legacy_case_mesh"]["sha256"] = "0" * 64
-        self._write_manifest(manifest)
+@pytest.mark.parametrize("damage, message", [("checksum", "sha256"), ("escape", "resolves outside")])
+def test_validation_rejects_changed_or_external_artifacts(data, tmp_path, damage, message):
+    case, source, output = data
+    create_bundle(case, source, output)
+    mesh = output / "inputs/mesh.msh"
+    if damage == "checksum":
+        mesh.write_bytes(b"X" * mesh.stat().st_size)
+    else:
+        outside = tmp_path / "outside.msh"
+        mesh.rename(outside)
+        mesh.symlink_to(outside)
+    with pytest.raises(BundleError, match=message):
+        validate_bundle_root(output)
 
-        with self.assertRaisesRegex(BundleError, "sha256 does not match"):
-            validate_bundle_root(self.bundle, REGRESSION_ROOT / "cases")
 
-    def test_artifact_cannot_escape_the_bundle(self) -> None:
-        self._create_bundle()
-        outside = self.root / "outside"
-        outside.mkdir()
-        (outside / "mesh.msh").write_text("outside\n", encoding="utf-8")
-        (self.bundle / "escape").symlink_to(outside, target_is_directory=True)
-        manifest = self._read_manifest()
-        manifest["artifacts"]["legacy_case_mesh"]["path"] = "escape/mesh.msh"
-        self._write_manifest(manifest)
+def test_optional_file_becomes_required_for_selected_workflow(data):
+    case, source, output = data
+    create_bundle(case, source, output)
+    (output / "inputs/param_cold_fixed_time_init.txt").unlink()
+    assert validate_bundle_root(output).warnings
+    with pytest.raises(BundleError, match="cold_fixed_time_init_parameters"):
+        validate_bundle_root(output, workflows=["cold_step_adaptive"])
 
-        with self.assertRaisesRegex(BundleError, "resolves outside"):
-            validate_bundle_root(self.bundle, REGRESSION_ROOT / "cases")
 
-    def test_missing_optional_artifact_is_reported_as_a_warning(self) -> None:
-        self._create_bundle()
-        manifest = self._read_manifest()
-        artifact_id = "legacy_case_cold_fixed_time_init_parameters"
-        artifact = manifest["artifacts"][artifact_id]
-        (self.bundle / artifact["path"]).unlink()
-
-        summary = validate_bundle_root(self.bundle, REGRESSION_ROOT / "cases")
-
-        self.assertIn(
-            f"optional artifact unavailable: {artifact_id}",
-            summary.warnings,
-        )
-
-    def test_cold_only_bundle_can_omit_warm_restart(self) -> None:
-        (self.source / "restart.h5").unlink()
-
-        self._create_bundle()
-
-        case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
-        summary = validate_bundle_root(self.bundle, REGRESSION_ROOT / "cases")
-        self.assertNotIn("warm_restart", required_case_roles(case))
-        self.assertIn("warm_restart", required_case_roles(case, "warm"))
-        self.assertEqual(summary.case_id, "legacy_case")
-
-    def test_cold_producer_compares_with_old_reference(self) -> None:
-        case = load_case_definition("diverted_case", REGRESSION_ROOT / "cases")
-        workflow = case["workflows"]["cold_adaptive"]
-
-        self.assertEqual(workflow["reference_role"], "warm_reference")
-        self.assertEqual(
-            workflow["output_roles"],
-            ["warm_restart", "warm_reference"],
-        )
-        self.assertIn(
-            "warm_reference",
-            required_case_roles(case, "cold_adaptive"),
-        )
-        self.assertNotIn(
-            "warm_restart",
-            required_case_roles(case, "cold_adaptive"),
-        )
-
-    def test_creation_failures_do_not_replace_existing_data(self) -> None:
-        (self.source / "geometry.geo").unlink()
-        with self.assertRaisesRegex(BundleError, "required file missing.*geometry"):
-            self._create_bundle()
-        self.assertFalse(self.bundle.exists())
-
-        self.bundle.mkdir()
-        marker = self.bundle / "keep.txt"
-        marker.write_text("keep\n", encoding="utf-8")
-        with self.assertRaisesRegex(BundleError, "output already exists"):
-            self._create_bundle()
-        self.assertEqual(marker.read_text(encoding="utf-8"), "keep\n")
-
-    def _create_bundle(self) -> None:
-        create_bundle(
-            "legacy_case",
-            self.source,
-            self.bundle,
-            REGRESSION_ROOT / "cases",
-        )
-
-    def _read_manifest(self) -> dict:
-        return json.loads((self.bundle / "manifest.json").read_text(encoding="utf-8"))
-
-    def _write_manifest(self, manifest: dict) -> None:
-        (self.bundle / "manifest.json").write_text(
-            json.dumps(manifest, indent=2) + "\n",
-            encoding="utf-8",
-        )
+def test_failed_creation_leaves_existing_data_and_no_partial_bundle(data):
+    case, source, output = data
+    (source / "geometry.geo").unlink()
+    with pytest.raises(BundleError, match="required files missing.*geometry"):
+        create_bundle(case, source, output)
+    assert not output.exists()
+    output.symlink_to(output.parent / "absent")
+    with pytest.raises(BundleError, match="output already exists"):
+        create_bundle(case, source, output)
+    assert output.is_symlink()
+    output.unlink()
+    output.mkdir()
+    marker = output / "keep.txt"
+    marker.write_text("keep")
+    with pytest.raises(BundleError, match="output already exists"):
+        create_bundle(case, source, output)
+    assert marker.read_text() == "keep"

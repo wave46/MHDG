@@ -22,7 +22,7 @@ from bundle.promotion import (
 )
 from bundle.schemas import load_validated_json
 from bundle.settings import bundle_root_from_settings, read_settings
-from bundle.validation import validate_bundle_root
+from regression_tests.bundles import validate_bundle_root
 from regression_tests.config import require_bundle_class
 from regression_tests.suites import compare_layout_pairs
 from regression_tests.suites import run_suite

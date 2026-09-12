@@ -78,8 +78,11 @@ def parser() -> argparse.ArgumentParser:
     compare.add_argument("--tolerance-profile")
     compare.add_argument("--report", type=Path)
 
-    bundle = command("bundle", "Create or validate external regression data.")
+    bundle = command("bundle", "Inspect readiness, create or validate external regression data.")
     bundles = bundle.add_subparsers(dest="action", required=True)
+    readiness = command("readiness", "Report required files and declared producer prerequisites.", parent=bundles)
+    readiness.add_argument("case", metavar="CASE")
+    readiness.add_argument("--source", required=True, type=Path, help="prepared source directory")
     create = command("create", "Copy prepared inputs into a new candidate bundle.", parent=bundles)
     create.add_argument("--case", required=True, metavar="CASE")
     create.add_argument("--source", required=True, type=Path)
@@ -87,6 +90,9 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--bundle-version", default="1.0.0", metavar="VERSION")
     validate = command("validate", "Validate a bundle, including artifact checksums.", parent=bundles)
     validate.add_argument("path", type=Path, metavar="BUNDLE")
+    for item in (readiness, create, validate):
+        item.add_argument("--workflow", action="append", default=[], metavar="WORKFLOW",
+                          help="require this workflow's files too; repeat to select several")
     return result
 
 
@@ -161,16 +167,20 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "compare":
         return _compare(args)
     if args.command == "bundle":
-        from bundle.creation import create_bundle
-        from bundle.validation import validate_bundle_root
+        from .bundles import bundle_readiness, create_bundle, validate_bundle_root
 
+        if args.action == "readiness":
+            report = bundle_readiness(args.case, args.source, workflows=args.workflow)
+            reporting.readiness(report)
+            return 0 if report["status"] == "ready" else 1
         if args.action == "create":
             summary = create_bundle(
                 args.case, args.source, args.output, ROOT / "cases", args.bundle_version,
+                workflows=args.workflow,
             )
             reporting.status("bundle", "created", args.output)
         else:
-            summary = validate_bundle_root(args.path, ROOT / "cases")
+            summary = validate_bundle_root(args.path, ROOT / "cases", workflows=args.workflow)
             reporting.status("bundle", "valid", args.path)
         reporting.bundle(summary)
         return 0

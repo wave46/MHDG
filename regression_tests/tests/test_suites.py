@@ -214,7 +214,7 @@ def test_staged_convergence_is_independent_of_old_reference_failure(tmp_path):
 
 
 def test_profile_resumes_across_cases_without_repeating_success(harness, monkeypatch):
-    from bundle.creation import create_bundle
+    from regression_tests.bundles import create_bundle
 
     diverted = harness.root / "diverted"
     create_bundle("diverted_case", harness.source, diverted, ROOT / "cases")

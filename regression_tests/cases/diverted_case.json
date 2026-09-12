@@ -36,7 +36,8 @@
   },
   "workflows": {
     "warm": {
-      "description": "Reconverge the accepted diverted state on the fixed mesh"
+      "description": "Reconverge the accepted diverted state on the fixed mesh",
+      "outputs": ["warm_reference"]
     },
     "cold_fixed": {
       "description": "Reach the diverted state from analytical initialization on the fixed mesh",

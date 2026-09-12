@@ -119,7 +119,7 @@ def test_check_builds_only_its_layouts_and_runs_from_manifest(setup, tmp_path, m
     harness_root = tmp_path / "harness"
     harness_root.mkdir()
     harness = create_harness(harness_root)
-    from bundle.creation import create_bundle
+    from regression_tests.bundles import create_bundle
     diverted = tmp_path / "diverted"
     create_bundle("diverted_case", harness.source, diverted, Path(__file__).resolve().parents[1] / "cases")
     settings = tmp_path / "machine.json"

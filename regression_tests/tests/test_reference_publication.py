@@ -11,13 +11,12 @@ REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
 
 from bundle.cases import load_case_definition  # noqa: E402
-from bundle.creation import create_bundle  # noqa: E402
+from regression_tests.bundles import create_bundle, validate_bundle_root  # noqa: E402
 from bundle.promotion import (  # noqa: E402
     promote_bundle,
     promote_mapped_bundle,
     publish_campaign_bundle,
 )
-from bundle.validation import validate_bundle_root  # noqa: E402
 from support.errors import BundleError  # noqa: E402
 from support.files import file_identity  # noqa: E402
 from references.mapped import collect_mapped_references  # noqa: E402

@@ -538,20 +538,51 @@ provenance is informational rather than a comparison criterion.
 
 ## External bundles
 
-The V2 `manifest.json` is generated. Prepare external files using the
-filenames declared in `regression_tests/cases/CASE.json`, then create a
-candidate bundle:
+The V2 `manifest.json` is generated. Inspect the files expected for a case and
+workflow before creating a candidate bundle:
+
+```bash
+python -m regression_tests bundle readiness diverted_case \
+  --source /private/path/prepared_diverted_case --workflow warm
+```
+
+The report lists filenames, presence, whether each file is required or optional
+for the selection, and whether a declared workflow can produce it. Missing
+producible files list producer workflows and their prerequisites. Producers are
+not launched or chosen automatically. A producer declaration does not mean the
+file is present or accepted as a golden.
+
+Readiness is for prepared sources before creation. Use `doctor` to check an
+existing bundle as part of the selected regression setup. To validate a bundle
+independently of machine settings, use the command below; it checks recorded
+sizes, checksums, contained paths and reference-matrix integrity:
+
+```bash
+python -m regression_tests bundle validate /private/path/candidate_bundle \
+  --workflow warm
+```
+
+`--workflow` can be repeated on readiness, create and validate. Without it, these
+commands require the base bundle files; with it, they additionally require every
+selected workflow's inputs, including its currently declared reference files.
+Optional files become required when a selected workflow uses them. Readiness
+returns exit code 1 when required files are missing, even if producers exist.
+
+Prepare external files using the reported names, then create a candidate:
 
 ```bash
 python -m regression_tests bundle create \
   --case legacy_case \
   --source /private/path/prepared_legacy_case \
-  --output /private/path/candidate_bundle
+  --output /private/path/candidate_bundle --workflow warm
 ```
 
-Creation copies files under `inputs/` and generates role mappings, media
-types, sizes, and SHA-256 checksums. It refuses to replace an output. Candidate
-and golden bundles share this contract; their class records acceptance.
+Creation copies all available declared files under `inputs/`, follows source
+symlinks into physical copies, and generates role mappings, media types, sizes
+and SHA-256 checksums. It validates before publishing the directory and refuses
+to replace an output. Candidate and golden bundles share this contract; their
+class records acceptance. `doctor` also checks the selected profile's workflow
+requirements, so a valid base bundle alone does not imply readiness for a run.
 
 `positionFeketeNodesTri2D.h5` must be beside each executable. It is generic
 solver runtime data, not case-specific bundle data.

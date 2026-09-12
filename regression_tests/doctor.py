@@ -27,7 +27,7 @@ def diagnose(args):
         print("Install regression_tests/requirements.txt with this Python interpreter.")
         return 1
 
-    from bundle.validation import validate_bundle_root
+    from regression_tests.bundles import validate_bundle_root
     from bundle.settings import bundle_root_from_settings
     from bundle.cases import load_case_definition
     from catalogs.layouts import load_layouts
@@ -62,7 +62,8 @@ def diagnose(args):
             if not values.get("MHDG_REGRESSION_DATA_ROOT"):
                 raise BundleError("no bundle selected; pass --bundle DIR or set defaults.bundles")
             root = bundle_root_from_settings(values)
-            summary = validate_bundle_root(root, config.ROOT / "cases")
+            workflows = {name for item in selected for name in item["workflow_ids"]}
+            summary = validate_bundle_root(root, config.ROOT / "cases", workflows=workflows)
             if summary.case_id != case_id:
                 raise BundleError(f"selected check needs {case_id}, bundle contains {summary.case_id}")
             return f"{root} ({summary.verified_artifact_count} artifacts verified)"
