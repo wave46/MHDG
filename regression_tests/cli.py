@@ -294,7 +294,7 @@ def _settings(args, case, *, use_build=True):
         raise BundleError(f"no bundle selected for {case}; pass --bundle DIR or set defaults.bundles")
     print(f"case: {case}")
     print(f"bundle: {values['MHDG_REGRESSION_DATA_ROOT']}")
-    selected_build = values.get("MHDG_BUILD_MANIFEST", "prebuilt executable settings")
+    selected_build = values.get("MHDG_BUILD_MANIFEST", "not selected")
     print(f"build: {selected_build if use_build else 'new build requested'}")
     if use_build and values.get("MHDG_SOLVER_REVISION"):
         print(f"solver revision: {values['MHDG_SOLVER_REVISION']}")

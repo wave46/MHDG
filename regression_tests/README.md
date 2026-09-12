@@ -29,7 +29,6 @@ golden publish           -> accepted golden bundle
 The default `routine` profile uses `diverted_case`. Limited coverage is retained
 in `full`. The Python package is the public entry point; catalog paths are
 discovered automatically.
-Golden refresh and publication also use the package CLI.
 
 ```bash
 python -m regression_tests --help
@@ -39,7 +38,6 @@ python -m regression_tests list suites
 python -m regression_tests list layouts
 ```
 
-Catalogs are discovered inside the package; their paths are not CLI options.
 Commands return 0 for success, 1 for failed checks/runtime input errors, 2 for
 invalid command usage, and 130 for interruption. Solver completion from `run`
 is distinct from a passing scientific comparison from `check`.
@@ -99,41 +97,21 @@ NGammaTiTeNeutral 2D builds; selected binaries and Fekete data must match their
 recorded checksums. Runtime environment setup remains machine-owned rather than
 being copied from another machine's build provenance.
 
-Use machine JSON for settings. Golden refresh and checks pass resolved settings
-in memory and write no intermediate settings files. Existing suite summaries
-made before this settings refactor cannot be resumed: start a new run ID; their
-output remains available to compare.
-
-Use `--diagnostics off|summary|equations|detailed` to run the same suite with
-an explicit balance-diagnostics mode. The selected override is recorded in
-the suite summary and each run plan.
-
-## Test matrix
+## Scientific coverage
 
 Warm workflows restart an existing solution; cold workflows start
 analytically. Fixed and adaptive indicate whether the mesh can change.
 
-| Workflow | Start and mesh | Work |
-| --- | --- | --- |
-| `warm` | Existing steady restart; fixed mesh | Reconverge the same state. |
-| `cold_fixed` | Analytical start; refined fixed mesh | `time_init`, `diffusion_reduction`, then five continuations. |
-| `cold_adaptive` | Analytical start; coarse mesh | Same seven stages; adapt in the first two. |
-| `cold_step_fixed` | Analytical start; coarse fixed mesh | One time step and two Newton iterations. |
-| `cold_step_impurity_off` | Analytical start; coarse fixed mesh | Short disabled-impurity lifecycle check. |
-| `cold_step_neutralgamma` | Analytical start; coarse fixed mesh | Short NeutralGamma race check with detailed particle diagnostics. |
-| `cold_step_adaptive` | Analytical start; coarse adaptive mesh | One time step, two Newton iterations, and one adaptation pass. |
-| `warm_neutral_sources_in_elements` | Accepted source-relocated restart; fixed mesh | Reconverge with puff and pump in elements. |
-| `warm_neutral_pressure` | Source-relocated warm restart; fixed mesh | Exercise `neutralp_lambda=0.05`. |
-| `warm_neutral_perpendicular` | Source-relocated warm restart; fixed mesh | Exercise projected perpendicular neutral diffusion. |
-| `warm_neutral_limiter_fixed` | Source-relocated warm restart; fixed mesh | Exercise active limiting with fixed `Tn=2.5 eV`. |
-| `warm_neutral_limiter_ti` | Source-relocated warm restart; fixed mesh | Exercise active limiting with `Tn=Ti`. |
-| `cold_step_fixed_neutral_sources_in_elements` | Analytical start; coarse fixed mesh | Short relocated-source race and detailed-balance check. |
-| `cold_step_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Short relocated-source adaptation and detailed-balance check. |
-| `cold_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Complete relocated-source cold workflow. |
+The retained cold recipe has seven stages: `time_init`, `diffusion_reduction`,
+then five transport continuations. `cold_fixed` uses the refined fixed mesh;
+`cold_adaptive` starts coarse and adapts in the first two stages. Short
+`cold_step_fixed` and `cold_step_adaptive` workflows use one time step and two
+Newton iterations; the adaptive variant also performs one adaptation pass.
+Use `list workflows CASE` for the complete current selection of feature variants.
 
 Full cold stages run sequentially and restart from their predecessor. The
 one-step workflows probe mesh construction and races, not convergence.
-The PR06 golden workflows all use the same accepted source-relocated restart.
+The limited neutral-feature golden workflows all use the same accepted source-relocated restart.
 Each then enables exactly one feature: source relocation alone, neutral
 pressure, perpendicular diffusion, fixed-`Tn` limiting, or `Tn=Ti` limiting.
 The active limiter declarations always retain
@@ -230,8 +208,6 @@ whole workflow starts in a fresh `RUN_ID-resume-N` directory. A profile stops at
 its first failed suite. Resume uses the ordinary suite records for completed and
 unfinished work. Changed selected inputs or declarations are rejected.
 `--build` cannot be combined with `--resume`; reuse its printed build manifest.
-Suite summaries now include the case in their directory name; earlier summaries
-remain available for comparison but require a new run ID for new checks.
 
 Use `--diagnostics off|summary|equations|detailed` to override the selected mode
 for a focused investigation. Four-format and on/off comparisons are focused
@@ -391,8 +367,8 @@ component updates. Ordinary `check --resume` remains available for suites.
 
 ## Outputs and provenance
 
-Runs are stored below `MHDG_REGRESSION_RUN_ROOT`. Builds use
-`MHDG_REGRESSION_BUILD_ROOT`, which defaults to `RUN_ROOT/builds`:
+Runs are stored below the configured `run_root`; `build_root` defaults to its
+`builds/` directory:
 
 ```text
 runs/
@@ -425,9 +401,8 @@ Suite summaries do not copy the machine settings dictionary; unused executables
 and build-only preferences do not affect resume. Selected runtime files are
 checked independently of executable checksums. Executables are selected through
 a build manifest.
-Summaries from before this metadata change require a new run ID; saved outputs
-remain available for comparison. Published canonical references from staged runs
-include a local copy of the final execution metadata.
+Published canonical references from staged runs include a local copy of the
+final execution metadata.
 
 Each newly built solver writes automatic compile-time identity into its HDF5
 solutions:
@@ -529,11 +504,11 @@ Common variants require JSON, not Python. In `cases/CASE.json`, inherit the
 closest workflow and override only changed parameters:
 
 ```json
-"cold_step_fixed_two_nr": {
+"cold_step_fixed_three_nr": {
   "extends": "cold_step_fixed",
-  "description": "Repeat the fixed coarse-mesh probe with two Newton iterations",
+  "description": "Fixed coarse-mesh probe with three Newton iterations",
   "parameter_overrides": {
-    "nrp": 2
+    "nrp": 3
   }
 }
 ```
@@ -632,9 +607,10 @@ regression limits for `legacy_case`, not physical-accuracy targets.
 ## Harness implementation and tests
 
 `catalog.py` owns case/workflow inheritance, layouts and suite/profile resolution;
-`config.py` owns machine JSON, build selection and environment setup. Preparation
+`config.py` owns machine JSON, build/runtime selection and environment setup. Preparation
 and suites accept resolved settings, so they do not parse configuration files.
-`bundles.py` owns bundle validation and publication-class checks. Shared document/
+`bundles.py` owns manifest paths, staged-reference indexes, bundle integrity and
+publication-class checks; comparison code consumes its validated references. Shared document/
 schema I/O, file/path contracts and errors/record identifiers live in `documents.py`,
 `files.py` and `support.py`. All callers use package imports; no `tools/` import
 bridge or test path injection is needed.
@@ -642,54 +618,37 @@ bridge or test path injection is needed.
 These tests use temporary bundles, small arrays, and fake executables. They do
 not launch MHDG or need physical data.
 
-| Changed area | Test group |
-| --- | --- |
-| Settings/build selection and doctor | `tests/test_settings.py` (pytest) |
-| Public package CLI smoke | `tests/test_cli.py` (pytest) |
-| Shared workflows and inheritance | `tests/test_catalog.py` (pytest) |
-| Generated layout relations and suite defaults | `tests/test_layouts.py` (pytest) |
-| Build | `tests/test_build.py` (pytest) |
-| Bundles and case loading | `tests.test_bundles` |
-| Preparation and parameters | `tests/test_preparation.py` (pytest) |
-| Execution and run metadata | `tests/test_execution.py` (pytest) |
-| Fixed comparison | `tests/test_fixed_comparison.py` (pytest) |
-| Adaptive comparison | `tests/test_adaptive_comparison.py` (pytest) |
-| Reference matrices | `tests/test_matrix_comparison.py` (pytest) |
-| Suites, layout pairs, resume | `tests.test_suites` |
-| Promotion | `tests.test_reference_publication` |
-
-Run the focused catalog tests with pytest (from the repository root):
+Run from the repository root:
 
 ```bash
-python -m pytest regression_tests/tests/test_catalog.py
+# Focused example; substitute the affected test module.
+python -m pytest -q regression_tests/tests/test_preparation.py
+# Whole Python harness; no solver build or real case inputs needed.
+python -m pytest -q regression_tests/tests
 ```
 
-The remaining test groups are being migrated incrementally. Run only the
-affected group:
+Tests cover composition and generated layout relations, bundle integrity,
+preparation, execution, direct/interpolated/parallel comparisons, diagnostics,
+resume, CLI, build and refresh/publication failure handling. Cleanup and suggestions
+have focused read-only/protection checks. Passing pytest establishes harness
+behavior; use real-data profiles to establish solver regression evidence.
 
-```bash
-cd regression_tests
-python -m pytest tests/test_preparation.py tests/test_execution.py
-```
+## Limitations and scientific acceptance
 
-For a cross-cutting change, run all synthetic tests:
+- Adaptive golden meshes can differ between revisions; within-build layout pairs
+  require exact meshes. Matching adaptive meshes use direct field comparisons.
+- Existing limited fixed/adaptive references have different mesh lineage (844 vs
+  846 elements). Align the fixed input with the final adaptive mesh during the
+  later accepted golden redesign, not by loosening comparison tolerances.
+- Diverted has a final golden but lacks historical per-stage references. Its cold
+  stages can be compared across layouts; a historical stage comparison needs new
+  accepted reference data. Diverted feature goldens remain future work.
+- Timing is recorded without a pass/fail threshold. Golden publication verifies
+  technical evidence; scientific acceptance requires human review.
 
-```bash
-cd regression_tests
-python -m pytest tests
-```
-
-## Limitations
-
-- Adaptive refinement may cross different thresholds between code revisions;
-  adaptive golden-reference comparisons therefore do not promise identical
-  meshes. Layout pairs within one race or cold matrix do require exact meshes.
-- Runtime is recorded without a timing threshold.
-- Promotion verifies technical evidence but physical acceptance remains human.
-- Promotion inputs must all describe accepted results from the configured source
-  bundle.
-
-Run `python -m regression_tests --help` for the command synopsis.
+Before redesigning the cold recipe or refreshing references, run `full` plus both
+cases' `cold_matrix` and `warm_parallelism` checks with unchanged accepted bundles
+and the same selected builds. Investigate failures before changing baselines.
 
 ### Inspect and clean stored runs/data
 

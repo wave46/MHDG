@@ -33,10 +33,13 @@ def _required_roles(case, workflows):
     return required
 
 
-def _manifest(root, case_dir):
-    return load_validated_json(root / "manifest.json",
+def load_manifest(root, case_dir=CASES, *, case_id=None):
+    manifest = load_validated_json(root / "manifest.json",
                                case_dir.parent / "schemas/bundle-manifest.schema.json",
                                "bundle manifest")
+    if case_id is not None and manifest["case_id"] != case_id:
+        raise BundleError(f"bundle does not contain case data for {case_id}")
+    return manifest
 
 
 def bundle_readiness(case_id, source, case_dir=CASES, *, workflows=()):
@@ -115,14 +118,17 @@ def create_bundle(case_id, source, output, case_dir=CASES, bundle_version="1.0.0
     return summary
 
 
-def validate_bundle_root(bundle_root, case_dir=CASES, *, workflows=()):
+def validate_bundle_root(bundle_root, case_dir=CASES, *, workflows=(), required_class=None):
     """Verify all recorded files and base plus selected workflow requirements."""
     bundle_root = require_directory(bundle_root, "bundle root")
-    manifest = _manifest(bundle_root, case_dir)
+    manifest = load_manifest(bundle_root, case_dir)
+    if required_class and manifest.get("bundle_class") != required_class:
+        actual = manifest.get("bundle_class", "unspecified")
+        raise BundleError(f"golden-check requires bundle_class={required_class}; found {actual}")
     case = load_case_definition(manifest["case_id"], case_dir)
     available, verified_bytes, warnings = _verify_artifacts(bundle_root, manifest["artifacts"])
     roles = _verify_roles(manifest)
-    _verify_reference_matrix(bundle_root, manifest, roles, available, case_dir.parent / "schemas")
+    load_reference_matrix(bundle_root, case["case_id"], case_dir, manifest=manifest)
     required = _required_roles(case, workflows)
     missing = sorted(role for role in required if roles.get(role) not in available)
     if missing:
@@ -142,7 +148,7 @@ def _verify_artifacts(
     for artifact_id, artifact in artifacts.items():
         label = f"manifest.artifacts.{artifact_id}"
         try:
-            path = _artifact_path(bundle_root, artifact["path"], label)
+            path = artifact_path(bundle_root, artifact["path"], label)
         except MissingArtifactError:
             if not artifact.get("optional", False):
                 raise
@@ -174,52 +180,49 @@ def _verify_roles(manifest: dict) -> dict[str, str]:
     return roles
 
 
-def _verify_reference_matrix(
-    bundle_root: Path,
-    manifest: dict,
-    roles: dict[str, str],
-    available: set[str],
-    schema_dir: Path,
-) -> None:
-    artifacts = manifest["artifacts"]
-    index_id = roles.get("reference_matrix")
-    if index_id is None:
-        return
-    index_artifact = artifacts[index_id]
-    index_path = _artifact_path(
-        bundle_root,
-        index_artifact["path"],
-        f"manifest.artifacts.{index_id}",
-    )
-    matrix = load_validated_json(
-        index_path,
-        schema_dir / "reference-matrix.schema.json",
-        "reference matrix",
-    )
-    if matrix["case_id"] != manifest["case_id"]:
-        raise BundleError("reference matrix has the wrong case_id")
+@dataclass(frozen=True)
+class ReferenceMatrix:
+    bundle_id: str
+    bundle_version: str
+    references: dict[tuple[str, str, str], Path]
 
-    cells = []
-    for reference in matrix["references"]:
-        artifact_id = reference["artifact_id"]
-        artifact = artifacts.get(artifact_id)
-        if artifact is None or artifact_id not in available:
-            raise BundleError(
-                f"reference matrix uses unavailable artifact {artifact_id}"
-            )
-        if artifact["media_type"] != "application/x-hdf5":
-            raise BundleError(
-                f"reference matrix artifact {artifact_id} is not HDF5"
-            )
-        cells.append(
-            (
-                reference["workflow_id"],
-                reference["layout_id"],
-                reference["stage_id"],
-            )
-        )
-    if len(cells) != len(set(cells)):
-        raise BundleError("reference matrix contains duplicate cells")
+    def reference_for(self, workflow_id, layout_id, stage_id):
+        key = (workflow_id, layout_id, stage_id)
+        try:
+            return self.references[key]
+        except KeyError as exc:
+            raise BundleError(f"golden matrix has no reference for {'/'.join(key)}") from exc
+
+
+def load_reference_matrix(bundle_root, case_id, case_dir=CASES, *, manifest=None):
+    """Read and validate the optional stage index; artifact hashing belongs to bundle validation."""
+    bundle_root = require_directory(bundle_root, "golden bundle")
+    if manifest is None:
+        manifest = load_manifest(bundle_root, case_dir, case_id=case_id)
+    index_id = manifest["roles"].get("reference_matrix")
+    if index_id is None:
+        return None
+
+    def artifact(artifact_id, media_type):
+        item = manifest["artifacts"].get(artifact_id)
+        if item is None:
+            raise BundleError(f"reference matrix refers to unknown artifact {artifact_id}")
+        if item["media_type"] != media_type:
+            raise BundleError(f"reference matrix artifact {artifact_id} is not {media_type}")
+        return artifact_path(bundle_root, item["path"], f"manifest.artifacts.{artifact_id}")
+
+    matrix = load_validated_json(artifact(index_id, "application/json"),
+                                 case_dir.parent / "schemas/reference-matrix.schema.json",
+                                 "reference matrix")
+    if matrix["case_id"] != case_id:
+        raise BundleError("reference matrix has the wrong case_id")
+    references = {}
+    for entry in matrix["references"]:
+        key = (entry["workflow_id"], entry["layout_id"], entry["stage_id"])
+        if key in references:
+            raise BundleError(f"reference matrix contains duplicate cell {'/'.join(key)}")
+        references[key] = artifact(entry["artifact_id"], "application/x-hdf5")
+    return ReferenceMatrix(manifest["bundle_id"], manifest["bundle_version"], references)
 
 
 def _relative_path(relative_path, label):
@@ -229,7 +232,7 @@ def _relative_path(relative_path, label):
     return path
 
 
-def _artifact_path(root, relative_path, label):
+def artifact_path(root, relative_path, label):
     candidate = root / _relative_path(relative_path, label)
     resolved = candidate.resolve()
     if not resolved.is_relative_to(root):
@@ -239,17 +242,3 @@ def _artifact_path(root, relative_path, label):
     if not resolved.is_file():
         raise BundleError(f"{label}.path is not a regular file: {relative_path}")
     return resolved
-
-
-def require_bundle_class(
-    bundle_root: Path,
-    case_directory: Path,
-    required: str,
-) -> None:
-    """Require the source bundle to declare the requested publication class."""
-    manifest = _manifest(bundle_root, case_directory)
-    actual = manifest.get("bundle_class", "unspecified")
-    if actual != required:
-        raise BundleError(
-            f"golden-check requires bundle_class={required}; found {actual}"
-        )

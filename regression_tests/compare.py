@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import load_case_definition
-from .references import ReferenceMatrix, load_reference_matrix
+from .bundles import ReferenceMatrix, load_reference_matrix
 from .documents import load_json, write_json_atomic
 from .support import BundleError, ComparisonError, utc_now
 from .files import file_identity, recorded_directory, recorded_file, require_directory
@@ -87,13 +87,13 @@ def _load_completed_metadata(run_directory: Path) -> dict[str, Any]:
 def load_plan_matrix(
     plan: dict[str, Any],
     case: dict[str, Any],
-    schema_dir: Path,
+    case_directory: Path,
 ) -> ReferenceMatrix | None:
     """Load the run's reference matrix and confirm its bundle identity."""
     bundle = plan.get("bundle")
     if not isinstance(bundle, dict) or not isinstance(bundle.get("root"), str):
         raise BundleError("run plan has no bundle identity")
-    matrix = load_reference_matrix(Path(bundle["root"]), case, schema_dir)
+    matrix = load_reference_matrix(Path(bundle["root"]), case["case_id"], case_directory)
     if matrix is not None and (
         bundle.get("bundle_id") != matrix.bundle_id
         or bundle.get("bundle_version") != matrix.bundle_version
@@ -132,7 +132,7 @@ def compare_completed_run(
         candidate_override, reference_override, tolerance_profile_override, comparison_policy_override,
     ))
     if inputs.workflow.get("stages") and not explicit_final:
-        matrix = load_plan_matrix(inputs.plan, inputs.case, inputs.case_directory.parent / "schemas")
+        matrix = load_plan_matrix(inputs.plan, inputs.case, inputs.case_directory)
         if matrix is not None:
             path, report = compare_reference_matrix(inputs, matrix, report_override)
             return "reference_matrix", path, report

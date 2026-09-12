@@ -6,6 +6,8 @@ import pytest
 
 from regression_tests.catalog import load_case_definition
 from regression_tests import compare
+from regression_tests.bundles import load_reference_matrix
+from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import REGRESSION_ROOT
 
 
@@ -59,6 +61,32 @@ def test_stage_references_and_stop_at_first_divergence(tmp_path, monkeypatch, wo
     assert calls[-1].tolerance_profile == ("fixed_stage_reference" if fail_second else "adaptive_reference")
     if workflow == "cold_adaptive":
         assert calls[-1].direct_tolerance_profile == "fixed_stage_reference"
+
+
+def test_reference_index_rejects_ambiguous_or_unusable_artifacts(tmp_path):
+    _, references = fixture(tmp_path, "cold_fixed")
+    root = tmp_path / "golden"
+    index = root / "references/index.json"
+    original = index.read_text()
+    matrix = json.loads(original)
+    matrix["references"].append(matrix["references"][0])
+    index.write_text(json.dumps(matrix))
+    with pytest.raises(BundleError, match="duplicate cell"):
+        load_reference_matrix(root, "legacy_case")
+    index.write_text(original)
+    manifest = json.loads((root / "manifest.json").read_text())
+    manifest["artifacts"]["golden_index"]["media_type"] = "application/x-hdf5"
+    (root / "manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(BundleError, match="not application/json"):
+        load_reference_matrix(root, "legacy_case")
+    manifest["artifacts"]["golden_index"]["media_type"] = "application/json"
+    (root / "manifest.json").write_text(json.dumps(manifest))
+    reference = next(iter(references.values()))
+    outside = tmp_path / "outside.h5"
+    reference.rename(outside)
+    reference.symlink_to(outside)
+    with pytest.raises(BundleError, match="resolves outside"):
+        load_reference_matrix(root, "legacy_case")
 
 
 def fixture(root, workflow_id):

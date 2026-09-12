@@ -9,7 +9,7 @@ import pytest
 import h5py
 
 from regression_tests import suites
-from regression_tests.compare import compare_generated_meshes, producer_converged
+from regression_tests.compare import producer_converged
 from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import create_harness, run_command, REGRESSION_ROOT as ROOT
 from regression_tests.tests.fixtures.solutions import write_solution
@@ -141,7 +141,8 @@ def test_cli_requires_golden_and_records_diagnostic_overrides(harness):
 
 def test_parallel_comparison_and_saved_recheck(harness):
     write_off_solution(harness.serial_executable.parent / "race_result.h5")
-    harness.install_solver(SOLVER.replace('cp inputs/reference.h5', 'cp "$(dirname "$0")/race_result.h5"').replace('1.0E-5', '1.0E5'))
+    solver = SOLVER.replace('cp inputs/reference.h5', 'cp "$(dirname "$0")/race_result.h5"').replace('1.0E-5', '1.0E5')
+    harness.install_solver(solver.replace("cp ", "printf 'mesh\\n' > res/temp.msh\ncp ", 1))
     path, summary = run(harness, "parallel")
     assert summary["status"] == "passed"
     assert summary["comparisons"]
@@ -149,16 +150,12 @@ def test_parallel_comparison_and_saved_recheck(harness):
     assert report["convergence"] == {"passed": True, "final_newton_error": 1e5, "maximum": None}
     result = run_command("compare", "--suite", str(path))
     assert result.returncode == 0, result.stderr
-
-
-def test_generated_mesh_comparison_is_byte_exact(tmp_path):
-    left, right = tmp_path / "left", tmp_path / "right"
-    for root in (left, right):
-        (root / "res").mkdir(parents=True)
-        (root / "res/temp.msh").write_text("mesh\n")
-    assert compare_generated_meshes(left, right)["passed"]
-    (right / "res/temp.msh").write_text("mesh\n\n")
-    assert not compare_generated_meshes(left, right)["passed"]
+    mesh = next(Path(summary["comparisons"][0]["candidate_run_directory"]).glob("**/res/temp.msh"))
+    mesh.write_text("mesh\n\n")
+    _, verification = suites.verify_suite(path, ROOT / "cases", ROOT / "tolerances.json")
+    assert verification["status"] == "failed"
+    assert any("generated mesh differs" in failure
+               for pair in verification["comparisons"] for failure in pair["failures"])
 
 
 def test_offline_checks_references_pairs_and_diagnostics(tmp_path, monkeypatch):

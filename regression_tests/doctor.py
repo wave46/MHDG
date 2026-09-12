@@ -59,8 +59,6 @@ def diagnose(args):
             continue
 
         def bundle():
-            if not values.get("MHDG_REGRESSION_DATA_ROOT"):
-                raise BundleError("no bundle selected; pass --bundle DIR or set defaults.bundles")
             root = bundle_root_from_settings(values)
             workflows = {name for item in selected for name in item["workflow_ids"]}
             summary = validate_bundle_root(root, config.ROOT / "cases", workflows=workflows)
@@ -71,7 +69,7 @@ def diagnose(args):
         def runtime():
             names = {name for item in selected for name in item["layouts"]}
             config.runtime_settings(values, [layouts[name] for name in names])
-            return values.get("MHDG_BUILD_MANIFEST", "prebuilt executable settings")
+            return values["MHDG_BUILD_MANIFEST"]
 
         check(f"{case_id} bundle", bundle)
         check(f"{case_id} build/runtime", runtime)

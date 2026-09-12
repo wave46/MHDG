@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import shutil
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -12,9 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import load_case_definition, workflow_required_roles, load_layout
-from .documents import load_validated_json, write_json_direct
-from .config import bundle_root_from_settings
-from .bundles import validate_bundle_root
+from .documents import write_json_direct
+from .config import (bundle_root_from_settings, absolute_setting, solver_executable,
+                     runtime_files, selected_mpi_launcher)
+from .bundles import validate_bundle_root, load_manifest, artifact_path
 from .support import BundleError, IDENTIFIER_RE, utc_now, utc_run_id
 from .parameters import render_parameter_file
 
@@ -98,9 +97,6 @@ def solver_command(
     ]
 
 
-RUNTIME_FILENAMES = ("positionFeketeNodesTri2D.h5",)
-
-
 def load_preparation_inputs(
     settings: dict[str, str],
     case_id: str,
@@ -135,10 +131,10 @@ def load_preparation_inputs(
         artifact_overrides or {},
     )
 
-    run_root = _absolute_setting(settings, "MHDG_REGRESSION_RUN_ROOT")
-    executable = _solver_executable(settings, layout["execution"])
-    runtime_files = _runtime_files(executable)
-    launcher = _mpi_launcher(settings) if layout["execution"] == "mpi" else None
+    run_root = absolute_setting(settings, "MHDG_REGRESSION_RUN_ROOT")
+    executable = solver_executable(settings, layout["execution"])
+    runtime_inputs = runtime_files(executable)
+    launcher = selected_mpi_launcher(settings) if layout["execution"] == "mpi" else None
     run_directory = _run_directory(
         run_root,
         case_id,
@@ -152,7 +148,7 @@ def load_preparation_inputs(
         launcher=launcher,
         layout=layout,
         artifacts=artifacts,
-        runtime_files=runtime_files,
+        runtime_files=runtime_inputs,
         case=case,
         workflow_id=workflow_id,
         workflow=workflow,
@@ -186,15 +182,7 @@ def _case_artifacts(
     workflow: dict[str, Any],
     overrides: dict[str, Path],
 ) -> tuple[dict[str, Path], dict[str, Any]]:
-    schema_path = case_directory.parent / "schemas" / "bundle-manifest.schema.json"
-    manifest = load_validated_json(
-        bundle_root / "manifest.json",
-        schema_path,
-        "bundle manifest",
-    )
-    case_id = case["case_id"]
-    if manifest["case_id"] != case_id:
-        raise BundleError(f"bundle does not contain case data for {case['case_id']}")
+    manifest = load_manifest(bundle_root, case_directory, case_id=case["case_id"])
 
     paths = {}
     for role in workflow_required_roles(workflow):
@@ -210,50 +198,10 @@ def _case_artifacts(
                 f"bundle does not provide role {role} for workflow {workflow_id}"
             ) from exc
         relative_path = manifest["artifacts"][artifact_id]["path"]
-        paths[role] = (bundle_root / relative_path).resolve(strict=True)
+        paths[role] = artifact_path(bundle_root, relative_path, f"workflow role {role}")
     return paths, manifest
 
 
-def _absolute_setting(settings: dict[str, str], key: str) -> Path:
-    value = settings.get(key)
-    if not value:
-        raise BundleError(f"settings must define {key}")
-    path = Path(value).expanduser()
-    if not path.is_absolute():
-        raise BundleError(f"{key} must be an absolute path")
-    return path.resolve()
-
-
-def _solver_executable(settings: dict[str, str], execution: str) -> Path:
-    key = (
-        "MHDG_SERIAL_EXECUTABLE"
-        if execution == "serial"
-        else "MHDG_PARALLEL_EXECUTABLE"
-    )
-    path = _absolute_setting(settings, key)
-    if not path.is_file() or not os.access(path, os.X_OK):
-        raise BundleError(f"{key} is not an executable file: {path}")
-    return path
-
-
-def _runtime_files(executable: Path) -> dict[str, Path]:
-    files = {}
-    for filename in RUNTIME_FILENAMES:
-        path = executable.parent / filename
-        if not path.is_file():
-            raise BundleError(f"required runtime file is missing: {path}")
-        files[filename] = path.resolve()
-    return files
-
-
-def _mpi_launcher(settings: dict[str, str]) -> Path:
-    value = settings.get("MHDG_MPI_LAUNCHER")
-    if not value:
-        raise BundleError("settings must define MHDG_MPI_LAUNCHER")
-    resolved = shutil.which(value)
-    if not resolved:
-        raise BundleError(f"MPI launcher is not executable or not found: {value}")
-    return Path(resolved).resolve()
 
 
 WARM_INPUT_LINKS = {

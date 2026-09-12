@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from pathlib import Path
-import shutil
 import time
 from typing import Any
 
 from .catalog import load_case_definition, load_suite_definition
-from .config import bundle_root_from_settings
-from .bundles import validate_bundle_root, require_bundle_class
+from .config import (bundle_root_from_settings, absolute_setting, solver_executable,
+                     runtime_files, selected_mpi_launcher)
+from .bundles import validate_bundle_root
 from .prepare import prepare_run
 from .execute import execute_prepared, reusable_outputs
 from .compare import compare_completed_run, compare_generated_meshes, producer_converged
@@ -284,53 +284,26 @@ def suite_execution_inputs(
             for name, path in tracked_files.items()
         },
     }
-    if any(layout.startswith("serial_") for layout in layout_ids):
-        records["serial_executable"] = _setting_file_record(
-            settings,
-            "MHDG_SERIAL_EXECUTABLE",
-        )
-    if any(layout.startswith("mpi") for layout in layout_ids):
-        records["parallel_executable"] = _setting_file_record(
-            settings,
-            "MHDG_PARALLEL_EXECUTABLE",
-        )
-        launcher = settings.get("MHDG_MPI_LAUNCHER")
-        resolved_launcher = shutil.which(launcher) if launcher else None
-        if resolved_launcher is None:
-            raise BundleError("MHDG_MPI_LAUNCHER is not executable or not found")
-        records["mpi_launcher"] = _file_record(
-            Path(resolved_launcher),
-            "MPI launcher",
-        )
+    for execution, prefix, name in (("serial", "serial_", "serial_executable"),
+                                     ("mpi", "mpi", "parallel_executable")):
+        if any(layout.startswith(prefix) for layout in layout_ids):
+            records[name] = _file_record(solver_executable(settings, execution), name)
+    if "parallel_executable" in records:
+        records["mpi_launcher"] = _file_record(selected_mpi_launcher(settings), "MPI launcher")
     # Runtime inputs affect resume independently of the executable checksum.
     # Record only selected paths, once even when both variants share the file.
-    from .prepare import _runtime_files
-
     records["runtime_files"] = {
         str(path): file_identity(path)
         for name in ("serial_executable", "parallel_executable") if name in records
-        for path in _runtime_files(Path(records[name]["path"])).values()
+        for path in runtime_files(Path(records[name]["path"])).values()
     }
     for key, name in (
         ("MHDG_ENVIRONMENT_SCRIPT", "environment_script"),
         ("MHDG_BUILD_MANIFEST", "build_manifest"),
     ):
         if settings.get(key):
-            records[name] = _setting_file_record(settings, key)
+            records[name] = _file_record(absolute_setting(settings, key), key)
     return records
-
-
-def _setting_file_record(
-    settings: dict[str, str],
-    key: str,
-) -> dict[str, Any]:
-    value = settings.get(key)
-    if not value:
-        raise BundleError(f"settings must define {key}")
-    path = Path(value).expanduser()
-    if not path.is_absolute():
-        raise BundleError(f"{key} must be an absolute path")
-    return _file_record(path, key)
 
 
 def _file_record(path: Path, label: str) -> dict[str, Any]:
@@ -380,9 +353,7 @@ def run_suite(
 ):
     suite = load_suite_definition(suite_id, suites_path, layouts_path, case_directory, case_id=case_id)
     bundle_root = bundle_root_from_settings(settings)
-    validate_bundle_root(bundle_root, case_directory)
-    if required_bundle_class:
-        require_bundle_class(bundle_root, case_directory, required_bundle_class)
+    validate_bundle_root(bundle_root, case_directory, required_class=required_bundle_class)
     run_id = run_id or utc_run_id()
     if not IDENTIFIER_RE.fullmatch(run_id):
         raise BundleError(f"invalid suite run identifier: {run_id}")
@@ -403,10 +374,7 @@ def run_suite(
         "layout_catalog": layouts_path, "suite_catalog": suites_path,
         "tolerance_catalog": tolerances_path,
     })
-    configured = settings.get("MHDG_REGRESSION_RUN_ROOT", "")
-    root = Path(configured).expanduser()
-    if not root.is_absolute():
-        raise BundleError("MHDG_REGRESSION_RUN_ROOT must be an absolute path")
+    root = absolute_setting(settings, "MHDG_REGRESSION_RUN_ROOT")
     directory = root.resolve() / "suites" / suite_id / suite["case_id"] / run_id
     path = directory / "suite_summary.json"
     expected = {
@@ -549,10 +517,8 @@ def run_profile(name, checks, settings_by_case, catalog_root, run_id=None, *, re
     # Reject unavailable/wrong-case bundles before running an earlier, costly check.
     for case_id, values in settings_by_case.items():
         bundle = bundle_root_from_settings(values)
-        if validate_bundle_root(bundle, catalog_root / "cases").case_id != case_id:
+        if validate_bundle_root(bundle, catalog_root / "cases", required_class=required_bundle_class).case_id != case_id:
             raise BundleError(f"selected bundle does not contain {case_id}")
-        if required_bundle_class:
-            require_bundle_class(bundle, catalog_root / "cases", required_bundle_class)
     summary = {"profile": name, "run_id": run_id, "status": "running", "results": []}
     if resume:
         previous = load_json(path, "profile summary")

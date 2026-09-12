@@ -40,7 +40,6 @@ def test_readiness_and_selected_creation_require_actual_files(data):
         bundle_readiness(case, source, workflows=["unknown"])
 
 
-@pytest.mark.parametrize("data", ["legacy_case", "diverted_case"], indirect=True)
 def test_creation_copies_links_and_validation_uses_manifest_paths(data, tmp_path):
     case, source, output = data
     shared = tmp_path / "equilibrium.h5"

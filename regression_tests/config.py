@@ -13,6 +13,7 @@ from .support import BundleError
 from .files import file_identity, require_file, require_directory
 
 ROOT = Path(__file__).resolve().parent
+RUNTIME_FILE = "positionFeketeNodesTri2D.h5"
 MACHINE_KEYS = {
     "run_root": "MHDG_REGRESSION_RUN_ROOT",
     "build_root": "MHDG_REGRESSION_BUILD_ROOT",
@@ -95,7 +96,7 @@ def build_settings(path: Path) -> dict[str, str]:
         "MHDG_BUILD_MANIFEST": str(path),
         "MHDG_SOLVER_REVISION": _text(repository.get("revision"), "repository.revision"),
     }
-    runtime = _artifact(record.get("runtime_files"), "positionFeketeNodesTri2D.h5", path.parent)
+    runtime = _artifact(record.get("runtime_files"), RUNTIME_FILE, path.parent)
     artifacts = record.get("artifacts")
     if not isinstance(artifacts, dict) or not artifacts or artifacts.keys() - {"serial", "parallel"}:
         raise BundleError("build manifest must contain serial and/or parallel executables")
@@ -109,7 +110,7 @@ def build_settings(path: Path) -> dict[str, str]:
         executable = _artifact(artifacts, variant, path.parent)
         if not os.access(executable, os.X_OK):
             raise BundleError(f"build executable is not executable: {executable}")
-        if (executable.parent / "positionFeketeNodesTri2D.h5").resolve() != runtime:
+        if (executable.parent / RUNTIME_FILE).resolve() != runtime:
             raise BundleError(f"Fekete data must be beside the executable: {executable}")
         values[key] = str(executable)
     return values
@@ -163,13 +164,11 @@ def openmpi_version(launcher, environment):
 
 def runtime_settings(values, layouts):
     """Check selected execution prerequisites before creating run directories."""
-    from .prepare import _runtime_files, _solver_executable
-
     for execution in {layout["execution"] for layout in layouts}:
         key = "MHDG_SERIAL_EXECUTABLE" if execution == "serial" else "MHDG_PARALLEL_EXECUTABLE"
         if key not in values:
             raise BundleError(f"no build selected for {execution}; pass --build-manifest FILE or use check --build")
-        _runtime_files(_solver_executable(values, execution))
+        runtime_files(solver_executable(values, execution))
     environment = execution_environment(values)
     if any(layout["execution"] == "mpi" for layout in layouts):
         values["MHDG_MPI_LAUNCHER"] = mpi_launcher(values, environment)
@@ -246,3 +245,40 @@ def bundle_root_from_settings(values):
     if not path.is_absolute():
         raise BundleError("selected bundle root must be an absolute path")
     return require_directory(path, "bundle root")
+
+
+def absolute_setting(settings: dict[str, str], key: str) -> Path:
+    value = settings.get(key)
+    if not value:
+        raise BundleError(f"settings must define {key}")
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        raise BundleError(f"{key} must be an absolute path")
+    return path.resolve()
+
+
+def solver_executable(settings: dict[str, str], execution: str) -> Path:
+    key = (
+        "MHDG_SERIAL_EXECUTABLE"
+        if execution == "serial"
+        else "MHDG_PARALLEL_EXECUTABLE"
+    )
+    path = absolute_setting(settings, key)
+    if not path.is_file() or not os.access(path, os.X_OK):
+        raise BundleError(f"{key} is not an executable file: {path}")
+    return path
+
+
+def runtime_files(executable: Path) -> dict[str, Path]:
+    path = executable.parent / RUNTIME_FILE
+    return {RUNTIME_FILE: require_file(path, "solver runtime")}
+
+
+def selected_mpi_launcher(settings: dict[str, str]) -> Path:
+    value = settings.get("MHDG_MPI_LAUNCHER")
+    if not value:
+        raise BundleError("settings must define MHDG_MPI_LAUNCHER")
+    resolved = shutil.which(value)
+    if not resolved:
+        raise BundleError(f"MPI launcher is not executable or not found: {value}")
+    return Path(resolved).resolve()

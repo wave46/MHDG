@@ -13,7 +13,7 @@ from .support import BundleError, HarnessError, utc_now, utc_run_id
 from .files import file_identity
 from . import config
 from .build import build_solver
-from .bundles import _artifact_path, validate_bundle_root
+from .bundles import artifact_path, validate_bundle_root
 from .compare import (ComparisonOverrides, compare_completed_run, compare_run,
                       load_comparison_inputs, load_stage_inputs, producer_converged)
 from .compare_common import select_candidate
@@ -62,7 +62,7 @@ def _record(path, base=None):
 
 
 def _verify_record(base, record):
-    path = _artifact_path(base, record["path"], "refresh evidence")
+    path = artifact_path(base, record["path"], "refresh evidence")
     if file_identity(path) != {key: record[key] for key in ("sha256", "size_bytes")}:
         raise BundleError(f"refresh evidence changed: {record['path']}")
     return path
@@ -308,7 +308,7 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
     if any(item["status"] != "passed" for item in report.get("parallel_checks", [])):
         raise BundleError("producer parallel checks failed")
     for check in report["checks"]:
-        summary = load_json(_artifact_path(workspace, check["summary"], "check summary"), "check summary")
+        summary = load_json(artifact_path(workspace, check["summary"], "check summary"), "check summary")
         if check["status"] != "passed" or summary["status"] != "passed":
             raise BundleError("golden validation checks failed")
         if not all(reusable_outputs(Path(item["run_directory"])) for item in summary["results"]):
