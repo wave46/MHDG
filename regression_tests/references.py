@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from bundle.schemas import load_validated_json
-from support.errors import BundleError
-from support.paths import require_directory, require_file
+from .documents import load_validated_json
+from .support import BundleError
+from .files import require_directory, require_file
 
 REFERENCE_MATRIX_ROLE = "reference_matrix"
 

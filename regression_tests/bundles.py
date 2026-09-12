@@ -7,13 +7,10 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from bundle.cases import load_case_definition, required_case_roles
-from bundle.schemas import load_validated_json
-from support.documents import write_json_direct
-from support.errors import BundleError, MissingArtifactError
-from support.files import file_identity, is_within, sha256_digest
-from support.paths import require_directory
-from support.time import utc_now
+from .catalog import load_case_definition, required_case_roles
+from .documents import load_validated_json, write_json_direct
+from .support import BundleError, MissingArtifactError, utc_now
+from .files import file_identity, sha256_digest, require_directory
 
 CASES = Path(__file__).resolve().parent / "cases"
 
@@ -76,7 +73,7 @@ def create_bundle(case_id, source, output, case_dir=CASES, bundle_version="1.0.0
     if output.exists() or output.is_symlink():
         raise BundleError(f"output already exists: {output}")
     output = output.resolve()
-    if is_within(output, source):
+    if output.is_relative_to(source):
         raise BundleError("output must be outside the prepared source directory")
     if not bundle_version:
         raise BundleError("bundle version must not be empty")
@@ -235,10 +232,24 @@ def _relative_path(relative_path, label):
 def _artifact_path(root, relative_path, label):
     candidate = root / _relative_path(relative_path, label)
     resolved = candidate.resolve()
-    if not is_within(resolved, root):
+    if not resolved.is_relative_to(root):
         raise BundleError(f"{label}.path resolves outside the bundle root")
     if not candidate.exists():
         raise MissingArtifactError(f"{label}.path does not exist: {relative_path}")
     if not resolved.is_file():
         raise BundleError(f"{label}.path is not a regular file: {relative_path}")
     return resolved
+
+
+def require_bundle_class(
+    bundle_root: Path,
+    case_directory: Path,
+    required: str,
+) -> None:
+    """Require the source bundle to declare the requested publication class."""
+    manifest = _manifest(bundle_root, case_directory)
+    actual = manifest.get("bundle_class", "unspecified")
+    if actual != required:
+        raise BundleError(
+            f"golden-check requires bundle_class={required}; found {actual}"
+        )

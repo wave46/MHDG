@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from bundle.cases import load_case_definition
+from regression_tests.catalog import load_case_definition
 from regression_tests import compare
-from tests.fixtures.harness import REGRESSION_ROOT
+from regression_tests.tests.fixtures.harness import REGRESSION_ROOT
 
 
 @pytest.mark.parametrize("workflow,profile,policy_override", [

@@ -136,12 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         command_parser.print_help()
         return 0
     args = command_parser.parse_args(arguments)
-    # Temporary bridge to existing internals, removed as their owning modules
-    # migrate in steps 3-6. Help remains usable without scientific dependencies.
-    tools_path = str(ROOT / "tools")
-    if tools_path not in sys.path:
-        sys.path.insert(0, tools_path)
-    from support.errors import HarnessError
+    from .support import HarnessError
 
     try:
         return _dispatch(args)
@@ -162,7 +157,7 @@ def _dispatch(args: argparse.Namespace) -> int:
 
         return diagnose(args)
     if args.command in {"run", "prepare"}:
-        from catalogs.layouts import load_layout
+        from .catalog import load_layout
         from .prepare import prepare_run
         from .execute import execute_prepared
 
@@ -202,7 +197,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         return 0
     if args.command == "golden":
         from . import golden, config
-        from support.errors import BundleError
+        from .support import BundleError
 
         if args.action == "refresh":
             values = config.settings(args.settings, case=args.case, bundle=args.bundle, use_build=False)
@@ -239,9 +234,10 @@ def _dispatch(args: argparse.Namespace) -> int:
 def _check(args: argparse.Namespace) -> int:
     from .build import build_solver
     from .suites import run_suite, run_profile
-    from .config import load_selection, build_settings, runtime_settings
-    from catalogs.layouts import load_layouts
-    from support.errors import BundleError
+    from .catalog import load_selection
+    from .config import build_settings, runtime_settings
+    from .catalog import load_layouts
+    from .support import BundleError
 
     if args.build and args.resume:
         raise BundleError("--build cannot be used with --resume; reuse the original build settings")
@@ -288,7 +284,7 @@ def _check(args: argparse.Namespace) -> int:
 
 def _settings(args, case, *, use_build=True):
     from .config import settings
-    from support.errors import BundleError
+    from .support import BundleError
 
     values = settings(
         args.settings, case=case, bundle=args.bundle,
@@ -306,7 +302,7 @@ def _settings(args, case, *, use_build=True):
 
 
 def _compare(args: argparse.Namespace) -> int:
-    from support.errors import BundleError
+    from .support import BundleError
 
     if args.diagnostics and not args.suite:
         raise BundleError("--diagnostics requires --suite")
@@ -315,20 +311,20 @@ def _compare(args: argparse.Namespace) -> int:
             raise BundleError("--suite cannot be combined with individual comparison overrides")
         if args.diagnostics:
             from .diagnostics import check_suite
-            from support.documents import write_json_atomic
+            from .documents import write_json_atomic
 
             report = check_suite(args.path)
             path = args.path.parent / "balance_diagnostics_check.json"
             write_json_atomic(path, report, "balance diagnostics report")
             reporting.diagnostics(report, path)
             return 0 if report["status"] == "passed" else 1
-        from regression_tests.suites import verify_suite
-        from regression_tests.reporting import print_verification_summary
+        from .suites import verify_suite
+        from .reporting import print_verification_summary
 
         path, summary = verify_suite(args.path, ROOT / "cases", ROOT / "tolerances.json")
         print_verification_summary(summary, path)
         return 0 if summary["status"] == "passed" else 1
-    from regression_tests.compare import compare_completed_run
+    from .compare import compare_completed_run
 
     policy, path, report = compare_completed_run(
         args.path, ROOT / "cases", ROOT / "tolerances.json",
@@ -340,9 +336,9 @@ def _compare(args: argparse.Namespace) -> int:
 
 
 def _list(args: argparse.Namespace) -> int:
-    from bundle.cases import load_case_definition
-    from bundle.schemas import load_validated_json
-    from catalogs.layouts import load_layouts
+    from .catalog import load_case_definition
+    from .documents import load_validated_json
+    from .catalog import load_layouts
 
     if args.listing == "layouts":
         entries = load_layouts(ROOT / "layouts.json")

@@ -7,8 +7,8 @@ import h5py
 import numpy as np
 
 from .compare_common import select_candidate
-from support.documents import load_json
-from support.errors import HarnessError
+from .documents import load_json
+from .support import HarnessError
 
 UNITS = {
     "n": ("particles", "particles/s"), "n_n": ("particles", "particles/s"),

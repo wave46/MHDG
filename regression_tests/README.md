@@ -79,7 +79,8 @@ python -m regression_tests check warm --case diverted_case \
 | Generated build manifest | Executables, solver revision, binary/runtime checksums; never enter these manually |
 
 Use `--settings FILE` or `MHDG_REGRESSION_SETTINGS` to select a different machine
-file. Relative paths inside JSON are relative to that file; command-line paths
+JSON file. Legacy KEY=VALUE `.env` settings are no longer accepted. Relative paths
+inside JSON are relative to that file; command-line paths
 are relative to the current directory. Without a machine file, the scratch root
 is `~/.cache/mhdg-regression`; build output defaults to its `builds/` directory.
 No bundle or build is chosen implicitly. `check` prints its effective selections.
@@ -251,8 +252,8 @@ build configuration, so the harness cleans them before building; it also cleans
 between serial and MPI variants. An empty build tree needs no initial clean.
 
 The command prints the generated manifest path and records commands, logs, Git
-state, toolchain versions, environment checksum, and executable checksums. It
-writes no `settings.env`: the manifest selects the new executables directly.
+state, toolchain versions, environment checksum, and executable checksums.
+The manifest selects the new executables directly.
 A manifest may contain just one variant; a suite needing another reports the
 missing build. Use `build` to produce both for subsequent mixed-layout suites.
 
@@ -422,7 +423,8 @@ Run observations retain binary hashes because they identify what was actually
 launched. Revision and build configuration are read from the build manifest.
 Suite summaries do not copy the machine settings dictionary; unused executables
 and build-only preferences do not affect resume. Selected runtime files are
-checked even when using prebuilt executables without a build manifest.
+checked independently of executable checksums. Executables are selected through
+a build manifest.
 Summaries from before this metadata change require a new run ID; saved outputs
 remain available for comparison. Published canonical references from staged runs
 include a local copy of the final execution metadata.
@@ -627,7 +629,15 @@ Except for transient initialization and race probes, final Newton error must
 not exceed `2e-4`. These are
 regression limits for `legacy_case`, not physical-accuracy targets.
 
-## Focused synthetic tests
+## Harness implementation and tests
+
+`catalog.py` owns case/workflow inheritance, layouts and suite/profile resolution;
+`config.py` owns machine JSON, build selection and environment setup. Preparation
+and suites accept resolved settings, so they do not parse configuration files.
+`bundles.py` owns bundle validation and publication-class checks. Shared document/
+schema I/O, file/path contracts and errors/record identifiers live in `documents.py`,
+`files.py` and `support.py`. All callers use package imports; no `tools/` import
+bridge or test path injection is needed.
 
 These tests use temporary bundles, small arrays, and fake executables. They do
 not launch MHDG or need physical data.

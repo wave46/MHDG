@@ -8,9 +8,9 @@ import pytest
 
 from regression_tests import compare
 from regression_tests.compare_adaptive import SampledFields, compare_sampled_fields, reference_sample_points
-from tests.fixtures.harness import REGRESSION_ROOT
-from tests.fixtures.solutions import write_solution
-from support.errors import ComparisonError
+from regression_tests.tests.fixtures.harness import REGRESSION_ROOT
+from regression_tests.tests.fixtures.solutions import write_solution
+from regression_tests.support import ComparisonError
 
 
 @pytest.mark.parametrize("staged", [False, True])

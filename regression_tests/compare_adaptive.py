@@ -10,8 +10,8 @@ from typing import Any
 import h5py
 import numpy as np
 
-from support.errors import ComparisonError
-from support.paths import require_file
+from .support import ComparisonError
+from .files import require_file
 from .compare_common import calculate_error_norms
 
 

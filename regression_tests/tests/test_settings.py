@@ -1,19 +1,13 @@
 """Settings ownership, build selection and read-only setup checks."""
 
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT.parent))
-sys.path.insert(0, str(ROOT / "tools"))
 
-from regression_tests.config import settings, build_settings  # noqa: E402
-from support.errors import BundleError  # noqa: E402
-from support.files import file_identity  # noqa: E402
-from tests.fixtures.harness import create_harness, run_command  # noqa: E402
+from regression_tests.config import settings, build_settings
+from regression_tests.support import BundleError, DocumentError
+from regression_tests.tests.fixtures.harness import create_harness, run_command
 
 
 @pytest.fixture
@@ -23,26 +17,8 @@ def setup(tmp_path):
         'echo "Error: 1.0E-5"\necho "Output written to file outputs/result.h5"\n'
     ))
 
-    def record(path):
-        return {"path": str(path.relative_to(tmp_path)), **file_identity(path)}
-
-    manifest = tmp_path / "build_metadata.json"
-    manifest.write_text(json.dumps({
-        "schema_version": 2, "status": "completed", "build_id": "test-build",
-        "repository": {"revision": "test-revision"},
-        "profile": {"model": "NGammaTiTeNeutral", "dimension": "2D"},
-        "artifacts": {
-            "serial": record(harness.serial_executable),
-            "parallel": record(harness.parallel_executable),
-        },
-        "runtime_files": {harness.runtime_file.name: record(harness.runtime_file)},
-    }))
-    document = {
-        "run_root": "runs", "mpi_launcher": str(harness.mpi_launcher),
-        "defaults": {"build": manifest.name, "bundles": {"legacy_case": "bundle"}},
-    }
-    path = tmp_path / "machine.json"
-    path.write_text(json.dumps(document))
+    manifest, path = harness.build_manifest, harness.settings
+    document = json.loads(path.read_text())
     return harness, path, manifest, document
 
 
@@ -68,6 +44,9 @@ def test_configuration_rejects_user_owned_generated_fields(setup):
     document["solver_revision"] = "user-entered"
     path.write_text(json.dumps(document))
     with pytest.raises(BundleError, match="unknown machine settings fields: solver_revision"):
+        settings(path)
+    path.write_text("MHDG_REGRESSION_DATA_ROOT=/legacy/data\n")
+    with pytest.raises(DocumentError, match="invalid JSON in machine settings"):
         settings(path)
 
 

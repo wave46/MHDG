@@ -6,13 +6,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from bundle.cases import load_case_definition
+from .catalog import load_case_definition
 from .references import ReferenceMatrix, load_reference_matrix
-from support.documents import load_json, write_json_atomic
-from support.errors import BundleError, ComparisonError
-from support.files import file_identity
-from support.paths import recorded_directory, recorded_file, require_directory
-from support.time import utc_now
+from .documents import load_json, write_json_atomic
+from .support import BundleError, ComparisonError, utc_now
+from .files import file_identity, recorded_directory, recorded_file, require_directory
 from .compare_adaptive import compare_adaptive_files, mesh_differences
 from .compare_fixed import compare_hdf5_files
 from .execute import final_execution

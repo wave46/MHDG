@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from . import config
-from support.errors import HarnessError, BundleError
+from .support import HarnessError, BundleError
 
 
 def diagnose(args):
@@ -27,12 +27,12 @@ def diagnose(args):
         print("Install regression_tests/requirements.txt with this Python interpreter.")
         return 1
 
-    from regression_tests.bundles import validate_bundle_root
-    from bundle.settings import bundle_root_from_settings
-    from bundle.cases import load_case_definition
-    from catalogs.layouts import load_layouts
+    from .bundles import validate_bundle_root
+    from .config import bundle_root_from_settings
+    from .catalog import load_case_definition, load_selection
+    from .catalog import load_layouts
     try:
-        _, checks = config.load_selection(
+        _, checks = load_selection(
             args.suite, config.ROOT / "suites.json", config.ROOT / "layouts.json",
             config.ROOT / "cases", case_id=args.case,
         )

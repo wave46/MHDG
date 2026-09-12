@@ -5,10 +5,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "tools"))
 
-from tests.fixtures.harness import create_harness, run_command  # noqa: E402
+from regression_tests.tests.fixtures.harness import create_harness, run_command
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_help_and_discovery_need_no_machine_setup():
@@ -22,7 +23,13 @@ def test_help_and_discovery_need_no_machine_setup():
     )
     assert help_result.returncode == 0, help_result.stderr
     assert "--cases" not in help_result.stdout
-    environment = {"MHDG_REGRESSION_SETTINGS": "/nonexistent/settings.env"}
+    doctor = subprocess.run(
+        [sys.executable, "-B", "-S", "-m", "regression_tests", "doctor"],
+        cwd=ROOT.parent, capture_output=True, text=True,
+    )
+    assert doctor.returncode == 1 and "FAIL Python jsonschema" in doctor.stdout
+    assert "Traceback" not in doctor.stderr
+    environment = {"MHDG_REGRESSION_SETTINGS": "/nonexistent/settings.json"}
     for listing in ("cases", "suites", "layouts", "workflows"):
         result = run_command("list", listing, environment=environment)
         assert result.returncode == 0, result.stderr
@@ -37,9 +44,9 @@ def test_usage_and_runtime_failures_have_distinct_exit_codes(tmp_path):
     usage = run_command("check", "--cases", str(tmp_path))
     assert usage.returncode == 2
     assert "unrecognized arguments" in usage.stderr
-    missing = run_command("check", "--settings", str(tmp_path / "missing.env"))
+    missing = run_command("check", "--settings", str(tmp_path / "missing.json"))
     assert missing.returncode == 1
-    assert missing.stderr.startswith("error: cannot read settings file")
+    assert missing.stderr.startswith("error: cannot read machine settings")
     assert "Traceback" not in missing.stderr
 
 

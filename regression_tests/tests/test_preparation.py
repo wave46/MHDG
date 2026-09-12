@@ -7,9 +7,9 @@ import pytest
 
 from regression_tests.prepare import prepare_run
 from regression_tests.parameters import render_parameter_file
-from bundle.cases import load_case_definition
-from support.errors import BundleError
-from tests.fixtures.harness import create_harness
+from regression_tests.catalog import load_case_definition
+from regression_tests.support import BundleError
+from regression_tests.tests.fixtures.harness import create_harness
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,7 +20,7 @@ def harness(tmp_path):
 
 
 def prepare(harness, workflow="warm", run_id="probe", **options):
-    return prepare_run(harness.settings, "legacy_case", workflow, "mpi4_omp4",
+    return prepare_run(harness.values, "legacy_case", workflow, "mpi4_omp4",
                        ROOT / "cases", ROOT / "layouts.json", run_id, **options)
 
 

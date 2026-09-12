@@ -10,10 +10,9 @@ import h5py
 
 from regression_tests import suites
 from regression_tests.compare import compare_generated_meshes, producer_converged
-from support.errors import BundleError
-from bundle.settings import read_settings
-from tests.fixtures.harness import create_harness, run_command, REGRESSION_ROOT as ROOT
-from tests.fixtures.solutions import write_solution
+from regression_tests.support import BundleError
+from regression_tests.tests.fixtures.harness import create_harness, run_command, REGRESSION_ROOT as ROOT
+from regression_tests.tests.fixtures.solutions import write_solution
 
 SOLVER = """#!/usr/bin/env bash
 set -euo pipefail
@@ -35,7 +34,7 @@ def harness(tmp_path):
 
 def run(harness, name="warm", run_id="check", **kwargs):
     kwargs.setdefault("parameter_overrides", {"balance_diagnostics_mode": "off"})
-    return suites.run_suite(harness.settings, name, ROOT / "cases", ROOT / "layouts.json",
+    return suites.run_suite(harness.values, name, ROOT / "cases", ROOT / "layouts.json",
                             ROOT / "suites.json", ROOT / "tolerances.json", run_id, case_id="legacy_case", **kwargs)
 
 
@@ -91,7 +90,7 @@ def test_resume_rechecks_comparisons_and_rejects_changed_inputs(harness, monkeyp
     shutil.copytree(ROOT / "cases", catalog / "cases")
     shutil.copytree(ROOT / "schemas", catalog / "schemas")
     shutil.copy2(ROOT / "workflows.json", catalog / "workflows.json")
-    selected = read_settings(harness.settings)
+    selected = harness.values
     def check(resume=False):
         return suites.run_suite(selected, "warm", catalog / "cases", ROOT / "layouts.json",
                                  ROOT / "suites.json", ROOT / "tolerances.json", "checked", resume=resume, case_id="legacy_case")
@@ -218,7 +217,7 @@ def test_profile_resumes_across_cases_without_repeating_success(harness, monkeyp
 
     diverted = harness.root / "diverted"
     create_bundle("diverted_case", harness.source, diverted, ROOT / "cases")
-    values = read_settings(harness.settings)
+    values = harness.values
     settings = {"legacy_case": values,
                 "diverted_case": {**values, "MHDG_REGRESSION_DATA_ROOT": str(diverted)}}
     checks = [{"suite_id": "warm", "case_id": case} for case in settings]

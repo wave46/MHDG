@@ -10,9 +10,9 @@ from typing import Any, Literal
 
 import numpy as np
 
-from support.documents import load_json
-from support.errors import ComparisonError
-from support.paths import recorded_file, require_file
+from .documents import load_json
+from .support import ComparisonError
+from .files import recorded_file, require_file
 
 
 TIME_SAVE_RE = re.compile(r"_\d{4}\.h5$")

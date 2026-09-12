@@ -8,20 +8,16 @@ import shutil
 import time
 from typing import Any
 
-from bundle.cases import load_case_definition
-from bundle.settings import bundle_root_from_settings, read_settings
-from regression_tests.bundles import validate_bundle_root
-from .config import load_suite_definition, require_bundle_class
+from .catalog import load_case_definition, load_suite_definition
+from .config import bundle_root_from_settings
+from .bundles import validate_bundle_root, require_bundle_class
 from .prepare import prepare_run
 from .execute import execute_prepared, reusable_outputs
 from .compare import compare_completed_run, compare_generated_meshes, producer_converged
 from .compare_common import select_candidate
-from support.documents import load_json, write_json_atomic
-from support.errors import BundleError, ComparisonError, HarnessError
-from support.files import file_identity
-from support.paths import require_file, recorded_directory
-from support.identifiers import IDENTIFIER_RE
-from support.time import utc_now, utc_run_id
+from .documents import load_json, write_json_atomic
+from .support import BundleError, ComparisonError, HarnessError, IDENTIFIER_RE, utc_now, utc_run_id
+from .files import file_identity, require_file, recorded_directory
 
 
 @dataclass(frozen=True)
@@ -151,7 +147,7 @@ def _compare_pair(
             result["status"] = "failed"
             result["failures"].extend(generated_meshes["failures"])
         if result["status"] == "passed":
-            from regression_tests.diagnostics import compare_outputs
+            from .diagnostics import compare_outputs
 
             diagnostic_report = compare_outputs(reference, _selected_output(candidate))
             result["diagnostics"] = diagnostic_report
@@ -306,7 +302,7 @@ def suite_execution_inputs(
             Path(resolved_launcher),
             "MPI launcher",
         )
-    # Runtime inputs may also come from a prebuilt executable without a manifest.
+    # Runtime inputs affect resume independently of the executable checksum.
     # Record only selected paths, once even when both variants share the file.
     from .prepare import _runtime_files
 
@@ -378,12 +374,11 @@ def _validate_recorded_cells(
 
 
 def run_suite(
-    settings_path, suite_id, case_directory, layouts_path, suites_path,
+    settings, suite_id, case_directory, layouts_path, suites_path,
     tolerances_path, run_id=None, required_bundle_class=None, compare=True,
     resume=False, parameter_overrides=None, *, case_id=None,
 ):
     suite = load_suite_definition(suite_id, suites_path, layouts_path, case_directory, case_id=case_id)
-    settings = read_settings(settings_path)
     bundle_root = bundle_root_from_settings(settings)
     validate_bundle_root(bundle_root, case_directory)
     if required_bundle_class:

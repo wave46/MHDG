@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 
 from regression_tests.compare_fixed import compare_hdf5_files
-from tests.fixtures.harness import run_command
-from tests.fixtures.solutions import write_solution
+from regression_tests.tests.fixtures.harness import run_command
+from regression_tests.tests.fixtures.solutions import write_solution
 
 TOLERANCES = {
     "newton_error_max": 2e-4, "mesh_coordinate_atol": 1e-12,

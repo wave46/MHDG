@@ -9,9 +9,9 @@ from types import SimpleNamespace
 import pytest
 
 from regression_tests import build, cli, config
-from support.errors import BundleError
-from support.files import file_identity
-from tests.fixtures.harness import create_harness
+from regression_tests.support import BundleError
+from regression_tests.files import file_identity
+from regression_tests.tests.fixtures.harness import create_harness
 
 
 @pytest.fixture
@@ -84,11 +84,10 @@ def test_required_variants_cleaning_and_manifest_selection(setup, variants, exis
     assert (result.path / "bin" / build.RUNTIME_FILE).read_bytes() == (
         setup.repository / "test" / build.RUNTIME_FILE
     ).read_bytes()
-    assert not list(result.path.rglob("*.env"))
 
-    # Selecting a partial build must discard executable paths from older settings.
-    old_settings = setup.repository / "old.env"
-    old_settings.write_text("MHDG_SERIAL_EXECUTABLE=/old/serial\nMHDG_PARALLEL_EXECUTABLE=/old/parallel\n")
+    # An explicit partial build replaces the default build as a whole.
+    old_settings = setup.repository / "machine.json"
+    old_settings.write_text(json.dumps({"defaults": {"build": "unavailable-old-build.json"}}))
     selected = config.settings(old_settings, build_manifest=result.metadata_path)
     for variant, key in (("serial", "MHDG_SERIAL_EXECUTABLE"), ("parallel", "MHDG_PARALLEL_EXECUTABLE")):
         if variant in result.executables:
@@ -146,7 +145,6 @@ def test_check_builds_only_its_layouts_and_runs_from_manifest(setup, tmp_path, m
     case = "diverted_case" if profile else "legacy_case"
     summary = json.loads((harness.run_root / f"suites/warm/{case}/new-build/suite_summary.json").read_text())
     assert summary["execution_inputs"]["build_manifest"]["path"] == str(manifest)
-    assert not list(manifest.parent.rglob("*.env"))
 
 
 FAKE_MAKE = """#!/usr/bin/env bash

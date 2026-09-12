@@ -1,4 +1,4 @@
-"""Machine preferences and invocation selections, adapted to existing runners."""
+"""Machine JSON, generated build selection and runtime environment setup."""
 
 from __future__ import annotations
 
@@ -6,17 +6,11 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
 
-from bundle.cases import load_case_definition
-from bundle.schemas import load_validated_json
-from catalogs.layouts import layout_pairs, load_layouts
 
-from bundle.settings import read_settings
-from support.documents import load_json
-from support.environments import source_environment
-from support.errors import BundleError
-from support.files import file_identity
+from .documents import load_json
+from .support import BundleError
+from .files import file_identity, require_file, require_directory
 
 ROOT = Path(__file__).resolve().parent
 MACHINE_KEYS = {
@@ -31,8 +25,8 @@ MACHINE_KEYS = {
 def settings(path=None, *, case=None, bundle=None, build_manifest=None, use_build=True):
     """Resolve explicit selections before local defaults; never choose newest data.
 
-    The MHDG_* dictionary is a temporary bridge to the existing runners. No
-    intermediate settings files are written; resume records the selected values.
+    Return one resolved runtime dictionary for preparation/execution; no other
+    module reads machine settings or writes intermediate settings files.
     """
     values, defaults = machine_settings(path)
     if bundle is None:
@@ -43,11 +37,6 @@ def settings(path=None, *, case=None, bundle=None, build_manifest=None, use_buil
     values.setdefault("MHDG_REGRESSION_BUILD_ROOT", str(Path(values["MHDG_REGRESSION_RUN_ROOT"]) / "builds"))
     if bundle is not None:
         values["MHDG_REGRESSION_DATA_ROOT"] = str(Path(bundle).expanduser().resolve())
-    if not use_build or build_manifest is not None:
-        # A partial new build must not inherit an executable from an old selection.
-        for key in ("MHDG_SERIAL_EXECUTABLE", "MHDG_PARALLEL_EXECUTABLE", "MHDG_SOLVER_REVISION",
-                    "MHDG_BUILD_MANIFEST"):
-            values.pop(key, None)
     if build_manifest is not None and use_build:
         values.update(build_settings(Path(build_manifest).expanduser()))
     return values
@@ -61,34 +50,29 @@ def machine_settings(path=None):
         optional = not configured
     else:
         path, optional = Path(path).expanduser(), False
-    defaults = {}
-    if path.suffix == ".env":
-        # Explicit migration input for old campaigns/prebuilt environments.
-        values = read_settings(path)
-    else:
-        document = {} if optional and not path.exists() else load_json(path, "machine settings")
-        _keys(document, {*MACHINE_KEYS, "defaults"}, "machine settings")
-        values = {"MHDG_REGRESSION_SETTINGS_VERSION": "2"}
-        for key, value in document.items():
-            if key == "defaults":
-                continue
-            if key == "build_jobs":
-                if type(value) is not int or value < 1:
-                    raise BundleError("build_jobs must be a positive integer")
-                values[MACHINE_KEYS[key]] = str(value)
-            elif key == "mpi_launcher" and isinstance(value, str) and "/" not in value:
-                values[MACHINE_KEYS[key]] = _text(value, key)
-            else:
-                values[MACHINE_KEYS[key]] = str(_path(value, path.parent, key))
-        defaults = document.get("defaults", {})
-        _keys(defaults, {"build", "bundles"}, "defaults")
-        bundles = defaults.get("bundles", {})
-        if not isinstance(bundles, dict):
-            raise BundleError("defaults.bundles must map case identifiers to bundle paths")
-        defaults = {"bundles": {name: _path(value, path.parent, f"defaults.bundles.{name}")
-                                 for name, value in bundles.items()},
-                    **({"build": _path(defaults["build"], path.parent, "defaults.build")}
-                       if "build" in defaults else {})}
+    document = {} if optional and not path.exists() else load_json(path, "machine settings")
+    _keys(document, {*MACHINE_KEYS, "defaults"}, "machine settings")
+    values = {}
+    for key, value in document.items():
+        if key == "defaults":
+            continue
+        if key == "build_jobs":
+            if type(value) is not int or value < 1:
+                raise BundleError("build_jobs must be a positive integer")
+            values[MACHINE_KEYS[key]] = str(value)
+        elif key == "mpi_launcher" and isinstance(value, str) and "/" not in value:
+            values[MACHINE_KEYS[key]] = _text(value, key)
+        else:
+            values[MACHINE_KEYS[key]] = str(_path(value, path.parent, key))
+    defaults = document.get("defaults", {})
+    _keys(defaults, {"build", "bundles"}, "defaults")
+    bundles = defaults.get("bundles", {})
+    if not isinstance(bundles, dict):
+        raise BundleError("defaults.bundles must map case identifiers to bundle paths")
+    defaults = {"bundles": {name: _path(value, path.parent, f"defaults.bundles.{name}")
+                             for name, value in bundles.items()},
+                **({"build": _path(defaults["build"], path.parent, "defaults.build")}
+                   if "build" in defaults else {})}
     return values, defaults
 
 
@@ -211,111 +195,54 @@ def _path(value, directory, label):
     return (directory / path).resolve() if not path.is_absolute() else path.resolve()
 
 
-def load_suite_definition(
-    suite_id: str,
-    suites_path: Path,
-    layouts_path: Path,
-    case_directory: Path,
-    *, case_id: str | None = None,
-) -> dict[str, Any]:
-    """Load one suite and validate its workflow and layout references."""
-    schema_path = suites_path.parent / "schemas" / "suites.schema.json"
-    document = load_validated_json(suites_path, schema_path, "suite definitions")
-    declaration = document["suites"].get(suite_id)
-    if declaration is None:
-        available = ", ".join(sorted(document["suites"]))
-        raise BundleError(f"unknown suite {suite_id}; available: {available}")
-    layouts = load_layouts(layouts_path)
-    defaults = document["defaults"]
-    relations = declaration.get("relations", [])
-    selected = declaration.get(
-        "layouts", "all" if relations else [defaults["layout"]]
-    )
-    selected = list(layouts) if selected == "all" else selected
-    unknown_layouts = [layout for layout in selected if layout not in layouts]
-    if unknown_layouts:
-        raise BundleError(
-            f"suite {suite_id} has unknown layouts: {', '.join(unknown_layouts)}"
-        )
 
-    pairs = layout_pairs({name: layouts[name] for name in selected}, relations)
-    suite = {
-        "description": declaration["description"],
-        "case_id": case_id or declaration.get("case", defaults["case"]),
-        "diagnostics": declaration.get("diagnostics", "off"),
-        "workflow_ids": declaration["workflows"],
-        "layouts": list(dict.fromkeys(
-            layout for pair in pairs for layout in pair.values()
-        )) if pairs else selected,
-        "reference_comparisons": declaration.get("reference_comparisons", not pairs),
-    }
-    if pairs:
-        suite["layout_comparisons"] = pairs
-        suite["tolerance_profile"] = declaration["tolerance_profile"]
-        if "layout_comparison_policy" in declaration:
-            suite["layout_comparison_policy"] = declaration["layout_comparison_policy"]
 
-    case = load_case_definition(suite["case_id"], case_directory)
-    unknown_workflows = [
-        workflow_id
-        for workflow_id in suite["workflow_ids"]
-        if workflow_id not in case["workflows"]
+
+def source_environment(
+    script: Path,
+    base_environment: dict[str, str] | None = None,
+) -> tuple[Path, dict[str, str]]:
+    """Source one shell script and return its resolved path and environment."""
+    script = require_file(script, "environment script")
+    command = [
+        "bash",
+        "-c",
+        'source "$1" >/dev/null && env -0',
+        "mhdg-regression-environment",
+        str(script),
     ]
-    if unknown_workflows:
+    try:
+        completed = subprocess.run(
+            command,
+            env=base_environment,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise BundleError(f"cannot source environment script {script}: {exc}") from exc
+    if completed.returncode != 0:
+        error = completed.stderr.decode(errors="replace").strip()
+        detail = f": {error}" if error else ""
         raise BundleError(
-            f"suite {suite_id} has unknown workflows: "
-            f"{', '.join(unknown_workflows)}"
+            f"environment script failed ({completed.returncode}){detail}"
         )
-    return suite
+    try:
+        return script, {
+            os.fsdecode(key): os.fsdecode(value)
+            for entry in completed.stdout.split(b"\0")
+            if entry
+            for key, value in [entry.split(b"=", 1)]
+        }
+    except ValueError as exc:
+        raise BundleError("environment script produced invalid environment data") from exc
 
 
-def load_selection(name, suites_path, layouts_path, case_directory, *, case_id=None):
-    """Expand a profile into unique case/suite selections; focused suites use the same loader."""
-    document = load_validated_json(
-        suites_path, suites_path.parent / "schemas/suites.schema.json", "suite definitions",
-    )
-    profiles = document.get("profiles", {})
-    if profiles.keys() & document["suites"].keys():
-        raise BundleError("profile and suite names must be distinct")
-    is_profile = name in profiles
-    if is_profile and case_id:
-        raise BundleError("--case applies to a focused suite; profiles declare their cases")
-
-    def expand(profile, ancestors=()):
-        if profile in ancestors:
-            raise BundleError(f"cyclic profile inclusion: {' -> '.join((*ancestors, profile))}")
-        if profile not in profiles:
-            raise BundleError(f"unknown included profile: {profile}")
-        for parent in profiles[profile].get("include", []):
-            yield from expand(parent, (*ancestors, profile))
-        yield from profiles[profile]["checks"]
-
-    entries = expand(name) if is_profile else [{"suite": name, "case": case_id}]
-    selected = {}
-    for entry in entries:
-        suite = load_suite_definition(
-            entry["suite"], suites_path, layouts_path, case_directory, case_id=entry.get("case"),
-        )
-        selected[(entry["suite"], suite["case_id"])] = {"suite_id": entry["suite"], **suite}
-    if not selected:
-        raise BundleError(f"selection {name} contains no checks")
-    return is_profile, list(selected.values())
-
-
-def require_bundle_class(
-    bundle_root: Path,
-    case_directory: Path,
-    required: str,
-) -> None:
-    """Require the source bundle to declare the requested publication class."""
-    schema = case_directory.parent / "schemas" / "bundle-manifest.schema.json"
-    manifest = load_validated_json(
-        bundle_root / "manifest.json",
-        schema,
-        "bundle manifest",
-    )
-    actual = manifest.get("bundle_class", "unspecified")
-    if actual != required:
-        raise BundleError(
-            f"golden-check requires bundle_class={required}; found {actual}"
-        )
+def bundle_root_from_settings(values):
+    """Resolve the selected external bundle; file contracts are owned by files.py."""
+    value = values.get("MHDG_REGRESSION_DATA_ROOT")
+    if not value:
+        raise BundleError("no bundle selected; pass --bundle DIR or set defaults.bundles")
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        raise BundleError("selected bundle root must be an absolute path")
+    return require_directory(path, "bundle root")

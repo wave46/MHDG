@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from regression_tests.diagnostics import check_output, check_suite, compare_outputs
-from tests.fixtures.harness import run_command
+from regression_tests.tests.fixtures.harness import run_command
 
 
 @pytest.fixture

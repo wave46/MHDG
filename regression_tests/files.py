@@ -1,11 +1,30 @@
-"""Explicit path contracts for regression-harness inputs and records."""
+"""File identities and direct/recorded path contracts."""
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
-from support.errors import PathError
+from .support import PathError
+
+def sha256_digest(path: Path) -> str:
+    """Return the hexadecimal SHA-256 digest of a file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def file_identity(path: Path) -> dict[str, Any]:
+    """Return the stable size and checksum fields shared by harness records."""
+    try:
+        size = path.stat().st_size
+        digest = sha256_digest(path)
+    except OSError as exc:
+        raise PathError(f"cannot inspect file {path}: {exc}") from exc
+    return {"size_bytes": size, "sha256": digest}
 
 
 def require_file(path: Path, label: str) -> Path:

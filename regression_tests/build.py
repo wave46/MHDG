@@ -10,11 +10,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from support.documents import write_json_atomic
-from support.environments import source_environment
-from support.errors import BundleError
-from support.files import file_identity
-from support.time import utc_now
+from .documents import write_json_atomic
+from .config import source_environment
+from .support import BundleError, utc_now
+from .files import file_identity
 
 VARIANTS = {"serial": "serial", "parallel": "parall"}
 RUNTIME_FILE = "positionFeketeNodesTri2D.h5"

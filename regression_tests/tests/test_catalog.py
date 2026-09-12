@@ -2,17 +2,16 @@
 
 import json
 import shutil
-import sys
 from pathlib import Path
 
 import pytest
 
 
-REGRESSION_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
+from regression_tests.catalog import load_case_definition
+from regression_tests.support import BundleError
 
-from bundle.cases import load_case_definition  # noqa: E402
-from support.errors import BundleError  # noqa: E402
+
+REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture

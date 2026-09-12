@@ -11,15 +11,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from bundle.cases import load_case_definition, workflow_required_roles
-from bundle.schemas import load_validated_json
-from bundle.settings import bundle_root_from_settings, read_settings
-from regression_tests.bundles import validate_bundle_root
-from catalogs.layouts import load_layout
-from support.documents import write_json_direct
-from support.errors import BundleError
-from support.identifiers import IDENTIFIER_RE
-from support.time import utc_now, utc_run_id
+from .catalog import load_case_definition, workflow_required_roles, load_layout
+from .documents import load_validated_json, write_json_direct
+from .config import bundle_root_from_settings
+from .bundles import validate_bundle_root
+from .support import BundleError, IDENTIFIER_RE, utc_now, utc_run_id
 from .parameters import render_parameter_file
 
 
@@ -106,7 +102,7 @@ RUNTIME_FILENAMES = ("positionFeketeNodesTri2D.h5",)
 
 
 def load_preparation_inputs(
-    settings_path: Path | dict[str, str],
+    settings: dict[str, str],
     case_id: str,
     workflow_id: str,
     layout_id: str,
@@ -119,7 +115,6 @@ def load_preparation_inputs(
     require_reference: bool = True,
 ) -> PreparationInputs:
     """Resolve the files and declarations needed to prepare one run."""
-    settings = read_settings(settings_path)
     bundle_root = bundle_root_from_settings(settings)
     if validate_bundle:
         validate_bundle_root(bundle_root, case_directory)
@@ -504,7 +499,7 @@ def _prepared_run(
 
 
 def prepare_run(
-    settings_path: Path | dict[str, str],
+    settings: dict[str, str],
     case_id: str,
     workflow_id: str,
     layout_id: str,
@@ -518,7 +513,7 @@ def prepare_run(
 ) -> PreparedExecution:
     """Create one validated, isolated run or staged workflow directory."""
     inputs = load_preparation_inputs(
-        settings_path,
+        settings,
         case_id,
         workflow_id,
         layout_id,

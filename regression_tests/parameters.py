@@ -6,7 +6,7 @@ import math
 import re
 from pathlib import Path
 
-from support.errors import BundleError
+from .support import BundleError
 
 
 ASSIGNMENT_RE = re.compile(

@@ -11,11 +11,10 @@ import pytest
 
 from regression_tests import cli, golden
 from regression_tests.bundles import validate_bundle_root
-from bundle.settings import read_settings
-from support.errors import BundleError
-from support.files import file_identity
-from tests.fixtures.harness import create_harness, REGRESSION_ROOT
-from tests.fixtures.solutions import write_solution
+from regression_tests.support import BundleError
+from regression_tests.files import file_identity
+from regression_tests.tests.fixtures.harness import create_harness, REGRESSION_ROOT
+from regression_tests.tests.fixtures.solutions import write_solution
 
 SOLVER = '''#!/usr/bin/env bash
 set -euo pipefail
@@ -58,17 +57,11 @@ def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(golden, 'ROOT', root)
     harness = create_harness(tmp_path, solver=SOLVER, reference_writer=write_off_solution)
     write_off_solution(harness.serial_executable.parent / 'seed.h5', 1)
-    build_path = tmp_path / 'build.json'
-    build_path.write_text(json.dumps({
-        'schema_version': 2, 'status': 'completed', 'build_id': 'test-build',
-        'repository': {'revision': 'a' * 40, 'changes': []},
-        'profile': {'model': 'NGammaTiTeNeutral', 'dimension': '2D'},
-        'artifacts': {'serial': {'path': str(harness.serial_executable), **file_identity(harness.serial_executable)}},
-        'runtime_files': {harness.runtime_file.name: {'path': str(harness.runtime_file), **file_identity(harness.runtime_file)}}}))
+    build_path = harness.build_manifest
     build = Mock(return_value=SimpleNamespace(metadata_path=build_path))
     monkeypatch.setattr(golden, 'build_solver', build)
     return SimpleNamespace(harness=harness, root=root, build=build, build_path=build_path,
-                           values=read_settings(harness.settings), workspace=tmp_path / 'refresh', output=tmp_path / 'golden')
+                           values=harness.values, workspace=tmp_path / 'refresh', output=tmp_path / 'golden')
 
 
 def publish(setup):
@@ -104,7 +97,6 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup, h
     cold = Path(report['producers'][0]['run_directory'])
     assert restart.is_symlink() and restart.resolve().is_relative_to(cold)
     assert not (warm / 'inputs/reference.h5').exists()
-    assert not list(setup.workspace.rglob('*.env'))
     result = cli.main(['golden', 'publish', str(setup.workspace), '--output', str(setup.output),
                       '--bundle-version', 'reviewed-1', '--reason', 'Accepted solver change', '--provenance', 'Review record 42'])
     assert result == 0

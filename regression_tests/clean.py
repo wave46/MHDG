@@ -5,8 +5,8 @@ import os
 import shutil
 
 from .config import machine_settings
-from support.documents import load_json
-from support.errors import BundleError
+from .documents import load_json
+from .support import BundleError
 
 MARKERS = ("refresh.json", "campaign.json", "manifest.json", "run_plan.json",
            "run_metadata.json", "suite_summary.json", "profile_summary.json", "build_metadata.json")
@@ -100,14 +100,10 @@ def inventory(root, *, keep=(), settings=None):
             raise BundleError(f"--keep must name a directory: {path}")
         if not path.is_relative_to(root):
             scan(path)
-    values, defaults = machine_settings(settings)
+    _, defaults = machine_settings(settings)
     protected.extend(defaults.get("bundles", {}).values())
     if defaults.get("build"):
         protected.append(defaults["build"])
-    # Explicit legacy settings can still select external inputs during migration.
-    protected.extend(Path(values[key]).expanduser().resolve() for key in
-                     ("MHDG_REGRESSION_DATA_ROOT", "MHDG_BUILD_MANIFEST",
-                      "MHDG_SERIAL_EXECUTABLE", "MHDG_PARALLEL_EXECUTABLE") if values.get(key))
     for row in rows:
         path = row["path"]
         if path == root or not path.is_relative_to(root):

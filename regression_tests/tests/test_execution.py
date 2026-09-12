@@ -7,8 +7,8 @@ import pytest
 
 from regression_tests.execute import execute_prepared, final_execution
 from regression_tests.prepare import prepare_run
-from support.files import file_identity
-from tests.fixtures.harness import REGRESSION_ROOT, create_harness, run_command
+from regression_tests.files import file_identity
+from regression_tests.tests.fixtures.harness import REGRESSION_ROOT, create_harness, run_command
 
 
 @pytest.fixture
@@ -114,7 +114,7 @@ def test_stages_stop_when_producer_fails_or_output_is_ambiguous(harness, ambiguo
 @pytest.mark.parametrize("log_failure", [False, True])
 def test_launch_failure_is_recorded(harness, log_failure):
     prepared = prepare_run(
-        harness.settings, "legacy_case", "warm", "serial_omp1",
+        harness.values, "legacy_case", "warm", "serial_omp1",
         REGRESSION_ROOT / "cases", REGRESSION_ROOT / "layouts.json", "launch-failure",
     )
     if log_failure:

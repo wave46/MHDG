@@ -4,8 +4,8 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 import subprocess
 
-from .config import load_selection
-from support.errors import BundleError
+from .catalog import load_selection
+from .support import BundleError
 
 ROOT = Path(__file__).resolve().parent
 # First matching rule owns a file. Keep the mapping explicit and small; unknown

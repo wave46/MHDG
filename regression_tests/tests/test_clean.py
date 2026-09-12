@@ -5,7 +5,7 @@ import pytest
 
 from regression_tests import cli
 from regression_tests.clean import cleanup
-from support.errors import BundleError, DocumentError
+from regression_tests.support import BundleError, DocumentError
 
 
 def record(directory, name, **values):

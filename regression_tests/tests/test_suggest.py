@@ -6,7 +6,7 @@ import pytest
 
 from regression_tests import cli, reporting
 from regression_tests.suggest import changed_paths, recommendations
-from support.errors import BundleError
+from regression_tests.support import BundleError
 
 
 def git(root, *arguments):

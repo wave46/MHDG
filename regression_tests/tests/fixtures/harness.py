@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from regression_tests.bundles import create_bundle
-from tests.fixtures.case_data import write_case_source
+from regression_tests.config import settings as resolve_settings
+from regression_tests.files import file_identity
+from regression_tests.tests.fixtures.case_data import write_case_source
 
 
 REGRESSION_ROOT = Path(__file__).resolve().parents[2]
@@ -59,6 +61,22 @@ class HarnessFixture:
                 else self.parallel_executable
             )
             write_executable(path, contents)
+        self.write_build_record()
+
+    @property
+    def values(self):
+        return resolve_settings(self.settings, case="legacy_case")
+
+    def write_build_record(self):
+        def record(path):
+            return {"path": path.name, **file_identity(path)}
+        self.build_manifest.write_text(json.dumps({
+            "schema_version": 2, "status": "completed", "build_id": "fixture-build",
+            "repository": {"revision": "fixture-revision"},
+            "profile": {"model": "NGammaTiTeNeutral", "dimension": "2D"},
+            "artifacts": {"serial": record(self.serial_executable), "parallel": record(self.parallel_executable)},
+            "runtime_files": {self.runtime_file.name: record(self.runtime_file)},
+        }))
 
     def run_directory(
         self,
@@ -96,46 +114,21 @@ def create_harness(
     runtime.write_text("synthetic Fekete nodes\n", encoding="utf-8")
 
     environment_script = None
-    build_manifest = None
-    extra_settings = ""
     if include_provenance:
         environment_script = binary_directory / "environment setup.sh"
-        environment_script.write_text(
-            "export MHDG_TEST_ENV=loaded\n",
-            encoding="utf-8",
-        )
-        build_manifest = binary_directory / "build_metadata.json"
-        build_manifest.write_text("{}\n", encoding="utf-8")
-        extra_settings = (
-            f"MHDG_ENVIRONMENT_SCRIPT={environment_script}\n"
-            f"MHDG_BUILD_MANIFEST={build_manifest}\n"
-        )
-
+        environment_script.write_text("export MHDG_TEST_ENV=loaded\n", encoding="utf-8")
+    build_manifest = binary_directory / "build_metadata.json"
     run_root = root / "runs"
-    settings = root / "settings.env"
-    settings.write_text(
-        "MHDG_REGRESSION_SETTINGS_VERSION=2\n"
-        f"MHDG_REGRESSION_DATA_ROOT={bundle}\n"
-        f"MHDG_REGRESSION_RUN_ROOT={run_root}\n"
-        f"MHDG_SERIAL_EXECUTABLE={serial}\n"
-        f"MHDG_PARALLEL_EXECUTABLE={parallel}\n"
-        f"MHDG_MPI_LAUNCHER={launcher}\n"
-        f"{extra_settings}",
-        encoding="utf-8",
-    )
-    return HarnessFixture(
-        root,
-        source,
-        bundle,
-        run_root,
-        settings,
-        serial,
-        parallel,
-        launcher,
-        runtime,
-        environment_script,
-        build_manifest,
-    )
+    settings = root / "settings.json"
+    settings.write_text(json.dumps({
+        "run_root": "runs", "mpi_launcher": "bin/mpirun",
+        **({"environment_script": "bin/environment setup.sh"} if environment_script else {}),
+        "defaults": {"build": "bin/build_metadata.json", "bundles": {"legacy_case": "bundle"}},
+    }))
+    harness = HarnessFixture(root, source, bundle, run_root, settings, serial, parallel,
+                             launcher, runtime, environment_script, build_manifest)
+    harness.write_build_record()
+    return harness
 
 
 def run_command(

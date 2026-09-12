@@ -4,9 +4,9 @@ import json
 import pytest
 
 from regression_tests.bundles import bundle_readiness, create_bundle, validate_bundle_root
-from support.errors import BundleError
-from tests.fixtures.case_data import write_case_source
-from tests.fixtures.harness import run_command
+from regression_tests.support import BundleError
+from regression_tests.tests.fixtures.case_data import write_case_source
+from regression_tests.tests.fixtures.harness import run_command
 
 
 @pytest.fixture

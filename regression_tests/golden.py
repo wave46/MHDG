@@ -7,12 +7,10 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from bundle.cases import load_case_definition, workflow_required_roles
-from catalogs.layouts import layout_pairs, load_layouts
-from support.documents import load_json, write_json_atomic
-from support.errors import BundleError, HarnessError
-from support.files import file_identity, is_within
-from support.time import utc_now, utc_run_id
+from .catalog import load_case_definition, workflow_required_roles, load_suite_definition, layout_pairs, load_layouts
+from .documents import load_json, write_json_atomic
+from .support import BundleError, HarnessError, utc_now, utc_run_id
+from .files import file_identity
 from . import config
 from .build import build_solver
 from .bundles import _artifact_path, validate_bundle_root
@@ -49,7 +47,7 @@ def _recipe(case_id, root):
                           "matrix": document["matrix"] if entry.get("matrix") else None})
     if not producers or len({item["workflow"] for item in producers}) != len(producers):
         raise BundleError("golden producers must be nonempty and unique")
-    checks = [config.load_suite_definition(name, root / "suites.json", root / "layouts.json",
+    checks = [load_suite_definition(name, root / "suites.json", root / "layouts.json",
                                           root / "cases", case_id=case_id)
               for name in declaration["checks"]]
     if not checks or len(set(declaration["checks"])) != len(checks):
@@ -286,7 +284,7 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
     if output.exists() or output.is_symlink():
         raise BundleError(f"output already exists: {output}")
     output = output.resolve()
-    if is_within(output, workspace):
+    if output.is_relative_to(workspace):
         raise BundleError("golden output must be outside the refresh workspace")
     report = load_json(workspace / "refresh.json", "refresh report")
     if report.get("status") != "ready" or not report.get("evidence"):
@@ -303,7 +301,7 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         _verify_record(workspace, record)
     for item in report["producers"]:
         directory = Path(item["run_directory"])
-        if not is_within(directory.resolve(), workspace) or item["status"] != "passed" or not reusable_outputs(directory):
+        if not directory.resolve().is_relative_to(workspace) or item["status"] != "passed" or not reusable_outputs(directory):
             raise BundleError("producer failed or its outputs changed")
         if not producer_converged(item, case["workflows"][item["workflow_id"]], "producer", {}, catalog_root / "tolerances.json"):
             raise BundleError("producer did not converge")

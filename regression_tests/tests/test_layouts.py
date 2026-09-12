@@ -2,18 +2,17 @@
 
 import json
 import shutil
-import sys
 from pathlib import Path
 
 import pytest
 
 
-REGRESSION_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
+from regression_tests.catalog import layout_pairs, load_layouts
+from regression_tests.catalog import load_suite_definition
+from regression_tests.support import BundleError
 
-from catalogs.layouts import layout_pairs, load_layouts  # noqa: E402
-from regression_tests.config import load_suite_definition  # noqa: E402
-from support.errors import BundleError  # noqa: E402
+
+REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -62,7 +61,7 @@ def test_requested_relation_cannot_silently_lose_its_comparison(catalog, relatio
 def test_suite_defaults_overrides_and_relations_select_runs_once(catalog, monkeypatch):
     root, layouts = catalog
     monkeypatch.setattr(
-        "regression_tests.config.load_case_definition",
+        "regression_tests.catalog.load_case_definition",
         lambda *_: {"workflows": {"probe": {}}},
     )
     declaration = {"description": "Probe", "workflows": ["probe"]}
@@ -104,10 +103,10 @@ def test_suite_defaults_overrides_and_relations_select_runs_once(catalog, monkey
 
 
 def test_profiles_compose_cases_without_duplicate_runs(catalog, monkeypatch):
-    from regression_tests.config import load_selection
+    from regression_tests.catalog import load_selection
 
     root, _ = catalog
-    monkeypatch.setattr("regression_tests.config.load_case_definition",
+    monkeypatch.setattr("regression_tests.catalog.load_case_definition",
                         lambda *_: {"workflows": {"probe": {}}})
     document = {
         "schema_version": 2, "defaults": {"case": "first", "layout": "mpi2_omp3"},

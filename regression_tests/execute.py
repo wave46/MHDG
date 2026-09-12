@@ -9,12 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from regression_tests.compare_common import select_candidate
-from support.documents import load_json, write_json_atomic
-from support.environments import source_environment
-from support.errors import BundleError, ComparisonError, HarnessError
-from support.files import file_identity
-from support.time import utc_now
+from .compare_common import select_candidate
+from .documents import load_json, write_json_atomic
+from .config import source_environment
+from .support import BundleError, ComparisonError, HarnessError, utc_now
+from .files import file_identity
 from .prepare import PreparedExecution, PreparedRun, PreparedStagedRun, openmp_environment
 
 
