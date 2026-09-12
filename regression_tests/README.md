@@ -680,3 +680,37 @@ python -m pytest tests
   bundle.
 
 Run `python -m regression_tests --help` for the command synopsis.
+
+### Inspect and clean stored runs/data
+
+Use one encompassing external storage root so retained runs, suites and refresh
+workspaces can protect their dependencies. Inventory and selection are read-only
+by default:
+
+```bash
+python -m regression_tests clean /path/regression-data
+python -m regression_tests clean /path/regression-data runs/old-run suites/old-suite
+# After reviewing the same explicit paths:
+python -m regression_tests clean /path/regression-data runs/old-run suites/old-suite --delete
+```
+
+Paths are absolute or relative to the storage root. The report shows directory
+kind, file sizes in bytes, selection and protection reasons. Sizes count stored
+file lengths without following symlinks; they are not a promise of reclaimed disk
+blocks. Select whole inventoried runs, suite/profile records, builds, refresh
+workspaces or candidate/golden bundles. There is no automatic age-based selection.
+
+Active/unfinished work, unknown historical data and configured default bundles
+or builds are protected. Retained records and symlinks protect referenced data;
+select dependent runs and their suite/profile records together to remove them.
+`--keep DIRECTORY` additionally protects a directory and inspects its dependencies;
+use it for retained work outside the storage root. Use the encompassing root and
+list external consumers: the command cannot discover unrelated storage elsewhere.
+Published bundle provenance is historical and does not keep old workspaces alive.
+
+Run cleanup while regression jobs and refresh/publish/resume commands are stopped.
+`--delete` rescans the tree on each invocation and refuses protected selections
+before removing anything. Removal does not follow symlinks. Sources and unrecognized
+legacy campaigns stay for manual review. An old golden requires explicit selection
+and must no longer be a configured default or a retained run's dependency. Nothing
+is removed by `check`, refresh or publication, and no cleanup database is created.

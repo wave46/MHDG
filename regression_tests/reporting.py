@@ -246,6 +246,20 @@ def print_verification_summary(summary: dict[str, Any], path: Path) -> None:
     print(f"verification {summary['status']}: {path}")
 
 
+def cleanup(report):
+    selected = [row for row in report["rows"] if row["selected"]]
+    for row in selected or report["rows"]:
+        action = report["status"] if row["selected"] else "keep"
+        if row["selected"] and row["reasons"]:
+            action = "blocked"
+        reasons = "; ".join(row["reasons"][:3]) or ("explicit selection" if row["selected"] else "not selected")
+        if len(row["reasons"]) > 3:
+            reasons += f"; {len(row['reasons']) - 3} more protection records"
+        print(f"{action}: {row['path']} ({row['kind']}, {row['bytes']} bytes): {reasons}")
+    status("cleanup", report["status"], report["root"])
+    print(f"selected: {report['selected_bytes']} bytes")
+
+
 def _print_diagnostics(summary, path):
     report = summary.get("diagnostics", {})
     if report.get("outputs") or report.get("failures"):

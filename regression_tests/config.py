@@ -34,6 +34,27 @@ def settings(path=None, *, case=None, bundle=None, build_manifest=None, use_buil
     The MHDG_* dictionary is a temporary bridge to the existing runners. No
     intermediate settings files are written; resume records the selected values.
     """
+    values, defaults = machine_settings(path)
+    if bundle is None:
+        bundle = defaults.get("bundles", {}).get(case)
+    if build_manifest is None and use_build:
+        build_manifest = defaults.get("build")
+    values.setdefault("MHDG_REGRESSION_RUN_ROOT", str(Path.home() / ".cache/mhdg-regression"))
+    values.setdefault("MHDG_REGRESSION_BUILD_ROOT", str(Path(values["MHDG_REGRESSION_RUN_ROOT"]) / "builds"))
+    if bundle is not None:
+        values["MHDG_REGRESSION_DATA_ROOT"] = str(Path(bundle).expanduser().resolve())
+    if not use_build or build_manifest is not None:
+        # A partial new build must not inherit an executable from an old selection.
+        for key in ("MHDG_SERIAL_EXECUTABLE", "MHDG_PARALLEL_EXECUTABLE", "MHDG_SOLVER_REVISION",
+                    "MHDG_BUILD_MANIFEST"):
+            values.pop(key, None)
+    if build_manifest is not None and use_build:
+        values.update(build_settings(Path(build_manifest).expanduser()))
+    return values
+
+
+def machine_settings(path=None):
+    """Read machine preferences/default paths without loading a build or bundle."""
     if path is None:
         configured = os.environ.get("MHDG_REGRESSION_SETTINGS")
         path = Path(configured).expanduser() if configured else ROOT / "settings.local.json"
@@ -64,22 +85,11 @@ def settings(path=None, *, case=None, bundle=None, build_manifest=None, use_buil
         bundles = defaults.get("bundles", {})
         if not isinstance(bundles, dict):
             raise BundleError("defaults.bundles must map case identifiers to bundle paths")
-        if bundle is None and case in bundles:
-            bundle = _path(bundles[case], path.parent, f"defaults.bundles.{case}")
-        if build_manifest is None and use_build and "build" in defaults:
-            build_manifest = _path(defaults["build"], path.parent, "defaults.build")
-    values.setdefault("MHDG_REGRESSION_RUN_ROOT", str(Path.home() / ".cache/mhdg-regression"))
-    values.setdefault("MHDG_REGRESSION_BUILD_ROOT", str(Path(values["MHDG_REGRESSION_RUN_ROOT"]) / "builds"))
-    if bundle is not None:
-        values["MHDG_REGRESSION_DATA_ROOT"] = str(Path(bundle).expanduser().resolve())
-    if not use_build or build_manifest is not None:
-        # A partial new build must not inherit an executable from an old selection.
-        for key in ("MHDG_SERIAL_EXECUTABLE", "MHDG_PARALLEL_EXECUTABLE", "MHDG_SOLVER_REVISION",
-                    "MHDG_BUILD_MANIFEST"):
-            values.pop(key, None)
-    if build_manifest is not None and use_build:
-        values.update(build_settings(Path(build_manifest).expanduser()))
-    return values
+        defaults = {"bundles": {name: _path(value, path.parent, f"defaults.bundles.{name}")
+                                 for name, value in bundles.items()},
+                    **({"build": _path(defaults["build"], path.parent, "defaults.build")}
+                       if "build" in defaults else {})}
+    return values, defaults
 
 
 def build_settings(path: Path) -> dict[str, str]:
