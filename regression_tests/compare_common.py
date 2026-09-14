@@ -130,10 +130,10 @@ def calculate_error_norms(
 NEWTON_CONVERGENCE_FAILURE = "final Newton error exceeds tolerance"
 
 
-NEWTON_FINITE_FAILURE = "final Newton error is missing or non-finite"
+NEWTON_FINITE_FAILURE = "final Newton error is missing, invalid or non-finite"
 
 
-_ERROR_RE = re.compile(r"^\s*Error:\s*([-+0-9.eE]+)\s*$", re.MULTILINE)
+_ERROR_RE = re.compile(r"^[ \t]*Error:[ \t]*([^\r\n]*)", re.MULTILINE)
 
 
 NewtonCheck = Literal["bounded", "finite_only"]
@@ -179,7 +179,14 @@ def read_newton_convergence(
         raise ComparisonError(f"cannot read solver log {log_path}: {exc}") from exc
 
     errors = _ERROR_RE.findall(solver_output)
-    final_error = float(errors[-1]) if errors else None
+    # Capture the last record even when its value is invalid; never reuse an
+    # earlier converged value after a failed final iteration.
+    try:
+        final_error = float(errors[-1].replace("D", "E").replace("d", "e")) if errors else None
+    except ValueError:
+        final_error = None
+    if final_error is not None and not isfinite(final_error):
+        final_error = None
     return NewtonConvergence(final_error=final_error, maximum=maximum)
 
 

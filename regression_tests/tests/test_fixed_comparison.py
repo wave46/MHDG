@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from regression_tests.compare_fixed import compare_hdf5_files
+from regression_tests.compare_common import read_newton_convergence
 from regression_tests.tests.fixtures.harness import run_command
 from regression_tests.tests.fixtures.solutions import write_solution
 
@@ -84,7 +85,27 @@ def test_magnetic_contract(files, difference):
         assert report["magnetic"]["datasets"]["rho_pol_norm"]["relative_l2"] == 0
 
 
-@pytest.mark.parametrize("mode", ["same_layout", "cross_layout", "nonconverged", "protected_output"])
+@pytest.mark.parametrize("last_value,expected", [
+    (None, None), ("", None), ("NaN", None), ("Infinity", None),
+    ("********", None), ("1.0E309", None),
+    ("1.0D-2", 1e-2), ("1.0d-5", 1e-5), ("1.0E-2", 1e-2),
+])
+def test_newton_acceptance_uses_last_record(tmp_path, last_value, expected):
+    log = tmp_path / "stdout.log"
+    log.write_text("no Newton iteration\n" if last_value is None else (
+        f" Error: 1.0E-5\n\tError: {last_value}\nOutput written to file result.h5\n"
+    ))
+    for maximum in (2e-4, None):
+        convergence = read_newton_convergence(log, maximum)
+        assert convergence.final_error == expected
+        assert convergence.passed == (
+            expected is not None and (maximum is None or expected <= maximum)
+        )
+        # Failed parsing/nonfinite values must still produce a valid JSON report.
+        json.dumps(convergence.as_report(), allow_nan=False)
+
+
+@pytest.mark.parametrize("mode", ["same_layout", "cross_layout", "nonconverged", "invalid_final", "protected_output"])
 def test_compare_command_selects_final_output_and_checks_convergence(tmp_path, mode):
     run = tmp_path / "run"
     (run / "inputs").mkdir(parents=True)
@@ -102,26 +123,27 @@ def test_compare_command_selects_final_output_and_checks_convergence(tmp_path, m
     (run / "run_metadata.json").write_text(json.dumps({
         "status": "completed", "hdf5_outputs": ["outputs/result.h5", "outputs/result_0000.h5"],
     }))
-    error = "3.0E-4" if mode == "nonconverged" else "1.0E-5"
+    error = "NaN" if mode == "invalid_final" else "3.0E-4" if mode == "nonconverged" else "1.0E-5"
     (run / "stdout.log").write_text(
-        f"Error: 8.0E-4\nError: {error}\nOutput written to file {checkpoint}\nOutput written to file {final}\n"
+        f"Error: 1.0E-5\nError: {error}\nOutput written to file {checkpoint}\nOutput written to file {final}\n"
     )
     report_path = final if mode == "protected_output" else tmp_path / "comparison.json"
     original = final.read_bytes()
     completed = run_command("compare", str(run), "--report", str(report_path))
-    assert completed.returncode == int(mode in {"nonconverged", "protected_output"}), completed.stderr
+    convergence_failed = mode in {"nonconverged", "invalid_final"}
+    assert completed.returncode == int(convergence_failed or mode == "protected_output"), completed.stderr
     assert final.read_bytes() == original
     if mode == "protected_output":
         assert "cannot replace a comparison input" in completed.stderr
         return
     report = json.loads(report_path.read_text())
     assert report["candidate"] == str(final)
-    assert report["convergence"]["final_newton_error"] == float(error)
+    assert report["convergence"]["final_newton_error"] == (None if mode == "invalid_final" else float(error))
     assert report["tolerance_profile"]["id"] == (
         "fixed_cross_layout" if mode == "cross_layout" else "fixed_same_layout"
     )
     assert len(report["files"]["reference"]["sha256"]) == 64
-    assert report["convergence"]["passed"] == (mode != "nonconverged")
+    assert report["convergence"]["passed"] == (not convergence_failed)
     for text in ("Mesh: PASS", "solution/u: PASS", "transport_1d: PASS"):
         assert text in completed.stdout
-    assert ("Newton error: FAIL" if mode == "nonconverged" else "Newton error: PASS") in completed.stdout
+    assert ("Newton error: FAIL" if convergence_failed else "Newton error: PASS") in completed.stdout
