@@ -13,7 +13,7 @@ from .config import (bundle_root_from_settings, absolute_setting, solver_executa
 from .bundles import validate_bundle_root
 from .prepare import prepare_run
 from .execute import execute_prepared, reusable_outputs
-from .compare import compare_completed_run, compare_generated_meshes, producer_converged
+from .compare import compare_completed_run, compare_generated_meshes, producer_converged, validate_completed_run
 from .compare_common import select_candidate
 from .documents import load_json, write_json_atomic
 from .support import BundleError, ComparisonError, HarnessError, IDENTIFIER_RE, utc_now, utc_run_id
@@ -30,6 +30,7 @@ class SuiteRunInputs:
     tolerances_path: Path
     compare: bool
     parameter_overrides: dict[str, bool | float | int | str]
+    validate: bool = True
 
 
 def run_cell(
@@ -192,6 +193,7 @@ def _verify_result(
     case: dict[str, Any],
     case_directory: Path,
     tolerances_path: Path,
+    references: bool = True,
 ) -> dict[str, Any]:
     workflow_id = source.get("workflow_id")
     result = {
@@ -214,6 +216,11 @@ def _verify_result(
 
     try:
         run_directory = Path(source["run_directory"])
+        if not references:
+            validation = validate_completed_run(run_directory, case_directory, tolerances_path)
+            result.update(validation=validation, status=validation["status"], failures=validation["failures"],
+                          convergence_status="passed" if validation["convergence"]["passed"] else "failed")
+            return result
         policy, report_path, report = compare_completed_run(
             run_directory,
             case_directory,
@@ -405,7 +412,7 @@ def run_suite(
     summary.pop("diagnostics", None)
     write_json_atomic(path, summary, "suite summary")
     inputs = SuiteRunInputs(settings, suite["case_id"], run_id, case_directory,
-                            layouts_path, tolerances_path, compare and references, overrides)
+                            layouts_path, tolerances_path, compare and references, overrides, validate=compare)
     print(f"suite: {suite_id} ({run_id})")
     for layout in suite["layouts"]:
         for workflow in suite["workflow_ids"]:
@@ -450,6 +457,7 @@ def _compare_cell(result, inputs):
     if result.get("run_status") != "completed":
         return result
     result.update(status="passed", failures=[], comparison_status="not_run")
+    result.pop("validation", None)
     if inputs.compare:
         try:
             policy, path, report = compare_completed_run(
@@ -458,6 +466,13 @@ def _compare_cell(result, inputs):
             result.update(comparison_policy=policy, comparison_report=str(path),
                           comparison_status=report["status"], failures=report["failures"],
                           status="passed" if report["status"] == "passed" else "comparison_failed")
+        except HarnessError as exc:
+            result.update(status="error", failures=[str(exc)])
+    elif inputs.validate:
+        try:
+            validation = validate_completed_run(Path(result["run_directory"]), inputs.case_directory, inputs.tolerances_path)
+            result.update(validation=validation, failures=validation["failures"],
+                          status="passed" if validation["status"] == "passed" else "validation_failed")
         except HarnessError as exc:
             result.update(status="error", failures=[str(exc)])
     return result
@@ -483,10 +498,10 @@ def verify_suite(suite_summary_path, case_directory, tolerances_path, *, include
         "run_id": source["run_id"], "case_id": source["case_id"], "results": [],
     }
     write_json_atomic(output, summary, "verification summary")
-    if source.get("reference_comparisons", not source.get("layout_comparisons")):
-        for result in source["results"]:
-            summary["results"].append(_verify_result(result, case, case_directory, tolerances_path))
-            write_json_atomic(output, summary, "verification summary")
+    references = source.get("reference_comparisons", not source.get("layout_comparisons"))
+    for result in source["results"]:
+        summary["results"].append(_verify_result(result, case, case_directory, tolerances_path, references))
+        write_json_atomic(output, summary, "verification summary")
     if include_layout_pairs and source.get("layout_comparisons"):
         summary["comparisons"] = compare_layout_pairs(source, case_directory, tolerances_path)
     from .diagnostics import check_suite

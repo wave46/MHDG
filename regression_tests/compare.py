@@ -323,41 +323,64 @@ def producer_converged(
     if policy not in {"reference_matrix", "producer"}:
         return False
 
+    try:
+        return all(check.passed for _, check in _newton_checks(source, workflow, tolerances_path))
+    except ComparisonError:
+        return False
+
+
+def _newton_checks(source, workflow, tolerances_path):
     run_directory = Path(source["run_directory"])
-    metadata = load_json(
-        run_directory / "run_metadata.json",
-        "staged run metadata",
-    )
+    metadata = load_json(run_directory / "run_metadata.json", "run metadata")
     definitions = workflow.get("stages", [{"newton_check": "bounded"}])
     records = metadata.get("stages") if workflow.get("stages") else [
         {"run_directory": str(run_directory), "status": metadata.get("status")}
     ]
-    if not isinstance(records, list) or len(records) != len(definitions):
-        return False
-    if any(
+    if not isinstance(records, list) or len(records) != len(definitions) or any(
         record.get("stage_id") != definition.get("stage_id")
         or record.get("status") != "completed"
         for record, definition in zip(records, definitions)
     ):
-        return False
+        raise ComparisonError("workflow has missing or incomplete stages")
+    maximum = _stage_newton_maximum(workflow, source["layout_id"], tolerances_path)
+    return [(record, read_newton_convergence(
+        Path(record["run_directory"]) / "stdout.log",
+        effective_newton_maximum(maximum, definition["newton_check"]),
+    )) for record, definition in zip(records, definitions)]
 
-    maximum = _stage_newton_maximum(
-        workflow,
-        source["layout_id"],
-        tolerances_path,
-    )
-    for record, definition in zip(records, definitions):
-        effective_maximum = effective_newton_maximum(
-            maximum,
-            definition["newton_check"],
-        )
-        convergence = read_newton_convergence(
-            Path(record["run_directory"]) / "stdout.log",
-            effective_maximum,
-        )
-        if not convergence.passed:
-            return False
-    return True
+
+def validate_completed_run(run_directory, case_directory, tolerances_path):
+    """Validate outputs and stage convergence without agreement with a reference."""
+    inputs = load_comparison_inputs(run_directory, case_directory, tolerances_path)
+    if inputs.workflow.get("stages"):
+        _validated_stage_records(inputs.plan, inputs.workflow, inputs.metadata)
+    checks = _newton_checks({"run_directory": str(run_directory), "layout_id": inputs.plan["layout_id"]},
+                            inputs.workflow, tolerances_path)
+    stages, failures = [], []
+    for record, convergence in checks:
+        directory = Path(record["run_directory"])
+        stage_failures = []
+        output = None
+        try:
+            output = select_candidate(directory, _load_completed_metadata(directory))
+            # Reuse the mesh, shape and finiteness contracts, not a second set
+            # of field validators. Self-agreement is not regression evidence.
+            mesh_differences(output, output, 0.)
+            fields = compare_hdf5_files(output, output, {
+                "mesh_coordinate_atol": 0., "relative_l2_max": 0., "normalized_linf_max": 0.,
+            })
+            stage_failures.extend(fields["failures"])
+        except (ValueError, TypeError) as exc:
+            stage_failures.append(str(exc))
+        if convergence.failure:
+            stage_failures.append(convergence.failure)
+        label = record.get("stage_id", "final")
+        failures.extend(f"{label}: {failure}" for failure in stage_failures)
+        stages.append({"stage_id": label, "output": str(output) if output else None,
+                       "convergence": convergence.as_report(), "failures": stage_failures,
+                       "status": "failed" if stage_failures else "passed"})
+    return {"status": "failed" if failures else "passed", "failures": failures, "stages": stages,
+            "convergence": {"passed": all(check.passed for _, check in checks)}}
 
 
 def _stage_newton_maximum(

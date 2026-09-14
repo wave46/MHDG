@@ -14,8 +14,7 @@ from .files import file_identity
 from . import config
 from .build import build_solver
 from .bundles import artifact_path, validate_bundle_root
-from .compare import (ComparisonOverrides, compare_completed_run, compare_run,
-                      load_comparison_inputs, load_stage_inputs, producer_converged)
+from .compare import compare_completed_run, producer_converged, validate_completed_run
 from .compare_common import select_candidate
 from .execute import execute_prepared, reusable_outputs
 from .prepare import prepare_run
@@ -124,7 +123,7 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
                 write_json_atomic(path, report, "refresh report")
                 execution = execute_prepared(prepared, values)
                 result.update(run_status=execution.status, status=execution.status)
-                _validate_producer(result, case, root)
+                _validate_producer(result, root)
                 result["status"] = "passed"
                 result["old_reference"] = _old_reference(result, source, manifest, case, root)
                 results.append(result)
@@ -170,29 +169,14 @@ def _solution(directory):
     return select_candidate(directory, load_json(directory / "run_metadata.json", "run metadata"))
 
 
-def _validate_producer(result, case, root):
+def _validate_producer(result, root):
     directory = Path(result["run_directory"])
-    workflow = case["workflows"][result["workflow_id"]]
     if result["run_status"] != "completed" or not reusable_outputs(directory):
         raise BundleError(f"producer failed or its outputs changed: {result['workflow_id']}")
-    if not producer_converged(result, workflow, "producer", {}, root / "tolerances.json"):
-        raise BundleError(f"producer did not converge: {result['workflow_id']}")
-    parent = load_comparison_inputs(directory, root / "cases", root / "tolerances.json")
-    records = parent.metadata.get("stages", [{"run_directory": str(directory)}])
-    definitions = workflow.get("stages", [{}])
-    if len(records) != len(definitions):
-        raise BundleError("producer has missing stages")
-    for record, definition in zip(records, definitions):
-        inputs = load_stage_inputs(parent, Path(record["run_directory"])) if workflow.get("stages") else parent
-        # Self-comparison exercises the existing structure/finiteness contracts;
-        # agreement with old fields is reviewed separately.
-        overrides = ComparisonOverrides(reference=_solution(inputs.run_directory),
-                                        tolerance_profile=workflow.get("stage_tolerance_profile") if workflow.get("stages") else None,
-                                        direct_tolerance_profile=workflow.get("direct_stage_tolerance_profile") if workflow.get("stages") else None,
-                                        newton_check=definition.get("newton_check", "bounded"))
-        _, validation = compare_run(inputs, overrides, inputs.run_directory / "producer_validation.json")
-        if validation["status"] != "passed":
-            raise BundleError(f"invalid producer output: {result['workflow_id']}: {validation['failures']}")
+    validation = validate_completed_run(directory, root / "cases", root / "tolerances.json")
+    result["validation"] = validation
+    if validation["status"] != "passed":
+        raise BundleError(f"invalid producer output: {result['workflow_id']}: {validation['failures']}")
 
 
 def _old_reference(result, source, manifest, case, root):

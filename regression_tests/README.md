@@ -212,7 +212,14 @@ unfinished work. Changed selected inputs or declarations are rejected.
 Use `--diagnostics off|summary|equations|detailed` to override the selected mode
 for a focused investigation. Four-format and on/off comparisons are focused
 checks for diagnostics changes, rather than duplicate routine solver chains.
-`--run-only` defers comparisons; `compare --suite` checks a saved suite summary.
+Suites without golden comparisons validate each stage's mesh, field sizes,
+finiteness and declared Newton acceptance. Initialization and short probes require
+finite Newton values without a convergence bound; `source_cold` enforces the cold
+stage thresholds. Compact validation results are stored in the suite summary.
+Golden producers share these checks independently of old-reference agreement.
+
+`--run-only` defers scientific checks; `compare --suite` checks a saved suite summary,
+including output validity for suites without reference comparisons.
 
 ### Build reusable executables
 

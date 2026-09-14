@@ -9,7 +9,6 @@ import pytest
 import h5py
 
 from regression_tests import suites
-from regression_tests.compare import producer_converged
 from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import create_harness, run_command, REGRESSION_ROOT as ROOT
 from regression_tests.tests.fixtures.solutions import write_solution
@@ -190,23 +189,53 @@ def test_offline_checks_references_pairs_and_diagnostics(tmp_path, monkeypatch):
     pairs.assert_not_called()
 
 
-def test_staged_convergence_is_independent_of_old_reference_failure(tmp_path):
-    stages = [{"stage_id": "initial", "newton_check": "finite_only"}, {"stage_id": "settle", "newton_check": "bounded"}]
-    records = []
-    for stage, error in zip(stages, (1., 1e-5)):
-        directory = tmp_path / stage["stage_id"]
-        directory.mkdir()
-        (directory / "stdout.log").write_text(f"Error: {error}\n")
-        records.append({**stage, "status": "completed", "run_directory": str(directory)})
-    (tmp_path / "run_metadata.json").write_text(json.dumps({"stages": records}))
-    source = {"run_directory": str(tmp_path), "layout_id": "serial_omp1"}
-    workflow = {"stages": stages, "comparison_policy": "fixed_hdf5", "stage_tolerance_profile": "fixed_stage_reference"}
-    report = {"status": "failed", "failures": ["old fields differ"]}
-    def converged():
-        return producer_converged(source, workflow, "reference_matrix", report, ROOT / "tolerances.json")
-    assert converged()
-    (tmp_path / "settle/stdout.log").write_text("Error: 1e-3\n")
-    assert not converged()
+@pytest.mark.parametrize("suite,damage", [
+    ("initialization", "nonfinite"), ("initialization", "shape"),
+    ("source_cold", "nonconvergence"),
+])
+def test_reference_free_runs_validate_outputs_and_stage_convergence(harness, suite, damage, monkeypatch):
+    seed = harness.serial_executable.parent / "seed.h5"
+    write_off_solution(seed)
+    solver = r'''#!/usr/bin/env bash
+set -euo pipefail
+cp "$(dirname "$0")/seed.h5" outputs/result.h5
+error=1.0E-5
+[[ "$PWD" != *01_time_init && "$PWD" != *01_single_step ]] || error=1.0
+printf 'Error: %s\nOutput written to file outputs/result.h5\n' "$error"
+'''
+    harness.install_solver(solver)
+    path, summary = run(harness, suite)
+    assert summary["status"] == "passed"
+    first = summary["results"][0]
+    assert first["comparison_status"] == "not_run"
+    stages = first["validation"]["stages"]
+    assert stages[0]["convergence"] == {"passed": True, "final_newton_error": 1., "maximum": None}
+    assert suites.verify_suite(path, ROOT / "cases", ROOT / "tolerances.json")[1]["status"] == "passed"
+    if damage == "nonconvergence":
+        # An intermediate cold stage must converge even if the last stage does.
+        log = Path(stages[1]["output"]).parent.parent / "stdout.log"
+        log.write_text("Error: 1e-3\n")
+        expected = "diffusion_reduction: final Newton error exceeds tolerance"
+        monkeypatch.setattr(suites, "run_cell", lambda *args: pytest.fail("reuse completed outputs"))
+        assert run(harness, suite, resume=True)[1]["status"] == "failed"
+    else:
+        def corrupt(output):
+            with h5py.File(output, "r+") as handle:
+                if damage == "nonfinite":
+                    handle["solution/u"][0] = float("nan")
+                else:
+                    del handle["solution/q"]
+                    handle["solution/q"] = [1.]
+        corrupt(Path(stages[0]["output"]))
+        corrupt(seed)
+        expected = "solution/u" if damage == "nonfinite" else "solution/q"
+        assert run(harness, suite, run_id="bad-output")[1]["status"] == "failed"
+    _, verification = suites.verify_suite(path, ROOT / "cases", ROOT / "tolerances.json")
+    assert verification["status"] == "failed"
+    assert any(expected in failure for result in verification["results"] for failure in result["failures"])
+    if damage == "nonconvergence":
+        completed = run_command("compare", "--suite", str(path))
+        assert completed.returncode == 1 and expected in completed.stdout
 
 
 def test_profile_resumes_across_cases_without_repeating_success(harness, monkeypatch):
