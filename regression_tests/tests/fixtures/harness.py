@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import shlex
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,7 +61,7 @@ class HarnessFixture:
                 if variant == "serial"
                 else self.parallel_executable
             )
-            write_executable(path, contents)
+            write_executable(path, solver_script(contents))
         self.write_build_record()
 
     @property
@@ -107,8 +108,8 @@ def create_harness(
 
     binary_directory = root / "bin"
     binary_directory.mkdir()
-    serial = write_executable(binary_directory / "serial", solver)
-    parallel = write_executable(binary_directory / "parallel", solver)
+    serial = write_executable(binary_directory / "serial", solver_script(solver))
+    parallel = write_executable(binary_directory / "parallel", solver_script(solver))
     launcher = write_executable(binary_directory / "mpirun", MPI_LAUNCHER)
     runtime = binary_directory / "positionFeketeNodesTri2D.h5"
     runtime.write_text("synthetic Fekete nodes\n", encoding="utf-8")
@@ -152,3 +153,9 @@ def write_executable(path: Path, contents: str) -> Path:
     path.write_text(contents, encoding="utf-8")
     path.chmod(0o755)
     return path
+
+
+def solver_script(contents):
+    code = (f"import sys; sys.path.insert(0, {str(REGRESSION_ROOT.parent)!r}); "
+            "from regression_tests.tests.fixtures.solutions import finalize_solver_outputs; finalize_solver_outputs()")
+    return f"#!/bin/bash\nexport MHDG_FIXTURE_PYTHON={shlex.quote(sys.executable)}\n(\n{contents}\n)\nstatus=$?\n((status == 0)) || exit $status\n" + shlex.join([sys.executable, "-B", "-c", code]) + "\n"

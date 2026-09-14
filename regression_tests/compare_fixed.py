@@ -549,3 +549,55 @@ def _exact_comparison(
         "reference_shape": list(reference.shape),
         "candidate_shape": list(candidate.shape),
     }
+
+
+def check_output_contract(path, model, provenance, overrides):
+    """Check the requested model, build provenance and explicit feature switches."""
+    from .config import MODELS
+    from .parameters import read_selected_input_values
+
+    directory = path.parent.parent
+    names = {"impurity_radiation", "transport_1d", "neutral_wall_sources_in_elements",
+             "neutral_perpendicular_diffusion", "neutralp_lambda", "neutral_flux_limiter_mode",
+             "neutral_flux_limiter_tn_source", "neutral_flux_limiter_tn_eV", "compute_from_flux"}
+    overrides = {**read_selected_input_values(directory / "param.txt", names), **overrides}
+    label, equations = MODELS[model]
+    expected = {"simulation_parameters/model": label, "simulation_parameters/Ndim": 2,
+                "simulation_parameters/Neq": len(equations),
+                "simulation_parameters/physics/conservative_variable_names": list(equations),
+                **{f"provenance/{key}": value for key, value in provenance.items()}}
+    for name in ("impurity_radiation", "neutral_wall_sources_in_elements", "neutral_perpendicular_diffusion"):
+        if name in overrides:
+            expected[f"simulation_parameters/switches/{name}"] = overrides[name]
+    for name in ("neutral_flux_limiter_mode", "neutral_flux_limiter_tn_source"):
+        if name in overrides:
+            expected[f"simulation_parameters/physics/{name}"] = overrides[name]
+    if "neutralp_lambda" in overrides:
+        expected["simulation_parameters/numerics/NeutralP_lambda"] = overrides["neutralp_lambda"]
+    if "compute_from_flux" in overrides:
+        expected["magnetic/jtor_source"] = "bicubic_psi" if overrides["compute_from_flux"] else "stored_hdf5"
+    if overrides.get("impurity_radiation") and (directory / "inputs/impurity_model.nml").is_file():
+        impurity = read_selected_input_values(directory / "inputs/impurity_model.nml", {"impurity_names", "impurity_concentrations"})
+        expected.update({f"simulation_parameters/physics/{name}": value for name, value in impurity.items()})
+    failures = []
+    try:
+        with h5py.File(path) as handle:
+            if overrides.get("transport_1d") and "transport_1d" not in handle:
+                failures.append("missing expected output: transport_1d")
+            if overrides.get("neutral_flux_limiter_tn_source") == "fixed" and "neutral_flux_limiter_tn_eV" in overrides:
+                scale = float(np.asarray(handle["simulation_parameters/adimensionalization/temperature_scale"]).item())
+                expected["simulation_parameters/physics/neutral_flux_limiter_tn"] = overrides["neutral_flux_limiter_tn_eV"] / scale
+            for name, wanted in expected.items():
+                if name not in handle:
+                    failures.append(f"missing expected output: {name}")
+                    continue
+                actual = [value.decode().strip(" \x00") if isinstance(value, bytes) else value.item() if isinstance(value, np.generic) else value
+                          for value in np.asarray(handle[name]).reshape(-1)]
+                wanted = wanted if isinstance(wanted, list) else [wanted]
+                matches = actual == wanted if any(isinstance(value, str) for value in wanted) else (
+                    len(actual) == len(wanted) and np.allclose(actual, wanted, rtol=1e-12, atol=0))
+                if not matches:
+                    failures.append(f"{name}: expected {wanted}, got {actual}")
+    except (OSError, KeyError, ValueError, TypeError, ZeroDivisionError) as exc:
+        failures.append(f"cannot verify output contract: {exc}")
+    return {"status": "failed" if failures else "passed", "failures": failures}

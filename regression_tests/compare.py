@@ -12,7 +12,7 @@ from .documents import load_json, write_json_atomic
 from .support import BundleError, ComparisonError, utc_now
 from .files import file_identity, recorded_directory, recorded_file, require_directory
 from .compare_adaptive import compare_adaptive_files, mesh_differences
-from .compare_fixed import compare_hdf5_files
+from .compare_fixed import compare_hdf5_files, check_output_contract
 from .execute import final_execution
 from .compare_common import (
     NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
@@ -199,6 +199,7 @@ def compare_run(
         details = {key: value for key, value in field_report.items() if key != "tolerances"}
     convergence = read_newton_convergence(inputs.run_directory / "stdout.log", tolerances["newton_error_max"])
     failures = list(field_report["failures"])
+    failures.extend(saved_output_contract(inputs)["failures"])
     if convergence.failure is not None:
         failures.append(convergence.failure)
     report = {
@@ -370,6 +371,7 @@ def validate_completed_run(run_directory, case_directory, tolerances_path):
                 "mesh_coordinate_atol": 0., "relative_l2_max": 0., "normalized_linf_max": 0.,
             })
             stage_failures.extend(fields["failures"])
+            stage_failures.extend(saved_output_contract(load_stage_inputs(inputs, directory))["failures"])
         except (ValueError, TypeError) as exc:
             stage_failures.append(str(exc))
         if convergence.failure:
@@ -403,3 +405,22 @@ def _stage_newton_maximum(
             profile,
         )
     return tolerances["newton_error_max"]
+
+
+def saved_output_contract(inputs):
+    """Check the output contract when saved execution evidence is available."""
+    from .config import verify_executable
+    from .support import HarnessError
+
+    directory, metadata = final_execution(inputs.run_directory, inputs.metadata)
+    manifest = metadata.get("solver", {}).get("build_manifest")
+    if not manifest:
+        return {"status": "unavailable", "failures": []}  # Debug comparisons can lack execution records.
+    try:
+        plan = load_json(directory / "run_plan.json", "run plan")
+        identity = verify_executable({"MHDG_BUILD_MANIFEST": manifest["path"]}, inputs.workflow["model"],
+                                     plan["layout"]["execution"], Path(metadata["executable"]["path"]))
+        return check_output_contract(select_candidate(directory, metadata), inputs.workflow["model"],
+                                     identity, plan.get("parameter_overrides", {}))
+    except (HarnessError, OSError) as exc:
+        return {"status": "failed", "failures": [str(exc)]}

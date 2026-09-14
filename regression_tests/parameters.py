@@ -139,3 +139,32 @@ def _write_parameter_file(destination: Path, rendered: list[str]) -> None:
         destination.write_text("".join(rendered), encoding="utf-8")
     except OSError as exc:
         raise BundleError(f"cannot write parameter file {destination}: {exc}") from exc
+
+
+def read_selected_input_values(path, names):
+    """Read selected complete scalar/list assignments from supported input files."""
+    values = {}
+    for line in _read_parameter_lines(path):
+        match = ASSIGNMENT_RE.match(line)
+        key = match.group("key").lower() if match else ""
+        if key not in names:
+            continue
+        if key in values:
+            raise BundleError(f"parameter assignments must appear once: {key}")
+        raw = line[len(match.group("prefix")):].split("!", 1)[0].strip().rstrip(",")
+        tokens = re.findall(r"'[^']*'|\"[^\"]*\"|[^,\s]+", raw)
+        parsed = []
+        for token in tokens:
+            if token.lower() in (".true.", ".false."):
+                parsed.append(token.lower() == ".true.")
+            elif token[:1] in ("'", '"'):
+                parsed.append(token[1:-1])
+            else:
+                try:
+                    parsed.append(float(token.replace("D", "E").replace("d", "e")))
+                except ValueError as exc:
+                    raise BundleError(f"unsupported parameter assignment in {path.name}: {key}") from exc
+        if not parsed:
+            raise BundleError(f"empty parameter assignment: {key}")
+        values[key] = parsed[0] if len(parsed) == 1 else parsed
+    return values

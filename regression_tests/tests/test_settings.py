@@ -27,7 +27,7 @@ def test_explicit_selections_override_case_defaults_and_builds(setup, monkeypatc
     monkeypatch.setenv("MHDG_REGRESSION_SETTINGS", str(path))
     values = settings(case="legacy_case")
     assert values["MHDG_REGRESSION_DATA_ROOT"] == str(harness.bundle)
-    assert values["MHDG_SERIAL_EXECUTABLE"] == str(harness.serial_executable)
+    assert values["MHDG_EXECUTABLES"]["NGammaTiTeNeutral/serial"] == str(harness.serial_executable)
     assert values["MHDG_REGRESSION_RUN_ROOT"] == str(harness.run_root)
     document["defaults"]["build"] = "unavailable-build.json"
     document["defaults"]["bundles"]["another_case"] = "separate-data"
@@ -36,7 +36,7 @@ def test_explicit_selections_override_case_defaults_and_builds(setup, monkeypatc
     assert values["MHDG_REGRESSION_DATA_ROOT"] == str(path.parent / "separate-data")
     values = settings(path, case="another_case", bundle=harness.bundle, build_manifest=manifest)
     assert values["MHDG_REGRESSION_DATA_ROOT"] == str(harness.bundle)
-    assert "MHDG_SERIAL_EXECUTABLE" not in settings(path, use_build=False)
+    assert "MHDG_EXECUTABLES" not in settings(path, use_build=False)
 
 
 def test_configuration_rejects_user_owned_generated_fields(setup):

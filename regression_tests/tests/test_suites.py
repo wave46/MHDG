@@ -21,7 +21,7 @@ printf 'Error: 1.0E-5\\nOutput written to file outputs/result.h5\\n'
 
 
 def write_off_solution(path):
-    write_solution(path)
+    write_solution(path, model=True)
     with h5py.File(path, "r+") as handle:
         handle["simulation_parameters/switches/balance_diagnostics_mode"] = b"off"
 
@@ -96,7 +96,7 @@ def test_resume_rechecks_comparisons_and_rejects_changed_inputs(harness, monkeyp
     _, first = check()
     assert first["status"] == "passed"
     # An unused executable and build-only preferences do not affect these runs.
-    selected["MHDG_SERIAL_EXECUTABLE"] = "/unused/serial"
+    selected["MHDG_EXECUTABLES"]["NGammaTiTeNeutral/serial"] = "/unused/serial"
     selected["MHDG_REGRESSION_BUILD_JOBS"] = "3"
     monkeypatch.setattr(suites, "run_cell", lambda *args: pytest.fail("valid output should be reused"))
     comparison = Mock(return_value=("fixed_hdf5", tmp_path / "comparison.json", {
@@ -115,11 +115,11 @@ def test_resume_rechecks_comparisons_and_rejects_changed_inputs(harness, monkeyp
     shared.write_text(original)
     runtime = harness.runtime_file.read_bytes()
     harness.runtime_file.write_bytes(b"changed runtime input")
-    with pytest.raises(BundleError, match="runtime_files"):
+    with pytest.raises(BundleError, match="checksum/size changed"):
         check(resume=True)
     harness.runtime_file.write_bytes(runtime)
     harness.install_solver("#!/usr/bin/env bash\nexit 7\n", "parallel")
-    with pytest.raises(BundleError, match="parallel_executable"):
+    with pytest.raises(BundleError, match="executables"):
         check(resume=True)
 
 

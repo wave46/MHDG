@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 
 from .documents import load_json
@@ -14,6 +15,38 @@ from .files import file_identity, require_file, require_directory
 
 ROOT = Path(__file__).resolve().parent
 RUNTIME_FILE = "positionFeketeNodesTri2D.h5"
+DEFAULT_MODEL = "NGammaTiTeNeutral"
+MODELS = {
+    DEFAULT_MODEL: ("N-Gamma-Ti-Te-Neutral", ("rho", "Gamma", "nEi", "nEe", "rhon")),
+    "NGammaTiTeNeutralGamma": ("N-Gamma-Ti-Te-NeutralGamma", ("rho", "Gamma", "nEi", "nEe", "rhon", "Gamman")),
+}
+EXECUTIONS = {"serial": "serial", "mpi": "parall"}
+
+
+def build_key(model, execution):
+    if model not in MODELS or execution not in EXECUTIONS:
+        raise BundleError(f"unsupported solver build: {model}/{execution}")
+    return f"{model}/{execution}"
+
+
+def executables_from_manifest(record):
+    """Return model/execution executable records from current or existing manifests."""
+    if record.get("status") != "completed" or not isinstance(record.get("profile"), dict) or record["profile"].get("dimension") != "2D":
+        raise BundleError("build manifest must describe a completed 2D build")
+    artifacts = record.get("artifacts")
+    if not isinstance(artifacts, dict) or not artifacts:
+        raise BundleError("build manifest has no executables")
+    if record.get("schema_version") == 2:
+        model = record["profile"].get("model")
+        artifacts = {build_key(model, {"serial": "serial", "parallel": "mpi"}.get(name)): item
+                     for name, item in artifacts.items()}
+    elif record.get("schema_version") != 3:
+        raise BundleError("unsupported build manifest version")
+    for key in artifacts:
+        parts = key.split("/")
+        if len(parts) != 2 or build_key(*parts) != key:
+            raise BundleError(f"invalid build key: {key}")
+    return artifacts
 MACHINE_KEYS = {
     "run_root": "MHDG_REGRESSION_RUN_ROOT",
     "build_root": "MHDG_REGRESSION_BUILD_ROOT",
@@ -77,43 +110,41 @@ def machine_settings(path=None):
     return values, defaults
 
 
-def build_settings(path: Path) -> dict[str, str]:
+def build_settings(path: Path) -> dict[str, Any]:
     """Select a completed existing build and verify its recorded binaries/data."""
     path = path.resolve()
     record = load_json(path, "build manifest")
-    if record.get("schema_version") != 2 or record.get("status") != "completed":
-        raise BundleError("build manifest must describe a completed version-2 build")
-    profile = record.get("profile", {})
-    if not isinstance(profile, dict) or (
-        profile.get("model"), profile.get("dimension")
-    ) != ("NGammaTiTeNeutral", "2D"):
-        raise BundleError("this harness currently supports NGammaTiTeNeutral 2D builds")
+    artifacts = executables_from_manifest(record)
     _text(record.get("build_id"), "build_id")
-    repository = record.get("repository")
-    if not isinstance(repository, dict):
-        raise BundleError("build manifest is missing repository provenance")
+    repository = record.get("repository", {})
     values = {
         "MHDG_BUILD_MANIFEST": str(path),
         "MHDG_SOLVER_REVISION": _text(repository.get("revision"), "repository.revision"),
+        "MHDG_EXECUTABLES": {},
     }
     runtime = _artifact(record.get("runtime_files"), RUNTIME_FILE, path.parent)
-    artifacts = record.get("artifacts")
-    if not isinstance(artifacts, dict) or not artifacts or artifacts.keys() - {"serial", "parallel"}:
-        raise BundleError("build manifest must contain serial and/or parallel executables")
-    if "variants" in profile and profile["variants"] != {
-        name: "serial" if name == "serial" else "parall" for name in artifacts
-    }:
-        raise BundleError("build artifacts do not match the declared variants")
-    for variant, key in (("serial", "MHDG_SERIAL_EXECUTABLE"), ("parallel", "MHDG_PARALLEL_EXECUTABLE")):
-        if variant not in artifacts:
-            continue
-        executable = _artifact(artifacts, variant, path.parent)
+    for key in artifacts:
+        executable = _artifact(artifacts, key, path.parent)
         if not os.access(executable, os.X_OK):
             raise BundleError(f"build executable is not executable: {executable}")
         if (executable.parent / RUNTIME_FILE).resolve() != runtime:
             raise BundleError(f"Fekete data must be beside the executable: {executable}")
-        values[key] = str(executable)
+        values["MHDG_EXECUTABLES"][key] = str(executable)
     return values
+
+
+def verify_executable(values, model, execution, executable):
+    """Verify the selected artifact again immediately before launching a run."""
+    manifest = absolute_setting(values, "MHDG_BUILD_MANIFEST")
+    record = load_json(manifest, "build manifest")
+    artifacts = executables_from_manifest(record)
+    key = build_key(model, execution)
+    expected = _artifact(artifacts, key, manifest.parent)
+    if expected != executable.resolve():
+        raise BundleError(f"selected executable does not match build {key}: {executable}")
+    _artifact(record.get("runtime_files"), RUNTIME_FILE, manifest.parent)
+    return {"build_id": record["build_id"], "git_commit": record["repository"]["revision"],
+            "git_dirty": bool(record["repository"].get("dirty", False))}
 
 
 def _artifact(records, name, directory):
@@ -162,15 +193,13 @@ def openmpi_version(launcher, environment):
     ) else None
 
 
-def runtime_settings(values, layouts):
-    """Check selected execution prerequisites before creating run directories."""
-    for execution in {layout["execution"] for layout in layouts}:
-        key = "MHDG_SERIAL_EXECUTABLE" if execution == "serial" else "MHDG_PARALLEL_EXECUTABLE"
-        if key not in values:
-            raise BundleError(f"no build selected for {execution}; pass --build-manifest FILE or use check --build")
-        runtime_files(solver_executable(values, execution))
+def runtime_settings(values, requirements):
+    """Check the required builds and launcher before creating run directories."""
+    for model, execution in sorted(requirements):
+        executable = solver_executable(values, execution, model)
+        verify_executable(values, model, execution, executable)
     environment = execution_environment(values)
-    if any(layout["execution"] == "mpi" for layout in layouts):
+    if any(execution == "mpi" for _, execution in requirements):
         values["MHDG_MPI_LAUNCHER"] = mpi_launcher(values, environment)
     return values
 
@@ -247,7 +276,7 @@ def bundle_root_from_settings(values):
     return require_directory(path, "bundle root")
 
 
-def absolute_setting(settings: dict[str, str], key: str) -> Path:
+def absolute_setting(settings: dict[str, Any], key: str) -> Path:
     value = settings.get(key)
     if not value:
         raise BundleError(f"settings must define {key}")
@@ -257,16 +286,15 @@ def absolute_setting(settings: dict[str, str], key: str) -> Path:
     return path.resolve()
 
 
-def solver_executable(settings: dict[str, str], execution: str) -> Path:
-    key = (
-        "MHDG_SERIAL_EXECUTABLE"
-        if execution == "serial"
-        else "MHDG_PARALLEL_EXECUTABLE"
-    )
-    path = absolute_setting(settings, key)
-    if not path.is_file() or not os.access(path, os.X_OK):
+def solver_executable(settings, execution, model=DEFAULT_MODEL):
+    key = build_key(model, execution)
+    selected = settings.get("MHDG_EXECUTABLES", {}).get(key)
+    if not selected:
+        raise BundleError(f"no build selected for {key}; use check --build or select a compatible --build-manifest")
+    path = Path(selected)
+    if not path.is_absolute() or not path.is_file() or not os.access(path, os.X_OK):
         raise BundleError(f"{key} is not an executable file: {path}")
-    return path
+    return path.resolve()
 
 
 def runtime_files(executable: Path) -> dict[str, Path]:
@@ -274,7 +302,7 @@ def runtime_files(executable: Path) -> dict[str, Path]:
     return {RUNTIME_FILE: require_file(path, "solver runtime")}
 
 
-def selected_mpi_launcher(settings: dict[str, str]) -> Path:
+def selected_mpi_launcher(settings: dict[str, Any]) -> Path:
     value = settings.get("MHDG_MPI_LAUNCHER")
     if not value:
         raise BundleError("settings must define MHDG_MPI_LAUNCHER")

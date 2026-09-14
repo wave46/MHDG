@@ -98,7 +98,7 @@ def solver_command(
 
 
 def load_preparation_inputs(
-    settings: dict[str, str],
+    settings: dict[str, Any],
     case_id: str,
     workflow_id: str,
     layout_id: str,
@@ -132,7 +132,7 @@ def load_preparation_inputs(
     )
 
     run_root = absolute_setting(settings, "MHDG_REGRESSION_RUN_ROOT")
-    executable = solver_executable(settings, layout["execution"])
+    executable = solver_executable(settings, layout["execution"], workflow["model"])
     runtime_inputs = runtime_files(executable)
     launcher = selected_mpi_launcher(settings) if layout["execution"] == "mpi" else None
     run_directory = _run_directory(
@@ -346,7 +346,7 @@ def _base_plan(
         "schema_version": 2, "created_utc": utc_now(),
         "case_id": inputs.case["case_id"], "workflow_id": inputs.workflow_id,
         **({"workflow_kind": workflow_kind} if workflow_kind is not None else {}),
-        "layout_id": inputs.layout_id, "layout": inputs.layout,
+        "layout_id": inputs.layout_id, "layout": inputs.layout, "model": inputs.workflow["model"],
         "working_directory": str(run_directory),
         "environment": openmp_environment(inputs.layout["omp_threads"]),
         **({"command": command} if command is not None else {}),
@@ -447,7 +447,7 @@ def _prepared_run(
 
 
 def prepare_run(
-    settings: dict[str, str],
+    settings: dict[str, Any],
     case_id: str,
     workflow_id: str,
     layout_id: str,

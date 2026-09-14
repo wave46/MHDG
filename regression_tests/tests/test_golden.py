@@ -28,7 +28,7 @@ printf 'Error: 1.0E-8\\nOutput written to file outputs/result.h5\\n'
 
 
 def write_off_solution(path, offset=0):
-    write_solution(path, solution_offset=offset)
+    write_solution(path, solution_offset=offset, model=True)
     with h5py.File(path, 'r+') as handle:
         handle['simulation_parameters/switches/balance_diagnostics_mode'] = b'off'
 
@@ -89,7 +89,7 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup, h
         path, report = golden.refresh('legacy_case', setup.values, setup.workspace)
     assert path.is_file() and report['status'] == 'ready' and not setup.output.exists()
     setup.build.assert_called_once()
-    assert setup.build.call_args.kwargs['variants'] == {'serial'}
+    assert setup.build.call_args.kwargs['requirements'] == {('NGammaTiTeNeutral', 'serial')}
     assert report['parallel_checks'] and all(item['status'] == 'passed' for item in report['parallel_checks'])
     assert report['producers'][-1]['old_reference']['status'] == ('failed' if has_old_reference else 'unavailable')
     warm = Path(report['producers'][-1]['run_directory'])
@@ -107,7 +107,7 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup, h
     manifest = json.loads((setup.output / 'manifest.json').read_text())
     assert manifest['bundle_class'] == 'golden'
     reference = setup.output / manifest['artifacts'][manifest['roles']['warm_reference']]['path']
-    assert reference.read_bytes() == restart.read_bytes()
+    assert reference.read_bytes() == (warm / "outputs/result.h5").read_bytes()
     receipt = json.loads((setup.output / 'provenance/publication.json').read_text())
     assert receipt['reason'] == 'Accepted solver change' and receipt['provenance'] == 'Review record 42'
     shutil.rmtree(setup.workspace)

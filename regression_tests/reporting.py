@@ -35,6 +35,10 @@ def run_result(result) -> int:
     print(f"solver exit code: {result.exit_code}")
     print(f"runtime: {result.duration_seconds:.3f} s")
     print(f"HDF5 outputs: {len(result.hdf5_outputs)}")
+    if result.status != "completed":
+        from .execute import execution_failures
+        for failure in execution_failures(result.path):
+            print(f"FAIL: {failure}")
     return 0 if result.status == "completed" else 1
 
 

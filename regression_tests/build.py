@@ -1,4 +1,4 @@
-"""Build the required 2-D neutral solver variants and record their provenance."""
+"""Build the required 2-D solver models/execution variants and record their provenance."""
 
 from __future__ import annotations
 
@@ -9,13 +9,12 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from .documents import write_json_atomic
-from .config import source_environment, RUNTIME_FILE
+from .config import source_environment, RUNTIME_FILE, EXECUTIONS, build_key
 from .support import BundleError, utc_now
 from .files import file_identity
-
-VARIANTS = {"serial": "serial", "parallel": "parall"}
 
 
 @dataclass(frozen=True)
@@ -26,13 +25,16 @@ class BuildResult:
 
 
 def build_solver(
-    settings: dict[str, str], repository_root: Path, jobs: int | None = None,
-    *, variants=("serial", "parallel"),
+    settings: dict[str, Any], repository_root: Path, jobs: int | None = None,
+    *, requirements,
 ) -> BuildResult:
     """Build each selected variant once; return artifacts without writing settings."""
-    selected = set(variants)
-    if not selected or selected - VARIANTS.keys():
-        raise BundleError("build variants must select serial and/or parallel")
+    # Deduplicate requirements; group by model, serial before MPI.
+    selected = sorted(set(requirements), key=lambda item: (item[0], item[1] != "serial"))
+    if not selected:
+        raise BundleError("no solver builds required")
+    for model, execution in selected:
+        build_key(model, execution)
     try:
         jobs = int(settings.get("MHDG_REGRESSION_BUILD_JOBS", "8")) if jobs is None else jobs
     except ValueError as exc:
@@ -82,19 +84,18 @@ def build_solver(
         any(library.glob(pattern))
         for pattern in ("*.o", "*.mod", "*.smod", "*.kmo", "*.F", "*.f90", "*.F90", "MHDG-*")
     )
-    for variant, mode in VARIANTS.items():
-        if variant not in selected:
-            continue
-        target = f"MHDG-NGammaTiTeNeutral-{mode}-2D"
+    for model, execution in selected:
+        variant, mode = build_key(model, execution), EXECUTIONS[execution]
+        target = f"MHDG-{model}-{mode}-2D"
         compile_command = [
             "make", f"-j{jobs}", f"MODE={mode}", "COMPTYPE=opt",
-            "MDL=NGammaTiTeNeutral", "DIM=2D",
+            f"MDL={model}", "DIM=2D",
             f"MHDG_GIT_COMMIT={revision}", f"MHDG_GIT_DIRTY={'true' if changes else 'false'}",
             f"MHDG_BUILD_ID={build_id}", target,
         ]
         steps = [["make", "clean"], compile_command] if clean_needed else [compile_command]
         commands.extend(steps)
-        _run_logged(steps, library, environment, directory / "logs" / f"{variant}.log")
+        _run_logged(steps, library, environment, directory / "logs" / f"{model}-{execution}.log")
         source = library / target
         if not source.is_file() or not os.access(source, os.X_OK):
             raise BundleError(f"built {variant} executable was not produced: {source}")
@@ -107,7 +108,7 @@ def build_solver(
     shutil.copy2(runtime, runtime_copy)
     metadata_path = directory / "build_metadata.json"
     metadata = {
-        "schema_version": 2,
+        "schema_version": 3,
         "build_id": build_id,
         "status": "completed",
         "started_utc": started,
@@ -117,8 +118,7 @@ def build_solver(
             "dirty": bool(changes), "changes": changes,
         },
         "profile": {
-            "model": "NGammaTiTeNeutral", "dimension": "2D", "compile_type": "opt",
-            "jobs": jobs, "variants": {name: VARIANTS[name] for name in executables},
+            "dimension": "2D", "compile_type": "opt", "jobs": jobs,
         },
         "commands": commands,
         "environment_script": _file_record(script) if script else None,

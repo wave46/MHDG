@@ -4,10 +4,14 @@ import json
 from dataclasses import replace
 
 import pytest
+import h5py
+import shlex
+import sys
 
 from regression_tests.execute import execute_prepared, final_execution
 from regression_tests.prepare import prepare_run
 from regression_tests.files import file_identity
+from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import REGRESSION_ROOT, create_harness, run_command
 
 
@@ -81,7 +85,8 @@ def test_stages_pass_selected_output_to_next_restart(harness):
     assert [stage["status"] for stage in metadata["stages"]] == ["completed"] * len(stages)
     final = stages[-1] / "outputs/result.h5"
     assert metadata["hdf5_outputs"] == [final.relative_to(directory).as_posix()]
-    assert final.read_text() == ">".join(path.name for path in stages) + "\n"
+    with h5py.File(final) as h:
+        assert h.attrs["fixture_text"] == ">".join(path.name for path in stages) + "\n"
     assert not (stages[0] / "inputs/restart.h5").exists()
     for previous, current in zip(stages, stages[1:]):
         assert (current / "inputs/restart.h5").resolve() == previous / "outputs/result.h5"
@@ -121,7 +126,7 @@ def test_launch_failure_is_recorded(harness, log_failure):
         (prepared.path / "stdout.log").mkdir()
     else:
         prepared = replace(prepared, command=[str(harness.root / "missing-command")])
-    result = execute_prepared(prepared, {})
+    result = execute_prepared(prepared, harness.values)
     metadata = json.loads((prepared.path / "run_metadata.json").read_text())
     assert result.status == metadata["status"] == "launch_failed"
     assert result.exit_code is None
@@ -157,7 +162,7 @@ stage=${PWD##*/}
 if (($# == 1)); then
   history=$stage
 else
-  history=$(<"$2.h5")
+  history=$("$MHDG_FIXTURE_PYTHON" -c 'import h5py,sys; print(h5py.File(sys.argv[1]).attrs["fixture_text"],end="")' "$2.h5")
   history=${history%$'\\n'}">"$stage
 fi
 printf '%s\n' "$history" > outputs/result.h5
@@ -183,3 +188,37 @@ fi
 printf '%s\n' "$stage" > outputs/result.h5
 printf 'Output written to file %s\n' "$PWD/outputs/result.h5"
 """
+
+
+def test_changed_executable_is_rejected_after_preparation(harness):
+    values = harness.values
+    prepared = prepare_run(values, "legacy_case", "warm", "serial_omp1",
+                           REGRESSION_ROOT / "cases", REGRESSION_ROOT / "layouts.json", "changed-binary")
+    harness.serial_executable.write_text(harness.serial_executable.read_text() + "\n")
+    with pytest.raises(BundleError, match="checksum/size changed"):
+        execute_prepared(prepared, values)
+    assert not (prepared.path / "stdout.log").exists()
+
+
+@pytest.mark.parametrize("defect", ["model", "provenance", "feature"])
+def test_wrong_model_provenance_or_feature_rejects_zero_exit_output(harness, defect):
+    workflow = "warm"
+    if defect == "model":
+        # A mislabeled build must not make the ordinary five-equation solver
+        # count as Gamma coverage, even if its executable hash is valid.
+        record = json.loads(harness.build_manifest.read_text())
+        record["profile"]["model"] = "NGammaTiTeNeutralGamma"
+        harness.build_manifest.write_text(json.dumps(record))
+        workflow = "cold_step_neutralgamma"
+        expected = "simulation_parameters/model"
+    else:
+        key, value = ("provenance/git_commit", "wrong-revision") if defect == "provenance" else (
+            "simulation_parameters/switches/impurity_radiation", 0)
+        code = f"import h5py; h=h5py.File('outputs/result.h5','r+'); del h[{key!r}]; h[{key!r}]={value!r}; h.close()"
+        harness.serial_executable.write_text(harness.serial_executable.read_text() + shlex.join([sys.executable, "-c", code]) + "\n")
+        harness.write_build_record()
+        expected = key
+    completed, _, metadata = run(harness, workflow)
+    assert completed.returncode == 1
+    assert metadata["status"] == "output_contract_failed"
+    assert expected in completed.stdout

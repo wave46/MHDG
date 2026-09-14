@@ -10,6 +10,7 @@ from typing import Any
 
 from .documents import load_validated_json
 from .support import BundleError
+from .config import DEFAULT_MODEL, build_key
 
 MEDIA_TYPES = {
     ".h5": "application/x-hdf5",
@@ -168,6 +169,7 @@ def _normalize_workflow(
         raise BundleError("resolved workflow is missing: " + ", ".join(missing))
     workflow = {
         "kind": declaration["type"],
+        "model": declaration.get("model", DEFAULT_MODEL),
         "description": declaration["description"],
         "required_artifact_roles": declaration.get("inputs", []),
     }
@@ -549,3 +551,21 @@ def load_selection(name, suites_path, layouts_path, case_directory, *, case_id=N
     if not selected:
         raise BundleError(f"selection {name} contains no checks")
     return is_profile, list(selected.values())
+
+
+def required_builds(case, workflows, layouts):
+    """Derive the unique model/execution combinations for selected cells."""
+    for name in workflows:
+        if name not in case["workflows"]:
+            raise BundleError(f"case {case['case_id']} has no workflow {name}")
+    requirements = {(case["workflows"][name]["model"], layout["execution"])
+                    for name in workflows for layout in layouts}
+    for requirement in requirements:
+        build_key(*requirement)
+    return requirements
+
+
+def selection_builds(checks, case_directory, layouts):
+    return set().union(*(required_builds(load_case_definition(check["case_id"], case_directory),
+                                        check["workflow_ids"], [layouts[name] for name in check["layouts"]])
+                         for check in checks))

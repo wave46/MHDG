@@ -29,7 +29,7 @@ def diagnose(args):
 
     from .bundles import validate_bundle_root
     from .config import bundle_root_from_settings
-    from .catalog import load_case_definition, load_selection
+    from .catalog import load_case_definition, load_selection, selection_builds
     from .catalog import load_layouts
     try:
         _, checks = load_selection(
@@ -67,8 +67,7 @@ def diagnose(args):
             return f"{root} ({summary.verified_artifact_count} artifacts verified)"
 
         def runtime():
-            names = {name for item in selected for name in item["layouts"]}
-            config.runtime_settings(values, [layouts[name] for name in names])
+            config.runtime_settings(values, selection_builds(selected, config.ROOT / "cases", layouts))
             return values["MHDG_BUILD_MANIFEST"]
 
         check(f"{case_id} bundle", bundle)

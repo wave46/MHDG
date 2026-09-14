@@ -7,12 +7,12 @@ from pathlib import Path
 import time
 from typing import Any
 
-from .catalog import load_case_definition, load_suite_definition
+from .catalog import load_case_definition, load_suite_definition, load_layouts, required_builds
 from .config import (bundle_root_from_settings, absolute_setting, solver_executable,
-                     runtime_files, selected_mpi_launcher)
+                     runtime_files, selected_mpi_launcher, runtime_settings, build_key)
 from .bundles import validate_bundle_root
 from .prepare import prepare_run
-from .execute import execute_prepared, reusable_outputs
+from .execute import execute_prepared, reusable_outputs, execution_failures
 from .compare import compare_completed_run, compare_generated_meshes, producer_converged, validate_completed_run
 from .compare_common import select_candidate
 from .documents import load_json, write_json_atomic
@@ -22,7 +22,7 @@ from .files import file_identity, require_file, recorded_directory
 
 @dataclass(frozen=True)
 class SuiteRunInputs:
-    settings: dict[str, str]
+    settings: dict[str, Any]
     case_id: str
     run_id: str
     case_directory: Path
@@ -58,7 +58,8 @@ def run_cell(
         result["duration_seconds"] = run.duration_seconds
         result["status"] = run.status
         if run.status != "completed":
-            result["failures"] = [f"solver run status is {run.status}"]
+            result["failures"] = [f"solver run status is {run.status}", *execution_failures(prepared.path)]
+
             return result
         return _compare_cell(result, inputs)
     except HarnessError as exc:
@@ -275,9 +276,9 @@ def _validate_source_summary(summary: dict[str, Any]) -> None:
 
 
 def suite_execution_inputs(
-    settings: dict[str, str],
+    settings: dict[str, Any],
     bundle_root: Path,
-    layout_ids: list[str],
+    requirements,
     tracked_files: dict[str, Path],
 ) -> dict[str, Any]:
     """Describe files that must remain stable across suite resumes."""
@@ -291,18 +292,16 @@ def suite_execution_inputs(
             for name, path in tracked_files.items()
         },
     }
-    for execution, prefix, name in (("serial", "serial_", "serial_executable"),
-                                     ("mpi", "mpi", "parallel_executable")):
-        if any(layout.startswith(prefix) for layout in layout_ids):
-            records[name] = _file_record(solver_executable(settings, execution), name)
-    if "parallel_executable" in records:
+    records["executables"] = {
+        build_key(model, execution): _file_record(solver_executable(settings, execution, model), "executable")
+        for model, execution in sorted(requirements)
+    }
+    if any(execution == "mpi" for _, execution in requirements):
         records["mpi_launcher"] = _file_record(selected_mpi_launcher(settings), "MPI launcher")
-    # Runtime inputs affect resume independently of the executable checksum.
-    # Record only selected paths, once even when both variants share the file.
     records["runtime_files"] = {
         str(path): file_identity(path)
-        for name in ("serial_executable", "parallel_executable") if name in records
-        for path in runtime_files(Path(records[name]["path"])).values()
+        for item in records["executables"].values()
+        for path in runtime_files(Path(item["path"])).values()
     }
     for key, name in (
         ("MHDG_ENVIRONMENT_SCRIPT", "environment_script"),
@@ -375,7 +374,11 @@ def run_suite(
     else:
         mode = "immediate"
     overrides = {"balance_diagnostics_mode": suite["diagnostics"], **(parameter_overrides or {})}
-    identity = suite_execution_inputs(settings, bundle_root, suite["layouts"], {
+    case = load_case_definition(suite["case_id"], case_directory)
+    layouts = load_layouts(layouts_path)
+    requirements = required_builds(case, suite["workflow_ids"], [layouts[name] for name in suite["layouts"]])
+    runtime_settings(settings, requirements)
+    identity = suite_execution_inputs(settings, bundle_root, requirements, {
         "case_definition": case_directory / f"{suite['case_id']}.json",
         "workflow_catalog": case_directory.parent / "workflows.json",
         "layout_catalog": layouts_path, "suite_catalog": suites_path,

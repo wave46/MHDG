@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from .catalog import load_case_definition, workflow_required_roles, load_suite_definition, layout_pairs, load_layouts
+from .catalog import load_case_definition, workflow_required_roles, load_suite_definition, layout_pairs, load_layouts, required_builds
 from .documents import load_json, write_json_atomic
 from .support import BundleError, HarnessError, utc_now, utc_run_id
 from .files import file_identity
@@ -51,9 +51,11 @@ def _recipe(case_id, root):
               for name in declaration["checks"]]
     if not checks or len(set(declaration["checks"])) != len(checks):
         raise BundleError("golden checks must be nonempty and unique")
-    used = {name for item in producers for name in item["layouts"]}
-    used.update(name for check in checks for name in check["layouts"])
-    return case, producers, declaration["checks"], [layouts[name] for name in sorted(used)]
+    requirements = set().union(*(required_builds(case, [item["workflow"]], [layouts[name] for name in item["layouts"]])
+                                 for item in producers))
+    for check in checks:
+        requirements.update(required_builds(case, check["workflow_ids"], [layouts[name] for name in check["layouts"]]))
+    return case, producers, declaration["checks"], requirements
 
 
 def _record(path, base=None):
@@ -70,7 +72,7 @@ def _verify_record(base, record):
 def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
     """Generate a reviewable candidate; never publish or resume a campaign."""
     root = catalog_root or ROOT
-    case, producers, checks, layouts = _recipe(case_id, root)
+    case, producers, checks, requirements = _recipe(case_id, root)
     source = Path(settings["MHDG_REGRESSION_DATA_ROOT"]).resolve()
     validate_bundle_root(source, root / "cases")
     manifest = load_json(source / "manifest.json", "source bundle")
@@ -101,11 +103,10 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
     path = workspace / "refresh.json"
     write_json_atomic(path, report, "refresh report")
     try:
-        variants = {"serial" if layout["execution"] == "serial" else "parallel" for layout in layouts}
-        build = build_solver(settings, ROOT.parent, jobs, variants=variants)
+        build = build_solver(settings, ROOT.parent, jobs, requirements=requirements)
         values = {**settings, **config.build_settings(build.metadata_path),
                   "MHDG_REGRESSION_RUN_ROOT": str(workspace / "runs")}
-        config.runtime_settings(values, layouts)
+        config.runtime_settings(values, requirements)
         shutil.copy2(build.metadata_path, workspace / "build.json")
         generated = {}
         for producer in producers:

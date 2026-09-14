@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from .compare_common import select_candidate
+from .compare_fixed import check_output_contract
 from .documents import load_json, write_json_atomic
-from .config import source_environment
+from .config import source_environment, verify_executable
 from .support import BundleError, ComparisonError, HarnessError, utc_now
 from .files import file_identity
 from .prepare import PreparedExecution, PreparedRun, PreparedStagedRun, openmp_environment
@@ -26,14 +27,16 @@ class RunResult:
     hdf5_outputs: list[str]
 
 
-def execute_prepared(prepared: PreparedExecution, settings: dict[str, str]) -> RunResult:
+def execute_prepared(prepared: PreparedExecution, settings: dict[str, Any]) -> RunResult:
     """Run one warm command or a sequential cold workflow."""
     if isinstance(prepared, PreparedStagedRun):
         return _execute_staged(prepared, settings)
     return _execute_run(prepared, settings)
 
 
-def _execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
+def _execute_run(prepared: PreparedRun, settings: dict[str, Any]) -> RunResult:
+    plan = load_json(prepared.path / "run_plan.json", "run plan")
+    identity = verify_executable(settings, plan["model"], plan["layout"]["execution"], prepared.executable)
     script = None
     environment = dict(os.environ)
     if configured := settings.get("MHDG_ENVIRONMENT_SCRIPT"):
@@ -109,11 +112,25 @@ def _execute_run(prepared: PreparedRun, settings: dict[str, str]) -> RunResult:
         "output_files": outputs,
         "hdf5_outputs": hdf5_outputs,
     }
+    if status == "completed":
+        try:
+            candidate = select_candidate(prepared.path, metadata)
+            contract = check_output_contract(candidate, plan["model"], identity, plan.get("parameter_overrides", {}))
+            metadata["output_contract"] = contract
+            if contract["status"] != "passed":
+                status = "output_contract_failed"
+        except ComparisonError as exc:
+            status = "output_selection_failed"
+            metadata["output_contract"] = {"status": "failed", "failures": [str(exc)]}
+        except BundleError as exc:
+            status = "output_contract_failed"
+            metadata["output_contract"] = {"status": "failed", "failures": [str(exc)]}
+        metadata["status"] = status
     write_json_atomic(prepared.path / "run_metadata.json", metadata, "run metadata")
     return RunResult(prepared.path, status, exit_code, duration, hdf5_outputs)
 
 
-def _execute_staged(prepared: PreparedStagedRun, settings: dict[str, str]) -> RunResult:
+def _execute_staged(prepared: PreparedStagedRun, settings: dict[str, Any]) -> RunResult:
     started_utc = utc_now()
     started_clock = time.monotonic()
     records = [
@@ -200,7 +217,7 @@ def _file_record(path: Path, display_path: str) -> dict[str, Any]:
     return {"path": display_path, **file_identity(path)}
 
 
-def _optional_file_record(settings: dict[str, str], key: str) -> dict[str, Any] | None:
+def _optional_file_record(settings: dict[str, Any], key: str) -> dict[str, Any] | None:
     if not (value := settings.get(key)):
         return None
     path = Path(value).expanduser()
@@ -246,3 +263,13 @@ def reusable_outputs(directory):
         )
     except (HarnessError, OSError, KeyError, TypeError):
         return False
+
+
+def execution_failures(directory):
+    """Read output-contract failures from the last attempted execution."""
+    metadata = load_json(directory / "run_metadata.json", "run metadata")
+    if metadata.get("stages"):
+        attempted = [stage for stage in metadata["stages"] if stage["status"] != "not_run"]
+        if attempted:
+            metadata = load_json(Path(attempted[-1]["run_directory"]) / "run_metadata.json", "stage metadata")
+    return metadata.get("output_contract", {}).get("failures", [])

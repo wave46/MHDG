@@ -62,6 +62,8 @@ def parser() -> argparse.ArgumentParser:
             item.add_argument("case", nargs="?", metavar="CASE")
 
     build = command("build", "Build regression executables.", settings=True)
+    build.add_argument("suite", nargs="?", default="routine", metavar="PROFILE_OR_SUITE")
+    build.add_argument("--case")
     build.add_argument("--jobs", type=_positive_integer, metavar="N")
 
     doctor = command("doctor", "Check selected catalogs, data, build and machine prerequisites.", settings=True)
@@ -157,14 +159,15 @@ def _dispatch(args: argparse.Namespace) -> int:
 
         return diagnose(args)
     if args.command in {"run", "prepare"}:
-        from .catalog import load_layout
+        from .catalog import load_layout, load_case_definition, required_builds
         from .prepare import prepare_run
         from .execute import execute_prepared
 
         settings = _settings(args, args.case)
         from .config import runtime_settings
 
-        runtime_settings(settings, [load_layout(args.layout, ROOT / "layouts.json")])
+        runtime_settings(settings, required_builds(load_case_definition(args.case, ROOT / "cases"),
+                                                  [args.workflow], [load_layout(args.layout, ROOT / "layouts.json")]))
         prepared = prepare_run(
             settings, args.case, args.workflow, args.layout,
             ROOT / "cases", ROOT / "layouts.json", args.run_id,
@@ -178,7 +181,10 @@ def _dispatch(args: argparse.Namespace) -> int:
         from .build import build_solver
         from .config import settings
 
-        result = build_solver(settings(args.settings, use_build=False), ROOT.parent, args.jobs)
+        from .catalog import load_selection, load_layouts, selection_builds
+        _, checks = load_selection(args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases", case_id=args.case)
+        requirements = selection_builds(checks, ROOT / "cases", load_layouts(ROOT / "layouts.json"))
+        result = build_solver(settings(args.settings, use_build=False), ROOT.parent, args.jobs, requirements=requirements)
         reporting.status("build", "completed", result.path)
         print(f"select with --build-manifest {result.metadata_path}")
         return 0
@@ -234,7 +240,7 @@ def _dispatch(args: argparse.Namespace) -> int:
 def _check(args: argparse.Namespace) -> int:
     from .build import build_solver
     from .suites import run_suite, run_profile
-    from .catalog import load_selection
+    from .catalog import load_selection, selection_builds
     from .config import build_settings, runtime_settings
     from .catalog import load_layouts
     from .support import BundleError
@@ -254,17 +260,16 @@ def _check(args: argparse.Namespace) -> int:
     values = {case: _settings(args, case, use_build=not args.build) for case in cases}
     layouts = load_layouts(ROOT / "layouts.json")
     if args.build:
-        variants = {"serial" if layouts[name]["execution"] == "serial" else "parallel"
-                    for check in checks for name in check["layouts"]}
-        build = build_solver(values[cases[0]], ROOT.parent, args.build_jobs, variants=variants)
+        requirements = selection_builds(checks, ROOT / "cases", layouts)
+        build = build_solver(values[cases[0]], ROOT.parent, args.build_jobs, requirements=requirements)
         selected_build = build_settings(build.metadata_path)
         for settings in values.values():
             settings.update(selected_build)
         reporting.status("build", "completed", build.path)
         print(f"select with --build-manifest {build.metadata_path}")
     for case, settings in values.items():
-        selected = {name for check in checks if check["case_id"] == case for name in check["layouts"]}
-        runtime_settings(settings, [layouts[name] for name in selected])
+        selected = [check for check in checks if check["case_id"] == case]
+        runtime_settings(settings, selection_builds(selected, ROOT / "cases", layouts))
     options = dict(
         required_bundle_class=None if args.allow_candidate else "golden",
         compare=not args.run_only, resume=args.resume,

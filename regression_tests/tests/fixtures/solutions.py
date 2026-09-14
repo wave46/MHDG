@@ -13,6 +13,7 @@ def write_solution(
     *,
     grouped: bool = True,
     solution_offset: float = 0.0,
+    model: bool = False,
 ) -> None:
     mesh_values = {
         "X": np.array([[0.0, 1.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]),
@@ -35,10 +36,14 @@ def write_solution(
         "Nextfaces": np.array([4], dtype=np.int32),
         "Nfaces": np.array([5], dtype=np.int32),
     }
+    names = [b"rho", b"Gamma", b"nEi", b"nEe", b"rhon"] if model else [b"rho", b"Gamma"]
+    if model == "NGammaTiTeNeutralGamma":
+        names.append(b"Gamman")
+    count = len(names)
     solution_values = {
-        "u": np.arange(1.0, 13.0) + solution_offset,
-        "q": np.arange(1.0, 25.0) + solution_offset,
-        "u_tilde": np.arange(1.0, 21.0) + solution_offset,
+        "u": np.arange(1.0, 6 * count + 1.) + solution_offset,
+        "q": np.arange(1.0, 12 * count + 1.) + solution_offset,
+        "u_tilde": np.arange(1.0, 10 * count + 1.) + solution_offset,
     }
 
     with h5py.File(path, "w") as handle:
@@ -51,17 +56,17 @@ def write_solution(
 
         if grouped:
             parameters = handle.create_group("simulation_parameters")
-            parameters.create_dataset("Neq", data=np.array([2], dtype=np.int32))
+            parameters.create_dataset("Neq", data=np.array([count], dtype=np.int32))
             physics = parameters.create_group("physics")
             physics.create_dataset(
                 "conservative_variable_names",
-                data=np.array([b"rho", b"Gamma"]),
+                data=np.array(names),
             )
         else:
-            handle.create_dataset("Neq", data=np.array([2], dtype=np.int32))
+            handle.create_dataset("Neq", data=np.array([count], dtype=np.int32))
             handle.create_dataset(
                 "conservative_variable_names",
-                data=np.array([b"rho", b"Gamma"]),
+                data=np.array(names),
             )
 
         transport = handle.create_group("transport_1d")
@@ -73,3 +78,32 @@ def write_solution(
             "rho_grid",
             data=np.array([0.0, 1.0]),
         )
+
+
+def finalize_solver_outputs(model="NGammaTiTeNeutral", build_id="fixture-build", revision="fixture-revision", dirty=False):
+    """Emit the identity/feature metadata of the tiny test executable."""
+    import json
+    plan = json.loads(Path("run_plan.json").read_text())
+    for path in Path("outputs").glob("*.h5"):
+        if not h5py.is_hdf5(path):
+            text = path.read_text()
+            write_solution(path, model=model)
+            with h5py.File(path, "r+") as handle:
+                handle.attrs["fixture_text"] = text
+        with h5py.File(path, "r+") as h:
+            values = {"simulation_parameters/model": "N-Gamma-Ti-Te-Neutral" + ("Gamma" if model.endswith("Gamma") else ""),
+                      "simulation_parameters/Ndim": 2,
+                      "simulation_parameters/switches/impurity_radiation": 1,
+                      "simulation_parameters/numerics/NeutralP_lambda": 0.,
+                      "simulation_parameters/physics/impurity_names": "W",
+                      "simulation_parameters/physics/impurity_concentrations": 1e-4,
+                      "provenance/build_id": build_id, "provenance/git_commit": revision, "provenance/git_dirty": int(dirty)}
+            for key, value in plan.get("parameter_overrides", {}).items():
+                if key in ("impurity_radiation", "neutral_wall_sources_in_elements", "neutral_perpendicular_diffusion"):
+                    values[f"simulation_parameters/switches/{key}"] = int(value)
+                elif key == "compute_from_flux":
+                    values["magnetic/jtor_source"] = "bicubic_psi" if value else "stored_hdf5"
+            for key, value in values.items():
+                if key in h:
+                    del h[key]
+                h[key] = value

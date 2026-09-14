@@ -93,7 +93,7 @@ creating runs. It does not execute the solver or prove numerical convergence.
 `build` and `check --build` produce a manifest; select the printed
 `--build-manifest` path for later runs/resume, or save it as `defaults.build`.
 A new build ignores the old default build. Build manifests must describe completed
-NGammaTiTeNeutral 2D builds; selected binaries and Fekete data must match their
+2D NGammaTiTeNeutral or NGammaTiTeNeutralGamma builds; selected binaries and Fekete data must match their
 recorded checksums. Runtime environment setup remains machine-owned rather than
 being copied from another machine's build provenance.
 
@@ -218,27 +218,42 @@ finite Newton values without a convergence bound; `source_cold` enforces the col
 stage thresholds. Compact validation results are stored in the suite summary.
 Golden producers share these checks independently of old-reference agreement.
 
-`--run-only` defers scientific checks; `compare --suite` checks a saved suite summary,
+`--run-only` defers reference, convergence and diagnostic checks; build/output identity
+is still checked on every execution. `compare --suite` checks a saved suite summary,
 including output validity for suites without reference comparisons.
 
 ### Build reusable executables
 
 ```bash
-python -m regression_tests build \
+python -m regression_tests build full \
   --settings /private/path/settings.json --jobs 8
 ```
 
-`build` produces both serial and MPI executables. `check --build` builds only
-the variants required by the selected suite, once each. Builds run sequentially
-because they share objects in `lib/`. Existing objects have an unknown manual
-build configuration, so the harness cleans them before building; it also cleans
-between serial and MPI variants. An empty build tree needs no initial clean.
+`build [PROFILE_OR_SUITE]` (default `routine`) and `check --build` derive the
+required model/execution combinations from the selected workflows and layouts.
+Each combination is built once; OpenMP thread counts share an executable. A
+workflow defaults to NGammaTiTeNeutral and can declare `model` explicitly;
+`cold_step_neutralgamma` requires NGammaTiTeNeutralGamma. Currently `routine`
+needs ordinary-neutral MPI, while `full` also needs ordinary-neutral serial and
+Gamma serial. These are selection results, not fixed build counts.
 
-The command prints the generated manifest path and records commands, logs, Git
-state, toolchain versions, environment checksum, and executable checksums.
-The manifest selects the new executables directly.
-A manifest may contain just one variant; a suite needing another reports the
-missing build. Use `build` to produce both for subsequent mixed-layout suites.
+Builds run sequentially because they share objects in `lib/`. Existing objects
+have an unknown manual configuration, so the harness cleans before building and
+between model/execution configurations. An empty tree needs no initial clean.
+The command records commands, logs, Git state, toolchain and artifact identities.
+
+Without `--build`, missing required executables fail preflight before a profile
+starts. The harness does not silently build midway through a check. Version-3
+manifests identify each artifact by model/execution; existing version-2 ordinary
+build manifests remain readable so accepted runs can still be investigated.
+
+Before every launch, the selected binary and runtime data must match the build
+record. After execution, the output must report the expected model, dimension,
+equations and build provenance. Relevant feature switches, neutral parameters
+and active impurity species/concentrations are checked against the run inputs.
+Zero exit status with an incorrect output contract fails the run and stops a cold
+chain. Saved comparisons apply the same identity checks when execution records
+are available; standalone debugging comparisons can lack those records.
 
 ### Inspect or run one workflow
 
@@ -420,9 +435,10 @@ solutions:
 /provenance/build_id
 ```
 
-Do not edit these fields. One regression build ID is shared by its serial and
-MPI executables. Candidate and golden commit hashes normally differ, so this
-provenance is informational rather than a comparison criterion.
+Do not edit these fields. One build ID is shared by the artifacts in that build
+set. Each run's output must match its selected build provenance. Candidate and
+golden revisions may differ; they are not required to match each other. Per-run
+metadata references the build record rather than copying its revision/configuration.
 
 ## External bundles
 

@@ -263,6 +263,7 @@
       }
     },
     "cold_step_neutralgamma": {
+      "model": "NGammaTiTeNeutralGamma",
       "extends": "cold_step_impurity_off",
       "description": "Exercise NeutralGamma for one fixed cold step and two Newton iterations",
       "parameter_overrides": {
