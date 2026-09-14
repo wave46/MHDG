@@ -120,7 +120,7 @@ def load_preparation_inputs(
     if workflow is None:
         raise BundleError(f"case {case_id} has no workflow {workflow_id}")
     if not require_reference:
-        workflow = {key: value for key, value in workflow.items() if key != "reference_role"}
+        workflow = {key: value for key, value in workflow.items() if key != "reference"}
     layout = load_layout(layout_id, layouts_path)
     artifacts, manifest = _case_artifacts(
         bundle_root,
@@ -246,15 +246,15 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     sources = {filename: artifacts[role] for role, filename in roles.items()}
     if stage is None:
         parameter_role = "warm_parameters"
-        sources["restart.h5"] = artifacts[workflow.get("restart_role", "warm_restart")]
-        if workflow.get("reference_role"):
-            sources["reference.h5"] = artifacts[workflow["reference_role"]]
+        sources["restart.h5"] = artifacts[workflow.get("restart", "warm_restart")]
+        if workflow.get("reference"):
+            sources["reference.h5"] = artifacts[workflow["reference"]]
     else:
-        parameter_role = stage["parameter_role"]
-        sources["mesh.msh"] = artifacts[workflow["mesh_role"]]
-        sources["transport_model.nml"] = artifacts[stage["transport_configuration_role"]]
-    if workflow.get("impurity_configuration_role"):
-        sources["impurity_model.nml"] = artifacts[workflow["impurity_configuration_role"]]
+        parameter_role = stage["parameters"]
+        sources["mesh.msh"] = artifacts[workflow["mesh"]]
+        sources["transport_model.nml"] = artifacts[stage["transport"]]
+    if workflow.get("impurity_configuration"):
+        sources["impurity_model.nml"] = artifacts[workflow["impurity_configuration"]]
     for filename, source in sources.items():
         (directory / filename).symlink_to(source)
     for filename, source in inputs.runtime_files.items():
@@ -288,7 +288,7 @@ def write_run_plan(
     """Write the plan for one warm run or one workflow stage."""
     plan = _base_plan(inputs, inputs.run_directory, command=command)
     if stage is not None:
-        plan["stage_id"] = stage["stage_id"]
+        plan["stage_id"] = stage["id"]
         plan["restart_from"] = stage["restart_from"]
     if applied_overrides is not None:
         plan["parameter_overrides"] = applied_overrides
@@ -304,7 +304,7 @@ def write_staged_plan(
     plan = _base_plan(
         inputs,
         inputs.run_directory,
-        workflow_kind=inputs.workflow["kind"],
+        workflow_kind=inputs.workflow["type"],
     )
     plan["stages"] = [
         {
@@ -385,7 +385,7 @@ def prepare_staged_run(inputs: PreparationInputs) -> PreparedStagedRun:
     with temporary_run_directory(inputs.run_directory) as staging:
         (staging / "inputs").mkdir()
         (staging / "stages").mkdir()
-        reference_role = inputs.workflow.get("reference_role")
+        reference_role = inputs.workflow.get("reference")
         if reference_role is not None:
             (staging / "inputs" / "reference.h5").symlink_to(
                 inputs.artifacts[reference_role]
@@ -402,7 +402,7 @@ def _prepare_stage(
     index: int,
     stage: dict[str, Any],
 ) -> PreparedStage:
-    directory_name = f"{index:02d}_{stage['stage_id']}"
+    directory_name = f"{index:02d}_{stage['id']}"
     stage_directory = inputs.run_directory / "stages" / directory_name
     staging_stage = staging / "stages" / directory_name
     command = solver_command(
@@ -427,7 +427,7 @@ def _prepare_stage(
         applied_overrides=overrides,
     )
     return PreparedStage(
-        stage["stage_id"],
+        stage["id"],
         stage["restart_from"],
         _prepared_run(stage_inputs, command),
     )
@@ -473,7 +473,7 @@ def prepare_run(
         artifact_overrides,
         require_reference,
     )
-    workflow_kind = inputs.workflow["kind"]
+    workflow_kind = inputs.workflow["type"]
     if workflow_kind == "warm_same_state":
         return prepare_warm_run(inputs)
     if workflow_kind in {"staged_fixed_mesh", "staged_adaptive_mesh"}:

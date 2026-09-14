@@ -48,7 +48,7 @@ def diagnose(args):
     for case_id in cases:
         case = load_case_definition(case_id, config.ROOT / "cases")
         selected = [item for item in checks if item["case_id"] == case_id]
-        needs_interpolation |= any(case["workflows"][name].get("comparison_policy") == "mesh_independent"
+        needs_interpolation |= any(case["workflows"][name].get("comparison", {}).get("method") == "mesh_independent"
                                    for item in selected for name in item["workflow_ids"])
         try:
             values = config.settings(args.settings, case=case_id, bundle=args.bundle,

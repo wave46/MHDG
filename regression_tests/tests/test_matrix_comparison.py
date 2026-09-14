@@ -91,7 +91,7 @@ def test_reference_index_rejects_ambiguous_or_unusable_artifacts(tmp_path):
 
 def fixture(root, workflow_id):
     case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
-    stage_ids = [stage["stage_id"] for stage in case["workflows"][workflow_id]["stages"]]
+    stage_ids = [stage["id"] for stage in case["workflows"][workflow_id]["stages"]]
     bundle = root / "golden"
     (bundle / "references").mkdir(parents=True)
     references, artifacts, entries = {}, {}, []

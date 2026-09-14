@@ -37,12 +37,12 @@ def _recipe(case_id, root):
         if name not in case["workflows"]:
             raise BundleError(f"unknown producer workflow: {name}")
         workflow = case["workflows"][name]
-        canonical = workflow["default_layout"]
+        canonical = workflow["layout"]
         selected = list(layouts) if entry.get("matrix") else [canonical]
         if canonical not in layouts:
             raise BundleError(f"unknown producer layout: {canonical}")
         producers.append({"workflow": name, "layouts": selected,
-                          "roles": workflow.get("output_roles", []), "canonical": canonical,
+                          "roles": workflow.get("outputs", []), "canonical": canonical,
                           "matrix": document["matrix"] if entry.get("matrix") else None})
     if not producers or len({item["workflow"] for item in producers}) != len(producers):
         raise BundleError("golden producers must be nonempty and unique")
@@ -82,7 +82,7 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
                  if (source / manifest["artifacts"][artifact]["path"]).is_file()}
     for producer in producers:
         workflow = case["workflows"][producer["workflow"]]
-        needed = workflow_required_roles({key: value for key, value in workflow.items() if key != "reference_role"})
+        needed = workflow_required_roles({key: value for key, value in workflow.items() if key != "reference"})
         missing = sorted(needed - available)
         if missing:
             raise BundleError(f"producer {producer['workflow']} needs: {', '.join(missing)}")
@@ -183,7 +183,7 @@ def _validate_producer(result, root):
 def _old_reference(result, source, manifest, case, root):
     directory = Path(result["run_directory"])
     workflow = case["workflows"][result["workflow_id"]]
-    artifact = manifest["roles"].get(workflow.get("reference_role"))
+    artifact = manifest["roles"].get(workflow.get("reference"))
     reference = source / manifest["artifacts"][artifact]["path"] if artifact else None
     if reference is None or not reference.is_file():
         return {"status": "unavailable"}

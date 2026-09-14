@@ -57,7 +57,7 @@ def bundle_readiness(case_id, source, case_dir=CASES, *, workflows=()):
         producers = {
             name: sorted(required_case_roles(case, name))
             for name, workflow in case["workflows"].items()
-            if role in workflow.get("output_roles", [])
+            if role in workflow.get("outputs", [])
         }
         rows.append({"role": role, "path": filename,
                      "origin": "workflow-producible" if producers else "user-supplied",

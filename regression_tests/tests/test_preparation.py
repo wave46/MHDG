@@ -45,7 +45,7 @@ def test_warm_links_immutable_inputs_and_renders_isolated_paths(harness):
 def test_restart_and_reference_roles_are_selected_independently(harness, monkeypatch):
     case = load_case_definition("legacy_case", ROOT / "cases")
     workflow = case["workflows"]["warm"]
-    workflow.update(restart_role="warm_reference", reference_role="warm_restart")
+    workflow.update(restart="warm_reference", reference="warm_restart")
     monkeypatch.setattr("regression_tests.prepare.load_case_definition", lambda *_: case)
     run = prepare(harness)
     assert (run.path / "inputs/restart.h5").resolve() == harness.bundle / "inputs/reference_mpi4_omp4.h5"

@@ -209,12 +209,13 @@ def load_fixed_tolerances(
     tolerance_profile_override: str | None,
 ) -> tuple[str, dict[str, Any]]:
     """Select and validate the tolerance profile for a fixed-mesh run."""
-    profile_id = tolerance_profile_override or workflow.get("tolerance_profile")
+    comparison = workflow.get("comparison", {})
+    profile_id = tolerance_profile_override or comparison.get("profile")
     if (
         tolerance_profile_override is None
-        and layout_id != workflow.get("default_layout")
+        and layout_id != workflow.get("layout")
     ):
-        profile_id = workflow.get("cross_layout_tolerance_profile", profile_id)
+        profile_id = comparison.get("cross_layout_profile", profile_id)
 
     if not profile_id:
         raise ComparisonError(f"unknown tolerance profile: {profile_id}")
@@ -238,7 +239,7 @@ def load_adaptive_tolerances(
     tolerance_profile_override: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Select and validate the tolerance profile for an adaptive run."""
-    profile_id = tolerance_profile_override or workflow.get("tolerance_profile")
+    profile_id = tolerance_profile_override or workflow.get("comparison", {}).get("profile")
     profile = _load_profile(path, profile_id)
     required = {
         "newton_error_max",

@@ -22,16 +22,6 @@ MEDIA_TYPES = {
 }
 
 
-COMPARISON_KEYS = {
-    "method": "comparison_policy",
-    "profile": "tolerance_profile",
-    "cross_layout_profile": "cross_layout_tolerance_profile",
-    "stage_profile": "stage_tolerance_profile",
-    "direct_profile": "direct_tolerance_profile",
-    "direct_stage_profile": "direct_stage_tolerance_profile",
-}
-
-
 def normalize_case_definition(
     case_id: str,
     declaration: dict[str, Any],
@@ -130,7 +120,7 @@ def _workflows(
         return merged
 
     return {
-        workflow_id: _normalize_workflow(
+        workflow_id: _expand_workflow(
             _extend_workflow({"parameter_namelists": parameter_namelists}, resolve(workflow_id)),
             sequences,
         )
@@ -160,103 +150,45 @@ def _extend_workflow(
     return extended
 
 
-def _normalize_workflow(
+def _expand_workflow(
     declaration: dict[str, Any],
     sequences: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
+    """Expand stage sequences and defaults without renaming declaration fields."""
     missing = [key for key in ("type", "description") if key not in declaration]
     if missing:
         raise BundleError("resolved workflow is missing: " + ", ".join(missing))
-    workflow = {
-        "kind": declaration["type"],
-        "model": declaration.get("model", DEFAULT_MODEL),
-        "description": declaration["description"],
-        "required_artifact_roles": declaration.get("inputs", []),
-    }
-    _copy_if_present(declaration, workflow, "layout", "default_layout")
-    _copy_if_present(declaration, workflow, "mesh", "mesh_role")
-    _copy_if_present(declaration, workflow, "restart", "restart_role")
-    _copy_if_present(declaration, workflow, "reference", "reference_role")
-    _copy_if_present(declaration, workflow, "outputs", "output_roles")
-    _copy_if_present(declaration, workflow, "parameter_namelists", "parameter_namelists")
-    _copy_if_present(
-        declaration,
-        workflow,
-        "impurity_configuration",
-        "impurity_configuration_role",
-    )
-    _copy_if_present(
-        declaration,
-        workflow,
-        "parameter_overrides",
-        "parameter_overrides",
-    )
-    for source, target in COMPARISON_KEYS.items():
-        _copy_if_present(declaration.get("comparison", {}), workflow, source, target)
-
+    workflow = deepcopy(declaration)
+    workflow.pop("extends", None)
+    workflow.setdefault("model", DEFAULT_MODEL)
+    workflow.setdefault("inputs", [])
     stages = []
-    for entry in declaration.get("stages", []):
+    for entry in workflow.pop("stages", []):
         if isinstance(entry, str):
             if entry not in sequences:
                 raise BundleError(f"unknown stage sequence: {entry}")
             stages.extend(sequences[entry])
         else:
             stages.append(entry)
-    stage_changes = declaration.get("stage_overrides", {})
-    unknown = sorted(stage_changes.keys() - {stage["id"] for stage in stages})
+    stage_changes = workflow.pop("stage_overrides", {})
+    stage_ids = {stage["id"] for stage in stages}
+    unknown = sorted(stage_changes.keys() - stage_ids)
     if unknown:
-        raise BundleError(
-            "stage_overrides contains unknown stages: " + ", ".join(unknown)
-        )
+        raise BundleError("stage_overrides contains unknown stages: " + ", ".join(unknown))
+    adaptive_stages = set(workflow.pop("adaptive_stages", []))
     if stages:
-        adaptive_stages = set(declaration.get("adaptive_stages", []))
-        stage_ids = {stage["id"] for stage in stages}
         unknown = sorted(adaptive_stages - stage_ids)
         if unknown:
-            raise BundleError(
-                "adaptive_stages contains unknown stages: " + ", ".join(unknown)
-            )
-        workflow["stages"] = [
-            _normalize_stage(
-                _extend_workflow(stage, stage_changes.get(stage["id"], {})),
-                index,
-                adaptive_stages,
-            )
-            for index, stage in enumerate(stages)
-        ]
+            raise BundleError("adaptive_stages contains unknown stages: " + ", ".join(unknown))
+        workflow["stages"] = []
+        for index, declaration in enumerate(stages):
+            stage = _extend_workflow(declaration, stage_changes.get(declaration["id"], {}))
+            stage["restart_from"] = "analytical" if index == 0 else "previous_stage"
+            stage.setdefault("newton_check", "bounded")
+            if stage["id"] in adaptive_stages:
+                stage.setdefault("parameter_overrides", {})["rest_adapt"] = True
+            workflow["stages"].append(stage)
     return workflow
-
-
-def _normalize_stage(
-    declaration: dict[str, Any],
-    index: int,
-    adaptive_stages: set[str],
-) -> dict[str, Any]:
-    stage_id = declaration["id"]
-    stage = {
-        "stage_id": stage_id,
-        "parameter_role": declaration["parameters"],
-        "transport_configuration_role": declaration["transport"],
-        "restart_from": "analytical" if index == 0 else "previous_stage",
-        "newton_check": declaration.get("newton_check", "bounded"),
-    }
-    overrides = declaration.get("parameter_overrides", {}).copy()
-    _copy_if_present(declaration, stage, "parameter_namelists", "parameter_namelists")
-    if stage_id in adaptive_stages:
-        overrides["rest_adapt"] = True
-    if overrides:
-        stage["parameter_overrides"] = overrides
-    return stage
-
-
-def _copy_if_present(
-    source: dict[str, Any],
-    target: dict[str, Any],
-    source_key: str,
-    target_key: str,
-) -> None:
-    if source_key in source:
-        target[target_key] = source[source_key]
 
 
 def load_case_definition(case_id: str, case_directory: Path) -> dict[str, Any]:
@@ -304,18 +236,18 @@ def required_case_roles(
 
 def workflow_required_roles(workflow: dict[str, Any]) -> set[str]:
     """Return explicit and staged artifact roles for one workflow."""
-    roles = set(workflow.get("required_artifact_roles", []))
+    roles = set(workflow.get("inputs", []))
     for name in (
-        "mesh_role",
-        "restart_role",
-        "reference_role",
-        "impurity_configuration_role",
+        "mesh",
+        "restart",
+        "reference",
+        "impurity_configuration",
     ):
         if workflow.get(name):
             roles.add(workflow[name])
     for stage in workflow.get("stages", []):
-        roles.add(stage["parameter_role"])
-        roles.add(stage["transport_configuration_role"])
+        roles.add(stage["parameters"])
+        roles.add(stage["transport"])
     return roles
 
 
@@ -323,7 +255,7 @@ def _validate_case_workflows(case: dict[str, Any]) -> None:
     declared_roles = set(case.get("bundle_files", {}))
     for workflow_id, workflow in case["workflows"].items():
         used_roles = workflow_required_roles(workflow) | set(
-            workflow.get("output_roles", [])
+            workflow.get("outputs", [])
         )
         unknown = (
             sorted(used_roles - declared_roles)
@@ -335,7 +267,7 @@ def _validate_case_workflows(case: dict[str, Any]) -> None:
                 f"workflow {workflow_id} uses undefined artifact roles: "
                 + ", ".join(unknown)
             )
-        if workflow["kind"] not in {
+        if workflow["type"] not in {
             "staged_fixed_mesh",
             "staged_adaptive_mesh",
         }:
@@ -343,7 +275,7 @@ def _validate_case_workflows(case: dict[str, Any]) -> None:
 
         missing = [
             name
-            for name in ("mesh_role", "stages")
+            for name in ("mesh", "stages")
             if not workflow.get(name)
         ]
         if missing:
@@ -351,18 +283,9 @@ def _validate_case_workflows(case: dict[str, Any]) -> None:
                 f"workflow {workflow_id} is missing: {', '.join(missing)}"
             )
         stages = workflow["stages"]
-        stage_ids = [stage["stage_id"] for stage in stages]
+        stage_ids = [stage["id"] for stage in stages]
         if len(stage_ids) != len(set(stage_ids)):
             raise BundleError(f"workflow {workflow_id} has duplicate stage IDs")
-        if stages[0]["restart_from"] != "analytical":
-            raise BundleError(
-                f"workflow {workflow_id} must start from analytical initialization"
-            )
-        if any(stage["restart_from"] != "previous_stage" for stage in stages[1:]):
-            raise BundleError(
-                f"workflow {workflow_id} continuation stages must restart "
-                "from the previous stage"
-            )
 
 
 SERIAL_LAYOUT = re.compile(r"serial_omp([1-9][0-9]*)")

@@ -629,7 +629,12 @@ regression limits for `legacy_case`, not physical-accuracy targets.
 
 ## Harness implementation and tests
 
-`catalog.py` owns case/workflow inheritance, layouts and suite/profile resolution;
+`catalog.py` owns case/workflow inheritance, layouts and suite/profile resolution.
+Resolved workflows retain the JSON field names (`type`, `mesh`, `restart`,
+`comparison`, and stage `id`); resolution expands inheritance and stage sequences
+and supplies defaults. Preparation and comparison consume those fields directly.
+Recorded run/report fields such as `stage_id` and `comparison_policy` describe
+execution evidence and keep their existing format.
 `config.py` owns machine JSON, build/runtime selection and environment setup. Preparation
 and suites accept resolved settings, so they do not parse configuration files.
 `bundles.py` owns manifest paths, staged-reference indexes, bundle integrity and

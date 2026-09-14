@@ -85,9 +85,6 @@ def test_case_overrides_reach_derived_workflows_without_changing_shared_inputs(c
     assert adaptive["parameter_overrides"] == {"nrp": 12, "rest_adapt": False}
     assert adaptive["parameter_namelists"] == {"new_knob": "case_physics", "nrp": "numerics"}
     assert adaptive["stages"][1]["parameter_namelists"] == {"tNR": "convergence"}
-    assert [stage["restart_from"] for stage in adaptive["stages"]] == [
-        "analytical", "previous_stage",
-    ]
     assert adaptive["stages"][0]["parameter_overrides"] == {"rest_adapt": True}
     assert adaptive["stages"][1]["parameter_overrides"] == {"tNR": 0.0001}
 

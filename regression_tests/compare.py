@@ -110,7 +110,7 @@ def _validated_stage_records(
     if metadata.get("status") != "completed":
         raise ComparisonError("run metadata status is not completed")
 
-    expected = [stage["stage_id"] for stage in workflow["stages"]]
+    expected = [stage["id"] for stage in workflow["stages"]]
     plan_stages = [stage.get("stage_id") for stage in plan.get("stages", [])]
     recorded = metadata.get("stages", [])
     recorded_stages = [stage.get("stage_id") for stage in recorded]
@@ -136,7 +136,7 @@ def compare_completed_run(
         if matrix is not None:
             path, report = compare_reference_matrix(inputs, matrix, report_override)
             return "reference_matrix", path, report
-    policy = comparison_policy_override or inputs.workflow.get("comparison_policy")
+    policy = comparison_policy_override or inputs.workflow.get("comparison", {}).get("method")
     path, report = compare_run(inputs, overrides, report_override, policy=policy)
     return report["comparison_policy"], path, report
 
@@ -146,7 +146,8 @@ def compare_run(
     report_path: Path | None = None, *, policy: str | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Share file selection, Newton acceptance and report writing across methods."""
-    policy = policy or inputs.workflow.get("comparison_policy")
+    comparison = inputs.workflow.get("comparison", {})
+    policy = policy or comparison.get("method")
     candidate = select_candidate(inputs.run_directory, inputs.metadata, overrides.candidate)
     reference = resolve_run_file(inputs.run_directory, overrides.reference, "inputs/reference.h5", "reference")
     profile_override = overrides.tolerance_profile
@@ -161,7 +162,7 @@ def compare_run(
             policy = "fixed_hdf5"
             selection["reason"] = "matching discrete meshes"
             profile_override = (overrides.direct_tolerance_profile or overrides.tolerance_profile
-                                or inputs.workflow.get("direct_tolerance_profile"))
+                                or comparison.get("direct_profile"))
             if not profile_override:
                 raise ComparisonError("adaptive workflow must declare a direct comparison profile")
     if policy == "fixed_hdf5":
@@ -169,7 +170,7 @@ def compare_run(
             inputs.tolerances_path, inputs.workflow, inputs.plan["layout_id"], profile_override,
         )
     elif policy == "mesh_independent":
-        if inputs.workflow.get("comparison_policy") != "mesh_independent":
+        if comparison.get("method") != "mesh_independent":
             raise ComparisonError("run does not define mesh-independent comparison")
         profile_id, tolerances = load_adaptive_tolerances(
             inputs.tolerances_path, inputs.workflow, overrides.tolerance_profile,
@@ -224,6 +225,7 @@ def compare_reference_matrix(
     context: ComparisonInputs, matrix: ReferenceMatrix, report_override: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Check the recorded stages in order, stopping at the first divergent stage."""
+    comparison = context.workflow["comparison"]
     stages = _validated_stage_records(context.plan, context.workflow, context.metadata)
     reports = []
     failures = []
@@ -236,11 +238,11 @@ def compare_reference_matrix(
         reference = matrix.reference_for(context.plan["workflow_id"], context.plan["layout_id"], stage_id)
         inputs = load_stage_inputs(context, directory)
         overrides = ComparisonOverrides(
-            candidate, reference, context.workflow.get("stage_tolerance_profile"), definition["newton_check"],
-            context.workflow.get("direct_stage_tolerance_profile"),
+            candidate, reference, comparison.get("stage_profile"), definition["newton_check"],
+            comparison.get("direct_stage_profile"),
         )
         path, report = compare_run(
-            inputs, overrides, directory / "comparison.json", policy=context.workflow["comparison_policy"],
+            inputs, overrides, directory / "comparison.json", policy=comparison["method"],
         )
         reports.append({
             "stage_id": stage_id, "status": report["status"], "comparison_report": str(path),
@@ -338,7 +340,7 @@ def _newton_checks(source, workflow, tolerances_path):
         {"run_directory": str(run_directory), "status": metadata.get("status")}
     ]
     if not isinstance(records, list) or len(records) != len(definitions) or any(
-        record.get("stage_id") != definition.get("stage_id")
+        record.get("stage_id") != definition.get("id")
         or record.get("status") != "completed"
         for record, definition in zip(records, definitions)
     ):
@@ -390,8 +392,9 @@ def _stage_newton_maximum(
     layout_id: str,
     tolerances_path: Path,
 ) -> float | None:
-    profile = workflow.get("stage_tolerance_profile")
-    if workflow.get("comparison_policy") == "fixed_hdf5":
+    comparison = workflow.get("comparison", {})
+    profile = comparison.get("stage_profile")
+    if comparison.get("method") == "fixed_hdf5":
         _, tolerances = load_fixed_tolerances(
             tolerances_path,
             workflow,
