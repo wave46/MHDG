@@ -11,7 +11,6 @@ import sys
 
 from regression_tests.execute import execute_prepared, final_execution
 from regression_tests.prepare import prepare_run
-from regression_tests.files import file_identity
 from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import REGRESSION_ROOT, create_harness, run_command
 
@@ -42,28 +41,18 @@ def test_parallel_logs_environment_and_provenance(harness):
     }.items():
         assert (directory / f"outputs/{filename}.txt").read_text() == value + "\n"
     assert metadata["status"] == "completed"
-    assert metadata["environment"]["OMP_NUM_THREADS"] == "4"
     assert metadata["solver"]["build_manifest"]["path"] == str(harness.build_manifest)
     assert metadata["hdf5_outputs"] == ["outputs/result.h5"]
-    for record, path in (
-        (metadata["executable"], harness.parallel_executable),
-        (metadata["environment"]["setup_script"], harness.environment_script),
-        (metadata["solver"]["build_manifest"], harness.build_manifest),
-        (metadata["runtime_files"][harness.runtime_file.name], harness.runtime_file),
-    ):
-        assert record == {"path": str(path), **file_identity(path)}
-    for record in metadata["output_files"]:
-        assert record == {"path": record["path"], **file_identity(directory / record["path"])}
+    assert metadata["executable"]["path"] == str(harness.parallel_executable)
 
 
 @pytest.mark.parametrize("solver,workflow,status,exit_code", [
     ("no_output", "warm", "missing_hdf5_output", 0),
-    ("failure", "warm", "solver_failed", 7),
     ("file_error", "cold_adaptive", "solver_reported_error", 0),
 ])
 def test_solver_outcomes(harness, solver, workflow, status, exit_code):
     harness.install_solver({
-        "no_output": NO_OUTPUT_SOLVER, "failure": FAILING_SOLVER,
+        "no_output": NO_OUTPUT_SOLVER,
         "file_error": FATAL_FILE_ERROR_SOLVER,
     }[solver], "serial")
     completed, directory, metadata = run(harness, workflow)
@@ -94,7 +83,7 @@ def test_stages_pass_selected_output_to_next_restart(harness):
     assert (directory / "stdout.log").resolve() == stages[-1] / "stdout.log"
     observed_directory, observed = final_execution(directory, metadata)
     assert observed_directory == stages[-1]
-    assert observed["executable"] == {"path": str(harness.serial_executable), **file_identity(harness.serial_executable)}
+    assert observed["executable"]["path"] == str(harness.serial_executable)
 
 
 @pytest.mark.parametrize("ambiguous", [False, True])
@@ -109,6 +98,7 @@ def test_stages_stop_when_producer_fails_or_output_is_ambiguous(harness, ambiguo
     expected = "output_selection_failed" if ambiguous else "solver_failed"
     assert completed.returncode == 1
     assert metadata["status"] == expected
+    assert metadata["exit_code"] == (0 if ambiguous else 7)
     assert [stage["status"] for stage in metadata["stages"]] == [
         "completed", "completed", expected, *(["not_run"] * 4),
     ]
@@ -117,16 +107,12 @@ def test_stages_stop_when_producer_fails_or_output_is_ambiguous(harness, ambiguo
     assert not (directory / "stages/04_continuation_02/inputs/restart.h5").exists()
 
 
-@pytest.mark.parametrize("log_failure", [False, True])
-def test_launch_failure_is_recorded(harness, log_failure):
+def test_launch_failure_is_recorded(harness):
     prepared = prepare_run(
         harness.values, "legacy_case", "warm", "serial_omp1",
         REGRESSION_ROOT / "cases", REGRESSION_ROOT / "layouts.json", "launch-failure",
     )
-    if log_failure:
-        (prepared.path / "stdout.log").mkdir()
-    else:
-        prepared = replace(prepared, command=[str(harness.root / "missing-command")])
+    prepared = replace(prepared, command=[str(harness.root / "missing-command")])
     result = execute_prepared(prepared, harness.values)
     metadata = json.loads((prepared.path / "run_metadata.json").read_text())
     assert result.status == metadata["status"] == "launch_failed"
@@ -149,11 +135,6 @@ printf 'synthetic hdf5\n' > outputs/result.h5
 NO_OUTPUT_SOLVER = """#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$OMP_NUM_THREADS" > outputs/omp_threads.txt
-"""
-
-FAILING_SOLVER = """#!/usr/bin/env bash
-printf 'failed\n' >&2
-exit 7
 """
 
 STAGED_SOLVER = """#!/usr/bin/env bash

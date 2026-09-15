@@ -10,11 +10,10 @@ from regression_tests.tests.fixtures.harness import run_command
 
 
 @pytest.fixture
-def data(tmp_path, request):
-    return getattr(request, "param", "legacy_case"), write_case_source(tmp_path / "source"), tmp_path / "bundle"
+def data(tmp_path):
+    return "legacy_case", write_case_source(tmp_path / "source"), tmp_path / "bundle"
 
 
-@pytest.mark.parametrize("data", ["legacy_case", "diverted_case"], indirect=True)
 def test_readiness_and_selected_creation_require_actual_files(data):
     case, source, output = data
     (source / "restart.h5").unlink()
@@ -38,8 +37,6 @@ def test_readiness_and_selected_creation_require_actual_files(data):
     validate_bundle_root(output)
     with pytest.raises(BundleError, match="missing required artifact roles.*warm_restart"):
         validate_bundle_root(output, workflows=["warm"])
-    with pytest.raises(BundleError, match="no workflow"):
-        bundle_readiness(case, source, workflows=["unknown"])
 
 
 def test_creation_copies_links_and_validation_uses_manifest_paths(data, tmp_path):

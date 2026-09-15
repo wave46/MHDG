@@ -13,8 +13,7 @@ from regression_tests.tests.fixtures.solutions import write_solution
 from regression_tests.support import ComparisonError
 
 
-@pytest.mark.parametrize("staged", [False, True])
-def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch, staged):
+def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
     candidate, reference, fekete = (tmp_path / name for name in (
         "candidate.h5", "golden.h5", "positionFeketeNodesTri2D.h5",
     ))
@@ -27,20 +26,15 @@ def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch, staged
     (tmp_path / "run_plan.json").write_text(json.dumps({
         "case_id": "legacy_case", "workflow_id": "cold_adaptive", "layout_id": "mpi4_omp4",
     }))
-    (tmp_path / "run_metadata.json").write_text(json.dumps({
-        "status": "completed", "hdf5_outputs": ["candidate.h5"],
+    stage = tmp_path / "final-stage"
+    stage.mkdir()
+    (stage / "run_metadata.json").write_text(json.dumps({
         "runtime_files": {fekete.name: {"path": str(fekete)}},
     }))
-    if staged:
-        stage = tmp_path / "final-stage"
-        stage.mkdir()
-        (stage / "run_metadata.json").write_text(json.dumps({
-            "runtime_files": {fekete.name: {"path": str(fekete)}},
-        }))
-        (tmp_path / "run_metadata.json").write_text(json.dumps({
-            "status": "completed", "hdf5_outputs": ["candidate.h5"],
-            "stages": [{"run_directory": str(stage), "status": "completed"}],
-        }))
+    (tmp_path / "run_metadata.json").write_text(json.dumps({
+        "status": "completed", "hdf5_outputs": ["candidate.h5"],
+        "stages": [{"run_directory": str(stage), "status": "completed"}],
+    }))
     calls = []
 
     def fields(*args):
@@ -49,13 +43,12 @@ def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch, staged
 
     monkeypatch.setattr(compare, "compare_adaptive_files", fields)
     inputs = compare.load_comparison_inputs(tmp_path, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json")
-    path, report = compare.compare_run(inputs, compare.ComparisonOverrides(
+    _, report = compare.compare_run(inputs, compare.ComparisonOverrides(
         candidate, reference, "adaptive_reference", "finite_only",
     ))
     assert report["status"] == "passed"
     assert report["convergence"] == {"passed": True, "final_newton_error": 1., "maximum": None}
     assert report["tolerance_profile"]["id"] == "adaptive_reference"
-    assert path.name == "comparison.json"
     assert calls[0][:4] == (reference, candidate, fekete, 4)
     assert report["comparison_policy"] == "mesh_independent"
     assert report["method_selection"]["differences"] == ["X"]

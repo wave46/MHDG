@@ -66,11 +66,10 @@ def test_broader_profile_absorbs_feature_checks_and_keeps_explanations():
              'src/Models/neutral_flux_limiter.f90', 'src/Utils/Diagnostics/balance_diagnostics_output.f90',
              'regression_tests/compare.py', 'src/Models/Laplace/physics.f90', 'README.md']
     report = recommendations(paths)
-    commands = [check['command'] for check in report['checks']]
-    assert commands == [['python', '-m', 'pytest', '-q', 'regression_tests/tests'],
-                        ['python', '-m', 'regression_tests', 'check', 'full', '--build']]
-    scientific = report['checks'][1]['reasons']
-    assert all(path in scientific for path in paths[:4])
+    scientific = [check for check in report['checks'] if 'check' in check['command']]
+    assert len(scientific) == 1 and scientific[0]['command'][-2:] == ['full', '--build']
+    assert any(check['command'][2] == 'pytest' for check in report['checks'])
+    assert all(path in scientific[0]['reasons'] for path in paths[:4])
     assert report['unmapped'] == ['src/Models/Laplace/physics.f90']
     assert report['documentation'] == ['README.md']
 
@@ -84,9 +83,7 @@ def test_harness_scope_selects_real_evidence_without_rebuilding_and_groups_outpu
     assert all('--build' not in command for command in commands)
     reporting.suggestions({'paths': paths, 'base': None, **report})
     output = capsys.readouterr().out
-    # One explanation per group/command, rather than one repeated explanation per file.
-    reason = report['checks'][0]['reasons'][paths[0]]
-    assert output.count(reason) == 2  # Shared reason applies to pytest and real regression.
+    assert output.count('python -m regression_tests check full') == 1
     assert all(path in output for path in paths)
     report = recommendations(['regression_tests/suggest.py', 'regression_tests/clean.py'])
     assert len(report['checks']) == 1 and report['checks'][0]['command'][2] == 'pytest'

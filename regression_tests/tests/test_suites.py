@@ -135,13 +135,22 @@ def test_cli_requires_golden_and_records_diagnostic_overrides(harness):
     result = run_command("check", "warm", "--case", "legacy_case", "--settings", str(harness.settings))
     assert result.returncode == 1 and "requires bundle_class=golden" in result.stderr
     harness.set_bundle_class("golden")
-    args = ("check", "warm", "--case", "legacy_case", "--settings", str(harness.settings), "--run-id", "mode", "--run-only")
+    args = ("check", "warm", "--case", "legacy_case", "--settings", str(harness.settings),
+            "--build-manifest", str(harness.build_manifest), "--run-id", "mode", "--run-only")
     result = run_command(*args, "--diagnostics", "detailed")
     assert result.returncode == 0, result.stderr
     assert "suite deferred:" in result.stdout
     assert "balance diagnostics deferred:" in result.stdout
     directory = harness.run_directory("warm", "mpi4_omp4", "mode")
     assert "balance_diagnostics_mode = 'detailed'" in (directory / "param.txt").read_text()
+    # Explicit selection survives unrelated/default settings changes on resume.
+    machine = json.loads(harness.settings.read_text())
+    machine["defaults"]["build"] = "unavailable-build.json"
+    machine["defaults"]["bundles"]["unselected_case"] = "unavailable-bundle"
+    machine["build_jobs"] = 3
+    harness.settings.write_text(json.dumps(machine))
+    result = run_command(*args, "--diagnostics", "detailed", "--resume")
+    assert result.returncode == 0 and "reusing completed" in result.stdout, result.stderr
     result = run_command(*args, "--diagnostics", "off", "--resume")
     assert result.returncode == 1 and "parameter_overrides" in result.stderr
     result = run_command(*args, "--build", "--resume")

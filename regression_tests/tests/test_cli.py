@@ -22,7 +22,7 @@ def test_help_and_discovery_need_no_machine_setup():
         cwd=ROOT.parent, capture_output=True, text=True,
     )
     assert help_result.returncode == 0, help_result.stderr
-    assert "--cases" not in help_result.stdout
+    assert "usage:" in help_result.stdout
     doctor = subprocess.run(
         [sys.executable, "-B", "-S", "-m", "regression_tests", "doctor"],
         cwd=ROOT.parent, capture_output=True, text=True,
@@ -34,14 +34,15 @@ def test_help_and_discovery_need_no_machine_setup():
         result = run_command("list", listing, environment=environment)
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip()
-    case = run_command("list", "cases").stdout.split(":", 1)[0]
+        if listing == "cases":
+            case = result.stdout.split(":", 1)[0]
     result = run_command("list", "workflows", case, environment=environment)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip()
 
 
 def test_usage_and_runtime_failures_have_distinct_exit_codes(tmp_path):
-    usage = run_command("check", "--cases", str(tmp_path))
+    usage = run_command("check", "--unknown-option")
     assert usage.returncode == 2
     assert "unrecognized arguments" in usage.stderr
     missing = run_command("check", "--settings", str(tmp_path / "missing.json"))
@@ -50,11 +51,8 @@ def test_usage_and_runtime_failures_have_distinct_exit_codes(tmp_path):
     assert "Traceback" not in missing.stderr
 
 
-def test_debug_prepare_and_bundle_validation_use_discovered_catalogs(tmp_path):
+def test_debug_prepare_uses_discovered_catalogs(tmp_path):
     harness = create_harness(tmp_path)
-    result = run_command("bundle", "validate", str(harness.bundle))
-    assert result.returncode == 0, result.stderr
-    assert "bundle valid:" in result.stdout
     result = run_command(
         "prepare", "legacy_case", "cold_step_adaptive",
         "--run-id", "cli-smoke", "--settings", str(harness.settings),

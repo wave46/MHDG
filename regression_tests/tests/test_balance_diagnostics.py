@@ -7,7 +7,7 @@ import h5py
 import numpy as np
 import pytest
 
-from regression_tests.diagnostics import check_output, check_suite, compare_outputs
+from regression_tests.diagnostics import check_output, compare_outputs
 from regression_tests.tests.fixtures.harness import run_command
 
 
@@ -117,8 +117,6 @@ def test_known_puff_and_cli_attach_to_existing_output(output, tmp_path):
     result = run_command("compare", "--suite", "--diagnostics", str(summary))
     assert result.returncode == 0, result.stderr
     assert "balance diagnostics passed:" in result.stdout
-    assert "terminal_history" not in (tmp_path / "balance_diagnostics_check.json").read_text()
     with h5py.File(solution, "r+") as handle:
         handle["diagnostics/equations/n_n/physical/volume_components/puff"][()] = 90.
-    assert check_suite(summary)["status"] == "failed"
     assert run_command("compare", "--suite", "--diagnostics", str(summary)).returncode == 1

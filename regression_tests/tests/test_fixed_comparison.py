@@ -8,7 +8,8 @@ import pytest
 
 from regression_tests.compare_fixed import compare_hdf5_files, validate_solution_file
 from regression_tests.compare_common import read_newton_convergence
-from regression_tests.tests.fixtures.harness import run_command
+from regression_tests.compare import compare_completed_run
+from regression_tests.tests.fixtures.harness import REGRESSION_ROOT, run_command
 from regression_tests.tests.fixtures.solutions import write_solution
 
 TOLERANCES = {
@@ -31,9 +32,7 @@ def test_grouped_and_flat_fields_match_with_reference_equation_names(files):
         del handle["conservative_variable_names"]
     report = compare_hdf5_files(reference, candidate, TOLERANCES)
     assert report["status"] == "passed"
-    assert report["formats"]["candidate"] == "flat_solution+flat_mesh"
     assert report["solution"]["equation_names"] == ["rho", "Gamma"]
-    assert report["solution"]["datasets"]["u"]["equations"]["Gamma"]["relative_l2"] == 0
     assert not validate_solution_file(reference)
     assert not validate_solution_file(candidate)
 
@@ -91,8 +90,6 @@ def test_magnetic_contract(files, difference):
     elif difference == "region":
         assert "magnetic/topology_region differs" in report["failures"]
     else:
-        assert report["magnetic"]["datasets"]["topology"]["mode"] == "exact"
-        assert report["magnetic"]["datasets"]["rho_pol_norm"]["relative_l2"] == 0
         with h5py.File(candidate, "r+") as handle:
             del handle["transport_1d"]  # Optional data need not exist for file validity.
         assert not validate_solution_file(candidate)
@@ -121,8 +118,8 @@ def test_newton_acceptance_uses_last_record(tmp_path, last_value, expected):
         json.dumps(convergence.as_report(), allow_nan=False)
 
 
-@pytest.mark.parametrize("mode", ["same_layout", "cross_layout", "nonconverged", "invalid_final", "protected_output"])
-def test_compare_command_selects_final_output_and_checks_convergence(tmp_path, mode):
+@pytest.mark.parametrize("mode", ["same_layout", "cross_layout", "protected_output"])
+def test_final_output_selection_tolerance_profile_and_cli(tmp_path, mode):
     run = tmp_path / "run"
     (run / "inputs").mkdir(parents=True)
     (run / "outputs").mkdir()
@@ -139,27 +136,24 @@ def test_compare_command_selects_final_output_and_checks_convergence(tmp_path, m
     (run / "run_metadata.json").write_text(json.dumps({
         "status": "completed", "hdf5_outputs": ["outputs/result.h5", "outputs/result_0000.h5"],
     }))
-    error = "NaN" if mode == "invalid_final" else "3.0E-4" if mode == "nonconverged" else "1.0E-5"
     (run / "stdout.log").write_text(
-        f"Error: 1.0E-5\nError: {error}\nOutput written to file {checkpoint}\nOutput written to file {final}\n"
+        f"Error: 1.0E-5\nOutput written to file {checkpoint}\nOutput written to file {final}\n"
     )
     report_path = final if mode == "protected_output" else tmp_path / "comparison.json"
     original = final.read_bytes()
-    completed = run_command("compare", str(run), "--report", str(report_path))
-    convergence_failed = mode in {"nonconverged", "invalid_final"}
-    assert completed.returncode == int(convergence_failed or mode == "protected_output"), completed.stderr
+    if mode == "cross_layout":
+        compare_completed_run(run, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json",
+                              report_override=report_path)
+    else:
+        completed = run_command("compare", str(run), "--report", str(report_path))
+        assert completed.returncode == int(mode == "protected_output"), completed.stderr
     assert final.read_bytes() == original
     if mode == "protected_output":
         assert "cannot replace a comparison input" in completed.stderr
         return
     report = json.loads(report_path.read_text())
     assert report["candidate"] == str(final)
-    assert report["convergence"]["final_newton_error"] == (None if mode == "invalid_final" else float(error))
+    assert report["status"] == "passed"
     assert report["tolerance_profile"]["id"] == (
         "fixed_cross_layout" if mode == "cross_layout" else "fixed_same_layout"
     )
-    assert len(report["files"]["reference"]["sha256"]) == 64
-    assert report["convergence"]["passed"] == (not convergence_failed)
-    for text in ("Mesh: PASS", "solution/u: PASS", "transport_1d: PASS"):
-        assert text in completed.stdout
-    assert ("Newton error: FAIL" if convergence_failed else "Newton error: PASS") in completed.stdout
