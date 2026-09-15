@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from regression_tests.prepare import prepare_run
-from regression_tests.parameters import render_parameter_file
+from regression_tests.parameters import render_parameter_file, read_selected_input_values
 from regression_tests.catalog import load_case_definition
 from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import create_harness
@@ -100,6 +100,8 @@ def test_parameter_renderer_uses_declared_namelists_for_new_scalars(tmp_path):
     assert " untouched = 3\n" in text
     assert "new_knob = 0.25" in text.split("&new_section")[1]
     assert "enabled = .true." in text.split("&new_section")[1]
+    selected = read_selected_input_values(target, {"New_Knob", "ENABLED"})
+    assert selected == {"new_knob": 0.25, "enabled": True}
 
 
 @pytest.mark.parametrize("text,namelists", [

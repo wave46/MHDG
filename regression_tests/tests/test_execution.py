@@ -1,6 +1,7 @@
 """Process outcomes and restart propagation, using tiny executable fixtures."""
 
 import json
+import shutil
 from dataclasses import replace
 
 import pytest
@@ -222,3 +223,48 @@ def test_wrong_model_provenance_or_feature_rejects_zero_exit_output(harness, def
     assert completed.returncode == 1
     assert metadata["status"] == "output_contract_failed"
     assert expected in completed.stdout
+
+
+def test_candidate_override_checks_its_provenance_and_original_run_parameters(harness):
+    from regression_tests.compare import compare_completed_run
+
+    completed, directory, _ = run(harness)
+    assert completed.returncode == 0, completed.stderr
+    (directory / "stdout.log").write_text("Error: 1.0E-5\n")
+    parameters = directory / "param.txt"
+    parameters.write_text(parameters.read_text().replace("&PHYS_LST", """&PHYS_LST
+ neutral_flux_limiter_tn_source = 'fixed'
+ Neutral_Flux_Limiter_Tn_eV = 1.0D2"""))
+    original = directory / "outputs/result.h5"
+    candidate = harness.root / "external-candidate.h5"
+    shutil.copy2(original, candidate)
+    with h5py.File(candidate, "r+") as handle:
+        handle["simulation_parameters/physics/neutral_flux_limiter_tn_source"] = "fixed"
+        handle["simulation_parameters/adimensionalization/temperature_scale"] = 50.
+        handle["simulation_parameters/physics/neutral_flux_limiter_tn"] = 2.
+
+    def compare():
+        return compare_completed_run(
+            directory, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json",
+            candidate_override=candidate, reference_override=original,
+        )[2]
+
+    # The candidate can live outside the run; expected values still come from
+    # that run's inputs. A defect in the unselected original must not reject it.
+    provenance = "provenance/git_commit"
+    with h5py.File(original, "r+") as handle:
+        del handle[provenance]
+        handle[provenance] = "unselected-revision"
+    assert compare()["status"] == "passed"
+    for key, wrong in ((provenance, "wrong-revision"),
+                       ("simulation_parameters/physics/neutral_flux_limiter_tn", 3.)):
+        with h5py.File(candidate, "r+") as handle:
+            correct = handle[key][()]
+            del handle[key]
+            handle[key] = wrong
+        report = compare()
+        assert report["status"] == "failed"
+        assert any(key in failure for failure in report["failures"])
+        with h5py.File(candidate, "r+") as handle:
+            del handle[key]
+            handle[key] = correct

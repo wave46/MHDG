@@ -551,16 +551,16 @@ def _exact_comparison(
     }
 
 
-def check_output_contract(path, model, provenance, overrides):
+def check_output_contract(path, directory, model, provenance, overrides):
     """Check the requested model, build provenance and explicit feature switches."""
     from .config import MODELS
     from .parameters import read_selected_input_values
 
-    directory = path.parent.parent
     names = {"impurity_radiation", "transport_1d", "neutral_wall_sources_in_elements",
              "neutral_perpendicular_diffusion", "neutralp_lambda", "neutral_flux_limiter_mode",
-             "neutral_flux_limiter_tn_source", "neutral_flux_limiter_tn_eV", "compute_from_flux"}
-    overrides = {**read_selected_input_values(directory / "param.txt", names), **overrides}
+             "neutral_flux_limiter_tn_source", "neutral_flux_limiter_tn_ev", "compute_from_flux"}
+    overrides = {**read_selected_input_values(directory / "param.txt", names),
+                 **{key.lower(): value for key, value in overrides.items()}}
     label, equations = MODELS[model]
     expected = {"simulation_parameters/model": label, "simulation_parameters/Ndim": 2,
                 "simulation_parameters/Neq": len(equations),
@@ -584,9 +584,9 @@ def check_output_contract(path, model, provenance, overrides):
         with h5py.File(path) as handle:
             if overrides.get("transport_1d") and "transport_1d" not in handle:
                 failures.append("missing expected output: transport_1d")
-            if overrides.get("neutral_flux_limiter_tn_source") == "fixed" and "neutral_flux_limiter_tn_eV" in overrides:
+            if overrides.get("neutral_flux_limiter_tn_source") == "fixed" and "neutral_flux_limiter_tn_ev" in overrides:
                 scale = float(np.asarray(handle["simulation_parameters/adimensionalization/temperature_scale"]).item())
-                expected["simulation_parameters/physics/neutral_flux_limiter_tn"] = overrides["neutral_flux_limiter_tn_eV"] / scale
+                expected["simulation_parameters/physics/neutral_flux_limiter_tn"] = overrides["neutral_flux_limiter_tn_ev"] / scale
             for name, wanted in expected.items():
                 if name not in handle:
                     failures.append(f"missing expected output: {name}")

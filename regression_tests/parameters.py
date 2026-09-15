@@ -142,7 +142,8 @@ def _write_parameter_file(destination: Path, rendered: list[str]) -> None:
 
 
 def read_selected_input_values(path, names):
-    """Read selected complete scalar/list assignments from supported input files."""
+    """Read selected scalar/list assignments, returning case-insensitive lowercase keys."""
+    names = {name.lower() for name in names}
     values = {}
     for line in _read_parameter_lines(path):
         match = ASSIGNMENT_RE.match(line)

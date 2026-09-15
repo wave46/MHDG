@@ -25,6 +25,7 @@ class RunResult:
     exit_code: int | None
     duration_seconds: float
     hdf5_outputs: list[str]
+    selected_output: Path | None
 
 
 def execute_prepared(prepared: PreparedExecution, settings: dict[str, Any]) -> RunResult:
@@ -112,10 +113,11 @@ def _execute_run(prepared: PreparedRun, settings: dict[str, Any]) -> RunResult:
         "output_files": outputs,
         "hdf5_outputs": hdf5_outputs,
     }
+    candidate = None
     if status == "completed":
         try:
             candidate = select_candidate(prepared.path, metadata)
-            contract = check_output_contract(candidate, plan["model"], identity, plan.get("parameter_overrides", {}))
+            contract = check_output_contract(candidate, prepared.path, plan["model"], identity, plan.get("parameter_overrides", {}))
             metadata["output_contract"] = contract
             if contract["status"] != "passed":
                 status = "output_contract_failed"
@@ -127,7 +129,7 @@ def _execute_run(prepared: PreparedRun, settings: dict[str, Any]) -> RunResult:
             metadata["output_contract"] = {"status": "failed", "failures": [str(exc)]}
         metadata["status"] = status
     write_json_atomic(prepared.path / "run_metadata.json", metadata, "run metadata")
-    return RunResult(prepared.path, status, exit_code, duration, hdf5_outputs)
+    return RunResult(prepared.path, status, exit_code, duration, hdf5_outputs, candidate)
 
 
 def _execute_staged(prepared: PreparedStagedRun, settings: dict[str, Any]) -> RunResult:
@@ -165,15 +167,7 @@ def _execute_staged(prepared: PreparedStagedRun, settings: dict[str, Any]) -> Ru
         )
         if status != "completed":
             break
-        try:
-            selected_output = select_candidate(
-                last_result.path, {"hdf5_outputs": last_result.hdf5_outputs},
-            )
-        except ComparisonError as exc:
-            status = "output_selection_failed"
-            record.update(status=status, selection_error=str(exc))
-            selected_output = None
-            break
+        selected_output = last_result.selected_output
         record["selected_hdf5"] = str(selected_output)
 
     if last_result is not None:
@@ -202,7 +196,8 @@ def _execute_staged(prepared: PreparedStagedRun, settings: dict[str, Any]) -> Ru
         "hdf5_outputs": hdf5_outputs,
     }
     write_json_atomic(prepared.path / "run_metadata.json", metadata, "run metadata")
-    return RunResult(prepared.path, status, exit_code, duration, hdf5_outputs)
+    return RunResult(prepared.path, status, exit_code, duration, hdf5_outputs,
+                     selected_output if status == "completed" else None)
 
 
 def final_execution(directory: Path, metadata: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
