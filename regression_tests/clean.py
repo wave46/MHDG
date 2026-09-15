@@ -11,7 +11,7 @@ from .support import BundleError
 MARKERS = ("refresh.json", "campaign.json", "manifest.json", "run_plan.json",
            "run_metadata.json", "suite_summary.json", "profile_summary.json", "build_metadata.json")
 FINISHED = {"completed", "passed", "deferred", "failed", "ready", "launch_failed", "solver_failed",
-            "solver_reported_error", "missing_hdf5_output", "output_selection_failed"}
+            "solver_reported_error", "missing_hdf5_output", "output_selection_failed", "output_contract_failed"}
 
 
 def _paths(value):

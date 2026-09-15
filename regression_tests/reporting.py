@@ -206,23 +206,27 @@ def _pass_label(passed: bool) -> str:
     return "PASS" if passed else "FAIL"
 
 
-def print_run_summary(summary: dict[str, Any], path: Path) -> None:
-    """Print execution and comparison status for every suite cell."""
+def _print_results(summary):
     print("workflow       layout        run                 comparison  runtime     result")
     for result in summary["results"]:
-        runtime = result["duration_seconds"]
+        runtime = result.get("duration_seconds")
         runtime_text = f"{runtime:.3f} s" if runtime is not None else "n/a"
         print(
             f"{result['workflow_id']:<14} "
             f"{result['layout_id']:<13} "
             f"{(result['run_status'] or 'n/a'):<19} "
-            f"{(result['comparison_status'] or 'n/a'):<11} "
+            f"{(result.get('comparison_status') or 'n/a'):<11} "
             f"{runtime_text:<11} {result['status']}"
         )
         for failure in result["failures"][:3]:
             print(f"  FAIL: {failure}")
         if len(result["failures"]) > 3:
             print(f"  ... {len(result['failures']) - 3} more failures")
+
+
+def print_run_summary(summary: dict[str, Any], path: Path) -> None:
+    """Print execution and comparison status for every suite cell."""
+    _print_results(summary)
     _print_layout_comparisons(summary.get("comparisons", []))
     _print_diagnostics(summary, path)
     print(
@@ -233,21 +237,9 @@ def print_run_summary(summary: dict[str, Any], path: Path) -> None:
 
 def print_verification_summary(summary: dict[str, Any], path: Path) -> None:
     """Print comparison status for every recorded suite cell."""
+    _print_results(summary)
+    _print_layout_comparisons(summary.get("comparisons", []))
     _print_diagnostics(summary, path)
-    if summary.get("comparisons") is not None:
-        _print_layout_comparisons(summary["comparisons"])
-        print(f"verification {summary['status']}: {path}")
-        return
-    print("workflow       layout        policy             result")
-    for result in summary["results"]:
-        print(
-            f"{str(result['workflow_id']):<14} "
-            f"{str(result['layout_id']):<13} "
-            f"{str(result['comparison_policy'] or 'n/a'):<18} "
-            f"{result['status']}"
-        )
-        for failure in result["failures"][:3]:
-            print(f"  FAIL: {failure}")
     print(f"verification {summary['status']}: {path}")
 
 
@@ -293,6 +285,10 @@ def _print_diagnostics(summary, path):
     report = summary.get("diagnostics", {})
     if report.get("outputs") or report.get("failures"):
         diagnostics(report, path)
+        if report.get("outputs") and all(item["mode"] == "off" for item in report["outputs"]):
+            print("  mode off: output absence checked")
+    elif summary.get("checks_enabled") is False:
+        status("balance diagnostics", "deferred", path)
 
 
 def _print_layout_comparisons(comparisons: list[dict[str, Any]]) -> None:
@@ -309,3 +305,6 @@ def _print_layout_comparisons(comparisons: list[dict[str, Any]]) -> None:
         )
         for failure in comparison["failures"][:3]:
             print(f"  FAIL: {failure}")
+        if comparison.get("diagnostics"):
+            report = comparison["diagnostics"]
+            print(f"  diagnostic comparison {report['status']}" + (f": {report['reason']}" if "reason" in report else ""))

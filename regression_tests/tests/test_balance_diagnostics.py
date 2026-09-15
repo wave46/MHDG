@@ -77,8 +77,12 @@ def test_missing_nonfinite_units_and_terminal_failures(output):
 
 
 def test_parallel_scaling_and_changed_scalar(output, tmp_path):
-    solution, _ = output()
+    off, _ = output("off")
     candidate = tmp_path / "candidate.h5"
+    candidate.write_bytes(off.read_bytes())
+    assert compare_outputs(off, candidate)["status"] == "skipped"
+    solution, _ = output()
+    assert compare_outputs(off, solution)["status"] == "failed"
     candidate.write_bytes(solution.read_bytes())
     for path in (solution, candidate):
         with h5py.File(path, "r+") as handle:
@@ -91,6 +95,11 @@ def test_parallel_scaling_and_changed_scalar(output, tmp_path):
     with h5py.File(candidate, "r+") as handle:
         handle["diagnostics/equations/n/physical/imbalance"][()] += .01
     assert "diagnostic differs across layouts: n/physical/imbalance" in compare_outputs(solution, candidate)["failures"]
+    for path in (solution, candidate):
+        with h5py.File(path, "r+") as handle:
+            del handle["diagnostics/equations"]
+            handle.create_group("diagnostics/equations")
+    assert compare_outputs(solution, candidate)["status"] == "failed"
 
 
 def test_known_puff_and_cli_attach_to_existing_output(output, tmp_path):

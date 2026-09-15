@@ -328,6 +328,10 @@ python -m regression_tests compare --suite --diagnostics /path/to/suite_summary.
 This writes a compact `balance_diagnostics_check.json`; full history remains in
 `stdout.log`. Ordinary `compare --suite` includes diagnostic output validation and
 any declared parallel comparisons in its verification summary.
+Fresh and saved suite summaries show individual results and failures alongside
+layout-pair results. When both outputs have diagnostics off, their diagnostic
+comparison is marked `skipped`; the separate output checks still verify absence
+of balance output. Run-only summaries mark diagnostic checks `deferred`.
 
 For a focused real mode check, reuse the same `warm` workflow, build, bundle and
 layout with distinct run IDs for the four modes. Compare enabled solutions directly
@@ -651,6 +655,11 @@ publication-class checks; comparison code consumes its validated references. Sha
 schema I/O, file/path contracts and errors/record identifiers live in `documents.py`,
 `files.py` and `support.py`. All callers use package imports; no `tools/` import
 bridge or test path injection is needed.
+`compare.py` combines field/mesh and Newton evidence; `suites.py` uses one
+assessment path for fresh, resumed and saved runs. `diagnostics.py` owns output
+checks and diagnostic scalar comparisons. `reporting.py` renders these results
+without reassessing them. Golden publication reuses recorded producer validation
+after checking evidence integrity. `clean.py` owns storage selection and protection.
 
 These tests use temporary bundles, small arrays, and fake executables. They do
 not launch MHDG or need physical data.
@@ -709,6 +718,8 @@ workspaces or candidate/golden bundles. There is no automatic age-based selectio
 Active/unfinished work, unknown historical data and configured default bundles
 or builds are protected. Retained records and symlinks protect referenced data;
 select dependent runs and their suite/profile records together to remove them.
+Runs that finished with an output-contract failure are eligible for explicit
+selection, subject to the same dependency protections.
 `--keep DIRECTORY` additionally protects a directory and inspects its dependencies;
 use it for retained work outside the storage root. Use the encompassing root and
 list external consumers: the command cannot discover unrelated storage elsewhere.

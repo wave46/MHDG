@@ -25,6 +25,7 @@ def run(root, name, **values):
 def test_cli_preview_and_explicit_removal_do_not_follow_links(tmp_path, capsys):
     root = tmp_path / 'storage'
     stale = run(root, 'stale')
+    record(stale, 'run_metadata.json', status='output_contract_failed')
     outside = tmp_path / 'source'
     outside.mkdir()
     payload = outside / 'input.h5'

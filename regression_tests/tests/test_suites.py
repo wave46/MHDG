@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 import h5py
 
-from regression_tests import suites
+from regression_tests import reporting, suites
 from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import create_harness, run_command, REGRESSION_ROOT as ROOT
 from regression_tests.tests.fixtures.solutions import write_solution
@@ -139,6 +139,7 @@ def test_cli_requires_golden_and_records_diagnostic_overrides(harness):
     result = run_command(*args, "--diagnostics", "detailed")
     assert result.returncode == 0, result.stderr
     assert "suite deferred:" in result.stdout
+    assert "balance diagnostics deferred:" in result.stdout
     directory = harness.run_directory("warm", "mpi4_omp4", "mode")
     assert "balance_diagnostics_mode = 'detailed'" in (directory / "param.txt").read_text()
     result = run_command(*args, "--diagnostics", "off", "--resume")
@@ -162,6 +163,8 @@ def test_parallel_comparison_and_saved_recheck(harness):
     assert report["convergence"] == {"passed": True, "final_newton_error": 1e5, "maximum": None}
     result = run_command("compare", "--suite", str(path))
     assert result.returncode == 0, result.stderr
+    assert "diagnostic comparison skipped: diagnostics off" in result.stdout
+    assert "mode off: output absence checked" in result.stdout
     mesh = next(Path(summary["comparisons"][0]["candidate_run_directory"]).glob("**/res/temp.msh"))
     mesh.write_text("mesh\n\n")
     _, verification = suites.verify_suite(path, ROOT / "cases", ROOT / "tolerances.json")
@@ -170,7 +173,7 @@ def test_parallel_comparison_and_saved_recheck(harness):
                for pair in verification["comparisons"] for failure in pair["failures"])
 
 
-def test_offline_checks_references_pairs_and_diagnostics(tmp_path, monkeypatch):
+def test_offline_checks_references_pairs_and_diagnostics(tmp_path, monkeypatch, capsys):
     passed = {"status": "passed", "failures": [], "convergence": {"passed": True}}
     compare = Mock(return_value=("fixed_hdf5", tmp_path / "compare.json", passed))
     pairs = Mock(return_value=[{"status": "passed"}])
@@ -197,6 +200,15 @@ def test_offline_checks_references_pairs_and_diagnostics(tmp_path, monkeypatch):
     compare.assert_called_once()  # Incomplete runs do not reach the field comparator.
     assert report["results"][-1]["convergence_status"] is None
     assert report["status"] == "failed"
+    # Individual failures must stay visible when the report also contains pairs.
+    passed.update(status="failed", failures=["individual field failure"])
+    pairs.return_value = [{"workflow_id": "cold_fixed", "baseline_layout_id": "serial_omp1",
+                           "candidate_layout_id": "serial_omp16", "comparison_policy": "fixed_hdf5",
+                           "status": "failed", "failures": ["parallel field failure"]}]
+    report = check()
+    reporting.print_verification_summary(report, source)
+    output = capsys.readouterr().out
+    assert all(message in output for message in ("individual field failure", "parallel field failure", "missing diagnostics"))
     pairs.reset_mock()
     suites.verify_suite(source, ROOT / "cases", ROOT / "tolerances.json", include_layout_pairs=False)
     pairs.assert_not_called()

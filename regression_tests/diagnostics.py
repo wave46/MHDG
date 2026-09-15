@@ -193,6 +193,11 @@ def compare_outputs(reference, candidate):
         right_mode, right, _ = _read(second, failures)
     if left_mode != right_mode or left.keys() != right.keys():
         failures.append("diagnostic mode or scalar dataset selection differs across layouts")
+    if not failures and not left and not right:
+        if left_mode in ("off", None):
+            return {"status": "skipped", "failures": [],
+                    "reason": "diagnostics off" if left_mode == "off" else "no diagnostic mode recorded"}
+        failures.append("no scalar diagnostics to compare")
     scales = {}
     def group(name):
         if left_mode == "summary":

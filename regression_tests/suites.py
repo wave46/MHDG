@@ -159,7 +159,7 @@ def _compare_pair(
 
             diagnostic_report = compare_outputs(reference, _selected_output(candidate))
             result["diagnostics"] = diagnostic_report
-            if diagnostic_report["status"] != "passed":
+            if diagnostic_report["status"] == "failed":
                 result["status"] = "failed"
                 result["failures"].extend(diagnostic_report["failures"])
     except HarnessError as exc:
