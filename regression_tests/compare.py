@@ -110,9 +110,6 @@ def _validated_stage_records(
     workflow: dict[str, Any],
     metadata: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    if metadata.get("status") != "completed":
-        raise ComparisonError("run metadata status is not completed")
-
     expected = [stage["id"] for stage in workflow["stages"]]
     plan_stages = [stage.get("stage_id") for stage in plan.get("stages", [])]
     recorded = metadata.get("stages", [])
@@ -232,6 +229,7 @@ def compare_reference_matrix(
     comparison = context.workflow["comparison"]
     stages = _validated_stage_records(context.plan, context.workflow, context.metadata)
     reports = []
+    convergence = []
     failures = []
     for stage, definition in zip(stages, context.workflow["stages"]):
         stage_id = stage["stage_id"]
@@ -248,6 +246,7 @@ def compare_reference_matrix(
         path, report = compare_run(
             inputs, overrides, directory / "comparison.json", policy=comparison["method"],
         )
+        convergence.append(report["convergence"]["passed"])
         reports.append({
             "stage_id": stage_id, "status": report["status"], "comparison_report": str(path),
             "reference": str(reference), "candidate": str(candidate), "failures": report["failures"],
@@ -264,6 +263,7 @@ def compare_reference_matrix(
         "comparison_policy": "reference_matrix", "checked_stage_count": len(reports),
         "total_stage_count": len(stages), "first_failed_stage": reports[-1]["stage_id"] if failures else None,
         "stages": reports, "failures": failures,
+        "convergence": {"passed": False if False in convergence else True if len(reports) == len(stages) else None},
     }
     output = (report_override or context.run_directory / "matrix_comparison.json").resolve()
     reserved = {Path(stage[name]).resolve() for stage in reports
@@ -316,41 +316,15 @@ def _generated_meshes(run_directory: Path) -> dict[str, Path]:
 
 
 
-def producer_converged(
-    source: dict[str, Any],
-    workflow: dict[str, Any],
-    policy: str,
-    report: dict[str, Any],
-    tolerances_path: Path,
-    *, catalog=None,
-) -> bool:
-    """Check convergence independently of old-reference field agreement."""
-    convergence = report.get("convergence")
-    if isinstance(convergence, dict):
-        return convergence.get("passed") is True
-    if policy not in {"reference_matrix", "producer"}:
-        return False
-
-    try:
-        return all(check.passed for _, check in _newton_checks(source, workflow, tolerances_path, catalog=catalog))
-    except ComparisonError:
-        return False
-
-
-def _newton_checks(source, workflow, tolerances_path, *, catalog=None):
-    run_directory = Path(source["run_directory"])
-    metadata = load_json(run_directory / "run_metadata.json", "run metadata")
+def _newton_checks(inputs):
+    workflow = inputs.workflow
     definitions = workflow.get("stages", [{"newton_check": "bounded"}])
-    records = metadata.get("stages") if workflow.get("stages") else [
-        {"run_directory": str(run_directory), "status": metadata.get("status")}
+    records = _validated_stage_records(inputs.plan, workflow, inputs.metadata) if workflow.get("stages") else [
+        {"run_directory": str(inputs.run_directory), "status": "completed"}
     ]
-    if not isinstance(records, list) or len(records) != len(definitions) or any(
-        record.get("stage_id") != definition.get("id")
-        or record.get("status") != "completed"
-        for record, definition in zip(records, definitions)
-    ):
-        raise ComparisonError("workflow has missing or incomplete stages")
-    maximum = _stage_newton_maximum(workflow, source["layout_id"], tolerances_path, catalog=catalog)
+    if any(record.get("status") != "completed" for record in records):
+        raise ComparisonError("workflow has incomplete stages")
+    maximum = _stage_newton_maximum(workflow, inputs.plan["layout_id"], inputs.tolerances_path, catalog=inputs.catalog)
     return [(record, read_newton_convergence(
         Path(record["run_directory"]) / "stdout.log",
         effective_newton_maximum(maximum, definition["newton_check"]),
@@ -360,10 +334,7 @@ def _newton_checks(source, workflow, tolerances_path, *, catalog=None):
 def validate_completed_run(run_directory, case_directory, tolerances_path, *, catalog=None):
     """Validate outputs and stage convergence without agreement with a reference."""
     inputs = load_comparison_inputs(run_directory, case_directory, tolerances_path, catalog=catalog)
-    if inputs.workflow.get("stages"):
-        _validated_stage_records(inputs.plan, inputs.workflow, inputs.metadata)
-    checks = _newton_checks({"run_directory": str(run_directory), "layout_id": inputs.plan["layout_id"]},
-                            inputs.workflow, tolerances_path, catalog=inputs.catalog)
+    checks = _newton_checks(inputs)
     stages, failures = [], []
     for record, convergence in checks:
         directory = Path(record["run_directory"])

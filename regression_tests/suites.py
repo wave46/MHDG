@@ -13,7 +13,7 @@ from .config import (bundle_root_from_settings, absolute_setting, solver_executa
 from .bundles import preflight_bundles
 from .prepare import prepare_run
 from .execute import execute_prepared, reusable_outputs, execution_failures
-from .compare import compare_completed_run, compare_generated_meshes, producer_converged, validate_completed_run
+from .compare import compare_completed_run, compare_generated_meshes, validate_completed_run
 from .compare_common import select_candidate
 from .documents import load_json, write_json_atomic
 from .support import BundleError, ComparisonError, HarnessError, IDENTIFIER_RE, utc_now, utc_run_id
@@ -30,7 +30,6 @@ class SuiteRunInputs:
     tolerances_path: Path
     compare: bool
     parameter_overrides: dict[str, bool | float | int | str]
-    validate: bool = True
     catalog: dict | None = None
     manifest: dict | None = None
     require_reference: bool = True
@@ -61,11 +60,8 @@ def run_cell(
         result["run_status"] = run.status
         result["duration_seconds"] = run.duration_seconds
         result["status"] = run.status
-        if run.status != "completed":
-            result["failures"] = [f"solver run status is {run.status}", *execution_failures(prepared.path)]
-
-            return result
-        return _compare_cell(result, inputs)
+        return assess_result(result, inputs.case_directory, inputs.tolerances_path,
+                             references=inputs.require_reference, enabled=inputs.compare, catalog=inputs.catalog)
     except HarnessError as exc:
         result["failures"] = [str(exc)]
     return result
@@ -78,7 +74,8 @@ def _empty_result(workflow_id: str, layout_id: str) -> dict[str, Any]:
         "status": "error",
         "run_status": None,
         "comparison_policy": None,
-        "comparison_status": None,
+        "comparison_status": "not_run",
+        "convergence_status": None,
         "duration_seconds": None,
         "run_directory": None,
         "comparison_report": None,
@@ -198,60 +195,31 @@ def _selected_output(run_directory: Path) -> Path:
     return select_candidate(run_directory, metadata)
 
 
-def _verify_result(
-    source: dict[str, Any],
-    case: dict[str, Any],
-    case_directory: Path,
-    tolerances_path: Path,
-    references: bool = True,
-    *, catalog=None,
-) -> dict[str, Any]:
-    workflow_id = source.get("workflow_id")
-    result = {
-        "workflow_id": workflow_id,
-        "layout_id": source.get("layout_id"),
-        "run_directory": source.get("run_directory"),
-        "run_status": source.get("run_status"),
-        "comparison_policy": None,
-        "comparison_report": None,
-        "convergence_status": None,
-        "status": "failed",
-        "failures": [],
-    }
-    if source.get("run_status") != "completed":
-        result["failures"] = ["solver run did not complete"]
-        return result
-    if workflow_id not in case["workflows"]:
-        result["failures"] = [f"unknown workflow: {workflow_id}"]
-        return result
-
+def assess_result(source, case_directory, tolerances_path, *, references=True, enabled=True, catalog=None):
+    """Assess fresh, resumed or saved execution with the same checks and result fields."""
+    result = {**source, "status": "failed", "failures": [], "comparison_policy": None,
+              "comparison_report": None, "comparison_status": "not_run", "convergence_status": None}
+    result.pop("validation", None)
     try:
-        run_directory = Path(source["run_directory"])
-        if not references:
-            validation = validate_completed_run(run_directory, case_directory, tolerances_path, catalog=catalog)
-            result.update(validation=validation, status=validation["status"], failures=validation["failures"],
-                          convergence_status="passed" if validation["convergence"]["passed"] else "failed")
+        directory = recorded_directory(source.get("run_directory"), "suite run")
+        if source.get("run_status") != "completed":
+            result["failures"] = [f"solver run status is {source.get('run_status')}", *execution_failures(directory)]
             return result
-        policy, report_path, report = compare_completed_run(
-            run_directory,
-            case_directory,
-            tolerances_path, catalog=catalog,
-        )
-        result["comparison_policy"] = policy
-        result["comparison_report"] = str(report_path)
-        result["convergence_status"] = (
-            "passed"
-            if producer_converged(
-                source,
-                case["workflows"][workflow_id],
-                policy,
-                report,
-                tolerances_path, catalog=catalog,
-            )
-            else "failed"
-        )
-        result["failures"] = report["failures"]
-        result["status"] = report["status"]
+        if not enabled:
+            result["status"] = "deferred"
+            return result
+        if references:
+            policy, path, report = compare_completed_run(directory, case_directory, tolerances_path, catalog=catalog)
+            result.update(comparison_policy=policy, comparison_report=str(path), comparison_status=report["status"])
+        else:
+            report = validate_completed_run(directory, case_directory, tolerances_path, catalog=catalog)
+            result["validation"] = report
+        convergence = report["convergence"]["passed"]
+        result["convergence_status"] = "passed" if convergence is True else "failed" if convergence is False else "not_checked"
+        result["failures"] = list(report["failures"])
+        if convergence is False and not result["failures"]:
+            result["failures"].append("Newton convergence check failed")
+        result["status"] = "passed" if report["status"] == "passed" and convergence is True else "failed"
     except (HarnessError, TypeError) as exc:
         result["failures"] = [str(exc)]
     return result
@@ -375,14 +343,6 @@ def run_suite(
         raise BundleError(f"invalid suite run identifier: {run_id}")
     pairs = suite.get("layout_comparisons")
     references = suite["reference_comparisons"]
-    if not pairs and not references:
-        mode = "execution_only"
-    elif not compare:
-        mode = "deferred" if references else "deferred_layout_pairs"
-    elif pairs:
-        mode = "reference_and_layout_pairs" if references else "layout_pairs"
-    else:
-        mode = "immediate"
     overrides = {"balance_diagnostics_mode": suite["diagnostics"], **(parameter_overrides or {})}
     case = load_case_definition(suite["case_id"], case_directory, catalog=catalog)
     layouts = load_layouts(layouts_path, catalog=catalog)
@@ -404,7 +364,7 @@ def run_suite(
     expected = {
         "suite_id": suite_id, "run_id": run_id, "case_id": suite["case_id"],
         "workflow_ids": suite["workflow_ids"], "layout_ids": suite["layouts"],
-        "comparison_mode": mode, "parameter_overrides": overrides,
+        "checks_enabled": compare, "parameter_overrides": overrides,
         "reference_comparisons": references,
         **{key: suite[key] for key in ("layout_comparisons", "tolerance_profile", "layout_comparison_policy") if key in suite},
     }
@@ -429,7 +389,7 @@ def run_suite(
     summary.pop("diagnostics", None)
     write_json_atomic(path, summary, "suite summary")
     inputs = SuiteRunInputs(settings, suite["case_id"], run_id, case_directory,
-                            layouts_path, tolerances_path, compare and references, overrides, validate=compare,
+                            layouts_path, tolerances_path, compare, overrides,
                             catalog=catalog, manifest=manifest, require_reference=references)
     print(f"suite: {suite_id} ({run_id})")
     for layout in suite["layouts"]:
@@ -440,7 +400,8 @@ def run_suite(
             if (previous and previous.get("run_status") == "completed"
                     and previous.get("run_directory") and reusable_outputs(Path(previous["run_directory"]))):
                 print(f"reusing completed {workflow} / {layout}", flush=True)
-                result = _compare_cell(dict(previous), inputs)
+                result = assess_result(previous, case_directory, tolerances_path,
+                                       references=references, enabled=compare, catalog=catalog)
             else:
                 selected = inputs
                 existing = root / suite["case_id"] / workflow / layout / run_id
@@ -471,37 +432,14 @@ def run_suite(
     return path, summary
 
 
-def _compare_cell(result, inputs):
-    if result.get("run_status") != "completed":
-        return result
-    result.update(status="passed", failures=[], comparison_status="not_run")
-    result.pop("validation", None)
-    if inputs.compare:
-        try:
-            policy, path, report = compare_completed_run(
-                Path(result["run_directory"]), inputs.case_directory, inputs.tolerances_path, catalog=inputs.catalog,
-            )
-            result.update(comparison_policy=policy, comparison_report=str(path),
-                          comparison_status=report["status"], failures=report["failures"],
-                          status="passed" if report["status"] == "passed" else "comparison_failed")
-        except HarnessError as exc:
-            result.update(status="error", failures=[str(exc)])
-    elif inputs.validate:
-        try:
-            validation = validate_completed_run(Path(result["run_directory"]), inputs.case_directory, inputs.tolerances_path, catalog=inputs.catalog)
-            result.update(validation=validation, failures=validation["failures"],
-                          status="passed" if validation["status"] == "passed" else "validation_failed")
-        except HarnessError as exc:
-            result.update(status="error", failures=[str(exc)])
-    return result
-
-
 def _finish(summary):
     checks = [*summary["results"], *summary.get("comparisons", [])]
     if summary.get("diagnostics"):
         checks.append(summary["diagnostics"])
-    summary.update(status="passed" if checks and all(item["status"] == "passed" for item in checks) else "failed",
-                   finished_utc=utc_now())
+    statuses = {item["status"] for item in checks}
+    status = "failed" if not statuses or statuses - {"passed", "deferred"} else (
+        "deferred" if "deferred" in statuses else "passed")
+    summary.update(status=status, finished_utc=utc_now())
 
 
 def verify_suite(suite_summary_path, case_directory, tolerances_path, *, include_layout_pairs=True):
@@ -510,6 +448,8 @@ def verify_suite(suite_summary_path, case_directory, tolerances_path, *, include
     source = load_json(path, "suite summary")
     _validate_source_summary(source)
     case = load_case_definition(source["case_id"], case_directory, catalog=catalog)
+    if any(item["workflow_id"] not in case["workflows"] for item in source["results"]):
+        raise BundleError("suite summary refers to an unknown workflow")
     output = path.parent / "verification_summary.json"
     summary = {
         "schema_version": 2, "created_utc": utc_now(), "status": "running",
@@ -519,7 +459,7 @@ def verify_suite(suite_summary_path, case_directory, tolerances_path, *, include
     write_json_atomic(output, summary, "verification summary")
     references = source.get("reference_comparisons", not source.get("layout_comparisons"))
     for result in source["results"]:
-        summary["results"].append(_verify_result(result, case, case_directory, tolerances_path, references, catalog=catalog))
+        summary["results"].append(assess_result(result, case_directory, tolerances_path, references=references, catalog=catalog))
         write_json_atomic(output, summary, "verification summary")
     if include_layout_pairs and source.get("layout_comparisons"):
         summary["comparisons"] = compare_layout_pairs(source, case_directory, tolerances_path, catalog=catalog)
@@ -578,9 +518,8 @@ def run_profile(name, checks, settings_by_case, catalog_root, run_id=None, *, re
                                    "summary": str(result_path)})
         summary["duration_seconds"] = time.monotonic() - started
         write_json_atomic(path, summary, "profile summary")
-        if result["status"] != "passed":
+        if result["status"] == "failed":
             break
-    summary["status"] = "passed" if (len(summary["results"]) == len(checks)
-        and all(result["status"] == "passed" for result in summary["results"])) else "failed"
+    _finish(summary)
     write_json_atomic(path, summary, "profile summary")
     return path, summary

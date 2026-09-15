@@ -22,7 +22,7 @@ def test_explicit_final_check_bypasses_stage_matrix(tmp_path, monkeypatch, workf
 
     def run_comparison(inputs, overrides, path, **kwargs):
         calls.append((overrides, kwargs["policy"]))
-        return report_path, {"status": "passed", "failures": [], "comparison_policy": kwargs["policy"]}
+        return report_path, {"status": "passed", "failures": [], "comparison_policy": kwargs["policy"], "convergence": {"passed": True}}
 
     monkeypatch.setattr(compare, "compare_run", run_comparison)
     policy, path, _ = compare.compare_completed_run(
@@ -45,7 +45,7 @@ def test_stage_references_and_stop_at_first_divergence(tmp_path, monkeypatch, wo
         calls.append(overrides)
         failures = ["solution/u exceeds tolerance"] if fail_second and len(calls) == 2 else []
         return path, {"status": "failed" if failures else "passed", "failures": failures,
-                      "comparison_policy": kwargs["policy"]}
+                      "comparison_policy": kwargs["policy"], "convergence": {"passed": True}}
 
     monkeypatch.setattr(compare, "compare_run", stage_comparison)
     policy, path, report = compare.compare_completed_run(
@@ -55,6 +55,7 @@ def test_stage_references_and_stop_at_first_divergence(tmp_path, monkeypatch, wo
     assert policy == "reference_matrix" and path.name == "matrix_comparison.json"
     assert report["status"] == ("failed" if fail_second else "passed")
     assert report["checked_stage_count"] == len(calls) == expected
+    assert report["convergence"]["passed"] is (None if fail_second else True)
     assert report["first_failed_stage"] == ("diffusion_reduction" if fail_second else None)
     assert [overrides.reference for overrides in calls] == list(references.values())[:expected]
     assert calls[0].newton_check == "finite_only" and calls[-1].newton_check == "bounded"

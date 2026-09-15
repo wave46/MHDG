@@ -150,6 +150,13 @@ def test_publish_rejects_changed_outputs_evidence_and_missing_reason(setup):
     _, report = golden.refresh('legacy_case', setup.values, setup.workspace)
     with pytest.raises(BundleError, match='reason and provenance'):
         golden.publish(setup.workspace, setup.output, 'v1', ' ', 'Review')
+    refresh_path = setup.workspace / 'refresh.json'
+    original_report = refresh_path.read_bytes()
+    report['producers'][0]['validation']['convergence']['passed'] = False
+    refresh_path.write_text(json.dumps(report))
+    with pytest.raises(BundleError, match='successful recorded validation'):
+        publish(setup)
+    refresh_path.write_bytes(original_report)
     candidate = setup.workspace / 'candidate'
     manifest_path = candidate / 'manifest.json'
     original = manifest_path.read_bytes()

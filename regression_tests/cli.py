@@ -296,7 +296,7 @@ def _check(args: argparse.Namespace) -> int:
             suite=checks[0], manifest=manifests[cases[0]], **options,
         )
         reporting.print_run_summary(summary, path)
-    return 0 if summary["status"] == "passed" else 1
+    return 0 if summary["status"] in {"passed", "deferred"} else 1
 
 
 def _settings(args, case, *, use_build=True):

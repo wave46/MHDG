@@ -50,7 +50,7 @@ cp inputs'''))
     good = {item["layout_id"]: item["run_directory"] for item in first["results"] if item["run_status"] == "completed"}
     assert good
     _, resumed = run(harness, "warm_parallelism", compare=False, resume=True)
-    assert resumed["status"] == "passed"
+    assert resumed["status"] == "deferred"
     assert len(resumed["results"]) == len(first["results"])
     for item in resumed["results"]:
         if item["layout_id"] in good:
@@ -63,7 +63,7 @@ cp inputs'''))
     output.write_bytes(b"changed output")
     _, repaired = run(harness, "warm_parallelism", compare=False, resume=True)
     changed = next(item for item in repaired["results"] if item["layout_id"] == damaged)
-    assert repaired["status"] == "passed"
+    assert repaired["status"] == "deferred"
     assert changed["run_directory"] != good[damaged]
     assert output.read_bytes() == b"changed output"  # Old evidence is not overwritten.
 
@@ -79,7 +79,7 @@ def test_interruption_preserves_partial_directory(harness, monkeypatch):
         with pytest.raises(KeyboardInterrupt):
             run(harness, compare=False)
     _, summary = run(harness, compare=False, resume=True)
-    assert summary["status"] == "passed"
+    assert summary["status"] == "deferred"
     assert (partial / "evidence.txt").read_text() == "keep"
     assert Path(summary["results"][0]["run_directory"]).name == "check-resume-1"
 
@@ -100,12 +100,20 @@ def test_resume_rechecks_comparisons_and_rejects_changed_inputs(harness, monkeyp
     selected["MHDG_REGRESSION_BUILD_JOBS"] = "3"
     monkeypatch.setattr(suites, "run_cell", lambda *args: pytest.fail("valid output should be reused"))
     comparison = Mock(return_value=("fixed_hdf5", tmp_path / "comparison.json", {
-        "status": "failed", "failures": ["changed acceptance result"],
+        "status": "failed", "failures": ["changed acceptance result"], "convergence": {"passed": True},
     }))
     monkeypatch.setattr(suites, "compare_completed_run", comparison)
     _, resumed = check(resume=True)
     comparison.assert_called_once()
     assert resumed["status"] == "failed"
+    comparison.return_value = ("fixed_hdf5", tmp_path / "comparison.json", {
+        "status": "passed", "failures": [], "convergence": {"passed": False},
+    })
+    resumed_path, inconsistent = check(resume=True)
+    assert inconsistent["status"] == "failed"
+    assert inconsistent["results"][0]["convergence_status"] == "failed"
+    verification = suites.verify_suite(resumed_path, catalog / "cases", ROOT / "tolerances.json")[1]
+    assert verification["results"][0] == inconsistent["results"][0]
     assert resumed["results"][0]["run_directory"] == first["results"][0]["run_directory"]
     shared = catalog / "workflows.json"
     original = shared.read_text()
@@ -130,6 +138,7 @@ def test_cli_requires_golden_and_records_diagnostic_overrides(harness):
     args = ("check", "warm", "--case", "legacy_case", "--settings", str(harness.settings), "--run-id", "mode", "--run-only")
     result = run_command(*args, "--diagnostics", "detailed")
     assert result.returncode == 0, result.stderr
+    assert "suite deferred:" in result.stdout
     directory = harness.run_directory("warm", "mpi4_omp4", "mode")
     assert "balance_diagnostics_mode = 'detailed'" in (directory / "param.txt").read_text()
     result = run_command(*args, "--diagnostics", "off", "--resume")

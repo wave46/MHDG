@@ -14,7 +14,7 @@ from .files import file_identity
 from . import config
 from .build import build_solver
 from .bundles import artifact_path, validate_bundle_root, preflight_bundles, load_manifest
-from .compare import compare_completed_run, producer_converged, validate_completed_run
+from .compare import compare_completed_run, validate_completed_run
 from .compare_common import select_candidate
 from .execute import execute_prepared, reusable_outputs
 from .prepare import prepare_run
@@ -296,8 +296,9 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         directory = Path(item["run_directory"])
         if not directory.resolve().is_relative_to(workspace) or item["status"] != "passed" or not reusable_outputs(directory):
             raise BundleError("producer failed or its outputs changed")
-        if not producer_converged(item, case["workflows"][item["workflow_id"]], "producer", {}, catalog_root / "tolerances.json", catalog=catalog):
-            raise BundleError("producer did not converge")
+        validation = item.get("validation", {})
+        if validation.get("status") != "passed" or validation.get("convergence", {}).get("passed") is not True:
+            raise BundleError("producer has no successful recorded validation")
     if any(item["status"] != "passed" for item in report.get("parallel_checks", [])):
         raise BundleError("producer parallel checks failed")
     for check in report["checks"]:

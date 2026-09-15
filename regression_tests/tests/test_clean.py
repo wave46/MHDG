@@ -48,7 +48,7 @@ def test_retained_suite_and_run_protect_dependencies_until_selected_together(tmp
     kept = run(root, 'consumer')
     (kept / 'restart.h5').symlink_to(producer / 'run_metadata.json')
     suite = root / 'suite'
-    record(suite, 'suite_summary.json', status='passed', results=[{'run_directory': str(kept)}])
+    record(suite, 'suite_summary.json', status='deferred', results=[{'run_directory': str(kept)}])
     report = cleanup(root, [producer, build])
     assert report['blocked']
     with pytest.raises(BundleError, match='needed by'):

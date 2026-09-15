@@ -225,7 +225,10 @@ stage thresholds. Compact validation results are stored in the suite summary.
 Golden producers share these checks independently of old-reference agreement.
 
 `--run-only` defers reference, convergence and diagnostic checks; build/output identity
-is still checked on every execution. `compare --suite` checks a saved suite summary,
+is still checked on every execution. Successful run-only suites/profiles report
+`deferred` and exit with code 0. Fresh, resumed and saved checks use the same
+assessment; a failed Newton check cannot count as a passed regression.
+`compare --suite` checks a saved suite summary,
 including output validity for suites without reference comparisons.
 
 ### Build reusable executables
