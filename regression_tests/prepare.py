@@ -109,26 +109,29 @@ def load_preparation_inputs(
     requested_overrides: dict[str, bool | float | int | str] | None = None,
     artifact_overrides: dict[str, Path] | None = None,
     require_reference: bool = True,
+    catalog=None,
+    manifest=None,
 ) -> PreparationInputs:
     """Resolve the files and declarations needed to prepare one run."""
+    catalog = {} if catalog is None else catalog
     bundle_root = bundle_root_from_settings(settings)
+    manifest = manifest if manifest is not None else load_manifest(bundle_root, case_directory, case_id=case_id)
     if validate_bundle:
-        validate_bundle_root(bundle_root, case_directory)
+        validate_bundle_root(bundle_root, case_directory, manifest=manifest, catalog=catalog)
 
-    case = load_case_definition(case_id, case_directory)
+    case = load_case_definition(case_id, case_directory, catalog=catalog)
     workflow = case["workflows"].get(workflow_id)
     if workflow is None:
         raise BundleError(f"case {case_id} has no workflow {workflow_id}")
-    if not require_reference:
-        workflow = {key: value for key, value in workflow.items() if key != "reference"}
-    layout = load_layout(layout_id, layouts_path)
-    artifacts, manifest = _case_artifacts(
+    layout_id = layout_id or workflow["layout"]
+    layout = load_layout(layout_id, layouts_path, catalog=catalog)
+    artifacts = _case_artifacts(
         bundle_root,
-        case,
         workflow_id,
-        case_directory,
+        manifest,
         workflow,
         artifact_overrides or {},
+        require_reference,
     )
 
     run_root = absolute_setting(settings, "MHDG_REGRESSION_RUN_ROOT")
@@ -176,16 +179,14 @@ def _run_directory(
 
 def _case_artifacts(
     bundle_root: Path,
-    case: dict[str, Any],
     workflow_id: str,
-    case_directory: Path,
+    manifest: dict[str, Any],
     workflow: dict[str, Any],
     overrides: dict[str, Path],
-) -> tuple[dict[str, Path], dict[str, Any]]:
-    manifest = load_manifest(bundle_root, case_directory, case_id=case["case_id"])
-
+    require_reference: bool,
+) -> dict[str, Path]:
     paths = {}
-    for role in workflow_required_roles(workflow):
+    for role in workflow_required_roles(workflow, references=require_reference):
         if role in overrides:
             paths[role] = overrides[role].resolve(strict=True)
             if not paths[role].is_file():
@@ -199,7 +200,7 @@ def _case_artifacts(
             ) from exc
         relative_path = manifest["artifacts"][artifact_id]["path"]
         paths[role] = artifact_path(bundle_root, relative_path, f"workflow role {role}")
-    return paths, manifest
+    return paths
 
 
 
@@ -247,7 +248,7 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     if stage is None:
         parameter_role = "warm_parameters"
         sources["restart.h5"] = artifacts[workflow.get("restart", "warm_restart")]
-        if workflow.get("reference"):
+        if workflow.get("reference") in artifacts:
             sources["reference.h5"] = artifacts[workflow["reference"]]
     else:
         parameter_role = stage["parameters"]
@@ -386,7 +387,7 @@ def prepare_staged_run(inputs: PreparationInputs) -> PreparedStagedRun:
         (staging / "inputs").mkdir()
         (staging / "stages").mkdir()
         reference_role = inputs.workflow.get("reference")
-        if reference_role is not None:
+        if reference_role in inputs.artifacts:
             (staging / "inputs" / "reference.h5").symlink_to(
                 inputs.artifacts[reference_role]
             )
@@ -458,6 +459,8 @@ def prepare_run(
     requested_overrides: dict[str, bool | float | int | str] | None = None,
     *, artifact_overrides: dict[str, Path] | None = None,
     require_reference: bool = True,
+    catalog=None,
+    manifest=None,
 ) -> PreparedExecution:
     """Create one validated, isolated run or staged workflow directory."""
     inputs = load_preparation_inputs(
@@ -472,6 +475,8 @@ def prepare_run(
         requested_overrides,
         artifact_overrides,
         require_reference,
+        catalog,
+        manifest,
     )
     workflow_kind = inputs.workflow["type"]
     if workflow_kind == "warm_same_state":

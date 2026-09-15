@@ -7,10 +7,10 @@ from pathlib import Path
 import time
 from typing import Any
 
-from .catalog import load_case_definition, load_suite_definition, load_layouts, required_builds
+from .catalog import load_case_definition, load_suite_definition, load_layouts, required_builds, selection_builds
 from .config import (bundle_root_from_settings, absolute_setting, solver_executable,
                      runtime_files, selected_mpi_launcher, runtime_settings, build_key)
-from .bundles import validate_bundle_root
+from .bundles import preflight_bundles
 from .prepare import prepare_run
 from .execute import execute_prepared, reusable_outputs, execution_failures
 from .compare import compare_completed_run, compare_generated_meshes, producer_converged, validate_completed_run
@@ -31,6 +31,9 @@ class SuiteRunInputs:
     compare: bool
     parameter_overrides: dict[str, bool | float | int | str]
     validate: bool = True
+    catalog: dict | None = None
+    manifest: dict | None = None
+    require_reference: bool = True
 
 
 def run_cell(
@@ -51,6 +54,7 @@ def run_cell(
             inputs.run_id,
             validate_bundle=False,
             requested_overrides=inputs.parameter_overrides,
+            catalog=inputs.catalog, manifest=inputs.manifest, require_reference=inputs.require_reference,
         )
         result["run_directory"] = str(prepared.path)
         run = execute_prepared(prepared, inputs.settings)
@@ -86,8 +90,10 @@ def compare_layout_pairs(
     summary: dict[str, Any],
     case_directory: Path,
     tolerances_path: Path,
+    *, catalog=None,
 ) -> list[dict[str, Any]]:
     """Compare every declared candidate with its same-workflow baseline."""
+    catalog = {} if catalog is None else catalog
     return [
         _compare_pair(
             summary,
@@ -95,6 +101,7 @@ def compare_layout_pairs(
             pair,
             case_directory,
             tolerances_path,
+            catalog,
         )
         for workflow_id in summary["workflow_ids"]
         for pair in summary["layout_comparisons"]
@@ -107,6 +114,7 @@ def _compare_pair(
     pair: dict[str, str],
     case_directory: Path,
     tolerances_path: Path,
+    catalog,
 ) -> dict[str, Any]:
     baseline_layout = pair["baseline"]
     candidate_layout = pair["candidate"]
@@ -134,6 +142,7 @@ def _compare_pair(
             candidate,
             case_directory,
             tolerances_path,
+            catalog=catalog,
             reference_override=reference,
             tolerance_profile_override=summary["tolerance_profile"],
             comparison_policy_override=summary.get("layout_comparison_policy"),
@@ -195,6 +204,7 @@ def _verify_result(
     case_directory: Path,
     tolerances_path: Path,
     references: bool = True,
+    *, catalog=None,
 ) -> dict[str, Any]:
     workflow_id = source.get("workflow_id")
     result = {
@@ -218,14 +228,14 @@ def _verify_result(
     try:
         run_directory = Path(source["run_directory"])
         if not references:
-            validation = validate_completed_run(run_directory, case_directory, tolerances_path)
+            validation = validate_completed_run(run_directory, case_directory, tolerances_path, catalog=catalog)
             result.update(validation=validation, status=validation["status"], failures=validation["failures"],
                           convergence_status="passed" if validation["convergence"]["passed"] else "failed")
             return result
         policy, report_path, report = compare_completed_run(
             run_directory,
             case_directory,
-            tolerances_path,
+            tolerances_path, catalog=catalog,
         )
         result["comparison_policy"] = policy
         result["comparison_report"] = str(report_path)
@@ -236,7 +246,7 @@ def _verify_result(
                 case["workflows"][workflow_id],
                 policy,
                 report,
-                tolerances_path,
+                tolerances_path, catalog=catalog,
             )
             else "failed"
         )
@@ -355,11 +365,11 @@ def _validate_recorded_cells(
 def run_suite(
     settings, suite_id, case_directory, layouts_path, suites_path,
     tolerances_path, run_id=None, required_bundle_class=None, compare=True,
-    resume=False, parameter_overrides=None, *, case_id=None,
+    resume=False, parameter_overrides=None, *, case_id=None, catalog=None, suite=None, manifest=None,
 ):
-    suite = load_suite_definition(suite_id, suites_path, layouts_path, case_directory, case_id=case_id)
+    catalog = {} if catalog is None else catalog
+    suite = suite or load_suite_definition(suite_id, suites_path, layouts_path, case_directory, case_id=case_id, catalog=catalog)
     bundle_root = bundle_root_from_settings(settings)
-    validate_bundle_root(bundle_root, case_directory, required_class=required_bundle_class)
     run_id = run_id or utc_run_id()
     if not IDENTIFIER_RE.fullmatch(run_id):
         raise BundleError(f"invalid suite run identifier: {run_id}")
@@ -374,10 +384,14 @@ def run_suite(
     else:
         mode = "immediate"
     overrides = {"balance_diagnostics_mode": suite["diagnostics"], **(parameter_overrides or {})}
-    case = load_case_definition(suite["case_id"], case_directory)
-    layouts = load_layouts(layouts_path)
+    case = load_case_definition(suite["case_id"], case_directory, catalog=catalog)
+    layouts = load_layouts(layouts_path, catalog=catalog)
     requirements = required_builds(case, suite["workflow_ids"], [layouts[name] for name in suite["layouts"]])
-    runtime_settings(settings, requirements)
+    # Profile/CLI callers pass the manifest after preflighting the entire selection.
+    if manifest is None:
+        manifest = preflight_bundles([suite], {suite["case_id"]: settings}, case_directory,
+                                     required_bundle_class=required_bundle_class, catalog=catalog)[suite["case_id"]]
+        runtime_settings(settings, requirements)
     identity = suite_execution_inputs(settings, bundle_root, requirements, {
         "case_definition": case_directory / f"{suite['case_id']}.json",
         "workflow_catalog": case_directory.parent / "workflows.json",
@@ -415,7 +429,8 @@ def run_suite(
     summary.pop("diagnostics", None)
     write_json_atomic(path, summary, "suite summary")
     inputs = SuiteRunInputs(settings, suite["case_id"], run_id, case_directory,
-                            layouts_path, tolerances_path, compare and references, overrides, validate=compare)
+                            layouts_path, tolerances_path, compare and references, overrides, validate=compare,
+                            catalog=catalog, manifest=manifest, require_reference=references)
     print(f"suite: {suite_id} ({run_id})")
     for layout in suite["layouts"]:
         for workflow in suite["workflow_ids"]:
@@ -446,7 +461,7 @@ def run_suite(
             summary["duration_seconds"] += time.monotonic() - started
             write_json_atomic(path, summary, "suite summary")
     if pairs and compare:
-        summary["comparisons"] = compare_layout_pairs(summary, case_directory, tolerances_path)
+        summary["comparisons"] = compare_layout_pairs(summary, case_directory, tolerances_path, catalog=catalog)
     if compare:
         from .diagnostics import check_suite
 
@@ -464,7 +479,7 @@ def _compare_cell(result, inputs):
     if inputs.compare:
         try:
             policy, path, report = compare_completed_run(
-                Path(result["run_directory"]), inputs.case_directory, inputs.tolerances_path,
+                Path(result["run_directory"]), inputs.case_directory, inputs.tolerances_path, catalog=inputs.catalog,
             )
             result.update(comparison_policy=policy, comparison_report=str(path),
                           comparison_status=report["status"], failures=report["failures"],
@@ -473,7 +488,7 @@ def _compare_cell(result, inputs):
             result.update(status="error", failures=[str(exc)])
     elif inputs.validate:
         try:
-            validation = validate_completed_run(Path(result["run_directory"]), inputs.case_directory, inputs.tolerances_path)
+            validation = validate_completed_run(Path(result["run_directory"]), inputs.case_directory, inputs.tolerances_path, catalog=inputs.catalog)
             result.update(validation=validation, failures=validation["failures"],
                           status="passed" if validation["status"] == "passed" else "validation_failed")
         except HarnessError as exc:
@@ -490,10 +505,11 @@ def _finish(summary):
 
 
 def verify_suite(suite_summary_path, case_directory, tolerances_path, *, include_layout_pairs=True):
+    catalog = {}
     path = require_file(suite_summary_path, "suite summary")
     source = load_json(path, "suite summary")
     _validate_source_summary(source)
-    case = load_case_definition(source["case_id"], case_directory)
+    case = load_case_definition(source["case_id"], case_directory, catalog=catalog)
     output = path.parent / "verification_summary.json"
     summary = {
         "schema_version": 2, "created_utc": utc_now(), "status": "running",
@@ -503,10 +519,10 @@ def verify_suite(suite_summary_path, case_directory, tolerances_path, *, include
     write_json_atomic(output, summary, "verification summary")
     references = source.get("reference_comparisons", not source.get("layout_comparisons"))
     for result in source["results"]:
-        summary["results"].append(_verify_result(result, case, case_directory, tolerances_path, references))
+        summary["results"].append(_verify_result(result, case, case_directory, tolerances_path, references, catalog=catalog))
         write_json_atomic(output, summary, "verification summary")
     if include_layout_pairs and source.get("layout_comparisons"):
-        summary["comparisons"] = compare_layout_pairs(source, case_directory, tolerances_path)
+        summary["comparisons"] = compare_layout_pairs(source, case_directory, tolerances_path, catalog=catalog)
     from .diagnostics import check_suite
 
     summary["diagnostics"] = check_suite(source, required=False)
@@ -516,10 +532,11 @@ def verify_suite(suite_summary_path, case_directory, tolerances_path, *, include
 
 
 def run_profile(name, checks, settings_by_case, catalog_root, run_id=None, *, resume=False,
-                compare=True, required_bundle_class=None, parameter_overrides=None):
+                compare=True, required_bundle_class=None, parameter_overrides=None, catalog=None, manifests=None):
     """Run an ordered selection using ordinary suite summaries for resume."""
     from .reporting import print_run_summary
 
+    catalog = {} if catalog is None else catalog
     run_id = run_id or utc_run_id()
     if not IDENTIFIER_RE.fullmatch(run_id):
         raise BundleError(f"invalid profile run identifier: {run_id}")
@@ -532,11 +549,13 @@ def run_profile(name, checks, settings_by_case, catalog_root, run_id=None, *, re
         raise BundleError(f"profile summary already exists: {path}")
     if resume and not path.is_file():
         raise BundleError(f"profile summary not found: {path}")
-    # Reject unavailable/wrong-case bundles before running an earlier, costly check.
-    for case_id, values in settings_by_case.items():
-        bundle = bundle_root_from_settings(values)
-        if validate_bundle_root(bundle, catalog_root / "cases", required_class=required_bundle_class).case_id != case_id:
-            raise BundleError(f"selected bundle does not contain {case_id}")
+    if manifests is None:
+        manifests = preflight_bundles(checks, settings_by_case, catalog_root / "cases",
+                                      required_bundle_class=required_bundle_class, catalog=catalog)
+        layouts = load_layouts(catalog_root / "layouts.json", catalog=catalog)
+        for case_id, values in settings_by_case.items():
+            selected = [check for check in checks if check["case_id"] == case_id]
+            runtime_settings(values, selection_builds(selected, catalog_root / "cases", layouts, catalog=catalog))
     summary = {"profile": name, "run_id": run_id, "status": "running", "results": []}
     if resume:
         previous = load_json(path, "profile summary")
@@ -552,7 +571,7 @@ def run_profile(name, checks, settings_by_case, catalog_root, run_id=None, *, re
             settings_by_case[case], suite, catalog_root / "cases", catalog_root / "layouts.json",
             catalog_root / "suites.json", catalog_root / "tolerances.json", run_id,
             required_bundle_class, compare, resume and existing.is_file(), parameter_overrides,
-            case_id=case,
+            case_id=case, suite=check, catalog=catalog, manifest=manifests[case],
         )
         print_run_summary(result, result_path)
         summary["results"].append({"suite": suite, "case": case, "status": result["status"],

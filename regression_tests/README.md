@@ -41,6 +41,12 @@ python -m regression_tests list layouts
 Commands return 0 for success, 1 for failed checks/runtime input errors, 2 for
 invalid command usage, and 130 for interruption. Solver completion from `run`
 is distinct from a passing scientific comparison from `check`.
+`run` and debug `prepare` use the workflow's default layout unless `--layout`
+is supplied, and need execution inputs only. Use `check` for reference comparisons
+(or supply `compare --reference FILE` when inspecting a standalone run).
+Before `check` builds or runs anything, it verifies each selected bundle against
+the combined workflow requirements. Parallel-only checks do not need an unused
+golden solution; reference checks do. `doctor` uses the same prerequisite check.
 
 ## First-time setup
 

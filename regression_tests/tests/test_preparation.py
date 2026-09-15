@@ -46,10 +46,20 @@ def test_restart_and_reference_roles_are_selected_independently(harness, monkeyp
     case = load_case_definition("legacy_case", ROOT / "cases")
     workflow = case["workflows"]["warm"]
     workflow.update(restart="warm_reference", reference="warm_restart")
-    monkeypatch.setattr("regression_tests.prepare.load_case_definition", lambda *_: case)
+    monkeypatch.setattr("regression_tests.prepare.load_case_definition", lambda *_, **__: case)
     run = prepare(harness)
     assert (run.path / "inputs/restart.h5").resolve() == harness.bundle / "inputs/reference_mpi4_omp4.h5"
     assert (run.path / "inputs/reference.h5").resolve() == harness.bundle / "inputs/restart.h5"
+
+    manifest_path = harness.bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["roles"]["warm_restart"]  # Reference-only role in this swapped workflow.
+    manifest_path.write_text(json.dumps(manifest))
+    producer = prepare(harness, run_id="producer", require_reference=False)
+    assert (producer.path / "inputs/restart.h5").resolve() == harness.bundle / "inputs/reference_mpi4_omp4.h5"
+    assert not (producer.path / "inputs/reference.h5").exists()
+    with pytest.raises(BundleError, match="does not provide role warm_restart"):
+        prepare(harness, run_id="needs-reference")
 
 
 @pytest.mark.parametrize("adaptive,short", [(False, False), (True, False), (False, True), (True, True)])

@@ -56,7 +56,7 @@ def test_debug_prepare_and_bundle_validation_use_discovered_catalogs(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "bundle valid:" in result.stdout
     result = run_command(
-        "prepare", "legacy_case", "cold_step_adaptive", "--layout", "serial_omp1",
+        "prepare", "legacy_case", "cold_step_adaptive",
         "--run-id", "cli-smoke", "--settings", str(harness.settings),
     )
     assert result.returncode == 0, result.stderr
@@ -65,3 +65,10 @@ def test_debug_prepare_and_bundle_validation_use_discovered_catalogs(tmp_path):
     assert plan["stages"]
     assert "run prepared:" in result.stdout
     assert not (run / "run_metadata.json").exists()
+
+    result = run_command(
+        "prepare", "legacy_case", "cold_step_adaptive", "--layout", "mpi4_omp4",
+        "--run-id", "override", "--settings", str(harness.settings),
+    )
+    assert result.returncode == 0, result.stderr
+    assert harness.run_directory("cold_step_adaptive", "mpi4_omp4", "override").is_dir()

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from .catalog import load_case_definition, required_case_roles
+from .config import bundle_root_from_settings
 from .documents import load_validated_json, write_json_direct
 from .support import BundleError, MissingArtifactError, utc_now
 from .files import file_identity, sha256_digest, require_directory
@@ -42,10 +43,11 @@ def load_manifest(root, case_dir=CASES, *, case_id=None):
     return manifest
 
 
-def bundle_readiness(case_id, source, case_dir=CASES, *, workflows=()):
+def bundle_readiness(case_id, source, case_dir=CASES, *, workflows=(), catalog=None):
     """Report presence and declared producers; do not run producers or hash files."""
+    catalog = {} if catalog is None else catalog
     source = require_directory(source, "source")
-    case = load_case_definition(case_id, case_dir)
+    case = load_case_definition(case_id, case_dir, catalog=catalog)
     required = _required_roles(case, workflows)
     rows = []
     for role, spec in case["bundle_files"].items():
@@ -55,7 +57,7 @@ def bundle_readiness(case_id, source, case_dir=CASES, *, workflows=()):
         if path.exists() and not present:
             raise BundleError(f"bundle source is not a file: {path}")
         producers = {
-            name: sorted(required_case_roles(case, name))
+            name: sorted(required_case_roles(case, name, references=False))
             for name, workflow in case["workflows"].items()
             if role in workflow.get("outputs", [])
         }
@@ -69,8 +71,9 @@ def bundle_readiness(case_id, source, case_dir=CASES, *, workflows=()):
             "status": "missing" if missing else "ready", "missing": missing, "artifacts": rows}
 
 
-def create_bundle(case_id, source, output, case_dir=CASES, bundle_version="1.0.0", *, workflows=()):
+def create_bundle(case_id, source, output, case_dir=CASES, bundle_version="1.0.0", *, workflows=(), catalog=None):
     """Copy available declared files, then validate before publishing a candidate."""
+    catalog = {} if catalog is None else catalog
     source = require_directory(source, "source")
     output = output.expanduser().absolute()
     if output.exists() or output.is_symlink():
@@ -80,10 +83,10 @@ def create_bundle(case_id, source, output, case_dir=CASES, bundle_version="1.0.0
         raise BundleError("output must be outside the prepared source directory")
     if not bundle_version:
         raise BundleError("bundle version must not be empty")
-    report = bundle_readiness(case_id, source, case_dir, workflows=workflows)
+    report = bundle_readiness(case_id, source, case_dir, workflows=workflows, catalog=catalog)
     if report["missing"]:
         raise BundleError("required files missing for roles: " + ", ".join(report["missing"]))
-    case = load_case_definition(case_id, case_dir)
+    case = load_case_definition(case_id, case_dir, catalog=catalog)
     if not case["bundle_files"]:
         raise BundleError(f"case {case_id} does not define bundle_files")
     try:
@@ -111,25 +114,26 @@ def create_bundle(case_id, source, output, case_dir=CASES, bundle_version="1.0.0
                     "media_type": spec["media_type"], **({"optional": True} if spec["optional"] else {}),
                 }
             write_json_direct(staging / "manifest.json", manifest)
-            summary = validate_bundle_root(staging, case_dir, workflows=workflows)
+            summary = validate_bundle_root(staging, case_dir, workflows=workflows, catalog=catalog)
             staging.rename(output)
     except OSError as exc:
         raise BundleError(f"cannot create bundle {output}: {exc}") from exc
     return summary
 
 
-def validate_bundle_root(bundle_root, case_dir=CASES, *, workflows=(), required_class=None):
+def validate_bundle_root(bundle_root, case_dir=CASES, *, workflows=(), required_class=None,
+                         required_roles=(), manifest=None, catalog=None):
     """Verify all recorded files and base plus selected workflow requirements."""
     bundle_root = require_directory(bundle_root, "bundle root")
-    manifest = load_manifest(bundle_root, case_dir)
+    manifest = manifest if manifest is not None else load_manifest(bundle_root, case_dir)
     if required_class and manifest.get("bundle_class") != required_class:
         actual = manifest.get("bundle_class", "unspecified")
         raise BundleError(f"golden-check requires bundle_class={required_class}; found {actual}")
-    case = load_case_definition(manifest["case_id"], case_dir)
+    case = load_case_definition(manifest["case_id"], case_dir, catalog=catalog)
     available, verified_bytes, warnings = _verify_artifacts(bundle_root, manifest["artifacts"])
     roles = _verify_roles(manifest)
     load_reference_matrix(bundle_root, case["case_id"], case_dir, manifest=manifest)
-    required = _required_roles(case, workflows)
+    required = _required_roles(case, workflows) | set(required_roles)
     missing = sorted(role for role in required if roles.get(role) not in available)
     if missing:
         raise BundleError(f"case {case['case_id']} has missing required artifact roles: " + ", ".join(missing))
@@ -242,3 +246,20 @@ def artifact_path(root, relative_path, label):
     if not resolved.is_file():
         raise BundleError(f"{label}.path is not a regular file: {relative_path}")
     return resolved
+
+
+def preflight_bundles(checks, settings_by_case, case_directory, *, required_bundle_class=None, catalog=None):
+    """Verify each source bundle once against the union of selected input/reference roles."""
+    catalog = {} if catalog is None else catalog
+    manifests = {}
+    for case_id, values in settings_by_case.items():
+        case = load_case_definition(case_id, case_directory, catalog=catalog)
+        roles = set().union(*(required_case_roles(case, workflow, references=check["reference_comparisons"])
+                              for check in checks if check["case_id"] == case_id
+                              for workflow in check["workflow_ids"]))
+        bundle = bundle_root_from_settings(values)
+        manifest = load_manifest(bundle, case_directory, case_id=case_id)
+        validate_bundle_root(bundle, case_directory, required_roles=roles, required_class=required_bundle_class,
+                             manifest=manifest, catalog=catalog)
+        manifests[case_id] = manifest
+    return manifests

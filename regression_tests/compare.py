@@ -16,7 +16,7 @@ from .compare_fixed import compare_hdf5_files, check_output_contract
 from .execute import final_execution
 from .compare_common import (
     NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
-    load_fixed_tolerances, read_newton_convergence, resolve_run_file, select_candidate,
+    load_fixed_tolerances, load_tolerance_catalog, read_newton_convergence, resolve_run_file, select_candidate,
 )
 
 
@@ -29,6 +29,7 @@ class ComparisonInputs:
     metadata: dict[str, Any]
     case: dict[str, Any]
     workflow: dict[str, Any]
+    catalog: dict
 
 
 @dataclass(frozen=True)
@@ -44,12 +45,14 @@ def load_comparison_inputs(
     run_directory: Path,
     case_directory: Path,
     tolerances_path: Path,
+    *, catalog=None,
 ) -> ComparisonInputs:
     """Load and validate the documents needed to compare a completed run."""
+    catalog = {} if catalog is None else catalog
     run_directory = require_directory(run_directory, "run")
     plan = load_json(run_directory / "run_plan.json", "run plan")
     metadata = _load_completed_metadata(run_directory)
-    case = load_case_definition(plan["case_id"], case_directory)
+    case = load_case_definition(plan["case_id"], case_directory, catalog=catalog)
     workflow = case["workflows"].get(plan.get("workflow_id"))
     if workflow is None:
         raise ComparisonError("run plan refers to an unknown workflow")
@@ -60,7 +63,7 @@ def load_comparison_inputs(
         plan=plan,
         metadata=metadata,
         case=case,
-        workflow=workflow,
+        workflow=workflow, catalog=catalog,
     )
 
 
@@ -124,9 +127,10 @@ def compare_completed_run(
     candidate_override: Path | None = None, reference_override: Path | None = None,
     tolerance_profile_override: str | None = None, comparison_policy_override: str | None = None,
     report_override: Path | None = None,
+    *, catalog=None,
 ) -> tuple[str, Path, dict[str, Any]]:
     """Use stage references when available, unless a final-state check is requested."""
-    inputs = load_comparison_inputs(run_directory, case_dir, tolerances_path)
+    inputs = load_comparison_inputs(run_directory, case_dir, tolerances_path, catalog=catalog)
     overrides = ComparisonOverrides(candidate_override, reference_override, tolerance_profile_override)
     explicit_final = any(value is not None for value in (
         candidate_override, reference_override, tolerance_profile_override, comparison_policy_override,
@@ -153,7 +157,7 @@ def compare_run(
     profile_override = overrides.tolerance_profile
     selection = {"requested_policy": policy, "reason": "fixed mesh required"}
     if policy == "mesh_independent":
-        coordinate_atol = load_json(inputs.tolerances_path, "tolerance definitions")["fixed_defaults"]["mesh_coordinate_atol"]
+        coordinate_atol = load_tolerance_catalog(inputs.tolerances_path, inputs.catalog)["fixed_defaults"]["mesh_coordinate_atol"]
         differences = mesh_differences(reference, candidate, coordinate_atol)
         selection.update(mesh_coordinate_atol=coordinate_atol, differences=differences)
         if differences:
@@ -167,13 +171,13 @@ def compare_run(
                 raise ComparisonError("adaptive workflow must declare a direct comparison profile")
     if policy == "fixed_hdf5":
         profile_id, tolerances = load_fixed_tolerances(
-            inputs.tolerances_path, inputs.workflow, inputs.plan["layout_id"], profile_override,
+            inputs.tolerances_path, inputs.workflow, inputs.plan["layout_id"], profile_override, catalog=inputs.catalog,
         )
     elif policy == "mesh_independent":
         if comparison.get("method") != "mesh_independent":
             raise ComparisonError("run does not define mesh-independent comparison")
         profile_id, tolerances = load_adaptive_tolerances(
-            inputs.tolerances_path, inputs.workflow, overrides.tolerance_profile,
+            inputs.tolerances_path, inputs.workflow, overrides.tolerance_profile, catalog=inputs.catalog,
         )
     else:
         raise ComparisonError(f"unsupported comparison policy: {policy}")
@@ -318,6 +322,7 @@ def producer_converged(
     policy: str,
     report: dict[str, Any],
     tolerances_path: Path,
+    *, catalog=None,
 ) -> bool:
     """Check convergence independently of old-reference field agreement."""
     convergence = report.get("convergence")
@@ -327,12 +332,12 @@ def producer_converged(
         return False
 
     try:
-        return all(check.passed for _, check in _newton_checks(source, workflow, tolerances_path))
+        return all(check.passed for _, check in _newton_checks(source, workflow, tolerances_path, catalog=catalog))
     except ComparisonError:
         return False
 
 
-def _newton_checks(source, workflow, tolerances_path):
+def _newton_checks(source, workflow, tolerances_path, *, catalog=None):
     run_directory = Path(source["run_directory"])
     metadata = load_json(run_directory / "run_metadata.json", "run metadata")
     definitions = workflow.get("stages", [{"newton_check": "bounded"}])
@@ -345,20 +350,20 @@ def _newton_checks(source, workflow, tolerances_path):
         for record, definition in zip(records, definitions)
     ):
         raise ComparisonError("workflow has missing or incomplete stages")
-    maximum = _stage_newton_maximum(workflow, source["layout_id"], tolerances_path)
+    maximum = _stage_newton_maximum(workflow, source["layout_id"], tolerances_path, catalog=catalog)
     return [(record, read_newton_convergence(
         Path(record["run_directory"]) / "stdout.log",
         effective_newton_maximum(maximum, definition["newton_check"]),
     )) for record, definition in zip(records, definitions)]
 
 
-def validate_completed_run(run_directory, case_directory, tolerances_path):
+def validate_completed_run(run_directory, case_directory, tolerances_path, *, catalog=None):
     """Validate outputs and stage convergence without agreement with a reference."""
-    inputs = load_comparison_inputs(run_directory, case_directory, tolerances_path)
+    inputs = load_comparison_inputs(run_directory, case_directory, tolerances_path, catalog=catalog)
     if inputs.workflow.get("stages"):
         _validated_stage_records(inputs.plan, inputs.workflow, inputs.metadata)
     checks = _newton_checks({"run_directory": str(run_directory), "layout_id": inputs.plan["layout_id"]},
-                            inputs.workflow, tolerances_path)
+                            inputs.workflow, tolerances_path, catalog=inputs.catalog)
     stages, failures = [], []
     for record, convergence in checks:
         directory = Path(record["run_directory"])
@@ -391,6 +396,7 @@ def _stage_newton_maximum(
     workflow: dict[str, Any],
     layout_id: str,
     tolerances_path: Path,
+    *, catalog=None,
 ) -> float | None:
     comparison = workflow.get("comparison", {})
     profile = comparison.get("stage_profile")
@@ -399,13 +405,13 @@ def _stage_newton_maximum(
             tolerances_path,
             workflow,
             layout_id,
-            profile,
+            profile, catalog=catalog,
         )
     else:
         _, tolerances = load_adaptive_tolerances(
             tolerances_path,
             workflow,
-            profile,
+            profile, catalog=catalog,
         )
     return tolerances["newton_error_max"]
 

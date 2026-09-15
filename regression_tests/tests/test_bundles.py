@@ -26,6 +26,8 @@ def test_readiness_and_selected_creation_require_actual_files(data):
     assert rows["warm_restart"]["origin"] == "workflow-producible"
     assert rows["warm_restart"]["presence"] == "missing"
     assert rows["warm_restart"]["producers"]
+    warm_inputs = rows["warm_reference"]["producers"]["warm"]
+    assert "warm_restart" in warm_inputs and "warm_reference" not in warm_inputs
     assert rows["geometry"]["origin"] == "user-supplied"
     command = run_command("bundle", "readiness", case, "--source", str(source), "--workflow", "warm")
     assert command.returncode == 1 and "workflow-producible" in command.stdout

@@ -27,16 +27,17 @@ def diagnose(args):
         print("Install regression_tests/requirements.txt with this Python interpreter.")
         return 1
 
-    from .bundles import validate_bundle_root
+    from .bundles import preflight_bundles
     from .config import bundle_root_from_settings
     from .catalog import load_case_definition, load_selection, selection_builds
     from .catalog import load_layouts
+    catalog = {}
     try:
         _, checks = load_selection(
             args.suite, config.ROOT / "suites.json", config.ROOT / "layouts.json",
-            config.ROOT / "cases", case_id=args.case,
+            config.ROOT / "cases", case_id=args.case, catalog=catalog,
         )
-        layouts = load_layouts(config.ROOT / "layouts.json")
+        layouts = load_layouts(config.ROOT / "layouts.json", catalog=catalog)
         cases = list(dict.fromkeys(item["case_id"] for item in checks))
         if args.bundle and len(cases) != 1:
             raise BundleError("--bundle requires a single-case selection; configure defaults.bundles")
@@ -46,7 +47,7 @@ def diagnose(args):
     print(f"PASS catalogs: {args.suite} / {', '.join(cases)}")
     needs_interpolation = False
     for case_id in cases:
-        case = load_case_definition(case_id, config.ROOT / "cases")
+        case = load_case_definition(case_id, config.ROOT / "cases", catalog=catalog)
         selected = [item for item in checks if item["case_id"] == case_id]
         needs_interpolation |= any(case["workflows"][name].get("comparison", {}).get("method") == "mesh_independent"
                                    for item in selected for name in item["workflow_ids"])
@@ -60,14 +61,11 @@ def diagnose(args):
 
         def bundle():
             root = bundle_root_from_settings(values)
-            workflows = {name for item in selected for name in item["workflow_ids"]}
-            summary = validate_bundle_root(root, config.ROOT / "cases", workflows=workflows)
-            if summary.case_id != case_id:
-                raise BundleError(f"selected check needs {case_id}, bundle contains {summary.case_id}")
-            return f"{root} ({summary.verified_artifact_count} artifacts verified)"
+            preflight_bundles(selected, {case_id: values}, config.ROOT / "cases", catalog=catalog)
+            return str(root)
 
         def runtime():
-            config.runtime_settings(values, selection_builds(selected, config.ROOT / "cases", layouts))
+            config.runtime_settings(values, selection_builds(selected, config.ROOT / "cases", layouts, catalog=catalog))
             return values["MHDG_BUILD_MANIFEST"]
 
         check(f"{case_id} bundle", bundle)

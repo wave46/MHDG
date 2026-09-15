@@ -1,4 +1,9 @@
-"""Resolve case/workflow inheritance and generate execution layouts and relations."""
+"""Resolve case/workflow inheritance and generate execution layouts and relations.
+
+Callers share a plain path-to-definition dictionary for one operation. Only
+repository declarations belong in it; mutable bundles/builds/runs are read at
+their validation boundaries. Omitting it starts a fresh catalog snapshot.
+"""
 
 from __future__ import annotations
 
@@ -191,32 +196,37 @@ def _expand_workflow(
     return workflow
 
 
-def load_case_definition(case_id: str, case_directory: Path) -> dict[str, Any]:
+def load_case_definition(case_id: str, case_directory: Path, *, catalog=None) -> dict[str, Any]:
     """Load and validate one tracked case definition by its identifier."""
     if not re.fullmatch(r"[a-z][a-z0-9_]*", case_id):
         raise BundleError(f"invalid case identifier: {case_id}")
 
+    catalog = {} if catalog is None else catalog
     path = case_directory / f"{case_id}.json"
+    if path in catalog:
+        return catalog[path]
     schema_path = case_directory.parent / "schemas" / "case.schema.json"
     declaration = load_validated_json(
         path,
         schema_path,
         f"case definition {path.name}",
     )
-    shared = load_validated_json(
-        case_directory.parent / "workflows.json",
-        schema_path,
-        "shared workflows",
-        definition="workflow_catalog",
-    )
+    shared_path = case_directory.parent / "workflows.json"
+    if shared_path not in catalog:
+        catalog[shared_path] = load_validated_json(
+            shared_path, schema_path, "shared workflows", definition="workflow_catalog",
+        )
+    shared = catalog[shared_path]
     case = normalize_case_definition(case_id, declaration, shared)
     _validate_case_workflows(case)
+    catalog[path] = case
     return case
 
 
 def required_case_roles(
     case: dict[str, Any],
     workflow_id: str | None = None,
+    *, references: bool = True,
 ) -> set[str]:
     """Return base package roles or the roles required by one workflow."""
     if workflow_id is None:
@@ -231,20 +241,21 @@ def required_case_roles(
         raise BundleError(
             f"case {case['case_id']} has no workflow {workflow_id}"
         ) from exc
-    return workflow_required_roles(workflow)
+    return workflow_required_roles(workflow, references=references)
 
 
-def workflow_required_roles(workflow: dict[str, Any]) -> set[str]:
-    """Return explicit and staged artifact roles for one workflow."""
+def workflow_required_roles(workflow: dict[str, Any], *, references: bool = True) -> set[str]:
+    """Resolve execution inputs, optionally including comparison references."""
     roles = set(workflow.get("inputs", []))
     for name in (
         "mesh",
         "restart",
-        "reference",
         "impurity_configuration",
     ):
         if workflow.get(name):
             roles.add(workflow[name])
+    if references and workflow.get("reference"):
+        roles.add(workflow["reference"])
     for stage in workflow.get("stages", []):
         roles.add(stage["parameters"])
         roles.add(stage["transport"])
@@ -294,16 +305,20 @@ SERIAL_LAYOUT = re.compile(r"serial_omp([1-9][0-9]*)")
 MPI_LAYOUT = re.compile(r"mpi([1-9][0-9]*)_omp([1-9][0-9]*)")
 
 
-def load_layouts(path: Path) -> dict[str, dict[str, Any]]:
+def load_layouts(path: Path, *, catalog=None) -> dict[str, dict[str, Any]]:
     """Load every declared layout and derive its execution parameters."""
+    catalog = {} if catalog is None else catalog
+    if path in catalog:
+        return catalog[path]
     schema = path.parent / "schemas/layouts.schema.json"
     document = load_validated_json(path, schema, "layout definitions")
-    return {layout_id: _layout(layout_id) for layout_id in document["layouts"]}
+    catalog[path] = {layout_id: _layout(layout_id) for layout_id in document["layouts"]}
+    return catalog[path]
 
 
-def load_layout(layout_id: str, path: Path) -> dict[str, Any]:
+def load_layout(layout_id: str, path: Path, *, catalog=None) -> dict[str, Any]:
     """Return one layout or report the available identifiers."""
-    layouts = load_layouts(path)
+    layouts = load_layouts(path, catalog=catalog)
     try:
         return layouts[layout_id]
     except KeyError as exc:
@@ -390,16 +405,16 @@ def load_suite_definition(
     suites_path: Path,
     layouts_path: Path,
     case_directory: Path,
-    *, case_id: str | None = None,
+    *, case_id: str | None = None, catalog=None,
 ) -> dict[str, Any]:
     """Load one suite and validate its workflow and layout references."""
-    schema_path = suites_path.parent / "schemas" / "suites.schema.json"
-    document = load_validated_json(suites_path, schema_path, "suite definitions")
+    catalog = {} if catalog is None else catalog
+    document = _suite_document(suites_path, catalog)
     declaration = document["suites"].get(suite_id)
     if declaration is None:
         available = ", ".join(sorted(document["suites"]))
         raise BundleError(f"unknown suite {suite_id}; available: {available}")
-    layouts = load_layouts(layouts_path)
+    layouts = load_layouts(layouts_path, catalog=catalog)
     defaults = document["defaults"]
     relations = declaration.get("relations", [])
     selected = declaration.get(
@@ -429,7 +444,7 @@ def load_suite_definition(
         if "layout_comparison_policy" in declaration:
             suite["layout_comparison_policy"] = declaration["layout_comparison_policy"]
 
-    case = load_case_definition(suite["case_id"], case_directory)
+    case = load_case_definition(suite["case_id"], case_directory, catalog=catalog)
     unknown_workflows = [
         workflow_id
         for workflow_id in suite["workflow_ids"]
@@ -443,11 +458,16 @@ def load_suite_definition(
     return suite
 
 
-def load_selection(name, suites_path, layouts_path, case_directory, *, case_id=None):
+def _suite_document(path, catalog):
+    if path not in catalog:
+        catalog[path] = load_validated_json(path, path.parent / "schemas/suites.schema.json", "suite definitions")
+    return catalog[path]
+
+
+def load_selection(name, suites_path, layouts_path, case_directory, *, case_id=None, catalog=None):
     """Expand a profile into unique case/suite selections; focused suites use the same loader."""
-    document = load_validated_json(
-        suites_path, suites_path.parent / "schemas/suites.schema.json", "suite definitions",
-    )
+    catalog = {} if catalog is None else catalog
+    document = _suite_document(suites_path, catalog)
     profiles = document.get("profiles", {})
     if profiles.keys() & document["suites"].keys():
         raise BundleError("profile and suite names must be distinct")
@@ -468,7 +488,7 @@ def load_selection(name, suites_path, layouts_path, case_directory, *, case_id=N
     selected = {}
     for entry in entries:
         suite = load_suite_definition(
-            entry["suite"], suites_path, layouts_path, case_directory, case_id=entry.get("case"),
+            entry["suite"], suites_path, layouts_path, case_directory, case_id=entry.get("case"), catalog=catalog,
         )
         selected[(entry["suite"], suite["case_id"])] = {"suite_id": entry["suite"], **suite}
     if not selected:
@@ -488,7 +508,8 @@ def required_builds(case, workflows, layouts):
     return requirements
 
 
-def selection_builds(checks, case_directory, layouts):
-    return set().union(*(required_builds(load_case_definition(check["case_id"], case_directory),
+def selection_builds(checks, case_directory, layouts, *, catalog=None):
+    catalog = {} if catalog is None else catalog
+    return set().union(*(required_builds(load_case_definition(check["case_id"], case_directory, catalog=catalog),
                                         check["workflow_ids"], [layouts[name] for name in check["layouts"]])
                          for check in checks))

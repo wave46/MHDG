@@ -7,13 +7,13 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from .catalog import load_case_definition, workflow_required_roles, load_suite_definition, layout_pairs, load_layouts, required_builds
+from .catalog import load_case_definition, workflow_required_roles, load_suite_definition, layout_pairs, load_layouts, required_builds, required_case_roles
 from .documents import load_json, write_json_atomic
 from .support import BundleError, HarnessError, utc_now, utc_run_id
 from .files import file_identity
 from . import config
 from .build import build_solver
-from .bundles import artifact_path, validate_bundle_root
+from .bundles import artifact_path, validate_bundle_root, preflight_bundles, load_manifest
 from .compare import compare_completed_run, producer_converged, validate_completed_run
 from .compare_common import select_candidate
 from .execute import execute_prepared, reusable_outputs
@@ -23,13 +23,13 @@ from .suites import compare_layout_pairs, run_suite
 ROOT = Path(__file__).resolve().parent
 
 
-def _recipe(case_id, root):
-    case = load_case_definition(case_id, root / "cases")
+def _recipe(case_id, root, catalog):
+    case = load_case_definition(case_id, root / "cases", catalog=catalog)
     document = load_json(root / "golden.json", "golden producers")
     declaration = document.get("cases", {}).get(case_id)
     if not declaration:
         raise BundleError(f"no golden producers declared for {case_id}")
-    layouts = load_layouts(root / "layouts.json")
+    layouts = load_layouts(root / "layouts.json", catalog=catalog)
     producers = []
     for entry in declaration["producers"]:
         entry = {"workflow": entry} if isinstance(entry, str) else entry
@@ -46,8 +46,8 @@ def _recipe(case_id, root):
                           "matrix": document["matrix"] if entry.get("matrix") else None})
     if not producers or len({item["workflow"] for item in producers}) != len(producers):
         raise BundleError("golden producers must be nonempty and unique")
-    checks = [load_suite_definition(name, root / "suites.json", root / "layouts.json",
-                                          root / "cases", case_id=case_id)
+    checks = [{"suite_id": name, **load_suite_definition(name, root / "suites.json", root / "layouts.json",
+                                          root / "cases", case_id=case_id, catalog=catalog)}
               for name in declaration["checks"]]
     if not checks or len(set(declaration["checks"])) != len(checks):
         raise BundleError("golden checks must be nonempty and unique")
@@ -55,7 +55,7 @@ def _recipe(case_id, root):
                                  for item in producers))
     for check in checks:
         requirements.update(required_builds(case, check["workflow_ids"], [layouts[name] for name in check["layouts"]]))
-    return case, producers, declaration["checks"], requirements
+    return case, producers, checks, requirements
 
 
 def _record(path, base=None):
@@ -72,21 +72,25 @@ def _verify_record(base, record):
 def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
     """Generate a reviewable candidate; never publish or resume a campaign."""
     root = catalog_root or ROOT
-    case, producers, checks, requirements = _recipe(case_id, root)
+    catalog = {}
+    case, producers, checks, requirements = _recipe(case_id, root, catalog)
     source = Path(settings["MHDG_REGRESSION_DATA_ROOT"]).resolve()
-    validate_bundle_root(source, root / "cases")
-    manifest = load_json(source / "manifest.json", "source bundle")
-    if manifest["case_id"] != case_id:
-        raise BundleError(f"source bundle does not contain {case_id}")
+    manifest = load_manifest(source, root / "cases", case_id=case_id)
+    validate_bundle_root(source, root / "cases", manifest=manifest, catalog=catalog)
     available = {role for role, artifact in manifest["roles"].items()
                  if (source / manifest["artifacts"][artifact]["path"]).is_file()}
     for producer in producers:
         workflow = case["workflows"][producer["workflow"]]
-        needed = workflow_required_roles({key: value for key, value in workflow.items() if key != "reference"})
+        needed = workflow_required_roles(workflow, references=False)
         missing = sorted(needed - available)
         if missing:
             raise BundleError(f"producer {producer['workflow']} needs: {', '.join(missing)}")
         available.update(producer["roles"])
+    for check in checks:
+        needed = set().union(*(required_case_roles(case, name, references=check["reference_comparisons"])
+                               for name in check["workflow_ids"]))
+        if needed - available:
+            raise BundleError(f"check {check['suite_id']} needs: {', '.join(sorted(needed - available))}")
     workspace = workspace.expanduser().absolute()
     if workspace.exists() or workspace.is_symlink():
         raise BundleError(f"refresh workspace already exists: {workspace}")
@@ -117,23 +121,23 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
                 prepared = prepare_run(values, case_id, name, layout, root / "cases", root / "layouts.json",
                                        run_id, validate_bundle=False,
                                        requested_overrides={"balance_diagnostics_mode": "off"},
-                                       artifact_overrides=generated, require_reference=False)
+                                       artifact_overrides=generated, require_reference=False, catalog=catalog, manifest=manifest)
                 result = {"workflow_id": name, "layout_id": layout, "run_directory": str(prepared.path),
                           "status": "running", "run_status": "running"}
                 report["producers"].append(result)
                 write_json_atomic(path, report, "refresh report")
                 execution = execute_prepared(prepared, values)
                 result.update(run_status=execution.status, status=execution.status)
-                _validate_producer(result, root)
+                _validate_producer(result, root, catalog)
                 result["status"] = "passed"
-                result["old_reference"] = _old_reference(result, source, manifest, case, root)
+                result["old_reference"] = _old_reference(result, source, manifest, case, root, catalog)
                 results.append(result)
                 write_json_atomic(path, report, "refresh report")
             if producer["matrix"]:
                 matrix = producer["matrix"]
-                pairs = layout_pairs(load_layouts(root / "layouts.json"), matrix["relations"])
+                pairs = layout_pairs(load_layouts(root / "layouts.json", catalog=catalog), matrix["relations"])
                 comparisons = compare_layout_pairs({**matrix, "workflow_ids": [name], "results": results,
-                                                    "layout_comparisons": pairs}, root / "cases", root / "tolerances.json")
+                                                    "layout_comparisons": pairs}, root / "cases", root / "tolerances.json", catalog=catalog)
                 report.setdefault("parallel_checks", []).extend(comparisons)
                 if any(item["status"] != "passed" for item in comparisons):
                     raise BundleError(f"producer parallel comparison failed: {name}")
@@ -141,17 +145,21 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
             for role in producer["roles"]:
                 generated[role] = _solution(Path(canonical["run_directory"]))
         candidate = workspace / "candidate"
-        _collect(source, candidate, manifest, generated, report, case, root)
+        _collect(source, candidate, manifest, generated, report, case)
         values["MHDG_REGRESSION_DATA_ROOT"] = str(candidate)
-        for name in checks:
+        candidate_manifest = preflight_bundles(checks, {case_id: values}, root / "cases",
+                                               required_bundle_class="candidate", catalog=catalog)[case_id]
+        for suite in checks:
+            name = suite["suite_id"]
             summary_path, summary = run_suite(values, name, root / "cases", root / "layouts.json",
                                               root / "suites.json", root / "tolerances.json", f"{run_id}-verify",
-                                              case_id=case_id, required_bundle_class="candidate")
+                                              case_id=case_id, required_bundle_class="candidate",
+                                              suite=suite, catalog=catalog, manifest=candidate_manifest)
             report["checks"].append({"suite": name, "status": summary["status"],
                                      "summary": str(summary_path.relative_to(workspace))})
             if summary["status"] != "passed":
                 raise BundleError(f"golden validation failed: {name}")
-        validate_bundle_root(candidate, root / "cases")
+        validate_bundle_root(candidate, root / "cases", catalog=catalog)
         report["evidence"] = [_record(item, workspace) for item in sorted(workspace.rglob("*"))
                               if item.is_file() and not item.is_symlink() and item != path
                               and (item.suffix in {".json", ".log"} or item.name == "param.txt")]
@@ -170,17 +178,17 @@ def _solution(directory):
     return select_candidate(directory, load_json(directory / "run_metadata.json", "run metadata"))
 
 
-def _validate_producer(result, root):
+def _validate_producer(result, root, catalog):
     directory = Path(result["run_directory"])
     if result["run_status"] != "completed" or not reusable_outputs(directory):
         raise BundleError(f"producer failed or its outputs changed: {result['workflow_id']}")
-    validation = validate_completed_run(directory, root / "cases", root / "tolerances.json")
+    validation = validate_completed_run(directory, root / "cases", root / "tolerances.json", catalog=catalog)
     result["validation"] = validation
     if validation["status"] != "passed":
         raise BundleError(f"invalid producer output: {result['workflow_id']}: {validation['failures']}")
 
 
-def _old_reference(result, source, manifest, case, root):
+def _old_reference(result, source, manifest, case, root, catalog):
     directory = Path(result["run_directory"])
     workflow = case["workflows"][result["workflow_id"]]
     artifact = manifest["roles"].get(workflow.get("reference"))
@@ -191,7 +199,7 @@ def _old_reference(result, source, manifest, case, root):
         use_matrix = bool(workflow.get("stages") and "reference_matrix" in manifest["roles"])
         _, path, report = compare_completed_run(directory, root / "cases", root / "tolerances.json",
                                                 reference_override=None if use_matrix else reference,
-                                                report_override=directory / "old_reference.json")
+                                                report_override=directory / "old_reference.json", catalog=catalog)
         return {"status": report["status"], "report": str(path)}
     except HarnessError as exc:
         return {"status": "unavailable", "reason": str(exc)}
@@ -204,7 +212,7 @@ def _install(staging, manifest, artifact_id, source, relative, media_type):
     manifest["artifacts"][artifact_id] = {"path": relative, **file_identity(target), "media_type": media_type}
 
 
-def _collect(source, candidate, source_manifest, generated, report, case, root):
+def _collect(source, candidate, source_manifest, generated, report, case):
     """Collect one candidate; later publication copies this validated bundle."""
     candidate.mkdir()
     manifest = deepcopy(source_manifest)
@@ -256,7 +264,6 @@ def _collect(source, candidate, source_manifest, generated, report, case, root):
         shutil.copy2(original, target)
     manifest.update(bundle_class="candidate", bundle_version=f"refresh-{report['run_id']}", created_utc=utc_now())
     write_json_atomic(candidate / "manifest.json", manifest, "candidate manifest")
-    validate_bundle_root(candidate, root / "cases")
 
 
 def publish(workspace, output, bundle_version, reason, provenance, *, catalog_root=None):
@@ -276,11 +283,12 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         raise BundleError("publication requires a successful, validated refresh")
     for record in report["catalogs"]:
         _verify_record(catalog_root, record)
-    case, producers, checks, _ = _recipe(report["case_id"], catalog_root)
+    catalog = {}
+    case, producers, checks, _ = _recipe(report["case_id"], catalog_root, catalog)
     expected = [(item["workflow"], layout) for item in producers for layout in item["layouts"]]
     if [(item["workflow_id"], item["layout_id"]) for item in report["producers"]] != expected:
         raise BundleError("refresh is missing required producers")
-    if [item["suite"] for item in report["checks"]] != checks:
+    if [item["suite"] for item in report["checks"]] != [check["suite_id"] for check in checks]:
         raise BundleError("refresh is missing required checks")
     for record in report["evidence"]:
         _verify_record(workspace, record)
@@ -288,7 +296,7 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         directory = Path(item["run_directory"])
         if not directory.resolve().is_relative_to(workspace) or item["status"] != "passed" or not reusable_outputs(directory):
             raise BundleError("producer failed or its outputs changed")
-        if not producer_converged(item, case["workflows"][item["workflow_id"]], "producer", {}, catalog_root / "tolerances.json"):
+        if not producer_converged(item, case["workflows"][item["workflow_id"]], "producer", {}, catalog_root / "tolerances.json", catalog=catalog):
             raise BundleError("producer did not converge")
     if any(item["status"] != "passed" for item in report.get("parallel_checks", [])):
         raise BundleError("producer parallel checks failed")
@@ -299,7 +307,7 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         if not all(reusable_outputs(Path(item["run_directory"])) for item in summary["results"]):
             raise BundleError("validation run outputs changed")
     candidate = workspace / "candidate"
-    validate_bundle_root(candidate, catalog_root / "cases")
+    validate_bundle_root(candidate, catalog_root / "cases", catalog=catalog)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f".{output.name}.", dir=output.parent) as temporary:
         staging = Path(temporary) / "golden"
@@ -319,6 +327,6 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
                                                 "media_type": "application/json"}
         manifest.update(bundle_class="golden", bundle_version=bundle_version, created_utc=publication["published_utc"])
         write_json_atomic(staging / "manifest.json", manifest, "golden manifest")
-        summary = validate_bundle_root(staging, catalog_root / "cases")
+        summary = validate_bundle_root(staging, catalog_root / "cases", catalog=catalog)
         staging.rename(output)
     return summary

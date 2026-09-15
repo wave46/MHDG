@@ -51,7 +51,7 @@ def parser() -> argparse.ArgumentParser:
         selection(run)
         run.add_argument("case", metavar="CASE")
         run.add_argument("workflow", metavar="WORKFLOW")
-        run.add_argument("--layout", default="mpi4_omp4", metavar="LAYOUT")
+        run.add_argument("--layout", metavar="LAYOUT", help="override the workflow default")
         run.add_argument("--run-id")
 
     listing = command("list", "Show available scientific selections without machine settings.")
@@ -163,14 +163,20 @@ def _dispatch(args: argparse.Namespace) -> int:
         from .prepare import prepare_run
         from .execute import execute_prepared
 
+        catalog = {}
         settings = _settings(args, args.case)
         from .config import runtime_settings
 
-        runtime_settings(settings, required_builds(load_case_definition(args.case, ROOT / "cases"),
-                                                  [args.workflow], [load_layout(args.layout, ROOT / "layouts.json")]))
+        case = load_case_definition(args.case, ROOT / "cases", catalog=catalog)
+        if args.workflow not in case["workflows"]:
+            from .support import BundleError
+            raise BundleError(f"case {args.case} has no workflow {args.workflow}")
+        layout = args.layout or case["workflows"][args.workflow]["layout"]
+        runtime_settings(settings, required_builds(case, [args.workflow],
+                         [load_layout(layout, ROOT / "layouts.json", catalog=catalog)]))
         prepared = prepare_run(
-            settings, args.case, args.workflow, args.layout,
-            ROOT / "cases", ROOT / "layouts.json", args.run_id,
+            settings, args.case, args.workflow, layout,
+            ROOT / "cases", ROOT / "layouts.json", args.run_id, catalog=catalog, require_reference=False,
         )
         reporting.prepared(prepared)
         if args.command == "prepare":
@@ -182,8 +188,9 @@ def _dispatch(args: argparse.Namespace) -> int:
         from .config import settings
 
         from .catalog import load_selection, load_layouts, selection_builds
-        _, checks = load_selection(args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases", case_id=args.case)
-        requirements = selection_builds(checks, ROOT / "cases", load_layouts(ROOT / "layouts.json"))
+        catalog = {}
+        _, checks = load_selection(args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases", case_id=args.case, catalog=catalog)
+        requirements = selection_builds(checks, ROOT / "cases", load_layouts(ROOT / "layouts.json", catalog=catalog), catalog=catalog)
         result = build_solver(settings(args.settings, use_build=False), ROOT.parent, args.jobs, requirements=requirements)
         reporting.status("build", "completed", result.path)
         print(f"select with --build-manifest {result.metadata_path}")
@@ -240,6 +247,7 @@ def _dispatch(args: argparse.Namespace) -> int:
 def _check(args: argparse.Namespace) -> int:
     from .build import build_solver
     from .suites import run_suite, run_profile
+    from .bundles import preflight_bundles
     from .catalog import load_selection, selection_builds
     from .config import build_settings, runtime_settings
     from .catalog import load_layouts
@@ -251,16 +259,19 @@ def _check(args: argparse.Namespace) -> int:
         raise BundleError("--build-jobs requires --build")
     if args.build and args.build_manifest:
         raise BundleError("select --build or --build-manifest, not both")
+    catalog = {}
     profile, checks = load_selection(
-        args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases", case_id=args.case,
+        args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases", case_id=args.case, catalog=catalog,
     )
     cases = list(dict.fromkeys(check["case_id"] for check in checks))
     if args.bundle and len(cases) != 1:
         raise BundleError("--bundle requires a single-case selection; configure defaults.bundles for this profile")
     values = {case: _settings(args, case, use_build=not args.build) for case in cases}
-    layouts = load_layouts(ROOT / "layouts.json")
+    layouts = load_layouts(ROOT / "layouts.json", catalog=catalog)
+    required_class = None if args.allow_candidate else "golden"
+    manifests = preflight_bundles(checks, values, ROOT / "cases", required_bundle_class=required_class, catalog=catalog)
     if args.build:
-        requirements = selection_builds(checks, ROOT / "cases", layouts)
+        requirements = selection_builds(checks, ROOT / "cases", layouts, catalog=catalog)
         build = build_solver(values[cases[0]], ROOT.parent, args.build_jobs, requirements=requirements)
         selected_build = build_settings(build.metadata_path)
         for settings in values.values():
@@ -269,19 +280,20 @@ def _check(args: argparse.Namespace) -> int:
         print(f"select with --build-manifest {build.metadata_path}")
     for case, settings in values.items():
         selected = [check for check in checks if check["case_id"] == case]
-        runtime_settings(settings, selection_builds(selected, ROOT / "cases", layouts))
+        runtime_settings(settings, selection_builds(selected, ROOT / "cases", layouts, catalog=catalog))
     options = dict(
-        required_bundle_class=None if args.allow_candidate else "golden",
+        required_bundle_class=required_class, catalog=catalog,
         compare=not args.run_only, resume=args.resume,
         parameter_overrides={"balance_diagnostics_mode": args.diagnostics} if args.diagnostics else None,
     )
     if profile:
-        path, summary = run_profile(args.suite, checks, values, ROOT, args.run_id, **options)
+        path, summary = run_profile(args.suite, checks, values, ROOT, args.run_id, manifests=manifests, **options)
         reporting.status("profile", summary["status"], path)
     else:
         path, summary = run_suite(
             values[cases[0]], args.suite, ROOT / "cases", ROOT / "layouts.json",
-            ROOT / "suites.json", ROOT / "tolerances.json", args.run_id, case_id=cases[0], **options,
+            ROOT / "suites.json", ROOT / "tolerances.json", args.run_id, case_id=cases[0],
+            suite=checks[0], manifest=manifests[cases[0]], **options,
         )
         reporting.print_run_summary(summary, path)
     return 0 if summary["status"] == "passed" else 1
@@ -345,6 +357,7 @@ def _list(args: argparse.Namespace) -> int:
     from .documents import load_validated_json
     from .catalog import load_layouts
 
+    resolved = {}
     if args.listing == "layouts":
         entries = load_layouts(ROOT / "layouts.json")
     elif args.listing == "suites":
@@ -358,7 +371,7 @@ def _list(args: argparse.Namespace) -> int:
         ]
         entries = {}
         for name in names:
-            case = load_case_definition(name, ROOT / "cases")
+            case = load_case_definition(name, ROOT / "cases", catalog=resolved)
             if args.listing == "cases":
                 entries[name] = case
             else:

@@ -62,7 +62,7 @@ def test_suite_defaults_overrides_and_relations_select_runs_once(catalog, monkey
     root, layouts = catalog
     monkeypatch.setattr(
         "regression_tests.catalog.load_case_definition",
-        lambda *_: {"workflows": {"probe": {}}},
+        lambda *_, **__: {"workflows": {"probe": {}}},
     )
     declaration = {"description": "Probe", "workflows": ["probe"]}
 
@@ -107,7 +107,7 @@ def test_profiles_compose_cases_without_duplicate_runs(catalog, monkeypatch):
 
     root, _ = catalog
     monkeypatch.setattr("regression_tests.catalog.load_case_definition",
-                        lambda *_: {"workflows": {"probe": {}}})
+                        lambda *_, **__: {"workflows": {"probe": {}}})
     document = {
         "schema_version": 2, "defaults": {"case": "first", "layout": "mpi2_omp3"},
         "suites": {"probe": {"description": "Probe", "workflows": ["probe"]}},

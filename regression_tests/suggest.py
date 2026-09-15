@@ -76,12 +76,12 @@ def recommendations(paths, *, catalog_root=ROOT):
             unmapped.append(path)
     # Catalog expansion owns profile membership. Suppress a smaller suggestion
     # only when the broader one includes all of its actual case/suite selections.
-    coverage = {}
+    coverage, catalog = {}, {}
     for name in matched:
         if name in {"pytest", "diagnostic-tests"}:
             continue
         _, selections = load_selection(name, catalog_root / "suites.json", catalog_root / "layouts.json",
-                                       catalog_root / "cases")
+                                       catalog_root / "cases", catalog=catalog)
         coverage[name] = {(item["case_id"], item["suite_id"]) for item in selections}
     for name in sorted(coverage, key=lambda item: len(coverage[item])):
         covering = next((other for other in matched if other in coverage and coverage[name] < coverage[other]), None)

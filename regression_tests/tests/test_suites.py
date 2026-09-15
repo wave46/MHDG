@@ -142,6 +142,10 @@ def test_parallel_comparison_and_saved_recheck(harness):
     write_off_solution(harness.serial_executable.parent / "race_result.h5")
     solver = SOLVER.replace('cp inputs/reference.h5', 'cp "$(dirname "$0")/race_result.h5"').replace('1.0E-5', '1.0E5')
     harness.install_solver(solver.replace("cp ", "printf 'mesh\\n' > res/temp.msh\ncp ", 1))
+    manifest_path = harness.bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["roles"]["warm_reference"]  # Parallel checks have their own run as reference.
+    manifest_path.write_text(json.dumps(manifest))
     path, summary = run(harness, "parallel")
     assert summary["status"] == "passed"
     assert summary["comparisons"]
@@ -246,12 +250,26 @@ def test_profile_resumes_across_cases_without_repeating_success(harness, monkeyp
     values = harness.values
     settings = {"legacy_case": values,
                 "diverted_case": {**values, "MHDG_REGRESSION_DATA_ROOT": str(diverted)}}
-    checks = [{"suite_id": "warm", "case_id": case} for case in settings]
+    checks = [{"suite_id": "warm", **suites.load_suite_definition(
+        "warm", ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases", case_id=case,
+    )} for case in settings]
     harness.install_solver(SOLVER.replace('cp inputs', '''if [[ "$PWD" == */diverted_case/* && ! -e "$(dirname "$0")/failed-once" ]]; then
   touch "$(dirname "$0")/failed-once"
   exit 7
 fi
 cp inputs'''))
+
+    manifest = diverted / "manifest.json"
+    original = manifest.read_text()
+    missing = json.loads(original)
+    del missing["roles"]["warm_reference"]
+    manifest.write_text(json.dumps(missing))
+    with monkeypatch.context() as patch:
+        patch.setattr(suites, "run_cell", lambda *args: pytest.fail("must preflight later suites first"))
+        with pytest.raises(BundleError, match="missing required artifact roles.*warm_reference"):
+            suites.run_profile("example", checks, settings, ROOT, "profile")
+    assert not harness.run_root.exists()
+    manifest.write_text(original)
     path, first = suites.run_profile("example", checks, settings, ROOT, "profile")
     assert first["status"] == "failed"
     assert [item["status"] for item in first["results"]] == ["passed", "failed"]

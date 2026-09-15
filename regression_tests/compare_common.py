@@ -207,6 +207,7 @@ def load_fixed_tolerances(
     workflow: dict[str, Any],
     layout_id: str,
     tolerance_profile_override: str | None,
+    *, catalog=None,
 ) -> tuple[str, dict[str, Any]]:
     """Select and validate the tolerance profile for a fixed-mesh run."""
     comparison = workflow.get("comparison", {})
@@ -219,7 +220,7 @@ def load_fixed_tolerances(
 
     if not profile_id:
         raise ComparisonError(f"unknown tolerance profile: {profile_id}")
-    profile = _load_profile(path, profile_id)
+    profile = _load_profile(path, profile_id, catalog=catalog)
 
     required = {
         "newton_error_max",
@@ -237,10 +238,11 @@ def load_adaptive_tolerances(
     path: Path,
     workflow: dict[str, Any],
     tolerance_profile_override: str | None = None,
+    *, catalog=None,
 ) -> tuple[str, dict[str, Any]]:
     """Select and validate the tolerance profile for an adaptive run."""
     profile_id = tolerance_profile_override or workflow.get("comparison", {}).get("profile")
-    profile = _load_profile(path, profile_id)
+    profile = _load_profile(path, profile_id, catalog=catalog)
     required = {
         "newton_error_max",
         "samples_per_element",
@@ -262,8 +264,15 @@ def load_adaptive_tolerances(
     return profile_id, profile
 
 
-def _load_profile(path: Path, profile_id: str) -> dict[str, Any]:
-    document = load_json(path, "tolerance definitions")
+def load_tolerance_catalog(path, catalog=None):
+    catalog = {} if catalog is None else catalog
+    if path not in catalog:
+        catalog[path] = load_json(path, "tolerance definitions")
+    return catalog[path]
+
+
+def _load_profile(path: Path, profile_id: str, *, catalog=None) -> dict[str, Any]:
+    document = load_tolerance_catalog(path, catalog)
     if document.get("schema_version") != 2:
         raise ComparisonError("tolerance definitions require schema_version 2")
     profiles = document.get("profiles")
