@@ -281,63 +281,15 @@ def compare_adaptive_files(
 
 def mesh_differences(reference_path: Path, candidate_path: Path, coordinate_atol: float) -> list[str]:
     """Validate both discrete meshes before deciding whether interpolation is needed."""
-    from .compare_fixed import required_array, _equation_count
+    from .compare_fixed import read_discrete_mesh, read_solution_field, _equation_count
 
     def read(path):
         with h5py.File(path, "r") as handle:
-            values = {}
-            for name in ("Ndim", "elemType", "Nnodes", "Nelems", "Nnodesperelem",
-                         "Nnodesperface", "Nfaces", "Nintfaces", "Nextfaces"):
-                value = required_array(handle, "mesh", name)
-                if value.size != 1 or value.dtype.kind not in "iu" or value.item() < 0:
-                    raise ComparisonError(f"invalid mesh/{name} in {path}")
-                values[name] = int(value.item())
-            dim, nodes, elements = values["Ndim"], values["Nnodes"], values["Nelems"]
-            npe, npf = values["Nnodesperelem"], values["Nnodesperface"]
-            faces, internal, external = values["Nfaces"], values["Nintfaces"], values["Nextfaces"]
-            if dim != 2 or values["elemType"] != 0:
-                raise ComparisonError(f"mesh comparison currently requires 2D triangles: {path}")
-            if min(nodes, elements, faces) < 1 or npf < 2 or npe != npf * (npf + 1) // 2:
-                raise ComparisonError(f"invalid mesh counts or polynomial order in {path}")
-            if faces != internal + external or 3 * elements != 2 * internal + external:
-                raise ComparisonError(f"inconsistent mesh face counts in {path}")
-            for name, shape in {
-                "X": (2, nodes), "T": (npe, elements), "Tlin": (3, elements),
-                "Tb": (npf, external), "F": (3, elements),
-                "intfaces": (5, internal), "extfaces": (2, external),
-            }.items():
-                array = required_array(handle, "mesh", name)
-                if array.shape != shape or not np.isfinite(array).all():
-                    raise ComparisonError(f"invalid mesh/{name} shape or non-finite values in {path}")
-                if name != "X" and array.dtype.kind not in "iu":
-                    raise ComparisonError(f"mesh/{name} must contain integer indices in {path}")
-                values[name] = array
-            for name, maximum in (("T", nodes), ("Tlin", nodes), ("Tb", nodes), ("F", faces)):
-                if ((values[name] < 1) | (values[name] > maximum)).any():
-                    raise ComparisonError(f"mesh/{name} contains invalid indices in {path}")
-            if (np.diff(np.sort(values["T"], axis=0), axis=0) == 0).any():
-                raise ComparisonError(f"mesh/T contains repeated element nodes in {path}")
-            if not (values["Tlin"][:, None, :] == values["T"][None, :, :]).any(axis=1).all():
-                raise ComparisonError(f"mesh/Tlin vertices do not belong to their elements in {path}")
-            incidence = np.bincount(values["F"].ravel().astype(np.intp), minlength=faces + 1)[1:]
-            if np.count_nonzero(incidence == 1) != external or np.count_nonzero(incidence == 2) != internal:
-                raise ComparisonError(f"mesh/F has inconsistent face incidence in {path}")
-            for name, row, maximum in (("intfaces", [0, 2], elements), ("intfaces", [1, 3], 3),
-                                       ("extfaces", [0], elements), ("extfaces", [1], 3)):
-                indices = values[name][row]
-                if ((indices < 1) | (indices > maximum)).any():
-                    raise ComparisonError(f"mesh/{name} contains invalid indices in {path}")
-            vertices = values["X"][:, values["Tlin"] - 1]
-            first, second = vertices[:, 1] - vertices[:, 0], vertices[:, 2] - vertices[:, 0]
-            area = first[0] * second[1] - first[1] * second[0]
-            if not np.isfinite(area).all() or (area == 0).any():
-                raise ComparisonError(f"mesh/Tlin contains degenerate triangles in {path}")
+            mesh = read_discrete_mesh(handle)
             equations = _equation_count(handle)
-            for name, size in (("u", elements * npe * equations), ("q", elements * npe * equations * dim),
-                               ("u_tilde", faces * npf * equations)):
-                if equations < 1 or required_array(handle, "solution", name).size != size:
-                    raise ComparisonError(f"solution/{name} size is inconsistent with the mesh in {path}")
-            return values
+            for name in ("u", "q", "u_tilde"):
+                read_solution_field(handle, name, equations)
+            return mesh
 
     try:
         reference, candidate = read(reference_path), read(candidate_path)

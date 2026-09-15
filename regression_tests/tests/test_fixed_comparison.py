@@ -6,7 +6,7 @@ import h5py
 import numpy as np
 import pytest
 
-from regression_tests.compare_fixed import compare_hdf5_files
+from regression_tests.compare_fixed import compare_hdf5_files, validate_solution_file
 from regression_tests.compare_common import read_newton_convergence
 from regression_tests.tests.fixtures.harness import run_command
 from regression_tests.tests.fixtures.solutions import write_solution
@@ -34,6 +34,8 @@ def test_grouped_and_flat_fields_match_with_reference_equation_names(files):
     assert report["formats"]["candidate"] == "flat_solution+flat_mesh"
     assert report["solution"]["equation_names"] == ["rho", "Gamma"]
     assert report["solution"]["datasets"]["u"]["equations"]["Gamma"]["relative_l2"] == 0
+    assert not validate_solution_file(reference)
+    assert not validate_solution_file(candidate)
 
 
 @pytest.mark.parametrize("dataset,index,value,section", [
@@ -49,6 +51,13 @@ def test_field_nonfinite_mesh_and_transport_failures(files, dataset, index, valu
     report = compare_hdf5_files(reference, candidate, TOLERANCES)
     assert report["status"] == "failed"
     assert not report[section]["passed"]
+    # A finite changed field is valid data even though it fails regression;
+    # bad connectivity and nonfinite fields are invalid on their own.
+    assert bool(validate_solution_file(candidate)) == (dataset in {"q", "T"})
+    if section == "transport_1d":
+        with h5py.File(candidate, "r+") as handle:
+            handle[dataset][index] = np.nan
+        assert any("transport_1d" in failure for failure in validate_solution_file(candidate))
     if dataset == "u":
         equations = report["solution"]["datasets"]["u"]["equations"]
         assert equations["rho"]["passed"] and not equations["Gamma"]["passed"]
@@ -76,6 +85,7 @@ def test_magnetic_contract(files, difference):
                 magnetic["topology_region"][2] = 3
     report = compare_hdf5_files(reference, candidate, TOLERANCES)
     assert report["status"] == ("failed" if difference else "passed")
+    assert not validate_solution_file(candidate)
     if difference == "missing":
         assert "candidate is missing magnetic data" in report["failures"]
     elif difference == "region":
@@ -83,6 +93,12 @@ def test_magnetic_contract(files, difference):
     else:
         assert report["magnetic"]["datasets"]["topology"]["mode"] == "exact"
         assert report["magnetic"]["datasets"]["rho_pol_norm"]["relative_l2"] == 0
+        with h5py.File(candidate, "r+") as handle:
+            del handle["transport_1d"]  # Optional data need not exist for file validity.
+        assert not validate_solution_file(candidate)
+        with h5py.File(candidate, "r+") as handle:
+            handle["magnetic/rho_pol_norm"][0] = np.inf
+        assert any("magnetic/rho_pol_norm" in failure for failure in validate_solution_file(candidate))
 
 
 @pytest.mark.parametrize("last_value,expected", [

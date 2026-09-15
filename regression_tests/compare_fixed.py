@@ -68,6 +68,33 @@ def compare_hdf5_files(
     return report
 
 
+def validate_solution_file(path: Path) -> list[str]:
+    """Check one solution's mesh, field storage and finite optional numeric data."""
+    failures = []
+
+    def finite(values, label):
+        if values.size == 0 or not _finite(values):
+            failures.append(f"{label} is empty or contains non-finite values")
+
+    try:
+        with h5py.File(path, "r") as handle:
+            read_discrete_mesh(handle)
+            equations = _equation_count(handle)
+            for name in ("u", "q", "u_tilde"):
+                finite(read_solution_field(handle, name, equations), f"solution/{name}")
+            transport = optional_group(handle, "transport_1d", "solution/transport_1d")
+            for name, dataset in transport_datasets(transport):
+                finite(np.asarray(dataset), f"transport_1d/{name}")
+            magnetic = optional_group(handle, "magnetic")
+            if magnetic is not None:
+                for name, dataset in magnetic.items():
+                    if isinstance(dataset, h5py.Dataset) and dataset.dtype.kind not in "biuOSU":
+                        finite(np.asarray(dataset), f"magnetic/{name}")
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        failures.append(str(exc))
+    return failures
+
+
 def required_array(handle: h5py.File, group: str, name: str) -> np.ndarray:
     """Read a required dataset from grouped or legacy-flat storage."""
     array = optional_array(handle, group, name)
@@ -106,6 +133,59 @@ def storage_format(handle: h5py.File) -> str:
     solution = "grouped_solution" if "solution" in handle else "flat_solution"
     mesh = "grouped_mesh" if "mesh" in handle else "flat_mesh"
     return f"{solution}+{mesh}"
+
+
+def read_discrete_mesh(handle: h5py.File) -> dict[str, Any]:
+    """Read a 2D triangular mesh after checking counts, connectivity and geometry."""
+    path = handle.filename
+    values = {}
+    for name in ("Ndim", "elemType", "Nnodes", "Nelems", "Nnodesperelem",
+                 "Nnodesperface", "Nfaces", "Nintfaces", "Nextfaces"):
+        value = required_array(handle, "mesh", name)
+        if value.size != 1 or value.dtype.kind not in "iu" or value.item() < 0:
+            raise ComparisonError(f"invalid mesh/{name} in {path}")
+        values[name] = int(value.item())
+    dim, nodes, elements = values["Ndim"], values["Nnodes"], values["Nelems"]
+    npe, npf = values["Nnodesperelem"], values["Nnodesperface"]
+    faces, internal, external = values["Nfaces"], values["Nintfaces"], values["Nextfaces"]
+    if dim != 2 or values["elemType"] != 0:
+        raise ComparisonError(f"mesh comparison currently requires 2D triangles: {path}")
+    if min(nodes, elements, faces) < 1 or npf < 2 or npe != npf * (npf + 1) // 2:
+        raise ComparisonError(f"invalid mesh counts or polynomial order in {path}")
+    if faces != internal + external or 3 * elements != 2 * internal + external:
+        raise ComparisonError(f"inconsistent mesh face counts in {path}")
+    for name, shape in {
+        "X": (2, nodes), "T": (npe, elements), "Tlin": (3, elements),
+        "Tb": (npf, external), "F": (3, elements),
+        "intfaces": (5, internal), "extfaces": (2, external),
+    }.items():
+        array = required_array(handle, "mesh", name)
+        if array.shape != shape or not np.isfinite(array).all():
+            raise ComparisonError(f"invalid mesh/{name} shape or non-finite values in {path}")
+        if name != "X" and array.dtype.kind not in "iu":
+            raise ComparisonError(f"mesh/{name} must contain integer indices in {path}")
+        values[name] = array
+    for name, maximum in (("T", nodes), ("Tlin", nodes), ("Tb", nodes), ("F", faces)):
+        if ((values[name] < 1) | (values[name] > maximum)).any():
+            raise ComparisonError(f"mesh/{name} contains invalid indices in {path}")
+    if (np.diff(np.sort(values["T"], axis=0), axis=0) == 0).any():
+        raise ComparisonError(f"mesh/T contains repeated element nodes in {path}")
+    if not (values["Tlin"][:, None, :] == values["T"][None, :, :]).any(axis=1).all():
+        raise ComparisonError(f"mesh/Tlin vertices do not belong to their elements in {path}")
+    incidence = np.bincount(values["F"].ravel().astype(np.intp), minlength=faces + 1)[1:]
+    if np.count_nonzero(incidence == 1) != external or np.count_nonzero(incidence == 2) != internal:
+        raise ComparisonError(f"mesh/F has inconsistent face incidence in {path}")
+    for name, row, maximum in (("intfaces", [0, 2], elements), ("intfaces", [1, 3], 3),
+                               ("extfaces", [0], elements), ("extfaces", [1], 3)):
+        indices = values[name][row]
+        if ((indices < 1) | (indices > maximum)).any():
+            raise ComparisonError(f"mesh/{name} contains invalid indices in {path}")
+    vertices = values["X"][:, values["Tlin"] - 1]
+    first, second = vertices[:, 1] - vertices[:, 0], vertices[:, 2] - vertices[:, 0]
+    area = first[0] * second[1] - first[1] * second[0]
+    if not np.isfinite(area).all() or (area == 0).any():
+        raise ComparisonError(f"mesh/Tlin contains degenerate triangles in {path}")
+    return values
 
 
 def numeric_comparison(
@@ -281,31 +361,13 @@ def _compare_dataset(
     tolerances: dict[str, Any],
     failures: list[str],
 ) -> dict[str, Any]:
-    reference_values = required_array(
-        reference, "solution", dataset_name
-    ).reshape(-1)
-    candidate_values = required_array(
-        candidate, "solution", dataset_name
-    ).reshape(-1)
+    reference_values = read_solution_field(reference, dataset_name, equation_count)
+    candidate_values = read_solution_field(candidate, dataset_name, equation_count)
     report: dict[str, Any] = {
         "reference_size": int(reference_values.size),
         "candidate_size": int(candidate_values.size),
         "equations": {},
     }
-    if (
-        reference_values.size != candidate_values.size
-        or reference_values.size % equation_count
-    ):
-        report["passed"] = False
-        failures.append(f"solution/{dataset_name} has incompatible size")
-        return report
-
-    reference_values = _reshape_dataset(
-        reference, dataset_name, reference_values, equation_count
-    )
-    candidate_values = _reshape_dataset(
-        candidate, dataset_name, candidate_values, equation_count
-    )
 
     reference_by_equation = np.moveaxis(reference_values, 2, -1).reshape(
         -1, equation_count
@@ -328,12 +390,13 @@ def _compare_dataset(
     return report
 
 
-def _reshape_dataset(
+def read_solution_field(
     handle: h5py.File,
     name: str,
-    values: np.ndarray,
     equation_count: int,
 ) -> np.ndarray:
+    """Read a conservative field with the size and storage order required by its mesh."""
+    values = required_array(handle, "solution", name)
     element_count = int(required_scalar(handle, "mesh", "Nelems"))
     nodes_per_element = int(
         required_scalar(handle, "mesh", "Nnodesperelem")
@@ -349,6 +412,8 @@ def _reshape_dataset(
             required_scalar(handle, "mesh", "Nnodesperface")
         )
         shape = (face_count, nodes_per_face, equation_count)
+    if equation_count < 1 or values.size != np.prod(shape):
+        raise ComparisonError(f"solution/{name} size is inconsistent with the mesh in {handle.filename}")
     return values.reshape(shape)
 
 
@@ -440,15 +505,16 @@ def compare_transport(
         return {"present": True, "passed": False, "datasets": {}}
 
     datasets = {}
-    for section in ("coefficients", "profiles"):
-        _compare_section(
-            reference_group,
-            candidate_group,
-            section,
-            tolerances,
-            failures,
-            datasets,
-        )
+    for label, reference_dataset in transport_datasets(reference_group):
+        candidate_dataset = candidate_group.get(label)
+        if not isinstance(candidate_dataset, h5py.Dataset):
+            datasets[label] = {"passed": False, "reason": "dataset missing"}
+            failures.append(f"transport_1d/{label} is missing")
+            continue
+        metrics = numeric_comparison(np.asarray(reference_dataset), np.asarray(candidate_dataset), tolerances)
+        datasets[label] = metrics
+        if not metrics["passed"]:
+            failures.append(f"transport_1d/{label} exceeds tolerance")
     return {
         "present": True,
         "passed": all(result["passed"] for result in datasets.values()),
@@ -456,40 +522,16 @@ def compare_transport(
     }
 
 
-def _compare_section(
-    reference_group: h5py.Group,
-    candidate_group: h5py.Group,
-    section: str,
-    tolerances: dict[str, Any],
-    failures: list[str],
-    datasets: dict[str, dict[str, Any]],
-) -> None:
-    if section not in reference_group:
-        return
-
-    candidate_section = candidate_group.get(section)
-    for name, reference_dataset in reference_group[section].items():
-        if not isinstance(reference_dataset, h5py.Dataset):
+def transport_datasets(group):
+    """Iterate the optional coefficient/profile datasets used by both checks."""
+    for section in ("coefficients", "profiles"):
+        if group is None or section not in group:
             continue
-        label = f"{section}/{name}"
-        candidate_dataset = (
-            candidate_section.get(name)
-            if isinstance(candidate_section, h5py.Group)
-            else None
-        )
-        if not isinstance(candidate_dataset, h5py.Dataset):
-            datasets[label] = {"passed": False, "reason": "dataset missing"}
-            failures.append(f"transport_1d/{label} is missing")
-            continue
-
-        metrics = numeric_comparison(
-            np.asarray(reference_dataset),
-            np.asarray(candidate_dataset),
-            tolerances,
-        )
-        datasets[label] = metrics
-        if not metrics["passed"]:
-            failures.append(f"transport_1d/{label} exceeds tolerance")
+        if not isinstance(group[section], h5py.Group):
+            raise ComparisonError(f"transport_1d/{section} must be a group")
+        for name, dataset in group[section].items():
+            if isinstance(dataset, h5py.Dataset):
+                yield f"{section}/{name}", dataset
 
 
 def compare_magnetic(

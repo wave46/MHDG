@@ -12,7 +12,7 @@ from .documents import load_json, write_json_atomic
 from .support import BundleError, ComparisonError, utc_now
 from .files import file_identity, recorded_directory, recorded_file, require_directory
 from .compare_adaptive import compare_adaptive_files, mesh_differences
-from .compare_fixed import compare_hdf5_files, check_output_contract
+from .compare_fixed import compare_hdf5_files, check_output_contract, validate_solution_file
 from .execute import final_execution
 from .compare_common import (
     NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
@@ -371,13 +371,7 @@ def validate_completed_run(run_directory, case_directory, tolerances_path, *, ca
         output = None
         try:
             output = select_candidate(directory, _load_completed_metadata(directory))
-            # Reuse the mesh, shape and finiteness contracts, not a second set
-            # of field validators. Self-agreement is not regression evidence.
-            mesh_differences(output, output, 0.)
-            fields = compare_hdf5_files(output, output, {
-                "mesh_coordinate_atol": 0., "relative_l2_max": 0., "normalized_linf_max": 0.,
-            })
-            stage_failures.extend(fields["failures"])
+            stage_failures.extend(validate_solution_file(output))
             stage_failures.extend(saved_output_contract(load_stage_inputs(inputs, directory), output)["failures"])
         except (ValueError, TypeError) as exc:
             stage_failures.append(str(exc))
