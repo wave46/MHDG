@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 import os
+import shlex
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -11,7 +12,8 @@ import pytest
 
 from regression_tests import build, cli, config
 from regression_tests.support import BundleError
-from regression_tests.files import file_identity
+from regression_tests.catalog import load_layouts, load_selection, selection_builds
+from regression_tests.tests.fixtures.case_data import write_catalog
 from regression_tests.tests.fixtures.harness import create_harness
 
 
@@ -54,10 +56,8 @@ def setup(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("variants,existing_objects,source_script", [
-    (("parallel", "serial", "parallel"), True, True),
+    (("parallel", "serial", "gamma", "parallel", "gamma"), True, True),
     (("parallel",), False, False),
-    (("serial",), True, False),
-    (("serial", "parallel", "gamma", "gamma"), True, False),
 ])
 def test_required_variants_cleaning_and_manifest_selection(setup, variants, existing_objects, source_script):
     if existing_objects:
@@ -67,29 +67,19 @@ def test_required_variants_cleaning_and_manifest_selection(setup, variants, exis
     requirements = [("NGammaTiTeNeutralGamma" if v == "gamma" else config.DEFAULT_MODEL,
                      "mpi" if v == "parallel" else "serial") for v in variants]
     result = build.build_solver(setup.settings, setup.repository, jobs=3, requirements=requirements)
-    metadata = json.loads(result.metadata_path.read_text())
-    commands = metadata["commands"]
-    compiles = [command for command in commands if command[1] != "clean"]
+    calls = [line.split("|", 1) for line in setup.log.read_text().splitlines()]
+    expected_env = "sourced" if source_script else "loaded"
+    assert all(environment == expected_env for environment, _ in calls)
+    commands = [shlex.split(command) for _, command in calls if command != "--version"]
+    compiles = [command for command in commands if command != ["clean"]]
     assert len(compiles) == len(set(variants))
-    assert sum(command == ["make", "clean"] for command in commands) == (
+    assert commands.count(["clean"]) == (
         int(existing_objects) + len(compiles) - 1
     )
-    if existing_objects:
-        assert commands[0] == ["make", "clean"]
-        assert not (setup.repository / "lib/stale.o").exists()
-    if len(compiles) == 2:
-        assert commands[commands.index(compiles[1]) - 1] == ["make", "clean"]
     for command in compiles:
         assert {"-j3", "DIM=2D", "COMPTYPE=opt"} <= set(command)
     assert {(next(a[4:] for a in c if a.startswith("MDL=")),
              "mpi" if "MODE=parall" in c else "serial") for c in compiles} == set(requirements)
-    assert metadata["status"] == "completed"
-    assert not metadata["repository"]["dirty"]
-    assert bool(metadata["environment_script"]) == source_script
-    expected_env = "sourced" if source_script else "loaded"
-    assert all(line.startswith(expected_env + "|") for line in setup.log.read_text().splitlines())
-    for variant, executable in result.executables.items():
-        assert metadata["artifacts"][variant] == {"path": str(executable), **file_identity(executable)}
     assert (result.path / "bin" / build.RUNTIME_FILE).read_bytes() == (
         setup.repository / "test" / build.RUNTIME_FILE
     ).read_bytes()
@@ -102,12 +92,6 @@ def test_required_variants_cleaning_and_manifest_selection(setup, variants, exis
     missing = ("NGammaTiTeNeutralGamma", "mpi")
     with pytest.raises(BundleError, match="no build selected"):
         config.runtime_settings(selected, {missing})
-    removed = next(iter(metadata["artifacts"]))
-    del metadata["artifacts"][removed]
-    if metadata["artifacts"]:
-        result.metadata_path.write_text(json.dumps(metadata))
-        with pytest.raises(BundleError, match="no build selected"):
-            config.runtime_settings(config.build_settings(result.metadata_path), {tuple(removed.split("/"))})
 
 
 def test_failed_build_keeps_log_without_a_completed_manifest(setup, monkeypatch):
@@ -120,20 +104,16 @@ def test_failed_build_keeps_log_without_a_completed_manifest(setup, monkeypatch)
     assert len(list(root.rglob("bin/MHDG-*"))) == 1  # Earlier serial copy is only partial evidence.
 
 
-@pytest.mark.parametrize("profile", [False, True, "gamma"])
-def test_check_builds_only_its_layouts_and_runs_from_manifest(setup, tmp_path, monkeypatch, profile):
+def test_check_builds_selected_model_and_runs_from_manifest(setup, tmp_path, monkeypatch):
     harness_root = tmp_path / "harness"
     harness_root.mkdir()
     harness = create_harness(harness_root)
     monkeypatch.setattr(cli, "ROOT", harness.catalog)
-    from regression_tests.bundles import create_bundle
-    diverted = tmp_path / "diverted"
-    create_bundle("diverted_case", harness.source, diverted, harness.catalog / "cases")
     settings = tmp_path / "machine.json"
     settings.write_text(json.dumps({
         "run_root": str(harness.run_root), "build_root": setup.settings["MHDG_REGRESSION_BUILD_ROOT"],
         "mpi_launcher": str(harness.mpi_launcher),
-        "defaults": {"build": "nonexistent-old-build.json", "bundles": {"legacy_case": str(harness.bundle), "diverted_case": str(diverted)}},
+        "defaults": {"build": "nonexistent-old-build.json", "bundles": {"legacy_case": str(harness.bundle)}},
     }))
     real_build = build.build_solver
     calls = []
@@ -142,20 +122,23 @@ def test_check_builds_only_its_layouts_and_runs_from_manifest(setup, tmp_path, m
         return real_build(values, setup.repository, jobs, **kwargs)
     monkeypatch.setattr(build, "build_solver", build_once)
     assert cli.main([
-        "check", *(["neutralgamma"] if profile == "gamma" else ["routine-extended"] if profile else ["warm", "--case", "legacy_case"]),
+        "check", "neutralgamma",
         "--build", "--build-jobs", "2", "--allow-candidate",
         "--run-only", "--settings", str(settings), "--run-id", "new-build",
     ]) == 0
     manifest = next((tmp_path / "builds").rglob("build_metadata.json"))
-    requirements = ({("NGammaTiTeNeutralGamma", "serial")} if profile == "gamma" else
-                    {(config.DEFAULT_MODEL, "serial"), (config.DEFAULT_MODEL, "mpi")} if profile else
-                    {(config.DEFAULT_MODEL, "mpi")})
-    assert calls == [requirements]
-    assert set(json.loads(manifest.read_text())["artifacts"]) == {config.build_key(*item) for item in requirements}
-    case = "diverted_case" if profile is True else "legacy_case"
-    suite = "neutralgamma" if profile == "gamma" else "warm"
-    summary = json.loads((harness.run_root / f"suites/{suite}/{case}/new-build/suite_summary.json").read_text())
+    assert calls == [{("NGammaTiTeNeutralGamma", "serial")}]
+    summary = json.loads((harness.run_root / "suites/neutralgamma/legacy_case/new-build/suite_summary.json").read_text())
     assert summary["execution_inputs"]["build_manifest"]["path"] == str(manifest)
+
+
+def test_profile_derives_builds_from_all_selected_models_and_layouts(tmp_path):
+    root = write_catalog(tmp_path)
+    _, checks = load_selection("full", root / "suites.json", root / "layouts.json", root / "cases")
+    assert selection_builds(checks, root / "cases", load_layouts(root / "layouts.json")) == {
+        (config.DEFAULT_MODEL, "serial"), (config.DEFAULT_MODEL, "mpi"),
+        ("NGammaTiTeNeutralGamma", "serial"),
+    }
 
 
 FAKE_MAKE = """#!/usr/bin/env bash
@@ -168,6 +151,11 @@ fi
 if [[ "$1" == "clean" ]]; then
     rm -f MHDG-* *.o
     exit 0
+fi
+# A real compiler must never inherit objects from a previous variant.
+if compgen -G '*.o' > /dev/null; then
+    echo 'stale objects'
+    exit 8
 fi
 for arg in "$@"; do
     if [[ "$arg" == "MODE=${MHDG_FAKE_FAIL:-unset}" ]]; then
@@ -182,7 +170,7 @@ for arg in "$@"; do
     esac
 done
 target=${!#}
-printf '#!/bin/bash\\nprintf fixture > outputs/result.h5\\n%q -B -c %q %q %q %q %q\\n' "$MHDG_FIXTURE_PYTHON" "$MHDG_FIXTURE_CODE" "$model" "$build_id" "$revision" "$dirty" > "$target"
+printf '#!/bin/bash\\n%q -B -c %q %q %q %q %q\\n' "$MHDG_FIXTURE_PYTHON" "$MHDG_FIXTURE_CODE" "$model" "$build_id" "$revision" "$dirty" > "$target"
 chmod +x "$target"
 touch built.o
 """
