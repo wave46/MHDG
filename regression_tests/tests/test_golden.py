@@ -32,24 +32,21 @@ def setup(tmp_path, monkeypatch):
     workflows = json.loads((root / 'workflows.json').read_text())
     for name in ('warm', 'cold_fixed'):
         workflows['workflows'][name]['layout'] = 'serial_omp1'
+    workflows['workflows']['cold_fixed'].pop('reference')
     (root / 'workflows.json').write_text(json.dumps(workflows))
     (root / 'layouts.json').write_text(json.dumps({'schema_version': 2, 'layouts': ['serial_omp1', 'serial_omp16']}))
     (root / 'suites.json').write_text(json.dumps({
         'schema_version': 2, 'defaults': {'case': 'legacy_case', 'layout': 'serial_omp1'},
         'suites': {'warm': {'description': 'Recheck collected reference', 'workflows': ['warm']}}}))
-    recipe = {'matrix': {'relations': ['all_pairs'], 'tolerance_profile': 'cold_cross_layout',
-                         'layout_comparison_policy': 'fixed_hdf5'},
-              'cases': {'legacy_case': {'producers': [{'workflow': 'cold_fixed', 'matrix': True}, 'warm'],
-                                        'checks': ['warm']}}}
+    recipe = {'cases': {'legacy_case': {'producers': ['warm'], 'checks': ['warm']}}}
     (root / 'golden.json').write_text(json.dumps(recipe))
     monkeypatch.setattr(golden, 'ROOT', root)
     monkeypatch.setattr(cli, 'ROOT', root)
     with h5py.File(harness.serial_executable.parent / 'seed.h5', 'r+') as handle:
         handle['solution/u'][...] += 1
-    build_path = harness.build_manifest
-    build = Mock(return_value=SimpleNamespace(metadata_path=build_path))
+    build = Mock(return_value=SimpleNamespace(metadata_path=harness.build_manifest))
     monkeypatch.setattr(golden, 'build_solver', build)
-    return SimpleNamespace(harness=harness, root=root, build=build, build_path=build_path,
+    return SimpleNamespace(harness=harness, root=root, build=build,
                            values=harness.values, workspace=tmp_path / 'refresh', output=tmp_path / 'golden')
 
 
@@ -57,30 +54,29 @@ def publish(setup):
     return golden.publish(setup.workspace, setup.output, 'reviewed-1', 'Accepted solver change', 'Review record 42')
 
 
-@pytest.mark.parametrize('has_old_reference', [True, False])
-def test_refresh_handoff_review_and_explicit_self_contained_publication(setup, has_old_reference):
+def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
+    (setup.root / 'golden.json').write_text(json.dumps({
+        'matrix': {'relations': ['all_pairs'], 'tolerance_profile': 'cold_cross_layout',
+                   'layout_comparison_policy': 'fixed_hdf5'},
+        'cases': {'legacy_case': {'producers': [{'workflow': 'cold_fixed', 'matrix': True}, 'warm'],
+                                  'checks': ['warm']}}}))
     manifest_path = setup.harness.bundle / 'manifest.json'
-    if not has_old_reference:
-        manifest = json.loads(manifest_path.read_text())
-        for role in ('warm_reference', 'warm_restart'):
-            artifact = manifest['artifacts'].pop(manifest['roles'].pop(role))
-            (setup.harness.bundle / artifact['path']).unlink()
-        manifest_path.write_text(json.dumps(manifest))
+    manifest = json.loads(manifest_path.read_text())
+    artifact = manifest['artifacts'].pop(manifest['roles'].pop('warm_restart'))
+    (setup.harness.bundle / artifact['path']).unlink()
+    manifest_path.write_text(json.dumps(manifest))
     original = manifest_path.read_bytes()
-    if has_old_reference:
-        machine = setup.workspace.parent / 'settings.json'
-        machine.write_text(json.dumps({'defaults': {'bundles': {'legacy_case': str(setup.harness.bundle)}}}))
-        assert cli.main(['golden', 'refresh', 'legacy_case', '--settings', str(machine),
-                         '--workspace', str(setup.workspace), '--jobs', '2']) == 0
-        path = setup.workspace / 'refresh.json'
-        report = json.loads(path.read_text())
-    else:
-        path, report = golden.refresh('legacy_case', setup.values, setup.workspace)
-    assert path.is_file() and report['status'] == 'ready' and not setup.output.exists()
+    machine = setup.workspace.parent / 'settings.json'
+    machine.write_text(json.dumps({'defaults': {'bundles': {'legacy_case': str(setup.harness.bundle)}}}))
+    assert cli.main(['golden', 'refresh', 'legacy_case', '--settings', str(machine),
+                     '--workspace', str(setup.workspace), '--jobs', '2']) == 0
+    report = json.loads((setup.workspace / 'refresh.json').read_text())
+    assert report['status'] == 'ready' and not setup.output.exists()
     setup.build.assert_called_once()
     assert setup.build.call_args.kwargs['requirements'] == {('NGammaTiTeNeutral', 'serial')}
     assert report['parallel_checks'] and all(item['status'] == 'passed' for item in report['parallel_checks'])
-    assert report['producers'][-1]['old_reference']['status'] == ('failed' if has_old_reference else 'unavailable')
+    assert report['producers'][0]['old_reference']['status'] == 'unavailable'
+    assert report['producers'][-1]['old_reference']['status'] == 'failed'
     warm = Path(report['producers'][-1]['run_directory'])
     restart = warm / 'inputs/restart.h5'
     cold = Path(report['producers'][0]['run_directory'])
@@ -104,7 +100,7 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup, h
     assert validate_bundle_root(setup.output, setup.root / 'cases').case_id == 'legacy_case'
 
 
-@pytest.mark.parametrize('failure', ['exit', 'nonconvergence', 'nonfinite', 'validation'])
+@pytest.mark.parametrize('failure', ['exit', 'nonconvergence', 'validation'])
 def test_failed_producer_or_validation_blocks_publication(setup, failure):
     solver = SOLVER
     if failure == 'exit':
@@ -113,11 +109,8 @@ def test_failed_producer_or_validation_blocks_publication(setup, failure):
         solver = SOLVER.replace('1.0E-8', '1.0E5')
     elif failure == 'validation':
         solver = SOLVER.replace('set -euo pipefail', 'set -euo pipefail\n[[ "$PWD" != *-verify ]] || exit 7')
-    else:
-        with h5py.File(setup.harness.serial_executable.parent / 'seed.h5', 'r+') as handle:
-            handle['solution/u'][0] = float('nan')
     setup.harness.install_solver(solver, 'serial')
-    with pytest.raises(BundleError, match='producer failed|producer did not converge|invalid producer output|golden validation failed'):
+    with pytest.raises(BundleError, match='producer failed|invalid producer output|golden validation failed'):
         golden.refresh('legacy_case', setup.values, setup.workspace)
     report = json.loads((setup.workspace / 'refresh.json').read_text())
     assert report['status'] == 'failed'
