@@ -7,15 +7,15 @@
   },
   "files": {
     "required": {
-      "mesh": "mesh.msh",
       "geometry": "geometry.geo",
       "equilibrium_magnetic_field": "equilibrium.h5",
-      "equilibrium_current_density": "current_density.h5",
-      "warm_parameters": "param.txt",
-      "transport_configuration": "transport_model.nml",
-      "impurity_configuration": "impurity_model_w.nml"
+      "equilibrium_current_density": "current_density.h5"
     },
     "optional": {
+      "mesh": "mesh.msh",
+      "warm_parameters": "param.txt",
+      "transport_configuration": "transport_model.nml",
+      "impurity_configuration": "impurity_model_w.nml",
       "warm_restart": "restart.h5",
       "warm_reference": "reference_mpi4_omp4.h5",
       "warm_neutral_sources_in_elements_restart": "restart_neutral_sources_in_elements.h5",
@@ -40,7 +40,6 @@
       "cold_fixed_continuation_03_parameters": "param_cold_fixed_continuation_03.txt",
       "cold_fixed_continuation_04_parameters": "param_cold_fixed_continuation_04.txt",
       "cold_fixed_continuation_05_parameters": "param_cold_fixed_continuation_05.txt",
-      "cold_fixed_initial_transport_configuration": "transport_cold_fixed_initial.nml",
       "cold_fixed_continuation_01_transport_configuration": "transport_cold_fixed_continuation_01.nml",
       "cold_fixed_continuation_02_transport_configuration": "transport_cold_fixed_continuation_02.nml",
       "cold_fixed_continuation_03_transport_configuration": "transport_cold_fixed_continuation_03.nml",
@@ -128,13 +127,12 @@
     "race_neutral_sources_in_elements": {
       "type": "warm_same_state",
       "description": "Run two Newton iterations with source relocation only",
+      "parameters": "warm_parameters",
+      "transport": "transport_configuration",
       "inputs": [
-        "mesh",
         "geometry",
         "equilibrium_magnetic_field",
-        "equilibrium_current_density",
-        "warm_parameters",
-        "transport_configuration"
+        "equilibrium_current_density"
       ],
       "impurity_configuration": "impurity_configuration",
       "layout": "serial_omp1",
@@ -187,6 +185,7 @@
       }
     },
     "warm_impurity_off": {
+      "impurity_configuration": null,
       "extends": "warm",
       "description": "Reconverge the accepted state with impurity radiation disabled",
       "restart": "warm_impurity_off_restart",
@@ -256,6 +255,7 @@
     },
     "cold_step_fixed": {},
     "cold_step_impurity_off": {
+      "impurity_configuration": null,
       "extends": "cold_step_fixed",
       "description": "Exercise analytical initialization with impurity radiation disabled",
       "parameter_overrides": {

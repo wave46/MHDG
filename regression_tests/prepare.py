@@ -15,7 +15,7 @@ from .config import (bundle_root_from_settings, absolute_setting, solver_executa
                      runtime_files, selected_mpi_launcher)
 from .bundles import validate_bundle_root, load_manifest, artifact_path
 from .support import BundleError, IDENTIFIER_RE, utc_now, utc_run_id
-from .parameters import render_parameter_file
+from .parameters import render_parameter_file, read_selected_input_values
 
 
 @dataclass(frozen=True)
@@ -205,12 +205,10 @@ def _case_artifacts(
 
 
 
-WARM_INPUT_LINKS = {
-    "mesh": "mesh.msh",
+COMMON_INPUT_LINKS = {
     "geometry": "geometry.geo",
     "equilibrium_magnetic_field": "equilibrium.h5",
     "equilibrium_current_density": "current_density.h5",
-    "transport_configuration": "transport_model.nml",
 }
 
 
@@ -240,31 +238,45 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     (staging / "outputs").mkdir()
     (staging / "res").mkdir()
     workflow, artifacts = inputs.workflow, inputs.artifacts
-    roles = WARM_INPUT_LINKS if stage is None else {
-        role: filename for role, filename in WARM_INPUT_LINKS.items()
-        if role not in {"mesh", "transport_configuration"}
-    }
-    sources = {filename: artifacts[role] for role, filename in roles.items()}
+    sources = {filename: artifacts[role] for role, filename in COMMON_INPUT_LINKS.items()}
+    recipe = stage if stage is not None else workflow
+    for role, filename in (
+        (workflow.get("mesh"), "mesh.msh"),
+        (recipe.get("transport"), "transport_model.nml"),
+        (workflow.get("impurity_configuration"), "impurity_model.nml"),
+    ):
+        if role:
+            sources[filename] = artifacts[role]
     if stage is None:
-        parameter_role = "warm_parameters"
-        sources["restart.h5"] = artifacts[workflow.get("restart", "warm_restart")]
+        sources["restart.h5"] = artifacts[workflow["restart"]]
         if workflow.get("reference") in artifacts:
             sources["reference.h5"] = artifacts[workflow["reference"]]
-    else:
-        parameter_role = stage["parameters"]
-        sources["mesh.msh"] = artifacts[workflow["mesh"]]
-        sources["transport_model.nml"] = artifacts[stage["transport"]]
-    if workflow.get("impurity_configuration"):
-        sources["impurity_model.nml"] = artifacts[workflow["impurity_configuration"]]
+    render_parameter_file(
+        artifacts[recipe["parameters"]], staging / "param.txt",
+        _parameter_replacements(inputs.run_directory), overrides,
+        {"transport_model_path": "input_lst", "impurity_model_path": "input_lst",
+         **workflow.get("parameter_namelists", {}), **(stage or {}).get("parameter_namelists", {})},
+    )
+    switches = read_selected_input_values(
+        staging / "param.txt", {"readMeshFromSol", "transport_1d", "impurity_radiation"},
+    )
+    restart = stage is None or stage["restart_from"] == "previous_stage"
+    if switches.get("readmeshfromsol"):
+        if not restart:
+            raise BundleError("readMeshFromSol requires a restart, not analytical initialization")
+        sources.pop("mesh.msh", None)
+    elif "mesh.msh" not in sources:
+        raise BundleError("readMeshFromSol is not enabled: declare a mesh input")
+    for switch, filename in (("transport_1d", "transport_model.nml"),
+                             ("impurity_radiation", "impurity_model.nml")):
+        if switches.get(switch) and filename not in sources:
+            raise BundleError(f"{switch} is enabled but {filename} has no declared input")
+        if not switches.get(switch):
+            sources.pop(filename, None)
     for filename, source in sources.items():
         (directory / filename).symlink_to(source)
     for filename, source in inputs.runtime_files.items():
         (staging / filename).symlink_to(source)
-    render_parameter_file(
-        artifacts[parameter_role], staging / "param.txt",
-        _parameter_replacements(inputs.run_directory), overrides,
-        {**workflow.get("parameter_namelists", {}), **(stage or {}).get("parameter_namelists", {})},
-    )
 
 
 def _parameter_replacements(final_directory: Path) -> dict[str, Path | str]:

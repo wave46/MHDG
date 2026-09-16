@@ -17,13 +17,11 @@
       {
         "id": "time_init",
         "parameters": "cold_fixed_time_init_parameters",
-        "transport": "cold_fixed_initial_transport_configuration",
         "newton_check": "finite_only"
       },
       {
         "id": "diffusion_reduction",
-        "parameters": "cold_fixed_diffusion_reduction_parameters",
-        "transport": "cold_fixed_initial_transport_configuration"
+        "parameters": "cold_fixed_diffusion_reduction_parameters"
       }
     ],
     "transport_continuation": [
@@ -58,13 +56,12 @@
     "warm": {
       "type": "warm_same_state",
       "description": "Reconverge an unchanged steady restart on the fixed mesh",
+      "parameters": "warm_parameters",
+      "transport": "transport_configuration",
       "inputs": [
-        "mesh",
         "geometry",
         "equilibrium_magnetic_field",
-        "equilibrium_current_density",
-        "warm_parameters",
-        "transport_configuration"
+        "equilibrium_current_density"
       ],
       "impurity_configuration": "impurity_configuration",
       "layout": "mpi4_omp4",
@@ -136,7 +133,6 @@
         {
           "id": "single_step",
           "parameters": "cold_fixed_time_init_parameters",
-          "transport": "cold_fixed_initial_transport_configuration",
           "parameter_overrides": {
             "steady": false,
             "saveNR": false,

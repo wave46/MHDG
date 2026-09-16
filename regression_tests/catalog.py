@@ -249,6 +249,8 @@ def workflow_required_roles(workflow: dict[str, Any], *, references: bool = True
     roles = set(workflow.get("inputs", []))
     for name in (
         "mesh",
+        "parameters",
+        "transport",
         "restart",
         "impurity_configuration",
     ):
@@ -258,7 +260,8 @@ def workflow_required_roles(workflow: dict[str, Any], *, references: bool = True
         roles.add(workflow["reference"])
     for stage in workflow.get("stages", []):
         roles.add(stage["parameters"])
-        roles.add(stage["transport"])
+        if stage.get("transport"):
+            roles.add(stage["transport"])
     return roles
 
 

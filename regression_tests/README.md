@@ -520,6 +520,23 @@ Only workflows selected in the case are exposed, but `extends` can also name an
 unselected shared parent. Case overrides are applied before parent resolution,
 so derived workflows inherit that case's changes. Descriptions are inherited.
 
+Warm workflows and individual stages select their parameter template with
+`parameters`; `transport` selects a transport namelist when needed. Omit
+`transport` for transport-off recipes, or set it to `null` to clear an inherited
+selection. Likewise, `impurity_configuration: null` clears an inherited impurity
+namelist for a radiation-off workflow. Parameter overrides and namelist mappings
+remain the way to vary scalar settings without adding Python code.
+
+Warm runs with `readMeshFromSol=true` use the restart's embedded mesh and need no
+standalone mesh file. The solver still receives its required first mesh-name
+argument. Analytical starts, or restarts with `readMeshFromSol=false`, require a
+declared `mesh`. Preparation checks the rendered switches, including invocation
+overrides, and rejects enabled transport/radiation without their declared input
+or an analytical start requesting a restart mesh. Immutable active inputs are
+linked; only the local parameter file is rendered. Meshes, parameter templates
+and feature namelists are optional at bundle level and required by the workflows
+that select them; common geometry/equilibrium inputs remain required.
+
 To adjust one stage without repeating the recipe, use `stage_overrides`:
 
 ```json

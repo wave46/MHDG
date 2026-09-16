@@ -16,6 +16,8 @@ PARAMETERS = """&INPUT_LST
     save_folder = '/old/output/'
 /
 &SWITCH_LST
+    readMeshFromSol = .false.
+    transport_1d = .true.
     steady = .false.
     saveNR = .true.
     impurity_radiation = .true.
@@ -71,19 +73,24 @@ def write_catalog(root):
     for name in ("layouts.json", "tolerances.json"):
         shutil.copy2(repository / name, root / name)
     (root / "cases").mkdir()
-    required = dict(zip(("mesh", "coarse_mesh", "geometry", "equilibrium_magnetic_field",
+    files = dict(zip(("mesh", "coarse_mesh", "geometry", "equilibrium_magnetic_field",
                         "equilibrium_current_density", "transport_configuration", "initial_transport"), FILES))
-    required.update(warm_parameters="param.txt", impurity_configuration="impurity_model_w.nml")
-    optional = {"warm_restart": "restart.h5", "warm_reference": "reference_mpi4_omp4.h5",
+    required = {role: files.pop(role) for role in ("geometry", "equilibrium_magnetic_field", "equilibrium_current_density")}
+    optional = {**files, "warm_parameters": "param.txt", "impurity_configuration": "impurity_model_w.nml",
+                "warm_restart": "restart.h5", "warm_reference": "reference_mpi4_omp4.h5",
                 "initial_parameters": "param_cold_fixed_time_init.txt"}
     warm = {"description": "Warm fixture", "type": "warm_same_state", "inputs": list(required),
+            "parameters": "warm_parameters", "transport": "transport_configuration",
             "impurity_configuration": "impurity_configuration", "layout": "mpi4_omp4",
             "restart": "warm_restart", "reference": "warm_reference", "outputs": ["warm_reference"],
-            "parameter_overrides": {"compute_from_flux": True},
+            "parameter_overrides": {"compute_from_flux": True, "readMeshFromSol": True},
             "comparison": {"method": "fixed_hdf5", "profile": "fixed_same_layout", "cross_layout_profile": "fixed_cross_layout"}}
     stages = [{"id": name, "parameters": "initial_parameters", "transport": "initial_transport",
+               "parameter_overrides": {"readMeshFromSol": name != "initial"},
                "newton_check": "finite_only" if name == "initial" else "bounded"}
               for name in ("initial", "continued", "final")]
+    del stages[0]["transport"]
+    stages[0]["parameter_overrides"]["transport_1d"] = False
     workflows = {
         "warm": warm,
         "cold_fixed": {"description": "Fixed fixture", "type": "staged_fixed_mesh",
@@ -100,6 +107,7 @@ def write_catalog(root):
                             "outputs": [], "comparison": {"method": "fixed_hdf5", "profile": "race_step", "stage_profile": "race_step"}},
         "cold_step_adaptive": {"extends": "cold_step_fixed", "type": "staged_adaptive_mesh", "adaptive_stages": ["initial"]},
         "cold_step_neutralgamma": {"extends": "cold_step_fixed", "model": "NGammaTiTeNeutralGamma",
+                                   "impurity_configuration": None,
                                    "parameter_overrides": {"impurity_radiation": False}},
     }
     documents = {"workflows.json": {"schema_version": 2, "workflows": workflows,

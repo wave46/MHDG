@@ -24,6 +24,8 @@ def test_warm_links_immutable_inputs_and_renders_isolated_paths(harness):
     source = harness.bundle / "inputs/param.txt"
     original = source.read_bytes()
     run = prepare(harness)
+    assert run.command[-2] == str(run.path / "inputs/mesh")  # Required CLI argument, unused file.
+    assert not (run.path / "inputs/mesh.msh").exists()
     assert run.command[-1] == str(run.path / "inputs/restart")
     assert (run.path / "inputs/equilibrium.h5").is_symlink()
     assert (run.path / "positionFeketeNodesTri2D.h5").resolve() == harness.runtime_file
@@ -65,11 +67,48 @@ def test_cold_preparation_preserves_mesh_and_restart_policy(harness, adaptive):
     assert run.stages[0].restart_from == "analytical"
     assert all(stage.restart_from == "previous_stage" for stage in run.stages[1:])
     mesh = "mesh_adaptive_initial.msh" if adaptive else "mesh.msh"
-    for stage in run.stages:
-        assert (stage.run.path / "inputs/mesh.msh").resolve() == harness.bundle / "inputs" / mesh
+    assert (run.stages[0].run.path / "inputs/mesh.msh").resolve() == harness.bundle / "inputs" / mesh
+    assert not (run.stages[0].run.path / "inputs/transport_model.nml").exists()
+    for stage in run.stages[1:]:
+        assert not (stage.run.path / "inputs/mesh.msh").exists()
+        assert (stage.run.path / "inputs/transport_model.nml").is_symlink()
         assert not (stage.run.path / "inputs/restart.h5").exists()
     first = (run.stages[0].run.path / "param.txt").read_text()
     assert f"rest_adapt = .{'true' if adaptive else 'false'}." in first
+
+
+def test_disabled_features_prepare_without_optional_files(harness):
+    path = harness.catalog / "workflows.json"
+    catalog = json.loads(path.read_text())
+    catalog["workflows"]["minimal"] = {
+        "extends": "warm", "transport": None, "impurity_configuration": None,
+        "parameters": "initial_parameters",
+        "parameter_overrides": {"transport_1d": False, "impurity_radiation": False},
+    }
+    path.write_text(json.dumps(catalog))
+    path = harness.catalog / "cases/legacy_case.json"
+    case = json.loads(path.read_text())
+    case["workflows"]["minimal"] = {}
+    path.write_text(json.dumps(case))
+    for name in ("mesh.msh", "transport_model.nml", "impurity_model_w.nml"):
+        (harness.bundle / "inputs" / name).unlink()
+    template = harness.root / "minimal.txt"
+    template.write_text("".join(line for line in (harness.bundle / "inputs/param_cold_fixed_time_init.txt").read_text().splitlines(True)
+                                if "transport_model_path" not in line and "impurity_model_path" not in line))
+    run = prepare(harness, "minimal", artifact_overrides={"initial_parameters": template})
+    assert not any((run.path / "inputs" / name).exists() for name in
+                   ("mesh.msh", "transport_model.nml", "impurity_model.nml"))
+    assert (run.path / "inputs/restart.h5").is_symlink()
+    assert json.loads((run.path / "run_plan.json").read_text())["artifacts"]["initial_parameters"] == str(template)
+    with pytest.raises(BundleError, match="no declared input"):
+        prepare(harness, "minimal", run_id="enabled", requested_overrides={"transport_1d": True})
+    with pytest.raises(BundleError, match="declare a mesh"):
+        prepare(harness, "minimal", run_id="mesh", requested_overrides={"readMeshFromSol": False})
+
+
+def test_analytical_start_cannot_read_a_nonexistent_restart(harness):
+    with pytest.raises(BundleError, match="requires a restart"):
+        prepare(harness, "cold_fixed", requested_overrides={"readMeshFromSol": True})
 
 
 def test_failed_render_does_not_publish_a_partial_run(harness):

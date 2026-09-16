@@ -112,6 +112,12 @@
         "mesh": {
           "$ref": "#/$defs/identifier"
         },
+        "parameters": {
+          "$ref": "#/$defs/identifier"
+        },
+        "transport": {
+          "anyOf": [{"$ref": "#/$defs/identifier"}, {"type": "null"}]
+        },
         "restart": {
           "$ref": "#/$defs/identifier"
         },
@@ -122,7 +128,7 @@
           "$ref": "#/$defs/identifier_list"
         },
         "impurity_configuration": {
-          "$ref": "#/$defs/identifier"
+          "anyOf": [{"$ref": "#/$defs/identifier"}, {"type": "null"}]
         },
         "comparison": {
           "$ref": "#/$defs/comparison"
@@ -192,8 +198,7 @@
       "$ref": "#/$defs/stage_fields",
       "required": [
         "id",
-        "parameters",
-        "transport"
+        "parameters"
       ]
     },
     "parameter_overrides": {
@@ -270,7 +275,7 @@
           "$ref": "#/$defs/identifier"
         },
         "transport": {
-          "$ref": "#/$defs/identifier"
+          "anyOf": [{"$ref": "#/$defs/identifier"}, {"type": "null"}]
         },
         "parameter_overrides": {
           "$ref": "#/$defs/parameter_overrides"
