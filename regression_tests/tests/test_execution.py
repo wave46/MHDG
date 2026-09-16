@@ -12,7 +12,7 @@ import sys
 from regression_tests.execute import execute_prepared, final_execution
 from regression_tests.prepare import prepare_run
 from regression_tests.support import BundleError
-from regression_tests.tests.fixtures.harness import REGRESSION_ROOT, create_harness, run_command
+from regression_tests.tests.fixtures.harness import create_harness, run_command
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def harness(tmp_path):
 def run(harness, workflow="warm", layout="serial_omp1"):
     completed = run_command(
         "run", "legacy_case", workflow, "--settings", str(harness.settings),
-        "--layout", layout, "--run-id", "execution-test",
+        "--layout", layout, "--run-id", "execution-test", catalog=harness.catalog,
     )
     directory = harness.run_directory(workflow, layout, "execution-test")
     metadata = json.loads((directory / "run_metadata.json").read_text())
@@ -60,7 +60,7 @@ def test_solver_outcomes(harness, solver, workflow, status, exit_code):
     assert metadata["status"] == status
     assert metadata["exit_code"] == exit_code
     if solver == "file_error":
-        first = json.loads((directory / "stages/01_time_init/run_metadata.json").read_text())
+        first = json.loads((directory / "stages/01_initial/run_metadata.json").read_text())
         assert len(first["fatal_log_messages"]) == 2
         assert all(stage["status"] == "not_run" for stage in metadata["stages"][1:])
 
@@ -100,17 +100,17 @@ def test_stages_stop_when_producer_fails_or_output_is_ambiguous(harness, ambiguo
     assert metadata["status"] == expected
     assert metadata["exit_code"] == (0 if ambiguous else 7)
     assert [stage["status"] for stage in metadata["stages"]] == [
-        "completed", "completed", expected, *(["not_run"] * 4),
+        "completed", expected, "not_run",
     ]
     assert metadata["hdf5_outputs"] == []
-    assert not (directory / "stages/04_continuation_02/run_metadata.json").exists()
-    assert not (directory / "stages/04_continuation_02/inputs/restart.h5").exists()
+    assert not (directory / "stages/03_final/run_metadata.json").exists()
+    assert not (directory / "stages/03_final/inputs/restart.h5").exists()
 
 
 def test_launch_failure_is_recorded(harness):
     prepared = prepare_run(
         harness.values, "legacy_case", "warm", "serial_omp1",
-        REGRESSION_ROOT / "cases", REGRESSION_ROOT / "layouts.json", "launch-failure",
+        harness.catalog / "cases", harness.catalog / "layouts.json", "launch-failure",
     )
     prepared = replace(prepared, command=[str(harness.root / "missing-command")])
     result = execute_prepared(prepared, harness.values)
@@ -129,7 +129,7 @@ printf '%s\n' "$OMP_NUM_THREADS" > outputs/omp_threads.txt
 printf '%s\n' "$OMP_PLACES" > outputs/omp_places.txt
 printf '%s\n' "$OMP_PROC_BIND" > outputs/omp_proc_bind.txt
 printf '%s\n' "$MHDG_TEST_ENV" > outputs/environment.txt
-printf 'synthetic hdf5\n' > outputs/result.h5
+cp "$(dirname "$0")/seed.h5" outputs/result.h5
 """
 
 NO_OUTPUT_SOLVER = """#!/usr/bin/env bash
@@ -144,18 +144,19 @@ stage=${PWD##*/}
 if (($# == 1)); then
   history=$stage
 else
-  history=$("$MHDG_FIXTURE_PYTHON" -c 'import h5py,sys; print(h5py.File(sys.argv[1]).attrs["fixture_text"],end="")' "$2.h5")
+  history=$(@PYTHON@ -c 'import h5py,sys; print(h5py.File(sys.argv[1]).attrs["fixture_text"],end="")' "$2.h5")
   history=${history%$'\\n'}">"$stage
 fi
-printf '%s\n' "$history" > outputs/result.h5
+cp "$(dirname "$0")/seed.h5" outputs/result.h5
+@PYTHON@ -c 'import h5py,sys; h=h5py.File("outputs/result.h5","r+"); h.attrs["fixture_text"]=sys.argv[1]+"\\n"; h.close()' "$history"
 printf 'Error: 1.0E-5\n'
 printf 'Output written to file %s\n' "$PWD/outputs/result.h5"
-"""
+""".replace("@PYTHON@", shlex.quote(sys.executable))
 
 FATAL_FILE_ERROR_SOLVER = """#!/usr/bin/env bash
 set -euo pipefail
 test -d res
-printf 'synthetic hdf5\n' > outputs/result.h5
+cp "$(dirname "$0")/seed.h5" outputs/result.h5
 printf 'Error opening destination file:./res/temp.msh\n'
 printf "Error   : Unable to open file './res/temp.msh'\n" >&2
 """
@@ -163,11 +164,11 @@ printf "Error   : Unable to open file './res/temp.msh'\n" >&2
 FAILING_STAGED_SOLVER = """#!/usr/bin/env bash
 set -euo pipefail
 stage=${PWD##*/}
-if [[ "$stage" == '03_continuation_01' ]]; then
+if [[ "$stage" == '02_continued' ]]; then
   printf 'failed stage\n' >&2
   exit 7
 fi
-printf '%s\n' "$stage" > outputs/result.h5
+cp "$(dirname "$0")/seed.h5" outputs/result.h5
 printf 'Output written to file %s\n' "$PWD/outputs/result.h5"
 """
 
@@ -175,7 +176,7 @@ printf 'Output written to file %s\n' "$PWD/outputs/result.h5"
 def test_changed_executable_is_rejected_after_preparation(harness):
     values = harness.values
     prepared = prepare_run(values, "legacy_case", "warm", "serial_omp1",
-                           REGRESSION_ROOT / "cases", REGRESSION_ROOT / "layouts.json", "changed-binary")
+                           harness.catalog / "cases", harness.catalog / "layouts.json", "changed-binary")
     harness.serial_executable.write_text(harness.serial_executable.read_text() + "\n")
     with pytest.raises(BundleError, match="checksum/size changed"):
         execute_prepared(prepared, values)
@@ -189,7 +190,7 @@ def test_wrong_model_provenance_or_feature_rejects_zero_exit_output(harness, def
         # A mislabeled build must not make the ordinary five-equation solver
         # count as Gamma coverage, even if its executable hash is valid.
         record = json.loads(harness.build_manifest.read_text())
-        record["profile"]["model"] = "NGammaTiTeNeutralGamma"
+        record["artifacts"]["NGammaTiTeNeutralGamma/serial"] = record["artifacts"].pop("NGammaTiTeNeutral/serial")
         harness.build_manifest.write_text(json.dumps(record))
         workflow = "cold_step_neutralgamma"
         expected = "simulation_parameters/model"
@@ -226,7 +227,7 @@ def test_candidate_override_checks_its_provenance_and_original_run_parameters(ha
 
     def compare():
         return compare_completed_run(
-            directory, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json",
+            directory, harness.catalog / "cases", harness.catalog / "tolerances.json",
             candidate_override=candidate, reference_override=original,
         )[2]
 

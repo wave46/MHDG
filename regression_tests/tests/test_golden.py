@@ -12,9 +12,7 @@ import pytest
 from regression_tests import cli, golden
 from regression_tests.bundles import validate_bundle_root
 from regression_tests.support import BundleError
-from regression_tests.files import file_identity
-from regression_tests.tests.fixtures.harness import create_harness, REGRESSION_ROOT
-from regression_tests.tests.fixtures.solutions import write_solution
+from regression_tests.tests.fixtures.harness import create_harness
 
 SOLVER = '''#!/usr/bin/env bash
 set -euo pipefail
@@ -27,20 +25,10 @@ printf 'Error: 1.0E-8\\nOutput written to file outputs/result.h5\\n'
 '''
 
 
-def write_off_solution(path, offset=0):
-    write_solution(path, solution_offset=offset, model=True)
-    with h5py.File(path, 'r+') as handle:
-        handle['simulation_parameters/switches/balance_diagnostics_mode'] = b'off'
-
-
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
-    root = tmp_path / 'catalog'
-    root.mkdir()
-    shutil.copytree(REGRESSION_ROOT / 'schemas', root / 'schemas')
-    shutil.copytree(REGRESSION_ROOT / 'cases', root / 'cases')
-    for name in ('workflows.json', 'tolerances.json'):
-        shutil.copy2(REGRESSION_ROOT / name, root / name)
+    harness = create_harness(tmp_path, solver=SOLVER)
+    root = harness.catalog
     workflows = json.loads((root / 'workflows.json').read_text())
     for name in ('warm', 'cold_fixed'):
         workflows['workflows'][name]['layout'] = 'serial_omp1'
@@ -55,8 +43,9 @@ def setup(tmp_path, monkeypatch):
                                         'checks': ['warm']}}}
     (root / 'golden.json').write_text(json.dumps(recipe))
     monkeypatch.setattr(golden, 'ROOT', root)
-    harness = create_harness(tmp_path, solver=SOLVER, reference_writer=write_off_solution)
-    write_off_solution(harness.serial_executable.parent / 'seed.h5', 1)
+    monkeypatch.setattr(cli, 'ROOT', root)
+    with h5py.File(harness.serial_executable.parent / 'seed.h5', 'r+') as handle:
+        handle['solution/u'][...] += 1
     build_path = harness.build_manifest
     build = Mock(return_value=SimpleNamespace(metadata_path=build_path))
     monkeypatch.setattr(golden, 'build_solver', build)
@@ -128,9 +117,6 @@ def test_failed_producer_or_validation_blocks_publication(setup, failure):
         with h5py.File(setup.harness.serial_executable.parent / 'seed.h5', 'r+') as handle:
             handle['solution/u'][0] = float('nan')
     setup.harness.install_solver(solver, 'serial')
-    build = json.loads(setup.build_path.read_text())
-    build['artifacts']['serial'].update(file_identity(setup.harness.serial_executable))
-    setup.build_path.write_text(json.dumps(build))
     with pytest.raises(BundleError, match='producer failed|producer did not converge|invalid producer output|golden validation failed'):
         golden.refresh('legacy_case', setup.values, setup.workspace)
     report = json.loads((setup.workspace / 'refresh.json').read_text())

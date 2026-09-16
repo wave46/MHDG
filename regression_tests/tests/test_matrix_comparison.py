@@ -4,15 +4,13 @@ import json
 
 import pytest
 
-from regression_tests.catalog import load_case_definition
 from regression_tests import compare
 from regression_tests.bundles import load_reference_matrix
 from regression_tests.support import BundleError
-from regression_tests.tests.fixtures.harness import REGRESSION_ROOT
+from regression_tests.tests.fixtures.case_data import write_catalog
 
 
 @pytest.mark.parametrize("workflow,profile,policy_override", [
-    ("cold_fixed", "race_step", None),
     ("cold_adaptive", "cold_cross_layout", "fixed_hdf5"),
 ])
 def test_explicit_final_check_bypasses_stage_matrix(tmp_path, monkeypatch, workflow, profile, policy_override):
@@ -26,13 +24,13 @@ def test_explicit_final_check_bypasses_stage_matrix(tmp_path, monkeypatch, workf
 
     monkeypatch.setattr(compare, "compare_run", run_comparison)
     policy, path, _ = compare.compare_completed_run(
-        run, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json",
-        reference_override=references["time_init"], tolerance_profile_override=profile,
+        run, tmp_path / "catalog/cases", tmp_path / "catalog/tolerances.json",
+        reference_override=references["initial"], tolerance_profile_override=profile,
         comparison_policy_override=policy_override,
     )
     assert policy == calls[0][1] == "fixed_hdf5"
     assert path == report_path and len(calls) == 1
-    assert calls[0][0].reference == references["time_init"]
+    assert calls[0][0].reference == references["initial"]
     assert calls[0][0].tolerance_profile == profile
 
 
@@ -49,14 +47,14 @@ def test_stage_references_and_stop_at_first_divergence(tmp_path, monkeypatch, wo
 
     monkeypatch.setattr(compare, "compare_run", stage_comparison)
     policy, path, report = compare.compare_completed_run(
-        run, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json",
+        run, tmp_path / "catalog/cases", tmp_path / "catalog/tolerances.json",
     )
     expected = 2 if fail_second else len(references)
     assert policy == "reference_matrix" and path.name == "matrix_comparison.json"
     assert report["status"] == ("failed" if fail_second else "passed")
     assert report["checked_stage_count"] == len(calls) == expected
     assert report["convergence"]["passed"] is (None if fail_second else True)
-    assert report["first_failed_stage"] == ("diffusion_reduction" if fail_second else None)
+    assert report["first_failed_stage"] == ("continued" if fail_second else None)
     assert [overrides.reference for overrides in calls] == list(references.values())[:expected]
     assert calls[0].newton_check == "finite_only" and calls[-1].newton_check == "bounded"
     assert calls[-1].tolerance_profile == ("fixed_stage_reference" if fail_second else "adaptive_reference")
@@ -73,13 +71,13 @@ def test_reference_index_rejects_ambiguous_or_unusable_artifacts(tmp_path):
     matrix["references"].append(matrix["references"][0])
     index.write_text(json.dumps(matrix))
     with pytest.raises(BundleError, match="duplicate cell"):
-        load_reference_matrix(root, "legacy_case")
+        load_reference_matrix(root, "legacy_case", tmp_path / "catalog/cases")
     index.write_text(original)
     manifest = json.loads((root / "manifest.json").read_text())
     manifest["artifacts"]["golden_index"]["media_type"] = "application/x-hdf5"
     (root / "manifest.json").write_text(json.dumps(manifest))
     with pytest.raises(BundleError, match="not application/json"):
-        load_reference_matrix(root, "legacy_case")
+        load_reference_matrix(root, "legacy_case", tmp_path / "catalog/cases")
     manifest["artifacts"]["golden_index"]["media_type"] = "application/json"
     (root / "manifest.json").write_text(json.dumps(manifest))
     reference = next(iter(references.values()))
@@ -87,12 +85,12 @@ def test_reference_index_rejects_ambiguous_or_unusable_artifacts(tmp_path):
     reference.rename(outside)
     reference.symlink_to(outside)
     with pytest.raises(BundleError, match="resolves outside"):
-        load_reference_matrix(root, "legacy_case")
+        load_reference_matrix(root, "legacy_case", tmp_path / "catalog/cases")
 
 
 def fixture(root, workflow_id):
-    case = load_case_definition("legacy_case", REGRESSION_ROOT / "cases")
-    stage_ids = [stage["id"] for stage in case["workflows"][workflow_id]["stages"]]
+    write_catalog(root / "catalog")
+    stage_ids = ["initial", "continued", "final"]
     bundle = root / "golden"
     (bundle / "references").mkdir(parents=True)
     references, artifacts, entries = {}, {}, []

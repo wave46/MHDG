@@ -55,7 +55,7 @@ def test_debug_prepare_uses_discovered_catalogs(tmp_path):
     harness = create_harness(tmp_path)
     result = run_command(
         "prepare", "legacy_case", "cold_step_adaptive",
-        "--run-id", "cli-smoke", "--settings", str(harness.settings),
+        "--run-id", "cli-smoke", "--settings", str(harness.settings), catalog=harness.catalog,
     )
     assert result.returncode == 0, result.stderr
     run = harness.run_directory("cold_step_adaptive", "serial_omp1", "cli-smoke")
@@ -66,7 +66,7 @@ def test_debug_prepare_uses_discovered_catalogs(tmp_path):
 
     result = run_command(
         "prepare", "legacy_case", "cold_step_adaptive", "--layout", "mpi4_omp4",
-        "--run-id", "override", "--settings", str(harness.settings),
+        "--run-id", "override", "--settings", str(harness.settings), catalog=harness.catalog,
     )
     assert result.returncode == 0, result.stderr
     assert harness.run_directory("cold_step_adaptive", "mpi4_omp4", "override").is_dir()

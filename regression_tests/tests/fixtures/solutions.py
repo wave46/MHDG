@@ -80,30 +80,18 @@ def write_solution(
         )
 
 
-def finalize_solver_outputs(model="NGammaTiTeNeutral", build_id="fixture-build", revision="fixture-revision", dirty=False):
-    """Emit the identity/feature metadata of the tiny test executable."""
-    import json
-    plan = json.loads(Path("run_plan.json").read_text())
-    for path in Path("outputs").glob("*.h5"):
-        if not h5py.is_hdf5(path):
-            text = path.read_text()
-            write_solution(path, model=model)
-            with h5py.File(path, "r+") as handle:
-                handle.attrs["fixture_text"] = text
-        with h5py.File(path, "r+") as h:
-            values = {"simulation_parameters/model": "N-Gamma-Ti-Te-Neutral" + ("Gamma" if model.endswith("Gamma") else ""),
-                      "simulation_parameters/Ndim": 2,
-                      "simulation_parameters/switches/impurity_radiation": 1,
-                      "simulation_parameters/numerics/NeutralP_lambda": 0.,
-                      "simulation_parameters/physics/impurity_names": "W",
-                      "simulation_parameters/physics/impurity_concentrations": 1e-4,
-                      "provenance/build_id": build_id, "provenance/git_commit": revision, "provenance/git_dirty": int(dirty)}
-            for key, value in plan.get("parameter_overrides", {}).items():
-                if key in ("impurity_radiation", "neutral_wall_sources_in_elements", "neutral_perpendicular_diffusion"):
-                    values[f"simulation_parameters/switches/{key}"] = int(value)
-                elif key == "compute_from_flux":
-                    values["magnetic/jtor_source"] = "bicubic_psi" if value else "stored_hdf5"
-            for key, value in values.items():
-                if key in h:
-                    del h[key]
-                h[key] = value
+def write_solver_output(model="NGammaTiTeNeutral", build_id="fixture-build", revision="fixture-revision", dirty=False, *, path="outputs/result.h5"):
+    """Known output for a tiny executable; never infer values from its run plan."""
+    write_solution(Path(path), model=model)
+    with h5py.File(path, "r+") as h:
+        for key, value in {
+            "simulation_parameters/model": "N-Gamma-Ti-Te-Neutral" + ("Gamma" if model.endswith("Gamma") else ""),
+            "simulation_parameters/Ndim": 2, "simulation_parameters/switches/balance_diagnostics_mode": "off",
+            "simulation_parameters/switches/impurity_radiation": int(model != "NGammaTiTeNeutralGamma"),
+            "simulation_parameters/numerics/NeutralP_lambda": 0.,
+            "simulation_parameters/physics/impurity_names": "W",
+            "simulation_parameters/physics/impurity_concentrations": 1e-4,
+            "magnetic/jtor_source": "bicubic_psi", "provenance/build_id": build_id,
+            "provenance/git_commit": revision, "provenance/git_dirty": int(dirty),
+        }.items():
+            h[key] = value

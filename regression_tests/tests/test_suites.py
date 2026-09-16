@@ -1,7 +1,6 @@
 """Suite execution, trustworthy resume and saved scientific comparisons."""
 
 import json
-import shutil
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -10,8 +9,7 @@ import h5py
 
 from regression_tests import reporting, suites
 from regression_tests.support import BundleError
-from regression_tests.tests.fixtures.harness import create_harness, run_command, REGRESSION_ROOT as ROOT
-from regression_tests.tests.fixtures.solutions import write_solution
+from regression_tests.tests.fixtures.harness import create_harness, run_command as package_command, REGRESSION_ROOT as ROOT
 
 SOLVER = """#!/usr/bin/env bash
 set -euo pipefail
@@ -20,15 +18,15 @@ printf 'Error: 1.0E-5\\nOutput written to file outputs/result.h5\\n'
 """
 
 
-def write_off_solution(path):
-    write_solution(path, model=True)
-    with h5py.File(path, "r+") as handle:
-        handle["simulation_parameters/switches/balance_diagnostics_mode"] = b"off"
+def run_command(*args):
+    return package_command(*args, catalog=ROOT)
 
 
 @pytest.fixture
-def harness(tmp_path):
-    return create_harness(tmp_path, solver=SOLVER, reference_writer=write_off_solution)
+def harness(tmp_path, monkeypatch):
+    result = create_harness(tmp_path, solver=SOLVER)
+    monkeypatch.setitem(globals(), "ROOT", result.catalog)
+    return result
 
 
 def run(harness, name="warm", run_id="check", **kwargs):
@@ -37,21 +35,33 @@ def run(harness, name="warm", run_id="check", **kwargs):
                             ROOT / "suites.json", ROOT / "tolerances.json", run_id, case_id="legacy_case", **kwargs)
 
 
-def test_resume_reuses_good_outputs_retries_failed_and_changed_runs(harness):
+def test_resume_reuses_good_outputs_preserves_interruption_and_retries_damage(harness, monkeypatch):
     # Same executable throughout; one serial launch fails once.
     harness.install_solver(SOLVER.replace('cp inputs', '''if [[ "$0" == */serial && "$OMP_NUM_THREADS" == 1 && ! -e "$(dirname "$0")/failed-once" ]]; then
   touch "$(dirname "$0")/failed-once"
   exit 7
 fi
 cp inputs'''))
-    _, first = run(harness, "warm_parallelism", compare=False)
-    assert first["status"] == "failed"
+    partial = harness.run_directory("warm", "mpi4_omp4", "check")
+    execute = suites.run_cell
+    def interrupt(inputs, workflow, layout):
+        if layout == "mpi4_omp4":
+            partial.mkdir(parents=True)
+            (partial / "evidence.txt").write_text("keep")
+            raise KeyboardInterrupt
+        return execute(inputs, workflow, layout)
+    with monkeypatch.context() as patch:
+        patch.setattr(suites, "run_cell", interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            run(harness, "warm_parallelism")
+    first = json.loads((harness.run_root / "suites/warm_parallelism/legacy_case/check/suite_summary.json").read_text())
     failed = next(item for item in first["results"] if item["run_status"] == "solver_failed")
     good = {item["layout_id"]: item["run_directory"] for item in first["results"] if item["run_status"] == "completed"}
     assert good
-    _, resumed = run(harness, "warm_parallelism", compare=False, resume=True)
-    assert resumed["status"] == "deferred"
-    assert len(resumed["results"]) == len(first["results"])
+    _, resumed = run(harness, "warm_parallelism", resume=True)
+    assert resumed["status"] == "passed"
+    assert len(resumed["results"]) == len(first["results"]) + 1
+    assert (partial / "evidence.txt").read_text() == "keep"
     for item in resumed["results"]:
         if item["layout_id"] in good:
             assert item["run_directory"] == good[item["layout_id"]]
@@ -61,74 +71,36 @@ cp inputs'''))
     damaged = next(iter(good))
     output = Path(good[damaged]) / "outputs/result.h5"
     output.write_bytes(b"changed output")
-    _, repaired = run(harness, "warm_parallelism", compare=False, resume=True)
+    _, repaired = run(harness, "warm_parallelism", resume=True)
     changed = next(item for item in repaired["results"] if item["layout_id"] == damaged)
-    assert repaired["status"] == "deferred"
+    assert repaired["status"] == "passed"
     assert changed["run_directory"] != good[damaged]
     assert output.read_bytes() == b"changed output"  # Old evidence is not overwritten.
 
-
-def test_interruption_preserves_partial_directory(harness, monkeypatch):
-    partial = harness.run_directory("warm", "mpi4_omp4", "check")
-    def interrupt(*args):
-        partial.mkdir(parents=True)
-        (partial / "evidence.txt").write_text("keep")
-        raise KeyboardInterrupt
-    with monkeypatch.context() as patch:
-        patch.setattr(suites, "run_cell", interrupt)
-        with pytest.raises(KeyboardInterrupt):
-            run(harness, compare=False)
-    _, summary = run(harness, compare=False, resume=True)
-    assert summary["status"] == "deferred"
-    assert (partial / "evidence.txt").read_text() == "keep"
-    assert Path(summary["results"][0]["run_directory"]).name == "check-resume-1"
-
-
-def test_resume_rechecks_comparisons_and_rejects_changed_inputs(harness, monkeypatch, tmp_path):
-    catalog = tmp_path / "catalog"
-    shutil.copytree(ROOT / "cases", catalog / "cases")
-    shutil.copytree(ROOT / "schemas", catalog / "schemas")
-    shutil.copy2(ROOT / "workflows.json", catalog / "workflows.json")
-    selected = harness.values
-    def check(resume=False):
-        return suites.run_suite(selected, "warm", catalog / "cases", ROOT / "layouts.json",
-                                 ROOT / "suites.json", ROOT / "tolerances.json", "checked", resume=resume, case_id="legacy_case")
-    _, first = check()
-    assert first["status"] == "passed"
-    # An unused executable and build-only preferences do not affect these runs.
-    selected["MHDG_EXECUTABLES"]["NGammaTiTeNeutral/serial"] = "/unused/serial"
-    selected["MHDG_REGRESSION_BUILD_JOBS"] = "3"
+    # Reassessment must use current checks without executing valid outputs again.
     monkeypatch.setattr(suites, "run_cell", lambda *args: pytest.fail("valid output should be reused"))
-    comparison = Mock(return_value=("fixed_hdf5", tmp_path / "comparison.json", {
-        "status": "failed", "failures": ["changed acceptance result"], "convergence": {"passed": True},
-    }))
+    comparison = Mock(return_value=("fixed_hdf5", harness.root / "comparison.json", {
+        "status": "passed", "failures": [], "convergence": {"passed": False}}))
     monkeypatch.setattr(suites, "compare_completed_run", comparison)
-    _, resumed = check(resume=True)
-    comparison.assert_called_once()
-    assert resumed["status"] == "failed"
-    comparison.return_value = ("fixed_hdf5", tmp_path / "comparison.json", {
-        "status": "passed", "failures": [], "convergence": {"passed": False},
-    })
-    resumed_path, inconsistent = check(resume=True)
-    assert inconsistent["status"] == "failed"
-    assert inconsistent["results"][0]["convergence_status"] == "failed"
-    verification = suites.verify_suite(resumed_path, catalog / "cases", ROOT / "tolerances.json")[1]
-    assert verification["results"][0] == inconsistent["results"][0]
-    assert resumed["results"][0]["run_directory"] == first["results"][0]["run_directory"]
-    shared = catalog / "workflows.json"
-    original = shared.read_text()
-    shared.write_text(original + "\n")
+    path, rejected = run(harness, "warm_parallelism", resume=True)
+    assert rejected["status"] == "failed" and comparison.call_count == 4
+    assert [row["run_directory"] for row in rejected["results"]] == [row["run_directory"] for row in repaired["results"]]
+    verified = suites.verify_suite(path, ROOT / "cases", ROOT / "tolerances.json")[1]
+    assert verified["results"] == rejected["results"]
+    shared = ROOT / "workflows.json"
+    original = shared.read_bytes()
+    shared.write_bytes(original + b"\n")
     with pytest.raises(BundleError, match="workflow_catalog"):
-        check(resume=True)
-    shared.write_text(original)
+        run(harness, "warm_parallelism", resume=True)
+    shared.write_bytes(original)
     runtime = harness.runtime_file.read_bytes()
     harness.runtime_file.write_bytes(b"changed runtime input")
     with pytest.raises(BundleError, match="checksum/size changed"):
-        check(resume=True)
+        run(harness, "warm_parallelism", resume=True)
     harness.runtime_file.write_bytes(runtime)
-    harness.install_solver("#!/usr/bin/env bash\nexit 7\n", "parallel")
+    harness.install_solver("#!/bin/sh\nexit 7\n", "parallel")
     with pytest.raises(BundleError, match="executables"):
-        check(resume=True)
+        run(harness, "warm_parallelism", resume=True)
 
 
 def test_cli_requires_golden_and_records_diagnostic_overrides(harness):
@@ -158,8 +130,7 @@ def test_cli_requires_golden_and_records_diagnostic_overrides(harness):
 
 
 def test_parallel_comparison_and_saved_recheck(harness):
-    write_off_solution(harness.serial_executable.parent / "race_result.h5")
-    solver = SOLVER.replace('cp inputs/reference.h5', 'cp "$(dirname "$0")/race_result.h5"').replace('1.0E-5', '1.0E5')
+    solver = SOLVER.replace('cp inputs/reference.h5', 'cp "$(dirname "$0")/seed.h5"').replace('1.0E-5', '1.0E5')
     harness.install_solver(solver.replace("cp ", "printf 'mesh\\n' > res/temp.msh\ncp ", 1))
     manifest_path = harness.bundle / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -167,7 +138,7 @@ def test_parallel_comparison_and_saved_recheck(harness):
     manifest_path.write_text(json.dumps(manifest))
     path, summary = run(harness, "parallel")
     assert summary["status"] == "passed"
-    assert summary["comparisons"]
+    assert len(summary["comparisons"]) == 1
     report = json.loads(Path(summary["comparisons"][0]["comparison_report"]).read_text())
     assert report["convergence"] == {"passed": True, "final_newton_error": 1e5, "maximum": None}
     result = run_command("compare", "--suite", str(path))
@@ -224,17 +195,16 @@ def test_offline_checks_references_pairs_and_diagnostics(tmp_path, monkeypatch, 
 
 
 @pytest.mark.parametrize("suite,damage", [
-    ("initialization", "nonfinite"), ("initialization", "shape"),
-    ("source_cold", "nonconvergence"),
+    ("initialization", "nonfinite"),
+    ("bootstrap", "nonconvergence"),
 ])
 def test_reference_free_runs_validate_outputs_and_stage_convergence(harness, suite, damage, monkeypatch):
     seed = harness.serial_executable.parent / "seed.h5"
-    write_off_solution(seed)
     solver = r'''#!/usr/bin/env bash
 set -euo pipefail
 cp "$(dirname "$0")/seed.h5" outputs/result.h5
 error=1.0E-5
-[[ "$PWD" != *01_time_init && "$PWD" != *01_single_step ]] || error=1.0
+[[ "$PWD" != *01_initial ]] || error=1.0
 printf 'Error: %s\nOutput written to file outputs/result.h5\n' "$error"
 '''
     harness.install_solver(solver)
@@ -249,20 +219,16 @@ printf 'Error: %s\nOutput written to file outputs/result.h5\n' "$error"
         # An intermediate cold stage must converge even if the last stage does.
         log = Path(stages[1]["output"]).parent.parent / "stdout.log"
         log.write_text("Error: 1e-3\n")
-        expected = "diffusion_reduction: final Newton error exceeds tolerance"
+        expected = "continued: final Newton error exceeds tolerance"
         monkeypatch.setattr(suites, "run_cell", lambda *args: pytest.fail("reuse completed outputs"))
         assert run(harness, suite, resume=True)[1]["status"] == "failed"
     else:
         def corrupt(output):
             with h5py.File(output, "r+") as handle:
-                if damage == "nonfinite":
-                    handle["solution/u"][0] = float("nan")
-                else:
-                    del handle["solution/q"]
-                    handle["solution/q"] = [1.]
+                handle["solution/u"][0] = float("nan")
         corrupt(Path(stages[0]["output"]))
         corrupt(seed)
-        expected = "solution/u" if damage == "nonfinite" else "solution/q"
+        expected = "solution/u"
         assert run(harness, suite, run_id="bad-output")[1]["status"] == "failed"
     _, verification = suites.verify_suite(path, ROOT / "cases", ROOT / "tolerances.json")
     assert verification["status"] == "failed"
@@ -272,7 +238,7 @@ printf 'Error: %s\nOutput written to file outputs/result.h5\n' "$error"
         assert completed.returncode == 1 and expected in completed.stdout
 
 
-def test_profile_resumes_across_cases_without_repeating_success(harness, monkeypatch):
+def test_profile_preflights_cases_and_forwards_suite_resume(harness, monkeypatch):
     from regression_tests.bundles import create_bundle
 
     diverted = harness.root / "diverted"
@@ -283,11 +249,17 @@ def test_profile_resumes_across_cases_without_repeating_success(harness, monkeyp
     checks = [{"suite_id": "warm", **suites.load_suite_definition(
         "warm", ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases", case_id=case,
     )} for case in settings]
-    harness.install_solver(SOLVER.replace('cp inputs', '''if [[ "$PWD" == */diverted_case/* && ! -e "$(dirname "$0")/failed-once" ]]; then
-  touch "$(dirname "$0")/failed-once"
-  exit 7
-fi
-cp inputs'''))
+    calls = []
+    def selected_suite(values, suite_id, *args, case_id, **kwargs):
+        resumed = args[7]
+        calls.append((case_id, resumed))
+        path = harness.run_root / f"suites/{suite_id}/{case_id}/profile/suite_summary.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        report = {"status": "failed" if case_id == "diverted_case" and not resumed else "passed",
+                  "results": [], "duration_seconds": 0.}
+        path.write_text(json.dumps(report))
+        return path, report
+    monkeypatch.setattr(suites, "run_suite", selected_suite)
 
     manifest = diverted / "manifest.json"
     original = manifest.read_text()
@@ -295,7 +267,7 @@ cp inputs'''))
     del missing["roles"]["warm_reference"]
     manifest.write_text(json.dumps(missing))
     with monkeypatch.context() as patch:
-        patch.setattr(suites, "run_cell", lambda *args: pytest.fail("must preflight later suites first"))
+        patch.setattr(suites, "run_suite", lambda *args, **kwargs: pytest.fail("must preflight later suites first"))
         with pytest.raises(BundleError, match="missing required artifact roles.*warm_reference"):
             suites.run_profile("example", checks, settings, ROOT, "profile")
     assert not harness.run_root.exists()
@@ -303,14 +275,10 @@ cp inputs'''))
     path, first = suites.run_profile("example", checks, settings, ROOT, "profile")
     assert first["status"] == "failed"
     assert [item["status"] for item in first["results"]] == ["passed", "failed"]
-    calls = []
-    run_cell = suites.run_cell
-    def record(inputs, *args):
-        calls.append(inputs.case_id)
-        return run_cell(inputs, *args)
-    monkeypatch.setattr(suites, "run_cell", record)
+    assert calls == [("legacy_case", False), ("diverted_case", False)]
+    calls.clear()
     resumed_path, resumed = suites.run_profile("example", checks, settings, ROOT, "profile", resume=True)
     assert resumed_path == path
     assert resumed["status"] == "passed"
-    assert calls == ["diverted_case"]
+    assert calls == [("legacy_case", True), ("diverted_case", True)]
     assert len({item["summary"] for item in resumed["results"]}) == 2

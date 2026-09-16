@@ -34,8 +34,8 @@ def setup(tmp_path, monkeypatch):
         "MHDG_FAKE_LOG": str(log), "MHDG_FAKE_ENV": "loaded",
         "MHDG_FIXTURE_PYTHON": sys.executable,
         "MHDG_FIXTURE_CODE": (f"import sys; sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r}); "
-                              "from regression_tests.tests.fixtures.solutions import finalize_solver_outputs; "
-                              "finalize_solver_outputs(*sys.argv[1:4], dirty=sys.argv[4]=='true')"),
+                              "from regression_tests.tests.fixtures.solutions import write_solver_output; "
+                              "write_solver_output(*sys.argv[1:4], dirty=sys.argv[4]=='true')"),
     }
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
@@ -125,9 +125,10 @@ def test_check_builds_only_its_layouts_and_runs_from_manifest(setup, tmp_path, m
     harness_root = tmp_path / "harness"
     harness_root.mkdir()
     harness = create_harness(harness_root)
+    monkeypatch.setattr(cli, "ROOT", harness.catalog)
     from regression_tests.bundles import create_bundle
     diverted = tmp_path / "diverted"
-    create_bundle("diverted_case", harness.source, diverted, Path(__file__).resolve().parents[1] / "cases")
+    create_bundle("diverted_case", harness.source, diverted, harness.catalog / "cases")
     settings = tmp_path / "machine.json"
     settings.write_text(json.dumps({
         "run_root": str(harness.run_root), "build_root": setup.settings["MHDG_REGRESSION_BUILD_ROOT"],
@@ -190,10 +191,10 @@ touch built.o
 def test_profile_rejects_missing_model_before_running(tmp_path, monkeypatch, capsys):
     from regression_tests import suites
     from regression_tests.bundles import create_bundle
-    from regression_tests.tests.fixtures.harness import REGRESSION_ROOT
     harness = create_harness(tmp_path)
+    monkeypatch.setattr(cli, "ROOT", harness.catalog)
     diverted = tmp_path / "diverted"
-    create_bundle("diverted_case", harness.source, diverted, REGRESSION_ROOT / "cases")
+    create_bundle("diverted_case", harness.source, diverted, harness.catalog / "cases")
     machine = json.loads(harness.settings.read_text())
     machine["defaults"]["bundles"]["diverted_case"] = str(diverted)
     harness.settings.write_text(json.dumps(machine))

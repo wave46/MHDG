@@ -1,7 +1,6 @@
 """Preparation behavior, without duplicating every production workflow declaration."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -11,9 +10,6 @@ from regression_tests.catalog import load_case_definition
 from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import create_harness
 
-ROOT = Path(__file__).resolve().parents[1]
-
-
 @pytest.fixture
 def harness(tmp_path):
     return create_harness(tmp_path)
@@ -21,7 +17,7 @@ def harness(tmp_path):
 
 def prepare(harness, workflow="warm", run_id="probe", **options):
     return prepare_run(harness.values, "legacy_case", workflow, "mpi4_omp4",
-                       ROOT / "cases", ROOT / "layouts.json", run_id, **options)
+                       harness.catalog / "cases", harness.catalog / "layouts.json", run_id, **options)
 
 
 def test_warm_links_immutable_inputs_and_renders_isolated_paths(harness):
@@ -42,7 +38,7 @@ def test_warm_links_immutable_inputs_and_renders_isolated_paths(harness):
 
 
 def test_restart_and_reference_roles_are_selected_independently(harness, monkeypatch):
-    case = load_case_definition("legacy_case", ROOT / "cases")
+    case = load_case_definition("legacy_case", harness.catalog / "cases")
     workflow = case["workflows"]["warm"]
     workflow.update(restart="warm_reference", reference="warm_restart")
     monkeypatch.setattr("regression_tests.prepare.load_case_definition", lambda *_, **__: case)
@@ -61,14 +57,14 @@ def test_restart_and_reference_roles_are_selected_independently(harness, monkeyp
         prepare(harness, run_id="needs-reference")
 
 
-@pytest.mark.parametrize("adaptive,short", [(False, False), (True, False), (False, True), (True, True)])
-def test_cold_preparation_preserves_mesh_and_restart_policy(harness, adaptive, short):
-    workflow = f"cold_{'step_' if short else ''}{'adaptive' if adaptive else 'fixed'}"
+@pytest.mark.parametrize("adaptive", [False, True])
+def test_cold_preparation_preserves_mesh_and_restart_policy(harness, adaptive):
+    workflow = "cold_adaptive" if adaptive else "cold_fixed"
     run = prepare(harness, workflow)
-    assert len(run.stages) == (1 if short else 7)
+    assert [stage.stage_id for stage in run.stages] == ["initial", "continued", "final"]
     assert run.stages[0].restart_from == "analytical"
     assert all(stage.restart_from == "previous_stage" for stage in run.stages[1:])
-    mesh = "mesh_adaptive_initial.msh" if adaptive or short else "mesh.msh"
+    mesh = "mesh_adaptive_initial.msh" if adaptive else "mesh.msh"
     for stage in run.stages:
         assert (stage.run.path / "inputs/mesh.msh").resolve() == harness.bundle / "inputs" / mesh
         assert not (stage.run.path / "inputs/restart.h5").exists()

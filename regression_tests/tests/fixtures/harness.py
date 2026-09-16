@@ -6,15 +6,14 @@ import json
 import os
 import subprocess
 import sys
-import shlex
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from regression_tests.bundles import create_bundle
 from regression_tests.config import settings as resolve_settings
 from regression_tests.files import file_identity
-from regression_tests.tests.fixtures.case_data import write_case_source
+from regression_tests.tests.fixtures.case_data import write_case_source, write_catalog
+from regression_tests.tests.fixtures.solutions import write_solver_output
 
 
 REGRESSION_ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +42,7 @@ exec "$@"
 class HarnessFixture:
     root: Path
     source: Path
+    catalog: Path
     bundle: Path
     run_root: Path
     settings: Path
@@ -61,7 +61,7 @@ class HarnessFixture:
                 if variant == "serial"
                 else self.parallel_executable
             )
-            write_executable(path, solver_script(contents))
+            write_executable(path, contents)
         self.write_build_record()
 
     @property
@@ -72,10 +72,11 @@ class HarnessFixture:
         def record(path):
             return {"path": path.name, **file_identity(path)}
         self.build_manifest.write_text(json.dumps({
-            "schema_version": 2, "status": "completed", "build_id": "fixture-build",
+            "schema_version": 3, "status": "completed", "build_id": "fixture-build",
             "repository": {"revision": "fixture-revision"},
-            "profile": {"model": "NGammaTiTeNeutral", "dimension": "2D"},
-            "artifacts": {"serial": record(self.serial_executable), "parallel": record(self.parallel_executable)},
+            "profile": {"dimension": "2D"},
+            "artifacts": {"NGammaTiTeNeutral/serial": record(self.serial_executable),
+                          "NGammaTiTeNeutral/mpi": record(self.parallel_executable)},
             "runtime_files": {self.runtime_file.name: record(self.runtime_file)},
         }))
 
@@ -98,18 +99,19 @@ def create_harness(
     root: Path,
     *,
     solver: str = EXIT_SOLVER,
-    reference_writer: Callable[[Path], None] | None = None,
     include_provenance: bool = False,
 ) -> HarnessFixture:
     """Create the external inputs needed by prepare, run, and suite tests."""
-    source = write_case_source(root / "source", reference_writer)
+    catalog = write_catalog(root / "catalog")
+    source = write_case_source(root / "source")
     bundle = root / "bundle"
-    create_bundle("legacy_case", source, bundle, REGRESSION_ROOT / "cases")
+    create_bundle("legacy_case", source, bundle, catalog / "cases")
 
     binary_directory = root / "bin"
     binary_directory.mkdir()
-    serial = write_executable(binary_directory / "serial", solver_script(solver))
-    parallel = write_executable(binary_directory / "parallel", solver_script(solver))
+    serial = write_executable(binary_directory / "serial", solver)
+    parallel = write_executable(binary_directory / "parallel", solver)
+    write_solver_output(path=binary_directory / "seed.h5")
     launcher = write_executable(binary_directory / "mpirun", MPI_LAUNCHER)
     runtime = binary_directory / "positionFeketeNodesTri2D.h5"
     runtime.write_text("synthetic Fekete nodes\n", encoding="utf-8")
@@ -126,7 +128,7 @@ def create_harness(
         **({"environment_script": "bin/environment setup.sh"} if environment_script else {}),
         "defaults": {"build": "bin/build_metadata.json", "bundles": {"legacy_case": "bundle"}},
     }))
-    harness = HarnessFixture(root, source, bundle, run_root, settings, serial, parallel,
+    harness = HarnessFixture(root, source, catalog, bundle, run_root, settings, serial, parallel,
                              launcher, runtime, environment_script, build_manifest)
     harness.write_build_record()
     return harness
@@ -135,9 +137,12 @@ def create_harness(
 def run_command(
     *arguments: str,
     environment: dict[str, str] | None = None,
+    catalog: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    command = ["-m", "regression_tests"] if catalog is None else [
+        "-c", f"from pathlib import Path; from regression_tests import cli; cli.ROOT=Path({str(catalog)!r}); raise SystemExit(cli.main())"]
     return subprocess.run(
-        [sys.executable, "-B", "-m", "regression_tests", *arguments],
+        [sys.executable, "-B", *command, *arguments],
         cwd=REGRESSION_ROOT.parent,
         check=False,
         capture_output=True,
@@ -153,9 +158,3 @@ def write_executable(path: Path, contents: str) -> Path:
     path.write_text(contents, encoding="utf-8")
     path.chmod(0o755)
     return path
-
-
-def solver_script(contents):
-    code = (f"import sys; sys.path.insert(0, {str(REGRESSION_ROOT.parent)!r}); "
-            "from regression_tests.tests.fixtures.solutions import finalize_solver_outputs; finalize_solver_outputs()")
-    return f"#!/bin/bash\nexport MHDG_FIXTURE_PYTHON={shlex.quote(sys.executable)}\n(\n{contents}\n)\nstatus=$?\n((status == 0)) || exit $status\n" + shlex.join([sys.executable, "-B", "-c", code]) + "\n"

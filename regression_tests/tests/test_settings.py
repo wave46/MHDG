@@ -57,18 +57,18 @@ def test_build_selection_rejects_failed_or_changed_artifacts(setup):
 
 def test_doctor_checks_artifacts_without_creating_scratch(setup):
     harness, path, _, _ = setup
-    result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path))
+    result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path), catalog=harness.catalog)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "doctor: passed" in result.stdout
     assert not harness.run_root.exists()
     manifest = json.loads((harness.bundle / "manifest.json").read_text())
     restart = harness.bundle / manifest["artifacts"][manifest["roles"]["warm_restart"]]["path"]
     restart.unlink()  # Optional for the base bundle, required by the selected warm check.
-    result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path))
+    result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path), catalog=harness.catalog)
     assert result.returncode == 1 and "missing required artifact roles: warm_restart" in result.stdout
     assert not harness.run_root.exists()
     path.write_text("{}")
-    result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path))
+    result = run_command("doctor", "warm", "--case", "legacy_case", "--settings", str(path), catalog=harness.catalog)
     assert result.returncode == 1
     assert "no bundle selected" in result.stdout
     assert "no build selected" in result.stdout
