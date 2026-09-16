@@ -115,6 +115,30 @@ then five transport continuations. `cold_fixed` uses the refined fixed mesh;
 Newton iterations; the adaptive variant also performs one adaptation pass.
 Use `list workflows CASE` for the complete current selection of feature variants.
 
+The replacement `bootstrap_adaptive` workflow is available for both cases:
+`time_init -> diffred -> steady`, with W radiation enabled and transport off.
+All three stages render the case's existing initial parameter template with stage
+overrides. The first two retain the previous settings; the final stage freezes
+the mesh and explicitly sets all four plasma diffusion coefficients to 16 m²/s.
+The diffusion-reduction stage can save coefficients reduced to 8 after solving
+at 16; the final steady stage explicitly restores 16 for its solve.
+
+Obtain candidate convergence evidence with the existing configured builds/bundles:
+
+```bash
+python -m regression_tests check bootstrap --case diverted_case
+python -m regression_tests check bootstrap --case legacy_case
+```
+
+Each command runs three stages in `mpi4_omp4`. Initialization requires finite
+valid output; `diffred` and `steady` additionally require final Newton error
+at most 2e-4. These focused checks do not compare the new transport-off state
+against the old transport-on goldens. They validate output/model/feature identity
+and convergence. `bootstrap_reference` is a separate future golden artifact.
+Routine/full profiles and golden refresh still select the old recipes during
+migration; the fixed bootstrap and refresh-only adaptive mesh handoff follow
+after review of this first bootstrap change.
+
 Full cold stages run sequentially and restart from their predecessor. The
 one-step workflows probe mesh construction and races, not convergence.
 The limited neutral-feature golden workflows all use the same accepted source-relocated restart.

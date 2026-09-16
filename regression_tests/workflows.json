@@ -13,6 +13,47 @@
     "neutral_flux_limiter_fs_flux_min": "phys_lst"
   },
   "sequences": {
+    "bootstrap": [
+      {
+        "id": "time_init",
+        "parameters": "cold_fixed_time_init_parameters",
+        "newton_check": "finite_only",
+        "parameter_overrides": {
+          "steady": false,
+          "read_gmsh": true,
+          "readMeshFromSol": false,
+          "psdtime": false,
+          "nrp": 3,
+          "dt0": 1000.0,
+          "nts": 10
+        }
+      },
+      {
+        "id": "diffred",
+        "parameters": "cold_fixed_time_init_parameters",
+        "parameter_overrides": {
+          "steady": false,
+          "read_gmsh": false,
+          "readMeshFromSol": true,
+          "psdtime": true,
+          "nrp": 40,
+          "dt0": 3000000000.0,
+          "nts": 1
+        }
+      },
+      {
+        "id": "steady",
+        "parameters": "cold_fixed_time_init_parameters",
+        "parameter_overrides": {
+          "steady": true,
+          "read_gmsh": false,
+          "readMeshFromSol": true,
+          "psdtime": false,
+          "nrp": 40,
+          "adaptivity": false
+        }
+      }
+    ],
     "cold_bootstrap": [
       {
         "id": "time_init",
@@ -53,6 +94,37 @@
     ]
   },
   "workflows": {
+    "bootstrap_adaptive": {
+      "type": "staged_adaptive_mesh",
+      "description": "Initialize, reduce diffusion and converge at 16 m2/s with W radiation and transport off",
+      "inputs": ["geometry", "equilibrium_magnetic_field", "equilibrium_current_density"],
+      "impurity_configuration": "impurity_configuration",
+      "mesh": "coarse_mesh",
+      "reference": "bootstrap_reference",
+      "outputs": ["bootstrap_reference"],
+      "layout": "mpi4_omp4",
+      "comparison": {
+        "method": "mesh_independent",
+        "profile": "adaptive_reference",
+        "stage_profile": "adaptive_reference",
+        "direct_profile": "cold_fixed_reference",
+        "direct_stage_profile": "fixed_stage_reference"
+      },
+      "parameter_overrides": {
+        "compute_from_flux": true,
+        "transport_1d": false,
+        "impurity_radiation": true,
+        "diff_n": 16.0,
+        "diff_u": 16.0,
+        "diff_e": 16.0,
+        "diff_ee": 16.0,
+        "tNR": 0.0002,
+        "adaptivity": true,
+        "rest_adapt": false
+      },
+      "adaptive_stages": ["time_init", "diffred"],
+      "stages": ["bootstrap"]
+    },
     "warm": {
       "type": "warm_same_state",
       "description": "Reconverge an unchanged steady restart on the fixed mesh",

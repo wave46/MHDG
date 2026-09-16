@@ -38,6 +38,11 @@
     }
   },
   "suites": {
+    "bootstrap": {
+      "description": "Three-stage adaptive bootstrap convergence; candidate evidence before new goldens",
+      "workflows": ["bootstrap_adaptive"],
+      "reference_comparisons": false
+    },
     "warm": {
       "description": "Warm golden regression with transport_1d in the production hybrid layout",
       "workflows": ["warm"]

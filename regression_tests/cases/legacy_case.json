@@ -12,6 +12,7 @@
       "equilibrium_current_density": "current_density.h5"
     },
     "optional": {
+      "bootstrap_reference": "reference_bootstrap.h5",
       "mesh": "mesh.msh",
       "warm_parameters": "param.txt",
       "transport_configuration": "transport_model.nml",
@@ -48,6 +49,7 @@
     }
   },
   "workflows": {
+    "bootstrap_adaptive": {},
     "warm": {"outputs": ["warm_reference"]},
     "warm_neutral_pressure": {
       "extends": "warm_neutral_sources_in_elements",
