@@ -54,12 +54,37 @@ def publish(setup):
     return golden.publish(setup.workspace, setup.output, 'reviewed-1', 'Accepted solver change', 'Review record 42')
 
 
-def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
+def mesh_producers(setup):
+    path = setup.root / 'workflows.json'
+    workflows = json.loads(path.read_text())
+    workflows['workflows']['cold_adaptive']['outputs'] = ['warm_restart', 'mesh']
+    workflows['workflows']['cold_fixed']['outputs'] = []
+    path.write_text(json.dumps(workflows))
     (setup.root / 'golden.json').write_text(json.dumps({
         'matrix': {'relations': ['all_pairs'], 'tolerance_profile': 'cold_cross_layout',
                    'layout_comparison_policy': 'fixed_hdf5'},
-        'cases': {'legacy_case': {'producers': [{'workflow': 'cold_fixed', 'matrix': True}, 'warm'],
+        'cases': {'legacy_case': {'producers': [{'workflow': 'cold_adaptive', 'matrix': True}, 'cold_fixed', 'warm'],
                                   'checks': ['warm']}}}))
+    # Known files from a tiny executable; this fixture does not simulate meshing.
+    return SOLVER + '''
+if [[ "$PWD" == */cold_adaptive/* && "$PWD" != */03_final ]]; then
+  printf '%s\\n' "${PWD##*/}" > res/temp.msh
+fi
+'''
+
+
+def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
+    setup.harness.install_solver(mesh_producers(setup), 'serial')
+    recipe_path = setup.root / 'golden.json'
+    recipe = json.loads(recipe_path.read_text())
+    producers = recipe['cases']['legacy_case']['producers']
+    producers[0], producers[1] = producers[1], producers[0]
+    recipe_path.write_text(json.dumps(recipe))
+    with pytest.raises(BundleError, match='producer cold_fixed needs: mesh'):
+        golden.refresh('legacy_case', setup.values, setup.workspace)
+    assert not setup.workspace.exists()
+    producers[0], producers[1] = producers[1], producers[0]
+    recipe_path.write_text(json.dumps(recipe))
     manifest_path = setup.harness.bundle / 'manifest.json'
     manifest = json.loads(manifest_path.read_text())
     artifact = manifest['artifacts'].pop(manifest['roles'].pop('warm_restart'))
@@ -82,6 +107,17 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
     cold = Path(report['producers'][0]['run_directory'])
     assert restart.is_symlink() and restart.resolve().is_relative_to(cold)
     assert not (warm / 'inputs/reference.h5').exists()
+    fixed = Path(report['producers'][-2]['run_directory'])
+    mesh = fixed / 'stages/01_initial/inputs/mesh.msh'
+    assert mesh.is_symlink() and mesh.resolve() == cold / 'stages/02_continued/res/temp.msh'
+    assert not (fixed / 'stages/01_initial/inputs/restart.h5').exists()
+    assert report['producers'][-2]['mesh_handoff']['status'] == 'passed'
+    # The same bytes are protected until publication, not merely linked once.
+    original_mesh = mesh.read_bytes()
+    mesh.write_bytes(b'changed mesh')
+    with pytest.raises(BundleError, match='evidence changed'):
+        publish(setup)
+    mesh.write_bytes(original_mesh)
     result = cli.main(['golden', 'publish', str(setup.workspace), '--output', str(setup.output),
                       '--bundle-version', 'reviewed-1', '--reason', 'Accepted solver change', '--provenance', 'Review record 42'])
     assert result == 0
@@ -93,14 +129,31 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
     assert manifest['bundle_class'] == 'golden'
     reference = setup.output / manifest['artifacts'][manifest['roles']['warm_reference']]['path']
     assert reference.read_bytes() == (warm / "outputs/result.h5").read_bytes()
+    published_mesh = setup.output / manifest['artifacts'][manifest['roles']['mesh']]['path']
+    assert published_mesh.read_bytes() == original_mesh
     receipt = json.loads((setup.output / 'provenance/publication.json').read_text())
     assert receipt['reason'] == 'Accepted solver change' and receipt['provenance'] == 'Review record 42'
     shutil.rmtree(setup.workspace)
     shutil.rmtree(setup.harness.bundle)
     assert validate_bundle_root(setup.output, setup.root / 'cases').case_id == 'legacy_case'
+    # An ordinary fixed run uses only the published bundle, after refresh is gone.
+    from regression_tests.prepare import prepare_run
+    values = {**setup.values, 'MHDG_REGRESSION_DATA_ROOT': str(setup.output)}
+    prepared = prepare_run(values, 'legacy_case', 'cold_fixed', 'serial_omp1',
+                           setup.root / 'cases', setup.root / 'layouts.json', require_reference=False)
+    assert (prepared.stages[0].run.path / 'inputs/mesh.msh').resolve() == published_mesh
+    assert not (prepared.stages[0].run.path / 'inputs/restart.h5').exists()
 
 
-@pytest.mark.parametrize('failure', ['exit', 'nonconvergence', 'validation'])
+def test_missing_generated_mesh_is_rejected(tmp_path):
+    (tmp_path / 'run_metadata.json').write_text(json.dumps({
+        'stages': [{'run_directory': str(tmp_path / 'stage')}],
+    }))
+    with pytest.raises(BundleError, match='retained no res/temp.msh'):
+        golden._generated_mesh(tmp_path)
+
+
+@pytest.mark.parametrize('failure', ['exit', 'nonconvergence', 'validation', 'endpoint'])
 def test_failed_producer_or_validation_blocks_publication(setup, failure):
     solver = SOLVER
     if failure == 'exit':
@@ -109,8 +162,19 @@ def test_failed_producer_or_validation_blocks_publication(setup, failure):
         solver = SOLVER.replace('1.0E-8', '1.0E5')
     elif failure == 'validation':
         solver = SOLVER.replace('set -euo pipefail', 'set -euo pipefail\n[[ "$PWD" != *-verify ]] || exit 7')
+    else:
+        mesh_solver = mesh_producers(setup)
+        seed = setup.harness.serial_executable.parent / 'mismatched_result.h5'
+        shutil.copy2(seed.with_name('seed.h5'), seed)
+        with h5py.File(seed, 'r+') as handle:
+            handle['solution/u'][...] += 0.1
+        solver = mesh_solver + '''
+if [[ "$PWD" == */cold_fixed/* ]]; then
+  cp "$(dirname "$0")/mismatched_result.h5" outputs/result.h5
+fi
+'''
     setup.harness.install_solver(solver, 'serial')
-    with pytest.raises(BundleError, match='producer failed|invalid producer output|golden validation failed'):
+    with pytest.raises(BundleError, match='producer failed|invalid producer output|golden validation failed|endpoint comparison failed'):
         golden.refresh('legacy_case', setup.values, setup.workspace)
     report = json.loads((setup.workspace / 'refresh.json').read_text())
     assert report['status'] == 'failed'
@@ -118,7 +182,7 @@ def test_failed_producer_or_validation_blocks_publication(setup, failure):
         assert all(item['status'] == 'passed' for item in report['producers'])
         assert report['checks'][0]['status'] == 'failed'
     else:
-        assert len(report['producers']) == 1
+        assert any(item['status'] == 'failed' for item in report['producers'])
         assert not (setup.workspace / 'candidate').exists()
     with pytest.raises(BundleError, match='successful, validated refresh'):
         publish(setup)

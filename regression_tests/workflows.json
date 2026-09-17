@@ -125,6 +125,20 @@
       "adaptive_stages": ["time_init", "diffred"],
       "stages": ["bootstrap"]
     },
+    "bootstrap_fixed": {
+      "extends": "bootstrap_adaptive",
+      "type": "staged_fixed_mesh",
+      "description": "Initialize fresh plasma on the accepted adaptive final mesh, then converge at 16 m2/s",
+      "mesh": "bootstrap_mesh",
+      "outputs": [],
+      "adaptive_stages": [],
+      "parameter_overrides": {"adaptivity": false},
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "cold_fixed_reference",
+        "stage_profile": "fixed_stage_reference"
+      }
+    },
     "warm": {
       "type": "warm_same_state",
       "description": "Reconverge an unchanged steady restart on the fixed mesh",

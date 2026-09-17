@@ -43,6 +43,11 @@
       "workflows": ["bootstrap_adaptive"],
       "reference_comparisons": false
     },
+    "bootstrap_fixed": {
+      "description": "Fixed three-stage bootstrap on the accepted bundled adaptive mesh",
+      "workflows": ["bootstrap_fixed"],
+      "case": "legacy_case"
+    },
     "warm": {
       "description": "Warm golden regression with transport_1d in the production hybrid layout",
       "workflows": ["warm"]

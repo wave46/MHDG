@@ -79,6 +79,8 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
     validate_bundle_root(source, root / "cases", manifest=manifest, catalog=catalog)
     available = {role for role, artifact in manifest["roles"].items()
                  if (source / manifest["artifacts"][artifact]["path"]).is_file()}
+    # Outputs scheduled for replacement must come from this refresh, not old data.
+    available.difference_update(role for producer in producers for role in producer["roles"])
     for producer in producers:
         workflow = case["workflows"][producer["workflow"]]
         needed = workflow_required_roles(workflow, references=False)
@@ -113,6 +115,7 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
         config.runtime_settings(values, requirements)
         shutil.copy2(build.metadata_path, workspace / "build.json")
         generated = {}
+        mesh_sources = {}
         for producer in producers:
             results = []
             for layout in producer["layouts"]:
@@ -129,6 +132,9 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
                 execution = execute_prepared(prepared, values)
                 result.update(run_status=execution.status, status=execution.status)
                 _validate_producer(result, root, catalog)
+                mesh_source = mesh_sources.get(case["workflows"][name].get("mesh"))
+                if mesh_source:
+                    result["mesh_handoff"] = _check_mesh_handoff(result, mesh_source, root, catalog)
                 result["status"] = "passed"
                 result["old_reference"] = _old_reference(result, source, manifest, case, root, catalog)
                 results.append(result)
@@ -142,8 +148,20 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
                 if any(item["status"] != "passed" for item in comparisons):
                     raise BundleError(f"producer parallel comparison failed: {name}")
             canonical = next(item for item in results if item["layout_id"] == producer["canonical"])
+            directory = Path(canonical["run_directory"])
             for role in producer["roles"]:
-                generated[role] = _solution(Path(canonical["run_directory"]))
+                if case["bundle_files"][role]["media_type"] == "application/x-gmsh":
+                    try:
+                        mesh = _generated_mesh(directory)
+                    except HarnessError:
+                        canonical["status"] = "failed"
+                        raise
+                    generated[role] = mesh
+                    mesh_sources[role] = directory
+                    canonical.setdefault("generated_meshes", {})[role] = _record(mesh, workspace)
+                else:
+                    generated[role] = _solution(directory)
+            write_json_atomic(path, report, "refresh report")
         candidate = workspace / "candidate"
         _collect(source, candidate, manifest, generated, report, case)
         values["MHDG_REGRESSION_DATA_ROOT"] = str(candidate)
@@ -176,6 +194,31 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
 
 def _solution(directory):
     return select_candidate(directory, load_json(directory / "run_metadata.json", "run metadata"))
+
+
+def _generated_mesh(directory):
+    """Select the last retained adaptation mesh in recorded stage order."""
+    metadata = load_json(directory / "run_metadata.json", "producer metadata")
+    directories = [Path(stage["run_directory"]) for stage in metadata.get("stages", [])] or [directory]
+    for stage in reversed(directories):
+        mesh = stage / "res/temp.msh"
+        if mesh.is_file():
+            return mesh
+    raise BundleError(f"mesh producer retained no res/temp.msh: {directory}")
+
+
+def _check_mesh_handoff(result, source, root, catalog):
+    """Compare final meshes and fields using the shared fixed-mesh comparator."""
+    directory = Path(result["run_directory"])
+    reference = _solution(source)
+    _, report_path, comparison = compare_completed_run(
+        directory, root / "cases", root / "tolerances.json", reference_override=reference,
+        comparison_policy_override="fixed_hdf5", report_override=directory / "adaptive_endpoint.json", catalog=catalog,
+    )
+    if comparison["status"] != "passed":
+        raise BundleError(f"fixed/adaptive bootstrap endpoint comparison failed: {report_path}")
+    return {"source_run": str(source),
+            "comparison_report": str(report_path), "status": comparison["status"]}
 
 
 def _validate_producer(result, root, catalog):
@@ -299,6 +342,8 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         validation = item.get("validation", {})
         if validation.get("status") != "passed" or validation.get("convergence", {}).get("passed") is not True:
             raise BundleError("producer has no successful recorded validation")
+        for record in item.get("generated_meshes", {}).values():
+            _verify_record(workspace, record)
     if any(item["status"] != "passed" for item in report.get("parallel_checks", [])):
         raise BundleError("producer parallel checks failed")
     for check in report["checks"]:

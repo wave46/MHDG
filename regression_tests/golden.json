@@ -7,6 +7,7 @@
   "cases": {
     "legacy_case": {
       "producers": [
+        "bootstrap_adaptive", "bootstrap_fixed",
         {"workflow": "cold_fixed", "matrix": true},
         {"workflow": "cold_adaptive", "matrix": true},
         "warm",
@@ -22,7 +23,7 @@
       ]
     },
     "diverted_case": {
-      "producers": ["cold_adaptive", "warm"],
+      "producers": ["bootstrap_adaptive", "cold_adaptive", "warm"],
       "checks": ["warm_parallelism", "parallel"]
     }
   }

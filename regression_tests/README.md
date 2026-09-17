@@ -135,9 +135,26 @@ valid output; `diffred` and `steady` additionally require final Newton error
 at most 2e-4. These focused checks do not compare the new transport-off state
 against the old transport-on goldens. They validate output/model/feature identity
 and convergence. `bootstrap_reference` is a separate future golden artifact.
-Routine/full profiles and golden refresh still select the old recipes during
-migration; the fixed bootstrap and refresh-only adaptive mesh handoff follow
-after review of this first bootstrap change.
+Routine/full profiles still select the old recipes during migration. Refresh now
+also produces the new adaptive bootstrap and, for limited geometry, the fixed
+bootstrap. The old producers remain until their dependent features are migrated.
+
+The limited `bootstrap_fixed` workflow runs the same three stages with adaptation
+disabled and fresh analytical plasma. During refresh, it consumes the last Gmsh
+mesh retained by the new adaptive producer. The final fixed-mesh comparison
+requires matching discrete meshes and solutions within the existing cold
+comparison tolerance. The mesh is published as `mesh_bootstrap.msh`
+alongside the new references. An ordinary check uses that accepted bundled mesh,
+without running adaptive first:
+
+```bash
+python -m regression_tests check bootstrap_fixed --bundle /path/new_golden
+```
+
+Historical bundles lack the new `bootstrap_mesh` role and cannot run this check.
+The harness does not substitute their old `mesh.msh`. The full refreshed reference
+set is still being migrated; these additions do not replace existing profile
+selections or assert real convergence of the new recipes.
 
 Full cold stages run sequentially and restart from their predecessor. The
 one-step workflows probe mesh construction and races, not convergence.
@@ -386,11 +403,13 @@ producer must complete, pass its declared Newton convergence checks, and produce
 structurally valid, finite fields. Available old-reference comparisons are saved
 for review; differences from an old golden do not excuse a failed producer.
 
-Limited refresh retains the full fixed/adaptive cold matrix across four layouts
+During migration, limited refresh first runs the new three-stage adaptive and
+fixed bootstraps. It retains the full old fixed/adaptive cold matrix across four layouts
 and all six pairs. Its canonical fixed cold result feeds the warm restart;
 subsequent warm, impurity and neutral workflows produce the respective files.
-Diverted refresh retains the full adaptive hybrid cold producer followed by warm
-reconvergence. Both retain their existing seven-stage recipes. These choices live
+Diverted refresh first runs the new three-stage adaptive bootstrap, then the old
+adaptive hybrid cold producer followed by warm reconvergence. The old producers
+retain their seven-stage recipes until feature/reference migration. These choices live
 in repository-owned `golden.json`; the CLI never takes a catalog path.
 
 Producers pass output files directly to subsequent workflows. There are no
@@ -398,6 +417,14 @@ intermediate candidate copies or generated settings files. After collection,
 existing warm/parallel/feature suites validate the new candidate. The shared build
 serves all producers and validation runs. Run refreshes sequentially in a worktree
 because the build uses its solver object directory.
+
+A workflow output with a `.msh` filename exports its last retained `res/temp.msh`
+in recorded stage order; ordinary outputs remain final HDF5 solutions. Refresh
+passes mesh outputs directly to later mesh consumers, compares their final mesh
+and solution against the producer, and records the source mesh checksum.
+Outputs scheduled for replacement cannot be supplied by stale source-bundle
+files when an earlier producer is missing. Publication verifies the recorded
+mesh identity and copies it into the golden; there are no external mesh links.
 
 Review `WORKSPACE/refresh.json`, the old-reference comparisons, and the validation
 suite reports. The workspace contains `candidate/`, `runs/`, and `build.json`.
