@@ -1,27 +1,8 @@
 {
-  "matrix": {
-    "relations": ["all_pairs"],
-    "tolerance_profile": "cold_cross_layout",
-    "layout_comparison_policy": "fixed_hdf5"
-  },
   "cases": {
     "legacy_case": {
-      "producers": [
-        "bootstrap_adaptive", "bootstrap_fixed",
-        "baseline_warm", "transport", "transport_short",
-        {"workflow": "cold_fixed", "matrix": true},
-        {"workflow": "cold_adaptive", "matrix": true},
-        "warm",
-        "bootstrap_impurity_off", "bootstrap_impurity_n", "bootstrap_impurity_nw",
-        "warm_impurity_off", "warm_impurity_n", "warm_impurity_nw",
-        "bootstrap_neutral_sources_in_elements", "warm_neutral_sources_in_elements",
-        "warm_neutral_pressure", "warm_neutral_perpendicular",
-        "warm_neutral_limiter_fixed", "warm_neutral_limiter_ti"
-      ],
-      "checks": [
-        "warm_parallelism", "parallel", "neutral_parallel", "sources",
-        "source_cold", "neutralgamma", "initialization", "impurities", "neutrals"
-      ]
+      "producers": ["bootstrap_adaptive", "bootstrap_fixed", "baseline_warm", "transport", "transport_short"],
+      "checks": ["warm", "transport", "transport_parallel", "neutralgamma", "initialization"]
     },
     "diverted_case": {
       "producers": [
@@ -32,10 +13,12 @@
         "neutral_limiter_fixed_short", "neutral_limiter_ti_short",
         "impurity_off", "impurity_n", "impurity_nw",
         "impurity_off_short", "impurity_n_short", "impurity_nw_short",
-        "adaptive_source_short",
-        "cold_adaptive", "warm"
+        "adaptive_source_short"
       ],
-      "checks": ["warm_parallelism", "parallel"]
+      "checks": [
+        "warm", "transport", "transport_hybrid", "stored_field", "adaptive_parallel",
+        "neutrals", "neutral_parallel", "impurities", "impurity_short", "mixture_parallel"
+      ]
     }
   }
 }

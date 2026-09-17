@@ -24,7 +24,7 @@ def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
     fekete.write_text("fixture\n")
     (tmp_path / "stdout.log").write_text("Error: 1.0\n")
     (tmp_path / "run_plan.json").write_text(json.dumps({
-        "case_id": "legacy_case", "workflow_id": "cold_adaptive", "layout_id": "mpi4_omp4",
+        "case_id": "legacy_case", "workflow_id": "bootstrap_adaptive", "layout_id": "mpi4_omp4",
     }))
     stage = tmp_path / "final-stage"
     stage.mkdir()
@@ -102,7 +102,7 @@ def adaptive_run(tmp_path):
     write_solution(candidate, grouped=False)
     (tmp_path / "stdout.log").write_text("Error: 1e-5\n")
     (tmp_path / "run_plan.json").write_text(json.dumps({
-        "case_id": "legacy_case", "workflow_id": "cold_adaptive", "layout_id": "mpi4_omp4",
+        "case_id": "legacy_case", "workflow_id": "bootstrap_adaptive", "layout_id": "mpi4_omp4",
     }))
     (tmp_path / "run_metadata.json").write_text(json.dumps({
         "status": "completed", "hdf5_outputs": [candidate.name],

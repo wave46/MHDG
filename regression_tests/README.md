@@ -105,189 +105,82 @@ being copied from another machine's build provenance.
 
 ## Scientific coverage
 
-Warm workflows restart an existing solution; cold workflows start
-analytically. Fixed and adaptive indicate whether the mesh can change.
+The profiles select distinct evidence; `full` replaces the cheaper probes where
+converged or parallel checks provide the agreed stronger coverage. It does not
+execute `routine-extended` first.
 
-The retained cold recipe has seven stages: `time_init`, `diffusion_reduction`,
-then five transport continuations. `cold_fixed` uses the refined fixed mesh;
-`cold_adaptive` starts coarse and adapts in the first two stages. Short
-`cold_step_fixed` and `cold_step_adaptive` workflows use one time step and two
-Newton iterations; the adaptive variant also performs one adaptation pass.
-Use `list workflows CASE` for the complete current selection of feature variants.
+| Profile | Solver launches | Selection |
+| --- | ---: | --- |
+| `routine` | 2 | Diverted baseline warm and short adaptive/source golden, diagnostics off |
+| `routine-extended` | 13 | Baseline; adaptive/source with diagnostics; four-layout short transport; hybrid short neutral/radiation features |
+| `full` | 49 | Both adaptive bootstraps, limited fixed bootstrap, both baseline/transport endpoints, diverted features and focused parallel/model checks |
 
-The replacement `bootstrap_adaptive` workflow is available for both cases:
-`time_init -> diffred -> steady`, with W radiation enabled and transport off.
-All three stages render the case's existing initial parameter template with stage
-overrides. The first two retain the previous settings; the final stage freezes
-the mesh and explicitly sets all four plasma diffusion coefficients to 16 m²/s.
-The diffusion-reduction stage can save coefficients reduced to 8 after solving
-at 16; the final steady stage explicitly restores 16 for its solve.
+The routine target is about 30 seconds on the development machine, excluding
+builds. Timings of these new physical recipes have not yet been measured.
 
-Obtain candidate convergence evidence with the existing configured builds/bundles:
+Full consists of 43 workflow/layout runs (the three bootstraps each launch three
+stages). It includes:
 
-```bash
-python -m regression_tests check bootstrap --case diverted_case
-python -m regression_tests check bootstrap --case legacy_case
-```
+- Three-stage adaptive bootstrap on both real topologies, plus limited fixed
+  bootstrap with fresh analytical plasma on the accepted adaptive final mesh.
+- Baseline warm and direct converged transport on both topologies.
+- Short transport: serial OMP1/OMP16 and MPI4×OMP1 on both cases, plus MPI4×OMP4
+  on diverted. Compare serial–OpenMP and serial–MPI; diverted adds MPI–hybrid.
+- Diverted short adaptive/source: serial OMP1/OMP16 and MPI4×OMP1.
+- Diverted source-only convergence and four independent neutral branches:
+  pressure, perpendicular diffusion, fixed-Tn limiting and Ti limiting. Each
+  feature has a converged hybrid run and short serial/OpenMP/MPI comparisons.
+- Diverted radiation off, N and N+W convergence; short N+W OpenMP comparison.
+- Diverted stored-field convergence with its own reference; limited six-equation
+  NeutralGamma OpenMP initialization and ordinary impurity-off initialization.
 
-Each command runs three stages in `mpi4_omp4`. Initialization requires finite
-valid output; `diffred` and `steady` additionally require final Newton error
-at most 2e-4. These focused checks do not compare the new transport-off state
-against the old transport-on goldens. They validate output/model/feature identity
-and convergence. `bootstrap_reference` is a separate future golden artifact.
-Routine/full profiles still select the old recipes during migration. Refresh now
-also produces the new adaptive bootstrap and, for limited geometry, the fixed
-bootstrap. The old producers remain until their dependent features are migrated.
+There are 17 layout pairs. Detailed diagnostics attach to short transport,
+short adaptive/source and NeutralGamma runs. Long cold/feature solves stay off.
+Routine-extended uses seven hybrid short neutral/radiation branches; full replaces
+these with the selected converged/parallel checks. Four-format/on–off diagnostic
+checks remain focused investigations, not additional recurring solver suites.
 
-The limited `bootstrap_fixed` workflow runs the same three stages with adaptation
-disabled and fresh analytical plasma. During refresh, it consumes the last Gmsh
-mesh retained by the new adaptive producer. The final fixed-mesh comparison
-requires matching discrete meshes and solutions within the existing cold
-comparison tolerance. The mesh is published as `mesh_bootstrap.msh`
-alongside the new references. An ordinary check uses that accepted bundled mesh,
-without running adaptive first:
-
-```bash
-python -m regression_tests check bootstrap_fixed --bundle /path/new_golden
-```
-
-Historical bundles lack the new `bootstrap_mesh` role and cannot run this check.
-The harness does not substitute their old `mesh.msh`. The full refreshed reference
-set is still being migrated; these additions do not replace existing profile
-selections or assert real convergence of the new recipes.
-
-The next feature workflows use this new transport-off `bootstrap_reference`:
-
-| Workflow | Cases | Solve | Own reference |
-| --- | --- | --- | --- |
-| `baseline_warm` | Both | Reconverge at 16 m²/s, W radiation, transport off | `reference_baseline.h5` |
-| `transport` | Both | Enable the case's transport model directly and converge | `reference_transport.h5` |
-| `transport_short` | Both | Enable transport for two Newton iterations | `reference_transport_short.h5` |
-| `stored_field` | Diverted | Converge using the stored magnetic/current fields | `reference_stored_field.h5` |
-
-These fixed-mesh branches all restart independently from `bootstrap_reference`;
-the short transport run does not restart from the converged transport result.
-Only transport branches link a transport namelist. All reuse the case's initial
-parameter template and embedded restart mesh, with explicit steady overrides.
-The stored-field reference is independent of the flux-derived-field reference.
-Converged branches require Newton error at most 2e-4; short transport requires
-finite output and uses the existing `race_step` comparison tolerances.
-
-With a bundle containing the new bootstrap artifact, an individual execution is:
-
-```bash
-python -m regression_tests run diverted_case transport_short --bundle /path/new_bundle
-```
-
-`run` checks execution/output identity; profile checks will also compare references.
-Historical bundles lack `bootstrap_reference` and cannot run these new branches.
-Refresh now produces their references after bootstrap. Current profiles remain
-unchanged until the final profile migration.
-
-The new diverted neutral and radiation branches have these dependencies:
+The shared bootstrap is `time_init -> diffred -> steady`: W radiation, transport
+off, steady diffusion 16 m²/s. Initialization requires finite valid output; the
+other stages require final Newton error ≤ 2e-4. Diffred can save coefficients 8
+after solving at 16; the steady stage explicitly restores 16 for its solve.
+Adaptation is enabled early and disabled for steady. There is no transport ramp.
 
 ```text
-bootstrap_reference (transport off, W, diffusion 16)
+bootstrap_reference (W, transport off, diffusion 16)
+  -> baseline_warm
+  -> transport / transport_short
+  -> stored_field                         diverted only
+  -> impurity_off / impurity_n / impurity_nw
   -> source_relocation -> source_reference
        -> neutral_pressure / neutral_perpendicular
        -> neutral_limiter_fixed / neutral_limiter_ti
-  -> impurity_off / impurity_n / impurity_nw
 ```
 
-Each neutral/radiation feature also has a `_short` workflow with two Newton
-iterations and a separate short reference. Both variants restart from the same
-precursor, not from each other's output. Pressure uses lambda=0.05; fixed-Tn
-limiting uses 2.5 eV; Ti limiting uses the ion temperature. Each neutral branch
-enables only its selected feature alongside source relocation. Radiation-off sets
-`impurity_radiation=false` and links no impurity namelist. The other radiation
-branches require case-owned `impurity_model_n.nml` / `impurity_model_nw.nml`;
-historical diverted bundles lack these inputs. Readiness reports them as
-user-supplied, and refresh rejects missing prerequisites before building.
+All neutral/radiation features also have `_short` variants with two Newton
+iterations and distinct references. Short and converged branches use the same
+precursor, not each other's result. Source-only output is reused directly as the
+neutral precursor; there is no duplicate restart file. Radiation-off sets the
+actual false switch and needs no species file. N/N+W namelists are case-owned
+external inputs; historical diverted bundles do not contain them.
 
-`adaptive_source_short` is a separate analytical start on the case's coarse mesh:
-one time step, two Newton iterations, source relocation and one adaptation pass,
-with W radiation and transport off. Its own reference uses direct comparison
-when meshes match and the existing interpolation tolerances otherwise. Its final
-Newton error must be finite, without requiring steady convergence. The new
-reference still needs real refinement evidence before acceptance.
+`adaptive_source_short` starts analytically on the case's coarse mesh: one time
+step, two Newton iterations and one adaptation pass with source relocation.
+`stored_field` uses stored magnetic/current fields and its own converged golden;
+ordinary workflows reconstruct from flux. No synthetic magnetic geometry is used.
 
-All these branches use existing parameter templates and comparison profiles;
-none needs a new transport namelist or duplicate restart/reference file. Refresh
-produces `source_reference` before its consumers. New profile/diagnostic placement
-and removal of the old limited feature recipes are the next migration step.
+During refresh only, limited fixed bootstrap consumes the Gmsh mesh retained by
+the new adaptive producer, never its plasma fields. Refresh compares the final
+meshes and solutions. Ordinary full checks use the accepted bundled mesh and do
+not derive fixed inputs from the current adaptive run.
 
-Full cold stages run sequentially and restart from their predecessor. The
-one-step workflows probe mesh construction and races, not convergence.
-The limited neutral-feature golden workflows all use the same accepted source-relocated restart.
-Each then enables exactly one feature: source relocation alone, neutral
-pressure, perpendicular diffusion, fixed-`Tn` limiting, or `Tn=Ti` limiting.
-The active limiter declarations always retain
-`neutral_wall_sources_in_elements=true`.
-The source-only golden keeps the strict fixed-layout tolerance. Repeated
-MPI4-by-OMP4 feature solves showed converged endpoint variation up to
-`2.90e-7` relative L2, so the other four use the measured
-`neutral_feature_same_layout` profile (`5e-7` for relative L2 and normalized
-L-infinity). A reference refresh updates the source reference but deliberately
-keeps its accepted restart fixed, so every feature continues from the same
-state.
-
-The two-Newton-iteration feature race uses a separate `1e-7` relative-L2
-profile. Repeating an identical nonlinear `mpi4_omp1` limiter cell varied by
-`7.40e-8`, while the source-only control remained near `1e-11`; the larger
-threshold avoids treating amplified parallel solver ordering as an assembly
-race. It remains five times tighter than the converged-feature profile.
-
-Tracked layouts are:
-
-| Layout | Execution |
-| --- | --- |
-| `serial_omp1` | Serial, one OpenMP thread. |
-| `serial_omp16` | Serial, sixteen OpenMP threads. |
-| `mpi4_omp1` | Four MPI ranks, one thread each. |
-| `mpi4_omp4` | Four MPI ranks, four threads each; canonical layout. |
-
-Identifiers matching `serial_ompN` or `mpiM_ompN` determine the executable,
-ranks, and threads. MPI runs bind each rank to exclusive cores.
-
-`suites.json` supplies common case/layout defaults. A suite can override them,
-select `layouts: "all"`, or request generated `relations`: `openmp` compares
-serial thread counts against one thread; `mpi` compares serial against MPI with
-one thread per rank; `hybrid` compares MPI thread counts at the same rank count;
-`all_pairs` compares every selected pair. Relations use the selected layouts
-(all registered layouts if omitted), deduplicate pairs and run each participating
-layout once. A relation with no matching pair is an error. Reference comparisons
-default to enabled for ordinary suites and disabled for relation suites;
-`reference_comparisons: true` enables both kinds of evidence together.
-
-| Profile | Coverage |
-| --- | --- |
-| `routine` (default) | Diverted hybrid warm golden, with transport_1d enabled, and one short adaptive execution smoke; diagnostics off |
-| `routine-extended` | Diverted warm golden plus short fixed/adaptive OpenMP, MPI and hybrid comparisons; detailed diagnostics on the parallel runs |
-| `full` | Extended checks, full seven-stage adaptive cold runs for both cases, limited fixed cold, and distinct limited neutral/impurity/initialization features |
-
-On the current machine with the selected existing PR08 build, one complete
-`routine` command took 24.31 seconds, excluding build time. This is measured
-evidence, not a hard performance threshold.
-
-The adaptive smoke checks solver completion and output presence. Quantitative
-field/mesh parity is covered by `parallel` in the extended profile. Full retains
-source-relocated cold initialization, pressure, perpendicular projection, both
-neutral limiter modes, NeutralGamma, stored-field compatibility and off/N/N+W
-impurity references. The ordinary warm case supplies the W reference.
-Detailed source-placement checks run on the existing short fixed/adaptive source
-suite; long cold chains default to diagnostics off. All seven cold stages remain.
-Diverted feature goldens are still a later scientific baseline task.
-
-Profiles share focused suite definitions; `full` includes `routine-extended`
-once. Use `list suites` to see the selections. `--case` selects another topology
-for a focused suite such as `warm`, `parallel`, `cold` or `fixed_cold`; profiles
-declare their own cases. `full` gets both bundles from `defaults.bundles`.
-`--bundle` is supported for a selection using one case.
-
-`cold_matrix` and `warm_parallelism` remain focused characterization checks.
-Normal parallel checks isolate OpenMP, MPI and hybrid effects with three
-relations. Golden refresh selects producer workflows directly; reference and
-restart files do not require their own suite wrappers.
+**Migration checkpoint:** these profiles require newly reviewed references;
+old transport-on goldens are not substitutes. Remaining 10d.2 work includes
+removal of stage-matrix machinery and completion of explicit refinement and
+within-suite fixed/adaptive endpoint acceptance. No new scientific results have
+been accepted merely by changing this catalog. Historical bundles remain intact
+for one-time comparisons with physically equivalent new endpoints using the
+existing comparators.
 
 ## Common tasks
 
@@ -302,7 +195,7 @@ python -m regression_tests check routine-extended --build --build-jobs 8
 
 # Focused limited checks or parallel evidence from a candidate bundle.
 python -m regression_tests check warm --case legacy_case
-python -m regression_tests check parallel --allow-candidate --bundle /path/to/candidate
+python -m regression_tests check transport_hybrid --allow-candidate --bundle /path/to/candidate
 
 # Resume the same profile and build after an interruption.
 python -m regression_tests check full --run-id overnight-01
@@ -321,8 +214,8 @@ for a focused investigation. Four-format and on/off comparisons are focused
 checks for diagnostics changes, rather than duplicate routine solver chains.
 Suites without golden comparisons validate each stage's mesh, field sizes,
 finiteness and declared Newton acceptance. Initialization and short probes require
-finite Newton values without a convergence bound; `source_cold` enforces the cold
-stage thresholds. Compact validation results are stored in the suite summary.
+finite Newton values without a convergence bound; converged cold stages enforce
+their thresholds. Compact validation results are stored in the suite summary.
 Golden producers share these checks independently of old-reference agreement.
 
 `--run-only` defers reference, convergence and diagnostic checks; build/output identity
@@ -370,14 +263,14 @@ are available; standalone debugging comparisons can lack those records.
 Preparation validates and renders an isolated run but does not launch MHDG:
 
 ```bash
-python -m regression_tests prepare legacy_case cold_step_adaptive \
+python -m regression_tests prepare diverted_case adaptive_source_short \
   --layout serial_omp16 --settings /private/path/settings.json
 ```
 
 Execute one workflow directly when debugging:
 
 ```bash
-python -m regression_tests run legacy_case cold_fixed \
+python -m regression_tests run legacy_case bootstrap_fixed \
   --layout mpi4_omp4 --run-id investigation-01 \
   --settings /private/path/settings.json
 ```
@@ -394,7 +287,7 @@ python -m regression_tests compare /path/to/completed/run
 
 # Every same-layout golden check and declared layout pair in a suite.
 python -m regression_tests compare --suite \
-  /path/to/suites/cold_matrix/legacy_case/overnight-01/suite_summary.json
+  /path/to/suites/transport_parallel/legacy_case/overnight-01/suite_summary.json
 ```
 
 Enable diagnostics on an existing suite; its normal checks also validate the
@@ -402,7 +295,7 @@ saved diagnostic output:
 
 ```bash
 python -m regression_tests check warm --diagnostics detailed --run-id warm-detailed
-python -m regression_tests check parallel --diagnostics detailed --run-id race-detailed
+python -m regression_tests check transport_hybrid --diagnostics detailed --run-id race-detailed
 ```
 
 The first command validates output presence, finite values, core units and
@@ -463,20 +356,16 @@ producer must complete, pass its declared Newton convergence checks, and produce
 structurally valid, finite fields. Available old-reference comparisons are saved
 for review; differences from an old golden do not excuse a failed producer.
 
-During migration, refresh first runs the new three-stage adaptive bootstrap
-(and the fixed bootstrap for limited), then baseline warm and both direct
-transport branches. Diverted also produces the stored-field reference.
-Limited retains the full old fixed/adaptive cold matrix across four layouts
-and all six pairs. Its canonical fixed cold result feeds the warm restart;
-subsequent warm, impurity and neutral workflows produce the respective files.
-Diverted then runs the old adaptive hybrid cold producer followed by warm
-reconvergence. The old producers
-retain their seven-stage recipes until feature/reference migration. These choices live
-in repository-owned `golden.json`; the CLI never takes a catalog path.
+Refresh runs the new adaptive bootstrap (and limited fixed bootstrap), then the
+independent feature producers shown above. It no longer runs seven-stage chains,
+old feature producers or four-layout cold matrices. Validation suites check the
+collected references and selected parallel pairs. Newly collected candidates drop
+retired source roles and historical stage references; the source bundle is never
+modified. Producer order lives in repository-owned `golden.json`.
 
 Producers pass output files directly to subsequent workflows. There are no
 intermediate candidate copies or generated settings files. After collection,
-existing warm/parallel/feature suites validate the new candidate. The shared build
+the selected baseline/parallel/feature suites validate the new candidate. The shared build
 serves all producers and validation runs. Run refreshes sequentially in a worktree
 because the build uses its solver object directory.
 
@@ -573,7 +462,7 @@ workflow before creating a candidate bundle:
 
 ```bash
 python -m regression_tests bundle readiness diverted_case \
-  --source /private/path/prepared_diverted_case --workflow warm
+  --source /private/path/prepared_diverted_case --workflow baseline_warm
 ```
 
 The report lists filenames, presence, whether each file is required or optional
@@ -589,7 +478,7 @@ sizes, checksums, contained paths and reference-matrix integrity:
 
 ```bash
 python -m regression_tests bundle validate /private/path/candidate_bundle \
-  --workflow warm
+  --workflow baseline_warm
 ```
 
 `--workflow` can be repeated on readiness, create and validate. Without it, these
@@ -604,7 +493,7 @@ Prepare external files using the reported names, then create a candidate:
 python -m regression_tests bundle create \
   --case legacy_case \
   --source /private/path/prepared_legacy_case \
-  --output /private/path/candidate_bundle --workflow warm
+  --output /private/path/candidate_bundle --workflow baseline_warm
 ```
 
 Creation copies all available declared files under `inputs/`, follows source
@@ -626,8 +515,7 @@ solver runtime data, not case-specific bundle data.
 ## Adding a parameter variant
 
 `workflows.json` defines the shared warm, fixed/adaptive cold and short-step
-procedures. Its `cold_bootstrap` and `transport_continuation` sequences compose
-the unchanged seven-stage cold recipe. Each case declares its own physical file
+procedures. Its `bootstrap` sequence contains the three cold stages. Each case declares its own physical file
 roles and selects workflows by name; `{}` uses the shared definition unchanged.
 Only workflows selected in the case are exposed, but `extends` can also name an
 unselected shared parent. Case overrides are applied before parent resolution,
@@ -653,14 +541,14 @@ that select them; common geometry/equilibrium inputs remain required.
 To adjust one stage without repeating the recipe, use `stage_overrides`:
 
 ```json
-"cold_fixed": {
+"bootstrap_adaptive": {
   "stage_overrides": {
-    "continuation_05": {"parameter_overrides": {"tNR": 1e-5}}
+    "steady": {"parameter_overrides": {"tNR": 1e-5}}
   }
 }
 ```
 
-This limited-case override also reaches its adaptive and diagnostic variants.
+Derived workflows inherit this case-specific override.
 Stage overrides are keyed by existing stage IDs and can change parameter/transport
 roles, parameter values, or the Newton check. Unknown IDs fail during loading.
 Sequences contain explicit stages; workflows may combine sequence names and
@@ -726,7 +614,7 @@ connectivity, tolerance-based coordinates, each equation in `u`, `q`, and
 Adaptive comparisons first validate both meshes and inspect coordinates,
 connectivity, polynomial order and face numbering. Matching discrete meshes use
 direct comparison of `u`, `q`, `u_tilde`, transport and magnetic data. Matching
-cold stages use `fixed_stage_reference`; final cold-versus-warm checks use
+cold stages use `fixed_stage_reference`; final bootstrap checks use
 `cold_fixed_reference`. Shared workflow declarations own these selections through
 `comparison.direct_profile` and `comparison.direct_stage_profile`.
 
@@ -742,15 +630,11 @@ Race probes require identical connectivity arrays, including node, element,
 face and boundary ordering, and matching discretization metadata. The generated
 adaptive `temp.msh` files must also be
 byte-identical, which rejects tag swaps even when the physical topology is
-unchanged. The full race matrix applies that check to every pair of tracked
-layouts before comparing `u`, `q`, and `u_tilde` with the race tolerances.
-Cold-matrix layout pairs likewise require exact final and retained meshes, then
-compare the final HDF5 solution and transport data with the cold cross-layout
-tolerances.
+unchanged. Selected parallel pairs apply this check alongside field comparisons.
+No all-pairs cold matrix is selected by the new profiles.
 
-Golden matrices keep a reference for each workflow, layout, and stage. A
-staged comparison stops at the first divergent stage. Race suites instead
-compare layout pairs produced by the same build directly.
+Stage-reference indexing remains temporarily in collection/comparison until
+10d.2 removes it. Parallel suites compare selected outputs from the same build.
 
 | Comparison | Relative L2 | Normalized Linf |
 | --- | ---: | ---: |
@@ -758,8 +642,7 @@ compare layout pairs produced by the same build directly.
 | Warm, cross layout | `5e-8` | `1e-6` |
 | One-step race probe | `5e-8` | `1e-6` |
 | Matching fixed cold stage | `2e-7` | `3e-7` |
-| Converged cold, cross layout | `3.5e-7` | `3e-7` |
-| Fixed cold final state against warm reference | `1e-5` | `1e-5` |
+| Bootstrap final state against canonical reference | `1e-5` | `1e-5` |
 | Adaptive solution | `0.05` | `0.1` |
 | Adaptive gradient | `0.25` | `0.3` |
 
@@ -768,7 +651,7 @@ absolute reference value. Fixed and race HDF5 coordinates use absolute
 tolerance `1e-12`; generated adaptive mesh files are compared byte-for-byte.
 Except for transient initialization and race probes, final Newton error must
 not exceed `2e-4`. These are
-regression limits for `legacy_case`, not physical-accuracy targets.
+regression limits, not physical-accuracy targets; new states still require scientific review.
 
 ## Harness implementation and tests
 
@@ -811,20 +694,17 @@ behavior; use real-data profiles to establish solver regression evidence.
 
 ## Limitations and scientific acceptance
 
-- Adaptive golden meshes can differ between revisions; within-build layout pairs
-  require exact meshes. Matching adaptive meshes use direct field comparisons.
-- Existing limited fixed/adaptive references have different mesh lineage (844 vs
-  846 elements). Align the fixed input with the final adaptive mesh during the
-  later accepted golden redesign, not by loosening comparison tolerances.
-- Diverted has a final golden but lacks historical per-stage references. Its cold
-  stages can be compared across layouts; a historical stage comparison needs new
-  accepted reference data. Diverted feature goldens remain future work.
-- Timing is recorded without a pass/fail threshold. Golden publication verifies
-  technical evidence; scientific acceptance requires human review.
+The new profiles need user-run convergence, feature activity, refinement and
+parallel evidence before publishing their goldens. New runtimes are unmeasured.
+Old limited fixed/adaptive meshes (844/846 elements) and the diverted fixed-mesh
+mismatch remain historical facts, not new comparison targets. New fixed mesh
+lineage is established during refresh, without modifying those bundles.
 
-Before redesigning the cold recipe or refreshing references, run `full` plus both
-cases' `cold_matrix` and `warm_parallelism` checks with unchanged accepted bundles
-and the same selected builds. Investigate failures before changing baselines.
+Old-versus-new endpoint agreement is meaningful only after verifying matching
+physical settings. Use explicit references with the existing comparators for
+migration evidence; keep that one-time pairing outside the permanent recipe.
+A reproduced golden alone does not establish correctness. Publication verifies
+technical evidence and requires an explicit human review reason/provenance.
 
 ### Inspect and clean stored runs/data
 
@@ -876,7 +756,7 @@ prints suggestions with the changed files/reasons, and executes nothing. It need
 no machine settings, solver build or external scientific bundle.
 
 A small explicit mapping in `suggest.py` connects current code owners to checks.
-For example, parallel/adaptivity changes suggest routine-extended; shared physics
+For example, parallel changes suggest routine-extended; adaptivity suggests adaptive_parallel; shared physics
 or initialization changes suggest full, including the cold chains. Shared harness
 workflow/comparison/catalog changes suggest pytest plus full real-data regression;
 helper-only changes (cleanup, suggestions, reporting, doctor, build-helper tests)

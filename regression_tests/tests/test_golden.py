@@ -89,6 +89,11 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
     manifest = json.loads(manifest_path.read_text())
     artifact = manifest['artifacts'].pop(manifest['roles'].pop('warm_restart'))
     (setup.harness.bundle / artifact['path']).unlink()
+    # Historical artifacts must not become requirements of the new candidate.
+    manifest['roles']['retired_restart'] = 'retired_restart'
+    manifest['artifacts']['retired_restart'] = dict(manifest['artifacts'][manifest['roles']['warm_reference']])
+    manifest['artifacts']['retired_restart']['path'] = 'inputs/retired.h5'
+    shutil.copy2(setup.harness.bundle / 'inputs/reference_mpi4_omp4.h5', setup.harness.bundle / 'inputs/retired.h5')
     manifest_path.write_text(json.dumps(manifest))
     original = manifest_path.read_bytes()
     machine = setup.workspace.parent / 'settings.json'
@@ -127,6 +132,9 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
     assert not any(item.is_symlink() for item in setup.output.rglob('*'))
     manifest = json.loads((setup.output / 'manifest.json').read_text())
     assert manifest['bundle_class'] == 'golden'
+    assert 'retired_restart' not in manifest['roles']
+    assert 'retired_restart' not in manifest['artifacts']
+    assert not (setup.output / 'inputs/retired.h5').exists()
     reference = setup.output / manifest['artifacts'][manifest['roles']['warm_reference']]['path']
     assert reference.read_bytes() == (warm / "outputs/result.h5").read_bytes()
     published_mesh = setup.output / manifest['artifacts'][manifest['roles']['mesh']]['path']

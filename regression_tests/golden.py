@@ -259,27 +259,25 @@ def _collect(source, candidate, source_manifest, generated, report, case):
     """Collect one candidate; later publication copies this validated bundle."""
     candidate.mkdir()
     manifest = deepcopy(source_manifest)
-    matrix_id = manifest["roles"].get("reference_matrix", "golden_matrix_index")
-    old_index = manifest["artifacts"].get(matrix_id)
-    entries = load_json(source / old_index["path"], "reference matrix")["references"] if old_index else []
-    keep = set(manifest["roles"].values()) | {item["artifact_id"] for item in entries}
+    # A complete refresh carries only current case inputs and newly produced
+    # references. Retired roles/stage matrices stay in the historical source.
+    manifest["roles"] = {role: artifact for role, artifact in manifest["roles"].items()
+                         if role in case["bundle_files"]}
+    matrix_id = "golden_matrix_index"
+    keep = set(manifest["roles"].values())
     manifest["artifacts"] = {key: value for key, value in manifest["artifacts"].items() if key in keep}
     for role, solution in generated.items():
         spec = case["bundle_files"][role]
         artifact_id = manifest["roles"].get(role, spec["artifact_id"])
         _install(candidate, manifest, artifact_id, solution, f"inputs/{spec['filename']}", spec["media_type"])
         manifest["roles"][role] = artifact_id
-    # Keep any untouched stage references from the source, replacing produced cells.
-    cells = {(item["workflow_id"], item["layout_id"], item["stage_id"]): item for item in entries}
+    cells = {}
     for result in report["producers"]:
         directory = Path(result["run_directory"])
         metadata = load_json(directory / "run_metadata.json", "producer metadata")
         for stage in metadata.get("stages", []):
             key = (result["workflow_id"], result["layout_id"], stage["stage_id"])
             artifact_id = "golden_matrix_" + "_".join(key)
-            previous = cells.get(key, {}).get("artifact_id")
-            if previous and previous != artifact_id and previous not in manifest["roles"].values():
-                manifest["artifacts"].pop(previous, None)
             relative = "references/matrix/" + "/".join(key) + ".h5"
             _install(candidate, manifest, artifact_id, Path(stage["selected_hdf5"]), relative, "application/x-hdf5")
             cells[key] = dict(zip(("workflow_id", "layout_id", "stage_id"), key), artifact_id=artifact_id)

@@ -130,7 +130,7 @@ def test_final_output_selection_tolerance_profile_and_cli(tmp_path, mode):
     write_solution(checkpoint, grouped=False, solution_offset=1.0)
     write_solution(final, grouped=False)
     (run / "run_plan.json").write_text(json.dumps({
-        "case_id": "legacy_case", "workflow_id": "warm",
+        "case_id": "legacy_case", "workflow_id": "baseline_warm",
         "layout_id": "serial_omp16" if mode == "cross_layout" else "mpi4_omp4",
     }))
     (run / "run_metadata.json").write_text(json.dumps({

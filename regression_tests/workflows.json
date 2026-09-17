@@ -53,44 +53,6 @@
           "adaptivity": false
         }
       }
-    ],
-    "cold_bootstrap": [
-      {
-        "id": "time_init",
-        "parameters": "cold_fixed_time_init_parameters",
-        "newton_check": "finite_only"
-      },
-      {
-        "id": "diffusion_reduction",
-        "parameters": "cold_fixed_diffusion_reduction_parameters"
-      }
-    ],
-    "transport_continuation": [
-      {
-        "id": "continuation_01",
-        "parameters": "cold_fixed_continuation_01_parameters",
-        "transport": "cold_fixed_continuation_01_transport_configuration"
-      },
-      {
-        "id": "continuation_02",
-        "parameters": "cold_fixed_continuation_02_parameters",
-        "transport": "cold_fixed_continuation_02_transport_configuration"
-      },
-      {
-        "id": "continuation_03",
-        "parameters": "cold_fixed_continuation_03_parameters",
-        "transport": "cold_fixed_continuation_03_transport_configuration"
-      },
-      {
-        "id": "continuation_04",
-        "parameters": "cold_fixed_continuation_04_parameters",
-        "transport": "cold_fixed_continuation_04_transport_configuration"
-      },
-      {
-        "id": "continuation_05",
-        "parameters": "cold_fixed_continuation_05_parameters",
-        "transport": "cold_fixed_continuation_05_transport_configuration"
-      }
     ]
   },
   "workflows": {
@@ -340,63 +302,6 @@
         "profile": "adaptive_reference",
         "direct_profile": "race_step"
       }
-    },
-    "warm": {
-      "type": "warm_same_state",
-      "description": "Reconverge an unchanged steady restart on the fixed mesh",
-      "parameters": "warm_parameters",
-      "transport": "transport_configuration",
-      "inputs": [
-        "geometry",
-        "equilibrium_magnetic_field",
-        "equilibrium_current_density"
-      ],
-      "impurity_configuration": "impurity_configuration",
-      "layout": "mpi4_omp4",
-      "restart": "warm_restart",
-      "reference": "warm_reference",
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "fixed_same_layout",
-        "cross_layout_profile": "fixed_cross_layout"
-      },
-      "parameter_overrides": {
-        "compute_from_flux": true
-      }
-    },
-    "cold_fixed": {
-      "type": "staged_fixed_mesh",
-      "description": "Reach the canonical state from analytical initialization on the fixed mesh",
-      "inputs": ["geometry", "equilibrium_magnetic_field", "equilibrium_current_density"],
-      "impurity_configuration": "impurity_configuration",
-      "mesh": "mesh",
-      "reference": "warm_reference",
-      "layout": "mpi4_omp4",
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "cold_fixed_reference",
-        "cross_layout_profile": "cold_fixed_reference",
-        "stage_profile": "fixed_stage_reference"
-      },
-      "parameter_overrides": {
-        "compute_from_flux": true,
-        "rest_adapt": false
-      },
-      "stages": ["cold_bootstrap", "transport_continuation"]
-    },
-    "cold_adaptive": {
-      "extends": "cold_fixed",
-      "type": "staged_adaptive_mesh",
-      "description": "Repeat the cold workflow with early-stage mesh adaptation",
-      "mesh": "coarse_mesh",
-      "comparison": {
-        "method": "mesh_independent",
-        "profile": "adaptive_reference",
-        "stage_profile": "adaptive_reference",
-        "direct_profile": "cold_fixed_reference",
-        "direct_stage_profile": "fixed_stage_reference"
-      },
-      "adaptive_stages": ["time_init", "diffusion_reduction"]
     },
     "cold_step_fixed": {
       "type": "staged_fixed_mesh",

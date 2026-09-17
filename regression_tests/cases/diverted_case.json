@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "description": "Lower-single-null transport regression case",
+  "description": "Real diverted topology: routine baseline and independent physical features",
   "reference": {
     "branch": "develop",
     "revision": "db468f73f899457bf9104055e953cf2465532750"
@@ -35,25 +35,10 @@
       "adaptive_source_short_reference": "reference_adaptive_source_short.h5",
       "impurity_n_configuration": "impurity_model_n.nml",
       "impurity_nw_configuration": "impurity_model_nw.nml",
-      "mesh": "mesh.msh",
-      "warm_parameters": "param.txt",
       "transport_configuration": "transport_model.nml",
       "impurity_configuration": "impurity_model_w.nml",
-      "warm_restart": "restart.h5",
-      "warm_reference": "reference_mpi4_omp4.h5",
       "coarse_mesh": "mesh_adaptive_initial.msh",
-      "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
-      "cold_fixed_diffusion_reduction_parameters": "param_cold_fixed_diffusion_reduction.txt",
-      "cold_fixed_continuation_01_parameters": "param_cold_fixed_continuation_01.txt",
-      "cold_fixed_continuation_02_parameters": "param_cold_fixed_continuation_02.txt",
-      "cold_fixed_continuation_03_parameters": "param_cold_fixed_continuation_03.txt",
-      "cold_fixed_continuation_04_parameters": "param_cold_fixed_continuation_04.txt",
-      "cold_fixed_continuation_05_parameters": "param_cold_fixed_continuation_05.txt",
-      "cold_fixed_continuation_01_transport_configuration": "transport_cold_fixed_continuation_01.nml",
-      "cold_fixed_continuation_02_transport_configuration": "transport_cold_fixed_continuation_02.nml",
-      "cold_fixed_continuation_03_transport_configuration": "transport_cold_fixed_continuation_03.nml",
-      "cold_fixed_continuation_04_transport_configuration": "transport_cold_fixed_continuation_04.nml",
-      "cold_fixed_continuation_05_transport_configuration": "transport_cold_fixed_continuation_05.nml"
+      "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt"
     }
   },
   "workflows": {
@@ -77,23 +62,6 @@
     "impurity_off_short": {},
     "impurity_n_short": {},
     "impurity_nw_short": {},
-    "adaptive_source_short": {},
-    "warm": {
-      "description": "Reconverge the accepted diverted state on the fixed mesh",
-      "outputs": ["warm_reference"]
-    },
-    "cold_fixed": {
-      "description": "Reach the diverted state from analytical initialization on the fixed mesh",
-      "outputs": ["warm_restart", "warm_reference"]
-    },
-    "cold_adaptive": {
-      "description": "Generate the canonical diverted state with early-stage mesh adaptation"
-    },
-    "cold_step_fixed": {
-      "description": "Run two diverted Newton iterations without adaptation"
-    },
-    "cold_step_adaptive": {
-      "description": "Run two diverted Newton iterations with one adaptation pass"
-    }
+    "adaptive_source_short": {}
   }
 }

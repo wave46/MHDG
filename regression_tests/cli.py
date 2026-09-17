@@ -227,7 +227,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         from .bundles import bundle_readiness, create_bundle, validate_bundle_root
 
         if args.action == "readiness":
-            report = bundle_readiness(args.case, args.source, workflows=args.workflow)
+            report = bundle_readiness(args.case, args.source, ROOT / "cases", workflows=args.workflow)
             reporting.readiness(report)
             return 0 if report["status"] == "ready" else 1
         if args.action == "create":

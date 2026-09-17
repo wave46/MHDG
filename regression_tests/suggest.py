@@ -14,27 +14,27 @@ RULES = (
     (("regression_tests/tests/*", "regression_tests/clean.py", "regression_tests/suggest.py",
       "regression_tests/reporting.py", "regression_tests/doctor.py", "regression_tests/build.py"),
      ("pytest",), "Harness tests, tooling or reporting; verify their Python behavior"),
-    (("regression_tests/diagnostics.py",), ("pytest", "routine-extended", "sources", "neutralgamma"),
+    (("regression_tests/diagnostics.py",), ("pytest", "routine-extended", "adaptive_parallel", "neutralgamma"),
      "Harness diagnostic checks on real parallel/source outputs, plus Python behavior"),
     (("regression_tests/*",), ("pytest", "full"),
      "Shared harness workflows, comparisons or scientific inputs; verify Python behavior and both real cases"),
     (("lib/Makefile*", "lib/Make.inc/*"), ("routine-extended",), "serial/MPI builds and parallel execution"),
-    (("src/Utils/Diagnostics/*",), ("routine-extended", "sources", "neutralgamma", "diagnostic-tests"),
+    (("src/Utils/Diagnostics/*",), ("routine-extended", "adaptive_parallel", "neutralgamma", "diagnostic-tests"),
      "diagnostic output and totals on existing parallel/source checks; output-format checker tests"),
     (("src/Models/neutral_flux_limiter.f90",), ("neutrals", "neutral_parallel"),
      "neutral limiter/projection goldens and parallel consistency"),
     (("src/Models/NGammaTiTe/impurity_radiation/*",), ("warm", "impurities"),
      "tungsten warm reference plus disabled/nitrogen/mixed-impurity references"),
     (("src/Models/NGammaTiTe/transport_1d/*",), ("routine-extended",),
-     "transport_1d warm reconvergence and short fixed/adaptive parallel checks"),
+     "direct transport activation and short transport parallel checks"),
     (("src/HDG/initialization.f90", "src/HDG/preprocess.f90", "src/InOut/read_input.f90",
       "src/MHDG.f90", "src/Convergence.f90", "src/Definitions/*", "src/Models/adimensionalization.f90",
       "src/Models/magnetic_*.f90", "src/Models/NGammaTiTe/physics.f90", "src/Models/NGammaTiTe/analytical.f90"),
      ("full",), "shared physics, initialization or convergence: both topologies, cold chains and feature coverage"),
-    (("src/Adaptivity/*",), ("routine-extended",),
+    (("src/Adaptivity/*",), ("adaptive_parallel",),
      "short adaptive execution, field and generated-mesh agreement across layouts"),
     (("src/MPI_OMP/*", "src/HDG/*", "src/LinearAlgebra/*", "src/InOut/*"), ("routine-extended",),
-     "shared assembly, ownership or I/O: warm and fixed/adaptive parallel consistency"),
+     "shared assembly, ownership or I/O: baseline and short transport parallel consistency"),
 )
 
 
@@ -74,8 +74,12 @@ def recommendations(paths, *, catalog_root=ROOT):
                 break
         else:
             unmapped.append(path)
-    # Catalog expansion owns profile membership. Suppress a smaller suggestion
-    # only when the broader one includes all of its actual case/suite selections.
+    # Full intentionally replaces the routine levels with converged features
+    # and selected parallel probes; it is not their literal set union.
+    if "full" in matched:
+        for name in ("routine", "routine-extended"):
+            matched["full"].update(matched.pop(name, {}))
+    # Catalog expansion owns membership for the remaining focused selections.
     coverage, catalog = {}, {}
     for name in matched:
         if name in {"pytest", "diagnostic-tests"}:

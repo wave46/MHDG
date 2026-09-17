@@ -1,150 +1,130 @@
 {
   "schema_version": 2,
-  "defaults": {
-    "case": "diverted_case",
-    "layout": "mpi4_omp4"
-  },
+  "defaults": {"case": "diverted_case", "layout": "mpi4_omp4"},
   "profiles": {
     "routine": {
-      "description": "Fast diverted warm golden and adaptive execution smoke",
-      "checks": [
-        {"suite": "warm"},
-        {"suite": "adaptive"}
-      ]
+      "description": "Diverted baseline and short adaptive golden; target about 30 seconds excluding builds",
+      "checks": [{"suite": "warm"}, {"suite": "adaptive"}]
     },
     "routine-extended": {
-      "description": "Diverted warm golden and fixed/adaptive parallel checks with diagnostics",
+      "description": "Diverted short feature goldens, transport parallelism and detailed diagnostics",
       "checks": [
-        {"suite": "warm"},
-        {"suite": "parallel"}
+        {"suite": "warm"}, {"suite": "adaptive_diagnostics"}, {"suite": "transport_hybrid"},
+        {"suite": "neutral_short"}, {"suite": "impurity_short"}
       ]
     },
     "full": {
-      "description": "Extended checks plus full cold runs for both topologies and distinct limited features",
-      "include": ["routine-extended"],
+      "description": "Both topologies, full bootstraps, feature convergence and focused parallel checks",
       "checks": [
-        {"suite": "cold"},
-        {"suite": "warm", "case": "legacy_case"},
-        {"suite": "cold", "case": "legacy_case"},
-        {"suite": "fixed_cold", "case": "legacy_case"},
-        {"suite": "neutrals"},
-        {"suite": "neutral_parallel"},
-        {"suite": "sources"},
-        {"suite": "source_cold"},
-        {"suite": "neutralgamma"},
-        {"suite": "impurities"},
-        {"suite": "initialization"}
+        {"suite": "bootstrap"}, {"suite": "bootstrap_limited"},
+        {"suite": "warm"}, {"suite": "warm", "case": "legacy_case"},
+        {"suite": "transport"}, {"suite": "transport", "case": "legacy_case"},
+        {"suite": "transport_hybrid"}, {"suite": "transport_parallel", "case": "legacy_case"},
+        {"suite": "adaptive_parallel"}, {"suite": "neutrals"}, {"suite": "neutral_parallel"},
+        {"suite": "impurities"}, {"suite": "mixture_parallel"}, {"suite": "stored_field"},
+        {"suite": "neutralgamma"}, {"suite": "initialization"}
       ]
     }
   },
   "suites": {
-    "bootstrap": {
-      "description": "Three-stage adaptive bootstrap convergence; candidate evidence before new goldens",
-      "workflows": ["bootstrap_adaptive"],
-      "reference_comparisons": false
-    },
-    "bootstrap_fixed": {
-      "description": "Fixed three-stage bootstrap on the accepted bundled adaptive mesh",
-      "workflows": ["bootstrap_fixed"],
-      "case": "legacy_case"
-    },
     "warm": {
-      "description": "Warm golden regression with transport_1d in the production hybrid layout",
-      "workflows": ["warm"]
+      "description": "Transport-off warm baseline: convergence and own golden",
+      "workflows": ["baseline_warm"]
     },
-    "warm_parallelism": {
-      "description": "Warm restart across serial, MPI, and OpenMP layouts",
-      "workflows": ["warm"],
-      "layouts": "all"
+    "bootstrap": {
+      "description": "Full three-stage adaptive bootstrap with stage acceptance and final golden",
+      "workflows": ["bootstrap_adaptive"]
     },
-    "parallel": {
-      "description": "Short fixed/adaptive OpenMP, MPI and hybrid consistency",
-      "workflows": ["cold_step_fixed", "cold_step_adaptive"],
-      "tolerance_profile": "race_step",
-      "relations": ["openmp", "mpi", "hybrid"],
-      "diagnostics": "detailed"
-    },
-    "cold": {
-      "description": "Full seven-stage adaptive cold regression",
-      "workflows": ["cold_adaptive"]
-    },
-    "cold_matrix": {
-      "description": "Cold workflows with golden and all-pairs layout checks",
-      "workflows": ["cold_fixed", "cold_adaptive"],
-      "tolerance_profile": "cold_cross_layout",
-      "layout_comparison_policy": "fixed_hdf5",
-      "reference_comparisons": true,
-      "relations": ["all_pairs"]
-    },
-    "neutrals": {
-      "description": "Independent source relocation, neutral pressure, projection, and limiter goldens",
-      "workflows": [
-        "warm_neutral_sources_in_elements",
-        "warm_neutral_pressure",
-        "warm_neutral_perpendicular",
-        "warm_neutral_limiter_fixed",
-        "warm_neutral_limiter_ti"
-      ],
-      "case": "legacy_case"
-    },
-    "neutral_parallel": {
-      "description": "Short parallel checks for distinct neutral features",
-      "workflows": [
-        "race_neutral_sources_in_elements",
-        "race_neutral_pressure",
-        "race_neutral_perpendicular",
-        "race_neutral_limiter_fixed",
-        "race_neutral_limiter_ti"
-      ],
-      "tolerance_profile": "neutral_feature_race_step",
-      "relations": ["openmp", "mpi", "hybrid"],
-      "case": "legacy_case"
-    },
-    "neutralgamma": {
-      "description": "One-step two-Newton-iteration NeutralGamma OpenMP and detailed-balance check",
-      "workflows": ["cold_step_neutralgamma"],
-      "tolerance_profile": "race_step",
-      "relations": ["openmp"],
+    "bootstrap_limited": {
+      "description": "Full limited adaptive and fixed bootstraps on accepted mesh inputs",
       "case": "legacy_case",
-      "diagnostics": "detailed"
-    },
-    "sources": {
-      "description": "Source-placement diagnostics on short fixed/adaptive parallel runs",
-      "workflows": ["cold_step_fixed_neutral_sources_in_elements", "cold_step_adaptive_neutral_sources_in_elements"],
-      "tolerance_profile": "race_step",
-      "relations": ["openmp", "mpi", "hybrid"],
-      "case": "legacy_case",
-      "diagnostics": "detailed"
-    },
-    "source_cold": {
-      "description": "Full source-relocated adaptive cold execution",
-      "workflows": ["cold_adaptive_neutral_sources_in_elements"],
-      "reference_comparisons": false,
-      "case": "legacy_case"
-    },
-    "impurities": {
-      "description": "Disabled, nitrogen and mixed-impurity warm goldens; tungsten is covered by warm",
-      "workflows": ["warm_impurity_off", "warm_impurity_n", "warm_impurity_nw"],
-      "case": "legacy_case"
-    },
-    "initialization": {
-      "description": "Analytical initialization and stored-field compatibility on real limited geometry",
-      "workflows": ["cold_step_impurity_off", "cold_step_stored_field"],
-      "reference_comparisons": false,
-      "case": "legacy_case",
-      "layouts": ["serial_omp1"]
-    },
-
-
-
-
-    "fixed_cold": {
-      "description": "Full seven-stage fixed-mesh cold regression",
-      "workflows": ["cold_fixed"]
+      "workflows": ["bootstrap_adaptive", "bootstrap_fixed"]
     },
     "adaptive": {
-      "description": "Short adaptive execution smoke; field/mesh parity is checked by parallel",
-      "workflows": ["cold_step_adaptive"],
+      "description": "Short adaptive source-relocation golden, diagnostics off",
+      "workflows": ["adaptive_source_short"]
+    },
+    "adaptive_diagnostics": {
+      "description": "Short adaptive source-relocation golden with detailed diagnostics",
+      "workflows": ["adaptive_source_short"],
+      "diagnostics": "detailed"
+    },
+    "adaptive_parallel": {
+      "description": "Short adaptive source-relocation golden, OpenMP/MPI and detailed diagnostics",
+      "workflows": ["adaptive_source_short"],
+      "relations": ["openmp", "mpi"],
+      "reference_comparisons": true,
+      "tolerance_profile": "race_step",
+      "layout_comparison_policy": "fixed_hdf5",
+      "diagnostics": "detailed"
+    },
+    "transport": {
+      "description": "Direct transport activation: convergence and own golden",
+      "workflows": ["transport"]
+    },
+    "transport_parallel": {
+      "description": "Short transport golden, OpenMP/MPI and detailed diagnostics",
+      "workflows": ["transport_short"],
+      "relations": ["openmp", "mpi"],
+      "reference_comparisons": true,
+      "tolerance_profile": "race_step",
+      "diagnostics": "detailed"
+    },
+    "transport_hybrid": {
+      "description": "Short transport golden, OpenMP/MPI/hybrid and detailed diagnostics",
+      "workflows": ["transport_short"],
+      "relations": ["openmp", "mpi", "hybrid"],
+      "reference_comparisons": true,
+      "tolerance_profile": "race_step",
+      "diagnostics": "detailed"
+    },
+    "neutrals": {
+      "description": "Source relocation and independent neutral features: convergence and own goldens",
+      "workflows": ["source_relocation", "neutral_pressure", "neutral_perpendicular", "neutral_limiter_fixed", "neutral_limiter_ti"]
+    },
+    "neutral_short": {
+      "description": "Short pressure, perpendicular diffusion and both limiter goldens",
+      "workflows": ["neutral_pressure_short", "neutral_perpendicular_short", "neutral_limiter_fixed_short", "neutral_limiter_ti_short"]
+    },
+    "neutral_parallel": {
+      "description": "Short neutral-feature goldens and focused OpenMP/MPI comparisons",
+      "workflows": ["neutral_pressure_short", "neutral_perpendicular_short", "neutral_limiter_fixed_short", "neutral_limiter_ti_short"],
+      "relations": ["openmp", "mpi"],
+      "reference_comparisons": true,
+      "tolerance_profile": "neutral_feature_race_step"
+    },
+    "impurities": {
+      "description": "Radiation off, N and N+W: convergence and own goldens",
+      "workflows": ["impurity_off", "impurity_n", "impurity_nw"]
+    },
+    "impurity_short": {
+      "description": "Short radiation-off, N and N+W goldens",
+      "workflows": ["impurity_off_short", "impurity_n_short", "impurity_nw_short"]
+    },
+    "mixture_parallel": {
+      "description": "Short N+W golden and OpenMP agreement",
+      "workflows": ["impurity_nw_short"],
+      "relations": ["openmp"],
+      "reference_comparisons": true,
+      "tolerance_profile": "race_step"
+    },
+    "stored_field": {
+      "description": "Stored magnetic/current fields: convergence and own golden",
+      "workflows": ["stored_field"]
+    },
+    "neutralgamma": {
+      "description": "Six-equation analytical initialization, radiation off, OpenMP and detailed diagnostics",
+      "case": "legacy_case",
+      "workflows": ["cold_step_neutralgamma"],
+      "relations": ["openmp"],
+      "tolerance_profile": "race_step",
+      "diagnostics": "detailed"
+    },
+    "initialization": {
+      "description": "Analytical initialization with impurity radiation disabled",
+      "case": "legacy_case",
+      "workflows": ["cold_step_impurity_off"],
+      "layouts": ["serial_omp1"],
       "reference_comparisons": false
     }
   }
