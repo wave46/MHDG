@@ -191,6 +191,156 @@
       "outputs": ["stored_field_reference"],
       "parameter_overrides": {"compute_from_flux": false}
     },
+    "source_relocation": {
+      "extends": "baseline_warm",
+      "description": "Converge from the transport-off bootstrap with puff and pump in elements",
+      "reference": "source_reference",
+      "outputs": ["source_reference"],
+      "parameter_overrides": {
+        "neutral_wall_sources_in_elements": true,
+        "neutralp_lambda": 0.0,
+        "neutral_perpendicular_diffusion": false,
+        "neutral_flux_limiter_mode": "off",
+        "neutral_flux_limiter_save_2d": false
+      }
+    },
+    "neutral_branch": {
+      "extends": "source_relocation",
+      "restart": "source_reference",
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "neutral_feature_same_layout",
+        "cross_layout_profile": "fixed_cross_layout"
+      }
+    },
+    "neutral_pressure": {
+      "extends": "neutral_branch",
+      "description": "Converge from the source-relocated precursor with neutral pressure",
+      "reference": "neutral_pressure_reference",
+      "outputs": ["neutral_pressure_reference"],
+      "parameter_overrides": {"neutralp_lambda": 0.05}
+    },
+    "neutral_perpendicular": {
+      "extends": "neutral_branch",
+      "description": "Converge from the source-relocated precursor with perpendicular neutral diffusion",
+      "reference": "neutral_perpendicular_reference",
+      "outputs": ["neutral_perpendicular_reference"],
+      "parameter_overrides": {"neutral_perpendicular_diffusion": true}
+    },
+    "neutral_limiter_fixed": {
+      "extends": "neutral_branch",
+      "description": "Converge from the source-relocated precursor with fixed-temperature neutral limiting",
+      "reference": "neutral_limiter_fixed_reference",
+      "outputs": ["neutral_limiter_fixed_reference"],
+      "parameter_overrides": {
+        "neutral_flux_limiter_mode": "lagged_flux_limiter",
+        "neutral_flux_limiter_tn_source": "fixed",
+        "neutral_flux_limiter_tn_eV": 2.5,
+        "neutral_flux_limiter_fs_fraction": 1.0
+      }
+    },
+    "neutral_limiter_ti": {
+      "extends": "neutral_limiter_fixed",
+      "description": "Converge from the source-relocated precursor with ion-temperature neutral limiting",
+      "reference": "neutral_limiter_ti_reference",
+      "outputs": ["neutral_limiter_ti_reference"],
+      "parameter_overrides": {
+        "neutral_flux_limiter_tn_source": "ti",
+        "neutral_flux_limiter_tn_eV": 0.0
+      }
+    },
+    "neutral_pressure_short": {
+      "extends": "neutral_pressure",
+      "description": "Run two Newton iterations enabling neutral pressure from the source-relocated precursor",
+      "reference": "neutral_pressure_short_reference",
+      "outputs": ["neutral_pressure_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "neutral_feature_race_step"}
+    },
+    "neutral_perpendicular_short": {
+      "extends": "neutral_perpendicular",
+      "description": "Run two Newton iterations enabling perpendicular diffusion from the source-relocated precursor",
+      "reference": "neutral_perpendicular_short_reference",
+      "outputs": ["neutral_perpendicular_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "neutral_feature_race_step"}
+    },
+    "neutral_limiter_fixed_short": {
+      "extends": "neutral_limiter_fixed",
+      "description": "Run two Newton iterations enabling fixed-temperature limiting from the source-relocated precursor",
+      "reference": "neutral_limiter_fixed_short_reference",
+      "outputs": ["neutral_limiter_fixed_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "neutral_feature_race_step"}
+    },
+    "neutral_limiter_ti_short": {
+      "extends": "neutral_limiter_ti",
+      "description": "Run two Newton iterations enabling ion-temperature limiting from the source-relocated precursor",
+      "reference": "neutral_limiter_ti_short_reference",
+      "outputs": ["neutral_limiter_ti_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "neutral_feature_race_step"}
+    },
+    "impurity_off": {
+      "extends": "baseline_warm",
+      "description": "Converge from the W bootstrap with impurity radiation disabled",
+      "impurity_configuration": null,
+      "reference": "impurity_off_reference",
+      "outputs": ["impurity_off_reference"],
+      "parameter_overrides": {"impurity_radiation": false}
+    },
+    "impurity_n": {
+      "extends": "baseline_warm",
+      "description": "Converge from the W bootstrap with nitrogen radiation",
+      "impurity_configuration": "impurity_n_configuration",
+      "reference": "impurity_n_reference",
+      "outputs": ["impurity_n_reference"]
+    },
+    "impurity_nw": {
+      "extends": "impurity_n",
+      "description": "Converge from the W bootstrap with nitrogen-tungsten radiation",
+      "impurity_configuration": "impurity_nw_configuration",
+      "reference": "impurity_nw_reference",
+      "outputs": ["impurity_nw_reference"]
+    },
+    "impurity_off_short": {
+      "extends": "impurity_off",
+      "description": "Run two Newton iterations disabling impurity radiation from the W bootstrap",
+      "reference": "impurity_off_short_reference",
+      "outputs": ["impurity_off_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "race_step"}
+    },
+    "impurity_n_short": {
+      "extends": "impurity_n",
+      "description": "Run two Newton iterations switching from W to nitrogen radiation",
+      "reference": "impurity_n_short_reference",
+      "outputs": ["impurity_n_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "race_step"}
+    },
+    "impurity_nw_short": {
+      "extends": "impurity_nw",
+      "description": "Run two Newton iterations switching from W to nitrogen-tungsten radiation",
+      "reference": "impurity_nw_short_reference",
+      "outputs": ["impurity_nw_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "race_step"}
+    },
+    "adaptive_source_short": {
+      "extends": "cold_step_adaptive",
+      "description": "Run one coarse-mesh time step with source relocation and one adaptation pass",
+      "layout": "mpi4_omp4",
+      "reference": "adaptive_source_short_reference",
+      "outputs": ["adaptive_source_short_reference"],
+      "parameter_overrides": {"neutral_wall_sources_in_elements": true},
+      "stage_overrides": {"single_step": {"newton_check": "finite_only"}},
+      "comparison": {
+        "method": "mesh_independent",
+        "profile": "adaptive_reference",
+        "direct_profile": "race_step"
+      }
+    },
     "warm": {
       "type": "warm_same_state",
       "description": "Reconverge an unchanged steady restart on the fixed mesh",

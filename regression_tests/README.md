@@ -181,8 +181,40 @@ python -m regression_tests run diverted_case transport_short --bundle /path/new_
 
 `run` checks execution/output identity; profile checks will also compare references.
 Historical bundles lack `bootstrap_reference` and cannot run these new branches.
-Refresh now produces their references after bootstrap. New profile placement and
-neutral/impurity branches are still being migrated; current profiles remain unchanged.
+Refresh now produces their references after bootstrap. Current profiles remain
+unchanged until the final profile migration.
+
+The new diverted neutral and radiation branches have these dependencies:
+
+```text
+bootstrap_reference (transport off, W, diffusion 16)
+  -> source_relocation -> source_reference
+       -> neutral_pressure / neutral_perpendicular
+       -> neutral_limiter_fixed / neutral_limiter_ti
+  -> impurity_off / impurity_n / impurity_nw
+```
+
+Each neutral/radiation feature also has a `_short` workflow with two Newton
+iterations and a separate short reference. Both variants restart from the same
+precursor, not from each other's output. Pressure uses lambda=0.05; fixed-Tn
+limiting uses 2.5 eV; Ti limiting uses the ion temperature. Each neutral branch
+enables only its selected feature alongside source relocation. Radiation-off sets
+`impurity_radiation=false` and links no impurity namelist. The other radiation
+branches require case-owned `impurity_model_n.nml` / `impurity_model_nw.nml`;
+historical diverted bundles lack these inputs. Readiness reports them as
+user-supplied, and refresh rejects missing prerequisites before building.
+
+`adaptive_source_short` is a separate analytical start on the case's coarse mesh:
+one time step, two Newton iterations, source relocation and one adaptation pass,
+with W radiation and transport off. Its own reference uses direct comparison
+when meshes match and the existing interpolation tolerances otherwise. Its final
+Newton error must be finite, without requiring steady convergence. The new
+reference still needs real refinement evidence before acceptance.
+
+All these branches use existing parameter templates and comparison profiles;
+none needs a new transport namelist or duplicate restart/reference file. Refresh
+produces `source_reference` before its consumers. New profile/diagnostic placement
+and removal of the old limited feature recipes are the next migration step.
 
 Full cold stages run sequentially and restart from their predecessor. The
 one-step workflows probe mesh construction and races, not convergence.

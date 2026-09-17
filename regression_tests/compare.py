@@ -128,7 +128,9 @@ def compare_completed_run(
 ) -> tuple[str, Path, dict[str, Any]]:
     """Use stage references when available, unless a final-state check is requested."""
     inputs = load_comparison_inputs(run_directory, case_dir, tolerances_path, catalog=catalog)
-    overrides = ComparisonOverrides(candidate_override, reference_override, tolerance_profile_override)
+    final_stage = inputs.workflow.get("stages", [{}])[-1]
+    overrides = ComparisonOverrides(candidate_override, reference_override, tolerance_profile_override,
+                                    final_stage.get("newton_check", "bounded"))
     explicit_final = any(value is not None for value in (
         candidate_override, reference_override, tolerance_profile_override, comparison_policy_override,
     ))

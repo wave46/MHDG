@@ -43,15 +43,25 @@ def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
 
     monkeypatch.setattr(compare, "compare_adaptive_files", fields)
     inputs = compare.load_comparison_inputs(tmp_path, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json")
-    _, report = compare.compare_run(inputs, compare.ComparisonOverrides(
-        candidate, reference, "adaptive_reference", "finite_only",
-    ))
+    inputs.workflow["stages"][-1]["newton_check"] = "finite_only"
+    monkeypatch.setattr(compare, "load_comparison_inputs", lambda *args, **kwargs: inputs)
+    _, _, report = compare.compare_completed_run(
+        tmp_path, inputs.case_directory, inputs.tolerances_path,
+        candidate_override=candidate, reference_override=reference,
+    )
     assert report["status"] == "passed"
     assert report["convergence"] == {"passed": True, "final_newton_error": 1., "maximum": None}
     assert report["tolerance_profile"]["id"] == "adaptive_reference"
     assert calls[0][:4] == (reference, candidate, fekete, 4)
     assert report["comparison_policy"] == "mesh_independent"
     assert report["method_selection"]["differences"] == ["X"]
+    inputs.workflow["stages"][-1]["newton_check"] = "bounded"
+    _, _, report = compare.compare_completed_run(
+        tmp_path, inputs.case_directory, inputs.tolerances_path,
+        candidate_override=candidate, reference_override=reference,
+    )
+    assert report["status"] == "failed"
+    assert "final Newton error exceeds tolerance" in report["failures"]
 
 
 def test_reference_points_are_deterministic_and_interior(tmp_path):
