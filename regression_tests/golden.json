@@ -8,6 +8,7 @@
     "legacy_case": {
       "producers": [
         "bootstrap_adaptive", "bootstrap_fixed",
+        "baseline_warm", "transport", "transport_short",
         {"workflow": "cold_fixed", "matrix": true},
         {"workflow": "cold_adaptive", "matrix": true},
         "warm",
@@ -23,7 +24,10 @@
       ]
     },
     "diverted_case": {
-      "producers": ["bootstrap_adaptive", "cold_adaptive", "warm"],
+      "producers": [
+        "bootstrap_adaptive", "baseline_warm", "transport", "transport_short", "stored_field",
+        "cold_adaptive", "warm"
+      ],
       "checks": ["warm_parallelism", "parallel"]
     }
   }

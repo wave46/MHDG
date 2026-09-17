@@ -156,6 +156,34 @@ The harness does not substitute their old `mesh.msh`. The full refreshed referen
 set is still being migrated; these additions do not replace existing profile
 selections or assert real convergence of the new recipes.
 
+The next feature workflows use this new transport-off `bootstrap_reference`:
+
+| Workflow | Cases | Solve | Own reference |
+| --- | --- | --- | --- |
+| `baseline_warm` | Both | Reconverge at 16 m²/s, W radiation, transport off | `reference_baseline.h5` |
+| `transport` | Both | Enable the case's transport model directly and converge | `reference_transport.h5` |
+| `transport_short` | Both | Enable transport for two Newton iterations | `reference_transport_short.h5` |
+| `stored_field` | Diverted | Converge using the stored magnetic/current fields | `reference_stored_field.h5` |
+
+These fixed-mesh branches all restart independently from `bootstrap_reference`;
+the short transport run does not restart from the converged transport result.
+Only transport branches link a transport namelist. All reuse the case's initial
+parameter template and embedded restart mesh, with explicit steady overrides.
+The stored-field reference is independent of the flux-derived-field reference.
+Converged branches require Newton error at most 2e-4; short transport requires
+finite output and uses the existing `race_step` comparison tolerances.
+
+With a bundle containing the new bootstrap artifact, an individual execution is:
+
+```bash
+python -m regression_tests run diverted_case transport_short --bundle /path/new_bundle
+```
+
+`run` checks execution/output identity; profile checks will also compare references.
+Historical bundles lack `bootstrap_reference` and cannot run these new branches.
+Refresh now produces their references after bootstrap. New profile placement and
+neutral/impurity branches are still being migrated; current profiles remain unchanged.
+
 Full cold stages run sequentially and restart from their predecessor. The
 one-step workflows probe mesh construction and races, not convergence.
 The limited neutral-feature golden workflows all use the same accepted source-relocated restart.
@@ -403,12 +431,14 @@ producer must complete, pass its declared Newton convergence checks, and produce
 structurally valid, finite fields. Available old-reference comparisons are saved
 for review; differences from an old golden do not excuse a failed producer.
 
-During migration, limited refresh first runs the new three-stage adaptive and
-fixed bootstraps. It retains the full old fixed/adaptive cold matrix across four layouts
+During migration, refresh first runs the new three-stage adaptive bootstrap
+(and the fixed bootstrap for limited), then baseline warm and both direct
+transport branches. Diverted also produces the stored-field reference.
+Limited retains the full old fixed/adaptive cold matrix across four layouts
 and all six pairs. Its canonical fixed cold result feeds the warm restart;
 subsequent warm, impurity and neutral workflows produce the respective files.
-Diverted refresh first runs the new three-stage adaptive bootstrap, then the old
-adaptive hybrid cold producer followed by warm reconvergence. The old producers
+Diverted then runs the old adaptive hybrid cold producer followed by warm
+reconvergence. The old producers
 retain their seven-stage recipes until feature/reference migration. These choices live
 in repository-owned `golden.json`; the CLI never takes a catalog path.
 

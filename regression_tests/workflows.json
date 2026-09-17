@@ -94,22 +94,10 @@
     ]
   },
   "workflows": {
-    "bootstrap_adaptive": {
-      "type": "staged_adaptive_mesh",
-      "description": "Initialize, reduce diffusion and converge at 16 m2/s with W radiation and transport off",
+    "plasma_baseline": {
       "inputs": ["geometry", "equilibrium_magnetic_field", "equilibrium_current_density"],
       "impurity_configuration": "impurity_configuration",
-      "mesh": "coarse_mesh",
-      "reference": "bootstrap_reference",
-      "outputs": ["bootstrap_reference"],
       "layout": "mpi4_omp4",
-      "comparison": {
-        "method": "mesh_independent",
-        "profile": "adaptive_reference",
-        "stage_profile": "adaptive_reference",
-        "direct_profile": "cold_fixed_reference",
-        "direct_stage_profile": "fixed_stage_reference"
-      },
       "parameter_overrides": {
         "compute_from_flux": true,
         "transport_1d": false,
@@ -119,9 +107,24 @@
         "diff_e": 16.0,
         "diff_ee": 16.0,
         "tNR": 0.0002,
-        "adaptivity": true,
         "rest_adapt": false
+      }
+    },
+    "bootstrap_adaptive": {
+      "extends": "plasma_baseline",
+      "type": "staged_adaptive_mesh",
+      "description": "Initialize, reduce diffusion and converge at 16 m2/s with W radiation and transport off",
+      "mesh": "coarse_mesh",
+      "reference": "bootstrap_reference",
+      "outputs": ["bootstrap_reference"],
+      "comparison": {
+        "method": "mesh_independent",
+        "profile": "adaptive_reference",
+        "stage_profile": "adaptive_reference",
+        "direct_profile": "cold_fixed_reference",
+        "direct_stage_profile": "fixed_stage_reference"
       },
+      "parameter_overrides": {"adaptivity": true},
       "adaptive_stages": ["time_init", "diffred"],
       "stages": ["bootstrap"]
     },
@@ -138,6 +141,55 @@
         "profile": "cold_fixed_reference",
         "stage_profile": "fixed_stage_reference"
       }
+    },
+    "baseline_warm": {
+      "extends": "plasma_baseline",
+      "type": "warm_same_state",
+      "description": "Reconverge the transport-off bootstrap with W radiation at 16 m2/s",
+      "parameters": "cold_fixed_time_init_parameters",
+      "restart": "bootstrap_reference",
+      "reference": "baseline_reference",
+      "outputs": ["baseline_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "fixed_same_layout",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
+      "parameter_overrides": {
+        "steady": true,
+        "read_gmsh": false,
+        "readMeshFromSol": true,
+        "psdtime": false,
+        "nrp": 40,
+        "adaptivity": false
+      }
+    },
+    "transport": {
+      "extends": "baseline_warm",
+      "description": "Enable transport directly from the transport-off bootstrap and converge",
+      "transport": "transport_configuration",
+      "reference": "transport_reference",
+      "outputs": ["transport_reference"],
+      "parameter_overrides": {"transport_1d": true}
+    },
+    "transport_short": {
+      "extends": "transport",
+      "description": "Run two Newton iterations enabling transport from the same transport-off bootstrap",
+      "reference": "transport_short_reference",
+      "outputs": ["transport_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "race_step",
+        "cross_layout_profile": "race_step"
+      }
+    },
+    "stored_field": {
+      "extends": "baseline_warm",
+      "description": "Converge using the stored magnetic/current fields with an independent reference",
+      "reference": "stored_field_reference",
+      "outputs": ["stored_field_reference"],
+      "parameter_overrides": {"compute_from_flux": false}
     },
     "warm": {
       "type": "warm_same_state",

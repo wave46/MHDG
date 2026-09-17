@@ -14,6 +14,9 @@
     "optional": {
       "bootstrap_reference": "reference_bootstrap.h5",
       "bootstrap_mesh": "mesh_bootstrap.msh",
+      "baseline_reference": "reference_baseline.h5",
+      "transport_reference": "reference_transport.h5",
+      "transport_short_reference": "reference_transport_short.h5",
       "mesh": "mesh.msh",
       "warm_parameters": "param.txt",
       "transport_configuration": "transport_model.nml",
@@ -52,6 +55,9 @@
   "workflows": {
     "bootstrap_adaptive": {"outputs": ["bootstrap_reference", "bootstrap_mesh"]},
     "bootstrap_fixed": {},
+    "baseline_warm": {},
+    "transport": {},
+    "transport_short": {},
     "warm": {"outputs": ["warm_reference"]},
     "warm_neutral_pressure": {
       "extends": "warm_neutral_sources_in_elements",

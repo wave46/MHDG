@@ -13,6 +13,10 @@
     },
     "optional": {
       "bootstrap_reference": "reference_bootstrap.h5",
+      "baseline_reference": "reference_baseline.h5",
+      "transport_reference": "reference_transport.h5",
+      "transport_short_reference": "reference_transport_short.h5",
+      "stored_field_reference": "reference_stored_field.h5",
       "mesh": "mesh.msh",
       "warm_parameters": "param.txt",
       "transport_configuration": "transport_model.nml",
@@ -36,6 +40,10 @@
   },
   "workflows": {
     "bootstrap_adaptive": {},
+    "baseline_warm": {},
+    "transport": {},
+    "transport_short": {},
+    "stored_field": {},
     "warm": {
       "description": "Reconverge the accepted diverted state on the fixed mesh",
       "outputs": ["warm_reference"]
