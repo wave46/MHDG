@@ -159,13 +159,13 @@ def test_offline_checks_references_pairs_and_diagnostics(tmp_path, monkeypatch, 
     pairs = Mock(return_value=[{"status": "passed"}])
     diagnostics = Mock(return_value={"status": "passed", "outputs": [], "failures": []})
     monkeypatch.setattr(suites, "compare_completed_run", compare)
-    monkeypatch.setattr(suites, "compare_layout_pairs", pairs)
+    monkeypatch.setattr(suites, "compare_suite_pairs", pairs)
     monkeypatch.setattr("regression_tests.diagnostics.check_suite", diagnostics)
-    results = [dict(workflow_id="cold_fixed", layout_id="serial_omp1", run_status="completed", run_directory=str(tmp_path))]
+    results = [dict(workflow_id="bootstrap_fixed", layout_id="serial_omp1", run_status="completed", run_directory=str(tmp_path))]
     source = tmp_path / "suite_summary.json"
     data = {"schema_version": 2, "suite_id": "example", "run_id": "example", "case_id": "legacy_case",
-            "workflow_ids": ["cold_fixed"], "reference_comparisons": True, "results": results,
-            "layout_comparisons": [{"baseline": "serial_omp1", "candidate": "serial_omp16"}], "tolerance_profile": "cold_cross_layout"}
+            "workflow_ids": ["bootstrap_fixed"], "reference_comparisons": True, "results": results,
+            "layout_comparisons": [{"baseline": "serial_omp1", "candidate": "serial_omp16"}], "tolerance_profile": "cold_fixed_reference"}
     def check():
         source.write_text(json.dumps(data))
         return suites.verify_suite(source, ROOT / "cases", ROOT / "tolerances.json")[1]
@@ -182,7 +182,7 @@ def test_offline_checks_references_pairs_and_diagnostics(tmp_path, monkeypatch, 
     assert report["status"] == "failed"
     # Individual failures must stay visible when the report also contains pairs.
     passed.update(status="failed", failures=["individual field failure"])
-    pairs.return_value = [{"workflow_id": "cold_fixed", "baseline_layout_id": "serial_omp1",
+    pairs.return_value = [{"workflow_id": "bootstrap_fixed", "baseline_layout_id": "serial_omp1",
                            "candidate_layout_id": "serial_omp16", "comparison_policy": "fixed_hdf5",
                            "status": "failed", "failures": ["parallel field failure"]}]
     report = check()
@@ -216,10 +216,18 @@ printf 'Error: %s\nOutput written to file outputs/result.h5\n' "$error"
     assert stages[0]["convergence"] == {"passed": True, "final_newton_error": 1., "maximum": None}
     assert suites.verify_suite(path, ROOT / "cases", ROOT / "tolerances.json")[1]["status"] == "passed"
     if damage == "nonconvergence":
+        from regression_tests.compare import compare_completed_run
+        def final_check():
+            return compare_completed_run(Path(first["run_directory"]), ROOT / "cases", ROOT / "tolerances.json",
+                                         reference_override=harness.bundle / "inputs/reference_mpi4_omp4.h5")[2]
+        assert final_check()["status"] == "passed"
         # An intermediate cold stage must converge even if the last stage does.
         log = Path(stages[1]["output"]).parent.parent / "stdout.log"
         log.write_text("Error: 1e-3\n")
         expected = "continued: final Newton error exceeds tolerance"
+        final = final_check()
+        assert final["status"] == "failed" and expected in final["failures"]
+        assert final["convergence"]["passed"] is False
         monkeypatch.setattr(suites, "run_cell", lambda *args: pytest.fail("reuse completed outputs"))
         assert run(harness, suite, resume=True)[1]["status"] == "failed"
     else:
@@ -236,6 +244,28 @@ printf 'Error: %s\nOutput written to file outputs/result.h5\n' "$error"
     if damage == "nonconvergence":
         completed = run_command("compare", "--suite", str(path))
         assert completed.returncode == 1 and expected in completed.stdout
+
+
+def test_suite_compares_independent_workflow_endpoints(harness):
+    harness.install_solver(SOLVER.replace('cp inputs/reference.h5', 'cp "$(dirname "$0")/seed.h5"'))
+    path = ROOT / "suites.json"
+    catalog = json.loads(path.read_text())
+    catalog["suites"]["endpoints"] = {
+        "description": "Independent cold endpoints", "workflows": ["cold_adaptive", "cold_fixed"],
+        "layouts": ["serial_omp1"], "reference_comparisons": False,
+        "workflow_comparison": ["cold_fixed", "cold_adaptive"],
+    }
+    path.write_text(json.dumps(catalog))
+    path, summary = run(harness, "endpoints")
+    assert summary["status"] == "passed"
+    pair = summary["comparisons"][0]
+    assert pair["comparison_policy"] == "fixed_hdf5"
+    assert pair["baseline_run_directory"] != pair["candidate_run_directory"]
+    with h5py.File(pair["baseline_output"], "r+") as handle:
+        handle["solution/u"][...] += 0.1
+    _, checked = suites.verify_suite(path, ROOT / "cases", ROOT / "tolerances.json", include_layout_pairs=False)
+    assert all(item["status"] == "passed" for item in checked["results"])
+    assert checked["status"] == checked["comparisons"][0]["status"] == "failed"
 
 
 def test_profile_preflights_cases_and_forwards_suite_resume(harness, monkeypatch):

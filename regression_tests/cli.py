@@ -157,7 +157,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "doctor":
         from .doctor import diagnose
 
-        return diagnose(args)
+        return diagnose(args, ROOT)
     if args.command in {"run", "prepare"}:
         from .catalog import load_layout, load_case_definition, required_builds
         from .prepare import prepare_run

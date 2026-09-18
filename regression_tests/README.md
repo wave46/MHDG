@@ -134,7 +134,7 @@ stages). It includes:
 - Diverted stored-field convergence with its own reference; limited six-equation
   NeutralGamma OpenMP initialization and ordinary impurity-off initialization.
 
-There are 17 layout pairs. Detailed diagnostics attach to short transport,
+There are 17 layout pairs and one limited fixed/adaptive endpoint comparison. Detailed diagnostics attach to short transport,
 short adaptive/source and NeutralGamma runs. Long cold/feature solves stay off.
 Routine-extended uses seven hybrid short neutral/radiation branches; full replaces
 these with the selected converged/parallel checks. Four-format/on–off diagnostic
@@ -172,13 +172,16 @@ ordinary workflows reconstruct from flux. No synthetic magnetic geometry is used
 During refresh only, limited fixed bootstrap consumes the Gmsh mesh retained by
 the new adaptive producer, never its plasma fields. Refresh compares the final
 meshes and solutions. Ordinary full checks use the accepted bundled mesh and do
-not derive fixed inputs from the current adaptive run.
+not derive fixed inputs from the current adaptive run. After both runs, the suite
+compares their endpoints directly if meshes match and interpolates otherwise.
+The adaptive short probe must increase the element count relative to its first
+recorded HDF5 output; setting an adaptation flag is not sufficient. Missing initial
+output fails this check. The same guard applies to refresh producers and saved runs.
 
 **Migration checkpoint:** these profiles require newly reviewed references;
-old transport-on goldens are not substitutes. Remaining 10d.2 work includes
-removal of stage-matrix machinery and completion of explicit refinement and
-within-suite fixed/adaptive endpoint acceptance. No new scientific results have
-been accepted merely by changing this catalog. Historical bundles remain intact
+old transport-on goldens are not substitutes. Stage-matrix machinery is removed;
+stage validity/Newton checks and final golden comparisons remain. No new scientific
+results have been accepted merely by changing this catalog. Historical bundles remain intact
 for one-time comparisons with physically equivalent new endpoints using the
 existing comparators.
 
@@ -420,8 +423,7 @@ runs/
     └── stages/...                 staged-workflow runs
 ```
 
-Comparisons write `comparison.json`, `matrix_comparison.json`, or
-`verification_summary.json`. Suite summaries are updated after every cell.
+Comparisons write `comparison.json` and suite `verification_summary.json`. Suite summaries are updated after every cell.
 
 Metadata has four owners:
 
@@ -474,7 +476,7 @@ file is present or accepted as a golden.
 Readiness is for prepared sources before creation. Use `doctor` to check an
 existing bundle as part of the selected regression setup. To validate a bundle
 independently of machine settings, use the command below; it checks recorded
-sizes, checksums, contained paths and reference-matrix integrity:
+sizes, checksums and contained paths:
 
 ```bash
 python -m regression_tests bundle validate /private/path/candidate_bundle \
@@ -614,9 +616,10 @@ connectivity, tolerance-based coordinates, each equation in `u`, `q`, and
 Adaptive comparisons first validate both meshes and inspect coordinates,
 connectivity, polynomial order and face numbering. Matching discrete meshes use
 direct comparison of `u`, `q`, `u_tilde`, transport and magnetic data. Matching
-cold stages use `fixed_stage_reference`; final bootstrap checks use
-`cold_fixed_reference`. Shared workflow declarations own these selections through
-`comparison.direct_profile` and `comparison.direct_stage_profile`.
+bootstrap endpoints use `cold_fixed_reference`; short adaptive probes use
+`race_step`. Workflow declarations own this selection through
+`comparison.direct_profile`. Intermediate stages have validity and Newton checks,
+without separate stage goldens.
 
 Only differing valid meshes use `HDG_postprocess` to interpolate conservative
 fields and gradients at deterministic interior points, with `adaptive_reference`
@@ -633,15 +636,17 @@ byte-identical, which rejects tag swaps even when the physical topology is
 unchanged. Selected parallel pairs apply this check alongside field comparisons.
 No all-pairs cold matrix is selected by the new profiles.
 
-Stage-reference indexing remains temporarily in collection/comparison until
-10d.2 removes it. Parallel suites compare selected outputs from the same build.
+There are no stage-reference indexes or producer layout matrices. Each producer
+runs once in its declared layout; selected parallel validation belongs to suites.
+Every intermediate cold stage is checked for valid finite fields, output identity
+and its declared Newton policy. Final comparison handles the final stage, so a
+converged endpoint cannot hide an invalid or nonconverged intermediate stage.
 
 | Comparison | Relative L2 | Normalized Linf |
 | --- | ---: | ---: |
 | Warm, same layout | `1e-10` | `1e-9` |
 | Warm, cross layout | `5e-8` | `1e-6` |
 | One-step race probe | `5e-8` | `1e-6` |
-| Matching fixed cold stage | `2e-7` | `3e-7` |
 | Bootstrap final state against canonical reference | `1e-5` | `1e-5` |
 | Adaptive solution | `0.05` | `0.1` |
 | Adaptive gradient | `0.25` | `0.3` |
@@ -663,8 +668,7 @@ Recorded run/report fields such as `stage_id` and `comparison_policy` describe
 execution evidence and keep their existing format.
 `config.py` owns machine JSON, build/runtime selection and environment setup. Preparation
 and suites accept resolved settings, so they do not parse configuration files.
-`bundles.py` owns manifest paths, staged-reference indexes, bundle integrity and
-publication-class checks; comparison code consumes its validated references. Shared document/
+`bundles.py` owns manifest paths, bundle integrity and publication-class checks. Shared document/
 schema I/O, file/path contracts and errors/record identifiers live in `documents.py`,
 `files.py` and `support.py`. All callers use package imports; no `tools/` import
 bridge or test path injection is needed.

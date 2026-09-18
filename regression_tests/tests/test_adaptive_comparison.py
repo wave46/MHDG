@@ -25,6 +25,7 @@ def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
     (tmp_path / "stdout.log").write_text("Error: 1.0\n")
     (tmp_path / "run_plan.json").write_text(json.dumps({
         "case_id": "legacy_case", "workflow_id": "bootstrap_adaptive", "layout_id": "mpi4_omp4",
+        "stages": [{"stage_id": "final"}],
     }))
     stage = tmp_path / "final-stage"
     stage.mkdir()
@@ -33,7 +34,7 @@ def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
     }))
     (tmp_path / "run_metadata.json").write_text(json.dumps({
         "status": "completed", "hdf5_outputs": ["candidate.h5"],
-        "stages": [{"run_directory": str(stage), "status": "completed"}],
+        "stages": [{"stage_id": "final", "run_directory": str(stage), "status": "completed"}],
     }))
     calls = []
 
@@ -43,7 +44,7 @@ def test_run_overrides_and_finite_only_convergence(tmp_path, monkeypatch):
 
     monkeypatch.setattr(compare, "compare_adaptive_files", fields)
     inputs = compare.load_comparison_inputs(tmp_path, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json")
-    inputs.workflow["stages"][-1]["newton_check"] = "finite_only"
+    inputs.workflow["stages"] = [{"id": "final", "newton_check": "finite_only"}]
     monkeypatch.setattr(compare, "load_comparison_inputs", lambda *args, **kwargs: inputs)
     _, _, report = compare.compare_completed_run(
         tmp_path, inputs.case_directory, inputs.tolerances_path,
@@ -96,7 +97,7 @@ def test_gradient_tolerances_and_point_coverage():
 
 
 @pytest.fixture
-def adaptive_run(tmp_path):
+def adaptive_run(tmp_path, monkeypatch):
     reference, candidate = tmp_path / "reference.h5", tmp_path / "candidate.h5"
     write_solution(reference)
     write_solution(candidate, grouped=False)
@@ -108,7 +109,26 @@ def adaptive_run(tmp_path):
         "status": "completed", "hdf5_outputs": [candidate.name],
     }))
     inputs = compare.load_comparison_inputs(tmp_path, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json")
+    # These file-comparison checks are independent of cold stage sequencing.
+    inputs.workflow.pop("stages")
+    monkeypatch.setattr(compare, "load_comparison_inputs", lambda *args, **kwargs: inputs)
     return inputs, reference, candidate
+
+
+def test_refinement_requires_recorded_initial_output_and_element_growth(adaptive_run):
+    inputs, initial, candidate = adaptive_run
+    inputs.workflow["require_refinement"] = True
+    inputs.metadata["hdf5_outputs"].append(initial.name)
+    (inputs.run_directory / "stdout.log").write_text(
+        f"Output written to file {initial}\nError: 1e-5\nOutput written to file {candidate}\n")
+    assert compare._check_refinement(inputs, candidate)["status"] == "failed"  # Identical meshes.
+    with h5py.File(candidate, "r+") as handle:
+        handle["Nelems"][...] = 3
+    report = compare._check_refinement(inputs, candidate)
+    assert report["status"] == "passed"
+    assert (report["initial_elements"], report["final_elements"]) == (2, 3)
+    inputs.metadata["hdf5_outputs"].remove(initial.name)
+    assert compare._check_refinement(inputs, candidate)["status"] == "failed"
 
 
 @pytest.mark.parametrize("perturbed", [False, True])
@@ -130,17 +150,6 @@ def test_matching_mesh_uses_direct_check_without_fallback(adaptive_run, monkeypa
     assert report["tolerance_profile"]["id"] == "cold_fixed_reference"
     assert "hdf5" in report and "sampling" not in report
     assert json.loads(path.read_text())["comparison_policy"] == policy
-
-
-def test_matching_stage_uses_stage_profile_and_preserves_finite_only(adaptive_run):
-    inputs, reference, candidate = adaptive_run
-    (inputs.run_directory / "stdout.log").write_text("Error: 1.0\n")
-    _, report = compare.compare_run(inputs, compare.ComparisonOverrides(
-        candidate, reference, "adaptive_reference", "finite_only", "fixed_stage_reference",
-    ))
-    assert report["status"] == "passed"
-    assert report["tolerance_profile"]["id"] == "fixed_stage_reference"
-    assert report["convergence"]["maximum"] is None
 
 
 @pytest.mark.parametrize("corruption", ["nonfinite", "index", "fractional_index", "degenerate", "order", "field_size"])
@@ -184,7 +193,7 @@ def test_face_order_is_part_of_mesh_identity_and_parallel_checks_stay_strict(ada
     assert "F" in differences and "extfaces" in differences
     monkeypatch.setattr(compare, "compare_adaptive_files", lambda *args: pytest.fail("parallel check interpolated"))
     _, report = compare.compare_run(inputs, compare.ComparisonOverrides(
-        reference=reference, tolerance_profile="cold_cross_layout",
+        reference=reference, tolerance_profile="cold_fixed_reference",
     ), policy="fixed_hdf5")
     assert report["status"] == "failed"
-    assert report["tolerance_profile"]["id"] == "cold_cross_layout"
+    assert report["tolerance_profile"]["id"] == "cold_fixed_reference"

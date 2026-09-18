@@ -8,7 +8,7 @@ from . import config
 from .support import HarnessError, BundleError
 
 
-def diagnose(args):
+def diagnose(args, catalog_root):
     failures = []
 
     def check(label, action):
@@ -34,10 +34,10 @@ def diagnose(args):
     catalog = {}
     try:
         _, checks = load_selection(
-            args.suite, config.ROOT / "suites.json", config.ROOT / "layouts.json",
-            config.ROOT / "cases", case_id=args.case, catalog=catalog,
+            args.suite, catalog_root / "suites.json", catalog_root / "layouts.json",
+            catalog_root / "cases", case_id=args.case, catalog=catalog,
         )
-        layouts = load_layouts(config.ROOT / "layouts.json", catalog=catalog)
+        layouts = load_layouts(catalog_root / "layouts.json", catalog=catalog)
         cases = list(dict.fromkeys(item["case_id"] for item in checks))
         if args.bundle and len(cases) != 1:
             raise BundleError("--bundle requires a single-case selection; configure defaults.bundles")
@@ -47,7 +47,7 @@ def diagnose(args):
     print(f"PASS catalogs: {args.suite} / {', '.join(cases)}")
     needs_interpolation = False
     for case_id in cases:
-        case = load_case_definition(case_id, config.ROOT / "cases", catalog=catalog)
+        case = load_case_definition(case_id, catalog_root / "cases", catalog=catalog)
         selected = [item for item in checks if item["case_id"] == case_id]
         needs_interpolation |= any(case["workflows"][name].get("comparison", {}).get("method") == "mesh_independent"
                                    for item in selected for name in item["workflow_ids"])
@@ -61,11 +61,11 @@ def diagnose(args):
 
         def bundle():
             root = bundle_root_from_settings(values)
-            preflight_bundles(selected, {case_id: values}, config.ROOT / "cases", catalog=catalog)
+            preflight_bundles(selected, {case_id: values}, catalog_root / "cases", catalog=catalog)
             return str(root)
 
         def runtime():
-            config.runtime_settings(values, selection_builds(selected, config.ROOT / "cases", layouts, catalog=catalog))
+            config.runtime_settings(values, selection_builds(selected, catalog_root / "cases", layouts, catalog=catalog))
             return values["MHDG_BUILD_MANIFEST"]
 
         check(f"{case_id} bundle", bundle)

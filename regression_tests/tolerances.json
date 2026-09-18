@@ -22,11 +22,6 @@
       "relative_l2_max": 5e-7,
       "normalized_linf_max": 5e-7
     },
-    "cold_cross_layout": {
-      "description": "Converged cold solutions across serial, MPI, and OpenMP layouts on identical meshes",
-      "relative_l2_max": 3.5e-7,
-      "normalized_linf_max": 3e-7
-    },
     "race_step": {
       "description": "Finite one-step output compared across layouts with identical mesh numbering",
       "newton_error_max": null,
@@ -41,13 +36,8 @@
       "relative_l2_max": 1e-7,
       "normalized_linf_max": 1e-6
     },
-    "fixed_stage_reference": {
-      "description": "Matching workflow stage and execution layout on a fixed mesh",
-      "relative_l2_max": 2e-7,
-      "normalized_linf_max": 3e-7
-    },
     "cold_fixed_reference": {
-      "description": "Cold fixed-mesh continuation compared with the warm reference",
+      "description": "Bootstrap endpoint agreement",
       "relative_l2_max": 1e-5,
       "normalized_linf_max": 1e-5
     },

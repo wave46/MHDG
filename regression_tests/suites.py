@@ -83,26 +83,22 @@ def _empty_result(workflow_id: str, layout_id: str) -> dict[str, Any]:
     }
 
 
-def compare_layout_pairs(
+def compare_suite_pairs(
     summary: dict[str, Any],
     case_directory: Path,
     tolerances_path: Path,
-    *, catalog=None,
+    *, catalog=None, include_layout_pairs=True,
 ) -> list[dict[str, Any]]:
-    """Compare every declared candidate with its same-workflow baseline."""
+    """Use the same comparator for layout pairs and a declared endpoint pair."""
     catalog = {} if catalog is None else catalog
-    return [
-        _compare_pair(
-            summary,
-            workflow_id,
-            pair,
-            case_directory,
-            tolerances_path,
-            catalog,
-        )
-        for workflow_id in summary["workflow_ids"]
-        for pair in summary["layout_comparisons"]
-    ]
+    pairs = [(workflow, pair) for workflow in summary["workflow_ids"]
+             for pair in summary.get("layout_comparisons", [])] if include_layout_pairs else []
+    if summary.get("workflow_comparison"):
+        baseline, candidate = summary["workflow_comparison"]
+        pairs.extend((candidate, {"baseline": layout, "candidate": layout, "baseline_workflow": baseline})
+                     for layout in summary["layout_ids"])
+    return [_compare_pair(summary, workflow, pair, case_directory, tolerances_path, catalog)
+            for workflow, pair in pairs]
 
 
 def _compare_pair(
@@ -115,8 +111,11 @@ def _compare_pair(
 ) -> dict[str, Any]:
     baseline_layout = pair["baseline"]
     candidate_layout = pair["candidate"]
+    baseline_workflow = pair.get("baseline_workflow", workflow_id)
+    same_workflow = baseline_workflow == workflow_id
     result = {
         "workflow_id": workflow_id,
+        "baseline_workflow_id": baseline_workflow,
         "baseline_layout_id": baseline_layout,
         "candidate_layout_id": candidate_layout,
         "baseline_run_directory": None,
@@ -129,7 +128,7 @@ def _compare_pair(
         "failures": [],
     }
     try:
-        baseline = _completed_run(summary, workflow_id, baseline_layout)
+        baseline = _completed_run(summary, baseline_workflow, baseline_layout)
         candidate = _completed_run(summary, workflow_id, candidate_layout)
         result["baseline_run_directory"] = str(baseline)
         result["candidate_run_directory"] = str(candidate)
@@ -141,20 +140,20 @@ def _compare_pair(
             tolerances_path,
             catalog=catalog,
             reference_override=reference,
-            tolerance_profile_override=summary["tolerance_profile"],
-            comparison_policy_override=summary.get("layout_comparison_policy"),
-            report_override=candidate / f"comparison_from_{baseline_layout}.json",
+            tolerance_profile_override=summary.get("tolerance_profile") if same_workflow else None,
+            comparison_policy_override=summary.get("layout_comparison_policy") if same_workflow else None,
+            report_override=candidate / f"comparison_from_{baseline_workflow}_{baseline_layout}.json",
         )
         result["comparison_policy"] = policy
         result["comparison_report"] = str(report_path)
         result["status"] = report["status"]
         result["failures"] = list(report["failures"])
-        generated_meshes = compare_generated_meshes(baseline, candidate)
+        generated_meshes = compare_generated_meshes(baseline, candidate) if same_workflow else None
         result["generated_meshes"] = generated_meshes
         if generated_meshes and not generated_meshes["passed"]:
             result["status"] = "failed"
             result["failures"].extend(generated_meshes["failures"])
-        if result["status"] == "passed":
+        if same_workflow and result["status"] == "passed":
             from .diagnostics import compare_outputs
 
             diagnostic_report = compare_outputs(reference, _selected_output(candidate))
@@ -341,7 +340,7 @@ def run_suite(
     run_id = run_id or utc_run_id()
     if not IDENTIFIER_RE.fullmatch(run_id):
         raise BundleError(f"invalid suite run identifier: {run_id}")
-    pairs = suite.get("layout_comparisons")
+    pairs = suite.get("layout_comparisons") or suite.get("workflow_comparison")
     references = suite["reference_comparisons"]
     overrides = {"balance_diagnostics_mode": suite["diagnostics"], **(parameter_overrides or {})}
     case = load_case_definition(suite["case_id"], case_directory, catalog=catalog)
@@ -366,7 +365,7 @@ def run_suite(
         "workflow_ids": suite["workflow_ids"], "layout_ids": suite["layouts"],
         "checks_enabled": compare, "parameter_overrides": overrides,
         "reference_comparisons": references,
-        **{key: suite[key] for key in ("layout_comparisons", "tolerance_profile", "layout_comparison_policy") if key in suite},
+        **{key: suite[key] for key in ("layout_comparisons", "tolerance_profile", "layout_comparison_policy", "workflow_comparison") if key in suite},
     }
     if resume:
         summary = load_json(path, "suite summary")
@@ -422,7 +421,7 @@ def run_suite(
             summary["duration_seconds"] += time.monotonic() - started
             write_json_atomic(path, summary, "suite summary")
     if pairs and compare:
-        summary["comparisons"] = compare_layout_pairs(summary, case_directory, tolerances_path, catalog=catalog)
+        summary["comparisons"] = compare_suite_pairs(summary, case_directory, tolerances_path, catalog=catalog)
     if compare:
         from .diagnostics import check_suite
 
@@ -461,8 +460,9 @@ def verify_suite(suite_summary_path, case_directory, tolerances_path, *, include
     for result in source["results"]:
         summary["results"].append(assess_result(result, case_directory, tolerances_path, references=references, catalog=catalog))
         write_json_atomic(output, summary, "verification summary")
-    if include_layout_pairs and source.get("layout_comparisons"):
-        summary["comparisons"] = compare_layout_pairs(source, case_directory, tolerances_path, catalog=catalog)
+    if (include_layout_pairs and source.get("layout_comparisons")) or source.get("workflow_comparison"):
+        summary["comparisons"] = compare_suite_pairs(source, case_directory, tolerances_path,
+                                                    catalog=catalog, include_layout_pairs=include_layout_pairs)
     from .diagnostics import check_suite
 
     summary["diagnostics"] = check_suite(source, required=False)

@@ -7,7 +7,6 @@
   "required": [
     "schema_version",
     "description",
-    "reference",
     "workflows"
   ],
   "properties": {
@@ -16,9 +15,6 @@
     },
     "description": {
       "$ref": "#/$defs/description"
-    },
-    "reference": {
-      "$ref": "#/$defs/reference"
     },
     "files": {
       "$ref": "#/$defs/files"
@@ -49,24 +45,6 @@
         "$ref": "#/$defs/identifier"
       },
       "uniqueItems": true
-    },
-    "reference": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "branch",
-        "revision"
-      ],
-      "properties": {
-        "branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "revision": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{40}$"
-        }
-      }
     },
     "files": {
       "type": "object",
@@ -164,6 +142,9 @@
         },
         "parameter_namelists": {
           "$ref": "#/$defs/parameter_namelists"
+        },
+        "require_refinement": {
+          "type": "boolean"
         }
       }
     },
@@ -183,13 +164,7 @@
         "cross_layout_profile": {
           "$ref": "#/$defs/identifier"
         },
-        "stage_profile": {
-          "$ref": "#/$defs/identifier"
-        },
         "direct_profile": {
-          "$ref": "#/$defs/identifier"
-        },
-        "direct_stage_profile": {
           "$ref": "#/$defs/identifier"
         }
       }

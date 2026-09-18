@@ -1,10 +1,6 @@
 {
   "schema_version": 2,
   "description": "Real limited topology: bootstrap, transport and analytical model checks",
-  "reference": {
-    "branch": "develop",
-    "revision": "29f442db67bac169b2616f2cbe399289d137993c"
-  },
   "files": {
     "required": {
       "geometry": "geometry.geo",

@@ -52,7 +52,6 @@ def catalog(tmp_path):
     declaration = {
         "schema_version": 2,
         "description": "An independently supplied case",
-        "reference": {"branch": "develop", "revision": "a" * 40},
         "files": {"required": {
             "mesh": "third_case.msh", "parameters": "third_case.txt",
             "transport": "third_case.nml",

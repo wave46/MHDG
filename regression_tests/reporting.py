@@ -80,19 +80,14 @@ def comparison(policy, path, report) -> None:
     if "method_selection" in report:
         print(f"method selection: {report['method_selection']['reason']}")
     status("comparison", report["status"], path)
-    if policy in {"fixed_hdf5", "mesh_independent"}:
-        files = report if policy == "fixed_hdf5" else report["files"]
-        print(f"candidate: {files['candidate']}")
-        print(f"reference: {files['reference']}")
-        print(f"tolerance profile: {report['tolerance_profile']['id']}")
-        if policy == "fixed_hdf5":
-            print_fixed_summary(report)
-        else:
-            print_adaptive_summary(report)
+    files = report if policy == "fixed_hdf5" else report["files"]
+    print(f"candidate: {files['candidate']}")
+    print(f"reference: {files['reference']}")
+    print(f"tolerance profile: {report['tolerance_profile']['id']}")
+    if policy == "fixed_hdf5":
+        print_fixed_summary(report)
     else:
-        print(f"stages checked: {report['checked_stage_count']}/{report['total_stage_count']}")
-        for failure in report["failures"]:
-            print(f"FAIL: {failure}")
+        print_adaptive_summary(report)
 
 
 def diagnostics(report, path) -> None:
@@ -227,7 +222,7 @@ def _print_results(summary):
 def print_run_summary(summary: dict[str, Any], path: Path) -> None:
     """Print execution and comparison status for every suite cell."""
     _print_results(summary)
-    _print_layout_comparisons(summary.get("comparisons", []))
+    _print_comparisons(summary.get("comparisons", []))
     _print_diagnostics(summary, path)
     print(
         f"suite {summary['status']}: {path} "
@@ -238,7 +233,7 @@ def print_run_summary(summary: dict[str, Any], path: Path) -> None:
 def print_verification_summary(summary: dict[str, Any], path: Path) -> None:
     """Print comparison status for every recorded suite cell."""
     _print_results(summary)
-    _print_layout_comparisons(summary.get("comparisons", []))
+    _print_comparisons(summary.get("comparisons", []))
     _print_diagnostics(summary, path)
     print(f"verification {summary['status']}: {path}")
 
@@ -291,13 +286,17 @@ def _print_diagnostics(summary, path):
         status("balance diagnostics", "deferred", path)
 
 
-def _print_layout_comparisons(comparisons: list[dict[str, Any]]) -> None:
+def _print_comparisons(comparisons: list[dict[str, Any]]) -> None:
     if not comparisons:
         return
     print("workflow             baseline       candidate      policy             result")
     for comparison in comparisons:
+        workflow = comparison['workflow_id']
+        baseline = comparison.get('baseline_workflow_id', workflow)
+        if baseline != workflow:
+            workflow = f"{baseline} -> {workflow}"
         print(
-            f"{comparison['workflow_id']:<20} "
+            f"{workflow:<20} "
             f"{comparison['baseline_layout_id']:<14} "
             f"{comparison['candidate_layout_id']:<14} "
             f"{str(comparison['comparison_policy'] or 'n/a'):<18} "

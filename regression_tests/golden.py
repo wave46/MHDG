@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from .catalog import load_case_definition, workflow_required_roles, load_suite_definition, layout_pairs, load_layouts, required_builds, required_case_roles
+from .catalog import load_case_definition, workflow_required_roles, load_suite_definition, load_layouts, required_builds, required_case_roles
 from .documents import load_json, write_json_atomic
 from .support import BundleError, HarnessError, utc_now, utc_run_id
 from .files import file_identity
@@ -18,7 +18,7 @@ from .compare import compare_completed_run, validate_completed_run
 from .compare_common import select_candidate
 from .execute import execute_prepared, reusable_outputs
 from .prepare import prepare_run
-from .suites import compare_layout_pairs, run_suite
+from .suites import run_suite
 
 ROOT = Path(__file__).resolve().parent
 
@@ -31,19 +31,14 @@ def _recipe(case_id, root, catalog):
         raise BundleError(f"no golden producers declared for {case_id}")
     layouts = load_layouts(root / "layouts.json", catalog=catalog)
     producers = []
-    for entry in declaration["producers"]:
-        entry = {"workflow": entry} if isinstance(entry, str) else entry
-        name = entry["workflow"]
+    for name in declaration["producers"]:
         if name not in case["workflows"]:
             raise BundleError(f"unknown producer workflow: {name}")
         workflow = case["workflows"][name]
         canonical = workflow["layout"]
-        selected = list(layouts) if entry.get("matrix") else [canonical]
         if canonical not in layouts:
             raise BundleError(f"unknown producer layout: {canonical}")
-        producers.append({"workflow": name, "layouts": selected,
-                          "roles": workflow.get("outputs", []), "canonical": canonical,
-                          "matrix": document["matrix"] if entry.get("matrix") else None})
+        producers.append({"workflow": name, "layout": canonical, "roles": workflow.get("outputs", [])})
     if not producers or len({item["workflow"] for item in producers}) != len(producers):
         raise BundleError("golden producers must be nonempty and unique")
     checks = [{"suite_id": name, **load_suite_definition(name, root / "suites.json", root / "layouts.json",
@@ -51,7 +46,7 @@ def _recipe(case_id, root, catalog):
               for name in declaration["checks"]]
     if not checks or len(set(declaration["checks"])) != len(checks):
         raise BundleError("golden checks must be nonempty and unique")
-    requirements = set().union(*(required_builds(case, [item["workflow"]], [layouts[name] for name in item["layouts"]])
+    requirements = set().union(*(required_builds(case, [item["workflow"]], [layouts[item["layout"]]])
                                  for item in producers))
     for check in checks:
         requirements.update(required_builds(case, check["workflow_ids"], [layouts[name] for name in check["layouts"]]))
@@ -117,48 +112,37 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
         generated = {}
         mesh_sources = {}
         for producer in producers:
-            results = []
-            for layout in producer["layouts"]:
-                name = producer["workflow"]
-                print(f"producer: {name} / {layout}", flush=True)
-                prepared = prepare_run(values, case_id, name, layout, root / "cases", root / "layouts.json",
-                                       run_id, validate_bundle=False,
-                                       requested_overrides={"balance_diagnostics_mode": "off"},
-                                       artifact_overrides=generated, require_reference=False, catalog=catalog, manifest=manifest)
-                result = {"workflow_id": name, "layout_id": layout, "run_directory": str(prepared.path),
-                          "status": "running", "run_status": "running"}
-                report["producers"].append(result)
-                write_json_atomic(path, report, "refresh report")
-                execution = execute_prepared(prepared, values)
-                result.update(run_status=execution.status, status=execution.status)
-                _validate_producer(result, root, catalog)
-                mesh_source = mesh_sources.get(case["workflows"][name].get("mesh"))
-                if mesh_source:
-                    result["mesh_handoff"] = _check_mesh_handoff(result, mesh_source, root, catalog)
-                result["status"] = "passed"
-                result["old_reference"] = _old_reference(result, source, manifest, case, root, catalog)
-                results.append(result)
-                write_json_atomic(path, report, "refresh report")
-            if producer["matrix"]:
-                matrix = producer["matrix"]
-                pairs = layout_pairs(load_layouts(root / "layouts.json", catalog=catalog), matrix["relations"])
-                comparisons = compare_layout_pairs({**matrix, "workflow_ids": [name], "results": results,
-                                                    "layout_comparisons": pairs}, root / "cases", root / "tolerances.json", catalog=catalog)
-                report.setdefault("parallel_checks", []).extend(comparisons)
-                if any(item["status"] != "passed" for item in comparisons):
-                    raise BundleError(f"producer parallel comparison failed: {name}")
-            canonical = next(item for item in results if item["layout_id"] == producer["canonical"])
-            directory = Path(canonical["run_directory"])
+            layout = producer["layout"]
+            name = producer["workflow"]
+            print(f"producer: {name} / {layout}", flush=True)
+            prepared = prepare_run(values, case_id, name, layout, root / "cases", root / "layouts.json",
+                                   run_id, validate_bundle=False,
+                                   requested_overrides={"balance_diagnostics_mode": "off"},
+                                   artifact_overrides=generated, require_reference=False, catalog=catalog, manifest=manifest)
+            result = {"workflow_id": name, "layout_id": layout, "run_directory": str(prepared.path),
+                      "status": "running", "run_status": "running"}
+            report["producers"].append(result)
+            write_json_atomic(path, report, "refresh report")
+            execution = execute_prepared(prepared, values)
+            result.update(run_status=execution.status, status=execution.status)
+            _validate_producer(result, root, catalog)
+            mesh_source = mesh_sources.get(case["workflows"][name].get("mesh"))
+            if mesh_source:
+                result["mesh_handoff"] = _check_mesh_handoff(result, mesh_source, root, catalog)
+            result["status"] = "passed"
+            result["old_reference"] = _old_reference(result, source, manifest, case, root, catalog)
+            write_json_atomic(path, report, "refresh report")
+            directory = Path(result["run_directory"])
             for role in producer["roles"]:
                 if case["bundle_files"][role]["media_type"] == "application/x-gmsh":
                     try:
                         mesh = _generated_mesh(directory)
                     except HarnessError:
-                        canonical["status"] = "failed"
+                        result["status"] = "failed"
                         raise
                     generated[role] = mesh
                     mesh_sources[role] = directory
-                    canonical.setdefault("generated_meshes", {})[role] = _record(mesh, workspace)
+                    result.setdefault("generated_meshes", {})[role] = _record(mesh, workspace)
                 else:
                     generated[role] = _solution(directory)
             write_json_atomic(path, report, "refresh report")
@@ -239,9 +223,8 @@ def _old_reference(result, source, manifest, case, root, catalog):
     if reference is None or not reference.is_file():
         return {"status": "unavailable"}
     try:
-        use_matrix = bool(workflow.get("stages") and "reference_matrix" in manifest["roles"])
         _, path, report = compare_completed_run(directory, root / "cases", root / "tolerances.json",
-                                                reference_override=None if use_matrix else reference,
+                                                reference_override=reference,
                                                 report_override=directory / "old_reference.json", catalog=catalog)
         return {"status": report["status"], "report": str(path)}
     except HarnessError as exc:
@@ -263,7 +246,6 @@ def _collect(source, candidate, source_manifest, generated, report, case):
     # references. Retired roles/stage matrices stay in the historical source.
     manifest["roles"] = {role: artifact for role, artifact in manifest["roles"].items()
                          if role in case["bundle_files"]}
-    matrix_id = "golden_matrix_index"
     keep = set(manifest["roles"].values())
     manifest["artifacts"] = {key: value for key, value in manifest["artifacts"].items() if key in keep}
     for role, solution in generated.items():
@@ -271,27 +253,6 @@ def _collect(source, candidate, source_manifest, generated, report, case):
         artifact_id = manifest["roles"].get(role, spec["artifact_id"])
         _install(candidate, manifest, artifact_id, solution, f"inputs/{spec['filename']}", spec["media_type"])
         manifest["roles"][role] = artifact_id
-    cells = {}
-    for result in report["producers"]:
-        directory = Path(result["run_directory"])
-        metadata = load_json(directory / "run_metadata.json", "producer metadata")
-        for stage in metadata.get("stages", []):
-            key = (result["workflow_id"], result["layout_id"], stage["stage_id"])
-            artifact_id = "golden_matrix_" + "_".join(key)
-            relative = "references/matrix/" + "/".join(key) + ".h5"
-            _install(candidate, manifest, artifact_id, Path(stage["selected_hdf5"]), relative, "application/x-hdf5")
-            cells[key] = dict(zip(("workflow_id", "layout_id", "stage_id"), key), artifact_id=artifact_id)
-    if cells:
-        index = {"schema_version": 2, "created_utc": utc_now(), "case_id": case["case_id"],
-                 "suite_id": "golden_refresh", "suite_run_id": report["run_id"],
-                 "source_bundle": {key: source_manifest[key] for key in ("bundle_id", "bundle_version")},
-                 "tracked_reference": {"branch": case["reference_branch"], "revision": case["reference_revision"]},
-                 "references": list(cells.values())}
-        path = candidate / "references/matrix/index.json"
-        write_json_atomic(path, index, "reference matrix")
-        manifest["artifacts"][matrix_id] = {"path": path.relative_to(candidate).as_posix(),
-                                            **file_identity(path), "media_type": "application/json"}
-        manifest["roles"]["reference_matrix"] = matrix_id
     for artifact_id, artifact in list(manifest["artifacts"].items()):
         target = candidate / artifact["path"]
         if target.exists():
@@ -326,7 +287,7 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         _verify_record(catalog_root, record)
     catalog = {}
     case, producers, checks, _ = _recipe(report["case_id"], catalog_root, catalog)
-    expected = [(item["workflow"], layout) for item in producers for layout in item["layouts"]]
+    expected = [(item["workflow"], item["layout"]) for item in producers]
     if [(item["workflow_id"], item["layout_id"]) for item in report["producers"]] != expected:
         raise BundleError("refresh is missing required producers")
     if [item["suite"] for item in report["checks"]] != [check["suite_id"] for check in checks]:
@@ -342,8 +303,6 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
             raise BundleError("producer has no successful recorded validation")
         for record in item.get("generated_meshes", {}).values():
             _verify_record(workspace, record)
-    if any(item["status"] != "passed" for item in report.get("parallel_checks", [])):
-        raise BundleError("producer parallel checks failed")
     for check in report["checks"]:
         summary = load_json(artifact_path(workspace, check["summary"], "check summary"), "check summary")
         if check["status"] != "passed" or summary["status"] != "passed":

@@ -34,7 +34,6 @@ def setup(tmp_path, monkeypatch):
         workflows['workflows'][name]['layout'] = 'serial_omp1'
     workflows['workflows']['cold_fixed'].pop('reference')
     (root / 'workflows.json').write_text(json.dumps(workflows))
-    (root / 'layouts.json').write_text(json.dumps({'schema_version': 2, 'layouts': ['serial_omp1', 'serial_omp16']}))
     (root / 'suites.json').write_text(json.dumps({
         'schema_version': 2, 'defaults': {'case': 'legacy_case', 'layout': 'serial_omp1'},
         'suites': {'warm': {'description': 'Recheck collected reference', 'workflows': ['warm']}}}))
@@ -61,9 +60,7 @@ def mesh_producers(setup):
     workflows['workflows']['cold_fixed']['outputs'] = []
     path.write_text(json.dumps(workflows))
     (setup.root / 'golden.json').write_text(json.dumps({
-        'matrix': {'relations': ['all_pairs'], 'tolerance_profile': 'cold_cross_layout',
-                   'layout_comparison_policy': 'fixed_hdf5'},
-        'cases': {'legacy_case': {'producers': [{'workflow': 'cold_adaptive', 'matrix': True}, 'cold_fixed', 'warm'],
+        'cases': {'legacy_case': {'producers': ['cold_adaptive', 'cold_fixed', 'warm'],
                                   'checks': ['warm']}}}))
     # Known files from a tiny executable; this fixture does not simulate meshing.
     return SOLVER + '''
@@ -104,7 +101,6 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
     assert report['status'] == 'ready' and not setup.output.exists()
     setup.build.assert_called_once()
     assert setup.build.call_args.kwargs['requirements'] == {('NGammaTiTeNeutral', 'serial')}
-    assert report['parallel_checks'] and all(item['status'] == 'passed' for item in report['parallel_checks'])
     assert report['producers'][0]['old_reference']['status'] == 'unavailable'
     assert report['producers'][-1]['old_reference']['status'] == 'failed'
     warm = Path(report['producers'][-1]['run_directory'])
@@ -135,6 +131,8 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
     assert 'retired_restart' not in manifest['roles']
     assert 'retired_restart' not in manifest['artifacts']
     assert not (setup.output / 'inputs/retired.h5').exists()
+    assert 'reference_matrix' not in manifest['roles']
+    assert not (setup.output / 'references').exists()
     reference = setup.output / manifest['artifacts'][manifest['roles']['warm_reference']]['path']
     assert reference.read_bytes() == (warm / "outputs/result.h5").read_bytes()
     published_mesh = setup.output / manifest['artifacts'][manifest['roles']['mesh']]['path']

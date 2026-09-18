@@ -1,4 +1,4 @@
-"""Compare completed workflows and their recorded cold-stage references."""
+"""Validate workflow stages and compare final states and selected run pairs."""
 
 from __future__ import annotations
 
@@ -6,16 +6,17 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+import h5py
+
 from .catalog import load_case_definition
-from .bundles import ReferenceMatrix, load_reference_matrix
 from .documents import load_json, write_json_atomic
-from .support import BundleError, ComparisonError, utc_now
-from .files import file_identity, recorded_directory, recorded_file, require_directory
+from .support import ComparisonError, utc_now
+from .files import file_identity, recorded_file, require_directory
 from .compare_adaptive import compare_adaptive_files, mesh_differences
-from .compare_fixed import compare_hdf5_files, check_output_contract, validate_solution_file
+from .compare_fixed import compare_hdf5_files, check_output_contract, validate_solution_file, required_scalar
 from .execute import final_execution
 from .compare_common import (
-    NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
+    OUTPUT_RE, NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
     load_fixed_tolerances, load_tolerance_catalog, read_newton_convergence, resolve_run_file, select_candidate,
 )
 
@@ -38,7 +39,6 @@ class ComparisonOverrides:
     reference: Path | None = None
     tolerance_profile: str | None = None
     newton_check: NewtonCheck = "bounded"
-    direct_tolerance_profile: str | None = None
 
 
 def load_comparison_inputs(
@@ -87,24 +87,6 @@ def _load_completed_metadata(run_directory: Path) -> dict[str, Any]:
     return metadata
 
 
-def load_plan_matrix(
-    plan: dict[str, Any],
-    case: dict[str, Any],
-    case_directory: Path,
-) -> ReferenceMatrix | None:
-    """Load the run's reference matrix and confirm its bundle identity."""
-    bundle = plan.get("bundle")
-    if not isinstance(bundle, dict) or not isinstance(bundle.get("root"), str):
-        raise BundleError("run plan has no bundle identity")
-    matrix = load_reference_matrix(Path(bundle["root"]), case["case_id"], case_directory)
-    if matrix is not None and (
-        bundle.get("bundle_id") != matrix.bundle_id
-        or bundle.get("bundle_version") != matrix.bundle_version
-    ):
-        raise BundleError("run and golden-matrix bundle identities differ")
-    return matrix
-
-
 def _validated_stage_records(
     plan: dict[str, Any],
     workflow: dict[str, Any],
@@ -126,19 +108,11 @@ def compare_completed_run(
     report_override: Path | None = None,
     *, catalog=None,
 ) -> tuple[str, Path, dict[str, Any]]:
-    """Use stage references when available, unless a final-state check is requested."""
+    """Validate cold stages and compare the final state with one explicit reference."""
     inputs = load_comparison_inputs(run_directory, case_dir, tolerances_path, catalog=catalog)
     final_stage = inputs.workflow.get("stages", [{}])[-1]
     overrides = ComparisonOverrides(candidate_override, reference_override, tolerance_profile_override,
                                     final_stage.get("newton_check", "bounded"))
-    explicit_final = any(value is not None for value in (
-        candidate_override, reference_override, tolerance_profile_override, comparison_policy_override,
-    ))
-    if inputs.workflow.get("stages") and not explicit_final:
-        matrix = load_plan_matrix(inputs.plan, inputs.case, inputs.case_directory)
-        if matrix is not None:
-            path, report = compare_reference_matrix(inputs, matrix, report_override)
-            return "reference_matrix", path, report
     policy = comparison_policy_override or inputs.workflow.get("comparison", {}).get("method")
     path, report = compare_run(inputs, overrides, report_override, policy=policy)
     return report["comparison_policy"], path, report
@@ -164,7 +138,7 @@ def compare_run(
         else:
             policy = "fixed_hdf5"
             selection["reason"] = "matching discrete meshes"
-            profile_override = (overrides.direct_tolerance_profile or overrides.tolerance_profile
+            profile_override = (overrides.tolerance_profile
                                 or comparison.get("direct_profile"))
             if not profile_override:
                 raise ComparisonError("adaptive workflow must declare a direct comparison profile")
@@ -202,8 +176,15 @@ def compare_run(
         )
         details = {key: value for key, value in field_report.items() if key != "tolerances"}
     convergence = read_newton_convergence(inputs.run_directory / "stdout.log", tolerances["newton_error_max"])
+    preceding = _validate_outputs(inputs, _newton_checks(inputs, before_final=True))
+    refinement = _check_refinement(inputs, candidate)
+    protected.extend(Path(stage["output"]) for stage in preceding["stages"] if stage["output"])
+    if refinement.get("initial_output"):
+        protected.append(Path(refinement["initial_output"]))
     failures = list(field_report["failures"])
     failures.extend(saved_output_contract(inputs, candidate)["failures"])
+    failures.extend(preceding["failures"])
+    failures.extend(refinement.get("failures", []))
     if convergence.failure is not None:
         failures.append(convergence.failure)
     report = {
@@ -215,64 +196,14 @@ def compare_run(
         "case_id": inputs.plan["case_id"], "workflow_id": inputs.plan["workflow_id"],
         "layout_id": inputs.plan["layout_id"],
         "tolerance_profile": {"id": profile_id, **tolerances},
-        "convergence": convergence.as_report(), "failures": failures,
+        "convergence": {**convergence.as_report(),
+                        "passed": convergence.passed and preceding["convergence"]["passed"]},
+        "stages": preceding["stages"], "refinement": refinement, "failures": failures,
     }
     output = (report_path or inputs.run_directory / "comparison.json").expanduser().resolve()
     if output in {path.expanduser().resolve() for path in protected}:
         raise ComparisonError("comparison report cannot replace a comparison input")
     write_json_atomic(output, report, "comparison report")
-    return output, report
-
-
-def compare_reference_matrix(
-    context: ComparisonInputs, matrix: ReferenceMatrix, report_override: Path | None = None,
-) -> tuple[Path, dict[str, Any]]:
-    """Check the recorded stages in order, stopping at the first divergent stage."""
-    comparison = context.workflow["comparison"]
-    stages = _validated_stage_records(context.plan, context.workflow, context.metadata)
-    reports = []
-    convergence = []
-    failures = []
-    for stage, definition in zip(stages, context.workflow["stages"]):
-        stage_id = stage["stage_id"]
-        if stage.get("status") != "completed":
-            raise ComparisonError(f"stage {stage_id} did not complete")
-        directory = recorded_directory(stage.get("run_directory"), "stage run")
-        candidate = recorded_file(stage.get("selected_hdf5"), "stage result")
-        reference = matrix.reference_for(context.plan["workflow_id"], context.plan["layout_id"], stage_id)
-        inputs = load_stage_inputs(context, directory)
-        overrides = ComparisonOverrides(
-            candidate, reference, comparison.get("stage_profile"), definition["newton_check"],
-            comparison.get("direct_stage_profile"),
-        )
-        path, report = compare_run(
-            inputs, overrides, directory / "comparison.json", policy=comparison["method"],
-        )
-        convergence.append(report["convergence"]["passed"])
-        reports.append({
-            "stage_id": stage_id, "status": report["status"], "comparison_report": str(path),
-            "reference": str(reference), "candidate": str(candidate), "failures": report["failures"],
-            "comparison_policy": report["comparison_policy"],
-        })
-        if report["status"] != "passed":
-            failures = [f"{stage_id}: {failure}" for failure in report["failures"] or ["comparison failed"]]
-            break
-    report = {
-        "schema_version": 2, "created_utc": utc_now(),
-        "status": "passed" if not failures and len(reports) == len(stages) else "failed",
-        "run_directory": str(context.run_directory), "case_id": context.case["case_id"],
-        "workflow_id": context.plan["workflow_id"], "layout_id": context.plan["layout_id"],
-        "comparison_policy": "reference_matrix", "checked_stage_count": len(reports),
-        "total_stage_count": len(stages), "first_failed_stage": reports[-1]["stage_id"] if failures else None,
-        "stages": reports, "failures": failures,
-        "convergence": {"passed": False if False in convergence else True if len(reports) == len(stages) else None},
-    }
-    output = (report_override or context.run_directory / "matrix_comparison.json").resolve()
-    reserved = {Path(stage[name]).resolve() for stage in reports
-                for name in ("candidate", "reference", "comparison_report")}
-    if output in reserved:
-        raise ComparisonError("matrix report cannot replace a stage artifact")
-    write_json_atomic(output, report, "matrix report")
     return output, report
 
 
@@ -318,7 +249,7 @@ def _generated_meshes(run_directory: Path) -> dict[str, Path]:
 
 
 
-def _newton_checks(inputs):
+def _newton_checks(inputs, *, before_final=False):
     workflow = inputs.workflow
     definitions = workflow.get("stages", [{"newton_check": "bounded"}])
     records = _validated_stage_records(inputs.plan, workflow, inputs.metadata) if workflow.get("stages") else [
@@ -326,6 +257,10 @@ def _newton_checks(inputs):
     ]
     if any(record.get("status") != "completed" for record in records):
         raise ComparisonError("workflow has incomplete stages")
+    if before_final:
+        records, definitions = records[:-1], definitions[:-1]
+    if not records:
+        return []
     maximum = _stage_newton_maximum(workflow, inputs.plan["layout_id"], inputs.tolerances_path, catalog=inputs.catalog)
     return [(record, read_newton_convergence(
         Path(record["run_directory"]) / "stdout.log",
@@ -336,7 +271,17 @@ def _newton_checks(inputs):
 def validate_completed_run(run_directory, case_directory, tolerances_path, *, catalog=None):
     """Validate outputs and stage convergence without agreement with a reference."""
     inputs = load_comparison_inputs(run_directory, case_directory, tolerances_path, catalog=catalog)
-    checks = _newton_checks(inputs)
+    report = _validate_outputs(inputs, _newton_checks(inputs))
+    output = report["stages"][-1]["output"]
+    refinement = _check_refinement(inputs, Path(output)) if output else {}
+    report["refinement"] = refinement
+    report["failures"].extend(refinement.get("failures", []))
+    report["status"] = "failed" if report["failures"] else "passed"
+    return report
+
+
+def _validate_outputs(inputs, checks):
+    """Validate recorded stages once; a final field comparison owns its own output."""
     stages, failures = [], []
     for record, convergence in checks:
         directory = Path(record["run_directory"])
@@ -359,6 +304,32 @@ def validate_completed_run(run_directory, case_directory, tolerances_path, *, ca
             "convergence": {"passed": all(check.passed for _, check in checks)}}
 
 
+def _check_refinement(inputs, candidate):
+    """Require an element-count increase over the recorded pre-adaptation output."""
+    if not inputs.workflow.get("require_refinement"):
+        return {}
+    directory, metadata = final_execution(inputs.run_directory, inputs.metadata)
+    report = {"status": "failed", "failures": []}
+    try:
+        logged = OUTPUT_RE.findall((directory / "stdout.log").read_text())
+        if not logged:
+            raise ComparisonError("missing initial output for refinement check")
+        initial = recorded_file(logged[0].strip(), "initial refinement output", directory)
+        recorded = {recorded_file(path, "HDF5 output", directory) for path in metadata["hdf5_outputs"]}
+        if initial not in recorded or initial == candidate.resolve():
+            raise ComparisonError("refinement needs a separate recorded initial output")
+        with h5py.File(initial, "r") as first, h5py.File(candidate, "r") as last:
+            before = int(required_scalar(first, "mesh", "Nelems"))
+            after = int(required_scalar(last, "mesh", "Nelems"))
+        report.update(initial_output=str(initial), initial_elements=before, final_elements=after)
+        if before <= 0 or after <= before:
+            raise ComparisonError("adaptive probe did not increase the element count")
+        report["status"] = "passed"
+    except (OSError, KeyError, ValueError, TypeError) as exc:
+        report["failures"].append(str(exc))
+    return report
+
+
 def _stage_newton_maximum(
     workflow: dict[str, Any],
     layout_id: str,
@@ -366,19 +337,18 @@ def _stage_newton_maximum(
     *, catalog=None,
 ) -> float | None:
     comparison = workflow.get("comparison", {})
-    profile = comparison.get("stage_profile")
     if comparison.get("method") == "fixed_hdf5":
         _, tolerances = load_fixed_tolerances(
             tolerances_path,
             workflow,
             layout_id,
-            profile, catalog=catalog,
+            None, catalog=catalog,
         )
     else:
         _, tolerances = load_adaptive_tolerances(
             tolerances_path,
             workflow,
-            profile, catalog=catalog,
+            None, catalog=catalog,
         )
     return tolerances["newton_error_max"]
 

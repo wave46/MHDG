@@ -98,13 +98,12 @@ def write_catalog(root):
                        "impurity_configuration": "impurity_configuration", "outputs": ["warm_restart"],
                        "reference": "warm_reference", "stages": stages,
                        "parameter_overrides": {"compute_from_flux": True, "rest_adapt": False},
-                       "comparison": {"method": "fixed_hdf5", "profile": "cold_fixed_reference", "stage_profile": "fixed_stage_reference"}},
+                       "comparison": {"method": "fixed_hdf5", "profile": "cold_fixed_reference"}},
         "cold_adaptive": {"extends": "cold_fixed", "type": "staged_adaptive_mesh", "mesh": "coarse_mesh",
                           "adaptive_stages": ["initial", "continued"], "outputs": [],
-                          "comparison": {"method": "mesh_independent", "profile": "adaptive_reference",
-                                         "stage_profile": "adaptive_reference", "direct_stage_profile": "fixed_stage_reference"}},
+                          "comparison": {"method": "mesh_independent", "profile": "adaptive_reference", "direct_profile": "cold_fixed_reference"}},
         "cold_step_fixed": {"extends": "cold_fixed", "layout": "serial_omp1", "stages": stages[:1],
-                            "outputs": [], "comparison": {"method": "fixed_hdf5", "profile": "race_step", "stage_profile": "race_step"}},
+                            "outputs": [], "comparison": {"method": "fixed_hdf5", "profile": "race_step"}},
         "cold_step_adaptive": {"extends": "cold_step_fixed", "type": "staged_adaptive_mesh", "adaptive_stages": ["initial"]},
         "cold_step_neutralgamma": {"extends": "cold_step_fixed", "model": "NGammaTiTeNeutralGamma",
                                    "impurity_configuration": None,
@@ -125,7 +124,7 @@ def write_catalog(root):
                                  "full": {"description": "Mixed models", "include": ["routine-extended"], "checks": [{"suite": "neutralgamma"}]}}}}
     for case in ("legacy_case", "diverted_case"):
         documents[f"cases/{case}.json"] = {"schema_version": 2, "description": "Mechanics fixture",
-            "reference": {"branch": "test", "revision": "a" * 40}, "files": {"required": required, "optional": optional},
+            "files": {"required": required, "optional": optional},
             "workflows": {name: {} for name in workflows}}
     for name, document in documents.items():
         (root / name).write_text(json.dumps(document))

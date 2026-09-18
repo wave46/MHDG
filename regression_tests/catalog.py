@@ -34,13 +34,10 @@ def normalize_case_definition(
 ) -> dict[str, Any]:
     """Derive machine-oriented fields from one readable case declaration."""
     shared = shared or {}
-    reference = declaration["reference"]
     return {
         "schema_version": declaration["schema_version"],
         "case_id": case_id,
         "description": declaration["description"],
-        "reference_branch": reference["branch"],
-        "reference_revision": reference["revision"],
         "bundle_files": _bundle_files(case_id, declaration.get("files", {})),
         "workflows": _workflows(
             declaration["workflows"],
@@ -458,6 +455,11 @@ def load_suite_definition(
             f"suite {suite_id} has unknown workflows: "
             f"{', '.join(unknown_workflows)}"
         )
+    if "workflow_comparison" in declaration:
+        pair = declaration["workflow_comparison"]
+        if any(name not in suite["workflow_ids"] for name in pair):
+            raise BundleError(f"suite {suite_id} compares a workflow it does not run")
+        suite["workflow_comparison"] = pair
     return suite
 
 

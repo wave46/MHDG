@@ -38,7 +38,8 @@
     "bootstrap_limited": {
       "description": "Full limited adaptive and fixed bootstraps on accepted mesh inputs",
       "case": "legacy_case",
-      "workflows": ["bootstrap_adaptive", "bootstrap_fixed"]
+      "workflows": ["bootstrap_adaptive", "bootstrap_fixed"],
+      "workflow_comparison": ["bootstrap_fixed", "bootstrap_adaptive"]
     },
     "adaptive": {
       "description": "Short adaptive source-relocation golden, diagnostics off",

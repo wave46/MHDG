@@ -82,9 +82,7 @@
       "comparison": {
         "method": "mesh_independent",
         "profile": "adaptive_reference",
-        "stage_profile": "adaptive_reference",
-        "direct_profile": "cold_fixed_reference",
-        "direct_stage_profile": "fixed_stage_reference"
+        "direct_profile": "cold_fixed_reference"
       },
       "parameter_overrides": {"adaptivity": true},
       "adaptive_stages": ["time_init", "diffred"],
@@ -100,8 +98,7 @@
       "parameter_overrides": {"adaptivity": false},
       "comparison": {
         "method": "fixed_hdf5",
-        "profile": "cold_fixed_reference",
-        "stage_profile": "fixed_stage_reference"
+        "profile": "cold_fixed_reference"
       }
     },
     "baseline_warm": {
@@ -292,6 +289,7 @@
     "adaptive_source_short": {
       "extends": "cold_step_adaptive",
       "description": "Run one coarse-mesh time step with source relocation and one adaptation pass",
+      "require_refinement": true,
       "layout": "mpi4_omp4",
       "reference": "adaptive_source_short_reference",
       "outputs": ["adaptive_source_short_reference"],
@@ -313,8 +311,7 @@
       "comparison": {
         "method": "fixed_hdf5",
         "profile": "race_step",
-        "cross_layout_profile": "race_step",
-        "stage_profile": "race_step"
+        "cross_layout_profile": "race_step"
       },
       "parameter_overrides": {
         "compute_from_flux": true,

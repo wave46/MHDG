@@ -1,10 +1,6 @@
 {
   "schema_version": 2,
   "description": "Real diverted topology: routine baseline and independent physical features",
-  "reference": {
-    "branch": "develop",
-    "revision": "db468f73f899457bf9104055e953cf2465532750"
-  },
   "files": {
     "required": {
       "geometry": "geometry.geo",

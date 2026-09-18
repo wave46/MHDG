@@ -116,6 +116,11 @@
         "workflows": {
           "$ref": "#/$defs/identifier_list"
         },
+        "workflow_comparison": {
+          "allOf": [{"$ref": "#/$defs/identifier_list"}],
+          "minItems": 2,
+          "maxItems": 2
+        },
         "layouts": {
           "oneOf": [
             {

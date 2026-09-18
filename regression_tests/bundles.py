@@ -132,7 +132,6 @@ def validate_bundle_root(bundle_root, case_dir=CASES, *, workflows=(), required_
     case = load_case_definition(manifest["case_id"], case_dir, catalog=catalog)
     available, verified_bytes, warnings = _verify_artifacts(bundle_root, manifest["artifacts"])
     roles = _verify_roles(manifest)
-    load_reference_matrix(bundle_root, case["case_id"], case_dir, manifest=manifest)
     required = _required_roles(case, workflows) | set(required_roles)
     missing = sorted(role for role in required if roles.get(role) not in available)
     if missing:
@@ -182,51 +181,6 @@ def _verify_roles(manifest: dict) -> dict[str, str]:
                 f"manifest.roles.{role} refers to unknown artifact {artifact_id}"
             )
     return roles
-
-
-@dataclass(frozen=True)
-class ReferenceMatrix:
-    bundle_id: str
-    bundle_version: str
-    references: dict[tuple[str, str, str], Path]
-
-    def reference_for(self, workflow_id, layout_id, stage_id):
-        key = (workflow_id, layout_id, stage_id)
-        try:
-            return self.references[key]
-        except KeyError as exc:
-            raise BundleError(f"golden matrix has no reference for {'/'.join(key)}") from exc
-
-
-def load_reference_matrix(bundle_root, case_id, case_dir=CASES, *, manifest=None):
-    """Read and validate the optional stage index; artifact hashing belongs to bundle validation."""
-    bundle_root = require_directory(bundle_root, "golden bundle")
-    if manifest is None:
-        manifest = load_manifest(bundle_root, case_dir, case_id=case_id)
-    index_id = manifest["roles"].get("reference_matrix")
-    if index_id is None:
-        return None
-
-    def artifact(artifact_id, media_type):
-        item = manifest["artifacts"].get(artifact_id)
-        if item is None:
-            raise BundleError(f"reference matrix refers to unknown artifact {artifact_id}")
-        if item["media_type"] != media_type:
-            raise BundleError(f"reference matrix artifact {artifact_id} is not {media_type}")
-        return artifact_path(bundle_root, item["path"], f"manifest.artifacts.{artifact_id}")
-
-    matrix = load_validated_json(artifact(index_id, "application/json"),
-                                 case_dir.parent / "schemas/reference-matrix.schema.json",
-                                 "reference matrix")
-    if matrix["case_id"] != case_id:
-        raise BundleError("reference matrix has the wrong case_id")
-    references = {}
-    for entry in matrix["references"]:
-        key = (entry["workflow_id"], entry["layout_id"], entry["stage_id"])
-        if key in references:
-            raise BundleError(f"reference matrix contains duplicate cell {'/'.join(key)}")
-        references[key] = artifact(entry["artifact_id"], "application/x-hdf5")
-    return ReferenceMatrix(manifest["bundle_id"], manifest["bundle_version"], references)
 
 
 def _relative_path(relative_path, label):
