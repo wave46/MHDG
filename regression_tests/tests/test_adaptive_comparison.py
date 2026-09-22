@@ -120,7 +120,11 @@ def test_refinement_requires_recorded_initial_output_and_element_growth(adaptive
     inputs.workflow["require_refinement"] = True
     inputs.metadata["hdf5_outputs"].append(initial.name)
     (inputs.run_directory / "stdout.log").write_text(
-        f"Output written to file {initial}\nError: 1e-5\nOutput written to file {candidate}\n")
+        "Mesh converted from gmsh to hdf5. Output written to file inputs/mesh_1_4.h5\n"
+        f"Output written to file {initial}\nError: 1e-5\n"
+        "Mesh converted from gmsh to hdf5. Output written to file ./res/new_mesh_n1.h5\n"
+        f"Output written to file {candidate}\n")
+    assert compare.select_candidate(inputs.run_directory, inputs.metadata) == candidate
     assert compare._check_refinement(inputs, candidate)["status"] == "failed"  # Identical meshes.
     with h5py.File(candidate, "r+") as handle:
         handle["Nelems"][...] = 3

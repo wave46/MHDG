@@ -16,7 +16,7 @@ from .compare_adaptive import compare_adaptive_files, mesh_differences
 from .compare_fixed import compare_hdf5_files, check_output_contract, validate_solution_file, required_scalar
 from .execute import final_execution
 from .compare_common import (
-    OUTPUT_RE, NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
+    select_logged_output, NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
     load_fixed_tolerances, load_tolerance_catalog, read_newton_convergence, resolve_run_file, select_candidate,
 )
 
@@ -311,12 +311,11 @@ def _check_refinement(inputs, candidate):
     directory, metadata = final_execution(inputs.run_directory, inputs.metadata)
     report = {"status": "failed", "failures": []}
     try:
-        logged = OUTPUT_RE.findall((directory / "stdout.log").read_text())
-        if not logged:
+        recorded = [recorded_file(path, "HDF5 output", directory) for path in metadata["hdf5_outputs"]]
+        initial = select_logged_output(directory, recorded, first=True)
+        if initial is None:
             raise ComparisonError("missing initial output for refinement check")
-        initial = recorded_file(logged[0].strip(), "initial refinement output", directory)
-        recorded = {recorded_file(path, "HDF5 output", directory) for path in metadata["hdf5_outputs"]}
-        if initial not in recorded or initial == candidate.resolve():
+        if initial == candidate.resolve():
             raise ComparisonError("refinement needs a separate recorded initial output")
         with h5py.File(initial, "r") as first, h5py.File(candidate, "r") as last:
             before = int(required_scalar(first, "mesh", "Nelems"))

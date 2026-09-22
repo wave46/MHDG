@@ -38,7 +38,7 @@ def select_candidate(
         for value in recorded_outputs
     ]
 
-    logged_output = _last_logged_output(run_directory, declared)
+    logged_output = select_logged_output(run_directory, declared)
     if logged_output is not None:
         return logged_output
 
@@ -64,16 +64,19 @@ def resolve_run_file(
     return require_file(path, label)
 
 
-def _last_logged_output(
+def select_logged_output(
     run_directory: Path,
     declared: list[Path],
+    *, first: bool = False,
 ) -> Path | None:
+    """Select the first or last logged solution, ignoring mesh-conversion output."""
     stdout_path = run_directory / "stdout.log"
     if not stdout_path.is_file():
         return None
 
     text = stdout_path.read_text(encoding="utf-8", errors="replace")
-    for match in reversed(OUTPUT_RE.findall(text)):
+    matches = OUTPUT_RE.findall(text)
+    for match in matches if first else reversed(matches):
         path = Path(match.strip()).expanduser()
         path = (
             path.resolve()
