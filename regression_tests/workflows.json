@@ -188,6 +188,11 @@
       "description": "Converge from the transport-off bootstrap with puff and pump in elements",
       "reference": "source_reference",
       "outputs": ["source_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "neutral_feature_same_layout",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
       "parameter_overrides": {
         "neutral_wall_sources_in_elements": true,
         "neutralp_lambda": 0.0,
@@ -198,12 +203,7 @@
     },
     "neutral_branch": {
       "extends": "source_relocation",
-      "restart": "source_reference",
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "neutral_feature_same_layout",
-        "cross_layout_profile": "fixed_cross_layout"
-      }
+      "restart": "source_reference"
     },
     "neutral_pressure": {
       "extends": "neutral_branch",
