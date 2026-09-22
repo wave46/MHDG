@@ -150,6 +150,9 @@ separate five-stage feature workflow: floors 8 -> 4 -> 2 -> 0.5 -> 0.1 m²/s
 for all four transport diffusion channels, with Newton convergence at each stage.
 The background diffusion parameters stay at 16. One case-owned transport namelist
 is rendered locally with each stage's overrides; no five-file input set is needed.
+Same-layout transport-ramp repeats use the historical stage-agreement limits:
+relative L2 ≤ 2e-7 and normalized Linf ≤ 3e-7 (`transport_converged`). Newton
+acceptance remains ≤ 2e-4; warm and short parallel comparison limits are unchanged.
 
 ```text
 bootstrap_reference (W, transport off, diffusion 16)

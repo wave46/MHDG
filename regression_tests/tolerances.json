@@ -17,6 +17,11 @@
       "relative_l2_max": 5e-8,
       "normalized_linf_max": 1e-6
     },
+    "transport_converged": {
+      "description": "Converged transport ramp repeats; historical matching-stage limits",
+      "relative_l2_max": 2e-7,
+      "normalized_linf_max": 3e-7
+    },
     "neutral_feature_same_layout": {
       "description": "Converged neutral feature repeats with the same solver build and MPI/OpenMP layout",
       "relative_l2_max": 5e-7,

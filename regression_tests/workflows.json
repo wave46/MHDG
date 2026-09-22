@@ -130,6 +130,11 @@
       "transport": "transport_configuration",
       "reference": "transport_reference",
       "outputs": ["transport_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "transport_converged",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
       "parameter_overrides": {"transport_1d": true},
       "stages": [
         {"id": "floor_8", "transport_overrides": {
