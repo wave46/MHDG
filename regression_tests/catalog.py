@@ -137,7 +137,7 @@ def _extend_workflow(
     """Apply one derived declaration while retaining base parameter values."""
     extended = deepcopy(base)
     extended.update(changes)
-    for key in ("parameter_overrides", "parameter_namelists"):
+    for key in ("parameter_overrides", "parameter_namelists", "transport_overrides"):
         if key in changes:
             extended[key] = {**base.get(key, {}), **changes[key]}
     if "stage_overrides" in changes:
@@ -185,7 +185,13 @@ def _expand_workflow(
         workflow["stages"] = []
         for index, declaration in enumerate(stages):
             stage = _extend_workflow(declaration, stage_changes.get(declaration["id"], {}))
-            stage["restart_from"] = "analytical" if index == 0 else "previous_stage"
+            initial_restart = "bundle" if workflow.get("restart") else "analytical"
+            stage["restart_from"] = initial_restart if index == 0 else "previous_stage"
+            for key in ("parameters", "transport"):
+                if key in workflow:
+                    stage.setdefault(key, workflow[key])
+            if not stage.get("parameters"):
+                raise BundleError(f"stage {stage['id']} has no parameters")
             stage.setdefault("newton_check", "bounded")
             if stage["id"] in adaptive_stages:
                 stage.setdefault("parameter_overrides", {})["rest_adapt"] = True
@@ -284,11 +290,9 @@ def _validate_case_workflows(case: dict[str, Any]) -> None:
         }:
             continue
 
-        missing = [
-            name
-            for name in ("mesh", "stages")
-            if not workflow.get(name)
-        ]
+        missing = [] if workflow.get("stages") else ["stages"]
+        if not workflow.get("mesh") and not workflow.get("restart"):
+            missing.append("mesh or restart")
         if missing:
             raise BundleError(
                 f"workflow {workflow_id} is missing: {', '.join(missing)}"

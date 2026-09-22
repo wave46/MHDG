@@ -196,6 +196,10 @@ fi
 
 
 def test_publish_rejects_changed_outputs_evidence_and_missing_reason(setup):
+    path = setup.root / 'workflows.json'
+    workflows = json.loads(path.read_text())
+    workflows['workflows']['warm']['transport_overrides'] = {'diff_n_min_phys': 0.1}
+    path.write_text(json.dumps(workflows))
     _, report = golden.refresh('legacy_case', setup.values, setup.workspace)
     with pytest.raises(BundleError, match='reason and provenance'):
         golden.publish(setup.workspace, setup.output, 'v1', ' ', 'Review')
@@ -214,6 +218,12 @@ def test_publish_rejects_changed_outputs_evidence_and_missing_reason(setup):
         publish(setup)
     manifest_path.write_bytes(original)
     run = Path(report['producers'][-1]['run_directory'])
+    namelist = run / 'inputs/transport_model.nml'
+    original = namelist.read_bytes()
+    namelist.write_bytes(original + b'\n')
+    with pytest.raises(BundleError, match='evidence changed'):
+        publish(setup)
+    namelist.write_bytes(original)
     (run / 'outputs/result.h5').write_bytes(b'changed')
     with pytest.raises(BundleError, match='outputs changed'):
         publish(setup)

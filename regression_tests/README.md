@@ -112,20 +112,21 @@ execute `routine-extended` first.
 | Profile | Solver launches | Selection |
 | --- | ---: | --- |
 | `routine` | 2 | Diverted baseline warm and short adaptive/source golden, diagnostics off |
-| `routine-extended` | 13 | Baseline; adaptive/source with diagnostics; four-layout short transport; hybrid short neutral/radiation features |
-| `full` | 49 | Both adaptive bootstraps, limited fixed bootstrap, both baseline/transport endpoints, diverted features and focused parallel/model checks |
+| `routine-extended` | 9 | Baseline; adaptive/source with diagnostics; hybrid short neutral/radiation features |
+| `full` | 57 | Both adaptive bootstraps, limited fixed bootstrap, both baseline/transport endpoints, diverted features and focused parallel/model checks |
 
 The routine target is about 30 seconds on the development machine, excluding
 builds. Timings of these new physical recipes have not yet been measured.
 
-Full consists of 43 workflow/layout runs (the three bootstraps each launch three
-stages). It includes:
+Full consists of 43 workflow/layout runs (three bootstraps each launch three
+stages, and two transport ramps each launch five). It includes:
 
 - Three-stage adaptive bootstrap on both real topologies, plus limited fixed
   bootstrap with fresh analytical plasma on the accepted adaptive final mesh.
-- Baseline warm and direct converged transport on both topologies.
+- Baseline warm and five-stage transport activation on both topologies.
 - Short transport: serial OMP1/OMP16 and MPI4×OMP1 on both cases, plus MPI4×OMP4
-  on diverted. Compare serial–OpenMP and serial–MPI; diverted adds MPI–hybrid.
+  on diverted, starting from each final transport reference. Compare serial–OpenMP
+  and serial–MPI; diverted adds MPI–hybrid.
 - Diverted short adaptive/source: serial OMP1/OMP16 and MPI4×OMP1.
 - Diverted source-only convergence and four independent neutral branches:
   pressure, perpendicular diffusion, fixed-Tn limiting and Ti limiting. Each
@@ -144,18 +145,27 @@ The shared bootstrap is `time_init -> diffred -> steady`: W radiation, transport
 off, steady diffusion 16 m²/s. Initialization requires finite valid output; the
 other stages require final Newton error ≤ 2e-4. Diffred can save coefficients 8
 after solving at 16; the steady stage explicitly restores 16 for its solve.
-Adaptation is enabled early and disabled for steady. There is no transport ramp.
+Adaptation is enabled early and disabled for steady. Transport activation is a
+separate five-stage feature workflow: floors 8 -> 4 -> 2 -> 0.5 -> 0.1 m²/s
+for all four transport diffusion channels, with Newton convergence at each stage.
+The background diffusion parameters stay at 16. One case-owned transport namelist
+is rendered locally with each stage's overrides; no five-file input set is needed.
 
 ```text
 bootstrap_reference (W, transport off, diffusion 16)
   -> baseline_warm
-  -> transport / transport_short
+  -> transport: 8 -> 4 -> 2 -> 0.5 -> 0.1
+       -> transport_reference -> transport_short (two iterations at 0.1)
   -> stored_field                         diverted only
   -> impurity_off / impurity_n / impurity_nw
   -> source_relocation -> source_reference
        -> neutral_pressure / neutral_perpendicular
        -> neutral_limiter_fixed / neutral_limiter_ti
 ```
+
+Transport short checks run in full, not routine-extended. They test parallel
+agreement in the established transport state; the five-stage runs test activation.
+No intermediate transport restart is published.
 
 All neutral/radiation features also have `_short` variants with two Newton
 iterations and distinct references. Short and converged branches use the same
@@ -536,8 +546,8 @@ argument. Analytical starts, or restarts with `readMeshFromSol=false`, require a
 declared `mesh`. Preparation checks the rendered switches, including invocation
 overrides, and rejects enabled transport/radiation without their declared input
 or an analytical start requesting a restart mesh. Immutable active inputs are
-linked; only the local parameter file is rendered. Meshes, parameter templates
-and feature namelists are optional at bundle level and required by the workflows
+linked; parameter and overridden transport namelist files are rendered locally.
+Meshes, parameter templates and feature namelists are optional at bundle level and required by the workflows
 that select them; common geometry/equilibrium inputs remain required.
 
 To adjust one stage without repeating the recipe, use `stage_overrides`:
@@ -554,7 +564,12 @@ Derived workflows inherit this case-specific override.
 Stage overrides are keyed by existing stage IDs and can change parameter/transport
 roles, parameter values, or the Newton check. Unknown IDs fail during loading.
 Sequences contain explicit stages; workflows may combine sequence names and
-inline stages. Sequence expansion does not change restart order or execution.
+inline stages. Stages inherit `parameters` and `transport` roles from their workflow
+unless overridden. A workflow with `restart` starts its first stage from that
+bundle role; otherwise it starts analytically. Later stages use the previous output.
+`transport_overrides` sets scalar values in `TRANSPORT_MODEL_1D_LST`, at workflow
+or stage level, using the same renderer as parameter overrides. Stage values take
+precedence. Rendered namelists are recorded as refresh publication evidence.
 
 Common variants require JSON, not Python. In `cases/CASE.json`, inherit the
 closest workflow and override only changed parameters:

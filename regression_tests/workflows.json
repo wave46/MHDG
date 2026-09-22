@@ -125,18 +125,41 @@
     },
     "transport": {
       "extends": "baseline_warm",
-      "description": "Enable transport directly from the transport-off bootstrap and converge",
+      "type": "staged_fixed_mesh",
+      "description": "Converge transport from the bootstrap with floors 8, 4, 2, 0.5 and 0.1 m2/s",
       "transport": "transport_configuration",
       "reference": "transport_reference",
       "outputs": ["transport_reference"],
-      "parameter_overrides": {"transport_1d": true}
+      "parameter_overrides": {"transport_1d": true},
+      "stages": [
+        {"id": "floor_8", "transport_overrides": {
+          "diff_n_min_phys": 8.0, "diff_u_min_phys": 8.0, "diff_e_min_phys": 8.0, "diff_ee_min_phys": 8.0
+        }},
+        {"id": "floor_4", "transport_overrides": {
+          "diff_n_min_phys": 4.0, "diff_u_min_phys": 4.0, "diff_e_min_phys": 4.0, "diff_ee_min_phys": 4.0
+        }},
+        {"id": "floor_2", "transport_overrides": {
+          "diff_n_min_phys": 2.0, "diff_u_min_phys": 2.0, "diff_e_min_phys": 2.0, "diff_ee_min_phys": 2.0
+        }},
+        {"id": "floor_0_5", "transport_overrides": {
+          "diff_n_min_phys": 0.5, "diff_u_min_phys": 0.5, "diff_e_min_phys": 0.5, "diff_ee_min_phys": 0.5
+        }},
+        {"id": "floor_0_1", "transport_overrides": {
+          "diff_n_min_phys": 0.1, "diff_u_min_phys": 0.1, "diff_e_min_phys": 0.1, "diff_ee_min_phys": 0.1
+        }}
+      ]
     },
     "transport_short": {
-      "extends": "transport",
-      "description": "Run two Newton iterations enabling transport from the same transport-off bootstrap",
+      "extends": "baseline_warm",
+      "description": "Run two Newton iterations from the converged transport reference at floor 0.1 m2/s",
+      "transport": "transport_configuration",
+      "restart": "transport_reference",
       "reference": "transport_short_reference",
       "outputs": ["transport_short_reference"],
-      "parameter_overrides": {"nrp": 2},
+      "parameter_overrides": {"transport_1d": true, "nrp": 2},
+      "transport_overrides": {
+        "diff_n_min_phys": 0.1, "diff_u_min_phys": 0.1, "diff_e_min_phys": 0.1, "diff_ee_min_phys": 0.1
+      },
       "comparison": {
         "method": "fixed_hdf5",
         "profile": "race_step",

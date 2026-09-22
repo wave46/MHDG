@@ -114,6 +114,9 @@
         "parameter_overrides": {
           "$ref": "#/$defs/parameter_overrides"
         },
+        "transport_overrides": {
+          "$ref": "#/$defs/parameter_overrides"
+        },
         "adaptive_stages": {
           "$ref": "#/$defs/identifier_list"
         },
@@ -172,8 +175,7 @@
     "stage": {
       "$ref": "#/$defs/stage_fields",
       "required": [
-        "id",
-        "parameters"
+        "id"
       ]
     },
     "parameter_overrides": {
@@ -253,6 +255,9 @@
           "anyOf": [{"$ref": "#/$defs/identifier"}, {"type": "null"}]
         },
         "parameter_overrides": {
+          "$ref": "#/$defs/parameter_overrides"
+        },
+        "transport_overrides": {
           "$ref": "#/$defs/parameter_overrides"
         },
         "newton_check": {

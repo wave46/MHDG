@@ -232,7 +232,7 @@ def temporary_run_directory(final_directory: Path) -> Iterator[Path]:
 
 
 def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=None):
-    """Link immutable inputs and render only the mutable parameter file."""
+    """Link immutable inputs and render parameter/transport overrides locally."""
     directory = staging / "inputs"
     directory.mkdir(parents=True)
     (staging / "outputs").mkdir()
@@ -247,8 +247,9 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     ):
         if role:
             sources[filename] = artifacts[role]
-    if stage is None:
+    if stage is None or stage["restart_from"] == "bundle":
         sources["restart.h5"] = artifacts[workflow["restart"]]
+    if stage is None:
         if workflow.get("reference") in artifacts:
             sources["reference.h5"] = artifacts[workflow["reference"]]
     render_parameter_file(
@@ -260,7 +261,7 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     switches = read_selected_input_values(
         staging / "param.txt", {"readMeshFromSol", "transport_1d", "impurity_radiation"},
     )
-    restart = stage is None or stage["restart_from"] == "previous_stage"
+    restart = stage is None or stage["restart_from"] != "analytical"
     if switches.get("readmeshfromsol"):
         if not restart:
             raise BundleError("readMeshFromSol requires a restart, not analytical initialization")
@@ -273,8 +274,14 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
             raise BundleError(f"{switch} is enabled but {filename} has no declared input")
         if not switches.get(switch):
             sources.pop(filename, None)
+    transport_overrides = {**workflow.get("transport_overrides", {}),
+                           **(stage or {}).get("transport_overrides", {})}
     for filename, source in sources.items():
-        (directory / filename).symlink_to(source)
+        if filename == "transport_model.nml" and transport_overrides:
+            render_parameter_file(source, directory / filename, {}, transport_overrides,
+                                  {key: "transport_model_1d_lst" for key in transport_overrides})
+        else:
+            (directory / filename).symlink_to(source)
     for filename, source in inputs.runtime_files.items():
         (staging / filename).symlink_to(source)
 
@@ -305,6 +312,10 @@ def write_run_plan(
         plan["restart_from"] = stage["restart_from"]
     if applied_overrides is not None:
         plan["parameter_overrides"] = applied_overrides
+    transport_overrides = {**inputs.workflow.get("transport_overrides", {}),
+                           **(stage or {}).get("transport_overrides", {})}
+    if transport_overrides:
+        plan["transport_overrides"] = transport_overrides
     write_json_direct(staging_directory / "run_plan.json", plan)
 
 
@@ -393,7 +404,7 @@ def prepare_warm_run(inputs: PreparationInputs) -> PreparedRun:
 
 
 def prepare_staged_run(inputs: PreparationInputs) -> PreparedStagedRun:
-    """Prepare every directory in a cold staged workflow."""
+    """Prepare every stage, starting analytically or from a bundle restart."""
     prepared_stages = []
     with temporary_run_directory(inputs.run_directory) as staging:
         (staging / "inputs").mkdir()
@@ -423,7 +434,7 @@ def _prepare_stage(
         inputs.executable,
         inputs.launcher,
         inputs.layout,
-        restart=stage["restart_from"] == "previous_stage",
+        restart=stage["restart_from"] != "analytical",
     )
     overrides = parameter_overrides(
         inputs.workflow,

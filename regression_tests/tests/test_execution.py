@@ -86,6 +86,46 @@ def test_stages_pass_selected_output_to_next_restart(harness):
     assert observed["executable"]["path"] == str(harness.serial_executable)
 
 
+def test_staged_restart_renders_transport_without_changing_source(harness):
+    from regression_tests.parameters import read_selected_input_values
+
+    path = harness.catalog / "workflows.json"
+    document = json.loads(path.read_text())
+    document["workflows"]["ramp"] = {
+        "extends": "warm", "type": "staged_fixed_mesh",
+        "transport_overrides": {"diff_n_min_phys": 8.0},
+        "stages": [{"id": "start"}, {"id": "finish", "transport_overrides": {"diff_n_min_phys": 0.1}}],
+    }
+    path.write_text(json.dumps(document))
+    path = harness.catalog / "cases/legacy_case.json"
+    document = json.loads(path.read_text())
+    document["workflows"]["ramp"] = {}
+    path.write_text(json.dumps(document))
+    restart = harness.root / "bootstrap.h5"
+    shutil.copy2(harness.bundle / "inputs/restart.h5", restart)
+    with h5py.File(restart, "r+") as handle:
+        handle.attrs["fixture_text"] = "bootstrap"
+    original = (harness.bundle / "inputs/transport_model.nml").read_bytes()
+    harness.install_solver(STAGED_SOLVER, "serial")
+    prepared = prepare_run(harness.values, "legacy_case", "ramp", "serial_omp1",
+                           harness.catalog / "cases", harness.catalog / "layouts.json",
+                           artifact_overrides={"warm_restart": restart})
+    first, last = [stage.run.path for stage in prepared.stages]
+    assert (first / "inputs/restart.h5").resolve() == restart
+    for directory, floor in ((first, 8.0), (last, 0.1)):
+        namelist = directory / "inputs/transport_model.nml"
+        assert not namelist.is_symlink()
+        assert read_selected_input_values(namelist, {"diff_n_min_phys", "c_pinch"}) == {
+            "diff_n_min_phys": floor, "c_pinch": 0.5}
+        assert not (directory / "inputs/mesh.msh").exists()
+    result = execute_prepared(prepared, harness.values)
+    assert result.status == "completed"
+    assert (last / "inputs/restart.h5").resolve() == first / "outputs/result.h5"
+    with h5py.File(result.selected_output) as handle:
+        assert handle.attrs["fixture_text"] == "bootstrap>01_start>02_finish\n"
+    assert (harness.bundle / "inputs/transport_model.nml").read_bytes() == original
+
+
 @pytest.mark.parametrize("ambiguous", [False, True])
 def test_stages_stop_when_producer_fails_or_output_is_ambiguous(harness, ambiguous):
     solver = FAILING_STAGED_SOLVER

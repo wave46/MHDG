@@ -7,9 +7,9 @@
       "checks": [{"suite": "warm"}, {"suite": "adaptive"}]
     },
     "routine-extended": {
-      "description": "Diverted short feature goldens, transport parallelism and detailed diagnostics",
+      "description": "Diverted short feature goldens and adaptive detailed diagnostics",
       "checks": [
-        {"suite": "warm"}, {"suite": "adaptive_diagnostics"}, {"suite": "transport_hybrid"},
+        {"suite": "warm"}, {"suite": "adaptive_diagnostics"},
         {"suite": "neutral_short"}, {"suite": "impurity_short"}
       ]
     },
@@ -60,7 +60,7 @@
       "diagnostics": "detailed"
     },
     "transport": {
-      "description": "Direct transport activation: convergence and own golden",
+      "description": "Five-stage transport activation: convergence and final golden",
       "workflows": ["transport"]
     },
     "transport_parallel": {

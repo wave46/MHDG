@@ -57,6 +57,7 @@ def write_case_source(directory):
     directory.mkdir()
     for name in FILES:
         (directory / name).write_text(f"fixture {name}\n")
+    (directory / "transport_model.nml").write_text("&TRANSPORT_MODEL_1D_LST\n c_pinch = 0.5\n/\n")
     for name in ("param.txt", "param_cold_fixed_time_init.txt"):
         (directory / name).write_text(PARAMETERS)
     (directory / "impurity_model_w.nml").write_text(

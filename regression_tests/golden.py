@@ -164,7 +164,7 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
         validate_bundle_root(candidate, root / "cases", catalog=catalog)
         report["evidence"] = [_record(item, workspace) for item in sorted(workspace.rglob("*"))
                               if item.is_file() and not item.is_symlink() and item != path
-                              and (item.suffix in {".json", ".log"} or item.name == "param.txt")]
+                              and (item.suffix in {".json", ".log", ".nml"} or item.name == "param.txt")]
         report["status"] = "ready"
     except (HarnessError, OSError, KeyboardInterrupt) as exc:
         if report["producers"] and report["producers"][-1]["status"] != "passed":
