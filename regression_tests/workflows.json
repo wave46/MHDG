@@ -176,6 +176,11 @@
       "description": "Converge using the stored magnetic/current fields with an independent reference",
       "reference": "stored_field_reference",
       "outputs": ["stored_field_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "stored_field_converged",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
       "parameter_overrides": {"compute_from_flux": false}
     },
     "source_relocation": {

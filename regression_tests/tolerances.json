@@ -12,6 +12,11 @@
       "relative_l2_max": 1e-10,
       "normalized_linf_max": 1e-9
     },
+    "stored_field_converged": {
+      "description": "Converged stored-field repeats with the same solver build and MPI/OpenMP layout",
+      "relative_l2_max": 1e-8,
+      "normalized_linf_max": 1e-8
+    },
     "fixed_cross_layout": {
       "description": "Initial tolerances across serial, MPI, and OpenMP layouts",
       "relative_l2_max": 5e-8,
