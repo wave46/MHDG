@@ -178,7 +178,7 @@
       "outputs": ["stored_field_reference"],
       "comparison": {
         "method": "fixed_hdf5",
-        "profile": "stored_field_converged",
+        "profile": "feature_converged",
         "cross_layout_profile": "fixed_cross_layout"
       },
       "parameter_overrides": {"compute_from_flux": false}
@@ -279,6 +279,11 @@
       "impurity_configuration": null,
       "reference": "impurity_off_reference",
       "outputs": ["impurity_off_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "feature_converged",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
       "parameter_overrides": {"impurity_radiation": false}
     },
     "impurity_n": {
@@ -286,7 +291,12 @@
       "description": "Converge from the W bootstrap with nitrogen radiation",
       "impurity_configuration": "impurity_n_configuration",
       "reference": "impurity_n_reference",
-      "outputs": ["impurity_n_reference"]
+      "outputs": ["impurity_n_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "feature_converged",
+        "cross_layout_profile": "fixed_cross_layout"
+      }
     },
     "impurity_nw": {
       "extends": "impurity_n",
