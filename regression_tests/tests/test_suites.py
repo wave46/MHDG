@@ -107,23 +107,26 @@ def test_cli_requires_golden_and_records_diagnostic_overrides(harness):
     result = run_command("check", "warm", "--case", "legacy_case", "--settings", str(harness.settings))
     assert result.returncode == 1 and "requires bundle_class=golden" in result.stderr
     harness.set_bundle_class("golden")
+    suites_path = ROOT / "suites.json"
+    catalog = json.loads(suites_path.read_text())
+    catalog["suites"]["warm"]["diagnostics"] = "detailed"
+    suites_path.write_text(json.dumps(catalog))
     args = ("check", "warm", "--case", "legacy_case", "--settings", str(harness.settings),
-            "--build-manifest", str(harness.build_manifest), "--run-id", "mode", "--run-only")
-    result = run_command(*args, "--diagnostics", "detailed")
+            "--build-manifest", str(harness.build_manifest), "--run-id", "mode")
+    result = run_command(*args, "--diagnostics", "off")
     assert result.returncode == 0, result.stderr
-    assert "suite deferred:" in result.stdout
-    assert "balance diagnostics deferred:" in result.stdout
+    assert "suite passed:" in result.stdout
     directory = harness.run_directory("warm", "mpi4_omp4", "mode")
-    assert "balance_diagnostics_mode = 'detailed'" in (directory / "param.txt").read_text()
+    assert "balance_diagnostics_mode = 'off'" in (directory / "param.txt").read_text()
     # Explicit selection survives unrelated/default settings changes on resume.
     machine = json.loads(harness.settings.read_text())
     machine["defaults"]["build"] = "unavailable-build.json"
     machine["defaults"]["bundles"]["unselected_case"] = "unavailable-bundle"
     machine["build_jobs"] = 3
     harness.settings.write_text(json.dumps(machine))
-    result = run_command(*args, "--diagnostics", "detailed", "--resume")
-    assert result.returncode == 0 and "reusing completed" in result.stdout, result.stderr
     result = run_command(*args, "--diagnostics", "off", "--resume")
+    assert result.returncode == 0 and "reusing completed" in result.stdout, result.stderr
+    result = run_command(*args, "--diagnostics", "detailed", "--resume")
     assert result.returncode == 1 and "parameter_overrides" in result.stderr
     result = run_command(*args, "--build", "--resume")
     assert result.returncode == 1 and "--build cannot be used with --resume" in result.stderr
@@ -281,7 +284,7 @@ def test_profile_preflights_cases_and_forwards_suite_resume(harness, monkeypatch
     )} for case in settings]
     calls = []
     def selected_suite(values, suite_id, *args, case_id, **kwargs):
-        resumed = args[7]
+        resumed = kwargs["resume"]
         calls.append((case_id, resumed))
         path = harness.run_root / f"suites/{suite_id}/{case_id}/profile/suite_summary.json"
         path.parent.mkdir(parents=True, exist_ok=True)

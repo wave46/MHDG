@@ -282,8 +282,6 @@ def _print_diagnostics(summary, path):
         diagnostics(report, path)
         if report.get("outputs") and all(item["mode"] == "off" for item in report["outputs"]):
             print("  mode off: output absence checked")
-    elif summary.get("checks_enabled") is False:
-        status("balance diagnostics", "deferred", path)
 
 
 def _print_comparisons(comparisons: list[dict[str, Any]]) -> None:

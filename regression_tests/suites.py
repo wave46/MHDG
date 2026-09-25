@@ -28,7 +28,6 @@ class SuiteRunInputs:
     case_directory: Path
     layouts_path: Path
     tolerances_path: Path
-    compare: bool
     parameter_overrides: dict[str, bool | float | int | str]
     catalog: dict | None = None
     manifest: dict | None = None
@@ -40,7 +39,7 @@ def run_cell(
     workflow_id: str,
     layout_id: str,
 ) -> dict[str, Any]:
-    """Prepare, execute, and optionally compare one suite cell."""
+    """Prepare, execute, and assess one suite cell."""
     result = _empty_result(workflow_id, layout_id)
     try:
         prepared = prepare_run(
@@ -61,7 +60,7 @@ def run_cell(
         result["duration_seconds"] = run.duration_seconds
         result["status"] = run.status
         return assess_result(result, inputs.case_directory, inputs.tolerances_path,
-                             references=inputs.require_reference, enabled=inputs.compare, catalog=inputs.catalog)
+                             references=inputs.require_reference, catalog=inputs.catalog)
     except HarnessError as exc:
         result["failures"] = [str(exc)]
     return result
@@ -194,7 +193,7 @@ def _selected_output(run_directory: Path) -> Path:
     return select_candidate(run_directory, metadata)
 
 
-def assess_result(source, case_directory, tolerances_path, *, references=True, enabled=True, catalog=None):
+def assess_result(source, case_directory, tolerances_path, *, references=True, catalog=None):
     """Assess fresh, resumed or saved execution with the same checks and result fields."""
     result = {**source, "status": "failed", "failures": [], "comparison_policy": None,
               "comparison_report": None, "comparison_status": "not_run", "convergence_status": None}
@@ -203,9 +202,6 @@ def assess_result(source, case_directory, tolerances_path, *, references=True, e
         directory = recorded_directory(source.get("run_directory"), "suite run")
         if source.get("run_status") != "completed":
             result["failures"] = [f"solver run status is {source.get('run_status')}", *execution_failures(directory)]
-            return result
-        if not enabled:
-            result["status"] = "deferred"
             return result
         if references:
             policy, path, report = compare_completed_run(directory, case_directory, tolerances_path, catalog=catalog)
@@ -331,7 +327,7 @@ def _validate_recorded_cells(
 
 def run_suite(
     settings, suite_id, case_directory, layouts_path, suites_path,
-    tolerances_path, run_id=None, required_bundle_class=None, compare=True,
+    tolerances_path, run_id=None, required_bundle_class=None,
     resume=False, parameter_overrides=None, *, case_id=None, catalog=None, suite=None, manifest=None,
 ):
     catalog = {} if catalog is None else catalog
@@ -363,7 +359,7 @@ def run_suite(
     expected = {
         "suite_id": suite_id, "run_id": run_id, "case_id": suite["case_id"],
         "workflow_ids": suite["workflow_ids"], "layout_ids": suite["layouts"],
-        "checks_enabled": compare, "parameter_overrides": overrides,
+        "parameter_overrides": overrides,
         "reference_comparisons": references,
         **{key: suite[key] for key in ("layout_comparisons", "tolerance_profile", "layout_comparison_policy", "workflow_comparison") if key in suite},
     }
@@ -388,7 +384,7 @@ def run_suite(
     summary.pop("diagnostics", None)
     write_json_atomic(path, summary, "suite summary")
     inputs = SuiteRunInputs(settings, suite["case_id"], run_id, case_directory,
-                            layouts_path, tolerances_path, compare, overrides,
+                            layouts_path, tolerances_path, overrides,
                             catalog=catalog, manifest=manifest, require_reference=references)
     print(f"suite: {suite_id} ({run_id})")
     for layout in suite["layouts"]:
@@ -400,7 +396,7 @@ def run_suite(
                     and previous.get("run_directory") and reusable_outputs(Path(previous["run_directory"]))):
                 print(f"reusing completed {workflow} / {layout}", flush=True)
                 result = assess_result(previous, case_directory, tolerances_path,
-                                       references=references, enabled=compare, catalog=catalog)
+                                       references=references, catalog=catalog)
             else:
                 selected = inputs
                 existing = root / suite["case_id"] / workflow / layout / run_id
@@ -420,12 +416,11 @@ def run_suite(
                 summary["results"].append(result)
             summary["duration_seconds"] += time.monotonic() - started
             write_json_atomic(path, summary, "suite summary")
-    if pairs and compare:
+    if pairs:
         summary["comparisons"] = compare_suite_pairs(summary, case_directory, tolerances_path, catalog=catalog)
-    if compare:
-        from .diagnostics import check_suite
+    from .diagnostics import check_suite
 
-        summary["diagnostics"] = check_suite(summary, required=False)
+    summary["diagnostics"] = check_suite(summary, required=False)
     _finish(summary)
     write_json_atomic(path, summary, "suite summary")
     return path, summary
@@ -436,8 +431,7 @@ def _finish(summary):
     if summary.get("diagnostics"):
         checks.append(summary["diagnostics"])
     statuses = {item["status"] for item in checks}
-    status = "failed" if not statuses or statuses - {"passed", "deferred"} else (
-        "deferred" if "deferred" in statuses else "passed")
+    status = "passed" if statuses == {"passed"} else "failed"
     summary.update(status=status, finished_utc=utc_now())
 
 
@@ -472,7 +466,7 @@ def verify_suite(suite_summary_path, case_directory, tolerances_path, *, include
 
 
 def run_profile(name, checks, settings_by_case, catalog_root, run_id=None, *, resume=False,
-                compare=True, required_bundle_class=None, parameter_overrides=None, catalog=None, manifests=None):
+                required_bundle_class=None, parameter_overrides=None, catalog=None, manifests=None):
     """Run an ordered selection using ordinary suite summaries for resume."""
     from .reporting import print_run_summary
 
@@ -510,7 +504,7 @@ def run_profile(name, checks, settings_by_case, catalog_root, run_id=None, *, re
         result_path, result = run_suite(
             settings_by_case[case], suite, catalog_root / "cases", catalog_root / "layouts.json",
             catalog_root / "suites.json", catalog_root / "tolerances.json", run_id,
-            required_bundle_class, compare, resume and existing.is_file(), parameter_overrides,
+            required_bundle_class, resume=resume and existing.is_file(), parameter_overrides=parameter_overrides,
             case_id=case, suite=check, catalog=catalog, manifest=manifests[case],
         )
         print_run_summary(result, result_path)

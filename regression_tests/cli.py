@@ -37,7 +37,6 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument("--case", help="case override for a focused suite")
     check.add_argument("--run-id")
     check.add_argument("--resume", action="store_true", help="resume an existing suite run")
-    check.add_argument("--run-only", action="store_true", help="record runs without comparisons")
     check.add_argument("--allow-candidate", action="store_true", help="also accept candidate bundles")
     check.add_argument("--build", action="store_true", help="build executables before checking")
     check.add_argument("--build-jobs", type=_positive_integer, metavar="N")
@@ -283,7 +282,7 @@ def _check(args: argparse.Namespace) -> int:
         runtime_settings(settings, selection_builds(selected, ROOT / "cases", layouts, catalog=catalog))
     options = dict(
         required_bundle_class=required_class, catalog=catalog,
-        compare=not args.run_only, resume=args.resume,
+        resume=args.resume,
         parameter_overrides={"balance_diagnostics_mode": args.diagnostics} if args.diagnostics else None,
     )
     if profile:
@@ -296,7 +295,7 @@ def _check(args: argparse.Namespace) -> int:
             suite=checks[0], manifest=manifests[cases[0]], **options,
         )
         reporting.print_run_summary(summary, path)
-    return 0 if summary["status"] in {"passed", "deferred"} else 1
+    return 0 if summary["status"] == "passed" else 1
 
 
 def _settings(args, case, *, use_build=True):

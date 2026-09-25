@@ -37,7 +37,8 @@ def setup(tmp_path, monkeypatch):
         "MHDG_FIXTURE_PYTHON": sys.executable,
         "MHDG_FIXTURE_CODE": (f"import sys; sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r}); "
                               "from regression_tests.tests.fixtures.solutions import write_solver_output; "
-                              "write_solver_output(*sys.argv[1:4], dirty=sys.argv[4]=='true')"),
+                              "write_solver_output(*sys.argv[1:4], dirty=sys.argv[4]=='true'); "
+                              "print('Error: 1.0E-8'); print('Output written to file outputs/result.h5')"),
     }
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
@@ -124,7 +125,7 @@ def test_check_builds_selected_model_and_runs_from_manifest(setup, tmp_path, mon
     assert cli.main([
         "check", "neutralgamma",
         "--build", "--build-jobs", "2", "--allow-candidate",
-        "--run-only", "--settings", str(settings), "--run-id", "new-build",
+        "--settings", str(settings), "--run-id", "new-build",
     ]) == 0
     manifest = next((tmp_path / "builds").rglob("build_metadata.json"))
     assert calls == [{("NGammaTiTeNeutralGamma", "serial")}]
