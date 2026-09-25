@@ -12,20 +12,25 @@
       "relative_l2_max": 1e-10,
       "normalized_linf_max": 1e-9
     },
+    "feature_converged": {
+      "description": "Converged stored-field and impurity repeats with the same solver build and MPI/OpenMP layout",
+      "relative_l2_max": 1e-8,
+      "normalized_linf_max": 1e-8
+    },
     "fixed_cross_layout": {
       "description": "Initial tolerances across serial, MPI, and OpenMP layouts",
       "relative_l2_max": 5e-8,
       "normalized_linf_max": 1e-6
     },
+    "transport_converged": {
+      "description": "Converged transport ramp repeats on the same layout",
+      "relative_l2_max": 3e-7,
+      "normalized_linf_max": 3e-7
+    },
     "neutral_feature_same_layout": {
       "description": "Converged neutral feature repeats with the same solver build and MPI/OpenMP layout",
       "relative_l2_max": 5e-7,
       "normalized_linf_max": 5e-7
-    },
-    "cold_cross_layout": {
-      "description": "Converged cold solutions across serial, MPI, and OpenMP layouts on identical meshes",
-      "relative_l2_max": 3.5e-7,
-      "normalized_linf_max": 3e-7
     },
     "race_step": {
       "description": "Finite one-step output compared across layouts with identical mesh numbering",
@@ -41,13 +46,8 @@
       "relative_l2_max": 1e-7,
       "normalized_linf_max": 1e-6
     },
-    "fixed_stage_reference": {
-      "description": "Matching workflow stage and execution layout on a fixed mesh",
-      "relative_l2_max": 2e-7,
-      "normalized_linf_max": 3e-7
-    },
     "cold_fixed_reference": {
-      "description": "Cold fixed-mesh continuation compared with the warm reference",
+      "description": "Bootstrap endpoint agreement",
       "relative_l2_max": 1e-5,
       "normalized_linf_max": 1e-5
     },

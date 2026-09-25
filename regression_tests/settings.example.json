@@ -1,0 +1,10 @@
+{
+  "run_root": "/path/to/regression/scratch",
+  "defaults": {
+    "build": "/path/to/build/build_metadata.json",
+    "bundles": {
+      "legacy_case": "/path/to/limited/golden_bundle",
+      "diverted_case": "/path/to/diverted/golden_bundle"
+    }
+  }
+}

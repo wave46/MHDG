@@ -7,7 +7,6 @@
   "required": [
     "schema_version",
     "description",
-    "reference",
     "workflows"
   ],
   "properties": {
@@ -17,21 +16,14 @@
     "description": {
       "$ref": "#/$defs/description"
     },
-    "reference": {
-      "$ref": "#/$defs/reference"
-    },
     "files": {
       "$ref": "#/$defs/files"
     },
     "workflows": {
-      "type": "object",
-      "minProperties": 1,
-      "propertyNames": {
-        "$ref": "#/$defs/identifier"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/workflow"
-      }
+      "$ref": "#/$defs/workflows"
+    },
+    "parameter_namelists": {
+      "$ref": "#/$defs/parameter_namelists"
     }
   },
   "$defs": {
@@ -53,24 +45,6 @@
         "$ref": "#/$defs/identifier"
       },
       "uniqueItems": true
-    },
-    "reference": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "branch",
-        "revision"
-      ],
-      "properties": {
-        "branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "revision": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{40}$"
-        }
-      }
     },
     "files": {
       "type": "object",
@@ -96,10 +70,8 @@
     "workflow": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "description"
-      ],
       "properties": {
+        "model": {"type": "string", "minLength": 1},
         "description": {
           "$ref": "#/$defs/description"
         },
@@ -118,6 +90,12 @@
         "mesh": {
           "$ref": "#/$defs/identifier"
         },
+        "parameters": {
+          "$ref": "#/$defs/identifier"
+        },
+        "transport": {
+          "anyOf": [{"$ref": "#/$defs/identifier"}, {"type": "null"}]
+        },
         "restart": {
           "$ref": "#/$defs/identifier"
         },
@@ -128,12 +106,15 @@
           "$ref": "#/$defs/identifier_list"
         },
         "impurity_configuration": {
-          "$ref": "#/$defs/identifier"
+          "anyOf": [{"$ref": "#/$defs/identifier"}, {"type": "null"}]
         },
         "comparison": {
           "$ref": "#/$defs/comparison"
         },
         "parameter_overrides": {
+          "$ref": "#/$defs/parameter_overrides"
+        },
+        "transport_overrides": {
           "$ref": "#/$defs/parameter_overrides"
         },
         "adaptive_stages": {
@@ -143,22 +124,32 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "$ref": "#/$defs/stage"
+            "anyOf": [
+              {
+                "$ref": "#/$defs/identifier"
+              },
+              {
+                "$ref": "#/$defs/stage"
+              }
+            ]
           }
-        }
-      },
-      "anyOf": [
-        {
-          "required": [
-            "type"
-          ]
         },
-        {
-          "required": [
-            "extends"
-          ]
+        "stage_overrides": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/stage_changes"
+          }
+        },
+        "parameter_namelists": {
+          "$ref": "#/$defs/parameter_namelists"
+        },
+        "require_refinement": {
+          "type": "boolean"
         }
-      ]
+      }
     },
     "comparison": {
       "type": "object",
@@ -176,39 +167,16 @@
         "cross_layout_profile": {
           "$ref": "#/$defs/identifier"
         },
-        "stage_profile": {
+        "direct_profile": {
           "$ref": "#/$defs/identifier"
         }
       }
     },
     "stage": {
-      "type": "object",
-      "additionalProperties": false,
+      "$ref": "#/$defs/stage_fields",
       "required": [
-        "id",
-        "parameters",
-        "transport"
-      ],
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/identifier"
-        },
-        "parameters": {
-          "$ref": "#/$defs/identifier"
-        },
-        "transport": {
-          "$ref": "#/$defs/identifier"
-        },
-        "parameter_overrides": {
-          "$ref": "#/$defs/parameter_overrides"
-        },
-        "newton_check": {
-          "enum": [
-            "bounded",
-            "finite_only"
-          ]
-        }
-      }
+        "id"
+      ]
     },
     "parameter_overrides": {
       "type": "object",
@@ -221,6 +189,96 @@
           "number",
           "string"
         ]
+      }
+    },
+    "workflows": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/workflow"
+      }
+    },
+    "stage_changes": {
+      "$ref": "#/$defs/stage_fields",
+      "not": {
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "workflow_catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "workflows"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 2
+        },
+        "workflows": {
+          "$ref": "#/$defs/workflows"
+        },
+        "sequences": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/stage"
+            }
+          }
+        },
+        "parameter_namelists": {
+          "$ref": "#/$defs/parameter_namelists"
+        }
+      }
+    },
+    "stage_fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "parameters": {
+          "$ref": "#/$defs/identifier"
+        },
+        "transport": {
+          "anyOf": [{"$ref": "#/$defs/identifier"}, {"type": "null"}]
+        },
+        "parameter_overrides": {
+          "$ref": "#/$defs/parameter_overrides"
+        },
+        "transport_overrides": {
+          "$ref": "#/$defs/parameter_overrides"
+        },
+        "newton_check": {
+          "enum": [
+            "bounded",
+            "finite_only"
+          ]
+        },
+        "parameter_namelists": {
+          "$ref": "#/$defs/parameter_namelists"
+        }
+      }
+    },
+    "parameter_namelists": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
       }
     }
   }

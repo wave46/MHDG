@@ -1,7 +1,13 @@
 &IMPURITY_RADIATION_LST
+  ! Read when impurity_radiation = .true.; select this file with impurity_model_path.
+  ! Supply 1 to 64 entries; supported names are 'N' and 'W'.
+  ! For a mixture, e.g. n_impurities = 2, provide two names and concentrations.
   n_impurities = 1
   impurity_names = 'W'
+  ! Non-negative fractions of electron density, one per entry; duplicates add.
   impurity_concentrations = 0.0d0
+  ! Moving-equilibrium concentration history for entry 1 (target_variable = 0, 1, 2).
+  ! With target_variable = 3, feedback adjusts entry 1; other entries stay fixed.
   impurity_concentration_path = '/path/where/to/read/impurity/concentration/'
   impurity_concentration_dimension = 10000
 /

@@ -32,6 +32,46 @@ Then a `.geo` file is needed to make `.msh` files using GMSH GUI.
 The refinement level for initial mesh should be of order of 1k P8 elements for a machine like TCV, then it will be automatically refined if mesh adaptivity is used.
 Without mesh adaptivity typicla P8 mesh for WEST tokamak has ~15-20k elements refined at the divertor targets and at the wall in the far SOL
 
+## Input configuration
+
+The solver reads `param.txt` from the working directory. The four templates in
+`test/` use the same input keys: `param_initial.txt` starts from a mesh at high
+diffusion, `param_diffred.txt` reduces diffusion through pseudo-steady states,
+`param_steady.txt` reconverges at fixed diffusion, and `param_reference.txt`
+provides an adaptive steady-state example with separate particle and heat
+diffusivities. Set paths, grid dimensions, and case-specific values before use.
+
+The neutral limiter temperature source is `'ti'` (local ion temperature) or
+`'fixed'` (requires `neutral_flux_limiter_tn_eV > 0`). Flux regularization and
+the minimum cap flux are specified in `m^-2 s^-1`. Set
+`neutral_flux_limiter_save_2d = .true.` in `SWITCH_LST` to save nodal limiter
+diagnostics; this can also be used with the limiter off.
+
+Enabled balance diagnostics require a 2D neutral-temperature model and
+`bohmtypebc = 0`. `summary` reports compact content, inputs/outputs, and total
+balances; `equations` reports individual equation balances; `detailed` adds
+physical, discrete, and boundary-condition components. Physical wall reporting
+supports Bohm, BohmPump, and BohmPuff boundaries; other physical boundaries
+produce a warning.
+
+`INPUT_LST` selects the auxiliary namelists, with paths relative to the working
+directory unless absolute paths are supplied:
+
+- `transport_model_path = 'transport_model.nml'` supplies
+  `TRANSPORT_MODEL_1D_LST` when `transport_1d` is enabled. See the
+  [sample](test/transport_model.nml) and
+  [transport guide](src/Models/NGammaTiTe/transport_1d/README.md) for topology
+  policies, particle-diffusion taper, and pinch settings.
+- `impurity_model_path = 'impurity_model.nml'` supplies
+  `IMPURITY_RADIATION_LST` and is required when `impurity_radiation` is enabled.
+  The [sample](test/impurity_model.nml) includes every supported key. Species
+  names (`'N'`, `'W'`) and non-negative concentrations are arrays, with
+  concentrations expressed as fractions of electron density. Mixture settings
+  and the moving-equilibrium concentration-file controls belong in this file.
+
+The feedback gains apply to moving-equilibrium control. The spelling
+`feedback_propotional_gain` (and its `_xpr` counterpart) matches the reader.
+
 ## Running 
 The pipeline to get solution for a case without meshadaptivity and in serial is described in [demo](https://github.com/wave46/HDG_postprocess/blob/main/demos/hdg_solution_basics_neutrals.ipynb)
 First, go to `test` folder, where executable is. It is convinient to create `Meshes` folder and put your mesh there.

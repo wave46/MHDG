@@ -1,284 +1,159 @@
-from __future__ import annotations
+"""Direct field/mesh contracts and the public comparison command."""
 
 import json
-import sys
-import tempfile
-import unittest
-from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 
-
-REGRESSION_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REGRESSION_ROOT / "tools"))
-
-from comparison.fixed.hdf5 import compare_hdf5_files  # noqa: E402
-from tests.fixtures.harness import run_command  # noqa: E402
-from tests.fixtures.solutions import write_solution  # noqa: E402
-
+from regression_tests.compare_fixed import compare_hdf5_files, validate_solution_file
+from regression_tests.compare_common import read_newton_convergence
+from regression_tests.compare import compare_completed_run
+from regression_tests.tests.fixtures.harness import REGRESSION_ROOT, run_command
+from regression_tests.tests.fixtures.solutions import write_solution
 
 TOLERANCES = {
-    "require_finite": True,
-    "newton_error_max": 2.0e-4,
-    "mesh_coordinate_atol": 1.0e-12,
-    "relative_l2_max": 1.0e-10,
-    "normalized_linf_max": 1.0e-9,
+    "newton_error_max": 2e-4, "mesh_coordinate_atol": 1e-12,
+    "relative_l2_max": 1e-10, "normalized_linf_max": 1e-9,
 }
 
 
-class Hdf5ComparisonTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temporary_directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary_directory.cleanup)
-        self.root = Path(self.temporary_directory.name)
-        self.reference = self.root / "reference.h5"
-        self.candidate = self.root / "candidate.h5"
-        write_solution(self.reference, grouped=True)
-        write_solution(self.candidate, grouped=False)
+@pytest.fixture
+def files(tmp_path):
+    reference, candidate = tmp_path / "reference.h5", tmp_path / "candidate.h5"
+    write_solution(reference)
+    write_solution(candidate)
+    return reference, candidate
 
-    def test_grouped_reference_matches_legacy_flat_candidate(self) -> None:
-        with h5py.File(self.candidate, "r+") as handle:
-            del handle["conservative_variable_names"]
 
-        report = compare_hdf5_files(
-            self.reference, self.candidate, TOLERANCES
-        )
+def test_missing_candidate_equation_names_use_reference_names(files):
+    reference, candidate = files
+    with h5py.File(candidate, "r+") as handle:
+        del handle["simulation_parameters/physics/conservative_variable_names"]
+    report = compare_hdf5_files(reference, candidate, TOLERANCES)
+    assert report["status"] == "passed"
+    assert report["solution"]["equation_names"] == ["rho", "Gamma"]
+    assert not validate_solution_file(reference)
+    assert not validate_solution_file(candidate)
 
-        self.assertEqual(report["status"], "passed")
-        self.assertEqual(
-            report["formats"]["candidate"], "flat_solution+flat_mesh"
-        )
-        self.assertEqual(
-            report["solution"]["datasets"]["u"]["equations"]["Gamma"][
-                "relative_l2"
-            ],
-            0.0,
-        )
-        self.assertEqual(report["solution"]["equation_names"], ["rho", "Gamma"])
 
-    def test_per_equation_difference_fails(self) -> None:
-        with h5py.File(self.candidate, "r+") as handle:
-            handle["u"][1] += 1.0
-
-        report = compare_hdf5_files(
-            self.reference, self.candidate, TOLERANCES
-        )
-
-        self.assertEqual(report["status"], "failed")
+@pytest.mark.parametrize("dataset,index,value,section", [
+    ("solution/u", 1, 3.0, "solution"),
+    ("solution/q", 0, np.nan, "solution"),
+    ("mesh/T", (0, 0), 99, "mesh"),
+    ("transport_1d/coefficients/d_fs", 0, 2.0, "transport_1d"),
+])
+def test_field_nonfinite_mesh_and_transport_failures(files, dataset, index, value, section):
+    reference, candidate = files
+    with h5py.File(candidate, "r+") as handle:
+        handle[dataset][index] = value
+    report = compare_hdf5_files(reference, candidate, TOLERANCES)
+    assert report["status"] == "failed"
+    assert not report[section]["passed"]
+    # A finite changed field is valid data even though it fails regression;
+    # bad connectivity and nonfinite fields are invalid on their own.
+    assert bool(validate_solution_file(candidate)) == (dataset in {"solution/q", "mesh/T"})
+    if section == "transport_1d":
+        with h5py.File(candidate, "r+") as handle:
+            handle[dataset][index] = np.nan
+        assert any("transport_1d" in failure for failure in validate_solution_file(candidate))
+    if dataset == "solution/u":
         equations = report["solution"]["datasets"]["u"]["equations"]
-        self.assertTrue(equations["rho"]["passed"])
-        self.assertFalse(equations["Gamma"]["passed"])
+        assert equations["rho"]["passed"] and not equations["Gamma"]["passed"]
+    elif dataset == "solution/q":
+        assert not report["solution"]["datasets"]["q"]["equations"]["rho"]["finite"]
+    elif dataset == "mesh/T":
+        assert report["solution"]["reason"] == "mesh comparison failed"
 
-    def test_nonfinite_candidate_fails(self) -> None:
-        with h5py.File(self.candidate, "r+") as handle:
-            handle["q"][0] = np.nan
 
-        report = compare_hdf5_files(
-            self.reference, self.candidate, TOLERANCES
-        )
-
-        self.assertEqual(report["status"], "failed")
-        metrics = report["solution"]["datasets"]["q"]["equations"]["rho"]
-        self.assertFalse(metrics["finite"])
-
-    def test_connectivity_difference_fails(self) -> None:
-        with h5py.File(self.candidate, "r+") as handle:
-            handle["T"][0, 0] = 99
-
-        report = compare_hdf5_files(
-            self.reference, self.candidate, TOLERANCES
-        )
-
-        self.assertEqual(report["status"], "failed")
-        self.assertFalse(report["mesh"]["connectivity"]["T"]["passed"])
-
-    def test_magnetic_contract_matches(self) -> None:
-        self._write_magnetic(self.reference)
-        self._write_magnetic(self.candidate)
-
-        report = compare_hdf5_files(
-            self.reference, self.candidate, TOLERANCES
-        )
-
-        magnetic = report["magnetic"]
-        self.assertEqual(report["status"], "passed")
-        self.assertTrue(magnetic["present"])
-        self.assertTrue(magnetic["passed"])
-        self.assertEqual(magnetic["datasets"]["topology"]["mode"], "exact")
-        self.assertEqual(
-            magnetic["datasets"]["rho_pol_norm"]["relative_l2"],
-            0.0,
-        )
-
-    def test_magnetic_region_difference_fails(self) -> None:
-        self._write_magnetic(self.reference)
-        self._write_magnetic(self.candidate)
-        with h5py.File(self.candidate, "r+") as handle:
-            handle["magnetic/topology_region"][2] = 3
-
-        report = compare_hdf5_files(
-            self.reference, self.candidate, TOLERANCES
-        )
-
-        self.assertEqual(report["status"], "failed")
-        self.assertFalse(
-            report["magnetic"]["datasets"]["topology_region"]["passed"]
-        )
-        self.assertIn("magnetic/topology_region differs", report["failures"])
-
-    def test_missing_candidate_magnetic_contract_fails(self) -> None:
-        self._write_magnetic(self.reference)
-
-        report = compare_hdf5_files(
-            self.reference, self.candidate, TOLERANCES
-        )
-
-        self.assertEqual(report["status"], "failed")
-        self.assertIn("candidate is missing magnetic data", report["failures"])
-
-    @staticmethod
-    def _write_magnetic(path: Path) -> None:
+@pytest.mark.parametrize("difference", [None, "region", "missing"])
+def test_magnetic_contract(files, difference):
+    reference, candidate = files
+    for path in files:
+        if path == candidate and difference == "missing":
+            continue
         with h5py.File(path, "r+") as handle:
             magnetic = handle.create_group("magnetic")
-            magnetic.create_dataset("topology", data=np.asarray([b"limited"]))
-            magnetic.create_dataset("topology_id", data=np.asarray([1]))
-            magnetic.create_dataset(
-                "topology_region", data=np.asarray([1, 1, 2, 2])
-            )
-            magnetic.create_dataset(
-                "rho_pol_norm", data=np.asarray([0.0, 0.5, 1.0, 1.2])
-            )
-            magnetic.create_dataset(
-                "topology_normal",
-                data=np.asarray(
-                    [[1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0]]
-                ),
-            )
+            for name, values in {
+                "topology": [b"limited"], "topology_id": [1],
+                "topology_region": [1, 1, 2, 2], "rho_pol_norm": [0., .5, 1., 1.2],
+                "topology_normal": [[1., 1., 1., 1.], [0., 0., 0., 0.]],
+            }.items():
+                magnetic[name] = np.asarray(values)
+            if path == candidate and difference == "region":
+                magnetic["topology_region"][2] = 3
+    report = compare_hdf5_files(reference, candidate, TOLERANCES)
+    assert report["status"] == ("failed" if difference else "passed")
+    assert not validate_solution_file(candidate)
+    if difference == "missing":
+        assert "candidate is missing magnetic data" in report["failures"]
+    elif difference == "region":
+        assert "magnetic/topology_region differs" in report["failures"]
+    else:
+        with h5py.File(candidate, "r+") as handle:
+            del handle["transport_1d"]  # Optional data need not exist for file validity.
+        assert not validate_solution_file(candidate)
+        with h5py.File(candidate, "r+") as handle:
+            handle["magnetic/rho_pol_norm"][0] = np.inf
+        assert any("magnetic/rho_pol_norm" in failure for failure in validate_solution_file(candidate))
 
 
-class CompareCommandTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temporary_directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary_directory.cleanup)
-        self.root = Path(self.temporary_directory.name)
-        self.run = self.root / "run"
-        (self.run / "inputs").mkdir(parents=True)
-        (self.run / "outputs").mkdir()
-
-        self.reference = self.run / "inputs/reference.h5"
-        self.checkpoint = self.run / "outputs/result_0000.h5"
-        self.final = self.run / "outputs/result.h5"
-        write_solution(self.reference, grouped=True)
-        write_solution(self.checkpoint, grouped=False, solution_offset=1.0)
-        write_solution(self.final, grouped=False)
-
-        (self.run / "run_plan.json").write_text(
-            json.dumps(
-                {
-                    "case_id": "legacy_case",
-                    "workflow_id": "warm",
-                    "layout_id": "mpi4_omp4",
-                }
-            ),
-            encoding="utf-8",
+@pytest.mark.parametrize("last_value,expected", [
+    (None, None), ("", None), ("NaN", None), ("Infinity", None),
+    ("********", None), ("1.0E309", None),
+    ("1.0D-2", 1e-2), ("1.0d-5", 1e-5), ("1.0E-2", 1e-2),
+])
+def test_newton_acceptance_uses_last_record(tmp_path, last_value, expected):
+    log = tmp_path / "stdout.log"
+    log.write_text("no Newton iteration\n" if last_value is None else (
+        f" Error: 1.0E-5\n\tError: {last_value}\nOutput written to file result.h5\n"
+    ))
+    for maximum in (2e-4, None):
+        convergence = read_newton_convergence(log, maximum)
+        assert convergence.final_error == expected
+        assert convergence.passed == (
+            expected is not None and (maximum is None or expected <= maximum)
         )
-        (self.run / "run_metadata.json").write_text(
-            json.dumps(
-                {
-                    "status": "completed",
-                    "hdf5_outputs": [
-                        "outputs/result.h5",
-                        "outputs/result_0000.h5",
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-        (self.run / "stdout.log").write_text(
-            f"Error: 8.0E-4\nError: 1.0E-5\n"
-            f"Output written to file {self.checkpoint}\n"
-            f"Output written to file {self.final}\n",
-            encoding="utf-8",
-        )
+        # Failed parsing/nonfinite values must still produce a valid JSON report.
+        json.dumps(convergence.as_report(), allow_nan=False)
 
-    def test_public_command_selects_final_output_and_writes_report(self) -> None:
-        report_path = self.root / "comparison.json"
-        completed = run_command(
-            "compare",
-            str(self.run),
-            "--report",
-            str(report_path),
-        )
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-        self.assertEqual(report["status"], "passed")
-        self.assertEqual(report["candidate"], str(self.final.resolve()))
-        self.assertEqual(report["convergence"]["final_newton_error"], 1.0e-5)
-        self.assertEqual(report["tolerance_profile"]["id"], "fixed_same_layout")
-        self.assertEqual(len(report["files"]["reference"]["sha256"]), 64)
-        self.assertIn("Newton error: PASS", completed.stdout)
-        self.assertIn("Mesh: PASS", completed.stdout)
-        self.assertIn("solution/u: PASS", completed.stdout)
-        self.assertIn("transport_1d: PASS", completed.stdout)
-
-    def test_newton_error_above_tolerance_fails(self) -> None:
-        (self.run / "stdout.log").write_text(
-            f"Error: 3.0E-4\nOutput written to file {self.final}\n",
-            encoding="utf-8",
-        )
-        report_path = self.root / "failed-comparison.json"
-        completed = run_command(
-            "compare",
-            str(self.run),
-            "--report",
-            str(report_path),
-        )
-
-        self.assertEqual(completed.returncode, 1)
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-        self.assertEqual(report["status"], "failed")
-        self.assertFalse(report["convergence"]["passed"])
-        self.assertIn("Newton error: FAIL", completed.stdout)
-        self.assertIn(
-            "FAIL: final Newton error exceeds tolerance",
-            completed.stdout,
-        )
-
-    def test_nondefault_layout_uses_cross_layout_profile(self) -> None:
-        (self.run / "run_plan.json").write_text(
-            json.dumps(
-                {
-                    "case_id": "legacy_case",
-                    "workflow_id": "warm",
-                    "layout_id": "serial_omp16",
-                }
-            ),
-            encoding="utf-8",
-        )
-        report_path = self.root / "cross-layout.json"
-        completed = run_command(
-            "compare",
-            str(self.run),
-            "--report",
-            str(report_path),
-        )
-
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-        self.assertEqual(report["tolerance_profile"]["id"], "fixed_cross_layout")
-
-    def test_report_cannot_replace_candidate_hdf5(self) -> None:
-        original_size = self.final.stat().st_size
-        completed = run_command(
-            "compare",
-            str(self.run),
-            "--report",
-            str(self.final),
-        )
-
-        self.assertEqual(completed.returncode, 1)
-        self.assertEqual(self.final.stat().st_size, original_size)
-        with h5py.File(self.final, "r") as handle:
-            self.assertIn("u", handle)
+@pytest.mark.parametrize("mode", ["same_layout", "cross_layout", "protected_output"])
+def test_final_output_selection_tolerance_profile_and_cli(tmp_path, mode):
+    run = tmp_path / "run"
+    (run / "inputs").mkdir(parents=True)
+    (run / "outputs").mkdir()
+    reference, checkpoint, final = (run / name for name in (
+        "inputs/reference.h5", "outputs/result_0000.h5", "outputs/result.h5",
+    ))
+    write_solution(reference)
+    write_solution(checkpoint, solution_offset=1.0)
+    write_solution(final)
+    (run / "run_plan.json").write_text(json.dumps({
+        "case_id": "legacy_case", "workflow_id": "baseline_warm",
+        "layout_id": "serial_omp16" if mode == "cross_layout" else "mpi4_omp4",
+    }))
+    (run / "run_metadata.json").write_text(json.dumps({
+        "status": "completed", "hdf5_outputs": ["outputs/result.h5", "outputs/result_0000.h5"],
+    }))
+    (run / "stdout.log").write_text(
+        f"Error: 1.0E-5\nOutput written to file {checkpoint}\nOutput written to file {final}\n"
+    )
+    report_path = final if mode == "protected_output" else tmp_path / "comparison.json"
+    original = final.read_bytes()
+    if mode == "cross_layout":
+        compare_completed_run(run, REGRESSION_ROOT / "cases", REGRESSION_ROOT / "tolerances.json",
+                              report_override=report_path)
+    else:
+        completed = run_command("compare", str(run), "--report", str(report_path))
+        assert completed.returncode == int(mode == "protected_output"), completed.stderr
+    assert final.read_bytes() == original
+    if mode == "protected_output":
+        assert "cannot replace a comparison input" in completed.stderr
+        return
+    report = json.loads(report_path.read_text())
+    assert report["candidate"] == str(final)
+    assert report["status"] == "passed"
+    assert report["tolerance_profile"]["id"] == (
+        "fixed_cross_layout" if mode == "cross_layout" else "fixed_same_layout"
+    )

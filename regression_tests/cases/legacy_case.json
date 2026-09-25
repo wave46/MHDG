@@ -1,410 +1,37 @@
 {
   "schema_version": 2,
-  "description": "Routine legacy regression case",
-  "reference": {
-    "branch": "develop",
-    "revision": "29f442db67bac169b2616f2cbe399289d137993c"
-  },
+  "description": "Real limited topology: bootstrap, transport and analytical model checks",
   "files": {
     "required": {
-      "mesh": "mesh.msh",
       "geometry": "geometry.geo",
       "equilibrium_magnetic_field": "equilibrium.h5",
-      "equilibrium_current_density": "current_density.h5",
-      "warm_parameters": "param.txt",
-      "transport_configuration": "transport_model.nml",
-      "impurity_configuration": "impurity_model_w.nml"
+      "equilibrium_current_density": "current_density.h5"
     },
     "optional": {
-      "warm_restart": "restart.h5",
-      "warm_reference": "reference_mpi4_omp4.h5",
-      "warm_neutral_sources_in_elements_restart": "restart_neutral_sources_in_elements.h5",
-      "warm_neutral_sources_in_elements_reference": "reference_neutral_sources_in_elements_mpi4_omp4.h5",
-      "warm_neutral_pressure_reference": "reference_neutral_pressure_mpi4_omp4.h5",
-      "warm_neutral_perpendicular_reference": "reference_neutral_perpendicular_mpi4_omp4.h5",
-      "warm_neutral_limiter_fixed_reference": "reference_neutral_limiter_fixed_mpi4_omp4.h5",
-      "warm_neutral_limiter_ti_reference": "reference_neutral_limiter_ti_mpi4_omp4.h5",
-      "warm_impurity_off_restart": "restart_impurity_off.h5",
-      "warm_impurity_off_reference": "reference_impurity_off_mpi4_omp4.h5",
-      "warm_impurity_n_restart": "restart_impurity_n.h5",
-      "warm_impurity_n_reference": "reference_impurity_n_mpi4_omp4.h5",
-      "impurity_n_configuration": "impurity_model_n.nml",
-      "warm_impurity_nw_restart": "restart_impurity_nw.h5",
-      "warm_impurity_nw_reference": "reference_impurity_nw_mpi4_omp4.h5",
-      "impurity_nw_configuration": "impurity_model_nw.nml",
+      "bootstrap_reference": "reference_bootstrap.h5",
+      "bootstrap_mesh": "mesh_bootstrap.msh",
+      "baseline_reference": "reference_baseline.h5",
+      "transport_reference": "reference_transport.h5",
+      "transport_short_reference": "reference_transport_short.h5",
+      "transport_configuration": "transport_model.nml",
+      "impurity_configuration": "impurity_model_w.nml",
       "coarse_mesh": "mesh_adaptive_initial.msh",
-      "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
-      "cold_fixed_diffusion_reduction_parameters": "param_cold_fixed_diffusion_reduction.txt",
-      "cold_fixed_continuation_01_parameters": "param_cold_fixed_continuation_01.txt",
-      "cold_fixed_continuation_02_parameters": "param_cold_fixed_continuation_02.txt",
-      "cold_fixed_continuation_03_parameters": "param_cold_fixed_continuation_03.txt",
-      "cold_fixed_continuation_04_parameters": "param_cold_fixed_continuation_04.txt",
-      "cold_fixed_continuation_05_parameters": "param_cold_fixed_continuation_05.txt",
-      "cold_fixed_initial_transport_configuration": "transport_cold_fixed_initial.nml",
-      "cold_fixed_continuation_01_transport_configuration": "transport_cold_fixed_continuation_01.nml",
-      "cold_fixed_continuation_02_transport_configuration": "transport_cold_fixed_continuation_02.nml",
-      "cold_fixed_continuation_03_transport_configuration": "transport_cold_fixed_continuation_03.nml",
-      "cold_fixed_continuation_04_transport_configuration": "transport_cold_fixed_continuation_04.nml",
-      "cold_fixed_continuation_05_transport_configuration": "transport_cold_fixed_continuation_05.nml"
+      "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt"
     }
   },
   "workflows": {
-    "warm": {
-      "type": "warm_same_state",
-      "description": "Reconverge an unchanged steady restart on the fixed mesh",
-      "inputs": [
-        "mesh",
-        "geometry",
-        "equilibrium_magnetic_field",
-        "equilibrium_current_density",
-        "warm_parameters",
-        "transport_configuration"
-      ],
-      "impurity_configuration": "impurity_configuration",
-      "layout": "mpi4_omp4",
-      "restart": "warm_restart",
-      "reference": "warm_reference",
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "fixed_same_layout",
-        "cross_layout_profile": "fixed_cross_layout"
-      },
-      "parameter_overrides": {
-        "compute_from_flux": true
-      }
-    },
-    "warm_balance_diagnostics": {
-      "extends": "warm",
-      "description": "Reconverge the unchanged warm restart with detailed balance diagnostics",
-      "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed"
-      }
-    },
-    "warm_neutral_pressure": {
-      "extends": "warm_neutral_sources_in_elements",
-      "description": "Reconverge the source-relocated state with neutral pressure enabled",
-      "reference": "warm_neutral_pressure_reference",
-      "outputs": ["warm_neutral_pressure_reference"],
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "neutral_feature_same_layout",
-        "cross_layout_profile": "fixed_cross_layout"
-      },
-      "parameter_overrides": {
-        "neutralp_lambda": 0.05
-      }
-    },
-    "warm_neutral_sources_in_elements": {
-      "extends": "warm",
-      "description": "Reconverge the accepted restart with neutral puff and pump in elements",
-      "restart": "warm_neutral_sources_in_elements_restart",
-      "reference": "warm_neutral_sources_in_elements_reference",
-      "outputs": ["warm_neutral_sources_in_elements_reference"],
-      "parameter_overrides": {
-        "neutral_wall_sources_in_elements": true,
-        "neutralp_lambda": 0.0,
-        "neutral_perpendicular_diffusion": false,
-        "neutral_flux_limiter_mode": "off",
-        "neutral_flux_limiter_save_2d": false
-      }
-    },
-    "bootstrap_neutral_sources_in_elements": {
-      "extends": "warm_neutral_sources_in_elements",
-      "description": "Create the source-relocated restart from the current canonical warm state",
-      "restart": "warm_restart",
-      "outputs": ["warm_neutral_sources_in_elements_restart"]
-    },
-    "warm_neutral_perpendicular": {
-      "extends": "warm_neutral_sources_in_elements",
-      "description": "Reconverge the source-relocated state with perpendicular neutral diffusion",
-      "reference": "warm_neutral_perpendicular_reference",
-      "outputs": ["warm_neutral_perpendicular_reference"],
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "neutral_feature_same_layout",
-        "cross_layout_profile": "fixed_cross_layout"
-      },
-      "parameter_overrides": {
-        "neutral_perpendicular_diffusion": true
-      }
-    },
-    "warm_neutral_limiter_fixed": {
-      "extends": "warm_neutral_sources_in_elements",
-      "description": "Reconverge the source-relocated state with fixed-temperature neutral limiting",
-      "reference": "warm_neutral_limiter_fixed_reference",
-      "outputs": ["warm_neutral_limiter_fixed_reference"],
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "neutral_feature_same_layout",
-        "cross_layout_profile": "fixed_cross_layout"
-      },
-      "parameter_overrides": {
-        "neutral_flux_limiter_mode": "lagged_flux_limiter",
-        "neutral_flux_limiter_tn_source": "fixed",
-        "neutral_flux_limiter_tn_eV": 2.5,
-        "neutral_flux_limiter_fs_fraction": 1.0
-      }
-    },
-    "warm_neutral_limiter_ti": {
-      "extends": "warm_neutral_limiter_fixed",
-      "description": "Reconverge the source-relocated state with ion-temperature neutral limiting",
-      "reference": "warm_neutral_limiter_ti_reference",
-      "outputs": ["warm_neutral_limiter_ti_reference"],
-      "parameter_overrides": {
-        "neutral_flux_limiter_tn_source": "ti",
-        "neutral_flux_limiter_tn_eV": 0.0
-      }
-    },
-    "race_neutral_sources_in_elements": {
-      "type": "warm_same_state",
-      "description": "Run two Newton iterations with source relocation only",
-      "inputs": [
-        "mesh",
-        "geometry",
-        "equilibrium_magnetic_field",
-        "equilibrium_current_density",
-        "warm_parameters",
-        "transport_configuration"
-      ],
-      "impurity_configuration": "impurity_configuration",
-      "layout": "serial_omp1",
-      "restart": "warm_neutral_sources_in_elements_restart",
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "neutral_feature_race_step",
-        "cross_layout_profile": "neutral_feature_race_step"
-      },
-      "parameter_overrides": {
-        "compute_from_flux": true,
-        "neutral_wall_sources_in_elements": true,
-        "neutralp_lambda": 0.0,
-        "neutral_perpendicular_diffusion": false,
-        "neutral_flux_limiter_mode": "off",
-        "neutral_flux_limiter_save_2d": false,
-        "nrp": 2
-      }
-    },
-    "race_neutral_pressure": {
-      "extends": "race_neutral_sources_in_elements",
-      "description": "Run two Newton iterations with neutral pressure",
-      "parameter_overrides": {
-        "neutralp_lambda": 0.05
-      }
-    },
-    "race_neutral_perpendicular": {
-      "extends": "race_neutral_sources_in_elements",
-      "description": "Run two Newton iterations with perpendicular neutral diffusion",
-      "parameter_overrides": {
-        "neutral_perpendicular_diffusion": true
-      }
-    },
-    "race_neutral_limiter_fixed": {
-      "extends": "race_neutral_sources_in_elements",
-      "description": "Run two Newton iterations with fixed-temperature neutral limiting",
-      "parameter_overrides": {
-        "neutral_flux_limiter_mode": "lagged_flux_limiter",
-        "neutral_flux_limiter_tn_source": "fixed",
-        "neutral_flux_limiter_tn_eV": 2.5,
-        "neutral_flux_limiter_fs_fraction": 1.0
-      }
-    },
-    "race_neutral_limiter_ti": {
-      "extends": "race_neutral_limiter_fixed",
-      "description": "Run two Newton iterations with ion-temperature neutral limiting",
-      "parameter_overrides": {
-        "neutral_flux_limiter_tn_source": "ti",
-        "neutral_flux_limiter_tn_eV": 0.0
-      }
-    },
-    "warm_impurity_off": {
-      "extends": "warm",
-      "description": "Reconverge the accepted state with impurity radiation disabled",
-      "restart": "warm_impurity_off_restart",
-      "reference": "warm_impurity_off_reference",
-      "parameter_overrides": {
-        "impurity_radiation": false
-      }
-    },
-    "warm_impurity_n": {
-      "extends": "warm",
-      "description": "Reconverge the accepted state with single-nitrogen radiation",
-      "restart": "warm_impurity_n_restart",
-      "reference": "warm_impurity_n_reference",
-      "impurity_configuration": "impurity_n_configuration",
-      "parameter_overrides": {
-        "impurity_radiation": true
-      }
-    },
-    "warm_impurity_nw": {
-      "extends": "warm",
-      "description": "Reconverge the accepted state with nitrogen-tungsten radiation",
-      "restart": "warm_impurity_nw_restart",
-      "reference": "warm_impurity_nw_reference",
-      "impurity_configuration": "impurity_nw_configuration",
-      "parameter_overrides": {
-        "impurity_radiation": true
-      }
-    },
-    "bootstrap_impurity_off": {
-      "extends": "warm_impurity_off",
-      "description": "Create the impurity-off restart from the current canonical warm state",
-      "restart": "warm_restart",
-      "outputs": ["warm_impurity_off_restart"]
-    },
-    "bootstrap_impurity_n": {
-      "extends": "warm_impurity_n",
-      "description": "Create the nitrogen restart from the current canonical warm state",
-      "restart": "warm_restart",
-      "outputs": ["warm_impurity_n_restart"]
-    },
-    "bootstrap_impurity_nw": {
-      "extends": "warm_impurity_nw",
-      "description": "Create the nitrogen-tungsten restart from the current canonical warm state",
-      "restart": "warm_restart",
-      "outputs": ["warm_impurity_nw_restart"]
-    },
-    "cold_fixed": {
-      "type": "staged_fixed_mesh",
-      "description": "Reach the canonical state from analytical initialization on the fixed mesh",
-      "inputs": [
-        "geometry",
-        "equilibrium_magnetic_field",
-        "equilibrium_current_density"
-      ],
-      "impurity_configuration": "impurity_configuration",
-      "mesh": "mesh",
-      "reference": "warm_reference",
-      "layout": "mpi4_omp4",
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "cold_fixed_reference",
-        "cross_layout_profile": "cold_fixed_reference",
-        "stage_profile": "fixed_stage_reference"
-      },
-      "parameter_overrides": {
-        "compute_from_flux": true,
-        "rest_adapt": false
-      },
-      "stages": [
-        {
-          "id": "time_init",
-          "parameters": "cold_fixed_time_init_parameters",
-          "transport": "cold_fixed_initial_transport_configuration",
-          "newton_check": "finite_only"
-        },
-        {
-          "id": "diffusion_reduction",
-          "parameters": "cold_fixed_diffusion_reduction_parameters",
-          "transport": "cold_fixed_initial_transport_configuration"
-        },
-        {
-          "id": "continuation_01",
-          "parameters": "cold_fixed_continuation_01_parameters",
-          "transport": "cold_fixed_continuation_01_transport_configuration"
-        },
-        {
-          "id": "continuation_02",
-          "parameters": "cold_fixed_continuation_02_parameters",
-          "transport": "cold_fixed_continuation_02_transport_configuration"
-        },
-        {
-          "id": "continuation_03",
-          "parameters": "cold_fixed_continuation_03_parameters",
-          "transport": "cold_fixed_continuation_03_transport_configuration"
-        },
-        {
-          "id": "continuation_04",
-          "parameters": "cold_fixed_continuation_04_parameters",
-          "transport": "cold_fixed_continuation_04_transport_configuration"
-        },
-        {
-          "id": "continuation_05",
-          "parameters": "cold_fixed_continuation_05_parameters",
-          "transport": "cold_fixed_continuation_05_transport_configuration",
-          "parameter_overrides": {
-            "tNR": 1e-5
-          }
-        }
+    "bootstrap_adaptive": {
+      "outputs": [
+        "bootstrap_reference",
+        "bootstrap_mesh"
       ]
     },
-    "cold_adaptive": {
-      "extends": "cold_fixed",
-      "type": "staged_adaptive_mesh",
-      "description": "Repeat the cold workflow with early-stage mesh adaptation",
-      "mesh": "coarse_mesh",
-      "comparison": {
-        "method": "mesh_independent",
-        "profile": "adaptive_reference",
-        "stage_profile": "adaptive_reference"
-      },
-      "adaptive_stages": [
-        "time_init",
-        "diffusion_reduction"
-      ]
-    },
-    "cold_fixed_balance_diagnostics": {
-      "extends": "cold_fixed",
-      "description": "Trace detailed particle balances through the fixed-mesh cold workflow",
-      "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed"
-      }
-    },
-    "cold_adaptive_balance_diagnostics": {
-      "extends": "cold_adaptive",
-      "description": "Trace detailed particle balances through the adaptive cold workflow",
-      "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed"
-      }
-    },
-    "cold_adaptive_neutral_sources_in_elements": {
-      "extends": "cold_adaptive",
-      "description": "Reach a source-relocated state from an adaptive cold start with detailed particle diagnostics",
-      "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed",
-        "neutral_wall_sources_in_elements": true
-      }
-    },
-    "cold_step_fixed": {
-      "type": "staged_fixed_mesh",
-      "description": "Run two Newton iterations on the coarse mesh without adaptation",
-      "inputs": [
-        "geometry",
-        "equilibrium_magnetic_field",
-        "equilibrium_current_density"
-      ],
-      "mesh": "coarse_mesh",
-      "impurity_configuration": "impurity_configuration",
-      "layout": "serial_omp1",
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "race_step",
-        "cross_layout_profile": "race_step",
-        "stage_profile": "race_step"
-      },
-      "parameter_overrides": {
-        "compute_from_flux": true,
-        "adaptivity": false,
-        "rest_adapt": false,
-        "nrp": 2
-      },
-      "stages": [
-        {
-          "id": "single_step",
-          "parameters": "cold_fixed_time_init_parameters",
-          "transport": "cold_fixed_initial_transport_configuration",
-          "parameter_overrides": {
-            "steady": false,
-            "saveNR": false,
-            "time_adapt": false,
-            "NR_adapt": false,
-            "div_adapt": false,
-            "osc_adapt": false,
-            "nts": 1
-          }
-        }
-      ]
-    },
+    "bootstrap_fixed": {},
+    "baseline_warm": {},
+    "transport": {},
+    "transport_short": {},
     "cold_step_impurity_off": {
+      "impurity_configuration": null,
       "extends": "cold_step_fixed",
       "description": "Exercise analytical initialization with impurity radiation disabled",
       "parameter_overrides": {
@@ -412,45 +39,11 @@
       }
     },
     "cold_step_neutralgamma": {
+      "model": "NGammaTiTeNeutralGamma",
       "extends": "cold_step_impurity_off",
-      "description": "Exercise NeutralGamma with detailed particle diagnostics for one fixed cold step and two Newton iterations",
+      "description": "Exercise NeutralGamma for one fixed cold step and two Newton iterations",
       "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed",
         "neutral_wall_sources_in_elements": false
-      }
-    },
-    "cold_step_stored_field": {
-      "extends": "cold_step_fixed",
-      "description": "Exercise the explicit stored-field compatibility path",
-      "parameter_overrides": {
-        "compute_from_flux": false
-      }
-    },
-    "cold_step_adaptive": {
-      "extends": "cold_step_fixed",
-      "type": "staged_adaptive_mesh",
-      "description": "Run two Newton iterations with one coarse-mesh adaptation pass",
-      "parameter_overrides": {
-        "adaptivity": true
-      },
-      "adaptive_stages": [
-        "single_step"
-      ]
-    },
-    "cold_step_fixed_neutral_sources_in_elements": {
-      "extends": "cold_step_fixed",
-      "description": "Run a fixed one-step race and detailed-balance check with neutral wall sources in elements",
-      "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed",
-        "neutral_wall_sources_in_elements": true
-      }
-    },
-    "cold_step_adaptive_neutral_sources_in_elements": {
-      "extends": "cold_step_adaptive",
-      "description": "Run an adaptive one-step race and detailed-balance check with neutral wall sources in elements",
-      "parameter_overrides": {
-        "balance_diagnostics_mode": "detailed",
-        "neutral_wall_sources_in_elements": true
       }
     }
   }

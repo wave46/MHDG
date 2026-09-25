@@ -1,0 +1,391 @@
+{
+  "schema_version": 2,
+  "parameter_namelists": {
+    "balance_diagnostics_mode": "utils_lst",
+    "neutral_wall_sources_in_elements": "switch_lst",
+    "neutral_perpendicular_diffusion": "switch_lst",
+    "neutral_flux_limiter_save_2d": "switch_lst",
+    "neutral_flux_limiter_mode": "phys_lst",
+    "neutral_flux_limiter_tn_source": "phys_lst",
+    "neutral_flux_limiter_tn_eV": "phys_lst",
+    "neutral_flux_limiter_eps": "phys_lst",
+    "neutral_flux_limiter_fs_fraction": "phys_lst",
+    "neutral_flux_limiter_fs_flux_min": "phys_lst"
+  },
+  "sequences": {
+    "bootstrap": [
+      {
+        "id": "time_init",
+        "parameters": "cold_fixed_time_init_parameters",
+        "newton_check": "finite_only",
+        "parameter_overrides": {
+          "steady": false,
+          "read_gmsh": true,
+          "readMeshFromSol": false,
+          "psdtime": false,
+          "nrp": 3,
+          "dt0": 1000.0,
+          "nts": 10
+        }
+      },
+      {
+        "id": "diffred",
+        "parameters": "cold_fixed_time_init_parameters",
+        "parameter_overrides": {
+          "steady": false,
+          "read_gmsh": false,
+          "readMeshFromSol": true,
+          "psdtime": true,
+          "nrp": 40,
+          "dt0": 3000000000.0,
+          "nts": 1
+        }
+      },
+      {
+        "id": "steady",
+        "parameters": "cold_fixed_time_init_parameters",
+        "parameter_overrides": {
+          "steady": true,
+          "read_gmsh": false,
+          "readMeshFromSol": true,
+          "psdtime": false,
+          "nrp": 40,
+          "adaptivity": false
+        }
+      }
+    ]
+  },
+  "workflows": {
+    "plasma_baseline": {
+      "inputs": ["geometry", "equilibrium_magnetic_field", "equilibrium_current_density"],
+      "impurity_configuration": "impurity_configuration",
+      "layout": "mpi4_omp4",
+      "parameter_overrides": {
+        "compute_from_flux": true,
+        "transport_1d": false,
+        "impurity_radiation": true,
+        "diff_n": 16.0,
+        "diff_u": 16.0,
+        "diff_e": 16.0,
+        "diff_ee": 16.0,
+        "tNR": 0.0002,
+        "rest_adapt": false
+      }
+    },
+    "bootstrap_adaptive": {
+      "extends": "plasma_baseline",
+      "type": "staged_adaptive_mesh",
+      "description": "Initialize, reduce diffusion and converge at 16 m2/s with W radiation and transport off",
+      "mesh": "coarse_mesh",
+      "reference": "bootstrap_reference",
+      "outputs": ["bootstrap_reference"],
+      "comparison": {
+        "method": "mesh_independent",
+        "profile": "adaptive_reference",
+        "direct_profile": "cold_fixed_reference"
+      },
+      "parameter_overrides": {"adaptivity": true},
+      "adaptive_stages": ["time_init", "diffred"],
+      "stages": ["bootstrap"]
+    },
+    "bootstrap_fixed": {
+      "extends": "bootstrap_adaptive",
+      "type": "staged_fixed_mesh",
+      "description": "Initialize fresh plasma on the accepted adaptive final mesh, then converge at 16 m2/s",
+      "mesh": "bootstrap_mesh",
+      "outputs": [],
+      "adaptive_stages": [],
+      "parameter_overrides": {"adaptivity": false},
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "cold_fixed_reference"
+      }
+    },
+    "baseline_warm": {
+      "extends": "plasma_baseline",
+      "type": "warm_same_state",
+      "description": "Reconverge the transport-off bootstrap with W radiation at 16 m2/s",
+      "parameters": "cold_fixed_time_init_parameters",
+      "restart": "bootstrap_reference",
+      "reference": "baseline_reference",
+      "outputs": ["baseline_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "fixed_same_layout",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
+      "parameter_overrides": {
+        "steady": true,
+        "read_gmsh": false,
+        "readMeshFromSol": true,
+        "psdtime": false,
+        "nrp": 40,
+        "adaptivity": false
+      }
+    },
+    "transport": {
+      "extends": "baseline_warm",
+      "type": "staged_fixed_mesh",
+      "description": "Converge transport from the bootstrap with floors 8, 4, 2, 0.5 and 0.1 m2/s",
+      "transport": "transport_configuration",
+      "reference": "transport_reference",
+      "outputs": ["transport_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "transport_converged",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
+      "parameter_overrides": {"transport_1d": true},
+      "stages": [
+        {"id": "floor_8", "transport_overrides": {
+          "diff_n_min_phys": 8.0, "diff_u_min_phys": 8.0, "diff_e_min_phys": 8.0, "diff_ee_min_phys": 8.0
+        }},
+        {"id": "floor_4", "transport_overrides": {
+          "diff_n_min_phys": 4.0, "diff_u_min_phys": 4.0, "diff_e_min_phys": 4.0, "diff_ee_min_phys": 4.0
+        }},
+        {"id": "floor_2", "transport_overrides": {
+          "diff_n_min_phys": 2.0, "diff_u_min_phys": 2.0, "diff_e_min_phys": 2.0, "diff_ee_min_phys": 2.0
+        }},
+        {"id": "floor_0_5", "transport_overrides": {
+          "diff_n_min_phys": 0.5, "diff_u_min_phys": 0.5, "diff_e_min_phys": 0.5, "diff_ee_min_phys": 0.5
+        }},
+        {"id": "floor_0_1", "transport_overrides": {
+          "diff_n_min_phys": 0.1, "diff_u_min_phys": 0.1, "diff_e_min_phys": 0.1, "diff_ee_min_phys": 0.1
+        }}
+      ]
+    },
+    "transport_short": {
+      "extends": "baseline_warm",
+      "description": "Run two Newton iterations from the converged transport reference at floor 0.1 m2/s",
+      "transport": "transport_configuration",
+      "restart": "transport_reference",
+      "reference": "transport_short_reference",
+      "outputs": ["transport_short_reference"],
+      "parameter_overrides": {"transport_1d": true, "nrp": 2},
+      "transport_overrides": {
+        "diff_n_min_phys": 0.1, "diff_u_min_phys": 0.1, "diff_e_min_phys": 0.1, "diff_ee_min_phys": 0.1
+      },
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "race_step",
+        "cross_layout_profile": "race_step"
+      }
+    },
+    "stored_field": {
+      "extends": "baseline_warm",
+      "description": "Converge using the stored magnetic/current fields with an independent reference",
+      "reference": "stored_field_reference",
+      "outputs": ["stored_field_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "feature_converged",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
+      "parameter_overrides": {"compute_from_flux": false}
+    },
+    "source_relocation": {
+      "extends": "baseline_warm",
+      "description": "Converge from the transport-off bootstrap with puff and pump in elements",
+      "reference": "source_reference",
+      "outputs": ["source_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "neutral_feature_same_layout",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
+      "parameter_overrides": {
+        "neutral_wall_sources_in_elements": true,
+        "neutralp_lambda": 0.0,
+        "neutral_perpendicular_diffusion": false,
+        "neutral_flux_limiter_mode": "off",
+        "neutral_flux_limiter_save_2d": false
+      }
+    },
+    "neutral_branch": {
+      "extends": "source_relocation",
+      "restart": "source_reference"
+    },
+    "neutral_pressure": {
+      "extends": "neutral_branch",
+      "description": "Converge from the source-relocated precursor with neutral pressure",
+      "reference": "neutral_pressure_reference",
+      "outputs": ["neutral_pressure_reference"],
+      "parameter_overrides": {"neutralp_lambda": 0.05}
+    },
+    "neutral_perpendicular": {
+      "extends": "neutral_branch",
+      "description": "Converge from the source-relocated precursor with perpendicular neutral diffusion",
+      "reference": "neutral_perpendicular_reference",
+      "outputs": ["neutral_perpendicular_reference"],
+      "parameter_overrides": {"neutral_perpendicular_diffusion": true}
+    },
+    "neutral_limiter_fixed": {
+      "extends": "neutral_branch",
+      "description": "Converge from the source-relocated precursor with fixed-temperature neutral limiting",
+      "reference": "neutral_limiter_fixed_reference",
+      "outputs": ["neutral_limiter_fixed_reference"],
+      "parameter_overrides": {
+        "neutral_flux_limiter_mode": "lagged_flux_limiter",
+        "neutral_flux_limiter_tn_source": "fixed",
+        "neutral_flux_limiter_tn_eV": 2.5,
+        "neutral_flux_limiter_fs_fraction": 1.0
+      }
+    },
+    "neutral_limiter_ti": {
+      "extends": "neutral_limiter_fixed",
+      "description": "Converge from the source-relocated precursor with ion-temperature neutral limiting",
+      "reference": "neutral_limiter_ti_reference",
+      "outputs": ["neutral_limiter_ti_reference"],
+      "parameter_overrides": {
+        "neutral_flux_limiter_tn_source": "ti",
+        "neutral_flux_limiter_tn_eV": 0.0
+      }
+    },
+    "neutral_pressure_short": {
+      "extends": "neutral_pressure",
+      "description": "Run two Newton iterations enabling neutral pressure from the source-relocated precursor",
+      "reference": "neutral_pressure_short_reference",
+      "outputs": ["neutral_pressure_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "neutral_feature_race_step"}
+    },
+    "neutral_perpendicular_short": {
+      "extends": "neutral_perpendicular",
+      "description": "Run two Newton iterations enabling perpendicular diffusion from the source-relocated precursor",
+      "reference": "neutral_perpendicular_short_reference",
+      "outputs": ["neutral_perpendicular_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "neutral_feature_race_step"}
+    },
+    "neutral_limiter_fixed_short": {
+      "extends": "neutral_limiter_fixed",
+      "description": "Run two Newton iterations enabling fixed-temperature limiting from the source-relocated precursor",
+      "reference": "neutral_limiter_fixed_short_reference",
+      "outputs": ["neutral_limiter_fixed_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "neutral_feature_race_step"}
+    },
+    "neutral_limiter_ti_short": {
+      "extends": "neutral_limiter_ti",
+      "description": "Run two Newton iterations enabling ion-temperature limiting from the source-relocated precursor",
+      "reference": "neutral_limiter_ti_short_reference",
+      "outputs": ["neutral_limiter_ti_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "neutral_feature_race_step"}
+    },
+    "impurity_off": {
+      "extends": "baseline_warm",
+      "description": "Converge from the W bootstrap with impurity radiation disabled",
+      "impurity_configuration": null,
+      "reference": "impurity_off_reference",
+      "outputs": ["impurity_off_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "feature_converged",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
+      "parameter_overrides": {"impurity_radiation": false}
+    },
+    "impurity_n": {
+      "extends": "baseline_warm",
+      "description": "Converge from the W bootstrap with nitrogen radiation",
+      "impurity_configuration": "impurity_n_configuration",
+      "reference": "impurity_n_reference",
+      "outputs": ["impurity_n_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "feature_converged",
+        "cross_layout_profile": "fixed_cross_layout"
+      }
+    },
+    "impurity_nw": {
+      "extends": "impurity_n",
+      "description": "Converge from the W bootstrap with nitrogen-tungsten radiation",
+      "impurity_configuration": "impurity_nw_configuration",
+      "reference": "impurity_nw_reference",
+      "outputs": ["impurity_nw_reference"]
+    },
+    "impurity_off_short": {
+      "extends": "impurity_off",
+      "description": "Run two Newton iterations disabling impurity radiation from the W bootstrap",
+      "reference": "impurity_off_short_reference",
+      "outputs": ["impurity_off_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "race_step"}
+    },
+    "impurity_n_short": {
+      "extends": "impurity_n",
+      "description": "Run two Newton iterations switching from W to nitrogen radiation",
+      "reference": "impurity_n_short_reference",
+      "outputs": ["impurity_n_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "race_step"}
+    },
+    "impurity_nw_short": {
+      "extends": "impurity_nw",
+      "description": "Run two Newton iterations switching from W to nitrogen-tungsten radiation",
+      "reference": "impurity_nw_short_reference",
+      "outputs": ["impurity_nw_short_reference"],
+      "parameter_overrides": {"nrp": 2},
+      "comparison": {"method": "fixed_hdf5", "profile": "race_step"}
+    },
+    "adaptive_source_short": {
+      "extends": "cold_step_adaptive",
+      "description": "Run one coarse-mesh time step with source relocation and one adaptation pass",
+      "require_refinement": true,
+      "layout": "mpi4_omp4",
+      "reference": "adaptive_source_short_reference",
+      "outputs": ["adaptive_source_short_reference"],
+      "parameter_overrides": {"neutral_wall_sources_in_elements": true},
+      "stage_overrides": {"single_step": {"newton_check": "finite_only"}},
+      "comparison": {
+        "method": "mesh_independent",
+        "profile": "adaptive_reference",
+        "direct_profile": "race_step"
+      }
+    },
+    "cold_step_fixed": {
+      "type": "staged_fixed_mesh",
+      "description": "Run two Newton iterations on the coarse mesh without adaptation",
+      "inputs": ["geometry", "equilibrium_magnetic_field", "equilibrium_current_density"],
+      "mesh": "coarse_mesh",
+      "impurity_configuration": "impurity_configuration",
+      "layout": "serial_omp1",
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "race_step",
+        "cross_layout_profile": "race_step"
+      },
+      "parameter_overrides": {
+        "compute_from_flux": true,
+        "adaptivity": false,
+        "rest_adapt": false,
+        "nrp": 2
+      },
+      "stages": [
+        {
+          "id": "single_step",
+          "parameters": "cold_fixed_time_init_parameters",
+          "parameter_overrides": {
+            "steady": false,
+            "saveNR": false,
+            "time_adapt": false,
+            "NR_adapt": false,
+            "div_adapt": false,
+            "osc_adapt": false,
+            "nts": 1
+          }
+        }
+      ]
+    },
+    "cold_step_adaptive": {
+      "extends": "cold_step_fixed",
+      "type": "staged_adaptive_mesh",
+      "description": "Run two Newton iterations with one coarse-mesh adaptation pass",
+      "parameter_overrides": {
+        "adaptivity": true
+      },
+      "adaptive_stages": ["single_step"]
+    }
+  }
+}

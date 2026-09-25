@@ -1,657 +1,301 @@
 # MHDG regression tests
 
-This directory contains the tracked test definitions and tools. Physical
-inputs and results stay outside Git: meshes, equilibria, parameter files,
-restarts, accepted solutions, logs, executables, and local paths belong in
-external bundles and private run directories.
+`python -m regression_tests` is the entry point for the MHDG scientific regression
+harness. It builds selected solver variants, runs real limited and diverted cases in
+isolated directories, checks convergence and output identity, and compares results
+with accepted solutions or selected parallel layouts. Physical inputs, executables,
+runs and goldens stay outside Git.
 
-The harness builds MHDG, prepares isolated runs, executes and compares solver
-workflows, resumes interrupted suites, and publishes reviewed golden data.
+## Quick start: one warm check
 
-## Concepts
-
-| Term | Meaning |
-| --- | --- |
-| **Case** | Input contract: available workflows and external file roles. |
-| **Workflow** | One simulation procedure, such as a warm restart or staged cold start. |
-| **Layout** | Executable type, MPI ranks, and OpenMP threads. |
-| **Suite** | Selected workflows and layouts executed as one resumable job. |
-| **Bundle** | Validated external files plus a generated manifest. A **golden** bundle contains accepted references. |
-
-```text
-case + workflow + layout -> run
-suite                    -> selected runs and comparisons
-accepted suite results   -> golden bundle
-```
-
-The routine case is `legacy_case`.
-
-## First-time setup
-
-Run commands from the repository root. Install the Python dependencies:
+From the repository root, install the Python requirements:
 
 ```bash
 python -m pip install -r regression_tests/requirements.txt
 ```
 
-Adaptive comparisons also need `hdg_postprocess`. Set
-`PYTHON=/path/to/python` if the required environment is not `python3`.
-
-Create the ignored local settings file:
-
-```bash
-cp regression_tests/settings.example.env regression_tests/golden.local.env
-```
-
-Fill in absolute paths for the external bundle, private run root, solver
-executables, Open MPI launcher, and environment script. Executable paths are
-only needed for prebuilt runs; `--build` generates them automatically.
-
-Validate the configured bundle and run the smallest accepted-reference check:
-
-```bash
-regression_tests/regression.sh bundle validate \
-  --settings regression_tests/golden.local.env
-
-regression_tests/regression.sh suite check
-```
-
-`suite check` defaults to the `warm` suite and
-`regression_tests/golden.local.env`. Override the file with `--settings FILE`
-or `MHDG_REGRESSION_GOLDEN_SETTINGS`. It must point to a golden-class bundle.
-Use `--diagnostics off|summary|equations|detailed` to run the same suite with
-an explicit balance-diagnostics mode. The selected override is recorded in
-the suite summary and each run plan.
-
-## Test matrix
-
-Warm workflows restart an existing solution; cold workflows start
-analytically. Fixed and adaptive indicate whether the mesh can change.
-
-| Workflow | Start and mesh | Work |
-| --- | --- | --- |
-| `warm` | Existing steady restart; fixed mesh | Reconverge the same state. |
-| `warm_balance_diagnostics` | Existing steady restart; fixed mesh | Reconverge once with detailed balance diagnostics. |
-| `cold_fixed` | Analytical start; refined fixed mesh | `time_init`, `diffusion_reduction`, then five continuations. |
-| `cold_adaptive` | Analytical start; coarse mesh | Same seven stages; adapt in the first two. |
-| `cold_fixed_balance_diagnostics` | Analytical start; refined fixed mesh | Detailed particle diagnostics through all seven fixed stages. |
-| `cold_adaptive_balance_diagnostics` | Analytical start; coarse mesh | Detailed particle diagnostics through all seven adaptive stages. |
-| `cold_step_fixed` | Analytical start; coarse fixed mesh | One time step and two Newton iterations. |
-| `cold_step_impurity_off` | Analytical start; coarse fixed mesh | Short disabled-impurity lifecycle check. |
-| `cold_step_neutralgamma` | Analytical start; coarse fixed mesh | Short NeutralGamma race check with detailed particle diagnostics. |
-| `cold_step_adaptive` | Analytical start; coarse adaptive mesh | One time step, two Newton iterations, and one adaptation pass. |
-| `warm_neutral_sources_in_elements` | Accepted source-relocated restart; fixed mesh | Reconverge with puff and pump in elements. |
-| `warm_neutral_pressure` | Source-relocated warm restart; fixed mesh | Exercise `neutralp_lambda=0.05`. |
-| `warm_neutral_perpendicular` | Source-relocated warm restart; fixed mesh | Exercise projected perpendicular neutral diffusion. |
-| `warm_neutral_limiter_fixed` | Source-relocated warm restart; fixed mesh | Exercise active limiting with fixed `Tn=2.5 eV`. |
-| `warm_neutral_limiter_ti` | Source-relocated warm restart; fixed mesh | Exercise active limiting with `Tn=Ti`. |
-| `cold_step_fixed_neutral_sources_in_elements` | Analytical start; coarse fixed mesh | Short relocated-source race and detailed-balance check. |
-| `cold_step_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Short relocated-source adaptation and detailed-balance check. |
-| `cold_adaptive_neutral_sources_in_elements` | Analytical start; coarse adaptive mesh | Complete relocated-source cold workflow. |
-
-Full cold stages run sequentially and restart from their predecessor. The
-one-step workflows probe mesh construction and races, not convergence.
-The PR06 golden workflows all use the same accepted source-relocated restart.
-Each then enables exactly one feature: source relocation alone, neutral
-pressure, perpendicular diffusion, fixed-`Tn` limiting, or `Tn=Ti` limiting.
-The active limiter declarations always retain
-`neutral_wall_sources_in_elements=true`.
-The source-only golden keeps the strict fixed-layout tolerance. Repeated
-MPI4-by-OMP4 feature solves showed converged endpoint variation up to
-`2.90e-7` relative L2, so the other four use the measured
-`neutral_feature_same_layout` profile (`5e-7` for relative L2 and normalized
-L-infinity). A reference refresh updates the source reference but deliberately
-keeps its accepted restart fixed, so every feature continues from the same
-state.
-
-The two-Newton-iteration feature race uses a separate `1e-7` relative-L2
-profile. Repeating an identical nonlinear `mpi4_omp1` limiter cell varied by
-`7.40e-8`, while the source-only control remained near `1e-11`; the larger
-threshold avoids treating amplified parallel solver ordering as an assembly
-race. It remains five times tighter than the converged-feature profile.
-
-Tracked layouts are:
-
-| Layout | Execution |
-| --- | --- |
-| `serial_omp1` | Serial, one OpenMP thread. |
-| `serial_omp16` | Serial, sixteen OpenMP threads. |
-| `mpi4_omp1` | Four MPI ranks, one thread each. |
-| `mpi4_omp4` | Four MPI ranks, four threads each; canonical layout. |
-
-Identifiers matching `serial_ompN` or `mpiM_ompN` determine the executable,
-ranks, and threads. MPI runs bind each rank to exclusive cores.
-
-| Suite | Coverage | Use |
-| --- | --- | --- |
-| `warm` | `warm`, `mpi4_omp4` | Fast routine golden check. |
-| `balance_diagnostics_warm` | Detailed warm restart, `mpi4_omp4` | Fast golden run for balance-diagnostics validation. |
-| `neutral_pressure_warm` | Pressure-on warm restart, `mpi4_omp4` | Execution-only pressure continuation attempt. |
-| `neutralgamma_race` | NeutralGamma fixed cold step, `serial_omp1` vs `serial_omp16` | Two-Newton-iteration OpenMP and detailed-balance check. |
-| `neutral_sources_in_elements_warm` | Relocated-source warm restart, `mpi4_omp4` | Golden reconvergence of the relocated-source formulation. |
-| `neutral_feature_references` | Pressure, projection, fixed-`Tn`, and `Tn=Ti`, `mpi4_omp4` | Reference producer used by golden refreshes. |
-| `neutral_features_warm` | Relocation plus the four independent feature variants, `mpi4_omp4` | Routine golden comparison. |
-| `neutral_feature_race_matrix` | The five independent neutral variants, every layout pair | Two-Newton-iteration race check without 2D diagnostics. |
-| `neutral_sources_in_elements_race_matrix` | Relocated-source fixed/adaptive steps, every layout pair | Mesh, field, race, and detailed source-placement checks. |
-| `neutral_sources_in_elements_cold_adaptive` | Full relocated-source adaptive cold start, `mpi4_omp4` | Canonical convergence evidence. |
-| `impurity_scalar_baseline` | Impurity off and N, `mpi4_omp4` | Focused compatibility check. |
-| `impurity_mixture` | Impurity off, W, N, and N+W, `mpi4_omp4` | Manual mixture-reference check. |
-| `initialization_smoke` | Disabled-impurity analytical start, `mpi4_omp4` | Execution-only initialization evidence. |
-| `race` | Both one-step workflows, `serial_omp1` vs `serial_omp16` | Routine OpenMP race check. |
-| `cold` | Both full cold workflows, `mpi4_omp4` | Canonical integration check. |
-| `balance_diagnostics_cold` | Detailed fixed and adaptive cold workflows, `mpi4_omp4` | Overnight particle-balance history and HDF5-contract check. |
-| `warm_parallelism` | `warm`, all layouts | Periodic layout characterization. |
-| `race_matrix` | Both one-step workflows, every pair of tracked layouts | Periodic race check. |
-| `cold_matrix` | Both full cold workflows, all layouts and all layout pairs | Overnight golden and reproducibility evidence. |
-| `stored_field_compatibility` | Limited two-Newton-step scratch start, stored `Br/Bz` | Compatibility smoke for `compute_from_flux=false`. |
-| `diverted_warm` | Diverted warm restart, `mpi4_omp4` | Routine diverted topology/transport check. |
-| `diverted_warm_parallelism` | Diverted warm restart, all layouts | Diverted layout characterization. |
-| `diverted_cold_adaptive` | Full diverted adaptive cold start, `mpi4_omp4` | Canonical diverted reference producer. |
-| `diverted_race_matrix` | Diverted two-step fixed/adaptive starts, every layout pair | Lightweight diverted race and cache-refresh evidence. |
-
-Warm and race suites are short. Full cold workflows are longer, and
-`cold_matrix` can take hours. Runtime is recorded but is not a pass criterion.
-
-Future harness work may reduce the shared cold bootstrap to time
-initialization, diffusion reduction, and at most one steady stage, then branch
-into independent feature continuations plus one small single-layout combined
-integration run. This is not part of the current PR06 harness changes.
-
-## Common tasks
-
-### Check accepted references
-
-```bash
-# Existing executables; warm suite by default.
-regression_tests/regression.sh suite check
-
-# Build clean serial and MPI executables first.
-regression_tests/regression.sh suite check --build --build-jobs 8
-
-# Canonical fixed and adaptive cold workflows.
-regression_tests/regression.sh suite check cold --build --build-jobs 8
-
-# Five independent PR06 neutral-feature goldens with a private setup.
-MHDG_REGRESSION_GOLDEN_SETTINGS=/private/path/pr06-neutral-features.local.env \
-  regression_tests/regression.sh suite check neutral_features_warm
-```
-
-### Run candidate or race evidence
-
-`suite run` accepts candidate or golden bundles and requires explicit settings:
-
-```bash
-# Direct serial_omp1 versus serial_omp16 race comparison; no golden output.
-regression_tests/regression.sh suite run race \
-  --settings /private/path/settings.env
-
-# Five PR06 neutral variants across all six pairs of the four tracked layouts.
-regression_tests/regression.sh suite run neutral_feature_race_matrix \
-  --settings /private/path/pr06-neutral-features.local.env
-
-# Save an expensive matrix before comparison or acceptance.
-regression_tests/regression.sh suite run cold_matrix \
-  --settings /private/path/settings.env \
-  --run-only --run-id overnight-01
-```
-
-Resume an interrupted matrix with the same suite, settings, and run ID:
-
-```bash
-regression_tests/regression.sh suite run cold_matrix \
-  --settings /private/path/settings.env \
-  --run-only --run-id overnight-01 --resume
-```
-
-Recorded cells are skipped. An incomplete run is preserved and retried as
-`RUN_ID-resume-N`. Resume rejects changed settings, bundle data, catalogs,
-executables, or launcher. `--build` cannot be combined with `--resume`; after
-an initial `--build`, use the generated `settings.env` printed by that build.
-
-Run the opt-in balance suite in the background with the PR06 neutral-feature
-bundle and the existing MPI/OpenMP executable:
-
-```bash
-nohup regression_tests/regression.sh suite run balance_diagnostics_cold \
-  --settings regression_tests/pr06-neutral-features.local.env \
-  --run-only --run-id pr07-balance-overnight-01 \
-  > pr07-balance-overnight-01.log 2>&1 &
-```
-
-Use the same command plus `--resume` after an interruption. Existing workflows
-remain diagnostics-off; only the two diagnostic workflow variants request
-`balance_diagnostics_mode='detailed'`.
-
-### Build reusable executables
-
-```bash
-regression_tests/regression.sh build \
-  --settings /private/path/settings.env --jobs 8
-```
-
-Serial and MPI builds run sequentially because they share objects. The command
-prints the generated settings path and records commands, logs, Git state,
-toolchain versions, environment checksum, and executable checksums.
-
-### Inspect or run one workflow
-
-Preparation validates and renders an isolated run but does not launch MHDG:
-
-```bash
-regression_tests/regression.sh prepare legacy_case cold_step_adaptive \
-  --layout serial_omp16 --settings /private/path/settings.env
-```
-
-Execute one or more workflows directly when debugging:
-
-```bash
-regression_tests/regression.sh run legacy_case cold_fixed cold_adaptive \
-  --layout mpi4_omp4 --run-id investigation-01 \
-  --settings /private/path/settings.env
-```
-
-Prefer suites for routine work because they preserve one resumable summary.
-
-### Recompare saved results
-
-Neither command below launches MHDG:
-
-```bash
-# One completed run; policy comes from run_plan.json.
-regression_tests/regression.sh compare /path/to/completed/run
-
-# Every same-layout golden check and declared layout pair in a suite.
-regression_tests/regression.sh suite compare \
-  /path/to/suites/cold_matrix/overnight-01/suite_summary.json
-```
-
-For a short warm solve with detailed diagnostics and the ordinary golden
-comparison, run:
-
-```bash
-regression_tests/regression.sh suite check warm --diagnostics detailed \
-  --build --run-id warm-balance-01
-```
-
-Then validate its HDF5 and terminal diagnostics without launching MHDG again:
-
-```bash
-regression_tests/regression.sh diagnostics check \
-  /path/to/suites/warm/warm-balance-01/suite_summary.json
-```
-
-Replace `detailed` with `off`, `summary`, or `equations` to inspect the other
-terminal and HDF5 presentation levels. The diagnostics checker currently
-validates the detailed contract; ordinary golden comparison still applies to
-all four modes.
-
-The same checker validates every selected stage after the longer cold balance
-suite completes:
-
-```bash
-regression_tests/regression.sh diagnostics check \
-  /path/to/balance_diagnostics_cold/RUN_ID/suite_summary.json
-```
-
-The generated `balance_diagnostics_check.json` retains every detailed
-terminal block with its time and Newton iteration, making the onset of a
-physical imbalance visible across the cold workflow. The same command accepts
-completed `neutralgamma_race` and `neutral_sources_in_elements_race_matrix`
-suite summaries; it then requires NeutralGamma flux components or verifies
-that relocated puff/pump terms occur in the volume balance and not the wall BC.
-
-### Publish accepted references
-
-For a complete refresh, one command starts or continues the persisted golden
-campaign and runs every producer and verification stage. It stops once, after
-the complete candidate is ready for review:
-
-```bash
-regression_tests/regression.sh golden update legacy_case \
-  --settings /private/path/source.env --run-id refresh-01 \
-  --output /private/path/new_golden_bundle --bundle-version 2.5.0
-```
-
-Run the same command again with `--accept campaign` after reviewing the final
-candidate. This second command only publishes; it does not rerun completed
-stages. `golden status WORKSPACE` shows progress; without `--workspace`, the
-workspace is `MHDG_REGRESSION_RUN_ROOT/golden_campaigns/RUN_ID`. Resumes reject
-changed inputs and never overwrite a workspace, candidate, or output.
-
-The default legacy refresh includes cold matrices, warm, mixture, and
-independent neutral-feature references; initialization and stored-field checks;
-ordinary, limiter/pressure/perpendicular, and relocated-source race matrices;
-the fixed/adaptive detailed-balance overnight; the full relocated-source
-adaptive cold workflow; warm layout checks; and final warm/mixture/neutral
-verification. Detailed-balance campaign stages run the diagnostics checker
-automatically and fail the campaign if their algebra, terminal/HDF5 agreement,
-or relocated puff/pump accounting fails. NeutralGamma is deliberately outside
-this canonical campaign because it uses a different solver model. Repeat
-`--only` to select `cold_matrix`, `warm`, `impurity_mixture`, or
-`neutral_features`. A
-cold-matrix refresh also updates the canonical warm restart, while `warm`
-updates the warm reference. Updating only warm or only mixture references
-records a consistency warning; select both together to avoid it.
-Reference producers may differ from the old fields under review, but golden
-promotion stops automatically if any producer fails its declared Newton
-convergence check.
-
-The legacy campaign does not carry specialized restart states directly from
-the source bundle. Its analytical cold matrix first creates the canonical warm
-restart. Dedicated producer stages then derive the impurity-off, nitrogen,
-nitrogen-tungsten, and relocated-source restarts from that current warm state.
-Reference and race stages consume those regenerated restarts. The previous
-golden therefore supplies immutable inputs and comparison references, but not
-the solution-state lineage published by the new campaign.
-
-The verified candidate is published atomically as a golden bundle. Campaign
-state, declaration, build metadata, suite summaries, run plans/metadata, and
-comparison reports are registered below `provenance/golden_campaign/`.
-
-### PR03 limited and diverted refresh
-
-PR03 keeps the exhaustive limited campaign and adds an independent diverted
-campaign. Run them sequentially: each campaign performs clean serial and MPI
-builds in the same worktree.
-
-The limited source remains the last accepted `legacy_case` golden bundle. Its
-full campaign runs the fixed/adaptive cold layout matrix, impurity references,
-the stored-field compatibility smoke, warm layouts, the two-step race matrix,
-and final verification. The tracked workflows render `compute_from_flux=true`;
-the compatibility smoke alone renders it false.
-
-The first diverted source is a candidate bundle, because no diverted golden
-exists yet. Prepare the filenames declared by `cases/diverted_case.json`. All
-transport namelists used by the cold and warm workflows must contain:
-
-```text
-transport_region_policy = 'core_and_main_sol'
-c_bohm_n_rho_slope = 0.7
-```
-
-Use `puff = 5.0e21` in every staged parameter file and
-`diff_n_min_phys = 0.1` in the final continuation and warm transport files.
-The case workflows explicitly render `compute_from_flux=true`, even if a
-prepared parameter file still contains false. Create the source candidate:
-
-```bash
-regression_tests/regression.sh bundle create \
-  --case diverted_case \
-  --source /private/path/prepared_diverted_case \
-  --output /private/path/diverted_case_pr03_source \
-  --bundle-version pr03-source.1
-```
-
-Point a private settings file at that candidate and start the resumable cold
-overnight in `tmux` or another persistent shell:
-
-```bash
-regression_tests/regression.sh golden update diverted_case \
-  --settings /private/path/diverted-source.env \
-  --run-id pr03-diverted-refresh-01 \
-  --workspace /private/path/campaigns/pr03-diverted-refresh-01 \
-  --output /private/path/golden_bundles/diverted_case_pr03_golden \
-  --bundle-version 1.0.0-pr03-golden.1 \
-  --bootstrap-candidate \
-  --build-jobs 8
-```
-
-The first invocation runs the full adaptive `mpi4_omp4` cold producer, maps its
-final output to `warm_restart` and `warm_reference`, generates a reconverged
-warm reference, runs the warm-layout and race checks, and finishes with final
-warm verification. It then stops at `awaiting_acceptance` without publishing.
-Inspect status and the reports below the workspace, then repeat the identical
-update command with `--accept campaign`:
-
-```bash
-regression_tests/regression.sh golden status \
-  /private/path/campaigns/pr03-diverted-refresh-01
-
-# Add this to the identical `golden update` command:
---accept campaign
-```
-
-If a run is interrupted, repeat the identical command without `--accept`; the
-recorded stage resumes. `--bootstrap-candidate` is only for the first diverted
-promotion; future refreshes start from the accepted golden and omit it. Never
-delete or reuse the workspace or output path.
-
-If a stage records a failure, correct its tracked workflow or source bundle,
-then repeat the identical command with `--retry-failed`. The failed attempt is
-retained in campaign provenance and the corrected stage receives a distinct
-`-retry-N` run ID. Completed producer stages are not rerun.
-
-If the correction affects an earlier campaign declaration, use
-`--retry-from STAGE` instead. The campaign records the declaration amendment,
-restores the preceding candidate, archives superseded downstream attempts, and
-uses distinct run, candidate, report, and settings paths for the replacements.
-
-Because multiple cases share the campaign catalog, a change confined to another
-case does not invalidate an in-progress campaign. Resume records the old and new
-catalog identities in `campaign_catalog_refreshes` after confirming that the
-selected case declaration is unchanged. A change to the selected case still
-requires an explicit `--retry-from STAGE`.
-
-Refresh the limited golden with the same lifecycle but `legacy_case`, an
-accepted golden source settings file, and distinct run/workspace/output names:
-
-```bash
-regression_tests/regression.sh golden update legacy_case \
-  --settings /private/path/limited-golden-source.env \
-  --run-id pr03-limited-refresh-01 \
-  --workspace /private/path/campaigns/pr03-limited-refresh-01 \
-  --output /private/path/golden_bundles/legacy_case_pr03_golden \
-  --bundle-version 2.5.0-pr03-golden.1 \
-  --build-jobs 8
-```
-
-It runs through the cold matrix, warm reference, impurity references, smoke and
-race checks, and final verification in one invocation. Review the composed
-candidate once, then publish it with the identical command plus
-`--accept campaign`.
-
-The `legacy_case` order was checked against the accepted PR 02 record: clean
-builds at `7ce486f`, its full cold-matrix refresh, the passing disabled
-initialization probe, final mixture verification, and the validated 118-artifact
-`legacy_case_2.4.0-pr02-mixture-golden.1` bundle. Those results defined the
-campaign shape; they were not rerun or treated as resumable campaign state
-because the historical record does not retain every suite path and fingerprint.
-
-For a smaller manually reviewed promotion, create a golden bundle directly:
-
-```bash
-regression_tests/regression.sh bundle promote \
-  /path/to/cold_matrix/suite_summary.json \
-  /path/to/warm/suite_summary.json \
-  --settings /private/path/candidate-settings.env \
-  --output /private/path/new_golden_bundle \
-  --bundle-version 1.0.0-golden.1
-```
-
-Promotion validates and applies one or more accepted summaries in the given
-order, including their references and provenance. It never overwrites an
-output, and tests never promote automatically.
-
-## Outputs and provenance
-
-Runs are stored below `MHDG_REGRESSION_RUN_ROOT`. Builds use
-`MHDG_REGRESSION_BUILD_ROOT`, which defaults to `RUN_ROOT/builds`:
-
-```text
-runs/
-├── builds/.../                    executables, logs, metadata, settings.env
-├── suites/SUITE/RUN_ID/           suite_summary.json
-└── CASE/WORKFLOW/LAYOUT/RUN_ID/
-    ├── run_plan.json              requested inputs and comparison policy
-    ├── run_metadata.json          execution result and provenance
-    ├── stdout.log / stderr.log
-    ├── outputs/
-    └── stages/...                 staged-workflow runs
-```
-
-Comparisons write `comparison.json`, `matrix_comparison.json`, or
-`verification_summary.json`. Suite summaries are updated after every cell.
-
-Each newly built solver writes automatic compile-time identity into its HDF5
-solutions:
-
-```text
-/provenance/git_commit
-/provenance/git_dirty
-/provenance/build_id
-```
-
-Do not edit these fields. One regression build ID is shared by its serial and
-MPI executables. Candidate and golden commit hashes normally differ, so this
-provenance is informational rather than a comparison criterion.
-
-## External bundles
-
-The V2 `manifest.json` is generated. Prepare external files using the
-filenames declared in `regression_tests/cases/CASE.json`, then create a
-candidate bundle:
-
-```bash
-regression_tests/regression.sh bundle create \
-  --case legacy_case \
-  --source /private/path/prepared_legacy_case \
-  --output /private/path/candidate_bundle
-```
-
-Creation copies files under `inputs/` and generates role mappings, media
-types, sizes, and SHA-256 checksums. It refuses to replace an output. Candidate
-and golden bundles share this contract; their class records acceptance.
-
-`positionFeketeNodesTri2D.h5` must be beside each executable. It is generic
-solver runtime data, not case-specific bundle data.
-
-| Edit directly | Generated; do not edit |
-| --- | --- |
-| Private settings and prepared physical files | Bundle manifest, identifiers, sizes, checksums |
-| `cases/*.json` | Rendered parameter files, input links, run/build metadata |
-| `suites.json`, `layouts.json`, `tolerances.json` | Summaries, comparison reports, HDF5 provenance |
-
-## Adding a parameter variant
-
-Common variants require JSON, not Python. In `cases/CASE.json`, inherit the
-closest workflow and override only changed parameters:
+Create the ignored `regression_tests/settings.local.json` with paths to an
+existing build manifest and the accepted diverted golden:
 
 ```json
-"cold_step_fixed_two_nr": {
-  "extends": "cold_step_fixed",
-  "description": "Repeat the fixed coarse-mesh probe with two Newton iterations",
-  "parameter_overrides": {
-    "nrp": 2
+{
+  "defaults": {
+    "build": "/path/to/build/build_metadata.json",
+    "bundles": {"diverted_case": "/path/to/diverted/golden_bundle"}
   }
 }
 ```
 
-This inherits inputs, mesh, stages, layout, comparison policy, and the other
-parameter overrides. Add the new workflow identifier to an existing or new
-suite in `suites.json`.
+```bash
+python -m regression_tests check warm
+```
 
-Overrides accept booleans, finite numbers, and strings. The named assignment
-must occur exactly once in the selected MHDG parameter file. Preparation
-formats it in a private copy and records the effective values in
-`run_plan.json`; the bundle is unchanged.
+This runs the five-equation 2D `NGammaTiTeNeutral` model. It restarts the
+accepted diverted bootstrap solution on its saved mesh and reconverges it to
+steady state with transport 1D off, W radiation on and diffusion at 16 m²/s.
+The harness checks output identity and Newton convergence, then
+compares the final mesh and solution fields with the accepted diverted warm
+reference. For a read-only setup check before launching MHDG, use
+`python -m regression_tests doctor warm`. Results are written under
+`~/.cache/mhdg-regression` unless you set `run_root` as described below.
 
-Workflow overrides apply to every stage. Stage overrides take precedence for
-that stage. With `extends`, `parameter_overrides` merge with the parent;
-another supplied field replaces the complete parent field.
+## How checks are organized
 
-For a variant requiring another physical file:
-
-1. Add a generic role and filename to the case catalog.
-2. Put the file in the external prepared directory and reference its role.
-3. Create and validate a candidate bundle; checksums are automatic.
-4. Run the smallest relevant suite and review it before promotion.
-
-Parameter values, matching layout identifiers, suite selections, and
-tolerance profiles need no Python. Python is reserved for new preparation
-behavior, workflow kinds, or comparison algorithms. Keep physical values,
-private paths, machine names, and credentials out of tracked identifiers.
-
-## Comparison behavior
-
-Fixed-mesh comparison checks finite values and Newton error, exact
-connectivity, tolerance-based coordinates, each equation in `u`, `q`, and
-`u_tilde`, and transport-1D data when present.
-
-Adaptive golden references may come from a different mesh after an intentional
-adaptivity change. Their comparison uses `HDG_postprocess` to interpolate both
-solutions at deterministic interior points instead of requiring equal
-connectivity.
-
-Race probes require identical connectivity arrays, including node, element,
-and boundary ordering. The generated adaptive `temp.msh` files must also be
-byte-identical, which rejects tag swaps even when the physical topology is
-unchanged. The full race matrix applies that check to every pair of tracked
-layouts before comparing `u`, `q`, and `u_tilde` with the race tolerances.
-Cold-matrix layout pairs likewise require exact final and retained meshes, then
-compare the final HDF5 solution and transport data with the cold cross-layout
-tolerances.
-
-Golden matrices keep a reference for each workflow, layout, and stage. A
-staged comparison stops at the first divergent stage. Race suites instead
-compare layout pairs produced by the same build directly.
-
-| Comparison | Relative L2 | Normalized Linf |
-| --- | ---: | ---: |
-| Warm, same layout | `1e-10` | `1e-9` |
-| Warm, cross layout | `5e-8` | `1e-6` |
-| One-step race probe | `5e-8` | `1e-6` |
-| Matching fixed cold stage | `2e-7` | `3e-7` |
-| Converged cold, cross layout | `3.5e-7` | `3e-7` |
-| Fixed cold final state against warm reference | `1e-5` | `1e-5` |
-| Adaptive solution | `0.05` | `0.1` |
-| Adaptive gradient | `0.25` | `0.3` |
-
-Normalized Linf divides the largest pointwise difference by the largest
-absolute reference value. Fixed and race HDF5 coordinates use absolute
-tolerance `1e-12`; generated adaptive mesh files are compared byte-for-byte.
-Except for transient initialization and race probes, final Newton error must
-not exceed `2e-4`. These are
-regression limits for `legacy_case`, not physical-accuracy targets.
-
-## Focused synthetic tests
-
-These tests use temporary bundles, small arrays, and fake executables. They do
-not launch MHDG or need physical data.
-
-| Changed area | Test group |
+| Term | Meaning in this harness |
 | --- | --- |
-| Build | `tests.test_build` |
-| Bundles and case loading | `tests.test_bundles` |
-| Preparation and parameters | `tests.test_preparation` |
-| Execution and run metadata | `tests.test_execution` |
-| Fixed comparison | `tests.test_fixed_comparison` |
-| Adaptive comparison | `tests.test_adaptive_comparison` |
-| Reference matrices | `tests.test_matrix_comparison` |
-| Suites, layout pairs, resume | `tests.test_suites` |
-| Promotion | `tests.test_reference_publication` |
+| **Case** | A real physical setup, such as limited or diverted, that names its input roles and available workflows. The files stay outside Git. |
+| **Workflow** | A solver recipe: starting state, inputs, parameter changes, launches, expected outputs and comparison policy. |
+| **Layout** | Executable type, MPI ranks and OpenMP threads for a launch. |
+| **Suite** | Workflows for one case, their layouts, reference checks and selected cross-run comparisons. |
+| **Profile** | An ordered selection of suites, possibly spanning cases. |
+| **Bundle** | External input files mapped to case roles, with a manifest and checksums. |
 
-Run only the affected group:
+The current catalog covers 2D only. Both real topologies use the five-equation
+`NGammaTiTeNeutral` model for their warm, cold and feature checks. The limited
+case also has one focused six-equation `NGammaTiTeNeutralGamma` check: an
+analytical cold step with two Newton iterations, OpenMP agreement and detailed
+diagnostics. That probe has no NeutralGamma golden reference. Other models and
+3D are outside the current harness.
+
+For example, `diverted_case` + `baseline_warm` + `mpi4_omp4` specifies one
+workflow run; the `warm` suite checks it against the diverted golden. The terms
+used in the coverage table mean:
+
+| Term | Meaning in this harness |
+| --- | --- |
+| **Warm / cold** | Warm restarts a saved plasma solution; cold initializes plasma without one. A cold *bootstrap* uses successive launches, or stages, to reach a converged state. |
+| **Golden** | A published bundle containing accepted reference results for regression comparison. |
+| **Fixed / adaptive mesh** | Fixed keeps the selected mesh; adaptive permits refinement. Matching meshes are compared directly; different meshes use sampled comparisons. |
+| **Feature checks** | Selected physics changes compared with their own references:<br>• **Neutrals:** source relocation, pressure, perpendicular diffusion and flux limiters.<br>• **Transport 1D:** activation followed by staged diffusion-floor reduction.<br>• **Impurities:** radiation off, N and N+W radiation. |
+| **Diagnostics** | Optional balance output checked for presence, consistency and, in selected parallel suites, agreement of totals. |
+
+## Scientific coverage
+
+| Selection | Purpose |
+| --- | --- |
+| `routine` | Diverted warm golden and short adaptive/source golden; diagnostics off. Target about 30 seconds on the development machine, excluding builds. |
+| `routine-extended` | Diverted warm, short adaptive/source with detailed diagnostics, and short neutral/impurity feature goldens. |
+| `full` | Both real topologies, complete cold bootstraps and transport activation, distinct diverted features, and focused serial/OpenMP/MPI/hybrid comparisons. |
+
+`full` selects its own evidence; it does not run the other profiles first. Its
+cold evidence comprises adaptive three-stage bootstraps for limited and diverted
+cases, plus an independent limited fixed-mesh bootstrap on the accepted adaptive
+final mesh. Each bootstrap uses `time_init -> diffred -> steady`; transport is off
+and the steady diffusion is 16 m²/s. Initialization requires valid finite output.
+The later stages must meet the declared Newton limit. The fixed run starts from
+analytical plasma, not the current adaptive solution. The limited suite also
+compares the two completed bootstrap endpoints.
+
+Transport is a separate feature on **both** topologies. Its five stages lower the
+transport diffusion floor through 8, 4, 2, 0.5 and 0.1 m²/s. The diverted case
+also checks source relocation, neutral pressure, perpendicular neutral diffusion,
+two neutral limiters, radiation off, N and N+W impurity radiation, and stored
+magnetic/current fields against its own reference. Limited adds analytical
+initialization and the focused NeutralGamma probe described above. There is no
+synthetic magnetic geometry.
+
+Parallel suites compare serial OMP1 with serial OMP16 for OpenMP, and serial OMP1
+with MPI4×OMP1 for MPI. The diverted short-transport suite additionally compares
+MPI4×OMP1 with production MPI4×OMP4. Selected short transport, adaptive/source
+and NeutralGamma runs carry detailed diagnostics; the long cold chains do not.
+`routine-extended` has no layout-pair comparison: choose a focused parallel suite
+or `full` when parallel agreement is the question. Suite relations named `openmp`,
+`mpi`, `hybrid` and `all_pairs` generate layout pairs from the available layouts.
+Run `list suites` to see current focused selections and their descriptions.
+
+## Settings and builds
+
+`settings.local.json` is the usual place for machine paths and default
+selections. The quick start needs only the diverted bundle. For limited checks
+or `full`, add the real limited case, `legacy_case`, under `defaults.bundles`.
+`settings.example.json` shows both cases and an explicit `run_root`.
+
+`run_root` holds runs and reports and defaults to `~/.cache/mhdg-regression`.
+`build_root` holds newly built executables and defaults to `run_root/builds`.
+Set these paths once for your machine if the defaults are unsuitable. To use a
+different settings file, pass `--settings FILE` for one command or set
+`MHDG_REGRESSION_SETTINGS` in the shell. For a single-case command,
+`--bundle DIR` or `--build-manifest FILE` can override a saved default. A
+multi-case profile uses the case-to-bundle map in `defaults.bundles`; one
+`--bundle` path cannot represent both physical cases. The harness finds its
+repository catalogs automatically, so ordinary commands need no catalog paths.
+
+If no build is selected, use `check warm --build` or build reusable executables:
 
 ```bash
-cd regression_tests
-PYTHONPATH=tools python -m unittest tests.test_preparation
+python -m regression_tests build routine --jobs 8
 ```
 
-For a cross-cutting change, run all synthetic tests:
+The command prints its `build_metadata.json`; select that file as `defaults.build`
+for later checks. Builds derive the required serial/MPI/model variants from the
+selection, rather than using a fixed list. A new build needs a usable compiler
+environment in the shell or the optional `environment_script`. The generic
+`positionFeketeNodesTri2D.h5` must be beside each executable and is not a case
+bundle input. Adaptive checks also need
+[HDG_postprocess](https://github.com/wave46/HDG_postprocess) importable in the
+selected Python environment. Plain `doctor` and `check` select the default
+`routine` profile, including its adaptive check; `doctor warm` and `check warm`
+select only the focused warm suite.
+
+## Commands and results
 
 ```bash
-cd regression_tests
-PYTHONPATH=tools python -m unittest discover -s tests -p 'test_*.py'
+python -m regression_tests list cases
+python -m regression_tests list workflows diverted_case
+python -m regression_tests list suites
+python -m regression_tests list layouts
+
+python -m regression_tests check warm --case legacy_case
+python -m regression_tests check transport_hybrid
+python -m regression_tests check full
 ```
 
-## Limitations
+`run CASE WORKFLOW` executes one workflow for investigation without asserting a
+regression comparison. `prepare CASE WORKFLOW` renders its inputs without
+launching MHDG. Both use the workflow's default layout unless `--layout` is
+supplied. A focused suite uses `check SUITE`; a profile uses `check PROFILE`.
+`--diagnostics off|summary|equations|detailed` can override the selected mode
+for a focused investigation. `check` requires a golden bundle by default;
+`--allow-candidate` is available when deliberately validating an unpublished
+candidate that already contains the selected references.
 
-- Adaptive refinement may cross different thresholds between code revisions;
-  adaptive golden-reference comparisons therefore do not promise identical
-  meshes. Layout pairs within one race or cold matrix do require exact meshes.
-- Runtime is recorded without a timing threshold.
-- Promotion verifies technical evidence but physical acceptance remains human.
-- Promotion inputs must all describe accepted results from the configured source
-  bundle.
+```bash
+python -m regression_tests run diverted_case baseline_warm --run-id investigation-01
+python -m regression_tests check full --run-id review-01
+python -m regression_tests check full --run-id review-01 --resume
+```
 
-Run `regression_tests/regression.sh help` for the command synopsis.
+Suite/profile resume reuses completed runs only while their recorded outputs and
+selected inputs still match. It reassesses the scientific checks; failed,
+incomplete or changed workflows are preserved and rerun in new directories.
+Resume needs the original build and cannot be combined with `--build`.
+
+Runs live under the configured `run_root`:
+
+```text
+profiles/PROFILE/RUN_ID/profile_summary.json
+suites/SUITE/CASE/RUN_ID/suite_summary.json
+CASE/WORKFLOW/LAYOUT/RUN_ID/{run_plan.json,run_metadata.json,stdout.log,outputs/,...}
+```
+
+The profile summary links suite summaries; a suite summary lists every workflow,
+layout and pair result. Comparison reports contain per-equation norms, mesh and
+Newton evidence, failures, and the selected tolerance profile. Build metadata
+records the solver revision, selected variants and artifact hashes; run metadata
+records what was actually launched and the resulting output hashes. To recheck
+saved evidence without launching MHDG:
+
+```bash
+python -m regression_tests compare --suite /path/to/suite_summary.json
+python -m regression_tests compare /path/to/completed/run
+```
+
+A matching adaptive mesh is compared directly, including fields and gradients.
+Only valid *different* meshes use deterministic interior-point interpolation via
+`hdg_postprocess`, with required point coverage. Parallel mesh checks require
+matching numbering and generated-mesh identity. Fixed comparisons check the
+mesh, every equation in `u`, `q` and `u_tilde`, and present transport/magnetic
+data. Every run checks its selected executable, runtime-file and output identity,
+including model, feature switches and build provenance. Intermediate cold stages
+must be valid; the final reference cannot conceal a bad earlier stage.
+
+The numerical limits live in `tolerances.json`. The default converged Newton
+limit is `2e-4`; initialization and short race probes require a finite recorded
+Newton value without that bound. Matching warm states use tighter field limits
+than cross-layout probes. Different-mesh adaptive sampling has separate solution
+and gradient limits. These are regression limits, not a proof of physical
+accuracy, positivity or mesh convergence. Enabled balance diagnostics also check
+output presence, finite values, units and terminal/HDF5 agreement; selected
+parallel suites compare diagnostic totals. They do not independently establish
+that every physical source term is correct.
+
+## External bundles and golden references
+
+Use `bundle readiness` on a prepared source directory to see user-supplied,
+workflow-producible, optional, present and missing files. It reports producer
+prerequisites but does not run them. A missing required file makes readiness fail
+even if a producer is declared. `--workflow` adds that workflow's required files,
+including any reference it declares.
+
+```bash
+python -m regression_tests bundle readiness diverted_case \
+  --source /path/to/prepared-inputs --workflow baseline_warm
+python -m regression_tests bundle create --case diverted_case \
+  --source /path/to/prepared-inputs --output /path/to/candidate-bundle
+python -m regression_tests bundle validate /path/to/candidate-bundle
+```
+
+Creation copies available declared source files into a self-contained candidate,
+following source symlinks into physical copies. It records roles, hashes and
+sizes, validates the result, and refuses to overwrite an output. A new reference
+need not exist to create a base candidate; a workflow-specific readiness or
+validation request will identify that missing reference. During runs, immutable
+bundle inputs are symlinked into temporary directories; rendered parameter and
+transport files are private run copies. Source bundles are not modified.
+
+A reference change requires a separate reviewed golden action. `golden refresh`
+builds the case's required variants once, runs the ordered producers in
+`golden.json`, collects a candidate and runs validation suites. It records old
+reference comparisons for review when possible; old agreement is not a condition
+for producing a valid new reference. Refresh can be expensive and has no campaign
+resume. Keep a failed workspace for inspection and use a new workspace after a
+correction.
+
+```bash
+python -m regression_tests golden refresh diverted_case \
+  --bundle /path/to/source-bundle --workspace /path/to/new-refresh --jobs 8
+# Review new-refresh/refresh.json and the linked suite/comparison reports.
+python -m regression_tests golden publish /path/to/new-refresh \
+  --output /path/to/new-golden --bundle-version 3.0.0 \
+  --reason "Accepted physical or numerical change" \
+  --provenance "Scientific review record"
+```
+
+Publication is a separate explicit command. It revalidates producer success,
+convergence, candidate files and validation evidence, records the reason and
+provenance, and refuses an existing destination. The published golden contains
+physical copies of its inputs and references; it has no dependency on refresh
+workspace symlinks. Update the private settings default only after reviewing
+and publishing it.
+
+## Extending and maintaining the harness
+
+The repository owns `cases/*.json` (physical roles and case workflow choices),
+`workflows.json` (shared procedures and stages), `suites.json` (suites and
+profiles), `layouts.json` (available layouts), `tolerances.json` (numerical
+limits), and `golden.json` (reference producers and validation suites). Add a
+feature to the nearest real case, derive a workflow where possible, then add a
+focused suite and a profile selection only if it contributes distinct evidence.
+Physical input values and machine paths belong in external sources/settings.
+Changing scalar parameters or namelists usually needs JSON overrides, not Python.
+The tutorials build from [one warm feature check](tutorials/01-warm-feature.md)
+to [layout comparisons](tutorials/02-layout-comparison.md), a
+[multi-workflow suite](tutorials/03-scientific-suite.md), a
+[cross-case profile](tutorials/04-profile.md), and a
+[real case with an input bundle](tutorials/05-real-case-bundle.md).
+
+`python -m regression_tests suggest --base develop` groups advisory checks for
+changed files; it reads Git and catalogs but executes nothing. Suggestions do
+not replace scientific judgment about cold convergence or diagnostic formats.
+The Python harness tests use temporary fixtures and fake executables, not MHDG:
+
+```bash
+python -m pytest -q regression_tests/tests
+```
+
+Inspect external storage before any removal. `clean` only previews unless given
+explicit inventoried directories **and** `--delete`; configured default bundles
+and builds, unfinished work, unknown historical data and retained dependencies
+are protected. Use a storage root that contains the related runs and summaries,
+and run cleanup when no regression work is active:
+
+```bash
+python -m regression_tests clean /path/to/regression-data
+python -m regression_tests clean /path/to/regression-data runs/CASE/WORKFLOW/LAYOUT/RUN_ID
+# Only after reviewing that exact selection and its dependencies:
+python -m regression_tests clean /path/to/regression-data runs/CASE/WORKFLOW/LAYOUT/RUN_ID --delete
+```
+
+The harness never cleans runs, candidates, historical goldens or builds as a side
+effect of `check`, refresh or publication. External storage cleanup is an
+explicit user action.

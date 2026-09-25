@@ -1,189 +1,63 @@
 {
   "schema_version": 2,
-  "description": "Lower-single-null transport regression case",
-  "reference": {
-    "branch": "develop",
-    "revision": "db468f73f899457bf9104055e953cf2465532750"
-  },
+  "description": "Real diverted topology: routine baseline and independent physical features",
   "files": {
     "required": {
-      "mesh": "mesh.msh",
       "geometry": "geometry.geo",
       "equilibrium_magnetic_field": "equilibrium.h5",
-      "equilibrium_current_density": "current_density.h5",
-      "warm_parameters": "param.txt",
-      "transport_configuration": "transport_model.nml",
-      "impurity_configuration": "impurity_model_w.nml"
+      "equilibrium_current_density": "current_density.h5"
     },
     "optional": {
-      "warm_restart": "restart.h5",
-      "warm_reference": "reference_mpi4_omp4.h5",
+      "bootstrap_reference": "reference_bootstrap.h5",
+      "baseline_reference": "reference_baseline.h5",
+      "transport_reference": "reference_transport.h5",
+      "transport_short_reference": "reference_transport_short.h5",
+      "stored_field_reference": "reference_stored_field.h5",
+      "source_reference": "reference_source.h5",
+      "neutral_pressure_reference": "reference_neutral_pressure.h5",
+      "neutral_perpendicular_reference": "reference_neutral_perpendicular.h5",
+      "neutral_limiter_fixed_reference": "reference_neutral_limiter_fixed.h5",
+      "neutral_limiter_ti_reference": "reference_neutral_limiter_ti.h5",
+      "neutral_pressure_short_reference": "reference_neutral_pressure_short.h5",
+      "neutral_perpendicular_short_reference": "reference_neutral_perpendicular_short.h5",
+      "neutral_limiter_fixed_short_reference": "reference_neutral_limiter_fixed_short.h5",
+      "neutral_limiter_ti_short_reference": "reference_neutral_limiter_ti_short.h5",
+      "impurity_off_reference": "reference_impurity_off.h5",
+      "impurity_n_reference": "reference_impurity_n.h5",
+      "impurity_nw_reference": "reference_impurity_nw.h5",
+      "impurity_off_short_reference": "reference_impurity_off_short.h5",
+      "impurity_n_short_reference": "reference_impurity_n_short.h5",
+      "impurity_nw_short_reference": "reference_impurity_nw_short.h5",
+      "adaptive_source_short_reference": "reference_adaptive_source_short.h5",
+      "impurity_n_configuration": "impurity_model_n.nml",
+      "impurity_nw_configuration": "impurity_model_nw.nml",
+      "transport_configuration": "transport_model.nml",
+      "impurity_configuration": "impurity_model_w.nml",
       "coarse_mesh": "mesh_adaptive_initial.msh",
-      "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
-      "cold_fixed_diffusion_reduction_parameters": "param_cold_fixed_diffusion_reduction.txt",
-      "cold_fixed_continuation_01_parameters": "param_cold_fixed_continuation_01.txt",
-      "cold_fixed_continuation_02_parameters": "param_cold_fixed_continuation_02.txt",
-      "cold_fixed_continuation_03_parameters": "param_cold_fixed_continuation_03.txt",
-      "cold_fixed_continuation_04_parameters": "param_cold_fixed_continuation_04.txt",
-      "cold_fixed_continuation_05_parameters": "param_cold_fixed_continuation_05.txt",
-      "cold_fixed_initial_transport_configuration": "transport_cold_fixed_initial.nml",
-      "cold_fixed_continuation_01_transport_configuration": "transport_cold_fixed_continuation_01.nml",
-      "cold_fixed_continuation_02_transport_configuration": "transport_cold_fixed_continuation_02.nml",
-      "cold_fixed_continuation_03_transport_configuration": "transport_cold_fixed_continuation_03.nml",
-      "cold_fixed_continuation_04_transport_configuration": "transport_cold_fixed_continuation_04.nml",
-      "cold_fixed_continuation_05_transport_configuration": "transport_cold_fixed_continuation_05.nml"
+      "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt"
     }
   },
   "workflows": {
-    "warm": {
-      "type": "warm_same_state",
-      "description": "Reconverge the accepted diverted state on the fixed mesh",
-      "inputs": [
-        "mesh",
-        "geometry",
-        "equilibrium_magnetic_field",
-        "equilibrium_current_density",
-        "warm_parameters",
-        "transport_configuration"
-      ],
-      "impurity_configuration": "impurity_configuration",
-      "layout": "mpi4_omp4",
-      "restart": "warm_restart",
-      "reference": "warm_reference",
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "fixed_same_layout",
-        "cross_layout_profile": "fixed_cross_layout"
-      },
-      "parameter_overrides": {
-        "compute_from_flux": true
-      }
-    },
-    "cold_fixed": {
-      "type": "staged_fixed_mesh",
-      "description": "Reach the diverted state from analytical initialization on the fixed mesh",
-      "inputs": [
-        "geometry",
-        "equilibrium_magnetic_field",
-        "equilibrium_current_density"
-      ],
-      "impurity_configuration": "impurity_configuration",
-      "mesh": "mesh",
-      "reference": "warm_reference",
-      "outputs": ["warm_restart", "warm_reference"],
-      "layout": "mpi4_omp4",
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "cold_fixed_reference",
-        "cross_layout_profile": "cold_fixed_reference",
-        "stage_profile": "fixed_stage_reference"
-      },
-      "parameter_overrides": {
-        "compute_from_flux": true,
-        "rest_adapt": false
-      },
-      "stages": [
-        {
-          "id": "time_init",
-          "parameters": "cold_fixed_time_init_parameters",
-          "transport": "cold_fixed_initial_transport_configuration",
-          "newton_check": "finite_only"
-        },
-        {
-          "id": "diffusion_reduction",
-          "parameters": "cold_fixed_diffusion_reduction_parameters",
-          "transport": "cold_fixed_initial_transport_configuration"
-        },
-        {
-          "id": "continuation_01",
-          "parameters": "cold_fixed_continuation_01_parameters",
-          "transport": "cold_fixed_continuation_01_transport_configuration"
-        },
-        {
-          "id": "continuation_02",
-          "parameters": "cold_fixed_continuation_02_parameters",
-          "transport": "cold_fixed_continuation_02_transport_configuration"
-        },
-        {
-          "id": "continuation_03",
-          "parameters": "cold_fixed_continuation_03_parameters",
-          "transport": "cold_fixed_continuation_03_transport_configuration"
-        },
-        {
-          "id": "continuation_04",
-          "parameters": "cold_fixed_continuation_04_parameters",
-          "transport": "cold_fixed_continuation_04_transport_configuration"
-        },
-        {
-          "id": "continuation_05",
-          "parameters": "cold_fixed_continuation_05_parameters",
-          "transport": "cold_fixed_continuation_05_transport_configuration"
-        }
-      ]
-    },
-    "cold_adaptive": {
-      "extends": "cold_fixed",
-      "type": "staged_adaptive_mesh",
-      "description": "Generate the canonical diverted state with early-stage mesh adaptation",
-      "mesh": "coarse_mesh",
-      "comparison": {
-        "method": "mesh_independent",
-        "profile": "adaptive_reference",
-        "stage_profile": "adaptive_reference"
-      },
-      "adaptive_stages": [
-        "time_init",
-        "diffusion_reduction"
-      ]
-    },
-    "cold_step_fixed": {
-      "type": "staged_fixed_mesh",
-      "description": "Run two diverted Newton iterations without adaptation",
-      "inputs": [
-        "geometry",
-        "equilibrium_magnetic_field",
-        "equilibrium_current_density"
-      ],
-      "impurity_configuration": "impurity_configuration",
-      "mesh": "coarse_mesh",
-      "layout": "serial_omp1",
-      "comparison": {
-        "method": "fixed_hdf5",
-        "profile": "race_step",
-        "cross_layout_profile": "race_step",
-        "stage_profile": "race_step"
-      },
-      "parameter_overrides": {
-        "compute_from_flux": true,
-        "adaptivity": false,
-        "rest_adapt": false,
-        "nrp": 2
-      },
-      "stages": [
-        {
-          "id": "single_step",
-          "parameters": "cold_fixed_time_init_parameters",
-          "transport": "cold_fixed_initial_transport_configuration",
-          "parameter_overrides": {
-            "steady": false,
-            "saveNR": false,
-            "time_adapt": false,
-            "NR_adapt": false,
-            "div_adapt": false,
-            "osc_adapt": false,
-            "nts": 1
-          }
-        }
-      ]
-    },
-    "cold_step_adaptive": {
-      "extends": "cold_step_fixed",
-      "type": "staged_adaptive_mesh",
-      "description": "Run two diverted Newton iterations with one adaptation pass",
-      "parameter_overrides": {
-        "adaptivity": true
-      },
-      "adaptive_stages": ["single_step"]
-    }
+    "bootstrap_adaptive": {},
+    "baseline_warm": {},
+    "transport": {},
+    "transport_short": {},
+    "stored_field": {},
+    "source_relocation": {},
+    "neutral_pressure": {},
+    "neutral_perpendicular": {},
+    "neutral_limiter_fixed": {},
+    "neutral_limiter_ti": {},
+    "neutral_pressure_short": {},
+    "neutral_perpendicular_short": {},
+    "neutral_limiter_fixed_short": {},
+    "neutral_limiter_ti_short": {},
+    "impurity_off": {},
+    "impurity_n": {},
+    "impurity_nw": {},
+    "impurity_off_short": {},
+    "impurity_n_short": {},
+    "impurity_nw_short": {},
+    "adaptive_source_short": {}
   }
 }
