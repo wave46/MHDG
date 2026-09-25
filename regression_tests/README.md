@@ -268,6 +268,11 @@ feature to the nearest real case, derive a workflow where possible, then add a
 focused suite and a profile selection only if it contributes distinct evidence.
 Physical input values and machine paths belong in external sources/settings.
 Changing scalar parameters or namelists usually needs JSON overrides, not Python.
+The tutorials build from [one warm feature check](tutorials/01-warm-feature.md)
+to [layout comparisons](tutorials/02-layout-comparison.md), a
+[multi-workflow suite](tutorials/03-scientific-suite.md), a
+[cross-case profile](tutorials/04-profile.md), and a
+[real case with an input bundle](tutorials/05-real-case-bundle.md).
 
 `python -m regression_tests suggest --base develop` groups advisory checks for
 changed files; it reads Git and catalogs but executes nothing. Suggestions do
