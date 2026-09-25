@@ -5,7 +5,8 @@ import subprocess
 import pytest
 
 from regression_tests import cli, reporting
-from regression_tests.suggest import changed_paths, recommendations
+from regression_tests.catalog import load_selection
+from regression_tests.suggest import ROOT, changed_paths, recommendations
 from regression_tests.support import BundleError
 
 
@@ -53,12 +54,33 @@ def test_git_base_local_layers_renames_and_cli_are_read_only(tmp_path, monkeypat
     monkeypatch.setattr(cli, 'ROOT', tmp_path / 'regression_tests')
     assert cli.main(['suggest', '--base', base]) == 0
     output = capsys.readouterr().out
-    assert output.count('python -m regression_tests check routine-extended --build') == 1
     assert f'unmapped: {untracked}' in output and 'nothing executed' in output
     assert git(tmp_path, 'status', '--porcelain') == before
     assert git(tmp_path, 'rev-parse', 'HEAD') != base
     with pytest.raises(BundleError, match='cannot inspect Git'):
         changed_paths(tmp_path, '--not-a-revision')
+
+
+def test_focused_recommendations_select_the_claimed_scientific_checks():
+    paths = ['src/Models/NGammaTiTe/transport_1d/transport_models_1d.f90',
+             'src/MPI_OMP/Communications.f90']
+    report = recommendations(paths)
+    selections = {}
+    for check in report['checks']:
+        command = check['command']
+        if command[:4] != ['python', '-m', 'regression_tests', 'check']:
+            continue
+        name = command[4]
+        _, suites = load_selection(name, ROOT / 'suites.json', ROOT / 'layouts.json', ROOT / 'cases')
+        selections[name] = suites[0]
+    assert 'transport' in selections['transport']['workflow_ids']
+    assert 'transport_short' in selections['transport_hybrid']['workflow_ids']
+    assert selections['transport_hybrid']['layout_comparisons']
+    assert selections['adaptive_parallel']['layout_comparisons']
+    assert all('--build' in check['command'] for check in report['checks'])
+
+    build = recommendations(['lib/Makefile'])['checks']
+    assert len(build) == 1 and build[0]['command'][-2:] == ['full', '--build']
 
 
 def test_broader_profile_absorbs_feature_checks_and_keeps_explanations():
