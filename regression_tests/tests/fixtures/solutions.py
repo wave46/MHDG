@@ -1,4 +1,4 @@
-"""Write compact grouped or legacy-flat synthetic MHDG solutions."""
+"""Write compact grouped synthetic MHDG solutions."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ import numpy as np
 def write_solution(
     path: Path,
     *,
-    grouped: bool = True,
     solution_offset: float = 0.0,
     model: bool = False,
 ) -> None:
@@ -47,27 +46,17 @@ def write_solution(
     }
 
     with h5py.File(path, "w") as handle:
-        mesh = handle.create_group("mesh") if grouped else handle
-        solution = handle.create_group("solution") if grouped else handle
+        mesh = handle.create_group("mesh")
+        solution = handle.create_group("solution")
         for name, values in mesh_values.items():
             mesh.create_dataset(name, data=values)
         for name, values in solution_values.items():
             solution.create_dataset(name, data=values)
 
-        if grouped:
-            parameters = handle.create_group("simulation_parameters")
-            parameters.create_dataset("Neq", data=np.array([count], dtype=np.int32))
-            physics = parameters.create_group("physics")
-            physics.create_dataset(
-                "conservative_variable_names",
-                data=np.array(names),
-            )
-        else:
-            handle.create_dataset("Neq", data=np.array([count], dtype=np.int32))
-            handle.create_dataset(
-                "conservative_variable_names",
-                data=np.array(names),
-            )
+        parameters = handle.create_group("simulation_parameters")
+        parameters.create_dataset("Neq", data=np.array([count], dtype=np.int32))
+        physics = parameters.create_group("physics")
+        physics.create_dataset("conservative_variable_names", data=np.array(names))
 
         transport = handle.create_group("transport_1d")
         transport.create_group("coefficients").create_dataset(

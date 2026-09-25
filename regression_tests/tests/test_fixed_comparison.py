@@ -21,15 +21,15 @@ TOLERANCES = {
 @pytest.fixture
 def files(tmp_path):
     reference, candidate = tmp_path / "reference.h5", tmp_path / "candidate.h5"
-    write_solution(reference, grouped=True)
-    write_solution(candidate, grouped=False)
+    write_solution(reference)
+    write_solution(candidate)
     return reference, candidate
 
 
-def test_grouped_and_flat_fields_match_with_reference_equation_names(files):
+def test_missing_candidate_equation_names_use_reference_names(files):
     reference, candidate = files
     with h5py.File(candidate, "r+") as handle:
-        del handle["conservative_variable_names"]
+        del handle["simulation_parameters/physics/conservative_variable_names"]
     report = compare_hdf5_files(reference, candidate, TOLERANCES)
     assert report["status"] == "passed"
     assert report["solution"]["equation_names"] == ["rho", "Gamma"]
@@ -38,9 +38,9 @@ def test_grouped_and_flat_fields_match_with_reference_equation_names(files):
 
 
 @pytest.mark.parametrize("dataset,index,value,section", [
-    ("u", 1, 3.0, "solution"),
-    ("q", 0, np.nan, "solution"),
-    ("T", (0, 0), 99, "mesh"),
+    ("solution/u", 1, 3.0, "solution"),
+    ("solution/q", 0, np.nan, "solution"),
+    ("mesh/T", (0, 0), 99, "mesh"),
     ("transport_1d/coefficients/d_fs", 0, 2.0, "transport_1d"),
 ])
 def test_field_nonfinite_mesh_and_transport_failures(files, dataset, index, value, section):
@@ -52,17 +52,17 @@ def test_field_nonfinite_mesh_and_transport_failures(files, dataset, index, valu
     assert not report[section]["passed"]
     # A finite changed field is valid data even though it fails regression;
     # bad connectivity and nonfinite fields are invalid on their own.
-    assert bool(validate_solution_file(candidate)) == (dataset in {"q", "T"})
+    assert bool(validate_solution_file(candidate)) == (dataset in {"solution/q", "mesh/T"})
     if section == "transport_1d":
         with h5py.File(candidate, "r+") as handle:
             handle[dataset][index] = np.nan
         assert any("transport_1d" in failure for failure in validate_solution_file(candidate))
-    if dataset == "u":
+    if dataset == "solution/u":
         equations = report["solution"]["datasets"]["u"]["equations"]
         assert equations["rho"]["passed"] and not equations["Gamma"]["passed"]
-    elif dataset == "q":
+    elif dataset == "solution/q":
         assert not report["solution"]["datasets"]["q"]["equations"]["rho"]["finite"]
-    elif dataset == "T":
+    elif dataset == "mesh/T":
         assert report["solution"]["reason"] == "mesh comparison failed"
 
 
@@ -127,8 +127,8 @@ def test_final_output_selection_tolerance_profile_and_cli(tmp_path, mode):
         "inputs/reference.h5", "outputs/result_0000.h5", "outputs/result.h5",
     ))
     write_solution(reference)
-    write_solution(checkpoint, grouped=False, solution_offset=1.0)
-    write_solution(final, grouped=False)
+    write_solution(checkpoint, solution_offset=1.0)
+    write_solution(final)
     (run / "run_plan.json").write_text(json.dumps({
         "case_id": "legacy_case", "workflow_id": "baseline_warm",
         "layout_id": "serial_omp16" if mode == "cross_layout" else "mpi4_omp4",

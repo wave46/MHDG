@@ -17,7 +17,7 @@ def compare_hdf5_files(
     candidate_path: Path,
     tolerances: dict[str, Any],
 ) -> dict[str, Any]:
-    """Compare grouped or legacy-flat solutions on the same fixed mesh."""
+    """Compare grouped solutions on the same fixed mesh."""
     failures: list[str] = []
     report: dict[str, Any] = {"failures": failures}
 
@@ -25,10 +25,6 @@ def compare_hdf5_files(
         with h5py.File(reference_path, "r") as reference, h5py.File(
             candidate_path, "r"
         ) as candidate:
-            report["formats"] = {
-                "reference": storage_format(reference),
-                "candidate": storage_format(candidate),
-            }
             report["mesh"] = compare_mesh(
                 reference,
                 candidate,
@@ -82,7 +78,7 @@ def validate_solution_file(path: Path) -> list[str]:
             equations = _equation_count(handle)
             for name in ("u", "q", "u_tilde"):
                 finite(read_solution_field(handle, name, equations), f"solution/{name}")
-            transport = optional_group(handle, "transport_1d", "solution/transport_1d")
+            transport = optional_group(handle, "transport_1d")
             for name, dataset in transport_datasets(transport):
                 finite(np.asarray(dataset), f"transport_1d/{name}")
             magnetic = optional_group(handle, "magnetic")
@@ -96,7 +92,7 @@ def validate_solution_file(path: Path) -> list[str]:
 
 
 def required_array(handle: h5py.File, group: str, name: str) -> np.ndarray:
-    """Read a required dataset from grouped or legacy-flat storage."""
+    """Read a required dataset from grouped storage."""
     array = optional_array(handle, group, name)
     if array is None:
         raise ComparisonError(f"required dataset is missing: {group}/{name}")
@@ -113,26 +109,14 @@ def optional_array(
     group: str,
     name: str,
 ) -> np.ndarray | None:
-    """Read an optional dataset from grouped or legacy-flat storage."""
-    for path in (f"{group}/{name}", name):
-        if path in handle and isinstance(handle[path], h5py.Dataset):
-            return np.asarray(handle[path])
-    return None
+    """Read an optional dataset from grouped storage."""
+    path = f"{group}/{name}"
+    return np.asarray(handle[path]) if path in handle and isinstance(handle[path], h5py.Dataset) else None
 
 
-def optional_group(handle: h5py.File, *paths: str) -> h5py.Group | None:
-    """Return the first matching HDF5 group."""
-    for path in paths:
-        if path in handle and isinstance(handle[path], h5py.Group):
-            return handle[path]
-    return None
-
-
-def storage_format(handle: h5py.File) -> str:
-    """Describe whether solution and mesh datasets are grouped or flat."""
-    solution = "grouped_solution" if "solution" in handle else "flat_solution"
-    mesh = "grouped_mesh" if "mesh" in handle else "flat_mesh"
-    return f"{solution}+{mesh}"
+def optional_group(handle: h5py.File, path: str) -> h5py.Group | None:
+    """Return an optional HDF5 group."""
+    return handle[path] if path in handle and isinstance(handle[path], h5py.Group) else None
 
 
 def read_discrete_mesh(handle: h5py.File) -> dict[str, Any]:
@@ -444,9 +428,8 @@ def _equation_names(
 
 
 def _equation_count(handle: h5py.File) -> int:
-    for path in ("simulation_parameters/Neq", "Neq"):
-        if path in handle:
-            return int(np.asarray(handle[path]).reshape(-1)[0])
+    if "simulation_parameters/Neq" in handle:
+        return int(np.asarray(handle["simulation_parameters/Neq"]).reshape(-1)[0])
 
     names = _optional_names(handle)
     if names:
@@ -466,19 +449,15 @@ def _valid_equation_names(handle: h5py.File, count: int) -> list[str]:
 
 
 def _optional_names(handle: h5py.File) -> list[str]:
-    for path in (
-        "simulation_parameters/physics/conservative_variable_names",
-        "conservative_variable_names",
-    ):
-        if path not in handle:
-            continue
-        return [
-            value.decode(errors="replace").strip(" \x00")
-            if isinstance(value, bytes)
-            else str(value).strip()
-            for value in np.asarray(handle[path]).reshape(-1)
-        ]
-    return []
+    path = "simulation_parameters/physics/conservative_variable_names"
+    if path not in handle:
+        return []
+    return [
+        value.decode(errors="replace").strip(" \x00")
+        if isinstance(value, bytes)
+        else str(value).strip()
+        for value in np.asarray(handle[path]).reshape(-1)
+    ]
 
 
 def compare_transport(
@@ -488,16 +467,8 @@ def compare_transport(
     failures: list[str],
 ) -> dict[str, Any]:
     """Compare reference transport datasets when they are present."""
-    reference_group = optional_group(
-        reference,
-        "transport_1d",
-        "solution/transport_1d",
-    )
-    candidate_group = optional_group(
-        candidate,
-        "transport_1d",
-        "solution/transport_1d",
-    )
+    reference_group = optional_group(reference, "transport_1d")
+    candidate_group = optional_group(candidate, "transport_1d")
     if reference_group is None:
         return {"present": False, "passed": True, "datasets": {}}
     if candidate_group is None:

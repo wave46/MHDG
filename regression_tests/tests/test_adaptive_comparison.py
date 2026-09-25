@@ -100,7 +100,7 @@ def test_gradient_tolerances_and_point_coverage():
 def adaptive_run(tmp_path, monkeypatch):
     reference, candidate = tmp_path / "reference.h5", tmp_path / "candidate.h5"
     write_solution(reference)
-    write_solution(candidate, grouped=False)
+    write_solution(candidate)
     (tmp_path / "stdout.log").write_text("Error: 1e-5\n")
     (tmp_path / "run_plan.json").write_text(json.dumps({
         "case_id": "legacy_case", "workflow_id": "bootstrap_adaptive", "layout_id": "mpi4_omp4",
@@ -127,7 +127,7 @@ def test_refinement_requires_recorded_initial_output_and_element_growth(adaptive
     assert compare.select_candidate(inputs.run_directory, inputs.metadata) == candidate
     assert compare._check_refinement(inputs, candidate)["status"] == "failed"  # Identical meshes.
     with h5py.File(candidate, "r+") as handle:
-        handle["Nelems"][...] = 3
+        handle["mesh/Nelems"][...] = 3
     report = compare._check_refinement(inputs, candidate)
     assert report["status"] == "passed"
     assert (report["initial_elements"], report["final_elements"]) == (2, 3)
@@ -139,9 +139,9 @@ def test_refinement_requires_recorded_initial_output_and_element_growth(adaptive
 def test_matching_mesh_uses_direct_check_without_fallback(adaptive_run, monkeypatch, perturbed):
     inputs, reference, candidate = adaptive_run
     with h5py.File(candidate, "r+") as handle:
-        handle["X"][0, 0] += 1e-13  # Within the declared mesh tolerance.
+        handle["mesh/X"][0, 0] += 1e-13  # Within the declared mesh tolerance.
         if perturbed:
-            handle["u"][1] += .001
+            handle["solution/u"][1] += .001
     def no_interpolation(*args):
         pytest.fail("matching-mesh comparisons must not interpolate, even after a failed direct check")
     monkeypatch.setattr(compare, "compare_adaptive_files", no_interpolation)
@@ -161,20 +161,20 @@ def test_malformed_mesh_or_storage_never_interpolates(adaptive_run, monkeypatch,
     inputs, reference, candidate = adaptive_run
     with h5py.File(candidate, "r+") as handle:
         if corruption == "nonfinite":
-            handle["X"][0, 0] = np.nan
+            handle["mesh/X"][0, 0] = np.nan
         elif corruption == "index":
-            handle["Tlin"][0, 0] = 99
+            handle["mesh/Tlin"][0, 0] = 99
         elif corruption == "fractional_index":
-            data = handle["Tlin"][()].astype(float)
-            del handle["Tlin"]
-            handle["Tlin"] = data + .1
+            data = handle["mesh/Tlin"][()].astype(float)
+            del handle["mesh/Tlin"]
+            handle["mesh/Tlin"] = data + .1
         elif corruption == "degenerate":
-            handle["X"][1] = 0.
+            handle["mesh/X"][1] = 0.
         elif corruption == "order":
-            handle["Nnodesperface"][0] = 3
+            handle["mesh/Nnodesperface"][0] = 3
         else:
-            del handle["u"]
-            handle["u"] = [1.]
+            del handle["solution/u"]
+            handle["solution/u"] = [1.]
     monkeypatch.setattr(compare, "compare_adaptive_files", lambda *args: pytest.fail("invalid mesh fell back to interpolation"))
     with pytest.raises(ComparisonError):
         compare.compare_run(inputs, compare.ComparisonOverrides(reference=reference))
@@ -183,16 +183,16 @@ def test_malformed_mesh_or_storage_never_interpolates(adaptive_run, monkeypatch,
 def test_face_order_is_part_of_mesh_identity_and_parallel_checks_stay_strict(adaptive_run, monkeypatch):
     inputs, reference, candidate = adaptive_run
     with h5py.File(candidate, "r+") as handle:
-        faces = handle["F"][()]
+        faces = handle["mesh/F"][()]
         # Permute two boundary-face IDs and their records consistently.
         faces[faces == 2] = 99
         faces[faces == 3] = 2
         faces[faces == 99] = 3
-        handle["F"][...] = faces
+        handle["mesh/F"][...] = faces
         for name in ("Tb", "extfaces"):
-            data = handle[name][()]
+            data = handle[f"mesh/{name}"][()]
             data[:, [0, 1]] = data[:, [1, 0]]
-            handle[name][...] = data
+            handle[f"mesh/{name}"][...] = data
     differences = compare.mesh_differences(reference, candidate, 1e-12)
     assert "F" in differences and "extfaces" in differences
     monkeypatch.setattr(compare, "compare_adaptive_files", lambda *args: pytest.fail("parallel check interpolated"))

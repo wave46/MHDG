@@ -131,8 +131,6 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
     assert 'retired_restart' not in manifest['roles']
     assert 'retired_restart' not in manifest['artifacts']
     assert not (setup.output / 'inputs/retired.h5').exists()
-    assert 'reference_matrix' not in manifest['roles']
-    assert not (setup.output / 'references').exists()
     reference = setup.output / manifest['artifacts'][manifest['roles']['warm_reference']]['path']
     assert reference.read_bytes() == (warm / "outputs/result.h5").read_bytes()
     published_mesh = setup.output / manifest['artifacts'][manifest['roles']['mesh']]['path']
