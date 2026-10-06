@@ -120,3 +120,39 @@ def test_known_puff_and_cli_attach_to_existing_output(output, tmp_path):
     with h5py.File(solution, "r+") as handle:
         handle["diagnostics/equations/n_n/physical/volume_components/puff"][()] = 90.
     assert run_command("compare", "--suite", "--diagnostics", str(summary)).returncode == 1
+
+
+@pytest.mark.parametrize("mode", ["summary", "detailed"])
+def test_neutral_wall_absorption_contract(output, mode):
+    solution, terminal = output(mode)
+    root = "diagnostics/summary/" if mode == "summary" else "diagnostics/equations/"
+    source = root + ("external_sources/particles/" if mode == "summary" else "n_n/bc/source_components/")
+    physical = root + "n_n/physical/boundary_components_inward/"
+    with h5py.File(solution, "r+") as handle:
+        for name in ("recycling_neutral", "recycling_neutral_pump"):
+            handle["simulation_parameters/physics/" + name] = .99
+        handle[source + "neutral_wall_absorption"] = 6.
+        handle[source + "units"] = "particles/s"
+        if mode == "detailed":
+            handle[physical + "neutral_wall_absorption"] = -6.
+            handle[physical + "units"] = "particles/s"
+    terminal.write_text(terminal.read_text() + ("neutral wall absorption -6.00E+00\n" if mode == "detailed" else "")
+                        + "neutral wall absorption 6.00E+00\n")
+    assert check_output(solution, terminal)["status"] == "passed"
+    with h5py.File(solution, "r+") as handle:
+        if mode == "detailed":
+            handle[physical + "neutral_wall_absorption"][()] = 6.
+        else:
+            del handle[source + "neutral_wall_absorption"]
+    assert check_output(solution, terminal)["status"] == "failed"
+
+
+def test_unit_recycling_requires_zero_wall_absorption(output):
+    solution, terminal = output("summary")
+    with h5py.File(solution, "r+") as handle:
+        for name in ("recycling_neutral", "recycling_neutral_pump"):
+            handle["simulation_parameters/physics/" + name] = 1.
+        handle["diagnostics/summary/external_sources/particles/neutral_wall_absorption"] = 1.
+        handle["diagnostics/summary/external_sources/particles/units"] = "particles/s"
+    terminal.write_text(terminal.read_text() + "neutral wall absorption 1.00E+00\n")
+    assert "neutral wall absorption is nonzero with unit recycling" in check_output(solution, terminal)["failures"]

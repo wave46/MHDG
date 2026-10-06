@@ -85,6 +85,8 @@ CONTAINS
     CALL HDF5_string_saving(family_group_id,'particles/s','units')
     CALL HDF5_real_saving(family_group_id,external_puff_input(this),'puff_in')
     CALL HDF5_real_saving(family_group_id,external_pump_output(this),'pump_out')
+    CALL write_section_term(this,family_group_id,equation_nn, &
+         &term_neutral_wall_absorption,section_bc,'neutral_wall_absorption')
     CALL write_prescribed_source(this,family_group_id,equation_n,'volume_n')
     CALL write_prescribed_source(this,family_group_id,equation_nn,'volume_n_n')
     CALL HDF5_group_close(family_group_id,ierr)
@@ -386,6 +388,8 @@ CONTAINS
     CALL write_section_term(this,group_id,equation,term_puff,section_bc,'puff')
     CALL HDF5_real_saving(group_id,-balance_value(this,equation,term_pump, &
          &section_bc),'pump')
+    CALL HDF5_real_saving(group_id,-balance_value(this,equation, &
+         &term_neutral_wall_absorption,section_bc),'neutral_wall_absorption')
   END SUBROUTINE write_neutral_physical_boundary
 
   SUBROUTINE write_particle_exchange(this, parent_group_id)
@@ -621,6 +625,8 @@ CONTAINS
          &'puff')
     CALL write_section_term(this,group_id,equation_nn,term_pump,section_bc, &
          &'pump')
+    CALL write_section_term(this,group_id,equation_nn, &
+         &term_neutral_wall_absorption,section_bc,'neutral_wall_absorption')
     CALL HDF5_group_close(group_id,ierr)
   END SUBROUTINE write_neutral_bc_sources
 

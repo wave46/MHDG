@@ -65,9 +65,11 @@ CONTAINS
     CALL print_content(balances,total_particles,total_energy)
 
     WRITE(6,'(A)') '  External sources'
-    WRITE(6,'(A,2(2X,A,1X,ES11.2))') '    particles [particles/s]', &
+    WRITE(6,'(A,3(2X,A,1X,ES11.2))') '    particles [particles/s]', &
          &'puff in',external_puff_input(this), &
-         &'pump out',external_pump_output(this)
+         &'pump out',external_pump_output(this), &
+         &'neutral wall absorption',section_value(this,equation_nn, &
+         &term_neutral_wall_absorption,section_bc)
     WRITE(6,'(A,2(2X,A,1X,ES11.2))') '      volume', &
          &'n',prescribed_source(this,equation_n), &
          &'n_n',prescribed_source(this,equation_nn)
@@ -286,12 +288,15 @@ CONTAINS
     CASE (equation_nn)
        CALL print_component_pairs('wall source', &
             [CHARACTER(LEN=24) :: 'recycling parallel', &
-            &'recycling diffusion','recycling pinch','puff','pump'], &
+            &'recycling diffusion','recycling pinch','puff','pump', &
+            &'neutral wall absorption'], &
             (/section_value(this,equation,term_recycling_parallel,section_bc), &
             &section_value(this,equation,term_recycling_diffusion,section_bc), &
             &section_value(this,equation,term_recycling_pinch,section_bc), &
             &section_value(this,equation,term_puff,section_bc), &
-            &-section_value(this,equation,term_pump,section_bc)/))
+            &-section_value(this,equation,term_pump,section_bc), &
+            &-section_value(this,equation,term_neutral_wall_absorption, &
+            &section_bc)/))
     END SELECT
   END SUBROUTINE print_physical_boundary_components
 
@@ -474,12 +479,15 @@ CONTAINS
             &neutral%tau_stabilization_inward,neutral%residual/))
        CALL print_component_pairs('imposed source', &
             [CHARACTER(LEN=24) :: 'recycling parallel', &
-            &'recycling diffusion','recycling pinch','puff','pump'], &
+            &'recycling diffusion','recycling pinch','puff','pump', &
+            &'neutral wall absorption'], &
             (/section_value(this,equation,term_recycling_parallel,section_bc), &
             &section_value(this,equation,term_recycling_diffusion,section_bc), &
             &section_value(this,equation,term_recycling_pinch,section_bc), &
             &section_value(this,equation,term_puff,section_bc), &
-            &section_value(this,equation,term_pump,section_bc)/))
+            &section_value(this,equation,term_pump,section_bc), &
+            &section_value(this,equation,term_neutral_wall_absorption, &
+            &section_bc)/))
        CALL print_neutral_bc_flux_components(this)
     END SELECT
   END SUBROUTINE print_bc_components

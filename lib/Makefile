@@ -10,7 +10,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 	balance_diagnostics_bc.o \
 	balance_diagnostics_reporting.o balance_diagnostics_output.o
 
-.PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper check-neutral-flux-limiter check-neutral-wall-flux check-neutral-wall-input
+.PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper check-neutral-flux-limiter check-neutral-wall-flux check-neutral-wall-input check-neutral-wall-diagnostics
 
 all : allseq
 
@@ -42,7 +42,7 @@ clean:
 	$(RM) MHDG-* Convergence *~
 	$(RM) magnetic_topology_check magnetic_geometry_check
 	$(RM) transport_region_policy_check transport_taper_check
-	$(RM) neutral_flux_limiter_check neutral_wall_flux_check neutral_wall_input_check
+	$(RM) neutral_flux_limiter_check neutral_wall_flux_check neutral_wall_input_check neutral_wall_diagnostics_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_magnetic_topology.f90 interpolation.o magnetic_topology.o -o magnetic_topology_check
@@ -74,6 +74,10 @@ check-neutral-wall-flux : neutral_wall_physics_check.o globals.o neutral_flux_li
 check-neutral-wall-input : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_neutral_wall_input.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o neutral_wall_input_check $(LIB)
 	python3 ../unit_tests/check_neutral_wall_input.py ./neutral_wall_input_check
+
+check-neutral-wall-diagnostics : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_neutral_wall_diagnostics.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o neutral_wall_diagnostics_check $(LIB)
+	python3 ../unit_tests/check_neutral_wall_diagnostics.py ./neutral_wall_diagnostics_check
 
 include Make.inc/build_provenance.mk
 

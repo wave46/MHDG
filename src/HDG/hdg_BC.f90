@@ -1811,7 +1811,7 @@ CONTAINS
 #ifdef NEUTRAL
         REAL*8           :: E, theta, RN
         REAL*8           :: Dnn_dU(Neq), Dnn_dU_U
-        REAL*8           :: neutral_recycling, dFw_dU(Neq)
+        REAL*8           :: neutral_recycling, Fw, dFw_dU(Neq)
 #endif
 #ifdef DKLINEARIZED
     real*8                 ::       q_cyl, xyf(:), ddk_dU(Neq), ddk_dU_u
@@ -1940,6 +1940,7 @@ CONTAINS
       IF (neutral_recycling /= 1.d0) THEN
         CALL compute_dneutral_wall_flux_dU(ufg,neutral_recycling,dFw_dU)
       ENDIF
+      IF (face_diagnostics_on) CALL compute_neutral_wall_flux(ufg,neutral_recycling,Fw)
 #endif
 #ifdef NEUTRALP
       CALL compute_W5p(ufg,W5p)
@@ -2283,6 +2284,7 @@ CONTAINS
         &diffusion_iso=diffiso,diffusion_ani=diffani,pinch_matrix=APinch, &
         &recycling_coefficient=recycling_coeff, &
         &puff_source=puff_coeff,pump_coefficient=cryopump_coeff, &
+        &neutral_wall_absorption=Fw, &
         &plasma=diagnostic_plasma_bc, &
 #ifdef NEUTRALP
         &neutral_pressure_vector=W5p, &

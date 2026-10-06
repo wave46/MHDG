@@ -66,3 +66,10 @@ objects to call the production `READ_input` and adimensionalization routines.
 It checks defaults, inheritance, pump overrides and range/nonfinite rejection.
 It uses the tracked parameter template in temporary directories and needs
 Python 3, with no external case data or solver simulation.
+
+For the neutral wall balance mapping, use the serial build and run
+`make check-neutral-wall-diagnostics`. It needs Python 3 with h5py and NumPy.
+The small driver calls the production accumulator and HDF5 writer without a
+solver simulation. Nine cases check zero/active loss, diagnostic modes,
+accumulator merges, inward/source signs, the total particle balance, and
+separation from plasma recycling and puff/pump with source relocation.

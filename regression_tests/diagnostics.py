@@ -115,8 +115,34 @@ def check_output(solution, terminal, expected_mode=None):
                             failures.append(f"relocated wall {field} is missing or nonzero")
             failures.extend(f"missing scalar diagnostic: {name}" for name in sorted(required - values.keys()))
             failures.extend(f"wrong or missing units: {name}" for name, unit in units.items() if texts.get(name) != unit)
+            if "simulation_parameters/physics/recycling_neutral" in handle:
+                _check_neutral_wall_absorption(handle, mode, values, texts, log, failures)
             _check_terminal(log, mode, values, failures)
     return {"solution": str(solution), "mode": mode, "status": "failed" if failures else "passed", "failures": failures}
+
+
+def _check_neutral_wall_absorption(handle, mode, values, texts, log, failures):
+    if mode not in ("summary", "detailed"):
+        return
+    source = ("external_sources/particles/" if mode == "summary" else "n_n/bc/source_components/")
+    loss = values.get(source + "neutral_wall_absorption", np.nan)
+    if not np.isfinite(loss) or texts.get(source + "units") != "particles/s":
+        failures.append("missing or invalid neutral wall absorption diagnostic")
+    if mode == "detailed":
+        physical = "n_n/physical/boundary_components_inward/"
+        inward = values.get(physical + "neutral_wall_absorption", np.nan)
+        if not np.isfinite(inward) or inward != -loss or texts.get(physical + "units") != "particles/s":
+            failures.append("neutral wall absorption inward/source signs differ")
+    coefficients = [handle.get("simulation_parameters/physics/" + name)
+                    for name in ("recycling_neutral", "recycling_neutral_pump")]
+    if all(item is not None and np.asarray(item[()]).item() == 1. for item in coefficients) and loss != 0.:
+        failures.append("neutral wall absorption is nonzero with unit recycling")
+    block = log.rsplit("Balance diagnostics (", 1)[-1]
+    printed = [float(value.replace("D", "E").replace("d", "e"))
+               for value in re.findall(rf"neutral wall absorption\s+({NUMBER})", block)]
+    expected = [loss] if mode == "summary" else [-loss, loss]
+    if len(printed) != len(expected) or not np.allclose(printed, expected, rtol=TERMINAL_RTOL, atol=0.):
+        failures.append("terminal/HDF5 neutral wall absorption mismatch")
 
 
 def _check_terminal(log, mode, values, failures):
