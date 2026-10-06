@@ -1811,6 +1811,7 @@ CONTAINS
 #ifdef NEUTRAL
         REAL*8           :: E, theta, RN
         REAL*8           :: Dnn_dU(Neq), Dnn_dU_U
+        REAL*8           :: neutral_recycling, Fw, dFw_dU(Neq)
 #endif
 #ifdef DKLINEARIZED
     real*8                 ::       q_cyl, xyf(:), ddk_dU(Neq), ddk_dU_u
@@ -1933,6 +1934,14 @@ CONTAINS
       CALL compute_W4(ufg,W4,diffiso(1,1),diffiso(4,4))
       CALL compute_dW4_dU(ufg,dW4_dU,diffiso(1,1),diffiso(4,4))
         QdW4 = MATMUL(Qpr,dW4_dU)
+#ifdef NEUTRAL
+      neutral_recycling = phys%Re_n
+      IF (phys%bcflags(fl) == bc_BohmPump) neutral_recycling = phys%Re_n_pump
+      IF (neutral_recycling /= 1.d0) THEN
+        CALL compute_dneutral_wall_flux_dU(ufg,neutral_recycling,dFw_dU)
+      ENDIF
+      IF (face_diagnostics_on) CALL compute_neutral_wall_flux(ufg,neutral_recycling,Fw)
+#endif
 #ifdef NEUTRALP
       CALL compute_W5p(ufg,W5p)
       CALL compute_dW5p_dU(ufg,dW5p_dU)
@@ -2275,6 +2284,7 @@ CONTAINS
         &diffusion_iso=diffiso,diffusion_ani=diffani,pinch_matrix=APinch, &
         &recycling_coefficient=recycling_coeff, &
         &puff_source=puff_coeff,pump_coefficient=cryopump_coeff, &
+        &neutral_wall_absorption=Fw, &
         &plasma=diagnostic_plasma_bc, &
 #ifdef NEUTRALP
         &neutral_pressure_vector=W5p, &
@@ -2312,6 +2322,15 @@ CONTAINS
     !cryopump modification Should it be ALU?
     indj = k+ind_asf !5th equation and 5th conservative variable: pump_power*U5
     elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - cryopump_coeff*NiNi
+
+#ifdef TEMPERATURE
+    IF (neutral_recycling /= 1.d0) THEN
+      DO j = 1,Neq
+        indj = j + ind_asf
+        elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - dFw_dU(j)*NiNi
+      END DO
+    ENDIF
+#endif
 
     ! Neutrals velocity
     !indj = Neq+ind_asf

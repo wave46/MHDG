@@ -297,6 +297,8 @@ MODULE types
      REAL*8,ALLOCATABLE        :: v_nn_Bou(:,:) ! Convective velocity in the neutral equation at 1D Gauss points on boundary faces
      REAL*8                    :: Re ! Recycling for the neutral equation
      REAL*8                    :: Re_pump ! Recycling for the neutral equation in the pump region
+     REAL*8                    :: Re_n = 1.d0
+     REAL*8                    :: Re_n_pump = 1.d0
      REAL*8                    :: puff ! Puff coefficient
      REAL*8                    :: feedback_propotional_gain ! relative feedback propotional gain
      REAL*8                    :: feedback_integral_gain ! feedback integral gain

@@ -290,3 +290,31 @@ def test_candidate_override_checks_its_provenance_and_original_run_parameters(ha
         with h5py.File(candidate, "r+") as handle:
             del handle[key]
             handle[key] = correct
+
+
+@pytest.mark.parametrize("overrides,expected", [
+    ({"Re_n": .99}, (.99, .99)),
+    ({"Re_n": .99, "Re_n_pump": .95}, (.99, .95)),
+    ({"Re_n_pump": .95}, (1., .95)),
+])
+def test_neutral_wall_recycling_input_and_output_contract(harness, overrides, expected):
+    catalog_path = harness.catalog / "workflows.json"
+    catalog = json.loads(catalog_path.read_text())
+    catalog["parameter_namelists"] = {"Re_n": "phys_lst", "Re_n_pump": "phys_lst"}
+    catalog_path.write_text(json.dumps(catalog))
+    seed = harness.serial_executable.parent / "seed.h5"
+    with h5py.File(seed, "r+") as handle:
+        handle["simulation_parameters/physics/recycling_neutral"] = expected[0]
+        handle["simulation_parameters/physics/recycling_neutral_pump"] = expected[1]
+    prepared = prepare_run(harness.values, "legacy_case", "warm", "serial_omp1",
+                           harness.catalog / "cases", harness.catalog / "layouts.json", "wall-pass",
+                           requested_overrides=overrides)
+    parameters = (prepared.path / "param.txt").read_text().lower()
+    assert ("re_n_pump =" in parameters) == ("Re_n_pump" in overrides)
+    assert execute_prepared(prepared, harness.values).status == "completed"
+    with h5py.File(seed, "r+") as handle:
+        handle["simulation_parameters/physics/recycling_neutral_pump"][()] = 1.
+    wrong = prepare_run(harness.values, "legacy_case", "warm", "serial_omp1",
+                        harness.catalog / "cases", harness.catalog / "layouts.json", "wall-fail",
+                        requested_overrides=overrides)
+    assert execute_prepared(wrong, harness.values).status == "output_contract_failed"

@@ -84,7 +84,8 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: term_sheath = 27
   INTEGER, PARAMETER :: term_split_diffusion = 28
   INTEGER, PARAMETER :: term_sheath_minus_bulk = 29
-  INTEGER, PARAMETER :: balance_term_count = 29
+  INTEGER, PARAMETER :: term_neutral_wall_absorption = 30
+  INTEGER, PARAMETER :: balance_term_count = 30
   INTEGER, PARAMETER :: summary_volume_terms(2) = &
        &(/term_prescribed_source,term_ohmic/)
 
@@ -285,6 +286,7 @@ MODULE balance_diagnostics
           &gradient, normal, magnetic_direction, magnetic_normal, tau, &
           &diffusion_iso, diffusion_ani, pinch_matrix, &
           &recycling_coefficient, puff_source, pump_coefficient, &
+          &neutral_wall_absorption, &
           &plasma, &
           &neutral_perpendicular_diffusion, neutral_pressure_vector, &
           &neutral_momentum_equation)
@@ -298,6 +300,7 @@ MODULE balance_diagnostics
        REAL*8, INTENT(IN) :: pinch_matrix(:,:)
        REAL*8, INTENT(IN) :: recycling_coefficient, puff_source
        REAL*8, INTENT(IN) :: pump_coefficient
+       REAL*8, INTENT(IN) :: neutral_wall_absorption
        TYPE(balance_plasma_bc_type), INTENT(IN) :: plasma
        LOGICAL, INTENT(IN) :: neutral_perpendicular_diffusion
        REAL*8, INTENT(IN), OPTIONAL :: neutral_pressure_vector(:)

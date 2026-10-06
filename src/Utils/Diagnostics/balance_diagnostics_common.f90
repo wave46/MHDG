@@ -63,7 +63,8 @@ CONTAINS
          balance_value(this,equation_nn,term_recycling_diffusion,section_bc)+ &
          balance_value(this,equation_nn,term_recycling_pinch,section_bc)+ &
          balance_value(this,equation_nn,term_puff,section_bc)- &
-         balance_value(this,equation_nn,term_pump,section_bc)
+         balance_value(this,equation_nn,term_pump,section_bc)- &
+         balance_value(this,equation_nn,term_neutral_wall_absorption,section_bc)
     balance%physical_flux_inward = &
          balance_value(this,equation_nn,term_diffusion,section_bc)+ &
          balance_value(this,equation_nn,term_pressure,section_bc)+ &

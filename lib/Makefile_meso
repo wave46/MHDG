@@ -192,7 +192,7 @@ read_input.F : $(SDIR)/InOut/read_input.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
 read_input.o : read_input.F prec_const.o globals.o MPI_OMP.o neutral_flux_limiter.o
-	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
+	$(FC) -c $(FCFLAGS) -fno-finite-math-only $(INC) $< -o $@
 
 reference_element.F : $(SDIR)/HDG/reference_element.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@

@@ -22,6 +22,7 @@ CONTAINS
        &gradient, normal, magnetic_direction, magnetic_normal, tau, &
        &diffusion_iso, diffusion_ani, pinch_matrix, &
        &recycling_coefficient, puff_source, pump_coefficient, &
+       &neutral_wall_absorption, &
        &plasma, &
        &neutral_perpendicular_diffusion, neutral_pressure_vector, &
        &neutral_momentum_equation)
@@ -35,6 +36,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: pinch_matrix(:,:)
     REAL*8, INTENT(IN) :: recycling_coefficient, puff_source
     REAL*8, INTENT(IN) :: pump_coefficient
+    REAL*8, INTENT(IN) :: neutral_wall_absorption
     TYPE(balance_plasma_bc_type), INTENT(IN) :: plasma
     LOGICAL, INTENT(IN) :: neutral_perpendicular_diffusion
     REAL*8, INTENT(IN), OPTIONAL :: neutral_pressure_vector(:)
@@ -54,6 +56,7 @@ CONTAINS
          &magnetic_normal, &
          &tau,diffusion_iso,diffusion_ani,pinch_matrix, &
          &density_diffusion,recycling_coefficient,puff_source,pump_coefficient, &
+         &neutral_wall_absorption, &
          &neutral_perpendicular_diffusion,integration_weight, &
          &neutral_pressure_vector,neutral_momentum_equation)
   END SUBROUTINE accumulate_bc
@@ -242,7 +245,8 @@ CONTAINS
        &state, exterior_state, gradient, normal, magnetic_direction, &
        &magnetic_normal, tau, diffusion_iso, diffusion_ani, pinch_matrix, &
        &density_diffusion, recycling_coefficient, puff_source, &
-       &pump_coefficient, perpendicular_enabled, integration_weight, &
+       &pump_coefficient, neutral_wall_absorption, &
+       &perpendicular_enabled, integration_weight, &
        &pressure_vector, neutral_momentum_equation)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
     INTEGER, INTENT(IN) :: neutral_equation
@@ -252,6 +256,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: pinch_matrix(:,:)
     REAL*8, INTENT(IN) :: density_diffusion
     REAL*8, INTENT(IN) :: recycling_coefficient, puff_source, pump_coefficient
+    REAL*8, INTENT(IN) :: neutral_wall_absorption
     LOGICAL, INTENT(IN) :: perpendicular_enabled
     REAL*8, INTENT(IN) :: integration_weight
     REAL*8, INTENT(IN), OPTIONAL :: pressure_vector(:)
@@ -262,6 +267,10 @@ CONTAINS
     CALL accumulate_recycling_bc(this,neutral_equation,state, &
          &exterior_state,normal,magnetic_normal,pinch_matrix,density_diffusion, &
          &recycling_coefficient,puff_source,pump_coefficient,coefficient)
+    CALL add_bc_value(this,equation_nn,term_neutral_wall_absorption, &
+         &neutral_wall_absorption*coefficient)
+    CALL add_bc_value(this,equation_nn,term_boundary_physical_inward, &
+         &-neutral_wall_absorption*coefficient)
     CALL accumulate_neutral_transport_bc(this,neutral_equation,state, &
          &exterior_state,gradient,normal,magnetic_direction,magnetic_normal, &
          &tau,diffusion_iso,diffusion_ani,perpendicular_enabled, &

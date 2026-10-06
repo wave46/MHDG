@@ -20,7 +20,7 @@
         {"suite": "warm"}, {"suite": "warm", "case": "legacy_case"},
         {"suite": "transport"}, {"suite": "transport", "case": "legacy_case"},
         {"suite": "transport_hybrid"}, {"suite": "transport_parallel", "case": "legacy_case"},
-        {"suite": "adaptive_parallel"}, {"suite": "neutrals"}, {"suite": "neutral_parallel"},
+        {"suite": "adaptive_parallel"}, {"suite": "neutrals"}, {"suite": "neutral_wall"}, {"suite": "neutral_parallel"},
         {"suite": "impurities"}, {"suite": "mixture_parallel"}, {"suite": "stored_field"},
         {"suite": "neutralgamma"}, {"suite": "initialization"}
       ]
@@ -86,6 +86,11 @@
     "neutral_short": {
       "description": "Short pressure, perpendicular diffusion and both limiter goldens",
       "workflows": ["neutral_pressure_short", "neutral_perpendicular_short", "neutral_limiter_fixed_short", "neutral_limiter_ti_short"]
+    },
+    "neutral_wall": {
+      "description": "Converged atomic wall absorption and independent pump-wall recycling goldens",
+      "workflows": ["neutral_wall_absorption", "neutral_wall_absorption_pump"],
+      "diagnostics": "detailed"
     },
     "neutral_parallel": {
       "description": "Short neutral-feature goldens and focused OpenMP/MPI comparisons",

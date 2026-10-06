@@ -3,22 +3,19 @@ PROGRAM test_neutral_flux_limiter
   USE neutral_flux_limiter, ONLY: neutral_tn_source_invalid, &
        neutral_tn_source_ti, neutral_tn_source_fixed, &
        neutral_flux_limiter_config_t, neutral_flux_limiter_result_t, &
-       parse_neutral_tn_source, neutral_free_streaming_speed, &
+       parse_neutral_tn_source, &
        compute_neutral_unlimited_flux, &
        apply_neutral_perpendicular_operator, evaluate_neutral_flux_limiter
   IMPLICIT NONE
 
-  CALL test_temperature_sources()
+  CALL test_temperature_source_parsing()
   CALL test_complete_flux()
   CALL test_limiter_algebra()
   WRITE (*, '(A)') 'neutral flux limiter kernel checks: PASS'
 
 CONTAINS
 
-  SUBROUTINE test_temperature_sources()
-    TYPE(neutral_flux_limiter_config_t) :: config
-    REAL*8 :: speed
-
+  SUBROUTINE test_temperature_source_parsing()
     CALL assert_equal(parse_neutral_tn_source('ti'), neutral_tn_source_ti, &
          'Ti source parsing')
     CALL assert_equal(parse_neutral_tn_source('  fixed  '), &
@@ -26,15 +23,7 @@ CONTAINS
     CALL assert_equal(parse_neutral_tn_source('electron'), &
          neutral_tn_source_invalid, 'invalid source parsing')
 
-    config%mref = 2.25d0
-    config%fixed_tn = 9.d0
-    config%tn_source = neutral_tn_source_ti
-    speed = neutral_free_streaming_speed(config, 4.d0)
-    CALL assert_close(speed, 3.d0, 'Ti cap speed retains Mref')
-    config%tn_source = neutral_tn_source_fixed
-    speed = neutral_free_streaming_speed(config, 4.d0)
-    CALL assert_close(speed, 4.5d0, 'fixed-Tn cap speed retains Mref')
-  END SUBROUTINE test_temperature_sources
+  END SUBROUTINE test_temperature_source_parsing
 
   SUBROUTINE test_complete_flux()
     REAL*8 :: gradient(2), pressure_flux(2), magnetic_direction(2)
@@ -71,7 +60,7 @@ CONTAINS
     config%epsilon = 0.d0
     config%diff_nn_min = 1.d0
     unlimited_flux = (/3.d0, 4.d0/)
-    CALL evaluate_neutral_flux_limiter(config=config, ti=100.d0, &
+    CALL evaluate_neutral_flux_limiter(config=config, cn=10.d0, &
          neutral_density=2.d0, dnn=8.d0, &
          unlimited_flux=unlimited_flux, result=result)
     CALL assert_close(result%flux_cap, 10.d0, &
@@ -84,7 +73,7 @@ CONTAINS
 
     config%epsilon = 2.d0
     unlimited_flux = 0.d0
-    CALL evaluate_neutral_flux_limiter(config=config, ti=100.d0, &
+    CALL evaluate_neutral_flux_limiter(config=config, cn=10.d0, &
          neutral_density=2.d0, dnn=8.d0, &
          unlimited_flux=unlimited_flux, result=result)
     CALL assert_close(result%activation_ratio, 0.2d0, &
@@ -96,7 +85,7 @@ CONTAINS
     config%fs_flux_min = 4.d0
     config%epsilon = 0.d0
     unlimited_flux = (/2.d0, 0.d0/)
-    CALL evaluate_neutral_flux_limiter(config=config, ti=100.d0, &
+    CALL evaluate_neutral_flux_limiter(config=config, cn=10.d0, &
          neutral_density=-3.d0, dnn=8.d0, &
          unlimited_flux=unlimited_flux, result=result)
     CALL assert_close(result%flux_cap, 4.d0, 'minimum cap flux')
@@ -106,7 +95,7 @@ CONTAINS
     config%fs_flux_min = 0.d0
     config%diff_nn_min = 0.d0
     unlimited_flux = 0.d0
-    CALL evaluate_neutral_flux_limiter(config=config, ti=1.d0, &
+    CALL evaluate_neutral_flux_limiter(config=config, cn=1.d0, &
          neutral_density=1.d0, dnn=4.d0, &
          unlimited_flux=unlimited_flux, result=result)
     CALL assert_close(result%flux_cap, 0.d0, 'zero cap with zero flux')
@@ -118,7 +107,7 @@ CONTAINS
     config%fs_flux_min = 0.d0
     config%diff_nn_min = 2.d0
     unlimited_flux = (/9.d0, 0.d0/)
-    CALL evaluate_neutral_flux_limiter(config=config, ti=1.d0, &
+    CALL evaluate_neutral_flux_limiter(config=config, cn=1.d0, &
          neutral_density=1.d0, dnn=4.d0, &
          unlimited_flux=unlimited_flux, result=result)
     CALL assert_close(result%phi, 0.5d0, 'diffusion floor')

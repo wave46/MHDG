@@ -9,6 +9,7 @@
         "bootstrap_adaptive", "baseline_warm", "transport", "transport_short", "stored_field",
         "source_relocation",
         "neutral_pressure", "neutral_perpendicular", "neutral_limiter_fixed", "neutral_limiter_ti",
+        "neutral_wall_absorption", "neutral_wall_absorption_pump",
         "neutral_pressure_short", "neutral_perpendicular_short",
         "neutral_limiter_fixed_short", "neutral_limiter_ti_short",
         "impurity_off", "impurity_n", "impurity_nw",
@@ -17,7 +18,7 @@
       ],
       "checks": [
         "warm", "transport", "transport_hybrid", "stored_field", "adaptive_parallel",
-        "neutrals", "neutral_parallel", "impurities", "impurity_short", "mixture_parallel"
+        "neutrals", "neutral_wall", "neutral_parallel", "impurities", "impurity_short", "mixture_parallel"
       ]
     }
   }

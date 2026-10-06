@@ -1200,6 +1200,8 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%Zeff, 'Zeff')
       CALL HDF5_real_saving(group_id2, phys%Pohmic, 'ohmic_coeff')
       CALL HDF5_real_saving(group_id2, phys%Re_pump, 'recycling_pump')
+      CALL HDF5_real_saving(group_id2, phys%Re_n, 'recycling_neutral')
+      CALL HDF5_real_saving(group_id2, phys%Re_n_pump, 'recycling_neutral_pump')
       CALL HDF5_real_saving(group_id2, phys%puff, 'puff')
       CALL HDF5_real_saving(group_id2, phys%r_axis, 'r_axis')
       CALL HDF5_real_saving(group_id2, phys%z_axis, 'z_axis')

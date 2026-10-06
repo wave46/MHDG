@@ -13,7 +13,8 @@ MODULE physics
        &adimensionalize_impurity_radiation_model, compute_impurity_cooling
   USE neutral_flux_limiter, ONLY: neutral_flux_limiter_config_t, &
        &neutral_flux_limiter_result_t, compute_neutral_unlimited_flux, &
-       &apply_neutral_perpendicular_operator, evaluate_neutral_flux_limiter
+       &apply_neutral_perpendicular_operator, evaluate_neutral_flux_limiter, &
+       &neutral_tn_source_ti, neutral_tn_source_fixed
   IMPLICIT NONE
 
   REAL*8, PARAMETER :: eirene_rate_te_min_phys = 1.d-1
@@ -796,6 +797,83 @@ CONTAINS
     dTi_limited_dU = dTi_dU*soft_deriv
   ENDSUBROUTINE compute_dlimited_Ti_dU
 
+#ifdef TEMPERATURE
+  ! cn = sqrt(k*Tn/mn), with mn=mi. This is not the mean Maxwellian speed.
+  PURE REAL*8 FUNCTION neutral_thermal_speed(mref, tn) RESULT(cn)
+    REAL*8, INTENT(IN) :: mref, tn
+
+    cn = SQRT(mref*tn)
+  END FUNCTION neutral_thermal_speed
+
+  SUBROUTINE compute_neutral_flux_cap_speed(U, cn)
+    REAL*8, INTENT(IN) :: U(:)
+    REAL*8, INTENT(OUT) :: cn
+    REAL*8 :: Tn
+
+    SELECT CASE (neutral_limiter_config%tn_source)
+    CASE (neutral_tn_source_ti)
+      CALL compute_limited_Ti(U, Tn)
+    CASE (neutral_tn_source_fixed)
+      Tn = neutral_limiter_config%fixed_tn
+    CASE DEFAULT
+      Tn = 0.d0
+    END SELECT
+    cn = neutral_thermal_speed(neutral_limiter_config%mref, Tn)
+  END SUBROUTINE compute_neutral_flux_cap_speed
+
+#ifdef NEUTRAL
+
+  SUBROUTINE compute_neutral_thermal_speed(U, cn)
+    REAL*8, INTENT(IN) :: U(:)
+    REAL*8, INTENT(OUT) :: cn
+    REAL*8 :: Ti_limited
+
+    CALL compute_limited_Ti(U, Ti_limited)
+    cn = neutral_thermal_speed(phys%Mref, Ti_limited)
+  END SUBROUTINE compute_neutral_thermal_speed
+
+  SUBROUTINE compute_dneutral_thermal_speed_dU(U, dcn_dU)
+    REAL*8, INTENT(IN) :: U(:)
+    REAL*8, INTENT(OUT) :: dcn_dU(:)
+    REAL*8 :: cn, dTi_limited_dU(SIZE(U))
+
+    CALL compute_neutral_thermal_speed(U, cn)
+    CALL compute_dlimited_Ti_dU(U, dTi_limited_dU)
+    dcn_dU = phys%Mref/(2.d0*cn)*dTi_limited_dU
+  END SUBROUTINE compute_dneutral_thermal_speed_dU
+
+  ! Fw is degree one in U, so Fw-dot_product(dFw_dU,U)=0: no Newton affine term.
+  SUBROUTINE compute_neutral_wall_flux(U, Re_n, Fw)
+    REAL*8, INTENT(IN) :: U(:), Re_n
+    REAL*8, INTENT(OUT) :: Fw
+    REAL*8 :: cn
+
+    Fw = 0.d0
+    IF (Re_n == 1.d0) RETURN
+
+    CALL compute_neutral_thermal_speed(U, cn)
+    Fw = (1.d0-Re_n)/SQRT(2.d0*ACOS(-1.d0))*U(phys%idx_rhon_eq)*cn
+  END SUBROUTINE compute_neutral_wall_flux
+
+  SUBROUTINE compute_dneutral_wall_flux_dU(U, Re_n, dFw_dU)
+    REAL*8, INTENT(IN) :: U(:), Re_n
+    REAL*8, INTENT(OUT) :: dFw_dU(:)
+    REAL*8 :: alpha, cn, dcn_dU(SIZE(U))
+    INTEGER :: inn
+
+    dFw_dU = 0.d0
+    IF (Re_n == 1.d0) RETURN
+
+    inn = phys%idx_rhon_eq
+    CALL compute_neutral_thermal_speed(U, cn)
+    CALL compute_dneutral_thermal_speed_dU(U, dcn_dU)
+    alpha = (1.d0-Re_n)/SQRT(2.d0*ACOS(-1.d0))
+    dFw_dU = alpha*U(inn)*dcn_dU
+    dFw_dU(inn) = dFw_dU(inn) + alpha*cn
+  END SUBROUTINE compute_dneutral_wall_flux_dU
+#endif
+#endif
+
   SUBROUTINE compute_neutral_transport_prefactor(U, coeff)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: coeff
@@ -897,7 +975,7 @@ CONTAINS
     REAL*8, INTENT(IN)  :: U(:), Q(:), magnetic_direction(:)
     REAL*8, INTENT(OUT) :: Dnn
     TYPE(neutral_flux_limiter_result_t), INTENT(OUT) :: result
-    REAL*8 :: Ti, Qpr(simpar%Ndim,simpar%Neq)
+    REAL*8 :: cn, Qpr(simpar%Ndim,simpar%Neq)
     REAL*8 :: pressure_flux(simpar%Ndim)
     REAL*8 :: unlimited_flux(simpar%Ndim)
 #ifdef NEUTRALP
@@ -921,8 +999,8 @@ CONTAINS
            &magnetic_direction(1:simpar%Ndim))
     ENDIF
 
-    CALL compute_limited_Ti(U, Ti)
-    CALL evaluate_neutral_flux_limiter(neutral_limiter_config, Ti, &
+    CALL compute_neutral_flux_cap_speed(U, cn)
+    CALL evaluate_neutral_flux_limiter(neutral_limiter_config, cn, &
          &U(inn), Dnn, &
          &unlimited_flux, result)
   END SUBROUTINE evaluate_neutral_flux_limiter_state

@@ -161,9 +161,18 @@ candidate that already contains the selected references.
 
 ```bash
 python -m regression_tests run diverted_case baseline_warm --run-id investigation-01
+python -m regression_tests check neutral_wall --run-id wall-review-01
 python -m regression_tests check full --run-id review-01
 python -m regression_tests check full --run-id review-01 --resume
 ```
+
+The `neutral_wall` suite compares two converged diverted-case results with their
+own references: `Re_n=0.99` with inherited pump-wall recycling, and `Re_n=0.99`
+with `Re_n_pump=0.95`. Both retain fixed-temperature neutral flux limiting and
+relocated puff/pump, and write detailed absorption diagnostics. The suite needs
+an external bundle containing both `reference_neutral_wall_absorption.h5` and
+`reference_neutral_wall_absorption_pump.h5`; use `--allow-candidate` while reviewing
+a new candidate bundle.
 
 Suite/profile resume reuses completed runs only while their recorded outputs and
 selected inputs still match. It reassesses the scientific checks; failed,

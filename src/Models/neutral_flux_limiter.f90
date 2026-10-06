@@ -24,7 +24,6 @@ MODULE neutral_flux_limiter
   END TYPE neutral_flux_limiter_result_t
 
   PUBLIC :: parse_neutral_tn_source
-  PUBLIC :: neutral_free_streaming_speed
   PUBLIC :: compute_neutral_unlimited_flux
   PUBLIC :: apply_neutral_perpendicular_operator
   PUBLIC :: evaluate_neutral_flux_limiter
@@ -44,23 +43,6 @@ CONTAINS
     END SELECT
   END FUNCTION parse_neutral_tn_source
 
-  PURE REAL*8 FUNCTION neutral_free_streaming_speed(config, ti) &
-       RESULT(speed)
-    TYPE(neutral_flux_limiter_config_t), INTENT(IN) :: config
-    REAL*8, INTENT(IN) :: ti
-    REAL*8 :: cap_temperature
-
-    SELECT CASE (config%tn_source)
-    CASE (neutral_tn_source_ti)
-       cap_temperature = ti
-    CASE (neutral_tn_source_fixed)
-       cap_temperature = config%fixed_tn
-    CASE DEFAULT
-       cap_temperature = 0.d0
-    END SELECT
-    speed = SQRT(config%mref*cap_temperature)
-  END FUNCTION neutral_free_streaming_speed
-
   PURE SUBROUTINE compute_neutral_unlimited_flux(dnn, neutral_gradient, &
        pressure_flux, unlimited_flux)
     REAL*8, INTENT(IN) :: dnn
@@ -78,18 +60,17 @@ CONTAINS
     flux = flux - DOT_PRODUCT(flux, magnetic_direction)*magnetic_direction
   END SUBROUTINE apply_neutral_perpendicular_operator
 
-  PURE SUBROUTINE evaluate_neutral_flux_limiter(config, ti, &
+  PURE SUBROUTINE evaluate_neutral_flux_limiter(config, cn, &
        neutral_density, dnn, unlimited_flux, result)
     TYPE(neutral_flux_limiter_config_t), INTENT(IN) :: config
     TYPE(neutral_flux_limiter_result_t), INTENT(OUT) :: result
-    REAL*8, INTENT(IN) :: ti, neutral_density, dnn
+    REAL*8, INTENT(IN) :: cn, neutral_density, dnn
     REAL*8, INTENT(IN) :: unlimited_flux(:)
-    REAL*8 :: free_streaming_speed, gamma_regularized
+    REAL*8 :: gamma_regularized
     REAL*8 :: phi_diffusion_floor
 
-    free_streaming_speed = neutral_free_streaming_speed(config, ti)
     result%flux_cap = MAX(config%fs_fraction*MAX(neutral_density, 0.d0)* &
-         free_streaming_speed, config%fs_flux_min)
+         cn, config%fs_flux_min)
     result%unlimited_flux_norm = &
          SQRT(DOT_PRODUCT(unlimited_flux, unlimited_flux))
     gamma_regularized = SQRT(result%unlimited_flux_norm**2 + &
