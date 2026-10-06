@@ -10,7 +10,9 @@
     "neutral_flux_limiter_tn_eV": "phys_lst",
     "neutral_flux_limiter_eps": "phys_lst",
     "neutral_flux_limiter_fs_fraction": "phys_lst",
-    "neutral_flux_limiter_fs_flux_min": "phys_lst"
+    "neutral_flux_limiter_fs_flux_min": "phys_lst",
+    "Re_n": "phys_lst",
+    "Re_n_pump": "phys_lst"
   },
   "sequences": {
     "bootstrap": [
@@ -240,6 +242,21 @@
         "neutral_flux_limiter_tn_source": "ti",
         "neutral_flux_limiter_tn_eV": 0.0
       }
+    },
+    "neutral_wall_absorption": {
+      "extends": "neutral_limiter_fixed",
+      "description": "Converge atomic wall absorption with inherited pump-wall recycling",
+      "restart": "neutral_limiter_fixed_reference",
+      "reference": "neutral_wall_absorption_reference",
+      "outputs": ["neutral_wall_absorption_reference"],
+      "parameter_overrides": {"Re_n": 0.99}
+    },
+    "neutral_wall_absorption_pump": {
+      "extends": "neutral_wall_absorption",
+      "description": "Converge atomic wall absorption with independent pump-wall recycling",
+      "reference": "neutral_wall_absorption_pump_reference",
+      "outputs": ["neutral_wall_absorption_pump_reference"],
+      "parameter_overrides": {"Re_n_pump": 0.95}
     },
     "neutral_pressure_short": {
       "extends": "neutral_pressure",

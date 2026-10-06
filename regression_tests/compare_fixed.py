@@ -571,7 +571,8 @@ def check_output_contract(path, directory, model, provenance, overrides):
 
     names = {"impurity_radiation", "transport_1d", "neutral_wall_sources_in_elements",
              "neutral_perpendicular_diffusion", "neutralp_lambda", "neutral_flux_limiter_mode",
-             "neutral_flux_limiter_tn_source", "neutral_flux_limiter_tn_ev", "compute_from_flux"}
+             "neutral_flux_limiter_tn_source", "neutral_flux_limiter_tn_ev", "compute_from_flux",
+             "re_n", "re_n_pump"}
     overrides = {**read_selected_input_values(directory / "param.txt", names),
                  **{key.lower(): value for key, value in overrides.items()}}
     label, equations = MODELS[model]
@@ -587,6 +588,10 @@ def check_output_contract(path, directory, model, provenance, overrides):
             expected[f"simulation_parameters/physics/{name}"] = overrides[name]
     if "neutralp_lambda" in overrides:
         expected["simulation_parameters/numerics/NeutralP_lambda"] = overrides["neutralp_lambda"]
+    if "re_n" in overrides or "re_n_pump" in overrides:
+        recycling = overrides.get("re_n", 1.)
+        expected["simulation_parameters/physics/recycling_neutral"] = recycling
+        expected["simulation_parameters/physics/recycling_neutral_pump"] = overrides.get("re_n_pump", recycling)
     if "compute_from_flux" in overrides:
         expected["magnetic/jtor_source"] = "bicubic_psi" if overrides["compute_from_flux"] else "stored_hdf5"
     if overrides.get("impurity_radiation") and (directory / "inputs/impurity_model.nml").is_file():
