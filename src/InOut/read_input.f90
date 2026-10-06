@@ -9,6 +9,7 @@
 ! Loads input file
 !********************************
 SUBROUTINE READ_input()
+  USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   USE prec_const
   USE globals
   USE MPI_OMP
@@ -70,6 +71,8 @@ SUBROUTINE READ_input()
   REAL*8                :: neutral_flux_limiter_tn_eV,neutral_flux_limiter_eps
   REAL*8                :: neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min
   REAL*8, PARAMETER     :: diff_nn_min_unset = -HUGE(1.d0)
+  REAL*8, PARAMETER     :: Re_n_pump_unset = -HUGE(1.d0)
+  REAL*8                :: Re_n, Re_n_pump
   REAL*8                :: feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr
 #ifdef KEQUATION
   ! k equation
@@ -113,14 +116,14 @@ SUBROUTINE READ_input()
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
-  & Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
+  & Re, Re_pump, Re_n, Re_n_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
     &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min,&
     &ionization_ion_energy_fraction
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, Re_n, Re_n_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
@@ -143,6 +146,8 @@ SUBROUTINE READ_input()
   divide_by_2pi = .FALSE.
   tau = 1.d0
   diff_nn_min = diff_nn_min_unset
+  Re_n = 1.d0
+  Re_n_pump = Re_n_pump_unset
   neutralp_lambda = 0.d0
   neutralp_ti_supp_eV = 1.d-6
   ionization_ion_energy_fraction = 0.d0
@@ -172,6 +177,26 @@ SUBROUTINE READ_input()
   READ (uinput, UTILS_LST)
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
+
+  IF (Re_n_pump == Re_n_pump_unset) Re_n_pump = Re_n
+  IF (.NOT. ieee_is_finite(Re_n) .OR. Re_n < 0.d0 .OR. Re_n > 1.d0) THEN
+     PRINT *, 'Re_n must be finite and in [0,1]: ', Re_n
+     STOP 1
+  ENDIF
+  IF (.NOT. ieee_is_finite(Re_n_pump) .OR. Re_n_pump < 0.d0 .OR. Re_n_pump > 1.d0) THEN
+     PRINT *, 'Re_n_pump must be finite and in [0,1]: ', Re_n_pump
+     STOP 1
+  ENDIF
+  IF (Re_n < 1.d0 .OR. Re_n_pump < 1.d0) THEN
+#if !defined(NEUTRAL) || !defined(TEMPERATURE)
+     PRINT *, 'Neutral wall absorption requires a temperature neutral model.'
+     STOP 1
+#endif
+#ifdef TOR3D
+     PRINT *, 'Neutral wall absorption is not supported in toroidal 3D builds.'
+     STOP 1
+#endif
+  ENDIF
 
   IF (diff_nn_min <= diff_nn_min_unset) diff_nn_min = 10.d0*diff_n
   IF (diff_nn_min < 0.d0) THEN
@@ -426,6 +451,8 @@ SUBROUTINE READ_input()
   phys%heating_equation   = heating_equation
   phys%Re                 = Re
   phys%Re_pump            = Re_pump
+  phys%Re_n               = Re_n
+  phys%Re_n_pump          = Re_n_pump
   phys%apply_trim         = apply_trim
   phys%cryopump_power     = cryopump_power
   phys%puff               = puff
@@ -654,6 +681,8 @@ SUBROUTINE READ_input()
           phys%neutral_flux_limiter_fs_flux_min
      PRINT *, '                - recycling coefficient in the neutral equation:      ', phys%Re
      PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
+     PRINT *, '                - neutral atomic recycling coefficient:               ', phys%Re_n
+     PRINT *, '                - neutral atomic recycling coefficient at pump:       ', phys%Re_n_pump
      PRINT *, '                - applying trim:                                      ', phys%apply_trim
      PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
      PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power

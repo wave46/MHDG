@@ -10,7 +10,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 	balance_diagnostics_bc.o \
 	balance_diagnostics_reporting.o balance_diagnostics_output.o
 
-.PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper check-neutral-flux-limiter check-neutral-wall-flux
+.PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper check-neutral-flux-limiter check-neutral-wall-flux check-neutral-wall-input
 
 all : allseq
 
@@ -42,7 +42,7 @@ clean:
 	$(RM) MHDG-* Convergence *~
 	$(RM) magnetic_topology_check magnetic_geometry_check
 	$(RM) transport_region_policy_check transport_taper_check
-	$(RM) neutral_flux_limiter_check neutral_wall_flux_check
+	$(RM) neutral_flux_limiter_check neutral_wall_flux_check neutral_wall_input_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_magnetic_topology.f90 interpolation.o magnetic_topology.o -o magnetic_topology_check
@@ -70,6 +70,10 @@ neutral_wall_physics_check.o : physics.o
 check-neutral-wall-flux : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_neutral_wall_flux.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o neutral_wall_flux_check
 	./neutral_wall_flux_check
+
+check-neutral-wall-input : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_neutral_wall_input.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o neutral_wall_input_check $(LIB)
+	python3 ../unit_tests/check_neutral_wall_input.py ./neutral_wall_input_check
 
 include Make.inc/build_provenance.mk
 
@@ -297,7 +301,7 @@ read_input.F : $(SDIR)/InOut/read_input.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
 read_input.o : read_input.F prec_const.o globals.o MPI_OMP.o neutral_flux_limiter.o balance_diagnostics.o
-	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
+	$(FC) -c $(FCFLAGS) -fno-finite-math-only $(INC) $< -o $@
 
 reference_element.F : $(SDIR)/HDG/reference_element.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@

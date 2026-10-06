@@ -35,6 +35,7 @@ cd lib
 source Make.inc/init_vars_libs.sh
 make check-neutral-flux-limiter
 make check-neutral-wall-flux
+make check-neutral-wall-input
 ```
 
 The wall check calls the production temperature and wall-flux routines. It
@@ -59,3 +60,9 @@ check warm compatibility of limiter changes against their accepted references.
 Wall `Re_n=1` compatibility and an active `Re_n=0.99` solver run are planned
 when the boundary term is connected. Keep the existing build cache for the same
 configuration; run `make clean` before switching model or build configuration.
+
+The input check builds the solver and links a small driver against its compiled
+objects to call the production `READ_input` and adimensionalization routines.
+It checks defaults, inheritance, pump overrides and range/nonfinite rejection.
+It uses the tracked parameter template in temporary directories and needs
+Python 3, with no external case data or solver simulation.
