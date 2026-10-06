@@ -27,7 +27,7 @@ and the explicit legacy magnetic-field fallback.  Test executables are generated
 in `lib/` and removed by `make clean`.  The taper target checks the disabled
 slope, the default `0.7` factor beyond the LCFS, and lower-bound clipping.
 
-For neutral thermal speed, wall absorption and flux limiting, use the 2D
+For all neutral unit checks, use the serial 2D
 `NGammaTiTeNeutral` or `NGammaTiTeNeutralGamma` build configuration:
 
 ```bash
@@ -36,40 +36,30 @@ source Make.inc/init_vars_libs.sh
 make check-neutral-flux-limiter
 make check-neutral-wall-flux
 make check-neutral-wall-input
+make check-neutral-wall-diagnostics
 ```
 
-The wall check calls the production temperature and wall-flux routines. It
-checks Maxwellian normalization, temperature-floor behavior, finite-difference
-derivatives at multiple steps, Euler homogeneity, five/six-component states,
-small positive plasma density, zero neutral density, `Re_n=1` inactivity and
-independence from the limiter's temperature selector. Function-section linking
-keeps this check independent of solver runs and external physical case data.
+Keep the build cache for the same configuration; run `make clean` before
+switching model or build configuration. The input and diagnostics drivers use
+serial solver objects and do not initialize MPI. They need Python 3;
+the diagnostics check also needs h5py and NumPy.
 
-The limiter check verifies complete diffusion/pressure flux, perpendicular
-projection, the supplied-speed cap, epsilon regularization and diffusion/cap
-floors. The wall check also verifies the production limiter's Ti/fixed speed
-selection. Both targets print `PASS` on success and exit nonzero on failure;
-wall assertion failures print the check name, actual value and expected value.
-Finite-difference derivatives are checked with a scaled tolerance of `2e-7`;
-Euler and common-scaling identities use `5e-13`. Temperature samples include
-both sides of the soft limiter but avoid crossing its piecewise joins.
+- `check-neutral-flux-limiter`: diffusion/pressure flux, perpendicular projection,
+  supplied-speed cap, epsilon regularization and diffusion/cap floors.
+- `check-neutral-wall-flux`: production Maxwellian normalization, limited Ti,
+  finite-difference derivatives (`2e-7` scaled tolerance), Euler homogeneity and
+  common scaling (`5e-13`), five/six-component states, small positive plasma
+  density, zero neutral density and inactive `Re_n=1`. It also checks Ti/fixed
+  limiter speed selection and wall independence from that selection.
+- `check-neutral-wall-input`: production input/adimensionalization calls in
+  temporary directories; 15 cases cover defaults, inheritance, pump overrides
+  and range/nonfinite rejection.
+- `check-neutral-wall-diagnostics`: production accumulator/HDF5 writer; nine
+  cases cover zero/active loss, modes, merges, signs, particle totals and
+  separation from plasma recycling and relocated puff/pump.
 
-These are local kernel tests, not boundary assembly or reconvergence tests.
-The existing `neutral_limiter_fixed` and `neutral_limiter_ti` harness workflows
-check warm compatibility of limiter changes against their accepted references.
-Wall `Re_n=1` compatibility and an active `Re_n=0.99` solver run are planned
-when the boundary term is connected. Keep the existing build cache for the same
-configuration; run `make clean` before switching model or build configuration.
-
-The input check builds the solver and links a small driver against its compiled
-objects to call the production `READ_input` and adimensionalization routines.
-It checks defaults, inheritance, pump overrides and range/nonfinite rejection.
-It uses the tracked parameter template in temporary directories and needs
-Python 3, with no external case data or solver simulation.
-
-For the neutral wall balance mapping, use the serial build and run
-`make check-neutral-wall-diagnostics`. It needs Python 3 with h5py and NumPy.
-The small driver calls the production accumulator and HDF5 writer without a
-solver simulation. Nine cases check zero/active loss, diagnostic modes,
-accumulator merges, inward/source signs, the total particle balance, and
-separation from plasma recycling and puff/pump with source relocation.
+All targets print `PASS` on success and fail with a nonzero exit status. They
+need no external case data or solver simulation. Warm reference comparisons
+belong to the regression harness: existing neutral workflows cover inactive
+compatibility, and `neutral_wall` covers `Re_n=0.99` with inherited pump recycling
+and with `Re_n_pump=0.95`. See [regression instructions](../regression_tests/README.md).
