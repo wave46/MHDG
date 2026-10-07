@@ -219,6 +219,8 @@
     ionization_ion_energy_fraction = 0.d0 ! Fraction of local ion thermal energy assigned to newly ionized particles [0,1]
     Re                  = 0.998   ! Recycling coefficient 0.997
     Re_pump             = 0.95    ! Recycling coefficient in the pump region
+    Re_n                = 1.d0    ! Neutral recycling coefficient [0,1]; 1 disables absorption
+    Re_n_pump           = 1.d0    ! Neutral recycling coefficient in the pump region [0,1]; inherits Re_n if omitted
     apply_trim          = .false.  ! if apply or not trim reflection coefficient RN*Re or RN*Re_pump
     puff                = 4e20 ! puff coefficient (particles per second in the whole puff area)
     feedback_propotional_gain = 10.e-21 !100.e-21  10.e-21
