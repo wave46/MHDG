@@ -189,10 +189,11 @@ CONTAINS
        c_pinch, nu_th, &
        vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, &
        rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, &
-       diff_e_min_phys, diff_ee_min_phys)
+       diff_e_min_phys, diff_ee_min_phys, pinch_equations)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
+    INTEGER, INTENT(IN), OPTIONAL :: pinch_equations(:)
     CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: transport_region_policy
 
     CALL tm1d_config_apply(this%config, simpar%refval_time, simpar%refval_length, &
@@ -202,6 +203,7 @@ CONTAINS
          c_gyrobohm_e=c_gyrobohm_e, c_bohm_n=c_bohm_n, &
          c_bohm_n_rho_slope=c_bohm_n_rho_slope, prandtl=prandtl, &
          pinch_model=pinch_model, c_pinch=c_pinch, nu_th=nu_th, &
+         pinch_equations=pinch_equations, &
          vpinch_const_phys=vpinch_const_phys, rho_pinch_axis_width=rho_pinch_axis_width, &
          rho_pinch_model_max=rho_pinch_model_max, rho_pinch_edge_width=rho_pinch_edge_width, &
          rho_blend_width=rho_blend_width, diff_n_min_phys=diff_n_min_phys, &

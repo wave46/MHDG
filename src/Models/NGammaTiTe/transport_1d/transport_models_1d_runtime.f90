@@ -74,6 +74,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: outward_normal(:)
     REAL*8 :: vpinch, velocity(2), pinch_weight
     REAL*8 :: chi_i, chi_e, d, nu_mom
+    INTEGER :: equation
 
     APinch = 0.d0
     IF (.NOT. this%is_initialized) RETURN
@@ -89,7 +90,9 @@ CONTAINS
 
     CALL tm1d_build_pinch_velocity(vpinch, &
          this%config%transport_region_policy, b, outward_normal, velocity)
-    APinch(1,1:2) = velocity
+    DO equation = 1, SIZE(this%config%pinch_enabled)
+       IF (this%config%pinch_enabled(equation)) APinch(equation,1:2) = velocity
+    ENDDO
   END SUBROUTINE tm1d_compute_1D_pinch_matrix
 
 END SUBMODULE transport_models_1d_runtime

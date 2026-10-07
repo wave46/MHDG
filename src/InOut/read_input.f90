@@ -817,6 +817,7 @@ SUBROUTINE READ_input()
           transport_model_input%c_bohm_n_rho_slope
      PRINT *, '                - prandtl (transport model):            ', transport_model_input%prandtl
      PRINT *, '                - pinch_model (transport model):        ', transport_model_input%pinch_model
+     PRINT *, '                - pinch_equations (transport model):    ', transport_model_input%pinch_equations
      PRINT *, '                - c_pinch (transport model):            ', transport_model_input%c_pinch
      PRINT *, '                - nu_th (transport model):              ', transport_model_input%nu_th
      PRINT *, '        ***************** Numerics ****************************'
@@ -925,11 +926,11 @@ SUBROUTINE read_transport_model_input()
 
   INTEGER :: utransport, ios
   REAL*8 :: rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
-  INTEGER :: pinch_model
+  INTEGER :: pinch_model, pinch_equations(4)
   CHARACTER(LEN=32) :: transport_region_policy
   NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge, rho_diffusion_model_max, &
        transport_region_policy, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, &
-       c_bohm_n, c_bohm_n_rho_slope, prandtl, pinch_model, c_pinch, nu_th, &
+       c_bohm_n, c_bohm_n_rho_slope, prandtl, pinch_model, pinch_equations, c_pinch, nu_th, &
        vpinch_const_phys, &
        rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, &
        rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, &
@@ -947,6 +948,7 @@ SUBROUTINE read_transport_model_input()
   c_bohm_n_rho_slope = transport_model_input%c_bohm_n_rho_slope
   prandtl = transport_model_input%prandtl
   pinch_model = transport_model_input%pinch_model
+  pinch_equations = transport_model_input%pinch_equations
   c_pinch = transport_model_input%c_pinch
   nu_th = transport_model_input%nu_th
   vpinch_const_phys = transport_model_input%vpinch_const_phys
@@ -971,9 +973,12 @@ SUBROUTINE read_transport_model_input()
   READ(utransport, nml=TRANSPORT_MODEL_1D_LST, iostat=ios)
   CLOSE(utransport)
   IF (ios /= 0) THEN
-     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Warning: could not read TRANSPORT_MODEL_1D_LST from file: ', TRIM(ADJUSTL(input%transport_model_path))
-     RETURN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Error: could not read TRANSPORT_MODEL_1D_LST from file: ', TRIM(ADJUSTL(input%transport_model_path))
+     ERROR STOP 'Invalid TRANSPORT_MODEL_1D_LST'
   END IF
+
+  IF (ANY(pinch_equations < 0) .OR. ANY(pinch_equations > 4)) &
+       ERROR STOP 'pinch_equations entries must be in [0,4] (0 means unused)'
 
   transport_model_input%rho_core = rho_core
   transport_model_input%rho_edge = rho_edge
@@ -987,6 +992,7 @@ SUBROUTINE read_transport_model_input()
   transport_model_input%c_bohm_n_rho_slope = c_bohm_n_rho_slope
   transport_model_input%prandtl = prandtl
   transport_model_input%pinch_model = pinch_model
+  transport_model_input%pinch_equations = pinch_equations
   transport_model_input%c_pinch = c_pinch
   transport_model_input%nu_th = nu_th
   transport_model_input%vpinch_const_phys = vpinch_const_phys

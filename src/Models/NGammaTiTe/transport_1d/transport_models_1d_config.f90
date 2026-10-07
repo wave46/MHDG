@@ -25,6 +25,7 @@ MODULE transport_models_1d_config
      REAL*8 :: rho_diffusion_model_max = 1.d0
      INTEGER :: transport_region_policy = transport_region_legacy_all_regions
      INTEGER :: pinch_model = 1
+     LOGICAL :: pinch_enabled(4) = [.TRUE., .FALSE., .FALSE., .FALSE.]
      REAL*8 :: c_pinch = 0.5d0
      REAL*8 :: nu_th = 0.04d0
      REAL*8 :: vpinch_const = 0.d0
@@ -55,6 +56,7 @@ CONTAINS
     config%rho_diffusion_model_max = 1.d0
     config%transport_region_policy = transport_region_legacy_all_regions
     config%pinch_model = 1
+    config%pinch_enabled = [.TRUE., .FALSE., .FALSE., .FALSE.]
     config%c_pinch = 0.5d0
     config%nu_th = 0.04d0
     config%vpinch_const = 0.d0
@@ -81,13 +83,15 @@ CONTAINS
        c_bohm_n_rho_slope, prandtl, pinch_model, c_pinch, nu_th, &
        vpinch_const_phys, rho_pinch_axis_width, &
        rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, &
-       diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys)
+       diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys, &
+       pinch_equations)
     TYPE(transport_model_config_t), INTENT(INOUT) :: config
     REAL*8, INTENT(IN) :: refval_time, refval_length
     REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
+    INTEGER, INTENT(IN), OPTIONAL :: pinch_equations(:)
     CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: transport_region_policy
-    INTEGER :: policy
+    INTEGER :: policy, i, equation
     LOGICAL :: valid
 
     IF (PRESENT(rho_edge)) config%rho_edge = rho_edge
@@ -107,6 +111,19 @@ CONTAINS
          config%c_bohm_n_rho_slope = c_bohm_n_rho_slope
     IF (PRESENT(prandtl)) config%prandtl = prandtl
     IF (PRESENT(pinch_model)) config%pinch_model = pinch_model
+    IF (PRESENT(pinch_equations)) THEN
+       IF (SIZE(pinch_equations) > SIZE(config%pinch_enabled)) &
+            ERROR STOP 'pinch_equations accepts at most four entries'
+       IF (ANY(pinch_equations < 0) .OR. &
+            ANY(pinch_equations > SIZE(config%pinch_enabled))) &
+            ERROR STOP 'pinch_equations entries must be in [0,4] (0 means unused)'
+       config%pinch_enabled = .FALSE.
+       DO i = 1, SIZE(pinch_equations)
+          equation = pinch_equations(i)
+          IF (equation == 0) CYCLE
+          config%pinch_enabled(equation) = .TRUE.
+       ENDDO
+    ENDIF
     IF (PRESENT(c_pinch)) config%c_pinch = c_pinch
     IF (PRESENT(nu_th)) config%nu_th = nu_th
     IF (PRESENT(vpinch_const_phys)) config%vpinch_const = vpinch_const_phys*refval_time/refval_length

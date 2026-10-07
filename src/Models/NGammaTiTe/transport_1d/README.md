@@ -10,7 +10,18 @@ The user-facing settings for this module are read from
 - the topology regions in which reduced transport is applied,
 - the diffusion replacement window,
 - the pinch model and pinch windows,
+- the plasma equations receiving pinch (`pinch_equations`, particles only by default),
 - the coefficient floors.
+
+`pinch_equations` selects up to four conserved plasma rows: 1 = particles,
+2 = parallel momentum, 3 = total ion energy, 4 = electron energy. Omission
+selects particles only; `1,2,3,4` selects all plasma rows, `3` selects ion
+energy only, and `0` disables pinch. Zero entries are unused slots and repeated
+IDs select an equation once. Every selected equation uses the same modeled
+velocity, sign, topology policy, and radial window. Neutral rows remain zero.
+The effective selection is saved as a sorted, zero-padded integer array at
+`/transport_1d/params/pinch_equations`. Malformed transport namelists and
+equation IDs outside 0–4 are rejected.
 
 ## Purpose
 

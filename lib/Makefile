@@ -10,7 +10,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 	balance_diagnostics_bc.o \
 	balance_diagnostics_reporting.o balance_diagnostics_output.o
 
-.PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper check-neutral-flux-limiter check-neutral-wall-flux check-neutral-wall-input check-neutral-wall-diagnostics
+.PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper check-transport-pinch check-neutral-flux-limiter check-neutral-wall-flux check-neutral-wall-input check-neutral-wall-diagnostics
 
 all : allseq
 
@@ -41,7 +41,7 @@ clean:
 	$(RM) *.o *.mod *.smod *.kmo  *.F *.f90 *.F90
 	$(RM) MHDG-* Convergence *~
 	$(RM) magnetic_topology_check magnetic_geometry_check
-	$(RM) transport_region_policy_check transport_taper_check
+	$(RM) transport_region_policy_check transport_taper_check transport_pinch_check
 	$(RM) neutral_flux_limiter_check neutral_wall_flux_check neutral_wall_input_check neutral_wall_diagnostics_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o
@@ -59,6 +59,10 @@ check-transport-region-policy : interpolation.o magnetic_topology.o transport_mo
 check-transport-taper : interpolation.o magnetic_topology.o transport_models_1d_config.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_transport_taper.f90 interpolation.o magnetic_topology.o transport_models_1d_config.o -o transport_taper_check
 	./transport_taper_check
+
+check-transport-pinch : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_transport_pinch.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o transport_pinch_check $(LIB)
+	python3 ../unit_tests/check_transport_pinch.py ./transport_pinch_check
 
 check-neutral-flux-limiter : neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_neutral_flux_limiter.f90 neutral_flux_limiter.o -o neutral_flux_limiter_check

@@ -13,6 +13,7 @@ make check-magnetic-topology
 make check-magnetic-geometry
 make check-transport-region-policy
 make check-transport-taper
+make check-transport-pinch
 ```
 
 The topology target also checks that reversing the psi convention preserves the
@@ -26,6 +27,13 @@ parsing, region inclusion, signed pinch orientation, null-normal suppression,
 and the explicit legacy magnetic-field fallback.  Test executables are generated
 in `lib/` and removed by `make clean`.  The taper target checks the disabled
 slope, the default `0.7` factor beyond the LCFS, and lower-bound clipping.
+The pinch target checks production namelist selection, particle-only defaults,
+mixed/all/disabled selections, duplicate and zero entries, invalid IDs and
+overlong lists, signed velocity normalization, untouched neutral rows, radial
+and topology suppression, configuration preservation across profile
+reinitialization, reset defaults, and HDF5 selection metadata. It links the
+current NGammaTiTe-family solver objects, needs Python 3 with h5py and NumPy,
+and does not launch a solver simulation or require external case data.
 
 For all neutral unit checks, use the serial 2D
 `NGammaTiTeNeutral` or `NGammaTiTeNeutralGamma` build configuration:

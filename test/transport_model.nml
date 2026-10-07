@@ -41,6 +41,15 @@
   !      negative values mean inward pinch.
   pinch_model = 2
 
+  ! Conserved plasma equations receiving the same pinch velocity:
+  ! 1 -> particles (n), 2 -> parallel momentum (n*u),
+  ! 3 -> total ion energy (nEi), 4 -> electron energy (nEe).
+  ! Default: 1 (particles only). Examples: 1,2,3,4 for all plasma;
+  ! 3 for ion energy only; 1,3,4 for particles and energies.
+  ! Up to four entries; 0 is an unused slot, and 0 alone disables pinch.
+  ! Repeated IDs select an equation once. Neutral equations are excluded.
+  pinch_equations = 1
+
   ! Pinch coefficient C. Positive C follows the outward radial convention.
   ! Use negative C for inward pinch.
   ! A single C is currently used for both model 1 and model 2.

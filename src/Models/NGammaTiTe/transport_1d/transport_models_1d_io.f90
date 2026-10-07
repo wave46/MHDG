@@ -8,6 +8,7 @@ CONTAINS
     INTEGER(HID_T), INTENT(IN) :: parent_group_id
     INTEGER(HID_T) :: coeffs_group_id, params_group_id
     INTEGER :: ierr
+    INTEGER :: pinch_equations(4)
 
     IF (.NOT. switch%transport_1d) RETURN
     IF (.NOT. this%is_initialized) RETURN
@@ -44,6 +45,8 @@ CONTAINS
          'c_bohm_n_rho_slope')
     CALL HDF5_real_saving(params_group_id, this%config%prandtl, 'prandtl')
     CALL HDF5_integer_saving(params_group_id, this%config%pinch_model, 'pinch_model')
+    pinch_equations = PACK([1, 2, 3, 4], this%config%pinch_enabled, [0, 0, 0, 0])
+    CALL HDF5_array1D_saving_int(params_group_id, pinch_equations, SIZE(pinch_equations), 'pinch_equations')
     CALL HDF5_real_saving(params_group_id, this%config%c_pinch, 'c_pinch')
     CALL HDF5_real_saving(params_group_id, this%config%nu_th, 'nu_th')
     CALL HDF5_real_saving(params_group_id, this%config%vpinch_const, 'vpinch_const')

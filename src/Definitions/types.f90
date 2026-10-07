@@ -501,6 +501,7 @@ MODULE types
      REAL*8 :: c_bohm_n_rho_slope = 0.7d0
      REAL*8 :: prandtl = 1.d0
      INTEGER :: pinch_model = 1
+     INTEGER :: pinch_equations(4) = [1, 0, 0, 0]
      REAL*8 :: c_pinch = 0.5d0
      REAL*8 :: nu_th = 0.04d0
      REAL*8 :: vpinch_const_phys = 0.d0
