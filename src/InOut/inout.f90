@@ -1183,6 +1183,14 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%neutralp_ti_supp, 'neutralp_ti_supp')
       CALL HDF5_real_saving(group_id2, phys%ionization_ion_energy_fraction, &
            &'ionization_ion_energy_fraction')
+      ! Gaussian power and geometry use the saved simulation reference scales.
+      CALL HDF5_real_saving(group_id2, phys%heating_power, 'heating_power')
+      CALL HDF5_real_saving(group_id2, phys%heating_dr, 'heating_dr')
+      CALL HDF5_real_saving(group_id2, phys%heating_dz, 'heating_dz')
+      CALL HDF5_real_saving(group_id2, phys%heating_sigmar, 'heating_sigmar')
+      CALL HDF5_real_saving(group_id2, phys%heating_sigmaz, 'heating_sigmaz')
+      CALL HDF5_real_saving(group_id2, phys%heating_ion_fraction, 'heating_ion_fraction')
+      CALL HDF5_integer_saving(group_id2, phys%heating_equation, 'heating_equation')
       CALL HDF5_string_saving(group_id2, phys%neutral_flux_limiter_mode, 'neutral_flux_limiter_mode')
       CALL HDF5_string_saving(group_id2, phys%neutral_flux_limiter_tn_source, 'neutral_flux_limiter_tn_source')
       CALL HDF5_real_saving(group_id2, phys%neutral_flux_limiter_tn, 'neutral_flux_limiter_tn')

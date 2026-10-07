@@ -258,14 +258,15 @@ MODULE types
      REAL*8                    :: etapar
      REAL*8                    :: c1, c2 ! coefficients coming from the adimensionalization
      REAL*8                    :: Potfloat
-     ! Coefficients for ion heating
-     REAL*8                    :: heating_power ! total power of ion heating source
-     REAL*8                    :: heating_amplitude ! adimentionalized gaussian amplitude including integration coefficients
+     ! Coefficients for additional Gaussian heating
+     REAL*8                    :: heating_power ! total ion plus electron heating power
+     REAL*8                    :: heating_amplitude = 0.d0 ! adimensional Gaussian amplitude including integration coefficients
+     REAL*8                    :: heating_ion_fraction = 0.d0 ! Resolved fraction of Gaussian heating assigned to ions
      REAL*8                    :: heating_dr ! displacement of the soruce from magnetic axis in r direction
      REAL*8                    :: heating_dz ! displacement of the soruce from magnetic axis in z direction
      REAL*8                    :: heating_sigmar ! width of the soruce from magnetic axis in r direction
      REAL*8                    :: heating_sigmaz ! width of the soruce from magnetic axis in z direction
-     INTEGER                   :: heating_equation ! Equation to which additional heating is applied (3 for ions, 4 for electrons)
+     INTEGER                   :: heating_equation ! Legacy selector used when heating_ion_fraction is omitted (3 ions, 4 electrons)
      ! Coefficients for the external heating
      REAL*8, POINTER           :: external_heating_ions(:) => NULL() ! External heating on ions on nodes of the mesh
      REAL*8, POINTER           :: external_heating_electrons(:) => NULL() ! External heating on electrons on nodes of the mesh

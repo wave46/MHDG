@@ -48,6 +48,8 @@ SUBROUTINE READ_input()
   INTEGER               :: jsweeps, novr, fill, jsweeps2, novr2, fill2, outer_sweeps, maxlevs, csize, cfill, cjswp
   REAL*8                :: thrsol, thrsol2, mncrratio, athres, cthres
   REAL*8                :: heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz
+  REAL*8, PARAMETER     :: heating_ion_fraction_unset = -HUGE(1.d0)
+  REAL*8                :: heating_ion_fraction
   INTEGER               :: heating_equation
   REAL*8                :: exbdump, part_source,ener_source, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc
 
@@ -121,14 +123,14 @@ SUBROUTINE READ_input()
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
     &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min,&
-    &ionization_ion_energy_fraction
+    &ionization_ion_energy_fraction, heating_ion_fraction
 #else
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, Re_n, Re_n_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
     &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min,&
-    &ionization_ion_energy_fraction
+    &ionization_ion_energy_fraction, heating_ion_fraction
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave, balance_diagnostics_mode
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
@@ -151,6 +153,13 @@ SUBROUTINE READ_input()
   neutralp_lambda = 0.d0
   neutralp_ti_supp_eV = 1.d-6
   ionization_ion_energy_fraction = 0.d0
+  heating_power = 0.d0
+  heating_dr = 0.d0
+  heating_dz = 0.d0
+  heating_sigmar = 0.d0
+  heating_sigmaz = 0.d0
+  heating_equation = 3
+  heating_ion_fraction = heating_ion_fraction_unset
   neutral_perpendicular_diffusion = .FALSE.
   neutral_wall_sources_in_elements = .FALSE.
   neutral_flux_limiter_mode = 'off'
@@ -177,6 +186,43 @@ SUBROUTINE READ_input()
   READ (uinput, UTILS_LST)
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
+
+  ! Resolve the optional split before dimensional inputs are scaled.
+  IF (.NOT. ieee_is_finite(heating_power) .OR. heating_power < 0.d0) THEN
+     PRINT *, 'heating_power must be finite and non-negative [W]: ', heating_power
+     STOP 1
+  ENDIF
+  IF (heating_ion_fraction == heating_ion_fraction_unset) THEN
+     SELECT CASE (heating_equation)
+     CASE (3)
+        heating_ion_fraction = 1.d0
+     CASE (4)
+        heating_ion_fraction = 0.d0
+     CASE DEFAULT
+        IF (heating_power > 0.d0) THEN
+           PRINT *, 'heating_equation must be 3 or 4 when heating_ion_fraction is omitted'
+           STOP 1
+        ENDIF
+        heating_ion_fraction = 0.d0
+     END SELECT
+  ENDIF
+  IF (.NOT. ieee_is_finite(heating_ion_fraction) .OR. &
+       &heating_ion_fraction < 0.d0 .OR. heating_ion_fraction > 1.d0) THEN
+     PRINT *, 'heating_ion_fraction must be finite and in [0,1]: ', heating_ion_fraction
+     STOP 1
+  ENDIF
+  IF (heating_power > 0.d0) THEN
+     IF (.NOT. ieee_is_finite(heating_dr) .OR. .NOT. ieee_is_finite(heating_dz)) THEN
+        PRINT *, 'Active Gaussian heating requires finite heating_dr and heating_dz [m]'
+        STOP 1
+     ENDIF
+     IF (.NOT. ieee_is_finite(heating_sigmar) .OR. &
+          &.NOT. ieee_is_finite(heating_sigmaz) .OR. &
+          &heating_sigmar <= 0.d0 .OR. heating_sigmaz <= 0.d0) THEN
+        PRINT *, 'Active Gaussian heating requires finite, positive heating_sigmar and heating_sigmaz [m]'
+        STOP 1
+     ENDIF
+  ENDIF
 
   IF (Re_n_pump == Re_n_pump_unset) Re_n_pump = Re_n
   IF (.NOT. ieee_is_finite(Re_n) .OR. Re_n < 0.d0 .OR. Re_n > 1.d0) THEN
@@ -444,6 +490,7 @@ SUBROUTINE READ_input()
   phys%neutral_flux_limiter_fs_flux_min = neutral_flux_limiter_fs_flux_min
   phys%I_0                = I_0
   phys%heating_power      = heating_power
+  phys%heating_ion_fraction = heating_ion_fraction
   phys%heating_dr         = heating_dr
   phys%heating_dz         = heating_dz
   phys%heating_sigmar     = heating_sigmar

@@ -1110,10 +1110,17 @@ CONTAINS
 
 #else
 !TOR3D
-  IF(switch%testcase .NE. 60) THEN
+  phys%heating_amplitude = 0.d0
+#ifdef TEMPERATURE
+  IF (switch%testcase >= 50 .AND. switch%testcase <= 59 .AND. phys%heating_power > 0.d0) THEN
+     IF (phys%r_axis+phys%heating_dr <= 0.d0) THEN
+        PRINT *, 'Active Gaussian heating requires a positive radial source centre'
+        STOP 1
+     ENDIF
     ! large aspect ratio assumption and low width of source
      phys%heating_amplitude = phys%heating_power/2./PI**2/phys%heating_sigmar/phys%heating_sigmaz/(phys%r_axis+phys%heating_dr)
   ENDIF
+#endif
   !********************************************
   !
   !                 2D routines
@@ -1377,6 +1384,9 @@ CONTAINS
     real*8,allocatable            :: Auq(:,:,:),Auu(:,:,:),rhs(:,:)
     real*8                        :: auxdiffsc(Ng2d)
     real*8                        :: Pi,sigma,x0,A,r
+#ifdef TEMPERATURE
+    real*8                        :: gaussian_heating
+#endif
     real*8                        :: th_n = 1.e-14
     real*8                        :: Vnng(Ndim)
     real*8                        :: neutral_limiter_phi(Ng2d)
@@ -1580,8 +1590,10 @@ CONTAINS
       if (phys%heating_amplitude>1e-10) then
         if (abs(xy(g,1)-(phys%r_axis+phys%heating_dr))<3.*abs(phys%heating_sigmar)) then
           if (abs(xy(g,2)-(phys%z_axis+phys%heating_dz))<3.*abs(phys%heating_sigmaz)) then
-            force(g,phys%heating_equation) = force(g,phys%heating_equation)+phys%heating_amplitude*exp(-((xy(g,1)-(phys%r_axis+phys%heating_dr))**2)/(phys%heating_sigmar**2)) &
+            gaussian_heating = phys%heating_amplitude*exp(-((xy(g,1)-(phys%r_axis+phys%heating_dr))**2)/(phys%heating_sigmar**2)) &
                                                     *exp(-((xy(g,2)-(phys%z_axis+phys%heating_dz))**2)/(phys%heating_sigmaz**2))
+            force(g,3) = force(g,3)+phys%heating_ion_fraction*gaussian_heating
+            force(g,4) = force(g,4)+(1.d0-phys%heating_ion_fraction)*gaussian_heating
           endif
         endif
       endif

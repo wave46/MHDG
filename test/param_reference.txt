@@ -214,7 +214,8 @@
     heating_dz = 0.                 ! [m] displacement from magnetic axis alon R direction (can be positive and negative)
     heating_sigmar = 0.15             ! [m] gaussian width in r-direction
     heating_sigmaz = 0.15             ! [m] gaussian width in z-direction
-    heating_equation = 3            ! equation to which heating is applied
+    heating_equation = 3            ! Legacy selector: 3 ions, 4 electrons; used only if fraction is omitted
+    ! heating_ion_fraction = 0.5d0  ! Optional ion share [0,1]; electrons receive 1 minus this fraction
     ! ****** Option for neutral equation (available only if compile with NEUTRAL)
     ionization_ion_energy_fraction = 0.d0 ! Fraction of local ion thermal energy assigned to newly ionized particles [0,1]
     Re                  = 0.998   ! Recycling coefficient 0.997
