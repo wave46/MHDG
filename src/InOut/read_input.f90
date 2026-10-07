@@ -187,6 +187,13 @@ SUBROUTINE READ_input()
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
 
+  ! In moving-equilibrium runs nts is the final global step, not a count of
+  ! additional steps after a restart. Histories are indexed by that step.
+  IF (ME .AND. nts .LT. 1) THEN
+     IF (MPIvar%glob_id .EQ. 0) WRITE (6, *) 'ME final step nts must be positive: ', nts
+     STOP 1
+  ENDIF
+
   ! Resolve the optional split before dimensional inputs are scaled.
   IF (.NOT. ieee_is_finite(heating_power) .OR. heating_power < 0.d0) THEN
      PRINT *, 'heating_power must be finite and non-negative [W]: ', heating_power

@@ -71,3 +71,35 @@ need no external case data or solver simulation. Warm reference comparisons
 belong to the regression harness: existing neutral workflows cover inactive
 compatibility, and `neutral_wall` covers `Re_n=0.99` with inherited pump recycling
 and with `Re_n_pump=0.95`. See [regression instructions](../regression_tests/README.md).
+
+For a 2D `NGammaTiTeNeutral` build, `make check-me-restart` reads small synthetic
+HDF5 checkpoints through the production input, initialization, and solution
+readers. It checks static bootstrap initialization, real ME steps 0/1/50/99/100,
+feedback-state restoration, rejection before out-of-range history access, and
+inactive ME compatibility. It needs Python 3 with h5py and NumPy, uses no external
+equilibrium or case data, and does not launch a solver simulation.
+
+In ME runs, `nts` is the final global step number: with `nts=100`, restart steps
+50, 99, and 100 leave 50, 1, and 0 advances. The magnetic filename remains
+`equilibrium_(step+1)` when another advance remains. With nts=100, restarting
+at 99 loads frame 0100, and restarting at 100 reads no magnetic files. The
+final advance skips the next field/control update. A restart beyond
+the final step is invalid. The non-ME step-count behavior is unchanged.
+
+For the executable loop and MPI exit paths, an optional focused check consumes
+a prepared external ME case (the compact synthetic case has the required layout):
+
+```bash
+python3 unit_tests/check_me_step_limit.py --case-directory /path/to/prepared/case \
+  --solver /path/to/MHDG-NGammaTiTeNeutral-parall-2D \
+  --run-root /tmp/new-me-step-check --mpi-ranks 2
+```
+
+Load the solver build environment first. The script leaves the source case
+unchanged, freezes its first magnetic pair and control values into new fixtures,
+and checks fresh/resumed advances, final-step zero-work MPI exit, beyond-limit
+rejection, and uninterrupted versus resumed numbered checkpoints with prescribed
+puff and density feedback. It compares solution and feedback arrays, and saves
+logs/reports in the new run directory. The step-50 fixture advances to step 52
+to exercise the same bound with only two solves; step 99 advances to 100.
+This verifies step machinery, not the moving-equilibrium physics trajectory.

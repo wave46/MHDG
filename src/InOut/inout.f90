@@ -1596,7 +1596,7 @@ CONTAINS
     INTEGER :: Neq, Ndim, Nel, Np, Nfg, Nf, sizeutilde, sizeu, it
     REAL*8, ALLOCATABLE       :: uaux(:,:),utaux(:,:),qaux(:,:)
     REAL*8, POINTER           :: impurity_concentrations_saved(:)
-    INTEGER              :: logrho_ptr = 0, n_impurities_saved
+    INTEGER              :: logrho_ptr = 0, n_impurities_saved, saved_ME
 
     NULLIFY(impurity_concentrations_saved)
     Neq = phys%Neq
@@ -1855,16 +1855,26 @@ CONTAINS
     ENDIF
 #endif
     IF (switch%ME) THEN
+       CALL HDF5_group_open(group_id, 'switches', group_id2, ierr)
+       CALL HDF5_integer_reading(group_id2, saved_ME, 'ME')
+       CALL HDF5_group_close(group_id2, ierr)
        CALL HDF5_group_open(group_id, 'time', group_id2, ierr)
        CALL HDF5_integer_reading(group_id2, it, 'Current_time_step_number')
        CALL HDF5_real_reading(group_id2, t, 'Current_time')
-       IF (it .GT. 1) THEN
+       ! Preserve static step-1 bootstrap initialization, but restore a real
+       ! ME checkpoint at step 1 just as any later ME checkpoint.
+       IF (saved_ME .NE. 0 .OR. it .GT. 1) THEN
+          IF (it .LT. 0 .OR. it .GT. SIZE(sol%time)) THEN
+             IF (MPIvar%glob_id .EQ. 0) THEN
+                WRITE (6, *) 'ME restart step ', it, ' is outside [0, nts = ', SIZE(sol%time), ']'
+             ENDIF
+             STOP 1
+          ENDIF
           time%it = it
           time%ik = it
           time%t = t
           sol%Nt = it
-          sol%time(it) = t
-       ELSE
+          IF (it .GT. 0) sol%time(it) = t
        END IF
        CALL HDF5_group_close(group_id2, ierr)
        IF (switch%target_variable /= 0) THEN           
@@ -1887,7 +1897,7 @@ CONTAINS
             ENDIF
          ENDIF
          
-         IF (time%it .GT. 1) THEN
+         IF (time%it .GT. 0) THEN
             CALL HDF5_real_reading(group_id2, phys%feedback_integral_error, 'feedback_integral_error')
             CALL HDF5_real_reading(group_id2, phys%feedback_previous_error, 'feedback_previous_error')
             IF (switch%target_variable == 3) THEN

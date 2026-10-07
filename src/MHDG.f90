@@ -2,6 +2,9 @@ PROGRAM MHDG
   USE Main_utils
   USE MPI_OMP
   USE adaptivity_indicator_module, ONLY: compute_error_oscillations
+#ifdef WITH_PETSC
+  USE solve_petsc, ONLY: FinalizePETSC
+#endif
 
   IMPLICIT NONE
 
@@ -118,6 +121,21 @@ PROGRAM MHDG
   ENDIF
 #endif
 
+  ! Read serial restart/projection data before deciding whether another field is needed.
+  IF (nb_args .NE. 1 .AND. MPIvar%glob_size .EQ. 1) CALL initialize_solution()
+
+  ! A completed ME restart must not read another field or update feedback.
+  IF (switch%ME .AND. time%it .EQ. nts) THEN
+     IF (MPIvar%glob_id .EQ. 0) THEN
+        WRITE (6, *) 'ME final step already reached: ', time%it, ' (nts = ', nts, ')'
+     ENDIF
+#ifdef WITH_PETSC
+     IF (lssolver%sollib .EQ. 3) CALL FinalizePETSC()
+#endif
+     CALL MPI_finalize(IERR)
+     STOP
+  ENDIF
+
 
   ! if the restart solution is not given
   IF ((nb_args .EQ. 1)) THEN
@@ -128,8 +146,6 @@ PROGRAM MHDG
      ! initialise solution
      CALL initialize_solution()
   ELSEIF ((MPIvar%glob_size .EQ. 1)) THEN
-       ! load the serial solution
-       CALL initialize_solution()
        ! initialise magnetic field (the mesh is needed)
        CALL initialize_magnetic_field()
        ! load magnetic field and Jtor
@@ -194,7 +210,8 @@ PROGRAM MHDG
   ir_check = 0
 
   it0 = 1
-  IF (switch%ME .AND. time%it .NE. 0) it0 = time%it
+  ! For ME, nts is the final global step, including on restart.
+  IF (switch%ME) it0 = time%it + 1
   IF (switch%ME) THEN
      time%dt = time%dt_ME/simpar%refval_time
   ENDIF
@@ -472,8 +489,8 @@ PROGRAM MHDG
               CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
            ENDIF
 
-           ! if moving equilibrium case then update the magnetic field, otherwise just continue
-           IF(switch%ME) THEN
+           ! Prepare the next ME field/control state only if another step remains.
+           IF(switch%ME .AND. time%it .LT. nts) THEN
               ! ReLoad magnetic field and Jtor
               CALL load_magnetic_field()
               CALL set_toroidal_current()
