@@ -11,6 +11,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 	balance_diagnostics_reporting.o balance_diagnostics_output.o
 
 .PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper check-transport-pinch check-neutral-flux-limiter check-neutral-wall-flux check-neutral-wall-input check-neutral-wall-diagnostics check-me-restart
+.PHONY : check-adaptivity-estimator
 
 all : allseq
 
@@ -44,6 +45,7 @@ clean:
 	$(RM) transport_region_policy_check transport_taper_check transport_pinch_check
 	$(RM) neutral_flux_limiter_check neutral_wall_flux_check neutral_wall_input_check neutral_wall_diagnostics_check
 	$(RM) me_restart_check
+	$(RM) adaptivity_estimator_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_magnetic_topology.f90 interpolation.o magnetic_topology.o -o magnetic_topology_check
@@ -87,6 +89,10 @@ check-neutral-wall-diagnostics : MHDG
 check-me-restart : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_me_restart.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o me_restart_check $(LIB)
 	python3 ../unit_tests/check_me_restart.py ./me_restart_check
+
+check-adaptivity-estimator : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_adaptivity_estimator.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o adaptivity_estimator_check $(LIB)
+	python3 ../unit_tests/check_adaptivity_estimator.py ./adaptivity_estimator_check
 
 include Make.inc/build_provenance.mk
 

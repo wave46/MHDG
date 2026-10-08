@@ -28,7 +28,10 @@ CONTAINS
       h_target_elements = 0.1
 
 
-      CALL post_process_matrix_solution(Mesh%X, Mesh%T, sol%u, sol%q, u_sol, u_star_sol)
+      ! Adaptation supplies coordinates in metres, but sol%q differentiates
+      ! the normalized coordinates x/lscale. Convert only this reconstruction
+      ! input; the solver/indicator gradients keep their existing normalization.
+      CALL post_process_matrix_solution(Mesh%X, Mesh%T, sol%u, sol%q/phys%lscale, u_sol, u_star_sol)
       DO i = 1, SIZE(adapt%param_est,1)
          CALL calculate_L2_error_two_sols_different_p_scalar_general(Mesh%X, Mesh%T, adapt%param_est(i), u_sol, u_star_sol, error_L2, eg_L2)
          h_target_temp = h_map_elements * ((adapt%tol_est / error_L2) ** (1. / (order + 1.)))
@@ -300,8 +303,8 @@ CONTAINS
       REAL*8, INTENT(out)   :: B(:,:)
       INTEGER*4             :: i, k, j, n, m, neq_dim, neq, ndim
 
-      neq_dim = 2*Mesh%ndim
-      neq = 2
+      neq_dim = phys%neq*Mesh%ndim
+      neq = phys%neq
       ndim = Mesh%ndim
 
       n = SIZE(Bx, 1)
