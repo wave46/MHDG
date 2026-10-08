@@ -627,6 +627,7 @@ MODULE types
      INTEGER           :: kspnorm    ! norm type to be used
      CHARACTER(len=20) :: ksptype    ! Krylov solver type
      CHARACTER(len=20) :: pctype     ! Preconditioner type
+     CHARACTER(len=80) :: petsc_factor_solver ! Empty: PETSc default; e.g. 'mumps' for PCLU
      INTEGER           :: gmresres   ! Restart value for GMRES
      INTEGER           :: mglevels   ! Number of levels for the MultiGrid preconditioner
      INTEGER           :: mgtypeform   ! Form type of the MultiGrid preconditioner

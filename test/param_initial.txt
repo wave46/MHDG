@@ -315,6 +315,7 @@
     kspmethd		= 'KSPPREONLY'	! Krylov method KSPCG KSPBCGS KSPGMRES KSPPREONLY KSPMINRES KSPRICHARDSON and more 
     !kspmethd		= 'KSPBCGS'	! Krylov method KSPCG KSPBCGS KSPGMRES KSPPREONLY KSPMINRES KSPRICHARDSON and more 
     pctype		= 'PCLU'	! Preconditioner type PCNONE PCJACOBI PCSOR PCLU PCILU PCGAMG PCMG and more
+    petsc_factor_solver = ''            ! PCLU backend: '' = PETSc default; 'mumps' selects MUMPS
     !pctype		= 'PCJACOBI'	! Preconditioner type PCNONE PCJACOBI PCSOR PCLU PCILU PCGAMG PCMG and more
     gmresres            = 30            ! Restart of the GMRES method (30 default)
     mglevels		= 1		! Number of levels for the MG preconditioner

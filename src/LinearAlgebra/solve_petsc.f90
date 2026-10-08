@@ -273,6 +273,7 @@ CONTAINS
     !PetscDraw             :: draw
     KSPType               :: ksp_type
     PCType                :: pc_type
+    PetscBool             :: factor_available
     PetscViewerAndFormat  :: vf
     PetscErrorCode        :: ierr
 
@@ -309,6 +310,19 @@ CONTAINS
     ! get the preconditioner and set it
     CALL KSPGetPC(matPETSC%ksp, matPETSC%pc, ierr);
     CALL PCSetType(matPETSC%pc, pc_type, ierr);
+    CHKERRA(ierr)
+    IF (LEN_TRIM(lssolver%petsc_factor_solver) > 0) THEN
+       ! Select the requested LU package before PCSetUp; never silently fall back.
+       CALL MatGetFactorAvailable(matPETSC%matK, TRIM(lssolver%petsc_factor_solver), &
+            MAT_FACTOR_LU, factor_available, ierr)
+       CHKERRA(ierr)
+       IF (.NOT. factor_available) THEN
+          IF (MPIvar%glob_id == 0) PRINT *, 'PETSc LU factorization backend unavailable: ', TRIM(lssolver%petsc_factor_solver)
+          CALL MPI_Abort(PETSC_COMM_WORLD, 1, ierr)
+       ENDIF
+       CALL PCFactorSetMatSolverType(matPETSC%pc, TRIM(lssolver%petsc_factor_solver), ierr)
+       CHKERRA(ierr)
+    ENDIF
     ! in case of PCMG set the additional info
     SELECT CASE (lssolver%pctype)
     CASE ('PCMG')
@@ -326,7 +340,9 @@ CONTAINS
 
     ! set preconditioner up
     CALL PCSetUp(matPETSC%pc, ierr);
+    CHKERRA(ierr)
     CALL KSPSetUp(matPETSC%ksp, ierr);
+    CHKERRA(ierr)
 
     ! print out the residue
     IF(lssolver%kspitrace .EQ. 1) THEN

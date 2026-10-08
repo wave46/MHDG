@@ -42,6 +42,7 @@ SUBROUTINE READ_input()
   REAL*8                :: diff_vort, diff_pot, etapar, Potfloat,diagsource(10)
   CHARACTER(100)        :: msg
   CHARACTER(20)         :: kmethd, ptype, kspmethd, pctype
+  CHARACTER(80)         :: petsc_factor_solver
 
   CHARACTER(len=20)     :: smther, smther2, prol, restr, solve, restr2, prol2, solve2, mlcycle
   CHARACTER(len=20)     :: aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, csolve, csbsolve, cmat
@@ -134,6 +135,7 @@ SUBROUTINE READ_input()
 #endif
   NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave, balance_diagnostics_mode
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
+       &petsc_factor_solver,&
        &smther, jsweeps,&
        &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
        &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
@@ -170,6 +172,7 @@ SUBROUTINE READ_input()
   neutral_flux_limiter_fs_fraction = 1.d0
   neutral_flux_limiter_fs_flux_min = 0.d0
   balance_diagnostics_mode = 'off'
+  petsc_factor_solver = ''
 
   ! Reading the file
   uinput = 100
@@ -186,6 +189,13 @@ SUBROUTINE READ_input()
   READ (uinput, UTILS_LST)
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
+
+  IF (sollib == 3 .AND. LEN_TRIM(petsc_factor_solver) > 0) THEN
+     IF (pctype /= 'PCLU') THEN
+        IF (MPIvar%glob_id == 0) PRINT *, 'petsc_factor_solver requires pctype = PCLU'
+        STOP 1
+     ENDIF
+  ENDIF
 
   ! In moving-equilibrium runs nts is the final global step, not a count of
   ! additional steps after a restart. Histories are indexed by that step.
@@ -568,6 +578,7 @@ SUBROUTINE READ_input()
   lssolver%kspnorm        = kspnorm
   lssolver%kspmethd       = kspmethd
   lssolver%pctype         = pctype
+  lssolver%petsc_factor_solver = TRIM(petsc_factor_solver)
   lssolver%gmresres       = gmresres
   lssolver%mglevels       = mglevels
   lssolver%mgtypeform     = mgtypeform
@@ -909,6 +920,9 @@ SUBROUTINE READ_input()
         PRINT *, '                - Library used for the linear system:   PETSc      '
         PRINT *, '                - Iterative method:                                 ', lssolver%kspmethd
         PRINT *, '                - Preconditioner:                                   ', lssolver%pctype
+        IF (LEN_TRIM(lssolver%petsc_factor_solver) > 0) THEN
+           PRINT *, '                - LU factorization backend:                         ', TRIM(lssolver%petsc_factor_solver)
+        ENDIF
         PRINT *, '                - Relative tollerance                               ', lssolver%rtol
         PRINT *, '                - Absolute tollerance                               ', lssolver%atol
         PRINT *, '                - Max number of iteration:                          ', lssolver%kspitmax

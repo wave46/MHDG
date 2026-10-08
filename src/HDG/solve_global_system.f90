@@ -6,7 +6,6 @@
 !*****************************************
 #ifdef WITH_PETSC
    SUBROUTINE solve_global_system(ir)
-   INTEGER, INTENT(IN) :: ir
 #else
    SUBROUTINE solve_global_system()
 #endif
@@ -28,6 +27,9 @@
 
   IMPLICIT NONE
 
+#ifdef WITH_PETSC
+  INTEGER, INTENT(IN) :: ir
+#endif
   REAL, ALLOCATABLE   :: rhspert(:)
   REAL                :: pertamp, errsol
   INTEGER*4           :: seed(34)
@@ -48,7 +50,6 @@
 #endif
 #ifdef PARALL
 #ifdef WITH_PETSC
-  INTEGER, INTENT(IN) :: ir
   INTEGER             :: total_n
   REAL*8, ALLOCATABLE :: aux_sol_glob_petsc(:)
   INTEGER             :: counts_recv(MPIvar%glob_size), displs(MPIvar%glob_size)

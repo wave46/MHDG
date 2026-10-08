@@ -61,7 +61,9 @@ PROGRAM Convergence
 
   ! Initialize MPI
   CALL init_MPI_OMP()
+#ifdef WITH_PETSC
   CALL InitPETSC()
+#endif
 
   ! Read input file param.txt
   CALL read_input()
@@ -248,7 +250,11 @@ PROGRAM Convergence
               CALL hdg_Assembly()
 
               ! Solve linear system
+#ifdef WITH_PETSC
+              CALL solve_global_system(ir)
+#else
               CALL solve_global_system()
+#endif
 
               CALL compute_element_solution()
 

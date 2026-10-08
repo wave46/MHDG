@@ -41,6 +41,20 @@ these selections. The local initializer and default PaStiX selection remain
 available. Clean existing objects before changing the model, execution mode,
 compiler, or solver backend. Source the same environment script in runtime jobs.
 
+For a PETSc direct solve with MUMPS, set these entries in the existing
+`&LSSOLV_LST` block of `param.txt`:
+
+```fortran
+sollib = 3
+kspmethd = 'KSPPREONLY'
+pctype = 'PCLU'
+petsc_factor_solver = 'mumps'
+```
+
+Omitting `petsc_factor_solver` retains PETSc's default factorization package.
+An explicit selection requires `PCLU` and an available backend in the loaded
+PETSc installation; unavailable backends stop the run instead of falling back.
+
 ## Regression testing
 
 The tracked regression harness supports external case bundles, isolated
