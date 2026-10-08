@@ -36,6 +36,7 @@ MODULE Main_utils
 
   INTEGER                      :: Np, Nel, Nfp, Nf, Ndim, Nthreads
   INTEGER                      :: it, ir, ir_check, it0, nts, nu, nut, nb_args, IERR, k, i,is, count_adapt = 0, ir_adapt = 0, checkpoint = 1, divergence_counter_adapt = 0, convergence_counter = 1, order
+  INTEGER                      :: divergence_refinements = 0
 
   LOGICAL, ALLOCATABLE         :: mkelms(:)
   REAL*8                       :: dt, dt0, errNR, errNR_adapt, errlstime
@@ -352,6 +353,10 @@ CONTAINS
 
     !! UPDATE VARIABLES
     errNR_adapt = 1e10
+    IF (adapt%adaptivity .AND. adapt%div_adapt) THEN
+       CALL update_uiter_qiter_best(uiter_best, qiter_best, sol%u, sol%q)
+       ir_adapt = 0
+    ENDIF
     IF(restart_adapt) THEN
        time%t = time%t - time%dt
        time%it = time%it - 1
@@ -631,6 +636,33 @@ CONTAINS
     qiter_best = q
   ENDSUBROUTINE update_uiter_qiter_best
 
+  SUBROUTINE reset_divergence_refinement()
+    divergence_refinements = 0
+    IF (adapt%adaptivity .AND. adapt%div_adapt) THEN
+       ! A first-iteration failure can recover from this timestep's initial
+       ! solution, rather than an iterate retained from the preceding timestep.
+       CALL update_uiter_qiter_best(uiter_best, qiter_best, sol%u, sol%q)
+       errNR_adapt = 1e10
+       ir_adapt = 0
+    ENDIF
+  ENDSUBROUTINE reset_divergence_refinement
+
+  LOGICAL FUNCTION prepare_divergence_refinement() RESULT(prepared)
+    prepared = .FALSE.
+    IF (.NOT. (adapt%adaptivity .AND. adapt%div_adapt)) RETURN
+    IF (divergence_refinements .GE. adapt%max_divergence_refinements) RETURN
+
+    ! The global NR error and shared retry count select the same recovery path
+    ! on every rank. Initialization and adaptation maintain the local buffers.
+    divergence_refinements = divergence_refinements + 1
+    ! Estimate/refine from the saved best iterate, never the divergent update.
+    ! Time history and feedback state stay intact for the same timestep.
+    sol%u = uiter_best
+    sol%q = qiter_best
+    CALL update_uconv_qconv(sol%u, sol%q)
+    prepared = .TRUE.
+  END FUNCTION prepare_divergence_refinement
+
 
   SUBROUTINE set_parameters()
     order = refElPol%nDeg
@@ -876,9 +908,15 @@ ENDSUBROUTINE update_delta_te
     END DO
   ENDSUBROUTINE check_for_NaNs
 
-  SUBROUTINE project_u0_newmesh()
+  SUBROUTINE project_u0_newmesh(preserve_history)
+    LOGICAL, OPTIONAL, INTENT(IN) :: preserve_history
+    LOGICAL :: retain_history
+    INTEGER :: history_id, n_history
 
-    IF(.NOT. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0))) THEN
+    retain_history = .FALSE.
+    IF (PRESENT(preserve_history)) retain_history = preserve_history
+
+    IF(retain_history .OR. .NOT. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0))) THEN
        ALLOCATE(u0_temp(SIZE(sol%u0,1),SIZE(sol%u0,2)))
        u0_temp = sol%u0
     ELSE
@@ -895,16 +933,28 @@ ENDSUBROUTINE update_delta_te
     Mesh_prec%X = Mesh_prec%X*phys%lscale
 
 #ifndef PARALL
-    CALL projectSolutionDifferentMeshes_general_arrays(Mesh_prec%T,Mesh_prec%X, Mesh%T, Mesh%X, u1 = u0_temp(:,1), u2 = sol%u0(:,1))
+    n_history = 1
+    IF (retain_history) n_history = SIZE(u0_temp,2)
+    DO history_id = 1, n_history
+       CALL projectSolutionDifferentMeshes_general_arrays(Mesh_prec%T,Mesh_prec%X, Mesh%T, Mesh%X, &
+            u1 = u0_temp(:,history_id), u2 = sol%u0(:,history_id))
+    ENDDO
 #else
     ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
 
     CALL gather_mesh(Mesh_in = Mesh_prec, T_glob = T_glob, X_glob = X_glob)
-    CALL gather_solution(Mesh_in = Mesh_prec, Nnodesperelem = Mesh_prec%Nnodesperelem, u_in = u0_temp(:,1), u_glob = u_glob)
-
-    CALL projectSolutionDifferentMeshes_general_arrays(T_glob,X_glob, Mesh%T, Mesh%X, u1 = u_glob, u2 = sol%u0(:,1))
-    DEALLOCATE(T_glob, X_glob, u_glob)
-    NULLIFY(T_glob, X_glob, u_glob)
+    n_history = 1
+    IF (retain_history) n_history = SIZE(u0_temp,2)
+    DO history_id = 1, n_history
+       CALL gather_solution(Mesh_in = Mesh_prec, Nnodesperelem = Mesh_prec%Nnodesperelem, &
+            u_in = u0_temp(:,history_id), u_glob = u_glob)
+       CALL projectSolutionDifferentMeshes_general_arrays(T_glob,X_glob, Mesh%T, Mesh%X, &
+            u1 = u_glob, u2 = sol%u0(:,history_id))
+       DEALLOCATE(u_glob)
+       NULLIFY(u_glob)
+    ENDDO
+    DEALLOCATE(T_glob, X_glob)
+    NULLIFY(T_glob, X_glob)
 #endif
 
 

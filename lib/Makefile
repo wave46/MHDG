@@ -13,6 +13,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper check-transport-pinch check-neutral-flux-limiter check-neutral-wall-flux check-neutral-wall-input check-neutral-wall-diagnostics check-me-restart
 .PHONY : check-adaptivity-estimator
 .PHONY : check-adaptive-checkpoint
+.PHONY : check-divergence-refinement
 
 all : allseq
 
@@ -48,6 +49,7 @@ clean:
 	$(RM) me_restart_check
 	$(RM) adaptivity_estimator_check
 	$(RM) adaptive_checkpoint_check
+	$(RM) divergence_refinement_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_magnetic_topology.f90 interpolation.o magnetic_topology.o -o magnetic_topology_check
@@ -99,6 +101,10 @@ check-adaptivity-estimator : MHDG
 check-adaptive-checkpoint : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_adaptive_checkpoint.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o adaptive_checkpoint_check $(LIB)
 	OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 ./adaptive_checkpoint_check
+
+check-divergence-refinement : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_divergence_refinement.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o divergence_refinement_check $(LIB)
+	python3 ../unit_tests/check_divergence_refinement.py ./divergence_refinement_check $(MODE)
 
 include Make.inc/build_provenance.mk
 

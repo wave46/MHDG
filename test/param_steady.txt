@@ -153,6 +153,7 @@
     freq_t_adapt	= 1		! Frequency of time refinement, only if time_adapt = .true.
     freq_NR_adapt	= 5		! Frequency of NR refinement, only if NR_adapt = .true.
     div_adapt		= .false.	! Refine if NR diverges
+    max_divergence_refinements = 2       ! Maximum divergence refinements per timestep; 0 disables retries
     rest_adapt		= .true.	! Call adaptivity at the very beginning, only for restart simulations
     osc_adapt		= .true.	! Refine if oscillations are higher than threshold
     osc_tol		= -2.		! Refine if oscillations are higher than this threshold, only if osc_adapt = .true.

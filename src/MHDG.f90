@@ -224,6 +224,7 @@ PROGRAM MHDG
 
      ! if a new time step starts, it means that the solution converged sol%u_conv = sol%u, sol%q_conv = sol%q
      CALL update_uconv_qconv(sol%u, sol%q)
+     CALL reset_divergence_refinement()
 
      ! Actualization of time
      time%t = time%t + time%dt
@@ -331,6 +332,33 @@ PROGRAM MHDG
            CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
            EXIT
         ELSEIF (errNR .GT. numer%div) THEN
+           IF (prepare_divergence_refinement()) THEN
+              IF (MPIvar%glob_id .EQ. 0) THEN
+                 WRITE(*,*) 'NR divergence: refining from best finite iterate; retry ', &
+                      divergence_refinements, ' of ', adapt%max_divergence_refinements
+              ENDIF
+              ! Reload this attempt's equilibrium, without advancing the
+              ! physical timestep or updating the puff/feedback controller.
+              IF (switch%ME) time%it = time%it - 1
+              CALL adaptivity()
+              IF (switch%ME) time%it = time%it + 1
+              CALL project_u0_newmesh(preserve_history=.TRUE.)
+              CALL update_uconv_qconv(sol%u, sol%q)
+              IF (SIZE(uiter) .NE. SIZE(sol%u)) THEN
+                 DEALLOCATE(uiter)
+                 ALLOCATE(uiter(SIZE(sol%u)))
+              ENDIF
+              uiter = sol%u
+              ir_check = 0
+              CALL free_mesh_loc(Mesh_prec)
+              CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
+              ir = 1
+              CYCLE
+           ENDIF
+           IF (adapt%adaptivity .AND. adapt%div_adapt .AND. MPIvar%glob_id .EQ. 0) THEN
+              WRITE(*,*) 'NR divergence recovery stopped: per-timestep refinement limit reached: ', &
+                   adapt%max_divergence_refinements
+           ENDIF
            WRITE (6, *) 'Problem in the N-R procedure'
            STOP
         ELSE

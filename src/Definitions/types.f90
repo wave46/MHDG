@@ -588,6 +588,7 @@ MODULE types
      INTEGER             :: freq_t_adapt ! Frequency of time refinement, only if time_adapt = .true.
      INTEGER             :: freq_NR_adapt ! Frequency of NR refinement, only if NR_adapt = .true.
      LOGICAL             :: div_adapt ! refine if NR divergence
+     INTEGER             :: max_divergence_refinements = 2 ! Maximum divergence refinements per timestep; 0 disables retries
      LOGICAL             :: rest_adapt ! call adaptivity at the very beginning, only for restart simulations
      LOGICAL             :: osc_adapt ! refine if oscillations are lower than threshold
      REAL*8              :: osc_tol ! refine if oscillations are lower than this threshold, only if osc_adapt = .true.
