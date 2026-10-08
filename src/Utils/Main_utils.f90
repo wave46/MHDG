@@ -612,7 +612,7 @@ CONTAINS
   ENDSUBROUTINE update_uiter
 
   SUBROUTINE update_uiter_qiter_best(uiter_best, qiter_best, u, q)
-    REAL*8, POINTER, INTENT(OUT)  :: uiter_best(:), qiter_best(:)
+    REAL*8, POINTER, INTENT(INOUT) :: uiter_best(:), qiter_best(:)
     REAL*8, INTENT(IN)           :: u(:), q(:)
 
     IF(ASSOCIATED(uiter_best)) THEN
@@ -621,17 +621,14 @@ CONTAINS
           DEALLOCATE(qiter_best)
           ALLOCATE(uiter_best(SIZE(u)))
           ALLOCATE(qiter_best(SIZE(q)))
-          uiter_best = u
-          qiter_best = q
        ENDIF
     ELSE
        ALLOCATE(uiter_best(SIZE(u)))
        ALLOCATE(qiter_best(SIZE(q)))
-       uiter_best = u
-       qiter_best = q
     ENDIF
-
-
+    ! A new best iterate must refresh the checkpoint even on the same mesh.
+    uiter_best = u
+    qiter_best = q
   ENDSUBROUTINE update_uiter_qiter_best
 
 

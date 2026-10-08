@@ -321,9 +321,9 @@ PROGRAM MHDG
         ENDIF
 
         IF (errNR .LT. numer%tNR) THEN
-           ! Save check-point solution if NR error is smaller than threshold
+           ! The converged iterate is the completed solution checkpoint.
            WRITE(*,*) "Solution saved as checkpoint."
-           CALL update_uconv_qconv(uiter_best, qiter_best)
+           CALL update_uconv_qconv(sol%u, sol%q)
            errNR_adapt = 1e10
            ir_adapt = 0
            ir_check = 1
@@ -482,6 +482,8 @@ PROGRAM MHDG
            ! call the adaptive procedure if time refinement is on
            IF((adapt%adaptivity) .AND. (adapt%time_adapt) .AND. (MOD(it,adapt%freq_t_adapt) .EQ. 0)) THEN
 
+              ! Periodic refinement projects the completed timestep.
+              CALL update_uconv_qconv(sol%u, sol%q)
               CALL adaptivity
 
               CALL update_u0(sol%u)
