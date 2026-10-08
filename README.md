@@ -18,6 +18,29 @@ source Make.inc/init_vars_libs.sh
 make
 ```
 
+The GCC configuration in `lib/Make.inc/arch.make` discovers HDF5, dense algebra,
+and the selected sparse solver through `pkg-config`. It supports both
+`hdf5_fortran` metadata and the local Debian `hdf5` metadata layout. Dense algebra
+uses OpenBLAS when available, otherwise the separate `blas` and `lapack` packages;
+set `MHDG_BLAS_PACKAGES='blas lapack'` to retain that implementation explicitly.
+Gmsh still requires `MHDG_GMSH_DIR`, with its shared library detected in `lib` or
+`lib64`. Use an LP64 BLAS/LAPACK installation and real double-precision PETSc
+with 32-bit indices and Fortran bindings.
+
+For Pitagora DCGP, after installing Gmsh under `$HOME/libs/gmsh-4.14.1`, load
+the dependency environment:
+
+```bash
+cd lib
+source Make.inc/init_vars_libs_pitagora.sh
+```
+
+The script loads the GCC/OpenMPI modules and PETSc built with MUMPS. It exports
+`MODE=parall`, `PASTIX=no`, and `PETSC=yes`; explicit `make` arguments override
+these selections. The local initializer and default PaStiX selection remain
+available. Clean existing objects before changing the model, execution mode,
+compiler, or solver backend. Source the same environment script in runtime jobs.
+
 ## Regression testing
 
 The tracked regression harness supports external case bundles, isolated

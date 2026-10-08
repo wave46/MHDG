@@ -18,8 +18,8 @@ COMPTYPE = $(COMPTYPE_OPT)
 #-------------------------------------------------------------------------------
 MODE_SERIAL = serial
 MODE_PARALL = parall
-MODE = $(MODE_SERIAL)
-#MODE = $(MODE_PARALL)
+MODE ?= $(MODE_SERIAL)
+#MODE ?= $(MODE_PARALL)
 
 #-------------------------------------------------------------------------------
 # The compiler
@@ -62,14 +62,14 @@ DIM=$(DIM_2D)
 # Available libraries: put $(LIB_YES) to use the library, $(LIB_NO) to not use it
 LIB_YES=yes
 LIB_NO=no
-PASTIX=$(LIB_YES)
+PASTIX ?= $(LIB_YES)
 #PASTIX=$(LIB_NO)
 #PSBLAS=$(LIB_YES)
 PSBLAS=$(LIB_NO)
 #PSBLMG=$(LIB_YES)
 PSBLMG=$(LIB_NO)
 #PETSC=$(LIB_YES)
-PETSC=$(LIB_NO)
+PETSC ?= $(LIB_NO)
 
 
 #-------------------------------------------------------------------------------
@@ -245,20 +245,34 @@ DEF = -DTHREAD_FUNNELED
 #-------------------------------------------------------------------------------
 # Includes
 #-------------------------------------------------------------------------------
-# HDF5/HWLOC/X11
-#Local
-FCFLAGS += -I/usr/include
-FCFLAGS += -I/usr/include/x86_64-linux-gnu
-FCFLAGS += -I/usr/include/hdf5/serial
-FCFLAGS += -I/usr/include/hwloc
-FCFLAGS += -I/usr/include/X11
+# Keep explicit paths: pkgconf can otherwise filter module-provided CPATH and
+# LIBRARY_PATH entries, including directories needed for Fortran .mod files.
+PKG_CONFIG ?= pkg-config
+MHDG_PKG_CONFIG = env PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1 \
+                     PKG_CONFIG_ALLOW_SYSTEM_LIBS=1 $(PKG_CONFIG)
+
+# Modules commonly provide hdf5_fortran.pc. Debian's hdf5.pc supplies the common
+# paths but only the C library, so add the Fortran library explicitly there.
+MHDG_HDF5_PACKAGE ?= $(shell $(PKG_CONFIG) --exists hdf5_fortran && \
+                            printf hdf5_fortran || printf hdf5)
+MHDG_HDF5_LIBS = $(if $(filter hdf5,$(MHDG_HDF5_PACKAGE)),-lhdf5_fortran) \
+                 $(shell $(MHDG_PKG_CONFIG) --libs $(MHDG_HDF5_PACKAGE))
+
+# Prefer a loaded OpenBLAS installation; retain the separate BLAS/LAPACK
+# implementation on systems such as the existing local Debian installation.
+# An explicit MHDG_BLAS_PACKAGES override selects the desired implementation.
+MHDG_BLAS_PACKAGES ?= $(shell $(PKG_CONFIG) --exists openblas && \
+                             printf openblas || printf 'blas lapack')
+FCFLAGS += $(shell $(MHDG_PKG_CONFIG) --cflags $(MHDG_HDF5_PACKAGE) $(MHDG_BLAS_PACKAGES))
 
 #GMSH
+MHDG_GMSH_LIBDIR ?= $(patsubst %/,%,$(dir $(firstword $(wildcard \
+    $(MHDG_GMSH_DIR)/lib/libgmsh.so $(MHDG_GMSH_DIR)/lib64/libgmsh.so))))
 FCFLAGS += -I$(MHDG_GMSH_DIR)/include
 
 # PASTIX
 ifeq ($(PASTIX),$(LIB_YES))
- FCFLAGS += $(shell echo `PKG_CONFIG_PATH=${PKG_CONFIG_PATH} pkg-config --cflags pastix pastixf`)
+ FCFLAGS += $(shell $(MHDG_PKG_CONFIG) --cflags pastix pastixf)
  FCFLAGS += -I$(MHDG_SCOTCH_DIR)/include
 endif
 
@@ -273,8 +287,7 @@ endif
 
 # PETSC
 ifeq ($(PETSC),$(LIB_YES))
- FCFLAGS += -I$(MHDG_PETSC_DIR)/include/
- FCFLAGS += -I$(MHDG_PETSC_DIR)/$(PETSC_ARCH)/include
+ FCFLAGS += $(shell $(MHDG_PKG_CONFIG) --cflags PETSc)
 endif
 
 # MLD2P4
@@ -286,16 +299,12 @@ endif
 #-------------------------------------------------------------------------------
 # Libraries needed for linking
 #-------------------------------------------------------------------------------
-# HDF5/HWLOC/X11
-#Local
-LIB += -L/usr/lib/x86_64-linux-gnu -lz -lm -lrt -lpthread
-LIB += -L/usr/lib/x86_64-linux-gnu/hdf5/serial -lhdf5_fortran -lhdf5
-LIB += -L/usr/lib/x86_64-linux-gnu/hwloc -lhwloc
-LIB += -L/usr/lib/x86_64-linux-gnu -lX11
-LIB += -L/usr/lib/x86_64-linux-gnu/xtables -lXt
+# HDF5 and system support libraries
+LIB += -lz -lm -lrt -lpthread
+LIB += $(MHDG_HDF5_LIBS)
 
 #GMSH
-LIB += -L$(MHDG_GMSH_DIR)/lib -Llib -lgmsh -L. -Wl,-rpath=$(MHDG_GMSH_DIR)/lib 
+LIB += -L$(MHDG_GMSH_LIBDIR) -lgmsh -Wl,-rpath,$(MHDG_GMSH_LIBDIR)
 
 
 # PASTIX
@@ -305,15 +314,14 @@ ifeq ($(PASTIX),$(LIB_YES))
  #LIB += -L$(MHDG_PASTIX_DIR)/install -lpastix -lm -lrt -lifcore
  #New GNU
  LIB += -L$(MHDG_SCOTCH_DIR)/lib -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread -lhwloc
- LIB += $(shell echo `PKG_CONFIG_PATH=${PKG_CONFIG_PATH} pkg-config --libs pastix pastixf`)
+ LIB += $(shell $(MHDG_PKG_CONFIG) --libs pastix pastixf)
  #New INTEL
  #LIB += -L$(MHDG_SCOTCH_DIR)/lib -lptscotch -lscotch -lptscotcherr -lz -lm -lrt -lpthread
  #LIB += -L$(MHDG_PASTIX_DIR)/install -lpastix -lm -lrt -lifcore -lpthread -lhwloc -lptscotch -lscotch -lscotcherr
 endif
 
 # BLAS/LAPACK
-#Local
-LIB += -L/usr/lib/x86_64-linux-gnu -lblas -llapack -llapacke
+LIB += $(shell $(MHDG_PKG_CONFIG) --libs $(MHDG_BLAS_PACKAGES))
 
 # MKL
 #LIB += -L$(MHDG_MKL_DIR)/build/mkl/latest/lib/intel64 -Wl,-rpath,$(MHDG_MKL_DIR)/build/mkl/latest/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
@@ -337,8 +345,7 @@ endif
 # PETSC
 #Local
 ifeq ($(PETSC),$(LIB_YES))
- LIB += -L$(MHDG_PETSC_DIR)/lib -lpetsc
- LIB += -L$(MHDG_PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc
+ LIB += $(shell $(MHDG_PKG_CONFIG) --libs PETSc)
 endif
 
 
