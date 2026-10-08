@@ -6,6 +6,7 @@ PROGRAM test_magnetic_topology
   CALL test_limited_sharp_corner_contact()
   CALL test_high_order_wall_and_grid_resolution()
   CALL test_lower_single_null_regions()
+  CALL test_narrow_separatrix_crossing()
   WRITE (*, '(A)') 'magnetic topology analytical checks: PASS'
 
 CONTAINS
@@ -221,6 +222,64 @@ CONTAINS
     CALL assert_true(psi_n > 1.d0, 'main-SOL fixture must have rho above one')
     CALL assert_true(region == magnetic_region_main_sol, 'main-SOL classification')
   END SUBROUTINE test_lower_single_null_regions
+
+  SUBROUTINE test_narrow_separatrix_crossing()
+    TYPE(equilibrium_geometry_t) :: geometry
+    INTEGER, PARAMETER :: nr = 200, nz = 200, ray = 491
+    REAL*8, PARAMETER :: r0 = 2.49d0, z0 = 0.022d0, b = 0.77d0
+    REAL*8, PARAMETER :: k = 2.d0/b, length_scale = 0.002d0
+    REAL*8 :: r(nr), z(nz), psi(nz, nr), wall(4, 2), ref_nodes(2)
+    REAL*8 :: angle, c, s, x, y, theta, value, pr, pz, outward_sign
+    INTEGER :: faces(4, 2), ir, iz, ierr, polarity
+    CHARACTER(LEN=256) :: message
+
+    ! A rotated cubic single-null equilibrium puts two separatrix crossings
+    ! between neighbouring radial scan points near the X point. This used to
+    ! fail despite a positive refined maximum. Use normalized coordinates,
+    ! and check both flux polarities and the axis-facing choice of root.
+    angle = -25.05d0*ACOS(-1.d0)/180.d0
+    c = COS(angle)
+    s = SIN(angle)
+    DO ir = 1, nr
+       r(ir) = (1.8d0 + 1.4d0*REAL(ir - 1)/REAL(nr - 1))/length_scale
+    ENDDO
+    DO iz = 1, nz
+       z(iz) = (-0.95d0 + 1.75d0*REAL(iz - 1)/REAL(nz - 1))/length_scale
+    ENDDO
+    DO ir = 1, nr
+       DO iz = 1, nz
+          x = c*(r(ir)*length_scale - r0) + s*(z(iz)*length_scale - z0)
+          y = -s*(r(ir)*length_scale - r0) + c*(z(iz)*length_scale - z0)
+          psi(iz, ir) = 6.d0*(x*x + k*(y**3/3.d0 + b*y*y/2.d0))
+       ENDDO
+    ENDDO
+    wall(1, :) = (/1.81d0, -0.94d0/)/length_scale
+    wall(2, :) = (/3.19d0, -0.94d0/)/length_scale
+    wall(3, :) = (/3.19d0, 0.79d0/)/length_scale
+    wall(4, :) = (/1.81d0, 0.79d0/)/length_scale
+    faces(1, :) = (/1, 2/)
+    faces(2, :) = (/2, 3/)
+    faces(3, :) = (/3, 4/)
+    faces(4, :) = (/4, 1/)
+    ref_nodes = (/-1.d0, 1.d0/)
+    theta = 2.d0*ACOS(-1.d0)*REAL(ray - 1)/720.d0
+
+    DO polarity = 1, 2
+       CALL geometry%init(r, z, psi, ierr, message)
+       CALL assert_ok(ierr, message)
+       CALL geometry%analyze(SIGN(b*b, psi(nz, nr)), wall, faces, ref_nodes, ierr, message)
+       CALL assert_ok(ierr, message)
+       CALL assert_true(geometry%topology_kind == topology_lower_single_null, &
+            'narrow-crossing case was not classified as lower single null')
+       CALL geometry%evaluate_flux(geometry%lcfs_r(ray), geometry%lcfs_z(ray), value, pr, pz)
+       CALL assert_close(value, geometry%psi_lcfs, 1.d-10, 'narrow-crossing LCFS flux')
+       outward_sign = SIGN(1.d0, geometry%psi_lcfs - geometry%psi_axis)
+       CALL assert_true(outward_sign*(pr*COS(theta) + pz*SIN(theta)) > 0.d0, &
+            'narrow-crossing root must be on the axis-facing side of the maximum')
+       CALL geometry%clear()
+       psi = -psi
+    ENDDO
+  END SUBROUTINE test_narrow_separatrix_crossing
 
   SUBROUTINE fill_circular_flux(r0, nr, nz, r, z, psi)
     REAL*8, INTENT(IN) :: r0

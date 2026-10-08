@@ -739,8 +739,8 @@ CONTAINS
     IF (imax <= 0) RETURN
 
     ! At an X point the separatrix can merely touch a radial ray, so a sign
-    ! change is not guaranteed.  Refine the sampled maximum of psi along the
-    ! ray before deciding whether this is that tangential LCFS contact.
+    ! change is not guaranteed. Refine the sampled maximum to find a tangent
+    ! contact or two crossings hidden between adjacent scan points.
     dt = rmax/REAL(ray_scan_points)
     tleft = MAX(0.d0, REAL(imax - 1)*dt)
     tright = MIN(rmax, REAL(imax + 1)*dt)
@@ -760,7 +760,24 @@ CONTAINS
     ENDDO
     CALL this%evaluate_flux(this%r_axis + tm*c, this%z_axis + tm*s, psi, pr, pz)
     fm = signed_span*(psi - psi_level)
-    IF (ABS(fm) <= 1.d-7*ABS(psi_level - this%psi_axis)) THEN
+    IF (fm >= 0.d0) THEN
+       ! A positive peak can hide two crossings between adjacent scan points.
+       ! Recover the first crossing on its axis-facing side.
+       t0 = tleft
+       t1 = tm
+       DO iteration = 1, 60
+          tm = 0.5d0*(t0 + t1)
+          CALL this%evaluate_flux(this%r_axis + tm*c, this%z_axis + tm*s, psi, pr, pz)
+          fm = signed_span*(psi - psi_level)
+          IF (fm >= 0.d0) THEN
+             t1 = tm
+          ELSE
+             t0 = tm
+          ENDIF
+       ENDDO
+       radius = 0.5d0*(t0 + t1)
+       found = .TRUE.
+    ELSEIF (ABS(fm) <= 1.d-7*ABS(psi_level - this%psi_axis)) THEN
        radius = tm
        found = .TRUE.
     ENDIF
