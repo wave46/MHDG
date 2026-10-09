@@ -1,4 +1,4 @@
-"""Exercise production recovery and history projection without a plasma solve.
+"""Exercise production refinement budgets, recovery and history projection without a plasma solve.
 
 Run `make check-divergence-refinement` from lib/. Parallel builds exercise one
 and two MPI ranks with distinct local checkpoint values and shared retry limits.
@@ -29,16 +29,23 @@ def main():
         for command in commands:
             subprocess.run(command, cwd=scratch, env=environment, check=True, timeout=60)
         template = (repository / "test/param_initial.txt").read_text()
-        # Keep the omitted-parameter check when the example declares the limit.
+        # Keep omitted-parameter checks when the example declares both limits.
         template = re.sub(
-            r"(?im)^\s*max_divergence_refinements\s*=.*\n", "", template
+            r"(?im)^\s*max_(?:divergence|oscillation)_refinements\s*=.*\n", "", template
         )
-        for limit in [None, 0, 1, 4, -1]:
+        cases = [({}, None)]
+        for key, limits in [("divergence", [0, 1, 4, -1]), ("oscillation", [0, 1, 10, -1])]:
+            for limit in limits:
+                parameter = f"max_{key}_refinements"
+                cases.append(({parameter: limit}, parameter if limit < 0 else None))
+        cases.append(({"max_divergence_refinements": 2, "max_oscillation_refinements": 6}, None))
+        for overrides, invalid_parameter in cases:
             parameters = template
-            if limit is not None:
+            if overrides:
+                assignments = "\n".join(f"    {key} = {value}" for key, value in overrides.items())
                 parameters, count = re.subn(
                     r"(?im)^(\s*div_adapt\s*=.*)$",
-                    lambda match: f"{match[1]}\n    max_divergence_refinements = {limit}",
+                    lambda match: f"{match[1]}\n{assignments}",
                     parameters,
                 )
                 assert count == 1
@@ -46,14 +53,17 @@ def main():
             run = subprocess.run([str(executable), "1", "input"], cwd=scratch,
                                  env=environment, text=True, capture_output=True, timeout=20)
             output = run.stdout + run.stderr
-            if limit == -1:
-                passed = run.returncode != 0 and "max_divergence_refinements must be nonnegative" in output
+            if invalid_parameter:
+                passed = run.returncode != 0 and f"{invalid_parameter} must be nonnegative" in output
             else:
-                expected = 2 if limit is None else limit
-                passed = run.returncode == 0 and f"DIV_REFINEMENT_LIMIT {expected}\n" in output
+                expected_div = overrides.get("max_divergence_refinements", 4)
+                expected_osc = overrides.get("max_oscillation_refinements", 10)
+                passed = (run.returncode == 0
+                          and f"DIV_REFINEMENT_LIMIT {expected_div}\n" in output
+                          and f"OSC_REFINEMENT_LIMIT {expected_osc}\n" in output)
             if not passed:
-                raise SystemExit(f"FAIL: divergence refinement input limit={limit}\n{output}")
-        print("Divergence refinement input checks: default, 0/1/4 overrides, negative rejection PASS")
+                raise SystemExit(f"FAIL: refinement input overrides={overrides}\n{output}")
+        print("Refinement input checks: defaults, independent/combined overrides, zero limits, negative rejection PASS")
 
 
 if __name__ == "__main__":

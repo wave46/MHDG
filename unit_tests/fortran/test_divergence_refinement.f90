@@ -1,9 +1,9 @@
 PROGRAM test_divergence_refinement
-  USE Main_utils, ONLY: reset_divergence_refinement, prepare_divergence_refinement, newton_refinement_required, &
+  USE Main_utils, ONLY: reset_newton_refinements, prepare_divergence_refinement, newton_refinement_required, &
        update_uiter_qiter_best, &
        physical_solution_is_admissible, update_best_newton_checkpoint, seed_divergence_checkpoint, &
        divergence_checkpoint_available, errNR_adapt, ir_adapt, &
-       uiter_best, qiter_best, divergence_refinements, &
+       uiter_best, qiter_best, divergence_refinements, oscillation_refinements, prepare_oscillation_refinement, &
        project_u0_newmesh, Mesh_prec, ir
   USE globals
   USE MPI_OMP, ONLY: MPIvar
@@ -28,10 +28,12 @@ PROGRAM test_divergence_refinement
   IF (mode_argument == 'input') THEN
     CALL read_input()
     WRITE(*,'(A,1X,I0)') 'DIV_REFINEMENT_LIMIT',adapt%max_divergence_refinements
+    WRITE(*,'(A,1X,I0)') 'OSC_REFINEMENT_LIMIT',adapt%max_oscillation_refinements
     CALL MPI_FINALIZE(ierr_test)
     STOP
   ENDIF
-  IF (adapt%max_divergence_refinements /= 2) ERROR STOP 'default divergence refinement limit'
+  IF (adapt%max_divergence_refinements /= 4) ERROR STOP 'default divergence refinement limit'
+  IF (adapt%max_oscillation_refinements /= 10) ERROR STOP 'default oscillation refinement limit'
   utils%printint = 0
   phys%neq = 2
   phys%idx_rhon_eq = -1
@@ -67,7 +69,7 @@ PROGRAM test_divergence_refinement
   IF (newton_refinement_required(0.5d0*numer%tNR,.FALSE.,1)) ERROR STOP 'physical recovery enabled with adaptation off'
   IF (newton_refinement_required(0.1d0,.FALSE.,numer%nrp)) ERROR STOP 'NR-limit recovery enabled with adaptation off'
   IF (.NOT. newton_refinement_required(2.d0*numer%div,.TRUE.,1)) ERROR STOP 'inactive divergence stop changed'
-  CALL reset_divergence_refinement()
+  CALL reset_newton_refinements()
   IF (prepare_divergence_refinement()) ERROR STOP 'recovery enabled with adaptation off'
   adapt%adaptivity = .TRUE.
   adapt%div_adapt = .FALSE.
@@ -82,7 +84,7 @@ PROGRAM test_divergence_refinement
   IF (.NOT. newton_refinement_required(0.1d0,.FALSE.,numer%nrp)) ERROR STOP 'invalid NR-limit state did not request refinement'
   IF (newton_refinement_required(0.1d0,.TRUE.,numer%nrp)) ERROR STOP 'admissible NR-limit behavior changed'
   IF (.NOT. newton_refinement_required(2.d0*numer%div,.FALSE.,1)) ERROR STOP 'active divergence trigger changed'
-  CALL reset_divergence_refinement()
+  CALL reset_newton_refinements()
   best_u = [10.d0,20.d0]+MPIvar%glob_id
   best_q = [30.d0,40.d0,50.d0,60.d0]+MPIvar%glob_id
   CALL update_uiter_qiter_best(uiter_best,qiter_best,best_u,best_q)
@@ -97,7 +99,7 @@ PROGRAM test_divergence_refinement
     CASE(3)
       adapt%max_divergence_refinements = 4
     END SELECT
-    CALL reset_divergence_refinement()
+    CALL reset_newton_refinements()
     CALL update_uiter_qiter_best(uiter_best,qiter_best,best_u,best_q)
     DO j = 1,adapt%max_divergence_refinements
       sol%u = 9.d30
@@ -118,11 +120,12 @@ PROGRAM test_divergence_refinement
   ! A fresh timestep resets the budget AND the fallback solution.
   sol%u = [71.d0,72.d0]
   sol%q = [73.d0,74.d0,75.d0,76.d0]
-  CALL reset_divergence_refinement()
+  CALL reset_newton_refinements()
   sol%u = 9.d30
   IF (.NOT. prepare_divergence_refinement()) ERROR STOP 'new timestep budget not reset'
   IF (ANY(sol%u /= [71.d0,72.d0])) ERROR STOP 'old timestep fallback retained'
 
+  CALL check_refinement_budgets()
   CALL assert_physical_state_unchanged()
   DEALLOCATE(sol%u,sol%q,sol%u_conv,sol%q_conv,sol%u0,uiter_best,qiter_best)
   NULLIFY(uiter_best,qiter_best)
@@ -216,6 +219,59 @@ PROGRAM test_divergence_refinement
 
 CONTAINS
 
+  SUBROUTINE check_refinement_budgets()
+    INTEGER :: attempt
+    adapt%adaptivity = .TRUE.
+    adapt%div_adapt = .TRUE.
+    adapt%osc_adapt = .TRUE.
+    adapt%max_divergence_refinements = 2
+    adapt%max_oscillation_refinements = 2
+    CALL reset_newton_refinements()
+    ! Alternate both triggers, as can happen within one ME timestep. The
+    ! post-projection checkpoint reseed and NR restart must retain both budgets.
+    DO attempt = 1,2
+       ir = 1
+       IF (.NOT. prepare_oscillation_refinement()) ERROR STOP 'allowed oscillation refinement rejected'
+       IF (oscillation_refinements /= attempt .OR. divergence_refinements /= attempt-1) &
+            ERROR STOP 'oscillation refinement altered divergence budget'
+       IF (.NOT. prepare_divergence_refinement()) ERROR STOP 'alternating divergence refinement rejected'
+       CALL seed_divergence_checkpoint()
+       IF (oscillation_refinements /= attempt .OR. divergence_refinements /= attempt) &
+            ERROR STOP 'remesh checkpoint reseed reset refinement budgets'
+       CALL assert_physical_state_unchanged()
+    ENDDO
+    IF (prepare_oscillation_refinement()) ERROR STOP 'unbounded oscillation refinement'
+    IF (prepare_divergence_refinement()) ERROR STOP 'alternating triggers bypassed divergence cap'
+    IF (oscillation_refinements /= 2 .OR. divergence_refinements /= 2) &
+         ERROR STOP 'exhausted requests changed counters'
+    ! With divergence recovery off, oscillation recovery still has its own
+    ! budget. Ten requests fit; the next is rejected without consuming a retry.
+    adapt%div_adapt = .FALSE.
+    adapt%max_oscillation_refinements = 10
+    CALL reset_newton_refinements()
+    IF (oscillation_refinements /= 0 .OR. divergence_refinements /= 0) &
+         ERROR STOP 'next timestep did not reset both budgets'
+    DO attempt = 1,10
+       IF (.NOT. prepare_oscillation_refinement()) ERROR STOP 'new timestep oscillation budget not available'
+    ENDDO
+    IF (prepare_oscillation_refinement()) ERROR STOP 'default oscillation cap not enforced'
+    IF (oscillation_refinements /= 10 .OR. divergence_refinements /= 0) &
+         ERROR STOP 'oscillation-only budget accounting'
+    adapt%max_oscillation_refinements = 0
+    CALL reset_newton_refinements()
+    IF (prepare_oscillation_refinement()) ERROR STOP 'zero oscillation cap allowed a retry'
+    adapt%max_oscillation_refinements = 10
+    adapt%osc_adapt = .FALSE.
+    IF (prepare_oscillation_refinement()) ERROR STOP 'oscillation retry enabled with osc_adapt off'
+    adapt%osc_adapt = .TRUE.
+    adapt%adaptivity = .FALSE.
+    IF (prepare_oscillation_refinement()) ERROR STOP 'oscillation retry enabled with adaptation off'
+    IF (oscillation_refinements /= 0) ERROR STOP 'disabled oscillator consumed a retry'
+    adapt%adaptivity = .TRUE.
+    adapt%div_adapt = .TRUE.
+    CALL assert_physical_state_unchanged()
+  END SUBROUTINE check_refinement_budgets
+
   SUBROUTINE check_oscillation_checkpoint_selection()
     TYPE(Mesh_type) :: checkpoint_mesh
     REAL*8, ALLOCATABLE :: oscillations(:)
@@ -295,7 +351,7 @@ CONTAINS
     sol%u = admissible_u
     sol%q = 0.1d0
     adapt%max_divergence_refinements = 3
-    CALL reset_divergence_refinement()
+    CALL reset_newton_refinements()
     IF (.NOT. divergence_checkpoint_available) ERROR STOP 'admissible initial fallback rejected'
     valid = physical_solution_is_admissible(sol%u)
     updated = update_best_newton_checkpoint(0.3d0,8,valid)

@@ -29,7 +29,7 @@ SUBROUTINE READ_input()
   INTEGER               :: balance_diagnostics_mode_id
   INTEGER               :: nts, tsw, freqdisp, freqsave, shockcp, limrho
   INTEGER               :: shockcp_adapt, evaluator, difference, freq_t_adapt,freq_NR_adapt, quant_ind
-  INTEGER               :: max_divergence_refinements
+  INTEGER               :: max_divergence_refinements, max_oscillation_refinements
   INTEGER,ALLOCATABLE,DIMENSION(:) :: n_quant_ind,param_est
   INTEGER               :: num_param_est, num_n_quant_ind
   REAL*8                :: thr_ind, tol_est, osc_tol, osc_check
@@ -114,7 +114,7 @@ SUBROUTINE READ_input()
        & neutral_wall_sources_in_elements,neutral_flux_limiter_save_2d
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path, impurity_model_path
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump,neutralp_lambda
-  NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, max_divergence_refinements, rest_adapt, osc_adapt, osc_tol, osc_check, geometry_path
+  NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, max_divergence_refinements, rest_adapt, osc_adapt, max_oscillation_refinements, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
@@ -147,7 +147,8 @@ SUBROUTINE READ_input()
   ALLOCATE(n_quant_ind(1000))
   param_est = -1
   n_quant_ind = -1
-  max_divergence_refinements = 2
+  max_divergence_refinements = 4
+  max_oscillation_refinements = 10
   compute_from_flux = .TRUE.
   divide_by_2pi = .FALSE.
   tau = 1.d0
@@ -474,6 +475,10 @@ SUBROUTINE READ_input()
   adapt%max_divergence_refinements = max_divergence_refinements
   adapt%rest_adapt        = rest_adapt
   adapt%osc_adapt         = osc_adapt
+  IF (max_oscillation_refinements .LT. 0) THEN
+     ERROR STOP 'max_oscillation_refinements must be nonnegative (0 allows no oscillation retries)'
+  ENDIF
+  adapt%max_oscillation_refinements = max_oscillation_refinements
   adapt%osc_tol           = osc_tol
   adapt%osc_check         = osc_check
 
@@ -904,6 +909,7 @@ SUBROUTINE READ_input()
         PRINT *, '                - maximum divergence refinements per timestep:         ', adapt%max_divergence_refinements
         PRINT *, '                - restart adaptivity:                                  ', adapt%rest_adapt
         PRINT *, '                - oscillations on the solution adaptivity:             ', adapt%osc_adapt
+        PRINT *, '                - maximum oscillation refinements per timestep:        ', adapt%max_oscillation_refinements
         PRINT *, '                - oscillations tollerance adaptivity:                  ', adapt%osc_tol
         PRINT *, '                - threshold oscillations for saving checkpoint:        ', adapt%osc_check
 

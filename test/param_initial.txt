@@ -153,9 +153,10 @@
     freq_t_adapt	= 1		! Frequency of time refinement, only if time_adapt = .true.
     freq_NR_adapt	= 5		! Frequency of NR refinement, only if NR_adapt = .true.
     div_adapt		= .false.	! Refine if NR diverges
-    max_divergence_refinements = 2       ! Maximum divergence refinements per timestep; 0 disables retries
+    max_divergence_refinements = 4       ! Maximum divergence refinements per timestep; 0 disables retries
     rest_adapt		= .true.	! Call adaptivity at the very beginning, only for restart simulations
     osc_adapt		= .true.	! Refine if oscillations are higher than threshold
+    max_oscillation_refinements = 10    ! Maximum oscillation refinements per timestep; 0 allows no retries
     osc_tol		= -2.		! Refine if oscillations are higher than this threshold, only if osc_adapt = .true.
     osc_check		= -3.		! Save the solution as checkpoint if the maximum value of oscillations are lower than this threshold (-100 for no oscillations at all)
     geometry_path	= '/path/to/geo/file/from/gmsh/geometry.geo'

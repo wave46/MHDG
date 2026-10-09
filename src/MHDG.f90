@@ -224,7 +224,7 @@ PROGRAM MHDG
 
      ! if a new time step starts, it means that the solution converged sol%u_conv = sol%u, sol%q_conv = sol%q
      CALL update_uconv_qconv(sol%u, sol%q)
-     CALL reset_divergence_refinement()
+     CALL reset_newton_refinements()
 
      ! Actualization of time
      time%t = time%t + time%dt
@@ -380,6 +380,9 @@ PROGRAM MHDG
               ELSE
                  WRITE(*,*) 'NR refinement recovery stopped: per-timestep refinement limit reached: ', &
                       adapt%max_divergence_refinements
+                 WRITE(*,*) 'Timestep: ', time%it, ' NR iteration: ', ir, ' max oscillation: ', max_osc
+                 WRITE(*,*) 'Divergence refinements: ', divergence_refinements, ' oscillation refinements: ', &
+                      oscillation_refinements
               ENDIF
            ENDIF
            WRITE (6, *) 'Problem in the N-R procedure'
@@ -404,6 +407,25 @@ PROGRAM MHDG
 
            ! Call adaptivity if one of the following conditions is respected
            IF ((adapt%adaptivity) .AND. ((adapt%osc_adapt .AND. (max_osc .GT. adapt%osc_tol)) .OR. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)))) THEN !  .or. (flag)) THEN
+
+              IF (adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol) THEN
+                 IF (.NOT. prepare_oscillation_refinement()) THEN
+                    IF (MPIvar%glob_id .EQ. 0) THEN
+                       WRITE(*,*) 'Oscillation refinement stopped: per-timestep refinement limit reached: ', &
+                            adapt%max_oscillation_refinements
+                       WRITE(*,*) 'Timestep: ', time%it, ' NR iteration: ', ir, ' max oscillation: ', max_osc
+                       WRITE(*,*) 'Divergence refinements: ', divergence_refinements, ' oscillation refinements: ', &
+                            oscillation_refinements
+                       FLUSH(6)
+                    ENDIF
+#ifdef PARALL
+                    CALL MPI_ABORT(MPI_COMM_WORLD,1,IERR)
+#endif
+                    ERROR STOP 'Oscillation refinement budget exhausted'
+                 ENDIF
+                 IF (MPIvar%glob_id .EQ. 0) WRITE(*,*) 'Oscillation refinement: retry ', &
+                      oscillation_refinements, ' of ', adapt%max_oscillation_refinements
+              ENDIF
 
               IF (switch%ME .EQV. .TRUE.) THEN
                time%it=time%it-1

@@ -38,6 +38,7 @@ MODULE Main_utils
   INTEGER                      :: Np, Nel, Nfp, Nf, Ndim, Nthreads
   INTEGER                      :: it, ir, ir_check, it0, nts, nu, nut, nb_args, IERR, k, i,is, count_adapt = 0, ir_adapt = 0, checkpoint = 1, divergence_counter_adapt = 0, convergence_counter = 1, order
   INTEGER                      :: divergence_refinements = 0
+  INTEGER                      :: oscillation_refinements = 0
   LOGICAL                      :: divergence_checkpoint_available = .FALSE.
   LOGICAL                      :: physical_iterate_valid = .TRUE.
 
@@ -722,12 +723,21 @@ CONTAINS
     updated = .TRUE.
   END FUNCTION update_best_newton_checkpoint
 
-  SUBROUTINE reset_divergence_refinement()
+  SUBROUTINE reset_newton_refinements()
     divergence_refinements = 0
+    oscillation_refinements = 0
     divergence_checkpoint_available = .FALSE.
     ! Seed this timestep's fallback; reseeding after remeshing retains the budget.
     CALL seed_divergence_checkpoint()
-  ENDSUBROUTINE reset_divergence_refinement
+  ENDSUBROUTINE reset_newton_refinements
+
+  LOGICAL FUNCTION prepare_oscillation_refinement() RESULT(prepared)
+    prepared = .FALSE.
+    IF (.NOT. (adapt%adaptivity .AND. adapt%osc_adapt)) RETURN
+    IF (oscillation_refinements .GE. adapt%max_oscillation_refinements) RETURN
+    oscillation_refinements = oscillation_refinements + 1
+    prepared = .TRUE.
+  END FUNCTION prepare_oscillation_refinement
 
   LOGICAL FUNCTION newton_refinement_required(error,admissible,iteration) RESULT(required)
     REAL*8, INTENT(IN) :: error
