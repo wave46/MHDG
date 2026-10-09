@@ -77,7 +77,7 @@ PROGRAM test_adaptivity_estimator
 
   ! The production estimator receives X in metres and q with respect to x/L.
   ! This varying density with constant primitive velocity/temperatures is
-  ! exactly reconstructible; all requested fields must permit the 10 cm cap.
+  ! exactly reconstructible; all requested fields must permit the 20 cm cap.
   phys%neq = 5
   phys%npv = 11
   phys%Mref = 12.d0
@@ -115,9 +115,9 @@ PROGRAM test_adaptivity_estimator
       adapt%difference = norm_case
       CALL apply_estimator(h,4,target)
       IF (.NOT. ALL(ieee_is_finite(target))) ERROR STOP 'nonfinite estimator target'
-      IF (ABS(target(1)-0.1d0) > 1.d-12) THEN
+      IF (ABS(target(1)-0.2d0) > 1.d-12) THEN
         WRITE(*,*) 'Affine target failed: length scale=',scale,' difference=',norm_case,' target=',target
-        ERROR STOP 'estimator length-unit consistency and 10 cm cap'
+        ERROR STOP 'estimator length-unit consistency and 20 cm cap'
       ENDIF
       IF (ANY(sol%q /= saved_gradient)) ERROR STOP 'estimator changed stored solver gradients'
     END DO

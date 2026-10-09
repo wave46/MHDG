@@ -25,7 +25,7 @@ CONTAINS
       INTEGER             :: i
 
       ALLOCATE(error_L2(SIZE(Mesh%T,1)))
-      h_target_elements = 0.1
+      h_target_elements = 0.2 ! Maximum estimator target size in metres.
 
 
       ! Adaptation supplies coordinates in metres, but sol%q differentiates
