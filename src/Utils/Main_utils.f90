@@ -31,12 +31,15 @@ MODULE Main_utils
   USE flux_surface_transport_data
   USE transport_models_1d
   USE residual_norm_module, ONLY: computeResidual
+  USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
 
   IMPLICIT NONE
 
   INTEGER                      :: Np, Nel, Nfp, Nf, Ndim, Nthreads
   INTEGER                      :: it, ir, ir_check, it0, nts, nu, nut, nb_args, IERR, k, i,is, count_adapt = 0, ir_adapt = 0, checkpoint = 1, divergence_counter_adapt = 0, convergence_counter = 1, order
   INTEGER                      :: divergence_refinements = 0
+  LOGICAL                      :: divergence_checkpoint_available = .FALSE.
+  LOGICAL                      :: physical_iterate_valid = .TRUE.
 
   LOGICAL, ALLOCATABLE         :: mkelms(:)
   REAL*8                       :: dt, dt0, errNR, errNR_adapt, errlstime
@@ -353,10 +356,7 @@ CONTAINS
 
     !! UPDATE VARIABLES
     errNR_adapt = 1e10
-    IF (adapt%adaptivity .AND. adapt%div_adapt) THEN
-       CALL update_uiter_qiter_best(uiter_best, qiter_best, sol%u, sol%q)
-       ir_adapt = 0
-    ENDIF
+    CALL seed_divergence_checkpoint()
     IF(restart_adapt) THEN
        time%t = time%t - time%dt
        time%it = time%it - 1
@@ -636,26 +636,122 @@ CONTAINS
     qiter_best = q
   ENDSUBROUTINE update_uiter_qiter_best
 
+  LOGICAL FUNCTION physical_solution_is_admissible(u) RESULT(valid)
+    REAL*8, INTENT(IN) :: u(:)
+    INTEGER :: point, element, offset, nodes_per_element
+#ifdef PARALL
+    INTEGER :: ierr_valid
+#endif
+#ifdef TEMPERATURE
+    REAL*8 :: kinetic, thermal, roundoff
+#endif
+
+    valid = .TRUE.
+    nodes_per_element = Mesh%Nnodesperelem
+#ifdef TOR3D
+    nodes_per_element = refElTor%Nnodes3D
+#endif
+    DO point = 1, SIZE(u)/phys%neq
+#ifdef PARALL
+       ! Evaluate owned values once; stale ghost copies do not select a checkpoint.
+       element = MOD((point-1)/nodes_per_element,Mesh%Nelems)+1
+       IF (Mesh%ghostElems(element) .NE. 0) CYCLE
+#endif
+       offset = (point-1)*phys%neq
+       IF (.NOT. ALL(ieee_is_finite(u(offset+1:offset+phys%neq)))) THEN
+          valid = .FALSE.
+          EXIT
+       ENDIF
+#ifdef NGAMMA
+       IF (.NOT. (u(offset+1) .GT. 0.d0)) THEN
+          valid = .FALSE.
+          EXIT
+       ENDIF
+#endif
+#ifdef TEMPERATURE
+       IF (phys%neq .GE. 4) THEN
+          ! Raw thermal energies, before cons2phys clips density/temperature.
+          kinetic = 0.5d0*u(offset+2)*(u(offset+2)/u(offset+1))
+          thermal = u(offset+3)-kinetic
+          roundoff = 64.d0*EPSILON(1.d0)*MAX(ABS(u(offset+3)),ABS(kinetic))
+          IF (.NOT. ieee_is_finite(kinetic) .OR. .NOT. (thermal .GE. -roundoff) .OR. &
+              .NOT. (u(offset+4) .GE. 0.d0)) THEN
+             valid = .FALSE.
+             EXIT
+          ENDIF
+       ENDIF
+#endif
+#ifdef NEUTRAL
+       IF (phys%idx_rhon_eq .GT. 0 .AND. phys%idx_rhon_eq .LE. phys%neq) THEN
+          IF (.NOT. (u(offset+phys%idx_rhon_eq) .GE. 0.d0)) THEN
+             valid = .FALSE.
+             EXIT
+          ENDIF
+       ENDIF
+#endif
+    ENDDO
+#ifdef PARALL
+    ! Physical admissibility is local, unlike the already global NR error.
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE,valid,1,MPI_LOGICAL,MPI_LAND,MPI_COMM_WORLD,ierr_valid)
+#endif
+  END FUNCTION physical_solution_is_admissible
+
+  SUBROUTINE seed_divergence_checkpoint()
+    IF (.NOT. (adapt%adaptivity .AND. adapt%div_adapt)) RETURN
+    divergence_checkpoint_available = physical_solution_is_admissible(sol%u)
+    physical_iterate_valid = divergence_checkpoint_available
+    errNR_adapt = HUGE(1.d0)
+    ir_adapt = 0
+    IF (divergence_checkpoint_available) THEN
+       CALL update_uiter_qiter_best(uiter_best,qiter_best,sol%u,sol%q)
+    ELSEIF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE(*,*) 'Recovery checkpoint unavailable: initial/projected state is not physically admissible.'
+    ENDIF
+  END SUBROUTINE seed_divergence_checkpoint
+
+  LOGICAL FUNCTION update_best_newton_checkpoint(error,iteration,admissible) RESULT(updated)
+    REAL*8, INTENT(IN) :: error
+    INTEGER, INTENT(IN) :: iteration
+    LOGICAL, INTENT(IN) :: admissible
+    updated = .FALSE.
+    IF (.NOT. (admissible .AND. error .LT. errNR_adapt)) RETURN
+    errNR_adapt = error
+    ir_adapt = iteration
+    CALL update_uiter_qiter_best(uiter_best,qiter_best,sol%u,sol%q)
+    IF (adapt%adaptivity .AND. adapt%div_adapt) divergence_checkpoint_available = .TRUE.
+    updated = .TRUE.
+  END FUNCTION update_best_newton_checkpoint
+
   SUBROUTINE reset_divergence_refinement()
     divergence_refinements = 0
-    IF (adapt%adaptivity .AND. adapt%div_adapt) THEN
-       ! A first-iteration failure can recover from this timestep's initial
-       ! solution, rather than an iterate retained from the preceding timestep.
-       CALL update_uiter_qiter_best(uiter_best, qiter_best, sol%u, sol%q)
-       errNR_adapt = 1e10
-       ir_adapt = 0
-    ENDIF
+    divergence_checkpoint_available = .FALSE.
+    ! Seed this timestep's fallback; reseeding after remeshing retains the budget.
+    CALL seed_divergence_checkpoint()
   ENDSUBROUTINE reset_divergence_refinement
+
+  LOGICAL FUNCTION newton_refinement_required(error,admissible,iteration) RESULT(required)
+    REAL*8, INTENT(IN) :: error
+    LOGICAL, INTENT(IN) :: admissible
+    INTEGER, INTENT(IN) :: iteration
+    ! Preserve the existing divergence stop when recovery is disabled. Under
+    ! active recovery, an invalid state retries at convergence or the NR limit.
+    required = error .GT. numer%div
+    IF (adapt%adaptivity .AND. adapt%div_adapt) THEN
+       required = required .OR. (.NOT. admissible .AND. &
+            (error .LT. numer%tNR .OR. iteration .GE. numer%nrp))
+    ENDIF
+  END FUNCTION newton_refinement_required
 
   LOGICAL FUNCTION prepare_divergence_refinement() RESULT(prepared)
     prepared = .FALSE.
     IF (.NOT. (adapt%adaptivity .AND. adapt%div_adapt)) RETURN
     IF (divergence_refinements .GE. adapt%max_divergence_refinements) RETURN
+    IF (.NOT. divergence_checkpoint_available) RETURN
 
     ! The global NR error and shared retry count select the same recovery path
     ! on every rank. Initialization and adaptation maintain the local buffers.
     divergence_refinements = divergence_refinements + 1
-    ! Estimate/refine from the saved best iterate, never the divergent update.
+    ! Estimate/refine from the best physically admissible iterate.
     ! Time history and feedback state stay intact for the same timestep.
     sol%u = uiter_best
     sol%q = qiter_best

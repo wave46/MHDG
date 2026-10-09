@@ -1,11 +1,14 @@
 PROGRAM test_divergence_refinement
-  USE Main_utils, ONLY: reset_divergence_refinement, prepare_divergence_refinement, &
+  USE Main_utils, ONLY: reset_divergence_refinement, prepare_divergence_refinement, newton_refinement_required, &
        update_uiter_qiter_best, &
+       physical_solution_is_admissible, update_best_newton_checkpoint, seed_divergence_checkpoint, &
+       divergence_checkpoint_available, errNR_adapt, ir_adapt, &
        uiter_best, qiter_best, divergence_refinements, &
        project_u0_newmesh, Mesh_prec, ir
   USE globals
   USE MPI_OMP, ONLY: MPIvar
   USE reference_element, ONLY: create_reference_element, free_reference_element_pol
+  USE adaptivity_indicator_module, ONLY: compute_error_oscillations
   USE mpi, ONLY: MPI_INIT, MPI_FINALIZE, MPI_COMM_RANK, MPI_COMM_SIZE, MPI_COMM_WORLD
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   IMPLICIT NONE
@@ -30,6 +33,14 @@ PROGRAM test_divergence_refinement
   ENDIF
   IF (adapt%max_divergence_refinements /= 2) ERROR STOP 'default divergence refinement limit'
   utils%printint = 0
+  phys%neq = 2
+  phys%idx_rhon_eq = -1
+  Mesh%Nelems = 1
+  Mesh%Nnodesperelem = 1
+#ifdef PARALL
+  ALLOCATE(Mesh%ghostElems(1))
+  Mesh%ghostElems = 0
+#endif
   ALLOCATE(sol%u(2),sol%q(4),sol%u_conv(2),sol%q_conv(4),sol%u0(2,3))
   sol%u = [1.d0,2.d0]
   sol%q = [3.d0,4.d0,5.d0,6.d0]
@@ -47,16 +58,30 @@ PROGRAM test_divergence_refinement
   phys%feedback_integral_error = 123.d0
   phys%feedback_previous_error = 321.d0
   adapt%osc_check = -3.d0
+  numer%tNR = 1.d-4
+  numer%div = 1.d3
+  numer%nrp = 12
 
   adapt%adaptivity = .FALSE.
   adapt%div_adapt = .TRUE.
+  IF (newton_refinement_required(0.5d0*numer%tNR,.FALSE.,1)) ERROR STOP 'physical recovery enabled with adaptation off'
+  IF (newton_refinement_required(0.1d0,.FALSE.,numer%nrp)) ERROR STOP 'NR-limit recovery enabled with adaptation off'
+  IF (.NOT. newton_refinement_required(2.d0*numer%div,.TRUE.,1)) ERROR STOP 'inactive divergence stop changed'
   CALL reset_divergence_refinement()
   IF (prepare_divergence_refinement()) ERROR STOP 'recovery enabled with adaptation off'
   adapt%adaptivity = .TRUE.
   adapt%div_adapt = .FALSE.
+  IF (newton_refinement_required(0.5d0*numer%tNR,.FALSE.,1)) ERROR STOP 'physical recovery enabled with div_adapt off'
+  IF (newton_refinement_required(0.1d0,.FALSE.,numer%nrp)) ERROR STOP 'NR-limit recovery enabled with div_adapt off'
   IF (prepare_divergence_refinement()) ERROR STOP 'recovery enabled with div_adapt off'
 
   adapt%div_adapt = .TRUE.
+  IF (newton_refinement_required(0.5d0*numer%tNR,.TRUE.,1)) ERROR STOP 'admissible convergence requested refinement'
+  IF (newton_refinement_required(0.1d0,.FALSE.,numer%nrp-1)) ERROR STOP 'transient negative iterate requested refinement'
+  IF (newton_refinement_required(numer%tNR,.FALSE.,1)) ERROR STOP 'physical convergence boundary changed'
+  IF (.NOT. newton_refinement_required(0.1d0,.FALSE.,numer%nrp)) ERROR STOP 'invalid NR-limit state did not request refinement'
+  IF (newton_refinement_required(0.1d0,.TRUE.,numer%nrp)) ERROR STOP 'admissible NR-limit behavior changed'
+  IF (.NOT. newton_refinement_required(2.d0*numer%div,.FALSE.,1)) ERROR STOP 'active divergence trigger changed'
   CALL reset_divergence_refinement()
   best_u = [10.d0,20.d0]+MPIvar%glob_id
   best_q = [30.d0,40.d0,50.d0,60.d0]+MPIvar%glob_id
@@ -101,6 +126,13 @@ PROGRAM test_divergence_refinement
   CALL assert_physical_state_unchanged()
   DEALLOCATE(sol%u,sol%q,sol%u_conv,sol%q_conv,sol%u0,uiter_best,qiter_best)
   NULLIFY(uiter_best,qiter_best)
+#ifdef PARALL
+  DEALLOCATE(Mesh%ghostElems)
+#endif
+#if defined(NGAMMA) && defined(TEMPERATURE) && defined(NEUTRAL)
+  CALL check_physical_checkpoint_selection()
+  CALL check_oscillation_checkpoint_selection()
+#endif
 
   ! Exercise production history projection on a split affine triangle. This
   ! performs interpolation and MPI gathering, without Gmsh or a plasma solve.
@@ -183,6 +215,188 @@ PROGRAM test_divergence_refinement
   CALL MPI_FINALIZE(ierr_test)
 
 CONTAINS
+
+  SUBROUTINE check_oscillation_checkpoint_selection()
+    TYPE(Mesh_type) :: checkpoint_mesh
+    REAL*8, ALLOCATABLE :: oscillations(:)
+    REAL*8 :: minimum, maximum
+    INTEGER :: n_osc, checkpoint_iteration, point
+    LOGICAL :: allowed
+    Mesh%Ndim = 2
+    Mesh%Nelems = 1
+    Mesh%Nnodes = 3
+    Mesh%Nnodesperelem = 3
+    phys%neq = 5
+    phys%npv = 11
+    phys%Mref = 12.d0
+    phys%idx_rhon_eq = 5
+    phys%idx_rhon_pv = 11
+    utils%timing = .FALSE.
+    adapt%quant_ind = 1
+    adapt%thr_ind = 1.d-5
+    adapt%osc_check = -3.d0
+    ALLOCATE(adapt%n_quant_ind(1))
+    adapt%n_quant_ind = [1]
+#ifdef PARALL
+    ALLOCATE(Mesh%ghostElems(1))
+    Mesh%ghostElems = 0
+#endif
+    CALL create_reference_element(refElPol,2,1,verbose=0)
+    ALLOCATE(sol%u(15),sol%q(30),sol%u_conv(15),sol%q_conv(30))
+    DO point=1,3
+       sol%u((point-1)*5+1:point*5) = [1.d0,0.2d0,2.d0,3.d0,0.01d0]
+    ENDDO
+    sol%q = 0.1d0
+    sol%u_conv = 7.d0
+    sol%q_conv = 8.d0
+    checkpoint_iteration = 7
+    checkpoint_mesh%Nelems = 77
+    ! Smooth density satisfies osc_check, but negative energy on one rank
+    ! must retain the previous checkpoint, its mesh and its iteration.
+    IF (MPIvar%glob_id == MPIvar%glob_size-1) sol%u(4) = -1.d-8
+    allowed = physical_solution_is_admissible(sol%u)
+    CALL compute_error_oscillations(oscillations,minimum,maximum,n_osc,8,checkpoint_iteration, &
+         checkpoint_mesh,checkpoint_allowed=allowed)
+    IF (maximum > adapt%osc_check) ERROR STOP 'checkpoint gate fixture is not smooth'
+    IF (checkpoint_iteration /= 7 .OR. checkpoint_mesh%Nelems /= 77) &
+         ERROR STOP 'rejected checkpoint changed iteration or mesh'
+    IF (ANY(sol%u_conv /= 7.d0) .OR. ANY(sol%q_conv /= 8.d0)) &
+         ERROR STOP 'invalid smooth iterate overwrote oscillation checkpoint'
+    ! Omitting the optional gate retains the existing checkpoint behavior.
+    sol%u(4) = 3.d0
+    CALL compute_error_oscillations(oscillations,minimum,maximum,n_osc,9,checkpoint_iteration,checkpoint_mesh)
+    IF (checkpoint_iteration /= 9 .OR. checkpoint_mesh%Nelems /= Mesh%Nelems) &
+         ERROR STOP 'default oscillation checkpoint behavior changed'
+    IF (ANY(sol%u_conv /= sol%u) .OR. ANY(sol%q_conv /= sol%q)) &
+         ERROR STOP 'default oscillation checkpoint copied wrong state'
+    CALL free_mesh_loc(checkpoint_mesh)
+    CALL free_reference_element_pol(refElPol)
+    DEALLOCATE(oscillations,adapt%n_quant_ind,sol%u,sol%q,sol%u_conv,sol%q_conv)
+#ifdef PARALL
+    DEALLOCATE(Mesh%ghostElems)
+#endif
+  END SUBROUTINE check_oscillation_checkpoint_selection
+
+  SUBROUTINE check_physical_checkpoint_selection()
+    REAL*8 :: admissible_u(10), accepted(10), saved_error, rho, momentum, kinetic
+    LOGICAL :: valid, updated
+    INTEGER :: bad_rank, saved_iteration, retry_count
+    phys%neq = 5
+    phys%idx_rhon_eq = 5
+    Mesh%Nelems = 2
+    Mesh%Nnodesperelem = 1
+#ifdef PARALL
+    ALLOCATE(Mesh%ghostElems(2))
+    Mesh%ghostElems = 0
+#endif
+    ALLOCATE(sol%u(10),sol%q(20),sol%u_conv(10),sol%q_conv(20))
+    admissible_u = [1.d0,0.2d0,2.d0,3.d0,0.01d0, 1.d0,0.1d0,2.d0,3.d0,0.02d0]
+    admissible_u = admissible_u*(1.d0+0.1d0*MPIvar%glob_id)
+    sol%u = admissible_u
+    sol%q = 0.1d0
+    adapt%max_divergence_refinements = 3
+    CALL reset_divergence_refinement()
+    IF (.NOT. divergence_checkpoint_available) ERROR STOP 'admissible initial fallback rejected'
+    valid = physical_solution_is_admissible(sol%u)
+    updated = update_best_newton_checkpoint(0.3d0,8,valid)
+    IF (.NOT. updated) ERROR STOP 'admissible NR 8 not recorded'
+    accepted = sol%u
+    saved_error = errNR_adapt
+    saved_iteration = ir_adapt
+
+    ! Only one rank has negative density: every rank must retain NR 8.
+    bad_rank = MPIvar%glob_size-1
+    IF (MPIvar%glob_id == bad_rank) sol%u(1) = -1.d-4
+    valid = physical_solution_is_admissible(sol%u)
+    IF (valid) ERROR STOP 'rank-local negative density not globally rejected'
+    updated = update_best_newton_checkpoint(0.095d0,10,valid)
+    IF (updated .OR. ANY(uiter_best /= accepted)) ERROR STOP 'invalid lower-error iterate replaced recovery state'
+    IF (errNR_adapt /= saved_error .OR. ir_adapt /= saved_iteration) ERROR STOP 'invalid iterate changed best score/iteration'
+    IF (.NOT. prepare_divergence_refinement()) ERROR STOP 'valid recovery checkpoint lost after bad iterate'
+    IF (ANY(sol%u /= accepted)) ERROR STOP 'recovery did not restore admissible NR 8'
+
+    ! A low residual must not complete a timestep with rank-local negative
+    ! energy. It uses the same checkpoint and budget as the preceding divergence.
+    sol%u = admissible_u
+    IF (MPIvar%glob_id == bad_rank) sol%u(4) = -1.d-8
+    valid = physical_solution_is_admissible(sol%u)
+    IF (.NOT. newton_refinement_required(0.5d0*numer%tNR,valid,11)) &
+         ERROR STOP 'inadmissible low-residual solution did not request refinement'
+    IF (update_best_newton_checkpoint(0.5d0*numer%tNR,11,valid)) &
+         ERROR STOP 'inadmissible low-residual solution replaced checkpoint'
+    IF (.NOT. prepare_divergence_refinement()) ERROR STOP 'physical convergence recovery rejected'
+    IF (ANY(sol%u /= accepted) .OR. ANY(sol%u_conv /= accepted)) &
+         ERROR STOP 'physical convergence recovery restored wrong checkpoint'
+    IF (divergence_refinements /= 2) &
+         ERROR STOP 'physical convergence recovery used a separate budget'
+
+    ! The final NR iterate is still invalid with an unconverged residual.
+    ! Recover before leaving the loop, using the remaining shared retry.
+    sol%u = admissible_u
+    IF (MPIvar%glob_id == bad_rank) sol%u(4) = -1.d-8
+    valid = physical_solution_is_admissible(sol%u)
+    IF (.NOT. newton_refinement_required(0.1d0,valid,numer%nrp)) &
+         ERROR STOP 'inadmissible NR-limit solution did not request refinement'
+    IF (update_best_newton_checkpoint(0.1d0,numer%nrp,valid)) &
+         ERROR STOP 'inadmissible NR-limit solution replaced checkpoint'
+    IF (.NOT. prepare_divergence_refinement()) ERROR STOP 'physical NR-limit recovery rejected'
+    IF (ANY(sol%u /= accepted) .OR. ANY(sol%u_conv /= accepted)) &
+         ERROR STOP 'physical NR-limit recovery restored wrong checkpoint'
+    IF (divergence_refinements /= adapt%max_divergence_refinements) &
+         ERROR STOP 'physical NR-limit recovery used a separate budget'
+    sol%u = admissible_u
+    IF (MPIvar%glob_id == bad_rank) sol%u(4) = -1.d-8
+    valid = physical_solution_is_admissible(sol%u)
+    IF (.NOT. newton_refinement_required(0.5d0*numer%tNR,valid,1)) &
+         ERROR STOP 'invalid convergence accepted after retry limit'
+    IF (prepare_divergence_refinement()) ERROR STOP 'physical convergence bypassed retry limit'
+    IF (.NOT. newton_refinement_required(0.1d0,valid,numer%nrp)) &
+         ERROR STOP 'invalid NR-limit solution accepted after retry limit'
+    IF (prepare_divergence_refinement()) ERROR STOP 'physical NR-limit recovery bypassed retry limit'
+
+    sol%u = admissible_u
+    IF (MPIvar%glob_id == bad_rank) sol%u(4) = -1.d-8
+    IF (physical_solution_is_admissible(sol%u)) ERROR STOP 'negative electron energy accepted'
+    sol%u = admissible_u
+    IF (MPIvar%glob_id == bad_rank) sol%u(3) = 0.d0
+    IF (physical_solution_is_admissible(sol%u)) ERROR STOP 'negative ion internal energy accepted'
+    sol%u = admissible_u
+    IF (MPIvar%glob_id == bad_rank) sol%u(5) = -1.d-8
+    IF (physical_solution_is_admissible(sol%u)) ERROR STOP 'negative neutral density accepted'
+    ! Zero electron/neutral energies and cancellation roundoff are allowed.
+    sol%u = admissible_u
+    rho = sol%u(1);momentum = sol%u(2)
+    kinetic = 0.5d0*momentum*(momentum/rho)
+    sol%u(3) = kinetic*(1.d0-4.d0*EPSILON(1.d0))
+    sol%u(4:5) = 0.d0
+    IF (.NOT. physical_solution_is_admissible(sol%u)) ERROR STOP 'roundoff thermal energy rejected'
+#ifdef PARALL
+    Mesh%ghostElems(2) = 1
+    sol%u(6:10) = -1.d0
+    IF (.NOT. physical_solution_is_admissible(sol%u)) ERROR STOP 'ghost values selected checkpoint validity'
+    Mesh%ghostElems = 0
+#endif
+
+    ! Projection/reinitialization invalidates old-mesh buffers without spending
+    ! another retry. A subsequent good iterate can seed this mesh's checkpoint.
+    sol%u = admissible_u
+    sol%u(1) = -1.d-4
+    retry_count = divergence_refinements
+    CALL seed_divergence_checkpoint()
+    IF (divergence_checkpoint_available) ERROR STOP 'invalid projected fallback accepted'
+    IF (prepare_divergence_refinement()) ERROR STOP 'old-mesh checkpoint used after bad projection'
+    IF (divergence_refinements /= retry_count) ERROR STOP 'unavailable checkpoint spent a retry'
+    sol%u = admissible_u
+    valid = physical_solution_is_admissible(sol%u)
+    IF (.NOT. update_best_newton_checkpoint(0.2d0,3,valid)) ERROR STOP 'good post-projection iterate not accepted'
+    IF (.NOT. divergence_checkpoint_available) ERROR STOP 'checkpoint not restored after valid iterate'
+    DEALLOCATE(sol%u,sol%q,sol%u_conv,sol%q_conv,uiter_best,qiter_best)
+    NULLIFY(uiter_best,qiter_best)
+    adapt%max_divergence_refinements = 2
+#ifdef PARALL
+    DEALLOCATE(Mesh%ghostElems)
+#endif
+  END SUBROUTINE check_physical_checkpoint_selection
 
   SUBROUTINE assert_physical_state_unchanged()
     IF (ANY(sol%u0 /= history)) ERROR STOP 'recovery changed time history'

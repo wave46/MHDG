@@ -107,12 +107,15 @@ CONTAINS
       END DO
   END SUBROUTINE refine_if_neighbors_oscillating
 
-  SUBROUTINE compute_error_oscillations(oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec)
+  SUBROUTINE compute_error_oscillations(oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec, checkpoint_allowed)
     REAL*8, ALLOCATABLE, INTENT(OUT)  :: oscillations(:)
     REAL*8, INTENT(OUT)               :: min_osc, max_osc
     INTEGER, INTENT(IN)               :: ir
-    INTEGER, INTENT(OUT)              :: n_osc,  ir_check
+    INTEGER, INTENT(OUT)              :: n_osc
+    INTEGER, INTENT(INOUT)            :: ir_check ! Retain the previous iteration when no checkpoint is accepted.
     TYPE(Mesh_type), INTENT(INOUT)    :: Mesh_prec
+    LOGICAL, OPTIONAL, INTENT(IN)    :: checkpoint_allowed
+    LOGICAL                         :: allow_checkpoint
 #ifdef PARALL
     INTEGER                           :: ierr
 #endif
@@ -149,7 +152,9 @@ CONTAINS
        WRITE(*,*) "NUMBER OF OSCILLATIONS:      ", n_osc
     ENDIF
 
-    IF(max_osc .LE. adapt%osc_check) THEN
+    allow_checkpoint = .TRUE.
+    IF (PRESENT(checkpoint_allowed)) allow_checkpoint = checkpoint_allowed
+    IF(max_osc .LE. adapt%osc_check .AND. allow_checkpoint) THEN
        IF(MPIvar%glob_id .EQ. 0) THEN
           WRITE(*,*) "Solution saved as checkpoint."
        ENDIF

@@ -297,8 +297,15 @@ PROGRAM MHDG
         ! CALL HDG_FilterSolution()
 
         ! Compute error on oscillations, print max value of oscillation and save solution as check-point if oscillations are lower than threshold
+        physical_iterate_valid = .TRUE.
+        IF (adapt%adaptivity .AND. adapt%div_adapt) THEN
+           physical_iterate_valid = physical_solution_is_admissible(sol%u)
+           IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id .EQ. 0) &
+                WRITE(*,*) 'NR iterate is not physically admissible; recovery checkpoint retained.'
+        ENDIF
         IF (adapt%adaptivity) THEN
-           CALL compute_error_oscillations(oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec)
+           CALL compute_error_oscillations(oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec, &
+                checkpoint_allowed=physical_iterate_valid)
         ENDIF
         ! Save solution
         IF (switch%saveNR) THEN
@@ -321,7 +328,7 @@ PROGRAM MHDG
 #endif
         ENDIF
 
-        IF (errNR .LT. numer%tNR) THEN
+        IF (errNR .LT. numer%tNR .AND. physical_iterate_valid) THEN
            ! The converged iterate is the completed solution checkpoint.
            WRITE(*,*) "Solution saved as checkpoint."
            CALL update_uconv_qconv(sol%u, sol%q)
@@ -331,11 +338,23 @@ PROGRAM MHDG
            CALL free_mesh_loc(Mesh_prec)
            CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
            EXIT
-        ELSEIF (errNR .GT. numer%div) THEN
+        ELSEIF (newton_refinement_required(errNR,physical_iterate_valid,ir)) THEN
+           IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id .EQ. 0) THEN
+              IF (errNR .LT. numer%tNR) THEN
+                 WRITE(*,*) 'NR residual converged, but solution is physically inadmissible; requesting refinement.'
+              ELSEIF (ir .GE. numer%nrp .AND. errNR .LE. numer%div) THEN
+                 WRITE(*,*) 'NR iteration limit reached with physically inadmissible solution; requesting refinement.'
+              ENDIF
+           ENDIF
            IF (prepare_divergence_refinement()) THEN
               IF (MPIvar%glob_id .EQ. 0) THEN
-                 WRITE(*,*) 'NR divergence: refining from best finite iterate; retry ', &
-                      divergence_refinements, ' of ', adapt%max_divergence_refinements
+                 IF (.NOT. physical_iterate_valid .AND. errNR .LE. numer%div) THEN
+                    WRITE(*,*) 'NR physical admissibility recovery: refining from best admissible iterate; retry ', &
+                         divergence_refinements, ' of ', adapt%max_divergence_refinements
+                 ELSE
+                    WRITE(*,*) 'NR divergence: refining from best physically admissible iterate; retry ', &
+                         divergence_refinements, ' of ', adapt%max_divergence_refinements
+                 ENDIF
               ENDIF
               ! Reload this attempt's equilibrium, without advancing the
               ! physical timestep or updating the puff/feedback controller.
@@ -356,25 +375,24 @@ PROGRAM MHDG
               CYCLE
            ENDIF
            IF (adapt%adaptivity .AND. adapt%div_adapt .AND. MPIvar%glob_id .EQ. 0) THEN
-              WRITE(*,*) 'NR divergence recovery stopped: per-timestep refinement limit reached: ', &
-                   adapt%max_divergence_refinements
+              IF (.NOT. divergence_checkpoint_available) THEN
+                 WRITE(*,*) 'NR refinement recovery stopped: no physically admissible checkpoint on this mesh.'
+              ELSE
+                 WRITE(*,*) 'NR refinement recovery stopped: per-timestep refinement limit reached: ', &
+                      adapt%max_divergence_refinements
+              ENDIF
            ENDIF
            WRITE (6, *) 'Problem in the N-R procedure'
            STOP
         ELSE
            uiter = sol%u
            !! ADAPTIVITY
-           IF(errNR .LT. errNR_adapt) THEN
-
-              errNR_adapt = errNR
-              ir_adapt = ir
-
+           IF(update_best_newton_checkpoint(errNR,ir,physical_iterate_valid)) THEN
               ! if the NR is the lowest reached so far, then save it as best check-point
               IF (MPIvar%glob_id .EQ. 0) THEN
                  WRITE(*,*) "Solution saved as last checkpoint."
               ENDIF
 
-              CALL update_uiter_qiter_best(uiter_best, qiter_best, sol%u, sol%q)
               divergence_counter_adapt = 0
            ELSEIF(errNR .GT. errNR_adapt) THEN
               divergence_counter_adapt = divergence_counter_adapt + 1
