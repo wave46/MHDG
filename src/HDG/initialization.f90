@@ -841,7 +841,7 @@ CONTAINS
 #ifdef WITH_PETSC
   SUBROUTINE InitPETSC
 #include "petsc/finclude/petsc.h"
-    USE petsc, ONLY: PetscInitialize, PetscInitialized
+    USE petsc, ONLY: PetscInitializeNoArguments, PetscInitialized
     !use petscsys
     USE MPI_OMP
     IMPLICIT NONE
