@@ -142,8 +142,10 @@ CONTAINS
       REAL*8, PARAMETER :: tol = 1.0E-10
       
       h_target_elements = h_target_elements_est
+      ! An inactive indicator returns the current size: retain estimator
+      ! coarsening there. When it requests refinement, use the smaller target.
       WHERE(ABS(h_target_elements_ind-h_map_elements) .GT. tol)
-         h_target_elements = h_target_elements_ind
+         h_target_elements = MIN(h_target_elements_est,h_target_elements_ind)
       END WHERE
    ENDSUBROUTINE combine_h_target_ind_est
 

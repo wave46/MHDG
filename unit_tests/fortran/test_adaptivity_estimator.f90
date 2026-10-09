@@ -3,6 +3,7 @@ PROGRAM test_adaptivity_estimator
   USE MPI_OMP, ONLY: MPIvar
   USE reference_element, ONLY: create_reference_element, free_reference_element_pol
   USE adaptivity_estimator_module, ONLY: hdg_post_process_matrix, hdg_postprocess_solution, apply_estimator
+  USE adaptivity_common_module, ONLY: combine_h_target_ind_est
   USE mpi, ONLY: MPI_INIT, MPI_FINALIZE, MPI_COMM_RANK, MPI_COMM_SIZE, MPI_COMM_WORLD
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   IMPLICIT NONE
@@ -12,6 +13,7 @@ PROGRAM test_adaptivity_estimator
   REAL*8, ALLOCATABLE :: u(:), q(:), reconstructed(:), interpolated(:), expected(:)
   REAL*8, ALLOCATABLE :: saved_gradient(:)
   REAL*8 :: h(1), target(1), scale, density, gradient(5), coefficients(5)
+  REAL*8 :: mixed_h(4), estimator_target(4), indicator_target(4), mixed_target(4)
   INTEGER :: neq, sizes(4), n, ns, i, j, case_id, axisym_case, scale_case, norm_case, ierr
 
   CALL MPI_INIT(ierr)
@@ -122,6 +124,13 @@ PROGRAM test_adaptivity_estimator
   END DO
   CALL free_reference_element_pol(higher)
   CALL free_reference_element_pol(refElPol)
+  ! Both active requests compete; an inactive indicator permits coarsening.
+  mixed_h = [0.134d0,0.1d0,0.05d0,0.05d0]
+  estimator_target = [0.037599d0,0.08d0,0.2d0,0.2d0]
+  indicator_target = [0.067d0,0.05d0,0.05d0,0.05d0+5.d-11]
+  CALL combine_h_target_ind_est(mixed_h,estimator_target,indicator_target,mixed_target)
+  IF (MAXVAL(ABS(mixed_target-[0.037599d0,0.05d0,0.2d0,0.2d0])) > 1.d-12) &
+       ERROR STOP 'mixed targets must keep stronger refinement and inactive-indicator coarsening'
   CALL MPI_FINALIZE(ierr)
-  WRITE(*,*) 'adaptivity estimator: equation layouts, length scales, physical fields and cap PASS'
+  WRITE(*,*) 'adaptivity estimator: equation layouts, length scales, physical fields, cap and mixed targets PASS'
 END PROGRAM test_adaptivity_estimator
