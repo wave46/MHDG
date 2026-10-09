@@ -215,7 +215,9 @@ CONTAINS
     ! set the values in the matrix
     DO r = 1, matPETSC%n
        DO rr = matPETSC%rowptr(r), (matPETSC%rowptr(r+1)-1)
-          CALL MatSetValues(matPETSC%matK,one, matPETSC%loc2glob(r)-1, one, matPETSC%cols(rr)-1, matPETSC%vals_matK(rr), INSERT_VALUES, ierr); CHKERRA(ierr)
+          CALL MatSetValues(matPETSC%matK, one, [matPETSC%loc2glob(r)-1], &
+               one, [matPETSC%cols(rr)-1], [matPETSC%vals_matK(rr)], INSERT_VALUES, ierr)
+          CHKERRA(ierr)
        END DO
     END DO
 
