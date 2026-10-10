@@ -22,6 +22,7 @@ SUBROUTINE READ_input()
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
   LOGICAL               :: ckeramp,saveNR,filter,saveTau,transport_1d,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
+  LOGICAL               :: check_neutral_positivity
   INTEGER               :: thresh, difcor, tis, stab,pertini,init,order_2d
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
   INTEGER               :: uinput, printint, testcase, nrp, i
@@ -114,7 +115,7 @@ SUBROUTINE READ_input()
        & neutral_wall_sources_in_elements,neutral_flux_limiter_save_2d
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path, impurity_model_path
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump,neutralp_lambda
-  NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, max_divergence_refinements, rest_adapt, osc_adapt, max_oscillation_refinements, osc_tol, osc_check, geometry_path
+  NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, check_neutral_positivity, max_divergence_refinements, rest_adapt, osc_adapt, max_oscillation_refinements, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
@@ -149,6 +150,7 @@ SUBROUTINE READ_input()
   n_quant_ind = -1
   max_divergence_refinements = 4
   max_oscillation_refinements = 10
+  check_neutral_positivity = .TRUE.
   compute_from_flux = .TRUE.
   divide_by_2pi = .FALSE.
   tau = 1.d0
@@ -469,6 +471,7 @@ SUBROUTINE READ_input()
   adapt%freq_t_adapt      = freq_t_adapt
   adapt%freq_NR_adapt     = freq_NR_adapt
   adapt%div_adapt         = div_adapt
+  adapt%check_neutral_positivity = check_neutral_positivity
   IF (max_divergence_refinements .LT. 0) THEN
      ERROR STOP 'max_divergence_refinements must be nonnegative (0 disables divergence retries)'
   ENDIF
@@ -906,6 +909,7 @@ SUBROUTINE READ_input()
         PRINT *, '                - frequence of time adaptivity:                        ', adapt%freq_t_adapt
         PRINT *, '                - frequence of NR adaptivity:                          ', adapt%freq_NR_adapt
         PRINT *, '                - NR divergence adaptivity:                            ', adapt%div_adapt
+        PRINT *, '                - require nonnegative raw neutrals for convergence/checkpoints: ', adapt%check_neutral_positivity
         PRINT *, '                - maximum divergence refinements per timestep:         ', adapt%max_divergence_refinements
         PRINT *, '                - restart adaptivity:                                  ', adapt%rest_adapt
         PRINT *, '                - oscillations on the solution adaptivity:             ', adapt%osc_adapt

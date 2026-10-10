@@ -29,16 +29,19 @@ def main():
         for command in commands:
             subprocess.run(command, cwd=scratch, env=environment, check=True, timeout=60)
         template = (repository / "test/param_initial.txt").read_text()
-        # Keep omitted-parameter checks when the example declares both limits.
+        # Exercise omitted defaults even when the example declares the settings.
         template = re.sub(
             r"(?im)^\s*max_(?:divergence|oscillation)_refinements\s*=.*\n", "", template
         )
+        template = re.sub(r"(?im)^\s*check_neutral_positivity\s*=.*\n", "", template)
         cases = [({}, None)]
         for key, limits in [("divergence", [0, 1, 4, -1]), ("oscillation", [0, 1, 10, -1])]:
             for limit in limits:
                 parameter = f"max_{key}_refinements"
                 cases.append(({parameter: limit}, parameter if limit < 0 else None))
         cases.append(({"max_divergence_refinements": 2, "max_oscillation_refinements": 6}, None))
+        cases.extend([({"check_neutral_positivity": ".true."}, None),
+                      ({"check_neutral_positivity": ".false."}, None)])
         for overrides, invalid_parameter in cases:
             parameters = template
             if overrides:
@@ -58,12 +61,14 @@ def main():
             else:
                 expected_div = overrides.get("max_divergence_refinements", 4)
                 expected_osc = overrides.get("max_oscillation_refinements", 10)
+                expected_neutral = "F" if overrides.get("check_neutral_positivity") == ".false." else "T"
                 passed = (run.returncode == 0
                           and f"DIV_REFINEMENT_LIMIT {expected_div}\n" in output
-                          and f"OSC_REFINEMENT_LIMIT {expected_osc}\n" in output)
+                          and f"OSC_REFINEMENT_LIMIT {expected_osc}\n" in output
+                          and f"CHECK_NEUTRAL_POSITIVITY {expected_neutral}\n" in output)
             if not passed:
                 raise SystemExit(f"FAIL: refinement input overrides={overrides}\n{output}")
-        print("Refinement input checks: defaults, independent/combined overrides, zero limits, negative rejection PASS")
+        print("Refinement input checks: defaults, overrides, retry limits and neutral positivity policy PASS")
 
 
 if __name__ == "__main__":

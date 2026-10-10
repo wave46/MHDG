@@ -29,11 +29,13 @@ PROGRAM test_divergence_refinement
     CALL read_input()
     WRITE(*,'(A,1X,I0)') 'DIV_REFINEMENT_LIMIT',adapt%max_divergence_refinements
     WRITE(*,'(A,1X,I0)') 'OSC_REFINEMENT_LIMIT',adapt%max_oscillation_refinements
+    WRITE(*,'(A,1X,L1)') 'CHECK_NEUTRAL_POSITIVITY',adapt%check_neutral_positivity
     CALL MPI_FINALIZE(ierr_test)
     STOP
   ENDIF
   IF (adapt%max_divergence_refinements /= 4) ERROR STOP 'default divergence refinement limit'
   IF (adapt%max_oscillation_refinements /= 10) ERROR STOP 'default oscillation refinement limit'
+  IF (.NOT. adapt%check_neutral_positivity) ERROR STOP 'default neutral positivity policy'
   utils%printint = 0
   phys%neq = 2
   phys%idx_rhon_eq = -1
@@ -135,6 +137,7 @@ PROGRAM test_divergence_refinement
 #if defined(NGAMMA) && defined(TEMPERATURE) && defined(NEUTRAL)
   CALL check_physical_checkpoint_selection()
   CALL check_oscillation_checkpoint_selection()
+  CALL check_neutral_positivity_policy()
 #endif
 
   ! Exercise production history projection on a split affine triangle. This
@@ -325,6 +328,17 @@ CONTAINS
          ERROR STOP 'default oscillation checkpoint behavior changed'
     IF (ANY(sol%u_conv /= sol%u) .OR. ANY(sol%q_conv /= sol%q)) &
          ERROR STOP 'default oscillation checkpoint copied wrong state'
+    ! The relaxed policy must also allow a smooth iterate with negative raw
+    ! neutrals to refresh the oscillation checkpoint, without changing its u.
+    IF (MPIvar%glob_id == MPIvar%glob_size-1) sol%u(5) = -1.d-8
+    adapt%check_neutral_positivity = .FALSE.
+    allowed = physical_solution_is_admissible(sol%u)
+    IF (.NOT. allowed) ERROR STOP 'relaxed neutral policy rejected smooth checkpoint'
+    CALL compute_error_oscillations(oscillations,minimum,maximum,n_osc,10,checkpoint_iteration, &
+         checkpoint_mesh,checkpoint_allowed=allowed)
+    IF (checkpoint_iteration /= 10 .OR. ANY(sol%u_conv /= sol%u)) &
+         ERROR STOP 'relaxed oscillation checkpoint lost raw neutral values'
+    adapt%check_neutral_positivity = .TRUE.
     CALL free_mesh_loc(checkpoint_mesh)
     CALL free_reference_element_pol(refElPol)
     DEALLOCATE(oscillations,adapt%n_quant_ind,sol%u,sol%q,sol%u_conv,sol%q_conv)
@@ -453,6 +467,80 @@ CONTAINS
     DEALLOCATE(Mesh%ghostElems)
 #endif
   END SUBROUTINE check_physical_checkpoint_selection
+
+  SUBROUTINE check_neutral_positivity_policy()
+    REAL*8 :: accepted(5)
+    LOGICAL :: valid
+    INTEGER :: bad_rank
+    phys%neq = 5
+    phys%idx_rhon_eq = 5
+    Mesh%Nelems = 1
+    Mesh%Nnodesperelem = 1
+#ifdef PARALL
+    ALLOCATE(Mesh%ghostElems(1))
+    Mesh%ghostElems = 0
+#endif
+    ALLOCATE(sol%u(5),sol%q(10),sol%u_conv(5),sol%q_conv(10))
+    accepted = [1.d0,0.2d0,2.d0,3.d0,0.01d0]
+    bad_rank = MPIvar%glob_size-1
+    IF (MPIvar%glob_id == bad_rank) accepted(5) = -1.d-8
+    sol%u = accepted
+    sol%q = 0.1d0
+    adapt%check_neutral_positivity = .TRUE.
+    CALL reset_newton_refinements()
+    IF (divergence_checkpoint_available) ERROR STOP 'strict policy seeded negative-neutral checkpoint'
+    valid = physical_solution_is_admissible(sol%u)
+    IF (.NOT. newton_refinement_required(0.5d0*numer%tNR,valid,1)) &
+         ERROR STOP 'strict neutral convergence policy changed'
+
+    adapt%check_neutral_positivity = .FALSE.
+    ! This is also the post-projection reseeding path that formerly lost the
+    ! fallback solely because neutrals were negative on one rank.
+    CALL seed_divergence_checkpoint()
+    IF (.NOT. divergence_checkpoint_available .OR. ANY(uiter_best /= accepted)) &
+         ERROR STOP 'relaxed policy did not seed projected checkpoint'
+    valid = physical_solution_is_admissible(sol%u)
+    IF (.NOT. valid) ERROR STOP 'rank-local negative neutrals rejected under relaxed policy'
+    IF (newton_refinement_required(0.5d0*numer%tNR,valid,2)) &
+         ERROR STOP 'negative neutrals alone forced convergence refinement'
+    IF (newton_refinement_required(0.1d0,valid,numer%nrp)) &
+         ERROR STOP 'negative neutrals alone forced NR-limit refinement'
+    IF (.NOT. update_best_newton_checkpoint(0.5d0*numer%tNR,2,valid)) &
+         ERROR STOP 'relaxed policy rejected best Newton iterate'
+
+    ! Relaxing neutrals must leave all plasma checks and genuine divergence
+    ! recovery active. Reject worse physics even with a smaller residual.
+    IF (MPIvar%glob_id == bad_rank) sol%u(1) = -1.d-4
+    valid = physical_solution_is_admissible(sol%u)
+    IF (valid) ERROR STOP 'relaxed neutral policy accepted negative plasma density'
+    IF (update_best_newton_checkpoint(0.25d0*numer%tNR,3,valid)) &
+         ERROR STOP 'relaxed neutral policy replaced checkpoint with invalid plasma'
+    IF (ANY(uiter_best /= accepted)) ERROR STOP 'invalid plasma changed relaxed checkpoint'
+    sol%u = accepted
+    IF (MPIvar%glob_id == bad_rank) sol%u(4) = -1.d-8
+    IF (physical_solution_is_admissible(sol%u)) ERROR STOP 'relaxed neutral policy accepted negative electron energy'
+    sol%u = accepted
+    IF (MPIvar%glob_id == bad_rank) sol%u(3) = 0.d0
+    IF (physical_solution_is_admissible(sol%u)) ERROR STOP 'relaxed neutral policy accepted negative ion internal energy'
+    IF (.NOT. newton_refinement_required(2.d0*numer%div,.TRUE.,3)) &
+         ERROR STOP 'relaxed neutral policy disabled divergence trigger'
+    IF (.NOT. prepare_divergence_refinement()) ERROR STOP 'relaxed checkpoint unavailable for divergence'
+    IF (ANY(sol%u /= accepted)) ERROR STOP 'recovery altered negative raw neutral values'
+
+    ! A completed state with negative neutrals can seed the next timestep too.
+    CALL reset_newton_refinements()
+    IF (.NOT. divergence_checkpoint_available .OR. divergence_refinements /= 0) &
+         ERROR STOP 'relaxed next-timestep checkpoint unavailable'
+    IF (.NOT. prepare_divergence_refinement()) ERROR STOP 'relaxed next-timestep recovery unavailable'
+    IF (ANY(sol%u /= accepted)) ERROR STOP 'next-timestep recovery changed raw neutrals'
+    adapt%check_neutral_positivity = .TRUE.
+    DEALLOCATE(sol%u,sol%q,sol%u_conv,sol%q_conv,uiter_best,qiter_best)
+    NULLIFY(uiter_best,qiter_best)
+#ifdef PARALL
+    DEALLOCATE(Mesh%ghostElems)
+#endif
+    IF (MPIvar%glob_id == 0) WRITE(*,*) 'Neutral positivity policy: strict/relaxed convergence and checkpoints PASS'
+  END SUBROUTINE check_neutral_positivity_policy
 
   SUBROUTINE assert_physical_state_unchanged()
     IF (ANY(sol%u0 /= history)) ERROR STOP 'recovery changed time history'

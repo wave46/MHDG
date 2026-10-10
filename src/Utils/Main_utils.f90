@@ -683,7 +683,7 @@ CONTAINS
        ENDIF
 #endif
 #ifdef NEUTRAL
-       IF (phys%idx_rhon_eq .GT. 0 .AND. phys%idx_rhon_eq .LE. phys%neq) THEN
+       IF (adapt%check_neutral_positivity .AND. phys%idx_rhon_eq .GT. 0 .AND. phys%idx_rhon_eq .LE. phys%neq) THEN
           IF (.NOT. (u(offset+phys%idx_rhon_eq) .GE. 0.d0)) THEN
              valid = .FALSE.
              EXIT
