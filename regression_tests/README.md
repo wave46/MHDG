@@ -97,7 +97,10 @@ to request smaller mesh sizes. The bootstrap override includes initialization
 and `diffred`; its final steady stage inherits the value with adaptivity off.
 The limited recipe retains its input tolerance.
 The short source/adaptivity probe retains its one-pass setup with divergence
-and oscillation recovery disabled. Changes to this cold-bootstrap recipe require
+and oscillation recovery disabled. It requires a valid changed mesh and a retained
+adaptation output; refinement, coarsening and redistribution at the same element
+count are accepted. An unchanged mesh or missing initial output is rejected.
+Changes to this cold-bootstrap recipe require
 convergence evidence and review of refreshed goldens before accepting a baseline.
 
 Transport is a separate feature on **both** topologies. Its five stages lower the

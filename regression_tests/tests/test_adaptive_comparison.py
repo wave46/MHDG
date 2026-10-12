@@ -115,7 +115,8 @@ def adaptive_run(tmp_path, monkeypatch):
     return inputs, reference, candidate
 
 
-def test_refinement_requires_recorded_initial_output_and_element_growth(adaptive_run):
+@pytest.fixture
+def adaptation_probe(adaptive_run):
     inputs, initial, candidate = adaptive_run
     inputs.workflow["require_refinement"] = True
     inputs.metadata["hdf5_outputs"].append(initial.name)
@@ -124,15 +125,70 @@ def test_refinement_requires_recorded_initial_output_and_element_growth(adaptive
         f"Output written to file {initial}\nError: 1e-5\n"
         "Mesh converted from gmsh to hdf5. Output written to file ./res/new_mesh_n1.h5\n"
         f"Output written to file {candidate}\n")
+    generated = inputs.run_directory / "res/temp.msh"
+    generated.parent.mkdir()
+    generated.write_text("retained adaptation mesh\n")
+    return inputs, initial, candidate
+
+
+def write_refined_square(path):
+    """Split the same square into four triangles around an interior node."""
+    write_solution(path)
+    with h5py.File(path, "r+") as handle:
+        changes = {
+            "X": [[0., 1., 0., 1., .5], [0., 0., 1., 1., .5]],
+            "T": [[1, 2, 4, 3], [2, 4, 3, 1], [5, 5, 5, 5]],
+            "Tlin": [[1, 2, 4, 3], [2, 4, 3, 1], [5, 5, 5, 5]],
+            "F": [[1, 2, 3, 4], [6, 7, 8, 5], [5, 6, 7, 8]],
+            "intfaces": [[1, 2, 3, 4], [2, 2, 2, 2], [2, 3, 4, 1], [3, 3, 3, 3], [2, 2, 2, 2]],
+            "extfaces": [[1, 2, 3, 4], [1, 1, 1, 1]],
+            "Nnodes": [5], "Nelems": [4], "Nintfaces": [4], "Nfaces": [8],
+        }
+        for name, values in changes.items():
+            group = handle["mesh"]
+            dtype = group[name].dtype
+            del group[name]
+            group.create_dataset(name, data=np.asarray(values, dtype=dtype))
+        for name, size in (("u", 24), ("q", 48), ("u_tilde", 32)):
+            del handle[f"solution/{name}"]
+            handle[f"solution/{name}"] = np.arange(1., size + 1.)
+
+
+@pytest.mark.parametrize("change", ["refinement", "coarsening", "redistribution"])
+def test_adaptation_accepts_valid_mesh_changes(adaptation_probe, change):
+    inputs, initial, candidate = adaptation_probe
+    if change == "coarsening":
+        write_refined_square(initial)
+    else:
+        write_refined_square(candidate)
+        if change == "redistribution":
+            write_refined_square(initial)
+            with h5py.File(candidate, "r+") as handle:
+                handle["mesh/X"][0, -1] += .05
     assert compare.select_candidate(inputs.run_directory, inputs.metadata) == candidate
-    assert compare._check_refinement(inputs, candidate)["status"] == "failed"  # Identical meshes.
-    with h5py.File(candidate, "r+") as handle:
-        handle["mesh/Nelems"][...] = 3
     report = compare._check_refinement(inputs, candidate)
-    assert report["status"] == "passed"
-    assert (report["initial_elements"], report["final_elements"]) == (2, 3)
-    inputs.metadata["hdf5_outputs"].remove(initial.name)
-    assert compare._check_refinement(inputs, candidate)["status"] == "failed"
+    assert report["status"] == "passed", report
+    expected = {"refinement": (2, 4), "coarsening": (4, 2), "redistribution": (4, 4)}
+    assert (report["initial_elements"], report["final_elements"]) == expected[change]
+    assert report["mesh_differences"]
+    assert report["generated_mesh"]["sha256"]
+
+
+@pytest.mark.parametrize("failure", ["unchanged", "missing_initial", "missing_generated", "invalid_mesh"])
+def test_adaptation_rejects_missing_or_invalid_evidence(adaptation_probe, failure):
+    inputs, initial, candidate = adaptation_probe
+    if failure != "unchanged":
+        write_refined_square(candidate)
+    if failure == "missing_initial":
+        inputs.metadata["hdf5_outputs"].remove(initial.name)
+    elif failure == "missing_generated":
+        (inputs.run_directory / "res/temp.msh").unlink()
+    elif failure == "invalid_mesh":
+        with h5py.File(candidate, "r+") as handle:
+            handle["mesh/T"][0, 0] = 0
+    report = compare._check_refinement(inputs, candidate)
+    assert report["status"] == "failed"
+    assert report["failures"]
 
 
 @pytest.mark.parametrize("perturbed", [False, True])
