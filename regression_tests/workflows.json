@@ -2,6 +2,10 @@
   "schema_version": 2,
   "parameter_namelists": {
     "balance_diagnostics_mode": "utils_lst",
+    "div_adapt": "adapt_lst",
+    "max_divergence_refinements": "adapt_lst",
+    "max_oscillation_refinements": "adapt_lst",
+    "thr_ind": "adapt_lst",
     "neutral_wall_sources_in_elements": "switch_lst",
     "neutral_perpendicular_diffusion": "switch_lst",
     "neutral_flux_limiter_save_2d": "switch_lst",
@@ -86,7 +90,13 @@
         "profile": "adaptive_reference",
         "direct_profile": "cold_fixed_reference"
       },
-      "parameter_overrides": {"adaptivity": true},
+      "parameter_overrides": {
+        "adaptivity": true,
+        "div_adapt": true,
+        "max_divergence_refinements": 2,
+        "max_oscillation_refinements": 10,
+        "thr_ind": 1e-5
+      },
       "adaptive_stages": ["time_init", "diffred"],
       "stages": ["bootstrap"]
     },
