@@ -87,8 +87,9 @@ analytical plasma, not the current adaptive solution. The limited suite also
 compares the two completed bootstrap endpoints.
 
 The shared adaptive bootstrap recipe enables divergence recovery with at most
-2 divergence and 10 oscillation refinements per timestep, and sets the indicator
-threshold `thr_ind=1e-5`. These harness overrides apply to both static cases;
+2 divergence and 10 oscillation refinements per timestep, sets the oscillation
+trigger `osc_tol=-0.5`, and uses the indicator threshold `thr_ind=1e-5`.
+These harness overrides apply to both static cases and all three stages;
 the final steady stage and the independent fixed bootstrap have adaptivity off.
 The short source/adaptivity probe retains its one-pass setup with divergence
 and oscillation recovery disabled. Changes to this cold-bootstrap recipe require

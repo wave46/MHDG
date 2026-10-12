@@ -5,6 +5,7 @@
     "div_adapt": "adapt_lst",
     "max_divergence_refinements": "adapt_lst",
     "max_oscillation_refinements": "adapt_lst",
+    "osc_tol": "adapt_lst",
     "thr_ind": "adapt_lst",
     "neutral_wall_sources_in_elements": "switch_lst",
     "neutral_perpendicular_diffusion": "switch_lst",
@@ -95,6 +96,7 @@
         "div_adapt": true,
         "max_divergence_refinements": 2,
         "max_oscillation_refinements": 10,
+        "osc_tol": -0.5,
         "thr_ind": 1e-5
       },
       "adaptive_stages": ["time_init", "diffred"],
