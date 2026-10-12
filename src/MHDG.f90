@@ -437,7 +437,7 @@ PROGRAM MHDG
               ENDIF
 
               ! u0 also needs to be projected from old mesh to new mesh
-              CALL project_u0_newmesh()
+              CALL project_u0_newmesh(preserve_history=adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol)
 
               IF((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)) THEN
                  ! Update check-point solution to the one projected on the new mesh

@@ -199,8 +199,23 @@ PROGRAM test_divergence_refinement
   IF (MAXVAL(ABS(Mesh%X-new_coordinates)) > 1.d-10 .OR. &
       MAXVAL(ABS(Mesh_prec%X-previous_coordinates)) > 1.d-10) ERROR STOP 'projection changed coordinate units'
 
-  ! Existing callers omit preserve_history: keep their existing first-column
-  ! projection behavior. The new all-column behavior is opt-in for recovery.
+  ! Oscillation recovery preserves every column too, including when an NR
+  ! frequency trigger coincides. Reuse the affine field on the original mesh.
+  DEALLOCATE(sol%u0)
+  ALLOCATE(sol%u0(6,3))
+  DO h=1,3
+    DO node=1,3
+      DO eq=1,2
+        sol%u0((node-1)*2+eq,h) = history_field(Mesh_prec%X(node,:)*phys%lscale,eq,h)
+      ENDDO
+    ENDDO
+  ENDDO
+  adapt%osc_adapt = .TRUE.
+  adapt%osc_tol = -0.5d0
+  CALL project_u0_newmesh(preserve_history=adapt%osc_adapt .AND. -0.4d0 .GT. adapt%osc_tol)
+  IF (MAXVAL(ABS(sol%u0-expected)) > 1.d-10) ERROR STOP 'oscillation recovery lost time history'
+
+  ! Callers omitting preserve_history keep their first-column projection behavior.
   DEALLOCATE(sol%u0)
   ALLOCATE(sol%u0(6,3))
   DO h=1,3
