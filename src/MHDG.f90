@@ -80,11 +80,8 @@ PROGRAM MHDG
   ! used in the HDG scheme
   ierr = 1
 #ifdef PARALL
-  IF((MPIvar%glob_size .GT. 1)) THEN
-     CALL mesh_preprocess_serial(ierr)
-  ELSE
-     CALL mesh_preprocess(ierr)
-  ENDIF
+  ! This is still the global mesh; ghost-face data is created during decomposition.
+  CALL mesh_preprocess_serial(ierr)
 #else
   CALL mesh_preprocess(ierr)
 #endif
@@ -121,8 +118,11 @@ PROGRAM MHDG
   ENDIF
 #endif
 
-  ! Read serial restart/projection data before deciding whether another field is needed.
-  IF (nb_args .NE. 1 .AND. MPIvar%glob_size .EQ. 1) CALL initialize_solution()
+  ! MPI restarts were already loaded before solution decomposition, even with one rank.
+  ! Read serial restart data before deciding whether another field is needed.
+#ifndef PARALL
+  IF (nb_args .EQ. 2) CALL initialize_solution()
+#endif
 
   ! A completed ME restart must not read another field or update feedback.
   IF (switch%ME .AND. time%it .EQ. nts) THEN

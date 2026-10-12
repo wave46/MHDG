@@ -46,7 +46,7 @@ MODULE Main_utils
   REAL*8                       :: dt, dt0, errNR, errNR_adapt, errlstime
   REAL*8, ALLOCATABLE          :: uiter(:), L2err(:),u0_temp(:,:)
   REAL*8, POINTER              :: uiter_best(:) => NULL(), qiter_best(:) => NULL()
-  CHARACTER(LEN=1024)          :: mesh_name,mesh_name_proj, save_name
+  CHARACTER(LEN=1024)          :: mesh_name, save_name
   CHARACTER ( len = 255 )      :: gmsh_filename
   CHARACTER ( len = 255 )      :: h5_filename
   CHARACTER ( len = 50 )       :: count_adapt_char
@@ -54,7 +54,6 @@ MODULE Main_utils
   INTEGER                      :: OMP_GET_MAX_THREADS
   INTEGER                      :: clock_rate,clock_start, clock_end
   REAL*8                       :: time_start, time_finish
-  REAL*8,ALLOCATABLE           :: xs(:,:)
   REAL*8, ALLOCATABLE          :: oscillations(:)
   REAL*8                       :: max_osc = -100., min_osc = -100.
   INTEGER,ALLOCATABLE          :: vector_nodes_unique(:,:)
@@ -117,6 +116,12 @@ CONTAINS
        Mesh%Nel_glob = Mesh%Nelems
        Mesh%Nfa_glob = Mesh%Nfaces
        Mesh%Nno_glob = Mesh%Nnodes
+
+       ! The initial global-mesh preprocess skips MPI boundary areas. Ghost
+       ! ownership is now defined, so compute them for this one-rank partition.
+       CALL computePuffArea()
+       CALL computePumpArea()
+       CALL computeCoreArea()
     ENDIF
 
   ENDSUBROUTINE domain_decomposition
@@ -897,11 +902,7 @@ ENDSUBROUTINE update_delta_te
 
 
   SUBROUTINE initialize_solution()
-    IF (nb_args .EQ. 3) THEN
-       ALLOCATE(sol%u_tilde(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
-       ALLOCATE(sol%u_tilde0(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
-       CALL extractFaceSolution()
-    ELSE IF (nb_args .EQ. 2) THEN
+    IF (nb_args .EQ. 2) THEN
        ! restart simulation: load solution from file (the name is given in argument)
        CALL HDF5_load_solution(save_name)
        ALLOCATE(sol%u_tilde0(SIZE(sol%u_tilde)))
@@ -913,26 +914,6 @@ ENDSUBROUTINE update_delta_te
   SUBROUTINE load_mesh()
     CHARACTER(LEN=1024) :: ordered_mesh_name
     INTEGER             :: mesh_flip
-
-    IF (nb_args .EQ. 3) THEN
-       ! find projection points
-       CALL load_mesh_h5(mesh_name)
-       ALLOCATE(xs(SIZE(Mesh%T,1)*SIZE(Mesh%T,2),2))
-       xs = Mesh%X(colint(TRANSPOSE(Mesh%T)),:)
-       CALL free_mesh()
-
-       ! Load solution to project from
-       CALL load_mesh_h5(mesh_name_proj)
-       CALL create_reference_element(refElPol, 2, verbose = 1)
-       CALL mesh_preprocess(ierr)
-       CALL HDF5_load_solution(save_name)
-
-       ! Project the solution
-       !call projectSolutionDifferentMeshes(xs)
-       DEALLOCATE(xs)
-       CALL free_mesh()
-       CALL free_reference_element()
-    ENDIF
 
     IF(switch%readMeshFromSol) THEN
        CALL HDF5_load_mesh_from_solution(save_name)
@@ -982,6 +963,15 @@ ENDSUBROUTINE update_delta_te
        STOP
     END IF
 
+    IF (nb_args .GT. 2) THEN
+       IF (MPIvar%glob_id .EQ. 0) THEN
+          WRITE (6, *) 'Error: mesh-to-mesh restart projection is unsupported.'
+          WRITE (6, *) 'Usage: MHDG mesh [restart_solution]'
+       ENDIF
+       CALL MPI_finalize(IERR)
+       STOP 1
+    ENDIF
+
     CALL getarg(1, mesh_name)
     mesh_name = ADJUSTL(TRIM(mesh_name))
 
@@ -993,16 +983,6 @@ ENDSUBROUTINE update_delta_te
        ENDIF
     END IF
 
-    IF (nb_args .GT. 2) THEN
-       CALL getarg(3, mesh_name_proj)
-       mesh_name_proj = ADJUSTL(TRIM(mesh_name_proj))
-       PRINT *, " Projecting solution from: ", mesh_name_proj
-    END IF
-
-    IF (nb_args .GT. 3) THEN
-       PRINT *, " Too many arguments "
-       STOP
-    END IF
   ENDSUBROUTINE check_input_arguments
 
   SUBROUTINE check_for_NaNs()
