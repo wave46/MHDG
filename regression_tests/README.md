@@ -91,6 +91,11 @@ The shared adaptive bootstrap recipe enables divergence recovery with at most
 trigger `osc_tol=-0.5`, and uses the indicator threshold `thr_ind=1e-5`.
 These harness overrides apply to both static cases and all three stages;
 the final steady stage and the independent fixed bootstrap have adaptivity off.
+Both adaptive diverted workflows, `bootstrap_adaptive` and
+`adaptive_source_short`, override the estimator tolerance to `tol_est=0.02`
+to request smaller mesh sizes. The bootstrap override includes initialization
+and `diffred`; its final steady stage inherits the value with adaptivity off.
+The limited recipe retains its input tolerance.
 The short source/adaptivity probe retains its one-pass setup with divergence
 and oscillation recovery disabled. Changes to this cold-bootstrap recipe require
 convergence evidence and review of refreshed goldens before accepting a baseline.
