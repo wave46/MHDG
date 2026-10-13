@@ -268,8 +268,37 @@ def _collect(source, candidate, source_manifest, generated, report, case):
     write_json_atomic(candidate / "manifest.json", manifest, "candidate manifest")
 
 
+def _publication_summary(workspace, report):
+    """Anchor retained evidence without copying machine paths or campaign logs."""
+    build = load_json(workspace / "build.json", "refresh build")
+    return {
+        "refresh_report": file_identity(workspace / "refresh.json"),
+        "candidate_manifest": file_identity(workspace / "candidate/manifest.json"),
+        "build": {"build_id": build["build_id"],
+                  "repository": {key: build["repository"][key] for key in ("revision", "dirty")
+                                 if key in build["repository"]},
+                  "profile": build["profile"], "toolchain": build.get("toolchain", {}),
+                  "artifacts": {name: {key: item[key] for key in ("sha256", "size_bytes")}
+                                for name, item in build["artifacts"].items()},
+                  "record": file_identity(workspace / "build.json")},
+        "source_bundle": {"bundle_id": report["source"]["bundle_id"],
+                          "bundle_version": report["source"]["bundle_version"],
+                          "manifest": {key: report["source"]["manifest"][key]
+                                       for key in ("sha256", "size_bytes")}},
+        "catalogs": report["catalogs"],
+        "producers": [{"workflow": item["workflow_id"], "layout": item["layout_id"],
+                       "status": item["status"],
+                       "stages": [{"stage": stage["stage_id"], "status": stage["status"],
+                                   "convergence": stage["convergence"]}
+                                  for stage in item["validation"]["stages"]]}
+                      for item in report["producers"]],
+        "validation_suites": [{"suite": item["suite"], "status": item["status"]}
+                              for item in report["checks"]],
+    }
+
+
 def publish(workspace, output, bundle_version, reason, provenance, *, catalog_root=None):
-    """Revalidate recorded evidence and publish a self-contained golden once."""
+    """Revalidate full evidence; publish runnable files and acceptance provenance."""
     catalog_root = catalog_root or ROOT
     if not all(isinstance(value, str) and value.strip() for value in (bundle_version, reason, provenance)):
         raise BundleError("publication requires a nonempty version, reason and provenance")
@@ -314,16 +343,20 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f".{output.name}.", dir=output.parent) as temporary:
         staging = Path(temporary) / "golden"
-        shutil.copytree(candidate, staging)
-        manifest = load_json(staging / "manifest.json", "candidate manifest")
-        evidence = [workspace / "refresh.json", *[workspace / item["path"] for item in report["evidence"]
-                                                 if not item["path"].startswith("candidate/")]]
-        for number, source in enumerate(evidence):
-            _install(staging, manifest, f"refresh_evidence_{number}", source,
-                     "provenance/refresh/" + source.relative_to(workspace).as_posix(),
-                     "application/json" if source.suffix == ".json" else "text/plain")
+        manifest = load_json(candidate / "manifest.json", "candidate manifest")
+        staging.mkdir()
+        keep = set(manifest["roles"].values())
+        manifest["artifacts"] = {key: value for key, value in manifest["artifacts"].items() if key in keep}
+        for artifact in manifest["artifacts"].values():
+            source = candidate / artifact["path"]
+            if artifact.get("optional") and not source.is_file():
+                continue
+            target = staging / artifact["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
         publication = {"published_utc": utc_now(), "reason": reason.strip(), "provenance": provenance.strip(),
                        "case_id": case["case_id"], "bundle_version": bundle_version, "refresh_run_id": report["run_id"]}
+        publication.update(_publication_summary(workspace, report))
         receipt = staging / "provenance/publication.json"
         write_json_atomic(receipt, publication, "publication provenance")
         manifest["artifacts"]["publication"] = {"path": "provenance/publication.json", **file_identity(receipt),

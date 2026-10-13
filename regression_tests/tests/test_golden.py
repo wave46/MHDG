@@ -11,6 +11,7 @@ import pytest
 
 from regression_tests import cli, golden
 from regression_tests.bundles import validate_bundle_root
+from regression_tests.files import file_identity
 from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import create_harness
 
@@ -128,6 +129,7 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
     assert not any(item.is_symlink() for item in setup.output.rglob('*'))
     manifest = json.loads((setup.output / 'manifest.json').read_text())
     assert manifest['bundle_class'] == 'golden'
+    assert not (setup.output / 'provenance/refresh').exists()
     assert 'retired_restart' not in manifest['roles']
     assert 'retired_restart' not in manifest['artifacts']
     assert not (setup.output / 'inputs/retired.h5').exists()
@@ -137,6 +139,8 @@ def test_refresh_handoff_review_and_explicit_self_contained_publication(setup):
     assert published_mesh.read_bytes() == original_mesh
     receipt = json.loads((setup.output / 'provenance/publication.json').read_text())
     assert receipt['reason'] == 'Accepted solver change' and receipt['provenance'] == 'Review record 42'
+    assert receipt['build']['repository']['revision'] == 'fixture-revision'
+    assert receipt['refresh_report'] == file_identity(setup.workspace / 'refresh.json')
     shutil.rmtree(setup.workspace)
     shutil.rmtree(setup.harness.bundle)
     assert validate_bundle_root(setup.output, setup.root / 'cases').case_id == 'legacy_case'

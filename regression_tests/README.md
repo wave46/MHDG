@@ -284,6 +284,19 @@ physical copies of its inputs and references; it has no dependency on refresh
 workspace symlinks. Update the private settings default only after reviewing
 and publishing it.
 
+Publication copies only manifest role files and a checksummed
+`provenance/publication.json`. The receipt records the acceptance
+reason, numerical limitations supplied in `--provenance`, source bundle identity,
+solver build/revision/artifact identities, catalog hashes and passed producer
+and suite summaries. It anchors the retained refresh report, candidate manifest
+and build record by checksum. Full campaign logs, run plans, rendered parameters
+and comparison reports remain in the refresh workspace. The published bundle
+works with ordinary bundle validation and regression commands independently of
+the workspace. Retain the workspace separately for detailed campaign audits.
+The output can be a case directory in an independent external data repository;
+it must be new and outside the refresh workspace. Publication does not create
+a Git commit, upload data, or change local bundle settings.
+
 ## Extending and maintaining the harness
 
 The repository owns `cases/*.json` (physical roles and case workflow choices),
