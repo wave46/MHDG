@@ -34,6 +34,22 @@ def test_me_expected_failure_declaration(tmp_path, expectation):
             load()
 
 
+@pytest.mark.parametrize("topology", [
+    {"first_completed": "limited", "last_completed": "lower_single_null"}, {}, {"last_completed": "unknown"},
+])
+def test_me_topology_declaration(tmp_path, topology):
+    path = tmp_path / "moving.json"
+    path.write_text(json.dumps({"series": "fields", "topology": topology}))
+    def load():
+        return load_validated_json(path, REGRESSION_ROOT / "schemas/case.schema.json",
+                                   "moving recipe", definition="moving_equilibrium")
+    if topology.get("first_completed") == "limited":
+        assert load()["topology"] == topology
+    else:
+        with pytest.raises(BundleError):
+            load()
+
+
 @pytest.fixture
 def catalog(tmp_path):
     (tmp_path / "schemas").mkdir()

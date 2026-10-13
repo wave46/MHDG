@@ -510,19 +510,27 @@ def compare_magnetic(
     candidate: h5py.File,
     tolerances: dict[str, Any],
     failures: list[str],
+    *, names: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
-    """Compare every direct dataset in the reference magnetic group."""
+    """Compare magnetic datasets, or selected categorical metadata exactly."""
     reference_group = optional_group(reference, "magnetic")
     candidate_group = optional_group(candidate, "magnetic")
     if reference_group is None:
+        if names:
+            failures.append("reference is missing magnetic data")
+            return {"present": False, "passed": False, "datasets": {}}
         return {"present": False, "passed": True, "datasets": {}}
     if candidate_group is None:
         failures.append("candidate is missing magnetic data")
         return {"present": True, "passed": False, "datasets": {}}
 
     datasets: dict[str, dict[str, Any]] = {}
-    for name, reference_dataset in reference_group.items():
+    for name in names if names is not None else reference_group:
+        reference_dataset = reference_group.get(name)
         if not isinstance(reference_dataset, h5py.Dataset):
+            if names is not None:
+                datasets[name] = {"passed": False, "reason": "reference dataset missing"}
+                failures.append(f"reference magnetic/{name} is missing")
             continue
         candidate_dataset = candidate_group.get(name)
         if not isinstance(candidate_dataset, h5py.Dataset):
@@ -532,7 +540,7 @@ def compare_magnetic(
 
         reference_array = np.asarray(reference_dataset)
         candidate_array = np.asarray(candidate_dataset)
-        if reference_array.dtype.kind in "biuOSU":
+        if names is not None or reference_array.dtype.kind in "biuOSU":
             metrics = _exact_comparison(reference_array, candidate_array)
         else:
             metrics = numeric_comparison(

@@ -202,6 +202,73 @@ def test_me_completion_uses_embedded_steps_and_final_attempts(me_outputs):
     json.dumps(report, allow_nan=False)
 
 
+@pytest.fixture
+def topology_outputs(me_outputs):
+    run, plan, metadata = me_outputs
+    for value in metadata['hdf5_outputs'][:-1]:
+        with h5py.File(value, 'r+') as handle:
+            step = int(handle['simulation_parameters/time/Current_time_step_number'][()])
+            # The bootstrap label must not substitute for the first completed advance.
+            handle['magnetic/topology'] = np.bytes_('limited' if step == 1 else 'lower_single_null')
+    return run, plan, metadata
+
+
+@pytest.mark.parametrize('compare_reference', [False, True])
+@pytest.mark.parametrize('damage', [None, 'first', 'last', 'missing'])
+def test_me_recipe_checks_completed_topology_endpoints(topology_outputs, monkeypatch, compare_reference, damage):
+    run, plan, metadata = topology_outputs
+    affected = metadata['hdf5_outputs'][2:4] if damage == 'last' else metadata['hdf5_outputs'][1:2]
+    if damage:
+        for value in affected:
+            with h5py.File(value, 'r+') as handle:
+                del handle['magnetic/topology']
+                if damage != 'missing':
+                    handle['magnetic/topology'] = np.bytes_('limited' if damage == 'last' else 'lower_single_null')
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    (run / 'run_metadata.json').write_text(json.dumps(metadata))
+    workflow = {'moving_equilibrium': {'series': 'fields', 'topology': {
+        'first_completed': 'limited', 'last_completed': 'lower_single_null'}},
+        'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    if compare_reference:
+        _, _, report = compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
+                                             reference_override=Path(metadata['hdf5_outputs'][3]))
+        assert report['hdf5']['status'] == 'passed'  # A refreshed reference cannot replace the trajectory assertion.
+    else:
+        report = validate_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json')
+    assert report['status'] == ('passed' if damage is None else 'failed')
+    assert report['convergence']['passed']
+    assert all('topology' in failure for failure in report['failures'])
+
+
+@pytest.mark.parametrize('reference_label', ['lower_single_null', 'limited', None, 1.5])
+def test_adaptive_me_reference_requires_matching_topology(topology_outputs, monkeypatch, reference_label):
+    run, plan, metadata = topology_outputs
+    reference, fekete = run / 'reference.h5', run / 'fekete.h5'
+    shutil.copy2(metadata['hdf5_outputs'][3], reference)
+    with h5py.File(reference, 'r+') as handle:
+        handle['mesh/X'][0] *= 1.01
+        del handle['magnetic/topology']
+        if reference_label:
+            handle['magnetic/topology'] = np.bytes_(reference_label) if isinstance(reference_label, str) else reference_label
+    fekete.write_bytes(b'not sampled in this metadata check')
+    metadata['runtime_files'] = {'positionFeketeNodesTri2D.h5': {'path': str(fekete)}}
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    (run / 'run_metadata.json').write_text(json.dumps(metadata))
+    workflow = {'moving_equilibrium': {'series': 'fields'},
+                'comparison': {'method': 'mesh_independent', 'profile': 'adaptive_reference'}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    fields = Mock(return_value={'status': 'passed', 'failures': []})
+    monkeypatch.setattr('regression_tests.compare.compare_adaptive_files', fields)
+    method, _, report = compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
+                                              reference_override=reference)
+    assert method == 'mesh_independent' and fields.call_count == 1
+    assert report['status'] == ('passed' if reference_label == 'lower_single_null' else 'failed')
+    assert report['magnetic_topology']['passed'] is (reference_label == 'lower_single_null')
+
+
 @pytest.mark.parametrize('damage', ['gap', 'time', 'nonfinite_time', 'dt', 'retry_error', 'nonconvergence',
                                   'duplicate'])
 def test_me_completion_rejects_invalid_completed_evidence(me_outputs, damage):
@@ -273,6 +340,25 @@ def stopped_me_outputs(me_outputs):
     metadata.update(status='solver_failed', exit_code=1, launch_error=None, fatal_log_messages=[])
     metadata['output_files'] = [{'path': value, **file_identity(Path(value))} for value in metadata['hdf5_outputs']]
     return run, plan, metadata
+
+
+@pytest.mark.parametrize('label', ['limited', 'lower_single_null'])
+def test_expected_prefix_checks_recipe_topology(stopped_me_outputs, monkeypatch, label):
+    from regression_tests.compare import validate_me_stopped_run
+    run, plan, metadata = stopped_me_outputs
+    with h5py.File(metadata['hdf5_outputs'][1], 'r+') as handle:
+        handle['magnetic/topology'] = np.bytes_(label)
+    metadata['output_files'] = [{'path': value, **file_identity(Path(value))} for value in metadata['hdf5_outputs']]
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    (run / 'run_metadata.json').write_text(json.dumps(metadata))
+    workflow = {'moving_equilibrium': {'series': 'fields', 'topology': {
+        'first_completed': 'limited', 'last_completed': 'limited'}},
+        'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    report = validate_me_stopped_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json', completed_steps=1)
+    assert report['status'] == ('passed' if label == 'limited' else 'failed')
+    assert report['run_status'] == 'solver_failed'
 
 
 @pytest.mark.parametrize('exit_code,status', [(0, 'solver_reported_error'), (1, 'solver_failed')])

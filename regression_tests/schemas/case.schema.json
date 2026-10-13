@@ -160,6 +160,13 @@
       "properties": {
         "series": {"$ref": "#/$defs/identifier"},
         "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+        "topology": {
+          "type": "object", "additionalProperties": false, "minProperties": 1,
+          "properties": {
+            "first_completed": {"enum": ["limited", "lower_single_null"]},
+            "last_completed": {"enum": ["limited", "lower_single_null"]}
+          }
+        },
         "expected_failure": {
           "type": "object", "additionalProperties": false,
           "required": ["reason", "completed_steps"],

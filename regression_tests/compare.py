@@ -15,7 +15,8 @@ from .documents import load_json, write_json_atomic
 from .support import ComparisonError, utc_now
 from .files import file_identity, recorded_file, require_directory
 from .compare_adaptive import compare_adaptive_files, mesh_differences
-from .compare_fixed import compare_hdf5_files, check_output_contract, validate_solution_file, required_scalar
+from .compare_fixed import (compare_hdf5_files, compare_magnetic, check_output_contract,
+                            validate_solution_file, required_scalar, required_array)
 from .execute import final_execution, outputs_unchanged
 from .compare_common import (
     select_logged_output, NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
@@ -204,6 +205,9 @@ def compare_run(
     if refinement.get("initial_output"):
         protected.append(Path(refinement["initial_output"]))
     failures = list(field_report["failures"])
+    if policy == "mesh_independent" and inputs.workflow.get("moving_equilibrium"):
+        with h5py.File(reference, "r") as first, h5py.File(candidate, "r") as second:
+            details["magnetic_topology"] = compare_magnetic(first, second, tolerances, failures, names=("topology",))
     failures.extend(saved_output_contract(inputs, candidate)["failures"])
     failures.extend(preceding["failures"])
     failures.extend(refinement.get("failures", []))
@@ -251,7 +255,8 @@ def compare_me_refinement_stop(directory, case_directory, tolerances_path, *, co
     maximum = _stage_newton_maximum(inputs.workflow, inputs.plan["layout_id"],
                                     tolerances_path, catalog=inputs.catalog)
     outcome = validate_me_refinement_stop(inputs.run_directory, inputs.plan, inputs.metadata,
-                                          maximum, completed_steps=completed_steps)
+                                          maximum, completed_steps=completed_steps,
+                                          topology=inputs.workflow["moving_equilibrium"].get("topology"))
     if outcome["status"] != "passed":
         raise ComparisonError("invalid expected ME refinement stop: " + "; ".join(outcome["failures"]))
     overrides = ComparisonOverrides(candidate=Path(outcome["selected_output"]), reference=reference_override)
@@ -268,7 +273,8 @@ def validate_me_stopped_run(directory, case_directory, tolerances_path, *, compl
     maximum = _stage_newton_maximum(inputs.workflow, inputs.plan["layout_id"],
                                     tolerances_path, catalog=inputs.catalog)
     outcome = validate_me_refinement_stop(inputs.run_directory, inputs.plan, inputs.metadata,
-                                          maximum, completed_steps=completed_steps)
+                                          maximum, completed_steps=completed_steps,
+                                          topology=inputs.workflow["moving_equilibrium"].get("topology"))
     report = {**outcome, "convergence": {"passed": False}}
     if outcome["status"] == "passed":
         contract = saved_output_contract(inputs, Path(outcome["selected_output"]))
@@ -361,14 +367,15 @@ def validate_completed_run(run_directory, case_directory, tolerances_path, *, ca
 def _validate_me_steps(inputs, maximum):
     if not inputs.workflow.get("moving_equilibrium"):
         return {}
-    report = validate_me_completed_steps(inputs.run_directory, inputs.plan, inputs.metadata, maximum)
+    report = validate_me_completed_steps(inputs.run_directory, inputs.plan, inputs.metadata, maximum,
+                                        topology=inputs.workflow["moving_equilibrium"].get("topology"))
     if not report["complete"]:
         report["failures"].append("moving equilibrium did not complete all prescribed advances")
     report["status"] = "failed" if report["failures"] else "passed"
     return report
 
 
-def validate_me_completed_steps(directory, plan, metadata, maximum):
+def validate_me_completed_steps(directory, plan, metadata, maximum, *, topology=None):
     """Validate a contiguous completed prefix; complete separately marks full coverage."""
     dt = plan["moving_equilibrium_inputs"]["time_step_s"]
     prescribed = plan["parameter_overrides"]["nts"]
@@ -414,6 +421,30 @@ def validate_me_completed_steps(directory, plan, metadata, maximum):
         failures.append("missing initial ME save")
     if completed != list(range(1, len(completed) + 1)):
         failures.append("completed ME advances are not a contiguous prefix")
+    if topology:
+        if not completed:
+            failures.append("no completed ME advance for topology expectations")
+        else:
+            for label, number in (("first_completed", completed[0]), ("last_completed", completed[-1])):
+                if label not in topology:
+                    continue
+                actual, problem = None, None
+                try:
+                    with h5py.File(steps[number]["output"], "r") as handle:
+                        values = required_array(handle, "magnetic", "topology")
+                    if values.size != 1:
+                        raise ComparisonError("magnetic/topology must contain one label")
+                    value = values.reshape(-1)[0]
+                    actual = (value.decode() if isinstance(value, bytes) else str(value)).strip(" \x00")
+                    if actual != topology[label]:
+                        problem = f"{label} topology: expected {topology[label]}, got {actual}"
+                except ComparisonError as exc:
+                    problem = str(exc)
+                steps[number]["topology"] = actual
+                if problem:
+                    steps[number]["failures"].append(problem)
+                    steps[number]["status"] = "failed"
+                    failures.append(f"step {number}: {problem}")
     return {"status": "failed" if failures else "passed", "failures": failures,
             "completed_steps": completed, "prescribed_steps": prescribed,
             "complete": completed == list(range(1, prescribed + 1)),
@@ -429,7 +460,7 @@ def _me_time(handle):
     return number, time, dt, scale
 
 
-def validate_me_refinement_stop(directory, plan, metadata, maximum, *, completed_steps):
+def validate_me_refinement_stop(directory, plan, metadata, maximum, *, completed_steps, topology=None):
     """Validate an expected divergence-budget stop without rewriting raw status."""
     report = {"status": "failed", "run_status": metadata.get("status"), "failures": [],
               "terminal_reason": None, "completed_prefix": None, "selected_output": None}
@@ -443,7 +474,7 @@ def validate_me_refinement_stop(directory, plan, metadata, maximum, *, completed
     if not outputs_unchanged(directory, metadata):
         failures.append("expected-failure outputs are missing or changed")
         return report
-    prefix = validate_me_completed_steps(directory, plan, metadata, maximum)
+    prefix = validate_me_completed_steps(directory, plan, metadata, maximum, topology=topology)
     report["completed_prefix"] = prefix
     failures.extend(prefix["failures"])
     if prefix["completed_steps"] != list(range(1, completed_steps + 1)) or prefix["complete"]:
