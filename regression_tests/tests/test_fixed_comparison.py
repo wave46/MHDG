@@ -494,6 +494,35 @@ def test_expected_refinement_stop_rejects_unrelated_or_invalid_failure(stopped_m
     assert report['status'] == 'failed' and report['failures'] and report['selected_output'] is None
 
 
+@pytest.mark.parametrize('kind,marker,budget', [
+    ('divergence_refinement_limit', 'NR refinement recovery stopped', 'max_divergence_refinements'),
+    ('oscillation_refinement_limit', 'Oscillation refinement stopped', 'max_oscillation_refinements'),
+])
+def test_either_budget_stop_requires_opt_in_and_matching_budget(stopped_me_outputs, kind, marker, budget):
+    run, plan, metadata = stopped_me_outputs
+    plan['parameter_overrides']['max_oscillation_refinements'] = 1
+    limit = plan['parameter_overrides'][budget]
+    log = run / 'stdout.log'
+    message = f'{marker}: per-timestep refinement limit reached: {limit}'
+    log.write_text(log.read_text().replace(
+        'NR refinement recovery stopped: per-timestep refinement limit reached: 0', message))
+    metadata['fatal_log_messages'] = [f'stdout.log:10: {message}']
+    original = json.dumps(metadata)
+    strict = validate_me_refinement_stop(run, plan, metadata, 2e-4, completed_steps=1)
+    assert strict['status'] == ('passed' if kind == 'divergence_refinement_limit' else 'failed')
+    report = validate_me_refinement_stop(run, plan, metadata, 2e-4, completed_steps=1, reason='refinement_limit')
+    assert report['status'] == 'passed' and report['terminal_reason'] == kind
+    assert report['selected_output'] == metadata['hdf5_outputs'][1]
+    metadata['fatal_log_messages'].append('stderr.log:11: Error opening source file: missing.h5')
+    assert validate_me_refinement_stop(run, plan, metadata, 2e-4, completed_steps=1,
+                                      reason='refinement_limit')['status'] == 'failed'
+    metadata['fatal_log_messages'].pop()
+    plan['parameter_overrides'][budget] += 1
+    assert validate_me_refinement_stop(run, plan, metadata, 2e-4, completed_steps=1,
+                                      reason='refinement_limit')['status'] == 'failed'
+    assert json.dumps(metadata) == original
+
+
 @pytest.mark.parametrize('policy', ['fixed_hdf5', 'mesh_independent'])
 @pytest.mark.parametrize('reference_damage', [None, 'field', 'step', 'time', 'dt'])
 def test_expected_stop_prefix_uses_shared_reference_comparison(stopped_me_outputs, monkeypatch, policy, reference_damage):

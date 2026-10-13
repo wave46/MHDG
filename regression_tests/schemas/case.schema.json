@@ -184,7 +184,7 @@
           "type": "object", "additionalProperties": false,
           "required": ["reason", "completed_steps"],
           "properties": {
-            "reason": {"const": "divergence_refinement_limit"},
+            "reason": {"enum": ["divergence_refinement_limit", "refinement_limit"]},
             "completed_steps": {"type": "integer", "minimum": 1}
           }
         },

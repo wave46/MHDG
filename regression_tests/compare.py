@@ -286,6 +286,8 @@ def _load_me_stop(directory, case_directory, tolerances_path, completed_steps, c
                                     tolerances_path, catalog=inputs.catalog)
     outcome = validate_me_refinement_stop(inputs.run_directory, inputs.plan, inputs.metadata,
                                           maximum, completed_steps=completed_steps,
+                                          reason=inputs.workflow["moving_equilibrium"].get("expected_failure", {}).get(
+                                              "reason", "divergence_refinement_limit"),
                                           topology=inputs.workflow["moving_equilibrium"].get("topology"))
     return inputs, outcome
 
@@ -491,8 +493,11 @@ def _me_time(handle):
     return number, time, dt, scale
 
 
-def validate_me_refinement_stop(directory, plan, metadata, maximum, *, completed_steps, topology=None):
-    """Validate an expected divergence-budget stop without rewriting raw status."""
+def validate_me_refinement_stop(directory, plan, metadata, maximum, *, completed_steps, topology=None,
+                                reason="divergence_refinement_limit"):
+    """Validate a declared refinement-budget stop without rewriting raw status."""
+    if reason not in {"divergence_refinement_limit", "refinement_limit"}:
+        raise ComparisonError(f"unsupported expected refinement stop reason: {reason}")
     report = {"status": "failed", "run_status": metadata.get("status"), "failures": [],
               "terminal_reason": None, "completed_prefix": None, "selected_output": None}
     failures = report["failures"]
@@ -516,16 +521,22 @@ def validate_me_refinement_stop(directory, plan, metadata, maximum, *, completed
     report["last_attempted_step"] = entered[-1] if entered else None
     if entered != list(range(1, completed_steps + 2)):
         failures.append("expected failed timestep was not the last attempted advance")
-    limit = plan["parameter_overrides"]["max_divergence_refinements"]
-    stop = re.compile(rf"NR refinement recovery stopped: per-timestep refinement limit reached:\s*{re.escape(str(limit))}\s*$",
-                      re.MULTILINE)
+    markers = {"divergence_refinement_limit": ("NR refinement recovery stopped", "max_divergence_refinements")}
+    if reason == "refinement_limit":
+        markers["oscillation_refinement_limit"] = ("Oscillation refinement stopped", "max_oscillation_refinements")
+    stops = {kind: re.compile(
+        rf"{marker}: per-timestep refinement limit reached:\s*{re.escape(str(plan['parameter_overrides'][budget]))}\s*$",
+        re.MULTILINE) for kind, (marker, budget) in markers.items()}
     final_attempt = log[iterations[-1].end():] if iterations else ""
-    if not stop.search(final_attempt):
-        failures.append("missing expected divergence-refinement-limit terminal reason")
-    elif any(not stop.search(message) for message in metadata.get("fatal_log_messages", [])):
+    matched = [kind for kind, stop in stops.items() if stop.search(final_attempt)]
+    if not matched:
+        label = "divergence-refinement-limit" if reason == "divergence_refinement_limit" else "refinement-limit"
+        failures.append(f"missing expected {label} terminal reason")
+    elif len(matched) != 1 or any(not stops[matched[0]].search(message)
+                                for message in metadata.get("fatal_log_messages", [])):
         failures.append("execution also reported an unrelated fatal error")
     else:
-        report["terminal_reason"] = "divergence_refinement_limit"
+        report["terminal_reason"] = matched[0]
     if not failures:
         report.update(status="passed", selected_output=prefix["steps"][-1]["output"])
     return report

@@ -372,8 +372,21 @@ exit 1
     return setup
 
 
-def test_expected_stop_refresh_collects_only_last_completion_and_publishes(stopped_setup):
+@pytest.mark.parametrize('terminal', ['divergence_refinement_limit', 'oscillation_refinement_limit'])
+def test_expected_stop_refresh_collects_only_last_completion_and_publishes(stopped_setup, terminal):
     setup = stopped_setup
+    if terminal == 'oscillation_refinement_limit':
+        path = setup.root / 'cases/legacy_case.json'
+        case = json.loads(path.read_text())
+        workflow = case['workflows']['moving']
+        workflow['moving_equilibrium']['expected_failure']['reason'] = 'refinement_limit'
+        workflow['parameter_overrides']['max_oscillation_refinements'] = 1
+        workflow['parameter_namelists']['max_oscillation_refinements'] = 'adapt_lst'
+        path.write_text(json.dumps(case))
+        solver = setup.harness.serial_executable.read_text().replace(
+            'NR refinement recovery stopped: per-timestep refinement limit reached: 0',
+            'Oscillation refinement stopped: per-timestep refinement limit reached: 1')
+        setup.harness.install_solver(solver, 'serial')
     _, report = golden.refresh('legacy_case', setup.values, setup.workspace)
     producer = report['producers'][0]
     run = Path(producer['run_directory'])
@@ -388,7 +401,7 @@ def test_expected_stop_refresh_collects_only_last_completion_and_publishes(stopp
     publish(setup)
     receipt = json.loads((setup.output / 'provenance/publication.json').read_text())
     assert receipt['producers'][0]['expected_failure'] == {
-        'reason': 'divergence_refinement_limit', 'completed_steps': [1], 'last_attempted_step': 2}
+        'reason': terminal, 'completed_steps': [1], 'last_attempted_step': 2}
     assert receipt['producers'][0]['run_status'] == 'solver_failed'
     assert not list(setup.output.rglob('*NR*.h5'))
     assert json.loads((run / 'run_metadata.json').read_text())['status'] == 'solver_failed'

@@ -98,7 +98,7 @@
           "zeff": "control_zeff", "impurity_concentration": "control_impurity_concentration"
         },
         "topology": {"first_completed": "limited", "last_completed": "limited"},
-        "expected_failure": {"reason": "divergence_refinement_limit", "completed_steps": 3},
+        "expected_failure": {"reason": "refinement_limit", "completed_steps": 3},
         "controller_scales": {
           "puff": 1e21, "n_li": 1e19,
           "feedback_integral_error": 1e19, "feedback_previous_error": 1e19,

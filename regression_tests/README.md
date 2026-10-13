@@ -116,6 +116,9 @@ select 80 ms puff feedback (seven advances), a 100 ms refinement-limit stop
 (compare completed step three), and two-advance 80 ms prescribed-puff/recycling
 checks with off-knot controls. These use four final solution references. The
 short puff-feedback MPI1/OMP1 versus MPI4/OMP1 pair needs no additional reference.
+The 100 ms recipe accepts exhaustion of either configured refinement budget
+at advance four, requires the same converged prefix, and records the actual stop
+reason. Other failures remain rejected; divergence-only declarations stay strict.
 `check moving_equilibrium` runs the full pair; `moving_equilibrium_short` and
 `moving_equilibrium_parallel` select the short checks. Field pairs are selected
 and retimed during preparation; the harness does not generate equilibria.
