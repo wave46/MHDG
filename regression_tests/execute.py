@@ -222,11 +222,14 @@ def _optional_file_record(settings: dict[str, Any], key: str) -> dict[str, Any] 
 
 
 def _fatal_log_messages(run_directory: Path, *, missing_ok: bool = False) -> list[str]:
-    """Catch solver file errors even when the process returns zero; bound the report."""
+    """Catch solver input/numerical stops even on zero exit; bound the report."""
     markers = (
         "Error opening source file:",
         "Error opening destination file:",
         "Error   : Unable to open file",
+        "NR refinement recovery stopped:",
+        "Oscillation refinement stopped:",
+        "Problem in the time advancing scheme",
     )
     messages = []
     for filename in ("stdout.log", "stderr.log"):
@@ -251,6 +254,14 @@ def reusable_outputs(directory):
         if metadata.get("stages"):
             return all(stage.get("status") == "completed" and reusable_outputs(Path(stage["run_directory"]))
                        for stage in metadata["stages"])
+        return outputs_unchanged(directory, metadata)
+    except (HarnessError, OSError, KeyError, TypeError):
+        return False
+
+
+def outputs_unchanged(directory, metadata):
+    """Check recorded output identities independently of the scientific outcome."""
+    try:
         outputs = metadata.get("output_files", [])
         return bool(outputs) and bool(metadata.get("hdf5_outputs")) and all(
             file_identity(directory / item["path"]) == {key: item[key] for key in ("sha256", "size_bytes")}

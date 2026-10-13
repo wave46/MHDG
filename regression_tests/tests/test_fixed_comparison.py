@@ -10,7 +10,8 @@ import pytest
 
 from regression_tests.compare_fixed import compare_hdf5_files, validate_solution_file
 from regression_tests.compare_common import read_newton_convergence
-from regression_tests.compare import compare_completed_run, validate_completed_run, validate_me_completed_steps
+from regression_tests.compare import compare_completed_run, validate_completed_run, validate_me_completed_steps, validate_me_refinement_stop
+from regression_tests.files import file_identity
 from regression_tests.tests.fixtures.harness import REGRESSION_ROOT, run_command
 from regression_tests.tests.fixtures.solutions import write_solution
 
@@ -254,3 +255,63 @@ def test_completed_me_run_cannot_hide_missing_or_unconverged_steps(me_outputs, m
         assert 'moving equilibrium did not complete all prescribed advances' in report['failures']
     else:
         assert not report['convergence']['passed']
+
+
+@pytest.fixture
+def stopped_me_outputs(me_outputs):
+    run, plan, metadata = me_outputs
+    for value in metadata['hdf5_outputs'][2:4]:
+        Path(value).unlink()
+    metadata['hdf5_outputs'] = [*metadata['hdf5_outputs'][:2], metadata['hdf5_outputs'][-1]]
+    log = run / 'stdout.log'
+    log.write_text(log.read_text().split('Time iteration = 2')[0] +
+                   'Time iteration = 2\nNR iteration: 1\nError: 1.0D9\n'
+                   'NR refinement recovery stopped: per-timestep refinement limit reached: 0\n')
+    plan['parameter_overrides']['max_divergence_refinements'] = 0
+    metadata.update(status='solver_failed', exit_code=1, launch_error=None, fatal_log_messages=[])
+    metadata['output_files'] = [{'path': value, **file_identity(Path(value))} for value in metadata['hdf5_outputs']]
+    return run, plan, metadata
+
+
+@pytest.mark.parametrize('exit_code,status', [(0, 'solver_reported_error'), (1, 'solver_failed')])
+def test_expected_refinement_stop_preserves_raw_status_and_selects_completed_prefix(stopped_me_outputs, exit_code, status):
+    run, plan, metadata = stopped_me_outputs
+    metadata.update(exit_code=exit_code, status=status)
+    original = json.dumps(metadata)
+    report = validate_me_refinement_stop(run, plan, metadata, 2e-4, completed_steps=1)
+    assert report['status'] == 'passed' and report['run_status'] == status
+    assert report['terminal_reason'] == 'divergence_refinement_limit'
+    assert report['last_attempted_step'] == 2
+    assert report['selected_output'] == metadata['hdf5_outputs'][1]
+    assert json.dumps(metadata) == original
+
+
+@pytest.mark.parametrize('damage', ['launch', 'crash', 'completed', 'missing_reason', 'earlier_reason', 'wrong_budget',
+                                  'file_error', 'later_step', 'unconverged_prefix', 'changed_output'])
+def test_expected_refinement_stop_rejects_unrelated_or_invalid_failure(stopped_me_outputs, damage):
+    run, plan, metadata = stopped_me_outputs
+    if damage in ('launch', 'completed'):
+        metadata['status'] = 'launch_failed' if damage == 'launch' else 'completed'
+    elif damage == 'crash':
+        metadata['exit_code'] = 139
+    elif damage == 'wrong_budget':
+        plan['parameter_overrides']['max_divergence_refinements'] = 1
+    elif damage == 'file_error':
+        metadata['fatal_log_messages'] = ['stderr.log:1: Error opening source file: missing.h5']
+    elif damage == 'changed_output':
+        Path(metadata['hdf5_outputs'][1]).write_bytes(b'changed output')
+    else:
+        log = run / 'stdout.log'
+        text = log.read_text()
+        if damage == 'missing_reason':
+            text = text.replace('NR refinement recovery stopped:', 'Unrelated failure:')
+        elif damage == 'earlier_reason':
+            stop = 'NR refinement recovery stopped: per-timestep refinement limit reached: 0\n'
+            text = text.replace(stop, '').replace('Time iteration = 2\n', stop + 'Time iteration = 2\n')
+        elif damage == 'later_step':
+            text += 'Time iteration = 3\n'
+        else:
+            text = text.replace('Error: 1.0D-5', 'Error: 1.0D-2')
+        log.write_text(text)
+    report = validate_me_refinement_stop(run, plan, metadata, 2e-4, completed_steps=1)
+    assert report['status'] == 'failed' and report['failures'] and report['selected_output'] is None

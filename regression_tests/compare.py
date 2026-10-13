@@ -16,7 +16,7 @@ from .support import ComparisonError, utc_now
 from .files import file_identity, recorded_file, require_directory
 from .compare_adaptive import compare_adaptive_files, mesh_differences
 from .compare_fixed import compare_hdf5_files, check_output_contract, validate_solution_file, required_scalar
-from .execute import final_execution
+from .execute import final_execution, outputs_unchanged
 from .compare_common import (
     select_logged_output, NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
     load_fixed_tolerances, load_tolerance_catalog, read_newton_convergence, resolve_run_file, select_candidate,
@@ -358,6 +358,46 @@ def validate_me_completed_steps(directory, plan, metadata, maximum):
             "complete": completed == list(range(1, prescribed + 1)),
             "convergence": {"passed": newton_passed},
             "steps": [steps[number] for number in sorted(steps)]}
+
+
+def validate_me_refinement_stop(directory, plan, metadata, maximum, *, completed_steps):
+    """Validate an expected divergence-budget stop without rewriting raw status."""
+    report = {"status": "failed", "run_status": metadata.get("status"), "failures": [],
+              "terminal_reason": None, "completed_prefix": None, "selected_output": None}
+    failures = report["failures"]
+    if not 1 <= completed_steps < plan["parameter_overrides"]["nts"]:
+        raise ComparisonError("expected failure requires a nonempty incomplete ME prefix")
+    if ((metadata.get("exit_code"), metadata.get("status")) not in
+            {(0, "solver_reported_error"), (1, "solver_failed")} or metadata.get("launch_error")):
+        failures.append("execution is not a supported numerical stop")
+        return report
+    if not outputs_unchanged(directory, metadata):
+        failures.append("expected-failure outputs are missing or changed")
+        return report
+    prefix = validate_me_completed_steps(directory, plan, metadata, maximum)
+    report["completed_prefix"] = prefix
+    failures.extend(prefix["failures"])
+    if prefix["completed_steps"] != list(range(1, completed_steps + 1)) or prefix["complete"]:
+        failures.append("completed prefix differs from the expected failure")
+    log = (directory / "stdout.log").read_text(encoding="utf-8", errors="replace")
+    iterations = list(re.finditer(r"Time iteration\s*=\s*(\d+)", log))
+    entered = [int(match[1]) for match in iterations]
+    report["last_attempted_step"] = entered[-1] if entered else None
+    if entered != list(range(1, completed_steps + 2)):
+        failures.append("expected failed timestep was not the last attempted advance")
+    limit = plan["parameter_overrides"]["max_divergence_refinements"]
+    stop = re.compile(rf"NR refinement recovery stopped: per-timestep refinement limit reached:\s*{re.escape(str(limit))}\s*$",
+                      re.MULTILINE)
+    final_attempt = log[iterations[-1].end():] if iterations else ""
+    if not stop.search(final_attempt):
+        failures.append("missing expected divergence-refinement-limit terminal reason")
+    elif any(not stop.search(message) for message in metadata.get("fatal_log_messages", [])):
+        failures.append("execution also reported an unrelated fatal error")
+    else:
+        report["terminal_reason"] = "divergence_refinement_limit"
+    if not failures:
+        report.update(status="passed", selected_output=prefix["steps"][-1]["output"])
+    return report
 
 
 def _validate_outputs(inputs, checks):
