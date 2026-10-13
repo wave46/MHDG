@@ -48,13 +48,14 @@ def load_comparison_inputs(
     run_directory: Path,
     case_directory: Path,
     tolerances_path: Path,
-    *, catalog=None,
+    *, catalog=None, require_completed=True,
 ) -> ComparisonInputs:
     """Load and validate the documents needed to compare a completed run."""
     catalog = {} if catalog is None else catalog
     run_directory = require_directory(run_directory, "run")
     plan = load_json(run_directory / "run_plan.json", "run plan")
-    metadata = _load_completed_metadata(run_directory)
+    metadata = (_load_completed_metadata(run_directory) if require_completed else
+                load_json(run_directory / "run_metadata.json", "run metadata"))
     case = load_case_definition(plan["case_id"], case_directory, catalog=catalog)
     workflow = case["workflows"].get(plan.get("workflow_id"))
     if workflow is None:
@@ -123,7 +124,7 @@ def compare_completed_run(
 
 def compare_run(
     inputs: ComparisonInputs, overrides: ComparisonOverrides,
-    report_path: Path | None = None, *, policy: str | None = None,
+    report_path: Path | None = None, *, policy: str | None = None, outcome=None,
 ) -> tuple[Path, dict[str, Any]]:
     """Share file selection, Newton acceptance and report writing across methods."""
     comparison = inputs.workflow.get("comparison", {})
@@ -178,8 +179,26 @@ def compare_run(
             reference, candidate, fekete, tolerances["samples_per_element"], tolerances,
         )
         details = {key: value for key, value in field_report.items() if key != "tolerances"}
-    convergence = read_newton_convergence(inputs.run_directory / "stdout.log", tolerances["newton_error_max"])
-    preceding = _validate_outputs(inputs, _newton_checks(inputs, before_final=True))
+    if outcome is None:
+        convergence = read_newton_convergence(inputs.run_directory / "stdout.log", tolerances["newton_error_max"])
+        preceding = _validate_outputs(inputs, _newton_checks(inputs, before_final=True))
+        moving = _validate_me_steps(inputs, tolerances["newton_error_max"])
+    else:
+        moving = outcome["completed_prefix"]
+        # A matching-mesh fallback can select a stricter Newton profile.
+        for step in moving["steps"][1:]:
+            if step["convergence"]["maximum"] != tolerances["newton_error_max"]:
+                check = NewtonConvergence(step["convergence"]["final_newton_error"], tolerances["newton_error_max"])
+                step["convergence"] = check.as_report()
+                if check.failure:
+                    step["failures"].append(check.failure)
+                    step["status"] = "failed"
+                    moving["failures"].append(f"step {step['step']}: {check.failure}")
+        moving["convergence"]["passed"] = all(step["convergence"]["passed"] for step in moving["steps"][1:])
+        moving["status"] = "failed" if moving["failures"] else "passed"
+        convergence = NewtonConvergence(moving["steps"][-1]["convergence"]["final_newton_error"],
+                                        tolerances["newton_error_max"])
+        preceding = _validate_outputs(inputs, [])
     refinement = _check_refinement(inputs, candidate)
     protected.extend(Path(stage["output"]) for stage in preceding["stages"] if stage["output"])
     if refinement.get("initial_output"):
@@ -188,9 +207,14 @@ def compare_run(
     failures.extend(saved_output_contract(inputs, candidate)["failures"])
     failures.extend(preceding["failures"])
     failures.extend(refinement.get("failures", []))
-    moving = _validate_me_steps(inputs, tolerances["newton_error_max"])
     failures.extend(moving.get("failures", []))
     protected.extend(Path(step["output"]) for step in moving.get("steps", []))
+    if moving:
+        with h5py.File(candidate, "r") as first, h5py.File(reference, "r") as second:
+            candidate_time, reference_time = _me_time(first), _me_time(second)
+        if (candidate_time[0] != reference_time[0] or any(not math.isclose(a, b, rel_tol=1e-10, abs_tol=1e-12)
+                for a, b in zip(candidate_time[1:3], reference_time[1:3]))):
+            failures.append("ME reference step/time/dt differs from the completed candidate")
     if convergence.failure is not None:
         failures.append(convergence.failure)
     report = {
@@ -206,6 +230,8 @@ def compare_run(
                         "passed": convergence.passed and preceding["convergence"]["passed"]
                                   and moving.get("convergence", {}).get("passed", True)},
         **({"moving_equilibrium": moving} if moving else {}),
+        **({"expected_failure": {key: outcome[key] for key in
+             ("run_status", "terminal_reason", "last_attempted_step")}} if outcome else {}),
         "stages": preceding["stages"], "refinement": refinement, "failures": failures,
     }
     output = (report_path or inputs.run_directory / "comparison.json").expanduser().resolve()
@@ -213,6 +239,24 @@ def compare_run(
         raise ComparisonError("comparison report cannot replace a comparison input")
     write_json_atomic(output, report, "comparison report")
     return output, report
+
+
+def compare_me_refinement_stop(directory, case_directory, tolerances_path, *, completed_steps,
+                               reference_override=None, report_override=None, catalog=None):
+    """Compare a validated completed prefix; raw failure metadata remains intact."""
+    inputs = load_comparison_inputs(directory, case_directory, tolerances_path,
+                                    catalog=catalog, require_completed=False)
+    if not inputs.workflow.get("moving_equilibrium"):
+        raise ComparisonError("expected refinement-stop comparison requires a moving-equilibrium workflow")
+    maximum = _stage_newton_maximum(inputs.workflow, inputs.plan["layout_id"],
+                                    tolerances_path, catalog=inputs.catalog)
+    outcome = validate_me_refinement_stop(inputs.run_directory, inputs.plan, inputs.metadata,
+                                          maximum, completed_steps=completed_steps)
+    if outcome["status"] != "passed":
+        raise ComparisonError("invalid expected ME refinement stop: " + "; ".join(outcome["failures"]))
+    overrides = ComparisonOverrides(candidate=Path(outcome["selected_output"]), reference=reference_override)
+    path, report = compare_run(inputs, overrides, report_override, outcome=outcome)
+    return report["comparison_policy"], path, report
 
 
 def compare_generated_meshes(
@@ -317,10 +361,7 @@ def validate_me_completed_steps(directory, plan, metadata, maximum):
             continue
         problems = validate_solution_file(path)
         with h5py.File(path, "r") as handle:
-            number = required_scalar(handle, "simulation_parameters/time", "Current_time_step_number")
-            scale = required_scalar(handle, "simulation_parameters/adimensionalization", "time_scale")
-            time = required_scalar(handle, "simulation_parameters/time", "Current_time") * scale
-            saved_dt = required_scalar(handle, "simulation_parameters/time", "Current_time_step") * scale
+            number, time, saved_dt, scale = _me_time(handle)
         if not (math.isfinite(number) and number == int(number) and 0 <= number <= prescribed):
             raise ComparisonError(f"invalid completed ME step: {path}")
         number = int(number)
@@ -358,6 +399,14 @@ def validate_me_completed_steps(directory, plan, metadata, maximum):
             "complete": completed == list(range(1, prescribed + 1)),
             "convergence": {"passed": newton_passed},
             "steps": [steps[number] for number in sorted(steps)]}
+
+
+def _me_time(handle):
+    number = required_scalar(handle, "simulation_parameters/time", "Current_time_step_number")
+    scale = required_scalar(handle, "simulation_parameters/adimensionalization", "time_scale")
+    time = required_scalar(handle, "simulation_parameters/time", "Current_time") * scale
+    dt = required_scalar(handle, "simulation_parameters/time", "Current_time_step") * scale
+    return number, time, dt, scale
 
 
 def validate_me_refinement_stop(directory, plan, metadata, maximum, *, completed_steps):

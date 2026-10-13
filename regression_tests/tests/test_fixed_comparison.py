@@ -10,8 +10,9 @@ import pytest
 
 from regression_tests.compare_fixed import compare_hdf5_files, validate_solution_file
 from regression_tests.compare_common import read_newton_convergence
-from regression_tests.compare import compare_completed_run, validate_completed_run, validate_me_completed_steps, validate_me_refinement_stop
+from regression_tests.compare import compare_completed_run, validate_completed_run, validate_me_completed_steps, validate_me_refinement_stop, compare_me_refinement_stop
 from regression_tests.files import file_identity
+from regression_tests.support import ComparisonError
 from regression_tests.tests.fixtures.harness import REGRESSION_ROOT, run_command
 from regression_tests.tests.fixtures.solutions import write_solution
 
@@ -315,3 +316,87 @@ def test_expected_refinement_stop_rejects_unrelated_or_invalid_failure(stopped_m
         log.write_text(text)
     report = validate_me_refinement_stop(run, plan, metadata, 2e-4, completed_steps=1)
     assert report['status'] == 'failed' and report['failures'] and report['selected_output'] is None
+
+
+@pytest.mark.parametrize('policy', ['fixed_hdf5', 'mesh_independent'])
+@pytest.mark.parametrize('reference_damage', [None, 'field', 'step', 'time', 'dt'])
+def test_expected_stop_prefix_uses_shared_reference_comparison(stopped_me_outputs, monkeypatch, policy, reference_damage):
+    run, plan, metadata = stopped_me_outputs
+    (run / 'inputs').mkdir()
+    reference = run / 'inputs/reference.h5'
+    shutil.copy2(metadata['hdf5_outputs'][1], reference)
+    if reference_damage:
+        with h5py.File(reference, 'r+') as handle:
+            if reference_damage == 'field':
+                handle['solution/u'][1] += .1
+            else:
+                key = {'step': 'Current_time_step_number', 'time': 'Current_time', 'dt': 'Current_time_step'}[reference_damage]
+                handle[f'simulation_parameters/time/{key}'][...] *= 2
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    metadata_path = run / 'run_metadata.json'
+    metadata_path.write_text(json.dumps(metadata))
+    original = metadata_path.read_bytes()
+    workflow = {'moving_equilibrium': {'series': 'equilibrium_series'}, 'layout': 'mpi4_omp4',
+                'comparison': {'method': policy, 'profile': 'fixed_same_layout' if policy == 'fixed_hdf5' else 'adaptive_reference',
+                               'direct_profile': 'fixed_same_layout'}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    method, _, report = compare_me_refinement_stop(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
+                                                  completed_steps=1)
+    assert method == 'fixed_hdf5'  # Existing matching-mesh fallback is reused.
+    assert report['status'] == ('passed' if reference_damage is None else 'failed')
+    assert report['candidate'] == metadata['hdf5_outputs'][1]
+    assert report['convergence']['final_newton_error'] == 1e-5  # Never the failed step's 1e9.
+    assert report['expected_failure']['run_status'] == 'solver_failed'
+    assert metadata_path.read_bytes() == original
+    if reference_damage in ('step', 'time', 'dt'):
+        assert report['hdf5']['status'] == 'passed' and any('ME reference' in failure for failure in report['failures'])
+    with pytest.raises(ComparisonError, match='not completed'):
+        compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json')
+    if reference_damage is None and policy == 'fixed_hdf5':
+        initial = Path(metadata['hdf5_outputs'][0])
+        original_output = initial.read_bytes()
+        with pytest.raises(ComparisonError, match='cannot replace a comparison input'):
+            compare_me_refinement_stop(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
+                                       completed_steps=1, report_override=initial)
+        assert initial.read_bytes() == original_output
+
+
+def test_invalid_expected_stop_cannot_enter_reference_comparison(stopped_me_outputs, monkeypatch):
+    run, plan, metadata = stopped_me_outputs
+    metadata['exit_code'] = 139
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    (run / 'run_metadata.json').write_text(json.dumps(metadata))
+    workflow = {'moving_equilibrium': {'series': 'equilibrium_series'}, 'layout': 'mpi4_omp4',
+                'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    monkeypatch.setattr('regression_tests.compare.compare_run', lambda *_, **__: pytest.fail('invalid outcome reached comparator'))
+    with pytest.raises(ComparisonError, match='invalid expected ME refinement stop'):
+        compare_me_refinement_stop(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json', completed_steps=1)
+
+
+def test_prefix_comparison_applies_stricter_fallback_newton_profile_to_earlier_steps(me_outputs, monkeypatch):
+    run, plan, metadata = me_outputs
+    plan['parameter_overrides'].update(nts=3, max_divergence_refinements=0)
+    log = run / 'stdout.log'
+    log.write_text(log.read_text().replace('Error: 2.0D-5', 'Error: 1.0D-7') +
+                   'Time iteration = 3\nNR iteration: 1\nError: 1.0D9\n'
+                   'NR refinement recovery stopped: per-timestep refinement limit reached: 0\n')
+    metadata.update(status='solver_failed', exit_code=1)
+    metadata['output_files'] = [{'path': value, **file_identity(Path(value))} for value in metadata['hdf5_outputs']]
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    (run / 'run_metadata.json').write_text(json.dumps(metadata))
+    tolerances = json.loads((REGRESSION_ROOT / 'tolerances.json').read_text())
+    tolerances['profiles']['fixed_same_layout']['newton_error_max'] = 1e-6
+    path = run / 'tolerances.json'
+    path.write_text(json.dumps(tolerances))
+    workflow = {'moving_equilibrium': {'series': 'equilibrium_series'}, 'layout': 'mpi4_omp4',
+                'comparison': {'method': 'mesh_independent', 'profile': 'adaptive_reference', 'direct_profile': 'fixed_same_layout'}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    _, _, report = compare_me_refinement_stop(run, REGRESSION_ROOT / 'cases', path,
+                                             completed_steps=2, reference_override=Path(metadata['hdf5_outputs'][2]))
+    assert report['hdf5']['status'] == 'passed' and report['convergence']['final_newton_error'] == 1e-7
+    assert report['status'] == 'failed' and not report['convergence']['passed']
+    assert report['moving_equilibrium']['steps'][1]['status'] == 'failed'
