@@ -158,7 +158,17 @@
       "type": "object", "additionalProperties": false,
       "required": ["series"],
       "properties": {
-        "series": {"$ref": "#/$defs/identifier"}
+        "series": {"$ref": "#/$defs/identifier"},
+        "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+        "controls": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "puff": {"$ref": "#/$defs/identifier"},
+            "target_density": {"$ref": "#/$defs/identifier"},
+            "zeff": {"$ref": "#/$defs/identifier"},
+            "impurity_concentration": {"$ref": "#/$defs/identifier"}
+          }
+        }
       }
     },
     "comparison": {

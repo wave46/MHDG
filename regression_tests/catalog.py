@@ -252,6 +252,7 @@ def workflow_required_roles(workflow: dict[str, Any], *, references: bool = True
     roles = set(workflow.get("inputs", []))
     if moving := workflow.get("moving_equilibrium"):
         roles.add(moving["series"])
+        roles.update(moving.get("controls", {}).values())
     for name in (
         "mesh",
         "parameters",

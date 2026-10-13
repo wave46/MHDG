@@ -147,3 +147,111 @@ def test_ambiguous_or_undeclared_parameter_edits_fail(tmp_path, text, namelists)
     with pytest.raises(BundleError):
         render_parameter_file(source, target, {}, {"x": 3}, namelists)
     assert not target.exists()
+
+
+@pytest.fixture
+def me_harness(harness):
+    import h5py
+    import numpy as np
+    from regression_tests.bundles import create_bundle
+
+    source = harness.source
+    (source / "magnetic").mkdir()
+    frames = []
+    for n in range(26):
+        frame = {}
+        for kind in ("magnetic", "current"):
+            path = source / f"magnetic/{kind}_{n + 1:04d}.h5"
+            with h5py.File(path, "w") as handle:
+                handle["time"], handle["dt"] = float(n * .02), .02
+                handle["field"] = np.arange(4).reshape(2, 2) + n * 10
+            frame[kind] = path.relative_to(source).as_posix()
+        frames.append(frame)
+    (source / "series.json").write_text(json.dumps({"schema_version": 1, "dt_s": .02, "frames": frames}))
+    for name in ("target_density", "impurity_concentration"):
+        with h5py.File(source / f"{name}.h5", "w") as handle:
+            handle["time"], handle[name] = [0., .5, .52], [2., 10., 10.]
+    with h5py.File(source / "restart.h5", "r+") as handle:
+        handle["simulation_parameters/adimensionalization/time_scale"] = 2e-7
+    (source / "impurity_model_w.nml").write_text("&IMPURITY_RADIATION_LST\n"
+        " impurity_concentration_path = '/old/concentration.h5'\n impurity_concentration_dimension = 3\n/\n")
+    render_parameter_file(source / "param.txt", source / "param_me.txt", {"target_density_path": "/old/density.h5"},
+                          {"target_density_dimension": 3},
+                          {"target_density_path": "input_lst", "target_density_dimension": "input_lst"})
+    path = harness.catalog / "cases/legacy_case.json"
+    case = json.loads(path.read_text())
+    case["files"]["optional"].update(equilibrium_series="series.json", me_parameters="param_me.txt",
+                                    density="target_density.h5", concentration="impurity_concentration.h5")
+    case["workflows"]["warm"].update(parameters="me_parameters", moving_equilibrium={
+        "series": "equilibrium_series", "time_step_s": .08,
+        "controls": {"target_density": "density", "impurity_concentration": "concentration"}})
+    path.write_text(json.dumps(case))
+    create_bundle("legacy_case", source, harness.root / "me_bundle", harness.catalog / "cases")
+    settings = json.loads(harness.settings.read_text())
+    settings["defaults"]["bundles"]["legacy_case"] = "me_bundle"
+    harness.settings.write_text(json.dumps(settings))
+    return harness
+
+
+@pytest.mark.parametrize("dt,steps,mapping", [
+    (.08, None, [1, 5, 9, 13, 17, 21, 25, 26]),
+    (.1, None, [1, 6, 11, 16, 21, 26]), (.02, 3, [1, 2, 3, 4]),
+])
+def test_me_preparation_retimes_pairs_and_reuses_canonical_controls(me_harness, dt, steps, mapping):
+    import h5py
+    import numpy as np
+    from regression_tests.files import file_identity
+
+    path = me_harness.catalog / "cases/legacy_case.json"
+    case = json.loads(path.read_text())
+    case["workflows"]["warm"]["moving_equilibrium"]["time_step_s"] = dt
+    path.write_text(json.dumps(case))
+    bundle = me_harness.root / "me_bundle"
+    original = {str(p): file_identity(p) for p in bundle.rglob("*") if p.is_file()}
+    run = prepare(me_harness, requested_overrides={"nts": steps} if steps else {})
+    plan = json.loads((run.path / "run_plan.json").read_text())
+    assert plan["moving_equilibrium_inputs"]["canonical_frames"] == mapping
+    assert plan["moving_equilibrium_inputs"]["source_manifest"] == file_identity(bundle / "manifest.json")
+    values = read_selected_input_values(run.path / "param.txt", {"nts", "dt0", "tfi", "field_path", "jtor_path", "target_density_dimension"})
+    assert values["nts"] == len(mapping) - 1
+    assert values["dt0"] * 2e-7 == pytest.approx(dt)
+    assert values["tfi"] * 2e-7 == pytest.approx((len(mapping) - 1) * dt)
+    assert values["field_path"] == str(run.path / "inputs/magnetic/equilibrium")
+    assert values["jtor_path"] == str(run.path / "inputs/magnetic/current_density")
+    for name, identity in plan["moving_equilibrium_inputs"]["generated_files"].items():
+        assert file_identity(run.path / name) == identity
+        number = int(name[-7:-3])
+        with h5py.File(run.path / name) as handle:
+            assert handle["time"][()] == pytest.approx((number - 1) * dt)
+            assert handle["dt"][()] == dt
+            np.testing.assert_array_equal(handle["field"][()], np.arange(4).reshape(2, 2) + (mapping[number - 1] - 1) * 10)
+    assert values["target_density_dimension"] == 3
+    assert (run.path / "inputs/target_density.h5").resolve() == bundle / "inputs/target_density.h5"
+    assert (run.path / "inputs/restart.h5").is_symlink()
+    impurity = read_selected_input_values(run.path / "inputs/impurity_model.nml", {"impurity_concentration_path", "impurity_concentration_dimension"})
+    assert impurity == {"impurity_concentration_path": str(run.path / "inputs/impurity_concentration.h5"), "impurity_concentration_dimension": 3}
+    assert original == {str(p): file_identity(p) for p in bundle.rglob("*") if p.is_file()}
+
+
+@pytest.mark.parametrize("failure", ["timestep", "metadata", "normalized_override", "control_range"])
+def test_me_preparation_failure_is_atomic(me_harness, failure):
+    import h5py
+
+    options = {"validate_bundle": False}
+    if failure == "timestep":
+        path = me_harness.catalog / "cases/legacy_case.json"
+        case = json.loads(path.read_text())
+        case["workflows"]["warm"]["moving_equilibrium"]["time_step_s"] = .07
+        path.write_text(json.dumps(case))
+    elif failure == "metadata":
+        with h5py.File(me_harness.root / "me_bundle/inputs/equilibrium_series/magnetic/current_0001.h5", "r+") as handle:
+            handle["time"][...] = .3
+    elif failure == "control_range":
+        with h5py.File(me_harness.root / "me_bundle/inputs/target_density.h5", "r+") as handle:
+            handle["time"][...] = [0., .1, .2]
+    else:
+        options["requested_overrides"] = {"dt0": 123.}
+    with pytest.raises(BundleError):
+        prepare(me_harness, **options)
+    parent = me_harness.run_directory("warm", "mpi4_omp4", "probe").parent
+    assert not parent.exists() or not list(parent.iterdir())
