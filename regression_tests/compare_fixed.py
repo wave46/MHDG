@@ -176,9 +176,10 @@ def numeric_comparison(
     reference: np.ndarray,
     candidate: np.ndarray,
     tolerances: dict[str, Any],
+    *, reference_scale: float = 0.,
 ) -> dict[str, Any]:
     """Build the standard fixed-mesh numeric tolerance report."""
-    norms = calculate_error_norms(reference, candidate)
+    norms = calculate_error_norms(reference, candidate, reference_scale=reference_scale)
     if not norms.available:
         return {
             "passed": False,
@@ -206,6 +207,29 @@ def numeric_comparison(
         "normalized_linf": normalized_linf,
         "normalized_linf_max": tolerances["normalized_linf_max"],
     }
+
+
+def compare_controller_files(reference_path, candidate_path, scales, tolerances):
+    """Compare declared saved controller scalars with explicit reference scale floors."""
+    datasets, failures = {}, []
+    with h5py.File(reference_path, "r") as reference, h5py.File(candidate_path, "r") as candidate:
+        for name, scale in scales.items():
+            try:
+                if not np.isfinite(scale) or scale <= 0:
+                    raise ComparisonError(f"invalid controller reference scale: {name}")
+                first = required_array(reference, "simulation_parameters/physics", name).reshape(-1)
+                second = required_array(candidate, "simulation_parameters/physics", name).reshape(-1)
+                if first.size != 1 or second.size != 1:
+                    raise ComparisonError(f"controller {name} must contain one value")
+                metrics = numeric_comparison(first, second, tolerances, reference_scale=scale)
+            except (ComparisonError, TypeError, ValueError) as exc:
+                metrics = {"passed": False, "reason": str(exc)}
+            datasets[name] = {**metrics, "reference_scale": scale}
+            if not metrics["passed"]:
+                failures.append(f"controller/{name} is invalid or differs from the reference")
+    return {"status": "failed" if failures else "passed", "datasets": datasets,
+            "failures": failures, "tolerances": {key: tolerances[key] for key in
+                                               ("relative_l2_max", "normalized_linf_max")}}
 
 
 def compare_mesh(

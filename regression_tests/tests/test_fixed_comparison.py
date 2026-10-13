@@ -202,6 +202,42 @@ def test_me_completion_uses_embedded_steps_and_final_attempts(me_outputs):
     json.dumps(report, allow_nan=False)
 
 
+@pytest.mark.parametrize('reference_check', [False, True])
+@pytest.mark.parametrize('damage', [None, 'missing', 'nonfinite', 'nonscalar', 'changed'])
+def test_declared_controller_state_is_validated_and_compared(me_outputs, monkeypatch, reference_check, damage):
+    run, plan, metadata = me_outputs
+    final = Path(metadata['hdf5_outputs'][3])
+    with h5py.File(final, 'r+') as handle:
+        handle['simulation_parameters/physics/puff'] = 0.
+    reference = run / 'reference.h5'
+    shutil.copy2(final, reference)
+    with h5py.File(final, 'r+') as handle:
+        group = handle['simulation_parameters/physics']
+        if damage == 'missing':
+            del group['puff']
+        elif damage == 'nonscalar':
+            del group['puff']
+            group['puff'] = [0., 1.]
+        elif damage:
+            group['puff'][...] = np.nan if damage == 'nonfinite' else 2e10
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    (run / 'run_metadata.json').write_text(json.dumps(metadata))
+    workflow = {'moving_equilibrium': {'series': 'fields', 'controller_scales': {'puff': 1e20}},
+                'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    if reference_check:
+        _, _, report = compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
+                                             reference_override=reference)
+        assert report['hdf5']['status'] == 'passed'
+    else:
+        report = validate_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json')
+    passed = damage is None or (damage == 'changed' and not reference_check)
+    assert report['status'] == ('passed' if passed else 'failed')
+    assert report['controller']['datasets']['puff']['reference_scale'] == 1e20
+    assert all('controller' in failure for failure in report['failures'])
+
+
 @pytest.fixture
 def topology_outputs(me_outputs):
     run, plan, metadata = me_outputs
@@ -267,6 +303,33 @@ def test_adaptive_me_reference_requires_matching_topology(topology_outputs, monk
     assert method == 'mesh_independent' and fields.call_count == 1
     assert report['status'] == ('passed' if reference_label == 'lower_single_null' else 'failed')
     assert report['magnetic_topology']['passed'] is (reference_label == 'lower_single_null')
+
+
+@pytest.mark.parametrize('profile,passed', [('fixed_same_layout', False), ('feature_converged', True)])
+def test_adaptive_controller_uses_existing_direct_profile(topology_outputs, monkeypatch, profile, passed):
+    run, plan, metadata = topology_outputs
+    candidate, reference, fekete = Path(metadata['hdf5_outputs'][3]), run / 'reference.h5', run / 'fekete.h5'
+    with h5py.File(candidate, 'r+') as handle:
+        handle['simulation_parameters/physics/puff'] = 5e11
+    shutil.copy2(candidate, reference)
+    with h5py.File(reference, 'r+') as handle:
+        handle['mesh/X'][0] *= 1.01
+        handle['simulation_parameters/physics/puff'][...] = 0.
+    fekete.write_bytes(b'not sampled in this scalar check')
+    metadata['runtime_files'] = {'positionFeketeNodesTri2D.h5': {'path': str(fekete)}}
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    (run / 'run_metadata.json').write_text(json.dumps(metadata))
+    workflow = {'moving_equilibrium': {'series': 'fields', 'controller_scales': {'puff': 1e20}},
+                'comparison': {'method': 'mesh_independent', 'profile': 'adaptive_reference', 'direct_profile': profile}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    monkeypatch.setattr('regression_tests.compare.compare_adaptive_files',
+                        lambda *_, **__: {'status': 'passed', 'failures': []})
+    method, _, report = compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
+                                              reference_override=reference)
+    assert method == 'mesh_independent'
+    assert report['status'] == ('passed' if passed else 'failed')
+    assert report['controller']['status'] == report['status']
 
 
 @pytest.mark.parametrize('damage', ['gap', 'time', 'nonfinite_time', 'dt', 'retry_error', 'nonconvergence',
@@ -359,6 +422,32 @@ def test_expected_prefix_checks_recipe_topology(stopped_me_outputs, monkeypatch,
     report = validate_me_stopped_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json', completed_steps=1)
     assert report['status'] == ('passed' if label == 'limited' else 'failed')
     assert report['run_status'] == 'solver_failed'
+
+
+@pytest.mark.parametrize('difference,passed', [(5e9, True), (2e10, False)])
+def test_expected_prefix_compares_controller_scalars_near_zero(stopped_me_outputs, monkeypatch, difference, passed):
+    from regression_tests.compare import validate_me_stopped_run
+    run, plan, metadata = stopped_me_outputs
+    candidate = Path(metadata['hdf5_outputs'][1])
+    with h5py.File(candidate, 'r+') as handle:
+        handle['simulation_parameters/physics/puff'] = 0.
+    reference = run / 'reference.h5'
+    shutil.copy2(candidate, reference)
+    with h5py.File(candidate, 'r+') as handle:
+        handle['simulation_parameters/physics/puff'][...] = difference
+    metadata['output_files'] = [{'path': value, **file_identity(Path(value))} for value in metadata['hdf5_outputs']]
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    (run / 'run_metadata.json').write_text(json.dumps(metadata))
+    workflow = {'moving_equilibrium': {'series': 'fields', 'controller_scales': {'puff': 1e20}},
+                'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    validation = validate_me_stopped_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json', completed_steps=1)
+    assert validation['status'] == 'passed'
+    _, _, report = compare_me_refinement_stop(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
+                                              completed_steps=1, reference_override=reference)
+    assert report['status'] == ('passed' if passed else 'failed')
+    assert report['candidate'] == str(candidate) and report['expected_failure']['run_status'] == 'solver_failed'
 
 
 @pytest.mark.parametrize('exit_code,status', [(0, 'solver_reported_error'), (1, 'solver_failed')])

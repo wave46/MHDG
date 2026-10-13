@@ -16,7 +16,7 @@ from .support import ComparisonError, utc_now
 from .files import file_identity, recorded_file, require_directory
 from .compare_adaptive import compare_adaptive_files, mesh_differences
 from .compare_fixed import (compare_hdf5_files, compare_magnetic, check_output_contract,
-                            validate_solution_file, required_scalar, required_array)
+                            validate_solution_file, required_scalar, required_array, compare_controller_files)
 from .execute import final_execution, outputs_unchanged
 from .compare_common import (
     select_logged_output, NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
@@ -205,6 +205,8 @@ def compare_run(
     if refinement.get("initial_output"):
         protected.append(Path(refinement["initial_output"]))
     failures = list(field_report["failures"])
+    controller = _controller_comparison(inputs, candidate, reference, tolerances)
+    failures.extend(controller.get("failures", []))
     if policy == "mesh_independent" and inputs.workflow.get("moving_equilibrium"):
         with h5py.File(reference, "r") as first, h5py.File(candidate, "r") as second:
             details["magnetic_topology"] = compare_magnetic(first, second, tolerances, failures, names=("topology",))
@@ -234,6 +236,7 @@ def compare_run(
                         "passed": convergence.passed and preceding["convergence"]["passed"]
                                   and moving.get("convergence", {}).get("passed", True)},
         **({"moving_equilibrium": moving} if moving else {}),
+        **({"controller": controller} if controller else {}),
         **({"expected_failure": {key: outcome[key] for key in
              ("run_status", "terminal_reason", "last_attempted_step")}} if outcome else {}),
         "stages": preceding["stages"], "refinement": refinement, "failures": failures,
@@ -280,6 +283,10 @@ def validate_me_stopped_run(directory, case_directory, tolerances_path, *, compl
         contract = saved_output_contract(inputs, Path(outcome["selected_output"]))
         report["output_contract"] = contract
         report["failures"].extend(contract["failures"])
+        controller = _controller_comparison(inputs, Path(outcome["selected_output"]))
+        if controller:
+            report["controller"] = controller
+            report["failures"].extend(controller["failures"])
         report["convergence"] = outcome["completed_prefix"]["convergence"]
         report["status"] = "failed" if report["failures"] else "passed"
     return report
@@ -354,6 +361,11 @@ def validate_completed_run(run_directory, case_directory, tolerances_path, *, ca
     refinement = _check_refinement(inputs, Path(output)) if output else {}
     report["refinement"] = refinement
     report["failures"].extend(refinement.get("failures", []))
+    if output:
+        controller = _controller_comparison(inputs, Path(output))
+        if controller:
+            report["controller"] = controller
+            report["failures"].extend(controller["failures"])
     if inputs.workflow.get("moving_equilibrium"):
         moving = _validate_me_steps(inputs, _stage_newton_maximum(
             inputs.workflow, inputs.plan["layout_id"], inputs.tolerances_path, catalog=inputs.catalog))
@@ -362,6 +374,20 @@ def validate_completed_run(run_directory, case_directory, tolerances_path, *, ca
         report["convergence"]["passed"] &= moving["convergence"]["passed"]
     report["status"] = "failed" if report["failures"] else "passed"
     return report
+
+
+def _controller_comparison(inputs, candidate, reference=None, tolerances=None):
+    scales = inputs.workflow.get("moving_equilibrium", {}).get("controller_scales")
+    if not scales:
+        return {}
+    if reference is None:
+        reference = candidate
+        tolerances = {"relative_l2_max": 0., "normalized_linf_max": 0.}
+    elif "relative_l2_max" not in tolerances:
+        _, tolerances = load_fixed_tolerances(inputs.tolerances_path, inputs.workflow, inputs.plan["layout_id"],
+                                             inputs.workflow.get("comparison", {}).get("direct_profile"),
+                                             catalog=inputs.catalog)
+    return compare_controller_files(reference, candidate, scales, tolerances)
 
 
 def _validate_me_steps(inputs, maximum):

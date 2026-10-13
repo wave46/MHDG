@@ -106,7 +106,7 @@ class ErrorNorms:
 
 
 def calculate_error_norms(
-    reference: np.ndarray, candidate: np.ndarray
+    reference: np.ndarray, candidate: np.ndarray, *, reference_scale: float = 0.,
 ) -> ErrorNorms:
     """Calculate error norms when both arrays are compatible and finite."""
     first = np.asarray(reference, dtype=float)
@@ -122,10 +122,10 @@ def calculate_error_norms(
     tiny = np.finfo(float).tiny
     relative_l2 = float(
         np.linalg.norm(difference.ravel())
-        / max(float(np.linalg.norm(first.ravel())), tiny)
+        / max(float(np.linalg.norm(first.ravel())), reference_scale, tiny)
     )
     normalized_linf = float(
-        np.max(np.abs(difference)) / max(float(np.max(np.abs(first))), tiny)
+        np.max(np.abs(difference)) / max(float(np.max(np.abs(first))), reference_scale, tiny)
     )
     return ErrorNorms(True, True, relative_l2, normalized_linf)
 

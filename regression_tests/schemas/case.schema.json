@@ -160,6 +160,19 @@
       "properties": {
         "series": {"$ref": "#/$defs/identifier"},
         "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+        "controller_scales": {
+          "type": "object", "additionalProperties": false, "minProperties": 1,
+          "properties": {
+            "puff": {"type": "number", "exclusiveMinimum": 0},
+            "n_li": {"type": "number", "exclusiveMinimum": 0},
+            "feedback_integral_error": {"type": "number", "exclusiveMinimum": 0},
+            "feedback_previous_error": {"type": "number", "exclusiveMinimum": 0},
+            "recycling": {"type": "number", "exclusiveMinimum": 0},
+            "recycling_pump": {"type": "number", "exclusiveMinimum": 0},
+            "recycling_neutral": {"type": "number", "exclusiveMinimum": 0},
+            "recycling_neutral_pump": {"type": "number", "exclusiveMinimum": 0}
+          }
+        },
         "topology": {
           "type": "object", "additionalProperties": false, "minProperties": 1,
           "properties": {

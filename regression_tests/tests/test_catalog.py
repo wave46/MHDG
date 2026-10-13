@@ -50,6 +50,20 @@ def test_me_topology_declaration(tmp_path, topology):
             load()
 
 
+@pytest.mark.parametrize('scales', [{'puff': 1e20, 'recycling': 1.}, {}, {'puff': 0}, {'puff_exp': 1.}])
+def test_me_controller_scales_declaration(tmp_path, scales):
+    path = tmp_path / 'moving.json'
+    path.write_text(json.dumps({'series': 'fields', 'controller_scales': scales}))
+    def load():
+        return load_validated_json(path, REGRESSION_ROOT / 'schemas/case.schema.json',
+                                   'moving recipe', definition='moving_equilibrium')
+    if scales.get('puff') == 1e20:
+        assert load()['controller_scales'] == scales
+    else:
+        with pytest.raises(BundleError):
+            load()
+
+
 @pytest.fixture
 def catalog(tmp_path):
     (tmp_path / "schemas").mkdir()
