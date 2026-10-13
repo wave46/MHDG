@@ -40,7 +40,9 @@
     }
   },
   "workflows": {
-    "bootstrap_adaptive": {},
+    "bootstrap_adaptive": {
+      "parameter_overrides": {"tol_est": 0.02}
+    },
     "baseline_warm": {},
     "transport": {},
     "transport_short": {},
@@ -62,6 +64,8 @@
     "impurity_off_short": {},
     "impurity_n_short": {},
     "impurity_nw_short": {},
-    "adaptive_source_short": {}
+    "adaptive_source_short": {
+      "parameter_overrides": {"tol_est": 0.02}
+    }
   }
 }

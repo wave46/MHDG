@@ -86,6 +86,23 @@ The later stages must meet the declared Newton limit. The fixed run starts from
 analytical plasma, not the current adaptive solution. The limited suite also
 compares the two completed bootstrap endpoints.
 
+The shared adaptive bootstrap recipe enables divergence recovery with at most
+2 divergence and 10 oscillation refinements per timestep, sets the oscillation
+trigger `osc_tol=-0.5`, and uses the indicator threshold `thr_ind=1e-5`.
+These harness overrides apply to both static cases and all three stages;
+the final steady stage and the independent fixed bootstrap have adaptivity off.
+Both adaptive diverted workflows, `bootstrap_adaptive` and
+`adaptive_source_short`, override the estimator tolerance to `tol_est=0.02`
+to request smaller mesh sizes. The bootstrap override includes initialization
+and `diffred`; its final steady stage inherits the value with adaptivity off.
+The limited recipe retains its input tolerance.
+The short source/adaptivity probe retains its one-pass setup with divergence
+and oscillation recovery disabled. It requires a valid changed mesh and a retained
+adaptation output; refinement, coarsening and redistribution at the same element
+count are accepted. An unchanged mesh or missing initial output is rejected.
+Changes to this cold-bootstrap recipe require
+convergence evidence and review of refreshed goldens before accepting a baseline.
+
 Transport is a separate feature on **both** topologies. Its five stages lower the
 transport diffusion floor through 8, 4, 2, 0.5 and 0.1 m²/s. The diverted case
 also checks source relocation, neutral pressure, perpendicular neutral diffusion,
@@ -266,6 +283,19 @@ provenance, and refuses an existing destination. The published golden contains
 physical copies of its inputs and references; it has no dependency on refresh
 workspace symlinks. Update the private settings default only after reviewing
 and publishing it.
+
+Publication copies only manifest role files and a checksummed
+`provenance/publication.json`. The receipt records the acceptance
+reason, numerical limitations supplied in `--provenance`, source bundle identity,
+solver build/revision/artifact identities, catalog hashes and passed producer
+and suite summaries. It anchors the retained refresh report, candidate manifest
+and build record by checksum. Full campaign logs, run plans, rendered parameters
+and comparison reports remain in the refresh workspace. The published bundle
+works with ordinary bundle validation and regression commands independently of
+the workspace. Retain the workspace separately for detailed campaign audits.
+The output can be a case directory in an independent external data repository;
+it must be new and outside the refresh workspace. Publication does not create
+a Git commit, upload data, or change local bundle settings.
 
 ## Extending and maintaining the harness
 

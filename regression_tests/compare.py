@@ -305,7 +305,7 @@ def _validate_outputs(inputs, checks):
 
 
 def _check_refinement(inputs, candidate):
-    """Require an element-count increase over the recorded pre-adaptation output."""
+    """Require a valid mesh change and a retained adaptation output."""
     if not inputs.workflow.get("require_refinement"):
         return {}
     directory, metadata = final_execution(inputs.run_directory, inputs.metadata)
@@ -314,15 +314,20 @@ def _check_refinement(inputs, candidate):
         recorded = [recorded_file(path, "HDF5 output", directory) for path in metadata["hdf5_outputs"]]
         initial = select_logged_output(directory, recorded, first=True)
         if initial is None:
-            raise ComparisonError("missing initial output for refinement check")
+            raise ComparisonError("missing initial output for adaptation check")
         if initial == candidate.resolve():
-            raise ComparisonError("refinement needs a separate recorded initial output")
+            raise ComparisonError("adaptation needs a separate recorded initial output")
         with h5py.File(initial, "r") as first, h5py.File(candidate, "r") as last:
             before = int(required_scalar(first, "mesh", "Nelems"))
             after = int(required_scalar(last, "mesh", "Nelems"))
         report.update(initial_output=str(initial), initial_elements=before, final_elements=after)
-        if before <= 0 or after <= before:
-            raise ComparisonError("adaptive probe did not increase the element count")
+        coordinate_atol = load_tolerance_catalog(inputs.tolerances_path, inputs.catalog)["fixed_defaults"]["mesh_coordinate_atol"]
+        differences = mesh_differences(initial, candidate, coordinate_atol)
+        report.update(mesh_coordinate_atol=coordinate_atol, mesh_differences=differences)
+        if not differences:
+            raise ComparisonError("adaptive probe did not change the mesh")
+        generated = recorded_file(str(directory / "res/temp.msh"), "generated adaptation mesh")
+        report["generated_mesh"] = {"path": str(generated), **file_identity(generated)}
         report["status"] = "passed"
     except (OSError, KeyError, ValueError, TypeError) as exc:
         report["failures"].append(str(exc))
