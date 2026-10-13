@@ -10,7 +10,8 @@
       "description": "Diverted short feature goldens and adaptive detailed diagnostics",
       "checks": [
         {"suite": "warm"}, {"suite": "adaptive_diagnostics"},
-        {"suite": "neutral_short"}, {"suite": "impurity_short"}
+        {"suite": "neutral_short"}, {"suite": "impurity_short"},
+        {"suite": "moving_equilibrium_short"}, {"suite": "moving_equilibrium_parallel"}
       ]
     },
     "full": {
@@ -22,11 +23,33 @@
         {"suite": "transport_hybrid"}, {"suite": "transport_parallel", "case": "legacy_case"},
         {"suite": "adaptive_parallel"}, {"suite": "neutrals"}, {"suite": "neutral_wall"}, {"suite": "neutral_parallel"},
         {"suite": "impurities"}, {"suite": "mixture_parallel"}, {"suite": "stored_field"},
-        {"suite": "neutralgamma"}, {"suite": "initialization"}
+        {"suite": "neutralgamma"}, {"suite": "initialization"},
+        {"suite": "moving_equilibrium"}, {"suite": "moving_equilibrium_short"},
+        {"suite": "moving_equilibrium_parallel"}
       ]
     }
   },
   "suites": {
+    "moving_equilibrium": {
+      "description": "Full 80 ms feedback golden and expected 100 ms refinement-limit prefix golden",
+      "case": "moving_equilibrium",
+      "workflows": ["mode1", "refinement_limit"]
+    },
+    "moving_equilibrium_short": {
+      "description": "Short 80 ms prescribed-puff and recycling-feedback goldens with off-knot controls",
+      "case": "moving_equilibrium",
+      "workflows": ["mode0_short", "mode2_short"]
+    },
+    "moving_equilibrium_parallel": {
+      "description": "Short 80 ms puff feedback: MPI1/OMP1 versus MPI4/OMP1",
+      "case": "moving_equilibrium",
+      "workflows": ["mode1_short"],
+      "layouts": ["mpi1_omp1", "mpi4_omp1"],
+      "relations": ["mpi"],
+      "reference_comparisons": false,
+      "tolerance_profile": "fixed_cross_layout",
+      "layout_comparison_policy": "fixed_hdf5"
+    },
     "warm": {
       "description": "Transport-off warm baseline: convergence and own golden",
       "workflows": ["baseline_warm"]

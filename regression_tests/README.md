@@ -74,8 +74,8 @@ used in the coverage table mean:
 | Selection | Purpose |
 | --- | --- |
 | `routine` | Diverted warm golden and short adaptive/source golden; diagnostics off. Target about 30 seconds on the development machine, excluding builds. |
-| `routine-extended` | Diverted warm, short adaptive/source with detailed diagnostics, and short neutral/impurity feature goldens. |
-| `full` | Both real topologies, complete cold bootstraps and transport activation, distinct diverted features, and focused serial/OpenMP/MPI/hybrid comparisons. |
+| `routine-extended` | Diverted warm, short adaptive/source with detailed diagnostics, short neutral/impurity goldens, and short moving-equilibrium controls/MPI agreement. |
+| `full` | Both real topologies, complete cold bootstraps and transport activation, distinct diverted features, focused parallel comparisons, and full/short moving-equilibrium checks. |
 
 `full` selects its own evidence; it does not run the other profiles first. Its
 cold evidence comprises adaptive three-stage bootstraps for limited and diverted
@@ -108,15 +108,23 @@ transport diffusion floor through 8, 4, 2, 0.5 and 0.1 m²/s. The diverted case
 also checks source relocation, neutral pressure, perpendicular neutral diffusion,
 two neutral limiters, radiation off, N and N+W impurity radiation, and stored
 magnetic/current fields against its own reference. Limited adds analytical
-initialization and the focused NeutralGamma probe described above. There is no
-synthetic magnetic geometry.
+initialization and the focused NeutralGamma probe described above.
+
+The separate `moving_equilibrium` bundle supplies a limited restart, one indexed
+canonical magnetic/current series and explicit control curves. Case recipes
+select 80 ms puff feedback (seven advances), a 100 ms refinement-limit stop
+(compare completed step three), and two-advance 80 ms prescribed-puff/recycling
+checks with off-knot controls. These use four final solution references. The
+short puff-feedback MPI1/OMP1 versus MPI4/OMP1 pair needs no additional reference.
+`check moving_equilibrium` runs the full pair; `moving_equilibrium_short` and
+`moving_equilibrium_parallel` select the short checks. Field pairs are selected
+and retimed during preparation; the harness does not generate equilibria.
 
 Parallel suites compare serial OMP1 with serial OMP16 for OpenMP, and serial OMP1
 with MPI4×OMP1 for MPI. The diverted short-transport suite additionally compares
 MPI4×OMP1 with production MPI4×OMP4. Selected short transport, adaptive/source
 and NeutralGamma runs carry detailed diagnostics; the long cold chains do not.
-`routine-extended` has no layout-pair comparison: choose a focused parallel suite
-or `full` when parallel agreement is the question. Suite relations named `openmp`,
+`routine-extended` includes the moving-equilibrium MPI pair. Suite relations named `openmp`,
 `mpi`, `hybrid` and `all_pairs` generate layout pairs from the available layouts.
 Run `list suites` to see current focused selections and their descriptions.
 
@@ -125,7 +133,8 @@ Run `list suites` to see current focused selections and their descriptions.
 `settings.local.json` is the usual place for machine paths and default
 selections. The quick start needs only the diverted bundle. For limited checks
 or `full`, add the real limited case, `legacy_case`, under `defaults.bundles`.
-`settings.example.json` shows both cases and an explicit `run_root`.
+`routine-extended` and `full` also need the `moving_equilibrium` bundle.
+`settings.example.json` shows the case paths and an explicit `run_root`.
 
 `run_root` holds runs and reports and defaults to `~/.cache/mhdg-regression`.
 `build_root` holds newly built executables and defaults to `run_root/builds`.

@@ -1,0 +1,153 @@
+{
+  "schema_version": 2,
+  "description": "Synthetic moving equilibrium from a limited bootstrap: feedback, topology change and refinement-limit failure",
+  "files": {
+    "required": {
+      "geometry": "geometry.geo",
+      "parameters": "param.txt",
+      "bootstrap": "restart.h5",
+      "impurity_configuration": "impurity_model.nml",
+      "equilibrium_series": "series_compact.json",
+      "control_puff": "puff.h5",
+      "control_target_density": "target_density.h5",
+      "control_zeff": "zeff.h5",
+      "control_impurity_concentration": "impurity_concentration.h5",
+      "short_control_puff": "short_puff.h5",
+      "short_control_target_density": "short_target_density.h5"
+    },
+    "optional": {
+      "mode1_reference": "reference_mode1.h5",
+      "failure_prefix_reference": "reference_failure_prefix.h5",
+      "mode0_short_reference": "reference_mode0_short.h5",
+      "mode2_short_reference": "reference_mode2_short.h5"
+    }
+  },
+  "parameter_namelists": {
+    "max_divergence_refinements": "adapt_lst",
+    "max_oscillation_refinements": "adapt_lst"
+  },
+  "workflows": {
+    "mode1_short": {
+      "description": "Two 80 ms puff-feedback advances for MPI agreement",
+      "type": "warm_same_state",
+      "layout": "mpi4_omp4",
+      "inputs": ["geometry"],
+      "parameters": "parameters",
+      "restart": "bootstrap",
+      "impurity_configuration": "impurity_configuration",
+      "moving_equilibrium": {
+        "series": "equilibrium_series",
+        "time_step_s": 0.08,
+        "controls": {
+          "puff": "control_puff", "target_density": "control_target_density",
+          "zeff": "control_zeff", "impurity_concentration": "control_impurity_concentration"
+        },
+        "topology": {"first_completed": "limited", "last_completed": "limited"},
+        "controller_scales": {
+          "puff": 1e21, "n_li": 1e19,
+          "feedback_integral_error": 1e19, "feedback_previous_error": 1e19,
+          "recycling": 1.0, "recycling_pump": 1.0
+        }
+      },
+      "parameter_overrides": {
+        "nts": 2, "target_variable": 1, "compute_from_flux": true,
+        "adaptivity": true, "div_adapt": true, "osc_adapt": true,
+        "check_neutral_positivity": true, "time_adapt": false,
+        "max_divergence_refinements": 0, "max_oscillation_refinements": 1,
+        "feedback_propotional_gain": 240.0,
+        "feedback_integral_gain": 24.0, "feedback_derivative_gain": 9.6
+      },
+      "comparison": {
+        "method": "mesh_independent", "profile": "adaptive_reference",
+        "direct_profile": "feature_converged", "cross_layout_profile": "fixed_cross_layout"
+      }
+    },
+    "mode1": {
+      "extends": "mode1_short",
+      "description": "Seven 80 ms puff-feedback advances through a limited-to-diverted transition",
+      "reference": "mode1_reference",
+      "outputs": ["mode1_reference"],
+      "parameter_overrides": {"nts": 7},
+      "moving_equilibrium": {
+        "series": "equilibrium_series", "time_step_s": 0.08,
+        "controls": {
+          "puff": "control_puff", "target_density": "control_target_density",
+          "zeff": "control_zeff", "impurity_concentration": "control_impurity_concentration"
+        },
+        "topology": {"first_completed": "limited", "last_completed": "lower_single_null"},
+        "controller_scales": {
+          "puff": 1e21, "n_li": 1e19,
+          "feedback_integral_error": 1e19, "feedback_previous_error": 1e19,
+          "recycling": 1.0, "recycling_pump": 1.0
+        }
+      }
+    },
+    "refinement_limit": {
+      "extends": "mode1_short",
+      "description": "100 ms puff feedback stops at advance four; compare the three-step completed prefix",
+      "reference": "failure_prefix_reference",
+      "outputs": ["failure_prefix_reference"],
+      "parameter_overrides": {
+        "nts": 5, "feedback_propotional_gain": 300.0,
+        "feedback_integral_gain": 30.0, "feedback_derivative_gain": 12.0
+      },
+      "moving_equilibrium": {
+        "series": "equilibrium_series", "time_step_s": 0.1,
+        "controls": {
+          "puff": "control_puff", "target_density": "control_target_density",
+          "zeff": "control_zeff", "impurity_concentration": "control_impurity_concentration"
+        },
+        "topology": {"first_completed": "limited", "last_completed": "limited"},
+        "expected_failure": {"reason": "divergence_refinement_limit", "completed_steps": 3},
+        "controller_scales": {
+          "puff": 1e21, "n_li": 1e19,
+          "feedback_integral_error": 1e19, "feedback_previous_error": 1e19,
+          "recycling": 1.0, "recycling_pump": 1.0
+        }
+      }
+    },
+    "mode2_short": {
+      "extends": "mode1_short",
+      "description": "Two 80 ms recycling-feedback advances with off-knot puff and density targets",
+      "reference": "mode2_short_reference",
+      "outputs": ["mode2_short_reference"],
+      "parameter_overrides": {
+        "target_variable": 2, "puff_dimension": 4, "target_density_dimension": 4,
+        "feedback_propotional_gain": 2e-20,
+        "feedback_integral_gain": 2e-21, "feedback_derivative_gain": 8e-22
+      },
+      "moving_equilibrium": {
+        "series": "equilibrium_series", "time_step_s": 0.08,
+        "controls": {
+          "puff": "short_control_puff", "target_density": "short_control_target_density",
+          "zeff": "control_zeff", "impurity_concentration": "control_impurity_concentration"
+        },
+        "topology": {"first_completed": "limited", "last_completed": "limited"},
+        "controller_scales": {
+          "puff": 1e21, "n_li": 1e19,
+          "feedback_integral_error": 1e19, "feedback_previous_error": 1e19,
+          "recycling": 1.0, "recycling_pump": 1.0
+        }
+      }
+    },
+    "mode0_short": {
+      "extends": "mode2_short",
+      "description": "Two 80 ms prescribed-puff advances with off-knot interpolation",
+      "reference": "mode0_short_reference",
+      "outputs": ["mode0_short_reference"],
+      "parameter_overrides": {
+        "target_variable": 0, "feedback_propotional_gain": 240.0,
+        "feedback_integral_gain": 24.0, "feedback_derivative_gain": 9.6
+      },
+      "moving_equilibrium": {
+        "series": "equilibrium_series", "time_step_s": 0.08,
+        "controls": {
+          "puff": "short_control_puff", "target_density": "short_control_target_density",
+          "zeff": "control_zeff", "impurity_concentration": "control_impurity_concentration"
+        },
+        "topology": {"first_completed": "limited", "last_completed": "limited"},
+        "controller_scales": {"puff": 1e21, "recycling": 1.0, "recycling_pump": 1.0}
+      }
+    }
+  }
+}

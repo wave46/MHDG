@@ -346,6 +346,14 @@ def layout_pairs(
             matches = list(combinations(layouts, 2))
         elif relation in {"openmp", "mpi", "hybrid"}:
             matches = []
+            mpi_baseline = None
+            if relation == "mpi":
+                single_thread = [name for name, item in layouts.items() if item["omp_threads"] == 1]
+                if single_thread:
+                    # Prefer serial when available; an MPI-only selection starts
+                    # from its smallest rank count instead.
+                    mpi_baseline = min(single_thread, key=lambda name: (
+                        layouts[name]["execution"] != "serial", layouts[name]["mpi_ranks"]))
             for baseline, first in layouts.items():
                 if first["omp_threads"] != 1:
                     continue
@@ -357,9 +365,10 @@ def layout_pairs(
                         )
                     elif relation == "mpi":
                         match = (
-                            first["execution"] == "serial"
+                            baseline == mpi_baseline
                             and second["execution"] == "mpi"
                             and second["omp_threads"] == 1
+                            and second["mpi_ranks"] > first["mpi_ranks"]
                         )
                     else:
                         match = (

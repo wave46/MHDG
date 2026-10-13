@@ -114,7 +114,7 @@ cp inputs'''))
         "status": "passed", "failures": [], "convergence": {"passed": False}}))
     monkeypatch.setattr(suites, "compare_completed_run", comparison)
     path, rejected = run(harness, "warm_parallelism", resume=True)
-    assert rejected["status"] == "failed" and comparison.call_count == 4
+    assert rejected["status"] == "failed" and comparison.call_count == len(repaired["results"])
     assert [row["run_directory"] for row in rejected["results"]] == [row["run_directory"] for row in repaired["results"]]
     verified = suites.verify_suite(path, ROOT / "cases", ROOT / "tolerances.json")[1]
     assert verified["results"] == rejected["results"]

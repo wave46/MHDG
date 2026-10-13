@@ -1,5 +1,9 @@
 {
   "cases": {
+    "moving_equilibrium": {
+      "producers": ["mode1", "refinement_limit", "mode0_short", "mode2_short"],
+      "checks": ["moving_equilibrium", "moving_equilibrium_short", "moving_equilibrium_parallel"]
+    },
     "legacy_case": {
       "producers": ["bootstrap_adaptive", "bootstrap_fixed", "baseline_warm", "transport", "transport_short"],
       "checks": ["warm", "transport", "transport_parallel", "neutralgamma", "initialization"]
