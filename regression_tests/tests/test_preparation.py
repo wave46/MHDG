@@ -233,7 +233,7 @@ def test_me_preparation_retimes_pairs_and_reuses_canonical_controls(me_harness, 
     assert original == {str(p): file_identity(p) for p in bundle.rglob("*") if p.is_file()}
 
 
-@pytest.mark.parametrize("failure", ["timestep", "metadata", "normalized_override", "control_range"])
+@pytest.mark.parametrize("failure", ["timestep", "metadata", "normalized_override", "control_range", "control_dimension"])
 def test_me_preparation_failure_is_atomic(me_harness, failure):
     import h5py
 
@@ -249,6 +249,8 @@ def test_me_preparation_failure_is_atomic(me_harness, failure):
     elif failure == "control_range":
         with h5py.File(me_harness.root / "me_bundle/inputs/target_density.h5", "r+") as handle:
             handle["time"][...] = [0., .1, .2]
+    elif failure == "control_dimension":
+        options["requested_overrides"] = {"target_density_dimension": 27}
     else:
         options["requested_overrides"] = {"dt0": 123.}
     with pytest.raises(BundleError):

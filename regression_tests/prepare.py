@@ -333,6 +333,9 @@ def _prepare_me_fields(staging, inputs, overrides):
         raise BundleError("ME timestep must be an integer multiple of canonical dt_s")
     stride, last = round(ratio), len(index["frames"]) - 1
     values = {key.lower(): value for key, value in overrides.items()}
+    control_dimensions = read_selected_input_values(inputs.artifacts[inputs.workflow["parameters"]],
+        {"puff_dimension", "target_density_dimension", "zeff_dimension"})
+    control_dimensions.update(values)
     steps = values.get("nts", math.ceil(last / stride))
     if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= math.ceil(last / stride):
         raise BundleError("ME nts must be an integer within the canonical series duration")
@@ -360,13 +363,18 @@ def _prepare_me_fields(staging, inputs, overrides):
                             raise BundleError(f"ME field {key} differs from its series: {target.name}")
                         handle[key][...] = generated
                 files[target.relative_to(staging).as_posix()] = file_identity(target)
-        for role in moving.get("controls", {}).values():
+        for name, role in moving.get("controls", {}).items():
             with h5py.File(inputs.artifacts[role]) as handle:
                 times = required_array(handle, "", "time")
                 if (times.ndim != 1 or len(times) < 2 or not all(math.isfinite(t) for t in times)
                         or any(a >= b for a, b in zip(times[:-1], times[1:]))
                         or times[0] > 0 or times[-1] <= (steps - 1) * dt):
                     raise BundleError("ME control times must bracket all interval-start loads")
+                if name in {"puff", "target_density", "zeff"}:
+                    key = f"{name}_dimension"
+                    count = control_dimensions.get(key)
+                    if count != len(times):
+                        raise BundleError(f"ME {key} must match its control time count ({len(times)})")
     except (OSError, KeyError, ValueError, TypeError, IndexError, ComparisonError) as exc:
         raise BundleError(f"cannot prepare ME fields: {exc}") from exc
     paths = {"field_path": inputs.run_directory / "inputs/magnetic/equilibrium",
