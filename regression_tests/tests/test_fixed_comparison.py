@@ -587,7 +587,7 @@ def test_suite_assesses_and_reuses_only_declared_expected_stops(stopped_me_outpu
     assert result['status'] == ('passed' if damage is None else 'failed')
     assert result['run_status'] == metadata['status']
     reusable = damage in (None, 'reference')  # Reference disagreement never requires a solver replay.
-    assert suites._reusable_result(*arguments, expected_failure=expectation) is reusable
+    assert suites.reusable_result(*arguments, expected_failure=expectation) is reusable
     validation = suites.assess_result(*arguments, references=False, expected_failure=expectation)
     assert validation['status'] == ('passed' if reusable else 'failed')
     if damage is None:

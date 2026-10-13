@@ -251,15 +251,7 @@ def compare_run(
 def compare_me_refinement_stop(directory, case_directory, tolerances_path, *, completed_steps,
                                reference_override=None, report_override=None, catalog=None):
     """Compare a validated completed prefix; raw failure metadata remains intact."""
-    inputs = load_comparison_inputs(directory, case_directory, tolerances_path,
-                                    catalog=catalog, require_completed=False)
-    if not inputs.workflow.get("moving_equilibrium"):
-        raise ComparisonError("expected refinement-stop comparison requires a moving-equilibrium workflow")
-    maximum = _stage_newton_maximum(inputs.workflow, inputs.plan["layout_id"],
-                                    tolerances_path, catalog=inputs.catalog)
-    outcome = validate_me_refinement_stop(inputs.run_directory, inputs.plan, inputs.metadata,
-                                          maximum, completed_steps=completed_steps,
-                                          topology=inputs.workflow["moving_equilibrium"].get("topology"))
+    inputs, outcome = _load_me_stop(directory, case_directory, tolerances_path, completed_steps, catalog)
     if outcome["status"] != "passed":
         raise ComparisonError("invalid expected ME refinement stop: " + "; ".join(outcome["failures"]))
     overrides = ComparisonOverrides(candidate=Path(outcome["selected_output"]), reference=reference_override)
@@ -269,15 +261,7 @@ def compare_me_refinement_stop(directory, case_directory, tolerances_path, *, co
 
 def validate_me_stopped_run(directory, case_directory, tolerances_path, *, completed_steps, catalog=None):
     """Validate an expected stop and its saved output contract without a reference."""
-    inputs = load_comparison_inputs(directory, case_directory, tolerances_path,
-                                    catalog=catalog, require_completed=False)
-    if not inputs.workflow.get("moving_equilibrium"):
-        raise ComparisonError("expected refinement stop requires a moving-equilibrium workflow")
-    maximum = _stage_newton_maximum(inputs.workflow, inputs.plan["layout_id"],
-                                    tolerances_path, catalog=inputs.catalog)
-    outcome = validate_me_refinement_stop(inputs.run_directory, inputs.plan, inputs.metadata,
-                                          maximum, completed_steps=completed_steps,
-                                          topology=inputs.workflow["moving_equilibrium"].get("topology"))
+    inputs, outcome = _load_me_stop(directory, case_directory, tolerances_path, completed_steps, catalog)
     report = {**outcome, "convergence": {"passed": False}}
     if outcome["status"] == "passed":
         contract = saved_output_contract(inputs, Path(outcome["selected_output"]))
@@ -290,6 +274,20 @@ def validate_me_stopped_run(directory, case_directory, tolerances_path, *, compl
         report["convergence"] = outcome["completed_prefix"]["convergence"]
         report["status"] = "failed" if report["failures"] else "passed"
     return report
+
+
+def _load_me_stop(directory, case_directory, tolerances_path, completed_steps, catalog):
+    """Share raw execution loading and expected-stop assessment across callers."""
+    inputs = load_comparison_inputs(directory, case_directory, tolerances_path,
+                                    catalog=catalog, require_completed=False)
+    if not inputs.workflow.get("moving_equilibrium"):
+        raise ComparisonError("expected refinement stop requires a moving-equilibrium workflow")
+    maximum = _stage_newton_maximum(inputs.workflow, inputs.plan["layout_id"],
+                                    tolerances_path, catalog=inputs.catalog)
+    outcome = validate_me_refinement_stop(inputs.run_directory, inputs.plan, inputs.metadata,
+                                          maximum, completed_steps=completed_steps,
+                                          topology=inputs.workflow["moving_equilibrium"].get("topology"))
+    return inputs, outcome
 
 
 def compare_generated_meshes(
@@ -447,35 +445,42 @@ def validate_me_completed_steps(directory, plan, metadata, maximum, *, topology=
         failures.append("missing initial ME save")
     if completed != list(range(1, len(completed) + 1)):
         failures.append("completed ME advances are not a contiguous prefix")
-    if topology:
-        if not completed:
-            failures.append("no completed ME advance for topology expectations")
-        else:
-            for label, number in (("first_completed", completed[0]), ("last_completed", completed[-1])):
-                if label not in topology:
-                    continue
-                actual, problem = None, None
-                try:
-                    with h5py.File(steps[number]["output"], "r") as handle:
-                        values = required_array(handle, "magnetic", "topology")
-                    if values.size != 1:
-                        raise ComparisonError("magnetic/topology must contain one label")
-                    value = values.reshape(-1)[0]
-                    actual = (value.decode() if isinstance(value, bytes) else str(value)).strip(" \x00")
-                    if actual != topology[label]:
-                        problem = f"{label} topology: expected {topology[label]}, got {actual}"
-                except ComparisonError as exc:
-                    problem = str(exc)
-                steps[number]["topology"] = actual
-                if problem:
-                    steps[number]["failures"].append(problem)
-                    steps[number]["status"] = "failed"
-                    failures.append(f"step {number}: {problem}")
+    failures.extend(_check_me_topology(steps, completed, topology))
     return {"status": "failed" if failures else "passed", "failures": failures,
             "completed_steps": completed, "prescribed_steps": prescribed,
             "complete": completed == list(range(1, prescribed + 1)),
             "convergence": {"passed": newton_passed},
             "steps": [steps[number] for number in sorted(steps)]}
+
+
+def _check_me_topology(steps, completed, topology):
+    """Apply recipe endpoint expectations to completed saves only."""
+    if not topology:
+        return []
+    if not completed:
+        return ["no completed ME advance for topology expectations"]
+    failures = []
+    for label, number in (("first_completed", completed[0]), ("last_completed", completed[-1])):
+        if label not in topology:
+            continue
+        actual, problem = None, None
+        try:
+            with h5py.File(steps[number]["output"], "r") as handle:
+                values = required_array(handle, "magnetic", "topology")
+            if values.size != 1:
+                raise ComparisonError("magnetic/topology must contain one label")
+            value = values.reshape(-1)[0]
+            actual = (value.decode() if isinstance(value, bytes) else str(value)).strip(" \x00")
+            if actual != topology[label]:
+                problem = f"{label} topology: expected {topology[label]}, got {actual}"
+        except ComparisonError as exc:
+            problem = str(exc)
+        steps[number]["topology"] = actual
+        if problem:
+            steps[number]["failures"].append(problem)
+            steps[number]["status"] = "failed"
+            failures.append(f"step {number}: {problem}")
+    return failures
 
 
 def _me_time(handle):

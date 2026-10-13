@@ -18,7 +18,7 @@ from .compare import compare_completed_run, compare_me_refinement_stop
 from .compare_common import select_candidate
 from .execute import execute_prepared, reusable_outputs
 from .prepare import prepare_run
-from .suites import run_suite, assess_result, _reusable_result
+from .suites import run_suite, assess_result, reusable_result
 
 ROOT = Path(__file__).resolve().parent
 
@@ -339,7 +339,7 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         directory = Path(item["run_directory"])
         expectation = case["workflows"][item["workflow_id"]].get("moving_equilibrium", {}).get("expected_failure")
         if (not directory.resolve().is_relative_to(workspace) or item["status"] != "passed"
-                or not _reusable_result(item, catalog_root / "cases", catalog_root / "tolerances.json",
+                or not reusable_result(item, catalog_root / "cases", catalog_root / "tolerances.json",
                                         expected_failure=expectation, catalog=catalog)):
             raise BundleError("producer failed or its outputs changed")
         validation = item.get("validation", {})
@@ -351,7 +351,7 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         summary = load_json(artifact_path(workspace, check["summary"], "check summary"), "check summary")
         if check["status"] != "passed" or summary["status"] != "passed":
             raise BundleError("golden validation checks failed")
-        if not all(_reusable_result(item, catalog_root / "cases", catalog_root / "tolerances.json", catalog=catalog,
+        if not all(reusable_result(item, catalog_root / "cases", catalog_root / "tolerances.json", catalog=catalog,
                                     expected_failure=case["workflows"][item["workflow_id"]].get("moving_equilibrium", {}).get("expected_failure"))
                    for item in summary["results"]):
             raise BundleError("validation run outputs changed")

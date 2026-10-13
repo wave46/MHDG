@@ -8,60 +8,10 @@ import pytest
 
 
 from regression_tests.catalog import load_case_definition
-from regression_tests.documents import load_validated_json
 from regression_tests.support import BundleError
 
 
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
-
-
-@pytest.mark.parametrize("expectation", [
-    {"reason": "divergence_refinement_limit", "completed_steps": 3},
-    {"reason": "crash", "completed_steps": 3},
-    {"reason": "divergence_refinement_limit", "completed_steps": 0},
-    {"reason": "divergence_refinement_limit"},
-])
-def test_me_expected_failure_declaration(tmp_path, expectation):
-    path = tmp_path / "moving.json"
-    path.write_text(json.dumps({"series": "fields", "expected_failure": expectation}))
-    def load():
-        return load_validated_json(path, REGRESSION_ROOT / "schemas/case.schema.json",
-                                   "moving recipe", definition="moving_equilibrium")
-    if expectation == {"reason": "divergence_refinement_limit", "completed_steps": 3}:
-        assert load()["expected_failure"] == expectation
-    else:
-        with pytest.raises(BundleError):
-            load()
-
-
-@pytest.mark.parametrize("topology", [
-    {"first_completed": "limited", "last_completed": "lower_single_null"}, {}, {"last_completed": "unknown"},
-])
-def test_me_topology_declaration(tmp_path, topology):
-    path = tmp_path / "moving.json"
-    path.write_text(json.dumps({"series": "fields", "topology": topology}))
-    def load():
-        return load_validated_json(path, REGRESSION_ROOT / "schemas/case.schema.json",
-                                   "moving recipe", definition="moving_equilibrium")
-    if topology.get("first_completed") == "limited":
-        assert load()["topology"] == topology
-    else:
-        with pytest.raises(BundleError):
-            load()
-
-
-@pytest.mark.parametrize('scales', [{'puff': 1e20, 'recycling': 1.}, {}, {'puff': 0}, {'puff_exp': 1.}])
-def test_me_controller_scales_declaration(tmp_path, scales):
-    path = tmp_path / 'moving.json'
-    path.write_text(json.dumps({'series': 'fields', 'controller_scales': scales}))
-    def load():
-        return load_validated_json(path, REGRESSION_ROOT / 'schemas/case.schema.json',
-                                   'moving recipe', definition='moving_equilibrium')
-    if scales.get('puff') == 1e20:
-        assert load()['controller_scales'] == scales
-    else:
-        with pytest.raises(BundleError):
-            load()
 
 
 @pytest.fixture

@@ -237,7 +237,8 @@ def assess_result(source, case_directory, tolerances_path, *, references=True, c
     return result
 
 
-def _reusable_result(source, case_directory, tolerances_path, *, expected_failure=None, catalog=None):
+def reusable_result(source, case_directory, tolerances_path, *, expected_failure=None, catalog=None):
+    """Reuse unchanged successful outputs or a freshly validated expected stop."""
     if not source or not source.get("run_directory"):
         return False
     directory = Path(source["run_directory"])
@@ -424,7 +425,7 @@ def run_suite(
             previous = next((item for item in summary["results"]
                              if (item["workflow_id"], item["layout_id"]) == (workflow, layout)), None)
             expected_failure = case["workflows"][workflow].get("moving_equilibrium", {}).get("expected_failure")
-            if _reusable_result(previous, case_directory, tolerances_path,
+            if reusable_result(previous, case_directory, tolerances_path,
                                 expected_failure=expected_failure, catalog=catalog):
                 outcome = "expected stop" if expected_failure else "completed"
                 print(f"reusing {outcome} {workflow} / {layout}", flush=True)
