@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import math
 from pathlib import Path
+import re
 from typing import Any
 
 import h5py
@@ -18,6 +20,7 @@ from .execute import final_execution
 from .compare_common import (
     select_logged_output, NewtonCheck, effective_newton_maximum, load_adaptive_tolerances,
     load_fixed_tolerances, load_tolerance_catalog, read_newton_convergence, resolve_run_file, select_candidate,
+    read_me_completion_errors, NewtonConvergence,
 )
 
 
@@ -185,6 +188,9 @@ def compare_run(
     failures.extend(saved_output_contract(inputs, candidate)["failures"])
     failures.extend(preceding["failures"])
     failures.extend(refinement.get("failures", []))
+    moving = _validate_me_steps(inputs, tolerances["newton_error_max"])
+    failures.extend(moving.get("failures", []))
+    protected.extend(Path(step["output"]) for step in moving.get("steps", []))
     if convergence.failure is not None:
         failures.append(convergence.failure)
     report = {
@@ -197,7 +203,9 @@ def compare_run(
         "layout_id": inputs.plan["layout_id"],
         "tolerance_profile": {"id": profile_id, **tolerances},
         "convergence": {**convergence.as_report(),
-                        "passed": convergence.passed and preceding["convergence"]["passed"]},
+                        "passed": convergence.passed and preceding["convergence"]["passed"]
+                                  and moving.get("convergence", {}).get("passed", True)},
+        **({"moving_equilibrium": moving} if moving else {}),
         "stages": preceding["stages"], "refinement": refinement, "failures": failures,
     }
     output = (report_path or inputs.run_directory / "comparison.json").expanduser().resolve()
@@ -276,8 +284,80 @@ def validate_completed_run(run_directory, case_directory, tolerances_path, *, ca
     refinement = _check_refinement(inputs, Path(output)) if output else {}
     report["refinement"] = refinement
     report["failures"].extend(refinement.get("failures", []))
+    if inputs.workflow.get("moving_equilibrium"):
+        moving = _validate_me_steps(inputs, _stage_newton_maximum(
+            inputs.workflow, inputs.plan["layout_id"], inputs.tolerances_path, catalog=inputs.catalog))
+        report["moving_equilibrium"] = moving
+        report["failures"].extend(moving["failures"])
+        report["convergence"]["passed"] &= moving["convergence"]["passed"]
     report["status"] = "failed" if report["failures"] else "passed"
     return report
+
+
+def _validate_me_steps(inputs, maximum):
+    if not inputs.workflow.get("moving_equilibrium"):
+        return {}
+    report = validate_me_completed_steps(inputs.run_directory, inputs.plan, inputs.metadata, maximum)
+    if not report["complete"]:
+        report["failures"].append("moving equilibrium did not complete all prescribed advances")
+    report["status"] = "failed" if report["failures"] else "passed"
+    return report
+
+
+def validate_me_completed_steps(directory, plan, metadata, maximum):
+    """Validate a contiguous completed prefix; complete separately marks full coverage."""
+    dt = plan["moving_equilibrium_inputs"]["time_step_s"]
+    prescribed = plan["parameter_overrides"]["nts"]
+    saves = read_me_completion_errors(directory / "stdout.log")
+    steps, failures, newton_passed = {}, [], True
+    for value in metadata.get("hdf5_outputs", []):
+        path = recorded_file(value, "HDF5 output", directory)
+        # setSolName distinguishes NR saves; numeric suffixes do not identify time steps.
+        if re.search(r"_NR\d+(?:_UNCP)?\.h5$", path.name):
+            continue
+        problems = validate_solution_file(path)
+        with h5py.File(path, "r") as handle:
+            number = required_scalar(handle, "simulation_parameters/time", "Current_time_step_number")
+            scale = required_scalar(handle, "simulation_parameters/adimensionalization", "time_scale")
+            time = required_scalar(handle, "simulation_parameters/time", "Current_time") * scale
+            saved_dt = required_scalar(handle, "simulation_parameters/time", "Current_time_step") * scale
+        if not (math.isfinite(number) and number == int(number) and 0 <= number <= prescribed):
+            raise ComparisonError(f"invalid completed ME step: {path}")
+        number = int(number)
+        if not (math.isfinite(scale) and scale > 0 and math.isclose(time, number * dt, rel_tol=1e-10, abs_tol=1e-12)
+                and math.isclose(saved_dt, dt, rel_tol=1e-10, abs_tol=1e-12)):
+            problems.append("completed step/time differs from the prescribed ME sequence")
+        logged_step, error = saves.get(path, (None, None))
+        if logged_step != number:
+            problems.append("completed output is not logged for its embedded timestep")
+        convergence = NewtonConvergence(error, maximum)
+        if number:
+            newton_passed &= convergence.passed
+        if number and convergence.failure:
+            problems.append(convergence.failure)
+        if number in steps:
+            duplicate = compare_hdf5_files(Path(steps[number]["output"]), path,
+                {"mesh_coordinate_atol": 0., "relative_l2_max": 0., "normalized_linf_max": 0.})
+            if duplicate["status"] != "passed":
+                problems.append("conflicting completed copies of the same timestep")
+        else:
+            steps[number] = {"step": number, "time_s": time if math.isfinite(time) else None, "output": str(path),
+                             "convergence": convergence.as_report() if number else None,
+                             "failures": [], "status": "passed"}
+        steps[number]["failures"].extend(problems)
+        if problems:
+            steps[number]["status"] = "failed"
+        failures.extend(f"step {number}: {problem}" for problem in problems)
+    completed = sorted(number for number in steps if number)
+    if 0 not in steps:
+        failures.append("missing initial ME save")
+    if completed != list(range(1, len(completed) + 1)):
+        failures.append("completed ME advances are not a contiguous prefix")
+    return {"status": "failed" if failures else "passed", "failures": failures,
+            "completed_steps": completed, "prescribed_steps": prescribed,
+            "complete": completed == list(range(1, prescribed + 1)),
+            "convergence": {"passed": newton_passed},
+            "steps": [steps[number] for number in sorted(steps)]}
 
 
 def _validate_outputs(inputs, checks):

@@ -1,6 +1,8 @@
 """Direct field/mesh contracts and the public comparison command."""
 
 import json
+import shutil
+from pathlib import Path
 
 import h5py
 import numpy as np
@@ -8,7 +10,7 @@ import pytest
 
 from regression_tests.compare_fixed import compare_hdf5_files, validate_solution_file
 from regression_tests.compare_common import read_newton_convergence
-from regression_tests.compare import compare_completed_run
+from regression_tests.compare import compare_completed_run, validate_completed_run, validate_me_completed_steps
 from regression_tests.tests.fixtures.harness import REGRESSION_ROOT, run_command
 from regression_tests.tests.fixtures.solutions import write_solution
 
@@ -157,3 +159,98 @@ def test_final_output_selection_tolerance_profile_and_cli(tmp_path, mode):
     assert report["tolerance_profile"]["id"] == (
         "fixed_cross_layout" if mode == "cross_layout" else "fixed_same_layout"
     )
+
+
+@pytest.fixture
+def me_outputs(tmp_path):
+    (tmp_path / 'outputs').mkdir()
+    paths = [tmp_path / 'outputs' / name for name in ('result_0000.h5', 'result_0099.h5', 'result_0002.h5')]
+    for number, path in enumerate(paths):
+        write_solution(path, model=True)
+        with h5py.File(path, 'r+') as handle:
+            handle['solution/u'][...] = np.tile([2., .2, 4., 3., .5], 6)
+            handle['simulation_parameters/adimensionalization/time_scale'] = 2e-7
+            for key, value in {'Current_time_step_number': number,
+                               'Current_time': number * .08 / 2e-7,
+                               'Current_time_step': .08 / 2e-7}.items():
+                handle[f'simulation_parameters/time/{key}'] = value
+    final = tmp_path / 'outputs/result.h5'
+    shutil.copy2(paths[-1], final)
+    # Stale/overwritten NR files must never count as completed saves.
+    nr = tmp_path / 'outputs/result_NR0001.h5'
+    nr.write_bytes(b'not a completed solution')
+    (tmp_path / 'stdout.log').write_text(
+        f'Output written to file {paths[0]}\nTime iteration = 1\nNR iteration: 1\nError: 1.0D-6\n'
+        f'NR iteration: 1\nOutput written to file {nr}\nError: 1.0D-5\nOutput written to file {paths[1]}\n'
+        f'Time iteration = 2\nNR iteration: 1\nError: 2.0D-5\nOutput written to file {paths[2]}\n'
+        f'Output written to file {final}\n')
+    plan = {'case_id': 'legacy_case', 'workflow_id': 'baseline_warm', 'layout_id': 'mpi4_omp4',
+            'moving_equilibrium_inputs': {'time_step_s': .08}, 'parameter_overrides': {'nts': 2}}
+    metadata = {'status': 'completed', 'hdf5_outputs': [str(path) for path in [*paths, final, nr]]}
+    return tmp_path, plan, metadata
+
+
+def test_me_completion_uses_embedded_steps_and_final_attempts(me_outputs):
+    run, plan, metadata = me_outputs
+    report = validate_me_completed_steps(run, plan, metadata, 2e-4)
+    assert report['status'] == 'passed' and report['complete']
+    assert report['completed_steps'] == [1, 2] and len(report['steps']) == 3
+    assert report['steps'][1]['convergence']['final_newton_error'] == 1e-5
+    json.dumps(report, allow_nan=False)
+
+
+@pytest.mark.parametrize('damage', ['gap', 'time', 'nonfinite_time', 'dt', 'retry_error', 'nonconvergence',
+                                  'duplicate'])
+def test_me_completion_rejects_invalid_completed_evidence(me_outputs, damage):
+    run, plan, metadata = me_outputs
+    first = Path(metadata['hdf5_outputs'][1])
+    if damage == 'gap':
+        metadata['hdf5_outputs'].remove(str(first))
+    elif damage in ('retry_error', 'nonconvergence'):
+        log = run / 'stdout.log'
+        log.write_text(log.read_text().replace('Error: 1.0D-5\n', '' if damage == 'retry_error' else 'Error: 1.0D-2\n'))
+    else:
+        path = Path(metadata['hdf5_outputs'][3]) if damage == 'duplicate' else first
+        with h5py.File(path, 'r+') as handle:
+            if damage == 'nonfinite_time':
+                handle['simulation_parameters/time/Current_time'][...] = np.nan
+            elif damage in ('time', 'dt'):
+                key = 'Current_time' if damage == 'time' else 'Current_time_step'
+                handle[f'simulation_parameters/time/{key}'][...] *= 2
+            else:
+                handle['solution/u'][1] = -1.
+    report = validate_me_completed_steps(run, plan, metadata, 2e-4)
+    assert report['status'] == 'failed' and report['failures']
+    if damage in ('retry_error', 'nonconvergence'):
+        assert not report['convergence']['passed']
+    json.dumps(report, allow_nan=False)
+
+
+@pytest.mark.parametrize('compare_reference', [False, True])
+@pytest.mark.parametrize('damage', ['incomplete', 'earlier_error'])
+def test_completed_me_run_cannot_hide_missing_or_unconverged_steps(me_outputs, monkeypatch, compare_reference, damage):
+    run, plan, metadata = me_outputs
+    if damage == 'incomplete':
+        metadata['hdf5_outputs'] = metadata['hdf5_outputs'][:2]
+        prefix = validate_me_completed_steps(run, plan, metadata, 2e-4)
+        assert prefix['status'] == 'passed' and not prefix['complete']
+    else:
+        log = run / 'stdout.log'
+        log.write_text(log.read_text().replace('Error: 1.0D-5', 'Error: 1.0D-2'))
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    (run / 'run_metadata.json').write_text(json.dumps(metadata))
+    workflow = {'moving_equilibrium': {'series': 'equilibrium_series'}, 'layout': 'mpi4_omp4',
+                'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    if compare_reference:
+        _, _, report = compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
+                                             reference_override=Path(metadata['hdf5_outputs'][-1 if damage == 'incomplete' else 3]))
+        assert report['hdf5']['status'] == 'passed'
+    else:
+        report = validate_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json')
+    assert report['status'] == 'failed'
+    if damage == 'incomplete':
+        assert 'moving equilibrium did not complete all prescribed advances' in report['failures']
+    else:
+        assert not report['convergence']['passed']

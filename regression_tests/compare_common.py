@@ -184,13 +184,37 @@ def read_newton_convergence(
     errors = _ERROR_RE.findall(solver_output)
     # Capture the last record even when its value is invalid; never reuse an
     # earlier converged value after a failed final iteration.
-    try:
-        final_error = float(errors[-1].replace("D", "E").replace("d", "e")) if errors else None
-    except ValueError:
-        final_error = None
-    if final_error is not None and not isfinite(final_error):
-        final_error = None
+    final_error = _newton_error(errors[-1]) if errors else None
     return NewtonConvergence(final_error=final_error, maximum=maximum)
+
+
+def _newton_error(value):
+    try:
+        error = float(value.replace("D", "E").replace("d", "e"))
+    except ValueError:
+        return None
+    return error if isfinite(error) else None
+
+
+def read_me_completion_errors(log_path):
+    """Bind saves to their timestep and latest error, resetting at each NR attempt."""
+    try:
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        raise ComparisonError(f"cannot read solver log {log_path}: {exc}") from exc
+    step, error, saves = 0, None, {}
+    for line in lines:
+        if match := re.search(r"Time iteration\s*=\s*(\d+)", line):
+            step, error = int(match[1]), None
+        if re.search(r"NR iteration:\s*\d+", line):
+            error = None
+        if match := _ERROR_RE.match(line):
+            error = _newton_error(match[1])
+        if match := OUTPUT_RE.search(line):
+            path = Path(match[1].strip())
+            path = path if path.is_absolute() else log_path.parent / path
+            saves[path.resolve()] = (step, error)
+    return saves
 
 
 def effective_newton_maximum(
