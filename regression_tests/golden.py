@@ -14,11 +14,11 @@ from .files import file_identity
 from . import config
 from .build import build_solver
 from .bundles import artifact_path, validate_bundle_root, preflight_bundles, load_manifest, series_artifact_ids
-from .compare import compare_completed_run, validate_completed_run
+from .compare import compare_completed_run, compare_me_refinement_stop
 from .compare_common import select_candidate
 from .execute import execute_prepared, reusable_outputs
 from .prepare import prepare_run
-from .suites import run_suite
+from .suites import run_suite, assess_result, _reusable_result
 
 ROOT = Path(__file__).resolve().parent
 
@@ -125,7 +125,7 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
             write_json_atomic(path, report, "refresh report")
             execution = execute_prepared(prepared, values)
             result.update(run_status=execution.status, status=execution.status)
-            _validate_producer(result, root, catalog)
+            _validate_producer(result, case["workflows"][name], root, catalog)
             mesh_source = mesh_sources.get(case["workflows"][name].get("mesh"))
             if mesh_source:
                 result["mesh_handoff"] = _check_mesh_handoff(result, mesh_source, root, catalog)
@@ -144,7 +144,7 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
                     mesh_sources[role] = directory
                     result.setdefault("generated_meshes", {})[role] = _record(mesh, workspace)
                 else:
-                    generated[role] = _solution(directory)
+                    generated[role] = _solution(directory, result["validation"].get("selected_output"))
             write_json_atomic(path, report, "refresh report")
         candidate = workspace / "candidate"
         _collect(source, candidate, manifest, generated, report, case)
@@ -176,8 +176,9 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
     return path, report
 
 
-def _solution(directory):
-    return select_candidate(directory, load_json(directory / "run_metadata.json", "run metadata"))
+def _solution(directory, selected_output=None):
+    return select_candidate(directory, load_json(directory / "run_metadata.json", "run metadata"),
+                            Path(selected_output) if selected_output else None)
 
 
 def _generated_mesh(directory):
@@ -205,14 +206,18 @@ def _check_mesh_handoff(result, source, root, catalog):
             "comparison_report": str(report_path), "status": comparison["status"]}
 
 
-def _validate_producer(result, root, catalog):
+def _validate_producer(result, workflow, root, catalog):
     directory = Path(result["run_directory"])
-    if result["run_status"] != "completed" or not reusable_outputs(directory):
+    expectation = workflow.get("moving_equilibrium", {}).get("expected_failure")
+    if not expectation and (result["run_status"] != "completed" or not reusable_outputs(directory)):
         raise BundleError(f"producer failed or its outputs changed: {result['workflow_id']}")
-    validation = validate_completed_run(directory, root / "cases", root / "tolerances.json", catalog=catalog)
-    result["validation"] = validation
-    if validation["status"] != "passed":
-        raise BundleError(f"invalid producer output: {result['workflow_id']}: {validation['failures']}")
+    assessed = assess_result(result, root / "cases", root / "tolerances.json", references=False,
+                             expected_failure=expectation, catalog=catalog)
+    result["validation"] = assessed.get("validation", {})
+    if assessed["status"] != "passed":
+        raise BundleError(f"invalid producer output: {result['workflow_id']}: {assessed['failures']}")
+    if expectation:
+        result["expected_failure"] = assessed["expected_failure"]
 
 
 def _old_reference(result, source, manifest, case, root, catalog):
@@ -223,9 +228,11 @@ def _old_reference(result, source, manifest, case, root, catalog):
     if reference is None or not reference.is_file():
         return {"status": "unavailable"}
     try:
-        _, path, report = compare_completed_run(directory, root / "cases", root / "tolerances.json",
-                                                reference_override=reference,
-                                                report_override=directory / "old_reference.json", catalog=catalog)
+        expectation = workflow.get("moving_equilibrium", {}).get("expected_failure")
+        compare = compare_me_refinement_stop if expectation else compare_completed_run
+        _, path, report = compare(directory, root / "cases", root / "tolerances.json",
+                                reference_override=reference, report_override=directory / "old_reference.json",
+                                catalog=catalog, **({"completed_steps": expectation["completed_steps"]} if expectation else {}))
         return {"status": report["status"], "report": str(path)}
     except HarnessError as exc:
         return {"status": "unavailable", "reason": str(exc)}
@@ -290,7 +297,12 @@ def _publication_summary(workspace, report):
                        "status": item["status"],
                        "stages": [{"stage": stage["stage_id"], "status": stage["status"],
                                    "convergence": stage["convergence"]}
-                                  for stage in item["validation"]["stages"]]}
+                                  for stage in item["validation"].get("stages", [])],
+                       **({"run_status": item["run_status"], "expected_failure": {
+                           "reason": item["validation"]["terminal_reason"],
+                           "completed_steps": item["validation"]["completed_prefix"]["completed_steps"],
+                           "last_attempted_step": item["validation"]["last_attempted_step"]}}
+                          if item.get("expected_failure") else {})}
                       for item in report["producers"]],
         "validation_suites": [{"suite": item["suite"], "status": item["status"]}
                               for item in report["checks"]],
@@ -325,7 +337,10 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         _verify_record(workspace, record)
     for item in report["producers"]:
         directory = Path(item["run_directory"])
-        if not directory.resolve().is_relative_to(workspace) or item["status"] != "passed" or not reusable_outputs(directory):
+        expectation = case["workflows"][item["workflow_id"]].get("moving_equilibrium", {}).get("expected_failure")
+        if (not directory.resolve().is_relative_to(workspace) or item["status"] != "passed"
+                or not _reusable_result(item, catalog_root / "cases", catalog_root / "tolerances.json",
+                                        expected_failure=expectation, catalog=catalog)):
             raise BundleError("producer failed or its outputs changed")
         validation = item.get("validation", {})
         if validation.get("status") != "passed" or validation.get("convergence", {}).get("passed") is not True:
@@ -336,7 +351,9 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         summary = load_json(artifact_path(workspace, check["summary"], "check summary"), "check summary")
         if check["status"] != "passed" or summary["status"] != "passed":
             raise BundleError("golden validation checks failed")
-        if not all(reusable_outputs(Path(item["run_directory"])) for item in summary["results"]):
+        if not all(_reusable_result(item, catalog_root / "cases", catalog_root / "tolerances.json", catalog=catalog,
+                                    expected_failure=case["workflows"][item["workflow_id"]].get("moving_equilibrium", {}).get("expected_failure"))
+                   for item in summary["results"]):
             raise BundleError("validation run outputs changed")
     candidate = workspace / "candidate"
     validate_bundle_root(candidate, catalog_root / "cases", catalog=catalog)
