@@ -10,7 +10,8 @@ import h5py
 import pytest
 
 from regression_tests import cli, golden
-from regression_tests.bundles import validate_bundle_root
+from regression_tests.bundles import create_bundle, validate_bundle_root, series_artifact_ids
+from regression_tests.catalog import load_case_definition
 from regression_tests.files import file_identity
 from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import create_harness
@@ -228,5 +229,87 @@ def test_publish_rejects_changed_outputs_evidence_and_missing_reason(setup):
     namelist.write_bytes(original)
     (run / 'outputs/result.h5').write_bytes(b'changed')
     with pytest.raises(BundleError, match='outputs changed'):
+        publish(setup)
+    assert not setup.output.exists()
+
+
+@pytest.fixture
+def indexed_setup(setup):
+    source = setup.harness.source
+    (source / 'magnetic').mkdir()
+    frames = []
+    for number in range(2):
+        frame = {}
+        for kind in ('magnetic', 'current'):
+            path = source / f'magnetic/{kind}_{number + 1:04d}.h5'
+            with h5py.File(path, 'w') as handle:
+                handle['time'], handle['dt'] = number * .02, .02
+                handle['field'] = [number, number + 1]
+            frame[kind] = path.relative_to(source).as_posix()
+        frames.append(frame)
+    (source / 'series.json').write_text(json.dumps({'schema_version': 1, 'dt_s': .02, 'frames': frames}))
+    with h5py.File(source / 'restart.h5', 'r+') as handle:
+        handle['simulation_parameters/adimensionalization/time_scale'] = 2e-7
+    path = setup.root / 'cases/legacy_case.json'
+    case = json.loads(path.read_text())
+    case['files']['optional']['equilibrium_series'] = 'series.json'
+    case['workflows']['moving'] = {'extends': 'warm',
+        'moving_equilibrium': {'series': 'equilibrium_series'}, 'parameter_overrides': {'nts': 1}}
+    path.write_text(json.dumps(case))
+    setup.source_bundle = setup.harness.root / 'indexed_bundle'
+    create_bundle('legacy_case', source, setup.source_bundle, setup.root / 'cases')
+    setup.values = {**setup.values, 'MHDG_REGRESSION_DATA_ROOT': str(setup.source_bundle)}
+    # An unrelated unroled artifact must still be removed by compact collection.
+    path = setup.source_bundle / 'manifest.json'
+    manifest = json.loads(path.read_text())
+    retired = setup.source_bundle / 'inputs/retired.h5'
+    retired.write_bytes(b'retired field')
+    manifest['artifacts']['retired_field'] = {'path': 'inputs/retired.h5',
+        **file_identity(retired), 'media_type': 'application/x-hdf5'}
+    path.write_text(json.dumps(manifest))
+    return setup
+
+
+def test_indexed_fields_survive_refresh_publication_and_source_removal(indexed_setup):
+    setup = indexed_setup
+    source_manifest = json.loads((setup.source_bundle / 'manifest.json').read_text())
+    case = load_case_definition('legacy_case', setup.root / 'cases')
+    members = series_artifact_ids(setup.source_bundle, source_manifest, case)
+    assert len(members) == 4 and members.isdisjoint(source_manifest['roles'].values())
+    golden.refresh('legacy_case', setup.values, setup.workspace)
+    publish(setup)
+    for bundle in (setup.workspace / 'candidate', setup.output):
+        manifest = json.loads((bundle / 'manifest.json').read_text())
+        for member in members:
+            assert manifest['artifacts'][member] == source_manifest['artifacts'][member]
+            assert file_identity(bundle / manifest['artifacts'][member]['path']) == {
+                key: source_manifest['artifacts'][member][key] for key in ('sha256', 'size_bytes')}
+        assert 'retired_field' not in manifest['artifacts']
+        assert not (bundle / 'inputs/retired.h5').exists()
+    assert not any(path.is_symlink() for path in setup.output.rglob('*'))
+    for directory in (setup.workspace, setup.source_bundle, setup.harness.source, setup.harness.bundle):
+        shutil.rmtree(directory)
+    validate_bundle_root(setup.output, setup.root / 'cases', workflows=['moving'])
+    from regression_tests.prepare import prepare_run
+    values = {**setup.values, 'MHDG_REGRESSION_DATA_ROOT': str(setup.output)}
+    prepared = prepare_run(values, 'legacy_case', 'moving', 'serial_omp1',
+                           setup.root / 'cases', setup.root / 'layouts.json', require_reference=False)
+    assert len(list((prepared.path / 'inputs/magnetic').glob('*.h5'))) == 4
+
+
+@pytest.mark.parametrize('damage', ['missing', 'changed'])
+def test_publication_rejects_damaged_indexed_field(indexed_setup, damage):
+    setup = indexed_setup
+    golden.refresh('legacy_case', setup.values, setup.workspace)
+    candidate = setup.workspace / 'candidate'
+    manifest = json.loads((candidate / 'manifest.json').read_text())
+    case = load_case_definition('legacy_case', setup.root / 'cases')
+    member = sorted(series_artifact_ids(candidate, manifest, case))[0]
+    path = candidate / manifest['artifacts'][member]['path']
+    if damage == 'missing':
+        path.unlink()
+    else:
+        path.write_bytes(b'changed field')
+    with pytest.raises(BundleError, match='missing|size_bytes|sha256|does not exist'):
         publish(setup)
     assert not setup.output.exists()

@@ -13,7 +13,7 @@ from .support import BundleError, HarnessError, utc_now, utc_run_id
 from .files import file_identity
 from . import config
 from .build import build_solver
-from .bundles import artifact_path, validate_bundle_root, preflight_bundles, load_manifest
+from .bundles import artifact_path, validate_bundle_root, preflight_bundles, load_manifest, series_artifact_ids
 from .compare import compare_completed_run, validate_completed_run
 from .compare_common import select_candidate
 from .execute import execute_prepared, reusable_outputs
@@ -246,7 +246,7 @@ def _collect(source, candidate, source_manifest, generated, report, case):
     # references. Retired roles/stage matrices stay in the historical source.
     manifest["roles"] = {role: artifact for role, artifact in manifest["roles"].items()
                          if role in case["bundle_files"]}
-    keep = set(manifest["roles"].values())
+    keep = set(manifest["roles"].values()) | series_artifact_ids(source, manifest, case)
     manifest["artifacts"] = {key: value for key, value in manifest["artifacts"].items() if key in keep}
     for role, solution in generated.items():
         spec = case["bundle_files"][role]
@@ -345,7 +345,7 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         staging = Path(temporary) / "golden"
         manifest = load_json(candidate / "manifest.json", "candidate manifest")
         staging.mkdir()
-        keep = set(manifest["roles"].values())
+        keep = set(manifest["roles"].values()) | series_artifact_ids(candidate, manifest, case)
         manifest["artifacts"] = {key: value for key, value in manifest["artifacts"].items() if key in keep}
         for artifact in manifest["artifacts"].values():
             source = candidate / artifact["path"]
