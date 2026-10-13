@@ -8,10 +8,30 @@ import pytest
 
 
 from regression_tests.catalog import load_case_definition
+from regression_tests.documents import load_validated_json
 from regression_tests.support import BundleError
 
 
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("expectation", [
+    {"reason": "divergence_refinement_limit", "completed_steps": 3},
+    {"reason": "crash", "completed_steps": 3},
+    {"reason": "divergence_refinement_limit", "completed_steps": 0},
+    {"reason": "divergence_refinement_limit"},
+])
+def test_me_expected_failure_declaration(tmp_path, expectation):
+    path = tmp_path / "moving.json"
+    path.write_text(json.dumps({"series": "fields", "expected_failure": expectation}))
+    def load():
+        return load_validated_json(path, REGRESSION_ROOT / "schemas/case.schema.json",
+                                   "moving recipe", definition="moving_equilibrium")
+    if expectation == {"reason": "divergence_refinement_limit", "completed_steps": 3}:
+        assert load()["expected_failure"] == expectation
+    else:
+        with pytest.raises(BundleError):
+            load()
 
 
 @pytest.fixture

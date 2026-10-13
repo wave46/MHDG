@@ -3,6 +3,7 @@
 import json
 import shutil
 from pathlib import Path
+from unittest.mock import Mock
 
 import h5py
 import numpy as np
@@ -374,6 +375,61 @@ def test_invalid_expected_stop_cannot_enter_reference_comparison(stopped_me_outp
     monkeypatch.setattr('regression_tests.compare.compare_run', lambda *_, **__: pytest.fail('invalid outcome reached comparator'))
     with pytest.raises(ComparisonError, match='invalid expected ME refinement stop'):
         compare_me_refinement_stop(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json', completed_steps=1)
+
+
+@pytest.mark.parametrize('damage', [None, 'reference', 'output', 'crash', 'completed', 'log'])
+def test_suite_assesses_and_reuses_only_declared_expected_stops(stopped_me_outputs, monkeypatch, damage):
+    from regression_tests import suites
+
+    run, plan, metadata = stopped_me_outputs
+    (run / 'inputs').mkdir()
+    reference = run / 'inputs/reference.h5'
+    shutil.copy2(metadata['hdf5_outputs'][1], reference)
+    if damage in ('reference', 'output'):
+        path = reference if damage == 'reference' else Path(metadata['hdf5_outputs'][1])
+        with h5py.File(path, 'r+') as handle:
+            handle['solution/u'][1] += .1
+    elif damage == 'crash':
+        metadata['exit_code'] = 139
+    elif damage == 'completed':
+        metadata.update(status='completed', exit_code=0)
+    elif damage == 'log':
+        (run / 'stdout.log').write_text('unrelated failure')
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    metadata_path = run / 'run_metadata.json'
+    metadata_path.write_text(json.dumps(metadata))
+    original = metadata_path.read_bytes()
+    expectation = {'reason': 'divergence_refinement_limit', 'completed_steps': 1}
+    workflow = {'moving_equilibrium': {'series': 'fields', 'expected_failure': expectation},
+                'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
+    case = {'workflows': {'baseline_warm': workflow}}
+    monkeypatch.setattr('regression_tests.compare.load_case_definition', lambda *_, **__: case)
+    monkeypatch.setattr(suites, 'load_case_definition', lambda *_, **__: case)
+    source = {'workflow_id': 'baseline_warm', 'layout_id': 'mpi4_omp4',
+              'run_status': metadata['status'], 'run_directory': str(run)}
+    arguments = (source, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json')
+    result = suites.assess_result(*arguments, expected_failure=expectation)
+    assert result['status'] == ('passed' if damage is None else 'failed')
+    assert result['run_status'] == metadata['status']
+    reusable = damage in (None, 'reference')  # Reference disagreement never requires a solver replay.
+    assert suites._reusable_result(*arguments, expected_failure=expectation) is reusable
+    validation = suites.assess_result(*arguments, references=False, expected_failure=expectation)
+    assert validation['status'] == ('passed' if reusable else 'failed')
+    if damage is None:
+        assert result['expected_failure']['last_attempted_step'] == 2
+        assert suites.assess_result(*arguments)['status'] == 'failed'  # Undeclared failures stay failures.
+    summary_path = run / 'suite_summary.json'
+    summary_path.write_text(json.dumps({'schema_version': 2, 'suite_id': 'example', 'run_id': 'example',
+                                        'case_id': 'legacy_case', 'reference_comparisons': True, 'results': [source]}))
+    from regression_tests import diagnostics
+    check_output = Mock(wraps=diagnostics.check_output)
+    monkeypatch.setattr(diagnostics, 'check_output', check_output)
+    verified = suites.verify_suite(summary_path, arguments[1], arguments[2], include_layout_pairs=False)[1]
+    assert verified['results'][0]['status'] == result['status']
+    assert check_output.call_count == int(reusable or damage == 'completed')
+    if reusable:
+        assert check_output.call_args.args[0] == Path(metadata['hdf5_outputs'][1])
+    assert metadata_path.read_bytes() == original
 
 
 def test_prefix_comparison_applies_stricter_fallback_newton_profile_to_earlier_steps(me_outputs, monkeypatch):

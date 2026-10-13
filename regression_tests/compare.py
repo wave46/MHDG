@@ -259,6 +259,26 @@ def compare_me_refinement_stop(directory, case_directory, tolerances_path, *, co
     return report["comparison_policy"], path, report
 
 
+def validate_me_stopped_run(directory, case_directory, tolerances_path, *, completed_steps, catalog=None):
+    """Validate an expected stop and its saved output contract without a reference."""
+    inputs = load_comparison_inputs(directory, case_directory, tolerances_path,
+                                    catalog=catalog, require_completed=False)
+    if not inputs.workflow.get("moving_equilibrium"):
+        raise ComparisonError("expected refinement stop requires a moving-equilibrium workflow")
+    maximum = _stage_newton_maximum(inputs.workflow, inputs.plan["layout_id"],
+                                    tolerances_path, catalog=inputs.catalog)
+    outcome = validate_me_refinement_stop(inputs.run_directory, inputs.plan, inputs.metadata,
+                                          maximum, completed_steps=completed_steps)
+    report = {**outcome, "convergence": {"passed": False}}
+    if outcome["status"] == "passed":
+        contract = saved_output_contract(inputs, Path(outcome["selected_output"]))
+        report["output_contract"] = contract
+        report["failures"].extend(contract["failures"])
+        report["convergence"] = outcome["completed_prefix"]["convergence"]
+        report["status"] = "failed" if report["failures"] else "passed"
+    return report
+
+
 def compare_generated_meshes(
     reference_run: Path,
     candidate_run: Path,

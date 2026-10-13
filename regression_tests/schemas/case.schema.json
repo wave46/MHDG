@@ -160,6 +160,14 @@
       "properties": {
         "series": {"$ref": "#/$defs/identifier"},
         "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+        "expected_failure": {
+          "type": "object", "additionalProperties": false,
+          "required": ["reason", "completed_steps"],
+          "properties": {
+            "reason": {"const": "divergence_refinement_limit"},
+            "completed_steps": {"type": "integer", "minimum": 1}
+          }
+        },
         "controls": {
           "type": "object", "additionalProperties": false,
           "properties": {
