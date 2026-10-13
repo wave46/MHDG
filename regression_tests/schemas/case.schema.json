@@ -146,9 +146,19 @@
         "parameter_namelists": {
           "$ref": "#/$defs/parameter_namelists"
         },
+        "moving_equilibrium": {
+          "$ref": "#/$defs/moving_equilibrium"
+        },
         "require_refinement": {
           "type": "boolean"
         }
+      }
+    },
+    "moving_equilibrium": {
+      "type": "object", "additionalProperties": false,
+      "required": ["series"],
+      "properties": {
+        "series": {"$ref": "#/$defs/identifier"}
       }
     },
     "comparison": {

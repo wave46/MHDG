@@ -313,6 +313,12 @@ to [layout comparisons](tutorials/02-layout-comparison.md), a
 [cross-case profile](tutorials/04-profile.md), and a
 [real case with an input bundle](tutorials/05-real-case-bundle.md).
 
+Moving-equilibrium workflows can declare an ordered paired field/current
+index using [field-series.schema.json](schemas/field-series.schema.json).
+Bundle creation copies its explicitly listed members; validation checks their
+identities in the existing manifest and verifies membership. Run preparation
+and outcome checks follow separately.
+
 `python -m regression_tests suggest --base develop` groups advisory checks for
 changed files; it reads Git and catalogs but executes nothing. Suggestions do
 not replace scientific judgment about cold convergence or diagnostic formats.

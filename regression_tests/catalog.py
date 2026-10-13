@@ -250,6 +250,8 @@ def required_case_roles(
 def workflow_required_roles(workflow: dict[str, Any], *, references: bool = True) -> set[str]:
     """Resolve execution inputs, optionally including comparison references."""
     roles = set(workflow.get("inputs", []))
+    if moving := workflow.get("moving_equilibrium"):
+        roles.add(moving["series"])
     for name in (
         "mesh",
         "parameters",
