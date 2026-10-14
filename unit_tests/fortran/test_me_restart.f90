@@ -8,6 +8,7 @@ PROGRAM test_me_restart
   USE interpolation, ONLY: binarysearch, interpolate
   USE external_heating, ONLY: initialize_external_heating, load_external_heating
   USE magnetic_field, ONLY: equilibrium_input_filename, equilibrium_grid_dimensions, load_stored_toroidal_current
+  USE magnetic_field, ONLY: open_control_series, load_puff_from_file, load_zeff, load_impurity_concentration
   USE HDF5_io_module, ONLY: HDF5_open, HDF5_close, HDF5_dataset_shape
   USE HDF5, ONLY: HID_T, HSIZE_T
   IMPLICIT NONE
@@ -21,6 +22,9 @@ PROGRAM test_me_restart
   REAL*8 :: current(1)
   CHARACTER(LEN=1000) :: field_filename
   CHARACTER(LEN=1024) :: output_name, expected_output, reference_mesh_name
+  INTEGER :: sample, control_length
+  REAL*8 :: initial_puff, control_times(3)
+  CHARACTER(LEN=1000) :: control_filename
 
   ! Exact control endpoints and grid corners must leave index+1 in bounds.
   knots = [0.d0, 0.5d0, 0.56d0]
@@ -35,6 +39,28 @@ PROGRAM test_me_restart
   CALL check_input_arguments()
   CALL read_input()
   CALL init_sim(nts, dt)
+
+  ! Actual control readers must interpolate identically with inferred lengths.
+  initial_puff = phys%puff
+  control_filename = 'controls'
+  IF (INDEX(mesh_input_name, '.msh') > 0) control_filename = 'controls.h5'
+  CALL open_control_series(control_filename, 'target_density', field_file, control_length)
+  CALL HDF5_close(field_file)
+  control_times = [0.d0, 0.25d0, 0.56d0]
+  IF (ALLOCATED(phys%impurity_concentrations)) DEALLOCATE(phys%impurity_concentrations)
+  ALLOCATE(phys%impurity_concentrations(1))
+  DO sample = 1, SIZE(control_times)
+     time%t_ME = control_times(sample)
+     CALL load_puff_from_file(control_filename, input%puff_dimension)
+     CALL load_zeff(control_filename, input%zeff_dimension)
+     CALL load_impurity_concentration(control_filename, input%impurity_concentration_dimension)
+     IF (ABS(phys%puff-(10.d0+20.d0*time%t_ME)) > 1.d-12 .OR. &
+         ABS(phys%Zeff-(2.d0+3.d0*time%t_ME)) > 1.d-12 .OR. &
+         ABS(phys%impurity_concentrations(1)-(0.1d0+0.01d0*time%t_ME)) > 1.d-12) &
+          ERROR STOP 'control interpolation with inferred lengths'
+  ENDDO
+  phys%puff = initial_puff
+  time%t_ME = 0.d0
 
   ! Full filenames and legacy stems must load identical physical mesh data.
   CALL load_gmsh_mesh(mesh_input_name, 0)

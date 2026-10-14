@@ -18,10 +18,13 @@ def parameters(template, *, nts=100, me=True, full_paths=False):
         template, count = re.subn(rf"(?im)^(\s*{key}\s*=).*?$", rf"\g<1> {value}", template)
         assert count == 1, key
     if full_paths:
-        template = re.sub(r"(?im)^\s*(?:field|jtor)_dimensions\([^\n]*\n", "", template)
+        template = re.sub(r"(?im)^\s*(?:(?:field|jtor)_dimensions[^\n]*|"
+                          r"(?:puff|target_density|target_density_xpr|zeff)_dimension\s*=[^\n]*)\n", "", template)
     else:
         template = template.replace("&INPUT_LST", "&INPUT_LST\n"
-            "    field_dimensions = 1000, 1000\n    jtor_dimensions = 1000, 1000", 1)
+            "    field_dimensions = 1000, 1000\n    jtor_dimensions = 1000, 1000\n"
+            "    puff_dimension = 1000\n    target_density_dimension = 1000\n"
+            "    target_density_xpr_dimension = 1000\n    zeff_dimension = 1000", 1)
     return template
 
 
@@ -85,6 +88,9 @@ def main():
         ("field_shape_mismatch", 0, True, 100, True, "Equilibrium dataset shape differs from grid"),
         ("current_shape_mismatch", 0, True, 100, True, "Equilibrium dataset shape differs from grid"),
         ("missing_full_filename", 0, True, 100, True, "Equilibrium input file not found: missing.h5"),
+        ("control_shape_mismatch", 0, True, 100, True, "Control dataset length differs from time"),
+        ("control_rank_mismatch", 0, True, 100, True, "Control values and time must be rank one"),
+        ("control_too_short", 0, True, 100, True, "Invalid control series length"),
     ]
     with tempfile.TemporaryDirectory(prefix="mhdg-me-restart-") as scratch:
         for name, step, saved_me, nts, me, expected in cases:
@@ -95,6 +101,22 @@ def main():
                 text = text.replace("'field_0000.h5'", "'missing.h5'")
             (directory / "param.txt").write_text(text)
             checkpoint(directory / "checkpoint.h5", step, saved_me)
+            with h5py.File(directory / "controls.h5", "w") as f:
+                times = np.array([0., .5, .56])
+                f["time"] = times
+                f["puff"] = 10 + 20*times
+                f["zeff"] = 2 + 3*times
+                f["impurity_concentration"] = .1 + .01*times
+                f["target_density"] = np.ones_like(times)
+                if name == "control_shape_mismatch":
+                    del f["puff"]
+                    f["puff"] = np.ones(2)
+                elif name == "control_rank_mismatch":
+                    del f["time"]
+                    f["time"] = times.reshape(1, 3)
+                elif name == "control_too_short":
+                    del f["time"], f["target_density"]
+                    f["time"], f["target_density"] = [0.], [1.]
             mesh_file = directory / "inputs/unit_mesh_P1.msh"
             mesh_file.parent.mkdir()
             mesh_file.write_text("$MeshFormat\n2.2 0 8\n$EndMeshFormat\n$Nodes\n3\n"

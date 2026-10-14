@@ -8,6 +8,6 @@
   impurity_concentrations = 0.0d0
   ! Moving-equilibrium concentration history for entry 1 (target_variable = 0, 1, 2).
   ! With target_variable = 3, feedback adjusts entry 1; other entries stay fixed.
-  impurity_concentration_path = '/path/where/to/read/impurity/concentration/'
-  impurity_concentration_dimension = 10000
+  ! Series length is read from HDF5.
+  impurity_concentration_path = '/path/where/to/read/impurity/concentration.h5'
 /

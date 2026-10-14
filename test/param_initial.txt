@@ -85,14 +85,11 @@
     save_folder = '/path/where/to/save/solution/'
     external_heating_path = '/path/where/to/read/external/heating/from.h5'
     external_heating_from_grid = .true.
-    puff_path = '/path/where/to/read/puff/' ! only used in moving equilibrium
-    puff_dimension = 1000
-    target_density_path = '/path/where/to/read/target/density/'
-    target_density_dimension = 10000
-    target_density_xpr_path = '/path/where/to/read/target/density/xpr/'
-    target_density_xpr_dimension = 101
-    zeff_path = '/path/where/to/read/zeff/'
-    zeff_dimension = 10000
+    ! Control series lengths are read from HDF5.
+    puff_path = '/path/where/to/read/puff.h5' ! only used in moving equilibrium
+    target_density_path = '/path/where/to/read/target/density.h5'
+    target_density_xpr_path = '/path/where/to/read/target/density/xpr.h5'
+    zeff_path = '/path/where/to/read/zeff.h5'
     diffusion_1D_path = '/path/where/to/read/1d/diffusion/'
 /
 

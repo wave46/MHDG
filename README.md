@@ -76,7 +76,7 @@ The solver reads `param.txt` from the working directory. The four templates in
 diffusion, `param_diffred.txt` reduces diffusion through pseudo-steady states,
 `param_steady.txt` reconverges at fixed diffusion, and `param_reference.txt`
 provides an adaptive steady-state example with separate particle and heat
-diffusivities. Set paths, grid dimensions, and case-specific values before use.
+diffusivities. Set paths and case-specific values before use.
 
 The neutral limiter temperature source is `'ti'` (local ion temperature) or
 `'fixed'` (requires `neutral_flux_limiter_tn_eV > 0`). Flux regularization and
@@ -101,7 +101,7 @@ directory unless absolute paths are supplied:
   policies, particle-diffusion taper, and pinch settings.
 - `impurity_model_path = 'impurity_model.nml'` supplies
   `IMPURITY_RADIATION_LST` and is required when `impurity_radiation` is enabled.
-  The [sample](test/impurity_model.nml) includes every supported key. Species
+  The [sample](test/impurity_model.nml) shows the current input format. Species
   names (`'N'`, `'W'`) and non-negative concentrations are arrays, with
   concentrations expressed as fractions of electron density. Mixture settings
   and the moving-equilibrium concentration-file controls belong in this file.
@@ -112,7 +112,7 @@ The feedback gains apply to moving-equilibrium control. The spelling
 ## Running 
 The pipeline to get solution for a case without meshadaptivity and in serial is described in [demo](https://github.com/wave46/HDG_postprocess/blob/main/demos/hdg_solution_basics_neutrals.ipynb)
 First, go to `test` folder, where executable is. It is convinient to create `Meshes` folder and put your mesh there.
-Take the `param_initial.txt` and copy its contents to `param.txt`. Specify the magnetic-field and plasma-current filenames and the output folder. Grid dimensions are inferred from HDF5.
+Take the `param_initial.txt` and copy its contents to `param.txt`. Specify the magnetic-field and plasma-current filenames and the output folder. Grid dimensions and control-series lengths are inferred from HDF5; legacy dimension entries remain accepted and are ignored.
 To initialize simulation one should start with high diffusion (usually arond 20m^2/s) and several small timesteps (`dt0=1e3` in adimensional values).
 Run the following command
 ```zsh

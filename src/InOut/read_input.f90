@@ -155,6 +155,10 @@ SUBROUTINE READ_input()
   divide_by_2pi = .FALSE.
   field_dimensions = 0
   jtor_dimensions = 0
+  puff_dimension = 0
+  target_density_dimension = 0
+  target_density_xpr_dimension = 0
+  zeff_dimension = 0
   tau = 1.d0
   diff_nn_min = diff_nn_min_unset
   Re_n = 1.d0

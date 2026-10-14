@@ -88,6 +88,9 @@ stored-current interpolation at initial/endpoint frames, full filenames and
 legacy basenames, optional namelist dimensions, and dataset-shape rejection.
 The same cases load a small Gmsh mesh and checkpoint mesh/solution using stems
 and full .msh/.h5 names, and verify that full input names preserve output stems.
+Control readers infer series lengths and preserve puff, Zeff and impurity
+interpolation at initial, intermediate and final times, including repeated
+loads; mismatched value/time lengths and invalid vector shapes are rejected.
 It needs Python 3 with h5py and NumPy, uses no external
 equilibrium or case data, and does not launch a solver simulation.
 

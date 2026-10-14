@@ -1642,55 +1642,88 @@ SUBROUTINE read_1D_diffusion_profiles()
    END IF
 END SUBROUTINE read_1D_diffusion_profiles
 
+SUBROUTINE open_control_series(path, dataset, file_id, n)
+   CHARACTER(LEN=*), INTENT(IN) :: path, dataset
+   INTEGER(HID_T), INTENT(OUT) :: file_id
+   INTEGER, INTENT(OUT) :: n
+   CHARACTER(LEN=1000) :: filename
+   INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:), time_dimensions(:)
+   INTEGER :: ierr
+
+   CALL resolve_input_filename(path, '.h5', filename, ierr)
+   IF (ierr /= 0) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control input file not found: ', TRIM(filename)
+      STOP 1
+   ENDIF
+   CALL HDF5_open(filename, file_id, ierr)
+   IF (ierr /= 0) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot open control input: ', TRIM(filename)
+      STOP 1
+   ENDIF
+   CALL HDF5_dataset_shape(file_id, dataset, dimensions, ierr)
+   IF (ierr == 0) CALL HDF5_dataset_shape(file_id, 'time', time_dimensions, ierr)
+   IF (ierr /= 0) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot read control dataset shape: ', TRIM(filename), ' ', TRIM(dataset)
+      CALL HDF5_close(file_id)
+      STOP 1
+   ENDIF
+   IF (SIZE(dimensions) /= 1 .OR. SIZE(time_dimensions) /= 1) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control values and time must be rank one: ', TRIM(filename)
+      CALL HDF5_close(file_id)
+      STOP 1
+   ENDIF
+   IF (dimensions(1) /= time_dimensions(1)) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control dataset length differs from time: ', TRIM(filename), ' ', TRIM(dataset)
+      CALL HDF5_close(file_id)
+      STOP 1
+   ENDIF
+   IF (dimensions(1) < 2 .OR. dimensions(1) > INT(HUGE(n), HSIZE_T)) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Invalid control series length: ', dimensions(1), ' ', TRIM(filename)
+      CALL HDF5_close(file_id)
+      STOP 1
+   ENDIF
+   n = INT(dimensions(1))
+END SUBROUTINE open_control_series
+
 SUBROUTINE SetParticleSource()
 
    CHARACTER(LEN=1000) :: fname, fname_density, fname_impurity,fname_xpr_density, fname_zeff
    REAL*8            :: nli
-   REAL*8, POINTER, DIMENSION(:) :: puff_time, target_density_time, target_density_exp
-   INTEGER           :: puff_len, density_len, impurity_concentration_len,density_xpr_len, zeff_len
-
-   NULLIFY(puff_time, target_density_time, target_density_exp)
 
    fname = input%puff_path
-   puff_len = input%puff_dimension
    fname_density = input%target_density_path
    fname_xpr_density = input%target_density_xpr_path
-   density_len = input%target_density_dimension
-   density_xpr_len = input%target_density_xpr_dimension
    fname_impurity = input%impurity_concentration_path
-   impurity_concentration_len = input%impurity_concentration_dimension
    fname_zeff = input%zeff_path
-   zeff_len = input%zeff_dimension
    
 
-   ! Allocate storing space in phys (puff for WEST, 403 entries)
    IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
       IF (switch%target_variable .EQ. 0) THEN
-         CALL load_puff_from_file(fname, puff_len)
+         CALL load_puff_from_file(fname, input%puff_dimension)
          IF (switch%impurity_radiation)THEN
-            CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
+            CALL load_impurity_concentration(fname_impurity, input%impurity_concentration_dimension)
          ENDIF
       ELSEIF (switch%target_variable .EQ. 1) THEN
-         CALL adjust_puff_to_target_density(fname_density, density_len)
+         CALL adjust_puff_to_target_density(fname_density, input%target_density_dimension)
          IF (switch%impurity_radiation)THEN
-            CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
+            CALL load_impurity_concentration(fname_impurity, input%impurity_concentration_dimension)
          ENDIF
       ELSEIF (switch%target_variable .EQ. 2) THEN
          !We first load the puff from file
-         CALL load_puff_from_file(fname, puff_len)
+         CALL load_puff_from_file(fname, input%puff_dimension)
          !Then we adjust wall recycling
-         CALL adjust_recycling_to_target_density(fname_density, density_len)
+         CALL adjust_recycling_to_target_density(fname_density, input%target_density_dimension)
          IF (switch%impurity_radiation)THEN
-            CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
+            CALL load_impurity_concentration(fname_impurity, input%impurity_concentration_dimension)
          ENDIF
       ELSEIF (switch%target_variable .EQ. 3) THEN
-         CALL adjust_puff_to_target_density(fname_density, density_len)
+         CALL adjust_puff_to_target_density(fname_density, input%target_density_dimension)
          IF (switch%impurity_radiation)THEN
-            CALL adjust_impurity_concentration_to_target_density_xpr(fname_xpr_density, density_xpr_len)
+            CALL adjust_impurity_concentration_to_target_density_xpr(fname_xpr_density, input%target_density_xpr_dimension)
          ENDIF
          
       END IF
-      CALL load_zeff(fname_zeff, zeff_len)
+      CALL load_zeff(fname_zeff, input%zeff_dimension)
       
    END IF
 
@@ -1705,17 +1738,18 @@ END SUBROUTINE SetParticleSource
 
 SUBROUTINE load_puff_from_file(fname, puff_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname
-   INTEGER, INTENT(IN) :: puff_len
+   INTEGER, INTENT(OUT) :: puff_len
    INTEGER(HID_T) :: file_id
    REAL*8, POINTER, DIMENSION(:) :: puff_time
    INTEGER :: puff_time_idx
-   INTEGER :: ierr
+
+   CALL open_control_series(fname, 'puff', file_id, puff_len)
 
    ALLOCATE(puff_time(puff_len))
+   IF (ASSOCIATED(phys%puff_exp)) DEALLOCATE(phys%puff_exp)
    ALLOCATE(phys%puff_exp(puff_len))
 
    ! Read file
-   CALL HDF5_open(fname, file_id, ierr)
    CALL HDF5_array1D_reading(file_id, phys%puff_exp, 'puff')
    CALL HDF5_array1D_reading(file_id, puff_time, 'time')
    IF (MPIvar%glob_id .EQ. 0) THEN
@@ -1736,19 +1770,19 @@ END SUBROUTINE load_puff_from_file
 
 SUBROUTINE adjust_puff_to_target_density(fname_density, density_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_density
-   INTEGER, INTENT(IN) :: density_len
+   INTEGER, INTENT(OUT) :: density_len
    REAL*8 :: x_lower, x_upper, y_lower, y_upper
    INTEGER(HID_T) :: file_id
    REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
    INTEGER :: target_density_idx
    REAL*8 :: target_density, nli
-   INTEGER :: ierr
+
+   CALL open_control_series(fname_density, 'target_density', file_id, density_len)
 
    ALLOCATE(target_density_time(density_len))
    ALLOCATE(target_density_exp(density_len))
 
    ! Read file
-   CALL HDF5_open(fname_density, file_id, ierr)
    CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
    CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
    CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
@@ -1781,19 +1815,19 @@ END SUBROUTINE adjust_puff_to_target_density
 
 SUBROUTINE adjust_impurity_concentration_to_target_density_xpr(fname_xpr_density, density_xpr_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_xpr_density
-   INTEGER, INTENT(IN) :: density_xpr_len
+   INTEGER, INTENT(OUT) :: density_xpr_len
    REAL*8 :: x_lower, x_upper, y_lower, y_upper
    INTEGER(HID_T) :: file_id
    REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
    INTEGER :: target_density_idx
    REAL*8 :: target_density, nli
-   INTEGER :: ierr
+
+   CALL open_control_series(fname_xpr_density, 'target_density', file_id, density_xpr_len)
 
    ALLOCATE(target_density_time(density_xpr_len))
    ALLOCATE(target_density_exp(density_xpr_len))
 
    ! Read file
-   CALL HDF5_open(fname_xpr_density, file_id, ierr)
    CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
    CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
    CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
@@ -1826,19 +1860,19 @@ END SUBROUTINE adjust_impurity_concentration_to_target_density_xpr
 
 SUBROUTINE adjust_recycling_to_target_density(fname_density, density_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_density
-   INTEGER, INTENT(IN) :: density_len
+   INTEGER, INTENT(OUT) :: density_len
    REAL*8 :: x_lower, x_upper, y_lower, y_upper
    INTEGER(HID_T) :: file_id
    REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
    INTEGER :: target_density_idx
    REAL*8 :: target_density, nli
-   INTEGER :: ierr
+
+   CALL open_control_series(fname_density, 'target_density', file_id, density_len)
 
    ALLOCATE(target_density_time(density_len))
    ALLOCATE(target_density_exp(density_len))
 
    ! Read file
-   CALL HDF5_open(fname_density, file_id, ierr)
    CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
    CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
    CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
@@ -1871,18 +1905,18 @@ END SUBROUTINE adjust_recycling_to_target_density
 
 SUBROUTINE load_impurity_concentration(fname_impurity, impurity_concentration_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_impurity
-   INTEGER, INTENT(IN) :: impurity_concentration_len
+   INTEGER, INTENT(OUT) :: impurity_concentration_len
    INTEGER(HID_T) :: file_id
    REAL*8, POINTER, DIMENSION(:) :: impurity_concentration_time, impurity_concentration_exp
    INTEGER :: impurity_concentration_idx
    REAL*8 :: impurity_concentration
-   INTEGER :: ierr
+
+   CALL open_control_series(fname_impurity, 'impurity_concentration', file_id, impurity_concentration_len)
 
    ALLOCATE(impurity_concentration_time(impurity_concentration_len))
    ALLOCATE(impurity_concentration_exp(impurity_concentration_len))
 
    ! Read file
-   CALL HDF5_open(fname_impurity, file_id, ierr)
    CALL HDF5_array1D_reading(file_id, impurity_concentration_exp, 'impurity_concentration')
    CALL HDF5_array1D_reading(file_id, impurity_concentration_time, 'time')
    IF (MPIvar%glob_id .EQ. 0) THEN
@@ -1905,18 +1939,18 @@ END SUBROUTINE load_impurity_concentration
 
 SUBROUTINE load_zeff(fname_zeff, zeff_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_zeff
-   INTEGER, INTENT(IN) :: zeff_len
+   INTEGER, INTENT(OUT) :: zeff_len
    INTEGER(HID_T) :: file_id
    REAL*8, POINTER, DIMENSION(:) :: zeff_time, zeff_exp
    INTEGER :: zeff_idx
    REAL*8 :: zeff
-   INTEGER :: ierr
+
+   CALL open_control_series(fname_zeff, 'zeff', file_id, zeff_len)
 
    ALLOCATE(zeff_time(zeff_len))
    ALLOCATE(zeff_exp(zeff_len))
 
    ! Read file
-   CALL HDF5_open(fname_zeff, file_id, ierr)
    CALL HDF5_array1D_reading(file_id, zeff_exp, 'zeff')
    CALL HDF5_array1D_reading(file_id, zeff_time, 'time')
    IF (MPIvar%glob_id .EQ. 0) THEN
