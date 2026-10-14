@@ -10,7 +10,8 @@ import h5py
 import pytest
 
 from regression_tests import cli, golden
-from regression_tests.bundles import validate_bundle_root
+from regression_tests.bundles import create_bundle, validate_bundle_root, series_artifact_ids
+from regression_tests.catalog import load_case_definition
 from regression_tests.files import file_identity
 from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.harness import create_harness
@@ -230,3 +231,205 @@ def test_publish_rejects_changed_outputs_evidence_and_missing_reason(setup):
     with pytest.raises(BundleError, match='outputs changed'):
         publish(setup)
     assert not setup.output.exists()
+
+
+@pytest.fixture
+def indexed_setup(setup):
+    source = setup.harness.source
+    (source / 'magnetic').mkdir()
+    frames = []
+    for number in range(2):
+        frame = {}
+        for kind in ('magnetic', 'current'):
+            path = source / f'magnetic/{kind}_{number + 1:04d}.h5'
+            with h5py.File(path, 'w') as handle:
+                handle['time'], handle['dt'] = number * .02, .02
+                handle['field'] = [number, number + 1]
+            frame[kind] = path.relative_to(source).as_posix()
+        frames.append(frame)
+    (source / 'series.json').write_text(json.dumps({'schema_version': 1, 'dt_s': .02, 'frames': frames}))
+    with h5py.File(source / 'restart.h5', 'r+') as handle:
+        handle['simulation_parameters/adimensionalization/time_scale'] = 2e-7
+    path = setup.root / 'cases/legacy_case.json'
+    case = json.loads(path.read_text())
+    case['files']['optional']['equilibrium_series'] = 'series.json'
+    case['workflows']['moving'] = {'extends': 'warm',
+        'moving_equilibrium': {'series': 'equilibrium_series'}, 'parameter_overrides': {'nts': 1}}
+    path.write_text(json.dumps(case))
+    setup.source_bundle = setup.harness.root / 'indexed_bundle'
+    create_bundle('legacy_case', source, setup.source_bundle, setup.root / 'cases')
+    setup.values = {**setup.values, 'MHDG_REGRESSION_DATA_ROOT': str(setup.source_bundle)}
+    # An unrelated unroled artifact must still be removed by compact collection.
+    path = setup.source_bundle / 'manifest.json'
+    manifest = json.loads(path.read_text())
+    retired = setup.source_bundle / 'inputs/retired.h5'
+    retired.write_bytes(b'retired field')
+    manifest['artifacts']['retired_field'] = {'path': 'inputs/retired.h5',
+        **file_identity(retired), 'media_type': 'application/x-hdf5'}
+    path.write_text(json.dumps(manifest))
+    return setup
+
+
+def test_indexed_fields_survive_refresh_publication_and_source_removal(indexed_setup):
+    setup = indexed_setup
+    source_manifest = json.loads((setup.source_bundle / 'manifest.json').read_text())
+    case = load_case_definition('legacy_case', setup.root / 'cases')
+    members = series_artifact_ids(setup.source_bundle, source_manifest, case)
+    assert len(members) == 4 and members.isdisjoint(source_manifest['roles'].values())
+    golden.refresh('legacy_case', setup.values, setup.workspace)
+    publish(setup)
+    for bundle in (setup.workspace / 'candidate', setup.output):
+        manifest = json.loads((bundle / 'manifest.json').read_text())
+        for member in members:
+            assert manifest['artifacts'][member] == source_manifest['artifacts'][member]
+            assert file_identity(bundle / manifest['artifacts'][member]['path']) == {
+                key: source_manifest['artifacts'][member][key] for key in ('sha256', 'size_bytes')}
+        assert 'retired_field' not in manifest['artifacts']
+        assert not (bundle / 'inputs/retired.h5').exists()
+    assert not any(path.is_symlink() for path in setup.output.rglob('*'))
+    for directory in (setup.workspace, setup.source_bundle, setup.harness.source, setup.harness.bundle):
+        shutil.rmtree(directory)
+    validate_bundle_root(setup.output, setup.root / 'cases', workflows=['moving'])
+    from regression_tests.prepare import prepare_run
+    values = {**setup.values, 'MHDG_REGRESSION_DATA_ROOT': str(setup.output)}
+    prepared = prepare_run(values, 'legacy_case', 'moving', 'serial_omp1',
+                           setup.root / 'cases', setup.root / 'layouts.json', require_reference=False)
+    assert len(list((prepared.path / 'inputs/magnetic').glob('*.h5'))) == 4
+
+
+@pytest.mark.parametrize('damage', ['missing', 'changed'])
+def test_publication_rejects_damaged_indexed_field(indexed_setup, damage):
+    setup = indexed_setup
+    golden.refresh('legacy_case', setup.values, setup.workspace)
+    candidate = setup.workspace / 'candidate'
+    manifest = json.loads((candidate / 'manifest.json').read_text())
+    case = load_case_definition('legacy_case', setup.root / 'cases')
+    member = sorted(series_artifact_ids(candidate, manifest, case))[0]
+    path = candidate / manifest['artifacts'][member]['path']
+    if damage == 'missing':
+        path.unlink()
+    else:
+        path.write_bytes(b'changed field')
+    with pytest.raises(BundleError, match='missing|size_bytes|sha256|does not exist'):
+        publish(setup)
+    assert not setup.output.exists()
+
+
+@pytest.fixture
+def stopped_setup(indexed_setup):
+    setup = indexed_setup
+    source = setup.harness.source
+    index = json.loads((source / 'series.json').read_text())
+    frame = {}
+    for kind in ('magnetic', 'current'):
+        path = source / f'magnetic/{kind}_0003.h5'
+        shutil.copy2(source / index['frames'][-1][kind], path)
+        with h5py.File(path, 'r+') as handle:
+            handle['time'][...] = .04
+        frame[kind] = path.relative_to(source).as_posix()
+    index['frames'].append(frame)
+    (source / 'series.json').write_text(json.dumps(index))
+    path = setup.root / 'cases/legacy_case.json'
+    case = json.loads(path.read_text())
+    workflow = case['workflows']['moving']
+    workflow['moving_equilibrium']['expected_failure'] = {
+        'reason': 'divergence_refinement_limit', 'completed_steps': 1}
+    workflow['parameter_overrides'].update(nts=2, max_divergence_refinements=0)
+    workflow['parameter_namelists'] = {'max_divergence_refinements': 'adapt_lst'}
+    path.write_text(json.dumps(case))
+    (setup.root / 'golden.json').write_text(json.dumps({
+        'cases': {'legacy_case': {'producers': ['moving'], 'checks': ['moving']}}}))
+    (setup.root / 'suites.json').write_text(json.dumps({
+        'schema_version': 2, 'defaults': {'case': 'legacy_case', 'layout': 'serial_omp1'},
+        'suites': {'moving': {'description': 'Check expected stop', 'workflows': ['moving']}}}))
+    for number in range(3):
+        path = setup.harness.serial_executable.parent / f'step{number}.h5'
+        shutil.copy2(path.with_name('seed.h5'), path)
+        with h5py.File(path, 'r+') as handle:
+            handle['simulation_parameters/adimensionalization/time_scale'] = 2e-7
+            for key, value in {'Current_time_step_number': number, 'Current_time': number * .02 / 2e-7,
+                               'Current_time_step': .02 / 2e-7}.items():
+                handle[f'simulation_parameters/time/{key}'] = value
+    # The old reference has the same completed time, but intentionally different fields.
+    with h5py.File(source / 'reference_mpi4_omp4.h5', 'r+') as handle:
+        handle['simulation_parameters/adimensionalization/time_scale'] = 2e-7
+        for key, value in {'Current_time_step_number': 1, 'Current_time': .02 / 2e-7,
+                           'Current_time_step': .02 / 2e-7}.items():
+            handle[f'simulation_parameters/time/{key}'] = value
+    setup.source_bundle = setup.harness.root / 'stopped_bundle'
+    create_bundle('legacy_case', source, setup.source_bundle, setup.root / 'cases')
+    setup.values['MHDG_REGRESSION_DATA_ROOT'] = str(setup.source_bundle)
+    setup.harness.install_solver('''#!/usr/bin/env bash
+set -euo pipefail
+cp "$(dirname "$0")/step0.h5" outputs/result_0000.h5
+printf 'Output written to file outputs/result_0000.h5\\nTime iteration = 1\\nNR iteration: 1\\nError: 1.0E-8\\n'
+cp "$(dirname "$0")/step1.h5" outputs/result_0001.h5
+printf 'Output written to file outputs/result_0001.h5\\nTime iteration = 2\\nNR iteration: 1\\nError: 1.0E9\\n'
+cp "$(dirname "$0")/step2.h5" outputs/result_NR0001.h5
+printf 'Output written to file outputs/result_NR0001.h5\\nNR refinement recovery stopped: per-timestep refinement limit reached: 0\\n'
+exit 1
+''', 'serial')
+    return setup
+
+
+@pytest.mark.parametrize('terminal', ['divergence_refinement_limit', 'oscillation_refinement_limit'])
+def test_expected_stop_refresh_collects_only_last_completion_and_publishes(stopped_setup, terminal):
+    setup = stopped_setup
+    if terminal == 'oscillation_refinement_limit':
+        path = setup.root / 'cases/legacy_case.json'
+        case = json.loads(path.read_text())
+        workflow = case['workflows']['moving']
+        workflow['moving_equilibrium']['expected_failure']['reason'] = 'refinement_limit'
+        workflow['parameter_overrides']['max_oscillation_refinements'] = 1
+        workflow['parameter_namelists']['max_oscillation_refinements'] = 'adapt_lst'
+        path.write_text(json.dumps(case))
+        solver = setup.harness.serial_executable.read_text().replace(
+            'NR refinement recovery stopped: per-timestep refinement limit reached: 0',
+            'Oscillation refinement stopped: per-timestep refinement limit reached: 1')
+        setup.harness.install_solver(solver, 'serial')
+    _, report = golden.refresh('legacy_case', setup.values, setup.workspace)
+    producer = report['producers'][0]
+    run = Path(producer['run_directory'])
+    assert report['status'] == 'ready' and producer['run_status'] == 'solver_failed'
+    assert producer['old_reference']['status'] == 'failed'  # Compared, rather than marked unavailable.
+    assert golden._solution(run).name == 'result_NR0001.h5'
+    manifest = json.loads((setup.workspace / 'candidate/manifest.json').read_text())
+    reference = setup.workspace / 'candidate' / manifest['artifacts'][manifest['roles']['warm_reference']]['path']
+    assert reference.read_bytes() == (run / 'outputs/result_0001.h5').read_bytes()
+    checks = json.loads((setup.workspace / report['checks'][0]['summary']).read_text())
+    assert checks['status'] == 'passed' and checks['results'][0]['run_status'] == 'solver_failed'
+    publish(setup)
+    receipt = json.loads((setup.output / 'provenance/publication.json').read_text())
+    assert receipt['producers'][0]['expected_failure'] == {
+        'reason': terminal, 'completed_steps': [1], 'last_attempted_step': 2}
+    assert receipt['producers'][0]['run_status'] == 'solver_failed'
+    assert not list(setup.output.rglob('*NR*.h5'))
+    assert json.loads((run / 'run_metadata.json').read_text())['status'] == 'solver_failed'
+
+
+@pytest.mark.parametrize('target', ['producer', 'check'])
+def test_expected_stop_publication_rejects_changed_checkpoint(stopped_setup, target):
+    setup = stopped_setup
+    _, report = golden.refresh('legacy_case', setup.values, setup.workspace)
+    result = report['producers'][0] if target == 'producer' else json.loads(
+        (setup.workspace / report['checks'][0]['summary']).read_text())['results'][0]
+    (Path(result['run_directory']) / 'outputs/result_0001.h5').write_bytes(b'changed checkpoint')
+    with pytest.raises(BundleError, match='outputs changed'):
+        publish(setup)
+    assert not setup.output.exists()
+
+
+@pytest.mark.parametrize('damage', ['crash', 'reason', 'completion'])
+def test_expected_stop_refresh_rejects_unexpected_outcome(stopped_setup, damage):
+    setup = stopped_setup
+    solver = setup.harness.serial_executable.read_text()
+    if damage == 'crash':
+        solver = solver.replace('exit 1', 'exit 139')
+    else:
+        solver = solver.replace('NR refinement recovery stopped: per-timestep refinement limit reached: 0', 'unexpected termination')
+        if damage == 'completion':
+            solver = solver.replace('exit 1', 'exit 0')
+    setup.harness.install_solver(solver, 'serial')
+    with pytest.raises(BundleError, match='invalid producer output'):
+        golden.refresh('legacy_case', setup.values, setup.workspace)
+    assert not (setup.workspace / 'candidate').exists()

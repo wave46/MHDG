@@ -116,6 +116,8 @@ CONTAINS
        Mesh%Nel_glob = Mesh%Nelems
        Mesh%Nfa_glob = Mesh%Nfaces
        Mesh%Nno_glob = Mesh%Nnodes
+       Mesh%Nintfaces_glob = Mesh%Nintfaces
+       Mesh%Nextfaces_glob = Mesh%Nextfaces
 
        ! The initial global-mesh preprocess skips MPI boundary areas. Ghost
        ! ownership is now defined, so compute them for this one-rank partition.

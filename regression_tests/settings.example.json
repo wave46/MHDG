@@ -4,7 +4,8 @@
     "build": "/path/to/build/build_metadata.json",
     "bundles": {
       "legacy_case": "/path/to/limited/golden_bundle",
-      "diverted_case": "/path/to/diverted/golden_bundle"
+      "diverted_case": "/path/to/diverted/golden_bundle",
+      "moving_equilibrium": "/path/to/moving_equilibrium/golden_bundle"
     }
   }
 }

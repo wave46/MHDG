@@ -3,7 +3,7 @@
 import json
 import pytest
 
-from regression_tests.bundles import bundle_readiness, create_bundle, validate_bundle_root
+from regression_tests.bundles import bundle_readiness, create_bundle, validate_bundle_root, series_artifact_ids
 from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.case_data import write_case_source, write_catalog
 from regression_tests.tests.fixtures.harness import run_command
@@ -100,3 +100,89 @@ def test_failed_creation_leaves_existing_data_and_no_partial_bundle(data):
     with pytest.raises(BundleError, match="output already exists"):
         create_bundle(case, source, output, case_dir=case_dir)
     assert marker.read_text() == "keep"
+
+
+@pytest.fixture
+def indexed_data(data):
+    case, source, output, case_dir = data
+    magnetic = source / "magnetic"
+    magnetic.mkdir()
+    frames = []
+    for number in range(2):
+        frame = {}
+        for kind in ("magnetic", "current"):
+            path = magnetic / f"{kind}_{number + 1:04d}.h5"
+            # Bundle validation owns bytes/identities, not HDF5 field contents.
+            path.write_text(f"{kind} frame {number}\n")
+            frame[kind] = path.relative_to(source).as_posix()
+        frames.append(frame)
+    (source / "series.json").write_text(json.dumps({"schema_version": 1, "dt_s": .02, "frames": frames}))
+    path = case_dir / "legacy_case.json"
+    declaration = json.loads(path.read_text())
+    declaration["files"]["required"]["equilibrium_series"] = "series.json"
+    declaration["workflows"]["warm"]["moving_equilibrium"] = {
+        "series": "equilibrium_series"}
+    path.write_text(json.dumps(declaration))
+    return data
+
+
+def test_indexed_bundle_copies_pairs_and_survives_relocation(indexed_data):
+    import shutil
+
+    case, source, output, case_dir = indexed_data
+    create_bundle(case, source, output, case_dir=case_dir)
+    manifest = json.loads((output / "manifest.json").read_text())
+    artifact = manifest["artifacts"][manifest["roles"]["equilibrium_series"]]
+    index = json.loads((output / artifact["path"]).read_text())
+    from regression_tests.catalog import load_case_definition
+    assert len(series_artifact_ids(output, manifest, load_case_definition(case, case_dir))) == 4
+    for frame in index["frames"]:
+        for kind in ("magnetic", "current"):
+            copied = (output / artifact["path"]).parent / frame[kind]
+            assert copied.read_bytes() == (source / frame[kind]).read_bytes()
+            assert not copied.is_symlink()
+    shutil.rmtree(source)
+    relocated = output.with_name("relocated")
+    output.rename(relocated)
+    assert validate_bundle_root(relocated, case_dir=case_dir, workflows=["warm"]).case_id == case
+
+
+@pytest.mark.parametrize("damage,match", [
+    ("checksum", "sha256"), ("missing", "does not exist"), ("membership", "one manifest artifact"),
+])
+def test_indexed_bundle_rejects_damaged_or_unrecorded_members(indexed_data, damage, match):
+    case, source, output, case_dir = indexed_data
+    create_bundle(case, source, output, case_dir=case_dir)
+    path = output / "manifest.json"
+    manifest = json.loads(path.read_text())
+    artifact = manifest["artifacts"][manifest["roles"]["equilibrium_series"]]
+    index_path = output / artifact["path"]
+    member = index_path.parent / json.loads(index_path.read_text())["frames"][0]["magnetic"]
+    if damage == "checksum":
+        member.write_bytes(b"X" * member.stat().st_size)
+    elif damage == "missing":
+        member.unlink()
+    else:
+        member_id = next(key for key, spec in manifest["artifacts"].items()
+                         if output / spec["path"] == member)
+        del manifest["artifacts"][member_id]
+        path.write_text(json.dumps(manifest))
+    with pytest.raises(BundleError, match=match):
+        validate_bundle_root(output, case_dir=case_dir)
+
+
+@pytest.mark.parametrize("damage,match", [
+    ("missing_pair", "current"), ("duplicate", "unique"),
+])
+def test_invalid_pair_index_does_not_create_a_bundle(indexed_data, damage, match):
+    case, source, output, case_dir = indexed_data
+    path = source / "series.json"
+    index = json.loads(path.read_text())
+    if damage == "missing_pair":
+        del index["frames"][1]["current"]
+    else:
+        index["frames"][1]["magnetic"] = index["frames"][0]["magnetic"]
+    path.write_text(json.dumps(index))
+    with pytest.raises(BundleError, match=match):
+        create_bundle(case, source, output, case_dir=case_dir)
+    assert not output.exists()

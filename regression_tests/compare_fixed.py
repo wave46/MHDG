@@ -176,9 +176,10 @@ def numeric_comparison(
     reference: np.ndarray,
     candidate: np.ndarray,
     tolerances: dict[str, Any],
+    *, reference_scale: float = 0.,
 ) -> dict[str, Any]:
     """Build the standard fixed-mesh numeric tolerance report."""
-    norms = calculate_error_norms(reference, candidate)
+    norms = calculate_error_norms(reference, candidate, reference_scale=reference_scale)
     if not norms.available:
         return {
             "passed": False,
@@ -206,6 +207,29 @@ def numeric_comparison(
         "normalized_linf": normalized_linf,
         "normalized_linf_max": tolerances["normalized_linf_max"],
     }
+
+
+def compare_controller_files(reference_path, candidate_path, scales, tolerances):
+    """Compare declared saved controller scalars with explicit reference scale floors."""
+    datasets, failures = {}, []
+    with h5py.File(reference_path, "r") as reference, h5py.File(candidate_path, "r") as candidate:
+        for name, scale in scales.items():
+            try:
+                if not np.isfinite(scale) or scale <= 0:
+                    raise ComparisonError(f"invalid controller reference scale: {name}")
+                first = required_array(reference, "simulation_parameters/physics", name).reshape(-1)
+                second = required_array(candidate, "simulation_parameters/physics", name).reshape(-1)
+                if first.size != 1 or second.size != 1:
+                    raise ComparisonError(f"controller {name} must contain one value")
+                metrics = numeric_comparison(first, second, tolerances, reference_scale=scale)
+            except (ComparisonError, TypeError, ValueError) as exc:
+                metrics = {"passed": False, "reason": str(exc)}
+            datasets[name] = {**metrics, "reference_scale": scale}
+            if not metrics["passed"]:
+                failures.append(f"controller/{name} is invalid or differs from the reference")
+    return {"status": "failed" if failures else "passed", "datasets": datasets,
+            "failures": failures, "tolerances": {key: tolerances[key] for key in
+                                               ("relative_l2_max", "normalized_linf_max")}}
 
 
 def compare_mesh(
@@ -510,19 +534,27 @@ def compare_magnetic(
     candidate: h5py.File,
     tolerances: dict[str, Any],
     failures: list[str],
+    *, names: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
-    """Compare every direct dataset in the reference magnetic group."""
+    """Compare magnetic datasets, or selected categorical metadata exactly."""
     reference_group = optional_group(reference, "magnetic")
     candidate_group = optional_group(candidate, "magnetic")
     if reference_group is None:
+        if names:
+            failures.append("reference is missing magnetic data")
+            return {"present": False, "passed": False, "datasets": {}}
         return {"present": False, "passed": True, "datasets": {}}
     if candidate_group is None:
         failures.append("candidate is missing magnetic data")
         return {"present": True, "passed": False, "datasets": {}}
 
     datasets: dict[str, dict[str, Any]] = {}
-    for name, reference_dataset in reference_group.items():
+    for name in names if names is not None else reference_group:
+        reference_dataset = reference_group.get(name)
         if not isinstance(reference_dataset, h5py.Dataset):
+            if names is not None:
+                datasets[name] = {"passed": False, "reason": "reference dataset missing"}
+                failures.append(f"reference magnetic/{name} is missing")
             continue
         candidate_dataset = candidate_group.get(name)
         if not isinstance(candidate_dataset, h5py.Dataset):
@@ -532,7 +564,7 @@ def compare_magnetic(
 
         reference_array = np.asarray(reference_dataset)
         candidate_array = np.asarray(candidate_dataset)
-        if reference_array.dtype.kind in "biuOSU":
+        if names is not None or reference_array.dtype.kind in "biuOSU":
             metrics = _exact_comparison(reference_array, candidate_array)
         else:
             metrics = numeric_comparison(

@@ -175,13 +175,16 @@ def check_suite(summary, *, required=True):
     reports, failures = [], []
     for result in summary.get("results", []):
         label = f"{result.get('workflow_id')}/{result.get('layout_id')}"
-        if result.get("run_status") != "completed":
+        prefix_output = result.get("expected_failure", {}).get("selected_output")
+        if result.get("run_status") != "completed" and not prefix_output:
             failures.append(f"{label}: solver run did not complete")
             continue
         try:
             run = Path(result["run_directory"])
             metadata = load_json(run / "run_metadata.json", "run metadata")
-            for stage in metadata.get("stages") or [{"run_directory": str(run), "status": "completed"}]:
+            stages = ([{"run_directory": str(run), "status": "completed", "selected_hdf5": prefix_output}]
+                      if prefix_output else metadata.get("stages") or [{"run_directory": str(run), "status": "completed"}])
+            for stage in stages:
                 directory = Path(stage["run_directory"])
                 if stage.get("status") != "completed":
                     failures.append(f"{label}: incomplete diagnostic stage")

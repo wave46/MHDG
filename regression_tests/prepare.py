@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import tempfile
+import math
+import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -13,9 +15,10 @@ from .catalog import load_case_definition, workflow_required_roles, load_layout
 from .documents import write_json_direct
 from .config import (bundle_root_from_settings, absolute_setting, solver_executable,
                      runtime_files, selected_mpi_launcher)
-from .bundles import validate_bundle_root, load_manifest, artifact_path
+from .bundles import validate_bundle_root, load_manifest, artifact_path, load_field_series
 from .support import BundleError, IDENTIFIER_RE, utc_now, utc_run_id
 from .parameters import render_parameter_file, read_selected_input_values
+from .files import file_identity
 
 
 @dataclass(frozen=True)
@@ -238,7 +241,11 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     (staging / "outputs").mkdir()
     (staging / "res").mkdir()
     workflow, artifacts = inputs.workflow, inputs.artifacts
-    sources = {filename: artifacts[role] for role, filename in COMMON_INPUT_LINKS.items()}
+    moving = workflow.get("moving_equilibrium")
+    if moving and stage is not None:
+        raise BundleError("ME preparation requires a single warm-restart workflow")
+    sources = {filename: artifacts[role] for role, filename in COMMON_INPUT_LINKS.items()
+               if not moving or role == "geometry"}
     recipe = stage if stage is not None else workflow
     for role, filename in (
         (workflow.get("mesh"), "mesh.msh"),
@@ -252,11 +259,29 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     if stage is None:
         if workflow.get("reference") in artifacts:
             sources["reference.h5"] = artifacts[workflow["reference"]]
+    replacements = _parameter_replacements(inputs.run_directory)
+    namelists = {"transport_model_path": "input_lst", "impurity_model_path": "input_lst",
+                 **workflow.get("parameter_namelists", {}), **(stage or {}).get("parameter_namelists", {})}
+    preparation = None
+    impurity_paths = {}
+    if moving:
+        paths, derived, preparation = _prepare_me_fields(staging, inputs, overrides)
+        replacements.update(paths)
+        overrides = {**{key: value for key, value in overrides.items() if key.lower() not in derived}, **derived}
+        namelists.update(me="switch_lst", nts="time_lst", dt0="time_lst", tfi="time_lst")
+        for name, role in moving.get("controls", {}).items():
+            filename = f"{name}.h5"
+            sources[filename] = artifacts[role]
+            owner = impurity_paths if name == "impurity_concentration" else replacements
+            owner[f"{name}_path"] = inputs.run_directory / "inputs" / filename
+            namelists[f"{name}_path"] = "input_lst"
+        template_paths = read_selected_input_values(artifacts[recipe["parameters"]],
+            {f"{name}_path" for name in ("puff", "target_density", "zeff")})
+        if any(value and key[:-5] not in moving.get("controls", {}) for key, value in template_paths.items()):
+            raise BundleError("ME control paths require declared inputs")
     render_parameter_file(
         artifacts[recipe["parameters"]], staging / "param.txt",
-        _parameter_replacements(inputs.run_directory), overrides,
-        {"transport_model_path": "input_lst", "impurity_model_path": "input_lst",
-         **workflow.get("parameter_namelists", {}), **(stage or {}).get("parameter_namelists", {})},
+        replacements, overrides, namelists,
     )
     switches = read_selected_input_values(
         staging / "param.txt", {"readMeshFromSol", "transport_1d", "impurity_radiation"},
@@ -280,10 +305,90 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
         if filename == "transport_model.nml" and transport_overrides:
             render_parameter_file(source, directory / filename, {}, transport_overrides,
                                   {key: "transport_model_1d_lst" for key in transport_overrides})
+        elif moving and filename == "impurity_model.nml":
+            existing = read_selected_input_values(source, {"impurity_concentration_path"})
+            if existing.get("impurity_concentration_path") and not impurity_paths:
+                raise BundleError("ME impurity schedule requires a declared input")
+            render_parameter_file(source, directory / filename, impurity_paths, {},
+                                  {key: "impurity_radiation_lst" for key in impurity_paths})
         else:
             (directory / filename).symlink_to(source)
     for filename, source in inputs.runtime_files.items():
         (staging / filename).symlink_to(source)
+    return overrides, preparation
+
+
+def _prepare_me_fields(staging, inputs, overrides):
+    """Retimestamp selected pairs; reuse canonical controls and solver interpolation."""
+    import h5py
+    from .compare_fixed import required_scalar
+    from .support import ComparisonError
+
+    moving = inputs.workflow["moving_equilibrium"]
+    source = inputs.artifacts[moving["series"]]
+    index = load_field_series(source)
+    dt = moving.get("time_step_s", index["dt_s"])
+    ratio = dt / index["dt_s"]
+    if not math.isfinite(ratio) or ratio < 1 or not math.isclose(ratio, round(ratio), rel_tol=1e-10):
+        raise BundleError("ME timestep must be an integer multiple of canonical dt_s")
+    stride, last = round(ratio), len(index["frames"]) - 1
+    values = {key.lower(): value for key, value in overrides.items()}
+    control_dimensions = read_selected_input_values(inputs.artifacts[inputs.workflow["parameters"]],
+        {"puff_dimension", "target_density_dimension", "zeff_dimension"})
+    control_dimensions.update(values)
+    steps = values.get("nts", math.ceil(last / stride))
+    if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= math.ceil(last / stride):
+        raise BundleError("ME nts must be an integer within the canonical series duration")
+    if {"dt0", "tfi"} & values.keys() or values.get("me") is False:
+        raise BundleError("ME timestep determines dt0/tfi and requires me=true")
+    mapping, files = [], {}
+    directory = staging / "inputs/magnetic"
+    directory.mkdir()
+    try:
+        with h5py.File(inputs.artifacts[inputs.workflow["restart"]]) as handle:
+            scale = required_scalar(handle, "simulation_parameters/adimensionalization", "time_scale")
+        if not math.isfinite(scale) or scale <= 0:
+            raise BundleError("ME bootstrap time_scale must be positive and finite")
+        for offset in range(steps + 1):
+            canonical = min(offset * stride, last)
+            mapping.append(canonical + 1)
+            for kind, prefix in (("magnetic", "equilibrium"), ("current", "current_density")):
+                target = directory / f"{prefix}_{offset + 1:04d}.h5"
+                shutil.copy2(source.parent / index["frames"][canonical][kind], target)
+                with h5py.File(target, "r+") as handle:
+                    for key, expected, generated in (("time", canonical * index["dt_s"], offset * dt),
+                                                     ("dt", index["dt_s"], dt)):
+                        if (handle[key].dtype.kind != "f" or handle[key].size != 1 or not math.isclose(
+                                required_scalar(handle, "", key), expected, rel_tol=1e-10, abs_tol=1e-12)):
+                            raise BundleError(f"ME field {key} differs from its series: {target.name}")
+                        handle[key][...] = generated
+                files[target.relative_to(staging).as_posix()] = file_identity(target)
+        _check_me_controls(inputs, control_dimensions, (steps - 1) * dt)
+    except (OSError, KeyError, ValueError, TypeError, IndexError, ComparisonError) as exc:
+        raise BundleError(f"cannot prepare ME fields: {exc}") from exc
+    paths = {"field_path": inputs.run_directory / "inputs/magnetic/equilibrium",
+             "jtor_path": inputs.run_directory / "inputs/magnetic/current_density"}
+    record = {"source_manifest": file_identity(inputs.bundle_root / "manifest.json"),
+              "time_step_s": dt, "canonical_frames": mapping, "generated_files": files}
+    return paths, {"me": True, "nts": steps, "dt0": dt / scale, "tfi": steps * dt / scale}, record
+
+
+def _check_me_controls(inputs, dimensions, last_load_time):
+    """Check supplied curves against solver load times and declared dimensions."""
+    import h5py
+    from .compare_fixed import required_array
+
+    for name, role in inputs.workflow["moving_equilibrium"].get("controls", {}).items():
+        with h5py.File(inputs.artifacts[role]) as handle:
+            times = required_array(handle, "", "time")
+            if (times.ndim != 1 or len(times) < 2 or not all(math.isfinite(t) for t in times)
+                    or any(a >= b for a, b in zip(times[:-1], times[1:]))
+                    or times[0] > 0 or times[-1] <= last_load_time):
+                raise BundleError("ME control times must bracket all interval-start loads")
+            if name in {"puff", "target_density", "zeff"}:
+                key = f"{name}_dimension"
+                if dimensions.get(key) != len(times):
+                    raise BundleError(f"ME {key} must match its control time count ({len(times)})")
 
 
 def _parameter_replacements(final_directory: Path) -> dict[str, Path | str]:
@@ -304,6 +409,7 @@ def write_run_plan(
     command: list[str],
     stage: dict[str, Any] | None = None,
     applied_overrides: dict[str, Any] | None = None,
+    input_preparation: dict[str, Any] | None = None,
 ) -> None:
     """Write the plan for one warm run or one workflow stage."""
     plan = _base_plan(inputs, inputs.run_directory, command=command)
@@ -312,6 +418,8 @@ def write_run_plan(
         plan["restart_from"] = stage["restart_from"]
     if applied_overrides is not None:
         plan["parameter_overrides"] = applied_overrides
+    if input_preparation is not None:
+        plan["moving_equilibrium_inputs"] = input_preparation
     transport_overrides = {**inputs.workflow.get("transport_overrides", {}),
                            **(stage or {}).get("transport_overrides", {})}
     if transport_overrides:
@@ -398,8 +506,8 @@ def prepare_warm_run(inputs: PreparationInputs) -> PreparedRun:
         restart=True,
     )
     with temporary_run_directory(inputs.run_directory) as staging:
-        _populate_run(staging, inputs, overrides)
-        write_run_plan(staging, inputs, command, applied_overrides=overrides)
+        applied, preparation = _populate_run(staging, inputs, overrides)
+        write_run_plan(staging, inputs, command, applied_overrides=applied, input_preparation=preparation)
     return _prepared_run(inputs, command)
 
 

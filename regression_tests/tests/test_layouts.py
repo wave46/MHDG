@@ -46,6 +46,17 @@ def test_relations_isolate_execution_changes_and_deduplicate_pairs(catalog):
     assert all(len(pair) == 2 for pair in identities)
 
 
+def test_mpi_relation_supports_one_rank_without_expanding_serial_matrix(catalog):
+    _, layouts = catalog
+    layouts["mpi1_omp1"] = {**layouts["mpi2_omp1"], "mpi_ranks": 1}
+    assert layout_pairs({name: layouts[name] for name in ("mpi2_omp1", "mpi1_omp1")}, ["mpi"]) == [
+        {"baseline": "mpi1_omp1", "candidate": "mpi2_omp1"},
+    ]
+    assert layout_pairs(layouts, ["mpi"]) == [
+        {"baseline": "serial_omp1", "candidate": "mpi2_omp1"},
+    ]
+
+
 @pytest.mark.parametrize("relation, selected", [
     ("openmp", ["serial_omp3"]),
     ("mpi", ["mpi2_omp1", "mpi2_omp3"]),

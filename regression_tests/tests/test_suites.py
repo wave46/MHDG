@@ -1,6 +1,7 @@
 """Suite execution, trustworthy resume and saved scientific comparisons."""
 
 import json
+import copy
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -33,6 +34,36 @@ def run(harness, name="warm", run_id="check", **kwargs):
     kwargs.setdefault("parameter_overrides", {"balance_diagnostics_mode": "off"})
     return suites.run_suite(harness.values, name, ROOT / "cases", ROOT / "layouts.json",
                             ROOT / "suites.json", ROOT / "tolerances.json", run_id, case_id="legacy_case", **kwargs)
+
+
+def test_expected_stop_suite_resume_reassesses_without_relaunch(harness, monkeypatch):
+    # Stop validation/field comparison are exercised with real saved evidence in
+    # test_fixed_comparison; here test suite orchestration and declaration routing.
+    harness.install_solver(SOLVER + "exit 1\n")
+    load_case = suites.load_case_definition
+    expectation = {"reason": "divergence_refinement_limit", "completed_steps": 1}
+    def declared_case(*args, **kwargs):
+        case = copy.deepcopy(load_case(*args, **kwargs))
+        case["workflows"]["warm"]["moving_equilibrium"] = {"series": "fields", "expected_failure": expectation}
+        return case
+    monkeypatch.setattr(suites, "load_case_definition", declared_case)
+    report = {"status": "failed", "failures": ["reference differs"], "convergence": {"passed": True},
+              "candidate": str(harness.run_directory("warm", "mpi4_omp4", "check") / "outputs/result.h5"),
+              "expected_failure": {"run_status": "solver_failed", "last_attempted_step": 2}}
+    compare = Mock(return_value=("fixed_hdf5", harness.root / "comparison.json", report))
+    validate = Mock(return_value={"status": "passed"})
+    monkeypatch.setattr(suites, "compare_me_refinement_stop", compare)
+    monkeypatch.setattr(suites, "validate_me_stopped_run", validate)
+    manifest = json.loads((harness.bundle / "manifest.json").read_text())
+    _, first = run(harness, manifest=manifest)
+    assert first["status"] == "failed" and first["results"][0]["run_status"] == "solver_failed"
+    monkeypatch.setattr(suites, "run_cell", lambda *args: pytest.fail("validated stop must be reused"))
+    report.update(status="passed", failures=[])
+    _, resumed = run(harness, resume=True, manifest=manifest)
+    assert resumed["status"] == "passed"
+    assert resumed["results"][0]["run_directory"] == first["results"][0]["run_directory"]
+    assert compare.call_count == 2 and validate.call_count == 1
+    assert compare.call_args.kwargs["completed_steps"] == expectation["completed_steps"]
 
 
 def test_resume_reuses_good_outputs_preserves_interruption_and_retries_damage(harness, monkeypatch):
@@ -83,7 +114,7 @@ cp inputs'''))
         "status": "passed", "failures": [], "convergence": {"passed": False}}))
     monkeypatch.setattr(suites, "compare_completed_run", comparison)
     path, rejected = run(harness, "warm_parallelism", resume=True)
-    assert rejected["status"] == "failed" and comparison.call_count == 4
+    assert rejected["status"] == "failed" and comparison.call_count == len(repaired["results"])
     assert [row["run_directory"] for row in rejected["results"]] == [row["run_directory"] for row in repaired["results"]]
     verified = suites.verify_suite(path, ROOT / "cases", ROOT / "tolerances.json")[1]
     assert verified["results"] == rejected["results"]

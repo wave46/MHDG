@@ -65,6 +65,19 @@ def test_solver_outcomes(harness, solver, workflow, status, exit_code):
         assert all(stage["status"] == "not_run" for stage in metadata["stages"][1:])
 
 
+@pytest.mark.parametrize('message', [
+    'NR refinement recovery stopped: per-timestep refinement limit reached: 0',
+    'Oscillation refinement stopped: per-timestep refinement limit reached: 1',
+    'Problem in the time advancing scheme',
+])
+def test_numerical_stop_with_zero_exit_and_existing_hdf5_is_failure(harness, message):
+    harness.install_solver(SOLVER + f"printf '%s\\n' '{message}'\n", 'serial')
+    completed, _, metadata = run(harness)
+    assert completed.returncode == 1
+    assert metadata['exit_code'] == 0 and metadata['status'] == 'solver_reported_error'
+    assert metadata['hdf5_outputs'] and len(metadata['fatal_log_messages']) == 1
+
+
 def test_stages_pass_selected_output_to_next_restart(harness):
     # Multiple outputs force selection from the solver log, not filename ordering.
     harness.install_solver(STAGED_SOLVER + "printf 'decoy\\n' > outputs/another.h5\n", "serial")

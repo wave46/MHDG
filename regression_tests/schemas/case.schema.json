@@ -146,8 +146,56 @@
         "parameter_namelists": {
           "$ref": "#/$defs/parameter_namelists"
         },
+        "moving_equilibrium": {
+          "$ref": "#/$defs/moving_equilibrium"
+        },
         "require_refinement": {
           "type": "boolean"
+        }
+      }
+    },
+    "moving_equilibrium": {
+      "type": "object", "additionalProperties": false,
+      "required": ["series"],
+      "properties": {
+        "series": {"$ref": "#/$defs/identifier"},
+        "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+        "controller_scales": {
+          "type": "object", "additionalProperties": false, "minProperties": 1,
+          "properties": {
+            "puff": {"type": "number", "exclusiveMinimum": 0},
+            "n_li": {"type": "number", "exclusiveMinimum": 0},
+            "feedback_integral_error": {"type": "number", "exclusiveMinimum": 0},
+            "feedback_previous_error": {"type": "number", "exclusiveMinimum": 0},
+            "recycling": {"type": "number", "exclusiveMinimum": 0},
+            "recycling_pump": {"type": "number", "exclusiveMinimum": 0},
+            "recycling_neutral": {"type": "number", "exclusiveMinimum": 0},
+            "recycling_neutral_pump": {"type": "number", "exclusiveMinimum": 0}
+          }
+        },
+        "topology": {
+          "type": "object", "additionalProperties": false, "minProperties": 1,
+          "properties": {
+            "first_completed": {"enum": ["limited", "lower_single_null"]},
+            "last_completed": {"enum": ["limited", "lower_single_null"]}
+          }
+        },
+        "expected_failure": {
+          "type": "object", "additionalProperties": false,
+          "required": ["reason", "completed_steps"],
+          "properties": {
+            "reason": {"enum": ["divergence_refinement_limit", "refinement_limit"]},
+            "completed_steps": {"type": "integer", "minimum": 1}
+          }
+        },
+        "controls": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "puff": {"$ref": "#/$defs/identifier"},
+            "target_density": {"$ref": "#/$defs/identifier"},
+            "zeff": {"$ref": "#/$defs/identifier"},
+            "impurity_concentration": {"$ref": "#/$defs/identifier"}
+          }
         }
       }
     },

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Canonical paired moving-equilibrium inputs",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "dt_s", "frames"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "dt_s": {"type": "number", "exclusiveMinimum": 0},
+    "frames": {
+      "type": "array", "minItems": 2,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["magnetic", "current"],
+        "properties": {
+          "magnetic": {"type": "string", "minLength": 1},
+          "current": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

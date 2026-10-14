@@ -1,4 +1,4 @@
-"""Check executable MPI restart startup without taking any plasma timesteps.
+"""Check completed MPI restart startup and optionally an active one-rank ME run.
 
 Supply an external prepared ME parameter file and a restart with an embedded
 mesh. All fixture changes and decomposition output stay in temporary directories.
@@ -11,6 +11,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import sys
 
 import h5py
 
@@ -20,8 +21,12 @@ def main():
     parser.add_argument("--solver", type=Path, required=True)
     parser.add_argument("--parameters", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--active-steps", type=int, default=0,
+                        help="also advance the supplied bootstrap with its prepared fields/controls")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
+    if args.active_steps < 0:
+        parser.error("--active-steps must be nonnegative")
     text = args.parameters.read_text()
     launcher = shlex.split(os.environ.get("MPIEXEC", "mpirun.openmpi"))
     environment = {**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1"}
@@ -70,6 +75,42 @@ def main():
             assert "Time iteration" not in output, output
             assert "HDF5-DIAG" not in output, output
         print(f"Completed ME restart startup: {ranks} MPI rank(s) PASS; zero timesteps")
+
+    if args.active_steps:
+        sys.path.insert(0, str(repo))
+        from regression_tests.compare import validate_me_completed_steps
+        from regression_tests.parameters import read_selected_input_values
+        import numpy as np
+
+        with tempfile.TemporaryDirectory(prefix="mhdg-active-mpi1-") as name:
+            scratch = Path(name)
+            (scratch / "outputs").mkdir()
+            (scratch / "positionFeketeNodesTri2D.h5").symlink_to(repo / "test/positionFeketeNodesTri2D.h5")
+            fixture = text
+            for key, value in {"nts": str(args.active_steps),
+                               "save_folder": repr(str(scratch / "outputs") + "/")}.items():
+                fixture, count = re.subn(rf"(?im)^(\s*{key}\s*=).*?$",
+                                        lambda match: match[1] + " " + value, fixture)
+                assert count == 1, key
+            (scratch / "param.txt").write_text(fixture)
+            run = subprocess.run([*launcher, "-n", "1", str(args.solver.resolve()),
+                                  str(scratch / "mesh"), str(args.checkpoint.resolve().with_suffix(""))],
+                                 cwd=scratch, env=environment, text=True, capture_output=True, timeout=300)
+            assert run.returncode == 0, run.stdout + run.stderr
+            assert "HDF5-DIAG" not in run.stdout + run.stderr, run.stdout + run.stderr
+            (scratch / "stdout.log").write_text(run.stdout)
+            paths = sorted((scratch / "outputs").glob("*.h5"))
+            field = read_selected_input_values(args.parameters, {"field_path"})["field_path"]
+            with h5py.File(field + "_0001.h5") as handle:
+                dt = float(np.asarray(handle["dt"]).item())
+            report = validate_me_completed_steps(scratch,
+                {"moving_equilibrium_inputs": {"time_step_s": dt}, "parameter_overrides": {"nts": args.active_steps}},
+                {"hdf5_outputs": [str(path) for path in paths]}, 2e-4)
+            assert report["status"] == "passed" and report["complete"], report
+            with h5py.File(report["steps"][0]["output"]) as initial, h5py.File(args.checkpoint) as source:
+                for key in ("Nintfaces", "Nextfaces"):
+                    assert np.array_equal(initial[f"mesh/{key}"], source[f"mesh/{key}"]), key
+            print(f"Active ME restart: 1 MPI rank PASS; {args.active_steps} converged advances and preserved boundary counts")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import math
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -49,6 +50,7 @@ def bundle_readiness(case_id, source, case_dir=CASES, *, workflows=(), catalog=N
     source = require_directory(source, "source")
     case = load_case_definition(case_id, case_dir, catalog=catalog)
     required = _required_roles(case, workflows)
+    indexes = _series_roles(case)
     rows = []
     for role, spec in case["bundle_files"].items():
         filename = spec["filename"]
@@ -56,6 +58,8 @@ def bundle_readiness(case_id, source, case_dir=CASES, *, workflows=(), catalog=N
         present = path.is_file()
         if path.exists() and not present:
             raise BundleError(f"bundle source is not a file: {path}")
+        if present and role in indexes:
+            load_field_series(path)
         producers = {
             name: sorted(required_case_roles(case, name, references=False))
             for name, workflow in case["workflows"].items()
@@ -87,6 +91,7 @@ def create_bundle(case_id, source, output, case_dir=CASES, bundle_version="1.0.0
     if report["missing"]:
         raise BundleError("required files missing for roles: " + ", ".join(report["missing"]))
     case = load_case_definition(case_id, case_dir, catalog=catalog)
+    indexes = _series_roles(case)
     if not case["bundle_files"]:
         raise BundleError(f"case {case_id} does not define bundle_files")
     try:
@@ -104,15 +109,19 @@ def create_bundle(case_id, source, output, case_dir=CASES, bundle_version="1.0.0
                 spec = case["bundle_files"][role]
                 source_path = source / spec["filename"]
                 target = staging / "inputs" / source_path.name
+                if role in indexes:
+                    target = staging / "inputs" / role / source_path.name
                 artifact_id = spec["artifact_id"]
-                if target.exists() or artifact_id in manifest["artifacts"]:
-                    raise BundleError(f"duplicate bundle file or artifact: {role}")
-                shutil.copy2(source_path, target)
+                _copy_artifact(staging, manifest, artifact_id, source_path, target,
+                               spec["media_type"], spec["optional"])
                 manifest["roles"][role] = artifact_id
-                manifest["artifacts"][artifact_id] = {
-                    "path": target.relative_to(staging).as_posix(), **file_identity(target),
-                    "media_type": spec["media_type"], **({"optional": True} if spec["optional"] else {}),
-                }
+                if role in indexes:
+                    index = load_field_series(source_path)
+                    for number, frame in enumerate(index["frames"], start=1):
+                        for kind, relative in frame.items():
+                            _copy_artifact(staging, manifest, f"{artifact_id}_{kind}_{number:04d}",
+                                           source_path.parent / relative, target.parent / relative,
+                                           "application/x-hdf5")
             write_json_direct(staging / "manifest.json", manifest)
             summary = validate_bundle_root(staging, case_dir, workflows=workflows, catalog=catalog)
             staging.rename(output)
@@ -132,6 +141,7 @@ def validate_bundle_root(bundle_root, case_dir=CASES, *, workflows=(), required_
     case = load_case_definition(manifest["case_id"], case_dir, catalog=catalog)
     available, verified_bytes, warnings = _verify_artifacts(bundle_root, manifest["artifacts"])
     roles = _verify_roles(manifest)
+    series_artifact_ids(bundle_root, manifest, case)
     required = _required_roles(case, workflows) | set(required_roles)
     missing = sorted(role for role in required if roles.get(role) not in available)
     if missing:
@@ -181,6 +191,65 @@ def _verify_roles(manifest: dict) -> dict[str, str]:
                 f"manifest.roles.{role} refers to unknown artifact {artifact_id}"
             )
     return roles
+
+
+def _copy_artifact(root, manifest, artifact_id, source, target, media_type, optional=False):
+    if target.exists() or artifact_id in manifest["artifacts"]:
+        raise BundleError(f"duplicate bundle file or artifact: {artifact_id}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
+    manifest["artifacts"][artifact_id] = {
+        "path": target.relative_to(root).as_posix(), **file_identity(target),
+        "media_type": media_type, **({"optional": True} if optional else {}),
+    }
+
+
+def _series_roles(case):
+    return {workflow["moving_equilibrium"]["series"]
+            for workflow in case["workflows"].values() if workflow.get("moving_equilibrium")}
+
+
+def load_field_series(path):
+    """Read ordered path pairs; the bundle manifest owns their file identities."""
+    index = load_validated_json(path, CASES.parent / "schemas/field-series.schema.json", "field series")
+    if not math.isfinite(index["dt_s"]):
+        raise BundleError("field series dt_s must be finite")
+    seen = set()
+    for frame in index["frames"]:
+        for relative in frame.values():
+            member = artifact_path(path.parent.resolve(), relative, "field series member")
+            if member in seen:
+                raise BundleError("field series member paths must be unique")
+            seen.add(member)
+    return index
+
+
+def series_artifact_ids(root, manifest, case):
+    """Resolve declared series members for validation and compact publication."""
+    roles = _series_roles(case)
+    if not roles:
+        return set()
+    by_path = {}
+    for artifact_id, spec in manifest["artifacts"].items():
+        path = (root / spec["path"]).resolve()
+        by_path.setdefault(path, []).append(artifact_id)
+    members = set()
+    for role in roles:
+        artifact_id = manifest["roles"].get(role)
+        if artifact_id is None:
+            continue
+        artifact = manifest["artifacts"][artifact_id]
+        if artifact.get("optional") and not (root / artifact["path"]).exists():
+            continue
+        path = artifact_path(root, artifact["path"], "field series index")
+        index = load_field_series(path)
+        for frame in index["frames"]:
+            for relative in frame.values():
+                matches = by_path.get((path.parent / relative).resolve(), [])
+                if len(matches) != 1:
+                    raise BundleError(f"field series member needs one manifest artifact: {relative}")
+                members.add(matches[0])
+    return members
 
 
 def _relative_path(relative_path, label):

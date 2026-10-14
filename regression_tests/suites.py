@@ -1,4 +1,4 @@
-"""Run and verify scientific suites; resume reuses completed, unchanged outputs."""
+"""Run and verify scientific suites; resume reuses validated, unchanged outputs."""
 
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ from .config import (bundle_root_from_settings, absolute_setting, solver_executa
 from .bundles import preflight_bundles
 from .prepare import prepare_run
 from .execute import execute_prepared, reusable_outputs, execution_failures
-from .compare import compare_completed_run, compare_generated_meshes, validate_completed_run
+from .compare import (compare_completed_run, compare_generated_meshes, validate_completed_run,
+                      compare_me_refinement_stop, validate_me_stopped_run)
 from .compare_common import select_candidate
 from .documents import load_json, write_json_atomic
 from .support import BundleError, ComparisonError, HarnessError, IDENTIFIER_RE, utc_now, utc_run_id
@@ -59,8 +60,11 @@ def run_cell(
         result["run_status"] = run.status
         result["duration_seconds"] = run.duration_seconds
         result["status"] = run.status
+        workflow = load_case_definition(inputs.case_id, inputs.case_directory,
+                                        catalog=inputs.catalog)["workflows"][workflow_id]
         return assess_result(result, inputs.case_directory, inputs.tolerances_path,
-                             references=inputs.require_reference, catalog=inputs.catalog)
+                             references=inputs.require_reference, catalog=inputs.catalog,
+                             expected_failure=workflow.get("moving_equilibrium", {}).get("expected_failure"))
     except HarnessError as exc:
         result["failures"] = [str(exc)]
     return result
@@ -193,17 +197,30 @@ def _selected_output(run_directory: Path) -> Path:
     return select_candidate(run_directory, metadata)
 
 
-def assess_result(source, case_directory, tolerances_path, *, references=True, catalog=None):
+def assess_result(source, case_directory, tolerances_path, *, references=True, catalog=None, expected_failure=None):
     """Assess fresh, resumed or saved execution with the same checks and result fields."""
     result = {**source, "status": "failed", "failures": [], "comparison_policy": None,
               "comparison_report": None, "comparison_status": "not_run", "convergence_status": None}
     result.pop("validation", None)
+    result.pop("expected_failure", None)
     try:
         directory = recorded_directory(source.get("run_directory"), "suite run")
-        if source.get("run_status") != "completed":
+        if expected_failure:
+            arguments = {"completed_steps": expected_failure["completed_steps"], "catalog": catalog}
+            if references:
+                policy, path, report = compare_me_refinement_stop(directory, case_directory, tolerances_path, **arguments)
+                result.update(comparison_policy=policy, comparison_report=str(path), comparison_status=report["status"])
+                result["expected_failure"] = {**report["expected_failure"], "selected_output": report["candidate"]}
+            else:
+                report = validate_me_stopped_run(directory, case_directory, tolerances_path, **arguments)
+                result["validation"] = report
+                if report["status"] == "passed":
+                    result["expected_failure"] = {key: report[key] for key in
+                                                  ("run_status", "terminal_reason", "last_attempted_step", "selected_output")}
+        elif source.get("run_status") != "completed":
             result["failures"] = [f"solver run status is {source.get('run_status')}", *execution_failures(directory)]
             return result
-        if references:
+        elif references:
             policy, path, report = compare_completed_run(directory, case_directory, tolerances_path, catalog=catalog)
             result.update(comparison_policy=policy, comparison_report=str(path), comparison_status=report["status"])
         else:
@@ -218,6 +235,21 @@ def assess_result(source, case_directory, tolerances_path, *, references=True, c
     except (HarnessError, TypeError) as exc:
         result["failures"] = [str(exc)]
     return result
+
+
+def reusable_result(source, case_directory, tolerances_path, *, expected_failure=None, catalog=None):
+    """Reuse unchanged successful outputs or a freshly validated expected stop."""
+    if not source or not source.get("run_directory"):
+        return False
+    directory = Path(source["run_directory"])
+    if not expected_failure:
+        return source.get("run_status") == "completed" and reusable_outputs(directory)
+    try:
+        return validate_me_stopped_run(directory, case_directory, tolerances_path,
+                                      completed_steps=expected_failure["completed_steps"],
+                                      catalog=catalog)["status"] == "passed"
+    except (HarnessError, OSError, KeyError, TypeError):
+        return False
 
 
 def _validate_source_summary(summary: dict[str, Any]) -> None:
@@ -392,11 +424,13 @@ def run_suite(
             started = time.monotonic()
             previous = next((item for item in summary["results"]
                              if (item["workflow_id"], item["layout_id"]) == (workflow, layout)), None)
-            if (previous and previous.get("run_status") == "completed"
-                    and previous.get("run_directory") and reusable_outputs(Path(previous["run_directory"]))):
-                print(f"reusing completed {workflow} / {layout}", flush=True)
+            expected_failure = case["workflows"][workflow].get("moving_equilibrium", {}).get("expected_failure")
+            if reusable_result(previous, case_directory, tolerances_path,
+                                expected_failure=expected_failure, catalog=catalog):
+                outcome = "expected stop" if expected_failure else "completed"
+                print(f"reusing {outcome} {workflow} / {layout}", flush=True)
                 result = assess_result(previous, case_directory, tolerances_path,
-                                       references=references, catalog=catalog)
+                                       references=references, catalog=catalog, expected_failure=expected_failure)
             else:
                 selected = inputs
                 existing = root / suite["case_id"] / workflow / layout / run_id
@@ -452,14 +486,16 @@ def verify_suite(suite_summary_path, case_directory, tolerances_path, *, include
     write_json_atomic(output, summary, "verification summary")
     references = source.get("reference_comparisons", not source.get("layout_comparisons"))
     for result in source["results"]:
-        summary["results"].append(assess_result(result, case_directory, tolerances_path, references=references, catalog=catalog))
+        workflow = case["workflows"][result["workflow_id"]]
+        summary["results"].append(assess_result(result, case_directory, tolerances_path, references=references, catalog=catalog,
+                                             expected_failure=workflow.get("moving_equilibrium", {}).get("expected_failure")))
         write_json_atomic(output, summary, "verification summary")
     if (include_layout_pairs and source.get("layout_comparisons")) or source.get("workflow_comparison"):
         summary["comparisons"] = compare_suite_pairs(source, case_directory, tolerances_path,
                                                     catalog=catalog, include_layout_pairs=include_layout_pairs)
     from .diagnostics import check_suite
 
-    summary["diagnostics"] = check_suite(source, required=False)
+    summary["diagnostics"] = check_suite(summary, required=False)
     _finish(summary)
     write_json_atomic(output, summary, "verification summary")
     return output, summary
