@@ -3,8 +3,8 @@ MODULE interpolation
 CONTAINS
 
   FUNCTION binarysearch(length, array, VALUE, delta)
-    ! Given an array and a value, returns the index of the element that
-    ! is closest to, but less than, the given value.
+    ! Given an array and a value, returns the lower interpolation index.
+    ! An exact final knot belongs to the last interval, so index+1 is valid.
     ! Uses a binary search algorithm.
     ! "delta" is the tolerance used to determine if two values are equal
     ! if ( abs(x1 - x2) <= delta) then
@@ -37,7 +37,8 @@ CONTAINS
        ENDIF
        middle = NINT((left + right)/2.0)
        IF (ABS(array(middle) - VALUE) <= d) THEN
-          binarySearch = middle
+          ! Interpolation callers also access index+1, including at the last knot.
+          binarySearch = MIN(middle, length - 1)
           RETURN
        ELSE IF (array(middle) > VALUE) THEN
           right = middle - 1

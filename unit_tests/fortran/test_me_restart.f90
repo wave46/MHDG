@@ -3,10 +3,20 @@ PROGRAM test_me_restart
   USE in_out, ONLY: HDF5_load_solution
   USE globals
   USE MPI_OMP, ONLY: MPIvar
+  USE interpolation, ONLY: binarysearch, interpolate
   IMPLICIT NONE
   INTEGER :: nts
   REAL :: dt, restored_time
   CHARACTER(LEN=1000) :: checkpoint
+  REAL :: knots(3), values(2,2)
+
+  ! Exact control endpoints and grid corners must leave index+1 in bounds.
+  knots = [0.d0, 0.5d0, 0.56d0]
+  IF (binarysearch(3,knots,knots(1),1.d-12) /= 1) ERROR STOP 'first interpolation endpoint'
+  IF (binarysearch(3,knots,knots(3),1.d-12) /= 2) ERROR STOP 'last interpolation endpoint'
+  values = RESHAPE([1.d0,2.d0,3.d0,4.d0],[2,2])
+  IF (interpolate(2,knots(1:2),2,knots(1:2),values,0.5d0,0.5d0,1.d-12) /= 4.d0) &
+       ERROR STOP 'last grid corner'
 
   MPIvar%glob_id = 0
   MPIvar%glob_size = 1
