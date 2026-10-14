@@ -17,15 +17,20 @@ MODULE equilibrium_series
   TYPE, PUBLIC :: equilibrium_series_t
      PRIVATE
      INTEGER(HID_T) :: file_id = -1
-     LOGICAL :: trajectory = .FALSE., has_poloidal = .FALSE., has_jtor = .FALSE.
+     LOGICAL :: trajectory = .FALSE., numbered = .FALSE.
+     LOGICAL :: has_poloidal = .FALSE., has_jtor = .FALSE.
+     CHARACTER(LEN=1000) :: field_path = '', jtor_path = '', jtor_stem = ''
      REAL(float), ALLOCATABLE :: r(:), z(:), times(:), psi_sep(:)
+     REAL(float), ALLOCATABLE :: jtor_r(:), jtor_z(:)
      CHARACTER(LEN=32) :: datasets(5)
      TYPE(equilibrium_sample_t) :: cache(2)
      INTEGER :: cache_frame(2) = 0
    CONTAINS
      PROCEDURE :: open => series_open
+     PROCEDURE :: open_numbered => series_open_numbered
      PROCEDURE :: sample_at => series_sample_at
      PROCEDURE :: grid => series_grid
+     PROCEDURE :: current_grid => series_current_grid
      PROCEDURE :: time_points => series_time_points
      PROCEDURE :: clear => series_clear
      FINAL :: series_finalize
@@ -33,14 +38,16 @@ MODULE equilibrium_series
 
 CONTAINS
 
-  SUBROUTINE series_open(this, path, ierr, message)
+  SUBROUTINE series_open(this, path, ierr, message, jtor_path)
     CLASS(equilibrium_series_t), INTENT(INOUT) :: this
     CHARACTER(LEN=*), INTENT(IN) :: path
     INTEGER, INTENT(OUT) :: ierr
     CHARACTER(LEN=*), INTENT(OUT) :: message
+    CHARACTER(LEN=*), OPTIONAL, INTENT(IN) :: jtor_path
     CHARACTER(LEN=1000) :: filename
 
     CALL this%clear()
+    IF (PRESENT(jtor_path)) this%jtor_path = TRIM(ADJUSTL(jtor_path))
     message = 'Equilibrium input file not found: '//TRIM(path)
     CALL resolve_input_filename(path, '.h5', filename, ierr)
     IF (ierr /= 0) RETURN
@@ -54,8 +61,129 @@ CONTAINS
     CALL read_equilibrium_metadata(this, ierr, message)
     IF (ierr == 0) CALL validate_coordinates(this, ierr, message)
     IF (ierr == 0) CALL validate_field_datasets(this, ierr, message)
+    IF (ierr == 0 .AND. LEN_TRIM(this%jtor_path) > 0) CALL read_current_metadata(this, ierr, message)
     IF (ierr /= 0) CALL this%clear()
   END SUBROUTINE series_open
+
+  SUBROUTINE series_open_numbered(this, path, last_frame, ierr, message, jtor_path)
+    CLASS(equilibrium_series_t), INTENT(INOUT) :: this
+    CHARACTER(LEN=*), INTENT(IN) :: path
+    INTEGER, INTENT(IN) :: last_frame
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    CHARACTER(LEN=*), OPTIONAL, INTENT(IN) :: jtor_path
+    CHARACTER(LEN=1000) :: field_stem, current_stem, filename, current_filename
+
+    CALL this%clear()
+    ierr = -1
+    message = 'Numbered equilibrium requires frames 0000 through last_frame (0..9999)'
+    IF (last_frame < 0 .OR. last_frame > 9999) RETURN
+    CALL numbered_stem(path, field_stem, ierr, message)
+    IF (ierr /= 0) RETURN
+    current_stem = ''
+    current_filename = ''
+    IF (PRESENT(jtor_path)) THEN
+       IF (LEN_TRIM(jtor_path) > 0) THEN
+          CALL numbered_stem(jtor_path, current_stem, ierr, message)
+          IF (ierr /= 0) RETURN
+          current_filename = numbered_filename(current_stem, 0)
+       ENDIF
+    ENDIF
+    filename = numbered_filename(field_stem, 0)
+    CALL this%open(filename, ierr, message, current_filename)
+    IF (ierr == 0) THEN
+       ierr = -1
+       message = 'Numbered equilibrium frames must use the legacy rectangular-grid layout'
+       IF (.NOT. this%trajectory) ierr = 0
+    ENDIF
+    IF (ierr == 0) THEN
+       this%numbered = .TRUE.
+       this%field_path = field_stem
+       this%jtor_stem = current_stem
+       CALL read_numbered_timeline(this, last_frame, ierr, message)
+    ENDIF
+    IF (ierr == 0) CALL validate_coordinates(this, ierr, message)
+    IF (ierr /= 0) CALL this%clear()
+  END SUBROUTINE series_open_numbered
+
+  SUBROUTINE numbered_stem(path, stem, ierr, message)
+    CHARACTER(LEN=*), INTENT(IN) :: path
+    CHARACTER(LEN=*), INTENT(OUT) :: stem, message
+    INTEGER, INTENT(OUT) :: ierr
+    INTEGER :: n
+
+    stem = TRIM(ADJUSTL(path))
+    n = LEN_TRIM(stem)
+    ierr = -1
+    message = 'Numbered input requires a stem or an initial _0000.h5 filename: '//TRIM(path)
+    IF (n == 0) RETURN
+    IF (n >= 3) THEN
+       IF (stem(n-2:n) == '.h5') THEN
+          IF (n <= 8) RETURN
+          IF (stem(n-7:n) /= '_0000.h5') RETURN
+          stem = stem(:n-8)
+       ENDIF
+    ENDIF
+    ierr = 0
+    message = ''
+  END SUBROUTINE numbered_stem
+
+  FUNCTION numbered_filename(stem, frame) RESULT(filename)
+    CHARACTER(LEN=*), INTENT(IN) :: stem
+    INTEGER, INTENT(IN) :: frame
+    CHARACTER(LEN=1000) :: filename
+    CHARACTER(LEN=4) :: index
+    WRITE(index, '(I4.4)') frame
+    filename = TRIM(stem)//'_'//index//'.h5'
+  END FUNCTION numbered_filename
+
+  SUBROUTINE read_numbered_timeline(this, last_frame, ierr, message)
+    CLASS(equilibrium_series_t), INTENT(INOUT) :: this
+    INTEGER, INTENT(IN) :: last_frame
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    INTEGER :: frame
+    REAL(float) :: current_time
+    CHARACTER(LEN=1000) :: filename
+
+    DEALLOCATE(this%times, this%psi_sep)
+    ALLOCATE(this%times(last_frame+1), this%psi_sep(last_frame+1))
+    DO frame = 0, last_frame
+       filename = numbered_filename(this%field_path, frame)
+       message = 'Cannot read numbered equilibrium metadata: '//TRIM(filename)
+       CALL read_numbered_metadata(filename, this%times(frame+1), ierr, this%psi_sep(frame+1))
+       IF (ierr /= 0) RETURN
+       IF (LEN_TRIM(this%jtor_stem) == 0) CYCLE
+       filename = numbered_filename(this%jtor_stem, frame)
+       message = 'Cannot read numbered Jtor timestamp: '//TRIM(filename)
+       CALL read_numbered_metadata(filename, current_time, ierr)
+       IF (ierr /= 0) RETURN
+       ierr = -1
+       message = 'Paired equilibrium/Jtor timestamps differ: '//TRIM(filename)
+       IF (.NOT. ieee_is_finite(current_time)) RETURN
+       IF (ABS(current_time-this%times(frame+1)) > &
+            64*EPSILON(current_time)*MAX(1._float, ABS(current_time), ABS(this%times(frame+1)))) RETURN
+    ENDDO
+    ierr = 0
+    message = ''
+  END SUBROUTINE read_numbered_timeline
+
+  SUBROUTINE read_numbered_metadata(path, time, ierr, psi_sep)
+    CHARACTER(LEN=*), INTENT(IN) :: path
+    REAL(float), INTENT(OUT) :: time
+    INTEGER, INTENT(OUT) :: ierr
+    REAL(float), OPTIONAL, INTENT(OUT) :: psi_sep
+    INTEGER(HID_T) :: file_id
+    CHARACTER(LEN=1000) :: filename
+
+    CALL resolve_input_filename(path, '.h5', filename, ierr)
+    IF (ierr /= 0) RETURN
+    CALL HDF5_open(filename, file_id, ierr)
+    IF (ierr /= 0) RETURN
+    CALL HDF5_real_reading(file_id, time, 'time', ierr)
+    IF (ierr == 0 .AND. PRESENT(psi_sep)) CALL HDF5_real_reading(file_id, psi_sep, 'psiSep', ierr)
+    CALL HDF5_close(file_id)
+  END SUBROUTINE read_numbered_metadata
 
   SUBROUTINE read_equilibrium_metadata(this, ierr, message)
     CLASS(equilibrium_series_t), INTENT(INOUT) :: this
@@ -96,28 +224,73 @@ CONTAINS
     CLASS(equilibrium_series_t), INTENT(INOUT) :: this
     INTEGER, INTENT(OUT) :: ierr
     CHARACTER(LEN=*), INTENT(OUT) :: message
-    REAL(float), ALLOCATABLE :: r2d(:,:), z2d(:,:)
 
     this%datasets = [CHARACTER(LEN=32) :: 'flux2D', 'Bphi2D', 'Br2D', 'Bz2D', 'Jtor']
-    message = 'Cannot read stationary R grid'
-    CALL read_matrix(this%file_id, 'r2D', r2d, ierr)
+    CALL read_rectangular_grid(this%file_id, this%r, this%z, ierr, message)
     IF (ierr /= 0) RETURN
-    message = 'Cannot read stationary Z grid'
-    CALL read_matrix(this%file_id, 'z2D', z2d, ierr)
-    IF (ierr /= 0) RETURN
-    ierr = -1
-    message = 'Stationary R,Z grids have different shapes'
-    IF (ANY(SHAPE(r2d) /= SHAPE(z2d))) RETURN
-    this%r = r2d(1,:)
-    this%z = z2d(:,1)
-    message = 'Stationary equilibrium requires a shared rectilinear R,Z grid'
-    IF (ANY(r2d /= SPREAD(this%r, 1, SIZE(this%z))) .OR. &
-        ANY(z2d /= SPREAD(this%z, 2, SIZE(this%r)))) RETURN
     this%times = [0._float]
     message = 'Cannot read stationary psiSep'
     ALLOCATE(this%psi_sep(1))
     CALL HDF5_real_reading(this%file_id, this%psi_sep(1), 'psiSep', ierr)
   END SUBROUTINE read_legacy_metadata
+
+  SUBROUTINE read_rectangular_grid(file_id, r, z, ierr, message)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    REAL(float), ALLOCATABLE, INTENT(OUT) :: r(:), z(:)
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    REAL(float), ALLOCATABLE :: r2d(:,:), z2d(:,:)
+
+    message = 'Cannot read rectangular R grid'
+    CALL read_matrix(file_id, 'r2D', r2d, ierr)
+    IF (ierr /= 0) RETURN
+    message = 'Cannot read rectangular Z grid'
+    CALL read_matrix(file_id, 'z2D', z2d, ierr)
+    IF (ierr /= 0) RETURN
+    ierr = -1
+    message = 'R,Z grids have different shapes'
+    IF (ANY(SHAPE(r2d) /= SHAPE(z2d))) RETURN
+    r = r2d(1,:)
+    z = z2d(:,1)
+    message = 'Equilibrium requires a rectangular R,Z grid with finite increasing axes'
+    IF (.NOT. valid_axis(r) .OR. .NOT. valid_axis(z)) RETURN
+    IF (ANY(r2d /= SPREAD(r, 1, SIZE(z))) .OR. ANY(z2d /= SPREAD(z, 2, SIZE(r)))) RETURN
+    ierr = 0
+    message = ''
+  END SUBROUTINE read_rectangular_grid
+
+  SUBROUTINE read_current_metadata(this, ierr, message)
+    CLASS(equilibrium_series_t), INTENT(INOUT) :: this
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    INTEGER(HID_T) :: file_id
+    INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
+    CHARACTER(LEN=1000) :: filename
+
+    ierr = -1
+    message = 'Trajectory Jtor must be stored in equilibrium/Jtor, not a separate file'
+    IF (this%trajectory) RETURN
+    CALL resolve_input_filename(this%jtor_path, '.h5', filename, ierr)
+    message = 'Cannot open separate Jtor input: '//TRIM(this%jtor_path)
+    IF (ierr /= 0) RETURN
+    CALL HDF5_open(filename, file_id, ierr)
+    IF (ierr /= 0) RETURN
+    CALL read_rectangular_grid(file_id, this%jtor_r, this%jtor_z, ierr, message)
+    IF (ierr == 0) THEN
+       message = 'Cannot read separate Jtor dataset'
+       CALL HDF5_dataset_shape(file_id, 'Jtor', dimensions, ierr)
+    ENDIF
+    CALL HDF5_close(file_id)
+    IF (ierr /= 0) RETURN
+    ierr = -1
+    message = 'Jtor dataset shape differs from its R,Z grid'
+    IF (SIZE(dimensions) /= 2) RETURN
+    IF (ANY(dimensions /= INT([SIZE(this%jtor_z), SIZE(this%jtor_r)], HSIZE_T))) RETURN
+    this%jtor_path = filename
+    this%has_jtor = .TRUE.
+    ierr = 0
+    message = ''
+  END SUBROUTINE read_current_metadata
 
   SUBROUTINE validate_coordinates(this, ierr, message)
     CLASS(equilibrium_series_t), INTENT(IN) :: this
@@ -146,6 +319,7 @@ CONTAINS
     INTEGER :: i, rank
     LOGICAL :: exists(5)
 
+    exists = .FALSE.
     IF (this%trajectory) THEN
        expected = INT([SIZE(this%r), SIZE(this%z), SIZE(this%times)], HSIZE_T)
        rank = 3
@@ -154,6 +328,7 @@ CONTAINS
        rank = 2
     ENDIF
     DO i = 1, SIZE(this%datasets)
+       IF (i == 5 .AND. LEN_TRIM(this%jtor_path) > 0) CYCLE
        message = 'Cannot read equilibrium dataset: '//TRIM(this%datasets(i))
        CALL H5Lexists_f(this%file_id, TRIM(this%datasets(i)), exists(i), ierr)
        IF (ierr /= 0) RETURN
@@ -237,9 +412,96 @@ CONTAINS
     slot = 1
     IF (this%cache_frame(slot) == keep_frame) slot = 2
     this%cache_frame(slot) = 0
-    CALL read_equilibrium_frame(this, frame, this%cache(slot), ierr, message)
+    CALL load_equilibrium_frame(this, frame, this%cache(slot), ierr, message)
     IF (ierr == 0) this%cache_frame(slot) = frame
   END SUBROUTINE cached_frame
+
+  SUBROUTINE load_equilibrium_frame(this, frame, sample, ierr, message)
+    CLASS(equilibrium_series_t), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: frame
+    TYPE(equilibrium_sample_t), INTENT(OUT) :: sample
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+
+    IF (this%numbered) THEN
+       CALL load_numbered_frame(this, frame, sample, ierr, message)
+    ELSE
+       CALL read_equilibrium_frame(this, frame, sample, ierr, message)
+       IF (ierr == 0 .AND. LEN_TRIM(this%jtor_path) > 0) &
+            CALL read_current_frame(this%jtor_path, sample%jtor, ierr, message)
+    ENDIF
+  END SUBROUTINE load_equilibrium_frame
+
+  SUBROUTINE load_numbered_frame(this, frame, sample, ierr, message)
+    CLASS(equilibrium_series_t), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: frame
+    TYPE(equilibrium_sample_t), INTENT(OUT) :: sample
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    TYPE(equilibrium_series_t) :: input
+    CHARACTER(LEN=1000) :: filename, current_filename, detail
+
+    filename = numbered_filename(this%field_path, frame-1)
+    current_filename = ''
+    IF (LEN_TRIM(this%jtor_stem) > 0) current_filename = numbered_filename(this%jtor_stem, frame-1)
+    CALL input%open(filename, ierr, message, current_filename)
+    IF (ierr == 0) CALL validate_numbered_frame(this, input, ierr, message)
+    IF (ierr == 0) THEN
+       CALL read_equilibrium_frame(input, 1, sample, ierr, message)
+       IF (ierr == 0 .AND. LEN_TRIM(current_filename) > 0) &
+            CALL read_current_frame(input%jtor_path, sample%jtor, ierr, message)
+    ENDIF
+    CALL input%clear()
+    IF (ierr /= 0) THEN
+       detail = message
+       message = TRIM(filename)//': '//TRIM(detail)
+    ENDIF
+  END SUBROUTINE load_numbered_frame
+
+  SUBROUTINE validate_numbered_frame(this, input, ierr, message)
+    CLASS(equilibrium_series_t), INTENT(IN) :: this, input
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+
+    ierr = -1
+    message = 'Numbered frames must retain their layout and optional fields'
+    IF (input%trajectory) RETURN
+    IF (this%has_poloidal .NEQV. input%has_poloidal) RETURN
+    IF (this%has_jtor .NEQV. input%has_jtor) RETURN
+    message = 'Numbered magnetic R,Z grid differs from frame 0000'
+    IF (.NOT. same_axis(this%r, input%r) .OR. .NOT. same_axis(this%z, input%z)) RETURN
+    IF (LEN_TRIM(this%jtor_stem) > 0) THEN
+       message = 'Numbered Jtor R,Z grid differs from frame 0000'
+       IF (.NOT. same_axis(this%jtor_r, input%jtor_r) .OR. &
+            .NOT. same_axis(this%jtor_z, input%jtor_z)) RETURN
+    ENDIF
+    ierr = 0
+    message = ''
+  END SUBROUTINE validate_numbered_frame
+
+  LOGICAL FUNCTION same_axis(left, right)
+    REAL(float), INTENT(IN) :: left(:), right(:)
+    same_axis = .FALSE.
+    IF (SIZE(left) /= SIZE(right)) RETURN
+    same_axis = ALL(left == right)
+  END FUNCTION same_axis
+
+  SUBROUTINE read_current_frame(path, values, ierr, message)
+    CHARACTER(LEN=*), INTENT(IN) :: path
+    REAL(float), ALLOCATABLE, INTENT(OUT) :: values(:,:)
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    INTEGER(HID_T) :: file_id
+
+    message = 'Cannot read finite separate Jtor frame: '//TRIM(path)
+    CALL HDF5_open(path, file_id, ierr)
+    IF (ierr /= 0) RETURN
+    CALL read_matrix(file_id, 'Jtor', values, ierr)
+    CALL HDF5_close(file_id)
+    IF (ierr /= 0) RETURN
+    IF (.NOT. ALL(ieee_is_finite(values))) ierr = -1
+    IF (ierr == 0) message = ''
+  END SUBROUTINE read_current_frame
 
   SUBROUTINE read_equilibrium_frame(this, frame, sample, ierr, message)
     CLASS(equilibrium_series_t), INTENT(IN) :: this
@@ -255,7 +517,7 @@ CONTAINS
        IF (i == 3 .OR. i == 4) THEN
           IF (.NOT. this%has_poloidal) CYCLE
        ELSEIF (i == 5) THEN
-          IF (.NOT. this%has_jtor) CYCLE
+          IF (.NOT. this%has_jtor .OR. LEN_TRIM(this%jtor_path) > 0) CYCLE
        ENDIF
        SELECT CASE (i)
        CASE (1)
@@ -322,7 +584,7 @@ CONTAINS
     right = 1
     actual_time = t
     weight = 0
-    IF (this%trajectory .AND. n > 1) THEN
+    IF (n > 1) THEN
        tolerance = 64*EPSILON(t)*MAX(1._float, ABS(t), ABS(this%times(1)), ABS(this%times(n)))
        message = 'Requested equilibrium time is outside trajectory coverage'
        IF (t < this%times(1)-tolerance .OR. t > this%times(n)+tolerance) RETURN
@@ -371,6 +633,19 @@ CONTAINS
     IF (ALLOCATED(this%z)) z = this%z
   END SUBROUTINE series_grid
 
+  SUBROUTINE series_current_grid(this, r, z)
+    CLASS(equilibrium_series_t), INTENT(IN) :: this
+    REAL(float), ALLOCATABLE, INTENT(OUT) :: r(:), z(:)
+    IF (.NOT. this%has_jtor) RETURN
+    IF (ALLOCATED(this%jtor_r)) THEN
+       r = this%jtor_r
+       z = this%jtor_z
+    ELSE
+       r = this%r
+       z = this%z
+    ENDIF
+  END SUBROUTINE series_current_grid
+
   SUBROUTINE series_time_points(this, times)
     CLASS(equilibrium_series_t), INTENT(IN) :: this
     REAL(float), ALLOCATABLE, INTENT(OUT) :: times(:)
@@ -382,6 +657,10 @@ CONTAINS
     IF (this%file_id >= 0) CALL HDF5_close(this%file_id)
     this%file_id = -1
     this%trajectory = .FALSE.
+    this%numbered = .FALSE.
+    this%field_path = ''
+    this%jtor_path = ''
+    this%jtor_stem = ''
     this%has_poloidal = .FALSE.
     this%has_jtor = .FALSE.
     this%cache_frame = 0
@@ -390,6 +669,8 @@ CONTAINS
     IF (ALLOCATED(this%z)) DEALLOCATE(this%z)
     IF (ALLOCATED(this%times)) DEALLOCATE(this%times)
     IF (ALLOCATED(this%psi_sep)) DEALLOCATE(this%psi_sep)
+    IF (ALLOCATED(this%jtor_r)) DEALLOCATE(this%jtor_r)
+    IF (ALLOCATED(this%jtor_z)) DEALLOCATE(this%jtor_z)
   END SUBROUTINE series_clear
 
   SUBROUTINE series_finalize(this)

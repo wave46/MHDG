@@ -1,7 +1,7 @@
 # Equilibrium series input
 
-The `equilibrium_series_t` reader currently supports legacy stationary files on a rectangular grid
-and a trajectory HDF5. Numbered input and solver integration follow separately.
+The `equilibrium_series_t` reader supports legacy stationary and numbered files on a rectangular grid
+and a trajectory HDF5. Solver integration follows separately.
 It owns its open file and two cached frames. `clear()` releases them; finalization
 also closes the file. Create and open each provider independently.
 
@@ -53,6 +53,32 @@ Stationary files retain the existing root datasets `r2D`, `z2D`, `flux2D`,
 array orientation is preserved; `psiSep` may be a scalar or a one-element array.
 They supply the same equilibrium at any finite requested time. Full filenames
 and legacy extensionless names are accepted.
+
+For paired legacy inputs, `open(path, ierr, message, jtor_path)` accepts a
+separate stationary current file with root `r2D`, `z2D` and `Jtor` datasets.
+Its rectangular grid may differ from the magnetic grid, as in the existing reader.
+`current_grid(r,z)` supplies the current coordinates, and `sample%jtor` has
+shape `(nz_current,nr_current)`. Embedded Jtor uses the magnetic coordinates.
+When Jtor is absent, `current_grid` leaves both outputs unallocated. A trajectory
+stores Jtor internally on its shared grid and does not take a separate current file.
+
+`open_numbered(path, last_frame, ierr, message, jtor_path)` opens legacy frames
+`0000` through `last_frame`, inclusive. Supply an extensionless stem or the full
+initial filename `stem_0000.h5`; `stem.h5` identifies a single file and is not
+an alias for a numbered sequence. An optional current path follows the same
+numbering rule. There is no filename renumbering or intermediate file generation.
+
+Numbered opening reads each field frame's `time` and `psiSep`, checks increasing
+finite timestamps, and checks paired current timestamps when supplied. Stored
+`dt` values are not interpolation coordinates. Primitive fields are loaded on
+cache misses; at that point the reader checks shapes, optional-field consistency
+and identical grid coordinates relative to frame 0000. Each magnetic frame must
+use the same grid; each separate current frame must use its own unchanged grid.
+No regridding is performed. Frame 0000's magnetic file remains open until `clear`;
+other numbered files and separate current files are opened briefly for metadata
+or a cache miss, then closed. Stationary and trajectory providers retain their
+magnetic file handle until `clear` as well. Inputs must remain unchanged while
+in use; concurrent read-only inspection is supported.
 
 `grid(r,z)` and `time_points(times)` return copies of the provider coordinates.
 Physical inputs are never normalized in the provider. Absence of reference

@@ -4,18 +4,20 @@ PROGRAM test_equilibrium_series
   IMPLICIT NONE
   TYPE(equilibrium_series_t) :: series, other
   TYPE(equilibrium_sample_t) :: sample
-  REAL(float), ALLOCATABLE :: r(:), z(:), times(:)
+  REAL(float), ALLOCATABLE :: r(:), z(:), times(:), jr(:), jz(:)
   REAL(float) :: requests(10), t, x, y
   INTEGER :: ierr, i, j, k
-  CHARACTER(LEN=1000) :: filename, message
+  CHARACTER(LEN=1000) :: filename, message, current_filename
   CHARACTER(LEN=32) :: mode
 
   CALL get_command_argument(1, filename)
   CALL get_command_argument(2, mode)
-  CALL series%open(filename, ierr, message)
+  CALL get_command_argument(3, current_filename)
+  CALL open_input(series)
   CALL require(ierr == 0, message)
   CALL series%grid(r, z)
   CALL series%time_points(times)
+  CALL series%current_grid(jr, jz)
   IF (mode == 'inspect') THEN
      CALL series%sample_at(times(1), sample, ierr, message)
      CALL require(ierr == 0, message)
@@ -42,10 +44,17 @@ PROGRAM test_equilibrium_series
            IF (mode /= 'optional') THEN
               CALL require(ABS(sample%br(j,i)-(0.2_float+x+2*y+3*t)) < 1.e-12_float, 'Br interpolation')
               CALL require(ABS(sample%bz(j,i)-(-0.4_float+2*x-y-4*t)) < 1.e-12_float, 'Bz interpolation')
-              CALL require(ABS(sample%jtor(j,i)-(1+3*x+4*y+13*t)) < 1.e-12_float, 'Jtor interpolation')
            ENDIF
         ENDDO
      ENDDO
+     IF (ALLOCATED(jr)) THEN
+        DO i = 1, SIZE(jr)
+           DO j = 1, SIZE(jz)
+              CALL require(ABS(sample%jtor(j,i)-(1+3*jr(i)+4*jz(j)+13*t)) < 1.e-12_float, &
+                   'Jtor interpolation on its own grid')
+           ENDDO
+        ENDDO
+     ENDIF
      CALL require(ABS(sample%psi_sep-(40+17*t)) < 1.e-12_float, 'psiSep interpolation')
      CALL require(ABS(sample%time-requests(k)) < 1.e-12_float, 'sample physical time')
      IF (mode == 'optional') CALL require(.NOT. ALLOCATED(sample%br) .AND. &
@@ -69,20 +78,29 @@ PROGRAM test_equilibrium_series
           sample%time == 10._float, 'fixed equilibrium independent of simulation time')
   ENDIF
   ! Closing/reopening one provider must leave another provider usable.
-  CALL other%open(filename, ierr, message)
+  CALL open_input(other)
   CALL require(ierr == 0, message)
   CALL series%clear()
   CALL series%sample_at(0._float, sample, ierr, message)
   CALL require(ierr /= 0, 'closed provider rejection')
   CALL other%sample_at(0.08_float, sample, ierr, message)
   CALL require(ierr == 0, message)
-  CALL other%open(filename, ierr, message)
+  CALL open_input(other)
   CALL require(ierr == 0, message)
   CALL other%sample_at(0._float, sample, ierr, message)
   CALL require(ierr == 0, message)
   CALL other%clear()
   WRITE(*,'(A)') 'EQUILIBRIUM_SERIES_PASS'
 CONTAINS
+  SUBROUTINE open_input(input)
+    TYPE(equilibrium_series_t), INTENT(INOUT) :: input
+    IF (INDEX(mode, 'numbered') == 1) THEN
+       CALL input%open_numbered(filename, 4, ierr, message, current_filename)
+    ELSE
+       CALL input%open(filename, ierr, message, current_filename)
+    ENDIF
+  END SUBROUTINE open_input
+
   SUBROUTINE require(condition, detail)
     LOGICAL, INTENT(IN) :: condition
     CHARACTER(LEN=*), INTENT(IN) :: detail

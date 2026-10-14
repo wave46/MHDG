@@ -31,6 +31,26 @@ def inputs(directory):
             f[names[name]] = values[0].T
 
 
+def numbered_inputs(directory):
+    directory.mkdir()
+    r = np.array([2., 2.1, 2.3, 2.6])
+    z = np.array([-1., -.1, .5])
+    jr, jz = np.array([2., 2.3, 2.6]), np.array([-1., .5])
+    names = {"psi": "flux2D", "Bphi": "Bphi2D", "Br": "Br2D", "Bz": "Bz2D", "Jtor": "Jtor"}
+    with h5py.File(directory.parent / "trajectory.h5") as source:
+        for frame, time in enumerate(source["time"][:]):
+            with h5py.File(directory / f"field_{frame:04d}.h5", "w") as f:
+                f["r2D"], f["z2D"] = np.meshgrid(r, z, indexing="ij")
+                f["time"], f["dt"] = time, 0. if frame == 0 else time-source["time"][frame-1]
+                f["psiSep"] = source["equilibrium/psiSep"][frame]
+                for name, legacy in names.items():
+                    f[legacy] = source[f"equilibrium/{name}"][frame].T
+            with h5py.File(directory / f"current_{frame:04d}.h5", "w") as f:
+                x, y = np.meshgrid(jr, jz, indexing="ij")
+                f["r2D"], f["z2D"], f["time"] = x, y, time
+                f["Jtor"] = 1+3*x+4*y+13*time
+
+
 def main():
     executable = Path(sys.argv[1]).resolve()
     with tempfile.TemporaryDirectory(prefix="mhdg-equilibrium-series-") as scratch:
@@ -63,8 +83,33 @@ def main():
                 if values is not None:
                     f[dataset] = values
             cases.append((filename, "invalid", expected))
-        for filename, mode, expected in cases:
-            run = subprocess.run([str(executable), filename, mode], cwd=directory,
+        cases = [(name, mode, expected, None) for name, mode, expected in cases]
+        numbered_inputs(directory / "numbered")
+        cases.extend([
+            ("numbered/field", "numbered", None, None),
+            ("numbered/field_0000.h5", "numbered", None, None),
+            ("numbered/field", "numbered", None, "numbered/current_0000.h5"),
+            ("stationary.h5", "stationary", None, "numbered/current_0000.h5"),
+        ])
+        for variant, dataset, expected in [
+            ("field_grid", "r2D", "Numbered magnetic R,Z grid differs"),
+            ("current_grid", "r2D", "Numbered Jtor R,Z grid differs"),
+            ("current_time", "time", "Paired equilibrium/Jtor timestamps differ"),
+            ("missing_frame", None, "Cannot read numbered equilibrium metadata"),
+        ]:
+            shutil.copytree(directory / "numbered", directory / variant)
+            if variant == "missing_frame":
+                (directory / variant / "field_0004.h5").unlink()
+            else:
+                prefix = "field" if variant == "field_grid" else "current"
+                with h5py.File(directory / variant / f"{prefix}_0001.h5", "r+") as f:
+                    f[dataset][...] = f[dataset][...] + .01
+            cases.append((f"{variant}/field", "numbered_invalid", expected, f"{variant}/current"))
+        for filename, mode, expected, current in cases:
+            command = [str(executable), filename, mode]
+            if current is not None:
+                command.append(current)
+            run = subprocess.run(command, cwd=directory,
                                  capture_output=True, text=True, timeout=20)
             output = run.stdout + run.stderr
             if expected is None:
