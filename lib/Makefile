@@ -14,6 +14,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-adaptivity-estimator
 .PHONY : check-adaptive-checkpoint
 .PHONY : check-divergence-refinement
+.PHONY : check-bdf-coefficients
 
 all : allseq
 
@@ -50,6 +51,15 @@ clean:
 	$(RM) adaptivity_estimator_check
 	$(RM) adaptive_checkpoint_check
 	$(RM) divergence_refinement_check
+	$(RM) bdf_coefficients_check
+
+# Exercise the internal production routine without building an HDG mesh.
+bdf_coefficients_routine.F : $(SDIR)/HDG/hdg_ComputeJacobian.f90
+	sed -n '/^  SUBROUTINE setTimeIntegrationCoefficients(/,/^  ENDSUBROUTINE setTimeIntegrationCoefficients/p' $< > $@
+
+check-bdf-coefficients : globals.o bdf_coefficients_routine.F
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_bdf_coefficients.f90 globals.o -o bdf_coefficients_check
+	./bdf_coefficients_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_magnetic_topology.f90 interpolation.o magnetic_topology.o -o magnetic_topology_check

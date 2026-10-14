@@ -2457,7 +2457,7 @@ CONTAINS
       REAL*8,INTENT(out) :: ktis(:)
       INTEGER :: it
 
-    ktis = 0.
+    ktis = 0.d0
 
       IF (time%ik .LT. time%tis) THEN
       it = time%ik
@@ -2467,38 +2467,38 @@ CONTAINS
 
     SELECT CASE (it)
       CASE (1)
-      ktis(1) = 1.
-      ktis(2) = 1.
+      ktis(1) = 1.d0
+      ktis(2) = 1.d0
       CASE (2)
-      ktis(1) = 1.5
-      ktis(2) = 2
-      ktis(3) = -0.5
+      ktis(1) = 1.5d0
+      ktis(2) = 2.d0
+      ktis(3) = -0.5d0
       CASE (3)
-      ktis(1) = 11./6.
-      ktis(2) = 3.
-      ktis(3) = -1.5
-      ktis(4) = 1./3.
+      ktis(1) = 11.d0/6.d0
+      ktis(2) = 3.d0
+      ktis(3) = -1.5d0
+      ktis(4) = 1.d0/3.d0
       CASE (4)
-      ktis(1) = 25./12.
-      ktis(2) = 4.
-      ktis(3) = -3.
-      ktis(4) = 4./3.
-      ktis(4) = -0.25
+      ktis(1) = 25.d0/12.d0
+      ktis(2) = 4.d0
+      ktis(3) = -3.d0
+      ktis(4) = 4.d0/3.d0
+      ktis(5) = -0.25d0
       CASE (5)
-      ktis(1) = 137./60.
-      ktis(2) = 5.
-      ktis(3) = -5.
-      ktis(4) = 10./3.
-      ktis(5) = -1.25
-      ktis(6) = 0.2
+      ktis(1) = 137.d0/60.d0
+      ktis(2) = 5.d0
+      ktis(3) = -5.d0
+      ktis(4) = 10.d0/3.d0
+      ktis(5) = -1.25d0
+      ktis(6) = 0.2d0
       CASE (6)
-      ktis(1) = 147./60.
-      ktis(2) = 6.
-      ktis(3) = -7.5
-      ktis(4) = 20./3.
-      ktis(5) = -3.75
-      ktis(6) = 1.2
-      ktis(7) = -1.6
+      ktis(1) = 147.d0/60.d0
+      ktis(2) = 6.d0
+      ktis(3) = -7.5d0
+      ktis(4) = 20.d0/3.d0
+      ktis(5) = -3.75d0
+      ktis(6) = 1.2d0
+      ktis(7) = -1.d0/6.d0
       CASE default
          WRITE (6,*) 'Formula not available'
          STOP

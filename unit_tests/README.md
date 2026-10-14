@@ -4,6 +4,12 @@ This directory contains small deterministic checks for numerical machinery that
 can be exercised without launching a full MHDG case.  Production-equilibrium
 and end-to-end coverage remains in `regression_tests`.
 
+`make check-bdf-coefficients` from `lib/` checks constant-step BDF1-6 polynomial
+differentiation, startup order ramping, unused history and unchanged BDF1 weights.
+It extracts the internal production coefficient routine verbatim and compiles it
+with the real global time state; no solver run or external data is needed. This
+target uses the current build configuration without a clean rebuild.
+
 Run the magnetic-topology checks from `lib/` after loading the build
 environment:
 
