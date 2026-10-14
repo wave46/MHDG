@@ -120,6 +120,8 @@ loads; mismatched value/time lengths and invalid vector shapes are rejected.
 The same target checks global nodal input on one rank and, for parallel builds,
 four ranks with four OpenMP threads: reordered/shared nodes, stationary and ME
 endpoint data, global flux extrema and axis coordinates, and mesh-size mismatch.
+Parallel builds also gather signed nodal samples on one and four ranks, checking
+shared-node values, exclusion of ghost-only copies, and all-rank/root-only output.
 It needs Python 3 with h5py and NumPy, uses no external
 equilibrium or case data, and does not launch a solver simulation. The nodal
 checks initialize MPI; parallel builds need a working local MPI launcher.

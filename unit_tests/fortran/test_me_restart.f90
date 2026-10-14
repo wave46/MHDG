@@ -5,6 +5,9 @@ PROGRAM test_me_restart
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
   USE globals
   USE MPI_OMP, ONLY: MPIvar, init_MPI_OMP
+#ifdef PARALL
+  USE Communications, ONLY: gather_nodal_values
+#endif
   USE mpi, ONLY: MPI_FINALIZE
   USE interpolation, ONLY: binarysearch, interpolate
   USE external_heating, ONLY: initialize_external_heating, load_external_heating, close_heating_input
@@ -247,8 +250,52 @@ CONTAINS
               ABS(time%dt_ME-0.08d0*frame) > 1.d-12) ERROR STOP 'nodal endpoint time'
        ENDIF
     ENDDO
+#ifdef PARALL
+    CALL check_nodal_gather()
+#endif
     IF (MPIvar%glob_id == 0) WRITE(*,'(A,1X,I0)') 'GLOBAL_NODAL_INPUT_PASS', MPIvar%glob_size
   END SUBROUTINE check_nodal_input
+
+#ifdef PARALL
+  SUBROUTINE check_nodal_gather()
+    TYPE(Mesh_type) :: partition
+    REAL*8, ALLOCATABLE :: local_values(:)
+    REAL*8, POINTER :: gathered(:)
+    REAL*8 :: expected(6)
+    INTEGER :: i
+
+    expected = [(REAL(i-3, KIND=8), i=1,6)]
+    partition%Nno_glob = 6
+    ALLOCATE(partition%T(2,3), partition%ghostElems(2))
+    IF (MPIvar%glob_size == 1) THEN
+       ALLOCATE(partition%loc2glob_nodes(6))
+       partition%loc2glob_nodes = [1,2,3,4,5,6]
+       partition%T(1,:) = [1,2,3]
+       partition%T(2,:) = [4,5,6]
+       partition%ghostElems = 0
+    ELSE
+       ! Four overlapping partitions cover all six nodes; node 4 is ghost-only locally.
+       ALLOCATE(partition%loc2glob_nodes(4))
+       partition%loc2glob_nodes(:3) = MPIvar%glob_id + [1,2,3]
+       partition%loc2glob_nodes(4) = 6
+       IF (MPIvar%glob_id >= 2) partition%loc2glob_nodes(4) = 1
+       partition%T(1,:) = [1,2,3]
+       partition%T(2,:) = [2,3,4]
+       partition%ghostElems = [0,1]
+    ENDIF
+    local_values = expected(partition%loc2glob_nodes)
+    IF (MPIvar%glob_size > 1) local_values(4) = 999.d0
+
+    CALL gather_nodal_values(partition, local_values, gathered, allgather=.TRUE.)
+    IF (ANY(gathered /= expected)) ERROR STOP 'shared nodal samples were summed or ghosts counted'
+    DEALLOCATE(gathered)
+    CALL gather_nodal_values(partition, local_values, gathered, allgather=.FALSE.)
+    IF (MPIvar%glob_id == 0) THEN
+       IF (ANY(gathered /= expected)) ERROR STOP 'root-only nodal gathering differs'
+    ENDIF
+    DEALLOCATE(gathered, local_values, partition%T, partition%ghostElems, partition%loc2glob_nodes)
+  END SUBROUTINE check_nodal_gather
+#endif
 
   SUBROUTINE check_mesh()
     IF (Mesh%Nnodes /= 3 .OR. Mesh%Nelems /= 1) ERROR STOP 'mesh dimensions'

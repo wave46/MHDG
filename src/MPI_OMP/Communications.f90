@@ -1055,7 +1055,8 @@ CONTAINS
     INTEGER                                 :: i, ierr
 
     ALLOCATE(value_glob(Mesh_in%Nno_glob))
-    value_glob = 0.
+    ! Shared nodes contain identical samples, not additive rank contributions.
+    value_glob = -HUGE(0.d0)
 
     DO i = 1, SIZE(Mesh_in%T,1)
        IF(Mesh_in%ghostElems(i) .NE. 1) THEN
@@ -1064,12 +1065,12 @@ CONTAINS
     ENDDO
 
     IF (allgather) THEN
-       CALL MPI_Allreduce(MPI_IN_PLACE, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+       CALL MPI_Allreduce(MPI_IN_PLACE, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
     ELSE
        IF (MPIvar%glob_id == 0) THEN
-          CALL MPI_REDUCE(MPI_IN_PLACE, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+          CALL MPI_REDUCE(MPI_IN_PLACE, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
        ELSE
-          CALL MPI_REDUCE(value_glob, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+          CALL MPI_REDUCE(value_glob, value_glob, SIZE(value_glob,1), MPI_REAL8, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
        END IF
     END IF
    END SUBROUTINE gather_nodal_values
