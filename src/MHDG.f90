@@ -212,9 +212,6 @@ PROGRAM MHDG
   it0 = 1
   ! For ME, nts is the final global step, including on restart.
   IF (switch%ME) it0 = time%it + 1
-  IF (switch%ME) THEN
-     time%dt = time%dt_ME/simpar%refval_time
-  ENDIF
   dt0 = time%dt
 
   !*******************************************************
@@ -225,6 +222,27 @@ PROGRAM MHDG
      ! if a new time step starts, it means that the solution converged sol%u_conv = sol%u, sol%q_conv = sol%q
      CALL update_uconv_qconv(sol%u, sol%q)
      CALL reset_newton_refinements()
+
+     IF (switch%ME) THEN
+        ! Initial/restart output represents the accepted frame. Sample the next
+        ! endpoint and its controls only when an advance is actually attempted.
+        CALL load_magnetic_field_Jtor(time%it + 1)
+        IF (.NOT. ieee_is_finite(time%dt_ME) .OR. time%dt_ME <= 0.d0) THEN
+           IF (MPIvar%glob_id == 0) WRITE(6,*) 'ME endpoint timestep must be positive: ', time%dt_ME
+           STOP 1
+        ENDIF
+        IF (.NOT. ieee_is_finite(time%t_ME) .OR. &
+            ABS(time%t_ME - (time%t*simpar%refval_time + time%dt_ME)) > &
+            MAX(1.d-12,1.d-10*ABS(time%t_ME))) THEN
+           IF (MPIvar%glob_id == 0) WRITE(6,*) &
+                'ME frame time must match the timestep endpoint: ', time%t_ME, &
+                time%t*simpar%refval_time + time%dt_ME
+           STOP 1
+        ENDIF
+        IF (switch%external_heating) CALL load_external_heating(time%it + 1)
+        CALL SetParticleSource()
+        time%dt = time%dt_ME/simpar%refval_time
+     ENDIF
 
      ! Actualization of time
      time%t = time%t + time%dt
@@ -278,13 +296,7 @@ PROGRAM MHDG
         ! Check for NaN (should work with optimization flags)
         CALL check_for_NaNs()
         IF (adapt%adaptivity .AND. restart_adapt) THEN
-           IF (switch%ME .EQV. .TRUE.) THEN
-              time%it=time%it-1
-           ENDIF
            CALL adaptivity()
-           IF (switch%ME .EQV. .TRUE.) THEN
-            time%it=time%it+1
-           ENDIF
            DEALLOCATE(uiter)
            ALLOCATE(uiter(SIZE(sol%u)))
            uiter = 0.
@@ -358,9 +370,7 @@ PROGRAM MHDG
               ENDIF
               ! Reload this attempt's equilibrium, without advancing the
               ! physical timestep or updating the puff/feedback controller.
-              IF (switch%ME) time%it = time%it - 1
               CALL adaptivity()
-              IF (switch%ME) time%it = time%it + 1
               CALL project_u0_newmesh(preserve_history=.TRUE.)
               CALL update_uconv_qconv(sol%u, sol%q)
               IF (SIZE(uiter) .NE. SIZE(sol%u)) THEN
@@ -427,14 +437,8 @@ PROGRAM MHDG
                       oscillation_refinements, ' of ', adapt%max_oscillation_refinements
               ENDIF
 
-              IF (switch%ME .EQV. .TRUE.) THEN
-               time%it=time%it-1
-              ENDIF
               ! call adaptivity precedure
               CALL adaptivity()
-              IF (switch%ME .EQV. .TRUE.) THEN
-               time%it=time%it+1
-              ENDIF
 
               ! u0 also needs to be projected from old mesh to new mesh
               CALL project_u0_newmesh(preserve_history=adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol)
@@ -559,14 +563,6 @@ PROGRAM MHDG
               CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
            ENDIF
 
-           ! Prepare the next ME field/control state only if another step remains.
-           IF(switch%ME .AND. time%it .LT. nts) THEN
-              ! ReLoad magnetic field and Jtor
-              CALL load_magnetic_field()
-              CALL set_toroidal_current()
-              CALL SetParticleSource()
-              time%dt = time%dt_ME/simpar%refval_time
-           ENDIF
         END IF
      ELSE
         IF (switch%psdtime) THEN

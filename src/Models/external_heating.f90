@@ -28,9 +28,10 @@ END SUBROUTINE initialize_external_heating
   !*******************************************************
   ! Read the external heating field from a file
   !*******************************************************
-  SUBROUTINE load_external_heating
+  SUBROUTINE load_external_heating(frame)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
     IF (input%external_heating_from_grid) THEN
-      CALL load_external_heating_from_grid
+      CALL load_external_heating_from_grid(frame)
     ELSE
       CALL load_external_heating_nodes
     END IF 
@@ -39,11 +40,13 @@ END SUBROUTINE initialize_external_heating
   !*******************************************************
   ! Read the external heating field from a grid file
   !*******************************************************
-  SUBROUTINE load_external_heating_from_grid
+  SUBROUTINE load_external_heating_from_grid(frame)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
     CHARACTER(LEN=1000)                           :: fname
     INTEGER(HID_T)                                :: file_id
     INTEGER                                       :: IERR, ip, jp, ind, i, k
     CHARACTER(70)        :: nit
+    INTEGER :: frame_index
     REAL*8, POINTER, DIMENSION(:, :)              :: r2D => NULL(), z2D => NULL(), heating2D_ions => NULL(), heating2D_electrons => NULL()
     REAL*8, ALLOCATABLE, DIMENSION(:)             :: xvec, yvec
     REAL*8                                        :: heating_ions, heating_electrons, x, y
@@ -60,7 +63,9 @@ END SUBROUTINE initialize_external_heating
       fname = input%external_heating_path
     ELSE
       fname = input%external_heating_path
-      WRITE(nit, "(i10)") INT(time%it + 1)
+      frame_index = time%it
+      IF (PRESENT(frame)) frame_index = frame
+      WRITE(nit, "(i10)") frame_index
       nit = TRIM(ADJUSTL(nit))
       k = INDEX(nit, " ") - 1
       fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'

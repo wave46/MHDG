@@ -75,15 +75,17 @@ and with `Re_n_pump=0.95`. See [regression instructions](../regression_tests/REA
 For a 2D `NGammaTiTeNeutral` build, `make check-me-restart` reads small synthetic
 HDF5 checkpoints through the production input, initialization, and solution
 readers. It checks static bootstrap initialization, real ME steps 0/1/50/99/100,
-feedback-state restoration, rejection before out-of-range history access, and
-inactive ME compatibility. It needs Python 3 with h5py and NumPy, uses no external
+feedback-state restoration, rejection before out-of-range history access,
+endpoint interpolation/heating selection, and inactive ME compatibility.
+It needs Python 3 with h5py and NumPy, uses no external
 equilibrium or case data, and does not launch a solver simulation.
 
 In ME runs, `nts` is the final global step number: with `nts=100`, restart steps
-50, 99, and 100 leave 50, 1, and 0 advances. The magnetic filename remains
-`equilibrium_(step+1)` when another advance remains. With nts=100, restarting
-at 99 loads frame 0100, and restarting at 100 reads no magnetic files. The
-final advance skips the next field/control update. A restart beyond
+50, 99, and 100 leave 50, 1, and 0 advances. Startup loads the accepted frame
+`equilibrium_(step)`, including frame 0000 at time zero with dt zero. Each advance
+then loads `equilibrium_(step+1)` and updates controls at its endpoint before the
+solve. With nts=100, restarting at 99 loads accepted frame 0099 and endpoint
+0100; restarting at 100 reads no magnetic files. A restart beyond
 the final step is invalid. The non-ME step-count behavior is unchanged.
 
 For the executable loop and MPI exit paths, an optional focused check consumes

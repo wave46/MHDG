@@ -224,6 +224,9 @@ CONTAINS
 #ifdef WITH_PSBLAS
     USE solve_psblas, only: terminate_PSBLAS
 #endif
+    INTEGER :: field_frame
+
+    field_frame = time%it
 
     ! Start timing
     IF (utils%timing) THEN
@@ -323,11 +326,11 @@ CONTAINS
     CALL initialize_magnetic_field()
 
     ! Re-load magnetic field and Jtor
-    CALL load_magnetic_field_Jtor()
+    CALL load_magnetic_field_Jtor(field_frame)
 
     IF (switch%external_heating) THEN
        CALL initialize_external_heating()
-       CALL load_external_heating_from_grid()
+       CALL load_external_heating_from_grid(field_frame)
     ENDIF
 
 

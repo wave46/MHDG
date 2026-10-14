@@ -1215,7 +1215,7 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%z_axis, 'z_axis')
       CALL HDF5_real_saving(group_id2, phys%a_minor, 'a_minor')
       IF (switch%ME) THEN
-         CALL HDF5_array1d_saving(group_id2, phys%puff_exp, input%puff_dimension, 'puff_exp')
+         CALL HDF5_array1d_saving(group_id2, phys%puff_exp, SIZE(phys%puff_exp), 'puff_exp')
          IF (switch%target_variable /= 0) THEN
             CALL HDF5_real_saving(group_id2, phys%feedback_propotional_gain,'feedback_propotional_gain')
             CALL HDF5_real_saving(group_id2, phys%feedback_integral_gain,'feedback_integral_gain')
@@ -1602,6 +1602,7 @@ CONTAINS
     REAL*8, ALLOCATABLE       :: uaux(:,:),utaux(:,:),qaux(:,:)
     REAL*8, POINTER           :: impurity_concentrations_saved(:)
     INTEGER              :: logrho_ptr = 0, n_impurities_saved, saved_ME
+    LOGICAL              :: saved_n_li
 
     NULLIFY(impurity_concentrations_saved)
     Neq = phys%Neq
@@ -1884,6 +1885,10 @@ CONTAINS
        CALL HDF5_group_close(group_id2, ierr)
        IF (switch%target_variable /= 0) THEN           
          CALL HDF5_group_open(group_id, 'physics', group_id2, ierr)
+         ! Startup no longer evaluates feedback before saving the accepted state.
+         phys%n_li = 0.d0
+         CALL H5Lexists_f(group_id2, 'n_li', saved_n_li, ierr)
+         IF (saved_n_li) CALL HDF5_real_reading(group_id2, phys%n_li, 'n_li')
          IF (switch%target_variable == 1) THEN
             CALL HDF5_real_reading(group_id2, phys%puff, 'puff')
          ELSEIF (switch%target_variable == 2) THEN

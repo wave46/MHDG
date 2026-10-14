@@ -60,15 +60,17 @@ CONTAINS
     END IF
   END SUBROUTINE initialize_magnetic_field
 
-  SUBROUTINE load_magnetic_field_Jtor
-      CALL load_magnetic_field()
-      IF (switch%ohmicsrc) CALL set_toroidal_current()
+  SUBROUTINE load_magnetic_field_Jtor(frame)
+      INTEGER, OPTIONAL, INTENT(IN) :: frame
+      CALL load_magnetic_field(frame)
+      IF (switch%ohmicsrc) CALL set_toroidal_current(frame)
   ENDSUBROUTINE load_magnetic_field_Jtor
 
   !**********************************************
   ! Load magnetic field in phys
   !**********************************************
-  SUBROUTINE load_magnetic_field
+  SUBROUTINE load_magnetic_field(frame)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
 
     CALL reset_magnetic_geometry_state()
     phys%B = 0.
@@ -88,12 +90,12 @@ CONTAINS
        ! Magnetic field loaded from file in a cartesian grid
        ! Interpolation is needed
        IF (input%field_from_grid) THEN
-          CALL load_magnetic_field_grid
+          CALL load_magnetic_field_grid(frame)
        ELSE
           IF (MPIvar%glob_id == 0) THEN
              WRITE (6, *) 'WARNING: node-based equilibrium input has no PR03 topology cache; using stored magnetic data.'
           ENDIF
-          CALL load_magnetic_field_nodes
+          CALL load_magnetic_field_nodes(frame)
        ENDIF
 
     CASE (60:69)
@@ -103,12 +105,12 @@ CONTAINS
 
     CASE (70:79)
        ! Magnetic field loaded from file in the mesh nodes
-       CALL load_magnetic_field_nodes
+       CALL load_magnetic_field_nodes(frame)
 
     CASE (80:89)
        ! Magnetic field loaded from file in a cartesian grid
        ! Interpolation is needed
-       CALL load_magnetic_field_grid
+       CALL load_magnetic_field_grid(frame)
 
 
     END SELECT
@@ -233,7 +235,8 @@ CONTAINS
   !***********************************************************************
   ! Magnetic field loaded by a hdf5 file in a cartesian grid
   !***********************************************************************
-  SUBROUTINE load_magnetic_field_grid()
+  SUBROUTINE load_magnetic_field_grid(frame)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
 
 
 
@@ -280,7 +283,7 @@ CONTAINS
           fname = input%field_path
        ELSE
           fname = input%field_path
-          WRITE(nit, "(i10)") INT(time%it + 1)
+          WRITE(nit, "(i10)") equilibrium_frame_index(frame)
           nit = TRIM(ADJUSTL(nit))
           k = INDEX(nit, " ") -1
           fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
@@ -298,7 +301,7 @@ CONTAINS
           fname = 'ITER_135011_0000.h5'
        ELSE
           fname = 'B_field_exp/ITER_135011'
-          WRITE(nit, "(i10)") INT(time%it + 1)
+          WRITE(nit, "(i10)") equilibrium_frame_index(frame)
           nit = TRIM(ADJUSTL(nit))
           k = INDEX(nit, " ") -1
           fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
@@ -605,10 +608,11 @@ CONTAINS
   !***********************************************************************
   ! Magnetic field loaded by a hdf5 file in the nodes !TODO modify for 3D
   !***********************************************************************
-  SUBROUTINE load_magnetic_field_nodes()
+  SUBROUTINE load_magnetic_field_nodes(frame)
 
 
     USE MPI_OMP, only: MPIvar
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
     INTEGER        ::  ierr, k
     INTEGER        ::  i
     CHARACTER(LEN=1000) :: fname = 'Evolving_equilibrium'
@@ -638,7 +642,7 @@ CONTAINS
        fname = TRIM(ADJUSTL(input%field_path))
     ELSE
        fname = TRIM(ADJUSTL(input%field_path))
-       WRITE(nit, "(i10)") INT(time%it + 1)
+       WRITE(nit, "(i10)") equilibrium_frame_index(frame)
        nit = TRIM(ADJUSTL(nit))
        k = INDEX(nit, " ") -1
        fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))
@@ -1142,7 +1146,8 @@ CONTAINS
   END SUBROUTINE calcRippleField
 #endif
 
-  SUBROUTINE set_toroidal_current()
+  SUBROUTINE set_toroidal_current(frame)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
     REAL*8, ALLOCATABLE :: stored_toroidal_current(:)
 
     toroidal_current_from_flux = .FALSE.
@@ -1158,7 +1163,7 @@ CONTAINS
        CALL derive_toroidal_current_from_flux()
        toroidal_current_from_flux = .TRUE.
        ALLOCATE(stored_toroidal_current(SIZE(phys%Jtor)))
-       CALL load_stored_toroidal_current(stored_toroidal_current)
+       CALL load_stored_toroidal_current(stored_toroidal_current,frame)
        CALL fit_and_apply_toroidal_current_sign(stored_toroidal_current)
        DEALLOCATE(stored_toroidal_current)
     ELSE
@@ -1166,7 +1171,7 @@ CONTAINS
           WRITE (6, *) &
                'WARNING: no bicubic psi geometry; falling back to stored HDF5 Jtor.'
        ENDIF
-       CALL load_stored_toroidal_current(phys%Jtor)
+       CALL load_stored_toroidal_current(phys%Jtor,frame)
     ENDIF
 
     CALL computeIplasma()
@@ -1213,8 +1218,9 @@ CONTAINS
 
   END SUBROUTINE derive_toroidal_current_from_flux
 
-  SUBROUTINE load_stored_toroidal_current(jtor_at_nodes)
+  SUBROUTINE load_stored_toroidal_current(jtor_at_nodes,frame)
     REAL*8, INTENT(OUT) :: jtor_at_nodes(:)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
     INTEGER        :: i,ierr,ip,jp,ind, k
 #ifdef TOR3D
     INTEGER        :: j
@@ -1245,7 +1251,7 @@ CONTAINS
           fname = input%jtor_path
        ELSE
           fname = input%jtor_path
-          WRITE(nit, "(i10)") INT(time%it + 1)
+          WRITE(nit, "(i10)") equilibrium_frame_index(frame)
           nit = TRIM(ADJUSTL(nit))
           k = INDEX(nit, " ") -1
           fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
@@ -1261,7 +1267,7 @@ CONTAINS
           fname = 'ITER_135011_Jtor_0000.h5'
        ELSE
           fname = 'B_field_exp/ITER_135011_Jtor'
-          WRITE(nit, "(i10)") INT(time%it + 1)
+          WRITE(nit, "(i10)") equilibrium_frame_index(frame)
           nit = TRIM(ADJUSTL(nit))
           k = INDEX(nit, " ") -1
           fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
@@ -1589,10 +1595,26 @@ CONTAINS
           WRITE(6,*) 'Puff is analytical'
        ENDIF
     ELSE
-       CALL SetParticleSource()
+       ! The initial frame has dt=0. Feedback is first updated for an endpoint,
+       ! before its solve; restart controller history must remain untouched here.
+       IF (time%it == 0) THEN
+          phys%feedback_integral_error = 0.d0
+          phys%feedback_previous_error = 0.d0
+          phys%feedback_integral_error_xpr = 0.d0
+          phys%feedback_previous_error_xpr = 0.d0
+          phys%n_li = 0.d0
+       ENDIF
     END IF
 #endif
   ENDSUBROUTINE initialize_puff
+
+  INTEGER FUNCTION equilibrium_frame_index(frame) RESULT(index)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    ! Default: rebuild the equilibrium of the current state, including remeshing.
+    ! A new advance explicitly requests the next endpoint before incrementing it.
+    index = time%it
+    IF (PRESENT(frame)) index = frame
+  END FUNCTION equilibrium_frame_index
 
 SUBROUTINE read_1D_diffusion_profiles()
    CHARACTER(LEN=1000) :: fname
