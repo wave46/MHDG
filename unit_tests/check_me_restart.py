@@ -63,6 +63,7 @@ def equilibrium_frames(directory, me):
                 f["time"], f["dt"] = [.08 * frame], [.08 * frame]
                 if prefix == "field":
                     f["flux2D"] = r**2 + z**2
+                    f["psiSep"] = [1.]
                     f["Br2D"], f["Bz2D"], f["Bphi2D"] = r, z, np.ones_like(r)
                 else:
                     f["Jtor"] = 1 + 2*r + 3*z + 10*frame
@@ -88,8 +89,10 @@ def main():
         ("me_full_filenames", 50, True, 100, True, 50),
         ("non_me_full_filenames", 100, True, 2, False, 0),
         ("field_shape_mismatch", 0, True, 100, True, "Equilibrium dataset shape differs from grid"),
-        ("current_shape_mismatch", 0, True, 100, True, "Equilibrium dataset shape differs from grid"),
+        ("current_shape_mismatch", 0, True, 100, True, "Jtor dataset shape differs from its R,Z grid"),
         ("missing_full_filename", 0, True, 100, True, "Equilibrium input file not found: missing.h5"),
+        ("trajectory_me", 50, True, 100, True, 50),
+        ("trajectory_fixed", 100, True, 2, False, 0),
         ("control_shape_mismatch", 0, True, 100, True, "Control dataset length differs from time"),
         ("control_rank_mismatch", 0, True, 100, True, "Control values and time must be rank one"),
         ("control_too_short", 0, True, 100, True, "Invalid control series length"),
@@ -101,6 +104,10 @@ def main():
             text = parameters(template, nts=nts, me=me, full_paths="full_filename" in name)
             if name == "missing_full_filename":
                 text = text.replace("'field_0000.h5'", "'missing.h5'")
+            if name.startswith("trajectory_"):
+                text = re.sub(r"(?im)^(\s*field_path\s*=).*?$", r"\g<1> 'trajectory.h5'", text)
+                # Embedded current needs no separate path; exercise its namelist default.
+                text = re.sub(r"(?im)^\s*jtor_path\s*=.*?\n", "", text)
             (directory / "param.txt").write_text(text)
             checkpoint(directory / "checkpoint.h5", step, saved_me)
             with h5py.File(directory / "controls.h5", "w") as f:
@@ -126,6 +133,21 @@ def main():
                 "1 1 2 1 1 1 2\n2 1 2 2 2 2 3\n3 1 2 3 3 3 1\n"
                 "4 2 2 4 4 1 2 3\n$EndElements\n")
             equilibrium_frames(directory, me)
+            if name.startswith("trajectory_"):
+                frames = (0, 1) if me else (0,)
+                with h5py.File(directory / "trajectory.h5", "w") as output:
+                    output["time"] = [.08*frame for frame in frames]
+                    with h5py.File(directory / "field_0000.h5") as field:
+                        output["grid/r"], output["grid/z"] = field["r2D"][:, 0], field["z2D"][0, :]
+                    for new, old in {"psi": "flux2D", "Bphi": "Bphi2D", "Br": "Br2D", "Bz": "Bz2D",
+                                     "psiSep": "psiSep", "Jtor": "Jtor"}.items():
+                        values = []
+                        for frame in frames:
+                            prefix = "current" if new == "Jtor" else "field"
+                            with h5py.File(directory / f"{prefix}_{frame:04d}.h5") as source:
+                                plane = source[old][...]
+                                values.append(float(plane[0]) if new == "psiSep" else plane.T)
+                        output[f"equilibrium/{new}"] = np.array(values)
             if name == "missing_full_filename":
                 (directory / "missing_0000.h5").symlink_to("field_0000.h5")
             if name in {"field_shape_mismatch", "current_shape_mismatch"}:

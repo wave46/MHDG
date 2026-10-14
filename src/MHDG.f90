@@ -608,6 +608,7 @@ PROGRAM MHDG
   END IF
 
   ! free all main allocatables and global variables
+  CALL close_magnetic_input()
   CALL free_main()
 
 END PROGRAM MHDG

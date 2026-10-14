@@ -9,6 +9,7 @@
 
 MODULE magnetic_field
   USE input_files, ONLY: resolve_input_filename
+  USE equilibrium_series, ONLY: equilibrium_series_t, equilibrium_sample_t
   USE prec_const
   USE globals
   USE MPI_OMP
@@ -33,7 +34,80 @@ MODULE magnetic_field
   REAL*8, PARAMETER :: field_alpha_canonical_warning = 0.10d0
   REAL*8, PARAMETER :: jtor_comparison_warning = 0.25d0
   REAL*8, PARAMETER :: stored_jtor_outside_core_warning = 0.01d0
+  TYPE(equilibrium_series_t), SAVE, PRIVATE :: equilibrium_input
+  REAL(float), ALLOCATABLE, SAVE, PRIVATE :: equilibrium_times(:)
+  LOGICAL, SAVE, PRIVATE :: equilibrium_input_open = .FALSE.
 CONTAINS
+
+  SUBROUTINE open_magnetic_input()
+    INTEGER :: ierr
+    CHARACTER(LEN=1000) :: filename, current_path, message
+
+    IF (equilibrium_input_open) RETURN
+    filename = equilibrium_input_filename(input%field_path, 0)
+    CALL equilibrium_input%open(filename, ierr, message)
+    CALL check_equilibrium_input(ierr, message)
+    current_path = ''
+    IF (switch%ohmicsrc) current_path = input%jtor_path
+    IF (equilibrium_input%is_trajectory()) THEN
+       IF (LEN_TRIM(current_path) > 0) &
+            CALL check_equilibrium_input(-1, 'Trajectory Jtor is embedded; leave jtor_path empty')
+    ELSEIF (switch%ME) THEN
+       CALL equilibrium_input%open_numbered(input%field_path, time%nts, ierr, message, current_path)
+    ELSEIF (LEN_TRIM(current_path) > 0) THEN
+       CALL equilibrium_input%open(filename, ierr, message, current_path)
+    ENDIF
+    CALL check_equilibrium_input(ierr, message)
+    CALL equilibrium_input%time_points(equilibrium_times)
+    IF (switch%ME) THEN
+       IF (SIZE(equilibrium_times) < time%nts+1) &
+            CALL check_equilibrium_input(-1, 'ME input must cover initial frame 0000 through nts')
+    ELSE
+       IF (SIZE(equilibrium_times) /= 1) &
+            CALL check_equilibrium_input(-1, 'A multi-frame trajectory requires ME; use one frame for a fixed equilibrium')
+    ENDIF
+    equilibrium_input_open = .TRUE.
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium provider opened: ', TRIM(input%field_path)
+  END SUBROUTINE open_magnetic_input
+
+  SUBROUTINE sample_magnetic_input(frame, sample)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    TYPE(equilibrium_sample_t), INTENT(OUT) :: sample
+    INTEGER :: index, ierr
+    REAL(float) :: target_time
+    CHARACTER(LEN=1000) :: message
+
+    CALL open_magnetic_input()
+    target_time = time%t*simpar%refval_time
+    IF (switch%ME) THEN
+       index = equilibrium_frame_index(frame)
+       IF (index < 0 .OR. index >= SIZE(equilibrium_times)) &
+            CALL check_equilibrium_input(-1, 'Requested equilibrium frame is outside input coverage')
+       target_time = equilibrium_times(index+1)
+    ENDIF
+    CALL equilibrium_input%sample_at(target_time, sample, ierr, message)
+    CALL check_equilibrium_input(ierr, message)
+  END SUBROUTINE sample_magnetic_input
+
+  SUBROUTINE check_equilibrium_input(ierr, message)
+    INTEGER, INTENT(IN) :: ierr
+    CHARACTER(LEN=*), INTENT(IN) :: message
+    IF (ierr == 0) RETURN
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium input error: ', TRIM(message)
+    STOP 1
+  END SUBROUTINE check_equilibrium_input
+
+  SUBROUTINE close_magnetic_input()
+    CALL equilibrium_input%clear()
+    IF (ALLOCATED(equilibrium_times)) DEALLOCATE(equilibrium_times)
+    equilibrium_input_open = .FALSE.
+  END SUBROUTINE close_magnetic_input
+
+  LOGICAL FUNCTION uses_equilibrium_grid()
+    uses_equilibrium_grid = (switch%testcase >= 50 .AND. switch%testcase <= 59 .AND. input%field_from_grid) .OR. &
+         (switch%testcase >= 80 .AND. switch%testcase <= 89)
+  END FUNCTION uses_equilibrium_grid
+
 
   FUNCTION equilibrium_input_filename(path, frame) RESULT(filename)
     CHARACTER(LEN=*), INTENT(IN) :: path
@@ -303,20 +377,19 @@ CONTAINS
 
 
 
-    INTEGER                           :: i, ierr, ip, jp, ind
+    INTEGER                           :: i, ierr, ip, jp, ind, index
 #ifdef TOR3D
     INTEGER                           :: j
 #endif
-    INTEGER(HID_T)                    :: file_id
-    REAL*8, POINTER, DIMENSION(:, :)  :: r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D
+    TYPE(equilibrium_sample_t) :: sample
+    REAL*8, ALLOCATABLE :: flux2D(:,:), Br2D(:,:), Bz2D(:,:), Bphi2D(:,:)
     REAL*8, ALLOCATABLE, DIMENSION(:) :: xvec, yvec
     REAL*8, ALLOCATABLE, DIMENSION(:, :) :: Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D
     REAL*8, ALLOCATABLE :: wall_coordinates(:, :)
     INTEGER, ALLOCATABLE :: wall_faces(:, :)
     REAL*8                            :: x, y
     REAL*8                            :: x_safe, dflux_dx, dflux_dy
-    REAL*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
-    CHARACTER(LEN=1000) :: fname
+    REAL*8                            :: Br, Bz, Bt, flux, psiSep
     CHARACTER(LEN=256) :: geometry_message, restart_message
 
     REAL*8                            :: q_cyl, omega,a
@@ -333,42 +406,20 @@ CONTAINS
        ENDIF
     END IF
 
-    fname = equilibrium_input_filename(input%field_path, frame)
-    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Magnetic field loaded from file: ', TRIM(fname)
-    CALL HDF5_open(fname, file_id, ierr)
-    IF (ierr /= 0) STOP 1
-    CALL equilibrium_grid_dimensions(file_id, &
-         [CHARACTER(LEN=8) :: 'r2D', 'z2D', 'flux2D', 'Br2D', 'Bz2D', 'Bphi2D'], ip, jp)
+    CALL sample_magnetic_input(frame, sample)
+    IF (.NOT. ALLOCATED(sample%br) .OR. .NOT. ALLOCATED(sample%bz)) &
+         CALL check_equilibrium_input(-1, 'Magnetic reconstruction currently requires reference Br and Bz')
+    CALL equilibrium_input%grid(xvec, yvec)
+    xvec = xvec/phys%lscale
+    yvec = yvec/phys%lscale
+    ip = SIZE(yvec)
+    jp = SIZE(xvec)
     input%field_dimensions = [ip, jp]
-
-    ALLOCATE (r2D(ip, jp))
-    ALLOCATE (z2D(ip, jp))
-    ALLOCATE (flux2D(ip, jp))
-    ALLOCATE (Br2D(ip, jp))
-    ALLOCATE (Bz2D(ip, jp))
-    ALLOCATE (Bphi2D(ip, jp))
-    CALL HDF5_array2D_reading(file_id, r2D, 'r2D')
-    CALL HDF5_array2D_reading(file_id, z2D, 'z2D')
-    CALL HDF5_real_reading(file_id, psiSep, 'psiSep')
-    CALL HDF5_array2D_reading(file_id, flux2D, 'flux2D')
-    CALL HDF5_array2D_reading(file_id, Br2D, 'Br2D')
-    CALL HDF5_array2D_reading(file_id, Bz2D, 'Bz2D')
-    CALL HDF5_array2D_reading(file_id, Bphi2D, 'Bphi2D')
-    IF (switch%ME ) THEN
-       CALL HDF5_real_reading(file_id, dt_ME, 'dt')
-       CALL HDF5_real_reading(file_id, t_ME, 'time')
-    ENDIF
-    CALL HDF5_close(file_id)
-
-    ! Apply length scale
-    r2D = r2D/phys%lscale
-    z2D = z2D/phys%lscale
-
-    ! Interpolate
-    ALLOCATE (xvec(jp))
-    ALLOCATE (yvec(ip))
-    xvec = r2D(1, :)
-    yvec = z2D(:, 1)
+    psiSep = sample%psi_sep
+    CALL MOVE_ALLOC(sample%psi, flux2D)
+    CALL MOVE_ALLOC(sample%br, Br2D)
+    CALL MOVE_ALLOC(sample%bz, Bz2D)
+    CALL MOVE_ALLOC(sample%bphi, Bphi2D)
 
     CALL magnetic_equilibrium%init(xvec, yvec, flux2D, ierr, geometry_message)
     IF (ierr /= 0) THEN
@@ -472,13 +523,14 @@ CONTAINS
 #endif
 
     IF (switch%ME) THEN
-       time%dt_ME = dt_ME
-       time%t_ME = t_ME
+       index = equilibrium_frame_index(frame)
+       time%t_ME = sample%time
+       time%dt_ME = 0.d0
+       IF (index > 0) time%dt_ME = equilibrium_times(index+1)-equilibrium_times(index)
     ENDIF
     ! Free memory
     DEALLOCATE (Br2D, Bz2D, Bphi2D, xvec, yvec)
-    DEALLOCATE (r2D, z2D, flux2D)
-    NULLIFY (r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D)
+    DEALLOCATE (flux2D)
 
   END SUBROUTINE load_magnetic_field_grid
 
@@ -1278,48 +1330,19 @@ CONTAINS
 #ifdef TOR3D
     INTEGER        :: j
 #endif
-    INTEGER(HID_T) :: file_id
-
-    CHARACTER(LEN=1000)    :: fname
-
-    REAL*8, POINTER, DIMENSION(:,:) :: r2D, z2D, Jtor
+    REAL*8, ALLOCATABLE :: Jtor(:,:)
     REAL*8, ALLOCATABLE, DIMENSION(:) :: xvec, yvec
     REAL*8, ALLOCATABLE, DIMENSION(:,:) :: Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D
-    REAL*8                            :: dt_ME,t_ME
     REAL*8                            :: x,y
-    REAL*8,PARAMETER                  :: tol = 1.e-12
     ! Allocate storing space in phys
     jtor_at_nodes = 0.d0
 
-    fname = equilibrium_input_filename(input%jtor_path, frame)
-    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Toroidal current loaded from file: ', TRIM(fname)
-    CALL HDF5_open(fname, file_id, ierr)
-    IF (ierr /= 0) STOP 1
-    CALL equilibrium_grid_dimensions(file_id, [CHARACTER(LEN=8) :: 'r2D', 'z2D', 'Jtor'], ip, jp)
+    CALL read_current_input(frame, Jtor, xvec, yvec)
+    xvec = xvec/phys%lscale
+    yvec = yvec/phys%lscale
+    ip = SIZE(yvec)
+    jp = SIZE(xvec)
     input%jtor_dimensions = [ip, jp]
-
-    ALLOCATE(r2D(ip,jp))
-    ALLOCATE(z2D(ip,jp))
-    ALLOCATE(Jtor(ip,jp))
-
-    CALL HDF5_array2D_reading(file_id,r2D,'r2D')
-    CALL HDF5_array2D_reading(file_id,z2D,'z2D')
-    CALL HDF5_array2D_reading(file_id,Jtor,'Jtor')
-    IF (switch%ME) THEN
-       CALL HDF5_real_reading(file_id, dt_ME, 'dt')
-       CALL HDF5_real_reading(file_id, t_ME, 'time')
-    ENDIF
-    CALL HDF5_close(file_id)
-
-    ! Apply length scale
-    r2D = r2D/phys%lscale
-    z2D = z2D/phys%lscale
-
-    ! Interpolate
-    ALLOCATE(xvec(jp))
-    ALLOCATE(yvec(ip))
-    xvec = r2D(1,:)
-    yvec = z2D(:,1)
     ALLOCATE(Jtor_dx2D(ip,jp))
     ALLOCATE(Jtor_dy2D(ip,jp))
     ALLOCATE(Jtor_dxy2D(ip,jp))
@@ -1341,20 +1364,55 @@ CONTAINS
 #endif
     ENDDO
 
-    ! check that time is the same
-    IF (switch%ME) THEN
-       IF ((ABS(dt_ME - time%dt_ME) > TOL) .OR. (ABS(t_ME - time%t_ME) > TOL)) THEN
-          WRITE(6,*) 'Time in current and in equilibrium files are different'
-          STOP
-       ENDIF
-    ENDIF
-
-    ! Free memory
-    DEALLOCATE(r2D, z2D, Jtor, xvec, yvec, Jtor_dx2D, Jtor_dy2D, &
-         Jtor_dxy2D)
-    NULLIFY(r2D,z2D,Jtor)
+    DEALLOCATE(Jtor, xvec, yvec, Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D)
 
   END SUBROUTINE load_stored_toroidal_current
+
+  SUBROUTINE read_current_input(frame, jtor, r, z)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    REAL*8, ALLOCATABLE, INTENT(OUT) :: jtor(:,:), r(:), z(:)
+    TYPE(equilibrium_sample_t) :: sample
+
+    IF (uses_equilibrium_grid()) THEN
+       CALL sample_magnetic_input(frame, sample)
+       IF (.NOT. ALLOCATED(sample%jtor)) &
+            CALL check_equilibrium_input(-1, 'Ohmic heating currently requires reference Jtor')
+       CALL equilibrium_input%current_grid(r, z)
+       CALL MOVE_ALLOC(sample%jtor, jtor)
+    ELSE
+       CALL read_legacy_current_input(frame, jtor, r, z)
+    ENDIF
+  END SUBROUTINE read_current_input
+
+  SUBROUTINE read_legacy_current_input(frame, jtor, r, z)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    REAL*8, ALLOCATABLE, INTENT(OUT) :: jtor(:,:), r(:), z(:)
+    REAL*8, ALLOCATABLE :: r2d(:,:), z2d(:,:)
+    INTEGER(HID_T) :: file_id
+    INTEGER :: ierr, ip, jp
+    REAL*8 :: dt_me, t_me
+    CHARACTER(LEN=1000) :: filename
+
+    filename = equilibrium_input_filename(input%jtor_path, frame)
+    CALL HDF5_open(filename, file_id, ierr)
+    CALL check_equilibrium_input(ierr, 'Cannot open legacy current input: '//TRIM(filename))
+    CALL equilibrium_grid_dimensions(file_id, [CHARACTER(LEN=8) :: 'r2D', 'z2D', 'Jtor'], ip, jp)
+    ALLOCATE(r2d(ip,jp), z2d(ip,jp), jtor(ip,jp))
+    CALL HDF5_array2D_reading(file_id, r2d, 'r2D')
+    CALL HDF5_array2D_reading(file_id, z2d, 'z2D')
+    CALL HDF5_array2D_reading(file_id, jtor, 'Jtor')
+    IF (switch%ME) THEN
+       CALL HDF5_real_reading(file_id, dt_me, 'dt')
+       CALL HDF5_real_reading(file_id, t_me, 'time')
+    ENDIF
+    CALL HDF5_close(file_id)
+    r = r2d(1,:)
+    z = z2d(:,1)
+    IF (switch%ME) THEN
+       IF (ABS(dt_me-time%dt_ME) > 1.d-12 .OR. ABS(t_me-time%t_ME) > 1.d-12) &
+            CALL check_equilibrium_input(-1, 'Time in current and in nodal equilibrium files differs')
+    ENDIF
+  END SUBROUTINE read_legacy_current_input
 
   SUBROUTINE fit_and_apply_toroidal_current_sign(stored_toroidal_current)
     REAL*8, INTENT(IN) :: stored_toroidal_current(:)

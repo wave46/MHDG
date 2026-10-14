@@ -10,9 +10,10 @@ PROGRAM test_me_restart
   USE external_heating, ONLY: initialize_external_heating, load_external_heating
   USE magnetic_field, ONLY: equilibrium_input_filename, equilibrium_grid_dimensions, load_stored_toroidal_current
   USE magnetic_field, ONLY: open_control_series, load_puff_from_file, load_zeff, load_impurity_concentration
-  USE magnetic_field, ONLY: initialize_magnetic_field, load_magnetic_field_nodes
+  USE magnetic_field, ONLY: initialize_magnetic_field, load_magnetic_field_nodes, sample_magnetic_input, close_magnetic_input
+  USE equilibrium_series, ONLY: equilibrium_sample_t
   USE HDF5_io_module, ONLY: HDF5_open, HDF5_close, HDF5_dataset_shape
-  USE HDF5, ONLY: HID_T, HSIZE_T
+  USE HDF5, ONLY: HID_T, HSIZE_T, H5Lexists_f
   IMPLICIT NONE
   INTEGER :: nts
   REAL :: dt, restored_time
@@ -20,7 +21,9 @@ PROGRAM test_me_restart
   REAL :: knots(3), values(2,2), expected_heating
   INTEGER(HID_T) :: field_file
   INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
-  INTEGER :: ierr, ip, jp
+  INTEGER :: ierr, ip, jp, configured_nts
+  LOGICAL :: trajectory
+  TYPE(equilibrium_sample_t) :: field_sample
   REAL*8 :: current(1)
   CHARACTER(LEN=1000) :: field_filename
   CHARACTER(LEN=1024) :: output_name, expected_output, reference_mesh_name
@@ -110,27 +113,41 @@ PROGRAM test_me_restart
   field_filename = equilibrium_input_filename(input%field_path, 0)
   CALL HDF5_open(field_filename, field_file, ierr)
   IF (ierr /= 0) ERROR STOP 'open equilibrium fixture'
-  CALL equilibrium_grid_dimensions(field_file, &
-       [CHARACTER(LEN=8) :: 'r2D', 'z2D', 'flux2D', 'Br2D', 'Bz2D', 'Bphi2D'], ip, jp)
-  IF (ip /= 3 .OR. jp /= 4) ERROR STOP 'equilibrium grid orientation'
-  CALL HDF5_dataset_shape(field_file, 'time', dimensions, ierr)
-  IF (ierr /= 0) ERROR STOP 'control-vector shape query'
-  IF (SIZE(dimensions) /= 1) ERROR STOP 'control-vector rank'
-  IF (dimensions(1) /= 1) ERROR STOP 'control-vector length'
+  CALL H5Lexists_f(field_file, 'equilibrium', trajectory, ierr)
+  IF (.NOT. trajectory) THEN
+    CALL equilibrium_grid_dimensions(field_file, &
+         [CHARACTER(LEN=8) :: 'r2D', 'z2D', 'flux2D', 'Br2D', 'Bz2D', 'Bphi2D'], ip, jp)
+    IF (ip /= 3 .OR. jp /= 4) ERROR STOP 'equilibrium grid orientation'
+    CALL HDF5_dataset_shape(field_file, 'time', dimensions, ierr)
+    IF (ierr /= 0) ERROR STOP 'control-vector shape query'
+    IF (SIZE(dimensions) /= 1) ERROR STOP 'control-vector rank'
+    IF (dimensions(1) /= 1) ERROR STOP 'control-vector length'
+  ENDIF
   CALL HDF5_close(field_file)
   ALLOCATE(Mesh%X(1,2))
   Mesh%X = 0.5d0/phys%lscale
   time%dt_ME = 0.d0
   time%t_ME = 0.d0
+  ! This reader probe has two frames; restore the restart's full nts afterwards.
+  configured_nts = time%nts
+  time%nts = 1
+  CALL sample_magnetic_input(0, field_sample)
+  IF (ANY(SHAPE(field_sample%psi) /= [3,4]) .OR. field_sample%psi(3,4) /= 0.5d0) &
+       ERROR STOP 'provider magnetic initial frame/orientation'
   CALL load_stored_toroidal_current(current, 0)
   IF (ABS(current(1)-3.5d0) > 1.d-12) ERROR STOP 'initial current interpolation'
   IF (switch%ME) THEN
      field_filename = equilibrium_input_filename(input%field_path, 1)
      time%dt_ME = 0.08d0
      time%t_ME = 0.08d0
+     CALL sample_magnetic_input(1, field_sample)
+     IF (ABS(field_sample%time-0.08d0) > 1.d-12 .OR. field_sample%frame_left /= 1) &
+          ERROR STOP 'provider magnetic endpoint'
      CALL load_stored_toroidal_current(current, 1)
      IF (ABS(current(1)-13.5d0) > 1.d-12) ERROR STOP 'endpoint current interpolation'
   ENDIF
+  CALL close_magnetic_input()
+  time%nts = configured_nts
   DEALLOCATE(Mesh%X)
 
   ! Dimensions of the synthetic triangle checkpoint, after the one-node probes.

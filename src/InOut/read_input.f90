@@ -153,6 +153,7 @@ SUBROUTINE READ_input()
   check_neutral_positivity = .TRUE.
   compute_from_flux = .TRUE.
   divide_by_2pi = .FALSE.
+  jtor_path = ''
   field_dimensions = 0
   jtor_dimensions = 0
   puff_dimension = 0

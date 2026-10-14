@@ -31,6 +31,7 @@ MODULE equilibrium_series
      PROCEDURE :: sample_at => series_sample_at
      PROCEDURE :: grid => series_grid
      PROCEDURE :: current_grid => series_current_grid
+     PROCEDURE :: is_trajectory => series_is_trajectory
      PROCEDURE :: time_points => series_time_points
      PROCEDURE :: clear => series_clear
      FINAL :: series_finalize
@@ -645,6 +646,11 @@ CONTAINS
        z = this%z
     ENDIF
   END SUBROUTINE series_current_grid
+
+  LOGICAL FUNCTION series_is_trajectory(this)
+    CLASS(equilibrium_series_t), INTENT(IN) :: this
+    series_is_trajectory = this%trajectory
+  END FUNCTION series_is_trajectory
 
   SUBROUTINE series_time_points(this, times)
     CLASS(equilibrium_series_t), INTENT(IN) :: this
