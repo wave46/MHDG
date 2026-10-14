@@ -25,7 +25,7 @@
         {"suite": "impurities"}, {"suite": "mixture_parallel"}, {"suite": "stored_field"},
         {"suite": "neutralgamma"}, {"suite": "initialization"},
         {"suite": "moving_equilibrium"}, {"suite": "moving_equilibrium_short"},
-        {"suite": "moving_equilibrium_parallel"}
+        {"suite": "moving_equilibrium_parallel"}, {"suite": "moving_equilibrium_restart"}
       ]
     }
   },
@@ -39,6 +39,11 @@
       "description": "Short 80 ms prescribed-puff and recycling-feedback goldens with off-knot controls",
       "case": "moving_equilibrium",
       "workflows": ["mode0_short", "mode2_short"]
+    },
+    "moving_equilibrium_restart": {
+      "description": "Step-six restart overlap and ten held-input 80 ms advances to quasi-steady plasma",
+      "case": "moving_equilibrium",
+      "workflows": ["mode1_restart"]
     },
     "moving_equilibrium_parallel": {
       "description": "Short 80 ms puff feedback: MPI1/OMP1 versus MPI4/OMP1",

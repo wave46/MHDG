@@ -158,19 +158,19 @@ def me_harness(harness):
     source = harness.source
     (source / "magnetic").mkdir()
     frames = []
-    for n in range(26):
+    for n in range(29):
         frame = {}
         for kind in ("magnetic", "current"):
-            path = source / f"magnetic/{kind}_{n + 1:04d}.h5"
+            path = source / f"magnetic/{kind}_{n:04d}.h5"
             with h5py.File(path, "w") as handle:
-                handle["time"], handle["dt"] = float(n * .02), .02
-                handle["field"] = np.arange(4).reshape(2, 2) + n * 10
+                handle["time"], handle["dt"] = float(n * .02), .02 if n else 0.
+                handle["field"] = np.arange(4).reshape(2, 2) + min(n, 25) * 10
             frame[kind] = path.relative_to(source).as_posix()
         frames.append(frame)
     (source / "series.json").write_text(json.dumps({"schema_version": 1, "dt_s": .02, "frames": frames}))
     for name in ("target_density", "impurity_concentration"):
         with h5py.File(source / f"{name}.h5", "w") as handle:
-            handle["time"], handle[name] = [0., .5, .52], [2., 10., 10.]
+            handle["time"], handle[name] = [0., .5, .56], [2., 10., 10.]
     with h5py.File(source / "restart.h5", "r+") as handle:
         handle["simulation_parameters/adimensionalization/time_scale"] = 2e-7
     (source / "impurity_model_w.nml").write_text("&IMPURITY_RADIATION_LST\n"
@@ -194,10 +194,10 @@ def me_harness(harness):
 
 
 @pytest.mark.parametrize("dt,steps,mapping", [
-    (.08, None, [1, 5, 9, 13, 17, 21, 25, 26]),
+    (.08, None, [1, 5, 9, 13, 17, 21, 25, 29]),
     (.1, None, [1, 6, 11, 16, 21, 26]), (.02, 3, [1, 2, 3, 4]),
 ])
-def test_me_preparation_retimes_pairs_and_reuses_canonical_controls(me_harness, dt, steps, mapping):
+def test_me_preparation_selects_endpoint_pairs_and_reuses_canonical_controls(me_harness, dt, steps, mapping):
     import h5py
     import numpy as np
     from regression_tests.files import file_identity
@@ -222,9 +222,9 @@ def test_me_preparation_retimes_pairs_and_reuses_canonical_controls(me_harness, 
         assert file_identity(run.path / name) == identity
         number = int(name[-7:-3])
         with h5py.File(run.path / name) as handle:
-            assert handle["time"][()] == pytest.approx((number - 1) * dt)
-            assert handle["dt"][()] == dt
-            np.testing.assert_array_equal(handle["field"][()], np.arange(4).reshape(2, 2) + (mapping[number - 1] - 1) * 10)
+            assert handle["time"][()] == pytest.approx(number * dt)
+            assert handle["dt"][()] == (dt if number else 0.)
+            np.testing.assert_array_equal(handle["field"][()], np.arange(4).reshape(2, 2) + min(mapping[number] - 1, 25) * 10)
     assert values["target_density_dimension"] == 3
     assert (run.path / "inputs/target_density.h5").resolve() == bundle / "inputs/target_density.h5"
     assert (run.path / "inputs/restart.h5").is_symlink()
@@ -233,7 +233,26 @@ def test_me_preparation_retimes_pairs_and_reuses_canonical_controls(me_harness, 
     assert original == {str(p): file_identity(p) for p in bundle.rglob("*") if p.is_file()}
 
 
-@pytest.mark.parametrize("failure", ["timestep", "metadata", "normalized_override", "control_range", "control_dimension"])
+@pytest.mark.parametrize("bad_time", [False, True])
+def test_me_preparation_restores_checkpoint_clock(me_harness, bad_time):
+    import h5py
+
+    with h5py.File(me_harness.root / "me_bundle/inputs/restart.h5", "r+") as handle:
+        handle['simulation_parameters/switches/ME'] = 1
+        handle['simulation_parameters/time/Current_time_step_number'] = 1
+        handle['simulation_parameters/time/Current_time'] = (.1 if bad_time else .08) / 2e-7
+    options = {"validate_bundle": False, "requested_overrides": {"nts": 3}}
+    if bad_time:
+        with pytest.raises(BundleError, match="restart time differs"):
+            prepare(me_harness, **options)
+    else:
+        run = prepare(me_harness, **options)
+        plan = json.loads((run.path / 'run_plan.json').read_text())
+        assert plan['moving_equilibrium_inputs']['initial_step'] == 1
+        assert plan['parameter_overrides']['nts'] == 3
+
+
+@pytest.mark.parametrize("failure", ["timestep", "metadata", "initial_dt", "normalized_override", "control_range", "control_dimension"])
 def test_me_preparation_failure_is_atomic(me_harness, failure):
     import h5py
 
@@ -243,9 +262,9 @@ def test_me_preparation_failure_is_atomic(me_harness, failure):
         case = json.loads(path.read_text())
         case["workflows"]["warm"]["moving_equilibrium"]["time_step_s"] = .07
         path.write_text(json.dumps(case))
-    elif failure == "metadata":
-        with h5py.File(me_harness.root / "me_bundle/inputs/equilibrium_series/magnetic/current_0001.h5", "r+") as handle:
-            handle["time"][...] = .3
+    elif failure in {"metadata", "initial_dt"}:
+        with h5py.File(me_harness.root / "me_bundle/inputs/equilibrium_series/magnetic/current_0000.h5", "r+") as handle:
+            handle["time" if failure == "metadata" else "dt"][...] = .3 if failure == "metadata" else .02
     elif failure == "control_range":
         with h5py.File(me_harness.root / "me_bundle/inputs/target_density.h5", "r+") as handle:
             handle["time"][...] = [0., .1, .2]

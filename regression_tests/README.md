@@ -113,15 +113,40 @@ initialization and the focused NeutralGamma probe described above.
 The separate `moving_equilibrium` bundle supplies a limited restart, one indexed
 canonical magnetic/current series and explicit control curves. Case recipes
 select 80 ms puff feedback (seven advances), a 100 ms refinement-limit stop
-(compare completed step three), and two-advance 80 ms prescribed-puff/recycling
-checks with off-knot controls. These use four final solution references. The
+(compare completed step two), and two-advance 80 ms prescribed-puff/recycling
+checks with off-knot controls. The optional `mode1_restart` continuation starts
+from the full run's saved step six, repeats step seven against `mode1_reference`,
+then adds ten held-input 80 ms steps through step 17 (1.36 s). It uses a fifth
+final reference and a step-six checkpoint, both regenerated during golden refresh.
+The checkpoint is harvested by embedded HDF5 step number using `checkpoint_outputs`;
+it is not selected as the producer's final solution. The
 short puff-feedback MPI1/OMP1 versus MPI4/OMP1 pair needs no additional reference.
 The 100 ms recipe accepts exhaustion of either configured refinement budget
-at advance four, requires the same converged prefix, and records the actual stop
+at advance three, requires the same converged prefix, and records the actual stop
 reason. Other failures remain rejected; divergence-only declarations stay strict.
 `check moving_equilibrium` runs the full pair; `moving_equilibrium_short` and
-`moving_equilibrium_parallel` select the short checks. Field pairs are selected
-and retimed during preparation; the harness does not generate equilibria.
+`moving_equilibrium_parallel` select the short checks. `moving_equilibrium_restart`
+selects the restart/held-input continuation. Full and short golden workflows use
+MPI4/OMP4 by default; the MPI comparison explicitly uses MPI1/OMP1 and MPI4/OMP1.
+ME recipes disable Newton solution files (`saveNR=false`) and retain accepted
+timestep saves. Field pairs are selected
+during preparation, preserving their canonical timestamps and setting the
+numerical dt: frame 0000 is the initial state (time=0, dt=0),
+and frame k supplies advance k's equilibrium/control endpoint. The 80 ms recipe
+keeps seven constant steps to 0.56 s; the canonical bundle explicitly holds the
+0.50 s equilibrium through 0.56 s. Control curves must cover the endpoint.
+Correct canonical data in the data repository; the harness validates it without
+repairing timestamps or extending equilibrium coverage.
+The continuation requires explicit canonical samples and held controls through
+1.36 s. Its expected accepted sequence starts at the saved checkpoint, so steps
+before that checkpoint are not required in continuation output. The repeated
+step-seven check uses the existing cross-layout tolerance for plasma fields and
+controller state, with spatial comparison if mesh numbering differs. It runs
+even when only output/convergence validation is requested. Keep this longer
+check out of routine profiles; use it for significant ME/restart changes and
+future timestep-growth/predictor studies.
+The overlap comparison excludes `cache_generation` and `equilibrium_generation`,
+which count process-local rebuilds and naturally restart from fresh values.
 
 Parallel suites compare serial OMP1 with serial OMP16 for OpenMP, and serial OMP1
 with MPI4×OMP1 for MPI. The diverted short-transport suite additionally compares

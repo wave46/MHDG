@@ -17,6 +17,8 @@
     },
     "optional": {
       "mode1_reference": "reference_mode1.h5",
+      "mode1_restart_step6": "restart_mode1_step6.h5",
+      "quasisteady_reference": "reference_quasisteady.h5",
       "failure_prefix_reference": "reference_failure_prefix.h5",
       "mode0_short_reference": "reference_mode0_short.h5",
       "mode2_short_reference": "reference_mode2_short.h5"
@@ -50,7 +52,7 @@
         }
       },
       "parameter_overrides": {
-        "nts": 2, "target_variable": 1, "compute_from_flux": true,
+        "nts": 2, "saveNR": false, "target_variable": 1, "compute_from_flux": true,
         "adaptivity": true, "div_adapt": true, "osc_adapt": true,
         "check_neutral_positivity": true, "time_adapt": false,
         "max_divergence_refinements": 0, "max_oscillation_refinements": 1,
@@ -67,6 +69,7 @@
       "description": "Seven 80 ms puff-feedback advances through a limited-to-diverted transition",
       "reference": "mode1_reference",
       "outputs": ["mode1_reference"],
+      "checkpoint_outputs": {"mode1_restart_step6": 6},
       "parameter_overrides": {"nts": 7},
       "moving_equilibrium": {
         "series": "equilibrium_series", "time_step_s": 0.08,
@@ -82,9 +85,32 @@
         }
       }
     },
+    "mode1_restart": {
+      "extends": "mode1",
+      "description": "Restart at step six, repeat step seven and add ten held-input 80 ms advances",
+      "restart": "mode1_restart_step6",
+      "reference": "quasisteady_reference",
+      "outputs": ["quasisteady_reference"],
+      "checkpoint_outputs": {},
+      "parameter_overrides": {"nts": 17},
+      "moving_equilibrium": {
+        "series": "equilibrium_series", "time_step_s": 0.08,
+        "restart_check": {"step": 7, "reference": "mode1_reference"},
+        "controls": {
+          "puff": "control_puff", "target_density": "control_target_density",
+          "zeff": "control_zeff", "impurity_concentration": "control_impurity_concentration"
+        },
+        "topology": {"first_completed": "lower_single_null", "last_completed": "lower_single_null"},
+        "controller_scales": {
+          "puff": 1e21, "n_li": 1e19,
+          "feedback_integral_error": 1e19, "feedback_previous_error": 1e19,
+          "recycling": 1.0, "recycling_pump": 1.0
+        }
+      }
+    },
     "refinement_limit": {
       "extends": "mode1_short",
-      "description": "100 ms puff feedback stops at advance four; compare the three-step completed prefix",
+      "description": "100 ms endpoint puff feedback stops at advance three; compare the two-step completed prefix",
       "reference": "failure_prefix_reference",
       "outputs": ["failure_prefix_reference"],
       "parameter_overrides": {
@@ -98,7 +124,7 @@
           "zeff": "control_zeff", "impurity_concentration": "control_impurity_concentration"
         },
         "topology": {"first_completed": "limited", "last_completed": "limited"},
-        "expected_failure": {"reason": "refinement_limit", "completed_steps": 3},
+        "expected_failure": {"reason": "refinement_limit", "completed_steps": 2},
         "controller_scales": {
           "puff": 1e21, "n_li": 1e19,
           "feedback_integral_error": 1e19, "feedback_previous_error": 1e19,

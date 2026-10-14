@@ -399,16 +399,50 @@ def _validate_me_steps(inputs, maximum):
         return {}
     report = validate_me_completed_steps(inputs.run_directory, inputs.plan, inputs.metadata, maximum,
                                         topology=inputs.workflow["moving_equilibrium"].get("topology"))
+    if check := inputs.workflow["moving_equilibrium"].get("restart_check"):
+        overlap = _check_me_restart_overlap(inputs, report, check)
+        report["restart_check"] = overlap
+        report["failures"].extend(overlap["failures"])
     if not report["complete"]:
         report["failures"].append("moving equilibrium did not complete all prescribed advances")
     report["status"] = "failed" if report["failures"] else "passed"
     return report
 
 
+def _check_me_restart_overlap(inputs, completed, check):
+    """Compare the repeated endpoint with the uninterrupted full-run reference."""
+    record = next((item for item in completed["steps"] if item["step"] == check["step"]), None)
+    if record is None or check["step"] <= completed["initial_step"]:
+        return {"status": "failed", "failures": ["missing repeated ME endpoint for restart comparison"]}
+    candidate = Path(record["output"])
+    reference = recorded_file(str(inputs.run_directory / "inputs/restart_reference.h5"), "restart reference")
+    profile, tolerances = load_fixed_tolerances(inputs.tolerances_path, inputs.workflow, inputs.plan["layout_id"],
+                                               "fixed_cross_layout", catalog=inputs.catalog)
+    if mesh_differences(reference, candidate, tolerances["mesh_coordinate_atol"]):
+        _, execution = final_execution(inputs.run_directory, inputs.metadata)
+        fekete = recorded_file(execution["runtime_files"]["positionFeketeNodesTri2D.h5"]["path"], "Fekete-node")
+        limits = {key: tolerances[key] for key in ("relative_l2_max", "normalized_linf_max")}
+        fields = compare_adaptive_files(reference, candidate, fekete, 4,
+                                        {"solution": limits, "gradient": limits, "minimum_point_coverage": 1.})
+    else:
+        fields = compare_hdf5_files(reference, candidate, tolerances, ignore_magnetic_generations=True)
+        fields["ignored_magnetic_metadata"] = ["cache_generation", "equilibrium_generation"]
+    controller = _controller_comparison(inputs, candidate, reference, tolerances)
+    failures = [*fields["failures"], *controller.get("failures", [])]
+    with h5py.File(reference) as first, h5py.File(candidate) as second:
+        a, b = _me_time(first), _me_time(second)
+        if a[0] != b[0] or any(not math.isclose(x, y, rel_tol=1e-10, abs_tol=1e-12) for x, y in zip(a[1:3], b[1:3])):
+            failures.append("ME restart reference step/time/dt differs from the repeated endpoint")
+    return {"status": "failed" if failures else "passed", "step": check["step"], "tolerance_profile": profile,
+            "candidate": str(candidate), "reference": str(reference), "reference_identity": file_identity(reference),
+            "fields": fields, "controller": controller, "failures": failures}
+
+
 def validate_me_completed_steps(directory, plan, metadata, maximum, *, topology=None):
     """Validate a contiguous completed prefix; complete separately marks full coverage."""
     dt = plan["moving_equilibrium_inputs"]["time_step_s"]
     prescribed = plan["parameter_overrides"]["nts"]
+    initial = plan["moving_equilibrium_inputs"].get("initial_step", 0)
     saves = read_me_completion_errors(directory / "stdout.log")
     steps, failures, newton_passed = {}, [], True
     for value in metadata.get("hdf5_outputs", []):
@@ -419,19 +453,19 @@ def validate_me_completed_steps(directory, plan, metadata, maximum, *, topology=
         problems = validate_solution_file(path)
         with h5py.File(path, "r") as handle:
             number, time, saved_dt, scale = _me_time(handle)
-        if not (math.isfinite(number) and number == int(number) and 0 <= number <= prescribed):
+        if not (math.isfinite(number) and number == int(number) and initial <= number <= prescribed):
             raise ComparisonError(f"invalid completed ME step: {path}")
         number = int(number)
         if not (math.isfinite(scale) and scale > 0 and math.isclose(time, number * dt, rel_tol=1e-10, abs_tol=1e-12)
                 and math.isclose(saved_dt, dt, rel_tol=1e-10, abs_tol=1e-12)):
             problems.append("completed step/time differs from the prescribed ME sequence")
         logged_step, error = saves.get(path, (None, None))
-        if logged_step != number:
+        if logged_step != number and not (number == initial and logged_step == 0):
             problems.append("completed output is not logged for its embedded timestep")
         convergence = NewtonConvergence(error, maximum)
-        if number:
+        if number > initial:
             newton_passed &= convergence.passed
-        if number and convergence.failure:
+        if number > initial and convergence.failure:
             problems.append(convergence.failure)
         if number in steps:
             duplicate = compare_hdf5_files(Path(steps[number]["output"]), path,
@@ -440,21 +474,21 @@ def validate_me_completed_steps(directory, plan, metadata, maximum, *, topology=
                 problems.append("conflicting completed copies of the same timestep")
         else:
             steps[number] = {"step": number, "time_s": time if math.isfinite(time) else None, "output": str(path),
-                             "convergence": convergence.as_report() if number else None,
+                             "convergence": convergence.as_report() if number > initial else None,
                              "failures": [], "status": "passed"}
         steps[number]["failures"].extend(problems)
         if problems:
             steps[number]["status"] = "failed"
         failures.extend(f"step {number}: {problem}" for problem in problems)
-    completed = sorted(number for number in steps if number)
-    if 0 not in steps:
+    completed = sorted(number for number in steps if number > initial)
+    if initial not in steps:
         failures.append("missing initial ME save")
-    if completed != list(range(1, len(completed) + 1)):
+    if completed != list(range(initial + 1, initial + len(completed) + 1)):
         failures.append("completed ME advances are not a contiguous prefix")
     failures.extend(_check_me_topology(steps, completed, topology))
     return {"status": "failed" if failures else "passed", "failures": failures,
-            "completed_steps": completed, "prescribed_steps": prescribed,
-            "complete": completed == list(range(1, prescribed + 1)),
+            "completed_steps": completed, "prescribed_steps": prescribed, "initial_step": initial,
+            "complete": completed == list(range(initial + 1, prescribed + 1)),
             "convergence": {"passed": newton_passed},
             "steps": [steps[number] for number in sorted(steps)]}
 

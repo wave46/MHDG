@@ -253,6 +253,8 @@ def workflow_required_roles(workflow: dict[str, Any], *, references: bool = True
     if moving := workflow.get("moving_equilibrium"):
         roles.add(moving["series"])
         roles.update(moving.get("controls", {}).values())
+        if check := moving.get("restart_check"):
+            roles.add(check["reference"])
     for name in (
         "mesh",
         "parameters",
@@ -276,7 +278,7 @@ def _validate_case_workflows(case: dict[str, Any]) -> None:
     for workflow_id, workflow in case["workflows"].items():
         used_roles = workflow_required_roles(workflow) | set(
             workflow.get("outputs", [])
-        )
+        ) | set(workflow.get("checkpoint_outputs", {}))
         unknown = (
             sorted(used_roles - declared_roles)
             if declared_roles

@@ -149,6 +149,11 @@
         "moving_equilibrium": {
           "$ref": "#/$defs/moving_equilibrium"
         },
+        "checkpoint_outputs": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/identifier"},
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
         "require_refinement": {
           "type": "boolean"
         }
@@ -160,6 +165,14 @@
       "properties": {
         "series": {"$ref": "#/$defs/identifier"},
         "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+        "restart_check": {
+          "type": "object", "additionalProperties": false,
+          "required": ["step", "reference"],
+          "properties": {
+            "step": {"type": "integer", "minimum": 1},
+            "reference": {"$ref": "#/$defs/identifier"}
+          }
+        },
         "controller_scales": {
           "type": "object", "additionalProperties": false, "minProperties": 1,
           "properties": {

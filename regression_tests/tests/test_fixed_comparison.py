@@ -210,6 +210,49 @@ def test_me_completion_uses_embedded_steps_and_final_attempts(me_outputs):
     json.dumps(report, allow_nan=False)
 
 
+@pytest.mark.parametrize('damage', [None, 'field', 'controller', 'missing_overlap'])
+def test_me_restart_validates_only_new_advances_and_repeated_endpoint(me_outputs, monkeypatch, damage):
+    run, plan, metadata = me_outputs
+    for value in metadata['hdf5_outputs']:
+        path = Path(value)
+        if '_NR' in path.name:
+            continue
+        with h5py.File(path, 'r+') as handle:
+            number = int(handle['simulation_parameters/time/Current_time_step_number'][()]) + 6
+            handle['simulation_parameters/time/Current_time_step_number'][...] = number
+            handle['simulation_parameters/time/Current_time'][...] = number * .08 / 2e-7
+            handle['simulation_parameters/physics/puff'] = 2e21
+            handle['magnetic/cache_generation'] = 8
+            handle['magnetic/equilibrium_generation'] = 8
+    plan['parameter_overrides']['nts'] = 8
+    plan['moving_equilibrium_inputs']['initial_step'] = 6
+    log = (run / 'stdout.log').read_text().replace('Time iteration = 1', 'Time iteration = 7').replace('Time iteration = 2', 'Time iteration = 8')
+    (run / 'stdout.log').write_text(log)
+    (run / 'inputs').mkdir()
+    overlap = run / 'outputs/result_0099.h5'  # Filename is deliberately not its embedded step.
+    reference = run / 'inputs/restart_reference.h5'
+    shutil.copy2(overlap, reference)
+    with h5py.File(overlap, 'r+') as handle:
+        handle['magnetic/cache_generation'][...] = 2
+        handle['magnetic/equilibrium_generation'][...] = 2
+    if damage in {'field', 'controller'}:
+        with h5py.File(overlap, 'r+') as handle:
+            handle['solution/u' if damage == 'field' else 'simulation_parameters/physics/puff'][...] *= 1.01
+    elif damage == 'missing_overlap':
+        metadata['hdf5_outputs'].remove(str(overlap))
+    workflow = {'moving_equilibrium': {'series': 'fields', 'controller_scales': {'puff': 1e21},
+                                     'restart_check': {'step': 7, 'reference': 'mode1_reference'}},
+                'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
+    report = validate_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json')
+    assert (report['status'] == 'passed') == (damage is None)
+    if damage is None:
+        moving = report['moving_equilibrium']
+        assert moving['completed_steps'] == [7, 8] and moving['complete']
+        assert moving['steps'][0]['convergence'] is None
+        assert moving['restart_check']['status'] == 'passed'
+
+
 @pytest.mark.parametrize('reference_check', [False, True])
 @pytest.mark.parametrize('damage', [None, 'missing', 'nonfinite', 'nonscalar', 'changed'])
 def test_declared_controller_state_is_validated_and_compared(me_outputs, monkeypatch, reference_check, damage):

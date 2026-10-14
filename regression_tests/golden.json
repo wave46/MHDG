@@ -1,8 +1,8 @@
 {
   "cases": {
     "moving_equilibrium": {
-      "producers": ["mode1", "refinement_limit", "mode0_short", "mode2_short"],
-      "checks": ["moving_equilibrium", "moving_equilibrium_short", "moving_equilibrium_parallel"]
+      "producers": ["mode1", "mode1_restart", "refinement_limit", "mode0_short", "mode2_short"],
+      "checks": ["moving_equilibrium", "moving_equilibrium_restart", "moving_equilibrium_short", "moving_equilibrium_parallel"]
     },
     "legacy_case": {
       "producers": ["bootstrap_adaptive", "bootstrap_fixed", "baseline_warm", "transport", "transport_short"],

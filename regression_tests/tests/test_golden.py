@@ -55,6 +55,39 @@ def publish(setup):
     return golden.publish(setup.workspace, setup.output, 'reviewed-1', 'Accepted solver change', 'Review record 42')
 
 
+def test_refresh_collects_a_checkpoint_separately_from_the_final_reference(setup):
+    import shlex
+    import sys
+
+    path = setup.root / 'cases/legacy_case.json'
+    case = json.loads(path.read_text())
+    case['files']['optional']['step6_checkpoint'] = 'restart_step6.h5'
+    case['workflows']['warm']['checkpoint_outputs'] = {'step6_checkpoint': 6}
+    path.write_text(json.dumps(case))
+    checkpoint = f'''{shlex.quote(sys.executable)} - <<'PY'
+import h5py, shutil
+shutil.copy2('outputs/result.h5', 'outputs/checkpoint.h5')
+with h5py.File('outputs/checkpoint.h5', 'r+') as handle:
+    handle['simulation_parameters/time/Current_time_step_number'] = 6
+    handle['solution/u'][...] += 6
+PY
+printf 'Error: 1.0E-8\\nOutput written to file outputs/checkpoint.h5\\n'
+'''
+    solver = SOLVER.replace("printf 'Error:", checkpoint + "printf 'Error:")
+    setup.harness.install_solver(solver, 'serial')
+    _, report = golden.refresh('legacy_case', setup.values, setup.workspace)
+    candidate = setup.workspace / 'candidate'
+    manifest = json.loads((candidate / 'manifest.json').read_text())
+    record = manifest['artifacts'][manifest['roles']['step6_checkpoint']]
+    produced = Path(report['producers'][0]['run_directory']) / 'outputs/checkpoint.h5'
+    assert file_identity(candidate / record['path']) == file_identity(produced)
+    with h5py.File(candidate / record['path']) as checkpoint, h5py.File(candidate / 'inputs/reference_mpi4_omp4.h5') as final:
+        assert checkpoint['simulation_parameters/time/Current_time_step_number'][()] == 6
+        assert (checkpoint['solution/u'][()] == final['solution/u'][()] + 6).all()
+    publish(setup)
+    assert file_identity(setup.output / record['path']) == file_identity(produced)
+
+
 def mesh_producers(setup):
     path = setup.root / 'workflows.json'
     workflows = json.loads(path.read_text())
@@ -243,7 +276,7 @@ def indexed_setup(setup):
         for kind in ('magnetic', 'current'):
             path = source / f'magnetic/{kind}_{number + 1:04d}.h5'
             with h5py.File(path, 'w') as handle:
-                handle['time'], handle['dt'] = number * .02, .02
+                handle['time'], handle['dt'] = number * .02, .02 if number else 0.
                 handle['field'] = [number, number + 1]
             frame[kind] = path.relative_to(source).as_posix()
         frames.append(frame)

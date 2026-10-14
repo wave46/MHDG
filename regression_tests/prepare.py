@@ -259,6 +259,8 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     if stage is None:
         if workflow.get("reference") in artifacts:
             sources["reference.h5"] = artifacts[workflow["reference"]]
+        if moving and (check := moving.get("restart_check")):
+            sources["restart_reference.h5"] = artifacts[check["reference"]]
     replacements = _parameter_replacements(inputs.run_directory)
     namelists = {"transport_model_path": "input_lst", "impurity_model_path": "input_lst",
                  **workflow.get("parameter_namelists", {}), **(stage or {}).get("parameter_namelists", {})}
@@ -319,7 +321,7 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
 
 
 def _prepare_me_fields(staging, inputs, overrides):
-    """Retimestamp selected pairs; reuse canonical controls and solver interpolation."""
+    """Prepare initial frame 0000 and numbered endpoint pairs at constant dt."""
     import h5py
     from .compare_fixed import required_scalar
     from .support import ComparisonError
@@ -336,8 +338,8 @@ def _prepare_me_fields(staging, inputs, overrides):
     control_dimensions = read_selected_input_values(inputs.artifacts[inputs.workflow["parameters"]],
         {"puff_dimension", "target_density_dimension", "zeff_dimension"})
     control_dimensions.update(values)
-    steps = values.get("nts", math.ceil(last / stride))
-    if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= math.ceil(last / stride):
+    steps = values.get("nts", last // stride)
+    if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= last // stride:
         raise BundleError("ME nts must be an integer within the canonical series duration")
     if {"dt0", "tfi"} & values.keys() or values.get("me") is False:
         raise BundleError("ME timestep determines dt0/tfi and requires me=true")
@@ -347,29 +349,45 @@ def _prepare_me_fields(staging, inputs, overrides):
     try:
         with h5py.File(inputs.artifacts[inputs.workflow["restart"]]) as handle:
             scale = required_scalar(handle, "simulation_parameters/adimensionalization", "time_scale")
+            # Static bootstraps start a new ME clock; real ME checkpoints keep it.
+            saved_step = (required_scalar(handle, "simulation_parameters/time", "Current_time_step_number")
+                          if "simulation_parameters/time/Current_time_step_number" in handle else 0)
+            saved_me = (required_scalar(handle, "simulation_parameters/switches", "ME")
+                        if "simulation_parameters/switches/ME" in handle else 0)
+            initial_step = saved_step if saved_me or saved_step > 1 else 0
+            if int(initial_step) != initial_step or not 0 <= initial_step < steps:
+                raise BundleError("ME restart step must precede the requested final step")
+            initial_step = int(initial_step)
+            if initial_step:
+                saved_time = required_scalar(handle, "simulation_parameters/time", "Current_time") * scale
+                if not math.isclose(saved_time, initial_step * dt, rel_tol=1e-10, abs_tol=1e-12):
+                    raise BundleError("ME restart time differs from the selected constant timestep sequence")
         if not math.isfinite(scale) or scale <= 0:
             raise BundleError("ME bootstrap time_scale must be positive and finite")
         for offset in range(steps + 1):
-            canonical = min(offset * stride, last)
+            canonical = offset * stride
             mapping.append(canonical + 1)
             for kind, prefix in (("magnetic", "equilibrium"), ("current", "current_density")):
-                target = directory / f"{prefix}_{offset + 1:04d}.h5"
+                target = directory / f"{prefix}_{offset:04d}.h5"
                 shutil.copy2(source.parent / index["frames"][canonical][kind], target)
                 with h5py.File(target, "r+") as handle:
-                    for key, expected, generated in (("time", canonical * index["dt_s"], offset * dt),
-                                                     ("dt", index["dt_s"], dt)):
+                    for key, expected in (("time", offset * dt),
+                                          ("dt", index["dt_s"] if canonical else 0.)):
                         if (handle[key].dtype.kind != "f" or handle[key].size != 1 or not math.isclose(
                                 required_scalar(handle, "", key), expected, rel_tol=1e-10, abs_tol=1e-12)):
                             raise BundleError(f"ME field {key} differs from its series: {target.name}")
-                        handle[key][...] = generated
+                    # Frame timestamps belong to the bundle. Only the numerical
+                    # interval changes when selecting a coarser constant step.
+                    handle["dt"][...] = dt if offset else 0.
                 files[target.relative_to(staging).as_posix()] = file_identity(target)
-        _check_me_controls(inputs, control_dimensions, (steps - 1) * dt)
+        _check_me_controls(inputs, control_dimensions, steps * dt)
     except (OSError, KeyError, ValueError, TypeError, IndexError, ComparisonError) as exc:
         raise BundleError(f"cannot prepare ME fields: {exc}") from exc
     paths = {"field_path": inputs.run_directory / "inputs/magnetic/equilibrium",
              "jtor_path": inputs.run_directory / "inputs/magnetic/current_density"}
     record = {"source_manifest": file_identity(inputs.bundle_root / "manifest.json"),
-              "time_step_s": dt, "canonical_frames": mapping, "generated_files": files}
+              "time_step_s": dt, "initial_step": initial_step,
+              "canonical_frames": mapping, "generated_files": files}
     return paths, {"me": True, "nts": steps, "dt0": dt / scale, "tfi": steps * dt / scale}, record
 
 
@@ -383,8 +401,8 @@ def _check_me_controls(inputs, dimensions, last_load_time):
             times = required_array(handle, "", "time")
             if (times.ndim != 1 or len(times) < 2 or not all(math.isfinite(t) for t in times)
                     or any(a >= b for a, b in zip(times[:-1], times[1:]))
-                    or times[0] > 0 or times[-1] <= last_load_time):
-                raise BundleError("ME control times must bracket all interval-start loads")
+                    or times[0] > 0 or times[-1] < last_load_time):
+                raise BundleError("ME control times must cover all timestep endpoints")
             if name in {"puff", "target_density", "zeff"}:
                 key = f"{name}_dimension"
                 if dimensions.get(key) != len(times):
