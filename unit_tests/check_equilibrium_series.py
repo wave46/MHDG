@@ -8,6 +8,9 @@ import tempfile
 import h5py
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools.convert_equilibrium import convert_equilibria
+
 
 def inputs(directory):
     r = np.array([2., 2.1, 2.3, 2.6])
@@ -51,6 +54,76 @@ def numbered_inputs(directory):
                 f["Jtor"] = 1+3*x+4*y+13*time
 
 
+def conversion_checks(directory):
+    """Use the existing numerical fixtures for Python/Fortran conversion equivalence."""
+    fields = [directory / "numbered" / f"field_{index:04d}.h5" for index in range(5)]
+    for index, path in enumerate(fields):
+        with h5py.File(path, "r+") as f:
+            f["r2D"].attrs["units"] = "m"
+            f["flux2D"].attrs["units"] = "Wb"
+            f["flux2D"].attrs["normalization"] = "primitive flux"
+            f.attrs["source_frame"] = index
+    originals = [path.read_bytes() for path in fields]
+    convert_equilibria(fields, directory / "converted.h5")
+    convert_equilibria([directory / "stationary.h5"], directory / "converted_fixed.h5")
+    with h5py.File(directory / "converted.h5") as converted, h5py.File(directory / "trajectory.h5") as expected:
+        for name in ("time", "grid/r", "grid/z", "equilibrium/psi", "equilibrium/Bphi", "equilibrium/Br",
+                     "equilibrium/Bz", "equilibrium/Jtor", "equilibrium/psiSep"):
+            np.testing.assert_array_equal(converted[name][:], expected[name][:])
+        assert converted["grid/r"].attrs["units"] == "m"
+        assert converted["equilibrium/psi"].attrs["normalization"] == "primitive flux"
+        assert converted["provenance/source_attributes/0004/magnetic"].attrs["source_frame"] == 4
+    assert originals == [path.read_bytes() for path in fields]
+    published = (directory / "converted.h5").read_bytes()
+    try:
+        convert_equilibria(fields, directory / "converted.h5")
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError("Converter overwrote an existing file")
+    assert published == (directory / "converted.h5").read_bytes()
+
+    # A separate same-grid Jtor series is sufficient when it is absent in the field files.
+    paired = directory / "paired"
+    shutil.copytree(directory / "numbered", paired)
+    for index in range(5):
+        with h5py.File(paired / f"field_{index:04d}.h5", "r+") as field, h5py.File(paired / f"current_{index:04d}.h5", "w") as current:
+            current["r2D"], current["z2D"] = field["r2D"][:], field["z2D"][:]
+            current["time"], current["Jtor"] = field["time"][...], field["Jtor"][:]
+            current["Jtor"].attrs["units"] = "A/m²"
+            del field["Jtor"]
+    command = [sys.executable, str(Path(__file__).resolve().parents[1] / "tools/convert_equilibrium.py"),
+               "--field", "paired/field_0000.h5", "--jtor", "paired/current", "--last-frame", "4",
+               "--output", "converted_paired.h5"]
+    run = subprocess.run(command, cwd=directory, text=True, capture_output=True, timeout=20)
+    assert run.returncode == 0, run.stdout + run.stderr
+    with h5py.File(directory / "converted_paired.h5") as converted:
+        assert converted["equilibrium/Jtor"].attrs["units"] == "A/m²"
+
+    for problem, expected in [("grid", "R,Z grid differs"), ("pair_grid", "Magnetic/Jtor R,Z grids differ"),
+                              ("time", "timestamps differ")]:
+        bad = directory / f"conversion_bad_{problem}"
+        shutil.copytree(paired, bad)
+        with h5py.File(bad / ("field_0004.h5" if problem in {"grid", "pair_grid"} else "current_0004.h5"), "r+") as f:
+            name = "r2D" if problem in {"grid", "pair_grid"} else "time"
+            f[name][...] = f[name][...] + .01
+        if problem == "grid":
+            with h5py.File(bad / "current_0004.h5", "r+") as f:
+                f["r2D"][...] = f["r2D"][...] + .01
+        output = directory / f"rejected_{problem}.h5"
+        try:
+            convert_equilibria([bad / path.name for path in fields], output,
+                               [bad / f"current_{index:04d}.h5" for index in range(5)])
+        except ValueError as error:
+            assert expected in str(error), error
+        else:
+            raise AssertionError(f"Converter accepted inconsistent {problem}")
+        assert not output.exists() and not list(directory.glob(f".{output.name}.*.tmp"))
+    print("Equilibrium conversion: values, attributes, sources, CLI, rejection and publication PASS")
+    return [("converted.h5", "trajectory", None, None), ("converted_fixed.h5", "stationary", None, None),
+            ("converted_paired.h5", "trajectory", None, None)]
+
+
 def main():
     executable = Path(sys.argv[1]).resolve()
     with tempfile.TemporaryDirectory(prefix="mhdg-equilibrium-series-") as scratch:
@@ -85,6 +158,7 @@ def main():
             cases.append((filename, "invalid", expected))
         cases = [(name, mode, expected, None) for name, mode, expected in cases]
         numbered_inputs(directory / "numbered")
+        cases.extend(conversion_checks(directory))
         cases.extend([
             ("numbered/field", "numbered", None, None),
             ("numbered/field_0000.h5", "numbered", None, None),

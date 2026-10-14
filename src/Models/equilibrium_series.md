@@ -119,3 +119,49 @@ path, including its separate legacy current input.
 
 The solver closes the provider on normal completion. Failed input validation
 terminates the run; recoverable nonlinear trial statuses are a later stage.
+
+## Legacy conversion
+
+The converter needs Python with NumPy and h5py. From the repository root, convert
+a stationary equilibrium/current pair:
+
+```bash
+python tools/convert_equilibrium.py --field equilibrium.h5 --jtor current_density.h5 --output equilibrium_series.h5
+```
+
+Convert numbered frames 0000 through N, inclusive, by supplying `--last-frame`:
+
+```bash
+python tools/convert_equilibrium.py --field equilibrium_0000.h5 --jtor current_density_0000.h5 --last-frame 28 --output discharge.h5
+```
+
+Numbered stems are also accepted. Without `--last-frame`, a full filename selects
+one stationary frame, even if its name ends in `_0000.h5`; an extensionless name
+resolves its stationary `.h5` file. Omit `--jtor` to use embedded legacy Jtor or
+leave the reference absent. Br/Bz remain paired optional references.
+
+The output uses the same `(nt,nz,nr)` layout for stationary and moving data.
+Conversion reads and writes one frame at a time, uses double precision and
+lossless compression with one frame per chunk, and leaves inputs unchanged.
+It preserves physical values and conventions without normalization, regridding,
+retiming or reconstruction. Moving frames require finite increasing timestamps
+and matching paired-current timestamps. For a stationary field without `time`,
+its one stored timestamp is zero; otherwise its original timestamp is retained.
+Paired stationary timestamps are compared when both are present.
+
+All frames, including separate Jtor files, must share identical rectangular R,Z
+coordinates. The legacy solver can still read a separate current grid, but such
+input cannot be converted to this shared-grid format without regridding.
+Dataset attributes, including provided units/convention metadata, are retained
+and must remain consistent across frames. Source root attributes are preserved
+per frame under `/provenance/source_attributes`; source basenames are recorded
+in `/provenance/magnetic_files` and, when supplied, `/provenance/current_files`.
+Unrelated legacy datasets and `dt` are not copied. Do not infer an unspecified
+flux normalization from conversion: the primitives and reference fields retain
+the source convention.
+
+The destination must not already exist. A failed conversion leaves no partial
+published file. Python callers, including regression preparation, can use
+`tools.convert_equilibrium.convert_equilibria(field_files, output, current_files)`
+with ordered file lists; callers choose the frames, and conversion retains their
+timestamps. The regression harness migration to this storage follows separately.

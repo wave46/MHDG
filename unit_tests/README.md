@@ -86,6 +86,16 @@ optional references, coverage rejection, provider reinitialization and invalid
 input shapes/nonfinite values. It needs h5py and NumPy, initializes no MPI and
 does not run the plasma solver. The trajectory layout is documented in
 [equilibrium_series.md](../src/Models/equilibrium_series.md).
+The same fixtures check Python conversion of stationary, numbered and paired
+current inputs: exact values/orientation and attributes, untouched sources,
+non-overwrite, late grid/time rejection without a partial output, and sampling
+converted files with the Fortran reader. For a Python-only converter change,
+reuse the already-built check executable without running make:
+
+```bash
+python unit_tests/check_equilibrium_series.py lib/equilibrium_series_check
+```
+
 
 For a 2D `NGammaTiTeNeutral` build, `make check-me-restart` reads small synthetic
 HDF5 checkpoints through the production input, initialization, and solution
