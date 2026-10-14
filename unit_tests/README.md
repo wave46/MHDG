@@ -78,6 +78,15 @@ belong to the regression harness: existing neutral workflows cover inactive
 compatibility, and `neutral_wall` covers `Re_n=0.99` with inherited pump recycling
 and with `Re_n_pump=0.95`. See [regression instructions](../regression_tests/README.md).
 
+`make check-equilibrium-series MODE=parall` checks the isolated equilibrium
+provider with small generated HDF5 inputs. It covers non-square orientation,
+nonuniform physical timestamps, exact/intermediate sampling, jumps and reverse
+sampling across more frames than fit in the cache, legacy and single-frame stationary equivalence,
+optional references, coverage rejection, provider reinitialization and invalid
+input shapes/nonfinite values. It needs h5py and NumPy, initializes no MPI and
+does not run the plasma solver. The trajectory layout is documented in
+[equilibrium_series.md](../src/Models/equilibrium_series.md).
+
 For a 2D `NGammaTiTeNeutral` build, `make check-me-restart` reads small synthetic
 HDF5 checkpoints through the production input, initialization, and solution
 readers. It checks static bootstrap initialization, real ME steps 0/1/50/99/100,
