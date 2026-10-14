@@ -157,11 +157,16 @@ def main():
                     f[dataset] = np.ones((4, 2))
             for frame, power in [(0, 0.), (1, 7.)]:
                 with h5py.File(directory / f"heat_{frame:04d}.h5", "w") as heat:
-                    heat['ip'], heat['jp'] = [2], [2]
+                    heat['ip'], heat['jp'] = [999], [999]  # Shapes, not legacy hints, are authoritative.
                     heat['r2D'] = [[0., 0.], [.5, .5]]
                     heat['z2D'] = [[0., .5], [0., .5]]
                     heat['heating2D_ions'] = np.full((2, 2), power)
                     heat['heating2D_electrons'] = np.full((2, 2), 2 * power)
+            with h5py.File(directory / "heat_trajectory.h5", "w") as heat:
+                ht, hz, hr = np.meshgrid([0., .04, .16], [0., .5], [0., .2, .5], indexing="ij")
+                heat["time"], heat["grid/r"], heat["grid/z"] = [0., .04, .16], [0., .2, .5], [0., .5]
+                heat["heating/ions"] = hr+hz+87.5*ht
+                heat["heating/electrons"] = 2*(hr+hz+87.5*ht)
             full_names = "full_filename" in name
             arguments = [str(executable), "inputs/unit_mesh_P1.msh" if full_names else "inputs/unit_mesh_P1",
                          "checkpoint.h5" if full_names else "checkpoint"]

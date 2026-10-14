@@ -7,7 +7,7 @@ PROGRAM test_me_restart
   USE MPI_OMP, ONLY: MPIvar, init_MPI_OMP
   USE mpi, ONLY: MPI_FINALIZE
   USE interpolation, ONLY: binarysearch, interpolate
-  USE external_heating, ONLY: initialize_external_heating, load_external_heating
+  USE external_heating, ONLY: initialize_external_heating, load_external_heating, close_heating_input
   USE magnetic_field, ONLY: equilibrium_input_filename, equilibrium_grid_dimensions, load_stored_toroidal_current
   USE magnetic_field, ONLY: open_control_series, load_puff_from_file, load_zeff, load_impurity_concentration
   USE magnetic_field, ONLY: initialize_magnetic_field, load_magnetic_field_nodes, sample_magnetic_input, close_magnetic_input
@@ -89,13 +89,15 @@ PROGRAM test_me_restart
   CALL setSolName(expected_output, reference_mesh_name, 0, .TRUE., .FALSE.)
   IF (output_name /= expected_output) ERROR STOP 'output name changed with full input filename'
 
-  ! The legacy heating reader follows the same initial/endpoint frame selection.
+  ! Legacy numbered heating retains the magnetic frame schedule without timestamps.
   Mesh%Nnodes = 1
   ALLOCATE(Mesh%X(1,2))
   Mesh%X = 0.5d0/phys%lscale
   input%external_heating_from_grid = .TRUE.
   input%external_heating_path = 'heat_0000.h5'
   IF (switch%ME) input%external_heating_path = 'heat'
+  configured_nts = time%nts
+  time%nts = 1
   CALL initialize_external_heating()
   CALL load_external_heating()
   IF (ANY(phys%external_heating_ions /= 0.d0) .OR. ANY(phys%external_heating_electrons /= 0.d0)) &
@@ -107,7 +109,35 @@ PROGRAM test_me_restart
          ABS(phys%external_heating_electrons(1)-2.d0*expected_heating) > 1.d-12*ABS(expected_heating)) &
           ERROR STOP 'endpoint heating frame'
   ENDIF
+  CALL close_heating_input()
+  ! A new trajectory has its own grid and nonuniform timestamps, even with fixed B.
+  input%external_heating_path = 'heat_trajectory.h5'
+  DO sample = 1, 3
+     control_times = [0.d0, 0.08d0, 0.02d0]
+     CALL load_external_heating(physical_time=control_times(sample))
+     expected_heating = (1.d0+87.5d0*control_times(sample))* &
+          simpar%refval_time/simpar%refval_specenergydens/simpar%refval_mass
+     IF (ABS(phys%external_heating_ions(1)-expected_heating) > 1.d-12*ABS(expected_heating) .OR. &
+         ABS(phys%external_heating_electrons(1)-2*expected_heating) > 1.d-12*ABS(expected_heating)) &
+          ERROR STOP 'independent heating interpolation and normalization'
+  ENDDO
+  ! Rebuild on a changed mesh, reusing dimensional cached frames without rescaling them.
   DEALLOCATE(Mesh%X,phys%external_heating_ions,phys%external_heating_electrons)
+  Mesh%Nnodes = 2
+  ALLOCATE(Mesh%X(2,2))
+  Mesh%X(1,:) = [0.1d0,0.2d0]/phys%lscale
+  Mesh%X(2,:) = [0.3d0,0.4d0]/phys%lscale
+  CALL initialize_external_heating()
+  CALL load_external_heating(physical_time=0.08d0)
+  DO sample = 1, 2
+     expected_heating = (SUM(Mesh%X(sample,:))*phys%lscale+7.d0)* &
+          simpar%refval_time/simpar%refval_specenergydens/simpar%refval_mass
+     IF (ABS(phys%external_heating_ions(sample)-expected_heating) > 1.d-12*ABS(expected_heating)) &
+          ERROR STOP 'heating cached-frame projection on changed mesh'
+  ENDDO
+  CALL close_heating_input()
+  DEALLOCATE(Mesh%X,phys%external_heating_ions,phys%external_heating_electrons)
+  Mesh%Nnodes = 1
 
   ! Read the same non-square grid without relying on configured dimensions.
   field_filename = equilibrium_input_filename(input%field_path, 0)
@@ -129,8 +159,6 @@ PROGRAM test_me_restart
   time%dt_ME = 0.d0
   time%t_ME = 0.d0
   ! This reader probe has two frames; restore the restart's full nts afterwards.
-  configured_nts = time%nts
-  time%nts = 1
   CALL sample_magnetic_input(0, field_sample)
   IF (ANY(SHAPE(field_sample%psi) /= [3,4]) .OR. field_sample%psi(3,4) /= 0.5d0) &
        ERROR STOP 'provider magnetic initial frame/orientation'

@@ -1,6 +1,7 @@
 MODULE heating_series
   USE prec_const, ONLY: float
   USE rectangular_series_io, ONLY: rectangular_series_t
+  USE input_files, ONLY: numbered_stem, numbered_filename
   IMPLICIT NONE
   PRIVATE
 
@@ -13,10 +14,14 @@ MODULE heating_series
   TYPE, PUBLIC :: heating_series_t
      PRIVATE
      TYPE(rectangular_series_t) :: series
+     LOGICAL :: numbered = .FALSE.
+     CHARACTER(LEN=1000) :: stem = ''
      CHARACTER(LEN=32) :: datasets(2)
      TYPE(heating_sample_t) :: cache(2)
    CONTAINS
      PROCEDURE :: open => heating_open
+     PROCEDURE :: open_numbered => heating_open_numbered
+     PROCEDURE :: is_trajectory => heating_is_trajectory
      PROCEDURE :: sample_at => heating_sample_at
      PROCEDURE :: grid => heating_grid
      PROCEDURE :: time_points => heating_time_points
@@ -43,6 +48,35 @@ CONTAINS
     CALL validate_heating_datasets(this, ierr, message)
     IF (ierr /= 0) CALL this%clear()
   END SUBROUTINE heating_open
+
+  SUBROUTINE heating_open_numbered(this, path, times, ierr, message)
+    CLASS(heating_series_t), INTENT(INOUT) :: this
+    CHARACTER(LEN=*), INTENT(IN) :: path
+    REAL(float), INTENT(IN) :: times(:)
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    CHARACTER(LEN=1000) :: stem
+
+    CALL this%clear()
+    ierr = -1
+    message = 'Numbered heating requires timestamps for frames 0000 through at most 9999'
+    IF (SIZE(times) < 1 .OR. SIZE(times) > 10000) RETURN
+    CALL numbered_stem(path, stem, ierr, message)
+    IF (ierr /= 0) RETURN
+    CALL this%open(numbered_filename(stem, 0), ierr, message)
+    IF (ierr == 0) THEN
+       ierr = -1
+       message = 'Numbered heating frames must use the legacy rectangular-grid layout'
+       IF (.NOT. this%series%is_trajectory()) ierr = 0
+    ENDIF
+    IF (ierr == 0) CALL this%series%set_times(times, ierr, message)
+    IF (ierr == 0) THEN
+       this%numbered = .TRUE.
+       this%stem = stem
+    ELSE
+       CALL this%clear()
+    ENDIF
+  END SUBROUTINE heating_open_numbered
 
   SUBROUTINE validate_heating_datasets(this, ierr, message)
     CLASS(heating_series_t), INTENT(IN) :: this
@@ -99,9 +133,39 @@ CONTAINS
     message = ''
     CALL this%series%reserve_frame(frame, keep_frame, slot, cached)
     IF (cached) RETURN
-    CALL read_heating_frame(this, frame, this%cache(slot), ierr, message)
+    IF (this%numbered) THEN
+       CALL read_numbered_heating_frame(this, frame, this%cache(slot), ierr, message)
+    ELSE
+       CALL read_heating_frame(this, frame, this%cache(slot), ierr, message)
+    ENDIF
     IF (ierr == 0) CALL this%series%mark_frame(slot, frame)
   END SUBROUTINE cached_heating_frame
+
+  SUBROUTINE read_numbered_heating_frame(this, frame, sample, ierr, message)
+    CLASS(heating_series_t), INTENT(IN) :: this
+    INTEGER, INTENT(IN) :: frame
+    TYPE(heating_sample_t), INTENT(OUT) :: sample
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    TYPE(heating_series_t) :: input
+    CHARACTER(LEN=1000) :: filename, detail
+
+    filename = numbered_filename(this%stem, frame-1)
+    CALL input%open(filename, ierr, message)
+    IF (ierr == 0) THEN
+       ierr = -1
+       message = 'Numbered heating layout or R,Z grid differs from frame 0000'
+       IF (.NOT. input%series%is_trajectory()) THEN
+          IF (this%series%same_grid(input%series)) ierr = 0
+       ENDIF
+    ENDIF
+    IF (ierr == 0) CALL read_heating_frame(input, 1, sample, ierr, message)
+    CALL input%clear()
+    IF (ierr /= 0) THEN
+       detail = message
+       message = TRIM(filename)//': '//TRIM(detail)
+    ENDIF
+  END SUBROUTINE read_numbered_heating_frame
 
   SUBROUTINE read_heating_frame(this, frame, sample, ierr, message)
     CLASS(heating_series_t), INTENT(IN) :: this
@@ -130,9 +194,16 @@ CONTAINS
     CALL this%series%time_points(times)
   END SUBROUTINE heating_time_points
 
+  LOGICAL FUNCTION heating_is_trajectory(this)
+    CLASS(heating_series_t), INTENT(IN) :: this
+    heating_is_trajectory = this%series%is_trajectory()
+  END FUNCTION heating_is_trajectory
+
   SUBROUTINE heating_clear(this)
     CLASS(heating_series_t), INTENT(INOUT) :: this
     CALL this%series%clear()
+    this%numbered = .FALSE.
+    this%stem = ''
     this%cache = heating_sample_t()
   END SUBROUTINE heating_clear
 

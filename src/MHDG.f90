@@ -239,9 +239,16 @@ PROGRAM MHDG
                 time%t*simpar%refval_time + time%dt_ME
            STOP 1
         ENDIF
-        IF (switch%external_heating) CALL load_external_heating(time%it + 1)
         CALL SetParticleSource()
         time%dt = time%dt_ME/simpar%refval_time
+     ENDIF
+
+     IF (switch%external_heating) THEN
+        IF (switch%ME) THEN
+           CALL load_external_heating(physical_time=time%t_ME)
+        ELSEIF (.NOT. switch%steady) THEN
+           CALL load_external_heating(physical_time=(time%t+time%dt)*simpar%refval_time)
+        ENDIF
      ENDIF
 
      ! Actualization of time
@@ -608,6 +615,7 @@ PROGRAM MHDG
   END IF
 
   ! free all main allocatables and global variables
+  CALL close_heating_input()
   CALL close_magnetic_input()
   CALL free_main()
 

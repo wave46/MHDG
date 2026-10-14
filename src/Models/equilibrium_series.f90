@@ -3,7 +3,7 @@ MODULE equilibrium_series
   USE HDF5
   USE HDF5_io_module, ONLY: HDF5_open, HDF5_close, HDF5_dataset_shape, &
        HDF5_real_vector_reading, HDF5_real_reading
-  USE input_files, ONLY: resolve_input_filename
+  USE input_files, ONLY: resolve_input_filename, numbered_stem, numbered_filename
   USE rectangular_series_io, ONLY: rectangular_series_t, read_rectangular_grid, read_matrix
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   IMPLICIT NONE
@@ -98,36 +98,7 @@ CONTAINS
     IF (ierr /= 0) CALL this%clear()
   END SUBROUTINE series_open_numbered
 
-  SUBROUTINE numbered_stem(path, stem, ierr, message)
-    CHARACTER(LEN=*), INTENT(IN) :: path
-    CHARACTER(LEN=*), INTENT(OUT) :: stem, message
-    INTEGER, INTENT(OUT) :: ierr
-    INTEGER :: n
 
-    stem = TRIM(ADJUSTL(path))
-    n = LEN_TRIM(stem)
-    ierr = -1
-    message = 'Numbered input requires a stem or an initial _0000.h5 filename: '//TRIM(path)
-    IF (n == 0) RETURN
-    IF (n >= 3) THEN
-       IF (stem(n-2:n) == '.h5') THEN
-          IF (n <= 8) RETURN
-          IF (stem(n-7:n) /= '_0000.h5') RETURN
-          stem = stem(:n-8)
-       ENDIF
-    ENDIF
-    ierr = 0
-    message = ''
-  END SUBROUTINE numbered_stem
-
-  FUNCTION numbered_filename(stem, frame) RESULT(filename)
-    CHARACTER(LEN=*), INTENT(IN) :: stem
-    INTEGER, INTENT(IN) :: frame
-    CHARACTER(LEN=1000) :: filename
-    CHARACTER(LEN=4) :: index
-    WRITE(index, '(I4.4)') frame
-    filename = TRIM(stem)//'_'//index//'.h5'
-  END FUNCTION numbered_filename
 
   SUBROUTINE read_numbered_timeline(this, last_frame, ierr, message)
     CLASS(equilibrium_series_t), INTENT(INOUT) :: this

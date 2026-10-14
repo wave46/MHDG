@@ -89,6 +89,32 @@ CONTAINS
     CALL check_equilibrium_input(ierr, message)
   END SUBROUTINE sample_magnetic_input
 
+  SUBROUTINE magnetic_time_points(times)
+    REAL(float), ALLOCATABLE, INTENT(OUT) :: times(:)
+    INTEGER :: frame, ierr
+    INTEGER(HID_T) :: file_id
+    CHARACTER(LEN=1000) :: filename
+
+    IF (uses_equilibrium_grid()) THEN
+       CALL open_magnetic_input()
+       CALL equilibrium_input%time_points(times)
+    ELSE
+       ! Legacy nodal input has the same frame clock without a rectangular grid.
+       IF (.NOT. ALLOCATED(equilibrium_times)) THEN
+          ALLOCATE(equilibrium_times(time%nts+1))
+          DO frame = 0, time%nts
+             filename = equilibrium_input_filename(input%field_path, frame)
+             CALL HDF5_open(filename, file_id, ierr)
+             CALL check_equilibrium_input(ierr, 'Cannot open magnetic frame clock: '//TRIM(filename))
+             CALL HDF5_real_reading(file_id, equilibrium_times(frame+1), 'time', ierr)
+             CALL HDF5_close(file_id)
+             CALL check_equilibrium_input(ierr, 'Cannot read magnetic frame clock: '//TRIM(filename))
+          ENDDO
+       ENDIF
+       times = equilibrium_times
+    ENDIF
+  END SUBROUTINE magnetic_time_points
+
   SUBROUTINE check_equilibrium_input(ierr, message)
     INTEGER, INTENT(IN) :: ierr
     CHARACTER(LEN=*), INTENT(IN) :: message
