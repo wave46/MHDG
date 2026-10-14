@@ -112,19 +112,21 @@ The feedback gains apply to moving-equilibrium control. The spelling
 ## Running 
 The pipeline to get solution for a case without meshadaptivity and in serial is described in [demo](https://github.com/wave46/HDG_postprocess/blob/main/demos/hdg_solution_basics_neutrals.ipynb)
 First, go to `test` folder, where executable is. It is convinient to create `Meshes` folder and put your mesh there.
-Take the `param_initial.txt` and copy its contents to `param.txt`. Do not forget to specify paths to files with magnetic field and plasma current, as well as the dimensions of the grid and output folder where solutions will be saved
+Take the `param_initial.txt` and copy its contents to `param.txt`. Specify the magnetic-field and plasma-current filenames and the output folder. Grid dimensions are inferred from HDF5.
 To initialize simulation one should start with high diffusion (usually arond 20m^2/s) and several small timesteps (`dt0=1e3` in adimensional values).
 Run the following command
 ```zsh
-./MHDG-NGammaTiTeNeutral-serial-2D ./Meshes/Name_of_the_mesh_without_.msh_but_with_P{polynomial_order}_at_the_end
+./MHDG-NGammaTiTeNeutral-serial-2D ./Meshes/mesh_P4.msh
 ```
+Full filenames are preferred. Legacy mesh and restart stems remain accepted;
+input extensions do not change output names or mesh-adaptation filenames.
 Having first initial guess for high diffusion (in a file with shortest name, without _NR00, _000 and so on), now we can reduce diffusion to the desired values (usually around 1m^2/s). This is done automatically in the code.
 One copy `param_diffred.txt` to `param.txt`. For each diffusion value a (pseudo)steady state will be achieved and then the diffusion value will be multiplied by `diffred` parameter and then a steady state for lower diffusion will be found.
 Usually simulation runs until it crashes for very low diffusion, or you can specify number of (pseudo)timesteps (i.e. number of (pseudo)steady states will be found for decreasing diffusion values) with parameter `nts` (10 in the example).
 Or you can also set the value of minimal desired diffusion `diffmin`.
 To restart your simulation from initialization solution from previous step, run 
 ```zsh
-./MHDG-NGammaTiTeNeutral-serial-2D ./Meshes/Name_of_the_mesh_without_.msh_but_with_P{polynomial_order}_at_the_end /path/to/initial/solution
+./MHDG-NGammaTiTeNeutral-serial-2D ./Meshes/mesh_P4.msh /path/to/initial/solution.h5
 ```
 
 Quite often the last diffusion value from previous solution is not exactly what you needed. For example, you started from 20 m^2/s, `diffred`=0.6 and you wished to have `diffmin`=0.5. 
@@ -133,7 +135,7 @@ So it's always convenient to find a base solution for your future scan for preci
 Copy `param_steady.txt` to `param.txt` and rerun from soltion with closest diffusion to desired one:
 
 ```zsh
-./MHDG-NGammaTiTeNeutral-serial-2D ./Meshes/Name_of_the_mesh_without_.msh_but_with_P{polynomial_order}_at_the_end /path/to/solution/with/0.560E+00/in/name
+./MHDG-NGammaTiTeNeutral-serial-2D ./Meshes/mesh_P4.msh /path/to/solution/with/0.560E+00/in/name.h5
 ```
 
 From now on you can conduct your scans, for example, puff scan (`puff` in parameters), various diffusions (`diff_n`, `diff_u`, `diff_e`, `diff_ee`), recycling (`R`), etc... 

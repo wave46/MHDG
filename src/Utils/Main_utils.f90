@@ -6,6 +6,7 @@
 
 MODULE Main_utils
 
+  USE input_files, ONLY: resolve_input_filename
   USE in_out
   USE GMSH_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5, gmsh_mesh2d_write, hdf5_save_mesh_struct
   USE reference_element
@@ -46,7 +47,7 @@ MODULE Main_utils
   REAL*8                       :: dt, dt0, errNR, errNR_adapt, errlstime
   REAL*8, ALLOCATABLE          :: uiter(:), L2err(:),u0_temp(:,:)
   REAL*8, POINTER              :: uiter_best(:) => NULL(), qiter_best(:) => NULL()
-  CHARACTER(LEN=1024)          :: mesh_name, save_name
+  CHARACTER(LEN=1024)          :: mesh_name, mesh_input_name, save_name
   CHARACTER ( len = 255 )      :: gmsh_filename
   CHARACTER ( len = 255 )      :: h5_filename
   CHARACTER ( len = 50 )       :: count_adapt_char
@@ -917,7 +918,7 @@ ENDSUBROUTINE update_delta_te
   ENDSUBROUTINE initialize_solution
 
   SUBROUTINE load_mesh()
-    CHARACTER(LEN=1024) :: ordered_mesh_name
+    CHARACTER(LEN=1024) :: ordered_mesh_name, mesh_filename
     INTEGER             :: mesh_flip
 
     IF(switch%readMeshFromSol) THEN
@@ -928,11 +929,16 @@ ENDSUBROUTINE update_delta_te
        
       mesh_flip = 1
       IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) mesh_flip = 0
-      CALL load_gmsh_mesh(mesh_name, mesh_flip)
+      CALL resolve_input_filename(mesh_input_name, '.msh', mesh_filename, ierr)
+      IF (ierr /= 0) THEN
+         IF (MPIvar%glob_id == 0) WRITE(*,*) 'Mesh input file not found: ', TRIM(mesh_filename)
+         STOP 1
+      ENDIF
+      CALL load_gmsh_mesh(mesh_filename, mesh_flip)
       CALL create_reference_element(refElPol, 2, verbose = 1)
 
       IF((switch%set_2d_order) .AND. (refElPol%nDeg .NE. switch%order_2d) ) THEN
-         CALL set_order_mesh(TRIM(mesh_name)//'.msh', adapt%geometry_path, switch%order_2d, &
+         CALL set_order_mesh(mesh_filename, adapt%geometry_path, switch%order_2d, &
               ordered_mesh_name)
          CALL free_mesh()
          CALL load_gmsh_mesh(ordered_mesh_name, mesh_flip)
@@ -951,7 +957,7 @@ ENDSUBROUTINE update_delta_te
          Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
       END IF
       IF (adapt%shockcp_adapt .GT. 0) THEN
-         gmsh_filename      = TRIM(ADJUSTL(mesh_name))//'.msh'
+         gmsh_filename = mesh_filename
          CALL copy_file(gmsh_filename,"./res/temp.msh")
       ENDIF
        
@@ -959,6 +965,8 @@ ENDSUBROUTINE update_delta_te
   ENDSUBROUTINE load_mesh
 
   SUBROUTINE check_input_arguments()
+    INTEGER :: n, ext_length, i
+    CHARACTER(LEN=4), PARAMETER :: mesh_extensions(2) = [CHARACTER(LEN=4) :: '.msh', '.h5']
 
     ! Check the number of input arguments
     nb_args = iargc()
@@ -979,6 +987,17 @@ ENDSUBROUTINE update_delta_te
 
     CALL getarg(1, mesh_name)
     mesh_name = ADJUSTL(TRIM(mesh_name))
+    mesh_input_name = mesh_name
+    n = LEN_TRIM(mesh_name)
+    DO i = 1, SIZE(mesh_extensions)
+       ext_length = LEN_TRIM(mesh_extensions(i))
+       IF (n > ext_length) THEN
+          IF (mesh_name(n-ext_length+1:n) == TRIM(mesh_extensions(i))) THEN
+             mesh_name = mesh_name(:n-ext_length)
+             EXIT
+          ENDIF
+       ENDIF
+    ENDDO
 
     IF (nb_args .GT. 1) THEN
        CALL getarg(2, save_name)

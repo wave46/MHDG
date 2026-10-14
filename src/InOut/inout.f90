@@ -7,6 +7,7 @@
 !************************************************************
 
 MODULE in_out
+  USE input_files, ONLY: resolve_input_filename
   USE HDF5
   USE HDF5_io_module
   USE flux_surface_transport_data
@@ -47,7 +48,11 @@ CONTAINS
     INTEGER :: Nextfaces, Nnodesperface, IERR
     INTEGER(HID_T) :: file_id
 
-    fname_complete = TRIM(ADJUSTL(fname))//'.h5'
+    CALL resolve_input_filename(fname, '.h5', fname_complete, ierr)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Mesh input file not found: ', TRIM(fname_complete)
+       STOP 1
+    ENDIF
 
     IF (utils%printint > 0) THEN
       IF(MPIvar%glob_id .EQ. 0) THEN
@@ -1414,7 +1419,11 @@ CONTAINS
     fname_complete = TRIM(ADJUSTL(fname))//'.h5'
 #endif
 #else
-    fname_complete = TRIM(ADJUSTL(fname))//'.h5'
+    CALL resolve_input_filename(fname, '.h5', fname_complete, ierr)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Restart mesh input file not found: ', TRIM(fname_complete)
+       STOP 1
+    ENDIF
 #endif
     IF (utils%printint > 0) THEN
        PRINT *, 'Loading mesh.'
@@ -1843,7 +1852,11 @@ CONTAINS
     !              2D case
     !*************************************
 
-    fname_complete = TRIM(ADJUSTL(fname))//'.h5'
+    CALL resolve_input_filename(fname, '.h5', fname_complete, ierr)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Solution input file not found: ', TRIM(fname_complete)
+       STOP 1
+    ENDIF
 
 
     CALL HDF5_open(fname_complete, file_id, IERR)

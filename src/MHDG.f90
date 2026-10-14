@@ -90,9 +90,9 @@ PROGRAM MHDG
   IF((ierr .EQ. 0)) THEN
      CALL free_mesh
      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
-        CALL load_gmsh_mesh(mesh_name, 1)
+        CALL load_gmsh_mesh(mesh_input_name, 1)
      ELSE
-        CALL load_gmsh_mesh(mesh_name, 0)
+        CALL load_gmsh_mesh(mesh_input_name, 0)
      ENDIF
 
      CALL mesh_preprocess_serial(ierr)

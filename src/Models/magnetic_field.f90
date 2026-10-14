@@ -8,6 +8,7 @@
 !*****************************************
 
 MODULE magnetic_field
+  USE input_files, ONLY: resolve_input_filename
   USE prec_const
   USE globals
   USE MPI_OMP
@@ -33,6 +34,68 @@ MODULE magnetic_field
   REAL*8, PARAMETER :: jtor_comparison_warning = 0.25d0
   REAL*8, PARAMETER :: stored_jtor_outside_core_warning = 0.01d0
 CONTAINS
+
+  FUNCTION equilibrium_input_filename(path, frame) RESULT(filename)
+    CHARACTER(LEN=*), INTENT(IN) :: path
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    CHARACTER(LEN=1000) :: filename, candidate
+    CHARACTER(LEN=32) :: number
+    INTEGER :: ierr, n, index
+    LOGICAL :: full_filename
+
+    candidate = TRIM(ADJUSTL(path))
+    n = LEN_TRIM(candidate)
+    full_filename = .FALSE.
+    IF (n >= 3) full_filename = candidate(n-2:n) == '.h5'
+    index = 0
+    IF (switch%ME) index = equilibrium_frame_index(frame)
+    WRITE(number, '(I0)') index
+    IF (switch%ME .AND. n > 8) THEN
+       IF (candidate(n-7:n) == '_0000.h5') THEN
+          candidate = candidate(:n-8)//'_'//REPEAT('0', MAX(0, 4-LEN_TRIM(number)))//TRIM(number)//'.h5'
+       ENDIF
+    ENDIF
+    CALL resolve_input_filename(candidate, '.h5', filename, ierr)
+    IF (ierr /= 0 .AND. .NOT. full_filename) THEN
+       candidate = TRIM(ADJUSTL(path))//'_'//REPEAT('0', MAX(0, 4-LEN_TRIM(number)))//TRIM(number)//'.h5'
+       CALL resolve_input_filename(candidate, '.h5', filename, ierr)
+    ENDIF
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium input file not found: ', TRIM(filename)
+       STOP 1
+    ENDIF
+  END FUNCTION equilibrium_input_filename
+
+  SUBROUTINE equilibrium_grid_dimensions(file_id, datasets, ip, jp)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    CHARACTER(LEN=*), INTENT(IN) :: datasets(:)
+    INTEGER, INTENT(OUT) :: ip, jp
+    INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
+    INTEGER :: i, ierr
+
+    DO i = 1, SIZE(datasets)
+       CALL HDF5_dataset_shape(file_id, TRIM(datasets(i)), dimensions, ierr)
+       IF (ierr /= 0) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot read equilibrium dataset shape: ', TRIM(datasets(i))
+          STOP 1
+       ENDIF
+       IF (SIZE(dimensions) /= 2) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium dataset must be rank two: ', TRIM(datasets(i))
+          STOP 1
+       ENDIF
+       IF (i == 1) THEN
+          IF (ANY(dimensions < 2) .OR. ANY(dimensions > INT(HUGE(ip), HSIZE_T))) THEN
+             IF (MPIvar%glob_id == 0) WRITE(6,*) 'Invalid equilibrium grid dimensions: ', dimensions
+             STOP 1
+          ENDIF
+          ip = INT(dimensions(1))
+          jp = INT(dimensions(2))
+       ELSEIF (ANY(dimensions /= [INT(ip, HSIZE_T), INT(jp, HSIZE_T)])) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium dataset shape differs from grid: ', TRIM(datasets(i))
+          STOP 1
+       ENDIF
+    ENDDO
+  END SUBROUTINE equilibrium_grid_dimensions
 
   !**********************************************
   ! Allocate storing space for the magnetic field
@@ -240,7 +303,7 @@ CONTAINS
 
 
 
-    INTEGER                           :: i, ierr, ip, jp, ind, k
+    INTEGER                           :: i, ierr, ip, jp, ind
 #ifdef TOR3D
     INTEGER                           :: j
 #endif
@@ -254,7 +317,6 @@ CONTAINS
     REAL*8                            :: x_safe, dflux_dx, dflux_dy
     REAL*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
     CHARACTER(LEN=1000) :: fname
-    CHARACTER(50)  :: nit
     CHARACTER(LEN=256) :: geometry_message, restart_message
 
     REAL*8                            :: q_cyl, omega,a
@@ -271,48 +333,13 @@ CONTAINS
        ENDIF
     END IF
 
-    ! Read file
-    IF (switch%testcase>=50 .AND. switch%testcase<60) THEN
-       ! WEST case
-       ! Dimensions of the file storing the magnetic field for West
-       ip = input%field_dimensions(1)
-       jp = input%field_dimensions(2)
-       !ip = 541
-       !jp = 391
-       IF (switch%ME .EQV. .FALSE.)  THEN !if not a moving equilibrium simulation
-          fname = input%field_path
-       ELSE
-          fname = input%field_path
-          WRITE(nit, "(i10)") equilibrium_frame_index(frame)
-          nit = TRIM(ADJUSTL(nit))
-          k = INDEX(nit, " ") -1
-          fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
-       ENDIF
-       IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE(6,*) 'Magnetic field loaded from file: ', TRIM(ADJUSTL(fname))
-       ENDIF
-       CALL HDF5_open(fname, file_id, IERR)
-    ELSEIF (switch%testcase>=80 .AND. switch%testcase<90) THEN
-       ! ITER case
-       IF (switch%ME .EQV. .FALSE.) THEN !if not a moving equilibrium simulation
-          !ip = 513
-          !jp = 257
-          !fname = 'ITER_2008_MagField.h5'
-          fname = 'ITER_135011_0000.h5'
-       ELSE
-          fname = 'B_field_exp/ITER_135011'
-          WRITE(nit, "(i10)") equilibrium_frame_index(frame)
-          nit = TRIM(ADJUSTL(nit))
-          k = INDEX(nit, " ") -1
-          fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
-       ENDIF
-       IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE(6,*) 'Magnetic field loaded from file: ', TRIM(ADJUSTL(fname))
-       ENDIF
-       CALL HDF5_open(fname, file_id, IERR)
-       CALL HDF5_integer_reading(file_id, ip, 'ip')
-       CALL HDF5_integer_reading(file_id, jp, 'jp')
-    ENDIF
+    fname = equilibrium_input_filename(input%field_path, frame)
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Magnetic field loaded from file: ', TRIM(fname)
+    CALL HDF5_open(fname, file_id, ierr)
+    IF (ierr /= 0) STOP 1
+    CALL equilibrium_grid_dimensions(file_id, &
+         [CHARACTER(LEN=8) :: 'r2D', 'z2D', 'flux2D', 'Br2D', 'Bz2D', 'Bphi2D'], ip, jp)
+    input%field_dimensions = [ip, jp]
 
     ALLOCATE (r2D(ip, jp))
     ALLOCATE (z2D(ip, jp))
@@ -638,29 +665,32 @@ CONTAINS
     ALLOCATE (Bz(nnodes))
     ALLOCATE (Bt(nnodes))
 
-    IF (switch%ME .EQV. .FALSE.)  THEN !if not a moving equilibrium simulation
+    IF (MPIvar%glob_size > 1) THEN
        fname = TRIM(ADJUSTL(input%field_path))
+       k = LEN_TRIM(fname)
+       IF (k >= 3) THEN
+          IF (fname(k-2:k) == '.h5') fname = fname(:k-3)
+       ENDIF
+       IF (switch%ME) THEN
+          k = LEN_TRIM(fname)
+          IF (k > 5) THEN
+             IF (fname(k-4:k) == '_0000') fname = fname(:k-5)
+          ENDIF
+          WRITE(nit, '(I0)') equilibrium_frame_index(frame)
+          fname = TRIM(fname)//'_'//REPEAT('0', MAX(0, 4-LEN_TRIM(nit)))//TRIM(nit)
+       ENDIF
+       WRITE(nid, '(I0)') MPIvar%glob_id + 1
+       WRITE(npr, '(I0)') MPIvar%glob_size
+       fname_complete = TRIM(fname)//'_'//TRIM(nid)//'_'//TRIM(npr)//'.h5'
     ELSE
-       fname = TRIM(ADJUSTL(input%field_path))
-       WRITE(nit, "(i10)") equilibrium_frame_index(frame)
-       nit = TRIM(ADJUSTL(nit))
-       k = INDEX(nit, " ") -1
-       fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))
+       fname_complete = equilibrium_input_filename(input%field_path, frame)
     ENDIF
-
-
-    IF (MPIvar%glob_size .GT. 1) THEN
-       WRITE (nid, *) MPIvar%glob_id + 1
-       WRITE (npr, *) MPIvar%glob_size
-       fname_complete = TRIM(ADJUSTL(fname))//'_'//TRIM(ADJUSTL(nid))//'_'//TRIM(ADJUSTL(npr))//'.h5'
-    ELSE
-       fname_complete = TRIM(ADJUSTL(fname))//'.h5'
-    END IF
     IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE (6, *) 'Magnetic field loaded from file: ', TRIM(ADJUSTL(fname_complete))
     ENDIF
     ! Read file
     CALL HDF5_open(fname_complete, file_id, IERR)
+    IF (ierr /= 0) STOP 1
     CALL HDF5_array1D_reading(file_id, Br, 'Br')
     CALL HDF5_array1D_reading(file_id, Bz, 'Bz')
     CALL HDF5_array1D_reading(file_id, Bt, 'Bt')
@@ -1221,14 +1251,13 @@ CONTAINS
   SUBROUTINE load_stored_toroidal_current(jtor_at_nodes,frame)
     REAL*8, INTENT(OUT) :: jtor_at_nodes(:)
     INTEGER, OPTIONAL, INTENT(IN) :: frame
-    INTEGER        :: i,ierr,ip,jp,ind, k
+    INTEGER        :: i,ierr,ip,jp,ind
 #ifdef TOR3D
     INTEGER        :: j
 #endif
     INTEGER(HID_T) :: file_id
 
     CHARACTER(LEN=1000)    :: fname
-    CHARACTER(70)        :: nit
 
     REAL*8, POINTER, DIMENSION(:,:) :: r2D, z2D, Jtor
     REAL*8, ALLOCATABLE, DIMENSION(:) :: xvec, yvec
@@ -1239,46 +1268,12 @@ CONTAINS
     ! Allocate storing space in phys
     jtor_at_nodes = 0.d0
 
-    ! Read file
-    IF (switch%testcase>=50 .AND. switch%testcase<60) THEN
-       ! WEST case
-       ! Dimensions of the file storing the magnetic field for West
-       ip =  input%jtor_dimensions(1)
-       jp =  input%jtor_dimensions(2)
-       !ip = 541
-       !jp = 391
-       IF(switch%ME .EQV. .FALSE.) THEN !if not a moving equilibrium simulation
-          fname = input%jtor_path
-       ELSE
-          fname = input%jtor_path
-          WRITE(nit, "(i10)") equilibrium_frame_index(frame)
-          nit = TRIM(ADJUSTL(nit))
-          k = INDEX(nit, " ") -1
-          fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
-       ENDIF
-       IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE(6,*) 'Toroidal current loaded from file: ', TRIM(ADJUSTL(fname))
-       ENDIF
-       CALL HDF5_open(fname, file_id, IERR)
-    ELSEIF (switch%testcase>=80 .AND. switch%testcase<90) THEN
-       ! ITER case
-       IF(switch%ME .EQV. .FALSE.) THEN !if not a moving equilibrium simulation
-          !fname = 'ITER_2008_MagField.h5'
-          fname = 'ITER_135011_Jtor_0000.h5'
-       ELSE
-          fname = 'B_field_exp/ITER_135011_Jtor'
-          WRITE(nit, "(i10)") equilibrium_frame_index(frame)
-          nit = TRIM(ADJUSTL(nit))
-          k = INDEX(nit, " ") -1
-          fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
-       ENDIF
-       IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE(6,*) 'Toroidal current loaded from file: ', TRIM(ADJUSTL(fname))
-       ENDIF
-       CALL HDF5_open(fname, file_id, IERR)
-       CALL HDF5_integer_reading(file_id, ip, 'ip')
-       CALL HDF5_integer_reading(file_id, jp, 'jp')
-    ENDIF
+    fname = equilibrium_input_filename(input%jtor_path, frame)
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Toroidal current loaded from file: ', TRIM(fname)
+    CALL HDF5_open(fname, file_id, ierr)
+    IF (ierr /= 0) STOP 1
+    CALL equilibrium_grid_dimensions(file_id, [CHARACTER(LEN=8) :: 'r2D', 'z2D', 'Jtor'], ip, jp)
+    input%jtor_dimensions = [ip, jp]
 
     ALLOCATE(r2D(ip,jp))
     ALLOCATE(z2D(ip,jp))

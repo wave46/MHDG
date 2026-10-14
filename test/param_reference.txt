@@ -72,20 +72,16 @@
 &INPUT_LST
     transport_model_path = 'transport_model.nml' ! Settings used when transport_1d = .true.
     impurity_model_path = 'impurity_model.nml' ! Required when impurity_radiation = .true.
-    field_path          = 'path/to/magnetic/field.h5'  ! Path to Bfield h5 file. 
-                                                                        ! If switch%ME = .true. then omit numbering part like 'B_field/WEST_54487'
-                                                                        ! If switch%ME = .false. then put the full part 'B_field/WEST_54487_0000.h5'
-    field_dimensions(1) = 2000                                   ! 1st dimension dimensions of magnetic field file (200x200)
-    field_dimensions(2) = 2000                                   ! 2nd dimension dimensions of magnetic field file
+    field_path          = 'path/to/magnetic/field.h5'  ! Path to Bfield h5 file.
+    ! Single file: field.h5; numbered ME: field_0000.h5 (legacy basename also accepted).
+    ! Grid dimensions are read from HDF5.
     field_from_grid = .true.                                   ! true then reads from cartesian grid and then biineary interpolates on nodes
                                                                 ! false then reads from files with field on nodes
     compute_from_flux   = .true.                                ! derive Br, Bz, and Jtor from psi using the fitted field convention
     divide_by_2pi       = .false.                               ! fallback convention only when the field fit is unavailable
-    jtor_path           = 'path/to/plasma/current.h5'    ! Path to jtor h5 file. 
-                                                                        ! If switch%ME = .true. then omit numbering part like 'Jtor/WEST_54487_Jtor'
-                                                                        ! If switch%ME = .false. then put the full part 'Jtor/WEST_54487_Jtor_0000.h5'
-    jtor_dimensions(1) = 2000                                   ! 1st dimension dimensions of plasma current file 457x457
-    jtor_dimensions(2) = 2000                                   ! 2nd dimension dimensions of plasma current file
+    jtor_path           = 'path/to/plasma/current.h5'    ! Path to jtor h5 file.
+    ! Single file: current.h5; numbered ME: current_0000.h5 (legacy basename also accepted).
+    ! Grid dimensions are read from HDF5.
     save_folder = 'path/where/to/save/'
     external_heating_path = '/path/where/to/read/external/heating/from.h5'
     external_heating_from_grid = .true.

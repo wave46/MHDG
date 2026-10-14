@@ -83,6 +83,11 @@ HDF5 checkpoints through the production input, initialization, and solution
 readers. It checks static bootstrap initialization, real ME steps 0/1/50/99/100,
 feedback-state restoration, rejection before out-of-range history access,
 endpoint interpolation/heating selection, and inactive ME compatibility.
+It also checks HDF5 grid dimensions/orientation on a non-square WEST grid,
+stored-current interpolation at initial/endpoint frames, full filenames and
+legacy basenames, optional namelist dimensions, and dataset-shape rejection.
+The same cases load a small Gmsh mesh and checkpoint mesh/solution using stems
+and full .msh/.h5 names, and verify that full input names preserve output stems.
 It needs Python 3 with h5py and NumPy, uses no external
 equilibrium or case data, and does not launch a solver simulation.
 

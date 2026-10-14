@@ -153,6 +153,8 @@ SUBROUTINE READ_input()
   check_neutral_positivity = .TRUE.
   compute_from_flux = .TRUE.
   divide_by_2pi = .FALSE.
+  field_dimensions = 0
+  jtor_dimensions = 0
   tau = 1.d0
   diff_nn_min = diff_nn_min_unset
   Re_n = 1.d0

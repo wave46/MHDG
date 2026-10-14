@@ -91,6 +91,41 @@ CONTAINS
     CALL H5Fclose_f(file_id, error)
   END SUBROUTINE HDF5_close
 
+  SUBROUTINE HDF5_dataset_shape(file_id, dsetname, dimensions, ierr)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    CHARACTER(LEN=*), INTENT(IN) :: dsetname
+    INTEGER(HSIZE_T), ALLOCATABLE, INTENT(OUT) :: dimensions(:)
+    INTEGER, INTENT(OUT) :: ierr
+    INTEGER(HID_T) :: dataset, dataspace
+    INTEGER(HSIZE_T), ALLOCATABLE :: max_dimensions(:)
+    INTEGER :: rank, error, close_error
+    LOGICAL :: exists
+
+    ierr = -1
+    CALL H5Lexists_f(file_id, TRIM(dsetname), exists, error)
+    IF (error < 0) RETURN
+    IF (.NOT. exists) RETURN
+    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+    IF (error < 0) RETURN
+    CALL H5Dget_space_f(dataset, dataspace, error)
+    IF (error < 0) THEN
+       CALL H5Dclose_f(dataset, close_error)
+       RETURN
+    ENDIF
+    CALL H5Sget_simple_extent_ndims_f(dataspace, rank, error)
+    IF (error >= 0) THEN
+       ALLOCATE(dimensions(rank), max_dimensions(rank))
+       ! HDF5's Fortran interface returns dimensions in Fortran array order.
+       CALL H5Sget_simple_extent_dims_f(dataspace, dimensions, max_dimensions, error)
+       IF (error >= 0) ierr = 0
+    ENDIF
+    CALL H5Sclose_f(dataspace, close_error)
+    CALL H5Dclose_f(dataset, close_error)
+    IF (ierr /= 0 .AND. ALLOCATED(dimensions)) DEALLOCATE(dimensions)
+  END SUBROUTINE HDF5_dataset_shape
+
+
+
   !----------------------------------------
   ! create new group
   !----------------------------------------
