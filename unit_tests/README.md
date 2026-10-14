@@ -89,13 +89,20 @@ does not run the plasma solver. The trajectory layout is documented in
 The same fixtures check Python conversion of stationary, numbered and paired
 current inputs: exact values/orientation and attributes, untouched sources,
 non-overwrite, late grid/time rejection without a partial output, and sampling
-converted files with the Fortran reader. For a Python-only converter change,
-reuse the already-built check executable without running make:
+converted files with the Fortran reader.
+
+The same target checks the [heating provider](../src/Models/heating_series.md)
+with its own non-square grid and timestamps: both power channels, forward and
+reverse sampling, stationary/one-frame equivalence, endpoint coverage, cache
+ownership, dimension inference and malformed/nonfinite inputs. These are raw
+provider checks; heating solver integration follows separately.
+
+For a Python-only converter change, reuse the already-built check executable
+without running make:
 
 ```bash
 python unit_tests/check_equilibrium_series.py lib/equilibrium_series_check
 ```
-
 
 For a 2D `NGammaTiTeNeutral` build, `make check-me-restart` reads small synthetic
 HDF5 checkpoints through the production input, initialization, and solution

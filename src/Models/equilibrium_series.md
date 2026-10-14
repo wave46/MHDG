@@ -6,6 +6,14 @@ spatial interpolation, normalization, derived fields and topology stay in the so
 It owns its open file and two cached frames. `clear()` releases them; finalization
 also closes the file. Create and open each provider independently.
 
+Equilibrium and heating each contain a private `rectangular_series_t`. It owns
+their shared file/grid/time state, common metadata and shape checks, time
+bracketing and cache-slot management. Each provider owns its named primitive
+arrays and format-specific validation; equilibrium also retains `psiSep`, numbered
+input and separate legacy Jtor grids. Successful frame reads mark a reserved
+slot valid; a failed read leaves that slot invalid. The public sampling API and
+file layout are unchanged by this composition.
+
 Trajectory datasets use the following **Python/HDF5** shapes:
 
 | Dataset | Shape | Contents |

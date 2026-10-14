@@ -124,6 +124,40 @@ def conversion_checks(directory):
             ("converted_paired.h5", "trajectory", None, None)]
 
 
+def heating_inputs(directory):
+    r, z = np.array([1.6, 1.9, 2.4]), np.array([-.8, .2])
+    times = np.array([0., .05, .17, .45, .8])
+    t, y, x = np.meshgrid(times, z, r, indexing="ij")
+    with h5py.File(directory / "heating.h5", "w") as f:
+        f["time"], f["grid/r"], f["grid/z"] = times, r, z
+        f["heating/ions"] = 20+2*x+3*y+7*t
+        f["heating/electrons"] = 30+x*x+y-4*t
+    with h5py.File(directory / "heating.h5") as source, h5py.File(directory / "heating_single.h5", "w") as f:
+        f["time"], f["grid/r"], f["grid/z"] = [3.2], r, z
+        f["heating/ions"] = source["heating/ions"][:1]
+        f["heating/electrons"] = source["heating/electrons"][:1]
+    with h5py.File(directory / "heating.h5") as source, h5py.File(directory / "heating_legacy.h5", "w") as f:
+        f["r2D"], f["z2D"] = np.meshgrid(r, z, indexing="ij")
+        f["heating2D_ions"] = source["heating/ions"][0].T
+        f["heating2D_electrons"] = source["heating/electrons"][0].T
+        # Stale/omitted legacy ip,jp datasets do not determine the measured grid.
+        f["ip"], f["jp"] = [999], [999]
+    cases = [("heating.h5", "heating", None, None), ("heating_single.h5", "heating_fixed", None, None),
+             ("heating_legacy", "heating_fixed", None, None)]
+    for problem, name, values, expected in [
+        ("times", "time", [0., .05, .05, .45, .8], "Heating times must be finite and strictly increasing"),
+        ("shape", "heating/electrons", np.ones((5, 3, 2)), "Heating dataset shape differs from grid/time"),
+        ("nonfinite", "heating/ions", np.full((5, 2, 3), np.nan), "Cannot read finite heating frame"),
+    ]:
+        path = directory / f"heating_bad_{problem}.h5"
+        shutil.copyfile(directory / "heating.h5", path)
+        with h5py.File(path, "r+") as f:
+            del f[name]
+            f[name] = values
+        cases.append((path.name, "heating_invalid", expected, None))
+    return cases
+
+
 def main():
     executable = Path(sys.argv[1]).resolve()
     with tempfile.TemporaryDirectory(prefix="mhdg-equilibrium-series-") as scratch:
@@ -159,6 +193,7 @@ def main():
         cases = [(name, mode, expected, None) for name, mode, expected in cases]
         numbered_inputs(directory / "numbered")
         cases.extend(conversion_checks(directory))
+        cases.extend(heating_inputs(directory))
         cases.extend([
             ("numbered/field", "numbered", None, None),
             ("numbered/field_0000.h5", "numbered", None, None),

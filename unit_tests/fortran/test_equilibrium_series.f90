@@ -1,5 +1,6 @@
 PROGRAM test_equilibrium_series
   USE prec_const, ONLY: float
+  USE heating_series, ONLY: heating_series_t, heating_sample_t
   USE equilibrium_series, ONLY: equilibrium_series_t, equilibrium_sample_t
   IMPLICIT NONE
   TYPE(equilibrium_series_t) :: series, other
@@ -12,6 +13,10 @@ PROGRAM test_equilibrium_series
 
   CALL get_command_argument(1, filename)
   CALL get_command_argument(2, mode)
+  IF (INDEX(mode, 'heating') == 1) THEN
+     CALL check_heating_input()
+     STOP
+  ENDIF
   CALL get_command_argument(3, current_filename)
   CALL open_input(series)
   CALL require(ierr == 0, message)
@@ -92,6 +97,63 @@ PROGRAM test_equilibrium_series
   CALL other%clear()
   WRITE(*,'(A)') 'EQUILIBRIUM_SERIES_PASS'
 CONTAINS
+  SUBROUTINE check_heating_input()
+    TYPE(heating_series_t) :: heating
+    TYPE(heating_sample_t) :: power
+    REAL(float), ALLOCATABLE :: hr(:), hz(:), ht(:)
+    REAL(float) :: targets(8), actual, expected
+    INTEGER :: m, ir, iz
+
+    CALL heating%open(filename, ierr, message)
+    CALL require(ierr == 0, message)
+    CALL heating%grid(hr, hz)
+    CALL heating%time_points(ht)
+    CALL require(SIZE(hr) == 3 .AND. SIZE(hz) == 2, 'independent heating grid dimensions')
+    targets = [0._float,0.03_float,0.08_float,0.17_float,0.8_float,0.45_float,0.69_float,0.01_float]
+    DO m = 1, SIZE(targets)
+       CALL heating%sample_at(targets(m), power, ierr, message)
+       CALL require(ierr == 0, message)
+       actual = targets(m)
+       IF (mode == 'heating_fixed') actual = 0
+       DO ir = 1, SIZE(hr)
+          DO iz = 1, SIZE(hz)
+             CALL require(ABS(power%ions(iz,ir)-(20+2*hr(ir)+3*hz(iz)+7*actual)) < 1.e-12_float, &
+                  'ion heating orientation/interpolation')
+             CALL require(ABS(power%electrons(iz,ir)-(30+hr(ir)**2+hz(iz)-4*actual)) < 1.e-12_float, &
+                  'electron heating orientation/interpolation')
+          ENDDO
+       ENDDO
+       CALL require(ABS(power%time-targets(m)) < 1.e-12_float, 'heating physical time')
+    ENDDO
+    IF (mode == 'heating_fixed') THEN
+       CALL heating%sample_at(10._float, power, ierr, message)
+       CALL require(ierr == 0, message)
+    ELSE
+       CALL require(SIZE(ht) == 5 .AND. ABS(ht(2)-0.05_float) < 1.e-12_float, 'independent heating times')
+       CALL heating%sample_at(0.8_float+EPSILON(actual), power, ierr, message)
+       CALL require(ierr == 0, message)
+       CALL require(power%frame_left == 4 .AND. power%frame_right == 4, 'heating final endpoint')
+       CALL heating%sample_at(0.9_float, power, ierr, message)
+       CALL require(ierr /= 0, 'heating coverage rejection')
+    ENDIF
+    CALL heating%sample_at(0._float, power, ierr, message)
+    CALL require(ierr == 0, message)
+    expected = power%ions(1,1)
+    power%ions = -999
+    CALL heating%sample_at(0._float, power, ierr, message)
+    CALL require(ierr == 0, message)
+    CALL require(power%ions(1,1) == expected, 'heating samples must not mutate cached primitives')
+    CALL heating%clear()
+    CALL heating%sample_at(0._float, power, ierr, message)
+    CALL require(ierr /= 0, 'closed heating input')
+    CALL heating%open(filename, ierr, message)
+    CALL require(ierr == 0, message)
+    CALL heating%sample_at(0._float, power, ierr, message)
+    CALL require(ierr == 0, message)
+    CALL heating%clear()
+    WRITE(*,'(A)') 'EQUILIBRIUM_SERIES_PASS'
+  END SUBROUTINE check_heating_input
+
   SUBROUTINE open_input(input)
     TYPE(equilibrium_series_t), INTENT(INOUT) :: input
     IF (INDEX(mode, 'numbered') == 1) THEN
