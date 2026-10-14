@@ -193,6 +193,14 @@ def me_outputs(tmp_path):
     return tmp_path, plan, metadata
 
 
+def record_me_workflow(monkeypatch, run, plan, metadata, workflow):
+    """Persist the current fixture and supply its workflow to public comparisons."""
+    (run / 'run_plan.json').write_text(json.dumps(plan))
+    (run / 'run_metadata.json').write_text(json.dumps(metadata))
+    monkeypatch.setattr('regression_tests.compare.load_case_definition',
+                        lambda *_, **__: {'workflows': {plan['workflow_id']: workflow}})
+
+
 def test_me_completion_uses_embedded_steps_and_final_attempts(me_outputs):
     run, plan, metadata = me_outputs
     report = validate_me_completed_steps(run, plan, metadata, 2e-4)
@@ -220,12 +228,9 @@ def test_declared_controller_state_is_validated_and_compared(me_outputs, monkeyp
             group['puff'] = [0., 1.]
         elif damage:
             group['puff'][...] = np.nan if damage == 'nonfinite' else 2e10
-    (run / 'run_plan.json').write_text(json.dumps(plan))
-    (run / 'run_metadata.json').write_text(json.dumps(metadata))
     workflow = {'moving_equilibrium': {'series': 'fields', 'controller_scales': {'puff': 1e20}},
                 'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
-    monkeypatch.setattr('regression_tests.compare.load_case_definition',
-                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
     if reference_check:
         _, _, report = compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
                                              reference_override=reference)
@@ -260,13 +265,10 @@ def test_me_recipe_checks_completed_topology_endpoints(topology_outputs, monkeyp
                 del handle['magnetic/topology']
                 if damage != 'missing':
                     handle['magnetic/topology'] = np.bytes_('limited' if damage == 'last' else 'lower_single_null')
-    (run / 'run_plan.json').write_text(json.dumps(plan))
-    (run / 'run_metadata.json').write_text(json.dumps(metadata))
     workflow = {'moving_equilibrium': {'series': 'fields', 'topology': {
         'first_completed': 'limited', 'last_completed': 'lower_single_null'}},
         'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
-    monkeypatch.setattr('regression_tests.compare.load_case_definition',
-                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
     if compare_reference:
         _, _, report = compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
                                              reference_override=Path(metadata['hdf5_outputs'][3]))
@@ -290,12 +292,9 @@ def test_adaptive_me_reference_requires_matching_topology(topology_outputs, monk
             handle['magnetic/topology'] = np.bytes_(reference_label) if isinstance(reference_label, str) else reference_label
     fekete.write_bytes(b'not sampled in this metadata check')
     metadata['runtime_files'] = {'positionFeketeNodesTri2D.h5': {'path': str(fekete)}}
-    (run / 'run_plan.json').write_text(json.dumps(plan))
-    (run / 'run_metadata.json').write_text(json.dumps(metadata))
     workflow = {'moving_equilibrium': {'series': 'fields'},
                 'comparison': {'method': 'mesh_independent', 'profile': 'adaptive_reference'}}
-    monkeypatch.setattr('regression_tests.compare.load_case_definition',
-                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
     fields = Mock(return_value={'status': 'passed', 'failures': []})
     monkeypatch.setattr('regression_tests.compare.compare_adaptive_files', fields)
     method, _, report = compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
@@ -317,12 +316,9 @@ def test_adaptive_controller_uses_existing_direct_profile(topology_outputs, monk
         handle['simulation_parameters/physics/puff'][...] = 0.
     fekete.write_bytes(b'not sampled in this scalar check')
     metadata['runtime_files'] = {'positionFeketeNodesTri2D.h5': {'path': str(fekete)}}
-    (run / 'run_plan.json').write_text(json.dumps(plan))
-    (run / 'run_metadata.json').write_text(json.dumps(metadata))
     workflow = {'moving_equilibrium': {'series': 'fields', 'controller_scales': {'puff': 1e20}},
                 'comparison': {'method': 'mesh_independent', 'profile': 'adaptive_reference', 'direct_profile': profile}}
-    monkeypatch.setattr('regression_tests.compare.load_case_definition',
-                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
     monkeypatch.setattr('regression_tests.compare.compare_adaptive_files',
                         lambda *_, **__: {'status': 'passed', 'failures': []})
     method, _, report = compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
@@ -370,12 +366,9 @@ def test_completed_me_run_cannot_hide_missing_or_unconverged_steps(me_outputs, m
     else:
         log = run / 'stdout.log'
         log.write_text(log.read_text().replace('Error: 1.0D-5', 'Error: 1.0D-2'))
-    (run / 'run_plan.json').write_text(json.dumps(plan))
-    (run / 'run_metadata.json').write_text(json.dumps(metadata))
     workflow = {'moving_equilibrium': {'series': 'equilibrium_series'}, 'layout': 'mpi4_omp4',
                 'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
-    monkeypatch.setattr('regression_tests.compare.load_case_definition',
-                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
     if compare_reference:
         _, _, report = compare_completed_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
                                              reference_override=Path(metadata['hdf5_outputs'][-1 if damage == 'incomplete' else 3]))
@@ -412,13 +405,10 @@ def test_expected_prefix_checks_recipe_topology(stopped_me_outputs, monkeypatch,
     with h5py.File(metadata['hdf5_outputs'][1], 'r+') as handle:
         handle['magnetic/topology'] = np.bytes_(label)
     metadata['output_files'] = [{'path': value, **file_identity(Path(value))} for value in metadata['hdf5_outputs']]
-    (run / 'run_plan.json').write_text(json.dumps(plan))
-    (run / 'run_metadata.json').write_text(json.dumps(metadata))
     workflow = {'moving_equilibrium': {'series': 'fields', 'topology': {
         'first_completed': 'limited', 'last_completed': 'limited'}},
         'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
-    monkeypatch.setattr('regression_tests.compare.load_case_definition',
-                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
     report = validate_me_stopped_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json', completed_steps=1)
     assert report['status'] == ('passed' if label == 'limited' else 'failed')
     assert report['run_status'] == 'solver_failed'
@@ -436,12 +426,9 @@ def test_expected_prefix_compares_controller_scalars_near_zero(stopped_me_output
     with h5py.File(candidate, 'r+') as handle:
         handle['simulation_parameters/physics/puff'][...] = difference
     metadata['output_files'] = [{'path': value, **file_identity(Path(value))} for value in metadata['hdf5_outputs']]
-    (run / 'run_plan.json').write_text(json.dumps(plan))
-    (run / 'run_metadata.json').write_text(json.dumps(metadata))
     workflow = {'moving_equilibrium': {'series': 'fields', 'controller_scales': {'puff': 1e20}},
                 'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
-    monkeypatch.setattr('regression_tests.compare.load_case_definition',
-                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
     validation = validate_me_stopped_run(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json', completed_steps=1)
     assert validation['status'] == 'passed'
     _, _, report = compare_me_refinement_stop(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json',
@@ -570,12 +557,9 @@ def test_expected_stop_prefix_uses_shared_reference_comparison(stopped_me_output
 def test_invalid_expected_stop_cannot_enter_reference_comparison(stopped_me_outputs, monkeypatch):
     run, plan, metadata = stopped_me_outputs
     metadata['exit_code'] = 139
-    (run / 'run_plan.json').write_text(json.dumps(plan))
-    (run / 'run_metadata.json').write_text(json.dumps(metadata))
     workflow = {'moving_equilibrium': {'series': 'equilibrium_series'}, 'layout': 'mpi4_omp4',
                 'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
-    monkeypatch.setattr('regression_tests.compare.load_case_definition',
-                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
     monkeypatch.setattr('regression_tests.compare.compare_run', lambda *_, **__: pytest.fail('invalid outcome reached comparator'))
     with pytest.raises(ComparisonError, match='invalid expected ME refinement stop'):
         compare_me_refinement_stop(run, REGRESSION_ROOT / 'cases', REGRESSION_ROOT / 'tolerances.json', completed_steps=1)
@@ -645,16 +629,13 @@ def test_prefix_comparison_applies_stricter_fallback_newton_profile_to_earlier_s
                    'NR refinement recovery stopped: per-timestep refinement limit reached: 0\n')
     metadata.update(status='solver_failed', exit_code=1)
     metadata['output_files'] = [{'path': value, **file_identity(Path(value))} for value in metadata['hdf5_outputs']]
-    (run / 'run_plan.json').write_text(json.dumps(plan))
-    (run / 'run_metadata.json').write_text(json.dumps(metadata))
     tolerances = json.loads((REGRESSION_ROOT / 'tolerances.json').read_text())
     tolerances['profiles']['fixed_same_layout']['newton_error_max'] = 1e-6
     path = run / 'tolerances.json'
     path.write_text(json.dumps(tolerances))
     workflow = {'moving_equilibrium': {'series': 'equilibrium_series'}, 'layout': 'mpi4_omp4',
                 'comparison': {'method': 'mesh_independent', 'profile': 'adaptive_reference', 'direct_profile': 'fixed_same_layout'}}
-    monkeypatch.setattr('regression_tests.compare.load_case_definition',
-                        lambda *_, **__: {'workflows': {'baseline_warm': workflow}})
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
     _, _, report = compare_me_refinement_stop(run, REGRESSION_ROOT / 'cases', path,
                                              completed_steps=2, reference_override=Path(metadata['hdf5_outputs'][2]))
     assert report['hdf5']['status'] == 'passed' and report['convergence']['final_newton_error'] == 1e-7

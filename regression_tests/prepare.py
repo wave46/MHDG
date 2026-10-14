@@ -321,7 +321,7 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
 def _prepare_me_fields(staging, inputs, overrides):
     """Retimestamp selected pairs; reuse canonical controls and solver interpolation."""
     import h5py
-    from .compare_fixed import required_scalar, required_array
+    from .compare_fixed import required_scalar
     from .support import ComparisonError
 
     moving = inputs.workflow["moving_equilibrium"]
@@ -363,18 +363,7 @@ def _prepare_me_fields(staging, inputs, overrides):
                             raise BundleError(f"ME field {key} differs from its series: {target.name}")
                         handle[key][...] = generated
                 files[target.relative_to(staging).as_posix()] = file_identity(target)
-        for name, role in moving.get("controls", {}).items():
-            with h5py.File(inputs.artifacts[role]) as handle:
-                times = required_array(handle, "", "time")
-                if (times.ndim != 1 or len(times) < 2 or not all(math.isfinite(t) for t in times)
-                        or any(a >= b for a, b in zip(times[:-1], times[1:]))
-                        or times[0] > 0 or times[-1] <= (steps - 1) * dt):
-                    raise BundleError("ME control times must bracket all interval-start loads")
-                if name in {"puff", "target_density", "zeff"}:
-                    key = f"{name}_dimension"
-                    count = control_dimensions.get(key)
-                    if count != len(times):
-                        raise BundleError(f"ME {key} must match its control time count ({len(times)})")
+        _check_me_controls(inputs, control_dimensions, (steps - 1) * dt)
     except (OSError, KeyError, ValueError, TypeError, IndexError, ComparisonError) as exc:
         raise BundleError(f"cannot prepare ME fields: {exc}") from exc
     paths = {"field_path": inputs.run_directory / "inputs/magnetic/equilibrium",
@@ -382,6 +371,24 @@ def _prepare_me_fields(staging, inputs, overrides):
     record = {"source_manifest": file_identity(inputs.bundle_root / "manifest.json"),
               "time_step_s": dt, "canonical_frames": mapping, "generated_files": files}
     return paths, {"me": True, "nts": steps, "dt0": dt / scale, "tfi": steps * dt / scale}, record
+
+
+def _check_me_controls(inputs, dimensions, last_load_time):
+    """Check supplied curves against solver load times and declared dimensions."""
+    import h5py
+    from .compare_fixed import required_array
+
+    for name, role in inputs.workflow["moving_equilibrium"].get("controls", {}).items():
+        with h5py.File(inputs.artifacts[role]) as handle:
+            times = required_array(handle, "", "time")
+            if (times.ndim != 1 or len(times) < 2 or not all(math.isfinite(t) for t in times)
+                    or any(a >= b for a, b in zip(times[:-1], times[1:]))
+                    or times[0] > 0 or times[-1] <= last_load_time):
+                raise BundleError("ME control times must bracket all interval-start loads")
+            if name in {"puff", "target_density", "zeff"}:
+                key = f"{name}_dimension"
+                if dimensions.get(key) != len(times):
+                    raise BundleError(f"ME {key} must match its control time count ({len(times)})")
 
 
 def _parameter_replacements(final_directory: Path) -> dict[str, Path | str]:

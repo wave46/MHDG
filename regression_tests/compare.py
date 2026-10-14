@@ -186,19 +186,7 @@ def compare_run(
         moving = _validate_me_steps(inputs, tolerances["newton_error_max"])
     else:
         moving = outcome["completed_prefix"]
-        # A matching-mesh fallback can select a stricter Newton profile.
-        for step in moving["steps"][1:]:
-            if step["convergence"]["maximum"] != tolerances["newton_error_max"]:
-                check = NewtonConvergence(step["convergence"]["final_newton_error"], tolerances["newton_error_max"])
-                step["convergence"] = check.as_report()
-                if check.failure:
-                    step["failures"].append(check.failure)
-                    step["status"] = "failed"
-                    moving["failures"].append(f"step {step['step']}: {check.failure}")
-        moving["convergence"]["passed"] = all(step["convergence"]["passed"] for step in moving["steps"][1:])
-        moving["status"] = "failed" if moving["failures"] else "passed"
-        convergence = NewtonConvergence(moving["steps"][-1]["convergence"]["final_newton_error"],
-                                        tolerances["newton_error_max"])
+        convergence = _me_prefix_convergence(moving, tolerances["newton_error_max"])
         preceding = _validate_outputs(inputs, [])
     refinement = _check_refinement(inputs, candidate)
     protected.extend(Path(stage["output"]) for stage in preceding["stages"] if stage["output"])
@@ -280,16 +268,32 @@ def _load_me_stop(directory, case_directory, tolerances_path, completed_steps, c
     """Share raw execution loading and expected-stop assessment across callers."""
     inputs = load_comparison_inputs(directory, case_directory, tolerances_path,
                                     catalog=catalog, require_completed=False)
-    if not inputs.workflow.get("moving_equilibrium"):
+    moving = inputs.workflow.get("moving_equilibrium")
+    if not moving:
         raise ComparisonError("expected refinement stop requires a moving-equilibrium workflow")
     maximum = _stage_newton_maximum(inputs.workflow, inputs.plan["layout_id"],
                                     tolerances_path, catalog=inputs.catalog)
     outcome = validate_me_refinement_stop(inputs.run_directory, inputs.plan, inputs.metadata,
                                           maximum, completed_steps=completed_steps,
-                                          reason=inputs.workflow["moving_equilibrium"].get("expected_failure", {}).get(
+                                          reason=moving.get("expected_failure", {}).get(
                                               "reason", "divergence_refinement_limit"),
-                                          topology=inputs.workflow["moving_equilibrium"].get("topology"))
+                                          topology=moving.get("topology"))
     return inputs, outcome
+
+
+def _me_prefix_convergence(prefix, maximum):
+    """Apply a potentially stricter matching-mesh Newton profile to each advance."""
+    for step in prefix["steps"][1:]:
+        if step["convergence"]["maximum"] != maximum:
+            check = NewtonConvergence(step["convergence"]["final_newton_error"], maximum)
+            step["convergence"] = check.as_report()
+            if check.failure:
+                step["failures"].append(check.failure)
+                step["status"] = "failed"
+                prefix["failures"].append(f"step {step['step']}: {check.failure}")
+    prefix["convergence"]["passed"] = all(step["convergence"]["passed"] for step in prefix["steps"][1:])
+    prefix["status"] = "failed" if prefix["failures"] else "passed"
+    return NewtonConvergence(prefix["steps"][-1]["convergence"]["final_newton_error"], maximum)
 
 
 def compare_generated_meshes(
@@ -521,25 +525,31 @@ def validate_me_refinement_stop(directory, plan, metadata, maximum, *, completed
     report["last_attempted_step"] = entered[-1] if entered else None
     if entered != list(range(1, completed_steps + 2)):
         failures.append("expected failed timestep was not the last attempted advance")
+    final_attempt = log[iterations[-1].end():] if iterations else ""
+    report["terminal_reason"], problem = _me_terminal_reason(
+        final_attempt, plan["parameter_overrides"], reason, metadata.get("fatal_log_messages", []))
+    if problem:
+        failures.append(problem)
+    if not failures:
+        report.update(status="passed", selected_output=prefix["steps"][-1]["output"])
+    return report
+
+
+def _me_terminal_reason(final_attempt, parameters, reason, fatal_messages):
+    """Recognize the declared budget stop only in the final attempted advance."""
     markers = {"divergence_refinement_limit": ("NR refinement recovery stopped", "max_divergence_refinements")}
     if reason == "refinement_limit":
         markers["oscillation_refinement_limit"] = ("Oscillation refinement stopped", "max_oscillation_refinements")
     stops = {kind: re.compile(
-        rf"{marker}: per-timestep refinement limit reached:\s*{re.escape(str(plan['parameter_overrides'][budget]))}\s*$",
+        rf"{marker}: per-timestep refinement limit reached:\s*{re.escape(str(parameters[budget]))}\s*$",
         re.MULTILINE) for kind, (marker, budget) in markers.items()}
-    final_attempt = log[iterations[-1].end():] if iterations else ""
     matched = [kind for kind, stop in stops.items() if stop.search(final_attempt)]
     if not matched:
         label = "divergence-refinement-limit" if reason == "divergence_refinement_limit" else "refinement-limit"
-        failures.append(f"missing expected {label} terminal reason")
-    elif len(matched) != 1 or any(not stops[matched[0]].search(message)
-                                for message in metadata.get("fatal_log_messages", [])):
-        failures.append("execution also reported an unrelated fatal error")
-    else:
-        report["terminal_reason"] = matched[0]
-    if not failures:
-        report.update(status="passed", selected_output=prefix["steps"][-1]["output"])
-    return report
+        return None, f"missing expected {label} terminal reason"
+    if len(matched) != 1 or any(not stops[matched[0]].search(message) for message in fatal_messages):
+        return None, "execution also reported an unrelated fatal error"
+    return matched[0], None
 
 
 def _validate_outputs(inputs, checks):
