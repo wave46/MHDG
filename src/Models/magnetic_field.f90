@@ -635,15 +635,57 @@ CONTAINS
   !***********************************************************************
   ! Magnetic field loaded by a hdf5 file in the nodes !TODO modify for 3D
   !***********************************************************************
+  SUBROUTINE read_global_nodal_array(file_id, dataset, values)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    CHARACTER(LEN=*), INTENT(IN) :: dataset
+    REAL*8, INTENT(OUT) :: values(:)
+    REAL*8, POINTER :: global_values(:)
+    INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
+    INTEGER :: n_global, ierr
+
+    n_global = SIZE(values)
+    IF (MPIvar%glob_size > 1) n_global = Mesh%Nno_glob
+    CALL HDF5_dataset_shape(file_id, dataset, dimensions, ierr)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot read nodal equilibrium dataset shape: ', TRIM(dataset)
+       STOP 1
+    ENDIF
+    IF (SIZE(dimensions) /= 1) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Nodal equilibrium dataset must be rank one: ', TRIM(dataset)
+       STOP 1
+    ENDIF
+    IF (dimensions(1) /= INT(n_global, HSIZE_T)) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Nodal equilibrium length differs from global mesh: ', TRIM(dataset)
+       STOP 1
+    ENDIF
+    IF (MPIvar%glob_size > 1) THEN
+       IF (.NOT. ASSOCIATED(Mesh%loc2glob_nodes)) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Nodal equilibrium needs the global node mapping'
+          STOP 1
+       ENDIF
+       IF (SIZE(Mesh%loc2glob_nodes) /= SIZE(values) .OR. &
+           ANY(Mesh%loc2glob_nodes < 1) .OR. ANY(Mesh%loc2glob_nodes > n_global)) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Nodal equilibrium node mapping does not match the global mesh'
+          STOP 1
+       ENDIF
+    ENDIF
+    ALLOCATE(global_values(n_global))
+    CALL HDF5_array1D_reading(file_id, global_values, dataset)
+    IF (MPIvar%glob_size > 1) THEN
+       values = global_values(Mesh%loc2glob_nodes)
+    ELSE
+       values = global_values
+    ENDIF
+    DEALLOCATE(global_values)
+  END SUBROUTINE read_global_nodal_array
+
   SUBROUTINE load_magnetic_field_nodes(frame)
 
 
     USE MPI_OMP, only: MPIvar
     INTEGER, OPTIONAL, INTENT(IN) :: frame
-    INTEGER        ::  ierr, k
+    INTEGER        ::  ierr
     INTEGER        ::  i
-    CHARACTER(LEN=1000) :: fname = 'Evolving_equilibrium'
-    CHARACTER(50)  :: npr, nid, nit
     CHARACTER(len=1000) :: fname_complete
     INTEGER(HID_T) :: file_id
     REAL*8, POINTER, DIMENSION(:) :: Br, Bz, Bt, flux
@@ -665,37 +707,18 @@ CONTAINS
     ALLOCATE (Bz(nnodes))
     ALLOCATE (Bt(nnodes))
 
-    IF (MPIvar%glob_size > 1) THEN
-       fname = TRIM(ADJUSTL(input%field_path))
-       k = LEN_TRIM(fname)
-       IF (k >= 3) THEN
-          IF (fname(k-2:k) == '.h5') fname = fname(:k-3)
-       ENDIF
-       IF (switch%ME) THEN
-          k = LEN_TRIM(fname)
-          IF (k > 5) THEN
-             IF (fname(k-4:k) == '_0000') fname = fname(:k-5)
-          ENDIF
-          WRITE(nit, '(I0)') equilibrium_frame_index(frame)
-          fname = TRIM(fname)//'_'//REPEAT('0', MAX(0, 4-LEN_TRIM(nit)))//TRIM(nit)
-       ENDIF
-       WRITE(nid, '(I0)') MPIvar%glob_id + 1
-       WRITE(npr, '(I0)') MPIvar%glob_size
-       fname_complete = TRIM(fname)//'_'//TRIM(nid)//'_'//TRIM(npr)//'.h5'
-    ELSE
-       fname_complete = equilibrium_input_filename(input%field_path, frame)
-    ENDIF
+    fname_complete = equilibrium_input_filename(input%field_path, frame)
     IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE (6, *) 'Magnetic field loaded from file: ', TRIM(ADJUSTL(fname_complete))
     ENDIF
     ! Read file
     CALL HDF5_open(fname_complete, file_id, IERR)
     IF (ierr /= 0) STOP 1
-    CALL HDF5_array1D_reading(file_id, Br, 'Br')
-    CALL HDF5_array1D_reading(file_id, Bz, 'Bz')
-    CALL HDF5_array1D_reading(file_id, Bt, 'Bt')
+    CALL read_global_nodal_array(file_id, 'Br', Br)
+    CALL read_global_nodal_array(file_id, 'Bz', Bz)
+    CALL read_global_nodal_array(file_id, 'Bt', Bt)
     CALL HDF5_real_reading(file_id, psiSep, 'psiSep')
-    CALL HDF5_array1D_reading(file_id, flux, 'flux')
+    CALL read_global_nodal_array(file_id, 'flux', flux)
     IF (switch%ME ) THEN
        CALL HDF5_real_reading(file_id, dt_ME, 'dt')
        CALL HDF5_real_reading(file_id, t_ME, 'time')

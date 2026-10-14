@@ -102,7 +102,7 @@ check-neutral-wall-diagnostics : MHDG
 
 check-me-restart : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_me_restart.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o me_restart_check $(LIB)
-	python3 ../unit_tests/check_me_restart.py ./me_restart_check
+	python3 ../unit_tests/check_me_restart.py ./me_restart_check $(MODE)
 
 check-adaptivity-estimator : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_adaptivity_estimator.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o adaptivity_estimator_check $(LIB)

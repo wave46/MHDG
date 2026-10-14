@@ -1,6 +1,8 @@
 """Exercise the production ME restart reader and input validation on small HDF5 files."""
 from pathlib import Path
+import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -158,6 +160,44 @@ def main():
             if not passed:
                 raise SystemExit(f"FAIL: {name}\n{output}")
     print(f"ME restart reader checks: {len(cases)} PASS")
+    check_nodal_input(executable, sys.argv[2] if len(sys.argv) > 2 else "serial")
+
+
+def check_nodal_input(executable, build_mode):
+    environment = {**os.environ, "OMP_NUM_THREADS": "4", "OPENBLAS_NUM_THREADS": "1"}
+    with tempfile.TemporaryDirectory(prefix="mhdg-nodal-input-") as scratch:
+        directory = Path(scratch)
+        nodes = np.arange(1., 7.)
+        for frame in (0, 1):
+            with h5py.File(directory / f"nodal_{frame:04d}.h5", "w") as f:
+                f["Br"] = nodes + .1 + 10*frame
+                f["Bz"] = 2*nodes + .2 + 10*frame
+                f["Bt"] = 3*nodes + .3 + 10*frame
+                f["flux"] = 10 - nodes + 100*frame
+                f["psiSep"] = [20. + 100*frame]
+                f["time"], f["dt"] = [.08*frame], [.08*frame]
+        (directory / "stationary.h5").symlink_to("nodal_0000.h5")
+        commands = [(1, "stationary", "fixed"), (1, "nodal", "moving")]
+        if build_mode == "parall":
+            commands += [(4, "stationary.h5", "fixed"), (4, "nodal_0000.h5", "moving")]
+        for ranks, filename, mode in commands:
+            command = [str(executable), "nodal", filename, mode]
+            if ranks > 1:
+                launcher = shlex.split(os.environ.get("MPIEXEC", "mpirun.openmpi"))
+                command = [*launcher, "-n", str(ranks), *command]
+            run = subprocess.run(command, cwd=directory, env=environment,
+                                 capture_output=True, text=True, timeout=30)
+            output = run.stdout + run.stderr
+            if run.returncode != 0 or f"GLOBAL_NODAL_INPUT_PASS {ranks}" not in output or "HDF5-DIAG" in output:
+                raise SystemExit(f"FAIL: nodal {ranks} ranks {mode}\n{output}")
+        with h5py.File(directory / "nodal_0000.h5", "r+") as f:
+            del f["Bz"]
+            f["Bz"] = np.ones(5)
+        run = subprocess.run([str(executable), "nodal", "stationary.h5", "fixed"],
+                             cwd=directory, env=environment, capture_output=True, text=True, timeout=30)
+        if run.returncode == 0 or "Nodal equilibrium length differs from global mesh" not in run.stdout + run.stderr:
+            raise SystemExit(f"FAIL: nodal mesh-size mismatch\n{run.stdout}{run.stderr}")
+    print(f"Global nodal equilibrium checks: {len(commands)} layouts/modes and mesh-size rejection PASS")
 
 
 if __name__ == "__main__":

@@ -120,6 +120,10 @@ Run the following command
 ```
 Full filenames are preferred. Legacy mesh and restart stems remain accepted;
 input extensions do not change output names or mesh-adaptation filenames.
+For 2D node-based equilibrium input, each file contains `Br`, `Bz`, `Bt` and
+`flux` vectors in global mesh-node order, plus `psiSep`. Runtime partitions read
+the same file and select their nodes through the mesh mapping; per-rank equilibrium
+files are no longer used. Numbered ME files also provide `time` and `dt`.
 Having first initial guess for high diffusion (in a file with shortest name, without _NR00, _000 and so on), now we can reduce diffusion to the desired values (usually around 1m^2/s). This is done automatically in the code.
 One copy `param_diffred.txt` to `param.txt`. For each diffusion value a (pseudo)steady state will be achieved and then the diffusion value will be multiplied by `diffred` parameter and then a steady state for lower diffusion will be found.
 Usually simulation runs until it crashes for very low diffusion, or you can specify number of (pseudo)timesteps (i.e. number of (pseudo)steady states will be found for decreasing diffusion values) with parameter `nts` (10 in the example).

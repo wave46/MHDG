@@ -4,11 +4,13 @@ PROGRAM test_me_restart
   USE GMSH_io_module, ONLY: load_gmsh_mesh
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
   USE globals
-  USE MPI_OMP, ONLY: MPIvar
+  USE MPI_OMP, ONLY: MPIvar, init_MPI_OMP
+  USE mpi, ONLY: MPI_FINALIZE
   USE interpolation, ONLY: binarysearch, interpolate
   USE external_heating, ONLY: initialize_external_heating, load_external_heating
   USE magnetic_field, ONLY: equilibrium_input_filename, equilibrium_grid_dimensions, load_stored_toroidal_current
   USE magnetic_field, ONLY: open_control_series, load_puff_from_file, load_zeff, load_impurity_concentration
+  USE magnetic_field, ONLY: initialize_magnetic_field, load_magnetic_field_nodes
   USE HDF5_io_module, ONLY: HDF5_open, HDF5_close, HDF5_dataset_shape
   USE HDF5, ONLY: HID_T, HSIZE_T
   IMPLICIT NONE
@@ -25,6 +27,15 @@ PROGRAM test_me_restart
   INTEGER :: sample, control_length
   REAL*8 :: initial_puff, control_times(3)
   CHARACTER(LEN=1000) :: control_filename
+  CHARACTER(LEN=32) :: mode
+
+  CALL get_command_argument(1, mode)
+  IF (mode == 'nodal') THEN
+     CALL init_MPI_OMP()
+     CALL check_nodal_input()
+     CALL MPI_FINALIZE(ierr)
+     STOP
+  ENDIF
 
   ! Exact control endpoints and grid corners must leave index+1 in bounds.
   knots = [0.d0, 0.5d0, 0.56d0]
@@ -142,6 +153,58 @@ PROGRAM test_me_restart
        phys%feedback_integral_error, phys%feedback_previous_error
 
 CONTAINS
+  SUBROUTINE check_nodal_input()
+    INTEGER :: i, frame, last_frame
+    REAL*8 :: node, expected_flux, expected_field(3)
+
+    CALL get_command_argument(2, input%field_path)
+    CALL get_command_argument(3, mode)
+    switch%ME = mode == 'moving'
+    switch%ohmicsrc = .FALSE.
+    switch%RMP = .FALSE.
+    switch%Ripple = .FALSE.
+    simpar%refval_charge = 1.d0
+    simpar%refval_mass = 1.d0
+    simpar%refval_time = 1.d0
+    Mesh%Nno_glob = 6
+    Mesh%Nnodes = 6
+    IF (MPIvar%glob_size > 1) Mesh%Nnodes = 3
+    ALLOCATE(Mesh%X(Mesh%Nnodes,2), Mesh%loc2glob_nodes(Mesh%Nnodes))
+    IF (MPIvar%glob_size == 1) THEN
+       Mesh%loc2glob_nodes = [1,2,3,4,5,6]
+    ELSE
+       ! Deliberately reordered, overlapping partitions, including shared nodes.
+       Mesh%loc2glob_nodes = [MPIvar%glob_id+3, MPIvar%glob_id+1, MPIvar%glob_id+2]
+    ENDIF
+    Mesh%X(:,1) = 2.d0 + 0.1d0*Mesh%loc2glob_nodes
+    Mesh%X(:,2) = 0.2d0*Mesh%loc2glob_nodes
+    CALL initialize_magnetic_field()
+    last_frame = 0
+    IF (switch%ME) last_frame = 1
+    DO frame = 0, last_frame
+       CALL load_magnetic_field_nodes(frame)
+       DO i = 1, Mesh%Nnodes
+          node = REAL(Mesh%loc2glob_nodes(i), KIND=8)
+          expected_field = [node+0.1d0, 2.d0*node+0.2d0, 3.d0*node+0.3d0] + 10.d0*frame
+          expected_flux = 10.d0-node+100.d0*frame
+          IF (MAXVAL(ABS(phys%B(i,:)-expected_field)) > 1.d-12 .OR. &
+              ABS(phys%magnetic_flux(i)-expected_flux) > 1.d-12 .OR. &
+              ABS(phys%magnetic_psi(i)-(6.d0-node)/16.d0) > 1.d-12 .OR. &
+              ABS(phys%omega(i)-SQRT(SUM(expected_field**2))) > 1.d-12) &
+               ERROR STOP 'nodal values differ from global mesh ordering'
+       ENDDO
+       IF (ABS(phys%Flux2Dmin-(4.d0+100.d0*frame)) > 1.d-12 .OR. &
+           ABS(phys%Flux2Dmax-(9.d0+100.d0*frame)) > 1.d-12 .OR. &
+           ABS(phys%r_axis-2.6d0) > 1.d-12 .OR. ABS(phys%z_axis-1.2d0) > 1.d-12) &
+            ERROR STOP 'global nodal flux range or magnetic axis'
+       IF (switch%ME) THEN
+          IF (ABS(time%t_ME-0.08d0*frame) > 1.d-12 .OR. &
+              ABS(time%dt_ME-0.08d0*frame) > 1.d-12) ERROR STOP 'nodal endpoint time'
+       ENDIF
+    ENDDO
+    IF (MPIvar%glob_id == 0) WRITE(*,'(A,1X,I0)') 'GLOBAL_NODAL_INPUT_PASS', MPIvar%glob_size
+  END SUBROUTINE check_nodal_input
+
   SUBROUTINE check_mesh()
     IF (Mesh%Nnodes /= 3 .OR. Mesh%Nelems /= 1) ERROR STOP 'mesh dimensions'
     IF (ABS(MINVAL(Mesh%X(:,1))*phys%lscale-2.d0) > 1.d-12 .OR. &

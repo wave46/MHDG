@@ -91,8 +91,12 @@ and full .msh/.h5 names, and verify that full input names preserve output stems.
 Control readers infer series lengths and preserve puff, Zeff and impurity
 interpolation at initial, intermediate and final times, including repeated
 loads; mismatched value/time lengths and invalid vector shapes are rejected.
+The same target checks global nodal input on one rank and, for parallel builds,
+four ranks with four OpenMP threads: reordered/shared nodes, stationary and ME
+endpoint data, global flux extrema and axis coordinates, and mesh-size mismatch.
 It needs Python 3 with h5py and NumPy, uses no external
-equilibrium or case data, and does not launch a solver simulation.
+equilibrium or case data, and does not launch a solver simulation. The nodal
+checks initialize MPI; parallel builds need a working local MPI launcher.
 
 In ME runs, `nts` is the final global step number: with `nts=100`, restart steps
 50, 99, and 100 leave 50, 1, and 0 advances. Startup loads the accepted frame
