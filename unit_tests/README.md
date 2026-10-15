@@ -149,6 +149,9 @@ It also checks that a caller requesting optional reference Jtor is told when
 the input contains none, without attempting interpolation of missing data.
 The same cases load a small Gmsh mesh and checkpoint mesh/solution using stems
 and full .msh/.h5 names, and verify that full input names preserve output stems.
+The same driver checks physical output indices independently of save frequency,
+initial and final names, and indices above 9999 while preserving legacy output
+numbering and Newton diagnostic overwriting.
 Control readers infer series lengths and preserve puff, Zeff and impurity
 interpolation at initial, intermediate and final times, including repeated
 loads; mismatched value/time lengths and invalid vector shapes are rejected.

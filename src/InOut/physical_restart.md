@@ -50,6 +50,20 @@ explicit modes independently of `ME`. Controller formulas and configured gains
 are retained. Configured constants and source schedules keep their existing
 ownership rules from the [control guide](../Models/control_series.md).
 
-This checkpoint slice leaves explicit solver execution guarded. Output naming,
-initial/restart output handling and end-to-end loop activation follow in the next
-slice; temporal rejection, timestep growth and predictor history follow later.
+For explicit physical-time modes, solution filenames end with the accepted
+numerical index, with at least four digits: `_0000`, `_0006`, `_10000`. The save
+frequency selects which steps are written; it does not divide the filename index.
+Startup output remains a service file named `_0000`, including on continuation;
+its metadata still records the restored physical time and numerical index.
+Final output uses the same indexed name as a regular output of that step,
+including when the final step falls outside the save frequency. Newton diagnostics keep their existing
+Newton-only names, such as `_NR0002`, and overwrite those files on subsequent
+steps. HDF5 timestamps remain authoritative.
+
+Legacy configurations retain their output sequence numbers (step divided by save
+frequency), startup `_0000` and unsuffixed final filename. All indices can grow
+beyond four digits.
+
+Explicit solver execution remains guarded until end-to-end physical loop
+activation; trajectory position metadata follows with that activation. Temporal
+rejection, timestep growth and predictor history follow later.

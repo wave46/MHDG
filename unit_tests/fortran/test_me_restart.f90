@@ -132,6 +132,7 @@ PROGRAM test_me_restart
   reference_mesh_name = 'inputs/unit_mesh_P1'
   CALL setSolName(expected_output, reference_mesh_name, 0, .TRUE., .FALSE.)
   IF (output_name /= expected_output) ERROR STOP 'output name changed with full input filename'
+  CALL check_output_names()
 
   ! Legacy numbered heating retains the magnetic frame schedule without timestamps.
   Mesh%Nnodes = 1
@@ -255,6 +256,43 @@ PROGRAM test_me_restart
        phys%feedback_integral_error, phys%feedback_previous_error
 
 CONTAINS
+  SUBROUTINE check_output_names()
+    CHARACTER(LEN=1024) :: base, name, previous
+    INTEGER :: saved_frequency
+    LOGICAL :: saved_legacy, saved_decoupled
+
+    saved_frequency = utils%freqsave
+    saved_legacy = time%legacy_input
+    saved_decoupled = switch%decoup
+    switch%decoup = .FALSE.
+    utils%freqsave = 5
+    time%legacy_input = .TRUE.
+    CALL setSolName(base, mesh_name, 0, .TRUE., .TRUE.)
+    CALL setSolName(name, mesh_name, 6, .TRUE., .FALSE.)
+    IF (name /= TRIM(base)//'_0001') ERROR STOP 'legacy output sequence changed'
+    CALL setSolName(name, mesh_name, 50000, .TRUE., .FALSE.)
+    IF (name /= TRIM(base)//'_10000') ERROR STOP 'legacy output index above 9999'
+
+    time%legacy_input = .FALSE.
+    CALL setSolName(name, mesh_name, 0, .TRUE., .FALSE.)
+    IF (name /= TRIM(base)//'_0000') ERROR STOP 'physical initial output'
+    CALL setSolName(previous, mesh_name, 6, .TRUE., .FALSE.)
+    IF (previous /= TRIM(base)//'_0006') ERROR STOP 'physical accepted-step output index'
+    CALL setSolName(name, mesh_name, 7, .TRUE., .FALSE.)
+    IF (name /= TRIM(base)//'_0007' .OR. name == previous) ERROR STOP 'physical substep collision'
+    CALL setSolName(previous, mesh_name, 7, .TRUE., .TRUE.)
+    IF (previous /= name) ERROR STOP 'physical final output lost accepted index'
+    CALL setSolName(name, mesh_name, 10000, .TRUE., .TRUE.)
+    IF (name /= TRIM(base)//'_10000') ERROR STOP 'physical output index above 9999'
+
+    CALL setSolName(name, mesh_name, 2, .FALSE., .TRUE.)
+    IF (name /= TRIM(base)//'_NR0002') ERROR STOP 'Newton diagnostics gained a physical step index'
+
+    utils%freqsave = saved_frequency
+    time%legacy_input = saved_legacy
+    switch%decoup = saved_decoupled
+  END SUBROUTINE check_output_names
+
   SUBROUTINE check_physical_restart()
     TYPE(equilibrium_sample_t) :: sample
     LOGICAL :: finished, moving

@@ -482,7 +482,7 @@ CONTAINS
     INTEGER, INTENT(IN)                  :: it
     LOGICAL, INTENT(IN)                  :: convNR, convT
     CHARACTER(LEN=20)                 :: Num
-    INTEGER                             :: l, i
+    INTEGER                             :: l, i, output_step
 
     ! At the beginning, the save name is the mesh name..
     save_name = TRIM(ADJUSTL(mesh_name))
@@ -525,18 +525,16 @@ CONTAINS
 #endif
     ! Complete the save name: if not converged the NR, I put NR + the iteration number
     IF (.NOT. convNR) THEN
-       WRITE (Num, "(i10)") it
-       Num = TRIM(ADJUSTL(Num))
-       k = INDEX(Num, " ") - 1
-       save_name = TRIM(ADJUSTL(save_name))//"_NR"//REPEAT("0", 4 - k)//TRIM(ADJUSTL(Num))
+       WRITE (Num, "(I0.4)") it
+       save_name = TRIM(save_name)//"_NR"//TRIM(Num)
     END IF
 
     ! Complete the save name: if not converged the time scheme, I put the iteration number
-    IF (.NOT. convT) THEN
-       WRITE (Num, "(i10)") it/utils%freqsave
-       Num = TRIM(ADJUSTL(Num))
-       k = INDEX(Num, " ") - 1
-       save_name = TRIM(ADJUSTL(save_name))//"_"//REPEAT("0", 4 - k)//TRIM(ADJUSTL(Num))
+    IF (.NOT. convT .OR. (.NOT. time%legacy_input .AND. convNR)) THEN
+       output_step = it
+       IF (time%legacy_input) output_step = it/utils%freqsave
+       WRITE (Num, "(I0.4)") output_step
+       save_name = TRIM(save_name)//"_"//TRIM(Num)
     END IF
 
     IF (switch%decoup) THEN
