@@ -159,6 +159,11 @@ SUBROUTINE READ_input()
   compute_from_flux = .TRUE.
   divide_by_2pi = .FALSE.
   jtor_path = ''
+  puff_path = ''
+  target_density_path = ''
+  target_density_xpr_path = ''
+  zeff_path = ''
+  target_variable = 0
   field_dimensions = 0
   jtor_dimensions = 0
   puff_dimension = 0
@@ -220,6 +225,10 @@ SUBROUTINE READ_input()
   CLOSE (uinput)
 
   CALL configure_time_input()
+  IF (time_mode /= 'legacy' .AND. (target_variable < 0 .OR. target_variable > 3)) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Physical-time target_variable must be 0, 1, 2 or 3'
+     STOP 1
+  ENDIF
 
   IF (sollib == 3 .AND. LEN_TRIM(petsc_factor_solver) > 0) THEN
      IF (pctype /= 'PCLU') THEN
@@ -230,7 +239,7 @@ SUBROUTINE READ_input()
 
   ! In moving-equilibrium runs nts is the final global step, not a count of
   ! additional steps after a restart. Histories are indexed by that step.
-  IF (ME .AND. nts .LT. 1) THEN
+  IF (time_mode == 'legacy' .AND. ME .AND. nts .LT. 1) THEN
      IF (MPIvar%glob_id .EQ. 0) WRITE (6, *) 'ME final step nts must be positive: ', nts
      STOP 1
   ENDIF

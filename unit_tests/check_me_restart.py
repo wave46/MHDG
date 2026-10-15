@@ -101,6 +101,7 @@ def main():
         ("control_shape_mismatch", 0, True, 100, True, "Control dataset length differs from time"),
         ("control_rank_mismatch", 0, True, 100, True, "Control values and time must be rank one"),
         ("control_too_short", 0, True, 100, True, "Invalid control series length"),
+        ("control_nonfinite", 0, True, 100, True, "Invalid control values or timestamps"),
     ]
     with tempfile.TemporaryDirectory(prefix="mhdg-me-restart-") as scratch:
         for name, step, saved_me, nts, me, expected in cases:
@@ -122,9 +123,13 @@ def main():
                 f["zeff"] = 2 + 3*times
                 f["impurity_concentration"] = .1 + .01*times
                 f["target_density"] = np.ones_like(times)
+                for key, value in {"x_lower": 2.1, "x_upper": 2.5, "y_lower": .1, "y_upper": .1}.items():
+                    f[key] = [value]
                 if name == "control_shape_mismatch":
                     del f["puff"]
                     f["puff"] = np.ones(2)
+                elif name == "control_nonfinite":
+                    f["puff"][1] = np.nan
                 elif name == "control_rank_mismatch":
                     del f["time"]
                     f["time"] = times.reshape(1, 3)
@@ -201,8 +206,15 @@ def main():
                                           text=True, capture_output=True, timeout=20)
                 if sampling.returncode or "PHYSICAL_SAMPLING_PASS" not in sampling.stdout:
                     raise SystemExit(f"FAIL: physical sampling {name}\n{sampling.stdout}{sampling.stderr}")
+                if name == "trajectory_fixed":
+                    controls = subprocess.run([str(executable), "time-controls"], cwd=directory,
+                                              text=True, capture_output=True, timeout=20)
+                    if controls.returncode or "PHYSICAL_CONTROLS_PASS" not in controls.stdout:
+                        raise SystemExit(f"FAIL: physical controls\n{controls.stdout}{controls.stderr}")
+
     print(f"ME restart reader checks: {len(cases)} PASS")
     print("Physical sampling: numbered stem/anchor, trajectory, fixed field and changed-node heating/current PASS")
+    print("Fixed-field controls: constants, scheduled sources, feedback timestep and repeat evaluation PASS")
     check_nodal_input(executable, sys.argv[2] if len(sys.argv) > 2 else "serial")
 
 

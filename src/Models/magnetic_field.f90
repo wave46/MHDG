@@ -8,6 +8,7 @@
 !*****************************************
 
 MODULE magnetic_field
+  USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   USE input_files, ONLY: resolve_input_filename, numbered_stem, numbered_filename
   USE rectangular_series_io, ONLY: locate_series_time
   USE equilibrium_series, ONLY: equilibrium_series_t, equilibrium_sample_t
@@ -40,6 +41,12 @@ MODULE magnetic_field
   TYPE(equilibrium_series_t), SAVE, PRIVATE :: equilibrium_input
   REAL(float), ALLOCATABLE, SAVE, PRIVATE :: equilibrium_times(:)
   LOGICAL, SAVE, PRIVATE :: equilibrium_input_open = .FALSE.
+  TYPE, PRIVATE :: control_curve_t
+     CHARACTER(LEN=1000) :: path = ''
+     REAL(float), ALLOCATABLE :: times(:), values(:)
+     REAL(float) :: chord(4) = 0
+  END TYPE control_curve_t
+  TYPE(control_curve_t), SAVE, PRIVATE :: puff_curve, density_curve, xpr_curve, impurity_curve, zeff_curve
 CONTAINS
 
   SUBROUTINE open_magnetic_input()
@@ -1825,7 +1832,7 @@ CONTAINS
     END IF
 
 #ifdef NEUTRAL
-    IF (switch%ME .EQV. .FALSE.) THEN
+    IF (time%legacy_input .AND. .NOT. switch%ME) THEN
        IF (MPIvar%glob_id .EQ. 0) THEN
           WRITE(6,*) 'Puff is analytical'
        ENDIF
@@ -1925,291 +1932,180 @@ SUBROUTINE open_control_series(path, dataset, file_id, n)
    n = INT(dimensions(1))
 END SUBROUTINE open_control_series
 
+SUBROUTINE read_control_curve(curve, path, dataset)
+   TYPE(control_curve_t), INTENT(INOUT) :: curve
+   CHARACTER(LEN=*), INTENT(IN) :: path, dataset
+   INTEGER(HID_T) :: file_id
+   INTEGER :: n
+
+   IF (curve%path == path .AND. ALLOCATED(curve%times)) RETURN
+   curve = control_curve_t()
+   CALL open_control_series(path, dataset, file_id, n)
+   ALLOCATE(curve%times(n), curve%values(n))
+   CALL HDF5_array1D_reading(file_id, curve%values, dataset)
+   CALL HDF5_array1D_reading(file_id, curve%times, 'time')
+   IF (dataset == 'target_density') THEN
+      CALL HDF5_real_reading(file_id, curve%chord(1), 'x_lower')
+      CALL HDF5_real_reading(file_id, curve%chord(2), 'x_upper')
+      CALL HDF5_real_reading(file_id, curve%chord(3), 'y_lower')
+      CALL HDF5_real_reading(file_id, curve%chord(4), 'y_upper')
+   ENDIF
+   CALL HDF5_close(file_id)
+   IF (ANY(.NOT. ieee_is_finite(curve%times)) .OR. ANY(.NOT. ieee_is_finite(curve%values)) .OR. &
+       ANY(.NOT. ieee_is_finite(curve%chord)) .OR. ANY(curve%times(2:) <= curve%times(:n-1))) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Invalid control values or timestamps: ', TRIM(path), ' ', TRIM(dataset)
+      STOP 1
+   ENDIF
+   curve%path = path
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control curve loaded: ', TRIM(path), ' ', TRIM(dataset)
+END SUBROUTINE read_control_curve
+
+SUBROUTINE sample_control_curve(curve, path, dataset, value, n)
+   TYPE(control_curve_t), INTENT(INOUT) :: curve
+   CHARACTER(LEN=*), INTENT(IN) :: path, dataset
+   REAL(float), INTENT(OUT) :: value
+   INTEGER, INTENT(OUT) :: n
+   INTEGER :: left, right, ierr
+   REAL(float) :: target_time, actual_time, weight
+   CHARACTER(LEN=256) :: message
+
+   CALL read_control_curve(curve, path, dataset)
+   n = SIZE(curve%times)
+   target_time = time%t_ME
+   IF (.NOT. time%legacy_input) target_time = time%t_target*simpar%refval_time
+   CALL locate_series_time(curve%times, target_time, left, right, actual_time, weight, ierr, message)
+   IF (ierr /= 0) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control input error: ', TRIM(path), ' ', TRIM(message)
+      STOP 1
+   ENDIF
+   IF (left == right) THEN
+      value = curve%values(left)
+   ELSE
+      value = curve%values(left)*(curve%times(right)-actual_time)/(curve%times(right)-curve%times(left)) + &
+              curve%values(right)*(actual_time-curve%times(left))/(curve%times(right)-curve%times(left))
+   ENDIF
+END SUBROUTINE sample_control_curve
+
+SUBROUTINE clear_control_curves()
+   puff_curve = control_curve_t()
+   density_curve = control_curve_t()
+   xpr_curve = control_curve_t()
+   impurity_curve = control_curve_t()
+   zeff_curve = control_curve_t()
+END SUBROUTINE clear_control_curves
+
+LOGICAL FUNCTION control_file_requested(path)
+   CHARACTER(LEN=*), INTENT(IN) :: path
+   control_file_requested = time%legacy_input .OR. LEN_TRIM(path) > 0
+END FUNCTION control_file_requested
+
 SUBROUTINE SetParticleSource()
+   REAL*8 :: nli
 
-   CHARACTER(LEN=1000) :: fname, fname_density, fname_impurity,fname_xpr_density, fname_zeff
-   REAL*8            :: nli
-
-   fname = input%puff_path
-   fname_density = input%target_density_path
-   fname_xpr_density = input%target_density_xpr_path
-   fname_impurity = input%impurity_concentration_path
-   fname_zeff = input%zeff_path
-   
-
-   IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
-      IF (switch%target_variable .EQ. 0) THEN
-         CALL load_puff_from_file(fname, input%puff_dimension)
-         IF (switch%impurity_radiation)THEN
-            CALL load_impurity_concentration(fname_impurity, input%impurity_concentration_dimension)
+   IF (.NOT. time%legacy_input .OR. (switch%testcase >= 50 .AND. switch%testcase <= 59)) THEN
+      SELECT CASE (switch%target_variable)
+      CASE (0, 2)
+         IF (control_file_requested(input%puff_path)) &
+              CALL load_puff_from_file(input%puff_path, input%puff_dimension)
+         IF (switch%target_variable == 2) &
+              CALL adjust_recycling_to_target_density(input%target_density_path, input%target_density_dimension)
+      CASE (1, 3)
+         CALL adjust_puff_to_target_density(input%target_density_path, input%target_density_dimension)
+      END SELECT
+      IF (switch%impurity_radiation) THEN
+         IF (switch%target_variable == 3) THEN
+            CALL adjust_impurity_concentration_to_target_density_xpr(input%target_density_xpr_path, &
+                 input%target_density_xpr_dimension)
+         ELSEIF (control_file_requested(input%impurity_concentration_path)) THEN
+            CALL load_impurity_concentration(input%impurity_concentration_path, input%impurity_concentration_dimension)
          ENDIF
-      ELSEIF (switch%target_variable .EQ. 1) THEN
-         CALL adjust_puff_to_target_density(fname_density, input%target_density_dimension)
-         IF (switch%impurity_radiation)THEN
-            CALL load_impurity_concentration(fname_impurity, input%impurity_concentration_dimension)
-         ENDIF
-      ELSEIF (switch%target_variable .EQ. 2) THEN
-         !We first load the puff from file
-         CALL load_puff_from_file(fname, input%puff_dimension)
-         !Then we adjust wall recycling
-         CALL adjust_recycling_to_target_density(fname_density, input%target_density_dimension)
-         IF (switch%impurity_radiation)THEN
-            CALL load_impurity_concentration(fname_impurity, input%impurity_concentration_dimension)
-         ENDIF
-      ELSEIF (switch%target_variable .EQ. 3) THEN
-         CALL adjust_puff_to_target_density(fname_density, input%target_density_dimension)
-         IF (switch%impurity_radiation)THEN
-            CALL adjust_impurity_concentration_to_target_density_xpr(fname_xpr_density, input%target_density_xpr_dimension)
-         ENDIF
-         
-      END IF
-      CALL load_zeff(fname_zeff, input%zeff_dimension)
-      
-   END IF
+      ENDIF
+      IF (control_file_requested(input%zeff_path)) CALL load_zeff(input%zeff_path, input%zeff_dimension)
+   ENDIF
 
-   ! ITER puff: linear increase up to nli = 4.00E+19
-   IF (switch%testcase .GE. 80 .AND. switch%testcase .LE. 89) THEN
-       ! Puff feedback: check if central line integrated has reached the target value (4e19 for ITER ohmic)
-       CALL compute_line_integrated_density(MINVAL(Mesh%X(:, 1)), MAXVAL(Mesh%X(:, 1)), 0.5/phys%lscale, 0.5/phys%lscale, nli)
-       CALL adjust_ITER_puff(nli)
-   END IF
-
+   IF (time%legacy_input .AND. switch%testcase >= 80 .AND. switch%testcase <= 89) THEN
+      CALL compute_line_integrated_density(MINVAL(Mesh%X(:,1)), MAXVAL(Mesh%X(:,1)), &
+           0.5/phys%lscale, 0.5/phys%lscale, nli)
+      CALL adjust_ITER_puff(nli)
+   ENDIF
 END SUBROUTINE SetParticleSource
 
 SUBROUTINE load_puff_from_file(fname, puff_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname
    INTEGER, INTENT(OUT) :: puff_len
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: puff_time
-   INTEGER :: puff_time_idx
 
-   CALL open_control_series(fname, 'puff', file_id, puff_len)
-
-   ALLOCATE(puff_time(puff_len))
-   IF (ASSOCIATED(phys%puff_exp)) DEALLOCATE(phys%puff_exp)
-   ALLOCATE(phys%puff_exp(puff_len))
-
-   ! Read file
-   CALL HDF5_array1D_reading(file_id, phys%puff_exp, 'puff')
-   CALL HDF5_array1D_reading(file_id, puff_time, 'time')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Puff loaded from file: ', TRIM(ADJUSTL(fname))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of puff
-   puff_time_idx = binarySearch(puff_len, puff_time, time%t_ME, 1e-12)
-   phys%puff = phys%puff_exp(puff_time_idx)*(puff_time(puff_time_idx+1)-time%t_ME)/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx)) + &
-               phys%puff_exp(puff_time_idx+1)*(time%t_ME-puff_time(puff_time_idx))/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx))
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'puff =  ', phys%puff
-   END IF
-   DEALLOCATE(puff_time)
-   NULLIFY(puff_time)
+   CALL sample_control_curve(puff_curve, fname, 'puff', phys%puff, puff_len)
+   ! Preserve the existing legacy output dataset until the output/restart slice.
+   IF (ASSOCIATED(phys%puff_exp)) THEN
+      IF (SIZE(phys%puff_exp) /= puff_len) DEALLOCATE(phys%puff_exp)
+   ENDIF
+   IF (.NOT. ASSOCIATED(phys%puff_exp)) ALLOCATE(phys%puff_exp(puff_len))
+   phys%puff_exp = puff_curve%values
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'puff = ', phys%puff
 END SUBROUTINE load_puff_from_file
+
+SUBROUTINE sample_target_density(curve, path, n, target, measured)
+   TYPE(control_curve_t), INTENT(INOUT) :: curve
+   CHARACTER(LEN=*), INTENT(IN) :: path
+   INTEGER, INTENT(OUT) :: n
+   REAL(float), INTENT(OUT) :: target, measured
+
+   CALL sample_control_curve(curve, path, 'target_density', target, n)
+   target = target/2.d0
+   CALL compute_line_integrated_density(curve%chord(1), curve%chord(2), curve%chord(3), curve%chord(4), measured)
+END SUBROUTINE sample_target_density
 
 SUBROUTINE adjust_puff_to_target_density(fname_density, density_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_density
    INTEGER, INTENT(OUT) :: density_len
-   REAL*8 :: x_lower, x_upper, y_lower, y_upper
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
-   INTEGER :: target_density_idx
-   REAL*8 :: target_density, nli
+   REAL(float) :: target, measured
 
-   CALL open_control_series(fname_density, 'target_density', file_id, density_len)
-
-   ALLOCATE(target_density_time(density_len))
-   ALLOCATE(target_density_exp(density_len))
-
-   ! Read file
-   CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
-   CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
-   CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
-   CALL HDF5_real_reading(file_id, x_upper, 'x_upper')
-   CALL HDF5_real_reading(file_id, y_lower, 'y_lower')
-   CALL HDF5_real_reading(file_id, y_upper, 'y_upper')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Target density loaded from file: ', TRIM(ADJUSTL(fname_density))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of target density
-   target_density_idx = binarySearch(density_len, target_density_time, time%t_ME, 1e-12)
-   target_density = target_density_exp(target_density_idx)*(target_density_time(target_density_idx+1)-time%t_ME)/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx)) + &
-                    target_density_exp(target_density_idx+1)*(time%t_ME-target_density_time(target_density_idx))/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))
-   target_density = target_density / 2.
-
-   ! Compute line integrated density
-   CALL compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
-
-   ! Adjust puff using feedback
-   CALL adjust_puff_feedback(target_density, nli)
-
-   DEALLOCATE(target_density_time, target_density_exp)
-   NULLIFY(target_density_time, target_density_exp)
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'puff =  ', phys%puff
-   END IF
+   CALL sample_target_density(density_curve, fname_density, density_len, target, measured)
+   CALL adjust_puff_feedback(target, measured)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'puff = ', phys%puff
 END SUBROUTINE adjust_puff_to_target_density
 
 SUBROUTINE adjust_impurity_concentration_to_target_density_xpr(fname_xpr_density, density_xpr_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_xpr_density
    INTEGER, INTENT(OUT) :: density_xpr_len
-   REAL*8 :: x_lower, x_upper, y_lower, y_upper
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
-   INTEGER :: target_density_idx
-   REAL*8 :: target_density, nli
+   REAL(float) :: target, measured
 
-   CALL open_control_series(fname_xpr_density, 'target_density', file_id, density_xpr_len)
-
-   ALLOCATE(target_density_time(density_xpr_len))
-   ALLOCATE(target_density_exp(density_xpr_len))
-
-   ! Read file
-   CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
-   CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
-   CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
-   CALL HDF5_real_reading(file_id, x_upper, 'x_upper')
-   CALL HDF5_real_reading(file_id, y_lower, 'y_lower')
-   CALL HDF5_real_reading(file_id, y_upper, 'y_upper')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'X-point target density loaded from file: ', TRIM(ADJUSTL(fname_xpr_density))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of target density
-   target_density_idx = binarySearch(density_xpr_len, target_density_time, time%t_ME, 1e-12)
-   target_density = target_density_exp(target_density_idx)*(target_density_time(target_density_idx+1)-time%t_ME)/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx)) + &
-                    target_density_exp(target_density_idx+1)*(time%t_ME-target_density_time(target_density_idx))/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))
-   target_density = target_density / 2.
-
-   ! Compute line integrated density
-   CALL compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
-
-   ! Adjust impurity concentration using feedback
-   CALL adjust_impurity_concentration_feedback(target_density,nli)
-
-   DEALLOCATE(target_density_time, target_density_exp)
-   NULLIFY(target_density_time, target_density_exp)
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentrations(1)
-   END IF
+   CALL sample_target_density(xpr_curve, fname_xpr_density, density_xpr_len, target, measured)
+   CALL adjust_impurity_concentration_feedback(target, measured)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'impurity_concentration = ', phys%impurity_concentrations(1)
 END SUBROUTINE adjust_impurity_concentration_to_target_density_xpr
 
 SUBROUTINE adjust_recycling_to_target_density(fname_density, density_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_density
    INTEGER, INTENT(OUT) :: density_len
-   REAL*8 :: x_lower, x_upper, y_lower, y_upper
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
-   INTEGER :: target_density_idx
-   REAL*8 :: target_density, nli
+   REAL(float) :: target, measured
 
-   CALL open_control_series(fname_density, 'target_density', file_id, density_len)
-
-   ALLOCATE(target_density_time(density_len))
-   ALLOCATE(target_density_exp(density_len))
-
-   ! Read file
-   CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
-   CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
-   CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
-   CALL HDF5_real_reading(file_id, x_upper, 'x_upper')
-   CALL HDF5_real_reading(file_id, y_lower, 'y_lower')
-   CALL HDF5_real_reading(file_id, y_upper, 'y_upper')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Target density loaded from file: ', TRIM(ADJUSTL(fname_density))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of target density
-   target_density_idx = binarySearch(density_len, target_density_time, time%t_ME, 1e-12)
-   target_density = target_density_exp(target_density_idx)*(target_density_time(target_density_idx+1)-time%t_ME)/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx)) + &
-                    target_density_exp(target_density_idx+1)*(time%t_ME-target_density_time(target_density_idx))/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))
-   target_density = target_density / 2.
-
-   ! Compute line integrated density
-   CALL compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
-   ! Adjust recycling using feedback
-   CALL adjust_recycling_feedback(target_density, nli)
-
-   DEALLOCATE(target_density_time, target_density_exp)
-   NULLIFY(target_density_time, target_density_exp)
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'recycling =  ', phys%Re
-   END IF
-
+   CALL sample_target_density(density_curve, fname_density, density_len, target, measured)
+   CALL adjust_recycling_feedback(target, measured)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'recycling = ', phys%Re
 END SUBROUTINE adjust_recycling_to_target_density
 
 SUBROUTINE load_impurity_concentration(fname_impurity, impurity_concentration_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_impurity
    INTEGER, INTENT(OUT) :: impurity_concentration_len
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: impurity_concentration_time, impurity_concentration_exp
-   INTEGER :: impurity_concentration_idx
-   REAL*8 :: impurity_concentration
 
-   CALL open_control_series(fname_impurity, 'impurity_concentration', file_id, impurity_concentration_len)
-
-   ALLOCATE(impurity_concentration_time(impurity_concentration_len))
-   ALLOCATE(impurity_concentration_exp(impurity_concentration_len))
-
-   ! Read file
-   CALL HDF5_array1D_reading(file_id, impurity_concentration_exp, 'impurity_concentration')
-   CALL HDF5_array1D_reading(file_id, impurity_concentration_time, 'time')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Impurity concentration loaded from file: ', TRIM(ADJUSTL(fname_impurity))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of impurity concentration
-   impurity_concentration_idx = binarySearch(impurity_concentration_len, impurity_concentration_time, time%t_ME, 1e-12)
-   impurity_concentration = impurity_concentration_exp(impurity_concentration_idx)*(impurity_concentration_time(impurity_concentration_idx+1)-time%t_ME)/(impurity_concentration_time(impurity_concentration_idx+1)-impurity_concentration_time(impurity_concentration_idx)) + &
-                            impurity_concentration_exp(impurity_concentration_idx+1)*(time%t_ME-impurity_concentration_time(impurity_concentration_idx))/(impurity_concentration_time(impurity_concentration_idx+1)-impurity_concentration_time(impurity_concentration_idx))
-
-   phys%impurity_concentrations(1) = impurity_concentration
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentrations(1)
-   END IF
-   DEALLOCATE(impurity_concentration_time, impurity_concentration_exp)
-   NULLIFY(impurity_concentration_time, impurity_concentration_exp)
+   CALL sample_control_curve(impurity_curve, fname_impurity, 'impurity_concentration', &
+        phys%impurity_concentrations(1), impurity_concentration_len)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'impurity_concentration = ', phys%impurity_concentrations(1)
 END SUBROUTINE load_impurity_concentration
 
 SUBROUTINE load_zeff(fname_zeff, zeff_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_zeff
    INTEGER, INTENT(OUT) :: zeff_len
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: zeff_time, zeff_exp
-   INTEGER :: zeff_idx
-   REAL*8 :: zeff
 
-   CALL open_control_series(fname_zeff, 'zeff', file_id, zeff_len)
-
-   ALLOCATE(zeff_time(zeff_len))
-   ALLOCATE(zeff_exp(zeff_len))
-
-   ! Read file
-   CALL HDF5_array1D_reading(file_id, zeff_exp, 'zeff')
-   CALL HDF5_array1D_reading(file_id, zeff_time, 'time')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Zeff loaded from file: ', TRIM(ADJUSTL(fname_zeff))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of Zeff
-   zeff_idx = binarySearch(zeff_len, zeff_time, time%t_ME, 1e-12)
-   zeff = zeff_exp(zeff_idx)*(zeff_time(zeff_idx+1)-time%t_ME)/(zeff_time(zeff_idx+1)-zeff_time(zeff_idx)) + &
-          zeff_exp(zeff_idx+1)*(time%t_ME-zeff_time(zeff_idx))/(zeff_time(zeff_idx+1)-zeff_time(zeff_idx))
-
-   phys%Zeff = zeff
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Zeff =  ', phys%Zeff
-   END IF
-   DEALLOCATE(zeff_time, zeff_exp)
-   NULLIFY(zeff_time, zeff_exp)
+   CALL sample_control_curve(zeff_curve, fname_zeff, 'zeff', phys%Zeff, zeff_len)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'Zeff = ', phys%Zeff
 END SUBROUTINE load_zeff
+
+REAL(float) FUNCTION feedback_timestep() RESULT(dt)
+   dt = time%dt_ME
+   IF (.NOT. time%legacy_input) dt = time%dt*simpar%refval_time
+END FUNCTION feedback_timestep
 
 SUBROUTINE compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
    REAL*8, INTENT(IN) :: x_lower, x_upper, y_lower, y_upper
@@ -2245,7 +2141,9 @@ END SUBROUTINE compute_line_integrated_density
 
 SUBROUTINE adjust_puff_feedback(target_density, nli)
    REAL*8, INTENT(IN) :: target_density, nli
-   REAL*8 :: control_signal, anti_windup_gain
+   REAL*8 :: control_signal, anti_windup_gain, dt
+
+   dt = feedback_timestep()
 
    IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,*) 'n_li = ', nli, ' [m^-2]'
@@ -2261,11 +2159,11 @@ SUBROUTINE adjust_puff_feedback(target_density, nli)
    ! Calculate the control signal
    control_signal = phys%puff + phys%feedback_propotional_gain * (target_density - nli) + &
                             phys%feedback_integral_gain * phys%feedback_integral_error + &
-                            phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+                            phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/dt
    IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) 'Proportional impact: ', phys%feedback_propotional_gain * (target_density - nli)
       WRITE(6,*) 'Integral impact: ', phys%feedback_integral_gain * phys%feedback_integral_error
-      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/dt
    END IF
    ! Saturate the control signal
    phys%puff = MAX(control_signal, 0.0)
@@ -2277,7 +2175,7 @@ SUBROUTINE adjust_puff_feedback(target_density, nli)
 
    ! Update the integral error only if the output is not saturated
    IF (phys%puff > 0.0) THEN
-       phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * time%dt_ME
+       phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * dt
    END IF
 
    ! Update the previous error
@@ -2286,7 +2184,9 @@ END SUBROUTINE adjust_puff_feedback
 
 SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
    REAL*8, INTENT(IN) :: target_density, nli
-   REAL*8 :: control_signal, anti_windup_gain
+   REAL*8 :: control_signal, anti_windup_gain, dt
+
+   dt = feedback_timestep()
 
    IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,*) 'X-point n_li = ', nli, ' [m^-2]'
@@ -2302,11 +2202,11 @@ SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
    ! Calculate the control signal
    control_signal = phys%impurity_concentrations(1) + phys%feedback_propotional_gain_xpr * (target_density - nli) + &
                             phys%feedback_integral_gain_xpr * phys%feedback_integral_error_xpr + &
-                            phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/time%dt_ME
+                            phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/dt
    IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) 'XPR Proportional impact: ', phys%feedback_propotional_gain_xpr * (target_density - nli)
       WRITE(6,*) 'XPR Integral impact: ', phys%feedback_integral_gain_xpr * phys%feedback_integral_error_xpr
-      WRITE(6,*) 'XPR Derivative impact: ', phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/time%dt_ME
+      WRITE(6,*) 'XPR Derivative impact: ', phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/dt
    END IF
 
    ! Saturate the control signal
@@ -2319,7 +2219,7 @@ SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
 
    ! Update the integral error only if the output is not saturated
    IF (phys%impurity_concentrations(1) > 0.0) THEN
-       phys%feedback_integral_error_xpr = phys%feedback_integral_error_xpr + (target_density - nli) * time%dt_ME
+       phys%feedback_integral_error_xpr = phys%feedback_integral_error_xpr + (target_density - nli) * dt
    END IF
 
    ! Update the previous error
@@ -2328,7 +2228,9 @@ END SUBROUTINE adjust_impurity_concentration_feedback
 
 SUBROUTINE adjust_recycling_feedback(target_density, nli)
    REAL*8, INTENT(IN) :: target_density, nli
-   REAL*8 :: control_signal, anti_windup_gain
+   REAL*8 :: control_signal, anti_windup_gain, dt
+
+   dt = feedback_timestep()
 
    IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,*) 'n_li = ', nli, ' [m^-2]'
@@ -2344,12 +2246,12 @@ SUBROUTINE adjust_recycling_feedback(target_density, nli)
    IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) 'Proportional impact: ', phys%feedback_propotional_gain * (target_density - nli)
       WRITE(6,*) 'Integral impact: ', phys%feedback_integral_gain * phys%feedback_integral_error
-      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/dt
    END IF
    ! Calculate the control signal
    control_signal = phys%Re + phys%feedback_propotional_gain * (target_density - nli) + &
                             phys%feedback_integral_gain * phys%feedback_integral_error + &
-                            phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+                            phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/dt
    
    ! Saturate the control signal
    phys%Re = MAX(control_signal, 0.0)
@@ -2361,7 +2263,7 @@ SUBROUTINE adjust_recycling_feedback(target_density, nli)
 
    ! Update the integral error only if the output is not saturated
    IF (phys%Re > 0.0) THEN
-       phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * time%dt_ME
+       phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * dt
    END IF
 
    ! Update the previous error

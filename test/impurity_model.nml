@@ -6,7 +6,8 @@
   impurity_names = 'W'
   ! Non-negative fractions of electron density, one per entry; duplicates add.
   impurity_concentrations = 0.0d0
-  ! Moving-equilibrium concentration history for entry 1 (target_variable = 0, 1, 2).
+  ! Concentration history for entry 1 (target_variable = 0, 1, 2).
+  ! Explicit time_mode: an empty path keeps configured concentrations constant.
   ! With target_variable = 3, feedback adjusts entry 1; other entries stay fixed.
   ! Series length is read from HDF5.
   impurity_concentration_path = '/path/where/to/read/impurity/concentration.h5'

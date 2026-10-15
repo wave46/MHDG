@@ -125,6 +125,12 @@ between frames independently of numerical counters, and use heating's own time
 grid. They also rebuild current and heating values on changed mesh nodes from
 the retained providers. Numbered magnetic/heating input remains covered alongside
 single-file trajectories.
+Fixed-field source checks retain constants with empty paths, combine scheduled
+puff/concentration with fixed Zeff, and sample the final control timestamp.
+Existing density/recycling/XPR controllers are exercised with two physical
+intervals and repeated evaluation from restored controller values. These checks
+reuse the same synthetic input and executable; they do not enable the guarded
+physical-time solver loop or test temporal rejection yet.
 It also checks HDF5 grid dimensions/orientation on a non-square rectangular grid,
 stored-current interpolation at initial/endpoint frames, full filenames and
 legacy basenames, optional namelist dimensions, and dataset-shape rejection.

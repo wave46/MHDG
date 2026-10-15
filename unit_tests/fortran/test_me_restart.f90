@@ -15,7 +15,7 @@ PROGRAM test_me_restart
   USE magnetic_field, ONLY: equilibrium_input_filename, equilibrium_grid_dimensions, load_stored_toroidal_current
   USE magnetic_field, ONLY: open_control_series, load_puff_from_file, load_zeff, load_impurity_concentration
   USE magnetic_field, ONLY: initialize_magnetic_field, load_magnetic_field_nodes, sample_magnetic_input, close_magnetic_input
-  USE magnetic_field, ONLY: magnetic_field_is_time_dependent
+  USE magnetic_field, ONLY: magnetic_field_is_time_dependent, SetParticleSource, initialize_puff, clear_control_curves
   USE equilibrium_series, ONLY: equilibrium_sample_t
   USE HDF5_io_module, ONLY: HDF5_open, HDF5_close, HDF5_dataset_shape
   USE HDF5, ONLY: HID_T, HSIZE_T, H5Lexists_f
@@ -40,6 +40,12 @@ PROGRAM test_me_restart
   LOGICAL :: saved_me, has_reference_current
 
   CALL get_command_argument(1, mode)
+  IF (mode == 'time-controls') THEN
+     CALL check_physical_controls()
+     WRITE(*,'(A)') 'PHYSICAL_CONTROLS_PASS'
+     CALL MPI_FINALIZE(ierr)
+     STOP
+  ENDIF
   IF (mode == 'time-sampling') THEN
      CALL check_physical_sampling()
      WRITE(*,'(A)') 'PHYSICAL_SAMPLING_PASS'
@@ -242,6 +248,106 @@ PROGRAM test_me_restart
        phys%feedback_integral_error, phys%feedback_previous_error
 
 CONTAINS
+  SUBROUTINE check_physical_controls()
+    INTEGER :: selector, trial, repetition
+    REAL*8 :: interval, expected_puff, expected_recycling, expected_impurity, first_result(7), result(7)
+
+    CALL init_MPI_OMP()
+    CALL read_input()
+    CALL init_sim(nts, dt)
+    switch%ME = .FALSE.
+    switch%impurity_radiation = .TRUE.
+    ALLOCATE(phys%impurity_concentrations(2))
+    phys%impurity_concentrations = [0.02d0, 0.03d0]
+    phys%puff = 8.d0
+    phys%Zeff = 1.7d0
+    switch%target_variable = 0
+    input%puff_path = ''
+    input%zeff_path = ''
+    input%impurity_concentration_path = ''
+    time%t_target = 0.25d0/simpar%refval_time
+    time%t_ME = 99.d0
+    CALL initialize_puff()
+    CALL SetParticleSource()
+    IF (phys%puff /= 8.d0 .OR. phys%Zeff /= 1.7d0 .OR. &
+        ANY(phys%impurity_concentrations /= [0.02d0,0.03d0])) ERROR STOP 'empty control paths changed constants'
+
+    input%puff_path = 'controls.h5'
+    input%impurity_concentration_path = 'controls.h5'
+    CALL SetParticleSource()
+    IF (ABS(phys%puff-15.d0) > 1.d-12 .OR. phys%Zeff /= 1.7d0 .OR. &
+        ABS(phys%impurity_concentrations(1)-0.1025d0) > 1.d-12 .OR. &
+        phys%impurity_concentrations(2) /= 0.03d0) ERROR STOP 'fixed-field sources or fixed Zeff'
+    input%zeff_path = 'controls.h5'
+    time%t_target = 0.56d0/simpar%refval_time
+    CALL SetParticleSource()
+    IF (ABS(phys%puff-21.2d0) > 1.d-12 .OR. ABS(phys%Zeff-3.68d0) > 1.d-12 .OR. &
+        ABS(phys%impurity_concentrations(1)-0.1056d0) > 1.d-12) ERROR STOP 'scheduled control endpoint'
+
+    CALL load_gmsh_mesh('inputs/unit_mesh_P1.msh', 0)
+    refElPol%Nnodes2D = 3
+    ALLOCATE(sol%u(3*phys%Neq))
+    sol%u = 0.d0
+#ifdef PARALL
+    ALLOCATE(Mesh%ghostElems(1))
+    Mesh%ghostElems = 0
+#endif
+    time%it = 5
+    time%dt_ME = 123.d0
+    input%target_density_path = 'controls.h5'
+    input%target_density_xpr_path = 'controls.h5'
+    input%puff_path = ''
+    input%zeff_path = ''
+    input%impurity_concentration_path = ''
+    phys%feedback_propotional_gain = 0.1d0
+    phys%feedback_integral_gain = 0.2d0
+    phys%feedback_derivative_gain = 0.3d0
+    phys%feedback_propotional_gain_xpr = 0.001d0
+    phys%feedback_integral_gain_xpr = 0.002d0
+    phys%feedback_derivative_gain_xpr = 0.003d0
+    DO selector = 1, 3
+       switch%target_variable = selector
+       DO trial = 1, 2
+          interval = 0.02d0*trial
+          time%dt = interval/simpar%refval_time
+          DO repetition = 1, 2
+             phys%puff = 10.d0
+             phys%Re = 0.5d0
+             phys%impurity_concentrations(1) = 0.02d0
+             phys%feedback_integral_error = 3.d0
+             phys%feedback_previous_error = 0.2d0
+             phys%feedback_integral_error_xpr = 4.d0
+             phys%feedback_previous_error_xpr = 0.3d0
+             CALL SetParticleSource()
+             expected_puff = 10.d0
+             expected_recycling = 0.5d0
+             expected_impurity = 0.02d0
+             IF (selector == 2) THEN
+                expected_recycling = 0.5d0 + 0.65d0 + 0.09d0/interval
+             ELSE
+                expected_puff = 10.d0 + 0.65d0 + 0.09d0/interval
+             ENDIF
+             IF (selector == 3) expected_impurity = 0.02d0 + 0.0085d0 + 0.0006d0/interval
+             IF (ABS(phys%puff-expected_puff) > 1.d-12 .OR. &
+                 ABS(phys%Re-expected_recycling) > 1.d-12 .OR. &
+                 ABS(phys%impurity_concentrations(1)-expected_impurity) > 1.d-12 .OR. &
+                 ABS(phys%feedback_integral_error-(3.d0+0.5d0*interval)) > 1.d-12) &
+                  ERROR STOP 'controller did not use the physical numerical interval'
+             IF (selector == 3) THEN
+                IF (ABS(phys%feedback_integral_error_xpr-(4.d0+0.5d0*interval)) > 1.d-12) &
+                     ERROR STOP 'XPR physical numerical interval'
+             ENDIF
+             result = [phys%puff, phys%Re, phys%impurity_concentrations(1), &
+                  phys%feedback_integral_error, phys%feedback_previous_error, &
+                  phys%feedback_integral_error_xpr, phys%feedback_previous_error_xpr]
+             IF (repetition == 1) first_result = result
+             IF (ANY(result /= first_result)) ERROR STOP 'controller retry from the same accepted state'
+          ENDDO
+       ENDDO
+    ENDDO
+    CALL clear_control_curves()
+  END SUBROUTINE check_physical_controls
+
   SUBROUTINE check_physical_sampling()
     TYPE(equilibrium_sample_t) :: sample
     CHARACTER(LEN=16) :: expected_kind

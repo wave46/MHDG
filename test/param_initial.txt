@@ -85,7 +85,8 @@
     external_heating_path = '/path/where/to/read/external/heating/from.h5'
     external_heating_from_grid = .true.
     ! Control series lengths are read from HDF5.
-    puff_path = '/path/where/to/read/puff.h5' ! only used in moving equilibrium
+    ! Explicit time_mode: empty source paths keep configured constants, even with moving equilibrium.
+    puff_path = '/path/where/to/read/puff.h5' ! prescribed puff for target_variable = 0 or 2
     target_density_path = '/path/where/to/read/target/density.h5'
     target_density_xpr_path = '/path/where/to/read/target/density/xpr.h5'
     zeff_path = '/path/where/to/read/zeff.h5'

@@ -106,8 +106,12 @@ directory unless absolute paths are supplied:
   concentrations expressed as fractions of electron density. Mixture settings
   and the moving-equilibrium concentration-file controls belong in this file.
 
-The feedback gains apply to moving-equilibrium control. The spelling
+The feedback gains apply to the existing density and impurity controllers. The spelling
 `feedback_propotional_gain` (and its `_xpr` counterpart) matches the reader.
+For explicit physical-time modes, controllers and source schedules are independent
+of magnetic evolution. Empty schedule paths retain configured constant puff,
+Zeff or impurity concentrations. See the [control input guide](src/Models/control_series.md)
+for the existing `target_variable` selections and required feedback target files.
 
 The physical-time configuration is being introduced in stages. `TIME_LST` now
 accepts `time_mode = 'fixed'`, `'prescribed'` or `'adaptive'`, `t_start` (default
@@ -120,8 +124,8 @@ For explicit modes, one equilibrium frame means fixed magnetic equilibrium and
 multiple frames mean moving equilibrium; `ME` is inferred internally. Magnetic
 and heating providers sample the proposed physical endpoint, interpolating when
 it lies between frames. Fixed magnetic fields are rebuilt only when the mesh
-changes. Independent controller scheduling and physical restart integration are
-the remaining prerequisites for enabling explicit-mode execution.
+changes. Physical restart/output integration remains a prerequisite for enabling
+explicit-mode execution.
 
 `time_units = 'seconds'` converts namelist `dt0`, `t_start` and the final time
 once during input normalization. Omitted units mean `'normalized'`, preserving

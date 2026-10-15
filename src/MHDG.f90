@@ -253,11 +253,11 @@ PROGRAM MHDG
                 time%t*simpar%refval_time + time%dt_ME
            STOP 1
         ENDIF
-        CALL SetParticleSource()
         time%dt = time%dt_ME/simpar%refval_time
      ELSEIF (.NOT. time%legacy_input) THEN
         IF (magnetic_field_is_time_dependent()) CALL load_magnetic_field_Jtor()
      ENDIF
+     IF (switch%ME .OR. .NOT. time%legacy_input) CALL SetParticleSource()
 
      IF (switch%external_heating) THEN
         IF (.NOT. time%legacy_input) THEN
@@ -641,6 +641,7 @@ PROGRAM MHDG
   ! free all main allocatables and global variables
   CALL close_heating_input()
   CALL close_magnetic_input()
+  CALL clear_control_curves()
   CALL free_main()
 
 END PROGRAM MHDG
