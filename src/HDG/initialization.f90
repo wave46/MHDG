@@ -26,17 +26,13 @@ CONTAINS
     INTEGER,INTENT(out) :: nts
     REAL,INTENT(out) :: dt
 
-    IF (time%mode /= 'legacy') THEN
-       IF (MPIvar%glob_id == 0) WRITE(6,*) &
-            'Explicit time_mode execution is not enabled yet; physical-clock integration follows.'
-       STOP 1
-    ENDIF
-
     CALL initPhys()
 
     ! the time is set to zero here but in case of a restart this value is
     ! overwritten by the loaded solution final time
     time%t = 0.
+    IF (.NOT. time%legacy_input) time%t = time%t_start
+    time%t_target = time%t
 
     ! time step is initialized to dt0.
     dt = time%dt0
@@ -48,7 +44,9 @@ CONTAINS
 
     ! number of time step of the simulation: if it is a steady state simulation
     ! ndt is set to 1,otherwise the input value is used
-    IF (switch%steady) THEN
+    IF (.NOT. time%legacy_input) THEN
+       nts = 16 ! Initial history capacity; physical stopping uses t_final.
+    ELSEIF (switch%steady) THEN
        nts = 1
     ELSE
        nts = time%nts

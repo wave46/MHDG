@@ -524,7 +524,9 @@ MODULE types
      REAL*8      :: t_ME   ! time step from equilibrium (to get puff rate) !stored as dimensional value
      REAL*8      :: t_final  ! final time of the simulation, in solver units
      REAL*8      :: t_start = 0.d0
-     CHARACTER(LEN=16) :: mode = 'legacy'
+     REAL*8      :: t_target = 0.d0 ! next physical endpoint, in solver units
+     CHARACTER(LEN=16) :: mode = 'fixed'
+     LOGICAL     :: legacy_input = .TRUE.
      CHARACTER(LEN=16) :: units = 'normalized' ! units of namelist time inputs
      LOGICAL     :: dt_reduce_on_failure = .FALSE.
      LOGICAL     :: dt_grow_on_easy = .FALSE.

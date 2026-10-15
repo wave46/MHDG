@@ -7,6 +7,7 @@ PROGRAM MHDG
 #endif
 
   IMPLICIT NONE
+  LOGICAL :: physical_time_finished
 
   ! Initialize MPI
   CALL init_MPI_OMP()
@@ -31,6 +32,12 @@ PROGRAM MHDG
 
   ! Read input file param.txt
   CALL read_input()
+
+  IF (.NOT. time%legacy_input) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) &
+          'Explicit time_mode execution is not enabled yet; equilibrium/controller integration follows.'
+     STOP 1
+  ENDIF
 
 #ifdef WITH_PETSC
   IF (lssolver%sollib .EQ. 3) THEN
@@ -125,7 +132,7 @@ PROGRAM MHDG
 #endif
 
   ! A completed ME restart must not read another field or update feedback.
-  IF (switch%ME .AND. time%it .EQ. nts) THEN
+  IF (time%legacy_input .AND. switch%ME .AND. time%it .EQ. nts) THEN
      IF (MPIvar%glob_id .EQ. 0) THEN
         WRITE (6, *) 'ME final step already reached: ', time%it, ' (nts = ', nts, ')'
      ENDIF
@@ -211,19 +218,26 @@ PROGRAM MHDG
 
   it0 = 1
   ! For ME, nts is the final global step, including on restart.
-  IF (switch%ME) it0 = time%it + 1
+  IF (switch%ME .OR. .NOT. time%legacy_input) it0 = time%it + 1
   dt0 = time%dt
 
   !*******************************************************
   !                  TIME LOOP
   !*******************************************************
-  DO it = it0, nts ! ************ TIME LOOP *********************
+  it = it0
+  DO ! ************ TIME LOOP *********************
+     IF (time%legacy_input) THEN
+        IF (it > nts) EXIT
+     ELSE
+        CALL prepare_physical_time_step(physical_time_finished)
+        IF (physical_time_finished) EXIT
+     ENDIF
 
      ! if a new time step starts, it means that the solution converged sol%u_conv = sol%u, sol%q_conv = sol%q
      CALL update_uconv_qconv(sol%u, sol%q)
      CALL reset_newton_refinements()
 
-     IF (switch%ME) THEN
+     IF (switch%ME .AND. time%legacy_input) THEN
         ! Initial/restart output represents the accepted frame. Sample the next
         ! endpoint and its controls only when an advance is actually attempted.
         CALL load_magnetic_field_Jtor(time%it + 1)
@@ -244,7 +258,9 @@ PROGRAM MHDG
      ENDIF
 
      IF (switch%external_heating) THEN
-        IF (switch%ME) THEN
+        IF (.NOT. time%legacy_input) THEN
+           CALL load_external_heating(physical_time=time%t_target*simpar%refval_time)
+        ELSEIF (switch%ME) THEN
            CALL load_external_heating(physical_time=time%t_ME)
         ELSEIF (.NOT. switch%steady) THEN
            CALL load_external_heating(physical_time=(time%t+time%dt)*simpar%refval_time)
@@ -252,7 +268,11 @@ PROGRAM MHDG
      ENDIF
 
      ! Actualization of time
-     time%t = time%t + time%dt
+     IF (time%legacy_input) THEN
+        time%t = time%t + time%dt
+     ELSE
+        time%t = time%t_target
+     ENDIF
      time%it = time%it + 1
      time%ik = time%ik + 1
      CALL ensure_time_history_capacity(sol%Nt + 1)
@@ -511,7 +531,7 @@ PROGRAM MHDG
         !****************************************
         ! Check steady state and update or exit
         !****************************************
-        IF (errlstime .LT. numer%tTM) THEN
+        IF (time%legacy_input .AND. errlstime .LT. numer%tTM) THEN
            IF (switch%psdtime) THEN
               ! Pseudo-time simulation
 
@@ -591,6 +611,7 @@ PROGRAM MHDG
         convergence_counter = convergence_counter + 1
      ENDIF
 
+     it = it + 1
   END DO ! ************ END OF THE TIME LOOP *********************
 
   ! Save solution

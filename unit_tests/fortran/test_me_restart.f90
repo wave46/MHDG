@@ -3,6 +3,7 @@ PROGRAM test_me_restart
   USE in_out, ONLY: HDF5_load_solution, HDF5_load_mesh_from_solution
   USE GMSH_io_module, ONLY: load_gmsh_mesh
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
+  USE Main_utils, ONLY: prepare_physical_time_step
   USE globals
   USE MPI_OMP, ONLY: MPIvar, init_MPI_OMP
 #ifdef PARALL
@@ -47,7 +48,11 @@ PROGRAM test_me_restart
      MPIvar%glob_id = 0
      MPIvar%glob_size = 1
      CALL read_input()
-     IF (mode == 'time-input-init') CALL init_sim(nts, dt)
+     IF (mode == 'time-input-init') THEN
+        CALL init_sim(nts, dt)
+        WRITE(*,'(A,2(1X,ES24.16),2(1X,I0))') 'TIME_INIT_STATE', &
+             time%t*simpar%refval_time, time%dt*simpar%refval_time, sol%Nt, SIZE(sol%time)
+     ENDIF
      WRITE(*,'(A,2(1X,A),4(1X,ES24.16),3(1X,I0))') 'TIME_INPUT_STATE', &
           TRIM(time%mode), TRIM(time%units), time%dt0, time%t_start, time%t_final, &
           simpar%refval_time, MERGE(1,0,time%dt_reduce_on_failure), MERGE(1,0,time%dt_grow_on_easy), time%nts
@@ -238,6 +243,7 @@ CONTAINS
     CHARACTER(LEN=256) :: message
 
     simpar%refval_time = 0.01d0
+    time%legacy_input = .FALSE.
     time%mode = 'fixed'
     time%t = 0.012d0/simpar%refval_time
     time%dt0 = 0.04d0/simpar%refval_time
@@ -246,9 +252,11 @@ CONTAINS
     expected = [0.052d0, 0.092d0, 0.105d0]
     DO step = 1, SIZE(expected)
        accepted = time%t
-       CALL next_physical_time(target, finished, status, message)
-       IF (status /= 0 .OR. finished) ERROR STOP 'fixed physical endpoint selection'
+       CALL prepare_physical_time_step(finished)
+       target = time%t_target
+       IF (finished) ERROR STOP 'fixed physical endpoint selection'
        IF (ABS(target*simpar%refval_time-expected(step)) > 1.d-15) ERROR STOP 'fixed final interval'
+       IF (ABS(time%dt-(target-accepted)) > 1.d-15 .OR. time%dt0 /= 4.d0) ERROR STOP 'fixed interval preparation'
        IF (time%t /= accepted .OR. time%it /= 47) ERROR STOP 'endpoint selection mutated accepted state'
        time%t = target
     ENDDO

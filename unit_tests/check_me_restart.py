@@ -233,14 +233,16 @@ def check_time_input(executable, template):
             np.testing.assert_allclose([start*scale, final*scale], [.12, .56], rtol=1e-14)
             np.testing.assert_allclose(dt*scale, 0. if mode == "prescribed" else .02, rtol=1e-14)
             assert (reduce, grow, steps) == (float(mode == "prescribed"), float(mode == "adaptive"), 0.)
-        # Until clock integration, explicit modes must not execute legacy stopping.
+        # Explicit initialization uses physical start time and capacity, without nts.
         text = re.sub(r"(?is)&TIME_LST\b.*?\n/", "&TIME_LST\n " + fixed + "\n/", text)
         (directory / "param.txt").write_text(text)
         run = subprocess.run([str(executable), "time-input-init"], cwd=directory,
                              text=True, capture_output=True, timeout=20)
-        if run.returncode == 0 or "Explicit time_mode execution is not enabled yet" not in run.stdout:
-            raise SystemExit(f"FAIL: unfinished physical-clock guard\n{run.stdout}{run.stderr}")
-    print(f"Time input checks: {len(cases)} cases and unfinished-clock guard PASS")
+        match = re.search(r"^TIME_INIT_STATE\s+(.*)$", run.stdout, re.M)
+        if run.returncode or not match:
+            raise SystemExit(f"FAIL: physical clock initialization\n{run.stdout}{run.stderr}")
+        np.testing.assert_allclose(list(map(float, match[1].split())), [.12, .02, 0., 16.], rtol=1e-14)
+    print(f"Time input checks: {len(cases)} cases and physical initialization PASS")
 
 
 def check_nodal_input(executable, build_mode):

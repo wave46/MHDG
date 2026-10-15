@@ -111,12 +111,15 @@ feedback-state restoration, rejection before out-of-range history access,
 endpoint interpolation/heating selection, and inactive ME compatibility.
 The same driver exercises production time-input parsing and seconds-to-solver
 conversion, normalized-unit equivalence, the `tfi` alias, independent adaptation
-options, and invalid/nonfinite configuration rejection. Until clock integration,
-it also verifies that explicit modes cannot execute the legacy loop.
+options, and invalid/nonfinite configuration rejection. Physical initialization
+uses `t_start` and allocates initial history capacity independently of `nts`.
 Endpoint checks use the production clock helper for constant/nonuniform steps,
 shortened final intervals, continuation between supplied frames and the last
 timestamp roundoff case. History growth preserves accepted entries and does not
 change their count; no additional executable or test target is needed.
+The production loop now selects physical endpoints independently of its loop
+index and ignores `tTM` for explicit physical modes. Explicit execution remains
+guarded at solver startup until equilibrium/controller scheduling is integrated.
 It also checks HDF5 grid dimensions/orientation on a non-square rectangular grid,
 stored-current interpolation at initial/endpoint frames, full filenames and
 legacy basenames, optional namelist dimensions, and dataset-shape rejection.

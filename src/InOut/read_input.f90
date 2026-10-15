@@ -531,6 +531,11 @@ SUBROUTINE READ_input()
   time%t_final            = t_final
   time%t_start            = t_start
   time%mode               = time_mode
+  time%legacy_input       = time_mode == 'legacy'
+  IF (time%legacy_input) THEN
+     time%mode = 'fixed'
+     IF (ME) time%mode = 'prescribed'
+  ENDIF
   time%units              = time_units
   time%dt_reduce_on_failure = dt_reduce_on_failure
   time%dt_grow_on_easy     = dt_grow_on_easy
@@ -746,6 +751,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - dt0:                                                ', time%dt0
      PRINT *, '                - dt modification:                                    ', time%tsw
      PRINT *, '                - time mode:                                          ', TRIM(time%mode)
+     PRINT *, '                - legacy stopping rules:                              ', time%legacy_input
      PRINT *, '                - time input units:                                   ', TRIM(time%units)
      PRINT *, '                - start time (solver units):                          ', time%t_start
      PRINT *, '                - final time (solver units):                          ', time%t_final

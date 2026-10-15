@@ -78,6 +78,30 @@ MODULE Main_utils
 
 CONTAINS
 
+  SUBROUTINE prepare_physical_time_step(finished)
+    LOGICAL, INTENT(OUT) :: finished
+    REAL*8, ALLOCATABLE :: frame_times(:)
+    REAL*8 :: target
+    INTEGER :: status
+    CHARACTER(LEN=256) :: message
+
+    IF (time%mode == 'prescribed') THEN
+       CALL magnetic_time_points(frame_times)
+       CALL next_physical_time(target, finished, status, message, frame_times)
+    ELSE
+       CALL next_physical_time(target, finished, status, message)
+    ENDIF
+    IF (status /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot select physical timestep: ', TRIM(message)
+       STOP 1
+    ENDIF
+    IF (finished) RETURN
+    time%t_target = target
+    time%dt = target-time%t
+    time%t_ME = target*simpar%refval_time
+    time%dt_ME = time%dt*simpar%refval_time
+  END SUBROUTINE prepare_physical_time_step
+
 #ifdef PARALL
   SUBROUTINE domain_decomposition()
     IF(MPIvar%glob_size .GT. 1) THEN
@@ -235,7 +259,7 @@ CONTAINS
        CALL system_CLOCK(timing%cks1, timing%clock_rate1)
     END IF
 
-    IF(restart_adapt) THEN
+    IF(restart_adapt .AND. time%legacy_input) THEN
        time%t = time%t + time%dt
        time%it = time%it + 1
        time%ik = time%ik + 1
@@ -370,10 +394,12 @@ CONTAINS
     errNR_adapt = 1e10
     CALL seed_divergence_checkpoint()
     IF(restart_adapt) THEN
-       time%t = time%t - time%dt
-       time%it = time%it - 1
-       time%ik = time%ik - 1
-       sol%Nt = sol%Nt - 1
+       IF (time%legacy_input) THEN
+          time%t = time%t - time%dt
+          time%it = time%it - 1
+          time%ik = time%ik - 1
+          sol%Nt = sol%Nt - 1
+       ENDIF
        restart_adapt = .FALSE.
     ENDIF
 

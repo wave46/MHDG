@@ -113,7 +113,7 @@ The physical-time configuration is being introduced in stages. `TIME_LST` now
 accepts `time_mode = 'fixed'`, `'prescribed'` or `'adaptive'`, `t_start` (default
 zero), and `t_final`. Explicit modes require `steady = .false.`,
 `psdtime = .false.`, and BDF1 (`tis = 1`). **Execution of explicit modes is
-temporarily rejected until the physical-clock integration is complete.**
+temporarily rejected until equilibrium/controller scheduling is integrated.**
 The existing templates retain their working legacy configuration.
 
 `time_units = 'seconds'` converts namelist `dt0`, `t_start` and the final time
@@ -129,6 +129,8 @@ enabled in the temporal-recovery stage. Fixed/adaptive modes require positive
 `dt0`; prescribed mode takes its intervals from the equilibrium timestamps.
 
 Without `time_mode`, legacy step-count/convergence stopping remains active.
+The reader resolves this to fixed or prescribed stepping internally while
+retaining the compatibility stopping rules; there is no fourth timestep mode.
 Legacy `tfi` remains readable with a warning, and remains unenforced in that
 mode. In explicit modes it is a deprecated alias for required `t_final`;
 conflicting values are rejected. Supplying `t_final` or a nonzero `t_start`
