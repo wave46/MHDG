@@ -12,6 +12,7 @@ from .catalog import load_case_definition, required_case_roles
 from .config import bundle_root_from_settings
 from .documents import load_validated_json, write_json_direct
 from .support import BundleError, MissingArtifactError, utc_now
+from .equilibrium import trajectory_times
 from .files import file_identity, sha256_digest, require_directory
 
 CASES = Path(__file__).resolve().parent / "cases"
@@ -59,7 +60,10 @@ def bundle_readiness(case_id, source, case_dir=CASES, *, workflows=(), catalog=N
         if path.exists() and not present:
             raise BundleError(f"bundle source is not a file: {path}")
         if present and role in indexes:
-            load_field_series(path)
+            if path.suffix == ".json":
+                load_field_series(path)
+            else:
+                trajectory_times(path)
         producers = {
             name: sorted(required_case_roles(case, name, references=False))
             for name, workflow in case["workflows"].items()
@@ -109,13 +113,13 @@ def create_bundle(case_id, source, output, case_dir=CASES, bundle_version="1.0.0
                 spec = case["bundle_files"][role]
                 source_path = source / spec["filename"]
                 target = staging / "inputs" / source_path.name
-                if role in indexes:
+                if role in indexes and source_path.suffix == ".json":
                     target = staging / "inputs" / role / source_path.name
                 artifact_id = spec["artifact_id"]
                 _copy_artifact(staging, manifest, artifact_id, source_path, target,
                                spec["media_type"], spec["optional"])
                 manifest["roles"][role] = artifact_id
-                if role in indexes:
+                if role in indexes and source_path.suffix == ".json":
                     index = load_field_series(source_path)
                     for number, frame in enumerate(index["frames"], start=1):
                         for kind, relative in frame.items():
@@ -242,6 +246,9 @@ def series_artifact_ids(root, manifest, case):
         if artifact.get("optional") and not (root / artifact["path"]).exists():
             continue
         path = artifact_path(root, artifact["path"], "field series index")
+        if path.suffix != ".json":
+            trajectory_times(path)
+            continue
         index = load_field_series(path)
         for frame in index["frames"]:
             for relative in frame.values():

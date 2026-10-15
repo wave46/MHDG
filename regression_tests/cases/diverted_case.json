@@ -4,8 +4,7 @@
   "files": {
     "required": {
       "geometry": "geometry.geo",
-      "equilibrium_magnetic_field": "equilibrium.h5",
-      "equilibrium_current_density": "current_density.h5"
+      "equilibrium_magnetic_field": "equilibrium.h5"
     },
     "optional": {
       "bootstrap_reference": "reference_bootstrap.h5",

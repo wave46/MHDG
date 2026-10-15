@@ -110,8 +110,8 @@ two neutral limiters, radiation off, N and N+W impurity radiation, and stored
 magnetic/current fields against its own reference. Limited adds analytical
 initialization and the focused NeutralGamma probe described above.
 
-The separate `moving_equilibrium` bundle supplies a limited restart, one indexed
-canonical magnetic/current series and explicit control curves. Case recipes
+The separate `moving_equilibrium` bundle supplies a limited restart, one trajectory HDF5
+containing canonical magnetic/current frames and explicit control curves. Case recipes
 select 80 ms puff feedback (seven advances), a 100 ms refinement-limit stop
 (compare completed step two), and two-advance 80 ms prescribed-puff/recycling
 checks with off-knot controls. The optional `mode1_restart` continuation starts
@@ -129,10 +129,11 @@ reason. Other failures remain rejected; divergence-only declarations stay strict
 selects the restart/held-input continuation. Full and short golden workflows use
 MPI4/OMP4 by default; the MPI comparison explicitly uses MPI1/OMP1 and MPI4/OMP1.
 ME recipes disable Newton solution files (`saveNR=false`) and retain accepted
-timestep saves. Field pairs are selected
-during preparation, preserving their canonical timestamps and setting the
-numerical dt: frame 0000 is the initial state (time=0, dt=0),
-and frame k supplies advance k's equilibrium/control endpoint. The 80 ms recipe
+timestep saves. Preparation copies selected supplied endpoints into one local
+`inputs/equilibrium.h5`, preserving physical timestamps, primitive arrays and
+reference data. It sets `field_path` to that full filename and leaves `jtor_path`
+empty. Frame zero is the initial state at time zero; each subsequent frame is the
+corresponding numerical advance's endpoint. The 80 ms recipe
 keeps seven constant steps to 0.56 s; the canonical bundle explicitly holds the
 0.50 s equilibrium through 0.56 s. Control curves must cover the endpoint.
 Correct canonical data in the data repository; the harness validates it without
@@ -350,11 +351,18 @@ to [layout comparisons](tutorials/02-layout-comparison.md), a
 [cross-case profile](tutorials/04-profile.md), and a
 [real case with an input bundle](tutorials/05-real-case-bundle.md).
 
-Moving-equilibrium workflows can declare an ordered paired field/current
-index using [field-series.schema.json](schemas/field-series.schema.json).
-Bundle creation copies its explicitly listed members; validation checks their
-identities in the existing manifest and verifies membership. Run preparation
-and outcome checks follow separately.
+Production bundles use the [single-file equilibrium format](../src/Models/equilibrium_series.md):
+fixed equilibria have one frame; moving equilibria contain the canonical time series.
+Both include psi, Bphi, Br, Bz, Jtor and psiSep on one shared rectangular R,Z grid.
+Reference-bearing inputs need no COCOS declaration. Bundle validation retains support
+for archived paired-file indexes using [field-series.schema.json](schemas/field-series.schema.json);
+new production run preparation consumes trajectory HDF5 files.
+
+Input-storage candidates can retain existing numerical references. Use
+`check ... --allow-candidate --settings /path/to/candidate/settings.local.json`
+to compare converted inputs against those unchanged goldens. A storage migration
+requires reviewing those comparisons before accepting its bundle; it does not
+require regenerating golden solutions.
 
 `python -m regression_tests suggest --base develop` groups advisory checks for
 changed files; it reads Git and catalogs but executes nothing. Suggestions do

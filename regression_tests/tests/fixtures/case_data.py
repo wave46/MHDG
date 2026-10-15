@@ -48,7 +48,7 @@ PARAMETERS = """&INPUT_LST
 """
 
 FILES = ("mesh.msh", "mesh_adaptive_initial.msh", "geometry.geo", "equilibrium.h5",
-         "current_density.h5", "transport_model.nml", "transport_cold_fixed_initial.nml")
+         "transport_model.nml", "transport_cold_fixed_initial.nml")
 
 
 def write_case_source(directory):
@@ -75,8 +75,8 @@ def write_catalog(root):
         shutil.copy2(repository / name, root / name)
     (root / "cases").mkdir()
     files = dict(zip(("mesh", "coarse_mesh", "geometry", "equilibrium_magnetic_field",
-                        "equilibrium_current_density", "transport_configuration", "initial_transport"), FILES))
-    required = {role: files.pop(role) for role in ("geometry", "equilibrium_magnetic_field", "equilibrium_current_density")}
+                        "transport_configuration", "initial_transport"), FILES))
+    required = {role: files.pop(role) for role in ("geometry", "equilibrium_magnetic_field")}
     optional = {**files, "warm_parameters": "param.txt", "impurity_configuration": "impurity_model_w.nml",
                 "warm_restart": "restart.h5", "warm_reference": "reference_mpi4_omp4.h5",
                 "initial_parameters": "param_cold_fixed_time_init.txt"}

@@ -31,6 +31,8 @@ def test_warm_links_immutable_inputs_and_renders_isolated_paths(harness):
     assert (run.path / "positionFeketeNodesTri2D.h5").resolve() == harness.runtime_file
     rendered = (run.path / "param.txt").read_text()
     assert str(run.path / "inputs/equilibrium.h5") in rendered
+    assert read_selected_input_values(run.path / "param.txt", {"jtor_path"})["jtor_path"] == ""
+    assert not (run.path / "inputs/current_density.h5").exists()
     assert str(run.path / "outputs") in rendered
     assert source.read_bytes() == original
     assert not (run.path / "param.txt").is_symlink()
@@ -156,18 +158,15 @@ def me_harness(harness):
     from regression_tests.bundles import create_bundle
 
     source = harness.source
-    (source / "magnetic").mkdir()
-    frames = []
-    for n in range(29):
-        frame = {}
-        for kind in ("magnetic", "current"):
-            path = source / f"magnetic/{kind}_{n:04d}.h5"
-            with h5py.File(path, "w") as handle:
-                handle["time"], handle["dt"] = float(n * .02), .02 if n else 0.
-                handle["field"] = np.arange(4).reshape(2, 2) + min(n, 25) * 10
-            frame[kind] = path.relative_to(source).as_posix()
-        frames.append(frame)
-    (source / "series.json").write_text(json.dumps({"schema_version": 1, "dt_s": .02, "frames": frames}))
+    with h5py.File(source / "trajectory.h5", "w") as handle:
+        handle["time"] = np.arange(29)*.02
+        handle["grid/r"], handle["grid/z"] = [2., 3.], [-1., 1.]
+        handle["equilibrium/psiSep"] = np.arange(29)+40.
+        handle["equilibrium/cocos"] = [12]
+        for name in ("psi", "Bphi", "Br", "Bz", "Jtor"):
+            handle[f"equilibrium/{name}"] = np.array([
+                np.arange(4).reshape(2, 2)+min(n, 25)*10 for n in range(29)])
+        handle["equilibrium/Br"].attrs["units"] = "T"
     for name in ("target_density", "impurity_concentration"):
         with h5py.File(source / f"{name}.h5", "w") as handle:
             handle["time"], handle[name] = [0., .5, .56], [2., 10., 10.]
@@ -180,7 +179,7 @@ def me_harness(harness):
                           {"target_density_path": "input_lst", "target_density_dimension": "input_lst"})
     path = harness.catalog / "cases/legacy_case.json"
     case = json.loads(path.read_text())
-    case["files"]["optional"].update(equilibrium_series="series.json", me_parameters="param_me.txt",
+    case["files"]["optional"].update(equilibrium_series="trajectory.h5", me_parameters="param_me.txt",
                                     density="target_density.h5", concentration="impurity_concentration.h5")
     case["workflows"]["warm"].update(parameters="me_parameters", moving_equilibrium={
         "series": "equilibrium_series", "time_step_s": .08,
@@ -197,7 +196,7 @@ def me_harness(harness):
     (.08, None, [1, 5, 9, 13, 17, 21, 25, 29]),
     (.1, None, [1, 6, 11, 16, 21, 26]), (.02, 3, [1, 2, 3, 4]),
 ])
-def test_me_preparation_selects_endpoint_pairs_and_reuses_canonical_controls(me_harness, dt, steps, mapping):
+def test_me_preparation_selects_trajectory_endpoints_and_reuses_canonical_controls(me_harness, dt, steps, mapping):
     import h5py
     import numpy as np
     from regression_tests.files import file_identity
@@ -216,15 +215,19 @@ def test_me_preparation_selects_endpoint_pairs_and_reuses_canonical_controls(me_
     assert values["nts"] == len(mapping) - 1
     assert values["dt0"] * 2e-7 == pytest.approx(dt)
     assert values["tfi"] * 2e-7 == pytest.approx((len(mapping) - 1) * dt)
-    assert values["field_path"] == str(run.path / "inputs/magnetic/equilibrium")
-    assert values["jtor_path"] == str(run.path / "inputs/magnetic/current_density")
+    assert values["field_path"] == str(run.path / "inputs/equilibrium.h5")
+    assert values["jtor_path"] == ""
     for name, identity in plan["moving_equilibrium_inputs"]["generated_files"].items():
         assert file_identity(run.path / name) == identity
-        number = int(name[-7:-3])
         with h5py.File(run.path / name) as handle:
-            assert handle["time"][()] == pytest.approx(number * dt)
-            assert handle["dt"][()] == (dt if number else 0.)
-            np.testing.assert_array_equal(handle["field"][()], np.arange(4).reshape(2, 2) + min(mapping[number] - 1, 25) * 10)
+            np.testing.assert_allclose(handle["time"][:], np.arange(len(mapping))*dt)
+            assert handle["equilibrium/psi"].shape == (len(mapping), 2, 2)
+            assert handle["equilibrium/Br"].attrs["units"] == "T"
+            np.testing.assert_array_equal(handle["equilibrium/cocos"][:], [12])
+            for number, frame in enumerate(mapping):
+                for component in ("psi", "Jtor"):
+                    np.testing.assert_array_equal(handle[f"equilibrium/{component}"][number],
+                        np.arange(4).reshape(2, 2)+min(frame-1, 25)*10)
     assert values["target_density_dimension"] == 3
     assert (run.path / "inputs/target_density.h5").resolve() == bundle / "inputs/target_density.h5"
     assert (run.path / "inputs/restart.h5").is_symlink()
@@ -252,7 +255,7 @@ def test_me_preparation_restores_checkpoint_clock(me_harness, bad_time):
         assert plan['parameter_overrides']['nts'] == 3
 
 
-@pytest.mark.parametrize("failure", ["timestep", "metadata", "initial_dt", "normalized_override", "control_range", "control_dimension"])
+@pytest.mark.parametrize("failure", ["timestep", "metadata", "initial_time", "normalized_override", "control_range"])
 def test_me_preparation_failure_is_atomic(me_harness, failure):
     import h5py
 
@@ -262,14 +265,15 @@ def test_me_preparation_failure_is_atomic(me_harness, failure):
         case = json.loads(path.read_text())
         case["workflows"]["warm"]["moving_equilibrium"]["time_step_s"] = .07
         path.write_text(json.dumps(case))
-    elif failure in {"metadata", "initial_dt"}:
-        with h5py.File(me_harness.root / "me_bundle/inputs/equilibrium_series/magnetic/current_0000.h5", "r+") as handle:
-            handle["time" if failure == "metadata" else "dt"][...] = .3 if failure == "metadata" else .02
+    elif failure in {"metadata", "initial_time"}:
+        with h5py.File(me_harness.root / "me_bundle/inputs/trajectory.h5", "r+") as handle:
+            if failure == "metadata":
+                handle["time"][2] = .3
+            else:
+                handle["time"][...] += .02
     elif failure == "control_range":
         with h5py.File(me_harness.root / "me_bundle/inputs/target_density.h5", "r+") as handle:
             handle["time"][...] = [0., .1, .2]
-    elif failure == "control_dimension":
-        options["requested_overrides"] = {"target_density_dimension": 27}
     else:
         options["requested_overrides"] = {"dt0": 123.}
     with pytest.raises(BundleError):

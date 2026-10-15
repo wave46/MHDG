@@ -7,7 +7,7 @@
       "parameters": "param.txt",
       "bootstrap": "restart.h5",
       "impurity_configuration": "impurity_model.nml",
-      "equilibrium_series": "series_compact.json",
+      "equilibrium_series": "equilibrium.h5",
       "control_puff": "puff.h5",
       "control_target_density": "target_density.h5",
       "control_zeff": "zeff.h5",
@@ -138,7 +138,7 @@
       "reference": "mode2_short_reference",
       "outputs": ["mode2_short_reference"],
       "parameter_overrides": {
-        "target_variable": 2, "puff_dimension": 4, "target_density_dimension": 4,
+        "target_variable": 2,
         "feedback_propotional_gain": 2e-20,
         "feedback_integral_gain": 2e-21, "feedback_derivative_gain": 8e-22
       },

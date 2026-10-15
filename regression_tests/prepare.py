@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import tempfile
 import math
-import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -15,10 +14,11 @@ from .catalog import load_case_definition, workflow_required_roles, load_layout
 from .documents import write_json_direct
 from .config import (bundle_root_from_settings, absolute_setting, solver_executable,
                      runtime_files, selected_mpi_launcher)
-from .bundles import validate_bundle_root, load_manifest, artifact_path, load_field_series
+from .bundles import validate_bundle_root, load_manifest, artifact_path
 from .support import BundleError, IDENTIFIER_RE, utc_now, utc_run_id
 from .parameters import render_parameter_file, read_selected_input_values
 from .files import file_identity
+from .equilibrium import trajectory_times, select_trajectory_frames
 
 
 @dataclass(frozen=True)
@@ -211,7 +211,6 @@ def _case_artifacts(
 COMMON_INPUT_LINKS = {
     "geometry": "geometry.geo",
     "equilibrium_magnetic_field": "equilibrium.h5",
-    "equilibrium_current_density": "current_density.h5",
 }
 
 
@@ -321,31 +320,32 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
 
 
 def _prepare_me_fields(staging, inputs, overrides):
-    """Prepare initial frame 0000 and numbered endpoint pairs at constant dt."""
+    """Select initial/endpoint frames into one trajectory at the prescribed dt."""
     import h5py
+    import numpy as np
     from .compare_fixed import required_scalar
     from .support import ComparisonError
 
     moving = inputs.workflow["moving_equilibrium"]
     source = inputs.artifacts[moving["series"]]
-    index = load_field_series(source)
-    dt = moving.get("time_step_s", index["dt_s"])
-    ratio = dt / index["dt_s"]
-    if not math.isfinite(ratio) or ratio < 1 or not math.isclose(ratio, round(ratio), rel_tol=1e-10):
-        raise BundleError("ME timestep must be an integer multiple of canonical dt_s")
-    stride, last = round(ratio), len(index["frames"]) - 1
+    times = trajectory_times(source)
+    dt = moving.get("time_step_s", times[1]-times[0] if len(times) > 1 else 0.)
+    if not math.isfinite(dt) or dt <= 0 or not math.isclose(times[0], 0., abs_tol=1e-12):
+        raise BundleError("ME trajectory requires a positive timestep and initial time zero")
+    last_step = math.floor((times[-1] + 1e-12) / dt)
     values = {key.lower(): value for key, value in overrides.items()}
-    control_dimensions = read_selected_input_values(inputs.artifacts[inputs.workflow["parameters"]],
-        {"puff_dimension", "target_density_dimension", "zeff_dimension"})
-    control_dimensions.update(values)
-    steps = values.get("nts", last // stride)
-    if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= last // stride:
+    steps = values.get("nts", last_step)
+    if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= last_step:
         raise BundleError("ME nts must be an integer within the canonical series duration")
     if {"dt0", "tfi"} & values.keys() or values.get("me") is False:
         raise BundleError("ME timestep determines dt0/tfi and requires me=true")
-    mapping, files = [], {}
-    directory = staging / "inputs/magnetic"
-    directory.mkdir()
+    indices = []
+    for endpoint in np.arange(steps+1)*dt:
+        index = int(np.argmin(abs(times-endpoint)))
+        if not math.isclose(times[index], endpoint, rel_tol=1e-10, abs_tol=1e-12):
+            raise BundleError("ME supplied timestamps must include every prescribed endpoint")
+        indices.append(index)
+    target = staging / "inputs/equilibrium.h5"
     try:
         with h5py.File(inputs.artifacts[inputs.workflow["restart"]]) as handle:
             scale = required_scalar(handle, "simulation_parameters/adimensionalization", "time_scale")
@@ -364,35 +364,20 @@ def _prepare_me_fields(staging, inputs, overrides):
                     raise BundleError("ME restart time differs from the selected constant timestep sequence")
         if not math.isfinite(scale) or scale <= 0:
             raise BundleError("ME bootstrap time_scale must be positive and finite")
-        for offset in range(steps + 1):
-            canonical = offset * stride
-            mapping.append(canonical + 1)
-            for kind, prefix in (("magnetic", "equilibrium"), ("current", "current_density")):
-                target = directory / f"{prefix}_{offset:04d}.h5"
-                shutil.copy2(source.parent / index["frames"][canonical][kind], target)
-                with h5py.File(target, "r+") as handle:
-                    for key, expected in (("time", offset * dt),
-                                          ("dt", index["dt_s"] if canonical else 0.)):
-                        if (handle[key].dtype.kind != "f" or handle[key].size != 1 or not math.isclose(
-                                required_scalar(handle, "", key), expected, rel_tol=1e-10, abs_tol=1e-12)):
-                            raise BundleError(f"ME field {key} differs from its series: {target.name}")
-                    # Frame timestamps belong to the bundle. Only the numerical
-                    # interval changes when selecting a coarser constant step.
-                    handle["dt"][...] = dt if offset else 0.
-                files[target.relative_to(staging).as_posix()] = file_identity(target)
-        _check_me_controls(inputs, control_dimensions, steps * dt)
+        select_trajectory_frames(source, target, indices)
+        _check_me_controls(inputs, steps * dt)
     except (OSError, KeyError, ValueError, TypeError, IndexError, ComparisonError) as exc:
         raise BundleError(f"cannot prepare ME fields: {exc}") from exc
-    paths = {"field_path": inputs.run_directory / "inputs/magnetic/equilibrium",
-             "jtor_path": inputs.run_directory / "inputs/magnetic/current_density"}
+    paths = {"field_path": inputs.run_directory / "inputs/equilibrium.h5", "jtor_path": ""}
     record = {"source_manifest": file_identity(inputs.bundle_root / "manifest.json"),
               "time_step_s": dt, "initial_step": initial_step,
-              "canonical_frames": mapping, "generated_files": files}
+              "canonical_frames": [index+1 for index in indices],
+              "generated_files": {"inputs/equilibrium.h5": file_identity(target)}}
     return paths, {"me": True, "nts": steps, "dt0": dt / scale, "tfi": steps * dt / scale}, record
 
 
-def _check_me_controls(inputs, dimensions, last_load_time):
-    """Check supplied curves against solver load times and declared dimensions."""
+def _check_me_controls(inputs, last_load_time):
+    """Check supplied curves cover the prescribed physical endpoints."""
     import h5py
     from .compare_fixed import required_array
 
@@ -403,10 +388,6 @@ def _check_me_controls(inputs, dimensions, last_load_time):
                     or any(a >= b for a, b in zip(times[:-1], times[1:]))
                     or times[0] > 0 or times[-1] < last_load_time):
                 raise BundleError("ME control times must cover all timestep endpoints")
-            if name in {"puff", "target_density", "zeff"}:
-                key = f"{name}_dimension"
-                if dimensions.get(key) != len(times):
-                    raise BundleError(f"ME {key} must match its control time count ({len(times)})")
 
 
 def _parameter_replacements(final_directory: Path) -> dict[str, Path | str]:
@@ -415,7 +396,7 @@ def _parameter_replacements(final_directory: Path) -> dict[str, Path | str]:
         "transport_model_path": inputs / "transport_model.nml",
         "impurity_model_path": inputs / "impurity_model.nml",
         "field_path": inputs / "equilibrium.h5",
-        "jtor_path": inputs / "current_density.h5",
+        "jtor_path": "",
         "geometry_path": inputs / "geometry.geo",
         "save_folder": f"{final_directory / 'outputs'}/",
     }
