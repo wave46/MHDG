@@ -49,22 +49,22 @@ CONTAINS
     IF (equilibrium_input_open) RETURN
     filename = equilibrium_input_filename(input%field_path, 0)
     CALL equilibrium_input%open(filename, ierr, message)
-    CALL check_equilibrium_input(ierr, message)
+    CALL abort_on_equilibrium_error(ierr, message)
     current_path = ''
     IF (switch%ohmicsrc) current_path = input%jtor_path
     IF (equilibrium_input%is_trajectory()) THEN
        IF (LEN_TRIM(current_path) > 0) &
-            CALL check_equilibrium_input(-1, 'Trajectory Jtor is embedded; leave jtor_path empty')
+            CALL abort_on_equilibrium_error(-1, 'Trajectory Jtor is embedded; leave jtor_path empty')
     ELSE
-       CALL open_legacy_equilibrium(filename, current_path, ierr, message)
+       CALL configure_legacy_equilibrium_input(filename, current_path, ierr, message)
+       CALL abort_on_equilibrium_error(ierr, message)
     ENDIF
-    CALL check_equilibrium_input(ierr, message)
     CALL configure_magnetic_clock()
     equilibrium_input_open = .TRUE.
     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium provider opened: ', TRIM(input%field_path)
   END SUBROUTINE open_magnetic_input
 
-  SUBROUTINE open_legacy_equilibrium(filename, current_path, ierr, message)
+  SUBROUTINE configure_legacy_equilibrium_input(filename, current_path, ierr, message)
     CHARACTER(LEN=*), INTENT(IN) :: filename, current_path
     INTEGER, INTENT(OUT) :: ierr
     CHARACTER(LEN=*), INTENT(OUT) :: message
@@ -87,7 +87,7 @@ CONTAINS
     ELSEIF (LEN_TRIM(current_path) > 0) THEN
        CALL equilibrium_input%open(filename, ierr, message, current_path)
     ENDIF
-  END SUBROUTINE open_legacy_equilibrium
+  END SUBROUTINE configure_legacy_equilibrium_input
 
   INTEGER FUNCTION last_numbered_equilibrium_frame(filename) RESULT(last_frame)
     CHARACTER(LEN=*), INTENT(IN) :: filename
@@ -100,7 +100,7 @@ CONTAINS
     IF (n <= 8) RETURN
     IF (filename(n-7:n) /= '_0000.h5') RETURN
     CALL numbered_stem(filename, stem, ierr, message)
-    CALL check_equilibrium_input(ierr, message)
+    CALL abort_on_equilibrium_error(ierr, message)
     DO frame = 1, 9999
        INQUIRE(FILE=numbered_filename(stem, frame), EXIST=exists)
        IF (.NOT. exists) EXIT
@@ -117,20 +117,20 @@ CONTAINS
     IF (.NOT. time%legacy_input) THEN
        switch%ME = SIZE(equilibrium_times) > 1
        IF (time%mode == 'prescribed' .AND. .NOT. switch%ME) &
-            CALL check_equilibrium_input(-1, 'Prescribed time mode requires multiple equilibrium frames')
+            CALL abort_on_equilibrium_error(-1, 'Prescribed time mode requires multiple equilibrium frames')
        IF (.NOT. switch%ME) RETURN
        CALL locate_series_time(equilibrium_times, time%t*simpar%refval_time, &
             left, right, actual_time, weight, ierr, message)
-       CALL check_equilibrium_input(ierr, 'Initial equilibrium time: '//TRIM(message))
+       CALL abort_on_equilibrium_error(ierr, 'Initial equilibrium time: '//TRIM(message))
        CALL locate_series_time(equilibrium_times, time%t_final*simpar%refval_time, &
             left, right, actual_time, weight, ierr, message)
-       CALL check_equilibrium_input(ierr, 'Final equilibrium time: '//TRIM(message))
+       CALL abort_on_equilibrium_error(ierr, 'Final equilibrium time: '//TRIM(message))
     ELSEIF (switch%ME) THEN
        IF (SIZE(equilibrium_times) < time%nts+1) &
-            CALL check_equilibrium_input(-1, 'ME input must cover initial frame 0000 through nts')
+            CALL abort_on_equilibrium_error(-1, 'ME input must cover initial frame 0000 through nts')
     ELSE
        IF (SIZE(equilibrium_times) /= 1) &
-            CALL check_equilibrium_input(-1, 'A multi-frame trajectory requires ME; use one frame for a fixed equilibrium')
+            CALL abort_on_equilibrium_error(-1, 'A multi-frame trajectory requires ME; use one frame for a fixed equilibrium')
     ENDIF
   END SUBROUTINE configure_magnetic_clock
 
@@ -140,7 +140,7 @@ CONTAINS
        magnetic_field_is_time_dependent = SIZE(equilibrium_times) > 1
     ELSE
        IF (.NOT. time%legacy_input .AND. switch%ME) &
-            CALL check_equilibrium_input(-1, 'Physical-time moving equilibrium requires rectangular-grid input')
+            CALL abort_on_equilibrium_error(-1, 'Physical-time moving equilibrium requires rectangular-grid input')
        magnetic_field_is_time_dependent = switch%ME
     ENDIF
   END FUNCTION magnetic_field_is_time_dependent
@@ -159,11 +159,11 @@ CONTAINS
     ELSEIF (switch%ME) THEN
        index = equilibrium_frame_index(frame)
        IF (index < 0 .OR. index >= SIZE(equilibrium_times)) &
-            CALL check_equilibrium_input(-1, 'Requested equilibrium frame is outside input coverage')
+            CALL abort_on_equilibrium_error(-1, 'Requested equilibrium frame is outside input coverage')
        target_time = equilibrium_times(index+1)
     ENDIF
     CALL equilibrium_input%sample_at(target_time, sample, ierr, message)
-    CALL check_equilibrium_input(ierr, message)
+    CALL abort_on_equilibrium_error(ierr, message)
   END SUBROUTINE sample_magnetic_input
 
   SUBROUTINE magnetic_time_points(times)
@@ -182,23 +182,23 @@ CONTAINS
           DO frame = 0, time%nts
              filename = equilibrium_input_filename(input%field_path, frame)
              CALL HDF5_open(filename, file_id, ierr)
-             CALL check_equilibrium_input(ierr, 'Cannot open magnetic frame clock: '//TRIM(filename))
+             CALL abort_on_equilibrium_error(ierr, 'Cannot open magnetic frame clock: '//TRIM(filename))
              CALL HDF5_real_reading(file_id, equilibrium_times(frame+1), 'time', ierr)
              CALL HDF5_close(file_id)
-             CALL check_equilibrium_input(ierr, 'Cannot read magnetic frame clock: '//TRIM(filename))
+             CALL abort_on_equilibrium_error(ierr, 'Cannot read magnetic frame clock: '//TRIM(filename))
           ENDDO
        ENDIF
        times = equilibrium_times
     ENDIF
   END SUBROUTINE magnetic_time_points
 
-  SUBROUTINE check_equilibrium_input(ierr, message)
+  SUBROUTINE abort_on_equilibrium_error(ierr, message)
     INTEGER, INTENT(IN) :: ierr
     CHARACTER(LEN=*), INTENT(IN) :: message
     IF (ierr == 0) RETURN
     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium input error: ', TRIM(message)
     STOP 1
-  END SUBROUTINE check_equilibrium_input
+  END SUBROUTINE abort_on_equilibrium_error
 
   SUBROUTINE close_magnetic_input()
     CALL equilibrium_input%clear()
@@ -674,7 +674,7 @@ CONTAINS
        CALL fit_poloidal_field_scale(magnetic_equilibrium, r, z, br, &
             bz, simpar%refval_length, poloidal_field_fit)
     ELSEIF (.NOT. input%compute_from_flux) THEN
-       CALL check_equilibrium_input(-1, 'Stored-field mode requires Br and Bz')
+       CALL abort_on_equilibrium_error(-1, 'Stored-field mode requires Br and Bz')
     ENDIF
     alpha_b = poloidal_field_fit%applied_alpha
     IF (.NOT. input%compute_from_flux) RETURN
@@ -693,7 +693,7 @@ CONTAINS
     ENDIF
     CALL resolve_flux_coefficients(poloidal_field_fit, toroidal_current_comparison, &
          switch%ohmicsrc, sample%cocos, alpha_b, alpha_j, metadata_conflict, ierr)
-    CALL check_equilibrium_input(ierr, &
+    CALL abort_on_equilibrium_error(ierr, &
          'Cannot resolve flux coefficients: provide cocos or usable Br/Bz together with Jtor when current is needed')
     IF (MPIvar%glob_id == 0) THEN
        IF (metadata_conflict) WRITE(6,'(A)') &
@@ -1498,7 +1498,7 @@ CONTAINS
     IF (PRESENT(available)) available = ALLOCATED(Jtor)
     IF (.NOT. ALLOCATED(Jtor)) THEN
        IF (PRESENT(available)) RETURN
-       CALL check_equilibrium_input(-1, 'Stored-current mode requires Jtor')
+       CALL abort_on_equilibrium_error(-1, 'Stored-current mode requires Jtor')
     ENDIF
     xvec = xvec/phys%lscale
     yvec = yvec/phys%lscale
@@ -1556,7 +1556,7 @@ CONTAINS
 
     filename = equilibrium_input_filename(input%jtor_path, frame)
     CALL HDF5_open(filename, file_id, ierr)
-    CALL check_equilibrium_input(ierr, 'Cannot open legacy current input: '//TRIM(filename))
+    CALL abort_on_equilibrium_error(ierr, 'Cannot open legacy current input: '//TRIM(filename))
     CALL equilibrium_grid_dimensions(file_id, [CHARACTER(LEN=8) :: 'r2D', 'z2D', 'Jtor'], ip, jp)
     ALLOCATE(r2d(ip,jp), z2d(ip,jp), jtor(ip,jp))
     CALL HDF5_array2D_reading(file_id, r2d, 'r2D')
@@ -1571,7 +1571,7 @@ CONTAINS
     z = z2d(:,1)
     IF (switch%ME) THEN
        IF (ABS(dt_me-time%dt_ME) > 1.d-12 .OR. ABS(t_me-time%t_ME) > 1.d-12) &
-            CALL check_equilibrium_input(-1, 'Time in current and in nodal equilibrium files differs')
+            CALL abort_on_equilibrium_error(-1, 'Time in current and in nodal equilibrium files differs')
     ENDIF
   END SUBROUTINE read_legacy_current_input
 
