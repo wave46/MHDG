@@ -784,7 +784,9 @@ CONTAINS
     INTEGER :: n_global, ierr
 
     n_global = SIZE(values)
+#ifdef PARALL
     IF (MPIvar%glob_size > 1) n_global = Mesh%Nno_glob
+#endif
     CALL HDF5_dataset_shape(file_id, dataset, dimensions, ierr)
     IF (ierr /= 0) THEN
        IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot read nodal equilibrium dataset shape: ', TRIM(dataset)
@@ -798,6 +800,7 @@ CONTAINS
        IF (MPIvar%glob_id == 0) WRITE(6,*) 'Nodal equilibrium length differs from global mesh: ', TRIM(dataset)
        STOP 1
     ENDIF
+#ifdef PARALL
     IF (MPIvar%glob_size > 1) THEN
        IF (.NOT. ASSOCIATED(Mesh%loc2glob_nodes)) THEN
           IF (MPIvar%glob_id == 0) WRITE(6,*) 'Nodal equilibrium needs the global node mapping'
@@ -809,13 +812,18 @@ CONTAINS
           STOP 1
        ENDIF
     ENDIF
+#endif
     ALLOCATE(global_values(n_global))
     CALL HDF5_array1D_reading(file_id, global_values, dataset)
+#ifdef PARALL
     IF (MPIvar%glob_size > 1) THEN
        values = global_values(Mesh%loc2glob_nodes)
     ELSE
+#endif
        values = global_values
+#ifdef PARALL
     ENDIF
+#endif
     DEALLOCATE(global_values)
   END SUBROUTINE read_global_nodal_array
 

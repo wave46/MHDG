@@ -218,6 +218,7 @@ PROGRAM test_me_restart
 CONTAINS
   SUBROUTINE check_nodal_input()
     INTEGER :: i, frame, last_frame
+    INTEGER, ALLOCATABLE :: node_ids(:)
     REAL*8 :: node, expected_flux, expected_field(3)
 
     CALL get_command_argument(2, input%field_path)
@@ -229,25 +230,30 @@ CONTAINS
     simpar%refval_charge = 1.d0
     simpar%refval_mass = 1.d0
     simpar%refval_time = 1.d0
-    Mesh%Nno_glob = 6
     Mesh%Nnodes = 6
+#ifdef PARALL
+    Mesh%Nno_glob = 6
     IF (MPIvar%glob_size > 1) Mesh%Nnodes = 3
-    ALLOCATE(Mesh%X(Mesh%Nnodes,2), Mesh%loc2glob_nodes(Mesh%Nnodes))
-    IF (MPIvar%glob_size == 1) THEN
-       Mesh%loc2glob_nodes = [1,2,3,4,5,6]
-    ELSE
+#endif
+    ALLOCATE(Mesh%X(Mesh%Nnodes,2), node_ids(Mesh%Nnodes))
+    node_ids = [(i, i=1,Mesh%Nnodes)]
+#ifdef PARALL
+    IF (MPIvar%glob_size > 1) THEN
        ! Deliberately reordered, overlapping partitions, including shared nodes.
-       Mesh%loc2glob_nodes = [MPIvar%glob_id+3, MPIvar%glob_id+1, MPIvar%glob_id+2]
+       node_ids = [MPIvar%glob_id+3, MPIvar%glob_id+1, MPIvar%glob_id+2]
     ENDIF
-    Mesh%X(:,1) = 2.d0 + 0.1d0*Mesh%loc2glob_nodes
-    Mesh%X(:,2) = 0.2d0*Mesh%loc2glob_nodes
+    ALLOCATE(Mesh%loc2glob_nodes(Mesh%Nnodes))
+    Mesh%loc2glob_nodes = node_ids
+#endif
+    Mesh%X(:,1) = 2.d0 + 0.1d0*node_ids
+    Mesh%X(:,2) = 0.2d0*node_ids
     CALL initialize_magnetic_field()
     last_frame = 0
     IF (switch%ME) last_frame = 1
     DO frame = 0, last_frame
        CALL load_magnetic_field_nodes(frame)
        DO i = 1, Mesh%Nnodes
-          node = REAL(Mesh%loc2glob_nodes(i), KIND=8)
+          node = REAL(node_ids(i), KIND=8)
           expected_field = [node+0.1d0, 2.d0*node+0.2d0, 3.d0*node+0.3d0] + 10.d0*frame
           expected_flux = 10.d0-node+100.d0*frame
           IF (MAXVAL(ABS(phys%B(i,:)-expected_field)) > 1.d-12 .OR. &
