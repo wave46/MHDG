@@ -109,6 +109,10 @@ HDF5 checkpoints through the production input, initialization, and solution
 readers. It checks static bootstrap initialization, real ME steps 0/1/50/99/100,
 feedback-state restoration, rejection before out-of-range history access,
 endpoint interpolation/heating selection, and inactive ME compatibility.
+The same driver exercises production time-input parsing and seconds-to-solver
+conversion, normalized-unit equivalence, the `tfi` alias, independent adaptation
+options, and invalid/nonfinite configuration rejection. Until clock integration,
+it also verifies that explicit modes cannot execute the legacy loop.
 It also checks HDF5 grid dimensions/orientation on a non-square rectangular grid,
 stored-current interpolation at initial/endpoint frames, full filenames and
 legacy basenames, optional namelist dimensions, and dataset-shape rejection.

@@ -25,6 +25,12 @@ CONTAINS
     INTEGER,INTENT(out) :: nts
     REAL,INTENT(out) :: dt
 
+    IF (time%mode /= 'legacy') THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) &
+            'Explicit time_mode execution is not enabled yet; physical-clock integration follows.'
+       STOP 1
+    ENDIF
+
     CALL initPhys()
 
     ! the time is set to zero here but in case of a restart this value is

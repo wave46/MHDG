@@ -75,6 +75,7 @@ def main():
     executable = Path(sys.argv[1]).resolve()
     repo = Path(__file__).resolve().parents[1]
     template = (repo / "test/param_initial.txt").read_text()
+    check_time_input(executable, template)
     cases = [
         ("static_bootstrap", 1, False, 100, True, 0),
         ("me_initial", 0, True, 100, True, 0),
@@ -188,6 +189,54 @@ def main():
                 raise SystemExit(f"FAIL: {name}\n{output}")
     print(f"ME restart reader checks: {len(cases)} PASS")
     check_nodal_input(executable, sys.argv[2] if len(sys.argv) > 2 else "serial")
+
+
+def check_time_input(executable, template):
+    fixed = "time_mode='fixed', time_units='seconds', dt0=.02, t_start=.12, t_final=.56"
+    cases = [
+        (fixed, None),
+        ("time_mode='fixed', dt0=145560.40756914119, t_start=873362.4454148472, "
+         "t_final=4075691.411935954", None),
+        ("time_mode='prescribed', time_units='seconds', t_start=.12, tfi=.56, "
+         "dt_reduce_on_failure=.true.", None),
+        ("time_mode='adaptive', time_units='seconds', dt0=.02, t_start=.12, t_final=.56, "
+         "dt_reduce_on_failure=.false., dt_grow_on_easy=.true.", None),
+        (fixed + ", tfi=.50", "tfi and t_final specify different final times"),
+        (fixed.replace(".56", "NaN"), "t_final must be finite"),
+        (fixed.replace(".56", ".10"), "t_final must be greater than t_start"),
+        (fixed + ", dt_reduce_on_failure=.true.", "Fixed time_mode does not support timestep adaptation"),
+        (fixed + ", tis=2", "Physical time modes currently require BDF1"),
+        (fixed.replace("seconds", "milliseconds"), "time_units must be normalized or seconds"),
+    ]
+    with tempfile.TemporaryDirectory(prefix="mhdg-time-input-") as scratch:
+        directory = Path(scratch)
+        for values, error in cases:
+            text = parameters(template, me=False)
+            text = re.sub(r"(?is)&TIME_LST\b.*?\n/", "&TIME_LST\n " + values + "\n/", text)
+            (directory / "param.txt").write_text(text)
+            run = subprocess.run([str(executable), "time-input"], cwd=directory,
+                                 text=True, capture_output=True, timeout=20)
+            output = run.stdout + run.stderr
+            if error:
+                if run.returncode == 0 or error not in " ".join(output.split()):
+                    raise SystemExit(f"FAIL: time input {values}\n{output}")
+                continue
+            match = re.search(r"^TIME_INPUT_STATE\s+(.*)$", output, re.M)
+            if run.returncode or not match:
+                raise SystemExit(f"FAIL: time input {values}\n{output}")
+            mode, units, *state = match.group(1).split()
+            dt, start, final, scale, reduce, grow, steps = map(float, state)
+            np.testing.assert_allclose([start*scale, final*scale], [.12, .56], rtol=1e-14)
+            np.testing.assert_allclose(dt*scale, 0. if mode == "prescribed" else .02, rtol=1e-14)
+            assert (reduce, grow, steps) == (float(mode == "prescribed"), float(mode == "adaptive"), 0.)
+        # Until clock integration, explicit modes must not execute legacy stopping.
+        text = re.sub(r"(?is)&TIME_LST\b.*?\n/", "&TIME_LST\n " + fixed + "\n/", text)
+        (directory / "param.txt").write_text(text)
+        run = subprocess.run([str(executable), "time-input-init"], cwd=directory,
+                             text=True, capture_output=True, timeout=20)
+        if run.returncode == 0 or "Explicit time_mode execution is not enabled yet" not in run.stdout:
+            raise SystemExit(f"FAIL: unfinished physical-clock guard\n{run.stdout}{run.stderr}")
+    print(f"Time input checks: {len(cases)} cases and unfinished-clock guard PASS")
 
 
 def check_nodal_input(executable, build_mode):

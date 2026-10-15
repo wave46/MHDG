@@ -216,4 +216,10 @@ SUBROUTINE adimensionalization()
 #endif
   simpar%refval_specenergydens_dimensions = 'm^-1*s^-2'
 
+  IF (time%units == 'seconds') THEN
+     time%dt0 = time%dt0/t0
+     time%t_start = time%t_start/t0
+     time%t_final = time%t_final/t0
+  ENDIF
+
 END SUBROUTINE adimensionalization

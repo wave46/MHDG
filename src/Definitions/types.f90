@@ -522,7 +522,12 @@ MODULE types
      REAL*8      :: dt   ! current time step
      REAL*8      :: dt_ME   ! time step from equilibrium !stored as dimensional value
      REAL*8      :: t_ME   ! time step from equilibrium (to get puff rate) !stored as dimensional value
-     REAL*8      :: tfi  ! final time of the simulation
+     REAL*8      :: t_final  ! final time of the simulation, in solver units
+     REAL*8      :: t_start = 0.d0
+     CHARACTER(LEN=16) :: mode = 'legacy'
+     CHARACTER(LEN=16) :: units = 'normalized' ! units of namelist time inputs
+     LOGICAL     :: dt_reduce_on_failure = .FALSE.
+     LOGICAL     :: dt_grow_on_easy = .FALSE.
      INTEGER     :: it   ! the number of the current time step
      INTEGER     :: ik   ! same as it but always incrementing (also in case of pseudotime..)
      INTEGER     :: ndt  ! max number of time steps to do in the current session

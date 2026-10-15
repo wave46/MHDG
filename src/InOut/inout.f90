@@ -1358,7 +1358,7 @@ CONTAINS
       CALL HDF5_group_create('time', group_id1, group_id2, ierr)
       CALL HDF5_real_saving(group_id2, time%dt0, 'Initial_time_step')
       CALL HDF5_real_saving(group_id2, time%dt, 'Current_time_step')
-      CALL HDF5_real_saving(group_id2, time%tfi, 'Final_time')
+      CALL HDF5_real_saving(group_id2, time%t_final, 'Final_time')
       CALL HDF5_integer_saving(group_id2, time%it, 'Current_time_step_number')
       CALL HDF5_integer_saving(group_id2, time%ik, 'Current_pseudo_time_step_number')
       CALL HDF5_integer_saving(group_id2, time%nts, 'Number_of_time_steps')

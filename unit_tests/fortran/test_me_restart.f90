@@ -38,6 +38,16 @@ PROGRAM test_me_restart
   LOGICAL :: saved_me, has_reference_current
 
   CALL get_command_argument(1, mode)
+  IF (mode == 'time-input' .OR. mode == 'time-input-init') THEN
+     MPIvar%glob_id = 0
+     MPIvar%glob_size = 1
+     CALL read_input()
+     IF (mode == 'time-input-init') CALL init_sim(nts, dt)
+     WRITE(*,'(A,2(1X,A),4(1X,ES24.16),3(1X,I0))') 'TIME_INPUT_STATE', &
+          TRIM(time%mode), TRIM(time%units), time%dt0, time%t_start, time%t_final, &
+          simpar%refval_time, MERGE(1,0,time%dt_reduce_on_failure), MERGE(1,0,time%dt_grow_on_easy), time%nts
+     STOP
+  ENDIF
   IF (mode == 'nodal') THEN
      CALL init_MPI_OMP()
      CALL check_nodal_input()

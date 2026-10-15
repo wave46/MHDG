@@ -109,6 +109,32 @@ directory unless absolute paths are supplied:
 The feedback gains apply to moving-equilibrium control. The spelling
 `feedback_propotional_gain` (and its `_xpr` counterpart) matches the reader.
 
+The physical-time configuration is being introduced in stages. `TIME_LST` now
+accepts `time_mode = 'fixed'`, `'prescribed'` or `'adaptive'`, `t_start` (default
+zero), and `t_final`. Explicit modes require `steady = .false.`,
+`psdtime = .false.`, and BDF1 (`tis = 1`). **Execution of explicit modes is
+temporarily rejected until the physical-clock integration is complete.**
+The existing templates retain their working legacy configuration.
+
+`time_units = 'seconds'` converts namelist `dt0`, `t_start` and the final time
+once during input normalization. Omitted units mean `'normalized'`, preserving
+existing inputs. Equilibrium, heating and control-file timestamps remain in
+seconds, independently of namelist units. Printed time values after normalization
+and the existing HDF5 `Final_time` field remain in solver units.
+
+The independent options `dt_reduce_on_failure` and `dt_grow_on_easy` default to
+false. Fixed mode allows neither; prescribed mode permits failure subdivision
+but no growth; adaptive mode permits both. Actual reduction and growth will be
+enabled in the temporal-recovery stage. Fixed/adaptive modes require positive
+`dt0`; prescribed mode takes its intervals from the equilibrium timestamps.
+
+Without `time_mode`, legacy step-count/convergence stopping remains active.
+Legacy `tfi` remains readable with a warning, and remains unenforced in that
+mode. In explicit modes it is a deprecated alias for required `t_final`;
+conflicting values are rejected. Supplying `t_final` or a nonzero `t_start`
+without an explicit mode is rejected rather than silently ignored. The new
+configuration adds no `max_steps` setting.
+
 ## Running 
 The pipeline to get solution for a case without meshadaptivity and in serial is described in [demo](https://github.com/wave46/HDG_postprocess/blob/main/demos/hdg_solution_basics_neutrals.ipynb)
 First, go to `test` folder, where executable is. It is convinient to create `Meshes` folder and put your mesh there.

@@ -37,6 +37,10 @@ SUBROUTINE READ_input()
   INTEGER               :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
   REAL*8                :: dt0, R0, diff_n, diff_u, tau(1:7), tNr, tTM, div, Tbg, neutralp_lambda
   REAL*8                :: tfi, a, bohmth,bohm_energy_thresh, q, diffred, diffmin
+  REAL*8, PARAMETER     :: time_input_unset = -HUGE(1.d0)
+  REAL*8                :: t_start, t_final
+  CHARACTER(LEN=16)     :: time_mode, time_units
+  LOGICAL               :: dt_reduce_on_failure, dt_grow_on_easy
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
   REAL*8                :: ionization_ion_energy_fraction
@@ -118,7 +122,8 @@ SUBROUTINE READ_input()
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, check_neutral_positivity, max_divergence_refinements, rest_adapt, osc_adapt, max_oscillation_refinements, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
-  NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
+  NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis, time_mode, time_units, t_start, t_final, &
+       dt_reduce_on_failure, dt_grow_on_easy
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, Re_n, Re_n_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
@@ -185,6 +190,18 @@ SUBROUTINE READ_input()
   neutral_flux_limiter_fs_flux_min = 0.d0
   balance_diagnostics_mode = 'off'
   petsc_factor_solver = ''
+  ME = .FALSE.
+  dt0 = 0.d0
+  nts = 0
+  tsw = 0
+  tis = 1
+  tfi = time_input_unset
+  t_final = time_input_unset
+  t_start = 0.d0
+  time_mode = 'legacy'
+  time_units = 'normalized'
+  dt_reduce_on_failure = .FALSE.
+  dt_grow_on_easy = .FALSE.
 
   ! Reading the file
   uinput = 100
@@ -201,6 +218,8 @@ SUBROUTINE READ_input()
   READ (uinput, UTILS_LST)
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
+
+  CALL configure_time_input()
 
   IF (sollib == 3 .AND. LEN_TRIM(petsc_factor_solver) > 0) THEN
      IF (pctype /= 'PCLU') THEN
@@ -509,7 +528,12 @@ SUBROUTINE READ_input()
   magn%ellip              = ellip
   time%dt0                = dt0
   time%nts                = nts
-  time%tfi                = tfi
+  time%t_final            = t_final
+  time%t_start            = t_start
+  time%mode               = time_mode
+  time%units              = time_units
+  time%dt_reduce_on_failure = dt_reduce_on_failure
+  time%dt_grow_on_easy     = dt_grow_on_easy
   time%tsw                = tsw
   time%tis                = tis
   phys%diff_n             = diff_n
@@ -721,7 +745,10 @@ SUBROUTINE READ_input()
      PRINT *, '        ***************** Time stepping ************************'
      PRINT *, '                - dt0:                                                ', time%dt0
      PRINT *, '                - dt modification:                                    ', time%tsw
-     PRINT *, '                - final time:                                         ', time%tfi
+     PRINT *, '                - time mode:                                          ', TRIM(time%mode)
+     PRINT *, '                - time input units:                                   ', TRIM(time%units)
+     PRINT *, '                - start time (solver units):                          ', time%t_start
+     PRINT *, '                - final time (solver units):                          ', time%t_final
      PRINT *, '                - max number of time steps:                           ', time%nts
      PRINT *, '                - time integration scheme:                            ', time%tis
      PRINT *, '        ***************** Physics *****************************'
@@ -963,6 +990,62 @@ SUBROUTINE READ_input()
 
      PRINT *, '        '
   END IF
+
+CONTAINS
+
+  SUBROUTINE configure_time_input()
+    SELECT CASE (time_mode)
+    CASE ('legacy', 'fixed', 'prescribed', 'adaptive')
+    CASE DEFAULT
+       CALL invalid_time_input('time_mode must be legacy, fixed, prescribed or adaptive')
+    END SELECT
+    SELECT CASE (time_units)
+    CASE ('normalized', 'seconds')
+    CASE DEFAULT
+       CALL invalid_time_input('time_units must be normalized or seconds')
+    END SELECT
+    IF (time_mode == 'legacy' .AND. t_final /= time_input_unset) &
+         CALL invalid_time_input('t_final requires an explicit physical time_mode')
+
+    IF (.NOT. ieee_is_finite(t_start)) CALL invalid_time_input('t_start must be finite')
+    IF (.NOT. ieee_is_finite(dt0)) CALL invalid_time_input('dt0 must be finite')
+    IF (tfi /= time_input_unset) THEN
+       IF (.NOT. ieee_is_finite(tfi)) CALL invalid_time_input('tfi must be finite')
+       IF (t_final /= time_input_unset .AND. t_final /= tfi) &
+            CALL invalid_time_input('tfi and t_final specify different final times')
+       t_final = tfi
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'WARNING: tfi is deprecated; use t_final in physical time modes.'
+    ENDIF
+
+    IF (time_mode == 'legacy') THEN
+       IF (t_start /= 0.d0) CALL invalid_time_input('t_start requires an explicit physical time_mode')
+       IF (dt_reduce_on_failure .OR. dt_grow_on_easy) &
+            CALL invalid_time_input('Timestep adaptation requires an explicit physical time_mode')
+       IF (t_final == time_input_unset) t_final = 0.d0
+       IF (MPIvar%glob_id == 0) WRITE(6,*) &
+            'WARNING: legacy time stepping retains nts-based stopping; tfi is not enforced.'
+       RETURN
+    ENDIF
+
+    IF (steady .OR. psdtime) CALL invalid_time_input('Physical time_mode requires steady=false and psdtime=false')
+    IF (t_final == time_input_unset) CALL invalid_time_input('Physical time_mode requires t_final')
+    IF (.NOT. ieee_is_finite(t_final)) CALL invalid_time_input('t_final must be finite')
+    IF (t_final <= t_start) CALL invalid_time_input('t_final must be greater than t_start')
+    IF (time_mode == 'prescribed') THEN
+       IF (dt_grow_on_easy) CALL invalid_time_input('Prescribed time_mode does not support timestep growth')
+    ELSE
+       IF (dt0 <= 0.d0) CALL invalid_time_input('Fixed/adaptive time_mode requires positive dt0')
+    ENDIF
+    IF (time_mode == 'fixed' .AND. (dt_reduce_on_failure .OR. dt_grow_on_easy)) &
+         CALL invalid_time_input('Fixed time_mode does not support timestep adaptation')
+    IF (tis /= 1) CALL invalid_time_input('Physical time modes currently require BDF1 (tis=1)')
+  END SUBROUTINE configure_time_input
+
+  SUBROUTINE invalid_time_input(message)
+    CHARACTER(LEN=*), INTENT(IN) :: message
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Invalid time input: ', message
+    STOP 1
+  END SUBROUTINE invalid_time_input
 
 END SUBROUTINE READ_input
 
