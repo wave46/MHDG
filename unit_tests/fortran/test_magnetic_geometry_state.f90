@@ -36,6 +36,12 @@ CONTAINS
        CALL assert_close(fit%applied_alpha, canonical_alpha(icandidate), 2.d-13, &
             'applied canonical alpha')
        CALL assert_true(fit%convention_id == icandidate, 'canonical convention ID')
+       CALL assert_true(poloidal_scale_matches_fit(canonical_alpha(icandidate), fit), &
+            'matching declared convention rejected')
+       CALL assert_true(.NOT. poloidal_scale_matches_fit(-canonical_alpha(icandidate), fit), &
+            'conflicting declared sign accepted')
+       CALL assert_true(.NOT. poloidal_scale_matches_fit(2.d0*ACOS(-1.d0)*canonical_alpha(icandidate), fit), &
+            'conflicting declared flux normalization accepted')
        CALL assert_close(fit%applied_relative_rms, 0.d0, 2.d-13, &
             'exact applied field residual')
     ENDDO
@@ -66,6 +72,8 @@ CONTAINS
          'percent-perturbed applied alpha')
     CALL assert_true(fit%relative_rms > 1.d-3 .AND. fit%relative_rms < 0.02d0, &
          'percent-perturbed field residual')
+    CALL assert_true(poloidal_scale_matches_fit(canonical_alpha(4), fit), &
+         'declaration must match selected convention rather than noisy unconstrained fit')
   END SUBROUTINE test_canonical_field_fit
 
   SUBROUTINE test_flux_derived_toroidal_current()

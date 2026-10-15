@@ -11,6 +11,7 @@ MODULE equilibrium_series
 
   TYPE, PUBLIC :: equilibrium_sample_t
      REAL(float), ALLOCATABLE :: psi(:,:), bphi(:,:), br(:,:), bz(:,:), jtor(:,:)
+     REAL(float), ALLOCATABLE :: poloidal_scale
      REAL(float) :: psi_sep = 0, time = 0, fraction = 0
      INTEGER :: frame_left = 0, frame_right = 0 ! Zero-based input positions.
   END TYPE equilibrium_sample_t
@@ -22,6 +23,7 @@ MODULE equilibrium_series
      LOGICAL :: has_poloidal = .FALSE., has_jtor = .FALSE.
      CHARACTER(LEN=1000) :: field_path = '', jtor_path = '', jtor_stem = ''
      REAL(float), ALLOCATABLE :: psi_sep(:)
+     REAL(float), ALLOCATABLE :: poloidal_scale
      REAL(float), ALLOCATABLE :: jtor_r(:), jtor_z(:)
      CHARACTER(LEN=32) :: datasets(5)
      TYPE(equilibrium_sample_t) :: cache(2)
@@ -51,6 +53,7 @@ CONTAINS
     CALL this%series%open(path, 'equilibrium', ierr, message, 'Equilibrium')
     IF (ierr /= 0) RETURN
     CALL read_equilibrium_metadata(this, ierr, message)
+    IF (ierr == 0) CALL read_poloidal_scale(this, ierr, message)
     IF (ierr == 0) CALL validate_psi_sep(this, ierr, message)
     IF (ierr == 0) CALL validate_field_datasets(this, ierr, message)
     IF (ierr == 0 .AND. LEN_TRIM(this%jtor_path) > 0) CALL read_current_metadata(this, ierr, message)
@@ -181,6 +184,33 @@ CONTAINS
     ALLOCATE(this%psi_sep(1))
     CALL HDF5_real_reading(this%series%file(), this%psi_sep(1), 'psiSep', ierr)
   END SUBROUTINE read_legacy_metadata
+
+  SUBROUTINE read_poloidal_scale(this, ierr, message)
+    CLASS(equilibrium_series_t), INTENT(INOUT) :: this
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    CHARACTER(LEN=32) :: name
+    LOGICAL :: exists
+
+    name = 'poloidal_scale'
+    IF (this%series%is_trajectory()) name = 'equilibrium/poloidal_scale'
+    message = 'Cannot inspect poloidal_scale'
+    CALL H5Lexists_f(this%series%file(), TRIM(name), exists, ierr)
+    IF (ierr /= 0) RETURN
+    IF (.NOT. exists) THEN
+       message = ''
+       RETURN
+    ENDIF
+    message = 'poloidal_scale must be a finite nonzero scalar'
+    ALLOCATE(this%poloidal_scale)
+    CALL HDF5_real_reading(this%series%file(), this%poloidal_scale, TRIM(name), ierr)
+    IF (ierr /= 0) RETURN
+    ierr = -1
+    IF (.NOT. ieee_is_finite(this%poloidal_scale)) RETURN
+    IF (this%poloidal_scale == 0._float) RETURN
+    ierr = 0
+    message = ''
+  END SUBROUTINE read_poloidal_scale
 
   SUBROUTINE read_current_metadata(this, ierr, message)
     CLASS(equilibrium_series_t), INTENT(INOUT) :: this
@@ -322,6 +352,11 @@ CONTAINS
     IF (input%series%is_trajectory()) RETURN
     IF (this%has_poloidal .NEQV. input%has_poloidal) RETURN
     IF (this%has_jtor .NEQV. input%has_jtor) RETURN
+    message = 'Numbered poloidal_scale differs from frame 0000'
+    IF (ALLOCATED(this%poloidal_scale) .NEQV. ALLOCATED(input%poloidal_scale)) RETURN
+    IF (ALLOCATED(this%poloidal_scale)) THEN
+       IF (this%poloidal_scale /= input%poloidal_scale) RETURN
+    ENDIF
     message = 'Numbered magnetic R,Z grid differs from frame 0000'
     IF (.NOT. this%series%same_grid(input%series)) RETURN
     IF (LEN_TRIM(this%jtor_stem) > 0) THEN
@@ -391,6 +426,7 @@ CONTAINS
        ENDIF
     ENDDO
     sample%psi_sep = this%psi_sep(frame)
+    IF (ALLOCATED(this%poloidal_scale)) sample%poloidal_scale = this%poloidal_scale
   END SUBROUTINE read_equilibrium_frame
 
   SUBROUTINE series_sample_at(this, t, sample, ierr, message)
@@ -475,6 +511,7 @@ CONTAINS
     this%has_jtor = .FALSE.
     this%cache = equilibrium_sample_t()
     IF (ALLOCATED(this%psi_sep)) DEALLOCATE(this%psi_sep)
+    IF (ALLOCATED(this%poloidal_scale)) DEALLOCATE(this%poloidal_scale)
     IF (ALLOCATED(this%jtor_r)) DEALLOCATE(this%jtor_r)
     IF (ALLOCATED(this%jtor_z)) DEALLOCATE(this%jtor_z)
   END SUBROUTINE series_clear

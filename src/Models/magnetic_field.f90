@@ -20,7 +20,7 @@ MODULE magnetic_field
        magnetic_region_core
   USE magnetic_geometry_state, ONLY: magnetic_equilibrium, &
        magnetic_geometry_cache, poloidal_field_fit, &
-       fit_poloidal_field_scale, reset_magnetic_geometry_state, &
+       fit_poloidal_field_scale, poloidal_scale_matches_fit, reset_magnetic_geometry_state, &
        compare_restart_geometry, fit_toroidal_current_sign, &
        evaluate_flux_derived_toroidal_current, &
        toroidal_current_from_flux, &
@@ -489,6 +489,15 @@ CONTAINS
        fac_2pi_field = 1.d0
        IF (input%divide_by_2pi) fac_2pi_field = 2.d0*PI
        alpha = determine_flux_sign(ip, jp, xvec, yvec, Br2D, Bz2D)/fac_2pi_field
+    ENDIF
+    IF (ALLOCATED(sample%poloidal_scale)) THEN
+       IF (.NOT. poloidal_field_fit%is_valid) &
+            CALL check_equilibrium_input(-1, 'Cannot validate poloidal_scale: no valid Br/Bz fit')
+       IF (.NOT. poloidal_scale_matches_fit(sample%poloidal_scale, poloidal_field_fit)) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,'(A,2ES24.16)') &
+               ' Declared/fitted poloidal scale: ', sample%poloidal_scale, alpha
+          CALL check_equilibrium_input(-1, 'poloidal_scale disagrees with the convention fitted from Br/Bz')
+       ENDIF
     ENDIF
     poloidal_field_fit%applied_alpha = alpha
     CALL report_field_fit(alpha)

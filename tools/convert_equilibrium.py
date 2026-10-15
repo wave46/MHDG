@@ -21,6 +21,7 @@ class _Frame:
     z: np.ndarray
     time: float
     psi_sep: float
+    poloidal_scale: float | None
     fields: dict[str, np.ndarray]
     attributes: dict[str, dict]
     source_attributes: dict[str, dict]
@@ -34,6 +35,7 @@ def convert_equilibria(
     Multiple frames require timestamps, including in paired current files. A
     stationary file without a timestamp uses zero. References may be absent;
     Br/Bz must be paired. Separate current files override embedded legacy Jtor.
+    An explicit poloidal_scale is preserved and must stay constant across frames.
     Output is published only after success and must not already exist.
     """
     fields = [Path(path) for path in field_files]
@@ -82,9 +84,14 @@ def _read_frame(field_file, current_file, *, require_time):
         r, z = _read_grid(field)
         timestamp = _read_scalar(field, "time", required=require_time)
         psi_sep = _read_scalar(field, "psiSep")
+        poloidal_scale = _read_scalar(field, "poloidal_scale", required=False)
+        if poloidal_scale == 0:
+            raise ValueError(f"poloidal_scale must be nonzero: {field_file}")
         attributes = {"grid/r": dict(field["r2D"].attrs), "grid/z": dict(field["z2D"].attrs),
                       "equilibrium/psiSep": dict(field["psiSep"].attrs),
                       "time": dict(field["time"].attrs) if "time" in field else {}}
+        if poloidal_scale is not None:
+            attributes["equilibrium/poloidal_scale"] = dict(field["poloidal_scale"].attrs)
         values = {}
         for name, legacy in FIELD_NAMES.items():
             if name == "Jtor" and current_file is not None:
@@ -109,7 +116,8 @@ def _read_frame(field_file, current_file, *, require_time):
             values["Jtor"] = _read_matrix(current, "Jtor", (len(r), len(z))).T
             attributes["equilibrium/Jtor"] = dict(current["Jtor"].attrs)
             source_attributes["current"] = dict(current.attrs)
-    return _Frame(r, z, timestamp if timestamp is not None else 0., psi_sep, values, attributes, source_attributes)
+    return _Frame(r, z, timestamp if timestamp is not None else 0., psi_sep, poloidal_scale,
+                  values, attributes, source_attributes)
 
 
 def _read_grid(source):
@@ -145,7 +153,7 @@ def _read_scalar(source, name, *, required=True):
         return None
     dataset = source[name]
     if dataset.size != 1 or dataset.dtype.kind not in "fiu":
-        raise ValueError(f"{name} must be a numeric scalar or singleton array: {source.filename}")
+        raise ValueError(f"{name} must be a numeric scalar or an array containing exactly one value: {source.filename}")
     value = float(np.asarray(dataset[...]).item())
     if not np.isfinite(value):
         raise ValueError(f"Nonfinite {name}: {source.filename}")
@@ -156,6 +164,8 @@ def _create_layout(destination, frame, fields, currents):
     destination["grid/r"], destination["grid/z"] = frame.r, frame.z
     destination.create_dataset("time", (len(fields),), dtype="f8")
     destination.create_dataset("equilibrium/psiSep", (len(fields),), dtype="f8")
+    if frame.poloidal_scale is not None:
+        destination["equilibrium/poloidal_scale"] = frame.poloidal_scale
     shape = (len(fields), len(frame.z), len(frame.r))
     for name in frame.fields:
         destination.create_dataset(f"equilibrium/{name}", shape, dtype="f8", chunks=(1, *shape[1:]),
@@ -173,8 +183,10 @@ def _validate_frame(frame, destination, previous_time, field_file):
         raise ValueError(f"Timestamps must be strictly increasing: {field_file}")
     if not np.array_equal(frame.r, destination["grid/r"][:]) or not np.array_equal(frame.z, destination["grid/z"][:]):
         raise ValueError(f"R,Z grid differs from the first frame; no regridding: {field_file}")
-    if set(frame.fields) != set(destination["equilibrium"]) - {"psiSep"}:
+    if set(frame.fields) != set(destination["equilibrium"]) - {"psiSep", "poloidal_scale"}:
         raise ValueError(f"Optional reference fields differ between frames: {field_file}")
+    if frame.poloidal_scale != _read_scalar(destination, "equilibrium/poloidal_scale", required=False):
+        raise ValueError(f"poloidal_scale differs between frames: {field_file}")
     for name, attributes in frame.attributes.items():
         initial = dict(destination[name].attrs)
         if (initial.keys() != attributes.keys()

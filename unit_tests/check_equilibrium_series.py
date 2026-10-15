@@ -124,6 +124,46 @@ def conversion_checks(directory):
             ("converted_paired.h5", "trajectory", None, None)]
 
 
+def scale_checks(directory):
+    """Preserve one declared flux convention through numbered input and conversion."""
+    alpha = -1 / (2*np.pi)
+    scaled = directory / 'scaled'
+    shutil.copytree(directory / 'numbered', scaled)
+    fields = [scaled / f'field_{index:04d}.h5' for index in range(5)]
+    for path in fields:
+        with h5py.File(path, 'r+') as f:
+            f['poloidal_scale'] = [alpha]
+            f['poloidal_scale'].attrs['definition'] = 'Br=-alpha/R*dpsi/dZ; Bz=alpha/R*dpsi/dR'
+    convert_equilibria(fields, directory / 'scaled.h5')
+    with h5py.File(directory / 'scaled.h5') as f:
+        assert f['equilibrium/poloidal_scale'].shape == ()
+        assert f['equilibrium/poloidal_scale'][()] == alpha
+        assert 'definition' in f['equilibrium/poloidal_scale'].attrs
+    cases = [('scaled/field', 'numbered_scale', None, None), ('scaled.h5', 'scale', None, None)]
+    for name, value in [('nonfinite', np.nan), ('zero', 0.), ('vector', [alpha, alpha])]:
+        path = directory / f'scale_{name}.h5'
+        shutil.copyfile(directory / 'scaled.h5', path)
+        with h5py.File(path, 'r+') as f:
+            del f['equilibrium/poloidal_scale']
+            f['equilibrium/poloidal_scale'] = value
+        cases.append((path.name, 'invalid', 'poloidal_scale must be a finite nonzero scalar', None))
+    with h5py.File(fields[1], 'r+') as f:
+        f['poloidal_scale'][...] = -alpha
+    rejected = directory / 'rejected_scale.h5'
+    try:
+        convert_equilibria(fields, rejected)
+    except ValueError as error:
+        assert 'poloidal_scale differs between frames' in str(error), error
+    else:
+        raise AssertionError('Converter accepted changing flux conventions')
+    assert not rejected.exists() and not list(directory.glob('.rejected_scale.h5.*.tmp'))
+    shutil.copytree(scaled, directory / 'changed_scale')
+    cases.append(('changed_scale/field', 'numbered_invalid', 'Numbered poloidal_scale differs', None))
+    with h5py.File(fields[1], 'r+') as f:
+        f['poloidal_scale'][...] = alpha
+    return cases
+
+
 def heating_inputs(directory):
     r, z = np.array([1.6, 1.9, 2.4]), np.array([-.8, .2])
     times = np.array([0., .05, .17, .45, .8])
@@ -193,6 +233,7 @@ def main():
         cases = [(name, mode, expected, None) for name, mode, expected in cases]
         numbered_inputs(directory / "numbered")
         cases.extend(conversion_checks(directory))
+        cases.extend(scale_checks(directory))
         cases.extend(heating_inputs(directory))
         cases.extend([
             ("numbered/field", "numbered", None, None),

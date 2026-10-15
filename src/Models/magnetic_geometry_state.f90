@@ -71,6 +71,7 @@ MODULE magnetic_geometry_state
   REAL*8, SAVE :: restart_a_minor = 0.d0
 
   PUBLIC :: fit_poloidal_field_scale
+  PUBLIC :: poloidal_scale_matches_fit
   PUBLIC :: fit_toroidal_current_sign
   PUBLIC :: evaluate_flux_derived_toroidal_current
   PUBLIC :: reset_magnetic_geometry_state
@@ -164,6 +165,16 @@ CONTAINS
          ieee_is_finite(fit%applied_relative_rms) .AND. &
          ieee_is_finite(fit%canonical_relative_difference)
   END SUBROUTINE fit_poloidal_field_scale
+
+  LOGICAL FUNCTION poloidal_scale_matches_fit(declared_alpha, fit)
+    REAL*8, INTENT(IN) :: declared_alpha
+    TYPE(poloidal_field_fit_t), INTENT(IN) :: fit
+
+    poloidal_scale_matches_fit = .FALSE.
+    IF (.NOT. fit%is_valid .OR. .NOT. ieee_is_finite(declared_alpha)) RETURN
+    poloidal_scale_matches_fit = ABS(declared_alpha-fit%applied_alpha) <= &
+         1.d-6*ABS(fit%applied_alpha)
+  END FUNCTION poloidal_scale_matches_fit
 
   SUBROUTINE fit_toroidal_current_sign(derived_norm_squared, &
        stored_norm_squared, cross_product, fit)

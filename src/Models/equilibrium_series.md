@@ -26,6 +26,24 @@ Trajectory datasets use the following **Python/HDF5** shapes:
 | `/equilibrium/psiSep` | `(nt,)` | Separatrix flux, same convention as psi |
 | `/equilibrium/Br`, `/equilibrium/Bz` | `(nt,nz,nr)` | Optional paired reference fields in tesla |
 | `/equilibrium/Jtor` | `(nt,nz,nr)` | Optional reference current density in A/m² |
+| `/equilibrium/poloidal_scale` | scalar | Optional declared flux scale and sign α |
+
+`poloidal_scale` declares the convention in physical R,Z coordinates:
+`Br = -α/R * ∂psi/∂Z`, `Bz = α/R * ∂psi/∂R`. The supported solver conventions
+are `+1`, `-1`, `+1/(2*pi)` and `-1/(2*pi)`. It is one constant declaration for
+the entire trajectory, not a time-varying field to interpolate. Legacy files may
+provide the same scalar at the root as `poloidal_scale`; numbered frames must
+retain its presence and value. Store the scale as a scalar or an array containing
+exactly one value; it is a single constant for the entire series.
+The provider checks a declared value is finite and nonzero and returns it as
+the optional allocated `sample%poloidal_scale`, unchanged by interpolation.
+It leaves an absent declaration unallocated and does not infer a convention.
+**When Br/Bz and `poloidal_scale` are both supplied, the declaration must agree
+with the canonical convention selected by the Br/Bz fit (relative tolerance
+`1e-6`); a mismatch or an invalid fit is an input error, and the declaration
+never overrides the reference fields.** This comparison uses the selected
+canonical scale, not the noisy unconstrained fit coefficient. Jtor is checked
+separately and does not determine the poloidal scale.
 
 The HDF5 Fortran interface reports these field dimensions as `(nr,nz,nt)`.
 The frame reader therefore fills an allocated `(nr,nz)` buffer, which the provider
@@ -121,8 +139,10 @@ follow in later slices. Multi-frame trajectories currently require ME.
 The provider accepts absent reference arrays, but solver reconstruction in this
 integration slice still requires Br/Bz and, with ohmic heating, Jtor. Missing
 references produce an explicit input error. Supporting reconstruction without
-these references requires an agreed normalization/sign convention; the reader
-does not invent one. Nodal/analytical magnetic input remains on its existing
+these references will use the agreed explicit poloidal scale and implied
+Ampère-law current sign in the next solver integration slice; metadata reading
+alone does not enable that reconstruction yet. The reader does not invent a
+convention. Nodal/analytical magnetic input remains on its existing
 path, including its separate legacy current input.
 
 The solver closes the provider on normal completion. Failed input validation
@@ -167,6 +187,11 @@ in `/provenance/magnetic_files` and, when supplied, `/provenance/current_files`.
 Unrelated legacy datasets and `dt` are not copied. Do not infer an unspecified
 flux normalization from conversion: the primitives and reference fields retain
 the source convention.
+
+An explicit legacy `poloidal_scale` is copied to the single trajectory scalar,
+including its dataset attributes. Every source frame must declare the same value
+or all omit it; conversion rejects a change of convention. Without a declaration,
+conversion leaves it absent rather than deriving one from reference fields.
 
 The destination must not already exist. A failed conversion leaves no partial
 published file. Python callers, including regression preparation, can use
