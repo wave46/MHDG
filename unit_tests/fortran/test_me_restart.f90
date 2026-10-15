@@ -1,6 +1,6 @@
 PROGRAM test_me_restart
   USE initialization, ONLY: init_sim, next_physical_time, ensure_time_history_capacity
-  USE in_out, ONLY: HDF5_load_solution, HDF5_load_mesh_from_solution
+  USE in_out, ONLY: HDF5_load_solution, HDF5_load_mesh_from_solution, save_feedback_state, load_feedback_state
   USE GMSH_io_module, ONLY: load_gmsh_mesh
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
   USE Main_utils, ONLY: prepare_physical_time_step, initialize_solu0_uiter_uconv
@@ -16,8 +16,11 @@ PROGRAM test_me_restart
   USE magnetic_field, ONLY: open_control_series, load_puff_from_file, load_zeff, load_impurity_concentration
   USE magnetic_field, ONLY: initialize_magnetic_field, load_magnetic_field_nodes, sample_magnetic_input, close_magnetic_input
   USE magnetic_field, ONLY: magnetic_field_is_time_dependent, SetParticleSource, initialize_puff, clear_control_curves
+  USE magnetic_field, ONLY: adjust_puff_feedback, adjust_recycling_feedback, adjust_impurity_concentration_feedback
   USE equilibrium_series, ONLY: equilibrium_sample_t
-  USE HDF5_io_module, ONLY: HDF5_open, HDF5_close, HDF5_dataset_shape
+  USE HDF5_io_module, ONLY: HDF5_open, HDF5_close, HDF5_dataset_shape, HDF5_create, &
+       HDF5_group_create, HDF5_group_open, HDF5_group_close, HDF5_real_saving, &
+       HDF5_integer_saving, HDF5_array1D_saving
   USE HDF5, ONLY: HID_T, HSIZE_T, H5Lexists_f
   IMPLICIT NONE
   INTEGER :: nts
@@ -349,6 +352,7 @@ CONTAINS
        DO trial = 1, 2
           interval = 0.02d0*trial
           time%dt = interval/simpar%refval_time
+          time%t = time%t_target-time%dt
           DO repetition = 1, 2
              phys%puff = 10.d0
              phys%Re = 0.5d0
@@ -357,6 +361,10 @@ CONTAINS
              phys%feedback_previous_error = 0.2d0
              phys%feedback_integral_error_xpr = 4.d0
              phys%feedback_previous_error_xpr = 0.3d0
+             phys%feedback_derivative_history = Feedback_derivative_history_type( &
+                  0.5d0, 0.3d0, time%t*simpar%refval_time-interval, .TRUE.)
+             phys%feedback_derivative_history_xpr = Feedback_derivative_history_type( &
+                  0.5d0, 0.2d0, time%t*simpar%refval_time-interval, .TRUE.)
              CALL SetParticleSource()
              expected_puff = 10.d0
              expected_recycling = 0.5d0
@@ -384,8 +392,154 @@ CONTAINS
           ENDDO
        ENDDO
     ENDDO
+    CALL check_feedback_timing()
     CALL clear_control_curves()
   END SUBROUTINE check_physical_controls
+
+  REAL*8 FUNCTION apply_feedback_test(selector, target, measured) RESULT(command)
+    INTEGER, INTENT(IN) :: selector
+    REAL*8, INTENT(IN) :: target, measured
+
+    SELECT CASE (selector)
+    CASE (1)
+       CALL adjust_puff_feedback(target, measured)
+       command = phys%puff
+    CASE (2)
+       CALL adjust_recycling_feedback(target, measured)
+       command = phys%Re
+    CASE (3)
+       CALL adjust_impurity_concentration_feedback(target, measured)
+       command = phys%impurity_concentrations(1)
+    END SELECT
+  END FUNCTION apply_feedback_test
+
+  SUBROUTINE check_feedback_timing()
+    REAL*8, PARAMETER :: intervals(9) = [0.005d0,0.004d0,0.003d0,0.002d0,0.001d0, &
+         0.0005d0,0.00025d0,0.000325d0,0.0004225d0]
+    REAL*8, PARAMETER :: retries(4) = [0.001d0,0.0005d0,0.00025d0,0.000325d0]
+    TYPE(Feedback_derivative_history_type) :: saved_history(2)
+    REAL*8 :: command, previous_command, target, measured, saved_values(6), expected(6), actual(6)
+    INTEGER :: selector, step, attempt
+    INTEGER(HID_T) :: file_id, simulation_group, physics_group
+
+    simpar%refval_time = 1.d0
+    time%legacy_input = .FALSE.
+    phys%feedback_propotional_gain = 0.d0
+    phys%feedback_integral_gain = 0.d0
+    phys%feedback_derivative_gain = 0.0002d0
+    phys%feedback_propotional_gain_xpr = 0.d0
+    phys%feedback_integral_gain_xpr = 0.d0
+    phys%feedback_derivative_gain_xpr = 0.0002d0
+    DO selector = 1, 3
+       time%t = 0.4d0
+       time%it = 0
+       phys%puff = 10.d0
+       phys%Re = 0.8d0
+       phys%impurity_concentrations(1) = 0.02d0
+       phys%feedback_integral_error = 0.d0
+       phys%feedback_integral_error_xpr = 0.d0
+       IF (selector == 3) THEN
+          phys%feedback_derivative_history_xpr = Feedback_derivative_history_type()
+       ELSE
+          phys%feedback_derivative_history = Feedback_derivative_history_type()
+       ENDIF
+       SELECT CASE (selector)
+       CASE (1)
+          command = phys%puff
+       CASE (2)
+          command = phys%Re
+       CASE (3)
+          command = phys%impurity_concentrations(1)
+       END SELECT
+       DO step = 1, SIZE(intervals)
+          time%dt = intervals(step)
+          time%t_target = time%t+time%dt
+          target = 100.d0+2.d0*time%t_target
+          measured = 50.d0+3.d0*time%t
+          previous_command = command
+          command = apply_feedback_test(selector, target, measured)
+          IF (step == 1) THEN
+             IF (command /= previous_command) ERROR STOP 'first feedback derivative must be zero'
+          ELSE
+             IF (ABS(command-previous_command+0.0002d0) > 1.d-12) &
+                  ERROR STOP 'timestep change created a derivative jump'
+          ENDIF
+          time%t = time%t_target
+          time%it = time%it+1
+       ENDDO
+    ENDDO
+
+    ! Tentative evaluations are replayed from the same accepted controller state.
+    saved_values = [phys%puff,phys%impurity_concentrations(1),phys%feedback_integral_error, &
+         phys%feedback_integral_error_xpr,phys%feedback_previous_error,phys%feedback_previous_error_xpr]
+    saved_history = [phys%feedback_derivative_history,phys%feedback_derivative_history_xpr]
+    DO attempt = 1, SIZE(retries)
+       phys%puff = saved_values(1)
+       phys%impurity_concentrations(1) = saved_values(2)
+       phys%feedback_integral_error = saved_values(3)
+       phys%feedback_integral_error_xpr = saved_values(4)
+       phys%feedback_previous_error = saved_values(5)
+       phys%feedback_previous_error_xpr = saved_values(6)
+       phys%feedback_derivative_history = saved_history(1)
+       phys%feedback_derivative_history_xpr = saved_history(2)
+       time%dt = retries(attempt)
+       time%t_target = time%t+time%dt
+       target = 100.d0+2.d0*time%t_target
+       measured = 50.d0+3.d0*time%t
+       command = apply_feedback_test(1, target, measured)
+       command = apply_feedback_test(3, target, measured)
+       IF (ABS(phys%puff-saved_values(1)+0.0002d0) > 1.d-12 .OR. &
+           ABS(command-saved_values(2)+0.0002d0) > 1.d-12 .OR. &
+           ABS(phys%feedback_integral_error-saved_values(3)-(target-measured)*time%dt) > 1.d-12 .OR. &
+           ABS(phys%feedback_integral_error_xpr-saved_values(4)-(target-measured)*time%dt) > 1.d-12) &
+            ERROR STOP 'feedback retry accumulated rejected state'
+    ENDDO
+    time%t = time%t_target
+    time%it = time%it+1
+
+    ! Round-trip actual feedback persistence, then compare the next update.
+    switch%target_variable = 3
+    CALL HDF5_create('feedback_state.h5', file_id, ierr)
+    CALL HDF5_group_create('simulation_parameters', file_id, simulation_group, ierr)
+    CALL HDF5_group_create('physics', simulation_group, physics_group, ierr)
+    CALL HDF5_real_saving(physics_group, phys%puff, 'puff')
+    CALL HDF5_real_saving(physics_group, phys%Re, 'recycling')
+    CALL HDF5_integer_saving(physics_group, SIZE(phys%impurity_concentrations), 'n_impurities')
+    CALL HDF5_array1D_saving(physics_group, phys%impurity_concentrations, SIZE(phys%impurity_concentrations), &
+         'impurity_concentrations')
+    CALL save_feedback_state(physics_group)
+    CALL HDF5_group_close(physics_group, ierr)
+    CALL HDF5_group_close(simulation_group, ierr)
+    CALL HDF5_close(file_id)
+    time%dt = 1.3d0*time%dt
+    time%t_target = time%t+time%dt
+    target = 100.d0+2.d0*time%t_target
+    measured = 50.d0+3.d0*time%t
+    command = apply_feedback_test(1, target, measured)
+    command = apply_feedback_test(3, target, measured)
+    expected = [phys%puff,phys%impurity_concentrations(1),phys%feedback_integral_error, &
+         phys%feedback_integral_error_xpr,phys%feedback_previous_error,phys%feedback_previous_error_xpr]
+    phys%puff = 0.d0
+    phys%impurity_concentrations(1) = 0.d0
+    phys%feedback_integral_error = 0.d0
+    phys%feedback_integral_error_xpr = 0.d0
+    phys%feedback_previous_error = 0.d0
+    phys%feedback_previous_error_xpr = 0.d0
+    phys%feedback_derivative_history = Feedback_derivative_history_type()
+    phys%feedback_derivative_history_xpr = Feedback_derivative_history_type()
+    CALL HDF5_open('feedback_state.h5', file_id, ierr)
+    CALL HDF5_group_open(file_id, 'simulation_parameters', simulation_group, ierr)
+    CALL load_feedback_state(simulation_group)
+    CALL HDF5_group_close(simulation_group, ierr)
+    CALL HDF5_close(file_id)
+    command = apply_feedback_test(1, target, measured)
+    command = apply_feedback_test(3, target, measured)
+    actual = [phys%puff,phys%impurity_concentrations(1),phys%feedback_integral_error, &
+         phys%feedback_integral_error_xpr,phys%feedback_previous_error,phys%feedback_previous_error_xpr]
+    IF (ANY(ABS(actual-expected) > 1.d-12)) ERROR STOP 'feedback restart changed the next update'
+
+    WRITE(*,'(A)') 'FEEDBACK_TIMING_PASS'
+  END SUBROUTINE check_feedback_timing
 
   SUBROUTINE check_physical_sampling()
     TYPE(equilibrium_sample_t) :: sample

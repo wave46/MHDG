@@ -15,6 +15,7 @@ MODULE in_out
   USE build_provenance, ONLY: solver_git_commit, solver_git_dirty, solver_build_id
   USE balance_diagnostics, ONLY: balance_diag, balance_diagnostics_mode_name
   USE GLOBALS
+  USE magnetic_field, ONLY: reconstruct_feedback_derivative_history
   USE MPI_OMP
   USE printutils
   USE magnetic_geometry_state, ONLY: magnetic_equilibrium, &
@@ -1961,12 +1962,15 @@ CONTAINS
        CALL HDF5_real_saving(physics_group, phys%n_li,'n_li')
        CALL HDF5_real_saving(physics_group, phys%feedback_integral_error,'feedback_integral_error')
        CALL HDF5_real_saving(physics_group, phys%feedback_previous_error,'feedback_previous_error')
+       CALL save_feedback_derivative_history(physics_group, 'feedback_derivative', phys%feedback_derivative_history)
        IF (switch%target_variable == 3) THEN
           CALL HDF5_real_saving(physics_group, phys%feedback_propotional_gain_xpr,'feedback_propotional_gain_xpr')
           CALL HDF5_real_saving(physics_group, phys%feedback_integral_gain_xpr,'feedback_integral_gain_xpr')
           CALL HDF5_real_saving(physics_group, phys%feedback_derivative_gain_xpr,'feedback_derivative_gain_xpr')
           CALL HDF5_real_saving(physics_group, phys%feedback_integral_error_xpr,'feedback_integral_error_xpr')
           CALL HDF5_real_saving(physics_group, phys%feedback_previous_error_xpr,'feedback_previous_error_xpr')
+          CALL save_feedback_derivative_history(physics_group, 'feedback_derivative_xpr', &
+               phys%feedback_derivative_history_xpr)
        ENDIF
     ENDIF
   END SUBROUTINE save_feedback_state
@@ -2006,14 +2010,83 @@ CONTAINS
       IF (time%it .GT. 0) THEN
          CALL read_checkpoint_real(group_id2, 'feedback_integral_error', phys%feedback_integral_error)
          CALL read_checkpoint_real(group_id2, 'feedback_previous_error', phys%feedback_previous_error)
+         CALL load_feedback_derivative_history(group_id, group_id2, 'feedback_derivative', &
+              phys%feedback_derivative_history, phys%feedback_previous_error, .FALSE.)
          IF (switch%target_variable == 3) THEN
             CALL read_checkpoint_real(group_id2, 'feedback_integral_error_xpr', phys%feedback_integral_error_xpr)
             CALL read_checkpoint_real(group_id2, 'feedback_previous_error_xpr', phys%feedback_previous_error_xpr)
+            CALL load_feedback_derivative_history(group_id, group_id2, 'feedback_derivative_xpr', &
+                 phys%feedback_derivative_history_xpr, phys%feedback_previous_error_xpr, .TRUE.)
          ENDIF
       ENDIF
       CALL HDF5_group_close(group_id2, ierr)
     ENDIF
   END SUBROUTINE load_feedback_state
+
+  SUBROUTINE save_feedback_derivative_history(physics_group, name, history)
+    INTEGER(HID_T), INTENT(IN) :: physics_group
+    CHARACTER(LEN=*), INTENT(IN) :: name
+    TYPE(Feedback_derivative_history_type), INTENT(IN) :: history
+    INTEGER(HID_T) :: group_id
+    INTEGER :: ierr
+
+    CALL HDF5_group_create(name, physics_group, group_id, ierr)
+    CALL HDF5_logical_saving(group_id, history%initialized, 'initialized')
+    CALL HDF5_real_saving(group_id, history%target, 'target')
+    CALL HDF5_real_saving(group_id, history%measurement, 'measurement')
+    CALL HDF5_real_saving(group_id, history%measurement_time, 'measurement_time_seconds')
+    CALL HDF5_group_close(group_id, ierr)
+  END SUBROUTINE save_feedback_derivative_history
+
+  SUBROUTINE load_feedback_derivative_history(simulation_group, physics_group, name, history, previous_error, xpr)
+    USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
+    INTEGER(HID_T), INTENT(IN) :: simulation_group, physics_group
+    CHARACTER(LEN=*), INTENT(IN) :: name
+    TYPE(Feedback_derivative_history_type), INTENT(OUT) :: history
+    REAL*8, INTENT(IN) :: previous_error
+    LOGICAL, INTENT(IN) :: xpr
+    INTEGER(HID_T) :: group_id
+    INTEGER :: ierr, initialized
+    REAL*8 :: previous_dt, saved_scale
+    LOGICAL :: exists
+
+    history = Feedback_derivative_history_type()
+    CALL H5Lexists_f(physics_group, name, exists, ierr)
+    IF (exists) THEN
+       CALL HDF5_group_open(physics_group, name, group_id, ierr)
+       CALL HDF5_integer_reading(group_id, initialized, 'initialized', ierr)
+       CALL abort_on_checkpoint_error(ierr, 'Cannot read derivative-history initialization')
+       history%initialized = initialized /= 0
+       CALL read_checkpoint_real(group_id, 'target', history%target)
+       CALL read_checkpoint_real(group_id, 'measurement', history%measurement)
+       CALL read_checkpoint_real(group_id, 'measurement_time_seconds', history%measurement_time)
+       CALL HDF5_group_close(group_id, ierr)
+    ELSE
+       CALL H5Lexists_f(simulation_group, 'time/Current_time_step', exists, ierr)
+       IF (exists) THEN
+          CALL read_checkpoint_real(simulation_group, 'time/Current_time_step', previous_dt)
+          saved_scale = simpar%refval_time
+          CALL H5Lexists_f(simulation_group, 'adimensionalization/time_scale', exists, ierr)
+          IF (exists) CALL read_checkpoint_real(simulation_group, 'adimensionalization/time_scale', saved_scale)
+          previous_dt = previous_dt*saved_scale
+          IF (ieee_is_finite(previous_dt) .AND. previous_dt > 0.d0) &
+               CALL reconstruct_feedback_derivative_history(history, previous_error, previous_dt, xpr)
+       ENDIF
+       IF (MPIvar%glob_id == 0) THEN
+          IF (history%initialized) THEN
+             WRITE(6,*) 'Reconstructed legacy derivative history from saved timestep and current target curve: ', name
+          ELSE
+             WRITE(6,*) 'Checkpoint has no usable derivative timing; first derivative contribution is zero: ', name
+          ENDIF
+       ENDIF
+    ENDIF
+    IF (history%initialized) THEN
+       IF (.NOT. ALL(ieee_is_finite([history%target, history%measurement, history%measurement_time]))) &
+            CALL abort_on_checkpoint_error(-1, 'Derivative history must be finite')
+       IF (history%measurement_time >= time%t*simpar%refval_time) &
+            CALL abort_on_checkpoint_error(-1, 'Derivative measurement must precede the accepted checkpoint time')
+    ENDIF
+  END SUBROUTINE load_feedback_derivative_history
 
   LOGICAL FUNCTION checkpoint_uses_physical_time(group_id) RESULT(physical)
     INTEGER(HID_T), INTENT(IN) :: group_id

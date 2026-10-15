@@ -131,6 +131,10 @@ Existing density/recycling/XPR controllers are exercised with two physical
 intervals and repeated evaluation from restored controller values. These checks
 reuse the same synthetic input and executable; they do not enable the guarded
 physical-time solver loop or test temporal rejection yet.
+The controller check also exercises linear ramps through repeated timestep
+halving and 1.3-times growth for puff/recycling/XPR, replays candidate updates
+after restoring state, and compares uninterrupted versus saved/restored feedback
+updates. Synthetic ramps cover the timestep-change spike without storing case traces.
 The same fixtures check explicit restart initialization from steady/pseudo-time
 states, fixed-field physical step-1 continuation, completed checkpoints, and
 moving-field continuation between frames with a numerical index larger than the

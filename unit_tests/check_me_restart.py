@@ -256,7 +256,8 @@ def main():
                 if name == "trajectory_fixed":
                     controls = subprocess.run([str(executable), "time-controls"], cwd=directory,
                                               text=True, capture_output=True, timeout=20)
-                    if controls.returncode or "PHYSICAL_CONTROLS_PASS" not in controls.stdout:
+                    if (controls.returncode or "PHYSICAL_CONTROLS_PASS" not in controls.stdout or
+                            "FEEDBACK_TIMING_PASS" not in controls.stdout):
                         raise SystemExit(f"FAIL: physical controls\n{controls.stdout}{controls.stderr}")
                 if name in {"trajectory_fixed", "trajectory_me"}:
                     check_physical_restart(executable, directory, physical, moving=me)
@@ -264,7 +265,7 @@ def main():
 
     print(f"ME restart reader checks: {len(cases)} PASS")
     print("Physical sampling: numbered stem/anchor, trajectory, fixed field and changed-node heating/current PASS")
-    print("Fixed-field controls: constants, scheduled sources, feedback timestep and repeat evaluation PASS")
+    print("Fixed-field controls: constants, signals, derivative timing, retries and checkpoint continuation PASS")
     check_nodal_input(executable, sys.argv[2] if len(sys.argv) > 2 else "serial")
 
 

@@ -1844,6 +1844,8 @@ CONTAINS
           phys%feedback_previous_error = 0.d0
           phys%feedback_integral_error_xpr = 0.d0
           phys%feedback_previous_error_xpr = 0.d0
+          phys%feedback_derivative_history = Feedback_derivative_history_type()
+          phys%feedback_derivative_history_xpr = Feedback_derivative_history_type()
           phys%n_li = 0.d0
        ENDIF
     END IF
@@ -1960,11 +1962,12 @@ SUBROUTINE read_control_curve(curve, path, dataset)
    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control curve loaded: ', TRIM(path), ' ', TRIM(dataset)
 END SUBROUTINE read_control_curve
 
-SUBROUTINE sample_control_curve(curve, path, dataset, value, n)
+SUBROUTINE sample_control_curve(curve, path, dataset, value, n, physical_time)
    TYPE(control_curve_t), INTENT(INOUT) :: curve
    CHARACTER(LEN=*), INTENT(IN) :: path, dataset
    REAL(float), INTENT(OUT) :: value
    INTEGER, INTENT(OUT) :: n
+   REAL(float), OPTIONAL, INTENT(IN) :: physical_time
    INTEGER :: left, right, ierr
    REAL(float) :: target_time, actual_time, weight
    CHARACTER(LEN=256) :: message
@@ -1973,6 +1976,7 @@ SUBROUTINE sample_control_curve(curve, path, dataset, value, n)
    n = SIZE(curve%times)
    target_time = time%t_ME
    IF (.NOT. time%legacy_input) target_time = time%t_target*simpar%refval_time
+   IF (PRESENT(physical_time)) target_time = physical_time
    CALL locate_series_time(curve%times, target_time, left, right, actual_time, weight, ierr, message)
    IF (ierr /= 0) THEN
       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control input error: ', TRIM(path), ' ', TRIM(message)
@@ -2107,6 +2111,43 @@ REAL(float) FUNCTION feedback_timestep() RESULT(dt)
    IF (.NOT. time%legacy_input) dt = time%dt*simpar%refval_time
 END FUNCTION feedback_timestep
 
+REAL(float) FUNCTION feedback_derivative(target, measured, history) RESULT(slope)
+   REAL(float), INTENT(IN) :: target, measured
+   TYPE(Feedback_derivative_history_type), INTENT(INOUT) :: history
+   REAL(float) :: sample_time, elapsed, dt
+
+   dt = feedback_timestep()
+   sample_time = time%t*simpar%refval_time
+   slope = 0.d0
+   IF (time%it == 0) history = Feedback_derivative_history_type()
+   IF (history%initialized) THEN
+      elapsed = sample_time-history%measurement_time
+      IF (dt <= 0.d0 .OR. elapsed <= 0.d0) THEN
+         IF (MPIvar%glob_id == 0) WRITE(6,*) 'Feedback requires positive proposed and elapsed measurement intervals'
+         STOP 1
+      ENDIF
+      slope = (target-history%target)/dt - (measured-history%measurement)/elapsed
+   ENDIF
+   history = Feedback_derivative_history_type(target, measured, sample_time, .TRUE.)
+END FUNCTION feedback_derivative
+
+SUBROUTINE reconstruct_feedback_derivative_history(history, previous_error, previous_dt, xpr)
+   TYPE(Feedback_derivative_history_type), INTENT(OUT) :: history
+   REAL(float), INTENT(IN) :: previous_error, previous_dt
+   LOGICAL, INTENT(IN) :: xpr
+   REAL(float) :: target, seconds
+   INTEGER :: n
+
+   seconds = time%t*simpar%refval_time
+   IF (xpr) THEN
+      CALL sample_control_curve(xpr_curve, input%target_density_xpr_path, 'target_density', target, n, seconds)
+   ELSE
+      CALL sample_control_curve(density_curve, input%target_density_path, 'target_density', target, n, seconds)
+   ENDIF
+   target = target/2.d0
+   history = Feedback_derivative_history_type(target, target-previous_error, seconds-previous_dt, .TRUE.)
+END SUBROUTINE reconstruct_feedback_derivative_history
+
 SUBROUTINE compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
    REAL*8, INTENT(IN) :: x_lower, x_upper, y_lower, y_upper
    REAL*8, INTENT(OUT) :: nli
@@ -2141,9 +2182,10 @@ END SUBROUTINE compute_line_integrated_density
 
 SUBROUTINE adjust_puff_feedback(target_density, nli)
    REAL*8, INTENT(IN) :: target_density, nli
-   REAL*8 :: control_signal, anti_windup_gain, dt
+   REAL*8 :: control_signal, anti_windup_gain, dt, derivative
 
    dt = feedback_timestep()
+   derivative = feedback_derivative(target_density, nli, phys%feedback_derivative_history)
 
    IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,*) 'n_li = ', nli, ' [m^-2]'
@@ -2159,11 +2201,11 @@ SUBROUTINE adjust_puff_feedback(target_density, nli)
    ! Calculate the control signal
    control_signal = phys%puff + phys%feedback_propotional_gain * (target_density - nli) + &
                             phys%feedback_integral_gain * phys%feedback_integral_error + &
-                            phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/dt
+                            phys%feedback_derivative_gain * derivative
    IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) 'Proportional impact: ', phys%feedback_propotional_gain * (target_density - nli)
       WRITE(6,*) 'Integral impact: ', phys%feedback_integral_gain * phys%feedback_integral_error
-      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/dt
+      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * derivative
    END IF
    ! Saturate the control signal
    phys%puff = MAX(control_signal, 0.0)
@@ -2184,9 +2226,10 @@ END SUBROUTINE adjust_puff_feedback
 
 SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
    REAL*8, INTENT(IN) :: target_density, nli
-   REAL*8 :: control_signal, anti_windup_gain, dt
+   REAL*8 :: control_signal, anti_windup_gain, dt, derivative
 
    dt = feedback_timestep()
+   derivative = feedback_derivative(target_density, nli, phys%feedback_derivative_history_xpr)
 
    IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,*) 'X-point n_li = ', nli, ' [m^-2]'
@@ -2202,11 +2245,11 @@ SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
    ! Calculate the control signal
    control_signal = phys%impurity_concentrations(1) + phys%feedback_propotional_gain_xpr * (target_density - nli) + &
                             phys%feedback_integral_gain_xpr * phys%feedback_integral_error_xpr + &
-                            phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/dt
+                            phys%feedback_derivative_gain_xpr * derivative
    IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) 'XPR Proportional impact: ', phys%feedback_propotional_gain_xpr * (target_density - nli)
       WRITE(6,*) 'XPR Integral impact: ', phys%feedback_integral_gain_xpr * phys%feedback_integral_error_xpr
-      WRITE(6,*) 'XPR Derivative impact: ', phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/dt
+      WRITE(6,*) 'XPR Derivative impact: ', phys%feedback_derivative_gain_xpr * derivative
    END IF
 
    ! Saturate the control signal
@@ -2228,9 +2271,10 @@ END SUBROUTINE adjust_impurity_concentration_feedback
 
 SUBROUTINE adjust_recycling_feedback(target_density, nli)
    REAL*8, INTENT(IN) :: target_density, nli
-   REAL*8 :: control_signal, anti_windup_gain, dt
+   REAL*8 :: control_signal, anti_windup_gain, dt, derivative
 
    dt = feedback_timestep()
+   derivative = feedback_derivative(target_density, nli, phys%feedback_derivative_history)
 
    IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,*) 'n_li = ', nli, ' [m^-2]'
@@ -2246,12 +2290,12 @@ SUBROUTINE adjust_recycling_feedback(target_density, nli)
    IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) 'Proportional impact: ', phys%feedback_propotional_gain * (target_density - nli)
       WRITE(6,*) 'Integral impact: ', phys%feedback_integral_gain * phys%feedback_integral_error
-      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/dt
+      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * derivative
    END IF
    ! Calculate the control signal
    control_signal = phys%Re + phys%feedback_propotional_gain * (target_density - nli) + &
                             phys%feedback_integral_gain * phys%feedback_integral_error + &
-                            phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/dt
+                            phys%feedback_derivative_gain * derivative
    
    ! Saturate the control signal
    phys%Re = MAX(control_signal, 0.0)

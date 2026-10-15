@@ -40,6 +40,11 @@ loaded accepted solution; earlier BDF history is not required or reconstructed.
 The existing solution reader loads conservative variables in solver units, so
 their plasma reference scales must remain compatible.
 
+Derivative history is stored with each feedback channel so continuation preserves
+the next derivative contribution when timestep changes. Older-file reconstruction
+and the timing convention are described in the
+[control guide](../Models/control_series.md#derivative-timing).
+
 Feedback histories and the actuators owned by feedback are saved/restored for
 explicit modes independently of `ME`. Controller formulas and configured gains
 are retained. Configured constants and source schedules keep their existing

@@ -201,6 +201,13 @@ MODULE types
   !*******************************************************
   ! Physics: type for physical model info
   !*******************************************************
+  TYPE Feedback_derivative_history_type
+     REAL*8 :: target = 0.d0
+     REAL*8 :: measurement = 0.d0
+     REAL*8 :: measurement_time = 0.d0 ! Physical seconds, before the plasma advance
+     LOGICAL :: initialized = .FALSE.
+  END TYPE Feedback_derivative_history_type
+
   TYPE Physics_type
      INTEGER                   :: neq ! Number of equations
      INTEGER                   :: npv ! Number of physical variables
@@ -311,6 +318,8 @@ MODULE types
      REAL*8                    :: feedback_derivative_gain_xpr ! feedback derivative gain for the xpr feedback control
      REAL*8                    :: feedback_previous_error_xpr ! previous error for the xpr feedback control
      REAL*8                    :: feedback_integral_error_xpr ! integral error for the xpr feedback control
+     TYPE(Feedback_derivative_history_type) :: feedback_derivative_history
+     TYPE(Feedback_derivative_history_type) :: feedback_derivative_history_xpr
      REAL*8                    :: n_li  ! line integrated density
      REAL*8                    :: cryopump_power ! Cryopump power in [m^3/s] coefficient
      REAL*8                    :: puff_slope ! Puff increment coefficient (only for moving equilibrium for ITER)
