@@ -71,6 +71,53 @@ def equilibrium_frames(directory, me):
                 (directory / f"{prefix}.h5").symlink_to(f"{prefix}_0000.h5")
 
 
+def check_physical_restart(executable, directory, physical, *, moving):
+    # Reuse the checkpoint and trajectory fixtures already exercised above.
+    cases = [("old_me", 23, .04, None, None), ("prescribed", 23, .04, True, None)] if moving else [
+        ("steady", 1, 1000., False, None), ("pseudo", 99, 1000., None, (False, True)),
+        ("fixed", 1, .04, True, None), ("complete", 23, .08, True, None),
+        ("nonfinite", 1, np.nan, True, None)]
+    for name, step, seconds, marker, flags in cases:
+        text = physical.replace("dt0=.02, t_final=.08", "dt0=.02, t_start=.02, t_final=.08")
+        if name == "prescribed":
+            text = text.replace("time_mode='fixed'", "time_mode='prescribed'")
+        (directory / "param.txt").write_text(text)
+        checkpoint(directory / "checkpoint.h5", step, saved_me=moving)
+        with h5py.File(directory / "checkpoint.h5", "r+") as f:
+            p = f["simulation_parameters"]
+            p["time/Current_time"][...] = seconds/.01
+            p["adimensionalization/time_scale"] = [.01]
+            if marker is not None:
+                p["time/Physical_time_evolution"] = [int(marker)]
+                p["time/Current_time_seconds"] = [seconds]
+            if flags is not None:
+                p["switches/steady"], p["switches/psdtime"] = [int(flags[0])], [int(flags[1])]
+        run = subprocess.run([str(executable), "physical-restart"], cwd=directory,
+                             text=True, capture_output=True, timeout=20)
+        output = run.stdout + run.stderr
+        if name == "nonfinite":
+            if run.returncode == 0 or "Checkpoint physical time must be finite" not in output:
+                raise SystemExit(f"FAIL: corrupt physical checkpoint\n{output}")
+            continue
+        match = re.search(r"^PHYSICAL_RESTART_STATE\s+(.*)$", output, re.M)
+        if run.returncode or match is None or "HDF5-DIAG" in output:
+            raise SystemExit(f"FAIL: physical restart {name}\n{output}")
+        values = match.group(1).split()
+        initial = name in {"steady", "pseudo"}
+        accepted_step = 0 if initial else step
+        accepted = .02 if initial else seconds
+        target = .08 if name in {"prescribed", "complete"} else accepted+.02
+        expected = [accepted, accepted, target, accepted/.08 if moving else 0.]
+        numeric = [float(x) for x in values[2:6]]
+        if ([int(x) for x in values[:2]] != [accepted_step]*2 or
+                not np.allclose(numeric, expected, rtol=0., atol=1.e-14) or
+                (values[6] == "T") != (name == "complete") or
+                [float(x) for x in values[7:10]] != ([456., 0., 0.] if initial else [123., 12.5, 25.]) or
+                float(values[10]) < accepted_step):
+            raise SystemExit(f"FAIL: physical restart {name}: {values}")
+    print(f"Physical checkpoint {'moving' if moving else 'fixed'}: {len(cases)} PASS")
+
+
 def main():
     executable = Path(sys.argv[1]).resolve()
     repo = Path(__file__).resolve().parents[1]
@@ -211,6 +258,9 @@ def main():
                                               text=True, capture_output=True, timeout=20)
                     if controls.returncode or "PHYSICAL_CONTROLS_PASS" not in controls.stdout:
                         raise SystemExit(f"FAIL: physical controls\n{controls.stdout}{controls.stderr}")
+                if name in {"trajectory_fixed", "trajectory_me"}:
+                    check_physical_restart(executable, directory, physical, moving=me)
+
 
     print(f"ME restart reader checks: {len(cases)} PASS")
     print("Physical sampling: numbered stem/anchor, trajectory, fixed field and changed-node heating/current PASS")

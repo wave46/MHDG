@@ -126,6 +126,9 @@ and heating providers sample the proposed physical endpoint, interpolating when
 it lies between frames. Fixed magnetic fields are rebuilt only when the mesh
 changes. Physical restart/output integration remains a prerequisite for enabling
 explicit-mode execution.
+Checkpoint classification and physical-clock restoration are implemented as
+described in the [restart guide](src/InOut/physical_restart.md); output naming
+and solver-loop activation remain the next slice.
 
 `time_units = 'seconds'` converts namelist `dt0`, `t_start` and the final time
 once during input normalization. Omitted units mean `'normalized'`, preserving

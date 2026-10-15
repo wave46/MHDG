@@ -3,7 +3,7 @@ PROGRAM test_me_restart
   USE in_out, ONLY: HDF5_load_solution, HDF5_load_mesh_from_solution
   USE GMSH_io_module, ONLY: load_gmsh_mesh
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
-  USE Main_utils, ONLY: prepare_physical_time_step
+  USE Main_utils, ONLY: prepare_physical_time_step, initialize_solu0_uiter_uconv
   USE globals
   USE MPI_OMP, ONLY: MPIvar, init_MPI_OMP
 #ifdef PARALL
@@ -40,6 +40,10 @@ PROGRAM test_me_restart
   LOGICAL :: saved_me, has_reference_current
 
   CALL get_command_argument(1, mode)
+  IF (mode == 'physical-restart') THEN
+     CALL check_physical_restart()
+     STOP
+  ENDIF
   IF (mode == 'time-controls') THEN
      CALL check_physical_controls()
      WRITE(*,'(A)') 'PHYSICAL_CONTROLS_PASS'
@@ -248,6 +252,41 @@ PROGRAM test_me_restart
        phys%feedback_integral_error, phys%feedback_previous_error
 
 CONTAINS
+  SUBROUTINE check_physical_restart()
+    TYPE(equilibrium_sample_t) :: sample
+    LOGICAL :: finished, moving
+    REAL*8 :: accepted_time, accepted_target
+
+    MPIvar%glob_id = 0
+    MPIvar%glob_size = 1
+    CALL read_input()
+    CALL init_sim(nts, dt)
+    Mesh%Nnodes = 3
+    Mesh%Nelems = 1
+    Mesh%Nfaces = 3
+    Mesh%Nnodesperface = 2
+    refElPol%Nnodes2D = 3
+    refElPol%Nfaces = 3
+    refElPol%Nfacenodes = 2
+    checkpoint = 'checkpoint.h5'
+    CALL HDF5_load_solution(checkpoint)
+    CALL initialize_puff()
+    CALL initialize_solu0_uiter_uconv()
+    IF (ANY(sol%u0(:,1) /= sol%u)) ERROR STOP 'restart BDF1 accepted state'
+    IF (time%it /= time%ik .OR. sol%Nt /= time%it) ERROR STOP 'physical checkpoint counters'
+    accepted_time = time%t*simpar%refval_time
+    accepted_target = time%t_target*simpar%refval_time
+    moving = magnetic_field_is_time_dependent()
+    CALL sample_magnetic_input(sample=sample)
+    CALL prepare_physical_time_step(finished)
+    IF (time%t*simpar%refval_time /= accepted_time) ERROR STOP 'restart preparation advanced accepted clock'
+    WRITE(*,'(A,2(1X,I0),4(1X,ES24.16),1X,L1,4(1X,ES24.16))') 'PHYSICAL_RESTART_STATE', &
+         time%it, sol%Nt, accepted_time, accepted_target, time%t_target*simpar%refval_time, &
+         sample%fraction, finished, phys%puff, phys%feedback_integral_error, &
+         phys%feedback_previous_error, REAL(SIZE(sol%time),8)
+    CALL close_magnetic_input()
+  END SUBROUTINE check_physical_restart
+
   SUBROUTINE check_physical_controls()
     INTEGER :: selector, trial, repetition
     REAL*8 :: interval, expected_puff, expected_recycling, expected_impurity, first_result(7), result(7)

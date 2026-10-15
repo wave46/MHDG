@@ -131,6 +131,13 @@ Existing density/recycling/XPR controllers are exercised with two physical
 intervals and repeated evaluation from restored controller values. These checks
 reuse the same synthetic input and executable; they do not enable the guarded
 physical-time solver loop or test temporal rejection yet.
+The same fixtures check explicit restart initialization from steady/pseudo-time
+states, fixed-field physical step-1 continuation, completed checkpoints, and
+moving-field continuation between frames with a numerical index larger than the
+frame count and initial history capacity. Clock conversion, feedback restoration,
+BDF1 accepted history, next-endpoint selection, and nonfinite-time rejection are
+checked through the production reader/helpers. Actual explicit-mode solver runs
+remain pending loop activation.
 It also checks HDF5 grid dimensions/orientation on a non-square rectangular grid,
 stored-current interpolation at initial/endpoint frames, full filenames and
 legacy basenames, optional namelist dimensions, and dataset-shape rejection.

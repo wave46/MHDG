@@ -74,7 +74,7 @@ CONTAINS
     message = 'Accepted time exceeds t_final'
     tolerance = 64*EPSILON(time%t)*MAX(1.d0, ABS(time%t), ABS(time%t_final))
     IF (time%t > time%t_final+tolerance) RETURN
-    IF (time%t >= time%t_final) THEN
+    IF (time%t >= time%t_final-tolerance) THEN
        finished = .TRUE.
        ierr = 0
        message = ''
