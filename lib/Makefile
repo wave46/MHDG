@@ -452,7 +452,7 @@ analytical.o : analytical.F globals.o physics.o prec_const.o PrintUtils.o
 initialization.F : $(SDIR)/HDG/initialization.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-initialization.o : initialization.F analytical.o globals.o physics.o MPI_OMP.o PrintUtils.o physics.o MPI_OMP.o
+initialization.o : initialization.F analytical.o globals.o physics.o MPI_OMP.o PrintUtils.o rectangular_series_io.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 hdg_PrecalculatedFirstEquation.F : $(SDIR)/HDG/hdg_PrecalculatedFirstEquation.f90

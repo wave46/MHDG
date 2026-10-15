@@ -1,5 +1,5 @@
 PROGRAM test_me_restart
-  USE initialization, ONLY: init_sim
+  USE initialization, ONLY: init_sim, next_physical_time, ensure_time_history_capacity
   USE in_out, ONLY: HDF5_load_solution, HDF5_load_mesh_from_solution
   USE GMSH_io_module, ONLY: load_gmsh_mesh
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
@@ -38,6 +38,11 @@ PROGRAM test_me_restart
   LOGICAL :: saved_me, has_reference_current
 
   CALL get_command_argument(1, mode)
+  IF (mode == 'time-clock') THEN
+     CALL check_physical_clock()
+     WRITE(*,'(A)') 'PHYSICAL_CLOCK_PASS'
+     STOP
+  ENDIF
   IF (mode == 'time-input' .OR. mode == 'time-input-init') THEN
      MPIvar%glob_id = 0
      MPIvar%glob_size = 1
@@ -226,6 +231,67 @@ PROGRAM test_me_restart
        phys%feedback_integral_error, phys%feedback_previous_error
 
 CONTAINS
+  SUBROUTINE check_physical_clock()
+    REAL*8 :: target, accepted, frames(4), expected(3)
+    INTEGER :: step, status
+    LOGICAL :: finished
+    CHARACTER(LEN=256) :: message
+
+    simpar%refval_time = 0.01d0
+    time%mode = 'fixed'
+    time%t = 0.012d0/simpar%refval_time
+    time%dt0 = 0.04d0/simpar%refval_time
+    time%t_final = 0.105d0/simpar%refval_time
+    time%it = 47
+    expected = [0.052d0, 0.092d0, 0.105d0]
+    DO step = 1, SIZE(expected)
+       accepted = time%t
+       CALL next_physical_time(target, finished, status, message)
+       IF (status /= 0 .OR. finished) ERROR STOP 'fixed physical endpoint selection'
+       IF (ABS(target*simpar%refval_time-expected(step)) > 1.d-15) ERROR STOP 'fixed final interval'
+       IF (time%t /= accepted .OR. time%it /= 47) ERROR STOP 'endpoint selection mutated accepted state'
+       time%t = target
+    ENDDO
+    CALL next_physical_time(target, finished, status, message)
+    IF (status /= 0 .OR. .NOT. finished) ERROR STOP 'physical final time stopping'
+
+    time%mode = 'prescribed'
+    frames = [0.d0, 0.02d0, 0.07d0, 0.11d0]
+    time%t = 0.012d0/simpar%refval_time
+    time%t_final = 0.10d0/simpar%refval_time
+    expected = [0.02d0, 0.07d0, 0.10d0]
+    DO step = 1, SIZE(expected)
+       CALL next_physical_time(target, finished, status, message, frames)
+       IF (status /= 0 .OR. finished) ERROR STOP 'prescribed physical endpoint selection'
+       IF (ABS(target*simpar%refval_time-expected(step)) > 1.d-15) ERROR STOP 'nonuniform/final prescribed interval'
+       time%t = target
+    ENDDO
+    time%t = 0.035d0/simpar%refval_time
+    CALL next_physical_time(target, finished, status, message, frames)
+    IF (status /= 0 .OR. ABS(target*simpar%refval_time-0.07d0) > 1.d-15) &
+         ERROR STOP 'intermediate time did not target next supplied frame'
+    time%t_final = 0.12d0/simpar%refval_time
+    CALL next_physical_time(target, finished, status, message, frames)
+    IF (status == 0) ERROR STOP 'prescribed final time exceeds input coverage'
+    time%t = frames(4)/simpar%refval_time
+    time%t_final = (frames(4)+EPSILON(frames(4)))/simpar%refval_time
+    CALL next_physical_time(target, finished, status, message, frames)
+    IF (status /= 0) ERROR STOP 'roundoff at last supplied timestamp'
+    IF (.NOT. finished .AND. target /= time%t_final) ERROR STOP 'last supplied timestamp final remainder'
+
+    CALL ensure_time_history_capacity(3)
+    sol%Nt = 3
+    sol%time(:3) = [1.d0,2.d0,3.d0]
+    sol%tres(:3) = [4.d0,5.d0,6.d0]
+    CALL ensure_time_history_capacity(33)
+    CALL ensure_time_history_capacity(34)
+    IF (SIZE(sol%time) < 34 .OR. SIZE(sol%tres) /= SIZE(sol%time)) ERROR STOP 'history capacity'
+    IF (ANY(sol%time(:3) /= [1.d0,2.d0,3.d0]) .OR. ANY(sol%tres(:3) /= [4.d0,5.d0,6.d0])) &
+         ERROR STOP 'history growth lost accepted entries'
+    IF (ANY(sol%time(4:) /= 0.d0) .OR. ANY(sol%tres(4:) /= 0.d0) .OR. sol%Nt /= 3) &
+         ERROR STOP 'history growth modified accepted count or unfilled entries'
+  END SUBROUTINE check_physical_clock
+
   SUBROUTINE check_nodal_input()
     INTEGER :: i, frame, last_frame
     INTEGER, ALLOCATABLE :: node_ids(:)

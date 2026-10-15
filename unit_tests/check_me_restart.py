@@ -75,6 +75,10 @@ def main():
     executable = Path(sys.argv[1]).resolve()
     repo = Path(__file__).resolve().parents[1]
     template = (repo / "test/param_initial.txt").read_text()
+    clock = subprocess.run([str(executable), "time-clock"], text=True, capture_output=True, timeout=20)
+    if clock.returncode or "PHYSICAL_CLOCK_PASS" not in clock.stdout:
+        raise SystemExit(f"FAIL: physical clock/history\n{clock.stdout}{clock.stderr}")
+    print("Physical endpoint selection and history growth: PASS")
     check_time_input(executable, template)
     cases = [
         ("static_bootstrap", 1, False, 100, True, 0),

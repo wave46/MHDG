@@ -255,6 +255,7 @@ PROGRAM MHDG
      time%t = time%t + time%dt
      time%it = time%it + 1
      time%ik = time%ik + 1
+     CALL ensure_time_history_capacity(sol%Nt + 1)
      sol%Nt = sol%Nt + 1
 
      IF (MPIvar%glob_id .EQ. 0) THEN

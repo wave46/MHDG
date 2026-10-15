@@ -8,6 +8,7 @@ MODULE rectangular_series_io
   IMPLICIT NONE
   PRIVATE
   PUBLIC :: read_rectangular_grid, read_matrix
+  PUBLIC :: locate_series_time
 
   TYPE, PUBLIC :: rectangular_series_t
      PRIVATE

@@ -435,7 +435,7 @@ CONTAINS
                & TRIM(phys%phyVarNam(ieq)), Vmin(ieq), Vmax(ieq)
        END DO
        WRITE (6, '(" * ", 60("-"), "*")')
-       WRITE (6, '(" * Time residual  = ", 1X, 2(E16.8, 2X), 13X, " *")') sol%tres(it)
+       WRITE (6, '(" * Time residual  = ", 1X, 2(E16.8, 2X), 13X, " *")') sol%tres(sol%Nt)
        WRITE (6, *) '  '
        WRITE (6, *) '  '
        WRITE (6, *) '  '
