@@ -20,11 +20,13 @@ MODULE magnetic_field
        magnetic_region_core
   USE magnetic_geometry_state, ONLY: magnetic_equilibrium, &
        magnetic_geometry_cache, poloidal_field_fit, &
-       fit_poloidal_field_scale, poloidal_scale_matches_fit, reset_magnetic_geometry_state, &
-       compare_restart_geometry, fit_toroidal_current_sign, &
+       fit_poloidal_field_scale, &
+       resolve_flux_coefficients, fit_toroidal_current_scale, &
+       reset_magnetic_geometry_state, &
+       compare_restart_geometry, &
        evaluate_flux_derived_toroidal_current, &
        toroidal_current_from_flux, &
-       toroidal_current_comparison, toroidal_current_comparison_t, &
+       toroidal_current_comparison, &
        field_alpha_plus_one, field_alpha_minus_one, &
        field_alpha_plus_inverse_two_pi, field_alpha_minus_inverse_two_pi
   IMPLICIT NONE
@@ -227,7 +229,39 @@ CONTAINS
       INTEGER, OPTIONAL, INTENT(IN) :: frame
       CALL load_magnetic_field(frame)
       IF (switch%ohmicsrc) CALL set_toroidal_current(frame)
+      IF (uses_equilibrium_grid()) CALL report_equilibrium_ranges()
   ENDSUBROUTINE load_magnetic_field_Jtor
+
+  SUBROUTINE report_equilibrium_ranges()
+    REAL*8 :: local_min(4), local_max(4), global_min(4), global_max(4)
+    INTEGER :: count
+#ifdef PARALL
+    INTEGER :: ierr
+#endif
+
+    count = 3
+    local_min(:3) = MINVAL(phys%B, DIM=1)
+    local_max(:3) = MAXVAL(phys%B, DIM=1)
+    IF (switch%ohmicsrc) THEN
+       count = 4
+       local_min(4) = MINVAL(phys%Jtor)
+       local_max(4) = MAXVAL(phys%Jtor)
+    ENDIF
+    ! Shared nodal copies do not affect extrema; no additive ghost contribution.
+#ifdef PARALL
+    CALL MPI_REDUCE(local_min, global_min, count, MPI_REAL8, MPI_MIN, 0, MPI_COMM_WORLD, ierr)
+    CALL MPI_REDUCE(local_max, global_max, count, MPI_REAL8, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+#else
+    global_min(:count) = local_min(:count)
+    global_max(:count) = local_max(:count)
+#endif
+    IF (MPIvar%glob_id /= 0) RETURN
+    WRITE(6,'(A,2ES16.7)') ' Equilibrium Br min/max [T]: ', global_min(1), global_max(1)
+    WRITE(6,'(A,2ES16.7)') ' Equilibrium Bz min/max [T]: ', global_min(2), global_max(2)
+    WRITE(6,'(A,2ES16.7)') ' Equilibrium Bphi min/max [T]: ', global_min(3), global_max(3)
+    IF (switch%ohmicsrc) &
+         WRITE(6,'(A,2ES16.7)') ' Equilibrium Jtor min/max [A/m^2]: ', global_min(4), global_max(4)
+  END SUBROUTINE report_equilibrium_ranges
 
   !**********************************************
   ! Load magnetic field in phys
@@ -419,7 +453,7 @@ CONTAINS
     CHARACTER(LEN=256) :: geometry_message, restart_message
 
     REAL*8                            :: q_cyl, omega,a
-    REAL*8                            :: alpha, fac_2pi_field
+    REAL*8                            :: alpha
     LOGICAL                           :: restart_mismatch
 
 
@@ -433,8 +467,6 @@ CONTAINS
     END IF
 
     CALL sample_magnetic_input(frame, sample)
-    IF (.NOT. ALLOCATED(sample%br) .OR. .NOT. ALLOCATED(sample%bz)) &
-         CALL check_equilibrium_input(-1, 'Magnetic reconstruction currently requires reference Br and Bz')
     CALL equilibrium_input%grid(xvec, yvec)
     xvec = xvec/phys%lscale
     yvec = yvec/phys%lscale
@@ -481,33 +513,15 @@ CONTAINS
     CALL build_bicubic_derivatives(ip, yvec, jp, xvec, Bphi2D, &
          Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D)
 
-    CALL fit_poloidal_field_scale(magnetic_equilibrium, xvec, yvec, Br2D, &
-         Bz2D, simpar%refval_length, poloidal_field_fit)
-    IF (poloidal_field_fit%is_valid) THEN
-       alpha = poloidal_field_fit%applied_alpha
-    ELSE
-       fac_2pi_field = 1.d0
-       IF (input%divide_by_2pi) fac_2pi_field = 2.d0*PI
-       alpha = determine_flux_sign(ip, jp, xvec, yvec, Br2D, Bz2D)/fac_2pi_field
-    ENDIF
-    IF (ALLOCATED(sample%poloidal_scale)) THEN
-       IF (.NOT. poloidal_field_fit%is_valid) &
-            CALL check_equilibrium_input(-1, 'Cannot validate poloidal_scale: no valid Br/Bz fit')
-       IF (.NOT. poloidal_scale_matches_fit(sample%poloidal_scale, poloidal_field_fit)) THEN
-          IF (MPIvar%glob_id == 0) WRITE(6,'(A,2ES24.16)') &
-               ' Declared/fitted poloidal scale: ', sample%poloidal_scale, alpha
-          CALL check_equilibrium_input(-1, 'poloidal_scale disagrees with the convention fitted from Br/Bz')
-       ENDIF
-    ENDIF
-    poloidal_field_fit%applied_alpha = alpha
-    CALL report_field_fit(alpha)
-
     CALL magnetic_geometry_cache%build(magnetic_equilibrium, Mesh%X(:, 1:2), &
          Mesh%T, refElPol%N2D, refElPol%face_nodes, refElPol%N1D)
     IF (.NOT. magnetic_geometry_cache%is_initialized) THEN
        IF (MPIvar%glob_id == 0) WRITE (6, *) 'Magnetic topology cache initialization failed.'
        STOP
     ENDIF
+
+    CALL configure_equilibrium_scales(xvec, yvec, Br2D, Bz2D, sample, frame, alpha)
+    CALL report_field_fit(alpha, ALLOCATED(Br2D))
 
     DO i = 1, Mesh%Nnodes
        x = Mesh%X(i, 1)
@@ -564,31 +578,67 @@ CONTAINS
        IF (index > 0) time%dt_ME = equilibrium_times(index+1)-equilibrium_times(index)
     ENDIF
     ! Free memory
-    DEALLOCATE (Br2D, Bz2D, Bphi2D, xvec, yvec)
+    IF (ALLOCATED(Br2D)) DEALLOCATE(Br2D, Bz2D)
+    DEALLOCATE (Bphi2D, xvec, yvec)
     DEALLOCATE (flux2D)
 
   END SUBROUTINE load_magnetic_field_grid
 
-   REAL*8 FUNCTION determine_flux_sign(ny, nx, r, z, Br2D, Bz2D)
-      INTEGER, INTENT(IN) :: ny, nx
-      REAL*8, INTENT(IN) :: r(nx), z(ny), Br2D(ny, nx), Bz2D(ny, nx)
-      INTEGER :: ii, jj
-      REAL*8 :: score_sign, x_safe, Br_ref, Bz_ref, psi, psi_r, psi_z
+  SUBROUTINE configure_equilibrium_scales(r, z, br, bz, sample, frame, alpha_b)
+    REAL*8, INTENT(IN) :: r(:), z(:)
+    REAL*8, ALLOCATABLE, INTENT(IN) :: br(:,:), bz(:,:)
+    TYPE(equilibrium_sample_t), INTENT(IN) :: sample
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    REAL*8, INTENT(OUT) :: alpha_b
+    REAL*8, ALLOCATABLE :: stored_current(:)
+    REAL*8 :: stats(4), alpha_j
+    INTEGER :: ierr, sample_counts(2)
+    LOGICAL :: has_current, metadata_conflict
 
-      score_sign = 0.d0
-      DO ii = 1, ny
-          DO jj = 1, nx
-               CALL magnetic_equilibrium%evaluate_flux(r(jj), z(ii), psi, psi_r, psi_z)
-               x_safe = MAX(ABS(r(jj)), 1.d-12)
-               Br_ref = -psi_z/x_safe/simpar%refval_length**2
-               Bz_ref = psi_r/x_safe/simpar%refval_length**2
-               score_sign = score_sign + Br_ref*Br2D(ii,jj) + Bz_ref*Bz2D(ii,jj)
-          ENDDO
-      ENDDO
+    IF (ALLOCATED(br)) THEN
+       CALL fit_poloidal_field_scale(magnetic_equilibrium, r, z, br, &
+            bz, simpar%refval_length, poloidal_field_fit)
+    ELSEIF (.NOT. input%compute_from_flux) THEN
+       CALL check_equilibrium_input(-1, 'Stored-field mode requires Br and Bz')
+    ENDIF
+    alpha_b = poloidal_field_fit%applied_alpha
+    IF (.NOT. input%compute_from_flux) RETURN
 
-      determine_flux_sign = 1.d0
-      IF (score_sign < 0.d0) determine_flux_sign = -1.d0
-   END FUNCTION determine_flux_sign
+    stats = 0.d0
+    sample_counts = 0
+    IF (switch%ohmicsrc) THEN
+       ! Use a unit coefficient until both reference fits and metadata are available.
+       CALL derive_toroidal_current_from_flux(1.d0)
+       ALLOCATE(stored_current(SIZE(phys%Jtor)))
+       CALL load_stored_toroidal_current(stored_current, frame, has_current)
+       IF (has_current) THEN
+          CALL toroidal_current_fit_statistics(stored_current, stats, sample_counts)
+          CALL fit_toroidal_current_scale(stats(2), stats(1), stats(3), 1.d0, toroidal_current_comparison)
+       ENDIF
+    ENDIF
+    CALL resolve_flux_coefficients(poloidal_field_fit, toroidal_current_comparison, &
+         switch%ohmicsrc, sample%cocos, alpha_b, alpha_j, metadata_conflict, ierr)
+    CALL check_equilibrium_input(ierr, &
+         'Cannot resolve flux coefficients: provide cocos or usable Br/Bz together with Jtor when current is needed')
+    IF (MPIvar%glob_id == 0) THEN
+       IF (metadata_conflict) WRITE(6,'(A)') &
+            ' WARNING: convention metadata conflicts with selected coefficients; references take precedence over cocos.'
+       IF (switch%ohmicsrc .AND. ABS(ABS(alpha_b)-ABS(alpha_j)) > 1.d-6*ABS(alpha_b)) &
+            WRITE(6,'(A,2ES16.7)') &
+            ' WARNING: Br/Bz and Jtor imply different flux normalizations; retaining their independent coefficients: ', alpha_b, alpha_j
+    ENDIF
+    IF (.NOT. switch%ohmicsrc) RETURN
+    CALL fit_toroidal_current_scale(stats(2), stats(1), stats(3), alpha_b, toroidal_current_comparison)
+    toroidal_current_comparison%applied_alpha = alpha_j
+    toroidal_current_comparison%applied_sign = INT(SIGN(1.d0, alpha_j/alpha_b))
+    toroidal_current_comparison%core_sample_count = sample_counts(1)
+    toroidal_current_comparison%outside_sample_count = sample_counts(2)
+    IF (toroidal_current_comparison%is_valid) &
+         toroidal_current_comparison%stored_outside_core_relative_l2 = SQRT(stats(4)/stats(1))
+    phys%Jtor = alpha_j*phys%Jtor
+    toroidal_current_from_flux = .TRUE.
+  END SUBROUTINE configure_equilibrium_scales
+
 
    SUBROUTINE collect_physical_wall(wall_coordinates, wall_faces)
      REAL*8, ALLOCATABLE, INTENT(OUT) :: wall_coordinates(:, :)
@@ -645,13 +695,12 @@ CONTAINS
      DEALLOCATE(all_faces, keep_face)
    END SUBROUTINE collect_physical_wall
 
-   SUBROUTINE report_field_fit(alpha)
+   SUBROUTINE report_field_fit(alpha, has_reference_field)
      REAL*8, INTENT(IN) :: alpha
+     LOGICAL, INTENT(IN) :: has_reference_field
      CHARACTER(LEN=32) :: topology_name, convention_name
      LOGICAL :: fatal_fit
-     REAL*8 :: inverse_two_pi
 
-     inverse_two_pi = 1.d0/(2.d0*PI)
      fatal_fit = poloidal_field_fit%is_valid .AND. input%compute_from_flux .AND. &
           poloidal_field_fit%applied_relative_rms > field_fit_fatal_rms
      IF (MPIvar%glob_id == 0) THEN
@@ -706,10 +755,14 @@ CONTAINS
            ELSEIF (poloidal_field_fit%applied_relative_rms > field_fit_accepted_rms) THEN
               WRITE (6, *) 'WARNING: poloidal-field fit residual is between 10% and 25%.'
            ENDIF
+        ELSEIF (.NOT. input%compute_from_flux) THEN
+           WRITE(6,'(A)') ' WARNING: no valid poloidal-field scale fit; using stored Br/Bz.'
+        ELSEIF (.NOT. has_reference_field) THEN
+           WRITE(6,'(A,ES24.16)') &
+                ' WARNING: Br/Bz absent; using resolved poloidal scale, without reference comparison: ', alpha
         ELSE
-           WRITE (6, '(A,ES16.7,A,ES16.7)') &
-                ' WARNING: no valid Bpol/psi fit; fallback alpha: ', alpha, &
-                ', 1/(2*pi): ', inverse_two_pi
+           WRITE(6,'(A,ES24.16)') &
+                ' WARNING: Br/Bz fit failed; using resolved poloidal scale, without reference comparison: ', alpha
         ENDIF
         IF (.NOT. input%compute_from_flux) THEN
            WRITE (6, *) &
@@ -1288,10 +1341,6 @@ CONTAINS
 
   SUBROUTINE set_toroidal_current(frame)
     INTEGER, OPTIONAL, INTENT(IN) :: frame
-    REAL*8, ALLOCATABLE :: stored_toroidal_current(:)
-
-    toroidal_current_from_flux = .FALSE.
-    toroidal_current_comparison = toroidal_current_comparison_t()
 
     IF (utils%printint > 0 .AND. MPIvar%glob_id == 0) THEN
        WRITE (6, *) '*************************************************'
@@ -1299,13 +1348,8 @@ CONTAINS
        WRITE (6, *) '*************************************************'
     ENDIF
 
-    IF (input%compute_from_flux .AND. magnetic_equilibrium%is_initialized) THEN
-       CALL derive_toroidal_current_from_flux()
-       toroidal_current_from_flux = .TRUE.
-       ALLOCATE(stored_toroidal_current(SIZE(phys%Jtor)))
-       CALL load_stored_toroidal_current(stored_toroidal_current,frame)
-       CALL fit_and_apply_toroidal_current_sign(stored_toroidal_current)
-       DEALLOCATE(stored_toroidal_current)
+    IF (toroidal_current_from_flux) THEN
+       CALL report_toroidal_current_fit()
     ELSE
        IF (input%compute_from_flux .AND. MPIvar%glob_id == 0) THEN
           WRITE (6, *) &
@@ -1318,20 +1362,14 @@ CONTAINS
     IF (MPIvar%glob_id == 0) WRITE (6, *) 'I_p =  ', phys%I_p, '[MA]'
   END SUBROUTINE set_toroidal_current
 
-  SUBROUTINE derive_toroidal_current_from_flux()
+  SUBROUTINE derive_toroidal_current_from_flux(alpha)
+    REAL*8, INTENT(IN) :: alpha
     INTEGER :: i, ind
 #ifdef TOR3D
     INTEGER :: j
 #endif
-    REAL*8 :: x, y, jtor_value, alpha
+    REAL*8 :: x, y, jtor_value
     LOGICAL :: is_valid
-
-    alpha = poloidal_field_fit%applied_alpha
-    IF (ABS(alpha) <= TINY(1.d0)) THEN
-       IF (MPIvar%glob_id == 0) WRITE (6, *) &
-            'ERROR: flux-derived Jtor requires the applied poloidal-field alpha.'
-       STOP
-    ENDIF
 
     phys%Jtor = 0.d0
     DO i = 1, Mesh%Nnodes
@@ -1358,9 +1396,10 @@ CONTAINS
 
   END SUBROUTINE derive_toroidal_current_from_flux
 
-  SUBROUTINE load_stored_toroidal_current(jtor_at_nodes,frame)
+  SUBROUTINE load_stored_toroidal_current(jtor_at_nodes, frame, available)
     REAL*8, INTENT(OUT) :: jtor_at_nodes(:)
     INTEGER, OPTIONAL, INTENT(IN) :: frame
+    LOGICAL, OPTIONAL, INTENT(OUT) :: available
     INTEGER        :: i,ierr,ip,jp,ind
 #ifdef TOR3D
     INTEGER        :: j
@@ -1373,6 +1412,11 @@ CONTAINS
     jtor_at_nodes = 0.d0
 
     CALL read_current_input(frame, Jtor, xvec, yvec)
+    IF (PRESENT(available)) available = ALLOCATED(Jtor)
+    IF (.NOT. ALLOCATED(Jtor)) THEN
+       IF (PRESENT(available)) RETURN
+       CALL check_equilibrium_input(-1, 'Stored-current mode requires Jtor')
+    ENDIF
     xvec = xvec/phys%lscale
     yvec = yvec/phys%lscale
     ip = SIZE(yvec)
@@ -1410,8 +1454,7 @@ CONTAINS
 
     IF (uses_equilibrium_grid()) THEN
        CALL sample_magnetic_input(frame, sample)
-       IF (.NOT. ALLOCATED(sample%jtor)) &
-            CALL check_equilibrium_input(-1, 'Ohmic heating currently requires reference Jtor')
+       IF (.NOT. ALLOCATED(sample%jtor)) RETURN
        CALL equilibrium_input%current_grid(r, z)
        CALL MOVE_ALLOC(sample%jtor, jtor)
     ELSE
@@ -1449,15 +1492,17 @@ CONTAINS
     ENDIF
   END SUBROUTINE read_legacy_current_input
 
-  SUBROUTINE fit_and_apply_toroidal_current_sign(stored_toroidal_current)
+  SUBROUTINE toroidal_current_fit_statistics(stored_toroidal_current, stats, sample_counts)
+    REAL*8, INTENT(OUT) :: stats(4)
+    INTEGER, INTENT(OUT) :: sample_counts(2)
     REAL*8, INTENT(IN) :: stored_toroidal_current(:)
     REAL*8 :: element_coordinates(refElPol%Nnodes2D, 2)
     REAL*8 :: derived_nodes(refElPol%Nnodes2D), stored_nodes(refElPol%Nnodes2D)
     REAL*8 :: derived_gauss(refElPol%NGauss2D), stored_gauss(refElPol%NGauss2D)
     REAL*8 :: jacobian_11(refElPol%NGauss2D), jacobian_12(refElPol%NGauss2D)
     REAL*8 :: jacobian_21(refElPol%NGauss2D), jacobian_22(refElPol%NGauss2D)
-    REAL*8 :: det_jacobian(refElPol%NGauss2D), stats(4), weight
-    INTEGER :: sample_counts(2), iel, igauss
+    REAL*8 :: det_jacobian(refElPol%NGauss2D), weight
+    INTEGER :: iel, igauss
 #ifdef PARALL
     INTEGER :: ierr
 #endif
@@ -1502,23 +1547,19 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, sample_counts, SIZE(sample_counts), &
          MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
-    CALL fit_toroidal_current_sign(stats(2), stats(1), stats(3), &
-         toroidal_current_comparison)
-    toroidal_current_comparison%core_sample_count = sample_counts(1)
-    toroidal_current_comparison%outside_sample_count = sample_counts(2)
+  END SUBROUTINE toroidal_current_fit_statistics
+
+  SUBROUTINE report_toroidal_current_fit()
     IF (.NOT. toroidal_current_comparison%is_valid) THEN
-       IF (MPIvar%glob_id == 0) WRITE (6, '(A)') &
-            ' WARNING: no valid stored-current fit; using raw Ampere-law Jtor sign.'
+       IF (MPIvar%glob_id == 0) WRITE(6,'(A,ES16.7)') &
+            ' WARNING: no valid Jtor reference fit; using resolved current coefficient: ', &
+            toroidal_current_comparison%applied_alpha
        RETURN
     ENDIF
-
-    phys%Jtor = REAL(toroidal_current_comparison%applied_sign, 8)*phys%Jtor
-    toroidal_current_comparison%stored_outside_core_relative_l2 = &
-         SQRT(stats(4)/stats(1))
     IF (MPIvar%glob_id == 0) THEN
-       WRITE (6, '(A,I0,A,F8.3,A)') &
-            ' Jtor convention: ', &
-            toroidal_current_comparison%applied_sign, &
+       WRITE (6, '(A,2ES16.7,A,F8.3,A)') &
+            ' Jtor unconstrained/applied coefficient: ', &
+            toroidal_current_comparison%alpha, toroidal_current_comparison%applied_alpha, &
             '; core RMS vs stored: ', &
             100.d0*toroidal_current_comparison%core_relative_l2, &
             ' %'
@@ -1529,7 +1570,7 @@ CONTAINS
             stored_jtor_outside_core_warning) WRITE (6, '(A)') &
             ' WARNING: stored Jtor outside the detected core exceeds 1% of its core L2 norm.'
     ENDIF
-  END SUBROUTINE fit_and_apply_toroidal_current_sign
+  END SUBROUTINE report_toroidal_current_fit
 
   SUBROUTINE loadMagneticFieldFromExperimentalData()
 

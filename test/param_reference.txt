@@ -78,7 +78,6 @@
     field_from_grid = .true.                                   ! true then reads from cartesian grid and then biineary interpolates on nodes
                                                                 ! false then reads from files with field on nodes
     compute_from_flux   = .true.                                ! derive Br, Bz, and Jtor from psi using the fitted field convention
-    divide_by_2pi       = .false.                               ! fallback convention only when the field fit is unavailable
     jtor_path           = 'path/to/plasma/current.h5'    ! Path to jtor h5 file.
     ! Single file: current.h5; numbered ME: current_0000.h5 (legacy basename also accepted).
     ! Grid dimensions are read from HDF5.

@@ -6,10 +6,98 @@ PROGRAM test_magnetic_geometry_state
   CALL test_canonical_field_fit()
   CALL test_flux_derived_toroidal_current()
   CALL test_toroidal_current_sign_fit()
+  CALL test_cocos_reconstruction()
   CALL test_exact_cache_and_refresh()
   WRITE (*, '(A)') 'magnetic geometry state checks: PASS'
 
 CONTAINS
+
+  SUBROUTINE test_cocos_reconstruction()
+    TYPE(equilibrium_geometry_t) :: geometry
+    TYPE(poloidal_field_fit_t) :: field_fit, reference_field
+    TYPE(toroidal_current_comparison_t) :: current_fit, reference_current
+    INTEGER, PARAMETER :: b_sign(8) = [-1,1,1,-1,-1,1,1,-1]
+    INTEGER, PARAMETER :: j_sign(8) = [-1,-1,1,1,-1,-1,1,1]
+    REAL*8 :: r(31), z(29), psi(29,31), br(29,31), bz(29,31)
+    REAL*8 :: alpha_b, alpha_j, k, scale
+    INTEGER, ALLOCATABLE :: cocos
+    INTEGER :: index, offset, ierr, h, have_b, have_j, have_c
+    LOGICAL :: conflict, should_resolve
+    CHARACTER(LEN=256) :: message
+
+    CALL fill_circular_flux(2.d0, r, z, psi)
+    CALL geometry%init(r, z, psi, ierr, message)
+    CALL assert_ok(ierr, message)
+    k = 1.d0/(2.d0*ACOS(-1.d0))
+    DO offset = 0, 10, 10
+       scale = 1.d0
+       IF (offset == 10) scale = k
+       DO index = 1, 8
+          CALL cocos_coefficients(index+offset, alpha_b, alpha_j, h, ierr)
+          CALL assert_ok(ierr, 'COCOS lookup failed')
+          CALL assert_close(alpha_b, b_sign(index)*scale, 1.d-14, 'COCOS B coefficient')
+          CALL assert_close(alpha_j, j_sign(index)*scale, 1.d-14, 'COCOS J coefficient')
+          CALL assert_true(h == b_sign(index)*j_sign(index), 'COCOS cylindrical handedness')
+          CALL fill_poloidal_field(geometry, r, z, alpha_b, br, bz)
+          CALL fit_poloidal_field_scale(geometry, r, z, br, bz, 1.d0, field_fit)
+          CALL fit_toroidal_current_scale(4.d0, 4.d0*alpha_j**2, 4.d0*alpha_j, alpha_b, current_fit)
+          CALL assert_close(field_fit%applied_alpha, alpha_b, 1.d-14, 'COCOS fitted B coefficient')
+          CALL assert_close(current_fit%applied_alpha, alpha_j, 1.d-14, 'COCOS fitted J coefficient')
+          CALL assert_close(current_fit%core_relative_l2, 0.d0, 1.d-7, 'COCOS current residual')
+       ENDDO
+    ENDDO
+    CALL cocos_coefficients(10, alpha_b, alpha_j, h, ierr)
+    CALL assert_true(ierr /= 0, 'invalid COCOS accepted')
+
+    CALL fill_poloidal_field(geometry, r, z, k, br, bz)
+    CALL fit_poloidal_field_scale(geometry, r, z, br, bz, 1.d0, reference_field)
+    CALL fit_toroidal_current_scale(4.d0, 4.d0*k*k, -4.d0*k, k, reference_current)
+    DO have_b = 0, 1
+       DO have_j = 0, 1
+          DO have_c = 0, 1
+             field_fit = poloidal_field_fit_t()
+             current_fit = toroidal_current_comparison_t()
+             IF (have_b == 1) field_fit = reference_field
+             IF (have_j == 1) current_fit = reference_current
+             IF (have_c == 1) cocos = 12
+             CALL resolve_flux_coefficients(field_fit, current_fit, .TRUE., cocos, &
+                  alpha_b, alpha_j, conflict, ierr)
+             should_resolve = have_c == 1 .OR. (have_b == 1 .AND. have_j == 1)
+             CALL assert_true((ierr == 0) .EQV. should_resolve, 'reference/metadata decision table')
+             IF (should_resolve) THEN
+                CALL assert_close(alpha_b, k, 1.d-14, 'resolved B coefficient')
+                CALL assert_close(alpha_j, -k, 1.d-14, 'resolved J coefficient')
+                CALL assert_true(.NOT. conflict, 'coherent metadata reported conflicting')
+                CALL assert_close(field_fit%applied_alpha, k, 1.d-14, 'resolved field metadata')
+                CALL assert_true(field_fit%is_valid .EQV. (have_b == 1), 'COCOS fallback reported as reference fit')
+             ENDIF
+             IF (ALLOCATED(cocos)) DEALLOCATE(cocos)
+          ENDDO
+       ENDDO
+    ENDDO
+    cocos = 3
+    CALL resolve_flux_coefficients(reference_field, reference_current, .TRUE., cocos, &
+         alpha_b, alpha_j, conflict, ierr)
+    CALL assert_ok(ierr, 'conflicting metadata must not override references')
+    CALL assert_true(conflict, 'metadata mismatch was not reported')
+    CALL assert_close(alpha_b, k, 1.d-14, 'reference B wins over metadata')
+    CALL assert_close(alpha_j, -k, 1.d-14, 'reference J wins over metadata')
+    ! A single reference supplies its measured normalization; COCOS supplies handedness.
+    CALL resolve_flux_coefficients(reference_field, toroidal_current_comparison_t(), .TRUE., cocos, &
+         alpha_b, alpha_j, conflict, ierr)
+    CALL assert_ok(ierr, 'one reference plus conflicting COCOS')
+    CALL assert_close(alpha_j, k, 1.d-14, 'missing current inherits measured normalization')
+    DEALLOCATE(cocos)
+    CALL fit_toroidal_current_scale(4.d0, 4.d0, 4.d0, k, current_fit)
+    CALL resolve_flux_coefficients(reference_field, current_fit, .TRUE., cocos, &
+         alpha_b, alpha_j, conflict, ierr)
+    CALL assert_ok(ierr, 'different inferred magnitudes must remain usable')
+    CALL assert_close(alpha_b, k, 1.d-14, 'independent B magnitude')
+    CALL assert_close(alpha_j, 1.d0, 1.d-14, 'independent J magnitude')
+    CALL resolve_flux_coefficients(reference_field, toroidal_current_comparison_t(), .FALSE., cocos, &
+         alpha_b, alpha_j, conflict, ierr)
+    CALL assert_ok(ierr, 'inactive ohmic source must not require current metadata')
+  END SUBROUTINE test_cocos_reconstruction
 
   SUBROUTINE test_canonical_field_fit()
     TYPE(equilibrium_geometry_t) :: geometry
@@ -36,12 +124,6 @@ CONTAINS
        CALL assert_close(fit%applied_alpha, canonical_alpha(icandidate), 2.d-13, &
             'applied canonical alpha')
        CALL assert_true(fit%convention_id == icandidate, 'canonical convention ID')
-       CALL assert_true(poloidal_scale_matches_fit(canonical_alpha(icandidate), fit), &
-            'matching declared convention rejected')
-       CALL assert_true(.NOT. poloidal_scale_matches_fit(-canonical_alpha(icandidate), fit), &
-            'conflicting declared sign accepted')
-       CALL assert_true(.NOT. poloidal_scale_matches_fit(2.d0*ACOS(-1.d0)*canonical_alpha(icandidate), fit), &
-            'conflicting declared flux normalization accepted')
        CALL assert_close(fit%applied_relative_rms, 0.d0, 2.d-13, &
             'exact applied field residual')
     ENDDO
@@ -72,8 +154,10 @@ CONTAINS
          'percent-perturbed applied alpha')
     CALL assert_true(fit%relative_rms > 1.d-3 .AND. fit%relative_rms < 0.02d0, &
          'percent-perturbed field residual')
-    CALL assert_true(poloidal_scale_matches_fit(canonical_alpha(4), fit), &
-         'declaration must match selected convention rather than noisy unconstrained fit')
+    br = 0.d0
+    bz = 0.d0
+    CALL fit_poloidal_field_scale(geometry, r, z, br, bz, 1.d0, fit)
+    CALL assert_true(.NOT. fit%is_valid, 'zero reference field produced a valid scale fit')
   END SUBROUTINE test_canonical_field_fit
 
   SUBROUTINE test_flux_derived_toroidal_current()

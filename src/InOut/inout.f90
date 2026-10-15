@@ -1068,6 +1068,10 @@ CONTAINS
       CALL HDF5_integer_saving(magnetic_group_id, &
            toroidal_current_comparison%applied_sign, 'jtor_applied_sign')
       CALL HDF5_real_saving(magnetic_group_id, &
+           toroidal_current_comparison%alpha, 'jtor_fit_alpha')
+      CALL HDF5_real_saving(magnetic_group_id, &
+           toroidal_current_comparison%applied_alpha, 'jtor_applied_alpha')
+      CALL HDF5_real_saving(magnetic_group_id, &
            toroidal_current_comparison%core_raw_relative_l2, &
            'jtor_core_raw_relative_l2')
       CALL HDF5_real_saving(magnetic_group_id, &

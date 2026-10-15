@@ -39,11 +39,10 @@ PROGRAM test_equilibrium_series
      CALL series%sample_at(requests(k), sample, ierr, message)
      CALL require(ierr == 0, message)
      t = requests(k)
-     IF (INDEX(mode, 'scale') > 0) THEN
-        CALL require(ALLOCATED(sample%poloidal_scale), 'declared scale absent from sample')
-        CALL require(ABS(sample%poloidal_scale+1._float/(2*ACOS(-1._float))) < 1.e-14_float, &
-             'constant declared scale through cache/interpolation')
-        sample%poloidal_scale = 999._float
+     IF (INDEX(mode, 'cocos') > 0) THEN
+        CALL require(ALLOCATED(sample%cocos), 'COCOS absent from sample')
+        CALL require(sample%cocos == 11, 'constant COCOS through cache/interpolation')
+        sample%cocos = 999
      ENDIF
      IF (mode == 'stationary') t = 0
      DO i = 1, SIZE(r)

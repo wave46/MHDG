@@ -26,24 +26,15 @@ Trajectory datasets use the following **Python/HDF5** shapes:
 | `/equilibrium/psiSep` | `(nt,)` | Separatrix flux, same convention as psi |
 | `/equilibrium/Br`, `/equilibrium/Bz` | `(nt,nz,nr)` | Optional paired reference fields in tesla |
 | `/equilibrium/Jtor` | `(nt,nz,nr)` | Optional reference current density in A/m² |
-| `/equilibrium/poloidal_scale` | scalar | Optional declared flux scale and sign α |
+| `/equilibrium/cocos` | scalar integer | Optional source COCOS identifier, 1–8 or 11–18 |
 
-`poloidal_scale` declares the convention in physical R,Z coordinates:
-`Br = -α/R * ∂psi/∂Z`, `Bz = α/R * ∂psi/∂R`. The supported solver conventions
-are `+1`, `-1`, `+1/(2*pi)` and `-1/(2*pi)`. It is one constant declaration for
-the entire trajectory, not a time-varying field to interpolate. Legacy files may
-provide the same scalar at the root as `poloidal_scale`; numbered frames must
-retain its presence and value. Store the scale as a scalar or an array containing
-exactly one value; it is a single constant for the entire series.
-The provider checks a declared value is finite and nonzero and returns it as
-the optional allocated `sample%poloidal_scale`, unchanged by interpolation.
-It leaves an absent declaration unallocated and does not infer a convention.
-**When Br/Bz and `poloidal_scale` are both supplied, the declaration must agree
-with the canonical convention selected by the Br/Bz fit (relative tolerance
-`1e-6`); a mismatch or an invalid fit is an input error, and the declaration
-never overrides the reference fields.** This comparison uses the selected
-canonical scale, not the noisy unconstrained fit coefficient. Jtor is checked
-separately and does not determine the poloidal scale.
+`cocos` is the only optional convention declaration. It identifies the source
+convention using the standard COCOS table; legacy files may store it at the root.
+Store it as a scalar or an array containing exactly one integer value. Its presence
+and value must stay constant across numbered frames and are unchanged by sampling.
+The provider returns it as the optional allocated `sample%cocos`; an absent
+identifier remains unallocated. Usable Br/Bz and Jtor references can determine both
+reconstruction coefficients without any convention declaration.
 
 The HDF5 Fortran interface reports these field dimensions as `(nr,nz,nt)`.
 The frame reader therefore fills an allocated `(nr,nz)` buffer, which the provider
@@ -136,14 +127,91 @@ This does not require steady plasma: existing fixed-equilibrium transients
 remain supported. Independent controller scheduling and adaptive timesteps
 follow in later slices. Multi-frame trajectories currently require ME.
 
-The provider accepts absent reference arrays, but solver reconstruction in this
-integration slice still requires Br/Bz and, with ohmic heating, Jtor. Missing
-references produce an explicit input error. Supporting reconstruction without
-these references will use the agreed explicit poloidal scale and implied
-Ampère-law current sign in the next solver integration slice; metadata reading
-alone does not enable that reconstruction yet. The reader does not invent a
-convention. Nodal/analytical magnetic input remains on its existing
-path, including its separate legacy current input.
+With `compute_from_flux = .true.`, the poloidal magnetic field and toroidal
+current density are reconstructed from the primitive flux `psi`. For physical
+cylindrical coordinates R (outward) and Z (upward), the expressions are:
+
+```text
+Br     = -alpha_B/R * ∂psi/∂Z
+Bz     =  alpha_B/R * ∂psi/∂R
+Bpol   = sqrt(Br² + Bz²)
+
+Δ*psi  = ∂²psi/∂R² - (1/R)*∂psi/∂R + ∂²psi/∂Z²
+Jtor   = -alpha_J/(mu0*R) * Δ*psi
+```
+
+Here R and Z are in metres, Br/Bz/Bpol in tesla, and Jtor in A/m²;
+`mu0 = 4*pi*10^-7 H/m` is the permeability used by the code. Derivatives in these
+expressions are with respect to physical coordinates. `psi` keeps the input's
+flux sign and normalization: COCOS 1–8 use reduced flux (Wb/rad), while 11–18
+use full flux (Wb). The dimensionless coefficients `alpha_B` and `alpha_J` account
+for that normalization and the source's sign conventions. They are selected
+internally, not separate input parameters. Bphi is read directly from the input.
+
+Each reference fit independently selects one of `+1`, `-1`, `+1/(2*pi)` or
+`-1/(2*pi)`; unconstrained fits and residuals are reported for comparison.
+The current fit uses the existing owned-element core quadrature comparison, and
+reconstructed current is set to zero at solver nodes outside the detected plasma core.
+`Jtor` denotes the physical toroidal current density, not a covariant component,
+parallel current, or integrated current.
+
+The COCOS lookup supplies both coefficients and cylindrical handedness `h`:
+
+| COCOS: reduced flux / full flux | alpha_B | alpha_J | h |
+| --- | --- | --- | --- |
+| 1,5 / 11,15 | -k | -k | +1 |
+| 2,6 / 12,16 | +k | -k | -1 |
+| 3,7 / 13,17 | +k | +k | +1 |
+| 4,8 / 14,18 | -k | +k | -1 |
+
+Here `k=1` for 1–8 and `k=1/(2*pi)` for 11–18; `alpha_J=h*alpha_B`.
+`h=+1` describes a right-handed (R,phi,Z) basis, and `h=-1` a right-handed
+(R,Z,phi) basis. Indices paired in each row differ in poloidal-angle conventions
+that do not change these component formulas. See
+[Sauter & Medvedev (2013), Table I and Eqs. 19, 25, 27, 30](https://doi.org/10.1016/j.cpc.2012.09.010).
+
+Reference fits take precedence over `cocos`. With only one usable reference and
+`cocos`, the measured coefficient sets the magnitude and sign; COCOS handedness
+supplies the missing coefficient. A metadata mismatch warns and continues. Different reference-derived
+magnitudes also warn and continue, retaining each independently selected coefficient;
+that pair is not a single consistent COCOS convention. Metadata comparisons use
+canonical selected coefficients with relative tolerance `1e-6`, rather than noisy
+unconstrained fits. The existing excessive-residual checks remain in effect.
+
+The complete selection rules are below. B means a usable paired Br/Bz fit and J
+means a usable Jtor fit. A reference whose fit cannot be evaluated supplies no
+coefficient information.
+
+| Reference information | Without `cocos` | With `cocos` |
+| --- | --- | --- |
+| B and J | Infer both independently | Infer both independently; warn if metadata conflicts |
+| B only | Stop if current is needed | Infer alpha_B; alpha_J=h*alpha_B |
+| J only | Stop: alpha_B unresolved | Infer alpha_J; alpha_B=h*alpha_J |
+| Neither | Stop | Both coefficients from COCOS |
+
+Unresolved current does not block runs with ohmic heating inactive: a usable B
+reference alone is sufficient. Missing or unusable references produce warnings
+when COCOS supplies the missing information. There is no assumed default COCOS.
+
+This lookup preserves source conventions. It does not transform Bphi, flows,
+signed safety factor or drift operators into a global HDG coordinate convention.
+A full coordinate conversion, needed before relying on sign-sensitive drift physics
+with arbitrary input conventions, remains separate work.
+
+With `compute_from_flux = .false.`, stored Br/Bz are required, and stored Jtor
+is required when ohmic heating is active. A declaration cannot replace arrays
+in stored-field mode. Nodal/analytical magnetic input retains its existing path,
+including its separate legacy current input.
+
+Rank zero reports global minimum/maximum nodal Br, Bz and Bphi in tesla, and
+Jtor in A/m² when active. These describe the fields actually applied on the
+current mesh. Output continues to distinguish valid reference fits from an
+explicitly selected scale through `field_fit_valid`, `field_applied_alpha`,
+`field_alpha_convention_id` and `jtor_comparison_valid`. `jtor_fit_alpha` and
+`jtor_applied_alpha` record the unconstrained and selected current coefficients.
+The legacy `jtor_applied_sign` remains the sign relative to alpha_B; raw current
+comparison diagnostics also retain alpha_B as their reference. The applied current
+residual includes the independently selected magnitude.
 
 The solver closes the provider on normal completion. Failed input validation
 terminates the run; recoverable nonlinear trial statuses are a later stage.
@@ -188,10 +256,10 @@ Unrelated legacy datasets and `dt` are not copied. Do not infer an unspecified
 flux normalization from conversion: the primitives and reference fields retain
 the source convention.
 
-An explicit legacy `poloidal_scale` is copied to the single trajectory scalar,
-including its dataset attributes. Every source frame must declare the same value
-or all omit it; conversion rejects a change of convention. Without a declaration,
-conversion leaves it absent rather than deriving one from reference fields.
+An explicit legacy `cocos` identifier is copied to the trajectory scalar, including
+its dataset attributes. Every source frame must retain its presence and value;
+conversion rejects a change of convention. An absent identifier remains absent
+rather than being inferred from references.
 
 The destination must not already exist. A failed conversion leaves no partial
 published file. Python callers, including regression preparation, can use

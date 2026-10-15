@@ -34,6 +34,8 @@ PROGRAM test_me_restart
   REAL*8 :: initial_puff, control_times(3)
   CHARACTER(LEN=1000) :: control_filename
   CHARACTER(LEN=32) :: mode
+  CHARACTER(LEN=1000) :: saved_field_path, saved_jtor_path
+  LOGICAL :: saved_me, has_reference_current
 
   CALL get_command_argument(1, mode)
   IF (mode == 'nodal') THEN
@@ -178,6 +180,19 @@ PROGRAM test_me_restart
      IF (ABS(current(1)-13.5d0) > 1.d-12) ERROR STOP 'endpoint current interpolation'
   ENDIF
   CALL close_magnetic_input()
+  ! Missing embedded reference current is optional only when requested by the caller.
+  saved_field_path = input%field_path
+  saved_jtor_path = input%jtor_path
+  saved_me = switch%ME
+  input%field_path = 'field_0000.h5'
+  input%jtor_path = ''
+  switch%ME = .FALSE.
+  CALL load_stored_toroidal_current(current, available=has_reference_current)
+  IF (has_reference_current .OR. ANY(current /= 0.d0)) ERROR STOP 'missing reference current availability'
+  CALL close_magnetic_input()
+  input%field_path = saved_field_path
+  input%jtor_path = saved_jtor_path
+  switch%ME = saved_me
   time%nts = configured_nts
   DEALLOCATE(Mesh%X)
 

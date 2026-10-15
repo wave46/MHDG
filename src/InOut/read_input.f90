@@ -415,7 +415,9 @@ SUBROUTINE READ_input()
   input%field_dimensions  = field_dimensions
   input%field_from_grid   = field_from_grid
   input%compute_from_flux = compute_from_flux
-  input%divide_by_2pi     = divide_by_2pi
+  ! Accepted only so old namelists remain readable.
+  IF (divide_by_2pi .AND. MPIvar%glob_id == 0) WRITE(6,'(A)') &
+       'WARNING: divide_by_2pi is obsolete and ignored; provide cocos when reference fitting is unavailable.'
   input%jtor_path         = TRIM(ADJUSTL(jtor_path))
   input%jtor_dimensions   = jtor_dimensions
   input%external_heating_path = TRIM(ADJUSTL(external_heating_path))

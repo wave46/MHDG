@@ -109,9 +109,11 @@ HDF5 checkpoints through the production input, initialization, and solution
 readers. It checks static bootstrap initialization, real ME steps 0/1/50/99/100,
 feedback-state restoration, rejection before out-of-range history access,
 endpoint interpolation/heating selection, and inactive ME compatibility.
-It also checks HDF5 grid dimensions/orientation on a non-square WEST grid,
+It also checks HDF5 grid dimensions/orientation on a non-square rectangular grid,
 stored-current interpolation at initial/endpoint frames, full filenames and
 legacy basenames, optional namelist dimensions, and dataset-shape rejection.
+It also checks that a caller requesting optional reference Jtor is told when
+the input contains none, without attempting interpolation of missing data.
 The same cases load a small Gmsh mesh and checkpoint mesh/solution using stems
 and full .msh/.h5 names, and verify that full input names preserve output stems.
 Control readers infer series lengths and preserve puff, Zeff and impurity
@@ -151,3 +153,7 @@ puff and density feedback. It compares solution and feedback arrays, and saves
 logs/reports in the new run directory. The step-50 fixture advances to step 52
 to exercise the same bound with only two solves; step 99 advances to 100.
 This verifies step machinery, not the moving-equilibrium physics trajectory.
+
+The magnetic-geometry checks cover all 16 COCOS identifiers, independent field/current
+coefficient fits, and selection with missing references or conflicting metadata.
+The existing series checks also cover COCOS preservation during conversion and sampling.

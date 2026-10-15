@@ -124,43 +124,42 @@ def conversion_checks(directory):
             ("converted_paired.h5", "trajectory", None, None)]
 
 
-def scale_checks(directory):
-    """Preserve one declared flux convention through numbered input and conversion."""
-    alpha = -1 / (2*np.pi)
-    scaled = directory / 'scaled'
-    shutil.copytree(directory / 'numbered', scaled)
-    fields = [scaled / f'field_{index:04d}.h5' for index in range(5)]
+def cocos_checks(directory):
+    """Preserve one source convention through numbered input and conversion."""
+    convention = directory / 'cocos'
+    shutil.copytree(directory / 'numbered', convention)
+    fields = [convention / f'field_{index:04d}.h5' for index in range(5)]
     for path in fields:
         with h5py.File(path, 'r+') as f:
-            f['poloidal_scale'] = [alpha]
-            f['poloidal_scale'].attrs['definition'] = 'Br=-alpha/R*dpsi/dZ; Bz=alpha/R*dpsi/dR'
-    convert_equilibria(fields, directory / 'scaled.h5')
-    with h5py.File(directory / 'scaled.h5') as f:
-        assert f['equilibrium/poloidal_scale'].shape == ()
-        assert f['equilibrium/poloidal_scale'][()] == alpha
-        assert 'definition' in f['equilibrium/poloidal_scale'].attrs
-    cases = [('scaled/field', 'numbered_scale', None, None), ('scaled.h5', 'scale', None, None)]
-    for name, value in [('nonfinite', np.nan), ('zero', 0.), ('vector', [alpha, alpha])]:
-        path = directory / f'scale_{name}.h5'
-        shutil.copyfile(directory / 'scaled.h5', path)
+            f['cocos'] = [11]
+            f['cocos'].attrs['reference'] = 'Sauter & Medvedev (2013)'
+    convert_equilibria(fields, directory / 'cocos.h5')
+    with h5py.File(directory / 'cocos.h5') as f:
+        assert f['equilibrium/cocos'].shape == ()
+        assert f['equilibrium/cocos'][()] == 11
+        assert 'reference' in f['equilibrium/cocos'].attrs
+    cases = [('cocos/field', 'numbered_cocos', None, None), ('cocos.h5', 'cocos', None, None)]
+    for name, value in [('invalid_index', 9), ('fractional', 12.5), ('nonfinite', np.nan), ('vector', [11, 11])]:
+        path = directory / f'cocos_{name}.h5'
+        shutil.copyfile(directory / 'cocos.h5', path)
         with h5py.File(path, 'r+') as f:
-            del f['equilibrium/poloidal_scale']
-            f['equilibrium/poloidal_scale'] = value
-        cases.append((path.name, 'invalid', 'poloidal_scale must be a finite nonzero scalar', None))
+            del f['equilibrium/cocos']
+            f['equilibrium/cocos'] = value
+        cases.append((path.name, 'invalid', 'cocos must be one scalar integer', None))
     with h5py.File(fields[1], 'r+') as f:
-        f['poloidal_scale'][...] = -alpha
-    rejected = directory / 'rejected_scale.h5'
+        f['cocos'][...] = 12
+    rejected = directory / 'rejected_cocos.h5'
     try:
         convert_equilibria(fields, rejected)
     except ValueError as error:
-        assert 'poloidal_scale differs between frames' in str(error), error
+        assert 'cocos differs between frames' in str(error), error
     else:
-        raise AssertionError('Converter accepted changing flux conventions')
-    assert not rejected.exists() and not list(directory.glob('.rejected_scale.h5.*.tmp'))
-    shutil.copytree(scaled, directory / 'changed_scale')
-    cases.append(('changed_scale/field', 'numbered_invalid', 'Numbered poloidal_scale differs', None))
+        raise AssertionError('Converter accepted changing COCOS')
+    assert not rejected.exists() and not list(directory.glob('.rejected_cocos.h5.*.tmp'))
+    shutil.copytree(convention, directory / 'changed_cocos')
+    cases.append(('changed_cocos/field', 'numbered_invalid', 'Numbered cocos differs', None))
     with h5py.File(fields[1], 'r+') as f:
-        f['poloidal_scale'][...] = alpha
+        f['cocos'][...] = 11
     return cases
 
 
@@ -233,7 +232,7 @@ def main():
         cases = [(name, mode, expected, None) for name, mode, expected in cases]
         numbered_inputs(directory / "numbered")
         cases.extend(conversion_checks(directory))
-        cases.extend(scale_checks(directory))
+        cases.extend(cocos_checks(directory))
         cases.extend(heating_inputs(directory))
         cases.extend([
             ("numbered/field", "numbered", None, None),
