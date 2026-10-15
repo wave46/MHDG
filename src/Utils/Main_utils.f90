@@ -355,7 +355,7 @@ CONTAINS
 
     IF (switch%external_heating) THEN
        CALL initialize_external_heating()
-       CALL load_external_heating_from_grid(field_frame)
+       CALL load_external_heating(field_frame)
     ENDIF
 
 

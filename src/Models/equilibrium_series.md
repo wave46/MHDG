@@ -113,7 +113,7 @@ same file. Existing legacy inputs keep their separate `field_path` and
 remain supported. Embedded Jtor also works in a legacy stationary file when
 no separate current path is supplied.
 
-With `ME = .true.`, the current prescribed loop visits frames 0000 through
+For legacy configurations without `time_mode`, `ME = .true.` visits frames 0000 through
 `nts`, where 0000 represents the initial state at time zero and subsequent
 frames are timestep endpoints. A trajectory must therefore supply at least
 `nts + 1` frames. Each interval is computed from successive physical timestamps;
@@ -125,7 +125,21 @@ the new mesh does not reopen a trajectory or reread cached frames.
 With `ME = .false.`, supply a stationary legacy file or a one-frame trajectory.
 This does not require steady plasma: existing fixed-equilibrium transients
 remain supported. Independent controller scheduling and adaptive timesteps
-follow in later slices. Multi-frame trajectories currently require ME.
+follow in later slices. Legacy multi-frame trajectories require ME.
+
+With an explicit `time_mode`, the input determines magnetic evolution: one frame
+supplies a fixed equilibrium and multiple frames supply a moving equilibrium.
+`ME` is then inferred internally. Legacy numbered sequences are discovered from
+frame 0000 through the last contiguous file, independently of the numerical step
+count. `prescribed` mode requires multiple frames; fixed numerical steps may use
+either fixed or moving equilibrium. A moving input must cover the initial and
+final physical times. Sampling uses the proposed solver endpoint in seconds,
+including interpolation between supplied frames; numerical step numbers do not
+select magnetic frames. Sampling leaves the numerical timestep unchanged.
+Fixed fields are retained between steps. Mesh adaptation rebuilds their nodal
+representation from the same provider and cache, as for moving fields.
+Explicit-mode solver execution remains guarded until controller scheduling and
+restart integration are complete.
 
 With `compute_from_flux = .true.`, the poloidal magnetic field and toroidal
 current density are reconstructed from the primitive flux `psi`. For physical

@@ -204,7 +204,7 @@ balance_diagnostics_output.o : balance_diagnostics_output.F balance_diagnostics.
 magnetic_field.F : $(SDIR)/Models/magnetic_field.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-magnetic_field.o : magnetic_field.F globals.o prec_const.o HDF5_io.o MPI_OMP.o interpolation.o magnetic_topology.o magnetic_geometry_state.o input_files.o equilibrium_series.o
+magnetic_field.o : magnetic_field.F globals.o prec_const.o HDF5_io.o MPI_OMP.o interpolation.o magnetic_topology.o magnetic_geometry_state.o input_files.o equilibrium_series.o rectangular_series_io.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 magnetic_topology.F : $(SDIR)/Models/magnetic_topology.f90

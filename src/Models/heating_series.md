@@ -69,6 +69,12 @@ frame's grid and channels when first needed and uses the same two-frame cache
 and interpolation. A new single-file trajectory uses its own timestamps instead.
 Missing frames and insufficient trajectory coverage are input errors.
 
+With explicit `time_mode`, heating is sampled at the proposed physical endpoint;
+an optional integer frame argument no longer selects its time. Native heating
+trajectories keep their own timestamps, including with fixed magnetic equilibrium.
+Numbered heating still shares the magnetic timestamps and requires moving
+magnetic input, but its frame count is independent of the numerical step count.
+
 Fixed heating is retained between steps. Mesh reinitialization invalidates its
 nodal representation and rebuilds it from the dimensional input cache. The
 provider is explicitly closed at normal shutdown. Physical-time restart for

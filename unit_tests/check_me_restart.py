@@ -64,7 +64,7 @@ def equilibrium_frames(directory, me):
                 if prefix == "field":
                     f["flux2D"] = r**2 + z**2
                     f["psiSep"] = [1.]
-                    f["Br2D"], f["Bz2D"], f["Bphi2D"] = r, z, np.ones_like(r)
+                    f["Br2D"], f["Bz2D"], f["Bphi2D"] = r, z, np.full_like(r, 1+frame)
                 else:
                     f["Jtor"] = 1 + 2*r + 3*z + 10*frame
             if not me and frame == 0:
@@ -191,7 +191,18 @@ def main():
                                         12.5 if restored else -11.0, 25.0 if restored else -12.0)
             if not passed:
                 raise SystemExit(f"FAIL: {name}\n{output}")
+            if name in {"me_initial", "me_full_filenames", "trajectory_me", "trajectory_fixed"}:
+                physical = re.sub(r"(?im)^\s*ME\s*=.*\n", "", text)
+                physical = re.sub(r"(?is)&TIME_LST\b.*?\n/", "&TIME_LST\n time_mode='fixed', "
+                                  "time_units='seconds', dt0=.02, t_final=.08\n/", physical)
+                (directory / "param.txt").write_text(physical)
+                kind = "fixed" if name == "trajectory_fixed" else "moving"
+                sampling = subprocess.run([str(executable), "time-sampling", kind], cwd=directory,
+                                          text=True, capture_output=True, timeout=20)
+                if sampling.returncode or "PHYSICAL_SAMPLING_PASS" not in sampling.stdout:
+                    raise SystemExit(f"FAIL: physical sampling {name}\n{sampling.stdout}{sampling.stderr}")
     print(f"ME restart reader checks: {len(cases)} PASS")
+    print("Physical sampling: numbered stem/anchor, trajectory, fixed field and changed-node heating/current PASS")
     check_nodal_input(executable, sys.argv[2] if len(sys.argv) > 2 else "serial")
 
 

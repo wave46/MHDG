@@ -15,6 +15,7 @@ PROGRAM test_me_restart
   USE magnetic_field, ONLY: equilibrium_input_filename, equilibrium_grid_dimensions, load_stored_toroidal_current
   USE magnetic_field, ONLY: open_control_series, load_puff_from_file, load_zeff, load_impurity_concentration
   USE magnetic_field, ONLY: initialize_magnetic_field, load_magnetic_field_nodes, sample_magnetic_input, close_magnetic_input
+  USE magnetic_field, ONLY: magnetic_field_is_time_dependent
   USE equilibrium_series, ONLY: equilibrium_sample_t
   USE HDF5_io_module, ONLY: HDF5_open, HDF5_close, HDF5_dataset_shape
   USE HDF5, ONLY: HID_T, HSIZE_T, H5Lexists_f
@@ -39,6 +40,11 @@ PROGRAM test_me_restart
   LOGICAL :: saved_me, has_reference_current
 
   CALL get_command_argument(1, mode)
+  IF (mode == 'time-sampling') THEN
+     CALL check_physical_sampling()
+     WRITE(*,'(A)') 'PHYSICAL_SAMPLING_PASS'
+     STOP
+  ENDIF
   IF (mode == 'time-clock') THEN
      CALL check_physical_clock()
      WRITE(*,'(A)') 'PHYSICAL_CLOCK_PASS'
@@ -236,6 +242,83 @@ PROGRAM test_me_restart
        phys%feedback_integral_error, phys%feedback_previous_error
 
 CONTAINS
+  SUBROUTINE check_physical_sampling()
+    TYPE(equilibrium_sample_t) :: sample
+    CHARACTER(LEN=16) :: expected_kind
+    LOGICAL :: moving
+    REAL*8 :: reference_current(2), fraction, scale, expected, r, z
+    INTEGER :: node
+
+    MPIvar%glob_id = 0
+    MPIvar%glob_size = 1
+    CALL read_input()
+    CALL get_command_argument(2, expected_kind)
+    moving = expected_kind == 'moving'
+    time%t = 0.02d0/simpar%refval_time
+    time%t_target = 0.04d0/simpar%refval_time
+    time%dt = time%t_target-time%t
+    time%dt_ME = 0.02d0
+    time%t_ME = 0.04d0
+    time%it = 99
+    time%nts = 9999
+    IF (magnetic_field_is_time_dependent() .NEQV. moving) ERROR STOP 'input-frame magnetic evolution inference'
+    CALL sample_magnetic_input(9999, sample)
+    fraction = MERGE(0.5d0, 0.d0, moving)
+    IF (ABS(sample%time-0.04d0) > 1.d-14 .OR. ABS(sample%fraction-fraction) > 1.d-14) &
+         ERROR STOP 'physical sampling used numerical step/frame index'
+    IF (ANY(ABS(sample%bphi-(1.d0+fraction)) > 1.d-14)) ERROR STOP 'physical magnetic interpolation'
+
+    Mesh%Nnodes = 1
+    ALLOCATE(Mesh%X(1,2))
+    Mesh%X = 0.5d0/phys%lscale
+    CALL load_stored_toroidal_current(reference_current(:1), 9999)
+    IF (ABS(reference_current(1)-(3.5d0+10*fraction)) > 1.d-12) ERROR STOP 'physical current interpolation'
+
+    time%t_target = 0.06d0/simpar%refval_time
+    fraction = MERGE(0.75d0, 0.d0, moving)
+    CALL sample_magnetic_input(9999, sample)
+    IF (ANY(ABS(sample%bphi-(1.d0+fraction)) > 1.d-14)) ERROR STOP 'next physical magnetic sample'
+    input%external_heating_from_grid = .TRUE.
+    scale = simpar%refval_time/simpar%refval_specenergydens/simpar%refval_mass
+    IF (moving) THEN
+       input%external_heating_path = 'heat'
+       CALL initialize_external_heating()
+       CALL load_external_heating(9999)
+       expected = 7.d0*0.06d0/0.08d0*scale
+       IF (ABS(phys%external_heating_ions(1)-expected) > 1.d-12*ABS(expected)) &
+            ERROR STOP 'numbered heating used numerical count as frame count'
+       CALL close_heating_input()
+       DEALLOCATE(phys%external_heating_ions, phys%external_heating_electrons)
+    ENDIF
+    input%external_heating_path = 'heat_trajectory.h5'
+    CALL initialize_external_heating()
+    CALL load_external_heating(9999)
+    expected = (1.d0+87.5d0*0.06d0)*scale
+    IF (ABS(phys%external_heating_ions(1)-expected) > 1.d-12*ABS(expected)) &
+         ERROR STOP 'heating did not use its own clock at the physical target'
+
+    DEALLOCATE(Mesh%X, phys%external_heating_ions, phys%external_heating_electrons)
+    Mesh%Nnodes = 2
+    ALLOCATE(Mesh%X(2,2))
+    Mesh%X(1,:) = [0.1d0,0.2d0]/phys%lscale
+    Mesh%X(2,:) = [0.3d0,0.4d0]/phys%lscale
+    CALL load_stored_toroidal_current(reference_current, 9999)
+    CALL initialize_external_heating()
+    CALL load_external_heating(9999)
+    DO node = 1, 2
+       r = Mesh%X(node,1)*phys%lscale
+       z = Mesh%X(node,2)*phys%lscale
+       IF (ABS(reference_current(node)-(1+2*r+3*z+10*fraction)) > 1.d-12) &
+            ERROR STOP 'current representation on changed nodes'
+       expected = (r+z+87.5d0*0.06d0)*scale
+       IF (ABS(phys%external_heating_ions(node)-expected) > 1.d-12*ABS(expected) .OR. &
+           ABS(phys%external_heating_electrons(node)-2*expected) > 1.d-12*ABS(expected)) &
+            ERROR STOP 'heating representation on changed nodes'
+    ENDDO
+    CALL close_heating_input()
+    CALL close_magnetic_input()
+  END SUBROUTINE check_physical_sampling
+
   SUBROUTINE check_physical_clock()
     REAL*8 :: target, accepted, frames(4), expected(3)
     INTEGER :: step, status

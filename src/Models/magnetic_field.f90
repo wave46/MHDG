@@ -8,7 +8,8 @@
 !*****************************************
 
 MODULE magnetic_field
-  USE input_files, ONLY: resolve_input_filename
+  USE input_files, ONLY: resolve_input_filename, numbered_stem, numbered_filename
+  USE rectangular_series_io, ONLY: locate_series_time
   USE equilibrium_series, ONLY: equilibrium_series_t, equilibrium_sample_t
   USE prec_const
   USE globals
@@ -54,23 +55,95 @@ CONTAINS
     IF (equilibrium_input%is_trajectory()) THEN
        IF (LEN_TRIM(current_path) > 0) &
             CALL check_equilibrium_input(-1, 'Trajectory Jtor is embedded; leave jtor_path empty')
-    ELSEIF (switch%ME) THEN
-       CALL equilibrium_input%open_numbered(input%field_path, time%nts, ierr, message, current_path)
+    ELSE
+       CALL open_legacy_equilibrium(filename, current_path, ierr, message)
+    ENDIF
+    CALL check_equilibrium_input(ierr, message)
+    CALL configure_magnetic_clock()
+    equilibrium_input_open = .TRUE.
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium provider opened: ', TRIM(input%field_path)
+  END SUBROUTINE open_magnetic_input
+
+  SUBROUTINE open_legacy_equilibrium(filename, current_path, ierr, message)
+    CHARACTER(LEN=*), INTENT(IN) :: filename, current_path
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    INTEGER :: last_frame
+
+    last_frame = 0
+    IF (time%legacy_input) THEN
+       IF (switch%ME) last_frame = time%nts
+    ELSE
+       last_frame = last_numbered_equilibrium_frame(filename)
+    ENDIF
+    ierr = 0
+    message = ''
+    IF (last_frame > 0) THEN
+       IF (time%legacy_input) THEN
+          CALL equilibrium_input%open_numbered(input%field_path, last_frame, ierr, message, current_path)
+       ELSE
+          CALL equilibrium_input%open_numbered(filename, last_frame, ierr, message, current_path)
+       ENDIF
     ELSEIF (LEN_TRIM(current_path) > 0) THEN
        CALL equilibrium_input%open(filename, ierr, message, current_path)
     ENDIF
+  END SUBROUTINE open_legacy_equilibrium
+
+  INTEGER FUNCTION last_numbered_equilibrium_frame(filename) RESULT(last_frame)
+    CHARACTER(LEN=*), INTENT(IN) :: filename
+    CHARACTER(LEN=1000) :: stem, message
+    INTEGER :: n, frame, ierr
+    LOGICAL :: exists
+
+    last_frame = 0
+    n = LEN_TRIM(filename)
+    IF (n <= 8) RETURN
+    IF (filename(n-7:n) /= '_0000.h5') RETURN
+    CALL numbered_stem(filename, stem, ierr, message)
     CALL check_equilibrium_input(ierr, message)
+    DO frame = 1, 9999
+       INQUIRE(FILE=numbered_filename(stem, frame), EXIST=exists)
+       IF (.NOT. exists) EXIT
+       last_frame = frame
+    ENDDO
+  END FUNCTION last_numbered_equilibrium_frame
+
+  SUBROUTINE configure_magnetic_clock()
+    INTEGER :: left, right, ierr
+    REAL(float) :: actual_time, weight
+    CHARACTER(LEN=256) :: message
+
     CALL equilibrium_input%time_points(equilibrium_times)
-    IF (switch%ME) THEN
+    IF (.NOT. time%legacy_input) THEN
+       switch%ME = SIZE(equilibrium_times) > 1
+       IF (time%mode == 'prescribed' .AND. .NOT. switch%ME) &
+            CALL check_equilibrium_input(-1, 'Prescribed time mode requires multiple equilibrium frames')
+       IF (.NOT. switch%ME) RETURN
+       CALL locate_series_time(equilibrium_times, time%t*simpar%refval_time, &
+            left, right, actual_time, weight, ierr, message)
+       CALL check_equilibrium_input(ierr, 'Initial equilibrium time: '//TRIM(message))
+       CALL locate_series_time(equilibrium_times, time%t_final*simpar%refval_time, &
+            left, right, actual_time, weight, ierr, message)
+       CALL check_equilibrium_input(ierr, 'Final equilibrium time: '//TRIM(message))
+    ELSEIF (switch%ME) THEN
        IF (SIZE(equilibrium_times) < time%nts+1) &
             CALL check_equilibrium_input(-1, 'ME input must cover initial frame 0000 through nts')
     ELSE
        IF (SIZE(equilibrium_times) /= 1) &
             CALL check_equilibrium_input(-1, 'A multi-frame trajectory requires ME; use one frame for a fixed equilibrium')
     ENDIF
-    equilibrium_input_open = .TRUE.
-    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium provider opened: ', TRIM(input%field_path)
-  END SUBROUTINE open_magnetic_input
+  END SUBROUTINE configure_magnetic_clock
+
+  LOGICAL FUNCTION magnetic_field_is_time_dependent()
+    IF (uses_equilibrium_grid()) THEN
+       CALL open_magnetic_input()
+       magnetic_field_is_time_dependent = SIZE(equilibrium_times) > 1
+    ELSE
+       IF (.NOT. time%legacy_input .AND. switch%ME) &
+            CALL check_equilibrium_input(-1, 'Physical-time moving equilibrium requires rectangular-grid input')
+       magnetic_field_is_time_dependent = switch%ME
+    ENDIF
+  END FUNCTION magnetic_field_is_time_dependent
 
   SUBROUTINE sample_magnetic_input(frame, sample)
     INTEGER, OPTIONAL, INTENT(IN) :: frame
@@ -81,7 +154,9 @@ CONTAINS
 
     CALL open_magnetic_input()
     target_time = time%t*simpar%refval_time
-    IF (switch%ME) THEN
+    IF (.NOT. time%legacy_input) THEN
+       target_time = time%t_target*simpar%refval_time
+    ELSEIF (switch%ME) THEN
        index = equilibrium_frame_index(frame)
        IF (index < 0 .OR. index >= SIZE(equilibrium_times)) &
             CALL check_equilibrium_input(-1, 'Requested equilibrium frame is outside input coverage')
@@ -571,7 +646,7 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmax, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
 #endif
 
-    IF (switch%ME) THEN
+    IF (switch%ME .AND. time%legacy_input) THEN
        index = equilibrium_frame_index(frame)
        time%t_ME = sample%time
        time%dt_ME = 0.d0

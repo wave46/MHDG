@@ -49,9 +49,10 @@ CONTAINS
 
     CALL open_heating_input()
     target_time = time%t*simpar%refval_time
+    IF (.NOT. time%legacy_input) target_time = time%t_target*simpar%refval_time
     IF (PRESENT(physical_time)) THEN
        target_time = physical_time
-    ELSEIF (PRESENT(frame) .AND. switch%ME) THEN
+    ELSEIF (PRESENT(frame) .AND. switch%ME .AND. time%legacy_input) THEN
        CALL magnetic_time_points(times)
        IF (frame < 0 .OR. frame >= SIZE(times)) &
             CALL check_heating_input(-1, 'Requested heating endpoint is outside the magnetic schedule')
@@ -108,7 +109,11 @@ CONTAINS
     IF (switch%ME .AND. n > 8) numbered = filename(n-7:n) == '_0000.h5'
     IF (numbered .AND. .NOT. heating_input%is_trajectory()) THEN
        CALL magnetic_time_points(times)
-       CALL heating_input%open_numbered(input%external_heating_path, times(:time%nts+1), ierr, message)
+       IF (time%legacy_input) THEN
+          CALL heating_input%open_numbered(input%external_heating_path, times(:time%nts+1), ierr, message)
+       ELSE
+          CALL heating_input%open_numbered(input%external_heating_path, times, ierr, message)
+       ENDIF
        CALL check_heating_input(ierr, message)
     ENDIF
     CALL heating_input%time_points(times)

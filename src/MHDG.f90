@@ -255,6 +255,8 @@ PROGRAM MHDG
         ENDIF
         CALL SetParticleSource()
         time%dt = time%dt_ME/simpar%refval_time
+     ELSEIF (.NOT. time%legacy_input) THEN
+        IF (magnetic_field_is_time_dependent()) CALL load_magnetic_field_Jtor()
      ENDIF
 
      IF (switch%external_heating) THEN

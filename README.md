@@ -116,6 +116,13 @@ zero), and `t_final`. Explicit modes require `steady = .false.`,
 temporarily rejected until equilibrium/controller scheduling is integrated.**
 The existing templates retain their working legacy configuration.
 
+For explicit modes, one equilibrium frame means fixed magnetic equilibrium and
+multiple frames mean moving equilibrium; `ME` is inferred internally. Magnetic
+and heating providers sample the proposed physical endpoint, interpolating when
+it lies between frames. Fixed magnetic fields are rebuilt only when the mesh
+changes. Independent controller scheduling and physical restart integration are
+the remaining prerequisites for enabling explicit-mode execution.
+
 `time_units = 'seconds'` converts namelist `dt0`, `t_start` and the final time
 once during input normalization. Omitted units mean `'normalized'`, preserving
 existing inputs. Equilibrium, heating and control-file timestamps remain in

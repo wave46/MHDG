@@ -120,6 +120,11 @@ change their count; no additional executable or test target is needed.
 The production loop now selects physical endpoints independently of its loop
 index and ignores `tTM` for explicit physical modes. Explicit execution remains
 guarded at solver startup until equilibrium/controller scheduling is integrated.
+Provider integration checks infer fixed/moving magnetic input without `ME`, sample
+between frames independently of numerical counters, and use heating's own time
+grid. They also rebuild current and heating values on changed mesh nodes from
+the retained providers. Numbered magnetic/heating input remains covered alongside
+single-file trajectories.
 It also checks HDF5 grid dimensions/orientation on a non-square rectangular grid,
 stored-current interpolation at initial/endpoint frames, full filenames and
 legacy basenames, optional namelist dimensions, and dataset-shape rejection.
