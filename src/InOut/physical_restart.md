@@ -172,3 +172,61 @@ proposal above a newly configured `dt_max` is capped on loading.
 Growth measures nonlinear-solve efficiency. It does not estimate temporal error
 or constrain the rate of change of equilibrium and control signals. Choose
 `dt_max` to resolve those dynamics; an accuracy estimator remains separate work.
+
+### Optional Newton initial guess
+
+Set `newton_predictor = .true.` in `TIME_LST` to extrapolate `u`, `q` and the
+independent face trace `u_hat` before Newton. It defaults to false and currently
+requires an explicit physical `time_mode` with BDF1. It works with fixed,
+prescribed or adaptive timesteps and with fixed or moving equilibrium.
+
+`newton_predictor_rate_limit = 0.35` controls when extrapolation is attempted.
+For each conservative field in `u`, `q` and `u_hat`, compare the two latest
+accepted rates, using their actual intervals:
+
+```text
+v_previous = (y[n-1] - y[n-2]) / (t[n-1] - t[n-2])
+v_current  = (y[n] - y[n-1]) / (t[n] - t[n-1])
+change = norm(v_current - v_previous) / max(norm(v_current), norm(v_previous))
+```
+
+The largest `change` must not exceed the configured limit: `0.35` means 35%.
+Norms are Euclidean coefficient norms, computed separately per field; gradient
+components are combined for their field. MPI sums include owned elements/faces
+once. If both rates vanish, their change is zero. The limit must be finite and
+nonnegative. Prediction requires two clean accepted intervals; when rates are
+changing too much, ordinary Newton runs and history continues updating. This is
+a convergence heuristic, not a temporal-accuracy check, and past smoothness
+cannot guarantee easy convergence of the next step.
+
+For accepted states at `t_previous` and `t_accepted`, the guess is
+`y_accepted + weight * (y_accepted - y_previous)`, with the same weight for all
+three arrays. Initially `weight = min(1, dt / (t_accepted-t_previous))`, using
+solver units throughout. The cap prevents extrapolating more than one previous
+accepted change when the timestep grows. If the guess fails the existing
+owned-node density/thermal-energy checks or any array is nonfinite, the weight
+is halved up to three times. If none of these guesses is admissible, Newton
+uses the accepted state. Existing optional neutral-positivity checks also apply.
+BDF history `u0` is unchanged. Feedback updates use the accepted plasma before
+prediction; boundary conditions use the existing assembly on every Newton
+iteration.
+
+A predicted solve that needs nonlinear or mesh recovery first falls back once
+to the accepted plasma at the same target time and timestep. This restores the
+ordinary Newton checkpoints and linear system without updating controllers or
+resetting mesh-recovery budgets. Failed predicted iterations count toward total
+Newton work; a fallback cannot trigger timestep growth. Fatal backend failures
+remain fatal. If the ordinary solve also fails, normal timestep reduction
+applies when enabled.
+
+History is one previous accepted `u/q/u_hat` state and the preceding interval's
+rates, separate from BDF history. It is released on remeshing, rejection or
+predictor fallback; two new clean accepted intervals establish history again.
+Runtime reinitialization and restart start with no predictor history.
+Checkpoints record the predictor flag and rate limit, but do not save its extra
+arrays. The current input supplies the flag and limit on continuation.
+Newton counts and finite-tolerance results can therefore differ after restarting.
+Prediction changes the initial
+guess, not the discrete equations; multiple nonlinear branches remain possible,
+so enabling it should be checked at the same timesteps before combining it with
+timestep growth.

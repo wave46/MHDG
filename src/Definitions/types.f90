@@ -545,6 +545,8 @@ MODULE types
      CHARACTER(LEN=16) :: units = 'normalized' ! units of namelist time inputs
      LOGICAL     :: dt_reduce_on_failure = .FALSE.
      LOGICAL     :: dt_grow_on_easy = .FALSE.
+     LOGICAL     :: newton_predictor = .FALSE.
+     REAL*8      :: newton_predictor_rate_limit = 0.35d0
      REAL*8      :: dt_min = 0.d0 ! minimum retry interval, in solver units
      REAL*8      :: dt_max = 0.d0 ! zero means no configured upper bound
      REAL*8      :: dt_growth_factor = 1.2d0

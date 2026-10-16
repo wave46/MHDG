@@ -172,7 +172,7 @@ def main():
     if clock.returncode or "PHYSICAL_CLOCK_PASS" not in clock.stdout:
         raise SystemExit(f"FAIL: physical clock/history\n{clock.stdout}{clock.stderr}")
     print("Physical endpoint selection and history growth: PASS")
-    check_time_input(executable, template)
+    check_time_input(executable, template, sys.argv[2] if len(sys.argv) > 2 else "serial")
     cases = [
         ("static_bootstrap", 1, False, 100, True, 0),
         ("me_initial", 0, True, 100, True, 0),
@@ -311,14 +311,21 @@ def main():
 
     print(f"ME restart reader checks: {len(cases)} PASS")
     print("Physical sampling: numbered stem/anchor, trajectory, fixed field and changed-node heating/current PASS")
-    print("Fixed-field controls: constants, signals, derivative timing, retries and checkpoint continuation PASS")
+    print("Fixed-field controls and Newton prediction: signals, derivative timing, retries, limiting and continuation PASS")
     check_nodal_input(executable, sys.argv[2] if len(sys.argv) > 2 else "serial")
 
 
-def check_time_input(executable, template):
+def check_time_input(executable, template, build_mode):
     fixed = "time_mode='fixed', time_units='seconds', dt0=.02, t_start=.12, t_final=.56"
     cases = [
         (fixed, None),
+        (fixed + ", newton_predictor=.true.", None),
+        (fixed + ", newton_predictor=.true., newton_predictor_rate_limit=.2", None),
+        (fixed + ", newton_predictor=.true., newton_predictor_rate_limit=-.1",
+         "Newton predictor rate limit must be finite and nonnegative"),
+        (fixed + ", newton_predictor=.true., newton_predictor_rate_limit=NaN",
+         "Newton predictor rate limit must be finite and nonnegative"),
+        ("newton_predictor=.true.", "Newton predictor requires an explicit physical time_mode"),
         ("time_mode='fixed', dt0=145560.40756914119, t_start=873362.4454148472, "
          "t_final=4075691.411935954", None),
         ("time_mode='prescribed', time_units='seconds', t_start=.12, tfi=.56, "
@@ -367,6 +374,9 @@ def check_time_input(executable, template):
             limits = re.search(r"^TIME_MINIMUM_STEP\s+(.*)$", output, re.M)
             np.testing.assert_allclose(list(map(float, limits[1].split())),
                                        [.001 if mode == "prescribed" else 0.], rtol=1e-14)
+            predictor_limit = re.search(r"^TIME_PREDICTOR_LIMIT\s+(.*)$", output, re.M)
+            np.testing.assert_allclose(float(predictor_limit[1]),
+                                       .2 if "newton_predictor_rate_limit=.2" in values else .35, rtol=1e-14)
         # Explicit initialization uses physical start time and capacity, without nts.
         text = re.sub(r"(?is)&TIME_LST\b.*?\n/", "&TIME_LST\n " + fixed + "\n/", text)
         (directory / "param.txt").write_text(text)
@@ -376,7 +386,22 @@ def check_time_input(executable, template):
         if run.returncode or not match:
             raise SystemExit(f"FAIL: physical clock initialization\n{run.stdout}{run.stderr}")
         np.testing.assert_allclose(list(map(float, match[1].split())), [.12, .02, 0., 16.], rtol=1e-14)
+        check_predictor_rate_gate(executable, directory, build_mode)
     print(f"Time input checks: {len(cases)} cases and physical initialization PASS")
+
+
+def check_predictor_rate_gate(executable, directory, build_mode):
+    environment = {**os.environ, "OMP_NUM_THREADS": "4", "OPENBLAS_NUM_THREADS": "1"}
+    for ranks in ([1, 4] if build_mode == "parall" else [1]):
+        command = [str(executable), "predictor-rates"]
+        if ranks > 1:
+            launcher = shlex.split(os.environ.get("MPIEXEC", "mpirun.openmpi"))
+            command = [*launcher, "-n", str(ranks), *command]
+        run = subprocess.run(command, cwd=directory, env=environment,
+                             capture_output=True, text=True, timeout=30)
+        if run.returncode or f"PREDICTOR_RATE_GATE_PASS {ranks}" not in run.stdout:
+            raise SystemExit(f"FAIL: predictor rate gate {ranks} ranks\n{run.stdout}{run.stderr}")
+    print("Predictor rate gate: interval ratios, field selection, ghost exclusion and continuation PASS")
 
 
 def check_nodal_input(executable, build_mode):

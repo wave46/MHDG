@@ -40,7 +40,8 @@ SUBROUTINE READ_input()
   REAL*8, PARAMETER     :: time_input_unset = -HUGE(1.d0)
   REAL*8                :: t_start, t_final
   CHARACTER(LEN=16)     :: time_mode, time_units
-  LOGICAL               :: dt_reduce_on_failure, dt_grow_on_easy
+  LOGICAL               :: dt_reduce_on_failure, dt_grow_on_easy, newton_predictor
+  REAL*8                :: newton_predictor_rate_limit
   REAL*8                :: dt_min, dt_max, dt_growth_factor
   INTEGER               :: dt_growth_easy_steps
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
@@ -126,7 +127,7 @@ SUBROUTINE READ_input()
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis, time_mode, time_units, t_start, t_final, &
        dt_reduce_on_failure, dt_grow_on_easy, dt_min, dt_max, dt_growth_factor, &
-       dt_growth_easy_steps
+       dt_growth_easy_steps, newton_predictor, newton_predictor_rate_limit
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, Re_n, Re_n_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
@@ -211,6 +212,8 @@ SUBROUTINE READ_input()
   time_units = 'normalized'
   dt_reduce_on_failure = .FALSE.
   dt_grow_on_easy = .FALSE.
+  newton_predictor = .FALSE.
+  newton_predictor_rate_limit = 0.35d0
   dt_min = 0.d0
   dt_max = 0.d0
   dt_growth_factor = 1.2d0
@@ -556,6 +559,8 @@ SUBROUTINE READ_input()
   time%units              = time_units
   time%dt_reduce_on_failure = dt_reduce_on_failure
   time%dt_grow_on_easy     = dt_grow_on_easy
+  time%newton_predictor    = newton_predictor
+  time%newton_predictor_rate_limit = newton_predictor_rate_limit
   time%dt_min             = dt_min
   time%dt_max             = dt_max
   time%dt_growth_factor   = dt_growth_factor
@@ -776,6 +781,8 @@ SUBROUTINE READ_input()
      PRINT *, '                - legacy stopping rules:                              ', time%legacy_input
      PRINT *, '                - time input units:                                   ', TRIM(time%units)
      PRINT *, '                - start time (solver units):                          ', time%t_start
+     PRINT *, '                - Newton initial-guess predictor:                     ', time%newton_predictor
+     IF (time%newton_predictor) PRINT *, '                - Predictor relative rate-change limit:               ', time%newton_predictor_rate_limit
      PRINT *, '                - final time (solver units):                          ', time%t_final
      IF (time%dt_reduce_on_failure) THEN
         PRINT *, '                - minimum retry dt (solver units):                    ', time%dt_min
@@ -1053,6 +1060,7 @@ CONTAINS
     ENDIF
 
     IF (time_mode == 'legacy') THEN
+       IF (newton_predictor) CALL invalid_time_input('Newton predictor requires an explicit physical time_mode')
        IF (t_start /= 0.d0) CALL invalid_time_input('t_start requires an explicit physical time_mode')
        IF (dt_reduce_on_failure .OR. dt_grow_on_easy) &
             CALL invalid_time_input('Timestep adaptation requires an explicit physical time_mode')
@@ -1074,6 +1082,10 @@ CONTAINS
     IF (time_mode == 'fixed' .AND. (dt_reduce_on_failure .OR. dt_grow_on_easy)) &
          CALL invalid_time_input('Fixed time_mode does not support timestep adaptation')
     IF (tis /= 1) CALL invalid_time_input('Physical time modes currently require BDF1 (tis=1)')
+    IF (newton_predictor) THEN
+       IF (.NOT. ieee_is_finite(newton_predictor_rate_limit) .OR. newton_predictor_rate_limit < 0.d0) &
+            CALL invalid_time_input('Newton predictor rate limit must be finite and nonnegative')
+    ENDIF
     IF (.NOT. ieee_is_finite(dt_min) .OR. dt_min < 0.d0) &
          CALL invalid_time_input('dt_min must be finite and nonnegative')
     IF (dt_reduce_on_failure .AND. dt_min <= 0.d0) &

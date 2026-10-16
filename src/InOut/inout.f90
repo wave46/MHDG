@@ -1971,6 +1971,8 @@ CONTAINS
   SUBROUTINE save_time_step_state(time_group)
     INTEGER(HID_T), INTENT(IN) :: time_group
 
+    CALL HDF5_logical_saving(time_group, time%newton_predictor, 'Newton_predictor')
+    CALL HDF5_real_saving(time_group, time%newton_predictor_rate_limit, 'Newton_predictor_rate_limit')
     IF (time%mode == 'adaptive') THEN
          CALL HDF5_real_saving(time_group, time%dt_next*simpar%refval_time, 'Proposed_time_step_seconds')
          CALL save_timestep_growth(time_group)

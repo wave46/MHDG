@@ -8,6 +8,8 @@ PROGRAM test_me_restart
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
   USE Main_utils, ONLY: prepare_time_step, initialize_solu0_uiter_uconv, update_time_dependent_inputs
   USE Main_utils, ONLY: accepted_step_state_t
+  USE Main_utils, ONLY: apply_newton_prediction, measure_predictor_rate_change, restart_adapt
+  USE newton_predictor_module, ONLY: newton_predictor_t
   USE globals
   USE MPI_OMP, ONLY: MPIvar, init_MPI_OMP
 #ifdef PARALL
@@ -47,6 +49,11 @@ PROGRAM test_me_restart
   LOGICAL :: saved_me, has_reference_current
 
   CALL get_command_argument(1, mode)
+  IF (mode == 'predictor-rates') THEN
+     CALL check_predictor_rate_gate()
+     CALL MPI_FINALIZE(ierr)
+     STOP
+  ENDIF
   IF (mode == 'physical-restart') THEN
      CALL check_physical_restart()
      STOP
@@ -83,6 +90,7 @@ PROGRAM test_me_restart
           simpar%refval_time, MERGE(1,0,time%dt_reduce_on_failure), MERGE(1,0,time%dt_grow_on_easy), time%nts
      WRITE(*,'(A,1X,ES24.16)') 'TIME_MINIMUM_STEP', time%dt_min*simpar%refval_time
      WRITE(*,'(A,1X,ES24.16)') 'TIME_MAXIMUM_STEP', time%dt_max*simpar%refval_time
+     WRITE(*,'(A,1X,ES24.16)') 'TIME_PREDICTOR_LIMIT', time%newton_predictor_rate_limit
      STOP
   ENDIF
   IF (mode == 'nodal') THEN
@@ -390,6 +398,8 @@ CONTAINS
 #ifdef PARALL
     ALLOCATE(Mesh%ghostElems(1))
     Mesh%ghostElems = 0
+    ALLOCATE(Mesh%ghostFaces(Mesh%Nfaces))
+    Mesh%ghostFaces = 0
 #endif
     time%it = 5
     time%dt_ME = 123.d0
@@ -458,6 +468,7 @@ CONTAINS
        ENDDO
     ENDDO
     CALL check_feedback_timing()
+    CALL check_newton_prediction()
     CALL clear_control_curves()
   END SUBROUTINE check_physical_controls
 
@@ -646,6 +657,130 @@ CONTAINS
 
     WRITE(*,'(A)') 'FEEDBACK_TIMING_PASS'
   END SUBROUTINE check_feedback_timing
+
+  SUBROUTINE check_newton_prediction()
+    TYPE(newton_predictor_t) :: history
+    TYPE(accepted_step_state_t) :: accepted
+    REAL*8, ALLOCATABLE :: previous(:), original(:)
+    REAL*8 :: weight, trial_puff
+    LOGICAL :: predicted
+    INTEGER :: point
+
+    time%newton_predictor = .TRUE.
+    restart_adapt = .FALSE.
+    time%t = 0.02d0
+    time%dt = 0.04d0
+    time%tis = 1
+    DO point = 1, SIZE(sol%u)/phys%neq
+       sol%u((point-1)*phys%neq+1:point*phys%neq) = [1.d0,0.d0,2.d0,2.d0,0.1d0]
+    ENDDO
+    sol%q = 2.d0
+    DEALLOCATE(sol%u_tilde,sol%u0)
+    ALLOCATE(sol%u_tilde(6*phys%neq),sol%u0(SIZE(sol%u),1))
+    sol%u_tilde = 2.d0
+    sol%u0(:,1) = sol%u
+    original = sol%u
+    previous = sol%u
+    previous(1::phys%neq) = 3.d0
+    CALL history%remember(2.d0*previous-original,sol%q-2.d0,sol%u_tilde-2.d0,-0.02d0)
+    CALL history%remember(previous,sol%q-1.d0,sol%u_tilde-1.d0,0.d0)
+    IF (history%weight(time%t,0.01d0) /= 0.5d0 .OR. history%weight(time%t,time%dt) /= 1.d0) &
+         ERROR STOP 'predictor ignored actual interval ratio or extrapolation cap'
+    CALL accepted%capture()
+    time%t = time%t+time%dt
+    phys%puff = phys%puff+1.d0
+    trial_puff = phys%puff
+    CALL apply_newton_prediction(accepted,history,predicted,weight)
+    IF (.NOT. predicted .OR. weight /= 0.25d0) ERROR STOP 'predictor did not limit negative density'
+    IF (ANY(sol%u(1::phys%neq) /= 0.5d0) .OR. ANY(sol%q /= 2.25d0) .OR. ANY(sol%u_tilde /= 2.25d0)) &
+         ERROR STOP 'predictor did not use one weight for solution gradient and trace'
+    IF (ANY(sol%u0(:,1) /= original) .OR. time%t /= 0.06d0 .OR. phys%puff /= trial_puff) &
+         ERROR STOP 'prediction changed BDF history clock or controller'
+
+    CALL accepted%restore_plasma()
+    previous(1::phys%neq) = 100.d0
+    CALL history%clear()
+    CALL history%remember(2.d0*previous-original,sol%q,sol%u_tilde,-0.02d0)
+    CALL history%remember(previous,sol%q,sol%u_tilde,0.d0)
+    CALL apply_newton_prediction(accepted,history,predicted,weight)
+    IF (predicted .OR. ANY(sol%u /= original) .OR. ANY(sol%q /= 2.d0) .OR. ANY(sol%u_tilde /= 2.d0)) &
+         ERROR STOP 'unsafe prediction did not restore accepted plasma'
+    CALL history%clear()
+    CALL apply_newton_prediction(accepted,history,predicted,weight)
+    IF (predicted) ERROR STOP 'cleared predictor history was reused'
+    time%newton_predictor = .FALSE.
+    WRITE(*,'(A)') 'NEWTON_PREDICTOR_PASS'
+  END SUBROUTINE check_newton_prediction
+
+  SUBROUTINE check_predictor_rate_gate()
+    TYPE(newton_predictor_t) :: history
+    TYPE(accepted_step_state_t) :: accepted
+    REAL*8 :: change,weight
+    INTEGER :: owned,points
+    LOGICAL :: ready,predicted
+
+    CALL init_MPI_OMP()
+    CALL read_input()
+    CALL init_sim(nts,dt)
+    phys%neq = 2
+    owned = 4/MPIvar%glob_size
+    points = owned
+#ifdef PARALL
+    points = points+1
+    ALLOCATE(Mesh%ghostElems(points),Mesh%ghostFaces(points))
+    Mesh%ghostElems = 0
+    Mesh%ghostFaces = 0
+    Mesh%ghostElems(points) = 1
+    Mesh%ghostFaces(points) = 1
+#endif
+    Mesh%Nelems = points
+    Mesh%Nfaces = points
+    Mesh%Nnodesperelem = 1
+    Mesh%Nnodesperface = 1
+    Mesh%ndim = 2
+    ALLOCATE(sol%u(2*points),sol%q(4*points),sol%u_tilde(2*points),sol%u0(2*points,1))
+    sol%Nt = 0
+    sol%u = 10.d0
+    sol%q = 10.d0
+    sol%u_tilde = 10.d0
+    CALL history%remember(sol%u,sol%q,sol%u_tilde,0.d0)
+    sol%u = 11.d0
+    sol%q = 11.d0
+    sol%u_tilde = 11.d0
+    CALL measure_predictor_rate_change(history,sol%u,sol%q,sol%u_tilde,1.d0,change,ready)
+    IF (ready) ERROR STOP 'predictor used fewer than two accepted intervals'
+    CALL history%remember(sol%u,sol%q,sol%u_tilde,1.d0)
+    sol%u = 13.d0
+    sol%q = 13.d0
+    sol%u_tilde = 13.d0
+    ! Same physical rate over twice the interval; only one gradient component changes.
+    IF (MPIvar%glob_id == 0) sol%q(1) = 11.d0
+#ifdef PARALL
+    sol%u(2*owned+1:) = 1.d6
+    sol%q(4*owned+1:) = 1.d6
+    sol%u_tilde(2*owned+1:) = 1.d6
+#endif
+    CALL measure_predictor_rate_change(history,sol%u,sol%q,sol%u_tilde,3.d0,change,ready)
+    IF (.NOT. ready .OR. ABS(change-1.d0/SQRT(8.d0)) > 1.d-12) &
+         ERROR STOP 'predictor rates counted ghosts, mixed fields or used increments instead of rates'
+    time%t = 3.d0
+    time%dt = 0.5d0
+    time%newton_predictor = .TRUE.
+    time%newton_predictor_rate_limit = 0.35d0
+    restart_adapt = .FALSE.
+    sol%u0(:,1) = sol%u
+    CALL accepted%capture()
+    CALL apply_newton_prediction(accepted,history,predicted,weight)
+    IF (predicted .OR. ANY(sol%u /= sol%u0(:,1))) ERROR STOP 'rate gate did not preserve ordinary guess'
+    time%newton_predictor_rate_limit = 0.36d0
+    CALL apply_newton_prediction(accepted,history,predicted,weight)
+    IF (.NOT. predicted .OR. weight /= 0.25d0) ERROR STOP 'configurable rate gate erased skipped history'
+    CALL accepted%restore_plasma()
+    IF (MPIvar%glob_id == MPIvar%glob_size-1) CALL history%clear()
+    CALL apply_newton_prediction(accepted,history,predicted,weight)
+    IF (predicted) ERROR STOP 'predictor readiness differs across ranks after history release'
+    IF (MPIvar%glob_id == 0) WRITE(*,'(A,1X,I0)') 'PREDICTOR_RATE_GATE_PASS',MPIvar%glob_size
+  END SUBROUTINE check_predictor_rate_gate
 
   SUBROUTINE check_physical_sampling()
     TYPE(equilibrium_sample_t) :: sample

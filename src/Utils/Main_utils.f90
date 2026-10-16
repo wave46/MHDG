@@ -21,6 +21,7 @@ MODULE Main_utils
   USE time_stepping, ONLY: next_physical_time, physical_time_is_complete, &
        schedule_half_step, remove_reached_target, ensure_time_history_capacity
   USE time_stepping, ONLY: update_timestep_growth, reset_timestep_growth
+  USE newton_predictor_module, ONLY: newton_predictor_t
   USE adaptivity_common_module, ONLY: set_order_mesh
   USE adaptivity_projection_module, ONLY: mesh_transfer_t
   USE external_heating
@@ -47,6 +48,8 @@ MODULE Main_utils
      REAL*8 :: first_error = 0.d0
      LOGICAL :: mesh_changed = .FALSE.
      LOGICAL :: iteration_limit_reached = .FALSE.
+     LOGICAL :: predictor_used = .FALSE.
+     LOGICAL :: predictor_fallback = .FALSE.
   END TYPE newton_result_t
 
   TYPE :: accepted_step_state_t
@@ -62,6 +65,7 @@ MODULE Main_utils
    CONTAINS
      PROCEDURE :: capture => capture_accepted_step
      PROCEDURE :: restore => restore_accepted_step
+     PROCEDURE :: restore_plasma => restore_accepted_plasma
      PROCEDURE :: capture_mesh => capture_accepted_mesh
      PROCEDURE :: restore_mesh => restore_accepted_mesh
      FINAL :: release_accepted_mesh
@@ -105,6 +109,7 @@ MODULE Main_utils
   INTEGER                      :: Neq, ntorloc,Nfl, Np1dPol, Np1dTor, Ng1dPol, Ng1dTor,
 #endif
   TYPE(Reference_element_type) :: refElPol_prec
+  TYPE(newton_predictor_t), PRIVATE :: predictor_history
 
 
 CONTAINS
@@ -136,15 +141,7 @@ CONTAINS
   SUBROUTINE restore_accepted_step(this)
     CLASS(accepted_step_state_t), INTENT(IN) :: this
 
-    ! The caller must restore the accepted mesh before restoring these arrays.
-    ! Preserve the complete solution history; derived fields are resampled.
-    IF (ASSOCIATED(sol%u)) DEALLOCATE(sol%u)
-    IF (ASSOCIATED(sol%q)) DEALLOCATE(sol%q)
-    IF (ASSOCIATED(sol%u_tilde)) DEALLOCATE(sol%u_tilde)
-    ALLOCATE(sol%u, SOURCE=this%u)
-    ALLOCATE(sol%q, SOURCE=this%q)
-    ALLOCATE(sol%u_tilde, SOURCE=this%trace)
-    sol%u0 = this%u0
+    CALL this%restore_plasma()
     time = this%clock
     sol%Nt = this%steps
     IF (ALLOCATED(this%impurity_concentrations)) THEN
@@ -164,6 +161,19 @@ CONTAINS
     phys%feedback_derivative_history = this%derivative
     phys%feedback_derivative_history_xpr = this%derivative_xpr
   END SUBROUTINE restore_accepted_step
+
+  SUBROUTINE restore_accepted_plasma(this)
+    CLASS(accepted_step_state_t), INTENT(IN) :: this
+
+    ! Restore on the accepted mesh, without changing trial clocks or actuators.
+    IF (ASSOCIATED(sol%u)) DEALLOCATE(sol%u)
+    IF (ASSOCIATED(sol%q)) DEALLOCATE(sol%q)
+    IF (ASSOCIATED(sol%u_tilde)) DEALLOCATE(sol%u_tilde)
+    ALLOCATE(sol%u, SOURCE=this%u)
+    ALLOCATE(sol%q, SOURCE=this%q)
+    ALLOCATE(sol%u_tilde, SOURCE=this%trace)
+    sol%u0 = this%u0
+  END SUBROUTINE restore_accepted_plasma
 
   SUBROUTINE capture_accepted_mesh(this)
     CLASS(accepted_step_state_t), INTENT(INOUT) :: this
@@ -205,7 +215,7 @@ CONTAINS
        IF (result%status%outcome == solve_success) THEN
           CALL remove_reached_target()
           previous_proposal = time%dt_next
-          clean_step = rejections == 0 .AND. .NOT. result%mesh_changed
+          clean_step = rejections == 0 .AND. .NOT. result%mesh_changed .AND. .NOT. result%predictor_fallback
           IF (adapt%adaptivity .AND. adapt%time_adapt) THEN
              IF (MOD(it,adapt%freq_t_adapt) == 0) clean_step = .FALSE.
           ENDIF
@@ -284,14 +294,205 @@ CONTAINS
     IF (time%legacy_input) THEN
        CALL solve_nonlinear_system(result)
     ELSE
-       CALL solve_nonlinear_system(result,accepted)
+       CALL solve_predicted_nonlinear_system(result,accepted)
        result%mesh_changed = ALLOCATED(accepted%original_mesh)
        IF (result%status%outcome == solve_retry) THEN
           CALL rollback_time_step(accepted)
           restart_adapt = accepted_restart_adapt
+          CALL predictor_history%clear()
+       ELSEIF (time%newton_predictor .AND. result%status%outcome == solve_success) THEN
+          IF (result%mesh_changed .OR. result%predictor_fallback) THEN
+             CALL predictor_history%clear()
+          ELSE
+             CALL predictor_history%remember(accepted%u,accepted%q,accepted%trace,accepted%clock%t)
+          ENDIF
        ENDIF
     ENDIF
   END SUBROUTINE solve_time_step_trial
+
+  SUBROUTINE solve_predicted_nonlinear_system(result, accepted)
+    TYPE(newton_result_t), INTENT(OUT) :: result
+    TYPE(accepted_step_state_t), INTENT(INOUT) :: accepted
+    LOGICAL :: predicted
+    INTEGER :: predicted_iterations, initial_checkpoint_iteration
+    REAL*8 :: weight
+
+    initial_checkpoint_iteration = ir_check
+    CALL apply_newton_prediction(accepted,predictor_history,predicted,weight)
+    CALL solve_nonlinear_system(result,accepted,predicted)
+    IF (.NOT. predicted) RETURN
+    result%predictor_used = .TRUE.
+    IF (result%status%outcome /= solve_retry) RETURN
+
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'NEWTON PREDICTOR FALLBACK at [s]: ', &
+         time%t*simpar%refval_time, '; ', TRIM(result%status%message)
+    predicted_iterations = result%iterations
+    CALL reset_predicted_newton_solve(accepted,initial_checkpoint_iteration)
+    CALL solve_nonlinear_system(result,accepted)
+    result%iterations = result%iterations+predicted_iterations
+    result%predictor_used = .TRUE.
+    result%predictor_fallback = .TRUE.
+  END SUBROUTINE solve_predicted_nonlinear_system
+
+  SUBROUTINE apply_newton_prediction(accepted, history, predicted, weight)
+    TYPE(accepted_step_state_t), INTENT(IN) :: accepted
+    TYPE(newton_predictor_t), INTENT(IN) :: history
+    LOGICAL, INTENT(OUT) :: predicted
+    REAL*8, INTENT(OUT) :: weight
+    TYPE(solver_status_t) :: status
+    INTEGER :: reduction
+    REAL*8 :: rate_change
+    LOGICAL :: rates_available
+
+    predicted = .FALSE.
+    weight = 0.d0
+    IF (.NOT. time%newton_predictor .OR. restart_adapt) RETURN
+    CALL measure_predictor_rate_change(history,accepted%u,accepted%q,accepted%trace, &
+         accepted%clock%t,rate_change,rates_available)
+    IF (.NOT. rates_available) THEN
+       weight = 0.d0
+       RETURN
+    ENDIF
+    IF (rate_change > time%newton_predictor_rate_limit) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'NEWTON PREDICTOR SKIPPED: relative rate change ', &
+            rate_change, ' exceeds limit ',time%newton_predictor_rate_limit
+       weight = 0.d0
+       RETURN
+    ENDIF
+    weight = history%weight(accepted%clock%t,time%dt)
+    IF (weight <= 0.d0) RETURN
+    DO reduction = 0, 3
+       status = solver_status_t()
+       IF (.NOT. history%apply(sol%u,sol%q,sol%u_tilde,weight)) &
+            status = solver_status_t(solve_retry,0,'Predictor history is unavailable on this mesh')
+       CALL agree_solver_status(status)
+       IF (status%outcome /= solve_success) EXIT
+       CALL check_newton_values(status)
+       IF (status%outcome == solve_success) THEN
+          predicted = physical_solution_is_admissible(sol%u)
+          IF (predicted) EXIT
+       ENDIF
+       CALL accepted%restore_plasma()
+       weight = weight/2.d0
+    ENDDO
+    IF (.NOT. predicted) THEN
+       CALL accepted%restore_plasma()
+       weight = 0.d0
+    ELSE
+       ! The first NR correction is measured from this guess, not from BDF u0.
+       uiter = sol%u
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'NEWTON PREDICTOR weight: ', weight
+    ENDIF
+  END SUBROUTINE apply_newton_prediction
+
+  SUBROUTINE measure_predictor_rate_change(history,u,q,trace,accepted_time,change,ready)
+    TYPE(newton_predictor_t), INTENT(IN) :: history
+    REAL*8, INTENT(IN) :: u(:),q(:),trace(:),accepted_time
+    REAL*8, INTENT(OUT) :: change
+    LOGICAL, INTENT(OUT) :: ready
+    LOGICAL, ALLOCATABLE :: volume_owned(:),trace_owned(:)
+    REAL*8 :: sums(3,phys%neq,3),denominator
+    INTEGER :: equation,field
+#ifdef PARALL
+    INTEGER :: ierr_rates
+#endif
+
+    change = 0.d0
+    CALL predictor_owned_points(SIZE(u)/phys%neq,SIZE(trace)/phys%neq,volume_owned,trace_owned)
+    CALL history%rate_sums(u,q,trace,accepted_time,phys%neq,volume_owned,trace_owned,sums,ready)
+#ifdef PARALL
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE,ready,1,MPI_LOGICAL,MPI_LAND,MPI_COMM_WORLD,ierr_rates)
+#endif
+    IF (.NOT. ready) RETURN
+#ifdef PARALL
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE,sums,SIZE(sums),MPI_REAL8,MPI_SUM,MPI_COMM_WORLD,ierr_rates)
+#endif
+    ready = finite_solver_values(RESHAPE(sums,[SIZE(sums)]))
+    IF (.NOT. ready) RETURN
+    DO field = 1, 3
+       DO equation = 1, phys%neq
+          denominator = MAX(sums(1,equation,field),sums(2,equation,field))
+          IF (denominator > 0.d0) change = MAX(change,SQRT(sums(3,equation,field)/denominator))
+       ENDDO
+    ENDDO
+  END SUBROUTINE measure_predictor_rate_change
+
+  SUBROUTINE predictor_owned_points(volume_points,trace_points,volume_owned,trace_owned)
+    INTEGER, INTENT(IN) :: volume_points,trace_points
+    LOGICAL, ALLOCATABLE, INTENT(OUT) :: volume_owned(:),trace_owned(:)
+    INTEGER :: element,face,first,itor,tor_owned,nodes_per_element
+#ifdef TOR3D
+    INTEGER :: block_size,offset
+#endif
+
+    ALLOCATE(volume_owned(volume_points),trace_owned(trace_points))
+    volume_owned = .FALSE.
+    trace_owned = .FALSE.
+    tor_owned = 1
+    nodes_per_element = Mesh%Nnodesperelem
+#ifdef TOR3D
+    tor_owned = numer%ntor/MPIvar%ntor
+    nodes_per_element = refElTor%Nnodes3D
+#endif
+    DO itor = 1, tor_owned
+       DO element = 1, Mesh%Nelems
+#ifdef PARALL
+          IF (Mesh%ghostElems(element) /= 0) CYCLE
+#endif
+          first = ((itor-1)*Mesh%Nelems+element-1)*nodes_per_element+1
+          volume_owned(first:first+nodes_per_element-1) = .TRUE.
+       ENDDO
+    ENDDO
+#ifdef TOR3D
+    ! Own each left poloidal face and lateral face once; omit the toroidal halo.
+    block_size = Mesh%Nelems*refElPol%Nnodes2D+(Mesh%Nfaces-Mesh%Ndir)*refElTor%Nfl
+    DO itor = 1, tor_owned
+       offset = (itor-1)*block_size
+       DO element = 1, Mesh%Nelems
+#ifdef PARALL
+          IF (Mesh%ghostElems(element) /= 0) CYCLE
+#endif
+          first = offset+(element-1)*refElPol%Nnodes2D+1
+          trace_owned(first:first+refElPol%Nnodes2D-1) = .TRUE.
+       ENDDO
+       DO face = 1, Mesh%Nfaces-Mesh%Ndir
+#ifdef PARALL
+          IF (Mesh%ghostFaces(face) /= 0) CYCLE
+#endif
+          first = offset+Mesh%Nelems*refElPol%Nnodes2D+(face-1)*refElTor%Nfl+1
+          trace_owned(first:first+refElTor%Nfl-1) = .TRUE.
+       ENDDO
+    ENDDO
+#else
+    DO face = 1, Mesh%Nfaces
+#ifdef PARALL
+       IF (Mesh%ghostFaces(face) /= 0) CYCLE
+#endif
+       first = (face-1)*Mesh%Nnodesperface+1
+       trace_owned(first:first+Mesh%Nnodesperface-1) = .TRUE.
+    ENDDO
+#endif
+  END SUBROUTINE predictor_owned_points
+
+  SUBROUTINE reset_predicted_newton_solve(accepted,checkpoint_iteration)
+    TYPE(accepted_step_state_t), INTENT(IN) :: accepted
+    INTEGER, INTENT(IN) :: checkpoint_iteration
+
+    ! Predicted solves stop before remeshing; keep target time, controls and budgets.
+    CALL discard_trial_linear_system()
+    CALL accepted%restore_plasma()
+    CALL update_uconv_qconv(sol%u,sol%q)
+    errNR_adapt = HUGE(1.d0)
+    ir_adapt = 0
+    ir_check = checkpoint_iteration
+    divergence_counter_adapt = 0
+    physical_iterate_valid = .TRUE.
+    CALL seed_divergence_checkpoint()
+    CALL free_mesh_loc(Mesh_prec)
+    CALL deep_copy_mesh_struct(Mesh,Mesh_prec)
+    IF (ASSOCIATED(sol%u_tilde0)) sol%u_tilde0 = 0.d0
+    CALL reset_timestep_growth()
+  END SUBROUTINE reset_predicted_newton_solve
 
   SUBROUTINE rollback_time_step(accepted)
     TYPE(accepted_step_state_t), INTENT(IN) :: accepted
@@ -369,12 +570,16 @@ CONTAINS
     ENDIF
   END SUBROUTINE handle_newton_result
 
-  SUBROUTINE solve_nonlinear_system(result, accepted)
+  SUBROUTINE solve_nonlinear_system(result, accepted, predicted)
     TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
     TYPE(newton_result_t), INTENT(OUT) :: result
+    LOGICAL, OPTIONAL, INTENT(IN) :: predicted
+    LOGICAL :: use_prediction
 
     result = newton_result_t()
-    CALL update_uiter()
+    use_prediction = .FALSE.
+    IF (PRESENT(predicted)) use_prediction = predicted
+    IF (.NOT. use_prediction) CALL update_uiter()
     errNR = HUGE(1.d0)
     ir = 1
     DO WHILE (ir <= numer%nrp)
@@ -390,8 +595,16 @@ CONTAINS
           RETURN
        ENDIF
        IF (newton_refinement_required(errNR,physical_iterate_valid,ir)) THEN
+          IF (use_prediction) THEN
+             result%status = solver_status_t(solve_retry,0,'Predicted Newton solve requires divergence recovery')
+             RETURN
+          ENDIF
           IF (recover_newton_divergence(accepted)) CYCLE
           result%status = solver_status_t(solve_retry, 0, 'Newton divergence or admissibility recovery exhausted')
+          RETURN
+       ENDIF
+       IF (use_prediction .AND. newton_mesh_refinement_requested()) THEN
+          result%status = solver_status_t(solve_retry,0,'Predicted Newton solve requires mesh refinement')
           RETURN
        ENDIF
        CALL update_newton_checkpoint_and_refine(result%status,accepted)
@@ -585,7 +798,7 @@ CONTAINS
     ENDIF
 
     ! Call adaptivity if one of the following conditions is respected
-    IF ((adapt%adaptivity) .AND. ((adapt%osc_adapt .AND. (max_osc .GT. adapt%osc_tol)) .OR. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)))) THEN !  .or. (flag)) THEN
+    IF (newton_mesh_refinement_requested()) THEN
 
        IF (adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol) THEN
           IF (.NOT. prepare_oscillation_refinement()) THEN
@@ -630,6 +843,12 @@ CONTAINS
 
     ENDIF
   END SUBROUTINE update_newton_checkpoint_and_refine
+
+  LOGICAL FUNCTION newton_mesh_refinement_requested() RESULT(requested)
+    requested = adapt%adaptivity .AND. ( &
+         (adapt%osc_adapt .AND. max_osc > adapt%osc_tol) .OR. &
+         (adapt%NR_adapt .AND. MOD(ir,adapt%freq_NR_adapt) == 0))
+  END FUNCTION newton_mesh_refinement_requested
 
   SUBROUTINE exit_if_restart_complete()
     IF (time%legacy_input) THEN
@@ -874,6 +1093,7 @@ CONTAINS
 
     IF (PRESENT(accepted)) CALL accepted%capture_mesh()
     CALL reset_timestep_growth()
+    CALL predictor_history%clear()
     field_frame = time%it
 
     ! Start timing
@@ -1483,6 +1703,7 @@ CONTAINS
   ENDSUBROUTINE set_parameters
 
   SUBROUTINE initialize_solu0_uiter_uconv()
+    CALL predictor_history%clear()
     ALLOCATE(uiter(SIZE(sol%u)))
     ALLOCATE(uiter_best(SIZE(sol%u)))
     ALLOCATE(qiter_best(SIZE(sol%q)))

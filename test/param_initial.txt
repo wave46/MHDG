@@ -184,6 +184,9 @@
                                         ! 0 = dt is not modified
                                         ! 1 = ...
     tis                 = 1             ! Time integration scheme (1-7)
+    ! Optional Newton initial guess; requires an explicit physical time_mode and BDF1.
+    newton_predictor = .false.
+    newton_predictor_rate_limit = 0.35    ! Maximum relative change between successive accepted rates
 /
 
 &PHYS_LST
