@@ -1,6 +1,7 @@
 PROGRAM test_linear_solve_status
   USE solver_status
   USE globals
+  USE Main_utils, ONLY: check_newton_values
   USE MPI_OMP, ONLY: init_MPI_OMP, MPIvar
   USE mpi, ONLY: MPI_FINALIZE
 #ifdef WITH_PASTIX
@@ -37,6 +38,20 @@ PROGRAM test_linear_solve_status
   IF (status%outcome == solve_success) ERROR STOP 'unfinished PETSc solve accepted'
   status = petsc_convergence_status(2)
   IF (status%outcome /= solve_success) ERROR STOP 'converged PETSc solve rejected'
+
+  ALLOCATE(sol%u(2),sol%q(4),sol%u_tilde(2))
+  sol%u = 1.d0
+  sol%q = 2.d0
+  sol%u_tilde = [11.d0,12.d0]
+  CALL check_newton_values(status)
+  IF (status%outcome /= solve_success) ERROR STOP 'finite Newton iterate rejected'
+  IF (MPIvar%glob_id == MPIvar%glob_size-1) sol%q(1) = ieee_value(0.d0,ieee_positive_inf)
+  CALL check_newton_values(status)
+  IF (status%outcome /= solve_retry) ERROR STOP 'nonfinite gradient not rejected collectively'
+  sol%q = 2.d0
+  CALL check_newton_values(status)
+  IF (status%outcome /= solve_success) ERROR STOP 'Newton status not reset after failure'
+  DEALLOCATE(sol%u,sol%q,sol%u_tilde)
 
 #ifdef WITH_PASTIX
   utils%timing = .FALSE.

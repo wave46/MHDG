@@ -6,6 +6,9 @@
 
 MODULE Main_utils
 
+  USE solver_status, ONLY: solver_status_t, solve_success, solve_retry, finite_solver_values, &
+       agree_solver_status, stop_on_solver_failure
+  USE adaptivity_indicator_module, ONLY: compute_error_oscillations
   USE input_files, ONLY: resolve_input_filename
   USE in_out
   USE GMSH_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5, gmsh_mesh2d_write, hdf5_save_mesh_struct
@@ -34,6 +37,12 @@ MODULE Main_utils
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
 
   IMPLICIT NONE
+
+  TYPE :: newton_result_t
+     TYPE(solver_status_t) :: status
+     INTEGER :: iterations = 0
+     LOGICAL :: iteration_limit_reached = .FALSE.
+  END TYPE newton_result_t
 
   INTEGER                      :: Np, Nel, Nfp, Nf, Ndim, Nthreads
   INTEGER                      :: it, ir, ir_check, it0, nts, nu, nut, nb_args, IERR, k, i,is, count_adapt = 0, ir_adapt = 0, checkpoint = 1, divergence_counter_adapt = 0, convergence_counter = 1, order
@@ -76,6 +85,276 @@ MODULE Main_utils
 
 
 CONTAINS
+
+  SUBROUTINE handle_newton_result(result)
+    TYPE(newton_result_t), INTENT(IN) :: result
+
+    IF (result%status%outcome == solve_success) RETURN
+    IF (result%iteration_limit_reached .AND. time%legacy_input .AND. &
+        (switch%steady .OR. switch%psdtime .OR. (nb_args == 1 .AND. .NOT. switch%ME))) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) &
+            'Warning: Newton iteration limit reached; retaining finite initialization/steady-state output. Residual: ', errNR
+    ELSE
+       CALL stop_on_solver_failure(result%status, 'Newton solve')
+    ENDIF
+  END SUBROUTINE handle_newton_result
+
+  SUBROUTINE solve_newton_step(result)
+    TYPE(newton_result_t), INTENT(OUT) :: result
+
+    result = newton_result_t()
+    CALL update_uiter()
+    errNR = HUGE(1.d0)
+    ir = 1
+    DO WHILE (ir <= numer%nrp)
+       result%iterations = result%iterations+1
+       CALL compute_newton_update(result%status)
+       IF (result%status%outcome /= solve_success) RETURN
+       CALL check_newton_convergence(result%status)
+       IF (result%status%outcome /= solve_success) RETURN
+
+       IF (errNR < numer%tNR .AND. physical_iterate_valid) THEN
+          CALL save_converged_newton_solution()
+          RETURN
+       ELSEIF (newton_refinement_required(errNR,physical_iterate_valid,ir)) THEN
+          IF (recover_newton_divergence()) CYCLE
+          result%status = solver_status_t(solve_retry, 0, 'Newton divergence or admissibility recovery exhausted')
+          RETURN
+       ELSE
+          CALL update_newton_checkpoint_and_refine(result%status)
+          IF (result%status%outcome /= solve_success) RETURN
+       ENDIF
+
+       IF (MPIvar%glob_id == 0) THEN
+          WRITE(6,*) '*********************************'
+          WRITE(6,*) ' '
+          WRITE(6,*) ' '
+       ENDIF
+       ir = ir+1
+    ENDDO
+    result%iteration_limit_reached = .TRUE.
+    result%status = solver_status_t(solve_retry, 0, 'Newton iteration limit reached')
+  END SUBROUTINE solve_newton_step
+
+  SUBROUTINE compute_newton_update(status)
+    TYPE(solver_status_t), INTENT(OUT) :: status
+
+    ! update nonconstant dumping factor
+    CALL update_dumpnr()
+
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE (6, *) "***** NR iteration: ", ir, "*****"
+       WRITE (6, *) "NR dumping factor:  ",  numer%dumpnr
+    ENDIF
+
+    !update 1D transport stuff if used
+    IF (switch%transport_1d) THEN
+        CALL update_reduced_transport_profiles()
+    ENDIF
+
+    ! Compute Jacobian
+    CALL HDG_computeJacobian()
+    ! Set boundary conditions
+    CALL hdg_BC()
+    ! Compute elemental mapping
+    CALL hdg_Mapping()
+    ! Assembly the global matrix
+    CALL hdg_Assembly()
+    ! Solve linear system
+#ifdef WITH_PETSC
+    CALL solve_global_system(status, ir)
+#else
+    CALL solve_global_system(status)
+#endif
+    IF (status%outcome /= solve_success) RETURN
+    ! Compute element-by-element solution
+    CALL compute_element_solution()
+    CALL check_newton_values(status)
+    IF (status%outcome /= solve_success) RETURN
+    IF (adapt%adaptivity .AND. restart_adapt) THEN
+       CALL adaptivity()
+       DEALLOCATE(uiter)
+       ALLOCATE(uiter(SIZE(sol%u)))
+       uiter = 0.
+    ENDIF
+  END SUBROUTINE compute_newton_update
+
+  SUBROUTINE check_newton_values(status)
+    TYPE(solver_status_t), INTENT(OUT) :: status
+
+    status = solver_status_t()
+    IF (.NOT. finite_solver_values(sol%u) .OR. .NOT. finite_solver_values(sol%q) .OR. &
+        .NOT. finite_solver_values(sol%u_tilde)) &
+         status = solver_status_t(solve_retry, 0, 'Nonfinite Newton solution or gradient')
+    CALL agree_solver_status(status)
+  END SUBROUTINE check_newton_values
+
+  SUBROUTINE check_newton_convergence(status)
+    TYPE(solver_status_t), INTENT(OUT) :: status
+
+    status = solver_status_t()
+    ! Compute error on oscillations, print max value of oscillation and save solution as check-point if oscillations are lower than threshold
+    physical_iterate_valid = .TRUE.
+    IF (adapt%adaptivity .AND. adapt%div_adapt) THEN
+       physical_iterate_valid = physical_solution_is_admissible(sol%u)
+       IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id .EQ. 0) &
+            WRITE(*,*) 'NR iterate is not physically admissible; recovery checkpoint retained.'
+    ENDIF
+    IF (adapt%adaptivity) THEN
+       CALL compute_error_oscillations(oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec, &
+            checkpoint_allowed=physical_iterate_valid)
+    ENDIF
+    ! Save solution
+    IF (switch%saveNR) THEN
+       CALL setSolName(save_name, mesh_name, ir, .FALSE., .TRUE.)
+       CALL HDF5_save_solution(save_name)
+    END IF
+
+    ! Check convergence of Newton-Raphson
+    errNR = computeResidual(sol%u, uiter, 1.)
+    errNR = errNR/numer%dumpnr
+
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE (*, *)   "Error:                  ", errNR
+#ifdef WITH_PETSC
+       IF(lssolver%sollib .EQ. 3) THEN
+          WRITE (*, *) "Relative Residue PETSc: ", matPETSC%residue
+          WRITE (*,*)  "Number of Iterations:   ", matPETSC%its
+          WRITE (*,*)  "Converged Reason:       ", matPETSC%convergedReason
+       END IF
+#endif
+    ENDIF
+
+    IF (.NOT. finite_solver_values([errNR])) &
+         status = solver_status_t(solve_retry, 0, 'Nonfinite Newton residual')
+    CALL agree_solver_status(status)
+  END SUBROUTINE check_newton_convergence
+
+  SUBROUTINE save_converged_newton_solution()
+    ! The converged iterate is the completed solution checkpoint.
+    WRITE(*,*) "Solution saved as checkpoint."
+    CALL update_uconv_qconv(sol%u, sol%q)
+    errNR_adapt = 1e10
+    ir_adapt = 0
+    ir_check = 1
+    CALL free_mesh_loc(Mesh_prec)
+    CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
+  END SUBROUTINE save_converged_newton_solution
+
+  LOGICAL FUNCTION recover_newton_divergence() RESULT(recovered)
+    IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id .EQ. 0) THEN
+       IF (errNR .LT. numer%tNR) THEN
+          WRITE(*,*) 'NR residual converged, but solution is physically inadmissible; requesting refinement.'
+       ELSEIF (ir .GE. numer%nrp .AND. errNR .LE. numer%div) THEN
+          WRITE(*,*) 'NR iteration limit reached with physically inadmissible solution; requesting refinement.'
+       ENDIF
+    ENDIF
+    recovered = prepare_divergence_refinement()
+    IF (recovered) THEN
+       IF (MPIvar%glob_id .EQ. 0) THEN
+          IF (.NOT. physical_iterate_valid .AND. errNR .LE. numer%div) THEN
+             WRITE(*,*) 'NR physical admissibility recovery: refining from best admissible iterate; retry ', &
+                  divergence_refinements, ' of ', adapt%max_divergence_refinements
+          ELSE
+             WRITE(*,*) 'NR divergence: refining from best physically admissible iterate; retry ', &
+                  divergence_refinements, ' of ', adapt%max_divergence_refinements
+          ENDIF
+       ENDIF
+       ! Reload this attempt's equilibrium, without advancing the
+       ! physical timestep or updating the puff/feedback controller.
+       CALL adaptivity(preserve_history=.TRUE.)
+       CALL update_uconv_qconv(sol%u, sol%q)
+       IF (SIZE(uiter) .NE. SIZE(sol%u)) THEN
+          DEALLOCATE(uiter)
+          ALLOCATE(uiter(SIZE(sol%u)))
+       ENDIF
+       uiter = sol%u
+       ir_check = 0
+       CALL free_mesh_loc(Mesh_prec)
+       CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
+       ir = 1
+       RETURN
+    ENDIF
+    IF (adapt%adaptivity .AND. adapt%div_adapt .AND. MPIvar%glob_id .EQ. 0) THEN
+       IF (.NOT. divergence_checkpoint_available) THEN
+          WRITE(*,*) 'NR refinement recovery stopped: no physically admissible checkpoint on this mesh.'
+       ELSE
+          WRITE(*,*) 'NR refinement recovery stopped: per-timestep refinement limit reached: ', &
+               adapt%max_divergence_refinements
+          WRITE(*,*) 'Timestep: ', time%it, ' NR iteration: ', ir, ' max oscillation: ', max_osc
+          WRITE(*,*) 'Divergence refinements: ', divergence_refinements, ' oscillation refinements: ', &
+               oscillation_refinements
+       ENDIF
+    ENDIF
+  END FUNCTION recover_newton_divergence
+
+  SUBROUTINE update_newton_checkpoint_and_refine(status)
+    TYPE(solver_status_t), INTENT(OUT) :: status
+
+    status = solver_status_t()
+    uiter = sol%u
+    !! ADAPTIVITY
+    IF(update_best_newton_checkpoint(errNR,ir,physical_iterate_valid)) THEN
+       ! if the NR is the lowest reached so far, then save it as best check-point
+       IF (MPIvar%glob_id .EQ. 0) THEN
+          WRITE(*,*) "Solution saved as last checkpoint."
+       ENDIF
+
+       divergence_counter_adapt = 0
+    ELSEIF(errNR .GT. errNR_adapt) THEN
+       divergence_counter_adapt = divergence_counter_adapt + 1
+    ENDIF
+
+    IF (MPIvar%glob_id .EQ. 0) THEN
+       WRITE(*,*) "ir_check: ", ir_check
+    ENDIF
+
+    ! Call adaptivity if one of the following conditions is respected
+    IF ((adapt%adaptivity) .AND. ((adapt%osc_adapt .AND. (max_osc .GT. adapt%osc_tol)) .OR. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)))) THEN !  .or. (flag)) THEN
+
+       IF (adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol) THEN
+          IF (.NOT. prepare_oscillation_refinement()) THEN
+             IF (MPIvar%glob_id .EQ. 0) THEN
+                WRITE(*,*) 'Oscillation refinement stopped: per-timestep refinement limit reached: ', &
+                     adapt%max_oscillation_refinements
+                WRITE(*,*) 'Timestep: ', time%it, ' NR iteration: ', ir, ' max oscillation: ', max_osc
+                WRITE(*,*) 'Divergence refinements: ', divergence_refinements, ' oscillation refinements: ', &
+                     oscillation_refinements
+                FLUSH(6)
+             ENDIF
+             status = solver_status_t(solve_retry, 0, 'Oscillation refinement budget exhausted')
+             RETURN
+          ENDIF
+          IF (MPIvar%glob_id .EQ. 0) WRITE(*,*) 'Oscillation refinement: retry ', &
+               oscillation_refinements, ' of ', adapt%max_oscillation_refinements
+       ENDIF
+
+       CALL adaptivity(preserve_history=adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol)
+
+       IF((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)) THEN
+          ! Update check-point solution to the one projected on the new mesh
+          DEALLOCATE(sol%u_conv)
+          ALLOCATE(sol%u_conv(SIZE(sol%u)))
+          sol%u_conv = sol%u
+          DEALLOCATE(sol%q_conv)
+          ALLOCATE(sol%q_conv(SIZE(sol%q)))
+          sol%q_conv = sol%q
+       ENDIF
+
+       ! update uiter to new mapped solution
+       CALL update_uiter()
+
+       IF(ir_check .NE. numer%nrp) THEN
+          ir = ir_check
+       ELSE
+          ir = 0
+       ENDIF
+
+       CALL free_mesh_loc(Mesh_prec)
+       CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
+
+    ENDIF
+  END SUBROUTINE update_newton_checkpoint_and_refine
 
   SUBROUTINE exit_if_restart_complete()
     IF (time%legacy_input) THEN

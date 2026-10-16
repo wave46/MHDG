@@ -54,18 +54,22 @@ CONTAINS
     CALL MPI_BCAST(status%message, LEN(status%message), MPI_CHARACTER, owner, MPI_COMM_WORLD, ierr)
   END SUBROUTINE agree_solver_status
 
-  SUBROUTINE stop_on_solver_failure(status)
+  SUBROUTINE stop_on_solver_failure(status, context)
     TYPE(solver_status_t), INTENT(IN) :: status
+    CHARACTER(LEN=*), OPTIONAL, INTENT(IN) :: context
+    CHARACTER(LEN=32) :: label
     INTEGER :: ierr
 
     IF (status%outcome == solve_success) RETURN
+    label = 'Linear solve'
+    IF (PRESENT(context)) label = context
     IF (MPIvar%glob_id == 0) THEN
-       WRITE(*,*) 'Linear solve failed: ', TRIM(status%message)
+       WRITE(*,*) TRIM(label), ' failed: ', TRIM(status%message)
        WRITE(*,*) 'Failure outcome, backend code: ', status%outcome, status%backend_code
        FLUSH(6)
     ENDIF
     CALL MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
-    ERROR STOP 'Linear solve failed'
+    ERROR STOP 'Solver failed'
   END SUBROUTINE stop_on_solver_failure
 
 END MODULE solver_status
