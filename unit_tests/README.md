@@ -213,3 +213,12 @@ MPI builds additionally check owned source values and destination ghost points.
 It uses generated meshes and the existing reference-node file, with no plasma
 solve or external case data. Pass the same `MODE`, model and build options as
 the current solver cache; no clean is needed when those options are unchanged.
+
+
+`make check-linear-solve-status` checks collective failure propagation, PETSc KSP
+reason classification without requiring PETSc, and (with PaStiX enabled) real
+diagonal solves followed by NaN-matrix/Inf-RHS rejection and backend rebuilding.
+It verifies that failure leaves the saved trace untouched and releases borrowed
+matrix storage. Use the existing build configuration; the target runs one MPI
+rank. The resulting `lib/linear_solve_status_check` can also run under MPI.
+PETSc runtime/library-API coverage requires a PETSc build on an equipped machine.

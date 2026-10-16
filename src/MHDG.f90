@@ -1,10 +1,12 @@
 PROGRAM MHDG
+  USE solver_status, ONLY: solver_status_t, stop_on_solver_failure
   USE Main_utils
   USE MPI_OMP
   USE adaptivity_indicator_module, ONLY: compute_error_oscillations
 
   IMPLICIT NONE
   LOGICAL :: time_finished
+  TYPE(solver_status_t) :: linear_status
 
   ! Initialize MPI
   CALL init_MPI_OMP()
@@ -254,10 +256,11 @@ PROGRAM MHDG
         CALL hdg_Assembly()
         ! Solve linear system
 #ifdef WITH_PETSC
-        CALL solve_global_system(ir)
+        CALL solve_global_system(linear_status, ir)
 #else
-        CALL solve_global_system()
+        CALL solve_global_system(linear_status)
 #endif
+        CALL stop_on_solver_failure(linear_status)
         ! Compute element-by-element solution
         CALL compute_element_solution()
         ! Check for NaN (should work with optimization flags)

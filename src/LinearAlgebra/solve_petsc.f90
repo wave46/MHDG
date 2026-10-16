@@ -266,9 +266,11 @@ CONTAINS
   !***********************************************
   ! Solve problem with PETSC
   !***********************************************
-  SUBROUTINE solve_mat_PETSC(matPETSC, ir)
+  SUBROUTINE solve_mat_PETSC(matPETSC, ir, error_code)
     TYPE(PETSC_STRUC)     :: matPETSC
     INTEGER, INTENT(IN)   :: ir
+    INTEGER, INTENT(OUT)  :: error_code
+    INTEGER :: collective_reason
     REAL*8                :: tps, tpe
     INTEGER               :: cks, clock_rate, cke
     !PetscViewer           :: viewer
@@ -279,6 +281,7 @@ CONTAINS
     PetscViewerAndFormat  :: vf
     PetscErrorCode        :: ierr
 
+    error_code = 0
     cks = 0
     cke = 0
 
@@ -388,10 +391,17 @@ CONTAINS
     !call MatView(matPETSC%matK, viewer, ierr)
 
 
-    CALL KSPSolve(matPETSC%ksp, matPETSC%rhs_vec, matPETSC%solPETSC_vec, ierr); CHKERRA(ierr)
+    CALL KSPSolve(matPETSC%ksp, matPETSC%rhs_vec, matPETSC%solPETSC_vec, ierr)
+    error_code = ABS(INT(ierr))
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, error_code, 1, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, ierr)
+    IF (error_code /= 0) RETURN
 
-    CALL KSPGetIterationNumber(matPETSC%ksp,matPETSC%its,ierr)
-    CALL KSPGetConvergedReason(matPETSC%ksp, matPETSC%convergedReason, ierr)
+    CALL KSPGetIterationNumber(matPETSC%ksp,matPETSC%its,ierr); CHKERRA(ierr)
+    CALL KSPGetConvergedReason(matPETSC%ksp, matPETSC%convergedReason, ierr); CHKERRA(ierr)
+    collective_reason = INT(matPETSC%convergedReason)
+    CALL MPI_ALLREDUCE(MPI_IN_PLACE, collective_reason, 1, MPI_INTEGER, MPI_MIN, MPI_COMM_WORLD, ierr)
+    matPETSC%convergedReason = collective_reason
+    IF (collective_reason <= 0) RETURN
 
     ! compute the unpreconditioned relative residue
     CALL compute_residue

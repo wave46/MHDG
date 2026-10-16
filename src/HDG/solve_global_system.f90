@@ -5,14 +5,15 @@
 ! Solve the global system
 !*****************************************
 #ifdef WITH_PETSC
-   SUBROUTINE solve_global_system(ir)
+   SUBROUTINE solve_global_system(status, ir)
 #else
-   SUBROUTINE solve_global_system()
+   SUBROUTINE solve_global_system(status)
 #endif
+  USE solver_status
   USE globals
   USE LinearAlgebra
 #ifdef WITH_PASTIX
-  USE solve_pastix, only: matPASTIX, init_mat_PASTIX, build_mat_PASTIX, check_mat_PASTIX, anal_mat_PASTIX, LU_mat_pastix, solve_mat_PASTIX
+  USE solve_pastix, only: matPASTIX, init_mat_PASTIX, build_mat_PASTIX, check_mat_PASTIX, anal_mat_PASTIX, LU_mat_pastix, solve_mat_PASTIX, terminate_mat_PASTIX
 #endif
 #ifdef WITH_PSBLAS
   USE solve_psblas
@@ -30,6 +31,8 @@
 #ifdef WITH_PETSC
   INTEGER, INTENT(IN) :: ir
 #endif
+  TYPE(solver_status_t), INTENT(OUT) :: status
+  INTEGER :: backend_error
   REAL, ALLOCATABLE   :: rhspert(:)
   REAL                :: pertamp, errsol
   INTEGER*4           :: seed(34)
@@ -67,6 +70,14 @@
   ! Save rhs for accuracy check
   !********************************
   NULLIFY(u_tilde_check)
+  status = solver_status_t()
+  IF (.NOT. finite_solver_values(matK%vals) .OR. .NOT. finite_solver_values(rhs%vals)) &
+       status = solver_status_t(solve_retry, 0, 'Nonfinite assembled matrix or RHS')
+  CALL agree_solver_status(status)
+  IF (status%outcome /= solve_success) THEN
+     CALL discard_failed_solve()
+     RETURN
+  ENDIF
   check_error_amplification = switch%ckeramp .AND. lssolver%sollib .EQ. 1
   IF (check_error_amplification) THEN
      errsol = 0.
@@ -102,12 +113,14 @@
         !#endif
      END IF
      CALL check_mat_PASTIX(matPASTIX)
-     CALL anal_mat_PASTIX(matPASTIX)
-     CALL LU_mat_pastix(matPASTIX)
-     CALL solve_mat_PASTIX(matPASTIX)
+     CALL anal_mat_PASTIX(matPASTIX, backend_error)
+     IF (backend_failed(backend_error, 'PaStiX analysis')) RETURN
+     CALL LU_mat_pastix(matPASTIX, backend_error)
+     IF (backend_failed(backend_error, 'PaStiX factorization')) RETURN
+     CALL solve_mat_PASTIX(matPASTIX, backend_error)
+     IF (backend_failed(backend_error, 'PaStiX solve')) RETURN
 #else
-     WRITE (6, *) "Trying to use PASTIX but compiled without option -DWITH_PASTIX"
-     STOP
+     IF (backend_failed(-1, 'PASTIX backend is not compiled')) RETURN
 #endif
   ELSE IF (lssolver%sollib .EQ. 2) THEN
 #ifdef WITH_PSBLAS
@@ -127,8 +140,7 @@
         CALL solve_mat_PSBLAS(matPSBLAS)
      END IF
 #else
-     WRITE (6, *) "Trying to use PSBLAS but compiled without option -DWITH_PSBLAS"
-     STOP
+     IF (backend_failed(-1, 'PSBLAS backend is not compiled')) RETURN
 #endif
   ELSE IF (lssolver%sollib .EQ. 3) THEN
 #ifdef WITH_PETSC
@@ -149,14 +161,23 @@
         CALL build_mat_PETSC(matPETSC)
         CALL extractInitialGuess_PETSC()
      ENDIF
-     CALL solve_mat_PETSC(matPETSC, ir)
+     CALL solve_mat_PETSC(matPETSC, ir, backend_error)
+     IF (backend_failed(backend_error, 'PETSc solve API')) RETURN
+     status = petsc_convergence_status(INT(matPETSC%convergedReason))
+     CALL agree_solver_status(status)
+     IF (status%outcome /= solve_success) THEN
+        CALL discard_failed_solve()
+        RETURN
+     ENDIF
 #else
-     WRITE (6, *) "Trying to use PETSc but compiled without option -DWITH_PETSC"
-     STOP
+     IF (backend_failed(-1, 'PETSc backend is not compiled')) RETURN
 #endif
 
+  ELSE
+     IF (backend_failed(-1, 'Unknown linear solver selection')) RETURN
   ENDIF
 
+  IF (invalid_linear_solution()) RETURN
 
   !********************************
   ! Store face solution
@@ -330,7 +351,9 @@
      matPASTIX%rhs = rhspert
 
      ! solve again..
-     CALL solve_mat_PASTIX(matPASTIX)
+     CALL solve_mat_PASTIX(matPASTIX, backend_error)
+     IF (backend_failed(backend_error, 'PaStiX perturbed solve')) RETURN
+     IF (invalid_linear_solution()) RETURN
 
      ! store the perturbed face solution in sol%u_tilde
      sol%u_tilde = u_tilde_check
@@ -420,6 +443,73 @@
   END IF
 
 CONTAINS
+
+  LOGICAL FUNCTION backend_failed(code, stage) RESULT(failed)
+    INTEGER, INTENT(IN) :: code
+    CHARACTER(LEN=*), INTENT(IN) :: stage
+
+    status = solver_status_t()
+    IF (code /= 0) status = solver_status_t(solve_fatal, code, stage)
+    CALL agree_solver_status(status)
+    failed = status%outcome /= solve_success
+    IF (failed) CALL discard_failed_solve()
+  END FUNCTION backend_failed
+
+  LOGICAL FUNCTION invalid_linear_solution() RESULT(failed)
+    LOGICAL :: finite
+#ifdef WITH_PETSC
+    REAL*8, ALLOCATABLE :: values(:)
+#endif
+
+    finite = .TRUE.
+    SELECT CASE (lssolver%sollib)
+    CASE (1)
+#ifdef WITH_PASTIX
+       finite = finite_solver_values(matPASTIX%rhs)
+#endif
+    CASE (2)
+#ifdef WITH_PSBLAS
+       finite = finite_solver_values(matPSBLAS%x%get_vect())
+#endif
+    CASE (3)
+#ifdef WITH_PETSC
+       ALLOCATE(values(matK%n))
+       CALL PETSC_retrieve_array(matPETSC%solPETSC_vec, values, matK%n)
+       finite = finite_solver_values(values)
+#endif
+    END SELECT
+    status = solver_status_t()
+    IF (.NOT. finite) status = solver_status_t(solve_retry, 0, 'Nonfinite linear solution')
+    CALL agree_solver_status(status)
+    failed = status%outcome /= solve_success
+    IF (failed) CALL discard_failed_solve()
+  END FUNCTION invalid_linear_solution
+
+  SUBROUTINE discard_failed_solve()
+    IF (ASSOCIATED(u_tilde_check)) THEN
+       sol%u_tilde = u_tilde_check
+       DEALLOCATE(u_tilde_check)
+    ENDIF
+    ! Detach backend views before freeing the matrix/RHS they reference.
+    IF (.NOT. matK%start) THEN
+       SELECT CASE (lssolver%sollib)
+       CASE (1)
+#ifdef WITH_PASTIX
+          CALL terminate_mat_PASTIX()
+#endif
+       CASE (2)
+#ifdef WITH_PSBLAS
+          CALL terminate_PSBLAS()
+#endif
+       CASE (3)
+#ifdef WITH_PETSC
+          CALL terminate_PETSC()
+#endif
+       END SELECT
+    ENDIF
+    matK%start = .TRUE.
+    CALL free_mat()
+  END SUBROUTINE discard_failed_solve
 
   SUBROUTINE storeFaceSolution
 
