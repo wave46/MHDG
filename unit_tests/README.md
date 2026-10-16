@@ -204,3 +204,12 @@ This verifies step machinery, not the moving-equilibrium physics trajectory.
 The magnetic-geometry checks cover all 16 COCOS identifiers, independent field/current
 coefficient fits, and selection with missing references or conflicting metadata.
 The existing series checks also cover COCOS preservation during conversion and sampling.
+
+
+`make check-divergence-refinement` also checks reusable mesh transfer: P1–P3
+polynomials on affine/curved meshes, solution and gradient layout, repeated
+application, rebuilding for another destination mesh, and BDF-history transfer.
+MPI builds additionally check owned source values and destination ghost points.
+It uses generated meshes and the existing reference-node file, with no plasma
+solve or external case data. Pass the same `MODE`, model and build options as
+the current solver cache; no clean is needed when those options are unchanged.

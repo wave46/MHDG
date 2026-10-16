@@ -337,8 +337,7 @@ PROGRAM MHDG
               ENDIF
               ! Reload this attempt's equilibrium, without advancing the
               ! physical timestep or updating the puff/feedback controller.
-              CALL adaptivity()
-              CALL project_u0_newmesh(preserve_history=.TRUE.)
+              CALL adaptivity(preserve_history=.TRUE.)
               CALL update_uconv_qconv(sol%u, sol%q)
               IF (SIZE(uiter) .NE. SIZE(sol%u)) THEN
                  DEALLOCATE(uiter)
@@ -404,11 +403,7 @@ PROGRAM MHDG
                       oscillation_refinements, ' of ', adapt%max_oscillation_refinements
               ENDIF
 
-              ! call adaptivity precedure
-              CALL adaptivity()
-
-              ! u0 also needs to be projected from old mesh to new mesh
-              CALL project_u0_newmesh(preserve_history=adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol)
+              CALL adaptivity(preserve_history=adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol)
 
               IF((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)) THEN
                  ! Update check-point solution to the one projected on the new mesh

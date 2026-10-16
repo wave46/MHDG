@@ -5,6 +5,10 @@ PROGRAM test_divergence_refinement
        divergence_checkpoint_available, errNR_adapt, ir_adapt, &
        uiter_best, qiter_best, divergence_refinements, oscillation_refinements, prepare_oscillation_refinement, &
        project_u0_newmesh, Mesh_prec, ir
+  USE adaptivity_projection_module, ONLY: mesh_transfer_t
+#ifdef PARALL
+  USE Communications, ONLY: gather_mesh, gather_solution
+#endif
   USE globals
   USE MPI_OMP, ONLY: MPIvar
   USE reference_element, ONLY: create_reference_element, free_reference_element_pol
@@ -17,6 +21,11 @@ PROGRAM test_divergence_refinement
   REAL*8 :: best_u(2), best_q(4), history(2,3), previous_coordinates(3,2), new_coordinates(4,2)
   REAL*8 :: expected(12,3), local_coordinate(2)
   LOGICAL :: recovered
+  TYPE(mesh_transfer_t) :: transfer
+#ifdef PARALL
+  INTEGER, POINTER :: old_connectivity(:,:) => NULL()
+  REAL*8, POINTER :: old_coordinates(:,:) => NULL()
+#endif
 
   CALL MPI_INIT(ierr_test)
   CALL MPI_COMM_RANK(MPI_COMM_WORLD, MPIvar%glob_id, ierr_test)
@@ -193,7 +202,15 @@ PROGRAM test_divergence_refinement
   adapt%NR_adapt = .TRUE.
   adapt%freq_NR_adapt = 5
   ir = 5
-  CALL project_u0_newmesh(preserve_history=.TRUE.)
+#ifdef PARALL
+  CALL gather_mesh(Mesh_prec, old_connectivity, old_coordinates)
+  CALL transfer%build(old_connectivity, old_coordinates, Mesh%T, Mesh%X)
+  DEALLOCATE(old_connectivity, old_coordinates)
+#else
+  CALL transfer%build(Mesh_prec%T, Mesh_prec%X, Mesh%T, Mesh%X)
+#endif
+  CALL project_u0_newmesh(preserve_history=.TRUE., transfer=transfer)
+  CALL transfer%clear()
   IF (.NOT. ALL(ieee_is_finite(sol%u0))) ERROR STOP 'nonfinite projected history'
   IF (MAXVAL(ABS(sol%u0-expected)) > 1.d-10) ERROR STOP 'time history not preserved on new mesh'
   IF (MAXVAL(ABS(Mesh%X-new_coordinates)) > 1.d-10 .OR. &
@@ -230,12 +247,176 @@ PROGRAM test_divergence_refinement
   IF (MAXVAL(ABS(sol%u0(:,1)-expected(:,1))) > 1.d-10 .OR. ANY(sol%u0(:,2:3) /= 0.d0)) &
     ERROR STOP 'default projection behavior changed'
   CALL free_reference_element_pol(refElPol)
+  CALL check_transfer_reuse()
+#ifdef PARALL
+  CALL check_transfer_ownership()
+#endif
   IF (MPIvar%glob_id == 0) WRITE(*,*) &
     'divergence refinement: checkpoint selection, retry bounds, MPI recovery and history projection PASS; ranks=', &
     MPIvar%glob_size
   CALL MPI_FINALIZE(ierr_test)
 
 CONTAINS
+
+  SUBROUTINE check_transfer_reuse()
+    TYPE(mesh_transfer_t) :: mapping
+    INTEGER :: degree, n, element, point, equation, component, old_node
+    INTEGER, ALLOCATABLE :: old_t(:,:), new_t(:,:)
+    REAL*8, ALLOCATABLE :: old_x(:,:), new_x(:,:), parent_points(:,:)
+    REAL*8, POINTER :: old_u(:) => NULL(), old_q(:) => NULL(), new_u(:) => NULL(), new_q(:) => NULL()
+    REAL*8 :: x, y, expected_value
+
+    ! Curved quadratic geometry puts some targets outside the straight-sided
+    ! candidate triangle. Distinct equation/gradient fields expose stride errors.
+    DO degree = 1, 3
+       CALL create_reference_element(refElPol,2,degree,verbose=0)
+       n = refElPol%Nnodes2D
+       ALLOCATE(old_t(1,n), new_t(2,n), old_x(n,2), new_x(2*n,2), parent_points(2*n,2))
+       ALLOCATE(old_u(n*phys%neq),old_q(n*phys%neq*2))
+       old_t(1,:) = [(point,point=1,n)]
+       DO point = 1, n
+          x = 0.5d0*(refElPol%coord2D(point,1)+1.d0)
+          y = 0.5d0*(refElPol%coord2D(point,2)+1.d0)
+          old_x(point,:) = curved_coordinates(x,y,degree)
+          DO equation = 1, phys%neq
+             old_u((point-1)*phys%neq+equation) = transfer_field(x,y,equation,degree)
+             DO component = 1, 2
+                old_q(((point-1)*phys%neq+equation-1)*2+component) = &
+                     transfer_field(x,y,equation+component+3,degree)
+             ENDDO
+          ENDDO
+          parent_points(point,:) = [0.5d0*x,y]
+          parent_points(n+point,:) = [0.5d0+0.5d0*x-0.5d0*y,y]
+       ENDDO
+       DO element = 1, 2
+          DO point = 1, n
+             old_node = (element-1)*n+point
+             new_t(element,point) = old_node
+             new_x(old_node,:) = curved_coordinates(parent_points(old_node,1),parent_points(old_node,2),degree)
+          ENDDO
+       ENDDO
+       CALL mapping%build(old_t, old_x, new_t, new_x)
+       CALL mapping%apply_to_pointers(old_u, new_u, old_q, new_q)
+       DO point = 1, 2*n
+          x = parent_points(point,1)
+          y = parent_points(point,2)
+          DO equation = 1, phys%neq
+             expected_value = transfer_field(x,y,equation,degree)
+             IF (ABS(new_u((point-1)*phys%neq+equation)-expected_value) > 1.d-9) &
+                  ERROR STOP 'cached solution polynomial projection'
+             DO component = 1, 2
+                expected_value = transfer_field(x,y,equation+component+3,degree)
+                IF (ABS(new_q(((point-1)*phys%neq+equation-1)*2+component)-expected_value) > 1.d-9) &
+                     ERROR STOP 'cached gradient polynomial projection'
+             ENDDO
+          ENDDO
+       ENDDO
+       ! Applying another field must use the same weights without retaining values.
+       old_u = -2.d0*old_u+3.d0
+       CALL mapping%apply(old_u, new_u)
+       DO point = 1, 2*n
+          DO equation = 1, phys%neq
+             expected_value = -2.d0*transfer_field(parent_points(point,1),parent_points(point,2),equation,degree)+3.d0
+             IF (ABS(new_u((point-1)*phys%neq+equation)-expected_value) > 1.d-9) &
+                  ERROR STOP 'repeated transfer retained previous solution'
+          ENDDO
+       ENDDO
+       ! A new mesh replaces the old map, including destination size and ordering.
+       CALL mapping%build(old_t, old_x, old_t, old_x)
+       CALL mapping%apply_to_pointers(old_u, new_u)
+       IF (SIZE(new_u) /= SIZE(old_u)) ERROR STOP 'rebuilt transfer destination size'
+       IF (MAXVAL(ABS(new_u-old_u)) > 1.d-9) ERROR STOP 'rebuilt transfer retained old geometry'
+       CALL mapping%clear()
+       DEALLOCATE(old_t,new_t,old_x,new_x,parent_points,old_u,old_q,new_u,new_q)
+       CALL free_reference_element_pol(refElPol)
+    ENDDO
+    IF (MPIvar%glob_id == 0) WRITE(*,*) 'Mesh transfer: P1-P3, curved geometry, u/q, repeated apply and rebuild PASS'
+  END SUBROUTINE check_transfer_reuse
+
+  FUNCTION curved_coordinates(x,y,degree) RESULT(coordinates)
+    REAL*8, INTENT(IN) :: x,y
+    INTEGER, INTENT(IN) :: degree
+    REAL*8 :: coordinates(2)
+
+    coordinates = [x,y]
+    IF (degree > 1) coordinates(2) = y-0.3d0*x*(1.d0-x-y)
+  END FUNCTION curved_coordinates
+
+  REAL*8 FUNCTION transfer_field(x,y,equation,degree) RESULT(value)
+    REAL*8, INTENT(IN) :: x,y
+    INTEGER, INTENT(IN) :: equation,degree
+
+    value = equation+0.3d0*equation*x-0.7d0*y
+    IF (degree >= 2) value = value+0.2d0*x*y-0.1d0*equation*x*x
+    IF (degree == 3) value = value+0.1d0*equation*x*y*y
+  END FUNCTION transfer_field
+
+#ifdef PARALL
+  SUBROUTINE check_transfer_ownership()
+    TYPE(Mesh_type) :: source_mesh
+    TYPE(mesh_transfer_t) :: mapping
+    INTEGER, POINTER :: source_t(:,:) => NULL()
+    REAL*8, POINTER :: source_x(:,:) => NULL(), source_u(:) => NULL(), source_q(:) => NULL()
+    REAL*8, POINTER :: projected_u(:) => NULL(), projected_q(:) => NULL()
+    REAL*8 :: local_u(12), local_q(24), destination_x(6,2), point_x(2), expected_value
+    INTEGER :: destination_t(2,3), owner, point, equation, component, index
+
+    CALL create_reference_element(refElPol,2,1,verbose=0)
+    source_mesh%Ndim = 2
+    source_mesh%Nelems = 2
+    source_mesh%Nnodes = 6
+    source_mesh%Nnodesperelem = 3
+    source_mesh%Nel_glob = MPIvar%glob_size
+    source_mesh%Nno_glob = 3*MPIvar%glob_size
+    ALLOCATE(source_mesh%X(6,2),source_mesh%T(2,3),source_mesh%ghostElems(2))
+    ALLOCATE(source_mesh%loc2glob_el(2),source_mesh%loc2glob_nodes(6))
+    owner = MOD(MPIvar%glob_id+1,MPIvar%glob_size)
+    source_mesh%ghostElems = [0,1]
+    source_mesh%loc2glob_el = [MPIvar%glob_id+1,owner+1]
+    source_mesh%loc2glob_nodes(:3) = [(point,point=1,3)]+3*MPIvar%glob_id
+    source_mesh%loc2glob_nodes(4:) = [(point,point=1,3)]+3*owner
+    source_mesh%T(1,:) = [1,2,3]
+    source_mesh%T(2,:) = [4,5,6]
+    destination_t = source_mesh%T
+    ! Wrong ghost geometry and values must never enter the global source.
+    source_mesh%X = -1.d6
+    local_u = -1.d6
+    local_q = -1.d6
+    DO point = 1, 3
+       point_x = 0.5d0*(refElPol%coord2D(point,:)+1.d0)
+       source_mesh%X(point,:) = point_x+[2.d0*MPIvar%glob_id,0.d0]
+       destination_x(point,:) = point_x+[2.d0*owner,0.d0]
+       destination_x(point+3,:) = source_mesh%X(point,:)
+       DO equation = 1, phys%neq
+          index = (point-1)*phys%neq+equation
+          local_u(index) = equation+SUM(source_mesh%X(point,:))
+          local_q(2*index-1:2*index) = [2.d0,3.d0]*local_u(index)
+       ENDDO
+    ENDDO
+    CALL gather_mesh(source_mesh,source_t,source_x)
+    CALL mapping%build(source_t,source_x,destination_t,destination_x)
+    CALL gather_solution(source_mesh,3,u_in=local_u,q_in=local_q,u_glob=source_u,q_glob=source_q)
+    CALL mapping%apply_to_pointers(source_u,projected_u,source_q,projected_q)
+    DO point = 1, 6
+       DO equation = 1, phys%neq
+          index = (point-1)*phys%neq+equation
+          expected_value = equation+SUM(destination_x(point,:))
+          IF (ABS(projected_u(index)-expected_value) > 1.d-9) ERROR STOP 'transfer source ownership'
+          DO component = 1, 2
+             IF (ABS(projected_q(2*index-2+component)-(component+1)*expected_value) > 1.d-9) THEN
+                WRITE(*,*) 'Ghost gradient rank/point/equation/component/actual/expected: ', &
+                     MPIvar%glob_id,point,equation,component,projected_q(2*index-2+component),(component+1)*expected_value
+                ERROR STOP 'transfer ghost destination gradient'
+             ENDIF
+          ENDDO
+       ENDDO
+    ENDDO
+    DEALLOCATE(source_t,source_x,source_u,source_q,projected_u,projected_q)
+    DEALLOCATE(source_mesh%X,source_mesh%T,source_mesh%ghostElems,source_mesh%loc2glob_el,source_mesh%loc2glob_nodes)
+    CALL free_reference_element_pol(refElPol)
+    IF (MPIvar%glob_id == 0) WRITE(*,*) 'Mesh transfer: owned source and local/remote ghost destinations PASS'
+  END SUBROUTINE check_transfer_ownership
+#endif
 
   SUBROUTINE check_refinement_budgets()
     INTEGER :: attempt

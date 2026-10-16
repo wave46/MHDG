@@ -16,8 +16,7 @@ MODULE Main_utils
   USE debug
   USE initialization
   USE adaptivity_common_module, ONLY: set_order_mesh
-  USE adaptivity_projection_module, ONLY: projectSolutionDifferentMeshes_general, &
-       projectSolutionDifferentMeshes_general_arrays
+  USE adaptivity_projection_module, ONLY: mesh_transfer_t
   USE external_heating
 #ifdef WITH_PETSC
    USE solve_petsc, only: matPETSC, InitPETSC, FinalizePETSC
@@ -45,7 +44,7 @@ MODULE Main_utils
 
   LOGICAL, ALLOCATABLE         :: mkelms(:)
   REAL*8                       :: dt, dt0, errNR, errNR_adapt, errlstime
-  REAL*8, ALLOCATABLE          :: uiter(:), L2err(:),u0_temp(:,:)
+  REAL*8, ALLOCATABLE          :: uiter(:), L2err(:)
   REAL*8, POINTER              :: uiter_best(:) => NULL(), qiter_best(:) => NULL()
   CHARACTER(LEN=1024)          :: mesh_name, mesh_input_name, save_name
   CHARACTER ( len = 255 )      :: gmsh_filename
@@ -304,7 +303,7 @@ CONTAINS
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
   END SUBROUTINE update_reduced_transport_profiles
 
-  SUBROUTINE adaptivity()
+  SUBROUTINE adaptivity(preserve_history)
 #ifdef WITH_PASTIX
     USE solve_pastix, only: terminate_mat_PASTIX
 #endif
@@ -314,6 +313,8 @@ CONTAINS
 #ifdef WITH_PSBLAS
     USE solve_psblas, only: terminate_PSBLAS
 #endif
+    LOGICAL, OPTIONAL, INTENT(IN) :: preserve_history
+    TYPE(mesh_transfer_t) :: transfer
     INTEGER :: field_frame
 
     field_frame = time%it
@@ -372,14 +373,8 @@ CONTAINS
     CALL gather_mesh(Mesh_prec,  T_glob = T_glob, X_glob = X_glob)
     CALL gather_solution(Mesh_in = Mesh_prec, Nnodesperelem = Mesh_prec%Nnodesperelem, u_in = sol%u_conv, q_in = sol%q_conv, u_glob = u_glob, q_glob = q_glob)
     ! Project the check-point solution to the new mesh
-    CALL projectSolutionDifferentMeshes_general(T_glob,X_glob,Mesh%T,Mesh%X, u_glob, q_glob, sol%u, sol%q)
-
-    DEALLOCATE(X_glob,T_glob, u_glob, q_glob)
-    NULLIFY(X_glob, T_glob, u_glob, q_glob)
-
-    ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
-    CALL gather_mesh(Mesh_in = Mesh, T_glob = T_glob, X_glob = X_glob)
-    CALL gather_solution(Mesh_in = Mesh, Nnodesperelem = Mesh%Nnodesperelem, u_in = sol%u, q_in = sol%q, u_glob = u_glob, q_glob = q_glob)
+    CALL transfer%build(T_glob, X_glob, Mesh%T, Mesh%X)
+    CALL transfer%apply_to_pointers(u_glob, sol%u, q_glob, sol%q)
 
     DEALLOCATE(X_glob,T_glob, u_glob, q_glob)
     NULLIFY(X_glob, T_glob, u_glob, q_glob)
@@ -389,7 +384,8 @@ CONTAINS
     Mesh%X = Mesh%X/phys%lscale
 
     ! Project the check-point solution to the new mesh
-    CALL projectSolutionDifferentMeshes_general(Mesh_prec%T,Mesh_prec%X,Mesh%T, Mesh%X, sol%u_conv, sol%q_conv, sol%u, sol%q)
+    CALL transfer%build(Mesh_prec%T, Mesh_prec%X, Mesh%T, Mesh%X)
+    CALL transfer%apply_to_pointers(sol%u_conv, sol%u, sol%q_conv, sol%q)
 
 #endif
     IF(MPIvar%glob_id .EQ. 0) THEN
@@ -474,6 +470,9 @@ CONTAINS
        timing%runtadapt = timing%runtadapt + (timing%cke1-timing%cks1)/REAL(timing%clock_rate1)
        timing%cputadapt = timing%cputadapt + timing%tpe1-timing%tps1
     END IF
+
+    ! Newton remeshing transfers history; between-step callers instead reseed u0.
+    IF (PRESENT(preserve_history)) CALL project_u0_newmesh(preserve_history, transfer)
 
   ENDSUBROUTINE adaptivity
 
@@ -1106,62 +1105,68 @@ ENDSUBROUTINE update_delta_te
     END DO
   ENDSUBROUTINE check_for_NaNs
 
-  SUBROUTINE project_u0_newmesh(preserve_history)
+  SUBROUTINE project_u0_newmesh(preserve_history, transfer)
     LOGICAL, OPTIONAL, INTENT(IN) :: preserve_history
+    TYPE(mesh_transfer_t), OPTIONAL, INTENT(IN) :: transfer
+    TYPE(mesh_transfer_t) :: local_transfer
+    REAL*8, ALLOCATABLE :: previous_history(:,:)
     LOGICAL :: retain_history
-    INTEGER :: history_id, n_history
 
     retain_history = .FALSE.
     IF (PRESENT(preserve_history)) retain_history = preserve_history
 
     IF(retain_history .OR. .NOT. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0))) THEN
-       ALLOCATE(u0_temp(SIZE(sol%u0,1),SIZE(sol%u0,2)))
-       u0_temp = sol%u0
+       previous_history = sol%u0
     ELSE
-       ALLOCATE(u0_temp(SIZE(sol%u_conv),SIZE(sol%u0,2)))
-       u0_temp = 0
-       u0_temp(:,1) = sol%u_conv
+       ALLOCATE(previous_history(SIZE(sol%u_conv),SIZE(sol%u0,2)))
+       previous_history = 0.d0
+       previous_history(:,1) = sol%u_conv
     ENDIF
 
     DEALLOCATE(sol%u0)
     ALLOCATE(sol%u0(Mesh%Nelems*Mesh%Nnodesperelem*phys%neq,time%tis))
-    sol%u0 = 0.
+    sol%u0 = 0.d0
 
-    Mesh%X = Mesh%X*phys%lscale
-    Mesh_prec%X = Mesh_prec%X*phys%lscale
-
-#ifndef PARALL
-    n_history = 1
-    IF (retain_history) n_history = SIZE(u0_temp,2)
-    DO history_id = 1, n_history
-       CALL projectSolutionDifferentMeshes_general_arrays(Mesh_prec%T,Mesh_prec%X, Mesh%T, Mesh%X, &
-            u1 = u0_temp(:,history_id), u2 = sol%u0(:,history_id))
-    ENDDO
+    IF (PRESENT(transfer)) THEN
+       CALL project_saved_history(transfer, previous_history, retain_history)
+    ELSE
+       ! Standalone callers build once and reuse across existing history columns.
+       Mesh%X = Mesh%X*phys%lscale
+       Mesh_prec%X = Mesh_prec%X*phys%lscale
+#ifdef PARALL
+       CALL gather_mesh(Mesh_in=Mesh_prec, T_glob=T_glob, X_glob=X_glob)
+       CALL local_transfer%build(T_glob, X_glob, Mesh%T, Mesh%X)
+       DEALLOCATE(T_glob, X_glob)
+       NULLIFY(T_glob, X_glob)
 #else
-    ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
+       CALL local_transfer%build(Mesh_prec%T, Mesh_prec%X, Mesh%T, Mesh%X)
+#endif
+       Mesh%X = Mesh%X/phys%lscale
+       Mesh_prec%X = Mesh_prec%X/phys%lscale
+       CALL project_saved_history(local_transfer, previous_history, retain_history)
+    ENDIF
+  END SUBROUTINE project_u0_newmesh
 
-    CALL gather_mesh(Mesh_in = Mesh_prec, T_glob = T_glob, X_glob = X_glob)
+  SUBROUTINE project_saved_history(transfer, previous_history, retain_history)
+    TYPE(mesh_transfer_t), INTENT(IN) :: transfer
+    REAL*8, INTENT(IN) :: previous_history(:,:)
+    LOGICAL, INTENT(IN) :: retain_history
+    INTEGER :: history_id, n_history
+
     n_history = 1
-    IF (retain_history) n_history = SIZE(u0_temp,2)
+    IF (retain_history) n_history = SIZE(previous_history,2)
     DO history_id = 1, n_history
-       CALL gather_solution(Mesh_in = Mesh_prec, Nnodesperelem = Mesh_prec%Nnodesperelem, &
-            u_in = u0_temp(:,history_id), u_glob = u_glob)
-       CALL projectSolutionDifferentMeshes_general_arrays(T_glob,X_glob, Mesh%T, Mesh%X, &
-            u1 = u_glob, u2 = sol%u0(:,history_id))
+#ifdef PARALL
+       CALL gather_solution(Mesh_in=Mesh_prec, Nnodesperelem=Mesh_prec%Nnodesperelem, &
+            u_in=previous_history(:,history_id), u_glob=u_glob)
+       CALL transfer%apply(u_glob, sol%u0(:,history_id))
        DEALLOCATE(u_glob)
        NULLIFY(u_glob)
-    ENDDO
-    DEALLOCATE(T_glob, X_glob)
-    NULLIFY(T_glob, X_glob)
+#else
+       CALL transfer%apply(previous_history(:,history_id), sol%u0(:,history_id))
 #endif
-
-
-
-    Mesh%X = Mesh%X/phys%lscale
-    Mesh_prec%X = Mesh_prec%X/phys%lscale
-
-    DEALLOCATE(u0_temp)
-  ENDSUBROUTINE project_u0_newmesh
+    ENDDO
+  END SUBROUTINE project_saved_history
 
   SUBROUTINE reduce_diffusion()
     ! Update the diffusion, the elemental matrices and the solution
