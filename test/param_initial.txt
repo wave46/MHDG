@@ -226,7 +226,6 @@
     feedback_propotional_gain_xpr = 1.e-22 
     feedback_integral_gain_xpr = 2.e-22
     feedback_derivative_gain_xpr = 0.5e-23
-    puff_slope          = 0.           ! Legacy testcase 80-89 moving-equilibrium puff target as a fraction of Greenwald density
     cryopump_power      = 10.      ! cryopump power in [m^3/s]
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
     ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52 and 81)

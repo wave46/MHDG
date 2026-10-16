@@ -2004,7 +2004,6 @@ LOGICAL FUNCTION control_file_requested(path)
 END FUNCTION control_file_requested
 
 SUBROUTINE SetParticleSource()
-   REAL*8 :: nli
 
    IF (.NOT. time%legacy_input .OR. (switch%testcase >= 50 .AND. switch%testcase <= 59)) THEN
       SELECT CASE (switch%target_variable)
@@ -2027,11 +2026,6 @@ SUBROUTINE SetParticleSource()
       IF (control_file_requested(input%zeff_path)) CALL load_zeff(input%zeff_path, input%zeff_dimension)
    ENDIF
 
-   IF (time%legacy_input .AND. switch%testcase >= 80 .AND. switch%testcase <= 89) THEN
-      CALL compute_line_integrated_density(MINVAL(Mesh%X(:,1)), MAXVAL(Mesh%X(:,1)), &
-           0.5/phys%lscale, 0.5/phys%lscale, nli)
-      CALL adjust_ITER_puff(nli)
-   ENDIF
 END SUBROUTINE SetParticleSource
 
 SUBROUTINE load_puff_from_file(fname, puff_len)
@@ -2039,12 +2033,6 @@ SUBROUTINE load_puff_from_file(fname, puff_len)
    INTEGER, INTENT(OUT) :: puff_len
 
    CALL sample_control_curve(puff_curve, fname, 'puff', phys%puff, puff_len)
-   ! Preserve the existing legacy output dataset until the output/restart slice.
-   IF (ASSOCIATED(phys%puff_exp)) THEN
-      IF (SIZE(phys%puff_exp) /= puff_len) DEALLOCATE(phys%puff_exp)
-   ENDIF
-   IF (.NOT. ASSOCIATED(phys%puff_exp)) ALLOCATE(phys%puff_exp(puff_len))
-   phys%puff_exp = puff_curve%values
    IF (MPIvar%glob_id == 0) WRITE(6,*) 'puff = ', phys%puff
 END SUBROUTINE load_puff_from_file
 
@@ -2313,25 +2301,5 @@ SUBROUTINE adjust_recycling_feedback(target_density, nli)
    ! Update the previous error
    phys%feedback_previous_error = target_density - nli
 END SUBROUTINE adjust_recycling_feedback
-
-SUBROUTINE adjust_ITER_puff(nli)
-   REAL*8, INTENT(IN) :: nli
-   REAL*8 :: n_Gw, n_la, a = 2.
-
-   n_la = nli/(8.3659 - 4.04)*simpar%refval_density
-   n_Gw = phys%I_p/(pi*a**2)*10.*simpar%refval_density
-
-   IF (time%it .EQ. 0) THEN
-       phys%puff_exp(time%it+1) = MAX(10.*(phys%puff_slope*n_Gw - n_la), 0.)
-       phys%puff = phys%puff_exp(time%it+1)
-   ELSE
-       phys%puff_exp(time%it+1) = MAX(phys%puff_exp(time%it) + 50.*(2 - SIGN(1.,phys%puff_slope*n_Gw - n_la))*(phys%puff_slope*n_Gw - n_la), 0.)
-       phys%puff = phys%puff_exp(time%it+1)
-   END IF
-
-   IF (MPIvar%glob_id .EQ. 0) THEN
-       WRITE (6, '(" * Puff = ", E10.3, 27X, " *")')  phys%puff
-   END IF
-END SUBROUTINE adjust_ITER_puff
 
 END MODULE Magnetic_field

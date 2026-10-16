@@ -426,11 +426,6 @@ CONTAINS
     IF (ALLOCATED(phys%v_nn_Bou)) THEN
        DEALLOCATE (phys%v_nn_Bou)
     END IF
-    IF (ASSOCIATED(phys%puff_exp)) THEN
-       DEALLOCATE (phys%puff_exp)
-       NULLIFY(phys%puff_exp)
-    END IF
-
     IF (ASSOCIATED(phys%omega)) THEN
        DEALLOCATE (phys%omega)
        NULLIFY(phys%omega)

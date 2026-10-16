@@ -322,8 +322,6 @@ MODULE types
      TYPE(Feedback_derivative_history_type) :: feedback_derivative_history_xpr
      REAL*8                    :: n_li  ! line integrated density
      REAL*8                    :: cryopump_power ! Cryopump power in [m^3/s] coefficient
-     REAL*8                    :: puff_slope ! Puff increment coefficient (only for moving equilibrium for ITER)
-     REAL*8,POINTER            :: puff_exp(:) => NULL()! Puff experimental coefficient (only for moving equilibriums)
      REAL*8                    :: part_source ! Particle source for ITER
      REAL*8                    :: ener_source ! Particle source for ITER
      REAL*8                    :: density_source ! Density source for WEST (2D, case 52)

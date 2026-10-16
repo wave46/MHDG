@@ -196,6 +196,7 @@ SUBROUTINE READ_input()
   balance_diagnostics_mode = 'off'
   petsc_factor_solver = ''
   ME = .FALSE.
+  puff_slope = 0.d0 ! Accepted only for old namelist compatibility.
   dt0 = 0.d0
   nts = 0
   tsw = 0
@@ -588,7 +589,6 @@ SUBROUTINE READ_input()
   phys%feedback_propotional_gain_xpr = feedback_propotional_gain_xpr
   phys%feedback_integral_gain_xpr = feedback_integral_gain_xpr
   phys%feedback_derivative_gain_xpr = feedback_derivative_gain_xpr
-  phys%puff_slope         = puff_slope
   phys%density_source     = density_source
   phys%ener_source_e      = ener_source_e
   phys%ener_source_ee     = ener_source_ee
@@ -835,7 +835,6 @@ SUBROUTINE READ_input()
      PRINT *, '                - neutral wall sources in element volumes:           ', switch%neutral_wall_sources_in_elements
      IF (switch%ME) THEN
         PRINT *, '                - I_0 for moving equilibrium:                         ', phys%I_0
-        PRINT *, '             - puff increment slope:                               ', phys%puff_slope
           IF (switch%target_variable /= 0) THEN
              PRINT *, '             - feedback_propotional_gain:                               ', phys%feedback_propotional_gain
              PRINT *, '             - feedback_integral_gain:                                  ', phys%feedback_integral_gain

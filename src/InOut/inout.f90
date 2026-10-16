@@ -1225,7 +1225,6 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%z_axis, 'z_axis')
       CALL HDF5_real_saving(group_id2, phys%a_minor, 'a_minor')
       IF (switch%ME) THEN
-         CALL HDF5_array1d_saving(group_id2, phys%puff_exp, SIZE(phys%puff_exp), 'puff_exp')
          IF (switch%diff_reverse_Ip) THEN
             CALL HDF5_real_saving(group_id2, phys%I_0, 'I_0')
             CALL HDF5_real_saving(group_id2, phys%I_p, 'I_p')

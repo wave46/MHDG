@@ -419,9 +419,8 @@ CONTAINS
     IF(ASSOCIATED(phys%Bperturb)) DEALLOCATE(phys%Bperturb)
     IF(ASSOCIATED(phys%magnetic_psi)) DEALLOCATE(phys%magnetic_psi)
     IF(ASSOCIATED(phys%Jtor))     DEALLOCATE(phys%Jtor)
-    IF(ASSOCIATED(phys%puff_exp)) DEALLOCATE(phys%puff_exp)
 
-    NULLIFY(phys%magnetic_flux, phys%Bperturb, phys%magnetic_psi, phys%Jtor, phys%puff_exp)
+    NULLIFY(phys%magnetic_flux, phys%Bperturb, phys%magnetic_psi, phys%Jtor)
     CALL free_el_mat()
     CALL free_mat()
   ENDSUBROUTINE free_before_adaptivity

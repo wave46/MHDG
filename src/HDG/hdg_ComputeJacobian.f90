@@ -491,7 +491,6 @@ CONTAINS
 !          !IF (xy(g,1)*phys%lscale .gt. 2.36 .and. xy(g,2)*phys%lscale .lt. -0.69 ) THEN
 !          IF (xy(g,1)*phys%lscale .gt. 2.446 .and. xy(g,1)*phys%lscale .lt. 2.59 .and. xy(g,2)*phys%lscale .gt. -0.7964 .and. xy(g,2)*phys%lscale .lt. -0.7304 ) THEN
 !            ! Case moving equilibrium
-!            ! force(g,5) = phys%puff_exp(time%it+1)
 !            i = (igtor-1)*Ng2d+g
 !            force(i,5) = phys%puff
 !          ENDIF
@@ -1579,7 +1578,6 @@ CONTAINS
 !            IF(switch%time_init) THEN
 !              force(g,5) = phys%puff
 !            ELSE
-!              force(g,5) = phys%puff_exp(time%it+1)
 !            ENDIF
 !          ENDIF
 !#endif
