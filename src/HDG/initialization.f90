@@ -37,6 +37,7 @@ CONTAINS
     dt = time%dt0
     time%dt = dt
     time%dt_next = dt
+    time%growth = Time_growth_history_type()
 
     ! time count
     time%it = 0

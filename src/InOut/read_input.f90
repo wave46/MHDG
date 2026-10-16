@@ -41,7 +41,8 @@ SUBROUTINE READ_input()
   REAL*8                :: t_start, t_final
   CHARACTER(LEN=16)     :: time_mode, time_units
   LOGICAL               :: dt_reduce_on_failure, dt_grow_on_easy
-  REAL*8                :: dt_min
+  REAL*8                :: dt_min, dt_max, dt_growth_factor
+  INTEGER               :: dt_growth_easy_steps
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
   REAL*8                :: ionization_ion_energy_fraction
@@ -124,7 +125,8 @@ SUBROUTINE READ_input()
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis, time_mode, time_units, t_start, t_final, &
-       dt_reduce_on_failure, dt_grow_on_easy, dt_min
+       dt_reduce_on_failure, dt_grow_on_easy, dt_min, dt_max, dt_growth_factor, &
+       dt_growth_easy_steps
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, Re_n, Re_n_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
@@ -210,6 +212,9 @@ SUBROUTINE READ_input()
   dt_reduce_on_failure = .FALSE.
   dt_grow_on_easy = .FALSE.
   dt_min = 0.d0
+  dt_max = 0.d0
+  dt_growth_factor = 1.2d0
+  dt_growth_easy_steps = 2
 
   ! Reading the file
   uinput = 100
@@ -552,6 +557,10 @@ SUBROUTINE READ_input()
   time%dt_reduce_on_failure = dt_reduce_on_failure
   time%dt_grow_on_easy     = dt_grow_on_easy
   time%dt_min             = dt_min
+  time%dt_max             = dt_max
+  time%dt_growth_factor   = dt_growth_factor
+  time%dt_growth_easy_steps = dt_growth_easy_steps
+  time%growth            = Time_growth_history_type()
   IF (ALLOCATED(time%pending_times)) DEALLOCATE(time%pending_times)
   time%tsw                = tsw
   time%tis                = tis
@@ -770,6 +779,11 @@ SUBROUTINE READ_input()
      PRINT *, '                - final time (solver units):                          ', time%t_final
      IF (time%dt_reduce_on_failure) THEN
         PRINT *, '                - minimum retry dt (solver units):                    ', time%dt_min
+     ENDIF
+     IF (time%dt_grow_on_easy) THEN
+        PRINT *, '                - maximum dt (solver units):                          ', time%dt_max
+        PRINT *, '                - timestep growth factor:                             ', time%dt_growth_factor
+        PRINT *, '                - consecutive easy steps for growth:                  ', time%dt_growth_easy_steps
      ENDIF
      PRINT *, '                - max number of time steps:                           ', time%nts
      PRINT *, '                - time integration scheme:                            ', time%tis
@@ -1066,6 +1080,16 @@ CONTAINS
          CALL invalid_time_input('Timestep reduction requires positive dt_min')
     IF (time_mode == 'adaptive' .AND. dt0 < dt_min) &
          CALL invalid_time_input('Adaptive dt0 must not be smaller than dt_min')
+    IF (.NOT. ieee_is_finite(dt_max) .OR. dt_max < 0.d0) &
+         CALL invalid_time_input('dt_max must be finite and nonnegative')
+    IF (dt_max > 0.d0 .AND. dt_max < MAX(dt0,dt_min)) &
+         CALL invalid_time_input('dt_max must not be smaller than dt0 or dt_min')
+    IF (dt_grow_on_easy) THEN
+       IF (dt_max <= 0.d0) CALL invalid_time_input('Timestep growth requires positive dt_max')
+       IF (.NOT. ieee_is_finite(dt_growth_factor) .OR. dt_growth_factor <= 1.d0) &
+            CALL invalid_time_input('dt_growth_factor must be finite and greater than one')
+       IF (dt_growth_easy_steps < 1) CALL invalid_time_input('Growth easy-step count must be positive')
+    ENDIF
   END SUBROUTINE configure_time_input
 
   SUBROUTINE invalid_time_input(message)

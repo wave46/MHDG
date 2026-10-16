@@ -1971,8 +1971,10 @@ CONTAINS
   SUBROUTINE save_time_step_state(time_group)
     INTEGER(HID_T), INTENT(IN) :: time_group
 
-    IF (time%mode == 'adaptive') &
+    IF (time%mode == 'adaptive') THEN
          CALL HDF5_real_saving(time_group, time%dt_next*simpar%refval_time, 'Proposed_time_step_seconds')
+         CALL save_timestep_growth(time_group)
+    ENDIF
     IF (time%mode == 'prescribed' .AND. ALLOCATED(time%pending_times)) THEN
        IF (SIZE(time%pending_times) > 0) &
             CALL HDF5_array1D_saving(time_group, time%pending_times*simpar%refval_time, &
@@ -1995,6 +1997,8 @@ CONTAINS
        IF (.NOT. ieee_is_finite(proposed_dt) .OR. proposed_dt <= 0.d0) &
             CALL abort_on_checkpoint_error(-1, 'Saved proposed timestep must be finite and positive')
        time%dt_next = proposed_dt/simpar%refval_time
+       IF (time%dt_max > 0.d0) time%dt_next = MIN(time%dt_next,time%dt_max)
+       CALL load_timestep_growth(group_id)
     ELSEIF (time%mode == 'prescribed' .AND. time%dt_reduce_on_failure) THEN
        CALL H5Lexists_f(group_id, 'time/Pending_time_targets_seconds', exists, ierr)
        IF (.NOT. exists) RETURN
@@ -2012,6 +2016,48 @@ CONTAINS
        time%pending_times = pending_seconds/simpar%refval_time
     ENDIF
   END SUBROUTINE load_time_step_state
+
+  SUBROUTINE save_timestep_growth(time_group)
+    INTEGER(HID_T), INTENT(IN) :: time_group
+    INTEGER(HID_T) :: history_group
+    INTEGER :: ierr
+
+    IF (.NOT. time%dt_grow_on_easy .OR. time%growth%nr_iterations == 0) RETURN
+    CALL HDF5_group_create('Growth_history', time_group, history_group, ierr)
+    CALL HDF5_integer_saving(history_group, time%growth%easy_steps, 'easy_steps')
+    CALL HDF5_integer_saving(history_group, time%growth%nr_iterations, 'newton_iterations')
+    CALL HDF5_real_saving(history_group, time%growth%first_error, 'first_newton_error')
+    CALL HDF5_real_saving(history_group, time%growth%dt*simpar%refval_time, 'step_seconds')
+    CALL HDF5_group_close(history_group, ierr)
+  END SUBROUTINE save_timestep_growth
+
+  SUBROUTINE load_timestep_growth(group_id)
+    USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    INTEGER(HID_T) :: history_group
+    INTEGER :: ierr
+    REAL*8 :: seconds
+    LOGICAL :: exists
+
+    IF (.NOT. time%dt_grow_on_easy) RETURN
+    CALL H5Lexists_f(group_id, 'time/Growth_history', exists, ierr)
+    IF (.NOT. exists) RETURN
+    CALL HDF5_group_open(group_id, 'time/Growth_history', history_group, ierr)
+    CALL abort_on_checkpoint_error(ierr, 'Cannot read timestep growth history')
+    CALL HDF5_integer_reading(history_group, time%growth%easy_steps, 'easy_steps', ierr)
+    CALL abort_on_checkpoint_error(ierr, 'Cannot read growth easy-step count')
+    CALL HDF5_integer_reading(history_group, time%growth%nr_iterations, 'newton_iterations', ierr)
+    CALL abort_on_checkpoint_error(ierr, 'Cannot read previous Newton iteration count')
+    CALL read_checkpoint_real(history_group, 'first_newton_error', time%growth%first_error)
+    CALL read_checkpoint_real(history_group, 'step_seconds', seconds)
+    CALL HDF5_group_close(history_group, ierr)
+    IF (time%growth%easy_steps < 0 .OR. time%growth%nr_iterations < 1 .OR. &
+        .NOT. ieee_is_finite(seconds) .OR. seconds <= 0.d0 .OR. &
+        .NOT. ieee_is_finite(time%growth%first_error) .OR. time%growth%first_error < 0.d0) &
+         CALL abort_on_checkpoint_error(-1, 'Invalid timestep growth history')
+    time%growth%easy_steps = MIN(time%growth%easy_steps,time%dt_growth_easy_steps-1)
+    time%growth%dt = seconds/simpar%refval_time
+  END SUBROUTINE load_timestep_growth
 
   SUBROUTINE save_feedback_state(physics_group)
     INTEGER(HID_T), INTENT(IN) :: physics_group

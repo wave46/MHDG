@@ -30,12 +30,6 @@ PROGRAM MHDG
   ! Read input file param.txt
   CALL read_input()
 
-  IF (.NOT. time%legacy_input .AND. time%dt_grow_on_easy) THEN
-     IF (MPIvar%glob_id == 0) WRITE(6,*) &
-          'Easy-convergence timestep growth is not enabled yet; use dt_grow_on_easy=false.'
-     STOP 1
-  ENDIF
-
 #ifdef WITH_PETSC
   IF (lssolver%sollib .EQ. 3) THEN
      CALL InitPETSC()

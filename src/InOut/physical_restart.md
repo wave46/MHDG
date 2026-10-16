@@ -121,5 +121,54 @@ failed remainder cannot be halved below `dt_min`. The code also stops if roundin
 prevents representing a time strictly between the accepted and failed endpoints.
 These limits terminate without saving the rejected trial as an
 accepted step. Legacy inputs retain their existing stepping and failure policy.
-Easy-convergence growth and the Newton predictor follow in separate slices;
-`dt_grow_on_easy=true` remains rejected for now.
+The Newton predictor remains a later slice.
+
+Optional growth is enabled with `time_mode='adaptive'`,
+`dt_grow_on_easy=true` and an explicit positive `dt_max`. Reduction and growth
+are independent options. For example:
+
+```fortran
+&TIME_LST
+    time_mode = 'adaptive'
+    time_units = 'seconds'
+    dt0 = 0.02
+    t_final = 1.36
+    dt_reduce_on_failure = .true.
+    dt_min = 1.e-6
+    dt_grow_on_easy = .true.
+    dt_max = 0.10
+/
+```
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `dt_growth_factor` | 1.2 | Multiply the proposal after an easy-step streak, capped by `dt_max` |
+| `dt_growth_easy_steps` | 2 | Consecutive easy steps required |
+
+A clean accepted step qualifies when both its Newton iteration count and its
+first NR correction are unchanged or smaller than in the previous accepted
+step. Thus `14 -> 13 -> 13` and `15 -> 15 -> 15` supply two easy steps with the
+default settings if the first correction does not increase. Comparisons require
+the same numerical interval; the configured Newton budget does not determine
+growth eligibility. The first correction is the existing
+absolute RMS conservative-variable update divided by Newton damping; it is not
+an equation residual or a timestep-error estimate.
+
+The first clean step establishes a comparison. A changed interval establishes a
+new comparison too, so the smaller first correction caused by halving cannot
+immediately trigger regrowth. Rejection, Newton remeshing, scheduled time-level
+remeshing and final-step clipping reset the easy-step history. A clean step that
+does not qualify resets the streak but remains the next comparison. No absolute
+Newton-count threshold triggers growth.
+
+Adaptive checkpoints save `Growth_history` under the time group when growth is
+enabled and a comparison is available. It contains `easy_steps`,
+`newton_iterations`, `first_newton_error` and `step_seconds`. These restore the
+growth decision across restart; older files without the history start with a
+fresh comparison.
+Current configured limits and growth settings remain authoritative. A saved
+proposal above a newly configured `dt_max` is capped on loading.
+
+Growth measures nonlinear-solve efficiency. It does not estimate temporal error
+or constrain the rate of change of equilibrium and control signals. Choose
+`dt_max` to resolve those dynamics; an accuracy estimator remains separate work.

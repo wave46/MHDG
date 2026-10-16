@@ -1,10 +1,12 @@
 MODULE time_stepping
   USE globals, ONLY: time, simpar, sol
+  USE types, ONLY: Time_growth_history_type
   USE rectangular_series_io, ONLY: locate_series_time
   IMPLICIT NONE
   PRIVATE
   PUBLIC :: next_physical_time, physical_time_is_complete, schedule_half_step
   PUBLIC :: remove_reached_target, ensure_time_history_capacity
+  PUBLIC :: update_timestep_growth, reset_timestep_growth
 
 CONTAINS
 
@@ -34,6 +36,7 @@ CONTAINS
        target = MIN(time%t_final, time%t+time%dt0)
     CASE ('adaptive')
        target = MIN(time%t_final, time%t+time%dt_next)
+       IF (time%dt_max > 0.d0) target = MIN(target, time%t+time%dt_max)
     CASE ('prescribed')
        CALL next_prescribed_time(target, ierr, message, frame_times)
        IF (ierr /= 0) RETURN
@@ -86,6 +89,46 @@ CONTAINS
     ierr = 0
     message = ''
   END SUBROUTINE schedule_half_step
+
+  SUBROUTINE update_timestep_growth(iterations, first_error, clean_step, grew)
+    INTEGER, INTENT(IN) :: iterations
+    REAL*8, INTENT(IN) :: first_error
+    LOGICAL, INTENT(IN) :: clean_step
+    LOGICAL, INTENT(OUT) :: grew
+    REAL*8 :: tolerance, previous_proposal
+    LOGICAL :: easy
+
+    grew = .FALSE.
+    IF (time%legacy_input .OR. time%mode /= 'adaptive' .OR. .NOT. time%dt_grow_on_easy) RETURN
+    tolerance = 64*EPSILON(time%dt)*MAX(1.d0,ABS(time%dt),ABS(time%dt_next))
+    IF (.NOT. clean_step .OR. ABS(time%dt-time%dt_next) > tolerance) THEN
+       CALL reset_timestep_growth()
+       RETURN
+    ENDIF
+
+    easy = .FALSE.
+    IF (time%growth%nr_iterations > 0 .AND. ABS(time%dt-time%growth%dt) <= tolerance) THEN
+       easy = iterations <= time%growth%nr_iterations .AND. first_error <= time%growth%first_error
+    ENDIF
+    IF (easy) THEN
+       time%growth%easy_steps = time%growth%easy_steps+1
+    ELSE
+       time%growth%easy_steps = 0
+    ENDIF
+    time%growth%nr_iterations = iterations
+    time%growth%first_error = first_error
+    time%growth%dt = time%dt
+
+    IF (time%growth%easy_steps < time%dt_growth_easy_steps) RETURN
+    previous_proposal = time%dt_next
+    time%dt_next = MIN(time%dt_max, time%dt_next*time%dt_growth_factor)
+    time%growth%easy_steps = 0
+    grew = time%dt_next > previous_proposal
+  END SUBROUTINE update_timestep_growth
+
+  SUBROUTINE reset_timestep_growth()
+    time%growth = Time_growth_history_type()
+  END SUBROUTINE reset_timestep_growth
 
   SUBROUTINE remove_reached_target()
     INTEGER :: pending

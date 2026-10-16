@@ -1,7 +1,7 @@
 PROGRAM test_me_restart
   USE initialization, ONLY: init_sim
   USE time_stepping, ONLY: next_physical_time, ensure_time_history_capacity
-  USE time_stepping, ONLY: schedule_half_step, remove_reached_target
+  USE time_stepping, ONLY: schedule_half_step, remove_reached_target, update_timestep_growth, reset_timestep_growth
   USE in_out, ONLY: HDF5_load_solution, HDF5_load_mesh_from_solution, save_feedback_state, load_feedback_state
   USE in_out, ONLY: save_time_step_state
   USE GMSH_io_module, ONLY: load_gmsh_mesh
@@ -65,6 +65,7 @@ PROGRAM test_me_restart
   IF (mode == 'time-clock') THEN
      CALL check_physical_clock()
      CALL check_time_subdivision()
+     CALL check_timestep_growth()
      WRITE(*,'(A)') 'PHYSICAL_CLOCK_PASS'
      STOP
   ENDIF
@@ -81,6 +82,7 @@ PROGRAM test_me_restart
           TRIM(time%mode), TRIM(time%units), time%dt0, time%t_start, time%t_final, &
           simpar%refval_time, MERGE(1,0,time%dt_reduce_on_failure), MERGE(1,0,time%dt_grow_on_easy), time%nts
      WRITE(*,'(A,1X,ES24.16)') 'TIME_MINIMUM_STEP', time%dt_min*simpar%refval_time
+     WRITE(*,'(A,1X,ES24.16)') 'TIME_MAXIMUM_STEP', time%dt_max*simpar%refval_time
      STOP
   ENDIF
   IF (mode == 'nodal') THEN
@@ -301,7 +303,7 @@ CONTAINS
 
   SUBROUTINE check_physical_restart()
     TYPE(equilibrium_sample_t) :: sample
-    LOGICAL :: finished, moving
+    LOGICAL :: finished, moving, grew
     REAL*8 :: accepted_time, accepted_target
     INTEGER(HID_T) :: state_file, time_group
 
@@ -337,6 +339,11 @@ CONTAINS
          time%it, sol%Nt, accepted_time, accepted_target, time%t_target*simpar%refval_time, &
          sample%fraction, finished, phys%puff, phys%feedback_integral_error, &
          phys%feedback_previous_error, REAL(SIZE(sol%time),8)
+    IF (time%dt_grow_on_easy) THEN
+       numer%nrp = 40
+       CALL update_timestep_growth(13, 0.1d0, .TRUE., grew)
+       IF (.NOT. grew) ERROR STOP 'restart lost sustained Newton improvement'
+    ENDIF
     CALL close_magnetic_input()
   END SUBROUTINE check_physical_restart
 
@@ -858,6 +865,72 @@ CONTAINS
     IF (status == 0) ERROR STOP 'indistinguishable midpoint did not stop halving'
     WRITE(*,'(A)') 'TIME_SUBDIVISION_PASS'
   END SUBROUTINE check_time_subdivision
+
+  SUBROUTINE check_timestep_growth()
+    LOGICAL :: grew
+
+    time%legacy_input = .FALSE.
+    time%mode = 'adaptive'
+    time%dt_grow_on_easy = .TRUE.
+    time%dt_growth_factor = 1.2d0
+    time%dt_growth_easy_steps = 2
+    time%dt = 1.d0
+    time%dt_next = 1.d0
+    time%dt_max = 1.3d0
+    numer%nrp = 40
+    CALL reset_timestep_growth()
+    CALL update_timestep_growth(14, 1.d0, .TRUE., grew)
+    IF (grew .OR. time%growth%easy_steps /= 0) ERROR STOP 'growth without a previous accepted comparison'
+    CALL update_timestep_growth(13, 0.95d0, .TRUE., grew)
+    IF (grew .OR. time%growth%easy_steps /= 1) ERROR STOP 'one fewer Newton iteration not recognized'
+    CALL update_timestep_growth(13, 0.95d0, .TRUE., grew)
+    IF (.NOT. grew .OR. ABS(time%dt_next-1.2d0) > 1.d-14) ERROR STOP 'sustained Newton reduction did not grow timestep'
+
+    time%dt = time%dt_next
+    CALL update_timestep_growth(12, 0.4d0, .TRUE., grew)
+    IF (grew .OR. time%growth%easy_steps /= 0) ERROR STOP 'growth compared different timesteps'
+    CALL update_timestep_growth(12, 0.3d0, .TRUE., grew)
+    CALL update_timestep_growth(13, 0.2d0, .TRUE., grew)
+    IF (grew .OR. time%growth%easy_steps /= 0) ERROR STOP 'first error hid increased Newton work'
+    CALL update_timestep_growth(12, 0.19d0, .TRUE., grew)
+    CALL update_timestep_growth(13, 0.18d0, .TRUE., grew)
+    IF (grew .OR. time%growth%easy_steps /= 0) ERROR STOP 'lost Newton improvement retained streak'
+    CALL update_timestep_growth(12, 0.17d0, .TRUE., grew)
+    CALL update_timestep_growth(11, 0.17d0, .TRUE., grew)
+    IF (.NOT. grew .OR. time%dt_next /= time%dt_max) ERROR STOP 'growth did not enforce dt_max'
+
+    time%dt = time%dt_next
+    CALL update_timestep_growth(10, 0.1d0, .FALSE., grew)
+    IF (grew .OR. time%growth%nr_iterations /= 0) ERROR STOP 'recovery retained easy-step history'
+    time%dt = time%dt_next/2.d0
+    CALL update_timestep_growth(1, 0.01d0, .TRUE., grew)
+    IF (grew .OR. time%growth%nr_iterations /= 0) ERROR STOP 'clipped final step contributed to growth'
+
+    time%dt = 1.d0
+    time%dt_next = 1.d0
+    time%dt_max = 2.d0
+    CALL reset_timestep_growth()
+    CALL update_timestep_growth(14, 1.d0, .TRUE., grew)
+    CALL update_timestep_growth(14, 1.d0, .TRUE., grew)
+    CALL update_timestep_growth(14, 1.d0, .TRUE., grew)
+    IF (.NOT. grew) ERROR STOP 'stable Newton work did not grow timestep'
+
+    CALL reset_timestep_growth()
+    time%dt_next = 1.d0
+    CALL update_timestep_growth(14, 1.d0, .TRUE., grew)
+    CALL update_timestep_growth(13, 1.1d0, .TRUE., grew)
+    IF (grew .OR. time%growth%easy_steps /= 0) ERROR STOP 'fewer iterations hid increased first correction'
+
+    CALL reset_timestep_growth()
+    CALL update_timestep_growth(30, 1.d0, .TRUE., grew)
+    CALL update_timestep_growth(30, 1.d0, .TRUE., grew)
+    CALL update_timestep_growth(30, 1.d0, .TRUE., grew)
+    IF (.NOT. grew) ERROR STOP 'Newton budget changed stable-step eligibility'
+    time%dt_grow_on_easy = .FALSE.
+    CALL update_timestep_growth(9, 0.5d0, .TRUE., grew)
+    IF (grew .OR. ABS(time%dt_next-1.2d0) > 1.d-14) ERROR STOP 'disabled growth changed proposed timestep'
+    WRITE(*,'(A)') 'TIMESTEP_GROWTH_PASS'
+  END SUBROUTINE check_timestep_growth
 
   SUBROUTINE check_nodal_input()
     INTEGER :: i, frame, last_frame

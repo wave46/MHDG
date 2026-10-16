@@ -81,6 +81,7 @@ def check_physical_restart(executable, directory, physical, *, moving):
     cases += [("adaptive_old", 23, .04, True, None),
               ("adaptive_reduced", 23, .04, True, None),
               ("adaptive_extended", 23, .04, True, None),
+              ("adaptive_growth", 23, .04, True, None),
               ("adaptive_invalid", 23, .04, True, None)]
     if moving:
         cases += [("prescribed_pending", 23, .04, True, None),
@@ -93,6 +94,8 @@ def check_physical_restart(executable, directory, physical, *, moving):
             text = text.replace("time_mode='fixed'", "time_mode='adaptive'")
         if name.startswith("adaptive") or name.startswith("prescribed_"):
             text = text.replace("t_final=.08", "t_final=.08, dt_reduce_on_failure=.true., dt_min=.001")
+        if name == "adaptive_growth":
+            text = text.replace("dt_min=.001", "dt_min=.001, dt_grow_on_easy=.true., dt_max=.04")
         text = re.sub(r"(?im)^(\s*target_density_path\s*=).*?$", r"\g<1> 'controls.h5'", text)
         (directory / "param.txt").write_text(text)
         checkpoint(directory / "checkpoint.h5", step, saved_me=moving)
@@ -105,11 +108,16 @@ def check_physical_restart(executable, directory, physical, *, moving):
                 p["time/Current_time_seconds"] = [seconds]
             if flags is not None:
                 p["switches/steady"], p["switches/psdtime"] = [int(flags[0])], [int(flags[1])]
-            if name in {"adaptive_reduced", "adaptive_extended", "adaptive_invalid"}:
+            if name in {"adaptive_reduced", "adaptive_extended", "adaptive_invalid", "adaptive_growth"}:
                 proposal = .02 if name == "adaptive_extended" else .005
                 p["time/Proposed_time_step_seconds"] = [np.nan if name == "adaptive_invalid" else proposal]
                 # A shortened actual final interval must not replace its proposal.
                 p["time/Current_time_step"] = [.001/.01]
+            if name == "adaptive_growth":
+                history = p.create_group("time/Growth_history")
+                for key, value in dict(easy_steps=1, newton_iterations=13,
+                                       first_newton_error=.1, step_seconds=.005).items():
+                    history[key] = [value]
             if name.startswith("prescribed_"):
                 p["time/Pending_time_targets_seconds"] = [.08, .06, .05] if name.endswith("pending") else [.05, .06]
         run = subprocess.run([str(executable), "physical-restart"], cwd=directory,
@@ -130,14 +138,19 @@ def check_physical_restart(executable, directory, physical, *, moving):
         accepted_step = 0 if initial else step
         accepted = .02 if initial else seconds
         target = .08 if name in {"prescribed", "complete"} else accepted+.02
-        if name == "adaptive_reduced":
+        if name in {"adaptive_reduced", "adaptive_growth"}:
             target = accepted+.005
         elif name == "prescribed_pending":
             target = .05
         with h5py.File(directory / "time_state.h5") as saved:
             if name.startswith("adaptive"):
-                expected_proposal = .005 if name == "adaptive_reduced" else .02
+                expected_proposal = .005 if name in {"adaptive_reduced", "adaptive_growth"} else .02
                 np.testing.assert_allclose(saved["time/Proposed_time_step_seconds"][:], [expected_proposal], rtol=1e-14)
+                if name == "adaptive_growth":
+                    history = saved["time/Growth_history"]
+                    np.testing.assert_allclose([history[key][0] for key in
+                                               ("easy_steps", "newton_iterations", "first_newton_error", "step_seconds")],
+                                              [1, 13, .1, .005], rtol=1e-14)
             elif name == "prescribed_pending":
                 np.testing.assert_allclose(saved["time/Pending_time_targets_seconds"][:], [.08, .06, .05], rtol=1e-14)
         expected = [accepted, accepted, target, accepted/.08 if moving else 0.]
@@ -311,7 +324,7 @@ def check_time_input(executable, template):
         ("time_mode='prescribed', time_units='seconds', t_start=.12, tfi=.56, "
          "dt_reduce_on_failure=.true., dt_min=.001", None),
         ("time_mode='adaptive', time_units='seconds', dt0=.02, t_start=.12, t_final=.56, "
-         "dt_reduce_on_failure=.false., dt_grow_on_easy=.true.", None),
+         "dt_reduce_on_failure=.false., dt_grow_on_easy=.true., dt_max=.08", None),
         (fixed + ", tfi=.50", "tfi and t_final specify different final times"),
         (fixed.replace(".56", "NaN"), "t_final must be finite"),
         (fixed.replace(".56", ".10"), "t_final must be greater than t_start"),
@@ -321,6 +334,12 @@ def check_time_input(executable, template):
         (fixed.replace("'fixed'", "'adaptive'") + ", dt_reduce_on_failure=.true.",
          "Timestep reduction requires positive dt_min"),
         (fixed.replace("'fixed'", "'adaptive'") + ", dt_min=.03", "Adaptive dt0 must not be smaller than dt_min"),
+        (fixed.replace("'fixed'", "'adaptive'") + ", dt_grow_on_easy=.true.",
+         "Timestep growth requires positive dt_max"),
+        (fixed.replace("'fixed'", "'adaptive'") + ", dt_grow_on_easy=.true., dt_max=.08, dt_growth_factor=1.",
+         "dt_growth_factor must be finite and greater than one"),
+        (fixed.replace("'fixed'", "'adaptive'") + ", dt_grow_on_easy=.true., dt_max=.08, dt_growth_easy_steps=0",
+         "Growth easy-step count must be positive"),
     ]
     with tempfile.TemporaryDirectory(prefix="mhdg-time-input-") as scratch:
         directory = Path(scratch)
@@ -343,6 +362,8 @@ def check_time_input(executable, template):
             np.testing.assert_allclose([start*scale, final*scale], [.12, .56], rtol=1e-14)
             np.testing.assert_allclose(dt*scale, 0. if mode == "prescribed" else .02, rtol=1e-14)
             assert (reduce, grow, steps) == (float(mode == "prescribed"), float(mode == "adaptive"), 0.)
+            maximum = re.search(r"^TIME_MAXIMUM_STEP\s+(.*)$", output, re.M)
+            np.testing.assert_allclose(float(maximum[1]), .08 if mode == "adaptive" else 0., rtol=1e-14)
             limits = re.search(r"^TIME_MINIMUM_STEP\s+(.*)$", output, re.M)
             np.testing.assert_allclose(list(map(float, limits[1].split())),
                                        [.001 if mode == "prescribed" else 0.], rtol=1e-14)

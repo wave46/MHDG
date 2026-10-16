@@ -524,6 +524,13 @@ MODULE types
   !*******************************************************
   ! Time: type for the time stepping information
   !*******************************************************
+  TYPE Time_growth_history_type
+     INTEGER :: easy_steps = 0
+     INTEGER :: nr_iterations = 0
+     REAL*8 :: first_error = 0.d0
+     REAL*8 :: dt = 0.d0
+  END TYPE Time_growth_history_type
+
   TYPE Time_type
      REAL*8      :: dt0  ! initial time step
      REAL*8      :: dt   ! current time step
@@ -539,6 +546,10 @@ MODULE types
      LOGICAL     :: dt_reduce_on_failure = .FALSE.
      LOGICAL     :: dt_grow_on_easy = .FALSE.
      REAL*8      :: dt_min = 0.d0 ! minimum retry interval, in solver units
+     REAL*8      :: dt_max = 0.d0 ! zero means no configured upper bound
+     REAL*8      :: dt_growth_factor = 1.2d0
+     INTEGER     :: dt_growth_easy_steps = 2
+     TYPE(Time_growth_history_type) :: growth
      REAL*8, ALLOCATABLE :: pending_times(:) ! prescribed endpoints, last entry first
      INTEGER     :: it   ! the number of the current time step
      INTEGER     :: ik   ! same as it but always incrementing (also in case of pseudotime..)

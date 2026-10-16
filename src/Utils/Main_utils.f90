@@ -20,6 +20,7 @@ MODULE Main_utils
   USE initialization
   USE time_stepping, ONLY: next_physical_time, physical_time_is_complete, &
        schedule_half_step, remove_reached_target, ensure_time_history_capacity
+  USE time_stepping, ONLY: update_timestep_growth, reset_timestep_growth
   USE adaptivity_common_module, ONLY: set_order_mesh
   USE adaptivity_projection_module, ONLY: mesh_transfer_t
   USE external_heating
@@ -43,6 +44,8 @@ MODULE Main_utils
   TYPE :: newton_result_t
      TYPE(solver_status_t) :: status
      INTEGER :: iterations = 0
+     REAL*8 :: first_error = 0.d0
+     LOGICAL :: mesh_changed = .FALSE.
      LOGICAL :: iteration_limit_reached = .FALSE.
   END TYPE newton_result_t
 
@@ -189,8 +192,9 @@ CONTAINS
   SUBROUTINE advance_time_step(result, finished)
     TYPE(newton_result_t), INTENT(OUT) :: result
     LOGICAL, INTENT(OUT) :: finished
-    REAL*8 :: failed_endpoint
+    REAL*8 :: failed_endpoint, previous_proposal
     INTEGER :: rejections, status
+    LOGICAL :: grew, clean_step
     CHARACTER(LEN=160) :: message
 
     rejections = 0
@@ -200,6 +204,16 @@ CONTAINS
        IF (time%legacy_input) RETURN
        IF (result%status%outcome == solve_success) THEN
           CALL remove_reached_target()
+          previous_proposal = time%dt_next
+          clean_step = rejections == 0 .AND. .NOT. result%mesh_changed
+          IF (adapt%adaptivity .AND. adapt%time_adapt) THEN
+             IF (MOD(it,adapt%freq_t_adapt) == 0) clean_step = .FALSE.
+          ENDIF
+          CALL update_timestep_growth(result%iterations, result%first_error, &
+               clean_step, grew)
+          IF (grew .AND. MPIvar%glob_id == 0) WRITE(6,'(/,A,ES16.8,A,ES16.8,A,ES16.8,A,/)') &
+               'TIMESTEP INCREASED at ', time%t*simpar%refval_time, ' s: ', &
+               previous_proposal*simpar%refval_time, ' -> ', time%dt_next*simpar%refval_time, ' s'
           RETURN
        ENDIF
        IF (result%status%outcome /= solve_retry .OR. .NOT. time%dt_reduce_on_failure) RETURN
@@ -271,6 +285,7 @@ CONTAINS
        CALL solve_nonlinear_system(result)
     ELSE
        CALL solve_nonlinear_system(result,accepted)
+       result%mesh_changed = ALLOCATED(accepted%original_mesh)
        IF (result%status%outcome == solve_retry) THEN
           CALL rollback_time_step(accepted)
           restart_adapt = accepted_restart_adapt
@@ -367,6 +382,7 @@ CONTAINS
        CALL compute_newton_update(result%status,accepted)
        IF (result%status%outcome /= solve_success) RETURN
        CALL check_newton_convergence(result%status)
+       IF (result%iterations == 1) result%first_error = errNR
        IF (result%status%outcome /= solve_success) RETURN
 
        IF (errNR < numer%tNR .AND. physical_iterate_valid) THEN
@@ -857,6 +873,7 @@ CONTAINS
     INTEGER :: field_frame
 
     IF (PRESENT(accepted)) CALL accepted%capture_mesh()
+    CALL reset_timestep_growth()
     field_frame = time%it
 
     ! Start timing
