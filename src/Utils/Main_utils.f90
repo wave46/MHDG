@@ -44,6 +44,20 @@ MODULE Main_utils
      LOGICAL :: iteration_limit_reached = .FALSE.
   END TYPE newton_result_t
 
+  TYPE :: accepted_step_state_t
+     PRIVATE
+     TYPE(Time_type) :: clock
+     INTEGER :: steps
+     REAL*8, ALLOCATABLE :: u(:), q(:), trace(:), impurity_concentrations(:)
+     REAL*8, ALLOCATABLE :: u0(:,:)
+     REAL*8 :: puff, recycling, recycling_pump, zeff, line_density
+     REAL*8 :: integral_error, previous_error, integral_error_xpr, previous_error_xpr
+     TYPE(Feedback_derivative_history_type) :: derivative, derivative_xpr
+   CONTAINS
+     PROCEDURE :: capture => capture_accepted_step
+     PROCEDURE :: restore => restore_accepted_step
+  END TYPE accepted_step_state_t
+
   INTEGER                      :: Np, Nel, Nfp, Nf, Ndim, Nthreads
   INTEGER                      :: it, ir, ir_check, it0, nts, nu, nut, nb_args, IERR, k, i,is, count_adapt = 0, ir_adapt = 0, checkpoint = 1, divergence_counter_adapt = 0, convergence_counter = 1, order
   INTEGER                      :: divergence_refinements = 0
@@ -85,6 +99,59 @@ MODULE Main_utils
 
 
 CONTAINS
+
+  SUBROUTINE capture_accepted_step(this)
+    CLASS(accepted_step_state_t), INTENT(OUT) :: this
+
+    ! Capture before selecting a trial endpoint or updating its controls.
+    this%clock = time
+    this%steps = sol%Nt
+    this%u = sol%u
+    this%q = sol%q
+    this%trace = sol%u_tilde
+    this%u0 = sol%u0
+    IF (ALLOCATED(phys%impurity_concentrations)) this%impurity_concentrations = phys%impurity_concentrations
+    this%puff = phys%puff
+    this%recycling = phys%Re
+    this%recycling_pump = phys%Re_pump
+    this%zeff = phys%Zeff
+    this%line_density = phys%n_li
+    this%integral_error = phys%feedback_integral_error
+    this%previous_error = phys%feedback_previous_error
+    this%integral_error_xpr = phys%feedback_integral_error_xpr
+    this%previous_error_xpr = phys%feedback_previous_error_xpr
+    this%derivative = phys%feedback_derivative_history
+    this%derivative_xpr = phys%feedback_derivative_history_xpr
+  END SUBROUTINE capture_accepted_step
+
+  SUBROUTINE restore_accepted_step(this)
+    CLASS(accepted_step_state_t), INTENT(IN) :: this
+
+    ! The caller must restore the accepted mesh before restoring these arrays.
+    ! Preserve the complete solution history; derived fields are resampled.
+    sol%u = this%u
+    sol%q = this%q
+    sol%u_tilde = this%trace
+    sol%u0 = this%u0
+    time = this%clock
+    sol%Nt = this%steps
+    IF (ALLOCATED(this%impurity_concentrations)) THEN
+       phys%impurity_concentrations = this%impurity_concentrations
+    ELSEIF (ALLOCATED(phys%impurity_concentrations)) THEN
+       DEALLOCATE(phys%impurity_concentrations)
+    ENDIF
+    phys%puff = this%puff
+    phys%Re = this%recycling
+    phys%Re_pump = this%recycling_pump
+    phys%Zeff = this%zeff
+    phys%n_li = this%line_density
+    phys%feedback_integral_error = this%integral_error
+    phys%feedback_previous_error = this%previous_error
+    phys%feedback_integral_error_xpr = this%integral_error_xpr
+    phys%feedback_previous_error_xpr = this%previous_error_xpr
+    phys%feedback_derivative_history = this%derivative
+    phys%feedback_derivative_history_xpr = this%derivative_xpr
+  END SUBROUTINE restore_accepted_step
 
   SUBROUTINE handle_newton_result(result)
     TYPE(newton_result_t), INTENT(IN) :: result

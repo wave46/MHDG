@@ -4,6 +4,7 @@ PROGRAM test_me_restart
   USE GMSH_io_module, ONLY: load_gmsh_mesh
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
   USE Main_utils, ONLY: prepare_time_step, initialize_solu0_uiter_uconv, update_time_dependent_inputs
+  USE Main_utils, ONLY: accepted_step_state_t
   USE globals
   USE MPI_OMP, ONLY: MPIvar, init_MPI_OMP
 #ifdef PARALL
@@ -463,9 +464,10 @@ CONTAINS
     REAL*8, PARAMETER :: intervals(9) = [0.005d0,0.004d0,0.003d0,0.002d0,0.001d0, &
          0.0005d0,0.00025d0,0.000325d0,0.0004225d0]
     REAL*8, PARAMETER :: retries(4) = [0.001d0,0.0005d0,0.00025d0,0.000325d0]
-    TYPE(Feedback_derivative_history_type) :: saved_history(2)
+    TYPE(accepted_step_state_t) :: accepted
+    TYPE(Time_type) :: accepted_clock
     REAL*8 :: command, previous_command, target, measured, saved_values(6), expected(6), actual(6)
-    INTEGER :: selector, step, attempt
+    INTEGER :: selector, step, attempt, history
     INTEGER(HID_T) :: file_id, simulation_group, physics_group
 
     simpar%refval_time = 1.d0
@@ -515,19 +517,41 @@ CONTAINS
        ENDDO
     ENDDO
 
-    ! Tentative evaluations are replayed from the same accepted controller state.
+    ! A failed trial changes the plasma, clock and both feedback histories.
+    ! Distinct history columns must survive independently of the current u.
+    time%tis = 3
+    ALLOCATE(sol%q(2*SIZE(sol%u)),sol%u_tilde(6),sol%u0(SIZE(sol%u),time%tis))
+    sol%u = 1.d0+MPIvar%glob_id
+    sol%q = 2.d0+MPIvar%glob_id
+    sol%u_tilde = 3.d0+MPIvar%glob_id
+    DO history = 1, time%tis
+       sol%u0(:,history) = sol%u-REAL(history,8)
+    ENDDO
+    sol%Nt = 3
+    time%ik = time%it
+    accepted_clock = time
+    sol%time(:3) = [0.1d0,0.2d0,0.3d0]
+    phys%Re_pump = 0.7d0
+    phys%Zeff = 1.7d0
+    phys%n_li = 50.d0
+    CALL accepted%capture()
     saved_values = [phys%puff,phys%impurity_concentrations(1),phys%feedback_integral_error, &
          phys%feedback_integral_error_xpr,phys%feedback_previous_error,phys%feedback_previous_error_xpr]
-    saved_history = [phys%feedback_derivative_history,phys%feedback_derivative_history_xpr]
     DO attempt = 1, SIZE(retries)
-       phys%puff = saved_values(1)
-       phys%impurity_concentrations(1) = saved_values(2)
-       phys%feedback_integral_error = saved_values(3)
-       phys%feedback_integral_error_xpr = saved_values(4)
-       phys%feedback_previous_error = saved_values(5)
-       phys%feedback_previous_error_xpr = saved_values(6)
-       phys%feedback_derivative_history = saved_history(1)
-       phys%feedback_derivative_history_xpr = saved_history(2)
+       CALL accepted%restore()
+       IF (ANY(sol%u /= 1.d0+MPIvar%glob_id) .OR. ANY(sol%q /= 2.d0+MPIvar%glob_id) .OR. &
+           ANY(sol%u_tilde /= 3.d0+MPIvar%glob_id)) ERROR STOP 'rejected plasma retained'
+       DO history = 1, time%tis
+          IF (ANY(sol%u0(:,history) /= sol%u-REAL(history,8))) ERROR STOP 'rejected BDF history retained'
+       ENDDO
+       IF (time%t /= accepted_clock%t .OR. time%t_target /= accepted_clock%t_target .OR. &
+           time%t_ME /= accepted_clock%t_ME .OR. time%dt_ME /= accepted_clock%dt_ME .OR. &
+           time%dt /= accepted_clock%dt .OR. time%it /= accepted_clock%it .OR. &
+           time%ik /= accepted_clock%ik .OR. sol%Nt /= 3) ERROR STOP 'rejected clock/counters retained'
+       IF (ANY(sol%time(:3) /= [0.1d0,0.2d0,0.3d0])) ERROR STOP 'accepted output history changed'
+       IF (phys%Re /= 0.8d0 .OR. phys%Re_pump /= 0.7d0 .OR. phys%Zeff /= 1.7d0 .OR. &
+           phys%n_li /= 50.d0 .OR. phys%impurity_concentrations(2) /= 0.03d0) &
+            ERROR STOP 'rejected prescribed controls retained'
        time%dt = retries(attempt)
        time%t_target = time%t+time%dt
        target = 100.d0+2.d0*time%t_target
@@ -539,6 +563,24 @@ CONTAINS
            ABS(phys%feedback_integral_error-saved_values(3)-(target-measured)*time%dt) > 1.d-12 .OR. &
            ABS(phys%feedback_integral_error_xpr-saved_values(4)-(target-measured)*time%dt) > 1.d-12) &
             ERROR STOP 'feedback retry accumulated rejected state'
+       IF (attempt < SIZE(retries)) THEN
+          time%t = time%t_target
+          time%it = time%it+1
+          time%ik = time%ik+1
+          time%t_ME = -1.d0
+          time%dt_ME = -1.d0
+          sol%Nt = sol%Nt+1
+          CALL ensure_time_history_capacity(64)
+          sol%u = -1.d0
+          sol%q = -2.d0
+          sol%u_tilde = -3.d0
+          sol%u0 = -4.d0
+          phys%Re = -1.d0
+          phys%Re_pump = -1.d0
+          phys%Zeff = -1.d0
+          phys%n_li = -1.d0
+          phys%impurity_concentrations(2) = -1.d0
+       ENDIF
     ENDDO
     time%t = time%t_target
     time%it = time%it+1
