@@ -277,7 +277,7 @@ def check_time_input(executable, template):
         ("time_mode='fixed', dt0=145560.40756914119, t_start=873362.4454148472, "
          "t_final=4075691.411935954", None),
         ("time_mode='prescribed', time_units='seconds', t_start=.12, tfi=.56, "
-         "dt_reduce_on_failure=.true.", None),
+         "dt_reduce_on_failure=.true., dt_min=.001", None),
         ("time_mode='adaptive', time_units='seconds', dt0=.02, t_start=.12, t_final=.56, "
          "dt_reduce_on_failure=.false., dt_grow_on_easy=.true.", None),
         (fixed + ", tfi=.50", "tfi and t_final specify different final times"),
@@ -286,6 +286,9 @@ def check_time_input(executable, template):
         (fixed + ", dt_reduce_on_failure=.true.", "Fixed time_mode does not support timestep adaptation"),
         (fixed + ", tis=2", "Physical time modes currently require BDF1"),
         (fixed.replace("seconds", "milliseconds"), "time_units must be normalized or seconds"),
+        (fixed.replace("'fixed'", "'adaptive'") + ", dt_reduce_on_failure=.true.",
+         "Timestep reduction requires positive dt_min"),
+        (fixed.replace("'fixed'", "'adaptive'") + ", dt_min=.03", "Adaptive dt0 must not be smaller than dt_min"),
     ]
     with tempfile.TemporaryDirectory(prefix="mhdg-time-input-") as scratch:
         directory = Path(scratch)
@@ -308,6 +311,9 @@ def check_time_input(executable, template):
             np.testing.assert_allclose([start*scale, final*scale], [.12, .56], rtol=1e-14)
             np.testing.assert_allclose(dt*scale, 0. if mode == "prescribed" else .02, rtol=1e-14)
             assert (reduce, grow, steps) == (float(mode == "prescribed"), float(mode == "adaptive"), 0.)
+            limits = re.search(r"^TIME_MINIMUM_STEP\s+(.*)$", output, re.M)
+            np.testing.assert_allclose(list(map(float, limits[1].split())),
+                                       [.001 if mode == "prescribed" else 0.], rtol=1e-14)
         # Explicit initialization uses physical start time and capacity, without nts.
         text = re.sub(r"(?is)&TIME_LST\b.*?\n/", "&TIME_LST\n " + fixed + "\n/", text)
         (directory / "param.txt").write_text(text)

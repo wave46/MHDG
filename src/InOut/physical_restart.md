@@ -78,6 +78,26 @@ Legacy configurations retain their output sequence numbers (step divided by save
 frequency), startup `_0000` and unsuffixed final filename. All indices can grow
 beyond four digits.
 
-Fixed and prescribed physical-time modes are enabled. Adaptive mode and the
-reduction/growth options remain explicitly rejected until temporal recovery is
-implemented. Predictor history also follows later.
+Fixed, prescribed and adaptive physical-time modes are enabled for BDF1.
+Reduction is opt-in with `dt_reduce_on_failure=true`; it requires a positive
+`dt_min`, in the same `time_units` as `dt0`. Repeated halving stops when the next
+retry would be smaller than this minimum; no separate rejection limit is needed.
+Existing Newton mesh-recovery triggers and budgets are tried within each trial;
+recoverable failure then restores the last accepted mesh, plasma and controllers
+before halving. Finite Newton-budget exhaustion also permits temporal retry.
+Fatal solver errors terminate immediately.
+
+Prescribed mode retains pending endpoints during subdivision: two failures of
+0→1 and 0→0.5 can produce accepted times 0.25, 0.5 and 1. After reaching that
+frame, the next supplied frame is targeted in full. Adaptive mode starts at
+`dt0`, retains a successful reduced interval, and may cross equilibrium frames.
+Both sample equilibrium and controls at each trial endpoint in memory. Fixed
+mode retains its configured timestep and does not permit adaptation.
+
+A final remainder may be shorter than `dt_min` to reach `t_final` exactly, but a
+failed remainder cannot be halved below `dt_min`. The code also stops if rounding
+prevents representing a time strictly between the accepted and failed endpoints.
+These limits terminate without saving the rejected trial as an
+accepted step. Legacy inputs retain their existing stepping and failure policy.
+Easy-convergence growth and the Newton predictor follow in separate slices;
+`dt_grow_on_easy=true` remains rejected for now.

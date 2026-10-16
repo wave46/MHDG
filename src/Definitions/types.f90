@@ -537,6 +537,8 @@ MODULE types
      CHARACTER(LEN=16) :: units = 'normalized' ! units of namelist time inputs
      LOGICAL     :: dt_reduce_on_failure = .FALSE.
      LOGICAL     :: dt_grow_on_easy = .FALSE.
+     REAL*8      :: dt_min = 0.d0 ! minimum retry interval, in solver units
+     REAL*8, ALLOCATABLE :: pending_times(:) ! prescribed endpoints, last entry first
      INTEGER     :: it   ! the number of the current time step
      INTEGER     :: ik   ! same as it but always incrementing (also in case of pseudotime..)
      INTEGER     :: ndt  ! max number of time steps to do in the current session

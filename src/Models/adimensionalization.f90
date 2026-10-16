@@ -218,6 +218,7 @@ SUBROUTINE adimensionalization()
 
   IF (time%units == 'seconds') THEN
      time%dt0 = time%dt0/t0
+     time%dt_min = time%dt_min/t0
      time%t_start = time%t_start/t0
      time%t_final = time%t_final/t0
   ENDIF

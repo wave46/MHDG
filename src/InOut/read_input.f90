@@ -41,6 +41,7 @@ SUBROUTINE READ_input()
   REAL*8                :: t_start, t_final
   CHARACTER(LEN=16)     :: time_mode, time_units
   LOGICAL               :: dt_reduce_on_failure, dt_grow_on_easy
+  REAL*8                :: dt_min
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
   REAL*8                :: ionization_ion_energy_fraction
@@ -123,7 +124,7 @@ SUBROUTINE READ_input()
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis, time_mode, time_units, t_start, t_final, &
-       dt_reduce_on_failure, dt_grow_on_easy
+       dt_reduce_on_failure, dt_grow_on_easy, dt_min
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, Re_n, Re_n_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
@@ -208,6 +209,7 @@ SUBROUTINE READ_input()
   time_units = 'normalized'
   dt_reduce_on_failure = .FALSE.
   dt_grow_on_easy = .FALSE.
+  dt_min = 0.d0
 
   ! Reading the file
   uinput = 100
@@ -549,6 +551,8 @@ SUBROUTINE READ_input()
   time%units              = time_units
   time%dt_reduce_on_failure = dt_reduce_on_failure
   time%dt_grow_on_easy     = dt_grow_on_easy
+  time%dt_min             = dt_min
+  IF (ALLOCATED(time%pending_times)) DEALLOCATE(time%pending_times)
   time%tsw                = tsw
   time%tis                = tis
   phys%diff_n             = diff_n
@@ -764,6 +768,9 @@ SUBROUTINE READ_input()
      PRINT *, '                - time input units:                                   ', TRIM(time%units)
      PRINT *, '                - start time (solver units):                          ', time%t_start
      PRINT *, '                - final time (solver units):                          ', time%t_final
+     IF (time%dt_reduce_on_failure) THEN
+        PRINT *, '                - minimum retry dt (solver units):                    ', time%dt_min
+     ENDIF
      PRINT *, '                - max number of time steps:                           ', time%nts
      PRINT *, '                - time integration scheme:                            ', time%tis
      PRINT *, '        ***************** Physics *****************************'
@@ -1053,6 +1060,12 @@ CONTAINS
     IF (time_mode == 'fixed' .AND. (dt_reduce_on_failure .OR. dt_grow_on_easy)) &
          CALL invalid_time_input('Fixed time_mode does not support timestep adaptation')
     IF (tis /= 1) CALL invalid_time_input('Physical time modes currently require BDF1 (tis=1)')
+    IF (.NOT. ieee_is_finite(dt_min) .OR. dt_min < 0.d0) &
+         CALL invalid_time_input('dt_min must be finite and nonnegative')
+    IF (dt_reduce_on_failure .AND. dt_min <= 0.d0) &
+         CALL invalid_time_input('Timestep reduction requires positive dt_min')
+    IF (time_mode == 'adaptive' .AND. dt0 < dt_min) &
+         CALL invalid_time_input('Adaptive dt0 must not be smaller than dt_min')
   END SUBROUTINE configure_time_input
 
   SUBROUTINE invalid_time_input(message)

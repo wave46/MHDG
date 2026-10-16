@@ -30,10 +30,9 @@ PROGRAM MHDG
   ! Read input file param.txt
   CALL read_input()
 
-  IF (.NOT. time%legacy_input .AND. &
-      (time%mode == 'adaptive' .OR. time%dt_reduce_on_failure .OR. time%dt_grow_on_easy)) THEN
+  IF (.NOT. time%legacy_input .AND. time%dt_grow_on_easy) THEN
      IF (MPIvar%glob_id == 0) WRITE(6,*) &
-          'Adaptive timestep execution is not enabled yet; use fixed or prescribed without adaptation.'
+          'Easy-convergence timestep growth is not enabled yet; use dt_grow_on_easy=false.'
      STOP 1
   ENDIF
 
@@ -197,7 +196,7 @@ PROGRAM MHDG
   !*******************************************************
   it = it0
   DO ! ************ TIME LOOP *********************
-     CALL attempt_time_step(newton_result,time_finished)
+     CALL advance_time_step(newton_result,time_finished)
      IF (time_finished) EXIT
      CALL handle_newton_result(newton_result)
 

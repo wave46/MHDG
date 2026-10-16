@@ -1,5 +1,7 @@
 PROGRAM test_me_restart
-  USE initialization, ONLY: init_sim, next_physical_time, ensure_time_history_capacity
+  USE initialization, ONLY: init_sim
+  USE time_stepping, ONLY: next_physical_time, ensure_time_history_capacity
+  USE time_stepping, ONLY: schedule_half_step, remove_reached_target
   USE in_out, ONLY: HDF5_load_solution, HDF5_load_mesh_from_solution, save_feedback_state, load_feedback_state
   USE GMSH_io_module, ONLY: load_gmsh_mesh
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
@@ -61,6 +63,7 @@ PROGRAM test_me_restart
   ENDIF
   IF (mode == 'time-clock') THEN
      CALL check_physical_clock()
+     CALL check_time_subdivision()
      WRITE(*,'(A)') 'PHYSICAL_CLOCK_PASS'
      STOP
   ENDIF
@@ -76,6 +79,7 @@ PROGRAM test_me_restart
      WRITE(*,'(A,2(1X,A),4(1X,ES24.16),3(1X,I0))') 'TIME_INPUT_STATE', &
           TRIM(time%mode), TRIM(time%units), time%dt0, time%t_start, time%t_final, &
           simpar%refval_time, MERGE(1,0,time%dt_reduce_on_failure), MERGE(1,0,time%dt_grow_on_easy), time%nts
+     WRITE(*,'(A,1X,ES24.16)') 'TIME_MINIMUM_STEP', time%dt_min*simpar%refval_time
      STOP
   ENDIF
   IF (mode == 'nodal') THEN
@@ -769,6 +773,65 @@ CONTAINS
     IF (ANY(sol%time(4:) /= 0.d0) .OR. ANY(sol%tres(4:) /= 0.d0) .OR. sol%Nt /= 3) &
          ERROR STOP 'history growth modified accepted count or unfilled entries'
   END SUBROUTINE check_physical_clock
+
+  SUBROUTINE check_time_subdivision()
+    REAL*8 :: endpoint, frames(3), expected(4), previous_dt
+    INTEGER :: status, step
+    LOGICAL :: finished
+    CHARACTER(LEN=256) :: message
+
+    simpar%refval_time = 0.01d0
+    time%mode = 'prescribed'
+    time%t = 0.d0
+    time%t_final = 2.d0/simpar%refval_time
+    time%dt_reduce_on_failure = .TRUE.
+    time%dt_min = 0.1d0/simpar%refval_time
+    frames = [0.d0,1.d0,2.d0]
+    CALL next_physical_time(endpoint, finished, status, message, frames)
+    IF (status /= 0 .OR. endpoint*simpar%refval_time /= 1.d0) ERROR STOP 'original prescribed target'
+    CALL schedule_half_step(endpoint, status, message)
+    CALL next_physical_time(endpoint, finished, status, message, frames)
+    IF (status /= 0 .OR. endpoint*simpar%refval_time /= 0.5d0) ERROR STOP 'first prescribed midpoint'
+    CALL schedule_half_step(endpoint, status, message)
+    expected = [0.25d0,0.5d0,1.d0,2.d0]
+    DO step = 1, SIZE(expected)
+       CALL next_physical_time(endpoint, finished, status, message, frames)
+       IF (status /= 0 .OR. finished) ERROR STOP 'nested prescribed subdivision'
+       IF (ABS(endpoint*simpar%refval_time-expected(step)) > 1.d-14) ERROR STOP 'pending target lost'
+       time%t = endpoint
+       CALL remove_reached_target()
+    ENDDO
+    IF (ALLOCATED(time%pending_times)) ERROR STOP 'completed interval retained pending targets'
+
+    time%mode = 'adaptive'
+    time%t = 0.d0
+    time%dt = 0.4d0/simpar%refval_time
+    time%t_final = 0.25d0/simpar%refval_time
+    CALL schedule_half_step(0.4d0/simpar%refval_time, status, message)
+    IF (status /= 0) ERROR STOP 'first adaptive halving'
+    CALL schedule_half_step(0.2d0/simpar%refval_time, status, message)
+    IF (status /= 0) ERROR STOP 'repeated adaptive halving'
+    expected(:3) = [0.1d0,0.2d0,0.25d0]
+    DO step = 1, 3
+       CALL next_physical_time(endpoint, finished, status, message)
+       IF (status /= 0 .OR. finished) ERROR STOP 'adaptive reduced endpoint'
+       IF (ABS(endpoint*simpar%refval_time-expected(step)) > 1.d-14) ERROR STOP 'adaptive step retention/final remainder'
+       time%t = endpoint
+       CALL remove_reached_target()
+    ENDDO
+    CALL next_physical_time(endpoint, finished, status, message)
+    IF (status /= 0 .OR. .NOT. finished) ERROR STOP 'adaptive final time'
+
+    time%t = 0.d0
+    previous_dt = time%dt
+    CALL schedule_half_step(0.1d0/simpar%refval_time, status, message)
+    IF (status == 0 .OR. time%dt /= previous_dt) ERROR STOP 'dt_min did not stop halving'
+    time%t = 1.d20
+    time%dt_min = 1.d-6
+    CALL schedule_half_step(time%t+SPACING(time%t), status, message)
+    IF (status == 0) ERROR STOP 'indistinguishable midpoint did not stop halving'
+    WRITE(*,'(A)') 'TIME_SUBDIVISION_PASS'
+  END SUBROUTINE check_time_subdivision
 
   SUBROUTINE check_nodal_input()
     INTEGER :: i, frame, last_frame

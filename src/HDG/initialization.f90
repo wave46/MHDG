@@ -12,7 +12,6 @@ MODULE initialization
   USE physics
   USE MPI_OMP
   USE LinearAlgebra, ONLY: col,tensorProduct,solve_linear_system
-  USE rectangular_series_io, ONLY: locate_series_time
 
 
   IMPLICIT NONE
@@ -59,94 +58,6 @@ CONTAINS
     sol%time = 0.
     sol%Nt = 0
   END SUBROUTINE init_sim
-
-  SUBROUTINE next_physical_time(target, finished, ierr, message, frame_times)
-    REAL*8, INTENT(OUT) :: target
-    LOGICAL, INTENT(OUT) :: finished
-    INTEGER, INTENT(OUT) :: ierr
-    CHARACTER(LEN=*), INTENT(OUT) :: message
-    REAL*8, OPTIONAL, INTENT(IN) :: frame_times(:) ! Physical seconds, as stored by the provider.
-    REAL*8 :: tolerance
-
-    target = time%t
-    finished = .FALSE.
-    ierr = -1
-    message = 'Accepted time exceeds t_final'
-    tolerance = 64*EPSILON(time%t)*MAX(1.d0, ABS(time%t), ABS(time%t_final))
-    IF (time%t > time%t_final+tolerance) RETURN
-    IF (physical_time_is_complete()) THEN
-       finished = .TRUE.
-       ierr = 0
-       message = ''
-       RETURN
-    ENDIF
-
-    SELECT CASE (time%mode)
-    CASE ('fixed')
-       target = MIN(time%t_final, time%t+time%dt0)
-    CASE ('prescribed')
-       CALL next_prescribed_time(target, ierr, message, frame_times)
-       IF (ierr /= 0) RETURN
-    CASE DEFAULT
-       message = 'Endpoint selection currently supports fixed and prescribed physical time modes'
-       RETURN
-    END SELECT
-    ierr = -1
-    message = 'Timestep cannot advance physical time'
-    IF (target <= time%t) RETURN
-    ierr = 0
-    message = ''
-  END SUBROUTINE next_physical_time
-
-  LOGICAL FUNCTION physical_time_is_complete()
-    REAL*8 :: tolerance
-
-    tolerance = 64*EPSILON(time%t)*MAX(1.d0, ABS(time%t), ABS(time%t_final))
-    physical_time_is_complete = time%t >= time%t_final-tolerance
-  END FUNCTION physical_time_is_complete
-
-  SUBROUTINE next_prescribed_time(target, ierr, message, frame_times)
-    REAL*8, INTENT(OUT) :: target
-    INTEGER, INTENT(OUT) :: ierr
-    CHARACTER(LEN=*), INTENT(OUT) :: message
-    REAL*8, OPTIONAL, INTENT(IN) :: frame_times(:)
-    REAL*8 :: actual_time, weight
-    INTEGER :: left, right
-
-    target = time%t
-    ierr = -1
-    message = 'Prescribed mode requires at least two equilibrium timestamps'
-    IF (.NOT. PRESENT(frame_times)) RETURN
-    IF (SIZE(frame_times) < 2) RETURN
-    CALL locate_series_time(frame_times, time%t_final*simpar%refval_time, &
-         left, right, actual_time, weight, ierr, message)
-    IF (ierr /= 0) RETURN
-    CALL locate_series_time(frame_times, time%t*simpar%refval_time, &
-         left, right, actual_time, weight, ierr, message)
-    IF (ierr /= 0) RETURN
-    target = time%t_final
-    IF (left < SIZE(frame_times)) target = MIN(target, frame_times(left+1)/simpar%refval_time)
-  END SUBROUTINE next_prescribed_time
-
-  SUBROUTINE ensure_time_history_capacity(required)
-    INTEGER, INTENT(IN) :: required
-    INTEGER :: capacity, previous
-    REAL*8, ALLOCATABLE :: times(:), residuals(:)
-
-    previous = 0
-    IF (ALLOCATED(sol%time)) previous = SIZE(sol%time)
-    IF (required <= previous) RETURN
-    capacity = MAX(required, 16, 2*previous)
-    ALLOCATE(times(capacity), residuals(capacity))
-    times = 0.d0
-    residuals = 0.d0
-    IF (previous > 0) THEN
-       times(:previous) = sol%time
-       residuals(:previous) = sol%tres
-    ENDIF
-    CALL MOVE_ALLOC(times, sol%time)
-    CALL MOVE_ALLOC(residuals, sol%tres)
-  END SUBROUTINE ensure_time_history_capacity
 
   !*******************************************
   ! Initialization of the elemental matrices

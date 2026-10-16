@@ -2134,7 +2134,7 @@ CONTAINS
   END FUNCTION checkpoint_uses_physical_time
 
   SUBROUTINE load_physical_checkpoint(group_id)
-    USE initialization, ONLY: ensure_time_history_capacity
+    USE time_stepping, ONLY: ensure_time_history_capacity
     USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
     INTEGER(HID_T), INTENT(IN) :: group_id
     INTEGER :: step, ierr

@@ -18,6 +18,8 @@ MODULE Main_utils
   USE printutils
   USE debug
   USE initialization
+  USE time_stepping, ONLY: next_physical_time, physical_time_is_complete, &
+       schedule_half_step, remove_reached_target, ensure_time_history_capacity
   USE adaptivity_common_module, ONLY: set_order_mesh
   USE adaptivity_projection_module, ONLY: mesh_transfer_t
   USE external_heating
@@ -184,9 +186,60 @@ CONTAINS
     IF (ALLOCATED(this%original_mesh)) CALL free_mesh_loc(this%original_mesh)
   END SUBROUTINE release_accepted_mesh
 
-  SUBROUTINE attempt_time_step(result, finished)
+  SUBROUTINE advance_time_step(result, finished)
     TYPE(newton_result_t), INTENT(OUT) :: result
     LOGICAL, INTENT(OUT) :: finished
+    REAL*8 :: failed_endpoint
+    INTEGER :: rejections, status
+    CHARACTER(LEN=160) :: message
+
+    rejections = 0
+    DO
+       CALL solve_time_step_trial(result, finished, failed_endpoint)
+       IF (finished) RETURN
+       IF (time%legacy_input) RETURN
+       IF (result%status%outcome == solve_success) THEN
+          CALL remove_reached_target()
+          RETURN
+       ENDIF
+       IF (result%status%outcome /= solve_retry .OR. .NOT. time%dt_reduce_on_failure) RETURN
+
+       rejections = rejections+1
+       CALL schedule_half_step(failed_endpoint, status, message)
+       IF (status /= 0) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot retry timestep: ', TRIM(message), &
+               '; last nonlinear failure: ', TRIM(result%status%message)
+          result%status%message = message
+          RETURN
+       ENDIF
+       CALL print_timestep_retry(failed_endpoint, rejections, result%status%message)
+    ENDDO
+  END SUBROUTINE advance_time_step
+
+  SUBROUTINE print_timestep_retry(failed_endpoint, rejection, reason)
+    REAL*8, INTENT(IN) :: failed_endpoint
+    INTEGER, INTENT(IN) :: rejection
+    CHARACTER(LEN=*), INTENT(IN) :: reason
+    REAL*8 :: accepted_time, failed_time, retry_time
+
+    IF (MPIvar%glob_id /= 0) RETURN
+    accepted_time = time%t*simpar%refval_time
+    failed_time = failed_endpoint*simpar%refval_time
+    retry_time = accepted_time+(failed_time-accepted_time)/2.d0
+    WRITE(6,'(/,A)') '***************************************************************'
+    WRITE(6,'(A,I0,2A)') 'TIMESTEP REJECTED (', rejection, '): ', TRIM(reason)
+    WRITE(6,'(A,ES16.8,A)') '  Restored accepted time: ', accepted_time, ' s'
+    WRITE(6,'(A,ES16.8,A)') '  Failed endpoint:        ', failed_time, ' s'
+    WRITE(6,'(A,ES16.8,A)') '  Retry endpoint:         ', retry_time, ' s'
+    WRITE(6,'(A,ES16.8,A,ES16.8,A)') '  Timestep:               ', &
+         failed_time-accepted_time, ' -> ', retry_time-accepted_time, ' s'
+    WRITE(6,'(A,/)') '***************************************************************'
+  END SUBROUTINE print_timestep_retry
+
+  SUBROUTINE solve_time_step_trial(result, finished, attempted_endpoint)
+    TYPE(newton_result_t), INTENT(OUT) :: result
+    LOGICAL, INTENT(OUT) :: finished
+    REAL*8, INTENT(OUT) :: attempted_endpoint
     TYPE(accepted_step_state_t) :: accepted
     LOGICAL :: accepted_restart_adapt
 
@@ -195,6 +248,7 @@ CONTAINS
        accepted_restart_adapt = restart_adapt
     ENDIF
     CALL prepare_time_step(finished)
+    attempted_endpoint = time%t_target
     IF (finished) RETURN
     CALL update_uconv_qconv(sol%u,sol%q)
     CALL reset_newton_refinements()
@@ -222,7 +276,7 @@ CONTAINS
           restart_adapt = accepted_restart_adapt
        ENDIF
     ENDIF
-  END SUBROUTINE attempt_time_step
+  END SUBROUTINE solve_time_step_trial
 
   SUBROUTINE rollback_time_step(accepted)
     TYPE(accepted_step_state_t), INTENT(IN) :: accepted
