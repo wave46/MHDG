@@ -48,6 +48,7 @@ MODULE Main_utils
      PRIVATE
      TYPE(Time_type) :: clock
      INTEGER :: steps
+     TYPE(Mesh_type), ALLOCATABLE :: original_mesh
      REAL*8, ALLOCATABLE :: u(:), q(:), trace(:), impurity_concentrations(:)
      REAL*8, ALLOCATABLE :: u0(:,:)
      REAL*8 :: puff, recycling, recycling_pump, zeff, line_density
@@ -56,6 +57,9 @@ MODULE Main_utils
    CONTAINS
      PROCEDURE :: capture => capture_accepted_step
      PROCEDURE :: restore => restore_accepted_step
+     PROCEDURE :: capture_mesh => capture_accepted_mesh
+     PROCEDURE :: restore_mesh => restore_accepted_mesh
+     FINAL :: release_accepted_mesh
   END TYPE accepted_step_state_t
 
   INTEGER                      :: Np, Nel, Nfp, Nf, Ndim, Nthreads
@@ -129,9 +133,12 @@ CONTAINS
 
     ! The caller must restore the accepted mesh before restoring these arrays.
     ! Preserve the complete solution history; derived fields are resampled.
-    sol%u = this%u
-    sol%q = this%q
-    sol%u_tilde = this%trace
+    IF (ASSOCIATED(sol%u)) DEALLOCATE(sol%u)
+    IF (ASSOCIATED(sol%q)) DEALLOCATE(sol%q)
+    IF (ASSOCIATED(sol%u_tilde)) DEALLOCATE(sol%u_tilde)
+    ALLOCATE(sol%u, SOURCE=this%u)
+    ALLOCATE(sol%q, SOURCE=this%q)
+    ALLOCATE(sol%u_tilde, SOURCE=this%trace)
     sol%u0 = this%u0
     time = this%clock
     sol%Nt = this%steps
@@ -153,6 +160,133 @@ CONTAINS
     phys%feedback_derivative_history_xpr = this%derivative_xpr
   END SUBROUTINE restore_accepted_step
 
+  SUBROUTINE capture_accepted_mesh(this)
+    CLASS(accepted_step_state_t), INTENT(INOUT) :: this
+
+    IF (ALLOCATED(this%original_mesh)) RETURN
+    ALLOCATE(this%original_mesh)
+    CALL deep_copy_mesh_struct(Mesh,this%original_mesh)
+  END SUBROUTINE capture_accepted_mesh
+
+  SUBROUTINE restore_accepted_mesh(this, changed)
+    CLASS(accepted_step_state_t), INTENT(IN) :: this
+    LOGICAL, INTENT(OUT) :: changed
+
+    changed = ALLOCATED(this%original_mesh)
+    IF (.NOT. changed) RETURN
+    CALL free_mesh_loc(Mesh)
+    CALL deep_copy_mesh_struct(this%original_mesh,Mesh)
+  END SUBROUTINE restore_accepted_mesh
+
+  SUBROUTINE release_accepted_mesh(this)
+    TYPE(accepted_step_state_t), INTENT(INOUT) :: this
+
+    IF (ALLOCATED(this%original_mesh)) CALL free_mesh_loc(this%original_mesh)
+  END SUBROUTINE release_accepted_mesh
+
+  SUBROUTINE attempt_time_step(result, finished)
+    TYPE(newton_result_t), INTENT(OUT) :: result
+    LOGICAL, INTENT(OUT) :: finished
+    TYPE(accepted_step_state_t) :: accepted
+    LOGICAL :: accepted_restart_adapt
+
+    IF (.NOT. time%legacy_input) THEN
+       CALL accepted%capture()
+       accepted_restart_adapt = restart_adapt
+    ENDIF
+    CALL prepare_time_step(finished)
+    IF (finished) RETURN
+    CALL update_uconv_qconv(sol%u,sol%q)
+    CALL reset_newton_refinements()
+    CALL update_time_dependent_inputs()
+    IF (time%legacy_input) THEN
+       time%t = time%t+time%dt
+    ELSE
+       time%t = time%t_target
+    ENDIF
+    time%it = time%it+1
+    time%ik = time%ik+1
+    CALL ensure_time_history_capacity(sol%Nt+1)
+    sol%Nt = sol%Nt+1
+    IF (MPIvar%glob_id == 0) THEN
+       WRITE(6,'(" *",60("*"),"**")')
+       WRITE(6,'(" *",20X,"Time iteration   = ",I5,16X," *")') time%it
+       WRITE(6,'(" *",60("*"),"**")')
+    ENDIF
+    IF (time%legacy_input) THEN
+       CALL solve_newton_step(result)
+    ELSE
+       CALL solve_newton_step(result,accepted)
+       IF (result%status%outcome == solve_retry) THEN
+          CALL rollback_time_step(accepted)
+          restart_adapt = accepted_restart_adapt
+       ENDIF
+    ENDIF
+  END SUBROUTINE attempt_time_step
+
+  SUBROUTINE rollback_time_step(accepted)
+    TYPE(accepted_step_state_t), INTENT(IN) :: accepted
+    LOGICAL :: mesh_changed
+    REAL*8 :: endpoint_time
+
+    CALL discard_trial_linear_system()
+    ! Free derived arrays before their mesh is replaced.
+    IF (ALLOCATED(accepted%original_mesh)) CALL free_before_adaptivity()
+    CALL accepted%restore_mesh(mesh_changed)
+    CALL accepted%restore()
+    endpoint_time = time%t_target
+    time%t_target = time%t
+    IF (mesh_changed) THEN
+       CALL rebuild_mesh_solver_state(time%it)
+    ELSE
+       IF (magnetic_field_is_time_dependent()) CALL load_magnetic_field_Jtor(time%it)
+       IF (switch%external_heating) CALL load_external_heating(physical_time=time%t*simpar%refval_time)
+    ENDIF
+    time%t_target = endpoint_time
+    CALL update_uconv_qconv(sol%u,sol%q)
+    CALL update_uiter()
+    CALL reset_newton_refinements()
+    ir = 1
+    ir_check = 0
+    CALL free_mesh_loc(Mesh_prec)
+    CALL deep_copy_mesh_struct(Mesh,Mesh_prec)
+    IF (ASSOCIATED(sol%u_tilde0)) DEALLOCATE(sol%u_tilde0)
+    ALLOCATE(sol%u_tilde0(SIZE(sol%u_tilde)))
+    sol%u_tilde0 = 0.d0
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Rejected timestep restored to accepted time [s]: ', &
+         time%t*simpar%refval_time, ' mesh restored: ', mesh_changed
+  END SUBROUTINE rollback_time_step
+
+  SUBROUTINE discard_trial_linear_system()
+#ifdef WITH_PASTIX
+    USE solve_pastix, ONLY: terminate_mat_PASTIX
+#endif
+#ifdef WITH_PETSC
+    USE solve_petsc, ONLY: terminate_PETSC
+#endif
+#ifdef WITH_PSBLAS
+    USE solve_psblas, ONLY: terminate_PSBLAS
+#endif
+    IF (.NOT. matK%start) THEN
+       SELECT CASE (lssolver%sollib)
+       CASE (1)
+#ifdef WITH_PASTIX
+          CALL terminate_mat_PASTIX()
+#endif
+       CASE (2)
+#ifdef WITH_PSBLAS
+          CALL terminate_PSBLAS()
+#endif
+       CASE (3)
+#ifdef WITH_PETSC
+          CALL terminate_PETSC()
+#endif
+       END SELECT
+    ENDIF
+    matK%start = .TRUE.
+    CALL free_mat()
+  END SUBROUTINE discard_trial_linear_system
+
   SUBROUTINE handle_newton_result(result)
     TYPE(newton_result_t), INTENT(IN) :: result
 
@@ -166,7 +300,8 @@ CONTAINS
     ENDIF
   END SUBROUTINE handle_newton_result
 
-  SUBROUTINE solve_newton_step(result)
+  SUBROUTINE solve_newton_step(result, accepted)
+    TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
     TYPE(newton_result_t), INTENT(OUT) :: result
 
     result = newton_result_t()
@@ -175,7 +310,7 @@ CONTAINS
     ir = 1
     DO WHILE (ir <= numer%nrp)
        result%iterations = result%iterations+1
-       CALL compute_newton_update(result%status)
+       CALL compute_newton_update(result%status,accepted)
        IF (result%status%outcome /= solve_success) RETURN
        CALL check_newton_convergence(result%status)
        IF (result%status%outcome /= solve_success) RETURN
@@ -184,11 +319,11 @@ CONTAINS
           CALL save_converged_newton_solution()
           RETURN
        ELSEIF (newton_refinement_required(errNR,physical_iterate_valid,ir)) THEN
-          IF (recover_newton_divergence()) CYCLE
+          IF (recover_newton_divergence(accepted)) CYCLE
           result%status = solver_status_t(solve_retry, 0, 'Newton divergence or admissibility recovery exhausted')
           RETURN
        ELSE
-          CALL update_newton_checkpoint_and_refine(result%status)
+          CALL update_newton_checkpoint_and_refine(result%status,accepted)
           IF (result%status%outcome /= solve_success) RETURN
        ENDIF
 
@@ -203,7 +338,8 @@ CONTAINS
     result%status = solver_status_t(solve_retry, 0, 'Newton iteration limit reached')
   END SUBROUTINE solve_newton_step
 
-  SUBROUTINE compute_newton_update(status)
+  SUBROUTINE compute_newton_update(status, accepted)
+    TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
     TYPE(solver_status_t), INTENT(OUT) :: status
 
     ! update nonconstant dumping factor
@@ -239,7 +375,7 @@ CONTAINS
     CALL check_newton_values(status)
     IF (status%outcome /= solve_success) RETURN
     IF (adapt%adaptivity .AND. restart_adapt) THEN
-       CALL adaptivity()
+       CALL adaptivity(accepted=accepted)
        DEALLOCATE(uiter)
        ALLOCATE(uiter(SIZE(sol%u)))
        uiter = 0.
@@ -308,7 +444,8 @@ CONTAINS
     CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
   END SUBROUTINE save_converged_newton_solution
 
-  LOGICAL FUNCTION recover_newton_divergence() RESULT(recovered)
+  LOGICAL FUNCTION recover_newton_divergence(accepted) RESULT(recovered)
+    TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
     IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id .EQ. 0) THEN
        IF (errNR .LT. numer%tNR) THEN
           WRITE(*,*) 'NR residual converged, but solution is physically inadmissible; requesting refinement.'
@@ -329,7 +466,7 @@ CONTAINS
        ENDIF
        ! Reload this attempt's equilibrium, without advancing the
        ! physical timestep or updating the puff/feedback controller.
-       CALL adaptivity(preserve_history=.TRUE.)
+       CALL adaptivity(preserve_history=.TRUE.,accepted=accepted)
        CALL update_uconv_qconv(sol%u, sol%q)
        IF (SIZE(uiter) .NE. SIZE(sol%u)) THEN
           DEALLOCATE(uiter)
@@ -355,7 +492,8 @@ CONTAINS
     ENDIF
   END FUNCTION recover_newton_divergence
 
-  SUBROUTINE update_newton_checkpoint_and_refine(status)
+  SUBROUTINE update_newton_checkpoint_and_refine(status, accepted)
+    TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
     TYPE(solver_status_t), INTENT(OUT) :: status
 
     status = solver_status_t()
@@ -396,7 +534,7 @@ CONTAINS
                oscillation_refinements, ' of ', adapt%max_oscillation_refinements
        ENDIF
 
-       CALL adaptivity(preserve_history=adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol)
+       CALL adaptivity(preserve_history=adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol,accepted=accepted)
 
        IF((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)) THEN
           ! Update check-point solution to the one projected on the new mesh
@@ -649,7 +787,7 @@ CONTAINS
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
   END SUBROUTINE update_reduced_transport_profiles
 
-  SUBROUTINE adaptivity(preserve_history)
+  SUBROUTINE adaptivity(preserve_history, accepted)
 #ifdef WITH_PASTIX
     USE solve_pastix, only: terminate_mat_PASTIX
 #endif
@@ -659,10 +797,12 @@ CONTAINS
 #ifdef WITH_PSBLAS
     USE solve_psblas, only: terminate_PSBLAS
 #endif
+    TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
     LOGICAL, OPTIONAL, INTENT(IN) :: preserve_history
     TYPE(mesh_transfer_t) :: transfer
     INTEGER :: field_frame
 
+    IF (PRESENT(accepted)) CALL accepted%capture_mesh()
     field_frame = time%it
 
     ! Start timing
@@ -751,24 +891,6 @@ CONTAINS
     Mesh%X = Mesh%X/phys%lscale
     Mesh_prec%X = Mesh_prec%X/phys%lscale
 
-    ! reset parameters
-    CALL set_parameters()
-
-    ! Re-initialize magnetic field (the Mesh is needed)
-    CALL initialize_magnetic_field()
-
-    ! Re-load magnetic field and Jtor
-    CALL load_magnetic_field_Jtor(field_frame)
-
-    IF (switch%external_heating) THEN
-       CALL initialize_external_heating()
-       CALL load_external_heating(field_frame)
-    ENDIF
-
-
-    ! Re-Allocation and initialization of the elemental matrices
-    CALL init_elmat()
-
     ! restart to first ever iteration
     matK%start = .TRUE.
 
@@ -789,13 +911,7 @@ CONTAINS
 #endif
     ENDIF
 
-    ! Re-Initialize shock capturing
-    IF ((switch%shockcp .GT. 0) .OR. ((adapt%adaptivity) .AND. (adapt%shockcp_adapt .GT. 0)))  THEN
-       CALL initializeShockCapturing()
-    ENDIF
-
-    ! Re-Compute first equation (definition of the gradient)
-    CALL HDG_precalculatedfirstequation()
+    CALL rebuild_mesh_solver_state(field_frame)
 
     !! UPDATE VARIABLES
     errNR_adapt = 1e10
@@ -823,14 +939,59 @@ CONTAINS
   ENDSUBROUTINE adaptivity
 
 
+  SUBROUTINE rebuild_mesh_solver_state(field_frame)
+    INTEGER, INTENT(IN) :: field_frame
+
+    ! reset parameters
+    CALL set_parameters()
+
+    ! Re-initialize magnetic field (the Mesh is needed)
+    CALL initialize_magnetic_field()
+
+    ! Re-load magnetic field and Jtor
+    CALL load_magnetic_field_Jtor(field_frame)
+
+    IF (switch%external_heating) THEN
+       CALL initialize_external_heating()
+       CALL load_external_heating(field_frame)
+    ENDIF
+
+
+    ! Re-Allocation and initialization of the elemental matrices
+    CALL init_elmat()
+
+    ! Re-Initialize shock capturing
+    IF ((switch%shockcp .GT. 0) .OR. ((adapt%adaptivity) .AND. (adapt%shockcp_adapt .GT. 0)))  THEN
+       CALL initializeShockCapturing()
+    ENDIF
+
+    ! Re-Compute first equation (definition of the gradient)
+    CALL HDG_precalculatedfirstequation()
+
+  END SUBROUTINE rebuild_mesh_solver_state
+
   SUBROUTINE free_before_adaptivity()
     IF(ASSOCIATED(phys%B)) DEALLOCATE(phys%B)
     IF(ASSOCIATED(phys%magnetic_flux)) DEALLOCATE(phys%magnetic_flux)
     IF(ASSOCIATED(phys%Bperturb)) DEALLOCATE(phys%Bperturb)
     IF(ASSOCIATED(phys%magnetic_psi)) DEALLOCATE(phys%magnetic_psi)
     IF(ASSOCIATED(phys%Jtor))     DEALLOCATE(phys%Jtor)
+    IF(ASSOCIATED(phys%omega)) DEALLOCATE(phys%omega)
+    IF(ASSOCIATED(phys%q_cyl)) DEALLOCATE(phys%q_cyl)
+    IF(ASSOCIATED(phys%external_heating_ions)) DEALLOCATE(phys%external_heating_ions)
+    IF(ASSOCIATED(phys%external_heating_electrons)) DEALLOCATE(phys%external_heating_electrons)
 
-    NULLIFY(phys%magnetic_flux, phys%Bperturb, phys%magnetic_psi, phys%Jtor)
+    NULLIFY(phys%B, phys%magnetic_flux, phys%Bperturb, phys%magnetic_psi, phys%Jtor, phys%omega, phys%q_cyl)
+    NULLIFY(phys%external_heating_ions, phys%external_heating_electrons)
+    IF (ALLOCATED(phys%diff_nn_Vol)) DEALLOCATE(phys%diff_nn_Vol)
+    IF (ALLOCATED(phys%diff_nn_Fac)) DEALLOCATE(phys%diff_nn_Fac)
+    IF (ALLOCATED(phys%diff_nn_Bou)) DEALLOCATE(phys%diff_nn_Bou)
+    IF (ALLOCATED(phys%v_nn_Vol)) DEALLOCATE(phys%v_nn_Vol)
+    IF (ALLOCATED(phys%v_nn_Fac)) DEALLOCATE(phys%v_nn_Fac)
+    IF (ALLOCATED(phys%v_nn_Bou)) DEALLOCATE(phys%v_nn_Bou)
+    IF (ALLOCATED(Mesh%Xg)) DEALLOCATE(Mesh%Xg)
+    IF (ALLOCATED(Mesh%Xgf)) DEALLOCATE(Mesh%Xgf)
+    IF (ALLOCATED(Mesh%Xgb)) DEALLOCATE(Mesh%Xgb)
     CALL free_el_mat()
     CALL free_mat()
   ENDSUBROUTINE free_before_adaptivity

@@ -197,33 +197,8 @@ PROGRAM MHDG
   !*******************************************************
   it = it0
   DO ! ************ TIME LOOP *********************
-     CALL prepare_time_step(time_finished)
+     CALL attempt_time_step(newton_result,time_finished)
      IF (time_finished) EXIT
-
-     ! if a new time step starts, it means that the solution converged sol%u_conv = sol%u, sol%q_conv = sol%q
-     CALL update_uconv_qconv(sol%u, sol%q)
-     CALL reset_newton_refinements()
-
-     CALL update_time_dependent_inputs()
-
-     ! Actualization of time
-     IF (time%legacy_input) THEN
-        time%t = time%t + time%dt
-     ELSE
-        time%t = time%t_target
-     ENDIF
-     time%it = time%it + 1
-     time%ik = time%ik + 1
-     CALL ensure_time_history_capacity(sol%Nt + 1)
-     sol%Nt = sol%Nt + 1
-
-     IF (MPIvar%glob_id .EQ. 0) THEN
-        WRITE (6, '(" *", 60("*"), "**")')
-        WRITE (6, '(" *", 20X,    "Time iteration   = ", I5, 16X, " *")') time%it
-        WRITE (6, '(" *", 60("*"), "**")')
-     END IF
-
-     CALL solve_newton_step(newton_result)
      CALL handle_newton_result(newton_result)
 
      !  ! Apply threshold

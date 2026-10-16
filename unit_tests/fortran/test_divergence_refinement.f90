@@ -4,7 +4,7 @@ PROGRAM test_divergence_refinement
        physical_solution_is_admissible, update_best_newton_checkpoint, seed_divergence_checkpoint, &
        divergence_checkpoint_available, errNR_adapt, ir_adapt, &
        uiter_best, qiter_best, divergence_refinements, oscillation_refinements, prepare_oscillation_refinement, &
-       project_u0_newmesh, Mesh_prec, ir
+       project_u0_newmesh, Mesh_prec, ir, accepted_step_state_t
   USE adaptivity_projection_module, ONLY: mesh_transfer_t
 #ifdef PARALL
   USE Communications, ONLY: gather_mesh, gather_solution
@@ -261,8 +261,10 @@ CONTAINS
 
   SUBROUTINE check_mesh_copy_lifetime()
     TYPE(Mesh_type) :: original, saved, restored
+    TYPE(accepted_step_state_t) :: accepted
     REAL*8 :: coordinates(3,2)
     INTEGER :: trial
+    LOGICAL :: changed
 
     coordinates(:,1) = [0.d0,1.d0,0.d0]+2*MPIvar%glob_id
     coordinates(:,2) = [0.d0,0.d0,1.d0]
@@ -315,6 +317,19 @@ CONTAINS
     original%pr2sd = MOD(MPIvar%glob_id+1,MPIvar%glob_size)+1
 #endif
     CALL deep_copy_mesh_struct(original,saved)
+    CALL free_mesh_loc(Mesh)
+    CALL deep_copy_mesh_struct(original,Mesh)
+    CALL accepted%restore_mesh(changed)
+    IF (changed .OR. ANY(Mesh%X /= coordinates)) ERROR STOP 'unrefined trial changed the mesh'
+    CALL accepted%capture_mesh()
+    DO trial = 1, 2
+       Mesh%X = -REAL(trial,8)
+       Mesh%T = -trial
+       CALL accepted%capture_mesh()
+       CALL accepted%restore_mesh(changed)
+       IF (.NOT. changed .OR. ANY(Mesh%X /= coordinates) .OR. ANY(Mesh%T(1,:) /= [1,2,3])) &
+            ERROR STOP 'later refinement replaced the accepted mesh snapshot'
+    ENDDO
     CALL free_mesh_loc(original)
     DO trial = 1, 2
        CALL deep_copy_mesh_struct(saved,restored)
