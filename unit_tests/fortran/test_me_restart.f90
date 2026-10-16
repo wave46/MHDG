@@ -3,7 +3,7 @@ PROGRAM test_me_restart
   USE in_out, ONLY: HDF5_load_solution, HDF5_load_mesh_from_solution, save_feedback_state, load_feedback_state
   USE GMSH_io_module, ONLY: load_gmsh_mesh
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
-  USE Main_utils, ONLY: prepare_physical_time_step, initialize_solu0_uiter_uconv
+  USE Main_utils, ONLY: prepare_time_step, initialize_solu0_uiter_uconv, update_time_dependent_inputs
   USE globals
   USE MPI_OMP, ONLY: MPIvar, init_MPI_OMP
 #ifdef PARALL
@@ -319,7 +319,7 @@ CONTAINS
     accepted_target = time%t_target*simpar%refval_time
     moving = magnetic_field_is_time_dependent()
     CALL sample_magnetic_input(sample=sample)
-    CALL prepare_physical_time_step(finished)
+    CALL prepare_time_step(finished)
     IF (time%t*simpar%refval_time /= accepted_time) ERROR STOP 'restart preparation advanced accepted clock'
     WRITE(*,'(A,2(1X,I0),4(1X,ES24.16),1X,L1,4(1X,ES24.16))') 'PHYSICAL_RESTART_STATE', &
          time%it, sol%Nt, accepted_time, accepted_target, time%t_target*simpar%refval_time, &
@@ -348,7 +348,7 @@ CONTAINS
     time%t_target = 0.25d0/simpar%refval_time
     time%t_ME = 99.d0
     CALL initialize_puff()
-    CALL SetParticleSource()
+    CALL update_time_dependent_inputs()
     IF (phys%puff /= 8.d0 .OR. phys%Zeff /= 1.7d0 .OR. &
         ANY(phys%impurity_concentrations /= [0.02d0,0.03d0])) ERROR STOP 'empty control paths changed constants'
 
@@ -360,7 +360,7 @@ CONTAINS
         phys%impurity_concentrations(2) /= 0.03d0) ERROR STOP 'fixed-field sources or fixed Zeff'
     input%zeff_path = 'controls.h5'
     time%t_target = 0.56d0/simpar%refval_time
-    CALL SetParticleSource()
+    CALL update_time_dependent_inputs()
     IF (ABS(phys%puff-21.2d0) > 1.d-12 .OR. ABS(phys%Zeff-3.68d0) > 1.d-12 .OR. &
         ABS(phys%impurity_concentrations(1)-0.1056d0) > 1.d-12) ERROR STOP 'scheduled control endpoint'
 
@@ -411,7 +411,7 @@ CONTAINS
                  phys%feedback_derivative_history%target /= 0.5d0 .OR. &
                  phys%feedback_derivative_history_xpr%target /= 0.5d0) &
                   ERROR STOP 'startup advanced restored feedback state'
-             CALL SetParticleSource()
+             CALL update_time_dependent_inputs()
              expected_puff = 10.d0
              expected_recycling = 0.5d0
              expected_impurity = 0.02d0
@@ -680,7 +680,7 @@ CONTAINS
     expected = [0.052d0, 0.092d0, 0.105d0]
     DO step = 1, SIZE(expected)
        accepted = time%t
-       CALL prepare_physical_time_step(finished)
+       CALL prepare_time_step(finished)
        target = time%t_target
        IF (finished) ERROR STOP 'fixed physical endpoint selection'
        IF (ABS(target*simpar%refval_time-expected(step)) > 1.d-15) ERROR STOP 'fixed final interval'

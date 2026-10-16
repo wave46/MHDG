@@ -20,7 +20,7 @@ MODULE Main_utils
        projectSolutionDifferentMeshes_general_arrays
   USE external_heating
 #ifdef WITH_PETSC
-   USE solve_petsc, only: matPETSC, InitPETSC
+   USE solve_petsc, only: matPETSC, InitPETSC, FinalizePETSC
 #endif
   USE adaptivity_general_module
   USE Postprocess, only: computeL2ErrorAnalyticSol
@@ -78,29 +78,94 @@ MODULE Main_utils
 
 CONTAINS
 
-  SUBROUTINE prepare_physical_time_step(finished)
+  SUBROUTINE exit_if_restart_complete()
+    IF (time%legacy_input) THEN
+       IF (.NOT. switch%ME .OR. time%it /= nts) RETURN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) &
+            'ME final step already reached: ', time%it, ' (nts = ', nts, ')'
+    ELSE
+       IF (.NOT. physical_time_is_complete()) RETURN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) &
+            'Physical final time already reached [s]: ', time%t*simpar%refval_time
+    ENDIF
+
+    ! Normal-run allocations and linear solver state are not initialized yet.
+#ifdef WITH_PETSC
+    IF (lssolver%sollib .EQ. 3) CALL FinalizePETSC()
+#endif
+    CALL MPI_finalize(IERR)
+    STOP
+  END SUBROUTINE exit_if_restart_complete
+
+  SUBROUTINE prepare_time_step(finished)
     LOGICAL, INTENT(OUT) :: finished
     REAL*8, ALLOCATABLE :: frame_times(:)
-    REAL*8 :: target
+    REAL*8 :: endpoint_time
     INTEGER :: status
     CHARACTER(LEN=256) :: message
 
+    IF (time%legacy_input) THEN
+       finished = it > nts
+       RETURN
+    ENDIF
+
     IF (time%mode == 'prescribed') THEN
        CALL magnetic_time_points(frame_times)
-       CALL next_physical_time(target, finished, status, message, frame_times)
+       CALL next_physical_time(endpoint_time, finished, status, message, frame_times)
     ELSE
-       CALL next_physical_time(target, finished, status, message)
+       CALL next_physical_time(endpoint_time, finished, status, message)
     ENDIF
     IF (status /= 0) THEN
        IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot select physical timestep: ', TRIM(message)
        STOP 1
     ENDIF
     IF (finished) RETURN
-    time%t_target = target
-    time%dt = target-time%t
-    time%t_ME = target*simpar%refval_time
+    time%t_target = endpoint_time
+    time%dt = endpoint_time-time%t
+    time%t_ME = endpoint_time*simpar%refval_time
     time%dt_ME = time%dt*simpar%refval_time
-  END SUBROUTINE prepare_physical_time_step
+  END SUBROUTINE prepare_time_step
+
+  SUBROUTINE update_time_dependent_inputs()
+    CALL update_magnetic_field_for_step()
+    IF (switch%ME .OR. .NOT. time%legacy_input) CALL SetParticleSource()
+    CALL update_heating_for_step()
+  END SUBROUTINE update_time_dependent_inputs
+
+  SUBROUTINE update_magnetic_field_for_step()
+    IF (switch%ME .AND. time%legacy_input) THEN
+       ! Initial/restart output represents the accepted frame. Sample the next
+       ! endpoint and its controls only when an advance is actually attempted.
+       CALL load_magnetic_field_Jtor(time%it + 1)
+       IF (.NOT. ieee_is_finite(time%dt_ME) .OR. time%dt_ME <= 0.d0) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'ME endpoint timestep must be positive: ', time%dt_ME
+          STOP 1
+       ENDIF
+       IF (.NOT. ieee_is_finite(time%t_ME) .OR. &
+           ABS(time%t_ME - (time%t*simpar%refval_time + time%dt_ME)) > &
+           MAX(1.d-12,1.d-10*ABS(time%t_ME))) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) &
+               'ME frame time must match the timestep endpoint: ', time%t_ME, &
+               time%t*simpar%refval_time + time%dt_ME
+          STOP 1
+       ENDIF
+       time%dt = time%dt_ME/simpar%refval_time
+    ELSEIF (.NOT. time%legacy_input) THEN
+       IF (magnetic_field_is_time_dependent()) CALL load_magnetic_field_Jtor()
+    ENDIF
+  END SUBROUTINE update_magnetic_field_for_step
+
+  SUBROUTINE update_heating_for_step()
+    IF (.NOT. switch%external_heating) RETURN
+
+    IF (.NOT. time%legacy_input) THEN
+       CALL load_external_heating(physical_time=time%t_target*simpar%refval_time)
+    ELSEIF (switch%ME) THEN
+       CALL load_external_heating(physical_time=time%t_ME)
+    ELSEIF (.NOT. switch%steady) THEN
+       CALL load_external_heating(physical_time=(time%t+time%dt)*simpar%refval_time)
+    ENDIF
+  END SUBROUTINE update_heating_for_step
 
 #ifdef PARALL
   SUBROUTINE domain_decomposition()

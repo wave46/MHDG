@@ -2,12 +2,9 @@ PROGRAM MHDG
   USE Main_utils
   USE MPI_OMP
   USE adaptivity_indicator_module, ONLY: compute_error_oscillations
-#ifdef WITH_PETSC
-  USE solve_petsc, ONLY: FinalizePETSC
-#endif
 
   IMPLICIT NONE
-  LOGICAL :: physical_time_finished
+  LOGICAL :: time_finished
 
   ! Initialize MPI
   CALL init_MPI_OMP()
@@ -132,44 +129,11 @@ PROGRAM MHDG
   IF (nb_args .EQ. 2) CALL initialize_solution()
 #endif
 
-  ! Completed restarts exit before field/source loading or startup output.
-  physical_time_finished = .FALSE.
-  IF (.NOT. time%legacy_input) physical_time_finished = physical_time_is_complete()
-  IF ((time%legacy_input .AND. switch%ME .AND. time%it .EQ. nts) .OR. physical_time_finished) THEN
-     IF (MPIvar%glob_id .EQ. 0) THEN
-        IF (physical_time_finished) THEN
-           WRITE (6, *) 'Physical final time already reached [s]: ', time%t*simpar%refval_time
-        ELSE
-           WRITE (6, *) 'ME final step already reached: ', time%it, ' (nts = ', nts, ')'
-        ENDIF
-     ENDIF
-#ifdef WITH_PETSC
-     IF (lssolver%sollib .EQ. 3) CALL FinalizePETSC()
-#endif
-     CALL MPI_finalize(IERR)
-     STOP
-  ENDIF
+  CALL exit_if_restart_complete()
 
-
-  ! if the restart solution is not given
-  IF ((nb_args .EQ. 1)) THEN
-     ! initialise magnetic field (the mesh is needed)
-     CALL initialize_magnetic_field()
-     ! load magnetic field and Jtor
-     CALL load_magnetic_field_Jtor()
-     ! initialise solution
-     CALL initialize_solution()
-  ELSEIF ((MPIvar%glob_size .EQ. 1)) THEN
-       ! initialise magnetic field (the mesh is needed)
-       CALL initialize_magnetic_field()
-       ! load magnetic field and Jtor
-       CALL load_magnetic_field_Jtor()
-  ELSE 
-      ! initialise magnetic field (the mesh is needed)
-      CALL initialize_magnetic_field()
-      ! load magnetic field and Jtor
-      CALL load_magnetic_field_Jtor()
-  ENDIF
+  CALL initialize_magnetic_field()
+  CALL load_magnetic_field_Jtor()
+  IF (nb_args .EQ. 1) CALL initialize_solution()
 
   IF (switch%external_heating) THEN
      ! Initialise external heating
@@ -233,48 +197,14 @@ PROGRAM MHDG
   !*******************************************************
   it = it0
   DO ! ************ TIME LOOP *********************
-     IF (time%legacy_input) THEN
-        IF (it > nts) EXIT
-     ELSE
-        CALL prepare_physical_time_step(physical_time_finished)
-        IF (physical_time_finished) EXIT
-     ENDIF
+     CALL prepare_time_step(time_finished)
+     IF (time_finished) EXIT
 
      ! if a new time step starts, it means that the solution converged sol%u_conv = sol%u, sol%q_conv = sol%q
      CALL update_uconv_qconv(sol%u, sol%q)
      CALL reset_newton_refinements()
 
-     IF (switch%ME .AND. time%legacy_input) THEN
-        ! Initial/restart output represents the accepted frame. Sample the next
-        ! endpoint and its controls only when an advance is actually attempted.
-        CALL load_magnetic_field_Jtor(time%it + 1)
-        IF (.NOT. ieee_is_finite(time%dt_ME) .OR. time%dt_ME <= 0.d0) THEN
-           IF (MPIvar%glob_id == 0) WRITE(6,*) 'ME endpoint timestep must be positive: ', time%dt_ME
-           STOP 1
-        ENDIF
-        IF (.NOT. ieee_is_finite(time%t_ME) .OR. &
-            ABS(time%t_ME - (time%t*simpar%refval_time + time%dt_ME)) > &
-            MAX(1.d-12,1.d-10*ABS(time%t_ME))) THEN
-           IF (MPIvar%glob_id == 0) WRITE(6,*) &
-                'ME frame time must match the timestep endpoint: ', time%t_ME, &
-                time%t*simpar%refval_time + time%dt_ME
-           STOP 1
-        ENDIF
-        time%dt = time%dt_ME/simpar%refval_time
-     ELSEIF (.NOT. time%legacy_input) THEN
-        IF (magnetic_field_is_time_dependent()) CALL load_magnetic_field_Jtor()
-     ENDIF
-     IF (switch%ME .OR. .NOT. time%legacy_input) CALL SetParticleSource()
-
-     IF (switch%external_heating) THEN
-        IF (.NOT. time%legacy_input) THEN
-           CALL load_external_heating(physical_time=time%t_target*simpar%refval_time)
-        ELSEIF (switch%ME) THEN
-           CALL load_external_heating(physical_time=time%t_ME)
-        ELSEIF (.NOT. switch%steady) THEN
-           CALL load_external_heating(physical_time=(time%t+time%dt)*simpar%refval_time)
-        ENDIF
-     ENDIF
+     CALL update_time_dependent_inputs()
 
      ! Actualization of time
      IF (time%legacy_input) THEN
