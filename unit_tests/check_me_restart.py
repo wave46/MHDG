@@ -15,7 +15,8 @@ def parameters(template, *, nts=100, me=True, full_paths=False):
     values = {"ME": ".true." if me else ".false.", "nts": str(nts),
               "steady": ".false.", "target_variable": "1", "printint": "0", "puff": "456",
               "field_path": "'field_0000.h5'" if full_paths else "'field'",
-              "jtor_path": "'current_0000.h5'" if full_paths else "'current'"}
+              "jtor_path": "'current_0000.h5'" if full_paths else "'current'",
+              "zeff_path": "'controls.h5'"}
     for key, value in values.items():
         template, count = re.subn(rf"(?im)^(\s*{key}\s*=).*?$", rf"\g<1> {value}", template)
         assert count == 1, key

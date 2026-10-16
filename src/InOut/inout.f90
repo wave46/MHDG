@@ -15,7 +15,7 @@ MODULE in_out
   USE build_provenance, ONLY: solver_git_commit, solver_git_dirty, solver_build_id
   USE balance_diagnostics, ONLY: balance_diag, balance_diagnostics_mode_name
   USE GLOBALS
-  USE magnetic_field, ONLY: reconstruct_feedback_derivative_history
+  USE magnetic_field, ONLY: reconstruct_feedback_derivative_history, magnetic_input_position
   USE MPI_OMP
   USE printutils
   USE magnetic_geometry_state, ONLY: magnetic_equilibrium, &
@@ -1352,6 +1352,10 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, time%t, 'Current_time')
       CALL HDF5_logical_saving(group_id2, .NOT. switch%steady .AND. .NOT. switch%psdtime, 'Physical_time_evolution')
       CALL HDF5_real_saving(group_id2, time%t*simpar%refval_time, 'Current_time_seconds')
+      IF (.NOT. time%legacy_input) THEN
+         CALL HDF5_string_saving(group_id2, time%mode, 'Time_mode')
+         CALL save_equilibrium_position(group_id2)
+      ENDIF
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create geometry parameters group
@@ -1950,6 +1954,18 @@ CONTAINS
     END IF
 
   ENDSUBROUTINE HDF5_load_solution
+
+  SUBROUTINE save_equilibrium_position(time_group)
+    INTEGER(HID_T), INTENT(IN) :: time_group
+    INTEGER :: left, right
+    REAL*8 :: fraction
+
+    CALL magnetic_input_position(left, right, fraction)
+    IF (left < 0) RETURN
+    CALL HDF5_integer_saving(time_group, left, 'Equilibrium_frame_left')
+    CALL HDF5_integer_saving(time_group, right, 'Equilibrium_frame_right')
+    CALL HDF5_real_saving(time_group, fraction, 'Equilibrium_fraction')
+  END SUBROUTINE save_equilibrium_position
 
   SUBROUTINE save_feedback_state(physics_group)
     INTEGER(HID_T), INTENT(IN) :: physics_group

@@ -199,6 +199,25 @@ CONTAINS
     ENDIF
   END SUBROUTINE magnetic_time_points
 
+  SUBROUTINE magnetic_input_position(left, right, fraction)
+    INTEGER, INTENT(OUT) :: left, right
+    REAL(float), INTENT(OUT) :: fraction
+    REAL(float) :: sampled_time
+    INTEGER :: ierr
+    CHARACTER(LEN=256) :: message
+
+    left = -1
+    right = -1
+    fraction = 0
+    ! Output must not open another equilibrium input, including for nodal cases.
+    IF (.NOT. equilibrium_input_open) RETURN
+    CALL locate_series_time(equilibrium_times, time%t*simpar%refval_time, &
+         left, right, sampled_time, fraction, ierr, message)
+    CALL abort_on_equilibrium_error(ierr, message)
+    left = left-1
+    right = right-1
+  END SUBROUTINE magnetic_input_position
+
   SUBROUTINE abort_on_equilibrium_error(ierr, message)
     INTEGER, INTENT(IN) :: ierr
     CHARACTER(LEN=*), INTENT(IN) :: message
@@ -1850,6 +1869,7 @@ CONTAINS
        ENDIF
     END IF
 #endif
+    IF (.NOT. time%legacy_input) CALL SetParticleSource(update_feedback=.FALSE.)
   ENDSUBROUTINE initialize_puff
 
   INTEGER FUNCTION equilibrium_frame_index(frame) RESULT(index)
@@ -2003,22 +2023,28 @@ LOGICAL FUNCTION control_file_requested(path)
    control_file_requested = time%legacy_input .OR. LEN_TRIM(path) > 0
 END FUNCTION control_file_requested
 
-SUBROUTINE SetParticleSource()
+SUBROUTINE SetParticleSource(update_feedback)
+   LOGICAL, OPTIONAL, INTENT(IN) :: update_feedback
+   LOGICAL :: advance_feedback
 
+   advance_feedback = .TRUE.
+   IF (PRESENT(update_feedback)) advance_feedback = update_feedback
    IF (.NOT. time%legacy_input .OR. (switch%testcase >= 50 .AND. switch%testcase <= 59)) THEN
       SELECT CASE (switch%target_variable)
       CASE (0, 2)
          IF (control_file_requested(input%puff_path)) &
               CALL load_puff_from_file(input%puff_path, input%puff_dimension)
-         IF (switch%target_variable == 2) &
+         IF (switch%target_variable == 2 .AND. advance_feedback) &
               CALL adjust_recycling_to_target_density(input%target_density_path, input%target_density_dimension)
       CASE (1, 3)
-         CALL adjust_puff_to_target_density(input%target_density_path, input%target_density_dimension)
+         IF (advance_feedback) &
+              CALL adjust_puff_to_target_density(input%target_density_path, input%target_density_dimension)
       END SELECT
       IF (switch%impurity_radiation) THEN
          IF (switch%target_variable == 3) THEN
-            CALL adjust_impurity_concentration_to_target_density_xpr(input%target_density_xpr_path, &
-                 input%target_density_xpr_dimension)
+            IF (advance_feedback) &
+                 CALL adjust_impurity_concentration_to_target_density_xpr(input%target_density_xpr_path, &
+                      input%target_density_xpr_dimension)
          ELSEIF (control_file_requested(input%impurity_concentration_path)) THEN
             CALL load_impurity_concentration(input%impurity_concentration_path, input%impurity_concentration_dimension)
          ENDIF

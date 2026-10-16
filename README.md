@@ -116,19 +116,19 @@ for the existing `target_variable` selections and required feedback target files
 The physical-time configuration is being introduced in stages. `TIME_LST` now
 accepts `time_mode = 'fixed'`, `'prescribed'` or `'adaptive'`, `t_start` (default
 zero), and `t_final`. Explicit modes require `steady = .false.`,
-`psdtime = .false.`, and BDF1 (`tis = 1`). **Execution of explicit modes is
-temporarily rejected until equilibrium/controller scheduling is integrated.**
+`psdtime = .false.`, and BDF1 (`tis = 1`). Fixed and prescribed modes are enabled;
+adaptive execution and the reduction/growth options remain unavailable until
+temporal recovery is implemented.
 The existing templates retain their working legacy configuration.
 
 For explicit modes, one equilibrium frame means fixed magnetic equilibrium and
 multiple frames mean moving equilibrium; `ME` is inferred internally. Magnetic
 and heating providers sample the proposed physical endpoint, interpolating when
 it lies between frames. Fixed magnetic fields are rebuilt only when the mesh
-changes. Physical restart/output integration remains a prerequisite for enabling
-explicit-mode execution.
-Checkpoint classification and physical-clock restoration are implemented as
-described in the [restart guide](src/InOut/physical_restart.md); output naming
-and solver-loop activation remain the next slice.
+changes. Runs advance to `t_final`, even when the plasma reaches a local steady
+state earlier. Fixed stepping shortens the last interval when necessary.
+Checkpoint classification, physical-clock restoration and output metadata are
+described in the [restart guide](src/InOut/physical_restart.md).
 
 `time_units = 'seconds'` converts namelist `dt0`, `t_start` and the final time
 once during input normalization. Omitted units mean `'normalized'`, preserving

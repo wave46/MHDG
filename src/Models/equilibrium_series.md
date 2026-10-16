@@ -138,8 +138,9 @@ including interpolation between supplied frames; numerical step numbers do not
 select magnetic frames. Sampling leaves the numerical timestep unchanged.
 Fixed fields are retained between steps. Mesh adaptation rebuilds their nodal
 representation from the same provider and cache, as for moving fields.
-Explicit-mode solver execution remains guarded until controller scheduling and
-restart integration are complete.
+Fixed and prescribed physical-time execution are supported. Checkpoints record
+the physical time and zero-based bracketing frame indices with their interpolation
+fraction; continuation locates the next endpoint from physical time.
 
 With `compute_from_flux = .true.`, the poloidal magnetic field and toroidal
 current density are reconstructed from the primitive flux `psi`. For physical

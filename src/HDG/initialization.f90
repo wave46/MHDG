@@ -74,7 +74,7 @@ CONTAINS
     message = 'Accepted time exceeds t_final'
     tolerance = 64*EPSILON(time%t)*MAX(1.d0, ABS(time%t), ABS(time%t_final))
     IF (time%t > time%t_final+tolerance) RETURN
-    IF (time%t >= time%t_final-tolerance) THEN
+    IF (physical_time_is_complete()) THEN
        finished = .TRUE.
        ierr = 0
        message = ''
@@ -97,6 +97,13 @@ CONTAINS
     ierr = 0
     message = ''
   END SUBROUTINE next_physical_time
+
+  LOGICAL FUNCTION physical_time_is_complete()
+    REAL*8 :: tolerance
+
+    tolerance = 64*EPSILON(time%t)*MAX(1.d0, ABS(time%t), ABS(time%t_final))
+    physical_time_is_complete = time%t >= time%t_final-tolerance
+  END FUNCTION physical_time_is_complete
 
   SUBROUTINE next_prescribed_time(target, ierr, message, frame_times)
     REAL*8, INTENT(OUT) :: target

@@ -140,8 +140,8 @@ states, fixed-field physical step-1 continuation, completed checkpoints, and
 moving-field continuation between frames with a numerical index larger than the
 frame count and initial history capacity. Clock conversion, feedback restoration,
 BDF1 accepted history, next-endpoint selection, and nonfinite-time rejection are
-checked through the production reader/helpers. Actual explicit-mode solver runs
-remain pending loop activation.
+checked through the production reader/helpers. Startup sampling also checks that
+prescribed values are initialized without changing restored feedback state.
 It also checks HDF5 grid dimensions/orientation on a non-square rectangular grid,
 stored-current interpolation at initial/endpoint frames, full filenames and
 legacy basenames, optional namelist dimensions, and dataset-shape rejection.
@@ -163,6 +163,17 @@ shared-node values, exclusion of ghost-only copies, and all-rank/root-only outpu
 It needs Python 3 with h5py and NumPy, uses no external
 equilibrium or case data, and does not launch a solver simulation. The nodal
 checks initialize MPI; parallel builds need a working local MPI launcher.
+
+For completed-restart executable checks with prepared external inputs, use:
+
+```bash
+python3 unit_tests/check_me_completed_restart.py --solver /path/to/solver \
+  --parameters /path/to/param.txt --checkpoint /path/to/checkpoint.h5 \
+  --ranks 4 --omp-threads 4
+```
+
+It checks legacy ME and explicit fixed/prescribed completion with deliberately
+absent equilibrium files and no physical advances or new output files.
 
 In ME runs, `nts` is the final global step number: with `nts=100`, restart steps
 50, 99, and 100 leave 50, 1, and 0 advances. Startup loads the accepted frame

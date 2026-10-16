@@ -4,7 +4,9 @@ With explicit `time_mode`, source schedules and the existing feedback controller
 are updated once before each timestep solve, independently of whether the magnetic
 equilibrium moves. Curves are sampled at the proposed physical endpoint in seconds.
 Feedback uses the numerical interval `time%dt * refval_time`, also in seconds.
-Explicit solver execution remains guarded pending the restart/output slice.
+At startup, prescribed actuator values and Zeff are sampled at the accepted
+physical time. Feedback-owned actuator values and their histories are retained;
+no PID update occurs until an advance is attempted.
 
 `target_variable` retains its existing meanings:
 

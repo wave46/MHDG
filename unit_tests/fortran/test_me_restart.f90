@@ -354,7 +354,7 @@ CONTAINS
 
     input%puff_path = 'controls.h5'
     input%impurity_concentration_path = 'controls.h5'
-    CALL SetParticleSource()
+    CALL initialize_puff()
     IF (ABS(phys%puff-15.d0) > 1.d-12 .OR. phys%Zeff /= 1.7d0 .OR. &
         ABS(phys%impurity_concentrations(1)-0.1025d0) > 1.d-12 .OR. &
         phys%impurity_concentrations(2) /= 0.03d0) ERROR STOP 'fixed-field sources or fixed Zeff'
@@ -403,6 +403,14 @@ CONTAINS
                   0.5d0, 0.3d0, time%t*simpar%refval_time-interval, .TRUE.)
              phys%feedback_derivative_history_xpr = Feedback_derivative_history_type( &
                   0.5d0, 0.2d0, time%t*simpar%refval_time-interval, .TRUE.)
+             CALL initialize_puff()
+             IF (phys%puff /= 10.d0 .OR. phys%Re /= 0.5d0 .OR. &
+                 phys%impurity_concentrations(1) /= 0.02d0 .OR. &
+                 phys%feedback_integral_error /= 3.d0 .OR. phys%feedback_integral_error_xpr /= 4.d0 .OR. &
+                 phys%feedback_previous_error /= 0.2d0 .OR. phys%feedback_previous_error_xpr /= 0.3d0 .OR. &
+                 phys%feedback_derivative_history%target /= 0.5d0 .OR. &
+                 phys%feedback_derivative_history_xpr%target /= 0.5d0) &
+                  ERROR STOP 'startup advanced restored feedback state'
              CALL SetParticleSource()
              expected_puff = 10.d0
              expected_recycling = 0.5d0

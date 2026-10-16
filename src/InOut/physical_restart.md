@@ -20,6 +20,17 @@ New output adds two datasets to `/simulation_parameters/time`:
 | `Physical_time_evolution` | Integer boolean: the saved run has `steady=false` and `psdtime=false` |
 | `Current_time_seconds` | Saved clock converted to seconds using the saved run's time reference |
 
+Explicit modes also write `Time_mode`. When a rectangular-grid equilibrium
+provider is active, they write `Equilibrium_frame_left`, `Equilibrium_frame_right`
+(zero-based input frame indices) and `Equilibrium_fraction`. For example,
+`left=6`, `right=7`, `fraction=0.5` means halfway between supplied frames 6 and 7.
+At a supplied frame, the indices are equal and the fraction is zero. A fixed
+equilibrium has both indices zero. These fields describe the trajectory position;
+the physical clock remains authoritative on restart, so numerical indices never
+select equilibrium frames. Nodal inputs omit this provider metadata.
+The actuator value is saved in `physics/puff`, with feedback histories saved
+separately.
+
 The existing `Current_time`, `Current_time_step_number`, and other datasets keep
 their names and units. The step number is the numerical index, independently of
 the equilibrium frame count. For nonphysical runs, the classification flag
@@ -39,6 +50,9 @@ history storage grows to accommodate the numerical index. BDF1 starts from the
 loaded accepted solution; earlier BDF history is not required or reconstructed.
 The existing solution reader loads conservative variables in solver units, so
 their plasma reference scales must remain compatible.
+
+If the checkpoint has already reached `t_final`, startup exits without loading
+equilibrium/heating inputs, updating controllers or writing another solution.
 
 Derivative history is stored with each feedback channel so continuation preserves
 the next derivative contribution when timestep changes. Older-file reconstruction
@@ -64,6 +78,6 @@ Legacy configurations retain their output sequence numbers (step divided by save
 frequency), startup `_0000` and unsuffixed final filename. All indices can grow
 beyond four digits.
 
-Explicit solver execution remains guarded until end-to-end physical loop
-activation; trajectory position metadata follows with that activation. Temporal
-rejection, timestep growth and predictor history follow later.
+Fixed and prescribed physical-time modes are enabled. Adaptive mode and the
+reduction/growth options remain explicitly rejected until temporal recovery is
+implemented. Predictor history also follows later.

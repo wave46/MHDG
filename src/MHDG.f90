@@ -33,9 +33,10 @@ PROGRAM MHDG
   ! Read input file param.txt
   CALL read_input()
 
-  IF (.NOT. time%legacy_input) THEN
+  IF (.NOT. time%legacy_input .AND. &
+      (time%mode == 'adaptive' .OR. time%dt_reduce_on_failure .OR. time%dt_grow_on_easy)) THEN
      IF (MPIvar%glob_id == 0) WRITE(6,*) &
-          'Explicit time_mode execution is not enabled yet; equilibrium/controller integration follows.'
+          'Adaptive timestep execution is not enabled yet; use fixed or prescribed without adaptation.'
      STOP 1
   ENDIF
 
@@ -131,10 +132,16 @@ PROGRAM MHDG
   IF (nb_args .EQ. 2) CALL initialize_solution()
 #endif
 
-  ! A completed ME restart must not read another field or update feedback.
-  IF (time%legacy_input .AND. switch%ME .AND. time%it .EQ. nts) THEN
+  ! Completed restarts exit before field/source loading or startup output.
+  physical_time_finished = .FALSE.
+  IF (.NOT. time%legacy_input) physical_time_finished = physical_time_is_complete()
+  IF ((time%legacy_input .AND. switch%ME .AND. time%it .EQ. nts) .OR. physical_time_finished) THEN
      IF (MPIvar%glob_id .EQ. 0) THEN
-        WRITE (6, *) 'ME final step already reached: ', time%it, ' (nts = ', nts, ')'
+        IF (physical_time_finished) THEN
+           WRITE (6, *) 'Physical final time already reached [s]: ', time%t*simpar%refval_time
+        ELSE
+           WRITE (6, *) 'ME final step already reached: ', time%it, ' (nts = ', nts, ')'
+        ENDIF
      ENDIF
 #ifdef WITH_PETSC
      IF (lssolver%sollib .EQ. 3) CALL FinalizePETSC()
