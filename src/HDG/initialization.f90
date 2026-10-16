@@ -36,6 +36,7 @@ CONTAINS
     ! time step is initialized to dt0.
     dt = time%dt0
     time%dt = dt
+    time%dt_next = dt
 
     ! time count
     time%it = 0

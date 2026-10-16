@@ -1355,6 +1355,7 @@ CONTAINS
       IF (.NOT. time%legacy_input) THEN
          CALL HDF5_string_saving(group_id2, time%mode, 'Time_mode')
          CALL save_equilibrium_position(group_id2)
+         CALL save_time_step_state(group_id2)
       ENDIF
       CALL HDF5_group_close(group_id2, ierr)
 
@@ -1967,6 +1968,51 @@ CONTAINS
     CALL HDF5_real_saving(time_group, fraction, 'Equilibrium_fraction')
   END SUBROUTINE save_equilibrium_position
 
+  SUBROUTINE save_time_step_state(time_group)
+    INTEGER(HID_T), INTENT(IN) :: time_group
+
+    IF (time%mode == 'adaptive') &
+         CALL HDF5_real_saving(time_group, time%dt_next*simpar%refval_time, 'Proposed_time_step_seconds')
+    IF (time%mode == 'prescribed' .AND. ALLOCATED(time%pending_times)) THEN
+       IF (SIZE(time%pending_times) > 0) &
+            CALL HDF5_array1D_saving(time_group, time%pending_times*simpar%refval_time, &
+                 SIZE(time%pending_times), 'Pending_time_targets_seconds')
+    ENDIF
+  END SUBROUTINE save_time_step_state
+
+  SUBROUTINE load_time_step_state(group_id)
+    USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    REAL*8 :: proposed_dt
+    REAL*8, ALLOCATABLE :: pending_seconds(:)
+    INTEGER :: ierr, count
+    LOGICAL :: exists
+
+    IF (time%mode == 'adaptive') THEN
+       CALL H5Lexists_f(group_id, 'time/Proposed_time_step_seconds', exists, ierr)
+       IF (.NOT. exists) RETURN ! Old checkpoints retain the configured dt0 proposal.
+       CALL read_checkpoint_real(group_id, 'time/Proposed_time_step_seconds', proposed_dt)
+       IF (.NOT. ieee_is_finite(proposed_dt) .OR. proposed_dt <= 0.d0) &
+            CALL abort_on_checkpoint_error(-1, 'Saved proposed timestep must be finite and positive')
+       time%dt_next = proposed_dt/simpar%refval_time
+    ELSEIF (time%mode == 'prescribed' .AND. time%dt_reduce_on_failure) THEN
+       CALL H5Lexists_f(group_id, 'time/Pending_time_targets_seconds', exists, ierr)
+       IF (.NOT. exists) RETURN
+       CALL HDF5_real_vector_reading(group_id, 'time/Pending_time_targets_seconds', pending_seconds, ierr)
+       CALL abort_on_checkpoint_error(ierr, 'Cannot read pending timestep targets')
+       IF (ANY(.NOT. ieee_is_finite(pending_seconds))) &
+            CALL abort_on_checkpoint_error(-1, 'Pending timestep targets must be finite')
+       IF (ANY(pending_seconds <= time%t*simpar%refval_time)) &
+            CALL abort_on_checkpoint_error(-1, 'Pending timestep targets must follow the accepted time')
+       count = SIZE(pending_seconds)
+       IF (count > 1) THEN
+          IF (ANY(pending_seconds(:count-1) <= pending_seconds(2:))) &
+               CALL abort_on_checkpoint_error(-1, 'Pending timestep targets must be stored in decreasing order')
+       ENDIF
+       time%pending_times = pending_seconds/simpar%refval_time
+    ENDIF
+  END SUBROUTINE load_time_step_state
+
   SUBROUTINE save_feedback_state(physics_group)
     INTEGER(HID_T), INTENT(IN) :: physics_group
 
@@ -2172,6 +2218,7 @@ CONTAINS
     time%t_target = time%t
     sol%Nt = step
     IF (step > 0) sol%time(step) = time%t
+    CALL load_time_step_state(group_id)
     CALL load_feedback_state(group_id)
     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Continuing physical checkpoint at time [s], accepted step: ', seconds, step
   END SUBROUTINE load_physical_checkpoint

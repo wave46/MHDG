@@ -527,6 +527,7 @@ MODULE types
   TYPE Time_type
      REAL*8      :: dt0  ! initial time step
      REAL*8      :: dt   ! current time step
+     REAL*8      :: dt_next = 0.d0 ! adaptive proposal, before final-time clipping
      REAL*8      :: dt_ME   ! time step from equilibrium !stored as dimensional value
      REAL*8      :: t_ME   ! time step from equilibrium (to get puff rate) !stored as dimensional value
      REAL*8      :: t_final  ! final time of the simulation, in solver units

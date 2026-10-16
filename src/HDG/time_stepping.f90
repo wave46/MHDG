@@ -33,7 +33,7 @@ CONTAINS
     CASE ('fixed')
        target = MIN(time%t_final, time%t+time%dt0)
     CASE ('adaptive')
-       target = MIN(time%t_final, time%t+time%dt)
+       target = MIN(time%t_final, time%t+time%dt_next)
     CASE ('prescribed')
        CALL next_prescribed_time(target, ierr, message, frame_times)
        IF (ierr /= 0) RETURN
@@ -42,7 +42,7 @@ CONTAINS
        RETURN
     END SELECT
     IF (ALLOCATED(time%pending_times)) THEN
-       IF (SIZE(time%pending_times) > 0) target = time%pending_times(SIZE(time%pending_times))
+       IF (SIZE(time%pending_times) > 0) target = MIN(time%t_final, time%pending_times(SIZE(time%pending_times)))
     ENDIF
     ierr = -1
     message = 'Timestep cannot advance physical time'
@@ -81,7 +81,7 @@ CONTAINS
           time%pending_times = [time%pending_times, midpoint]
        ENDIF
     ELSE
-       time%dt = reduced_dt
+       time%dt_next = reduced_dt
     ENDIF
     ierr = 0
     message = ''
@@ -92,7 +92,7 @@ CONTAINS
 
     IF (.NOT. ALLOCATED(time%pending_times)) RETURN
     pending = SIZE(time%pending_times)
-    IF (pending <= 1) THEN
+    IF (pending <= 1 .OR. physical_time_is_complete()) THEN
        DEALLOCATE(time%pending_times)
     ELSE
        time%pending_times = time%pending_times(:pending-1)

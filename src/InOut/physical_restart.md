@@ -31,6 +31,28 @@ select equilibrium frames. Nodal inputs omit this provider metadata.
 The actuator value is saved in `physics/puff`, with feedback histories saved
 separately.
 
+The same time group stores the numerical schedule needed for continuation:
+
+| Dataset | Written when | Meaning |
+| --- | --- | --- |
+| `Proposed_time_step_seconds` | Adaptive mode | Next proposed interval, before clipping to the final time |
+| `Pending_time_targets_seconds` | Prescribed mode has subdivided an interval | Remaining target times, with the next target last |
+
+For example, a checkpoint at 0.2125 s with pending times `[0.3, 0.25, 0.225]`
+continues toward 0.225 s, then 0.25 s and 0.3 s. The numerical step index does
+not select any of these times. Pending targets are restored when prescribed
+mode and failure reduction remain enabled. Otherwise the configured mode
+selects the next endpoint normally. A newly shortened `t_final` clips pending
+targets too; reaching it clears the remaining targets.
+
+Adaptive continuation restores its saved proposal instead of resetting to
+`dt0`. A shortened final interval does not overwrite that proposal: a run with
+a 20 ms proposal and a 10 ms final remainder still proposes 20 ms when restarted
+with a later final time. Configured timestep limits remain enforced. Older
+files without schedule metadata start from configured `dt0` in adaptive mode,
+or the next supplied frame in prescribed mode. Saved steady/pseudo-time states
+continue to initialize a new run and do not restore transient scheduling state.
+
 The existing `Current_time`, `Current_time_step_number`, and other datasets keep
 their names and units. The step number is the numerical index, independently of
 the equilibrium frame count. For nonphysical runs, the classification flag

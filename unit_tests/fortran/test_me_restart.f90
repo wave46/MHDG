@@ -3,6 +3,7 @@ PROGRAM test_me_restart
   USE time_stepping, ONLY: next_physical_time, ensure_time_history_capacity
   USE time_stepping, ONLY: schedule_half_step, remove_reached_target
   USE in_out, ONLY: HDF5_load_solution, HDF5_load_mesh_from_solution, save_feedback_state, load_feedback_state
+  USE in_out, ONLY: save_time_step_state
   USE GMSH_io_module, ONLY: load_gmsh_mesh
   USE Main_utils, ONLY: check_input_arguments, mesh_name, mesh_input_name, save_name, setSolName
   USE Main_utils, ONLY: prepare_time_step, initialize_solu0_uiter_uconv, update_time_dependent_inputs
@@ -302,6 +303,7 @@ CONTAINS
     TYPE(equilibrium_sample_t) :: sample
     LOGICAL :: finished, moving
     REAL*8 :: accepted_time, accepted_target
+    INTEGER(HID_T) :: state_file, time_group
 
     MPIvar%glob_id = 0
     MPIvar%glob_size = 1
@@ -320,6 +322,11 @@ CONTAINS
     CALL initialize_solu0_uiter_uconv()
     IF (ANY(sol%u0(:,1) /= sol%u)) ERROR STOP 'restart BDF1 accepted state'
     IF (time%it /= time%ik .OR. sol%Nt /= time%it) ERROR STOP 'physical checkpoint counters'
+    CALL HDF5_create('time_state.h5', state_file, ierr)
+    CALL HDF5_group_create('time', state_file, time_group, ierr)
+    CALL save_time_step_state(time_group)
+    CALL HDF5_group_close(time_group, ierr)
+    CALL HDF5_close(state_file)
     accepted_time = time%t*simpar%refval_time
     accepted_target = time%t_target*simpar%refval_time
     moving = magnetic_field_is_time_dependent()
@@ -805,7 +812,7 @@ CONTAINS
 
     time%mode = 'adaptive'
     time%t = 0.d0
-    time%dt = 0.4d0/simpar%refval_time
+    time%dt_next = 0.4d0/simpar%refval_time
     time%t_final = 0.25d0/simpar%refval_time
     CALL schedule_half_step(0.4d0/simpar%refval_time, status, message)
     IF (status /= 0) ERROR STOP 'first adaptive halving'
@@ -823,9 +830,28 @@ CONTAINS
     IF (status /= 0 .OR. .NOT. finished) ERROR STOP 'adaptive final time'
 
     time%t = 0.d0
-    previous_dt = time%dt
+    previous_dt = time%dt_next
     CALL schedule_half_step(0.1d0/simpar%refval_time, status, message)
-    IF (status == 0 .OR. time%dt /= previous_dt) ERROR STOP 'dt_min did not stop halving'
+    IF (status == 0 .OR. time%dt_next /= previous_dt) ERROR STOP 'dt_min did not stop halving'
+    ! Final clipping changes the actual interval, not the next adaptive proposal.
+    time%t = 0.2d0/simpar%refval_time
+    time%dt_next = 0.1d0/simpar%refval_time
+    time%t_final = 0.25d0/simpar%refval_time
+    CALL prepare_time_step(finished)
+    IF (ABS(time%dt*simpar%refval_time-0.05d0) > 1.d-14 .OR. &
+        ABS(time%dt_next*simpar%refval_time-0.1d0) > 1.d-14) ERROR STOP 'final clipping changed adaptive proposal'
+
+    ! A shorter restarted final time can cut across pending subdivision targets.
+    time%mode = 'prescribed'
+    time%t = 0.25d0/simpar%refval_time
+    time%t_final = 0.4d0/simpar%refval_time
+    time%pending_times = [1.d0,0.5d0]/simpar%refval_time
+    CALL next_physical_time(endpoint, finished, status, message, frames)
+    IF (status /= 0 .OR. ABS(endpoint*simpar%refval_time-0.4d0) > 1.d-14) ERROR STOP 'pending target bypassed final time'
+    time%t = endpoint
+    CALL remove_reached_target()
+    IF (ALLOCATED(time%pending_times)) ERROR STOP 'final clipping retained completed pending targets'
+
     time%t = 1.d20
     time%dt_min = 1.d-6
     CALL schedule_half_step(time%t+SPACING(time%t), status, message)

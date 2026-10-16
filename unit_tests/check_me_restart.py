@@ -78,10 +78,22 @@ def check_physical_restart(executable, directory, physical, *, moving):
         ("steady", 1, 1000., False, None), ("pseudo", 99, 1000., None, (False, True)),
         ("fixed", 1, .04, True, None), ("complete", 23, .08, True, None),
         ("nonfinite", 1, np.nan, True, None)]
+    cases += [("adaptive_old", 23, .04, True, None),
+              ("adaptive_reduced", 23, .04, True, None),
+              ("adaptive_extended", 23, .04, True, None),
+              ("adaptive_invalid", 23, .04, True, None)]
+    if moving:
+        cases += [("prescribed_pending", 23, .04, True, None),
+                  ("prescribed_invalid", 23, .04, True, None)]
     for name, step, seconds, marker, flags in cases:
         text = physical.replace("dt0=.02, t_final=.08", "dt0=.02, t_start=.02, t_final=.08")
-        if name == "prescribed":
+        if name.startswith("prescribed"):
             text = text.replace("time_mode='fixed'", "time_mode='prescribed'")
+        if name.startswith("adaptive"):
+            text = text.replace("time_mode='fixed'", "time_mode='adaptive'")
+        if name.startswith("adaptive") or name.startswith("prescribed_"):
+            text = text.replace("t_final=.08", "t_final=.08, dt_reduce_on_failure=.true., dt_min=.001")
+        text = re.sub(r"(?im)^(\s*target_density_path\s*=).*?$", r"\g<1> 'controls.h5'", text)
         (directory / "param.txt").write_text(text)
         checkpoint(directory / "checkpoint.h5", step, saved_me=moving)
         with h5py.File(directory / "checkpoint.h5", "r+") as f:
@@ -93,12 +105,22 @@ def check_physical_restart(executable, directory, physical, *, moving):
                 p["time/Current_time_seconds"] = [seconds]
             if flags is not None:
                 p["switches/steady"], p["switches/psdtime"] = [int(flags[0])], [int(flags[1])]
+            if name in {"adaptive_reduced", "adaptive_extended", "adaptive_invalid"}:
+                proposal = .02 if name == "adaptive_extended" else .005
+                p["time/Proposed_time_step_seconds"] = [np.nan if name == "adaptive_invalid" else proposal]
+                # A shortened actual final interval must not replace its proposal.
+                p["time/Current_time_step"] = [.001/.01]
+            if name.startswith("prescribed_"):
+                p["time/Pending_time_targets_seconds"] = [.08, .06, .05] if name.endswith("pending") else [.05, .06]
         run = subprocess.run([str(executable), "physical-restart"], cwd=directory,
                              text=True, capture_output=True, timeout=20)
         output = run.stdout + run.stderr
-        if name == "nonfinite":
-            if run.returncode == 0 or "Checkpoint physical time must be finite" not in output:
-                raise SystemExit(f"FAIL: corrupt physical checkpoint\n{output}")
+        error = {"nonfinite": "Checkpoint physical time must be finite",
+                 "adaptive_invalid": "Saved proposed timestep must be finite and positive",
+                 "prescribed_invalid": "Pending timestep targets must be stored in decreasing order"}.get(name)
+        if error:
+            if run.returncode == 0 or error not in output:
+                raise SystemExit(f"FAIL: corrupt physical checkpoint {name}\n{output}")
             continue
         match = re.search(r"^PHYSICAL_RESTART_STATE\s+(.*)$", output, re.M)
         if run.returncode or match is None or "HDF5-DIAG" in output:
@@ -108,6 +130,16 @@ def check_physical_restart(executable, directory, physical, *, moving):
         accepted_step = 0 if initial else step
         accepted = .02 if initial else seconds
         target = .08 if name in {"prescribed", "complete"} else accepted+.02
+        if name == "adaptive_reduced":
+            target = accepted+.005
+        elif name == "prescribed_pending":
+            target = .05
+        with h5py.File(directory / "time_state.h5") as saved:
+            if name.startswith("adaptive"):
+                expected_proposal = .005 if name == "adaptive_reduced" else .02
+                np.testing.assert_allclose(saved["time/Proposed_time_step_seconds"][:], [expected_proposal], rtol=1e-14)
+            elif name == "prescribed_pending":
+                np.testing.assert_allclose(saved["time/Pending_time_targets_seconds"][:], [.08, .06, .05], rtol=1e-14)
         expected = [accepted, accepted, target, accepted/.08 if moving else 0.]
         numeric = [float(x) for x in values[2:6]]
         if ([int(x) for x in values[:2]] != [accepted_step]*2 or
