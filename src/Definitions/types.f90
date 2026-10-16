@@ -933,6 +933,8 @@ CONTAINS
        Mesh2%N = Mesh1%N
     ENDIF
 
+    IF(ALLOCATED(Mesh1%face_info)) Mesh2%face_info = Mesh1%face_info
+
     IF(ALLOCATED(Mesh1%faces)) THEN
        ALLOCATE(Mesh2%faces(SIZE(Mesh1%faces, 1), SIZE(Mesh1%faces, 2), SIZE(Mesh1%faces, 3)))
        Mesh2%faces = Mesh1%faces
@@ -1033,6 +1035,10 @@ CONTAINS
     Mesh2%Nel_glob = Mesh1%Nel_glob
     Mesh2%Nfa_glob = Mesh1%Nfa_glob
     Mesh2%Nno_glob = Mesh1%Nno_glob
+    Mesh2%Nextfaces_glob = Mesh1%Nextfaces_glob
+    Mesh2%Nintfaces_glob = Mesh1%Nintfaces_glob
+    Mesh2%Nintfaces_nogho = Mesh1%Nintfaces_nogho
+    Mesh2%Nextfaces_nogho = Mesh1%Nextfaces_nogho
     Mesh2%Ndir_glob = Mesh1%Ndir_glob
     Mesh2%Ngho_glob = Mesh1%Ngho_glob
 
@@ -1096,6 +1102,7 @@ CONTAINS
        ALLOCATE(Mesh2%el2sd(SIZE(Mesh1%el2sd)))
        Mesh2%el2sd = Mesh1%el2sd
     ENDIF
+    IF (ALLOCATED(Mesh1%pe2sd)) Mesh2%pe2sd = Mesh1%pe2sd
     IF (ALLOCATED(Mesh1%el2rv)) THEN
        ALLOCATE(Mesh2%el2rv(SIZE(Mesh1%el2rv)))
        Mesh2%el2rv = Mesh1%el2rv

@@ -629,6 +629,14 @@ CONTAINS
   SUBROUTINE free_mesh_loc(Mesh_loc)
     TYPE(Mesh_type), INTENT(INOUT) :: Mesh_loc
     ! Mesh
+    IF (ALLOCATED(Mesh_loc%flag_elems_rho)) DEALLOCATE(Mesh_loc%flag_elems_rho)
+    IF (ALLOCATED(Mesh_loc%flag_elems_sc)) DEALLOCATE(Mesh_loc%flag_elems_sc)
+    IF (ALLOCATED(Mesh_loc%minrho_elems)) DEALLOCATE(Mesh_loc%minrho_elems)
+    IF (ALLOCATED(Mesh_loc%sour_elems)) DEALLOCATE(Mesh_loc%sour_elems)
+    IF (ALLOCATED(Mesh_loc%diff_elems)) DEALLOCATE(Mesh_loc%diff_elems)
+    IF (ALLOCATED(Mesh_loc%Xg)) DEALLOCATE(Mesh_loc%Xg)
+    IF (ALLOCATED(Mesh_loc%Xgf)) DEALLOCATE(Mesh_loc%Xgf)
+    IF (ALLOCATED(Mesh_loc%Xgb)) DEALLOCATE(Mesh_loc%Xgb)
     IF (ASSOCIATED(Mesh_loc%T)) THEN
        DEALLOCATE(Mesh_loc%T)
        NULLIFY(Mesh_loc%T)

@@ -248,6 +248,7 @@ PROGRAM test_divergence_refinement
     ERROR STOP 'default projection behavior changed'
   CALL free_reference_element_pol(refElPol)
   CALL check_transfer_reuse()
+  CALL check_mesh_copy_lifetime()
 #ifdef PARALL
   CALL check_transfer_ownership()
 #endif
@@ -257,6 +258,93 @@ PROGRAM test_divergence_refinement
   CALL MPI_FINALIZE(ierr_test)
 
 CONTAINS
+
+  SUBROUTINE check_mesh_copy_lifetime()
+    TYPE(Mesh_type) :: original, saved, restored
+    REAL*8 :: coordinates(3,2)
+    INTEGER :: trial
+
+    coordinates(:,1) = [0.d0,1.d0,0.d0]+2*MPIvar%glob_id
+    coordinates(:,2) = [0.d0,0.d0,1.d0]
+    original%Ndim = 2
+    original%Nelems = 1
+    original%Nnodes = 3
+    original%Nnodesperelem = 3
+    original%Nnodesperface = 2
+    original%Nfaces = 3
+    original%Nextfaces = 3
+    original%Nintfaces = 0
+    original%elemType = 0
+    original%ndir = 0
+    original%ukf = 3
+    original%Nnodes_toroidal = 0
+    original%xmin = MINVAL(coordinates(:,1))
+    original%xmax = MAXVAL(coordinates(:,1))
+    original%ymin = 0.d0
+    original%ymax = 1.d0
+    original%puff_area = 0.d0
+    original%pump_area = 0.d0
+    original%core_area = 0.d0
+    ALLOCATE(original%X(3,2),original%T(1,3),original%face_info(3,2))
+    original%X = coordinates
+    original%T(1,:) = [1,2,3]
+    original%face_info(:,1) = 1
+    original%face_info(:,2) = [1,2,3]
+    ALLOCATE(original%flag_elems_rho(1),original%flag_elems_sc(1),original%minrho_elems(1), &
+         original%sour_elems(1),original%diff_elems(1))
+    original%flag_elems_rho = 1
+    original%flag_elems_sc = 1
+    original%minrho_elems = 2.d0
+    original%sour_elems = 3.d0
+    original%diff_elems = 4.d0
+#ifdef PARALL
+    original%nghostfaces = 0
+    original%nghostelems = 0
+    original%Nel_glob = MPIvar%glob_size
+    original%Nno_glob = 3*MPIvar%glob_size
+    original%Nfa_glob = 3*MPIvar%glob_size
+    original%Ndir_glob = 0
+    original%Ngho_glob = 0
+    original%Nextfaces_glob = 3*MPIvar%glob_size
+    original%Nintfaces_glob = 0
+    original%Nextfaces_nogho = 3
+    original%Nintfaces_nogho = 0
+    ALLOCATE(original%loc2glob_nodes(3),original%fc2sd(1),original%pr2sd(1))
+    original%loc2glob_nodes = [1,2,3]+3*MPIvar%glob_id
+    original%fc2sd = 2
+    original%pr2sd = MOD(MPIvar%glob_id+1,MPIvar%glob_size)+1
+#endif
+    CALL deep_copy_mesh_struct(original,saved)
+    CALL free_mesh_loc(original)
+    DO trial = 1, 2
+       CALL deep_copy_mesh_struct(saved,restored)
+       IF (ANY(restored%X /= coordinates) .OR. ANY(restored%T(1,:) /= [1,2,3])) &
+            ERROR STOP 'mesh copy lost accepted coordinates/connectivity'
+       IF (.NOT. ALLOCATED(restored%face_info)) ERROR STOP 'mesh copy lost boundary face information'
+       IF (ANY(restored%face_info(:,2) /= [1,2,3])) ERROR STOP 'mesh copy changed boundary face information'
+#ifdef PARALL
+       IF (restored%Nextfaces_glob /= 3*MPIvar%glob_size .OR. restored%Nintfaces_glob /= 0 .OR. &
+           restored%Nextfaces_nogho /= 3 .OR. restored%Nintfaces_nogho /= 0) ERROR STOP 'mesh copy lost MPI face counts'
+       IF (ANY(restored%loc2glob_nodes /= [1,2,3]+3*MPIvar%glob_id) .OR. restored%fc2sd(1) /= 2 .OR. &
+           restored%pr2sd(1) /= MOD(MPIvar%glob_id+1,MPIvar%glob_size)+1) ERROR STOP 'mesh copy lost MPI exchange maps'
+       restored%loc2glob_nodes = -1
+       restored%fc2sd = -1
+#endif
+       restored%X = -1.d0
+       restored%T = -1
+       restored%face_info = -1
+       ALLOCATE(restored%Xg(1,2),restored%Xgf(1,2),restored%Xgb(1,2))
+       CALL free_mesh_loc(restored)
+       IF (ASSOCIATED(restored%X) .OR. ASSOCIATED(restored%T) .OR. ALLOCATED(restored%face_info) .OR. &
+           ALLOCATED(restored%flag_elems_rho) .OR. ALLOCATED(restored%flag_elems_sc) .OR. &
+           ALLOCATED(restored%minrho_elems) .OR. ALLOCATED(restored%sour_elems) .OR. &
+           ALLOCATED(restored%diff_elems) .OR. ALLOCATED(restored%Xg) .OR. ALLOCATED(restored%Xgf) .OR. &
+           ALLOCATED(restored%Xgb)) ERROR STOP 'mesh cleanup retained owned storage'
+       CALL free_mesh_loc(restored)
+    ENDDO
+    CALL free_mesh_loc(saved)
+    IF (MPIvar%glob_id == 0) WRITE(*,*) 'Mesh copy: independent restore, MPI face counts/maps and cleanup PASS'
+  END SUBROUTINE check_mesh_copy_lifetime
 
   SUBROUTINE check_transfer_reuse()
     TYPE(mesh_transfer_t) :: mapping
