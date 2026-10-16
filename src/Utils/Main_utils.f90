@@ -214,9 +214,9 @@ CONTAINS
        WRITE(6,'(" *",60("*"),"**")')
     ENDIF
     IF (time%legacy_input) THEN
-       CALL solve_newton_step(result)
+       CALL solve_nonlinear_system(result)
     ELSE
-       CALL solve_newton_step(result,accepted)
+       CALL solve_nonlinear_system(result,accepted)
        IF (result%status%outcome == solve_retry) THEN
           CALL rollback_time_step(accepted)
           restart_adapt = accepted_restart_adapt
@@ -300,7 +300,7 @@ CONTAINS
     ENDIF
   END SUBROUTINE handle_newton_result
 
-  SUBROUTINE solve_newton_step(result, accepted)
+  SUBROUTINE solve_nonlinear_system(result, accepted)
     TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
     TYPE(newton_result_t), INTENT(OUT) :: result
 
@@ -318,14 +318,14 @@ CONTAINS
        IF (errNR < numer%tNR .AND. physical_iterate_valid) THEN
           CALL save_converged_newton_solution()
           RETURN
-       ELSEIF (newton_refinement_required(errNR,physical_iterate_valid,ir)) THEN
+       ENDIF
+       IF (newton_refinement_required(errNR,physical_iterate_valid,ir)) THEN
           IF (recover_newton_divergence(accepted)) CYCLE
           result%status = solver_status_t(solve_retry, 0, 'Newton divergence or admissibility recovery exhausted')
           RETURN
-       ELSE
-          CALL update_newton_checkpoint_and_refine(result%status,accepted)
-          IF (result%status%outcome /= solve_success) RETURN
        ENDIF
+       CALL update_newton_checkpoint_and_refine(result%status,accepted)
+       IF (result%status%outcome /= solve_success) RETURN
 
        IF (MPIvar%glob_id == 0) THEN
           WRITE(6,*) '*********************************'
@@ -336,7 +336,7 @@ CONTAINS
     ENDDO
     result%iteration_limit_reached = .TRUE.
     result%status = solver_status_t(solve_retry, 0, 'Newton iteration limit reached')
-  END SUBROUTINE solve_newton_step
+  END SUBROUTINE solve_nonlinear_system
 
   SUBROUTINE compute_newton_update(status, accepted)
     TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
