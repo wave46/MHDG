@@ -9,7 +9,7 @@
 
 MODULE magnetic_field
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
-  USE input_files, ONLY: resolve_input_filename, numbered_stem, numbered_filename
+  USE input_files, ONLY: resolve_input_filename, numbered_stem, numbered_filename, last_numbered_frame
   USE rectangular_series_io, ONLY: locate_series_time
   USE equilibrium_series, ONLY: equilibrium_series_t, equilibrium_sample_t
   USE prec_const
@@ -81,7 +81,7 @@ CONTAINS
     IF (time%legacy_input) THEN
        IF (switch%ME) last_frame = time%nts
     ELSE
-       last_frame = last_numbered_equilibrium_frame(filename)
+       last_frame = last_numbered_frame(filename)
     ENDIF
     ierr = 0
     message = ''
@@ -95,25 +95,6 @@ CONTAINS
        CALL equilibrium_input%open(filename, ierr, message, current_path)
     ENDIF
   END SUBROUTINE configure_legacy_equilibrium_input
-
-  INTEGER FUNCTION last_numbered_equilibrium_frame(filename) RESULT(last_frame)
-    CHARACTER(LEN=*), INTENT(IN) :: filename
-    CHARACTER(LEN=1000) :: stem, message
-    INTEGER :: n, frame, ierr
-    LOGICAL :: exists
-
-    last_frame = 0
-    n = LEN_TRIM(filename)
-    IF (n <= 8) RETURN
-    IF (filename(n-7:n) /= '_0000.h5') RETURN
-    CALL numbered_stem(filename, stem, ierr, message)
-    CALL abort_on_equilibrium_error(ierr, message)
-    DO frame = 1, 9999
-       INQUIRE(FILE=numbered_filename(stem, frame), EXIST=exists)
-       IF (.NOT. exists) EXIT
-       last_frame = frame
-    ENDDO
-  END FUNCTION last_numbered_equilibrium_frame
 
   SUBROUTINE configure_magnetic_clock()
     INTEGER :: left, right, ierr

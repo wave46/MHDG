@@ -242,7 +242,7 @@ heating_series.o : heating_series.F rectangular_series_io.o HDF5_io.o input_file
 
 external_heating.F : $(SDIR)/Models/external_heating.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
-external_heating.o : external_heating.F globals.o prec_const.o MPI_OMP.o interpolation.o heating_series.o magnetic_field.o input_files.o
+external_heating.o : external_heating.F globals.o prec_const.o MPI_OMP.o interpolation.o heating_series.o input_files.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 #transport_coefficient_map.F : $(SDIR)/Models/transport_coefficient_map.f90

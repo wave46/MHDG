@@ -936,6 +936,8 @@ CONTAINS
        CALL load_external_heating(physical_time=time%t_ME)
     ELSEIF (.NOT. switch%steady) THEN
        CALL load_external_heating(physical_time=(time%t+time%dt)*simpar%refval_time)
+    ELSE
+       CALL load_external_heating()
     ENDIF
   END SUBROUTINE update_heating_for_step
 
@@ -1244,7 +1246,7 @@ CONTAINS
 
     IF (switch%external_heating) THEN
        CALL initialize_external_heating()
-       CALL load_external_heating(field_frame)
+       CALL update_heating_for_step()
     ENDIF
 
 

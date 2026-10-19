@@ -273,11 +273,17 @@ def main():
                     f[dataset] = np.ones((4, 2))
             for frame, power in [(0, 0.), (1, 7.)]:
                 with h5py.File(directory / f"heat_{frame:04d}.h5", "w") as heat:
+                    heat['time'] = [0.12 * frame]
                     heat['ip'], heat['jp'] = [999], [999]  # Shapes, not legacy hints, are authoritative.
                     heat['r2D'] = [[0., 0.], [.5, .5]]
                     heat['z2D'] = [[0., .5], [0., .5]]
                     heat['heating2D_ions'] = np.full((2, 2), power)
                     heat['heating2D_electrons'] = np.full((2, 2), 2 * power)
+            with h5py.File(directory / "fixed_heat_0000.h5", "w") as heat:
+                heat['r2D'] = [[0., 0.], [.5, .5]]
+                heat['z2D'] = [[0., .5], [0., .5]]
+                heat['heating2D_ions'] = np.full((2, 2), 3.)
+                heat['heating2D_electrons'] = np.full((2, 2), 6.)
             with h5py.File(directory / "heat_trajectory.h5", "w") as heat:
                 ht, hz, hr = np.meshgrid([0., .04, .16], [0., .5], [0., .2, .5], indexing="ij")
                 heat["time"], heat["grid/r"], heat["grid/z"] = [0., .04, .16], [0., .2, .5], [0., .5]
@@ -312,6 +318,16 @@ def main():
                                           text=True, capture_output=True, timeout=20)
                 if sampling.returncode or "PHYSICAL_SAMPLING_PASS" not in sampling.stdout:
                     raise SystemExit(f"FAIL: physical sampling {name}\n{sampling.stdout}{sampling.stderr}")
+                if name == "trajectory_fixed":
+                    with h5py.File(directory / "heat_0001.h5", "r+") as heat:
+                        del heat['time']
+                    missing_time = subprocess.run([str(executable), "time-sampling", "fixed"], cwd=directory,
+                                                  text=True, capture_output=True, timeout=20)
+                    if (missing_time.returncode == 0 or "Cannot read required heating timestamp /time" not in
+                            missing_time.stdout + missing_time.stderr):
+                        raise SystemExit(f"FAIL: missing heating timestamp\n{missing_time.stdout}{missing_time.stderr}")
+                    with h5py.File(directory / "heat_0001.h5", "r+") as heat:
+                        heat['time'] = [.12]
                 if name == "trajectory_fixed":
                     controls = subprocess.run([str(executable), "time-controls"], cwd=directory,
                                               text=True, capture_output=True, timeout=20)

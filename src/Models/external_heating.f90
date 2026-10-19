@@ -3,9 +3,8 @@ MODULE external_heating
   USE globals
   USE MPI_OMP, ONLY: MPIvar
   USE interpolation, ONLY: interpolate
-  USE input_files, ONLY: resolve_input_filename, numbered_stem, numbered_filename
+  USE input_files, ONLY: resolve_input_filename, numbered_stem, numbered_filename, last_numbered_frame
   USE heating_series, ONLY: heating_series_t, heating_sample_t
-  USE magnetic_field, ONLY: magnetic_time_points
   IMPLICIT NONE
   TYPE(heating_series_t), SAVE, PRIVATE :: heating_input
   LOGICAL, SAVE, PRIVATE :: input_open = .FALSE., time_dependent = .FALSE., mesh_ready = .FALSE.
@@ -25,21 +24,19 @@ CONTAINS
     mesh_ready = .FALSE.
   END SUBROUTINE initialize_external_heating
 
-  SUBROUTINE load_external_heating(frame, physical_time)
-    INTEGER, OPTIONAL, INTENT(IN) :: frame
+  SUBROUTINE load_external_heating(physical_time)
     REAL(float), OPTIONAL, INTENT(IN) :: physical_time
     IF (input%external_heating_from_grid) THEN
-       CALL load_external_heating_from_grid(frame, physical_time)
+       CALL load_external_heating_from_grid(physical_time)
     ELSE
        CALL load_external_heating_nodes()
     ENDIF
   END SUBROUTINE load_external_heating
 
-  SUBROUTINE load_external_heating_from_grid(frame, physical_time)
-    INTEGER, OPTIONAL, INTENT(IN) :: frame
+  SUBROUTINE load_external_heating_from_grid(physical_time)
     REAL(float), OPTIONAL, INTENT(IN) :: physical_time
     TYPE(heating_sample_t) :: power
-    REAL(float), ALLOCATABLE :: r(:), z(:), times(:)
+    REAL(float), ALLOCATABLE :: r(:), z(:)
     REAL(float) :: target_time, x, y
     INTEGER :: ierr, i, ind
 #ifdef TOR3D
@@ -50,14 +47,7 @@ CONTAINS
     CALL open_heating_input()
     target_time = time%t*simpar%refval_time
     IF (.NOT. time%legacy_input) target_time = time%t_target*simpar%refval_time
-    IF (PRESENT(physical_time)) THEN
-       target_time = physical_time
-    ELSEIF (PRESENT(frame) .AND. switch%ME .AND. time%legacy_input) THEN
-       CALL magnetic_time_points(times)
-       IF (frame < 0 .OR. frame >= SIZE(times)) &
-            CALL check_heating_input(-1, 'Requested heating endpoint is outside the magnetic schedule')
-       target_time = times(frame+1)
-    ENDIF
+    IF (PRESENT(physical_time)) target_time = physical_time
     IF (mesh_ready) THEN
        IF (.NOT. time_dependent .OR. target_time == applied_time) RETURN
     ENDIF
@@ -87,33 +77,26 @@ CONTAINS
   END SUBROUTINE load_external_heating_from_grid
 
   SUBROUTINE open_heating_input()
-    INTEGER :: ierr, n
+    INTEGER :: ierr, n, last_frame
     REAL(float), ALLOCATABLE :: times(:)
     CHARACTER(LEN=1000) :: filename, stem, message
-    LOGICAL :: numbered, full_filename
+    LOGICAL :: full_filename
 
     IF (input_open) RETURN
     n = LEN_TRIM(input%external_heating_path)
     full_filename = .FALSE.
     IF (n >= 3) full_filename = input%external_heating_path(n-2:n) == '.h5'
     CALL resolve_input_filename(input%external_heating_path, '.h5', filename, ierr)
-    IF (ierr /= 0 .AND. switch%ME .AND. .NOT. full_filename) THEN
+    IF (ierr /= 0 .AND. .NOT. full_filename) THEN
        CALL numbered_stem(input%external_heating_path, stem, ierr, message)
        CALL check_heating_input(ierr, message)
        filename = numbered_filename(stem, 0)
     ENDIF
     CALL heating_input%open(filename, ierr, message)
     CALL check_heating_input(ierr, message)
-    numbered = .FALSE.
-    n = LEN_TRIM(filename)
-    IF (switch%ME .AND. n > 8) numbered = filename(n-7:n) == '_0000.h5'
-    IF (numbered .AND. .NOT. heating_input%is_trajectory()) THEN
-       CALL magnetic_time_points(times)
-       IF (time%legacy_input) THEN
-          CALL heating_input%open_numbered(input%external_heating_path, times(:time%nts+1), ierr, message)
-       ELSE
-          CALL heating_input%open_numbered(input%external_heating_path, times, ierr, message)
-       ENDIF
+    IF (.NOT. heating_input%is_trajectory()) THEN
+       last_frame = last_numbered_frame(filename)
+       IF (last_frame > 0) CALL heating_input%open_numbered(filename, last_frame, ierr, message)
        CALL check_heating_input(ierr, message)
     ENDIF
     CALL heating_input%time_points(times)

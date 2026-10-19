@@ -62,18 +62,17 @@ A multi-frame trajectory is sampled at each physical timestep endpoint, with
 either moving or fixed magnetic equilibrium. Steady simulations sample their
 initial time only. Nodal heating input remains unsupported.
 
-For legacy ME numbered heating, supply a stem or its full `_0000.h5` anchor.
-`open_numbered(path,times,...)` associates frame k with magnetic frame k's
-timestamp; heating timestamps are neither required nor used. It validates each
-frame's grid and channels when first needed and uses the same two-frame cache
-and interpolation. A new single-file trajectory uses its own timestamps instead.
-Missing frames and insufficient trajectory coverage are input errors.
+For numbered legacy heating, supply a stem or its full `_0000.h5` anchor.
+Contiguous numbered files are discovered independently of the magnetic input.
+A lone `_0000.h5` remains fixed. For a sequence, each file must contain a scalar
+`/time` in seconds; timestamps must be finite and strictly increasing. Missing
+heating timestamps are an input error: magnetic timestamps are not substituted.
+The provider validates each frame's grid and channels when first needed and
+uses the same two-frame cache and interpolation as trajectory input.
 
-With explicit `time_mode`, heating is sampled at the proposed physical endpoint;
-an optional integer frame argument no longer selects its time. Native heating
-trajectories keep their own timestamps, including with fixed magnetic equilibrium.
-Numbered heating still shares the magnetic timestamps and requires moving
-magnetic input, but its frame count is independent of the numerical step count.
+Heating is sampled at the proposed physical endpoint, using its own timestamps
+with either fixed or moving magnetics. Insufficient time coverage is an input
+error. Mesh reconstruction samples heating at the same physical endpoint.
 
 Fixed heating is retained between steps. Mesh reinitialization invalidates its
 nodal representation and rebuilds it from the dimensional input cache. The

@@ -1,7 +1,7 @@
 MODULE input_files
   IMPLICIT NONE
   PRIVATE
-  PUBLIC :: resolve_input_filename, numbered_stem, numbered_filename
+  PUBLIC :: resolve_input_filename, numbered_stem, numbered_filename, last_numbered_frame
 CONTAINS
   SUBROUTINE resolve_input_filename(path, extension, filename, ierr)
     CHARACTER(LEN=*), INTENT(IN) :: path, extension
@@ -58,4 +58,23 @@ CONTAINS
     WRITE(index, '(I4.4)') frame
     filename = TRIM(stem)//'_'//index//'.h5'
   END FUNCTION numbered_filename
+
+  INTEGER FUNCTION last_numbered_frame(filename) RESULT(last_frame)
+    CHARACTER(LEN=*), INTENT(IN) :: filename
+    CHARACTER(LEN=1000) :: stem, message
+    INTEGER :: n, frame, ierr
+    LOGICAL :: exists
+
+    last_frame = 0
+    n = LEN_TRIM(filename)
+    IF (n <= 8) RETURN
+    IF (filename(n-7:n) /= '_0000.h5') RETURN
+    CALL numbered_stem(filename, stem, ierr, message)
+    IF (ierr /= 0) RETURN
+    DO frame = 1, 9999
+       INQUIRE(FILE=numbered_filename(stem, frame), EXIST=exists)
+       IF (.NOT. exists) EXIT
+       last_frame = frame
+    ENDDO
+  END FUNCTION last_numbered_frame
 END MODULE input_files

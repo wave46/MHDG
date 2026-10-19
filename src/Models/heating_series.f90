@@ -2,6 +2,7 @@ MODULE heating_series
   USE prec_const, ONLY: float
   USE rectangular_series_io, ONLY: rectangular_series_t
   USE input_files, ONLY: numbered_stem, numbered_filename
+  USE HDF5_io_module, ONLY: HDF5_open, HDF5_close, HDF5_real_reading, HID_T
   IMPLICIT NONE
   PRIVATE
 
@@ -49,18 +50,18 @@ CONTAINS
     IF (ierr /= 0) CALL this%clear()
   END SUBROUTINE heating_open
 
-  SUBROUTINE heating_open_numbered(this, path, times, ierr, message)
+  SUBROUTINE heating_open_numbered(this, path, last_frame, ierr, message)
     CLASS(heating_series_t), INTENT(INOUT) :: this
     CHARACTER(LEN=*), INTENT(IN) :: path
-    REAL(float), INTENT(IN) :: times(:)
+    INTEGER, INTENT(IN) :: last_frame
     INTEGER, INTENT(OUT) :: ierr
     CHARACTER(LEN=*), INTENT(OUT) :: message
     CHARACTER(LEN=1000) :: stem
 
     CALL this%clear()
     ierr = -1
-    message = 'Numbered heating requires timestamps for frames 0000 through at most 9999'
-    IF (SIZE(times) < 1 .OR. SIZE(times) > 10000) RETURN
+    message = 'Numbered heating requires frames 0000 through last_frame (0..9999)'
+    IF (last_frame < 0 .OR. last_frame > 9999) RETURN
     CALL numbered_stem(path, stem, ierr, message)
     IF (ierr /= 0) RETURN
     CALL this%open(numbered_filename(stem, 0), ierr, message)
@@ -69,14 +70,35 @@ CONTAINS
        message = 'Numbered heating frames must use the legacy rectangular-grid layout'
        IF (.NOT. this%series%is_trajectory()) ierr = 0
     ENDIF
-    IF (ierr == 0) CALL this%series%set_times(times, ierr, message)
     IF (ierr == 0) THEN
        this%numbered = .TRUE.
        this%stem = stem
-    ELSE
-       CALL this%clear()
+       CALL read_heating_timeline(this, last_frame, ierr, message)
     ENDIF
+    IF (ierr /= 0) CALL this%clear()
   END SUBROUTINE heating_open_numbered
+
+  SUBROUTINE read_heating_timeline(this, last_frame, ierr, message)
+    CLASS(heating_series_t), INTENT(INOUT) :: this
+    INTEGER, INTENT(IN) :: last_frame
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    REAL(float) :: times(last_frame+1)
+    CHARACTER(LEN=1000) :: filename
+    INTEGER(HID_T) :: file_id
+    INTEGER :: frame
+
+    DO frame = 0, last_frame
+       filename = numbered_filename(this%stem, frame)
+       message = 'Cannot read required heating timestamp /time in '//TRIM(filename)
+       CALL HDF5_open(filename, file_id, ierr)
+       IF (ierr /= 0) RETURN
+       CALL HDF5_real_reading(file_id, times(frame+1), 'time', ierr)
+       CALL HDF5_close(file_id)
+       IF (ierr /= 0) RETURN
+    ENDDO
+    CALL this%series%set_times(times, ierr, message)
+  END SUBROUTINE read_heating_timeline
 
   SUBROUTINE validate_heating_datasets(this, ierr, message)
     CLASS(heating_series_t), INTENT(IN) :: this

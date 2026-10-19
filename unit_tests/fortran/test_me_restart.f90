@@ -155,7 +155,7 @@ PROGRAM test_me_restart
   IF (output_name /= expected_output) ERROR STOP 'output name changed with full input filename'
   CALL check_output_names()
 
-  ! Legacy numbered heating retains the magnetic frame schedule without timestamps.
+  ! Numbered heating uses its own timestamps, independently of the magnetic flag.
   Mesh%Nnodes = 1
   ALLOCATE(Mesh%X(1,2))
   Mesh%X = 0.5d0/phys%lscale
@@ -169,7 +169,7 @@ PROGRAM test_me_restart
   IF (ANY(phys%external_heating_ions /= 0.d0) .OR. ANY(phys%external_heating_electrons /= 0.d0)) &
        ERROR STOP 'initial heating frame'
   IF (switch%ME) THEN
-     CALL load_external_heating(1)
+     CALL load_external_heating(physical_time=0.12d0)
      expected_heating = 7.d0*simpar%refval_time/simpar%refval_specenergydens/simpar%refval_mass
      IF (ABS(phys%external_heating_ions(1)-expected_heating) > 1.d-12*ABS(expected_heating) .OR. &
          ABS(phys%external_heating_electrons(1)-2.d0*expected_heating) > 1.d-12*ABS(expected_heating)) &
@@ -826,19 +826,23 @@ CONTAINS
     IF (ANY(ABS(sample%bphi-(1.d0+fraction)) > 1.d-14)) ERROR STOP 'next physical magnetic sample'
     input%external_heating_from_grid = .TRUE.
     scale = simpar%refval_time/simpar%refval_specenergydens/simpar%refval_mass
-    IF (moving) THEN
-       input%external_heating_path = 'heat'
-       CALL initialize_external_heating()
-       CALL load_external_heating(9999)
-       expected = 7.d0*0.06d0/0.08d0*scale
-       IF (ABS(phys%external_heating_ions(1)-expected) > 1.d-12*ABS(expected)) &
-            ERROR STOP 'numbered heating used numerical count as frame count'
-       CALL close_heating_input()
-       DEALLOCATE(phys%external_heating_ions, phys%external_heating_electrons)
-    ENDIF
+    input%external_heating_path = 'heat'
+    CALL initialize_external_heating()
+    CALL load_external_heating()
+    expected = 7.d0*0.06d0/0.12d0*scale
+    IF (ABS(phys%external_heating_ions(1)-expected) > 1.d-12*ABS(expected)) &
+         ERROR STOP 'numbered heating did not use its own timestamps'
+    CALL close_heating_input()
+    DEALLOCATE(phys%external_heating_ions, phys%external_heating_electrons)
+    input%external_heating_path = 'fixed_heat_0000.h5'
+    CALL initialize_external_heating()
+    CALL load_external_heating()
+    IF (ANY(phys%external_heating_ions /= 3.d0*scale)) ERROR STOP 'fixed numbered anchor became moving heating'
+    CALL close_heating_input()
+    DEALLOCATE(phys%external_heating_ions, phys%external_heating_electrons)
     input%external_heating_path = 'heat_trajectory.h5'
     CALL initialize_external_heating()
-    CALL load_external_heating(9999)
+    CALL load_external_heating()
     expected = (1.d0+87.5d0*0.06d0)*scale
     IF (ABS(phys%external_heating_ions(1)-expected) > 1.d-12*ABS(expected)) &
          ERROR STOP 'heating did not use its own clock at the physical target'
@@ -850,7 +854,7 @@ CONTAINS
     Mesh%X(2,:) = [0.3d0,0.4d0]/phys%lscale
     CALL load_stored_toroidal_current(reference_current, 9999)
     CALL initialize_external_heating()
-    CALL load_external_heating(9999)
+    CALL load_external_heating()
     DO node = 1, 2
        r = Mesh%X(node,1)*phys%lscale
        z = Mesh%X(node,2)*phys%lscale
