@@ -170,9 +170,7 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
             if summary["status"] != "passed":
                 raise BundleError(f"golden validation failed: {name}")
         validate_bundle_root(candidate, root / "cases", catalog=catalog)
-        report["evidence"] = [_record(item, workspace) for item in sorted(workspace.rglob("*"))
-                              if item.is_file() and not item.is_symlink() and item != path
-                              and (item.suffix in {".json", ".log", ".nml"} or item.name == "param.txt")]
+        report["evidence"] = _refresh_evidence(workspace)
         report["status"] = "ready"
     except (HarnessError, OSError, KeyboardInterrupt) as exc:
         if report["producers"] and report["producers"][-1]["status"] != "passed":
@@ -182,6 +180,12 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
         raise
     write_json_atomic(path, report, "refresh report")
     return path, report
+
+
+def _refresh_evidence(workspace):
+    return [_record(item, workspace) for item in sorted(workspace.rglob("*"))
+            if item.is_file() and not item.is_symlink() and item.name != "refresh.json"
+            and (item.suffix in {".json", ".log", ".nml"} or item.name == "param.txt")]
 
 
 def _solution(directory, selected_output=None):
@@ -338,7 +342,21 @@ def _publication_summary(workspace, report):
                       for item in report["producers"]],
         "validation_suites": [{"suite": item["suite"], "status": item["status"]}
                               for item in report["checks"]],
+        **({"continuations": [_continuation_summary(workspace, item) for item in report["continuations"]]}
+           if report.get("continuations") else {}),
     }
+
+
+def _continuation_summary(workspace, item):
+    if "build" not in item:
+        return item
+    build = load_json(_verify_record(workspace, item["build"]), "continuation build")
+    return {**item, "validation_build": {
+        "build_id": build["build_id"],
+        "repository": {key: build["repository"][key] for key in ("revision", "dirty")
+                       if key in build["repository"]},
+        "artifacts": {name: {key: value[key] for key in ("sha256", "size_bytes")}
+                      for name, value in build["artifacts"].items()}}}
 
 
 def publish(workspace, output, bundle_version, reason, provenance, *, catalog_root=None):

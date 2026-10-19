@@ -364,10 +364,32 @@ def _validate_recorded_cells(
         raise BundleError("suite summary contains duplicate workflow/layout cells")
 
 
+def _reuse_suite_results(path, expected, identity, rerun_workflows):
+    """Allow a new build while retaining input and per-run provenance checks."""
+    source = load_json(path, "previous suite summary")
+    _validate_source_summary(source)
+    for key, value in expected.items():
+        if key != "run_id" and source.get(key) != value:
+            raise BundleError(f"previous suite does not match: {key}")
+    def stable_inputs(record):
+        stable = {key: value for key, value in record.items()
+                  if key not in {"executables", "build_manifest", "runtime_files"}}
+        # A fresh build has a different directory, but must use the same data.
+        stable["runtime_files"] = sorted((value["sha256"], value["size_bytes"])
+                                         for value in record.get("runtime_files", {}).values())
+        return stable
+    _validate_execution_inputs(stable_inputs(source["execution_inputs"]), stable_inputs(identity))
+    return {"reused_from": {"path": str(path), **file_identity(path),
+                            "execution_inputs": source["execution_inputs"]},
+            "results": [{**item, "reused_execution": True} for item in source["results"]
+                        if item["status"] == "passed" and item["workflow_id"] not in rerun_workflows]}
+
+
 def run_suite(
     settings, suite_id, case_directory, layouts_path, suites_path,
     tolerances_path, run_id=None, required_bundle_class=None,
     resume=False, parameter_overrides=None, *, case_id=None, catalog=None, suite=None, manifest=None,
+    reuse_from=None, rerun_workflows=(),
 ):
     catalog = {} if catalog is None else catalog
     suite = suite or load_suite_definition(suite_id, suites_path, layouts_path, case_directory, case_id=case_id, catalog=catalog)
@@ -419,6 +441,8 @@ def run_suite(
             "description": suite["description"], "execution_inputs": identity,
             **expected, "results": [],
         }
+        if reuse_from is not None:
+            summary.update(_reuse_suite_results(reuse_from, expected, identity, rerun_workflows))
     summary.update(status="running", finished_utc=None, comparisons=[])
     summary.pop("diagnostics", None)
     write_json_atomic(path, summary, "suite summary")
