@@ -1958,19 +1958,23 @@ SUBROUTINE read_control_curve(curve, path, dataset)
    TYPE(control_curve_t), INTENT(INOUT) :: curve
    CHARACTER(LEN=*), INTENT(IN) :: path, dataset
    INTEGER(HID_T) :: file_id
-   INTEGER :: n
+   INTEGER :: n, ierr, coordinate
+   CHARACTER(LEN=7), PARAMETER :: chord_names(4) = &
+        [CHARACTER(LEN=7) :: 'x_lower', 'x_upper', 'y_lower', 'y_upper']
 
    IF (curve%path == path .AND. ALLOCATED(curve%times)) RETURN
    curve = control_curve_t()
    CALL open_control_series(path, dataset, file_id, n)
    ALLOCATE(curve%times(n), curve%values(n))
-   CALL HDF5_array1D_reading(file_id, curve%values, dataset)
-   CALL HDF5_array1D_reading(file_id, curve%times, 'time')
+   CALL HDF5_array1D_reading(file_id, curve%values, dataset, ierr)
+   CALL check_control_read(file_id, path, dataset, ierr)
+   CALL HDF5_array1D_reading(file_id, curve%times, 'time', ierr)
+   CALL check_control_read(file_id, path, 'time', ierr)
    IF (dataset == 'target_density') THEN
-      CALL HDF5_real_reading(file_id, curve%chord(1), 'x_lower')
-      CALL HDF5_real_reading(file_id, curve%chord(2), 'x_upper')
-      CALL HDF5_real_reading(file_id, curve%chord(3), 'y_lower')
-      CALL HDF5_real_reading(file_id, curve%chord(4), 'y_upper')
+      DO coordinate = 1, SIZE(chord_names)
+         CALL HDF5_real_reading(file_id, curve%chord(coordinate), TRIM(chord_names(coordinate)), ierr)
+         CALL check_control_read(file_id, path, TRIM(chord_names(coordinate)), ierr)
+      ENDDO
    ENDIF
    CALL HDF5_close(file_id)
    IF (ANY(.NOT. ieee_is_finite(curve%times)) .OR. ANY(.NOT. ieee_is_finite(curve%values)) .OR. &
@@ -1981,6 +1985,18 @@ SUBROUTINE read_control_curve(curve, path, dataset)
    curve%path = path
    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control curve loaded: ', TRIM(path), ' ', TRIM(dataset)
 END SUBROUTINE read_control_curve
+
+SUBROUTINE check_control_read(file_id, path, dataset, ierr)
+   INTEGER(HID_T), INTENT(IN) :: file_id
+   CHARACTER(LEN=*), INTENT(IN) :: path, dataset
+   INTEGER, INTENT(IN) :: ierr
+
+   IF (ierr == 0) RETURN
+   CALL HDF5_close(file_id)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) &
+        'Control input error: cannot read required dataset ', TRIM(dataset), ' in ', TRIM(path)
+   STOP 1
+END SUBROUTINE check_control_read
 
 SUBROUTINE sample_control_curve(curve, path, dataset, value, n, physical_time)
    TYPE(control_curve_t), INTENT(INOUT) :: curve

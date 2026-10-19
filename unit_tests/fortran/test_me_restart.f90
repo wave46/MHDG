@@ -22,6 +22,7 @@ PROGRAM test_me_restart
   USE magnetic_field, ONLY: open_control_series, load_puff_from_file, load_zeff, load_impurity_concentration
   USE magnetic_field, ONLY: initialize_magnetic_field, load_magnetic_field_nodes, sample_magnetic_input, close_magnetic_input
   USE magnetic_field, ONLY: magnetic_field_is_time_dependent, SetParticleSource, initialize_puff, clear_control_curves
+  USE magnetic_field, ONLY: reconstruct_feedback_derivative_history
   USE magnetic_field, ONLY: adjust_puff_feedback, adjust_recycling_feedback, adjust_impurity_concentration_feedback
   USE equilibrium_series, ONLY: equilibrium_sample_t
   USE HDF5_io_module, ONLY: HDF5_open, HDF5_close, HDF5_dataset_shape, HDF5_create, &
@@ -37,6 +38,7 @@ PROGRAM test_me_restart
   INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
   INTEGER :: ierr, ip, jp, configured_nts
   LOGICAL :: trajectory
+  TYPE(Feedback_derivative_history_type) :: control_history
   TYPE(equilibrium_sample_t) :: field_sample
   REAL*8 :: current(1)
   CHARACTER(LEN=1000) :: field_filename
@@ -121,6 +123,8 @@ PROGRAM test_me_restart
   IF (INDEX(mesh_input_name, '.msh') > 0) control_filename = 'controls.h5'
   CALL open_control_series(control_filename, 'target_density', field_file, control_length)
   CALL HDF5_close(field_file)
+  input%target_density_path = control_filename
+  CALL reconstruct_feedback_derivative_history(control_history, 0.d0, 0.1d0, .FALSE.)
   control_times = [0.d0, 0.25d0, 0.56d0]
   IF (ALLOCATED(phys%impurity_concentrations)) DEALLOCATE(phys%impurity_concentrations)
   ALLOCATE(phys%impurity_concentrations(1))

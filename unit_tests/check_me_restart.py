@@ -204,6 +204,8 @@ def main():
         ("control_rank_mismatch", 0, True, 100, True, "Control values and time must be rank one"),
         ("control_too_short", 0, True, 100, True, "Invalid control series length"),
         ("control_nonfinite", 0, True, 100, True, "Invalid control values or timestamps"),
+        *[(f"control_missing_{name}", 0, True, 100, True, f"cannot read required dataset {name}")
+          for name in ("x_lower", "x_upper", "y_lower", "y_upper")],
     ]
     with tempfile.TemporaryDirectory(prefix="mhdg-me-restart-") as scratch:
         for name, step, saved_me, nts, me, expected in cases:
@@ -227,7 +229,9 @@ def main():
                 f["target_density"] = np.ones_like(times)
                 for key, value in {"x_lower": 2.1, "x_upper": 2.5, "y_lower": .1, "y_upper": .1}.items():
                     f[key] = [value]
-                if name == "control_shape_mismatch":
+                if name.startswith("control_missing_"):
+                    del f[name.removeprefix("control_missing_")]
+                elif name == "control_shape_mismatch":
                     del f["puff"]
                     f["puff"] = np.ones(2)
                 elif name == "control_nonfinite":
