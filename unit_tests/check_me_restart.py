@@ -12,6 +12,9 @@ import numpy as np
 
 
 def parameters(template, *, nts=100, me=True, full_paths=False):
+    # Legacy restart cases explicitly supply this optional compatibility switch.
+    if not re.search(r"(?im)^\s*ME\s*=", template):
+        template = template.replace("&SWITCH_LST", "&SWITCH_LST\n    ME = .false.", 1)
     values = {"ME": ".true." if me else ".false.", "nts": str(nts),
               "steady": ".false.", "target_variable": "1", "printint": "0", "puff": "456",
               "field_path": "'field_0000.h5'" if full_paths else "'field'",

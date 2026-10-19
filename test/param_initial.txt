@@ -22,9 +22,9 @@
     driftexb            = .false.       ! Set to FALSE to ignore ExB drifts terms
     testcase            = 54            ! Determine the analytical solution and the body forces !!60 for circ CircLimAlign_Quads_Nel588_P6 mesh for circ case
     OhmicSrc            = .true.        ! True to set Ohmic source of energy
-    ME                  = .false.        ! True to allow magnetic equilibrium evolution in time
     diff_reverse_Ip     = .false.        ! True to make D=D0*I_0/I_p in moving equilibrium, where D0 is diff_n, diff_u, so on, I_0 is plasma current at flat-top (set-up below), I_p is the current plasma current
-    target_variable      = 2       ! in moving equilibrium 0 -- puff from experimental file, 1 -- puff adjusted to target density, 2 -- recycling adjusted to target density, 3 -- 1+ conecntratio of impurity is adjusted to lid at X-Ppoint
+    target_variable = 2                ! 0 prescribed/constant puff; 1 puff feedback; 2 recycling feedback
+                                        ! 3 puff feedback plus impurity feedback at the X-point
     RMP                 = .false.       ! True to set RMP (non-axisymetrical perturbation)
     Ripple              = .false.       ! True to set Ripple (non-axisymetrical perturbation)
     psdtime             = .false.        ! Reduce the diffusion every time we reach the steady state
@@ -70,27 +70,23 @@
 /
 
 &INPUT_LST
-    transport_model_path = 'transport_model.nml' ! Settings used when transport_1d = .true.
-    impurity_model_path = 'impurity_model.nml' ! Required when impurity_radiation = .true.
-    field_path          = '/path/to/magnetic/field.h5'  ! Path to Bfield h5 file.
-    ! Single file: field.h5; numbered ME: field_0000.h5 (legacy basename also accepted).
-    ! Grid dimensions are read from HDF5.
-    field_from_grid = .true.                                   ! true then reads from cartesian grid and then biineary interpolates on nodes
-                                                                ! false then reads from files with field on nodes
-    compute_from_flux   = .true.                                ! derive Br, Bz, and Jtor from psi using the fitted field convention
-    jtor_path           = '/path/to/plasma/current.h5'    ! Path to jtor h5 file.
-    ! Single file: current.h5; numbered ME: current_0000.h5 (legacy basename also accepted).
-    ! Grid dimensions are read from HDF5.
+    transport_model_path = 'transport_model.nml' ! Used when transport_1d = .true.
+    impurity_model_path = 'impurity_model.nml'   ! Used when impurity_radiation = .true.
+    field_path = 'path/to/equilibrium.h5'        ! Stationary equilibrium or single-file trajectory
+    ! Legacy numbered input: field_0000.h5; the old basename is also accepted.
+    field_from_grid = .true.                   ! Rectangular grid; .false. reads values on global mesh nodes
+    compute_from_flux = .true.                 ! Reconstruct Br/Bz and Jtor from psi; references set conventions
+    jtor_path = ''                            ! Set only for a separate legacy current file, e.g. current_0000.h5
+    ! Grid dimensions and control-series lengths are read from HDF5.
     save_folder = '/path/where/to/save/solution/'
-    external_heating_path = '/path/where/to/read/external/heating/from.h5'
+    external_heating_path = 'path/to/heating.h5' ! Used when external_heating = .true.
     external_heating_from_grid = .true.
-    ! Control series lengths are read from HDF5.
-    ! Explicit time_mode: empty source paths keep configured constants, even with moving equilibrium.
-    puff_path = '/path/where/to/read/puff.h5' ! prescribed puff for target_variable = 0 or 2
-    target_density_path = '/path/where/to/read/target/density.h5'
-    target_density_xpr_path = '/path/where/to/read/target/density/xpr.h5'
-    zeff_path = '/path/where/to/read/zeff.h5'
-    diffusion_1D_path = '/path/where/to/read/1d/diffusion/'
+    ! Physical time modes: omitted/empty puff and Zeff paths keep PHYS_LST constants.
+    puff_path = ''                            ! Optional prescribed puff for target_variable = 0 or 2
+    zeff_path = ''                            ! Optional time-dependent Zeff, independent of equilibrium evolution
+    target_density_path = ''                  ! Required for feedback: target_variable = 1, 2 or 3
+    target_density_xpr_path = ''              ! Also required for impurity feedback: target_variable = 3
+    diffusion_1D_path = 'path/to/diffusion.h5'  ! Used when import_diffusion_1D = .true.
 /
 
 &NUMER_LST
@@ -141,7 +137,7 @@
     n_quant_ind = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10		! Specify all physical variables(gradients) to which you would like to apply indicator
     tol_est		= 1.e-1	! Difference between p+1 and p solution (estimator)
     difference		= 1		! Type of difference: relative, absolute [0,1]
-    time_adapt		= .true.	! Refine at times steps (pseudo or not)
+    time_adapt		= .true.	! Mesh refinement at timesteps; independent of timestep adaptation
     NR_adapt		= .false.	! Refine at NR steps (pseudo or not)
     freq_t_adapt	= 1		! Frequency of time refinement, only if time_adapt = .true.
     freq_NR_adapt	= 5		! Frequency of NR refinement, only if NR_adapt = .true.
@@ -177,16 +173,11 @@
 
 
 &TIME_LST
-    dt0                 = 1e2        ! Initial time step
-    nts                 = 10           ! Max number of time iterations to do in the current session (only for transient simulations) 30
-    tfi                 = 1e10           ! Final time: the simulation stops when this time is reached
-    tsw                 = 0             ! Switch to modify the time step
-                                        ! 0 = dt is not modified
-                                        ! 1 = ...
-    tis                 = 1             ! Time integration scheme (1-7)
-    ! Optional Newton initial guess; requires an explicit physical time_mode and BDF1.
-    newton_predictor = .false.
-    newton_predictor_rate_limit = 0.35    ! Maximum relative change between successive accepted rates
+    ! Omitted time_mode keeps the existing steady/pseudo-time or legacy nts-based workflow.
+    dt0 = 1e2                          ! Initial step in normalized solver units by default
+    nts = 10                           ! Legacy numerical-step limit; not a limit for physical time modes
+    tis = 1                            ! BDF1; required by fixed, prescribed and adaptive physical modes
+    ! Physical time options: see the TIME_LST example in param_reference.txt.
 /
 
 &PHYS_LST
