@@ -232,6 +232,28 @@ PROGRAM test_divergence_refinement
   CALL project_u0_newmesh(preserve_history=adapt%osc_adapt .AND. -0.4d0 .GT. adapt%osc_tol)
   IF (MAXVAL(ABS(sol%u0-expected)) > 1.d-10) ERROR STOP 'oscillation recovery lost time history'
 
+  ! Ordinary Newton remeshing must retain the accepted state, not u_conv.
+  ALLOCATE(sol%u_conv(6))
+  DO limit_case = 1, 2
+    DEALLOCATE(sol%u0)
+    ALLOCATE(sol%u0(6,3))
+    DO h=1,3
+      DO node=1,3
+        DO eq=1,2
+          sol%u0((node-1)*2+eq,h) = history_field(Mesh_prec%X(node,:)*phys%lscale,eq,h)
+        ENDDO
+      ENDDO
+    ENDDO
+    sol%u_conv = sol%u0(:,1)+100.d0
+    time%legacy_input = limit_case == 2
+    switch%ME = limit_case == 2
+    CALL project_u0_newmesh(preserve_history=.FALSE.)
+    IF (MAXVAL(ABS(sol%u0-expected)) > 1.d-10) ERROR STOP 'ordinary Newton remeshing replaced accepted history'
+  ENDDO
+  DEALLOCATE(sol%u_conv)
+  time%legacy_input = .TRUE.
+  switch%ME = .FALSE.
+
   ! Callers omitting preserve_history keep their first-column projection behavior.
   DEALLOCATE(sol%u0)
   ALLOCATE(sol%u0(6,3))

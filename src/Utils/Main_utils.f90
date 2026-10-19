@@ -1911,8 +1911,8 @@ ENDSUBROUTINE update_delta_te
     REAL*8, ALLOCATABLE :: previous_history(:,:)
     LOGICAL :: retain_history
 
-    retain_history = .FALSE.
-    IF (PRESENT(preserve_history)) retain_history = preserve_history
+    retain_history = .NOT. time%legacy_input .OR. switch%ME
+    IF (PRESENT(preserve_history)) retain_history = retain_history .OR. preserve_history
 
     IF(retain_history .OR. .NOT. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0))) THEN
        previous_history = sol%u0

@@ -221,7 +221,7 @@ PROGRAM MHDG
         !****************************************
         ! Check steady state and update or exit
         !****************************************
-        IF (time%legacy_input .AND. errlstime .LT. numer%tTM) THEN
+        IF (time%legacy_input .AND. .NOT. switch%ME .AND. errlstime .LT. numer%tTM) THEN
            IF (switch%psdtime) THEN
               ! Pseudo-time simulation
 

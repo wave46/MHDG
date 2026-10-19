@@ -70,6 +70,7 @@ PROGRAM test_me_restart
      STOP
   ENDIF
   IF (mode == 'time-clock') THEN
+     adapt%adaptivity = .FALSE.
      CALL check_physical_clock()
      CALL check_time_subdivision()
      CALL check_timestep_growth()
