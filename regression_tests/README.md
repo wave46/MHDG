@@ -110,44 +110,93 @@ two neutral limiters, radiation off, N and N+W impurity radiation, and stored
 magnetic/current fields against its own reference. Limited adds analytical
 initialization and the focused NeutralGamma probe described above.
 
-The separate `moving_equilibrium` bundle supplies a limited restart, one trajectory HDF5
-containing canonical magnetic/current frames and explicit control curves. Case recipes
-select 80 ms puff feedback (seven advances), a 100 ms refinement-limit stop
-(compare completed step two), and two-advance 80 ms prescribed-puff/recycling
-checks with off-knot controls. The optional `mode1_restart` continuation starts
-from the full run's saved step six, repeats step seven against `mode1_reference`,
-then adds ten held-input 80 ms steps through step 17 (1.36 s). It uses a fifth
-final reference and a step-six checkpoint, both regenerated during golden refresh.
-The checkpoint is harvested by embedded HDF5 step number using `checkpoint_outputs`;
-it is not selected as the producer's final solution. The
-short puff-feedback MPI1/OMP1 versus MPI4/OMP1 pair needs no additional reference.
-The 100 ms recipe accepts exhaustion of either configured refinement budget
-at advance three, requires the same converged prefix, and records the actual stop
-reason. Other failures remain rejected; divergence-only declarations stay strict.
-`check moving_equilibrium` runs the full pair; `moving_equilibrium_short` and
-`moving_equilibrium_parallel` select the short checks. `moving_equilibrium_restart`
-selects the restart/held-input continuation. Full and short golden workflows use
-MPI4/OMP4 by default; the MPI comparison explicitly uses MPI1/OMP1 and MPI4/OMP1.
-ME recipes disable Newton solution files (`saveNR=false`) and retain accepted
-timestep saves. Preparation copies selected supplied endpoints into one local
-`inputs/equilibrium.h5`, preserving physical timestamps, primitive arrays and
-reference data. It sets `field_path` to that full filename and leaves `jtor_path`
-empty. Frame zero is the initial state at time zero; each subsequent frame is the
-corresponding numerical advance's endpoint. The 80 ms recipe
-keeps seven constant steps to 0.56 s; the canonical bundle explicitly holds the
-0.50 s equilibrium through 0.56 s. Control curves must cover the endpoint.
-Correct canonical data in the data repository; the harness validates it without
-repairing timestamps or extending equilibrium coverage.
-The continuation requires explicit canonical samples and held controls through
-1.36 s. Its expected accepted sequence starts at the saved checkpoint, so steps
-before that checkpoint are not required in continuation output. The repeated
-step-seven check uses the existing cross-layout tolerance for plasma fields and
-controller state, with spatial comparison if mesh numbering differs. It runs
-even when only output/convergence validation is requested. Keep this longer
-check out of routine profiles; use it for significant ME/restart changes and
-future timestep-growth/predictor studies.
-The overlap comparison excludes `cache_generation` and `equilibrium_generation`,
-which count process-local rebuilds and naturally restart from fresh values.
+The separate `moving_equilibrium` bundle supplies a limited restart, one trajectory
+HDF5 containing magnetic/current frames, and explicit control curves. Its checks are:
+
+- `moving_equilibrium`: the unchanged seven-step 80 ms transition to 0.56 s,
+  plus a full discharge from the bootstrap to 0.50 s with prescribed 100 ms
+  targets and temporal recovery.
+  Recovery must reject a trial, save smaller accepted substeps, and reach the
+  original endpoint. A second workflow restarts from the first accepted
+  intermediate checkpoint and compares every replayed checkpoint with the
+  uninterrupted recovery run, including fields, controller state and time/dt.
+- `moving_equilibrium_restart`: restart the 80 ms run at step six and compare
+  repeated step seven with the uninterrupted reference, then continue ten
+  held-input 80 ms steps through step 17 at 1.36 s. This run produces the
+  quasi-steady reference used to initialize the adaptive ramp.
+- `moving_equilibrium_adaptive`: start from the regenerated 1.36 s quasi-steady
+  checkpoint, hold the 0.56 s equilibrium fixed, and follow the supplied density
+  ramp until 2.30 s. Start at 80 ms, allow growth by 1.2 up to 160 ms, and enable
+  guarded Newton prediction. Check that a larger numerical step was actually
+  accepted, that at least one predicted Newton guess reached convergence without
+  fallback, and that the final remaining interval was shorter than the saved dt
+  proposal. These are functional coverage requirements, not speedup or accuracy
+  estimates; there is no hardcoded Newton count or growth schedule. Compare
+  the final fields and controller state with the ramp's own golden. Zeff is fixed
+  at one and impurity concentrations come from the impurity namelist.
+- `moving_equilibrium_short`: retain the two-step prescribed-puff and
+  recycling-feedback checks with off-knot controls for controller refactoring.
+- `moving_equilibrium_parallel`: retain the short puff-feedback MPI1/OMP1 versus
+  MPI4/OMP1 comparison, without another golden reference.
+
+All other ME workflows use MPI4/OMP4. Newton solution files are disabled
+(`saveNR=false`); accepted timestep files remain available. The 80 ms and short
+controller recipes retain legacy stepping with temporal reduction/growth and
+prediction explicitly disabled. The 80 ms recipe keeps seven constant steps to
+0.56 s; the canonical data explicitly holds the 0.50 s equilibrium through
+0.56 s. Preparation copies selected supplied frames into a local
+`inputs/equilibrium.h5`, preserves timestamps and primitive arrays, uses that
+full filename as `field_path`, and leaves `jtor_path` empty.
+
+Physical-time recipes use seconds and `t_final`. Preparation reads the saved
+physical clock independently of the accepted-step number; a steady-state seed
+instead starts at `t_start`. `time_step_s` selects the supplied-frame cadence
+for prescribed recovery and the initial numerical dt for adaptive stepping.
+`equilibrium_time_s` selects one supplied frame for a fixed-field run, preserving
+its three-dimensional trajectory layout with one time sample. Omitted control
+curves clear the local template paths so the namelist values remain constant.
+Supplied curves must cover the actual start and final times; the harness never
+repairs canonical timestamps or extends their coverage.
+
+The case's `acceptance_checks` request observable rejection, growth, prediction,
+intermediate-time restart or final clipping. Ordinary output must contain a
+contiguous sequence of accepted steps with increasing physical time; each saved
+dt must equal the difference between successive timestamps. Step counts may
+exceed supplied frame counts. Failed predictor attempts do not satisfy the
+prediction check, and rejected temporal trials must not appear as accepted saves.
+Final clipping is checked against `Proposed_time_step_seconds` in the preceding
+checkpoint, rather than assuming a smaller last dt proves clipping.
+
+Golden refresh regenerates the complete dependency chain:
+
+1. Full 80 ms producer writes its final reference and step-six checkpoint.
+2. Step-six continuation consumes that new checkpoint, checks the step-seven
+   overlap, and writes the 1.36 s quasi-steady reference.
+3. Full 100 ms producer starts from the bootstrap, recovers failed intervals,
+   reaches 0.50 s, and writes its final reference and an intermediate checkpoint.
+4. Fixed-field adaptive ramp consumes the new quasi-steady output and writes
+   its own final reference. Both short controller producers retain their goldens.
+5. Candidate checks replay the intermediate restart using the new checkpoint
+   and compare every suffix save with a fresh uninterrupted 100 ms run.
+
+`checkpoint_outputs` accepts an embedded accepted-step number or the selector
+`"first_intermediate"`. The latter selects the first accepted time between the
+supplied equilibrium frames, so the recovery checkpoint is independent of how
+many halvings were needed. The refresh dependency preflight excludes stale
+outputs scheduled for regeneration: consumers require their producers to have
+run first. The old failed-prefix output is no longer an input or output role.
+The new bundle needs `ramp_target_density`, `recovery_reference`,
+`recovery_restart` and `ramp_reference` roles. The references and recovery
+checkpoint can be generated by golden refresh; the ramp curve must be supplied
+in its source bundle before launching refresh.
+
+Restart comparisons use the existing cross-layout tolerances for fields and
+controllers, with spatial comparison if meshes differ. They exclude
+`cache_generation` and `equilibrium_generation`, which count process-local
+rebuilds. Full includes all these suites; routine-extended retains the short
+controller and MPI checks. Run the full ME checks for significant changes to
+moving equilibrium, recovery, restart, growth or prediction, rather than every
+small input-wiring edit.
 
 Parallel suites compare serial OMP1 with serial OMP16 for OpenMP, and serial OMP1
 with MPI4×OMP1 for MPI. The diverted short-transport suite additionally compares

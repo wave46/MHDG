@@ -14,7 +14,7 @@ from .bundles import preflight_bundles
 from .prepare import prepare_run
 from .execute import execute_prepared, reusable_outputs, execution_failures
 from .compare import (compare_completed_run, compare_generated_meshes, validate_completed_run,
-                      compare_me_refinement_stop, validate_me_stopped_run)
+                      compare_me_refinement_stop, validate_me_stopped_run, compare_physical_restart_suffix)
 from .compare_common import select_candidate
 from .documents import load_json, write_json_atomic
 from .support import BundleError, ComparisonError, HarnessError, IDENTIFIER_RE, utc_now, utc_run_id
@@ -151,6 +151,13 @@ def _compare_pair(
         result["comparison_report"] = str(report_path)
         result["status"] = report["status"]
         result["failures"] = list(report["failures"])
+        if not same_workflow:
+            suffix = compare_physical_restart_suffix(baseline, candidate, case_directory, tolerances_path, catalog=catalog)
+            if suffix is not None:
+                result["restart_suffix"] = suffix
+                result["failures"].extend(suffix["failures"])
+                if suffix["status"] != "passed":
+                    result["status"] = "failed"
         generated_meshes = compare_generated_meshes(baseline, candidate) if same_workflow else None
         result["generated_meshes"] = generated_meshes
         if generated_meshes and not generated_meshes["passed"]:

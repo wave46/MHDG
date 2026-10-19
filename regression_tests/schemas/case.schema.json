@@ -152,7 +152,9 @@
         "checkpoint_outputs": {
           "type": "object",
           "propertyNames": {"$ref": "#/$defs/identifier"},
-          "additionalProperties": {"type": "integer", "minimum": 0}
+          "additionalProperties": {"oneOf": [
+            {"type": "integer", "minimum": 0}, {"enum": ["first_intermediate"]}
+          ]}
         },
         "require_refinement": {
           "type": "boolean"
@@ -165,6 +167,17 @@
       "properties": {
         "series": {"$ref": "#/$defs/identifier"},
         "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+        "equilibrium_time_s": {"type": "number"},
+        "acceptance_checks": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "rejection": {"type": "boolean"},
+            "growth": {"type": "boolean"},
+            "prediction": {"type": "boolean"},
+            "intermediate_restart": {"type": "boolean"},
+            "final_clipping": {"type": "boolean"}
+          }
+        },
         "restart_check": {
           "type": "object", "additionalProperties": false,
           "required": ["step", "reference"],

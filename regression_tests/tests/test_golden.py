@@ -62,13 +62,28 @@ def test_refresh_collects_a_checkpoint_separately_from_the_final_reference(setup
     path = setup.root / 'cases/legacy_case.json'
     case = json.loads(path.read_text())
     case['files']['optional']['step6_checkpoint'] = 'restart_step6.h5'
-    case['workflows']['warm']['checkpoint_outputs'] = {'step6_checkpoint': 6}
+    case['workflows']['checkpoint_producer'] = {'extends': 'warm', 'restart': 'warm_restart',
+        'outputs': [], 'checkpoint_outputs': {'step6_checkpoint': 6}}
+    case['workflows']['warm']['restart'] = 'step6_checkpoint'
     path.write_text(json.dumps(case))
+    recipe_path = setup.root/'golden.json'
+    recipe = json.loads(recipe_path.read_text())
+    recipe['cases']['legacy_case']['producers'] = ['warm', 'checkpoint_producer']
+    recipe_path.write_text(json.dumps(recipe))
+    with pytest.raises(BundleError, match='producer warm needs: step6_checkpoint'):
+        golden.refresh('legacy_case', setup.values, setup.workspace)
+    assert not setup.workspace.exists()
+    recipe['cases']['legacy_case']['producers'].reverse()
+    recipe_path.write_text(json.dumps(recipe))
     checkpoint = f'''{shlex.quote(sys.executable)} - <<'PY'
 import h5py, shutil
 shutil.copy2('outputs/result.h5', 'outputs/checkpoint.h5')
 with h5py.File('outputs/checkpoint.h5', 'r+') as handle:
-    handle['simulation_parameters/time/Current_time_step_number'] = 6
+    group = handle.require_group('simulation_parameters/time')
+    if 'Current_time_step_number' in group:
+        group['Current_time_step_number'][...] = 6
+    else:
+        group['Current_time_step_number'] = 6
     handle['solution/u'][...] += 6
 PY
 printf 'Error: 1.0E-8\\nOutput written to file outputs/checkpoint.h5\\n'
@@ -81,9 +96,11 @@ printf 'Error: 1.0E-8\\nOutput written to file outputs/checkpoint.h5\\n'
     record = manifest['artifacts'][manifest['roles']['step6_checkpoint']]
     produced = Path(report['producers'][0]['run_directory']) / 'outputs/checkpoint.h5'
     assert file_identity(candidate / record['path']) == file_identity(produced)
+    consumer = Path(report['producers'][1]['run_directory'])
+    assert (consumer/'inputs/restart.h5').resolve() == produced
     with h5py.File(candidate / record['path']) as checkpoint, h5py.File(candidate / 'inputs/reference_mpi4_omp4.h5') as final:
         assert checkpoint['simulation_parameters/time/Current_time_step_number'][()] == 6
-        assert (checkpoint['solution/u'][()] == final['solution/u'][()] + 6).all()
+        assert (checkpoint['solution/u'][()] == final['solution/u'][()]).all()
     publish(setup)
     assert file_identity(setup.output / record['path']) == file_identity(produced)
 

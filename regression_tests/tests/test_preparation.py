@@ -280,3 +280,55 @@ def test_me_preparation_failure_is_atomic(me_harness, failure):
         prepare(me_harness, **options)
     parent = me_harness.run_directory("warm", "mpi4_omp4", "probe").parent
     assert not parent.exists() or not list(parent.iterdir())
+
+
+@pytest.mark.parametrize("fixed", [False, True])
+def test_physical_preparation_preserves_intermediate_clock_and_supports_constant_controls(me_harness, fixed):
+    import h5py
+    import numpy as np
+
+    path = me_harness.catalog / "cases/legacy_case.json"
+    case = json.loads(path.read_text())
+    moving = case["workflows"]["warm"]["moving_equilibrium"]
+    moving["time_step_s"] = .08 if fixed else .1
+    initial, final = (1.36, 2.3) if fixed else (.225, .3)
+    if fixed:
+        moving["equilibrium_time_s"] = .56
+        moving["controls"] = {"target_density": "density"}
+        with h5py.File(me_harness.root / "me_bundle/inputs/target_density.h5", "r+") as handle:
+            handle["time"][...] = [1.36, 1.8, 2.4]
+    path.write_text(json.dumps(case))
+    with h5py.File(me_harness.root / "me_bundle/inputs/restart.h5", "r+") as handle:
+        handle["simulation_parameters/switches/ME"] = 1
+        handle["simulation_parameters/time/Current_time_step_number"] = 9
+        handle["simulation_parameters/time/Current_time"] = initial / 2e-7
+        handle["simulation_parameters/time/Current_time_seconds"] = initial
+    run = prepare(me_harness, validate_bundle=False, requested_overrides={
+        "time_mode": "adaptive" if fixed else "prescribed", "t_final": final})
+    record = json.loads((run.path / "run_plan.json").read_text())["moving_equilibrium_inputs"]
+    assert record["initial_step"] == 9 and record["initial_time_s"] == initial
+    assert record["final_time_s"] == final
+    values = read_selected_input_values(run.path / "param.txt", {"time_units", "dt0", "tfi", "t_final", "me", "tis"})
+    assert values == {"time_units": "seconds", "dt0": moving["time_step_s"], "tfi": final,
+                      "t_final": final, "me": not fixed, "tis": 1}
+    with h5py.File(run.path / "inputs/equilibrium.h5") as handle:
+        np.testing.assert_allclose(handle["time"][:], [.56] if fixed else [0., .1, .2, .3])
+        assert handle["equilibrium/psi"].shape == (1 if fixed else 4, 2, 2)
+    if fixed:
+        assert read_selected_input_values(run.path / "inputs/impurity_model.nml", {"impurity_concentration_path"}) == {
+            "impurity_concentration_path": ""}
+        assert read_selected_input_values(run.path / "param.txt", {"puff_path", "zeff_path"}) == {
+            "puff_path": "", "zeff_path": ""}
+
+
+def test_physical_preparation_starts_steady_seed_at_configured_start(me_harness):
+    import h5py
+
+    with h5py.File(me_harness.root / "me_bundle/inputs/restart.h5", "r+") as handle:
+        handle["simulation_parameters/time/Physical_time_evolution"] = 0
+        handle["simulation_parameters/time/Current_time_step_number"] = 70
+        handle["simulation_parameters/time/Current_time"] = 1e10
+    run = prepare(me_harness, validate_bundle=False, requested_overrides={
+        "time_mode": "adaptive", "t_start": .12, "t_final": .3})
+    record = json.loads((run.path / "run_plan.json").read_text())["moving_equilibrium_inputs"]
+    assert record["initial_step"] == 0 and record["initial_time_s"] == .12

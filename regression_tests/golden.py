@@ -17,10 +17,10 @@ from .build import build_solver
 from .bundles import artifact_path, validate_bundle_root, preflight_bundles, load_manifest, series_artifact_ids
 from .compare import compare_completed_run, compare_me_refinement_stop
 from .compare_common import select_candidate
+from .compare_time import accepted_checkpoints, accepted_checkpoint_files
 from .execute import execute_prepared, reusable_outputs
 from .prepare import prepare_run
 from .compare_fixed import required_scalar
-from .files import recorded_file
 from .suites import run_suite, assess_result, reusable_result
 
 ROOT = Path(__file__).resolve().parent
@@ -189,17 +189,28 @@ def _solution(directory, selected_output=None):
                             Path(selected_output) if selected_output else None)
 
 
-def _checkpoint_solution(directory, step):
-    """Select an accepted timestep by HDF5 metadata, ignoring Newton saves."""
+def _checkpoint_solution(directory, selector):
+    """Select a numbered checkpoint or the first accepted interpolated time."""
+    import math
+
     metadata = load_json(directory / "run_metadata.json", "producer metadata")
-    for value in metadata["hdf5_outputs"]:
-        path = recorded_file(value, "HDF5 output", directory)
-        if "_NR" in path.name:
-            continue
-        with h5py.File(path) as handle:
-            if required_scalar(handle, "simulation_parameters/time", "Current_time_step_number") == step:
+    if selector != "first_intermediate":
+        for path in accepted_checkpoint_files(directory, metadata):
+            with h5py.File(path) as handle:
+                number = required_scalar(handle, "simulation_parameters/time", "Current_time_step_number")
+            if number == selector:
                 return path
-    raise BundleError(f"producer retained no accepted checkpoint at step {step}: {directory}")
+        raise BundleError(f"producer retained no accepted checkpoint at step {selector}: {directory}")
+    plan = load_json(directory / "run_plan.json", "producer plan")
+    frames = plan["moving_equilibrium_inputs"]["equilibrium_times_s"]
+    initial = plan["moving_equilibrium_inputs"]["initial_step"]
+    for path, clock in sorted(accepted_checkpoints(directory, metadata), key=lambda item: item[1][0]):
+        number, seconds = clock[:2]
+        selected = number > initial and not any(
+            math.isclose(seconds, time, rel_tol=1e-10, abs_tol=1e-12) for time in frames)
+        if selected:
+            return path
+    raise BundleError(f"producer retained no accepted checkpoint for {selector}: {directory}")
 
 
 def _generated_mesh(directory):

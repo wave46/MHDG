@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "description": "Synthetic moving equilibrium from a limited bootstrap: feedback, topology change and refinement-limit failure",
+  "description": "Transient feedback, moving equilibrium, timestep recovery and fixed-field adaptive ramp",
   "files": {
     "required": {
       "geometry": "geometry.geo",
@@ -19,9 +19,12 @@
       "mode1_reference": "reference_mode1.h5",
       "mode1_restart_step6": "restart_mode1_step6.h5",
       "quasisteady_reference": "reference_quasisteady.h5",
-      "failure_prefix_reference": "reference_failure_prefix.h5",
       "mode0_short_reference": "reference_mode0_short.h5",
-      "mode2_short_reference": "reference_mode2_short.h5"
+      "mode2_short_reference": "reference_mode2_short.h5",
+      "ramp_target_density": "ramp_target_density.h5",
+      "recovery_reference": "reference_recovery.h5",
+      "recovery_restart": "restart_recovery.h5",
+      "ramp_reference": "reference_ramp.h5"
     }
   },
   "parameter_namelists": {
@@ -52,6 +55,8 @@
         }
       },
       "parameter_overrides": {
+        "time_mode": "legacy", "dt_reduce_on_failure": false,
+        "dt_grow_on_easy": false, "newton_predictor": false,
         "nts": 2, "saveNR": false, "target_variable": 1, "compute_from_flux": true,
         "adaptivity": true, "div_adapt": true, "osc_adapt": true,
         "check_neutral_positivity": true, "time_adapt": false,
@@ -108,29 +113,133 @@
         }
       }
     },
-    "refinement_limit": {
+    "recovery": {
       "extends": "mode1_short",
-      "description": "100 ms endpoint puff feedback stops at advance three; compare the two-step completed prefix",
-      "reference": "failure_prefix_reference",
-      "outputs": ["failure_prefix_reference"],
+      "description": "Run the full 0 to 0.50 s discharge with prescribed 100 ms targets and temporal recovery",
+      "reference": "recovery_reference",
+      "outputs": [
+        "recovery_reference"
+      ],
       "parameter_overrides": {
-        "nts": 5, "feedback_propotional_gain": 300.0,
-        "feedback_integral_gain": 30.0, "feedback_derivative_gain": 12.0
+        "feedback_propotional_gain": 300.0,
+        "feedback_integral_gain": 30.0,
+        "feedback_derivative_gain": 12.0,
+        "time_mode": "prescribed",
+        "time_units": "seconds",
+        "t_final": 0.5,
+        "dt_reduce_on_failure": true,
+        "dt_min": 1e-06
       },
       "moving_equilibrium": {
-        "series": "equilibrium_series", "time_step_s": 0.1,
+        "series": "equilibrium_series",
+        "time_step_s": 0.1,
         "controls": {
-          "puff": "control_puff", "target_density": "control_target_density",
-          "zeff": "control_zeff", "impurity_concentration": "control_impurity_concentration"
+          "puff": "control_puff",
+          "target_density": "control_target_density",
+          "zeff": "control_zeff",
+          "impurity_concentration": "control_impurity_concentration"
         },
-        "topology": {"first_completed": "limited", "last_completed": "limited"},
-        "expected_failure": {"reason": "refinement_limit", "completed_steps": 2},
+        "topology": {
+          "first_completed": "limited",
+          "last_completed": "lower_single_null"
+        },
         "controller_scales": {
-          "puff": 1e21, "n_li": 1e19,
-          "feedback_integral_error": 1e19, "feedback_previous_error": 1e19,
-          "recycling": 1.0, "recycling_pump": 1.0
+          "puff": 1e+21,
+          "n_li": 1e+19,
+          "feedback_integral_error": 1e+19,
+          "feedback_previous_error": 1e+19,
+          "recycling": 1.0,
+          "recycling_pump": 1.0
+        },
+        "acceptance_checks": {
+          "rejection": true
         }
+      },
+      "restart": "bootstrap",
+      "checkpoint_outputs": {
+        "recovery_restart": "first_intermediate"
       }
+    },
+    "recovery_restart": {
+      "extends": "recovery",
+      "description": "Restart at the first accepted intermediate time and replay the rest of the 0.50 s discharge",
+      "reference": "recovery_reference",
+      "outputs": [],
+      "moving_equilibrium": {
+        "series": "equilibrium_series",
+        "time_step_s": 0.1,
+        "controls": {
+          "puff": "control_puff",
+          "target_density": "control_target_density",
+          "zeff": "control_zeff",
+          "impurity_concentration": "control_impurity_concentration"
+        },
+        "topology": {
+          "first_completed": "limited",
+          "last_completed": "lower_single_null"
+        },
+        "controller_scales": {
+          "puff": 1e+21,
+          "n_li": 1e+19,
+          "feedback_integral_error": 1e+19,
+          "feedback_previous_error": 1e+19,
+          "recycling": 1.0,
+          "recycling_pump": 1.0
+        },
+        "acceptance_checks": {
+          "intermediate_restart": true
+        }
+      },
+      "restart": "recovery_restart",
+      "checkpoint_outputs": {}
+    },
+    "adaptive_ramp": {
+      "description": "Fixed-field density ramp with timestep growth and guarded Newton prediction",
+      "restart": "quasisteady_reference",
+      "moving_equilibrium": {
+        "series": "equilibrium_series",
+        "time_step_s": 0.08,
+        "controls": {
+          "target_density": "ramp_target_density"
+        },
+        "topology": {
+          "first_completed": "lower_single_null",
+          "last_completed": "lower_single_null"
+        },
+        "controller_scales": {
+          "puff": 1e+21,
+          "n_li": 1e+19,
+          "feedback_integral_error": 1e+19,
+          "feedback_previous_error": 1e+19,
+          "recycling": 1.0,
+          "recycling_pump": 1.0
+        },
+        "equilibrium_time_s": 0.56,
+        "acceptance_checks": {
+          "growth": true,
+          "prediction": true,
+          "final_clipping": true
+        }
+      },
+      "parameter_overrides": {
+        "time_mode": "adaptive",
+        "dt_reduce_on_failure": true,
+        "dt_grow_on_easy": true,
+        "newton_predictor": true,
+        "time_units": "seconds",
+        "t_final": 2.3,
+        "dt_min": 1e-06,
+        "dt_max": 0.16,
+        "dt_growth_factor": 1.2,
+        "dt_growth_easy_steps": 2,
+        "newton_predictor_rate_limit": 0.35,
+        "Zeff": 1.0
+      },
+      "extends": "mode1_short",
+      "reference": "ramp_reference",
+      "outputs": [
+        "ramp_reference"
+      ]
     },
     "mode2_short": {
       "extends": "mode1_short",

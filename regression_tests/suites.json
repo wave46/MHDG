@@ -25,15 +25,24 @@
         {"suite": "impurities"}, {"suite": "mixture_parallel"}, {"suite": "stored_field"},
         {"suite": "neutralgamma"}, {"suite": "initialization"},
         {"suite": "moving_equilibrium"}, {"suite": "moving_equilibrium_short"},
-        {"suite": "moving_equilibrium_parallel"}, {"suite": "moving_equilibrium_restart"}
+        {"suite": "moving_equilibrium_parallel"}, {"suite": "moving_equilibrium_restart"},
+        {"suite": "moving_equilibrium_adaptive"}
       ]
     }
   },
   "suites": {
     "moving_equilibrium": {
-      "description": "Full 80 ms feedback golden and expected 100 ms refinement-limit prefix golden",
+      "description": "Full 80 ms and 100 ms discharges, with recovery and intermediate restart replay",
       "case": "moving_equilibrium",
-      "workflows": ["mode1", "refinement_limit"]
+      "workflows": [
+        "mode1",
+        "recovery",
+        "recovery_restart"
+      ],
+      "workflow_comparison": [
+        "recovery",
+        "recovery_restart"
+      ]
     },
     "moving_equilibrium_short": {
       "description": "Short 80 ms prescribed-puff and recycling-feedback goldens with off-knot controls",
@@ -44,6 +53,13 @@
       "description": "Step-six restart overlap and ten held-input 80 ms advances to quasi-steady plasma",
       "case": "moving_equilibrium",
       "workflows": ["mode1_restart"]
+    },
+    "moving_equilibrium_adaptive": {
+      "description": "Fixed-field density ramp: growth, Newton prediction and final-time clipping",
+      "case": "moving_equilibrium",
+      "workflows": [
+        "adaptive_ramp"
+      ]
     },
     "moving_equilibrium_parallel": {
       "description": "Short 80 ms puff feedback: MPI1/OMP1 versus MPI4/OMP1",

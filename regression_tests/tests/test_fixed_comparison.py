@@ -210,6 +210,172 @@ def test_me_completion_uses_embedded_steps_and_final_attempts(me_outputs):
     json.dumps(report, allow_nan=False)
 
 
+@pytest.fixture
+def physical_outputs(me_outputs):
+    run, plan, metadata = me_outputs
+    for value in metadata['hdf5_outputs']:
+        if '_NR' in value:
+            continue
+        with h5py.File(value, 'r+') as handle:
+            number = int(handle['simulation_parameters/time/Current_time_step_number'][()])
+            time = .2 + number*.05
+            handle['simulation_parameters/time/Current_time_step_number'][...] = number+2
+            handle['simulation_parameters/time/Current_time'][...] = time/2e-7
+            handle['simulation_parameters/time/Current_time_step'][...] = (.05 if number else .1)/2e-7
+            handle['simulation_parameters/time/Current_time_seconds'] = time
+    plan['parameter_overrides'] = {'nts': 1, 'time_mode': 'prescribed'}  # Not the accepted-step limit.
+    plan['moving_equilibrium_inputs'].update(time_mode='prescribed', initial_step=2,
+        initial_time_s=.2, final_time_s=.3, equilibrium_times_s=[0., .1, .2, .3])
+    log = (run/'stdout.log').read_text().replace('Time iteration = 1', 'Time iteration = 3').replace(
+        'Time iteration = 2', 'Time iteration = 4')
+    log = log.replace('Time iteration = 3', 'TIMESTEP REJECTED (1): iteration limit\n'
+        '  Restored accepted time: 2.00000000E-01 s\n  Failed endpoint: 3.00000000E-01 s\n'
+        '  Retry endpoint: 2.50000000E-01 s\nTime iteration = 3')
+    (run/'stdout.log').write_text(log)
+    return run, plan, metadata
+
+
+@pytest.mark.parametrize('damage', [None, 'dt', 'seconds', 'missing_substep', 'no_rejection', 'failed_endpoint_save'])
+def test_physical_completion_validates_accepted_substeps_and_rejection(physical_outputs, damage):
+    run, plan, metadata = physical_outputs
+    first = Path(metadata['hdf5_outputs'][1])
+    if damage in {'dt', 'seconds', 'failed_endpoint_save'}:
+        with h5py.File(first, 'r+') as handle:
+            if damage == 'dt':
+                handle['simulation_parameters/time/Current_time_step'][...] *= 2
+            elif damage == 'seconds':
+                handle['simulation_parameters/time/Current_time_seconds'][...] = .27
+            else:
+                handle['simulation_parameters/time/Current_time'][...] = .3/2e-7
+                handle['simulation_parameters/time/Current_time_seconds'][...] = .3
+    elif damage == 'missing_substep':
+        metadata['hdf5_outputs'].remove(str(first))
+    elif damage == 'no_rejection':
+        log = run/'stdout.log'
+        log.write_text(log.read_text().replace('TIMESTEP REJECTED (', 'not a rejection ('))
+    report = validate_me_completed_steps(run, plan, metadata, 2e-4, acceptance_checks={'rejection': True})
+    assert (report['status'] == 'passed') == (damage is None)
+    if damage is None:
+        assert report['complete'] and report['completed_steps'] == [3, 4]
+        assert report['physical_time']['events']['rejection'] == 1
+    json.dumps(report, allow_nan=False)
+
+
+def test_golden_selects_first_actual_intermediate_checkpoint(physical_outputs):
+    from regression_tests.golden import _checkpoint_solution
+    from regression_tests.support import BundleError
+
+    run, plan, metadata = physical_outputs
+    (run/'run_plan.json').write_text(json.dumps(plan))
+    (run/'run_metadata.json').write_text(json.dumps(metadata))
+    selected = _checkpoint_solution(run, 'first_intermediate')
+    with h5py.File(selected) as handle:
+        assert handle['simulation_parameters/time/Current_time_seconds'][()] == pytest.approx(.25)
+    plan['moving_equilibrium_inputs']['equilibrium_times_s'].append(.25)
+    (run/'run_plan.json').write_text(json.dumps(plan))
+    with pytest.raises(BundleError, match='no accepted checkpoint'):
+        _checkpoint_solution(run, 'first_intermediate')
+
+
+def test_regular_transient_comparison_ignores_process_local_generations(physical_outputs, monkeypatch):
+    run, plan, metadata = physical_outputs
+    for value in metadata['hdf5_outputs']:
+        if '_NR' not in value:
+            with h5py.File(value, 'r+') as handle:
+                handle['magnetic/cache_generation'] = 2
+                handle['magnetic/equilibrium_generation'] = 2
+    reference = run/'reference.h5'
+    shutil.copy2(metadata['hdf5_outputs'][3], reference)
+    with h5py.File(reference, 'r+') as handle:
+        handle['magnetic/cache_generation'][...] = 8
+        handle['magnetic/equilibrium_generation'][...] = 8
+    workflow = {'moving_equilibrium': {'series': 'fields'},
+                'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
+    record_me_workflow(monkeypatch, run, plan, metadata, workflow)
+    _, _, report = compare_completed_run(run, REGRESSION_ROOT/'cases', REGRESSION_ROOT/'tolerances.json',
+                                         reference_override=reference)
+    assert report['status'] == 'passed'
+    assert report['hdf5']['ignored_magnetic_metadata'] == ['cache_generation', 'equilibrium_generation']
+
+
+@pytest.mark.parametrize('fallback', [False, True])
+def test_physical_prediction_check_counts_only_accepted_predictions(physical_outputs, fallback):
+    run, plan, metadata = physical_outputs
+    log = run/'stdout.log'
+    text = log.read_text().replace('Time iteration = 3', 'Time iteration = 3\nNEWTON PREDICTOR weight: 1.0')
+    if fallback:
+        text = text.replace('NEWTON PREDICTOR weight: 1.0',
+                            'NEWTON PREDICTOR weight: 1.0\nNEWTON PREDICTOR FALLBACK at [s]: .25')
+    log.write_text(text)
+    report = validate_me_completed_steps(run, plan, metadata, 2e-4, acceptance_checks={'prediction': True})
+    assert (report['status'] == 'passed') == (not fallback)
+
+
+def test_physical_growth_requires_an_actual_larger_step_and_final_clipping(physical_outputs):
+    run, plan, metadata = physical_outputs
+    log = run/'stdout.log'
+    log.write_text(log.read_text()+'TIMESTEP INCREASED at .25 s: .05 -> .06 s\n')
+    failed = validate_me_completed_steps(run, plan, metadata, 2e-4,
+                                        acceptance_checks={'growth': True, 'final_clipping': True})
+    assert 'growth did not increase an accepted timestep' in failed['failures']
+    assert 'final interval was not clipped from its saved timestep proposal to t_final' in failed['failures']
+    paths = [Path(value) for value in metadata['hdf5_outputs'][:4]]
+    last = run/'outputs/result_0005.h5'
+    shutil.copy2(paths[2], last)
+    for path, number, time, dt in ((paths[2], 4, .32, .07), (last, 5, .34, .02), (paths[3], 5, .34, .02)):
+        with h5py.File(path, 'r+') as handle:
+            handle['simulation_parameters/time/Current_time_step_number'][...] = number
+            handle['simulation_parameters/time/Current_time'][...] = time/2e-7
+            handle['simulation_parameters/time/Current_time_seconds'][...] = time
+            handle['simulation_parameters/time/Current_time_step'][...] = dt/2e-7
+            handle['simulation_parameters/time/Proposed_time_step_seconds'] = .07
+    metadata['hdf5_outputs'].append(str(last))
+    plan['moving_equilibrium_inputs']['final_time_s'] = .34
+    text = log.read_text().replace(f'Output written to file {paths[3]}',
+        f'Time iteration = 5\nNR iteration: 1\nError: 1.0D-5\nOutput written to file {last}\n'
+        f'Output written to file {paths[3]}')
+    log.write_text(text)
+    passed = validate_me_completed_steps(run, plan, metadata, 2e-4,
+                                        acceptance_checks={'growth': True, 'final_clipping': True})
+    assert passed['status'] == 'passed' and passed['complete']
+
+
+@pytest.mark.parametrize('damage', [None, 'field', 'controller', 'clock'])
+def test_intermediate_restart_compares_each_suffix_checkpoint(physical_outputs, tmp_path, monkeypatch, damage):
+    from copy import deepcopy
+    from regression_tests.compare import compare_physical_restart_suffix
+
+    baseline, plan, metadata = physical_outputs
+    workflow = {'moving_equilibrium': {'series': 'fields', 'controller_scales': {'puff': 1e21},
+                                      'acceptance_checks': {'intermediate_restart': True}},
+                'comparison': {'method': 'fixed_hdf5', 'profile': 'fixed_same_layout'}}
+    for value in metadata['hdf5_outputs']:
+        if '_NR' not in value:
+            with h5py.File(value, 'r+') as handle:
+                handle['simulation_parameters/physics/puff'] = 2e21
+    record_me_workflow(monkeypatch, baseline, plan, metadata, workflow)
+    replay = tmp_path/'replay'
+    replay.mkdir()
+    replay_metadata = {'status': 'completed', 'hdf5_outputs': []}
+    for value in metadata['hdf5_outputs'][1:4]:
+        target = replay/Path(value).name
+        shutil.copy2(value, target)
+        replay_metadata['hdf5_outputs'].append(str(target))
+    replay_plan = deepcopy(plan)
+    replay_plan['moving_equilibrium_inputs'].update(initial_step=3, initial_time_s=.25)
+    record_me_workflow(monkeypatch, replay, replay_plan, replay_metadata, workflow)
+    # Damage the first repeated checkpoint; the final state remains identical.
+    if damage:
+        with h5py.File(replay_metadata['hdf5_outputs'][0], 'r+') as handle:
+            key = {'field': 'solution/u', 'controller': 'simulation_parameters/physics/puff',
+                   'clock': 'simulation_parameters/time/Current_time_step'}[damage]
+            handle[key][...] *= 1.01
+    report = compare_physical_restart_suffix(baseline, replay, REGRESSION_ROOT/'cases',
+                                             REGRESSION_ROOT/'tolerances.json')
+    assert (report['status'] == 'passed') == (damage is None)
+    assert [step['step'] for step in report['steps']] == [3, 4]
+
+
 @pytest.mark.parametrize('damage', [None, 'field', 'controller', 'missing_overlap'])
 def test_me_restart_validates_only_new_advances_and_repeated_endpoint(me_outputs, monkeypatch, damage):
     run, plan, metadata = me_outputs
