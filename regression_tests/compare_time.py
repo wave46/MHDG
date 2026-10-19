@@ -230,4 +230,3 @@ def read_checkpoint_time(handle):
     time = required_scalar(handle, "simulation_parameters/time", "Current_time") * scale
     dt = required_scalar(handle, "simulation_parameters/time", "Current_time_step") * scale
     return number, time, dt, scale
-

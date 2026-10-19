@@ -309,8 +309,8 @@ def test_physical_preparation_preserves_intermediate_clock_and_supports_constant
     assert record["initial_step"] == 9 and record["initial_time_s"] == initial
     assert record["final_time_s"] == final
     values = read_selected_input_values(run.path / "param.txt", {"time_units", "dt0", "tfi", "t_final", "me", "tis"})
-    assert values == {"time_units": "seconds", "dt0": moving["time_step_s"], "tfi": final,
-                      "t_final": final, "me": not fixed, "tis": 1}
+    assert values == {"time_units": "seconds", "dt0": moving["time_step_s"],
+                      "t_final": final, "tis": 1}
     with h5py.File(run.path / "inputs/equilibrium.h5") as handle:
         np.testing.assert_allclose(handle["time"][:], [.56] if fixed else [0., .1, .2, .3])
         assert handle["equilibrium/psi"].shape == (1 if fixed else 4, 2, 2)

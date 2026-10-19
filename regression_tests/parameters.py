@@ -18,11 +18,12 @@ def render_parameter_file(
     replacements: dict[str, Path | str],
     parameter_overrides: dict[str, bool | float | int | str] | None = None,
     parameter_namelists: dict[str, str] | None = None,
+    omit_parameters: tuple[str, ...] = (),
 ) -> None:
     """Render selected path and parameter assignments in a copied input file."""
     lines = _read_parameter_lines(source)
     values = _replacement_values(replacements, parameter_overrides)
-    rendered, counts = _render_assignments(lines, values)
+    rendered, counts = _render_assignments(lines, values, omit_parameters)
     rendered = _insert_missing_assignments(rendered, values, counts, parameter_namelists or {})
     _require_single_assignment(counts)
     _write_parameter_file(destination, rendered)
@@ -73,8 +74,10 @@ def _format_parameter_value(key: str, value: bool | float | int | str) -> str:
 def _render_assignments(
     lines: list[str],
     values: dict[str, str],
+    omit_parameters: tuple[str, ...] = (),
 ) -> tuple[list[str], dict[str, int]]:
     counts = dict.fromkeys(values, 0)
+    omitted = {key.lower() for key in omit_parameters}
     rendered = []
     for line in lines:
         body = line.rstrip("\r\n")
@@ -86,13 +89,16 @@ def _render_assignments(
                 break
         match = ASSIGNMENT_RE.match(code)
         key = match.group("key").lower() if match else ""
-        if key not in values:
+        if key not in values and key not in omitted:
             rendered.append(line)
             continue
 
         scalar_code = re.sub(r"'[^']*'|\"[^\"]*\"", "''", code)
         if re.search(r",\s*[A-Za-z][A-Za-z0-9_]*(?:\([^)]*\))?\s*=", scalar_code) or scalar_code.rstrip().endswith("&"):
             raise BundleError(f"parameter replacement requires one complete assignment per line: {key}")
+
+        if key in omitted:
+            continue
 
         suffix = f" !{comment}" if marker else ""
         rendered.append(f"{match.group('prefix')}{values[key]}{suffix}{ending}")

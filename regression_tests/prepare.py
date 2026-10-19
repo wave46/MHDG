@@ -264,9 +264,13 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     namelists = {"transport_model_path": "input_lst", "impurity_model_path": "input_lst",
                  **workflow.get("parameter_namelists", {}), **(stage or {}).get("parameter_namelists", {})}
     preparation = None
+    omit_parameters = ()
     impurity_paths = {}
     if moving:
         paths, derived, preparation = _prepare_me_fields(staging, inputs, overrides)
+        if preparation.get("time_mode"):
+            omit_parameters = ("me", "tfi")
+            overrides = {key: value for key, value in overrides.items() if key.lower() not in omit_parameters}
         replacements.update(paths)
         overrides = {**{key: value for key, value in overrides.items() if key.lower() not in derived}, **derived}
         namelists.update(me="switch_lst", steady="switch_lst", psdtime="switch_lst",
@@ -282,7 +286,7 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
         namelists.update({key: "input_lst" for key in control_paths})
     render_parameter_file(
         artifacts[recipe["parameters"]], staging / "param.txt",
-        replacements, overrides, namelists,
+        replacements, overrides, namelists, omit_parameters=omit_parameters,
     )
     switches = read_selected_input_values(
         staging / "param.txt", {"readMeshFromSol", "transport_1d", "impurity_radiation"},
@@ -433,8 +437,8 @@ def _prepare_physical_fields(staging, inputs, overrides):
               "canonical_frames": [index+1 for index in indices],
               "generated_files": {"inputs/equilibrium.h5": file_identity(target)}}
     paths = {"field_path": inputs.run_directory / "inputs/equilibrium.h5", "jtor_path": ""}
-    derived = {"me": "equilibrium_time_s" not in moving, "steady": False, "psdtime": False,
-               "time_units": "seconds", "dt0": dt, "tfi": final, "tis": 1}
+    derived = {"steady": False, "psdtime": False,
+               "time_units": "seconds", "dt0": dt, "tis": 1}
     return paths, derived, record
 
 
