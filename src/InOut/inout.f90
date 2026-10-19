@@ -2232,7 +2232,7 @@ CONTAINS
     USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
     INTEGER(HID_T), INTENT(IN) :: group_id
     INTEGER :: step, ierr
-    REAL*8 :: seconds, saved_scale, tolerance
+    REAL*8 :: seconds, saved_scale, saved_dt, tolerance
     LOGICAL :: exists
 
     IF (.NOT. checkpoint_uses_physical_time(group_id)) THEN
@@ -2243,6 +2243,13 @@ CONTAINS
     CALL HDF5_integer_reading(group_id, step, 'time/Current_time_step_number', ierr)
     CALL abort_on_checkpoint_error(ierr, 'Cannot read accepted checkpoint step')
     IF (step < 0) CALL abort_on_checkpoint_error(-1, 'Checkpoint accepted step must be non-negative')
+    saved_scale = simpar%refval_time
+    CALL H5Lexists_f(group_id, 'adimensionalization/time_scale', exists, ierr)
+    IF (exists) THEN
+       CALL read_checkpoint_real(group_id, 'adimensionalization/time_scale', saved_scale)
+       IF (.NOT. ieee_is_finite(saved_scale) .OR. saved_scale <= 0.d0) &
+            CALL abort_on_checkpoint_error(-1, 'Checkpoint time scale must be finite and positive')
+    ENDIF
     CALL H5Lexists_f(group_id, 'time/Current_time_seconds', exists, ierr)
     IF (exists) THEN
        CALL HDF5_real_reading(group_id, seconds, 'time/Current_time_seconds', ierr)
@@ -2250,9 +2257,6 @@ CONTAINS
     ELSE
        CALL HDF5_real_reading(group_id, seconds, 'time/Current_time', ierr)
        CALL abort_on_checkpoint_error(ierr, 'Cannot read legacy checkpoint time')
-       saved_scale = simpar%refval_time
-       CALL H5Lexists_f(group_id, 'adimensionalization/time_scale', exists, ierr)
-       IF (exists) CALL HDF5_real_reading(group_id, saved_scale, 'adimensionalization/time_scale')
        seconds = seconds*saved_scale
     ENDIF
     IF (.NOT. ieee_is_finite(seconds)) CALL abort_on_checkpoint_error(-1, 'Checkpoint physical time must be finite')
@@ -2264,6 +2268,13 @@ CONTAINS
     time%ik = step
     time%t = seconds/simpar%refval_time
     time%t_target = time%t
+    CALL H5Lexists_f(group_id, 'time/Current_time_step', exists, ierr)
+    IF (exists) THEN
+       CALL read_checkpoint_real(group_id, 'time/Current_time_step', saved_dt)
+       IF (.NOT. ieee_is_finite(saved_dt) .OR. saved_dt < 0.d0 .OR. (step > 0 .AND. saved_dt == 0.d0)) &
+            CALL abort_on_checkpoint_error(-1, 'Checkpoint accepted timestep must be finite and positive')
+       time%dt = saved_dt*saved_scale/simpar%refval_time
+    ENDIF
     sol%Nt = step
     IF (step > 0) sol%time(step) = time%t
     CALL load_time_step_state(group_id)

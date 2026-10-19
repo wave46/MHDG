@@ -334,6 +334,7 @@ CONTAINS
     IF (time%it /= time%ik .OR. sol%Nt /= time%it) ERROR STOP 'physical checkpoint counters'
     CALL HDF5_create('time_state.h5', state_file, ierr)
     CALL HDF5_group_create('time', state_file, time_group, ierr)
+    CALL HDF5_real_saving(time_group, time%dt*simpar%refval_time, 'Current_time_step_seconds')
     CALL save_time_step_state(time_group)
     CALL HDF5_group_close(time_group, ierr)
     CALL HDF5_close(state_file)

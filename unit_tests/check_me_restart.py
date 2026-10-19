@@ -77,7 +77,7 @@ def check_physical_restart(executable, directory, physical, *, moving):
     cases = [("old_me", 23, .04, None, None), ("prescribed", 23, .04, True, None)] if moving else [
         ("steady", 1, 1000., False, None), ("pseudo", 99, 1000., None, (False, True)),
         ("fixed", 1, .04, True, None), ("complete", 23, .08, True, None),
-        ("nonfinite", 1, np.nan, True, None)]
+        ("nonfinite", 1, np.nan, True, None), ("invalid_dt", 1, .04, True, None)]
     cases += [("adaptive_old", 23, .04, True, None),
               ("adaptive_reduced", 23, .04, True, None),
               ("adaptive_extended", 23, .04, True, None),
@@ -108,6 +108,8 @@ def check_physical_restart(executable, directory, physical, *, moving):
                 p["time/Current_time_seconds"] = [seconds]
             if flags is not None:
                 p["switches/steady"], p["switches/psdtime"] = [int(flags[0])], [int(flags[1])]
+            if name in {"fixed", "prescribed", "old_me", "prescribed_pending", "invalid_dt"}:
+                p["time/Current_time_step"] = [np.nan if name == "invalid_dt" else .003/.01]
             if name in {"adaptive_reduced", "adaptive_extended", "adaptive_invalid", "adaptive_growth"}:
                 proposal = .02 if name == "adaptive_extended" else .005
                 p["time/Proposed_time_step_seconds"] = [np.nan if name == "adaptive_invalid" else proposal]
@@ -124,6 +126,7 @@ def check_physical_restart(executable, directory, physical, *, moving):
                              text=True, capture_output=True, timeout=20)
         output = run.stdout + run.stderr
         error = {"nonfinite": "Checkpoint physical time must be finite",
+                 "invalid_dt": "Checkpoint accepted timestep must be finite and positive",
                  "adaptive_invalid": "Saved proposed timestep must be finite and positive",
                  "prescribed_invalid": "Pending timestep targets must be stored in decreasing order"}.get(name)
         if error:
@@ -143,6 +146,9 @@ def check_physical_restart(executable, directory, physical, *, moving):
         elif name == "prescribed_pending":
             target = .05
         with h5py.File(directory / "time_state.h5") as saved:
+            expected_dt = (.003 if name in {"fixed", "prescribed", "old_me", "prescribed_pending"}
+                           else .001 if name in {"adaptive_reduced", "adaptive_extended", "adaptive_growth"} else .02)
+            np.testing.assert_allclose(saved["time/Current_time_step_seconds"][:], [expected_dt], rtol=1e-14)
             if name.startswith("adaptive"):
                 expected_proposal = .005 if name in {"adaptive_reduced", "adaptive_growth"} else .02
                 np.testing.assert_allclose(saved["time/Proposed_time_step_seconds"][:], [expected_proposal], rtol=1e-14)
