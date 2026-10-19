@@ -78,6 +78,37 @@ def test_numerical_stop_with_zero_exit_and_existing_hdf5_is_failure(harness, mes
     assert metadata['hdf5_outputs'] and len(metadata['fatal_log_messages']) == 1
 
 
+@pytest.mark.parametrize('ending', ['accepted', 'unfinished', 'nr_only', 'terminal', 'file_error'])
+def test_refinement_stops_require_completed_temporal_recovery(harness, ending):
+    divergence = 'NR refinement recovery stopped: per-timestep refinement limit reached: 0'
+    oscillation = 'Oscillation refinement stopped: per-timestep refinement limit reached: 1'
+    lines = ['Time iteration = 3', divergence, 'TIMESTEP REJECTED (1): divergence',
+             'Time iteration = 3', oscillation, 'TIMESTEP REJECTED (2): oscillation',
+             'Time iteration = 3']
+    if ending == 'file_error':
+        lines.append('Error opening source file: missing-input.h5')
+    if ending == 'nr_only':
+        lines.append('Output written to file outputs/result_NR0001.h5')
+    elif ending != 'unfinished':
+        lines.append('Output written to file outputs/result.h5')
+    if ending == 'terminal':
+        lines.extend(['Time iteration = 4', oscillation])
+    # The executable already leaves a valid HDF5 file, even for incomplete retry.
+    command = shlex.join(['printf', '%s\n', *lines])
+    harness.install_solver(SOLVER + command + '\n', 'serial')
+    completed, directory, metadata = run(harness)
+    passed = ending == 'accepted'
+    assert completed.returncode == (0 if passed else 1)
+    assert metadata['status'] == ('completed' if passed else 'solver_reported_error')
+    messages = metadata['fatal_log_messages']
+    assert len(messages) == (0 if passed else 2 if ending in {'unfinished', 'nr_only'} else 1)
+    if ending == 'file_error':
+        assert 'Error opening source file:' in messages[0]
+    if ending == 'terminal':
+        assert oscillation in messages[0]
+    assert divergence in (directory/'stdout.log').read_text()  # Preserve diagnostic evidence.
+
+
 def test_stages_pass_selected_output_to_next_restart(harness):
     # Multiple outputs force selection from the solver log, not filename ordering.
     harness.install_solver(STAGED_SOLVER + "printf 'decoy\\n' > outputs/another.h5\n", "serial")

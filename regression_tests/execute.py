@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .compare_common import select_candidate
+from .compare_common import OUTPUT_RE, select_candidate
 from .compare_fixed import check_output_contract
 from .documents import load_json, write_json_atomic
 from .config import source_environment, verify_executable
@@ -223,26 +224,49 @@ def _optional_file_record(settings: dict[str, Any], key: str) -> dict[str, Any] 
 
 def _fatal_log_messages(run_directory: Path, *, missing_ok: bool = False) -> list[str]:
     """Catch solver input/numerical stops even on zero exit; bound the report."""
-    markers = (
-        "Error opening source file:",
-        "Error opening destination file:",
-        "Error   : Unable to open file",
-        "NR refinement recovery stopped:",
-        "Oscillation refinement stopped:",
-        "Problem in the time advancing scheme",
-    )
     messages = []
     for filename in ("stdout.log", "stderr.log"):
         path = run_directory / filename
         if missing_ok and not path.is_file():
             continue  # Opening a log may itself have failed during launch.
-        with path.open("r", encoding="utf-8", errors="replace") as stream:
-            for line_number, line in enumerate(stream, start=1):
-                if any(marker in line for marker in markers):
-                    messages.append(f"{filename}:{line_number}: {line.rstrip()}")
-                    if len(messages) == 20:
-                        return messages
+        messages.extend(_unrecovered_log_stops(path))
+        if len(messages) >= 20:
+            return messages[:20]
     return messages
+
+
+def _unrecovered_log_stops(path: Path) -> list[str]:
+    """A refinement stop is recovered only after retry and an accepted-step save."""
+    fatal_markers = ("Error opening source file:", "Error opening destination file:",
+                     "Error   : Unable to open file", "Problem in the time advancing scheme")
+    refinement_markers = ("NR refinement recovery stopped:", "Oscillation refinement stopped:")
+    detected_stops, current_trial_failures, pending_recovery_failures, recovered_lines = [], [], [], set()
+    step = None
+    with path.open("r", encoding="utf-8", errors="replace") as stream:
+        for number, line in enumerate(stream, start=1):
+            if match := re.search(r"Time iteration\s*=\s*(\d+)", line):
+                next_step = int(match[1])
+                if next_step != step:
+                    pending_recovery_failures.clear()
+                current_trial_failures.clear()
+                step = next_step
+            if any(marker in line for marker in refinement_markers):
+                detected_stops.append((number, line.rstrip()))
+                current_trial_failures.append(number)
+            elif any(marker in line for marker in fatal_markers):
+                detected_stops.append((number, line.rstrip()))
+            # Recovery is printed by rank zero to stdout. Stderr errors retain
+            # their fatal meaning, irrespective of stdout's later progress.
+            if path.name != "stdout.log" or step is None:
+                continue
+            if re.match(r"\s*TIMESTEP REJECTED \(\d+\):", line):
+                pending_recovery_failures.extend(current_trial_failures)
+                current_trial_failures.clear()
+            if match := OUTPUT_RE.search(line):
+                if "_NR" not in Path(match[1].strip()).name:
+                    recovered_lines.update(pending_recovery_failures)
+                    pending_recovery_failures.clear()
+    return [f"{path.name}:{number}: {line}" for number, line in detected_stops if number not in recovered_lines]
 
 
 def reusable_outputs(directory):
