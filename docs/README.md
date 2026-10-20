@@ -5,6 +5,8 @@ and limited to the guides listed below.
 
 ## Models
 
+- [Wall recycling: physical law and HDG implementation](models/wall-recycling.md):
+  element/trace states, recycled diffusion, stabilization and balance interpretation.
 - [Reduced 1D transport](models/transport-1d.md): configuration, Bohm /
   gyro-Bohm diffusion, pinch, scientific conventions and output.
 
