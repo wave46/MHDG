@@ -16,6 +16,13 @@ differences in density and electron energy below, inside, at and above the
 temperature interval, with in-range and clamped densities. It also checks the
 existing zero-rate cutoff. It needs no MPI launch or external case data.
 
+`make check-neutral-energy-source` uses a temperature model with
+`NEUTRALGAMMA`. It checks that the production source matrix and affine term
+recover the neutral kinetic-energy transfer below, at and above the density
+floor, including zero neutral momentum and state-dependent rate coefficients.
+It extracts the internal source assembly verbatim and uses the production
+energy-factor helpers; no MPI launch or external case data is needed.
+
 Run the magnetic-topology checks from `lib/` after loading the build
 environment:
 

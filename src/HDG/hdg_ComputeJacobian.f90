@@ -4503,16 +4503,16 @@ END IF
       Sn0(3)    = phys%ionization_ion_energy_fraction*fEiiz*sigmaviz - &
         &fEirec*sigmavrec - fEicx*sigmavcx
 #ifdef NEUTRALGAMMA
-      Sn0(3)    = Sn0(3) + fEiN*(sigmaviz + sigmavcx)
+      ! For S_N = fEiN*(sigmaviz + sigmavcx), Sn0 contains dS_N/dU . U - S_N.
+      ! The density floor makes dfEiN/dU . U = 3*fEiN below it, rather than 2*fEiN.
+      Sn0(3)    = Sn0(3) + (DOT_PRODUCT(dfEiN_dU,U)-fEiN)*(sigmaviz + sigmavcx) + &
+        &fEiN*DOT_PRODUCT(dsigmaviz_dU + dsigmavcx_dU,U)
 #endif
       !modification with recombination gain
       Sn0(4)    = nrec*sigmavrec*recombination_energy
       Sn0(4)    = Sn0(4) - niz*sigmavEiz - nrec*sigmavErec
       Sn0(3)    = Sn0(3) + phys%ionization_ion_energy_fraction*fEiiz* &
         &dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U)
-#ifdef NEUTRALGAMMA
-      Sn0(3)    = Sn0(3) + fEiN*dot_PRODUCT(dsigmaviz_dU,U)
-#endif
       Sn0(4)    = Sn0(4) - niz*dot_product(dsigmavEiz_dU,U) - nrec*dot_product(dsigmavErec_dU,U)
       Sn0(4)    = Sn0(4) + nrec*dot_PRODUCT(dsigmavrec_dU,U)*recombination_energy
       IF (PRESENT(cooling_factor)) THEN
