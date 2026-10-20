@@ -116,6 +116,10 @@
     "recovery": {
       "extends": "mode1_short",
       "description": "Run the full 0 to 0.50 s discharge with prescribed 100 ms targets and temporal recovery",
+      "comparison": {
+        "method": "mesh_independent", "profile": "adaptive_reference",
+        "direct_profile": "me_recovery_converged", "cross_layout_profile": "fixed_cross_layout"
+      },
       "reference": "recovery_reference",
       "outputs": [
         "recovery_reference"
