@@ -31,11 +31,11 @@ for mode, wall, relocated in cases:
                 check(handle, root + "/external_sources/particles/puff_in", 14.)
                 check(handle, root + "/external_sources/particles/pump_out", 12.)
                 check(handle, root + "/external_sources/particles/neutral_wall_absorption", 2*wall)
-                check(handle, root + "/balances/total_n/physical_imbalance", -3.-2*wall)
+                check(handle, root + "/balances/total_n/physical_imbalance", -4.-2*wall)
             else:
                 root = "diagnostics/equations"
                 check(handle, root + "/n_n/physical/imbalance", 7.-2*wall)
-                check(handle, root + "/total_n/physical/imbalance", -3.-2*wall)
+                check(handle, root + "/total_n/physical/imbalance", -4.-2*wall)
                 check(handle, root + "/n_n/bc/residual", 0.)
                 check(handle, root + "/n_n/discrete/residual", 2. if relocated else 0.)
                 if mode == 3:
@@ -44,6 +44,8 @@ for mode, wall, relocated in cases:
                     check(handle, bc + "neutral_wall_absorption", 2*wall)
                     check(handle, physical + "neutral_wall_absorption", -2*wall)
                     check(handle, bc + "recycling_parallel_inward", 5.)
+                    check(handle, bc + "recycling_diffusion_inward", -0.5)
+                    check(handle, bc + "recycling_pinch_inward", 0.5)
                     check(handle, bc + "puff", 0. if relocated else 14.)
                     check(handle, bc + "pump", 0. if relocated else 12.)
                     if relocated:

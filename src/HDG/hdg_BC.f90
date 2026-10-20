@@ -1125,7 +1125,8 @@ CONTAINS
       t_g = xyDer(g,:)/xyDerNorm_g
       n_g = [t_g(2),-t_g(1)]
          bn = dot_PRODUCT(b(g,1:2),n_g)
-      ! Sound speed
+      ! Sound speed; constant/isothermal closures have zero sensitivity.
+      dcs_du = 0.d0
 #ifndef TEMPERATURE
          SoundSpeed = SQRT(phys%a)
 #else
@@ -1135,6 +1136,7 @@ CONTAINS
          call compute_dcs_du(ufg(g,:),dcs_du)
          IF (switch%decoup) THEN
             SoundSpeed = SQRT(phys%Mref)
+            dcs_du = 0.d0
          ENDIF
 #endif
       ! tangency
@@ -1879,11 +1881,16 @@ CONTAINS
           elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) + tau(i,i)*delta*setval*NiNi
           elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*(1. - delta)*NiNi
                  !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*NiNi
-                 !linearization of sound speed
+                 ! Target: delta*s(U_hat)*U(1) + (1-delta)*U(2).
+                 ! Its sound-speed sensitivity belongs to trace columns; tau,
+                 ! the branch and energy suppression remain lagged.
                  DO j = 1,Neqstab
                   indj = j + ind_asf
-                  elMat%Alu(ind_ff(ind),ind_fe(indj),iel) = elMat%Alu(ind_ff(ind),ind_fe(indj),iel) + tau(i,i)*delta*dcs_du(j)*ufg(1)*NiNi
+                  elMat%All(ind_ff(ind),ind_ff(indj),iel) = elMat%All(ind_ff(ind),ind_ff(indj),iel) + tau(i,i)*delta*dcs_du(j)*uefg(1)*NiNi
                  ENDDO
+                 ! No sound-speed affine RHS term: s(U_hat) is homogeneous
+                 ! of degree zero (also after its scalar softplus), hence
+                 ! ds/dU_hat . U_hat = 0 with branch/suppression held fixed.
 #ifdef NEUTRALGAMMA
         ELSE IF (ign > 0 .AND. i == ign) THEN
           indj = inn + ind_asf
@@ -2299,15 +2306,17 @@ CONTAINS
 
     ! Convective part
     k = inn
-    ! Plasma flux
+    ! Recycle the physical plasma flux from U_hat and element Q
+    ! (convection + pinch - diffusion).
+    ! The plasma diffusive contribution is assembled below; no R*tau_1 term.
     indi = k+ind_asf
     indj = 2+ind_asf
     !if (ntang) then
-      elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + bn*NiNi*recycling_coeff
+      elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + bn*NiNi*recycling_coeff
     !endif
     ! Pinch
     indj = 1+ind_asf
-    elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + (APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*NiNi*recycling_coeff
+    elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + (APinch(1,1)*ng(1) + APinch(1,2)*ng(2))*NiNi*recycling_coeff
     !Neutrals flux
     DO j=1,Neq
        indj = ind_asf + j
@@ -2319,7 +2328,7 @@ CONTAINS
       elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) + bn*NiNi
     END IF
 #endif
-    !cryopump modification Should it be ALU?
+    ! Boundary-local pumping uses the trace neutral density.
     indj = k+ind_asf !5th equation and 5th conservative variable: pump_power*U5
     elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - cryopump_coeff*NiNi
 

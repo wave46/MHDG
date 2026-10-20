@@ -2182,7 +2182,7 @@ CONTAINS
     TYPE(balance_accumulator_type),INTENT(INOUT) :: diagnostics
     integer*4                 :: g,NGauss,i,indsave(Ng1d),inn
     real*8                    :: dline,xyDerNorm_g
-    real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq)
+    real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq),diffusion_state(Ng1d,neq)
     real*8                    :: xyf(Ng1d,ndim)
     real*8                    :: xyDer(Ng1d,ndim)
     real*8                    :: qfg(Ng1d,neq*Ndim)
@@ -2203,6 +2203,8 @@ CONTAINS
     real*8                    :: Vnng(Ndim)
     real*8                    :: q_cyl(Ng1d)
     real*8                    :: omega(Ng1d)
+    integer                   :: boundary_flag
+    logical                   :: trace_wall
     inn = phys%idx_rhon_eq
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
@@ -2264,11 +2266,28 @@ CONTAINS
     ! Gradient solution at face gauss points
       qfg = MATMUL(refElPol%N1D,qef)
 
-    ! Compute diffusion at faces Gauss points
+    ! Match the default physical-wall BC's constitutive flux using U_hat.
+    ! Partition interfaces (boundary flag zero) retain the element-state policy.
+    trace_wall = .FALSE.
+    IF (numer%bohmtypebc == 0 .AND. Mesh%F(iel,ifa) > Mesh%Nintfaces) THEN
+      boundary_flag = Mesh%boundaryFlag(Mesh%F(iel,ifa)-Mesh%Nintfaces)
+      IF (boundary_flag > 0) THEN
+        SELECT CASE (phys%bcflags(boundary_flag))
+        CASE (bc_Bohm,bc_BohmPump,bc_BohmPuff)
+          trace_wall = .TRUE.
+        END SELECT
+      ENDIF
+    ENDIF
+    ! ufg is U_hat; uefg is the element state U evaluated on the face.
+    diffusion_state = uefg
+    IF (trace_wall) diffusion_state = ufg
+
+    ! Compute diffusion at faces Gauss points. Apply profiles before the frozen
+    ! limiter, and keep the unlimited diffusion as the stabilization input.
 #ifndef KEQUATION
-    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac)
+    CALL setLocalDiff(xyf,diffusion_state,diff_iso_fac,diff_ani_fac)
 #else
-    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac,q_cyl)
+    CALL setLocalDiff(xyf,diffusion_state,diff_iso_fac,diff_ani_fac,q_cyl)
 #endif
 
 
@@ -2286,7 +2305,7 @@ CONTAINS
 #if defined(NEUTRAL) && defined(TEMPERATURE)
     IF (switch%neutral_flux_limiter) THEN
       DO g = 1,Ng1d
-        CALL compute_neutral_flux_limiter_phi(uefg(g,:),qfg(g,:),b(g,:),&
+        CALL compute_neutral_flux_limiter_phi(diffusion_state(g,:),qfg(g,:),b(g,:),&
           &neutral_limiter_phi(g))
         diff_iso_fac(inn,inn,g) = neutral_limiter_phi(g)*diff_iso_fac(inn,inn,g)
         diff_ani_fac(inn,inn,g) = neutral_limiter_phi(g)*diff_ani_fac(inn,inn,g)

@@ -47,6 +47,8 @@ CONTAINS
          &gradient,normal, &
          &magnetic_direction,magnetic_normal,diffusion_iso,diffusion_ani)
 
+    ! Here trace_state is U_hat and exterior_state is element U on the face.
+    ! The private helpers below receive U_hat as their argument named state.
     CALL accumulate_plasma_bc(this,trace_state,exterior_state, &
          &gradient,normal,magnetic_direction,magnetic_normal,tau, &
          &diffusion_iso,diffusion_ani,pinch_matrix,density_diffusion,plasma, &
@@ -265,7 +267,7 @@ CONTAINS
 
     coefficient = integration_weight*this%rate_scale(equation_nn)
     CALL accumulate_recycling_bc(this,neutral_equation,state, &
-         &exterior_state,normal,magnetic_normal,pinch_matrix,density_diffusion, &
+         &normal,magnetic_normal,pinch_matrix,density_diffusion, &
          &recycling_coefficient,puff_source,pump_coefficient,coefficient)
     CALL add_bc_value(this,equation_nn,term_neutral_wall_absorption, &
          &neutral_wall_absorption*coefficient)
@@ -278,21 +280,21 @@ CONTAINS
   END SUBROUTINE accumulate_neutral_bc
 
   SUBROUTINE accumulate_recycling_bc(this, &
-       &neutral_equation, state, exterior_state, normal, magnetic_normal, &
+       &neutral_equation, state, normal, magnetic_normal, &
        &pinch_matrix, density_diffusion, recycling_coefficient, puff_source, &
        &pump_coefficient, coefficient)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
     INTEGER, INTENT(IN) :: neutral_equation
-    REAL*8, INTENT(IN) :: state(:), exterior_state(:), normal(:)
+    REAL*8, INTENT(IN) :: state(:), normal(:)
     REAL*8, INTENT(IN) :: magnetic_normal, pinch_matrix(:,:)
     REAL*8, INTENT(IN) :: density_diffusion
     REAL*8, INTENT(IN) :: recycling_coefficient, puff_source, pump_coefficient
     REAL*8, INTENT(IN) :: coefficient
     REAL*8 :: parallel, diffusion, pinch
 
-    parallel = recycling_coefficient*exterior_state(equation_nu)*magnetic_normal
+    parallel = recycling_coefficient*state(equation_nu)*magnetic_normal
     diffusion = -recycling_coefficient*density_diffusion
-    pinch = recycling_coefficient*exterior_state(equation_n)* &
+    pinch = recycling_coefficient*state(equation_n)* &
          &DOT_PRODUCT(pinch_matrix(equation_n,:),normal)
     CALL add_bc_value(this,equation_nn,term_recycling_parallel, &
          &parallel*coefficient)
