@@ -10,6 +10,12 @@ It extracts the internal production coefficient routine verbatim and compiles it
 with the real global time state; no solver run or external data is needed. This
 target uses the current build configuration without a clean rebuild.
 
+`make check-amjuel-extrapolation` uses the current 2D NGammaTiTe-family build
+with `AMJUELSPLINES`. It compares the production rate Jacobian with finite
+differences in density and electron energy below, inside, at and above the
+temperature interval, with in-range and clamped densities. It also checks the
+existing zero-rate cutoff. It needs no MPI launch or external case data.
+
 Run the magnetic-topology checks from `lib/` after loading the build
 environment:
 

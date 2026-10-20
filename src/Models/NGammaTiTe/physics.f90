@@ -2383,7 +2383,7 @@ CONTAINS
   SUBROUTINE compute_2D_eirene_rate_du(U1,U4,te,ne,alpha,rate_du)
     REAL*8, INTENT(IN) :: U1,U4,te,ne,alpha(:,:)
     REAL*8             :: rate
-    REAL*8             :: dlograte_dlogne, dlograte_dlogte
+    REAL*8             :: dlograte_dlogne, dlograte_dlogte, d2lograte_dlogtedlogne
     REAL*8, INTENT(OUT):: rate_du(:)
 
     CALL compute_2D_eirene_rate(te,ne,alpha,rate)
@@ -2398,9 +2398,14 @@ CONTAINS
        ELSEIF (te<neutral_rt%eirene_te_min) THEN
           CALL compute_dlogeirene_2D_dlogne_rate(neutral_rt%eirene_te_min,ne,alpha,dlograte_dlogne)
           CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_min,ne,alpha,dlograte_dlogte)
+          ! The extrapolated log-rate slope also depends on density.
+          CALL compute_d2logeirene_2D_dlogtedlogne_rate(neutral_rt%eirene_te_min,ne,alpha,d2lograte_dlogtedlogne)
+          dlograte_dlogne = dlograte_dlogne + d2lograte_dlogtedlogne*(LOG(te)-LOG(neutral_rt%eirene_te_min))
        ELSEIF (te>neutral_rt%eirene_te_max) THEN
           CALL compute_dlogeirene_2D_dlogne_rate(neutral_rt%eirene_te_max,ne,alpha,dlograte_dlogne)
           CALL compute_dlogeirene_2D_dlogte_rate(neutral_rt%eirene_te_max,ne,alpha,dlograte_dlogte)
+          CALL compute_d2logeirene_2D_dlogtedlogne_rate(neutral_rt%eirene_te_max,ne,alpha,d2lograte_dlogtedlogne)
+          dlograte_dlogne = dlograte_dlogne + d2lograte_dlogtedlogne*(LOG(te)-LOG(neutral_rt%eirene_te_max))
        ENDIF
     ! beyond range of ne applicability (ne derivative is now zero)
     ELSEIF(ne<neutral_rt%eirene_ne_min) THEN
@@ -2480,6 +2485,23 @@ CONTAINS
        END DO
     END DO
   ENDSUBROUTINE compute_dlogeirene_2D_dlogne_rate
+
+  SUBROUTINE compute_d2logeirene_2D_dlogtedlogne_rate(te,ne,alpha,rate)
+    ! Mixed derivative of the log-rate polynomial in log(Te), log(ne).
+    REAL*8, INTENT(IN) :: te,ne,alpha(:,:)
+    REAL*8, INTENT(OUT) :: rate
+    REAL*8 :: logte,logne
+    INTEGER :: i,j
+
+    rate = 0.d0
+    logte = LOG(te)
+    logne = LOG(ne)
+    DO j = 2,SIZE(alpha,2)
+      DO i = 2,SIZE(alpha,1)
+        rate = rate + alpha(i,j)*(i-1)*(j-1)*logne**(j-2)*logte**(i-2)
+      END DO
+    END DO
+  ENDSUBROUTINE compute_d2logeirene_2D_dlogtedlogne_rate
 
   SUBROUTINE compute_sigmaviz(U,sigmaviz)
     REAL*8, INTENT(IN) :: U(:)

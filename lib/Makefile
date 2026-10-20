@@ -17,6 +17,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-equilibrium-series
 .PHONY : check-linear-solve-status
 .PHONY : check-bdf-coefficients
+.PHONY : check-amjuel-extrapolation
 
 all : allseq
 
@@ -54,6 +55,7 @@ clean:
 	$(RM) adaptive_checkpoint_check
 	$(RM) divergence_refinement_check
 	$(RM) bdf_coefficients_check linear_solve_status_check
+	$(RM) amjuel_extrapolation_check
 
 # Exercise the internal production routine without building an HDG mesh.
 bdf_coefficients_routine.F : $(SDIR)/HDG/hdg_ComputeJacobian.f90
@@ -93,6 +95,10 @@ neutral_wall_physics_check.o : physics.o
 check-neutral-wall-flux : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_neutral_wall_flux.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o neutral_wall_flux_check
 	./neutral_wall_flux_check
+
+check-amjuel-extrapolation : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_amjuel_extrapolation.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o amjuel_extrapolation_check
+	./amjuel_extrapolation_check
 
 check-neutral-wall-input : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_neutral_wall_input.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o neutral_wall_input_check $(LIB)
