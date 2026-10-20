@@ -221,6 +221,5 @@ diagnostics and can be used with the limiter off.
 | `'detailed'` | Physical, discrete and boundary-condition components |
 
 Enabled balance reporting requires a 2D model with plasma temperatures and
-neutrals, and `bohmtypebc = 0` in `NUMER_LST`. Physical wall reporting
-supports Bohm, BohmPump and BohmPuff boundaries; other physical boundaries
-produce a warning.
+neutrals. Physical wall reporting supports Bohm, BohmPump and BohmPuff
+boundaries; other physical boundaries produce a warning.

@@ -2266,10 +2266,10 @@ CONTAINS
     ! Gradient solution at face gauss points
       qfg = MATMUL(refElPol%N1D,qef)
 
-    ! Match the default physical-wall BC's constitutive flux using U_hat.
+    ! Match the physical-wall BC's constitutive flux using U_hat.
     ! Partition interfaces (boundary flag zero) retain the element-state policy.
     trace_wall = .FALSE.
-    IF (numer%bohmtypebc == 0 .AND. Mesh%F(iel,ifa) > Mesh%Nintfaces) THEN
+    IF (Mesh%F(iel,ifa) > Mesh%Nintfaces) THEN
       boundary_flag = Mesh%boundaryFlag(Mesh%F(iel,ifa)-Mesh%Nintfaces)
       IF (boundary_flag > 0) THEN
         SELECT CASE (phys%bcflags(boundary_flag))

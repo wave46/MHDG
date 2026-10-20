@@ -594,7 +594,6 @@ MODULE types
      INTEGER        :: ptor     ! Polynomial degree in the toroidal direction
      REAL*8         :: tmax     ! Max extention in the toroidal direction
      INTEGER        :: npartor  ! Number of MPI divisions in the toroidal direction
-     INTEGER        :: bohmtypebc ! Implementation of the Bohm bc for Gamma
      REAL*8         :: exbdump ! Dumping for ExB drifts
      REAL*8         :: neutralp_lambda ! Continuation factor for the additive neutral-pressure term
   END TYPE Numeric_type

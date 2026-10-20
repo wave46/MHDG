@@ -82,7 +82,7 @@ residual** uses element numerical fluxes, including stabilization; the
 residual alone does not establish the physical particle balance. Saved
 balances describe the last pre-solve assembly; saved fields are post-update.
 
-Scope: 2D NGammaTiTe neutral/NeutralGamma/k family, `bohmtypebc=0`, diagonal
+Scope: 2D NGammaTiTe neutral/NeutralGamma/k family, diagonal
 stabilization and Bohm/BohmPump/BohmPuff walls; shock diffusion is excluded.
 Source: [physical flux coefficients](../../src/Models/NGammaTiTe/physics.f90),
 [wall BC](../../src/HDG/hdg_BC.f90),

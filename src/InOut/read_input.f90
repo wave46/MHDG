@@ -176,6 +176,7 @@ SUBROUTINE READ_input()
   zeff_dimension = 0
   tau = 1.d0
   bcflags = 0
+  bohmtypebc = 0 ! Compatibility input; alternative Bohm assemblers are retired.
   ! Accepted for compatibility with inputs predating removal of BC 6.
   part_source = 0.d0
   ener_source = 0.d0
@@ -242,6 +243,11 @@ SUBROUTINE READ_input()
   IF (ANY(bcflags == 6)) THEN
      IF (MPIvar%glob_id == 0) &
           WRITE(6,*) 'Boundary condition 6 (ITER core) has been removed; select a supported boundary condition explicitly.'
+     STOP 1
+  ENDIF
+  IF (bohmtypebc /= 0) THEN
+     IF (MPIvar%glob_id == 0) &
+          WRITE(6,*) 'Alternate Bohm boundary conditions have been removed; omit bohmtypebc or set it to 0. Received:', bohmtypebc
      STOP 1
   ENDIF
 
@@ -407,10 +413,6 @@ SUBROUTINE READ_input()
      STOP
   ENDIF
 #endif
-  IF (balance_diagnostics_mode_id /= balance_mode_off .AND. bohmtypebc /= 0) THEN
-     PRINT *, 'Balance diagnostics require bohmtypebc=0; received ',bohmtypebc
-     STOP
-  ENDIF
   CALL balance_diag%configure(balance_diagnostics_mode_id)
 
   ! Storing at the right place
@@ -508,7 +510,6 @@ SUBROUTINE READ_input()
   numer%ptor              = ptor
   numer%tmax              = tmax
   numer%npartor           = npartor
-  numer%bohmtypebc        = bohmtypebc
   numer%exbdump           = exbdump
   numer%neutralp_lambda   = neutralp_lambda
   adapt%adaptivity        = adaptivity
@@ -983,7 +984,6 @@ SUBROUTINE READ_input()
      PRINT *, '                - max extention in the toroidal direction:            ', numer%tmax
 #endif
      PRINT *, '                - dumping for ExB term:       ', numer%exbdump
-     PRINT *, '                - type of bohm boundary condition:                     ',  numer%bohmtypebc
      IF(adapt%adaptivity) THEN
         PRINT *, '        ***************** Adaptivity ****************************'
         PRINT *, '                - adaptivity :                                         ', adapt%adaptivity

@@ -119,7 +119,6 @@
     ptor                = 4             ! Polynomial degree in the toroidal direction
     tmax                = 1.5708        ! Max extention in the toroidal direction
     npartor             = 1             ! Number of MPI partition in the toroidal direction
-    bohmtypebc          = 0             ! Implementation of the Bohm bc for Gamma (0-Old Bohm BC, 1-Dirichlet always, 2-Dirichlet+Neumann)
     exbdump             = 1.            ! Dumping for ExB drift
 /
 
@@ -296,7 +295,7 @@
 
 &UTILS_LST
     balance_diagnostics_mode = 'summary' ! off, summary, equations, detailed
-                                        ! Enabled modes require a 2D neutral-temperature model and bohmtypebc = 0
+                                        ! Enabled modes require a 2D neutral-temperature model
     printint            = 1             ! how much info we want to print
     dotiming            = true          ! timing of the code
     freqdisp            = 1             ! frequency of result display

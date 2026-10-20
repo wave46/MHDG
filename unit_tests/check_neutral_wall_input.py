@@ -31,11 +31,16 @@ def main():
     ]
     invalid.append(("removed_iter_core", "bcflags(8)=6",
                     "Boundary condition 6 (ITER core) has been removed"))
+    cases = [("PHYS_LST", *case) for case in valid + invalid]
+    cases.append(("NUMER_LST", "legacy_bohm_zero", "bohmtypebc=0", (1.0, 1.0)))
+    cases.extend(("NUMER_LST", f"removed_bohm_{value}", f"bohmtypebc={value}",
+                  "Alternate Bohm boundary conditions have been removed")
+                 for value in (1, 2))
     with tempfile.TemporaryDirectory(prefix="mhdg-neutral-wall-input-") as scratch:
-        for name, entries, expected in valid + invalid:
+        for namelist, name, entries, expected in cases:
             directory = Path(scratch) / name
             directory.mkdir()
-            text = re.sub(r"(?ms)(&PHYS_LST\b.*?)(^\s*/\s*$)",
+            text = re.sub(rf"(?ms)(&{namelist}\b.*?)(^\s*/\s*$)",
                           lambda match: f"{match[1]}  {entries}\n{match[2]}",
                           template, count=1)
             (directory / "param.txt").write_text(text)
@@ -54,7 +59,7 @@ def main():
                           and "NEUTRAL_WALL_ALBEDOS" not in output)
             if not passed:
                 raise SystemExit(f"FAIL: {name}\n{output}")
-    print(f"neutral wall input checks: {len(valid) + len(invalid)} PASS")
+    print(f"neutral wall input checks: {len(cases)} PASS")
 
 
 if __name__ == "__main__":
