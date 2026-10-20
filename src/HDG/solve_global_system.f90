@@ -34,7 +34,8 @@
   TYPE(solver_status_t), INTENT(OUT) :: status
   INTEGER :: backend_error
   REAL, ALLOCATABLE   :: rhspert(:)
-  REAL                :: pertamp, errsol
+  REAL                :: pertamp
+  REAL*8              :: errsol
   INTEGER*4           :: seed(34)
   REAL, ALLOCATABLE   :: u_tilde_exact(:)
   REAL, POINTER       :: u_tilde_check(:)
@@ -361,13 +362,10 @@
 
 
 #ifdef PARALL
-     ct = 0
      DO i = 1, Mesh%Nfaces
         IF (Mesh%ghostfaces(i) .EQ. 1) CYCLE
-        ct = ct + 1
         indg = (i - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
-        indl = (ct - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
-        errsol = MAX(errsol, MAXVAL(ABS(u_tilde_exact(indg) - sol%u_tilde(indl))))
+        errsol = MAX(errsol, MAXVAL(ABS(u_tilde_exact(indg) - sol%u_tilde(indg))))
      END DO
 #else
      DO i = 1, matPASTIX%n
@@ -376,7 +374,7 @@
 #endif
      errsol = errsol/pertamp/numer%dumpnr
 #ifdef PARALL
-     CALL MPI_ALLREDUCE(MPI_IN_PLACE, errsol, 1, MPI_REAL, MPI_MAX, MPI_COMM_WORLD, ierr)
+     CALL MPI_ALLREDUCE(MPI_IN_PLACE, errsol, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
 #endif
      IF (MPIvar%glob_id .EQ. 0) THEN
         WRITE (6, *) "ERROR AMPLIFICATION: ", errsol
