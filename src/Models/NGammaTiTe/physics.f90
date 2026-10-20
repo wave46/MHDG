@@ -617,7 +617,7 @@ CONTAINS
       &ua(:,phys%idx_rhon_eq) = ABS(up(:,phys%idx_rhon_pv))
 #ifdef NEUTRALGAMMA
     IF (phys%idx_gamman_eq > 0 .AND. phys%idx_un_pv > 0 .AND. phys%idx_rhon_pv > 0) THEN
-      ua(:,phys%idx_gamman_eq) = ABS(MAX(up(:,phys%idx_rhon_pv), 1.d-7))*up(:,phys%idx_un_pv)
+      ua(:,phys%idx_gamman_eq) = ua(:,phys%idx_rhon_eq)*up(:,phys%idx_un_pv)
     END IF
 #endif
 #ifdef KEQUATION
@@ -659,7 +659,7 @@ CONTAINS
       &up(:,phys%idx_rhon_pv) = ABS(ua(:,phys%idx_rhon_eq)) ! neutral density
 #ifdef NEUTRALGAMMA
     IF (phys%idx_gamman_eq > 0 .AND. phys%idx_un_pv > 0) THEN
-      up(:,phys%idx_un_pv) = ua(:,phys%idx_gamman_eq)/ABS(MAX(Unn, 1.d-7))
+      up(:,phys%idx_un_pv) = ua(:,phys%idx_gamman_eq)/Unn
     END IF
 #endif
 #ifdef KEQUATION
@@ -1063,7 +1063,7 @@ CONTAINS
 #endif
 #ifdef NEUTRALGAMMA
       IF (inn > 0 .AND. ign > 0) THEN
-        Unn = MAX(1.d-7,U(inn))
+        Unn = U(inn)
         A(inn, ign) = 1.d0
         A(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
         A(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
@@ -1100,7 +1100,7 @@ CONTAINS
 #ifdef NEUTRAL
 #ifdef NEUTRALGAMMA
       IF (inn > 0 .AND. ign > 0) THEN
-        Unn = MAX(1.d-7,U(inn))
+        Unn = U(inn)
         A(inn, ign) = 1.d0
         A(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
         A(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
@@ -1149,7 +1149,7 @@ CONTAINS
 #endif
 #ifdef NEUTRALGAMMA
       IF (inn > 0 .AND. ign > 0) THEN
-        Unn = MAX(1.d-7,U(inn))
+        Unn = U(inn)
         An(inn, ign) = 1.d0
         An(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
         An(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
@@ -1183,7 +1183,7 @@ CONTAINS
 #ifdef NEUTRAL
 #ifdef NEUTRALGAMMA
       IF (inn > 0 .AND. ign > 0) THEN
-        Unn = MAX(1.d-7,U(inn))
+        Unn = U(inn)
         An(inn, ign) = 1.d0
         An(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
         An(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
@@ -1609,7 +1609,7 @@ CONTAINS
     U1 = U(1)
     U2 = U(2)
     U3 = U(3)
-    Unn = MAX(U(inn), 1.d-7)
+    Unn = U(inn)
 
     Gn(ign, 1) = 2.d0/3.d0*Unn*(-U3/U1**2 + U2**2/U1**3)
     Gn(ign, 2) = -2.d0/3.d0*Unn*U2/U1**2
@@ -1674,10 +1674,9 @@ CONTAINS
   SUBROUTINE computeEtan(U, Etan)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: Etan
-    REAL*8, PARAMETER   :: tol = 1.d-7
     REAL*8              :: coeff, denom, denom_eff, denom_floor, eta_coeff, Unn
 
-    Unn = MAX(U(phys%idx_rhon_eq), tol)
+    Unn = U(phys%idx_rhon_eq)
 
 #ifdef CONSTANTNEUTRALDIFF
     Etan = Unn*MAX(phys%diff_nn, phys%diff_nn_min)
@@ -1696,17 +1695,16 @@ CONTAINS
   SUBROUTINE compute_dEtan_dU(U, dEtan_dU)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: dEtan_dU(:)
-    REAL*8, PARAMETER   :: tol = 1.d-7
     REAL*8              :: coeff, denom, denom_eff, denom_floor, eta_coeff, double_soft_deriv, Unn
     REAL*8              :: dcoeff_dU(SIZE(U)), ddenom_dU(SIZE(U)), deta_dU(SIZE(U))
     INTEGER             :: inn
 
     dEtan_dU = 0.d0
     inn = phys%idx_rhon_eq
-    Unn = MAX(U(inn), tol)
+    Unn = U(inn)
 
 #ifdef CONSTANTNEUTRALDIFF
-    IF (U(inn) >= tol) dEtan_dU(inn) = MAX(phys%diff_nn, phys%diff_nn_min)
+    dEtan_dU(inn) = MAX(phys%diff_nn, phys%diff_nn_min)
 #else
     CALL compute_neutral_transport_prefactor(U, coeff)
     CALL compute_dneutral_transport_prefactor_dU(U, dcoeff_dU)
@@ -1727,21 +1725,21 @@ CONTAINS
     CALL double_softplus(eta_coeff, phys%diff_nn_min, phys%diff_nn)
 
     dEtan_dU = Unn*deta_dU
-    IF (U(inn) >= tol) dEtan_dU(inn) = dEtan_dU(inn) + eta_coeff
+    dEtan_dU(inn) = dEtan_dU(inn) + eta_coeff
 #endif
   ENDSUBROUTINE compute_dEtan_dU
 
+  ! u_n=Gamma_n/n_n requires positive density, as for plasma velocity.
   SUBROUTINE computeVun(U, Vun)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: Vun(:)
-    REAL*8, PARAMETER   :: tol = 1.d-7
     REAL*8              :: Unn
     INTEGER             :: inn, ign
 
     Vun = 0.d0
     inn = phys%idx_rhon_eq
     ign = phys%idx_gamman_eq
-    Unn = MAX(U(inn), tol)
+    Unn = U(inn)
 
     Vun(inn) = -U(ign)/Unn**2
     Vun(ign) = 1.d0/Unn
@@ -1750,19 +1748,16 @@ CONTAINS
   SUBROUTINE compute_dVun_dU(U, dVun_dU)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: dVun_dU(:, :)
-    REAL*8, PARAMETER   :: tol = 1.d-7
     REAL*8              :: Unn
     INTEGER             :: inn, ign
 
     dVun_dU = 0.d0
     inn = phys%idx_rhon_eq
     ign = phys%idx_gamman_eq
-    Unn = MAX(U(inn), tol)
+    Unn = U(inn)
 
-    IF (U(inn) >= tol) THEN
-      dVun_dU(inn, inn) = 2.d0*U(ign)/Unn**3
-      dVun_dU(ign, inn) = -1.d0/Unn**2
-    END IF
+    dVun_dU(inn, inn) = 2.d0*U(ign)/Unn**3
+    dVun_dU(ign, inn) = -1.d0/Unn**2
     dVun_dU(inn, ign) = -1.d0/Unn**2
   ENDSUBROUTINE compute_dVun_dU
 #endif
@@ -3124,30 +3119,28 @@ CONTAINS
   SUBROUTINE compute_fEiN(U, fEiN)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: fEiN
-    REAL*8, PARAMETER   :: tol = 1.d-7
     REAL*8              :: Unn
     INTEGER             :: inn, ign
 
     inn = phys%idx_rhon_eq
     ign = phys%idx_gamman_eq
-    Unn = MAX(U(inn), tol)
+    Unn = U(inn)
     fEiN = 0.5d0*U(1)*U(ign)**2/Unn
   ENDSUBROUTINE compute_fEiN
 
   SUBROUTINE compute_dfEiN_dU(U, res)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: res(:)
-    REAL*8, PARAMETER   :: tol = 1.d-7
     REAL*8              :: Unn
     INTEGER             :: inn, ign
 
     res = 0.d0
     inn = phys%idx_rhon_eq
     ign = phys%idx_gamman_eq
-    Unn = MAX(U(inn), tol)
+    Unn = U(inn)
 
     res(1) = U(ign)**2/Unn
-    IF (U(inn) >= tol) res(inn) = -U(1)*(U(ign)/Unn)**2
+    res(inn) = -U(1)*(U(ign)/Unn)**2
     res(ign) = 2.d0*U(1)*U(ign)/Unn
     res = 0.5d0*res
   ENDSUBROUTINE compute_dfEiN_dU
@@ -3537,7 +3530,7 @@ ENDSUBROUTINE  compute_ddissip_du
 #endif
 #ifdef NEUTRALGAMMA
         IF (ign > 0 .AND. inn > 0) tau_aux(ign) = &
-          &tau_aux(ign) + Etan/MAX(uc(inn),1.d-7)*refElPol%ndeg/Mesh%elemSize(iel)
+          &tau_aux(ign) + Etan/uc(inn)*refElPol%ndeg/Mesh%elemSize(iel)
 #endif
 #endif
 !        ! Toroidal face

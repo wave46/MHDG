@@ -19,6 +19,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-bdf-coefficients
 .PHONY : check-amjuel-extrapolation
 .PHONY : check-neutral-energy-source
+.PHONY : check-neutral-gamma-transport
 .PHONY : check-heat-flux-limiter
 
 all : allseq
@@ -59,6 +60,7 @@ clean:
 	$(RM) bdf_coefficients_check linear_solve_status_check
 	$(RM) amjuel_extrapolation_check
 	$(RM) neutral_energy_source_check
+	$(RM) neutral_gamma_transport_check
 	$(RM) heat_flux_limiter_check
 
 # Exercise the internal production routine without building an HDG mesh.
@@ -107,6 +109,10 @@ check-amjuel-extrapolation : neutral_wall_physics_check.o globals.o neutral_flux
 check-heat-flux-limiter : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_heat_flux_limiter.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o heat_flux_limiter_check
 	./heat_flux_limiter_check
+
+check-neutral-gamma-transport : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_neutral_gamma_transport.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o neutral_gamma_transport_check
+	./neutral_gamma_transport_check
 
 # Keep the internal source assembly in the check identical to production.
 neutral_source_assembly_routine.F : $(SDIR)/HDG/hdg_ComputeJacobian.f90

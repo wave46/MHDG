@@ -22,10 +22,16 @@ checks reconstruction from the Jacobian and affine term in ordinary,
 temperature-floor and cap-floor states, with either flux sign and zero flux.
 It uses the production value/derivative helpers without MPI or external data.
 
+`make check-neutral-gamma-transport` requires a NeutralGamma configuration.
+It checks velocity, convection and pressure-curvature derivatives and flux
+reconstruction at small positive and ordinary neutral densities, including both
+convection modes, signed/zero neutral momentum, and physical/conservative
+velocity conversion. No mesh or MPI launch is needed.
+
 `make check-neutral-energy-source` uses a temperature model with
 `NEUTRALGAMMA`. It checks that the production source matrix and affine term
-recover the neutral kinetic-energy transfer below, at and above the density
-floor, including zero neutral momentum and state-dependent rate coefficients.
+recover the physical neutral kinetic-energy transfer at small positive densities,
+including zero neutral momentum and state-dependent rate coefficients.
 It extracts the internal source assembly verbatim and uses the production
 energy-factor helpers; no MPI launch or external case data is needed.
 

@@ -45,7 +45,7 @@ PROGRAM test_neutral_energy_source
              fEicx=0.d0,dfEicx_dU=zero,fEiN=f,dfEiN_dU=df,Sn=Sn,Sn0=Sn0, &
              sigmavEiz=0.d0,dsigmavEiz_dU=zero,sigmavErec=0.d0,dsigmavErec_dU=zero)
         realized = -DOT_PRODUCT(Sn(3,:),U)-Sn0(3)
-        expected = f*(kiz+kcx)
+        expected = 0.5d0*U(1)*U(6)**2/U(5)*(kiz+kcx)
         tolerance = 128.d0*EPSILON(1.d0)*ABS(expected)
         IF (.NOT. ieee_is_finite(realized) .OR. ABS(realized-expected) > tolerance) THEN
           WRITE(*,*) 'neutral density, rate case, velocity case:',U(5),rate_case,velocity_case

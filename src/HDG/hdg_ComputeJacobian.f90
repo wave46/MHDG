@@ -4491,8 +4491,8 @@ END IF
         &fEirec*sigmavrec - fEicx*sigmavcx
 #ifdef NEUTRALGAMMA
       ! For S_N = fEiN*(sigmaviz + sigmavcx), Sn0 contains dS_N/dU . U - S_N.
-      ! The density floor makes dfEiN/dU . U = 3*fEiN below it, rather than 2*fEiN.
-      Sn0(3)    = Sn0(3) + (DOT_PRODUCT(dfEiN_dU,U)-fEiN)*(sigmaviz + sigmavcx) + &
+      ! fEiN=n*Gamma_n^2/(2*n_n) is degree two, so dfEiN/dU . U = 2*fEiN.
+      Sn0(3)    = Sn0(3) + fEiN*(sigmaviz + sigmavcx) + &
         &fEiN*DOT_PRODUCT(dsigmaviz_dU + dsigmavcx_dU,U)
 #endif
       !modification with recombination gain
