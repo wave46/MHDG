@@ -173,6 +173,7 @@ CONTAINS
     ALLOCATE(sol%q, SOURCE=this%q)
     ALLOCATE(sol%u_tilde, SOURCE=this%trace)
     sol%u0 = this%u0
+    time%bdf_start_step = this%clock%bdf_start_step
   END SUBROUTINE restore_accepted_plasma
 
   SUBROUTINE capture_accepted_mesh(this)
@@ -1216,6 +1217,7 @@ CONTAINS
           time%ik = time%ik - 1
           sol%Nt = sol%Nt - 1
        ENDIF
+       time%bdf_start_step = time%ik-1
        restart_adapt = .FALSE.
     ENDIF
 
@@ -1705,6 +1707,7 @@ CONTAINS
     ALLOCATE (sol%q_conv(SIZE(sol%q)))
     sol%u0 = 0.
     sol%u0(:, 1) = sol%u
+    time%bdf_start_step = time%ik
     uiter = sol%u
     uiter_best = sol%u
     qiter_best = sol%q
@@ -1721,6 +1724,7 @@ CONTAINS
     ENDIF
     sol%u0 = 0.
     sol%u0(:, 1) = u
+    time%bdf_start_step = time%ik
   ENDSUBROUTINE update_u0
 
   SUBROUTINE update_uconv_qconv(u_conv, q_conv)
@@ -1947,6 +1951,7 @@ ENDSUBROUTINE update_delta_te
 
     n_history = 1
     IF (retain_history) n_history = SIZE(previous_history,2)
+    IF (.NOT. retain_history) time%bdf_start_step = time%ik-1
     DO history_id = 1, n_history
 #ifdef PARALL
        CALL gather_solution(Mesh_in=Mesh_prec, Nnodesperelem=Mesh_prec%Nnodesperelem, &

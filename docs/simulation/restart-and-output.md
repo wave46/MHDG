@@ -34,6 +34,12 @@ loaded in solver units, without conversion between reference normalizations.
 BDF1 continues from the loaded accepted solution; earlier BDF states are not
 reconstructed. See [time stepping](time-stepping.md) for mode configuration.
 
+Legacy runs requesting a higher BDF order restart with BDF1, then increase
+order as accepted states accumulate. A BDF3 restart therefore uses orders
+1, 2, 3 on its first three advances. Physical time, global step and input-frame
+indexing continue from the checkpoint. Full higher-order history is not saved,
+so this startup is not identical to an uninterrupted higher-order run.
+
 ### Final time and prescribed inputs
 
 Set `t_final` later than the checkpoint time to advance. A checkpoint beyond

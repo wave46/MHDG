@@ -154,6 +154,7 @@ PROGRAM test_divergence_refinement
   phys%neq = 2
   phys%lscale = 0.001901d0
   time%tis = 3
+  time%bdf_start_step = time%ik-2
   Mesh%ndim = 2
   Mesh%Nelems = 2
   Mesh%Nnodes = 4
@@ -213,6 +214,7 @@ PROGRAM test_divergence_refinement
   CALL transfer%clear()
   IF (.NOT. ALL(ieee_is_finite(sol%u0))) ERROR STOP 'nonfinite projected history'
   IF (MAXVAL(ABS(sol%u0-expected)) > 1.d-10) ERROR STOP 'time history not preserved on new mesh'
+  IF (time%bdf_start_step /= time%ik-2) ERROR STOP 'projection changed BDF startup with retained history'
   IF (MAXVAL(ABS(Mesh%X-new_coordinates)) > 1.d-10 .OR. &
       MAXVAL(ABS(Mesh_prec%X-previous_coordinates)) > 1.d-10) ERROR STOP 'projection changed coordinate units'
 
@@ -268,6 +270,7 @@ PROGRAM test_divergence_refinement
   CALL project_u0_newmesh()
   IF (MAXVAL(ABS(sol%u0(:,1)-expected(:,1))) > 1.d-10 .OR. ANY(sol%u0(:,2:3) /= 0.d0)) &
     ERROR STOP 'default projection behavior changed'
+  IF (time%bdf_start_step /= time%ik-1) ERROR STOP 'single-state projection retained BDF order'
   CALL free_reference_element_pol(refElPol)
   CALL check_transfer_reuse()
   CALL check_mesh_copy_lifetime()

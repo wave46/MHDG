@@ -6,6 +6,8 @@ and end-to-end coverage remains in `regression_tests`.
 
 `make check-bdf-coefficients` from `lib/` checks constant-step BDF1-6 polynomial
 differentiation, startup order ramping, unused history and unchanged BDF1 weights.
+It also checks the production history initialization/update routines at fresh
+and mature restart indices, constant-state preservation and single-state reseeding.
 It extracts the internal production coefficient routine verbatim and compiles it
 with the real global time state; no solver run or external data is needed. This
 target uses the current build configuration without a clean rebuild.

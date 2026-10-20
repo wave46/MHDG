@@ -2391,11 +2391,8 @@ CONTAINS
 
     ktis = 0.d0
 
-      IF (time%ik .LT. time%tis) THEN
-      it = time%ik
-      ELSE
-      it = time%tis
-      END IF
+    ! A restart/reseed has one accepted state, regardless of the global step.
+    it = MIN(time%tis, time%ik-time%bdf_start_step)
 
     SELECT CASE (it)
       CASE (1)

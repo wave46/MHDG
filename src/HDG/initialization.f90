@@ -42,6 +42,7 @@ CONTAINS
     ! time count
     time%it = 0
     time%ik = 0
+    time%bdf_start_step = 0
 
     ! number of time step of the simulation: if it is a steady state simulation
     ! ndt is set to 1,otherwise the input value is used

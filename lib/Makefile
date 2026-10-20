@@ -67,8 +67,8 @@ clean:
 bdf_coefficients_routine.F : $(SDIR)/HDG/hdg_ComputeJacobian.f90
 	sed -n '/^  SUBROUTINE setTimeIntegrationCoefficients(/,/^  ENDSUBROUTINE setTimeIntegrationCoefficients/p' $< > $@
 
-check-bdf-coefficients : globals.o bdf_coefficients_routine.F
-	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_bdf_coefficients.f90 globals.o -o bdf_coefficients_check
+check-bdf-coefficients : MHDG bdf_coefficients_routine.F
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_bdf_coefficients.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o bdf_coefficients_check $(LIB)
 	./bdf_coefficients_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o

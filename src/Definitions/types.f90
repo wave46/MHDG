@@ -545,6 +545,7 @@ MODULE types
      REAL*8, ALLOCATABLE :: pending_times(:) ! prescribed endpoints, last entry first
      INTEGER     :: it   ! the number of the current time step
      INTEGER     :: ik   ! same as it but always incrementing (also in case of pseudotime..)
+     INTEGER     :: bdf_start_step = 0 ! ik before the first step using newly seeded history
      INTEGER     :: ndt  ! max number of time steps to do in the current session
      INTEGER     :: tsw  ! switch to modify the time step
      INTEGER     :: nts  ! max number of time iterations to do in the current session (only for transient simulations)
