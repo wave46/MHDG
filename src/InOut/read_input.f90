@@ -37,6 +37,13 @@ SUBROUTINE READ_input()
   INTEGER               :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
   REAL*8                :: dt0, R0, diff_n, diff_u, tau(1:7), tNr, tTM, div, Tbg, neutralp_lambda
   REAL*8                :: tfi, a, bohmth,bohm_energy_thresh, q, diffred, diffmin
+  REAL*8, PARAMETER     :: time_input_unset = -HUGE(1.d0)
+  REAL*8                :: t_start, t_final
+  CHARACTER(LEN=16)     :: time_mode, time_units
+  LOGICAL               :: dt_reduce_on_failure, dt_grow_on_easy, newton_predictor
+  REAL*8                :: newton_predictor_rate_limit
+  REAL*8                :: dt_min, dt_max, dt_growth_factor
+  INTEGER               :: dt_growth_easy_steps
   REAL*8                :: sc_coe, so_coe, df_coe, thr, thrpre, minrho, dc_coe, sc_sen
   REAL*8                :: epn, Mref, diff_pari, diff_e, Gmbohm, Gmbohme
   REAL*8                :: ionization_ion_energy_fraction
@@ -118,7 +125,9 @@ SUBROUTINE READ_input()
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, check_neutral_positivity, max_divergence_refinements, rest_adapt, osc_adapt, max_oscillation_refinements, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
-  NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis
+  NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis, time_mode, time_units, t_start, t_final, &
+       dt_reduce_on_failure, dt_grow_on_easy, dt_min, dt_max, dt_growth_factor, &
+       dt_growth_easy_steps, newton_predictor, newton_predictor_rate_limit
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
   & Re, Re_pump, Re_n, Re_n_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
@@ -153,6 +162,18 @@ SUBROUTINE READ_input()
   check_neutral_positivity = .TRUE.
   compute_from_flux = .TRUE.
   divide_by_2pi = .FALSE.
+  jtor_path = ''
+  puff_path = ''
+  target_density_path = ''
+  target_density_xpr_path = ''
+  zeff_path = ''
+  target_variable = 0
+  field_dimensions = 0
+  jtor_dimensions = 0
+  puff_dimension = 0
+  target_density_dimension = 0
+  target_density_xpr_dimension = 0
+  zeff_dimension = 0
   tau = 1.d0
   diff_nn_min = diff_nn_min_unset
   Re_n = 1.d0
@@ -178,6 +199,25 @@ SUBROUTINE READ_input()
   neutral_flux_limiter_fs_flux_min = 0.d0
   balance_diagnostics_mode = 'off'
   petsc_factor_solver = ''
+  ME = .FALSE.
+  puff_slope = 0.d0 ! Accepted only for old namelist compatibility.
+  dt0 = 0.d0
+  nts = 0
+  tsw = 0
+  tis = 1
+  tfi = time_input_unset
+  t_final = time_input_unset
+  t_start = 0.d0
+  time_mode = 'legacy'
+  time_units = 'normalized'
+  dt_reduce_on_failure = .FALSE.
+  dt_grow_on_easy = .FALSE.
+  newton_predictor = .FALSE.
+  newton_predictor_rate_limit = 0.35d0
+  dt_min = 0.d0
+  dt_max = 0.d0
+  dt_growth_factor = 1.2d0
+  dt_growth_easy_steps = 2
 
   ! Reading the file
   uinput = 100
@@ -195,6 +235,12 @@ SUBROUTINE READ_input()
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
 
+  CALL configure_time_input()
+  IF (time_mode /= 'legacy' .AND. (target_variable < 0 .OR. target_variable > 3)) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Physical-time target_variable must be 0, 1, 2 or 3'
+     STOP 1
+  ENDIF
+
   IF (sollib == 3 .AND. LEN_TRIM(petsc_factor_solver) > 0) THEN
      IF (pctype /= 'PCLU') THEN
         IF (MPIvar%glob_id == 0) PRINT *, 'petsc_factor_solver requires pctype = PCLU'
@@ -204,7 +250,7 @@ SUBROUTINE READ_input()
 
   ! In moving-equilibrium runs nts is the final global step, not a count of
   ! additional steps after a restart. Histories are indexed by that step.
-  IF (ME .AND. nts .LT. 1) THEN
+  IF (time_mode == 'legacy' .AND. ME .AND. nts .LT. 1) THEN
      IF (MPIvar%glob_id .EQ. 0) WRITE (6, *) 'ME final step nts must be positive: ', nts
      STOP 1
   ENDIF
@@ -408,7 +454,9 @@ SUBROUTINE READ_input()
   input%field_dimensions  = field_dimensions
   input%field_from_grid   = field_from_grid
   input%compute_from_flux = compute_from_flux
-  input%divide_by_2pi     = divide_by_2pi
+  ! Accepted only so old namelists remain readable.
+  IF (divide_by_2pi .AND. MPIvar%glob_id == 0) WRITE(6,'(A)') &
+       'WARNING: divide_by_2pi is obsolete and ignored; provide cocos when reference fitting is unavailable.'
   input%jtor_path         = TRIM(ADJUSTL(jtor_path))
   input%jtor_dimensions   = jtor_dimensions
   input%external_heating_path = TRIM(ADJUSTL(external_heating_path))
@@ -500,7 +548,25 @@ SUBROUTINE READ_input()
   magn%ellip              = ellip
   time%dt0                = dt0
   time%nts                = nts
-  time%tfi                = tfi
+  time%t_final            = t_final
+  time%t_start            = t_start
+  time%mode               = time_mode
+  time%legacy_input       = time_mode == 'legacy'
+  IF (time%legacy_input) THEN
+     time%mode = 'fixed'
+     IF (ME) time%mode = 'prescribed'
+  ENDIF
+  time%units              = time_units
+  time%dt_reduce_on_failure = dt_reduce_on_failure
+  time%dt_grow_on_easy     = dt_grow_on_easy
+  time%newton_predictor    = newton_predictor
+  time%newton_predictor_rate_limit = newton_predictor_rate_limit
+  time%dt_min             = dt_min
+  time%dt_max             = dt_max
+  time%dt_growth_factor   = dt_growth_factor
+  time%dt_growth_easy_steps = dt_growth_easy_steps
+  time%growth            = Time_growth_history_type()
+  IF (ALLOCATED(time%pending_times)) DEALLOCATE(time%pending_times)
   time%tsw                = tsw
   time%tis                = tis
   phys%diff_n             = diff_n
@@ -541,7 +607,6 @@ SUBROUTINE READ_input()
   phys%feedback_propotional_gain_xpr = feedback_propotional_gain_xpr
   phys%feedback_integral_gain_xpr = feedback_integral_gain_xpr
   phys%feedback_derivative_gain_xpr = feedback_derivative_gain_xpr
-  phys%puff_slope         = puff_slope
   phys%density_source     = density_source
   phys%ener_source_e      = ener_source_e
   phys%ener_source_ee     = ener_source_ee
@@ -712,7 +777,21 @@ SUBROUTINE READ_input()
      PRINT *, '        ***************** Time stepping ************************'
      PRINT *, '                - dt0:                                                ', time%dt0
      PRINT *, '                - dt modification:                                    ', time%tsw
-     PRINT *, '                - final time:                                         ', time%tfi
+     PRINT *, '                - time mode:                                          ', TRIM(time%mode)
+     PRINT *, '                - legacy stopping rules:                              ', time%legacy_input
+     PRINT *, '                - time input units:                                   ', TRIM(time%units)
+     PRINT *, '                - start time (solver units):                          ', time%t_start
+     PRINT *, '                - Newton initial-guess predictor:                     ', time%newton_predictor
+     IF (time%newton_predictor) PRINT *, '                - Predictor relative rate-change limit:               ', time%newton_predictor_rate_limit
+     PRINT *, '                - final time (solver units):                          ', time%t_final
+     IF (time%dt_reduce_on_failure) THEN
+        PRINT *, '                - minimum retry dt (solver units):                    ', time%dt_min
+     ENDIF
+     IF (time%dt_grow_on_easy) THEN
+        PRINT *, '                - maximum dt (solver units):                          ', time%dt_max
+        PRINT *, '                - timestep growth factor:                             ', time%dt_growth_factor
+        PRINT *, '                - consecutive easy steps for growth:                  ', time%dt_growth_easy_steps
+     ENDIF
      PRINT *, '                - max number of time steps:                           ', time%nts
      PRINT *, '                - time integration scheme:                            ', time%tis
      PRINT *, '        ***************** Physics *****************************'
@@ -784,7 +863,6 @@ SUBROUTINE READ_input()
      PRINT *, '                - neutral wall sources in element volumes:           ', switch%neutral_wall_sources_in_elements
      IF (switch%ME) THEN
         PRINT *, '                - I_0 for moving equilibrium:                         ', phys%I_0
-        PRINT *, '             - puff increment slope:                               ', phys%puff_slope
           IF (switch%target_variable /= 0) THEN
              PRINT *, '             - feedback_propotional_gain:                               ', phys%feedback_propotional_gain
              PRINT *, '             - feedback_integral_gain:                                  ', phys%feedback_integral_gain
@@ -954,6 +1032,83 @@ SUBROUTINE READ_input()
 
      PRINT *, '        '
   END IF
+
+CONTAINS
+
+  SUBROUTINE configure_time_input()
+    SELECT CASE (time_mode)
+    CASE ('legacy', 'fixed', 'prescribed', 'adaptive')
+    CASE DEFAULT
+       CALL invalid_time_input('time_mode must be legacy, fixed, prescribed or adaptive')
+    END SELECT
+    SELECT CASE (time_units)
+    CASE ('normalized', 'seconds')
+    CASE DEFAULT
+       CALL invalid_time_input('time_units must be normalized or seconds')
+    END SELECT
+    IF (time_mode == 'legacy' .AND. t_final /= time_input_unset) &
+         CALL invalid_time_input('t_final requires an explicit physical time_mode')
+
+    IF (.NOT. ieee_is_finite(t_start)) CALL invalid_time_input('t_start must be finite')
+    IF (.NOT. ieee_is_finite(dt0)) CALL invalid_time_input('dt0 must be finite')
+    IF (tfi /= time_input_unset) THEN
+       IF (.NOT. ieee_is_finite(tfi)) CALL invalid_time_input('tfi must be finite')
+       IF (t_final /= time_input_unset .AND. t_final /= tfi) &
+            CALL invalid_time_input('tfi and t_final specify different final times')
+       t_final = tfi
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'WARNING: tfi is deprecated; use t_final in physical time modes.'
+    ENDIF
+
+    IF (time_mode == 'legacy') THEN
+       IF (newton_predictor) CALL invalid_time_input('Newton predictor requires an explicit physical time_mode')
+       IF (t_start /= 0.d0) CALL invalid_time_input('t_start requires an explicit physical time_mode')
+       IF (dt_reduce_on_failure .OR. dt_grow_on_easy) &
+            CALL invalid_time_input('Timestep adaptation requires an explicit physical time_mode')
+       IF (t_final == time_input_unset) t_final = 0.d0
+       IF (MPIvar%glob_id == 0) WRITE(6,*) &
+            'WARNING: legacy time stepping retains nts-based stopping; tfi is not enforced.'
+       RETURN
+    ENDIF
+
+    IF (steady .OR. psdtime) CALL invalid_time_input('Physical time_mode requires steady=false and psdtime=false')
+    IF (t_final == time_input_unset) CALL invalid_time_input('Physical time_mode requires t_final')
+    IF (.NOT. ieee_is_finite(t_final)) CALL invalid_time_input('t_final must be finite')
+    IF (t_final <= t_start) CALL invalid_time_input('t_final must be greater than t_start')
+    IF (time_mode == 'prescribed') THEN
+       IF (dt_grow_on_easy) CALL invalid_time_input('Prescribed time_mode does not support timestep growth')
+    ELSE
+       IF (dt0 <= 0.d0) CALL invalid_time_input('Fixed/adaptive time_mode requires positive dt0')
+    ENDIF
+    IF (time_mode == 'fixed' .AND. (dt_reduce_on_failure .OR. dt_grow_on_easy)) &
+         CALL invalid_time_input('Fixed time_mode does not support timestep adaptation')
+    IF (tis /= 1) CALL invalid_time_input('Physical time modes currently require BDF1 (tis=1)')
+    IF (newton_predictor) THEN
+       IF (.NOT. ieee_is_finite(newton_predictor_rate_limit) .OR. newton_predictor_rate_limit < 0.d0) &
+            CALL invalid_time_input('Newton predictor rate limit must be finite and nonnegative')
+    ENDIF
+    IF (.NOT. ieee_is_finite(dt_min) .OR. dt_min < 0.d0) &
+         CALL invalid_time_input('dt_min must be finite and nonnegative')
+    IF (dt_reduce_on_failure .AND. dt_min <= 0.d0) &
+         CALL invalid_time_input('Timestep reduction requires positive dt_min')
+    IF (time_mode == 'adaptive' .AND. dt0 < dt_min) &
+         CALL invalid_time_input('Adaptive dt0 must not be smaller than dt_min')
+    IF (.NOT. ieee_is_finite(dt_max) .OR. dt_max < 0.d0) &
+         CALL invalid_time_input('dt_max must be finite and nonnegative')
+    IF (dt_max > 0.d0 .AND. dt_max < MAX(dt0,dt_min)) &
+         CALL invalid_time_input('dt_max must not be smaller than dt0 or dt_min')
+    IF (dt_grow_on_easy) THEN
+       IF (dt_max <= 0.d0) CALL invalid_time_input('Timestep growth requires positive dt_max')
+       IF (.NOT. ieee_is_finite(dt_growth_factor) .OR. dt_growth_factor <= 1.d0) &
+            CALL invalid_time_input('dt_growth_factor must be finite and greater than one')
+       IF (dt_growth_easy_steps < 1) CALL invalid_time_input('Growth easy-step count must be positive')
+    ENDIF
+  END SUBROUTINE configure_time_input
+
+  SUBROUTINE invalid_time_input(message)
+    CHARACTER(LEN=*), INTENT(IN) :: message
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Invalid time input: ', message
+    STOP 1
+  END SUBROUTINE invalid_time_input
 
 END SUBROUTINE READ_input
 

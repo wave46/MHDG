@@ -9,6 +9,9 @@ MODULE magnetic_geometry_state
   REAL*8, PARAMETER :: near_null_fraction = 1.d-6
   REAL*8, PARAMETER :: restart_comparison_tolerance = 1.d-6
   REAL*8, PARAMETER :: vacuum_permeability = 4.d-7*PI
+  REAL*8, PARAMETER :: coefficient_tolerance = 1.d-6
+  REAL*8, PARAMETER :: canonical_flux_coefficients(4) = &
+       [1.d0, -1.d0, 1.d0/(2.d0*PI), -1.d0/(2.d0*PI)]
   INTEGER, PARAMETER, PUBLIC :: field_alpha_plus_one = 1
   INTEGER, PARAMETER, PUBLIC :: field_alpha_minus_one = 2
   INTEGER, PARAMETER, PUBLIC :: field_alpha_plus_inverse_two_pi = 3
@@ -28,6 +31,7 @@ MODULE magnetic_geometry_state
   TYPE, PUBLIC :: toroidal_current_comparison_t
      LOGICAL :: is_valid = .FALSE.
      INTEGER :: applied_sign = 1
+     REAL*8 :: alpha = 0.d0, applied_alpha = 0.d0
      REAL*8 :: core_raw_relative_l2 = 0.d0
      REAL*8 :: core_relative_l2 = 0.d0
      REAL*8 :: core_norm_ratio = 0.d0
@@ -71,6 +75,8 @@ MODULE magnetic_geometry_state
   REAL*8, SAVE :: restart_a_minor = 0.d0
 
   PUBLIC :: fit_poloidal_field_scale
+  PUBLIC :: cocos_coefficients, resolve_flux_coefficients
+  PUBLIC :: fit_toroidal_current_scale
   PUBLIC :: fit_toroidal_current_sign
   PUBLIC :: evaluate_flux_derived_toroidal_current
   PUBLIC :: reset_magnetic_geometry_state
@@ -78,6 +84,114 @@ MODULE magnetic_geometry_state
   PUBLIC :: compare_restart_geometry
 
 CONTAINS
+
+  SUBROUTINE cocos_coefficients(cocos, alpha_b, alpha_j, handedness, ierr)
+    INTEGER, INTENT(IN) :: cocos
+    REAL*8, INTENT(OUT) :: alpha_b, alpha_j
+    INTEGER, INTENT(OUT) :: handedness, ierr
+    INTEGER :: index
+    REAL*8 :: scale
+
+    alpha_b = 0.d0
+    alpha_j = 0.d0
+    handedness = 0
+    ierr = -1
+    index = cocos
+    scale = 1.d0
+    IF (cocos >= 11 .AND. cocos <= 18) THEN
+       index = cocos-10
+       scale = 1.d0/(2.d0*PI)
+    ENDIF
+    IF (index < 1 .OR. index > 8) RETURN
+    ! Sauter & Medvedev (2013), Table I and Eqs. 19, 25, 27, 30:
+    ! alpha_B = -sigma_RphiZ*sigma_Bp/(2*pi)**e_Bp; alpha_J = sigma_RphiZ*alpha_B.
+    SELECT CASE (MOD(index-1, 4))
+    CASE (0)
+       alpha_b = -scale
+       handedness = 1
+    CASE (1)
+       alpha_b = scale
+       handedness = -1
+    CASE (2)
+       alpha_b = scale
+       handedness = 1
+    CASE (3)
+       alpha_b = -scale
+       handedness = -1
+    END SELECT
+    alpha_j = handedness*alpha_b
+    ierr = 0
+  END SUBROUTINE cocos_coefficients
+
+  SUBROUTINE resolve_flux_coefficients(field_fit, current_fit, need_current, &
+       cocos, alpha_b, alpha_j, metadata_conflict, ierr)
+    TYPE(poloidal_field_fit_t), INTENT(INOUT) :: field_fit
+    TYPE(toroidal_current_comparison_t), INTENT(IN) :: current_fit
+    LOGICAL, INTENT(IN) :: need_current
+    INTEGER, ALLOCATABLE, INTENT(IN) :: cocos
+    REAL*8, INTENT(OUT) :: alpha_b, alpha_j
+    LOGICAL, INTENT(OUT) :: metadata_conflict
+    INTEGER, INTENT(OUT) :: ierr
+    REAL*8 :: cocos_b, cocos_j
+    INTEGER :: handedness
+
+    alpha_b = 0.d0
+    alpha_j = 0.d0
+    metadata_conflict = .FALSE.
+    ierr = -1
+    IF (ALLOCATED(cocos)) THEN
+       CALL cocos_coefficients(cocos, cocos_b, cocos_j, handedness, ierr)
+       IF (ierr /= 0) RETURN
+    ENDIF
+    ierr = -1
+    IF (field_fit%is_valid) THEN
+       alpha_b = field_fit%applied_alpha
+    ELSEIF (ALLOCATED(cocos)) THEN
+       alpha_b = cocos_b
+       IF (current_fit%is_valid) alpha_b = handedness*current_fit%applied_alpha
+    ELSE
+       RETURN
+    ENDIF
+    ierr = -1
+    IF (current_fit%is_valid) THEN
+       alpha_j = current_fit%applied_alpha
+    ELSEIF (ALLOCATED(cocos)) THEN
+       alpha_j = handedness*alpha_b
+    ELSEIF (need_current) THEN
+       RETURN
+    ENDIF
+    IF (ALLOCATED(cocos)) THEN
+       metadata_conflict = ABS(alpha_b-cocos_b) > coefficient_tolerance*ABS(cocos_b)
+       IF (need_current) metadata_conflict = metadata_conflict .OR. &
+            ABS(alpha_j-cocos_j) > coefficient_tolerance*ABS(cocos_j)
+    ENDIF
+    IF (.NOT. field_fit%is_valid) THEN
+       field_fit%applied_alpha = alpha_b
+       field_fit%convention_id = MINLOC(ABS(canonical_flux_coefficients-alpha_b), DIM=1)
+    ENDIF
+    ierr = 0
+  END SUBROUTINE resolve_flux_coefficients
+
+  SUBROUTINE fit_toroidal_current_scale(unit_norm_squared, stored_norm_squared, &
+       cross_product, reference_alpha, fit)
+    REAL*8, INTENT(IN) :: unit_norm_squared, stored_norm_squared, cross_product, reference_alpha
+    TYPE(toroidal_current_comparison_t), INTENT(OUT) :: fit
+    REAL*8 :: alpha, applied, residual
+    INTEGER :: convention
+
+    ! Keep the legacy comparison diagnostics relative to alpha_B * unit current.
+    CALL fit_toroidal_current_sign(reference_alpha**2*unit_norm_squared, &
+         stored_norm_squared, reference_alpha*cross_product, fit)
+    IF (.NOT. fit%is_valid) RETURN
+    alpha = cross_product/unit_norm_squared
+    convention = MINLOC(ABS(canonical_flux_coefficients-alpha), DIM=1)
+    applied = canonical_flux_coefficients(convention)
+    fit%alpha = alpha
+    fit%applied_alpha = applied
+    fit%applied_sign = INT(SIGN(1.d0, applied/reference_alpha))
+    residual = MAX(applied**2*unit_norm_squared+stored_norm_squared-2.d0*applied*cross_product, 0.d0)
+    fit%core_relative_l2 = SQRT(residual/stored_norm_squared)
+  END SUBROUTINE fit_toroidal_current_scale
 
   SUBROUTINE reset_magnetic_geometry_state()
     CALL magnetic_equilibrium%clear()
@@ -97,8 +211,7 @@ CONTAINS
     REAL*8 :: psi, psi_r, psi_z, gr, gz, gnorm, bnorm
     REAL*8 :: max_gnorm, max_bnorm, numerator, denominator
     REAL*8 :: residual, reference_norm, r_safe, length_scale_squared
-    REAL*8 :: applied_residual, inverse_two_pi
-    REAL*8 :: canonical_alpha(4)
+    REAL*8 :: applied_residual
 
     fit = poloidal_field_fit_t()
     IF (.NOT. geometry%is_initialized) RETURN
@@ -149,11 +262,9 @@ CONTAINS
     residual = MAX(reference_norm - 2.d0*fit%alpha*numerator + &
          fit%alpha*fit%alpha*denominator, 0.d0)
     fit%relative_rms = SQRT(residual/reference_norm)
-    inverse_two_pi = 1.d0/(2.d0*ACOS(-1.d0))
-    canonical_alpha = (/1.d0, -1.d0, inverse_two_pi, -inverse_two_pi/)
-    candidate_index = MINLOC(ABS(canonical_alpha - fit%alpha), DIM=1)
+    candidate_index = MINLOC(ABS(canonical_flux_coefficients - fit%alpha), DIM=1)
     fit%convention_id = candidate_index
-    fit%applied_alpha = canonical_alpha(candidate_index)
+    fit%applied_alpha = canonical_flux_coefficients(candidate_index)
     fit%canonical_relative_difference = ABS(fit%alpha - fit%applied_alpha)/ &
          ABS(fit%applied_alpha)
     applied_residual = MAX(reference_norm - 2.d0*fit%applied_alpha*numerator + &
@@ -164,6 +275,7 @@ CONTAINS
          ieee_is_finite(fit%applied_relative_rms) .AND. &
          ieee_is_finite(fit%canonical_relative_difference)
   END SUBROUTINE fit_poloidal_field_scale
+
 
   SUBROUTINE fit_toroidal_current_sign(derived_norm_squared, &
        stored_norm_squared, cross_product, fit)

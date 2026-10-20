@@ -30,10 +30,14 @@ CONTAINS
     ! the time is set to zero here but in case of a restart this value is
     ! overwritten by the loaded solution final time
     time%t = 0.
+    IF (.NOT. time%legacy_input) time%t = time%t_start
+    time%t_target = time%t
 
     ! time step is initialized to dt0.
     dt = time%dt0
     time%dt = dt
+    time%dt_next = dt
+    time%growth = Time_growth_history_type()
 
     ! time count
     time%it = 0
@@ -41,7 +45,9 @@ CONTAINS
 
     ! number of time step of the simulation: if it is a steady state simulation
     ! ndt is set to 1,otherwise the input value is used
-    IF (switch%steady) THEN
+    IF (.NOT. time%legacy_input) THEN
+       nts = 16 ! Initial history capacity; physical stopping uses t_final.
+    ELSEIF (switch%steady) THEN
        nts = 1
     ELSE
        nts = time%nts
@@ -107,10 +113,6 @@ CONTAINS
     ALLOCATE (elmat%S(Neq*Np,Nel))
     ALLOCATE (elmat%fH(Neq*Nfg,Nel))
 
-    IF (switch%ME) THEN
-       ALLOCATE(phys%puff_exp(time%nts))
-    END IF
-
     IF (switch%saveTau) THEN
        ALLOCATE(phys%diff_nn_Vol(Mesh%Nelems*refElPol%NGauss2D))
        ALLOCATE(phys%diff_nn_Fac(Mesh%Nelems*refElPol%Nfaces*refElPol%NGauss1D))
@@ -144,9 +146,6 @@ CONTAINS
     elmat%U0 = 0.d0
     elmat%LL = 0.d0
     elmat%L0 = 0.d0
-    IF (switch%ME) THEN
-       phys%puff_exp = 0.
-    END IF
     IF (switch%saveTau) THEN
        phys%diff_nn_Vol = 0.
        phys%diff_nn_Fac = 0.

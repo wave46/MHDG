@@ -20,7 +20,6 @@ Create `regression_tests/cases/new_case.json`:
     "required": {
       "geometry": "geometry.geo",
       "equilibrium_magnetic_field": "equilibrium.h5",
-      "equilibrium_current_density": "current_density.h5",
       "coarse_mesh": "mesh_adaptive_initial.msh",
       "cold_fixed_time_init_parameters": "param_cold_fixed_time_init.txt",
       "impurity_configuration": "impurity_model_w.nml"
@@ -41,7 +40,7 @@ The key on the left of each mapping is a **role** used by the shared
 [workflows](../workflows.json); the value is the filename in your prepared
 source directory and eventual bundle. Empty workflow objects reuse the shared
 definitions without case-specific changes. `required` means every bundle for
-this case needs all six supplied inputs, including the coarse mesh needed by
+this case needs all five supplied inputs, including the coarse mesh needed by
 `bootstrap_adaptive`. The bundle copies and records that mesh under the
 `coarse_mesh` role; the workflow selects the role. The two `optional`
 reference roles are produced later, so they are absent from the initial source
@@ -61,10 +60,18 @@ Prepare a directory containing your real files under the declared filenames:
 prepared-inputs/
   geometry.geo
   equilibrium.h5
-  current_density.h5
   mesh_adaptive_initial.msh
   param_cold_fixed_time_init.txt
   impurity_model_w.nml
+```
+
+`equilibrium.h5` uses the [single-file equilibrium format](../../src/Models/equilibrium_series.md)
+with one frame for a fixed equilibrium, including Br/Bz and Jtor reference arrays.
+The harness renders its full filename and an empty `jtor_path`. Convert existing
+stationary magnetic/current files before creating the bundle:
+
+```bash
+python tools/convert_equilibrium.py --field old_equilibrium.h5 --jtor old_current.h5 --output prepared-inputs/equilibrium.h5
 ```
 
 The generic `positionFeketeNodesTri2D.h5` comes from the solver build, not
@@ -80,7 +87,7 @@ python -m regression_tests bundle validate /path/to/new-source-bundle
 ```
 
 Base readiness identifies supplied and workflow-producible roles and requires
-all six source files. A workflow-specific readiness request also requires that
+all five source files. A workflow-specific readiness request also requires that
 workflow's reference, so it can report `missing` before golden production.
 The candidate manifest records roles and checksums. Bundle creation and later
 publication refuse existing output directories.

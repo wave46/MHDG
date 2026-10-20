@@ -6,6 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 import shutil
 import tempfile
+import h5py
 
 from .catalog import load_case_definition, workflow_required_roles, load_suite_definition, load_layouts, required_builds, required_case_roles
 from .documents import load_json, write_json_atomic
@@ -16,8 +17,10 @@ from .build import build_solver
 from .bundles import artifact_path, validate_bundle_root, preflight_bundles, load_manifest, series_artifact_ids
 from .compare import compare_completed_run, compare_me_refinement_stop
 from .compare_common import select_candidate
+from .compare_time import accepted_checkpoints, accepted_checkpoint_files
 from .execute import execute_prepared, reusable_outputs
 from .prepare import prepare_run
+from .compare_fixed import required_scalar
 from .suites import run_suite, assess_result, reusable_result
 
 ROOT = Path(__file__).resolve().parent
@@ -38,7 +41,8 @@ def _recipe(case_id, root, catalog):
         canonical = workflow["layout"]
         if canonical not in layouts:
             raise BundleError(f"unknown producer layout: {canonical}")
-        producers.append({"workflow": name, "layout": canonical, "roles": workflow.get("outputs", [])})
+        roles = list(dict.fromkeys([*workflow.get("outputs", []), *workflow.get("checkpoint_outputs", {})]))
+        producers.append({"workflow": name, "layout": canonical, "roles": roles})
     if not producers or len({item["workflow"] for item in producers}) != len(producers):
         raise BundleError("golden producers must be nonempty and unique")
     checks = [{"suite_id": name, **load_suite_definition(name, root / "suites.json", root / "layouts.json",
@@ -134,7 +138,11 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
             write_json_atomic(path, report, "refresh report")
             directory = Path(result["run_directory"])
             for role in producer["roles"]:
-                if case["bundle_files"][role]["media_type"] == "application/x-gmsh":
+                checkpoints = case["workflows"][name].get("checkpoint_outputs", {})
+                if role in checkpoints:
+                    generated[role] = _checkpoint_solution(directory, checkpoints[role])
+                    result.setdefault("generated_checkpoints", {})[role] = _record(generated[role], workspace)
+                elif case["bundle_files"][role]["media_type"] == "application/x-gmsh":
                     try:
                         mesh = _generated_mesh(directory)
                     except HarnessError:
@@ -162,9 +170,7 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
             if summary["status"] != "passed":
                 raise BundleError(f"golden validation failed: {name}")
         validate_bundle_root(candidate, root / "cases", catalog=catalog)
-        report["evidence"] = [_record(item, workspace) for item in sorted(workspace.rglob("*"))
-                              if item.is_file() and not item.is_symlink() and item != path
-                              and (item.suffix in {".json", ".log", ".nml"} or item.name == "param.txt")]
+        report["evidence"] = _refresh_evidence(workspace)
         report["status"] = "ready"
     except (HarnessError, OSError, KeyboardInterrupt) as exc:
         if report["producers"] and report["producers"][-1]["status"] != "passed":
@@ -176,9 +182,39 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
     return path, report
 
 
+def _refresh_evidence(workspace):
+    return [_record(item, workspace) for item in sorted(workspace.rglob("*"))
+            if item.is_file() and not item.is_symlink() and item.name != "refresh.json"
+            and (item.suffix in {".json", ".log", ".nml"} or item.name == "param.txt")]
+
+
 def _solution(directory, selected_output=None):
     return select_candidate(directory, load_json(directory / "run_metadata.json", "run metadata"),
                             Path(selected_output) if selected_output else None)
+
+
+def _checkpoint_solution(directory, selector):
+    """Select a numbered checkpoint or the first accepted interpolated time."""
+    import math
+
+    metadata = load_json(directory / "run_metadata.json", "producer metadata")
+    if selector != "first_intermediate":
+        for path in accepted_checkpoint_files(directory, metadata):
+            with h5py.File(path) as handle:
+                number = required_scalar(handle, "simulation_parameters/time", "Current_time_step_number")
+            if number == selector:
+                return path
+        raise BundleError(f"producer retained no accepted checkpoint at step {selector}: {directory}")
+    plan = load_json(directory / "run_plan.json", "producer plan")
+    frames = plan["moving_equilibrium_inputs"]["equilibrium_times_s"]
+    initial = plan["moving_equilibrium_inputs"]["initial_step"]
+    for path, clock in sorted(accepted_checkpoints(directory, metadata), key=lambda item: item[1][0]):
+        number, seconds = clock[:2]
+        selected = number > initial and not any(
+            math.isclose(seconds, time, rel_tol=1e-10, abs_tol=1e-12) for time in frames)
+        if selected:
+            return path
+    raise BundleError(f"producer retained no accepted checkpoint for {selector}: {directory}")
 
 
 def _generated_mesh(directory):
@@ -306,7 +342,21 @@ def _publication_summary(workspace, report):
                       for item in report["producers"]],
         "validation_suites": [{"suite": item["suite"], "status": item["status"]}
                               for item in report["checks"]],
+        **({"continuations": [_continuation_summary(workspace, item) for item in report["continuations"]]}
+           if report.get("continuations") else {}),
     }
+
+
+def _continuation_summary(workspace, item):
+    if "build" not in item:
+        return item
+    build = load_json(_verify_record(workspace, item["build"]), "continuation build")
+    return {**item, "validation_build": {
+        "build_id": build["build_id"],
+        "repository": {key: build["repository"][key] for key in ("revision", "dirty")
+                       if key in build["repository"]},
+        "artifacts": {name: {key: value[key] for key in ("sha256", "size_bytes")}
+                      for name, value in build["artifacts"].items()}}}
 
 
 def publish(workspace, output, bundle_version, reason, provenance, *, catalog_root=None):
@@ -346,6 +396,8 @@ def publish(workspace, output, bundle_version, reason, provenance, *, catalog_ro
         if validation.get("status") != "passed" or validation.get("convergence", {}).get("passed") is not True:
             raise BundleError("producer has no successful recorded validation")
         for record in item.get("generated_meshes", {}).values():
+            _verify_record(workspace, record)
+        for record in item.get("generated_checkpoints", {}).values():
             _verify_record(workspace, record)
     for check in report["checks"]:
         summary = load_json(artifact_path(workspace, check["summary"], "check summary"), "check summary")

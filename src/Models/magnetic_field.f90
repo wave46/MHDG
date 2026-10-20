@@ -8,6 +8,10 @@
 !*****************************************
 
 MODULE magnetic_field
+  USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
+  USE input_files, ONLY: resolve_input_filename, numbered_stem, numbered_filename, last_numbered_frame
+  USE rectangular_series_io, ONLY: locate_series_time
+  USE equilibrium_series, ONLY: equilibrium_series_t, equilibrium_sample_t
   USE prec_const
   USE globals
   USE MPI_OMP
@@ -18,11 +22,13 @@ MODULE magnetic_field
        magnetic_region_core
   USE magnetic_geometry_state, ONLY: magnetic_equilibrium, &
        magnetic_geometry_cache, poloidal_field_fit, &
-       fit_poloidal_field_scale, reset_magnetic_geometry_state, &
-       compare_restart_geometry, fit_toroidal_current_sign, &
+       fit_poloidal_field_scale, &
+       resolve_flux_coefficients, fit_toroidal_current_scale, &
+       reset_magnetic_geometry_state, &
+       compare_restart_geometry, &
        evaluate_flux_derived_toroidal_current, &
        toroidal_current_from_flux, &
-       toroidal_current_comparison, toroidal_current_comparison_t, &
+       toroidal_current_comparison, &
        field_alpha_plus_one, field_alpha_minus_one, &
        field_alpha_plus_inverse_two_pi, field_alpha_minus_inverse_two_pi
   IMPLICIT NONE
@@ -32,7 +38,248 @@ MODULE magnetic_field
   REAL*8, PARAMETER :: field_alpha_canonical_warning = 0.10d0
   REAL*8, PARAMETER :: jtor_comparison_warning = 0.25d0
   REAL*8, PARAMETER :: stored_jtor_outside_core_warning = 0.01d0
+  TYPE(equilibrium_series_t), SAVE, PRIVATE :: equilibrium_input
+  REAL(float), ALLOCATABLE, SAVE, PRIVATE :: equilibrium_times(:)
+  LOGICAL, SAVE, PRIVATE :: equilibrium_input_open = .FALSE.
+  TYPE, PRIVATE :: control_curve_t
+     CHARACTER(LEN=1000) :: path = ''
+     REAL(float), ALLOCATABLE :: times(:), values(:)
+     REAL(float) :: chord(4) = 0
+  END TYPE control_curve_t
+  TYPE(control_curve_t), SAVE, PRIVATE :: puff_curve, density_curve, xpr_curve, impurity_curve, zeff_curve
 CONTAINS
+
+  SUBROUTINE open_magnetic_input()
+    INTEGER :: ierr
+    CHARACTER(LEN=1000) :: filename, current_path, message
+
+    IF (equilibrium_input_open) RETURN
+    filename = equilibrium_input_filename(input%field_path, 0)
+    CALL equilibrium_input%open(filename, ierr, message)
+    CALL abort_on_equilibrium_error(ierr, message)
+    current_path = ''
+    IF (switch%ohmicsrc) current_path = input%jtor_path
+    IF (equilibrium_input%is_trajectory()) THEN
+       IF (LEN_TRIM(current_path) > 0) &
+            CALL abort_on_equilibrium_error(-1, 'Trajectory Jtor is embedded; leave jtor_path empty')
+    ELSE
+       CALL configure_legacy_equilibrium_input(filename, current_path, ierr, message)
+       CALL abort_on_equilibrium_error(ierr, message)
+    ENDIF
+    CALL configure_magnetic_clock()
+    equilibrium_input_open = .TRUE.
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium provider opened: ', TRIM(input%field_path)
+  END SUBROUTINE open_magnetic_input
+
+  SUBROUTINE configure_legacy_equilibrium_input(filename, current_path, ierr, message)
+    CHARACTER(LEN=*), INTENT(IN) :: filename, current_path
+    INTEGER, INTENT(OUT) :: ierr
+    CHARACTER(LEN=*), INTENT(OUT) :: message
+    INTEGER :: last_frame
+
+    last_frame = 0
+    IF (time%legacy_input) THEN
+       IF (switch%ME) last_frame = time%nts
+    ELSE
+       last_frame = last_numbered_frame(filename)
+    ENDIF
+    ierr = 0
+    message = ''
+    IF (last_frame > 0) THEN
+       IF (time%legacy_input) THEN
+          CALL equilibrium_input%open_numbered(input%field_path, last_frame, ierr, message, current_path)
+       ELSE
+          CALL equilibrium_input%open_numbered(filename, last_frame, ierr, message, current_path)
+       ENDIF
+    ELSEIF (LEN_TRIM(current_path) > 0) THEN
+       CALL equilibrium_input%open(filename, ierr, message, current_path)
+    ENDIF
+  END SUBROUTINE configure_legacy_equilibrium_input
+
+  SUBROUTINE configure_magnetic_clock()
+    INTEGER :: left, right, ierr
+    REAL(float) :: actual_time, weight
+    CHARACTER(LEN=256) :: message
+
+    CALL equilibrium_input%time_points(equilibrium_times)
+    IF (.NOT. time%legacy_input) THEN
+       switch%ME = SIZE(equilibrium_times) > 1
+       IF (time%mode == 'prescribed' .AND. .NOT. switch%ME) &
+            CALL abort_on_equilibrium_error(-1, 'Prescribed time mode requires multiple equilibrium frames')
+       IF (.NOT. switch%ME) RETURN
+       CALL locate_series_time(equilibrium_times, time%t*simpar%refval_time, &
+            left, right, actual_time, weight, ierr, message)
+       CALL abort_on_equilibrium_error(ierr, 'Initial equilibrium time: '//TRIM(message))
+       CALL locate_series_time(equilibrium_times, time%t_final*simpar%refval_time, &
+            left, right, actual_time, weight, ierr, message)
+       CALL abort_on_equilibrium_error(ierr, 'Final equilibrium time: '//TRIM(message))
+    ELSEIF (switch%ME) THEN
+       IF (SIZE(equilibrium_times) < time%nts+1) &
+            CALL abort_on_equilibrium_error(-1, 'ME input must cover initial frame 0000 through nts')
+    ELSE
+       IF (SIZE(equilibrium_times) /= 1) &
+            CALL abort_on_equilibrium_error(-1, 'A multi-frame trajectory requires ME; use one frame for a fixed equilibrium')
+    ENDIF
+  END SUBROUTINE configure_magnetic_clock
+
+  LOGICAL FUNCTION magnetic_field_is_time_dependent()
+    IF (uses_equilibrium_grid()) THEN
+       CALL open_magnetic_input()
+       magnetic_field_is_time_dependent = SIZE(equilibrium_times) > 1
+    ELSE
+       IF (.NOT. time%legacy_input .AND. switch%ME) &
+            CALL abort_on_equilibrium_error(-1, 'Physical-time moving equilibrium requires rectangular-grid input')
+       magnetic_field_is_time_dependent = switch%ME
+    ENDIF
+  END FUNCTION magnetic_field_is_time_dependent
+
+  SUBROUTINE sample_magnetic_input(frame, sample)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    TYPE(equilibrium_sample_t), INTENT(OUT) :: sample
+    INTEGER :: index, ierr
+    REAL(float) :: target_time
+    CHARACTER(LEN=1000) :: message
+
+    CALL open_magnetic_input()
+    target_time = time%t*simpar%refval_time
+    IF (.NOT. time%legacy_input) THEN
+       target_time = time%t_target*simpar%refval_time
+    ELSEIF (switch%ME) THEN
+       index = equilibrium_frame_index(frame)
+       IF (index < 0 .OR. index >= SIZE(equilibrium_times)) &
+            CALL abort_on_equilibrium_error(-1, 'Requested equilibrium frame is outside input coverage')
+       target_time = equilibrium_times(index+1)
+    ENDIF
+    CALL equilibrium_input%sample_at(target_time, sample, ierr, message)
+    CALL abort_on_equilibrium_error(ierr, message)
+  END SUBROUTINE sample_magnetic_input
+
+  SUBROUTINE magnetic_time_points(times)
+    REAL(float), ALLOCATABLE, INTENT(OUT) :: times(:)
+    INTEGER :: frame, ierr
+    INTEGER(HID_T) :: file_id
+    CHARACTER(LEN=1000) :: filename
+
+    IF (uses_equilibrium_grid()) THEN
+       CALL open_magnetic_input()
+       CALL equilibrium_input%time_points(times)
+    ELSE
+       ! Legacy nodal input has the same frame clock without a rectangular grid.
+       IF (.NOT. ALLOCATED(equilibrium_times)) THEN
+          ALLOCATE(equilibrium_times(time%nts+1))
+          DO frame = 0, time%nts
+             filename = equilibrium_input_filename(input%field_path, frame)
+             CALL HDF5_open(filename, file_id, ierr)
+             CALL abort_on_equilibrium_error(ierr, 'Cannot open magnetic frame clock: '//TRIM(filename))
+             CALL HDF5_real_reading(file_id, equilibrium_times(frame+1), 'time', ierr)
+             CALL HDF5_close(file_id)
+             CALL abort_on_equilibrium_error(ierr, 'Cannot read magnetic frame clock: '//TRIM(filename))
+          ENDDO
+       ENDIF
+       times = equilibrium_times
+    ENDIF
+  END SUBROUTINE magnetic_time_points
+
+  SUBROUTINE magnetic_input_position(left, right, fraction)
+    INTEGER, INTENT(OUT) :: left, right
+    REAL(float), INTENT(OUT) :: fraction
+    REAL(float) :: sampled_time
+    INTEGER :: ierr
+    CHARACTER(LEN=256) :: message
+
+    left = -1
+    right = -1
+    fraction = 0
+    ! Output must not open another equilibrium input, including for nodal cases.
+    IF (.NOT. equilibrium_input_open) RETURN
+    CALL locate_series_time(equilibrium_times, time%t*simpar%refval_time, &
+         left, right, sampled_time, fraction, ierr, message)
+    CALL abort_on_equilibrium_error(ierr, message)
+    left = left-1
+    right = right-1
+  END SUBROUTINE magnetic_input_position
+
+  SUBROUTINE abort_on_equilibrium_error(ierr, message)
+    INTEGER, INTENT(IN) :: ierr
+    CHARACTER(LEN=*), INTENT(IN) :: message
+    IF (ierr == 0) RETURN
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium input error: ', TRIM(message)
+    STOP 1
+  END SUBROUTINE abort_on_equilibrium_error
+
+  SUBROUTINE close_magnetic_input()
+    CALL equilibrium_input%clear()
+    IF (ALLOCATED(equilibrium_times)) DEALLOCATE(equilibrium_times)
+    equilibrium_input_open = .FALSE.
+  END SUBROUTINE close_magnetic_input
+
+  LOGICAL FUNCTION uses_equilibrium_grid()
+    uses_equilibrium_grid = (switch%testcase >= 50 .AND. switch%testcase <= 59 .AND. input%field_from_grid) .OR. &
+         (switch%testcase >= 80 .AND. switch%testcase <= 89)
+  END FUNCTION uses_equilibrium_grid
+
+
+  FUNCTION equilibrium_input_filename(path, frame) RESULT(filename)
+    CHARACTER(LEN=*), INTENT(IN) :: path
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    CHARACTER(LEN=1000) :: filename, candidate
+    CHARACTER(LEN=32) :: number
+    INTEGER :: ierr, n, index
+    LOGICAL :: full_filename
+
+    candidate = TRIM(ADJUSTL(path))
+    n = LEN_TRIM(candidate)
+    full_filename = .FALSE.
+    IF (n >= 3) full_filename = candidate(n-2:n) == '.h5'
+    index = 0
+    IF (switch%ME) index = equilibrium_frame_index(frame)
+    WRITE(number, '(I0)') index
+    IF (switch%ME .AND. n > 8) THEN
+       IF (candidate(n-7:n) == '_0000.h5') THEN
+          candidate = candidate(:n-8)//'_'//REPEAT('0', MAX(0, 4-LEN_TRIM(number)))//TRIM(number)//'.h5'
+       ENDIF
+    ENDIF
+    CALL resolve_input_filename(candidate, '.h5', filename, ierr)
+    IF (ierr /= 0 .AND. .NOT. full_filename) THEN
+       candidate = TRIM(ADJUSTL(path))//'_'//REPEAT('0', MAX(0, 4-LEN_TRIM(number)))//TRIM(number)//'.h5'
+       CALL resolve_input_filename(candidate, '.h5', filename, ierr)
+    ENDIF
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium input file not found: ', TRIM(filename)
+       STOP 1
+    ENDIF
+  END FUNCTION equilibrium_input_filename
+
+  SUBROUTINE equilibrium_grid_dimensions(file_id, datasets, ip, jp)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    CHARACTER(LEN=*), INTENT(IN) :: datasets(:)
+    INTEGER, INTENT(OUT) :: ip, jp
+    INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
+    INTEGER :: i, ierr
+
+    DO i = 1, SIZE(datasets)
+       CALL HDF5_dataset_shape(file_id, TRIM(datasets(i)), dimensions, ierr)
+       IF (ierr /= 0) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot read equilibrium dataset shape: ', TRIM(datasets(i))
+          STOP 1
+       ENDIF
+       IF (SIZE(dimensions) /= 2) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium dataset must be rank two: ', TRIM(datasets(i))
+          STOP 1
+       ENDIF
+       IF (i == 1) THEN
+          IF (ANY(dimensions < 2) .OR. ANY(dimensions > INT(HUGE(ip), HSIZE_T))) THEN
+             IF (MPIvar%glob_id == 0) WRITE(6,*) 'Invalid equilibrium grid dimensions: ', dimensions
+             STOP 1
+          ENDIF
+          ip = INT(dimensions(1))
+          jp = INT(dimensions(2))
+       ELSEIF (ANY(dimensions /= [INT(ip, HSIZE_T), INT(jp, HSIZE_T)])) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Equilibrium dataset shape differs from grid: ', TRIM(datasets(i))
+          STOP 1
+       ENDIF
+    ENDDO
+  END SUBROUTINE equilibrium_grid_dimensions
 
   !**********************************************
   ! Allocate storing space for the magnetic field
@@ -60,15 +307,49 @@ CONTAINS
     END IF
   END SUBROUTINE initialize_magnetic_field
 
-  SUBROUTINE load_magnetic_field_Jtor
-      CALL load_magnetic_field()
-      IF (switch%ohmicsrc) CALL set_toroidal_current()
+  SUBROUTINE load_magnetic_field_Jtor(frame)
+      INTEGER, OPTIONAL, INTENT(IN) :: frame
+      CALL load_magnetic_field(frame)
+      IF (switch%ohmicsrc) CALL set_toroidal_current(frame)
+      IF (uses_equilibrium_grid()) CALL report_equilibrium_ranges()
   ENDSUBROUTINE load_magnetic_field_Jtor
+
+  SUBROUTINE report_equilibrium_ranges()
+    REAL*8 :: local_min(4), local_max(4), global_min(4), global_max(4)
+    INTEGER :: count
+#ifdef PARALL
+    INTEGER :: ierr
+#endif
+
+    count = 3
+    local_min(:3) = MINVAL(phys%B, DIM=1)
+    local_max(:3) = MAXVAL(phys%B, DIM=1)
+    IF (switch%ohmicsrc) THEN
+       count = 4
+       local_min(4) = MINVAL(phys%Jtor)
+       local_max(4) = MAXVAL(phys%Jtor)
+    ENDIF
+    ! Shared nodal copies do not affect extrema; no additive ghost contribution.
+#ifdef PARALL
+    CALL MPI_REDUCE(local_min, global_min, count, MPI_REAL8, MPI_MIN, 0, MPI_COMM_WORLD, ierr)
+    CALL MPI_REDUCE(local_max, global_max, count, MPI_REAL8, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+#else
+    global_min(:count) = local_min(:count)
+    global_max(:count) = local_max(:count)
+#endif
+    IF (MPIvar%glob_id /= 0) RETURN
+    WRITE(6,'(A,2ES16.7)') ' Equilibrium Br min/max [T]: ', global_min(1), global_max(1)
+    WRITE(6,'(A,2ES16.7)') ' Equilibrium Bz min/max [T]: ', global_min(2), global_max(2)
+    WRITE(6,'(A,2ES16.7)') ' Equilibrium Bphi min/max [T]: ', global_min(3), global_max(3)
+    IF (switch%ohmicsrc) &
+         WRITE(6,'(A,2ES16.7)') ' Equilibrium Jtor min/max [A/m^2]: ', global_min(4), global_max(4)
+  END SUBROUTINE report_equilibrium_ranges
 
   !**********************************************
   ! Load magnetic field in phys
   !**********************************************
-  SUBROUTINE load_magnetic_field
+  SUBROUTINE load_magnetic_field(frame)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
 
     CALL reset_magnetic_geometry_state()
     phys%B = 0.
@@ -88,12 +369,12 @@ CONTAINS
        ! Magnetic field loaded from file in a cartesian grid
        ! Interpolation is needed
        IF (input%field_from_grid) THEN
-          CALL load_magnetic_field_grid
+          CALL load_magnetic_field_grid(frame)
        ELSE
           IF (MPIvar%glob_id == 0) THEN
              WRITE (6, *) 'WARNING: node-based equilibrium input has no PR03 topology cache; using stored magnetic data.'
           ENDIF
-          CALL load_magnetic_field_nodes
+          CALL load_magnetic_field_nodes(frame)
        ENDIF
 
     CASE (60:69)
@@ -103,12 +384,12 @@ CONTAINS
 
     CASE (70:79)
        ! Magnetic field loaded from file in the mesh nodes
-       CALL load_magnetic_field_nodes
+       CALL load_magnetic_field_nodes(frame)
 
     CASE (80:89)
        ! Magnetic field loaded from file in a cartesian grid
        ! Interpolation is needed
-       CALL load_magnetic_field_grid
+       CALL load_magnetic_field_grid(frame)
 
 
     END SELECT
@@ -233,29 +514,28 @@ CONTAINS
   !***********************************************************************
   ! Magnetic field loaded by a hdf5 file in a cartesian grid
   !***********************************************************************
-  SUBROUTINE load_magnetic_field_grid()
+  SUBROUTINE load_magnetic_field_grid(frame)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
 
 
 
-    INTEGER                           :: i, ierr, ip, jp, ind, k
+    INTEGER                           :: i, ierr, ip, jp, ind, index
 #ifdef TOR3D
     INTEGER                           :: j
 #endif
-    INTEGER(HID_T)                    :: file_id
-    REAL*8, POINTER, DIMENSION(:, :)  :: r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D
+    TYPE(equilibrium_sample_t) :: sample
+    REAL*8, ALLOCATABLE :: flux2D(:,:), Br2D(:,:), Bz2D(:,:), Bphi2D(:,:)
     REAL*8, ALLOCATABLE, DIMENSION(:) :: xvec, yvec
     REAL*8, ALLOCATABLE, DIMENSION(:, :) :: Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D
     REAL*8, ALLOCATABLE :: wall_coordinates(:, :)
     INTEGER, ALLOCATABLE :: wall_faces(:, :)
     REAL*8                            :: x, y
     REAL*8                            :: x_safe, dflux_dx, dflux_dy
-    REAL*8                            :: Br, Bz, Bt, flux, psiSep, dt_ME,t_ME
-    CHARACTER(LEN=1000) :: fname
-    CHARACTER(50)  :: nit
+    REAL*8                            :: Br, Bz, Bt, flux, psiSep
     CHARACTER(LEN=256) :: geometry_message, restart_message
 
     REAL*8                            :: q_cyl, omega,a
-    REAL*8                            :: alpha, fac_2pi_field
+    REAL*8                            :: alpha
     LOGICAL                           :: restart_mismatch
 
 
@@ -268,77 +548,18 @@ CONTAINS
        ENDIF
     END IF
 
-    ! Read file
-    IF (switch%testcase>=50 .AND. switch%testcase<60) THEN
-       ! WEST case
-       ! Dimensions of the file storing the magnetic field for West
-       ip = input%field_dimensions(1)
-       jp = input%field_dimensions(2)
-       !ip = 541
-       !jp = 391
-       IF (switch%ME .EQV. .FALSE.)  THEN !if not a moving equilibrium simulation
-          fname = input%field_path
-       ELSE
-          fname = input%field_path
-          WRITE(nit, "(i10)") INT(time%it + 1)
-          nit = TRIM(ADJUSTL(nit))
-          k = INDEX(nit, " ") -1
-          fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
-       ENDIF
-       IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE(6,*) 'Magnetic field loaded from file: ', TRIM(ADJUSTL(fname))
-       ENDIF
-       CALL HDF5_open(fname, file_id, IERR)
-    ELSEIF (switch%testcase>=80 .AND. switch%testcase<90) THEN
-       ! ITER case
-       IF (switch%ME .EQV. .FALSE.) THEN !if not a moving equilibrium simulation
-          !ip = 513
-          !jp = 257
-          !fname = 'ITER_2008_MagField.h5'
-          fname = 'ITER_135011_0000.h5'
-       ELSE
-          fname = 'B_field_exp/ITER_135011'
-          WRITE(nit, "(i10)") INT(time%it + 1)
-          nit = TRIM(ADJUSTL(nit))
-          k = INDEX(nit, " ") -1
-          fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
-       ENDIF
-       IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE(6,*) 'Magnetic field loaded from file: ', TRIM(ADJUSTL(fname))
-       ENDIF
-       CALL HDF5_open(fname, file_id, IERR)
-       CALL HDF5_integer_reading(file_id, ip, 'ip')
-       CALL HDF5_integer_reading(file_id, jp, 'jp')
-    ENDIF
-
-    ALLOCATE (r2D(ip, jp))
-    ALLOCATE (z2D(ip, jp))
-    ALLOCATE (flux2D(ip, jp))
-    ALLOCATE (Br2D(ip, jp))
-    ALLOCATE (Bz2D(ip, jp))
-    ALLOCATE (Bphi2D(ip, jp))
-    CALL HDF5_array2D_reading(file_id, r2D, 'r2D')
-    CALL HDF5_array2D_reading(file_id, z2D, 'z2D')
-    CALL HDF5_real_reading(file_id, psiSep, 'psiSep')
-    CALL HDF5_array2D_reading(file_id, flux2D, 'flux2D')
-    CALL HDF5_array2D_reading(file_id, Br2D, 'Br2D')
-    CALL HDF5_array2D_reading(file_id, Bz2D, 'Bz2D')
-    CALL HDF5_array2D_reading(file_id, Bphi2D, 'Bphi2D')
-    IF (switch%ME ) THEN
-       CALL HDF5_real_reading(file_id, dt_ME, 'dt')
-       CALL HDF5_real_reading(file_id, t_ME, 'time')
-    ENDIF
-    CALL HDF5_close(file_id)
-
-    ! Apply length scale
-    r2D = r2D/phys%lscale
-    z2D = z2D/phys%lscale
-
-    ! Interpolate
-    ALLOCATE (xvec(jp))
-    ALLOCATE (yvec(ip))
-    xvec = r2D(1, :)
-    yvec = z2D(:, 1)
+    CALL sample_magnetic_input(frame, sample)
+    CALL equilibrium_input%grid(xvec, yvec)
+    xvec = xvec/phys%lscale
+    yvec = yvec/phys%lscale
+    ip = SIZE(yvec)
+    jp = SIZE(xvec)
+    input%field_dimensions = [ip, jp]
+    psiSep = sample%psi_sep
+    CALL MOVE_ALLOC(sample%psi, flux2D)
+    CALL MOVE_ALLOC(sample%br, Br2D)
+    CALL MOVE_ALLOC(sample%bz, Bz2D)
+    CALL MOVE_ALLOC(sample%bphi, Bphi2D)
 
     CALL magnetic_equilibrium%init(xvec, yvec, flux2D, ierr, geometry_message)
     IF (ierr /= 0) THEN
@@ -374,24 +595,15 @@ CONTAINS
     CALL build_bicubic_derivatives(ip, yvec, jp, xvec, Bphi2D, &
          Bphi_dx2D, Bphi_dy2D, Bphi_dxy2D)
 
-    CALL fit_poloidal_field_scale(magnetic_equilibrium, xvec, yvec, Br2D, &
-         Bz2D, simpar%refval_length, poloidal_field_fit)
-    IF (poloidal_field_fit%is_valid) THEN
-       alpha = poloidal_field_fit%applied_alpha
-    ELSE
-       fac_2pi_field = 1.d0
-       IF (input%divide_by_2pi) fac_2pi_field = 2.d0*PI
-       alpha = determine_flux_sign(ip, jp, xvec, yvec, Br2D, Bz2D)/fac_2pi_field
-    ENDIF
-    poloidal_field_fit%applied_alpha = alpha
-    CALL report_field_fit(alpha)
-
     CALL magnetic_geometry_cache%build(magnetic_equilibrium, Mesh%X(:, 1:2), &
          Mesh%T, refElPol%N2D, refElPol%face_nodes, refElPol%N1D)
     IF (.NOT. magnetic_geometry_cache%is_initialized) THEN
        IF (MPIvar%glob_id == 0) WRITE (6, *) 'Magnetic topology cache initialization failed.'
        STOP
     ENDIF
+
+    CALL configure_equilibrium_scales(xvec, yvec, Br2D, Bz2D, sample, frame, alpha)
+    CALL report_field_fit(alpha, ALLOCATED(Br2D))
 
     DO i = 1, Mesh%Nnodes
        x = Mesh%X(i, 1)
@@ -441,37 +653,74 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, phys%Flux2Dmax, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
 #endif
 
-    IF (switch%ME) THEN
-       time%dt_ME = dt_ME
-       time%t_ME = t_ME
+    IF (switch%ME .AND. time%legacy_input) THEN
+       index = equilibrium_frame_index(frame)
+       time%t_ME = sample%time
+       time%dt_ME = 0.d0
+       IF (index > 0) time%dt_ME = equilibrium_times(index+1)-equilibrium_times(index)
     ENDIF
     ! Free memory
-    DEALLOCATE (Br2D, Bz2D, Bphi2D, xvec, yvec)
-    DEALLOCATE (r2D, z2D, flux2D)
-    NULLIFY (r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D)
+    IF (ALLOCATED(Br2D)) DEALLOCATE(Br2D, Bz2D)
+    DEALLOCATE (Bphi2D, xvec, yvec)
+    DEALLOCATE (flux2D)
 
   END SUBROUTINE load_magnetic_field_grid
 
-   REAL*8 FUNCTION determine_flux_sign(ny, nx, r, z, Br2D, Bz2D)
-      INTEGER, INTENT(IN) :: ny, nx
-      REAL*8, INTENT(IN) :: r(nx), z(ny), Br2D(ny, nx), Bz2D(ny, nx)
-      INTEGER :: ii, jj
-      REAL*8 :: score_sign, x_safe, Br_ref, Bz_ref, psi, psi_r, psi_z
+  SUBROUTINE configure_equilibrium_scales(r, z, br, bz, sample, frame, alpha_b)
+    REAL*8, INTENT(IN) :: r(:), z(:)
+    REAL*8, ALLOCATABLE, INTENT(IN) :: br(:,:), bz(:,:)
+    TYPE(equilibrium_sample_t), INTENT(IN) :: sample
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    REAL*8, INTENT(OUT) :: alpha_b
+    REAL*8, ALLOCATABLE :: stored_current(:)
+    REAL*8 :: stats(4), alpha_j
+    INTEGER :: ierr, sample_counts(2)
+    LOGICAL :: has_current, metadata_conflict
 
-      score_sign = 0.d0
-      DO ii = 1, ny
-          DO jj = 1, nx
-               CALL magnetic_equilibrium%evaluate_flux(r(jj), z(ii), psi, psi_r, psi_z)
-               x_safe = MAX(ABS(r(jj)), 1.d-12)
-               Br_ref = -psi_z/x_safe/simpar%refval_length**2
-               Bz_ref = psi_r/x_safe/simpar%refval_length**2
-               score_sign = score_sign + Br_ref*Br2D(ii,jj) + Bz_ref*Bz2D(ii,jj)
-          ENDDO
-      ENDDO
+    IF (ALLOCATED(br)) THEN
+       CALL fit_poloidal_field_scale(magnetic_equilibrium, r, z, br, &
+            bz, simpar%refval_length, poloidal_field_fit)
+    ELSEIF (.NOT. input%compute_from_flux) THEN
+       CALL abort_on_equilibrium_error(-1, 'Stored-field mode requires Br and Bz')
+    ENDIF
+    alpha_b = poloidal_field_fit%applied_alpha
+    IF (.NOT. input%compute_from_flux) RETURN
 
-      determine_flux_sign = 1.d0
-      IF (score_sign < 0.d0) determine_flux_sign = -1.d0
-   END FUNCTION determine_flux_sign
+    stats = 0.d0
+    sample_counts = 0
+    IF (switch%ohmicsrc) THEN
+       ! Use a unit coefficient until both reference fits and metadata are available.
+       CALL derive_toroidal_current_from_flux(1.d0)
+       ALLOCATE(stored_current(SIZE(phys%Jtor)))
+       CALL load_stored_toroidal_current(stored_current, frame, has_current)
+       IF (has_current) THEN
+          CALL toroidal_current_fit_statistics(stored_current, stats, sample_counts)
+          CALL fit_toroidal_current_scale(stats(2), stats(1), stats(3), 1.d0, toroidal_current_comparison)
+       ENDIF
+    ENDIF
+    CALL resolve_flux_coefficients(poloidal_field_fit, toroidal_current_comparison, &
+         switch%ohmicsrc, sample%cocos, alpha_b, alpha_j, metadata_conflict, ierr)
+    CALL abort_on_equilibrium_error(ierr, &
+         'Cannot resolve flux coefficients: provide cocos or usable Br/Bz together with Jtor when current is needed')
+    IF (MPIvar%glob_id == 0) THEN
+       IF (metadata_conflict) WRITE(6,'(A)') &
+            ' WARNING: convention metadata conflicts with selected coefficients; references take precedence over cocos.'
+       IF (switch%ohmicsrc .AND. ABS(ABS(alpha_b)-ABS(alpha_j)) > 1.d-6*ABS(alpha_b)) &
+            WRITE(6,'(A,2ES16.7)') &
+            ' WARNING: Br/Bz and Jtor imply different flux normalizations; retaining their independent coefficients: ', alpha_b, alpha_j
+    ENDIF
+    IF (.NOT. switch%ohmicsrc) RETURN
+    CALL fit_toroidal_current_scale(stats(2), stats(1), stats(3), alpha_b, toroidal_current_comparison)
+    toroidal_current_comparison%applied_alpha = alpha_j
+    toroidal_current_comparison%applied_sign = INT(SIGN(1.d0, alpha_j/alpha_b))
+    toroidal_current_comparison%core_sample_count = sample_counts(1)
+    toroidal_current_comparison%outside_sample_count = sample_counts(2)
+    IF (toroidal_current_comparison%is_valid) &
+         toroidal_current_comparison%stored_outside_core_relative_l2 = SQRT(stats(4)/stats(1))
+    phys%Jtor = alpha_j*phys%Jtor
+    toroidal_current_from_flux = .TRUE.
+  END SUBROUTINE configure_equilibrium_scales
+
 
    SUBROUTINE collect_physical_wall(wall_coordinates, wall_faces)
      REAL*8, ALLOCATABLE, INTENT(OUT) :: wall_coordinates(:, :)
@@ -528,13 +777,12 @@ CONTAINS
      DEALLOCATE(all_faces, keep_face)
    END SUBROUTINE collect_physical_wall
 
-   SUBROUTINE report_field_fit(alpha)
+   SUBROUTINE report_field_fit(alpha, has_reference_field)
      REAL*8, INTENT(IN) :: alpha
+     LOGICAL, INTENT(IN) :: has_reference_field
      CHARACTER(LEN=32) :: topology_name, convention_name
      LOGICAL :: fatal_fit
-     REAL*8 :: inverse_two_pi
 
-     inverse_two_pi = 1.d0/(2.d0*PI)
      fatal_fit = poloidal_field_fit%is_valid .AND. input%compute_from_flux .AND. &
           poloidal_field_fit%applied_relative_rms > field_fit_fatal_rms
      IF (MPIvar%glob_id == 0) THEN
@@ -589,10 +837,14 @@ CONTAINS
            ELSEIF (poloidal_field_fit%applied_relative_rms > field_fit_accepted_rms) THEN
               WRITE (6, *) 'WARNING: poloidal-field fit residual is between 10% and 25%.'
            ENDIF
+        ELSEIF (.NOT. input%compute_from_flux) THEN
+           WRITE(6,'(A)') ' WARNING: no valid poloidal-field scale fit; using stored Br/Bz.'
+        ELSEIF (.NOT. has_reference_field) THEN
+           WRITE(6,'(A,ES24.16)') &
+                ' WARNING: Br/Bz absent; using resolved poloidal scale, without reference comparison: ', alpha
         ELSE
-           WRITE (6, '(A,ES16.7,A,ES16.7)') &
-                ' WARNING: no valid Bpol/psi fit; fallback alpha: ', alpha, &
-                ', 1/(2*pi): ', inverse_two_pi
+           WRITE(6,'(A,ES24.16)') &
+                ' WARNING: Br/Bz fit failed; using resolved poloidal scale, without reference comparison: ', alpha
         ENDIF
         IF (.NOT. input%compute_from_flux) THEN
            WRITE (6, *) &
@@ -605,14 +857,65 @@ CONTAINS
   !***********************************************************************
   ! Magnetic field loaded by a hdf5 file in the nodes !TODO modify for 3D
   !***********************************************************************
-  SUBROUTINE load_magnetic_field_nodes()
+  SUBROUTINE read_global_nodal_array(file_id, dataset, values)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    CHARACTER(LEN=*), INTENT(IN) :: dataset
+    REAL*8, INTENT(OUT) :: values(:)
+    REAL*8, POINTER :: global_values(:)
+    INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
+    INTEGER :: n_global, ierr
+
+    n_global = SIZE(values)
+#ifdef PARALL
+    IF (MPIvar%glob_size > 1) n_global = Mesh%Nno_glob
+#endif
+    CALL HDF5_dataset_shape(file_id, dataset, dimensions, ierr)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot read nodal equilibrium dataset shape: ', TRIM(dataset)
+       STOP 1
+    ENDIF
+    IF (SIZE(dimensions) /= 1) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Nodal equilibrium dataset must be rank one: ', TRIM(dataset)
+       STOP 1
+    ENDIF
+    IF (dimensions(1) /= INT(n_global, HSIZE_T)) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Nodal equilibrium length differs from global mesh: ', TRIM(dataset)
+       STOP 1
+    ENDIF
+#ifdef PARALL
+    IF (MPIvar%glob_size > 1) THEN
+       IF (.NOT. ASSOCIATED(Mesh%loc2glob_nodes)) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Nodal equilibrium needs the global node mapping'
+          STOP 1
+       ENDIF
+       IF (SIZE(Mesh%loc2glob_nodes) /= SIZE(values) .OR. &
+           ANY(Mesh%loc2glob_nodes < 1) .OR. ANY(Mesh%loc2glob_nodes > n_global)) THEN
+          IF (MPIvar%glob_id == 0) WRITE(6,*) 'Nodal equilibrium node mapping does not match the global mesh'
+          STOP 1
+       ENDIF
+    ENDIF
+#endif
+    ALLOCATE(global_values(n_global))
+    CALL HDF5_array1D_reading(file_id, global_values, dataset)
+#ifdef PARALL
+    IF (MPIvar%glob_size > 1) THEN
+       values = global_values(Mesh%loc2glob_nodes)
+    ELSE
+#endif
+       values = global_values
+#ifdef PARALL
+    ENDIF
+#endif
+    DEALLOCATE(global_values)
+  END SUBROUTINE read_global_nodal_array
+
+  SUBROUTINE load_magnetic_field_nodes(frame)
 
 
     USE MPI_OMP, only: MPIvar
-    INTEGER        ::  ierr, k
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    INTEGER        ::  ierr
     INTEGER        ::  i
-    CHARACTER(LEN=1000) :: fname = 'Evolving_equilibrium'
-    CHARACTER(50)  :: npr, nid, nit
     CHARACTER(len=1000) :: fname_complete
     INTEGER(HID_T) :: file_id
     REAL*8, POINTER, DIMENSION(:) :: Br, Bz, Bt, flux
@@ -634,34 +937,18 @@ CONTAINS
     ALLOCATE (Bz(nnodes))
     ALLOCATE (Bt(nnodes))
 
-    IF (switch%ME .EQV. .FALSE.)  THEN !if not a moving equilibrium simulation
-       fname = TRIM(ADJUSTL(input%field_path))
-    ELSE
-       fname = TRIM(ADJUSTL(input%field_path))
-       WRITE(nit, "(i10)") INT(time%it + 1)
-       nit = TRIM(ADJUSTL(nit))
-       k = INDEX(nit, " ") -1
-       fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))
-    ENDIF
-
-
-    IF (MPIvar%glob_size .GT. 1) THEN
-       WRITE (nid, *) MPIvar%glob_id + 1
-       WRITE (npr, *) MPIvar%glob_size
-       fname_complete = TRIM(ADJUSTL(fname))//'_'//TRIM(ADJUSTL(nid))//'_'//TRIM(ADJUSTL(npr))//'.h5'
-    ELSE
-       fname_complete = TRIM(ADJUSTL(fname))//'.h5'
-    END IF
+    fname_complete = equilibrium_input_filename(input%field_path, frame)
     IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE (6, *) 'Magnetic field loaded from file: ', TRIM(ADJUSTL(fname_complete))
     ENDIF
     ! Read file
     CALL HDF5_open(fname_complete, file_id, IERR)
-    CALL HDF5_array1D_reading(file_id, Br, 'Br')
-    CALL HDF5_array1D_reading(file_id, Bz, 'Bz')
-    CALL HDF5_array1D_reading(file_id, Bt, 'Bt')
+    IF (ierr /= 0) STOP 1
+    CALL read_global_nodal_array(file_id, 'Br', Br)
+    CALL read_global_nodal_array(file_id, 'Bz', Bz)
+    CALL read_global_nodal_array(file_id, 'Bt', Bt)
     CALL HDF5_real_reading(file_id, psiSep, 'psiSep')
-    CALL HDF5_array1D_reading(file_id, flux, 'flux')
+    CALL read_global_nodal_array(file_id, 'flux', flux)
     IF (switch%ME ) THEN
        CALL HDF5_real_reading(file_id, dt_ME, 'dt')
        CALL HDF5_real_reading(file_id, t_ME, 'time')
@@ -1142,11 +1429,8 @@ CONTAINS
   END SUBROUTINE calcRippleField
 #endif
 
-  SUBROUTINE set_toroidal_current()
-    REAL*8, ALLOCATABLE :: stored_toroidal_current(:)
-
-    toroidal_current_from_flux = .FALSE.
-    toroidal_current_comparison = toroidal_current_comparison_t()
+  SUBROUTINE set_toroidal_current(frame)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
 
     IF (utils%printint > 0 .AND. MPIvar%glob_id == 0) THEN
        WRITE (6, *) '*************************************************'
@@ -1154,39 +1438,28 @@ CONTAINS
        WRITE (6, *) '*************************************************'
     ENDIF
 
-    IF (input%compute_from_flux .AND. magnetic_equilibrium%is_initialized) THEN
-       CALL derive_toroidal_current_from_flux()
-       toroidal_current_from_flux = .TRUE.
-       ALLOCATE(stored_toroidal_current(SIZE(phys%Jtor)))
-       CALL load_stored_toroidal_current(stored_toroidal_current)
-       CALL fit_and_apply_toroidal_current_sign(stored_toroidal_current)
-       DEALLOCATE(stored_toroidal_current)
+    IF (toroidal_current_from_flux) THEN
+       CALL report_toroidal_current_fit()
     ELSE
        IF (input%compute_from_flux .AND. MPIvar%glob_id == 0) THEN
           WRITE (6, *) &
                'WARNING: no bicubic psi geometry; falling back to stored HDF5 Jtor.'
        ENDIF
-       CALL load_stored_toroidal_current(phys%Jtor)
+       CALL load_stored_toroidal_current(phys%Jtor,frame)
     ENDIF
 
     CALL computeIplasma()
     IF (MPIvar%glob_id == 0) WRITE (6, *) 'I_p =  ', phys%I_p, '[MA]'
   END SUBROUTINE set_toroidal_current
 
-  SUBROUTINE derive_toroidal_current_from_flux()
+  SUBROUTINE derive_toroidal_current_from_flux(alpha)
+    REAL*8, INTENT(IN) :: alpha
     INTEGER :: i, ind
 #ifdef TOR3D
     INTEGER :: j
 #endif
-    REAL*8 :: x, y, jtor_value, alpha
+    REAL*8 :: x, y, jtor_value
     LOGICAL :: is_valid
-
-    alpha = poloidal_field_fit%applied_alpha
-    IF (ABS(alpha) <= TINY(1.d0)) THEN
-       IF (MPIvar%glob_id == 0) WRITE (6, *) &
-            'ERROR: flux-derived Jtor requires the applied poloidal-field alpha.'
-       STOP
-    ENDIF
 
     phys%Jtor = 0.d0
     DO i = 1, Mesh%Nnodes
@@ -1213,89 +1486,32 @@ CONTAINS
 
   END SUBROUTINE derive_toroidal_current_from_flux
 
-  SUBROUTINE load_stored_toroidal_current(jtor_at_nodes)
+  SUBROUTINE load_stored_toroidal_current(jtor_at_nodes, frame, available)
     REAL*8, INTENT(OUT) :: jtor_at_nodes(:)
-    INTEGER        :: i,ierr,ip,jp,ind, k
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    LOGICAL, OPTIONAL, INTENT(OUT) :: available
+    INTEGER        :: i,ierr,ip,jp,ind
 #ifdef TOR3D
     INTEGER        :: j
 #endif
-    INTEGER(HID_T) :: file_id
-
-    CHARACTER(LEN=1000)    :: fname
-    CHARACTER(70)        :: nit
-
-    REAL*8, POINTER, DIMENSION(:,:) :: r2D, z2D, Jtor
+    REAL*8, ALLOCATABLE :: Jtor(:,:)
     REAL*8, ALLOCATABLE, DIMENSION(:) :: xvec, yvec
     REAL*8, ALLOCATABLE, DIMENSION(:,:) :: Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D
-    REAL*8                            :: dt_ME,t_ME
     REAL*8                            :: x,y
-    REAL*8,PARAMETER                  :: tol = 1.e-12
     ! Allocate storing space in phys
     jtor_at_nodes = 0.d0
 
-    ! Read file
-    IF (switch%testcase>=50 .AND. switch%testcase<60) THEN
-       ! WEST case
-       ! Dimensions of the file storing the magnetic field for West
-       ip =  input%jtor_dimensions(1)
-       jp =  input%jtor_dimensions(2)
-       !ip = 541
-       !jp = 391
-       IF(switch%ME .EQV. .FALSE.) THEN !if not a moving equilibrium simulation
-          fname = input%jtor_path
-       ELSE
-          fname = input%jtor_path
-          WRITE(nit, "(i10)") INT(time%it + 1)
-          nit = TRIM(ADJUSTL(nit))
-          k = INDEX(nit, " ") -1
-          fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
-       ENDIF
-       IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE(6,*) 'Toroidal current loaded from file: ', TRIM(ADJUSTL(fname))
-       ENDIF
-       CALL HDF5_open(fname, file_id, IERR)
-    ELSEIF (switch%testcase>=80 .AND. switch%testcase<90) THEN
-       ! ITER case
-       IF(switch%ME .EQV. .FALSE.) THEN !if not a moving equilibrium simulation
-          !fname = 'ITER_2008_MagField.h5'
-          fname = 'ITER_135011_Jtor_0000.h5'
-       ELSE
-          fname = 'B_field_exp/ITER_135011_Jtor'
-          WRITE(nit, "(i10)") INT(time%it + 1)
-          nit = TRIM(ADJUSTL(nit))
-          k = INDEX(nit, " ") -1
-          fname = TRIM(ADJUSTL(fname))//'_'//REPEAT("0", 4 - k)//TRIM(ADJUSTL(nit))//'.h5'
-       ENDIF
-       IF (MPIvar%glob_id .EQ. 0) THEN
-          WRITE(6,*) 'Toroidal current loaded from file: ', TRIM(ADJUSTL(fname))
-       ENDIF
-       CALL HDF5_open(fname, file_id, IERR)
-       CALL HDF5_integer_reading(file_id, ip, 'ip')
-       CALL HDF5_integer_reading(file_id, jp, 'jp')
+    CALL read_current_input(frame, Jtor, xvec, yvec)
+    IF (PRESENT(available)) available = ALLOCATED(Jtor)
+    IF (.NOT. ALLOCATED(Jtor)) THEN
+       IF (PRESENT(available)) RETURN
+       CALL abort_on_equilibrium_error(-1, 'Stored-current mode requires Jtor')
     ENDIF
-
-    ALLOCATE(r2D(ip,jp))
-    ALLOCATE(z2D(ip,jp))
-    ALLOCATE(Jtor(ip,jp))
-
-    CALL HDF5_array2D_reading(file_id,r2D,'r2D')
-    CALL HDF5_array2D_reading(file_id,z2D,'z2D')
-    CALL HDF5_array2D_reading(file_id,Jtor,'Jtor')
-    IF (switch%ME) THEN
-       CALL HDF5_real_reading(file_id, dt_ME, 'dt')
-       CALL HDF5_real_reading(file_id, t_ME, 'time')
-    ENDIF
-    CALL HDF5_close(file_id)
-
-    ! Apply length scale
-    r2D = r2D/phys%lscale
-    z2D = z2D/phys%lscale
-
-    ! Interpolate
-    ALLOCATE(xvec(jp))
-    ALLOCATE(yvec(ip))
-    xvec = r2D(1,:)
-    yvec = z2D(:,1)
+    xvec = xvec/phys%lscale
+    yvec = yvec/phys%lscale
+    ip = SIZE(yvec)
+    jp = SIZE(xvec)
+    input%jtor_dimensions = [ip, jp]
     ALLOCATE(Jtor_dx2D(ip,jp))
     ALLOCATE(Jtor_dy2D(ip,jp))
     ALLOCATE(Jtor_dxy2D(ip,jp))
@@ -1317,30 +1533,66 @@ CONTAINS
 #endif
     ENDDO
 
-    ! check that time is the same
-    IF (switch%ME) THEN
-       IF ((ABS(dt_ME - time%dt_ME) > TOL) .OR. (ABS(t_ME - time%t_ME) > TOL)) THEN
-          WRITE(6,*) 'Time in current and in equilibrium files are different'
-          STOP
-       ENDIF
-    ENDIF
-
-    ! Free memory
-    DEALLOCATE(r2D, z2D, Jtor, xvec, yvec, Jtor_dx2D, Jtor_dy2D, &
-         Jtor_dxy2D)
-    NULLIFY(r2D,z2D,Jtor)
+    DEALLOCATE(Jtor, xvec, yvec, Jtor_dx2D, Jtor_dy2D, Jtor_dxy2D)
 
   END SUBROUTINE load_stored_toroidal_current
 
-  SUBROUTINE fit_and_apply_toroidal_current_sign(stored_toroidal_current)
+  SUBROUTINE read_current_input(frame, jtor, r, z)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    REAL*8, ALLOCATABLE, INTENT(OUT) :: jtor(:,:), r(:), z(:)
+    TYPE(equilibrium_sample_t) :: sample
+
+    IF (uses_equilibrium_grid()) THEN
+       CALL sample_magnetic_input(frame, sample)
+       IF (.NOT. ALLOCATED(sample%jtor)) RETURN
+       CALL equilibrium_input%current_grid(r, z)
+       CALL MOVE_ALLOC(sample%jtor, jtor)
+    ELSE
+       CALL read_legacy_current_input(frame, jtor, r, z)
+    ENDIF
+  END SUBROUTINE read_current_input
+
+  SUBROUTINE read_legacy_current_input(frame, jtor, r, z)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    REAL*8, ALLOCATABLE, INTENT(OUT) :: jtor(:,:), r(:), z(:)
+    REAL*8, ALLOCATABLE :: r2d(:,:), z2d(:,:)
+    INTEGER(HID_T) :: file_id
+    INTEGER :: ierr, ip, jp
+    REAL*8 :: dt_me, t_me
+    CHARACTER(LEN=1000) :: filename
+
+    filename = equilibrium_input_filename(input%jtor_path, frame)
+    CALL HDF5_open(filename, file_id, ierr)
+    CALL abort_on_equilibrium_error(ierr, 'Cannot open legacy current input: '//TRIM(filename))
+    CALL equilibrium_grid_dimensions(file_id, [CHARACTER(LEN=8) :: 'r2D', 'z2D', 'Jtor'], ip, jp)
+    ALLOCATE(r2d(ip,jp), z2d(ip,jp), jtor(ip,jp))
+    CALL HDF5_array2D_reading(file_id, r2d, 'r2D')
+    CALL HDF5_array2D_reading(file_id, z2d, 'z2D')
+    CALL HDF5_array2D_reading(file_id, jtor, 'Jtor')
+    IF (switch%ME) THEN
+       CALL HDF5_real_reading(file_id, dt_me, 'dt')
+       CALL HDF5_real_reading(file_id, t_me, 'time')
+    ENDIF
+    CALL HDF5_close(file_id)
+    r = r2d(1,:)
+    z = z2d(:,1)
+    IF (switch%ME) THEN
+       IF (ABS(dt_me-time%dt_ME) > 1.d-12 .OR. ABS(t_me-time%t_ME) > 1.d-12) &
+            CALL abort_on_equilibrium_error(-1, 'Time in current and in nodal equilibrium files differs')
+    ENDIF
+  END SUBROUTINE read_legacy_current_input
+
+  SUBROUTINE toroidal_current_fit_statistics(stored_toroidal_current, stats, sample_counts)
+    REAL*8, INTENT(OUT) :: stats(4)
+    INTEGER, INTENT(OUT) :: sample_counts(2)
     REAL*8, INTENT(IN) :: stored_toroidal_current(:)
     REAL*8 :: element_coordinates(refElPol%Nnodes2D, 2)
     REAL*8 :: derived_nodes(refElPol%Nnodes2D), stored_nodes(refElPol%Nnodes2D)
     REAL*8 :: derived_gauss(refElPol%NGauss2D), stored_gauss(refElPol%NGauss2D)
     REAL*8 :: jacobian_11(refElPol%NGauss2D), jacobian_12(refElPol%NGauss2D)
     REAL*8 :: jacobian_21(refElPol%NGauss2D), jacobian_22(refElPol%NGauss2D)
-    REAL*8 :: det_jacobian(refElPol%NGauss2D), stats(4), weight
-    INTEGER :: sample_counts(2), iel, igauss
+    REAL*8 :: det_jacobian(refElPol%NGauss2D), weight
+    INTEGER :: iel, igauss
 #ifdef PARALL
     INTEGER :: ierr
 #endif
@@ -1385,23 +1637,19 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, sample_counts, SIZE(sample_counts), &
          MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
-    CALL fit_toroidal_current_sign(stats(2), stats(1), stats(3), &
-         toroidal_current_comparison)
-    toroidal_current_comparison%core_sample_count = sample_counts(1)
-    toroidal_current_comparison%outside_sample_count = sample_counts(2)
+  END SUBROUTINE toroidal_current_fit_statistics
+
+  SUBROUTINE report_toroidal_current_fit()
     IF (.NOT. toroidal_current_comparison%is_valid) THEN
-       IF (MPIvar%glob_id == 0) WRITE (6, '(A)') &
-            ' WARNING: no valid stored-current fit; using raw Ampere-law Jtor sign.'
+       IF (MPIvar%glob_id == 0) WRITE(6,'(A,ES16.7)') &
+            ' WARNING: no valid Jtor reference fit; using resolved current coefficient: ', &
+            toroidal_current_comparison%applied_alpha
        RETURN
     ENDIF
-
-    phys%Jtor = REAL(toroidal_current_comparison%applied_sign, 8)*phys%Jtor
-    toroidal_current_comparison%stored_outside_core_relative_l2 = &
-         SQRT(stats(4)/stats(1))
     IF (MPIvar%glob_id == 0) THEN
-       WRITE (6, '(A,I0,A,F8.3,A)') &
-            ' Jtor convention: ', &
-            toroidal_current_comparison%applied_sign, &
+       WRITE (6, '(A,2ES16.7,A,F8.3,A)') &
+            ' Jtor unconstrained/applied coefficient: ', &
+            toroidal_current_comparison%alpha, toroidal_current_comparison%applied_alpha, &
             '; core RMS vs stored: ', &
             100.d0*toroidal_current_comparison%core_relative_l2, &
             ' %'
@@ -1412,7 +1660,7 @@ CONTAINS
             stored_jtor_outside_core_warning) WRITE (6, '(A)') &
             ' WARNING: stored Jtor outside the detected core exceeds 1% of its core L2 norm.'
     ENDIF
-  END SUBROUTINE fit_and_apply_toroidal_current_sign
+  END SUBROUTINE report_toroidal_current_fit
 
   SUBROUTINE loadMagneticFieldFromExperimentalData()
 
@@ -1584,15 +1832,34 @@ CONTAINS
     END IF
 
 #ifdef NEUTRAL
-    IF (switch%ME .EQV. .FALSE.) THEN
+    IF (time%legacy_input .AND. .NOT. switch%ME) THEN
        IF (MPIvar%glob_id .EQ. 0) THEN
           WRITE(6,*) 'Puff is analytical'
        ENDIF
     ELSE
-       CALL SetParticleSource()
+       ! The initial frame has dt=0. Feedback is first updated for an endpoint,
+       ! before its solve; restart controller history must remain untouched here.
+       IF (time%it == 0) THEN
+          phys%feedback_integral_error = 0.d0
+          phys%feedback_previous_error = 0.d0
+          phys%feedback_integral_error_xpr = 0.d0
+          phys%feedback_previous_error_xpr = 0.d0
+          phys%feedback_derivative_history = Feedback_derivative_history_type()
+          phys%feedback_derivative_history_xpr = Feedback_derivative_history_type()
+          phys%n_li = 0.d0
+       ENDIF
     END IF
 #endif
+    IF (.NOT. time%legacy_input) CALL SetParticleSource(update_feedback=.FALSE.)
   ENDSUBROUTINE initialize_puff
+
+  INTEGER FUNCTION equilibrium_frame_index(frame) RESULT(index)
+    INTEGER, OPTIONAL, INTENT(IN) :: frame
+    ! Default: rebuild the equilibrium of the current state, including remeshing.
+    ! A new advance explicitly requests the next endpoint before incrementing it.
+    index = time%it
+    IF (PRESENT(frame)) index = frame
+  END FUNCTION equilibrium_frame_index
 
 SUBROUTINE read_1D_diffusion_profiles()
    CHARACTER(LEN=1000) :: fname
@@ -1625,300 +1892,272 @@ SUBROUTINE read_1D_diffusion_profiles()
    END IF
 END SUBROUTINE read_1D_diffusion_profiles
 
-SUBROUTINE SetParticleSource()
+SUBROUTINE open_control_series(path, dataset, file_id, n)
+   CHARACTER(LEN=*), INTENT(IN) :: path, dataset
+   INTEGER(HID_T), INTENT(OUT) :: file_id
+   INTEGER, INTENT(OUT) :: n
+   CHARACTER(LEN=1000) :: filename
+   INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:), time_dimensions(:)
+   INTEGER :: ierr
 
-   CHARACTER(LEN=1000) :: fname, fname_density, fname_impurity,fname_xpr_density, fname_zeff
-   REAL*8            :: nli
-   REAL*8, POINTER, DIMENSION(:) :: puff_time, target_density_time, target_density_exp
-   INTEGER           :: puff_len, density_len, impurity_concentration_len,density_xpr_len, zeff_len
+   CALL resolve_input_filename(path, '.h5', filename, ierr)
+   IF (ierr /= 0) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control input file not found: ', TRIM(filename)
+      STOP 1
+   ENDIF
+   CALL HDF5_open(filename, file_id, ierr)
+   IF (ierr /= 0) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot open control input: ', TRIM(filename)
+      STOP 1
+   ENDIF
+   CALL HDF5_dataset_shape(file_id, dataset, dimensions, ierr)
+   IF (ierr == 0) CALL HDF5_dataset_shape(file_id, 'time', time_dimensions, ierr)
+   IF (ierr /= 0) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Cannot read control dataset shape: ', TRIM(filename), ' ', TRIM(dataset)
+      CALL HDF5_close(file_id)
+      STOP 1
+   ENDIF
+   IF (SIZE(dimensions) /= 1 .OR. SIZE(time_dimensions) /= 1) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control values and time must be rank one: ', TRIM(filename)
+      CALL HDF5_close(file_id)
+      STOP 1
+   ENDIF
+   IF (dimensions(1) /= time_dimensions(1)) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control dataset length differs from time: ', TRIM(filename), ' ', TRIM(dataset)
+      CALL HDF5_close(file_id)
+      STOP 1
+   ENDIF
+   IF (dimensions(1) < 2 .OR. dimensions(1) > INT(HUGE(n), HSIZE_T)) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Invalid control series length: ', dimensions(1), ' ', TRIM(filename)
+      CALL HDF5_close(file_id)
+      STOP 1
+   ENDIF
+   n = INT(dimensions(1))
+END SUBROUTINE open_control_series
 
-   NULLIFY(puff_time, target_density_time, target_density_exp)
+SUBROUTINE read_control_curve(curve, path, dataset)
+   TYPE(control_curve_t), INTENT(INOUT) :: curve
+   CHARACTER(LEN=*), INTENT(IN) :: path, dataset
+   INTEGER(HID_T) :: file_id
+   INTEGER :: n, ierr, coordinate
+   CHARACTER(LEN=7), PARAMETER :: chord_names(4) = &
+        [CHARACTER(LEN=7) :: 'x_lower', 'x_upper', 'y_lower', 'y_upper']
 
-   fname = input%puff_path
-   puff_len = input%puff_dimension
-   fname_density = input%target_density_path
-   fname_xpr_density = input%target_density_xpr_path
-   density_len = input%target_density_dimension
-   density_xpr_len = input%target_density_xpr_dimension
-   fname_impurity = input%impurity_concentration_path
-   impurity_concentration_len = input%impurity_concentration_dimension
-   fname_zeff = input%zeff_path
-   zeff_len = input%zeff_dimension
-   
+   IF (curve%path == path .AND. ALLOCATED(curve%times)) RETURN
+   curve = control_curve_t()
+   CALL open_control_series(path, dataset, file_id, n)
+   ALLOCATE(curve%times(n), curve%values(n))
+   CALL HDF5_array1D_reading(file_id, curve%values, dataset, ierr)
+   CALL check_control_read(file_id, path, dataset, ierr)
+   CALL HDF5_array1D_reading(file_id, curve%times, 'time', ierr)
+   CALL check_control_read(file_id, path, 'time', ierr)
+   IF (dataset == 'target_density') THEN
+      DO coordinate = 1, SIZE(chord_names)
+         CALL HDF5_real_reading(file_id, curve%chord(coordinate), TRIM(chord_names(coordinate)), ierr)
+         CALL check_control_read(file_id, path, TRIM(chord_names(coordinate)), ierr)
+      ENDDO
+   ENDIF
+   CALL HDF5_close(file_id)
+   IF (ANY(.NOT. ieee_is_finite(curve%times)) .OR. ANY(.NOT. ieee_is_finite(curve%values)) .OR. &
+       ANY(.NOT. ieee_is_finite(curve%chord)) .OR. ANY(curve%times(2:) <= curve%times(:n-1))) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Invalid control values or timestamps: ', TRIM(path), ' ', TRIM(dataset)
+      STOP 1
+   ENDIF
+   curve%path = path
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control curve loaded: ', TRIM(path), ' ', TRIM(dataset)
+END SUBROUTINE read_control_curve
 
-   ! Allocate storing space in phys (puff for WEST, 403 entries)
-   IF (switch%testcase .GE. 50 .AND. switch%testcase .LE. 59) THEN
-      IF (switch%target_variable .EQ. 0) THEN
-         CALL load_puff_from_file(fname, puff_len)
-         IF (switch%impurity_radiation)THEN
-            CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
+SUBROUTINE check_control_read(file_id, path, dataset, ierr)
+   INTEGER(HID_T), INTENT(IN) :: file_id
+   CHARACTER(LEN=*), INTENT(IN) :: path, dataset
+   INTEGER, INTENT(IN) :: ierr
+
+   IF (ierr == 0) RETURN
+   CALL HDF5_close(file_id)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) &
+        'Control input error: cannot read required dataset ', TRIM(dataset), ' in ', TRIM(path)
+   STOP 1
+END SUBROUTINE check_control_read
+
+SUBROUTINE sample_control_curve(curve, path, dataset, value, n, physical_time)
+   TYPE(control_curve_t), INTENT(INOUT) :: curve
+   CHARACTER(LEN=*), INTENT(IN) :: path, dataset
+   REAL(float), INTENT(OUT) :: value
+   INTEGER, INTENT(OUT) :: n
+   REAL(float), OPTIONAL, INTENT(IN) :: physical_time
+   INTEGER :: left, right, ierr
+   REAL(float) :: target_time, actual_time, weight
+   CHARACTER(LEN=256) :: message
+
+   CALL read_control_curve(curve, path, dataset)
+   n = SIZE(curve%times)
+   target_time = time%t_ME
+   IF (.NOT. time%legacy_input) target_time = time%t_target*simpar%refval_time
+   IF (PRESENT(physical_time)) target_time = physical_time
+   CALL locate_series_time(curve%times, target_time, left, right, actual_time, weight, ierr, message)
+   IF (ierr /= 0) THEN
+      IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control input error: ', TRIM(path), ' ', TRIM(message)
+      STOP 1
+   ENDIF
+   IF (left == right) THEN
+      value = curve%values(left)
+   ELSE
+      value = curve%values(left)*(curve%times(right)-actual_time)/(curve%times(right)-curve%times(left)) + &
+              curve%values(right)*(actual_time-curve%times(left))/(curve%times(right)-curve%times(left))
+   ENDIF
+END SUBROUTINE sample_control_curve
+
+SUBROUTINE clear_control_curves()
+   puff_curve = control_curve_t()
+   density_curve = control_curve_t()
+   xpr_curve = control_curve_t()
+   impurity_curve = control_curve_t()
+   zeff_curve = control_curve_t()
+END SUBROUTINE clear_control_curves
+
+LOGICAL FUNCTION control_file_requested(path)
+   CHARACTER(LEN=*), INTENT(IN) :: path
+   control_file_requested = time%legacy_input .OR. LEN_TRIM(path) > 0
+END FUNCTION control_file_requested
+
+SUBROUTINE SetParticleSource(update_feedback)
+   LOGICAL, OPTIONAL, INTENT(IN) :: update_feedback
+   LOGICAL :: advance_feedback
+
+   advance_feedback = .TRUE.
+   IF (PRESENT(update_feedback)) advance_feedback = update_feedback
+   IF (.NOT. time%legacy_input .OR. (switch%testcase >= 50 .AND. switch%testcase <= 59)) THEN
+      SELECT CASE (switch%target_variable)
+      CASE (0, 2)
+         IF (control_file_requested(input%puff_path)) &
+              CALL load_puff_from_file(input%puff_path, input%puff_dimension)
+         IF (switch%target_variable == 2 .AND. advance_feedback) &
+              CALL adjust_recycling_to_target_density(input%target_density_path, input%target_density_dimension)
+      CASE (1, 3)
+         IF (advance_feedback) &
+              CALL adjust_puff_to_target_density(input%target_density_path, input%target_density_dimension)
+      END SELECT
+      IF (switch%impurity_radiation) THEN
+         IF (switch%target_variable == 3) THEN
+            IF (advance_feedback) &
+                 CALL adjust_impurity_concentration_to_target_density_xpr(input%target_density_xpr_path, &
+                      input%target_density_xpr_dimension)
+         ELSEIF (control_file_requested(input%impurity_concentration_path)) THEN
+            CALL load_impurity_concentration(input%impurity_concentration_path, input%impurity_concentration_dimension)
          ENDIF
-      ELSEIF (switch%target_variable .EQ. 1) THEN
-         CALL adjust_puff_to_target_density(fname_density, density_len)
-         IF (switch%impurity_radiation)THEN
-            CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
-         ENDIF
-      ELSEIF (switch%target_variable .EQ. 2) THEN
-         !We first load the puff from file
-         CALL load_puff_from_file(fname, puff_len)
-         !Then we adjust wall recycling
-         CALL adjust_recycling_to_target_density(fname_density, density_len)
-         IF (switch%impurity_radiation)THEN
-            CALL load_impurity_concentration(fname_impurity, impurity_concentration_len)
-         ENDIF
-      ELSEIF (switch%target_variable .EQ. 3) THEN
-         CALL adjust_puff_to_target_density(fname_density, density_len)
-         IF (switch%impurity_radiation)THEN
-            CALL adjust_impurity_concentration_to_target_density_xpr(fname_xpr_density, density_xpr_len)
-         ENDIF
-         
-      END IF
-      CALL load_zeff(fname_zeff, zeff_len)
-      
-   END IF
-
-   ! ITER puff: linear increase up to nli = 4.00E+19
-   IF (switch%testcase .GE. 80 .AND. switch%testcase .LE. 89) THEN
-       ! Puff feedback: check if central line integrated has reached the target value (4e19 for ITER ohmic)
-       CALL compute_line_integrated_density(MINVAL(Mesh%X(:, 1)), MAXVAL(Mesh%X(:, 1)), 0.5/phys%lscale, 0.5/phys%lscale, nli)
-       CALL adjust_ITER_puff(nli)
-   END IF
+      ENDIF
+      IF (control_file_requested(input%zeff_path)) CALL load_zeff(input%zeff_path, input%zeff_dimension)
+   ENDIF
 
 END SUBROUTINE SetParticleSource
 
 SUBROUTINE load_puff_from_file(fname, puff_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname
-   INTEGER, INTENT(IN) :: puff_len
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: puff_time
-   INTEGER :: puff_time_idx
-   INTEGER :: ierr
+   INTEGER, INTENT(OUT) :: puff_len
 
-   ALLOCATE(puff_time(puff_len))
-   ALLOCATE(phys%puff_exp(puff_len))
-
-   ! Read file
-   CALL HDF5_open(fname, file_id, ierr)
-   CALL HDF5_array1D_reading(file_id, phys%puff_exp, 'puff')
-   CALL HDF5_array1D_reading(file_id, puff_time, 'time')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Puff loaded from file: ', TRIM(ADJUSTL(fname))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of puff
-   puff_time_idx = binarySearch(puff_len, puff_time, time%t_ME, 1e-12)
-   phys%puff = phys%puff_exp(puff_time_idx)*(puff_time(puff_time_idx+1)-time%t_ME)/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx)) + &
-               phys%puff_exp(puff_time_idx+1)*(time%t_ME-puff_time(puff_time_idx))/(puff_time(puff_time_idx+1)-puff_time(puff_time_idx))
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'puff =  ', phys%puff
-   END IF
-   DEALLOCATE(puff_time)
-   NULLIFY(puff_time)
+   CALL sample_control_curve(puff_curve, fname, 'puff', phys%puff, puff_len)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'puff = ', phys%puff
 END SUBROUTINE load_puff_from_file
+
+SUBROUTINE sample_target_density(curve, path, n, target, measured)
+   TYPE(control_curve_t), INTENT(INOUT) :: curve
+   CHARACTER(LEN=*), INTENT(IN) :: path
+   INTEGER, INTENT(OUT) :: n
+   REAL(float), INTENT(OUT) :: target, measured
+
+   CALL sample_control_curve(curve, path, 'target_density', target, n)
+   target = target/2.d0
+   CALL compute_line_integrated_density(curve%chord(1), curve%chord(2), curve%chord(3), curve%chord(4), measured)
+END SUBROUTINE sample_target_density
 
 SUBROUTINE adjust_puff_to_target_density(fname_density, density_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_density
-   INTEGER, INTENT(IN) :: density_len
-   REAL*8 :: x_lower, x_upper, y_lower, y_upper
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
-   INTEGER :: target_density_idx
-   REAL*8 :: target_density, nli
-   INTEGER :: ierr
+   INTEGER, INTENT(OUT) :: density_len
+   REAL(float) :: target, measured
 
-   ALLOCATE(target_density_time(density_len))
-   ALLOCATE(target_density_exp(density_len))
-
-   ! Read file
-   CALL HDF5_open(fname_density, file_id, ierr)
-   CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
-   CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
-   CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
-   CALL HDF5_real_reading(file_id, x_upper, 'x_upper')
-   CALL HDF5_real_reading(file_id, y_lower, 'y_lower')
-   CALL HDF5_real_reading(file_id, y_upper, 'y_upper')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Target density loaded from file: ', TRIM(ADJUSTL(fname_density))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of target density
-   target_density_idx = binarySearch(density_len, target_density_time, time%t_ME, 1e-12)
-   target_density = target_density_exp(target_density_idx)*(target_density_time(target_density_idx+1)-time%t_ME)/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx)) + &
-                    target_density_exp(target_density_idx+1)*(time%t_ME-target_density_time(target_density_idx))/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))
-   target_density = target_density / 2.
-
-   ! Compute line integrated density
-   CALL compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
-
-   ! Adjust puff using feedback
-   CALL adjust_puff_feedback(target_density, nli)
-
-   DEALLOCATE(target_density_time, target_density_exp)
-   NULLIFY(target_density_time, target_density_exp)
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'puff =  ', phys%puff
-   END IF
+   CALL sample_target_density(density_curve, fname_density, density_len, target, measured)
+   CALL adjust_puff_feedback(target, measured)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'puff = ', phys%puff
 END SUBROUTINE adjust_puff_to_target_density
 
 SUBROUTINE adjust_impurity_concentration_to_target_density_xpr(fname_xpr_density, density_xpr_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_xpr_density
-   INTEGER, INTENT(IN) :: density_xpr_len
-   REAL*8 :: x_lower, x_upper, y_lower, y_upper
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
-   INTEGER :: target_density_idx
-   REAL*8 :: target_density, nli
-   INTEGER :: ierr
+   INTEGER, INTENT(OUT) :: density_xpr_len
+   REAL(float) :: target, measured
 
-   ALLOCATE(target_density_time(density_xpr_len))
-   ALLOCATE(target_density_exp(density_xpr_len))
-
-   ! Read file
-   CALL HDF5_open(fname_xpr_density, file_id, ierr)
-   CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
-   CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
-   CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
-   CALL HDF5_real_reading(file_id, x_upper, 'x_upper')
-   CALL HDF5_real_reading(file_id, y_lower, 'y_lower')
-   CALL HDF5_real_reading(file_id, y_upper, 'y_upper')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'X-point target density loaded from file: ', TRIM(ADJUSTL(fname_xpr_density))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of target density
-   target_density_idx = binarySearch(density_xpr_len, target_density_time, time%t_ME, 1e-12)
-   target_density = target_density_exp(target_density_idx)*(target_density_time(target_density_idx+1)-time%t_ME)/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx)) + &
-                    target_density_exp(target_density_idx+1)*(time%t_ME-target_density_time(target_density_idx))/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))
-   target_density = target_density / 2.
-
-   ! Compute line integrated density
-   CALL compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
-
-   ! Adjust impurity concentration using feedback
-   CALL adjust_impurity_concentration_feedback(target_density,nli)
-
-   DEALLOCATE(target_density_time, target_density_exp)
-   NULLIFY(target_density_time, target_density_exp)
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentrations(1)
-   END IF
+   CALL sample_target_density(xpr_curve, fname_xpr_density, density_xpr_len, target, measured)
+   CALL adjust_impurity_concentration_feedback(target, measured)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'impurity_concentration = ', phys%impurity_concentrations(1)
 END SUBROUTINE adjust_impurity_concentration_to_target_density_xpr
 
 SUBROUTINE adjust_recycling_to_target_density(fname_density, density_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_density
-   INTEGER, INTENT(IN) :: density_len
-   REAL*8 :: x_lower, x_upper, y_lower, y_upper
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: target_density_time, target_density_exp
-   INTEGER :: target_density_idx
-   REAL*8 :: target_density, nli
-   INTEGER :: ierr
+   INTEGER, INTENT(OUT) :: density_len
+   REAL(float) :: target, measured
 
-   ALLOCATE(target_density_time(density_len))
-   ALLOCATE(target_density_exp(density_len))
-
-   ! Read file
-   CALL HDF5_open(fname_density, file_id, ierr)
-   CALL HDF5_array1D_reading(file_id, target_density_exp, 'target_density')
-   CALL HDF5_array1D_reading(file_id, target_density_time, 'time')
-   CALL HDF5_real_reading(file_id, x_lower, 'x_lower')
-   CALL HDF5_real_reading(file_id, x_upper, 'x_upper')
-   CALL HDF5_real_reading(file_id, y_lower, 'y_lower')
-   CALL HDF5_real_reading(file_id, y_upper, 'y_upper')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Target density loaded from file: ', TRIM(ADJUSTL(fname_density))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of target density
-   target_density_idx = binarySearch(density_len, target_density_time, time%t_ME, 1e-12)
-   target_density = target_density_exp(target_density_idx)*(target_density_time(target_density_idx+1)-time%t_ME)/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx)) + &
-                    target_density_exp(target_density_idx+1)*(time%t_ME-target_density_time(target_density_idx))/(target_density_time(target_density_idx+1)-target_density_time(target_density_idx))
-   target_density = target_density / 2.
-
-   ! Compute line integrated density
-   CALL compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
-   ! Adjust recycling using feedback
-   CALL adjust_recycling_feedback(target_density, nli)
-
-   DEALLOCATE(target_density_time, target_density_exp)
-   NULLIFY(target_density_time, target_density_exp)
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'recycling =  ', phys%Re
-   END IF
-
+   CALL sample_target_density(density_curve, fname_density, density_len, target, measured)
+   CALL adjust_recycling_feedback(target, measured)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'recycling = ', phys%Re
 END SUBROUTINE adjust_recycling_to_target_density
 
 SUBROUTINE load_impurity_concentration(fname_impurity, impurity_concentration_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_impurity
-   INTEGER, INTENT(IN) :: impurity_concentration_len
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: impurity_concentration_time, impurity_concentration_exp
-   INTEGER :: impurity_concentration_idx
-   REAL*8 :: impurity_concentration
-   INTEGER :: ierr
+   INTEGER, INTENT(OUT) :: impurity_concentration_len
 
-   ALLOCATE(impurity_concentration_time(impurity_concentration_len))
-   ALLOCATE(impurity_concentration_exp(impurity_concentration_len))
-
-   ! Read file
-   CALL HDF5_open(fname_impurity, file_id, ierr)
-   CALL HDF5_array1D_reading(file_id, impurity_concentration_exp, 'impurity_concentration')
-   CALL HDF5_array1D_reading(file_id, impurity_concentration_time, 'time')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Impurity concentration loaded from file: ', TRIM(ADJUSTL(fname_impurity))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of impurity concentration
-   impurity_concentration_idx = binarySearch(impurity_concentration_len, impurity_concentration_time, time%t_ME, 1e-12)
-   impurity_concentration = impurity_concentration_exp(impurity_concentration_idx)*(impurity_concentration_time(impurity_concentration_idx+1)-time%t_ME)/(impurity_concentration_time(impurity_concentration_idx+1)-impurity_concentration_time(impurity_concentration_idx)) + &
-                            impurity_concentration_exp(impurity_concentration_idx+1)*(time%t_ME-impurity_concentration_time(impurity_concentration_idx))/(impurity_concentration_time(impurity_concentration_idx+1)-impurity_concentration_time(impurity_concentration_idx))
-
-   phys%impurity_concentrations(1) = impurity_concentration
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'impurity_concentration =  ', phys%impurity_concentrations(1)
-   END IF
-   DEALLOCATE(impurity_concentration_time, impurity_concentration_exp)
-   NULLIFY(impurity_concentration_time, impurity_concentration_exp)
+   CALL sample_control_curve(impurity_curve, fname_impurity, 'impurity_concentration', &
+        phys%impurity_concentrations(1), impurity_concentration_len)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'impurity_concentration = ', phys%impurity_concentrations(1)
 END SUBROUTINE load_impurity_concentration
 
 SUBROUTINE load_zeff(fname_zeff, zeff_len)
    CHARACTER(LEN=1000), INTENT(IN) :: fname_zeff
-   INTEGER, INTENT(IN) :: zeff_len
-   INTEGER(HID_T) :: file_id
-   REAL*8, POINTER, DIMENSION(:) :: zeff_time, zeff_exp
-   INTEGER :: zeff_idx
-   REAL*8 :: zeff
-   INTEGER :: ierr
+   INTEGER, INTENT(OUT) :: zeff_len
 
-   ALLOCATE(zeff_time(zeff_len))
-   ALLOCATE(zeff_exp(zeff_len))
-
-   ! Read file
-   CALL HDF5_open(fname_zeff, file_id, ierr)
-   CALL HDF5_array1D_reading(file_id, zeff_exp, 'zeff')
-   CALL HDF5_array1D_reading(file_id, zeff_time, 'time')
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Zeff loaded from file: ', TRIM(ADJUSTL(fname_zeff))
-   END IF
-   CALL HDF5_close(file_id)
-
-   ! Linear interpolation of Zeff
-   zeff_idx = binarySearch(zeff_len, zeff_time, time%t_ME, 1e-12)
-   zeff = zeff_exp(zeff_idx)*(zeff_time(zeff_idx+1)-time%t_ME)/(zeff_time(zeff_idx+1)-zeff_time(zeff_idx)) + &
-          zeff_exp(zeff_idx+1)*(time%t_ME-zeff_time(zeff_idx))/(zeff_time(zeff_idx+1)-zeff_time(zeff_idx))
-
-   phys%Zeff = zeff
-   IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6, *) 'Zeff =  ', phys%Zeff
-   END IF
-   DEALLOCATE(zeff_time, zeff_exp)
-   NULLIFY(zeff_time, zeff_exp)
+   CALL sample_control_curve(zeff_curve, fname_zeff, 'zeff', phys%Zeff, zeff_len)
+   IF (MPIvar%glob_id == 0) WRITE(6,*) 'Zeff = ', phys%Zeff
 END SUBROUTINE load_zeff
+
+REAL(float) FUNCTION feedback_timestep() RESULT(dt)
+   dt = time%dt_ME
+   IF (.NOT. time%legacy_input) dt = time%dt*simpar%refval_time
+END FUNCTION feedback_timestep
+
+REAL(float) FUNCTION feedback_derivative(target, measured, history) RESULT(slope)
+   REAL(float), INTENT(IN) :: target, measured
+   TYPE(Feedback_derivative_history_type), INTENT(INOUT) :: history
+   REAL(float) :: sample_time, elapsed, dt
+
+   dt = feedback_timestep()
+   sample_time = time%t*simpar%refval_time
+   slope = 0.d0
+   IF (time%it == 0) history = Feedback_derivative_history_type()
+   IF (history%initialized) THEN
+      elapsed = sample_time-history%measurement_time
+      IF (dt <= 0.d0 .OR. elapsed <= 0.d0) THEN
+         IF (MPIvar%glob_id == 0) WRITE(6,*) 'Feedback requires positive proposed and elapsed measurement intervals'
+         STOP 1
+      ENDIF
+      slope = (target-history%target)/dt - (measured-history%measurement)/elapsed
+   ENDIF
+   history = Feedback_derivative_history_type(target, measured, sample_time, .TRUE.)
+END FUNCTION feedback_derivative
+
+SUBROUTINE reconstruct_feedback_derivative_history(history, previous_error, previous_dt, xpr)
+   TYPE(Feedback_derivative_history_type), INTENT(OUT) :: history
+   REAL(float), INTENT(IN) :: previous_error, previous_dt
+   LOGICAL, INTENT(IN) :: xpr
+   REAL(float) :: target, seconds
+   INTEGER :: n
+
+   seconds = time%t*simpar%refval_time
+   IF (xpr) THEN
+      CALL sample_control_curve(xpr_curve, input%target_density_xpr_path, 'target_density', target, n, seconds)
+   ELSE
+      CALL sample_control_curve(density_curve, input%target_density_path, 'target_density', target, n, seconds)
+   ENDIF
+   target = target/2.d0
+   history = Feedback_derivative_history_type(target, target-previous_error, seconds-previous_dt, .TRUE.)
+END SUBROUTINE reconstruct_feedback_derivative_history
 
 SUBROUTINE compute_line_integrated_density(x_lower, x_upper, y_lower, y_upper, nli)
    REAL*8, INTENT(IN) :: x_lower, x_upper, y_lower, y_upper
@@ -1954,7 +2193,10 @@ END SUBROUTINE compute_line_integrated_density
 
 SUBROUTINE adjust_puff_feedback(target_density, nli)
    REAL*8, INTENT(IN) :: target_density, nli
-   REAL*8 :: control_signal, anti_windup_gain
+   REAL*8 :: control_signal, anti_windup_gain, dt, derivative
+
+   dt = feedback_timestep()
+   derivative = feedback_derivative(target_density, nli, phys%feedback_derivative_history)
 
    IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,*) 'n_li = ', nli, ' [m^-2]'
@@ -1970,11 +2212,11 @@ SUBROUTINE adjust_puff_feedback(target_density, nli)
    ! Calculate the control signal
    control_signal = phys%puff + phys%feedback_propotional_gain * (target_density - nli) + &
                             phys%feedback_integral_gain * phys%feedback_integral_error + &
-                            phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+                            phys%feedback_derivative_gain * derivative
    IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) 'Proportional impact: ', phys%feedback_propotional_gain * (target_density - nli)
       WRITE(6,*) 'Integral impact: ', phys%feedback_integral_gain * phys%feedback_integral_error
-      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * derivative
    END IF
    ! Saturate the control signal
    phys%puff = MAX(control_signal, 0.0)
@@ -1986,7 +2228,7 @@ SUBROUTINE adjust_puff_feedback(target_density, nli)
 
    ! Update the integral error only if the output is not saturated
    IF (phys%puff > 0.0) THEN
-       phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * time%dt_ME
+       phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * dt
    END IF
 
    ! Update the previous error
@@ -1995,7 +2237,10 @@ END SUBROUTINE adjust_puff_feedback
 
 SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
    REAL*8, INTENT(IN) :: target_density, nli
-   REAL*8 :: control_signal, anti_windup_gain
+   REAL*8 :: control_signal, anti_windup_gain, dt, derivative
+
+   dt = feedback_timestep()
+   derivative = feedback_derivative(target_density, nli, phys%feedback_derivative_history_xpr)
 
    IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,*) 'X-point n_li = ', nli, ' [m^-2]'
@@ -2011,11 +2256,11 @@ SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
    ! Calculate the control signal
    control_signal = phys%impurity_concentrations(1) + phys%feedback_propotional_gain_xpr * (target_density - nli) + &
                             phys%feedback_integral_gain_xpr * phys%feedback_integral_error_xpr + &
-                            phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/time%dt_ME
+                            phys%feedback_derivative_gain_xpr * derivative
    IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) 'XPR Proportional impact: ', phys%feedback_propotional_gain_xpr * (target_density - nli)
       WRITE(6,*) 'XPR Integral impact: ', phys%feedback_integral_gain_xpr * phys%feedback_integral_error_xpr
-      WRITE(6,*) 'XPR Derivative impact: ', phys%feedback_derivative_gain_xpr * (target_density - nli - phys%feedback_previous_error_xpr)/time%dt_ME
+      WRITE(6,*) 'XPR Derivative impact: ', phys%feedback_derivative_gain_xpr * derivative
    END IF
 
    ! Saturate the control signal
@@ -2028,7 +2273,7 @@ SUBROUTINE adjust_impurity_concentration_feedback(target_density, nli)
 
    ! Update the integral error only if the output is not saturated
    IF (phys%impurity_concentrations(1) > 0.0) THEN
-       phys%feedback_integral_error_xpr = phys%feedback_integral_error_xpr + (target_density - nli) * time%dt_ME
+       phys%feedback_integral_error_xpr = phys%feedback_integral_error_xpr + (target_density - nli) * dt
    END IF
 
    ! Update the previous error
@@ -2037,7 +2282,10 @@ END SUBROUTINE adjust_impurity_concentration_feedback
 
 SUBROUTINE adjust_recycling_feedback(target_density, nli)
    REAL*8, INTENT(IN) :: target_density, nli
-   REAL*8 :: control_signal, anti_windup_gain
+   REAL*8 :: control_signal, anti_windup_gain, dt, derivative
+
+   dt = feedback_timestep()
+   derivative = feedback_derivative(target_density, nli, phys%feedback_derivative_history)
 
    IF (MPIvar%glob_id .EQ. 0) THEN
        WRITE(6,*) 'n_li = ', nli, ' [m^-2]'
@@ -2053,12 +2301,12 @@ SUBROUTINE adjust_recycling_feedback(target_density, nli)
    IF (MPIvar%glob_id .EQ. 0) THEN
       WRITE(6,*) 'Proportional impact: ', phys%feedback_propotional_gain * (target_density - nli)
       WRITE(6,*) 'Integral impact: ', phys%feedback_integral_gain * phys%feedback_integral_error
-      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+      WRITE(6,*) 'Derivative impact: ', phys%feedback_derivative_gain * derivative
    END IF
    ! Calculate the control signal
    control_signal = phys%Re + phys%feedback_propotional_gain * (target_density - nli) + &
                             phys%feedback_integral_gain * phys%feedback_integral_error + &
-                            phys%feedback_derivative_gain * (target_density - nli - phys%feedback_previous_error)/time%dt_ME
+                            phys%feedback_derivative_gain * derivative
    
    ! Saturate the control signal
    phys%Re = MAX(control_signal, 0.0)
@@ -2070,31 +2318,11 @@ SUBROUTINE adjust_recycling_feedback(target_density, nli)
 
    ! Update the integral error only if the output is not saturated
    IF (phys%Re > 0.0) THEN
-       phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * time%dt_ME
+       phys%feedback_integral_error = phys%feedback_integral_error + (target_density - nli) * dt
    END IF
 
    ! Update the previous error
    phys%feedback_previous_error = target_density - nli
 END SUBROUTINE adjust_recycling_feedback
-
-SUBROUTINE adjust_ITER_puff(nli)
-   REAL*8, INTENT(IN) :: nli
-   REAL*8 :: n_Gw, n_la, a = 2.
-
-   n_la = nli/(8.3659 - 4.04)*simpar%refval_density
-   n_Gw = phys%I_p/(pi*a**2)*10.*simpar%refval_density
-
-   IF (time%it .EQ. 0) THEN
-       phys%puff_exp(time%it+1) = MAX(10.*(phys%puff_slope*n_Gw - n_la), 0.)
-       phys%puff = phys%puff_exp(time%it+1)
-   ELSE
-       phys%puff_exp(time%it+1) = MAX(phys%puff_exp(time%it) + 50.*(2 - SIGN(1.,phys%puff_slope*n_Gw - n_la))*(phys%puff_slope*n_Gw - n_la), 0.)
-       phys%puff = phys%puff_exp(time%it+1)
-   END IF
-
-   IF (MPIvar%glob_id .EQ. 0) THEN
-       WRITE (6, '(" * Puff = ", E10.3, 27X, " *")')  phys%puff
-   END IF
-END SUBROUTINE adjust_ITER_puff
 
 END MODULE Magnetic_field

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import tempfile
 import math
-import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -15,10 +14,11 @@ from .catalog import load_case_definition, workflow_required_roles, load_layout
 from .documents import write_json_direct
 from .config import (bundle_root_from_settings, absolute_setting, solver_executable,
                      runtime_files, selected_mpi_launcher)
-from .bundles import validate_bundle_root, load_manifest, artifact_path, load_field_series
+from .bundles import validate_bundle_root, load_manifest, artifact_path
 from .support import BundleError, IDENTIFIER_RE, utc_now, utc_run_id
 from .parameters import render_parameter_file, read_selected_input_values
 from .files import file_identity
+from .equilibrium import trajectory_times, select_trajectory_frames
 
 
 @dataclass(frozen=True)
@@ -211,7 +211,6 @@ def _case_artifacts(
 COMMON_INPUT_LINKS = {
     "geometry": "geometry.geo",
     "equilibrium_magnetic_field": "equilibrium.h5",
-    "equilibrium_current_density": "current_density.h5",
 }
 
 
@@ -259,29 +258,35 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     if stage is None:
         if workflow.get("reference") in artifacts:
             sources["reference.h5"] = artifacts[workflow["reference"]]
+        if moving and (check := moving.get("restart_check")):
+            sources["restart_reference.h5"] = artifacts[check["reference"]]
     replacements = _parameter_replacements(inputs.run_directory)
     namelists = {"transport_model_path": "input_lst", "impurity_model_path": "input_lst",
                  **workflow.get("parameter_namelists", {}), **(stage or {}).get("parameter_namelists", {})}
     preparation = None
+    omit_parameters = ()
     impurity_paths = {}
     if moving:
         paths, derived, preparation = _prepare_me_fields(staging, inputs, overrides)
+        if preparation.get("time_mode"):
+            omit_parameters = ("me", "tfi")
+            overrides = {key: value for key, value in overrides.items() if key.lower() not in omit_parameters}
         replacements.update(paths)
         overrides = {**{key: value for key, value in overrides.items() if key.lower() not in derived}, **derived}
-        namelists.update(me="switch_lst", nts="time_lst", dt0="time_lst", tfi="time_lst")
-        for name, role in moving.get("controls", {}).items():
-            filename = f"{name}.h5"
-            sources[filename] = artifacts[role]
-            owner = impurity_paths if name == "impurity_concentration" else replacements
-            owner[f"{name}_path"] = inputs.run_directory / "inputs" / filename
-            namelists[f"{name}_path"] = "input_lst"
-        template_paths = read_selected_input_values(artifacts[recipe["parameters"]],
-            {f"{name}_path" for name in ("puff", "target_density", "zeff")})
-        if any(value and key[:-5] not in moving.get("controls", {}) for key, value in template_paths.items()):
-            raise BundleError("ME control paths require declared inputs")
+        namelists.update(me="switch_lst", steady="switch_lst", psdtime="switch_lst",
+                         nts="time_lst", dt0="time_lst", tfi="time_lst")
+        namelists.update({key: "time_lst" for key in (
+            "time_mode", "time_units", "t_start", "t_final", "tis", "dt_min", "dt_max",
+            "dt_reduce_on_failure", "dt_grow_on_easy", "dt_growth_factor", "dt_growth_easy_steps",
+            "newton_predictor", "newton_predictor_rate_limit")})
+        control_sources, control_paths, impurity_paths = _prepare_control_inputs(
+            inputs, recipe, physical=bool(preparation.get("time_mode")))
+        sources.update(control_sources)
+        replacements.update(control_paths)
+        namelists.update({key: "input_lst" for key in control_paths})
     render_parameter_file(
         artifacts[recipe["parameters"]], staging / "param.txt",
-        replacements, overrides, namelists,
+        replacements, overrides, namelists, omit_parameters=omit_parameters,
     )
     switches = read_selected_input_values(
         staging / "param.txt", {"readMeshFromSol", "transport_1d", "impurity_radiation"},
@@ -318,63 +323,174 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
     return overrides, preparation
 
 
+def _prepare_control_inputs(inputs, recipe, *, physical):
+    """Resolve declared schedules; physical recipes use constants for omitted ones."""
+    controls = inputs.workflow["moving_equilibrium"].get("controls", {})
+    sources, paths, impurity_paths = {}, {}, {}
+    if physical:
+        paths = {f"{name}_path": "" for name in ("puff", "target_density", "zeff")}
+        impurity_paths["impurity_concentration_path"] = ""
+    else:
+        template = read_selected_input_values(inputs.artifacts[recipe["parameters"]],
+            {f"{name}_path" for name in ("puff", "target_density", "zeff")})
+        if any(value and key[:-5] not in controls for key, value in template.items()):
+            raise BundleError("ME control paths require declared inputs")
+    for name, role in controls.items():
+        filename = f"{name}.h5"
+        sources[filename] = inputs.artifacts[role]
+        owner = impurity_paths if name == "impurity_concentration" else paths
+        owner[f"{name}_path"] = inputs.run_directory / "inputs" / filename
+    return sources, paths, impurity_paths
+
+
 def _prepare_me_fields(staging, inputs, overrides):
-    """Retimestamp selected pairs; reuse canonical controls and solver interpolation."""
+    """Select initial/endpoint frames into one trajectory at the prescribed dt."""
+    if {key.lower(): value for key, value in overrides.items()}.get("time_mode", "legacy") != "legacy":
+        return _prepare_physical_fields(staging, inputs, overrides)
     import h5py
+    import numpy as np
     from .compare_fixed import required_scalar
     from .support import ComparisonError
 
     moving = inputs.workflow["moving_equilibrium"]
     source = inputs.artifacts[moving["series"]]
-    index = load_field_series(source)
-    dt = moving.get("time_step_s", index["dt_s"])
-    ratio = dt / index["dt_s"]
-    if not math.isfinite(ratio) or ratio < 1 or not math.isclose(ratio, round(ratio), rel_tol=1e-10):
-        raise BundleError("ME timestep must be an integer multiple of canonical dt_s")
-    stride, last = round(ratio), len(index["frames"]) - 1
+    times = trajectory_times(source)
+    dt = moving.get("time_step_s", times[1]-times[0] if len(times) > 1 else 0.)
+    if not math.isfinite(dt) or dt <= 0 or not math.isclose(times[0], 0., abs_tol=1e-12):
+        raise BundleError("ME trajectory requires a positive timestep and initial time zero")
+    last_step = math.floor((times[-1] + 1e-12) / dt)
     values = {key.lower(): value for key, value in overrides.items()}
-    control_dimensions = read_selected_input_values(inputs.artifacts[inputs.workflow["parameters"]],
-        {"puff_dimension", "target_density_dimension", "zeff_dimension"})
-    control_dimensions.update(values)
-    steps = values.get("nts", math.ceil(last / stride))
-    if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= math.ceil(last / stride):
+    steps = values.get("nts", last_step)
+    if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= last_step:
         raise BundleError("ME nts must be an integer within the canonical series duration")
     if {"dt0", "tfi"} & values.keys() or values.get("me") is False:
         raise BundleError("ME timestep determines dt0/tfi and requires me=true")
-    mapping, files = [], {}
-    directory = staging / "inputs/magnetic"
-    directory.mkdir()
+    indices = []
+    for endpoint in np.arange(steps+1)*dt:
+        index = int(np.argmin(abs(times-endpoint)))
+        if not math.isclose(times[index], endpoint, rel_tol=1e-10, abs_tol=1e-12):
+            raise BundleError("ME supplied timestamps must include every prescribed endpoint")
+        indices.append(index)
+    target = staging / "inputs/equilibrium.h5"
     try:
         with h5py.File(inputs.artifacts[inputs.workflow["restart"]]) as handle:
             scale = required_scalar(handle, "simulation_parameters/adimensionalization", "time_scale")
+            # Static bootstraps start a new ME clock; real ME checkpoints keep it.
+            saved_step = (required_scalar(handle, "simulation_parameters/time", "Current_time_step_number")
+                          if "simulation_parameters/time/Current_time_step_number" in handle else 0)
+            saved_me = (required_scalar(handle, "simulation_parameters/switches", "ME")
+                        if "simulation_parameters/switches/ME" in handle else 0)
+            initial_step = saved_step if saved_me or saved_step > 1 else 0
+            if int(initial_step) != initial_step or not 0 <= initial_step < steps:
+                raise BundleError("ME restart step must precede the requested final step")
+            initial_step = int(initial_step)
+            if initial_step:
+                saved_time = required_scalar(handle, "simulation_parameters/time", "Current_time") * scale
+                if not math.isclose(saved_time, initial_step * dt, rel_tol=1e-10, abs_tol=1e-12):
+                    raise BundleError("ME restart time differs from the selected constant timestep sequence")
         if not math.isfinite(scale) or scale <= 0:
             raise BundleError("ME bootstrap time_scale must be positive and finite")
-        for offset in range(steps + 1):
-            canonical = min(offset * stride, last)
-            mapping.append(canonical + 1)
-            for kind, prefix in (("magnetic", "equilibrium"), ("current", "current_density")):
-                target = directory / f"{prefix}_{offset + 1:04d}.h5"
-                shutil.copy2(source.parent / index["frames"][canonical][kind], target)
-                with h5py.File(target, "r+") as handle:
-                    for key, expected, generated in (("time", canonical * index["dt_s"], offset * dt),
-                                                     ("dt", index["dt_s"], dt)):
-                        if (handle[key].dtype.kind != "f" or handle[key].size != 1 or not math.isclose(
-                                required_scalar(handle, "", key), expected, rel_tol=1e-10, abs_tol=1e-12)):
-                            raise BundleError(f"ME field {key} differs from its series: {target.name}")
-                        handle[key][...] = generated
-                files[target.relative_to(staging).as_posix()] = file_identity(target)
-        _check_me_controls(inputs, control_dimensions, (steps - 1) * dt)
+        select_trajectory_frames(source, target, indices)
+        _check_me_controls(inputs, steps * dt)
     except (OSError, KeyError, ValueError, TypeError, IndexError, ComparisonError) as exc:
         raise BundleError(f"cannot prepare ME fields: {exc}") from exc
-    paths = {"field_path": inputs.run_directory / "inputs/magnetic/equilibrium",
-             "jtor_path": inputs.run_directory / "inputs/magnetic/current_density"}
+    paths = {"field_path": inputs.run_directory / "inputs/equilibrium.h5", "jtor_path": ""}
     record = {"source_manifest": file_identity(inputs.bundle_root / "manifest.json"),
-              "time_step_s": dt, "canonical_frames": mapping, "generated_files": files}
+              "time_step_s": dt, "initial_step": initial_step,
+              "canonical_frames": [index+1 for index in indices],
+              "generated_files": {"inputs/equilibrium.h5": file_identity(target)}}
     return paths, {"me": True, "nts": steps, "dt0": dt / scale, "tfi": steps * dt / scale}, record
 
 
-def _check_me_controls(inputs, dimensions, last_load_time):
-    """Check supplied curves against solver load times and declared dimensions."""
+def _prepare_physical_fields(staging, inputs, overrides):
+    """Prepare physical-time inputs without equating accepted steps with frames."""
+    from .support import ComparisonError
+
+    moving = inputs.workflow["moving_equilibrium"]
+    values = {key.lower(): value for key, value in overrides.items()}
+    mode = values["time_mode"]
+    if mode not in {"fixed", "prescribed", "adaptive"}:
+        raise BundleError("unknown physical time_mode")
+    if values.get("time_units", "seconds") != "seconds" or {"dt0", "tfi"} & values.keys():
+        raise BundleError("physical regression recipes use seconds and derive dt0/tfi")
+    start, final = values.get("t_start", 0.), values.get("t_final")
+    dt = moving.get("time_step_s")
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in (start, final, dt)) or not dt > 0 or final <= start:
+        raise BundleError("physical recipes require finite t_start < t_final and positive time_step_s")
+    source = inputs.artifacts[moving["series"]]
+    times = trajectory_times(source)
+    try:
+        initial_step, initial_time = _physical_restart_clock(inputs.artifacts[inputs.workflow["restart"]], start)
+        if (not math.isfinite(initial_step) or initial_step != int(initial_step) or initial_step < 0
+                or not math.isfinite(initial_time) or not start <= initial_time < final):
+            raise BundleError("physical restart must have a nonnegative accepted step and precede t_final")
+        indices = _physical_frame_indices(times, moving, mode, initial_time, final, dt)
+        target = staging / "inputs/equilibrium.h5"
+        select_trajectory_frames(source, target, indices)
+        _check_me_controls(inputs, final, initial_time)
+    except (OSError, KeyError, ValueError, TypeError, IndexError, ComparisonError) as exc:
+        raise BundleError(f"cannot prepare physical-time fields: {exc}") from exc
+    record = {"source_manifest": file_identity(inputs.bundle_root / "manifest.json"),
+              "time_mode": mode, "time_step_s": dt, "initial_step": int(initial_step),
+              "initial_time_s": initial_time, "final_time_s": final,
+              "equilibrium_times_s": [float(times[index]) for index in indices],
+              "canonical_frames": [index+1 for index in indices],
+              "generated_files": {"inputs/equilibrium.h5": file_identity(target)}}
+    paths = {"field_path": inputs.run_directory / "inputs/equilibrium.h5", "jtor_path": ""}
+    derived = {"steady": False, "psdtime": False,
+               "time_units": "seconds", "dt0": dt, "tis": 1}
+    return paths, derived, record
+
+
+def _physical_restart_clock(path, start):
+    """Mirror the solver's steady-seed versus physical-checkpoint classification."""
+    import h5py
+    from .compare_fixed import required_scalar
+
+    with h5py.File(path) as handle:
+        group = "simulation_parameters"
+        def optional(key, default=None):
+            return required_scalar(handle, group, key) if f"{group}/{key}" in handle else default
+        physical = optional("time/Physical_time_evolution")
+        if physical is None:
+            steady, pseudo = optional("switches/steady"), optional("switches/psdtime")
+            physical = (not steady and not pseudo and
+                        (steady is not None and pseudo is not None or optional("switches/ME", 0) != 0))
+        if not physical:
+            return 0, start
+        step = required_scalar(handle, group, "time/Current_time_step_number")
+        seconds = optional("time/Current_time_seconds")
+        if seconds is None:
+            seconds = (required_scalar(handle, group, "time/Current_time") *
+                       required_scalar(handle, group, "adimensionalization/time_scale"))
+        return step, seconds
+
+
+def _physical_frame_indices(times, moving, mode, initial, final, dt):
+    """Select a fixed frame, prescribed cadence, or the full interpolation series."""
+    import numpy as np
+
+    def supplied_frame(time):
+        index = int(np.argmin(abs(times-time)))
+        if not math.isclose(times[index], time, rel_tol=1e-10, abs_tol=1e-12):
+            raise BundleError("requested equilibrium time must select a supplied frame")
+        return index
+    if "equilibrium_time_s" in moving:
+        if mode == "prescribed":
+            raise BundleError("prescribed stepping requires a trajectory, not a fixed equilibrium")
+        return [supplied_frame(moving["equilibrium_time_s"])]
+    if times[0] > initial + 1e-12 or times[-1] < final - 1e-12:
+        raise BundleError("equilibrium trajectory does not cover the physical run")
+    if mode == "prescribed":
+        # Include the bracket above a shortened final interval. Numerical
+        # substeps are interpolated and do not need their own supplied frames.
+        count = math.ceil((final-times[0])/dt - 1e-10)
+        return [supplied_frame(times[0]+number*dt) for number in range(count+1)]
+    return list(range(len(times)))
+
+
+def _check_me_controls(inputs, last_load_time, first_load_time=0.):
+    """Check supplied curves cover the prescribed physical endpoints."""
     import h5py
     from .compare_fixed import required_array
 
@@ -383,12 +499,8 @@ def _check_me_controls(inputs, dimensions, last_load_time):
             times = required_array(handle, "", "time")
             if (times.ndim != 1 or len(times) < 2 or not all(math.isfinite(t) for t in times)
                     or any(a >= b for a, b in zip(times[:-1], times[1:]))
-                    or times[0] > 0 or times[-1] <= last_load_time):
-                raise BundleError("ME control times must bracket all interval-start loads")
-            if name in {"puff", "target_density", "zeff"}:
-                key = f"{name}_dimension"
-                if dimensions.get(key) != len(times):
-                    raise BundleError(f"ME {key} must match its control time count ({len(times)})")
+                    or times[0] > first_load_time + 1e-12 or times[-1] < last_load_time - 1e-12):
+                raise BundleError("ME control times must cover all timestep endpoints")
 
 
 def _parameter_replacements(final_directory: Path) -> dict[str, Path | str]:
@@ -397,7 +509,7 @@ def _parameter_replacements(final_directory: Path) -> dict[str, Path | str]:
         "transport_model_path": inputs / "transport_model.nml",
         "impurity_model_path": inputs / "impurity_model.nml",
         "field_path": inputs / "equilibrium.h5",
-        "jtor_path": inputs / "current_density.h5",
+        "jtor_path": "",
         "geometry_path": inputs / "geometry.geo",
         "save_folder": f"{final_directory / 'outputs'}/",
     }

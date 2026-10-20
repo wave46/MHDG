@@ -110,18 +110,93 @@ two neutral limiters, radiation off, N and N+W impurity radiation, and stored
 magnetic/current fields against its own reference. Limited adds analytical
 initialization and the focused NeutralGamma probe described above.
 
-The separate `moving_equilibrium` bundle supplies a limited restart, one indexed
-canonical magnetic/current series and explicit control curves. Case recipes
-select 80 ms puff feedback (seven advances), a 100 ms refinement-limit stop
-(compare completed step three), and two-advance 80 ms prescribed-puff/recycling
-checks with off-knot controls. These use four final solution references. The
-short puff-feedback MPI1/OMP1 versus MPI4/OMP1 pair needs no additional reference.
-The 100 ms recipe accepts exhaustion of either configured refinement budget
-at advance four, requires the same converged prefix, and records the actual stop
-reason. Other failures remain rejected; divergence-only declarations stay strict.
-`check moving_equilibrium` runs the full pair; `moving_equilibrium_short` and
-`moving_equilibrium_parallel` select the short checks. Field pairs are selected
-and retimed during preparation; the harness does not generate equilibria.
+The separate `moving_equilibrium` bundle supplies a limited restart, one trajectory
+HDF5 containing magnetic/current frames, and explicit control curves. Its checks are:
+
+- `moving_equilibrium`: the unchanged seven-step 80 ms transition to 0.56 s,
+  plus a full discharge from the bootstrap to 0.50 s with prescribed 100 ms
+  targets and temporal recovery.
+  Recovery must reject a trial, save smaller accepted substeps, and reach the
+  original endpoint. A second workflow restarts from the first accepted
+  intermediate checkpoint and compares every replayed checkpoint with the
+  uninterrupted recovery run, including fields, controller state and time/dt.
+- `moving_equilibrium_restart`: restart the 80 ms run at step six and compare
+  repeated step seven with the uninterrupted reference, then continue ten
+  held-input 80 ms steps through step 17 at 1.36 s. This run produces the
+  quasi-steady reference used to initialize the adaptive ramp.
+- `moving_equilibrium_adaptive`: start from the regenerated 1.36 s quasi-steady
+  checkpoint, hold the 0.56 s equilibrium fixed, and follow the supplied density
+  ramp until 2.30 s. Start at 80 ms, allow growth by 1.2 up to 160 ms, and enable
+  guarded Newton prediction. Check that a larger numerical step was actually
+  accepted, that at least one predicted Newton guess reached convergence without
+  fallback, and that the final remaining interval was shorter than the saved dt
+  proposal. These are functional coverage requirements, not speedup or accuracy
+  estimates; there is no hardcoded Newton count or growth schedule. Compare
+  the final fields and controller state with the ramp's own golden. Zeff is fixed
+  at one and impurity concentrations come from the impurity namelist.
+- `moving_equilibrium_short`: retain the two-step prescribed-puff and
+  recycling-feedback checks with off-knot controls for controller refactoring.
+- `moving_equilibrium_parallel`: retain the short puff-feedback MPI1/OMP1 versus
+  MPI4/OMP1 comparison, without another golden reference.
+
+All other ME workflows use MPI4/OMP4. Newton solution files are disabled
+(`saveNR=false`); accepted timestep files remain available. The 80 ms and short
+controller recipes retain legacy stepping with temporal reduction/growth and
+prediction explicitly disabled. The 80 ms recipe keeps seven constant steps to
+0.56 s; the canonical data explicitly holds the 0.50 s equilibrium through
+0.56 s. Preparation copies selected supplied frames into a local
+`inputs/equilibrium.h5`, preserves timestamps and primitive arrays, uses that
+full filename as `field_path`, and leaves `jtor_path` empty.
+
+Physical-time recipes use seconds and `t_final`. Preparation reads the saved
+physical clock independently of the accepted-step number; a steady-state seed
+instead starts at `t_start`. `time_step_s` selects the supplied-frame cadence
+for prescribed recovery and the initial numerical dt for adaptive stepping.
+`equilibrium_time_s` selects one supplied frame for a fixed-field run, preserving
+its three-dimensional trajectory layout with one time sample. Omitted control
+curves clear the local template paths so the namelist values remain constant.
+Supplied curves must cover the actual start and final times; the harness never
+repairs canonical timestamps or extends their coverage.
+
+The case's `acceptance_checks` request observable rejection, growth, prediction,
+intermediate-time restart or final clipping. Ordinary output must contain a
+contiguous sequence of accepted steps with increasing physical time; each saved
+dt must equal the difference between successive timestamps. Step counts may
+exceed supplied frame counts. Failed predictor attempts do not satisfy the
+prediction check, and rejected temporal trials must not appear as accepted saves.
+Final clipping is checked against `Proposed_time_step_seconds` in the preceding
+checkpoint, rather than assuming a smaller last dt proves clipping.
+
+Golden refresh regenerates the complete dependency chain:
+
+1. Full 80 ms producer writes its final reference and step-six checkpoint.
+2. Step-six continuation consumes that new checkpoint, checks the step-seven
+   overlap, and writes the 1.36 s quasi-steady reference.
+3. Full 100 ms producer starts from the bootstrap, recovers failed intervals,
+   reaches 0.50 s, and writes its final reference and an intermediate checkpoint.
+4. Fixed-field adaptive ramp consumes the new quasi-steady output and writes
+   its own final reference. Both short controller producers retain their goldens.
+5. Candidate checks replay the intermediate restart using the new checkpoint
+   and compare every suffix save with a fresh uninterrupted 100 ms run.
+
+`checkpoint_outputs` accepts an embedded accepted-step number or the selector
+`"first_intermediate"`. The latter selects the first accepted time between the
+supplied equilibrium frames, so the recovery checkpoint is independent of how
+many halvings were needed. The refresh dependency preflight excludes stale
+outputs scheduled for regeneration: consumers require their producers to have
+run first. The old failed-prefix output is no longer an input or output role.
+The new bundle needs `ramp_target_density`, `recovery_reference`,
+`recovery_restart` and `ramp_reference` roles. The references and recovery
+checkpoint can be generated by golden refresh; the ramp curve must be supplied
+in its source bundle before launching refresh.
+
+Restart comparisons use the existing cross-layout tolerances for fields and
+controllers, with spatial comparison if meshes differ. They exclude
+`cache_generation` and `equilibrium_generation`, which count process-local
+rebuilds. Full includes all these suites; routine-extended retains the short
+controller and MPI checks. Run the full ME checks for significant changes to
+moving equilibrium, recovery, restart, growth or prediction, rather than every
+small input-wiring edit.
 
 Parallel suites compare serial OMP1 with serial OMP16 for OpenMP, and serial OMP1
 with MPI4×OMP1 for MPI. The diverted short-transport suite additionally compares
@@ -325,11 +400,18 @@ to [layout comparisons](tutorials/02-layout-comparison.md), a
 [cross-case profile](tutorials/04-profile.md), and a
 [real case with an input bundle](tutorials/05-real-case-bundle.md).
 
-Moving-equilibrium workflows can declare an ordered paired field/current
-index using [field-series.schema.json](schemas/field-series.schema.json).
-Bundle creation copies its explicitly listed members; validation checks their
-identities in the existing manifest and verifies membership. Run preparation
-and outcome checks follow separately.
+Production bundles use the [single-file equilibrium format](../src/Models/equilibrium_series.md):
+fixed equilibria have one frame; moving equilibria contain the canonical time series.
+Both include psi, Bphi, Br, Bz, Jtor and psiSep on one shared rectangular R,Z grid.
+Reference-bearing inputs need no COCOS declaration. Bundle validation retains support
+for archived paired-file indexes using [field-series.schema.json](schemas/field-series.schema.json);
+new production run preparation consumes trajectory HDF5 files.
+
+Input-storage candidates can retain existing numerical references. Use
+`check ... --allow-candidate --settings /path/to/candidate/settings.local.json`
+to compare converted inputs against those unchanged goldens. A storage migration
+requires reviewing those comparisons before accepting its bundle; it does not
+require regenerating golden solutions.
 
 `python -m regression_tests suggest --base develop` groups advisory checks for
 changed files; it reads Git and catalogs but executes nothing. Suggestions do

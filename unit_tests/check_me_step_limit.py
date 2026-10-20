@@ -34,17 +34,20 @@ if ROOT.exists():
 ROOT.mkdir()
 (ROOT/'magnetic').mkdir()
 (ROOT/'controls').mkdir()
-for index in [1,2,3,51,52,53,100,101]:
+for index in [0,1,2,3,50,51,52,53,99,100,101]:
     for prefix in ['equilibrium','current_density']:
         destination = ROOT/f'magnetic/{prefix}_{index:04d}.h5'
         shutil.copy2(CASE/f'magnetic/{prefix}_0001.h5',destination)
         with h5py.File(destination,'r+') as f:
-            f['time'][...] = (index-1)*frame_dt
+            f['time'][...] = index*frame_dt
+            f['dt'][...] = frame_dt if index else 0.
 for name in ['target_density','puff','zeff','impurity_concentration']:
     destination = ROOT/f'controls/{name}.h5'
     shutil.copy2(CASE/f'controls/{name}.h5',destination)
     with h5py.File(destination,'r+') as f:
         f[name][...] = f[name][0]
+        # The synthetic step-50/99 restarts also need valid control coverage.
+        f['time'][...] = np.linspace(0., 102*frame_dt, len(f['time']))
 (ROOT/'impurity_model.nml').write_text(
     (CASE/'inputs/impurity_model.nml').read_text().replace(str(CASE/'controls'), str(ROOT/'controls')))
 template = (CASE/'runs/full/param.txt').read_text()
@@ -112,7 +115,7 @@ def execute(name, step, nts, expected_steps, target=0, restart=None):
         assert proc.returncode != 0 and 'outside [0, nts' in output and not actual, result
     else:
         assert proc.returncode == 0 and actual == expected_steps, result
-        expected_frames = ([step+1] + [s+1 for s in expected_steps if s < nts]) if expected_steps else []
+        expected_frames = [step, *expected_steps] if expected_steps else []
         assert frames == expected_frames, result
         assert 'HDF5-DIAG' not in output, result
         if not expected_steps:

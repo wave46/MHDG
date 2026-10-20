@@ -91,6 +91,100 @@ CONTAINS
     CALL H5Fclose_f(file_id, error)
   END SUBROUTINE HDF5_close
 
+  SUBROUTINE HDF5_dataset_shape(file_id, dsetname, dimensions, ierr)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    CHARACTER(LEN=*), INTENT(IN) :: dsetname
+    INTEGER(HSIZE_T), ALLOCATABLE, INTENT(OUT) :: dimensions(:)
+    INTEGER, INTENT(OUT) :: ierr
+    INTEGER(HID_T) :: dataset, dataspace
+    INTEGER(HSIZE_T), ALLOCATABLE :: max_dimensions(:)
+    INTEGER :: rank, error, close_error
+    LOGICAL :: exists
+
+    ierr = -1
+    CALL H5Lexists_f(file_id, TRIM(dsetname), exists, error)
+    IF (error < 0) RETURN
+    IF (.NOT. exists) RETURN
+    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+    IF (error < 0) RETURN
+    CALL H5Dget_space_f(dataset, dataspace, error)
+    IF (error < 0) THEN
+       CALL H5Dclose_f(dataset, close_error)
+       RETURN
+    ENDIF
+    CALL H5Sget_simple_extent_ndims_f(dataspace, rank, error)
+    IF (error >= 0) THEN
+       ALLOCATE(dimensions(rank), max_dimensions(rank))
+       ! HDF5's Fortran interface returns dimensions in Fortran array order.
+       CALL H5Sget_simple_extent_dims_f(dataspace, dimensions, max_dimensions, error)
+       IF (error >= 0) ierr = 0
+    ENDIF
+    CALL H5Sclose_f(dataspace, close_error)
+    CALL H5Dclose_f(dataset, close_error)
+    IF (ierr /= 0 .AND. ALLOCATED(dimensions)) DEALLOCATE(dimensions)
+  END SUBROUTINE HDF5_dataset_shape
+
+  SUBROUTINE HDF5_real_vector_reading(file_id, dsetname, values, ierr)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    CHARACTER(LEN=*), INTENT(IN) :: dsetname
+    REAL(float), ALLOCATABLE, INTENT(OUT) :: values(:)
+    INTEGER, INTENT(OUT) :: ierr
+    INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
+
+    CALL HDF5_dataset_shape(file_id, dsetname, dimensions, ierr)
+    IF (ierr /= 0) RETURN
+    ierr = -1
+    IF (SIZE(dimensions) /= 1) RETURN
+    IF (dimensions(1) < 1 .OR. dimensions(1) > INT(HUGE(1), HSIZE_T)) RETURN
+    ALLOCATE(values(INT(dimensions(1))))
+    CALL HDF5_array1D_reading(file_id, values, dsetname, ierr)
+  END SUBROUTINE HDF5_real_vector_reading
+
+
+  ! Python/HDF5 shape (nframes,n2,n1) is seen by Fortran as (n1,n2,nframes).
+  ! Read one frame into the caller's already allocated (n1,n2) buffer.
+  SUBROUTINE HDF5_frame_reading(file_id, dsetname, frame, values, ierr)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    CHARACTER(LEN=*), INTENT(IN) :: dsetname
+    INTEGER, INTENT(IN) :: frame
+    REAL(float), INTENT(OUT) :: values(:,:)
+    INTEGER, INTENT(OUT) :: ierr
+    INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
+    INTEGER(HSIZE_T) :: memory_dimensions(2), offset(3), count(3)
+    INTEGER(HID_T) :: dataset, file_space, memory_space
+    INTEGER :: close_error
+
+    CALL HDF5_dataset_shape(file_id, dsetname, dimensions, ierr)
+    IF (ierr /= 0) RETURN
+    ierr = -1
+    IF (SIZE(dimensions) /= 3) RETURN
+    memory_dimensions = INT(SHAPE(values), HSIZE_T)
+    IF (ANY(dimensions(:2) /= memory_dimensions)) RETURN
+    IF (frame < 1 .OR. frame > dimensions(3)) RETURN
+    dataset = -1
+    file_space = -1
+    memory_space = -1
+    read_frame: BLOCK
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, ierr)
+      IF (ierr < 0) EXIT read_frame
+      CALL H5Dget_space_f(dataset, file_space, ierr)
+      IF (ierr < 0) EXIT read_frame
+      offset = [0_HSIZE_T, 0_HSIZE_T, INT(frame-1, HSIZE_T)]
+      count = [memory_dimensions, 1_HSIZE_T]
+      CALL H5Sselect_hyperslab_f(file_space, H5S_SELECT_SET_F, offset, count, ierr)
+      IF (ierr < 0) EXIT read_frame
+      CALL H5Screate_simple_f(2, memory_dimensions, memory_space, ierr)
+      IF (ierr < 0) EXIT read_frame
+      CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, values, memory_dimensions, ierr, &
+           mem_space_id=memory_space, file_space_id=file_space)
+    END BLOCK read_frame
+    IF (memory_space >= 0) CALL H5Sclose_f(memory_space, close_error)
+    IF (file_space >= 0) CALL H5Sclose_f(file_space, close_error)
+    IF (dataset >= 0) CALL H5Dclose_f(dataset, close_error)
+  END SUBROUTINE HDF5_frame_reading
+
+
+
   !----------------------------------------
   ! create new group
   !----------------------------------------
@@ -806,27 +900,28 @@ CONTAINS
   !----------------------------------------
   ! HDF5 reading for a real double
   !----------------------------------------
-  SUBROUTINE HDF5_real_reading(file_id, rd, dsetname)
+  SUBROUTINE HDF5_real_reading(file_id, rd, dsetname, ierr)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    REAL(float), INTENT(OUT) :: rd
+    CHARACTER(LEN=*), INTENT(IN) :: dsetname
+    INTEGER, OPTIONAL, INTENT(OUT) :: ierr
+    INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
+    INTEGER(HID_T) :: dataset
+    INTEGER :: error, close_error
 
-
-    INTEGER(HID_T), INTENT(in)  :: file_id   ! file identifier
-    REAL(float), INTENT(out) :: rd
-    CHARACTER(LEN=*), INTENT(in)  :: dsetname  ! dataset name
-
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
-
-    !*** read the integer data to the dataset ***
-    !***  using default transfer properties   ***
-    CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, rd, dim, error)
-
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
+    CALL HDF5_dataset_shape(file_id, dsetname, dimensions, error)
+    IF (error == 0) THEN
+       ! Legacy files use both scalar and one-element array datasets.
+       IF (PRODUCT(dimensions) /= 1) error = -1
+    ENDIF
+    IF (error == 0) THEN
+       CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+       IF (error == 0) THEN
+          CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, rd, [1_HSIZE_T], error)
+          CALL H5Dclose_f(dataset, close_error)
+       ENDIF
+    ENDIF
+    IF (PRESENT(ierr)) ierr = error
   END SUBROUTINE HDF5_real_reading
 
   !----------------------------------------
@@ -892,60 +987,43 @@ CONTAINS
   !----------------------------------------
   ! HDF5 reading for an array 1D
   !----------------------------------------
-  SUBROUTINE HDF5_array1D_reading(file_id, array1D, dsetname)
+  SUBROUTINE HDF5_array1D_reading(file_id, array1D, dsetname, ierr)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    REAL(float), INTENT(OUT) :: array1D(:)
+    CHARACTER(LEN=*), INTENT(IN) :: dsetname
+    INTEGER, OPTIONAL, INTENT(OUT) :: ierr
+    INTEGER(HSIZE_T) :: dimensions(1)
+    INTEGER(HID_T) :: dataset
+    INTEGER :: error, close_error
 
-
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(float), &
-         DIMENSION(:), POINTER    :: array1D
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
-
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-
-    !*** file opening ***
+    dimensions = INT(SHAPE(array1D), HSIZE_T)
     CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
-
-    !*** read the integer data to the dataset ***
-    !***   using default transfer properties  ***
-    DIM(1) = SIZE(array1D, 1)
-    CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array1D, dim, error)
-
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
+    IF (error == 0) THEN
+       CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array1D, dimensions, error)
+       CALL H5Dclose_f(dataset, close_error)
+    ENDIF
+    IF (PRESENT(ierr)) ierr = error
   END SUBROUTINE HDF5_array1D_reading
 
   !----------------------------------------
   ! HDF5 reading for an array 2D
   !----------------------------------------
   SUBROUTINE HDF5_array2D_reading(file_id, array2D, dsetname, ierr)
+    INTEGER(HID_T), INTENT(IN) :: file_id
+    REAL(float), INTENT(OUT) :: array2D(:,:)
+    CHARACTER(LEN=*), INTENT(IN) :: dsetname
+    INTEGER, OPTIONAL, INTENT(OUT) :: ierr
+    INTEGER(HSIZE_T) :: dimensions(2)
+    INTEGER(HID_T) :: dataset
+    INTEGER :: error, close_error
 
-
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(float), &
-         DIMENSION(:, :), POINTER    :: array2D
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
-    INTEGER, OPTIONAL, INTENT(out)   :: ierr ! error flag
-
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(2)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-
-    !*** file opening ***
+    dimensions = INT(SHAPE(array2D), HSIZE_T)
     CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
-
-    !*** read the integer data to the dataset ***
-    !***  using default transfer properties   ***
-    DIM(1) = SIZE(array2D, 1)
-    DIM(2) = SIZE(array2D, 2)
-    CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array2D, dim, error)
+    IF (error == 0) THEN
+       CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array2D, dimensions, error)
+       CALL H5Dclose_f(dataset, close_error)
+    ENDIF
     IF (PRESENT(ierr)) ierr = error
-
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
   END SUBROUTINE HDF5_array2D_reading
 
   !----------------------------------------

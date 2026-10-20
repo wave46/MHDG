@@ -16,9 +16,9 @@ MODULE solve_pastix
       ! integer(kind=pastix_int_t), dimension(:), allocatable :: loc2glob ! Corresponding numbering from local to global
       ! real(kind=c_double),        dimension(:), allocatable :: vals     ! Values stored in the matrix
       ! From here below the variables are PASTIX specific
-      type(pastix_data_t), pointer                      :: pastix_data
+      type(pastix_data_t), pointer                      :: pastix_data => NULL()
 
-      type(spmatrix_t), pointer :: spm      ! Spm format of the matrix
+      type(spmatrix_t), pointer :: spm => NULL() ! Spm format of the matrix
       ! integer                               :: pastix_comm ! MPI communicator used by pastix
       ! pastix_int_t, dimension(:), pointer :: perm => null() ! permutation tabular
       ! pastix_int_t, dimension(:), pointer :: invp => null() ! reverse permutation tabular
@@ -235,12 +235,14 @@ CONTAINS
    !***********************************************
    ! Analysis of matrix with PASTIX
    !***********************************************
-   SUBROUTINE anal_mat_PASTIX(matPASTIX)
+   SUBROUTINE anal_mat_PASTIX(matPASTIX, error_code)
       use matrices_tools, only: dump_CSR
 
       TYPE(PASTIX_STRUC) :: matPASTIX
+      INTEGER, INTENT(OUT) :: error_code
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      error_code = 0
       cks = 0.
 
       if (lssolver%timing) then
@@ -249,9 +251,8 @@ CONTAINS
       end if
 
       call pastix_task_analyze(matPASTIX%pastix_data, matPASTIX%spm, matPASTIX%info)
-      if (matPASTIX%info .ne. 0) then
-         error stop "pastix_task_analyze failed"
-      end if
+      error_code = matPASTIX%info
+      if (error_code .ne. 0) return
 
       if (lssolver%timing) then
          call cpu_time(tpe)
@@ -264,12 +265,14 @@ CONTAINS
    !***********************************************
    ! LU factorization of matrix with PASTIX
    !***********************************************
-   SUBROUTINE LU_mat_pastix(matPASTIX)
+   SUBROUTINE LU_mat_pastix(matPASTIX, error_code)
 
       TYPE(PASTIX_STRUC) :: matPASTIX
+      INTEGER, INTENT(OUT) :: error_code
 
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      error_code = 0
       cks = 0.
 
       if (lssolver%timing) then
@@ -278,9 +281,8 @@ CONTAINS
       end if
 
       call pastix_task_numfact(matPASTIX%pastix_data, matPASTIX%spm, matPASTIX%info)
-      if (matPASTIX%info .ne. 0) then
-         error stop "pastix_task_numfact failed"
-      end if
+      error_code = matPASTIX%info
+      if (error_code .ne. 0) return
 
       if (lssolver%timing) then
          call cpu_time(tpe)
@@ -294,11 +296,13 @@ CONTAINS
    !***********************************************
    ! Solve problem with PASTIX
    !***********************************************
-   SUBROUTINE solve_mat_PASTIX(matPASTIX)
+   SUBROUTINE solve_mat_PASTIX(matPASTIX, error_code)
       TYPE(PASTIX_STRUC) :: matPASTIX
+      INTEGER, INTENT(OUT) :: error_code
 
       real*8  :: tps, tpe
       integer :: cks, clock_rate, cke
+      error_code = 0
       cks = 0.
 
       if (lssolver%timing) then
@@ -308,9 +312,8 @@ CONTAINS
 
       call pastix_task_solve_and_refine( matPASTIX%pastix_data, matPASTIX%spm%nexp, matPASTIX%nrhs, matPASTIX%b, matPASTIX%spm%nexp, matPASTIX%x, matPASTIX%spm%nexp, matPASTIX%info )
       ! call pastix_task_solve( matPASTIX%pastix_data, matPASTIX%spm%nexp, matPASTIX%nrhs, matPASTIX%x, matPASTIX%spm%nexp, matPASTIX%info )
-      if (matPASTIX%info .ne. 0) then
-         error stop "pastix_task_solve failed"
-      end if
+      error_code = matPASTIX%info
+      if (error_code .ne. 0) return
       matPASTIX%rhs = matPASTIX%x(:, 1)
 
       if (lssolver%timing) then
@@ -323,12 +326,14 @@ CONTAINS
 
    SUBROUTINE terminate_mat_PASTIX()
 
-      matPASTIX%spm%colptr = c_null_ptr
-      matPASTIX%spm%rowptr = c_null_ptr
-      matPASTIX%spm%values = c_null_ptr
-      matPASTIX%spm%loc2glob = c_null_ptr
-      call spmExit(matPASTIX%spm)
-      deallocate (matPASTIX%spm)
+      if (associated(matPASTIX%spm)) then
+         matPASTIX%spm%colptr = c_null_ptr
+         matPASTIX%spm%rowptr = c_null_ptr
+         matPASTIX%spm%values = c_null_ptr
+         matPASTIX%spm%loc2glob = c_null_ptr
+         call spmExit(matPASTIX%spm)
+         deallocate (matPASTIX%spm)
+      end if
 
       if (allocated(matPASTIX%x)) then
          deallocate (matPASTIX%x)
@@ -337,7 +342,8 @@ CONTAINS
       end if
 
       !  Destroy the C data structure (Should be last if used to call MPI_Finalize)
-      call pastixFinalize(matPASTIX%pastix_data)
+      if (associated(matPASTIX%pastix_data)) call pastixFinalize(matPASTIX%pastix_data)
+      nullify(matPASTIX%pastix_data)
 
    END SUBROUTINE terminate_mat_PASTIX
 

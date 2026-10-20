@@ -14,6 +14,9 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-adaptivity-estimator
 .PHONY : check-adaptive-checkpoint
 .PHONY : check-divergence-refinement
+.PHONY : check-equilibrium-series
+.PHONY : check-linear-solve-status
+.PHONY : check-bdf-coefficients
 
 all : allseq
 
@@ -50,6 +53,15 @@ clean:
 	$(RM) adaptivity_estimator_check
 	$(RM) adaptive_checkpoint_check
 	$(RM) divergence_refinement_check
+	$(RM) bdf_coefficients_check linear_solve_status_check
+
+# Exercise the internal production routine without building an HDG mesh.
+bdf_coefficients_routine.F : $(SDIR)/HDG/hdg_ComputeJacobian.f90
+	sed -n '/^  SUBROUTINE setTimeIntegrationCoefficients(/,/^  ENDSUBROUTINE setTimeIntegrationCoefficients/p' $< > $@
+
+check-bdf-coefficients : globals.o bdf_coefficients_routine.F
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_bdf_coefficients.f90 globals.o -o bdf_coefficients_check
+	./bdf_coefficients_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_magnetic_topology.f90 interpolation.o magnetic_topology.o -o magnetic_topology_check
@@ -68,7 +80,7 @@ check-transport-taper : interpolation.o magnetic_topology.o transport_models_1d_
 	./transport_taper_check
 
 check-transport-pinch : MHDG
-	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_transport_pinch.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o transport_pinch_check $(LIB)
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_transport_pinch.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o transport_pinch_check $(LIB)
 	python3 ../unit_tests/check_transport_pinch.py ./transport_pinch_check
 
 check-neutral-flux-limiter : neutral_flux_limiter.o
@@ -83,28 +95,36 @@ check-neutral-wall-flux : neutral_wall_physics_check.o globals.o neutral_flux_li
 	./neutral_wall_flux_check
 
 check-neutral-wall-input : MHDG
-	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_neutral_wall_input.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o neutral_wall_input_check $(LIB)
+	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_neutral_wall_input.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o neutral_wall_input_check $(LIB)
 	python3 ../unit_tests/check_neutral_wall_input.py ./neutral_wall_input_check
 
 check-neutral-wall-diagnostics : MHDG
-	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_neutral_wall_diagnostics.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o neutral_wall_diagnostics_check $(LIB)
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_neutral_wall_diagnostics.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o neutral_wall_diagnostics_check $(LIB)
 	python3 ../unit_tests/check_neutral_wall_diagnostics.py ./neutral_wall_diagnostics_check
 
+check-equilibrium-series : equilibrium_series.o heating_series.o
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_equilibrium_series.f90 equilibrium_series.o heating_series.o rectangular_series_io.o HDF5_io.o input_files.o prec_const.o -o equilibrium_series_check $(LIB)
+	python3 ../unit_tests/check_equilibrium_series.py ./equilibrium_series_check
+
 check-me-restart : MHDG
-	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_me_restart.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o me_restart_check $(LIB)
-	python3 ../unit_tests/check_me_restart.py ./me_restart_check
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_me_restart.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o me_restart_check $(LIB)
+	python3 ../unit_tests/check_me_restart.py ./me_restart_check $(MODE)
 
 check-adaptivity-estimator : MHDG
-	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_adaptivity_estimator.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o adaptivity_estimator_check $(LIB)
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_adaptivity_estimator.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o adaptivity_estimator_check $(LIB)
 	python3 ../unit_tests/check_adaptivity_estimator.py ./adaptivity_estimator_check
 
 check-adaptive-checkpoint : MHDG
-	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_adaptive_checkpoint.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o adaptive_checkpoint_check $(LIB)
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_adaptive_checkpoint.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o adaptive_checkpoint_check $(LIB)
 	OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 ./adaptive_checkpoint_check
 
 check-divergence-refinement : MHDG
-	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_divergence_refinement.f90 $(filter-out MHDG.o Convergence.o %_check.o,$(wildcard *.o)) -o divergence_refinement_check $(LIB)
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_divergence_refinement.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o divergence_refinement_check $(LIB)
 	python3 ../unit_tests/check_divergence_refinement.py ./divergence_refinement_check $(MODE)
+
+check-linear-solve-status : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_linear_solve_status.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o linear_solve_status_check $(LIB)
+	OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 ./linear_solve_status_check
 
 include Make.inc/build_provenance.mk
 
@@ -189,8 +209,8 @@ balance_diagnostics_output.o : balance_diagnostics_output.F balance_diagnostics.
 magnetic_field.F : $(SDIR)/Models/magnetic_field.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-magnetic_field.o : magnetic_field.F globals.o prec_const.o HDF5_io.o MPI_OMP.o interpolation.o magnetic_topology.o magnetic_geometry_state.o
-	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
+magnetic_field.o : magnetic_field.F globals.o prec_const.o HDF5_io.o MPI_OMP.o interpolation.o magnetic_topology.o magnetic_geometry_state.o input_files.o equilibrium_series.o rectangular_series_io.o
+	$(FC) -c $(FCFLAGS) -fno-finite-math-only $(INC) $< -o $@
 
 magnetic_topology.F : $(SDIR)/Models/magnetic_topology.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
@@ -204,9 +224,25 @@ magnetic_geometry_state.F : $(SDIR)/Models/magnetic_geometry_state.f90
 magnetic_geometry_state.o : magnetic_geometry_state.F magnetic_topology.o prec_const.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
+equilibrium_series.F : $(SDIR)/Models/equilibrium_series.f90
+	$(CMP) -s $< $@ || $(CP) -f $< $@
+
+equilibrium_series.o : equilibrium_series.F rectangular_series_io.o HDF5_io.o input_files.o prec_const.o
+	$(FC) -c $(FCFLAGS) $(INC) -fno-fast-math $< -o $@
+
+rectangular_series_io.F : $(SDIR)/InOut/rectangular_series_io.f90
+	$(CMP) -s $< $@ || $(CP) -f $< $@
+rectangular_series_io.o : rectangular_series_io.F HDF5_io.o input_files.o prec_const.o
+	$(FC) -c $(FCFLAGS) $(INC) -fno-fast-math $< -o $@
+
+heating_series.F : $(SDIR)/Models/heating_series.f90
+	$(CMP) -s $< $@ || $(CP) -f $< $@
+heating_series.o : heating_series.F rectangular_series_io.o HDF5_io.o input_files.o prec_const.o
+	$(FC) -c $(FCFLAGS) $(INC) -fno-fast-math $< -o $@
+
 external_heating.F : $(SDIR)/Models/external_heating.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
-external_heating.o : external_heating.F globals.o inout.o prec_const.o HDF5_io.o MPI_OMP.o interpolation.o
+external_heating.o : external_heating.F globals.o prec_const.o MPI_OMP.o interpolation.o heating_series.o input_files.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 #transport_coefficient_map.F : $(SDIR)/Models/transport_coefficient_map.f90
@@ -214,6 +250,12 @@ external_heating.o : external_heating.F globals.o inout.o prec_const.o HDF5_io.o
 
 #transport_coefficient_map.o : transport_coefficient_map.F globals.o
 #	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
+
+input_files.F : $(SDIR)/InOut/input_files.f90
+	$(CMP) -s $< $@ || $(CP) -f $< $@
+
+input_files.o : input_files.F
+	$(FC) -c $(FCFLAGS) $(INC) $< -o $@
 
 HDF5_io.F : $(SDIR)/InOut/HDF5_io.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
@@ -224,7 +266,7 @@ HDF5_io.o : HDF5_io.F prec_const.o
 gmsh_io.F : $(SDIR)/InOut/gmsh_io.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-gmsh_io.o : gmsh_io.F reference_element.o MPI_OMP.o HDF5_io.o PrintUtils.o
+gmsh_io.o : gmsh_io.F reference_element.o MPI_OMP.o HDF5_io.o PrintUtils.o input_files.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 matrices_tools.F : $(SDIR)/LinearAlgebra/matrices_tools.f90
@@ -266,8 +308,8 @@ LinearAlgebra.o : LinearAlgebra.F
 inout.F : $(SDIR)/InOut/inout.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-inout.o : inout.F $(BUILD_PROVENANCE_OBJECT) HDF5_io.o flux_surface_transport_data.o transport_models_1d.o globals.o PrintUtils.o LinearAlgebra.o gmsh_io.o MPI_OMP.o Communications.o magnetic_geometry_state.o magnetic_topology.o physics.o neutral_flux_limiter.o balance_diagnostics.o
-	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
+inout.o : inout.F time_stepping.o magnetic_field.o $(BUILD_PROVENANCE_OBJECT) HDF5_io.o flux_surface_transport_data.o transport_models_1d.o globals.o PrintUtils.o LinearAlgebra.o gmsh_io.o MPI_OMP.o Communications.o magnetic_geometry_state.o magnetic_topology.o physics.o neutral_flux_limiter.o balance_diagnostics.o input_files.o
+	$(FC) -c $(FCFLAGS) -fno-finite-math-only $(INC)  $< -o $@
 
 Debug.F : $(SDIR)/Utils/Debug.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
@@ -412,10 +454,22 @@ analytical.F : $(SDIR)/Models/$(RMDL)/analytical.f90
 analytical.o : analytical.F globals.o physics.o prec_const.o PrintUtils.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
+time_stepping.F : $(SDIR)/HDG/time_stepping.f90
+	$(CMP) -s $< $@ || $(CP) -f $< $@
+
+time_stepping.o : time_stepping.F globals.o rectangular_series_io.o
+	$(FC) -c $(FCFLAGS) $(INC) $< -o $@
+
+newton_predictor.F : $(SDIR)/HDG/newton_predictor.f90
+	$(CMP) -s $< $@ || $(CP) -f $< $@
+
+newton_predictor.o : newton_predictor.F
+	$(FC) -c $(FCFLAGS) $(INC) $< -o $@
+
 initialization.F : $(SDIR)/HDG/initialization.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-initialization.o : initialization.F analytical.o globals.o physics.o MPI_OMP.o PrintUtils.o physics.o MPI_OMP.o
+initialization.o : initialization.F analytical.o globals.o physics.o MPI_OMP.o PrintUtils.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 hdg_PrecalculatedFirstEquation.F : $(SDIR)/HDG/hdg_PrecalculatedFirstEquation.f90
@@ -454,10 +508,16 @@ hdg_LimitingTechniques.F : $(SDIR)/HDG/hdg_LimitingTechniques.f90
 hdg_LimitingTechniques.o : hdg_LimitingTechniques.F globals.o PrintUtils.o LinearAlgebra.o MPI_OMP.o reference_element.o physics.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
+solver_status.F : $(SDIR)/LinearAlgebra/solver_status.f90
+	$(CMP) -s $< $@ || $(CP) -f $< $@
+
+solver_status.o : solver_status.F MPI_OMP.o
+	$(FC) -c $(FCFLAGS) -fno-finite-math-only $(INC) $< -o $@
+
 solve_global_system.F : $(SDIR)/HDG/solve_global_system.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-solve_global_system.o : solve_global_system.F globals.o Communications.o MPI_OMP.o LinearAlgebra.o $(ADDMODSOLV)
+solve_global_system.o : solve_global_system.F solver_status.o globals.o Communications.o MPI_OMP.o LinearAlgebra.o $(ADDMODSOLV)
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 domain_decomposition.F : $(SDIR)/MPI_OMP/domain_decomposition.f90
@@ -523,29 +583,29 @@ adaptivity_general.o : adaptivity_general.F MPI_OMP.o Communications.o globals.o
 Main_utils.F : $(SDIR)/Utils/Main_utils.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-Main_utils.o : Main_utils.F residual_norm.o external_heating.o inout.o gmsh_io.o adaptivity_general.o adaptivity_projection.o reference_element.o preprocess.o MPI_OMP.o PrintUtils.o Debug.o initialization.o Communications.o domain_decomposition.o hdg_LimitingTechniques.o Postprocess.o $(ADDMODSOLV)
+Main_utils.o : Main_utils.F newton_predictor.o solver_status.o adaptivity_indicator.o residual_norm.o external_heating.o inout.o gmsh_io.o adaptivity_general.o adaptivity_projection.o reference_element.o preprocess.o MPI_OMP.o PrintUtils.o Debug.o initialization.o time_stepping.o Communications.o domain_decomposition.o hdg_LimitingTechniques.o Postprocess.o $(ADDMODSOLV) input_files.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 MHDG.F : $(SDIR)/MHDG.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-MHDG.o : MHDG.F MPI_OMP.o Main_utils.o
+MHDG.o : MHDG.F MPI_OMP.o Main_utils.o solver_status.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 Convergence.F : $(SDIR)/Convergence.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-Convergence.o : Convergence.F residual_norm.o inout.o gmsh_io.o reference_element.o MPI_OMP.o PrintUtils.o Debug.o initialization.o Postprocess.o
+Convergence.o : Convergence.F solver_status.o residual_norm.o inout.o gmsh_io.o reference_element.o MPI_OMP.o PrintUtils.o Debug.o initialization.o Postprocess.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
-MHDG-$(MDL)-$(MODE)-$(DIM) : Main_utils.o residual_norm.o MPI_OMP.o $(BALANCE_DIAGNOSTICS_OBJECTS) matrices_types.o interpolation.o magnetic_topology.o magnetic_geometry_state.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o external_heating.o $(IMPURITY_RADIATION_OBJECT) neutral_flux_limiter.o physics.o read_input.o HDF5_io.o $(BUILD_PROVENANCE_OBJECT) flux_surface_transport_data.o transport_models_1d_config.o transport_models_1d_derived.o transport_models_1d.o transport_models_1d_update.o transport_models_1d_diffusion_bohm_gyrobohm.o transport_models_1d_common.o transport_models_1d_pinch.o transport_models_1d_io.o transport_models_1d_runtime.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o element_mapping.o adaptivity_projection.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o solve_global_system.o compute_element_solution.o adaptivity_general.o adaptivity_common.o mod_splines.o adaptivity_estimator.o adaptivity_indicator.o  domain_decomposition.o MHDG.o
-	$(FC) $(FCFLAGS)  Main_utils.o residual_norm.o MPI_OMP.o $(BALANCE_DIAGNOSTICS_OBJECTS) matrices_types.o interpolation.o magnetic_topology.o magnetic_geometry_state.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o external_heating.o $(IMPURITY_RADIATION_OBJECT) neutral_flux_limiter.o physics.o read_input.o HDF5_io.o $(BUILD_PROVENANCE_OBJECT) flux_surface_transport_data.o transport_models_1d_config.o transport_models_1d_derived.o transport_models_1d.o transport_models_1d_update.o transport_models_1d_diffusion_bohm_gyrobohm.o transport_models_1d_common.o transport_models_1d_pinch.o transport_models_1d_io.o transport_models_1d_runtime.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o element_mapping.o adaptivity_projection.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  Postprocess.o $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o  solve_global_system.o compute_element_solution.o mod_splines.o adaptivity_general.o adaptivity_common.o adaptivity_indicator.o adaptivity_estimator.o domain_decomposition.o MHDG.o -o MHDG-$(MDL)-$(MODE)-$(DIM) $(LIB)
+MHDG-$(MDL)-$(MODE)-$(DIM) : newton_predictor.o solver_status.o equilibrium_series.o heating_series.o rectangular_series_io.o input_files.o Main_utils.o residual_norm.o MPI_OMP.o $(BALANCE_DIAGNOSTICS_OBJECTS) matrices_types.o interpolation.o magnetic_topology.o magnetic_geometry_state.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o external_heating.o $(IMPURITY_RADIATION_OBJECT) neutral_flux_limiter.o physics.o read_input.o HDF5_io.o $(BUILD_PROVENANCE_OBJECT) flux_surface_transport_data.o transport_models_1d_config.o transport_models_1d_derived.o transport_models_1d.o transport_models_1d_update.o transport_models_1d_diffusion_bohm_gyrobohm.o transport_models_1d_common.o transport_models_1d_pinch.o transport_models_1d_io.o transport_models_1d_runtime.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o time_stepping.o element_mapping.o adaptivity_projection.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o solve_global_system.o compute_element_solution.o adaptivity_general.o adaptivity_common.o mod_splines.o adaptivity_estimator.o adaptivity_indicator.o  domain_decomposition.o MHDG.o
+	$(FC) $(FCFLAGS) newton_predictor.o solver_status.o equilibrium_series.o heating_series.o rectangular_series_io.o input_files.o Main_utils.o residual_norm.o MPI_OMP.o $(BALANCE_DIAGNOSTICS_OBJECTS) matrices_types.o interpolation.o magnetic_topology.o magnetic_geometry_state.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o external_heating.o $(IMPURITY_RADIATION_OBJECT) neutral_flux_limiter.o physics.o read_input.o HDF5_io.o $(BUILD_PROVENANCE_OBJECT) flux_surface_transport_data.o transport_models_1d_config.o transport_models_1d_derived.o transport_models_1d.o transport_models_1d_update.o transport_models_1d_diffusion_bohm_gyrobohm.o transport_models_1d_common.o transport_models_1d_pinch.o transport_models_1d_io.o transport_models_1d_runtime.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o time_stepping.o element_mapping.o adaptivity_projection.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  Postprocess.o $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o  solve_global_system.o compute_element_solution.o mod_splines.o adaptivity_general.o adaptivity_common.o adaptivity_indicator.o adaptivity_estimator.o domain_decomposition.o MHDG.o -o MHDG-$(MDL)-$(MODE)-$(DIM) $(LIB)
 	/bin/cp -f MHDG-$(MDL)-$(MODE)-$(DIM) ../test/
 #	/bin/cp -f MHDG-$(MDL)-$(MODE)-$(DIM) ../test_anal/
 #	/bin/cp -f MHDG-$(MDL)-$(MODE)-$(DIM) ../test_psblas/
 
-Convergence-$(MDL)-$(DIM) : residual_norm.o MPI_OMP.o $(BALANCE_DIAGNOSTICS_OBJECTS) matrices_types.o interpolation.o magnetic_topology.o magnetic_geometry_state.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o external_heating.o $(IMPURITY_RADIATION_OBJECT) neutral_flux_limiter.o physics.o read_input.o HDF5_io.o $(BUILD_PROVENANCE_OBJECT) flux_surface_transport_data.o transport_models_1d_config.o transport_models_1d_derived.o transport_models_1d.o transport_models_1d_update.o transport_models_1d_diffusion_bohm_gyrobohm.o transport_models_1d_common.o transport_models_1d_pinch.o transport_models_1d_io.o transport_models_1d_runtime.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o solve_global_system.o compute_element_solution.o adaptivity_general.o adaptivity_common.o  mod_splines.o Convergence.o
-	$(FC) $(FCFLAGS) $(OBJS) residual_norm.o MPI_OMP.o $(BALANCE_DIAGNOSTICS_OBJECTS) matrices_types.o interpolation.o magnetic_topology.o magnetic_geometry_state.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o external_heating.o $(IMPURITY_RADIATION_OBJECT) neutral_flux_limiter.o physics.o read_input.o HDF5_io.o $(BUILD_PROVENANCE_OBJECT) flux_surface_transport_data.o transport_models_1d_config.o transport_models_1d_derived.o transport_models_1d.o transport_models_1d_update.o transport_models_1d_diffusion_bohm_gyrobohm.o transport_models_1d_common.o transport_models_1d_pinch.o transport_models_1d_io.o transport_models_1d_runtime.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  Postprocess.o $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o  solve_global_system.o compute_element_solution.o adaptivity_general.o adaptivity_common.o mod_splines.o Convergence.o -o Convergence-$(MDL)-$(MODE)-$(DIM) $(LIB)
+Convergence-$(MDL)-$(DIM) : solver_status.o equilibrium_series.o heating_series.o rectangular_series_io.o input_files.o residual_norm.o MPI_OMP.o $(BALANCE_DIAGNOSTICS_OBJECTS) matrices_types.o interpolation.o magnetic_topology.o magnetic_geometry_state.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o external_heating.o $(IMPURITY_RADIATION_OBJECT) neutral_flux_limiter.o physics.o read_input.o HDF5_io.o $(BUILD_PROVENANCE_OBJECT) flux_surface_transport_data.o transport_models_1d_config.o transport_models_1d_derived.o transport_models_1d.o transport_models_1d_update.o transport_models_1d_diffusion_bohm_gyrobohm.o transport_models_1d_common.o transport_models_1d_pinch.o transport_models_1d_io.o transport_models_1d_runtime.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o time_stepping.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o solve_global_system.o compute_element_solution.o adaptivity_general.o adaptivity_common.o  mod_splines.o Convergence.o
+	$(FC) $(FCFLAGS) $(OBJS) solver_status.o equilibrium_series.o heating_series.o rectangular_series_io.o input_files.o residual_norm.o MPI_OMP.o $(BALANCE_DIAGNOSTICS_OBJECTS) matrices_types.o interpolation.o magnetic_topology.o magnetic_geometry_state.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o external_heating.o $(IMPURITY_RADIATION_OBJECT) neutral_flux_limiter.o physics.o read_input.o HDF5_io.o $(BUILD_PROVENANCE_OBJECT) flux_surface_transport_data.o transport_models_1d_config.o transport_models_1d_derived.o transport_models_1d.o transport_models_1d_update.o transport_models_1d_diffusion_bohm_gyrobohm.o transport_models_1d_common.o transport_models_1d_pinch.o transport_models_1d_io.o transport_models_1d_runtime.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o time_stepping.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  Postprocess.o $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o  solve_global_system.o compute_element_solution.o adaptivity_general.o adaptivity_common.o mod_splines.o Convergence.o -o Convergence-$(MDL)-$(MODE)-$(DIM) $(LIB)
 	/bin/cp -f Convergence-$(MDL)-$(MODE)-$(DIM) ../test/
 #	/bin/cp -f Convergence-$(MDL)-$(MODE)-$(DIM) ../test_anal/
 

@@ -101,6 +101,11 @@ def parser() -> argparse.ArgumentParser:
     refresh.add_argument("--bundle", type=Path, help="source bundle; overrides the case default")
     refresh.add_argument("--workspace", required=True, type=Path)
     refresh.add_argument("--jobs", type=_positive_integer)
+    continuation = command("continue", "Continue validation using completed producers and a new build.", parent=actions, settings=True)
+    continuation.add_argument("workspace", type=Path)
+    continuation.add_argument("--rerun", action="append", required=True, metavar="WORKFLOW",
+                              help="validation workflow to rerun; repeat for several")
+    continuation.add_argument("--jobs", type=_positive_integer)
     publish = command("publish", "Revalidate and publish a reviewed refresh workspace.", parent=actions)
     publish.add_argument("workspace", type=Path, metavar="WORKSPACE")
     publish.add_argument("--output", required=True, type=Path)
@@ -216,6 +221,12 @@ def _dispatch(args: argparse.Namespace) -> int:
             if not values.get("MHDG_REGRESSION_DATA_ROOT"):
                 raise BundleError("no source bundle selected; pass --bundle DIR or set defaults.bundles")
             path, report = golden.refresh(args.case, values, args.workspace, args.jobs)
+            reporting.golden_review(path, report)
+        elif args.action == "continue":
+            from .golden_continue import continue_refresh
+
+            values = config.settings(args.settings, use_build=False)
+            path, report = continue_refresh(args.workspace, values, args.rerun, args.jobs)
             reporting.golden_review(path, report)
         else:
             summary = golden.publish(args.workspace, args.output, args.bundle_version, args.reason, args.provenance)

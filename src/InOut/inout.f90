@@ -7,6 +7,7 @@
 !************************************************************
 
 MODULE in_out
+  USE input_files, ONLY: resolve_input_filename
   USE HDF5
   USE HDF5_io_module
   USE flux_surface_transport_data
@@ -14,6 +15,7 @@ MODULE in_out
   USE build_provenance, ONLY: solver_git_commit, solver_git_dirty, solver_build_id
   USE balance_diagnostics, ONLY: balance_diag, balance_diagnostics_mode_name
   USE GLOBALS
+  USE magnetic_field, ONLY: reconstruct_feedback_derivative_history, magnetic_input_position
   USE MPI_OMP
   USE printutils
   USE magnetic_geometry_state, ONLY: magnetic_equilibrium, &
@@ -47,7 +49,11 @@ CONTAINS
     INTEGER :: Nextfaces, Nnodesperface, IERR
     INTEGER(HID_T) :: file_id
 
-    fname_complete = TRIM(ADJUSTL(fname))//'.h5'
+    CALL resolve_input_filename(fname, '.h5', fname_complete, ierr)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Mesh input file not found: ', TRIM(fname_complete)
+       STOP 1
+    ENDIF
 
     IF (utils%printint > 0) THEN
       IF(MPIvar%glob_id .EQ. 0) THEN
@@ -1063,6 +1069,10 @@ CONTAINS
       CALL HDF5_integer_saving(magnetic_group_id, &
            toroidal_current_comparison%applied_sign, 'jtor_applied_sign')
       CALL HDF5_real_saving(magnetic_group_id, &
+           toroidal_current_comparison%alpha, 'jtor_fit_alpha')
+      CALL HDF5_real_saving(magnetic_group_id, &
+           toroidal_current_comparison%applied_alpha, 'jtor_applied_alpha')
+      CALL HDF5_real_saving(magnetic_group_id, &
            toroidal_current_comparison%core_raw_relative_l2, &
            'jtor_core_raw_relative_l2')
       CALL HDF5_real_saving(magnetic_group_id, &
@@ -1215,22 +1225,6 @@ CONTAINS
       CALL HDF5_real_saving(group_id2, phys%z_axis, 'z_axis')
       CALL HDF5_real_saving(group_id2, phys%a_minor, 'a_minor')
       IF (switch%ME) THEN
-         CALL HDF5_array1d_saving(group_id2, phys%puff_exp, input%puff_dimension, 'puff_exp')
-         IF (switch%target_variable /= 0) THEN
-            CALL HDF5_real_saving(group_id2, phys%feedback_propotional_gain,'feedback_propotional_gain')
-            CALL HDF5_real_saving(group_id2, phys%feedback_integral_gain,'feedback_integral_gain')
-            CALL HDF5_real_saving(group_id2, phys%feedback_derivative_gain,'feedback_derivative_gain')
-            CALL HDF5_real_saving(group_id2, phys%n_li,'n_li')
-            CALL HDF5_real_saving(group_id2, phys%feedback_integral_error,'feedback_integral_error')
-            CALL HDF5_real_saving(group_id2, phys%feedback_previous_error,'feedback_previous_error')
-            IF (switch%target_variable == 3) THEN
-               CALL HDF5_real_saving(group_id2, phys%feedback_propotional_gain_xpr,'feedback_propotional_gain_xpr')
-               CALL HDF5_real_saving(group_id2, phys%feedback_integral_gain_xpr,'feedback_integral_gain_xpr')
-               CALL HDF5_real_saving(group_id2, phys%feedback_derivative_gain_xpr,'feedback_derivative_gain_xpr')
-               CALL HDF5_real_saving(group_id2, phys%feedback_integral_error_xpr,'feedback_integral_error_xpr')
-               CALL HDF5_real_saving(group_id2, phys%feedback_previous_error_xpr,'feedback_previous_error_xpr')
-            ENDIF
-         ENDIF
          IF (switch%diff_reverse_Ip) THEN
             CALL HDF5_real_saving(group_id2, phys%I_0, 'I_0')
             CALL HDF5_real_saving(group_id2, phys%I_p, 'I_p')
@@ -1240,6 +1234,7 @@ CONTAINS
             CALL HDF5_real_saving(group_id2, phys%ME_diff_ee, 'ME_diff_ee')
          ENDIF
       END IF
+      IF (switch%ME .OR. .NOT. time%legacy_input) CALL save_feedback_state(group_id2)
       if (switch%external_heating) THEN
 #ifdef PARALL
          CALL HDF5_array1D_saving(group_id2, external_heating_ions_glob, SIZE(external_heating_ions_glob), 'external_heating_ions')
@@ -1349,12 +1344,19 @@ CONTAINS
       CALL HDF5_group_create('time', group_id1, group_id2, ierr)
       CALL HDF5_real_saving(group_id2, time%dt0, 'Initial_time_step')
       CALL HDF5_real_saving(group_id2, time%dt, 'Current_time_step')
-      CALL HDF5_real_saving(group_id2, time%tfi, 'Final_time')
+      CALL HDF5_real_saving(group_id2, time%t_final, 'Final_time')
       CALL HDF5_integer_saving(group_id2, time%it, 'Current_time_step_number')
       CALL HDF5_integer_saving(group_id2, time%ik, 'Current_pseudo_time_step_number')
       CALL HDF5_integer_saving(group_id2, time%nts, 'Number_of_time_steps')
       CALL HDF5_integer_saving(group_id2, time%tis, 'Time_integration_scheme')
       CALL HDF5_real_saving(group_id2, time%t, 'Current_time')
+      CALL HDF5_logical_saving(group_id2, .NOT. switch%steady .AND. .NOT. switch%psdtime, 'Physical_time_evolution')
+      CALL HDF5_real_saving(group_id2, time%t*simpar%refval_time, 'Current_time_seconds')
+      IF (.NOT. time%legacy_input) THEN
+         CALL HDF5_string_saving(group_id2, time%mode, 'Time_mode')
+         CALL save_equilibrium_position(group_id2)
+         CALL save_time_step_state(group_id2)
+      ENDIF
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create geometry parameters group
@@ -1414,7 +1416,11 @@ CONTAINS
     fname_complete = TRIM(ADJUSTL(fname))//'.h5'
 #endif
 #else
-    fname_complete = TRIM(ADJUSTL(fname))//'.h5'
+    CALL resolve_input_filename(fname, '.h5', fname_complete, ierr)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Restart mesh input file not found: ', TRIM(fname_complete)
+       STOP 1
+    ENDIF
 #endif
     IF (utils%printint > 0) THEN
        PRINT *, 'Loading mesh.'
@@ -1600,10 +1606,7 @@ CONTAINS
 #endif
     INTEGER :: Neq, Ndim, Nel, Np, Nfg, Nf, sizeutilde, sizeu, it
     REAL*8, ALLOCATABLE       :: uaux(:,:),utaux(:,:),qaux(:,:)
-    REAL*8, POINTER           :: impurity_concentrations_saved(:)
-    INTEGER              :: logrho_ptr = 0, n_impurities_saved, saved_ME
-
-    NULLIFY(impurity_concentrations_saved)
+    INTEGER              :: logrho_ptr = 0, saved_ME
     Neq = phys%Neq
     mod_ptr => model_string
 #ifdef TOR3D
@@ -1842,7 +1845,11 @@ CONTAINS
     !              2D case
     !*************************************
 
-    fname_complete = TRIM(ADJUSTL(fname))//'.h5'
+    CALL resolve_input_filename(fname, '.h5', fname_complete, ierr)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Solution input file not found: ', TRIM(fname_complete)
+       STOP 1
+    ENDIF
 
 
     CALL HDF5_open(fname_complete, file_id, IERR)
@@ -1859,7 +1866,9 @@ CONTAINS
        logrho_ptr = 0
     ENDIF
 #endif
-    IF (switch%ME) THEN
+    IF (.NOT. time%legacy_input) THEN
+       CALL load_physical_checkpoint(group_id)
+    ELSEIF (switch%ME) THEN
        CALL HDF5_group_open(group_id, 'switches', group_id2, ierr)
        CALL HDF5_integer_reading(group_id2, saved_ME, 'ME')
        CALL HDF5_group_close(group_id2, ierr)
@@ -1882,36 +1891,7 @@ CONTAINS
           IF (it .GT. 0) sol%time(it) = t
        END IF
        CALL HDF5_group_close(group_id2, ierr)
-       IF (switch%target_variable /= 0) THEN           
-         CALL HDF5_group_open(group_id, 'physics', group_id2, ierr)
-         IF (switch%target_variable == 1) THEN
-            CALL HDF5_real_reading(group_id2, phys%puff, 'puff')
-         ELSEIF (switch%target_variable == 2) THEN
-            CALL HDF5_real_reading(group_id2, phys%Re, 'recycling')
-         ELSEIF (switch%target_variable == 3) THEN
-            CALL HDF5_real_reading(group_id2, phys%puff, 'puff')
-            IF (switch%impurity_radiation) THEN
-               CALL HDF5_integer_reading(group_id2, n_impurities_saved, 'n_impurities')
-               IF (n_impurities_saved > 0) THEN
-                  ALLOCATE(impurity_concentrations_saved(n_impurities_saved))
-                  CALL HDF5_array1D_reading(group_id2, impurity_concentrations_saved, 'impurity_concentrations')
-                  phys%impurity_concentrations(1) = impurity_concentrations_saved(1)
-                  DEALLOCATE(impurity_concentrations_saved)
-                  NULLIFY(impurity_concentrations_saved)
-               ENDIF
-            ENDIF
-         ENDIF
-         
-         IF (time%it .GT. 0) THEN
-            CALL HDF5_real_reading(group_id2, phys%feedback_integral_error, 'feedback_integral_error')
-            CALL HDF5_real_reading(group_id2, phys%feedback_previous_error, 'feedback_previous_error')
-            IF (switch%target_variable == 3) THEN
-               CALL HDF5_real_reading(group_id2, phys%feedback_integral_error_xpr, 'feedback_integral_error_xpr')
-               CALL HDF5_real_reading(group_id2, phys%feedback_previous_error_xpr, 'feedback_previous_error_xpr')
-            ENDIF
-         ENDIF
-         CALL HDF5_group_close(group_id2, ierr)
-       ENDIF
+       CALL load_feedback_state(group_id)
     END IF
     CALL HDF5_group_close(group_id, ierr)
 
@@ -1975,6 +1955,351 @@ CONTAINS
     END IF
 
   ENDSUBROUTINE HDF5_load_solution
+
+  SUBROUTINE save_equilibrium_position(time_group)
+    INTEGER(HID_T), INTENT(IN) :: time_group
+    INTEGER :: left, right
+    REAL*8 :: fraction
+
+    CALL magnetic_input_position(left, right, fraction)
+    IF (left < 0) RETURN
+    CALL HDF5_integer_saving(time_group, left, 'Equilibrium_frame_left')
+    CALL HDF5_integer_saving(time_group, right, 'Equilibrium_frame_right')
+    CALL HDF5_real_saving(time_group, fraction, 'Equilibrium_fraction')
+  END SUBROUTINE save_equilibrium_position
+
+  SUBROUTINE save_time_step_state(time_group)
+    INTEGER(HID_T), INTENT(IN) :: time_group
+
+    CALL HDF5_logical_saving(time_group, time%newton_predictor, 'Newton_predictor')
+    CALL HDF5_real_saving(time_group, time%newton_predictor_rate_limit, 'Newton_predictor_rate_limit')
+    IF (time%mode == 'adaptive') THEN
+         CALL HDF5_real_saving(time_group, time%dt_next*simpar%refval_time, 'Proposed_time_step_seconds')
+         CALL save_timestep_growth(time_group)
+    ENDIF
+    IF (time%mode == 'prescribed' .AND. ALLOCATED(time%pending_times)) THEN
+       IF (SIZE(time%pending_times) > 0) &
+            CALL HDF5_array1D_saving(time_group, time%pending_times*simpar%refval_time, &
+                 SIZE(time%pending_times), 'Pending_time_targets_seconds')
+    ENDIF
+  END SUBROUTINE save_time_step_state
+
+  SUBROUTINE load_time_step_state(group_id)
+    USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    REAL*8 :: proposed_dt
+    REAL*8, ALLOCATABLE :: pending_seconds(:)
+    INTEGER :: ierr, count
+    LOGICAL :: exists
+
+    IF (time%mode == 'adaptive') THEN
+       CALL H5Lexists_f(group_id, 'time/Proposed_time_step_seconds', exists, ierr)
+       IF (.NOT. exists) RETURN ! Old checkpoints retain the configured dt0 proposal.
+       CALL read_checkpoint_real(group_id, 'time/Proposed_time_step_seconds', proposed_dt)
+       IF (.NOT. ieee_is_finite(proposed_dt) .OR. proposed_dt <= 0.d0) &
+            CALL abort_on_checkpoint_error(-1, 'Saved proposed timestep must be finite and positive')
+       time%dt_next = proposed_dt/simpar%refval_time
+       IF (time%dt_max > 0.d0) time%dt_next = MIN(time%dt_next,time%dt_max)
+       CALL load_timestep_growth(group_id)
+    ELSEIF (time%mode == 'prescribed' .AND. time%dt_reduce_on_failure) THEN
+       CALL H5Lexists_f(group_id, 'time/Pending_time_targets_seconds', exists, ierr)
+       IF (.NOT. exists) RETURN
+       CALL HDF5_real_vector_reading(group_id, 'time/Pending_time_targets_seconds', pending_seconds, ierr)
+       CALL abort_on_checkpoint_error(ierr, 'Cannot read pending timestep targets')
+       IF (ANY(.NOT. ieee_is_finite(pending_seconds))) &
+            CALL abort_on_checkpoint_error(-1, 'Pending timestep targets must be finite')
+       IF (ANY(pending_seconds <= time%t*simpar%refval_time)) &
+            CALL abort_on_checkpoint_error(-1, 'Pending timestep targets must follow the accepted time')
+       count = SIZE(pending_seconds)
+       IF (count > 1) THEN
+          IF (ANY(pending_seconds(:count-1) <= pending_seconds(2:))) &
+               CALL abort_on_checkpoint_error(-1, 'Pending timestep targets must be stored in decreasing order')
+       ENDIF
+       time%pending_times = pending_seconds/simpar%refval_time
+    ENDIF
+  END SUBROUTINE load_time_step_state
+
+  SUBROUTINE save_timestep_growth(time_group)
+    INTEGER(HID_T), INTENT(IN) :: time_group
+    INTEGER(HID_T) :: history_group
+    INTEGER :: ierr
+
+    IF (.NOT. time%dt_grow_on_easy .OR. time%growth%nr_iterations == 0) RETURN
+    CALL HDF5_group_create('Growth_history', time_group, history_group, ierr)
+    CALL HDF5_integer_saving(history_group, time%growth%easy_steps, 'easy_steps')
+    CALL HDF5_integer_saving(history_group, time%growth%nr_iterations, 'newton_iterations')
+    CALL HDF5_real_saving(history_group, time%growth%first_error, 'first_newton_error')
+    CALL HDF5_real_saving(history_group, time%growth%dt*simpar%refval_time, 'step_seconds')
+    CALL HDF5_group_close(history_group, ierr)
+  END SUBROUTINE save_timestep_growth
+
+  SUBROUTINE load_timestep_growth(group_id)
+    USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    INTEGER(HID_T) :: history_group
+    INTEGER :: ierr
+    REAL*8 :: seconds
+    LOGICAL :: exists
+
+    IF (.NOT. time%dt_grow_on_easy) RETURN
+    CALL H5Lexists_f(group_id, 'time/Growth_history', exists, ierr)
+    IF (.NOT. exists) RETURN
+    CALL HDF5_group_open(group_id, 'time/Growth_history', history_group, ierr)
+    CALL abort_on_checkpoint_error(ierr, 'Cannot read timestep growth history')
+    CALL HDF5_integer_reading(history_group, time%growth%easy_steps, 'easy_steps', ierr)
+    CALL abort_on_checkpoint_error(ierr, 'Cannot read growth easy-step count')
+    CALL HDF5_integer_reading(history_group, time%growth%nr_iterations, 'newton_iterations', ierr)
+    CALL abort_on_checkpoint_error(ierr, 'Cannot read previous Newton iteration count')
+    CALL read_checkpoint_real(history_group, 'first_newton_error', time%growth%first_error)
+    CALL read_checkpoint_real(history_group, 'step_seconds', seconds)
+    CALL HDF5_group_close(history_group, ierr)
+    IF (time%growth%easy_steps < 0 .OR. time%growth%nr_iterations < 1 .OR. &
+        .NOT. ieee_is_finite(seconds) .OR. seconds <= 0.d0 .OR. &
+        .NOT. ieee_is_finite(time%growth%first_error) .OR. time%growth%first_error < 0.d0) &
+         CALL abort_on_checkpoint_error(-1, 'Invalid timestep growth history')
+    time%growth%easy_steps = MIN(time%growth%easy_steps,time%dt_growth_easy_steps-1)
+    time%growth%dt = seconds/simpar%refval_time
+  END SUBROUTINE load_timestep_growth
+
+  SUBROUTINE save_feedback_state(physics_group)
+    INTEGER(HID_T), INTENT(IN) :: physics_group
+
+    IF (switch%target_variable /= 0) THEN
+       CALL HDF5_real_saving(physics_group, phys%feedback_propotional_gain,'feedback_propotional_gain')
+       CALL HDF5_real_saving(physics_group, phys%feedback_integral_gain,'feedback_integral_gain')
+       CALL HDF5_real_saving(physics_group, phys%feedback_derivative_gain,'feedback_derivative_gain')
+       CALL HDF5_real_saving(physics_group, phys%n_li,'n_li')
+       CALL HDF5_real_saving(physics_group, phys%feedback_integral_error,'feedback_integral_error')
+       CALL HDF5_real_saving(physics_group, phys%feedback_previous_error,'feedback_previous_error')
+       CALL save_feedback_derivative_history(physics_group, 'feedback_derivative', phys%feedback_derivative_history)
+       IF (switch%target_variable == 3) THEN
+          CALL HDF5_real_saving(physics_group, phys%feedback_propotional_gain_xpr,'feedback_propotional_gain_xpr')
+          CALL HDF5_real_saving(physics_group, phys%feedback_integral_gain_xpr,'feedback_integral_gain_xpr')
+          CALL HDF5_real_saving(physics_group, phys%feedback_derivative_gain_xpr,'feedback_derivative_gain_xpr')
+          CALL HDF5_real_saving(physics_group, phys%feedback_integral_error_xpr,'feedback_integral_error_xpr')
+          CALL HDF5_real_saving(physics_group, phys%feedback_previous_error_xpr,'feedback_previous_error_xpr')
+          CALL save_feedback_derivative_history(physics_group, 'feedback_derivative_xpr', &
+               phys%feedback_derivative_history_xpr)
+       ENDIF
+    ENDIF
+  END SUBROUTINE save_feedback_state
+
+  SUBROUTINE load_feedback_state(group_id)
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    INTEGER(HID_T) :: group_id2
+    INTEGER :: ierr, n_impurities_saved
+    LOGICAL :: saved_n_li
+    REAL*8, POINTER :: impurity_concentrations_saved(:) => NULL()
+
+    IF (switch%target_variable /= 0) THEN
+      CALL HDF5_group_open(group_id, 'physics', group_id2, ierr)
+      CALL abort_on_checkpoint_error(ierr, 'Cannot read checkpoint feedback group')
+      ! Startup no longer evaluates feedback before saving the accepted state.
+      phys%n_li = 0.d0
+      CALL H5Lexists_f(group_id2, 'n_li', saved_n_li, ierr)
+      IF (saved_n_li) CALL read_checkpoint_real(group_id2, 'n_li', phys%n_li)
+      IF (switch%target_variable == 1) THEN
+         CALL read_checkpoint_real(group_id2, 'puff', phys%puff)
+      ELSEIF (switch%target_variable == 2) THEN
+         CALL read_checkpoint_real(group_id2, 'recycling', phys%Re)
+      ELSEIF (switch%target_variable == 3) THEN
+         CALL read_checkpoint_real(group_id2, 'puff', phys%puff)
+         IF (switch%impurity_radiation) THEN
+            CALL HDF5_integer_reading(group_id2, n_impurities_saved, 'n_impurities')
+            IF (n_impurities_saved > 0) THEN
+               ALLOCATE(impurity_concentrations_saved(n_impurities_saved))
+               CALL HDF5_array1D_reading(group_id2, impurity_concentrations_saved, 'impurity_concentrations')
+               phys%impurity_concentrations(1) = impurity_concentrations_saved(1)
+               DEALLOCATE(impurity_concentrations_saved)
+               NULLIFY(impurity_concentrations_saved)
+            ENDIF
+         ENDIF
+      ENDIF
+
+      IF (time%it .GT. 0) THEN
+         CALL read_checkpoint_real(group_id2, 'feedback_integral_error', phys%feedback_integral_error)
+         CALL read_checkpoint_real(group_id2, 'feedback_previous_error', phys%feedback_previous_error)
+         CALL load_feedback_derivative_history(group_id, group_id2, 'feedback_derivative', &
+              phys%feedback_derivative_history, phys%feedback_previous_error, .FALSE.)
+         IF (switch%target_variable == 3) THEN
+            CALL read_checkpoint_real(group_id2, 'feedback_integral_error_xpr', phys%feedback_integral_error_xpr)
+            CALL read_checkpoint_real(group_id2, 'feedback_previous_error_xpr', phys%feedback_previous_error_xpr)
+            CALL load_feedback_derivative_history(group_id, group_id2, 'feedback_derivative_xpr', &
+                 phys%feedback_derivative_history_xpr, phys%feedback_previous_error_xpr, .TRUE.)
+         ENDIF
+      ENDIF
+      CALL HDF5_group_close(group_id2, ierr)
+    ENDIF
+  END SUBROUTINE load_feedback_state
+
+  SUBROUTINE save_feedback_derivative_history(physics_group, name, history)
+    INTEGER(HID_T), INTENT(IN) :: physics_group
+    CHARACTER(LEN=*), INTENT(IN) :: name
+    TYPE(Feedback_derivative_history_type), INTENT(IN) :: history
+    INTEGER(HID_T) :: group_id
+    INTEGER :: ierr
+
+    CALL HDF5_group_create(name, physics_group, group_id, ierr)
+    CALL HDF5_logical_saving(group_id, history%initialized, 'initialized')
+    CALL HDF5_real_saving(group_id, history%target, 'target')
+    CALL HDF5_real_saving(group_id, history%measurement, 'measurement')
+    CALL HDF5_real_saving(group_id, history%measurement_time, 'measurement_time_seconds')
+    CALL HDF5_group_close(group_id, ierr)
+  END SUBROUTINE save_feedback_derivative_history
+
+  SUBROUTINE load_feedback_derivative_history(simulation_group, physics_group, name, history, previous_error, xpr)
+    USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
+    INTEGER(HID_T), INTENT(IN) :: simulation_group, physics_group
+    CHARACTER(LEN=*), INTENT(IN) :: name
+    TYPE(Feedback_derivative_history_type), INTENT(OUT) :: history
+    REAL*8, INTENT(IN) :: previous_error
+    LOGICAL, INTENT(IN) :: xpr
+    INTEGER(HID_T) :: group_id
+    INTEGER :: ierr, initialized
+    REAL*8 :: previous_dt, saved_scale
+    LOGICAL :: exists
+
+    history = Feedback_derivative_history_type()
+    CALL H5Lexists_f(physics_group, name, exists, ierr)
+    IF (exists) THEN
+       CALL HDF5_group_open(physics_group, name, group_id, ierr)
+       CALL HDF5_integer_reading(group_id, initialized, 'initialized', ierr)
+       CALL abort_on_checkpoint_error(ierr, 'Cannot read derivative-history initialization')
+       history%initialized = initialized /= 0
+       CALL read_checkpoint_real(group_id, 'target', history%target)
+       CALL read_checkpoint_real(group_id, 'measurement', history%measurement)
+       CALL read_checkpoint_real(group_id, 'measurement_time_seconds', history%measurement_time)
+       CALL HDF5_group_close(group_id, ierr)
+    ELSE
+       CALL H5Lexists_f(simulation_group, 'time/Current_time_step', exists, ierr)
+       IF (exists) THEN
+          CALL read_checkpoint_real(simulation_group, 'time/Current_time_step', previous_dt)
+          saved_scale = simpar%refval_time
+          CALL H5Lexists_f(simulation_group, 'adimensionalization/time_scale', exists, ierr)
+          IF (exists) CALL read_checkpoint_real(simulation_group, 'adimensionalization/time_scale', saved_scale)
+          previous_dt = previous_dt*saved_scale
+          IF (ieee_is_finite(previous_dt) .AND. previous_dt > 0.d0) &
+               CALL reconstruct_feedback_derivative_history(history, previous_error, previous_dt, xpr)
+       ENDIF
+       IF (MPIvar%glob_id == 0) THEN
+          IF (history%initialized) THEN
+             WRITE(6,*) 'Reconstructed legacy derivative history from saved timestep and current target curve: ', name
+          ELSE
+             WRITE(6,*) 'Checkpoint has no usable derivative timing; first derivative contribution is zero: ', name
+          ENDIF
+       ENDIF
+    ENDIF
+    IF (history%initialized) THEN
+       IF (.NOT. ALL(ieee_is_finite([history%target, history%measurement, history%measurement_time]))) &
+            CALL abort_on_checkpoint_error(-1, 'Derivative history must be finite')
+       IF (history%measurement_time >= time%t*simpar%refval_time) &
+            CALL abort_on_checkpoint_error(-1, 'Derivative measurement must precede the accepted checkpoint time')
+    ENDIF
+  END SUBROUTINE load_feedback_derivative_history
+
+  LOGICAL FUNCTION checkpoint_uses_physical_time(group_id) RESULT(physical)
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    INTEGER :: ierr, saved_flag, saved_steady, saved_pseudo, saved_me
+    LOGICAL :: exists, has_steady, has_pseudo
+
+    CALL H5Lexists_f(group_id, 'time/Physical_time_evolution', exists, ierr)
+    IF (exists) THEN
+       CALL HDF5_integer_reading(group_id, saved_flag, 'time/Physical_time_evolution', ierr)
+       CALL abort_on_checkpoint_error(ierr, 'Cannot read checkpoint time classification')
+       physical = saved_flag /= 0
+       RETURN
+    ENDIF
+    CALL H5Lexists_f(group_id, 'switches/steady', has_steady, ierr)
+    CALL H5Lexists_f(group_id, 'switches/psdtime', has_pseudo, ierr)
+    saved_steady = 0
+    saved_pseudo = 0
+    saved_me = 0
+    IF (has_steady) CALL HDF5_integer_reading(group_id, saved_steady, 'switches/steady')
+    IF (has_pseudo) CALL HDF5_integer_reading(group_id, saved_pseudo, 'switches/psdtime')
+    IF (saved_steady /= 0 .OR. saved_pseudo /= 0) THEN
+       physical = .FALSE.
+    ELSEIF (has_steady .AND. has_pseudo) THEN
+       physical = .TRUE.
+    ELSE
+       CALL H5Lexists_f(group_id, 'switches/ME', exists, ierr)
+       IF (exists) CALL HDF5_integer_reading(group_id, saved_me, 'switches/ME')
+       physical = saved_me /= 0
+    ENDIF
+  END FUNCTION checkpoint_uses_physical_time
+
+  SUBROUTINE load_physical_checkpoint(group_id)
+    USE time_stepping, ONLY: ensure_time_history_capacity
+    USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    INTEGER :: step, ierr
+    REAL*8 :: seconds, saved_scale, saved_dt, tolerance
+    LOGICAL :: exists
+
+    IF (.NOT. checkpoint_uses_physical_time(group_id)) THEN
+       IF (MPIvar%glob_id == 0) WRITE(6,*) 'Initializing physical run from saved plasma at t_start [s]: ', &
+            time%t*simpar%refval_time
+       RETURN
+    ENDIF
+    CALL HDF5_integer_reading(group_id, step, 'time/Current_time_step_number', ierr)
+    CALL abort_on_checkpoint_error(ierr, 'Cannot read accepted checkpoint step')
+    IF (step < 0) CALL abort_on_checkpoint_error(-1, 'Checkpoint accepted step must be non-negative')
+    saved_scale = simpar%refval_time
+    CALL H5Lexists_f(group_id, 'adimensionalization/time_scale', exists, ierr)
+    IF (exists) THEN
+       CALL read_checkpoint_real(group_id, 'adimensionalization/time_scale', saved_scale)
+       IF (.NOT. ieee_is_finite(saved_scale) .OR. saved_scale <= 0.d0) &
+            CALL abort_on_checkpoint_error(-1, 'Checkpoint time scale must be finite and positive')
+    ENDIF
+    CALL H5Lexists_f(group_id, 'time/Current_time_seconds', exists, ierr)
+    IF (exists) THEN
+       CALL HDF5_real_reading(group_id, seconds, 'time/Current_time_seconds', ierr)
+       CALL abort_on_checkpoint_error(ierr, 'Cannot read physical checkpoint time')
+    ELSE
+       CALL HDF5_real_reading(group_id, seconds, 'time/Current_time', ierr)
+       CALL abort_on_checkpoint_error(ierr, 'Cannot read legacy checkpoint time')
+       seconds = seconds*saved_scale
+    ENDIF
+    IF (.NOT. ieee_is_finite(seconds)) CALL abort_on_checkpoint_error(-1, 'Checkpoint physical time must be finite')
+    tolerance = 64*EPSILON(seconds)*MAX(1.d0, ABS(seconds), ABS(time%t_final*simpar%refval_time))
+    IF (seconds > time%t_final*simpar%refval_time+tolerance) &
+         CALL abort_on_checkpoint_error(-1, 'Checkpoint physical time exceeds t_final')
+    CALL ensure_time_history_capacity(step)
+    time%it = step
+    time%ik = step
+    time%t = seconds/simpar%refval_time
+    time%t_target = time%t
+    CALL H5Lexists_f(group_id, 'time/Current_time_step', exists, ierr)
+    IF (exists) THEN
+       CALL read_checkpoint_real(group_id, 'time/Current_time_step', saved_dt)
+       IF (.NOT. ieee_is_finite(saved_dt) .OR. saved_dt < 0.d0 .OR. (step > 0 .AND. saved_dt == 0.d0)) &
+            CALL abort_on_checkpoint_error(-1, 'Checkpoint accepted timestep must be finite and positive')
+       time%dt = saved_dt*saved_scale/simpar%refval_time
+    ENDIF
+    sol%Nt = step
+    IF (step > 0) sol%time(step) = time%t
+    CALL load_time_step_state(group_id)
+    CALL load_feedback_state(group_id)
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Continuing physical checkpoint at time [s], accepted step: ', seconds, step
+  END SUBROUTINE load_physical_checkpoint
+
+  SUBROUTINE read_checkpoint_real(group_id, dataset, value)
+    INTEGER(HID_T), INTENT(IN) :: group_id
+    CHARACTER(LEN=*), INTENT(IN) :: dataset
+    REAL*8, INTENT(OUT) :: value
+    INTEGER :: ierr
+
+    CALL HDF5_real_reading(group_id, value, dataset, ierr)
+    CALL abort_on_checkpoint_error(ierr, 'Cannot read checkpoint value: '//dataset)
+  END SUBROUTINE read_checkpoint_real
+
+  SUBROUTINE abort_on_checkpoint_error(ierr, message)
+    INTEGER, INTENT(IN) :: ierr
+    CHARACTER(LEN=*), INTENT(IN) :: message
+
+    IF (ierr == 0) RETURN
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Checkpoint input error: ', TRIM(message)
+    STOP 1
+  END SUBROUTINE abort_on_checkpoint_error
 
   SUBROUTINE load_restart_geometry_reference(file_id)
     INTEGER(HID_T), INTENT(IN) :: file_id

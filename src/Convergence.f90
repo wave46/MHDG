@@ -1,4 +1,5 @@
 PROGRAM Convergence
+  USE solver_status, ONLY: solver_status_t, stop_on_solver_failure
   USE in_out
   USE reference_element
   USE preprocess
@@ -24,6 +25,7 @@ PROGRAM Convergence
   USE residual_norm_module, ONLY: computeResidual
   IMPLICIT NONE
 
+  TYPE(solver_status_t) :: linear_status
   INTEGER             :: it, ir, nts, nu, nb_args, n_points, n_polyns, IERR
   INTEGER             :: ieq
   INTEGER             :: ipol, ipts
@@ -251,10 +253,11 @@ PROGRAM Convergence
 
               ! Solve linear system
 #ifdef WITH_PETSC
-              CALL solve_global_system(ir)
+              CALL solve_global_system(linear_status, ir)
 #else
-              CALL solve_global_system()
+              CALL solve_global_system(linear_status)
 #endif
+              CALL stop_on_solver_failure(linear_status)
 
               CALL compute_element_solution()
 

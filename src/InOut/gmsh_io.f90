@@ -2,6 +2,7 @@ MODULE GMSH_io_module
 
   USE MPI_OMP, only: MPIvar
   USE globals
+  USE input_files, ONLY: resolve_input_filename
   IMPLICIT NONE
 
 
@@ -20,10 +21,15 @@ CONTAINS
     CHARACTER (len = 255)                        :: temp_filename
     INTEGER ( kind = 4 )                         :: m
     INTEGER ( kind = 4 )                         :: node_num
+    INTEGER                                     :: ierr
     REAL ( kind = 8 ), ALLOCATABLE               :: node_x(:,:)
 
 
-    temp_filename      = TRIM(ADJUSTL(gmsh_filename))//'.msh'
+    CALL resolve_input_filename(gmsh_filename, '.msh', temp_filename, ierr)
+    IF (ierr /= 0) THEN
+       IF (MPIvar%glob_id == 0) WRITE(*,*) 'Mesh input file not found: ', TRIM(temp_filename)
+       STOP 1
+    ENDIF
 
     IF(MPIvar%glob_id .EQ. 0) THEN
       WRITE ( *, '(a)' ) ''

@@ -1,12 +1,10 @@
 PROGRAM MHDG
   USE Main_utils
   USE MPI_OMP
-  USE adaptivity_indicator_module, ONLY: compute_error_oscillations
-#ifdef WITH_PETSC
-  USE solve_petsc, ONLY: FinalizePETSC
-#endif
 
   IMPLICIT NONE
+  LOGICAL :: time_finished
+  TYPE(newton_result_t) :: newton_result
 
   ! Initialize MPI
   CALL init_MPI_OMP()
@@ -90,9 +88,9 @@ PROGRAM MHDG
   IF((ierr .EQ. 0)) THEN
      CALL free_mesh
      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
-        CALL load_gmsh_mesh(mesh_name, 1)
+        CALL load_gmsh_mesh(mesh_input_name, 1)
      ELSE
-        CALL load_gmsh_mesh(mesh_name, 0)
+        CALL load_gmsh_mesh(mesh_input_name, 0)
      ENDIF
 
      CALL mesh_preprocess_serial(ierr)
@@ -124,38 +122,11 @@ PROGRAM MHDG
   IF (nb_args .EQ. 2) CALL initialize_solution()
 #endif
 
-  ! A completed ME restart must not read another field or update feedback.
-  IF (switch%ME .AND. time%it .EQ. nts) THEN
-     IF (MPIvar%glob_id .EQ. 0) THEN
-        WRITE (6, *) 'ME final step already reached: ', time%it, ' (nts = ', nts, ')'
-     ENDIF
-#ifdef WITH_PETSC
-     IF (lssolver%sollib .EQ. 3) CALL FinalizePETSC()
-#endif
-     CALL MPI_finalize(IERR)
-     STOP
-  ENDIF
+  CALL exit_if_restart_complete()
 
-
-  ! if the restart solution is not given
-  IF ((nb_args .EQ. 1)) THEN
-     ! initialise magnetic field (the mesh is needed)
-     CALL initialize_magnetic_field()
-     ! load magnetic field and Jtor
-     CALL load_magnetic_field_Jtor()
-     ! initialise solution
-     CALL initialize_solution()
-  ELSEIF ((MPIvar%glob_size .EQ. 1)) THEN
-       ! initialise magnetic field (the mesh is needed)
-       CALL initialize_magnetic_field()
-       ! load magnetic field and Jtor
-       CALL load_magnetic_field_Jtor()
-  ELSE 
-      ! initialise magnetic field (the mesh is needed)
-      CALL initialize_magnetic_field()
-      ! load magnetic field and Jtor
-      CALL load_magnetic_field_Jtor()
-  ENDIF
+  CALL initialize_magnetic_field()
+  CALL load_magnetic_field_Jtor()
+  IF (nb_args .EQ. 1) CALL initialize_solution()
 
   IF (switch%external_heating) THEN
      ! Initialise external heating
@@ -211,266 +182,17 @@ PROGRAM MHDG
 
   it0 = 1
   ! For ME, nts is the final global step, including on restart.
-  IF (switch%ME) it0 = time%it + 1
-  IF (switch%ME) THEN
-     time%dt = time%dt_ME/simpar%refval_time
-  ENDIF
+  IF (switch%ME .OR. .NOT. time%legacy_input) it0 = time%it + 1
   dt0 = time%dt
 
   !*******************************************************
   !                  TIME LOOP
   !*******************************************************
-  DO it = it0, nts ! ************ TIME LOOP *********************
-
-     ! if a new time step starts, it means that the solution converged sol%u_conv = sol%u, sol%q_conv = sol%q
-     CALL update_uconv_qconv(sol%u, sol%q)
-     CALL reset_newton_refinements()
-
-     ! Actualization of time
-     time%t = time%t + time%dt
-     time%it = time%it + 1
-     time%ik = time%ik + 1
-     sol%Nt = sol%Nt + 1
-
-     IF (MPIvar%glob_id .EQ. 0) THEN
-        WRITE (6, '(" *", 60("*"), "**")')
-        WRITE (6, '(" *", 20X,    "Time iteration   = ", I5, 16X, " *")') time%it
-        WRITE (6, '(" *", 60("*"), "**")')
-     END IF
-
-     !*******************************************************
-     !             Newton-Raphson iterations
-     !*******************************************************
-     ! uiter = sol%u0
-     CALL update_uiter()
-
-     ir = 1
-     DO WHILE(ir .LE. numer%nrp) ! ************ NEWTON-RAPHSON LOOP *********************
-        ! update nonconstant dumping factor
-        CALL update_dumpnr()
-
-        IF (MPIvar%glob_id .EQ. 0) THEN
-           WRITE (6, *) "***** NR iteration: ", ir, "*****"
-           WRITE (6, *) "NR dumping factor:  ",  numer%dumpnr
-        ENDIF
-        
-        !update 1D transport stuff if used
-        IF (switch%transport_1d) THEN
-            CALL update_reduced_transport_profiles()
-        ENDIF
-
-        ! Compute Jacobian
-        CALL HDG_computeJacobian()
-        ! Set boundary conditions
-        CALL hdg_BC()
-        ! Compute elemental mapping
-        CALL hdg_Mapping()
-        ! Assembly the global matrix
-        CALL hdg_Assembly()
-        ! Solve linear system
-#ifdef WITH_PETSC
-        CALL solve_global_system(ir)
-#else
-        CALL solve_global_system()
-#endif
-        ! Compute element-by-element solution
-        CALL compute_element_solution()
-        ! Check for NaN (should work with optimization flags)
-        CALL check_for_NaNs()
-        IF (adapt%adaptivity .AND. restart_adapt) THEN
-           IF (switch%ME .EQV. .TRUE.) THEN
-              time%it=time%it-1
-           ENDIF
-           CALL adaptivity()
-           IF (switch%ME .EQV. .TRUE.) THEN
-            time%it=time%it+1
-           ENDIF
-           DEALLOCATE(uiter)
-           ALLOCATE(uiter(SIZE(sol%u)))
-           uiter = 0.
-        ENDIF
-
-        ! Apply threshold
-        ! CALL HDG_applyThreshold(mkelms)
-
-        ! Apply filtering
-        ! CALL HDG_FilterSolution()
-
-        ! Compute error on oscillations, print max value of oscillation and save solution as check-point if oscillations are lower than threshold
-        physical_iterate_valid = .TRUE.
-        IF (adapt%adaptivity .AND. adapt%div_adapt) THEN
-           physical_iterate_valid = physical_solution_is_admissible(sol%u)
-           IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id .EQ. 0) &
-                WRITE(*,*) 'NR iterate is not physically admissible; recovery checkpoint retained.'
-        ENDIF
-        IF (adapt%adaptivity) THEN
-           CALL compute_error_oscillations(oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec, &
-                checkpoint_allowed=physical_iterate_valid)
-        ENDIF
-        ! Save solution
-        IF (switch%saveNR) THEN
-           CALL setSolName(save_name, mesh_name, ir, .FALSE., .TRUE.)
-           CALL HDF5_save_solution(save_name)
-        END IF
-
-        ! Check convergence of Newton-Raphson
-        errNR = computeResidual(sol%u, uiter, 1.)
-        errNR = errNR/numer%dumpnr
-
-        IF (MPIvar%glob_id .EQ. 0) THEN
-           WRITE (*, *)   "Error:                  ", errNR
-#ifdef WITH_PETSC
-           IF(lssolver%sollib .EQ. 3) THEN
-              WRITE (*, *) "Relative Residue PETSc: ", matPETSC%residue
-              WRITE (*,*)  "Number of Iterations:   ", matPETSC%its
-              WRITE (*,*)  "Converged Reason:       ", matPETSC%convergedReason
-           END IF
-#endif
-        ENDIF
-
-        IF (errNR .LT. numer%tNR .AND. physical_iterate_valid) THEN
-           ! The converged iterate is the completed solution checkpoint.
-           WRITE(*,*) "Solution saved as checkpoint."
-           CALL update_uconv_qconv(sol%u, sol%q)
-           errNR_adapt = 1e10
-           ir_adapt = 0
-           ir_check = 1
-           CALL free_mesh_loc(Mesh_prec)
-           CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
-           EXIT
-        ELSEIF (newton_refinement_required(errNR,physical_iterate_valid,ir)) THEN
-           IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id .EQ. 0) THEN
-              IF (errNR .LT. numer%tNR) THEN
-                 WRITE(*,*) 'NR residual converged, but solution is physically inadmissible; requesting refinement.'
-              ELSEIF (ir .GE. numer%nrp .AND. errNR .LE. numer%div) THEN
-                 WRITE(*,*) 'NR iteration limit reached with physically inadmissible solution; requesting refinement.'
-              ENDIF
-           ENDIF
-           IF (prepare_divergence_refinement()) THEN
-              IF (MPIvar%glob_id .EQ. 0) THEN
-                 IF (.NOT. physical_iterate_valid .AND. errNR .LE. numer%div) THEN
-                    WRITE(*,*) 'NR physical admissibility recovery: refining from best admissible iterate; retry ', &
-                         divergence_refinements, ' of ', adapt%max_divergence_refinements
-                 ELSE
-                    WRITE(*,*) 'NR divergence: refining from best physically admissible iterate; retry ', &
-                         divergence_refinements, ' of ', adapt%max_divergence_refinements
-                 ENDIF
-              ENDIF
-              ! Reload this attempt's equilibrium, without advancing the
-              ! physical timestep or updating the puff/feedback controller.
-              IF (switch%ME) time%it = time%it - 1
-              CALL adaptivity()
-              IF (switch%ME) time%it = time%it + 1
-              CALL project_u0_newmesh(preserve_history=.TRUE.)
-              CALL update_uconv_qconv(sol%u, sol%q)
-              IF (SIZE(uiter) .NE. SIZE(sol%u)) THEN
-                 DEALLOCATE(uiter)
-                 ALLOCATE(uiter(SIZE(sol%u)))
-              ENDIF
-              uiter = sol%u
-              ir_check = 0
-              CALL free_mesh_loc(Mesh_prec)
-              CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
-              ir = 1
-              CYCLE
-           ENDIF
-           IF (adapt%adaptivity .AND. adapt%div_adapt .AND. MPIvar%glob_id .EQ. 0) THEN
-              IF (.NOT. divergence_checkpoint_available) THEN
-                 WRITE(*,*) 'NR refinement recovery stopped: no physically admissible checkpoint on this mesh.'
-              ELSE
-                 WRITE(*,*) 'NR refinement recovery stopped: per-timestep refinement limit reached: ', &
-                      adapt%max_divergence_refinements
-                 WRITE(*,*) 'Timestep: ', time%it, ' NR iteration: ', ir, ' max oscillation: ', max_osc
-                 WRITE(*,*) 'Divergence refinements: ', divergence_refinements, ' oscillation refinements: ', &
-                      oscillation_refinements
-              ENDIF
-           ENDIF
-           WRITE (6, *) 'Problem in the N-R procedure'
-           STOP
-        ELSE
-           uiter = sol%u
-           !! ADAPTIVITY
-           IF(update_best_newton_checkpoint(errNR,ir,physical_iterate_valid)) THEN
-              ! if the NR is the lowest reached so far, then save it as best check-point
-              IF (MPIvar%glob_id .EQ. 0) THEN
-                 WRITE(*,*) "Solution saved as last checkpoint."
-              ENDIF
-
-              divergence_counter_adapt = 0
-           ELSEIF(errNR .GT. errNR_adapt) THEN
-              divergence_counter_adapt = divergence_counter_adapt + 1
-           ENDIF
-
-           IF (MPIvar%glob_id .EQ. 0) THEN
-              WRITE(*,*) "ir_check: ", ir_check
-           ENDIF
-
-           ! Call adaptivity if one of the following conditions is respected
-           IF ((adapt%adaptivity) .AND. ((adapt%osc_adapt .AND. (max_osc .GT. adapt%osc_tol)) .OR. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)))) THEN !  .or. (flag)) THEN
-
-              IF (adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol) THEN
-                 IF (.NOT. prepare_oscillation_refinement()) THEN
-                    IF (MPIvar%glob_id .EQ. 0) THEN
-                       WRITE(*,*) 'Oscillation refinement stopped: per-timestep refinement limit reached: ', &
-                            adapt%max_oscillation_refinements
-                       WRITE(*,*) 'Timestep: ', time%it, ' NR iteration: ', ir, ' max oscillation: ', max_osc
-                       WRITE(*,*) 'Divergence refinements: ', divergence_refinements, ' oscillation refinements: ', &
-                            oscillation_refinements
-                       FLUSH(6)
-                    ENDIF
-#ifdef PARALL
-                    CALL MPI_ABORT(MPI_COMM_WORLD,1,IERR)
-#endif
-                    ERROR STOP 'Oscillation refinement budget exhausted'
-                 ENDIF
-                 IF (MPIvar%glob_id .EQ. 0) WRITE(*,*) 'Oscillation refinement: retry ', &
-                      oscillation_refinements, ' of ', adapt%max_oscillation_refinements
-              ENDIF
-
-              IF (switch%ME .EQV. .TRUE.) THEN
-               time%it=time%it-1
-              ENDIF
-              ! call adaptivity precedure
-              CALL adaptivity()
-              IF (switch%ME .EQV. .TRUE.) THEN
-               time%it=time%it+1
-              ENDIF
-
-              ! u0 also needs to be projected from old mesh to new mesh
-              CALL project_u0_newmesh(preserve_history=adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol)
-
-              IF((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)) THEN
-                 ! Update check-point solution to the one projected on the new mesh
-                 DEALLOCATE(sol%u_conv)
-                 ALLOCATE(sol%u_conv(SIZE(sol%u)))
-                 sol%u_conv = sol%u
-                 DEALLOCATE(sol%q_conv)
-                 ALLOCATE(sol%q_conv(SIZE(sol%q)))
-                 sol%q_conv = sol%q
-              ENDIF
-
-              ! update uiter to new mapped solution
-              CALL update_uiter()
-
-              IF(ir_check .NE. numer%nrp) THEN
-                 ir = ir_check
-              ELSE
-                 ir = 0
-              ENDIF
-
-              CALL free_mesh_loc(Mesh_prec)
-              CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
-
-           ENDIF
-        END IF
-
-        IF (MPIvar%glob_id .EQ. 0) THEN
-           WRITE (6, *) "*********************************"
-           WRITE (6, *) " "
-           WRITE (6, *) " "
-        ENDIF
-        ir = ir + 1
-     END DO ! ************ END OF NEWTON-RAPHSON LOOP *********************
+  it = it0
+  DO ! ************ TIME LOOP *********************
+     CALL advance_time_step(newton_result,time_finished)
+     IF (time_finished) EXIT
+     CALL handle_newton_result(newton_result)
 
      !  ! Apply threshold
      !  CALL HDG_applyThreshold()
@@ -499,7 +221,7 @@ PROGRAM MHDG
         !****************************************
         ! Check steady state and update or exit
         !****************************************
-        IF (errlstime .LT. numer%tTM) THEN
+        IF (time%legacy_input .AND. .NOT. switch%ME .AND. errlstime .LT. numer%tTM) THEN
            IF (switch%psdtime) THEN
               ! Pseudo-time simulation
 
@@ -559,14 +281,6 @@ PROGRAM MHDG
               CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
            ENDIF
 
-           ! Prepare the next ME field/control state only if another step remains.
-           IF(switch%ME .AND. time%it .LT. nts) THEN
-              ! ReLoad magnetic field and Jtor
-              CALL load_magnetic_field()
-              CALL set_toroidal_current()
-              CALL SetParticleSource()
-              time%dt = time%dt_ME/simpar%refval_time
-           ENDIF
         END IF
      ELSE
         IF (switch%psdtime) THEN
@@ -587,6 +301,7 @@ PROGRAM MHDG
         convergence_counter = convergence_counter + 1
      ENDIF
 
+     it = it + 1
   END DO ! ************ END OF THE TIME LOOP *********************
 
   ! Save solution
@@ -612,6 +327,9 @@ PROGRAM MHDG
   END IF
 
   ! free all main allocatables and global variables
+  CALL close_heating_input()
+  CALL close_magnetic_input()
+  CALL clear_control_curves()
   CALL free_main()
 
 END PROGRAM MHDG

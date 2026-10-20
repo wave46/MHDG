@@ -201,6 +201,13 @@ MODULE types
   !*******************************************************
   ! Physics: type for physical model info
   !*******************************************************
+  TYPE Feedback_derivative_history_type
+     REAL*8 :: target = 0.d0
+     REAL*8 :: measurement = 0.d0
+     REAL*8 :: measurement_time = 0.d0 ! Physical seconds, before the plasma advance
+     LOGICAL :: initialized = .FALSE.
+  END TYPE Feedback_derivative_history_type
+
   TYPE Physics_type
      INTEGER                   :: neq ! Number of equations
      INTEGER                   :: npv ! Number of physical variables
@@ -311,10 +318,10 @@ MODULE types
      REAL*8                    :: feedback_derivative_gain_xpr ! feedback derivative gain for the xpr feedback control
      REAL*8                    :: feedback_previous_error_xpr ! previous error for the xpr feedback control
      REAL*8                    :: feedback_integral_error_xpr ! integral error for the xpr feedback control
+     TYPE(Feedback_derivative_history_type) :: feedback_derivative_history
+     TYPE(Feedback_derivative_history_type) :: feedback_derivative_history_xpr
      REAL*8                    :: n_li  ! line integrated density
      REAL*8                    :: cryopump_power ! Cryopump power in [m^3/s] coefficient
-     REAL*8                    :: puff_slope ! Puff increment coefficient (only for moving equilibrium for ITER)
-     REAL*8,POINTER            :: puff_exp(:) => NULL()! Puff experimental coefficient (only for moving equilibriums)
      REAL*8                    :: part_source ! Particle source for ITER
      REAL*8                    :: ener_source ! Particle source for ITER
      REAL*8                    :: density_source ! Density source for WEST (2D, case 52)
@@ -478,7 +485,6 @@ MODULE types
      LOGICAL             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: external_heating_from_grid !if true, then reads external heating file n rectangular grid; if false - on nodes of the mesh
      LOGICAL             :: compute_from_flux = .TRUE. ! derive B_R, B_Z and Jtor from bicubic psi when available
-     LOGICAL             :: divide_by_2pi = .FALSE.    ! fallback convention when the field fit is unavailable
      INTEGER             :: field_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
      INTEGER             :: jtor_dimensions(1:2) ! dimensions of magnetic field files (2D WEST cases so far)
      INTEGER             :: puff_dimension ! number of timeslices in the puff file
@@ -518,12 +524,35 @@ MODULE types
   !*******************************************************
   ! Time: type for the time stepping information
   !*******************************************************
+  TYPE Time_growth_history_type
+     INTEGER :: easy_steps = 0
+     INTEGER :: nr_iterations = 0
+     REAL*8 :: first_error = 0.d0
+     REAL*8 :: dt = 0.d0
+  END TYPE Time_growth_history_type
+
   TYPE Time_type
      REAL*8      :: dt0  ! initial time step
      REAL*8      :: dt   ! current time step
+     REAL*8      :: dt_next = 0.d0 ! adaptive proposal, before final-time clipping
      REAL*8      :: dt_ME   ! time step from equilibrium !stored as dimensional value
      REAL*8      :: t_ME   ! time step from equilibrium (to get puff rate) !stored as dimensional value
-     REAL*8      :: tfi  ! final time of the simulation
+     REAL*8      :: t_final  ! final time of the simulation, in solver units
+     REAL*8      :: t_start = 0.d0
+     REAL*8      :: t_target = 0.d0 ! next physical endpoint, in solver units
+     CHARACTER(LEN=16) :: mode = 'fixed'
+     LOGICAL     :: legacy_input = .TRUE.
+     CHARACTER(LEN=16) :: units = 'normalized' ! units of namelist time inputs
+     LOGICAL     :: dt_reduce_on_failure = .FALSE.
+     LOGICAL     :: dt_grow_on_easy = .FALSE.
+     LOGICAL     :: newton_predictor = .FALSE.
+     REAL*8      :: newton_predictor_rate_limit = 0.35d0
+     REAL*8      :: dt_min = 0.d0 ! minimum retry interval, in solver units
+     REAL*8      :: dt_max = 0.d0 ! zero means no configured upper bound
+     REAL*8      :: dt_growth_factor = 1.2d0
+     INTEGER     :: dt_growth_easy_steps = 2
+     TYPE(Time_growth_history_type) :: growth
+     REAL*8, ALLOCATABLE :: pending_times(:) ! prescribed endpoints, last entry first
      INTEGER     :: it   ! the number of the current time step
      INTEGER     :: ik   ! same as it but always incrementing (also in case of pseudotime..)
      INTEGER     :: ndt  ! max number of time steps to do in the current session
@@ -920,6 +949,8 @@ CONTAINS
        Mesh2%N = Mesh1%N
     ENDIF
 
+    IF(ALLOCATED(Mesh1%face_info)) Mesh2%face_info = Mesh1%face_info
+
     IF(ALLOCATED(Mesh1%faces)) THEN
        ALLOCATE(Mesh2%faces(SIZE(Mesh1%faces, 1), SIZE(Mesh1%faces, 2), SIZE(Mesh1%faces, 3)))
        Mesh2%faces = Mesh1%faces
@@ -1020,6 +1051,10 @@ CONTAINS
     Mesh2%Nel_glob = Mesh1%Nel_glob
     Mesh2%Nfa_glob = Mesh1%Nfa_glob
     Mesh2%Nno_glob = Mesh1%Nno_glob
+    Mesh2%Nextfaces_glob = Mesh1%Nextfaces_glob
+    Mesh2%Nintfaces_glob = Mesh1%Nintfaces_glob
+    Mesh2%Nintfaces_nogho = Mesh1%Nintfaces_nogho
+    Mesh2%Nextfaces_nogho = Mesh1%Nextfaces_nogho
     Mesh2%Ndir_glob = Mesh1%Ndir_glob
     Mesh2%Ngho_glob = Mesh1%Ngho_glob
 
@@ -1083,6 +1118,7 @@ CONTAINS
        ALLOCATE(Mesh2%el2sd(SIZE(Mesh1%el2sd)))
        Mesh2%el2sd = Mesh1%el2sd
     ENDIF
+    IF (ALLOCATED(Mesh1%pe2sd)) Mesh2%pe2sd = Mesh1%pe2sd
     IF (ALLOCATED(Mesh1%el2rv)) THEN
        ALLOCATE(Mesh2%el2rv(SIZE(Mesh1%el2rv)))
        Mesh2%el2rv = Mesh1%el2rv

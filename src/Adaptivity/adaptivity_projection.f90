@@ -17,121 +17,59 @@ MODULE adaptivity_projection_module
   PUBLIC :: projectSolutionDifferentMeshes_general
   PUBLIC :: projectSolutionDifferentMeshes_general_arrays
 
+  ! One old/new mesh pair: build is collective, apply is local.
+  ! Source DOFs are element-local; destination points include ghost elements.
+  TYPE, PUBLIC :: mesh_transfer_t
+     PRIVATE
+     INTEGER :: nodes_per_element = 0, old_points = 0, new_points = 0
+     INTEGER, ALLOCATABLE :: element_offsets(:), point_indices(:)
+     REAL*8, ALLOCATABLE :: weights(:,:)
+   CONTAINS
+     PROCEDURE :: build => build_mesh_transfer
+     PROCEDURE :: apply => apply_mesh_transfer
+     PROCEDURE :: apply_to_pointers => apply_mesh_transfer_to_pointers
+     PROCEDURE :: clear => clear_mesh_transfer
+     PROCEDURE, PRIVATE :: apply_fields => apply_mesh_transfer_fields
+  END TYPE mesh_transfer_t
+
 CONTAINS
 
   SUBROUTINE projectSolutionDifferentMeshes_general(T1, X1, T2, X2, u1, q1, u2, q2)
-    INTEGER, INTENT(IN)                                    :: T1(:,:), T2(:,:)
-    REAL*8, INTENT(IN)                                     :: X1(:,:), X2(:,:)
-    REAL*8, POINTER, INTENT(IN)                            :: u1(:)
-    REAL*8, POINTER, OPTIONAL, INTENT(IN)                  :: q1(:)
-    REAL*8, POINTER, INTENT(INOUT)                         :: u2(:)
-    REAL*8, POINTER, OPTIONAL, INTENT(INOUT)               :: q2(:)
+    INTEGER, INTENT(IN) :: T1(:,:), T2(:,:)
+    REAL*8, INTENT(IN) :: X1(:,:), X2(:,:)
+    REAL*8, POINTER, INTENT(IN) :: u1(:)
+    REAL*8, POINTER, OPTIONAL, INTENT(IN) :: q1(:)
+    REAL*8, POINTER, INTENT(INOUT) :: u2(:)
+    REAL*8, POINTER, OPTIONAL, INTENT(INOUT) :: q2(:)
+    TYPE(mesh_transfer_t) :: transfer
 
-    REAL*8, ALLOCATABLE                                    :: u_old(:,:), u_new(:,:)
-    REAL*8, ALLOCATABLE                                    :: q_old(:,:,:), q_new(:,:,:)
-    INTEGER                                                :: old_points, new_points, gradient_dimensions
-
-    CALL validate_optional_gradient_pair(PRESENT(q1), PRESENT(q2))
-    CALL validate_mesh_geometry(T1, X1, T2, X2)
-    IF(.NOT. ASSOCIATED(u1)) ERROR STOP "Old projection solution is not associated"
-
-    old_points = SIZE(T1,1)*SIZE(T1,2)
-    new_points = SIZE(T2,1)*SIZE(T2,2)
-    gradient_dimensions = SIZE(X1,2)
-    IF(SIZE(u1) .NE. old_points*phys%neq) ERROR STOP "Old projection solution has an invalid size"
-
-    CALL resize_real_pointer(u2, new_points*phys%neq)
-    ALLOCATE(u_old(old_points,phys%neq), u_new(new_points,phys%neq))
-    CALL unpack_flat_solution(u1, u_old)
-
-    IF(PRESENT(q1)) THEN
-       IF(.NOT. ASSOCIATED(q1)) ERROR STOP "Old projection gradient is not associated"
-       IF(SIZE(q1) .NE. old_points*phys%neq*gradient_dimensions) THEN
-          ERROR STOP "Old projection gradient has an invalid size"
-       ENDIF
-
-       CALL resize_real_pointer(q2, new_points*phys%neq*gradient_dimensions)
-       ALLOCATE(q_old(old_points,phys%neq,gradient_dimensions))
-       ALLOCATE(q_new(new_points,phys%neq,gradient_dimensions))
-       CALL unpack_flat_gradient(q1, q_old)
-       CALL project_solution_between_meshes(T1, X1, T2, X2, &
-            u_old, q_old, u_new, q_new)
-       CALL pack_flat_gradient(q_new, q2)
-       DEALLOCATE(q_old, q_new)
-    ELSE
-       CALL project_solution_between_meshes(T1, X1, T2, X2, &
-            u_old=u_old, u_new=u_new)
-    ENDIF
-
-    CALL pack_flat_solution(u_new, u2)
-    DEALLOCATE(u_old, u_new)
-  ENDSUBROUTINE projectSolutionDifferentMeshes_general
+    CALL transfer%build(T1, X1, T2, X2)
+    CALL transfer%apply_to_pointers(u1, u2, q1, q2)
+  END SUBROUTINE projectSolutionDifferentMeshes_general
 
   SUBROUTINE projectSolutionDifferentMeshes_general_arrays(T1, X1, T2, X2, u1, q1, u2, q2)
-    INTEGER, INTENT(IN)                    :: T1(:,:), T2(:,:)
-    REAL*8, INTENT(IN)                     :: X1(:,:), X2(:,:)
-    REAL*8, INTENT(IN)                     :: u1(:)
-    REAL*8, OPTIONAL, INTENT(IN)           :: q1(:)
-    REAL*8, INTENT(INOUT)                  :: u2(:)
-    REAL*8, OPTIONAL, INTENT(INOUT)        :: q2(:)
+    INTEGER, INTENT(IN) :: T1(:,:), T2(:,:)
+    REAL*8, INTENT(IN) :: X1(:,:), X2(:,:), u1(:)
+    REAL*8, OPTIONAL, INTENT(IN) :: q1(:)
+    REAL*8, INTENT(OUT) :: u2(:)
+    REAL*8, OPTIONAL, INTENT(OUT) :: q2(:)
+    TYPE(mesh_transfer_t) :: transfer
 
-    REAL*8, ALLOCATABLE                    :: u_old(:,:), u_new(:,:)
-    REAL*8, ALLOCATABLE                    :: q_old(:,:,:), q_new(:,:,:)
-    INTEGER                                :: old_points, new_points, gradient_dimensions
+    CALL transfer%build(T1, X1, T2, X2)
+    CALL transfer%apply(u1, u2, q1, q2)
+  END SUBROUTINE projectSolutionDifferentMeshes_general_arrays
 
-    CALL validate_optional_gradient_pair(PRESENT(q1), PRESENT(q2))
-    CALL validate_mesh_geometry(T1, X1, T2, X2)
+  SUBROUTINE build_mesh_transfer(this, old_connectivity, old_coordinates, new_connectivity, new_coordinates)
+    CLASS(mesh_transfer_t), INTENT(INOUT) :: this
+    INTEGER, INTENT(IN) :: old_connectivity(:,:), new_connectivity(:,:)
+    REAL*8, INTENT(IN) :: old_coordinates(:,:), new_coordinates(:,:)
+    REAL*8 :: target_points(SIZE(new_connectivity),2), reference_points(SIZE(new_connectivity),2)
+    INTEGER :: point_elements(SIZE(new_connectivity)), nearest_elements(SIZE(new_connectivity))
+    REAL*8 :: nearest_distances(SIZE(new_connectivity)), nearest_sizes(SIZE(new_connectivity))
+    INTEGER :: global_missing
 
-    old_points = SIZE(T1,1)*SIZE(T1,2)
-    new_points = SIZE(T2,1)*SIZE(T2,2)
-    gradient_dimensions = SIZE(X1,2)
-    IF(SIZE(u1) .NE. old_points*phys%neq .OR. SIZE(u2) .NE. new_points*phys%neq) THEN
-       ERROR STOP "Projection solution arrays have invalid sizes"
-    ENDIF
-
-    ALLOCATE(u_old(old_points,phys%neq), u_new(new_points,phys%neq))
-    CALL unpack_flat_solution(u1, u_old)
-
-    IF(PRESENT(q1)) THEN
-       IF(SIZE(q1) .NE. old_points*phys%neq*gradient_dimensions .OR. &
-            SIZE(q2) .NE. new_points*phys%neq*gradient_dimensions) THEN
-          ERROR STOP "Projection gradient arrays have invalid sizes"
-       ENDIF
-
-       ALLOCATE(q_old(old_points,phys%neq,gradient_dimensions))
-       ALLOCATE(q_new(new_points,phys%neq,gradient_dimensions))
-       CALL unpack_flat_gradient(q1, q_old)
-       CALL project_solution_between_meshes(T1, X1, T2, X2, &
-            u_old, q_old, u_new, q_new)
-       CALL pack_flat_gradient(q_new, q2)
-       DEALLOCATE(q_old, q_new)
-    ELSE
-       CALL project_solution_between_meshes(T1, X1, T2, X2, &
-            u_old=u_old, u_new=u_new)
-    ENDIF
-
-    CALL pack_flat_solution(u_new, u2)
-    DEALLOCATE(u_old, u_new)
-  ENDSUBROUTINE projectSolutionDifferentMeshes_general_arrays
-
-  SUBROUTINE project_solution_between_meshes(old_connectivity, old_coordinates, new_connectivity, new_coordinates, &
-       u_old, q_old, u_new, q_new)
-    INTEGER, INTENT(IN)                    :: old_connectivity(:,:), new_connectivity(:,:)
-    REAL*8, INTENT(IN)                     :: old_coordinates(:,:), new_coordinates(:,:)
-    REAL*8, INTENT(IN)                     :: u_old(:,:)
-    REAL*8, OPTIONAL, INTENT(IN)           :: q_old(:,:,:)
-    REAL*8, INTENT(OUT)                    :: u_new(:,:)
-    REAL*8, OPTIONAL, INTENT(OUT)          :: q_new(:,:,:)
-
-    REAL*8                                 :: target_points(SIZE(new_connectivity,1)*SIZE(new_connectivity,2),2)
-    REAL*8                                 :: reference_points(SIZE(target_points,1),2)
-    INTEGER                                :: point_elements(SIZE(target_points,1))
-    INTEGER                                :: nearest_elements(SIZE(target_points,1))
-    REAL*8                                 :: nearest_distances(SIZE(target_points,1))
-    REAL*8                                 :: nearest_sizes(SIZE(target_points,1))
-    INTEGER                                :: global_missing
-
-    CALL validate_projection_shapes(old_connectivity, new_connectivity, u_old, q_old, u_new, q_new)
+    CALL this%clear()
+    CALL validate_mesh_geometry(old_connectivity, old_coordinates, new_connectivity, new_coordinates)
     CALL collect_target_points(new_connectivity, new_coordinates, target_points)
     CALL print_projection_banner()
 
@@ -156,8 +94,64 @@ CONTAINS
          nearest_sizes, global_missing)
     IF(global_missing .NE. 0) ERROR STOP "Adaptive projection has unmatched points"
 
-    CALL interpolate_projected_solution(reference_points, point_elements, old_connectivity, u_old, q_old, u_new, q_new)
-  ENDSUBROUTINE project_solution_between_meshes
+    this%nodes_per_element = SIZE(old_connectivity,2)
+    this%old_points = SIZE(old_connectivity)
+    this%new_points = SIZE(new_connectivity)
+    CALL cache_projection_weights(this, reference_points, point_elements, SIZE(old_connectivity,1))
+  END SUBROUTINE build_mesh_transfer
+
+  SUBROUTINE apply_mesh_transfer_to_pointers(this, u_old, u_new, q_old, q_new)
+    CLASS(mesh_transfer_t), INTENT(IN) :: this
+    REAL*8, POINTER, INTENT(IN) :: u_old(:)
+    REAL*8, POINTER, INTENT(INOUT) :: u_new(:)
+    REAL*8, POINTER, OPTIONAL, INTENT(IN) :: q_old(:)
+    REAL*8, POINTER, OPTIONAL, INTENT(INOUT) :: q_new(:)
+
+    CALL validate_optional_gradient_pair(PRESENT(q_old), PRESENT(q_new))
+    IF (.NOT. ASSOCIATED(u_old)) ERROR STOP 'Old projection solution is not associated'
+    IF (PRESENT(q_old)) THEN
+       IF (.NOT. ASSOCIATED(q_old)) ERROR STOP 'Old projection gradient is not associated'
+       CALL resize_real_pointer(q_new, this%new_points*phys%neq*2)
+    ENDIF
+    CALL resize_real_pointer(u_new, this%new_points*phys%neq)
+    CALL this%apply(u_old, u_new, q_old, q_new)
+  END SUBROUTINE apply_mesh_transfer_to_pointers
+
+  SUBROUTINE apply_mesh_transfer(this, u_old, u_new, q_old, q_new)
+    CLASS(mesh_transfer_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: u_old(:)
+    REAL*8, INTENT(OUT) :: u_new(:)
+    REAL*8, OPTIONAL, INTENT(IN) :: q_old(:)
+    REAL*8, OPTIONAL, INTENT(OUT) :: q_new(:)
+    REAL*8, ALLOCATABLE :: old_values(:,:), new_values(:,:), old_gradients(:,:,:), new_gradients(:,:,:)
+
+    IF (.NOT. ALLOCATED(this%weights)) ERROR STOP 'Mesh transfer must be built before applying it'
+    CALL validate_optional_gradient_pair(PRESENT(q_old), PRESENT(q_new))
+    IF (SIZE(u_old) /= this%old_points*phys%neq .OR. SIZE(u_new) /= this%new_points*phys%neq) &
+         ERROR STOP 'Projection solution arrays have invalid sizes'
+    ALLOCATE(old_values(this%old_points,phys%neq), new_values(this%new_points,phys%neq))
+    CALL unpack_flat_solution(u_old, old_values)
+    IF (PRESENT(q_old)) THEN
+       IF (SIZE(q_old) /= this%old_points*phys%neq*2 .OR. SIZE(q_new) /= this%new_points*phys%neq*2) &
+            ERROR STOP 'Projection gradient arrays have invalid sizes'
+       ALLOCATE(old_gradients(this%old_points,phys%neq,2), new_gradients(this%new_points,phys%neq,2))
+       CALL unpack_flat_gradient(q_old, old_gradients)
+       CALL this%apply_fields(old_values, new_values, old_gradients, new_gradients)
+       CALL pack_flat_gradient(new_gradients, q_new)
+    ELSE
+       CALL this%apply_fields(old_values, new_values)
+    ENDIF
+    CALL pack_flat_solution(new_values, u_new)
+  END SUBROUTINE apply_mesh_transfer
+
+  SUBROUTINE clear_mesh_transfer(this)
+    CLASS(mesh_transfer_t), INTENT(INOUT) :: this
+
+    IF (ALLOCATED(this%element_offsets)) DEALLOCATE(this%element_offsets, this%point_indices, this%weights)
+    this%nodes_per_element = 0
+    this%old_points = 0
+    this%new_points = 0
+  END SUBROUTINE clear_mesh_transfer
 
   SUBROUTINE assign_linear_projection_candidates(target_points, old_connectivity, old_coordinates, point_elements, &
        reference_points)
@@ -356,46 +350,60 @@ CONTAINS
     ENDDO
   ENDSUBROUTINE report_unmatched_projection_points
 
-  SUBROUTINE interpolate_projected_solution(reference_points, point_elements, old_connectivity, u_old, q_old, &
-       u_new, q_new)
-    REAL*8, INTENT(IN)                     :: reference_points(:,:), u_old(:,:)
-    INTEGER, INTENT(IN)                    :: point_elements(:), old_connectivity(:,:)
-    REAL*8, OPTIONAL, INTENT(IN)           :: q_old(:,:,:)
-    REAL*8, INTENT(OUT)                    :: u_new(:,:)
-    REAL*8, OPTIONAL, INTENT(OUT)          :: q_new(:,:,:)
+  SUBROUTINE cache_projection_weights(this, reference_points, point_elements, old_elements)
+    CLASS(mesh_transfer_t), INTENT(INOUT) :: this
+    REAL*8, INTENT(IN) :: reference_points(:,:)
+    INTEGER, INTENT(IN) :: point_elements(:), old_elements
+    REAL*8, ALLOCATABLE :: shape_functions(:,:,:)
+    INTEGER, ALLOCATABLE :: indices(:)
+    INTEGER :: element, first_point, last_point
 
-    INTEGER                                :: old_dofs(SIZE(old_connectivity,2))
-    REAL*8, ALLOCATABLE                    :: element_reference_points(:,:), shape_functions(:,:,:)
-    INTEGER, ALLOCATABLE                   :: point_indices(:)
-    INTEGER                                :: element, point, direction
+    ALLOCATE(this%element_offsets(old_elements+1), this%point_indices(this%new_points))
+    ALLOCATE(this%weights(this%nodes_per_element,this%new_points))
+    first_point = 1
+    DO element = 1, old_elements
+       this%element_offsets(element) = first_point
+       CALL find_matching_indices(point_elements, element, indices)
+       last_point = first_point+SIZE(indices)-1
+       IF (SIZE(indices) > 0) THEN
+          ALLOCATE(shape_functions(this%nodes_per_element,SIZE(indices),3))
+          shape_functions = 0.d0
+          CALL compute_shape_functions_at_points(refElPol, reference_points(indices,:), shape_functions)
+          this%point_indices(first_point:last_point) = indices
+          this%weights(:,first_point:last_point) = shape_functions(:,:,1)
+          DEALLOCATE(shape_functions)
+       ENDIF
+       first_point = last_point+1
+    ENDDO
+    this%element_offsets(old_elements+1) = first_point
+  END SUBROUTINE cache_projection_weights
+
+  SUBROUTINE apply_mesh_transfer_fields(this, u_old, u_new, q_old, q_new)
+    CLASS(mesh_transfer_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: u_old(:,:)
+    REAL*8, INTENT(OUT) :: u_new(:,:)
+    REAL*8, OPTIONAL, INTENT(IN) :: q_old(:,:,:)
+    REAL*8, OPTIONAL, INTENT(OUT) :: q_new(:,:,:)
+    INTEGER :: old_dofs(this%nodes_per_element)
+    INTEGER :: element, point, direction, first_point, last_point
 
     u_new = 0.d0
-    IF(PRESENT(q_new)) q_new = 0.d0
-    DO element = 1, SIZE(old_connectivity,1)
-       CALL find_matching_indices(point_elements, element, point_indices)
-       IF(SIZE(point_indices) .EQ. 0) THEN
-          DEALLOCATE(point_indices)
-          CYCLE
-       ENDIF
-
-       ALLOCATE(element_reference_points(SIZE(point_indices),2))
-       ALLOCATE(shape_functions(SIZE(old_connectivity,2),SIZE(point_indices),3))
-       element_reference_points = reference_points(point_indices,:)
-       shape_functions = 0.d0
-       CALL compute_shape_functions_at_points(refElPol, element_reference_points, shape_functions)
-
-       old_dofs = (element-1)*SIZE(old_connectivity,2) + (/ (point, point=1,SIZE(old_connectivity,2)) /)
-       u_new(point_indices,:) = MATMUL(TRANSPOSE(shape_functions(:,:,1)),u_old(old_dofs,:))
-       IF(PRESENT(q_old)) THEN
+    IF (PRESENT(q_new)) q_new = 0.d0
+    DO element = 1, SIZE(this%element_offsets)-1
+       first_point = this%element_offsets(element)
+       last_point = this%element_offsets(element+1)-1
+       IF (last_point < first_point) CYCLE
+       old_dofs = (element-1)*this%nodes_per_element + [(point, point=1,this%nodes_per_element)]
+       u_new(this%point_indices(first_point:last_point),:) = &
+            MATMUL(TRANSPOSE(this%weights(:,first_point:last_point)),u_old(old_dofs,:))
+       IF (PRESENT(q_old)) THEN
           DO direction = 1, SIZE(q_old,3)
-             q_new(point_indices,:,direction) = &
-                  MATMUL(TRANSPOSE(shape_functions(:,:,1)),q_old(old_dofs,:,direction))
+             q_new(this%point_indices(first_point:last_point),:,direction) = &
+                  MATMUL(TRANSPOSE(this%weights(:,first_point:last_point)),q_old(old_dofs,:,direction))
           ENDDO
        ENDIF
-
-       DEALLOCATE(element_reference_points, shape_functions, point_indices)
     ENDDO
-  ENDSUBROUTINE interpolate_projected_solution
+  END SUBROUTINE apply_mesh_transfer_fields
 
   SUBROUTINE collect_target_points(connectivity, coordinates, target_points)
     INTEGER, INTENT(IN)                    :: connectivity(:,:)
@@ -568,27 +576,6 @@ CONTAINS
        ERROR STOP "Projection connectivity contains invalid node indices"
     ENDIF
   ENDSUBROUTINE validate_mesh_geometry
-
-  SUBROUTINE validate_projection_shapes(old_connectivity, new_connectivity, u_old, q_old, u_new, q_new)
-    INTEGER, INTENT(IN)                    :: old_connectivity(:,:), new_connectivity(:,:)
-    REAL*8, INTENT(IN)                     :: u_old(:,:)
-    REAL*8, OPTIONAL, INTENT(IN)           :: q_old(:,:,:)
-    REAL*8, INTENT(OUT)                    :: u_new(:,:)
-    REAL*8, OPTIONAL, INTENT(OUT)          :: q_new(:,:,:)
-
-    INTEGER                                :: old_points, new_points
-
-    CALL validate_optional_gradient_pair(PRESENT(q_old),PRESENT(q_new))
-    old_points = SIZE(old_connectivity,1)*SIZE(old_connectivity,2)
-    new_points = SIZE(new_connectivity,1)*SIZE(new_connectivity,2)
-    IF(SIZE(u_old,1) .NE. old_points .OR. SIZE(u_new,1) .NE. new_points .OR. &
-         SIZE(u_old,2) .NE. SIZE(u_new,2)) ERROR STOP "Projection solution shapes are inconsistent"
-    IF(PRESENT(q_old)) THEN
-       IF(SIZE(q_old,1) .NE. old_points .OR. SIZE(q_new,1) .NE. new_points .OR. &
-            SIZE(q_old,2) .NE. SIZE(u_old,2) .OR. SIZE(q_new,2) .NE. SIZE(u_new,2) .OR. &
-            SIZE(q_old,3) .NE. SIZE(q_new,3)) ERROR STOP "Projection gradient shapes are inconsistent"
-    ENDIF
-  ENDSUBROUTINE validate_projection_shapes
 
   SUBROUTINE print_projection_banner()
     IF(MPIvar%glob_id .NE. 0 .OR. utils%printint .LE. 0) RETURN

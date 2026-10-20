@@ -64,7 +64,7 @@
   },
   "workflows": {
     "plasma_baseline": {
-      "inputs": ["geometry", "equilibrium_magnetic_field", "equilibrium_current_density"],
+      "inputs": ["geometry", "equilibrium_magnetic_field"],
       "impurity_configuration": "impurity_configuration",
       "layout": "mpi4_omp4",
       "parameter_overrides": {
@@ -376,7 +376,7 @@
     "cold_step_fixed": {
       "type": "staged_fixed_mesh",
       "description": "Run two Newton iterations on the coarse mesh without adaptation",
-      "inputs": ["geometry", "equilibrium_magnetic_field", "equilibrium_current_density"],
+      "inputs": ["geometry", "equilibrium_magnetic_field"],
       "mesh": "coarse_mesh",
       "impurity_configuration": "impurity_configuration",
       "layout": "serial_omp1",

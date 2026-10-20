@@ -55,6 +55,56 @@ def publish(setup):
     return golden.publish(setup.workspace, setup.output, 'reviewed-1', 'Accepted solver change', 'Review record 42')
 
 
+def test_refresh_collects_a_checkpoint_separately_from_the_final_reference(setup):
+    import shlex
+    import sys
+
+    path = setup.root / 'cases/legacy_case.json'
+    case = json.loads(path.read_text())
+    case['files']['optional']['step6_checkpoint'] = 'restart_step6.h5'
+    case['workflows']['checkpoint_producer'] = {'extends': 'warm', 'restart': 'warm_restart',
+        'outputs': [], 'checkpoint_outputs': {'step6_checkpoint': 6}}
+    case['workflows']['warm']['restart'] = 'step6_checkpoint'
+    path.write_text(json.dumps(case))
+    recipe_path = setup.root/'golden.json'
+    recipe = json.loads(recipe_path.read_text())
+    recipe['cases']['legacy_case']['producers'] = ['warm', 'checkpoint_producer']
+    recipe_path.write_text(json.dumps(recipe))
+    with pytest.raises(BundleError, match='producer warm needs: step6_checkpoint'):
+        golden.refresh('legacy_case', setup.values, setup.workspace)
+    assert not setup.workspace.exists()
+    recipe['cases']['legacy_case']['producers'].reverse()
+    recipe_path.write_text(json.dumps(recipe))
+    checkpoint = f'''{shlex.quote(sys.executable)} - <<'PY'
+import h5py, shutil
+shutil.copy2('outputs/result.h5', 'outputs/checkpoint.h5')
+with h5py.File('outputs/checkpoint.h5', 'r+') as handle:
+    group = handle.require_group('simulation_parameters/time')
+    if 'Current_time_step_number' in group:
+        group['Current_time_step_number'][...] = 6
+    else:
+        group['Current_time_step_number'] = 6
+    handle['solution/u'][...] += 6
+PY
+printf 'Error: 1.0E-8\\nOutput written to file outputs/checkpoint.h5\\n'
+'''
+    solver = SOLVER.replace("printf 'Error:", checkpoint + "printf 'Error:")
+    setup.harness.install_solver(solver, 'serial')
+    _, report = golden.refresh('legacy_case', setup.values, setup.workspace)
+    candidate = setup.workspace / 'candidate'
+    manifest = json.loads((candidate / 'manifest.json').read_text())
+    record = manifest['artifacts'][manifest['roles']['step6_checkpoint']]
+    produced = Path(report['producers'][0]['run_directory']) / 'outputs/checkpoint.h5'
+    assert file_identity(candidate / record['path']) == file_identity(produced)
+    consumer = Path(report['producers'][1]['run_directory'])
+    assert (consumer/'inputs/restart.h5').resolve() == produced
+    with h5py.File(candidate / record['path']) as checkpoint, h5py.File(candidate / 'inputs/reference_mpi4_omp4.h5') as final:
+        assert checkpoint['simulation_parameters/time/Current_time_step_number'][()] == 6
+        assert (checkpoint['solution/u'][()] == final['solution/u'][()]).all()
+    publish(setup)
+    assert file_identity(setup.output / record['path']) == file_identity(produced)
+
+
 def mesh_producers(setup):
     path = setup.root / 'workflows.json'
     workflows = json.loads(path.read_text())
@@ -234,29 +284,23 @@ def test_publish_rejects_changed_outputs_evidence_and_missing_reason(setup):
 
 
 @pytest.fixture
-def indexed_setup(setup):
+def trajectory_setup(setup):
     source = setup.harness.source
-    (source / 'magnetic').mkdir()
-    frames = []
-    for number in range(2):
-        frame = {}
-        for kind in ('magnetic', 'current'):
-            path = source / f'magnetic/{kind}_{number + 1:04d}.h5'
-            with h5py.File(path, 'w') as handle:
-                handle['time'], handle['dt'] = number * .02, .02
-                handle['field'] = [number, number + 1]
-            frame[kind] = path.relative_to(source).as_posix()
-        frames.append(frame)
-    (source / 'series.json').write_text(json.dumps({'schema_version': 1, 'dt_s': .02, 'frames': frames}))
+    with h5py.File(source / 'trajectory.h5', 'w') as handle:
+        handle['time'] = [0., .02, .04]
+        handle['grid/r'], handle['grid/z'] = [2., 3.], [-1., 1.]
+        handle['equilibrium/psiSep'] = [1., 1., 1.]
+        for name in ('psi', 'Bphi', 'Br', 'Bz', 'Jtor'):
+            handle[f'equilibrium/{name}'] = [[[n, n+1], [n+2, n+3]] for n in range(3)]
     with h5py.File(source / 'restart.h5', 'r+') as handle:
         handle['simulation_parameters/adimensionalization/time_scale'] = 2e-7
     path = setup.root / 'cases/legacy_case.json'
     case = json.loads(path.read_text())
-    case['files']['optional']['equilibrium_series'] = 'series.json'
+    case['files']['required']['equilibrium_series'] = 'trajectory.h5'
     case['workflows']['moving'] = {'extends': 'warm',
         'moving_equilibrium': {'series': 'equilibrium_series'}, 'parameter_overrides': {'nts': 1}}
     path.write_text(json.dumps(case))
-    setup.source_bundle = setup.harness.root / 'indexed_bundle'
+    setup.source_bundle = setup.harness.root / 'trajectory_bundle'
     create_bundle('legacy_case', source, setup.source_bundle, setup.root / 'cases')
     setup.values = {**setup.values, 'MHDG_REGRESSION_DATA_ROOT': str(setup.source_bundle)}
     # An unrelated unroled artifact must still be removed by compact collection.
@@ -270,20 +314,19 @@ def indexed_setup(setup):
     return setup
 
 
-def test_indexed_fields_survive_refresh_publication_and_source_removal(indexed_setup):
-    setup = indexed_setup
+def test_trajectory_survives_refresh_publication_and_source_removal(trajectory_setup):
+    setup = trajectory_setup
     source_manifest = json.loads((setup.source_bundle / 'manifest.json').read_text())
     case = load_case_definition('legacy_case', setup.root / 'cases')
-    members = series_artifact_ids(setup.source_bundle, source_manifest, case)
-    assert len(members) == 4 and members.isdisjoint(source_manifest['roles'].values())
+    artifact_id = source_manifest['roles']['equilibrium_series']
+    assert not series_artifact_ids(setup.source_bundle, source_manifest, case)
     golden.refresh('legacy_case', setup.values, setup.workspace)
     publish(setup)
     for bundle in (setup.workspace / 'candidate', setup.output):
         manifest = json.loads((bundle / 'manifest.json').read_text())
-        for member in members:
-            assert manifest['artifacts'][member] == source_manifest['artifacts'][member]
-            assert file_identity(bundle / manifest['artifacts'][member]['path']) == {
-                key: source_manifest['artifacts'][member][key] for key in ('sha256', 'size_bytes')}
+        assert manifest['artifacts'][artifact_id] == source_manifest['artifacts'][artifact_id]
+        assert file_identity(bundle / manifest['artifacts'][artifact_id]['path']) == {
+            key: source_manifest['artifacts'][artifact_id][key] for key in ('sha256', 'size_bytes')}
         assert 'retired_field' not in manifest['artifacts']
         assert not (bundle / 'inputs/retired.h5').exists()
     assert not any(path.is_symlink() for path in setup.output.rglob('*'))
@@ -294,18 +337,19 @@ def test_indexed_fields_survive_refresh_publication_and_source_removal(indexed_s
     values = {**setup.values, 'MHDG_REGRESSION_DATA_ROOT': str(setup.output)}
     prepared = prepare_run(values, 'legacy_case', 'moving', 'serial_omp1',
                            setup.root / 'cases', setup.root / 'layouts.json', require_reference=False)
-    assert len(list((prepared.path / 'inputs/magnetic').glob('*.h5'))) == 4
+    with h5py.File(prepared.path / 'inputs/equilibrium.h5') as handle:
+        assert handle['time'][:].tolist() == [0., .02]
+        assert handle['equilibrium/Jtor'].shape == (2, 2, 2)
 
 
 @pytest.mark.parametrize('damage', ['missing', 'changed'])
-def test_publication_rejects_damaged_indexed_field(indexed_setup, damage):
-    setup = indexed_setup
+def test_publication_rejects_damaged_trajectory(trajectory_setup, damage):
+    setup = trajectory_setup
     golden.refresh('legacy_case', setup.values, setup.workspace)
     candidate = setup.workspace / 'candidate'
     manifest = json.loads((candidate / 'manifest.json').read_text())
-    case = load_case_definition('legacy_case', setup.root / 'cases')
-    member = sorted(series_artifact_ids(candidate, manifest, case))[0]
-    path = candidate / manifest['artifacts'][member]['path']
+    artifact_id = manifest['roles']['equilibrium_series']
+    path = candidate / manifest['artifacts'][artifact_id]['path']
     if damage == 'missing':
         path.unlink()
     else:
@@ -316,19 +360,9 @@ def test_publication_rejects_damaged_indexed_field(indexed_setup, damage):
 
 
 @pytest.fixture
-def stopped_setup(indexed_setup):
-    setup = indexed_setup
+def stopped_setup(trajectory_setup):
+    setup = trajectory_setup
     source = setup.harness.source
-    index = json.loads((source / 'series.json').read_text())
-    frame = {}
-    for kind in ('magnetic', 'current'):
-        path = source / f'magnetic/{kind}_0003.h5'
-        shutil.copy2(source / index['frames'][-1][kind], path)
-        with h5py.File(path, 'r+') as handle:
-            handle['time'][...] = .04
-        frame[kind] = path.relative_to(source).as_posix()
-    index['frames'].append(frame)
-    (source / 'series.json').write_text(json.dumps(index))
     path = setup.root / 'cases/legacy_case.json'
     case = json.loads(path.read_text())
     workflow = case['workflows']['moving']

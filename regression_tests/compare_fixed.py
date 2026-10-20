@@ -16,6 +16,7 @@ def compare_hdf5_files(
     reference_path: Path,
     candidate_path: Path,
     tolerances: dict[str, Any],
+    *, ignore_magnetic_generations: bool = False,
 ) -> dict[str, Any]:
     """Compare grouped solutions on the same fixed mesh."""
     failures: list[str] = []
@@ -54,6 +55,7 @@ def compare_hdf5_files(
                 candidate,
                 tolerances,
                 failures,
+                ignore_generations=ignore_magnetic_generations,
             )
     except (OSError, KeyError) as exc:
         raise ComparisonError(f"cannot read HDF5 comparison data: {exc}") from exc
@@ -534,7 +536,7 @@ def compare_magnetic(
     candidate: h5py.File,
     tolerances: dict[str, Any],
     failures: list[str],
-    *, names: tuple[str, ...] | None = None,
+    *, names: tuple[str, ...] | None = None, ignore_generations: bool = False,
 ) -> dict[str, Any]:
     """Compare magnetic datasets, or selected categorical metadata exactly."""
     reference_group = optional_group(reference, "magnetic")
@@ -550,6 +552,8 @@ def compare_magnetic(
 
     datasets: dict[str, dict[str, Any]] = {}
     for name in names if names is not None else reference_group:
+        if ignore_generations and name in {"cache_generation", "equilibrium_generation"}:
+            continue
         reference_dataset = reference_group.get(name)
         if not isinstance(reference_dataset, h5py.Dataset):
             if names is not None:
