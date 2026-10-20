@@ -771,8 +771,6 @@ CONTAINS
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
     CASE (bc_BohmPuff)
       CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
-    CASE (bc_iter_core)
-      CALL set_itercore_bc()
     CASE DEFAULT
       WRITE (6,*) "Error: wrong boundary type"
       STOP
@@ -1010,53 +1008,6 @@ CONTAINS
   END SUBROUTINE set_dirichletstr_bc
 
 
-  !***************************************************************
-  ! Boundary condition to model the ITER core
-  !***************************************************************
-  SUBROUTINE set_itercore_bc
-    INTEGER                   :: g
-    REAL*8                    :: dline,xyDerNorm_g
-    REAL*8                    :: t_g(Ndim),n_g(Ndim)
-    REAL*8                    :: NiNi(Npfl,Npfl),Ni(Npfl)
-    REAL                      :: tau_stab(Neq,Neq)
-    ! Loop in 1D Gauss points
-    DO g = 1,Ng1d
-
-      ! Calculate the integration weight
-       xyDerNorm_g = NORM2(xyDer(g,:))
-      dline = refElPol%gauss_weights1D(g)*xyDerNorm_g
-      IF (switch%axisym) THEN
-        dline = dline*xyg(g,1)
-      END IF
-
-      ! Unit normal to the boundary
-      t_g = xyDer(g,:)/xyDerNorm_g
-      n_g = [t_g(2),-t_g(1)]
-
-
-      !****************** Stabilization part******************************
-      IF (numer%stab > 1) THEN
-        ! Compute tau in the Gauss points
-        IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
-        ELSE
-          CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
-        ENDIF
-      ELSE
-        tau_stab=0.
-        DO i = 1,Neq
-          tau_stab(i,i) = numer%tau(i)
-        END DO
-      END IF
-      !****************** End stabilization part******************************
-
-
-      NiNi = tensorProduct(refElPol%N1D(g,:),refElPol%N1D(g,:))*dline
-      Ni = refElPol%N1D(g,:)*dline
-      CALL assembly_itercore_bc(iel,ind_asf,ind_ash,ind_ff,ind_fg,NiNi,Ni,b(g,1:2),n_g,tau_stab,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g))
-    END DO
-
-  END SUBROUTINE set_itercore_bc
 
 
 
@@ -1518,137 +1469,6 @@ CONTAINS
 
 
 
-  !*********************************
-  ! ITER core boundary condition
-  !*********************************
-  SUBROUTINE assembly_itercore_bc(iel,ind_asf,ind_ash,ind_ff,ind_fg,NiNi,Ni,bg,ng,tau,diffiso,diffani)
-      INTEGER*4    :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fg(:)
-      REAL*8       :: NiNi(:,:),Ni(:),bg(:),ng(:)
-      REAL*8       :: tau(:,:)
-      REAL*8       :: diffiso(:,:),diffani(:,:)
-      REAL*8       :: bn
-      INTEGER*4    :: i,j, idm
-      INTEGER*4    :: indi(Npfl),indj(Npfl)
-      REAL*8       :: source_dens_coeff,source_ener_coeff
-
-
-#ifndef NEUTRAL
-      WRITE(6,*) "Wrong bc! Should be used only with neutrals"
-      STOP
-#endif
-
-
-      bn = dot_PRODUCT(bg,ng)
-
-    source_dens_coeff = phys%part_source/simpar%refval_density/(Mesh%core_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale
-    source_ener_coeff = 0.5*phys%ener_source/simpar%refval_specenergydens/(Mesh%core_area*phys%lscale**2)/(simpar%refval_diffusion)*phys%lscale/simpar%refval_mass
-
-    ! *********** Equation 1 --> Flux plasma equal to flux neutrals + source
-    ! stabilization part
-    i = 1
-    indi = i + ind_asf
-      elMat%ALL(ind_ff(indi),ind_ff(indi),iel) = elMat%ALL(ind_ff(indi),ind_ff(indi),iel) - tau(i,i)*NiNi
-    elMat%Alu(ind_ff(indi),ind_fe(indi),iel) = elMat%Alu(ind_ff(indi),ind_fe(indi),iel) + tau(i,i)*NiNi
-    ! flux diagonal part
-    j = 1
-    DO idm = 1,Ndim
-      indj = ind_ash + idm + (j - 1)*Ndim
-      !elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
-      !  &NiNi*ng(idm)*phys%diff_n
-      elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) -  &
-        NiNi*(ng(idm)*diffiso(i,i)-bn*bg(idm)*diffani(i,i))
-    END DO
-   ! flux non-diagonal part
-    j = phys%Neq
-    DO idm = 1,Ndim
-      indj = ind_ash + idm + (j - 1)*Ndim
-      elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
-        &NiNi*ng(idm)*phys%diff_nn
-    END DO
-    ! flux rhs-part
-    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_dens_coeff*Ni
-
-
-
-    ! *********** Equation 2 --> zero momentum
-    ! stabilization part
-    i = 2
-    indi = i + ind_asf
-      elMat%ALL(ind_ff(indi),ind_ff(indi),iel) = elMat%ALL(ind_ff(indi),ind_ff(indi),iel) - numer%tau(i)*NiNi
-     ! flux diagonal part
-    j = 2
-    DO idm = 1,Ndim
-      indj = ind_ash + idm + (j - 1)*Ndim
-      !elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*ng(idm)*phys%diff_u
-      elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*(ng(idm)*diffiso(i,i)-bn*bg(idm)*diffani(i,i))
-    END DO
-
-
-#ifdef TEMPERATURE
-    ! *********** Equation 3 --> Ions energy flux equal 10 MW
-    ! stabilization part
-    i = 3
-    indi = i + ind_asf
-      elMat%ALL(ind_ff(indi),ind_ff(indi),iel) = elMat%ALL(ind_ff(indi),ind_ff(indi),iel) - tau(i,i)*NiNi
-    elMat%Alu(ind_ff(indi),ind_fe(indi),iel) = elMat%Alu(ind_ff(indi),ind_fe(indi),iel) + tau(i,i)*NiNi
-    ! flux diagonal part
-    j = 3
-    DO idm = 1,Ndim
-      indj = ind_ash + idm + (j - 1)*Ndim
-      !elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
-      !  &NiNi*ng(idm)*phys%diff_e
-      elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*(ng(idm)*diffiso(i,i)-bn*bg(idm)*diffani(i,i))
-    END DO
-    ! flux rhs-part
-    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_ener_coeff*Ni
-
-
-    ! *********** Equation 4 --> Electrons energy flux equal 10 MW
-    ! stabilization part
-    i = 4
-    indi = i + ind_asf
-      elMat%ALL(ind_ff(indi),ind_ff(indi),iel) = elMat%ALL(ind_ff(indi),ind_ff(indi),iel) - tau(i,i)*NiNi
-    elMat%Alu(ind_ff(indi),ind_fe(indi),iel) = elMat%Alu(ind_ff(indi),ind_fe(indi),iel) + tau(i,i)*NiNi
-    ! flux diagonal part
-    j = 4
-    DO idm = 1,Ndim
-      indj = ind_ash + idm + (j - 1)*Ndim
-      !elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
-      !  &NiNi*ng(idm)*phys%diff_ee
-      elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*(ng(idm)*diffiso(i,i)-bn*bg(idm)*diffani(i,i))
-    END DO
-    ! flux rhs-part
-    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_ener_coeff*Ni
-#endif
-
-
-    ! *********** Equation Neq --> Flux neutrals equal to flux plasma - source
-    ! stabilization part
-    i = phys%Neq
-    indi = i + ind_asf
-      elMat%ALL(ind_ff(indi),ind_ff(indi),iel) = elMat%ALL(ind_ff(indi),ind_ff(indi),iel) - tau(i,i)*NiNi
-    elMat%Alu(ind_ff(indi),ind_fe(indi),iel) = elMat%Alu(ind_ff(indi),ind_fe(indi),iel) + tau(i,i)*NiNi
-    ! flux diagonal part
-    j = phys%Neq
-    DO idm = 1,Ndim
-      indj = ind_ash + idm + (j - 1)*Ndim
-      elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
-        &NiNi*ng(idm)*phys%diff_nn
-    END DO
-!   ! flux non-diagonal part
-!    j = 1
-!    DO idm = 1,Ndim
-!      indj = ind_ash + idm + (j - 1)*Ndim
-!      elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
-!        &NiNi*ng(idm)*phys%diff_n
-!    END DO
-!    ! flux rhs-part
-!    elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) - source_dens_coeff*Ni
-
-
-
-
-  END SUBROUTINE assembly_itercore_bc
 
 
 

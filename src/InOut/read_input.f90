@@ -175,6 +175,10 @@ SUBROUTINE READ_input()
   target_density_xpr_dimension = 0
   zeff_dimension = 0
   tau = 1.d0
+  bcflags = 0
+  ! Accepted for compatibility with inputs predating removal of BC 6.
+  part_source = 0.d0
+  ener_source = 0.d0
   diff_nn_min = diff_nn_min_unset
   Re_n = 1.d0
   Re_n_pump = Re_n_pump_unset
@@ -234,6 +238,12 @@ SUBROUTINE READ_input()
   READ (uinput, UTILS_LST)
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
+
+  IF (ANY(bcflags == 6)) THEN
+     IF (MPIvar%glob_id == 0) &
+          WRITE(6,*) 'Boundary condition 6 (ITER core) has been removed; select a supported boundary condition explicitly.'
+     STOP 1
+  ENDIF
 
   CALL configure_time_input()
   IF (time_mode /= 'legacy' .AND. (target_variable < 0 .OR. target_variable > 3)) THEN
@@ -874,8 +884,8 @@ SUBROUTINE READ_input()
              ENDIF
           ENDIF
      ENDIF
-     PRINT *, '                - particle source at core:                            ', part_source
-     PRINT *, '                - energy source at core:                              ', ener_source
+     PRINT *, '                - legacy part_source (unused):                        ', part_source
+     PRINT *, '                - legacy ener_source (unused):                        ', ener_source
 #endif
 #ifdef KEQUATION
      PRINT *, '                - minimum perp diffusion in the k equation:           ', phys%diff_k_min

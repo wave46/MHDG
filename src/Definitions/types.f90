@@ -21,7 +21,7 @@ MODULE types
   INTEGER, PARAMETER, PUBLIC :: bc_dirichlet_weak_form_oldvalues = 3
   INTEGER, PARAMETER, PUBLIC :: bc_Transmission = 4
   INTEGER, PARAMETER, PUBLIC :: bc_dirichlet_and_Neumann = 5
-  INTEGER, PARAMETER, PUBLIC :: bc_iter_core = 6
+  ! BC ID 6 (legacy ITER core) is retired; do not reuse it.
   ! 20-.. In out type
   INTEGER, PARAMETER, PUBLIC :: bc_inout = 20
   ! 30-.. Neumann type
@@ -322,8 +322,8 @@ MODULE types
      TYPE(Feedback_derivative_history_type) :: feedback_derivative_history_xpr
      REAL*8                    :: n_li  ! line integrated density
      REAL*8                    :: cryopump_power ! Cryopump power in [m^3/s] coefficient
-     REAL*8                    :: part_source ! Particle source for ITER
-     REAL*8                    :: ener_source ! Particle source for ITER
+     REAL*8                    :: part_source ! Unused legacy ITER-core input
+     REAL*8                    :: ener_source ! Unused legacy ITER-core input
      REAL*8                    :: density_source ! Density source for WEST (2D, case 52)
      REAL*8                    :: ener_source_e ! Ion energy source for WEST and ITER (2D, case 52 and 81)
      REAL*8                    :: ener_source_ee ! Electron source for WEST and ITER (2D, case 52 and 81)
@@ -890,7 +890,6 @@ CONTAINS
     bc_flag_name(3)  = 'Dirichlet weak form using old values of the variables'
     bc_flag_name(4)  = 'Transmission boundary conditions'
     bc_flag_name(5)  = 'Dirichlet in some equations and Neumann in others '
-    bc_flag_name(6)  = 'ITER core BC: plasma flux = plasma flux, energy flux imposed '
     bc_flag_name(20) = 'Inlet-Outlet'
     bc_flag_name(30) = 'Neumann homogeneus'
     bc_flag_name(50) = 'Bohm'
