@@ -1310,11 +1310,12 @@ SUBROUTINE HDG_assembly()
 
   END DO ! End loop over elements
   !$OMP END DO
-  rows(nn + 1) = nnz + 1
-  rhs%loc2glob = loc2glob
   DEALLOCATE (Kel, fel)
 
   !$OMP END PARALLEL
+
+  rows(nn + 1) = nnz + 1
+  rhs%loc2glob = loc2glob
 
   NULLIFY (cols, rows, vals, loc2glob, rhsvec)
 
