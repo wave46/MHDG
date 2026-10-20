@@ -3079,6 +3079,7 @@ ENDIF
           IF (switch%ohmicsrc) THEN
             rhs(:,i) = rhs(:,i) + Sohmic*(Jtor**2)*Ni
           ENDIF
+#ifdef NEUTRAL
           ELSEIF (i == inn) THEN
                  DO j = 1,Neq
               z = i+(j-1)*Neq
@@ -3104,6 +3105,7 @@ ENDIF
                 &rhs(:,i) = rhs(:,i) - DOT_PRODUCT(Qpr(k,:),dW5p_dU_u)*NNbb*b(k)
 #endif
                  ENDDO
+#endif
 #ifdef KEQUATION
         ELSEIF (i==ik) THEN
           DO j=1,Neq
@@ -3396,7 +3398,9 @@ ENDIF
 #ifdef NEUTRALP
       real*8                    :: W5p(Neq),dW5p_dU(Neq,Neq),QdW5p(Ndim,Neq)
 #endif
+#ifdef NEUTRAL
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8                    :: ddk_dU(Neq), ddk_dU_U
@@ -3512,10 +3516,12 @@ ENDIF
         dq_fs_i_dU = 0.
       END IF
 
+#ifdef NEUTRAL
            CALL compute_Dnn_dU(uf,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,uf)
       Dnn_dU = neutral_limiter_phi*Dnn_dU
       Dnn_dU_u = neutral_limiter_phi*Dnn_dU_u
+#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       call compute_ddk_dU(uf,xyf,q_cyl,ddk_dU)
@@ -3715,6 +3721,7 @@ ENDIF
                  kmultf = flux_limiter_e**2*coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
+#ifdef NEUTRAL
       ELSEIF (i == inn) THEN
         DO j=1,Neq
           ind_jf = ind_asf+j
@@ -3749,6 +3756,7 @@ ENDIF
         kmultf = kmultf*Nif
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
           elMat%fh(ind_ff(ind_if),iel) = elMat%fh(ind_ff(ind_if),iel) - kmultf
+#endif
 #endif
 #ifdef NEUTRALGAMMA
        ELSEIF (i == ign) THEN
@@ -3881,7 +3889,9 @@ ENDIF
 #ifdef NEUTRALP
       real*8                    :: W5p(Neq), dW5p_dU(Neq,Neq), QdW5p(Ndim,Neq)
 #endif
+#ifdef NEUTRAL
       real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       real*8                    :: ddk_dU(Neq), ddk_dU_U
@@ -3996,10 +4006,12 @@ ENDIF
         dq_fs_i_dU = 0.
       END IF
       
+#ifdef NEUTRAL
            CALL compute_Dnn_dU(uf,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,uf)
       Dnn_dU = neutral_limiter_phi*Dnn_dU
       Dnn_dU_u = neutral_limiter_phi*Dnn_dU_u
+#endif
 
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
@@ -4241,6 +4253,7 @@ END IF
           END DO
                  kmultf = flux_limiter_e**2*coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue),b),uf))*Nfbn
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+#ifdef NEUTRAL
         ELSEIF (i == inn) THEN
           DO j=1,Neq
             ind_jf = ind_asf+j
@@ -4271,6 +4284,7 @@ END IF
           IF (switch%neutral_perpendicular_diffusion) kmultf = kmultf - bn*DOT_PRODUCT(MATMUL(TRANSPOSE(QdW5p),b),uf)
           kmultf = kmultf*Nif
           elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - kmultf
+#endif
 #endif
 #ifdef NEUTRALGAMMA
        ELSEIF (i == ign) THEN

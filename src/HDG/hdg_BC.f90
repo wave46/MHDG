@@ -2014,10 +2014,12 @@ CONTAINS
         dq_fs_i_dU = 0.0
       END IF
 
+#ifdef NEUTRAL
       call compute_Dnn_dU(ufg,Dnn_dU)
       Dnn_dU_u = dot_product(Dnn_dU,ufg)
       Dnn_dU = neutral_limiter_phi*Dnn_dU
       Dnn_dU_u = neutral_limiter_phi*Dnn_dU_u
+#endif
 #ifdef KEQUATION
 #ifdef DKLINEARIZED
       call compute_ddk_dU(ufg,xyf,q_cyl,ddk_dU)

@@ -874,6 +874,7 @@ CONTAINS
 #endif
 #endif
 
+#ifdef NEUTRAL
   SUBROUTINE compute_neutral_transport_prefactor(U, coeff)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: coeff
@@ -1015,6 +1016,7 @@ CONTAINS
          &Dnn, result)
     phi = result%phi
   END SUBROUTINE compute_neutral_flux_limiter_phi
+#endif
 #endif
 
 
@@ -1441,9 +1443,6 @@ CONTAINS
     !WRITE(6,*) d_iso(1,1,:)*simpar%refval_length**2/simpar%refval_time
 #endif
     !Dnn = sum(Dnn)/size(u,1)
-#else
-    inn = phys%idx_rhon_eq
-    d_iso(inn,inn,:) = 0.
 #endif
     d_ani(1, 1, :) = d_iso(1,1,:)
     d_ani(2, 2, :) = d_iso(2,2,:)
