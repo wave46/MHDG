@@ -107,6 +107,8 @@ the diagnostics check also needs h5py and NumPy.
   supported source/circular presets, ignored legacy `diffmin` and core sources,
   `bohmtypebc=0` with rejection of the removed alternate Bohm selectors, and
   legacy `saveTau=.false.` with rejection of removed `saveTau=.true.` output.
+  It also checks the k-build testcase restriction to 50–69 and its absence
+  in non-k builds; the compiled test reports its build kind to the checker.
 - `check-neutral-wall-diagnostics`: production accumulator/HDF5 writer; nine
   cases cover zero/active loss, modes, merges, signs, particle totals and
   separation from plasma recycling and relocated puff/pump.

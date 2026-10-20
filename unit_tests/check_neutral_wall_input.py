@@ -9,10 +9,18 @@ import tempfile
 
 def main():
     executable = Path(sys.argv[1]).resolve()
+    build_kind = subprocess.check_output(
+        [str(executable), "--build-kind"], text=True, timeout=15).strip()
+    if build_kind not in ("k", "non-k"):
+        raise SystemExit(f"unexpected input-check build kind: {build_kind!r}")
+    k_equation = build_kind == "k"
     repository = Path(__file__).resolve().parents[1]
     template = (repository / "test/param_initial.txt").read_text()
     # Omission and inheritance cases must not inherit explicit template albedos.
     template = re.sub(r"(?mi)^\s*Re_n(?:_pump)?\s*=[^\n]*\n", "", template)
+    if k_equation:
+        template = template.replace("&PHYS_LST", "&PHYS_LST\n"
+            "  diff_k_min=10, diff_k_max=10, k_max=1.e10", 1)
     valid = [
         ("omitted", "", (1.0, 1.0)),
         ("explicit_inactive", "Re_n=1, Re_n_pump=1", (1.0, 1.0)),
@@ -50,6 +58,10 @@ def main():
         ("SWITCH_LST", "legacy_diffmin", "diffmin=0.1", (1.0, 1.0)),
         ("PHYS_LST", "legacy_core_sources", "part_source=1, ener_source=20e6", (1.0, 1.0)),
     ])
+    cases.extend(("SWITCH_LST", f"k_range_{value}", f"testcase={value}",
+                  "k-equation builds require testcase in 50-69"
+                  if k_equation and not 50 <= value <= 69 else (1.0, 1.0))
+                 for value in (2, 49, 50, 69, 70))
     with tempfile.TemporaryDirectory(prefix="mhdg-neutral-wall-input-") as scratch:
         for namelist, name, entries, expected in cases:
             directory = Path(scratch) / name

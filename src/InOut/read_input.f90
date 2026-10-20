@@ -248,6 +248,15 @@ SUBROUTINE READ_input()
      STOP 1
   ENDIF
 
+#ifdef KEQUATION
+  ! The k radius is defined only for the 50-69 coordinate conventions.
+  IF (testcase < 50 .OR. testcase > 69) THEN
+     IF (MPIvar%glob_id == 0) &
+          WRITE(6,*) 'k-equation builds require testcase in 50-69. Received:', testcase
+     STOP 1
+  ENDIF
+#endif
+
   IF (ANY(bcflags == 6)) THEN
      IF (MPIvar%glob_id == 0) &
           WRITE(6,*) 'Boundary condition 6 (ITER core) has been removed; select a supported boundary condition explicitly.'
