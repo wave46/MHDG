@@ -33,8 +33,6 @@ SUBROUTINE HDG_computeJacobian()
   INTEGER*4             :: sizeu,sizel
   REAL*8,ALLOCATABLE    :: ures(:,:),lres(:,:),u0res(:,:,:)
   REAL*8,ALLOCATABLE    :: Xel(:,:),Xfl(:,:)
-  REAL*8,ALLOCATABLE    :: tau_save(:,:)
-  REAL*8,ALLOCATABLE    :: xy_g_save(:,:)
   LOGICAL               :: isdir
 #ifdef TEMPERATURE
   REAL*8                :: coefi,coefe
@@ -59,23 +57,17 @@ SUBROUTINE HDG_computeJacobian()
   REAL*8                :: Jtorel(refElTor%Nnodes3d)
 #else
   ! Definitions in 2D
-  LOGICAL               :: save_tau
   INTEGER*4             :: inde(Mesh%Nnodesperelem)
   INTEGER*4             :: indf(refElPol%Nfacenodes)
   INTEGER*4             :: ind_loc(refElPol%Nfaces,refElPol%Nfacenodes*phys%Neq),perm(refElPol%Nfacenodes*phys%Neq)
   REAL*8                :: ue(Mesh%Nnodesperelem,phys%Neq),u0e(Mesh%Nnodesperelem,phys%Neq,time%tis)
   REAL*8                :: uf(refElPol%Nfacenodes,phys%Neq),uef(refElPol%Nfacenodes,phys%Neq)
-  INTEGER               :: indtausave(refElPol%Nfaces*refElPol%Ngauss1d)
-  INTEGER               :: inddiff_nn_Vol(refElPol%NGauss2D)
-  REAL*8                :: tau_save_el(refElPol%Nfaces*refElPol%Ngauss1d,phys%neq),xy_g_save_el(refElPol%Nfaces*refElPol%Ngauss1d,2)
   REAL*8                :: qe(Mesh%Nnodesperelem,phys%Neq*2),qef(refElPol%Nfacenodes,phys%Neq*2)
   REAL*8,ALLOCATABLE    :: qres(:,:)
   REAL*8                :: Bel(refElPol%Nnodes2d,3),fluxel(refElPol%Nnodes2d),psiel(refElPol%Nnodes2d),Bfl(refElPol%Nfacenodes,3),psifl(refElPol%Nfacenodes)
   REAL*8                :: external_heating_ions_el(refElPol%Nnodes2d),external_heating_electrons_el(refElPol%Nnodes2d)
   real*8                :: omegael(refElPol%Nnodes2d),q_cylel(refElPol%Nnodes2d),q_cylfl(refElPol%Nfacenodes),omegafl(refElPol%Nfacenodes)
   REAL*8                :: Jtorel(refElPol%Nnodes2d)
-  REAL*8                :: diff_nn_Vol_el(refElPol%NGauss2D),v_nn_Vol_el(refElPol%NGauss2D,Mesh%Ndim),Xg_el(refElPol%NGauss2D,Mesh%Ndim)
-  REAL*8                :: diff_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D),v_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D,Mesh%Ndim)
   REAL*8                :: wall_source_totals_el(4)
   LOGICAL               :: diagnostics_on
   LOGICAL               :: element_diagnostics_on,face_diagnostics_on
@@ -183,13 +175,6 @@ SUBROUTINE HDG_computeJacobian()
   perm = 0
   CALL set_permutations(Neq*Npfl,Neq,perm)
 
-  save_tau = switch%saveTau
-  IF (save_tau) THEN
-     ALLOCATE (tau_save(refElPol%Nfaces*Mesh%Nelems*refElPol%Ngauss1d,phys%neq))
-     ALLOCATE (xy_g_save(refElPol%Nfaces*Mesh%Nelems*refElPol%Ngauss1d,2))
-    tau_save = 0.
-    xy_g_save = 0.
-  ENDIF
 
   ! Compute shock capturing diffusion
   IF (switch%shockcp.GT.0) THEN
@@ -1137,7 +1122,6 @@ CONTAINS
   ENDIF
   !$OMP PARALLEL DEFAULT(SHARED) &
   !$OMP PRIVATE(iel,ifa,iface,inde,indf,Xel,Xfl,i,qe,qef,ue,uef,uf,u0e,Bel,Bfl,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,psifl,q_cylfl,omegafl,isdir,Jtorel,wall_source_totals_el) &
-  !$OMP PRIVATE(Xg_el,diff_nn_Vol_el,diff_nn_Fac_el,v_nn_Vol_el,v_nn_Fac_el,xy_g_save,xy_g_save_el,tau_save,tau_save_el)&
   !$OMP PRIVATE(element_diagnostics_on,face_diagnostics_on,thread_diagnostics) &
   !$OMP FIRSTPRIVATE(phys)
 
@@ -1201,23 +1185,11 @@ CONTAINS
 #endif
 
     ! Compute the matrices for the element
-    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el, &
+    CALL elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,wall_source_totals_el, &
       &element_diagnostics_on,thread_diagnostics)
 
-     IF (save_tau) THEN
-       inddiff_nn_Vol = (iel - 1)*refElPol%NGauss2D+(/(i,i=1,refElPol%NGauss2D)/)
-       phys%diff_nn_Vol(inddiff_nn_Vol) = diff_nn_Vol_el
-       phys%v_nn_Vol(inddiff_nn_Vol,:) = v_nn_Vol_el
-       Mesh%Xg(inddiff_nn_Vol,:) = Xg_el
-     ENDIF
 
     ! Loop in local faces
-     IF (save_tau) THEN
-       diff_nn_Fac_el = 0.
-       v_nn_Fac_el = 0.
-       tau_save_el = 0.
-       xy_g_save_el = 0;
-     ENDIF
 
     DO ifa=1,refElPol%Nfaces
       iface = Mesh%F(iel,ifa)
@@ -1250,7 +1222,7 @@ CONTAINS
       endif
 
       if (iface.le.Mesh%Nintfaces) then
-        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf)
       else
 
         if (Mesh%periodic_faces(iface-Mesh%Nintfaces).eq.0) then
@@ -1260,11 +1232,11 @@ CONTAINS
           IF (Mesh%boundaryFlag(iface-Mesh%Nintfaces) .EQ. 0) face_diagnostics_on = .FALSE.
           IF (Mesh%ghostFaces(iface) .NE. 0) face_diagnostics_on = .FALSE.
 #endif
-          CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el, &
+          CALL elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf, &
             &face_diagnostics_on,thread_diagnostics)
         else
           ! periodic face
-          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf)
         endif
       endif
 
@@ -1279,14 +1251,6 @@ CONTAINS
         END IF
     END DO
 
-     IF (save_tau) THEN
-       indtausave = (iel - 1)*refElPol%Nfaces*refElPol%Ngauss1d+(/(i,i=1,refElPol%Nfaces*refElPol%Ngauss1d)/)
-	   phys%diff_nn_Fac(indtausave) = diff_nn_Fac_el
-	   phys%v_nn_Fac(indtausave,:) = v_nn_Fac_el
-	   tau_save(indtausave,:) = tau_save_el
-	   Mesh%Xgf(indtausave,:) = xy_g_save_el
-       xy_g_save(indtausave,:) = xy_g_save_el
-     END IF
 
 
   END DO
@@ -1314,14 +1278,6 @@ CONTAINS
   DEALLOCATE (ures,lres,u0res)
   DEALLOCATE (qres)
 
-  IF (save_tau) THEN
-     WRITE (6,*) "Saving Dnn in 2D gauss points"
-     WRITE (6,*) "Saving tau in the faces"
-     CALL saveMatrix(tau_save,'tau_save')
-     CALL saveMatrix(xy_g_save,'xy_g_save')
-     DEALLOCATE (tau_save,xy_g_save)
-     WRITE (6,*) "Done saving tau!"
-  ENDIF
 
   IF (utils%printint > 1) THEN
     WRITE (6,*) "Done!"
@@ -1341,7 +1297,7 @@ CONTAINS
   !***************************************************
   ! Volume computation in 2D
   !***************************************************
-  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,diff_nn_Vol_el,v_nn_Vol_el,Xg_el,wall_source_totals_el,diagnostics_on,diagnostics)
+  SUBROUTINE elemental_matrices_volume(iel,Xel,Bel,fluxel,omegael,q_cylel,psiel,external_heating_ions_el,external_heating_electrons_el,qe,ue,u0e,Jtorel,wall_source_totals_el,diagnostics_on,diagnostics)
 
       INTEGER,INTENT(IN)            :: iel
       REAL*8,INTENT(IN)             :: Xel(:,:)
@@ -1350,7 +1306,6 @@ CONTAINS
       REAL*8,INTENT(IN)             :: omegael(:),q_cylel(:)
       REAL*8,INTENT(IN)             :: qe(:,:)
       REAL*8,INTENT(IN)             :: ue(:,:),u0e(:,:,:)
-      REAL*8,INTENT(OUT)            :: diff_nn_Vol_el(Ng2D),v_nn_Vol_el(Ng2D,ndim),Xg_el(Ng2D,ndim)
       REAL*8,INTENT(OUT)            :: wall_source_totals_el(4)
       LOGICAL,INTENT(IN)             :: diagnostics_on
       TYPE(balance_accumulator_type),INTENT(INOUT) :: diagnostics
@@ -1387,17 +1342,11 @@ CONTAINS
     real*8                        :: gaussian_heating
 #endif
     real*8                        :: th_n = 1.e-14
-    real*8                        :: Vnng(Ndim)
     real*8                        :: neutral_limiter_phi(Ng2d)
       REAL*8                        :: external_heating_ions_gauss(Ng2d), external_heating_electrons_gauss(Ng2d)
 
       inn = phys%idx_rhon_eq
 
-      IF (save_tau) THEN
-       Xg_el = 0.
-       diff_nn_Vol_el = 0.
-       v_nn_Vol_el = 0.
-      ENDIF
 
     ind_ass = (/(i,i=0,Neq*(Npel - 1),Neq)/)
     ind_asq = (/(i,i=0,Neq*(Npel - 1)*Ndim,Neq*Ndim)/)
@@ -1412,9 +1361,6 @@ CONTAINS
 
     ! Gauss points position
       xy = MATMUL(refElPol%N2D,Xel)
-      IF (save_tau) THEN
-       Xg_el = xy;
-      ENDIF
 
     !****************************************************
     !                      Magnetic field
@@ -1506,9 +1452,6 @@ CONTAINS
     ENDIF
 #endif
 
-    if (save_tau) then
-       diff_nn_Vol_el = diff_iso_vol(inn,inn,:)
-      ENDIF
 
       IF (switch%shockcp.GT.0) THEN
          auxdiffsc = MATMUL(refElPol%N2D,Mesh%scdiff_nodes(iel,:))
@@ -1752,9 +1695,6 @@ CONTAINS
         &outward_normal=topology_normal(g,:),diagnostics_on=diagnostics_on,diagnostics=diagnostics)
 #endif
 
-         IF (save_tau) THEN
-         v_nn_Vol_el(g,:) = Vnng
-         ENDIF
 
     END DO ! END loop in volume Gauss points
 #ifdef NEUTRAL
@@ -1964,7 +1904,7 @@ CONTAINS
   ! Interior faces computation in 2D
   !***************************************************
 
-  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el)
+  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf)
 
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
@@ -1973,8 +1913,7 @@ CONTAINS
     real*8,intent(IN)         :: uef(:,:),uf(:,:)
     real*8,intent(IN)             :: q_cylfl(:)
     real*8,intent(in)         :: omegafl(:)
-    real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
-    integer*4                 :: g,NGauss,i,indsave(Ng1d),inn
+    integer*4                 :: g,NGauss,i,inn
     real*8                    :: dline,xyDerNorm_g
     real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq)
     real*8                    :: xyf(Ng1d,ndim)
@@ -1985,7 +1924,7 @@ CONTAINS
     real*8                    :: t_g(ndim),n_g(ndim),bn
     real*8                    :: NNif(Npfl,Npfl),Nif(Npfl),Nfbn(Npfl)
     real*8                    :: upgf(Ng1d,phys%npv)
-    real*8                    :: tau(Neq,Neq),Vnng(Ndim)
+    real*8                    :: tau(Neq,Neq)
     real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d),rho_pol_norm(Ng1d)
     real*8                    :: topology_normal(Ng1d,2)
     integer                   :: topology_region(Ng1d)
@@ -2084,10 +2023,6 @@ CONTAINS
     ENDIF
 #endif
 
-    if (save_tau) then
-       indsave = (ifa - 1)*Ngauss + (/(i,i=1,Ngauss)/)
-       diff_nn_Fac_el(indsave) = diff_iso_fac(inn,inn,:)
-      END IF
 
       IF (switch%shockcp.GT.0) THEN
          auxdiffsc = MATMUL(refElPol%N1D,Mesh%scdiff_nodes(iel,refElPol%face_nodes(ifa,:)))
@@ -2148,13 +2083,6 @@ CONTAINS
         topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
 
-         IF (save_tau) THEN
-        DO i = 1,Neq
-          tau_save_el((ifa - 1)*Ngauss + g,i) = tau(i,i)
-        END DO
-        v_nn_Fac_el((ifa -1)*Ngauss + g,:) = Vnng
-        xy_g_save_el((ifa - 1)*Ngauss + g,:) = xyf(g,:)
-         ENDIF
 
 
     END DO ! Gauss points
@@ -2167,7 +2095,7 @@ CONTAINS
   ! Exterior faces computation in 2D
   !***************************************************
 
-  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diff_nn_Fac_el,v_nn_Fac_el,tau_save_el,xy_g_save_el,diagnostics_on,diagnostics)
+  SUBROUTINE elemental_matrices_faces_ext(iel,ifa,isdir,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf,diagnostics_on,diagnostics)
 
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
@@ -2177,10 +2105,9 @@ CONTAINS
     real*8,intent(INOUT)      :: uef(:,:),uf(:,:)
     real*8,intent(IN)             :: q_cylfl(:)
     real*8,intent(in)         :: omegafl(:)
-    real*8,intent(out)        :: diff_nn_Fac_el(:),v_nn_Fac_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
     logical,intent(IN) :: diagnostics_on
     TYPE(balance_accumulator_type),INTENT(INOUT) :: diagnostics
-    integer*4                 :: g,NGauss,i,indsave(Ng1d),inn
+    integer*4                 :: g,NGauss,i,inn
     real*8                    :: dline,xyDerNorm_g
     real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq),diffusion_state(Ng1d,neq)
     real*8                    :: xyf(Ng1d,ndim)
@@ -2200,7 +2127,6 @@ CONTAINS
     real*8                    :: diff_iso_tau(Neq,Neq,Ng1d)
     real*8                    :: neutral_limiter_phi(Ng1d)
     real*8                    :: auxdiffsc(Ng1d)
-    real*8                    :: Vnng(Ndim)
     real*8                    :: q_cyl(Ng1d)
     real*8                    :: omega(Ng1d)
     integer                   :: boundary_flag
@@ -2313,10 +2239,6 @@ CONTAINS
     ENDIF
 #endif
 
-    if (save_tau) then
-       indsave = (ifa -1)*Ngauss + (/(i,i=1,Ngauss)/)
-       diff_nn_Fac_el(indsave) = diff_iso_fac(inn,inn,:)
-      END IF
 
       IF (switch%shockcp.GT.0) THEN
          auxdiffsc = MATMUL(refElPol%N1D,Mesh%scdiff_nodes(iel,refElPol%face_nodes(ifa,:)))
@@ -2422,13 +2344,6 @@ CONTAINS
 #endif
 
 #endif
-      if (save_tau) then
-        DO i = 1,Neq
-          tau_save_el((ifa - 1)*Ngauss + g,i) = tau(i,i)
-        END DO
-        v_nn_Fac_el((ifa - 1)*Ngauss + g,:) = Vnng
-        xy_g_save_el((ifa - 1)*Ngauss + g,:) = xyf(g,:)
-         ENDIF
 
     END DO ! Gauss points
 

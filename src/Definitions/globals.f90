@@ -408,24 +408,6 @@ CONTAINS
        DEALLOCATE (phys%Jtor)
        NULLIFY(phys%Jtor)
     END IF
-    IF (ALLOCATED(phys%diff_nn_Vol)) THEN
-       DEALLOCATE (phys%diff_nn_Vol)
-    END IF
-    IF (ALLOCATED(phys%diff_nn_Fac)) THEN
-       DEALLOCATE (phys%diff_nn_Fac)
-    END IF
-    IF (ALLOCATED(phys%diff_nn_Bou)) THEN
-       DEALLOCATE (phys%diff_nn_Bou)
-    END IF
-    IF (ALLOCATED(phys%v_nn_Vol)) THEN
-       DEALLOCATE (phys%v_nn_Vol)
-    END IF
-    IF (ALLOCATED(phys%v_nn_Fac)) THEN
-       DEALLOCATE (phys%v_nn_Fac)
-    END IF
-    IF (ALLOCATED(phys%v_nn_Bou)) THEN
-       DEALLOCATE (phys%v_nn_Bou)
-    END IF
     IF (ASSOCIATED(phys%omega)) THEN
        DEALLOCATE (phys%omega)
        NULLIFY(phys%omega)
@@ -634,9 +616,6 @@ CONTAINS
     IF (ALLOCATED(Mesh_loc%minrho_elems)) DEALLOCATE(Mesh_loc%minrho_elems)
     IF (ALLOCATED(Mesh_loc%sour_elems)) DEALLOCATE(Mesh_loc%sour_elems)
     IF (ALLOCATED(Mesh_loc%diff_elems)) DEALLOCATE(Mesh_loc%diff_elems)
-    IF (ALLOCATED(Mesh_loc%Xg)) DEALLOCATE(Mesh_loc%Xg)
-    IF (ALLOCATED(Mesh_loc%Xgf)) DEALLOCATE(Mesh_loc%Xgf)
-    IF (ALLOCATED(Mesh_loc%Xgb)) DEALLOCATE(Mesh_loc%Xgb)
     IF (ASSOCIATED(Mesh_loc%T)) THEN
        DEALLOCATE(Mesh_loc%T)
        NULLIFY(Mesh_loc%T)

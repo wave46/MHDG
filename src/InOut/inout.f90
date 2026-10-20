@@ -1297,7 +1297,6 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%decoup, 'decoup')
       CALL HDF5_logical_saving(group_id2, switch%ckeramp, 'ckeramp')
       CALL HDF5_logical_saving(group_id2, switch%saveNR, 'saveNR')
-      CALL HDF5_logical_saving(group_id2, switch%saveTau, 'saveTau')
       CALL HDF5_logical_saving(group_id2, switch%fixdPotLim, 'fixdPotLim')
       CALL HDF5_logical_saving(group_id2, switch%dirivortcore, 'dirivortcore')
       CALL HDF5_logical_saving(group_id2, switch%dirivortlim, 'dirivortlim')

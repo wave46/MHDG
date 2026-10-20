@@ -370,13 +370,11 @@ CONTAINS
        restored%X = -1.d0
        restored%T = -1
        restored%face_info = -1
-       ALLOCATE(restored%Xg(1,2),restored%Xgf(1,2),restored%Xgb(1,2))
        CALL free_mesh_loc(restored)
        IF (ASSOCIATED(restored%X) .OR. ASSOCIATED(restored%T) .OR. ALLOCATED(restored%face_info) .OR. &
            ALLOCATED(restored%flag_elems_rho) .OR. ALLOCATED(restored%flag_elems_sc) .OR. &
            ALLOCATED(restored%minrho_elems) .OR. ALLOCATED(restored%sour_elems) .OR. &
-           ALLOCATED(restored%diff_elems) .OR. ALLOCATED(restored%Xg) .OR. ALLOCATED(restored%Xgf) .OR. &
-           ALLOCATED(restored%Xgb)) ERROR STOP 'mesh cleanup retained owned storage'
+           ALLOCATED(restored%diff_elems)) ERROR STOP 'mesh cleanup retained owned storage'
        CALL free_mesh_loc(restored)
     ENDDO
     CALL free_mesh_loc(saved)

@@ -36,6 +36,11 @@ def main():
     cases.extend(("NUMER_LST", f"removed_bohm_{value}", f"bohmtypebc={value}",
                   "Alternate Bohm boundary conditions have been removed")
                  for value in (1, 2))
+    cases.extend([
+        ("SWITCH_LST", "legacy_savetau_false", "saveTau=.false.", (1.0, 1.0)),
+        ("SWITCH_LST", "removed_savetau_true", "saveTau=.true.",
+         "saveTau output has been removed"),
+    ])
     with tempfile.TemporaryDirectory(prefix="mhdg-neutral-wall-input-") as scratch:
         for namelist, name, entries, expected in cases:
             directory = Path(scratch) / name

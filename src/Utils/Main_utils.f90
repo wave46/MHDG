@@ -1276,15 +1276,6 @@ CONTAINS
 
     NULLIFY(phys%B, phys%magnetic_flux, phys%Bperturb, phys%magnetic_psi, phys%Jtor, phys%omega, phys%q_cyl)
     NULLIFY(phys%external_heating_ions, phys%external_heating_electrons)
-    IF (ALLOCATED(phys%diff_nn_Vol)) DEALLOCATE(phys%diff_nn_Vol)
-    IF (ALLOCATED(phys%diff_nn_Fac)) DEALLOCATE(phys%diff_nn_Fac)
-    IF (ALLOCATED(phys%diff_nn_Bou)) DEALLOCATE(phys%diff_nn_Bou)
-    IF (ALLOCATED(phys%v_nn_Vol)) DEALLOCATE(phys%v_nn_Vol)
-    IF (ALLOCATED(phys%v_nn_Fac)) DEALLOCATE(phys%v_nn_Fac)
-    IF (ALLOCATED(phys%v_nn_Bou)) DEALLOCATE(phys%v_nn_Bou)
-    IF (ALLOCATED(Mesh%Xg)) DEALLOCATE(Mesh%Xg)
-    IF (ALLOCATED(Mesh%Xgf)) DEALLOCATE(Mesh%Xgf)
-    IF (ALLOCATED(Mesh%Xgb)) DEALLOCATE(Mesh%Xgb)
     CALL free_el_mat()
     CALL free_mat()
   ENDSUBROUTINE free_before_adaptivity

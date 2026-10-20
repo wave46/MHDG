@@ -144,9 +144,6 @@ MODULE types
      REAL*8                 :: puff_area ! area of the puff bounday condition
      REAL*8                 :: pump_area ! area of the pump bounday condition
      REAL*8                 :: core_area ! area of the core bounday condition
-     REAL*8,ALLOCATABLE     :: Xg(:,:) ! 2D Gauss point coordinates
-     REAL*8,ALLOCATABLE     :: Xgf(:,:) ! 1D Gauss point coordinates at interior faces
-     REAL*8,ALLOCATABLE     :: Xgb(:,:) ! 1D Gauss point coordinates at boundary faces
 #ifdef PARALL
      INTEGER, POINTER       :: loc2glob_fa(:) => NULL()! mapping number of the faces for creating the global matrix [number of faces in the mesh]
      INTEGER, POINTER       :: loc2glob_el(:) => NULL()! mapping number of the elements from local to global [number of elements in the mesh]
@@ -297,12 +294,6 @@ MODULE types
      REAL*8,DIMENSION(22)      :: E           ! Energy values from TRIM
      REAL*8,DIMENSION(19)      :: theta       ! Incidence angle values from TRIM
      REAL*8,DIMENSION(22,19)   :: RN_DW       ! Reflection coefficient for neutrals from TRIM, (E,theta) grid
-     REAL*8,ALLOCATABLE        :: diff_nn_Vol(:) ! Diffusion in the neutral equation at 2D Gauss points
-     REAL*8,ALLOCATABLE        :: diff_nn_Fac(:) ! Diffusion in the neutral equation at 1D Gauss points on interior faces
-     REAL*8,ALLOCATABLE        :: diff_nn_Bou(:) ! Diffusion in the neutral equation at 1D Gauss points on boundary faces
-     REAL*8,ALLOCATABLE        :: v_nn_Vol(:,:) ! Convective velocity in the neutral equation at 2D Gauss points
-     REAL*8,ALLOCATABLE        :: v_nn_Fac(:,:) ! Convective velocity in the neutral equation at 1D Gauss points on interior faces
-     REAL*8,ALLOCATABLE        :: v_nn_Bou(:,:) ! Convective velocity in the neutral equation at 1D Gauss points on boundary faces
      REAL*8                    :: Re ! Recycling for the neutral equation
      REAL*8                    :: Re_pump ! Recycling for the neutral equation in the pump region
      REAL*8                    :: Re_n = 1.d0
@@ -445,7 +436,6 @@ MODULE types
      LOGICAL :: decoup  ! Decouple N-Gamma from Te-Ti (only used for N-Gamma-Ti-Te model)
      LOGICAL :: ckeramp ! Chech the error amplification in the linear system solution (for very ill-conditioned matrices)
      LOGICAL :: saveNR  ! Save solution at each NR iteration
-     LOGICAL :: saveTau ! Save tau on faces
      LOGICAL :: transport_1d ! Save reduced 1D flux-surface profiles with solution output
      LOGICAL :: fixdPotLim
      LOGICAL :: dirivortcore

@@ -177,6 +177,7 @@ SUBROUTINE READ_input()
   tau = 1.d0
   bcflags = 0
   bohmtypebc = 0 ! Compatibility input; alternative Bohm assemblers are retired.
+  saveTau = .FALSE. ! Compatibility input; Gauss-point text dumps are retired.
   ! Accepted for compatibility with inputs predating removal of BC 6.
   part_source = 0.d0
   ener_source = 0.d0
@@ -248,6 +249,12 @@ SUBROUTINE READ_input()
   IF (bohmtypebc /= 0) THEN
      IF (MPIvar%glob_id == 0) &
           WRITE(6,*) 'Alternate Bohm boundary conditions have been removed; omit bohmtypebc or set it to 0. Received:', bohmtypebc
+     STOP 1
+  ENDIF
+
+  IF (saveTau) THEN
+     IF (MPIvar%glob_id == 0) &
+          WRITE(6,*) 'saveTau output has been removed; omit saveTau or set it to .false.'
      STOP 1
   ENDIF
 
@@ -443,7 +450,6 @@ SUBROUTINE READ_input()
   switch%decoup           = decoup
   switch%ckeramp          = ckeramp
   switch%saveNR           = saveNR
-  switch%saveTau          = saveTau
   switch%transport_1d = transport_1d
   switch%gmsh2h5          = gmsh2h5
   switch%fixdPotLim       = fixdPotLim
@@ -921,7 +927,6 @@ SUBROUTINE READ_input()
 #endif
      PRINT *, '                - ckeramp:                                            ', ckeramp
      PRINT *, '                - saveNR:                                             ', saveNR
-     PRINT *, '                - saveTau:                                            ', saveTau
      PRINT *, '                - transport_1d:                          ', transport_1d
      PRINT *, '                - transport_model_path:                  ', TRIM(ADJUSTL(input%transport_model_path))
      PRINT *, '                - rho_core (transport model):            ', transport_model_input%rho_core

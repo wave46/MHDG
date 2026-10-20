@@ -38,7 +38,6 @@ SUBROUTINE HDG_BC()
   REAL*8                    :: qqf(refElTor%Nfl,3*phys%Neq),qfg(refElTor%Ngl,phys%neq*3)
   REAL*8                    :: coefi,coefe
   REAL*8                    :: tdiv(numer%ntor + 1)
-  REAL*8                    :: tau_save_el(refElPol%Ngauss1d,phys%neq),xy_g_save_el(refElPol%Ngauss1d,2)
   REAL*8                    :: xyf(refElPol%Ngauss1d,2),xyd_g(refElPol%Ngauss1d,2),xydNorm_g(refElPol%Ngauss1d)
   INTEGER                   :: ind_asf(refElTor%Nfl),ind_ash(refElTor%Nfl)
   REAL*8                    :: Bfl(refElTor%Nfl,3)
@@ -508,15 +507,9 @@ CONTAINS
   REAL*8                    :: uf(refElPol%Nfacenodes*phys%neq),qf(refElPol%Nfacenodes,phys%neq*2)
   REAL*8                    :: ue(refElPol%Nfacenodes,phys%neq)
   REAL*8                    :: coefi,coefe
-  REAL*8                    :: tau_save_el(refElPol%Ngauss1d,phys%neq),xy_g_save_el(refElPol%Ngauss1d,2)
-  REAL*8                    :: v_nn_Bou_el(refElPol%Ngauss1D,Mesh%Ndim)
-  LOGICAL                   :: save_tau
-  REAL*8,ALLOCATABLE        :: tau_save(:,:)
-  REAL*8,ALLOCATABLE        :: xy_g_save(:,:)
   REAL*8,ALLOCATABLE        :: ures(:,:)
   INTEGER*4                 :: inde(Mesh%Nnodesperelem)
   INTEGER                   :: sizeu
-  INTEGER                   :: indtausave(refElPol%Ngauss1d)
   INTEGER                   :: ind_asf(refElPol%Nfacenodes),ind_ash(refElPol%Nfacenodes)
   REAL*8                    :: Bfl(refElPol%Nfacenodes,3),psifl(refElPol%Nfacenodes)
   REAL*8                    :: Bmod_nod(refElPol%Nfacenodes),b_nod(refElPol%Nfacenodes,3)
@@ -541,7 +534,6 @@ CONTAINS
     CALL cpu_TIME(timing%tps1)
     CALL system_CLOCK(timing%cks1,timing%clock_rate1)
   END IF
-  save_tau = switch%saveTau
   Ndim = 2
   Npel = refElPol%Nnodes2D
   Npfl = refElPol%Nfacenodes
@@ -558,15 +550,6 @@ CONTAINS
   ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
   ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
 
-  IF (save_tau) THEN
-     ALLOCATE (tau_save(Mesh%Nextfaces*refElPol%Ngauss1d,phys%neq))
-     ALLOCATE (xy_g_save(Mesh%Nextfaces*refElPol%Ngauss1d,2))
-    tau_save = 0.
-    xy_g_save = 0.
-    v_nn_Bou_el = 0.
-    tau_save_el = 0.
-    xy_g_save_el = 0.
-  ENDIF
   sizeu = SIZE(sol%u)
 
   ALLOCATE (ures(sizeu/Neq,Neq))
@@ -708,11 +691,6 @@ CONTAINS
     ENDIF
 #endif
 
-    if (save_tau) then
-       indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
-       phys%diff_nn_Bou(indtausave) = &
-         &diff_iso_fac(phys%idx_rhon_eq,phys%idx_rhon_eq,:)
-     ENDIF
 
     ! Physical variables at Gauss points (division by 0 during convergence test!!!)
      IF ( switch%testcase .NE. 2 ) THEN
@@ -741,12 +719,6 @@ CONTAINS
       CALL set_dirichletstr_bc()
     CASE (bc_dirichlet_weak_form)
       CALL set_dirichletwf_bc()
-        IF (save_tau) THEN
-         DO i = 1, Neq
-            tau_save_el(:,i) = numer%tau(i)
-            xy_g_save_el = xyg
-         END DO
-        ENDIF
     CASE (bc_dirichlet_and_Neumann)
       CALL set_diric_neum_bc()
     CASE(bc_NeumannH)
@@ -757,23 +729,16 @@ CONTAINS
       CYCLE ! done in assembly
       !         CALL set_periodic_bc()
     CASE (bc_Bohm)
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
+      CALL set_Bohm_bc()
     CASE (bc_BohmPump)
 
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
+      CALL set_Bohm_bc()
     CASE (bc_BohmPuff)
-      CALL set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
+      CALL set_Bohm_bc()
     CASE DEFAULT
       WRITE (6,*) "Error: wrong boundary type"
       STOP
     END SELECT
-     IF (save_tau) THEN
-       indtausave = (ifa - 1)*refElPol%Ngauss1d+(/(i,i=1,refElPol%Ngauss1d)/)
-       phys%v_nn_Bou(indtausave,:) = v_nn_Bou_el
-       tau_save(indtausave,:) = tau_save_el
-       Mesh%Xgb(indtausave,:) = xy_g_save_el
-       xy_g_save(indtausave,:) = xy_g_save_el
-     ENDIF
 
   END DO
 
@@ -783,13 +748,6 @@ CONTAINS
     CALL balance_diag%report()
   ENDIF
 
-  IF (save_tau) THEN
-     WRITE (6,*) "Saving tau in the boundary faces"
-     CALL saveMatrix(tau_save,'tau_save_bound')
-     CALL saveMatrix(xy_g_save,'xy_g_save_bound')
-     DEALLOCATE (tau_save,xy_g_save)
-     WRITE (6,*) "Done saving tau!"
-  ENDIF
   DEALLOCATE(ures)
 
   IF (utils%timing) THEN
@@ -1037,7 +995,7 @@ CONTAINS
   !****************************
   ! Bohm
   !****************************
-  SUBROUTINE set_Bohm_bc(v_nn_Bou_el,tau_save_el,xy_g_save_el)
+  SUBROUTINE set_Bohm_bc()
       INTEGER                   :: g,i
       REAL*8                    :: dline,xyDerNorm_g
       REAL*8                    :: setval
@@ -1049,8 +1007,6 @@ CONTAINS
     REAL*8                    :: dcs_du(Neq)
       REAL*8                    :: bn
       LOGICAL                   :: ntang
-      REAL*8,INTENT(out)        :: v_nn_Bou_el(:,:),tau_save_el(:,:),xy_g_save_el(:,:)
-      REAL*8                    :: Vnng(Ndim)
       REAL                      :: tau_stab(Neq,Neq)
       REAL*8                    :: bohm_suppresion, energy_zero_threshold
     energy_zero_threshold=1.e-20
@@ -1147,12 +1103,6 @@ CONTAINS
           CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
         ENDIF
 
-            IF (save_tau) THEN
-          DO i = 1,Neq
-            tau_save_el(g,i) = tau_stab(i,i)
-          END DO
-          xy_g_save_el(g,:) = xyg(g,:)
-            ENDIF
       ELSE
         tau_stab=0.
         DO i = 1,Neq
@@ -1173,9 +1123,6 @@ CONTAINS
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
 
-         IF (save_tau) THEN
-         v_nn_Bou_el(g,:) = Vnng
-         ENDIF
 
     END DO ! END loop in Gauss points
 

@@ -56,7 +56,6 @@
                                         ! false: coupled system
     ckeramp             = .false.       ! check the error amplification in the linear system solution (for very ill-conditioned matrices)
     saveNR              = .true.        ! save each N-R iterations
-    saveTau             = .false.       ! save tau on faces
     gmsh2h5		= .true.	! convert the gmsh read in input to hdf5 format
     !***** N-Gamma-Vorticity model
     fixdPotLim          = .false.       ! Fix potential at the floating potential on the limiter
