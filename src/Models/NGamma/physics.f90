@@ -317,7 +317,8 @@ CONTAINS
                 !			            ipdiff(g) = exp(dref) ! 1 < ipdiff(g) < exp(maxamp)
                 ipdiff(g) = ipdiff(g) + EXP(dref) - 1 ! 0 < ipdiff(g) < exp(maxamp)-1
              ELSE IF (opt==2) THEN
-                ipdiff(g) = ipdiff(g) +  1./((1.-d/numer%minrho)*2+1./50.) - 1.
+                ! Low-density protection must not subtract diffusion.
+                ipdiff(g) = ipdiff(g) + MAX(0.d0, 1./((1.-d/numer%minrho)*2+1./50.) - 1.)
              ENDIF
           ENDIF
        END DO
