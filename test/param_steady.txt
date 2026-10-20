@@ -31,7 +31,6 @@
                                         ! condition (only works if steady=.false.)
     diffred             = 0.6  ! Reduction factor of the diffusion for psdtime simulation (set for 20*diff_x)
     !diffred             = 0.76923076923
-    diffmin             = 0.1           ! Minimum value of the diffusion for a psdtime simulation
     shockcp             = 0             ! Shock capturing option
                                         ! 0 - No shock capturing
                                         ! 1 - Constant in each element
@@ -220,12 +219,10 @@
     feedback_derivative_gain_xpr = 0.5e-23
     cryopump_power      = 10.      ! cryopump power in [m^3/s]
     density_source      = 1.59      ! amplitude of the truncated gaussian density source for WEST with core (case 52)
-    ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52 and 81)
-    ener_source_ee      = 150.      ! amplitude of the truncated electron energy source (case 52 and 81)
-    sigma_source        = 0.05      ! sigma of the truncated gaussian sources (case 52 and 81)
+    ener_source_e       = 150.      ! amplitude of the truncated ion energy source (case 52)
+    ener_source_ee      = 150.      ! amplitude of the truncated electron energy source (case 52)
+    sigma_source        = 0.05      ! sigma of the truncated gaussian sources (case 52)
     fluxg_trunc         = 0.2       ! value of the NORMALISED magnetic surface at which truncate the gaussian source WEST (case 52)
-    part_source         = 0.        ! source coefficient (particles per second in the whole core area [ONLY BC 6])
-    ener_source         = 20e6      ! source coefficient (Watt in the whole core area [ONLY BC 6])
     ! kequation part
     !diff_k_min = 10.  ! minimal diffusion in the k equation
     !diff_k_max = 10. ! maximal diffusion in the k equation

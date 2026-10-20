@@ -181,6 +181,7 @@ SUBROUTINE READ_input()
   ! Accepted for compatibility with inputs predating removal of BC 6.
   part_source = 0.d0
   ener_source = 0.d0
+  diffmin = 0.d0 ! Compatibility input; the case-86 diffusion floor is retired.
   diff_nn_min = diff_nn_min_unset
   Re_n = 1.d0
   Re_n_pump = Re_n_pump_unset
@@ -240,6 +241,12 @@ SUBROUTINE READ_input()
   READ (uinput, UTILS_LST)
   READ (uinput, LSSOLV_LST)
   CLOSE (uinput)
+
+  IF (testcase >= 80 .AND. testcase <= 89) THEN
+     IF (MPIvar%glob_id == 0) &
+          WRITE(6,*) 'ITER testcases 80-89 have been removed; select a supported testcase and configure sources explicitly.'
+     STOP 1
+  ENDIF
 
   IF (ANY(bcflags == 6)) THEN
      IF (MPIvar%glob_id == 0) &
@@ -441,7 +448,6 @@ SUBROUTINE READ_input()
   switch%Ripple           = Ripple
   switch%psdtime          = psdtime
   switch%diffred          = diffred
-  switch%diffmin          = diffmin
   switch%shockcp          = shockcp
   switch%limrho           = limrho
   switch%difcor           = difcor
@@ -634,8 +640,6 @@ SUBROUTINE READ_input()
 #endif
   phys%sigma_source       = sigma_source
   phys%fluxg_trunc        = fluxg_trunc
-  phys%part_source        = part_source
-  phys%ener_source        = ener_source
   phys%Zeff               = Zeff
   phys%Pohmic             = Pohmic
   phys%Tbg                = Tbg
@@ -891,8 +895,6 @@ SUBROUTINE READ_input()
              ENDIF
           ENDIF
      ENDIF
-     PRINT *, '                - legacy part_source (unused):                        ', part_source
-     PRINT *, '                - legacy ener_source (unused):                        ', ener_source
 #endif
 #ifdef KEQUATION
      PRINT *, '                - minimum perp diffusion in the k equation:           ', phys%diff_k_min

@@ -1811,7 +1811,7 @@ ENDSUBROUTINE update_delta_te
        ! Load the mesh file from gmsh input or h5
        
       mesh_flip = 1
-      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) mesh_flip = 0
+      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LT. 80)) mesh_flip = 0
       CALL resolve_input_filename(mesh_input_name, '.msh', mesh_filename, ierr)
       IF (ierr /= 0) THEN
          IF (MPIvar%glob_id == 0) WRITE(*,*) 'Mesh input file not found: ', TRIM(mesh_filename)

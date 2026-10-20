@@ -118,7 +118,7 @@ CONTAINS
       CALL free_reference_element_pol(refElPol)
       CALL create_reference_element(refElPol,2,order, verbose = 0)
 
-      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
+      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LT. 80)) THEN
          CALL load_gmsh_mesh("./res/temp",0)
       ELSE
          CALL load_gmsh_mesh("./res/temp",1)

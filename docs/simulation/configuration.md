@@ -152,9 +152,8 @@ stage near 0.56 m²/s, followed by about 0.34 m²/s. To obtain 0.5 m²/s,
 reconverge the nearby stage with the desired fixed coefficients.
 
 The legacy loop limit `nts` bounds numerical iterations, not the number of
-completed quasi-steady stages. **`diffmin` does not stop the reduction loop.**
-It is used as a diffusion floor in a separate current-dependent model path;
-do not rely on it to finish this workflow at a requested coefficient.
+completed quasi-steady stages. Set the final diffusivities with the fixed
+steady solve above.
 
 A converged reduction stage is saved before its coefficients are reduced.
 The final save after the loop can follow another reduction without a solve

@@ -1356,23 +1356,6 @@ CONTAINS
     d_iso(3, 3, :) = phys%diff_e
     d_iso(4, 4, :) = phys%diff_ee
     IF ((switch%ME .EQV. .TRUE.) ) THEN
-       IF (switch%testcase .EQ. 85) THEN !Iter core-edge with evolving equilibria plus diffusion decrease
-          d_iso(1, 1, :) = phys%diff_n - (phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-          d_iso(2, 2, :) = phys%diff_u - (phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-          d_iso(3, 3, :) = phys%diff_e - (phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-          d_iso(4, 4, :) = phys%diff_ee - (phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-       ELSE IF (switch%testcase .EQ. 86) THEN
-          d_iso(1,1,:) = MAX(switch%diffmin,phys%diff_n - 2.18*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.)))
-          d_iso(2,2,:) = MAX(switch%diffmin,phys%diff_u - 2.18*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.)))
-          d_iso(3,3,:) = MAX(switch%diffmin,phys%diff_e - 2.18*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.)))
-          d_iso(4,4,:) = MAX(switch%diffmin,phys%diff_ee - 2.18*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.)))
-       ELSE IF (switch%testcase .EQ. 87) THEN
-          d_iso(1,1,:) = phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
-          d_iso(2,2,:) = phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
-          d_iso(3,3,:) = phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
-          d_iso(4,4,:) = phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
-       ENDIF
-
        IF (switch%diff_reverse_Ip) THEN
          d_iso(1,1,:) = phys%diff_n*phys%I_0/phys%I_p
          d_iso(2,2,:) = phys%diff_u*phys%I_0/phys%I_p
@@ -1449,24 +1432,6 @@ CONTAINS
     d_ani(2, 2, :) = d_iso(2,2,:)
     d_ani(3, 3, :) = d_iso(3,3,:)
     d_ani(4, 4, :) = d_iso(4,4,:)
-    IF ((switch%ME .EQV. .TRUE.) .AND. (switch%testcase .GT. 84)) THEN !Iter core-edge with evolving equilibria plus diffusion decrease
-       IF (switch%testcase .EQ. 85) THEN
-         d_ani(1, 1, :) = phys%diff_n - (phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-         d_ani(2, 2, :) = phys%diff_u - (phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-         d_ani(3, 3, :) = phys%diff_e - (phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-         d_ani(4, 4, :) = phys%diff_ee - (phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2)/14.65*(phys%I_p - 0.35)
-       ELSE IF (switch%testcase .EQ. 86) THEN
-          d_ani(1,1,:) = MAX(switch%diffmin,phys%diff_n - 2.18*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.)))
-          d_ani(2,2,:) = MAX(switch%diffmin,phys%diff_u - 2.18*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.)))
-          d_ani(3,3,:) = MAX(switch%diffmin,phys%diff_e - 2.18*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.)))
-          d_ani(4,4,:) = MAX(switch%diffmin,phys%diff_ee - 2.18*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.)))
-       ELSE IF (switch%testcase .EQ. 87) THEN
-          d_ani(1,1,:) = phys%diff_n - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
-          d_ani(2,2,:) = phys%diff_u - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
-          d_ani(3,3,:) = phys%diff_e - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
-          d_ani(4,4,:) = phys%diff_ee - 0.5*simpar%refval_time/simpar%refval_length**2*(TANH((phys%I_p - 0.35)/5.))
-       ENDIF
-    ENDIF
 #ifdef NEUTRAL
     IF (switch%neutral_perpendicular_diffusion) THEN
       d_ani(phys%idx_rhon_eq,phys%idx_rhon_eq,:) = d_iso(phys%idx_rhon_eq,phys%idx_rhon_eq,:)

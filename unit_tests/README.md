@@ -102,8 +102,9 @@ the diagnostics check also needs h5py and NumPy.
   density, zero neutral density and inactive `Re_n=1`. It also checks Ti/fixed
   limiter speed selection and wall independence from that selection.
 - `check-neutral-wall-input`: production input/adimensionalization calls in
-  temporary directories; 21 cases cover defaults, inheritance, pump overrides,
-  range/nonfinite rejection, retired ITER-core BC 6, and acceptance of legacy
+  temporary directories; cases cover defaults, inheritance, pump overrides,
+  range/nonfinite rejection, retired ITER-core BC 6 and testcases 80–89,
+  supported source/circular presets, ignored legacy `diffmin` and core sources,
   `bohmtypebc=0` with rejection of the removed alternate Bohm selectors, and
   legacy `saveTau=.false.` with rejection of removed `saveTau=.true.` output.
 - `check-neutral-wall-diagnostics`: production accumulator/HDF5 writer; nine

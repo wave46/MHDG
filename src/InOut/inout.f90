@@ -1288,7 +1288,6 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%ripple, 'Ripple')
       CALL HDF5_logical_saving(group_id2, switch%psdtime, 'psdtime')
       CALL HDF5_real_saving(group_id2, switch%diffred, 'diffred')
-      CALL HDF5_real_saving(group_id2, switch%diffmin, 'diffmin')
       CALL HDF5_integer_saving(group_id2, switch%shockcp, 'shockcp')
       CALL HDF5_integer_saving(group_id2, switch%limrho, 'limrho')
       CALL HDF5_integer_saving(group_id2, switch%difcor, 'difcor')

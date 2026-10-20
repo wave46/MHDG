@@ -80,9 +80,6 @@ CONTAINS
              IF (r .LE. 0.05) THEN
                 up(ind, 2) = 1.
              END IF
-          CASE (80:89)
-             up(ind, 1) = 1.
-             up(ind, 2) = 0.
           CASE DEFAULT
              WRITE (6, *) "Error! Test case not valid"
              STOP
@@ -590,13 +587,6 @@ CONTAINS
              up(i, 2) = 1.
           END IF
        END DO
-    CASE (80:89)
-       up(:, 1) = 1.
-       up(:, 2) = 0.
-#ifdef NEUTRAL
-       up(:,4)  = 0.
-#endif
-
     CASE DEFAULT
        WRITE (6, *) "Error! Test case not valid"
        STOP

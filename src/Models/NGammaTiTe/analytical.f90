@@ -1321,25 +1321,6 @@ CONTAINS
              up(i, 2) = 1.
           END IF
        END DO
-    CASE (80:89)
-       !Define an anylitical solution with a Gaussian shape respect to the normalized flux surface
-       fluxel = phys%magnetic_flux(Mesh%T(iel,:))
-       fluxel = (fluxel - phys%Flux2Dmin)/(phys%Flux2Dmax - phys%Flux2Dmin)
-       sigma = 0.3
-       up(:, 1) = 1.*EXP(-fluxel**2/(2*sigma**2))
-       up(:, 3) = 18.*EXP(-fluxel**2/(2*sigma**2))
-       up(:, 4) = 18.*EXP(-fluxel**2/(2*sigma**2))
-       !Define an anylitical solution with a Gaussian shape respect to geometrical center of symmetry of the domain
-       !  sigma = 1.5
-       !  up(:, 1) = 1.*exp(-((x*phys%lscale - xm*phys%lscale)**2 + (y*phys%lscale - ym*phys%lscale)**2)/(2*sigma**2))
-       !  up(:, 3) = 18.*exp(-((x*phys%lscale - xm*phys%lscale)**2 + (y*phys%lscale - ym*phys%lscale)**2)/(2*sigma**2))
-       !  up(:, 4) = 18.*exp(-((x*phys%lscale - xm*phys%lscale)**2 + (y*phys%lscale - ym*phys%lscale)**2)/(2*sigma**2))
-#ifdef NEUTRAL
-       up(:,inn_pv) = 1.e-8
-#ifdef KEQUATION
-       up(:,ik_pv)= 1.8e-5
-#endif
-#endif
     CASE DEFAULT
        WRITE (6, *) "Error! Test case not valid"
        STOP

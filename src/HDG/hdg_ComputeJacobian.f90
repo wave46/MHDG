@@ -1264,9 +1264,6 @@ CONTAINS
   !$OMP END PARALLEL
 
   IF (MPIvar%glob_id.EQ.0) THEN
-     IF((switch%ME .EQV. .TRUE.) .AND. (switch%testcase .GE. 80)) THEN
-        WRITE(6,*) 'D_n = ', phys%ME_diff_n*simpar%refval_length**2/simpar%refval_time
-     ENDIF
      IF ((switch%ME .EQV. .TRUE.) .AND. (switch%diff_reverse_Ip .EQV. .TRUE.)) THEN
         WRITE(6,*) 'D_n = ', phys%ME_diff_n*simpar%refval_length**2/simpar%refval_time
         WRITE(6,*) 'mu = ', phys%ME_diff_u*simpar%refval_length**2/simpar%refval_time
@@ -1549,40 +1546,6 @@ CONTAINS
 #endif
       END DO
     END IF
-
-    ! Some sources for ITER cases
-      IF (switch%testcase .GE. 80) THEN
-       ! Compute flux surfaces and normalise them
-         fluxg = MATMUL(refElPol%N2D,fluxel)
-         max_flux2D = MAXVAL(phys%magnetic_flux)
-         min_flux2D = MINVAL(phys%magnetic_flux)
-       fluxg = (fluxg - min_flux2D)/(max_flux2D - min_flux2D)
-       IF (switch%testcase == 81) THEN
-          sigma = phys%sigma_source
-          x0 = 0.
-            A = (phys%lscale**2)/SQRT((2*Pi*sigma**2))
-          ! Only energy sources: density from neutral model
-            IF (fluxg(g) .LE. phys%fluxg_trunc) THEN
-#ifdef NEUTRAL
-#ifdef TEMPERATURE
-               force(g,3) = phys%ener_source_e*A*EXP(-((fluxg(g)-x0)**2)/(2*sigma**2))
-               force(g,4) = phys%ener_source_ee*A*EXP(-((fluxg(g)-x0)**2)/(2*sigma**2))
-#endif
-#endif
-          ENDIF
-       ELSE IF (switch%testcase == 82) THEN
-          sigma = phys%sigma_source
-            A = (phys%lscale**2)/SQRT((2*Pi*sigma**2))
-          ! Only energy sources: density from neutral model
-#ifdef NEUTRAL
-#ifdef TEMPERATURE
-            force(g,3) = phys%ener_source_e*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
-            force(g,4) = phys%ener_source_ee*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
-#endif
-#endif
-       ENDIF
-    ENDIF
-    ! end sources
 
     ! Some sources for Circular cases
       IF (switch%testcase .GE. 60) THEN

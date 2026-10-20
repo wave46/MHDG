@@ -214,8 +214,7 @@ CONTAINS
   END SUBROUTINE close_magnetic_input
 
   LOGICAL FUNCTION uses_equilibrium_grid()
-    uses_equilibrium_grid = (switch%testcase >= 50 .AND. switch%testcase <= 59 .AND. input%field_from_grid) .OR. &
-         (switch%testcase >= 80 .AND. switch%testcase <= 89)
+    uses_equilibrium_grid = switch%testcase >= 50 .AND. switch%testcase <= 59 .AND. input%field_from_grid
   END FUNCTION uses_equilibrium_grid
 
 
@@ -385,12 +384,6 @@ CONTAINS
     CASE (70:79)
        ! Magnetic field loaded from file in the mesh nodes
        CALL load_magnetic_field_nodes(frame)
-
-    CASE (80:89)
-       ! Magnetic field loaded from file in a cartesian grid
-       ! Interpolation is needed
-       CALL load_magnetic_field_grid(frame)
-
 
     END SELECT
 #ifdef TOR3D

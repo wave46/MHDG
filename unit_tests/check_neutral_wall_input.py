@@ -41,6 +41,15 @@ def main():
         ("SWITCH_LST", "removed_savetau_true", "saveTau=.true.",
          "saveTau output has been removed"),
     ])
+    cases.extend(("SWITCH_LST", f"retired_iter_{value}", f"testcase={value}",
+                  "ITER testcases 80-89 have been removed")
+                 for value in range(80, 90))
+    cases.extend(("SWITCH_LST", f"supported_{value}", f"testcase={value}", (1.0, 1.0))
+                 for value in (52, 60))
+    cases.extend([
+        ("SWITCH_LST", "legacy_diffmin", "diffmin=0.1", (1.0, 1.0)),
+        ("PHYS_LST", "legacy_core_sources", "part_source=1, ener_source=20e6", (1.0, 1.0)),
+    ])
     with tempfile.TemporaryDirectory(prefix="mhdg-neutral-wall-input-") as scratch:
         for namelist, name, entries, expected in cases:
             directory = Path(scratch) / name

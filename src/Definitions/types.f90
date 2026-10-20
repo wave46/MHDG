@@ -313,14 +313,12 @@ MODULE types
      TYPE(Feedback_derivative_history_type) :: feedback_derivative_history_xpr
      REAL*8                    :: n_li  ! line integrated density
      REAL*8                    :: cryopump_power ! Cryopump power in [m^3/s] coefficient
-     REAL*8                    :: part_source ! Unused legacy ITER-core input
-     REAL*8                    :: ener_source ! Unused legacy ITER-core input
      REAL*8                    :: density_source ! Density source for WEST (2D, case 52)
-     REAL*8                    :: ener_source_e ! Ion energy source for WEST and ITER (2D, case 52 and 81)
-     REAL*8                    :: ener_source_ee ! Electron source for WEST and ITER (2D, case 52 and 81)
-     REAL*8                    :: sigma_source ! Sigma for the gaussian sources for WEST and ITER (2D, case 52 and 81)
+     REAL*8                    :: ener_source_e ! Ion energy source (2D, case 52)
+     REAL*8                    :: ener_source_ee ! Electron energy source (2D, case 52)
+     REAL*8                    :: sigma_source ! Width of the Gaussian sources (2D, case 52)
      REAL*8                    :: fluxg_trunc ! Value of the NORMALISED magnetic flux at which to truncate the gaussian sources for WEST (2D, case 52), refer to Source_shape.m file
-     ! Diffusion coefficients ITER evolving equilibrium
+     ! Diffusion coefficients for current-dependent transport in moving equilibria
      REAL*8                    :: ME_diff_n
      REAL*8                    :: ME_diff_u
      REAL*8                    :: ME_diff_e
@@ -426,7 +424,6 @@ MODULE types
      LOGICAL :: psdtime ! Reduce the diffusion every time we reach the steady state
      ! condition (only works if steady=.false.)
      REAL*8  :: diffred ! Reduction factor of the diffusion for psdtime simulation
-     REAL*8  :: diffmin ! Minimum value of the diffusion for a psdtime simulation
      INTEGER :: shockcp ! Shock capturing option
      INTEGER :: limrho  ! Add a source for limiting the min value of rho
      INTEGER :: difcor  ! Add diffusion in corners
