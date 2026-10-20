@@ -73,7 +73,7 @@ used in the coverage table mean:
 
 | Selection | Purpose |
 | --- | --- |
-| `routine` | Diverted warm golden and short adaptive/source golden; diagnostics off. Target about 30 seconds on the development machine, excluding builds. |
+| `routine` | Diverted warm golden, heat-limited warm golden and short adaptive/source golden; diagnostics off. |
 | `routine-extended` | Diverted warm, short adaptive/source with detailed diagnostics, short neutral/impurity goldens, and short moving-equilibrium controls/MPI agreement. |
 | `full` | Both real topologies, complete cold bootstraps and transport activation, distinct diverted features, focused parallel comparisons, and full/short moving-equilibrium checks. |
 
@@ -102,6 +102,19 @@ adaptation output; refinement, coarsening and redistribution at the same element
 count are accepted. An unchanged mesh or missing initial output is rejected.
 Changes to this cold-bootstrap recipe require
 convergence evidence and review of refreshed goldens before accepting a baseline.
+
+`heat_flux_limiter` restarts the unlimited diverted warm baseline with both
+heat free-streaming fractions set to 0.2. It retains 50 eV caps on the
+temperature used in the parallel conductivities and compares the reconverged
+solution with its own `heat_flux_limiter_reference`, using the existing
+`feature_converged` tolerances and Newton acceptance. The output contract
+also checks activation, both fractions and the normalized conductivity caps.
+The focused Fortran `check-heat-flux-limiter` target separately covers the
+temperature/flux floors and their linearization. The warm suite runs in all three
+profiles and can be selected alone with `python -m regression_tests check
+heat_flux_limiter`. Golden refresh produces it after `baseline_warm`.
+Existing bundles need the new reference generated, reviewed and published
+before this suite can pass; an unlimited reference is not a substitute.
 
 Transport is a separate feature on **both** topologies. Its five stages lower the
 transport diffusion floor through 8, 4, 2, 0.5 and 0.1 m²/s. The diverted case

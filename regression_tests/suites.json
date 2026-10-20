@@ -3,13 +3,13 @@
   "defaults": {"case": "diverted_case", "layout": "mpi4_omp4"},
   "profiles": {
     "routine": {
-      "description": "Diverted baseline and short adaptive golden; target about 30 seconds excluding builds",
-      "checks": [{"suite": "warm"}, {"suite": "adaptive"}]
+      "description": "Diverted baseline, heat-limited warm solution and short adaptive golden",
+      "checks": [{"suite": "warm"}, {"suite": "heat_flux_limiter"}, {"suite": "adaptive"}]
     },
     "routine-extended": {
       "description": "Diverted short feature goldens and adaptive detailed diagnostics",
       "checks": [
-        {"suite": "warm"}, {"suite": "adaptive_diagnostics"},
+        {"suite": "warm"}, {"suite": "heat_flux_limiter"}, {"suite": "adaptive_diagnostics"},
         {"suite": "neutral_short"}, {"suite": "impurity_short"},
         {"suite": "moving_equilibrium_short"}, {"suite": "moving_equilibrium_parallel"}
       ]
@@ -18,7 +18,7 @@
       "description": "Both topologies, full bootstraps, feature convergence and focused parallel checks",
       "checks": [
         {"suite": "bootstrap"}, {"suite": "bootstrap_limited"},
-        {"suite": "warm"}, {"suite": "warm", "case": "legacy_case"},
+        {"suite": "warm"}, {"suite": "heat_flux_limiter"}, {"suite": "warm", "case": "legacy_case"},
         {"suite": "transport"}, {"suite": "transport", "case": "legacy_case"},
         {"suite": "transport_hybrid"}, {"suite": "transport_parallel", "case": "legacy_case"},
         {"suite": "adaptive_parallel"}, {"suite": "neutrals"}, {"suite": "neutral_wall"}, {"suite": "neutral_parallel"},
@@ -74,6 +74,11 @@
     "warm": {
       "description": "Transport-off warm baseline: convergence and own golden",
       "workflows": ["baseline_warm"]
+    },
+    "heat_flux_limiter": {
+      "description": "Ion/electron heat limiting at 0.2: warm convergence and own golden, 50 eV conductivity caps",
+      "case": "diverted_case",
+      "workflows": ["heat_flux_limiter"]
     },
     "bootstrap": {
       "description": "Full three-stage adaptive bootstrap with stage acceptance and final golden",

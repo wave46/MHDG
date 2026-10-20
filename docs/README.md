@@ -5,6 +5,8 @@ and limited to the guides listed below.
 
 ## Models
 
+- [Parallel heat-flux limiter](models/heat-flux-limiter.md): free-streaming
+  caps, floors and consistent flux linearization.
 - [AMJUEL rates and source linearization](models/amjuel-rates.md): physical
   coefficients, continuation, derivatives and their source-assembly roles.
 - [Wall recycling: physical law and HDG implementation](models/wall-recycling.md):

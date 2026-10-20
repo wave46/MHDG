@@ -9,13 +9,13 @@ import h5py
 import numpy as np
 import pytest
 
-from regression_tests.compare_fixed import compare_hdf5_files, validate_solution_file
+from regression_tests.compare_fixed import compare_hdf5_files, validate_solution_file, check_output_contract
 from regression_tests.compare_common import read_newton_convergence
 from regression_tests.compare import compare_completed_run, validate_completed_run, validate_me_completed_steps, validate_me_refinement_stop, compare_me_refinement_stop
 from regression_tests.files import file_identity
 from regression_tests.support import ComparisonError
 from regression_tests.tests.fixtures.harness import REGRESSION_ROOT, run_command
-from regression_tests.tests.fixtures.solutions import write_solution
+from regression_tests.tests.fixtures.solutions import write_solution, write_solver_output
 
 TOLERANCES = {
     "newton_error_max": 2e-4, "mesh_coordinate_atol": 1e-12,
@@ -29,6 +29,40 @@ def files(tmp_path):
     write_solution(reference)
     write_solution(candidate)
     return reference, candidate
+
+
+@pytest.mark.parametrize("wrong_dataset,wrong_value", [
+    (None, None),
+    ("switches/flux_limiter", 0),
+    ("physics/c_fli", 0.3),
+    ("physics/T_fluxlim_maxe", 50.),
+])
+def test_heat_limiter_contract_checks_activation_fractions_and_temperature_units(tmp_path, wrong_dataset, wrong_value):
+    candidate = tmp_path / "candidate.h5"
+    write_solver_output(path=candidate)
+    (tmp_path / "param.txt").write_text(
+        "&SWITCH_LST\n flux_limiter=.true.\n/\n&PHYS_LST\n"
+        " c_fli=0.2\n c_fle=0.2\n T_fluxlim_maxi=50.\n T_fluxlim_maxe=50.\n/\n")
+    with h5py.File(candidate, "r+") as handle:
+        for name, value in {"switches/flux_limiter": 1, "physics/c_fli": .2,
+                            "physics/c_fle": .2, "physics/T_fluxlim_maxi": 1.,
+                            "physics/T_fluxlim_maxe": 1., "adimensionalization/temperature_scale": 50.}.items():
+            handle["simulation_parameters/" + name] = value
+        if wrong_dataset:
+            handle["simulation_parameters/" + wrong_dataset][...] = wrong_value
+    report = check_output_contract(candidate, tmp_path, "NGammaTiTeNeutral", {}, {})
+    assert report["status"] == ("failed" if wrong_dataset else "passed")
+    if wrong_dataset:
+        assert any(wrong_dataset in failure for failure in report["failures"])
+
+
+def test_disabled_heat_limiter_does_not_require_saved_inactive_coefficients(tmp_path):
+    candidate = tmp_path / "candidate.h5"
+    write_solver_output(path=candidate)
+    (tmp_path / "param.txt").write_text("&SWITCH_LST\n flux_limiter=.false.\n/\n&PHYS_LST\n c_fli=0.2\n/\n")
+    with h5py.File(candidate, "r+") as handle:
+        handle["simulation_parameters/switches/flux_limiter"] = 0
+    assert check_output_contract(candidate, tmp_path, "NGammaTiTeNeutral", {}, {})["status"] == "passed"
 
 
 def test_missing_candidate_equation_names_use_reference_names(files):

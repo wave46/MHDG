@@ -10,7 +10,7 @@
     },
     "diverted_case": {
       "producers": [
-        "bootstrap_adaptive", "baseline_warm", "transport", "transport_short", "stored_field",
+        "bootstrap_adaptive", "baseline_warm", "heat_flux_limiter", "transport", "transport_short", "stored_field",
         "source_relocation",
         "neutral_pressure", "neutral_perpendicular", "neutral_limiter_fixed", "neutral_limiter_ti",
         "neutral_wall_absorption", "neutral_wall_absorption_pump",
@@ -21,7 +21,7 @@
         "adaptive_source_short"
       ],
       "checks": [
-        "warm", "transport", "transport_hybrid", "stored_field", "adaptive_parallel",
+        "warm", "heat_flux_limiter", "transport", "transport_hybrid", "stored_field", "adaptive_parallel",
         "neutrals", "neutral_wall", "neutral_parallel", "impurities", "impurity_short", "mixture_parallel"
       ]
     }

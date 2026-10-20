@@ -18,6 +18,7 @@ MODULE physics
   IMPLICIT NONE
 
   REAL*8, PARAMETER :: eirene_rate_te_min_phys = 1.d-1
+  REAL*8, PARAMETER :: heat_flux_cap_floor = 1.d-10
   REAL*8, PARAMETER :: eirene_rate_te_max_phys = 2.d4
   REAL*8, PARAMETER :: eirene_rate_ti_min_phys = 1.d-1
   REAL*8, PARAMETER :: eirene_rate_ti_max_phys = 3.d3
@@ -1868,6 +1869,9 @@ CONTAINS
       res(1) = -0.5/U(1)
       res(4) = 3./2./U(4)
       res = (2./3.*U(4)/U(1))**1.5*U(1)*SQRT(mi/me)*res
+    ELSE
+      ! q_fs=C*n*T_min^(3/2): flooring T preserves the density derivative.
+      res(1) = (2.d0/3.d0*tmin_cons)**1.5d0*SQRT(mi/me)
     ENDIF
   END SUBROUTINE
 
@@ -1906,6 +1910,9 @@ CONTAINS
       res(2) = -3./2.*U(2)/(U(1)*(U(3)-1./2.*U(2)**2/U(1)))
       res(3) = 3./2./(U(3)-1./2.*U(2)**2/U(1))
       res = (2./3.*(U(3)-1./2.*U(2)**2/U(1))/U(1))**1.5*U(1)*res
+    ELSE
+      ! q_fs=C*n*T_min^(3/2): flooring T preserves the density derivative.
+      res(1) = (2.d0/3.d0*tmin_cons)**1.5d0
     ENDIF
   END SUBROUTINE
 
@@ -1940,16 +1947,37 @@ CONTAINS
   SUBROUTINE compute_flux_limiter(qfs,qsh,c_fl, flux_limiter)
     REAL*8, INTENT(IN)  :: qfs, qsh, c_fl
     REAL*8, INTENT(OUT) :: flux_limiter
-    REAL*8, PARAMETER :: tol = 1.e-10
     REAL*8 :: qfs_clamped
     
 
-    qfs_clamped = MAX(ABS(qfs), tol)
+    qfs_clamped = MAX(ABS(qfs), heat_flux_cap_floor)
 
     flux_limiter = 1.0 / (1.0 + ABS(qsh) / (c_fl * qfs_clamped))
 
 
   END SUBROUTINE compute_flux_limiter
+
+  SUBROUTINE compute_heat_flux_limiter_linearization(qfs, qsh, c_fl, dqfs_dU_U, &
+       &flux_limiter, dheat_dqfs, affine_correction)
+    REAL*8, INTENT(IN) :: qfs, qsh, c_fl, dqfs_dU_U
+    REAL*8, INTENT(OUT) :: flux_limiter, dheat_dqfs, affine_correction
+
+    ! r=|q_SH|/(C_FL*q_FS), FL=1/(1+r), q_parallel=FL*q_SH.
+    ! SH Taylor terms: q^Q=(dq_SH/dQ)*Q, q^U=(dq_SH/dU)*U, q^0=-(dq_SH/dU)*U0.
+    ! With coefficients at (U0,Q0) and the outer cap floor inactive:
+    ! q_parallel,lin=FL^2*(q^Q+q^U+q^0)+(FL^2*q_SH*r/q_FS)*(dq_FS/dU)*U.
+    CALL compute_flux_limiter(qfs,qsh,c_fl,flux_limiter)
+    dheat_dqfs = 0.d0
+    IF (ABS(qfs) > heat_flux_cap_floor) THEN
+      ! dheat_dqfs=FL^2*q_SH*r/q_FS=FL*q_SH*(1-FL)/q_FS.
+      dheat_dqfs = (flux_limiter*qsh)*(1.d0-flux_limiter)/qfs
+      ! RHS correction beyond -FL^2*q^0; (dq_FS/dU)*U0=q_FS for a degree-one cap.
+      affine_correction = dheat_dqfs*(dqfs_dU_U-qfs)
+    ELSE
+      ! Constant cap: q^0_extra=FL*(1-FL)*q_SH; the RHS contains -q^0_extra.
+      affine_correction = flux_limiter*(flux_limiter-1.d0)*qsh
+    ENDIF
+  END SUBROUTINE compute_heat_flux_limiter_linearization
    
 
   ! ******************************

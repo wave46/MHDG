@@ -608,7 +608,8 @@ def check_output_contract(path, directory, model, provenance, overrides):
     names = {"impurity_radiation", "transport_1d", "neutral_wall_sources_in_elements",
              "neutral_perpendicular_diffusion", "neutralp_lambda", "neutral_flux_limiter_mode",
              "neutral_flux_limiter_tn_source", "neutral_flux_limiter_tn_ev", "compute_from_flux",
-             "re_n", "re_n_pump"}
+             "re_n", "re_n_pump", "flux_limiter", "c_fli", "c_fle",
+             "t_fluxlim_maxi", "t_fluxlim_maxe"}
     overrides = {**read_selected_input_values(directory / "param.txt", names),
                  **{key.lower(): value for key, value in overrides.items()}}
     label, equations = MODELS[model]
@@ -616,7 +617,7 @@ def check_output_contract(path, directory, model, provenance, overrides):
                 "simulation_parameters/Neq": len(equations),
                 "simulation_parameters/physics/conservative_variable_names": list(equations),
                 **{f"provenance/{key}": value for key, value in provenance.items()}}
-    for name in ("impurity_radiation", "neutral_wall_sources_in_elements", "neutral_perpendicular_diffusion"):
+    for name in ("impurity_radiation", "neutral_wall_sources_in_elements", "neutral_perpendicular_diffusion", "flux_limiter"):
         if name in overrides:
             expected[f"simulation_parameters/switches/{name}"] = overrides[name]
     for name in ("neutral_flux_limiter_mode", "neutral_flux_limiter_tn_source"):
@@ -636,6 +637,14 @@ def check_output_contract(path, directory, model, provenance, overrides):
     failures = []
     try:
         with h5py.File(path) as handle:
+            if overrides.get("flux_limiter"):
+                for name in ("c_fli", "c_fle"):
+                    if name in overrides:
+                        expected[f"simulation_parameters/physics/{name}"] = overrides[name]
+                for name in ("T_fluxlim_maxi", "T_fluxlim_maxe"):
+                    if name.lower() in overrides:
+                        scale = float(np.asarray(handle["simulation_parameters/adimensionalization/temperature_scale"]).item())
+                        expected[f"simulation_parameters/physics/{name}"] = overrides[name.lower()] / scale
             if overrides.get("transport_1d") and "transport_1d" not in handle:
                 failures.append("missing expected output: transport_1d")
             if overrides.get("neutral_flux_limiter_tn_source") == "fixed" and "neutral_flux_limiter_tn_ev" in overrides:

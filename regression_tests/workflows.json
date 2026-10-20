@@ -137,6 +137,25 @@
         "adaptivity": false
       }
     },
+    "heat_flux_limiter": {
+      "extends": "baseline_warm",
+      "description": "Reconverge the unlimited warm baseline with ion/electron heat limiting at 0.2",
+      "restart": "baseline_reference",
+      "reference": "heat_flux_limiter_reference",
+      "outputs": ["heat_flux_limiter_reference"],
+      "comparison": {
+        "method": "fixed_hdf5",
+        "profile": "feature_converged",
+        "cross_layout_profile": "fixed_cross_layout"
+      },
+      "parameter_overrides": {
+        "flux_limiter": true,
+        "c_fli": 0.2,
+        "c_fle": 0.2,
+        "T_fluxlim_maxi": 50.0,
+        "T_fluxlim_maxe": 50.0
+      }
+    },
     "transport": {
       "extends": "baseline_warm",
       "type": "staged_fixed_mesh",

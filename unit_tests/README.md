@@ -16,6 +16,12 @@ differences in density and electron energy below, inside, at and above the
 temperature interval, with in-range and clamped densities. It also checks the
 existing zero-rate cutoff. It needs no MPI launch or external case data.
 
+`make check-heat-flux-limiter` uses the current NGammaTiTe-family configuration.
+It compares ion/electron limited-flux derivatives with finite differences and
+checks reconstruction from the Jacobian and affine term in ordinary,
+temperature-floor and cap-floor states, with either flux sign and zero flux.
+It uses the production value/derivative helpers without MPI or external data.
+
 `make check-neutral-energy-source` uses a temperature model with
 `NEUTRALGAMMA`. It checks that the production source matrix and affine term
 recover the neutral kinetic-energy transfer below, at and above the density
