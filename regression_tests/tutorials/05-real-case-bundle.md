@@ -65,7 +65,7 @@ prepared-inputs/
   impurity_model_w.nml
 ```
 
-`equilibrium.h5` uses the [single-file equilibrium format](../../src/Models/equilibrium_series.md)
+`equilibrium.h5` uses the [single-file equilibrium format](../../docs/inputs/equilibrium.md#single-file-hdf5-format)
 with one frame for a fixed equilibrium, including Br/Bz and Jtor reference arrays.
 The harness renders its full filename and an empty `jtor_path`. Convert existing
 stationary magnetic/current files before creating the bundle:

@@ -85,17 +85,17 @@ sampling across more frames than fit in the cache, legacy and single-frame stati
 optional references, coverage rejection, provider reinitialization and invalid
 input shapes/nonfinite values. It needs h5py and NumPy, initializes no MPI and
 does not run the plasma solver. The trajectory layout is documented in
-[equilibrium_series.md](../src/Models/equilibrium_series.md).
+[equilibrium input guide](../docs/inputs/equilibrium.md).
 The same fixtures check Python conversion of stationary, numbered and paired
 current inputs: exact values/orientation and attributes, untouched sources,
 non-overwrite, late grid/time rejection without a partial output, and sampling
 converted files with the Fortran reader.
 
-The same target checks the [heating provider](../src/Models/heating_series.md)
+The same target checks the [heating provider](../docs/inputs/heating.md#implementation-notes)
 with its own non-square grid and timestamps: both power channels, forward and
 reverse sampling, stationary/one-frame equivalence, endpoint coverage, cache
 ownership, dimension inference and malformed/nonfinite inputs. These are raw
-provider checks; heating solver integration follows separately.
+provider checks; solver integration is covered separately by `check-me-restart`.
 
 For a Python-only converter change, reuse the already-built check executable
 without running make:
@@ -116,21 +116,20 @@ uses `t_start` and allocates initial history capacity independently of `nts`.
 Endpoint checks use the production clock helper for constant/nonuniform steps,
 shortened final intervals, continuation between supplied frames and the last
 timestamp roundoff case. History growth preserves accepted entries and does not
-change their count; no additional executable or test target is needed.
-The production loop now selects physical endpoints independently of its loop
-index and ignores `tTM` for explicit physical modes. Explicit execution remains
-guarded at solver startup until equilibrium/controller scheduling is integrated.
+change their count. The solver contracts checked here are described in
+[physical time stepping](../docs/simulation/time-stepping.md) and
+[restart and output](../docs/simulation/restart-and-output.md).
 Provider integration checks infer fixed/moving magnetic input without `ME`, sample
 between frames independently of numerical counters, and use heating's own time
 grid. They also rebuild current and heating values on changed mesh nodes from
-the retained providers. Numbered magnetic/heating input remains covered alongside
-single-file trajectories.
+the retained providers. Numbered heating is checked with its own timestamps,
+including fixed magnetics, missing-time rejection and a lone fixed frame.
+Numbered magnetic input remains covered alongside single-file trajectories.
 Fixed-field source checks retain constants with empty paths, combine scheduled
 puff/concentration with fixed Zeff, and sample the final control timestamp.
 Existing density/recycling/XPR controllers are exercised with two physical
 intervals and repeated evaluation from restored controller values. These checks
-reuse the same synthetic input and executable; they do not enable the guarded
-physical-time solver loop or test temporal rejection yet.
+reuse the same synthetic input and executable to exercise control updates directly.
 The controller check also exercises linear ramps through repeated timestep
 halving and 1.3-times growth for puff/recycling/XPR, replays candidate updates
 after restoring state, and compares uninterrupted versus saved/restored feedback
@@ -144,7 +143,8 @@ checked through the production reader/helpers. Startup sampling also checks that
 prescribed values are initialized without changing restored feedback state.
 It also checks HDF5 grid dimensions/orientation on a non-square rectangular grid,
 stored-current interpolation at initial/endpoint frames, full filenames and
-legacy basenames, optional namelist dimensions, and dataset-shape rejection.
+legacy basenames, optional namelist dimensions, dataset-shape rejection and
+missing required density-chord fields.
 It also checks that a caller requesting optional reference Jtor is told when
 the input contains none, without attempting interpolation of missing data.
 The same cases load a small Gmsh mesh and checkpoint mesh/solution using stems
@@ -175,13 +175,10 @@ python3 unit_tests/check_me_completed_restart.py --solver /path/to/solver \
 It checks legacy ME and explicit fixed/prescribed completion with deliberately
 absent equilibrium files and no physical advances or new output files.
 
-In ME runs, `nts` is the final global step number: with `nts=100`, restart steps
-50, 99, and 100 leave 50, 1, and 0 advances. Startup loads the accepted frame
-`equilibrium_(step)`, including frame 0000 at time zero with dt zero. Each advance
-then loads `equilibrium_(step+1)` and updates controls at its endpoint before the
-solve. With nts=100, restarting at 99 loads accepted frame 0099 and endpoint
-0100; restarting at 100 reads no magnetic files. A restart beyond
-the final step is invalid. The non-ME step-count behavior is unchanged.
+Legacy moving-equilibrium step-limit checks cover fresh and resumed advances
+through the final global `nts` bound, zero-work completion and out-of-range
+rejection. The [legacy frame/step contract](../docs/inputs/equilibrium.md#legacy-time-stepping)
+is separate from explicit physical modes, which stop at `t_final`.
 
 For the executable loop and MPI exit paths, an optional focused check consumes
 a prepared external ME case (the compact synthetic case has the required layout):

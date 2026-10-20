@@ -3,11 +3,13 @@
 [Tutorial 3](03-scientific-suite.md) grouped related workflows in one suite.
 A profile selects suites in order. It adds no solver recipe or numerical
 tolerance of its own. The existing `full` profile combines limited and diverted
-evidence, so it shows how one selection spans cases.
+static-case evidence with moving-equilibrium checks.
 
 ## Read the `full` profile
 
-In [`suites.json`](../suites.json), the profile is:
+The following abridged example shows the static-case selections. The complete
+`full` profile in [`suites.json`](../suites.json) also includes `neutral_wall`
+and the moving-equilibrium suites:
 
 ```json
 "full": {
@@ -47,10 +49,10 @@ comparison.
 
 ## Select machine inputs and run
 
-Because this profile spans two cases, `settings.local.json` must map both to
-published golden bundles, as shown in
-[`settings.example.json`](../settings.example.json). One `--bundle` argument
-cannot select both cases. The selected build manifest must contain the solver
+The complete profile requires published bundles for `legacy_case`,
+`diverted_case` and `moving_equilibrium`, mapped in `settings.local.json` as
+shown in [`settings.example.json`](../settings.example.json). One `--bundle`
+argument cannot select all cases. The selected build manifest must contain the solver
 variants needed by the selected suites: serial and MPI 2D
 `NGammaTiTeNeutral`, plus serial 2D `NGammaTiTeNeutralGamma`.
 
