@@ -12,6 +12,15 @@ It extracts the internal production coefficient routine verbatim and compiles it
 with the real global time state; no solver run or external data is needed. This
 target uses the current build configuration without a clean rebuild.
 
+`make check-strong-dirichlet` uses the current 2D NGammaTiTe-family build.
+It checks interleaved face ordering and matching frozen stabilization for
+constant, variable diagonal and matrix tau. The stabilization and prescribed
+contributions are extracted from production assembly. With PaStiX, it also
+assembles and solves a small trace system with prescribed faces. The MPI
+executable can run with `mpirun.openmpi -np 2 ./strong_dirichlet_check` to check
+ghost metadata, remote owner indices, prescribed ghost faces and trace exchange.
+It uses generated algebraic fixtures and needs no external case data.
+
 `make check-amjuel-extrapolation` uses the current 2D NGammaTiTe-family build
 with `AMJUELSPLINES`. It compares the production rate Jacobian with finite
 differences in density and electron energy below, inside, at and above the

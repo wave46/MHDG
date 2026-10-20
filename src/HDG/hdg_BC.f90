@@ -632,6 +632,7 @@ CONTAINS
 
      ! Solution at face Gauss points
      ufg = MATMUL(refElPol%N1D,TRANSPOSE(RESHAPE(uf,[neq,Npfl])))
+     IF (Mesh%Fdir(iel,ifl)) ufg = uex
 
      ! Elemental solution at face Gauss points
      ueg = MATMUL(refElPol%N1D,ue)
@@ -1412,7 +1413,7 @@ CONTAINS
       REAL*8           :: qg(:)
       REAL*8           :: bn,An(Neq,Neq)
       INTEGER          :: i,j,idm
-      REAL*8           :: kmultstab(Neq*Npfl),kmultconv(Neq*Npfl),kmultfseq(Ndim*Neq*Npfl)
+      REAL*8           :: kmultconv(Neq*Npfl),kmultfseq(Ndim*Neq*Npfl)
       REAL*8           :: uexn(Ndim*neq)
       INTEGER*4        :: ind(Npfl),ind_1f(Npfl)
       REAL*8           :: Qpr(Ndim,Neq)
@@ -1430,7 +1431,6 @@ CONTAINS
 
     CALL jacobianMatricesFace(ufg,bn,An)
     ! Contribution of the current integration point to the elemental matrix
-    kmultstab = col(tensorProduct(ufg,Ni))
       kmultconv = col(tensorProduct(MATMUL(An,ufg),Ni))
 #ifndef TEMPERATURE
       IF (switch%logrho) THEN
@@ -1442,7 +1442,7 @@ CONTAINS
     kmultfseq = col(tensorProduct(uexn,Ni))  ! Ndim*neq*npf
     DO i = 1,Neq
       ind = i + ind_asf
-      elMat%Aul_dir(ind_fe(ind),iel) = elMat%Aul_dir(ind_fe(ind),iel) - numer%tau(i)*kmultstab(ind) + kmultconv(ind)
+      elMat%Aul_dir(ind_fe(ind),iel) = elMat%Aul_dir(ind_fe(ind),iel) + kmultconv(ind)
       DO idm = 1,Ndim
         ind_1f = ind_ash + idm + (i - 1)*Ndim
         elMat%Aql_dir(ind_fG(ind_1f),iel) = elMat%Aql_dir(ind_fG(ind_1f),iel) - kmultfseq(ind_1f)

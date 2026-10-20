@@ -767,9 +767,8 @@ CONTAINS
   ! list
   !********************************************
   SUBROUTINE Bc_preprocess()
-    INTEGER              :: fl, nb, ndir, ifa, bt, idir
+    INTEGER              :: fl, nb, ndir, ifa, bt
     INTEGER              :: df(max_num_diff_bc)
-    INTEGER, ALLOCATABLE :: aux_Tb(:, :), aux_extFaces(:, :), aux_boundaryflag(:)
 
     nb = 0
     df = 0
@@ -794,39 +793,10 @@ CONTAINS
     END DO
 
 
-    ! Here I place Dirichlet boundary faces at the bottom of Tb: I change
-    ! the order of the faces only in case that at least 1 Dirichlet
-    ! face exists and there are more then one type of boundary conditions.
-    ! This guarantees compatibility with the Matlab version of the code
-    IF (nb > 1 .AND. ndir > 0) THEN
-       ALLOCATE (aux_Tb(SIZE(Mesh%Tb, 1), SIZE(Mesh%Tb, 2)))
-       ALLOCATE (aux_extFaces(SIZE(Mesh%extFaces, 1), SIZE(Mesh%extFaces, 2)))
-       ALLOCATE (aux_boundaryflag(Mesh%NextFaces))
-       aux_boundaryflag = 0
-       aux_Tb = 0
-       aux_extFaces = 0
-       idir = 0
-       DO ifa = 1, Mesh%Nextfaces
-          fl = Mesh%boundaryFlag(ifa) ! boundary flag of the current face
+    IF (ndir > 0) CALL reorder_dirichlet_faces()
 #ifdef PARALL
-          IF (fl .EQ. 0) CYCLE ! Add by Benjamin
+    CALL refresh_ghost_face_owners(ndir)
 #endif
-          IF (phys%bcflags(fl) == bc_dirichlet) THEN
-             aux_Tb(ifa + Mesh%Nextfaces - ndir, :) = Mesh%Tb(ifa, :)
-             aux_extFaces(ifa + Mesh%Nextfaces - ndir, :) = Mesh%extFaces(ifa, :)
-             aux_boundaryflag(ifa + Mesh%Nextfaces - ndir) = Mesh%boundaryFlag(ifa)
-             idir = idir + 1
-          ELSE
-             aux_Tb(ifa - idir, :) = Mesh%Tb(ifa, :)
-             aux_extFaces(ifa - idir, :) = Mesh%extFaces(ifa, :)
-             aux_boundaryflag(ifa - idir) = Mesh%boundaryFlag(ifa)
-          END IF
-       END DO
-       Mesh%Tb = aux_Tb
-       Mesh%extFaces = aux_extFaces
-       Mesh%boundaryFlag = aux_boundaryflag
-       DEALLOCATE (aux_Tb, aux_extFaces, aux_boundaryflag)
-    END IF
 
     CALL set_boundary_flag_names()
 
@@ -919,9 +889,8 @@ CONTAINS
   ENDSUBROUTINE Bc_preprocess
 
   SUBROUTINE Bc_preprocess_serial()
-    INTEGER :: fl, nb, ndir, ifa, bt, idir
+    INTEGER :: fl, nb, ndir, ifa, bt
     INTEGER :: df(max_num_diff_bc)
-    INTEGER, ALLOCATABLE :: aux_Tb(:, :), aux_extFaces(:, :), aux_boundaryflag(:)
 
     nb = 0
     df = 0
@@ -942,36 +911,7 @@ CONTAINS
     END DO
 
 
-    ! Here I place Dirichlet boundary faces at the bottom of Tb: I change
-    ! the order of the faces only in case that at least 1 Dirichlet
-    ! face exists and there are more then one type of boundary conditions.
-    ! This guarantees compatibility with the Matlab version of the code
-    IF (nb > 1 .AND. ndir > 0) THEN
-       ALLOCATE (aux_Tb(SIZE(Mesh%Tb, 1), SIZE(Mesh%Tb, 2)))
-       ALLOCATE (aux_extFaces(SIZE(Mesh%extFaces, 1), SIZE(Mesh%extFaces, 2)))
-       ALLOCATE (aux_boundaryflag(Mesh%NextFaces))
-       aux_boundaryflag = 0
-       aux_Tb = 0
-       aux_extFaces = 0
-       idir = 0
-       DO ifa = 1, Mesh%Nextfaces
-          fl = Mesh%boundaryFlag(ifa) ! boundary flag of the current face
-          IF (phys%bcflags(fl) == bc_dirichlet) THEN
-             aux_Tb(ifa + Mesh%Nextfaces - ndir, :) = Mesh%Tb(ifa, :)
-             aux_extFaces(ifa + Mesh%Nextfaces - ndir, :) = Mesh%extFaces(ifa, :)
-             aux_boundaryflag(ifa + Mesh%Nextfaces - ndir) = Mesh%boundaryFlag(ifa)
-             idir = idir + 1
-          ELSE
-             aux_Tb(ifa - idir, :) = Mesh%Tb(ifa, :)
-             aux_extFaces(ifa - idir, :) = Mesh%extFaces(ifa, :)
-             aux_boundaryflag(ifa - idir) = Mesh%boundaryFlag(ifa)
-          END IF
-       END DO
-       Mesh%Tb = aux_Tb
-       Mesh%extFaces = aux_extFaces
-       Mesh%boundaryFlag = aux_boundaryflag
-       DEALLOCATE (aux_Tb, aux_extFaces, aux_boundaryflag)
-    END IF
+    IF (ndir > 0) CALL reorder_dirichlet_faces()
 
     CALL set_boundary_flag_names()
 
@@ -1053,6 +993,103 @@ CONTAINS
     ENDSUBROUTINE periodic_faces_preprocess
 
   ENDSUBROUTINE Bc_preprocess_serial
+
+  ! Keep unknown faces before prescribed traces, preserving order within each group.
+  SUBROUTINE reorder_dirichlet_faces()
+    INTEGER :: ifa, fl
+    INTEGER, ALLOCATABLE :: indices(:), permutation(:)
+    LOGICAL, ALLOCATABLE :: prescribed(:)
+#ifdef PARALL
+    INTEGER :: slot
+    INTEGER, ALLOCATABLE :: face_permutation(:), ghost_slot(:)
+    INTEGER, ALLOCATABLE :: ghost_permutation(:)
+#endif
+
+    ALLOCATE(indices(Mesh%Nextfaces),permutation(Mesh%Nextfaces),prescribed(Mesh%Nextfaces))
+    indices = [(ifa, ifa=1,Mesh%Nextfaces)]
+    prescribed = .FALSE.
+    DO ifa = 1,Mesh%Nextfaces
+       fl = Mesh%boundaryFlag(ifa)
+       ! Flag zero denotes a partition interface, not a physical boundary.
+       IF (fl > 0) prescribed(ifa) = phys%bcflags(fl) == bc_dirichlet
+    ENDDO
+    permutation = [PACK(indices,.NOT. prescribed),PACK(indices,prescribed)]
+    Mesh%Tb = Mesh%Tb(permutation,:)
+    Mesh%extFaces = Mesh%extFaces(permutation,:)
+    Mesh%boundaryFlag = Mesh%boundaryFlag(permutation)
+#ifdef PARALL
+    ! Partition metadata is absent during global serial preprocessing.
+    IF (ASSOCIATED(Mesh%ghostfaces)) THEN
+       ALLOCATE(face_permutation(Mesh%Nfaces),ghost_slot(Mesh%Nfaces))
+       face_permutation = [(ifa, ifa=1,Mesh%Nfaces)]
+       face_permutation(Mesh%Nintfaces+1:) = Mesh%Nintfaces+permutation
+       ghost_slot = 0
+       slot = 0
+       DO ifa = 1,Mesh%Nfaces
+          IF (Mesh%ghostfaces(ifa) /= 1) CYCLE
+          slot = slot+1
+          ghost_slot(ifa) = slot
+       ENDDO
+       IF (slot > 0) THEN
+          ! These arrays contain ghost faces only, in their local face order.
+          ghost_permutation = PACK(ghost_slot(face_permutation),Mesh%ghostfaces(face_permutation)==1)
+          Mesh%ghostflp = Mesh%ghostflp(ghost_permutation)
+          Mesh%ghostpro = Mesh%ghostpro(ghost_permutation)
+          Mesh%ghostloc = Mesh%ghostloc(ghost_permutation)
+       ENDIF
+       Mesh%ghostfaces = Mesh%ghostfaces(face_permutation)
+       Mesh%loc2glob_fa = Mesh%loc2glob_fa(face_permutation)
+    ENDIF
+#endif
+  END SUBROUTINE reorder_dirichlet_faces
+
+#ifdef PARALL
+  ! Local permutations also change the indices stored by neighboring ranks.
+  SUBROUTINE refresh_ghost_face_owners(ndir)
+    INTEGER, INTENT(IN) :: ndir
+    INTEGER :: total_dir, ierr, i, owner, slot, position
+    INTEGER :: counts_send(MPIvar%glob_size), counts_recv(MPIvar%glob_size)
+    INTEGER :: offsets_send(MPIvar%glob_size), offsets_recv(MPIvar%glob_size), cursor(MPIvar%glob_size)
+    INTEGER, ALLOCATABLE :: requests(:), received(:), slots(:), ghost_faces(:)
+
+    ! Every rank participates if any partition has prescribed faces.
+    CALL MPI_ALLREDUCE(ndir,total_dir,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
+    IF (total_dir == 0) RETURN
+    counts_send = 0
+    ghost_faces = PACK([(i,i=1,Mesh%Nfaces)],Mesh%ghostfaces==1)
+    DO slot = 1,Mesh%nghostfaces
+       owner = Mesh%ghostpro(slot)
+       counts_send(owner) = counts_send(owner)+1
+    ENDDO
+    CALL MPI_ALLTOALL(counts_send,1,MPI_INTEGER,counts_recv,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
+    offsets_send(1) = 0
+    offsets_recv(1) = 0
+    DO i = 2,MPIvar%glob_size
+       offsets_send(i) = offsets_send(i-1)+counts_send(i-1)
+       offsets_recv(i) = offsets_recv(i-1)+counts_recv(i-1)
+    ENDDO
+    ALLOCATE(requests(SUM(counts_send)),slots(SUM(counts_send)),received(SUM(counts_recv)))
+    cursor = offsets_send
+    DO slot = 1,Mesh%nghostfaces
+       owner = Mesh%ghostpro(slot)
+       cursor(owner) = cursor(owner)+1
+       position = cursor(owner)
+       requests(position) = Mesh%loc2glob_fa(ghost_faces(slot))
+       slots(position) = slot
+    ENDDO
+    ! Global face IDs survive local reordering; owners return their new local IDs.
+    CALL MPI_ALLTOALLV(requests,counts_send,offsets_send,MPI_INTEGER, &
+         received,counts_recv,offsets_recv,MPI_INTEGER,MPI_COMM_WORLD,ierr)
+    DO i = 1,SIZE(received)
+       position = FINDLOC(Mesh%loc2glob_fa,received(i),DIM=1)
+       IF (position == 0) ERROR STOP 'Cannot locate owner of reordered boundary face'
+       received(i) = position
+    ENDDO
+    CALL MPI_ALLTOALLV(received,counts_recv,offsets_recv,MPI_INTEGER, &
+         requests,counts_send,offsets_send,MPI_INTEGER,MPI_COMM_WORLD,ierr)
+    Mesh%ghostloc(slots) = requests
+  END SUBROUTINE refresh_ghost_face_owners
+#endif
 
   SUBROUTINE CreateFaceConnectivity_serial
     INTEGER :: ifa, igh

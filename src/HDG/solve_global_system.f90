@@ -294,7 +294,8 @@
   ct = 0
   Neq = phys%Neq
   Nfp = Mesh%Nnodesperface
-  DO i = 1, Mesh%Nfaces
+  ! The packed solver vector contains owned unknown faces, not prescribed traces.
+  DO i = 1, Mesh%ukf
      IF (Mesh%ghostfaces(i) .EQ. 1) CYCLE
      ct = ct + 1
      indg = (i - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
@@ -362,7 +363,7 @@
 
 
 #ifdef PARALL
-     DO i = 1, Mesh%Nfaces
+     DO i = 1, Mesh%ukf
         IF (Mesh%ghostfaces(i) .EQ. 1) CYCLE
         indg = (i - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
         errsol = MAX(errsol, MAXVAL(ABS(u_tilde_exact(indg) - sol%u_tilde(indg))))
@@ -628,7 +629,7 @@ CONTAINS
     ct = 0
     Neq = phys%Neq
     Nfp = Mesh%Nnodesperface
-    DO i = 1, Mesh%Nfaces
+    DO i = 1, Mesh%ukf
        IF (Mesh%ghostfaces(i) .EQ. 1) CYCLE
        ct = ct + 1
        indg = (i - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
@@ -754,7 +755,7 @@ CONTAINS
        ct = 0
        Neq = phys%Neq
        Nfp = Mesh%Nnodesperface
-       DO i = 1, Mesh%Nfaces
+       DO i = 1, Mesh%ukf
           IF (Mesh%ghostfaces(i) .EQ. 1) CYCLE
           ct = ct + 1
           indg = (i - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)

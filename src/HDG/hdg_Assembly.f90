@@ -1181,7 +1181,8 @@ SUBROUTINE HDG_assembly()
   nn = blk*Nfunk   ! K = nn x nn
 
 #ifdef PARALL
-  nn = nn-blk*Mesh%nghostfaces
+  ! Nfunk already excludes prescribed faces; subtract only ghost unknown faces.
+  nn = nn-blk*COUNT(Mesh%ghostfaces(1:Nfunk)==1)
   Fasind = 0
   rept = 0
 

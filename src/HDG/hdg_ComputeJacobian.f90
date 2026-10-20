@@ -4224,13 +4224,16 @@ END IF
 #endif
       END DO  ! i-Loop
 
+      ! Prescribed traces use the same frozen tau as the element contribution.
       ! Assembly stabilization terms
       IF (numer%stab < 6) THEN
         DO i = 1,Neq
           ind_if = i + ind_asf
           kmult = tau(i,i)*NNif
           elMat%Auu(ind_fe(ind_if),ind_fe(ind_if),iel) = elMat%Auu(ind_fe(ind_if),ind_fe(ind_if),iel) + kmult
-                 IF (.NOT. isdir) THEN
+          IF (isdir) THEN
+            elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) + tau(i,i)*uf(i)*Nif
+          ELSE
             elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) - kmult
           ENDIF
         END DO
@@ -4241,7 +4244,9 @@ END IF
             ind_jf = j + ind_asf
             kmult = tau(i,j)*NNif
             elMat%Auu(ind_fe(ind_if),ind_fe(ind_jf),iel) = elMat%Auu(ind_fe(ind_if),ind_fe(ind_jf),iel) + kmult
-                    IF (.NOT. isdir) THEN
+            IF (isdir) THEN
+              elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) + tau(i,j)*uf(j)*Nif
+            ELSE
               elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
             ENDIF
           END DO

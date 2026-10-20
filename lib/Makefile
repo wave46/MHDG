@@ -17,6 +17,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-equilibrium-series
 .PHONY : check-linear-solve-status
 .PHONY : check-bdf-coefficients
+.PHONY : check-strong-dirichlet
 .PHONY : check-amjuel-extrapolation
 .PHONY : check-neutral-energy-source
 .PHONY : check-neutral-gamma-transport
@@ -58,6 +59,7 @@ clean:
 	$(RM) adaptive_checkpoint_check
 	$(RM) divergence_refinement_check
 	$(RM) bdf_coefficients_check linear_solve_status_check
+	$(RM) strong_dirichlet_check
 	$(RM) amjuel_extrapolation_check
 	$(RM) neutral_energy_source_check
 	$(RM) neutral_gamma_transport_check
@@ -70,6 +72,11 @@ bdf_coefficients_routine.F : $(SDIR)/HDG/hdg_ComputeJacobian.f90
 check-bdf-coefficients : MHDG bdf_coefficients_routine.F
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_bdf_coefficients.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o bdf_coefficients_check $(LIB)
 	./bdf_coefficients_check
+
+check-strong-dirichlet : MHDG
+	python3 ../unit_tests/extract_strong_dirichlet.py $(SDIR)/HDG/hdg_ComputeJacobian.f90 $(SDIR)/HDG/hdg_BC.f90
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_strong_dirichlet.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o strong_dirichlet_check $(LIB)
+	OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 ./strong_dirichlet_check
 
 check-magnetic-topology : interpolation.o magnetic_topology.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_magnetic_topology.f90 interpolation.o magnetic_topology.o -o magnetic_topology_check
