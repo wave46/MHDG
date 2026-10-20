@@ -1,5 +1,12 @@
 MODULE solve_petsc
 #include "petsc/finclude/petsc.h"
+#if PETSC_VERSION_LT(3,23,0)
+! Older Fortran interfaces use the F90 suffix for pointer-array access.
+#define VecGetArrayRead VecGetArrayReadF90
+#define VecRestoreArrayRead VecRestoreArrayReadF90
+#define VecGetArray VecGetArrayF90
+#define VecRestoreArray VecRestoreArrayF90
+#endif
   USE matrices_types
   USE types
   USE globals
@@ -22,7 +29,7 @@ MODULE solve_petsc
      PetscScalar, DIMENSION(:), POINTER :: vals_rhs => NULL()
      PetscScalar                        :: residue   ! UNPRECONDTIONED residue norm of the linear system
      PetscInt                           :: its      ! Previous number of iterations
-     KSPConvergedReason                 :: convergedReason
+     INTEGER                            :: convergedReason ! collective numeric code for MHDG status handling
 
   END TYPE PETSC_STRUC
 
@@ -271,6 +278,7 @@ CONTAINS
     INTEGER, INTENT(IN)   :: ir
     INTEGER, INTENT(OUT)  :: error_code
     INTEGER :: collective_reason
+    KSPConvergedReason :: reason
     REAL*8                :: tps, tpe
     INTEGER               :: cks, clock_rate, cke
     !PetscViewer           :: viewer
@@ -397,8 +405,13 @@ CONTAINS
     IF (error_code /= 0) RETURN
 
     CALL KSPGetIterationNumber(matPETSC%ksp,matPETSC%its,ierr); CHKERRA(ierr)
-    CALL KSPGetConvergedReason(matPETSC%ksp, matPETSC%convergedReason, ierr); CHKERRA(ierr)
-    collective_reason = INT(matPETSC%convergedReason)
+    CALL KSPGetConvergedReason(matPETSC%ksp, reason, ierr); CHKERRA(ierr)
+#if PETSC_VERSION_GE(3,23,0)
+    ! PETSc 3.23 introduced distinct Fortran derived types for enums.
+    collective_reason = reason%v
+#else
+    collective_reason = INT(reason)
+#endif
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, collective_reason, 1, MPI_INTEGER, MPI_MIN, MPI_COMM_WORLD, ierr)
     matPETSC%convergedReason = collective_reason
     IF (collective_reason <= 0) RETURN
@@ -422,9 +435,9 @@ CONTAINS
     PetscScalar, POINTER      :: data_array(:)
     PetscErrorCode            :: ierr
     ! copy the vector values into the array
-    CALL VecGetArrayReadF90(vector,data_array,ierr)
+    CALL VecGetArrayRead(vector,data_array,ierr)
     aux_sol = data_array
-    CALL VecRestoreArrayReadF90(vector,data_array,ierr)
+    CALL VecRestoreArrayRead(vector,data_array,ierr)
   END SUBROUTINE PETSC_retrieve_array
 
   SUBROUTINE PETSC_set_array(vector, aux_sol, size)
@@ -434,9 +447,9 @@ CONTAINS
     PetscScalar, POINTER      :: data_array(:)
     PetscErrorCode            :: ierr
     ! copy the vector values into the array
-    CALL VecGetArrayF90(vector,data_array,ierr)
+    CALL VecGetArray(vector,data_array,ierr)
     data_array = aux_sol
-    CALL VecRestoreArrayF90(vector,data_array,ierr)
+    CALL VecRestoreArray(vector,data_array,ierr)
   END SUBROUTINE PETSC_set_array
 
 
