@@ -22,6 +22,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-neutral-energy-source
 .PHONY : check-neutral-gamma-transport
 .PHONY : check-heat-flux-limiter
+.PHONY : check-initial-profile
 
 all : allseq
 
@@ -64,6 +65,7 @@ clean:
 	$(RM) neutral_energy_source_check
 	$(RM) neutral_gamma_transport_check
 	$(RM) heat_flux_limiter_check
+	$(RM) initial_profile_check
 
 # Exercise the internal production routine without building an HDG mesh.
 bdf_coefficients_routine.F : $(SDIR)/HDG/hdg_ComputeJacobian.f90
@@ -160,6 +162,11 @@ check-divergence-refinement : MHDG
 check-linear-solve-status : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_linear_solve_status.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o linear_solve_status_check $(LIB)
 	OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 ./linear_solve_status_check
+
+# Exercise the production 2D temperature-model initializer for both flux signs.
+check-initial-profile : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_initial_profile.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o initial_profile_check $(LIB)
+	OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 ./initial_profile_check
 
 include Make.inc/build_provenance.mk
 
