@@ -33,7 +33,8 @@ CONTAINS
   ! Initialization of MPI/OMP
   !********************************************
   SUBROUTINE init_MPI_OMP()
-    INTEGER :: IERR, OMP_GET_MAX_THREADS, MPI_THREAD_provided, MPI_THREAD_required
+    USE omp_lib, ONLY: omp_get_max_threads, omp_set_num_threads
+    INTEGER :: IERR, MPI_THREAD_provided, MPI_THREAD_required
 
     ! Initialization of the MPI communicator
     !MPI_THREAD_required = MPI_THREAD_SINGLE

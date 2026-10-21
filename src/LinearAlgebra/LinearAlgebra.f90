@@ -8,6 +8,45 @@
 
 MODULE LinearAlgebra
 
+  ! Traditional Fortran BLAS/LAPACK interfaces: retain the existing REAL*8
+  ! and default-integer calling convention, including sequence association.
+  PRIVATE :: dgetrf, dgetri, dgesv, dgemm, dgeev
+  INTERFACE
+     SUBROUTINE dgetrf(m, n, a, lda, ipiv, info)
+       INTEGER, INTENT(IN) :: m, n, lda
+       REAL*8, INTENT(INOUT) :: a(lda,*)
+       INTEGER, INTENT(OUT) :: ipiv(*), info
+     END SUBROUTINE dgetrf
+
+     SUBROUTINE dgetri(n, a, lda, ipiv, work, lwork, info)
+       INTEGER, INTENT(IN) :: n, lda, lwork, ipiv(*)
+       REAL*8, INTENT(INOUT) :: a(lda,*)
+       REAL*8, INTENT(OUT) :: work(*)
+       INTEGER, INTENT(OUT) :: info
+     END SUBROUTINE dgetri
+
+     SUBROUTINE dgesv(n, nrhs, a, lda, ipiv, b, ldb, info)
+       INTEGER, INTENT(IN) :: n, nrhs, lda, ldb
+       REAL*8, INTENT(INOUT) :: a(lda,*), b(ldb,*)
+       INTEGER, INTENT(OUT) :: ipiv(*), info
+     END SUBROUTINE dgesv
+
+     SUBROUTINE dgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+       CHARACTER, INTENT(IN) :: transa, transb
+       INTEGER, INTENT(IN) :: m, n, k, lda, ldb, ldc
+       REAL*8, INTENT(IN) :: alpha, beta, a(lda,*), b(ldb,*)
+       REAL*8, INTENT(INOUT) :: c(ldc,*)
+     END SUBROUTINE dgemm
+
+     SUBROUTINE dgeev(jobvl, jobvr, n, a, lda, wr, wi, vl, ldvl, vr, ldvr, work, lwork, info)
+       CHARACTER, INTENT(IN) :: jobvl, jobvr
+       INTEGER, INTENT(IN) :: n, lda, ldvl, ldvr, lwork
+       REAL*8, INTENT(INOUT) :: a(lda,*)
+       REAL*8, INTENT(OUT) :: wr(*), wi(*), vl(ldvl,*), vr(ldvr,*), work(*)
+       INTEGER, INTENT(OUT) :: info
+     END SUBROUTINE dgeev
+  END INTERFACE
+
 CONTAINS
 
   SUBROUTINE compute_lup_decomp(A, n, L, U, P)
@@ -100,9 +139,6 @@ CONTAINS
     INTEGER*4            :: ipiv(1:SIZE(M, 1)) ! pivot indices
     INTEGER*4            :: info
 
-    EXTERNAL DGETRF
-    EXTERNAL DGETRI
-
     n = SIZE(M, 1)
 
     ! store the matrix IN inverse to prevent it from being overwritten by LAPACK
@@ -136,8 +172,6 @@ CONTAINS
     INTEGER            :: p(1:SIZE(b, 1))
     REAL*8,ALLOCATABLE :: temp(:,:)
 
-    EXTERNAL DGESV
-
     ALLOCATE(temp(SIZE(A, 1), SIZE(A, 2)))
     n = SIZE(b, 1) ! size of the matrix (n x n)
     m = SIZE(b, 2) ! number of RHS
@@ -166,7 +200,6 @@ CONTAINS
     INTEGER            :: n, m, info
     INTEGER            :: p(1:SIZE(b, 1))
     REAL*8             :: temp(SIZE(A, 1), SIZE(A, 2))
-    EXTERNAL DGESV
 
     n = SIZE(b, 1) ! size of the matrix (n x n)
     m = 1 ! number of RHS
@@ -192,7 +225,6 @@ CONTAINS
     REAL*8, INTENT(IN) :: B(:,:)
     REAL*8, INTENT(OUT):: C(:,:)
     INTEGER            :: a1,a2,b1,b2,c1,c2
-    EXTERNAL DGEMM
 
     a1 = SIZE(A,1)
     a2 = SIZE(A,2)
@@ -225,7 +257,6 @@ CONTAINS
    REAL*8, INTENT(IN) :: B(:, :)  ! Input matrix B
    REAL*8, ALLOCATABLE :: C(:, :) ! Result matrix C
    INTEGER :: a1, a2, b1, b2, c1, c2
-   EXTERNAL DGEMM
 
    ! Get dimensions of input matrices
    a1 = SIZE(A, 1)  ! Rows of A
@@ -263,8 +294,7 @@ CONTAINS
     REAL*8,ALLOCATABLE  :: work(:)
     REAL*8, ALLOCATABLE :: Vmat(:, :), wr(:), wi(:)
     REAL*8              :: dummy(SIZE(A,1), SIZE(A,1))
-
-    EXTERNAL dgeev
+    REAL*8              :: query_work(1)
 
     m = SIZE(A, 1)
 
@@ -275,10 +305,10 @@ CONTAINS
 
     ! Query the optimal workspace
     lwork = -1
-    CALL dgeev('N', 'V', m, Vmat, m, wr, wi, dummy, 1, V, m, dummy, lwork, info)
+    CALL dgeev('N', 'V', m, Vmat, m, wr, wi, dummy, 1, V, m, query_work, lwork, info)
 
     ! Compute the eigenvalues and right eigenvectors of A
-    lwork = MAX((nb+2)*m, NINT(dummy(1,1)))
+    lwork = MAX((nb+2)*m, NINT(query_work(1)))
     ALLOCATE (work(lwork))
     CALL dgeev('N', 'V', m, Vmat, m, wr, wi, dummy, 1, V, m, work, lwork, info)
 
@@ -375,8 +405,6 @@ CONTAINS
     END DO
   END FUNCTION col
 
-END MODULE LinearAlgebra
-
 SUBROUTINE cross_product(a, b, c)
   REAL*8, INTENT(IN) :: a(3), b(3)
   REAL*8, INTENT(OUT):: c(3)
@@ -407,3 +435,5 @@ SUBROUTINE ijk_cross_product(i, j, k)
   END SELECT
 
 END SUBROUTINE ijk_cross_product
+
+END MODULE LinearAlgebra

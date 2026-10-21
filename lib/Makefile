@@ -23,6 +23,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-neutral-gamma-transport
 .PHONY : check-heat-flux-limiter
 .PHONY : check-initial-profile
+.PHONY : check-linear-algebra
 
 all : allseq
 
@@ -66,8 +67,13 @@ clean:
 	$(RM) neutral_gamma_transport_check
 	$(RM) heat_flux_limiter_check
 	$(RM) initial_profile_check
+	$(RM) linear_algebra_check
 
 # Exercise the internal production routine without building an HDG mesh.
+check-linear-algebra : LinearAlgebra.o
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_linear_algebra.f90 LinearAlgebra.o -o linear_algebra_check $(shell $(MHDG_PKG_CONFIG) --libs $(MHDG_BLAS_PACKAGES))
+	OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 ./linear_algebra_check
+
 bdf_coefficients_routine.F : $(SDIR)/HDG/hdg_ComputeJacobian.f90
 	sed -n '/^  SUBROUTINE setTimeIntegrationCoefficients(/,/^  ENDSUBROUTINE setTimeIntegrationCoefficients/p' $< > $@
 

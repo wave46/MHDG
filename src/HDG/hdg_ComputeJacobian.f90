@@ -8,7 +8,7 @@
 
 SUBROUTINE HDG_computeJacobian()
   USE globals
-  USE LinearAlgebra, only: tensorProduct, tensorSumInt
+  USE LinearAlgebra, only: tensorProduct, tensorSumInt, cross_product, ijk_cross_product
   USE analytical, only: body_force, analytical_solution
   USE physics
   USE transport_models_1d, ONLY: transport_model_1d

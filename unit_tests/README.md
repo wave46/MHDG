@@ -4,6 +4,12 @@ This directory contains small deterministic checks for numerical machinery that
 can be exercised without launching a full MHDG case.  Production-equilibrium
 and end-to-end coverage remains in `regression_tests`.
 
+`make check-linear-algebra` checks the production BLAS/LAPACK wrappers using
+rectangular products, pivoted single/multiple-RHS solves, inversion, LU factors
+and real right-eigenvector residuals. It also checks cross-product orientation
+and antisymmetry. It needs only `LinearAlgebra.o` and the configured BLAS/LAPACK
+libraries; no solver run, mesh or MPI launch is needed.
+
 `make check-bdf-coefficients` from `lib/` checks constant-step BDF1-6 polynomial
 differentiation, startup order ramping, unused history and unchanged BDF1 weights.
 It also checks the production history initialization/update routines at fresh
