@@ -1862,7 +1862,7 @@ CONTAINS
     coefi = phys%diff_pari*(2./(3.*phys%Mref))**(1 + phys%epn)
     Alphai = computeAlphai(U)
     CALL computeVi(U, Vveci)
-    gmi = dot_PRODUCT(MATMUL(Q,Vveci),b)
+    gmi = dot_PRODUCT(MATMUL(Q,Vveci),b(1:SIZE(Q,1)))
     q_sh_i = -coefi*Alphai*gmi
   
   END SUBROUTINE compute_spitzer_harm_flux_ions
@@ -1876,7 +1876,7 @@ CONTAINS
     coefe = phys%diff_pare*(2./(3.*phys%Mref))**(1 + phys%epn)
     Alphae = computeAlphae(U)
     CALL computeVe(U, Vvece)
-    gme = dot_PRODUCT(MATMUL(Q,Vvece),b)
+    gme = dot_PRODUCT(MATMUL(Q,Vvece),b(1:SIZE(Q,1)))
     q_sh_e = -coefe*Alphae*gme
 
   END SUBROUTINE compute_spitzer_harm_flux_electrons

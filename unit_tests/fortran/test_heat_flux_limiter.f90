@@ -116,10 +116,10 @@ CONTAINS
     REAL*8, INTENT(OUT) :: result
     REAL*8 :: fs,sh,limiter
     IF (which == 1) THEN
-      CALL compute_spitzer_harm_flux_ions(state,gradient,b(1:2),sh)
+      CALL compute_spitzer_harm_flux_ions(state,gradient,b,sh)
       CALL compute_free_streaming_heat_flux_ions(state,fs)
     ELSE
-      CALL compute_spitzer_harm_flux_electrons(state,gradient,b(1:2),sh)
+      CALL compute_spitzer_harm_flux_electrons(state,gradient,b,sh)
       CALL compute_free_streaming_heat_flux_electrons(state,fs)
     ENDIF
     CALL compute_flux_limiter(fs,sh,c_fl,limiter)

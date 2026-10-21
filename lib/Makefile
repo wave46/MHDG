@@ -103,7 +103,7 @@ check-neutral-flux-limiter : neutral_flux_limiter.o
 	./neutral_flux_limiter_check
 
 neutral_wall_physics_check.o : physics.o
-	$(FC) -c $(FCFLAGS) $(INC) -ffunction-sections -fdata-sections physics.F -o $@
+	$(FC) -c $(FCFLAGS) $(INC) -O0 -fno-fast-math -fcheck=all -ffunction-sections -fdata-sections physics.F -o $@
 
 check-neutral-wall-flux : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_neutral_wall_flux.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o neutral_wall_flux_check
