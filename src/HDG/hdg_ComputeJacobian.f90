@@ -3870,6 +3870,19 @@ ENDIF
       gmGamman = MATMUL(Qpr,Vun)
       TauGamman = MATMUL(Qpr,dVun_dU)
 #endif
+#ifdef NEUTRAL
+      ! A prescribed U_hat is fixed; neutral diffusion varies only through Q.
+      IF (isdir) THEN
+        Dnn_dU = 0.d0
+        Dnn_dU_U = 0.d0
+#ifdef NEUTRALP
+        QdW5p = 0.d0
+#endif
+#ifdef NEUTRALGAMMA
+        TauGamman = 0.d0
+#endif
+      ENDIF
+#endif
 #endif
 
       IF (diagnostics_on) THEN
@@ -4044,6 +4057,8 @@ END IF
           END DO ! j-loop
           ! Pinch Contribution
           elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) + (APinch(i,1)*n(1) + APinch(i,2)*n(2))*NNif
+        ELSE
+          elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) - DOT_PRODUCT(APinch(i,:),n)*uf(i)*Nif
         ENDIF
 
 
