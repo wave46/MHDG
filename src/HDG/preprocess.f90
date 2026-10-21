@@ -117,6 +117,8 @@ CONTAINS
        END IF
     ENDIF
 
+    ! MPI computes these areas after ghost ownership is defined.
+#ifndef PARALL
     !*****************************************
     ! Compute puff area
     !*****************************************
@@ -125,11 +127,7 @@ CONTAINS
           WRITE (6, *) "Computing puff area"
        END IF
     ENDIF
-    ! It does not work in parallel (TODO)
-#ifndef PARALL
     CALL computePuffArea()
-#endif
-    ! It does not work in parallel (TODO)
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
           WRITE (6, *) "Puff area:  ", Mesh%puff_area*phys%lscale*phys%lscale, " m^2"
@@ -140,23 +138,20 @@ CONTAINS
           WRITE (6, *) "Computing pump area"
        END IF
     ENDIF
-#ifndef PARALL
     CALL computePumpArea()
-#endif
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
           WRITE (6, *) "Pump area:  ", Mesh%pump_area*phys%lscale*phys%lscale, " m^2"
        END IF
     ENDIF
-#ifndef PARALL
     CALL computeCoreArea()
-#endif
     IF (MPIvar%glob_id .EQ. 0) THEN
        IF (utils%printint > 0) THEN
           WRITE (6, *) "Core area:  ", Mesh%core_area*phys%lscale*phys%lscale, " m^2"
           WRITE (6, *) "Done! "
        END IF
     ENDIF
+#endif
   ENDSUBROUTINE mesh_preprocess_serial
 
   SUBROUTINE mesh_preprocess(ierr)
