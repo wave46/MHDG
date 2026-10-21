@@ -1535,14 +1535,6 @@ CONTAINS
           endif
         endif
       endif
-      ! external heating
-      IF (switch%external_heating) THEN
-        ! ion heating
-        force(g,3) = force(g,3)+external_heating_ions_gauss(g)
-        ! electron heating
-        force(g,4) = force(g,4)+external_heating_electrons_gauss(g)
-      ENDIF
-
 #endif
       END DO
     END IF
@@ -1574,6 +1566,13 @@ CONTAINS
 		END IF
 		!! end sources
 
+#ifdef TEMPERATURE
+    ! Add imported heating after testcase-specific sources, including 61/62.
+    IF (switch%external_heating .AND. switch%testcase >= 50 .AND. switch%testcase <= 69) THEN
+      force(:,3) = force(:,3)+external_heating_ions_gauss
+      force(:,4) = force(:,4)+external_heating_electrons_gauss
+    ENDIF
+#endif
 
     ! Loop in 2D Gauss points
     Ngauss = Ng2d

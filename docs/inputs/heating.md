@@ -9,6 +9,11 @@ This guide covers heating supplied on a rectangular cylindrical $R,Z$ grid.
 The ion and electron channels are prescribed separately; positive values add
 energy to the corresponding equation.
 
+In the 2D NGammaTiTe family, imported heating is added in testcases 50–69,
+on top of any testcase-specific sources. Manufactured convergence cases are
+excluded. The separate analytical Gaussian-heating option retains its
+50–59 scope.
+
 ## Configuration
 
 Set these entries in the existing namelist blocks of `param.txt`:
