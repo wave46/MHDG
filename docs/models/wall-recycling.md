@@ -62,6 +62,9 @@ The limiter and stabilization coefficients remain lagged; stabilization uses
 unlimited diffusion. Plasma diffusion is recycled; plasma stabilization
 $R\tau_p(n_p-\widehat n_p)$ is excluded.
 
+The general volume/face coefficient convention is described in
+[Diffusion in HDG](../numerics/diffusion.md).
+
 These are weak face equations. $U$ and $\widehat U$ need not coincide at
 convergence. At unit recycling without puff or losses, the combined numerical
 wall flux can retain the plasma stabilization correction; exact numerical

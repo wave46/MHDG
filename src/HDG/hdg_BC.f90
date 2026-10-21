@@ -660,10 +660,10 @@ CONTAINS
      q_cyl = MATMUL(refElPol%N1d,q_cylfl)
      omega = MATMUL(refElPol%N1d,omegafl)
     ! Compute diffusion at faces Gauss points
-#ifndef KEQUATION
-    CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac)
-#else
+#ifdef TEMPERATURE
     CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac,q_cyl)
+#else
+    CALL setLocalDiff(xyg,ufg,diff_iso_fac,diff_ani_fac)
 #endif
     
     

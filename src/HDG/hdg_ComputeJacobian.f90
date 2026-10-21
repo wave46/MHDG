@@ -1222,7 +1222,7 @@ CONTAINS
       endif
 
       if (iface.le.Mesh%Nintfaces) then
-        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf)
+        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uf)
       else
 
         if (Mesh%periodic_faces(iface-Mesh%Nintfaces).eq.0) then
@@ -1236,7 +1236,7 @@ CONTAINS
             &face_diagnostics_on,thread_diagnostics)
         else
           ! periodic face
-          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf)
+          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uf)
         endif
       endif
 
@@ -1422,10 +1422,10 @@ CONTAINS
       qeg = MATMUL(refElPol%N2D,qe)
 
     ! Compute diffusion at Gauss points
-#ifndef KEQUATION
-    CALL setLocalDiff(xy,ueg,diff_iso_vol,diff_ani_vol)
-#else
+#ifdef TEMPERATURE
     CALL setLocalDiff(xy,ueg,diff_iso_vol,diff_ani_vol,q_cyl)
+#else
+    CALL setLocalDiff(xy,ueg,diff_iso_vol,diff_ani_vol)
 #endif
 
     IF (switch%import_diffusion_1D) THEN
@@ -1867,18 +1867,18 @@ CONTAINS
   ! Interior faces computation in 2D
   !***************************************************
 
-  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uef,uf)
+  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uf)
 
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
     real*8,intent(IN)         :: Bfl(:,:), psifl(:)
     real*8,intent(IN)         :: qef(:,:)
-    real*8,intent(IN)         :: uef(:,:),uf(:,:)
+    real*8,intent(IN)         :: uf(:,:)
     real*8,intent(IN)             :: q_cylfl(:)
     real*8,intent(in)         :: omegafl(:)
     integer*4                 :: g,NGauss,i,inn
     real*8                    :: dline,xyDerNorm_g
-    real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq)
+    real*8                    :: ufg(Ng1d,neq)
     real*8                    :: xyf(Ng1d,ndim)
     real*8                    :: xyDer(Ng1d,ndim)
     real*8                    :: qfg(Ng1d,neq*Ndim)
@@ -1952,16 +1952,14 @@ CONTAINS
         topology_region = magnetic_geometry_cache%face_region(:,ifa,iel)
       ENDIF
 
-    ! Element solution at face Gauss points
-      uefg = MATMUL(refElPol%N1D,uef)
     ! Gradient solution at face gauss points
       qfg = MATMUL(refElPol%N1D,qef)
 
-    ! Compute diffusion at faces Gauss points
-#ifndef KEQUATION
-    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac)
+    ! Face constitutive coefficients use U_hat; Q remains element-based.
+#ifdef TEMPERATURE
+    CALL setLocalDiff(xyf,ufg,diff_iso_fac,diff_ani_fac,q_cyl)
 #else
-    CALL setLocalDiff(xyf,uefg,diff_iso_fac,diff_ani_fac,q_cyl)
+    CALL setLocalDiff(xyf,ufg,diff_iso_fac,diff_ani_fac)
 #endif
 
     IF (switch%import_diffusion_1D) THEN
@@ -1978,7 +1976,7 @@ CONTAINS
 #if defined(NEUTRAL) && defined(TEMPERATURE)
     IF (switch%neutral_flux_limiter) THEN
       DO g = 1,Ng1d
-        CALL compute_neutral_flux_limiter_phi(uefg(g,:),qfg(g,:),b(g,:),&
+        CALL compute_neutral_flux_limiter_phi(ufg(g,:),qfg(g,:),b(g,:),&
           &neutral_limiter_phi(g))
         diff_iso_fac(inn,inn,g) = neutral_limiter_phi(g)*diff_iso_fac(inn,inn,g)
         diff_ani_fac(inn,inn,g) = neutral_limiter_phi(g)*diff_ani_fac(inn,inn,g)
@@ -2072,7 +2070,7 @@ CONTAINS
     TYPE(balance_accumulator_type),INTENT(INOUT) :: diagnostics
     integer*4                 :: g,NGauss,i,inn
     real*8                    :: dline,xyDerNorm_g
-    real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq),diffusion_state(Ng1d,neq)
+    real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq)
     real*8                    :: xyf(Ng1d,ndim)
     real*8                    :: xyDer(Ng1d,ndim)
     real*8                    :: qfg(Ng1d,neq*Ndim)
@@ -2092,8 +2090,6 @@ CONTAINS
     real*8                    :: auxdiffsc(Ng1d)
     real*8                    :: q_cyl(Ng1d)
     real*8                    :: omega(Ng1d)
-    integer                   :: boundary_flag
-    logical                   :: trace_wall
     inn = phys%idx_rhon_eq
     ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
     ind_ash = (/(i,i=0,Neq*(Npfl - 1)*Ndim,Neq*Ndim)/)
@@ -2155,28 +2151,12 @@ CONTAINS
     ! Gradient solution at face gauss points
       qfg = MATMUL(refElPol%N1D,qef)
 
-    ! Match the physical-wall BC's constitutive flux using U_hat.
-    ! Partition interfaces (boundary flag zero) retain the element-state policy.
-    trace_wall = .FALSE.
-    IF (Mesh%F(iel,ifa) > Mesh%Nintfaces) THEN
-      boundary_flag = Mesh%boundaryFlag(Mesh%F(iel,ifa)-Mesh%Nintfaces)
-      IF (boundary_flag > 0) THEN
-        SELECT CASE (phys%bcflags(boundary_flag))
-        CASE (bc_Bohm,bc_BohmPump,bc_BohmPuff)
-          trace_wall = .TRUE.
-        END SELECT
-      ENDIF
-    ENDIF
-    ! ufg is U_hat; uefg is the element state U evaluated on the face.
-    diffusion_state = uefg
-    IF (trace_wall) diffusion_state = ufg
-
-    ! Compute diffusion at faces Gauss points. Apply profiles before the frozen
-    ! limiter, and keep the unlimited diffusion as the stabilization input.
-#ifndef KEQUATION
-    CALL setLocalDiff(xyf,diffusion_state,diff_iso_fac,diff_ani_fac)
+    ! Physical and partition faces use U_hat, as in the BC assembly.
+    ! Apply profiles before limiting; stabilization uses unlimited diffusion.
+#ifdef TEMPERATURE
+    CALL setLocalDiff(xyf,ufg,diff_iso_fac,diff_ani_fac,q_cyl)
 #else
-    CALL setLocalDiff(xyf,diffusion_state,diff_iso_fac,diff_ani_fac,q_cyl)
+    CALL setLocalDiff(xyf,ufg,diff_iso_fac,diff_ani_fac)
 #endif
 
 
@@ -2194,7 +2174,7 @@ CONTAINS
 #if defined(NEUTRAL) && defined(TEMPERATURE)
     IF (switch%neutral_flux_limiter) THEN
       DO g = 1,Ng1d
-        CALL compute_neutral_flux_limiter_phi(diffusion_state(g,:),qfg(g,:),b(g,:),&
+        CALL compute_neutral_flux_limiter_phi(ufg(g,:),qfg(g,:),b(g,:),&
           &neutral_limiter_phi(g))
         diff_iso_fac(inn,inn,g) = neutral_limiter_phi(g)*diff_iso_fac(inn,inn,g)
         diff_ani_fac(inn,inn,g) = neutral_limiter_phi(g)*diff_ani_fac(inn,inn,g)

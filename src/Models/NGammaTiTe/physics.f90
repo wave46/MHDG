@@ -1313,15 +1313,13 @@ CONTAINS
   !*****************************************
   ! Set the perpendicular diffusion
   !****************************************
-#ifndef KEQUATION
-  SUBROUTINE setLocalDiff(xy, u, d_iso, d_ani)
-#else
   SUBROUTINE setLocalDiff(xy, u, d_iso, d_ani, q_cyl)
-#endif
     real*8, intent(in)  		:: xy(:, :)
     real*8, intent(in)  		:: u(:,:)
 #ifdef KEQUATION
     real*8, intent(in)  		:: q_cyl(:)
+#else
+    real*8, intent(in), optional :: q_cyl(:)
 #endif
     real*8, intent(out)		 :: d_iso(:, :, :), d_ani(:, :, :)
     real*8		              :: iperdiff(size(xy, 1))

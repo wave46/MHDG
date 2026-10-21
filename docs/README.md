@@ -34,6 +34,8 @@ and limited to the guides listed below.
 
 ## Numerical utilities
 
+- [Diffusion in HDG](numerics/diffusion.md): element/trace coefficient states,
+  gradients and lagged stabilization.
 - [One-dimensional splines](numerics/splines.md): interpolation conventions,
   Fortran usage and current limitations of the retained utility.
 
