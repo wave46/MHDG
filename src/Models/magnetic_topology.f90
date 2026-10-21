@@ -696,7 +696,7 @@ CONTAINS
     INTEGER :: i, iteration, imax
     REAL*8 :: c, s, rmax, t0, t1, f0, f1, tm, fm, psi, pr, pz
     REAL*8 :: prr, pzz, prz, dfdt, d2fdt2, tleft, tright, dt
-    REAL*8 :: signed_span, max_f
+    REAL*8 :: signed_span, max_f, df0, df1, peak_left, peak_right, peak, dfpeak
 
     c = COS(theta)
     s = SIN(theta)
@@ -705,6 +705,7 @@ CONTAINS
     t0 = 0.d0
     f0 = -ABS(psi_level - this%psi_axis)
     max_f = f0
+    df0 = 0.d0
     imax = 0
     found = .FALSE.
     radius = 0.d0
@@ -713,6 +714,37 @@ CONTAINS
        t1 = rmax*REAL(i)/REAL(ray_scan_points)
        CALL this%evaluate_flux(this%r_axis + t1*c, this%z_axis + t1*s, psi, pr, pz)
        f1 = signed_span*(psi - psi_level)
+       df1 = signed_span*(pr*c + pz*s)
+
+       ! Resolve each local maximum before accepting a farther crossing.
+       ! A separatrix can touch this ray at an X point without changing sign;
+       ! a later crossing must not hide that earlier axis-connected contact.
+       IF (df0 > 0.d0 .AND. df1 <= 0.d0) THEN
+          peak_left = t0
+          peak_right = t1
+          DO iteration = 1, 60
+             peak = 0.5d0*(peak_left + peak_right)
+             CALL this%evaluate_flux(this%r_axis + peak*c, this%z_axis + peak*s, psi, pr, pz)
+             dfpeak = signed_span*(pr*c + pz*s)
+             IF (dfpeak > 0.d0) THEN
+                peak_left = peak
+             ELSE
+                peak_right = peak
+             ENDIF
+          ENDDO
+          peak = 0.5d0*(peak_left + peak_right)
+          CALL this%evaluate_flux(this%r_axis + peak*c, this%z_axis + peak*s, psi, pr, pz)
+          fm = signed_span*(psi - psi_level)
+          IF (fm >= 0.d0) THEN
+             ! Bracket the first root on the axis-facing side of the peak.
+             t1 = peak
+             f1 = fm
+          ELSEIF (ABS(fm) <= 1.d-7*ABS(psi_level - this%psi_axis)) THEN
+             radius = peak
+             found = .TRUE.
+             RETURN
+          ENDIF
+       ENDIF
        IF (f1 > max_f) THEN
           max_f = f1
           imax = i
@@ -734,6 +766,7 @@ CONTAINS
        ENDIF
        t0 = t1
        f0 = f1
+       df0 = df1
     ENDDO
 
     IF (imax <= 0) RETURN

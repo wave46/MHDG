@@ -7,6 +7,7 @@ PROGRAM test_magnetic_topology
   CALL test_high_order_wall_and_grid_resolution()
   CALL test_lower_single_null_regions()
   CALL test_narrow_separatrix_crossing()
+  CALL test_tangent_before_farther_crossing()
   WRITE (*, '(A)') 'magnetic topology analytical checks: PASS'
 
 CONTAINS
@@ -280,6 +281,63 @@ CONTAINS
        psi = -psi
     ENDDO
   END SUBROUTINE test_narrow_separatrix_crossing
+
+  SUBROUTINE test_tangent_before_farther_crossing()
+    TYPE(equilibrium_geometry_t) :: geometry
+    INTEGER, PARAMETER :: nr = 101, nz = 301
+    REAL*8, PARAMETER :: r0 = 2.d0, b = 0.6d0, d = 1.d0
+    REAL*8, PARAMETER :: psi_x = b**4/4.d0 - (b + d)*b**3/3.d0 + b*d*b*b/2.d0
+    REAL*8 :: r(nr), z(nz), psi(nz, nr), wall(4, 2), ref_nodes(2)
+    REAL*8 :: scale, y, psi_n, rho, normal(2)
+    INTEGER :: faces(4, 2), ir, iz, ierr, polarity, units, region
+    CHARACTER(LEN=256) :: message
+
+    ! Along the downward ray, V'(z)=z*(z+b)*(z+d). The saddle at -b
+    ! is a tangent contact with psi_x; beyond the private-flux well at -d
+    ! the same ray crosses psi_x again. The well is outside the wall but
+    ! inside the equilibrium grid. A later crossing must not hide the saddle.
+    DO units = 1, 2
+       scale = 1.d0
+       IF (units == 2) scale = 0.002d0
+       DO ir = 1, nr
+          r(ir) = (r0 - 0.65d0 + 1.3d0*REAL(ir - 1)/REAL(nr - 1))/scale
+       ENDDO
+       DO iz = 1, nz
+          y = -1.5d0 + 2.4d0*REAL(iz - 1)/REAL(nz - 1)
+          z(iz) = y/scale
+          DO ir = 1, nr
+             psi(iz, ir) = (r(ir)*scale - r0)**2 + &
+                  y**4/4.d0 + (b + d)*y**3/3.d0 + b*d*y*y/2.d0
+          ENDDO
+       ENDDO
+       wall(1, :) = (/r0 - 0.5d0, -0.8d0/)/scale
+       wall(2, :) = (/r0 + 0.5d0, -0.8d0/)/scale
+       wall(3, :) = (/r0 + 0.5d0, 0.55d0/)/scale
+       wall(4, :) = (/r0 - 0.5d0, 0.55d0/)/scale
+       faces(1, :) = (/1, 2/)
+       faces(2, :) = (/2, 3/)
+       faces(3, :) = (/3, 4/)
+       faces(4, :) = (/4, 1/)
+       ref_nodes = (/-1.d0, 1.d0/)
+       DO polarity = 1, 2
+          CALL geometry%init(r, z, psi, ierr, message)
+          CALL assert_ok(ierr, message)
+          CALL geometry%analyze(SIGN(psi_x, psi(nz, nr)), wall, faces, ref_nodes, ierr, message)
+          CALL assert_ok(ierr, message)
+          CALL assert_true(geometry%topology_kind == topology_lower_single_null, &
+               'a farther crossing hid the lower X-point tangent contact')
+          CALL assert_close(geometry%r_xpoint*scale, r0, 2.d-3, 'tangent-first X-point R')
+          CALL assert_close(geometry%z_xpoint*scale, -b, 2.d-3, 'tangent-first X-point Z')
+          CALL assert_close(geometry%psi_lcfs, SIGN(psi_x, psi(nz, nr)), 1.d-4, &
+               'tangent-first separatrix flux')
+          CALL geometry%evaluate_topology(r0/scale, -0.75d0/scale, psi_n, rho, normal, region)
+          CALL assert_true(region == magnetic_region_private_flux, &
+               'the private-flux lobe was included in the core polygon')
+          CALL geometry%clear()
+          psi = -psi
+       ENDDO
+    ENDDO
+  END SUBROUTINE test_tangent_before_farther_crossing
 
   SUBROUTINE fill_circular_flux(r0, nr, nz, r, z, psi)
     REAL*8, INTENT(IN) :: r0
