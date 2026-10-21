@@ -83,7 +83,6 @@ MODULE Main_utils
   REAL*8, ALLOCATABLE          :: uiter(:), L2err(:)
   REAL*8, POINTER              :: uiter_best(:) => NULL(), qiter_best(:) => NULL()
   CHARACTER(LEN=1024)          :: mesh_name, mesh_input_name, save_name
-  CHARACTER ( len = 255 )      :: gmsh_filename
   CHARACTER ( len = 255 )      :: h5_filename
   CHARACTER ( len = 50 )       :: count_adapt_char
   REAL*8                       :: cputtot, runttot
@@ -1840,8 +1839,7 @@ ENDSUBROUTINE update_delta_te
          Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
       END IF
       IF (adapt%shockcp_adapt .GT. 0) THEN
-         gmsh_filename = mesh_filename
-         CALL copy_file(gmsh_filename,"./res/temp.msh")
+         CALL copy_file(mesh_filename,"./res/temp.msh")
       ENDIF
        
     ENDIF
