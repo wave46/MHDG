@@ -242,14 +242,14 @@ CONTAINS
     !*****************************
     ! No non-diagonal terms defined for this model
 
-    !    call computeIperDiffusion(xy, u, iperdiff)
+    !    call computeIperDiffusion(xy, iperdiff)
     !    d_iso(1, 1, :) = d_iso(1, 1, :)*iperdiff
     !    d_iso(2, 2, :) = d_iso(2, 2, :)*iperdiff
     !#ifdef NEUTRAL
     !    d_iso(3, 3, :) = d_iso(3, 3, :)*iperdiff
     !#endif
 
-    CALL computeIperDiffusion(xy, u, iperdiff)
+    CALL computeIperDiffusion(xy, iperdiff)
     d_iso(1, 1, :) = d_iso(1, 1, :) + iperdiff
     d_iso(2, 2, :) = d_iso(2, 2, :) + iperdiff
 
@@ -267,13 +267,12 @@ CONTAINS
   !*******************************************
   ! Compute local diffusion in points
   !*******************************************
-  SUBROUTINE computeIperDiffusion(X, u, ipdiff)
-    REAL*8, INTENT(IN)  :: X(:, :), u(:,:)
+  SUBROUTINE computeIperDiffusion(X, ipdiff)
+    REAL*8, INTENT(IN)  :: X(:, :)
     REAL*8, INTENT(OUT) :: ipdiff(:)
-    REAL*8              :: xcorn, ycorn,d,dref,maxamp
+    REAL*8              :: xcorn, ycorn
     REAL*8              :: rad(SIZE(X, 1))
-    REAL*8              :: h,rhog
-    INTEGER             :: g, opt
+    REAL*8              :: h
 
     ipdiff = 0.
 
@@ -304,25 +303,6 @@ CONTAINS
        ipdiff = 1 + numer%dc_coe*EXP(-(2*rad/h)**2)
     END IF
 
-    maxamp = 4.
-    opt = 2
-    IF (switch%limrho .EQ. 2 .AND. MINVAL(u(:,1)) .LT. numer%minrho) THEN
-       DO g = 1,SIZE(u,1)
-          rhog = u(g,1)
-          IF (rhog<0.) rhog=0.
-          IF (rhog<numer%minrho) THEN
-             d = numer%minrho-rhog ! 0 < d < minrho
-             IF (opt.EQ.1) THEN
-                dref = maxamp * d/numer%minrho  ! 0 < dref < maxamp
-                !			            ipdiff(g) = exp(dref) ! 1 < ipdiff(g) < exp(maxamp)
-                ipdiff(g) = ipdiff(g) + EXP(dref) - 1 ! 0 < ipdiff(g) < exp(maxamp)-1
-             ELSE IF (opt==2) THEN
-                ! Low-density protection must not subtract diffusion.
-                ipdiff(g) = ipdiff(g) + MAX(0.d0, 1./((1.-d/numer%minrho)*2+1./50.) - 1.)
-             ENDIF
-          ENDIF
-       END DO
-    ENDIF
   END SUBROUTINE computeIperDiffusion
 
   ! ******************************

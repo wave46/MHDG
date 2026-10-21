@@ -36,7 +36,6 @@
                                         ! 1 - Constant in each element
                                         ! 2 - Linear interpolation between nodes
                                         ! 3 - Linear interpolation between nodes+save parameter
-    limrho              = 0             ! Option for limiting the min value of rho
                                         ! 0 - No limiting
                                         ! 1 - Use a constant source in flagged elements
                                         ! 2 - Use a constant diffusion in flagged elements
@@ -102,9 +101,6 @@
     div                 = 1e5           ! Divergence of Newton-Raphon iteration
     sc_coe              = 0             ! Shock capturing coefficient
     sc_sen              = 1.4           ! Shock capturing sensibility
-    minrho              = 1.e-12        ! Value of rho to start applying limiting
-    so_coe              = 0.01          ! Coefficient of the source for limiting rho
-    df_coe              = 100.          ! Coefficient of the diffusion for limiting rho
     dc_coe              = 100           ! Coefficient of the diffusion to add in the corners
     thr                 = 1.e-12        ! Min value of density allowed (works only if the switch is activated)
     thrpre              = 1.e-12        ! Min value of pressure allowed (works only if the switch is activated)

@@ -133,12 +133,8 @@ MODULE types
      REAL*8, POINTER        :: X(:, :) => NULL() ! nodes coordinates
      INTEGER*4              :: Nnodes_toroidal ! Number of nodes in the toroidal direction
      REAL*8, POINTER        :: toroidal(:) => NULL() ! nodes coordinates in the toroidal direction
-     ! Limiting & shock capturing stuff
-     INTEGER, ALLOCATABLE   :: flag_elems_rho(:) ! Flagged elements for limiting rho [Number of elements]
+     ! Shock capturing
      INTEGER, ALLOCATABLE   :: flag_elems_sc(:) ! Flagged elements for shock-capturing [Number of elements]
-     REAL*8, ALLOCATABLE    :: minrho_elems(:) ! Minimum value of density in the flagged elements[Number of elements]
-     REAL*8, ALLOCATABLE    :: sour_elems(:) ! Source to limit rho in the flagged elements[Number of elements]
-     REAL*8, ALLOCATABLE    :: diff_elems(:) ! Diffusion to limit rho in the flagged elements[Number of elements]
      REAL*8, ALLOCATABLE    :: scdiff_nodes(:, :) ! Shock capturing diffusion in each node [Number of elements,Number of nodes per element]
      REAL*8                 :: xmax, xmin, ymax, ymin ! Limit of the GLOBAL matrix, across mpi partitions
      REAL*8                 :: puff_area ! area of the puff bounday condition
@@ -425,7 +421,6 @@ MODULE types
      ! condition (only works if steady=.false.)
      REAL*8  :: diffred ! Reduction factor of the diffusion for psdtime simulation
      INTEGER :: shockcp ! Shock capturing option
-     INTEGER :: limrho  ! Add a source for limiting the min value of rho
      INTEGER :: difcor  ! Add diffusion in corners
      INTEGER :: thresh  ! Use a threshold for limiting the min value of rho
      ! (rho-rho*E in case of N-Gamma-Energy model, rho-rho*Ei-rho*Ee in case of N-Gamma-Ti-Te model)
@@ -563,9 +558,6 @@ MODULE types
      REAL*8         :: tau(1:7) ! Stabilization parameter for each equation
      REAL*8         :: sc_coe   ! Shock capturing coefficient
      REAL*8         :: sc_sen   ! Shock capturing sensibility
-     REAL*8         :: minrho   ! Value of rho to start applying limiting
-     REAL*8         :: so_coe   ! Source coefficient for limiting rho
-     REAL*8         :: df_coe   ! Diffusion coefficient for limiting rho
      REAL*8         :: dc_coe   ! Diffusion coefficient in corners
      REAL*8         :: thr      ! Threshold to limit rho
      REAL*8         :: thrpre   ! Threshold to limit pressure
@@ -826,9 +818,6 @@ MODULE types
      REAL*8, ALLOCATABLE :: Qf(:, :, :)
      REAL*8, ALLOCATABLE :: LL(:, :, :)
      REAL*8, ALLOCATABLE :: L0(:, :)
-     ! Limiting rho
-     REAL*8, ALLOCATABLE :: S_lrho(:, :)
-     REAL*8, ALLOCATABLE :: P_lrho(:, :, :)
      ! Shock capturing
      REAL*8, ALLOCATABLE :: P_sc(:, :, :)
      REAL*8, ALLOCATABLE :: Lf_sc(:, :, :)
@@ -992,29 +981,9 @@ CONTAINS
        Mesh2%toroidal = Mesh1%toroidal
     ENDIF
 
-    IF(ALLOCATED(Mesh1%flag_elems_rho)) THEN
-       ALLOCATE(Mesh2%flag_elems_rho(SIZE(Mesh1%flag_elems_rho)))
-       Mesh2%flag_elems_rho = Mesh1%flag_elems_rho
-    ENDIF
-
     IF(ALLOCATED(Mesh1%flag_elems_sc)) THEN
        ALLOCATE(Mesh2%flag_elems_sc(SIZE(Mesh1%flag_elems_sc)))
        Mesh2%flag_elems_sc = Mesh1%flag_elems_sc
-    ENDIF
-
-    IF(ALLOCATED(Mesh1%minrho_elems)) THEN
-       ALLOCATE(Mesh2%minrho_elems(SIZE(Mesh1%minrho_elems)))
-       Mesh2%minrho_elems = Mesh1%minrho_elems
-    ENDIF
-
-    IF(ALLOCATED(Mesh1%sour_elems)) THEN
-       ALLOCATE(Mesh2%sour_elems(SIZE(Mesh1%sour_elems)))
-       Mesh2%sour_elems = Mesh1%sour_elems
-    ENDIF
-
-    IF(ALLOCATED(Mesh1%diff_elems)) THEN
-       ALLOCATE(Mesh2%diff_elems(SIZE(Mesh1%diff_elems)))
-       Mesh2%diff_elems = Mesh1%diff_elems
     ENDIF
 
     IF(ALLOCATED(Mesh1%scdiff_nodes)) THEN

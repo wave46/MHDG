@@ -178,6 +178,11 @@ SUBROUTINE READ_input()
   bcflags = 0
   bohmtypebc = 0 ! Compatibility input; alternative Bohm assemblers are retired.
   saveTau = .FALSE. ! Compatibility input; Gauss-point text dumps are retired.
+  ! Retired density-limiter inputs, accepted for old parameter files.
+  limrho = 0
+  minrho = 0.d0
+  so_coe = 0.d0
+  df_coe = 0.d0
   ! Accepted for compatibility with inputs predating removal of BC 6.
   part_source = 0.d0
   ener_source = 0.d0
@@ -271,6 +276,11 @@ SUBROUTINE READ_input()
   IF (saveTau) THEN
      IF (MPIvar%glob_id == 0) &
           WRITE(6,*) 'saveTau output has been removed; omit saveTau or set it to .false.'
+     STOP 1
+  ENDIF
+  IF (limrho /= 0) THEN
+     IF (MPIvar%glob_id == 0) &
+          WRITE(6,*) 'limrho has been removed; omit limrho or set it to 0. Received:', limrho
      STOP 1
   ENDIF
 
@@ -458,7 +468,6 @@ SUBROUTINE READ_input()
   switch%psdtime          = psdtime
   switch%diffred          = diffred
   switch%shockcp          = shockcp
-  switch%limrho           = limrho
   switch%difcor           = difcor
   switch%thresh           = thresh
   switch%filter           = filter
@@ -515,9 +524,6 @@ SUBROUTINE READ_input()
   numer%div               = div
   numer%sc_coe            = sc_coe
   numer%sc_sen            = sc_sen
-  numer%minrho            = minrho
-  numer%so_coe            = so_coe
-  numer%df_coe            = df_coe
   numer%dc_coe            = dc_coe
   numer%thr               = thr
   numer%thrpre            = thrpre
@@ -929,7 +935,6 @@ SUBROUTINE READ_input()
      PRINT *, '                - RMP:                                                ', RMP
      PRINT *, '                - Ripple:                                             ', Ripple
      PRINT *, '                - shockcp:                                            ', shockcp
-     PRINT *, '                - minrho:                                             ', minrho
      PRINT *, '                - logrho:                                             ', logrho
      PRINT *, '                - thresh:                                             ', thresh
      PRINT *, '                - filter:                                             ', filter
@@ -972,15 +977,6 @@ SUBROUTINE READ_input()
      IF (switch%shockcp .GT. 0) THEN
         PRINT *, '                - shock capturing coeff:                            ', numer%sc_coe
         PRINT *, '                - shock capturing sensibility:                      ', numer%sc_sen
-     END IF
-     IF (switch%limrho .GT. 0) THEN
-        PRINT *, '                - applying limiting of rho at value:                ', numer%minrho
-     END IF
-     IF (switch%limrho .EQ. 1 .OR. switch%limrho .EQ. 3) THEN
-        PRINT *, '                - coefficient of the source for limiting rho:       ', numer%so_coe
-     END IF
-     IF (switch%limrho .EQ. 2 .OR. switch%limrho .EQ. 3) THEN
-        PRINT *, '                - coefficient of the diffusion for limiting rho:    ', numer%df_coe
      END IF
      IF (switch%difcor .GT. 0) THEN
         PRINT *, '                - adding diffusion in corners, in position:         ', switch%difcor

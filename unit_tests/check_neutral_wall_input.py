@@ -48,7 +48,12 @@ def main():
         ("SWITCH_LST", "legacy_savetau_false", "saveTau=.false.", (1.0, 1.0)),
         ("SWITCH_LST", "removed_savetau_true", "saveTau=.true.",
          "saveTau output has been removed"),
+        ("SWITCH_LST", "legacy_limrho_zero", "limrho=0", (1.0, 1.0)),
+        ("NUMER_LST", "legacy_limrho_coefficients", "minrho=1.e-12, so_coe=0.01, df_coe=100", (1.0, 1.0)),
     ])
+    cases.extend(("SWITCH_LST", f"removed_limrho_{value}", f"limrho={value}",
+                  "limrho has been removed")
+                 for value in (-1, 1, 2, 3))
     cases.extend(("SWITCH_LST", f"retired_iter_{value}", f"testcase={value}",
                   "ITER testcases 80-89 have been removed")
                  for value in range(80, 90))

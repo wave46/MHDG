@@ -317,13 +317,8 @@ CONTAINS
     original%T(1,:) = [1,2,3]
     original%face_info(:,1) = 1
     original%face_info(:,2) = [1,2,3]
-    ALLOCATE(original%flag_elems_rho(1),original%flag_elems_sc(1),original%minrho_elems(1), &
-         original%sour_elems(1),original%diff_elems(1))
-    original%flag_elems_rho = 1
+    ALLOCATE(original%flag_elems_sc(1))
     original%flag_elems_sc = 1
-    original%minrho_elems = 2.d0
-    original%sour_elems = 3.d0
-    original%diff_elems = 4.d0
 #ifdef PARALL
     original%nghostfaces = 0
     original%nghostelems = 0
@@ -375,9 +370,7 @@ CONTAINS
        restored%face_info = -1
        CALL free_mesh_loc(restored)
        IF (ASSOCIATED(restored%X) .OR. ASSOCIATED(restored%T) .OR. ALLOCATED(restored%face_info) .OR. &
-           ALLOCATED(restored%flag_elems_rho) .OR. ALLOCATED(restored%flag_elems_sc) .OR. &
-           ALLOCATED(restored%minrho_elems) .OR. ALLOCATED(restored%sour_elems) .OR. &
-           ALLOCATED(restored%diff_elems)) ERROR STOP 'mesh cleanup retained owned storage'
+           ALLOCATED(restored%flag_elems_sc)) ERROR STOP 'mesh cleanup retained owned storage'
        CALL free_mesh_loc(restored)
     ENDDO
     CALL free_mesh_loc(saved)

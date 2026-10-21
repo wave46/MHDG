@@ -653,20 +653,8 @@ CONTAINS
     CALL HDF5_integer_saving(group_id1,Mesh%Nnodes_toroidal,'Nnodes_toroidal')
     CALL HDF5_array1D_saving(group_id1,Mesh%toroidal,SIZE(Mesh%toroidal), 'toroidal')
 #endif
-    IF(ALLOCATED(Mesh%flag_elems_rho)) THEN
-       CALL HDF5_array1D_saving_int(group_id1,Mesh%flag_elems_rho,SIZE(Mesh%flag_elems_rho), 'flag_elems_rho')
-    ENDIF
     IF(ALLOCATED(Mesh%flag_elems_sc)) THEN
        CALL HDF5_array1D_saving_int(group_id1,Mesh%flag_elems_sc,SIZE(Mesh%flag_elems_sc), 'flag_elems_sc')
-    ENDIF
-    IF(ALLOCATED(Mesh%minrho_elems)) THEN
-       CALL HDF5_array1D_saving(group_id1,Mesh%minrho_elems,SIZE(Mesh%minrho_elems), 'minrho_elems')
-    ENDIF
-    IF(ALLOCATED(Mesh%sour_elems)) THEN
-       CALL HDF5_array1D_saving(group_id1,Mesh%sour_elems,SIZE(Mesh%sour_elems), 'sour_elems')
-    ENDIF
-    IF(ALLOCATED(Mesh%diff_elems)) THEN
-       CALL HDF5_array1D_saving(group_id1,Mesh%diff_elems,SIZE(Mesh%diff_elems), 'diff_elems')
     ENDIF
     IF(ALLOCATED(Mesh%scdiff_nodes)) THEN
        CALL HDF5_array2D_saving(group_id1,Mesh%scdiff_nodes,SIZE(Mesh%scdiff_nodes,1),SIZE(Mesh%scdiff_nodes,2), 'scdiff_nodes')
@@ -1289,7 +1277,6 @@ CONTAINS
       CALL HDF5_logical_saving(group_id2, switch%psdtime, 'psdtime')
       CALL HDF5_real_saving(group_id2, switch%diffred, 'diffred')
       CALL HDF5_integer_saving(group_id2, switch%shockcp, 'shockcp')
-      CALL HDF5_integer_saving(group_id2, switch%limrho, 'limrho')
       CALL HDF5_integer_saving(group_id2, switch%difcor, 'difcor')
       CALL HDF5_integer_saving(group_id2, switch%thresh, 'thresh')
       CALL HDF5_logical_saving(group_id2, switch%filter, 'filter')
@@ -1322,9 +1309,6 @@ CONTAINS
       CALL HDF5_array1d_saving(group_id2, numer%tau, SIZE(numer%tau), 'Stabilization_parameter')
       CALL HDF5_real_saving(group_id2, numer%sc_coe, 'Shock_capturing_parameter')
       CALL HDF5_real_saving(group_id2, numer%sc_sen, 'Shock_capturing_sensibility')
-      CALL HDF5_real_saving(group_id2, numer%minrho, 'Value_of_rho_to_start_applying_limiting')
-      CALL HDF5_real_saving(group_id2, numer%so_coe, 'Source_coefficient_for_limiting_rho')
-      CALL HDF5_real_saving(group_id2, numer%df_coe, 'Diffusion_coefficient_for_limiting_rho')
       CALL HDF5_real_saving(group_id2, numer%dc_coe, 'Diffusion_coefficient_in_corners')
       CALL HDF5_real_saving(group_id2, numer%thr, 'Threshold_to_limit_rho')
       CALL HDF5_real_saving(group_id2, numer%thrpre, 'Threshold_to_limit_pressure')
