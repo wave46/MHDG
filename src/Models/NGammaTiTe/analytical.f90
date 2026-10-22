@@ -1281,7 +1281,8 @@ CONTAINS
          ! The topology coordinate is axis-to-LCFS normalized for either
          ! flux orientation. A mesh maximum can coincide with the axis.
          fluxel = phys%magnetic_psi(Mesh%T(iel,:))
-         sigma = 0.4
+         ! Broaden the analytical seed to avoid an excessively cold SOL tail.
+         sigma = 0.7d0
          up(:, 1) = 1.*EXP(-fluxel**2/(2*sigma**2))
          up(:, 3) = 18.*EXP(-fluxel**2/(2*sigma**2))
          up(:, 4) = 18.*EXP(-fluxel**2/(2*sigma**2))

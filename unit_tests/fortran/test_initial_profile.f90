@@ -48,7 +48,7 @@ PROGRAM test_initial_profile
   y = 0.d0
   normalized = [0.001d0,0.8d0,1.6d0]
   phys%magnetic_psi = normalized
-  expected = EXP(-normalized(Mesh%T(1,:))**2/(2.d0*0.4d0**2))
+  expected = EXP(-normalized(Mesh%T(1,:))**2/(2.d0*0.7d0**2))
   switch%testcase = 54
 
   DO sign_case = 1,2
