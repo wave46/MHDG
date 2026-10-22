@@ -1978,7 +1978,9 @@ CONTAINS
        CALL H5Lexists_f(group_id, 'time/Proposed_time_step_seconds', exists, ierr)
        IF (.NOT. exists) RETURN ! Old checkpoints retain the configured dt0 proposal.
        CALL read_checkpoint_real(group_id, 'time/Proposed_time_step_seconds', proposed_dt)
-       IF (.NOT. ieee_is_finite(proposed_dt) .OR. proposed_dt <= 0.d0) &
+       IF (.NOT. ieee_is_finite(proposed_dt)) &
+            CALL abort_on_checkpoint_error(-1, 'Saved proposed timestep must be finite and positive')
+       IF (proposed_dt <= 0.d0) &
             CALL abort_on_checkpoint_error(-1, 'Saved proposed timestep must be finite and positive')
        time%dt_next = proposed_dt/simpar%refval_time
        IF (time%dt_max > 0.d0) time%dt_next = MIN(time%dt_next,time%dt_max)
@@ -2253,7 +2255,9 @@ CONTAINS
     CALL H5Lexists_f(group_id, 'time/Current_time_step', exists, ierr)
     IF (exists) THEN
        CALL read_checkpoint_real(group_id, 'time/Current_time_step', saved_dt)
-       IF (.NOT. ieee_is_finite(saved_dt) .OR. saved_dt < 0.d0 .OR. (step > 0 .AND. saved_dt == 0.d0)) &
+       IF (.NOT. ieee_is_finite(saved_dt)) &
+            CALL abort_on_checkpoint_error(-1, 'Checkpoint accepted timestep must be finite and positive')
+       IF (saved_dt < 0.d0 .OR. (step > 0 .AND. saved_dt == 0.d0)) &
             CALL abort_on_checkpoint_error(-1, 'Checkpoint accepted timestep must be finite and positive')
        time%dt = saved_dt*saved_scale/simpar%refval_time
     ENDIF

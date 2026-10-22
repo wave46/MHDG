@@ -31,6 +31,7 @@ SUBROUTINE READ_input()
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
   LOGICAL               :: ckeramp,saveNR,filter,saveTau,transport_1d,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
   LOGICAL               :: check_neutral_positivity
+  LOGICAL               :: valid_wall_recycling
   INTEGER               :: thresh, difcor, tis, stab,pertini,init,order_2d
   INTEGER               :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres,mglevels,mgtypeform
   INTEGER               :: uinput, printint, testcase, nrp, i
@@ -350,11 +351,15 @@ SUBROUTINE READ_input()
   ENDIF
 
   IF (Re_n_pump == Re_n_pump_unset) Re_n_pump = Re_n
-  IF (.NOT. ieee_is_finite(Re_n) .OR. Re_n < 0.d0 .OR. Re_n > 1.d0) THEN
+  valid_wall_recycling = ieee_is_finite(Re_n)
+  IF (valid_wall_recycling) valid_wall_recycling = Re_n >= 0.d0 .AND. Re_n <= 1.d0
+  IF (.NOT. valid_wall_recycling) THEN
      PRINT *, 'Re_n must be finite and in [0,1]: ', Re_n
      STOP 1
   ENDIF
-  IF (.NOT. ieee_is_finite(Re_n_pump) .OR. Re_n_pump < 0.d0 .OR. Re_n_pump > 1.d0) THEN
+  valid_wall_recycling = ieee_is_finite(Re_n_pump)
+  IF (valid_wall_recycling) valid_wall_recycling = Re_n_pump >= 0.d0 .AND. Re_n_pump <= 1.d0
+  IF (.NOT. valid_wall_recycling) THEN
      PRINT *, 'Re_n_pump must be finite and in [0,1]: ', Re_n_pump
      STOP 1
   ENDIF
@@ -1113,7 +1118,9 @@ CONTAINS
          CALL invalid_time_input('Fixed time_mode does not support timestep adaptation')
     IF (tis /= 1) CALL invalid_time_input('Physical time modes currently require BDF1 (tis=1)')
     IF (newton_predictor) THEN
-       IF (.NOT. ieee_is_finite(newton_predictor_rate_limit) .OR. newton_predictor_rate_limit < 0.d0) &
+       IF (.NOT. ieee_is_finite(newton_predictor_rate_limit)) &
+            CALL invalid_time_input('Newton predictor rate limit must be finite and nonnegative')
+       IF (newton_predictor_rate_limit < 0.d0) &
             CALL invalid_time_input('Newton predictor rate limit must be finite and nonnegative')
     ENDIF
     IF (.NOT. ieee_is_finite(dt_min) .OR. dt_min < 0.d0) &
