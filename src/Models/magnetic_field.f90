@@ -1483,7 +1483,7 @@ CONTAINS
     REAL*8, INTENT(OUT) :: jtor_at_nodes(:)
     INTEGER, OPTIONAL, INTENT(IN) :: frame
     LOGICAL, OPTIONAL, INTENT(OUT) :: available
-    INTEGER        :: i,ierr,ip,jp,ind
+    INTEGER        :: i,ip,jp,ind
 #ifdef TOR3D
     INTEGER        :: j
 #endif

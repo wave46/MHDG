@@ -1536,9 +1536,9 @@ CONTAINS
 
   LOGICAL FUNCTION physical_solution_is_admissible(u) RESULT(valid)
     REAL*8, INTENT(IN) :: u(:)
-    INTEGER :: point, element, offset, nodes_per_element
+    INTEGER :: point, offset, nodes_per_element
 #ifdef PARALL
-    INTEGER :: ierr_valid
+    INTEGER :: element, ierr_valid
 #endif
 #ifdef TEMPERATURE
     REAL*8 :: kinetic, thermal, roundoff

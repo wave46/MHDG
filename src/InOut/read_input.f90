@@ -23,9 +23,12 @@ SUBROUTINE READ_input()
   USE MPI_OMP
   USE neutral_flux_limiter, ONLY: neutral_tn_source_invalid, &
        neutral_tn_source_ti, neutral_tn_source_fixed, parse_neutral_tn_source
-  USE balance_diagnostics, ONLY: balance_mode_invalid, balance_mode_off, &
+  USE balance_diagnostics, ONLY: balance_mode_invalid, &
        parse_balance_diagnostics_mode, balance_diagnostics_mode_name, &
        balance_diag
+#if defined(TOR3D) || !defined(NEUTRAL) || !defined(TEMPERATURE)
+  USE balance_diagnostics, ONLY: balance_mode_off
+#endif
   IMPLICIT NONE
 
   LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
