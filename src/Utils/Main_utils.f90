@@ -274,9 +274,9 @@ CONTAINS
     TYPE(accepted_step_state_t) :: accepted
     LOGICAL :: accepted_restart_adapt
 
+    accepted_restart_adapt = restart_adapt
     IF (.NOT. time%legacy_input) THEN
        CALL accepted%capture()
-       accepted_restart_adapt = restart_adapt
     ENDIF
     CALL prepare_time_step(finished)
     attempted_endpoint = time%t_target
