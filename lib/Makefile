@@ -22,6 +22,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-neutral-energy-source
 .PHONY : check-neutral-gamma-transport
 .PHONY : check-heat-flux-limiter
+.PHONY : check-ohmic-source
 .PHONY : check-initial-profile
 .PHONY : check-linear-algebra
 
@@ -66,6 +67,7 @@ clean:
 	$(RM) neutral_energy_source_check
 	$(RM) neutral_gamma_transport_check
 	$(RM) heat_flux_limiter_check
+	$(RM) ohmic_source_check
 	$(RM) initial_profile_check
 	$(RM) linear_algebra_check
 
@@ -124,6 +126,11 @@ check-amjuel-extrapolation : neutral_wall_physics_check.o globals.o neutral_flux
 check-heat-flux-limiter : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_heat_flux_limiter.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o heat_flux_limiter_check
 	./heat_flux_limiter_check
+
+# Check the production Ohmic source and Jacobian with floating-point traps.
+check-ohmic-source : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_ohmic_source.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o ohmic_source_check
+	./ohmic_source_check
 
 check-neutral-gamma-transport : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_neutral_gamma_transport.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o neutral_gamma_transport_check

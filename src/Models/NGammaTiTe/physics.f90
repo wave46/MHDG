@@ -19,6 +19,11 @@ MODULE physics
 
   REAL*8, PARAMETER :: eirene_rate_te_min_phys = 1.d-1
   REAL*8, PARAMETER :: heat_flux_cap_floor = 1.d-10
+  ! Physical electron-temperature floor [eV], used only for Ohmic resistivity.
+  REAL*8, PARAMETER :: ohmic_te_floor_phys = 1.d0
+  ! Initialized once after the run's reference scales are established.
+  REAL*8, SAVE, PRIVATE :: ohmic_energy_per_density_min
+  REAL*8, SAVE, PRIVATE :: ohmic_temperature_factor, ohmic_resistivity_max
   REAL*8, PARAMETER :: eirene_rate_te_max_phys = 2.d4
   REAL*8, PARAMETER :: eirene_rate_ti_min_phys = 1.d-1
   REAL*8, PARAMETER :: eirene_rate_ti_max_phys = 3.d3
@@ -425,11 +430,20 @@ CONTAINS
     CALL adimensionalize_impurity_radiation_model()
   END IF
 
+  CALL initialize_ohmic_runtime_constants()
   CALL initialize_neutral_rate_runtime_constants()
   CALL adimensionalize_neutral_rate_coefficients()
   CALL initialize_neutral_flux_limiter_config()
 
   ENDSUBROUTINE initPhys
+
+  SUBROUTINE initialize_ohmic_runtime_constants()
+    ! U4/U1 = (3*Mref/2)*Te, with Te in solver temperature units.
+    ohmic_energy_per_density_min = (3.d0*phys%Mref/2.d0)* &
+         (ohmic_te_floor_phys/simpar%refval_temperature)
+    ohmic_temperature_factor = (3.d0*phys%Mref/2.d0)**1.5d0
+    ohmic_resistivity_max = (simpar%refval_temperature/ohmic_te_floor_phys)**1.5d0
+  END SUBROUTINE initialize_ohmic_runtime_constants
 
   SUBROUTINE initialize_neutral_flux_limiter_config()
     neutral_limiter_config%tn_source = &
@@ -1998,28 +2012,29 @@ CONTAINS
   !*****************************
   SUBROUTINE compute_Sohmic(U,Sohmic)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: Sohmic,U1,U4
-    REAL*8, PARAMETER :: tol = 1.e-20
-    U1 = U(1)
-    U4 = U(4)
-    IF (U4<tol) U4=tol
-    IF (U1<tol) U1=tol
-    Sohmic = phys%Zeff*phys%Pohmic*(((3*phys%Mref)/2)**1.5)*((U1/U4)**1.5)
+    REAL*8             :: Sohmic
+    Sohmic = 0.d0
+    ! Extend the source by zero to nonpositive density; never divide there.
+    IF (U(1) <= 0.d0) RETURN
+    IF (U(4) <= U(1)*ohmic_energy_per_density_min) THEN
+      ! Positive density, Te <= 1 eV (including negative energy): freeze eta.
+      Sohmic = phys%Zeff*phys%Pohmic*ohmic_resistivity_max
+    ELSE
+      Sohmic = phys%Zeff*phys%Pohmic*ohmic_temperature_factor*(U(1)/U(4))**1.5d0
+    ENDIF
   ENDSUBROUTINE compute_Sohmic
 
 
   SUBROUTINE compute_dSohmic_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:),U1,U4
-    REAL*8, PARAMETER :: tol = 1.e-20
-    U1 = U(1)
-    U4 = U(4)
-    IF (U4<tol) U4=tol
-    IF (U1<tol) U1=tol
-    res = 0.
-    res(1) = (1.5*U1**0.5)/(U4**1.5)
-    res(4) = -(1.5*U1**1.5)/(U4**2.5)
-    res = phys%Zeff*phys%Pohmic*(((3*phys%Mref)/2)**1.5)*res
+    REAL*8             :: res(:),Sohmic
+    res = 0.d0
+    IF (U(1) <= 0.d0) RETURN
+    ! Both derivatives vanish on the frozen branch; choose that side at 1 eV.
+    IF (U(4) <= U(1)*ohmic_energy_per_density_min) RETURN
+    Sohmic = phys%Zeff*phys%Pohmic*ohmic_temperature_factor*(U(1)/U(4))**1.5d0
+    res(1) = 1.5d0*Sohmic/U(1)
+    res(4) = -1.5d0*Sohmic/U(4)
   ENDSUBROUTINE compute_dSohmic_dU
 
 

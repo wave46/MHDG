@@ -5,6 +5,8 @@ and limited to the guides listed below.
 
 ## Models
 
+- [Physics cutoff conventions](models/physics-cutoffs.md): floors, caps,
+  invalid-state extensions and the adopted Ohmic resistivity rule.
 - [Parallel heat-flux limiter](models/heat-flux-limiter.md): free-streaming
   caps, floors and consistent flux linearization.
 - [AMJUEL rates and source linearization](models/amjuel-rates.md): physical
