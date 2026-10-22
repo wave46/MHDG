@@ -84,11 +84,7 @@ def _read_frame(field_file, current_file, *, require_time):
         r, z = _read_grid(field)
         timestamp = _read_scalar(field, "time", required=require_time)
         psi_sep = _read_scalar(field, "psiSep")
-        cocos = _read_scalar(field, "cocos", required=False)
-        if cocos is not None:
-            if cocos not in (*range(1, 9), *range(11, 19)):
-                raise ValueError(f"cocos must be one scalar integer in 1..8 or 11..18: {field_file}")
-            cocos = int(cocos)
+        cocos = _read_cocos(field, "cocos")
         attributes = {"grid/r": dict(field["r2D"].attrs), "grid/z": dict(field["z2D"].attrs),
                       "equilibrium/psiSep": dict(field["psiSep"].attrs),
                       "time": dict(field["time"].attrs) if "time" in field else {}}
@@ -148,6 +144,19 @@ def _read_matrix(source, name, shape=None):
     return values
 
 
+def _read_cocos(source, name):
+    if name not in source:
+        return None
+    dataset = source[name]
+    message = f"cocos must be one scalar integer in 1..8 or 11..18: {source.filename}"
+    if dataset.size != 1 or dataset.dtype.kind not in "iu":
+        raise ValueError(message)
+    value = int(np.asarray(dataset[...]).item())
+    if value not in (*range(1, 9), *range(11, 19)):
+        raise ValueError(message)
+    return value
+
+
 def _read_scalar(source, name, *, required=True):
     if name not in source:
         if required:
@@ -187,7 +196,7 @@ def _validate_frame(frame, destination, previous_time, field_file):
         raise ValueError(f"R,Z grid differs from the first frame; no regridding: {field_file}")
     if set(frame.fields) != set(destination["equilibrium"]) - {"psiSep", "cocos"}:
         raise ValueError(f"Optional reference fields differ between frames: {field_file}")
-    if frame.cocos != _read_scalar(destination, "equilibrium/cocos", required=False):
+    if frame.cocos != _read_cocos(destination, "equilibrium/cocos"):
         raise ValueError(f"cocos differs between frames: {field_file}")
     for name, attributes in frame.attributes.items():
         initial = dict(destination[name].attrs)

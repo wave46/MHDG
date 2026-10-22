@@ -191,7 +191,9 @@ CONTAINS
     INTEGER, INTENT(OUT) :: ierr
     CHARACTER(LEN=*), INTENT(OUT) :: message
     CHARACTER(LEN=32) :: name
-    REAL(float) :: value
+    INTEGER :: value, datatype_class, close_error
+    INTEGER(HID_T) :: dataset, datatype
+    INTEGER(HSIZE_T), ALLOCATABLE :: dimensions(:)
     LOGICAL :: exists
 
     name = 'cocos'
@@ -200,14 +202,30 @@ CONTAINS
     CALL H5Lexists_f(this%series%file(), TRIM(name), exists, ierr)
     IF (ierr /= 0 .OR. .NOT. exists) RETURN
     message = 'cocos must be one scalar integer in 1..8 or 11..18'
-    CALL HDF5_real_reading(this%series%file(), value, TRIM(name), ierr)
+    CALL HDF5_dataset_shape(this%series%file(), TRIM(name), dimensions, ierr)
+    IF (ierr /= 0) RETURN
+    IF (PRODUCT(dimensions) /= 1) THEN
+       ierr = -1
+       RETURN
+    ENDIF
+    CALL H5Dopen_f(this%series%file(), TRIM(name), dataset, ierr)
+    IF (ierr /= 0) RETURN
+    ! Reject floating storage before HDF5 can convert it to integer memory.
+    CALL H5Dget_type_f(dataset, datatype, ierr)
+    IF (ierr == 0) THEN
+       CALL H5Tget_class_f(datatype, datatype_class, ierr)
+       CALL H5Tclose_f(datatype, close_error)
+       IF (ierr == 0) THEN
+          IF (datatype_class /= H5T_INTEGER_F) ierr = -1
+       ENDIF
+    ENDIF
+    IF (ierr == 0) CALL H5Dread_f(dataset, H5T_NATIVE_INTEGER, value, [1_HSIZE_T], ierr)
+    CALL H5Dclose_f(dataset, close_error)
     IF (ierr /= 0) RETURN
     ierr = -1
-    IF (.NOT. ieee_is_finite(value)) RETURN
     IF (value < 1 .OR. value > 18) RETURN
-    IF (value /= REAL(INT(value), float)) RETURN
     IF (value > 8 .AND. value < 11) RETURN
-    this%cocos = INT(value)
+    this%cocos = value
     ierr = 0
     message = ''
   END SUBROUTINE read_cocos

@@ -1839,8 +1839,6 @@ CONTAINS
     inn = phys%idx_rhon_eq
     puff_totals = 0.d0
     puff_totals(1) = puff_wall_integral
-    IF (puff_wall_integral .EQ. 0.d0) RETURN
-
     puff_rhs = puff_wall_integral*volume_load/element_volume
     rhs(:,inn) = rhs(:,inn) + puff_rhs
     puff_totals(2) = SUM(puff_rhs)

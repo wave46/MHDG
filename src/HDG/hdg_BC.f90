@@ -1698,9 +1698,7 @@ CONTAINS
 #ifdef NEUTRAL
       neutral_recycling = phys%Re_n
       IF (phys%bcflags(fl) == bc_BohmPump) neutral_recycling = phys%Re_n_pump
-      IF (neutral_recycling /= 1.d0) THEN
-        CALL compute_dneutral_wall_flux_dU(ufg,neutral_recycling,dFw_dU)
-      ENDIF
+      CALL compute_dneutral_wall_flux_dU(ufg,neutral_recycling,dFw_dU)
       IF (face_diagnostics_on) CALL compute_neutral_wall_flux(ufg,neutral_recycling,Fw)
 #endif
 #ifdef NEUTRALP
@@ -2085,12 +2083,10 @@ CONTAINS
     elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) - cryopump_coeff*NiNi
 
 #ifdef TEMPERATURE
-    IF (neutral_recycling /= 1.d0) THEN
-      DO j = 1,Neq
-        indj = j + ind_asf
-        elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - dFw_dU(j)*NiNi
-      END DO
-    ENDIF
+    DO j = 1,Neq
+      indj = j + ind_asf
+      elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - dFw_dU(j)*NiNi
+    END DO
 #endif
 
     ! Neutrals velocity

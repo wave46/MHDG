@@ -80,7 +80,8 @@ def check_physical_restart(executable, directory, physical, *, moving):
     cases = [("old_me", 23, .04, None, None), ("prescribed", 23, .04, True, None)] if moving else [
         ("steady", 1, 1000., False, None), ("pseudo", 99, 1000., None, (False, True)),
         ("fixed", 1, .04, True, None), ("complete", 23, .08, True, None),
-        ("nonfinite", 1, np.nan, True, None), ("invalid_dt", 1, .04, True, None)]
+        ("nonfinite", 1, np.nan, True, None), ("invalid_dt", 1, .04, True, None),
+        ("invalid_zero_dt", 1, .04, True, None), ("invalid_negative_dt", 1, .04, True, None)]
     cases += [("adaptive_old", 23, .04, True, None),
               ("adaptive_reduced", 23, .04, True, None),
               ("adaptive_extended", 23, .04, True, None),
@@ -113,6 +114,8 @@ def check_physical_restart(executable, directory, physical, *, moving):
                 p["switches/steady"], p["switches/psdtime"] = [int(flags[0])], [int(flags[1])]
             if name in {"fixed", "prescribed", "old_me", "prescribed_pending", "invalid_dt"}:
                 p["time/Current_time_step"] = [np.nan if name == "invalid_dt" else .003/.01]
+            if name in {"invalid_zero_dt", "invalid_negative_dt"}:
+                p["time/Current_time_step"] = [0. if name == "invalid_zero_dt" else -.003/.01]
             if name in {"adaptive_reduced", "adaptive_extended", "adaptive_invalid", "adaptive_growth"}:
                 proposal = .02 if name == "adaptive_extended" else .005
                 p["time/Proposed_time_step_seconds"] = [np.nan if name == "adaptive_invalid" else proposal]
@@ -130,6 +133,8 @@ def check_physical_restart(executable, directory, physical, *, moving):
         output = run.stdout + run.stderr
         error = {"nonfinite": "Checkpoint physical time must be finite",
                  "invalid_dt": "Checkpoint accepted timestep must be finite and positive",
+                 "invalid_zero_dt": "Checkpoint accepted timestep must be finite and positive",
+                 "invalid_negative_dt": "Checkpoint accepted timestep must be finite and positive",
                  "adaptive_invalid": "Saved proposed timestep must be finite and positive",
                  "prescribed_invalid": "Pending timestep targets must be stored in decreasing order"}.get(name)
         if error:

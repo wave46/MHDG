@@ -41,6 +41,11 @@ and limited to the guides listed below.
 - [One-dimensional splines](numerics/splines.md): interpolation conventions,
   Fortran usage and current limitations of the retained utility.
 
+## Development
+
+- [Intentional exact real comparisons](development/real-comparisons.md): reviewed
+  compiler warnings, their numerical and input-contract rationale, and review policy.
+
 ## Other documentation
 
 Installation, building and basic runs remain in the [root README](../README.md).

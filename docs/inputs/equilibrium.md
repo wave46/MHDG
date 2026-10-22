@@ -116,9 +116,12 @@ COCOS 1–8 and Wb for COCOS 11–18; signs and normalization are handled throug
 the reconstruction coefficients below. Do not normalize the input arrays
 using the plasma's solver reference scales.
 
-`cocos` is the supported convention declaration. It may be a scalar or an array
-containing exactly one integer value. It describes the source convention and
-does not change during time sampling. There is no assumed default COCOS.
+`cocos` is the supported convention declaration. Its HDF5 datatype must be
+integer; floating-point datasets are rejected even for integral values such as
+`11.0`. It may be a scalar or an array containing exactly one integer value.
+The same rule applies to the equilibrium converter. The declaration describes
+the source convention and does not change during time sampling. There is no
+assumed default COCOS.
 
 ## Time sampling
 

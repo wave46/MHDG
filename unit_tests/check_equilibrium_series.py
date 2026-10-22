@@ -139,13 +139,29 @@ def cocos_checks(directory):
         assert f['equilibrium/cocos'][()] == 11
         assert 'reference' in f['equilibrium/cocos'].attrs
     cases = [('cocos/field', 'numbered_cocos', None, None), ('cocos.h5', 'cocos', None, None)]
-    for name, value in [('invalid_index', 9), ('fractional', 12.5), ('nonfinite', np.nan), ('vector', [11, 11])]:
+    for name, value in [('invalid_index', 9), ('float_integral', 11.0),
+                        ('fractional', 12.5), ('nonfinite', np.nan),
+                        ('large_integer', np.iinfo(np.int64).max), ('vector', [11, 11])]:
         path = directory / f'cocos_{name}.h5'
         shutil.copyfile(directory / 'cocos.h5', path)
         with h5py.File(path, 'r+') as f:
             del f['equilibrium/cocos']
             f['equilibrium/cocos'] = value
         cases.append((path.name, 'invalid', 'cocos must be one scalar integer', None))
+    for name, value in [('float_integral', 11.0), ('fractional', 12.5)]:
+        path = directory / f'conversion_cocos_{name}.h5'
+        shutil.copyfile(fields[0], path)
+        with h5py.File(path, 'r+') as f:
+            del f['cocos']
+            f['cocos'] = value
+        rejected = directory / f'rejected_cocos_{name}.h5'
+        try:
+            convert_equilibria([path], rejected)
+        except ValueError as error:
+            assert 'cocos must be one scalar integer' in str(error), error
+        else:
+            raise AssertionError('Converter accepted floating-point COCOS')
+        assert not rejected.exists() and not list(directory.glob(f'.{rejected.name}.*.tmp'))
     with h5py.File(fields[1], 'r+') as f:
         f['cocos'][...] = 12
     rejected = directory / 'rejected_cocos.h5'

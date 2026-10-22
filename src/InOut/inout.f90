@@ -2257,8 +2257,13 @@ CONTAINS
        CALL read_checkpoint_real(group_id, 'time/Current_time_step', saved_dt)
        IF (.NOT. ieee_is_finite(saved_dt)) &
             CALL abort_on_checkpoint_error(-1, 'Checkpoint accepted timestep must be finite and positive')
-       IF (saved_dt < 0.d0 .OR. (step > 0 .AND. saved_dt == 0.d0)) &
-            CALL abort_on_checkpoint_error(-1, 'Checkpoint accepted timestep must be finite and positive')
+       IF (step > 0) THEN
+          IF (saved_dt <= 0.d0) &
+               CALL abort_on_checkpoint_error(-1, 'Checkpoint accepted timestep must be finite and positive')
+       ELSE
+          IF (saved_dt < 0.d0) &
+               CALL abort_on_checkpoint_error(-1, 'Checkpoint accepted timestep must be finite and positive')
+       ENDIF
        time%dt = saved_dt*saved_scale/simpar%refval_time
     ENDIF
     sol%Nt = step
