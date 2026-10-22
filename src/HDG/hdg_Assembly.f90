@@ -5,6 +5,13 @@
 ! Assembly the global matrix
 !*****************************************
 
+MODULE hdg_assembly_module
+  IMPLICIT NONE
+  PRIVATE
+  PUBLIC :: HDG_assembly
+
+CONTAINS
+
 #ifdef TOR3D
 
 !***********************************************************************
@@ -1683,3 +1690,5 @@ CONTAINS
 
 ENDSUBROUTINE HDG_assembly
 #endif
+
+END MODULE hdg_assembly_module

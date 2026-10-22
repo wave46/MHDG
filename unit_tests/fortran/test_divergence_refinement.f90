@@ -1,4 +1,5 @@
 PROGRAM test_divergence_refinement
+  USE input_reader, ONLY: read_input
   USE Main_utils, ONLY: reset_newton_refinements, prepare_divergence_refinement, newton_refinement_required, &
        update_uiter_qiter_best, &
        physical_solution_is_admissible, update_best_newton_checkpoint, seed_divergence_checkpoint, &

@@ -6,6 +6,13 @@
 ! and element solution
 !*****************************************
 
+MODULE element_solution_module
+  IMPLICIT NONE
+  PRIVATE
+  PUBLIC :: compute_element_solution
+
+CONTAINS
+
 SUBROUTINE compute_element_solution
   USE globals
   USE LinearAlgebra
@@ -159,3 +166,5 @@ SUBROUTINE compute_element_solution
   end if
 
 END SUBROUTINE compute_element_solution
+
+END MODULE element_solution_module

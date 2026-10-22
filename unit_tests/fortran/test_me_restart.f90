@@ -1,4 +1,5 @@
 PROGRAM test_me_restart
+  USE input_reader, ONLY: read_input
   USE initialization, ONLY: init_sim
   USE time_stepping, ONLY: next_physical_time, ensure_time_history_capacity
   USE time_stepping, ONLY: schedule_half_step, remove_reached_target, update_timestep_growth, reset_timestep_growth

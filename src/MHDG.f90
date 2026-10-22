@@ -1,6 +1,8 @@
 PROGRAM MHDG
   USE Main_utils
   USE MPI_OMP
+  USE input_reader, ONLY: read_input
+  USE hdg_first_equation_module, ONLY: HDG_precalculatedfirstequation
 
   IMPLICIT NONE
   LOGICAL :: time_finished

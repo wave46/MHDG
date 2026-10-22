@@ -1,4 +1,5 @@
 PROGRAM test_neutral_wall_input
+  USE input_reader, ONLY: read_input
   USE globals, ONLY: phys
   USE MPI_OMP, ONLY: MPIvar
   IMPLICIT NONE

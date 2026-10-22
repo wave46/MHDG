@@ -1,5 +1,13 @@
 PROGRAM Convergence
   USE solver_status, ONLY: solver_status_t, stop_on_solver_failure
+  USE input_reader, ONLY: read_input
+  USE hdg_first_equation_module, ONLY: HDG_precalculatedfirstequation
+  USE hdg_jacobian_module, ONLY: HDG_computeJacobian
+  USE hdg_bc_module, ONLY: HDG_BC
+  USE hdg_mapping_module, ONLY: HDG_mapping
+  USE hdg_assembly_module, ONLY: HDG_assembly
+  USE global_system_solver, ONLY: solve_global_system
+  USE element_solution_module, ONLY: compute_element_solution
   USE in_out
   USE reference_element
   USE preprocess

@@ -4,6 +4,13 @@
 ! date: 23/07/2019
 ! Solve the global system
 !*****************************************
+MODULE global_system_solver
+  IMPLICIT NONE
+  PRIVATE
+  PUBLIC :: solve_global_system
+
+CONTAINS
+
 #ifdef WITH_PETSC
    SUBROUTINE solve_global_system(status, ir)
 #else
@@ -820,3 +827,5 @@ CONTAINS
   ENDSUBROUTINE displayMatrixInfo
 
 ENDSUBROUTINE solve_global_system
+
+END MODULE global_system_solver

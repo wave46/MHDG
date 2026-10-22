@@ -4,6 +4,13 @@
 ! date: 21/04/2020
 ! Adimensionalization of the inputs
 !**********************************
+MODULE adimensionalization_module
+  IMPLICIT NONE
+  PRIVATE
+  PUBLIC :: adimensionalization
+
+CONTAINS
+
 SUBROUTINE adimensionalization()
   USE globals
   USE MPI_OMP, only: MPIvar
@@ -224,3 +231,5 @@ SUBROUTINE adimensionalization()
   ENDIF
 
 END SUBROUTINE adimensionalization
+
+END MODULE adimensionalization_module

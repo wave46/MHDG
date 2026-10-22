@@ -6,6 +6,13 @@
 ! during the whole computation
 !*****************************************
 
+MODULE hdg_first_equation_module
+  IMPLICIT NONE
+  PRIVATE
+  PUBLIC :: HDG_precalculatedfirstequation
+
+CONTAINS
+
 SUBROUTINE HDG_precalculatedfirstequation()
   USE globals
   USE LinearAlgebra, only: tensorSumInt, tensorProduct, invert_matrix
@@ -745,3 +752,5 @@ CONTAINS
   ENDSUBROUTINE assemblyFacesContribution
 
 ENDSUBROUTINE HDG_precalculatedfirstequation
+
+END MODULE hdg_first_equation_module

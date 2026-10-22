@@ -421,7 +421,7 @@ endif
 read_input.F : $(SDIR)/InOut/read_input.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-read_input.o : read_input.F prec_const.o globals.o MPI_OMP.o neutral_flux_limiter.o balance_diagnostics.o
+read_input.o : read_input.F adimensionalization.o prec_const.o globals.o MPI_OMP.o neutral_flux_limiter.o balance_diagnostics.o
 	$(FC) -c $(FCFLAGS) -fno-finite-math-only $(INC) $< -o $@
 
 reference_element.F : $(SDIR)/HDG/reference_element.f90
@@ -631,19 +631,19 @@ adaptivity_general.o : adaptivity_general.F MPI_OMP.o Communications.o globals.o
 Main_utils.F : $(SDIR)/Utils/Main_utils.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-Main_utils.o : Main_utils.F newton_predictor.o solver_status.o adaptivity_indicator.o residual_norm.o external_heating.o inout.o gmsh_io.o adaptivity_general.o adaptivity_projection.o reference_element.o preprocess.o MPI_OMP.o PrintUtils.o Debug.o initialization.o time_stepping.o Communications.o domain_decomposition.o hdg_LimitingTechniques.o Postprocess.o $(ADDMODSOLV) input_files.o
+Main_utils.o : Main_utils.F newton_predictor.o solver_status.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o hdg_BC.o hdg_Mapping.o hdg_Assembly.o solve_global_system.o compute_element_solution.o adaptivity_indicator.o residual_norm.o external_heating.o inout.o gmsh_io.o adaptivity_general.o adaptivity_projection.o reference_element.o preprocess.o MPI_OMP.o PrintUtils.o Debug.o initialization.o time_stepping.o Communications.o domain_decomposition.o hdg_LimitingTechniques.o Postprocess.o $(ADDMODSOLV) input_files.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 MHDG.F : $(SDIR)/MHDG.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-MHDG.o : MHDG.F MPI_OMP.o Main_utils.o solver_status.o
+MHDG.o : MHDG.F MPI_OMP.o Main_utils.o solver_status.o read_input.o hdg_PrecalculatedFirstEquation.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 Convergence.F : $(SDIR)/Convergence.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-Convergence.o : Convergence.F solver_status.o residual_norm.o inout.o gmsh_io.o reference_element.o MPI_OMP.o PrintUtils.o Debug.o initialization.o Postprocess.o
+Convergence.o : Convergence.F solver_status.o read_input.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o hdg_BC.o hdg_Mapping.o hdg_Assembly.o solve_global_system.o compute_element_solution.o residual_norm.o inout.o gmsh_io.o reference_element.o MPI_OMP.o PrintUtils.o Debug.o initialization.o Postprocess.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 MHDG-$(MDL)-$(MODE)-$(DIM) : newton_predictor.o solver_status.o equilibrium_series.o heating_series.o rectangular_series_io.o input_files.o Main_utils.o residual_norm.o MPI_OMP.o $(BALANCE_DIAGNOSTICS_OBJECTS) matrices_types.o interpolation.o magnetic_topology.o magnetic_geometry_state.o PrintUtils.o prec_const.o types.o globals.o adimensionalization.o Debug.o LinearAlgebra.o magnetic_field.o external_heating.o $(IMPURITY_RADIATION_OBJECT) neutral_flux_limiter.o physics.o read_input.o HDF5_io.o $(BUILD_PROVENANCE_OBJECT) flux_surface_transport_data.o transport_models_1d_config.o transport_models_1d_derived.o transport_models_1d.o transport_models_1d_update.o transport_models_1d_diffusion_bohm_gyrobohm.o transport_models_1d_common.o transport_models_1d_pinch.o transport_models_1d_io.o transport_models_1d_runtime.o inout.o gmsh_io.o gmsh.o reference_element.o preprocess.o analytical.o initialization.o time_stepping.o element_mapping.o adaptivity_projection.o hdg_PrecalculatedFirstEquation.o hdg_ComputeJacobian.o  $(ADDMOD) hdg_Mapping.o hdg_BC.o hdg_Assembly.o solve_global_system.o compute_element_solution.o adaptivity_general.o adaptivity_common.o mod_splines.o adaptivity_estimator.o adaptivity_indicator.o  domain_decomposition.o MHDG.o

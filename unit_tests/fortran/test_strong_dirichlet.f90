@@ -1,4 +1,6 @@
 PROGRAM test_strong_dirichlet
+  USE hdg_assembly_module, ONLY: HDG_assembly
+  USE global_system_solver, ONLY: solve_global_system
   USE globals
   USE preprocess, ONLY: Bc_preprocess, Bc_preprocess_serial, CreateFaceConnectivity
   USE LinearAlgebra, ONLY: col, tensorProduct
@@ -247,7 +249,11 @@ CONTAINS
     numer%dumpnr = 1.d0
     ALLOCATE(sol%u_tilde(16))
     sol%u_tilde = -17.d0
+#ifdef WITH_PETSC
+    CALL solve_global_system(status,1)
+#else
     CALL solve_global_system(status)
+#endif
     IF (status%outcome /= solve_success) ERROR STOP 'partitioned strong Dirichlet solve failed'
     DO face = 1,Mesh%ukf
        wanted = 10.d0*expected_ids(face)+[(j,j=1,block)]

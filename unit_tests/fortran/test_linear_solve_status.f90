@@ -1,4 +1,5 @@
 PROGRAM test_linear_solve_status
+  USE global_system_solver, ONLY: solve_global_system
   USE solver_status
   USE globals
   USE Main_utils, ONLY: check_newton_values

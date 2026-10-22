@@ -8,8 +8,16 @@
 !********************************
 ! Loads input file
 !********************************
+MODULE input_reader
+  IMPLICIT NONE
+  PRIVATE
+  PUBLIC :: read_input, read_transport_model_input, read_impurity_radiation_input
+
+CONTAINS
+
 SUBROUTINE READ_input()
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
+  USE adimensionalization_module, ONLY: adimensionalization
   USE prec_const
   USE globals
   USE MPI_OMP
@@ -1300,3 +1308,5 @@ SUBROUTINE read_impurity_radiation_input()
   input%impurity_concentration_dimension = impurity_concentration_dimension
 
 END SUBROUTINE read_impurity_radiation_input
+
+END MODULE input_reader

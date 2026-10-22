@@ -6,6 +6,13 @@
 ! problem
 !*****************************************
 
+MODULE hdg_bc_module
+  IMPLICIT NONE
+  PRIVATE
+  PUBLIC :: HDG_BC
+
+CONTAINS
+
 SUBROUTINE HDG_BC()
   USE globals
   USE LinearAlgebra
@@ -2156,3 +2163,5 @@ CONTAINS
 
 
 END SUBROUTINE HDG_BC
+
+END MODULE hdg_bc_module

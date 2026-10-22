@@ -1,4 +1,5 @@
 PROGRAM test_transport_pinch
+  USE input_reader, ONLY: read_transport_model_input
   USE globals, ONLY: input, transport_model_input, simpar, switch
   USE MPI_OMP, ONLY: MPIvar
   USE transport_models_1d, ONLY: transport_model_1d_t

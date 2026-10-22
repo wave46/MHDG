@@ -8,6 +8,13 @@ MODULE Main_utils
 
   USE solver_status, ONLY: solver_status_t, solve_success, solve_retry, finite_solver_values, &
        agree_solver_status, stop_on_solver_failure
+  USE hdg_first_equation_module, ONLY: HDG_precalculatedfirstequation
+  USE hdg_jacobian_module, ONLY: HDG_computeJacobian
+  USE hdg_bc_module, ONLY: HDG_BC
+  USE hdg_mapping_module, ONLY: HDG_mapping
+  USE hdg_assembly_module, ONLY: HDG_assembly
+  USE global_system_solver, ONLY: solve_global_system
+  USE element_solution_module, ONLY: compute_element_solution
   USE adaptivity_indicator_module, ONLY: compute_error_oscillations
   USE input_files, ONLY: resolve_input_filename
   USE in_out

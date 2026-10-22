@@ -1,3 +1,10 @@
+MODULE hdg_mapping_module
+  IMPLICIT NONE
+  PRIVATE
+  PUBLIC :: HDG_mapping
+
+CONTAINS
+
 SUBROUTINE HDG_mapping()
   USE globals
   USE LinearAlgebra, ONLY: mymatmul, solve_linear_system, solve_linear_system_sing
@@ -243,3 +250,5 @@ CONTAINS
   ENDSUBROUTINE set_permutations
 #endif
 ENDSUBROUTINE HDG_mapping
+
+END MODULE hdg_mapping_module

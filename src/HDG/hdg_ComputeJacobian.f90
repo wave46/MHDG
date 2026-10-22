@@ -6,6 +6,13 @@
 ! during the NR iterative process
 !*****************************************
 
+MODULE hdg_jacobian_module
+  IMPLICIT NONE
+  PRIVATE
+  PUBLIC :: HDG_computeJacobian
+
+CONTAINS
+
 SUBROUTINE HDG_computeJacobian()
   USE globals
   USE LinearAlgebra, only: tensorProduct, tensorSumInt, cross_product, ijk_cross_product
@@ -4391,3 +4398,5 @@ END IF
 
 
          ENDSUBROUTINE hdg_ComputeJacobian
+
+END MODULE hdg_jacobian_module
