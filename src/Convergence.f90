@@ -176,7 +176,11 @@ PROGRAM Convergence
 
         ! Mesh preprocess: create the mesh related structures
         ! used in the HDG scheme
-        CALL mesh_preprocess()
+        CALL mesh_preprocess(ierr)
+        IF (ierr == 0) THEN
+           IF (MPIvar%glob_id == 0) WRITE (6, *) 'Mesh preprocessing failed in Convergence'
+           STOP 1
+        ENDIF
 
 #ifdef TOR3D
         ! Define toroidal discretization
@@ -339,10 +343,10 @@ PROGRAM Convergence
      WRITE (6, '(" * Convergence for ", A7, 31X, " *")') TRIM(phys%conVarNam(ieq))
      DO ipol = 1, n_polyns
         WRITE (6, '(" * ", 55("-"), "*")')
-        WRITE (6, '(" * Interpolation: p", I0, 38X, "*")'), ipol
+        WRITE (6, '(" * Interpolation: p", I0, 38X, "*")') ipol
         WRITE (6, '(" * ",5X, " h ", 7X, " Nel ", 5X, " Nunk ", 2X, " L2err", 6X, "Slope", 5X, "*")')
         DO ipts = 1, n_points
-           WRITE (6, '(" * ",2X,ES10.2E3, 2X, I5, 2X, I8, 2X, ES10.2E3, 2X, ES10.2E3, 2X, "*")'), &
+           WRITE (6, '(" * ",2X,ES10.2E3, 2X, I5, 2X, I8, 2X, ES10.2E3, 2X, ES10.2E3, 2X, "*")') &
                 elSize(ipts, ipol), Nelv(ipts, ipol), Nunk(ipts, ipol), L2err(ipts, ipol, ieq), Slope(ipts, ipol, ieq)
         END DO
      END DO
