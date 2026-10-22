@@ -191,8 +191,8 @@ CONTAINS
     WRITE(6,'(A)') &
          &'    volume + physical boundary inward - temporal = imbalance'
     DO equation = equation_n,equation_nn
-       WRITE(6,'(A)') '    '//TRIM(balance_equation_names(equation))//' ['// &
-            &TRIM(balance_rate_units(equation))//']'
+       WRITE(6,'(A)') '    '//TRIM(balance_equation_name(equation))//' ['// &
+            &TRIM(balance_equation_rate_units(equation))//']'
        CALL print_physical_aggregate(balances(equation))
        CALL print_volume_components(this,equation)
        CALL print_physical_boundary_components(this,equation)
@@ -345,8 +345,8 @@ CONTAINS
     WRITE(6,'(A)') &
          &'    equation boundary + tau stabilization = numerical boundary'
     DO equation = equation_n,equation_nn
-       WRITE(6,'(A)') '    '//TRIM(balance_equation_names(equation))//' ['// &
-            &TRIM(balance_rate_units(equation))//']'
+       WRITE(6,'(A)') '    '//TRIM(balance_equation_name(equation))//' ['// &
+            &TRIM(balance_equation_rate_units(equation))//']'
        CALL print_discrete_aggregate(balances(equation))
        CALL print_equation_boundary_components(this,equation)
     ENDDO
@@ -462,7 +462,7 @@ CONTAINS
             &section_bc), &
             &equation_bc_residual_value(this,equation)/))
     CASE (equation_nEi,equation_nEe)
-       WRITE(6,'(A)') '    '//TRIM(balance_equation_names(equation))//' [W]'
+       WRITE(6,'(A)') '    '//TRIM(balance_equation_name(equation))//' [W]'
        WRITE(6,'(A)') '      perpendicular diffusion + split diffusion + '// &
             &'conduction + '// &
             &'sheath minus bulk + tau stabilization = residual'

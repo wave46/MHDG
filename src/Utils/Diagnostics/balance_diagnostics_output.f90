@@ -177,10 +177,13 @@ CONTAINS
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     INTEGER(HID_T), INTENT(IN) :: equations_group_id
     INTEGER, INTENT(IN) :: equation
+    CHARACTER(LEN=12), PARAMETER :: balance_content_units( &
+         &balance_equation_count) = [CHARACTER(LEN=12) :: &
+         &'particles','kg m s^-1','J','J','particles']
 
     CALL write_equation(this,equations_group_id, &
-         &balance_equation_names(equation),physical_balance(this,equation), &
-         &balance_content_units(equation),balance_rate_units(equation),equation)
+         &balance_equation_name(equation),physical_balance(this,equation), &
+         &balance_content_units(equation),balance_equation_rate_units(equation),equation)
   END SUBROUTINE write_primary_equation
 
   SUBROUTINE write_equation(this, parent_group_id, name, balance, &

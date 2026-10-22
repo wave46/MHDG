@@ -28,15 +28,6 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: equation_nEe = 4
   INTEGER, PARAMETER :: equation_nn = 5
   INTEGER, PARAMETER :: balance_equation_count = 5
-  CHARACTER(LEN=8), PARAMETER :: balance_equation_names( &
-       &balance_equation_count) = [CHARACTER(LEN=8) :: &
-       &'n','nu','nEi','nEe','n_n']
-  CHARACTER(LEN=12), PARAMETER :: balance_content_units( &
-       &balance_equation_count) = [CHARACTER(LEN=12) :: &
-       &'particles','kg m s^-1','J','J','particles']
-  CHARACTER(LEN=12), PARAMETER :: balance_rate_units( &
-       &balance_equation_count) = [CHARACTER(LEN=12) :: &
-       &'particles/s','N','W','W','particles/s']
 
   ! Each accumulated value is addressed as values(equation,term,section). Terms
   ! describe physics and are reused between the physical and independent-BC
@@ -86,8 +77,6 @@ MODULE balance_diagnostics
   INTEGER, PARAMETER :: term_sheath_minus_bulk = 29
   INTEGER, PARAMETER :: term_neutral_wall_absorption = 30
   INTEGER, PARAMETER :: balance_term_count = 30
-  INTEGER, PARAMETER :: summary_volume_terms(2) = &
-       &(/term_prescribed_source,term_ohmic/)
 
   ! Evaluated physical inputs shared by the particle, momentum, and energy
   ! source mappings. Equation ownership and signs remain private below.
@@ -229,6 +218,16 @@ MODULE balance_diagnostics
   PUBLIC :: balance_diagnostics_mode_name
 
   INTERFACE
+     MODULE PURE FUNCTION balance_equation_name(equation) RESULT(name)
+       INTEGER, INTENT(IN) :: equation
+       CHARACTER(LEN=8) :: name
+     END FUNCTION balance_equation_name
+
+     MODULE PURE FUNCTION balance_equation_rate_units(equation) RESULT(units)
+       INTEGER, INTENT(IN) :: equation
+       CHARACTER(LEN=12) :: units
+     END FUNCTION balance_equation_rate_units
+
      MODULE SUBROUTINE observe_boundary_type(this, boundary_type)
        CLASS(balance_diagnostics_type), INTENT(INOUT) :: this
        INTEGER, INTENT(IN) :: boundary_type

@@ -3,6 +3,23 @@ SUBMODULE (balance_diagnostics) balance_diagnostics_common
 
 CONTAINS
 
+  MODULE PROCEDURE balance_equation_name
+    CHARACTER(LEN=8), PARAMETER :: values( &
+         &balance_equation_count) = [CHARACTER(LEN=8) :: &
+         &'n','nu','nEi','nEe','n_n']
+
+    name = values(equation)
+  END PROCEDURE balance_equation_name
+
+  MODULE PROCEDURE balance_equation_rate_units
+    CHARACTER(LEN=12), PARAMETER :: values( &
+         &balance_equation_count) = [CHARACTER(LEN=12) :: &
+         &'particles/s','N','W','W','particles/s']
+
+    units = values(equation)
+  END PROCEDURE balance_equation_rate_units
+
+
   MODULE FUNCTION balance_value(this, equation, term, section) RESULT(value)
     CLASS(balance_diagnostics_type), INTENT(IN) :: this
     INTEGER, INTENT(IN) :: equation, term, section

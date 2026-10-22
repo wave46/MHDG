@@ -242,6 +242,8 @@ CONTAINS
   LOGICAL FUNCTION stores_volume_component(this, term) RESULT(stores)
     CLASS(balance_accumulator_type), INTENT(IN) :: this
     INTEGER, INTENT(IN) :: term
+    INTEGER, PARAMETER :: summary_volume_terms(2) = &
+         &(/term_prescribed_source,term_ohmic/)
 
     SELECT CASE (this%mode)
     CASE (balance_mode_summary)
