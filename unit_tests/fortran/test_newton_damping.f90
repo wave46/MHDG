@@ -1,6 +1,7 @@
 PROGRAM test_newton_damping
   USE globals
-  USE Main_utils, ONLY: finish_newton_update
+  USE Main_utils, ONLY: finish_newton_update, update_newton_reference, &
+       check_newton_convergence, uiter, errNR
   USE element_solution_module, ONLY: compute_element_solution
   USE global_system_solver, ONLY: solve_global_system
   USE solver_status, ONLY: solver_status_t, solve_success, solve_retry
@@ -94,9 +95,46 @@ PROGRAM test_newton_damping
   IF (status%outcome/=solve_retry) ERROR STOP 'rollback silently accepted a failed linear solve'
   IF (status%backend_code/=17) ERROR STOP 'failed linear status lost'
   CALL unchanged()
+  CALL check_newton_reference()
   IF (MPIvar%glob_id==0) WRITE(*,*) 'Full-state damping: condensed trial, alpha 0/0.25/1, prescribed trace, collective rollback PASS'
   CALL MPI_FINALIZE(ierr)
 CONTAINS
+  SUBROUTINE check_newton_reference()
+    REAL*8 :: history(4,2), increment(4), expected
+    INTEGER :: n
+
+    adapt%adaptivity=.FALSE.
+    switch%saveNR=.FALSE.
+#ifdef PARALL
+    ALLOCATE(Mesh%ghostElems(1))
+    Mesh%ghostElems=0
+#endif
+    numer%dumpnr=0.25d0
+    DO n=2,4,2
+       Mesh%Nnodesperelem=n/phys%neq
+       DEALLOCATE(sol%u)
+       ALLOCATE(sol%u(n))
+       IF (ALLOCATED(sol%u0)) DEALLOCATE(sol%u0)
+       ALLOCATE(sol%u0(n,2))
+       history(1:n,1)=[(100.d0*j+MPIvar%glob_id,j=1,n)]
+       history(1:n,2)=history(1:n,1)+1000.d0
+       sol%u0=history(1:n,:)
+       sol%u=[(10.d0*j+MPIvar%glob_id,j=1,n)]
+       CALL update_newton_reference()
+       CALL close(uiter,sol%u)
+       increment(1:n)=[(REAL(j,8),j=1,n)]
+       sol%u=sol%u+numer%dumpnr*increment(1:n)
+       CALL check_newton_convergence(status)
+       IF (status%outcome/=solve_success) ERROR STOP 'Newton reference check rejected finite update'
+       expected=SQRT(SUM(increment(1:n)**2)/REAL(n,8))
+       IF (ABS(errNR-expected)>1.d-12) ERROR STOP 'Newton error compared against time history'
+       IF (ANY(sol%u0/=history(1:n,:))) ERROR STOP 'Newton reference reset changed time history'
+       CALL update_newton_reference()
+       CALL check_newton_convergence(status)
+       IF (errNR/=0.d0) ERROR STOP 'unchanged Newton state has nonzero correction'
+    ENDDO
+    IF (MPIvar%glob_id==0) WRITE(*,*) 'Newton reference: projected state, mesh resize, native correction and preserved time history PASS'
+  END SUBROUTINE check_newton_reference
 
 #ifdef WITH_PASTIX
   SUBROUTINE check_trace_solve()

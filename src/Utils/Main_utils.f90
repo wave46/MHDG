@@ -790,11 +790,7 @@ CONTAINS
        ! physical timestep or updating the puff/feedback controller.
        CALL adaptivity(preserve_history=.TRUE.,accepted=accepted)
        CALL update_uconv_qconv(sol%u, sol%q)
-       IF (SIZE(uiter) .NE. SIZE(sol%u)) THEN
-          DEALLOCATE(uiter)
-          ALLOCATE(uiter(SIZE(sol%u)))
-       ENDIF
-       uiter = sol%u
+       CALL update_newton_reference()
        ir_check = 0
        CALL free_mesh_loc(Mesh_prec)
        CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
@@ -868,8 +864,9 @@ CONTAINS
           sol%q_conv = sol%q
        ENDIF
 
-       ! update uiter to new mapped solution
-       CALL update_uiter()
+       ! Compare the next Newton trial with the projected Newton checkpoint.
+       ! The separately projected u0 remains the time-discretization history.
+       CALL update_newton_reference()
 
        IF(ir_check .NE. numer%nrp) THEN
           ir = ir_check
@@ -1545,6 +1542,11 @@ CONTAINS
     ENDIF
     uiter = sol%u0(:, 1)
   ENDSUBROUTINE update_uiter
+
+  SUBROUTINE update_newton_reference()
+    ! Allocatable assignment also resizes the reference after remeshing.
+    uiter = sol%u
+  END SUBROUTINE update_newton_reference
 
   SUBROUTINE update_uiter_qiter_best(uiter_best, qiter_best, u, q)
     REAL*8, POINTER, INTENT(INOUT) :: uiter_best(:), qiter_best(:)
