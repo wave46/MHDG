@@ -11,7 +11,8 @@ PROGRAM test_neutral_wall_diagnostics
   TYPE(balance_accumulator_type) :: accumulator
   TYPE(balance_plasma_bc_type) :: plasma
   REAL*8 :: state(5), exterior_state(5), gradient(2,5), normal(2), matrix(5,5), diffusion(5,5), pinch(5,2)
-  REAL*8 :: wall_flux, puff, pump
+  REAL*8 :: wall_flux, puff, pump, recycled_flux
+  LOGICAL :: recycle_plasma_diffusion
   INTEGER(HID_T) :: file_id, group_id
   INTEGER :: mode, relocated, i
 #ifdef PARALL
@@ -28,6 +29,8 @@ PROGRAM test_neutral_wall_diagnostics
   READ(argument,*) wall_flux
   CALL get_command_argument(3,argument)
   READ(argument,*) relocated
+  CALL get_command_argument(4,argument)
+  READ(argument,*) recycle_plasma_diffusion
   MPIvar%glob_id = 0
   MPIvar%glob_size = 1
   state = [2.d0,5.d0,16.d0,6.d0,3.d0]
@@ -48,9 +51,11 @@ PROGRAM test_neutral_wall_diagnostics
      pump = 0.d0
   ENDIF
   gradient = 0.d0
-  ! R*(5 + 0.25*2 - 0.5) = 2.5: retain perpendicular plasma diffusion.
+  ! R*(5 + 0.25*2) = 2.75; legacy diffusion subtracts R*0.5.
+  recycled_flux = 2.75d0
+  IF (recycle_plasma_diffusion) recycled_flux = recycled_flux - 0.25d0
   gradient(1,1) = 0.5d0
-  gradient(1,5) = (2.5d0+puff-pump*state(5)-wall_flux)/2.d0
+  gradient(1,5) = (recycled_flux+puff-pump*state(5)-wall_flux)/2.d0
   CALL diagnostics%configure(mode)
   CALL diagnostics%begin_assembly(1.d0,1.d0,1.d0/(2.d0*ACOS(-1.d0)),1.d0)
   DO i = 1,2
@@ -63,7 +68,8 @@ PROGRAM test_neutral_wall_diagnostics
           pinch_matrix=pinch, recycling_coefficient=0.5d0, &
           puff_source=puff, pump_coefficient=pump, &
           neutral_wall_absorption=wall_flux, plasma=plasma, &
-          neutral_perpendicular_diffusion=.FALSE.)
+          neutral_perpendicular_diffusion=.FALSE., &
+          recycle_plasma_diffusion=recycle_plasma_diffusion)
      IF (relocated == 1) CALL accumulator%accumulate_relocated_sources(7.d0,6.d0)
      CALL diagnostics%merge(accumulator)
   ENDDO

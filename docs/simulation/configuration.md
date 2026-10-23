@@ -196,6 +196,13 @@ An explicit selection requires `PCLU` and an available backend; an unavailable
 backend stops the run. See the [build instructions](../../README.md#building)
 for selecting the linked solver libraries.
 
+## Bohm wall recycling
+
+In `PHYS_LST`, `recycle_plasma_diffusion = .false.` is the default;
+set `.true.` to restore the previous raw ion diffusion contribution.
+See the [wall recycling model](../models/wall-recycling.md) for the flux laws,
+balance interpretation, saved setting and restart behavior.
+
 ## Optional neutral limiter and balance reporting
 
 The neutral flux limiter is selected in `PHYS_LST`:

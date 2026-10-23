@@ -2040,6 +2040,7 @@ CONTAINS
         &magnetic_direction=bg,magnetic_normal=bn,tau=tau, &
         &diffusion_iso=diffiso,diffusion_ani=diffani,pinch_matrix=APinch, &
         &recycling_coefficient=recycling_coeff, &
+        &recycle_plasma_diffusion=phys%recycle_plasma_diffusion, &
         &puff_source=puff_coeff,pump_coefficient=cryopump_coeff, &
         &neutral_wall_absorption=Fw, &
         &plasma=diagnostic_plasma_bc, &
@@ -2056,9 +2057,9 @@ CONTAINS
 
     ! Convective part
     k = inn
-    ! Recycle the physical plasma flux from U_hat and element Q
-    ! (convection + pinch - diffusion).
-    ! The plasma diffusive contribution is assembled below; no R*tau_1 term.
+    ! Recycle prescribed Bohm outflow: trace convection plus pinch.
+    ! Ion diffusion cancels stabilization in the density wall condition.
+    ! Recycling raw ion diffusion is available only as a legacy option below.
     indi = k+ind_asf
     indj = 2+ind_asf
     !if (ntang) then
@@ -2140,18 +2141,18 @@ CONTAINS
     END IF
 #endif
 
-    ! diffusive non-diagonal part
-    DO idm = 1,Ndim
-      k = inn
-      j=1
-      indi = ind_asf+k
-      indj = ind_ash+idm+(j-1)*Ndim
-      !if (ntang) then
-        elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*(ng(idm)*diffiso(j,j)-bn*bg(idm)*diffani(j,j))*recycling_coeff
-      !else
-      !  elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-NiNi*ng(idm)*phys%diff_n*recycling_coeff
-      !endif
-    END DO
+    ! Optional legacy recycling of the raw plasma diffusive wall flux.
+    IF (phys%recycle_plasma_diffusion) THEN
+      DO idm = 1,Ndim
+        k = inn
+        j = 1
+        indi = ind_asf+k
+        indj = ind_ash+idm+(j-1)*Ndim
+        elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = &
+             &elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - &
+             &NiNi*(ng(idm)*diffiso(j,j)-bn*bg(idm)*diffani(j,j))*recycling_coeff
+      END DO
+    ENDIF
 #endif
 
 

@@ -20,4 +20,5 @@ PROGRAM test_neutral_wall_input
   CALL read_input()
   WRITE (*,'(A,2(1X,ES24.16))') 'NEUTRAL_WALL_ALBEDOS', &
        phys%Re_n, phys%Re_n_pump
+  WRITE (*,'(A,1X,L1)') 'RECYCLE_PLASMA_DIFFUSION', phys%recycle_plasma_diffusion
 END PROGRAM test_neutral_wall_input

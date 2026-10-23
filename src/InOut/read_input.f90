@@ -87,7 +87,7 @@ SUBROUTINE READ_input()
   INTEGER               :: nbCoils_rmp, parite, nbRow, nbCoils_ripple
 
   ! Neutral and Ohmic heating
-  LOGICAL               :: OhmicSrc, apply_trim
+  LOGICAL               :: OhmicSrc, apply_trim, recycle_plasma_diffusion
   REAL*8                :: Zeff,Pohmic,diff_nn,diff_nn_min,neutralp_ti_supp_eV,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
   CHARACTER(LEN=40)     :: neutral_flux_limiter_mode
   CHARACTER(LEN=16)     :: neutral_flux_limiter_tn_source
@@ -142,14 +142,14 @@ SUBROUTINE READ_input()
        dt_growth_easy_steps, newton_predictor, newton_predictor_rate_limit
 #ifndef KEQUATION
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0, heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation,&
-  & Re, Re_pump, Re_n, Re_n_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
+  & Re, Re_pump, Re_n, Re_n_pump, apply_trim, recycle_plasma_diffusion, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
     &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min,&
     &ionization_ion_energy_fraction, heating_ion_fraction
 #else
-  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, Re_n, Re_n_pump, apply_trim, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
+  NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, Re_n, Re_n_pump, apply_trim, recycle_plasma_diffusion, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
@@ -200,6 +200,7 @@ SUBROUTINE READ_input()
   ener_source = 0.d0
   diffmin = 0.d0 ! Compatibility input; the case-86 diffusion floor is retired.
   diff_nn_min = diff_nn_min_unset
+  recycle_plasma_diffusion = .FALSE.
   Re_n = 1.d0
   Re_n_pump = Re_n_pump_unset
   neutralp_lambda = 0.d0
@@ -652,6 +653,7 @@ SUBROUTINE READ_input()
   phys%Re_n               = Re_n
   phys%Re_n_pump          = Re_n_pump
   phys%apply_trim         = apply_trim
+  phys%recycle_plasma_diffusion = recycle_plasma_diffusion
   phys%cryopump_power     = cryopump_power
   phys%puff               = puff
   IF (switch%impurity_radiation) CALL read_impurity_radiation_input()
@@ -893,6 +895,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - recycling coefficient pump in the neutral equation: ', phys%Re_pump
      PRINT *, '                - neutral atomic recycling coefficient:               ', phys%Re_n
      PRINT *, '                - neutral atomic recycling coefficient at pump:       ', phys%Re_n_pump
+     PRINT *, '                - recycle plasma diffusion at Bohm walls:             ', phys%recycle_plasma_diffusion
      PRINT *, '                - applying trim:                                      ', phys%apply_trim
      PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
      PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power

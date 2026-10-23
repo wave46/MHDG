@@ -18,11 +18,14 @@ def main():
     template = (repository / "test/param_initial.txt").read_text()
     # Omission and inheritance cases must not inherit explicit template albedos.
     template = re.sub(r"(?mi)^\s*Re_n(?:_pump)?\s*=[^\n]*\n", "", template)
+    template = re.sub(r"(?mi)^\s*recycle_plasma_diffusion\s*=[^\n]*\n", "", template)
     if k_equation:
         template = template.replace("&PHYS_LST", "&PHYS_LST\n"
             "  diff_k_min=10, diff_k_max=10, k_max=1.e10", 1)
     valid = [
         ("omitted", "", (1.0, 1.0)),
+        ("diffusion_false", "recycle_plasma_diffusion=.false.", (1.0, 1.0)),
+        ("diffusion_true", "recycle_plasma_diffusion=.true.", (1.0, 1.0)),
         ("explicit_inactive", "Re_n=1, Re_n_pump=1", (1.0, 1.0)),
         ("inherit", "Re_n=0.99", (0.99, 0.99)),
         ("pump_override", "Re_n=0.99, Re_n_pump=0.95", (0.99, 0.95)),
@@ -85,6 +88,8 @@ def main():
                 if passed:
                     values = tuple(float(value) for value in match.groups())
                     passed = values == expected
+                    flag = re.search(r"^RECYCLE_PLASMA_DIFFUSION\s+([TF])", output, re.M)
+                    passed = passed and flag is not None and (flag[1] == "T") == (name == "diffusion_true")
             else:
                 passed = (run.returncode != 0 and expected in output
                           and "NEUTRAL_WALL_ALBEDOS" not in output)

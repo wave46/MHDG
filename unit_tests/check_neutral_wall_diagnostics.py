@@ -17,9 +17,12 @@ def check(handle, path, expected):
 executable = Path(sys.argv[1]).resolve()
 cases = [(mode, wall, 0) for mode in (1, 2, 3) for wall in (0., 3.)]
 cases += [(3, wall, 1) for wall in (0., 3.)] + [(0, 3., 1)]
-for mode, wall, relocated in cases:
+cases = [(mode, wall, relocated, recycle) for mode, wall, relocated in cases
+         for recycle in (False, True)]
+for mode, wall, relocated, recycle in cases:
+    extra_return = 0. if recycle else 0.5
     with tempfile.TemporaryDirectory(prefix="neutral_wall_diagnostics_") as directory:
-        result = subprocess.run([str(executable), str(mode), str(wall), str(relocated)],
+        result = subprocess.run([str(executable), str(mode), str(wall), str(relocated), "T" if recycle else "F"],
                                 cwd=directory, capture_output=True, text=True, check=True)
         with h5py.File(Path(directory) / "diagnostics.h5") as handle:
             if mode == 0:
@@ -31,11 +34,11 @@ for mode, wall, relocated in cases:
                 check(handle, root + "/external_sources/particles/puff_in", 14.)
                 check(handle, root + "/external_sources/particles/pump_out", 12.)
                 check(handle, root + "/external_sources/particles/neutral_wall_absorption", 2*wall)
-                check(handle, root + "/balances/total_n/physical_imbalance", -4.-2*wall)
+                check(handle, root + "/balances/total_n/physical_imbalance", -4.+extra_return-2*wall)
             else:
                 root = "diagnostics/equations"
-                check(handle, root + "/n_n/physical/imbalance", 7.-2*wall)
-                check(handle, root + "/total_n/physical/imbalance", -4.-2*wall)
+                check(handle, root + "/n_n/physical/imbalance", 7.+extra_return-2*wall)
+                check(handle, root + "/total_n/physical/imbalance", -4.+extra_return-2*wall)
                 check(handle, root + "/n_n/bc/residual", 0.)
                 check(handle, root + "/n_n/discrete/residual", 2. if relocated else 0.)
                 if mode == 3:
@@ -44,7 +47,7 @@ for mode, wall, relocated in cases:
                     check(handle, bc + "neutral_wall_absorption", 2*wall)
                     check(handle, physical + "neutral_wall_absorption", -2*wall)
                     check(handle, bc + "recycling_parallel_inward", 5.)
-                    check(handle, bc + "recycling_diffusion_inward", -0.5)
+                    check(handle, bc + "recycling_diffusion_inward", -0.5 if recycle else 0.)
                     check(handle, bc + "recycling_pinch_inward", 0.5)
                     check(handle, bc + "puff", 0. if relocated else 14.)
                     check(handle, bc + "pump", 0. if relocated else 12.)

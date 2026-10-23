@@ -25,7 +25,7 @@ CONTAINS
        &neutral_wall_absorption, &
        &plasma, &
        &neutral_perpendicular_diffusion, neutral_pressure_vector, &
-       &neutral_momentum_equation)
+       &neutral_momentum_equation, recycle_plasma_diffusion)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
     REAL*8, INTENT(IN) :: integration_weight
     INTEGER, INTENT(IN) :: neutral_equation
@@ -41,7 +41,8 @@ CONTAINS
     LOGICAL, INTENT(IN) :: neutral_perpendicular_diffusion
     REAL*8, INTENT(IN), OPTIONAL :: neutral_pressure_vector(:)
     INTEGER, INTENT(IN), OPTIONAL :: neutral_momentum_equation
-    REAL*8 :: density_diffusion
+    LOGICAL, INTENT(IN), OPTIONAL :: recycle_plasma_diffusion
+    REAL*8 :: density_diffusion, recycled_density_diffusion
 
     density_diffusion = perpendicular_diffusive_flux(equation_n, &
          &gradient,normal, &
@@ -53,11 +54,15 @@ CONTAINS
          &gradient,normal,magnetic_direction,magnetic_normal,tau, &
          &diffusion_iso,diffusion_ani,pinch_matrix,density_diffusion,plasma, &
          &integration_weight)
+    recycled_density_diffusion = 0.d0
+    IF (PRESENT(recycle_plasma_diffusion)) THEN
+       IF (recycle_plasma_diffusion) recycled_density_diffusion = density_diffusion
+    ENDIF
     CALL accumulate_neutral_bc(this,neutral_equation, &
          &trace_state,exterior_state,gradient,normal,magnetic_direction, &
          &magnetic_normal, &
          &tau,diffusion_iso,diffusion_ani,pinch_matrix, &
-         &density_diffusion,recycling_coefficient,puff_source,pump_coefficient, &
+         &recycled_density_diffusion,recycling_coefficient,puff_source,pump_coefficient, &
          &neutral_wall_absorption, &
          &neutral_perpendicular_diffusion,integration_weight, &
          &neutral_pressure_vector,neutral_momentum_equation)

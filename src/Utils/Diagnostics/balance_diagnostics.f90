@@ -288,7 +288,7 @@ MODULE balance_diagnostics
           &neutral_wall_absorption, &
           &plasma, &
           &neutral_perpendicular_diffusion, neutral_pressure_vector, &
-          &neutral_momentum_equation)
+          &neutral_momentum_equation, recycle_plasma_diffusion)
        CLASS(balance_accumulator_type), INTENT(INOUT) :: this
        REAL*8, INTENT(IN) :: integration_weight
        INTEGER, INTENT(IN) :: neutral_equation
@@ -304,6 +304,7 @@ MODULE balance_diagnostics
        LOGICAL, INTENT(IN) :: neutral_perpendicular_diffusion
        REAL*8, INTENT(IN), OPTIONAL :: neutral_pressure_vector(:)
        INTEGER, INTENT(IN), OPTIONAL :: neutral_momentum_equation
+       LOGICAL, INTENT(IN), OPTIONAL :: recycle_plasma_diffusion
      END SUBROUTINE accumulate_bc
 
      MODULE SUBROUTINE balance_diagnostics_report(this)
