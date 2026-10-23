@@ -26,17 +26,28 @@ in their respective guides.
 
 For prescribed current density and effective charge,
 $Q_\Omega=\eta(T_e)j_\phi^2$, with $\eta\propto Z_{\mathrm{eff}}T_e^{-3/2}$.
-The electron-temperature floor for resistivity is **1 eV**.
+The source switches off at **0.1 eV** and recovers the original law at **1 eV**.
+These are physical electron temperatures, converted once to thresholds on
+`U4/U1` using the run's reference temperature and `Mref`.
 
 | Local state | Ohmic heating | State Jacobian |
 | --- | --- | --- |
 | Density $\le 0$ | Zero | Zero |
-| Positive density, $T_e\le1$ eV, including negative electron energy | $\eta(1\,\mathrm{eV})j_\phi^2$ | Zero |
-| Positive density, $T_e>1$ eV | Original temperature-dependent law | Derivative of that law |
+| Positive density, $T_e\le0.1$ eV, including negative electron energy | Zero; resistivity is not evaluated | Zero |
+| Positive density, $0.1<T_e<1$ eV | $w(T_e)\eta(T_e)j_\phi^2$ | Derivative of both the weight and resistivity |
+| Positive density, $T_e\ge1$ eV | Original temperature-dependent law | Derivative of that law |
 
-This freezes resistivity; it neither switches off heating in cold plasma nor
-imposes a limit on total Ohmic power. The nonpositive-density rule is a
-numerical extension outside the admissible plasma state.
+For $x=(T_e-0.1\,\mathrm{eV})/(0.9\,\mathrm{eV})$, the transition weight is
+$w=3x^2-2x^3$. The shared `smooth_transition` utility clips this cubic to zero
+below $x=0$ and one above $x=1$, with zero slope at both endpoints. The source
+and its state Jacobian are continuous at both temperature thresholds.
+
+There is no resistivity floor or cap: the zero-source branch returns before
+evaluating the singular law. The transition can exceed the former 1 eV capped
+source within part of the interval. This is a low-temperature numerical
+safeguard, not a limit on total Ohmic power or a model of cold current-carrying
+plasma. It does not establish positivity of the conserved state. The
+nonpositive-density rule remains an extension outside the admissible state.
 
 Related conventions: [heat-flux limiter](heat-flux-limiter.md) and
 [AMJUEL rates](amjuel-rates.md).

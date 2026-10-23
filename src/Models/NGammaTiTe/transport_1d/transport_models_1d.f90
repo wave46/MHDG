@@ -5,6 +5,7 @@ MODULE transport_models_1d
   USE flux_surface_transport_data, ONLY: flux_surface_transport_t
   USE interpolation, ONLY: find_cell_and_local_coordinate
   USE physics, ONLY: cons2phys
+  USE smooth_transition, ONLY: smoothstep01
   USE transport_models_1d_config, ONLY: transport_model_config_t, &
        tm1d_config_reset, tm1d_config_apply, tm1d_region_policy_name, &
        tm1d_region_is_included, tm1d_build_pinch_velocity, &
@@ -94,9 +95,6 @@ MODULE transport_models_1d
        CLASS(transport_model_1d_t), INTENT(IN) :: this
        REAL*8, INTENT(IN) :: rho
      END FUNCTION tm1d_pinch_window
-     MODULE REAL*8 FUNCTION tm1d_smoothstep01(s)
-       REAL*8, INTENT(IN) :: s
-     END FUNCTION tm1d_smoothstep01
      MODULE REAL*8 FUNCTION tm1d_axis_ramp(rho, width)
        REAL*8, INTENT(IN) :: rho, width
      END FUNCTION tm1d_axis_ramp

@@ -9,6 +9,7 @@ MODULE physics
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_quiet_nan, ieee_value
   USE globals
   USE magnetic_field
+  USE smooth_transition, ONLY: smoothstep01, smoothstep01_derivative
   USE impurity_radiation_model, ONLY: init_impurity_radiation_model, &
        &adimensionalize_impurity_radiation_model, compute_impurity_cooling
   USE neutral_flux_limiter, ONLY: neutral_flux_limiter_config_t, &
@@ -16,14 +17,15 @@ MODULE physics
        &apply_neutral_perpendicular_operator, evaluate_neutral_flux_limiter, &
        &neutral_tn_source_ti, neutral_tn_source_fixed
   IMPLICIT NONE
+  PRIVATE :: smoothstep01, smoothstep01_derivative
 
   REAL*8, PARAMETER :: eirene_rate_te_min_phys = 1.d-1
   REAL*8, PARAMETER :: heat_flux_cap_floor = 1.d-10
-  ! Physical electron-temperature floor [eV], used only for Ohmic resistivity.
-  REAL*8, PARAMETER :: ohmic_te_floor_phys = 1.d0
+  ! Physical electron-temperature endpoints [eV] of the Ohmic source safeguard.
+  REAL*8, PARAMETER :: ohmic_te_off_phys = 0.1d0, ohmic_te_full_phys = 1.d0
   ! Initialized once after the run's reference scales are established.
-  REAL*8, SAVE, PRIVATE :: ohmic_energy_per_density_min
-  REAL*8, SAVE, PRIVATE :: ohmic_temperature_factor, ohmic_resistivity_max
+  REAL*8, SAVE, PRIVATE :: ohmic_energy_per_density_off, ohmic_energy_per_density_full
+  REAL*8, SAVE, PRIVATE :: ohmic_transition_width, ohmic_temperature_factor
   REAL*8, PARAMETER :: eirene_rate_te_max_phys = 2.d4
   REAL*8, PARAMETER :: eirene_rate_ti_min_phys = 1.d-1
   REAL*8, PARAMETER :: eirene_rate_ti_max_phys = 3.d3
@@ -439,10 +441,12 @@ CONTAINS
 
   SUBROUTINE initialize_ohmic_runtime_constants()
     ! U4/U1 = (3*Mref/2)*Te, with Te in solver temperature units.
-    ohmic_energy_per_density_min = (3.d0*phys%Mref/2.d0)* &
-         (ohmic_te_floor_phys/simpar%refval_temperature)
+    ohmic_energy_per_density_off = (3.d0*phys%Mref/2.d0)* &
+         (ohmic_te_off_phys/simpar%refval_temperature)
+    ohmic_energy_per_density_full = (3.d0*phys%Mref/2.d0)* &
+         (ohmic_te_full_phys/simpar%refval_temperature)
+    ohmic_transition_width = ohmic_energy_per_density_full-ohmic_energy_per_density_off
     ohmic_temperature_factor = (3.d0*phys%Mref/2.d0)**1.5d0
-    ohmic_resistivity_max = (simpar%refval_temperature/ohmic_te_floor_phys)**1.5d0
   END SUBROUTINE initialize_ohmic_runtime_constants
 
   SUBROUTINE initialize_neutral_flux_limiter_config()
@@ -2013,14 +2017,15 @@ CONTAINS
   SUBROUTINE compute_Sohmic(U,Sohmic)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: Sohmic
+    REAL*8             :: transition
     Sohmic = 0.d0
-    ! Extend the source by zero to nonpositive density; never divide there.
+    ! Return before evaluating the singular resistivity in cold/invalid states.
     IF (U(1) <= 0.d0) RETURN
-    IF (U(4) <= U(1)*ohmic_energy_per_density_min) THEN
-      ! Positive density, Te <= 1 eV (including negative energy): freeze eta.
-      Sohmic = phys%Zeff*phys%Pohmic*ohmic_resistivity_max
-    ELSE
-      Sohmic = phys%Zeff*phys%Pohmic*ohmic_temperature_factor*(U(1)/U(4))**1.5d0
+    IF (U(4) <= U(1)*ohmic_energy_per_density_off) RETURN
+    Sohmic = phys%Zeff*phys%Pohmic*ohmic_temperature_factor*(U(1)/U(4))**1.5d0
+    IF (U(4) < U(1)*ohmic_energy_per_density_full) THEN
+      transition = (U(4)/U(1)-ohmic_energy_per_density_off)/ohmic_transition_width
+      Sohmic = Sohmic*smoothstep01(transition)
     ENDIF
   ENDSUBROUTINE compute_Sohmic
 
@@ -2028,13 +2033,21 @@ CONTAINS
   SUBROUTINE compute_dSohmic_dU(U,res)
     REAL*8, INTENT(IN) :: U(:)
     REAL*8             :: res(:),Sohmic
+    REAL*8             :: energy_per_density, transition, weight, weight_derivative
     res = 0.d0
     IF (U(1) <= 0.d0) RETURN
-    ! Both derivatives vanish on the frozen branch; choose that side at 1 eV.
-    IF (U(4) <= U(1)*ohmic_energy_per_density_min) RETURN
+    IF (U(4) <= U(1)*ohmic_energy_per_density_off) RETURN
     Sohmic = phys%Zeff*phys%Pohmic*ohmic_temperature_factor*(U(1)/U(4))**1.5d0
     res(1) = 1.5d0*Sohmic/U(1)
     res(4) = -1.5d0*Sohmic/U(4)
+    IF (U(4) < U(1)*ohmic_energy_per_density_full) THEN
+      energy_per_density = U(4)/U(1)
+      transition = (energy_per_density-ohmic_energy_per_density_off)/ohmic_transition_width
+      weight = smoothstep01(transition)
+      weight_derivative = smoothstep01_derivative(transition)/ohmic_transition_width
+      res(1) = Sohmic*(1.5d0*weight-energy_per_density*weight_derivative)/U(1)
+      res(4) = Sohmic*(-1.5d0*weight/U(4)+weight_derivative/U(1))
+    ENDIF
   ENDSUBROUTINE compute_dSohmic_dU
 
 

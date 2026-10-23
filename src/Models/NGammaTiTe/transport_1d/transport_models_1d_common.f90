@@ -3,14 +3,6 @@ IMPLICIT NONE
 
 CONTAINS
 
-  MODULE REAL*8 FUNCTION tm1d_smoothstep01(s)
-    REAL*8, INTENT(IN) :: s
-    REAL*8 :: sc
-
-    sc = MAX(MIN(s, 1.d0), 0.d0)
-    tm1d_smoothstep01 = sc*sc*(3.d0 - 2.d0*sc)
-  END FUNCTION tm1d_smoothstep01
-
   MODULE REAL*8 FUNCTION tm1d_axis_ramp(rho, width)
     REAL*8, INTENT(IN) :: rho, width
 
@@ -19,7 +11,7 @@ CONTAINS
     ELSEIF (width <= model_tol .OR. rho >= width) THEN
        tm1d_axis_ramp = 1.d0
     ELSE
-       tm1d_axis_ramp = tm1d_smoothstep01(rho/width)
+       tm1d_axis_ramp = smoothstep01(rho/width)
     END IF
   END FUNCTION tm1d_axis_ramp
 
@@ -36,7 +28,7 @@ CONTAINS
        IF (rho <= rho_start) THEN
           tm1d_edge_cutoff = 1.d0
        ELSE
-          tm1d_edge_cutoff = 1.d0 - tm1d_smoothstep01((rho - rho_start)/width)
+          tm1d_edge_cutoff = 1.d0 - smoothstep01((rho - rho_start)/width)
        END IF
     END IF
   END FUNCTION tm1d_edge_cutoff
