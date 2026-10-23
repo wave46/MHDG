@@ -136,8 +136,11 @@ retain $\Gamma_{p,\mathrm{stab}}$.
 
 If puff/pumping is relocated into elements, its wall terms are removed and
 volume operators use $U$. Absorption remains at the wall. The Bohm momentum
-target uses trace-derived sound speed times element density on its active
+target uses trace-derived sound speed times trace density on its active
 branch; its linearization follows those arguments, with suppression lagged.
+Only outward supersonic flow selects the free-outflow branch. Momentum
+diffusion remains present on both branches, so the active target does not
+impose exactly sonic trace velocity when its diffusive contribution is nonzero.
 
 ## Reading the diagnostics
 

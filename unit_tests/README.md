@@ -27,6 +27,13 @@ executable can run with `mpirun.openmpi -np 2 ./strong_dirichlet_check` to check
 ghost metadata, remote owner indices, prescribed ghost faces and trace exchange.
 It uses generated algebraic fixtures and needs no external case data.
 
+`python3 unit_tests/check_bohm_momentum.py` from the repository root checks
+the 2D temperature-model Bohm trace-density target, independent element/trace
+derivatives, diagonal and full stabilization, and signed outgoing-flow selection.
+It checks sound-speed sensitivity in both stabilization branches, grazing
+incidence and suppression. It compiles extracted production code in a temporary directory
+with gfortran; no solver build, mesh, MPI launch or external data is needed.
+
 `make check-amjuel-extrapolation` uses the current 2D NGammaTiTe-family build
 with `AMJUELSPLINES`. It compares the production rate Jacobian with finite
 differences in density and electron energy below, inside, at and above the

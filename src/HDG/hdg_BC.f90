@@ -1016,7 +1016,7 @@ CONTAINS
       REAL*8                    :: bn
       LOGICAL                   :: ntang
       REAL                      :: tau_stab(Neq,Neq)
-      REAL*8                    :: bohm_suppresion, energy_zero_threshold
+      REAL*8                    :: bohm_suppresion, energy_zero_threshold, bohm_velocity
     energy_zero_threshold=1.e-20
     ! Loop in 1D Gauss points
     DO g = 1,Ng1d
@@ -1083,16 +1083,21 @@ CONTAINS
       !                        to 0 as a function of the angle of incidence
          setval = ABS(upg(g,2))
          sn = SIGN(1.,bn)
+         bohm_velocity = ABS(upg(g,2))
+#ifdef TEMPERATURE
+         ! Only outward sonic/supersonic flow can select the free branch.
+         bohm_velocity = sn*upg(g,2)
+#endif
       delta = 1
          bohm_suppresion = max(ufg(g,3),energy_zero_threshold)/(max(ufg(g,3),energy_zero_threshold)+phys%bohm_energy_thresh)
          IF (ABS(inc) .LE. phys%bohmth) THEN
             setval = sn*SoundSpeed/phys%bohmth*ABS(inc)*bohm_suppresion
             dcs_du = sn*dcs_du/phys%bohmth*ABS(inc)*bohm_suppresion
       ELSE
-            IF (ABS(upg(g,2)) .LE. SoundSpeed/bohm_suppresion) THEN
+            IF (bohm_velocity .LE. SoundSpeed/bohm_suppresion) THEN
             setval = sn*SoundSpeed*bohm_suppresion
                dcs_du = sn*dcs_du*bohm_suppresion
-            ELSE IF (ABS(upg(g,2)) .GT. SoundSpeed/bohm_suppresion) THEN
+            ELSE IF (bohm_velocity .GT. SoundSpeed/bohm_suppresion) THEN
             delta = 0
             !setval = sn*setval
          END IF
@@ -1632,15 +1637,22 @@ CONTAINS
           !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*(1 - delta)*setval*NiNi
           !End modification BC
           !NEW BOHM BC: Impose everywhere a value for velocity
+#ifdef TEMPERATURE
+          elMat%All(ind_ff(ind),ind_ff(ind - 1),iel) = elMat%All(ind_ff(ind),ind_ff(ind - 1),iel) + tau(i,i)*delta*setval*NiNi
+#else
           elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) + tau(i,i)*delta*setval*NiNi
+#endif
           elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*(1. - delta)*NiNi
                  !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*NiNi
-                 ! Target: delta*s(U_hat)*U(1) + (1-delta)*U(2).
-                 ! Its sound-speed sensitivity belongs to trace columns; tau,
-                 ! the branch and energy suppression remain lagged.
+                 ! Temperature models target delta*s(U_hat)*U_hat(1) +
+                 ! (1-delta)*U(2). Tau, branch and suppression remain lagged.
                  DO j = 1,Neqstab
                   indj = j + ind_asf
+#ifdef TEMPERATURE
+                  elMat%All(ind_ff(ind),ind_ff(indj),iel) = elMat%All(ind_ff(ind),ind_ff(indj),iel) + tau(i,i)*delta*dcs_du(j)*ufg(1)*NiNi
+#else
                   elMat%All(ind_ff(ind),ind_ff(indj),iel) = elMat%All(ind_ff(ind),ind_ff(indj),iel) + tau(i,i)*delta*dcs_du(j)*uefg(1)*NiNi
+#endif
                  ENDDO
                  ! No sound-speed affine RHS term: s(U_hat) is homogeneous
                  ! of degree zero (also after its scalar softplus), hence
@@ -1663,13 +1675,24 @@ CONTAINS
           indj = j + ind_asf
                  elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - tau(i,j)*NiNi
           IF (j == 1) THEN
+#ifdef TEMPERATURE
+            ! Apply the trace-density target to the same full-tau column.
+            elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + tau(i,j)*NiNi
+            elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + tau(i,2)*delta*setval*NiNi
+#else
             elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) +&
               &tau(i,j)*NiNi + tau(i,j + 1)*(delta*setval)*NiNi
+#endif
           ELSE IF (j == 2) THEN
             elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + tau(i,j)*(1 - delta)*NiNi
           ELSE
             elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + tau(i,j)*NiNi
           ENDIF
+#ifdef TEMPERATURE
+          ! d[s(U_hat)*U_hat(1)]/dU_hat(j), with tau/branch/suppression fixed.
+          ! The density derivative is above; ds/dU_hat . U_hat = 0.
+          elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + tau(i,2)*delta*ufg(1)*dcs_du(j)*NiNi
+#endif
         END DO
       END DO
     ENDIF
@@ -2022,7 +2045,7 @@ CONTAINS
 #ifdef TEMPERATURE
     IF (face_diagnostics_on) THEN
       diagnostic_plasma_bc = balance_plasma_bc_type( &
-        &momentum_target=DBLE(delta)*setval*uefg(1)+ &
+        &momentum_target=DBLE(delta)*setval*ufg(1)+ &
         &(1.d0-DBLE(delta))*uefg(2), &
         &momentum_split_diffusive_flux=DOT_PRODUCT(MATMUL(Qpr,W2),ng-bn*bg), &
         &ion_energy_split_diffusive_flux= &
