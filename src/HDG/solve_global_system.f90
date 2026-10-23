@@ -39,6 +39,7 @@ CONTAINS
   INTEGER, INTENT(IN) :: ir
 #endif
   TYPE(solver_status_t), INTENT(OUT) :: status
+  ! Return the full linear trial; Newton callers relax U, Q and trace together.
   INTEGER :: backend_error
   REAL, ALLOCATABLE   :: rhspert(:)
   REAL                :: pertamp
@@ -252,7 +253,7 @@ CONTAINS
         ct = ct + 1
         indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
         indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-        sol%u_tilde(indgp) = (1.-numer%dumpnr)*sol%u_tilde(indgp) + numer%dumpnr*aux_sol(indlp)
+        sol%u_tilde(indgp) = aux_sol(indlp)
      END DO
   END IF
   DO itor = 1, ntorass
@@ -268,7 +269,7 @@ CONTAINS
         ct = ct + 1
         indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
         indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-        sol%u_tilde(indgp) = (1.-numer%dumpnr)*sol%u_tilde(indgp) + numer%dumpnr*aux_sol(indlp)
+        sol%u_tilde(indgp) = aux_sol(indlp)
      END DO
      ct = 0
      dd = dd + (N2D*Np2D)*Neq
@@ -279,7 +280,7 @@ CONTAINS
         ct = ct + 1
         indgt = dd + (i - 1)*Nfl*Neq + (/(j, j=0, Neq*Nfl - 1)/)
         indlt = ddl + (ct - 1)*Nfl*Neq + (/(j, j=0, Neq*Nfl - 1)/)
-        sol%u_tilde(indgt) = (1.-numer%dumpnr)*sol%u_tilde(indgt) + numer%dumpnr*aux_sol(indlt)
+        sol%u_tilde(indgt) = aux_sol(indlt)
      END DO
   END DO
   IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .NE. MPIvar%ntor) THEN
@@ -292,7 +293,7 @@ CONTAINS
         ct = ct + 1
         indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
         indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-        sol%u_tilde(indgp) = (1.-numer%dumpnr)*sol%u_tilde(indgp) + numer%dumpnr*aux_sol(indlp)
+        sol%u_tilde(indgp) = aux_sol(indlp)
      END DO
   END IF
 
@@ -307,7 +308,7 @@ CONTAINS
      ct = ct + 1
      indg = (i - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
      indl = (ct - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
-     sol%u_tilde(indg) = (1.-numer%dumpnr)*sol%u_tilde(indg) + numer%dumpnr*aux_sol(indl)
+     sol%u_tilde(indg) = aux_sol(indl)
   END DO
 #endif
 
@@ -317,14 +318,14 @@ CONTAINS
   ! ********* Sequential 2D and 3D ***********
   IF (lssolver%sollib .EQ. 1) THEN
 #ifdef WITH_PASTIX
-     sol%u_tilde(1:matK%n) = (1.-numer%dumpnr)*sol%u_tilde(1:matK%n) + numer%dumpnr*matPASTIX%rhs
+     sol%u_tilde(1:matK%n) = matPASTIX%rhs
 #else
      WRITE (6, *) "Trying to use PASTIX but compiled without option -DWITH_PASTIX"
      STOP
 #endif
   ELSE IF (lssolver%sollib .EQ. 2) THEN
 #ifdef WITH_PSBLAS
-     sol%u_tilde(1:matK%n) = (1.-numer%dumpnr)*sol%u_tilde(1:matK%n) + numer%dumpnr*matPSBLAS%x%get_vect()
+     sol%u_tilde(1:matK%n) = matPSBLAS%x%get_vect()
 #else
      WRITE (6, *) "Trying to use PSBLAS but compiled without option -DWITH_PSBLAS"
      STOP
@@ -333,7 +334,7 @@ CONTAINS
 #ifdef WITH_PETSC
      ALLOCATE (aux_sol(matK%n))
      CALL PETSC_retrieve_array(matPETSC%solPETSC_vec, aux_sol, matK%n)
-     sol%u_tilde(1:matK%n) = (1.-numer%dumpnr)*sol%u_tilde(1:matK%n) + numer%dumpnr*aux_sol
+     sol%u_tilde(1:matK%n) = aux_sol
      DEALLOCATE(aux_sol)
 #else
      WRITE (6, *) "Trying to use PETSC but compiled without option -DWITH_PETSC"
@@ -380,7 +381,7 @@ CONTAINS
         errsol = MAX(errsol, ABS(u_tilde_exact(i) - sol%u_tilde(i)))
      ENDDO
 #endif
-     errsol = errsol/pertamp/numer%dumpnr
+     errsol = errsol/pertamp
 #ifdef PARALL
      CALL MPI_ALLREDUCE(MPI_IN_PLACE, errsol, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
 #endif
@@ -587,7 +588,7 @@ CONTAINS
           ct = ct + 1
           indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
           indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-          sol%u_tilde(indgp) = (1.-numer%dumpnr)*sol%u_tilde(indgp) + numer%dumpnr*aux_sol(indlp)
+          sol%u_tilde(indgp) = aux_sol(indlp)
        END DO
     END IF
     DO itor = 1, ntorass
@@ -603,7 +604,7 @@ CONTAINS
           ct = ct + 1
           indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
           indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-          sol%u_tilde(indgp) = (1.-numer%dumpnr)*sol%u_tilde(indgp) + numer%dumpnr*aux_sol(indlp)
+          sol%u_tilde(indgp) = aux_sol(indlp)
        END DO
        ct = 0
        dd = dd + (N2D*Np2D)*Neq
@@ -614,7 +615,7 @@ CONTAINS
           ct = ct + 1
           indgt = dd + (i - 1)*Nfl*Neq + (/(j, j=0, Neq*Nfl - 1)/)
           indlt = ddl + (ct - 1)*Nfl*Neq + (/(j, j=0, Neq*Nfl - 1)/)
-          sol%u_tilde(indgt) = (1.-numer%dumpnr)*sol%u_tilde(indgt) + numer%dumpnr*aux_sol(indlt)
+          sol%u_tilde(indgt) = aux_sol(indlt)
        END DO
     END DO
     IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .NE. MPIvar%ntor) THEN
@@ -627,7 +628,7 @@ CONTAINS
           ct = ct + 1
           indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
           indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-          sol%u_tilde(indgp) = (1.-numer%dumpnr)*sol%u_tilde(indgp) + numer%dumpnr*aux_sol(indlp)
+          sol%u_tilde(indgp) = aux_sol(indlp)
        END DO
     END IF
 
@@ -641,7 +642,7 @@ CONTAINS
        ct = ct + 1
        indg = (i - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
        indl = (ct - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
-       sol%u_tilde(indg) = (1.-numer%dumpnr)*sol%u_tilde(indg) + numer%dumpnr*aux_sol(indl)
+       sol%u_tilde(indg) = aux_sol(indl)
     END DO
 #endif
 
@@ -651,14 +652,14 @@ CONTAINS
     ! ********* Sequential 2D and 3D ***********
     IF (lssolver%sollib .EQ. 1) THEN
 #ifdef WITH_PASTIX
-       sol%u_tilde(1:matK%n) = (1.-numer%dumpnr)*sol%u_tilde(1:matK%n) + numer%dumpnr*matPASTIX%rhs
+       sol%u_tilde(1:matK%n) = matPASTIX%rhs
 #else
        WRITE (6, *) "Trying to use PASTIX but compiled without option -DWITH_PASTIX"
        STOP
 #endif
     ELSE IF (lssolver%sollib .EQ. 2) THEN
 #ifdef WITH_PSBLAS
-       sol%u_tilde(1:matK%n) = (1.-numer%dumpnr)*sol%u_tilde(1:matK%n) + numer%dumpnr*matPSBLAS%x%get_vect()
+       sol%u_tilde(1:matK%n) = matPSBLAS%x%get_vect()
 #else
        WRITE (6, *) "Trying to use PSBLAS but compiled without option -DWITH_PSBLAS"
        STOP
@@ -667,7 +668,7 @@ CONTAINS
 #ifdef WITH_PETSC
        ALLOCATE (aux_sol(matK%n))
        CALL PETSC_retrieve_array(matPETSC%solPETSC_vec, aux_sol, matK%n)
-       sol%u_tilde(1:matK%n) = (1.-numer%dumpnr)*sol%u_tilde(1:matK%n) + numer%dumpnr*aux_sol
+       sol%u_tilde(1:matK%n) = aux_sol
        DEALLOCATE(aux_sol)
 #else
        WRITE (6, *) "Trying to use PETSC but compiled without option -DWITH_PETSC"

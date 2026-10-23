@@ -631,6 +631,7 @@ CONTAINS
   SUBROUTINE compute_newton_update(status, accepted)
     TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
     TYPE(solver_status_t), INTENT(OUT) :: status
+    REAL*8, ALLOCATABLE :: previous_u(:), previous_q(:), previous_trace(:)
 
     ! update nonconstant dumping factor
     CALL update_dumpnr()
@@ -653,17 +654,26 @@ CONTAINS
     CALL hdg_Mapping()
     ! Assembly the global matrix
     CALL hdg_Assembly()
-    ! Solve linear system
+    ! Assembly has already imposed prescribed traces. Snapshot after that so
+    ! strong boundary values are not relaxed away from their prescribed value.
+    previous_u = sol%u
+    previous_q = sol%q
+    previous_trace = sol%u_tilde
+
+    ! Obtain the complete condensed Newton trial before relaxing any field.
 #ifdef WITH_PETSC
     CALL solve_global_system(status, ir)
 #else
     CALL solve_global_system(status)
 #endif
+    IF (status%outcome == solve_success) CALL compute_element_solution()
+    CALL finish_newton_update(status, previous_u, previous_q, previous_trace, numer%dumpnr)
     IF (status%outcome /= solve_success) RETURN
-    ! Compute element-by-element solution
-    CALL compute_element_solution()
-    CALL check_newton_values(status)
-    IF (status%outcome /= solve_success) RETURN
+#ifdef PARALL
+    ! The full trial trace was exchanged before local reconstruction. Refresh
+    ! ghost traces from their owner again after relaxing the complete state.
+    IF (numer%dumpnr /= 1.d0) CALL exchangeSol()
+#endif
     IF (adapt%adaptivity .AND. restart_adapt) THEN
        CALL adaptivity(accepted=accepted)
        DEALLOCATE(uiter)
@@ -671,6 +681,28 @@ CONTAINS
        uiter = 0.
     ENDIF
   END SUBROUTINE compute_newton_update
+
+  SUBROUTINE finish_newton_update(status, previous_u, previous_q, previous_trace, relaxation)
+    TYPE(solver_status_t), INTENT(INOUT) :: status
+    REAL*8, INTENT(IN) :: previous_u(:), previous_q(:), previous_trace(:), relaxation
+
+    IF (status%outcome == solve_success) CALL check_newton_values(status)
+    IF (status%outcome == solve_success) THEN
+       IF (relaxation /= 1.d0) THEN
+          sol%u = (1.d0-relaxation)*previous_u + relaxation*sol%u
+          sol%q = (1.d0-relaxation)*previous_q + relaxation*sol%q
+          sol%u_tilde = (1.d0-relaxation)*previous_trace + relaxation*sol%u_tilde
+       ENDIF
+       CALL check_newton_values(status)
+    ENDIF
+    ! A failed linear solve or nonfinite reconstructed trial is never accepted
+    ! partially, on any rank. This also protects retries on the current mesh.
+    IF (status%outcome /= solve_success) THEN
+       sol%u = previous_u
+       sol%q = previous_q
+       sol%u_tilde = previous_trace
+    ENDIF
+  END SUBROUTINE finish_newton_update
 
   SUBROUTINE check_newton_values(status)
     TYPE(solver_status_t), INTENT(OUT) :: status

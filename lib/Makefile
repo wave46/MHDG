@@ -16,6 +16,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-divergence-refinement
 .PHONY : check-equilibrium-series
 .PHONY : check-linear-solve-status
+.PHONY : check-newton-damping
 .PHONY : check-bdf-coefficients
 .PHONY : check-strong-dirichlet
 .PHONY : check-amjuel-extrapolation
@@ -63,6 +64,7 @@ clean:
 	$(RM) adaptive_checkpoint_check
 	$(RM) divergence_refinement_check
 	$(RM) bdf_coefficients_check linear_solve_status_check
+	$(RM) newton_damping_check
 	$(RM) strong_dirichlet_check
 	$(RM) amjuel_extrapolation_check
 	$(RM) neutral_energy_source_check
@@ -180,6 +182,13 @@ check-divergence-refinement : MHDG
 check-linear-solve-status : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_linear_solve_status.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o linear_solve_status_check $(LIB)
 	OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 ./linear_solve_status_check
+
+newton_damping_check : MHDG
+# Expand after MHDG builds objects; Make's wildcard cache can predate that build.
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_newton_damping.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(shell printf '%s\n' *.o)) -o newton_damping_check $(LIB)
+
+check-newton-damping : newton_damping_check
+	OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=1 ./newton_damping_check
 
 # Exercise the production 2D temperature-model initializer for both flux signs.
 check-initial-profile : MHDG

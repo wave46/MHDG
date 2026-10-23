@@ -179,6 +179,14 @@ controls `dumpnr_min`, `dumpnr_max`, `dumpnr_width` and `dumpnr_n0` belong
 in `NUMER_LST`; they set the Newton damping profile. Mesh changes and
 physical-time retries have their own configured recovery rules.
 
+In the main solver, the same factor relaxes the complete Newton trial for
+the conservative variables `u`, gradients `q` and face trace `u_tilde`.
+The solver first computes the undamped trace and reconstructs the full local
+trial, then blends all three arrays with their previous iterate. Prescribed
+trace values remain imposed. A factor of one accepts the full trial; failed
+linear solves or nonfinite trials restore the previous state. This changes
+the iteration path, not the boundary conditions or the converged equations.
+
 ## Linear-solver selection
 
 The selected solver must be available in the executable's build. For PETSc
