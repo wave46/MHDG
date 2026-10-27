@@ -1204,6 +1204,7 @@ CONTAINS
       ENDIF
       CALL HDF5_logical_saving(group_id2, phys%apply_trim, 'apply_trim')
       CALL HDF5_logical_saving(group_id2, phys%recycle_plasma_diffusion, 'recycle_plasma_diffusion')
+      CALL HDF5_logical_saving(group_id2, phys%bohm_momentum_always_include_diffusion, 'bohm_momentum_always_include_diffusion')
       CALL HDF5_real_saving(group_id2, phys%Zeff, 'Zeff')
       CALL HDF5_real_saving(group_id2, phys%Pohmic, 'ohmic_coeff')
       CALL HDF5_real_saving(group_id2, phys%Re_pump, 'recycling_pump')

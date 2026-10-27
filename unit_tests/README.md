@@ -27,11 +27,13 @@ executable can run with `mpirun.openmpi -np 2 ./strong_dirichlet_check` to check
 ghost metadata, remote owner indices, prescribed ghost faces and trace exchange.
 It uses generated algebraic fixtures and needs no external case data.
 
-`python3 unit_tests/check_bohm_momentum.py` checks the smooth 2D Bohm blend.
+`python3 unit_tests/check_bohm_momentum.py` checks the smooth 2D Bohm blend
+with full momentum diffusion and with its optional free-weight multiplier.
 It compiles the boundary coefficient module and unmodified selector/assembly
 blocks, then compares independent residuals, element/trace/gradient Jacobian
 columns, absolute Newton RHS reconstruction and convex weights, using
-automatic diagonal stabilization and a prescribed per-equation tau fixture. Full direct and W2 momentum diffusion remain in all branches.
+automatic diagonal stabilization and a prescribed per-equation tau fixture. Both modes check complete direct and W2 diffusion, including the
+weight derivative and affine term in the suppressed mode.
 Add `--neutral-gamma` for its shared active weight and lagged velocity,
 or `--isothermal` for the unchanged hard selector and target.
 The tests use named fixtures and separate residual, derivative and endpoint

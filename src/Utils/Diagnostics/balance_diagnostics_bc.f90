@@ -90,7 +90,7 @@ CONTAINS
          &density_diffusion,integration_weight*this%rate_scale(equation_n))
     CALL accumulate_momentum_closure(this,state,target,gradient,normal, &
          &magnetic_direction,magnetic_normal,tau,diffusion_iso,diffusion_ani, &
-         &plasma%momentum_split_diffusive_flux, &
+         &plasma%momentum_split_diffusive_flux,plasma%momentum_diffusion_factor, &
          &integration_weight*this%rate_scale(equation_nu))
     CALL accumulate_energy_closure(this,equation_nEi,state,target,gradient, &
          &normal, &
@@ -181,20 +181,20 @@ CONTAINS
 
   SUBROUTINE accumulate_momentum_closure(this, state, target, gradient, normal, &
        &magnetic_direction, magnetic_normal, tau, diffusion_iso, &
-       &diffusion_ani, split_diffusion, coefficient)
+       &diffusion_ani, split_diffusion, diffusion_factor, coefficient)
     CLASS(balance_accumulator_type), INTENT(INOUT) :: this
     REAL*8, INTENT(IN) :: state(:), target(:), gradient(:,:), normal(:)
     REAL*8, INTENT(IN) :: magnetic_direction(:), magnetic_normal
     REAL*8, INTENT(IN) :: tau(:,:), diffusion_iso(:,:), diffusion_ani(:,:)
-    REAL*8, INTENT(IN) :: split_diffusion, coefficient
+    REAL*8, INTENT(IN) :: split_diffusion, diffusion_factor, coefficient
     REAL*8 :: diffusion, stabilization
 
     diffusion = perpendicular_diffusive_flux(equation_nu,gradient,normal, &
          &magnetic_direction,magnetic_normal,diffusion_iso,diffusion_ani)
     stabilization = DOT_PRODUCT(tau(equation_nu,:),state-target)
-    CALL add_bc_value(this,equation_nu,term_diffusion,diffusion*coefficient)
+    CALL add_bc_value(this,equation_nu,term_diffusion,diffusion_factor*diffusion*coefficient)
     CALL add_bc_value(this,equation_nu,term_split_diffusion, &
-         &split_diffusion*coefficient)
+         &diffusion_factor*split_diffusion*coefficient)
     CALL add_bc_value(this,equation_nu,term_tau_stabilization_inward, &
          &stabilization*coefficient)
   END SUBROUTINE accumulate_momentum_closure

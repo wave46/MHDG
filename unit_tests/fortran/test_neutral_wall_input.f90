@@ -23,4 +23,5 @@ PROGRAM test_neutral_wall_input
   WRITE (*,'(A,1X,L1)') 'RECYCLE_PLASMA_DIFFUSION', phys%recycle_plasma_diffusion
   WRITE (*,'(A,1X,I0)') 'STABILIZATION_TYPE', numer%stab
   WRITE (*,'(A,5(1X,ES24.16))') 'STABILIZATION_TAU', numer%tau(1:5)
+  WRITE (*,'(A,1X,L1)') 'BOHM_MOMENTUM_ALWAYS_INCLUDE_DIFFUSION', phys%bohm_momentum_always_include_diffusion
 END PROGRAM test_neutral_wall_input

@@ -263,6 +263,7 @@
     ! ****** Boundary threshold for Bohm
     bohmth              = 0.01           ! threshold for imposing the bohm boundary condition !for circ put 0.1 0.02
     bohm_energy_thresh  = 2e-4           ! Dimensionless nEi scale; 2e-4 at n=1e17 m^-3: Ei=0.080 eV/ion, Ti=0.053 eV at zero flow
+    bohm_momentum_always_include_diffusion = .true. ! Include full momentum diffusion in all Bohm branches
     ! ****** Boundary coefficients for the Bohm boundary condition of the temperature equations:
     Gmbohm              = 2.5           ! gamma for Bohm boundary condition for energy equation (usually 7) and for ions energy equation (usually 2.5)
     Gmbohme             = 4.5           ! gamma for Bohm boundary condition for electron energy equation (usually 4.5)

@@ -84,13 +84,27 @@ For diagonal stabilization, the momentum equation is
 
 $$
 B_2=\tau_{22}\left[p_ss_nc_s\widehat U_1+p_FU_2-\widehat U_2\right]
--g_2(\widehat U,Q)=0.
+-r_g g_2(\widehat U,Q)=0,\qquad
+r_g=\begin{cases}1,&\texttt{bohm\_momentum\_always\_include\_diffusion=true},\\
+p_F,&\texttt{false}.\end{cases}
 $$
 
-$g_2$ includes direct perpendicular momentum diffusion and the complete
-$W_2$ density-gradient contribution. Full momentum diffusion is retained in
-all branches. Consequently, diffusion can offset the target velocity;
-the imposed branch is a mixed condition, not exact trace Mach equality.
+$g_2$ is the full normal diffusive momentum flux. `bohm_momentum_always_include_diffusion` defaults
+to `true`: full diffusion remains in all branches and can offset the target
+velocity. The imposed branch is then a mixed condition. This changes the
+boundary equation, not just the Newton iteration: on the fully imposed
+branch,
+
+$$
+M=\beta A-\frac{s_ng_2}{\tau_{22}\widehat U_1c_s}.
+$$
+
+Diffusion can shift Mach below or above the target $\beta A$, including
+below one when $A=\beta=1$. With `false`, the
+complete diffusion term is suppressed on the imposed branch, restored across
+the Mach transition and fully retained on the free branch. At $p_F=0$, the
+weak condition reduces to the reduced trace-velocity target. The flag also
+applies to isothermal Bohm faces, whose hard selector and target are unchanged.
 
 | State | $p_0$ | $p_s$ | $p_F$ | Stabilization target for momentum |
 |---|---|---|---|---|
@@ -103,7 +117,9 @@ the imposed branch is a mixed condition, not exact trace Mach equality.
 
 Even in the transition, angle and energy reduce the imposed target; they do
 not prescribe a larger Mach.
-The same $-g_2$ appears in every row. This is a numerical wall regularization,
+For the default retained-diffusion mode, the same $-g_2$ appears in every
+case above. In the optional suppressed mode its multiplier is the $p_F$ column.
+This is a numerical wall regularization,
 not a kinetic sheath model. Energy sheath conditions and recycling retain
 their existing flux laws. Isothermal models keep their previous hard selector
 and target.
@@ -117,14 +133,15 @@ momentum terms are
 
 $$
 \frac{\partial B_2}{\partial U_j}=\tau_{22}f\delta_{j2},\qquad
-\frac{\partial B_2}{\partial Q}=-\frac{\partial g_2}{\partial Q},
+\frac{\partial B_2}{\partial Q}=-r_g\frac{\partial g_2}{\partial Q},
 $$
 
 $$
 \frac{\partial B_2}{\partial\widehat U_j}
 =\tau_{22}\left[c\delta_{j1}+\widehat U_1\frac{\partial c}{\partial\widehat U_j}
 +U_2\frac{\partial f}{\partial\widehat U_j}-\delta_{j2}\right]
--\frac{\partial g_2}{\partial\widehat U_j}.
+-r_g\frac{\partial g_2}{\partial\widehat U_j}
+-g_2\frac{\partial r_g}{\partial\widehat U_j}.
 $$
 
 | Contribution | Destination |
@@ -133,7 +150,14 @@ $$
 | Trace momentum, target density, sound speed and weight derivatives | `All` |
 | Direct and $W_2$ gradient derivatives | `Alq` |
 | $W_2$ trace derivatives | `All` |
+| Optional diffusion-weight derivative $-g_2\,\partial p_F/\partial\widehat U$ | `All`; its contraction with $\widehat U$ also enters affine `fh` |
 | $\tau_{22}(\widehat U_1\,\partial c/\partial\widehat U+U_2\,\partial f/\partial\widehat U)\cdot\widehat U$ | Affine `fh` |
+
+The same $r_g$ scales direct and $W_2$ diffusion and all their state/gradient
+derivatives. Since $p_F=1-\delta$, the optional coefficient derivative is
+$+g_2\,\partial\delta/\partial\widehat U$. It adds no element-state
+column: the weights depend on the trace. Balance diagnostics use the same
+multiplier for both diffusion contributions.
 
 The absolute Newton RHS is $Jx-B$. Sound speed has degree zero, so
 $(\partial c_s/\partial\widehat U)\cdot\widehat U=0$. Suppression has

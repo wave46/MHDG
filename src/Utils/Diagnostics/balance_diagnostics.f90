@@ -128,6 +128,7 @@ MODULE balance_diagnostics
   ! dimensional scaling, target-aware tau, and equation bookkeeping.
   TYPE, PUBLIC :: balance_plasma_bc_type
      REAL*8 :: momentum_target = 0.d0
+     REAL*8 :: momentum_diffusion_factor = 1.d0
      REAL*8 :: momentum_split_diffusive_flux = 0.d0
      REAL*8 :: ion_energy_split_diffusive_flux = 0.d0
      REAL*8 :: electron_energy_split_diffusive_flux = 0.d0

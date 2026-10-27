@@ -1516,7 +1516,7 @@ CONTAINS
     integer*4        :: ind(Npfl),indi(Npfl),indj(Npfl),ind_jf(Npfl),ind_kf(Npfl)
     real*8           :: Qpr(Ndim,Neq), recycling_coeff,  cryopump_coeff,puff_coeff
     real*8           :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
-    real*8           :: target_affine
+    real*8           :: momentum_diffusion_factor, momentum_diffusive_flux, target_affine
     TYPE(balance_plasma_bc_type) :: diagnostic_plasma_bc
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
 #ifdef TEMPERATURE
@@ -1565,6 +1565,9 @@ CONTAINS
 
     ! Compute Q^T^(k-1)
         Qpr = RESHAPE(qfg,(/Ndim,Neq/))
+
+    momentum_diffusion_factor = 1.d0
+    IF (.NOT. phys%bohm_momentum_always_include_diffusion) momentum_diffusion_factor = free_weight
 
     ! Split diffusion matrices/vectors for the momentum equation
     CALL compute_W2(ufg,W2,diffiso(1,1),diffiso(2,2))
@@ -1756,18 +1759,19 @@ CONTAINS
           indi = ind_asf + k
           indj = ind_ash + idm + (k - 1)*Ndim
           ! Non-tangent case
-          elMat%Alq(ind_ff(indi),ind_fG(indj),iel)=elMat%Alq(ind_ff(indi),ind_fG(indj),iel)-&
-            &NiNi*(ng(idm)*diffiso(k,k)-bn*bg(idm)*diffani(k,k) )
+          kmult = NiNi*(ng(idm)*diffiso(k,k)-bn*bg(idm)*diffani(k,k))
+          IF (k == 2) kmult = momentum_diffusion_factor*kmult
+          elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - kmult
             IF(k == 2) THEN
               ! Assembly LQ
               j = 1 ! all other terms are 0 anyway in vector W2
               ind_kf = ind_ash + idm + (j - 1)*Ndim
-               kmult = NiNi*W2(j)*(ng(idm) - bn*bg(idm))
+               kmult = momentum_diffusion_factor*NiNi*W2(j)*(ng(idm) - bn*bg(idm))
                elMat%Alq(ind_ff(indi),ind_fG(ind_kf),iel) = elMat%Alq(ind_ff(indi),ind_fG(ind_kf),iel) - kmult
             ! Assembly LU
                DO j=1,Neq
                  ind_jf = ind_asf+j
-                   kmult = QdW2(idm,j)*NiNi*(ng(idm)-bn*bg(idm))
+                   kmult = momentum_diffusion_factor*QdW2(idm,j)*NiNi*(ng(idm)-bn*bg(idm))
                        elMat%ALL(ind_ff(indi),ind_ff(ind_jf),iel)  = elMat%ALL(ind_ff(indi),ind_ff(ind_jf),iel) - kmult
                END DO
 #ifdef TEMPERATURE
@@ -1823,10 +1827,29 @@ CONTAINS
           indi = ind_asf + k
           indj = ind_ash + idm + (k - 1)*Ndim
           ! Tangent case
-          elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - NiNi*ng(idm)
+          kmult = NiNi*ng(idm)
+          IF (k == 2) kmult = momentum_diffusion_factor*kmult
+          elMat%Alq(ind_ff(indi),ind_fG(indj),iel) = elMat%Alq(ind_ff(indi),ind_fG(indj),iel) - kmult
         END DO
       END DO
     ENDIF
+
+    ! Begin momentum weight derivative: d[-(1-delta)*g2]/dU_hat.
+    IF (.NOT. phys%bohm_momentum_always_include_diffusion) THEN
+      momentum_diffusive_flux = DOT_PRODUCT(Qpr(:,2),ng)
+      IF (ntang) momentum_diffusive_flux = &
+           DOT_PRODUCT(Qpr(:,2),diffiso(2,2)*ng-bn*diffani(2,2)*bg) + &
+           DOT_PRODUCT(MATMUL(Qpr,W2),ng-bn*bg)
+      indi = 2 + ind_asf
+      DO j = 1,Neqstab
+        indj = j + ind_asf
+        elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + &
+             momentum_diffusive_flux*ddelta_du(j)*NiNi
+      ENDDO
+      elMat%fh(ind_ff(indi),iel) = elMat%fh(ind_ff(indi),iel) + &
+           momentum_diffusive_flux*DOT_PRODUCT(ddelta_du,ufg)*Ni
+    ENDIF
+    ! End momentum weight derivative.
 
 #ifdef VORTICITY
     IF (ntang) THEN
@@ -1958,6 +1981,7 @@ CONTAINS
       diagnostic_plasma_bc = balance_plasma_bc_type( &
         &momentum_target=target_coefficient*ufg(1)+ &
         &free_weight*uefg(2), &
+        &momentum_diffusion_factor=momentum_diffusion_factor, &
         &momentum_split_diffusive_flux=DOT_PRODUCT(MATMUL(Qpr,W2),ng-bn*bg), &
         &ion_energy_split_diffusive_flux= &
         &DOT_PRODUCT(MATMUL(Qpr,W3),ng-bn*bg), &

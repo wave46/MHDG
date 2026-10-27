@@ -287,6 +287,7 @@ MODULE types
      REAL*8                    :: neutral_flux_limiter_fs_fraction ! Fraction of free-streaming flux
      REAL*8                    :: neutral_flux_limiter_fs_flux_min ! Minimum free-streaming flux
      LOGICAL                   :: apply_trim ! Apply TRIM reflection coefficient
+     LOGICAL                   :: bohm_momentum_always_include_diffusion = .TRUE. ! Include full momentum diffusion in every Bohm branch
      LOGICAL                   :: recycle_plasma_diffusion = .FALSE. ! Legacy raw ion diffusion in Bohm recycling
      REAL*8,DIMENSION(22)      :: E           ! Energy values from TRIM
      REAL*8,DIMENSION(19)      :: theta       ! Incidence angle values from TRIM

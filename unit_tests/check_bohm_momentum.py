@@ -97,6 +97,8 @@ def production_wrapper(model):
         "SELECTOR": "!" + routine(boundary, "set_Bohm_bc").split(
             "! Bohm selector:", 1)[1].split("! Shape functions", 1)[0],
         "STABILIZATION": assembly.split("! Begin diagonal Bohm stabilization", 1)[1].split("! End diagonal Bohm stabilization", 1)[0],
+        "DIFFUSION_FACTOR": assembly.split("    momentum_diffusion_factor =", 1)[1].split("! Split diffusion", 1)[0],
+        "WEIGHT_DERIVATIVE": "!" + assembly.split("! Begin momentum weight derivative:", 1)[1].split("! End momentum weight derivative.", 1)[0],
         "DIFFUSION": conditional_block(assembly.split("! Perpendicular diffusion", 1)[1]),
         "DIAGNOSTIC_TYPE": re.search(
             r"  TYPE, PUBLIC :: balance_plasma_bc_type.*?  END TYPE balance_plasma_bc_type",
@@ -104,6 +106,9 @@ def production_wrapper(model):
         "DIAGNOSTIC_HELPERS": flux.replace("MODULE FUNCTION", "FUNCTION", 1) + "\n" + routine(
             (diagnostics / "balance_diagnostics_bc.f90").read_text(), "accumulate_momentum_closure"),
     }
+    blocks["DIFFUSION_FACTOR"] = "    momentum_diffusion_factor =" + blocks["DIFFUSION_FACTOR"]
+    factor = re.search(r"momentum_diffusion_factor=(.*?), &", boundary_path.read_text())[1]
+    blocks["DIAGNOSTIC_FACTOR"] = "plasma%momentum_diffusion_factor=" + factor
     if not model.isothermal:
         expression = re.search(r"momentum_target=(.*?), &", boundary_path.read_text(), re.S)[1]
         blocks["DIAGNOSTIC_TARGET"] = "target=" + expression.replace("&", "").replace("\n", "")
@@ -122,10 +127,10 @@ class BohmProbe:
         self.iso = np.diag(np.linspace(.3, .8, neq))
         self.ani = np.diag(np.linspace(.06, .12, neq))
         array = np.ctypeslib.ndpointer(dtype=np.float64, flags="F_CONTIGUOUS")
-        library.probe.argtypes = [array]*8 + [ctypes.c_double]*3 + [ctypes.c_int] + [array]*7
+        library.probe.argtypes = [array]*8 + [ctypes.c_double]*3 + [ctypes.c_int]*2 + [array]*7
         library.probe.restype = None
 
-    def evaluate(self, fixture, element, tau, tangent):
+    def evaluate(self, fixture, element, tau, tangent, retain):
         neq = self.model.neq
         ju, jh = [np.zeros((neq, neq), order="F") for _ in range(2)]
         jq = np.zeros((neq, 2*neq), order="F")
@@ -134,7 +139,7 @@ class BohmProbe:
                   fixture.magnetic, NORMAL, tau)
         lag_velocity = fixture.trace[1]/fixture.trace[0]
         self.library.probe(*[np.asfortranarray(a) for a in arrays], fixture.angle,
-                           fixture.energy_threshold, lag_velocity, tangent,
+                           fixture.energy_threshold, lag_velocity, tangent, retain,
                            ju, jh, jq, rhs, weights, target, diagnostic)
         return ju, jh, jq, rhs, weights, target[0], diagnostic
 
@@ -180,7 +185,7 @@ def reference_target(model, fixture, element, trace):
     return weights, target
 
 
-def reference_residual(probe, fixture, element, trace, gradient, tau, tangent):
+def reference_residual(probe, fixture, element, trace, gradient, tau, tangent, retain):
     model = probe.model
     weights, momentum = reference_target(model, fixture, element, trace)
     target = element.copy()
@@ -192,6 +197,8 @@ def reference_residual(probe, fixture, element, trace, gradient, tau, tangent):
         flux = NORMAL @ gradient
     if model.neutral_gamma:
         flux[4] = 0.  # Common assembly skips neutral density.
+    if not retain:
+        flux[1] *= weights[2]
     return tau @ (target-trace) - flux
 
 
@@ -248,15 +255,15 @@ def special_fixtures(model):
         yield Fixture('Mach support endpoint', trace, .1*NORMAL, .1, 0., False)
 
 
-def check_case(probe, fixture, stabilization, tangent, results):
+def check_case(probe, fixture, stabilization, tangent, retain, results):
     neq = probe.model.neq
     trace = fixture.trace
     element = trace*np.linspace(.93, 1.07, neq)
     tau = np.diag(np.linspace(.12, .22, neq))
     if stabilization == 1:
         tau = np.diag(.11*np.arange(1, neq+1))
-    ju, jh, jq, rhs, weights, target, diagnostic = probe.evaluate(fixture, element, tau, tangent)
-    exact = reference_residual(probe, fixture, element, trace, probe.gradient, tau, tangent)
+    ju, jh, jq, rhs, weights, target, diagnostic = probe.evaluate(fixture, element, tau, tangent, retain)
+    exact = reference_residual(probe, fixture, element, trace, probe.gradient, tau, tangent, retain)
     expected_weights, expected_target = reference_target(probe.model, fixture, element, trace)
     reconstructed = ju @ element + jh @ trace + jq @ probe.gradient.ravel(order="F") - rhs
     results.residual = max(results.residual, max(abs(reconstructed-exact)))
@@ -273,16 +280,16 @@ def check_case(probe, fixture, stabilization, tangent, results):
     if probe.model.isothermal:
         derivatives = derivatives and abs(abs(trace[1]/trace[0])-1.) > .1
     if derivatives:
-        check_jacobian(probe, fixture, element, tau, tangent, np.column_stack((ju, jh, jq)), results)
+        check_jacobian(probe, fixture, element, tau, tangent, retain, np.column_stack((ju, jh, jq)), results)
 
 
-def check_jacobian(probe, fixture, element, tau, tangent, jacobian, results):
+def check_jacobian(probe, fixture, element, tau, tangent, retain, jacobian, results):
     neq = probe.model.neq
     x = np.r_[element, fixture.trace, probe.gradient.ravel(order="F")]
 
     def value(state):
         return reference_residual(probe, fixture, state[:neq], state[neq:2*neq],
-                                  state[2*neq:].reshape((2, neq), order="F"), tau, tangent)
+                                  state[2*neq:].reshape((2, neq), order="F"), tau, tangent, retain)
 
     for column in range(len(x)):
         # A sub-floor energy change is unresolvable in this whole-row difference.
@@ -299,44 +306,45 @@ def check_jacobian(probe, fixture, element, tau, tangent, jacobian, results):
         results.columns += 1
 
 
-def check_mach_endpoints(probe):
+def check_mach_endpoints(probe, retain):
     for mach in [1., 1.+MACH_WIDTH]:
         trace = mach_state(probe.model.neq, 1., mach, density=1., cs=1.)
         fixture = Fixture('Mach endpoint tangent', trace, .2*NORMAL, .1, 0.)
         element = .97*trace
         tau = np.diag(np.linspace(.12, .22, probe.model.neq))
-        analytic = probe.evaluate(fixture, element, tau, 0)[1][:, 1]
+        analytic = probe.evaluate(fixture, element, tau, 0, retain)[1][:, 1]
         errors = []
         # Crossing a clipped cubic's C1 endpoint gives first-order FD convergence.
         for step in [1.e-4, 1.e-5, 1.e-6]:
             plus, minus = trace.copy(), trace.copy()
             plus[1] += step
             minus[1] -= step
-            fp = reference_residual(probe, fixture, element, plus, probe.gradient, tau, 0)
-            fm = reference_residual(probe, fixture, element, minus, probe.gradient, tau, 0)
+            fp = reference_residual(probe, fixture, element, plus, probe.gradient, tau, 0, retain)
+            fm = reference_residual(probe, fixture, element, minus, probe.gradient, tau, 0, retain)
             errors.append(np.max(abs((fp-fm)/(2.*step)-analytic)))
         assert errors[1] < .2*errors[0] and errors[2] < .2*errors[1], errors
 
 
-def check_prescribed_stabilization(probe, results):
+def check_prescribed_stabilization(probe, retain, results):
     trace = mach_state(probe.model.neq, 1., 2.+MACH_WIDTH*.5)
     fixture = Fixture('prescribed per-equation tau', trace, .025*NORMAL, .1,
                       trace[2], derivatives=False)
-    check_case(probe, fixture, 1, 0, results)
+    check_case(probe, fixture, 1, 0, retain, results)
 
 
 def check_model(model):
     results = Results()
     fixtures = [*transition_fixtures(model), *special_fixtures(model)]
     with compiled_probe(model) as probe:
-        for fixture, tangent in product(fixtures, [0, 1]):
+        for fixture, tangent, retain in product(fixtures, [0, 1], [True, False]):
             try:
-                check_case(probe, fixture, 5, tangent, results)
+                check_case(probe, fixture, 5, tangent, retain, results)
             except AssertionError as error:
-                raise AssertionError(f"{fixture.label}; stab=5, tangent={tangent}") from error
-        check_prescribed_stabilization(probe, results)
-        if not model.isothermal:
-            check_mach_endpoints(probe)
+                raise AssertionError(f"{fixture.label}; stab=5, tangent={tangent}, retain={retain}") from error
+        for retain in [True, False]:
+            check_prescribed_stabilization(probe, retain, results)
+            if not model.isothermal:
+                check_mach_endpoints(probe, retain)
     configuration = "optimized" if model.optimized else "bounds-checked"
     print(f"Bohm PASS ({configuration}): {results.states} states, {results.columns} derivative columns; "
           f"max FD={results.derivative:.3g}, residual={results.residual:.3g}, "
