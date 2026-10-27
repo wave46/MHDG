@@ -40,6 +40,12 @@ differences in density and electron energy below, inside, at and above the
 temperature interval, with in-range and clamped densities. It also checks the
 existing zero-rate cutoff. It needs no MPI launch or external case data.
 
+`make check-energy-conductivity` checks the production ion/electron conductivity
+values and derivatives at negative, zero, floored, ordinary and capped specific
+energies. It covers active-branch derivatives at the floor/cap, the convergence
+test's cap bypass, density/momentum couplings and degree-zero homogeneity.
+It uses the current NGammaTiTe-family configuration without mesh or case data.
+
 `make check-heat-flux-limiter` uses the current NGammaTiTe-family configuration.
 It compares ion/electron limited-flux derivatives with finite differences and
 checks reconstruction from the Jacobian and affine term in ordinary,

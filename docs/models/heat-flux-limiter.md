@@ -1,63 +1,72 @@
 # Parallel heat-flux limiter
 
-For ions and electrons, the conductive heat flux is
+For ions and electrons, parallel conduction follows the Spitzer–Härm law,
+with a limiter that prevents the conductive flux from exceeding a chosen
+fraction of the free-streaming flux:
 
 $$
-q_{\parallel,s}=\mathrm{FL}_s q_{\mathrm{SH},s},\qquad
+q_{\parallel,s}=\phi_s q_{\mathrm{SH},s},\qquad
 q_{\mathrm{SH},s}=-\kappa_{\parallel,s}\nabla_\parallel T_s,\qquad
-\mathrm{FL}_s=\frac{1}{1+|q_{\mathrm{SH},s}|/(c_{\mathrm{fl},s}q_{\mathrm{cap},s})}.
+\phi_s=\frac{1}{1+|q_{\mathrm{SH},s}|/q_{\max,s}}.
 $$
 
-The free-streaming flux scales as $q_{\mathrm{fs},s}\propto nT_s^{3/2}$,
-with the species mass factor included by the physics helpers.
-`c_fli` and `c_fle` specify the fractions of free streaming used for the ion
-and electron caps. `flux_limiter` enables both. This limits conductive heat
-flux; the prescribed sheath energy flux is assembled separately.
-`T_fluxlim_maxi` and `T_fluxlim_maxe` separately cap the temperature used
-in the parallel conductivity.
+Here $s$ denotes ions or electrons, and $q_{\max,s}$ is the allowed flux.
+The free-streaming flux scales as
+$nT_s^{3/2}$, with the appropriate species mass. The dimensionless inputs
+`c_fli` and `c_fle` set its allowed fraction for each species, and
+`flux_limiter` enables both limiters. The prescribed sheath energy loss is
+assembled separately.
 
-The existing regularization uses $T_s\ge10^{-5}$ eV in the free-streaming
-cap and $q_{\mathrm{cap},s}=\max(|q_{\mathrm{fs},s}|,10^{-10})$ in solver
-flux units. Below the temperature floor, $q_{\mathrm{fs},s}$ still depends
-linearly on density. Below the outer cap floor, $q_{\mathrm{cap},s}$ is
-constant and its state derivative vanishes.
+## Temperature limits
 
-Write the Spitzer–Harm Taylor expression as $q^Q+q^U+q^0$, with
-$q^Q=(\partial_Q q_{\mathrm{SH}})Q$, $q^U=(\partial_U q_{\mathrm{SH}})U$,
-and $q^0=-(\partial_U q_{\mathrm{SH}})U_0$. All coefficients are evaluated
-at $(U_0,Q_0)$. With the outer cap floor inactive, the limited expression is
+The parallel conductivity grows as $T_s^p$, normally with $p=5/2$.
+Ion temperature uses thermal energy after subtracting bulk kinetic energy.
+The inputs `T_fluxlim_maxi` and `T_fluxlim_maxe`, specified in **eV**, set
+separate upper temperatures for the ion and electron conductivities. Above
+these temperatures the conductivity stays at its capped value. The
+manufactured solution (MMS) testcase 2 bypasses these upper limits.
 
-$$
-q_{\parallel,\mathrm{lin}}=\mathrm{FL}^2(q^Q+q^U+q^0)
-+\frac{\mathrm{FL}^2 q_{\mathrm{SH}}r}{q_{\mathrm{fs}}}
-(\partial_U q_{\mathrm{fs}})U,\qquad r=\frac{|q_{\mathrm{SH}}|}{c_{\mathrm{fl}}q_{\mathrm{fs}}}.
-$$
-
-For $h=\mathrm{FL} q_{\mathrm{SH}}$, the scalar derivatives are
+The conductivity uses a numerical temperature floor barely above zero:
 
 $$
-\frac{\partial h}{\partial q_{\mathrm{SH}}}=\mathrm{FL}^2,\qquad
+T_{\kappa,\min}\approx2.67\times10^{-20}\ \mathrm{eV}.
+$$
+
+With the code's fixed reference scales, the reference ion energy is about
+4.00 eV, giving this floor from $\tfrac23\,10^{-20}E_{\rm ref}$.
+This is only a numerical positivity check, with no meaningful physical
+temperature scale. It keeps the conductivity positive without changing
+the energy or temperature stored in the solution.
+
+The **free-streaming cap** uses a separate, fixed temperature floor of
+$10^{-5}$ eV. Below it the cap still varies linearly with density. A further
+minimum free-streaming flux of $10^{-10}$ in solver flux units prevents a
+zero denominator when evaluating the limiter.
+
+## Linearization
+
+Inside the conductivity's temperature limits, its derivative follows the
+power law. Below the lower floor or above the upper limit, the conductivity
+is constant and its derivative is zero. Exactly at the lower limit the
+constant-side derivative is used; exactly at the upper limit the power-law
+side is used. Multiplying all conservative state components by the same
+factor leaves temperature and conductivity unchanged.
+
+For the currently assembled exact heat-limiter derivative, write
+$h=\phi q_{\mathrm{SH}}$. Its response to changes in the classical flux and
+the free-streaming flux is
+
+$$
+\frac{\partial h}{\partial q_{\mathrm{SH}}}=\phi^2,\qquad
 \frac{\partial h}{\partial q_{\mathrm{fs}}}=
 \begin{cases}
-(\mathrm{FL} q_{\mathrm{SH}})(1-\mathrm{FL})/q_{\mathrm{fs}}, & |q_{\mathrm{fs}}|>10^{-10},\\
+h(1-\phi)/q_{\mathrm{fs}}, & |q_{\mathrm{fs}}|>10^{-10},\\
 0, & |q_{\mathrm{fs}}|\le10^{-10}.
 \end{cases}
 $$
 
-The affine linearization is $h_{\mathrm{lin}}=A_U U+A_Q Q+c_0$, where
-$c_0=h_0-A_U U_0-A_Q Q_0$ and all coefficients are evaluated at the
-linearization state $(U_0,Q_0)$. The assembled right-hand side stores
-$-c_0$, the Jacobian contraction minus $h_0$. This recovers the actual
-limited flux at that state, including when either floor is active.
-When the outer cap floor is active, the helper adds
-$\mathrm{FL}(\mathrm{FL}-1)q_{\mathrm{SH}}$ to this right-hand-side quantity; the
-corresponding constant in the flux has the opposite sign.
-
-In [physics.f90](../../src/Models/NGammaTiTe/physics.f90),
-`compute_free_streaming_heat_flux_*` and their derivative helpers evaluate
-the same floored coefficient. `compute_flux_limiter` supplies the value;
-`compute_heat_flux_limiter_linearization` supplies that value, its cap
-sensitivity and the affine correction. Volume, interior/exterior faces,
-Bohm conditions and strong-Dirichlet contributions use these definitions.
-State choices and deliberately lagged stabilization remain as specified
-by their callers.
+The linearized expression includes a constant term so that it reproduces
+the actual limited flux at the state where it was evaluated. This remains
+true when a temperature or flux floor is active. The same coefficient
+rules are used in volume and face assembly; face conductivity uses trace
+temperature with element gradients.

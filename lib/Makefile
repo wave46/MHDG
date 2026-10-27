@@ -23,6 +23,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-neutral-energy-source
 .PHONY : check-neutral-gamma-transport
 .PHONY : check-heat-flux-limiter
+.PHONY : check-energy-conductivity
 .PHONY : check-ohmic-source
 .PHONY : check-initial-profile
 .PHONY : check-smooth-transition
@@ -70,6 +71,7 @@ clean:
 	$(RM) neutral_energy_source_check
 	$(RM) neutral_gamma_transport_check
 	$(RM) heat_flux_limiter_check
+	$(RM) energy_conductivity_check
 	$(RM) ohmic_source_check
 	$(RM) initial_profile_check
 	$(RM) linear_algebra_check smooth_transition_check
@@ -129,6 +131,10 @@ check-neutral-wall-flux : neutral_wall_physics_check.o globals.o neutral_flux_li
 check-amjuel-extrapolation : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_amjuel_extrapolation.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o amjuel_extrapolation_check
 	./amjuel_extrapolation_check
+
+check-energy-conductivity : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_energy_conductivity.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o energy_conductivity_check
+	./energy_conductivity_check
 
 check-heat-flux-limiter : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_heat_flux_limiter.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o heat_flux_limiter_check

@@ -1724,68 +1724,69 @@ CONTAINS
 
   FUNCTION computeAlphai(U) RESULT(res)
     REAL*8 :: U(:)
-    REAL*8 :: res, aux
-    REAL*8, PARAMETER :: tol = 1.e-20
-    aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
-    IF ((2./(3.*phys%Mref)*aux > phys%T_fluxlim_maxi) .AND. (switch%testcase .NE. 2)) THEN
-      res = (3.*phys%Mref/2*phys%T_fluxlim_maxi)**(phys%epn)
-    ELSE
-       IF (aux<tol) aux = tol
-      res = aux**phys%epn
-    ENDIF
+    REAL*8 :: res
+    CALL evaluate_energy_conductivity(U,3,res)
   END FUNCTION computeAlphai
 
   FUNCTION computeAlphae(U) RESULT(res)
     REAL*8 :: U(:)
-    REAL*8 :: res, aux
-    REAL*8, PARAMETER :: tol = 1.e-20
-    aux = U(4)/U(1)
-    IF ((2./(3.*phys%Mref)*aux > phys%T_fluxlim_maxe) .AND. (switch%testcase .NE. 2)) THEN
-      res = (3.*phys%Mref/2*phys%T_fluxlim_maxe)**(phys%epn)
-    ELSE
-       IF (aux<tol) aux = tol
-      res = aux**phys%epn
-    ENDIF
+    REAL*8 :: res
+    CALL evaluate_energy_conductivity(U,4,res)
   END FUNCTION computeAlphae
 
   SUBROUTINE compute_dAlpha_dUi(U, res)
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT):: res(:)
     real*8             :: aux
-    REAL*8, PARAMETER :: tol = 1.e-20
-
-    aux = U(3)/U(1) - 0.5*U(2)**2/U(1)**2
-
-    IF ((2./(3.*phys%Mref)*aux > phys%T_fluxlim_maxi) .AND. (switch%testcase .NE. 2)) THEN !! don't apply flux limiter if it is a convergence test
-      res = 0.
-    ELSE
-       IF (aux<0) aux = tol
-      res = 0.d0
-      res(1) = -U(3)/U(1)**2+U(2)**2/U(1)**3
-      res(2) = -U(2)/U(1)**2
-      res(3) = 1./U(1)
-      res=phys%epn*aux**(phys%epn-1)*res
-    ENDIF
+    CALL evaluate_energy_conductivity(U,3,aux,res)
   ENDSUBROUTINE compute_dAlpha_dUi
 
   SUBROUTINE compute_dAlpha_dUe(U, res)
     real*8, intent(IN) :: U(:)
     real*8, intent(OUT):: res(:)
     real*8             :: aux
-    REAL*8, PARAMETER :: tol = 1.e-20
-
-    aux = U(4)/U(1)
-
-    IF ((2./(3.*phys%Mref)*aux > phys%T_fluxlim_maxe) .AND. (switch%testcase .NE. 2)) THEN !! don't apply flux limiter if it is a convergence test
-      res = 0.
-    ELSE
-       IF (aux<0) aux = tol
-      res = 0.d0
-      res(1) = -U(4)/U(1)**2
-      res(4) = 1./U(1)
-      res=phys%epn*aux**(phys%epn-1)*res
-    ENDIF
+    CALL evaluate_energy_conductivity(U,4,aux,res)
   ENDSUBROUTINE compute_dAlpha_dUe
+
+  SUBROUTINE evaluate_energy_conductivity(U, energy_row, alpha, derivative)
+    REAL*8, INTENT(IN) :: U(:)
+    INTEGER, INTENT(IN) :: energy_row
+    REAL*8, INTENT(OUT) :: alpha
+    REAL*8, OPTIONAL, INTENT(OUT) :: derivative(:)
+    REAL*8 :: specific_energy, temperature_cap
+    REAL*8, PARAMETER :: floor_energy = 1.d-20
+    LOGICAL :: apply_temperature_cap
+
+    specific_energy = U(energy_row)/U(1)
+    temperature_cap = phys%T_fluxlim_maxe
+    IF (energy_row == 3) THEN
+      specific_energy = specific_energy-0.5d0*U(2)**2/U(1)**2
+      temperature_cap = phys%T_fluxlim_maxi
+    ENDIF
+    IF (PRESENT(derivative)) derivative = 0.d0
+
+    ! MMS testcase 2 uses the uncapped conductivity law.
+    apply_temperature_cap = switch%testcase /= 2
+    IF (apply_temperature_cap .AND. 2.d0/(3.d0*phys%Mref)*specific_energy > temperature_cap) THEN
+      alpha = (1.5d0*phys%Mref*temperature_cap)**phys%epn
+      RETURN
+    ENDIF
+
+    IF (specific_energy <= floor_energy) THEN
+      alpha = floor_energy**phys%epn
+      RETURN
+    ENDIF
+
+    alpha = specific_energy**phys%epn
+    IF (.NOT. PRESENT(derivative)) RETURN
+
+    IF (energy_row == 3) THEN
+      CALL computeVi(U,derivative)
+    ELSE
+      CALL computeVe(U,derivative)
+    ENDIF
+    derivative = phys%epn*specific_energy**(phys%epn-1.d0)*derivative
+  END SUBROUTINE evaluate_energy_conductivity
 
   SUBROUTINE compute_free_streaming_heat_flux_electrons(U, qfs)
     REAL*8, INTENT(IN)  :: U(:)
