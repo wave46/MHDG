@@ -76,6 +76,16 @@ check, including nonfinite states and negative combined thermal energy.
 Run `mpirun -np 2 ./exchange_domain_check` in an MPI build to check collective
 rejection when only one rank has invalid data.
 
+`make check-stabilization` checks all five stabilization-5 derivatives in the
+2D plasma–neutral model. It checks coefficient values and finite differences,
+then reconstructs physical residuals from production interior, exterior and
+Bohm matrices/RHS with distinct element and trace states. It covers both Bohm
+diffusion modes, capped/floored temperatures, spectral branch changes,
+homogeneity, prescribed traces and permuted multi-node maps. Physical limiter
+values are held fixed only in the residual finite differences. Use
+`--constant-neutral` or `--optimized` with `check_stabilization.py` for those
+variants. No mesh, MPI launch or simulation is needed.
+
 `make check-neutral-gamma-transport` requires a NeutralGamma configuration.
 It checks velocity, convection and pressure-curvature derivatives and flux
 reconstruction at small positive and ordinary neutral densities, including both

@@ -18,6 +18,7 @@ SUBROUTINE HDG_computeJacobian()
   USE LinearAlgebra, only: tensorProduct, tensorSumInt, cross_product, ijk_cross_product
   USE analytical, only: body_force, analytical_solution
   USE physics
+  USE hdg_stabilization, ONLY: add_tau_derivative
   USE transport_models_1d, ONLY: transport_model_1d
   USE magnetic_geometry_state, ONLY: magnetic_geometry_cache, &
        toroidal_current_from_flux
@@ -1229,7 +1230,7 @@ CONTAINS
       endif
 
       if (iface.le.Mesh%Nintfaces) then
-        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uf)
+        CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uf,uef)
       else
 
         if (Mesh%periodic_faces(iface-Mesh%Nintfaces).eq.0) then
@@ -1243,7 +1244,7 @@ CONTAINS
             &face_diagnostics_on,thread_diagnostics)
         else
           ! periodic face
-          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uf)
+          CALL elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uf,uef)
         endif
       endif
 
@@ -1871,18 +1872,18 @@ CONTAINS
   ! Interior faces computation in 2D
   !***************************************************
 
-  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uf)
+  SUBROUTINE elemental_matrices_faces_int(iel,ifa,Xfl,Bfl,psifl,omegafl,q_cylfl,qef,uf,uef)
 
     integer,intent(IN)        :: iel,ifa
     real*8,intent(IN)         :: Xfl(:,:)
     real*8,intent(IN)         :: Bfl(:,:), psifl(:)
     real*8,intent(IN)         :: qef(:,:)
-    real*8,intent(IN)         :: uf(:,:)
+    real*8,intent(IN)         :: uf(:,:),uef(:,:)
     real*8,intent(IN)             :: q_cylfl(:)
     real*8,intent(in)         :: omegafl(:)
     integer*4                 :: g,NGauss,i,inn
     real*8                    :: dline,xyDerNorm_g
-    real*8                    :: ufg(Ng1d,neq)
+    real*8                    :: ufg(Ng1d,neq),uefg(Ng1d,neq)
     real*8                    :: xyf(Ng1d,ndim)
     real*8                    :: xyDer(Ng1d,ndim)
     real*8                    :: qfg(Ng1d,neq*Ndim)
@@ -1892,6 +1893,7 @@ CONTAINS
     real*8                    :: NNif(Npfl,Npfl),Nif(Npfl),Nfbn(Npfl)
     real*8                    :: upgf(Ng1d,phys%npv)
     real*8                    :: tau(Neq,Neq)
+    REAL*8 :: dtau_du(Neq,Neq)
     real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d),Psig(Ng1d),rho_pol_norm(Ng1d)
     real*8                    :: topology_normal(Ng1d,2)
     integer                   :: topology_region(Ng1d)
@@ -1957,6 +1959,7 @@ CONTAINS
       ENDIF
 
     ! Gradient solution at face gauss points
+      uefg = MATMUL(refElPol%N1D,uef)
       qfg = MATMUL(refElPol%N1D,qef)
 
     ! Face constitutive coefficients use U_hat; Q remains element-based.
@@ -2022,6 +2025,7 @@ CONTAINS
 
       ! Compute the stabilization term
       tau = 0.
+      dtau_du = 0.d0
       IF (numer%stab == 1) THEN
         ! Constant stabilization
         DO i = 1,Neq
@@ -2031,7 +2035,11 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
+#ifdef TEMPERATURE
+            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_tau(:,:,g),dtau_du)
+#else
             CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_tau(:,:,g))
+#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),0.,iel,tau)
         ENDIF
@@ -2041,11 +2049,13 @@ CONTAINS
 #ifdef DKLINEARIZED
       CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
       n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
-      topology_region=topology_region(g),outward_normal=topology_normal(g,:))
+      topology_region=topology_region(g),outward_normal=topology_normal(g,:), &
+          uef=uefg(g,:),dtau_du=dtau_du)
 #else
       CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
         n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
-        topology_region=topology_region(g),outward_normal=topology_normal(g,:))
+        topology_region=topology_region(g),outward_normal=topology_normal(g,:), &
+          uef=uefg(g,:),dtau_du=dtau_du)
 #endif
 
 
@@ -2084,6 +2094,7 @@ CONTAINS
     real*8                    :: t_g(ndim),n_g(ndim),bn
     real*8                    :: NNif(Npfl,Npfl),Nif(Npfl),Nfbn(Npfl)
     real*8                    :: tau(Neq,Neq)
+    REAL*8 :: dtau_du(Neq,Neq)
     real*8                    :: upgf(Ng1d,phys%npv)
     real*8                    :: Bmod_nod(Npfl),b_nod(Npfl,3),b(Ng1d,3),Bmod(Ng1d), Psig(Ng1d), rho_pol_norm(Ng1d)
     real*8                    :: topology_normal(Ng1d,2)
@@ -2222,6 +2233,7 @@ CONTAINS
       END IF
 #endif
       tau = 0.
+      dtau_du = 0.d0
       IF (numer%stab == 1) THEN
         ! Constant stabilization
         DO i = 1,Neq
@@ -2231,7 +2243,11 @@ CONTAINS
         ! Non constant stabilization
         ! Compute tau in the Gauss points
         IF (numer%stab < 6) THEN
+#ifdef TEMPERATURE
+            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_tau(:,:,g),dtau_du)
+#else
             CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_tau(:,:,g))
+#endif
         ELSE
           CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),isext,iel,tau)
         ENDIF
@@ -2256,24 +2272,27 @@ CONTAINS
 #ifndef DKLINEARIZED
         CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
           n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
-          topology_region=topology_region(g),outward_normal=topology_normal(g,:))
-
+          topology_region=topology_region(g),outward_normal=topology_normal(g,:), &
+          uef=uefg(g,:),dtau_du=dtau_du)
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
           n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
           topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
-          diagnostics_on=diagnostics_on,diagnostics=diagnostics)
+          diagnostics_on=diagnostics_on,diagnostics=diagnostics, &
+          dtau_du=dtau_du)
       ENDIF
 #else
 
         CALL assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
         n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,ufg(g,:),qfg(g,:),tau,&
-        topology_region=topology_region(g),outward_normal=topology_normal(g,:))
+        topology_region=topology_region(g),outward_normal=topology_normal(g,:), &
+          uef=uefg(g,:),dtau_du=dtau_du)
       ELSE
         CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
           n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
           topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
-          diagnostics_on=diagnostics_on,diagnostics=diagnostics)
+          diagnostics_on=diagnostics_on,diagnostics=diagnostics, &
+          dtau_du=dtau_du)
       ENDIF
 #endif
 
@@ -2282,12 +2301,14 @@ CONTAINS
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),&
         n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
         topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
-        diagnostics_on=diagnostics_on,diagnostics=diagnostics)
+        diagnostics_on=diagnostics_on,diagnostics=diagnostics, &
+          dtau_du=dtau_du)
 #else
       CALL assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,b(g,:),rho_pol_norm(g),q_cyl(g),xyf(g,:),&
         n_g,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),NNif,Nif,Nfbn,uefg(g,:),ufg(g,:),qfg(g,:),tau,&
         topology_region=topology_region(g),outward_normal=topology_normal(g,:),&
-        diagnostics_on=diagnostics_on,diagnostics=diagnostics)
+        diagnostics_on=diagnostics_on,diagnostics=diagnostics, &
+          dtau_du=dtau_du)
 #endif
 
 #endif
@@ -3177,11 +3198,11 @@ ENDIF
 #ifdef DKLINEARIZED
   SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
     &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uf,qf,tau,&
-    &topology_region,outward_normal)
+    &topology_region,outward_normal,uef,dtau_du)
 #else
     SUBROUTINE assemblyIntFacesContribution(iel,ind_asf,ind_ash,ind_ff,ind_fe,&
         &ind_fg,b3,rho,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uf,qf,tau,&
-        &topology_region,outward_normal)
+        &topology_region,outward_normal,uef,dtau_du)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       real*8,intent(IN)         :: b3(:),n(:), rho
@@ -3197,6 +3218,8 @@ ENDIF
 #endif
 #endif
       real*8,optional,intent(INOUT) :: tau(:,:)
+      REAL*8, OPTIONAL, INTENT(IN) :: dtau_du(:,:)
+      REAL*8, OPTIONAL, INTENT(IN) :: uef(:)
       real*8                     :: b(Ndim)
 #ifdef VORTICITY
       real*8                     :: kcoeff,exb(3)
@@ -3618,6 +3641,16 @@ ENDIF
       ENDIF
       !************* End stabilization terms************************
 
+#ifdef TEMPERATURE
+      IF (PRESENT(dtau_du) .AND. PRESENT(uef)) THEN
+        CALL add_tau_derivative(elMat%Aul(:,:,iel),elMat%S(:,iel), &
+             ind_fe,ind_ff,ind_asf,NNif,Nif,uf,uef-uf,dtau_du)
+        CALL add_tau_derivative(elMat%All(:,:,iel),elMat%fh(:,iel), &
+             ind_ff,ind_ff,ind_asf,NNif,Nif,uf,uef-uf,dtau_du)
+      ENDIF
+#endif
+
+
     ENDSUBROUTINE assemblyIntFacesContribution
 
     !********************************************************************
@@ -3629,11 +3662,11 @@ ENDIF
 #ifdef DKLINEARIZED
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
       &ind_fg,b3,rho,q_cyl,xyf,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uef,uf,qf,tau,&
-      &topology_region,outward_normal,diagnostics_on,diagnostics)
+      &topology_region,outward_normal,diagnostics_on,diagnostics,dtau_du)
 #else
     SUBROUTINE assemblyExtFacesContribution(iel,isdir,ind_asf,ind_ash,ind_ff,ind_fe,&
         &ind_fg,b3,rho,n,diffiso,diffani,neutral_limiter_phi,NNif,Nif,Nfbn,uef,uf,qf,tau,&
-        &topology_region,outward_normal,diagnostics_on,diagnostics)
+        &topology_region,outward_normal,diagnostics_on,diagnostics,dtau_du)
 #endif
       integer*4,intent(IN)      :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:)
       logical                   :: isdir
@@ -3652,6 +3685,7 @@ ENDIF
 #endif
 #endif
       real*8,optional,intent(INOUT) :: tau(:,:)
+      REAL*8, OPTIONAL, INTENT(IN) :: dtau_du(:,:)
 #ifdef VORTICITY
       integer*4                 :: alpha,beta,ii
       real*8                    :: exb(3),kcoeff
@@ -4134,6 +4168,14 @@ END IF
         END DO
       ENDIF
       !************* End stabilization terms************************
+
+#ifdef TEMPERATURE
+      IF (PRESENT(dtau_du) .AND. .NOT.isdir) THEN
+        CALL add_tau_derivative(elMat%Aul(:,:,iel),elMat%S(:,iel), &
+             ind_fe,ind_ff,ind_asf,NNif,Nif,uf,uef-uf,dtau_du)
+      ENDIF
+#endif
+
     ENDSUBROUTINE assemblyExtFacesContribution
 
     SUBROUTINE do_assembly(Auq,Auu,rhs,ind_ass,ind_asq,iel)

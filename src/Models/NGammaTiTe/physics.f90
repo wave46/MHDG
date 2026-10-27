@@ -90,9 +90,10 @@ MODULE physics
 
   PRIVATE :: evaluate_stab5
   INTERFACE
-    MODULE SUBROUTINE evaluate_stab5(up,uc,b,normal,length_factor,diff_iso,tau)
+    MODULE SUBROUTINE evaluate_stab5(up,uc,b,normal,length_factor,diff_iso,tau,dtau_du)
       REAL*8, INTENT(IN) :: up(:),uc(:),b(:),normal(:),length_factor,diff_iso(:,:)
       REAL*8, INTENT(OUT) :: tau(:,:)
+      REAL*8, OPTIONAL, INTENT(OUT) :: dtau_du(:,:)
     END SUBROUTINE evaluate_stab5
   END INTERFACE
 
@@ -3348,11 +3349,12 @@ ENDSUBROUTINE  compute_ddissip_du
   !*******************************************
   ! Compute the stabilization tensor tau
   !*******************************************
-  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau,diff_iso)
+  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau,diff_iso,dtau_du)
     real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
     REAL*8, intent(in)    :: isext
     integer, intent(in) ::  iel
     real*8, intent(out) :: tau(:, :)
+    REAL*8, OPTIONAL, INTENT(OUT) :: dtau_du(:,:)
 #ifdef NEUTRAL
     REAL*8              :: tau_aux(SIZE(uc))
     REAL*8,INTENT(IN)   :: diff_iso(:,:)
@@ -3374,13 +3376,14 @@ ENDSUBROUTINE  compute_ddissip_du
     U3 = uc(3)
     U4 = uc(4)
 
+    tau = 0.
+    IF (PRESENT(dtau_du)) dtau_du = 0.d0
 #ifndef TOR3D
     IF (numer%stab == 5) THEN
-      CALL evaluate_stab5(up,uc,b,n,DBLE(refElPol%ndeg)/Mesh%elemSize(iel),diff_iso,tau)
+      CALL evaluate_stab5(up,uc,b,n,DBLE(refElPol%ndeg)/Mesh%elemSize(iel),diff_iso,tau,dtau_du)
       RETURN
     ENDIF
 #endif
-    tau = 0.
     inn = phys%idx_rhon_eq
     ign = phys%idx_gamman_eq
     ik = phys%idx_k_eq
@@ -3479,6 +3482,7 @@ ENDSUBROUTINE  compute_ddissip_du
             phys%lscale/geom%R0*ABS(bn)*phys%diff_pari*up(7)**2.5, phys%lscale/geom%R0*ABS(bn)*phys%diff_pare*up(8)**2.5)
 
     ELSEIF (numer%stab == 5) THEN
+       ! 2D values and sensitivities return through evaluate_stab5 above.
 #ifdef TOR3D
        !IF (ABS(isext - 1.) .LT. 1e-12) THEN
        ! ! exterior faces

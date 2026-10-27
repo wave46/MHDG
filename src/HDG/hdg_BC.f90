@@ -20,6 +20,7 @@ SUBROUTINE HDG_BC()
   USE globals
   USE LinearAlgebra
   USE physics
+  USE hdg_stabilization, ONLY: add_tau_derivative
   USE transport_models_1d, ONLY: transport_model_1d
   USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
   USE analytical, only: analytical_solution
@@ -1019,6 +1020,7 @@ CONTAINS
       REAL*8                    :: bn
       LOGICAL                   :: ntang
       REAL                      :: tau_stab(Neq,Neq)
+    REAL*8 :: dtau_du(Neq,Neq)
     ! Loop in 1D Gauss points
     DO g = 1,Ng1d
 
@@ -1073,6 +1075,7 @@ CONTAINS
       ! Shape functions
       NiNi = tensorProduct(refElPol%N1D(g,:),refElPol%N1D(g,:))*dline
       Ni = refElPol%N1D(g,:)*dline
+      dtau_du = 0.d0
       !****************** Stabilization part******************************
       IF (numer%stab == 1) THEN
         tau_stab=0.d0
@@ -1080,7 +1083,11 @@ CONTAINS
           tau_stab(i,i) = numer%tau(i)
         END DO
       ELSE
+#ifdef TEMPERATURE
+        CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g),dtau_du)
+#else
         CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
+#endif
       ENDIF
       !****************** End stabilization part******************************
 
@@ -1089,11 +1096,13 @@ CONTAINS
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
           &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,target_coefficient,dtarget_du,delta,free_weight,ddelta_du,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,&
-          &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
+          &topology_region=topology_region(g),outward_normal=topology_normal(g,:), &
+          dtau_du=dtau_du)
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
           &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,target_coefficient,dtarget_du,delta,free_weight,ddelta_du,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,&
-          &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
+          &topology_region=topology_region(g),outward_normal=topology_normal(g,:), &
+          dtau_du=dtau_du)
 #endif
 
 
@@ -1470,9 +1479,9 @@ CONTAINS
   ! Assembly Bohm
   !*********************************
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,target_coefficient,dtarget_du,delta,free_weight,ddelta_du,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,target_coefficient,dtarget_du,delta,free_weight,ddelta_du,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal,dtau_du)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,target_coefficient,dtarget_du,delta,free_weight,ddelta_du,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,target_coefficient,dtarget_du,delta,free_weight,ddelta_du,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal,dtau_du)
 #endif
     integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc
     real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),rho,ng(:),tau(:,:),target_coefficient,dtarget_du(:),delta,free_weight,ddelta_du(:)
@@ -1481,6 +1490,8 @@ CONTAINS
     real*8           :: diffiso(:,:),diffani(:,:),neutral_limiter_phi,dline
     logical          :: ntang
     real*8           :: qfg(:)
+    REAL*8, OPTIONAL, INTENT(IN) :: dtau_du(:,:)
+    REAL*8 :: tau_jump(Neq)
     real*8           :: bn,Abohm(Neq,Neq),APinch(Neq,Ndim)
     integer          :: i,j,k,idm,Neqstab,Neqgrad,inn,ign,ik
 #ifdef VORTICITY
@@ -1583,6 +1594,15 @@ CONTAINS
       ENDIF
     ENDDO
     ! End diagonal Bohm stabilization
+
+#ifdef TEMPERATURE
+    IF (PRESENT(dtau_du)) THEN
+      tau_jump = uefg-ufg
+      tau_jump(2) = target_coefficient*ufg(1)+free_weight*uefg(2)-ufg(2)
+      CALL add_tau_derivative(elMat%All(:,:,iel),elMat%fh(:,iel), &
+           ind_ff,ind_ff,ind_asf,NiNi,Ni,ufg,tau_jump,dtau_du)
+    ENDIF
+#endif
 
 #ifdef TEMPERATURE
 
