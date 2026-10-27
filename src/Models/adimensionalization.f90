@@ -8,6 +8,8 @@ MODULE adimensionalization_module
   IMPLICIT NONE
   PRIVATE
   PUBLIC :: adimensionalization
+  REAL*8, PARAMETER, PUBLIC :: ion_mass_si = 3.35d-27
+  REAL*8, PARAMETER, PUBLIC :: electron_mass_si = 9.109d-31
 
 CONTAINS
 
@@ -17,8 +19,8 @@ SUBROUTINE adimensionalization()
   IMPLICIT NONE
 
   ! Parameters
-  REAL*8, PARAMETER :: mi = 3.35e-27         ! Ionic mass [kg]
-  REAL*8, PARAMETER :: me = 9.109e-31        ! Electronic mass [kg]
+  REAL*8, PARAMETER :: mi = ion_mass_si      ! Ionic mass [kg]
+  REAL*8, PARAMETER :: me = electron_mass_si ! Electronic mass [kg]
   REAL*8, PARAMETER :: e = 1.60217662e-19    ! Electron charge [C]
   REAL*8, PARAMETER :: kB = 1.38064852e-23   ! Boltzmann constant [m^2*kg*s^-2*K^-1]
   REAL*8, PARAMETER :: eps0 = 8.85e-12       ! Permittivity of free space [F/m]

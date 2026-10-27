@@ -45,6 +45,9 @@ MODULE Main_utils
   USE flux_surface_transport_data
   USE transport_models_1d
   USE residual_norm_module, ONLY: computeResidual
+#if defined(TEMPERATURE) && !defined(TOR3D)
+  USE physics, ONLY: temperature_exchange_state_is_evaluable
+#endif
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
 
   IMPLICIT NONE
@@ -646,6 +649,10 @@ CONTAINS
         CALL update_reduced_transport_profiles()
     ENDIF
 
+#if defined(TEMPERATURE) && !defined(TOR3D)
+    CALL check_temperature_exchange_domain(status)
+    IF (status%outcome /= solve_success) RETURN
+#endif
     ! Compute Jacobian
     CALL HDG_computeJacobian()
     ! Set boundary conditions
@@ -681,6 +688,33 @@ CONTAINS
        uiter = 0.
     ENDIF
   END SUBROUTINE compute_newton_update
+
+#if defined(TEMPERATURE) && !defined(TOR3D)
+  SUBROUTINE check_temperature_exchange_domain(status)
+    TYPE(solver_status_t), INTENT(OUT) :: status
+    REAL*8 :: nodal(Mesh%Nnodesperelem,phys%neq), gauss(refElPol%Ngauss2d,phys%neq)
+    INTEGER :: element, point, offset, element_size
+
+    status = solver_status_t()
+    element_size = Mesh%Nnodesperelem*phys%neq
+    ! Match the source evaluation, including local ghost elements assembled
+    ! by HDG_computeJacobian. This is a domain check, not a reduced MPI norm.
+    DO element = 1,Mesh%Nelems
+      offset = (element-1)*element_size
+      nodal = TRANSPOSE(RESHAPE(sol%u(offset+1:offset+element_size),[phys%neq,Mesh%Nnodesperelem]))
+      gauss = MATMUL(refElPol%N2D,nodal)
+      DO point = 1,refElPol%Ngauss2d
+        IF (.NOT.temperature_exchange_state_is_evaluable(gauss(point,:))) THEN
+          status = solver_status_t(solve_retry,0, &
+               'Temperature exchange requires positive density and total thermal energy at volume Gauss points')
+          EXIT
+        ENDIF
+      ENDDO
+      IF (status%outcome /= solve_success) EXIT
+    ENDDO
+    CALL agree_solver_status(status)
+  END SUBROUTINE check_temperature_exchange_domain
+#endif
 
   SUBROUTINE finish_newton_update(status, previous_u, previous_q, previous_trace, relaxation)
     TYPE(solver_status_t), INTENT(INOUT) :: status

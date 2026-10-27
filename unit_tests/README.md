@@ -52,6 +52,15 @@ checks reconstruction from the Jacobian and affine term in ordinary,
 temperature-floor and cap-floor states, with either flux sign and zero flux.
 It uses the production value/derivative helpers without MPI or external data.
 
+`make check-temperature-exchange` checks source values, finite-difference
+Jacobians, continuity at zero electron temperature, recovery signs and
+homogeneity against independent formulas. It needs no mesh or MPI launch.
+
+`make check-exchange-domain` exercises the actual preassembly Gauss-point
+check, including nonfinite states and negative combined thermal energy.
+Run `mpirun -np 2 ./exchange_domain_check` in an MPI build to check collective
+rejection when only one rank has invalid data.
+
 `make check-neutral-gamma-transport` requires a NeutralGamma configuration.
 It checks velocity, convection and pressure-curvature derivatives and flux
 reconstruction at small positive and ordinary neutral densities, including both

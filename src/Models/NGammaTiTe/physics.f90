@@ -7,6 +7,8 @@
 !*****************************************
 MODULE physics
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_quiet_nan, ieee_value
+  USE solver_status, ONLY: finite_solver_values
+  USE adimensionalization_module, ONLY: ion_mass_si, electron_mass_si
   USE globals
   USE magnetic_field
   USE smooth_transition, ONLY: smoothstep01, smoothstep01_derivative
@@ -18,9 +20,12 @@ MODULE physics
        &neutral_tn_source_ti, neutral_tn_source_fixed
   IMPLICIT NONE
   PRIVATE :: smoothstep01, smoothstep01_derivative
+  PRIVATE :: exchange_collision_temperature, temperature_exchange_coefficient
+  PRIVATE :: finite_solver_values, ion_mass_si, electron_mass_si
 
   REAL*8, PARAMETER :: eirene_rate_te_min_phys = 1.d-1
   REAL*8, PARAMETER :: heat_flux_cap_floor = 1.d-10
+  REAL*8, PARAMETER, PRIVATE :: exchange_mass_ratio = electron_mass_si/ion_mass_si
   ! Physical electron-temperature endpoints [eV] of the Ohmic source safeguard.
   REAL*8, PARAMETER :: ohmic_te_off_phys = 0.1d0, ohmic_te_full_phys = 1.d0
   ! Initialized once after the run's reference scales are established.
@@ -1793,8 +1798,8 @@ CONTAINS
     REAL*8, INTENT(OUT) :: qfs
     REAL*8, PARAMETER :: tmin = 1e-5 ! eV    
     REAL*8            :: tmin_cons
-    REAL*8, PARAMETER :: mi = 3.35e-27         ! Ionic mass [kg]
-    REAL*8, PARAMETER :: me = 9.109e-31        ! Electronic mass [kg]
+    REAL*8, PARAMETER :: mi = ion_mass_si
+    REAL*8, PARAMETER :: me = electron_mass_si
     REAL*8             :: t, n
 
     tmin_cons = tmin/simpar%refval_temperature*3*phys%Mref/2.
@@ -1812,8 +1817,8 @@ CONTAINS
   SUBROUTINE compute_dfree_streaming_heat_flux_electrons_dU(U, res)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: res(:)
-    REAL*8, PARAMETER :: mi = 3.35e-27         ! Ionic mass [kg]
-    REAL*8, PARAMETER :: me = 9.109e-31        ! Electronic mass [kg]
+    REAL*8, PARAMETER :: mi = ion_mass_si
+    REAL*8, PARAMETER :: me = electron_mass_si
     REAL*8, PARAMETER :: tmin = 1e-5 ! eV    
     REAL*8            :: tmin_cons
 
@@ -1957,59 +1962,96 @@ CONTAINS
   ! ******************************
   ! Temperature exchange terms
   ! ******************************
-  SUBROUTINE compute_s(U, s)
+  LOGICAL FUNCTION temperature_exchange_state_is_evaluable(U) RESULT(valid)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: s, U1, U4, U3
-    REAL*8, PARAMETER :: tol = 1.e-20
-    U1 = U(1)
-    U4 = U(4)
-    U3 = U(3)
-    IF (U4 < tol) U4 = tol
-    IF (U1 < tol) U1 = tol
-    IF (U3 < tol) U3 = tol
-    ! keeping this thing for high diffusion, but take care for low values
-#ifndef KEQUATION
-    if ((phys%diff_ee .gt. 0.0380) .and. (switch%testcase .ne. 2) .and. (switch%psdtime)) then
-      s = 1./(phys%tie*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
-#else
-    if (((phys%diff_ee+phys%diff_k_min) .gt. 0.0380) .and. (switch%testcase .ne. 2) .and. (switch%psdtime)) then
-      s = 1./(phys%tie*0.0380/(phys%diff_ee+phys%diff_k_min))*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
-#endif
-    else
-      s = 1./(phys%tie)*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4-U3+0.5*(U(2)**2/U1))
-    ENDIF
-    !s = 1./phys%tie*(2./3./phys%Mref)**(-0.5)*(U1**(2.5)/U4**1.5)*(U4 - U3 + 0.5*(U(2)**2/U1))
-  ENDSUBROUTINE compute_s
+    REAL*8 :: velocity, thermal_sum
 
-  SUBROUTINE compute_ds_dU(U, res)
+    ! Individual negative trial temperatures are evaluable. Conservative
+    ! exchange cannot recover positive temperatures without positive total
+    ! thermal energy; the Newton caller rejects that state before assembly.
+    valid = .FALSE.
+    IF (.NOT.finite_solver_values(U(1:4))) RETURN
+    IF (U(1) <= 0.d0) RETURN
+    velocity = U(2)/U(1)
+    thermal_sum = (U(3)/U(1)-.5d0*velocity**2)+U(4)/U(1)
+    valid = finite_solver_values([thermal_sum]) .AND. thermal_sum > 0.d0
+  END FUNCTION temperature_exchange_state_is_evaluable
+
+  SUBROUTINE evaluate_temperature_exchange(U, s, ds_dU)
     REAL*8, INTENT(IN) :: U(:)
-    REAL*8             :: res(:), U1, U4, U3
-    REAL*8, PARAMETER :: tol = 1.e-20
-    U1 = U(1)
-    U4 = U(4)
-    U3 = U(3)
-    IF (U4 < tol) U4 = tol
-    IF (U1 < tol) U1 = tol
-    IF (U3 < tol) U3 = tol
-    res = 0.
-    res(1) = 2.5*(U1/U4)**1.5*(U4 - U3 + 0.5*(U(2)**2/U1)) - 0.5*U1**0.5*U(2)**2/U4**1.5
-    res(2) = U(2)*(U1/U4)**1.5
-    res(3) = -U1**2.5/U4**1.5
-    res(4) = -1.5*(U1/U4)**2.5*(U4 - U3 + 0.5*U(2)**2/U1) + U1**2.5/U4**1.5
-    ! keeping this thing for high diffusion, but take care for low values
-#ifndef KEQUATION
-    if ((phys%diff_ee .gt. 0.0380) .and. (switch%testcase .ne. 2) .and. (switch%psdtime)) then
-      res = 1./(phys%tie*0.0380/phys%diff_ee)*(2./3./phys%Mref)**(-0.5)*res
-#else
-    if (((phys%diff_ee+phys%diff_k_min) .gt. 0.0380) .and. (switch%testcase .ne. 2) .and. (switch%psdtime)) then
-      res = 1./(phys%tie*0.0380/(phys%diff_ee+phys%diff_k_min))*(2./3./phys%Mref)**(-0.5)*res
+    REAL*8, INTENT(OUT) :: s
+    REAL*8, OPTIONAL, INTENT(OUT) :: ds_dU(:)
+    REAL*8 :: density, velocity, temperature_scale, Ti, Te, collision_temperature
+    REAL*8 :: dcollision_dTi, dcollision_dTe, prefactor, difference
+    REAL*8 :: dTi(SIZE(U)), dTe(SIZE(U)), dcollision(SIZE(U))
 
-#endif
-    else
-     res = 1./(phys%tie)*(2./3./phys%Mref)**(-0.5)*res
+    IF (.NOT.temperature_exchange_state_is_evaluable(U)) THEN
+      s = ieee_value(0.d0,ieee_quiet_nan)
+      IF (PRESENT(ds_dU)) ds_dU = s
+      RETURN
     ENDIF
-    !res = 1./phys%tie*(2./3./phys%Mref)**(-0.5)*res
-  ENDSUBROUTINE compute_ds_dU
+    density = U(1)
+    velocity = U(2)/density
+    temperature_scale = 2.d0/(3.d0*phys%Mref)
+    Ti = temperature_scale*(U(3)/density-.5d0*velocity**2)
+    Te = temperature_scale*U(4)/density
+
+    CALL exchange_collision_temperature(Ti,Te,collision_temperature,dcollision_dTi,dcollision_dTe)
+    prefactor = temperature_exchange_coefficient()*density**2/collision_temperature**1.5d0
+    difference = Ti-Te
+    s = prefactor*difference
+
+    IF (.NOT.PRESENT(ds_dU)) RETURN
+
+    CALL computeVi(U,dTi)
+    CALL computeVe(U,dTe)
+    dTi = temperature_scale*dTi
+    dTe = temperature_scale*dTe
+    dcollision = dcollision_dTi*dTi+dcollision_dTe*dTe
+    ds_dU = prefactor*(dTi-dTe-1.5d0*difference/collision_temperature*dcollision)
+    ds_dU(1) = ds_dU(1)+2.d0*s/density
+  END SUBROUTINE evaluate_temperature_exchange
+
+  SUBROUTINE exchange_collision_temperature(Ti, Te, temperature, dtemperature_dTi, dtemperature_dTe)
+    REAL*8, INTENT(IN) :: Ti, Te
+    REAL*8, INTENT(OUT) :: temperature, dtemperature_dTi, dtemperature_dTe
+    REAL*8 :: total_scale, exponent, weight, scale_derivative
+    REAL*8, PARAMETER :: negligible_exponent = -700.d0
+
+    IF (Te >= 0.d0) THEN
+      temperature = Te+exchange_mass_ratio*Ti
+      dtemperature_dTi = exchange_mass_ratio
+      dtemperature_dTe = 1.d0
+      RETURN
+    ENDIF
+
+    total_scale = exchange_mass_ratio*(Ti+Te)
+    exponent = 2.d0*(1.d0-exchange_mass_ratio)*Te/total_scale
+    IF (exponent < negligible_exponent) THEN
+      temperature = .5d0*total_scale
+      dtemperature_dTi = .5d0*exchange_mass_ratio
+      dtemperature_dTe = .5d0*exchange_mass_ratio
+      RETURN
+    ENDIF
+
+    weight = EXP(exponent)
+    temperature = .5d0*total_scale*(1.d0+weight)
+    scale_derivative = .5d0*(1.d0+weight*(1.d0-exponent))
+    dtemperature_dTi = exchange_mass_ratio*scale_derivative
+    dtemperature_dTe = dtemperature_dTi+(1.d0-exchange_mass_ratio)*weight
+  END SUBROUTINE exchange_collision_temperature
+
+  FUNCTION temperature_exchange_coefficient() RESULT(coefficient)
+    REAL*8 :: coefficient, exchange_diffusion
+
+    exchange_diffusion = phys%diff_ee
+#ifdef KEQUATION
+    exchange_diffusion = exchange_diffusion+phys%diff_k_min
+#endif
+    coefficient = -1.d0/phys%tie
+    IF (exchange_diffusion > .0380d0 .AND. switch%testcase /= 2 .AND. switch%psdtime) &
+         coefficient = coefficient*exchange_diffusion/.0380d0
+  END FUNCTION temperature_exchange_coefficient
 
 
   !*****************************

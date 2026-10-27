@@ -24,6 +24,8 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-neutral-gamma-transport
 .PHONY : check-heat-flux-limiter
 .PHONY : check-energy-conductivity
+.PHONY : check-temperature-exchange
+.PHONY : check-exchange-domain
 .PHONY : check-ohmic-source
 .PHONY : check-initial-profile
 .PHONY : check-smooth-transition
@@ -72,6 +74,8 @@ clean:
 	$(RM) neutral_gamma_transport_check
 	$(RM) heat_flux_limiter_check
 	$(RM) energy_conductivity_check
+	$(RM) temperature_exchange_check
+	$(RM) exchange_domain_check
 	$(RM) ohmic_source_check
 	$(RM) initial_profile_check
 	$(RM) linear_algebra_check smooth_transition_check
@@ -139,6 +143,17 @@ check-energy-conductivity : neutral_wall_physics_check.o globals.o neutral_flux_
 check-heat-flux-limiter : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_heat_flux_limiter.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o heat_flux_limiter_check
 	./heat_flux_limiter_check
+
+# Full collision-temperature value/tangent, trial continuation and affine RHS.
+check-temperature-exchange : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o solver_status.o MPI_OMP.o
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_temperature_exchange.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o solver_status.o MPI_OMP.o -Wl,--gc-sections -o temperature_exchange_check
+	./temperature_exchange_check
+
+exchange_domain_check : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_exchange_domain.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(shell printf '%s\n' *.o)) -o exchange_domain_check $(LIB)
+
+check-exchange-domain : exchange_domain_check
+	OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 ./exchange_domain_check
 
 # Check the production Ohmic source and Jacobian with floating-point traps.
 check-ohmic-source : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o smooth_transition.o
@@ -418,7 +433,7 @@ impurity_radiation.o : impurity_radiation.F globals.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 endif
 
-physics.o : physics.F globals.o magnetic_field.o neutral_flux_limiter.o $(IMPURITY_RADIATION_OBJECT) smooth_transition.o
+physics.o : physics.F globals.o magnetic_field.o neutral_flux_limiter.o $(IMPURITY_RADIATION_OBJECT) smooth_transition.o adimensionalization.o solver_status.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 ifeq ($(PASTIX),$(LIB_YES))

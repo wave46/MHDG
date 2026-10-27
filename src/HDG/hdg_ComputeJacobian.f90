@@ -2606,10 +2606,7 @@ CONTAINS
 #endif
 
     ! Temperature exchange terms
-    ! s(U^(k-1))
-        CALL compute_S(ue,s)
-    ! ds_du(U^(k-1))
-        CALL compute_dS_dU(ue,ds_dU)
+        CALL evaluate_temperature_exchange(ue,s,ds_dU)
 
     !Ohmic Heating
     IF (switch%ohmicsrc) THEN
