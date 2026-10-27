@@ -52,6 +52,11 @@ The default recycles the prescribed Bohm convection/pinch outflow; `.true.`
 restores the previous raw-diffusion recycling law. This choice changes neutral
 recycling, not plasma or neutral transport.
 
+The [smooth Bohm momentum condition](../numerics/bohm-boundary.md) reduces
+the target with angle and energy and releases it through outward Mach.
+It retains full momentum diffusion; the recycling flux selection above
+remains independent.
+
 The neutral flux includes diffusion, optional pressure transport and, for
 NeutralGamma, parallel flow:
 

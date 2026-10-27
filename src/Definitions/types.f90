@@ -237,7 +237,7 @@ MODULE types
      REAL*8, POINTER           :: Jtor(:) => NULL()! Toroidal Current
      REAL*8                    :: I_p ! Total plasma current
      REAL*8                    :: bohmth ! Threshold for imposing the Bohm boundary condition
-     REAL*8                    :: bohm_energy_thresh ! threshold on adimensional conservative ion energy for imposing Bohm, 2e-4 for density of 1e7 and no mach number corresponds to ~0.1 eV
+     REAL*8                    :: bohm_energy_thresh ! Dimensionless ion total energy-density scale; 2e-4 is ~0.053 eV at n=1e17 m^-3 and zero flow
      ! Energy equation coefficients
      REAL*8                    :: diff_e ! Perpendicular diffusion in the energy equation
      REAL*8                    :: epn ! Exponential of the parallel diffusion (usually 5/2)

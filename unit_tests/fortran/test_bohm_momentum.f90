@@ -1,124 +1,107 @@
-PROGRAM test_bohm_momentum
-  USE extracted_bohm
+! Compiled by check_bohm_momentum.py with verbatim extracted production blocks.
+MODULE extracted_bohm
+  USE, INTRINSIC :: iso_c_binding
+  USE, INTRINSIC :: ieee_arithmetic
+  USE bohm_boundary, ONLY: evaluate_bohm_blend, evaluate_isothermal_bohm_target
   IMPLICIT NONE
-  REAL*8 :: u(5), uhat(5), trial(5), ds(5), speed, factor, step
-  REAL*8 :: tau(5,5), ju(5,5), juhat(5,5), plus(5), minus(5), expected(5), actual(5)
-  REAL*8 :: ju_general(5,5), juhat_general(5,5)
-  REAL*8 :: velocities(7), velocity, bn, target, worst
-  INTEGER :: matrix_case, delta, sign_case, j, i, k, checks, branch_checks, selected, equivalence_checks
-  LOGICAL :: full
-
-  u = [1.2d0,.2d0,2.1d0,3.6d0,.3d0]
-  uhat = [.8d0,-.15d0,1.6d0,2.2d0,.1d0]
-  worst = 0.d0
-  checks = 0
-  equivalence_checks = 0
-  DO matrix_case = 0,1
-    full = matrix_case == 1
-    tau = 0.d0
-    DO i = 1,5
-      tau(i,i) = 1.d0+.2d0*i
-      IF (full) THEN
-        DO j = 1,5
-          IF (i /= j) tau(i,j) = .03d0*(i+j)
-        END DO
-      ENDIF
-    END DO
-    DO delta = 0,1
-      DO sign_case = -1,1,2
-        factor = .65d0*sign_case
-        CALL compute_cs(uhat,speed)
-        CALL compute_dcs_du(uhat,ds)
-        speed = factor*speed
-        ds = factor*ds
-        CALL assemble(u,uhat,ds,speed,delta,tau,full,ju,juhat)
-        IF (.NOT. full) THEN
-          ! The general assembly must reduce to the diagonal assembly when
-          ! supplied the same diagonal tau, despite different loop indices.
-          CALL assemble(u,uhat,ds,speed,delta,tau,.TRUE.,ju_general,juhat_general)
-          IF (MAXVAL(ABS(ju-ju_general))>1.d-12 .OR. &
-              MAXVAL(ABS(juhat-juhat_general))>1.d-12) ERROR STOP 'diagonal/full tau reduction'
-          equivalence_checks = equivalence_checks+1
-        ENDIF
-        CALL residual(u,uhat,speed,delta,tau,expected)
-        actual = MATMUL(ju,u)+MATMUL(juhat,uhat)
-        IF (MAXVAL(ABS(actual-expected)) > 1.d-12) ERROR STOP 'trace-density residual reconstruction'
-        IF (.NOT. full .AND. delta == 1) THEN
-          IF (ABS(ju(2,1)) > 1.d-12) ERROR STOP 'active momentum still uses element density'
-        ENDIF
-        DO j = 1,5
-          step = 1.d-6*MAX(ABS(u(j)),.1d0)
-          trial = u; trial(j) = trial(j)+step
-          CALL residual(trial,uhat,speed,delta,tau,plus)
-          trial = u; trial(j) = trial(j)-step
-          CALL residual(trial,uhat,speed,delta,tau,minus)
-          CALL check((plus-minus)/(2*step),ju(:,j))
-          step = 1.d-6*MAX(ABS(uhat(j)),.1d0)
-          trial = uhat; trial(j) = trial(j)+step
-          CALL trace_residual(u,trial,factor,delta,tau,plus)
-          trial = uhat; trial(j) = trial(j)-step
-          CALL trace_residual(u,trial,factor,delta,tau,minus)
-          CALL check((plus-minus)/(2*step),juhat(:,j))
-        END DO
-      END DO
-    END DO
-  END DO
-
-  ! Constant cs=1 at each state, while changing signed parallel velocity.
-  velocities = [-3.d0,-1.d0,-.5d0,0.d0,.5d0,1.d0,3.d0]
-  branch_checks = 0
-  DO sign_case = -1,1,2
-    bn = sign_case*.5d0
-    DO k = 1,SIZE(velocities)
-      velocity = velocities(k)
-      trial = [2.d0,2.d0*velocity,2.d0*(.75d0+.5d0*velocity**2),1.5d0,.1d0]
-      CALL select_branch(trial,bn,selected,target)
-      delta = 1
-      IF (sign_case*velocity > 1.d0+1.d-12) delta = 0
-      IF (selected /= delta) ERROR STOP 'signed outgoing Bohm branch'
-      IF (delta == 1 .AND. ABS(target-sign_case) > 1.d-12) ERROR STOP 'outgoing sonic target'
-      branch_checks = branch_checks+1
-    END DO
-    ! Grazing incidence keeps its original attenuation and active branch.
-    CALL select_branch(trial,sign_case*.05d0,selected,target)
-    IF (selected /= 1 .OR. ABS(target-sign_case*.5d0)>1.d-12) ERROR STOP 'grazing branch changed'
-    branch_checks = branch_checks+1
-  END DO
-  ! Preserve the existing reciprocal-suppression switch threshold.
-  trial = [2.d0,3.d0,3.75d0,1.5d0,.1d0]
-  phys%bohm_energy_thresh = trial(3)
-  CALL select_branch(trial,.5d0,selected,target)
-  IF (selected /= 1 .OR. ABS(target-.5d0)>1.d-12) ERROR STOP 'suppressed branch changed'
-  branch_checks = branch_checks+1
-  WRITE(*,*) 'Bohm momentum PASS: derivative columns, branch cases, worst error:',checks,branch_checks,worst
-  WRITE(*,*) 'Diagonal/full assembly equivalence cases:',equivalence_checks
-
+#ifdef NEUTRALGAMMA
+  INTEGER, PARAMETER :: Neq=6
+#else
+  INTEGER, PARAMETER :: Neq=5
+#endif
+  INTEGER, PARAMETER :: Ndim=2, Npfl=1
+  TYPE physics_type
+    REAL*8 :: bohmth,bohm_energy_thresh
+  END TYPE
+  TYPE(physics_type) :: phys
+  INTEGER, PARAMETER :: equation_nu=2,term_diffusion=1,term_split_diffusion=2,term_tau_stabilization_inward=3
+  TYPE balance_accumulator_type
+    REAL*8 :: values(3)=0.d0
+  END TYPE
+! PRODUCTION_DIAGNOSTIC_TYPE
 CONTAINS
+! PRODUCTION_HELPERS
+! PRODUCTION_DIAGNOSTIC_HELPERS
 
-  SUBROUTINE residual(u,uhat,speed,delta,tau,result)
-    REAL*8, INTENT(IN) :: u(5),uhat(5),speed,tau(5,5)
-    INTEGER, INTENT(IN) :: delta
-    REAL*8, INTENT(OUT) :: result(5)
-    REAL*8 :: target(5)
-    target = u
-    target(2) = delta*speed*uhat(1)+(1-delta)*u(2)
-    result = MATMUL(tau,target-uhat)
+  SUBROUTINE add_bc_value(this,equation,term,value)
+    CLASS(balance_accumulator_type),INTENT(INOUT) :: this
+    INTEGER,INTENT(IN) :: equation,term
+    REAL*8,INTENT(IN) :: value
+    this%values(term)=this%values(term)+value
   END SUBROUTINE
 
-  SUBROUTINE trace_residual(u,uhat,factor,delta,tau,result)
-    REAL*8, INTENT(IN) :: u(5),uhat(5),factor,tau(5,5)
-    INTEGER, INTENT(IN) :: delta
-    REAL*8, INTENT(OUT) :: result(5)
-    REAL*8 :: speed
-    CALL compute_cs(uhat,speed)
-    speed = factor*speed
-    CALL residual(u,uhat,speed,delta,tau,result)
+  SUBROUTINE select_blend(uhat,bn,delta,free_weight,ddelta_du,target_coefficient,dtarget_du,weights)
+    REAL*8, INTENT(IN) :: uhat(Neq),bn
+    REAL*8, INTENT(OUT) :: delta,free_weight,ddelta_du(Neq),target_coefficient,dtarget_du(Neq),weights(3)
+    REAL*8 :: ufg(1,Neq),upg(1,9),SoundSpeed,inc,sn,bohm_suppresion,energy_zero_threshold,dcs_du(Neq)
+    REAL*8 :: p0,ps,pf,dp0(Neq),dps(Neq),dpf(Neq)
+    INTEGER :: g
+    g=1;ufg(1,:)=uhat;upg=0;upg(1,2)=uhat(2)/uhat(1);inc=bn;energy_zero_threshold=1.d-20
+#ifdef TEMPERATURE
+    CALL compute_cs(uhat,SoundSpeed)
+    CALL compute_dcs_du(uhat,dcs_du)
+#else
+    SoundSpeed=1.d0;dcs_du=0.d0
+#endif
+! PRODUCTION_SELECTOR
+#ifdef TEMPERATURE
+    weights=[p0,ps,pf]
+#else
+    weights=[0.d0,delta,free_weight]
+#endif
   END SUBROUTINE
 
-  SUBROUTINE check(numerical,analytic)
-    REAL*8, INTENT(IN) :: numerical(5),analytic(5)
-    worst = MAX(worst,MAXVAL(ABS(numerical-analytic)))
-    checks = checks+1
-    IF (MAXVAL(ABS(numerical-analytic))>1.d-8) ERROR STOP 'Bohm momentum Jacobian'
+  SUBROUTINE probe(u,uhat,q,iso,ani,b,n,tau_input,angle,energy,lag_velocity,tangent,ju,jh,jq,rhs,weights,target,diagnostic) BIND(C)
+    REAL(c_double), INTENT(IN) :: u(Neq),uhat(Neq),q(2,Neq),iso(Neq,Neq),ani(Neq,Neq),b(2),n(2),tau_input(Neq,Neq)
+    REAL(c_double), VALUE :: angle,energy,lag_velocity
+    INTEGER(c_int), VALUE :: tangent
+    REAL(c_double), INTENT(OUT) :: ju(Neq,Neq),jh(Neq,Neq),jq(Neq,2*Neq),rhs(Neq),weights(3),target,diagnostic(3)
+    TYPE matrix_type
+      REAL*8 :: All(Neq,Neq,1),Alu(Neq,Neq,1),Alq(Neq,2*Neq,1),fh(Neq,1)
+    END TYPE
+    TYPE(matrix_type) :: elMat
+    TYPE(balance_accumulator_type) :: accumulator
+    TYPE(balance_plasma_bc_type) :: plasma
+    INTEGER :: i,j,k,idm,iel,Neqstab,Neqgrad,inn,ign
+    INTEGER :: ind(1),indi(1),indj(1),ind_jf(1),ind_kf(1),ind_asf(1),ind_ash(1),ind_ff(Neq),ind_fe(Neq),ind_fg(2*Neq)
+    REAL*8 :: ufg(Neq),uefg(Neq),upfg(9),Qpr(2,Neq),diffiso(Neq,Neq),diffani(Neq,Neq),bg(2),ng(2),bn,tau(Neq,Neq)
+    REAL*8 :: delta,free_weight,ddelta_du(Neq),target_coefficient,dtarget_du(Neq),NiNi(1,1),Ni(1),kmult(1,1)
+    REAL*8 :: target_affine
+    REAL*8 :: W2(Neq),dW2_dU(Neq,Neq),QdW2(2,Neq)
+    REAL*8 :: W3(Neq),dW3_dU(Neq,Neq),QdW3(2,Neq),W4(Neq),dW4_dU(Neq,Neq),QdW4(2,Neq)
+    LOGICAL :: ntang
+    REAL*8 :: diagnostic_target(Neq)
+    phys%bohmth=angle;phys%bohm_energy_thresh=energy
+    bn=DOT_PRODUCT(b,n)
+    CALL select_blend(uhat,bn,delta,free_weight,ddelta_du,target_coefficient,dtarget_du,weights)
+    ufg=uhat;uefg=u
+#ifdef TEMPERATURE
+! PRODUCTION_DIAGNOSTIC_TARGET
+#endif
+#ifndef TEMPERATURE
+    target=target_coefficient*u(1)+free_weight*u(2)
+#endif
+    ufg=uhat;uefg=u;upfg=0;upfg(2)=lag_velocity;Qpr=q;diffiso=iso;diffani=ani;bg=b;ng=n;tau=tau_input
+    elMat%All=0;elMat%Alu=0;elMat%Alq=0;elMat%fh=0
+    iel=1;Neqstab=Neq;Neqgrad=Neq;inn=0;ign=0
+#ifdef NEUTRALGAMMA
+    inn=5;ign=6
+#endif
+    ind_asf=0;ind_ash=0;ind_ff=[(i,i=1,Neq)];ind_fe=ind_ff;ind_fg=[(i,i=1,2*Neq)]
+    NiNi=1.d0;Ni=1.d0
+    ntang=tangent==0
+    CALL compute_W2(ufg,W2,diffiso(1,1),diffiso(2,2))
+    CALL compute_dW2_dU(ufg,dW2_dU,diffiso(1,1),diffiso(2,2));QdW2=MATMUL(Qpr,dW2_dU)
+    CALL compute_W3(ufg,W3,diffiso(1,1),diffiso(2,2),diffiso(3,3))
+    CALL compute_dW3_dU(ufg,dW3_dU,diffiso(1,1),diffiso(2,2),diffiso(3,3));QdW3=MATMUL(Qpr,dW3_dU)
+    CALL compute_W4(ufg,W4,diffiso(1,1),diffiso(4,4))
+    CALL compute_dW4_dU(ufg,dW4_dU,diffiso(1,1),diffiso(4,4));QdW4=MATMUL(Qpr,dW4_dU)
+! PRODUCTION_STABILIZATION
+! PRODUCTION_DIFFUSION
+    diagnostic_target=u;diagnostic_target(2)=target
+    CALL accumulate_momentum_closure(accumulator,uhat,diagnostic_target,q,n,b,bn,tau_input,iso,ani, &
+         DOT_PRODUCT(MATMUL(q,W2),n-bn*b),1.d0)
+    diagnostic=accumulator%values
+    ju=elMat%Alu(:,:,1);jh=elMat%All(:,:,1);jq=elMat%Alq(:,:,1);rhs=elMat%fh(:,1)
   END SUBROUTINE
-END PROGRAM
+END MODULE

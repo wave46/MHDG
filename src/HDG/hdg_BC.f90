@@ -7,6 +7,9 @@
 !*****************************************
 
 MODULE hdg_bc_module
+#if defined(NGAMMA) && !defined(TOR3D)
+  USE bohm_boundary, ONLY: evaluate_bohm_blend, evaluate_isothermal_bohm_target
+#endif
   IMPLICIT NONE
   PRIVATE
   PUBLIC :: HDG_BC
@@ -1006,18 +1009,16 @@ CONTAINS
   SUBROUTINE set_Bohm_bc()
       INTEGER                   :: g,i
       REAL*8                    :: dline,xyDerNorm_g
-      REAL*8                    :: setval
+      REAL*8                    :: target_coefficient
       REAL*8                    :: t_g(Ndim),n_g(Ndim)
-      REAL*8                    :: inc,sn
-      INTEGER                   :: delta
+      REAL*8                    :: sn
+      REAL*8                    :: delta,free_weight,ddelta_du(Neq),p0,ps,pf,dp0(Neq),dps(Neq),dpf(Neq)
       REAL*8                    :: NiNi(Npfl,Npfl),Ni(Npfl)
       REAL*8                    :: soundSpeed
-    REAL*8                    :: dcs_du(Neq)
+    REAL*8                    :: dcs_du(Neq),dtarget_du(Neq)
       REAL*8                    :: bn
       LOGICAL                   :: ntang
       REAL                      :: tau_stab(Neq,Neq)
-      REAL*8                    :: bohm_suppresion, energy_zero_threshold, bohm_velocity
-    energy_zero_threshold=1.e-20
     ! Loop in 1D Gauss points
     DO g = 1,Ng1d
 
@@ -1048,91 +1049,50 @@ CONTAINS
 #endif
       ! tangency
       ntang = .TRUE.
-      inc = bn
 
 #ifdef NGAMMA
-      setval = ufg(g,2)
-
-      !IF (abs(inc) .le. phys%bohmth) THEN
-      !   !sn = 1.
-      !   !delta = 0 ! TODO try to module delta in the WEST case
-      !   !Modification BC
-      !   sn = sign(1.,bn)
-      !   delta = 0.
-      !   setval = sn
-      !   !End modification BC
-      !   ntang = .FALSE.
-      !ELSE
-      !  sn = sign(1.,bn)
-      !  delta = 1
-      !  IF ((abs(upg(g,2))) .le. SoundSpeed) THEN
-      !     setval = sn*SoundSpeed
-      !     delta = 1
-      !  ELSE IF ((abs(upg(g,2))) .gt. SoundSpeed) THEN
-      !    !delta = 0
-      !    !setval = upg(g,2)
-      !    !Modification BC
-      !    delta = 0.
-      !    setval = sn
-      !    !End modification BC
-      !  END IF
-
-      ! NEW BOHM BC
-      ! Above angle threshold: Impose outgoing supersonic velocity everywhere
-      ! Below angle thresgold: Impose linear decrease of supersonic velocity
-      !                        to 0 as a function of the angle of incidence
-         setval = ABS(upg(g,2))
-         sn = SIGN(1.,bn)
-         bohm_velocity = ABS(upg(g,2))
+      ! Bohm selector: imposed target and supersonic release.
+         sn = SIGN(1.d0,bn)
+         ddelta_du = 0.d0
 #ifdef TEMPERATURE
-         ! Only outward sonic/supersonic flow can select the free branch.
-         bohm_velocity = sn*upg(g,2)
+         CALL evaluate_bohm_blend(ufg(g,:),SoundSpeed,dcs_du,bn,phys%bohmth,phys%bohm_energy_thresh, &
+              p0,ps,pf,dp0,dps,dpf)
+         free_weight = pf
+         delta = p0+ps
+         ddelta_du = dp0+dps
+         ! target_coefficient is the weighted sonic coefficient, not an effective speed.
+         dtarget_du = sn*(ps*dcs_du+SoundSpeed*dps)
+         target_coefficient = sn*SoundSpeed*ps
+#else
+         CALL evaluate_isothermal_bohm_target(ufg(g,:),upg(g,2),SoundSpeed,bn, &
+              phys%bohmth,phys%bohm_energy_thresh,delta,free_weight,target_coefficient)
+         dtarget_du = 0.d0
 #endif
-      delta = 1
-         bohm_suppresion = max(ufg(g,3),energy_zero_threshold)/(max(ufg(g,3),energy_zero_threshold)+phys%bohm_energy_thresh)
-         IF (ABS(inc) .LE. phys%bohmth) THEN
-            setval = sn*SoundSpeed/phys%bohmth*ABS(inc)*bohm_suppresion
-            dcs_du = sn*dcs_du/phys%bohmth*ABS(inc)*bohm_suppresion
-      ELSE
-            IF (bohm_velocity .LE. SoundSpeed/bohm_suppresion) THEN
-            setval = sn*SoundSpeed*bohm_suppresion
-               dcs_du = sn*dcs_du*bohm_suppresion
-            ELSE IF (bohm_velocity .GT. SoundSpeed/bohm_suppresion) THEN
-            delta = 0
-            !setval = sn*setval
-         END IF
-      END IF
 #endif
 
       ! Shape functions
       NiNi = tensorProduct(refElPol%N1D(g,:),refElPol%N1D(g,:))*dline
       Ni = refElPol%N1D(g,:)*dline
       !****************** Stabilization part******************************
-      IF (numer%stab > 1) THEN
-        ! Compute tau in the Gauss points
-        IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
-        ELSE
-          CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
-        ENDIF
-
-      ELSE
-        tau_stab=0.
+      IF (numer%stab == 1) THEN
+        tau_stab=0.d0
         DO i = 1,Neq
           tau_stab(i,i) = numer%tau(i)
         END DO
-      END IF
+      ELSE
+        CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
+      ENDIF
       !****************** End stabilization part******************************
 
 
       ! Assembly Bohm contribution
 #ifndef DKLINEARIZED
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,&
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),n_g,tau_stab,target_coefficient,dtarget_du,delta,free_weight,ddelta_du,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,&
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #else
         CALL assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg(g,:),&
-          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,setval,dcs_du,delta,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,&
+          &ufg(g,:),upg(g,:),ueg(g,:),b(g,1:2),rho_pol_norm(g),q_cyl(g),xyg(g,:),n_g,tau_stab,target_coefficient,dtarget_du,delta,free_weight,ddelta_du,diff_iso_fac(:,:,g),diff_ani_fac(:,:,g),neutral_limiter_phi(g),dline,ntang,&
           &topology_region=topology_region(g),outward_normal=topology_normal(g,:))
 #endif
 
@@ -1536,12 +1496,12 @@ CONTAINS
   ! Assembly Bohm
   !*********************************
 #ifndef DKLINEARIZED
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,ng,tau,target_coefficient,dtarget_du,delta,free_weight,ddelta_du,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal)
 #else
-    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,setval,dcs_du,delta,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal)
+    SUBROUTINE assembly_bohm_bc(iel,ind_asf,ind_ash,ind_ff,ind_fe,ind_fg,NiNi,Ni,qfg,ufg,upfg,uefg,bg,rho,q_cyl,xyf,ng,tau,target_coefficient,dtarget_du,delta,free_weight,ddelta_du,diffiso,diffani,neutral_limiter_phi,dline,ntang,topology_region,outward_normal)
 #endif
-    integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc,delta
-    real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),rho,ng(:),tau(:,:),setval,dcs_du(:)
+    integer*4        :: iel,ind_asf(:),ind_ash(:),ind_ff(:),ind_fe(:),ind_fg(:),bc
+    real*8           :: NiNi(:,:),Ni(:),ufg(:),upfg(:),uefg(:),bg(:),rho,ng(:),tau(:,:),target_coefficient,dtarget_du(:),delta,free_weight,ddelta_du(:)
     integer,intent(IN)         :: topology_region
     real*8,intent(IN)          :: outward_normal(:)
     real*8           :: diffiso(:,:),diffani(:,:),neutral_limiter_phi,dline
@@ -1556,6 +1516,7 @@ CONTAINS
     integer*4        :: ind(Npfl),indi(Npfl),indj(Npfl),ind_jf(Npfl),ind_kf(Npfl)
     real*8           :: Qpr(Ndim,Neq), recycling_coeff,  cryopump_coeff,puff_coeff
     real*8           :: W2(Neq), dW2_dU(Neq,Neq), QdW2(Ndim,Neq)
+    real*8           :: target_affine
     TYPE(balance_plasma_bc_type) :: diagnostic_plasma_bc
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
 #ifdef TEMPERATURE
@@ -1610,93 +1571,43 @@ CONTAINS
     CALL compute_dW2_dU(ufg,dW2_dU,diffiso(1,1),diffiso(2,2))
         QdW2 = MATMUL(Qpr,dW2_dU)
 
-    ! Case diagonal matrix stabilization
-    IF (numer%stab < 6) THEN
-      DO i = 1,Neqstab
-        ind = i + ind_asf
-              elMat%ALL(ind_ff(ind),ind_ff(ind),iel) = elMat%ALL(ind_ff(ind),ind_ff(ind),iel) - tau(i,i)*NiNi
-              !dirichlet boundary on minimal allowed values
-              !IF ((i .ne. 5) .and. ((ufg(1)<1e-5) .or. (ufg(3)<1.e-8*3/2*phys%Mref) .or. (ufg(4)<1.e-8*3/2*phys%Mref))) THEN
-              !IF (.false.) THEN
-              ! if (i==1) then
-              !    elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel)  - tau(i,i)*1e-5*Ni
-              ! elseif (i == 3) then
-              !    elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel)  - tau(i,i)*1.e-8*3/2*phys%Mref*Ni
-              ! elseif (i==4) then
-              !    elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel)  - tau(i,i)*1.e-8*3/2*phys%Mref*Ni
-              ! endif
-        IF (i == 2) THEN
-          !elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) + tau(i,i)*(delta*setval)*NiNi
-          !if (iel==195) then
-          !write(6,*) "delta",delta
-          !write(6,*) "setval",setval
-          !write(6,*) "tau(i,i)",tau(i,i)
-          !endif
-          !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*(1 - delta)*NiNi
-          !Modification BC
-          !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*(1 - delta)*setval*NiNi
-          !End modification BC
-          !NEW BOHM BC: Impose everywhere a value for velocity
+    ! Begin diagonal Bohm stabilization
+    DO i = 1,Neqstab
+      ind = i + ind_asf
+      elMat%All(ind_ff(ind),ind_ff(ind),iel) = elMat%All(ind_ff(ind),ind_ff(ind),iel) - tau(i,i)*NiNi
+      IF (i == 2) THEN
 #ifdef TEMPERATURE
-          elMat%All(ind_ff(ind),ind_ff(ind - 1),iel) = elMat%All(ind_ff(ind),ind_ff(ind - 1),iel) + tau(i,i)*delta*setval*NiNi
+        elMat%All(ind_ff(ind),ind_ff(ind-1),iel) = elMat%All(ind_ff(ind),ind_ff(ind-1),iel) + tau(i,i)*target_coefficient*NiNi
+        target_affine = ufg(1)*DOT_PRODUCT(dtarget_du,ufg)-uefg(2)*DOT_PRODUCT(ddelta_du,ufg)
 #else
-          elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind - 1),iel) + tau(i,i)*delta*setval*NiNi
+        elMat%Alu(ind_ff(ind),ind_fe(ind-1),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind-1),iel) + tau(i,i)*target_coefficient*NiNi
+        target_affine = 0.d0
 #endif
-          elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*(1. - delta)*NiNi
-                 !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*NiNi
-                 ! Temperature models target delta*s(U_hat)*U_hat(1) +
-                 ! (1-delta)*U(2). Tau, branch and suppression remain lagged.
-                 DO j = 1,Neqstab
-                  indj = j + ind_asf
-#ifdef TEMPERATURE
-                  elMat%All(ind_ff(ind),ind_ff(indj),iel) = elMat%All(ind_ff(ind),ind_ff(indj),iel) + tau(i,i)*delta*dcs_du(j)*ufg(1)*NiNi
-#else
-                  elMat%All(ind_ff(ind),ind_ff(indj),iel) = elMat%All(ind_ff(ind),ind_ff(indj),iel) + tau(i,i)*delta*dcs_du(j)*uefg(1)*NiNi
-#endif
-                 ENDDO
-                 ! No sound-speed affine RHS term: s(U_hat) is homogeneous
-                 ! of degree zero (also after its scalar softplus), hence
-                 ! ds/dU_hat . U_hat = 0 with branch/suppression held fixed.
-#ifdef NEUTRALGAMMA
-        ELSE IF (ign > 0 .AND. i == ign) THEN
-          indj = inn + ind_asf
-          elMat%Alu(ind_ff(ind),ind_fe(indj),iel) = elMat%Alu(ind_ff(ind),ind_fe(indj),iel) + &
-            &tau(i,i)*delta*(-upfg(2))*NiNi
-#endif
-        ELSE
-          elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*NiNi
-        END IF
-      END DO
-    ELSE
-      ! Case full matrix stabilization
-      DO i = 1,Neqstab
-        indi = i + ind_asf
+        elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*free_weight*NiNi
         DO j = 1,Neqstab
           indj = j + ind_asf
-                 elMat%ALL(ind_ff(indi),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi),ind_ff(indj),iel) - tau(i,j)*NiNi
-          IF (j == 1) THEN
-#ifdef TEMPERATURE
-            ! Apply the trace-density target to the same full-tau column.
-            elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + tau(i,j)*NiNi
-            elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + tau(i,2)*delta*setval*NiNi
-#else
-            elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) +&
-              &tau(i,j)*NiNi + tau(i,j + 1)*(delta*setval)*NiNi
+          elMat%All(ind_ff(ind),ind_ff(indj),iel) = elMat%All(ind_ff(ind),ind_ff(indj),iel) + &
+               tau(i,i)*(ufg(1)*dtarget_du(j)-uefg(2)*ddelta_du(j))*NiNi
+        ENDDO
+        ! Absolute-unknown solve: affine RHS = J*x - nonlinear residual.
+        elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel) + tau(i,i)*target_affine*Ni
+#ifdef NEUTRALGAMMA
+      ELSE IF (ign > 0 .AND. i == ign) THEN
+        indj = inn + ind_asf
+        elMat%Alu(ind_ff(ind),ind_fe(indj),iel) = elMat%Alu(ind_ff(ind),ind_fe(indj),iel) - tau(i,i)*delta*upfg(2)*NiNi
+        DO j = 1,Neqstab
+          indj = j + ind_asf
+          elMat%All(ind_ff(ind),ind_ff(indj),iel) = elMat%All(ind_ff(ind),ind_ff(indj),iel) - &
+               tau(i,i)*upfg(2)*uefg(inn)*ddelta_du(j)*NiNi
+        ENDDO
+        elMat%fh(ind_ff(ind),iel) = elMat%fh(ind_ff(ind),iel) - &
+             tau(i,i)*upfg(2)*uefg(inn)*DOT_PRODUCT(ddelta_du,ufg)*Ni
 #endif
-          ELSE IF (j == 2) THEN
-            elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + tau(i,j)*(1 - delta)*NiNi
-          ELSE
-            elMat%Alu(ind_ff(indi),ind_fe(indj),iel) = elMat%Alu(ind_ff(indi),ind_fe(indj),iel) + tau(i,j)*NiNi
-          ENDIF
-#ifdef TEMPERATURE
-          ! d[s(U_hat)*U_hat(1)]/dU_hat(j), with tau/branch/suppression fixed.
-          ! The density derivative is above; ds/dU_hat . U_hat = 0.
-          elMat%All(ind_ff(indi),ind_ff(indj),iel) = elMat%All(ind_ff(indi),ind_ff(indj),iel) + tau(i,2)*delta*ufg(1)*dcs_du(j)*NiNi
-#endif
-        END DO
-      END DO
-    ENDIF
-
+      ELSE
+        elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*NiNi
+      ENDIF
+    ENDDO
+    ! End diagonal Bohm stabilization
 
 #ifdef TEMPERATURE
 
@@ -2045,8 +1956,8 @@ CONTAINS
 #ifdef TEMPERATURE
     IF (face_diagnostics_on) THEN
       diagnostic_plasma_bc = balance_plasma_bc_type( &
-        &momentum_target=DBLE(delta)*setval*ufg(1)+ &
-        &(1.d0-DBLE(delta))*uefg(2), &
+        &momentum_target=target_coefficient*ufg(1)+ &
+        &free_weight*uefg(2), &
         &momentum_split_diffusive_flux=DOT_PRODUCT(MATMUL(Qpr,W2),ng-bn*bg), &
         &ion_energy_split_diffusive_flux= &
         &DOT_PRODUCT(MATMUL(Qpr,W3),ng-bn*bg), &

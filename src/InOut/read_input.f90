@@ -679,6 +679,11 @@ SUBROUTINE READ_input()
   phys%bcflags            = bcflags
   phys%bohmth             = bohmth
   phys%bohm_energy_thresh = bohm_energy_thresh
+#if defined(TEMPERATURE) && !defined(TOR3D)
+  IF (.NOT. ieee_is_finite(bohm_energy_thresh) .OR. bohm_energy_thresh<0.d0) &
+       ERROR STOP 'bohm_energy_thresh must be finite and nonnegative'
+  IF (.NOT. ieee_is_finite(bohmth)) ERROR STOP 'bohmth must be finite'
+#endif
   phys%Gmbohm             = Gmbohm
   phys%Gmbohme            = Gmbohme
   phys%a                  = a

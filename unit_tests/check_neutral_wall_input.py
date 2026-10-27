@@ -42,7 +42,17 @@ def main():
     ]
     invalid.append(("removed_iter_core", "bcflags(8)=6",
                     "Boundary condition 6 (ITER core) has been removed"))
+    valid.append(("bohm_unsuppressed", "bohm_energy_thresh=0, bohmth=0", (1.0, 1.0)))
+    invalid.extend((f"bohm_energy_{name}", f"bohm_energy_thresh={value}",
+                    "bohm_energy_thresh must be finite and nonnegative")
+                   for name, value in (("negative", "-1"), ("nan", "NaN"), ("infinite", "Infinity")))
+    invalid.extend((f"bohm_angle_{name}", f"bohmth={value}", "bohmth must be finite")
+                   for name, value in (("nan", "NaN"), ("infinite", "Infinity")))
     cases = [("PHYS_LST", *case) for case in valid + invalid]
+    cases.extend([
+        ("NUMER_LST", "stabilization_prescribed", "stab=1, tau=0.11,0.22,0.33,0.44,0.55", (1.0, 1.0)),
+        ("NUMER_LST", "stabilization_automatic", "stab=5", (1.0, 1.0)),
+    ])
     cases.append(("NUMER_LST", "legacy_bohm_zero", "bohmtypebc=0", (1.0, 1.0)))
     cases.extend(("NUMER_LST", f"removed_bohm_{value}", f"bohmtypebc={value}",
                   "Alternate Bohm boundary conditions have been removed")
@@ -93,6 +103,14 @@ def main():
             else:
                 passed = (run.returncode != 0 and expected in output
                           and "NEUTRAL_WALL_ALBEDOS" not in output)
+            if passed and name == "stabilization_prescribed":
+                selected = re.search(r"^STABILIZATION_TYPE\s+(\d+)", output, re.M)
+                prescribed = re.search(r"^STABILIZATION_TAU\s+(.+)$", output, re.M)
+                passed = selected is not None and selected[1] == "1" and prescribed is not None
+                if passed:
+                    values = tuple(float(value) for value in prescribed[1].split())
+                    passed = all(abs(actual-expected) < 1.e-14
+                                 for actual, expected in zip(values, (.11,.22,.33,.44,.55)))
             if not passed:
                 raise SystemExit(f"FAIL: {name}\n{output}")
     print(f"neutral wall input checks: {len(cases)} PASS")
