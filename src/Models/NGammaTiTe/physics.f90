@@ -88,6 +88,15 @@ MODULE physics
   TYPE(neutral_runtime_constants_t), SAVE :: neutral_rt
   TYPE(neutral_flux_limiter_config_t), SAVE :: neutral_limiter_config
 
+  PRIVATE :: evaluate_stab5
+  INTERFACE
+    MODULE SUBROUTINE evaluate_stab5(up,uc,b,normal,length_factor,diff_iso,tau)
+      REAL*8, INTENT(IN) :: up(:),uc(:),b(:),normal(:),length_factor,diff_iso(:,:)
+      REAL*8, INTENT(OUT) :: tau(:,:)
+    END SUBROUTINE evaluate_stab5
+  END INTERFACE
+
+
 CONTAINS
 
   !*******************************************
@@ -1814,27 +1823,6 @@ CONTAINS
 
   END SUBROUTINE
 
-  SUBROUTINE compute_dfree_streaming_heat_flux_electrons_dU(U, res)
-    REAL*8, INTENT(IN)  :: U(:)
-    REAL*8, INTENT(OUT) :: res(:)
-    REAL*8, PARAMETER :: mi = ion_mass_si
-    REAL*8, PARAMETER :: me = electron_mass_si
-    REAL*8, PARAMETER :: tmin = 1e-5 ! eV    
-    REAL*8            :: tmin_cons
-
-    res = 0.d0
-
-    tmin_cons = tmin/simpar%refval_temperature*3*phys%Mref/2.
-    
-    IF (U(4)/U(1) > tmin_cons) THEN
-      res(1) = -0.5/U(1)
-      res(4) = 3./2./U(4)
-      res = (2./3.*U(4)/U(1))**1.5*U(1)*SQRT(mi/me)*res
-    ELSE
-      ! q_fs=C*n*T_min^(3/2): flooring T preserves the density derivative.
-      res(1) = (2.d0/3.d0*tmin_cons)**1.5d0*SQRT(mi/me)
-    ENDIF
-  END SUBROUTINE
 
   SUBROUTINE compute_free_streaming_heat_flux_ions(U,qfs)
     REAL*8, INTENT(IN)  :: U(:)
@@ -1855,27 +1843,6 @@ CONTAINS
 
   END SUBROUTINE
 
-  SUBROUTINE compute_dfree_streaming_heat_flux_ions_dU(U, res)
-    REAL*8, INTENT(IN)  :: U(:)
-    REAL*8, INTENT(OUT) :: res(:)
-    REAL*8, PARAMETER :: tmin = 1e-5 ! eV    
-    REAL*8            :: tmin_cons
-
-    res = 0.d0
-    
-    tmin_cons = tmin/simpar%refval_temperature*3*phys%Mref/2.
-    
-    IF (U(3)/U(1) - 0.5*U(2)**2/U(1)**2  > tmin_cons) THEN
-
-      res(1) = -0.5*(U(3)-2.*U(2)**2/U(1))/(U(1)*(U(3)-1./2.*U(2)**2/U(1)))
-      res(2) = -3./2.*U(2)/(U(1)*(U(3)-1./2.*U(2)**2/U(1)))
-      res(3) = 3./2./(U(3)-1./2.*U(2)**2/U(1))
-      res = (2./3.*(U(3)-1./2.*U(2)**2/U(1))/U(1))**1.5*U(1)*res
-    ELSE
-      ! q_fs=C*n*T_min^(3/2): flooring T preserves the density derivative.
-      res(1) = (2.d0/3.d0*tmin_cons)**1.5d0
-    ENDIF
-  END SUBROUTINE
 
   SUBROUTINE compute_spitzer_harm_flux_ions(U, Q, b, q_sh_i)
     REAL*8, INTENT(IN) :: U(:), Q(:,:), b(:)
@@ -1918,27 +1885,19 @@ CONTAINS
 
   END SUBROUTINE compute_flux_limiter
 
-  SUBROUTINE compute_heat_flux_limiter_linearization(qfs, qsh, c_fl, dqfs_dU_U, &
-       &flux_limiter, dheat_dqfs, affine_correction)
-    REAL*8, INTENT(IN) :: qfs, qsh, c_fl, dqfs_dU_U
-    REAL*8, INTENT(OUT) :: flux_limiter, dheat_dqfs, affine_correction
+  SUBROUTINE compute_heat_flux_limiters(U,qsh_i,qsh_e,phi_i,phi_e)
+    REAL*8, INTENT(IN) :: U(:),qsh_i,qsh_e
+    REAL*8, INTENT(OUT) :: phi_i,phi_e
+    REAL*8 :: qfs_i,qfs_e
 
-    ! r=|q_SH|/(C_FL*q_FS), FL=1/(1+r), q_parallel=FL*q_SH.
-    ! SH Taylor terms: q^Q=(dq_SH/dQ)*Q, q^U=(dq_SH/dU)*U, q^0=-(dq_SH/dU)*U0.
-    ! With coefficients at (U0,Q0) and the outer cap floor inactive:
-    ! q_parallel,lin=FL^2*(q^Q+q^U+q^0)+(FL^2*q_SH*r/q_FS)*(dq_FS/dU)*U.
-    CALL compute_flux_limiter(qfs,qsh,c_fl,flux_limiter)
-    dheat_dqfs = 0.d0
-    IF (ABS(qfs) > heat_flux_cap_floor) THEN
-      ! dheat_dqfs=FL^2*q_SH*r/q_FS=FL*q_SH*(1-FL)/q_FS.
-      dheat_dqfs = (flux_limiter*qsh)*(1.d0-flux_limiter)/qfs
-      ! RHS correction beyond -FL^2*q^0; (dq_FS/dU)*U0=q_FS for a degree-one cap.
-      affine_correction = dheat_dqfs*(dqfs_dU_U-qfs)
-    ELSE
-      ! Constant cap: q^0_extra=FL*(1-FL)*q_SH; the RHS contains -q^0_extra.
-      affine_correction = flux_limiter*(flux_limiter-1.d0)*qsh
-    ENDIF
-  END SUBROUTINE compute_heat_flux_limiter_linearization
+    phi_i = 1.d0
+    phi_e = 1.d0
+    IF (.NOT. switch%flux_limiter) RETURN
+    CALL compute_free_streaming_heat_flux_ions(U,qfs_i)
+    CALL compute_free_streaming_heat_flux_electrons(U,qfs_e)
+    CALL compute_flux_limiter(qfs_i,qsh_i,phys%c_fli,phi_i)
+    CALL compute_flux_limiter(qfs_e,qsh_e,phys%c_fle,phi_e)
+  END SUBROUTINE compute_heat_flux_limiters
    
 
   ! ******************************
@@ -3415,6 +3374,12 @@ ENDSUBROUTINE  compute_ddissip_du
     U3 = uc(3)
     U4 = uc(4)
 
+#ifndef TOR3D
+    IF (numer%stab == 5) THEN
+      CALL evaluate_stab5(up,uc,b,n,DBLE(refElPol%ndeg)/Mesh%elemSize(iel),diff_iso,tau)
+      RETURN
+    ENDIF
+#endif
     tau = 0.
     inn = phys%idx_rhon_eq
     ign = phys%idx_gamman_eq
@@ -3514,6 +3479,7 @@ ENDSUBROUTINE  compute_ddissip_du
             phys%lscale/geom%R0*ABS(bn)*phys%diff_pari*up(7)**2.5, phys%lscale/geom%R0*ABS(bn)*phys%diff_pare*up(8)**2.5)
 
     ELSEIF (numer%stab == 5) THEN
+#ifdef TOR3D
        !IF (ABS(isext - 1.) .LT. 1e-12) THEN
        ! ! exterior faces
        !   tau_aux = ABS((4*uc(2)*bn)/uc(1))
@@ -3556,6 +3522,8 @@ ENDSUBROUTINE  compute_ddissip_du
 !#endif
 #ifdef TOR3D
        ENDIF
+#endif
+
 #endif
 
     ELSE

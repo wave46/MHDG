@@ -54,11 +54,18 @@ energies. It covers active-branch derivatives at the floor/cap, the convergence
 test's cap bypass, density/momentum couplings and degree-zero homogeneity.
 It uses the current NGammaTiTe-family configuration without mesh or case data.
 
-`make check-heat-flux-limiter` uses the current NGammaTiTe-family configuration.
-It compares ion/electron limited-flux derivatives with finite differences and
-checks reconstruction from the Jacobian and affine term in ordinary,
-temperature-floor and cap-floor states, with either flux sign and zero flux.
-It uses the production value/derivative helpers without MPI or external data.
+`make check-heat-flux-limiter` verifies the physical limited flux and its
+held-limiter tangent, including floors, both flux signs, zero gradient and
+the disabled limiter. It checks finite differences with phi fixed, the
+absolute RHS reconstruction and the joint state/gradient scaling identity.
+
+`make check-heat-flux-assembly` checks unmodified numerical blocks from volume,
+interior, exterior, Bohm and prescribed-trace paths against independent fluxes
+and held-phi finite differences. It runs bounds-checked and optimized builds.
+
+`make check-stabilization-values` verifies automatic diagonal coefficients
+against independent formulas and checks independence from gradients and the
+physical limiter. It includes capped temperatures and a trial undershoot.
 
 `make check-temperature-exchange` checks source values, finite-difference
 Jacobians, continuity at zero electron temperature, recovery signs and

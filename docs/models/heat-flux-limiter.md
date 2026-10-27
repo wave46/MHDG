@@ -43,7 +43,7 @@ $10^{-5}$ eV. Below it the cap still varies linearly with density. A further
 minimum free-streaming flux of $10^{-10}$ in solver flux units prevents a
 zero denominator when evaluating the limiter.
 
-## Linearization
+## Tangent
 
 Inside the conductivity's temperature limits, its derivative follows the
 power law. Below the lower floor or above the upper limit, the conductivity
@@ -52,21 +52,22 @@ constant-side derivative is used; exactly at the upper limit the power-law
 side is used. Multiplying all conservative state components by the same
 factor leaves temperature and conductivity unchanged.
 
-For the currently assembled exact heat-limiter derivative, write
-$h=\phi q_{\mathrm{SH}}$. Its response to changes in the classical flux and
-the free-streaming flux is
+The limiter is recomputed at each nonlinear assembly. With
+$h=\phi q_{\mathrm{SH}}$, the tangent holds $\phi$ fixed:
 
 $$
-\frac{\partial h}{\partial q_{\mathrm{SH}}}=\phi^2,\qquad
-\frac{\partial h}{\partial q_{\mathrm{fs}}}=
-\begin{cases}
-h(1-\phi)/q_{\mathrm{fs}}, & |q_{\mathrm{fs}}|>10^{-10},\\
-0, & |q_{\mathrm{fs}}|\le10^{-10}.
-\end{cases}
+\delta h=\phi_0\,\delta q_{\mathrm{SH}}.
 $$
 
-The linearized expression includes a constant term so that it reproduces
-the actual limited flux at the state where it was evaluated. This remains
-true when a temperature or flux floor is active. The same coefficient
-rules are used in volume and face assembly; face conductivity uses trace
-temperature with element gradients.
+Conductivity and temperature-gradient derivatives remain active; derivatives
+of $\phi$ and the free-streaming cap are omitted. This is an approximate
+tangent. The physical flux remains $\phi q_{\mathrm{SH}}$, and its
+linearized expression reproduces that flux at the current state, including
+when a floor or conductivity cap is active. Volume terms use the element
+state; face terms use trace temperature and element gradients.
+
+The limiter is excluded from the thermal stabilization coefficient. That
+penalty therefore remains finite when the physical conduction saturates.
+It contributes separately to the numerical heat flux: the limiter bounds
+physical parallel conduction, not the total HDG flux. See
+[thermal stabilization](../numerics/thermal-stabilization.md).
