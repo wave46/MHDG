@@ -322,3 +322,7 @@ and reset after remeshing. Output checks cover writer ownership, independent
 monitor instances, independent balance/residual modes, and silent residual stopping. Repeat with `OMP_NUM_THREADS=1` or `4`, and
 `mpirun -np 2 ./hdg_residual_check 2` using the matching MPI launcher.
 The input gate checks the default update choice and residual-control validation.
+
+The same residual fixture also compares absolute and incremental elimination
+against independent dense solutions, including a nonzero gradient mismatch,
+unequal periodic traces, prescribed offsets and complete-state damping.

@@ -48,9 +48,7 @@ MODULE Main_utils
 #if defined(TEMPERATURE) && !defined(TOR3D)
   USE physics, ONLY: temperature_exchange_state_is_evaluable
 #endif
-#ifndef TOR3D
-  USE hdg_residual_module, ONLY: hdg_residual
-#endif
+  USE hdg_residual_module, ONLY: hdg_residual_t,evaluate_hdg_residual,hdg_residual
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
 
   IMPLICIT NONE
@@ -588,6 +586,7 @@ CONTAINS
     TYPE(newton_result_t), INTENT(OUT) :: result
     LOGICAL, OPTIONAL, INTENT(IN) :: predicted
     LOGICAL :: use_prediction
+    TYPE(hdg_residual_t) :: residual
 
     result = newton_result_t()
 #ifndef TOR3D
@@ -600,7 +599,7 @@ CONTAINS
     ir = 1
     DO WHILE (ir <= numer%nrp)
        result%iterations = result%iterations+1
-       CALL assemble_newton_system(result%status)
+       CALL assemble_newton_system(result%status,residual)
        IF (result%status%outcome /= solve_success) RETURN
 #ifndef TOR3D
        IF(hdg_residual%converged(errNR))THEN
@@ -611,7 +610,7 @@ CONTAINS
           ENDIF
        ENDIF
 #endif
-       CALL compute_newton_update(result%status,accepted)
+       CALL compute_newton_update(result%status,residual,accepted)
        IF (result%status%outcome /= solve_success) RETURN
        CALL check_newton_convergence(result%status)
        IF (result%iterations == 1) result%first_error = errNR
@@ -648,8 +647,9 @@ CONTAINS
     result%status = solver_status_t(solve_retry, 0, 'Newton iteration limit reached')
   END SUBROUTINE solve_nonlinear_system
 
-  SUBROUTINE assemble_newton_system(status)
+  SUBROUTINE assemble_newton_system(status,residual)
     TYPE(solver_status_t), INTENT(OUT) :: status
+    TYPE(hdg_residual_t), INTENT(OUT) :: residual
     status=solver_status_t()
     ! update nonconstant dumping factor
     CALL update_dumpnr()
@@ -673,26 +673,38 @@ CONTAINS
     ! Set boundary conditions
     CALL hdg_BC()
 #ifndef TOR3D
-    CALL hdg_residual%evaluate()
+    IF(TRIM(numer%newton_formulation)=='incremental')THEN
+      CALL evaluate_hdg_residual(residual)
+      CALL hdg_residual%evaluate(residual)
+    ELSE
+      CALL hdg_residual%evaluate()
+    ENDIF
     CALL hdg_residual%report()
 #endif
   END SUBROUTINE assemble_newton_system
 
-  SUBROUTINE compute_newton_update(status, accepted)
+  SUBROUTINE compute_newton_update(status, residual, accepted)
     TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
     TYPE(solver_status_t), INTENT(OUT) :: status
+    TYPE(hdg_residual_t), INTENT(IN) :: residual
     REAL*8, ALLOCATABLE :: previous_u(:), previous_q(:), previous_trace(:)
 
-
-    ! Compute elemental mapping
-    CALL hdg_Mapping()
-    ! Assembly the global matrix
-    CALL hdg_Assembly()
-    ! Assembly has already imposed prescribed traces. Snapshot after that so
-    ! strong boundary values are not relaxed away from their prescribed value.
-    previous_u = sol%u
-    previous_q = sol%q
-    previous_trace = sol%u_tilde
+    previous_u=sol%u;previous_q=sol%q;previous_trace=sol%u_tilde
+#ifndef TOR3D
+    IF(TRIM(numer%newton_formulation)=='incremental')THEN
+      ! Only the elimination RHS changes; physical matrices remain intact.
+      CALL hdg_Mapping(element_conservation_residual=residual%u, &
+           element_gradient_residual=residual%q)
+      CALL hdg_Assembly(element_trace_residual=residual%trace)
+      ! Prescribed traces have no unknown columns and receive zero increments.
+      sol%u_tilde=0.d0
+    ELSE
+#endif
+      CALL hdg_Mapping()
+      CALL hdg_Assembly()
+#ifndef TOR3D
+    ENDIF
+#endif
 
     ! Obtain the complete condensed Newton trial before relaxing any field.
 #ifdef WITH_PETSC
@@ -701,6 +713,13 @@ CONTAINS
     CALL solve_global_system(status)
 #endif
     IF (status%outcome == solve_success) CALL compute_element_solution()
+#ifndef TOR3D
+    IF(status%outcome==solve_success.AND.TRIM(numer%newton_formulation)=='incremental')THEN
+      sol%u=previous_u+sol%u
+      sol%q=previous_q+sol%q
+      sol%u_tilde=previous_trace+sol%u_tilde
+    ENDIF
+#endif
     CALL finish_newton_update(status, previous_u, previous_q, previous_trace, numer%dumpnr)
     IF (status%outcome /= solve_success) RETURN
 #ifdef PARALL

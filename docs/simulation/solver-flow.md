@@ -42,6 +42,9 @@ active. Boundary assembly supplies the face equations. Element elimination
 traces enter as boundary data. After its solution, local reconstruction recovers
 $U$ and $Q$. The damping factor applies to all three fields together.
 
+The [Newton formulation](../numerics/newton-formulation.md) selects an absolute
+trial or an increment, with the same assembly/check/solve order.
+
 The default `newton_convergence='update'` checks the existing volume-update
 measure after reconstruction and damping. Residual reporting is optional and
 does not change that stopping rule. The experimental `residual` and `both`

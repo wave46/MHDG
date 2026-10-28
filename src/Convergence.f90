@@ -80,6 +80,8 @@ PROGRAM Convergence
 
   ! Read input file param.txt
   CALL read_input()
+  IF(TRIM(numer%newton_formulation)/='absolute') &
+       ERROR STOP 'The Convergence driver uses the absolute Newton formulation'
 
   ! Check input
   IF (switch%testcase > 10) THEN

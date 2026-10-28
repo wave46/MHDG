@@ -1,7 +1,11 @@
 PROGRAM test_hdg_residual
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_value,ieee_quiet_nan,ieee_positive_inf
   USE globals
-  USE LinearAlgebra, ONLY: invert_matrix
+  USE LinearAlgebra, ONLY: invert_matrix,solve_linear_system_sing
+  USE hdg_mapping_module, ONLY: HDG_mapping
+  USE element_solution_module, ONLY: compute_element_solution
+  USE Main_utils, ONLY: finish_newton_update
+  USE solver_status, ONLY: solver_status_t,solve_success
   USE hdg_residual_module
   USE balance_diagnostics, ONLY: balance_diag,balance_mode_equations
   USE hdg_assembly_module, ONLY: HDG_assembly
@@ -32,7 +36,7 @@ PROGRAM test_hdg_residual
   CALL check_no_trace_unknowns()
   CALL check_reporting_modes()
   IF(MPIvar%glob_id==0)WRITE(*,*) &
-       'HDG residual PASS: 8 dense systems, assembler parity; ranks/threads=', &
+       'HDG residual PASS: 8 dense systems, assembler parity, absolute/incremental equivalence; ranks/threads=', &
        MPIvar%glob_size,omp_get_max_threads(),'; worst=',worst
   CALL MPI_FINALIZE(ierr)
 
@@ -195,6 +199,7 @@ CONTAINS
     CALL close(RESHAPE(system-saved_system,[nt*nt]),SPREAD(0.d0,1,nt*nt),'matrix preservation')
     CALL close(load,saved_load,'affine RHS preservation')
     CALL check_assembler_trace()
+    CALL check_newton_formulations(saved_system,saved_load)
   END SUBROUTINE check_fixture
 
   FUNCTION reference_element_mass(element) RESULT(mass)
@@ -420,6 +425,80 @@ CONTAINS
       CALL close([assembled],[expected(volume_size+global_row)],'actual assembler trace row')
     ENDDO
   END SUBROUTINE check_assembler_trace
+
+  SUBROUTINE check_newton_formulations(matrix,affine_rhs)
+    REAL*8, INTENT(IN) :: matrix(nt,nt),affine_rhs(nt)
+    REAL*8 :: trial(nt),correction(nt),old_u(nv*ne),old_q(nq*ne),old_trace(9*block)
+    REAL*8 :: factors(2),assembled,reference(nt)
+    TYPE(solver_status_t) :: status
+    INTEGER :: formulation,row,entry,damping
+
+    CALL solve_linear_system_sing(matrix,affine_rhs,trial)
+    correction=trial-state
+    factors=[.25d0,1.d0]
+    DO formulation=1,2
+      CALL unpack_state(state)
+      old_u=sol%u;old_q=sol%q;old_trace=sol%u_tilde
+      IF(formulation==1)THEN
+        CALL HDG_mapping()
+        CALL HDG_assembly()
+        reference=trial
+      ELSE
+        CALL HDG_mapping(element_conservation_residual=residual%u, &
+             element_gradient_residual=residual%q)
+        CALL HDG_assembly(element_trace_residual=residual%trace)
+        reference=correction
+      ENDIF
+      DO row=1,MatK%n
+        assembled=0.d0
+        DO entry=MatK%rowptr(row),MatK%rowptr(row+1)-1
+          assembled=assembled+MatK%vals(entry)*reference(volume_size+MatK%cols(entry))
+        ENDDO
+        IF(ABS(assembled-rhs%vals(row))>2.d-12*MAX(1.d0,ABS(rhs%vals(row)))) &
+             WRITE(*,*)'Newton fixture seed/form/row/periodic:',seed,formulation,row,ANY(Mesh%periodic_faces/=0)
+        CALL close([assembled],[rhs%vals(row)],'condensed Newton RHS')
+      ENDDO
+      DO damping=1,SIZE(factors)
+        sol%u_tilde=0.d0
+        IF(formulation==1)sol%u_tilde=old_trace
+        sol%u_tilde(1:nh)=reference(volume_size+1:nt)
+        CALL compute_element_solution()
+        IF(formulation==2)THEN
+          CALL close(sol%u_tilde(nh+1:),SPREAD(0.d0,1,block),'prescribed trace increments')
+          sol%u=old_u+sol%u;sol%q=old_q+sol%q;sol%u_tilde=old_trace+sol%u_tilde
+        ENDIF
+        status=solver_status_t()
+        CALL finish_newton_update(status,old_u,old_q,old_trace,factors(damping))
+        IF(status%outcome/=solve_success)ERROR STOP 'Newton fixture rejected a finite trial'
+        CALL close(pack_state(),state+factors(damping)*correction,'complete damped Newton state')
+        CALL close(sol%u_tilde(nh+1:),old_trace(nh+1:),'prescribed trace after damping')
+      ENDDO
+    ENDDO
+    CALL unpack_state(state)
+  END SUBROUTINE check_newton_formulations
+
+  SUBROUTINE unpack_state(values)
+    REAL*8, INTENT(IN) :: values(nt)
+    INTEGER :: e,offset
+    DO e=1,ne
+      offset=(e-1)*(nv+nq)
+      sol%u((e-1)*nv+1:e*nv)=values(offset+1:offset+nv)
+      sol%q((e-1)*nq+1:e*nq)=values(offset+nv+1:offset+nv+nq)
+    ENDDO
+    sol%u_tilde(1:nh)=values(volume_size+1:nt)
+    sol%u_tilde(nh+1:)=1.d10
+  END SUBROUTINE unpack_state
+
+  FUNCTION pack_state() RESULT(values)
+    REAL*8 :: values(nt)
+    INTEGER :: e,offset
+    DO e=1,ne
+      offset=(e-1)*(nv+nq)
+      values(offset+1:offset+nv)=sol%u((e-1)*nv+1:e*nv)
+      values(offset+nv+1:offset+nv+nq)=sol%q((e-1)*nq+1:e*nq)
+    ENDDO
+    values(volume_size+1:nt)=sol%u_tilde(1:nh)
+  END FUNCTION pack_state
 
   SUBROUTINE trace_indices(element,global,local)
     INTEGER, INTENT(IN) :: element

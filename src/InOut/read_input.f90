@@ -92,7 +92,7 @@ SUBROUTINE READ_input()
   REAL*8                :: Zeff,Pohmic,diff_nn,diff_nn_min,neutralp_ti_supp_eV,Re,Re_pump,puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,cryopump_power,puff_slope
   CHARACTER(LEN=40)     :: neutral_flux_limiter_mode
   CHARACTER(LEN=16)     :: neutral_flux_limiter_tn_source
-  CHARACTER(LEN=16)     :: newton_convergence
+  CHARACTER(LEN=16)     :: newton_convergence,newton_formulation
   REAL*8                :: residual_atol,residual_rtol,residual_scales(7)
   CHARACTER(LEN=16)     :: balance_diagnostics_mode,residual_diagnostics_mode
   REAL*8                :: neutral_flux_limiter_tn_eV,neutral_flux_limiter_eps
@@ -137,7 +137,7 @@ SUBROUTINE READ_input()
        & neutral_wall_sources_in_elements,neutral_flux_limiter_save_2d
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path, impurity_model_path
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump,neutralp_lambda, &
-       newton_convergence,residual_atol,residual_rtol,residual_scales
+       newton_convergence,newton_formulation,residual_atol,residual_rtol,residual_scales
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, check_neutral_positivity, max_divergence_refinements, rest_adapt, osc_adapt, max_oscillation_refinements, osc_tol, osc_check, geometry_path
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
@@ -230,6 +230,7 @@ SUBROUTINE READ_input()
   balance_diagnostics_mode = 'off'
   residual_diagnostics_mode = 'off'
   newton_convergence = 'update'
+  newton_formulation = 'absolute'
   residual_atol=1.d-6;residual_rtol=1.d-4;residual_scales=1.d0
   petsc_factor_solver = ''
   ME = .FALSE.
@@ -488,6 +489,16 @@ SUBROUTINE READ_input()
   IF(TRIM(newton_convergence)/='update')ERROR STOP 'HDG residual convergence currently supports 2D builds'
 #endif
   numer%newton_convergence=newton_convergence
+  SELECT CASE(TRIM(newton_formulation))
+  CASE('absolute','incremental')
+  CASE DEFAULT
+    ERROR STOP 'newton_formulation must be absolute or incremental'
+  END SELECT
+#if !defined(TEMPERATURE) || defined(TOR3D)
+  IF(TRIM(newton_formulation)/='absolute') &
+       ERROR STOP 'Incremental Newton currently supports 2D temperature builds'
+#endif
+  numer%newton_formulation=newton_formulation
   numer%residual_atol=residual_atol;numer%residual_rtol=residual_rtol
   numer%residual_scales=residual_scales
 
@@ -1025,6 +1036,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - tau(7):                                             ', numer%tau(7)
      PRINT *, '                - max number of N-R iterations:                       ', numer%nrp
      PRINT *, '                - tolerance for the N-R scheme:                       ', numer%tNR
+     PRINT *, '                - Newton formulation:                                ', TRIM(numer%newton_formulation)
      PRINT *, '                - tolerance for the steady state achievement:         ', numer%tTM
      IF (switch%shockcp .GT. 0) THEN
         PRINT *, '                - shock capturing coeff:                            ', numer%sc_coe

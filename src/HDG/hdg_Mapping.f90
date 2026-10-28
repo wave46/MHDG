@@ -5,12 +5,13 @@ MODULE hdg_mapping_module
 
 CONTAINS
 
-SUBROUTINE HDG_mapping()
+SUBROUTINE HDG_mapping(element_conservation_residual,element_gradient_residual)
   USE globals
   USE LinearAlgebra, ONLY: mymatmul, solve_linear_system, solve_linear_system_sing
   USE MPI_OMP, ONLY: MPIvar
 
   IMPLICIT NONE
+  REAL*8, OPTIONAL, INTENT(IN) :: element_conservation_residual(:,:),element_gradient_residual(:,:)
   INTEGER*4           :: Ndim, N2d, neq, Np, Nfp, Nfe, i, ifa, iel, iel3, Nfg
   REAL*8, ALLOCATABLE :: LL(:, :), UU(:, :), L0(:), U0(:)
   REAL*8, ALLOCATABLE :: Auq_iAqq(:, :), Mu(:, :), Ml(:, :), Md(:), aux(:, :), auxAqq(:, :), auxAquUU(:, :)
@@ -26,6 +27,8 @@ SUBROUTINE HDG_mapping()
 #endif
 
   NULLIFY(iAqq, Aqu, Aql, Auq, Auu, Aul, Aql_dir, Aul_dir, f)
+  IF(PRESENT(element_conservation_residual).NEQV.PRESENT(element_gradient_residual)) &
+       ERROR STOP 'HDG_mapping requires both conservation and gradient residuals'
 
   IF (MPIvar%glob_id .EQ. 0) THEN
      IF (utils%printint > 1) THEN
@@ -157,7 +160,11 @@ SUBROUTINE HDG_mapping()
         CALL  mymatmul(Auq_iAqq,Aql,Ml)
         Ml = Aul - Ml
 
-        Md = f - (Aul_dir - MATMUL(Auq_iAqq, Aql_dir))
+        IF(PRESENT(element_conservation_residual))THEN
+          Md=-element_conservation_residual(:,iel3)+MATMUL(Auq,element_gradient_residual(:,iel3))
+        ELSE
+          Md=f-(Aul_dir-MATMUL(Auq_iAqq,Aql_dir))
+        ENDIF
         CALL solve_linear_system(Mu, -Ml, UU)
         CALL solve_linear_system_sing(Mu, Md, U0)
 
@@ -169,7 +176,11 @@ SUBROUTINE HDG_mapping()
         CALL mymatmul(iAqq,auxAquUU,LL)
         LL = -LL
 
-        L0 = -MATMUL(iAqq, Aql_dir + (MATMUL(Aqu, U0)))
+        IF(PRESENT(element_gradient_residual))THEN
+          L0=-MATMUL(iAqq,MATMUL(Aqu,U0))-element_gradient_residual(:,iel3)
+        ELSE
+          L0=-MATMUL(iAqq,Aql_dir+MATMUL(Aqu,U0))
+        ENDIF
 
         ! Flip the faces
         DO ifa = 1, refElPol%Nfaces

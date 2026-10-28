@@ -1138,12 +1138,14 @@ END SUBROUTINE HDG_assembly
 !                            VERSION 2D
 !
 !***********************************************************************
-SUBROUTINE HDG_assembly()
+SUBROUTINE HDG_assembly(element_trace_residual)
   USE globals
   USE matrices_types
   USE printUtils
   USE debug
   USE LinearAlgebra, ONLY: tensorSumInt
+
+  REAL*8, OPTIONAL, INTENT(IN) :: element_trace_residual(:,:)
 
   INTEGER                         :: i, j, iel, ifa, ifl, nnz, nn, cont, ieloc
   INTEGER                         :: ieln,ifan,Fi_per,Fe_aux(refElPol%Nfaces)
@@ -1158,6 +1160,7 @@ SUBROUTINE HDG_assembly()
   REAL*8, POINTER                 :: vals(:), rhsvec(:)
   LOGICAL                         :: Fd(refElPol%Nfaces)
   REAL*8, ALLOCATABLE             :: Kel(:,:), fel(:)
+  REAL*8                          :: periodic_rhs(refElPol%Nfacenodes*phys%neq)
 #ifdef PARALL
   INTEGER                         :: Fasind(Mesh%Nfaces)
   INTEGER                         :: rept
@@ -1233,7 +1236,7 @@ SUBROUTINE HDG_assembly()
   ! Parallel Loop over Mesh Elements
   !**************************
 
-  !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(iel, Fe, Fd, Fi, ifa, indpos, indglo, ieln, ifan, Fi_per, Fe_aux, Kel, fel)
+  !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(iel, Fe, Fd, Fi, ifa, indpos, indglo, ieln, ifan, Fi_per, Fe_aux, Kel, fel, periodic_rhs)
 
   ALLOCATE (Kel(1:Nf*Nfp*Neq, 1:Nf*Nfp*Neq))
   ALLOCATE (fel(1:Nf*Nfp*Neq))
@@ -1289,6 +1292,12 @@ SUBROUTINE HDG_assembly()
 #endif
               !$OMP END CRITICAL
 
+              IF(PRESENT(element_trace_residual))THEN
+                ! The copied row replaces this face column by its periodic partner.
+                periodic_rhs=fel(ind_loc(ifa,:))
+                fel(ind_loc(ifa,:))=periodic_rhs-MATMUL(Kel(ind_loc(ifa,:),ind_loc(ifa,:)), &
+                     sol%u_tilde((Fi_per-1)*blk+1:Fi_per*blk)-sol%u_tilde((Fi-1)*blk+1:Fi*blk))
+              ENDIF
               Fe_aux = Fe
               CALL exchange_Fi(Fe, Fi, Fi_per, Nf) ! Swap Fi <-> Fi_per
               CALL getindposextperiodic(indpos, Fi_per, Fi, Nf, Nfp, neq, Fd, Fe, ieln)
@@ -1301,6 +1310,7 @@ SUBROUTINE HDG_assembly()
 #endif
               !$OMP END CRITICAL
 
+              IF(PRESENT(element_trace_residual))fel(ind_loc(ifa,:))=periodic_rhs
               Fe = Fe_aux
               CYCLE
            ENDIF
@@ -1471,7 +1481,12 @@ CONTAINS
 
     ! Elemental matrix and elemental RHS
     Kel = MATMUL(A_lq, LL) + MATMUL(A_lu, UU) + A_ll
-    fel = -(MATMUL(A_lu, U0) + MATMUL(A_lq, L0)) + f
+    fel=-(MATMUL(A_lu,U0)+MATMUL(A_lq,L0))
+    IF(PRESENT(element_trace_residual))THEN
+      fel=fel-element_trace_residual(:,iel)
+    ELSE
+      fel=fel+f
+    ENDIF
 
     NULLIFY (LL, L0, UU, U0)
     NULLIFY (A_lq, A_lu, A_ll)

@@ -152,12 +152,17 @@ CONTAINS
     CALL this%begin_solve()
   END SUBROUTINE invalidate_residual_mesh
 
-  SUBROUTINE evaluate_residual_monitor(this)
+  SUBROUTINE evaluate_residual_monitor(this,assembled_residual)
     CLASS(hdg_residual_monitor_t), INTENT(INOUT) :: this
+    TYPE(hdg_residual_t), OPTIONAL, INTENT(IN) :: assembled_residual
     TYPE(hdg_residual_t) :: residual
     IF(this%report_mode==0.AND.TRIM(numer%newton_convergence)=='update')RETURN
-    CALL evaluate_hdg_residual(residual)
-    CALL this%measure(residual)
+    IF(PRESENT(assembled_residual))THEN
+      CALL this%measure(assembled_residual)
+    ELSE
+      CALL evaluate_hdg_residual(residual)
+      CALL this%measure(residual)
+    ENDIF
   END SUBROUTINE evaluate_residual_monitor
 
   SUBROUTINE measure_residual(this,residual,norms)

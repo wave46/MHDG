@@ -20,7 +20,7 @@ def main():
     template = re.sub(r"(?mi)^\s*Re_n(?:_pump)?\s*=[^\n]*\n", "", template)
     template = re.sub(r"(?mi)^\s*recycle_plasma_diffusion\s*=[^\n]*\n", "", template)
     template = re.sub(r"(?mi)^\s*bohm_momentum_always_include_diffusion\s*=[^\n]*\n", "", template)
-    template = re.sub(r"(?mi)^\s*(newton_convergence|residual_atol|residual_scales|residual_diagnostics_mode)\s*=[^\n]*\n", "", template)
+    template = re.sub(r"(?mi)^\s*(newton_formulation|newton_convergence|residual_atol|residual_scales|residual_diagnostics_mode)\s*=[^\n]*\n", "", template)
     if k_equation:
         template = template.replace("&PHYS_LST", "&PHYS_LST\n"
             "  diff_k_min=10, diff_k_max=10, k_max=1.e10", 1)
@@ -85,6 +85,9 @@ def main():
                   if k_equation and not 50 <= value <= 69 else (1.0, 1.0))
                  for value in (2, 49, 50, 69, 70))
     cases.extend([
+        ("NUMER_LST", "newton_absolute", "newton_formulation='absolute'", (1.0, 1.0)),
+        ("NUMER_LST", "newton_incremental", "newton_formulation='incremental'", (1.0, 1.0)),
+        ("NUMER_LST", "newton_invalid", "newton_formulation='unknown'", "newton_formulation must be"),
         ("NUMER_LST", "residual_enabled", "newton_convergence='residual'", (1.0, 1.0)),
         ("NUMER_LST", "residual_both", "newton_convergence='both'", (1.0, 1.0)),
         ("NUMER_LST", "residual_invalid_choice", "newton_convergence='unknown'", "newton_convergence must be"),
@@ -126,9 +129,12 @@ def main():
                 passed = (run.returncode != 0 and expected in output
                           and "NEUTRAL_WALL_ALBEDOS" not in output)
             if passed and isinstance(expected, tuple):
+                formulation = re.search(r"^NEWTON_FORMULATION\s+(\S+)", output, re.M)
+                choice = "incremental" if name == "newton_incremental" else "absolute"
+                passed = formulation is not None and formulation[1] == choice
                 selected = re.search(r"^NEWTON_CONVERGENCE\s+(\S+)", output, re.M)
                 choice = {"residual_enabled": "residual", "residual_both": "both"}.get(name, "update")
-                passed = selected is not None and selected[1] == choice
+                passed = passed and selected is not None and selected[1] == choice
                 report = re.search(r"^RESIDUAL_REPORT_MODE\s+(\S+)", output, re.M)
                 report_choice={"residual_report_summary":"summary","residual_report_equations":"equations"}.get(name,"off")
                 passed = passed and report is not None and report[1] == report_choice

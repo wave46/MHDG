@@ -87,6 +87,7 @@
 /
 
 &NUMER_LST
+  newton_formulation = 'absolute' ! absolute or incremental (2D temperature MHDG)
   newton_convergence = 'update' ! update, residual or both; admissibility is separate
   residual_atol = 1.d-6, residual_rtol = 1.d-4
   residual_scales = 1,1,1,1,1,1,1 ! Fixed references in solver units

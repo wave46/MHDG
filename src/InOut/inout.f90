@@ -1306,6 +1306,7 @@ CONTAINS
       CALL HDF5_group_create('numerics', group_id1, group_id2, ierr)
       CALL HDF5_integer_saving(group_id2, numer%nrp, 'Max_number_of_NR_iterations')
       CALL HDF5_real_saving(group_id2, numer%tnr, 'NR_convergence_criterium')
+      CALL HDF5_string_saving(group_id2, TRIM(numer%newton_formulation), 'newton_formulation')
       CALL HDF5_real_saving(group_id2, numer%ttm, 'Time_convergence_criterium')
       CALL HDF5_real_saving(group_id2, numer%div, 'Divergence_criterium')
       CALL HDF5_array1d_saving(group_id2, numer%tau, SIZE(numer%tau), 'Stabilization_parameter')

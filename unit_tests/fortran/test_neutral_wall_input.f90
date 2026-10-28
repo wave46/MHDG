@@ -25,6 +25,7 @@ PROGRAM test_neutral_wall_input
   WRITE (*,'(A,1X,I0)') 'STABILIZATION_TYPE', numer%stab
   WRITE (*,'(A,5(1X,ES24.16))') 'STABILIZATION_TAU', numer%tau(1:5)
   WRITE (*,'(A,1X,L1)') 'BOHM_MOMENTUM_ALWAYS_INCLUDE_DIFFUSION', phys%bohm_momentum_always_include_diffusion
+  WRITE (*,'(A,1X,A)') 'NEWTON_FORMULATION',TRIM(numer%newton_formulation)
   WRITE (*,'(A,1X,A)') 'NEWTON_CONVERGENCE',TRIM(numer%newton_convergence)
   WRITE (*,'(A,1X,A)') 'RESIDUAL_REPORT_MODE',TRIM(hdg_residual%get_mode())
 END PROGRAM test_neutral_wall_input

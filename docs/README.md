@@ -38,6 +38,8 @@ and limited to the guides listed below.
 
 ## Numerical utilities
 
+- [Newton formulation](numerics/newton-formulation.md): equivalent absolute and
+  incremental solves, local elimination and boundary handling.
 - [HDG residuals and Newton convergence](numerics/hdg-residuals.md): residual
   evaluation, normalization, reporting and experimental stopping criteria.
 - [Diffusion in HDG](numerics/diffusion.md): element/trace coefficient states,
