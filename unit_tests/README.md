@@ -66,6 +66,9 @@ and held-phi finite differences. It runs bounds-checked and optimized builds.
 `make check-stabilization-values` verifies automatic diagonal coefficients
 against independent formulas and checks independence from gradients and the
 physical limiter. It includes capped temperatures and a trial undershoot.
+For admissible states it also checks the common coefficient against the
+characteristic speeds and their polynomial identity in the production
+convection Jacobian.
 
 `make check-temperature-exchange` checks source values, finite-difference
 Jacobians, continuity at zero electron temperature, recovery signs and

@@ -7,15 +7,29 @@ conduction. For each energy equation,
 $$
 \tau_s=a+\frac{p}{h_e}D_{\perp,s}
 +\frac{p}{h_e}|b\cdot n|\,\|b_{1:2}\|
-\frac{\kappa_{\parallel,s}(\min(T_s,T_{\max,s}))}{\widehat U_1}.
+\frac{\kappa_{\parallel,s}(\min(\widehat T_s,T_{\max,s}))}{\widehat U_1}.
 $$
 
 Here $p$ is polynomial degree, $h_e$ is the stored element-length estimate
 (the shortest vertex edge for triangles), and $n$ is the outward unit normal.
 The wrapper passes $p/h_e$ as `length_factor`; it stays fixed during each
 Newton assembly. Temperatures and transport coefficients
-are in solver units. The advective estimate $a$ is the existing maximum of two characteristic-speed
-estimates. The prescribed diagonal option (`stab=1`) uses the input values.
+are in solver units. For the coupled four-equation plasma convection block,
+the common scalar is its spectral radius:
+
+$$
+a=|b\cdot n|\max\left(\frac53|u_\parallel|,
+                       |u_\parallel|+c_{\rm flux}\right),\qquad
+u_\parallel=\frac{\widehat U_2}{\widehat U_1},\qquad
+c_{\rm flux}=\sqrt{\frac53 M_{\rm ref}(\widehat T_i+\widehat T_e)}.
+$$
+
+The flux Jacobian has eigenvalues $(b\cdot n)$ times
+$u_\parallel-c_{\rm flux}$, $u_\parallel$, $u_\parallel+c_{\rm flux}$
+and $5u_\parallel/3$. Here $c_{\rm flux}$ is the adiabatic acoustic speed
+of this convection block, with ratio of specific heats $\gamma=5/3$. The same scalar is added
+to every diagonal row, including the neutral row as extra numerical damping.
+The prescribed diagonal option (`stab=1`) uses the input values.
 Here $\kappa_{\parallel,s}$ is the unlimited parallel conductivity used by
 the stabilization, with the existing $T^{5/2}$ law. Physical conductivity
 uses `epn`.
@@ -57,8 +71,8 @@ $$
  +(U_i-\widehat U_i)\frac{\partial\tau_i}{\partial\widehat U_j}.
 $$
 
-The existing assembly already adds $+\tau_i$ in the element-state column
-and $-\tau_i$ in the trace-state column. The new helper adds only the second
+The assembly adds $+\tau_i$ in the element-state column
+and $-\tau_i$ in the trace-state column. The HDG coefficient helper adds the second
 term above, with shape-function products and the face integration weight.
 It also adds the matching absolute-Newton affine RHS:
 
@@ -70,7 +84,7 @@ $$
 For [Bohm momentum](bohm-boundary.md), replace $U_2-\widehat U_2$ by the actual
 blended target jump
 $p_s\,\operatorname{sign}(b\cdot n)c_s\widehat U_1+p_F U_2-\widehat U_2$.
-The existing boundary assembly differentiates this target; the new helper
+The boundary assembly differentiates this target; the coefficient helper
 adds its product with $\partial\tau_2/\partial\widehat U_j$.
 
 | Equation row | Added matrix | Added affine RHS |
@@ -92,8 +106,10 @@ negative thermal term, including above its temperature cap. Neutral diffusion
 has its own density-dependent rates; no common homogeneity cancellation is
 assumed. These identities apply away from the density floor.
 
-ABS/MAX use active-branch derivatives without extra smoothing. At a spectral
-MAX tie the velocity branch is selected. Temperature derivatives vanish below
+The characteristic-speed interpretation requires admissible temperatures.
+For trial states the coefficient continues its square root with the absolute
+value of the radicand. ABS/MAX use active-branch derivatives without extra
+smoothing. At a spectral MAX tie the velocity branch is selected. Temperature derivatives vanish below
 or at their floor and above their cap; the uncapped derivative is used at the
 cap. At the singular zero of the square-root spectral estimate, its derivative
 is held at zero. This convention avoids an infinite tangent; it does not make

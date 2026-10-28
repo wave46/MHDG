@@ -69,12 +69,13 @@ CONTAINS
     REAL*8, INTENT(IN) :: up(:),uc(:),bn
     REAL*8, INTENT(OUT) :: advective_tau,derivative(:)
     LOGICAL, INTENT(IN) :: differentiate
-    REAL*8 :: first,second,chi,root,npositive,dchi(SIZE(uc))
+    REAL*8 :: first,second,chi,root,npositive,dchi(SIZE(uc)),dvelocity(SIZE(uc))
 
+    ! Coupled plasma convection: max(|5*u/3|, |u|+c_flux), projected on the normal.
     first = 5.d0/3.d0*up(2)*bn
     chi = 10.d0*uc(3)*uc(1)+10.d0*uc(4)*uc(1)-5.d0*uc(2)**2
     root = SQRT(ABS(chi))
-    second = 0.3d0*bn*(3.d0*uc(1)+root)/uc(1)
+    second = bn*(ABS(up(2))+root/(3.d0*uc(1)))
     advective_tau = MAX(ABS(first),ABS(second))
     derivative = 0.d0
     IF (.NOT.differentiate) RETURN
@@ -83,11 +84,18 @@ CONTAINS
       IF (first == 0.d0) RETURN
       derivative(2) = 5.d0/3.d0*bn/npositive*SIGN(1.d0,first)
       IF (uc(1) > 1.d-20) derivative(1) = -derivative(2)*uc(2)/npositive
-    ELSEIF (chi /= 0.d0 .AND. second /= 0.d0) THEN
-      dchi = 0.d0
-      dchi(1:4) = [10.d0*(uc(3)+uc(4)),-10.d0*uc(2),10.d0*uc(1),10.d0*uc(1)]
-      derivative = 0.3d0*bn/uc(1)*0.5d0*SIGN(1.d0,chi)/root*dchi
-      derivative(1) = derivative(1)-0.3d0*bn*root/uc(1)**2
+    ELSEIF (second /= 0.d0) THEN
+      npositive = MAX(uc(1),1.d-20)
+      dvelocity = 0.d0
+      dvelocity(2) = 1.d0/npositive
+      IF (uc(1) > 1.d-20) dvelocity(1) = -uc(2)/npositive**2
+      IF (up(2) /= 0.d0) derivative = bn*SIGN(1.d0,up(2))*dvelocity
+      IF (chi /= 0.d0) THEN
+        dchi = 0.d0
+        dchi(1:4) = [10.d0*(uc(3)+uc(4)),-10.d0*uc(2),10.d0*uc(1),10.d0*uc(1)]
+        derivative = derivative+bn/(3.d0*uc(1))*0.5d0*SIGN(1.d0,chi)/root*dchi
+      ENDIF
+      derivative(1) = derivative(1)-bn*root/(3.d0*uc(1)**2)
       derivative = SIGN(1.d0,second)*derivative
     ENDIF
     ! At chi=0 the square-root branch has no finite derivative; freeze that part.

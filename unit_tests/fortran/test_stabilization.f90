@@ -15,7 +15,7 @@ PROGRAM test_stabilization
   phys%T_fluxlim_maxi=.3d0;phys%T_fluxlim_maxe=.4d0
   CALL fixture('temperature caps',reference_trace,.TRUE.)
   phys%T_fluxlim_maxi=100.d0;phys%T_fluxlim_maxe=100.d0
-  CALL fixture('advective velocity branch',[.8d0,2.4d0,5.2d0,2.2d0,.1d0],.TRUE.)
+  CALL fixture('advective velocity branch',[.8d0,3.2d0,8.d0,2.2d0,.1d0],.TRUE.)
   CALL fixture('Mach release',[1.d0,1.43d0,2.2d0,1.6d0,.1d0],.TRUE.)
   b=[.05d0,.05d0,SQRT(.995d0)]
   CALL fixture('grazing angular target',[.8d0,-.15d0,1.6d0,2.2d0,.1d0],.TRUE.)
@@ -97,8 +97,11 @@ CONTAINS
     CALL get_tau(trace_state,gradient,tau,derivative)
     CALL thermal_parts(trace_state,heat)
     CALL coefficients(trace_state,1.d0,di,da)
-    adv=MAX(ABS(5.d0/3.d0*trace_state(2)/trace_state(1)*DOT_PRODUCT(b(1:2),n)), &
-         ABS(.3d0*DOT_PRODUCT(b(1:2),n)*(3*trace_state(1)+SQRT(ABS(10*trace_state(1)*(trace_state(3)+trace_state(4))-5*trace_state(2)**2)))/trace_state(1)))
+    adv=ABS(DOT_PRODUCT(b(1:2),n))*MAX( &
+         ABS(trace_state(2)/trace_state(1))+SQRT(ABS( &
+         10.d0/9.d0*(trace_state(3)+trace_state(4))/trace_state(1) &
+         -5.d0/9.d0*(trace_state(2)/trace_state(1))**2)), &
+         5.d0/3.d0*ABS(trace_state(2)/trace_state(1)))
     DO i=1,5
       CALL close(tau(i,i),adv+di(i,i)*refElPol%ndeg/Mesh%elemSize(1)+ &
            SUM(heat, MASK=[i==3,i==4]),label//' coefficient value')
@@ -196,7 +199,7 @@ CONTAINS
       CALL get_tau(trial,gradient,tm)
       CALL close(dt(row,row),(tau(row,row)-tm(row,row))/step,'one-sided derivative at cap',fd_tolerance)
     ENDDO
-    trace_state=[1.d0,.9d0,.5d0,.305d0,.1d0]
+    trace_state=[1.d0,3.d0,6.d0,2.1d0,.1d0]
     CALL get_tau(trace_state,gradient,tau,dt)
     step=1.d-7;trial=trace_state;trial(4)=trace_state(4)+step;CALL get_tau(trial,gradient,tp)
     trial(4)=trace_state(4)-step;CALL get_tau(trial,gradient,tm)
