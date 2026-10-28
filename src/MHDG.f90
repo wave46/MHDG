@@ -3,6 +3,9 @@ PROGRAM MHDG
   USE MPI_OMP
   USE input_reader, ONLY: read_input
   USE hdg_first_equation_module, ONLY: HDG_precalculatedfirstequation
+#ifndef TOR3D
+  USE hdg_residual_module, ONLY: hdg_residual
+#endif
 
   IMPLICIT NONE
   LOGICAL :: time_finished
@@ -151,6 +154,9 @@ PROGRAM MHDG
 
   ! Compute first equation (definition of the gradient)
   CALL HDG_precalculatedfirstequation()
+#ifndef TOR3D
+  CALL hdg_residual%invalidate_mesh()
+#endif
 
   ! Initialize shock capturing
   IF ((switch%shockcp .GT. 0) .OR. (adapt%shockcp_adapt .GT. 0))  THEN

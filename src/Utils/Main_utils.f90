@@ -48,6 +48,9 @@ MODULE Main_utils
 #if defined(TEMPERATURE) && !defined(TOR3D)
   USE physics, ONLY: temperature_exchange_state_is_evaluable
 #endif
+#ifndef TOR3D
+  USE hdg_residual_module, ONLY: hdg_residual
+#endif
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
 
   IMPLICIT NONE
@@ -587,6 +590,9 @@ CONTAINS
     LOGICAL :: use_prediction
 
     result = newton_result_t()
+#ifndef TOR3D
+    CALL hdg_residual%begin_solve()
+#endif
     use_prediction = .FALSE.
     IF (PRESENT(predicted)) use_prediction = predicted
     IF (.NOT. use_prediction) CALL update_uiter()
@@ -594,13 +600,24 @@ CONTAINS
     ir = 1
     DO WHILE (ir <= numer%nrp)
        result%iterations = result%iterations+1
+       CALL assemble_newton_system(result%status)
+       IF (result%status%outcome /= solve_success) RETURN
+#ifndef TOR3D
+       IF(hdg_residual%converged(errNR))THEN
+          physical_iterate_valid=physical_solution_is_admissible(sol%u)
+          IF(physical_iterate_valid)THEN
+             CALL save_converged_newton_solution()
+             RETURN
+          ENDIF
+       ENDIF
+#endif
        CALL compute_newton_update(result%status,accepted)
        IF (result%status%outcome /= solve_success) RETURN
        CALL check_newton_convergence(result%status)
        IF (result%iterations == 1) result%first_error = errNR
        IF (result%status%outcome /= solve_success) RETURN
 
-       IF (errNR < numer%tNR .AND. physical_iterate_valid) THEN
+       IF (TRIM(numer%newton_convergence)=='update'.AND.errNR < numer%tNR .AND. physical_iterate_valid) THEN
           CALL save_converged_newton_solution()
           RETURN
        ENDIF
@@ -631,11 +648,9 @@ CONTAINS
     result%status = solver_status_t(solve_retry, 0, 'Newton iteration limit reached')
   END SUBROUTINE solve_nonlinear_system
 
-  SUBROUTINE compute_newton_update(status, accepted)
-    TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
+  SUBROUTINE assemble_newton_system(status)
     TYPE(solver_status_t), INTENT(OUT) :: status
-    REAL*8, ALLOCATABLE :: previous_u(:), previous_q(:), previous_trace(:)
-
+    status=solver_status_t()
     ! update nonconstant dumping factor
     CALL update_dumpnr()
 
@@ -657,6 +672,18 @@ CONTAINS
     CALL HDG_computeJacobian()
     ! Set boundary conditions
     CALL hdg_BC()
+#ifndef TOR3D
+    CALL hdg_residual%evaluate()
+    CALL hdg_residual%report()
+#endif
+  END SUBROUTINE assemble_newton_system
+
+  SUBROUTINE compute_newton_update(status, accepted)
+    TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
+    TYPE(solver_status_t), INTENT(OUT) :: status
+    REAL*8, ALLOCATABLE :: previous_u(:), previous_q(:), previous_trace(:)
+
+
     ! Compute elemental mapping
     CALL hdg_Mapping()
     ! Assembly the global matrix
@@ -1331,6 +1358,9 @@ CONTAINS
 
     ! Re-Compute first equation (definition of the gradient)
     CALL HDG_precalculatedfirstequation()
+#ifndef TOR3D
+    CALL hdg_residual%invalidate_mesh()
+#endif
 
   END SUBROUTINE rebuild_mesh_solver_state
 

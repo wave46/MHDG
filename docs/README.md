@@ -27,6 +27,8 @@ and limited to the guides listed below.
 
 ## Simulation
 
+- [Solver flow](simulation/solver-flow.md): initialization, Newton assembly and
+  solve, acceptance, recovery and outer continuation.
 - [Simulation configuration](simulation/configuration.md): parameter templates,
   geometry and input preparation, initialization and fixed-diffusion scans.
 - [Physical time stepping](simulation/time-stepping.md): mode selection,
@@ -36,6 +38,8 @@ and limited to the guides listed below.
 
 ## Numerical utilities
 
+- [HDG residuals and Newton convergence](numerics/hdg-residuals.md): residual
+  evaluation, normalization, reporting and experimental stopping criteria.
 - [Diffusion in HDG](numerics/diffusion.md): element/trace coefficient states,
   gradients and lagged stabilization.
 - [One-dimensional splines](numerics/splines.md): interpolation conventions,

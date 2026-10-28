@@ -31,6 +31,9 @@ PROGRAM Convergence
 #endif
   USE HDG_LimitingTechniques
   USE residual_norm_module, ONLY: computeResidual
+#ifndef TOR3D
+  USE hdg_residual_module, ONLY: hdg_residual
+#endif
   IMPLICIT NONE
 
   TYPE(solver_status_t) :: linear_status
@@ -220,6 +223,9 @@ PROGRAM Convergence
         ! Compute the elemental matrices that depend only on the
         ! mesh, i.e. fixed in time
         CALL HDG_precalculatedfirstequation()
+#ifndef TOR3D
+        CALL hdg_residual%invalidate_mesh()
+#endif
 
         ! Initialize the solution
         CALL init_sol()
@@ -249,6 +255,9 @@ PROGRAM Convergence
            !             Newton-Raphson iterations
            !*******************************************************
            uiter = sol%u0(:, 1)
+#ifndef TOR3D
+           CALL hdg_residual%begin_solve()
+#endif
            DO ir = 1, numer%nrp
 
               ! Compute the elemental matrices that depends on the N-R iteration
@@ -256,6 +265,10 @@ PROGRAM Convergence
 
               ! Set boundary conditions
               CALL hdg_BC()
+#ifndef TOR3D
+              CALL hdg_residual%evaluate()
+              CALL hdg_residual%report()
+#endif
 
               ! Compute elemental mapping
               CALL hdg_Mapping()

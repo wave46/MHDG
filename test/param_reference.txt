@@ -87,6 +87,9 @@
 /
 
 &NUMER_LST
+  newton_convergence = 'update' ! update, residual or both; admissibility is separate
+  residual_atol = 1.d-6, residual_rtol = 1.d-4
+  residual_scales = 1,1,1,1,1,1,1 ! Fixed references in solver units
     tau(1)              = 1.E+0         ! Stabilization parameter 1st equation
     tau(2)              = 1.E+0         ! Stabilization parameter 2nd equation
     tau(3)              = 1.E+0         ! Stabilization parameter 3rd equation
@@ -288,6 +291,7 @@
 /
 
 &UTILS_LST
+    residual_diagnostics_mode = 'off' ! off, summary, equations
     balance_diagnostics_mode = 'summary' ! off, summary, equations, detailed
                                         ! Enabled modes require a 2D neutral-temperature model
     printint            = 1             ! how much info we want to print

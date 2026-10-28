@@ -555,6 +555,9 @@ MODULE types
   TYPE Numeric_type
      INTEGER        :: nrp      ! Max number of Newton-Raphson iterations
      REAL*8         :: tNR      ! Tolerance of the Newton-Raphson scheme
+     CHARACTER(LEN=16) :: newton_convergence = 'update'
+     REAL*8         :: residual_atol = 1.d-6, residual_rtol = 1.d-4
+     REAL*8         :: residual_scales(7) = 1.d0 ! Fixed equation references in solver units
      REAL*8         :: tTM      ! Tolerance for the steady state achievement
      REAL*8         :: div      ! Divergence detector
      REAL*8         :: tau(1:7) ! Stabilization parameter for each equation

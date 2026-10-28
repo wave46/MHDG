@@ -313,3 +313,12 @@ It verifies that failure leaves the saved trace untouched and releases borrowed
 matrix storage. Use the existing build configuration; the target runs one MPI
 rank. The resulting `lib/linear_solve_status_check` can also run under MPI.
 PETSc runtime/library-API coverage requires a PETSc build on an equipped machine.
+
+`make check-hdg-residual` checks eight independent dense mixed systems and
+production trace assembly, with flipped/prescribed/periodic faces and ghosts.
+Independent quadrature contractions check axisymmetric mass RMS and local peaks;
+policy checks cover absolute/relative stopping, `both`, zero/nonfinite baselines,
+and reset after remeshing. Output checks cover writer ownership, independent
+monitor instances, independent balance/residual modes, and silent residual stopping. Repeat with `OMP_NUM_THREADS=1` or `4`, and
+`mpirun -np 2 ./hdg_residual_check 2` using the matching MPI launcher.
+The input gate checks the default update choice and residual-control validation.

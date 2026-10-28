@@ -20,6 +20,7 @@ def main():
     template = re.sub(r"(?mi)^\s*Re_n(?:_pump)?\s*=[^\n]*\n", "", template)
     template = re.sub(r"(?mi)^\s*recycle_plasma_diffusion\s*=[^\n]*\n", "", template)
     template = re.sub(r"(?mi)^\s*bohm_momentum_always_include_diffusion\s*=[^\n]*\n", "", template)
+    template = re.sub(r"(?mi)^\s*(newton_convergence|residual_atol|residual_scales|residual_diagnostics_mode)\s*=[^\n]*\n", "", template)
     if k_equation:
         template = template.replace("&PHYS_LST", "&PHYS_LST\n"
             "  diff_k_min=10, diff_k_max=10, k_max=1.e10", 1)
@@ -83,6 +84,22 @@ def main():
                   "k-equation builds require testcase in 50-69"
                   if k_equation and not 50 <= value <= 69 else (1.0, 1.0))
                  for value in (2, 49, 50, 69, 70))
+    cases.extend([
+        ("NUMER_LST", "residual_enabled", "newton_convergence='residual'", (1.0, 1.0)),
+        ("NUMER_LST", "residual_both", "newton_convergence='both'", (1.0, 1.0)),
+        ("NUMER_LST", "residual_invalid_choice", "newton_convergence='unknown'", "newton_convergence must be"),
+        ("NUMER_LST", "residual_negative_atol", "residual_atol=-1", "Residual tolerances require"),
+        ("NUMER_LST", "residual_invalid_rtol", "residual_rtol=1", "Residual tolerances require"),
+        ("NUMER_LST", "residual_zero_tolerances", "residual_atol=0,residual_rtol=0", "At least one residual tolerance"),
+        ("NUMER_LST", "residual_invalid_scale", "residual_scales(4)=0", "residual_scales must be"),
+        ("NUMER_LST", "residual_nan_scale", "residual_scales(1)=NaN", "residual_scales must be"),
+    ])
+    cases.extend([
+        ("UTILS_LST", "residual_report_summary", "residual_diagnostics_mode='summary',balance_diagnostics_mode='off'", (1.0,1.0)),
+        ("UTILS_LST", "residual_report_equations", "residual_diagnostics_mode='equations',balance_diagnostics_mode='off'", (1.0,1.0)),
+        ("UTILS_LST", "residual_report_off", "residual_diagnostics_mode='off',balance_diagnostics_mode='detailed'", (1.0,1.0)),
+        ("UTILS_LST", "residual_report_invalid", "residual_diagnostics_mode='invalid'", "residual_diagnostics_mode must be"),
+    ])
     with tempfile.TemporaryDirectory(prefix="mhdg-neutral-wall-input-") as scratch:
         for namelist, name, entries, expected in cases:
             directory = Path(scratch) / name
@@ -108,6 +125,13 @@ def main():
             else:
                 passed = (run.returncode != 0 and expected in output
                           and "NEUTRAL_WALL_ALBEDOS" not in output)
+            if passed and isinstance(expected, tuple):
+                selected = re.search(r"^NEWTON_CONVERGENCE\s+(\S+)", output, re.M)
+                choice = {"residual_enabled": "residual", "residual_both": "both"}.get(name, "update")
+                passed = selected is not None and selected[1] == choice
+                report = re.search(r"^RESIDUAL_REPORT_MODE\s+(\S+)", output, re.M)
+                report_choice={"residual_report_summary":"summary","residual_report_equations":"equations"}.get(name,"off")
+                passed = passed and report is not None and report[1] == report_choice
             if passed and name == "stabilization_prescribed":
                 selected = re.search(r"^STABILIZATION_TYPE\s+(\d+)", output, re.M)
                 prescribed = re.search(r"^STABILIZATION_TAU\s+(.+)$", output, re.M)
