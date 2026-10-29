@@ -1433,16 +1433,11 @@ CONTAINS
       Taui = MATMUL(Qpr,dV_dUi)                       ! 2x3
       Taue = MATMUL(Qpr,dV_dUe)
 
-    ! Compute Alpha(U^(k-1))
-    Alphai = computeAlphai(ufg)
-    Alphae = computeAlphae(ufg)
+    CALL evaluate_energy_conductivity(ufg,3,Alphai,dAlpha_dUi)
+    CALL evaluate_energy_conductivity(ufg,4,Alphae,dAlpha_dUe)
 
-    ! Compute dAlpha/dU^(k-1)
-      CALL compute_dAlpha_dUi(ufg,dAlpha_dUi)
-      CALL compute_dAlpha_dUe(ufg,dAlpha_dUe)
-
-    CALL compute_spitzer_harm_flux_ions(ufg,Qpr,bg,q_sh_i)
-    CALL compute_spitzer_harm_flux_electrons(ufg,Qpr,bg,q_sh_e)
+    CALL compute_spitzer_harm_flux(Alphai,gmi,phys%diff_pari,q_sh_i)
+    CALL compute_spitzer_harm_flux(Alphae,gme,phys%diff_pare,q_sh_e)
     CALL compute_heat_flux_limiters(ufg,q_sh_i,q_sh_e,flux_limiter_i,flux_limiter_e)
 
     ! assemblyExtFacesContribution supplies the constant heat-flux RHS term.
@@ -1626,13 +1621,8 @@ CONTAINS
       QdW5p = neutral_limiter_phi*QdW5p
 #endif
 
-      ! Compute Alpha(U^(k-1))
-      Alphai = computeAlphai(ufg)
-      Alphae = computeAlphae(ufg)
-
-      ! Compute dAlpha/dU^(k-1)
-        CALL compute_dAlpha_dUi(ufg,dAlpha_dUi)
-        CALL compute_dAlpha_dUe(ufg,dAlpha_dUe)
+      CALL evaluate_energy_conductivity(ufg,3,Alphai,dAlpha_dUi)
+      CALL evaluate_energy_conductivity(ufg,4,Alphae,dAlpha_dUe)
 
       ! Jacobian matrix for convection part
       CALL jacobianMatricesBohm(ufg,Abohm)
@@ -1651,8 +1641,8 @@ CONTAINS
 
       ! Compute flux limiters
 
-      CALL compute_spitzer_harm_flux_ions(ufg,Qpr,bg,q_sh_i)
-      CALL compute_spitzer_harm_flux_electrons(ufg,Qpr,bg,q_sh_e)
+      CALL compute_spitzer_harm_flux(Alphai,gmi,phys%diff_pari,q_sh_i)
+      CALL compute_spitzer_harm_flux(Alphae,gme,phys%diff_pare,q_sh_e)
       CALL compute_heat_flux_limiters(ufg,q_sh_i,q_sh_e,flux_limiter_i,flux_limiter_e)
 
 #ifdef NEUTRAL

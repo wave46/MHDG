@@ -32,8 +32,6 @@ CONTAINS
     ue=state;uf=state;ufg=state;qpr=gradient
     CALL computeVi(state,Vveci);CALL computeVe(state,Vvece)
     CALL compute_dV_dUi(state,dVi);CALL compute_dV_dUe(state,dVe)
-    Alphai=computeAlphai(state);Alphae=computeAlphae(state)
-    CALL compute_dAlpha_dUi(state,dAlpha_dUi);CALL compute_dAlpha_dUe(state,dAlpha_dUe)
     Taui=MATMUL(qpr,dVi);Taue=MATMUL(qpr,dVe)
     gmi=DOT_PRODUCT(MATMUL(qpr,Vveci),b);gme=DOT_PRODUCT(MATMUL(qpr,Vvece),b)
     coefi=phys%diff_pari*(2.d0/(3.d0*phys%Mref))**(1.d0+phys%epn)

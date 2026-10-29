@@ -44,7 +44,11 @@ def production_wrapper(flags=FLAGS):
     wrapper = (ROOT/'unit_tests/fortran/test_heat_flux_assembly.f90').read_text()
     for label, source, name in sources:
         body = routine(source, name)
-        call = re.search(r'CALL compute_spitzer_harm_flux_ions\(.*?CALL compute_heat_flux_limiters\(.*?\)', body, re.S | re.M)[0]
+        conductivity = re.findall(r'CALL evaluate_energy_conductivity\([^\n]*\)', body)
+        if len(conductivity) != 2:
+            raise ValueError(f'{name}: expected ion and electron conductivity evaluations')
+        flux = re.search(r'CALL compute_spitzer_harm_flux\(.*?CALL compute_heat_flux_limiters\(.*?\)', body, re.S | re.M)[0]
+        call = '\n'.join([*conductivity, flux])
         if label == 'BOHM':
             block = body.split('! Parallel diffusion for temperature', 1)[1].split('!endif', 1)[0]
         elif label == 'PRESCRIBED':

@@ -5,7 +5,7 @@ PROGRAM test_heat_flux_limiter
        compute_free_streaming_heat_flux_ions,compute_free_streaming_heat_flux_electrons, &
        compute_spitzer_harm_flux_ions,compute_spitzer_harm_flux_electrons, &
        computeVi,computeVe,compute_dV_dUi,compute_dV_dUe, &
-       computeAlphai,computeAlphae,compute_dAlpha_dUi,compute_dAlpha_dUe
+       evaluate_energy_conductivity
   IMPLICIT NONE
   REAL*8, PARAMETER :: perturbation=2.d-7
   INTEGER :: species,checks,reconstructions
@@ -87,14 +87,13 @@ CONTAINS
     REAL*8, INTENT(IN) :: state(5)
     INTEGER, INTENT(IN) :: which
     REAL*8, INTENT(OUT) :: v(5),dv(5,5),alpha,da(5),coefficient,qfs
+    CALL evaluate_energy_conductivity(state,which+2,alpha,da)
     IF (which==1) THEN
       CALL computeVi(state,v);CALL compute_dV_dUi(state,dv)
-      alpha=computeAlphai(state);CALL compute_dAlpha_dUi(state,da)
       coefficient=phys%diff_pari
       CALL compute_free_streaming_heat_flux_ions(state,qfs)
     ELSE
       CALL computeVe(state,v);CALL compute_dV_dUe(state,dv)
-      alpha=computeAlphae(state);CALL compute_dAlpha_dUe(state,da)
       coefficient=phys%diff_pare
       CALL compute_free_streaming_heat_flux_electrons(state,qfs)
     ENDIF

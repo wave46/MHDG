@@ -2554,13 +2554,8 @@ CONTAINS
         CALL compute_dV_dUi(ue,dV_dUi)
         CALL compute_dV_dUe(ue,dV_dUe)
 
-    ! Compute Alpha(U^(k-1))
-    Alphai = computeAlphai(ue)
-    Alphae = computeAlphae(ue)
-
-    ! Compute dAlpha/dU^(k-1)
-        CALL compute_dAlpha_dUi(ue,dAlpha_dUi)
-        CALL compute_dAlpha_dUe(ue,dAlpha_dUe)
+    CALL evaluate_energy_conductivity(ue,3,Alphai,dAlpha_dUi)
+    CALL evaluate_energy_conductivity(ue,4,Alphae,dAlpha_dUe)
 
         gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),b)    ! scalar
         gme = dot_PRODUCT(MATMUL(Qpr,Vvece),b)    ! scalar
@@ -2568,8 +2563,8 @@ CONTAINS
         Taue = MATMUL(Qpr,dV_dUe)                 ! Ndim x Neq
 
 
-    CALL compute_spitzer_harm_flux_ions(ue,Qpr,b,q_sh_i)
-    CALL compute_spitzer_harm_flux_electrons(ue,Qpr,b,q_sh_e)
+    CALL compute_spitzer_harm_flux(Alphai,gmi,phys%diff_pari,q_sh_i)
+    CALL compute_spitzer_harm_flux(Alphae,gme,phys%diff_pare,q_sh_e)
     CALL compute_heat_flux_limiters(ue,q_sh_i,q_sh_e,flux_limiter_i,flux_limiter_e)
 
     ! Parallel current term
@@ -3311,13 +3306,8 @@ ENDIF
       QdW5p = neutral_limiter_phi*QdW5p
 #endif
 
-      ! Compute Alpha(U^(k-1))
-      Alphai = computeAlphai(uf)
-      Alphae = computeAlphae(uf)
-
-      ! Compute dAlpha/dU^(k-1)
-           CALL compute_dAlpha_dUi(uf,dAlpha_dUi)
-           CALL compute_dAlpha_dUe(uf,dAlpha_dUe)
+      CALL evaluate_energy_conductivity(uf,3,Alphai,dAlpha_dUi)
+      CALL evaluate_energy_conductivity(uf,4,Alphae,dAlpha_dUe)
 
            gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),b)  ! scalar
            gme = dot_PRODUCT(MATMUL(Qpr,Vvece),b)
@@ -3326,8 +3316,8 @@ ENDIF
 
       ! Compute flux limiters
 
-      CALL compute_spitzer_harm_flux_ions(uf,Qpr,b,q_sh_i)
-      CALL compute_spitzer_harm_flux_electrons(uf,Qpr,b,q_sh_e)
+      CALL compute_spitzer_harm_flux(Alphai,gmi,phys%diff_pari,q_sh_i)
+      CALL compute_spitzer_harm_flux(Alphae,gme,phys%diff_pare,q_sh_e)
       CALL compute_heat_flux_limiters(uf,q_sh_i,q_sh_e,flux_limiter_i,flux_limiter_e)
 
 #ifdef NEUTRAL
@@ -3769,13 +3759,8 @@ ENDIF
       QdW5p = neutral_limiter_phi*QdW5p
 #endif
 
-      ! Compute Alpha(U^(k-1))
-      Alphai = computeAlphai(uf)
-      Alphae = computeAlphae(uf)
-
-      ! Compute dAlpha/dU^(k-1)
-           CALL compute_dAlpha_dUi(uf,dAlpha_dUi)
-           CALL compute_dAlpha_dUe(uf,dAlpha_dUe)
+      CALL evaluate_energy_conductivity(uf,3,Alphai,dAlpha_dUi)
+      CALL evaluate_energy_conductivity(uf,4,Alphae,dAlpha_dUe)
 
            gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),b)  ! scalar
            gme = dot_PRODUCT(MATMUL(Qpr,Vvece),b)
@@ -3783,8 +3768,8 @@ ENDIF
            Taue = MATMUL(Qpr,dV_dUe)               ! 2x3
 
       ! Compute flux limiters
-      CALL compute_spitzer_harm_flux_ions(uf,Qpr,b,q_sh_i)
-      CALL compute_spitzer_harm_flux_electrons(uf,Qpr,b,q_sh_e)
+      CALL compute_spitzer_harm_flux(Alphai,gmi,phys%diff_pari,q_sh_i)
+      CALL compute_spitzer_harm_flux(Alphae,gme,phys%diff_pare,q_sh_e)
       CALL compute_heat_flux_limiters(uf,q_sh_i,q_sh_e,flux_limiter_i,flux_limiter_e)
       
 #ifdef NEUTRAL

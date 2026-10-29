@@ -1665,32 +1665,6 @@ CONTAINS
   ENDSUBROUTINE compute_dVun_dU
 #endif
 
-  FUNCTION computeAlphai(U) RESULT(res)
-    REAL*8 :: U(:)
-    REAL*8 :: res
-    CALL evaluate_energy_conductivity(U,3,res)
-  END FUNCTION computeAlphai
-
-  FUNCTION computeAlphae(U) RESULT(res)
-    REAL*8 :: U(:)
-    REAL*8 :: res
-    CALL evaluate_energy_conductivity(U,4,res)
-  END FUNCTION computeAlphae
-
-  SUBROUTINE compute_dAlpha_dUi(U, res)
-    real*8, intent(IN) :: U(:)
-    real*8, intent(OUT):: res(:)
-    real*8             :: aux
-    CALL evaluate_energy_conductivity(U,3,aux,res)
-  ENDSUBROUTINE compute_dAlpha_dUi
-
-  SUBROUTINE compute_dAlpha_dUe(U, res)
-    real*8, intent(IN) :: U(:)
-    real*8, intent(OUT):: res(:)
-    real*8             :: aux
-    CALL evaluate_energy_conductivity(U,4,aux,res)
-  ENDSUBROUTINE compute_dAlpha_dUe
-
   SUBROUTINE evaluate_energy_conductivity(U, energy_row, alpha, derivative)
     REAL*8, INTENT(IN) :: U(:)
     INTEGER, INTENT(IN) :: energy_row
@@ -1773,31 +1747,39 @@ CONTAINS
   END SUBROUTINE
 
 
+  SUBROUTINE compute_spitzer_harm_flux(alpha, parallel_gradient, parallel_diffusion, heat_flux)
+    REAL*8, INTENT(IN) :: alpha, parallel_gradient, parallel_diffusion
+    REAL*8, INTENT(OUT) :: heat_flux
+    REAL*8 :: coefficient
+
+    ! parallel_gradient is the parallel derivative of specific thermal energy.
+    coefficient = parallel_diffusion*(2.d0/(3.d0*phys%Mref))**(1.d0 + phys%epn)
+    heat_flux = -coefficient*alpha*parallel_gradient
+  END SUBROUTINE compute_spitzer_harm_flux
+
   SUBROUTINE compute_spitzer_harm_flux_ions(U, Q, b, q_sh_i)
     REAL*8, INTENT(IN) :: U(:), Q(:,:), b(:)
     REAL*8, INTENT(OUT):: q_sh_i
-    REAL*8             :: Alphai, gmi, coefi
+    REAL*8             :: Alphai, gmi
     REAL*8             :: Vveci(SIZE(U))
 
-    coefi = phys%diff_pari*(2./(3.*phys%Mref))**(1 + phys%epn)
-    Alphai = computeAlphai(U)
+    CALL evaluate_energy_conductivity(U,3,Alphai)
     CALL computeVi(U, Vveci)
     gmi = dot_PRODUCT(MATMUL(Q,Vveci),b(1:SIZE(Q,1)))
-    q_sh_i = -coefi*Alphai*gmi
+    CALL compute_spitzer_harm_flux(Alphai,gmi,phys%diff_pari,q_sh_i)
   
   END SUBROUTINE compute_spitzer_harm_flux_ions
 
   SUBROUTINE compute_spitzer_harm_flux_electrons(U, Q, b, q_sh_e)
     REAL*8, INTENT(IN) :: U(:), Q(:,:), b(:)
     REAL*8, INTENT(OUT):: q_sh_e
-    REAL*8             :: Alphae, gme, coefe
+    REAL*8             :: Alphae, gme
     REAL*8             :: Vvece(SIZE(U))
 
-    coefe = phys%diff_pare*(2./(3.*phys%Mref))**(1 + phys%epn)
-    Alphae = computeAlphae(U)
+    CALL evaluate_energy_conductivity(U,4,Alphae)
     CALL computeVe(U, Vvece)
     gme = dot_PRODUCT(MATMUL(Q,Vvece),b(1:SIZE(Q,1)))
-    q_sh_e = -coefe*Alphae*gme
+    CALL compute_spitzer_harm_flux(Alphae,gme,phys%diff_pare,q_sh_e)
 
   END SUBROUTINE compute_spitzer_harm_flux_electrons
 
@@ -1869,7 +1851,7 @@ CONTAINS
     REAL*8, INTENT(IN) :: U(:)
     REAL*8, INTENT(OUT) :: s
     REAL*8, OPTIONAL, INTENT(OUT) :: ds_dU(:)
-    REAL*8 :: density, velocity, temperature_scale, Ti, Te, collision_temperature
+    REAL*8 :: density, Ti, Te, collision_temperature
     REAL*8 :: dcollision_dTi, dcollision_dTe, prefactor, difference
     REAL*8 :: dTi(SIZE(U)), dTe(SIZE(U)), dcollision(SIZE(U))
 
@@ -1879,10 +1861,8 @@ CONTAINS
       RETURN
     ENDIF
     density = U(1)
-    velocity = U(2)/density
-    temperature_scale = 2.d0/(3.d0*phys%Mref)
-    Ti = temperature_scale*(U(3)/density-.5d0*velocity**2)
-    Te = temperature_scale*U(4)/density
+    CALL compute_Ti(U,Ti)
+    CALL compute_Te(U,Te)
 
     CALL exchange_collision_temperature(Ti,Te,collision_temperature,dcollision_dTi,dcollision_dTe)
     prefactor = temperature_exchange_coefficient()*density**2/collision_temperature**1.5d0
@@ -1891,10 +1871,8 @@ CONTAINS
 
     IF (.NOT.PRESENT(ds_dU)) RETURN
 
-    CALL computeVi(U,dTi)
-    CALL computeVe(U,dTe)
-    dTi = temperature_scale*dTi
-    dTe = temperature_scale*dTe
+    CALL compute_dTi_dU(U,dTi)
+    CALL compute_dTe_dU(U,dTe)
     dcollision = dcollision_dTi*dTi+dcollision_dTe*dTe
     ds_dU = prefactor*(dTi-dTe-1.5d0*difference/collision_temperature*dcollision)
     ds_dU(1) = ds_dU(1)+2.d0*s/density

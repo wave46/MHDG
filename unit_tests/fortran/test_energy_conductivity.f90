@@ -1,7 +1,7 @@
 PROGRAM test_energy_conductivity
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   USE globals, ONLY: phys, switch
-  USE physics, ONLY: computeAlphai, computeAlphae, compute_dAlpha_dUi, compute_dAlpha_dUe
+  USE physics, ONLY: evaluate_energy_conductivity
   IMPLICIT NONE
   REAL*8, PARAMETER :: energy_floor=1.d-20, perturbation=1.d-6
   REAL*8 :: u(5), trial(5), derivative(5), a, expected, plus, minus, step, numerical
@@ -92,13 +92,7 @@ CONTAINS
     INTEGER, INTENT(IN) :: which
     REAL*8, INTENT(OUT) :: value
     REAL*8, OPTIONAL, INTENT(OUT) :: tangent(:)
-    IF (which==1) THEN
-      value=computeAlphai(state)
-      IF (PRESENT(tangent)) CALL compute_dAlpha_dUi(state,tangent)
-    ELSE
-      value=computeAlphae(state)
-      IF (PRESENT(tangent)) CALL compute_dAlpha_dUe(state,tangent)
-    ENDIF
+    CALL evaluate_energy_conductivity(state,which+2,value,tangent)
   END SUBROUTINE coefficient
 
   SUBROUTINE close(actual,reference,normalization,tolerance,label)
