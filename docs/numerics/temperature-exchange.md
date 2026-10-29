@@ -37,6 +37,8 @@ $T_e=0$ (right); it approaches $2\sqrt{2}$ on the negative side.
 | Zero or negative | Return a collective retry before assembly |
 
 Nonpositive density or nonfinite plasma states also trigger a retry.
+The driver checks this domain before assembly and after each Newton update;
+see [solver flow](../simulation/solver-flow.md) for acceptance and recovery.
 
 ## Linearization
 

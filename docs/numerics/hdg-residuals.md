@@ -8,20 +8,17 @@ $$ r_k\leq\varepsilon_{\mathrm{abs}}+\varepsilon_{\mathrm{rel}}r_0, $$
 where `residual_atol` and `residual_rtol` set the two tolerances. Their defaults,
 `1.d-6` and `1.d-4`, are provisional. `both` additionally requires the preceding
 undamped volume update to satisfy `tNR`, with at least one update on this mesh.
-Residual acceptance also requires the existing raw-state admissibility check;
-this is separate from the norm and does not certify positivity at every Gauss point.
+State admissibility and continuation rules are described in the
+[solver flow](../simulation/solver-flow.md#assembly-solve-and-acceptance).
 
 ## Evaluation and output
-
-The [solver-flow overview](../simulation/solver-flow.md) places these checks
-within initialization, time stepping and the HDG solve.
 
 Let the current complete state be $X_k=(U_k,Q_k,\widehat U_k)$. The MHDG
 Newton loop follows this sequence:
 
 1. Assemble matrices and right-hand sides at $X_k$.
 2. Evaluate its nonlinear residual $F(X_k)$ and normalized magnitude $r_k$.
-3. If the selected residual criterion and admissibility pass, accept $X_k$.
+3. If the selected residual criterion and state-acceptance policy pass, accept $X_k$.
 4. Otherwise solve for a correction and apply the damping factor $\lambda$:
 
    $$ J_k\Delta X=-F(X_k),\qquad X_{k+1}=X_k+\lambda\Delta X. $$

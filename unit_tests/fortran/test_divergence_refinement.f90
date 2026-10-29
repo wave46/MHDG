@@ -671,6 +671,9 @@ CONTAINS
     phys%idx_rhon_eq = 5
     Mesh%Nelems = 2
     Mesh%Nnodesperelem = 1
+    refElPol%Ngauss2d = 1
+    ALLOCATE(refElPol%N2D(1,1))
+    refElPol%N2D = 1.d0
 #ifdef PARALL
     ALLOCATE(Mesh%ghostElems(2))
     Mesh%ghostElems = 0
@@ -776,7 +779,7 @@ CONTAINS
     valid = physical_solution_is_admissible(sol%u)
     IF (.NOT. update_best_newton_checkpoint(0.2d0,3,valid)) ERROR STOP 'good post-projection iterate not accepted'
     IF (.NOT. divergence_checkpoint_available) ERROR STOP 'checkpoint not restored after valid iterate'
-    DEALLOCATE(sol%u,sol%q,sol%u_conv,sol%q_conv,uiter_best,qiter_best)
+    DEALLOCATE(sol%u,sol%q,sol%u_conv,sol%q_conv,uiter_best,qiter_best,refElPol%N2D)
     NULLIFY(uiter_best,qiter_best)
     adapt%max_divergence_refinements = 2
 #ifdef PARALL
@@ -792,6 +795,9 @@ CONTAINS
     phys%idx_rhon_eq = 5
     Mesh%Nelems = 1
     Mesh%Nnodesperelem = 1
+    refElPol%Ngauss2d = 1
+    ALLOCATE(refElPol%N2D(1,1))
+    refElPol%N2D = 1.d0
 #ifdef PARALL
     ALLOCATE(Mesh%ghostElems(1))
     Mesh%ghostElems = 0
@@ -850,7 +856,7 @@ CONTAINS
     IF (.NOT. prepare_divergence_refinement()) ERROR STOP 'relaxed next-timestep recovery unavailable'
     IF (ANY(sol%u /= accepted)) ERROR STOP 'next-timestep recovery changed raw neutrals'
     adapt%check_neutral_positivity = .TRUE.
-    DEALLOCATE(sol%u,sol%q,sol%u_conv,sol%q_conv,uiter_best,qiter_best)
+    DEALLOCATE(sol%u,sol%q,sol%u_conv,sol%q_conv,uiter_best,qiter_best,refElPol%N2D)
     NULLIFY(uiter_best,qiter_best)
 #ifdef PARALL
     DEALLOCATE(Mesh%ghostElems)

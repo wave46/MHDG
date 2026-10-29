@@ -572,14 +572,31 @@ CONTAINS
     TYPE(newton_result_t), INTENT(IN) :: result
 
     IF (result%status%outcome == solve_success) RETURN
-    IF (result%iteration_limit_reached .AND. time%legacy_input .AND. &
-        (switch%steady .OR. switch%psdtime .OR. (nb_args == 1 .AND. .NOT. switch%ME))) THEN
+    IF (result%iteration_limit_reached .AND. bootstrap_output_allowed()) THEN
        IF (MPIvar%glob_id == 0) WRITE(6,*) &
             'Warning: Newton iteration limit reached; retaining finite initialization/steady-state output. Residual: ', errNR
+       CALL warn_inadmissible_bootstrap_output()
     ELSE
        CALL stop_on_solver_failure(result%status, 'Newton solve')
     ENDIF
   END SUBROUTINE handle_newton_result
+
+  LOGICAL FUNCTION bootstrap_output_allowed() RESULT(allowed)
+    allowed = time%legacy_input .AND. &
+         (switch%steady .OR. switch%psdtime .OR. (nb_args == 1 .AND. .NOT. switch%ME))
+  END FUNCTION bootstrap_output_allowed
+
+  LOGICAL FUNCTION newton_candidate_is_acceptable(admissible) RESULT(acceptable)
+    LOGICAL, INTENT(IN) :: admissible
+
+    ! Source evaluability is checked separately, before either stopping test.
+    acceptable = admissible .OR. bootstrap_output_allowed()
+  END FUNCTION newton_candidate_is_acceptable
+
+  SUBROUTINE warn_inadmissible_bootstrap_output()
+    IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id == 0) WRITE(6,*) &
+         'Warning: bootstrap output contains inadmissible raw state values; retained for continuation.'
+  END SUBROUTINE warn_inadmissible_bootstrap_output
 
   SUBROUTINE solve_nonlinear_system(result, accepted, predicted)
     TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
@@ -600,11 +617,14 @@ CONTAINS
     DO WHILE (ir <= numer%nrp)
        result%iterations = result%iterations+1
        CALL assemble_newton_system(result%status,residual)
-       IF (result%status%outcome /= solve_success) RETURN
+       IF (result%status%outcome /= solve_success) THEN
+          IF (recover_newton_domain_failure(result%status,use_prediction,accepted)) CYCLE
+          RETURN
+       ENDIF
 #ifndef TOR3D
        IF(hdg_residual%converged(errNR))THEN
           physical_iterate_valid=physical_solution_is_admissible(sol%u)
-          IF(physical_iterate_valid)THEN
+          IF(newton_candidate_is_acceptable(physical_iterate_valid))THEN
              CALL save_converged_newton_solution()
              RETURN
           ENDIF
@@ -612,11 +632,21 @@ CONTAINS
 #endif
        CALL compute_newton_update(result%status,residual,accepted)
        IF (result%status%outcome /= solve_success) RETURN
+#if defined(TEMPERATURE) && !defined(TOR3D)
+       ! A small update must not accept an unevaluable Gauss state or save it
+       ! over a recovery checkpoint before the next assembly can reject it.
+       CALL check_temperature_exchange_domain(result%status)
+       IF (result%status%outcome /= solve_success) THEN
+          IF (recover_newton_domain_failure(result%status,use_prediction,accepted)) CYCLE
+          RETURN
+       ENDIF
+#endif
        CALL check_newton_convergence(result%status)
        IF (result%iterations == 1) result%first_error = errNR
        IF (result%status%outcome /= solve_success) RETURN
 
-       IF (TRIM(numer%newton_convergence)=='update'.AND.errNR < numer%tNR .AND. physical_iterate_valid) THEN
+       IF (TRIM(numer%newton_convergence)=='update'.AND.errNR < numer%tNR .AND. &
+           newton_candidate_is_acceptable(physical_iterate_valid)) THEN
           CALL save_converged_newton_solution()
           RETURN
        ENDIF
@@ -626,6 +656,7 @@ CONTAINS
              RETURN
           ENDIF
           IF (recover_newton_divergence(accepted)) CYCLE
+          IF (ir >= numer%nrp .AND. errNR <= numer%div) EXIT
           result%status = solver_status_t(solve_retry, 0, 'Newton divergence or admissibility recovery exhausted')
           RETURN
        ENDIF
@@ -646,6 +677,21 @@ CONTAINS
     result%iteration_limit_reached = .TRUE.
     result%status = solver_status_t(solve_retry, 0, 'Newton iteration limit reached')
   END SUBROUTINE solve_nonlinear_system
+
+  LOGICAL FUNCTION recover_newton_domain_failure(status,predicted,accepted) RESULT(recovered)
+    TYPE(solver_status_t), INTENT(IN) :: status
+    LOGICAL, INTENT(IN) :: predicted
+    TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
+
+    recovered = .FALSE.
+    IF (status%outcome /= solve_retry) RETURN
+    physical_iterate_valid = .FALSE.
+    ! If the extrapolated initial guess fails, retry this timestep from
+    ! the previous accepted solution before attempting mesh refinement.
+    IF (predicted) RETURN
+    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Newton source-domain rejection: ',TRIM(status%message)
+    recovered = recover_newton_divergence(accepted)
+  END FUNCTION recover_newton_domain_failure
 
   SUBROUTINE assemble_newton_system(status,residual)
     TYPE(solver_status_t), INTENT(OUT) :: status
@@ -799,12 +845,9 @@ CONTAINS
 
     status = solver_status_t()
     ! Compute error on oscillations, print max value of oscillation and save solution as check-point if oscillations are lower than threshold
-    physical_iterate_valid = .TRUE.
-    IF (adapt%adaptivity .AND. adapt%div_adapt) THEN
-       physical_iterate_valid = physical_solution_is_admissible(sol%u)
-       IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id .EQ. 0) &
-            WRITE(*,*) 'NR iterate is not physically admissible; recovery checkpoint retained.'
-    ENDIF
+    physical_iterate_valid = physical_solution_is_admissible(sol%u)
+    IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id .EQ. 0) &
+         WRITE(*,*) 'NR iterate is not physically admissible; recovery checkpoint retained.'
     IF (adapt%adaptivity) THEN
        CALL compute_error_oscillations(oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec, &
             checkpoint_allowed=physical_iterate_valid)
@@ -837,6 +880,7 @@ CONTAINS
 
   SUBROUTINE save_converged_newton_solution()
     ! The converged iterate is the completed solution checkpoint.
+    CALL warn_inadmissible_bootstrap_output()
     WRITE(*,*) "Solution saved as checkpoint."
     CALL update_uconv_qconv(sol%u, sol%q)
     errNR_adapt = 1e10
@@ -1712,15 +1756,24 @@ CONTAINS
   END FUNCTION physical_solution_is_admissible
 
   SUBROUTINE seed_divergence_checkpoint()
+#if defined(TEMPERATURE) && !defined(TOR3D)
+    TYPE(solver_status_t) :: status
+#endif
     IF (.NOT. (adapt%adaptivity .AND. adapt%div_adapt)) RETURN
     divergence_checkpoint_available = physical_solution_is_admissible(sol%u)
+#if defined(TEMPERATURE) && !defined(TOR3D)
+    IF (divergence_checkpoint_available .AND. phys%neq >= 4) THEN
+       CALL check_temperature_exchange_domain(status)
+       divergence_checkpoint_available = status%outcome == solve_success
+    ENDIF
+#endif
     physical_iterate_valid = divergence_checkpoint_available
     errNR_adapt = HUGE(1.d0)
     ir_adapt = 0
     IF (divergence_checkpoint_available) THEN
        CALL update_uiter_qiter_best(uiter_best,qiter_best,sol%u,sol%q)
     ELSEIF (MPIvar%glob_id .EQ. 0) THEN
-       WRITE(*,*) 'Recovery checkpoint unavailable: initial/projected state is not physically admissible.'
+       WRITE(*,*) 'Recovery checkpoint unavailable: initial/projected state is inadmissible or its source is unevaluable.'
     ENDIF
   END SUBROUTINE seed_divergence_checkpoint
 
