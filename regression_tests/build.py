@@ -26,7 +26,7 @@ class BuildResult:
 
 def build_solver(
     settings: dict[str, Any], repository_root: Path, jobs: int | None = None,
-    *, requirements,
+    *, requirements, newton_probe=False,
 ) -> BuildResult:
     """Build each selected variant once; return artifacts without writing settings."""
     # Deduplicate requirements; group by model, serial before MPI.
@@ -78,6 +78,7 @@ def build_solver(
     started = utc_now()
     commands = []
     executables = {}
+    probe_records = {}
     # Existing objects/generated sources may come from a manual build with other
     # flags. An empty tree needs no clean; every serial/MPI transition does.
     clean_needed = any(
@@ -101,6 +102,12 @@ def build_solver(
             raise BundleError(f"built {variant} executable was not produced: {source}")
         destination = directory / "bin" / target
         shutil.copy2(source, destination)
+        if newton_probe:
+            from .newton_probe import build_probe
+            probe_records[variant] = build_probe(
+                repository_root, destination, environment, compile_command[2:],
+                directory / "logs" / f"{model}-{execution}-newton_probe.log",
+            )
         executables[variant] = destination
         clean_needed = True
 
@@ -130,6 +137,10 @@ def build_solver(
         "artifacts": {name: _file_record(path) for name, path in executables.items()},
         "runtime_files": {RUNTIME_FILE: _file_record(runtime_copy)},
     }
+    if newton_probe:
+        metadata["newton_probe"] = {
+            "kind": "mixed_linear_residual_observation", "variants": probe_records,
+        }
     write_json_atomic(metadata_path, metadata, "build metadata")
     return BuildResult(directory, metadata_path, executables)
 

@@ -117,6 +117,8 @@ def calculate_error_norms(
         return ErrorNorms(compatible, finite, None, None)
     if first.size == 0:
         return ErrorNorms(True, True, None, None)
+    if np.array_equal(first, second):
+        return ErrorNorms(True, True, 0., 0.)
 
     difference = second - first
     tiny = np.finfo(float).tiny

@@ -195,7 +195,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         catalog = {}
         _, checks = load_selection(args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases", case_id=args.case, catalog=catalog)
         requirements = selection_builds(checks, ROOT / "cases", load_layouts(ROOT / "layouts.json", catalog=catalog), catalog=catalog)
-        result = build_solver(settings(args.settings, use_build=False), ROOT.parent, args.jobs, requirements=requirements)
+        result = build_solver(settings(args.settings, use_build=False), ROOT.parent, args.jobs, requirements=requirements,
+                              newton_probe=any(item.get("newton_formulation_comparison") for item in checks))
         reporting.status("build", "completed", result.path)
         print(f"select with --build-manifest {result.metadata_path}")
         return 0
@@ -282,7 +283,8 @@ def _check(args: argparse.Namespace) -> int:
     manifests = preflight_bundles(checks, values, ROOT / "cases", required_bundle_class=required_class, catalog=catalog)
     if args.build:
         requirements = selection_builds(checks, ROOT / "cases", layouts, catalog=catalog)
-        build = build_solver(values[cases[0]], ROOT.parent, args.build_jobs, requirements=requirements)
+        build = build_solver(values[cases[0]], ROOT.parent, args.build_jobs, requirements=requirements,
+                             newton_probe=any(item.get("newton_formulation_comparison") for item in checks))
         selected_build = build_settings(build.metadata_path)
         for settings in values.values():
             settings.update(selected_build)

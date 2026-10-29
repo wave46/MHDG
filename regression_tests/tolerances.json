@@ -68,6 +68,14 @@
         "relative_l2_max": 0.25,
         "normalized_linf_max": 0.3
       }
+    },
+    "newton_formulations": {
+      "description": "Same-state absolute/incremental solves; conditioning-aware field and first-update comparison",
+      "relative_l2_max": 2e-05,
+      "normalized_linf_max": 0.0002,
+      "update_relative_l2_max": 0.02,
+      "update_normalized_linf_max": 0.1,
+      "linear_residual_relative_max": 0.01
     }
   }
 }

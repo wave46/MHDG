@@ -181,6 +181,22 @@
       "workflows": ["cold_step_impurity_off"],
       "layouts": ["serial_omp1"],
       "reference_comparisons": false
+    },
+    "newton_formulations": {
+      "description": "Compare complete Newton updates, linear residuals and converged fields for both formulations",
+      "workflows": [
+        "newton_absolute",
+        "newton_incremental"
+      ],
+      "workflow_comparison": [
+        "newton_absolute",
+        "newton_incremental"
+      ],
+      "reference_comparisons": false,
+      "newton_formulation_comparison": true,
+      "layouts": [
+        "mpi4_omp4"
+      ]
     }
   }
 }

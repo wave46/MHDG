@@ -478,6 +478,8 @@ def load_suite_definition(
         if any(name not in suite["workflow_ids"] for name in pair):
             raise BundleError(f"suite {suite_id} compares a workflow it does not run")
         suite["workflow_comparison"] = pair
+    if declaration.get("newton_formulation_comparison"):
+        suite["newton_formulation_comparison"] = True
     return suite
 
 

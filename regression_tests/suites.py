@@ -151,6 +151,15 @@ def _compare_pair(
         result["comparison_report"] = str(report_path)
         result["status"] = report["status"]
         result["failures"] = list(report["failures"])
+        if summary.get("newton_formulation_comparison"):
+            from .newton import compare_newton_runs
+            case = load_case_definition(summary["case_id"], case_directory, catalog=catalog)
+            profile = case["workflows"][workflow_id]["comparison"]["profile"]
+            newton = compare_newton_runs(baseline, candidate, tolerances_path, profile, catalog=catalog)
+            result["newton"] = newton
+            result["failures"].extend(newton["failures"])
+            if newton["status"] != "passed":
+                result["status"] = "failed"
         if not same_workflow:
             suffix = compare_physical_restart_suffix(baseline, candidate, case_directory, tolerances_path, catalog=catalog)
             if suffix is not None:
@@ -393,6 +402,10 @@ def run_suite(
 ):
     catalog = {} if catalog is None else catalog
     suite = suite or load_suite_definition(suite_id, suites_path, layouts_path, case_directory, case_id=case_id, catalog=catalog)
+    if suite.get("newton_formulation_comparison"):
+        build = load_json(absolute_setting(settings, "MHDG_BUILD_MANIFEST"), "build manifest")
+        if build.get("newton_probe", {}).get("kind") != "mixed_linear_residual_observation":
+            raise BundleError("newton_formulations requires a linear-observation test build; rerun with --build")
     bundle_root = bundle_root_from_settings(settings)
     run_id = run_id or utc_run_id()
     if not IDENTIFIER_RE.fullmatch(run_id):
@@ -443,6 +456,8 @@ def run_suite(
         }
         if reuse_from is not None:
             summary.update(_reuse_suite_results(reuse_from, expected, identity, rerun_workflows))
+    if suite.get("newton_formulation_comparison"):
+        summary["newton_formulation_comparison"] = True
     summary.update(status="running", finished_utc=None, comparisons=[])
     summary.pop("diagnostics", None)
     write_json_atomic(path, summary, "suite summary")

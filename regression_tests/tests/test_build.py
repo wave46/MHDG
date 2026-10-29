@@ -105,6 +105,27 @@ def test_failed_build_keeps_log_without_a_completed_manifest(setup, monkeypatch)
     assert len(list(root.rglob("bin/MHDG-*"))) == 1  # Earlier serial copy is only partial evidence.
 
 
+def test_observation_build_records_each_variant_separately(setup, monkeypatch):
+    from regression_tests import newton_probe
+    calls = []
+    def observe(repository, destination, environment, arguments, log):
+        calls.append((destination, arguments, log))
+        return {"kind": "mixed_linear_residual_observation", "target": destination.name}
+    monkeypatch.setattr(newton_probe, "build_probe", observe)
+    result = build.build_solver(
+        setup.settings, setup.repository,
+        requirements={(config.DEFAULT_MODEL, "serial"), (config.DEFAULT_MODEL, "mpi")},
+        newton_probe=True,
+    )
+    manifest = json.loads(result.metadata_path.read_text())
+    variants = manifest["newton_probe"]["variants"]
+    assert set(variants) == set(result.executables)
+    assert len({log for _, _, log in calls}) == 2
+    for destination, arguments, _ in calls:
+        assert f'MHDG_BUILD_ID={manifest["build_id"]}' in arguments
+        assert arguments[-1] == destination.name
+
+
 def test_check_builds_selected_model_and_runs_from_manifest(setup, tmp_path, monkeypatch):
     harness_root = tmp_path / "harness"
     harness_root.mkdir()

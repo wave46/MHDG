@@ -23,6 +23,15 @@ TOLERANCES = {
 }
 
 
+def test_identical_huge_metadata_has_zero_error_without_norm_overflow():
+    from regression_tests.compare_common import calculate_error_norms
+
+    sentinel = np.array([np.finfo(float).max])
+    with np.errstate(over='raise', invalid='raise'):
+        norms = calculate_error_norms(sentinel, sentinel.copy())
+    assert norms.available and norms.relative_l2 == norms.normalized_linf == 0.
+
+
 @pytest.fixture
 def files(tmp_path):
     reference, candidate = tmp_path / "reference.h5", tmp_path / "candidate.h5"

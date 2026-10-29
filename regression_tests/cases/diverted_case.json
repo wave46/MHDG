@@ -67,6 +67,8 @@
     "impurity_nw_short": {},
     "adaptive_source_short": {
       "parameter_overrides": {"tol_est": 0.02}
-    }
+    },
+    "newton_absolute": {},
+    "newton_incremental": {}
   }
 }
