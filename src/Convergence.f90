@@ -80,8 +80,17 @@ PROGRAM Convergence
 
   ! Read input file param.txt
   CALL read_input()
-  IF(TRIM(numer%newton_formulation)/='absolute') &
-       ERROR STOP 'The Convergence driver uses the absolute Newton formulation'
+  IF (MPIvar%glob_id == 0) THEN
+    IF (TRIM(numer%newton_formulation)/='absolute') WRITE(6,'(A)') &
+         'WARNING: Convergence overrides newton_formulation to absolute.'
+    IF (TRIM(numer%newton_convergence)/='update') WRITE(6,'(A)') &
+         'WARNING: Convergence overrides newton_convergence to update; residuals are diagnostic only.'
+    IF (numer%dumpnr_min/=1.d0 .OR. numer%dumpnr_max/=1.d0) WRITE(6,'(A)') &
+         'WARNING: Convergence ignores the input damping schedule; using damping=1.'
+  ENDIF
+  numer%newton_formulation = 'absolute'
+  numer%newton_convergence = 'update'
+  numer%dumpnr = 1.d0
 
   ! Check input
   IF (switch%testcase > 10) THEN

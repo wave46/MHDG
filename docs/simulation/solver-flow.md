@@ -92,6 +92,3 @@ configured schedules. See [time stepping](time-stepping.md),
 | Time-step trials, Newton loop, damping and recovery | [`Main_utils.f90`](../../src/Utils/Main_utils.f90) |
 | Element and boundary assembly | [`hdg_ComputeJacobian.f90`](../../src/HDG/hdg_ComputeJacobian.f90), [`hdg_BC.f90`](../../src/HDG/hdg_BC.f90) |
 | Element elimination and global trace assembly | [`hdg_Mapping.f90`](../../src/HDG/hdg_Mapping.f90), [`hdg_Assembly.f90`](../../src/HDG/hdg_Assembly.f90) |
-
-The separate manufactured-solution driver, `Convergence`, retains its own
-update-based loop; it can report residuals without using them for acceptance.
