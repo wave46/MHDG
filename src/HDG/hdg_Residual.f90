@@ -373,9 +373,10 @@ CONTAINS
     IF(MPIvar%glob_id/=0)RETURN
     destination=6
     IF(PRESENT(output_unit))destination=output_unit
-    WRITE(destination,'(A,ES11.3,A,ES11.3,A,ES11.3)') &
+    WRITE(destination,'(A,ES11.3,A,ES11.3,2A)') &
          'HDG residual before update: norm=',norms%total_rms, &
-         '; relative=',norms%relative,'; target=',norms%target
+         '; target=',norms%target, &
+         '; within target=',MERGE('yes','no ',norms%total_rms<=norms%target)
     WRITE(destination,'(A,3(1X,ES11.3))') &
          '  local peaks (conservation, gradient, trace):',MAXVAL(norms%local_max,DIM=2)
     IF(detailed)THEN

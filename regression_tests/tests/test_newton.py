@@ -11,7 +11,7 @@ from regression_tests.support import BundleError
 from regression_tests.tests.fixtures.solutions import write_solution
 
 CATALOG = Path(__file__).resolve().parents[1]
-LOG = ('HDG residual before update: norm= 1.0; relative= 1.0; target= 1e-8\n'
+LOG = ('HDG residual before update: norm= 1.0; target= 1e-8; within target=no\n'
        'Newton linear check: initial=1.0; trial=1e-10; relative=1e-10\n'
        'Error: 1e-2\nError: 1e-5\n')
 

@@ -34,12 +34,15 @@ its existing update-based stopping test.
 `residual_diagnostics_mode='summary'` in `UTILS_LST` prints two lines:
 
 ```text
-HDG residual before update: norm=  3.007E-07; relative=  1.000E+00; target=  1.000E-06
+HDG residual before update: norm=  3.007E-07; target=  1.000E-06; within target=yes
   local peaks (conservation, gradient, trace):   5.096E-05   1.613E-11   3.776E-05
 ```
 
-`norm` is $r_k$, `relative` is $r_k/r_0$, and `target` is the acceptance bound
-above. Each peak is the largest local norm over all equations in that block;
+`norm` is the total residual $r_k$, and `target` is
+$\varepsilon_{\mathrm{abs}}+\varepsilon_{\mathrm{rel}}r_0$.
+`within target=yes` means $r_k\leq\text{target}$; the selected stopping rule
+and state-acceptance checks still determine convergence.
+Each peak is the largest local norm over all equations in that block;
 peaks are diagnostic, not additional stopping tests. `equations`
 also prints per-equation columns: `U RMS`, `Q RMS`, `trace RMS`, `U peak`,
 `Q peak`, `trace peak`. Here `U` means conservation and `Q` means the gradient relation.
@@ -48,8 +51,7 @@ also prints per-equation columns: `U RMS`, `Q RMS`, `trace RMS`, `U peak`,
 The residual monitor owns `residual_diagnostics_mode`: `off` (default),
 `summary`, or `equations`. Balance diagnostics has its own independent mode.
 With residual reporting off, `update` skips residual evaluation; `residual` and
-`both` still evaluate silently. When $r_0=0$, the absolute tolerance governs; the relative
-value is zero if $r_k=0$ and a large sentinel otherwise.
+`both` still evaluate silently. When $r_0=0$, the absolute tolerance governs.
 
 Solution files record `newton_convergence`, `residual_atol`, `residual_rtol`,
 and all seven `residual_scales` entries under `simulation_parameters/numerics`.
