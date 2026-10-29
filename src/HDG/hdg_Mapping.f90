@@ -7,14 +7,14 @@ CONTAINS
 
 SUBROUTINE HDG_mapping(element_conservation_residual,element_gradient_residual)
   USE globals
-  USE LinearAlgebra, ONLY: mymatmul, solve_linear_system, solve_linear_system_sing
+  USE LinearAlgebra, ONLY: mymatmul, solve_linear_system
   USE MPI_OMP, ONLY: MPIvar
 
   IMPLICIT NONE
   REAL*8, OPTIONAL, INTENT(IN) :: element_conservation_residual(:,:),element_gradient_residual(:,:)
   INTEGER*4           :: Ndim, N2d, neq, Np, Nfp, Nfe, i, ifa, iel, iel3, Nfg
   REAL*8, ALLOCATABLE :: LL(:, :), UU(:, :), L0(:), U0(:)
-  REAL*8, ALLOCATABLE :: Auq_iAqq(:, :), Mu(:, :), Ml(:, :), Md(:), aux(:, :), auxAqq(:, :), auxAquUU(:, :)
+  REAL*8, ALLOCATABLE :: Auq_iAqq(:, :), Mu(:, :), mapping_rhs(:, :), mapping_solution(:, :), auxAquUU(:, :)
   REAL*8, POINTER     :: iAqq(:, :) => NULL(), Aqu(:, :) => NULL(), Aql(:, :) => NULL()
   REAL*8, POINTER     :: Auq(:, :) => NULL(), Auu(:, :) => NULL(), Aul(:, :) => NULL()
   REAL*8, POINTER     :: Aql_dir(:) => NULL(), Aul_dir(:) => NULL(), f(:) => NULL()
@@ -100,9 +100,9 @@ SUBROUTINE HDG_mapping(element_conservation_residual,element_gradient_residual)
 
   !$OMP PARALLEL DEFAULT(SHARED) &
 #ifdef TOR3D
-  !$OMP PRIVATE(iel,itor,iel3,LL,UU,L0,U0,Auq_iAqq,Auu,Mu,Ml,Md,f,aux,auxAqq,auxAquUU,iAqq,Aqu,Aql,Auq,Aul,Aql_dir,Aul_dir,ifa)
+  !$OMP PRIVATE(iel,itor,iel3,LL,UU,L0,U0,Auq_iAqq,Auu,Mu,mapping_rhs,mapping_solution,f,auxAquUU,iAqq,Aqu,Aql,Auq,Aul,Aql_dir,Aul_dir,ifa)
 #else
-  !$OMP PRIVATE(iel,iel3,LL,UU,L0,U0,Auq_iAqq,Auu,Mu,Ml,Md,f,aux,auxAqq,auxAquUU,iAqq,Aqu,Aql,Auq,Aul,Aql_dir,Aul_dir,ifa)
+  !$OMP PRIVATE(iel,iel3,LL,UU,L0,U0,Auq_iAqq,Auu,Mu,mapping_rhs,mapping_solution,f,auxAquUU,iAqq,Aqu,Aql,Auq,Aul,Aql_dir,Aul_dir,ifa)
 #endif
 
   ALLOCATE (LL(Neq*Np*Ndim, Neq*Nfg))
@@ -110,11 +110,9 @@ SUBROUTINE HDG_mapping(element_conservation_residual,element_gradient_residual)
   ALLOCATE (UU(Neq*Np, Neq*Nfg))
   ALLOCATE (U0(Neq*Np))
   ALLOCATE (Auq_iAqq(Neq*Np, Neq*Ndim*Np))
-  ALLOCATE (Ml(Neq*Np, Neq*Nfg))
+  ALLOCATE (mapping_rhs(Neq*Np, Neq*Nfg+1))
+  ALLOCATE (mapping_solution(Neq*Np, Neq*Nfg+1))
   ALLOCATE (Mu(Neq*Np, Neq*Np))
-  ALLOCATE (Md(Neq*Np))
-  ALLOCATE (aux(Neq*Ndim*Np, Neq*Np))
-  ALLOCATE (auxAqq(Neq*Ndim*Np, Neq*Ndim*Np))
   ALLOCATE (auxAquUU(Neq*Ndim*Np, Neq*Nfg))
 
 
@@ -156,17 +154,18 @@ SUBROUTINE HDG_mapping(element_conservation_residual,element_gradient_residual)
         CALL mymatmul(Auq_iAqq,Aqu,Mu)
         Mu = Auu - Mu
 
-        !Ml = Aul - matmul(Auq_iAqq, Aql)
-        CALL  mymatmul(Auq_iAqq,Aql,Ml)
-        Ml = Aul - Ml
+        CALL mymatmul(Auq_iAqq,Aql,mapping_rhs(:,:Neq*Nfg))
+        mapping_rhs(:,:Neq*Nfg) = mapping_rhs(:,:Neq*Nfg)-Aul
 
         IF(PRESENT(element_conservation_residual))THEN
-          Md=-element_conservation_residual(:,iel3)+MATMUL(Auq,element_gradient_residual(:,iel3))
+          mapping_rhs(:,Neq*Nfg+1)=-element_conservation_residual(:,iel3)+MATMUL(Auq,element_gradient_residual(:,iel3))
         ELSE
-          Md=f-(Aul_dir-MATMUL(Auq_iAqq,Aql_dir))
+          mapping_rhs(:,Neq*Nfg+1)=f-(Aul_dir-MATMUL(Auq_iAqq,Aql_dir))
         ENDIF
-        CALL solve_linear_system(Mu, -Ml, UU)
-        CALL solve_linear_system_sing(Mu, Md, U0)
+        ! Solve the trace response and affine load with one factorization.
+        CALL solve_linear_system(Mu,mapping_rhs,mapping_solution)
+        UU=mapping_solution(:,:Neq*Nfg)
+        U0=mapping_solution(:,Neq*Nfg+1)
 
         !auxAquUU = matmul(Aqu, UU) ! Avoid stack overflow
         CALL mymatmul(Aqu,UU,auxAquUU) ! Avoid stack overflow
@@ -203,7 +202,7 @@ SUBROUTINE HDG_mapping(element_conservation_residual,element_gradient_residual)
 #endif
 
   !$OMP END DO
-  DEALLOCATE (LL, UU, L0, U0, Auq_iAqq, Mu, Ml, Md, aux, auxAqq, auxAquUU)
+  DEALLOCATE (LL, UU, L0, U0, Auq_iAqq, Mu, mapping_rhs, mapping_solution, auxAquUU)
   !$OMP END PARALLEL
 
 
