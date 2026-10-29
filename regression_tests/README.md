@@ -57,6 +57,11 @@ analytical cold step with two Newton iterations, OpenMP agreement and detailed
 diagnostics. That probe has no NeutralGamma golden reference. Other models and
 3D are outside the current harness.
 
+The baseline uses automatic stabilization (`stab=2`), absolute Newton with
+update-based stopping, full Bohm momentum diffusion, and residual reporting
+off. Heat limiting is enabled in the heat-limiter and Newton-comparison
+workflows. Damping schedules and Bohm angle/energy thresholds come from the bundle.
+
 For example, `diverted_case` + `baseline_warm` + `mpi4_omp4` specifies one
 workflow run; the `warm` suite checks it against the diverted golden. The terms
 used in the coverage table mean:

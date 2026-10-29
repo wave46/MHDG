@@ -55,6 +55,12 @@
         }
       },
       "parameter_overrides": {
+        "stab": 2,
+        "newton_formulation": "absolute",
+        "newton_convergence": "update",
+        "residual_diagnostics_mode": "off",
+        "bohm_momentum_always_include_diffusion": true,
+        "flux_limiter": false,
         "time_mode": "legacy", "dt_reduce_on_failure": false,
         "dt_grow_on_easy": false, "newton_predictor": false,
         "nts": 2, "saveNR": false, "target_variable": 1, "compute_from_flux": true,

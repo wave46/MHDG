@@ -14,6 +14,25 @@ from regression_tests.support import BundleError
 REGRESSION_ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("case_id", ["legacy_case", "diverted_case", "moving_equilibrium"])
+def test_production_workflows_inherit_solver_defaults(case_id):
+    case = load_case_definition(case_id, REGRESSION_ROOT / "cases")
+    policy = {"stab": 2, "newton_formulation": "absolute", "newton_convergence": "update",
+              "residual_diagnostics_mode": "off", "bohm_momentum_always_include_diffusion": True,
+              "flux_limiter": False}
+    for name, workflow in case["workflows"].items():
+        expected = dict(policy)
+        if name in ("heat_flux_limiter", "newton_absolute", "newton_incremental"):
+            expected["flux_limiter"] = True
+        if name.startswith("newton_"):
+            expected["residual_diagnostics_mode"] = "equations"
+            expected["newton_formulation"] = name.removeprefix("newton_")
+        overrides = workflow["parameter_overrides"]
+        assert {key: overrides[key] for key in expected} == expected, name
+        assert all(not set(stage.get("parameter_overrides", {})) & set(policy)
+                   for stage in workflow.get("stages", [])), name
+
+
 @pytest.fixture
 def catalog(tmp_path):
     (tmp_path / "schemas").mkdir()
