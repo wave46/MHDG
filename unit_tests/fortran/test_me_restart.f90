@@ -281,12 +281,10 @@ CONTAINS
   SUBROUTINE check_output_names()
     CHARACTER(LEN=1024) :: base, name, previous
     INTEGER :: saved_frequency
-    LOGICAL :: saved_legacy, saved_decoupled
+    LOGICAL :: saved_legacy
 
     saved_frequency = utils%freqsave
     saved_legacy = time%legacy_input
-    saved_decoupled = switch%decoup
-    switch%decoup = .FALSE.
     utils%freqsave = 5
     time%legacy_input = .TRUE.
     CALL setSolName(base, mesh_name, 0, .TRUE., .TRUE.)
@@ -312,7 +310,6 @@ CONTAINS
 
     utils%freqsave = saved_frequency
     time%legacy_input = saved_legacy
-    switch%decoup = saved_decoupled
   END SUBROUTINE check_output_names
 
   SUBROUTINE check_physical_restart()

@@ -48,10 +48,6 @@
                                         ! 2 - Threshold on physical values (substitute with numer%thr or numer%thrpre at nodes)
                                         ! 3 - Threshold with filtering (substitute with numer%thr or numer%thrpre)
     filter              = .false.       ! Filter solution to avoid oscillation in empty zones
-    !****** N-Gamma-Ti-Te model
-    decoup              = .false.       ! decouple the N-Gamma system from the Ti-Te system
-                                        ! true: decouple N-Gamma from Ti-Te
-                                        ! false: coupled system
     ckeramp             = .false.       ! check the error amplification in the linear system solution (for very ill-conditioned matrices)
     saveNR              = .true.        ! save each N-R iterations
     gmsh2h5		= .false.	! convert the gmsh read in input to hdf5 format

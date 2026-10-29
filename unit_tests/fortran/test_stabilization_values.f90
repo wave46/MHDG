@@ -20,7 +20,7 @@ PROGRAM test_stabilization_values
   phys%Mref=1.3d0;phys%diff_pari=.4d0;phys%diff_pare=.7d0
   phys%T_fluxlim_maxi=.6d0;phys%T_fluxlim_maxe=.9d0
   phys%c_fli=.2d0;phys%c_fle=.3d0
-  switch%testcase=50;switch%decoup=.FALSE.;numer%stab=stab_automatic
+  switch%testcase=50;numer%stab=stab_automatic
   ALLOCATE(Mesh%elemSize(1));Mesh%elemSize=.7d0;refElPol%ndeg=3
   b=[.2d0,.4d0,SQRT(.8d0)];n=0.d0;n(1:2)=[.6d0,.8d0]
   xy=[2.1d0,-.3d0]

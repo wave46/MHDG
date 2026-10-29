@@ -32,7 +32,7 @@ SUBROUTINE READ_input()
 #endif
   IMPLICIT NONE
 
-  LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
+  LOGICAL               :: driftdia,driftexb, axisym, steady,dotiming,psdtime,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
   LOGICAL               :: ckeramp,saveNR,filter,saveTau,transport_1d,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho
   LOGICAL               :: check_neutral_positivity
   LOGICAL               :: valid_wall_recycling
@@ -132,7 +132,7 @@ SUBROUTINE READ_input()
 
   ! Defining the variables to READ from the file
   NAMELIST /SWITCH_LST/ steady,read_gmsh, readMeshFromSol, set_2d_order, order_2d, gmsh2h5, axisym,external_heating, impurity_radiation, init, driftdia, driftexb, testcase, OhmicSrc, ME,diff_reverse_Ip, target_variable, RMP, Ripple, psdtime, diffred, diffmin, &
-       & shockcp, limrho, difcor, thresh, filter, decoup, ckeramp, saveNR, saveTau, transport_1d, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
+       & shockcp, limrho, difcor, thresh, filter, ckeramp, saveNR, saveTau, transport_1d, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb,flux_limiter,import_diffusion_1D,neutral_perpendicular_diffusion,&
        & neutral_wall_sources_in_elements,neutral_flux_limiter_save_2d
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path, impurity_model_path
@@ -526,7 +526,6 @@ SUBROUTINE READ_input()
   switch%difcor           = difcor
   switch%thresh           = thresh
   switch%filter           = filter
-  switch%decoup           = decoup
   switch%ckeramp          = ckeramp
   switch%saveNR           = saveNR
   switch%transport_1d = transport_1d
@@ -1017,9 +1016,6 @@ SUBROUTINE READ_input()
      PRINT *, '                - logrho:                                             ', logrho
      PRINT *, '                - thresh:                                             ', thresh
      PRINT *, '                - filter:                                             ', filter
-#ifdef TEMPERATURE
-     PRINT *, '                - decoup:                                             ', decoup
-#endif
      PRINT *, '                - ckeramp:                                            ', ckeramp
      PRINT *, '                - saveNR:                                             ', saveNR
      PRINT *, '                - transport_1d:                          ', transport_1d

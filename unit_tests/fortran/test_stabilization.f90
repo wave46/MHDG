@@ -54,7 +54,6 @@ CONTAINS
     phys%recycle_plasma_diffusion=.false.
     switch%neutral_wall_sources_in_elements=.false.
     switch%testcase=54;switch%ME=.false.;switch%difcor=0;switch%transport_1d=.false.
-    switch%decoup=.false.
     coefi=phys%diff_pari*(2.d0/(3.d0*phys%Mref))**(1.d0+phys%epn)
     coefe=phys%diff_pare*(2.d0/(3.d0*phys%Mref))**(1.d0+phys%epn)
     allocate(elMat%Auu(5,5,1),elMat%Aul(5,5,1),elMat%Auq(5,10,1),elMat%S(5,1))

@@ -1074,76 +1074,41 @@ CONTAINS
     inn = phys%idx_rhon_eq
     ign = phys%idx_gamman_eq
     ik = phys%idx_k_eq
-    IF (switch%decoup) THEN
-      A(1, 2) = 1.
 
-      A(2, 1) = (-U(2)**2/U(1)**2 + phys%Mref)
-      A(2, 2) = 2.*U(2)/U(1)
+    A(1, 2) = 1.
 
-      A(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
-      A(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
-      A(3, 3) = 5./3.*U(2)/U(1)
+    A(2, 1) = -2./3.*U(2)**2/U(1)**2
+    A(2, 2) = 4./3.*U(2)/U(1)
+    A(2, 3) = 2./3.
+    A(2, 4) = 2./3.
 
-      A(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
-      A(4, 2) = 5./3.*U(4)/U(1)
-      A(4, 4) = 5./3.*U(2)/U(1)
+    A(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
+    A(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
+    A(3, 3) = 5./3.*U(2)/U(1)
+
+    A(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
+    A(4, 2) = 5./3.*U(4)/U(1)
+    A(4, 4) = 5./3.*U(2)/U(1)
 #ifdef KEQUATION
-      IF (ik > 0) THEN
-        A(ik, 1) = -U(ik)*U(2)/U(1)**2
-        A(ik, 2) = U(ik)/U(1)
-        A(ik, ik) = U(2)/U(1)
-      END IF
-#endif
-#ifdef NEUTRALGAMMA
-      IF (inn > 0 .AND. ign > 0) THEN
-        Unn = U(inn)
-        A(inn, ign) = 1.d0
-        A(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
-        A(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
-        A(ign, 3) = 2.d0/3.d0*Unn/U(1)
-        A(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
-        A(ign, ign) = 2.d0*U(ign)/Unn
-      END IF
-#endif
-    ELSE
-
-      A(1, 2) = 1.
-
-      A(2, 1) = -2./3.*U(2)**2/U(1)**2
-      A(2, 2) = 4./3.*U(2)/U(1)
-      A(2, 3) = 2./3.
-      A(2, 4) = 2./3.
-
-      A(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
-      A(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
-      A(3, 3) = 5./3.*U(2)/U(1)
-
-      A(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
-      A(4, 2) = 5./3.*U(4)/U(1)
-      A(4, 4) = 5./3.*U(2)/U(1)
-#ifdef KEQUATION
-      IF (ik > 0) THEN
-        A(ik, 1) = -U(ik)*U(2)/U(1)**2
-        A(ik, 2) = U(ik)/U(1)
-      !IF (U(6) >= 0.) THEN
-        A(ik, ik) = U(2)/U(1)
-      !ENDIF
-      END IF
+    IF (ik > 0) THEN
+      A(ik, 1) = -U(ik)*U(2)/U(1)**2
+      A(ik, 2) = U(ik)/U(1)
+      A(ik, ik) = U(2)/U(1)
+    END IF
 #endif
 #ifdef NEUTRAL
 #ifdef NEUTRALGAMMA
-      IF (inn > 0 .AND. ign > 0) THEN
-        Unn = U(inn)
-        A(inn, ign) = 1.d0
-        A(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
-        A(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
-        A(ign, 3) = 2.d0/3.d0*Unn/U(1)
-        A(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
-        A(ign, ign) = 2.d0*U(ign)/Unn
-      END IF
-#endif
-#endif
+    IF (inn > 0 .AND. ign > 0) THEN
+      Unn = U(inn)
+      A(inn, ign) = 1.d0
+      A(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
+      A(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
+      A(ign, 3) = 2.d0/3.d0*Unn/U(1)
+      A(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
+      A(ign, ign) = 2.d0*U(ign)/Unn
     END IF
+#endif
+#endif
   ENDSUBROUTINE jacobianMatrices
 
   !*****************************************
@@ -1160,73 +1125,40 @@ CONTAINS
     inn = phys%idx_rhon_eq
     ign = phys%idx_gamman_eq
     ik = phys%idx_k_eq
-    IF (switch%decoup) THEN
-      An(1, 2) = 1.
+    An(1, 2) = 1.
 
-      An(2, 1) = (-U(2)**2/U(1)**2 + phys%Mref)
-      An(2, 2) = 2.*U(2)/U(1)
+    An(2, 1) = -2./3.*U(2)**2/U(1)**2
+    An(2, 2) = 4./3.*U(2)/U(1)
+    An(2, 3) = 2./3.
+    An(2, 4) = 2./3.
 
-      An(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
-      An(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
-      An(3, 3) = 5./3.*U(2)/U(1)
+    An(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
+    An(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
+    An(3, 3) = 5./3.*U(2)/U(1)
 
-      An(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
-      An(4, 2) = 5./3.*U(4)/U(1)
-      An(4, 4) = 5./3.*U(2)/U(1)
+    An(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
+    An(4, 2) = 5./3.*U(4)/U(1)
+    An(4, 4) = 5./3.*U(2)/U(1)
 #ifdef KEQUATION
-      IF (ik > 0) THEN
-        An(ik, 1) = -U(ik)*U(2)/U(1)**2
-        An(ik, 2) = U(ik)/U(1)
-        An(ik, ik) = U(2)/U(1)
-      END IF
-#endif
-#ifdef NEUTRALGAMMA
-      IF (inn > 0 .AND. ign > 0) THEN
-        Unn = U(inn)
-        An(inn, ign) = 1.d0
-        An(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
-        An(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
-        An(ign, 3) = 2.d0/3.d0*Unn/U(1)
-        An(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
-        An(ign, ign) = 2.d0*U(ign)/Unn
-      END IF
-#endif
-    ELSE
-      An(1, 2) = 1.
-
-      An(2, 1) = -2./3.*U(2)**2/U(1)**2
-      An(2, 2) = 4./3.*U(2)/U(1)
-      An(2, 3) = 2./3.
-      An(2, 4) = 2./3.
-
-      An(3, 1) = -5./3.*U(2)*U(3)/U(1)**2 + 2./3.*U(2)**3/U(1)**3
-      An(3, 2) = 5./3.*U(3)/U(1) - U(2)**2/U(1)**2
-      An(3, 3) = 5./3.*U(2)/U(1)
-
-      An(4, 1) = -5./3.*U(4)*U(2)/U(1)**2
-      An(4, 2) = 5./3.*U(4)/U(1)
-      An(4, 4) = 5./3.*U(2)/U(1)
-#ifdef KEQUATION
-      IF (ik > 0) THEN
-        An(ik, 1) = -U(ik)*U(2)/U(1)**2
-        An(ik, 2) = U(ik)/U(1)
-        An(ik, ik) = U(2)/U(1)
-      END IF
+    IF (ik > 0) THEN
+      An(ik, 1) = -U(ik)*U(2)/U(1)**2
+      An(ik, 2) = U(ik)/U(1)
+      An(ik, ik) = U(2)/U(1)
+    END IF
 #endif
 #ifdef NEUTRAL
 #ifdef NEUTRALGAMMA
-      IF (inn > 0 .AND. ign > 0) THEN
-        Unn = U(inn)
-        An(inn, ign) = 1.d0
-        An(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
-        An(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
-        An(ign, 3) = 2.d0/3.d0*Unn/U(1)
-        An(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
-        An(ign, ign) = 2.d0*U(ign)/Unn
-      END IF
+    IF (inn > 0 .AND. ign > 0) THEN
+      Unn = U(inn)
+      An(inn, ign) = 1.d0
+      An(ign, 1) = 2.d0/3.d0*Unn*(-U(3)/U(1)**2 + U(2)**2/U(1)**3)
+      An(ign, 2) = -2.d0/3.d0*Unn*U(2)/U(1)**2
+      An(ign, 3) = 2.d0/3.d0*Unn/U(1)
+      An(ign, inn) = -U(ign)**2/Unn**2 + 2.d0/3.d0*(U(3)/U(1) - 0.5d0*U(2)**2/U(1)**2)
+      An(ign, ign) = 2.d0*U(ign)/Unn
+    END IF
 #endif
 #endif
-    ENDIF
     An = bn*An
   ENDSUBROUTINE jacobianMatricesFace
 
@@ -1559,14 +1491,10 @@ CONTAINS
     !                        0                             0                             0                              0];
 
     G = 0.d0
-    IF (switch%decoup) THEN
-      G(2, 1) = phys%Mref
-    ELSE
-      G(2, 1) = 1./3.*U(2)**2/U(1)**2
-      G(2, 2) = -2./3.*U(2)/U(1)
-      G(2, 3) = 2./3.
-      G(2, 4) = 2./3.
-    END IF
+    G(2, 1) = 1./3.*U(2)**2/U(1)**2
+    G(2, 2) = -2./3.*U(2)/U(1)
+    G(2, 3) = 2./3.
+    G(2, 4) = 2./3.
     G = divb*G
   ENDSUBROUTINE GimpMatrix
 

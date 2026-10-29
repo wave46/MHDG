@@ -12,7 +12,7 @@ PROGRAM test_neutral_gamma_transport
   REAL*8 :: scales(7), densities(3), flux, pressure, step, denominator, numerical
   REAL*8 :: worst, bn, eta, divb
   REAL*8, PARAMETER :: perturbation=1.d-7, threshold=3.d-6
-  INTEGER :: inn, ign, neq, density_case, direction, decoupled, j, k, row, checks, states
+  INTEGER :: inn, ign, neq, density_case, direction, j, k, row, checks, states
 
   CALL set_model_layout()
   phys%Mref=1.3d0
@@ -29,66 +29,63 @@ PROGRAM test_neutral_gamma_transport
   checks=0
   states=0
   worst=0.d0
-  DO decoupled=0,1
-    switch%decoup=decoupled==1
-    DO density_case=1,SIZE(densities)
-      DO direction=-1,1
-        U=0.d0
-        U(1:4)=[2.d0,.4d0,3.d0,4.d0]
-        U(inn)=densities(density_case)
-        U(ign)=DBLE(direction)*.3d0*U(inn)
-        IF (phys%idx_k_eq>0) U(phys%idx_k_eq)=.01d0
-        scales=1.d0
-        scales(1:4)=U(1:4)
-        scales(inn)=U(inn)
-        scales(ign)=U(inn)
-        CALL jacobianMatrices(U,a)
-        CALL jacobianMatricesFace(U,bn,an)
-        CALL GimpMatrixN(U,divb,g)
-        CALL computeVun(U,v)
-        CALL compute_dVun_dU(U,dv)
-        flux=momentum_flux(U)
-        pressure=neutral_pressure(U)
-        CALL check(DOT_PRODUCT(a(ign,:),U),flux,ABS(flux))
-        CALL check(DOT_PRODUCT(an(ign,:),U),bn*flux,ABS(bn*flux))
-        CALL check(DOT_PRODUCT(g(ign,:),U),divb*pressure,ABS(divb*pressure))
-        CALL check(a(inn,ign),1.d0,1.d0)
-        DO j=1,neq
-          step=perturbation*scales(j)
-          up=U
-          um=U
-          up(j)=up(j)+step
-          um(j)=um(j)-step
-          denominator=2.d0*perturbation
-          numerical=(momentum_flux(up)-momentum_flux(um))/denominator
-          CALL check(numerical,a(ign,j)*scales(j),ABS(flux))
-          CALL check(bn*numerical,an(ign,j)*scales(j),ABS(bn*flux))
-          numerical=divb*(neutral_pressure(up)-neutral_pressure(um))/denominator
-          CALL check(numerical,g(ign,j)*scales(j),ABS(divb*pressure))
-          numerical=(velocity(up)-velocity(um))/denominator
-          CALL check(numerical,v(j)*scales(j),1.d0)
-          CALL computeVun(up,vp)
-          CALL computeVun(um,vm)
-          DO row=inn,ign
-            CALL check((vp(row)-vm(row))/denominator,dv(row,j)*scales(j),1.d0/U(inn))
-          ENDDO
+  DO density_case=1,SIZE(densities)
+    DO direction=-1,1
+      U=0.d0
+      U(1:4)=[2.d0,.4d0,3.d0,4.d0]
+      U(inn)=densities(density_case)
+      U(ign)=DBLE(direction)*.3d0*U(inn)
+      IF (phys%idx_k_eq>0) U(phys%idx_k_eq)=.01d0
+      scales=1.d0
+      scales(1:4)=U(1:4)
+      scales(inn)=U(inn)
+      scales(ign)=U(inn)
+      CALL jacobianMatrices(U,a)
+      CALL jacobianMatricesFace(U,bn,an)
+      CALL GimpMatrixN(U,divb,g)
+      CALL computeVun(U,v)
+      CALL compute_dVun_dU(U,dv)
+      flux=momentum_flux(U)
+      pressure=neutral_pressure(U)
+      CALL check(DOT_PRODUCT(a(ign,:),U),flux,ABS(flux))
+      CALL check(DOT_PRODUCT(an(ign,:),U),bn*flux,ABS(bn*flux))
+      CALL check(DOT_PRODUCT(g(ign,:),U),divb*pressure,ABS(divb*pressure))
+      CALL check(a(inn,ign),1.d0,1.d0)
+      DO j=1,neq
+        step=perturbation*scales(j)
+        up=U
+        um=U
+        up(j)=up(j)+step
+        um(j)=um(j)-step
+        denominator=2.d0*perturbation
+        numerical=(momentum_flux(up)-momentum_flux(um))/denominator
+        CALL check(numerical,a(ign,j)*scales(j),ABS(flux))
+        CALL check(bn*numerical,an(ign,j)*scales(j),ABS(bn*flux))
+        numerical=divb*(neutral_pressure(up)-neutral_pressure(um))/denominator
+        CALL check(numerical,g(ign,j)*scales(j),ABS(divb*pressure))
+        numerical=(velocity(up)-velocity(um))/denominator
+        CALL check(numerical,v(j)*scales(j),1.d0)
+        CALL computeVun(up,vp)
+        CALL computeVun(um,vm)
+        DO row=inn,ign
+          CALL check((vp(row)-vm(row))/denominator,dv(row,j)*scales(j),1.d0/U(inn))
         ENDDO
-        q=0.d0
-        q(:,inn)=[.1d0,.2d0]*U(inn)
-        q(:,ign)=[.04d0,-.03d0]*U(inn)
-        DO k=1,2
-          up=U+perturbation*q(k,:)
-          um=U-perturbation*q(k,:)
-          denominator=2.d0*perturbation
-          numerical=eta*(velocity(up)-velocity(um))/denominator
-          CALL check(eta*DOT_PRODUCT(q(k,:),v),numerical,eta)
-        ENDDO
-        CALL cons2phys(RESHAPE(U,[1,neq]),physical)
-        CALL check(physical(1,phys%idx_un_pv),velocity(U),1.d0)
-        CALL phys2cons(physical,conservative)
-        CALL check(conservative(1,ign),U(ign),U(inn))
-        states=states+1
       ENDDO
+      q=0.d0
+      q(:,inn)=[.1d0,.2d0]*U(inn)
+      q(:,ign)=[.04d0,-.03d0]*U(inn)
+      DO k=1,2
+        up=U+perturbation*q(k,:)
+        um=U-perturbation*q(k,:)
+        denominator=2.d0*perturbation
+        numerical=eta*(velocity(up)-velocity(um))/denominator
+        CALL check(eta*DOT_PRODUCT(q(k,:),v),numerical,eta)
+      ENDDO
+      CALL cons2phys(RESHAPE(U,[1,neq]),physical)
+      CALL check(physical(1,phys%idx_un_pv),velocity(U),1.d0)
+      CALL phys2cons(physical,conservative)
+      CALL check(conservative(1,ign),U(ign),U(inn))
+      states=states+1
     ENDDO
   ENDDO
   WRITE(*,*) 'NeutralGamma transport: PASS; states, checks, worst error:',states,checks,worst
@@ -118,7 +115,7 @@ CONTAINS
     REAL*8 :: error
     error=ABS(actual-expected)/MAX(scale,ABS(actual),ABS(expected),1.d-30)
     IF (.NOT. ieee_is_finite(error) .OR. error>threshold) THEN
-      WRITE(*,*) 'decoupled, density case, momentum direction:',decoupled,density_case,direction
+      WRITE(*,*) 'density case, momentum direction:',density_case,direction
       WRITE(*,*) 'actual, expected, scaled error:',actual,expected,error
       ERROR STOP 'neutral gamma transport'
     ENDIF

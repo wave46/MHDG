@@ -1282,7 +1282,6 @@ CONTAINS
       CALL HDF5_integer_saving(group_id2, switch%difcor, 'difcor')
       CALL HDF5_integer_saving(group_id2, switch%thresh, 'thresh')
       CALL HDF5_logical_saving(group_id2, switch%filter, 'filter')
-      CALL HDF5_logical_saving(group_id2, switch%decoup, 'decoup')
       CALL HDF5_logical_saving(group_id2, switch%ckeramp, 'ckeramp')
       CALL HDF5_logical_saving(group_id2, switch%saveNR, 'saveNR')
       CALL HDF5_logical_saving(group_id2, switch%fixdPotLim, 'fixdPotLim')

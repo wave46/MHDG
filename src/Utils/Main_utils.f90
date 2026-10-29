@@ -1555,9 +1555,6 @@ CONTAINS
        save_name = TRIM(save_name)//"_"//TRIM(Num)
     END IF
 
-    IF (switch%decoup) THEN
-       save_name = TRIM(ADJUSTL(save_name))//'_UNCP'
-    ENDIF
 
     ! Add "Sol_"
 #ifdef TOR3D

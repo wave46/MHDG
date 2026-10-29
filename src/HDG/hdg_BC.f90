@@ -447,9 +447,6 @@ CONTAINS
           SoundSpeed = SQRT(phys%a)
 #else
         SoundSpeed = upg(g,9)
-          IF (switch%decoup) THEN
-             SoundSpeed = SQRT(phys%Mref)
-          ENDIF
 #endif
         ! tangency
         ntang = .TRUE.
@@ -1038,10 +1035,6 @@ CONTAINS
          !SoundSpeed = upg(g,9)
          CALL compute_cs(ufg(g,:),SoundSpeed)
          call compute_dcs_du(ufg(g,:),dcs_du)
-         IF (switch%decoup) THEN
-            SoundSpeed = SQRT(phys%Mref)
-            dcs_du = 0.d0
-         ENDIF
 #endif
       ! tangency
       ntang = .TRUE.

@@ -431,7 +431,6 @@ MODULE types
      INTEGER :: thresh  ! Use a threshold for limiting the min value of rho
      ! (rho-rho*E in case of N-Gamma-Energy model, rho-rho*Ei-rho*Ee in case of N-Gamma-Ti-Te model)
      LOGICAL :: filter  ! Filter solution to avoid oscillation in empty zones
-     LOGICAL :: decoup  ! Decouple N-Gamma from Te-Ti (only used for N-Gamma-Ti-Te model)
      LOGICAL :: ckeramp ! Chech the error amplification in the linear system solution (for very ill-conditioned matrices)
      LOGICAL :: saveNR  ! Save solution at each NR iteration
      LOGICAL :: transport_1d ! Save reduced 1D flux-surface profiles with solution output
