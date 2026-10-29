@@ -747,7 +747,7 @@ CONTAINS
 
       ! Compute the stabilization term
       tau = 0.
-      IF (numer%stab == 1) THEN
+      IF (numer%stab == stab_prescribed) THEN
         ! Constant stabilization
         DO i = 1,Neq
           tau(i,i) = numer%tau(i)
@@ -755,11 +755,12 @@ CONTAINS
       ELSE
         ! Non constant stabilization
         ! Compute tau in the Gauss points
-        IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),b(g,:),Bmod(g),n_g(g,:),iel2,0.,xyf(g,:),tau)
-        ELSE
-          CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g(g,:),xyf(g,:),0.,iel2,tau)
-        ENDIF
+#ifdef TEMPERATURE
+        CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g(g,:),iel2,0., &
+             xyf(g,:),tau,diff_iso_fac(:,:,g))
+#else
+        CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),b(g,:),Bmod(g),n_g(g,:),iel2,0.,xyf(g,:),tau)
+#endif
       END IF
 
       ! Assembly local contributions
@@ -886,7 +887,7 @@ CONTAINS
 
         ! Compute the stabilization term
         tau = 0.
-        IF (numer%stab == 1) THEN
+        IF (numer%stab == stab_prescribed) THEN
           ! Constant stabilization
           DO i = 1,Neq
             tau(i,i) = numer%tau(i)
@@ -894,11 +895,12 @@ CONTAINS
         ELSE
           ! Non constant stabilization
           ! Compute tau in the Gauss points
-          IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),b(g,:),Bmod(g),n_g(g,:),iel2,0.,xyf(g,:),tau)
-          ELSE
-            CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g(g,:),xyf(g,:),0.,iel2,tau)
-          ENDIF
+#ifdef TEMPERATURE
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g(g,:),iel2,0., &
+               xyf(igpol,:),tau,diff_iso_fac(:,:,g))
+#else
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),b(g,:),Bmod(g),n_g(g,:),iel2,0.,xyf(g,:),tau)
+#endif
         END IF
 
         ! Assembly local contributions
@@ -1043,7 +1045,7 @@ CONTAINS
         END IF
 #endif
         tau = 0.
-        IF (numer%stab == 1) THEN
+        IF (numer%stab == stab_prescribed) THEN
           ! Constant stabilization
           DO i = 1,Neq
             tau(i,i) = numer%tau(i)
@@ -1051,12 +1053,12 @@ CONTAINS
         ELSE
           ! Non constant stabilization
           ! Compute tau in the Gauss points
-          IF (numer%stab < 6) THEN
-                CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:), b(g,:),n_g(g,:),iel2,isext,xyf(g,:),tau)
-
-          ELSE
-            CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g(g,:),xyf(g,:),isext,iel2,tau)
-          ENDIF
+#ifdef TEMPERATURE
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g(g,:),iel2,isext, &
+               xyf(igpol,:),tau,diff_iso_fac(:,:,g))
+#else
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:), b(g,:),n_g(g,:),iel2,isext,xyf(g,:),tau)
+#endif
         END IF
 
         ! Assembly local contributions
@@ -2026,7 +2028,7 @@ CONTAINS
       ! Compute the stabilization term
       tau = 0.
       dtau_du = 0.d0
-      IF (numer%stab == 1) THEN
+      IF (numer%stab == stab_prescribed) THEN
         ! Constant stabilization
         DO i = 1,Neq
           tau(i,i) = numer%tau(i)
@@ -2034,15 +2036,11 @@ CONTAINS
       ELSE
         ! Non constant stabilization
         ! Compute tau in the Gauss points
-        IF (numer%stab < 6) THEN
 #ifdef TEMPERATURE
-            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_tau(:,:,g),dtau_du)
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_tau(:,:,g),dtau_du)
 #else
-            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_tau(:,:,g))
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,0.,xyf(g,:),tau,diff_iso_tau(:,:,g))
 #endif
-        ELSE
-          CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),0.,iel,tau)
-        ENDIF
       END IF
 
 ! Assembly local contributions
@@ -2234,7 +2232,7 @@ CONTAINS
 #endif
       tau = 0.
       dtau_du = 0.d0
-      IF (numer%stab == 1) THEN
+      IF (numer%stab == stab_prescribed) THEN
         ! Constant stabilization
         DO i = 1,Neq
           tau(i,i) = numer%tau(i)
@@ -2242,15 +2240,11 @@ CONTAINS
       ELSE
         ! Non constant stabilization
         ! Compute tau in the Gauss points
-        IF (numer%stab < 6) THEN
 #ifdef TEMPERATURE
-            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_tau(:,:,g),dtau_du)
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_tau(:,:,g),dtau_du)
 #else
-            CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_tau(:,:,g))
+          CALL computeTauGaussPoints(upgf(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g,iel,isext,xyf(g,:),tau,diff_iso_tau(:,:,g))
 #endif
-        ELSE
-          CALL computeTauGaussPoints_matrix(upgf(g,:),ufg(g,:),b(g,:),n_g,xyf(g,:),isext,iel,tau)
-        ENDIF
       END IF
 
       ! Shape functions products
@@ -3617,28 +3611,14 @@ ENDIF
       END DO  ! i-Loop
 
       ! Assembly stabilization terms
-      IF (numer%stab < 6) THEN
-        DO i = 1,Neq
-          ind_if = i + ind_asf
-          kmult = tau(i,i)*NNif
-          elMat%Auu(ind_fe(ind_if),ind_fe(ind_if),iel) = elMat%Auu(ind_fe(ind_if),ind_fe(ind_if),iel) + kmult
-          elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) - kmult
-                 elMat%ALL(ind_ff(ind_if),ind_ff(ind_if),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_if),iel) - kmult
-          elMat%Alu(ind_ff(ind_if),ind_fe(ind_if),iel) = elMat%Alu(ind_ff(ind_if),ind_fe(ind_if),iel) + kmult
-        END DO
-      ELSE
-        DO i = 1,Neq
-          ind_if = i + ind_asf
-          DO j = 1,Neq
-            ind_jf = j + ind_asf
-            kmult = tau(i,j)*NNif
-            elMat%Auu(ind_fe(ind_if),ind_fe(ind_jf),iel) = elMat%Auu(ind_fe(ind_if),ind_fe(ind_jf),iel) + kmult
-            elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
-                    elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_jf),iel) - kmult
-            elMat%Alu(ind_ff(ind_if),ind_fe(ind_jf),iel) = elMat%Alu(ind_ff(ind_if),ind_fe(ind_jf),iel) + kmult
-          END DO
-        END DO
-      ENDIF
+      DO i = 1,Neq
+        ind_if = i + ind_asf
+        kmult = tau(i,i)*NNif
+        elMat%Auu(ind_fe(ind_if),ind_fe(ind_if),iel) = elMat%Auu(ind_fe(ind_if),ind_fe(ind_if),iel) + kmult
+        elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) - kmult
+        elMat%ALL(ind_ff(ind_if),ind_ff(ind_if),iel) = elMat%ALL(ind_ff(ind_if),ind_ff(ind_if),iel) - kmult
+        elMat%Alu(ind_ff(ind_if),ind_fe(ind_if),iel) = elMat%Alu(ind_ff(ind_if),ind_fe(ind_if),iel) + kmult
+      END DO
       !************* End stabilization terms************************
 
 #ifdef TEMPERATURE
@@ -4141,32 +4121,16 @@ END IF
 
       ! Prescribed traces use the same frozen tau as the element contribution.
       ! Assembly stabilization terms
-      IF (numer%stab < 6) THEN
-        DO i = 1,Neq
-          ind_if = i + ind_asf
-          kmult = tau(i,i)*NNif
-          elMat%Auu(ind_fe(ind_if),ind_fe(ind_if),iel) = elMat%Auu(ind_fe(ind_if),ind_fe(ind_if),iel) + kmult
-          IF (isdir) THEN
-            elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) + tau(i,i)*uf(i)*Nif
-          ELSE
-            elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) - kmult
-          ENDIF
-        END DO
-      ELSE
-        DO i = 1,Neq
-          ind_if = i + ind_asf
-          DO j = 1,Neq
-            ind_jf = j + ind_asf
-            kmult = tau(i,j)*NNif
-            elMat%Auu(ind_fe(ind_if),ind_fe(ind_jf),iel) = elMat%Auu(ind_fe(ind_if),ind_fe(ind_jf),iel) + kmult
-            IF (isdir) THEN
-              elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) + tau(i,j)*uf(j)*Nif
-            ELSE
-              elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_jf),iel) - kmult
-            ENDIF
-          END DO
-        END DO
-      ENDIF
+      DO i = 1,Neq
+        ind_if = i + ind_asf
+        kmult = tau(i,i)*NNif
+        elMat%Auu(ind_fe(ind_if),ind_fe(ind_if),iel) = elMat%Auu(ind_fe(ind_if),ind_fe(ind_if),iel) + kmult
+        IF (isdir) THEN
+          elMat%S(ind_fe(ind_if),iel) = elMat%S(ind_fe(ind_if),iel) + tau(i,i)*uf(i)*Nif
+        ELSE
+          elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) = elMat%Aul(ind_fe(ind_if),ind_ff(ind_if),iel) - kmult
+        ENDIF
+      END DO
       !************* End stabilization terms************************
 
 #ifdef TEMPERATURE

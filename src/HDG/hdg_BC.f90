@@ -346,13 +346,14 @@ CONTAINS
 
 
         !****************** Stabilization part******************************
-        IF (numer%stab > 1) THEN
+        IF (numer%stab /= stab_prescribed) THEN
           ! Compute tau in the Gauss points
-          IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),iel,1.,xyf(g,:),tau_stab)
-          ELSE
-            CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),xyf(g,:),1.,iel,tau_stab)
-          ENDIF
+#ifdef TEMPERATURE
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g(g,:),iel,1., &
+               xyf(igpol,:),tau_stab,diff_iso_fac(:,:,g))
+#else
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),iel,1.,xyf(g,:),tau_stab)
+#endif
           !****************** End stabilization part******************************
         ELSE
           tau_stab=0.
@@ -478,13 +479,14 @@ CONTAINS
         Ni = Nfi(g,:)*dsurfg
 
         !****************** Stabilization part******************************
-        IF (numer%stab > 1) THEN
+        IF (numer%stab /= stab_prescribed) THEN
           ! Compute tau in the Gauss points
-          IF (numer%stab < 6) THEN
-            CALL computeTauGaussPoints(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),iel,1.,xyf(g,:),tau_stab)
-          ELSE
-            CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),xyf(g,:),1.,iel,tau_stab)
-          ENDIF
+#ifdef TEMPERATURE
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,:),n_g(g,:),iel,1., &
+               xyf(igpol,:),tau_stab,diff_iso_fac(:,:,g))
+#else
+          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),b(g,:),n_g(g,:),iel,1.,xyf(g,:),tau_stab)
+#endif
           !****************** End stabilization part******************************
         ELSE
           tau_stab=0.
@@ -863,13 +865,9 @@ CONTAINS
 
 
       !****************** Stabilization part******************************
-      IF (numer%stab > 1) THEN
+      IF (numer%stab /= stab_prescribed) THEN
         ! Compute tau in the Gauss points
-        IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
-        ELSE
-          CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
-        ENDIF
+        CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
       ELSE
         tau_stab=0.
         DO i = 1,Neq
@@ -914,13 +912,9 @@ CONTAINS
 
 
       !****************** Stabilization part******************************
-      IF (numer%stab > 1) THEN
+      IF (numer%stab /= stab_prescribed) THEN
         ! Compute tau in the Gauss points
-        IF (numer%stab < 6) THEN
-          CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
-        ELSE
-          CALL computeTauGaussPoints_matrix(upg(g,:),ufg(g,:),b(g,1:2),n_g,xyg(g,:),1.,iel,tau_stab)
-        ENDIF
+        CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
       ELSE
         tau_stab=0.
         DO i = 1,Neq
@@ -1077,7 +1071,7 @@ CONTAINS
       Ni = refElPol%N1D(g,:)*dline
       dtau_du = 0.d0
       !****************** Stabilization part******************************
-      IF (numer%stab == 1) THEN
+      IF (numer%stab == stab_prescribed) THEN
         tau_stab=0.d0
         DO i = 1,Neq
           tau_stab(i,i) = numer%tau(i)

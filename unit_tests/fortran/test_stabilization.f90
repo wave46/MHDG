@@ -60,7 +60,7 @@ CONTAINS
     allocate(elMat%Auu(5,5,1),elMat%Aul(5,5,1),elMat%Auq(5,10,1),elMat%S(5,1))
     allocate(elMat%Alu(5,5,1),elMat%All(5,5,1),elMat%Alq(5,10,1),elMat%fh(5,1))
 
-    allocate(Mesh%elemSize(1));Mesh%elemSize=.7d0;refElPol%ndeg=3;numer%stab=5
+    allocate(Mesh%elemSize(1));Mesh%elemSize=.7d0;refElPol%ndeg=3;numer%stab=stab_automatic
     switch%neutral_perpendicular_diffusion=.false.;numer%neutralp_lambda=.2d0
     switch%neutral_flux_limiter=.false.
     b=[.2d0,.4d0,sqrt(.8d0)];n=[.6d0,.8d0];phi=1.d0;checks=0;states=0;worst=0

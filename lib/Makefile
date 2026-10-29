@@ -150,9 +150,8 @@ check-heat-flux-assembly : physics.o globals.o
 	python3 ../unit_tests/check_heat_flux_assembly.py --build-dir .
 
 .PHONY : check-stabilization-values
-check-stabilization-values : neutral_wall_physics_check.o physics_stabilization.o globals.o neutral_flux_limiter.o
-	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_stabilization_values.f90 neutral_wall_physics_check.o physics_stabilization.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o stabilization_values_check
-	./stabilization_values_check
+check-stabilization-values : physics.o physics_stabilization.o globals.o neutral_flux_limiter.o
+	python3 ../unit_tests/check_stabilization_values.py --build-dir .
 
 # Full collision-temperature value/tangent, trial continuation and affine RHS.
 check-temperature-exchange : neutral_wall_physics_check.o globals.o neutral_flux_limiter.o solver_status.o MPI_OMP.o

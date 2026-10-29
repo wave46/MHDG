@@ -340,7 +340,7 @@ def check_model(model):
             try:
                 check_case(probe, fixture, 5, tangent, retain, results)
             except AssertionError as error:
-                raise AssertionError(f"{fixture.label}; stab=5, tangent={tangent}, retain={retain}") from error
+                raise AssertionError(f"{fixture.label}; automatic diagonal tau, tangent={tangent}, retain={retain}") from error
         for retain in [True, False]:
             check_prescribed_stabilization(probe, retain, results)
             if not model.isothermal:

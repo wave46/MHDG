@@ -88,13 +88,13 @@ MODULE physics
   TYPE(neutral_runtime_constants_t), SAVE :: neutral_rt
   TYPE(neutral_flux_limiter_config_t), SAVE :: neutral_limiter_config
 
-  PRIVATE :: evaluate_stab5
+  PRIVATE :: evaluate_automatic_stabilization
   INTERFACE
-    MODULE SUBROUTINE evaluate_stab5(up,uc,b,normal,length_factor,diff_iso,tau,dtau_du)
+    MODULE SUBROUTINE evaluate_automatic_stabilization(up,uc,b,normal,length_factor,diff_iso,tau,dtau_du)
       REAL*8, INTENT(IN) :: up(:),uc(:),b(:),normal(:),length_factor,diff_iso(:,:)
       REAL*8, INTENT(OUT) :: tau(:,:)
       REAL*8, OPTIONAL, INTENT(OUT) :: dtau_du(:,:)
-    END SUBROUTINE evaluate_stab5
+    END SUBROUTINE evaluate_automatic_stabilization
   END INTERFACE
 
 
@@ -3350,365 +3350,25 @@ ENDSUBROUTINE  compute_ddissip_du
   ! Compute the stabilization tensor tau
   !*******************************************
   SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau,diff_iso,dtau_du)
-    real*8, intent(in)  :: up(:), uc(:), q(:), b(:), n(:), xy(:)
-    REAL*8, intent(in)    :: isext
-    integer, intent(in) ::  iel
-    real*8, intent(out) :: tau(:, :)
+    REAL*8, INTENT(IN) :: up(:), uc(:), q(:), b(:), n(:), xy(:), isext
+    INTEGER, INTENT(IN) :: iel
+    REAL*8, INTENT(OUT) :: tau(:,:)
     REAL*8, OPTIONAL, INTENT(OUT) :: dtau_du(:,:)
-#ifdef NEUTRAL
-    REAL*8              :: tau_aux(SIZE(uc))
-    REAL*8,INTENT(IN)   :: diff_iso(:,:)
-#ifdef NEUTRALGAMMA
-    REAL*8              :: Etan
-#endif
-#else
-    REAL*8              :: tau_aux(SIZE(uc))
-    REAL*8,INTENT(IN)   :: diff_iso(:,:)
-#endif
-    integer             :: ndim, inn, ign, ik
-    real*8              :: bn, bnorm,xyd(1,size(xy)),uu(1,size(uc)),qq(1,size(q))
-    REAL*8              :: q_fs_i, q_fs_e, flux_limiter_i, flux_limiter_e, q_sh_i, q_sh_e
-    REAL*8              :: Qpr(simpar%Ndim,simpar%Neq)
+    REAL*8, INTENT(IN) :: diff_iso(:,:)
+    REAL*8 :: length_factor
 
-    real*8              :: U1, U2, U3, U4
-    U1 = uc(1)
-    U2 = uc(2)
-    U3 = uc(3)
-    U4 = uc(4)
-
-    tau = 0.
-    IF (PRESENT(dtau_du)) dtau_du = 0.d0
-#ifndef TOR3D
-    IF (numer%stab == 5) THEN
-      CALL evaluate_stab5(up,uc,b,n,DBLE(refElPol%ndeg)/Mesh%elemSize(iel),diff_iso,tau,dtau_du)
-      RETURN
+    length_factor = DBLE(refElPol%ndeg)/Mesh%elemSize(iel)
+#ifdef TOR3D
+    IF (ABS(n(3)) > 0.1d0) THEN
+      ! Cross-section face: use the toroidal arc length in solver coordinates.
+      length_factor = DBLE(refElTor%ndeg)/(xy(1)*numer%tmax/numer%ntor)
     ENDIF
 #endif
-    inn = phys%idx_rhon_eq
-    ign = phys%idx_gamman_eq
-    ik = phys%idx_k_eq
-    ndim = SIZE(n)
-    bn = dot_PRODUCT(b(1:ndim), n)
-    bnorm = NORM2(b(1:ndim))
-    xyd(1,:) = xy(:)
-    uu(1,:) = uc(:)
-    qq(1,:) = q(:)
-    Qpr = RESHAPE(q,(/simpar%Ndim,simpar%Neq/))
-    ! Compute flux limiters at the face
-    IF (switch%flux_limiter) THEN
-      call compute_free_streaming_heat_flux_electrons(uc,q_fs_e)
-      call compute_free_streaming_heat_flux_ions(uc,q_fs_i)
-      call compute_spitzer_harm_flux_electrons(uc,Qpr,b,q_sh_e)
-      call compute_spitzer_harm_flux_ions(uc,Qpr,b,q_sh_i)
-      call compute_flux_limiter(q_fs_e,q_sh_e,phys%c_fle,flux_limiter_e)
-      call compute_flux_limiter(q_fs_i,q_sh_i,phys%c_fli,flux_limiter_i)
-
-    ELSE
-      flux_limiter_e = 1.
-      flux_limiter_i = 1.
-    END IF
-
-#ifdef NEUTRALGAMMA
-    IF (ign > 0) CALL computeEtan(uc,Etan)
-#endif
-
-    IF (numer%stab == 2) THEN
-       IF (ABS(isext - 1.) .LT. 1e-12) THEN
-        ! exterior faces
-          tau_aux = ABS((4*uc(2)*bn)/uc(1))
-       ELSE
-          tau_aux = MAX(ABS(5./3.*up(2)*bn), ABS(0.3*bn*(3*uc(1) + SQRT(ABS(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)))
-       ENDIF
-#ifdef TOR3D
-       IF (ABS(n(3)) > 0.1) THEN
-        ! Poloidal face
-        tau_aux(1) = tau_aux(1) + phys%diff_n*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-        tau_aux(2) = tau_aux(2) + phys%diff_u*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-          tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-          tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-#ifdef NEUTRAL
-        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-#endif
-       ELSE
-#endif
-        ! Toroidal face
-        tau_aux(1) = tau_aux(1) + phys%diff_n*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-        tau_aux(2) = tau_aux(2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-          tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-          tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-#ifdef NEUTRAL
-        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-#endif
-#ifdef TOR3D
-       ENDIF
-#endif
-
-    ELSEIF (numer%stab == 3) THEN
-       IF (ABS(isext - 1.) .LT. 1e-12) THEN
-        ! exterior faces
-          tau_aux = MAX(ABS((5*U2 - 2*U2*phys%Gmbohme)/(3*U1)), ABS((5*U2 - 2*U2*phys%Gmbohm)/(3*U1)))
-       ELSE
-          tau_aux = MAX(ABS((3*U2*bn + 5**(0.5)*bn*(-U2**2 + 2*U1*U3 + 2*U1*U4)**(0.5))/(3*U1)),&
-          &abs((3*U2*bn - 5**(0.5)*bn*(-U2**2 + 2*U1*U3 + 2*U1*U4)**(0.5))/(3*U1)),&
-          &abs((U2*bn)/U1),&
-          &abs((5*U2*bn)/(3*U1)))
-       ENDIF
-#ifdef TOR3D
-       IF (ABS(n(3)) > 0.1) THEN
-        ! Poloidal face
-        tau_aux(1) = tau_aux(1) + phys%diff_n*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-        tau_aux(2) = tau_aux(2) + phys%diff_u*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-          tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-          tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-#ifdef NEUTRAL
-        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-#endif
-       ELSE
-#endif
-        ! Toroidal face
-        tau_aux(1) = tau_aux(1) + phys%diff_n*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-        tau_aux(2) = tau_aux(2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-          tau_aux(3) = tau_aux(3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-          tau_aux(4) = tau_aux(4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-#ifdef NEUTRAL
-        tau_aux(inn) = tau_aux(inn) + phys%diff_nn*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-#endif
-#ifdef TOR3D
-       ENDIF
-#endif
-
-    ELSEIF (numer%stab == 4) THEN
-       tau_aux = MAX(ABS(5./3.*up(2)*bn), ABS(0.3*bn*(3*uc(1) + SQRT(ABS(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)), &
-            phys%lscale/geom%R0*ABS(bn)*phys%diff_pari*up(7)**2.5, phys%lscale/geom%R0*ABS(bn)*phys%diff_pare*up(8)**2.5)
-
-    ELSEIF (numer%stab == 5) THEN
-       ! 2D values and sensitivities return through evaluate_stab5 above.
-#ifdef TOR3D
-       !IF (ABS(isext - 1.) .LT. 1e-12) THEN
-       ! ! exterior faces
-       !   tau_aux = ABS((4*uc(2)*bn)/uc(1))
-       !ELSE
-          tau_aux = MAX(ABS(5./3.*up(2)*bn), ABS(0.3*bn*(3*uc(1) + SQRT(ABS(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)))
-#ifdef TOR3D
-       IF (ABS(n(3)) > 0.1) THEN
-        ! Poloidal face
-        tau_aux(1) = tau_aux(1) + phys%diff_n
-        tau_aux(2) = tau_aux(2) + phys%diff_u
-          tau_aux(3) = tau_aux(3) + phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-          tau_aux(4) = tau_aux(4) + phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-#ifdef NEUTRAL
-        tau_aux(inn) = phys%diff_nn
-#endif
-       ELSE
-#endif
-        ! Toroidal face
-        tau_aux(1) = tau_aux(1) + diff_iso(1,1)*refElPol%ndeg/Mesh%elemSize(iel)
-        tau_aux(2) = tau_aux(2) + diff_iso(2,2)*refElPol%ndeg/Mesh%elemSize(iel)
-          tau_aux(3) = tau_aux(3) + diff_iso(3,3)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_i*ABS(bn)*phys%diff_pari*(MIN(phys%T_fluxlim_maxi,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
-          tau_aux(4) = tau_aux(4) + diff_iso(4,4)*refElPol%ndeg/Mesh%elemSize(iel) + flux_limiter_e*ABS(bn)*phys%diff_pare*(MIN(phys%T_fluxlim_maxe,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
-#ifdef NEUTRAL
-        tau_aux(inn) = tau_aux(inn) + diff_iso(inn,inn)*refElPol%ndeg/Mesh%elemSize(iel)
-#ifdef KEQUATION
-        IF (ik > 0) tau_aux(ik) = tau_aux(ik) + diff_iso(ik,ik)*refElPol%ndeg/Mesh%elemSize(iel)
-#endif
-#ifdef NEUTRALGAMMA
-        IF (ign > 0 .AND. inn > 0) tau_aux(ign) = &
-          &tau_aux(ign) + Etan/uc(inn)*refElPol%ndeg/Mesh%elemSize(iel)
-#endif
-#endif
-!        ! Toroidal face
-!        tau_aux(1) = tau_aux(1) +  diff_iso(1,1,1)
-!        tau_aux(2) = tau_aux(2) +  diff_iso(2,2,1)
-!        tau_aux(3) = tau_aux(3) +  diff_iso(3,3,1) + abs(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-!        tau_aux(4) = tau_aux(4) +  diff_iso(4,4,1) + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-!#ifdef NEUTRAL
-!        tau_aux(5) = tau_aux(5) +  diff_iso(5,5,1)
-!#endif
-#ifdef TOR3D
-       ENDIF
-#endif
-
-#endif
-
-    ELSE
-       WRITE (6, *) "Wrong stabilization type: ", numer%stab
-       STOP
-    ENDIF
-    tau(1, 1) = tau_aux(1)
-    tau(2, 2) = tau_aux(2)
-    tau(3, 3) = tau_aux(3)
-    tau(4, 4) = tau_aux(4)
-#ifdef NEUTRAL
-    tau(inn, inn) = tau_aux(inn)
-#ifdef NEUTRALGAMMA
-    IF (ign > 0) tau(ign, ign) = tau_aux(ign)
-#endif
-#ifdef KEQUATION
-    IF (ik > 0) tau(ik,ik) = tau_aux(ik)
-#endif
-#endif
+    CALL evaluate_automatic_stabilization(up,uc,b,n,length_factor,diff_iso,tau,dtau_du)
   ENDSUBROUTINE computeTauGaussPoints
 
   !!
 
-  SUBROUTINE computeTauGaussPoints_matrix(up, uc, b, n, xy, isext, iel, tau)
-
-    REAL*8, INTENT(in)  :: up(:), uc(:), b(:), n(:), xy(:), isext
-    REAL*8, INTENT(out) :: tau(:, :)
-    INTEGER, INTENT(in) :: iel
-    REAL*8, PARAMETER :: eps = 1e-12
-    REAL*8              :: bn, bnorm
-
-    REAL*8 :: U1, U2, U3, U4
-    REAL*8 :: t2, t3, t4, t5, t6, t7, t8, t9
-    REAL*8 :: t10, t11, t12, t13, t14, t15, t16, t17, t18, t19
-    REAL*8 :: t20, t21, t22, t23, t24, t25, t26, t27, t28, t29
-    REAL*8 :: t30, t31, t32, t33, t34, t35, t36, t37, t38, t39
-    REAL*8 :: t40, t41, t42, t43, t44, t45, t46, t47, t48, t49
-    REAL*8 :: t50, t51, t52, t53, t54, t55, t56, t57, t58, t59
-    REAL*8 :: t60, t61, t62, t63, t64, t65, t66, t67, t68, t69
-    REAL*8 :: t70, t71, t72, t73, t74, t75, t76, t77, t78, t79, t80
-    REAL*8 :: x, y
-
-    tau = 0.
-    bn = dot_PRODUCT(b, n)
-    bnorm = NORM2(b)
-
-    x = xy(1)
-    y = xy(2)
-
-    U1 = uc(1)
-    U2 = uc(2)
-    U3 = uc(3)
-    U4 = uc(4)
-
-    !************************************
-    !
-    ! *****     CONVECTIVE PART  ********
-    !
-    !************************************
-    IF (ABS(isext - 1.) .LT. 1e-12) THEN
-
-      !************************************
-      !   EXTERIOR FACES
-      !************************************
-       tau(3, 1) = (1.0D0/U1**2*ABS(U2*bn)*(U1*U3 - U2**2)*(-4.0D0))/ABS(U1)
-       tau(3, 2) = (ABS(U2*bn)*(U1*U3*2.0D0 - U2**2*3.0D0)*2.0D0)/(U1*(U2 + eps)*ABS(U1))
-       tau(3, 3) = (ABS(U2*bn)*4.0D0)/ABS(U1)
-
-    ELSE
-      !************************************
-      !   INTERIOR FACES
-      !************************************
-       t2 = ABS(U1)
-      t3 = U1*U3*2.0D0
-      t4 = U1*U4*2.0D0
-      t5 = U2**2
-      !          t6 = t3+t4-t5
-       t6 = ABS(t3 + t4 - t5)
-      t7 = U2*bn
-       t8 = ABS(t7)
-      t9 = t5**2
-      t10 = U2*bn*3.0D0
-       t11 = SQRT(5.0D0)
-       t12 = SQRT(t6)
-      t13 = bn*t11*t12
-      t14 = t10 + t13
-       t15 = ABS(t14)
-      t16 = t10 - t13
-       t17 = ABS(t16)
-      t18 = t6**(3.0D0/2.0D0)
-      t19 = 1.0D0/t6
-      t20 = 1.0D0/t2
-      t21 = U2*3.0D0
-      t22 = t11*t12
-      t23 = U1**2
-      t24 = t21 + t22
-      t25 = bn*t24
-       t26 = ABS(t25)
-      t27 = t21 - t22
-      t28 = bn*t27
-       t29 = ABS(t28)
-      t30 = t8*(-6.0D0) + t26 + t29
-      t31 = t19*t20*t23*t30*(1.0D0/5.0D0)
-      t32 = 1.0D0/U1
-      t33 = U1*U3*1.0D1
-      t34 = U1*U4*1.0D1
-      t51 = t5*9.0D0
-      t35 = t33 + t34 - t51
-      t36 = 1.0D0/t35
-      t37 = U2*t12*5.0D0
-      t38 = U1*U3*t11*1.0D1
-      t39 = U1*U4*t11*1.0D1
-      t40 = U2*t11*t12
-      t41 = t3 + t4
-      t42 = t2*t6*1.35D2
-      t43 = t42 - t2*t41*6.0D1
-      t44 = 1.0D0/t43
-      t45 = U1*U2*t5*t8*7.2D1
-      t46 = U1*U2*t6*t15*1.5D1
-      t47 = U1*U2*t6*t17*1.5D1
-      t48 = U1*t11*t15*t18*5.0D0
-      t49 = U1*t5*t11*t12*t17*4.0D0
-      t50 = t19*t44*(t45+t46+t47+t48+t49-U1*t11*t17*t18*5.0D0-U1*U2*t6*t8*9.0D1-U1*U2*t5*t15*1.2D1-U1*U2*t5*t17*1.2D1-U1*t5*t11*t12*t15*4.0D0)
-      t52 = U1*U3*5.0D0
-      t53 = U1*U4*5.0D0
-      t54 = t5*(-4.0D0) + t52 + t53
-      t55 = 1.0D0/U1**2
-      t56 = t5*7.0D0
-      t57 = 1.0D0/t6**(3.0D0/2.0D0)
-      t58 = t33 + t34 - t40 - t56
-      t59 = t9*1.5D1
-      t60 = U3**2
-      t61 = t23*t60*5.0D1
-      t62 = U3*U4*t23*5.0D1
-      t63 = U2*t5*t11*t12*3.0D0
-      t65 = U1*U3*t5*5.5D1
-      t66 = U1*U4*t5*3.0D1
-      t64 = t59 + t61 + t62 + t63 - t65 - t66
-      t67 = U2*2.0D0
-      t68 = U1*U3*5.0D1
-      t69 = U1*U4*5.0D1
-      t73 = t5*4.5D1
-      t70 = t68 + t69 - t73
-      t71 = 1.0D0/t70
-      t72 = t22 + t67
-      t74 = t59 + t61 + t62 - t63 - t65 - t66
-      t75 = t11*t20*t26*t57*t71*t72*t74*(1.0D0/1.5D1)
-      t76 = t11*t20*t29*t57*t64*t71*(t22 - t67)*(1.0D0/1.5D1)
-       t77 = 1.0D0/SQRT(t6)
-      t78 = U1*U4*t12*t26*5.0D0
-      t79 = U1*U4*t12*t29*5.0D0
-      t80 = U1*U2*U4*t11*t26*2.0D0
-      tau(1,1) = (t19*(t8*t9*2.4D1-t9*t15*4.0D0-t9*t17*4.0D0+t6**2*t8*5.0D1-t5*t6*t8*7.0D1+t5*t6*t15*5.0D0+t5*t6*t17*5.0D0-U2*t11*t15*t18*5.0D0+U2*t11*t17*t18*5.0D0+U2*t5*t11*t12*t15*4.0D0-U2*t5*t11*t12*t17*4.0D0))/(t2*t6*9.0D1-t2*t41*4.0D1)
-      tau(1, 2) = t19*t20*(U1*U2*t8*(-1.2D1) + U1*U2*t15*2.0D0 + U1*U2*t17*2.0D0 - U1*t11*t12*t15 + U1*t11*t12*t17)*(-1.0D0/1.0D1)
-      tau(1, 3) = t31
-      tau(1, 4) = t31
-      tau(2,1) = U2*t8*t19*t20*t32*t54*(2.0D0/5.0D0)+U2*t11*t19*t20*t29*t32*t36*t58*(t37-t38-t39+t5*t11*1.1D1)*(1.0D0/1.5D2)-U2*t11*t19*t20*t26*t32*t36*(t37+t38+t39-t5*t11*1.1D1)*(t5*(-7.0D0)+t33+t34+t40)*(1.0D0/1.5D2)
-      tau(2,2) = t19*t20*(t5*t8*3.6D1-t5*t15*6.0D0+t6*t15*5.0D0-t5*t17*6.0D0+t6*t17*5.0D0+U2*t11*t12*t15-U2*t11*t12*t17)*(1.0D0/3.0D1)
-      tau(2, 3) = t50
-      tau(2, 4) = t50
-      tau(3,1) = t5*t8*t19*t20*t54*t55*(1.0D0/5.0D0)-U4*t5*t8*t20*t32*t36*(2.5D1/3.0D0)+U2*t11*t20*t29*t36*t55*t57*t58*t64*(1.0D0/1.5D2)-U2*t11*t20*t26*t36*t55*t57*(t33+t34+t40-t56)*(t59+t61+t62-U1*U3*t5*5.5D1-U1*U4*t5*3.0D1-U2*t5*t11*t12*3.0D0)*(1.0D0/1.5D2)
-      tau(3,2) = t11*t20*t29*t32*t57*t64*(-1.0D0/1.5D2)+t11*t20*t26*t32*t57*(t59+t61+t62-t63-U1*U3*t5*5.5D1-U1*U4*t5*3.0D1)*(1.0D0/1.5D2)+U2*t5*t8*t19*t20*t32*(3.0D0/5.0D0)
-      tau(3, 3) = t75 + t76 - t5*t8*t19*t20*(3.0D0/5.0D0) + U1*U4*t8*t20*t36*(5.0D1/3.0D0)
-      tau(3, 4) = t75 + t76 - t5*t8*t19*t20*(3.0D0/5.0D0) - t8*t20*t36*(t33 - t51)*(5.0D0/3.0D0)
-      tau(4,1) = (t11*t77*(U2*U4*t5*t15*(-1.0D1)+U2*U4*t6*t15*2.5D1+U2*U4*t5*t17*1.0D1-U2*U4*t6*t17*2.5D1-U4*t5*t8*t11*t12*5.0D1+U4*t5*t11*t12*t15*5.0D0+U4*t5*t11*t12*t17*5.0D0)*(-1.0D0/5.0D0))/(U1*t2*t6*5.4D1-U1*t2*t41*2.4D1)
-      tau(4, 2) = t20*t77*(U4*t11*t15 - U4*t11*t17)*(1.0D0/6.0D0)
-      tau(4, 3) = t20*t36*t77*(t78 + t79 + t80 - U1*U4*t8*t12*5.0D1 - U1*U2*U4*t11*t29*2.0D0)*(1.0D0/3.0D0)
-      tau(4, 4) = t20*t36*t77*(t78 + t79 + t80 - t5*t8*t12*4.5D1 + U1*U3*t8*t12*5.0D1 - U1*U2*U4*t11*t29*2.0D0)*(1.0D0/3.0D0)
-    END IF
-
-    !************************************
-    !
-    ! *****     DIFFUSIVE PART  ********
-    !
-    !************************************
-    tau(1, 1) = tau(1, 1) + phys%diff_n*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-    tau(2, 2) = tau(2, 2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-    tau(3, 3) = tau(3, 3) + (phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-    tau(4, 4) = tau(4, 4) + (phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1))*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-
-  ENDSUBROUTINE computeTauGaussPoints_matrix
 
 #ifdef TEMPERATURE
   !!!! Routines to apply smoothening on limiting values of neutral diffusion

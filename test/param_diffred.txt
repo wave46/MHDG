@@ -108,7 +108,7 @@
     dc_coe              = 100           ! Coefficient of the diffusion to add in the corners
     thr                 = 1.e-12        ! Min value of density allowed (works only if the switch is activated)
     thrpre              = 1.e-12        ! Min value of pressure allowed (works only if the switch is activated)
-    stab                = 5             ! Stabilization type (from 1 to 4 (5), 2 is good, 5 is better (simplified 2, only for N-Gamma(-T)))
+    stab                = 2             ! NGammaTiTe: 1 prescribed tau(:), 2 automatic; other models may differ
     dumpnr_min          = 0.1           ! Dumping factor for Newton-Raphson (0<dumpnr<1, first parameter to decrease if NR fail) typical 0.1
     dumpnr_max          = 1.            ! It is calculated each NR iteration based on the current number of iteration in a shape of tanh
     dumpnr_width        = 10.           ! dumpnr(n) = dumpnr_min+(dumpnr_max-dumpnr_min)/2.*(1+TANH((n-dumpnr_n0)/dumpnr_width))

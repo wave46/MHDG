@@ -1,17 +1,29 @@
 # Thermal stabilization
 
-For the 2D temperature model, automatic diagonal stabilization (`stab=5`)
-combines an advective estimate, perpendicular diffusion and parallel thermal
-conduction. For each energy equation,
+The NGammaTiTe family selects diagonal stabilization with `stab` in 2D and
+TOR3D (other models use model-specific selectors):
+
+| Value | Coefficients |
+|---|---|
+| 1 | Prescribed per-equation values from `tau(:)` |
+| 2 | Automatic convection and diffusion coefficients |
+
+Automatic stabilization combines the convective spectral radius,
+perpendicular diffusion and parallel thermal conduction. For each energy equation,
 
 $$
 \tau_s=a+\frac{p}{h_e}D_{\perp,s}
-+\frac{p}{h_e}|b\cdot n|\,\|b_{1:2}\|
++\frac{p}{h_e}|b\cdot n|\,\|b_{\mathrm{active}}\|
 \frac{\kappa_{\parallel,s}(\min(\widehat T_s,T_{\max,s}))}{\widehat U_1}.
 $$
 
-Here $p$ is polynomial degree, $h_e$ is the stored element-length estimate
-(the shortest vertex edge for triangles), and $n$ is the outward unit normal.
+Here $n$ is the outward unit normal. On 2D and TOR3D side faces, $p/h_e$
+is the poloidal degree divided by the stored element size (the shortest vertex
+edge for triangles). On TOR3D cross-section faces it is
+$p_{\mathrm{tor}}/(R\Delta\varphi)$, where $\Delta\varphi$ is the toroidal
+cell angle and $R$ is in solver coordinates. The magnetic vector
+$b_{\mathrm{active}}$ contains the poloidal components in 2D and all three
+components in TOR3D.
 The wrapper passes $p/h_e$ as `length_factor`; it stays fixed during each
 Newton assembly. Temperatures and transport coefficients
 are in solver units. For the coupled four-equation plasma convection block,
@@ -29,7 +41,6 @@ $u_\parallel-c_{\rm flux}$, $u_\parallel$, $u_\parallel+c_{\rm flux}$
 and $5u_\parallel/3$. Here $c_{\rm flux}$ is the adiabatic acoustic speed
 of this convection block, with ratio of specific heats $\gamma=5/3$. The same scalar is added
 to every diagonal row, including the neutral row as extra numerical damping.
-The prescribed diagonal option (`stab=1`) uses the input values.
 Here $\kappa_{\parallel,s}$ is the unlimited parallel conductivity used by
 the stabilization, with the existing $T^{5/2}$ law. Physical conductivity
 uses `epn`.
@@ -59,7 +70,7 @@ five diagonal coefficients with respect to $\widehat U$: the common advective
 estimate, both thermal terms and the unlimited neutral diffusion coefficient.
 Supplied plasma diffusion profiles remain fixed during this assembly.
 There is no coefficient derivative with respect to the element gradient $Q$.
-Other model families retain their existing frozen-coefficient tangents.
+TOR3D and other model families use frozen-coefficient tangents.
 
 For an ordinary face, stabilization contributes
 $\tau_i(\widehat U)(U_i-\widehat U_i)$. Its trace derivative is

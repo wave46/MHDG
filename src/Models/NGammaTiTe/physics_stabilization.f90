@@ -4,7 +4,7 @@ SUBMODULE (physics) physics_stabilization
   IMPLICIT NONE
 CONTAINS
 
-  MODULE PROCEDURE evaluate_stab5
+  MODULE PROCEDURE evaluate_automatic_stabilization
     REAL*8 :: advective,bn,bnorm,Etan,heat_part
     REAL*8 :: dadvective(SIZE(uc)),dheat(SIZE(uc)),dneutral(SIZE(uc))
     INTEGER :: i
@@ -63,7 +63,7 @@ CONTAINS
       derivative(1) = derivative(1)-thermal_tau/uc(1)
     END SUBROUTINE thermal_stabilization
 
-  END PROCEDURE evaluate_stab5
+  END PROCEDURE evaluate_automatic_stabilization
 
   SUBROUTINE advective_stabilization(up,uc,bn,advective_tau,derivative,differentiate)
     REAL*8, INTENT(IN) :: up(:),uc(:),bn

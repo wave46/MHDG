@@ -20,7 +20,7 @@ target uses the current build configuration without a clean rebuild.
 
 `make check-strong-dirichlet` uses the current 2D NGammaTiTe-family build.
 It checks interleaved face ordering and matching frozen stabilization for
-constant, variable diagonal and matrix tau. The stabilization and prescribed
+prescribed and automatic diagonal tau. The stabilization and prescribed
 contributions are extracted from production assembly. With PaStiX, it also
 assembles and solves a small trace system with prescribed faces. The MPI
 executable can run with `mpirun.openmpi -np 2 ./strong_dirichlet_check` to check
@@ -63,9 +63,11 @@ absolute RHS reconstruction and the joint state/gradient scaling identity.
 interior, exterior, Bohm and prescribed-trace paths against independent fluxes
 and held-phi finite differences. It runs bounds-checked and optimized builds.
 
-`make check-stabilization-values` verifies automatic diagonal coefficients
+`make check-stabilization-values` compiles the production coefficient evaluator
+in 2D and TOR3D and verifies automatic diagonal coefficients
 against independent formulas and checks independence from gradients and the
-physical limiter. It includes capped temperatures and a trial undershoot.
+physical limiter. It covers both 3D face orientations, toroidal degree/length
+scaling, capped temperatures and a trial undershoot.
 For admissible states it also checks the common coefficient against the
 characteristic speeds and their polynomial identity in the production
 convection Jacobian.
@@ -79,7 +81,7 @@ check, including nonfinite states and negative combined thermal energy.
 Run `mpirun -np 2 ./exchange_domain_check` in an MPI build to check collective
 rejection when only one rank has invalid data.
 
-`make check-stabilization` checks all five stabilization-5 derivatives in the
+`make check-stabilization` checks all five automatic diagonal stabilization derivatives in the
 2D plasma–neutral model. It checks coefficient values and finite differences,
 then reconstructs physical residuals from production interior, exterior and
 Bohm matrices/RHS with distinct element and trace states. It covers both Bohm

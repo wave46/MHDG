@@ -11,6 +11,10 @@ MODULE types
   USE mod_splines
   IMPLICIT NONE
 
+  INTEGER, PARAMETER, PUBLIC :: stab_prescribed = 1
+  ! Automatic diagonal law of NGammaTiTe; other models use their own selectors.
+  INTEGER, PARAMETER, PUBLIC :: stab_automatic = 2
+
   !*******************************************************
   ! Boundary condition flags
   !*******************************************************
@@ -567,10 +571,7 @@ MODULE types
      REAL*8         :: dc_coe   ! Diffusion coefficient in corners
      REAL*8         :: thr      ! Threshold to limit rho
      REAL*8         :: thrpre   ! Threshold to limit pressure
-     INTEGER        :: stab     ! Stabilization type
-     ! 1 - constant tau (one for each equation) in the whole domain
-     ! 2 -
-     ! 3 -
+     INTEGER        :: stab     ! NGammaTiTe: 1 prescribed, 2 automatic; other models may differ
      REAL*8         :: dumpnr   ! dumping factor for Newton-Raphson. 0<dumpnr<1
      REAL*8         :: dumpnr_min   ! dumping factor minimum for Newton-Raphson. 0<dumpnr<1
      REAL*8         :: dumpnr_max   ! dumping factor maximum for Newton-Raphson. 0<dumpnr<1

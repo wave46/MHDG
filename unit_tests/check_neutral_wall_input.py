@@ -55,8 +55,13 @@ def main():
     cases = [("PHYS_LST", *case) for case in valid + invalid]
     cases.extend([
         ("NUMER_LST", "stabilization_prescribed", "stab=1, tau=0.11,0.22,0.33,0.44,0.55", (1.0, 1.0)),
-        ("NUMER_LST", "stabilization_automatic", "stab=5", (1.0, 1.0)),
+        ("NUMER_LST", "stabilization_automatic", "stab=2", (1.0, 1.0)),
     ])
+    cases.extend(("NUMER_LST", f"invalid_stabilization_{value}", f"stab={value}",
+                  "stab must be 1 (prescribed diagonal tau) or 2 (automatic diagonal tau)")
+                 for value in (-1, 0, 3, 4, 5, 6))
+    cases.append(("NUMER_LST", "stabilization_missing", "",
+                  "stab must be 1 (prescribed diagonal tau) or 2 (automatic diagonal tau)"))
     cases.append(("NUMER_LST", "legacy_bohm_zero", "bohmtypebc=0", (1.0, 1.0)))
     cases.extend(("NUMER_LST", f"removed_bohm_{value}", f"bohmtypebc={value}",
                   "Alternate Bohm boundary conditions have been removed")
@@ -107,9 +112,12 @@ def main():
         for namelist, name, entries, expected in cases:
             directory = Path(scratch) / name
             directory.mkdir()
+            source = template
+            if name == "stabilization_missing":
+                source = re.sub(r"(?mi)^\s*stab\s*=[^\n]*\n", "", source)
             text = re.sub(rf"(?ms)(&{namelist}\b.*?)(^\s*/\s*$)",
                           lambda match: f"{match[1]}  {entries}\n{match[2]}",
-                          template, count=1)
+                          source, count=1)
             (directory / "param.txt").write_text(text)
             run = subprocess.run([str(executable)], cwd=directory,
                                  capture_output=True, text=True, timeout=15)
@@ -146,6 +154,9 @@ def main():
                     values = tuple(float(value) for value in prescribed[1].split())
                     passed = all(abs(actual-expected) < 1.e-14
                                  for actual, expected in zip(values, (.11,.22,.33,.44,.55)))
+            if passed and name == "stabilization_automatic":
+                selected = re.search(r"^STABILIZATION_TYPE\s+(\d+)", output, re.M)
+                passed = selected is not None and selected[1] == "2"
             if not passed:
                 raise SystemExit(f"FAIL: {name}\n{output}")
     print(f"neutral wall input checks: {len(cases)} PASS")

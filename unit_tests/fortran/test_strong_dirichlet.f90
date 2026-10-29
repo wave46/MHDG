@@ -103,16 +103,14 @@ CONTAINS
     normal = [1.d0,0.d0]
     field = [0.d0,1.d0]
     qg = 0.d0
-    DO mode = 1,3
-       numer%stab = 1
-       IF (mode == 2) numer%stab = 5
-       IF (mode == 3) numer%stab = 6
+    DO mode = 1,2
+       numer%stab = stab_prescribed
+       IF (mode == 2) numer%stab = stab_automatic
        tau = 0.d0
        numer%tau = 0.5d0
        DO i=1,Neq
           tau(i,i) = 0.5d0
           IF (mode > 1) tau(i,i) = 2.d0+i
-          IF (mode == 3 .AND. i < Neq) tau(i,i+1) = 0.125d0*i
        ENDDO
        DO prescribed = 0,1
           isdir = prescribed == 1

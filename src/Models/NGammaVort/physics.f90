@@ -364,51 +364,6 @@ CONTAINS
     !tau = tau/(refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale)
   END SUBROUTINE computeTauGaussPoints
 
-  SUBROUTINE computeTauGaussPoints_matrix(up,uc,b,n,xy,isext,iel,tau)
-    REAL*8,INTENT(in)  :: up(:),uc(:),b(:),n(:),xy(:),isext
-    REAL*8,INTENT(out) :: tau(:,:)
-    INTEGER,INTENT(in) :: iel
-    REAL*8              :: bn,bnorm
-    REAL*8,PARAMETER :: eps = 1e-12
-    REAL*8 :: U1,U2,U3,U4
-    REAL*8 :: t2,t3,t4,t5,t6,t7,t8,t9
-    REAL*8 :: t10,t11,t12,t13,t14,t15,t16,t17,t18,t19
-    REAL*8 :: t20,t21,t22,t23,t24,t25,t26,t27,t28,t29
-    REAL*8 :: t30,t31,t32,t33,t34,t35,t36,t37,t38,t39
-    REAL*8 :: t40,t41,t42,t43,t44,t45,t46,t47,t48,t49
-    REAL*8 :: t50,t51,t52,t53,t54,t55,t56,t57,t58,t59
-    REAL*8 :: t60,t61,t62,t63,t64,t65,t66,t67,t68,t69
-    REAL*8 :: t70,t71,t72,t73,t74,t75,t76,t77,t78,t79,t80
-    REAL*8 :: x,y,r,h,coef,r0,rc
-
-    x = xy(1)
-    y = xy(2)
-
-    U1 = uc(1)
-    U2 = uc(2)
-    U3 = uc(3)
-    U4 = uc(4)
-
-    bn = dot_PRODUCT(b,n)
-    bnorm = NORM2(b)
-    !************************************
-    !
-    ! *****     CONVECTIVE PART  ********
-    !
-    !************************************
-    tau(1,1) = ABS((uc(2)*bn)/uc(1))
-    tau(2,2) = ABS((uc(2)*bn)/uc(1))
-    tau(3,3) = ABS((uc(2)*bn)/uc(1))
-    tau(4,4) = ABS((uc(2)*bn)/uc(1))
-
-    !************************************
-    !
-    ! *****     DIFFUSIVE PART  ********
-    !
-    !************************************
-    tau(1,1) = tau(1,1) + phys%diff_n
-    tau(2,2) = tau(2,2) + phys%diff_u
-  END SUBROUTINE computeTauGaussPoints_matrix
 
 
 END MODULE physics

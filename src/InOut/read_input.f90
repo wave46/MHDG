@@ -191,6 +191,7 @@ SUBROUTINE READ_input()
   target_density_xpr_dimension = 0
   zeff_dimension = 0
   tau = 1.d0
+  stab = 0 ! Require an explicit stabilization choice in NUMER_LST.
   bcflags = 0
   bohmtypebc = 0 ! Compatibility input; alternative Bohm assemblers are retired.
   saveTau = .FALSE. ! Compatibility input; Gauss-point text dumps are retired.
@@ -581,6 +582,21 @@ SUBROUTINE READ_input()
   numer%dc_coe            = dc_coe
   numer%thr               = thr
   numer%thrpre            = thrpre
+#ifdef TEMPERATURE
+  SELECT CASE (stab)
+  CASE (stab_prescribed,stab_automatic)
+  CASE DEFAULT
+     IF (MPIvar%glob_id == 0) WRITE(6,'(A)') &
+          'stab must be 1 (prescribed diagonal tau) or 2 (automatic diagonal tau)'
+     STOP 1
+  END SELECT
+#else
+  IF (stab < stab_prescribed .OR. stab >= 6) THEN
+     IF (MPIvar%glob_id == 0) WRITE(6,'(A)') &
+          'Select stab=1 (prescribed diagonal tau) or a model-specific diagonal choice in 2-5'
+     STOP 1
+  ENDIF
+#endif
   numer%stab              = stab
   numer%dumpnr            = dumpnr_min
   numer%dumpnr_min        = dumpnr_min
@@ -1026,7 +1042,16 @@ SUBROUTINE READ_input()
      PRINT *, '                - c_pinch (transport model):            ', transport_model_input%c_pinch
      PRINT *, '                - nu_th (transport model):              ', transport_model_input%nu_th
      PRINT *, '        ***************** Numerics ****************************'
+#ifdef TEMPERATURE
+     SELECT CASE (numer%stab)
+     CASE (stab_prescribed)
+        PRINT *, '                - stabilization: 1 (prescribed diagonal tau)'
+     CASE (stab_automatic)
+        PRINT *, '                - stabilization: 2 (automatic diagonal tau)'
+     END SELECT
+#else
      PRINT *, '                - stabilization type:                                 ', numer%stab
+#endif
      PRINT *, '                - tau(1):                                             ', numer%tau(1)
      PRINT *, '                - tau(2):                                             ', numer%tau(2)
      PRINT *, '                - tau(3):                                             ', numer%tau(3)

@@ -489,42 +489,6 @@ CONTAINS
 #endif
   END SUBROUTINE computeTauGaussPoints
 
-  SUBROUTINE computeTauGaussPoints_matrix(up, uc, b, n, xy, isext, iel, tau)
-    REAL*8, INTENT(in)  :: up(:), uc(:), b(:), n(:), xy(:), isext
-    REAL*8, INTENT(out) :: tau(:, :)
-    INTEGER, INTENT(in) :: iel
-    REAL*8              :: bn, bnorm
-    REAL*8              :: U1, U2, U3, U4
-    REAL*8              :: x, y
-
-    x = xy(1)
-    y = xy(2)
-
-    U1 = uc(1)
-    U2 = uc(2)
-    U3 = uc(3)
-    U4 = uc(4)
-
-    bn = dot_PRODUCT(b, n)
-    bnorm = NORM2(b)
-    !************************************
-    !
-    ! *****     CONVECTIVE PART  ********
-    !
-    !************************************
-    tau(1, 1) = ABS((uc(2)*bn)/uc(1))
-    tau(2, 2) = ABS((uc(2)*bn)/uc(1))
-    tau(3, 3) = ABS((uc(2)*bn)/uc(1))
-    tau(4, 4) = ABS((uc(2)*bn)/uc(1))
-
-    !************************************
-    !
-    ! *****     DIFFUSIVE PART  ********
-    !
-    !************************************
-    tau(1, 1) = tau(1, 1) + phys%diff_n
-    tau(2, 2) = tau(2, 2) + phys%diff_u
-  END SUBROUTINE computeTauGaussPoints_matrix
 
 
 END MODULE physics
