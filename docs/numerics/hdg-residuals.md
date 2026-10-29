@@ -51,6 +51,10 @@ With residual reporting off, `update` skips residual evaluation; `residual` and
 `both` still evaluate silently. When $r_0=0$, the absolute tolerance governs; the relative
 value is zero if $r_k=0$ and a large sentinel otherwise.
 
+Solution files record `newton_convergence`, `residual_atol`, `residual_rtol`,
+and all seven `residual_scales` entries under `simulation_parameters/numerics`.
+These describe the saved run; restart controls come from the current input.
+
 ## Residual equations and normalization
 
 For element state $U$, gradient $Q$, and trace $\widehat U$, the assembled blocks give
@@ -112,5 +116,5 @@ a magnetic-field change alone does not invalidate the mass matrices.
 
 Evaluation adds local matrix-vector products, trace accumulation and three MPI
 reductions; timing adds one reduction. First use includes cache setup. No extra
-global solve is needed, and no caches or residual datasets are saved to HDF5.
+global solve is needed; caches and measured residuals are not saved to HDF5.
 `computeResidual` remains the volume-change measure used for update/time checks.
