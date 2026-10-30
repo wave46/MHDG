@@ -76,10 +76,19 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
     source = Path(settings["MHDG_REGRESSION_DATA_ROOT"]).resolve()
     manifest = load_manifest(source, root / "cases", case_id=case_id)
     validate_bundle_root(source, root / "cases", manifest=manifest, catalog=catalog)
+    dependency = None
+    if case_id == "moving_equilibrium":
+        from .moving_bootstrap import bootstrap_pin
+        selected = settings.get("MHDG_REGRESSION_BOOTSTRAP_BUNDLE")
+        if not selected:
+            raise BundleError("moving refresh requires a selected --bootstrap-bundle or defaults.bundles.legacy_case")
+        dependency = bootstrap_pin(Path(selected), root / "cases")
     available = {role for role, artifact in manifest["roles"].items()
                  if (source / manifest["artifacts"][artifact]["path"]).is_file()}
     # Outputs scheduled for replacement must come from this refresh, not old data.
     available.difference_update(role for producer in producers for role in producer["roles"])
+    if dependency is not None:
+        available.add("bootstrap")
     for producer in producers:
         workflow = case["workflows"][producer["workflow"]]
         needed = workflow_required_roles(workflow, references=False)
@@ -106,6 +115,12 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
                            (f"cases/{case_id}.json", "workflows.json", "layouts.json", "tolerances.json",
                             "suites.json", "golden.json")]}
     path = workspace / "refresh.json"
+    input_overrides = {}
+    if dependency is not None:
+        pin_path = workspace / "bootstrap.json"
+        write_json_atomic(pin_path, dependency, "moving bootstrap dependency")
+        input_overrides["bootstrap"] = pin_path
+        report["bootstrap_dependency"] = _record(pin_path, workspace)
     write_json_atomic(path, report, "refresh report")
     try:
         build = build_solver(settings, ROOT.parent, jobs, requirements=requirements,
@@ -114,7 +129,7 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
                   "MHDG_REGRESSION_RUN_ROOT": str(workspace / "runs")}
         config.runtime_settings(values, requirements)
         shutil.copy2(build.metadata_path, workspace / "build.json")
-        generated = {}
+        generated = dict(input_overrides)
         mesh_sources = {}
         for producer in producers:
             layout = producer["layout"]

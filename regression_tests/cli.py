@@ -30,6 +30,7 @@ def parser() -> argparse.ArgumentParser:
     def selection(child):
         child.add_argument("--bundle", type=Path, help="external bundle; overrides the selected case default")
         child.add_argument("--build-manifest", type=Path, help="build_metadata.json; overrides the default build")
+        child.add_argument("--bootstrap-bundle", type=Path, help="limited bundle containing the pinned moving initial state")
 
     check = command("check", "Run a scientific profile or focused suite.", settings=True)
     selection(check)
@@ -99,6 +100,7 @@ def parser() -> argparse.ArgumentParser:
     refresh = command("refresh", "Build once, run producers and validate a review candidate.", parent=actions, settings=True)
     refresh.add_argument("case", metavar="CASE")
     refresh.add_argument("--bundle", type=Path, help="source bundle; overrides the case default")
+    refresh.add_argument("--bootstrap-bundle", type=Path, help="limited bundle to use for the new moving references")
     refresh.add_argument("--workspace", required=True, type=Path)
     refresh.add_argument("--jobs", type=_positive_integer)
     continuation = command("continue", "Continue validation using completed producers and a new build.", parent=actions, settings=True)
@@ -106,6 +108,7 @@ def parser() -> argparse.ArgumentParser:
     continuation.add_argument("--rerun", action="append", required=True, metavar="WORKFLOW",
                               help="validation workflow to rerun; repeat for several")
     continuation.add_argument("--jobs", type=_positive_integer)
+    continuation.add_argument("--bootstrap-bundle", type=Path, help="limited bundle containing the campaign's pinned initial state")
     publish = command("publish", "Revalidate and publish a reviewed refresh workspace.", parent=actions)
     publish.add_argument("workspace", type=Path, metavar="WORKSPACE")
     publish.add_argument("--output", required=True, type=Path)
@@ -218,7 +221,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         from .support import BundleError
 
         if args.action == "refresh":
-            values = config.settings(args.settings, case=args.case, bundle=args.bundle, use_build=False)
+            values = config.settings(args.settings, case=args.case, bundle=args.bundle, use_build=False,
+                                     bootstrap_bundle=args.bootstrap_bundle)
             if not values.get("MHDG_REGRESSION_DATA_ROOT"):
                 raise BundleError("no source bundle selected; pass --bundle DIR or set defaults.bundles")
             path, report = golden.refresh(args.case, values, args.workspace, args.jobs)
@@ -226,7 +230,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         elif args.action == "continue":
             from .golden_continue import continue_refresh
 
-            values = config.settings(args.settings, use_build=False)
+            values = config.settings(args.settings, use_build=False, bootstrap_bundle=args.bootstrap_bundle)
             path, report = continue_refresh(args.workspace, values, args.rerun, args.jobs)
             reporting.golden_review(path, report)
         else:
@@ -241,7 +245,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             report = bundle_readiness(args.case, args.source, ROOT / "cases", workflows=args.workflow)
             reporting.readiness(report)
             return 0 if report["status"] == "ready" else 1
-        if args.action == "create":
+        elif args.action == "create":
             summary = create_bundle(
                 args.case, args.source, args.output, ROOT / "cases", args.bundle_version,
                 workflows=args.workflow,
@@ -318,6 +322,7 @@ def _settings(args, case, *, use_build=True):
     values = settings(
         args.settings, case=case, bundle=args.bundle,
         build_manifest=args.build_manifest, use_build=use_build,
+        bootstrap_bundle=args.bootstrap_bundle,
     )
     if not values.get("MHDG_REGRESSION_DATA_ROOT"):
         raise BundleError(f"no bundle selected for {case}; pass --bundle DIR or set defaults.bundles")

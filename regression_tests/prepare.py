@@ -61,6 +61,7 @@ class PreparationInputs:
     bundle_root: Path
     manifest: dict[str, Any]
     requested_overrides: dict[str, bool | float | int | str]
+    bootstrap_dependency: dict | None = None
 
 
 def openmp_environment(threads: int) -> dict[str, str]:
@@ -136,6 +137,11 @@ def load_preparation_inputs(
         artifact_overrides or {},
         require_reference,
     )
+    bootstrap_dependency = None
+    if case_id == "moving_equilibrium":
+        from .moving_bootstrap import resolve_bootstrap
+        artifacts["bootstrap"], bootstrap_dependency = resolve_bootstrap(
+            artifacts["bootstrap"], settings, case_directory)
 
     run_root = absolute_setting(settings, "MHDG_REGRESSION_RUN_ROOT")
     executable = solver_executable(settings, layout["execution"], workflow["model"])
@@ -162,6 +168,7 @@ def load_preparation_inputs(
         bundle_root=bundle_root,
         manifest=manifest,
         requested_overrides=dict(requested_overrides or {}),
+        bootstrap_dependency=bootstrap_dependency,
     )
 
 
@@ -281,6 +288,17 @@ def _populate_run(staging: Path, inputs: PreparationInputs, overrides, stage=Non
             "newton_predictor", "newton_predictor_rate_limit")})
         control_sources, control_paths, impurity_paths = _prepare_control_inputs(
             inputs, recipe, physical=bool(preparation.get("time_mode")))
+        if inputs.bootstrap_dependency is not None:
+            from .moving_bootstrap import prepare_bootstrap_controls
+            generated, anchor = prepare_bootstrap_controls(
+                artifacts["bootstrap"], artifacts, moving.get("controls", {}), directory)
+            for relative in generated:
+                control_sources.pop(Path(relative).name, None)
+            preparation["generated_files"].update(generated)
+            preparation["bootstrap_dependency"] = inputs.bootstrap_dependency
+            preparation["bootstrap_controls"] = anchor
+            overrides["puff"] = anchor["puff_particles_per_s"]
+            namelists["puff"] = "phys_lst"
         sources.update(control_sources)
         replacements.update(control_paths)
         namelists.update({key: "input_lst" for key in control_paths})

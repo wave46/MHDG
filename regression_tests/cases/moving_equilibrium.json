@@ -5,7 +5,6 @@
     "required": {
       "geometry": "geometry.geo",
       "parameters": "param.txt",
-      "bootstrap": "restart.h5",
       "impurity_configuration": "impurity_model.nml",
       "equilibrium_series": "equilibrium.h5",
       "control_puff": "puff.h5",
@@ -16,6 +15,7 @@
       "short_control_target_density": "short_target_density.h5"
     },
     "optional": {
+      "bootstrap": "bootstrap.json",
       "mode1_reference": "reference_mode1.h5",
       "mode1_restart_step6": "restart_mode1_step6.h5",
       "quasisteady_reference": "reference_quasisteady.h5",
@@ -36,7 +36,7 @@
       "description": "Two 80 ms puff-feedback advances for MPI agreement",
       "type": "warm_same_state",
       "layout": "mpi4_omp4",
-      "inputs": ["geometry"],
+      "inputs": ["geometry", "bootstrap", "control_puff", "control_target_density"],
       "parameters": "parameters",
       "restart": "bootstrap",
       "impurity_configuration": "impurity_configuration",
@@ -60,6 +60,11 @@
         "newton_convergence": "update",
         "residual_diagnostics_mode": "off",
         "bohm_momentum_always_include_diffusion": true,
+        "recycle_plasma_diffusion": false,
+        "evaluator": 0,
+        "quant_ind": 1,
+        "tol_est": 0.005,
+        "osc_tol": -3.0,
         "flux_limiter": false,
         "time_mode": "legacy", "dt_reduce_on_failure": false,
         "dt_grow_on_easy": false, "newton_predictor": false,

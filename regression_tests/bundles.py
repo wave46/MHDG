@@ -291,5 +291,9 @@ def preflight_bundles(checks, settings_by_case, case_directory, *, required_bund
         manifest = load_manifest(bundle, case_directory, case_id=case_id)
         validate_bundle_root(bundle, case_directory, required_roles=roles, required_class=required_bundle_class,
                              manifest=manifest, catalog=catalog)
+        if case_id == "moving_equilibrium":
+            from .moving_bootstrap import resolve_bootstrap
+            descriptor = artifact_path(bundle, manifest["artifacts"][manifest["roles"]["bootstrap"]]["path"], "bootstrap")
+            resolve_bootstrap(descriptor, values, case_directory)
         manifests[case_id] = manifest
     return manifests

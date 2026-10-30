@@ -19,7 +19,8 @@ def test_production_workflows_inherit_solver_defaults(case_id):
     case = load_case_definition(case_id, REGRESSION_ROOT / "cases")
     policy = {"stab": 2, "newton_formulation": "absolute", "newton_convergence": "update",
               "residual_diagnostics_mode": "off", "bohm_momentum_always_include_diffusion": True,
-              "flux_limiter": False}
+              "flux_limiter": False, "recycle_plasma_diffusion": False,
+              "evaluator": 0, "quant_ind": 1, "tol_est": 0.005, "osc_tol": -3.0}
     for name, workflow in case["workflows"].items():
         expected = dict(policy)
         if name == "heat_flux_limiter":

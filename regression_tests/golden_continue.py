@@ -40,6 +40,12 @@ def validate_saved_campaign(workspace, root, rerun_workflows):
     source = Path(report["source"]["manifest"]["path"]).parent
     source_manifest = load_manifest(source, root / "cases", case_id=report["case_id"])
     generated = {role for producer in producers for role in producer["roles"]}
+    if dependency := report.get("bootstrap_dependency"):
+        descriptor = golden._verify_record(workspace, dependency)
+        collected = candidate / manifest["artifacts"][manifest["roles"]["bootstrap"]]["path"]
+        if file_identity(descriptor) != file_identity(collected):
+            raise BundleError("candidate bootstrap dependency differs from the campaign")
+        generated.add("bootstrap")
     for role, artifact in manifest["roles"].items():
         if role not in generated:
             original = source_manifest["roles"].get(role)
@@ -78,6 +84,9 @@ def continue_refresh(workspace, settings, rerun_workflows, jobs=None, *, catalog
     root = catalog_root or golden.ROOT
     workspace = workspace.expanduser().resolve()
     report, checks, requirements, catalog = validate_saved_campaign(workspace, root, rerun_workflows)
+    if dependency := report.get("bootstrap_dependency"):
+        from .moving_bootstrap import resolve_bootstrap
+        resolve_bootstrap(golden._verify_record(workspace, dependency), settings, root / "cases")
     previous_checks = {}
     for attempt in report.get("continuations", []):
         previous = load_json(golden._verify_record(workspace, attempt["previous_report"]), "previous refresh report")

@@ -53,7 +53,7 @@ def diagnose(args, catalog_root):
                                    for item in selected for name in item["workflow_ids"])
         try:
             values = config.settings(args.settings, case=case_id, bundle=args.bundle,
-                                     build_manifest=args.build_manifest)
+                                     build_manifest=args.build_manifest, bootstrap_bundle=args.bootstrap_bundle)
         except (HarnessError, OSError) as exc:
             failures.append(case_id)
             print(f"FAIL {case_id} settings: {exc}")

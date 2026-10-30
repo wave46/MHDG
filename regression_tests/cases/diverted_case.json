@@ -41,9 +41,7 @@
     }
   },
   "workflows": {
-    "bootstrap_adaptive": {
-      "parameter_overrides": {"tol_est": 0.02}
-    },
+    "bootstrap_adaptive": {},
     "baseline_warm": {},
     "heat_flux_limiter": {},
     "transport": {},
@@ -66,9 +64,7 @@
     "impurity_off_short": {},
     "impurity_n_short": {},
     "impurity_nw_short": {},
-    "adaptive_source_short": {
-      "parameter_overrides": {"tol_est": 0.02}
-    },
+    "adaptive_source_short": {},
     "newton_incremental": {}
   }
 }

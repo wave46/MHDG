@@ -59,8 +59,7 @@ diagnostics. That probe has no NeutralGamma golden reference. Other models and
 
 The baseline uses automatic stabilization (`stab=2`), absolute Newton with
 update-based stopping, full Bohm momentum diffusion, and residual reporting
-off. Heat limiting is enabled in the heat-limiter and Newton-comparison
-workflows. Damping schedules and Bohm angle/energy thresholds come from the bundle.
+off. Heat limiting is enabled in its dedicated feature workflow. Damping schedules and Bohm angle/energy thresholds come from the bundle.
 
 For example, `diverted_case` + `baseline_warm` + `mpi4_omp4` specifies one
 workflow run; the `warm` suite checks it against the diverted golden. The terms
@@ -93,20 +92,39 @@ compares the two completed bootstrap endpoints.
 
 The shared adaptive bootstrap recipe enables divergence recovery with at most
 2 divergence and 10 oscillation refinements per timestep, sets the oscillation
-trigger `osc_tol=-0.5`, and uses the indicator threshold `thr_ind=1e-5`.
+trigger `osc_tol=-3`, and uses the indicator threshold `thr_ind=1e-5`.
 These harness overrides apply to both static cases and all three stages;
 the final steady stage and the independent fixed bootstrap have adaptivity off.
-Both adaptive diverted workflows, `bootstrap_adaptive` and
-`adaptive_source_short`, override the estimator tolerance to `tol_est=0.02`
-to request smaller mesh sizes. The bootstrap override includes initialization
-and `diffred`; its final steady stage inherits the value with adaptivity off.
-The limited recipe retains its input tolerance.
+Both steady topologies and moving equilibrium use the mixed evaluator with
+`tol_est=5e-3`. The indicator uses physical density, ion temperature and electron
+temperature (`quant_ind=1`, `n_quant_ind=1,7,8`); the estimator also includes
+parallel velocity (`param_est=1,2,7,8`). Recycling omits raw plasma diffusion;
+the Bohm momentum condition retains its diffusion contribution.
 The short source/adaptivity probe retains its one-pass setup with divergence
 and oscillation recovery disabled. It requires a valid changed mesh and a retained
 adaptation output; refinement, coarsening and redistribution at the same element
 count are accepted. An unchanged mesh or missing initial output is rejected.
 Changes to this cold-bootstrap recipe require
 convergence evidence and review of refreshed goldens before accepting a baseline.
+
+Moving equilibrium shares the limited initial state through `bootstrap.json`,
+a dependency descriptor containing the `legacy_case/bootstrap_reference` file
+checksum. Select its containing bundle with `--bootstrap-bundle LIMITED` or
+`defaults.bundles.legacy_case`. The state and mesh are linked directly into each
+run. A different bootstrap is rejected before execution; an identical state can
+be used after publication or relocation of its containing bundle.
+
+Run preparation anchors the main puff and density ramps to that state, preserving
+their endpoints and timestamps, and resamples the short curves at their existing
+times. The density-file start is twice the controller's 1000-point nearest-node
+chord measurement in m⁻². Generated controls and their checksums belong to the
+run. Restart workflows use the same original anchor, even when their actual
+restart is a moving checkpoint. The later fixed-field ramp retains its own curve.
+
+`golden refresh moving_equilibrium --bootstrap-bundle LIMITED` records the
+selected dependency with the new references. Its source bundle supplies the
+trajectory and control templates; refresh does not modify those files. Ordinary
+checks use the recorded pin and never reselect a new starting state automatically.
 
 `heat_flux_limiter` restarts the unlimited diverted warm baseline with both
 heat free-streaming fractions set to 0.2. It retains 50 eV caps on the
@@ -151,10 +169,10 @@ two neutral limiters, radiation off, N and N+W impurity radiation, and stored
 magnetic/current fields against its own reference. Limited adds analytical
 initialization and the focused NeutralGamma probe described above.
 
-The separate `moving_equilibrium` bundle supplies a limited restart, one trajectory
-HDF5 containing magnetic/current frames, and explicit control curves. Its checks are:
+The `moving_equilibrium` bundle records its limited-bootstrap dependency and
+supplies the magnetic/current trajectory and control templates. Its checks are:
 
-- `moving_equilibrium`: the unchanged seven-step 80 ms transition to 0.56 s,
+- `moving_equilibrium`: the seven-step 80 ms transition to 0.56 s,
   plus a full discharge from the bootstrap to 0.50 s with prescribed 100 ms
   targets and temporal recovery.
   Recovery must reject a trial, save smaller accepted substeps, and reach the
@@ -378,13 +396,14 @@ python -m regression_tests bundle create --case diverted_case \
 python -m regression_tests bundle validate /path/to/candidate-bundle
 ```
 
-Creation copies available declared source files into a self-contained candidate,
+Creation copies available declared source files into a candidate,
 following source symlinks into physical copies. It records roles, hashes and
 sizes, validates the result, and refuses to overwrite an output. A new reference
 need not exist to create a base candidate; a workflow-specific readiness or
 validation request will identify that missing reference. During runs, immutable
 bundle inputs are symlinked into temporary directories; rendered parameter and
 transport files are private run copies. Source bundles are not modified.
+The moving bootstrap is an external pinned dependency rather than a copied state.
 
 A reference change requires a separate reviewed golden action. `golden refresh`
 builds the case's required variants once, runs the ordered producers in

@@ -56,13 +56,16 @@ MACHINE_KEYS = {
 }
 
 
-def settings(path=None, *, case=None, bundle=None, build_manifest=None, use_build=True):
+def settings(path=None, *, case=None, bundle=None, build_manifest=None, use_build=True, bootstrap_bundle=None):
     """Resolve explicit selections before local defaults; never choose newest data.
 
     Return one resolved runtime dictionary for preparation/execution; no other
     module reads machine settings or writes intermediate settings files.
     """
     values, defaults = machine_settings(path)
+    bootstrap_bundle = bootstrap_bundle or defaults.get("bundles", {}).get("legacy_case")
+    if bootstrap_bundle is not None:
+        values["MHDG_REGRESSION_BOOTSTRAP_BUNDLE"] = str(Path(bootstrap_bundle).expanduser().resolve())
     if bundle is None:
         bundle = defaults.get("bundles", {}).get(case)
     if build_manifest is None and use_build:
