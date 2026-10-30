@@ -8,6 +8,28 @@ from .files import file_identity
 from .support import BundleError
 
 
+def observation_settings(settings):
+    """Select the private observer without changing ordinary suite settings."""
+    from .config import absolute_setting, build_settings
+    from .documents import load_json
+
+    manifest = absolute_setting(settings, 'MHDG_BUILD_MANIFEST')
+    build = load_json(manifest, 'build manifest')
+    observation = build.get('newton_probe', {})
+    if record := observation.get('manifest'):
+        path = Path(record['path'])
+        if not path.is_absolute():
+            path = manifest.parent / path
+        if not path.is_file() or file_identity(path) != {key: record[key] for key in ('sha256', 'size_bytes')}:
+            raise BundleError('Newton observation build manifest checksum/size changed')
+        build = load_json(path, 'Newton observation build manifest')
+        observation = build.get('newton_probe', {})
+        manifest = path
+    if observation.get('kind') != 'mixed_linear_residual_observation':
+        raise BundleError('newton_formulations requires a linear-observation test build; rerun with --build')
+    return {**settings, **build_settings(manifest)}
+
+
 def build_probe(repository, destination, environment, make_arguments, log_path):
     library = repository / 'lib'
     probe = destination.parent.parent / 'newton_probe' / destination.name

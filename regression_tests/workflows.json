@@ -452,23 +452,15 @@
       },
       "adaptive_stages": ["single_step"]
     },
-    "newton_absolute": {
+    "newton_incremental": {
       "extends": "baseline_warm",
-      "description": "Converge an unlimited fixed-mesh restart using absolute Newton and save the first complete update",
-      "reference": "baseline_reference",
-      "outputs": [],
+      "description": "Repeat the unlimited warm restart using incremental Newton",
+      "reference": "newton_incremental_reference",
+      "outputs": ["newton_incremental_reference"],
       "comparison": {
         "method": "fixed_hdf5",
-        "profile": "newton_formulations"
+        "profile": "feature_converged"
       },
-      "parameter_overrides": {
-        "residual_diagnostics_mode": "equations",
-        "saveNR": true
-      }
-    },
-    "newton_incremental": {
-      "extends": "newton_absolute",
-      "description": "Repeat the identical restart and controls using incremental Newton",
       "parameter_overrides": {
         "newton_formulation": "incremental"
       }

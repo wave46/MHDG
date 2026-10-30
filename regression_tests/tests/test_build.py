@@ -105,25 +105,44 @@ def test_failed_build_keeps_log_without_a_completed_manifest(setup, monkeypatch)
     assert len(list(root.rglob("bin/MHDG-*"))) == 1  # Earlier serial copy is only partial evidence.
 
 
-def test_observation_build_records_each_variant_separately(setup, monkeypatch):
+@pytest.mark.parametrize('observed', [True, {(config.DEFAULT_MODEL, 'mpi')}])
+def test_observation_build_records_each_variant_separately(setup, monkeypatch, observed):
     from regression_tests import newton_probe
     calls = []
     def observe(repository, destination, environment, arguments, log):
         calls.append((destination, arguments, log))
+        destination.write_bytes((repository / "lib" / destination.name).read_bytes() + b'\n# observer\n')
+        destination.chmod(0o755)
         return {"kind": "mixed_linear_residual_observation", "target": destination.name}
     monkeypatch.setattr(newton_probe, "build_probe", observe)
     result = build.build_solver(
         setup.settings, setup.repository,
         requirements={(config.DEFAULT_MODEL, "serial"), (config.DEFAULT_MODEL, "mpi")},
-        newton_probe=True,
+        newton_probe=observed,
     )
     manifest = json.loads(result.metadata_path.read_text())
-    variants = manifest["newton_probe"]["variants"]
-    assert set(variants) == set(result.executables)
-    assert len({log for _, _, log in calls}) == 2
+    observation_path = Path(manifest["newton_probe"]["manifest"]["path"])
+    observation = json.loads(observation_path.read_text())
+    variants = observation["newton_probe"]["variants"]
+    expected = set(result.executables) if observed is True else {config.build_key(*item) for item in observed}
+    assert set(variants) == expected
+    assert len({log for _, _, log in calls}) == len(expected)
     for destination, arguments, _ in calls:
         assert f'MHDG_BUILD_ID={manifest["build_id"]}' in arguments
         assert arguments[-1] == destination.name
+    normal_settings = config.build_settings(result.metadata_path)
+    before = dict(normal_settings)
+    observed_settings = newton_probe.observation_settings(normal_settings)
+    assert normal_settings == before
+    assert observed_settings["MHDG_BUILD_MANIFEST"] == str(observation_path)
+    assert observed_settings["MHDG_EXECUTABLES"] != normal_settings["MHDG_EXECUTABLES"]
+    for key, path in result.executables.items():
+        assert b'# observer' not in path.read_bytes()
+    for key in expected:
+        assert b'# observer' in Path(observed_settings["MHDG_EXECUTABLES"][key]).read_bytes()
+    observation_path.write_text(observation_path.read_text() + '\n')
+    with pytest.raises(BundleError, match='observation build manifest checksum/size changed'):
+        newton_probe.observation_settings(normal_settings)
 
 
 def test_check_builds_selected_model_and_runs_from_manifest(setup, tmp_path, monkeypatch):

@@ -191,12 +191,12 @@ def _dispatch(args: argparse.Namespace) -> int:
         from .build import build_solver
         from .config import settings
 
-        from .catalog import load_selection, load_layouts, selection_builds
+        from .catalog import load_selection, load_layouts, selection_builds, newton_probe_builds
         catalog = {}
         _, checks = load_selection(args.suite, ROOT / "suites.json", ROOT / "layouts.json", ROOT / "cases", case_id=args.case, catalog=catalog)
         requirements = selection_builds(checks, ROOT / "cases", load_layouts(ROOT / "layouts.json", catalog=catalog), catalog=catalog)
         result = build_solver(settings(args.settings, use_build=False), ROOT.parent, args.jobs, requirements=requirements,
-                              newton_probe=any(item.get("newton_formulation_comparison") for item in checks))
+                              newton_probe=newton_probe_builds(checks, ROOT / "cases", load_layouts(ROOT / "layouts.json", catalog=catalog), catalog=catalog))
         reporting.status("build", "completed", result.path)
         print(f"select with --build-manifest {result.metadata_path}")
         return 0
@@ -259,7 +259,7 @@ def _check(args: argparse.Namespace) -> int:
     from .build import build_solver
     from .suites import run_suite, run_profile
     from .bundles import preflight_bundles
-    from .catalog import load_selection, selection_builds
+    from .catalog import load_selection, selection_builds, newton_probe_builds
     from .config import build_settings, runtime_settings
     from .catalog import load_layouts
     from .support import BundleError
@@ -284,7 +284,7 @@ def _check(args: argparse.Namespace) -> int:
     if args.build:
         requirements = selection_builds(checks, ROOT / "cases", layouts, catalog=catalog)
         build = build_solver(values[cases[0]], ROOT.parent, args.build_jobs, requirements=requirements,
-                             newton_probe=any(item.get("newton_formulation_comparison") for item in checks))
+                             newton_probe=newton_probe_builds(checks, ROOT / "cases", layouts, catalog=catalog))
         selected_build = build_settings(build.metadata_path)
         for settings in values.values():
             settings.update(selected_build)

@@ -18,7 +18,7 @@
       "description": "Both topologies, full bootstraps, feature convergence and focused parallel checks",
       "checks": [
         {"suite": "bootstrap"}, {"suite": "bootstrap_limited"},
-        {"suite": "warm"}, {"suite": "heat_flux_limiter"}, {"suite": "warm", "case": "legacy_case"},
+        {"suite": "newton_formulations"}, {"suite": "heat_flux_limiter"}, {"suite": "warm", "case": "legacy_case"},
         {"suite": "transport"}, {"suite": "transport", "case": "legacy_case"},
         {"suite": "transport_hybrid"}, {"suite": "transport_parallel", "case": "legacy_case"},
         {"suite": "adaptive_parallel"}, {"suite": "neutrals"}, {"suite": "neutral_wall"}, {"suite": "neutral_parallel"},
@@ -184,15 +184,17 @@
     },
     "newton_formulations": {
       "description": "Compare complete Newton updates, linear residuals and converged fields for both formulations",
+      "case": "diverted_case",
       "workflows": [
-        "newton_absolute",
+        "baseline_warm",
         "newton_incremental"
       ],
       "workflow_comparison": [
-        "newton_absolute",
+        "baseline_warm",
         "newton_incremental"
       ],
-      "reference_comparisons": false,
+      "reference_comparisons": true,
+      "tolerance_profile": "newton_formulations",
       "newton_formulation_comparison": true,
       "layouts": [
         "mpi4_omp4"

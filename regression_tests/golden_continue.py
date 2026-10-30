@@ -7,7 +7,7 @@ import shutil
 from . import config, golden
 from .build import build_solver
 from .bundles import artifact_path, load_manifest, preflight_bundles, validate_bundle_root
-from .catalog import required_case_roles
+from .catalog import required_case_roles, newton_probe_builds, load_layouts
 from .documents import load_json, write_json_atomic
 from .files import file_identity
 from .support import BundleError, HarnessError, utc_now, utc_run_id
@@ -100,7 +100,8 @@ def continue_refresh(workspace, settings, rerun_workflows, jobs=None, *, catalog
     path = workspace / "refresh.json"
     write_json_atomic(path, report, "refresh report")
     try:
-        build = build_solver(settings, root.parent, jobs, requirements=requirements)
+        build = build_solver(settings, root.parent, jobs, requirements=requirements,
+                             newton_probe=newton_probe_builds(checks, root / "cases", load_layouts(root / "layouts.json", catalog=catalog), catalog=catalog))
         shutil.copy2(build.metadata_path, directory / "build.json")
         continuation["build"] = golden._record(directory / "build.json", workspace)
         values = {**settings, **config.build_settings(build.metadata_path),

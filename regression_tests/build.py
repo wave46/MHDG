@@ -33,6 +33,9 @@ def build_solver(
     selected = sorted(set(requirements), key=lambda item: (item[0], item[1] != "serial"))
     if not selected:
         raise BundleError("no solver builds required")
+    observed = set(selected) if newton_probe is True else set(newton_probe or ())
+    if observed - set(selected):
+        raise BundleError("Newton observation variants must belong to the selected build")
     for model, execution in selected:
         build_key(model, execution)
     try:
@@ -78,6 +81,7 @@ def build_solver(
     started = utc_now()
     commands = []
     executables = {}
+    observed_executables = {}
     probe_records = {}
     # Existing objects/generated sources may come from a manual build with other
     # flags. An empty tree needs no clean; every serial/MPI transition does.
@@ -102,12 +106,15 @@ def build_solver(
             raise BundleError(f"built {variant} executable was not produced: {source}")
         destination = directory / "bin" / target
         shutil.copy2(source, destination)
-        if newton_probe:
+        if (model, execution) in observed:
             from .newton_probe import build_probe
+            observed_destination = directory / "newton" / "bin" / target
+            observed_destination.parent.mkdir(parents=True, exist_ok=True)
             probe_records[variant] = build_probe(
-                repository_root, destination, environment, compile_command[2:],
+                repository_root, observed_destination, environment, compile_command[2:],
                 directory / "logs" / f"{model}-{execution}-newton_probe.log",
             )
+            observed_executables[variant] = observed_destination
         executables[variant] = destination
         clean_needed = True
 
@@ -137,10 +144,18 @@ def build_solver(
         "artifacts": {name: _file_record(path) for name, path in executables.items()},
         "runtime_files": {RUNTIME_FILE: _file_record(runtime_copy)},
     }
-    if newton_probe:
-        metadata["newton_probe"] = {
-            "kind": "mixed_linear_residual_observation", "variants": probe_records,
+    if observed:
+        observed_runtime = directory / "newton" / "bin" / RUNTIME_FILE
+        shutil.copy2(runtime, observed_runtime)
+        observed_manifest = directory / "newton" / "build_metadata.json"
+        observation = {
+            **metadata,
+            "artifacts": {name: _file_record(path) for name, path in observed_executables.items()},
+            "runtime_files": {RUNTIME_FILE: _file_record(observed_runtime)},
+            "newton_probe": {"kind": "mixed_linear_residual_observation", "variants": probe_records},
         }
+        write_json_atomic(observed_manifest, observation, "Newton observation build metadata")
+        metadata["newton_probe"] = {"manifest": _file_record(observed_manifest)}
     write_json_atomic(metadata_path, metadata, "build metadata")
     return BuildResult(directory, metadata_path, executables)
 

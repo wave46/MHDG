@@ -126,11 +126,16 @@ unlimited fixed-mesh restart as `baseline_warm`, using its physics, damping and
 stopping controls. Both runs enable residual reporting and first-update snapshots;
 only the Newton formulation differs between them. One-iteration reconvergence
 is accepted. Run it with `check newton_formulations --build`.
+Diverted golden refresh produces `newton_incremental_reference` alongside the
+ordinary absolute baseline. Each repeat is compared with its own golden; the
+cross-formulation comparison uses the separate `newton_formulations` tolerances.
+The diverted full and refresh selections use this pair in place of the standalone
+warm check, so the absolute warm solve runs once per validation.
 The regression build observes the assembled mixed equations before damping
-through a private instrumented copy of the driver; production sources remain
-untouched. Its manifest records the observation source and executable hashes.
-The observer reuses the normal Makefile, configured compiler and libraries
-in a private copy of each variant's completed build directory.
+through a private instrumented copy of the driver. Its own manifest records the
+observation source and executable hashes. The observer reuses the normal Makefile,
+configured compiler and libraries for the required variants. Ordinary producers
+and other checks use the production executable from the main build manifest.
 The check compares the first complete U/Q/trace changes and final fields,
 verifies the saved formulation, and records both nonlinear residual histories.
 It requires the first linear trial to reduce the mixed mismatch by the factor

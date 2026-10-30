@@ -8,7 +8,7 @@ import shutil
 import tempfile
 import h5py
 
-from .catalog import load_case_definition, workflow_required_roles, load_suite_definition, load_layouts, required_builds, required_case_roles
+from .catalog import load_case_definition, workflow_required_roles, load_suite_definition, load_layouts, required_builds, required_case_roles, newton_probe_builds
 from .documents import load_json, write_json_atomic
 from .support import BundleError, HarnessError, utc_now, utc_run_id
 from .files import file_identity
@@ -108,7 +108,8 @@ def refresh(case_id, settings, workspace, jobs=None, *, catalog_root=None):
     path = workspace / "refresh.json"
     write_json_atomic(path, report, "refresh report")
     try:
-        build = build_solver(settings, ROOT.parent, jobs, requirements=requirements)
+        build = build_solver(settings, ROOT.parent, jobs, requirements=requirements,
+                             newton_probe=newton_probe_builds(checks, root / "cases", load_layouts(root / "layouts.json", catalog=catalog), catalog=catalog))
         values = {**settings, **config.build_settings(build.metadata_path),
                   "MHDG_REGRESSION_RUN_ROOT": str(workspace / "runs")}
         config.runtime_settings(values, requirements)

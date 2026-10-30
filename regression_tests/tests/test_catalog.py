@@ -25,7 +25,6 @@ def test_production_workflows_inherit_solver_defaults(case_id):
         if name == "heat_flux_limiter":
             expected["flux_limiter"] = True
         if name.startswith("newton_"):
-            expected["residual_diagnostics_mode"] = "equations"
             expected["newton_formulation"] = name.removeprefix("newton_")
         overrides = workflow["parameter_overrides"]
         assert {key: overrides[key] for key in expected} == expected, name
@@ -33,19 +32,36 @@ def test_production_workflows_inherit_solver_defaults(case_id):
                    for stage in workflow.get("stages", [])), name
 
 
-@pytest.mark.parametrize("case_id", ["legacy_case", "diverted_case"])
-def test_newton_pair_uses_same_unlimited_restart_and_controls(case_id):
-    workflows = load_case_definition(case_id, REGRESSION_ROOT / "cases")["workflows"]
-    absolute, incremental = (workflows[name] for name in ("newton_absolute", "newton_incremental"))
-    assert absolute["restart"] == incremental["restart"] == workflows["baseline_warm"]["restart"]
+def test_newton_pair_uses_same_unlimited_restart_and_controls():
+    workflows = load_case_definition("diverted_case", REGRESSION_ROOT / "cases")["workflows"]
+    absolute, incremental = (workflows[name] for name in ("baseline_warm", "newton_incremental"))
+    assert absolute["restart"] == incremental["restart"]
     controls = [dict(workflow["parameter_overrides"]) for workflow in (absolute, incremental)]
     assert controls[0].pop("newton_formulation") == "absolute"
     assert controls[1].pop("newton_formulation") == "incremental"
     assert controls[0] == controls[1]
     assert controls[0]["flux_limiter"] is False
-    warm_controls = dict(workflows["baseline_warm"]["parameter_overrides"])
-    warm_controls.pop("newton_formulation")
-    assert controls[0] == {**warm_controls, "residual_diagnostics_mode": "equations", "saveNR": True}
+    assert absolute["reference"] == "baseline_reference"
+    assert incremental["outputs"] == [incremental["reference"]] == ["newton_incremental_reference"]
+
+
+def test_diverted_full_and_refresh_share_the_absolute_warm_check():
+    from regression_tests.catalog import load_selection, newton_probe_builds, load_layouts
+
+    _, checks = load_selection("full", REGRESSION_ROOT / "suites.json", REGRESSION_ROOT / "layouts.json",
+                               REGRESSION_ROOT / "cases")
+    diverted = [check for check in checks if check["case_id"] == "diverted_case"]
+    assert not any(check["suite_id"] == "warm" for check in diverted)
+    pair = next(check for check in diverted if check["suite_id"] == "newton_formulations")
+    assert pair["workflow_ids"] == ["baseline_warm", "newton_incremental"]
+    assert pair["reference_comparisons"] is True
+    assert pair["tolerance_profile"] == "newton_formulations"
+    assert newton_probe_builds(checks, REGRESSION_ROOT / "cases", load_layouts(REGRESSION_ROOT / "layouts.json")) == {
+        ("NGammaTiTeNeutral", "mpi")}
+    recipe = json.loads((REGRESSION_ROOT / "golden.json").read_text())["cases"]["diverted_case"]
+    assert recipe["producers"].count("baseline_warm") == 1
+    assert recipe["producers"].count("newton_incremental") == 1
+    assert "newton_formulations" in recipe["checks"] and "warm" not in recipe["checks"]
 
 
 @pytest.fixture

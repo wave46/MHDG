@@ -9,6 +9,7 @@
     "optional": {
       "bootstrap_reference": "reference_bootstrap.h5",
       "baseline_reference": "reference_baseline.h5",
+      "newton_incremental_reference": "reference_newton_incremental.h5",
       "heat_flux_limiter_reference": "reference_heat_flux_limiter.h5",
       "transport_reference": "reference_transport.h5",
       "transport_short_reference": "reference_transport_short.h5",
@@ -68,7 +69,6 @@
     "adaptive_source_short": {
       "parameter_overrides": {"tol_est": 0.02}
     },
-    "newton_absolute": {},
     "newton_incremental": {}
   }
 }

@@ -170,13 +170,14 @@
         "relations": [
           "tolerance_profile"
         ],
-        "tolerance_profile": [
-          "relations"
-        ],
         "layout_comparison_policy": [
           "relations"
         ]
-      }
+      },
+      "allOf": [{
+        "if": {"required": ["tolerance_profile"]},
+        "then": {"anyOf": [{"required": ["relations"]}, {"required": ["workflow_comparison"]}]}
+      }]
     }
   }
 }

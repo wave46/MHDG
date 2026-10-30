@@ -7,7 +7,7 @@ from pathlib import Path
 import time
 from typing import Any
 
-from .catalog import load_case_definition, load_suite_definition, load_layouts, required_builds, selection_builds
+from .catalog import load_case_definition, load_suite_definition, load_layouts, required_builds, selection_builds, newton_probe_builds
 from .config import (bundle_root_from_settings, absolute_setting, solver_executable,
                      runtime_files, selected_mpi_launcher, runtime_settings, build_key)
 from .bundles import preflight_bundles
@@ -143,7 +143,7 @@ def _compare_pair(
             tolerances_path,
             catalog=catalog,
             reference_override=reference,
-            tolerance_profile_override=summary.get("tolerance_profile") if same_workflow else None,
+            tolerance_profile_override=summary.get("tolerance_profile"),
             comparison_policy_override=summary.get("layout_comparison_policy") if same_workflow else None,
             report_override=candidate / f"comparison_from_{baseline_workflow}_{baseline_layout}.json",
         )
@@ -154,7 +154,7 @@ def _compare_pair(
         if summary.get("newton_formulation_comparison"):
             from .newton import compare_newton_runs
             case = load_case_definition(summary["case_id"], case_directory, catalog=catalog)
-            profile = case["workflows"][workflow_id]["comparison"]["profile"]
+            profile = summary.get("tolerance_profile") or case["workflows"][workflow_id]["comparison"]["profile"]
             newton = compare_newton_runs(baseline, candidate, tolerances_path, profile, catalog=catalog)
             result["newton"] = newton
             result["failures"].extend(newton["failures"])
@@ -403,16 +403,16 @@ def run_suite(
     catalog = {} if catalog is None else catalog
     suite = suite or load_suite_definition(suite_id, suites_path, layouts_path, case_directory, case_id=case_id, catalog=catalog)
     if suite.get("newton_formulation_comparison"):
-        build = load_json(absolute_setting(settings, "MHDG_BUILD_MANIFEST"), "build manifest")
-        if build.get("newton_probe", {}).get("kind") != "mixed_linear_residual_observation":
-            raise BundleError("newton_formulations requires a linear-observation test build; rerun with --build")
+        from .newton_probe import observation_settings
+        settings = observation_settings(settings)
     bundle_root = bundle_root_from_settings(settings)
     run_id = run_id or utc_run_id()
     if not IDENTIFIER_RE.fullmatch(run_id):
         raise BundleError(f"invalid suite run identifier: {run_id}")
     pairs = suite.get("layout_comparisons") or suite.get("workflow_comparison")
     references = suite["reference_comparisons"]
-    overrides = {"balance_diagnostics_mode": suite["diagnostics"], **(parameter_overrides or {})}
+    observations = {"residual_diagnostics_mode": "equations", "saveNR": True} if suite.get("newton_formulation_comparison") else {}
+    overrides = {"balance_diagnostics_mode": suite["diagnostics"], **observations, **(parameter_overrides or {})}
     case = load_case_definition(suite["case_id"], case_directory, catalog=catalog)
     layouts = load_layouts(layouts_path, catalog=catalog)
     requirements = required_builds(case, suite["workflow_ids"], [layouts[name] for name in suite["layouts"]])
@@ -572,6 +572,14 @@ def run_profile(name, checks, settings_by_case, catalog_root, run_id=None, *, re
         for case_id, values in settings_by_case.items():
             selected = [check for check in checks if check["case_id"] == case_id]
             runtime_settings(values, selection_builds(selected, catalog_root / "cases", layouts, catalog=catalog))
+    # Check the private observer before starting any expensive profile workflow.
+    from .newton_probe import observation_settings
+    layouts = load_layouts(catalog_root / "layouts.json", catalog=catalog)
+    for case_id, values in settings_by_case.items():
+        observed = newton_probe_builds([check for check in checks if check["case_id"] == case_id],
+                                      catalog_root / "cases", layouts, catalog=catalog)
+        if observed:
+            runtime_settings(observation_settings(values), observed)
     summary = {"profile": name, "run_id": run_id, "status": "running", "results": []}
     if resume:
         previous = load_json(path, "profile summary")

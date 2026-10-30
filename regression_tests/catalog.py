@@ -458,9 +458,10 @@ def load_suite_definition(
     }
     if pairs:
         suite["layout_comparisons"] = pairs
-        suite["tolerance_profile"] = declaration["tolerance_profile"]
         if "layout_comparison_policy" in declaration:
             suite["layout_comparison_policy"] = declaration["layout_comparison_policy"]
+    if "tolerance_profile" in declaration:
+        suite["tolerance_profile"] = declaration["tolerance_profile"]
 
     case = load_case_definition(suite["case_id"], case_directory, catalog=catalog)
     unknown_workflows = [
@@ -538,3 +539,9 @@ def selection_builds(checks, case_directory, layouts, *, catalog=None):
     return set().union(*(required_builds(load_case_definition(check["case_id"], case_directory, catalog=catalog),
                                         check["workflow_ids"], [layouts[name] for name in check["layouts"]])
                          for check in checks))
+
+
+def newton_probe_builds(checks, case_directory, layouts, *, catalog=None):
+    """Observe only the variants used by a Newton-formulation check."""
+    return selection_builds([check for check in checks if check.get("newton_formulation_comparison")],
+                            case_directory, layouts, catalog=catalog)
