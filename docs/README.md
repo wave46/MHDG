@@ -38,6 +38,9 @@ and limited to the guides listed below.
 
 ## Numerical utilities
 
+- [Mesh adaptivity](numerics/adaptivity.md): optional element-count limit and
+  its interaction with Newton recovery and accepted timesteps.
+
 - [Newton formulation](numerics/newton-formulation.md): equivalent absolute and
   incremental solves, local elimination and boundary handling.
 - [HDG residuals and Newton convergence](numerics/hdg-residuals.md): residual

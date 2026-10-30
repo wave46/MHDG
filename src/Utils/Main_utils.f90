@@ -29,7 +29,7 @@ MODULE Main_utils
        schedule_half_step, remove_reached_target, ensure_time_history_capacity
   USE time_stepping, ONLY: update_timestep_growth, reset_timestep_growth
   USE newton_predictor_module, ONLY: newton_predictor_t
-  USE adaptivity_common_module, ONLY: set_order_mesh
+  USE adaptivity_common_module, ONLY: set_order_mesh, load_new_mesh_gmsh
   USE adaptivity_projection_module, ONLY: mesh_transfer_t
   USE external_heating
 #ifdef WITH_PETSC
@@ -655,7 +655,8 @@ CONTAINS
              result%status = solver_status_t(solve_retry,0,'Predicted Newton solve requires divergence recovery')
              RETURN
           ENDIF
-          IF (recover_newton_divergence(accepted)) CYCLE
+          IF (recover_newton_divergence(accepted,result%status)) CYCLE
+          IF (result%status%outcome /= solve_success) RETURN
           IF (ir >= numer%nrp .AND. errNR <= numer%div) EXIT
           result%status = solver_status_t(solve_retry, 0, 'Newton divergence or admissibility recovery exhausted')
           RETURN
@@ -679,7 +680,7 @@ CONTAINS
   END SUBROUTINE solve_nonlinear_system
 
   LOGICAL FUNCTION recover_newton_domain_failure(status,predicted,accepted) RESULT(recovered)
-    TYPE(solver_status_t), INTENT(IN) :: status
+    TYPE(solver_status_t), INTENT(INOUT) :: status
     LOGICAL, INTENT(IN) :: predicted
     TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
 
@@ -690,7 +691,7 @@ CONTAINS
     ! the previous accepted solution before attempting mesh refinement.
     IF (predicted) RETURN
     IF (MPIvar%glob_id == 0) WRITE(6,*) 'Newton source-domain rejection: ',TRIM(status%message)
-    recovered = recover_newton_divergence(accepted)
+    recovered = recover_newton_divergence(accepted,status)
   END FUNCTION recover_newton_domain_failure
 
   SUBROUTINE assemble_newton_system(status,residual)
@@ -774,7 +775,8 @@ CONTAINS
     IF (numer%dumpnr /= 1.d0) CALL exchangeSol()
 #endif
     IF (adapt%adaptivity .AND. restart_adapt) THEN
-       CALL adaptivity(accepted=accepted)
+       CALL adaptivity(accepted=accepted,status=status)
+       IF (status%outcome /= solve_success) RETURN
        DEALLOCATE(uiter)
        ALLOCATE(uiter(SIZE(sol%u)))
        uiter = 0.
@@ -890,8 +892,10 @@ CONTAINS
     CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
   END SUBROUTINE save_converged_newton_solution
 
-  LOGICAL FUNCTION recover_newton_divergence(accepted) RESULT(recovered)
+  LOGICAL FUNCTION recover_newton_divergence(accepted,status) RESULT(recovered)
     TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
+    TYPE(solver_status_t), INTENT(INOUT) :: status
+    TYPE(solver_status_t) :: adaptation_status
     IF (.NOT. physical_iterate_valid .AND. MPIvar%glob_id .EQ. 0) THEN
        IF (errNR .LT. numer%tNR) THEN
           WRITE(*,*) 'NR residual converged, but solution is physically inadmissible; requesting refinement.'
@@ -912,7 +916,12 @@ CONTAINS
        ENDIF
        ! Reload this attempt's equilibrium, without advancing the
        ! physical timestep or updating the puff/feedback controller.
-       CALL adaptivity(preserve_history=.TRUE.,accepted=accepted)
+       CALL adaptivity(preserve_history=.TRUE.,accepted=accepted,status=adaptation_status)
+       IF (adaptation_status%outcome /= solve_success) THEN
+          status = adaptation_status
+          recovered = .FALSE.
+          RETURN
+       ENDIF
        CALL update_uconv_qconv(sol%u, sol%q)
        CALL update_newton_reference()
        ir_check = 0
@@ -976,7 +985,8 @@ CONTAINS
                oscillation_refinements, ' of ', adapt%max_oscillation_refinements
        ENDIF
 
-       CALL adaptivity(preserve_history=adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol,accepted=accepted)
+       CALL adaptivity(preserve_history=adapt%osc_adapt .AND. max_osc .GT. adapt%osc_tol,accepted=accepted,status=status)
+       IF (status%outcome /= solve_success) RETURN
 
        IF((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)) THEN
           ! Update check-point solution to the one projected on the new mesh
@@ -1238,7 +1248,7 @@ CONTAINS
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
   END SUBROUTINE update_reduced_transport_profiles
 
-  SUBROUTINE adaptivity(preserve_history, accepted)
+  SUBROUTINE adaptivity(preserve_history, accepted, status)
 #ifdef WITH_PASTIX
     USE solve_pastix, only: terminate_mat_PASTIX
 #endif
@@ -1250,9 +1260,12 @@ CONTAINS
 #endif
     TYPE(accepted_step_state_t), OPTIONAL, INTENT(INOUT) :: accepted
     LOGICAL, OPTIONAL, INTENT(IN) :: preserve_history
+    TYPE(solver_status_t), OPTIONAL, INTENT(OUT) :: status
+    TYPE(solver_status_t) :: adaptation_status
     TYPE(mesh_transfer_t) :: transfer
     INTEGER :: field_frame
 
+    IF (PRESENT(status)) status = solver_status_t()
     IF (PRESENT(accepted)) CALL accepted%capture_mesh()
     CALL reset_timestep_growth()
     CALL predictor_history%clear()
@@ -1285,8 +1298,38 @@ CONTAINS
     Mesh_prec%X = Mesh_prec%X*phys%lscale
 
     ! Free elmat, mat, magnetic field, Jtor, puff (to save some memory for the adaptivity)
-    CALL free_before_adaptivity()
-    CALL adaptively_refine_mesh(mesh_name,count_adapt,order)
+    ! Unlimited runs retain the existing memory-release order. With a cap,
+    ! retain derived state until the candidate can be accepted or rejected.
+    IF (adapt%max_elements == 0) CALL free_before_adaptivity()
+    CALL adaptively_refine_mesh(mesh_name,count_adapt,order,adaptation_status)
+    IF (adaptation_status%outcome /= solve_success) THEN
+       Mesh%X = Mesh%X/phys%lscale
+       Mesh_prec%X = Mesh_prec%X/phys%lscale
+       count_adapt = count_adapt-1
+       IF (restart_adapt .AND. time%legacy_input) THEN
+          time%t = time%t-time%dt
+          time%it = time%it-1
+          time%ik = time%ik-1
+          sol%Nt = sol%Nt-1
+       ENDIF
+       IF (utils%timing) THEN
+          CALL cpu_TIME(timing%tpe1)
+          CALL system_CLOCK(timing%cke1, timing%clock_rate1)
+          timing%runtadapt = timing%runtadapt + (timing%cke1-timing%cks1)/REAL(timing%clock_rate1)
+          timing%cputadapt = timing%cputadapt + timing%tpe1-timing%tps1
+       ENDIF
+       IF (MPIvar%glob_id == 0) WRITE(*,*) TRIM(adaptation_status%message), &
+            '; timestep=', time%it, ' Newton iteration=', ir
+       IF (PRESENT(status)) THEN
+          status = adaptation_status
+       ELSE
+          ! Between-step callers have already committed their output/history.
+          CALL stop_on_solver_failure(adaptation_status,'Periodic mesh adaptation')
+       ENDIF
+       RETURN
+    ENDIF
+    IF (adapt%max_elements > 0) CALL free_before_adaptivity()
+    CALL load_new_mesh_gmsh(order)
 
 
 #ifdef PARALL

@@ -13,6 +13,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper check-transport-pinch check-neutral-flux-limiter check-neutral-wall-flux check-neutral-wall-input check-neutral-wall-diagnostics check-me-restart
 .PHONY : check-adaptivity-estimator
 .PHONY : check-adaptive-checkpoint
+.PHONY : check-adaptive-element-limit
 .PHONY : check-divergence-refinement
 .PHONY : check-equilibrium-series
 .PHONY : check-linear-solve-status
@@ -67,6 +68,7 @@ clean:
 	$(RM) me_restart_check
 	$(RM) adaptivity_estimator_check
 	$(RM) adaptive_checkpoint_check
+	$(RM) adaptive_element_limit_check
 	$(RM) divergence_refinement_check
 	$(RM) bdf_coefficients_check linear_solve_status_check
 	$(RM) newton_damping_check hdg_residual_check
@@ -218,6 +220,10 @@ check-adaptive-checkpoint : MHDG
 check-divergence-refinement : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_divergence_refinement.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o divergence_refinement_check $(LIB)
 	python3 ../unit_tests/check_divergence_refinement.py ./divergence_refinement_check $(MODE)
+
+check-adaptive-element-limit : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_adaptive_element_limit.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o adaptive_element_limit_check $(LIB)
+	python3 ../unit_tests/check_adaptive_element_limit.py ./adaptive_element_limit_check $(MODE)
 
 check-linear-solve-status : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_linear_solve_status.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o linear_solve_status_check $(LIB)
@@ -693,7 +699,7 @@ gmsh.o : gmsh.F
 adaptivity_common.F : $(SDIR)/Adaptivity/adaptivity_common.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-adaptivity_common.o : adaptivity_common.F physics.o mod_splines.o globals.o gmsh.o reference_element.o LinearAlgebra.o gmsh_io.o inout.o
+adaptivity_common.o : adaptivity_common.F solver_status.o physics.o mod_splines.o globals.o gmsh.o reference_element.o LinearAlgebra.o gmsh_io.o inout.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 element_mapping.F : $(SDIR)/Adaptivity/element_mapping.f90
@@ -723,7 +729,7 @@ adaptivity_estimator.o : adaptivity_estimator.F globals.o gmsh.o adaptivity_comm
 adaptivity_general.F : $(SDIR)/Adaptivity/adaptivity_general.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-adaptivity_general.o : adaptivity_general.F MPI_OMP.o Communications.o globals.o adaptivity_common.o adaptivity_indicator.o adaptivity_estimator.o
+adaptivity_general.o : adaptivity_general.F solver_status.o MPI_OMP.o Communications.o globals.o adaptivity_common.o adaptivity_indicator.o adaptivity_estimator.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 Main_utils.F : $(SDIR)/Utils/Main_utils.f90

@@ -34,7 +34,10 @@ def main():
             r"(?im)^\s*max_(?:divergence|oscillation)_refinements\s*=.*\n", "", template
         )
         template = re.sub(r"(?im)^\s*check_neutral_positivity\s*=.*\n", "", template)
+        template = re.sub(r"(?im)^\s*max_elements\s*=.*\n", "", template)
         cases = [({}, None)]
+        cases.extend([({"max_elements": limit}, "max_elements" if limit < 0 else None)
+                      for limit in [0, 1, 100000, -1]])
         for key, limits in [("divergence", [0, 1, 4, -1]), ("oscillation", [0, 1, 10, -1])]:
             for limit in limits:
                 parameter = f"max_{key}_refinements"
@@ -62,9 +65,11 @@ def main():
                 expected_div = overrides.get("max_divergence_refinements", 4)
                 expected_osc = overrides.get("max_oscillation_refinements", 10)
                 expected_neutral = "F" if overrides.get("check_neutral_positivity") == ".false." else "T"
+                expected_elements = overrides.get("max_elements", 0)
                 passed = (run.returncode == 0
                           and f"DIV_REFINEMENT_LIMIT {expected_div}\n" in output
                           and f"OSC_REFINEMENT_LIMIT {expected_osc}\n" in output
+                          and f"ADAPTIVE_ELEMENT_LIMIT {expected_elements}\n" in output
                           and f"CHECK_NEUTRAL_POSITIVITY {expected_neutral}\n" in output)
             if not passed:
                 raise SystemExit(f"FAIL: refinement input overrides={overrides}\n{output}")

@@ -131,6 +131,9 @@ reaching that frame, the next supplied frame is targeted in full. Adaptive
 mode instead retains the successful reduced interval as its next proposal.
 Fixed mode does not permit timestep adaptation.
 
+The optional [adaptive mesh element cap](../numerics/adaptivity.md#element-count-limit)
+uses this recovery path when exceeded during Newton.
+
 ## Timestep growth
 
 An accepted step qualifies as easy when both its Newton iteration count and

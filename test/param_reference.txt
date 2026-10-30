@@ -117,6 +117,7 @@
 /
 
 &ADAPT_LST
+    max_elements = 0                    ! Global adaptive triangle cap; 0 = unlimited
     adaptivity		= .true.	! Enable or disable adaptivity [0,1]
     shockcp_adapt       = 2             ! Shock capturing option for adaptivity (2)
                                         ! 0 - No shock capturing

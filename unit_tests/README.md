@@ -316,6 +316,15 @@ It uses generated meshes and the existing reference-node file, with no plasma
 solve or external case data. Pass the same `MODE`, model and build options as
 the current solver cache; no clean is needed when those options are unchanged.
 
+`make check-adaptive-element-limit` generates small Gmsh meshes on a generic
+square. It checks unlimited, exact-cap and oversized candidates, high-order
+triangle counts, rejected-file preservation, retained mesh coordinates/fields,
+Newton recovery status propagation and the existing periodic-stop policy.
+Parallel builds run with one and two ranks, including ghost triangles.
+`check-divergence-refinement` covers omitted/default, zero, positive and invalid
+negative `max_elements` inputs. Time halving and its lower bound remain covered
+by `check-me-restart`.
+
 
 `make check-linear-solve-status` checks collective failure propagation, PETSc KSP
 reason classification without requiring PETSc, and (with PaStiX enabled) real

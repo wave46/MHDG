@@ -12,6 +12,7 @@ MODULE adaptivity_common_module
   USE reference_element, ONLY: create_reference_element, free_reference_element_pol
   USE gmsh, ONLY: gmsh_t
   USE GMSH_io_module, ONLY: load_gmsh_mesh
+  USE solver_status, ONLY: solver_status_t, solve_retry
   IMPLICIT NONE
   PRIVATE
 
@@ -517,9 +518,13 @@ CONTAINS
   ENDSUBROUTINE unique_stable
 
 
-  SUBROUTINE gmsh_create_from_h_target(h_target_on_elements,vertices_coordinates, connectivity, p_order)
+  SUBROUTINE gmsh_create_from_h_target(h_target_on_elements,vertices_coordinates, connectivity, p_order, status)
       TYPE(gmsh_t) :: gmsh_l
       INTEGER, INTENT(IN) :: p_order
+      TYPE(solver_status_t), INTENT(OUT) :: status
+      INTEGER(c_size_t), ALLOCATABLE :: triangle_tags(:), triangle_nodes(:)
+      INTEGER(c_int), ALLOCATABLE :: surface_types(:)
+      INTEGER :: candidate_elements, element_type_index
       REAL*8, DIMENSION(:), INTENT(IN) :: h_target_on_elements ! on the elements
       REAL*8, DIMENSION(:,:), INTENT(IN) :: vertices_coordinates ! coordinates of the vertices
       INTEGER, DIMENSION(:,:), INTENT(IN) :: connectivity ! connectivity of the triangles
@@ -532,6 +537,7 @@ CONTAINS
       REAL*8, PARAMETER   :: view_coordinate_quantum = 1.d-11
       number_of_vertices_per_triangle = 3 
       number_of_triangles = SIZE(connectivity,1)
+      status = solver_status_t()
 
       ! initalize gmsh
       CALL gmsh_l%initialize()
@@ -596,6 +602,28 @@ CONTAINS
 
       ! Generate the refined mesh
       call gmsh_l%model%mesh%generate(2)
+      IF (adapt%max_elements .GT. 0) THEN
+         ! Gmsh can retain an element-order option across remeshes. Count all
+         ! 2D types, including high-order triangles, but never boundary tags.
+         candidate_elements = 0
+         CALL gmsh_l%model%mesh%getElementTypes(surface_types, dim=2)
+         DO element_type_index = 1,SIZE(surface_types)
+            CALL gmsh_l%model%mesh%getElementsByType(surface_types(element_type_index), triangle_tags, triangle_nodes)
+            candidate_elements = candidate_elements+SIZE(triangle_tags)
+            DEALLOCATE(triangle_tags, triangle_nodes)
+         ENDDO
+         DEALLOCATE(surface_types)
+         IF (candidate_elements .GT. adapt%max_elements) THEN
+            status%outcome = solve_retry
+            WRITE(status%message,'(A,I0,A,I0)') 'Adaptive mesh exceeds max_elements: candidate=', &
+                 candidate_elements, ', limit=', adapt%max_elements
+         ENDIF
+         IF (status%outcome == solve_retry) THEN
+            CALL gmsh_l%finalize()
+            DEALLOCATE(data_for_gmsh, h_target_on_nodes)
+            RETURN
+         ENDIF
+      ENDIF
       call gmsh_l%model%mesh%setOrder(p_order)
       call gmsh_l%model%mesh%optimize('HighOrder')
       CALL gmsh_l%option%setNumber("Mesh.MshFileVersion", 2.2)

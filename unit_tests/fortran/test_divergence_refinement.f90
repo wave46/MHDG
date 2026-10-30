@@ -39,12 +39,14 @@ PROGRAM test_divergence_refinement
     CALL read_input()
     WRITE(*,'(A,1X,I0)') 'DIV_REFINEMENT_LIMIT',adapt%max_divergence_refinements
     WRITE(*,'(A,1X,I0)') 'OSC_REFINEMENT_LIMIT',adapt%max_oscillation_refinements
+    WRITE(*,'(A,1X,I0)') 'ADAPTIVE_ELEMENT_LIMIT',adapt%max_elements
     WRITE(*,'(A,1X,L1)') 'CHECK_NEUTRAL_POSITIVITY',adapt%check_neutral_positivity
     CALL MPI_FINALIZE(ierr_test)
     STOP
   ENDIF
   IF (adapt%max_divergence_refinements /= 4) ERROR STOP 'default divergence refinement limit'
   IF (adapt%max_oscillation_refinements /= 10) ERROR STOP 'default oscillation refinement limit'
+  IF (adapt%max_elements /= 0) ERROR STOP 'adaptive element limit must default to unlimited'
   IF (.NOT. adapt%check_neutral_positivity) ERROR STOP 'default neutral positivity policy'
   utils%printint = 0
   phys%neq = 2

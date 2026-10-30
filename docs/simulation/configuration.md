@@ -37,7 +37,7 @@ The main blocks used in this guide are:
 | `PHYS_LST` | Diffusivities, puff, recycling, effective charge and other physical coefficients |
 | `TIME_LST` | Time units, integration scheme, intervals and stopping settings |
 | `NUMER_LST` | Newton/time-convergence tolerances, damping and numerical boundary settings |
-| `ADAPT_LST` | Mesh adaptivity and geometry path |
+| `ADAPT_LST` | [Mesh adaptivity](../numerics/adaptivity.md), optional element cap and geometry path |
 | `LSSOLV_LST` | Linear solver and preconditioner |
 | `UTILS_LST` | Output frequency and balance diagnostics |
 
