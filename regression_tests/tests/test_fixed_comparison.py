@@ -320,6 +320,38 @@ def test_golden_selects_first_actual_intermediate_checkpoint(physical_outputs):
         _checkpoint_solution(run, 'first_intermediate')
 
 
+@pytest.mark.parametrize('first_topology,last_topology,passed', [
+    ('limited', 'lower_single_null', True),
+    ('lower_single_null', 'lower_single_null', True),
+    ('lower_single_null', 'limited', False),
+])
+def test_recovery_restart_allows_topology_transition_before_first_advance(
+        physical_outputs, first_topology, last_topology, passed):
+    from regression_tests.catalog import load_case_definition
+
+    run, plan, metadata = physical_outputs
+    workflows = load_case_definition('moving_equilibrium', REGRESSION_ROOT/'cases')['workflows']
+    recovery = workflows['recovery']['moving_equilibrium']
+    replay = workflows['recovery_restart']['moving_equilibrium']
+    assert recovery['topology'] == {'first_completed': 'limited', 'last_completed': 'lower_single_null'}
+    assert recovery['acceptance_checks']['rejection']
+    assert replay['acceptance_checks']['intermediate_restart']
+    plan['moving_equilibrium_inputs']['equilibrium_times_s'] = [0., .1, .18, .22, .3]
+    for path in metadata['hdf5_outputs']:
+        if '_NR' in path:
+            continue
+        with h5py.File(path, 'r+') as handle:
+            number = int(handle['simulation_parameters/time/Current_time_step_number'][()])
+            handle['magnetic/topology'] = np.bytes_(last_topology if number == 4 else first_topology)
+
+    report = validate_me_completed_steps(run, plan, metadata, 2e-4,
+        topology=replay['topology'], acceptance_checks=replay['acceptance_checks'])
+    assert (report['status'] == 'passed') == passed
+    assert report['complete']
+    if not passed:
+        assert report['failures'] == ['step 4: last_completed topology: expected lower_single_null, got limited']
+
+
 def test_regular_transient_comparison_ignores_process_local_generations(physical_outputs, monkeypatch):
     run, plan, metadata = physical_outputs
     for value in metadata['hdf5_outputs']:

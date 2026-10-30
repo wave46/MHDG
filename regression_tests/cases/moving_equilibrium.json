@@ -190,7 +190,6 @@
           "impurity_concentration": "control_impurity_concentration"
         },
         "topology": {
-          "first_completed": "limited",
           "last_completed": "lower_single_null"
         },
         "controller_scales": {
