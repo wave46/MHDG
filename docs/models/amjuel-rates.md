@@ -97,3 +97,6 @@ enter `Sn` with the left-hand-side sign, $\mathrm{Sn}=-\mathcal J_{\mathcal S}$;
 the affine term is $\mathrm{Sn0}=\mathcal J_{\mathcal S}U-\mathcal S$ and
 is subtracted from the RHS. Together they represent the linearized source,
 retaining its value at the current iterate.
+
+Atomic prefactors use a $10^{-20}$ dimensionless floor on density and ion-energy
+arguments as a numerical zero safeguard.

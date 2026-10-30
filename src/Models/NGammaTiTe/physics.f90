@@ -2007,6 +2007,8 @@ CONTAINS
     res = 0.
     res(1) = U5
     res(phys%idx_rhon_eq) = U1
+    IF (U(1)<=tol) res(1)=0.d0
+    IF (U(phys%idx_rhon_eq)<=tol) res(phys%idx_rhon_eq)=0.d0
   ENDSUBROUTINE compute_dniz_dU
 
 
@@ -2028,6 +2030,7 @@ CONTAINS
     IF (U1<tol) U1=tol
     res = 0.
     res(1) = 2.*U1
+    IF (U(1)<=tol) res(1)=0.d0
   ENDSUBROUTINE compute_dnrec_dU
 
 
@@ -2052,6 +2055,7 @@ CONTAINS
     res = 0.
     res(2) = U5
     res(phys%idx_rhon_eq) = U2
+    IF (U(phys%idx_rhon_eq)<=tol) res(phys%idx_rhon_eq)=0.d0
   ENDSUBROUTINE compute_dfGammacx_dU
 
 
@@ -2076,6 +2080,7 @@ CONTAINS
     res = 0.
     res(1) = U2
     res(2) = U1
+    IF (U(1)<=tol) res(1)=0.d0
   ENDSUBROUTINE compute_dfGammarec_dU
 
 #ifdef NEUTRALGAMMA
@@ -2934,6 +2939,9 @@ CONTAINS
     res(1) = res(1)+0.5*U(2)**2/U1**2*U5
     res(2) = -1.*U(2)/U1*U5
     res(phys%idx_rhon_eq) = res(phys%idx_rhon_eq) - 0.5*U(2)**2/U1
+    IF (U(1)<=tol) res(1)=0.d0
+    IF (U(3)<=tol) res(3)=0.d0
+    IF (U(phys%idx_rhon_eq)<=tol) res(phys%idx_rhon_eq)=0.d0
   ENDSUBROUTINE compute_dfEiiz_dU
 
 
@@ -2962,6 +2970,8 @@ CONTAINS
     res = 0.
     res(1) = U3
     res(3) = U1
+    IF (U(1)<=tol) res(1)=0.d0
+    IF (U(3)<=tol) res(3)=0.d0
   ENDSUBROUTINE compute_dfEirec_dU
 
 
@@ -2992,6 +3002,8 @@ CONTAINS
     res(2) = 2.*U5*U2/U1
     res(phys%idx_rhon_eq) = (U2**2)/U1
     res(:) = res(:)*0.5
+    IF (U(1)<=tol) res(1)=0.d0
+    IF (U(phys%idx_rhon_eq)<=tol) res(phys%idx_rhon_eq)=0.d0
   ENDSUBROUTINE compute_dfEicx_dU
 
 #ifdef NEUTRALGAMMA

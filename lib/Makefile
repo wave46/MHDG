@@ -21,6 +21,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-strong-dirichlet
 .PHONY : check-amjuel-extrapolation
 .PHONY : check-neutral-energy-source
+.PHONY : check-neutral-source
 .PHONY : check-neutral-gamma-transport
 .PHONY : check-heat-flux-limiter
 .PHONY : check-energy-conductivity
@@ -72,6 +73,7 @@ clean:
 	$(RM) strong_dirichlet_check
 	$(RM) amjuel_extrapolation_check
 	$(RM) neutral_energy_source_check
+	$(RM) neutral_source_check
 	$(RM) neutral_gamma_transport_check
 	$(RM) heat_flux_limiter_check stabilization_values_check
 	$(RM) energy_conductivity_check
@@ -184,6 +186,10 @@ neutral_source_assembly_routine.F : $(SDIR)/HDG/hdg_ComputeJacobian.f90
 check-neutral-energy-source : neutral_source_assembly_routine.F neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_neutral_energy_source.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o neutral_energy_source_check
 	./neutral_energy_source_check
+
+check-neutral-source : neutral_source_assembly_routine.F neutral_wall_physics_check.o globals.o neutral_flux_limiter.o
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all -ffpe-trap=invalid,zero,overflow ../unit_tests/fortran/test_neutral_source.f90 neutral_wall_physics_check.o globals.o neutral_flux_limiter.o -Wl,--gc-sections -o neutral_source_check
+	./neutral_source_check
 
 check-neutral-wall-input : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_neutral_wall_input.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o neutral_wall_input_check $(LIB)

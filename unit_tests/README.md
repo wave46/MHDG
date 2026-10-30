@@ -104,6 +104,12 @@ including zero neutral momentum and state-dependent rate coefficients.
 It extracts the internal source assembly verbatim and uses the production
 energy-factor helpers; no MPI launch or external case data is needed.
 
+`make check-neutral-source` checks atomic prefactor derivatives and the
+assembled source value/Jacobian, including negative neutral density and clipped
+plasma density/ion energy. It verifies plasma-neutral particle cancellation
+and the affine RHS with state-dependent rates, using the production kernels
+and internal assembly. It supports both temperature-neutral models.
+
 Run the magnetic-topology checks from `lib/` after loading the build
 environment:
 

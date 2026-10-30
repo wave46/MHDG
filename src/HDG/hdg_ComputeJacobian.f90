@@ -4192,7 +4192,7 @@ END IF
       REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz,sigmavErec,dsigmavEiz_dU(:),dsigmavErec_dU(:)
       REAL*8, INTENT(IN), OPTIONAL :: cooling_factor,dcooling_factor_dU(:)
 #endif
-             REAL*8             :: Sn(:,:),Sn0(:)
+             REAL*8             :: Sn(:,:),Sn0(:),source_value(SIZE(U))
              INTEGER            :: inn,ign
 #ifdef TEMPERATURE
              REAL*8             :: recombination_energy
@@ -4264,42 +4264,28 @@ END IF
       Sn(ign,:) = -Sn(2,:)
 #endif
 
-      !Assembly RHS Neutral Source Terms
-      Sn0(1)    = niz*sigmaviz - nrec*sigmavrec
-      Sn0(2)    = -fGammacx*sigmavcx - fGammarec*sigmavrec
+      ! Sn=-dS/dU; the volume RHS receives -Sn0. Reconstruct S even on clipped branches.
+      source_value = 0.d0
+      source_value(1) = niz*sigmaviz-nrec*sigmavrec
+      source_value(2) = -fGammacx*sigmavcx-fGammarec*sigmavrec
 #ifdef NEUTRALGAMMA
-      Sn0(2)    = Sn0(2) + fGammaN*(sigmaviz + sigmavcx)
+      source_value(2) = source_value(2)+fGammaN*(sigmaviz+sigmavcx)
 #endif
 #ifdef TEMPERATURE
-      Sn0(1)    = Sn0(1) + niz*dot_PRODUCT(dsigmaviz_dU,U) - nrec*dot_PRODUCT(dsigmavrec_dU,U)
-      Sn0(2)    = Sn0(2) - fGammarec*dot_PRODUCT(dsigmavrec_dU,U)
+      source_value(3) = phys%ionization_ion_energy_fraction*fEiiz*sigmaviz - &
+           fEirec*sigmavrec-fEicx*sigmavcx
 #ifdef NEUTRALGAMMA
-      Sn0(2)    = Sn0(2) + fGammaN*dot_PRODUCT(dsigmaviz_dU,U)
+      source_value(3) = source_value(3)+fEiN*(sigmaviz+sigmavcx)
 #endif
-      Sn0(3)    = phys%ionization_ion_energy_fraction*fEiiz*sigmaviz - &
-        &fEirec*sigmavrec - fEicx*sigmavcx
+      source_value(4) = -niz*sigmavEiz-nrec*sigmavErec + &
+           recombination_energy*nrec*sigmavrec
+      IF (PRESENT(cooling_factor)) source_value(4) = source_value(4)-nrec*cooling_factor
+#endif
+      source_value(inn) = -source_value(1)
 #ifdef NEUTRALGAMMA
-      ! For S_N = fEiN*(sigmaviz + sigmavcx), Sn0 contains dS_N/dU . U - S_N.
-      ! fEiN=n*Gamma_n^2/(2*n_n) is degree two, so dfEiN/dU . U = 2*fEiN.
-      Sn0(3)    = Sn0(3) + fEiN*(sigmaviz + sigmavcx) + &
-        &fEiN*DOT_PRODUCT(dsigmaviz_dU + dsigmavcx_dU,U)
+      source_value(ign) = -source_value(2)
 #endif
-      !modification with recombination gain
-      Sn0(4)    = nrec*sigmavrec*recombination_energy
-      Sn0(4)    = Sn0(4) - niz*sigmavEiz - nrec*sigmavErec
-      Sn0(3)    = Sn0(3) + phys%ionization_ion_energy_fraction*fEiiz* &
-        &dot_PRODUCT(dsigmaviz_dU,U) - fEirec*dot_PRODUCT(dsigmavrec_dU,U)
-      Sn0(4)    = Sn0(4) - niz*dot_product(dsigmavEiz_dU,U) - nrec*dot_product(dsigmavErec_dU,U)
-      Sn0(4)    = Sn0(4) + nrec*dot_PRODUCT(dsigmavrec_dU,U)*recombination_energy
-      IF (PRESENT(cooling_factor)) THEN
-      ! Cooling factor term
-        Sn0(4)    = Sn0(4) - nrec*cooling_factor
-      ENDIF
-#endif
-      Sn0(inn)  = -Sn0(1)
-#ifdef NEUTRALGAMMA
-      Sn0(ign)  = -Sn0(2)
-#endif
+      Sn0 = -source_value-MATMUL(Sn,U)
 
     ENDSUBROUTINE assemblyNeutral
 #endif
