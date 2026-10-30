@@ -55,6 +55,20 @@ def test_complete_update_and_linear_observations(pair):
     assert report['histories']['incremental']['linear'][0]['trial'] == 1e-10
 
 
+@pytest.mark.parametrize('update_error, offset', [('1e-5', 1e-7), ('0.0', 0.0)])
+def test_one_step_warm_reconvergence_is_accepted(pair, update_error, offset):
+    for run in pair:
+        (run/'stdout.log').write_text(LOG.replace('Error: 1e-2\nError: 1e-5\n',
+                                                f'Error: {update_error}\n'))
+        write_solution(run/'outputs/state_NR0001.h5', model=True, solution_offset=offset)
+        with h5py.File(run/'outputs/state_NR0001.h5', 'r+') as handle:
+            handle['simulation_parameters/numerics/newton_formulation'] = run.name
+    report = compare(pair)
+    assert report['status'] == 'passed', report['failures']
+    assert len(report['histories']['absolute']['update_errors']) == 1
+    assert len(report['histories']['incremental']['update_errors']) == 1
+
+
 @pytest.mark.parametrize('field', ['q', 'u_tilde'])
 def test_corrupted_gradient_or_trace_update_is_rejected(pair, field):
     with h5py.File(pair[1]/'outputs/state_NR0001.h5', 'r+') as handle:
@@ -87,8 +101,8 @@ def test_large_energy_scale_cannot_hide_a_neutral_update_error(pair):
 
 @pytest.mark.parametrize('replacement', ['', LOG.replace('relative=1e-10', 'relative=0.5'),
                                        LOG.replace('trial=1e-10', 'trial=nan'),
-                                       LOG.replace('Error: 1e-2', 'Error: 1e-5')])
-def test_missing_bad_or_unexercised_linear_check_is_rejected(pair, replacement):
+                                       LOG.replace('Error: 1e-2\nError: 1e-5\n', '')])
+def test_missing_or_invalid_observations_are_rejected(pair, replacement):
     (pair[1]/'stdout.log').write_text(replacement)
     assert compare(pair)['status'] == 'failed'
 

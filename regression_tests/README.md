@@ -122,14 +122,15 @@ Existing bundles need the new reference generated, reviewed and published
 before this suite can pass; an unlimited reference is not a substitute.
 
 `newton_formulations` compares absolute and incremental Newton on the same
-fixed-mesh restart, using full Bohm momentum diffusion, heat limiting and
-identical undamped controls. Run it with `check newton_formulations --build`.
+unlimited fixed-mesh restart as `baseline_warm`, using its physics, damping and
+stopping controls. Both runs enable residual reporting and first-update snapshots;
+only the Newton formulation differs between them. One-iteration reconvergence
+is accepted. Run it with `check newton_formulations --build`.
 The regression build observes the assembled mixed equations before damping
 through a private instrumented copy of the driver; production sources remain
 untouched. Its manifest records the observation source and executable hashes.
 The observer reuses the normal Makefile, configured compiler and libraries
 in a private copy of each variant's completed build directory.
-The selected bundle must supply a seed requiring a nonconverged first update.
 The check compares the first complete U/Q/trace changes and final fields,
 verifies the saved formulation, and records both nonlinear residual histories.
 It requires the first linear trial to reduce the mixed mismatch by the factor

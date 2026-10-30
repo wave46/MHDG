@@ -22,7 +22,7 @@ def test_production_workflows_inherit_solver_defaults(case_id):
               "flux_limiter": False}
     for name, workflow in case["workflows"].items():
         expected = dict(policy)
-        if name in ("heat_flux_limiter", "newton_absolute", "newton_incremental"):
+        if name == "heat_flux_limiter":
             expected["flux_limiter"] = True
         if name.startswith("newton_"):
             expected["residual_diagnostics_mode"] = "equations"
@@ -31,6 +31,21 @@ def test_production_workflows_inherit_solver_defaults(case_id):
         assert {key: overrides[key] for key in expected} == expected, name
         assert all(not set(stage.get("parameter_overrides", {})) & set(policy)
                    for stage in workflow.get("stages", [])), name
+
+
+@pytest.mark.parametrize("case_id", ["legacy_case", "diverted_case"])
+def test_newton_pair_uses_same_unlimited_restart_and_controls(case_id):
+    workflows = load_case_definition(case_id, REGRESSION_ROOT / "cases")["workflows"]
+    absolute, incremental = (workflows[name] for name in ("newton_absolute", "newton_incremental"))
+    assert absolute["restart"] == incremental["restart"] == workflows["baseline_warm"]["restart"]
+    controls = [dict(workflow["parameter_overrides"]) for workflow in (absolute, incremental)]
+    assert controls[0].pop("newton_formulation") == "absolute"
+    assert controls[1].pop("newton_formulation") == "incremental"
+    assert controls[0] == controls[1]
+    assert controls[0]["flux_limiter"] is False
+    warm_controls = dict(workflows["baseline_warm"]["parameter_overrides"])
+    warm_controls.pop("newton_formulation")
+    assert controls[0] == {**warm_controls, "residual_diagnostics_mode": "equations", "saveNR": True}
 
 
 @pytest.fixture

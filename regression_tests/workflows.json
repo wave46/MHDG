@@ -453,8 +453,8 @@
       "adaptive_stages": ["single_step"]
     },
     "newton_absolute": {
-      "extends": "heat_flux_limiter",
-      "description": "Converge a fixed-mesh restart using absolute Newton and save the first complete update",
+      "extends": "baseline_warm",
+      "description": "Converge an unlimited fixed-mesh restart using absolute Newton and save the first complete update",
       "reference": "baseline_reference",
       "outputs": [],
       "comparison": {
@@ -462,16 +462,8 @@
         "profile": "newton_formulations"
       },
       "parameter_overrides": {
-        "newton_formulation": "absolute",
-        "newton_convergence": "update",
         "residual_diagnostics_mode": "equations",
-        "stab": 2,
-        "bohm_momentum_always_include_diffusion": true,
-        "saveNR": true,
-        "nrp": 30,
-        "adaptivity": false,
-        "dumpnr_min": 1.0,
-        "dumpnr_max": 1.0
+        "saveNR": true
       }
     },
     "newton_incremental": {
