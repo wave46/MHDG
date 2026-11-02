@@ -949,21 +949,210 @@ CONTAINS
          END DO
       END DO
       DEALLOCATE (xx, yy, zz)
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         WRITE(*,*)
+         WRITE(*,*) "Ripple field statistics (- average):"
+         WRITE(*,*) "AVERAGE : ", SUM(bripple(:,1))/size(bripple(:,1)), SUM(bripple(:,2))/size(bripple(:,2)), SUM(bripple(:,3))/size(bripple(:,3))
+         WRITE(*,*) "MIN     : ", MINVAL(bripple(:,1)), MINVAL(bripple(:,2)), MINVAL(bripple(:,3))
+         WRITE(*,*) "MAX     : ", MAXVAL(bripple(:,1)), MAXVAL(bripple(:,2)), MAXVAL(bripple(:,3))
+         WRITE(*,*)
+         WRITE(*,*) "Background magnetic field statistics:"
+         WRITE(*,*) "AVERAGE : ", SUM(phys%B(:,1))/size(phys%B(:,1)), SUM(phys%B(:,2))/size(phys%B(:,2)), SUM(phys%B(:,3))/size(phys%B(:,3))
+         WRITE(*,*) "MIN     : ", MINVAL(phys%B(:,1)), MINVAL(phys%B(:,2)), MINVAL(phys%B(:,3))
+         WRITE(*,*) "MAX     : ", MAXVAL(phys%B(:,1)), MAXVAL(phys%B(:,2)), MAXVAL(phys%B(:,3))
+         WRITE(*,*)
+      END IF
    END SUBROUTINE calcRippleField
+
+   SUBROUTINE calcRippleField_grid(elDiscr)
+      INTEGER, INTENT(IN)                          :: elDiscr
+      REAL*8, DIMENSION(Mesh%Nnodes_toroidal)      :: t
+      REAL*8, ALLOCATABLE                          :: x(:), y(:)
+      REAL*8, ALLOCATABLE                          :: bripple_av(:,:,:,:), bripple(:,:,:,:)
+      REAL*8                                       :: minRadius, tmax, thetaCoil, phiCoil, csteR
+      REAL*8                                       :: dlxx, dlyy, dlzz
+      REAL*8                                       :: x0, y0, z0
+      REAL*8                                       :: rrx, rry, rrz, rr2, rr3
+      REAL*8                                       :: Bx, By, Bz, dBx, dBy, dBz
+      INTEGER                                      :: i, j, k, N2d, N1d, idx,idy, i1d, ind, par
+      REAL*8, DIMENSION(:, :), ALLOCATABLE         :: xx, yy, zz
+      REAL*8, DIMENSION(3)                         :: ripple_max, ripple_min, ripple_av
+
+      INTEGER                                      :: ip, jp, IERR
+      REAL*8, POINTER, DIMENSION(:,:)              :: r2D, z2D
+      INTEGER(HID_T)                           :: file_id
+      CHARACTER(LEN=1000)          :: fname, nid
+
+      IF (switch%testcase >= 50 .AND. switch%testcase < 60) THEN
+         ! WEST case
+         ! Dimensions of the file storing the magnetic field for West
+         ip = input%field_dimensions(1)
+         jp = input%field_dimensions(2)
+         fname = input%field_path
+
+         IF (MPIvar%glob_id .EQ. 0) THEN
+            WRITE (6, *) 'Magnetic field loaded from file: ', TRIM(ADJUSTL(fname))
+         END IF
+         CALL HDF5_open(fname, file_id, IERR)
+      END IF
+
+      ALLOCATE (r2D(ip, jp))
+      ALLOCATE (z2D(ip, jp))
+      CALL HDF5_array2D_reading(file_id, r2D, 'r2D')
+      CALL HDF5_array2D_reading(file_id, z2D, 'z2D')
+      CALL HDF5_close(file_id)
+
+      ALLOCATE(x(jp), y(ip))
+      x = r2D(1,:)
+      y = z2D(:,1)
+
+      ripple_max = 0.0
+      ripple_min = 0.0
+      ripple_av = 0.0
+
+      t = Mesh%toroidal
+      ! Size of the domain
+      tmax = 2*pi !numer%tmax
+      N1d = SIZE(t, 1)
+      csteR = 1.4
+      minRadius = MAX(Mesh%xmax - Mesh%xmin,Mesh%ymax - Mesh%ymin)/2.0
+
+      ALLOCATE (xx(magn%nbCoils_ripple, elDiscr))
+      ALLOCATE (yy(magn%nbCoils_ripple, elDiscr))
+      ALLOCATE (zz(magn%nbCoils_ripple, elDiscr))
+
+      ! Creation of the N_coils by rotation (in row/ toroidal direction)
+      ! Need to create coils a0round full torus to avoid B-field inconsistency
+      DO i = 1, magn%nbCoils_ripple
+         ! Shift from 0 for first phi to avoid non-axisymmetry
+         phiCoil = tmax*(i - 1)/magn%nbCoils_ripple + tmax/(2*magn%nbCoils_ripple)
+         ! Theta discretization on Ndiscr points and minor radius of 2*a for toroidal coils
+         DO j = 1, elDiscr
+            thetaCoil = 2*PI*j/elDiscr
+            xx(i, j) = (geom%R0/phys%lscale + csteR*minRadius*COS(thetaCoil + magn%triang*SIN(thetaCoil)))*COS(phiCoil)
+            yy(i, j) = (geom%R0/phys%lscale + csteR*minRadius*COS(thetaCoil + magn%triang*SIN(thetaCoil)))*SIN(phiCoil)
+            zz(i, j) = magn%ellip*csteR*minRadius*SIN(thetaCoil)
+         END DO
+      END DO
+
+      ALLOCATE(bripple(jp,ip,mesh%Nnodes_toroidal,3))
+      bripple = 0.
+
+      ! Ripple hard coded with Biot and Savard law (see phd E. Nardon and ERGOS)
+      DO idx = 1, jp
+         DO idy = 1, ip
+            DO i1d = 1, N1d
+               ! in cartesian coordinates (for Biot and Savard)
+               Bx = 0.0
+               By = 0.0
+               Bz = 0.0
+
+               x0 = SQRT(x(idx)**2 + y(idy)**2)*COS(t(i1d))
+               y0 = SQRT(x(idx)**2 + y(idy)**2)*SIN(t(i1d))
+               z0 = y(idy)
+
+               !Loop on coils
+               DO i = 1, magn%nbCoils_ripple
+                  par = 1 !(-1)**i
+                  ! Loop on elements of coils for writing coils coordinates
+                  ! rr is the r vector in Biot and Savard
+                  DO j = 1, elDiscr
+                     IF (j .LT. elDiscr) THEN
+                        k = j + 1
+                     ELSE
+                        k = 1
+                     END IF
+
+                     rrx = x0 - xx(i, j)
+                     rry = y0 - yy(i, j)
+                     rrz = z0 - zz(i, j)
+
+                     dlxx = xx(i, k) - xx(i, j)
+                     dlyy = yy(i, k) - yy(i, j)
+                     dlzz = zz(i, k) - zz(i, j)
+
+                     rr2 = rrx**2 + rry**2 + rrz**2
+                     rr3 = rr2**(3./2)
+
+
+                     dBx = par*(dlyy*rrz - dlzz*rry)/rr3/phys%lscale
+                     dBy = par*(dlzz*rrx - dlxx*rrz)/rr3/phys%lscale
+                     dBz = par*(dlxx*rry - dlyy*rrx)/rr3/phys%lscale
+
+                     Bx = Bx + dBx
+                     By = By + dBy
+                     Bz = Bz + dBz
+                  END DO ! end elements of one coil
+               END DO ! end loop on coils
+               ! Br, Bz, Bt
+
+               bripple(idx,idy,i1d, 1) = bripple(idx,idy,i1d, 1) + magn%amp_ripple*(-Bx*SIN(t(i1d)) + By*COS(t(i1d)))
+               bripple(idx,idy,i1d, 2) = bripple(idx,idy,i1d, 2) + magn%amp_ripple*Bz
+               bripple(idx,idy,i1d, 3) = bripple(idx,idy,i1d, 3) + magn%amp_ripple*(Bx*COS(t(i1d)) + By*SIN(t(i1d)))
+
+            END DO
+         END DO
+      END DO
+
+      ! Compute the ripple average
+      ALLOCATE(bripple_av(jp,ip,mesh%Nnodes_toroidal,3))
+      bripple_av = 0.
+
+      DO idx = 1, jp
+         DO idy = 1, ip
+            DO i1d = 1, N1d
+               bripple_av(idx, idy, i1d,1) = bripple_av(idx, idy, i1d,1) + bripple(idx, idy, i1d,1)
+               bripple_av(idx, idy, i1d,2) = bripple_av(idx, idy, i1d,2) + bripple(idx, idy, i1d,2)
+               bripple_av(idx, idy, i1d,3) = bripple_av(idx, idy, i1d,3) + bripple(idx, idy, i1d,3)
+            END DO
+         END DO
+      END DO
+
+      bripple_av = bripple_av/SIZE(t, 1)
+      ! Substract the mean along phi to the magnetic field to only keep the ripple
+      ! minloc can be necessary to find the correct index in the global matrix bripple_av to substract to the local matrix bripple
+      ! When bripple and phys%bripple are the same size, loc must be equal to ind (which unfortunately is NOT the case for a few
+      ! index).
+      DO idx = 1, jp
+         DO idy = 1, ip
+            DO i1d = 1, N1d
+               bripple(idx, idy, i1d,1) = bripple(idx, idy, i1d,1) - bripple_av(idx, idy, i1d,1)
+               bripple(idx, idy, i1d,2) = bripple(idx, idy, i1d,2) - bripple_av(idx, idy, i1d,2)
+               bripple(idx, idy, i1d,3) = bripple(idx, idy, i1d,3) - bripple_av(idx, idy, i1d,3)
+            END DO
+         END DO
+      END DO
+
+      ! do i1d = 1, N1d
+      !    WRITE (nid, '(I3.3)') i1d
+      !    fname = TRIM(ADJUSTL('./B_ripple_grid_Br_')) // TRIM(ADJUSTL(nid))
+      !    call HDF5_save_matrix(bripple(:,:,i1d,1), fname)
+      !    fname = TRIM(ADJUSTL('./B_ripple_grid_Bz_')) // TRIM(ADJUSTL(nid))
+      !    call HDF5_save_matrix(bripple(:,:,i1d,2), fname)
+      !    fname = TRIM(ADJUSTL('./B_ripple_grid_Bphi_')) // TRIM(ADJUSTL(nid))
+      !    call HDF5_save_matrix(bripple(:,:,i1d,3), fname)
+      ! end do
+
+      DEALLOCATE (xx, yy, zz)
+      DEALLOCATE(bripple)
+      DEALLOCATE(bripple_av)
+
+   END SUBROUTINE calcRippleField_grid
 #endif
 
    ! Below are routines from Manuel MHDG v2.1. Copy as it without any check: TODO adapt it to global magnetic field
 
    SUBROUTINE loadJtorMap()
 
-      INTEGER                   :: i, ierr, ip, jp, ind, k
+      INTEGER                      :: i, ierr, ip, jp, ind, k
 #ifdef TOR3D
-      INTEGER                   :: j
+      INTEGER                      :: j
 #endif
-      INTEGER(HID_T)            :: file_id
+      INTEGER(HID_T)               :: file_id
 
-      CHARACTER(LEN=1000)       :: fname
-      CHARACTER(70)             :: nit
+      CHARACTER(LEN=1000)          :: fname
+      CHARACTER(70)                :: nit
 
       REAL*8, POINTER, DIMENSION(:, :) :: r2D, z2D, Jtor
       REAL*8, ALLOCATABLE, DIMENSION(:)   :: xvec, yvec
