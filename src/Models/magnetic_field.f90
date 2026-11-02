@@ -603,6 +603,7 @@ CONTAINS
          elDiscr = 32
          ALLOCATE (magn%coils_ripple(magn%nbCoils_ripple*elDiscr, 6))
          CALL calcRippleField(bripple, elDiscr)
+         CALL calcRippleField_grid(elDiscr)
       END IF
 
       DO i = 1, N2d
@@ -1130,6 +1131,8 @@ CONTAINS
       DO i = 1, Mesh%Nnodes
          x = Mesh%X(i, 1)
          y = Mesh%X(i, 2)
+         r2D_int = interpolate(ip, yvec, jp, xvec, r2D, y, x, 1e-12)
+         z2D_int = interpolate(ip, yvec, jp, xvec, z2D, y, x, 1e-12)
          Br = interpolate(ip, yvec, jp, xvec, Br2D, y, x, 1e-12)
          Bz = interpolate(ip, yvec, jp, xvec, Bz2D, y, x, 1e-12)
          Bt = interpolate(ip, yvec, jp, xvec, Bphi2D, y, x, 1e-12)
@@ -1142,6 +1145,8 @@ CONTAINS
             phys%B(ind, 1) = Br
             phys%B(ind, 2) = Bz
             phys%B(ind, 3) = Bt
+            phys%r2D(ind) = r2D_int
+            phys%z2D(ind) = z2D_int
             phys%magnetic_flux(ind) = flux
 #ifdef TOR3D
          END DO
