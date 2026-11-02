@@ -200,7 +200,10 @@ MODULE types
       CHARACTER(LEN=20), POINTER:: conVarNam(:) => NULL() ! Names of the conservative variables (set in initPhys)
       REAL*8                    :: lscale ! Length scale for the non-dimensionalization of the equations
       ! Magnetic field defined for each node of the mesh.
-      REAL*8, POINTER           :: B(:, :) => NULL()! Magnetic field, Br,Bz,Bphi [n of nodes x 3]
+      REAL*8, POINTER           :: B(:, :) => NULL()! Magnetic field, Br,Bz,Bphi [n of nodes x 3] + ripple/rmp in case
+      REAL*8, POINTER           :: r2D(:) => NULL()! Magnetic field how it is saved in the 2D grid from the magnetic field file
+      REAL*8, POINTER           :: z2D(:) => NULL()! Magnetic field how it is saved in the 2D grid from the magnetic field file
+      REAL*8, POINTER           :: B_axis(:, :) => NULL()! Axisymmetric magnetic field, Br,Bz,Bphi [n of nodes x 3]
       REAL*8                    :: B0 ! Reference value for the magnetic field [Tesla]
       REAL*8, POINTER           :: magnetic_flux(:) => NULL()! Magnetic flux [n of nodes]
       REAL*8, POINTER           :: magnetic_psi(:) => NULL()! Magnetic flux normalized to separatrix magnetic flux [n of nodes]
