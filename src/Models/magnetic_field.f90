@@ -813,7 +813,7 @@ CONTAINS
       N2d = SIZE(x, 1)
       N1d = SIZE(t, 1)
       csteR = 1.4
-      minRadius = (Mesh%xmax - Mesh%xmin)/2.0
+      minRadius = MAX(Mesh%xmax - Mesh%xmin,Mesh%ymax - Mesh%ymin)/2.0
 
       ALLOCATE (xx(magn%nbCoils_ripple, elDiscr))
       ALLOCATE (yy(magn%nbCoils_ripple, elDiscr))
