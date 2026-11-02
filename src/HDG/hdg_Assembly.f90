@@ -1523,10 +1523,10 @@ CONTAINS
    ! for exterior faces
    !**************************************************
    SUBROUTINE getindposext(indpos, Fe, Fd, Nf, Neq, Nfp)
+      INTEGER, INTENT(IN)       :: Nf, Neq, Nfp
       INTEGER, INTENT(OUT)      :: indpos(1:neq*Nfp*Nf)
       INTEGER, INTENT(IN)       :: Fe(Nf)
       LOGICAL, INTENT(IN)       :: Fd(Nf)
-      INTEGER, INTENT(IN)       :: Nf, Neq, Nfp
       INTEGER                   :: i, j, fei
       INTEGER                   :: pos(1:Nf)
 
@@ -1551,8 +1551,8 @@ CONTAINS
    ! for exterior periodic faces
    !**************************************************
    SUBROUTINE getindposextperiodic(indpos, Fi_per, Fi, Nf, Nfp, neq, Fd, Fe, ieln)
-      INTEGER, INTENT(OUT)      :: indpos(1:neq*Nfp*Nf)
       INTEGER, INTENT(IN)       :: ieln, Fi, Fi_per, neq, Nfp, Nf, Fe(Nf)
+      INTEGER, INTENT(OUT)      :: indpos(1:neq*Nfp*Nf)
       LOGICAL, INTENT(IN)       :: Fd(Nf)
       INTEGER                   :: i, j, fei
       INTEGER                   :: pos(1:Nf)
