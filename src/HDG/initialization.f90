@@ -208,14 +208,6 @@ CONTAINS
       INTEGER                   :: N2d, Nfl, Ntorloc, Np1d, Np2d
 #endif
 
-      IF (utils%printint > 0) THEN
-         IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE (6, *) '*************************************************'
-            WRITE (6, *) '*            INITIALIZING SOLUTION              *'
-            WRITE (6, *) '*************************************************'
-         END IF
-      END IF
-
       Neq = phys%Neq
 #ifdef TOR3D
       Ndim = 3                             ! N. of dimensions
