@@ -100,7 +100,6 @@ CONTAINS
       CALL pastixInit(matPASTIX%pastix_data, MPI_COMM_WORLD, matPASTIX%iparm, matPASTIX%dparm)
       ALLOCATE(matPASTIX%spm)
       CALL spmInitDist(matPASTIX%spm, MPI_COMM_WORLD)
-      CALL build_mat_PASTIX(matPASTIX)
 
       IF (lssolver%timing) THEN
          CALL cpu_time(tpe)
