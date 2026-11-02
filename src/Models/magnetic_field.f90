@@ -541,7 +541,6 @@ CONTAINS
    !        b: (R,Z,Phi) in: computation of B at equilibrium (NOT normalized). out: normalized b with perturbation
    !********************************
    SUBROUTINE addMagneticPerturbation()
-      REAL*8                                   :: xc, yc
       REAL*8                                   :: xmax, xmin, ymax, ymin, xm, ym
       REAL*8                                   :: xx, yy, tt, BB
       INTEGER*4                                :: i, j, ind, N2D, N1D
@@ -566,9 +565,6 @@ CONTAINS
       !ymin = -526.038926880589!Mesh%ymin
       xm = 0.5*(xmax + xmin)
       ym = 0.5*(ymax + ymin)
-
-      xc = -0.5
-      yc = -0.5
 
       ! RMP part testcase 61-69
       ALLOCATE (brmp(N2d*N1d, 3))
