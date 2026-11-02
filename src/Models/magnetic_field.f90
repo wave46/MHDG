@@ -19,7 +19,7 @@ CONTAINS
    !**********************************************
    ! allocate storing space for the magnetic field
    !**********************************************
-   SUBROUTINE initialize_magnetic_field
+   SUBROUTINE initialize_magnetic_field_Jtor
       INTEGER                   :: nnodes
 #ifdef TOR3D
       nnodes = Mesh%Nnodes*Mesh%Nnodes_toroidal
@@ -30,13 +30,16 @@ CONTAINS
       ALLOCATE (phys%B(nnodes, 3))
       ALLOCATE (phys%magnetic_flux(nnodes))
       ALLOCATE (phys%magnetic_psi(nnodes))
+      ALLOCATE (phys%r2D(nnodes))
+      ALLOCATE (phys%z2D(nnodes))
       IF (switch%ohmicsrc) THEN
          ALLOCATE (phys%Jtor(nnodes))
       END IF
       IF ((switch%RMP) .OR. (switch%Ripple)) THEN
          ALLOCATE (phys%Bperturb(nnodes, 3))
+         ALLOCATE (phys%B_axis(nnodes, 3))
       END IF
-   END SUBROUTINE initialize_magnetic_field
+   END SUBROUTINE initialize_magnetic_field_Jtor
 
    SUBROUTINE load_magnetic_field_Jtor
       CALL load_magnetic_field()
@@ -386,6 +389,10 @@ CONTAINS
             phys%B(:, 1) = phys%B(:, 1)/2./PI
             phys%B(:, 2) = phys%B(:, 2)/2./PI
          END IF
+      END IF
+
+      IF ((switch%RMP) .OR. (switch%Ripple)) THEN
+         phys%B_axis = phys%B
       END IF
 
       ! Min and Max flux for inizialization
