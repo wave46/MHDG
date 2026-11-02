@@ -382,6 +382,18 @@ CONTAINS
          DEALLOCATE (phys%Bperturb)
          NULLIFY(phys%Bperturb)
       END IF
+      IF (ASSOCIATED(phys%B_axis)) THEN
+         DEALLOCATE (phys%B_axis)
+         NULLIFY(phys%B_axis)
+      END IF
+      IF (ASSOCIATED(phys%z2D)) THEN
+         DEALLOCATE (phys%z2D)
+         NULLIFY(phys%z2D)
+      END IF
+      IF (ASSOCIATED(phys%r2D)) THEN
+         DEALLOCATE (phys%r2D)
+         NULLIFY(phys%r2D)
+      END IF
       IF (ASSOCIATED(phys%phyVarNam)) THEN
          DEALLOCATE (phys%phyVarNam)
          NULLIFY(phys%phyVarNam)
@@ -1032,6 +1044,52 @@ CONTAINS
 
 
    END SUBROUTINE free_reference_element_tor
+
+   SUBROUTINE free_magnetic_Jtor_puff()
+
+      IF (ASSOCIATED(phys%B)) THEN 
+         DEALLOCATE (phys%B)
+         NULLIFY(phys%B)
+      ENDIF
+      
+      IF (ASSOCIATED(phys%magnetic_flux)) THEN
+         DEALLOCATE (phys%magnetic_flux)
+         NULLIFY(phys%magnetic_flux)
+      ENDIF
+      IF (ASSOCIATED(phys%Bperturb)) THEN
+         DEALLOCATE (phys%Bperturb)
+         NULLIFY(phys%Bperturb)
+      ENDIF
+
+      IF (ASSOCIATED(phys%B_axis)) THEN
+         DEALLOCATE (phys%B_axis)
+         NULLIFY(phys%B_axis)
+      END IF
+      
+      IF (ASSOCIATED(phys%z2D)) THEN
+         DEALLOCATE (phys%z2D)
+         NULLIFY(phys%z2D)
+      END IF
+      
+      IF (ASSOCIATED(phys%r2D)) THEN
+         DEALLOCATE (phys%r2D)
+         NULLIFY(phys%r2D)
+      END IF
+
+      IF (ASSOCIATED(phys%magnetic_psi)) THEN
+         DEALLOCATE (phys%magnetic_psi)
+         NULLIFY(phys%magnetic_psi)
+      ENDIF
+      IF (ASSOCIATED(phys%Jtor)) THEN
+         DEALLOCATE (phys%Jtor)
+         NULLIFY(phys%Jtor)
+      ENDIF
+      IF (ASSOCIATED(phys%puff_exp)) THEN
+         DEALLOCATE (phys%puff_exp)
+         NULLIFY(phys%puff_exp)
+      ENDIF
+
+   END SUBROUTINE free_magnetic_Jtor_puff
 
    SUBROUTINE free_el_mat
       IF (ALLOCATED(elMat%iAqq)) THEN
