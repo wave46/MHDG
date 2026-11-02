@@ -506,6 +506,8 @@ MODULE types
       CHARACTER(len=20)         :: ksptype    ! Krylov solver type
       CHARACTER(len=20)         :: pctype     ! Preconditioner type
       INTEGER                   :: gmresres   ! Restart value for GMRES
+      LOGICAL                   :: reorder_matrix
+      REAL*8                    :: theta
       INTEGER                   :: mgorder   ! Polynomial order to use in the MultiGrid preconditioner
       INTEGER                   :: mglevels   ! Number of levels for the MultiGrid preconditioner
       INTEGER                   :: mgcycletype ! cycle type for the MultiGrid preconditioner
