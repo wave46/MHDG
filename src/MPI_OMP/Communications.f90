@@ -1312,6 +1312,10 @@ CONTAINS
 
       ALLOCATE (B_glob(Nnodes_glob, 3))
       ALLOCATE (magnetic_flux_glob(Nnodes_glob))
+      ALLOCATE (r2D_glob(Nnodes_glob))
+      ALLOCATE (z2D_glob(Nnodes_glob))
+      r2D_glob = -1.e30
+      z2D_glob = -1.e30
       B_glob = -1.e30
       magnetic_flux_glob = -1.e30
 
@@ -1327,6 +1331,10 @@ CONTAINS
          ALLOCATE (Bperturb_glob(Nnodes_glob, 3))
          Bperturb_glob = -1.e30
       END IF
+      IF (PRESENT(B_axi_glob)) THEN
+         ALLOCATE (B_axi_glob(Nnodes_glob, 3))
+         B_axi_glob = -1.e30
+      END IF
 
       ! no need to filter out the ghost elements as the max is taken and the ghost cell has exactly the same field as the regular cell. i.e. max(x,x) = x
       ! Nnodes_tor = 1 for 2D
@@ -1334,18 +1342,24 @@ CONTAINS
          indices_loc = (i - 1)*Mesh_in%Nnodes + indices
          indices_glob = (i - 1)*Mesh_in%Nno_glob + Mesh_in%loc2glob_nodes(indices)
          B_glob(indices_glob, :) = phys%B(indices_loc, :)
+         r2D_glob(indices_glob) = phys%r2D(indices_loc)
+         z2D_glob(indices_glob) = phys%z2D(indices_loc)
          magnetic_flux_glob(indices_glob) = phys%magnetic_flux(indices_loc)
          IF (PRESENT(magnetic_psi_glob)) magnetic_psi_glob(indices_glob) = phys%magnetic_psi(indices_loc)
          IF (PRESENT(Bperturb_glob)) Bperturb_glob(indices_glob, :) = phys%Bperturb(indices_loc, :)
          IF (PRESENT(Jtor_glob)) Jtor_glob(indices_glob) = phys%Jtor(indices_loc)
+         IF (PRESENT(B_axi_glob)) B_axi_glob(indices_glob, :) = phys%B_axis(indices_loc, :)
       END DO
 
       ! reduce results over processes
       CALL MPI_Allreduce(MPI_IN_PLACE, B_glob, SIZE(B_glob, 1)*SIZE(B_glob, 2), MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
       CALL MPI_Allreduce(MPI_IN_PLACE, magnetic_flux_glob, SIZE(magnetic_flux_glob, 1), MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+      CALL MPI_Allreduce(MPI_IN_PLACE, r2D_glob, SIZE(r2D_glob, 1), MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+      CALL MPI_Allreduce(MPI_IN_PLACE, z2D_glob, SIZE(z2D_glob, 1), MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
       IF(PRESENT(magnetic_psi_glob)) CALL MPI_Allreduce(MPI_IN_PLACE, magnetic_psi_glob, SIZE(magnetic_psi_glob,1), MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
       IF(PRESENT(Bperturb_glob)) CALL MPI_Allreduce(MPI_IN_PLACE, Bperturb_glob, SIZE(Bperturb_glob,1)*SIZE(Bperturb_glob,2), MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
       IF(PRESENT(Jtor_glob)) CALL MPI_Allreduce(MPI_IN_PLACE, Jtor_glob, SIZE(Jtor_glob, 1), MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
+      IF(PRESENT(B_axi_glob)) CALL MPI_Allreduce(MPI_IN_PLACE, B_axi_glob, SIZE(B_axi_glob,1)*SIZE(B_axi_glob,2), MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
 
       DEALLOCATE (indices)
       DEALLOCATE (indices_loc)
