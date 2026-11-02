@@ -797,7 +797,13 @@ CONTAINS
       REAL*8                                       :: rrx, rry, rrz, rr2, rr3
       REAL*8                                       :: Bx, By, Bz, dBx, dBy, dBz
       INTEGER                                      :: i, j, k, N2d, N1d, i2d, i1d, ind, par
-      REAL*8, DIMENSION(:, :), ALLOCATABLE          :: xx, yy, zz
+      REAL*8, DIMENSION(:, :), ALLOCATABLE         :: xx, yy, zz
+      REAL*8, DIMENSION(3)                         :: ripple_max, ripple_min, ripple_av
+
+
+      ripple_max = 0.0
+      ripple_min = 0.0
+      ripple_av = 0.0
 
       x = Mesh%X(:, 1)
       y = Mesh%X(:, 2)
@@ -897,8 +903,18 @@ CONTAINS
             bripple(ind, 1) = bripple(ind, 1) + magn%amp_ripple*(-Bx*SIN(t(i1d)) + By*COS(t(i1d)))
             bripple(ind, 2) = bripple(ind, 2) + magn%amp_ripple*Bz
             bripple(ind, 3) = bripple(ind, 3) + magn%amp_ripple*(Bx*COS(t(i1d)) + By*SIN(t(i1d)))
+
          END DO
       END DO
+
+      IF(MPIvar%glob_id .EQ. 0) THEN
+         WRITE(*,*)
+         WRITE(*,*) "Ripple field statistics (+ average):"
+         WRITE(*,*) "AVERAGE: ", SUM(bripple(:,1))/size(bripple(:,1)), SUM(bripple(:,2))/size(bripple(:,2)), SUM(bripple(:,3))/size(bripple(:,3))
+         WRITE(*,*) "MIN    : ", MINVAL(bripple(:,1)), MINVAL(bripple(:,2)), MINVAL(bripple(:,3))
+         WRITE(*,*) "MAX    : ", MAXVAL(bripple(:,1)), MAXVAL(bripple(:,2)), MAXVAL(bripple(:,3))
+      END IF
+
       ! Compute the ripple average
       bripple_av = 0.
       DO i2d = 1, N2d
