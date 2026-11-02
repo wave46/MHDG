@@ -88,12 +88,9 @@ CONTAINS
       !*****************************************
       ! Create face connectivity F and flipFaces
       !*****************************************
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Creating face connectivity "
-         END IF
-      END IF
+
       CALL CreateFaceConnectivity_serial()
+
       ! Print out stuff...
       IF (utils%printint > 1) THEN
          WRITE (6, *) "Face connectivity matrix F: "
@@ -105,58 +102,27 @@ CONTAINS
       !*****************************************
       ! Compute max and min element size
       !*****************************************
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Computing element size "
-         END IF
-      END IF
       CALL computeElementSize()
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Done! "
-         END IF
-      END IF
 
       !*****************************************
-      ! Compute puff area
+      ! Compute puff, pump and core area
       !*****************************************
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Computing puff area"
-         END IF
-      END IF
       ! It does not work in parallel (TODO)
 #ifndef PARALL
       CALL computePuffArea()
+      CALL computePumpArea()
+      CALL computeCoreArea()
 #endif
-      ! It does not work in parallel (TODO)
+
       IF (MPIvar%glob_id .EQ. 0) THEN
          IF (utils%printint > 0) THEN
             WRITE (6, *) "Puff area:  ", Mesh%puff_area*phys%lscale*phys%lscale, " m^2"
-         END IF
-      END IF
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Computing pump area"
-         END IF
-      END IF
-#ifndef PARALL
-      CALL computePumpArea()
-#endif
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
             WRITE (6, *) "Pump area:  ", Mesh%pump_area*phys%lscale*phys%lscale, " m^2"
-         END IF
-      END IF
-#ifndef PARALL
-      CALL computeCoreArea()
-#endif
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
             WRITE (6, *) "Core area:  ", Mesh%core_area*phys%lscale*phys%lscale, " m^2"
-            WRITE (6, *) "Done! "
+            WRITE (6, *)
          END IF
       END IF
+
    END SUBROUTINE mesh_preprocess_serial
 
    SUBROUTINE mesh_preprocess(ierr)
@@ -225,12 +191,9 @@ CONTAINS
       !*******************************
       ! Boundary condition preprocess
       !*******************************
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Boundary conditions preprocess "
-         END IF
-      END IF
+
       CALL Bc_preprocess()
+
       ! Print out stuff...
       IF (utils%printint > 1) THEN
          WRITE (6, *) "Exterior faces after preprocess: "
@@ -242,12 +205,9 @@ CONTAINS
       !*****************************************
       ! Create face connectivity F and flipFaces
       !*****************************************
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Creating face connectivity "
-         END IF
-      END IF
+
       CALL CreateFaceConnectivity()
+
       ! Print out stuff...
       IF (utils%printint > 1) THEN
          WRITE (6, *) "Face connectivity matrix F: "
@@ -259,59 +219,32 @@ CONTAINS
       !*****************************************
       ! Compute max and min element size
       !*****************************************
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Computing element size "
-         END IF
-      END IF
+
       CALL computeElementSize()
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Done! "
-         END IF
-      END IF
 
       !*****************************************
-      ! Compute puff area
+      ! Compute puff, pump and core area
       !*****************************************
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Computing puff area"
-         END IF
-      END IF
+
       CALL computePuffArea()
+      CALL computePumpArea()
+      CALL computeCoreArea()
+
 #ifdef PARALL
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%puff_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%pump_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%core_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 #endif
+
       IF (MPIvar%glob_id .EQ. 0) THEN
          IF (utils%printint > 0) THEN
             WRITE (6, *) "Puff area:  ", Mesh%puff_area*phys%lscale*phys%lscale, " m^2"
-         END IF
-      END IF
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Computing pump area"
-         END IF
-      END IF
-      CALL computePumpArea()
-#ifdef PARALL
-      CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%pump_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
             WRITE (6, *) "Pump area:  ", Mesh%pump_area*phys%lscale*phys%lscale, " m^2"
-         END IF
-      END IF
-      CALL computeCoreArea()
-#ifdef PARALL
-      CALL MPI_ALLREDUCE(MPI_IN_PLACE, Mesh%core_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-#endif
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
             WRITE (6, *) "Core area:  ", Mesh%core_area*phys%lscale*phys%lscale, " m^2"
-            WRITE (6, *) "Done! "
+            WRITE (6, *)
          END IF
       END IF
+
    END SUBROUTINE mesh_preprocess
 
    !********************
@@ -565,7 +498,6 @@ CONTAINS
 
          nodes = Mesh%T(iel, refElPol%face_nodes(ifa, :))
          DO iextf = 1, Mesh%Nextfaces
-
             IF (markF(iextf)) CYCLE
             nodes_check = Mesh%Tb(iextf, :)! <--- Here I use Tb!!
             isok = .TRUE.
@@ -926,7 +858,6 @@ CONTAINS
       ! boundary conditions) and how many Dirichlet faces are used
       DO ifa = 1, Mesh%Nextfaces
          fl = Mesh%boundaryFlag(ifa) ! boundary flag of the current face
-
          IF (df(phys%bcflags(fl)) == 0) THEN
             df(phys%bcflags(fl)) = 1
             nb = nb + 1
