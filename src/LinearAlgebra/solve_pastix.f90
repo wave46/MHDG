@@ -322,22 +322,31 @@ CONTAINS
 
    SUBROUTINE terminate_mat_PASTIX()
 
-      matPASTIX%spm%colptr = c_null_ptr
-      matPASTIX%spm%rowptr = c_null_ptr
-      matPASTIX%spm%values = c_null_ptr
-      matPASTIX%spm%loc2glob = c_null_ptr
-      CALL spmExit(matPASTIX%spm)
-      DEALLOCATE (matPASTIX%spm)
+      IF (ASSOCIATED(matPASTIX%spm)) THEN
+         matPASTIX%spm%colptr = c_null_ptr
+         matPASTIX%spm%rowptr = c_null_ptr
+         matPASTIX%spm%values = c_null_ptr
+         matPASTIX%spm%loc2glob = c_null_ptr
+         CALL spmExit(matPASTIX%spm)
+         DEALLOCATE (matPASTIX%spm)
+         NULLIFY (matPASTIX%spm)
+      END IF
 
-      IF (allocated(matPASTIX%x)) THEN
+      IF (ALLOCATED(matPASTIX%x)) THEN
          DEALLOCATE (matPASTIX%x)
+      END IF
+      IF (ALLOCATED(matPASTIX%b)) THEN
          DEALLOCATE (matPASTIX%b)
+      END IF
+      IF (ALLOCATED(matPASTIX%rhs)) THEN
          DEALLOCATE (matPASTIX%rhs)
       END IF
 
-      !  Destroy the C data structure (Should be last if used to call MPI_Finalize)
-      CALL pastixFinalize(matPASTIX%pastix_data)
-
+      IF (ASSOCIATED(matPASTIX%pastix_data)) THEN
+         !  Destroy the C data structure (Should be last if used to call MPI_Finalize)
+         CALL pastixFinalize(matPASTIX%pastix_data)
+         NULLIFY (matPASTIX%pastix_data)
+      END IF
    END SUBROUTINE terminate_mat_PASTIX
 
 END MODULE solve_pastix
