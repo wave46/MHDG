@@ -114,13 +114,11 @@ MODULE types
       INTEGER*4, POINTER        :: boundaryFlag(:) => NULL() ! Flag for the boundary condition for each external face (set in the mesh generator)
       INTEGER*4, ALLOCATABLE    :: F(:, :) ! Faces connectivity matrix
       INTEGER*4, ALLOCATABLE    :: N(:, :) ! Nodes connectivity matrix
-      INTEGER*4, ALLOCATABLE    :: face_info(:, :) ! elemental face info
       INTEGER*4, ALLOCATABLE    :: faces(:, :, :) ! for each triangle i, stores info k on each face j: faces(i,j,1) = # of neighbouring triangle (0 if external
       ! boundary), faces(i,j,2) = type of boundary (), faces(i,j,3) = type of boundary condition
       INTEGER*4, ALLOCATABLE    :: extfaces(:, :) ! for each exterior face, stores the number of the triangle, the number of the face, and the type of BC
-      INTEGER*4, ALLOCATABLE    :: intfaces(:, :) ! for each interior face, stores the number of the triangle, the number of the face, the number of the
-      ! neighboring triangle, the number of its face and the number of the node of the neighboring triangle that
-      ! matches the first knot of the triangle
+      INTEGER*4, ALLOCATABLE    :: intfaces(:, :) ! for each interior face, stores the number of the triangle, the number of the face, the number of the neighboring triangle, the number of its face and the number of the node of the neighboring triangle
+      ! that matches the first knot of the triangle
       LOGICAL, ALLOCATABLE      :: flipface(:, :) ! for each triangle, and for each face, 0 if the order of the numbering in the face is to be kept, 1 if the
       ! order is to be reversed
       LOGICAL, ALLOCATABLE      :: Fdir(:, :) ! for each element states if each local face is of Dirichlet type
