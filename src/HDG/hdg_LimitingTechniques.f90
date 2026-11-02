@@ -601,12 +601,6 @@ CONTAINS
 
       DEALLOCATE (Pel, Qel, Lfel)
 
-      IF (MPIvar%glob_id .EQ. 0) THEN
-         IF (utils%printint > 0) THEN
-            WRITE (6, *) "Done!"
-         END IF
-      END IF
-
    CONTAINS
 
       !*********************************************
@@ -991,10 +985,10 @@ CONTAINS
       CALL mpi_allreduce(MPI_IN_PLACE, ctgl, 1, mpi_integer, mpi_sum, MPI_COMM_WORLD, ierr)
       CALL mpi_allreduce(MPI_IN_PLACE, maxdiff, 1, MPI_REAL8, MPI_MAX, MPI_COMM_WORLD, ierr)
 #endif
+
       IF (MPIvar%glob_id .EQ. 0 .AND. ctgl .GT. 0) THEN
          IF (utils%printint > 0) THEN
             WRITE (6, *) "Added shock capturing diffusion in ", ctgl, " elements. Max diffusion: ", maxdiff
-            WRITE (6, *) "Done!"
          END IF
       END IF
 
