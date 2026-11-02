@@ -69,7 +69,7 @@ SUBROUTINE READ_input()
    NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, v_p, diff_nn,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, apply_trim, puff,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
    &bohm_energy_thresh, Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat, diagsource
    NAMELIST /UTILS_LST/ PRINTint, printflux, dotiming, freqdisp, freqsave
-   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres, mglevels, mgorder, mgcycletype, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
+   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,reorder_matrix, theta, mglevels, mgorder, mgcycletype, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
    &smther, jsweeps,&
    &novr, restr, prol, solve, fill, thrsol, smther2, jsweeps2, novr2, restr2, prol2, solve2, fill2, thrsol2, mlcycle,&
    &outer_sweeps, maxlevs, csize, aggr_prol, par_aggr_alg, aggr_ord, aggr_filter, mncrratio, athres,&
@@ -258,6 +258,8 @@ SUBROUTINE READ_input()
    lssolver%kspmethd = kspmethd
    lssolver%pctype = pctype
    lssolver%gmresres = gmresres
+   lssolver%reorder_matrix = reorder_matrix
+   lssolver%theta = theta
    lssolver%mgorder = mgorder
    lssolver%mglevels = mglevels
    lssolver%mgcycletype = mgcycletype
