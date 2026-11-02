@@ -1,7 +1,7 @@
 SUBROUTINE HDG_mapping()
    USE globals
    USE LinearAlgebra, ONLY: mymatmul, solve_linear_system, solve_linear_system_sing
-   USE MPI_OMP, ONLY: MPIvar
+   USE MPI_OMP, ONLY: MPIvar, MPI_COMM_WORLD, MPI_Barrier
 
    IMPLICIT NONE
    INTEGER*4                    :: Ndim, N2d, neq, Np, Nfp, Nfe, i, ifa, iel, iel3, Nfg
