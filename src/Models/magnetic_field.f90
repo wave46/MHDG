@@ -1043,12 +1043,14 @@ CONTAINS
 #endif
       END DO
 
+#ifndef PARALL
       !Compute Ip
       CALL computeIplasma()
 
       IF (MPIvar%glob_id .EQ. 0) THEN
          WRITE (6, *) 'I_p =  ', phys%I_p, '[MA]'
       END IF
+#endif
 
       ! check that time is the same
       IF (switch%ME) THEN
