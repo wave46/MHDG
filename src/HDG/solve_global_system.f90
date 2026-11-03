@@ -86,8 +86,8 @@ SUBROUTINE solve_global_system()
          CALL displayMatrixInfo()
          CALL init_mat_PASTIX(matPASTIX)
          matK%start = .FALSE.
-      ENDIF
-      
+      END IF
+
       CALL build_mat_PASTIX(matPASTIX)
       CALL check_mat_PASTIX(matPASTIX)
       CALL anal_mat_PASTIX(matPASTIX)

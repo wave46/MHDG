@@ -6,15 +6,15 @@
 !********************************************
 
 MODULE prec_const
-  IMPLICIT NONE
+   IMPLICIT NONE
 
-  ! Precision for real
-  !*****************
-  INTEGER, PARAMETER :: float = SELECTED_REAL_KIND(13, 99)
+   ! precision for real
+   !*****************
+   INTEGER, PARAMETER           :: float = SELECTED_REAL_KIND(13, 99)
 
-  ! Some useful constants
-  !*********************
-  REAL(float), PARAMETER :: PI = 3.141592653589793238462643383279502884197_float
-  REAL(float), PARAMETER :: sqrt2 = 1.414213562373095_float
+   ! Some useful constants
+   !*********************
+   REAL(float), PARAMETER       :: PI = 3.141592653589793238462643383279502884197_float
+   REAL(float), PARAMETER       :: sqrt2 = 1.414213562373095_float
 
 END MODULE prec_const

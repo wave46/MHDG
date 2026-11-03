@@ -28,1226 +28,1226 @@
 !  array saving and reading in HDF5 format
 !---------------------------------------------
 MODULE HDF5_io_module
-  USE HDF5
-  USE prec_const
-  IMPLICIT NONE
+   USE HDF5
+   USE prec_const
+   IMPLICIT NONE
 
-  !******************************
+   !******************************
 CONTAINS
-  !******************************
+   !******************************
 
-  !----------------------------------------
-  ! create HDF5 file
-  !----------------------------------------
-  SUBROUTINE HDF5_create(filename, file_id, ierr)
+   !----------------------------------------
+   ! create HDF5 file
+   !----------------------------------------
+   SUBROUTINE HDF5_create(filename, file_id, ierr)
 
-    CHARACTER(LEN=*), INTENT(in)  :: filename  ! file name
-    INTEGER(HID_T), INTENT(out) :: file_id   ! file identifier
-    INTEGER, OPTIONAL, INTENT(out) :: ierr
+      CHARACTER(LEN=*), INTENT(IN)  :: filename  ! file name
+      INTEGER(HID_T), INTENT(OUT) :: file_id   ! file identifier
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierr
 
-    INTEGER :: ierr_HDF5
+      INTEGER                   :: ierr_HDF5
 
-    !*** Initialize fortran interface ***
-    CALL H5open_f(ierr_HDF5)
+      !*** Initialize fortran interface ***
+      CALL H5open_f(ierr_HDF5)
 
-    !*** Create a new file using default properties ***
-    CALL H5Fcreate_f(TRIM(filename)//CHAR(0), &
+      !*** Create a new file using default properties ***
+      CALL H5Fcreate_f(TRIM(filename)//CHAR(0), &
          H5F_ACC_TRUNC_F, file_id, ierr_HDF5)
-    !     print *, pglobal_id, "create file", trim(filename)//char(0)
-    IF (PRESENT(ierr)) ierr = ierr_HDF5
+      !     print *, pglobal_id, "create file", trim(filename)//char(0)
+      IF (PRESENT(ierr)) ierr = ierr_HDF5
 
-  END SUBROUTINE HDF5_create
+   END SUBROUTINE HDF5_create
 
-  !----------------------------------------
-  ! open HDF5 file
-  !----------------------------------------
-  SUBROUTINE HDF5_open(filename, file_id, ierr)
+   !----------------------------------------
+   ! open HDF5 file
+   !----------------------------------------
+   SUBROUTINE HDF5_open(filename, file_id, ierr)
 
-    CHARACTER(LEN=*), INTENT(in)  :: filename  ! file name
-    INTEGER(HID_T), INTENT(out) :: file_id   ! file identifier
-    INTEGER, OPTIONAL, INTENT(out) :: ierr
+      CHARACTER(LEN=*), INTENT(IN)  :: filename  ! file name
+      INTEGER(HID_T), INTENT(OUT) :: file_id   ! file identifier
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierr
 
-    INTEGER :: ierr_HDF5
+      INTEGER                   :: ierr_HDF5
 
-    !*** Initialize fortran interface ***
-    CALL H5open_f(ierr_HDF5)
+      !*** Initialize fortran interface ***
+      CALL H5open_f(ierr_HDF5)
 
-    !*** open the HDF5 file ***
-    !     print *, pglobal_id, "open file", trim(filename)//char(0)
-    CALL H5Fopen_f(TRIM(filename)//CHAR(0), &
+      !*** open the HDF5 file ***
+      !     print *, pglobal_id, "open file", trim(filename)//char(0)
+      CALL H5Fopen_f(TRIM(filename)//CHAR(0), &
          H5F_ACC_RDONLY_F, file_id, ierr_HDF5)
-    IF (PRESENT(ierr)) ierr = ierr_HDF5
-  END SUBROUTINE HDF5_open
+      IF (PRESENT(ierr)) ierr = ierr_HDF5
+   END SUBROUTINE HDF5_open
 
-  !----------------------------------------
-  ! close HDF5 file
-  !----------------------------------------
-  SUBROUTINE HDF5_close(file_id)
+   !----------------------------------------
+   ! close HDF5 file
+   !----------------------------------------
+   SUBROUTINE HDF5_close(file_id)
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
 
-    INTEGER :: error   ! error flag
+      INTEGER                   :: error   ! error flag
 
-    CALL H5Fclose_f(file_id, error)
-  END SUBROUTINE HDF5_close
+      CALL H5Fclose_f(file_id, error)
+   END SUBROUTINE HDF5_close
 
-  !----------------------------------------
-  ! create new group
-  !----------------------------------------
-  SUBROUTINE HDF5_group_create(groupname, group_up_id, group_id, ierr)
+   !----------------------------------------
+   ! create new group
+   !----------------------------------------
+   SUBROUTINE HDF5_group_create(groupname, group_up_id, group_id, ierr)
 
-    CHARACTER(LEN=*), INTENT(in)  :: groupname   ! group name
-    INTEGER(HID_T), INTENT(in)  :: group_up_id ! the upper level
-    INTEGER(HID_T), INTENT(out) :: group_id     ! the new group
-    INTEGER, OPTIONAL, INTENT(out) :: ierr
+      CHARACTER(LEN=*), INTENT(IN)  :: groupname   ! group name
+      INTEGER(HID_T), INTENT(IN)  :: group_up_id ! the upper level
+      INTEGER(HID_T), INTENT(OUT) :: group_id     ! the new group
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierr
 
-    INTEGER :: ierr_HDF5
+      INTEGER                   :: ierr_HDF5
 
-    !*** Initialize fortran interface ***
-    !    call H5open_f(ierr_HDF5)
-    !*** Initialize fortran interface ***
-    CALL H5open_f(ierr_HDF5)
+      !*** Initialize fortran interface ***
+      !    call H5open_f(ierr_HDF5)
+      !*** Initialize fortran interface ***
+      CALL H5open_f(ierr_HDF5)
 
-    !*** open the HDF5 file ***
-    !     print *, pglobal_id, "open file", trim(filename)//char(0)
-    CALL h5gcreate_f(group_up_id, groupname, group_id, ierr_HDF5)
-    IF (PRESENT(ierr)) ierr = ierr_HDF5
-  END SUBROUTINE HDF5_group_create
+      !*** open the HDF5 file ***
+      !     print *, pglobal_id, "open file", trim(filename)//char(0)
+      CALL h5gcreate_f(group_up_id, groupname, group_id, ierr_HDF5)
+      IF (PRESENT(ierr)) ierr = ierr_HDF5
+   END SUBROUTINE HDF5_group_create
 
-  !----------------------------------------
-  ! open a group in a HDF5 file
-  !----------------------------------------
-  SUBROUTINE HDF5_group_open(file_id, group_name, group_id, ierr)
+   !----------------------------------------
+   ! open a group in a HDF5 file
+   !----------------------------------------
+   SUBROUTINE HDF5_group_open(file_id, group_name, group_id, ierr)
 
-    INTEGER(HID_T), INTENT(in) :: file_id
-    CHARACTER(len=*), INTENT(in) :: group_name   ! file identifier/group identifier
-    INTEGER(HID_T), INTENT(out) :: group_id   ! file identifier/group identifier
-    INTEGER, OPTIONAL, INTENT(out) :: ierr
+      INTEGER(HID_T), INTENT(IN) :: file_id
+      CHARACTER(len=*), INTENT(IN) :: group_name   ! file identifier/group identifier
+      INTEGER(HID_T), INTENT(OUT) :: group_id   ! file identifier/group identifier
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierr
 
-    INTEGER :: ierr_HDF5
+      INTEGER                   :: ierr_HDF5
 
-    !*** Initialize fortran interface ***
-    CALL H5open_f(ierr_HDF5)
+      !*** Initialize fortran interface ***
+      CALL H5open_f(ierr_HDF5)
 
-    !*** open the HDF5 file ***
-    !     print *, pglobal_id, "open file", trim(filename)//char(0)
-    CALL H5gopen_f(file_id, group_name, group_id, ierr_HDF5)
-    IF (PRESENT(ierr)) ierr = ierr_HDF5
-  END SUBROUTINE HDF5_group_open
+      !*** open the HDF5 file ***
+      !     print *, pglobal_id, "open file", trim(filename)//char(0)
+      CALL H5gopen_f(file_id, group_name, group_id, ierr_HDF5)
+      IF (PRESENT(ierr)) ierr = ierr_HDF5
+   END SUBROUTINE HDF5_group_open
 
-  !----------------------------------------
-  ! close group
-  !----------------------------------------
-  SUBROUTINE HDF5_group_close(group_id, ierr)
+   !----------------------------------------
+   ! close group
+   !----------------------------------------
+   SUBROUTINE HDF5_group_close(group_id, ierr)
 
-    INTEGER(HID_T), INTENT(out) :: group_id     ! the new group
-    INTEGER, OPTIONAL, INTENT(out) :: ierr
+      INTEGER(HID_T), INTENT(OUT) :: group_id     ! the new group
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierr
 
-    INTEGER :: ierr_HDF5
+      INTEGER                   :: ierr_HDF5
 
-    !*** Initialize fortran interface ***
-    !    call H5open_f(ierr_HDF5)
+      !*** Initialize fortran interface ***
+      !    call H5open_f(ierr_HDF5)
 
-    !*** open the HDF5 file ***
-    !     print *, pglobal_id, "open file", trim(filename)//char(0)
-    CALL h5gclose_f(group_id, ierr_HDF5)
-    IF (PRESENT(ierr)) ierr = ierr_HDF5
-  END SUBROUTINE HDF5_group_close
+      !*** open the HDF5 file ***
+      !     print *, pglobal_id, "open file", trim(filename)//char(0)
+      CALL h5gclose_f(group_id, ierr_HDF5)
+      IF (PRESENT(ierr)) ierr = ierr_HDF5
+   END SUBROUTINE HDF5_group_close
 
-  !*************************************************
-  !  HDF5 WRITING
-  !*************************************************
-  !----------------------------------------
-  ! HDF5 saving for an integer
-  !----------------------------------------
-  SUBROUTINE HDF5_integer_saving(file_id, int, dsetname)
+   !*************************************************
+   !  HDF5 WRITING
+   !*************************************************
+   !----------------------------------------
+   ! HDF5 saving for an integer
+   !----------------------------------------
+   SUBROUTINE HDF5_integer_saving(file_id, int, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    INTEGER, INTENT(in) :: int
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      INTEGER, INTENT(IN)       :: int
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER              :: error      ! error flag
-    INTEGER              :: rank       ! dataset rank
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)       :: dim        ! dataset dimensions
-    INTEGER(HID_T)       :: dataset    ! dataset identifier
-    INTEGER(HID_T)       :: dataspace  ! dataspace identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = 1
-    rank = 1
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = 1
+      rank = 1
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
 
-    !*** Create integer dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), &
+      !*** Create integer dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), &
          H5T_NATIVE_INTEGER, dataspace, dataset, error)
 
-    !*** Write the integer data to the dataset ***
-    !***  using default transfer properties    ***
-    CALL H5Dwrite_f(dataset, H5T_NATIVE_INTEGER, int, dim, error)
+      !*** Write the integer data to the dataset ***
+      !***  using default transfer properties    ***
+      CALL H5Dwrite_f(dataset, H5T_NATIVE_INTEGER, int, dim, error)
 
-    !*** Closing ***
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_integer_saving
+      !*** Closing ***
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_integer_saving
 
-  !----------------------------------------
-  ! HDF5 saving for an boolean
-  !----------------------------------------
-  SUBROUTINE HDF5_logical_saving(file_id, bool, dsetname)
+   !----------------------------------------
+   ! HDF5 saving for an boolean
+   !----------------------------------------
+   SUBROUTINE HDF5_logical_saving(file_id, bool, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    LOGICAL, INTENT(in) :: bool
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      LOGICAL, INTENT(IN)       :: bool
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER              :: error      ! error flag
-    INTEGER              :: rank       ! dataset rank
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)       :: dim        ! dataset dimensions
-    INTEGER(HID_T)       :: dataset    ! dataset identifier
-    INTEGER(HID_T)       :: dataspace  ! dataspace identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = 1
-    rank = 1
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = 1
+      rank = 1
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
 
-    !*** Create integer dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), &
+      !*** Create integer dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), &
          H5T_NATIVE_INTEGER, dataspace, dataset, error)
 
-    !*** Write the integer data to the dataset ***
-    !***  using default transfer properties    ***
-    IF (bool) THEN
-       CALL H5Dwrite_f(dataset, H5T_NATIVE_INTEGER, 1, dim, error)
-    ELSE
-       CALL H5Dwrite_f(dataset, H5T_NATIVE_INTEGER, 0, dim, error)
-    ENDIF
+      !*** Write the integer data to the dataset ***
+      !***  using default transfer properties    ***
+      IF (bool) THEN
+         CALL H5Dwrite_f(dataset, H5T_NATIVE_INTEGER, 1, dim, error)
+      ELSE
+         CALL H5Dwrite_f(dataset, H5T_NATIVE_INTEGER, 0, dim, error)
+      END IF
 
-    !*** Closing ***
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_logical_saving
+      !*** Closing ***
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_logical_saving
 
-  !----------------------------------------
-  ! HDF5 saving for a real double
-  !----------------------------------------
-  SUBROUTINE HDF5_real_saving(file_id, rd, dsetname)
+   !----------------------------------------
+   ! HDF5 saving for a real double
+   !----------------------------------------
+   SUBROUTINE HDF5_real_saving(file_id, rd, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(float), INTENT(in) :: rd
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      REAL(float), INTENT(IN)   :: rd
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER              :: error      ! error flag
-    INTEGER              :: rank       ! dataset rank
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)       :: dim        ! dataset dimensions
-    INTEGER(HID_T)       :: dataset    ! dataset identifier
-    INTEGER(HID_T)       :: dataspace  ! dataspace identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = 1
-    rank = 1
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = 1
+      rank = 1
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
 
-    !*** Create integer dataset ***
-    CALL H5Dcreate_f(file_id, dsetname, &
+      !*** Create integer dataset ***
+      CALL H5Dcreate_f(file_id, dsetname, &
          H5T_NATIVE_DOUBLE, dataspace, dataset, error)
 
-    !*** Write the integer data to the dataset ***
-    !***  using default transfer properties    ***
-    CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, rd, dim, error)
+      !*** Write the integer data to the dataset ***
+      !***  using default transfer properties    ***
+      CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, rd, dim, error)
 
-    !*** Closing ***
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_real_saving
+      !*** Closing ***
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_real_saving
 
-  !----------------------------------------
-  ! HDF5 saving for strings
-  !----------------------------------------
-  SUBROUTINE HDF5_string_saving(file_id, string, dsetname)
+   !----------------------------------------
+   ! HDF5 saving for strings
+   !----------------------------------------
+   SUBROUTINE HDF5_string_saving(file_id, string, dsetname)
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    CHARACTER(LEN=*), INTENT(in) :: string    ! string to be saved
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
-    INTEGER             :: error      ! error flag
-    INTEGER             :: rank       ! dataset rank
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim, one    ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
-    INTEGER(HID_T)      :: filetype
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      CHARACTER(LEN=*), INTENT(IN) :: string    ! string to be saved
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim, one    ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
+      INTEGER(HID_T)            :: filetype
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = len_TRIM(string)
-    one = 1
-    rank = 1
-    CALL H5Tcopy_f(H5T_FORTRAN_S1, filetype, error)
-    CALL H5Tset_size_f(filetype, DIM(1), error)
-    CALL H5Screate_simple_f(rank, one, dataspace, error)
-    !*** Create dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), filetype, &
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = len_TRIM(string)
+      one = 1
+      rank = 1
+      CALL H5Tcopy_f(H5T_FORTRAN_S1, filetype, error)
+      CALL H5Tset_size_f(filetype, DIM(1), error)
+      CALL H5Screate_simple_f(rank, one, dataspace, error)
+      !*** Create dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), filetype, &
          dataspace, dataset, error)
-    !*** Write the string to the dataset ***
-    CALL H5Dwrite_f(dataset, filetype, TRIM(string), one, error)
-    !*** Closing ***
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-    CALL H5Tclose_f(filetype, error)
-  END SUBROUTINE HDF5_string_saving
+      !*** Write the string to the dataset ***
+      CALL H5Dwrite_f(dataset, filetype, TRIM(string), one, error)
+      !*** Closing ***
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+      CALL H5Tclose_f(filetype, error)
+   END SUBROUTINE HDF5_string_saving
 
-  !----------------------------------------
-  ! HDF5 saving for string arrays
-  !----------------------------------------
-  SUBROUTINE HDF5_string_array1D_saving(file_id, string_array, dsetname)
+   !----------------------------------------
+   ! HDF5 saving for string arrays
+   !----------------------------------------
+   SUBROUTINE HDF5_string_array1D_saving(file_id, string_array, dsetname)
 
-    USE ISO_C_BINDING
-    INTEGER(HID_T), INTENT(in)        :: file_id   ! file identifier
-    CHARACTER(LEN=*), DIMENSION(:), INTENT(in), TARGET :: string_array    ! string to be saved
-    CHARACTER(LEN=*), INTENT(in)        :: dsetname  ! dataset name
-    INTEGER(SIZE_T)     :: sdim       ! sting dimension
-    INTEGER             :: error     ! error flag
-    INTEGER             :: rank       ! dataset rank
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
-    INTEGER(HID_T)      :: filetype, memtype
-    TYPE(c_ptr) :: f_ptr
-    f_ptr = C_LOC(string_array(1) (1:1))
+      USE ISO_C_BINDING
+      INTEGER(HID_T), INTENT(IN)        :: file_id   ! file identifier
+      CHARACTER(LEN=*), DIMENSION(:), INTENT(IN), TARGET :: string_array    ! string to be saved
+      CHARACTER(LEN=*), INTENT(IN)        :: dsetname  ! dataset name
+      INTEGER(SIZE_T)           :: sdim       ! sting dimension
+      INTEGER                   :: error     ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
+      INTEGER(HID_T)            :: filetype, memtype
+      TYPE(c_ptr)               :: f_ptr
+      f_ptr = C_LOC(string_array(1) (1:1))
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = SIZE(string_array)
-    sdim = 20
-    rank = 1
-    CALL H5Tcopy_f(H5T_FORTRAN_S1, memtype, error)
-    CALL H5Tset_size_f(memtype, sdim, error)
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = SIZE(string_array)
+      sdim = 20
+      rank = 1
+      CALL H5Tcopy_f(H5T_FORTRAN_S1, memtype, error)
+      CALL H5Tset_size_f(memtype, sdim, error)
 
-    CALL H5Tcopy_f(H5T_C_S1, filetype, error)
-    CALL H5Tset_size_f(filetype, sdim + 1, error)
+      CALL H5Tcopy_f(H5T_C_S1, filetype, error)
+      CALL H5Tset_size_f(filetype, sdim + 1, error)
 
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
-    !*** Create real dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), filetype, &
-         dataspace, dataset, error)
-
-    !*** Write the string to the dataset ***
-    CALL H5Dwrite_f(dataset, memtype, f_ptr, error)
-    !*** Closing ***
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_string_array1D_saving
-
-  !----------------------------------------
-  ! HDF5 reading for a string
-  !----------------------------------------
-  SUBROUTINE HDF5_string_reading(file_id, string, dsetname, ierr)
-
-
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    CHARACTER(LEN=*), POINTER    :: string
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
-    INTEGER, OPTIONAL, INTENT(out) :: ierr ! error flag
-
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T)    :: sdim, ssize        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
-    INTEGER(HSIZE_T), DIMENSION(1)      :: dims, maxdims        ! dataset dimensions
-    INTEGER(HID_T)      :: filetype, memtype
-    sdim = 100
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
-
-    CALL H5Dget_type_f(dataset, filetype, error)
-    CALL H5Tget_size_f(filetype, ssize, error)
-
-    ! Get dataset dimensions for allocation
-    CALL h5dget_space_f(dataset, dataspace, error)
-    CALL h5sget_simple_extent_dims_f(dataspace, dims, maxdims, error)
-
-    CALL H5Tcopy_f(H5T_FORTRAN_S1, memtype, error)
-    CALL H5Tset_size_f(memtype, sdim, error)
-
-    !*** read the integer data to the dataset ***
-    !***   using default transfer properties  ***
-    CALL H5Dread_f(dataset, memtype, string, dims, error)
-    IF (PRESENT(ierr)) ierr = error
-    string = string(1:ssize)
-
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_string_reading
-
-  !----------------------------------------
-  ! HDF5 saving for a 1D array of integer
-  !----------------------------------------
-  SUBROUTINE HDF5_array1D_saving_int(file_id, array1D, dim1, dsetname)
-
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    INTEGER, DIMENSION(:), INTENT(in) :: array1D
-    INTEGER, INTENT(in) :: dim1
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
-
-    INTEGER             :: error      ! error flag
-    INTEGER             :: rank       ! dataset rank
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
-
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = dim1
-    rank = 1
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
-
-    !*** Create real dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_INTEGER, &
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      !*** Create real dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), filetype, &
          dataspace, dataset, error)
 
-    !*** Write the real*8 array data to the dataset using ***
-    !***  default transfer properties                     ***
-    CALL H5Dwrite_f(dataset, H5T_NATIVE_INTEGER, array1D, dim, error)
+      !*** Write the string to the dataset ***
+      CALL H5Dwrite_f(dataset, memtype, f_ptr, error)
+      !*** Closing ***
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_string_array1D_saving
 
-    !*** Closing ***
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array1D_saving_int
+   !----------------------------------------
+   ! HDF5 reading for a string
+   !----------------------------------------
+   SUBROUTINE HDF5_string_reading(file_id, string, dsetname, ierr)
 
-  !----------------------------------------
-  ! HDF5 saving for a 2D array of integer
-  !----------------------------------------
-  SUBROUTINE HDF5_array2D_saving_int(file_id, array2D, dim1, dim2, dsetname)
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    INTEGER, DIMENSION(:, :), INTENT(in) :: array2D
-    INTEGER, INTENT(in) :: dim1, dim2
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      CHARACTER(LEN=*), POINTER    :: string
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierr ! error flag
 
-    INTEGER             :: error      ! error flag
-    INTEGER             :: rank       ! dataset rank
-    INTEGER(HSIZE_T), &
-         DIMENSION(2)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER(HSIZE_T)          :: sdim, ssize        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
+      INTEGER(HSIZE_T), DIMENSION(1)      :: dims, maxdims        ! dataset dimensions
+      INTEGER(HID_T)            :: filetype, memtype
+      sdim = 100
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = dim1
-    DIM(2) = dim2
-    rank = 2
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      CALL H5Dget_type_f(dataset, filetype, error)
+      CALL H5Tget_size_f(filetype, ssize, error)
 
-    !*** Create real dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_INTEGER, &
+      ! Get dataset dimensions for allocation
+      CALL h5dget_space_f(dataset, dataspace, error)
+      CALL h5sget_simple_extent_dims_f(dataspace, dims, maxdims, error)
+
+      CALL H5Tcopy_f(H5T_FORTRAN_S1, memtype, error)
+      CALL H5Tset_size_f(memtype, sdim, error)
+
+      !*** read the integer data to the dataset ***
+      !***   using default transfer properties  ***
+      CALL H5Dread_f(dataset, memtype, string, dims, error)
+      IF (PRESENT(ierr)) ierr = error
+      string = string(1:ssize)
+
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_string_reading
+
+   !----------------------------------------
+   ! HDF5 saving for a 1D array of integer
+   !----------------------------------------
+   SUBROUTINE HDF5_array1D_saving_int(file_id, array1D, dim1, dsetname)
+
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      INTEGER, DIMENSION(:), INTENT(IN) :: array1D
+      INTEGER, INTENT(IN)       :: dim1
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
+
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
+
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = dim1
+      rank = 1
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
+
+      !*** Create real dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_INTEGER, &
          dataspace, dataset, error)
 
-    !*** Write the real*8 array data to the dataset using ***
-    !***  default transfer properties                     ***
-    CALL H5Dwrite_f(dataset, H5T_NATIVE_INTEGER, array2D, dim, error)
+      !*** Write the real*8 array data to the dataset using ***
+      !***  default transfer properties                     ***
+      CALL H5Dwrite_f(dataset, H5T_NATIVE_INTEGER, array1D, dim, error)
 
-    !*** Closing ***
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array2D_saving_int
+      !*** Closing ***
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array1D_saving_int
 
-  !----------------------------------------
-  ! gzip HDF5 saving for a 1D array of real*4
-  !----------------------------------------
-  SUBROUTINE HDF5_array1D_saving_r4(file_id, array1D, dim1, dsetname)
+   !----------------------------------------
+   ! HDF5 saving for a 2D array of integer
+   !----------------------------------------
+   SUBROUTINE HDF5_array2D_saving_int(file_id, array2D, dim1, dim2, dsetname)
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(4), DIMENSION(:), INTENT(in) :: array1D
-    INTEGER, INTENT(in) :: dim1
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      INTEGER, DIMENSION(:, :), INTENT(IN) :: array2D
+      INTEGER, INTENT(IN)       :: dim1, dim2
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER             :: error      ! error flag
-    INTEGER             :: rank       ! dataset rank
-    INTEGER             :: cmpr       ! compression level
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
-    INTEGER(HID_T)      :: property   ! Property list identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER(HSIZE_T), &
+         DIMENSION(2)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = dim1
-    rank = 1
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = dim1
+      DIM(2) = dim2
+      rank = 2
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
 
-    !*** Creates a new property dataset ***
-    CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
-    CALL H5Pset_chunk_f(property, rank, dim, error)
-    cmpr = 6
-    CALL H5Pset_deflate_f(property, cmpr, error)
+      !*** Create real dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_INTEGER, &
+         dataspace, dataset, error)
 
-    !*** Create real dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_REAL, &
+      !*** Write the real*8 array data to the dataset using ***
+      !***  default transfer properties                     ***
+      CALL H5Dwrite_f(dataset, H5T_NATIVE_INTEGER, array2D, dim, error)
+
+      !*** Closing ***
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array2D_saving_int
+
+   !----------------------------------------
+   ! gzip HDF5 saving for a 1D array of real*4
+   !----------------------------------------
+   SUBROUTINE HDF5_array1D_saving_r4(file_id, array1D, dim1, dsetname)
+
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      REAL(4), DIMENSION(:), INTENT(IN) :: array1D
+      INTEGER, INTENT(IN)       :: dim1
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
+
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER                   :: cmpr       ! compression level
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
+      INTEGER(HID_T)            :: property   ! Property list identifier
+
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = dim1
+      rank = 1
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
+
+      !*** Creates a new property dataset ***
+      CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
+      CALL H5Pset_chunk_f(property, rank, dim, error)
+      cmpr = 6
+      CALL H5Pset_deflate_f(property, cmpr, error)
+
+      !*** Create real dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_REAL, &
          dataspace, dataset, error, property)
 
-    !*** Write the real*8 array data to the dataset ***
-    !***   using default transfer properties        ***
-    CALL H5Dwrite_f(dataset, H5T_NATIVE_REAL, array1D, dim, error)
+      !*** Write the real*8 array data to the dataset ***
+      !***   using default transfer properties        ***
+      CALL H5Dwrite_f(dataset, H5T_NATIVE_REAL, array1D, dim, error)
 
-    !*** Closing ***
-    CALL H5Pclose_f(property, error)
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array1D_saving_r4
+      !*** Closing ***
+      CALL H5Pclose_f(property, error)
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array1D_saving_r4
 
-  !--------------------------------------------
-  ! gzip HDF5 saving for a 1D array of real*8
-  !--------------------------------------------
-  SUBROUTINE HDF5_array1D_saving(file_id, array1D, dim1, dsetname)
+   !--------------------------------------------
+   ! gzip HDF5 saving for a 1D array of real*8
+   !--------------------------------------------
+   SUBROUTINE HDF5_array1D_saving(file_id, array1D, dim1, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(float), &
-         DIMENSION(:), INTENT(in) :: array1D
-    INTEGER, INTENT(in) :: dim1
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      REAL(float), &
+         DIMENSION(:), INTENT(IN) :: array1D
+      INTEGER, INTENT(IN)       :: dim1
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER             :: error      ! error flag
-    INTEGER             :: rank       ! dataset rank
-    INTEGER             :: cmpr       ! compression level
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
-    INTEGER(HID_T)      :: property   ! Property list identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER                   :: cmpr       ! compression level
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
+      INTEGER(HID_T)            :: property   ! Property list identifier
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = dim1
-    rank = 1
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = dim1
+      rank = 1
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
 
-    !*** Creates a new property for gzip dataset ***
-    CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
-    CALL H5Pset_chunk_f(property, rank, dim, error)
-    cmpr = 6
-    CALL H5Pset_deflate_f(property, cmpr, error)
+      !*** Creates a new property for gzip dataset ***
+      CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
+      CALL H5Pset_chunk_f(property, rank, dim, error)
+      cmpr = 6
+      CALL H5Pset_deflate_f(property, cmpr, error)
 
-    !*** Create real dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_DOUBLE, &
+      !*** Create real dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_DOUBLE, &
          dataspace, dataset, error, property)
 
-    !*** Write the real*8 array data to the dataset ***
-    !***   using default transfer properties        ***
-    CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, array1D, dim, error)
+      !*** Write the real*8 array data to the dataset ***
+      !***   using default transfer properties        ***
+      CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, array1D, dim, error)
 
-    !*** Closing ***
-    CALL H5Pclose_f(property, error)
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array1D_saving
+      !*** Closing ***
+      CALL H5Pclose_f(property, error)
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array1D_saving
 
-  !----------------------------------------
-  ! gzip HDF5 saving for a 2D array
-  !----------------------------------------
-  SUBROUTINE HDF5_array2D_saving(file_id, array2D, dim1, dim2, dsetname)
+   !----------------------------------------
+   ! gzip HDF5 saving for a 2D array
+   !----------------------------------------
+   SUBROUTINE HDF5_array2D_saving(file_id, array2D, dim1, dim2, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(float), &
-         DIMENSION(:, :), INTENT(in) :: array2D
-    INTEGER, INTENT(in) :: dim1, dim2
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      REAL(float), &
+         DIMENSION(:, :), INTENT(IN) :: array2D
+      INTEGER, INTENT(IN)       :: dim1, dim2
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER              :: error      ! error flag
-    INTEGER              :: rank       ! dataset rank
-    INTEGER              :: cmpr       ! compression level
-    INTEGER(HSIZE_T), &
-         DIMENSION(2)       :: dim        ! dataset dimensions
-    INTEGER(HID_T)       :: dataset    ! dataset identifier
-    INTEGER(HID_T)       :: dataspace  ! dataspace identifier
-    INTEGER(HID_T)       :: property   ! Property list identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER                   :: cmpr       ! compression level
+      INTEGER(HSIZE_T), &
+         DIMENSION(2)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
+      INTEGER(HID_T)            :: property   ! Property list identifier
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = dim1
-    DIM(2) = dim2
-    rank = 2
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = dim1
+      DIM(2) = dim2
+      rank = 2
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
 
-    !*** Creates a new property dataset ***
-    CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
-    CALL H5Pset_chunk_f(property, rank, dim, error)
-    cmpr = 6
-    CALL H5Pset_deflate_f(property, cmpr, error)
+      !*** Creates a new property dataset ***
+      CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
+      CALL H5Pset_chunk_f(property, rank, dim, error)
+      cmpr = 6
+      CALL H5Pset_deflate_f(property, cmpr, error)
 
-    !*** Create real dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_DOUBLE, &
+      !*** Create real dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_DOUBLE, &
          dataspace, dataset, error, property)
 
-    !*** Write the real*8 array data to the dataset ***
-    !***   using default transfer properties        ***
-    CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, array2D, dim, error)
+      !*** Write the real*8 array data to the dataset ***
+      !***   using default transfer properties        ***
+      CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, array2D, dim, error)
 
-    !*** Closing ***
-    CALL H5Pclose_f(property, error)
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array2D_saving
+      !*** Closing ***
+      CALL H5Pclose_f(property, error)
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array2D_saving
 
-  !----------------------------------------
-  ! gzip HDF5 saving for a 3D array
-  !----------------------------------------
-  SUBROUTINE HDF5_array3D_saving(file_id, array3D, &
-       dim1, dim2, dim3, dsetname)
+   !----------------------------------------
+   ! gzip HDF5 saving for a 3D array
+   !----------------------------------------
+   SUBROUTINE HDF5_array3D_saving(file_id, array3D, &
+      dim1, dim2, dim3, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(float), &
-         DIMENSION(:, :, :), INTENT(in) :: array3D
-    INTEGER, INTENT(in) :: dim1, dim2, dim3
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      REAL(float), &
+         DIMENSION(:, :, :), INTENT(IN) :: array3D
+      INTEGER, INTENT(IN)       :: dim1, dim2, dim3
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER             :: error      ! error flag
-    INTEGER             :: rank       ! dataset rank
-    INTEGER             :: cmpr       ! compression level
-    INTEGER(HSIZE_T), &
-         DIMENSION(3)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
-    INTEGER(HID_T)      :: property   ! Property list identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER                   :: cmpr       ! compression level
+      INTEGER(HSIZE_T), &
+         DIMENSION(3)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
+      INTEGER(HID_T)            :: property   ! Property list identifier
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = dim1
-    DIM(2) = dim2
-    DIM(3) = dim3
-    rank = 3
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = dim1
+      DIM(2) = dim2
+      DIM(3) = dim3
+      rank = 3
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
 
-    !*** Creates a new property dataset ***
-    CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
-    CALL H5Pset_chunk_f(property, rank, dim, error)
-    cmpr = 6
-    CALL H5Pset_deflate_f(property, cmpr, error)
+      !*** Creates a new property dataset ***
+      CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
+      CALL H5Pset_chunk_f(property, rank, dim, error)
+      cmpr = 6
+      CALL H5Pset_deflate_f(property, cmpr, error)
 
-    !*** Create real dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_DOUBLE, &
+      !*** Create real dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_DOUBLE, &
          dataspace, dataset, error, property)
 
-    !*** Write the real*8 array data to the dataset ***
-    !***   using default transfer properties        ***
-    CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, array3D, dim, error)
+      !*** Write the real*8 array data to the dataset ***
+      !***   using default transfer properties        ***
+      CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, array3D, dim, error)
 
-    !*** Closing ***
-    CALL H5Pclose_f(property, error)
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array3D_saving
+      !*** Closing ***
+      CALL H5Pclose_f(property, error)
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array3D_saving
 
-  !----------------------------------------
-  ! gzip HDF5 saving for a 4D array
-  !----------------------------------------
-  SUBROUTINE HDF5_array4D_saving(file_id, array4d, &
-       dim1, dim2, dim3, dim4, dsetname)
+   !----------------------------------------
+   ! gzip HDF5 saving for a 4D array
+   !----------------------------------------
+   SUBROUTINE HDF5_array4D_saving(file_id, array4d, &
+      dim1, dim2, dim3, dim4, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(float), &
-         DIMENSION(:, :, :, :), INTENT(in) :: array4d
-    INTEGER, INTENT(in) :: dim1, dim2, dim3, dim4
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      REAL(float), &
+         DIMENSION(:, :, :, :), INTENT(IN) :: array4d
+      INTEGER, INTENT(IN)       :: dim1, dim2, dim3, dim4
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER             :: error      ! error flag
-    INTEGER             :: rank       ! dataset rank
-    INTEGER             :: cmpr       ! compression level
-    INTEGER(HSIZE_T), &
-         DIMENSION(4)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
-    INTEGER(HID_T)      :: property   ! Property list identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER                   :: cmpr       ! compression level
+      INTEGER(HSIZE_T), &
+         DIMENSION(4)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
+      INTEGER(HID_T)            :: property   ! Property list identifier
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = dim1
-    DIM(2) = dim2
-    DIM(3) = dim3
-    DIM(4) = dim4
-    rank = 4
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = dim1
+      DIM(2) = dim2
+      DIM(3) = dim3
+      DIM(4) = dim4
+      rank = 4
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
 
-    !*** Creates a new property dataset ***
-    CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
-    CALL H5Pset_chunk_f(property, rank, dim, error)
-    cmpr = 6
-    CALL H5Pset_deflate_f(property, cmpr, error)
+      !*** Creates a new property dataset ***
+      CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
+      CALL H5Pset_chunk_f(property, rank, dim, error)
+      cmpr = 6
+      CALL H5Pset_deflate_f(property, cmpr, error)
 
-    !*** Create real dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_DOUBLE, &
+      !*** Create real dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_DOUBLE, &
          dataspace, dataset, error, property)
 
-    !*** Write the real*8 array data to the dataset ***
-    !***  using default transfer properties ***
-    CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, array4D, dim, error)
+      !*** Write the real*8 array data to the dataset ***
+      !***  using default transfer properties ***
+      CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, array4D, dim, error)
 
-    !*** Closing ***
-    CALL H5Pclose_f(property, error)
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array4D_saving
+      !*** Closing ***
+      CALL H5Pclose_f(property, error)
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array4D_saving
 
-  !----------------------------------------
-  ! gzip HDF5 saving for a 5D array
-  !----------------------------------------
-  SUBROUTINE HDF5_array5D_saving(file_id, array5d, &
-       dim1, dim2, dim3, dim4, dim5, dsetname)
+   !----------------------------------------
+   ! gzip HDF5 saving for a 5D array
+   !----------------------------------------
+   SUBROUTINE HDF5_array5D_saving(file_id, array5d, &
+      dim1, dim2, dim3, dim4, dim5, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id  ! file identifier
-    REAL(float), &
-         DIMENSION(:, :, :, :, :), INTENT(in) :: array5d
-    INTEGER, INTENT(in) :: dim1, dim2
-    INTEGER, INTENT(in) :: dim3, dim4, dim5
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      INTEGER(HID_T), INTENT(IN) :: file_id  ! file identifier
+      REAL(float), &
+         DIMENSION(:, :, :, :, :), INTENT(IN) :: array5d
+      INTEGER, INTENT(IN)       :: dim1, dim2
+      INTEGER, INTENT(IN)       :: dim3, dim4, dim5
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER             :: error      ! error flag
-    INTEGER             :: rank       ! dataset rank
-    INTEGER             :: cmpr       ! compression level
-    INTEGER(HSIZE_T), &
-         DIMENSION(5)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
-    INTEGER(HID_T)      :: property   ! Property list identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER                   :: rank       ! dataset rank
+      INTEGER                   :: cmpr       ! compression level
+      INTEGER(HSIZE_T), &
+         DIMENSION(5)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
+      INTEGER(HID_T)            :: property   ! Property list identifier
 
-    !*** Create and initialize dataspaces for datasets ***
-    DIM(1) = dim1
-    DIM(2) = dim2
-    DIM(3) = dim3
-    DIM(4) = dim4
-    DIM(5) = dim5
-    rank = 5
-    CALL H5Screate_simple_f(rank, dim, dataspace, error)
+      !*** Create and initialize dataspaces for datasets ***
+      DIM(1) = dim1
+      DIM(2) = dim2
+      DIM(3) = dim3
+      DIM(4) = dim4
+      DIM(5) = dim5
+      rank = 5
+      CALL H5Screate_simple_f(rank, dim, dataspace, error)
 
-    !*** Creates a new property dataset ***
-    CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
-    CALL H5Pset_chunk_f(property, rank, dim, error)
-    cmpr = 6
-    CALL H5Pset_deflate_f(property, cmpr, error)
+      !*** Creates a new property dataset ***
+      CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
+      CALL H5Pset_chunk_f(property, rank, dim, error)
+      cmpr = 6
+      CALL H5Pset_deflate_f(property, cmpr, error)
 
-    !*** Create real dataset ***
-    CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_DOUBLE, &
+      !*** Create real dataset ***
+      CALL H5Dcreate_f(file_id, TRIM(dsetname), H5T_NATIVE_DOUBLE, &
          dataspace, dataset, error, property)
 
-    !*** Write the real*8 array data to the dataset ***
-    !***  using default transfer properties         ***
-    CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, array5D, dim, error)
+      !*** Write the real*8 array data to the dataset ***
+      !***  using default transfer properties         ***
+      CALL H5Dwrite_f(dataset, H5T_NATIVE_DOUBLE, array5D, dim, error)
 
-    !*** Closing ***
-    CALL H5Pclose_f(property, error)
-    CALL H5Sclose_f(dataspace, error)
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array5D_saving
+      !*** Closing ***
+      CALL H5Pclose_f(property, error)
+      CALL H5Sclose_f(dataspace, error)
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array5D_saving
 
-  !************************************************
-  !  HDF5 READING
-  !************************************************
+   !************************************************
+   !  HDF5 READING
+   !************************************************
 
-  !----------------------------------------
-  ! HDF5 get dimensions of a 1d dataset
-  !----------------------------------------
-  SUBROUTINE HDF5_getdim(file_id, dsetname, res)
-
-
-    INTEGER(HID_T), INTENT(in)  :: file_id   ! file identifier
-    CHARACTER(LEN=*), INTENT(in)  :: dsetname  ! dataset name
-    INTEGER(HSIZE_T), INTENT(out) :: res       ! the dataset size
-
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dims, maxdims        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-    INTEGER(HID_T)      :: dataspace  ! dataspace identifier
-
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
-
-    ! Get dataset dimensions for allocation
-    CALL h5dget_space_f(dataset, dataspace, error)
-    CALL h5sget_simple_extent_dims_f(dataspace, dims, maxdims, error)
-    res = dims(1)
-
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_getdim
-
-  !----------------------------------------
-  ! HDF5 reading for an integer
-  !----------------------------------------
-  SUBROUTINE HDF5_integer_reading(file_id, int, dsetname, ierr)
+   !----------------------------------------
+   ! HDF5 get dimensions of a 1d dataset
+   !----------------------------------------
+   SUBROUTINE HDF5_getdim(file_id, dsetname, res)
 
 
-    INTEGER(HID_T), INTENT(in)  :: file_id   ! file identifier
-    INTEGER, INTENT(out) :: int
-    CHARACTER(LEN=*), INTENT(in)  :: dsetname  ! dataset name
-    INTEGER, OPTIONAL, INTENT(out) :: ierr      ! error flag
+      INTEGER(HID_T), INTENT(IN)  :: file_id   ! file identifier
+      CHARACTER(LEN=*), INTENT(IN)  :: dsetname  ! dataset name
+      INTEGER(HSIZE_T), INTENT(OUT) :: res       ! the dataset size
 
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dims, maxdims        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+      INTEGER(HID_T)            :: dataspace  ! dataspace identifier
 
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
 
-    !*** read the integer data to the dataset ***
-    !***  using default transfer properties   ***
-    CALL H5Dread_f(dataset, H5T_NATIVE_INTEGER, int, dim, error)
-    IF (PRESENT(ierr)) ierr = error
+      ! Get dataset dimensions for allocation
+      CALL h5dget_space_f(dataset, dataspace, error)
+      CALL h5sget_simple_extent_dims_f(dataspace, dims, maxdims, error)
+      res = dims(1)
 
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_getdim
 
-  END SUBROUTINE HDF5_integer_reading
-
-  !----------------------------------------
-  ! HDF5 reading for a real double
-  !----------------------------------------
-  SUBROUTINE HDF5_real_reading(file_id, rd, dsetname)
-
-
-    INTEGER(HID_T), INTENT(in)  :: file_id   ! file identifier
-    REAL(float), INTENT(out) :: rd
-    CHARACTER(LEN=*), INTENT(in)  :: dsetname  ! dataset name
-
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
-
-    !*** read the integer data to the dataset ***
-    !***  using default transfer properties   ***
-    CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, rd, dim, error)
-
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_real_reading
-
-  !----------------------------------------
-  ! HDF5 reading for an array 1D of integer
-  !----------------------------------------
-  SUBROUTINE HDF5_array1D_reading_int(file_id, array1D, dsetname, ierr)
+   !----------------------------------------
+   ! HDF5 reading for an integer
+   !----------------------------------------
+   SUBROUTINE HDF5_integer_reading(file_id, int, dsetname, ierr)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    INTEGER, DIMENSION(:), POINTER    :: array1D
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
-    INTEGER, OPTIONAL, INTENT(out) :: ierr ! error flag
+      INTEGER(HID_T), INTENT(IN)  :: file_id   ! file identifier
+      INTEGER, INTENT(OUT)      :: int
+      CHARACTER(LEN=*), INTENT(IN)  :: dsetname  ! dataset name
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierr      ! error flag
 
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
 
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
 
-    !*** read the integer data to the dataset ***
-    !***   using default transfer properties  ***
-    DIM(1) = SIZE(array1D, 1)
-    CALL H5Dread_f(dataset, H5T_NATIVE_INTEGER, array1D, dim, error)
+      !*** read the integer data to the dataset ***
+      !***  using default transfer properties   ***
+      CALL H5Dread_f(dataset, H5T_NATIVE_INTEGER, int, dim, error)
+      IF (PRESENT(ierr)) ierr = error
 
-    IF (PRESENT(ierr)) ierr = error
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, error)
 
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array1D_reading_int
+   END SUBROUTINE HDF5_integer_reading
 
-  !----------------------------------------
-  ! HDF5 reading for an array 2D of integer
-  !----------------------------------------
-  SUBROUTINE HDF5_array2D_reading_int(file_id, array2D, dsetname, ierr)
-
-
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    INTEGER, DIMENSION(:, :), POINTER    :: array2D
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
-    INTEGER, OPTIONAL, INTENT(out) :: ierr ! error flag
-
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(2)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
-
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
-
-    !*** read the integer data to the dataset ***
-    !***   using default transfer properties  ***
-    DIM(1) = SIZE(array2D, 1)
-    DIM(2) = SIZE(array2D, 2)
-    CALL H5Dread_f(dataset, H5T_NATIVE_INTEGER, array2D, dim, error)
-    IF (PRESENT(ierr)) ierr = error
-
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array2D_reading_int
-
-  !----------------------------------------
-  ! HDF5 reading for an array 1D
-  !----------------------------------------
-  SUBROUTINE HDF5_array1D_reading(file_id, array1D, dsetname)
+   !----------------------------------------
+   ! HDF5 reading for a real double
+   !----------------------------------------
+   SUBROUTINE HDF5_real_reading(file_id, rd, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(float), &
+      INTEGER(HID_T), INTENT(IN)  :: file_id   ! file identifier
+      REAL(float), INTENT(OUT)  :: rd
+      CHARACTER(LEN=*), INTENT(IN)  :: dsetname  ! dataset name
+
+      INTEGER                   :: error      ! error flag
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+
+      !*** read the integer data to the dataset ***
+      !***  using default transfer properties   ***
+      CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, rd, dim, error)
+
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_real_reading
+
+   !----------------------------------------
+   ! HDF5 reading for an array 1D of integer
+   !----------------------------------------
+   SUBROUTINE HDF5_array1D_reading_int(file_id, array1D, dsetname, ierr)
+
+
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      INTEGER, DIMENSION(:), POINTER    :: array1D
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierr ! error flag
+
+      INTEGER                   :: error      ! error flag
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+
+      !*** read the integer data to the dataset ***
+      !***   using default transfer properties  ***
+      DIM(1) = SIZE(array1D, 1)
+      CALL H5Dread_f(dataset, H5T_NATIVE_INTEGER, array1D, dim, error)
+
+      IF (PRESENT(ierr)) ierr = error
+
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array1D_reading_int
+
+   !----------------------------------------
+   ! HDF5 reading for an array 2D of integer
+   !----------------------------------------
+   SUBROUTINE HDF5_array2D_reading_int(file_id, array2D, dsetname, ierr)
+
+
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      INTEGER, DIMENSION(:, :), POINTER    :: array2D
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierr ! error flag
+
+      INTEGER                   :: error      ! error flag
+      INTEGER(HSIZE_T), &
+         DIMENSION(2)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
+
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+
+      !*** read the integer data to the dataset ***
+      !***   using default transfer properties  ***
+      DIM(1) = SIZE(array2D, 1)
+      DIM(2) = SIZE(array2D, 2)
+      CALL H5Dread_f(dataset, H5T_NATIVE_INTEGER, array2D, dim, error)
+      IF (PRESENT(ierr)) ierr = error
+
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array2D_reading_int
+
+   !----------------------------------------
+   ! HDF5 reading for an array 1D
+   !----------------------------------------
+   SUBROUTINE HDF5_array1D_reading(file_id, array1D, dsetname)
+
+
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      REAL(float), &
          DIMENSION(:), POINTER    :: array1D
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(1)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER(HSIZE_T), &
+         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
 
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
 
-    !*** read the integer data to the dataset ***
-    !***   using default transfer properties  ***
-    DIM(1) = SIZE(array1D, 1)
-    CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array1D, dim, error)
+      !*** read the integer data to the dataset ***
+      !***   using default transfer properties  ***
+      DIM(1) = SIZE(array1D, 1)
+      CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array1D, dim, error)
 
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array1D_reading
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array1D_reading
 
-  !----------------------------------------
-  ! HDF5 reading for an array 2D
-  !----------------------------------------
-  SUBROUTINE HDF5_array2D_reading(file_id, array2D, dsetname, ierr)
+   !----------------------------------------
+   ! HDF5 reading for an array 2D
+   !----------------------------------------
+   SUBROUTINE HDF5_array2D_reading(file_id, array2D, dsetname, ierr)
 
-    INTEGER(HID_T), INTENT(in)            :: file_id ! file identifier
-    REAL(float), DIMENSION(:, :), POINTER :: array2D
-    CHARACTER(LEN=*), INTENT(in)          :: dsetname ! dataset name
-    INTEGER, OPTIONAL, INTENT(out)        :: ierr ! error flag
+      INTEGER(HID_T), INTENT(IN)            :: file_id ! file identifier
+      REAL(float), DIMENSION(:, :), POINTER :: array2D
+      CHARACTER(LEN=*), INTENT(IN)          :: dsetname ! dataset name
+      INTEGER, OPTIONAL, INTENT(OUT)        :: ierr ! error flag
 
-    INTEGER                               :: error ! error flag
-    INTEGER(HSIZE_T), DIMENSION(2)        :: dim ! dataset dimensions
-    INTEGER(HID_T)                        :: dataset ! dataset identifier
+      INTEGER                               :: error ! error flag
+      INTEGER(HSIZE_T), DIMENSION(2)        :: dim ! dataset dimensions
+      INTEGER(HID_T)                        :: dataset ! dataset identifier
 
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
 
-    !*** read the integer data to the dataset ***
-    !***  using default transfer properties   ***
-    DIM(1) = SIZE(array2D, 1)
-    DIM(2) = SIZE(array2D, 2)
-    CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array2D, dim, error)
-    IF (PRESENT(ierr)) ierr = error
+      !*** read the integer data to the dataset ***
+      !***  using default transfer properties   ***
+      DIM(1) = SIZE(array2D, 1)
+      DIM(2) = SIZE(array2D, 2)
+      CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array2D, dim, error)
+      IF (PRESENT(ierr)) ierr = error
 
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array2D_reading
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array2D_reading
 
-  !----------------------------------------
-  ! HDF5 reading for an array 3D
-  !----------------------------------------
-  SUBROUTINE HDF5_array3D_reading(file_id, array3D, dsetname)
+   !----------------------------------------
+   ! HDF5 reading for an array 3D
+   !----------------------------------------
+   SUBROUTINE HDF5_array3D_reading(file_id, array3D, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in) :: file_id   ! file identifier
-    REAL(float), &
+      INTEGER(HID_T), INTENT(IN) :: file_id   ! file identifier
+      REAL(float), &
          DIMENSION(:, :, :), POINTER    :: array3D
-    CHARACTER(LEN=*), INTENT(in) :: dsetname  ! dataset name
+      CHARACTER(LEN=*), INTENT(IN) :: dsetname  ! dataset name
 
-    INTEGER             :: error      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(3)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
+      INTEGER                   :: error      ! error flag
+      INTEGER(HSIZE_T), &
+         DIMENSION(3)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
 
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
 
-    !*** read the integer data to the dataset ***
-    !***  using default transfer properties   ***
-    DIM(1) = SIZE(array3D, 1)
-    DIM(2) = SIZE(array3D, 2)
-    DIM(3) = SIZE(array3D, 3)
-    CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array3D, dim, error)
+      !*** read the integer data to the dataset ***
+      !***  using default transfer properties   ***
+      DIM(1) = SIZE(array3D, 1)
+      DIM(2) = SIZE(array3D, 2)
+      DIM(3) = SIZE(array3D, 3)
+      CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array3D, dim, error)
 
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array3D_reading
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array3D_reading
 
-  !----------------------------------------
-  ! HDF5 reading for an array 4D
-  !----------------------------------------
-  SUBROUTINE HDF5_array4D_reading(file_id, array4D, dsetname, ierr)
+   !----------------------------------------
+   ! HDF5 reading for an array 4D
+   !----------------------------------------
+   SUBROUTINE HDF5_array4D_reading(file_id, array4D, dsetname, ierr)
 
-    INTEGER(HID_T), INTENT(in)  :: file_id   ! file identifier
-    REAL(float), &
+      INTEGER(HID_T), INTENT(IN)  :: file_id   ! file identifier
+      REAL(float), &
          DIMENSION(:, :, :, :), POINTER     :: array4D
-    CHARACTER(LEN=*), INTENT(in)  :: dsetname  ! dataset name
-    INTEGER, OPTIONAL, INTENT(out) :: ierr
+      CHARACTER(LEN=*), INTENT(IN)  :: dsetname  ! dataset name
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierr
 
-    INTEGER             :: ierr_HDF5      ! error flag
-    INTEGER(HSIZE_T), &
-         DIMENSION(4)      :: dim        ! dataset dimensions
-    INTEGER(HID_T)      :: dataset    ! dataset identifier
+      INTEGER                   :: ierr_HDF5      ! error flag
+      INTEGER(HSIZE_T), &
+         DIMENSION(4)           :: dim        ! dataset dimensions
+      INTEGER(HID_T)            :: dataset    ! dataset identifier
 
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, ierr_HDF5)
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, ierr_HDF5)
 
-    !*** read the integer data to the dataset ***
-    !***  using default transfer properties   ***
-    DIM(1) = SIZE(array4D, 1)
-    DIM(2) = SIZE(array4D, 2)
-    DIM(3) = SIZE(array4D, 3)
-    DIM(4) = SIZE(array4D, 4)
-    CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array4D, dim, ierr_HDF5)
+      !*** read the integer data to the dataset ***
+      !***  using default transfer properties   ***
+      DIM(1) = SIZE(array4D, 1)
+      DIM(2) = SIZE(array4D, 2)
+      DIM(3) = SIZE(array4D, 3)
+      DIM(4) = SIZE(array4D, 4)
+      CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array4D, dim, ierr_HDF5)
 
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, ierr_HDF5)
-    IF (PRESENT(ierr)) ierr = ierr_HDF5
-  END SUBROUTINE HDF5_array4D_reading
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, ierr_HDF5)
+      IF (PRESENT(ierr)) ierr = ierr_HDF5
+   END SUBROUTINE HDF5_array4D_reading
 
-  !----------------------------------------
-  ! HDF5 reading for an array 5D
-  !----------------------------------------
-  SUBROUTINE HDF5_array5D_reading(file_id, array5D, dsetname)
+   !----------------------------------------
+   ! HDF5 reading for an array 5D
+   !----------------------------------------
+   SUBROUTINE HDF5_array5D_reading(file_id, array5D, dsetname)
 
 
-    INTEGER(HID_T), INTENT(in)                        :: file_id
-    REAL(float), DIMENSION(:, :, :, :, :), POINTER    :: array5D
-    CHARACTER(LEN=*), INTENT(in)                      :: dsetname  ! dataset name
-    INTEGER                                           :: error      ! error flag
-    INTEGER(HSIZE_T), DIMENSION(5)                    :: dim        ! dataset dimensions
-    INTEGER(HID_T)                                    :: dataset    ! dataset identifier
+      INTEGER(HID_T), INTENT(IN)                        :: file_id
+      REAL(float), DIMENSION(:, :, :, :, :), POINTER    :: array5D
+      CHARACTER(LEN=*), INTENT(IN)                      :: dsetname  ! dataset name
+      INTEGER                                           :: error      ! error flag
+      INTEGER(HSIZE_T), DIMENSION(5)                    :: dim        ! dataset dimensions
+      INTEGER(HID_T)                                    :: dataset    ! dataset identifier
 
-    !*** file opening ***
-    CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
+      !*** file opening ***
+      CALL H5Dopen_f(file_id, TRIM(dsetname), dataset, error)
 
-    !*** read the integer data to the dataset ***
-    !***  using default transfer properties   ***
-    DIM(1) = SIZE(array5D, 1)
-    DIM(2) = SIZE(array5D, 2)
-    DIM(3) = SIZE(array5D, 3)
-    DIM(4) = SIZE(array5D, 4)
-    DIM(5) = SIZE(array5D, 5)
-    CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array5D, dim, error)
+      !*** read the integer data to the dataset ***
+      !***  using default transfer properties   ***
+      DIM(1) = SIZE(array5D, 1)
+      DIM(2) = SIZE(array5D, 2)
+      DIM(3) = SIZE(array5D, 3)
+      DIM(4) = SIZE(array5D, 4)
+      DIM(5) = SIZE(array5D, 5)
+      CALL H5Dread_f(dataset, H5T_NATIVE_DOUBLE, array5D, dim, error)
 
-    !*** Closing ***
-    CALL H5Dclose_f(dataset, error)
-  END SUBROUTINE HDF5_array5D_reading
+      !*** Closing ***
+      CALL H5Dclose_f(dataset, error)
+   END SUBROUTINE HDF5_array5D_reading
 
-  !******************************************************
-  !  HDF5 UTILS
-  !******************************************************
-  !   !-----------------------------------------------------
-  !   ! create the name of the HDF5 file on each processor
-  !   !   name+"_d<num_diag>"+"_p<proc_diag>".h5
-  !   ! ( used for 3D storage)
-  !   !-----------------------------------------------------
-  !   function create_filename3D(name,diag_num,proc_num)
-  !     use globals, only : numfmt
-  !     character(LEN=*), intent(in)           :: name
-  !     integer         , intent(in)           :: diag_num
-  !     integer         , intent(in), optional :: proc_num
-  !
-  !     character(LEN=50) :: create_filename3D
-  !     character(LEN=30) :: diag_name, proc_name
-  !
-  !     write(diag_name,'('//numfmt//')') diag_num
-  !     if (.not.present(proc_num)) then
-  !       create_filename3D = trim(name)//&
-  !         trim(diag_name)//".h5"//char(0)
-  !     else
-  !       proc_name  = "_p    "
-  !       write(proc_name(3:6),'(i4.4)') proc_num
-  !       create_filename3D = trim(name)//trim(diag_name)&
-  !         //trim(proc_name)//".h5"//char(0)
-  !     end if
-  !   end function create_filename3D
-  !
-  !
-  !
-  !   !-----------------------------------------------------
-  !   ! create the name of the HDF5 file on each processor
-  !   !   used for 5D storage
-  !   !-----------------------------------------------------
-  !   function create_filename5D(name,diag_num,proc_num)
-  !     use globals, only : istart, Nr, Nbproc_r, &
-  !       jstart, Ntheta, Nbproc_theta, &
-  !       mu_id
-  !     character(LEN=*), intent(in) :: name
-  !     integer          , intent(in) :: diag_num
-  !     integer          , intent(in) :: proc_num
-  !
-  !     character(LEN=50) :: create_filename5D
-  !     character(LEN=30) :: diag_name, proc_name
-  !     character(LEN=30) :: dim1_name, dim2_name
-  !     character(LEN=30) :: dim3_name, dim4_name, dim5_name, num
-  !
-  !     write(num,'(i9)') diag_num
-  !     diag_name ="_"//adjustl(num)
-  !
-  !     write(num,'(i9)') ((istart)/((Nr+1)/Nbproc_r))
-  !     dim1_name ="_"//adjustl(num)
-  !
-  !     write(num,'(i9)') (jstart)/(Ntheta/Nbproc_theta)
-  !     dim2_name ="-"//adjustl(num)
-  !
-  !     dim3_name  = trim("-0")
-  !
-  !     dim4_name  = trim("-0")
-  !
-  !     write(num,'(i9)') mu_id
-  !     dim5_name ="-"//adjustl(num)
-  !
-  !     create_filename5D = trim(name)//trim(diag_name)//&
-  !       trim(dim1_name)//trim(dim2_name)//trim(dim3_name)//&
-  !       trim(dim4_name)//trim(dim5_name)//".h5"//char(0)
-  !   end function create_filename5D
+   !******************************************************
+   !  HDF5 UTILS
+   !******************************************************
+   !   !-----------------------------------------------------
+   !   ! create the name of the HDF5 file on each processor
+   !   !   name+"_d<num_diag>"+"_p<proc_diag>".h5
+   !   ! ( used for 3D storage)
+   !   !-----------------------------------------------------
+   !   function create_filename3D(name,diag_num,proc_num)
+   !     use globals, only : numfmt
+   !     character(LEN=*), intent(in)           :: name
+   !     integer         , intent(in)           :: diag_num
+   !     integer         , intent(in), optional :: proc_num
+   !
+   !     character(LEN=50)      :: create_filename3D
+   !     character(LEN=30)      :: diag_name, proc_name
+   !
+   !     write(diag_name,'('//numfmt//')') diag_num
+   !     if (.not.present(proc_num)) then
+   !       create_filename3D = trim(name)//&
+   !         trim(diag_name)//".h5"//char(0)
+   !     else
+   !       proc_name  = "_p    "
+   !       write(proc_name(3:6),'(i4.4)') proc_num
+   !       create_filename3D = trim(name)//trim(diag_name)&
+   !         //trim(proc_name)//".h5"//char(0)
+   !     end if
+   !   end function create_filename3D
+   !
+   !
+   !
+   !   !-----------------------------------------------------
+   !   ! create the name of the HDF5 file on each processor
+   !   !   used for 5D storage
+   !   !-----------------------------------------------------
+   !   function create_filename5D(name,diag_num,proc_num)
+   !     use globals, only : istart, Nr, Nbproc_r, &
+   !       jstart, Ntheta, Nbproc_theta, &
+   !       mu_id
+   !     character(LEN=*), intent(in) :: name
+   !     integer          , intent(in) :: diag_num
+   !     integer          , intent(in) :: proc_num
+   !
+   !     character(LEN=50)      :: create_filename5D
+   !     character(LEN=30)      :: diag_name, proc_name
+   !     character(LEN=30)      :: dim1_name, dim2_name
+   !     character(LEN=30)      :: dim3_name, dim4_name, dim5_name, num
+   !
+   !     write(num,'(i9)') diag_num
+   !     diag_name ="_"//adjustl(num)
+   !
+   !     write(num,'(i9)') ((istart)/((Nr+1)/Nbproc_r))
+   !     dim1_name ="_"//adjustl(num)
+   !
+   !     write(num,'(i9)') (jstart)/(Ntheta/Nbproc_theta)
+   !     dim2_name ="-"//adjustl(num)
+   !
+   !     dim3_name  = trim("-0")
+   !
+   !     dim4_name  = trim("-0")
+   !
+   !     write(num,'(i9)') mu_id
+   !     dim5_name ="-"//adjustl(num)
+   !
+   !     create_filename5D = trim(name)//trim(diag_name)//&
+   !       trim(dim1_name)//trim(dim2_name)//trim(dim3_name)//&
+   !       trim(dim4_name)//trim(dim5_name)//".h5"//char(0)
+   !   end function create_filename5D
 
-  !------------------------------------------------
-  ! create the name of the variable corresponding
-  !  to the tree in the HDF5 master file
-  !------------------------------------------------
-  FUNCTION create_variable_name(tree, var_name)
-    CHARACTER(len=*), INTENT(in) :: tree, var_name
+   !------------------------------------------------
+   ! create the name of the variable corresponding
+   !  to the tree in the HDF5 master file
+   !------------------------------------------------
+   FUNCTION create_variable_name(tree, var_name)
+      CHARACTER(len=*), INTENT(IN) :: tree, var_name
 
-    CHARACTER(LEN=50) :: create_variable_name
+      CHARACTER(LEN=50)         :: create_variable_name
 
-    create_variable_name = TRIM(tree)//"/"
-    create_variable_name = TRIM(create_variable_name)// &
+      create_variable_name = TRIM(tree)//"/"
+      create_variable_name = TRIM(create_variable_name)// &
          TRIM(var_name)
-  END FUNCTION create_variable_name
+   END FUNCTION create_variable_name
 
-  !   !------------------------------------------------
-  !   !  Write a test file for 1D array
-  !   !------------------------------------------------
-  !   subroutine Write_HDF5_test1D(idiag_num,var1D_name,array1D)
-  !
-  !     integer                       , intent(in) :: idiag_num
-  !     character(LEN=*)              , intent(in) :: var1D_name
-  !     real(float)     , dimension(:), pointer    :: array1D
-  !
-  !     integer(HID_T)    :: file_id
-  !     integer           :: lbound1, ubound1, dim1
-  !     character(LEN=50) :: file1D_name, var1Dname_tmp
-  !     integer           :: nbchar
-  !
-  !     var1Dname_tmp = trim(var1D_name)//char(0)
-  !     nbchar        = len_trim(var1D_name)
-  !     if (idiag_num.ne.-1) then
-  !       file1D_name = trim(var1D_name)//"_d    _p    .h5"// &
-  !         char(0)
-  !       write(file1D_name(nbchar+3:nbchar+6),'(i4.4)') idiag_num
-  !       write(file1D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
-  !     else
-  !       file1D_name = trim(var1D_name)//"_dinit_p    .h5"// &
-  !         char(0)
-  !       write(file1D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
-  !     end if
-  !
-  !     lbound1 = lbound(array1D,1)
-  !     ubound1 = ubound(array1D,1)
-  !     dim1    = abs(ubound1-lbound1)+1
-  !     call HDF5_create(trim(file1D_name),file_id)
-  !     call HDF5_integer_saving(file_id,lbound1,'lbound1'//char(0))
-  !     call HDF5_integer_saving(file_id,ubound1,'ubound1'//char(0))
-  !     call HDF5_array1D_saving(file_id,array1D,dim1,var1Dname_tmp)
-  !     call HDF5_close(file_id)
-  !   end subroutine Write_HDF5_test1D
-  !
-  !
-  !   !------------------------------------------------
-  !   !  Write a test file for 2D array
-  !   !------------------------------------------------
-  !   subroutine Write_HDF5_test2D(idiag_num,var2D_name,array2D)
-  !
-  !     integer                         , intent(in) :: idiag_num
-  !     character(LEN=*)                , intent(in) :: var2D_name
-  !     real(float)     , dimension(:,:), pointer    :: array2D
-  !
-  !     integer(HID_T)    :: file_id
-  !     integer           :: lbound1, ubound1, dim1
-  !     integer           :: lbound2, ubound2, dim2
-  !     character(LEN=50) :: file2D_name, var2Dname_tmp
-  !     integer           :: nbchar
-  !
-  !     var2Dname_tmp = trim(var2D_name)//char(0)
-  !     nbchar        = len_trim(var2D_name)
-  !     if (idiag_num.ne.-1) then
-  !       file2D_name = trim(var2D_name)//"_d    _p    .h5"// &
-  !         char(0)
-  !       write(file2D_name(nbchar+3:nbchar+6),'(i4.4)') idiag_num
-  !       write(file2D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
-  !     else
-  !       file2D_name = trim(var2D_name)//"_dinit_p    .h5"// &
-  !         char(0)
-  !       write(file2D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
-  !     end if
-  !     lbound1 = lbound(array2D,1)
-  !     ubound1 = ubound(array2D,1)
-  !     dim1    = abs(ubound1-lbound1)+1
-  !     lbound2 = lbound(array2D,2)
-  !     ubound2 = ubound(array2D,2)
-  !     dim2    = abs(ubound2-lbound2)+1
-  !     call HDF5_create(trim(file2D_name),file_id)
-  !     call HDF5_integer_saving(file_id,lbound1,'lbound1'//char(0))
-  !     call HDF5_integer_saving(file_id,ubound1,'ubound1'//char(0))
-  !     call HDF5_integer_saving(file_id,lbound2,'lbound2'//char(0))
-  !     call HDF5_integer_saving(file_id,ubound2,'ubound2'//char(0))
-  !     call HDF5_array2D_saving(file_id,array2D, &
-  !       dim1,dim2,var2Dname_tmp)
-  !     call HDF5_close(file_id)
-  !   end subroutine Write_HDF5_test2D
-  !
-  !
-  !   !------------------------------------------------
-  !   !  Write a test file for 3D array
-  !   !------------------------------------------------
-  !   subroutine Write_HDF5_test3D(idiag_num,var3D_name,array3D)
-  !
-  !     integer                           , intent(in) :: idiag_num
-  !     character(LEN=*)                  , intent(in) :: var3D_name
-  !     real(float)     , dimension(:,:,:), pointer    :: array3D
-  !
-  !     integer(HID_T)    :: file_id
-  !     integer           :: lbound1, ubound1, dim1
-  !     integer           :: lbound2, ubound2, dim2
-  !     integer           :: lbound3, ubound3, dim3
-  !     character(LEN=50) :: file3D_name, var3Dname_tmp
-  !     integer           :: nbchar
-  !
-  !     var3Dname_tmp = trim(var3D_name)//char(0)
-  !     nbchar        = len_trim(var3D_name)
-  !     if (idiag_num.ne.-1) then
-  !       file3D_name = trim(var3D_name)//"_d    _p    .h5"// &
-  !         char(0)
-  !       write(file3D_name(nbchar+3:nbchar+6),'(i4.4)') idiag_num
-  !       write(file3D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
-  !     else
-  !       file3D_name = trim(var3D_name)//"_dinit_p    .h5"// &
-  !         char(0)
-  !       write(file3D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
-  !     end if
-  !     lbound1 = lbound(array3D,1)
-  !     ubound1 = ubound(array3D,1)
-  !     dim1    = abs(ubound1-lbound1)+1
-  !     lbound2 = lbound(array3D,2)
-  !     ubound2 = ubound(array3D,2)
-  !     dim2    = abs(ubound2-lbound2)+1
-  !     lbound3 = lbound(array3D,3)
-  !     ubound3 = ubound(array3D,3)
-  !     dim3    = abs(ubound3-lbound3)+1
-  !     call HDF5_create(trim(file3D_name),file_id)
-  !     call HDF5_integer_saving(file_id,lbound1,'lbound1'//char(0))
-  !     call HDF5_integer_saving(file_id,ubound1,'ubound1'//char(0))
-  !     call HDF5_integer_saving(file_id,lbound2,'lbound2'//char(0))
-  !     call HDF5_integer_saving(file_id,ubound2,'ubound2'//char(0))
-  !     call HDF5_integer_saving(file_id,lbound3,'lbound3'//char(0))
-  !     call HDF5_integer_saving(file_id,ubound3,'ubound3'//char(0))
-  !     call HDF5_array3D_saving(file_id,array3D, &
-  !       dim1,dim2,dim3,var3Dname_tmp)
-  !     call HDF5_close(file_id)
-  !   end subroutine Write_HDF5_test3D
+   !   !------------------------------------------------
+   !   !  Write a test file for 1D array
+   !   !------------------------------------------------
+   !   subroutine Write_HDF5_test1D(idiag_num,var1D_name,array1D)
+   !
+   !     integer                       , intent(in) :: idiag_num
+   !     character(LEN=*)              , intent(in) :: var1D_name
+   !     real(float)     , dimension(:), pointer    :: array1D
+   !
+   !     integer(HID_T)         :: file_id
+   !     integer                :: lbound1, ubound1, dim1
+   !     character(LEN=50)      :: file1D_name, var1Dname_tmp
+   !     integer                :: nbchar
+   !
+   !     var1Dname_tmp = trim(var1D_name)//char(0)
+   !     nbchar        = len_trim(var1D_name)
+   !     if (idiag_num.ne.-1) then
+   !       file1D_name = trim(var1D_name)//"_d    _p    .h5"// &
+   !         char(0)
+   !       write(file1D_name(nbchar+3:nbchar+6),'(i4.4)') idiag_num
+   !       write(file1D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
+   !     else
+   !       file1D_name = trim(var1D_name)//"_dinit_p    .h5"// &
+   !         char(0)
+   !       write(file1D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
+   !     end if
+   !
+   !     lbound1 = lbound(array1D,1)
+   !     ubound1 = ubound(array1D,1)
+   !     dim1    = abs(ubound1-lbound1)+1
+   !     call HDF5_create(trim(file1D_name),file_id)
+   !     call HDF5_integer_saving(file_id,lbound1,'lbound1'//char(0))
+   !     call HDF5_integer_saving(file_id,ubound1,'ubound1'//char(0))
+   !     call HDF5_array1D_saving(file_id,array1D,dim1,var1Dname_tmp)
+   !     call HDF5_close(file_id)
+   !   end subroutine Write_HDF5_test1D
+   !
+   !
+   !   !------------------------------------------------
+   !   !  Write a test file for 2D array
+   !   !------------------------------------------------
+   !   subroutine Write_HDF5_test2D(idiag_num,var2D_name,array2D)
+   !
+   !     integer                         , intent(in) :: idiag_num
+   !     character(LEN=*)                , intent(in) :: var2D_name
+   !     real(float)     , dimension(:,:), pointer    :: array2D
+   !
+   !     integer(HID_T)         :: file_id
+   !     integer                :: lbound1, ubound1, dim1
+   !     integer                :: lbound2, ubound2, dim2
+   !     character(LEN=50)      :: file2D_name, var2Dname_tmp
+   !     integer                :: nbchar
+   !
+   !     var2Dname_tmp = trim(var2D_name)//char(0)
+   !     nbchar        = len_trim(var2D_name)
+   !     if (idiag_num.ne.-1) then
+   !       file2D_name = trim(var2D_name)//"_d    _p    .h5"// &
+   !         char(0)
+   !       write(file2D_name(nbchar+3:nbchar+6),'(i4.4)') idiag_num
+   !       write(file2D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
+   !     else
+   !       file2D_name = trim(var2D_name)//"_dinit_p    .h5"// &
+   !         char(0)
+   !       write(file2D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
+   !     end if
+   !     lbound1 = lbound(array2D,1)
+   !     ubound1 = ubound(array2D,1)
+   !     dim1    = abs(ubound1-lbound1)+1
+   !     lbound2 = lbound(array2D,2)
+   !     ubound2 = ubound(array2D,2)
+   !     dim2    = abs(ubound2-lbound2)+1
+   !     call HDF5_create(trim(file2D_name),file_id)
+   !     call HDF5_integer_saving(file_id,lbound1,'lbound1'//char(0))
+   !     call HDF5_integer_saving(file_id,ubound1,'ubound1'//char(0))
+   !     call HDF5_integer_saving(file_id,lbound2,'lbound2'//char(0))
+   !     call HDF5_integer_saving(file_id,ubound2,'ubound2'//char(0))
+   !     call HDF5_array2D_saving(file_id,array2D, &
+   !       dim1,dim2,var2Dname_tmp)
+   !     call HDF5_close(file_id)
+   !   end subroutine Write_HDF5_test2D
+   !
+   !
+   !   !------------------------------------------------
+   !   !  Write a test file for 3D array
+   !   !------------------------------------------------
+   !   subroutine Write_HDF5_test3D(idiag_num,var3D_name,array3D)
+   !
+   !     integer                           , intent(in) :: idiag_num
+   !     character(LEN=*)                  , intent(in) :: var3D_name
+   !     real(float)     , dimension(:,:,:), pointer    :: array3D
+   !
+   !     integer(HID_T)         :: file_id
+   !     integer                :: lbound1, ubound1, dim1
+   !     integer                :: lbound2, ubound2, dim2
+   !     integer                :: lbound3, ubound3, dim3
+   !     character(LEN=50)      :: file3D_name, var3Dname_tmp
+   !     integer                :: nbchar
+   !
+   !     var3Dname_tmp = trim(var3D_name)//char(0)
+   !     nbchar        = len_trim(var3D_name)
+   !     if (idiag_num.ne.-1) then
+   !       file3D_name = trim(var3D_name)//"_d    _p    .h5"// &
+   !         char(0)
+   !       write(file3D_name(nbchar+3:nbchar+6),'(i4.4)') idiag_num
+   !       write(file3D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
+   !     else
+   !       file3D_name = trim(var3D_name)//"_dinit_p    .h5"// &
+   !         char(0)
+   !       write(file3D_name(nbchar+9:nbchar+12),'(i4.4)') pglobal_id
+   !     end if
+   !     lbound1 = lbound(array3D,1)
+   !     ubound1 = ubound(array3D,1)
+   !     dim1    = abs(ubound1-lbound1)+1
+   !     lbound2 = lbound(array3D,2)
+   !     ubound2 = ubound(array3D,2)
+   !     dim2    = abs(ubound2-lbound2)+1
+   !     lbound3 = lbound(array3D,3)
+   !     ubound3 = ubound(array3D,3)
+   !     dim3    = abs(ubound3-lbound3)+1
+   !     call HDF5_create(trim(file3D_name),file_id)
+   !     call HDF5_integer_saving(file_id,lbound1,'lbound1'//char(0))
+   !     call HDF5_integer_saving(file_id,ubound1,'ubound1'//char(0))
+   !     call HDF5_integer_saving(file_id,lbound2,'lbound2'//char(0))
+   !     call HDF5_integer_saving(file_id,ubound2,'ubound2'//char(0))
+   !     call HDF5_integer_saving(file_id,lbound3,'lbound3'//char(0))
+   !     call HDF5_integer_saving(file_id,ubound3,'ubound3'//char(0))
+   !     call HDF5_array3D_saving(file_id,array3D, &
+   !       dim1,dim2,dim3,var3Dname_tmp)
+   !     call HDF5_close(file_id)
+   !   end subroutine Write_HDF5_test3D
 
 END MODULE HDF5_io_module

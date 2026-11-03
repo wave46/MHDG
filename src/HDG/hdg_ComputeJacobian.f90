@@ -8,8 +8,8 @@
 
 SUBROUTINE HDG_computeJacobian()
    USE globals
-   USE LinearAlgebra, only: tensorProduct, tensorSumInt
-   USE analytical, only: body_force, analytical_solution
+   USE LinearAlgebra, ONLY: tensorProduct, tensorSumInt
+   USE analytical, ONLY: body_force, analytical_solution
    USE physics
    USE hdg_limitingtechniques, ONLY: HDG_ShockCapturing
 
@@ -20,56 +20,56 @@ SUBROUTINE HDG_computeJacobian()
    !              COMPUTATION OF THE JACOBIANS
    !
    !***********************************************************************
-   INTEGER*4             :: Ndim, Neq, N2D, Npel, Npfl, Nfre, Ng1d, Ng2d
-   INTEGER*4             :: iel, ifa, iface, i, j
-   INTEGER*4             :: sizeu, sizel
-   REAL*8, ALLOCATABLE    :: ures(:, :), lres(:, :), u0res(:, :, :)
-   REAL*8, ALLOCATABLE    :: Xel(:, :), Xfl(:, :)
-   REAL*8, ALLOCATABLE    :: tau_save(:, :)
-   REAL*8, ALLOCATABLE    :: xy_g_save(:, :)
-   LOGICAL               :: isdir
+   INTEGER*4                    :: Ndim, Neq, N2D, Npel, Npfl, Nfre, Ng1d, Ng2d
+   INTEGER*4                    :: iel, ifa, iface, i, j
+   INTEGER*4                    :: sizeu, sizel
+   REAL*8, ALLOCATABLE          :: ures(:, :), lres(:, :), u0res(:, :, :)
+   REAL*8, ALLOCATABLE          :: Xel(:, :), Xfl(:, :)
+   REAL*8, ALLOCATABLE          :: tau_save(:, :)
+   REAL*8, ALLOCATABLE          :: xy_g_save(:, :)
+   LOGICAL                      :: isdir
 #ifdef TEMPERATURE
-   REAL*8                :: coefi, coefe
+   REAL*8                       :: coefi, coefe
 #endif
 #ifdef TOR3D
    ! Definitions in 3D
-   INTEGER*4             :: itor, iel3, ntorloc, itorg, Np1Dpol, Np1Dtor, Np2D, Npfp, Ng1dpol, Ng1dtor, Ngfp, Ngfl, Nfdir, Ngvo
-   INTEGER*4             :: inde(refElTor%Nnodes3D)
-   INTEGER*4             :: indft(refElTor%Nfl), indfp(Mesh%Nnodesperelem), indl(Mesh%Nnodesperelem)
-   INTEGER*4             :: ind_loc(refElPol%Nfaces, refElTor%Nfl*phys%Neq), perm(refElTor%Nfl*phys%Neq)
-   INTEGER               :: dd
-   INTEGER               :: ind_dim(refElPol%Nfaces + 2), ind_sta(refElPol%Nfaces + 2), aux
-   REAL*8                :: tdiv(numer%ntor + 1), tel(refElTor%Nnodes1d), tg(1), htor
-   REAL*8, ALLOCATABLE    :: ue(:, :), u0e(:, :, :)
-   REAL*8, ALLOCATABLE    :: ufp(:, :), uft(:, :)
-   REAL*8, ALLOCATABLE    :: uefp(:, :), ueft(:, :)
-   REAL*8, ALLOCATABLE    :: qe(:, :)
-   REAL*8, ALLOCATABLE    :: qefp(:, :), qeft(:, :)
-   REAL*8, ALLOCATABLE    :: qres(:, :)
-   REAL*8, ALLOCATABLE    :: Bel(:, :), fluxel(:), Bfl(:, :), Bfp(:, :)
-   INTEGER               :: indbe(refElTor%Nnodes3d), indbp(Mesh%Nnodesperelem), indbt(refElTor%Nfl)
-   REAL*8                :: Jtorel(refElTor%Nnodes3d)
+   INTEGER*4                    :: itor, iel3, ntorloc, itorg, Np1Dpol, Np1Dtor, Np2D, Npfp, Ng1dpol, Ng1dtor, Ngfp, Ngfl, Nfdir, Ngvo
+   INTEGER*4                    :: inde(refElTor%Nnodes3D)
+   INTEGER*4                    :: indft(refElTor%Nfl), indfp(Mesh%Nnodesperelem), indl(Mesh%Nnodesperelem)
+   INTEGER*4                    :: ind_loc(refElPol%Nfaces, refElTor%Nfl*phys%Neq), perm(refElTor%Nfl*phys%Neq)
+   INTEGER                      :: dd
+   INTEGER                      :: ind_dim(refElPol%Nfaces + 2), ind_sta(refElPol%Nfaces + 2), aux
+   REAL*8                       :: tdiv(numer%ntor + 1), tel(refElTor%Nnodes1d), tg(1), htor
+   REAL*8, ALLOCATABLE          :: ue(:, :), u0e(:, :, :)
+   REAL*8, ALLOCATABLE          :: ufp(:, :), uft(:, :)
+   REAL*8, ALLOCATABLE          :: uefp(:, :), ueft(:, :)
+   REAL*8, ALLOCATABLE          :: qe(:, :)
+   REAL*8, ALLOCATABLE          :: qefp(:, :), qeft(:, :)
+   REAL*8, ALLOCATABLE          :: qres(:, :)
+   REAL*8, ALLOCATABLE          :: Bel(:, :), fluxel(:), Bfl(:, :), Bfp(:, :)
+   INTEGER                      :: indbe(refElTor%Nnodes3d), indbp(Mesh%Nnodesperelem), indbt(refElTor%Nfl)
+   REAL*8                       :: Jtorel(refElTor%Nnodes3d)
 #else
    ! Definitions in 2D
-   LOGICAL               :: save_tau
-   INTEGER*4             :: inde(Mesh%Nnodesperelem)
-   INTEGER*4             :: indf(refElPol%Nfacenodes)
-   INTEGER*4             :: ind_loc(refElPol%Nfaces, refElPol%Nfacenodes*phys%Neq), perm(refElPol%Nfacenodes*phys%Neq)
-   REAL*8                :: ue(Mesh%Nnodesperelem, phys%Neq), u0e(Mesh%Nnodesperelem, phys%Neq, time%tis)
-   REAL*8                :: uf(refElPol%Nfacenodes, phys%Neq), uef(refElPol%Nfacenodes, phys%Neq)
-   INTEGER               :: indtausave(refElPol%Nfaces*refElPol%Ngauss1d)
-   INTEGER               :: inddiff_nn_Vol(refElPol%NGauss2D)
-   REAL*8                :: tau_save_el(refElPol%Nfaces*refElPol%Ngauss1d, phys%neq), xy_g_save_el(refElPol%Nfaces*refElPol%Ngauss1d, 2)
-   REAL*8                :: qe(Mesh%Nnodesperelem, phys%Neq*2), qef(refElPol%Nfacenodes, phys%Neq*2)
-   REAL*8, ALLOCATABLE    :: qres(:, :)
-   REAL*8                :: Bel(refElPol%Nnodes2d, 3), fluxel(refElPol%Nnodes2d), psiel(refElPol%Nnodes2d), Bfl(refElPol%Nfacenodes, 3), psifl(refElPol%Nfacenodes)
-   REAL*8                :: Jtorel(refElPol%Nnodes2d)
-   REAL*8                :: n, El_n, nn, El_nn, totaln
-   REAL*8                :: diff_nn_Vol_el(refElPol%NGauss2D), v_nn_Vol_el(refElPol%NGauss2D, Mesh%Ndim), Xg_el(refElPol%NGauss2D, Mesh%Ndim)
-   REAL*8                :: diff_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D), v_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D, Mesh%Ndim)
+   LOGICAL                      :: save_tau
+   INTEGER*4                    :: inde(Mesh%Nnodesperelem)
+   INTEGER*4                    :: indf(refElPol%Nfacenodes)
+   INTEGER*4                    :: ind_loc(refElPol%Nfaces, refElPol%Nfacenodes*phys%Neq), perm(refElPol%Nfacenodes*phys%Neq)
+   REAL*8                       :: ue(Mesh%Nnodesperelem, phys%Neq), u0e(Mesh%Nnodesperelem, phys%Neq, time%tis)
+   REAL*8                       :: uf(refElPol%Nfacenodes, phys%Neq), uef(refElPol%Nfacenodes, phys%Neq)
+   INTEGER                      :: indtausave(refElPol%Nfaces*refElPol%Ngauss1d)
+   INTEGER                      :: inddiff_nn_Vol(refElPol%NGauss2D)
+   REAL*8                       :: tau_save_el(refElPol%Nfaces*refElPol%Ngauss1d, phys%neq), xy_g_save_el(refElPol%Nfaces*refElPol%Ngauss1d, 2)
+   REAL*8                       :: qe(Mesh%Nnodesperelem, phys%Neq*2), qef(refElPol%Nfacenodes, phys%Neq*2)
+   REAL*8, ALLOCATABLE          :: qres(:, :)
+   REAL*8                       :: Bel(refElPol%Nnodes2d, 3), fluxel(refElPol%Nnodes2d), psiel(refElPol%Nnodes2d), Bfl(refElPol%Nfacenodes, 3), psifl(refElPol%Nfacenodes)
+   REAL*8                       :: Jtorel(refElPol%Nnodes2d)
+   REAL*8                       :: n, El_n, nn, El_nn, totaln
+   REAL*8                       :: diff_nn_Vol_el(refElPol%NGauss2D), v_nn_Vol_el(refElPol%NGauss2D, Mesh%Ndim), Xg_el(refElPol%NGauss2D, Mesh%Ndim)
+   REAL*8                       :: diff_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D), v_nn_Fac_el(refElPol%Nfaces*refElPol%NGauss1D, Mesh%Ndim)
 #endif
 #ifdef PARALL
-   INTEGER               :: ierr
+   INTEGER                      :: ierr
 #endif
 
    IF (utils%printint .GT. 1) THEN
@@ -241,7 +241,7 @@ SUBROUTINE HDG_computeJacobian()
 
          ! Magnetic field of the nodes of the element
          indbe = colint(tensorSumInt(Mesh%T(iel, :), (itor - 1)*(Np1Dtor - 1)*Mesh%Nnodes + &
-           &Mesh%Nnodes*((/(i, i=1, Np1Dtor)/) - 1)))
+         &Mesh%Nnodes*((/(i, i=1, Np1Dtor)/) - 1)))
 
          Bel = phys%B(indbe, :)
          fluxel = phys%magnetic_flux(indbe)
@@ -290,7 +290,7 @@ SUBROUTINE HDG_computeJacobian()
 
             ! Magnetic field of the nodes of the face
             indbt = colint(tensorSumInt(Mesh%T(iel, refElPol%face_nodes(ifa, :)), (itor - 1)*&
-              &(Np1Dtor - 1)*Mesh%Nnodes + Mesh%Nnodes*((/(i, i=1, Np1Dtor)/) - 1)))
+            &(Np1Dtor - 1)*Mesh%Nnodes + Mesh%Nnodes*((/(i, i=1, Np1Dtor)/) - 1)))
             Bfl = phys%B(indbt, :)
 
             ! Face solution
@@ -405,7 +405,7 @@ CONTAINS
       REAL*8                      :: diff_iso_vol(Neq, Neq, Ngvo), diff_ani_vol(Neq, Neq, Ngvo)
       REAL*8                      :: sigma, sigmax, sigmay, x0, y0, A
 
-      REAL*8, ALLOCATABLE  :: Auq(:, :, :), Auu(:, :, :), rhs(:, :)
+      REAL*8, ALLOCATABLE       :: Auq(:, :, :), Auu(:, :, :), rhs(:, :)
 
       !index i from 2nd to 3rd term with a 4th term as step
       ind_ass = (/(i, i=0, Neq*(Npel - 1), Neq)/)
@@ -483,9 +483,9 @@ CONTAINS
                force(g, 3) = 0.
                force(g, 4) = 30.*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
 #endif
-               !IF (fluxg(g) .le. -0.90 .and. fluxg(g) .ge. -1.) THEN
+               !if (fluxg(g) .le. -0.90 .and. fluxg(g) .ge. -1.) then
                !  force(g,1) = 9.45155008295538e-06
-               !END IF
+               !end if
             ELSE IF (switch%testcase == 53) THEN
                IF (fluxg(g) .LE. -0.90) THEN
                   force(g, 1) = 7.24032211339971e-06
@@ -502,9 +502,9 @@ CONTAINS
                IF (fluxg(g) .LE. 0.35) THEN
                   force(g, 1) = 1.*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
                END IF
-               !IF (fluxg(g) .le. -1.03) THEN
+               !if (fluxg(g) .le. -1.03) then
                !  force(g,1) = 0.000115575293741846
-               !END IF
+               !end if
 #endif
             ELSE IF (switch%testcase == 55) THEN
                IF (fluxg(g) .LE. -0.88 .AND. fluxg(g) .GE. -0.90) THEN
@@ -517,7 +517,7 @@ CONTAINS
             END IF
          END DO
       END IF
-    !! end sources
+      !! end sources
 
       ! Loop in 2D Gauss points
       J11 = MATMUL(refElPol%Nxi2D, Xel(:, 1))                           ! ng x 1
@@ -536,7 +536,7 @@ CONTAINS
       NgaussPol = refElPol%NGauss2D
       NgaussTor = refElTor%NGauss1D
 
-      ! Allocate temporary matrices
+      ! allocate temporary matrices
       ALLOCATE (Auq(Npel, Npel, neq*neq*ndim))
       ALLOCATE (Auu(Npel, Npel, neq*neq))
       ALLOCATE (rhs(Npel, Neq))
@@ -603,9 +603,9 @@ CONTAINS
             driftg = phys%dfcoef*driftg/Bmod(g)
 
             CALL assemblyVolumeContribution(Auq, Auu, rhs, b(g, :), divbg, driftg, force(g, :),&
-              &ktis, diff_iso_vol(:, :, g), diff_ani_vol(:, :, g), Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upg(g, :),&
-              &ueg(g, :), qeg(g, :), u0eg(g, :, :), Jtor(g))
-         END DO ! END loop in volume Gauss points
+            &ktis, diff_iso_vol(:, :, g), diff_ani_vol(:, :, g), Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upg(g, :),&
+            &ueg(g, :), qeg(g, :), u0eg(g, :, :), Jtor(g))
+         END DO ! end loop in volume Gauss points
       END DO
       CALL do_assembly(Auq, Auu, rhs, ind_ass, ind_asq, iel)
       DEALLOCATE (Auq, Auu, rhs)
@@ -616,30 +616,30 @@ CONTAINS
    ! Poloidal faces computations in 3D
    !*****************************************
    SUBROUTINE elemental_matrices_faces_pol(iel, ifa, iel2, Xfp, tg, Bfp, qef, uef, uf)
-      INTEGER*4, INTENT(IN)  :: iel, ifa, iel2
-      REAL*8, INTENT(IN)     :: Xfp(:, :), tg(1)
-      REAL*8, INTENT(IN)     :: Bfp(:, :)
-      REAL*8, INTENT(IN)     :: qef(:, :)
-      REAL*8, INTENT(IN)     :: uef(:, :), uf(:, :)
-      REAL*8                :: ufg(Ng2d, Neq), uefg(Ng2d, Neq), upgf(Ng2d, phys%npv)
-      REAL*8                :: qfg(Ng2d, Neq*Ndim)
-      INTEGER*4             :: ind_asf(Np2D), ind_ash(Np2D)
-      INTEGER*4             :: g, NGauss, i, j, lel
-      REAL*8                :: dsurf(Ng2d), bn
-      REAL*8                :: xyf(Ng2d, 2)
-      REAL*8                :: J11(Ng2d), J12(Ng2d)
-      REAL*8                :: J21(Ng2d), J22(Ng2d)
-      REAL*8                :: detJ(Ng2d)
-      REAL*8                :: iJ11(Ng2d), iJ12(Ng2d)
-      REAL*8                :: iJ21(Ng2d), iJ22(Ng2d)
-      REAL*8, POINTER        :: Nfg(:)
-      REAL*8                :: NNif(Np2D, Np2D), Nif(Np2D), Nfbn(Np2D)
-      REAL*8                :: n_g(Ng2d, 3)
-      INTEGER*4             :: ind_ff(Neq*Np2D), ind_fe(Neq*Np2D), ind_fg(Neq*Ndim*Np2D)
-      REAL*8, PARAMETER     :: tol = 1e-12
-      REAL*8                :: Bmod_nod(Np2D), b_nod(Np2D, 3), b(Ng2d, 3), Bmod(Ng2d)
-      REAL*8                :: tau(Neq, Neq)
-      REAL*8                :: diff_iso_fac(Neq, Neq, Ng2D), diff_ani_fac(Neq, Neq, Ng2D)
+      INTEGER*4, INTENT(IN)     :: iel, ifa, iel2
+      REAL*8, INTENT(IN)        :: Xfp(:, :), tg(1)
+      REAL*8, INTENT(IN)        :: Bfp(:, :)
+      REAL*8, INTENT(IN)        :: qef(:, :)
+      REAL*8, INTENT(IN)        :: uef(:, :), uf(:, :)
+      REAL*8                    :: ufg(Ng2d, Neq), uefg(Ng2d, Neq), upgf(Ng2d, phys%npv)
+      REAL*8                    :: qfg(Ng2d, Neq*Ndim)
+      INTEGER*4                 :: ind_asf(Np2D), ind_ash(Np2D)
+      INTEGER*4                 :: g, NGauss, i, j, lel
+      REAL*8                    :: dsurf(Ng2d), bn
+      REAL*8                    :: xyf(Ng2d, 2)
+      REAL*8                    :: J11(Ng2d), J12(Ng2d)
+      REAL*8                    :: J21(Ng2d), J22(Ng2d)
+      REAL*8                    :: detJ(Ng2d)
+      REAL*8                    :: iJ11(Ng2d), iJ12(Ng2d)
+      REAL*8                    :: iJ21(Ng2d), iJ22(Ng2d)
+      REAL*8, POINTER           :: Nfg(:)
+      REAL*8                    :: NNif(Np2D, Np2D), Nif(Np2D), Nfbn(Np2D)
+      REAL*8                    :: n_g(Ng2d, 3)
+      INTEGER*4                 :: ind_ff(Neq*Np2D), ind_fe(Neq*Np2D), ind_fg(Neq*Ndim*Np2D)
+      REAL*8, PARAMETER         :: tol = 1e-12
+      REAL*8                    :: Bmod_nod(Np2D), b_nod(Np2D, 3), b(Ng2d, 3), Bmod(Ng2d)
+      REAL*8                    :: tau(Neq, Neq)
+      REAL*8                    :: diff_iso_fac(Neq, Neq, Ng2D), diff_ani_fac(Neq, Neq, Ng2D)
 
       ind_asf = (/(i, i=0, Neq*(Np2D - 1), Neq)/)
       ind_ash = (/(i, i=0, Neq*(Np2D - 1)*Ndim, Neq*Ndim)/)
@@ -729,9 +729,9 @@ CONTAINS
 
          ! Assembly local contributions
          CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), &
-                                           n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
+            n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
       END DO
-      !      END DO
+      !      end do
 
    END SUBROUTINE elemental_matrices_faces_pol
 
@@ -868,11 +868,11 @@ CONTAINS
 
             ! Assembly local contributions
             CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), &
-                                              n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
+               n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
 
          END DO ! Gauss points
       END DO
-      !      END DO ! 2 elements
+      !      end do ! 2 elements
 
    END SUBROUTINE elemental_matrices_faces_int
 
@@ -947,7 +947,7 @@ CONTAINS
             CALL set_permutations(Np1Dpol, Np1Dtor, 1, permsing)
             uf = uf(permsing, :)
          END IF
-         ! TODO: VERIFY IF I NEED TO FLIP ALSO xyf,b and Bmod in this case!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+         ! TODO: VERIFY if I NEED TO FLIP ALSO xyf,b and Bmod in this case!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #endif
          ufg = MATMUL(refElTor%sFTF, uf)
       END IF
@@ -1029,14 +1029,14 @@ CONTAINS
             IF (Mesh%boundaryFlag(Mesh%F(iel2, ifa - 1) - Mesh%Nintfaces) .EQ. 0) THEN
                ! Ghost face: assembly it as interior
                CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), &
-                                                 n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
+                  n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
             ELSE
                CALL assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), &
-                                                 n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
+                  n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
             END IF
 #else
             CALL assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), &
-                                              n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
+               n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
 
 #endif
          END DO ! Gauss points
@@ -1048,10 +1048,10 @@ CONTAINS
    ! Set permutations for flipping faces
    !****************************************
    SUBROUTINE set_permutations(Np1Dpol, Np1Dtor, Neq, perm)
-      INTEGER, INTENT(IN)  :: Np1Dpol, Np1Dtor, Neq
-      INTEGER, INTENT(OUT) :: perm(:)
-      INTEGER              :: i, j, k
-      INTEGER              :: temp_pol(Np1Dpol), temp_tor(Np1Dtor), aux(Np1Dpol, Np1Dtor)
+      INTEGER, INTENT(IN)       :: Np1Dpol, Np1Dtor, Neq
+      INTEGER, INTENT(OUT)      :: perm(:)
+      INTEGER                   :: i, j, k
+      INTEGER                   :: temp_pol(Np1Dpol), temp_tor(Np1Dtor), aux(Np1Dpol, Np1Dtor)
 
       temp_pol = (/(i, i=1, Np1Dpol)/)
       temp_tor = Np1Dpol*((/(i, i=1, Np1Dtor)/) - 1)
@@ -1178,8 +1178,8 @@ CONTAINS
             ELSE
                ! periodic face
                CALL elemental_matrices_faces_int(iel, ifa, Xfl, Bfl, psifl, qef, uef, uf, diff_nn_Fac_el, v_nn_Fac_el, tau_save_el, xy_g_save_el)
-            end if
-         end if
+            END IF
+         END IF
 
          ! Flip faces
          IF (Mesh%flipface(iel, ifa)) THEN
@@ -1337,7 +1337,7 @@ CONTAINS
       ! Compute diffusion at Gauss points
       CALL setLocalDiff(xy, ueg, diff_iso_vol, diff_ani_vol)
 
-      if (save_tau) then
+      IF (save_tau) THEN
          diff_nn_Vol_el = diff_iso_vol(neq, neq, :)
       END IF
 
@@ -1371,7 +1371,7 @@ CONTAINS
             IF (ueg(g, 1) .LT. th_n) THEN
                force(g, 1) = th_n - ueg(g, 1)
             END IF
-            ! WEST CASE with analytical Gaussian sources on density and energies, no puff.
+            ! WEST case with analytical Gaussian sources on density and energies, no puff.
             IF (switch%testcase == 52) THEN
                sigma = phys%sigma_source
                x0 = 0.
@@ -1387,14 +1387,14 @@ CONTAINS
 #ifdef TEMPERATURE
             ! additional heating
 
-            if (phys%heating_amplitude > 1e-10) then
-               if (abs(xy(g, 1) - (phys%r_axis + phys%heating_dr)) < 3.*abs(phys%heating_sigmar)) then
-                  if (abs(xy(g, 2) - (phys%z_axis + phys%heating_dz)) < 3.*abs(phys%heating_sigmaz)) then
+            IF (phys%heating_amplitude > 1e-10) THEN
+               IF (abs(xy(g, 1) - (phys%r_axis + phys%heating_dr)) < 3.*abs(phys%heating_sigmar)) THEN
+                  IF (abs(xy(g, 2) - (phys%z_axis + phys%heating_dz)) < 3.*abs(phys%heating_sigmaz)) THEN
                      force(g, phys%heating_equation) = force(g, phys%heating_equation) + phys%heating_amplitude*exp(-((xy(g, 1) - (phys%r_axis + phys%heating_dr))**2)/(phys%heating_sigmar**2)) &
-                                                       *exp(-((xy(g, 2) - (phys%z_axis + phys%heating_dz))**2)/(phys%heating_sigmaz**2))
-                  end if
-               end if
-            end if
+                        *exp(-((xy(g, 2) - (phys%z_axis + phys%heating_dz))**2)/(phys%heating_sigmaz**2))
+                  END IF
+               END IF
+            END IF
 #endif
          END DO
       END IF
@@ -1410,7 +1410,7 @@ CONTAINS
             sigma = phys%sigma_source
             x0 = 0.
             A = (phys%lscale**2)/SQRT((2*Pi*sigma**2))
-            ! Only energy sources: density from neutral model
+            ! only energy sources: density from neutral model
             IF (fluxg(g) .LE. phys%fluxg_trunc) THEN
 #ifdef NEUTRAL
 #ifdef TEMPERATURE
@@ -1422,7 +1422,7 @@ CONTAINS
          ELSE IF (switch%testcase == 82) THEN
             sigma = phys%sigma_source
             A = (phys%lscale**2)/SQRT((2*Pi*sigma**2))
-            ! Only energy sources: density from neutral model
+            ! only energy sources: density from neutral model
 #ifdef NEUTRAL
 #ifdef TEMPERATURE
             force(g, 3) = phys%ener_source_e*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
@@ -1435,30 +1435,30 @@ CONTAINS
 
       ! Some sources for Circular cases
       IF (switch%testcase .GE. 60) THEN
-      DO g = 1, Ng2D
-         IF (switch%testcase == 61) THEN
-            r = SQRT((xy(g, 1)*phys%lscale - geom%R0)**2 + (xy(g, 2)*phys%lscale)**2)
-            IF (r .LE. 0.4) THEN
-               force(g, 1) = 0. !2.838272668283863e-05
+         DO g = 1, Ng2D
+            IF (switch%testcase == 61) THEN
+               r = SQRT((xy(g, 1)*phys%lscale - geom%R0)**2 + (xy(g, 2)*phys%lscale)**2)
+               IF (r .LE. 0.4) THEN
+                  force(g, 1) = 0. !2.838272668283863e-05
 #ifdef TEMPERATURE
-               force(g, 3) = 8*2.838272668283863e-05 !force(g,1)
-               force(g, 4) = 8*2.838272668283863e-05
+                  force(g, 3) = 8*2.838272668283863e-05 !force(g,1)
+                  force(g, 4) = 8*2.838272668283863e-05
+#endif
+               END IF
+            ELSE IF (switch%testcase == 62) THEN
+#ifdef TEMPERATURE
+               Pi = 3.1415926535
+               sigma = 0.3
+               x0 = geom%R0
+               A = (phys%lscale**2)/(2*Pi*sigma**2)
+               force(g, 1) = 0.
+               force(g, 3) = 18.*A*EXP(-((xy(g, 1)*phys%lscale - x0)**2 + (xy(g, 2)*phys%lscale)**2)/(2*sigma**2))
+               force(g, 4) = force(g, 3)
 #endif
             END IF
-         ELSE IF (switch%testcase == 62) THEN
-#ifdef TEMPERATURE
-            Pi = 3.1415926535
-            sigma = 0.3
-            x0 = geom%R0
-            A = (phys%lscale**2)/(2*Pi*sigma**2)
-            force(g, 1) = 0.
-            force(g, 3) = 18.*A*EXP(-((xy(g, 1)*phys%lscale - x0)**2 + (xy(g, 2)*phys%lscale)**2)/(2*sigma**2))
-            force(g, 4) = force(g, 3)
-#endif
-         END IF
-      END DO
+         END DO
       END IF
-                !! end sources
+      !! end sources
 
       ! Loop in 2D Gauss points
       Ngauss = Ng2d
@@ -1474,7 +1474,7 @@ CONTAINS
 
       ! Coefficient time integration scheme
       CALL setTimeIntegrationCoefficients(ktis)
-      ! Allocate temporary matrices
+      ! allocate temporary matrices
       ALLOCATE (Auq(Npel, Npel, neq*neq*ndim))
       ALLOCATE (Auu(Npel, Npel, neq*neq))
       ALLOCATE (rhs(Npel, Neq))
@@ -1531,14 +1531,14 @@ CONTAINS
          driftg = phys%dfcoef*driftg/Bmod(g)
 
          CALL assemblyVolumeContribution(Auq, Auu, rhs, b(g, :), Psig(g), divbg, driftg, force(g, :),&
-           &ktis, diff_iso_vol(:, :, g), diff_ani_vol(:, :, g), Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upg(g, :),&
-           &ueg(g, :), qeg(g, :), u0eg(g, :, :), Jtor(g))
+         &ktis, diff_iso_vol(:, :, g), diff_ani_vol(:, :, g), Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upg(g, :),&
+         &ueg(g, :), qeg(g, :), u0eg(g, :, :), Jtor(g))
 
          IF (save_tau) THEN
             v_nn_Vol_el(g, :) = Vnng
          END IF
 
-      END DO ! END loop in volume Gauss points
+      END DO ! end loop in volume Gauss points
       CALL do_assembly(Auq, Auu, rhs, ind_ass, ind_asq, iel)
       DEALLOCATE (Auq, Auu, rhs)
 
@@ -1549,27 +1549,27 @@ CONTAINS
    !***************************************************
    SUBROUTINE elemental_matrices_faces_int(iel, ifa, Xfl, Bfl, psifl, qef, uef, uf, diff_nn_Fac_el, v_nn_Fac_el, tau_save_el, xy_g_save_el)
 
-      integer, intent(IN)        :: iel, ifa
-      real*8, intent(IN)         :: Xfl(:, :)
-      real*8, intent(IN)         :: Bfl(:, :), psifl(:)
-      real*8, intent(IN)         :: qef(:, :)
-      real*8, intent(IN)         :: uef(:, :), uf(:, :)
-      real*8, intent(out)        :: diff_nn_Fac_el(:), v_nn_Fac_el(:, :), tau_save_el(:, :), xy_g_save_el(:, :)
-      integer*4                 :: g, NGauss, i, indsave(Ng1d)
-      real*8                    :: dline, xyDerNorm_g
-      real*8                    :: ufg(Ng1d, neq), uefg(Ng1d, neq)
-      real*8                    :: xyf(Ng1d, ndim)
-      real*8                    :: xyDer(Ng1d, ndim)
-      real*8                    :: qfg(Ng1d, neq*Ndim)
-      integer*4                 :: ind_ff(Neq*Npfl), ind_fe(Neq*Npfl), ind_fg(Neq*Ndim*Npfl)
-      integer*4, dimension(Npfl)  :: ind_asf, ind_ash
-      real*8                    :: t_g(ndim), n_g(ndim), bn
-      real*8                    :: NNif(Npfl, Npfl), Nif(Npfl), Nfbn(Npfl)
-      real*8                    :: upgf(Ng1d, phys%npv)
-      real*8                    :: tau(Neq, Neq), Vnng(Ndim)
-      real*8                    :: Bmod_nod(Npfl), b_nod(Npfl, 3), b(Ng1d, 3), Bmod(Ng1d), Psig(Ng1d)
-      real*8                    :: diff_iso_fac(Neq, Neq, Ng1d), diff_ani_fac(Neq, Neq, Ng1d)
-      real*8                    :: auxdiffsc(Ng1d)
+      INTEGER, INTENT(IN)        :: iel, ifa
+      REAL*8, INTENT(IN)         :: Xfl(:, :)
+      REAL*8, INTENT(IN)         :: Bfl(:, :), psifl(:)
+      REAL*8, INTENT(IN)         :: qef(:, :)
+      REAL*8, INTENT(IN)         :: uef(:, :), uf(:, :)
+      REAL*8, INTENT(OUT)        :: diff_nn_Fac_el(:), v_nn_Fac_el(:, :), tau_save_el(:, :), xy_g_save_el(:, :)
+      INTEGER*4                 :: g, NGauss, i, indsave(Ng1d)
+      REAL*8                    :: dline, xyDerNorm_g
+      REAL*8                    :: ufg(Ng1d, neq), uefg(Ng1d, neq)
+      REAL*8                    :: xyf(Ng1d, ndim)
+      REAL*8                    :: xyDer(Ng1d, ndim)
+      REAL*8                    :: qfg(Ng1d, neq*Ndim)
+      INTEGER*4                 :: ind_ff(Neq*Npfl), ind_fe(Neq*Npfl), ind_fg(Neq*Ndim*Npfl)
+      INTEGER*4, DIMENSION(Npfl)  :: ind_asf, ind_ash
+      REAL*8                    :: t_g(ndim), n_g(ndim), bn
+      REAL*8                    :: NNif(Npfl, Npfl), Nif(Npfl), Nfbn(Npfl)
+      REAL*8                    :: upgf(Ng1d, phys%npv)
+      REAL*8                    :: tau(Neq, Neq), Vnng(Ndim)
+      REAL*8                    :: Bmod_nod(Npfl), b_nod(Npfl, 3), b(Ng1d, 3), Bmod(Ng1d), Psig(Ng1d)
+      REAL*8                    :: diff_iso_fac(Neq, Neq, Ng1d), diff_ani_fac(Neq, Neq, Ng1d)
+      REAL*8                    :: auxdiffsc(Ng1d)
 
       ind_asf = (/(i, i=0, Neq*(Npfl - 1), Neq)/)
       ind_ash = (/(i, i=0, Neq*(Npfl - 1)*Ndim, Neq*Ndim)/)
@@ -1605,8 +1605,8 @@ CONTAINS
       xyDer = MATMUL(refElPol%Nxi1D, Xfl)
 
       ! Magnetic field norm and direction at Gauss points
-      Bmod = matmul(refElPol%N1D, Bmod_nod)
-      b = matmul(refElPol%N1D, b_nod)
+      Bmod = MATMUL(refElPol%N1D, Bmod_nod)
+      b = MATMUL(refElPol%N1D, b_nod)
 
       ! Normalaized magnetic flux at Gauss points: PSI
       Psig = MATMUL(refElPol%N1d, psifl)
@@ -1619,7 +1619,7 @@ CONTAINS
       ! Compute diffusion at faces Gauss points
       CALL setLocalDiff(xyf, uefg, diff_iso_fac, diff_ani_fac)
 
-      if (save_tau) then
+      IF (save_tau) THEN
          indsave = (ifa - 1)*Ngauss + (/(i, i=1, Ngauss)/)
          diff_nn_Fac_el(indsave) = diff_iso_fac(neq, neq, :)
       END IF
@@ -1673,7 +1673,7 @@ CONTAINS
 
 ! Assembly local contributions
          CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), Psig(g), &
-                                           n_g, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
+            n_g, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
 
          IF (save_tau) THEN
             DO i = 1, Neq
@@ -1693,30 +1693,30 @@ CONTAINS
    !***************************************************
 
    SUBROUTINE elemental_matrices_faces_ext(iel, ifa, isdir, Xfl, Bfl, psifl, qef, uef, uf, diff_nn_Fac_el, v_nn_Fac_el, tau_save_el, xy_g_save_el)
-      integer, intent(IN)        :: iel, ifa
-      real*8, intent(IN)         :: Xfl(:, :)
-      real*8, intent(IN)         :: Bfl(:, :), psifl(:)
-      logical, intent(IN)        :: isdir
-      real*8, intent(IN)         :: qef(:, :)
-      real*8, intent(INOUT)      :: uef(:, :), uf(:, :)
-      real*8, intent(out)        :: diff_nn_Fac_el(:), v_nn_Fac_el(:, :), tau_save_el(:, :), xy_g_save_el(:, :)
-      integer*4                 :: g, NGauss, i, indsave(Ng1d)
-      real*8                    :: dline, xyDerNorm_g
-      real*8                    :: ufg(Ng1d, neq), uefg(Ng1d, neq)
-      real*8                    :: xyf(Ng1d, ndim)
-      real*8                    :: xyDer(Ng1d, ndim)
-      real*8                    :: qfg(Ng1d, neq*Ndim)
-      integer*4                 :: ind_ff(Neq*Npfl), ind_fe(Neq*Npfl), ind_fg(Neq*Ndim*Npfl)
-      integer*4, dimension(Npfl)  :: ind_asf, ind_ash
-      real                      :: isext
-      real*8                    :: t_g(ndim), n_g(ndim), bn
-      real*8                    :: NNif(Npfl, Npfl), Nif(Npfl), Nfbn(Npfl)
-      real*8                    :: tau(Neq, Neq)
-      real*8                    :: upgf(Ng1d, phys%npv)
-      real*8                    :: Bmod_nod(Npfl), b_nod(Npfl, 3), b(Ng1d, 3), Bmod(Ng1d), Psig(Ng1d)
-      real*8                    :: diff_iso_fac(Neq, Neq, Ng1d), diff_ani_fac(Neq, Neq, Ng1d)
-      real*8                    :: auxdiffsc(Ng1d)
-      real*8                    :: Vnng(Ndim)
+      INTEGER, INTENT(IN)        :: iel, ifa
+      REAL*8, INTENT(IN)         :: Xfl(:, :)
+      REAL*8, INTENT(IN)         :: Bfl(:, :), psifl(:)
+      LOGICAL, INTENT(IN)        :: isdir
+      REAL*8, INTENT(IN)         :: qef(:, :)
+      REAL*8, INTENT(INOUT)      :: uef(:, :), uf(:, :)
+      REAL*8, INTENT(OUT)        :: diff_nn_Fac_el(:), v_nn_Fac_el(:, :), tau_save_el(:, :), xy_g_save_el(:, :)
+      INTEGER*4                 :: g, NGauss, i, indsave(Ng1d)
+      REAL*8                    :: dline, xyDerNorm_g
+      REAL*8                    :: ufg(Ng1d, neq), uefg(Ng1d, neq)
+      REAL*8                    :: xyf(Ng1d, ndim)
+      REAL*8                    :: xyDer(Ng1d, ndim)
+      REAL*8                    :: qfg(Ng1d, neq*Ndim)
+      INTEGER*4                 :: ind_ff(Neq*Npfl), ind_fe(Neq*Npfl), ind_fg(Neq*Ndim*Npfl)
+      INTEGER*4, DIMENSION(Npfl)  :: ind_asf, ind_ash
+      REAL                      :: isext
+      REAL*8                    :: t_g(ndim), n_g(ndim), bn
+      REAL*8                    :: NNif(Npfl, Npfl), Nif(Npfl), Nfbn(Npfl)
+      REAL*8                    :: tau(Neq, Neq)
+      REAL*8                    :: upgf(Ng1d, phys%npv)
+      REAL*8                    :: Bmod_nod(Npfl), b_nod(Npfl, 3), b(Ng1d, 3), Bmod(Ng1d), Psig(Ng1d)
+      REAL*8                    :: diff_iso_fac(Neq, Neq, Ng1d), diff_ani_fac(Neq, Neq, Ng1d)
+      REAL*8                    :: auxdiffsc(Ng1d)
+      REAL*8                    :: Vnng(Ndim)
       ind_asf = (/(i, i=0, Neq*(Npfl - 1), Neq)/)
       ind_ash = (/(i, i=0, Neq*(Npfl - 1)*Ndim, Neq*Ndim)/)
 
@@ -1751,11 +1751,11 @@ CONTAINS
          CALL analytical_solution(iel, xyf(:, 1), xyf(:, 2), ufg)
       ELSE
 #ifdef PARALL
-         ! FOR SOME UNKNOWN REASON EXTERNAL FACES DO NOT NEED TO BE FLIPPED ONLY AT THE VERY FIRST ITERATION.
+         ! FOR SOME UNKNOWN REASON EXTERNAL FACES do NOT NEED TO BE FLIPPED only AT THE VERY FIRST ITERATION.
          IF (Mesh%flipFace(iel, ifa)) THEN
             uf = uf((/(i, i=Npfl, 1, -1)/), :)
          END IF
-         ! TODO: VERIFY IF I NEED TO FLIP ALSO xyf,b and Bmod in this case!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+         ! TODO: VERIFY if I NEED TO FLIP ALSO xyf,b and Bmod in this case!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #endif
          ufg = MATMUL(refElPol%N1D, uf)
       END IF
@@ -1768,7 +1768,7 @@ CONTAINS
       ! Compute diffusion at faces Gauss points
       CALL setLocalDiff(xyf, uefg, diff_iso_fac, diff_ani_fac)
 
-      if (save_tau) then
+      IF (save_tau) THEN
          indsave = (ifa - 1)*Ngauss + (/(i, i=1, Ngauss)/)
          diff_nn_Fac_el(indsave) = diff_iso_fac(neq, neq, :)
       END IF
@@ -1833,18 +1833,18 @@ CONTAINS
          IF (Mesh%boundaryFlag(Mesh%F(iel, ifa) - Mesh%Nintfaces) .EQ. 0) THEN
             ! Ghost face: assembly it as interior
             CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), Psig(g), &
-                                              n_g, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
+               n_g, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
 
          ELSE
             CALL assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), Psig(g), &
-                                              n_g, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
+               n_g, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
          END IF
 #else
 
          CALL assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), Psig(g), &
-                                           n_g, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
+            n_g, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
 #endif
-         if (save_tau) then
+         IF (save_tau) THEN
             DO i = 1, Neq
                tau_save_el((ifa - 1)*Ngauss + g, i) = tau(i, i)
             END DO
@@ -1864,10 +1864,10 @@ CONTAINS
    ! Set permutations for flipping faces
    !****************************************
    SUBROUTINE set_permutations(n, m, perm)
-      INTEGER, INTENT(IN)  :: n, m
-      INTEGER, INTENT(OUT) :: perm(:)
-      INTEGER              :: i
-      INTEGER              :: temp(m, n/m), templr(m, n/m)
+      INTEGER, INTENT(IN)       :: n, m
+      INTEGER, INTENT(OUT)      :: perm(:)
+      INTEGER                   :: i
+      INTEGER                   :: temp(m, n/m), templr(m, n/m)
 
       IF (MOD(n, m) .NE. 0) THEN
          WRITE (6, *) 'Error! n must be a multiple of m'
@@ -1893,8 +1893,8 @@ CONTAINS
    !
    !********************************************************************************************
    SUBROUTINE setTimeIntegrationCoefficients(ktis)
-      REAL*8, INTENT(out) :: ktis(:)
-      INTEGER :: it
+      REAL*8, INTENT(OUT)       :: ktis(:)
+      INTEGER                   :: it
 
       ktis = 0.
 
@@ -1905,32 +1905,32 @@ CONTAINS
       END IF
 
       SELECT CASE (it)
-      CASE (1)
+       CASE (1)
          ktis(1) = 1.
          ktis(2) = 1.
-      CASE (2)
+       CASE (2)
          ktis(1) = 1.5
          ktis(2) = 2
          ktis(3) = -0.5
-      CASE (3)
+       CASE (3)
          ktis(1) = 11./6.
          ktis(2) = 3.
          ktis(3) = -1.5
          ktis(4) = 1./3.
-      CASE (4)
+       CASE (4)
          ktis(1) = 25./12.
          ktis(2) = 4.
          ktis(3) = -3.
          ktis(4) = 4./3.
          ktis(4) = -0.25
-      CASE (5)
+       CASE (5)
          ktis(1) = 137./60.
          ktis(2) = 5.
          ktis(3) = -5.
          ktis(4) = 10./3.
          ktis(5) = -1.25
          ktis(6) = 0.2
-      CASE (6)
+       CASE (6)
          ktis(1) = 147./60.
          ktis(2) = 6.
          ktis(3) = -7.5
@@ -1938,7 +1938,7 @@ CONTAINS
          ktis(5) = -3.75
          ktis(6) = 1.2
          ktis(7) = -1.6
-      CASE default
+       CASE default
          WRITE (6, *) 'Formula not available'
          STOP
       END SELECT
@@ -1951,53 +1951,53 @@ CONTAINS
    !********************************************************************
 
    SUBROUTINE assemblyVolumeContribution(Auq, Auu, rhs, b3, psi, divb, drift, f,&
-       &ktis, diffiso, diffani, Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upe, ue, qe, u0e, Jtor)
-      REAL*8, INTENT(inout)  :: Auq(:, :, :), Auu(:, :, :), rhs(:, :)
-      REAL*8, INTENT(IN)     :: b3(:), psi, divb, drift(:), f(:), ktis(:)
-      real*8, intent(IN)         :: diffiso(:, :), diffani(:, :)
-      real*8, intent(IN)         :: Ni(:), NNi(:, :), Nxyzg(:, :), NNxy(:, :), NxyzNi(:, :, :), NNbb(:)
-      real*8, intent(IN)         :: upe(:), ue(:), Jtor
-      real*8, intent(INOUT)      :: u0e(:, :)
-      real*8, intent(IN)         :: qe(:)
+   &ktis, diffiso, diffani, Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upe, ue, qe, u0e, Jtor)
+      REAL*8, INTENT(INOUT)     :: Auq(:, :, :), Auu(:, :, :), rhs(:, :)
+      REAL*8, INTENT(IN)        :: b3(:), psi, divb, drift(:), f(:), ktis(:)
+      REAL*8, INTENT(IN)         :: diffiso(:, :), diffani(:, :)
+      REAL*8, INTENT(IN)         :: Ni(:), NNi(:, :), Nxyzg(:, :), NNxy(:, :), NxyzNi(:, :, :), NNbb(:)
+      REAL*8, INTENT(IN)         :: upe(:), ue(:), Jtor
+      REAL*8, INTENT(INOUT)      :: u0e(:, :)
+      REAL*8, INTENT(IN)         :: qe(:)
 #ifdef VORTICITY
-      real*8                    :: kcoeff, exb(3)
-      integer*4                 :: alpha, beta, ii
+      REAL*8                    :: kcoeff, exb(3)
+      INTEGER*4                 :: alpha, beta, ii
 #endif
-      integer*4                 :: i, j, k, iord, z
-      real*8, dimension(neq, neq) :: A
-      real*8, dimension(neq, Ndim):: APinch
-      real*8                    :: Qpr(Ndim, Neq), bb(3)
-      real*8                    :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
-      real*8                    :: qq(3, Neq), b(Ndim)
-      real*8                    :: grad_n(3), gradpar_n
+      INTEGER*4                 :: i, j, k, iord, z
+      REAL*8, DIMENSION(neq, neq) :: A
+      REAL*8, DIMENSION(neq, Ndim):: APinch
+      REAL*8                    :: Qpr(Ndim, Neq), bb(3)
+      REAL*8                    :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
+      REAL*8                    :: qq(3, Neq), b(Ndim)
+      REAL*8                    :: grad_n(3), gradpar_n
 
 #ifdef TEMPERATURE
-      real*8, dimension(neq, neq) :: GG
-      real*8                    :: Telect
-      real*8                    :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
-      real*8                    :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
-      real*8                    :: W, dW_dU(Neq, Neq), s, ds_dU(Neq), Zet(ndim, Neq)
-      real*8                    :: Sohmic, dSohmic_dU(Neq) ! Ohmic heating
-      real*8                    :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
-      real*8                    :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
+      REAL*8, DIMENSION(neq, neq) :: GG
+      REAL*8                    :: Telect
+      REAL*8                    :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
+      REAL*8                    :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
+      REAL*8                    :: W, dW_dU(Neq, Neq), s, ds_dU(Neq), Zet(ndim, Neq)
+      REAL*8                    :: Sohmic, dSohmic_dU(Neq) ! Ohmic heating
+      REAL*8                    :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
+      REAL*8                    :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
 #else
-      real*8                    :: auxvec(Neq)
+      REAL*8                    :: auxvec(Neq)
 #endif
 #ifdef NEUTRAL
-      real*8                    :: niz, nrec, fGammacx, fGammarec
-      real*8                    :: dniz_dU(Neq), dnrec_dU(Neq), dfGammacx_dU(Neq), dfGammarec_dU(Neq)
+      REAL*8                    :: niz, nrec, fGammacx, fGammarec
+      REAL*8                    :: dniz_dU(Neq), dnrec_dU(Neq), dfGammacx_dU(Neq), dfGammarec_dU(Neq)
 #ifdef TEMPERATURE
-      REAL*8                :: sigmaviz, sigmavrec, sigmavcx, Tloss, Tlossrec, fEiiz, fEirec, fEicx
+      REAL*8                    :: sigmaviz, sigmavrec, sigmavcx, Tloss, Tlossrec, fEiiz, fEirec, fEicx
       !amjuel radiation losses
-      real*8                    :: sigmavEiz, sigmavErec
-      real*8                    :: dsigmavEiz_dU(Neq), dsigmavErec_dU(Neq)
-      REAL*8                :: dsigmaviz_dU(Neq), dsigmavrec_dU(Neq), dsigmavcx_dU(Neq), dTloss_dU(Neq), dTlossrec_dU(Neq)
-      REAL*8                :: dfEiiz_dU(Neq), dfEirec_dU(Neq), dfEicx_dU(Neq)
-      real*8                    :: Dnn_dU(Neq), Dnn_dU_U
+      REAL*8                    :: sigmavEiz, sigmavErec
+      REAL*8                    :: dsigmavEiz_dU(Neq), dsigmavErec_dU(Neq)
+      REAL*8                    :: dsigmaviz_dU(Neq), dsigmavrec_dU(Neq), dsigmavcx_dU(Neq), dTloss_dU(Neq), dTlossrec_dU(Neq)
+      REAL*8                    :: dfEiiz_dU(Neq), dfEirec_dU(Neq), dfEicx_dU(Neq)
+      REAL*8                    :: Dnn_dU(Neq), Dnn_dU_U
 #endif
-      real*8                    :: Sn(Neq, Neq), Sn0(Neq)
+      REAL*8                    :: Sn(Neq, Neq), Sn0(Neq)
 #endif
-      REAL*8                :: kmult(SIZE(Auq, 1), SIZE(Auq, 2))
+      REAL*8                    :: kmult(SIZE(Auq, 1), SIZE(Auq, 2))
 
       b = b3(1:Ndim)
 
@@ -2118,13 +2118,13 @@ CONTAINS
 
 #ifdef AMJUELSPLINES
       !Amjuel energy losses
-      call compute_sigmavEiz(ue, sigmavEiz)
-      call compute_sigmavErec(ue, sigmavErec)
-      call compute_dsigmavEiz_dU(ue, dsigmavEiz_dU)
-      call compute_dsigmavErec_dU(ue, dsigmavErec_dU)
+      CALL compute_sigmavEiz(ue, sigmavEiz)
+      CALL compute_sigmavErec(ue, sigmavErec)
+      CALL compute_dsigmavEiz_dU(ue, dsigmavEiz_dU)
+      CALL compute_dsigmavErec_dU(ue, dsigmavErec_dU)
 #else
-    !! hot fix DO NOT USE
-      WRITE (*, *) this is a hotfix.Do not use.STOPPING.
+      !! hot fix do NOT use
+      WRITE (*, *) this is a hotfix.DO not USE.STOPPING.
       STOP
       sigmavEiz = sigmaviz*Tloss
       sigmavErec = sigmavrec*Tlossrec
@@ -2138,15 +2138,15 @@ CONTAINS
       !Assembly the matrix for neutral sources
 #ifdef TEMPERATURE
 #ifdef AMJUELSPLINES
-      call assemblyNeutral(ue, niz, dniz_dU, nrec, dnrec_dU, sigmaviz, dsigmaviz_dU, sigmavrec, dsigmavrec_dU,&
-        &fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, sigmavcx, dsigmavcx_dU, fEiiz,&
-        &dfEiiz_dU, fEirec, dfEirec_dU, fEicx, dfEicx_dU, Sn, Sn0, &
-        sigmavEiz=sigmavEiz, dsigmavEiz_dU=dsigmavEiz_dU, sigmavErec=sigmavErec, dsigmavErec_dU=dsigmavErec_dU)
+      CALL assemblyNeutral(ue, niz, dniz_dU, nrec, dnrec_dU, sigmaviz, dsigmaviz_dU, sigmavrec, dsigmavrec_dU,&
+      &fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, sigmavcx, dsigmavcx_dU, fEiiz,&
+      &dfEiiz_dU, fEirec, dfEirec_dU, fEicx, dfEicx_dU, Sn, Sn0, &
+         sigmavEiz=sigmavEiz, dsigmavEiz_dU=dsigmavEiz_dU, sigmavErec=sigmavErec, dsigmavErec_dU=dsigmavErec_dU)
 #else
-      call assemblyNeutral(ue, niz, dniz_dU, nrec, dnrec_dU, sigmaviz, dsigmaviz_dU, sigmavrec, dsigmavrec_dU,&
-        &fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, sigmavcx, dsigmavcx_dU, fEiiz,&
-        &dfEiiz_dU, fEirec, dfEirec_dU, fEicx, dfEicx_dU, Sn, Sn0, &
-        Tloss=Tloss, dTloss_dU=dTloss_dU, Tlossrec=Tlossrec, dTlossrec_dU=dTlossrec_dU)
+      CALL assemblyNeutral(ue, niz, dniz_dU, nrec, dnrec_dU, sigmaviz, dsigmaviz_dU, sigmavrec, dsigmavrec_dU,&
+      &fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, sigmavcx, dsigmavcx_dU, fEiiz,&
+      &dfEiiz_dU, fEirec, dfEirec_dU, fEicx, dfEicx_dU, Sn, Sn0, &
+         Tloss=Tloss, dTloss_dU=dTloss_dU, Tlossrec=Tlossrec, dTlossrec_dU=dTlossrec_dU)
 #endif
 #else
       CALL assemblyNeutral(ue, niz, dniz_dU, nrec, dnrec_dU, fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, Sn, Sn0)
@@ -2161,7 +2161,7 @@ CONTAINS
          IF (.NOT. switch%steady) THEN
             ! Time derivative contribution
 #ifdef VORTICITY
-            ! In the vorticity model I don't assemble the mass matrix for the potential equation
+            ! in the vorticity model I don't assemble the mass matrix for the potential equation
             IF (i .NE. 4) THEN
 #endif
                z = i + (i - 1)*Neq
@@ -2194,972 +2194,972 @@ CONTAINS
 #ifdef VORTICITY
          IF (switch%driftdia .AND. i .NE. 4) THEN
 #else
-            IF (switch%driftdia) THEN
+         IF (switch%driftdia) THEN
 #endif
-               ! B x GradB drift (isothermal)
-               DO k = 1, Ndim
-                  z = i + (i - 1)*Neq
-                  Auu(:, :, z) = Auu(:, :, z) + TRANSPOSE(NxyzNi(:, :, k))*drift(k)
-               END DO
-            END IF
+            ! B x GradB drift (isothermal)
+            DO k = 1, Ndim
+               z = i + (i - 1)*Neq
+               Auu(:, :, z) = Auu(:, :, z) + TRANSPOSE(NxyzNi(:, :, k))*drift(k)
+            END DO
+         END IF
 #else
-            IF (i == 2) THEN
-               DO j = 1, Neq
-                  z = i + (j - 1)*Neq
-                  ! Curvature contribution (non-isothermal)
-                  Auu(:, :, z) = Auu(:, :, z) - GG(i, j)*NNi
-
-                  ! split diffusion momentum equation (LU) (non-isothermal)
-                  DO k = 1, Ndim
-                     Auu(:, :, z) = Auu(:, :, z) + (NxyzNi(:, :, k)*QdW2(k, j))
-                  END DO
-                  Auu(:, :, z) = Auu(:, :, z) - (dot_PRODUCT(QdW2(:, j), b))*NNxy
-               END DO
-            END IF
-
-            IF (switch%driftdia) THEN
-               Telect = upe(8)
-               ! B x GradB drift (non-isothermal)
-               DO k = 1, Ndim
-                  z = i + (i - 1)*Neq
-                  Auu(:, :, z) = Auu(:, :, z) + Telect*TRANSPOSE(NxyzNi(:, :, k))*drift(k)
-               END DO
-            END IF
-
-            ! Parallel diffusion for the temperature
-            IF (i == 3) THEN
-               DO j = 1, 4
-                  Auu(:, :, i + (j - 1)*Neq) = Auu(:, :, i + (j - 1)*Neq) + coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:, j), b)))*NNxy + &
-                       &(dot_PRODUCT(Zet(:, j), b) + ds_dU(j))*NNi
-                  DO k = 1, Ndim
-                     z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
-                     Auq(:, :, z) = Auq(:, :, z) + coefi*Alphai*Vveci(j)*b(k)*NNxy
-                     IF (j == 4) THEN
-                        Auq(:, :, z) = Auq(:, :, z) + W*NNi*b(k)
-                     END IF
-                  END DO
-                  ! split diffusion electron energy equation (LU)
-                  z = i + (j - 1)*Neq
-                  DO k = 1, Ndim
-                     Auu(:, :, z) = Auu(:, :, z) + (NxyzNi(:, :, k)*QdW3(k, j))
-                  END DO
-                  Auu(:, :, z) = Auu(:, :, z) - (dot_PRODUCT(QdW3(:, j), b))*NNxy
-               END DO
-               rhs(:, i) = rhs(:, i) + coefi*Alphai*(dot_PRODUCT(MATMUL(TRANSPOSE(Taui), b), ue))*NNbb + s*Ni
-            ELSEIF (i == 4) THEN
-               DO j = 1, 4
-                  z = i + (j - 1)*Neq
-                  Auu(:, :, z) = Auu(:, :, z) + coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:, j), b)))*NNxy - (dot_PRODUCT(Zet(:, j), b) + ds_dU(j))*NNi
-                  IF (switch%ohmicsrc) THEN
-                     Auu(:, :, z) = Auu(:, :, z) - dSohmic_dU(j)*(Jtor**2)*NNi
-                  END IF
-                  DO k = 1, Ndim
-                     z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
-                     Auq(:, :, z) = Auq(:, :, z) + coefe*Alphae*Vvece(j)*b(k)*NNxy
-                     IF (j == 4) THEN
-                        Auq(:, :, z) = Auq(:, :, z) - W*NNi*b(k)
-                     END IF
-                  END DO
-                  ! split diffusion electron energy equation (LU)
-                  z = i + (j - 1)*Neq
-                  DO k = 1, Ndim
-                     Auu(:, :, z) = Auu(:, :, z) + (NxyzNi(:, :, k)*QdW4(k, j))
-                  END DO
-                  Auu(:, :, z) = Auu(:, :, z) - (dot_PRODUCT(QdW4(:, j), b))*NNxy
-               END DO
-               rhs(:, i) = rhs(:, i) + coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue), b), ue))*NNbb - s*Ni
-               IF (switch%ohmicsrc) THEN
-                  rhs(:, i) = rhs(:, i) + Sohmic*(Jtor**2)*Ni
-               END IF
-#ifdef NEUTRAL
-             ELSEIF (i == neq) THEN
-               DO j = 1, neq
-                  z = i + (j - 1)*Neq
-                  DO k = 1, Ndim
-                     !z = i+(k-1)*Neq+(j-1)*Neq*Ndim
-                     Auu(:, :, z) = Auu(:, :, z) + (NxyzNi(:, :, k)*Dnn_dU(j)*Qpr(k, i))
-                  END DO
-               END DO
-
-               DO k = 1, Ndim
-                  rhs(:, i) = rhs(:, i) + Dnn_dU_U*Qpr(k, i)*Nxyzg(:, k)
-               END DO
-#endif
-            END IF
-#endif
-
-            ! Convection contribution
+         IF (i == 2) THEN
             DO j = 1, Neq
                z = i + (j - 1)*Neq
-               Auu(:, :, z) = Auu(:, :, z) - A(i, j)*NNxy
+               ! Curvature contribution (non-isothermal)
+               Auu(:, :, z) = Auu(:, :, z) - GG(i, j)*NNi
+
+               ! split diffusion momentum equation (LU) (non-isothermal)
+               DO k = 1, Ndim
+                  Auu(:, :, z) = Auu(:, :, z) + (NxyzNi(:, :, k)*QdW2(k, j))
+               END DO
+               Auu(:, :, z) = Auu(:, :, z) - (dot_PRODUCT(QdW2(:, j), b))*NNxy
+            END DO
+         END IF
+
+         IF (switch%driftdia) THEN
+            Telect = upe(8)
+            ! B x GradB drift (non-isothermal)
+            DO k = 1, Ndim
+               z = i + (i - 1)*Neq
+               Auu(:, :, z) = Auu(:, :, z) + Telect*TRANSPOSE(NxyzNi(:, :, k))*drift(k)
+            END DO
+         END IF
+
+         ! Parallel diffusion for the temperature
+         IF (i == 3) THEN
+            DO j = 1, 4
+               Auu(:, :, i + (j - 1)*Neq) = Auu(:, :, i + (j - 1)*Neq) + coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:, j), b)))*NNxy + &
+               &(dot_PRODUCT(Zet(:, j), b) + ds_dU(j))*NNi
+               DO k = 1, Ndim
+                  z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
+                  Auq(:, :, z) = Auq(:, :, z) + coefi*Alphai*Vveci(j)*b(k)*NNxy
+                  IF (j == 4) THEN
+                     Auq(:, :, z) = Auq(:, :, z) + W*NNi*b(k)
+                  END IF
+               END DO
+               ! split diffusion electron energy equation (LU)
+               z = i + (j - 1)*Neq
+               DO k = 1, Ndim
+                  Auu(:, :, z) = Auu(:, :, z) + (NxyzNi(:, :, k)*QdW3(k, j))
+               END DO
+               Auu(:, :, z) = Auu(:, :, z) - (dot_PRODUCT(QdW3(:, j), b))*NNxy
+            END DO
+            rhs(:, i) = rhs(:, i) + coefi*Alphai*(dot_PRODUCT(MATMUL(TRANSPOSE(Taui), b), ue))*NNbb + s*Ni
+         ELSEIF (i == 4) THEN
+            DO j = 1, 4
+               z = i + (j - 1)*Neq
+               Auu(:, :, z) = Auu(:, :, z) + coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:, j), b)))*NNxy - (dot_PRODUCT(Zet(:, j), b) + ds_dU(j))*NNi
+               IF (switch%ohmicsrc) THEN
+                  Auu(:, :, z) = Auu(:, :, z) - dSohmic_dU(j)*(Jtor**2)*NNi
+               END IF
+               DO k = 1, Ndim
+                  z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
+                  Auq(:, :, z) = Auq(:, :, z) + coefe*Alphae*Vvece(j)*b(k)*NNxy
+                  IF (j == 4) THEN
+                     Auq(:, :, z) = Auq(:, :, z) - W*NNi*b(k)
+                  END IF
+               END DO
+               ! split diffusion electron energy equation (LU)
+               z = i + (j - 1)*Neq
+               DO k = 1, Ndim
+                  Auu(:, :, z) = Auu(:, :, z) + (NxyzNi(:, :, k)*QdW4(k, j))
+               END DO
+               Auu(:, :, z) = Auu(:, :, z) - (dot_PRODUCT(QdW4(:, j), b))*NNxy
+            END DO
+            rhs(:, i) = rhs(:, i) + coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue), b), ue))*NNbb - s*Ni
+            IF (switch%ohmicsrc) THEN
+               rhs(:, i) = rhs(:, i) + Sohmic*(Jtor**2)*Ni
+            END IF
 #ifdef NEUTRAL
-               !Sources
-               Auu(:, :, z) = Auu(:, :, z) + Sn(i, j)*NNi
-#endif
+         ELSEIF (i == neq) THEN
+            DO j = 1, neq
+               z = i + (j - 1)*Neq
+               DO k = 1, Ndim
+                  !z = i+(k-1)*Neq+(j-1)*Neq*Ndim
+                  Auu(:, :, z) = Auu(:, :, z) + (NxyzNi(:, :, k)*Dnn_dU(j)*Qpr(k, i))
+               END DO
             END DO
 
-            ! Pinch contribution
-            z = i + (i - 1)*Neq
-            Auu(:, :, z) = Auu(:, :, z) - (APinch(i, 1)*NxyzNi(:, :, 1) + APinch(i, 2)*NxyzNi(:, :, 2))
-
             DO k = 1, Ndim
-               ! split diffusion contributions (LQ)
-               IF (i == 2) THEN
-                  DO j = 1, Neq
-                     z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
-                     Auq(:, :, z) = Auq(:, :, z) + W2(j)*(NxyzNi(:, :, k) - NNxy*b(k))
-                  END DO
+               rhs(:, i) = rhs(:, i) + Dnn_dU_U*Qpr(k, i)*Nxyzg(:, k)
+            END DO
+#endif
+         END IF
+#endif
+
+         ! Convection contribution
+         DO j = 1, Neq
+            z = i + (j - 1)*Neq
+            Auu(:, :, z) = Auu(:, :, z) - A(i, j)*NNxy
+#ifdef NEUTRAL
+            !Sources
+            Auu(:, :, z) = Auu(:, :, z) + Sn(i, j)*NNi
+#endif
+         END DO
+
+         ! Pinch contribution
+         z = i + (i - 1)*Neq
+         Auu(:, :, z) = Auu(:, :, z) - (APinch(i, 1)*NxyzNi(:, :, 1) + APinch(i, 2)*NxyzNi(:, :, 2))
+
+         DO k = 1, Ndim
+            ! split diffusion contributions (LQ)
+            IF (i == 2) THEN
+               DO j = 1, Neq
+                  z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
+                  Auq(:, :, z) = Auq(:, :, z) + W2(j)*(NxyzNi(:, :, k) - NNxy*b(k))
+               END DO
 #ifdef TEMPERATURE
-               ELSEIF (i == 3) THEN
-                  DO j = 1, Neq
-                     z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
-                     Auq(:, :, z) = Auq(:, :, z) + W3(j)*(NxyzNi(:, :, k) - NNxy*b(k))
-                  END DO
-               ELSEIF (i == 4) THEN
-                  DO j = 1, Neq
-                     z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
-                     Auq(:, :, z) = Auq(:, :, z) + W4(j)*(NxyzNi(:, :, k) - NNxy*b(k))
-                  END DO
+            ELSEIF (i == 3) THEN
+               DO j = 1, Neq
+                  z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
+                  Auq(:, :, z) = Auq(:, :, z) + W3(j)*(NxyzNi(:, :, k) - NNxy*b(k))
+               END DO
+            ELSEIF (i == 4) THEN
+               DO j = 1, Neq
+                  z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
+                  Auq(:, :, z) = Auq(:, :, z) + W4(j)*(NxyzNi(:, :, k) - NNxy*b(k))
+               END DO
 #endif
-               END IF
+            END IF
 
-               ! Diagonal terms for perpendicular diffusion
-               z = i + (k - 1)*Neq + (i - 1)*Neq*Ndim
-               kmult = diffiso(i, i)*NxyzNi(:, :, k) - diffani(i, i)*NNxy*b(k)
+            ! Diagonal terms for perpendicular diffusion
+            z = i + (k - 1)*Neq + (i - 1)*Neq*Ndim
+            kmult = diffiso(i, i)*NxyzNi(:, :, k) - diffani(i, i)*NNxy*b(k)
 #ifdef VORTICITY
-               IF (i == 4) THEN
-                  kmult = kmult/ue(1)
-               END IF
+            IF (i == 4) THEN
+               kmult = kmult/ue(1)
+            END IF
 #endif
 
-               Auq(:, :, z) = Auq(:, :, z) + kmult
+            Auq(:, :, z) = Auq(:, :, z) + kmult
 
 #ifndef TEMPERATURE
-               ! Added term for n=exp(x) change of variable \Grad \chi **2
+            ! Added term for n=exp(x) change of variable \Grad \chi **2
+            IF (switch%logrho) THEN
+               IF (i == 1) THEN
+                  Auq(:, :, z) = Auq(:, :, z) - 2*(diffiso(i, i)*grad_n(k) - diffani(i, i)*b(k)*gradpar_n)*NNi
+                  rhs(:, i) = rhs(:, i) - Ni*(diffiso(i, i)*grad_n(k)*grad_n(k) - diffani(i, i)*gradpar_n**2/Ndim)
+               END IF
+            END IF
+#endif
+
+#ifdef VORTICITY
+            IF (switch%bxgradb) THEN
+               ! B x GradB current in the vorticity equation
+               IF (i == 3) THEN
+                  ii = 1
+                  z = i + (ii - 1)*Neq
+                  IF (switch%logrho) THEN
+                     Auu(:, :, z) = Auu(:, :, z) + 2*upe(1)*TRANSPOSE(NxyzNi(:, :, k))*drift(k) ! TODO: first order linearization
+                  ELSE
+                     Auu(:, :, z) = Auu(:, :, z) + 2*TRANSPOSE(NxyzNi(:, :, k))*drift(k)
+                  END IF
+               END IF
+            END IF
+            IF (switch%driftexb .AND. i .NE. 4) THEN
+               ! ExB terms
+               kcoeff = phys%dfcoef*numer%exbdump/Bmod
+               CALL ijk_cross_product(k, alpha, beta)
+               ii = 4
+               z = i + (k - 1)*Neq + (ii - 1)*Neq*Ndim
+               Auq(:, :, z) = Auq(:, :, z) + kcoeff*(NxyzNi(:, :, alpha)*b3(beta) - NxyzNi(:, :, beta)*b3(alpha))*ue(i)
+               CALL cross_product(qq(:, ii), bb, exb)
+               z = i + (i - 1)*Neq
+               Auu(:, :, z) = Auu(:, :, z) + kcoeff*exb(k)*NxyzNi(:, :, k)
+               rhs(:, i) = rhs(:, i) + kcoeff*exb(k)*ue(i)*Nxyzg(:, k)
+            END IF
+
+            ! Non-diagonal terms for perpendicular diffusion
+            DO ii = 1, Neq
+               IF (ii == i) CYCLE ! diagonal already assembled
+               IF (ABS(diffiso(i, ii)) < 1e-12 .AND. ABS(diffani(i, ii)) < 1e-12) CYCLE
+               kcoeff = 1.
+               ! Non-linear correction for non-linear diffusive terms.
+               ! TODO: find a smarter way to include it,avoiding if statements and model dependencies (i==3,ii==1 only holds for Isothermal+Vorticity model)
+
+               !if ((i == 3 .or. i == 4) .and. ii == 1) then
+               IF ((i == 3) .AND. ii == 1) THEN
+                  z = i + (ii - 1)*Neq
+                  kcoeff = 1./ue(1)
+                  Auu(:, :, z) = Auu(:, :, z) - kcoeff**2*(diffiso(i, ii)*Qpr(k, ii)*NxyzNi(:, :, k) - diffani(i, ii)*Qpr(k, ii)*b(k)*NNxy)
+                  rhs(:, i) = rhs(:, i) - kcoeff*(diffiso(i, ii)*Qpr(k, ii)*Nxyzg(:, k) - diffani(i, ii)*Qpr(k, ii)*b(k)*NNbb)
+               END IF
+               z = i + (k - 1)*Neq + (ii - 1)*Ndim*Neq
+               Auq(:, :, z) = Auq(:, :, z) + kcoeff*diffiso(i, ii)*NxyzNi(:, :, k) - kcoeff*diffani(i, ii)*NNxy*b(k)
+
+            END DO
+#endif
+         END DO ! loop in k: 1-Ndim
+
+#ifdef VORTICITY
+         ! The vorticity is the source term in the potential equation
+         IF (i == 4) THEN
+            j = 3
+            z = i + (j - 1)*Neq
+            Auu(:, :, z) = Auu(:, :, z) + NNi
+         END IF
+#endif
+
+#ifdef VORTICITY
+
+         IF (switch%testcase .EQ. 7) THEN
+            IF ((xy(1) - geom%R0)/phys%lscale .GT. 0.4) THEN
+               ! implicit sources to take into account parallel losses
                IF (switch%logrho) THEN
                   IF (i == 1) THEN
-                     Auq(:, :, z) = Auq(:, :, z) - 2*(diffiso(i, i)*grad_n(k) - diffani(i, i)*b(k)*gradpar_n)*NNi
-                     rhs(:, i) = rhs(:, i) - Ni*(diffiso(i, i)*grad_n(k)*grad_n(k) - diffani(i, i)*gradpar_n**2/Ndim)
+                     rhs(:, i) = rhs(:, i) - phys%diagsource(i)*Ni
+                  ELSE IF (i == 3) THEN
+                     j = 4
+                     z = i + (j - 1)*Neq
+                     Auu(:, :, z) = Auu(:, :, z) + phys%diagsource(i)*NNi
                   END IF
-               END IF
-#endif
-
-#ifdef VORTICITY
-               IF (switch%bxgradb) THEN
-                  ! B x GradB current in the vorticity equation
-                  IF (i == 3) THEN
-                     ii = 1
-                     z = i + (ii - 1)*Neq
-                     IF (switch%logrho) THEN
-                        Auu(:, :, z) = Auu(:, :, z) + 2*upe(1)*TRANSPOSE(NxyzNi(:, :, k))*drift(k) ! TODO: first order linearization
-                     ELSE
-                        Auu(:, :, z) = Auu(:, :, z) + 2*TRANSPOSE(NxyzNi(:, :, k))*drift(k)
-                     END IF
-                  END IF
-               END IF
-               IF (switch%driftexb .AND. i .NE. 4) THEN
-                  ! ExB terms
-                  kcoeff = phys%dfcoef*numer%exbdump/Bmod
-                  CALL ijk_cross_product(k, alpha, beta)
-                  ii = 4
-                  z = i + (k - 1)*Neq + (ii - 1)*Neq*Ndim
-                  Auq(:, :, z) = Auq(:, :, z) + kcoeff*(NxyzNi(:, :, alpha)*b3(beta) - NxyzNi(:, :, beta)*b3(alpha))*ue(i)
-                  CALL cross_product(qq(:, ii), bb, exb)
-                  z = i + (i - 1)*Neq
-                  Auu(:, :, z) = Auu(:, :, z) + kcoeff*exb(k)*NxyzNi(:, :, k)
-                  rhs(:, i) = rhs(:, i) + kcoeff*exb(k)*ue(i)*Nxyzg(:, k)
-               END IF
-
-               ! Non-diagonal terms for perpendicular diffusion
-               DO ii = 1, Neq
-                  IF (ii == i) CYCLE ! diagonal already assembled
-                  IF (ABS(diffiso(i, ii)) < 1e-12 .AND. ABS(diffani(i, ii)) < 1e-12) CYCLE
-                  kcoeff = 1.
-                  ! Non-linear correction for non-linear diffusive terms.
-                  ! TODO: find a smarter way to include it,avoiding if statements and model dependencies (i==3,ii==1 only holds for Isothermal+Vorticity model)
-
-                  !IF ((i == 3 .or. i == 4) .and. ii == 1) then
-                  IF ((i == 3) .AND. ii == 1) THEN
-                     z = i + (ii - 1)*Neq
-                     kcoeff = 1./ue(1)
-                     Auu(:, :, z) = Auu(:, :, z) - kcoeff**2*(diffiso(i, ii)*Qpr(k, ii)*NxyzNi(:, :, k) - diffani(i, ii)*Qpr(k, ii)*b(k)*NNxy)
-                     rhs(:, i) = rhs(:, i) - kcoeff*(diffiso(i, ii)*Qpr(k, ii)*Nxyzg(:, k) - diffani(i, ii)*Qpr(k, ii)*b(k)*NNbb)
-                  END IF
-                  z = i + (k - 1)*Neq + (ii - 1)*Ndim*Neq
-                  Auq(:, :, z) = Auq(:, :, z) + kcoeff*diffiso(i, ii)*NxyzNi(:, :, k) - kcoeff*diffani(i, ii)*NNxy*b(k)
-
-               END DO
-#endif
-            END DO ! loop in k: 1-Ndim
-
-#ifdef VORTICITY
-            ! The vorticity is the source term in the potential equation
-            IF (i == 4) THEN
-               j = 3
-               z = i + (j - 1)*Neq
-               Auu(:, :, z) = Auu(:, :, z) + NNi
-            END IF
-#endif
-
-#ifdef VORTICITY
-
-            IF (switch%testcase .EQ. 7) THEN
-               IF ((xy(1) - geom%R0)/phys%lscale .GT. 0.4) THEN
-                  ! Implicit sources to take into account parallel losses
-                  IF (switch%logrho) THEN
-                     IF (i == 1) THEN
-                        rhs(:, i) = rhs(:, i) - phys%diagsource(i)*Ni
-                     ELSE IF (i == 3) THEN
-                        j = 4
-                        z = i + (j - 1)*Neq
-                        Auu(:, :, z) = Auu(:, :, z) + phys%diagsource(i)*NNi
-                     END IF
-                  ELSE
-                     IF (i == 1) THEN
-                        z = i + (i - 1)*Neq
-                        Auu(:, :, z) = Auu(:, :, z) + phys%diagsource(i)*NNi
-                     ELSE IF (i == 3) THEN
-                        j = 4
-                        z = i + (j - 1)*Neq
-                        Auu(:, :, z) = Auu(:, :, z) + phys%diagsource(i)*NNi
-                     END IF
-                  END IF
-               END IF
-            END IF
-#endif
-            END DO ! Loop in equations
-
-            ! Assembly RHS
-            IF (.NOT. switch%steady) THEN
-#ifdef VORTICITY
-               u0e(4, :) = 0.
-#endif
-               DO iord = 1, time%tis
-                  ! Time derivative contribution
-                  rhs = rhs + ktis(iord + 1)*tensorProduct(Ni, u0e(:, iord))/time%dt
-               END DO
-            END IF
-
-            ! Linear body force contribution
-            rhs = rhs + tensorProduct(Ni, f)
-#ifdef NEUTRAL
-            rhs = rhs - tensorProduct(Ni, Sn0)
-#endif
-            END SUBROUTINE assemblyVolumeContribution
-
-            !********************************************************************
-            !
-            !         ASSEMBLY INTERIOR FACES CONTRIBUTION
-            !
-            !********************************************************************
-
-            SUBROUTINE assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe,&
-                &ind_fg, b3, psi, n, diffiso, diffani, NNif, Nif, Nfbn, uf, qf, tau)
-
-               integer*4, intent(IN)               :: iel, ind_asf(:), ind_ash(:), ind_ff(:), ind_fe(:), ind_fg(:)
-               real*8, intent(IN)                  :: b3(:), n(:), psi
-               real*8, intent(IN)                  :: diffiso(:, :), diffani(:, :)
-               real*8, intent(IN)                  :: NNif(:, :), Nif(:), Nfbn(:)
-               real*8, intent(IN)                  :: uf(:)
-               real*8, intent(IN)                  :: qf(:)
-               real*8, optional, intent(INOUT)     :: tau(:, :)
-               real*8                              :: b(Ndim)
-               integer*4                           :: i, j, k
-               integer*4, dimension(size(ind_asf)) :: ind_if, ind_jf, ind_kf
-               real*8, dimension(neq, neq)         :: A
-               real*8, dimension(neq, Ndim)        :: APinch
-               real*8                              :: nn(3), qq(3, Neq), bb(3)
-               real*8                              :: bn, kmult(size(ind_asf), size(ind_asf)), kmultf(size(ind_asf))
-               real*8                              :: Qpr(Ndim, Neq)
-               real*8                              :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
-#ifndef TEMPERATURE
-               real*8                              :: auxvec(neq)
-#else
-               real*8                              :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
-               real*8                              :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
-               real*8                              :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
-               real*8                              :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
-#endif
-#ifdef NEUTRAL
-              real*8                               :: Dnn_dU(Neq), Dnn_dU_U
-#endif
-#ifdef VORTICITY
-               real*8                              :: kcoeff, exb(3)
-               integer*4                           :: alpha, beta, ii
-#endif
-               b = b3(1:Ndim)
-               bb = b3
-               ! Jacobian matrices
-               bn = dot_PRODUCT(b, n)
-               CALL jacobianMatrices(uf, A)
-
-               ! Jacobian for pinch term
-               CALL computePinch(b, psi, APinch)
-
-               ! Compute Q^T^(k-1)
-               Qpr = RESHAPE(qf, (/Ndim, Neq/))
-
-               ! Split diffusion vector/matrix for momentum equation
-               CALL compute_W2(uf, W2, diffiso(1, 1), diffiso(2, 2))
-               CALL compute_dW2_dU(uf, dW2_dU, diffiso(1, 1), diffiso(2, 2))
-               QdW2 = MATMUL(Qpr, dW2_dU)
-
-               nn = 0.
-               qq = 0.
-               nn(1:Ndim) = n
-               qq(1:Ndim, :) = Qpr
-
-#ifdef TEMPERATURE
-               ! Compute V(U^(k-1))
-               CALL computeVi(uf, Vveci)
-               CALL computeVe(uf, Vvece)
-
-               ! Compute dV_dU (k-1)
-               CALL compute_dV_dUi(uf, dV_dUi)
-               CALL compute_dV_dUe(uf, dV_dUe)
-
-               ! Split diffusion vector/matrix for the energies equations
-               CALL compute_W3(uf, W3, diffiso(1, 1), diffiso(2, 2), diffiso(3, 3))
-               CALL compute_dW3_dU(uf, dW3_dU, diffiso(1, 1), diffiso(2, 2), diffiso(3, 3))
-               QdW3 = MATMUL(Qpr, dW3_dU)
-
-               CALL compute_W4(uf, W4, diffiso(1, 1), diffiso(4, 4))
-               CALL compute_dW4_dU(uf, dW4_dU, diffiso(1, 1), diffiso(4, 4))
-               QdW4 = MATMUL(Qpr, dW4_dU)
-
-               ! Compute Alpha(U^(k-1))
-               Alphai = computeAlphai(uf)
-               Alphae = computeAlphae(uf)
-
-               ! Compute dAlpha/dU^(k-1)
-               CALL compute_dAlpha_dUi(uf, dAlpha_dUi)
-               CALL compute_dAlpha_dUe(uf, dAlpha_dUe)
-
-               gmi = dot_PRODUCT(MATMUL(Qpr, Vveci), b)  ! scalar
-               gme = dot_PRODUCT(MATMUL(Qpr, Vvece), b)
-               Taui = MATMUL(Qpr, dV_dUi)      ! 2x3
-               Taue = MATMUL(Qpr, dV_dUe)      ! 2x3
-#ifdef NEUTRAL
-               CALL compute_Dnn_dU(uf, Dnn_dU)
-               Dnn_dU_u = dot_product(Dnn_dU, uf)
-#endif
-#endif
-
-               ! Assembly local matrix
-               DO i = 1, Neq
-                  ind_if = ind_asf + i
-                  DO k = 1, Ndim
-                     ind_kf = ind_ash + k + (i - 1)*Ndim
-                     kmult = NNif*(n(k)*diffiso(i, i) - bn*b(k)*diffani(i, i))
-
-#ifdef VORTICITY
-                     IF (i == 4) THEN
-                        kmult = kmult/uf(1)
-                     END IF
-#endif
-                     ! Diagonal terms for perpendicular diffusion
-                     elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
-                     elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-
-                     ! Split diffusion contribution
-                     IF (i == 2) THEN
-                        ! Assembly LQ momentum equatuation
-                        j = 1
-                        ind_kf = ind_ash + k + (j - 1)*Ndim
-                        kmult = NNif*W2(j)*(n(k) - bn*b(k))
-                        elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
-                        elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                        !Assembly LU momentum equation
-                        DO j = 1, Neq
-                           ind_jf = ind_asf + j
-                           kmult = QdW2(k, j)*NNif*(n(k) - bn*b(k))
-                           elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                           elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
-                        END DO
-#ifdef TEMPERATURE
-                     ELSEIF (i == 3) THEN
-                        ! Assembly LQ ion energy
-                        DO j = 1, Neq
-                           ind_kf = ind_ash + k + (j - 1)*Ndim
-                           kmult = NNif*W3(j)*(n(k) - bn*b(k))
-                           elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
-                           elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                        END DO
-                        ! Assembly LU ion energy
-                        DO j = 1, Neq
-                           ind_jf = ind_asf + j
-                           kmult = QdW3(k, j)*NNif*(n(k) - bn*b(k))
-                           elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                           elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
-                        END DO
-                     ELSEIF (i == 4) THEN
-                        ! Assembly LQ electron energy
-                        j = 1
-                        ind_kf = ind_ash + k + (j - 1)*Ndim
-                        kmult = NNif*W4(j)*(n(k) - bn*b(k))
-                        elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
-                        elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                        !Assembly LU electron energy
-                        DO j = 1, Neq
-                           ind_jf = ind_asf + j
-                           kmult = QdW4(k, j)*NNif*(n(k) - bn*b(k))
-                           elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                           elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
-                        END DO
-#endif
-                     END IF
-#ifdef VORTICITY
-
-                     IF (switch%driftexb .AND. i .NE. 4) THEN
-                        ! ExB terms
-                        kcoeff = phys%dfcoef*numer%exbdump/Bmod
-                        ii = 4
-                        CALL ijk_cross_product(k, alpha, beta)
-                        ind_kf = ind_ash + k + (ii - 1)*Ndim
-                        kmult = kcoeff*NNif*(nn(alpha)*b3(beta) - nn(beta)*b3(alpha))*uf(i)
-                        elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                        elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
-                        CALL cross_product(qq(:, ii), bb, exb)
-                        kmult = kcoeff*exb(k)*NNif*b(k)
-                        elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) - kmult
-                        elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) - kmult
-                        kmultf = kcoeff*exb(k)*uf(i)*Nif*b(k)
-                        elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
-                        elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
-
-                        !tau(i,i) = tau(i,i) + abs(kcoeff*exb(k)*b(k))
-                        tau(i, i) = 100
-                     END IF
-                     DO ii = 1, Neq
-                        IF (ii == i) CYCLE ! diagonal alredy assembled
-                        IF (ABS(diffiso(i, ii)) < 1e-12 .AND. ABS(diffani(i, ii)) < 1e-12) CYCLE
-                        ind_kf = ind_ash + k + (ii - 1)*Ndim
-                        kcoeff = 1.
-                        ! Non-linear correction for non-linear diffusive terms.
-                        ! TODO: find a smarter way to include it,avoiding if statements and model dependencies (i==3,ii==1 only holds for Isothermal+Vorticity model)
-
-                        !IF ((i == 3 .or. i == 4) .and. ii == 1) then
-                        IF ((i == 3) .AND. ii == 1) THEN
-                           ! Non-linear term in the vorticity equation (\Grad// n/n b)
-                           ind_jf = ind_asf + ii
-                           kcoeff = 1./uf(1)
-                           kmult = kcoeff**2*(diffiso(i, ii)*Qpr(k, 1)*n(k)*NNif - diffani(i, ii)*Qpr(k, 1)*b(k)*NNif*bn)
-                           elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
-                           elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) + kmult
-                           kmultf = kcoeff*(diffiso(i, ii)*Qpr(k, 1)*n(k)*Nif - diffani(i, ii)*Qpr(k, 1)*b(k)*Nfbn)
-                           elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) + kmultf
-                           elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) + kmultf
-                        END IF
-                        kmult = NNif*kcoeff*(n(k)*diffiso(i, ii) - bn*b(k)*diffani(i, ii))
-                        elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
-                        elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                     END DO
-#endif
-                  END DO ! k-loop
-
-                  ! Convection contribution
-                  DO j = 1, Neq
-                     ind_jf = ind_asf + j
-                     kmult = bn*A(i, j)*NNif
-
-                     elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
-                     elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) + kmult
-                  END DO ! j-loop
-                  ! Pinch contribution
-                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) + (APinch(i, 1)*n(1) + APinch(i, 2)*n(2))*NNif
-                  elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) + (APinch(i, 1)*n(1) + APinch(i, 2)*n(2))*NNif
-
-#ifdef TEMPERATURE
-                  ! Parallel diffusion for the temperature
-                  IF (i == 3) THEN
-                     DO j = 1, 4
-                        ind_jf = ind_asf + j
-                        kmult = coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:, j), b)))*NNif*bn
-                        elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                        elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
-                        DO k = 1, Ndim
-                           ind_kf = k + (j - 1)*Ndim + ind_ash
-                           kmult = coefi*Alphai*Vveci(j)*b(k)*NNif*bn
-                           elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) - kmult
-                           elMat%Alq(ind_ff(ind_if), ind_fg(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fg(ind_kf), iel) - kmult
-                        END DO
-                     END DO
-                     kmultf = coefi*Alphai*(dot_PRODUCT(MATMUL(TRANSPOSE(Taui), b), uf))*Nfbn
-                     elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
-                     elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
-                  ELSEIF (i == 4) THEN
-                     DO j = 1, 4
-                        ind_jf = ind_asf + j
-                        kmult = coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:, j), b)))*NNif*bn
-                        elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                        elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
-                        DO k = 1, Ndim
-                           ind_kf = k + (j - 1)*Ndim + ind_ash
-                           kmult = coefe*Alphae*Vvece(j)*b(k)*NNif*bn
-                           elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) - kmult
-                           elMat%Alq(ind_ff(ind_if), ind_fg(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fg(ind_kf), iel) - kmult
-                        END DO
-                     END DO
-                     kmultf = coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue), b), uf))*Nfbn
-                     elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
-                     elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
-#ifdef NEUTRAL
-                  ELSEIF (i == neq) THEN
-                     DO j = 1, Neq
-                        ind_jf = ind_asf + j
-                        DO k = 1, Ndim
-
-                           kmult = Dnn_dU(j)*Qpr(k, i)*n(k)*NNif
-                           elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                           elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
-                        END DO
-                     END DO
-                     kmultf = Dnn_dU_U*(Qpr(1, i)*n(1) + Qpr(2, i)*n(2))*Nif
-                     elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
-                     elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
-#endif
-                  END IF
-#endif
-               END DO  ! i-Loop
-
-               ! Assembly stabilization terms
-               IF (numer%stab < 6) THEN
-                  DO i = 1, Neq
-                     ind_if = i + ind_asf
-                     kmult = tau(i, i)*NNif
-                     elMat%Auu(ind_fe(ind_if), ind_fe(ind_if), iel) = elMat%Auu(ind_fe(ind_if), ind_fe(ind_if), iel) + kmult
-                     elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) - kmult
-                     elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) - kmult
-                     elMat%Alu(ind_ff(ind_if), ind_fe(ind_if), iel) = elMat%Alu(ind_ff(ind_if), ind_fe(ind_if), iel) + kmult
-                  END DO
                ELSE
-                  DO i = 1, Neq
-                     ind_if = i + ind_asf
-                     DO j = 1, Neq
-                        ind_jf = j + ind_asf
-                        kmult = tau(i, j)*NNif
-                        elMat%Auu(ind_fe(ind_if), ind_fe(ind_jf), iel) = elMat%Auu(ind_fe(ind_if), ind_fe(ind_jf), iel) + kmult
-                        elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                        elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
-                        elMat%Alu(ind_ff(ind_if), ind_fe(ind_jf), iel) = elMat%Alu(ind_ff(ind_if), ind_fe(ind_jf), iel) + kmult
-                     END DO
-                  END DO
+                  IF (i == 1) THEN
+                     z = i + (i - 1)*Neq
+                     Auu(:, :, z) = Auu(:, :, z) + phys%diagsource(i)*NNi
+                  ELSE IF (i == 3) THEN
+                     j = 4
+                     z = i + (j - 1)*Neq
+                     Auu(:, :, z) = Auu(:, :, z) + phys%diagsource(i)*NNi
+                  END IF
                END IF
-               !************* End stabilization terms************************
+            END IF
+         END IF
+#endif
+      END DO ! Loop in equations
 
-            END SUBROUTINE assemblyIntFacesContribution
+      ! Assembly RHS
+      IF (.NOT. switch%steady) THEN
+#ifdef VORTICITY
+         u0e(4, :) = 0.
+#endif
+         DO iord = 1, time%tis
+            ! Time derivative contribution
+            rhs = rhs + ktis(iord + 1)*tensorProduct(Ni, u0e(:, iord))/time%dt
+         END DO
+      END IF
 
-            !********************************************************************
-            !
-            !         ASSEMBLY EXTERIOR FACES CONTRIBUTION
-            !
-            !********************************************************************
+      ! Linear body force contribution
+      rhs = rhs + tensorProduct(Ni, f)
+#ifdef NEUTRAL
+      rhs = rhs - tensorProduct(Ni, Sn0)
+#endif
+   END SUBROUTINE assemblyVolumeContribution
 
-            SUBROUTINE assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe,&
-                &ind_fg, b3, psi, n, diffiso, diffani, NNif, Nif, Nfbn, uf, qf, tau)
+   !********************************************************************
+   !
+   !         ASSEMBLY INTERIOR FACES CONTRIBUTION
+   !
+   !********************************************************************
 
-               integer*4, intent(IN)           :: iel, ind_asf(:), ind_ash(:), ind_ff(:), ind_fe(:), ind_fg(:)
-               logical, INTENT(IN)             :: isdir
-               real*8, intent(IN)              :: b3(:), n(:), psi
-               real*8, intent(IN)              :: diffiso(:, :), diffani(:, :)
-               real*8, intent(IN)              :: NNif(:, :), Nif(:), Nfbn(:)
-               real*8, intent(IN)              :: uf(:)
-               real*8, intent(IN)              :: qf(:)
-               real*8, optional, intent(INOUT) :: tau(:, :)
-               real*8                          :: bn, kmult(Npfl, Npfl), kmultf(Npfl)
-               real*8                          :: Qpr(Ndim, Neq)
-               real*8                          :: nn(3), qq(3, Neq), b(Ndim), bb(3)
-               real*8                          :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
-               integer*4                       :: i, j, k
-               integer*4, dimension(Npfl)      :: ind_if, ind_jf, ind_kf
-               real*8, dimension(neq, neq)     :: A
-               real*8, dimension(neq, Ndim)    :: APinch
+   SUBROUTINE assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe,&
+   &ind_fg, b3, psi, n, diffiso, diffani, NNif, Nif, Nfbn, uf, qf, tau)
+
+      INTEGER*4, INTENT(IN)               :: iel, ind_asf(:), ind_ash(:), ind_ff(:), ind_fe(:), ind_fg(:)
+      REAL*8, INTENT(IN)                  :: b3(:), n(:), psi
+      REAL*8, INTENT(IN)                  :: diffiso(:, :), diffani(:, :)
+      REAL*8, INTENT(IN)                  :: NNif(:, :), Nif(:), Nfbn(:)
+      REAL*8, INTENT(IN)                  :: uf(:)
+      REAL*8, INTENT(IN)                  :: qf(:)
+      REAL*8, OPTIONAL, INTENT(INOUT)     :: tau(:, :)
+      REAL*8                              :: b(Ndim)
+      INTEGER*4                           :: i, j, k
+      INTEGER*4, DIMENSION(size(ind_asf)) :: ind_if, ind_jf, ind_kf
+      REAL*8, DIMENSION(neq, neq)         :: A
+      REAL*8, DIMENSION(neq, Ndim)        :: APinch
+      REAL*8                              :: nn(3), qq(3, Neq), bb(3)
+      REAL*8                              :: bn, kmult(size(ind_asf), size(ind_asf)), kmultf(size(ind_asf))
+      REAL*8                              :: Qpr(Ndim, Neq)
+      REAL*8                              :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
 #ifndef TEMPERATURE
-               real*8                          :: auxvec(neq)
+      REAL*8                              :: auxvec(neq)
 #else
-               real*8                          :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
-               real*8                          :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
-               real*8                          :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
-               real*8                          :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
+      REAL*8                              :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
+      REAL*8                              :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
+      REAL*8                              :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
+      REAL*8                              :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
 #endif
 #ifdef NEUTRAL
-               real*8                          :: Dnn_dU(Neq), Dnn_dU_U
+      REAL*8                               :: Dnn_dU(Neq), Dnn_dU_U
 #endif
 #ifdef VORTICITY
-               integer*4                       :: alpha, beta, ii
-               real*8                          :: exb(3), kcoeff
+      REAL*8                              :: kcoeff, exb(3)
+      INTEGER*4                           :: alpha, beta, ii
+#endif
+      b = b3(1:Ndim)
+      bb = b3
+      ! Jacobian matrices
+      bn = dot_PRODUCT(b, n)
+      CALL jacobianMatrices(uf, A)
+
+      ! Jacobian for pinch term
+      CALL computePinch(b, psi, APinch)
+
+      ! Compute Q^T^(k-1)
+      Qpr = RESHAPE(qf, (/Ndim, Neq/))
+
+      ! Split diffusion vector/matrix for momentum equation
+      CALL compute_W2(uf, W2, diffiso(1, 1), diffiso(2, 2))
+      CALL compute_dW2_dU(uf, dW2_dU, diffiso(1, 1), diffiso(2, 2))
+      QdW2 = MATMUL(Qpr, dW2_dU)
+
+      nn = 0.
+      qq = 0.
+      nn(1:Ndim) = n
+      qq(1:Ndim, :) = Qpr
+
+#ifdef TEMPERATURE
+      ! Compute V(U^(k-1))
+      CALL computeVi(uf, Vveci)
+      CALL computeVe(uf, Vvece)
+
+      ! Compute dV_dU (k-1)
+      CALL compute_dV_dUi(uf, dV_dUi)
+      CALL compute_dV_dUe(uf, dV_dUe)
+
+      ! Split diffusion vector/matrix for the energies equations
+      CALL compute_W3(uf, W3, diffiso(1, 1), diffiso(2, 2), diffiso(3, 3))
+      CALL compute_dW3_dU(uf, dW3_dU, diffiso(1, 1), diffiso(2, 2), diffiso(3, 3))
+      QdW3 = MATMUL(Qpr, dW3_dU)
+
+      CALL compute_W4(uf, W4, diffiso(1, 1), diffiso(4, 4))
+      CALL compute_dW4_dU(uf, dW4_dU, diffiso(1, 1), diffiso(4, 4))
+      QdW4 = MATMUL(Qpr, dW4_dU)
+
+      ! Compute Alpha(U^(k-1))
+      Alphai = computeAlphai(uf)
+      Alphae = computeAlphae(uf)
+
+      ! Compute dAlpha/dU^(k-1)
+      CALL compute_dAlpha_dUi(uf, dAlpha_dUi)
+      CALL compute_dAlpha_dUe(uf, dAlpha_dUe)
+
+      gmi = dot_PRODUCT(MATMUL(Qpr, Vveci), b)  ! scalar
+      gme = dot_PRODUCT(MATMUL(Qpr, Vvece), b)
+      Taui = MATMUL(Qpr, dV_dUi)      ! 2x3
+      Taue = MATMUL(Qpr, dV_dUe)      ! 2x3
+#ifdef NEUTRAL
+      CALL compute_Dnn_dU(uf, Dnn_dU)
+      Dnn_dU_u = dot_product(Dnn_dU, uf)
+#endif
 #endif
 
-               b = b3(1:Ndim)
-               bb = b3
-               ! Jacobian matrices
-               bn = dot_PRODUCT(b, n)
-               CALL jacobianMatrices(uf, A)
+      ! Assembly local matrix
+      DO i = 1, Neq
+         ind_if = ind_asf + i
+         DO k = 1, Ndim
+            ind_kf = ind_ash + k + (i - 1)*Ndim
+            kmult = NNif*(n(k)*diffiso(i, i) - bn*b(k)*diffani(i, i))
 
-               ! Jacobian matrices Pinch
-               CALL computePinch(b, psi, APinch)
+#ifdef VORTICITY
+            IF (i == 4) THEN
+               kmult = kmult/uf(1)
+            END IF
+#endif
+            ! Diagonal terms for perpendicular diffusion
+            elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
+            elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
 
-               ! Compute Q^T^(k-1)
-               Qpr = RESHAPE(qf, (/Ndim, Neq/))
+            ! Split diffusion contribution
+            IF (i == 2) THEN
+               ! Assembly LQ momentum equatuation
+               j = 1
+               ind_kf = ind_ash + k + (j - 1)*Ndim
+               kmult = NNif*W2(j)*(n(k) - bn*b(k))
+               elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
+               elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+               !Assembly LU momentum equation
+               DO j = 1, Neq
+                  ind_jf = ind_asf + j
+                  kmult = QdW2(k, j)*NNif*(n(k) - bn*b(k))
+                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+                  elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
+               END DO
+#ifdef TEMPERATURE
+            ELSEIF (i == 3) THEN
+               ! Assembly LQ ion energy
+               DO j = 1, Neq
+                  ind_kf = ind_ash + k + (j - 1)*Ndim
+                  kmult = NNif*W3(j)*(n(k) - bn*b(k))
+                  elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
+                  elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+               END DO
+               ! Assembly LU ion energy
+               DO j = 1, Neq
+                  ind_jf = ind_asf + j
+                  kmult = QdW3(k, j)*NNif*(n(k) - bn*b(k))
+                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+                  elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
+               END DO
+            ELSEIF (i == 4) THEN
+               ! Assembly LQ electron energy
+               j = 1
+               ind_kf = ind_ash + k + (j - 1)*Ndim
+               kmult = NNif*W4(j)*(n(k) - bn*b(k))
+               elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
+               elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+               !Assembly LU electron energy
+               DO j = 1, Neq
+                  ind_jf = ind_asf + j
+                  kmult = QdW4(k, j)*NNif*(n(k) - bn*b(k))
+                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+                  elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
+               END DO
+#endif
+            END IF
+#ifdef VORTICITY
 
-               ! Split diffusion vector/matrix for the momentum equation
-               CALL compute_W2(uf, W2, diffiso(1, 1), diffiso(2, 2))
-               CALL compute_dW2_dU(uf, dW2_dU, diffiso(1, 1), diffiso(2, 2))
-               QdW2 = MATMUL(Qpr, dW2_dU)
+            IF (switch%driftexb .AND. i .NE. 4) THEN
+               ! ExB terms
+               kcoeff = phys%dfcoef*numer%exbdump/Bmod
+               ii = 4
+               CALL ijk_cross_product(k, alpha, beta)
+               ind_kf = ind_ash + k + (ii - 1)*Ndim
+               kmult = kcoeff*NNif*(nn(alpha)*b3(beta) - nn(beta)*b3(alpha))*uf(i)
+               elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+               elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
+               CALL cross_product(qq(:, ii), bb, exb)
+               kmult = kcoeff*exb(k)*NNif*b(k)
+               elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) - kmult
+               elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) - kmult
+               kmultf = kcoeff*exb(k)*uf(i)*Nif*b(k)
+               elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
+               elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
 
-               nn = 0.
-               qq = 0.
-               nn(1:Ndim) = n
-               qq(1:Ndim, :) = Qpr
+               !tau(i,i) = tau(i,i) + abs(kcoeff*exb(k)*b(k))
+               tau(i, i) = 100
+            END IF
+            DO ii = 1, Neq
+               IF (ii == i) CYCLE ! diagonal alredy assembled
+               IF (ABS(diffiso(i, ii)) < 1e-12 .AND. ABS(diffani(i, ii)) < 1e-12) CYCLE
+               ind_kf = ind_ash + k + (ii - 1)*Ndim
+               kcoeff = 1.
+               ! Non-linear correction for non-linear diffusive terms.
+               ! TODO: find a smarter way to include it,avoiding if statements and model dependencies (i==3,ii==1 only holds for Isothermal+Vorticity model)
+
+               !if ((i == 3 .or. i == 4) .and. ii == 1) then
+               IF ((i == 3) .AND. ii == 1) THEN
+                  ! Non-linear term in the vorticity equation (\Grad// n/n b)
+                  ind_jf = ind_asf + ii
+                  kcoeff = 1./uf(1)
+                  kmult = kcoeff**2*(diffiso(i, ii)*Qpr(k, 1)*n(k)*NNif - diffani(i, ii)*Qpr(k, 1)*b(k)*NNif*bn)
+                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
+                  elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) + kmult
+                  kmultf = kcoeff*(diffiso(i, ii)*Qpr(k, 1)*n(k)*Nif - diffani(i, ii)*Qpr(k, 1)*b(k)*Nfbn)
+                  elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) + kmultf
+                  elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) + kmultf
+               END IF
+               kmult = NNif*kcoeff*(n(k)*diffiso(i, ii) - bn*b(k)*diffani(i, ii))
+               elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fG(ind_kf), iel) - kmult
+               elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+            END DO
+#endif
+         END DO ! k-loop
+
+         ! Convection contribution
+         DO j = 1, Neq
+            ind_jf = ind_asf + j
+            kmult = bn*A(i, j)*NNif
+
+            elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
+            elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) + kmult
+         END DO ! j-loop
+         ! Pinch contribution
+         elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) + (APinch(i, 1)*n(1) + APinch(i, 2)*n(2))*NNif
+         elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) + (APinch(i, 1)*n(1) + APinch(i, 2)*n(2))*NNif
+
+#ifdef TEMPERATURE
+         ! Parallel diffusion for the temperature
+         IF (i == 3) THEN
+            DO j = 1, 4
+               ind_jf = ind_asf + j
+               kmult = coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:, j), b)))*NNif*bn
+               elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+               elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
+               DO k = 1, Ndim
+                  ind_kf = k + (j - 1)*Ndim + ind_ash
+                  kmult = coefi*Alphai*Vveci(j)*b(k)*NNif*bn
+                  elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) - kmult
+                  elMat%Alq(ind_ff(ind_if), ind_fg(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fg(ind_kf), iel) - kmult
+               END DO
+            END DO
+            kmultf = coefi*Alphai*(dot_PRODUCT(MATMUL(TRANSPOSE(Taui), b), uf))*Nfbn
+            elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+            elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
+         ELSEIF (i == 4) THEN
+            DO j = 1, 4
+               ind_jf = ind_asf + j
+               kmult = coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:, j), b)))*NNif*bn
+               elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+               elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
+               DO k = 1, Ndim
+                  ind_kf = k + (j - 1)*Ndim + ind_ash
+                  kmult = coefe*Alphae*Vvece(j)*b(k)*NNif*bn
+                  elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) - kmult
+                  elMat%Alq(ind_ff(ind_if), ind_fg(ind_kf), iel) = elMat%Alq(ind_ff(ind_if), ind_fg(ind_kf), iel) - kmult
+               END DO
+            END DO
+            kmultf = coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue), b), uf))*Nfbn
+            elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+            elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
+#ifdef NEUTRAL
+         ELSEIF (i == neq) THEN
+            DO j = 1, Neq
+               ind_jf = ind_asf + j
+               DO k = 1, Ndim
+
+                  kmult = Dnn_dU(j)*Qpr(k, i)*n(k)*NNif
+                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+                  elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
+               END DO
+            END DO
+            kmultf = Dnn_dU_U*(Qpr(1, i)*n(1) + Qpr(2, i)*n(2))*Nif
+            elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+            elMat%fh(ind_ff(ind_if), iel) = elMat%fh(ind_ff(ind_if), iel) - kmultf
+#endif
+         END IF
+#endif
+      END DO  ! i-Loop
+
+      ! Assembly stabilization terms
+      IF (numer%stab < 6) THEN
+         DO i = 1, Neq
+            ind_if = i + ind_asf
+            kmult = tau(i, i)*NNif
+            elMat%Auu(ind_fe(ind_if), ind_fe(ind_if), iel) = elMat%Auu(ind_fe(ind_if), ind_fe(ind_if), iel) + kmult
+            elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) - kmult
+            elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) - kmult
+            elMat%Alu(ind_ff(ind_if), ind_fe(ind_if), iel) = elMat%Alu(ind_ff(ind_if), ind_fe(ind_if), iel) + kmult
+         END DO
+      ELSE
+         DO i = 1, Neq
+            ind_if = i + ind_asf
+            DO j = 1, Neq
+               ind_jf = j + ind_asf
+               kmult = tau(i, j)*NNif
+               elMat%Auu(ind_fe(ind_if), ind_fe(ind_jf), iel) = elMat%Auu(ind_fe(ind_if), ind_fe(ind_jf), iel) + kmult
+               elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+               elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) - kmult
+               elMat%Alu(ind_ff(ind_if), ind_fe(ind_jf), iel) = elMat%Alu(ind_ff(ind_if), ind_fe(ind_jf), iel) + kmult
+            END DO
+         END DO
+      END IF
+      !************* end stabilization terms************************
+
+   END SUBROUTINE assemblyIntFacesContribution
+
+   !********************************************************************
+   !
+   !         ASSEMBLY EXTERIOR FACES CONTRIBUTION
+   !
+   !********************************************************************
+
+   SUBROUTINE assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe,&
+   &ind_fg, b3, psi, n, diffiso, diffani, NNif, Nif, Nfbn, uf, qf, tau)
+
+      INTEGER*4, INTENT(IN)           :: iel, ind_asf(:), ind_ash(:), ind_ff(:), ind_fe(:), ind_fg(:)
+      LOGICAL, INTENT(IN)             :: isdir
+      REAL*8, INTENT(IN)              :: b3(:), n(:), psi
+      REAL*8, INTENT(IN)              :: diffiso(:, :), diffani(:, :)
+      REAL*8, INTENT(IN)              :: NNif(:, :), Nif(:), Nfbn(:)
+      REAL*8, INTENT(IN)              :: uf(:)
+      REAL*8, INTENT(IN)              :: qf(:)
+      REAL*8, OPTIONAL, INTENT(INOUT) :: tau(:, :)
+      REAL*8                          :: bn, kmult(Npfl, Npfl), kmultf(Npfl)
+      REAL*8                          :: Qpr(Ndim, Neq)
+      REAL*8                          :: nn(3), qq(3, Neq), b(Ndim), bb(3)
+      REAL*8                          :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
+      INTEGER*4                       :: i, j, k
+      INTEGER*4, DIMENSION(Npfl)      :: ind_if, ind_jf, ind_kf
+      REAL*8, DIMENSION(neq, neq)     :: A
+      REAL*8, DIMENSION(neq, Ndim)    :: APinch
+#ifndef TEMPERATURE
+      REAL*8                          :: auxvec(neq)
+#else
+      REAL*8                          :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
+      REAL*8                          :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
+      REAL*8                          :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
+      REAL*8                          :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
+#endif
+#ifdef NEUTRAL
+      REAL*8                          :: Dnn_dU(Neq), Dnn_dU_U
+#endif
+#ifdef VORTICITY
+      INTEGER*4                       :: alpha, beta, ii
+      REAL*8                          :: exb(3), kcoeff
+#endif
+
+      b = b3(1:Ndim)
+      bb = b3
+      ! Jacobian matrices
+      bn = dot_PRODUCT(b, n)
+      CALL jacobianMatrices(uf, A)
+
+      ! Jacobian matrices Pinch
+      CALL computePinch(b, psi, APinch)
+
+      ! Compute Q^T^(k-1)
+      Qpr = RESHAPE(qf, (/Ndim, Neq/))
+
+      ! Split diffusion vector/matrix for the momentum equation
+      CALL compute_W2(uf, W2, diffiso(1, 1), diffiso(2, 2))
+      CALL compute_dW2_dU(uf, dW2_dU, diffiso(1, 1), diffiso(2, 2))
+      QdW2 = MATMUL(Qpr, dW2_dU)
+
+      nn = 0.
+      qq = 0.
+      nn(1:Ndim) = n
+      qq(1:Ndim, :) = Qpr
 
 #ifdef TEMPERATURE
 
-               ! Compute V(U^(k-1))
-               CALL computeVi(uf, Vveci)
-               CALL computeVe(uf, Vvece)
+      ! Compute V(U^(k-1))
+      CALL computeVi(uf, Vveci)
+      CALL computeVe(uf, Vvece)
 
-               ! Compute dV_dU (k-1)
-               CALL compute_dV_dUi(uf, dV_dUi)
-               CALL compute_dV_dUe(uf, dV_dUe)
+      ! Compute dV_dU (k-1)
+      CALL compute_dV_dUi(uf, dV_dUi)
+      CALL compute_dV_dUe(uf, dV_dUe)
 
-               ! Split diffusion vector/matrix for the energies equations
-               CALL compute_W3(uf, W3, diffiso(1, 1), diffiso(2, 2), diffiso(3, 3))
-               CALL compute_dW3_dU(uf, dW3_dU, diffiso(1, 1), diffiso(2, 2), diffiso(3, 3))
-               QdW3 = MATMUL(Qpr, dW3_dU)
+      ! Split diffusion vector/matrix for the energies equations
+      CALL compute_W3(uf, W3, diffiso(1, 1), diffiso(2, 2), diffiso(3, 3))
+      CALL compute_dW3_dU(uf, dW3_dU, diffiso(1, 1), diffiso(2, 2), diffiso(3, 3))
+      QdW3 = MATMUL(Qpr, dW3_dU)
 
-               CALL compute_W4(uf, W4, diffiso(1, 1), diffiso(4, 4))
-               CALL compute_dW4_dU(uf, dW4_dU, diffiso(1, 1), diffiso(4, 4))
-               QdW4 = MATMUL(Qpr, dW4_dU)
+      CALL compute_W4(uf, W4, diffiso(1, 1), diffiso(4, 4))
+      CALL compute_dW4_dU(uf, dW4_dU, diffiso(1, 1), diffiso(4, 4))
+      QdW4 = MATMUL(Qpr, dW4_dU)
 
-               ! Compute Alpha(U^(k-1))
-               Alphai = computeAlphai(uf)
-               Alphae = computeAlphae(uf)
+      ! Compute Alpha(U^(k-1))
+      Alphai = computeAlphai(uf)
+      Alphae = computeAlphae(uf)
 
-               ! Compute dAlpha/dU^(k-1)
-               CALL compute_dAlpha_dUi(uf, dAlpha_dUi)
-               CALL compute_dAlpha_dUe(uf, dAlpha_dUe)
+      ! Compute dAlpha/dU^(k-1)
+      CALL compute_dAlpha_dUi(uf, dAlpha_dUi)
+      CALL compute_dAlpha_dUe(uf, dAlpha_dUe)
 
-               gmi = dot_PRODUCT(MATMUL(Qpr, Vveci), b)  ! scalar
-               gme = dot_PRODUCT(MATMUL(Qpr, Vvece), b)
-               Taui = MATMUL(Qpr, dV_dUi)               ! 2x3
-               Taue = MATMUL(Qpr, dV_dUe)               ! 2x3
+      gmi = dot_PRODUCT(MATMUL(Qpr, Vveci), b)  ! scalar
+      gme = dot_PRODUCT(MATMUL(Qpr, Vvece), b)
+      Taui = MATMUL(Qpr, dV_dUi)               ! 2x3
+      Taue = MATMUL(Qpr, dV_dUe)               ! 2x3
 #ifdef NEUTRAL
-               CALL compute_Dnn_dU(uf, Dnn_dU)
-               Dnn_dU_u = dot_product(Dnn_dU, uf)
+      CALL compute_Dnn_dU(uf, Dnn_dU)
+      Dnn_dU_u = dot_product(Dnn_dU, uf)
 #endif
 #endif
 
-               ! Assembly local matrix
-               DO i = 1, Neq
-                  ind_if = ind_asf + i
-                  DO k = 1, Ndim
-                     ind_kf = ind_ash + k + (i - 1)*Ndim
-                     kmult = NNif*(n(k)*diffiso(i, i) - bn*b(k)*diffani(i, i))
+      ! Assembly local matrix
+      DO i = 1, Neq
+         ind_if = ind_asf + i
+         DO k = 1, Ndim
+            ind_kf = ind_ash + k + (i - 1)*Ndim
+            kmult = NNif*(n(k)*diffiso(i, i) - bn*b(k)*diffani(i, i))
 #ifdef VORTICITY
-                     IF (i == 4) THEN
-                        kmult = kmult/uf(1)
-                     END IF
+            IF (i == 4) THEN
+               kmult = kmult/uf(1)
+            END IF
 #endif
-                     ! Diagonal terms for perpendicular diffusion
-                     elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                     IF (i == 2) THEN
-                        ! Assembly LQ
-                        j = 1 ! other terms are 0 anyway in vector W2
-                        ind_kf = ind_ash + k + (j - 1)*Ndim
-                        kmult = NNif*W2(j)*(n(k) - bn*b(k))
-                        elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                        ! Assembly LU
-                        DO j = 1, Neq
-                           ind_jf = ind_asf + j
-                           IF (.NOT. isdir) THEN
-                              kmult = QdW2(k, j)*NNif*(n(k) - bn*b(k))
-                              elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                           END IF
-                        END DO
-#ifdef TEMPERATURE
-                     ELSEIF (i == 3) THEN
-                        ! Assembly LQ
-                        DO j = 1, Neq ! here there are 2 non-zero elements in vector W3
-                           ind_kf = ind_ash + k + (j - 1)*Ndim
-                           kmult = NNif*W3(j)*(n(k) - bn*b(k))
-                           elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                        END DO
-                        ! Assembly LU
-                        DO j = 1, Neq
-                           ind_jf = ind_asf + j
-                           IF (.NOT. isdir) THEN
-                              kmult = QdW3(k, j)*NNif*(n(k) - bn*b(k))
-                              elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                           END IF
-                        END DO
-                     ELSEIF (i == 4) THEN
-                        ! Assembly LQ
-                        j = 1 !other terms are 0 anyway in vector W4
-                        ind_kf = ind_ash + k + (j - 1)*Ndim
-                        kmult = NNif*W4(j)*(n(k) - bn*b(k))
-                        elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                        ! Assembly LU
-                        DO j = 1, Neq
-                           ind_jf = ind_asf + j
-                           IF (.NOT. isdir) THEN
-                              kmult = QdW4(k, j)*NNif*(n(k) - bn*b(k))
-                              elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                           END IF
-                        END DO
-
-#endif
-                     END IF
-
-#ifdef VORTICITY
-                     IF (switch%driftexb .AND. i .NE. 4) THEN
-                        ! ExB terms
-                        ii = 4
-                        kcoeff = phys%dfcoef*numer%exbdump/Bmod
-                        CALL ijk_cross_product(k, alpha, beta)
-                        ind_kf = ind_ash + k + (ii - 1)*Ndim
-                        kmult = kcoeff*NNif*(nn(alpha)*b3(beta) - nn(beta)*b3(alpha))*uf(i)
-                        elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                        IF (.NOT. isdir) THEN
-                           CALL cross_product(qq(:, ii), bb, exb)
-                           kmult = kcoeff*exb(k)*NNif*b(k)
-                           elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) - kmult
-                           kmultf = kcoeff*exb(k)*uf(i)*Nif*b(k)
-                           elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
-                        END IF
-                        tau(i, i) = tau(i, i) + ABS(kcoeff*exb(k)*b(k))
-                        tau(i, i) = 100
-                     END IF
-                     DO ii = 1, Neq
-                        IF (ii == i) CYCLE ! diagonal alredy assembled
-                        IF (ABS(diffiso(i, ii)) < 1e-12 .AND. ABS(diffani(i, ii)) < 1e-12) CYCLE
-                        ind_kf = ind_ash + k + (ii - 1)*Ndim
-                        kcoeff = 1.
-                        ! Non-linear correction for non-linear diffusive terms.
-                        ! TODO: find a smarter way to include it,avoiding if statements and model dependencies (i==3,ii==1 only holds for Isothermal+Vorticity model)
-
-                        !               IF ((i == 3 .or. i == 4) .and. ii == 1) then
-                        IF ((i == 3) .AND. ii == 1) THEN
-
-                           kcoeff = 1./uf(1)
-                           IF (.NOT. isdir) THEN
-                              ind_jf = ind_asf + ii
-                              kmult = kcoeff**2*(diffiso(i, ii)*Qpr(k, 1)*n(k)*NNif - diffani(i, ii)*Qpr(k, 1)*b(k)*NNif*bn)
-                              elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
-                              elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) + kcoeff*(diffiso(i, ii)*Qpr(k, 1)*n(k)*Nif - &
-                                &diffani(i, ii)*Qpr(k, 1)*b(k)*Nfbn)
-                           END IF
-                        END IF
-                        kmult = NNif*kcoeff*(n(k)*diffiso(i, ii) - bn*b(k)*diffani(i, ii))
-                        elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
-                     END DO
-#endif
-                  END DO ! k-loop
-
-                  ! Convection contribution
+            ! Diagonal terms for perpendicular diffusion
+            elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+            IF (i == 2) THEN
+               ! Assembly LQ
+               j = 1 ! other terms are 0 anyway in vector W2
+               ind_kf = ind_ash + k + (j - 1)*Ndim
+               kmult = NNif*W2(j)*(n(k) - bn*b(k))
+               elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+               ! Assembly LU
+               DO j = 1, Neq
+                  ind_jf = ind_asf + j
                   IF (.NOT. isdir) THEN
-                     DO j = 1, Neq
-                        ind_jf = ind_asf + j
-                        kmult = bn*A(i, j)*NNif
-                        elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
-                     END DO ! j-loop
-                     ! Pinch Contribution
-                     elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) + (APinch(i, 1)*n(1) + APinch(i, 2)*n(2))*NNif
+                     kmult = QdW2(k, j)*NNif*(n(k) - bn*b(k))
+                     elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
                   END IF
+               END DO
 #ifdef TEMPERATURE
-                  ! Parallel diffusion for the temperature
-                  IF (i == 3) THEN
-                     DO j = 1, 4
-                        ind_jf = ind_asf + j
-                        IF (.NOT. isdir) THEN
-                           kmult = coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:, j), b)))*NNif*bn
-                           elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                        END IF
-                        DO k = 1, Ndim
-                           ind_kf = k + (j - 1)*Ndim + ind_ash
-                           kmult = coefi*Alphai*Vveci(j)*b(k)*NNif*bn
-                           elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) - kmult
-                        END DO
-                     END DO
-                     kmultf = coefi*Alphai*(dot_PRODUCT(MATMUL(TRANSPOSE(Taui), b), uf))*Nfbn
-                     elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
-                  ELSEIF (i == 4) THEN
-                     DO j = 1, 4
-                        ind_jf = ind_asf + j
-                        IF (.NOT. isdir) THEN
-                           kmult = coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:, j), b)))*NNif*bn
-                           elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                        END IF
-                        DO k = 1, Ndim
-                           ind_kf = k + (j - 1)*Ndim + ind_ash
-                           kmult = coefe*Alphae*Vvece(j)*b(k)*NNif*bn
-                           elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) - kmult
-                        END DO
-                     END DO
-                     kmultf = coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue), b), uf))*Nfbn
-                     elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
-#ifdef NEUTRAL
-                  ELSEIF (i == neq) THEN
-                     DO j = 1, Neq
-                        ind_jf = ind_asf + j
-                        DO k = 1, Ndim
-
-                           kmult = Dnn_dU(j)*Qpr(k, i)*n(k)*NNif
-                           elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                        END DO
-                     END DO
-                     kmultf = Dnn_dU_U*(Qpr(1, i)*n(1) + Qpr(2, i)*n(2))*Nif
-                     elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
-#endif
+            ELSEIF (i == 3) THEN
+               ! Assembly LQ
+               DO j = 1, Neq ! here there are 2 non-zero elements in vector W3
+                  ind_kf = ind_ash + k + (j - 1)*Ndim
+                  kmult = NNif*W3(j)*(n(k) - bn*b(k))
+                  elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+               END DO
+               ! Assembly LU
+               DO j = 1, Neq
+                  ind_jf = ind_asf + j
+                  IF (.NOT. isdir) THEN
+                     kmult = QdW3(k, j)*NNif*(n(k) - bn*b(k))
+                     elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
                   END IF
+               END DO
+            ELSEIF (i == 4) THEN
+               ! Assembly LQ
+               j = 1 !other terms are 0 anyway in vector W4
+               ind_kf = ind_ash + k + (j - 1)*Ndim
+               kmult = NNif*W4(j)*(n(k) - bn*b(k))
+               elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+               ! Assembly LU
+               DO j = 1, Neq
+                  ind_jf = ind_asf + j
+                  IF (.NOT. isdir) THEN
+                     kmult = QdW4(k, j)*NNif*(n(k) - bn*b(k))
+                     elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+                  END IF
+               END DO
+
+#endif
+            END IF
+
+#ifdef VORTICITY
+            IF (switch%driftexb .AND. i .NE. 4) THEN
+               ! ExB terms
+               ii = 4
+               kcoeff = phys%dfcoef*numer%exbdump/Bmod
+               CALL ijk_cross_product(k, alpha, beta)
+               ind_kf = ind_ash + k + (ii - 1)*Ndim
+               kmult = kcoeff*NNif*(nn(alpha)*b3(beta) - nn(beta)*b3(alpha))*uf(i)
+               elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+               IF (.NOT. isdir) THEN
+                  CALL cross_product(qq(:, ii), bb, exb)
+                  kmult = kcoeff*exb(k)*NNif*b(k)
+                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) - kmult
+                  kmultf = kcoeff*exb(k)*uf(i)*Nif*b(k)
+                  elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+               END IF
+               tau(i, i) = tau(i, i) + ABS(kcoeff*exb(k)*b(k))
+               tau(i, i) = 100
+            END IF
+            DO ii = 1, Neq
+               IF (ii == i) CYCLE ! diagonal alredy assembled
+               IF (ABS(diffiso(i, ii)) < 1e-12 .AND. ABS(diffani(i, ii)) < 1e-12) CYCLE
+               ind_kf = ind_ash + k + (ii - 1)*Ndim
+               kcoeff = 1.
+               ! Non-linear correction for non-linear diffusive terms.
+               ! TODO: find a smarter way to include it,avoiding if statements and model dependencies (i==3,ii==1 only holds for Isothermal+Vorticity model)
+
+               !               if ((i == 3 .or. i == 4) .and. ii == 1) then
+               IF ((i == 3) .AND. ii == 1) THEN
+
+                  kcoeff = 1./uf(1)
+                  IF (.NOT. isdir) THEN
+                     ind_jf = ind_asf + ii
+                     kmult = kcoeff**2*(diffiso(i, ii)*Qpr(k, 1)*n(k)*NNif - diffani(i, ii)*Qpr(k, 1)*b(k)*NNif*bn)
+                     elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
+                     elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) + kcoeff*(diffiso(i, ii)*Qpr(k, 1)*n(k)*Nif - &
+                     &diffani(i, ii)*Qpr(k, 1)*b(k)*Nfbn)
+                  END IF
+               END IF
+               kmult = NNif*kcoeff*(n(k)*diffiso(i, ii) - bn*b(k)*diffani(i, ii))
+               elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fG(ind_kf), iel) - kmult
+            END DO
+#endif
+         END DO ! k-loop
+
+         ! Convection contribution
+         IF (.NOT. isdir) THEN
+            DO j = 1, Neq
+               ind_jf = ind_asf + j
+               kmult = bn*A(i, j)*NNif
+               elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
+            END DO ! j-loop
+            ! Pinch Contribution
+            elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) + (APinch(i, 1)*n(1) + APinch(i, 2)*n(2))*NNif
+         END IF
+#ifdef TEMPERATURE
+         ! Parallel diffusion for the temperature
+         IF (i == 3) THEN
+            DO j = 1, 4
+               ind_jf = ind_asf + j
+               IF (.NOT. isdir) THEN
+                  kmult = coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:, j), b)))*NNif*bn
+                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+               END IF
+               DO k = 1, Ndim
+                  ind_kf = k + (j - 1)*Ndim + ind_ash
+                  kmult = coefi*Alphai*Vveci(j)*b(k)*NNif*bn
+                  elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) - kmult
+               END DO
+            END DO
+            kmultf = coefi*Alphai*(dot_PRODUCT(MATMUL(TRANSPOSE(Taui), b), uf))*Nfbn
+            elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+         ELSEIF (i == 4) THEN
+            DO j = 1, 4
+               ind_jf = ind_asf + j
+               IF (.NOT. isdir) THEN
+                  kmult = coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:, j), b)))*NNif*bn
+                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+               END IF
+               DO k = 1, Ndim
+                  ind_kf = k + (j - 1)*Ndim + ind_ash
+                  kmult = coefe*Alphae*Vvece(j)*b(k)*NNif*bn
+                  elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) = elMat%Auq(ind_fe(ind_if), ind_fg(ind_kf), iel) - kmult
+               END DO
+            END DO
+            kmultf = coefe*Alphae*(dot_PRODUCT(MATMUL(TRANSPOSE(Taue), b), uf))*Nfbn
+            elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+#ifdef NEUTRAL
+         ELSEIF (i == neq) THEN
+            DO j = 1, Neq
+               ind_jf = ind_asf + j
+               DO k = 1, Ndim
+
+                  kmult = Dnn_dU(j)*Qpr(k, i)*n(k)*NNif
+                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
+               END DO
+            END DO
+            kmultf = Dnn_dU_U*(Qpr(1, i)*n(1) + Qpr(2, i)*n(2))*Nif
+            elMat%S(ind_fe(ind_if), iel) = elMat%S(ind_fe(ind_if), iel) - kmultf
+#endif
+         END IF
 
 !if below for TEMPERATURE FLAG
 #endif
-               END DO  ! i-Loop
+      END DO  ! i-Loop
 
-               ! Assembly stabilization terms
-               IF (numer%stab < 6) THEN
-                  DO i = 1, Neq
-                     ind_if = i + ind_asf
-                     kmult = tau(i, i)*NNif
-                     elMat%Auu(ind_fe(ind_if), ind_fe(ind_if), iel) = elMat%Auu(ind_fe(ind_if), ind_fe(ind_if), iel) + kmult
-                     IF (.NOT. isdir) THEN
-                        elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) - kmult
-                     END IF
-                  END DO
-               ELSE
-                  DO i = 1, Neq
-                     ind_if = i + ind_asf
-                     DO j = 1, Neq
-                        ind_jf = j + ind_asf
-                        kmult = tau(i, j)*NNif
-                        elMat%Auu(ind_fe(ind_if), ind_fe(ind_jf), iel) = elMat%Auu(ind_fe(ind_if), ind_fe(ind_jf), iel) + kmult
-                        IF (.NOT. isdir) THEN
-                           elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
-                        END IF
-                     END DO
-                  END DO
+      ! Assembly stabilization terms
+      IF (numer%stab < 6) THEN
+         DO i = 1, Neq
+            ind_if = i + ind_asf
+            kmult = tau(i, i)*NNif
+            elMat%Auu(ind_fe(ind_if), ind_fe(ind_if), iel) = elMat%Auu(ind_fe(ind_if), ind_fe(ind_if), iel) + kmult
+            IF (.NOT. isdir) THEN
+               elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) - kmult
+            END IF
+         END DO
+      ELSE
+         DO i = 1, Neq
+            ind_if = i + ind_asf
+            DO j = 1, Neq
+               ind_jf = j + ind_asf
+               kmult = tau(i, j)*NNif
+               elMat%Auu(ind_fe(ind_if), ind_fe(ind_jf), iel) = elMat%Auu(ind_fe(ind_if), ind_fe(ind_jf), iel) + kmult
+               IF (.NOT. isdir) THEN
+                  elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) - kmult
                END IF
-               !************* End stabilization terms************************
-            END SUBROUTINE assemblyExtFacesContribution
+            END DO
+         END DO
+      END IF
+      !************* end stabilization terms************************
+   END SUBROUTINE assemblyExtFacesContribution
 
-            SUBROUTINE do_assembly(Auq, Auu, rhs, ind_ass, ind_asq, iel)
-               REAL*8, INTENT(in)    :: Auq(:, :, :), Auu(:, :, :), rhs(:, :)
-               INTEGER*4, INTENT(in) :: iel, ind_ass(:), ind_asq(:)
-               INTEGER :: i, j, k, z
-               INTEGER*4, DIMENSION(Npel) :: ind_i, ind_j, ind_k
+   SUBROUTINE do_assembly(Auq, Auu, rhs, ind_ass, ind_asq, iel)
+      REAL*8, INTENT(IN)        :: Auq(:, :, :), Auu(:, :, :), rhs(:, :)
+      INTEGER*4, INTENT(IN)     :: iel, ind_ass(:), ind_asq(:)
+      INTEGER                   :: i, j, k, z
+      INTEGER*4, DIMENSION(Npel) :: ind_i, ind_j, ind_k
 
-               DO i = 1, Neq
-                  ind_i = i + ind_ass
-                  elMat%S(ind_i, iel) = elMat%S(ind_i, iel) + rhs(:, i)
-                  DO j = 1, Neq
-                     ind_j = j + ind_ass
-                     z = i + (j - 1)*Neq
-                     elMat%Auu(ind_i, ind_j, iel) = elMat%Auu(ind_i, ind_j, iel) + Auu(:, :, z)
-                     DO k = 1, Ndim
-                        z = i + (k - 1)*Neq + (j - 1)*Ndim*Neq
-                        ind_k = ind_asq + k + (j - 1)*Ndim
-                        elMat%Auq(ind_i, ind_k, iel) = elMat%Auq(ind_i, ind_k, iel) + Auq(:, :, z)
-                     END DO
-                  END DO
-               END DO
+      DO i = 1, Neq
+         ind_i = i + ind_ass
+         elMat%S(ind_i, iel) = elMat%S(ind_i, iel) + rhs(:, i)
+         DO j = 1, Neq
+            ind_j = j + ind_ass
+            z = i + (j - 1)*Neq
+            elMat%Auu(ind_i, ind_j, iel) = elMat%Auu(ind_i, ind_j, iel) + Auu(:, :, z)
+            DO k = 1, Ndim
+               z = i + (k - 1)*Neq + (j - 1)*Ndim*Neq
+               ind_k = ind_asq + k + (j - 1)*Ndim
+               elMat%Auq(ind_i, ind_k, iel) = elMat%Auq(ind_i, ind_k, iel) + Auq(:, :, z)
+            END DO
+         END DO
+      END DO
 
-            END SUBROUTINE do_assembly
+   END SUBROUTINE do_assembly
 
 #ifdef NEUTRAL
-            !********************************************************************
-            !
-            !         ASSEMBLY NEUTRAL SOURCE MATRIX
-            !
-            !********************************************************************
+   !********************************************************************
+   !
+   !         ASSEMBLY NEUTRAL SOURCE MATRIX
+   !
+   !********************************************************************
 #ifdef TEMPERATURE
-            SUBROUTINE assemblyNeutral(U, niz, dniz_dU, nrec, dnrec_dU, sigmaviz, dsigmaviz_dU, sigmavrec, dsigmavrec_dU,&
-                &fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, sigmavcx, dsigmavcx_dU, fEiiz,&
-                &dfEiiz_dU, fEirec, dfEirec_dU, fEicx, dfEicx_dU, Sn, Sn0, &
-                sigmavEiz, dsigmavEiz_dU, sigmavErec, dsigmavErec_dU)
+   SUBROUTINE assemblyNeutral(U, niz, dniz_dU, nrec, dnrec_dU, sigmaviz, dsigmaviz_dU, sigmavrec, dsigmavrec_dU,&
+   &fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, sigmavcx, dsigmavcx_dU, fEiiz,&
+   &dfEiiz_dU, fEirec, dfEirec_dU, fEicx, dfEicx_dU, Sn, Sn0, &
+      sigmavEiz, dsigmavEiz_dU, sigmavErec, dsigmavErec_dU)
 #else
-               SUBROUTINE assemblyNeutral(U, niz, dniz_dU, nrec, dnrec_dU, fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, Sn, Sn0)
+   SUBROUTINE assemblyNeutral(U, niz, dniz_dU, nrec, dnrec_dU, fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, Sn, Sn0)
 #endif
-                  REAL*8, INTENT(IN) :: niz, nrec, fGammacx, fGammarec
-                  REAL*8, INTENT(IN) :: U(:), dniz_dU(:), dnrec_dU(:), dfGammacx_dU(:), dfGammarec_dU(:)
+      REAL*8, INTENT(IN)        :: niz, nrec, fGammacx, fGammarec
+      REAL*8, INTENT(IN)        :: U(:), dniz_dU(:), dnrec_dU(:), dfGammacx_dU(:), dfGammarec_dU(:)
 #ifndef TEMPERATURE
-                  REAL*8             :: sigmaviz, sigmavrec, sigmavcx
+      REAL*8                    :: sigmaviz, sigmavrec, sigmavcx
 #else
-                  REAL*8, INTENT(IN)        :: sigmaviz, sigmavrec, sigmavcx, fEiiz, fEirec, fEicx
-                  REAL*8, INTENT(IN)        :: dsigmaviz_dU(:), dsigmavrec_dU(:), dsigmavcx_dU(:)
-                  REAL*8, INTENT(IN)        :: dfEiiz_dU(:), dfEirec_dU(:), dfEicx_dU(:)
-                  REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz, sigmavErec, dsigmavEiz_dU(:), dsigmavErec_dU(:)
+      REAL*8, INTENT(IN)        :: sigmaviz, sigmavrec, sigmavcx, fEiiz, fEirec, fEicx
+      REAL*8, INTENT(IN)        :: dsigmaviz_dU(:), dsigmavrec_dU(:), dsigmavcx_dU(:)
+      REAL*8, INTENT(IN)        :: dfEiiz_dU(:), dfEirec_dU(:), dfEicx_dU(:)
+      REAL*8, INTENT(IN), OPTIONAL :: sigmavEiz, sigmavErec, dsigmavEiz_dU(:), dsigmavErec_dU(:)
 #endif
-                  REAL*8             :: ad, ad4, RE, Sn(:, :), Sn0(:), Ti, Te
+      REAL*8                    :: ad, ad4, RE, Sn(:, :), Sn0(:), Ti, Te
 
-                  Sn = 0.
-                  Sn0 = 0.
-                  RE = 1.
-                  ad = 1e19*1.374e-07 !n0*t0 !1e19*1.374e-07 !old 1.3737e12
-                  ad4 = 1e19*1.374e-07**3/1.901e-3**2*1.60217662e-19/3.35e-27 ! n0*t0/u0^2/m_i*e = 1e19*1.374e-07**3/1.901e-3**2*1.60217662e-19/3.35e-27 !old (ad*1.6e-19)/((1.3839e4**2)*3.35e-27)
+      Sn = 0.
+      Sn0 = 0.
+      RE = 1.
+      ad = 1e19*1.374e-07 !n0*t0 !1e19*1.374e-07 !old 1.3737e12
+      ad4 = 1e19*1.374e-07**3/1.901e-3**2*1.60217662e-19/3.35e-27 ! n0*t0/u0^2/m_i*e = 1e19*1.374e-07**3/1.901e-3**2*1.60217662e-19/3.35e-27 !old (ad*1.6e-19)/((1.3839e4**2)*3.35e-27)
 
 #ifndef TEMPERATURE
-                  sigmaviz = 3.01e-14
-                  sigmavrec = 1.3638e-20
-                  sigmavcx = 4.0808e-15
+      sigmaviz = 3.01e-14
+      sigmavrec = 1.3638e-20
+      sigmavcx = 4.0808e-15
 #endif
 
-                  !Assembly Source Terms in plasma density equation
-                  Sn(1, :) = ad*(-dniz_dU(:)*sigmaviz + dnrec_dU(:)*sigmavrec)
+      !Assembly Source Terms in plasma density equation
+      Sn(1, :) = ad*(-dniz_dU(:)*sigmaviz + dnrec_dU(:)*sigmavrec)
 #ifdef TEMPERATURE
 
-                  Sn(1, :) = Sn(1, :) + ad*(-niz*dsigmaviz_dU(:) + nrec*dsigmavrec_dU(:))
+      Sn(1, :) = Sn(1, :) + ad*(-niz*dsigmaviz_dU(:) + nrec*dsigmavrec_dU(:))
 #endif
-                  !Assembly Source Terms in plasma momentum equation
+      !Assembly Source Terms in plasma momentum equation
 
-                  Sn(2, :) = ad*(dfGammacx_dU(:)*sigmavcx + dfGammarec_dU(:)*sigmavrec)
+      Sn(2, :) = ad*(dfGammacx_dU(:)*sigmavcx + dfGammarec_dU(:)*sigmavrec)
 #ifdef TEMPERATURE
 
-                  Sn(2, :) = Sn(2, :) + ad*(fGammacx*dsigmavcx_dU(:) + fGammarec*dsigmavrec_dU(:))
+      Sn(2, :) = Sn(2, :) + ad*(fGammacx*dsigmavcx_dU(:) + fGammarec*dsigmavrec_dU(:))
 
-                  !Assembly Source Terms in ion energy equation
+      !Assembly Source Terms in ion energy equation
 
-                  Sn(3, :) = ad*(-RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec + dfEicx_dU(:)*sigmavcx)
-                  Sn(3, :) = Sn(3, :) + ad*(-RE*fEiiz*dsigmaviz_dU(:) + fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:))
-                  !Assembly Source Terms in electron energy equation
-                  !AMJUEL rates
-                  Sn(4, :) = ad4*(dniz_dU(:)*sigmavEiz + niz*dsigmavEiz_dU(:) +&
-                    &dnrec_dU(:)*sigmavErec + nrec*dsigmavErec_dU(:))
+      Sn(3, :) = ad*(-RE*dfEiiz_dU(:)*sigmaviz + dfEirec_dU(:)*sigmavrec + dfEicx_dU(:)*sigmavcx)
+      Sn(3, :) = Sn(3, :) + ad*(-RE*fEiiz*dsigmaviz_dU(:) + fEirec*dsigmavrec_dU(:) + fEicx*dsigmavcx_dU(:))
+      !Assembly Source Terms in electron energy equation
+      !AMJUEL rates
+      Sn(4, :) = ad4*(dniz_dU(:)*sigmavEiz + niz*dsigmavEiz_dU(:) +&
+      &dnrec_dU(:)*sigmavErec + nrec*dsigmavErec_dU(:))
 
-                  !modification with recombination gain
-                  Sn(4, :) = Sn(4, :) + ad4*(-1.*dnrec_dU(:)*sigmavrec*13.6 - nrec*dsigmavrec_dU(:)*13.6)
+      !modification with recombination gain
+      Sn(4, :) = Sn(4, :) + ad4*(-1.*dnrec_dU(:)*sigmavrec*13.6 - nrec*dsigmavrec_dU(:)*13.6)
 
 #endif
-                  !Assembly Source Terms in neutral density equation
-                  Sn(neq, :) = -Sn(1, :)
+      !Assembly Source Terms in neutral density equation
+      Sn(neq, :) = -Sn(1, :)
 
-                  !Assembly RHS Neutral Source Terms
-                  Sn0(1) = ad*(niz*sigmaviz - nrec*sigmavrec)
-                  Sn0(2) = ad*(-fGammacx*sigmavcx - fGammarec*sigmavrec)
+      !Assembly RHS Neutral Source Terms
+      Sn0(1) = ad*(niz*sigmaviz - nrec*sigmavrec)
+      Sn0(2) = ad*(-fGammacx*sigmavcx - fGammarec*sigmavrec)
 #ifdef AMJUELSPLINES
-                  Sn0(1) = Sn0(1) + ad*(niz*dot_PRODUCT(dsigmaviz_dU, U) - nrec*dot_PRODUCT(dsigmavrec_dU, U))
-                  Sn0(2) = Sn0(2) + ad*(-fGammarec*dot_PRODUCT(dsigmavrec_dU, U))
+      Sn0(1) = Sn0(1) + ad*(niz*dot_PRODUCT(dsigmaviz_dU, U) - nrec*dot_PRODUCT(dsigmavrec_dU, U))
+      Sn0(2) = Sn0(2) + ad*(-fGammarec*dot_PRODUCT(dsigmavrec_dU, U))
 #endif
 #ifdef TEMPERATURE
-                  Sn0(3) = ad*(RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx)
+      Sn0(3) = ad*(RE*fEiiz*sigmaviz - fEirec*sigmavrec - fEicx*sigmavcx)
 
-                  !modification with recombination gain
-                  Sn0(4) = ad4*(nrec*sigmavrec*13.6)
-                  Sn0(4) = Sn0(4) + ad4*(-niz*sigmavEiz - nrec*sigmavErec)
+      !modification with recombination gain
+      Sn0(4) = ad4*(nrec*sigmavrec*13.6)
+      Sn0(4) = Sn0(4) + ad4*(-niz*sigmavEiz - nrec*sigmavErec)
 #ifdef AMJUELSPLINES
-                  Sn0(3) = Sn0(3) + ad*(RE*fEiiz*dot_PRODUCT(dsigmaviz_dU, U) - fEirec*dot_PRODUCT(dsigmavrec_dU, U))
-                  Sn0(4) = Sn0(4) + ad4*(-niz*dot_product(dsigmavEiz_dU, U) - nrec*dot_product(dsigmavErec_dU, U))
-                  Sn0(4) = Sn0(4) + ad4*(nrec*dot_PRODUCT(dsigmavrec_dU, U)*13.6)
+      Sn0(3) = Sn0(3) + ad*(RE*fEiiz*dot_PRODUCT(dsigmaviz_dU, U) - fEirec*dot_PRODUCT(dsigmavrec_dU, U))
+      Sn0(4) = Sn0(4) + ad4*(-niz*dot_product(dsigmavEiz_dU, U) - nrec*dot_product(dsigmavErec_dU, U))
+      Sn0(4) = Sn0(4) + ad4*(nrec*dot_PRODUCT(dsigmavrec_dU, U)*13.6)
 #endif
 #endif
-                  Sn0(neq) = -Sn0(1)
+      Sn0(neq) = -Sn0(1)
 
-                  !Thresholds:
+      !Thresholds:
 #ifdef TEMPERATURE
-                  Ti = 2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
-                  Te = 2./(3.*phys%Mref)*U(4)/U(1)
+      Ti = 2./(3.*phys%Mref)*(U(3)/U(1) - 1./2.*(U(2)/U(1))**2)
+      Te = 2./(3.*phys%Mref)*U(4)/U(1)
 #endif
 
-               END SUBROUTINE assemblyNeutral
+   END SUBROUTINE assemblyNeutral
 #endif
 
-            END SUBROUTINE hdg_ComputeJacobian
+END SUBROUTINE hdg_ComputeJacobian

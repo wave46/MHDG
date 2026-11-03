@@ -167,7 +167,7 @@ CONTAINS
             step = (MAXVAL(X(:, 2)) - MINVAL(X(:, 2)))/REAL(nDiv)
             theta = [(MINVAL(X(:, 2)) + (i - 1)*step, i=1, nDiv + 1)]
           CASE DEFAULT
-            WRITE (*, *) "Option not supported for divType, domain decompositon. STOP."
+            WRITE (*, *) "Option not supported for divType, domain decompositon. stop."
             STOP
          END SELECT
 
@@ -247,7 +247,7 @@ CONTAINS
          END IF
 
 #ifdef PARALL
-         ! USE MPI_Allreduce to check if any process encountered the exit condition
+         ! use MPI_Allreduce to check if any process encountered the exit condition
          CALL MPI_Allreduce(MPI_IN_PLACE, redo, 1, MPI_LOGICAL, MPI_LOR, MPI_COMM_WORLD, ierr)
 #endif
 
@@ -424,11 +424,11 @@ CONTAINS
                   WRITE (*, *) 'Problem in fixed connectivity. Retrying.'
                END IF
                redo = .TRUE.
-               !EXIT
+               !exit
             END IF
 
 #ifdef PARALL
-            ! USE MPI_Allreduce to check if any process encountered the exit condition
+            ! use MPI_Allreduce to check if any process encountered the exit condition
             CALL MPI_Allreduce(MPI_IN_PLACE, redo, 1, MPI_LOGICAL, MPI_LOR, MPI_COMM_WORLD, ierr)
 #endif
             IF (redo) THEN
@@ -478,7 +478,7 @@ CONTAINS
                END DO
 
                IF (loc2glob_fa(j) .EQ. 0) THEN
-                  WRITE (*, *) "Problem in the creation of loc2glob_fa. STOP"
+                  WRITE (*, *) "Problem in the creation of loc2glob_fa. stop"
                   STOP
                END IF
             END DO
@@ -526,7 +526,7 @@ CONTAINS
                         END IF
 
                         IF (j .EQ. SIZE(TTb, 1)) THEN
-                           WRITE (*, *) "Problem in the creation of loc2glob_fa. STOP."
+                           WRITE (*, *) "Problem in the creation of loc2glob_fa. stop."
                            STOP
                         END IF
                      END DO
@@ -587,7 +587,7 @@ CONTAINS
             END DO
 
 #ifdef PARALL
-            ! USE MPI_Allreduce to check if any process encountered the exit condition
+            ! use MPI_Allreduce to check if any process encountered the exit condition
             CALL MPI_Allreduce(MPI_IN_PLACE, redo, 1, MPI_LOGICAL, MPI_LOR, MPI_COMM_WORLD, ierr)
 #endif
             ! if redo rotate the mesh
@@ -604,7 +604,7 @@ CONTAINS
                angle = angle + rot_angle
             END IF
 
-            ! if redo rotate DEALLOCATE all allocated structures
+            ! if redo rotate deallocate all allocated structures
             IF (redo) THEN
 
                DEALLOCATE (loc2glob_fa)
@@ -816,7 +816,7 @@ CONTAINS
                IF (b1 .NE. 0) THEN
                   loc2glob_fa(clg) = b1
                   IF (b2 .NE. 0) THEN
-                     WRITE (*, *) "That is strange. STOP."
+                     WRITE (*, *) "That is strange. stop."
                      STOP
                   END IF
                   IF (loc2glob_el(iel) .GT. intFaces_Glob(b1, 3)) THEN
@@ -828,7 +828,7 @@ CONTAINS
                      flipFace(counter) = 1
                   END IF
                ELSE
-                  WRITE (*, *) "That is very strange. STOP."
+                  WRITE (*, *) "That is very strange. stop."
                   STOP
                END IF
 
@@ -839,19 +839,19 @@ CONTAINS
 
          ! little check
          IF (ANY(mapextf .EQ. 0)) THEN
-            WRITE (*, *) "Error in mapextf. STOP."
+            WRITE (*, *) "Error in mapextf. stop."
             STOP
          END IF
 
          ! watch out
          CALL UNIQUE_1D(mapextf, mapextf_unique)
          IF (SIZE(mapextf_unique) .NE. MAXVAL(mapextf)) THEN
-            WRITE (*, *) "Error in mapextf. STOP."
+            WRITE (*, *) "Error in mapextf. stop."
             STOP
          END IF
          DO j = 1, SIZE(mapextf_unique)
             IF (mapextf_unique(j) .NE. j) THEN
-               WRITE (*, *) "Error in mapextf. STOP."
+               WRITE (*, *) "Error in mapextf. stop."
                STOP
             END IF
          END DO
@@ -1300,8 +1300,8 @@ CONTAINS
       ALLOCATE (Mesh%loc2glob_el(Mesh%Nelems))
       ALLOCATE (Mesh%loc2glob_nodes(Mesh%Nnodes))
       ALLOCATE (Mesh%ghostElems(Mesh%Nelems))
-      !ALLOCATE (Mesh%intFaces(Mesh%Nintfaces,Mesh%Nnodesperface))
-      !ALLOCATE (Mesh%extFaces(Mesh%Nextfaces,Mesh%Nnodesperface))
+      !allocate (Mesh%intFaces(Mesh%Nintfaces,Mesh%Nnodesperface))
+      !allocate (Mesh%extFaces(Mesh%Nextfaces,Mesh%Nnodesperface))
 
       Mesh%T = M(MPIvar%glob_id + 1)%TT
       Mesh%X = M(MPIvar%glob_id + 1)%XX
@@ -1371,7 +1371,7 @@ CONTAINS
       CALL MPI_ALLREDUCE(MAXVAL(Mesh%loc2glob_nodes), Mesh%Nno_glob, 1, MPI_INTEGER, MPI_MAX, MPI_COMM_WORLD, ierr)
       CALL MPI_ALLREDUCE(Mesh%Nextfaces_nogho, Mesh%Nextfaces_glob, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
       CALL MPI_ALLREDUCE(Mesh%Nintfaces_nogho, Mesh%Nintfaces_glob, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
-      !CALL MPI_ALLREDUCE(Mesh%ndir, Mesh%Ndir_glob, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+      !call MPI_ALLREDUCE(Mesh%ndir, Mesh%Ndir_glob, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
       CALL MPI_ALLREDUCE(Mesh%nghostfaces, Mesh%Ngho_glob, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
 
       xmin = MINVAL(Mesh%X(:, 1))
@@ -1381,7 +1381,7 @@ CONTAINS
       ! Apply shift if axisymmetric case
       IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80) .OR. (switch%axisym .AND. MINVAL(Mesh%X(:,1)) < tol)) THEN
          IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE (6, *) "*** Applying translation in axisymmetric CASE!"
+            WRITE (6, *) "*** Applying translation in axisymmetric case!"
          END IF
          Mesh%X(:, 1) = Mesh%X(:, 1) + geom%R0
       END IF
