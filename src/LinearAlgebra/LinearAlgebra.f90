@@ -369,14 +369,6 @@ CONTAINS
       INTEGER, INTENT(IN), DIMENSION(:, :)                  :: M
       INTEGER, DIMENSION(SIZE(M, 1)*SIZE(M, 2)) :: V
 
-      ! integer                   :: i, j
-
-      ! do j = 1, SIZE(M, 2)
-      !    do i = 1, SIZE(M, 1)
-      !       V((j - 1)*SIZE(M, 1) + i) = M(i, j)
-      !    end do
-      ! end do
-
       V = RESHAPE(M, (/SIZE(M, 1)*SIZE(M, 2)/))
 
    END FUNCTION colint
@@ -387,14 +379,6 @@ CONTAINS
    PURE FUNCTION col(M) RESULT(V)
       REAL, INTENT(IN), DIMENSION(:, :)                  :: M
       REAL, DIMENSION(SIZE(M, 1)*SIZE(M, 2)) :: V
-
-      ! integer                   :: i, j
-
-      ! do j = 1, SIZE(M, 2)
-      !    do i = 1, SIZE(M, 1)
-      !       V((j - 1)*SIZE(M, 1) + i) = M(i, j)
-      !    end do
-      ! end do
 
       V = RESHAPE(M, (/SIZE(M, 1)*SIZE(M, 2)/))
 
