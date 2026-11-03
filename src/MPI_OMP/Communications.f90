@@ -889,7 +889,7 @@ CONTAINS
       IF(PRESENT(F_glob))             CALL MPI_Allreduce(MPI_IN_PLACE, F_glob, SIZE(F_glob,1)*SIZE(F_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
       IF(PRESENT(Tlin_glob))          CALL MPI_Allreduce(MPI_IN_PLACE, Tlin_glob, SIZE(Tlin_glob,1)*SIZE(Tlin_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
       IF(PRESENT(flag_elems_sc_glob))    CALL MPI_Allreduce(MPI_IN_PLACE, flag_elems_sc_glob, SIZE(flag_elems_sc_glob), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
-      IF(PRESENT(scdiff_nodes_glob))  CALL MPI_Allreduce(MPI_IN_PLACE, scdiff_nodes_glob, SIZE(scdiff_nodes_glob,1)*SIZE(scdiff_nodes_glob,2), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+      IF(PRESENT(scdiff_nodes_glob))  CALL MPI_Allreduce(MPI_IN_PLACE, scdiff_nodes_glob, SIZE(scdiff_nodes_glob,1)*SIZE(scdiff_nodes_glob,2), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
 
       ! elemsize cannot be gathered as there is no information on the order of elements in the global mesh
       IF (PRESENT(elemSize_glob)) THEN
@@ -1274,22 +1274,22 @@ CONTAINS
       END DO
 
       IF (allgather) THEN
-         CALL MPI_Allreduce(MPI_IN_PLACE, value_glob, SIZE(value_glob, 1), MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
+         CALL MPI_Allreduce(MPI_IN_PLACE, value_glob, Mesh_in%Nel_glob, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
       ELSE
          IF (MPIvar%glob_id == 0) THEN
-            CALL MPI_REDUCE(MPI_IN_PLACE, value_glob, SIZE(value_glob, 1), MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+            CALL MPI_REDUCE(MPI_IN_PLACE, value_glob, Mesh_in%Nel_glob, MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
          ELSE
-            CALL MPI_REDUCE(value_glob, value_glob, SIZE(value_glob, 1), MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+            CALL MPI_REDUCE(value_glob, value_glob, Mesh_in%Nel_glob, MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
          END IF
       END IF
 
    END SUBROUTINE gather_elemental_values
 
-   SUBROUTINE gather_magnetic_field(Mesh_in, B_glob, magnetic_flux_glob, magnetic_psi_glob, Bperturb_glob, Jtor_glob)
+   SUBROUTINE gather_magnetic_field(Mesh_in, r2D_glob, z2D_glob, B_glob, magnetic_flux_glob, magnetic_psi_glob, Bperturb_glob, B_axi_glob, Jtor_glob)
 
       TYPE(Mesh_type)                         :: Mesh_in
-      REAL*8, POINTER, INTENT(OUT)            :: B_glob(:, :), magnetic_flux_glob(:)
-      REAL*8, OPTIONAL, POINTER, INTENT(OUT)  :: magnetic_psi_glob(:), Bperturb_glob(:, :), Jtor_glob(:)
+      REAL*8, POINTER, INTENT(OUT)            :: B_glob(:, :), magnetic_flux_glob(:), r2D_glob(:), z2D_glob(:)
+      REAL*8, OPTIONAL, POINTER, INTENT(OUT)  :: magnetic_psi_glob(:), Bperturb_glob(:, :), B_axi_glob(:, :), Jtor_glob(:)
       INTEGER                                 :: i, Nnodes_loc, Nnodes_glob, Nnodes_tor, ierr
       INTEGER, ALLOCATABLE                    :: indices(:), indices_loc(:), indices_glob(:)
 
