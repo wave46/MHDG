@@ -171,7 +171,7 @@ PROGRAM Convergence
 #endif
 
          ! Initialize magnetic field (the Mesh is needed)
-         CALL initialize_magnetic_field()
+         CALL initialize_magnetic_field_Jtor()
 
          ! Load magnetic field
          CALL load_magnetic_field()
