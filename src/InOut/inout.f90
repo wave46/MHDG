@@ -28,7 +28,7 @@ CONTAINS
       CHARACTER(10)               :: str
       REAL*8, PARAMETER           ::tol = 1e-6
       REAL*8                      :: xmin
-      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem, Nfaces
+      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem
       INTEGER                     :: Nextfaces, Nnodesperface, IERR
       INTEGER(HID_T)              :: file_id
 
@@ -185,7 +185,7 @@ CONTAINS
       CHARACTER(70)               :: npr, nid
       REAL*8, PARAMETER           ::tol = 1e-6
       REAL*8                      :: xmin
-      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem
+      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem, Nfaces
       INTEGER                     :: Nextfaces, Nnodesperface, IERR
       INTEGER(HID_T)              :: file_id
 #ifdef PARALL
@@ -1177,7 +1177,6 @@ CONTAINS
 #endif
 
 #ifdef TOR3D
-      CHARACTER(70)               :: nip, nit, ngd
       INTEGER                     :: ntorloc, iel, ifa, iface, Fi, itor, dd, iel3, i, j, N2d, Nfl, Np1d, Np2d
       INTEGER, ALLOCATABLE        :: ind_q_add(:), indu2D(:), indq2D(:), indu3D(:), indq3D(:), indufp(:), induf2D(:), induf3D(:), indul(:), indql(:), indutl(:)
       REAL*8, ALLOCATABLE         :: u2D(:), q2D(:), ut2D(:), q2D_add(:, :)
@@ -1185,7 +1184,7 @@ CONTAINS
 #else
       REAL*8                      :: t
 #endif
-      INTEGER                     :: Neq, Ndim, Nel, Np, Nfg, Nf, sizeutilde, sizeu, it
+      INTEGER                     :: Neq, Ndim, Nel, Np, Nf, sizeutilde, sizeu, it
       REAL*8, ALLOCATABLE         :: uaux(:, :), utaux(:, :), qaux(:, :)
       INTEGER                     :: logrho_ptr = 0
 
@@ -1211,7 +1210,6 @@ CONTAINS
       Np2d = refElPol%Nnodes2D             ! N. of nodes for each poloidal 2D element
       Np = Np2d*Np1d                     ! N. of nodes for each 3D element
       Nfl = refElPol%Nnodes1D*Np1d        ! N. of nodes in the lateral faces
-      Nfg = Np2d*2 + refElPol%Nfaces*Nfl    ! N. of nodes in all the faces of a 3D element
       Nf = Mesh%Nfaces                   ! N. of faces in the 2D mesh
       sizeu = Neq*Nel*Np                    ! Size of u
 
@@ -1231,7 +1229,6 @@ CONTAINS
       Nel = Mesh%Nelems
       Np = refElPol%Nnodes2D
       Nf = refElPol%Nfaces
-      Nfg = refElPol%Nfacenodes*Nf
       sizeu = Neq*Nel*Np
       sizeutilde = Neq*Mesh%Nfaces*Mesh%Nnodesperface
 #endif
@@ -1720,14 +1717,9 @@ CONTAINS
 
       CHARACTER(len=*), INTENT(IN) :: source_file
       CHARACTER(len=*), INTENT(IN) :: destination_file
-      CHARACTER(len=255)        :: temp_source_file
-      CHARACTER(len=255)        :: temp_destination_file
       CHARACTER(len=1000)       :: buffer
       INTEGER                     :: unit_in, unit_out
       INTEGER                     :: ios
-
-      temp_source_file = TRIM(ADJUSTL(source_file))
-      temp_destination_file = TRIM(ADJUSTL(destination_file))
 
       CALL get_unit(unit_in)
       ! Open the source file for reading
