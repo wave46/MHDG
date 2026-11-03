@@ -515,8 +515,7 @@ CONTAINS
       INTEGER                   :: error      ! error flag
       INTEGER                   :: rank       ! dataset rank
       INTEGER                   :: cmpr       ! compression level
-      INTEGER(HSIZE_T), &
-         DIMENSION(1)           :: dim        ! dataset dimensions
+      INTEGER(HSIZE_T), DIMENSION(1)           :: dim, dim_chunk        ! dataset dimensions
       INTEGER(HID_T)            :: dataset    ! dataset identifier
       INTEGER(HID_T)            :: dataspace  ! dataspace identifier
       INTEGER(HID_T)            :: property   ! Property list identifier
@@ -528,7 +527,8 @@ CONTAINS
 
       !*** Creates a new property for gzip dataset ***
       CALL H5Pcreate_f(H5P_DATASET_CREATE_F, property, error)
-      CALL H5Pset_chunk_f(property, rank, dim, error)
+      dim_chunk(1) = MIN(dim(1), INT(2**20, HSIZE_T))
+      CALL H5Pset_chunk_f(property, rank, dim_chunk, error)
       cmpr = 6
       CALL H5Pset_deflate_f(property, cmpr, error)
 
