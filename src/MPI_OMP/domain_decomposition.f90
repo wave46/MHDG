@@ -497,8 +497,8 @@ CONTAINS
       angle = 0
       redo = .TRUE.
 
-      xcenter = 0.5*(MAXVAL(X(:, 1)) + MINVAL(X(:, 1)))
-      ycenter = 0.5*(MAXVAL(X(:, 2)) + MINVAL(X(:, 2)))
+      xcenter = 0.5*(MAXVAL(X(:, 1)) + MINVAL(X(:, 1))) ! 3.4
+      ycenter = 0.5*(MAXVAL(X(:, 2)) + MINVAL(X(:, 2))) ! 0
 
       ALLOCATE (xb(Nelems))
       ALLOCATE (yb(Nelems))
@@ -597,7 +597,7 @@ CONTAINS
                DO i = 1, imax
                   Nel_loc = 0
                   DO j = 1, SIZE(thetab)
-                     IF ((thetab(j) .GT. theta(it)) .AND. (thetab(j) .LT. theta(it + 1))) THEN
+                     IF ((thetab(j) .GE. theta(it)) .AND. (thetab(j) .LE. theta(it + 1))) THEN
                         Nel_loc = Nel_loc + 1
                      END IF
                   END DO
@@ -625,7 +625,7 @@ CONTAINS
          DO it = 1, SIZE(theta) - 1
             Nel_loc = 0
             DO i = 1, SIZE(thetab)
-               IF ((thetab(i) .GT. theta(it)) .AND. (thetab(i) .LT. theta(it + 1))) THEN
+               IF ((thetab(i) .GE. theta(it)) .AND. (thetab(i) .LE. theta(it + 1))) THEN
                   Nel_loc = Nel_loc + 1
                END IF
             END DO
@@ -667,7 +667,7 @@ CONTAINS
                WRITE (*, *) "Division: ", it
             END IF
 
-            ALLOCATE (loc2glob_el(COUNT((thetab .GT. theta(it)) .AND. (thetab .LT. theta(it + 1)))))
+            ALLOCATE (loc2glob_el(COUNT((thetab .GE. theta(it)) .AND. (thetab .LE. theta(it + 1)))))
             loc2glob_el = 0
             Tb_sizes = 0
 
@@ -676,7 +676,7 @@ CONTAINS
 
             counter = 1
             DO i = 1, SIZE(thetab)
-               IF ((thetab(i) .GT. theta(it)) .AND. (thetab(i) .LT. theta(it + 1))) THEN
+               IF ((thetab(i) .GE. theta(it)) .AND. (thetab(i) .LE. theta(it + 1))) THEN
                   loc2glob_el(counter) = i
                   counter = counter + 1
                   ind(i) = .TRUE.
@@ -734,7 +734,7 @@ CONTAINS
                innext = 0
                counter = 1
                DO i = 1, SIZE(ghel)
-                  IF (thetab(ghel(i)) .GT. theta(it + 1)) THEN
+                  IF (thetab(ghel(i)) .GE. theta(it + 1)) THEN
                      innext(counter) = i
                      counter = counter + 1
                   END IF
