@@ -16,6 +16,408 @@ MODULE domain_decomposition_module
 
 CONTAINS
 
+
+   SUBROUTINE reorder_mesh(perm_elems)
+      USE preprocess, ONLY: mesh_preprocess_serial, mesh_preprocess
+      INTEGER, ALLOCATABLE, INTENT(OUT)       :: perm_elems(:)
+      INTEGER                                 :: Nelems, Nnodesperelem, Nnodes
+      INTEGER                                 :: iel
+      INTEGER, ALLOCATABLE                    :: T_r(:, :)
+      REAL*8, ALLOCATABLE                     :: X_r(:, :)
+      INTEGER                                 :: ierr
+
+      Nelems = Mesh%Nelems
+      Nnodesperelem = Mesh%Nnodesperelem
+      Nnodes = Mesh%Nnodes
+#ifdef PARALL
+      CALL mesh_preprocess_serial(ierr)
+#else
+      CALL mesh_preprocess(ierr)
+#endif
+
+      ALLOCATE(perm_elems(Nelems))
+      perm_elems = 0
+
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*, *) "*************************************************"
+         WRITE (*, *) "*           CONNECTIVITY REORDERING             *"
+         WRITE (*, *) "*************************************************"
+
+         ALLOCATE (T_r(Nelems, Nnodesperelem))
+         ALLOCATE (X_r(Nnodes, mesh%Ndim))
+         T_r = 0
+         X_r = 0.d0
+
+         CALL element_adjacency()
+
+         DO iel = 1, Nelems
+            T_r(iel, :) = Mesh%T(perm_elems(iel), :)
+            X_r(T_r(iel, :), :) = Mesh%X(Mesh%T(perm_elems(iel), :), :)
+         END DO
+
+
+         Mesh%T = T_r
+         Mesh%X = X_r
+
+         DEALLOCATE (T_r, X_r)
+
+      END IF
+
+      CALL MPI_BCAST(Mesh%T,Nelems*Nnodesperelem,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+      CALL MPI_BCAST(Mesh%X,Nnodes*Mesh%Ndim,MPI_REAL8,0,MPI_COMM_WORLD,ierr)
+      CALL MPI_BCAST(perm_elems,Nelems,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+
+   CONTAINS
+
+      SUBROUTINE element_adjacency()
+
+         INTEGER, ALLOCATABLE   :: edge(:,:), elem_of_edge(:)
+         INTEGER                :: iel, k, tmp, ivert, jvert, e1, e2
+         INTEGER, ALLOCATABLE   :: A(:,:)
+
+         ALLOCATE(A(Nelems,Nelems))
+         A = 0
+
+         ALLOCATE(edge(3*Nelems,2))
+         ALLOCATE(elem_of_edge(3*Nelems))
+
+         k = 0
+
+         DO iel = 1, Nelems
+
+            ! Edge 1
+            k = k + 1
+            edge(k,:) = [Mesh%T(iel,1), Mesh%T(iel,2)]
+            elem_of_edge(k) = iel
+
+            ! Edge 2
+            k = k + 1
+            edge(k,:) = [Mesh%T(iel,2), Mesh%T(iel,3)]
+            elem_of_edge(k) = iel
+
+            ! Edge 3
+            k = k + 1
+            edge(k,:) = [Mesh%T(iel,3), Mesh%T(iel,1)]
+            elem_of_edge(k) = iel
+
+         END DO
+
+
+         DO ivert = 1, 3*Nelems
+            IF (edge(ivert,1) > edge(ivert,2)) THEN
+               tmp = edge(ivert,1)
+               edge(ivert,1) = edge(ivert,2)
+               edge(ivert,2) = tmp
+            END IF
+         END DO
+
+         DO ivert = 1, 3*Nelems-1
+            DO jvert = ivert+1, 3*Nelems
+
+               IF (edge(ivert,1) == edge(jvert,1) .AND. &
+                  edge(ivert,2) == edge(jvert,2)) THEN
+
+                  e1 = elem_of_edge(ivert)
+                  e2 = elem_of_edge(jvert)
+
+                  IF (e1 .NE. e2) THEN
+                     A(e1,e2) = 1
+                     A(e2,e1) = 1
+                  END IF
+
+               END IF
+
+            END DO
+         END DO
+
+         CALL rcm(A, Nelems, perm_elems)
+
+      END SUBROUTINE element_adjacency
+
+      SUBROUTINE rcm(A, n, perm_elems)
+
+         IMPLICIT NONE
+
+         INTEGER, INTENT(IN)       :: n
+         INTEGER, INTENT(IN)       :: A(n,n)
+         INTEGER, INTENT(OUT)      :: perm_elems(n)
+
+         INTEGER                   :: degree(n)
+         INTEGER                   :: visited(n)
+         INTEGER                   :: queue(n)
+         INTEGER                   :: neighbors(n)
+         INTEGER                   :: i, j
+         INTEGER                   :: start, current
+         INTEGER                   :: nvisited
+         INTEGER                   :: nneigh
+         INTEGER                   :: tmp
+         INTEGER                   :: head, tail
+
+         degree = 0
+
+         !------------------------------------------------------------
+         ! Compute degrees
+         !------------------------------------------------------------
+         DO i = 1, n
+            DO j = 1, n
+               degree(i) = degree(i) + A(i,j)
+            END DO
+         END DO
+
+         visited = 0
+         perm_elems = 0
+         nvisited = 0
+
+         !------------------------------------------------------------
+         ! Process each connected component
+         !------------------------------------------------------------
+         DO WHILE (nvisited < n)
+
+            ! Find unvisited node with minimum degree
+            start = -1
+            DO i = 1, n
+               IF (visited(i) == 0) THEN
+                  IF (start == -1) THEN
+                     start = i
+                  ELSE IF (degree(i) < degree(start)) THEN
+                     start = i
+                  END IF
+               END IF
+            END DO
+
+            !--------------------------------------------------------
+            ! BFS
+            !--------------------------------------------------------
+            queue = 0
+            queue(1) = start
+            visited(start) = 1
+
+            head = 1
+            tail = 1
+
+            DO WHILE (head <= tail)
+
+               current = queue(head)
+               head = head + 1
+
+               nvisited = nvisited + 1
+               perm_elems(nvisited) = current
+
+               ! Find unvisited neighbors
+               nneigh = 0
+
+               DO j = 1, n
+
+                  IF (A(current,j) /= 0 .AND. visited(j) == 0) THEN
+
+                     nneigh = nneigh + 1
+                     neighbors(nneigh) = j
+
+                     visited(j) = 1
+
+                  END IF
+
+               END DO
+
+               !----------------------------------------------------
+               ! Sort neighbors by increasing degree
+               !----------------------------------------------------
+               DO i = 1, nneigh-1
+                  DO j = i+1, nneigh
+
+                     IF (degree(neighbors(j)) < &
+                        degree(neighbors(i))) THEN
+
+                        tmp = neighbors(i)
+                        neighbors(i) = neighbors(j)
+                        neighbors(j) = tmp
+
+                     END IF
+
+                  END DO
+               END DO
+
+               !----------------------------------------------------
+               ! Add neighbors to BFS queue
+               !----------------------------------------------------
+               DO i = 1, nneigh
+
+                  tail = tail + 1
+                  queue(tail) = neighbors(i)
+
+               END DO
+
+            END DO
+
+         END DO
+
+         !------------------------------------------------------------
+         ! Reverse Cuthill-McKee
+         !------------------------------------------------------------
+         DO i = 1, n/2
+            tmp = perm_elems(i)
+            perm_elems(i) = perm_elems(n-i+1)
+            perm_elems(n-i+1) = tmp
+         END DO
+
+      END SUBROUTINE rcm
+
+   END SUBROUTINE reorder_mesh
+
+#ifndef TOR3D
+   SUBROUTINE reorder_solution(perm_elems)
+      USE initialization, ONLY: extractFaceSolution
+      INTEGER, INTENT(IN)                :: perm_elems(:)
+      !integer, intent(in)                :: perm_faces(:)
+      REAL*8, ALLOCATABLE, DIMENSION(:)  :: u, q
+      INTEGER                            :: Nelems, Nnodesperelem, Neq, iel, i, ip, Ndim
+      INTEGER, DIMENSION(phys%Neq)       :: idx_ord_u, idx_noord_u, indices_u
+      INTEGER, DIMENSION(phys%Neq*Mesh%Ndim)  :: idx_ord_q, idx_noord_q, indices_q
+
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*, *) "*************************************************"
+         WRITE (*, *) "*              SOLUTION REORDERING              *"
+         WRITE (*, *) "*************************************************"
+      END IF
+
+      Nelems = Mesh%Nelems
+      Nnodesperelem = Mesh%Nnodesperelem
+      Neq = phys%Neq
+      Ndim = Mesh%Ndim
+
+      indices_u = (/ (i, i = 1, Neq) /)
+      indices_q = (/ (i, i = 1, Neq*Ndim) /)
+
+      ALLOCATE(u(Nelems*Nnodesperelem*Neq))
+      ALLOCATE(q(Nelems*Nnodesperelem*Neq*Ndim))
+
+      u = 0.
+      q = 0.
+
+      ! Reorder the solution vectors according to the reordered mesh
+      DO iel = 1, Nelems
+         DO ip = 1, Nnodesperelem
+            idx_ord_u = (iel - 1)*Nnodesperelem*Neq + (ip-1)*Neq + indices_u
+            idx_noord_u = (perm_elems(iel) - 1)*Nnodesperelem*Neq + (ip-1)*Neq + indices_u
+            u(idx_ord_u) = sol%u(idx_noord_u)
+         END DO
+      END DO
+
+      DO iel = 1, Nelems
+         DO ip = 1, Nnodesperelem
+            idx_ord_q = (iel - 1)*Nnodesperelem*Neq*Ndim + (ip-1)*Neq*Ndim + indices_q
+            idx_noord_q = (perm_elems(iel) - 1)*Nnodesperelem*Neq*Ndim + (ip-1)*Neq*Ndim + indices_q
+            q(idx_ord_q) = sol%q(idx_noord_q)
+         END DO
+      END DO
+
+      sol%u = u
+      sol%q = q
+
+      DEALLOCATE (sol%u_tilde)
+      ALLOCATE (sol%u_tilde(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
+      CALL extractFaceSolution()
+
+      DEALLOCATE(u, q)
+
+   END SUBROUTINE reorder_solution
+
+#else
+   SUBROUTINE reorder_solution(perm_elems)
+      USE initialization, ONLY: extractFaceSolution
+      INTEGER, INTENT(IN)                                            :: perm_elems(:)
+      INTEGER                                                        :: Nelems, Nnodesperelem, Nfaces, Nnodesperface, Neq, iel, i, ip, Ndim, start_range, end_range, itor, Ntor, Nnodesperelem_tor1d
+      INTEGER, ALLOCATABLE, DIMENSION(:)                             :: indices_u, indices_q,idx_ord_u, idx_noord_u, idx_ord_q, idx_noord_q
+      REAL*8, ALLOCATABLE, DIMENSION(:)                              :: u, q
+
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*, *) "*************************************************"
+         WRITE (*, *) "              SOLUTION REORDERING                "
+         WRITE (*, *) "*************************************************"
+      END IF
+
+
+      Nelems = Mesh%Nelems
+      Nfaces = Mesh%Nfaces
+      Nnodesperface = Mesh%Nnodesperface
+      Nnodesperelem = Mesh%Nnodesperelem
+      Neq = phys%Neq
+      Ndim = Mesh%Ndim + 1
+      Ntor = numer%Ntor
+      Nnodesperelem_tor1d = numer%ptor + 1
+
+      ALLOCATE(u(Ntor*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq))
+      ALLOCATE(q(Ntor*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq*Ndim))
+
+      ALLOCATE(indices_u(Nnodesperelem*Neq))
+      ALLOCATE(indices_q(Nnodesperelem*Neq*Ndim))
+      ALLOCATE(idx_ord_u(Nelems*Nnodesperelem*Neq))
+      ALLOCATE(idx_ord_q(Nelems*Nnodesperelem*Neq*Ndim))
+      ALLOCATE(idx_noord_u(Nelems*Nnodesperelem*Neq))
+      ALLOCATE(idx_noord_q(Nelems*Nnodesperelem*Neq*Ndim))
+
+      indices_u = (/ (i, i = 1, Neq*Nnodesperelem) /)
+      indices_q = (/ (i, i = 1, Neq*Ndim*Nnodesperelem) /)
+
+      u = 0.
+      q = 0.
+
+      DO itor = 1,Ntor
+         DO ip = 1,Nnodesperelem_tor1d
+            start_range = 1
+            end_range = 1
+            DO iel = 1, Nelems
+               end_range = start_range + Neq*Nnodesperelem-1
+
+               indices_u = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq + (ip-1)*Neq*Nnodesperelem + (perm_elems(iel)-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + indices_u
+               idx_noord_u(start_range:end_range) = indices_u
+               indices_u = (/ (i, i = 1, Neq*Nnodesperelem) /)
+
+               indices_u = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq + (ip-1)*Neq*Nnodesperelem + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + indices_u
+               idx_ord_u(start_range:end_range) = indices_u
+               indices_u = (/ (i, i = 1, Neq*Nnodesperelem) /)
+
+               start_range = end_range + 1
+            END DO
+
+            ! Reorder the solution vectors according to the reordered mesh
+            u(idx_ord_u) = sol%u(idx_noord_u)
+         END DO
+      END DO
+
+      DO itor = 1,Ntor
+         DO ip = 1,Nnodesperelem_tor1d
+            start_range = 1
+            end_range = 1
+            DO iel = 1, Nelems
+               end_range = start_range + Neq*Nnodesperelem*Ndim-1
+               indices_q = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq*Ndim + (ip-1)*Neq*Nnodesperelem*Ndim + (perm_elems(iel)-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d*Ndim + indices_q
+               idx_ord_q(start_range:end_range) = indices_q
+               indices_q = (/ (i, i = 1, Nnodesperelem*Neq*Ndim) /)
+               indices_q = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq*Ndim + (ip-1)*Neq*Nnodesperelem*Ndim + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d*Ndim + indices_q
+               idx_noord_q(start_range:end_range) = indices_q
+               indices_q = (/ (i, i = 1, Nnodesperelem*Neq*Ndim) /)
+               start_range = end_range + 1
+            END DO
+
+            ! Reorder the solution vectors according to the reordered mesh
+            q(idx_ord_q) = sol%q(idx_noord_q)
+         END DO
+      END DO
+
+      sol%u = u
+      sol%q = q
+
+      DEALLOCATE (sol%u_tilde)
+      ALLOCATE (sol%u_tilde(Ntor*(Nelems*Nnodesperelem*Neq + Nfaces*Nnodesperface*Nnodesperelem_tor1d*Neq)))
+      CALL extractFaceSolution()
+
+      DEALLOCATE(idx_ord_u, idx_noord_u, idx_ord_q, idx_noord_q)
+      DEALLOCATE(u, q)
+
+   END SUBROUTINE reorder_solution
+#endif
+
    SUBROUTINE split_mesh(ndiv, divtype, verbose)
 
       INTEGER, INTENT(IN)                     :: nDiv, divType
