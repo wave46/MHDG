@@ -14,14 +14,14 @@ SUBROUTINE READ_input()
    USE MPI_OMP, ONLY: MPIvar
    IMPLICIT NONE
 
-   LOGICAL                       :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt
+   LOGICAL                       :: driftdia,driftexb, axisym, steady,dotiming,psdtime,decoup,bxgradb, read_gmsh,readMeshFromSol, set_2d_order, gmsh2h5,igz, adaptivity, time_adapt, NR_adapt, div_adapt, rest_adapt,osc_adapt, reorder_matrix
    LOGICAL                      :: ckeramp,saveNR,filter,saveTau,lstiming,fixdPotLim,dirivortcore,dirivortlim,convvort,logrho, printflux
    INTEGER                      :: thresh, difcor, tis, stab, pertini, init, order_2d
    INTEGER                       :: itmax, itrace, rest, istop, sollib, kspitrace,rprecond, Nrprecond, kspitmax, kspnorm, gmresres, mglevels, mgorder, mgcycletype, mgtypeform
    INTEGER                      :: uinput, printint, testcase, nrp
    INTEGER                      :: nts, tsw, freqdisp, freqsave, shockcp, limrho
    INTEGER                         :: shockcp_adapt, evaluator, param_est, difference, freq_t_adapt, freq_NR_adapt, quant_ind, n_quant_ind
-   REAL*8                       :: thr_ind, tol_est, osc_tol, osc_check
+   REAL*8                       :: thr_ind, tol_est, osc_tol, osc_check, theta
    INTEGER                      :: bcflags(1:10), ntor, ptor, npartor, bohmtypebc
    REAL*8                       :: dt0, R0, diff_n, diff_u, v_p, tau(1:5), tNr, tTM, div, Tbg
    REAL*8                       :: tfi, a, bohmth, bohm_energy_thresh, q, diffred, diffmin
@@ -537,6 +537,6 @@ SUBROUTINE READ_input()
          PRINT *, '                - MultiGrid (MG) type form                          ', lssolver%mgtypeform
       END IF
 
-      PRINT *, '        '
+      PRINT *, '        ***************** end of linear solver params ******************'
    END IF
 END SUBROUTINE READ_input
