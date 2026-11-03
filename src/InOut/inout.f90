@@ -714,17 +714,14 @@ CONTAINS
       INTEGER(HID_T)              :: file_id, group_id1
       INTEGER                     :: ierr
 
-#ifdef TOR3D
-      CHARACTER(70)               :: nip, nit, ngd
-#endif
 #ifdef PARALL
       INTEGER, POINTER            :: T_glob(:,:), Tb_glob(:,:), extfaces_glob(:,:), intfaces_glob(:,:), boundaryFlag_glob(:), periodic_faces_glob(:), F_glob(:,:), N_glob(:,:), Tlin_glob(:,:), flag_elems_sc_glob(:)
       REAL*8, POINTER             :: u_tilde_glob(:), u_glob(:), q_glob(:), magnetic_psi_glob(:), magnetic_flux_glob(:), Jtor_glob(:), elemSize_glob(:), scdiff_nodes_glob(:,:)
-      REAL*8, POINTER             :: X_glob(:, :), B_glob(:, :), Bperturb_glob(:, :)
+      REAL*8, POINTER             :: X_glob(:, :), B_glob(:, :), B_axi_glob(:, :), Bperturb_glob(:, :), r2D_glob(:), z2D_glob(:)
 
       NULLIFY(T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob, flag_elems_sc_glob)
       NULLIFY (u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, Jtor_glob, elemSize_glob, scdiff_nodes_glob)
-      NULLIFY (X_glob, B_glob, Bperturb_glob)
+      NULLIFY (X_glob, B_glob, B_axi_glob, Bperturb_glob, r2D_glob, z2D_glob)
 
 #endif
 
@@ -759,6 +756,10 @@ CONTAINS
       CALL HDF5_array1D_saving(group_id1, phys%magnetic_psi, SIZE(phys%magnetic_psi), 'magnetic_psi')
       ! save magnetic flux
       CALL HDF5_array1D_saving(group_id1, phys%magnetic_flux, SIZE(phys%magnetic_flux), 'magnetic_flux')
+      ! save r2D
+      CALL HDF5_array1D_saving(group_id1, phys%r2D, SIZE(phys%r2D), 'r2D')
+      ! save z2D
+      CALL HDF5_array1D_saving(group_id1, phys%z2D, SIZE(phys%z2D), 'z2D')
       ! save toroidal current
       IF (switch%ohmicsrc) THEN
          CALL HDF5_array1D_saving(group_id1, phys%Jtor, SIZE(phys%Jtor), 'Jtor')
@@ -860,19 +861,10 @@ CONTAINS
       CALL gather_solution(Mesh_in = Mesh, Nnodesperelem = Mesh%Nnodesperelem, Nnodesperface = Mesh%Nnodesperface, u_tilde_in = sol%u_tilde, u_in = sol%u, q_in = sol%q,  u_tilde_glob = u_tilde_glob, u_glob = u_glob, q_glob = q_glob)
 
       IF (switch%OhmicSrc) THEN
-         IF ((switch%RMP) .OR. (switch%Ripple)) THEN
-            CALL gather_magnetic_field(Mesh, B_glob, magnetic_flux_glob, magnetic_psi_glob, Bperturb_glob, Jtor_glob)
-         ELSE
-            CALL gather_magnetic_field(Mesh_in = Mesh, B_glob = B_glob, magnetic_flux_glob = magnetic_flux_glob, magnetic_psi_glob = magnetic_psi_glob, Jtor_glob = Jtor_glob)
-         END IF
+         CALL gather_magnetic_field(Mesh_in = Mesh, r2D_glob = r2D_glob, z2D_glob = z2D_glob, B_glob = B_glob, magnetic_flux_glob = magnetic_flux_glob, magnetic_psi_glob = magnetic_psi_glob, Jtor_glob = Jtor_glob)
       ELSE
-         IF ((switch%RMP) .OR. (switch%Ripple)) THEN
-            CALL gather_magnetic_field(Mesh_in = Mesh, B_glob = B_glob, magnetic_flux_glob = magnetic_flux_glob, magnetic_psi_glob = magnetic_psi_glob, Bperturb_glob = Bperturb_glob)
-         ELSE
-            CALL gather_magnetic_field(Mesh_in=Mesh, B_glob=B_glob, magnetic_flux_glob=magnetic_flux_glob, magnetic_psi_glob=magnetic_psi_glob)
-         END IF
+         CALL gather_magnetic_field(Mesh_in=Mesh, r2D_glob = r2D_glob, z2D_glob = z2D_glob, B_glob=B_glob, magnetic_flux_glob=magnetic_flux_glob, magnetic_psi_glob=magnetic_psi_glob)
       END IF
-
 #else
 
       ! gather solution, mesh and magnetic related arrays
@@ -880,15 +872,15 @@ CONTAINS
 
       IF (switch%OhmicSrc) THEN
          IF ((switch%RMP) .OR. (switch%Ripple)) THEN
-            CALL gather_magnetic_field(Mesh, B_glob, magnetic_flux_glob, magnetic_psi_glob, Bperturb_glob, Jtor_glob)
+            CALL gather_magnetic_field(Mesh, r2D_glob = r2D_glob, z2D_glob = z2D_glob, B_glob = B_glob, magnetic_flux_glob = magnetic_flux_glob, magnetic_psi_glob = magnetic_psi_glob, Bperturb_glob = Bperturb_glob, B_axi_glob = B_axi_glob, Jtor_glob = Jtor_glob)
          ELSE
-            CALL gather_magnetic_field(Mesh_in = Mesh, B_glob = B_glob, magnetic_flux_glob = magnetic_flux_glob, magnetic_psi_glob = magnetic_psi_glob, Jtor_glob = Jtor_glob)
+            CALL gather_magnetic_field(Mesh_in = Mesh, r2D_glob = r2D_glob, z2D_glob = z2D_glob, B_glob = B_glob, magnetic_flux_glob = magnetic_flux_glob, magnetic_psi_glob = magnetic_psi_glob, Jtor_glob = Jtor_glob)
          END IF
       ELSE
          IF ((switch%RMP) .OR. (switch%Ripple)) THEN
-            CALL gather_magnetic_field(Mesh_in = Mesh, B_glob = B_glob, magnetic_flux_glob = magnetic_flux_glob, magnetic_psi_glob = magnetic_psi_glob, Bperturb_glob = Bperturb_glob)
+            CALL gather_magnetic_field(Mesh_in = Mesh, r2D_glob = r2D_glob, z2D_glob = z2D_glob, B_glob = B_glob, magnetic_flux_glob = magnetic_flux_glob, magnetic_psi_glob = magnetic_psi_glob, Bperturb_glob = Bperturb_glob, B_axi_glob = B_axi_glob)
          ELSE
-            CALL gather_magnetic_field(Mesh_in=Mesh, B_glob=B_glob, magnetic_flux_glob=magnetic_flux_glob, magnetic_psi_glob=magnetic_psi_glob)
+            CALL gather_magnetic_field(Mesh_in=Mesh, r2D_glob = r2D_glob, z2D_glob = z2D_glob, B_glob=B_glob, magnetic_flux_glob=magnetic_flux_glob, magnetic_psi_glob=magnetic_psi_glob)
          END IF
       END IF
 
@@ -911,7 +903,7 @@ CONTAINS
          CALL HDF5_array1D_saving(group_id1, u_tilde_glob, SIZE(u_tilde_glob), 'u_tilde')
          CALL HDF5_array1D_saving(group_id1, u_glob, SIZE(u_glob), 'u')
          CALL HDF5_array1D_saving(group_id1, q_glob, SIZE(q_glob), 'q')
-         CALL HDF5_group_close(group_id1)
+         CALL HDF5_group_close(group_id1, ierr)
 
          CALL HDF5_group_create('mesh', file_id, group_id1, ierr)
          CALL HDF5_integer_saving(group_id1, Mesh%Ndim, 'Ndim')
@@ -974,10 +966,14 @@ CONTAINS
          IF (switch%ripple) THEN
             CALL HDF5_array2D_saving(group_id1, magn%coils_ripple, SIZE(magn%coils_ripple, 1), SIZE(magn%coils_ripple, 2), 'coils_ripple')
          END IF
-         ! save magnetic field
+         ! save magnetic field + ripple/RMP if present
          CALL HDF5_array2D_saving(group_id1, B_glob, SIZE(B_glob, 1), SIZE(B_glob, 2), 'magnetic_field')
          ! save magnetic flux
          CALL HDF5_array1D_saving(group_id1, magnetic_flux_glob, SIZE(magnetic_flux_glob), 'magnetic_flux')
+         ! save r2D
+         CALL HDF5_array1D_saving(group_id1, r2D_glob, SIZE(r2D_glob), 'r2D')
+         ! save z2D
+         CALL HDF5_array1D_saving(group_id1, z2D_glob, SIZE(z2D_glob), 'z2D')
          ! save normalized psi
          CALL HDF5_array1D_saving(group_id1, magnetic_psi_glob, SIZE(magnetic_psi_glob), 'magnetic_psi')
          ! save toroidal current
@@ -987,6 +983,7 @@ CONTAINS
          ! save magnetic perturbation and related fields
          IF ((switch%rmp) .OR. (switch%ripple)) THEN
             CALL HDF5_array2D_saving(group_id1, Bperturb_glob, SIZE(Bperturb_glob, 1), SIZE(Bperturb_glob, 2), 'magnetic_perturbation')
+            CALL HDF5_array2D_saving(group_id1, B_axi_glob, SIZE(B_axi_glob, 1), SIZE(B_axi_glob, 2), 'magnetic_field_axi')
          END IF
 
          IF (switch%shockcp .EQ. 3) THEN
@@ -995,11 +992,12 @@ CONTAINS
          CALL HDF5_group_close(group_id1, ierr)
 
       END IF
+
       IF (ASSOCIATED(T_glob)) THEN
          DEALLOCATE (T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
-         DEALLOCATE (u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob)
+         DEALLOCATE (u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob, r2D_glob, z2D_glob)
          NULLIFY (T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
-         NULLIFY (u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob)
+         NULLIFY (u_tilde_glob, u_glob, q_glob, magnetic_psi_glob, magnetic_flux_glob, elemSize_glob, X_glob, B_glob, r2D_glob, z2D_glob)
       END IF
 
       IF (ASSOCIATED(Jtor_glob)) THEN
@@ -1009,6 +1007,8 @@ CONTAINS
       IF (ASSOCIATED(Bperturb_glob)) THEN
          DEALLOCATE (Bperturb_glob)
          NULLIFY (Bperturb_glob)
+         DEALLOCATE (B_axi_glob)
+         NULLIFY (B_axi_glob)
       END IF
       IF (ASSOCIATED(flag_elems_sc_glob)) THEN
          DEALLOCATE (flag_elems_sc_glob)
