@@ -479,6 +479,223 @@ CONTAINS
    END SUBROUTINE load_mesh_h5
 
    !**********************************************************************
+   ! save mesh in HDF5 file format
+   !**********************************************************************
+   SUBROUTINE HDF5_save_mesh(Mesh_in, fname)
+#ifdef PARALL
+      USE communications, ONLY: gather_mesh
+#endif
+
+      IMPLICIT NONE
+
+      TYPE(Mesh_type), INTENT(IN)    :: Mesh_in
+      CHARACTER(LEN=*), INTENT(IN)    :: fname
+      CHARACTER(len=1000)         :: fname_complete
+      INTEGER(HID_T)              :: file_id, group_id1
+      INTEGER                     :: ierr
+
+#ifdef PARALL
+      INTEGER, POINTER            :: T_glob(:,:), Tb_glob(:,:), extfaces_glob(:,:), intfaces_glob(:,:), boundaryFlag_glob(:), periodic_faces_glob(:), F_glob(:,:), N_glob(:,:), Tlin_glob(:,:), flag_elems_sc_glob(:)
+      REAL*8, POINTER             :: elemSize_glob(:), scdiff_nodes_glob(:,:)
+      REAL*8, POINTER             :: X_glob(:, :)
+
+      NULLIFY(T_glob, X_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob, flag_elems_sc_glob, elemSize_glob, scdiff_nodes_glob)
+#endif
+
+      fname_complete = TRIM(ADJUSTL(fname))//'.h5'
+
+#ifndef PARALL
+      CALL hdf5_save_mesh_serial(Mesh_in, fname_complete)
+#else
+
+      IF ((switch%shockcp .NE. 0) .OR. ((adapt%shockcp_adapt .NE. 0) .AND. (adapt%adaptivity .EQV. .TRUE.))) THEN
+         CALL gather_Mesh(Mesh_in, T_glob, X_glob, Tb_glob, F_glob, N_glob, intfaces_glob, extfaces_glob, boundaryFlag_glob, Tlin_glob, periodic_faces_glob, elemSize_glob, flag_elems_sc_glob, scdiff_nodes_glob)
+      ELSE
+         CALL gather_Mesh(Mesh_in, T_glob, X_glob, Tb_glob, F_glob, N_glob, intfaces_glob, extfaces_glob, boundaryFlag_glob, Tlin_glob, periodic_faces_glob, elemSize_glob)
+      END IF
+
+      ! save to file
+      IF (MPIvar%glob_id .EQ. 0) THEN
+
+         CALL HDF5_create(fname_complete, file_id, ierr)
+
+         CALL HDF5_group_create('Mesh_in', file_id, group_id1, ierr)
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Ndim, 'Ndim')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nno_glob, 'Nnodes')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nel_glob, 'Nelems')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nfa_glob, 'Nfaces')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nextfaces_glob, 'Nextfaces')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nintfaces_glob, 'Nintfaces')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Ndir_glob, 'Ndir')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nnodesperelem, 'Nnodesperelem')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nnodesperface, 'Nnodesperface')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%elemType, 'elemType')
+         ! these are already reduced in preprocess or load Mesh_in
+         CALL HDF5_real_saving(group_id1, Mesh_in%puff_area, 'puff_area')
+         CALL HDF5_real_saving(group_id1, Mesh_in%core_area, 'core_area')
+         CALL HDF5_real_saving(group_id1, Mesh_in%xmax, 'xmax')
+         CALL HDF5_real_saving(group_id1, Mesh_in%xmin, 'xmin')
+         CALL HDF5_real_saving(group_id1, Mesh_in%ymax, 'ymax')
+         CALL HDF5_real_saving(group_id1, Mesh_in%ymin, 'ymin')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nfa_glob, 'ukf')
+
+         CALL HDF5_array2D_saving_int(group_id1, T_glob, SIZE(T_glob, 1), SIZE(T_glob, 2), 'T')
+         CALL HDF5_array2D_saving_int(group_id1, Tb_glob, SIZE(Tb_glob, 1), SIZE(Tb_glob, 2), 'Tb')
+         CALL HDF5_array2D_saving(group_id1, X_glob*phys%lscale, SIZE(X_glob, 1), SIZE(X_glob, 2), 'X')
+
+         !call HDF5_array1D_saving_int(file_id,Mesh_in%boundaryFlag, SIZE(Mesh_in%boundaryFlag), 'boundaryFlag')
+         CALL HDF5_array2D_saving_int(group_id1, F_glob, SIZE(F_glob, 1), SIZE(F_glob, 2), 'F')
+         CALL HDF5_array2D_saving_int(group_id1, N_glob, SIZE(N_glob, 1), SIZE(N_glob, 2), 'N')
+
+         CALL HDF5_array1D_saving(group_id1, elemSize_glob, SIZE(elemSize_glob), 'elemSize')
+
+         ! save boundary structure
+         CALL HDF5_array2D_saving_int(group_id1, extfaces_glob, SIZE(extfaces_glob, 1), SIZE(extfaces_glob, 2), 'extfaces')
+         CALL HDF5_array2D_saving_int(group_id1, intfaces_glob, SIZE(intfaces_glob, 1), SIZE(intfaces_glob, 2), 'intfaces')
+         CALL HDF5_array1D_saving_int(group_id1, boundaryFlag_glob, SIZE(boundaryFlag_glob, 1), 'boundaryFlag')
+
+         IF (ALLOCATED(Mesh_in%periodic_faces)) THEN
+            CALL HDF5_array1D_saving_int(group_id1, periodic_faces_glob, SIZE(periodic_faces_glob), 'periodic_faces')
+         END IF
+         IF (ASSOCIATED(Mesh_in%Tlin)) THEN
+            CALL HDF5_array2D_saving_int(group_id1, Tlin_glob, SIZE(Tlin_glob, 1), SIZE(Tlin_glob, 2), 'Tlin')
+         END IF
+         IF (ALLOCATED(Mesh_in%flag_elems_sc)) THEN
+            CALL HDF5_array1D_saving_int(group_id1, flag_elems_sc_glob, SIZE(flag_elems_sc_glob), 'flag_elems_sc')
+         END IF
+         IF (ALLOCATED(Mesh_in%scdiff_nodes)) THEN
+            CALL HDF5_array2D_saving(group_id1, scdiff_nodes_glob, SIZE(scdiff_nodes_glob, 1), SIZE(scdiff_nodes_glob, 2), 'scdiff_nodes')
+         END IF
+
+#ifdef TOR3D
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nnodes_toroidal, 'Nnodes_toroidal')
+         CALL HDF5_array1D_saving(group_id1, Mesh_in%toroidal, SIZE(Mesh_in%toroidal), 'toroidal')
+#endif
+         CALL HDF5_group_close(group_id1, ierr)
+
+         CALL HDF5_close(file_id)
+         ! Message to confirm succesful creation and filling of file
+         PRINT *, 'Output written to file ', TRIM(ADJUSTL(fname_complete))
+
+      END IF
+      IF (ASSOCIATED(T_glob)) THEN
+         DEALLOCATE (T_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
+         DEALLOCATE (elemSize_glob, X_glob)
+         NULLIFY (T_glob, X_glob, Tb_glob, extfaces_glob, intfaces_glob, boundaryFlag_glob, periodic_faces_glob, F_glob, N_glob, Tlin_glob)
+      END IF
+
+      IF (ASSOCIATED(flag_elems_sc_glob)) THEN
+         DEALLOCATE (flag_elems_sc_glob)
+         NULLIFY (flag_elems_sc_glob)
+      END IF
+      IF (ASSOCIATED(scdiff_nodes_glob)) THEN
+         DEALLOCATE (scdiff_nodes_glob)
+         NULLIFY (scdiff_nodes_glob)
+      END IF
+#endif
+
+
+   END SUBROUTINE HDF5_save_mesh
+
+   SUBROUTINE HDF5_save_mesh_serial(Mesh_in, fname)
+      TYPE(Mesh_type), INTENT(IN)    :: Mesh_in
+      CHARACTER(LEN=*), INTENT(IN)    :: fname
+      CHARACTER(len=1000)         :: fname_complete
+      INTEGER(HID_T)              :: file_id, group_id1
+      INTEGER                     :: ierr
+
+      IF (MPIvar%glob_id .EQ. 0) THEN
+
+         fname_complete = TRIM(ADJUSTL(fname)) //'.h5'
+
+         ! Create file
+         CALL HDF5_create(fname_complete, file_id, ierr)
+
+         ! save Mesh_in related arrays
+         CALL HDF5_group_create('mesh', file_id, group_id1, ierr)
+         ! save boundary structure
+         CALL HDF5_array2D_saving_int(group_id1, Mesh_in%extfaces, SIZE(Mesh_in%extfaces, 1), SIZE(Mesh_in%extfaces, 2), 'extfaces')
+         CALL HDF5_array1D_saving_int(group_id1, Mesh_in%boundaryFlag, SIZE(Mesh_in%boundaryFlag, 1), 'boundaryFlag')
+
+         IF (switch%shockcp .EQ. 3) THEN
+            CALL HDF5_array2D_saving(group_id1, Mesh_in%scdiff_nodes, SIZE(Mesh_in%scdiff_nodes, 1), SIZE(Mesh_in%scdiff_nodes, 2), 'scdiff_nodes')
+         END IF
+
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Ndim, 'Ndim')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nnodes, 'Nnodes')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nnodesperelem, 'Nnodesperelem')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nnodesperface, 'Nnodesperface')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nelems, 'Nelems')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nfaces, 'Nfaces')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nextfaces, 'Nextfaces')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nintfaces, 'Nintfaces')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%elemType, 'elemType')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Ndir, 'Ndir')
+         CALL HDF5_integer_saving(group_id1, Mesh_in%ukf, 'ukf')
+         CALL HDF5_array2D_saving_int(group_id1, Mesh_in%T, SIZE(Mesh_in%T, 1), SIZE(Mesh_in%T, 2), 'T')
+         CALL HDF5_array2D_saving_int(group_id1, Mesh_in%Tb, SIZE(Mesh_in%Tb, 1), SIZE(Mesh_in%Tb, 2), 'Tb')
+         CALL HDF5_array2D_saving_int(group_id1, Mesh_in%Tlin, SIZE(Mesh_in%Tlin, 1), SIZE(Mesh_in%Tlin, 2), 'Tlin')
+         CALL HDF5_array2D_saving_int(group_id1, Mesh_in%F, SIZE(Mesh_in%F, 1), SIZE(Mesh_in%F, 2), 'F')
+         CALL HDF5_array2D_saving_int(group_id1, Mesh_in%N, SIZE(Mesh_in%N, 1), SIZE(Mesh_in%N, 2), 'N')
+
+         IF (ALLOCATED(Mesh_in%faces)) THEN
+            CALL HDF5_array3D_saving(group_id1, REAL(Mesh_in%faces), SIZE(Mesh_in%faces, 1), SIZE(Mesh_in%faces, 2), SIZE(Mesh_in%faces, 3), 'faces')
+         END IF
+         CALL HDF5_array2D_saving_int(group_id1, Mesh_in%intfaces, SIZE(Mesh_in%intfaces, 1), SIZE(Mesh_in%intfaces, 2), 'intfaces')
+         !call HDF5_array2D_saving_int(file_id,int(Mesh_in%flipface), SIZE(Mesh_in%flipface,1),SIZE(Mesh_in%flipface,2), 'flipface')
+         !call HDF5_array2D_saving_logical(file_id,Mesh_in%Fdir, SIZE(Mesh_in%Fdir,1),SIZE(Mesh_in%Fdir,2), 'Fdir')
+         IF (ALLOCATED(Mesh_in%periodic_faces)) THEN
+            CALL HDF5_array1D_saving_int(group_id1, Mesh_in%periodic_faces, SIZE(Mesh_in%periodic_faces), 'periodic_faces')
+         END IF
+         IF (ALLOCATED(Mesh_in%Diric)) THEN
+            CALL HDF5_array1D_saving_int(group_id1, Mesh_in%Diric, SIZE(Mesh_in%Diric), 'Diric')
+         END IF
+         IF (ALLOCATED(Mesh_in%numberbcs)) THEN
+            CALL HDF5_array1D_saving_int(group_id1, Mesh_in%numberbcs, SIZE(Mesh_in%numberbcs), 'numberbcs')
+         END IF
+         CALL HDF5_array1D_saving(group_id1, Mesh_in%elemSize*phys%lscale, SIZE(Mesh_in%elemSize), 'elemSize')
+         CALL HDF5_array2D_saving(group_id1, Mesh_in%X*phys%lscale, SIZE(Mesh_in%X, 1), SIZE(Mesh_in%X, 2), 'X')
+#ifdef TOR3D
+         CALL HDF5_integer_saving(group_id1, Mesh_in%Nnodes_toroidal, 'Nnodes_toroidal')
+         CALL HDF5_array1D_saving(group_id1, Mesh_in%toroidal, SIZE(Mesh_in%toroidal), 'toroidal')
+#endif
+         IF (ALLOCATED(Mesh_in%flag_elems_rho)) THEN
+            CALL HDF5_array1D_saving_int(group_id1, Mesh_in%flag_elems_rho, SIZE(Mesh_in%flag_elems_rho), 'flag_elems_rho')
+         END IF
+         IF (ALLOCATED(Mesh_in%flag_elems_sc)) THEN
+            CALL HDF5_array1D_saving_int(group_id1, Mesh_in%flag_elems_sc, SIZE(Mesh_in%flag_elems_sc), 'flag_elems_sc')
+         END IF
+         IF (ALLOCATED(Mesh_in%minrho_elems)) THEN
+            CALL HDF5_array1D_saving(group_id1, Mesh_in%minrho_elems, SIZE(Mesh_in%minrho_elems), 'minrho_elems')
+         END IF
+         IF (ALLOCATED(Mesh_in%sour_elems)) THEN
+            CALL HDF5_array1D_saving(group_id1, Mesh_in%sour_elems, SIZE(Mesh_in%sour_elems), 'sour_elems')
+         END IF
+         IF (ALLOCATED(Mesh_in%diff_elems)) THEN
+            CALL HDF5_array1D_saving(group_id1, Mesh_in%diff_elems, SIZE(Mesh_in%diff_elems), 'diff_elems')
+         END IF
+         IF (ALLOCATED(Mesh_in%scdiff_nodes)) THEN
+            CALL HDF5_array2D_saving(group_id1, Mesh_in%scdiff_nodes, SIZE(Mesh_in%scdiff_nodes, 1), SIZE(Mesh_in%scdiff_nodes, 2), 'scdiff_nodes')
+         END IF
+         CALL HDF5_real_saving(group_id1, Mesh_in%xmax*phys%lscale, 'xmax')
+         CALL HDF5_real_saving(group_id1, Mesh_in%xmin*phys%lscale, 'xmin')
+         CALL HDF5_real_saving(group_id1, Mesh_in%ymax*phys%lscale, 'ymax')
+         CALL HDF5_real_saving(group_id1, Mesh_in%ymin*phys%lscale, 'ymin')
+         CALL HDF5_real_saving(group_id1, Mesh_in%puff_area*phys%lscale**2, 'puff_area')
+         CALL HDF5_real_saving(group_id1, Mesh_in%core_area*phys%lscale**2, 'core_area')
+         CALL HDF5_group_close(group_id1, ierr)
+
+         CALL HDF5_close(file_id)
+
+         ! Message to confirm succesful creation and filling of file
+         PRINT *, 'Mesh saved to file: ', TRIM(ADJUSTL(fname_complete))
+         PRINT *, '        '
+
+      END IF
+
+   END SUBROUTINE HDF5_save_mesh_serial
+
+   !**********************************************************************
    ! save solution in HDF5 file format
    !**********************************************************************
    SUBROUTINE HDF5_save_solution(fname)
