@@ -1,5 +1,4 @@
 MODULE interpolation
-   USE printutils
 CONTAINS
 
    FUNCTION binarysearch(length, array, VALUE, delta)
