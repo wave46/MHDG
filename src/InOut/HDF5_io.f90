@@ -141,9 +141,9 @@ CONTAINS
    SUBROUTINE HDF5_group_close(group_id, ierr)
 
       INTEGER(HID_T), INTENT(OUT) :: group_id     ! the new group
-      INTEGER, OPTIONAL, INTENT(OUT) :: ierr
-
+      INTEGER, INTENT(OUT)      :: ierr
       INTEGER                   :: ierr_HDF5
+
 
       !*** Initialize fortran interface ***
       !    call H5open_f(ierr_HDF5)
@@ -151,7 +151,9 @@ CONTAINS
       !*** open the HDF5 file ***
       !     print *, pglobal_id, "open file", trim(filename)//char(0)
       CALL h5gclose_f(group_id, ierr_HDF5)
-      IF (PRESENT(ierr)) ierr = ierr_HDF5
+
+      ierr = ierr_HDF5
+
    END SUBROUTINE HDF5_group_close
 
    !*************************************************
