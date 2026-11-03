@@ -16,8 +16,8 @@ CONTAINS
    !********************************************
    SUBROUTINE computeL2ErrorAnalyticSol(L2err)
       REAL*8, INTENT(OUT)       :: L2err(:)
-      INTEGER*4                 :: i, iel, Ndim, Nel, Np2D, iel3, itor, Neq
-      INTEGER*4                 :: Np1Dpol, Np1Dtor, Np, Nfl, Nfp, Nf, ntor, N2D
+      INTEGER*4                 :: i, iel, Np2D, iel3, itor, Neq
+      INTEGER*4                 :: Np1Dpol, Np1Dtor, Np, ntor, N2D
       INTEGER*4                 :: ind_ue(refElPol%Nnodes2D*refElTor%Nnodes1D*phys%Neq)
       REAL*8                    :: Xe(Mesh%Nnodesperelem, Mesh%Ndim)
       REAL*8                    :: ue(refElPol%Nnodes2D*refElTor%Nnodes1D*phys%Neq)
@@ -26,17 +26,12 @@ CONTAINS
       REAL*8                    :: err_sol(phys%Neq), int_sol(phys%Neq)
       REAL*8                    :: err_sole(phys%Neq), int_sole(phys%Neq)
 
-      Ndim = 3                                               ! Number of dimensions
       Neq = phys%Neq
       N2D = Mesh%Nelems                                     ! Number elements in the 2D mesh
       Np2D = refElPol%Nnodes2D                               ! Number of nodes in the 2D elements
       Np1Dpol = refElPol%Nnodes1D                               ! Number of nodes in the 1D poloidal segments
       Np1Dtor = refElTor%Nnodes1D                               ! Number of nodes in the 1D toroidal segments
-      Nel = N2D*numer%ntor                                  ! Number of 3D elements
       Np = Np2D*refElTor%Nnodes1D                          ! Number of nodes for each 3D element
-      Nfl = Np1Dpol*Np1Dtor                                 ! Number of nodes in the lateral faces
-      Nfp = Np2D*2 + refElPol%Nfaces*Nfl                      ! Number of nodes in all the faces of a 3D element
-      Nf = Mesh%Nfaces                                     ! Number of faces in the 2D mesh
       ntor = numer%ntor
 
       ! Initialization
@@ -89,7 +84,6 @@ CONTAINS
          REAL*8                 :: uan(refElPol%Ngauss2d*refElTor%Ngauss1d, Neq), ueg(Neq)
          REAL*8                 :: xy(refElPol%Ngauss2d, Mesh%Ndim)
          REAL*8                 :: J11(refElPol%Ngauss2d), J12(refElPol%Ngauss2d), J21(refElPol%Ngauss2d), J22(refElPol%Ngauss2d)
-         REAL*8                 :: iJ11(refElPol%Ngauss2d), iJ12(refElPol%Ngauss2d), iJ21(refElPol%Ngauss2d), iJ22(refElPol%Ngauss2d)
          REAL*8                 :: detJ(refElPol%Ngauss2d), teg(refElTor%Ngauss1d)
 
          ! Initialization
@@ -113,10 +107,6 @@ CONTAINS
          J21 = MATMUL(refElPol%Neta2D, Xe(:, 1))                          ! ng x 1
          J22 = MATMUL(refElPol%Neta2D, Xe(:, 2))                          ! ng x 1
          detJ = J11*J22 - J21*J12                    ! determinant of the Jacobian
-         iJ11 = J22/detJ
-         iJ12 = -J12/detJ
-         iJ21 = -J21/detJ
-         iJ22 = J11/detJ
          NgaussPol = refElPol%NGauss2D
          NgaussTor = refElTor%NGauss1D
          DO igtor = 1, NGaussTor
