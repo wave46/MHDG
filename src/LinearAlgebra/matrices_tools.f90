@@ -60,11 +60,10 @@ CONTAINS
 
       TYPE(MAT_CSR_TYP), INTENT(IN)                      :: S ! sparse matrix in CSR format
       REAL(8), DIMENSION(:, :), ALLOCATABLE, INTENT(OUT) :: M ! full matrix
-      INTEGER                                            :: r, c, i, j, nnz
+      INTEGER                                            :: r, c, i, j
       INTEGER, DIMENSION(:), POINTER                     :: cols, rowptr
       REAL(8), DIMENSION(:), POINTER                     :: vals
 
-      nnz = S%nnz
       cols => S%cols
       rowptr => S%rowptr
       vals => S%vals
