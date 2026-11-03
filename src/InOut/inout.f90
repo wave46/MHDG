@@ -1023,9 +1023,9 @@ CONTAINS
       IF (MPIvar%glob_id .EQ. 0) THEN
          CALL HDF5_close(file_id)
          ! Message to confirm succesful creation and filling of file
-         PRINT *, 'Output written to file ', TRIM(ADJUSTL(fname_complete))
-         PRINT *, '        '
+         PRINT *, 'Output written to file: ', TRIM(ADJUSTL(fname_complete))
       END IF
+
    CONTAINS
 
       !**********************************************************************
@@ -1216,21 +1216,16 @@ CONTAINS
       CHARACTER(LEN=*)            :: fname
       CHARACTER(len=1000)         :: fname_complete
       CHARACTER(10)               :: str
-      REAL*8, PARAMETER           ::tol = 1e-6
-      REAL*8                      :: xmin
-      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem
-      INTEGER                     :: Nextfaces, Nnodesperface, Nfaces, IERR
+      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem, Nfaces
+      INTEGER                     :: Nextfaces, Nnodesperface, IERR
       INTEGER(HID_T)              :: file_id, group_id
-#ifdef TOR3D
-      INTEGER                     :: i
-#endif
 
       fname_complete = TRIM(ADJUSTL(fname))//'.h5'
 
       IF (utils%printint > 0) THEN
          IF (MPIvar%glob_id .EQ. 0) THEN
             WRITE (*, *) "*************************************************"
-            WRITE (*, *) "            LOADING MESH FROM SOLUTION           "
+            WRITE (*, *) "*            LOADING MESH FROM SOLUTION         *"
             WRITE (*, *) "*************************************************"
          END IF
       END IF
@@ -1461,7 +1456,11 @@ CONTAINS
 
       IF (INDEX(fname, "Sol3D") .NE. 0) THEN
          ! Initialization with a 3D solution
-         WRITE (6, *) "3D initial solution"
+         IF (MPIvar%glob_id .EQ. 0) THEN
+            WRITE (6, *) '**************************************************'
+            WRITE (6, *) '*            3D INITIAL SOLUTION                 *'
+            WRITE (6, *) '**************************************************'
+         END IF
          fname_complete = TRIM(ADJUSTL(fname))//'.h5'
 
          CALL HDF5_open(fname_complete, file_id, IERR)
@@ -1725,7 +1724,6 @@ CONTAINS
       ! Message to confirm succesful reading of file
       IF (MPIvar%glob_id .EQ. 0) THEN
          PRINT *, 'Solution read from file: ', TRIM(ADJUSTL(fname_complete))
-         PRINT *, '        '
       END IF
 
    END SUBROUTINE HDF5_load_solution
@@ -1761,7 +1759,6 @@ CONTAINS
       ! Message to confirm succesful creation and filling of file
       IF (MPIvar%glob_id .EQ. 0) THEN
          PRINT *, 'Output written to file ', TRIM(ADJUSTL(fname_complete))
-         PRINT *, '        '
       END IF
 
    END SUBROUTINE HDF5_save_CSR_matrix
