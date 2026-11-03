@@ -429,7 +429,7 @@ CONTAINS
       INTEGER, POINTER, DIMENSION(:)          :: boundaryFlag => NULL()
       REAL*8, POINTER, DIMENSION(:, :)         :: X => NULL()
 
-      INTEGER                                 :: elemType, Nvert, n_ext_faces, n_int_faces, Nelems, Nfaces, Nnodes, Nnodes_mean, Nelems_mean, Nel_tot
+      INTEGER                                 :: Nvert, n_ext_faces, n_int_faces, Nelems, Nfaces, Nnodes, Nnodes_mean, Nelems_mean, Nel_tot
       INTEGER                                 :: Nel_loc, n_boundaries
       INTEGER                                 :: iel, it, i, j, ii, jj, counter, clg, offset, ifa, iface, ib, n, ierr, b1, b2, n1, n2, s
       INTEGER, PARAMETER                      :: imax = 1000
@@ -448,14 +448,13 @@ CONTAINS
 
       IF (MPIvar%glob_id .EQ. 0) THEN
          WRITE (*, *) "*************************************************"
-         WRITE (*, *) "            DOMAIN DECOMPOSITION                 "
+         WRITE (*, *) "*            DOMAIN DECOMPOSITION               *"
          WRITE (*, *) "*************************************************"
       END IF
 
       pi_loc = 4.D0*DATAN(1.D0)
       rot_angle = 1.
 
-      elemType = refElPol%elemType
       Nvert = refElPol%Nvertices
       n_ext_faces = Mesh%Nextfaces
       n_int_faces = Mesh%Nintfaces
