@@ -448,6 +448,46 @@ CONTAINS
 
    END SUBROUTINE free_all
 
+   SUBROUTINE free_mesh_order
+
+      IF (ASSOCIATED(Mesh%Tlin)) THEN
+         DEALLOCATE (Mesh%Tlin)
+         NULLIFY(Mesh%Tlin)
+      END IF
+
+      IF (ALLOCATED(Mesh%F)) THEN
+         DEALLOCATE (Mesh%F)
+      END IF
+      IF (ALLOCATED(Mesh%N)) THEN
+         DEALLOCATE (Mesh%N)
+      END IF
+      IF (ALLOCATED(Mesh%faces)) THEN
+         DEALLOCATE (Mesh%faces)
+      END IF
+      IF (ALLOCATED(Mesh%extfaces)) THEN
+         DEALLOCATE (Mesh%extfaces)
+      END IF
+      IF (ALLOCATED(Mesh%intfaces)) THEN
+         DEALLOCATE (Mesh%intfaces)
+      END IF
+      IF (ALLOCATED(Mesh%flipFace)) THEN
+         DEALLOCATE (Mesh%flipFace)
+      END IF
+      IF (ALLOCATED(Mesh%Fdir)) THEN
+         DEALLOCATE (Mesh%Fdir)
+      END IF
+
+      IF (ASSOCIATED(Mesh%elemSize)) THEN
+         DEALLOCATE (Mesh%elemSize)
+         NULLIFY(Mesh%elemSize)
+      END IF
+
+      IF (ALLOCATED(Mesh%periodic_faces)) THEN
+         DEALLOCATE (Mesh%periodic_faces)
+      END IF
+
+   END SUBROUTINE free_mesh_order
+
    SUBROUTINE free_mesh
       ! Mesh
       IF (ASSOCIATED(Mesh%T)) THEN
