@@ -8,17 +8,21 @@ MODULE adaptivity_general_module
 CONTAINS
 
    SUBROUTINE adaptively_refine_mesh(mesh_name, count_adapt, order)
+      USE HDF5_io_module
 #ifdef PARALL
       USE Communications, ONLY: gather_mesh, gather_elemental_values
 #endif
       CHARACTER(1024), INTENT(IN) :: mesh_name
       INTEGER, INTENT(IN)       :: count_adapt
       INTEGER, INTENT(IN)       :: order
-      REAL*8                    :: h_map_elements(SIZE(Mesh%T, 1))
-      REAL*8                    :: h_target_elements(SIZE(Mesh%T, 1))
+      REAL*8                    :: h_map_elements(Mesh%Nelems)
+      REAL*8                    :: h_target_elements(Mesh%Nelems)
       REAL*8, POINTER           :: h_target_vertices(:)
-#ifdef PARALL
+      INTEGER(HID_T)              :: file_id, group_id1
       INTEGER                   :: ierr
+
+#ifdef PARALL
+
       INTEGER, POINTER          :: T_global(:, :)
       REAL*8, POINTER           :: X_global(:,:)
       REAL*8, POINTER           :: h_target_elements_global(:)
@@ -32,11 +36,11 @@ CONTAINS
 
 #ifdef PARALL
       CALL gather_mesh(Mesh,T_global,X_global)
-      CALL gather_elemental_values(Mesh, h_target_elements, h_target_elements_global,allgather=.FALSE.)
+      CALL gather_elemental_values(Mesh, h_target_elements, h_target_elements_global, allgather=.FALSE.)
       IF (MPIvar%glob_id .EQ. 0) THEN
-         CALL gmsh_create_from_h_target(h_target_elements_global,X_global, T_global(:,:3), order)
+         CALL gmsh_create_from_h_target(h_target_elements_global,X_global, T_global(:,1:3), order)
 #else
-      CALL gmsh_create_from_h_target(h_target_elements,Mesh%X, Mesh%T(:,:3), order)
+      CALL gmsh_create_from_h_target(h_target_elements,Mesh%X, Mesh%T(:,1:3), order)
 #endif
       CALL save_copy_new_mesh(mesh_name, count_adapt)
 #ifdef PARALL
