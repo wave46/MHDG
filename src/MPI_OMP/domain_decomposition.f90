@@ -2,7 +2,8 @@ MODULE domain_decomposition_module
    USE MPI_OMP
    USE globals
    USE adaptivity_common_module, ONLY: unique_1D, unique_stable
-   USE preprocess, ONLY: GetFaces_mod
+   USE Communications, ONLY: reshape_transpose_permute, reshape_transpose_permute_4D, flatten_row_major, flatten_row_major_4D
+   USE preprocess, ONLY: GetFaces_mod, mesh_preprocess
 
    IMPLICIT NONE
 
