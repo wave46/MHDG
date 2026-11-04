@@ -1,3 +1,4 @@
+*.mod
 *src_git/
 *test/B_field*
 *test/Jtor*
@@ -18,3 +19,4 @@
 *lib_*
 test/*.sh*
 code_tests
+*.bak
