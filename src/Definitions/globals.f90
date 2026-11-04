@@ -448,7 +448,7 @@ CONTAINS
 
    END SUBROUTINE free_all
 
-   SUBROUTINE free_mesh_order
+   SUBROUTINE free_mesh_ordered
 
       IF (ASSOCIATED(Mesh%Tlin)) THEN
          DEALLOCATE (Mesh%Tlin)
@@ -486,7 +486,7 @@ CONTAINS
          DEALLOCATE (Mesh%periodic_faces)
       END IF
 
-   END SUBROUTINE free_mesh_order
+   END SUBROUTINE free_mesh_ordered
 
    SUBROUTINE free_mesh
       ! Mesh
