@@ -6,11 +6,20 @@
 !************************************************************
 
 MODULE adaptivity_common_module
+   USE, INTRINSIC               :: iso_c_binding, ONLY: c_double, c_int, c_size_t
    USE globals
    USE reference_element
    USE gmsh
    USE GMSH_io_module
    IMPLICIT NONE
+
+   TYPE                         :: gmsh_entity_mesh_data
+      INTEGER                   :: DIMENSION = -1
+      INTEGER                   :: tag = -1
+      INTEGER                   :: element_type = -1
+      INTEGER(c_size_t), ALLOCATABLE :: element_tags(:)
+      INTEGER(c_size_t), ALLOCATABLE :: node_tags(:)
+   END TYPE gmsh_entity_mesh_data
 
 CONTAINS
 
@@ -224,264 +233,500 @@ CONTAINS
       END DO
    END SUBROUTINE average_h_target
 
-   SUBROUTINE set_order_mesh(p)
+   ! subroutine set_order_mesh(p)
 
-      INTEGER, INTENT(IN)                      :: p
-      TYPE(Reference_element_type)             :: refElLocal
-      INTEGER                                  :: n_element_nodes, n_face_nodes, n_int_faces, n_nodes, ini,ind, i, j, elem, iface, counter, element_order, elemType, ielem, meshed_face, &
-         n_already_meshed_faces, n_boundaries, n_boundary_elements, Nnodesperelem, n_elements, Ndim, Nelems, Nextfaces, Nnodes, &
-         Nnodesperface, counter1, start, stop_index
-      INTEGER                                  :: temp(p-1), elem_pos(2), face_pos(2), face_nodes(3,p-1), face_info(3), elements(2), nodes_face(2, p-1), element_face(2), already_meshed_face_nodes(2, p-1), already_meshed_element_faces(2), &
-         already_meshed_element(2), ifacenode(p + 1)
-      INTEGER, ALLOCATABLE, DIMENSION(:, :)     :: int_faces, elem_int_face, Tp, Tb
-      INTEGER, ALLOCATABLE, DIMENSION(:)       :: boundaryFlag, unique_boundary_flag
-      LOGICAL, ALLOCATABLE, DIMENSION(:)       :: aux_coord_logical, local_coord_logical, int_face_meshed
-      REAL*8, ALLOCATABLE, DIMENSION(:, :)      :: Xp, Xp_aux, elem_nodes_mod, coord_ref
-      INTEGER , ALLOCATABLE, DIMENSION(:,:)    :: Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_ULIM, Tb_PUFF, Tb_PUMP, mesh_info
+   !    integer, intent(in)                      :: p
+   !    TYPE(Reference_element_type)             :: refElLocal
+   !    integer                                  :: n_element_nodes, n_face_nodes, n_int_faces, n_nodes, ini,ind, i, j, elem, iface, counter, element_order, elemType, ielem, meshed_face, &
+   !       n_already_meshed_faces, n_boundaries, n_boundary_elements, Nnodesperelem, n_elements, Ndim, Nelems, Nextfaces, Nnodes, &
+   !       Nnodesperface, counter1, start, stop_index
+   !    integer                                  :: temp(p-1), elem_pos(2), face_pos(2), face_nodes(3,p-1), face_info(3), elements(2), nodes_face(2, p-1), element_face(2), already_meshed_face_nodes(2, p-1), already_meshed_element_faces(2), &
+   !       already_meshed_element(2), ifacenode(p + 1)
+   !    integer, allocatable, dimension(:, :)     :: int_faces, elem_int_face, Tp, Tb
+   !    integer, allocatable, dimension(:)       :: boundaryFlag, unique_boundary_flag
+   !    logical, allocatable, dimension(:)       :: aux_coord_logical, local_coord_logical, int_face_meshed
+   !    real*8, allocatable, dimension(:, :)      :: Xp, Xp_aux, elem_nodes_mod, coord_ref
+   !    integer , allocatable, dimension(:,:)    :: Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_ULIM, Tb_PUFF, Tb_PUMP, mesh_info
 
-      IF (utils%printint > 0) THEN
-         IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE (6, *) '*************************************************'
-            WRITE (6, *) '*              INCREASE ORDER MESH              *'
-            WRITE (6, *) '*************************************************'
-         END IF
+   !    if (utils%printint > 0) then
+   !       if (MPIvar%glob_id .eq. 0) then
+   !          WRITE (6, *) '*************************************************'
+   !          WRITE (6, *) '*              INCREASE ORDER MESH              *'
+   !          WRITE (6, *) '*************************************************'
+   !       end if
+   !    end if
+
+   !    call create_reference_element(refElLocal, 2, p, verbose=0)
+
+   !    face_nodes = refElLocal%face_nodes(:, 2:SIZE(refElLocal%face_nodes, 2) - 1); ! without vertices
+   !    allocate (coord_ref(SIZE(refElLocal%coord2d, 1), SIZE(refElLocal%coord2d, 2)))
+   !    allocate (int_faces(SIZE(Mesh%intfaces, 1), SIZE(Mesh%intfaces, 2)))
+
+   !    coord_ref = refElLocal%coord2d;
+   !    n_element_nodes = SIZE(coord_ref, 1);
+   !    n_face_nodes = SIZE(face_nodes, 2);
+   !    int_faces = Mesh%intfaces
+   !    elem_int_face = Mesh%F
+
+   !    n_int_faces = SIZE(int_faces, 1);
+   !    do i = 1, SIZE(elem_int_face, 1)
+   !       do j = 1, SIZE(elem_int_face, 2)
+   !          if (elem_int_face(i, j) .gt. n_int_faces) then
+   !             elem_int_face(i, j) = 0
+   !          end if
+   !       end do
+   !    end do
+
+   !    n_elements = SIZE(Mesh%T, 1);
+   !    n_nodes = SIZE(Mesh%X, 1);
+   !    allocate (Xp(n_element_nodes*n_elements, 2))
+   !    allocate (Tp(n_elements, n_element_nodes))
+   !    allocate (aux_coord_logical(n_element_nodes))
+   !    allocate (local_coord_logical(n_element_nodes))
+   !    allocate (int_face_meshed(n_int_faces))
+   !    allocate (elem_nodes_mod(n_element_nodes, 2))
+
+   !    Xp(1:n_nodes, :) = Mesh%X
+   !    Tp(:, 1:3) = Mesh%T
+
+   !    elem_pos(1) = 1
+   !    elem_pos(2) = 3
+   !    face_pos(1) = 2
+   !    face_pos(2) = 4
+
+   !    aux_coord_logical = .true.
+   !    aux_coord_logical(1:3) = .false.
+   !    int_face_meshed = .false.
+
+   !    ini = n_nodes + 1;
+   !    counter1 = 1
+
+   !    do elem = 1, n_elements
+
+   !       local_coord_logical = aux_coord_logical
+
+   !       ! read the faces infos
+   !       face_info = elem_int_face(elem, :)
+
+   !       ! count how many faces are valid .neq. 0
+   !       n_already_meshed_faces = 0
+   !       do iface = 1, 3
+   !          if (face_info(iface) .ne. 0) then
+   !             if (int_face_meshed(face_info(iface)) .eqv. .true.) then
+   !                n_already_meshed_faces = n_already_meshed_faces + 1
+   !             end if
+   !          end if
+   !       end do
+
+   !       ! if there is at least one face valid
+   !       if (n_already_meshed_faces .le. 3) then
+   !          ! loop through all faces of the element
+   !          do iface = 1, 3
+   !             ! if the face is valid
+   !             if (face_info(iface) .ne. 0) then
+   !                ! if it is already remeshed
+   !                if (int_face_meshed(face_info(iface)) .eqv. .true.) then
+   !                   meshed_face = face_info(iface)
+   !                   elements(1) = int_faces(face_info(iface), elem_pos(1))
+   !                   elements(2) = int_faces(face_info(iface), elem_pos(2))
+
+   !                   if (elements(1) .ne. elem) then
+   !                      already_meshed_element(1) = elements(1)
+   !                      already_meshed_element_faces(1) = int_faces(meshed_face, face_pos(1));
+   !                      already_meshed_face_nodes(1, :) = face_nodes(already_meshed_element_faces(1), :);
+   !                   else
+   !                      element_face(1) = int_faces(meshed_face, face_pos(1));
+   !                      nodes_face(1, :) = face_nodes(element_face(1), :);
+   !                      local_coord_logical(nodes_face(1, :)) = .false.
+   !                   end if
+
+   !                   if (elements(2) .ne. elem) then
+   !                      already_meshed_element(2) = elements(2)
+   !                      already_meshed_element_faces(2) = int_faces(meshed_face, face_pos(2));
+   !                      already_meshed_face_nodes(2, :) = face_nodes(already_meshed_element_faces(2), :);
+   !                   else
+   !                      element_face(2) = int_faces(meshed_face, face_pos(2));
+   !                      nodes_face(2, :) = face_nodes(element_face(2), :);
+   !                      local_coord_logical(nodes_face(2, :)) = .false.
+   !                   end if
+
+   !                   if ((elements(1) .ne. elem) .and. (elements(2) .eq. elem)) then
+   !                      call fliplr_int(Tp(already_meshed_element(1), already_meshed_face_nodes(1, :)), temp);
+   !                      Tp(elem, nodes_face(2, :)) = temp
+   !                   end if
+
+   !                   if ((elements(1) .eq. elem) .and. (elements(2) .ne. elem)) then
+   !                      call fliplr_int(Tp(already_meshed_element(2), already_meshed_face_nodes(2, :)), temp)
+   !                      Tp(elem, nodes_face(1, :)) = temp
+   !                   end if
+   !                end if
+   !                int_face_meshed(face_info(iface)) = .true.
+   !             end if
+   !          end do
+   !       end if
+
+   !       elem_nodes_mod = 0
+
+   !       do i = 1, SIZE(local_coord_logical)
+   !          if (local_coord_logical(i) .eqv. .true.) then
+   !             call linear_mapping(Mesh%X(Mesh%T(elem, :), :), coord_ref(i, :), elem_nodes_mod(i, :))
+   !          end if
+   !       end do
+
+   !       ind = ini
+
+   !       do i = 1, SIZE(local_coord_logical)
+   !          if (local_coord_logical(i) .eqv. .true.) then
+   !             Xp(ind, :) = elem_nodes_mod(i, :)
+   !             Tp(elem, i) = ind
+   !             ind = ind + 1
+   !          end if
+   !       end do
+
+   !       if ((n_element_nodes - n_already_meshed_faces*n_face_nodes - 3 - 1) .ge. 0) then
+   !          ini = ini - 1 + n_element_nodes - n_already_meshed_faces*n_face_nodes - 3 + 1
+   !       end if
+
+   !    end do
+
+   !    allocate (Xp_aux(ini - 1, 2))
+   !    Xp_aux(:, :) = Xp(1:ini - 1, :)
+
+   !    n_face_nodes = SIZE(refElLocal%Face_nodes, 2)
+
+   !    call unique_stable(Mesh%boundaryFlag, unique_boundary_flag)
+
+   !    n_boundaries = SIZE(unique_boundary_flag)
+
+   !    do i = 1, n_boundaries
+   !       n_boundary_elements = COUNT(Mesh%boundaryFlag .eq. unique_boundary_flag(i))
+   !       if (n_boundary_elements .ne. 0) then
+   !          if (unique_boundary_flag(i) .eq. 5) then
+   !             allocate (Tb_PUMP(n_boundary_elements, n_face_nodes))
+   !          elseif (unique_boundary_flag(i) .eq. 6) then
+   !             allocate (Tb_PUFF(n_boundary_elements, n_face_nodes))
+   !          elseif (unique_boundary_flag(i) .eq. 7) then
+   !             allocate (Tb_LIM(n_boundary_elements, n_face_nodes))
+   !          elseif (unique_boundary_flag(i) .eq. 8) then
+   !             allocate (Tb_IN(n_boundary_elements, n_face_nodes))
+   !          elseif (unique_boundary_flag(i) .eq. 9) then
+   !             allocate (Tb_OUT(n_boundary_elements, n_face_nodes))
+   !          end if
+   !       end if
+   !    end do
+
+   !    start = 0
+   !    stop_index = 0
+   !    do i = 1, n_boundaries
+
+   !       start = stop_index + 1
+   !       n_boundary_elements = COUNT(Mesh%boundaryFlag .eq. unique_boundary_flag(i))
+   !       stop_index = start + n_boundary_elements - 1
+
+   !       counter = 1
+   !       do j = start, stop_index
+   !          ielem = Mesh%extfaces(j, 1)
+   !          iface = Mesh%extfaces(j, 2)
+   !          ifacenode = refElLocal%face_nodes(iface, :)
+   !          if (unique_boundary_flag(i) .eq. 5) Tb_PUMP(counter, :) = Tp(ielem, ifacenode)
+   !          if (unique_boundary_flag(i) .eq. 6) Tb_PUFF(counter, :) = Tp(ielem, ifacenode)
+   !          if (unique_boundary_flag(i) .eq. 7) Tb_LIM(counter, :) = Tp(ielem, ifacenode)
+   !          if (unique_boundary_flag(i) .eq. 8) Tb_IN(counter, :) = Tp(ielem, ifacenode)
+   !          if (unique_boundary_flag(i) .eq. 9) Tb_OUT(counter, :) = Tp(ielem, ifacenode)
+   !          counter = counter + 1
+   !       end do
+   !    end do
+
+   !    Ndim = SIZE(Xp_aux, 2)
+   !    Nelems = SIZE(Tp, 1)
+
+   !    Nextfaces = 0
+   !    if (ALLOCATED(Tb_IN)) then
+   !       Nextfaces = SIZE(Tb_IN, 1)
+   !    end if
+   !    if (ALLOCATED(Tb_LIM)) then
+   !       Nextfaces = Nextfaces + SIZE(Tb_LIM, 1)
+   !    end if
+   !    if (ALLOCATED(Tb_OUT)) then
+   !       Nextfaces = Nextfaces + SIZE(Tb_OUT, 1)
+   !    end if
+   !    if (ALLOCATED(Tb_PUFF)) then
+   !       Nextfaces = Nextfaces + SIZE(Tb_PUFF, 1)
+   !    end if
+   !    if (ALLOCATED(Tb_PUMP)) then
+   !       Nextfaces = Nextfaces + SIZE(Tb_PUMP, 1)
+   !    end if
+
+   !    Nnodes = SIZE(Xp_aux, 1)
+   !    Nnodesperelem = SIZE(Tp, 2)
+   !    Nnodesperface = n_face_nodes
+   !    elemType = Mesh%elemType
+   !    element_order = n_face_nodes
+
+   !    allocate (mesh_info(SIZE(Mesh%extfaces, 1), SIZE(Mesh%extfaces, 2)))
+
+   !    mesh_info = Mesh%extfaces
+
+   !    call free_mesh
+
+   !    !call generate_elemface_info(Tp,Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, p+1, total_face_info)
+   !    call generate_boundary_names(Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_PUFF, Tb_PUMP, Tb_ULIM, Tb, boundaryFlag, element_order)
+   !    call load_mesh2global_var(Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, Tp, Xp_aux, Tb, boundaryFlag)
+
+   !    call free_reference_element_pol(refElLocal)
+   !    deallocate (int_faces, elem_int_face, Tp, Tb)
+   !    deallocate (boundaryFlag, unique_boundary_flag)
+   !    deallocate (aux_coord_logical, local_coord_logical, int_face_meshed)
+   !    deallocate (Xp, Xp_aux, elem_nodes_mod, coord_ref)
+   !    if (ALLOCATED(Tb_Dirichlet)) deallocate (Tb_Dirichlet)
+   !    if (ALLOCATED(Tb_PUMP)) deallocate (Tb_PUMP)
+   !    if (ALLOCATED(Tb_PUFF)) deallocate (Tb_PUFF)
+   !    if (ALLOCATED(Tb_LEFT)) deallocate (Tb_LEFT)
+   !    if (ALLOCATED(Tb_RIGHT)) deallocate (Tb_RIGHT)
+   !    if (ALLOCATED(Tb_UP)) deallocate (Tb_UP)
+   !    if (ALLOCATED(Tb_DOWN)) deallocate (Tb_DOWN)
+   !    if (ALLOCATED(Tb_WALL)) deallocate (Tb_WALL)
+   !    if (ALLOCATED(Tb_LIM)) deallocate (Tb_LIM)
+   !    if (ALLOCATED(Tb_IN)) deallocate (Tb_IN)
+   !    if (ALLOCATED(Tb_OUT)) deallocate (Tb_OUT)
+   !    if (ALLOCATED(Tb_ULIM)) deallocate (Tb_ULIM)
+   ! end subroutine set_order_mesh
+
+   SUBROUTINE set_order_mesh(mesh_filename, geometry_filename, p, ordered_mesh_name)
+      USE mpi, ONLY: MPI_BARRIER, MPI_COMM_WORLD
+
+      CHARACTER(*), INTENT(IN)  :: mesh_filename, geometry_filename
+      INTEGER, INTENT(IN)       :: p
+      CHARACTER(*), INTENT(OUT) :: ordered_mesh_name
+      INTEGER                   :: barrier_error
+
+      IF (LEN_TRIM(geometry_filename) .EQ. 0) &
+         CALL mesh_order_error('set_2d_order requires geometry_path')
+
+      ordered_mesh_name = './res/mesh_ordered_input'
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE(*,*) 'Increasing mesh order on the supplied CAD geometry.'
+         CALL elevate_mesh_order_with_gmsh(TRIM(mesh_filename), TRIM(geometry_filename), &
+            TRIM(ordered_mesh_name)//'.msh', p)
       END IF
-
-      CALL create_reference_element(refElLocal, 2, p, verbose=0)
-
-      face_nodes = refElLocal%face_nodes(:, 2:SIZE(refElLocal%face_nodes, 2) - 1); ! without vertices
-      ALLOCATE (coord_ref(SIZE(refElLocal%coord2d, 1), SIZE(refElLocal%coord2d, 2)))
-      ALLOCATE (int_faces(SIZE(Mesh%intfaces, 1), SIZE(Mesh%intfaces, 2)))
-
-      coord_ref = refElLocal%coord2d;
-      n_element_nodes = SIZE(coord_ref, 1);
-      n_face_nodes = SIZE(face_nodes, 2);
-      int_faces = Mesh%intfaces
-      elem_int_face = Mesh%F
-
-      n_int_faces = SIZE(int_faces, 1);
-      DO i = 1, SIZE(elem_int_face, 1)
-         DO j = 1, SIZE(elem_int_face, 2)
-            IF (elem_int_face(i, j) .GT. n_int_faces) THEN
-               elem_int_face(i, j) = 0
-            END IF
-         END DO
-      END DO
-
-      n_elements = SIZE(Mesh%T, 1);
-      n_nodes = SIZE(Mesh%X, 1);
-      ALLOCATE (Xp(n_element_nodes*n_elements, 2))
-      ALLOCATE (Tp(n_elements, n_element_nodes))
-      ALLOCATE (aux_coord_logical(n_element_nodes))
-      ALLOCATE (local_coord_logical(n_element_nodes))
-      ALLOCATE (int_face_meshed(n_int_faces))
-      ALLOCATE (elem_nodes_mod(n_element_nodes, 2))
-
-      Xp(1:n_nodes, :) = Mesh%X
-      Tp(:, 1:3) = Mesh%T
-
-      elem_pos(1) = 1
-      elem_pos(2) = 3
-      face_pos(1) = 2
-      face_pos(2) = 4
-
-      aux_coord_logical = .TRUE.
-      aux_coord_logical(1:3) = .FALSE.
-      int_face_meshed = .FALSE.
-
-      ini = n_nodes + 1;
-      counter1 = 1
-
-      DO elem = 1, n_elements
-
-         local_coord_logical = aux_coord_logical
-
-         ! read the faces infos
-         face_info = elem_int_face(elem, :)
-
-         ! count how many faces are valid .neq. 0
-         n_already_meshed_faces = 0
-         DO iface = 1, 3
-            IF (face_info(iface) .NE. 0) THEN
-               IF (int_face_meshed(face_info(iface)) .EQV. .TRUE.) THEN
-                  n_already_meshed_faces = n_already_meshed_faces + 1
-               END IF
-            END IF
-         END DO
-
-         ! if there is at least one face valid
-         IF (n_already_meshed_faces .LE. 3) THEN
-            ! loop through all faces of the element
-            DO iface = 1, 3
-               ! if the face is valid
-               IF (face_info(iface) .NE. 0) THEN
-                  ! if it is already remeshed
-                  IF (int_face_meshed(face_info(iface)) .EQV. .TRUE.) THEN
-                     meshed_face = face_info(iface)
-                     elements(1) = int_faces(face_info(iface), elem_pos(1))
-                     elements(2) = int_faces(face_info(iface), elem_pos(2))
-
-                     IF (elements(1) .NE. elem) THEN
-                        already_meshed_element(1) = elements(1)
-                        already_meshed_element_faces(1) = int_faces(meshed_face, face_pos(1));
-                        already_meshed_face_nodes(1, :) = face_nodes(already_meshed_element_faces(1), :);
-                     ELSE
-                        element_face(1) = int_faces(meshed_face, face_pos(1));
-                        nodes_face(1, :) = face_nodes(element_face(1), :);
-                        local_coord_logical(nodes_face(1, :)) = .FALSE.
-                     END IF
-
-                     IF (elements(2) .NE. elem) THEN
-                        already_meshed_element(2) = elements(2)
-                        already_meshed_element_faces(2) = int_faces(meshed_face, face_pos(2));
-                        already_meshed_face_nodes(2, :) = face_nodes(already_meshed_element_faces(2), :);
-                     ELSE
-                        element_face(2) = int_faces(meshed_face, face_pos(2));
-                        nodes_face(2, :) = face_nodes(element_face(2), :);
-                        local_coord_logical(nodes_face(2, :)) = .FALSE.
-                     END IF
-
-                     IF ((elements(1) .NE. elem) .AND. (elements(2) .EQ. elem)) THEN
-                        CALL fliplr_int(Tp(already_meshed_element(1), already_meshed_face_nodes(1, :)), temp);
-                        Tp(elem, nodes_face(2, :)) = temp
-                     END IF
-
-                     IF ((elements(1) .EQ. elem) .AND. (elements(2) .NE. elem)) THEN
-                        CALL fliplr_int(Tp(already_meshed_element(2), already_meshed_face_nodes(2, :)), temp)
-                        Tp(elem, nodes_face(1, :)) = temp
-                     END IF
-                  END IF
-                  int_face_meshed(face_info(iface)) = .TRUE.
-               END IF
-            END DO
-         END IF
-
-         elem_nodes_mod = 0
-
-         DO i = 1, SIZE(local_coord_logical)
-            IF (local_coord_logical(i) .EQV. .TRUE.) THEN
-               CALL linear_mapping(Mesh%X(Mesh%T(elem, :), :), coord_ref(i, :), elem_nodes_mod(i, :))
-            END IF
-         END DO
-
-         ind = ini
-
-         DO i = 1, SIZE(local_coord_logical)
-            IF (local_coord_logical(i) .EQV. .TRUE.) THEN
-               Xp(ind, :) = elem_nodes_mod(i, :)
-               Tp(elem, i) = ind
-               ind = ind + 1
-            END IF
-         END DO
-
-         IF ((n_element_nodes - n_already_meshed_faces*n_face_nodes - 3 - 1) .GE. 0) THEN
-            ini = ini - 1 + n_element_nodes - n_already_meshed_faces*n_face_nodes - 3 + 1
-         END IF
-
-      END DO
-
-      ALLOCATE (Xp_aux(ini - 1, 2))
-      Xp_aux(:, :) = Xp(1:ini - 1, :)
-
-      n_face_nodes = SIZE(refElLocal%Face_nodes, 2)
-
-      CALL unique_stable(Mesh%boundaryFlag, unique_boundary_flag)
-
-      n_boundaries = SIZE(unique_boundary_flag)
-
-      DO i = 1, n_boundaries
-         n_boundary_elements = COUNT(Mesh%boundaryFlag .EQ. unique_boundary_flag(i))
-         IF (n_boundary_elements .NE. 0) THEN
-            IF (unique_boundary_flag(i) .EQ. 5) THEN
-               ALLOCATE (Tb_PUMP(n_boundary_elements, n_face_nodes))
-            ELSEIF (unique_boundary_flag(i) .EQ. 6) THEN
-               ALLOCATE (Tb_PUFF(n_boundary_elements, n_face_nodes))
-            ELSEIF (unique_boundary_flag(i) .EQ. 7) THEN
-               ALLOCATE (Tb_LIM(n_boundary_elements, n_face_nodes))
-            ELSEIF (unique_boundary_flag(i) .EQ. 8) THEN
-               ALLOCATE (Tb_IN(n_boundary_elements, n_face_nodes))
-            ELSEIF (unique_boundary_flag(i) .EQ. 9) THEN
-               ALLOCATE (Tb_OUT(n_boundary_elements, n_face_nodes))
-            END IF
-         END IF
-      END DO
-
-      start = 0
-      stop_index = 0
-      DO i = 1, n_boundaries
-
-         start = stop_index + 1
-         n_boundary_elements = COUNT(Mesh%boundaryFlag .EQ. unique_boundary_flag(i))
-         stop_index = start + n_boundary_elements - 1
-
-         counter = 1
-         DO j = start, stop_index
-            ielem = Mesh%extfaces(j, 1)
-            iface = Mesh%extfaces(j, 2)
-            ifacenode = refElLocal%face_nodes(iface, :)
-            IF (unique_boundary_flag(i) .EQ. 5) Tb_PUMP(counter, :) = Tp(ielem, ifacenode)
-            IF (unique_boundary_flag(i) .EQ. 6) Tb_PUFF(counter, :) = Tp(ielem, ifacenode)
-            IF (unique_boundary_flag(i) .EQ. 7) Tb_LIM(counter, :) = Tp(ielem, ifacenode)
-            IF (unique_boundary_flag(i) .EQ. 8) Tb_IN(counter, :) = Tp(ielem, ifacenode)
-            IF (unique_boundary_flag(i) .EQ. 9) Tb_OUT(counter, :) = Tp(ielem, ifacenode)
-            counter = counter + 1
-         END DO
-      END DO
-
-      Ndim = SIZE(Xp_aux, 2)
-      Nelems = SIZE(Tp, 1)
-
-      Nextfaces = 0
-      IF (ALLOCATED(Tb_IN)) THEN
-         Nextfaces = SIZE(Tb_IN, 1)
-      END IF
-      IF (ALLOCATED(Tb_LIM)) THEN
-         Nextfaces = Nextfaces + SIZE(Tb_LIM, 1)
-      END IF
-      IF (ALLOCATED(Tb_OUT)) THEN
-         Nextfaces = Nextfaces + SIZE(Tb_OUT, 1)
-      END IF
-      IF (ALLOCATED(Tb_PUFF)) THEN
-         Nextfaces = Nextfaces + SIZE(Tb_PUFF, 1)
-      END IF
-      IF (ALLOCATED(Tb_PUMP)) THEN
-         Nextfaces = Nextfaces + SIZE(Tb_PUMP, 1)
-      END IF
-
-      Nnodes = SIZE(Xp_aux, 1)
-      Nnodesperelem = SIZE(Tp, 2)
-      Nnodesperface = n_face_nodes
-      elemType = Mesh%elemType
-      element_order = n_face_nodes
-
-      ALLOCATE (mesh_info(SIZE(Mesh%extfaces, 1), SIZE(Mesh%extfaces, 2)))
-
-      mesh_info = Mesh%extfaces
-
-      CALL free_mesh
-
-      !call generate_elemface_info(Tp,Tb_IN, Tb_LIM, Tb_PUFF, Tb_PUMP, Tb_OUT, p+1, total_face_info)
-      CALL generate_boundary_names(Tb_Dirichlet, Tb_LEFT, Tb_RIGHT, Tb_UP, Tb_DOWN, Tb_WALL, Tb_LIM, Tb_IN, Tb_OUT, Tb_PUFF, Tb_PUMP, Tb_ULIM, Tb, boundaryFlag, element_order)
-      CALL load_mesh2global_var(Ndim, Nelems, Nextfaces, Nnodes, Nnodesperelem, Nnodesperface, elemType, Tp, Xp_aux, Tb, boundaryFlag)
-
-      CALL free_reference_element_pol(refElLocal)
-      DEALLOCATE (int_faces, elem_int_face, Tp, Tb)
-      DEALLOCATE (boundaryFlag, unique_boundary_flag)
-      DEALLOCATE (aux_coord_logical, local_coord_logical, int_face_meshed)
-      DEALLOCATE (Xp, Xp_aux, elem_nodes_mod, coord_ref)
-      IF (ALLOCATED(Tb_Dirichlet)) DEALLOCATE (Tb_Dirichlet)
-      IF (ALLOCATED(Tb_PUMP)) DEALLOCATE (Tb_PUMP)
-      IF (ALLOCATED(Tb_PUFF)) DEALLOCATE (Tb_PUFF)
-      IF (ALLOCATED(Tb_LEFT)) DEALLOCATE (Tb_LEFT)
-      IF (ALLOCATED(Tb_RIGHT)) DEALLOCATE (Tb_RIGHT)
-      IF (ALLOCATED(Tb_UP)) DEALLOCATE (Tb_UP)
-      IF (ALLOCATED(Tb_DOWN)) DEALLOCATE (Tb_DOWN)
-      IF (ALLOCATED(Tb_WALL)) DEALLOCATE (Tb_WALL)
-      IF (ALLOCATED(Tb_LIM)) DEALLOCATE (Tb_LIM)
-      IF (ALLOCATED(Tb_IN)) DEALLOCATE (Tb_IN)
-      IF (ALLOCATED(Tb_OUT)) DEALLOCATE (Tb_OUT)
-      IF (ALLOCATED(Tb_ULIM)) DEALLOCATE (Tb_ULIM)
+      CALL MPI_BARRIER(MPI_COMM_WORLD, barrier_error)
    END SUBROUTINE set_order_mesh
+
+   SUBROUTINE elevate_mesh_order_with_gmsh(mesh_filename, geometry_filename, output_filename, p)
+      CHARACTER(*), INTENT(IN)                   :: mesh_filename, geometry_filename, output_filename
+      INTEGER, INTENT(IN)                        :: p
+      TYPE(gmsh_t)                               :: gmsh_l
+      TYPE(gmsh_entity_mesh_data), ALLOCATABLE   :: source_entities(:)
+      INTEGER(c_size_t), ALLOCATABLE             :: source_node_tags(:)
+      REAL(c_double), ALLOCATABLE                :: source_coordinates(:)
+      INTEGER, ALLOCATABLE                       :: source_node_dimensions(:), source_node_entities(:)
+      INTEGER                                    :: source_entity_count
+
+      CALL gmsh_l%initialize()
+      CALL gmsh_l%option%setNumber('General.Verbosity', 2.d0)
+      CALL gmsh_l%open(mesh_filename)
+      CALL capture_source_mesh(gmsh_l, source_node_tags, source_coordinates, source_node_dimensions, &
+         source_node_entities, source_entities, source_entity_count)
+
+      CALL gmsh_l%clear()
+      CALL gmsh_l%open(geometry_filename)
+      CALL classify_cad_point_nodes(gmsh_l, source_coordinates, source_node_dimensions, source_node_entities, &
+         source_entities, source_entity_count)
+      CALL add_source_nodes_to_cad(gmsh_l, source_node_tags, source_coordinates, source_node_dimensions, &
+         source_node_entities)
+      CALL add_source_elements_to_cad(gmsh_l, source_entities, source_entity_count)
+
+      CALL gmsh_l%model%mesh%setOrder(p)
+      CALL gmsh_l%model%mesh%optimize('HighOrder')
+      CALL gmsh_l%option%setNumber('Mesh.MshFileVersion', 2.2d0)
+      CALL gmsh_l%write(output_filename)
+      CALL gmsh_l%finalize()
+   END SUBROUTINE elevate_mesh_order_with_gmsh
+
+   SUBROUTINE capture_source_mesh(gmsh_l, node_tags, coordinates, node_dimensions, node_entities, &
+      entity_data, entity_count)
+      TYPE(gmsh_t), INTENT(INOUT)                         :: gmsh_l
+      INTEGER(c_size_t), ALLOCATABLE, INTENT(OUT)         :: node_tags(:)
+      REAL(c_double), ALLOCATABLE, INTENT(OUT)            :: coordinates(:)
+      INTEGER, ALLOCATABLE, INTENT(OUT)                   :: node_dimensions(:), node_entities(:)
+      TYPE(gmsh_entity_mesh_data), ALLOCATABLE, INTENT(OUT) :: entity_data(:)
+      INTEGER, INTENT(OUT)                                :: entity_count
+      INTEGER(c_int), ALLOCATABLE                         :: dimension_tags(:,:), element_types(:)
+      INTEGER(c_size_t), ALLOCATABLE                      :: entity_node_tags(:)
+      REAL(c_double), ALLOCATABLE                         :: unused_coordinates(:), unused_parameters(:)
+      INTEGER, ALLOCATABLE                                :: node_index(:)
+      INTEGER                                             :: entity, node, position, DIMENSION, tag, source_element_type
+
+      CALL gmsh_l%model%mesh%getNodes(node_tags, coordinates, unused_parameters, returnParametricCoord=.FALSE.)
+      IF (SIZE(node_tags) .EQ. 0) CALL mesh_order_error('source mesh has no nodes')
+      ALLOCATE(node_index(INT(MAXVAL(node_tags))))
+      node_index = 0
+      DO node = 1, SIZE(node_tags)
+         node_index(INT(node_tags(node))) = node
+      END DO
+
+      ALLOCATE(node_dimensions(SIZE(node_tags)), node_entities(SIZE(node_tags)))
+      node_dimensions = -1
+      node_entities = -1
+      CALL gmsh_l%model%getEntities(dimension_tags)
+      ALLOCATE(entity_data(SIZE(dimension_tags,2)))
+      entity_count = 0
+
+      DO entity = 1, SIZE(dimension_tags,2)
+         DIMENSION = INT(dimension_tags(1,entity))
+         tag = INT(dimension_tags(2,entity))
+         IF (DIMENSION .LT. 0 .OR. DIMENSION .GT. 2) CYCLE
+         CALL gmsh_l%model%mesh%getNodes(entity_node_tags, unused_coordinates, unused_parameters, &
+            dim=DIMENSION, tag=tag, includeBoundary=.FALSE., returnParametricCoord=.FALSE.)
+         DO node = 1, SIZE(entity_node_tags)
+            position = node_index(INT(entity_node_tags(node)))
+            node_dimensions(position) = DIMENSION
+            node_entities(position) = tag
+         END DO
+
+         IF (DIMENSION .EQ. 0) CYCLE
+         source_element_type = MERGE(1, 2, DIMENSION .EQ. 1)
+         CALL gmsh_l%model%mesh%getElementTypes(element_types, dim=DIMENSION, tag=tag)
+         IF (ANY(element_types .NE. source_element_type)) &
+            CALL mesh_order_error('set_2d_order requires a first-order line/triangle mesh')
+         IF (SIZE(element_types) .EQ. 0) CYCLE
+
+         entity_count = entity_count + 1
+         entity_data(entity_count)%DIMENSION = DIMENSION
+         entity_data(entity_count)%tag = tag
+         entity_data(entity_count)%element_type = source_element_type
+         CALL gmsh_l%model%mesh%getElementsByType(source_element_type, &
+            entity_data(entity_count)%element_tags, entity_data(entity_count)%node_tags, tag=tag)
+      END DO
+
+      IF (entity_count .EQ. 0) CALL mesh_order_error('source mesh has no line or triangle elements')
+      IF (ANY(node_dimensions .EQ. -1)) CALL mesh_order_error('source mesh contains unclassified nodes')
+   END SUBROUTINE capture_source_mesh
+
+   SUBROUTINE classify_cad_point_nodes(gmsh_l, coordinates, node_dimensions, node_entities, &
+      entity_data, entity_count)
+      TYPE(gmsh_t), INTENT(INOUT)              :: gmsh_l
+      REAL(c_double), INTENT(IN)                :: coordinates(:)
+      INTEGER, INTENT(INOUT)                    :: node_dimensions(:), node_entities(:)
+      TYPE(gmsh_entity_mesh_data), INTENT(IN)   :: entity_data(:)
+      INTEGER, INTENT(IN)                       :: entity_count
+      INTEGER(c_int), ALLOCATABLE               :: curves(:,:), curve_boundary(:,:)
+      INTEGER, ALLOCATABLE                      :: point_tags(:)
+      REAL(c_double), ALLOCATABLE               :: point_coordinates(:), no_parameters(:)
+      REAL(c_double)                            :: tolerance, distance, nearest_distance, coordinate_scale
+      INTEGER                                   :: curve, boundary, point_count, point, node, nearest_node, point_tag
+
+      CALL gmsh_l%model%getEntities(curves, dim=1)
+      ALLOCATE(point_tags(MAX(1,2*SIZE(curves,2))), no_parameters(0))
+      point_count = 0
+      DO curve = 1, SIZE(curves,2)
+         IF (.NOT. entity_has_elements(entity_data, entity_count, 1, INT(curves(2,curve)))) CYCLE
+         CALL gmsh_l%model%getBoundary(curves(:,curve:curve), curve_boundary, combined=.FALSE., oriented=.FALSE.)
+         DO boundary = 1, SIZE(curve_boundary,2)
+            IF (curve_boundary(1,boundary) .NE. 0_c_int) CYCLE
+            point_tag = ABS(INT(curve_boundary(2,boundary)))
+            IF (point_count .EQ. 0 .OR. .NOT. ANY(point_tags(1:point_count) .EQ. point_tag)) THEN
+               point_count = point_count + 1
+               point_tags(point_count) = point_tag
+            END IF
+         END DO
+      END DO
+
+      coordinate_scale = MAX(1.d0, MAXVAL(coordinates(1::3))-MINVAL(coordinates(1::3)), &
+         MAXVAL(coordinates(2   ::3))-MINVAL(coordinates(2::3)))
+      tolerance = 1.d-8*coordinate_scale
+      DO point = 1, point_count
+         CALL gmsh_l%model%getValue(0, point_tags(point), no_parameters, point_coordinates)
+         nearest_node = 0
+         nearest_distance = HUGE(1.d0)
+         DO node = 1, SIZE(node_dimensions)
+            IF (node_dimensions(node) .GT. 1) CYCLE
+            distance = SQRT(SUM((coordinates(3*node-2:3*node)-point_coordinates(1:3))**2))
+            IF (distance .LT. nearest_distance) THEN
+               nearest_distance = distance
+               nearest_node = node
+            END IF
+         END DO
+         IF (nearest_node .EQ. 0 .OR. nearest_distance .GT. tolerance) &
+            CALL mesh_order_error('CAD endpoint does not match a source mesh vertex')
+         node_dimensions(nearest_node) = 0
+         node_entities(nearest_node) = point_tags(point)
+      END DO
+   END SUBROUTINE classify_cad_point_nodes
+
+   LOGICAL FUNCTION entity_has_elements(entity_data, entity_count, DIMENSION, tag)
+      TYPE(gmsh_entity_mesh_data), INTENT(IN) :: entity_data(:)
+      INTEGER, INTENT(IN)                     :: entity_count, DIMENSION, tag
+      INTEGER                                 :: entity
+
+      entity_has_elements = .FALSE.
+      DO entity = 1, entity_count
+         IF (entity_data(entity)%DIMENSION .EQ. DIMENSION .AND. entity_data(entity)%tag .EQ. tag) THEN
+            entity_has_elements = .TRUE.
+            RETURN
+         END IF
+      END DO
+   END FUNCTION entity_has_elements
+
+   SUBROUTINE add_source_nodes_to_cad(gmsh_l, node_tags, coordinates, node_dimensions, node_entities)
+      TYPE(gmsh_t), INTENT(INOUT)          :: gmsh_l
+      INTEGER(c_size_t), INTENT(IN)        :: node_tags(:)
+      REAL(c_double), INTENT(IN)           :: coordinates(:)
+      INTEGER, INTENT(IN)                  :: node_dimensions(:), node_entities(:)
+      INTEGER(c_int), ALLOCATABLE          :: cad_entities(:,:)
+      INTEGER(c_size_t), ALLOCATABLE       :: entity_node_tags(:)
+      REAL(c_double), ALLOCATABLE          :: entity_coordinates(:), parameters(:)
+      INTEGER                              :: DIMENSION, entity, tag, count_nodes, node, local_node, added_nodes
+
+      added_nodes = 0
+      DO DIMENSION = 0, 2
+         CALL gmsh_l%model%getEntities(cad_entities, dim=DIMENSION)
+         DO entity = 1, SIZE(cad_entities,2)
+            tag = INT(cad_entities(2,entity))
+            count_nodes = COUNT(node_dimensions .EQ. DIMENSION .AND. node_entities .EQ. tag)
+            IF (count_nodes .EQ. 0) CYCLE
+            ALLOCATE(entity_node_tags(count_nodes), entity_coordinates(3*count_nodes))
+            local_node = 0
+            DO node = 1, SIZE(node_tags)
+               IF (node_dimensions(node) .NE. DIMENSION .OR. node_entities(node) .NE. tag) CYCLE
+               local_node = local_node + 1
+               entity_node_tags(local_node) = node_tags(node)
+               entity_coordinates(3*local_node-2:3*local_node) = coordinates(3*node-2:3*node)
+            END DO
+
+            IF (DIMENSION .EQ. 0) THEN
+               CALL gmsh_l%model%mesh%addNodes(DIMENSION, tag, entity_node_tags, entity_coordinates)
+            ELSE
+               CALL gmsh_l%model%getParametrization(DIMENSION, tag, entity_coordinates, parameters)
+               CALL gmsh_l%model%mesh%addNodes(DIMENSION, tag, entity_node_tags, entity_coordinates, &
+                  parametricCoord=parameters)
+               DEALLOCATE(parameters)
+            END IF
+            added_nodes = added_nodes + count_nodes
+            DEALLOCATE(entity_node_tags, entity_coordinates)
+         END DO
+      END DO
+      IF (added_nodes .NE. SIZE(node_tags)) CALL mesh_order_error('source mesh and CAD entity tags do not match')
+   END SUBROUTINE add_source_nodes_to_cad
+
+   SUBROUTINE add_source_elements_to_cad(gmsh_l, entity_data, entity_count)
+      TYPE(gmsh_t), INTENT(INOUT)             :: gmsh_l
+      TYPE(gmsh_entity_mesh_data), INTENT(IN) :: entity_data(:)
+      INTEGER, INTENT(IN)                     :: entity_count
+      INTEGER                                 :: entity
+
+      DO entity = 1, entity_count
+         CALL gmsh_l%model%mesh%addElementsByType(entity_data(entity)%tag, entity_data(entity)%element_type, &
+            entity_data(entity)%element_tags, entity_data(entity)%node_tags)
+      END DO
+   END SUBROUTINE add_source_elements_to_cad
+
+   SUBROUTINE mesh_order_error(message)
+      CHARACTER(*), INTENT(IN)  :: message
+
+      WRITE(*,*) 'Unable to increase mesh order on the CAD geometry: ', TRIM(message)
+      ERROR STOP 1
+   END SUBROUTINE mesh_order_error
 
    SUBROUTINE fliplr_int(arrin, arrout)
       INTEGER, DIMENSION(:), INTENT(IN) :: arrin
@@ -925,6 +1170,10 @@ CONTAINS
       INTEGER*8                 :: gmsh_dim, number_of_vertices_per_triangle, i, j, start_index
       INTEGER*4                 :: size_view, number_of_triangles, ret
       REAL*8                    :: sf_index, vertex_coordinates(2), h_target_on_vertex
+      REAL*8, PARAMETER         :: minimum_mesh_size = 0.5d-4
+      REAL*8, PARAMETER         :: target_size_quantum = 2.d-3*minimum_mesh_size
+      REAL*8, PARAMETER         :: view_coordinate_quantum = 1.d-11
+
       !GMSH always have (X,Y,Z) coordinates
       gmsh_dim = 3
       number_of_vertices_per_triangle = 3
@@ -947,8 +1196,8 @@ CONTAINS
       DO i = 1, number_of_triangles
          start_index = (i - 1)*(number_of_vertices_per_triangle*(number_of_vertices_per_triangle + 1))
          DO j = 1, number_of_vertices_per_triangle
-            vertex_coordinates = vertices_coordinates(connectivity(i, j), :)
-            h_target_on_vertex = h_target_on_elements(i)
+            vertex_coordinates = view_coordinate_quantum*ANINT(vertices_coordinates(connectivity(i,j),:)/view_coordinate_quantum)
+            h_target_on_vertex = target_size_quantum*ANINT(h_target_on_elements(i)/target_size_quantum)
             data_for_gmsh(start_index + j) = vertex_coordinates(1)
             data_for_gmsh(start_index + number_of_vertices_per_triangle + j) = vertex_coordinates(2)
             data_for_gmsh(start_index + 2*number_of_vertices_per_triangle + j) = 0.0 ! no Z coordinate
@@ -969,15 +1218,17 @@ CONTAINS
       CALL gmsh_l%model%mesh%field%setAsBackgroundMesh(ret)
 
       ! ignore characteristic length from geometry
+      CALL gmsh_l%option%setNumber("Mesh.RandomSeed", 1d0)
       CALL gmsh_l%option%setNumber("Mesh.MeshSizeExtendFromBoundary", 0d0)
       CALL gmsh_l%option%setNumber("Mesh.MeshSizeFromPoints", 0d0)
       CALL gmsh_l%option%setNumber("Mesh.MeshSizeFromCurvature", 0d0)
       CALL gmsh_l%option%setNumber("Mesh.MeshSizeFactor", 1d0)
-      CALL gmsh_l%option%setNumber("General.NumThreads", REAL(OMPvar%Nthreads)) ! it should be use what specified by OMP_NUM_THREADS
+      CALL gmsh_l%option%setNumber("General.NumThreads", 1d0) !real(OMPvar%Nthreads) should be use what specified by OMP_NUM_THREADS
       CALL gmsh_l%option%setNumber("Mesh.MeshSizeMin", 0.5e-4)
-
       !Changing the algorithm to Delaunay, the default is Frontal-Delaunay (Don't Know if needed)
       CALL gmsh_l%option%setNumber("Mesh.Algorithm", 5d0)
+      CALL gmsh_l%option%setNumber("Geometry.OCCBooleanPreserveNumbering", 1d0)
+
       ! Generate the refined mesh
       CALL gmsh_l%model%mesh%generate(2)
       CALL gmsh_l%model%mesh%setOrder(p_order)
@@ -1001,12 +1252,16 @@ CONTAINS
 
       WRITE (param_adapt_char, *) adapt%param_est
       WRITE (count_adapt_char, *) count_adapt
+
       new_mesh_name_npne = TRIM(ADJUSTL(mesh_name_npne))//'_param'//TRIM(ADJUSTL(param_adapt_char))//'_n'//TRIM(ADJUSTL(count_adapt_char))
 
       buffer = "./res/"//TRIM(ADJUSTL(new_mesh_name_npne))//".msh"
+
       IF (MPIvar%glob_id .EQ. 0) THEN
-         WRITE (*, *) "Mesh saved as: ", TRIM(ADJUSTL(new_mesh_name_npne))
+         WRITE (*, *) "Mesh saved as: ", TRIM(ADJUSTL(buffer))
+         WRITE (*,*)
       END IF
+
       CALL copy_file("./res/temp.msh", buffer)
 
    END SUBROUTINE save_copy_new_mesh
