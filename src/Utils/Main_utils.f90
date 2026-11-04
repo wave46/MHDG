@@ -849,6 +849,36 @@ CONTAINS
 #endif
    END SUBROUTINE reduce_diffusion
 
+   SUBROUTINE error_checking()
+
+      IF (lssolver%pctype .EQ. 'PCMG') THEN
+         IF (lssolver%mglevels .LT. 2) THEN
+            IF (MPIvar%glob_id .EQ. 0) THEN
+               WRITE (*, *) "Warning: number of multigrid levels too low, set to ", lssolver%mglevels, ". It should be at least 2. stop"
+            END IF
+            CALL MPI_ABORT(MPI_COMM_WORLD, -1, ierr)
+         END IF
+         IF (lssolver%mglevels .GT. refElPol%Ndeg/2) THEN
+            IF (MPIvar%glob_id .EQ. 0) THEN
+               WRITE (*, *) "Warning: number of multigrid levels too low, set to ", lssolver%mglevels, ". It should not be more than half of the polynomial degree ", refElPol%Ndeg, ". stop"
+            END IF
+            !call MPI_ABORT(MPI_COMM_WORLD, -1, ierr)
+         END IF
+      END IF
+
+#ifndef TOR3D
+      IF (switch%ripple) THEN
+         IF (MPIvar%glob_id .EQ. 0) THEN
+            WRITE (*, *) "Ripple is activated but the code is not compiled in TOR3D mode. Please recompile with -DTOR3D flag or deactivate ripple. stop"
+         END IF
+         CALL MPI_ABORT(MPI_COMM_WORLD, -1, ierr)
+      END IF
+#endif
+
+      CALL MPI_BARRIER(MPI_COMM_WORLD, ierr)
+
+   END SUBROUTINE error_checking
+
    SUBROUTINE print_timing_infos()
       ! Code timing
       IF (MPIvar%glob_id .EQ. 0) THEN
