@@ -1,8 +1,9 @@
 PROGRAM MHDG
    USE Main_utils
-   USE MPI_OMP
 
    IMPLICIT NONE
+
+   CHARACTER(LEN=255)             :: h5_filename
 
    ! Initialize MPI
    CALL init_MPI_OMP()
@@ -368,7 +369,6 @@ PROGRAM MHDG
       !  call HDG_applyThreshold()
 
       ! Check convergence in time advancing and update
-
       errlstime = computeResidual(sol%u, sol%u0(:, 1), time%dt)
       sol%tres(sol%Nt) = errlstime
       sol%time(sol%Nt) = time%t
