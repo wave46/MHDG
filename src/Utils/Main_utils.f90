@@ -458,29 +458,24 @@ CONTAINS
          restart_adapt = .FALSE.
       END IF
 
+      IF (time_adapt) THEN
+         time_adapt = .FALSE.
+      END IF
+
       IF (utils%timing) THEN
          CALL cpu_TIME(timing%tpe1)
          CALL system_CLOCK(timing%cke1, timing%clock_rate1)
-         timing%runtadapt = timing%runtadapt + (timing%cke1-timing%cks1)/REAL(timing%clock_rate1)
-         timing%cputadapt = timing%cputadapt + timing%tpe1-timing%tps1
+         timing%runtadapt = timing%runtadapt + (timing%cke1 - timing%cks1)/REAL(timing%clock_rate1)
+         timing%cputadapt = timing%cputadapt + timing%tpe1 - timing%tps1
       END IF
 
    END SUBROUTINE adaptivity
 
-
    SUBROUTINE free_before_adaptivity()
-      IF(ASSOCIATED(phys%B)) DEALLOCATE(phys%B)
-      IF(ASSOCIATED(phys%magnetic_flux)) DEALLOCATE(phys%magnetic_flux)
-      IF(ASSOCIATED(phys%Bperturb)) DEALLOCATE(phys%Bperturb)
-      IF(ASSOCIATED(phys%magnetic_psi)) DEALLOCATE(phys%magnetic_psi)
-      IF(ASSOCIATED(phys%Jtor))     DEALLOCATE(phys%Jtor)
-      IF(ASSOCIATED(phys%puff_exp)) DEALLOCATE(phys%puff_exp)
-
-      NULLIFY(phys%magnetic_flux, phys%Bperturb, phys%magnetic_psi, phys%Jtor, phys%puff_exp)
+      CALL free_magnetic_Jtor_puff()
       CALL free_el_mat()
       CALL free_mat()
    END SUBROUTINE free_before_adaptivity
-
 
    !************************************************
    ! Display results
