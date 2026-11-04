@@ -10,10 +10,10 @@
 MODULE magnetic_field
    USE prec_const
    USE globals
-   USE in_out
    USE HDF5_io_module
    USE HDF5
    USE interpolation
+   USE MPI_OMP
 CONTAINS
 
    !**********************************************
@@ -411,6 +411,7 @@ CONTAINS
          time%dt_ME = dt_ME
          time%t_ME = t_ME
       END IF
+
       ! Free memory
       DEALLOCATE (Br2D, Bz2D, Bphi2D, xvec, yvec, xq, yq, Br_nodes, Bz_nodes, Bt_nodes, flux_nodes)
       DEALLOCATE (r2D, z2D, flux2D)
@@ -424,14 +425,14 @@ CONTAINS
    SUBROUTINE load_magnetic_field_nodes()
 
       USE MPI_OMP, ONLY: MPIvar
-      INTEGER                   ::  ierr, k
-      CHARACTER(LEN=1000)       :: fname = 'Evolving_equilibrium'
-      CHARACTER(50)             :: npr, nid, nit
-      CHARACTER(len=1000)       :: fname_complete
-      INTEGER(HID_T)            :: file_id
+      INTEGER                      ::  ierr, k
+      CHARACTER(LEN=1000)          :: fname = 'Evolving_equilibrium'
+      CHARACTER(50)                :: npr, nid, nit
+      CHARACTER(len=1000)          :: fname_complete
+      INTEGER(HID_T)               :: file_id
       REAL*8, POINTER, DIMENSION(:) :: Br, Bz, Bt, flux
-      REAL*8                    :: psiSep, dt_ME, t_ME
-      INTEGER                   :: nnodes
+      REAL*8                       :: psiSep, dt_ME, t_ME
+      INTEGER                      :: nnodes
       INTEGER                            :: min_ind(1)
 #ifdef PARALL
       REAL*8                              :: minflux_in(2), minflux_out(2)
@@ -559,10 +560,6 @@ CONTAINS
       xmin = Mesh%xmin
       ymax = Mesh%ymax
       ymin = Mesh%ymin
-      !xmax = 2314.57127827459!Mesh%xmax
-      !xmin = 1262.49342451341!Mesh%xmin
-      !ymax = 526.038926880589!Mesh%ymax
-      !ymin = -526.038926880589!Mesh%ymin
       xm = 0.5*(xmax + xmin)
       ym = 0.5*(ymax + ymin)
 
@@ -624,6 +621,7 @@ CONTAINS
       END DO
       DEALLOCATE (brmp, bripple)
    END SUBROUTINE addMagneticPerturbation
+
 
    !********************************
    ! A subroutine drawing the (rectangular) coils for RMP and computing B RMP field
@@ -890,6 +888,7 @@ CONTAINS
                   rr2 = rrx**2 + rry**2 + rrz**2
                   rr3 = rr2**(3./2)
 
+
                   dBx = par*(dlyy*rrz - dlzz*rry)/rr3/phys%lscale
                   dBy = par*(dlzz*rrx - dlxx*rrz)/rr3/phys%lscale
                   dBz = par*(dlxx*rry - dlyy*rrx)/rr3/phys%lscale
@@ -966,6 +965,7 @@ CONTAINS
    END SUBROUTINE calcRippleField
 
    SUBROUTINE calcRippleField_grid(elDiscr)
+      USE in_out
       INTEGER, INTENT(IN)                          :: elDiscr
       REAL*8, DIMENSION(Mesh%Nnodes_toroidal)      :: t
       REAL*8, ALLOCATABLE                          :: x(:), y(:)
@@ -1168,6 +1168,14 @@ CONTAINS
          END IF
       END IF
 
+      ! Error messange in case the simulation was ran with Ohmic source but the mesh does not have a core
+      IF(ANY(Mesh%boundaryFlag .EQ. 8)) THEN
+         IF (MPIvar%glob_id .EQ. 0) THEN
+            WRITE(6, *) 'ERROR: simulation was ran with Ohmic source but the mesh does not have a core. STOPPING.'
+            CALL MPI_Abort(MPI_COMM_WORLD, 1, ierr)
+         END IF
+      END IF
+
       ! allocate storing space in phys
       phys%Jtor = 0.
 
@@ -1273,18 +1281,18 @@ CONTAINS
    SUBROUTINE loadMagneticFieldFromExperimentalData()
 
       USE MPI_OMP, ONLY: MPIvar
-      INTEGER                   :: ierr, k, ip, jp, i, ind
+      INTEGER                      :: ierr, k, ip, jp, i, ind
       REAL*8, POINTER, DIMENSION(:, :) :: r2D, z2D, flux2D, Br2D, Bz2D, Bphi2D
       REAL*8, ALLOCATABLE, DIMENSION(:)   :: xvec, yvec, Bmod
-      REAL*8                            :: x, y, Br, Bz, Bt, flux
+      REAL*8                            :: x, y, Br, Bz, Bt, flux, r2D_int, z2D_int
 #ifdef TOR3D
-      INTEGER                   :: j
+      INTEGER                      :: j
 
 #endif
-      CHARACTER(LEN=25)         :: fname = 'WEST_54487'
-      CHARACTER(10)             :: npr, nid, nit
-      CHARACTER(len=1000)       :: fname_complete
-      INTEGER(HID_T)            :: file_id
+      CHARACTER(LEN=25)            :: fname = 'WEST_54487'
+      CHARACTER(10)                :: npr, nid, nit
+      CHARACTER(len=1000)          :: fname_complete
+      INTEGER(HID_T)               :: file_id
 
       ! Dimensions of the file storing the magnetic field for West
       ip = 457
@@ -1357,20 +1365,20 @@ CONTAINS
       END DO
 
       ! Free memory
-      DEALLOCATE (Br2D, Bz2D, Bphi2D, xvec, yvec)
+      DEALLOCATE (Br2D, Bz2D, Bphi2D,xvec, yvec)
       DEALLOCATE (r2D, z2D, flux2D)
 
    END SUBROUTINE loadMagneticFieldFromExperimentalData
 
    SUBROUTINE computeIplasma()
-      REAL*8                    :: Xel(refElPol%Nnodes2D, 2), xyg(refElPol%NGauss2D, 2), dvolu
-      REAL*8                    :: Jtorel(refElPol%Nnodes2D), Jtorg(refElPol%NGauss2D)
-      REAL*8                    :: J11(refElPol%NGauss2D), J12(refElPol%NGauss2D)
-      REAL*8                    :: J21(refElPol%NGauss2D), J22(refElPol%NGauss2D)
-      REAL*8                    :: detJ(refElPol%NGauss2D)
-      INTEGER                   :: iel, g
+      REAL*8                       :: Xel(refElPol%Nnodes2D, 2), xyg(refElPol%NGauss2D, 2), dvolu
+      REAL*8                       :: Jtorel(refElPol%Nnodes2D), Jtorg(refElPol%NGauss2D)
+      REAL*8                       :: J11(refElPol%NGauss2D), J12(refElPol%NGauss2D)
+      REAL*8                       :: J21(refElPol%NGauss2D), J22(refElPol%NGauss2D)
+      REAL*8                       :: detJ(refElPol%NGauss2D)
+      INTEGER                      :: iel, g
 #ifdef PARALL
-      INTEGER                   :: ierr
+      INTEGER                      :: ierr
 #endif
 
       phys%I_p = 0.
@@ -1450,16 +1458,16 @@ CONTAINS
 
    SUBROUTINE SetPuff()
 
-      INTEGER                   :: ierr, i
-      CHARACTER(LEN=1000)       :: fname
-      INTEGER(HID_T)            :: file_id
-      INTEGER                   :: qp, Nn2D
-      INTEGER                   :: T(Mesh%Nelems, refElPol%Nnodes2D)
-      REAL*8                    :: lower, upper, nli, n_Gw, n_la, a = 2.
-      REAL*8                    :: X(Mesh%Nnodes, 2), u(Mesh%Nelems*refElPol%Nnodes2D, phys%Neq)
-      REAL*8                    :: linex(1000), liney(1000), n_i(Mesh%Nelems*refElPol%Nnodes2D)
+      INTEGER                      :: ierr, i
+      CHARACTER(LEN=1000)          :: fname
+      INTEGER(HID_T)               :: file_id
+      INTEGER                      :: qp, Nn2D
+      INTEGER                      :: T(Mesh%Nelems, refElPol%Nnodes2D)
+      REAL*8                       :: lower, upper, nli, n_Gw, n_la, a = 2.
+      REAL*8                       :: X(Mesh%Nnodes, 2), u(Mesh%Nelems*refElPol%Nnodes2D, phys%Neq)
+      REAL*8                       :: linex(1000), liney(1000), n_i(Mesh%Nelems*refElPol%Nnodes2D)
       REAL*8, POINTER, DIMENSION(:) :: puff_time
-      INTEGER                   :: puff_time_idx, puff_len
+      INTEGER                      :: puff_time_idx, puff_len
 
       fname = input%puff_path
       puff_len = input%puff_dimension
