@@ -426,29 +426,49 @@ CONTAINS
       CALL set_parameters()
 
       ! Re-initialize magnetic field (the Mesh is needed)
-      CALL initialize_magnetic_field()
+      CALL initialize_magnetic_field_Jtor()
 
       ! Re-load magnetic field and Jtor
       CALL load_magnetic_field_Jtor()
 
+      ! Re-Initialize shock capturing
+      IF ((switch%shockcp .GT. 0) .OR. ((adapt%adaptivity) .AND. (adapt%shockcp_adapt .GT. 0))) THEN
+         CALL initializeShockCapturing()
+      END IF
+
+      file_name = "./res/projected_solution_n"//TRIM(ADJUSTL(count_adapt_char))
+      CALL HDF5_save_solution(file_name)
 
       ! Re-Allocation and initialization of the elemental matrices
       CALL init_elmat()
 
-      ! restart to first ever iteration
-      matK%start = .TRUE.
-
-      ! Re-Initialize shock capturing
-      IF ((switch%shockcp .GT. 0) .OR. ((adapt%adaptivity) .AND. (adapt%shockcp_adapt .GT. 0)))  THEN
-         CALL initializeShockCapturing()
-      END IF
-
       ! Re-Compute first equation (definition of the gradient)
       CALL HDG_precalculatedfirstequation()
 
+      ! restart to first ever iteration
+      matK%start = .TRUE.
+
+      IF (lssolver%sollib .EQ. 1) THEN
+#ifdef WITH_PASTIX
+         CALL terminate_mat_PASTIX()
+         ! MPI finalization
+#endif
+      ELSEIF (lssolver%sollib .EQ. 2) THEN
+#ifdef WITH_PSBLAS
+         CALL terminate_PSBLAS()
+#endif
+      ELSEIF (lssolver%sollib .EQ. 3) THEN
+#ifdef WITH_PETSC
+         CALL terminate_PETSC()
+         CALL FinalizePETSC()
+         CALL InitPETSC()
+#endif
+      END IF
+
+
       !! UPDATE VARIABLES
       errNR_adapt = 1e10
-      IF(restart_adapt) THEN
+      IF (restart_adapt) THEN
          time%t = time%t - time%dt
          time%it = time%it - 1
          time%ik = time%ik - 1
@@ -564,8 +584,7 @@ CONTAINS
       ! look for the P of the order of the polynomial (P4 for example)
       i = INDEX(save_name, 'P', .TRUE.)
       WRITE (Num, "(i10)") refElPol%nDeg
-      save_name(i+1:i+2) = TRIM(ADJUSTL(Num))
-
+      save_name(i + 1:i + 2) = TRIM(ADJUSTL(Num))
 
 #ifdef TOR3D
       ! Add the number of toroidal elements
@@ -628,76 +647,78 @@ CONTAINS
       END IF
    END SUBROUTINE compute_dt
 
-
-#ifdef TOR3D
-   !**********************************************
-   ! Definition of the toroidal discretization
-   !**********************************************
-   SUBROUTINE define_toroidal_discretization
-      INTEGER                   :: i, ntorloc, itor, itorg, nnodes_toroidal
-      INTEGER                   :: ind(numer%ptor + 1)
-      REAL*8                    :: tdiv(numer%ntor + 1), tel(numer%ptor + 1), htor
-
-      ! Toroidal discretization
-      htor = numer%tmax/numer%ntor
-      tdiv = 0.
-      DO i = 1, numer%ntor
-         tdiv(i + 1) = i*htor
-      END DO
-#ifdef PARALL
-      IF (MPIvar%ntor .GT. 1) THEN
-         ntorloc = numer%ntor/MPIvar%ntor + 1
-      ELSE
-         ntorloc = numer%ntor
-      END IF
-#else
-      ntorloc = numer%ntor
-#endif
-
-      nnodes_toroidal = ntorloc + 1 + (numer%ptor - 1)*ntorloc
-      Mesh%Nnodes_toroidal = nnodes_toroidal
-      ALLOCATE (Mesh%toroidal(nnodes_toroidal))
-
-      DO itor = 1, ntorloc
-#ifdef PARALL
-         itorg = itor + (MPIvar%itor - 1)*numer%ntor/MPIvar%ntor
-         IF (itorg == numer%ntor + 1) itorg = 1
-#else
-         itorg = itor
-#endif
-         tel = tdiv(itorg) + 0.5*(refElTor%coord1d+1)*(tdiv(itorg + 1) - tdiv(itorg))
-         ind = (itor - 1)*numer%ptor + (/(i, i=1, numer%ptor + 1)/)
-         Mesh%toroidal(ind) = tel
-      END DO
-   END SUBROUTINE define_toroidal_discretization
-#endif
-
+#ifndef TOR3D
    SUBROUTINE update_solution_arrays()
-      DEALLOCATE(sol%u_tilde)
-      DEALLOCATE(sol%u_tilde0)
-      ALLOCATE(sol%u_tilde(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
-      ALLOCATE(sol%u_tilde0(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
+      DEALLOCATE (sol%u_tilde)
+      DEALLOCATE (sol%u_tilde0)
+      ALLOCATE (sol%u_tilde(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
+      ALLOCATE (sol%u_tilde0(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
       CALL extractFaceSolution()
       sol%u_tilde0 = sol%u_tilde
 
-      IF(restart_adapt) THEN
-         DEALLOCATE(sol%u0)
+      IF (restart_adapt) THEN
+         DEALLOCATE (sol%u0)
          ALLOCATE (sol%u0(SIZE(sol%u), time%tis))
          sol%u0 = 0.
          sol%u0(:, 1) = sol%u
       END IF
 
-      IF(.NOT. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0))) THEN
+      IF (.NOT. ((adapt%NR_adapt) .AND. (MOD(ir, adapt%freq_NR_adapt) .EQ. 0))) THEN
          ! Update check-point solution to the one projected on the new mesh
-         DEALLOCATE(sol%u_conv)
-         ALLOCATE(sol%u_conv(SIZE(sol%u)))
+         DEALLOCATE (sol%u_conv)
+         ALLOCATE (sol%u_conv(SIZE(sol%u)))
          sol%u_conv = sol%u
-         DEALLOCATE(sol%q_conv)
-         ALLOCATE(sol%q_conv(SIZE(sol%q)))
+         DEALLOCATE (sol%q_conv)
+         ALLOCATE (sol%q_conv(SIZE(sol%q)))
          sol%q_conv = sol%q
       END IF
 
    END SUBROUTINE update_solution_arrays
+#else
+   SUBROUTINE update_solution_arrays()
+      INTEGER                   ::  Ntor, Nelems, Nnodesperface, Nnodesperelem, Nnodesperelem_tor1d, Nfaces, neq, size_utilde
+
+      Ntor = numer%ntor
+      Nelems = Mesh%Nelems
+      Nnodesperface = Mesh%Nnodesperface
+      Nnodesperelem = Mesh%Nnodesperelem
+      Nnodesperelem_tor1d = numer%ptor + 1
+      Nfaces = Mesh%Nfaces
+      neq = phys%Neq
+
+      ! size of utilde per equation local
+      IF (MPIvar%ntor .GT. 1) THEN
+         size_utilde = (Ntor*(Nnodesperface*Nnodesperelem_tor1d*Nfaces + Nelems*Nnodesperelem) + Nelems*Nnodesperelem)*neq
+      ELSE
+         size_utilde = Ntor*(Nnodesperface*Nnodesperelem_tor1d*Nfaces + Nelems*Nnodesperelem)*neq
+      END IF
+
+      DEALLOCATE (sol%u_tilde)
+      DEALLOCATE (sol%u_tilde0)
+      ALLOCATE (sol%u_tilde(size_utilde))
+      ALLOCATE (sol%u_tilde0(size_utilde))
+      CALL extractFaceSolution()
+      sol%u_tilde0 = sol%u_tilde
+
+      IF (restart_adapt) THEN
+         DEALLOCATE (sol%u0)
+         ALLOCATE (sol%u0(SIZE(sol%u), time%tis))
+         sol%u0 = 0.
+         sol%u0(:, 1) = sol%u
+      END IF
+
+      IF (.NOT. ((adapt%NR_adapt) .AND. (MOD(ir, adapt%freq_NR_adapt) .EQ. 0))) THEN
+         ! Update check-point solution to the one projected on the new mesh
+         DEALLOCATE (sol%u_conv)
+         ALLOCATE (sol%u_conv(SIZE(sol%u)))
+         sol%u_conv = sol%u
+         DEALLOCATE (sol%q_conv)
+         ALLOCATE (sol%q_conv(SIZE(sol%q)))
+         sol%q_conv = sol%q
+      END IF
+
+   END SUBROUTINE update_solution_arrays
+#endif
 
    SUBROUTINE update_solution()
       IF (time%tis .GT. 1 .AND. it .LT. time%tis) THEN
@@ -713,9 +734,9 @@ CONTAINS
    END SUBROUTINE update_solution
 
    SUBROUTINE update_uiter()
-      IF(SIZE(uiter) .NE. SIZE(sol%u0(:,1))) THEN
-         DEALLOCATE(uiter)
-         ALLOCATE(uiter(SIZE(sol%u0(:,1))))
+      IF (SIZE(uiter) .NE. SIZE(sol%u0(:, 1))) THEN
+         DEALLOCATE (uiter)
+         ALLOCATE (uiter(SIZE(sol%u0(:, 1))))
       END IF
       uiter = sol%u0(:, 1)
    END SUBROUTINE update_uiter
@@ -724,25 +745,23 @@ CONTAINS
       REAL*8, POINTER, INTENT(OUT)  :: uiter_best(:), qiter_best(:)
       REAL*8, INTENT(IN)           :: u(:), q(:)
 
-      IF(ASSOCIATED(uiter_best)) THEN
-         IF(SIZE(uiter_best) .NE. SIZE(u)) THEN
-            DEALLOCATE(uiter_best)
-            DEALLOCATE(qiter_best)
-            ALLOCATE(uiter_best(SIZE(u)))
-            ALLOCATE(qiter_best(SIZE(q)))
+      IF (ASSOCIATED(uiter_best)) THEN
+         IF (SIZE(uiter_best) .NE. SIZE(u)) THEN
+            DEALLOCATE (uiter_best)
+            DEALLOCATE (qiter_best)
+            ALLOCATE (uiter_best(SIZE(u)))
+            ALLOCATE (qiter_best(SIZE(q)))
             uiter_best = u
             qiter_best = q
          END IF
       ELSE
-         ALLOCATE(uiter_best(SIZE(u)))
-         ALLOCATE(qiter_best(SIZE(q)))
+         ALLOCATE (uiter_best(SIZE(u)))
+         ALLOCATE (qiter_best(SIZE(q)))
          uiter_best = u
          qiter_best = q
       END IF
 
-
    END SUBROUTINE update_uiter_qiter_best
-
 
    SUBROUTINE set_parameters()
       order = refElPol%nDeg
@@ -781,10 +800,10 @@ CONTAINS
    END SUBROUTINE set_parameters
 
    SUBROUTINE initialize_solu0_uiter_uconv()
-      ALLOCATE(uiter(SIZE(sol%u)))
-      ALLOCATE(uiter_best(SIZE(sol%u)))
-      ALLOCATE(qiter_best(SIZE(sol%q)))
-      ALLOCATE(sol%u0(SIZE(sol%u), time%tis))
+      ALLOCATE (uiter(SIZE(sol%u)))
+      ALLOCATE (uiter_best(SIZE(sol%u)))
+      ALLOCATE (qiter_best(SIZE(sol%q)))
+      ALLOCATE (sol%u0(SIZE(sol%u), time%tis))
       ALLOCATE (sol%u_conv(SIZE(sol%u)))
       ALLOCATE (sol%q_conv(SIZE(sol%q)))
       sol%u0 = 0.
@@ -799,8 +818,8 @@ CONTAINS
    SUBROUTINE update_u0(u)
       REAL*8, INTENT(IN)        :: u(:)
 
-      IF(SIZE(sol%u0,1) .NE. SIZE(u)) THEN
-         DEALLOCATE(sol%u0)
+      IF (SIZE(sol%u0, 1) .NE. SIZE(u)) THEN
+         DEALLOCATE (sol%u0)
          ALLOCATE (sol%u0(SIZE(u), time%tis))
       END IF
       sol%u0 = 0.
@@ -809,70 +828,79 @@ CONTAINS
 
    SUBROUTINE update_uconv_qconv(u_conv, q_conv)
       REAL*8, INTENT(IN)        :: u_conv(:), q_conv(:)
-      IF(SIZE(sol%u_conv) .NE. SIZE(u_conv)) THEN
-         DEALLOCATE(sol%u_conv)
-         ALLOCATE(sol%u_conv(SIZE(u_conv)))
+      IF (SIZE(sol%u_conv) .NE. SIZE(u_conv)) THEN
+         DEALLOCATE (sol%u_conv)
+         ALLOCATE (sol%u_conv(SIZE(u_conv)))
       END IF
-      IF(SIZE(sol%q_conv) .NE. SIZE(q_conv)) THEN
-         DEALLOCATE(sol%q_conv)
-         ALLOCATE(sol%q_conv(SIZE(q_conv)))
+      IF (SIZE(sol%q_conv) .NE. SIZE(q_conv)) THEN
+         DEALLOCATE (sol%q_conv)
+         ALLOCATE (sol%q_conv(SIZE(q_conv)))
       END IF
       sol%u_conv = u_conv
       sol%q_conv = q_conv
    END SUBROUTINE update_uconv_qconv
 
    SUBROUTINE update_dumpnr()
-      numer%dumpnr = numer%dumpnr_min+(numer%dumpnr_max-numer%dumpnr_min)/2.*(1+TANH((ir-numer%dumpnr_n0)/numer%dumpnr_width))
+      numer%dumpnr = numer%dumpnr_min + (numer%dumpnr_max - numer%dumpnr_min)/2.*(1 + TANH((ir - numer%dumpnr_n0)/numer%dumpnr_width))
    END SUBROUTINE update_dumpnr
 
    SUBROUTINE initialize_solution()
+
+
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*, *) "*************************************************"
+         WRITE (*, *) "*             INITIALIZING SOLUTION              *"
+         WRITE (*, *) "*************************************************"
+      END IF
+
       IF (nb_args .EQ. 3) THEN
-         ALLOCATE(sol%u_tilde(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
-         ALLOCATE(sol%u_tilde0(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
+         ALLOCATE (sol%u_tilde(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
+         ALLOCATE (sol%u_tilde0(phys%neq*Mesh%Nfaces*Mesh%Nnodesperface))
          CALL extractFaceSolution()
       ELSE IF (nb_args .EQ. 2) THEN
          ! restart simulation: load solution from file (the name is given in argument)
          CALL HDF5_load_solution(save_name)
-         ALLOCATE(sol%u_tilde0(SIZE(sol%u_tilde)))
+         ALLOCATE (sol%u_tilde0(SIZE(sol%u_tilde)))
       ELSE
          CALL init_sol()
       END IF
    END SUBROUTINE initialize_solution
 
    SUBROUTINE load_mesh()
+      CHARACTER(LEN=1024)       :: ordered_mesh_name
 
       IF (nb_args .EQ. 3) THEN
          ! find projection points
          CALL load_mesh_h5(mesh_name)
-         ALLOCATE(xs(SIZE(Mesh%T,1)*SIZE(Mesh%T,2),2))
-         xs = Mesh%X(colint(TRANSPOSE(Mesh%T)),:)
+         ALLOCATE (xs(SIZE(Mesh%T, 1)*SIZE(Mesh%T, 2), 2))
+         xs = Mesh%X(colint(TRANSPOSE(Mesh%T)), :)
          CALL free_mesh()
 
          ! Load solution to project from
          CALL load_mesh_h5(mesh_name_proj)
-         CALL create_reference_element(refElPol, 2, verbose = 1)
+         CALL create_reference_element(refElPol, 2, verbose=1)
          CALL mesh_preprocess(ierr)
          CALL HDF5_load_solution(save_name)
 
          ! Project the solution
          !call projectSolutionDifferentMeshes(xs)
-         DEALLOCATE(xs)
+         DEALLOCATE (xs)
          CALL free_mesh()
          CALL free_reference_element()
       END IF
 
-      IF(switch%readMeshFromSol) THEN
+      IF (switch%readMeshFromSol) THEN
          CALL HDF5_load_mesh_from_solution(save_name)
       ELSE
 
          ! Load the mesh file from gmsh input or h5
          CALL load_gmsh_mesh(mesh_name, 1)
 
-         CALL create_reference_element(refElPol, 2, verbose = 1)
-
-         IF((switch%set_2d_order) .AND. (refElPol%nDeg .NE. switch%order_2d) ) THEN
+         IF ((switch%set_2d_order) .AND. (refElPol%nDeg .NE. switch%order_2d)) THEN
+            CALL create_reference_element(refElPol, 2, verbose=1)
             CALL mesh_preprocess_serial(ierr)
-            CALL set_order_mesh(switch%order_2d)
+            !call set_order_mesh(switch%order_2d)
+            CALL set_order_mesh(TRIM(mesh_name)//'.msh', adapt%geometry_path, switch%order_2d, ordered_mesh_name)
             CALL free_reference_element_pol(refElPol)
             Mesh%X = Mesh%X*phys%lscale
             Mesh%xmax = Mesh%xmax*phys%lscale
@@ -881,20 +909,9 @@ CONTAINS
             Mesh%ymin = Mesh%ymin*phys%lscale
          END IF
 
-         IF(switch%gmsh2h5) THEN
-            IF(MPIvar%glob_id .EQ. 0) THEN
-               h5_filename = TRIM(ADJUSTL(mesh_name)) // '.h5'
-               CALL convert_gmsh_to_hdf5(h5_filename, SIZE(Mesh%X,2), SIZE(Mesh%T,1), SIZE(Mesh%Tb,1), SIZE(Mesh%X,1), SIZE(Mesh%T,2), refElPol%nDeg+1, 0, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-            END IF
-         END IF
-
-
-         IF ((switch%axisym .AND. switch%testcase .GE. 60 .AND. switch%testcase .LT. 80)) THEN
-            Mesh%X(:,1) = Mesh%X(:,1) - geom%R0
-         END IF
          IF (adapt%shockcp_adapt .GT. 0) THEN
-            gmsh_filename      = TRIM(ADJUSTL(mesh_name))//'.msh'
-            CALL copy_file(gmsh_filename,"./res/temp.msh")
+            gmsh_filename = TRIM(ADJUSTL(mesh_name))//'.msh'
+            CALL copy_file(gmsh_filename, "./res/temp.msh")
          END IF
 
       END IF
@@ -916,7 +933,7 @@ CONTAINS
       IF (nb_args .GT. 1) THEN
          CALL getarg(2, save_name)
          save_name = ADJUSTL(TRIM(save_name))
-         IF(MPIvar%glob_id .EQ. 0) THEN
+         IF (MPIvar%glob_id .EQ. 0) THEN
             PRINT *, " Restart simulation with solution: ", save_name
          END IF
       END IF
@@ -1300,93 +1317,95 @@ CONTAINS
             cputtot = cputtot + timing%cputcom
             runttot = runttot + timing%runtcom
 #endif
-            WRITE(6, *) " "
-            WRITE(6, *) " "
-            WRITE(6, *) " "
-            WRITE(6, '(" *", 90("*"), "**")')
-            WRITE(6, '(" *", 36X, "CODE TIMING ( Nthreads = ",i2,")", 26X, " *")') Nthreads
-            WRITE(6, '(" *", 28X, "Cpu-time  (% tot)",6X,    "Run-time  (% tot)   Speedup/Nthreads ", 2X, " *")')
-            WRITE(6, '(" *", 2X,  "Precal. matr     : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
-            &timing%cputpre,timing%cputpre/cputtot*100,timing%runtpre,timing%runtpre/runttot*100,timing%cputpre/timing%runtpre/Nthreads
-            WRITE(6, '(" *", 2X,  "Jacobian         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-            &timing%cputjac,timing%cputjac/cputtot*100,timing%runtjac,timing%runtjac/runttot*100,timing%cputjac/timing%runtjac/Nthreads
-            WRITE(6, '(" *", 2X,  "Mapping          : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-            &timing%cputmap,timing%cputmap/cputtot*100,timing%runtmap,timing%runtmap/runttot*100,timing%cputmap/timing%runtmap/Nthreads
-            WRITE(6, '(" *", 2X,  "Boundary cond.   : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-            &timing%cputbcd,timing%cputbcd/cputtot*100,timing%runtbcd,timing%runtbcd/runttot*100,timing%cputbcd/timing%runtbcd/Nthreads
-            WRITE(6, '(" *", 2X,  "Assembly         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-            &timing%cputass,timing%cputass/cputtot*100,timing%runtass,timing%runtass/runttot*100,timing%cputass/timing%runtass/Nthreads
-            WRITE(6, '(" *", 2X,  "Solve glob. syst.: ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-            &timing%cputglb,timing%cputglb/cputtot*100,timing%runtglb,timing%runtglb/runttot*100,timing%cputglb/timing%runtglb/Nthreads
-            WRITE(6, '(" *", 2X,  "Element solution : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-            &timing%cputsol,timing%cputsol/cputtot*100,timing%runtsol,timing%runtsol/runttot*100,timing%cputsol/timing%runtsol/Nthreads
-            IF(adapt%adaptivity .EQV. .TRUE.) THEN
-               WRITE(6, '(" *", 2X,  "Adaptivity       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+            WRITE (6, *) " "
+            WRITE (6, *) " "
+            WRITE (6, *) " "
+            WRITE (6, '(" *", 90("*"), "**")')
+            WRITE (6, '(" *", 36X, "CODE TIMING ( Nthreads = ",i2,")", 26X, " *")') Nthreads
+            WRITE (6, '(" *", 28X, "Cpu-time  (% tot)",6X,    "Run-time  (% tot)   Speedup/Nthreads ", 2X, " *")')
+            WRITE (6, '(" *", 2X,  "Precal. matr     : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
+            &timing%cputpre, timing%cputpre/cputtot*100, timing%runtpre, timing%runtpre/runttot*100, timing%cputpre/timing%runtpre/Nthreads
+            WRITE (6, '(" *", 2X,  "Jacobian         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+            &timing%cputjac, timing%cputjac/cputtot*100, timing%runtjac, timing%runtjac/runttot*100, timing%cputjac/timing%runtjac/Nthreads
+            WRITE (6, '(" *", 2X,  "Mapping          : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+            &timing%cputmap, timing%cputmap/cputtot*100, timing%runtmap, timing%runtmap/runttot*100, timing%cputmap/timing%runtmap/Nthreads
+            WRITE (6, '(" *", 2X,  "Boundary cond.   : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+            &timing%cputbcd, timing%cputbcd/cputtot*100, timing%runtbcd, timing%runtbcd/runttot*100, timing%cputbcd/timing%runtbcd/Nthreads
+            WRITE (6, '(" *", 2X,  "Assembly         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+            &timing%cputass, timing%cputass/cputtot*100, timing%runtass, timing%runtass/runttot*100, timing%cputass/timing%runtass/Nthreads
+            WRITE (6, '(" *", 2X,  "Solve glob. syst.: ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+            &timing%cputglb, timing%cputglb/cputtot*100, timing%runtglb, timing%runtglb/runttot*100, timing%cputglb/timing%runtglb/Nthreads
+            WRITE (6, '(" *", 2X,  "Element solution : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+            &timing%cputsol, timing%cputsol/cputtot*100, timing%runtsol, timing%runtsol/runttot*100, timing%cputsol/timing%runtsol/Nthreads
+            IF (adapt%adaptivity .EQV. .TRUE.) THEN
+               WRITE (6, '(" *", 2X,  "Adaptivity       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
                &timing%cputadapt,timing%cputadapt/cputtot*100,timing%runtadapt,timing%runtadapt/runttot*100,timing%cputadapt/timing%runtadapt/Nthreads
             END IF
 #ifdef PARALL
-            WRITE(6, '(" *", 2X,  "Communications   : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
-            &timing%cputcom,timing%cputcom/cputtot*100,timing%runtcom,timing%runtcom/runttot*100,timing%cputcom/timing%runtcom/Nthreads
+            WRITE (6, '(" *", 2X,  "Communications   : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")')   &
+            &timing%cputcom, timing%cputcom/cputtot*100, timing%runtcom, timing%runtcom/runttot*100, timing%cputcom/timing%runtcom/Nthreads
 #endif
-            WRITE(6, '(" *", 2X, "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")')   &
-               cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
-            WRITE(6, '(" *", 90("*"), "**")')
-            WRITE(6, *) " "
-            WRITE(6, *) " "
-            WRITE(6, *) " "
+            WRITE (6, '(" *", 2X, "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")') &
+               cputtot, cputtot/cputtot*100, runttot, runttot/runttot*100, cputtot/runttot/Nthreads
+            WRITE (6, '(" *", 90("*"), "**")')
+            WRITE (6, *) " "
+            WRITE (6, *) " "
+            WRITE (6, *) " "
          END IF
 
          IF (lssolver%timing) THEN
             cputtot = timing%clstime1 + timing%clstime2 + timing%clstime3 + timing%clstime4 + timing%clstime5 + timing%clstime6
             runttot = timing%rlstime1 + timing%rlstime2 + timing%rlstime3 + timing%rlstime4 + timing%rlstime5 + timing%rlstime6
-            WRITE(6, '(" *", 90("*"), "**")')
+            WRITE (6, '(" *", 90("*"), "**")')
             IF (lssolver%sollib .EQ. 1) THEN
-               WRITE(6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PASTIX ( Nthreads = ",i2,")", 14X, " *")') Nthreads
+               WRITE (6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PASTIX ( Nthreads = ",i2,")", 14X, " *")') Nthreads
             ELSE IF (lssolver%sollib .EQ. 2) THEN
-               WRITE(6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PSBLAS ( Nthreads = ",i2,")", 14X, " *")') Nthreads
+               WRITE (6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PSBLAS ( Nthreads = ",i2,")", 14X, " *")') Nthreads
             ELSE IF (lssolver%sollib .EQ. 3) THEN
-               WRITE(6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PETSc ( Nthreads = ",i2,")", 14X, " *")') Nthreads
+               WRITE (6, '(" *", 24X, "LINEAR SYSTEM SOLVER TIMING: PETSc ( Nthreads = ",i2,")", 14X, " *")') Nthreads
             END IF
-            WRITE(6, '(" *", 28X, "Cpu-time  (% tot)",6X,    "Run-time  (% tot)   Speedup/Nthreads ", 2X, " *")')
+            WRITE (6, '(" *", 28X, "Cpu-time  (% tot)",6X,    "Run-time  (% tot)   Speedup/Nthreads ", 2X, " *")')
             IF (lssolver%sollib .EQ. 1) THEN
-               WRITE(6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
                &timing%clstime1,timing%clstime1/cputtot*100,timing%rlstime1,timing%rlstime1/runttot*100,timing%clstime1/timing%rlstime1/Nthreads
-               WRITE(6, '(" *", 2X,  "Check mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Check mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime2,timing%clstime2/cputtot*100,timing%rlstime2,timing%rlstime2/runttot*100,timing%clstime2/timing%rlstime2/Nthreads
-               WRITE(6, '(" *", 2X,  "Anal. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Anal. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime3,timing%clstime3/cputtot*100,timing%rlstime3,timing%rlstime3/runttot*100,timing%clstime3/timing%rlstime3/Nthreads
-               WRITE(6, '(" *", 2X,  "Build mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Build mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime4,timing%clstime4/cputtot*100,timing%rlstime4,timing%rlstime4/runttot*100,timing%clstime4/timing%rlstime4/Nthreads
-               WRITE(6, '(" *", 2X,  "LU decomp.       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "LU decomp.       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime5,timing%clstime5/cputtot*100,timing%rlstime5,timing%rlstime5/runttot*100,timing%clstime5/timing%rlstime5/Nthreads
-               WRITE(6, '(" *", 2X,  "Solve            : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Solve            : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime6,timing%clstime6/cputtot*100,timing%rlstime6,timing%rlstime6/runttot*100,timing%clstime6/timing%rlstime6/Nthreads
-               WRITE(6, '(" *", 2X,  "Total time      : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",7X,F5.1 , 10X, " *")') &
-               &cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
+               WRITE (6, '(" *", 2X,  "Total time      : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",7X,F5.1 , 10X, " *")') &
+               &cputtot, cputtot/cputtot*100, runttot, runttot/runttot*100, cputtot/runttot/Nthreads
             ELSEIF (lssolver%sollib .EQ. 2) THEN
-               WRITE(6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
                &timing%clstime1,timing%clstime1/cputtot*100,timing%rlstime1,timing%rlstime1/runttot*100,timing%clstime1/timing%rlstime1/Nthreads
-               WRITE(6, '(" *", 2X,  "Build mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Build mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime2,timing%clstime2/cputtot*100,timing%rlstime2,timing%rlstime2/runttot*100,timing%clstime2/timing%rlstime2/Nthreads
-               WRITE(6, '(" *", 2X,  "Build prec       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Build prec       : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime3,timing%clstime3/cputtot*100,timing%rlstime3,timing%rlstime3/runttot*100,timing%clstime3/timing%rlstime3/Nthreads
-               WRITE(6, '(" *", 2X,  "Fill vec         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Fill vec         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime4,timing%clstime4/cputtot*100,timing%rlstime4,timing%rlstime4/runttot*100,timing%clstime4/timing%rlstime4/Nthreads
-               WRITE(6, '(" *", 2X,  "Solve            : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Solve            : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime5,timing%clstime5/cputtot*100,timing%rlstime5,timing%rlstime5/runttot*100,timing%clstime5/timing%rlstime5/Nthreads
-               WRITE(6, '(" *", 2X,  "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")') &
-               &cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
+               WRITE (6, '(" *", 2X,  "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")') &
+               &cputtot, cputtot/cputtot*100, runttot, runttot/runttot*100, cputtot/runttot/Nthreads
             ELSEIF (lssolver%sollib .EQ. 3) THEN
-               WRITE(6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Init. mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,  F4.1 , 10X, " *")') &
                &timing%clstime1,timing%clstime1/cputtot*100,timing%rlstime1,timing%rlstime1/runttot*100,timing%clstime1/timing%rlstime1/Nthreads
-               WRITE(6, '(" *", 2X,  "Build mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Build mat        : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime2,timing%clstime2/cputtot*100,timing%rlstime2,timing%rlstime2/runttot*100,timing%clstime2/timing%rlstime2/Nthreads
-               WRITE(6, '(" *", 2X,  "Fill vec         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Fill vec         : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime3,timing%clstime3/cputtot*100,timing%rlstime3,timing%rlstime3/runttot*100,timing%clstime3/timing%rlstime3/Nthreads
-               WRITE(6, '(" *", 2X,  "Solve            : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               WRITE (6, '(" *", 2X,  "Reorder          : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
+               &timing%clstime5,timing%clstime5/cputtot*100,timing%rlstime5,timing%rlstime5/runttot*100,timing%clstime5/timing%rlstime5/Nthreads
+               WRITE (6, '(" *", 2X,  "Solve            : ", ES16.3," ("F4.1 "%)",1X,ES14.3," ("F4.1 "%)",8X,F4.1 , 10X, " *")') &
                &timing%clstime4,timing%clstime4/cputtot*100,timing%rlstime4,timing%rlstime4/runttot*100,timing%clstime4/timing%rlstime4/Nthreads
-               WRITE(6, '(" *", 2X,  "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")') &
-               &cputtot,cputtot/cputtot*100,runttot,runttot/runttot*100,cputtot/runttot/Nthreads
+               WRITE (6, '(" *", 2X,  "Total time       : ", ES16.3," ("F5.1 "%)",1X,ES13.3," ("F5.1 "%)",6X,F5.1 , 10X, " *")') &
+               &cputtot, cputtot/cputtot*100, runttot, runttot/runttot*100, cputtot/runttot/Nthreads
             END IF
             WRITE (6, '(" *", 90("*"), "**")')
             WRITE (6, *) " "
@@ -1397,26 +1416,15 @@ CONTAINS
    END SUBROUTINE print_timing_infos
 
    SUBROUTINE free_main()
-#ifdef WITH_PASTIX
-      USE solve_pastix, ONLY: terminate_mat_PASTIX
-#endif
-#ifdef WITH_PETSC
-      USE solve_petsc, ONLY: terminate_PETSC, FinalizePETSC
-#endif
-#ifdef WITH_PSBLAS
-      USE solve_psblas, ONLY: terminate_PSBLAS
-#endif
 
-      IF(ALLOCATED(uiter)) DEALLOCATE (uiter)
-      IF(ASSOCIATED(uiter_best)) DEALLOCATE(uiter_best)
-      IF(ASSOCIATED(qiter_best)) DEALLOCATE(qiter_best)
-      NULLIFY(uiter_best)
-      NULLIFY(qiter_best)
-      IF(ALLOCATED(mkelms)) DEALLOCATE (mkelms)
-      IF(ALLOCATED(sol%u0)) DEALLOCATE (sol%u0)
-      IF(ALLOCATED(oscillations)) DEALLOCATE(oscillations)
-
-      CALL free_splines(splines)
+      IF (ALLOCATED(uiter)) DEALLOCATE (uiter)
+      IF (ASSOCIATED(uiter_best)) DEALLOCATE (uiter_best)
+      IF (ASSOCIATED(qiter_best)) DEALLOCATE (qiter_best)
+      NULLIFY (uiter_best)
+      NULLIFY (qiter_best)
+      IF (ALLOCATED(mkelms)) DEALLOCATE (mkelms)
+      IF (ALLOCATED(sol%u0)) DEALLOCATE (sol%u0)
+      IF (ALLOCATED(oscillations)) DEALLOCATE (oscillations)
 
       IF (lssolver%sollib .EQ. 1) THEN
 #ifdef WITH_PASTIX
@@ -1438,14 +1446,9 @@ CONTAINS
 
       CALL free_all
       CALL free_mesh
-#ifdef PARALL
-      CALL free_mesh_loc(Mesh_glob)
-#endif
       CALL free_mesh_loc(Mesh_prec)
       CALL free_reference_element
-      CALL free_reference_element_pol(refElPol_prec)
 
    END SUBROUTINE free_main
-
 
 END MODULE Main_utils
