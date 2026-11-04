@@ -28,7 +28,7 @@ CONTAINS
       CHARACTER(10)               :: str
       REAL*8, PARAMETER           ::tol = 1e-6
       REAL*8                      :: xmin
-      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem, Nfaces
+      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem
       INTEGER                     :: Nextfaces, Nnodesperface, IERR
       INTEGER(HID_T)              :: file_id
 
@@ -49,11 +49,6 @@ CONTAINS
       CALL HDF5_integer_reading(file_id, elemType, 'elemType', ierr)
       IF (IERR .NE. 0) THEN
          WRITE (6, *) "Error reading integer: elemType"
-         STOP
-      END IF
-      CALL HDF5_integer_reading(file_id, Nfaces, 'Nfaces', ierr)
-      IF (IERR .NE. 0) THEN
-         WRITE (6, *) "Error reading integer: Nfaces"
          STOP
       END IF
       CALL HDF5_integer_reading(file_id, ndim, 'Ndim', ierr)
@@ -1276,12 +1271,6 @@ CONTAINS
          WRITE (6, *) "Error reading integer: Nextfaces"
          STOP
       END IF
-      CALL HDF5_integer_reading(group_id, Nfaces, 'Nfaces', ierr)
-      IF (IERR .NE. 0) THEN
-         WRITE (6, *) "Error reading integer: Nfaces"
-         STOP
-      END IF
-
       ALLOCATE (Mesh%T(Nelems, Nnodesperelem))
       ALLOCATE (Mesh%X(Nnodes, ndim))
 
