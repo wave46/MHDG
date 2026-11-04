@@ -15,183 +15,274 @@ MODULE adaptivity_estimator_module
 
 CONTAINS
 
+#ifndef TOR3D
    SUBROUTINE apply_estimator(h_map_elements, order, h_target_elements)
       REAL*8, INTENT(IN)        :: h_map_elements(:)
       INTEGER, INTENT(IN)       :: order
       REAL*8, INTENT(INOUT)     :: h_target_elements(:)
-      REAL*8, ALLOCATABLE       :: error_L2(:), u_sol(:,:), u_star_sol(:,:)
-      REAL*8                    :: h_target_temp(SIZE(Mesh%T,1))
+      REAL*8, ALLOCATABLE       :: error_L2(:), u_sol(:, :), u_star_sol(:, :)
+      REAL*8                    :: h_target_temp(SIZE(Mesh%T, 1))
       REAL*8                    :: eg_L2
       INTEGER                   :: i
 
-      ALLOCATE(error_L2(SIZE(Mesh%T,1)))
+      ALLOCATE (error_L2(SIZE(Mesh%T, 1)))
       h_target_elements = 0.1
 
       IF (adapt%param_est == 0) THEN
-         CALL post_process_matrix_solution(Mesh%X, Mesh%T, sol%u, sol%q, u_sol, u_star_sol)
-         DO i = 1, phys%npv
+         CALL post_process_matrix_solution(Mesh%X, Mesh%T, sol%u, sol%q/phys%lscale, u_sol, u_star_sol)
+         DO i = 1, phys%npv - 1
             CALL calculate_L2_error_two_sols_different_p_scalar_general(Mesh%X, Mesh%T, i, u_sol, u_star_sol, error_L2, eg_L2)
-            h_target_temp = h_map_elements * ((adapt%tol_est / error_L2) ** (1. / (order + 1.)))
+            h_target_temp = h_map_elements*((adapt%tol_est/error_L2)**(1./(order + 1.)))
             h_target_elements = MIN(h_target_temp, h_target_elements)
          END DO
       ELSE
          CALL L2_error_estimator_eval(Mesh%X, Mesh%T, sol%u, sol%q, adapt%param_est, error_L2, eg_L2)
-         h_target_temp = h_map_elements * ((adapt%tol_est / error_L2) ** (1. / (order + 1.)))
+         h_target_temp = h_map_elements*((adapt%tol_est/error_L2)**(1./(order + 1.)))
          h_target_elements = MIN(h_target_temp, h_target_elements)
       END IF
 
-      DEALLOCATE(error_L2)
-      IF(adapt%param_est == 0) DEALLOCATE(u_sol, u_star_sol)
+      DEALLOCATE (error_L2)
+      IF (adapt%param_est == 0) DEALLOCATE (u_sol, u_star_sol)
+
    END SUBROUTINE apply_estimator
+#else
+   SUBROUTINE apply_estimator(h_map_elements, order, h_target_elements)
+      REAL*8, INTENT(IN)        :: h_map_elements(:)
+      INTEGER, INTENT(IN)       :: order
+      REAL*8, INTENT(INOUT)     :: h_target_elements(:)
+      REAL*8, ALLOCATABLE       :: error_L2(:), u_sol(:, :), u_star_sol(:, :), u_pol_slice(:), q_pol_slice(:)
+      REAL*8                    :: h_target_temp(SIZE(Mesh%T, 1))
+      REAL*8                    :: eg_L2
+      INTEGER                   :: i, itor, p, iel, Ndim, Ntor, Nelems, Nnodesperelem, Nnodesperelem_tor1d, Neq, start_range_u, end_range_u, start_range_q, end_range_q
+      INTEGER, ALLOCATABLE      :: indices_pol_slice_u(:), indices_elem_u(:), indices_elem_const_u(:)
+      INTEGER, ALLOCATABLE      :: indices_pol_slice_q(:), indices_elem_q(:), indices_elem_const_q(:)
 
-   SUBROUTINE calculate_L2_error_two_sols_different_p_scalar_general(X,T,error_param, u_sol,u_star_sol, error_L2, eg_L2)
+      Ntor = numer%ntor
+      Nelems = Mesh%Nelems
+      Nnodesperelem = Mesh%Nnodesperelem
+      Nnodesperelem_tor1d = numer%ptor + 1
+      Neq = phys%Neq
+      Ndim = Mesh%ndim + 1
 
-      REAL*8, INTENT(IN)                :: X(:,:)
-      INTEGER, INTENT(IN)               :: T(:,:)
-      REAL*8, INTENT(IN)                :: u_sol(:,:), u_star_sol(:,:)
+      ALLOCATE (error_L2(Nelems))
+
+      ALLOCATE (indices_pol_slice_u(Nelems*Nnodesperelem*Neq))
+      ALLOCATE (indices_elem_u(Nnodesperelem*Neq))
+      ALLOCATE (indices_elem_const_u(Nnodesperelem*Neq))
+      ALLOCATE (u_pol_slice(Nelems*Nnodesperelem*Neq))
+
+      ALLOCATE (indices_pol_slice_q(Nelems*Nnodesperelem*Neq*Ndim))
+      ALLOCATE (indices_elem_q(Nnodesperelem*Neq*Ndim))
+      ALLOCATE (indices_elem_const_q(Nnodesperelem*Neq*Ndim))
+      ALLOCATE (q_pol_slice(Nelems*Nnodesperelem*Neq*Ndim))
+
+      indices_pol_slice_u = 0
+      indices_elem_u = 0
+      indices_elem_const_u = [(i, i=1, Neq*Nnodesperelem)]
+      u_pol_slice = 0.
+      indices_pol_slice_q = 0
+      indices_elem_q = 0
+      indices_elem_const_q = [(i, i=1, Nnodesperelem*Neq*Ndim)]
+      q_pol_slice = 0.
+
+      h_target_elements = 0.1
+
+      DO itor = 1, Ntor
+         DO p = 1, Nnodesperelem_tor1d
+            start_range_u = 1
+            end_range_u = 1
+            start_range_q = 1
+            end_range_q = 1
+
+            DO iel = 1, Nelems
+               indices_elem_u = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq + (p-1)*Neq*Nnodesperelem + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + indices_elem_const_u;
+               indices_elem_q = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq*Ndim + (p-1)*Neq*Ndim*Nnodesperelem + (iel-1)*Neq*Ndim*Nnodesperelem*Nnodesperelem_tor1d + indices_elem_const_q;
+               end_range_u = start_range_u + Neq*Nnodesperelem - 1;
+               indices_pol_slice_u(start_range_u:end_range_u) = indices_elem_u;
+               end_range_q = start_range_q + Neq*Nnodesperelem*Ndim - 1;
+               indices_pol_slice_q(start_range_q:end_range_q) = indices_elem_q;
+               start_range_u = end_range_u + 1;
+               start_range_q = end_range_q + 1;
+            END DO
+
+            u_pol_slice = sol%u(indices_pol_slice_u)
+            q_pol_slice = sol%q(indices_pol_slice_q)
+
+            IF (adapt%param_est == 0) THEN
+               CALL post_process_matrix_solution(Mesh%X, Mesh%T, u_pol_slice, q_pol_slice, u_sol, u_star_sol)
+               DO i = 1, phys%npv - 1
+                  CALL calculate_L2_error_two_sols_different_p_scalar_general(Mesh%X, Mesh%T, i, u_sol, u_star_sol, error_L2, eg_L2)
+                  h_target_temp = h_map_elements*((adapt%tol_est/error_L2)**(1./(order + 1.)))
+                  h_target_elements = MIN(h_target_temp, h_target_elements)
+               END DO
+            ELSE
+               CALL L2_error_estimator_eval(Mesh%X, Mesh%T, u_pol_slice, q_pol_slice, adapt%param_est, error_L2, eg_L2)
+               h_target_temp = h_map_elements*((adapt%tol_est/error_L2)**(1./(order + 1.)))
+               h_target_elements = MIN(h_target_temp, h_target_elements)
+            END IF
+
+            indices_pol_slice_u = 0
+            indices_pol_slice_q = 0
+
+         END DO
+      END DO
+
+      DEALLOCATE (error_L2)
+
+      IF (adapt%param_est == 0) DEALLOCATE (u_sol, u_star_sol)
+
+      DEALLOCATE(u_pol_slice, indices_pol_slice_u, indices_elem_u, indices_elem_const_u, indices_pol_slice_q, indices_elem_q, indices_elem_const_q)
+
+   END SUBROUTINE apply_estimator
+#endif
+
+   SUBROUTINE calculate_L2_error_two_sols_different_p_scalar_general(X, T, error_param, u_sol, u_star_sol, error_L2, eg_L2)
+
+      REAL*8, INTENT(IN)                :: X(:, :)
+      INTEGER, INTENT(IN)               :: T(:, :)
+      REAL*8, INTENT(IN)                :: u_sol(:, :), u_star_sol(:, :)
       INTEGER, INTENT(IN)               :: error_param
       REAL*8, INTENT(OUT)               :: error_L2(:)
       REAL*8, INTENT(OUT)               :: eg_L2
       TYPE(Reference_element_type)      :: refElv_star
 
-      CALL create_reference_element(refElv_star,2,refElPol%Ndeg+1, verbose = 0)
+      CALL create_reference_element(refElv_star, 2, refElPol%Ndeg + 1, verbose=0)
       ! elemental error,global error, area elements
       CALL calculate_L2_error_two_sols_different_p_scalar(X,T,u_sol(:,error_param),refElPol,X,T,u_star_sol(:,error_param),refElv_star,error_L2,eg_L2)
       CALL free_reference_element_pol(refElv_star)
 
    END SUBROUTINE calculate_L2_error_two_sols_different_p_scalar_general
 
-   SUBROUTINE post_process_matrix_solution(X,T,u,q,u_sol,u_star_sol)
+   SUBROUTINE post_process_matrix_solution(X, T, u, q, u_sol, u_star_sol)
       USE physics, ONLY: cons2phys
 
-      REAL*8, INTENT(IN)                :: X(:,:)
-      INTEGER, INTENT(IN)               :: T(:,:)
+      REAL*8, INTENT(IN)                :: X(:, :)
+      INTEGER, INTENT(IN)               :: T(:, :)
       REAL*8, INTENT(IN)                :: u(:), q(:)
-      REAL*8, ALLOCATABLE, INTENT(OUT)  :: u_sol(:,:), u_star_sol(:,:)
+      REAL*8, ALLOCATABLE, INTENT(OUT)  :: u_sol(:, :), u_star_sol(:, :)
 
       TYPE(Reference_element_type)      :: refElv_star
-      REAL*8, ALLOCATABLE               :: K(:,:,:), Bt(:,:,:), int_N(:,:,:)
+      REAL*8, ALLOCATABLE               :: K(:, :, :), Bt(:, :, :), int_N(:, :, :)
       REAL*8, ALLOCATABLE               :: u_star(:), u_int(:)
-      INTEGER                           :: n_elements
+      INTEGER                           :: Nelems
 
-      n_elements = Mesh%Nelems
+      Nelems = Mesh%Nelems
 
-      ALLOCATE(K((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq, n_elements))
-      ALLOCATE(Bt((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq*mesh%ndim*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2, n_elements))
-      ALLOCATE(int_N((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq, n_elements))
-      ALLOCATE(u_star((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements))
-      ALLOCATE(u_int((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements))
-      ALLOCATE(u_sol(Mesh%Nnodesperelem*n_elements*phys%neq/phys%Neq, phys%npv))
-      ALLOCATE(u_star_sol((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements/phys%Neq, phys%npv))
+      ALLOCATE (K((refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq, (refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq, Nelems))
+      ALLOCATE(Bt((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq*mesh%ndim*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2, Nelems))
+      ALLOCATE (int_N((refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq, phys%neq, Nelems))
+      ALLOCATE (u_star((refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq*Nelems))
+      ALLOCATE (u_int((refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq*Nelems))
+      ALLOCATE (u_sol(Mesh%Nnodesperelem*Nelems*phys%neq/phys%Neq, phys%npv))
+      ALLOCATE (u_star_sol((refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq*Nelems/phys%Neq, phys%npv))
 
-
-      CALL create_reference_element(refElv_star,2,refElPol%Ndeg+1, verbose = 0)
+      CALL create_reference_element(refElv_star, 2, refElPol%Ndeg + 1, verbose=0)
       ! local calculation of the p+1 solution u_star
-      CALL hdg_post_process_matrix(X,T,refElv_star,refElPol%Ndeg,refElPol%Ndeg+1, K, Bt, int_N)
-      CALL hdg_postprocess_solution(q,u,K,Bt,int_N,refElv_star,refElPol,n_elements, u_star, u_int)
+      CALL hdg_post_process_matrix(X, T, refElv_star, refElPol%Ndeg, refElPol%Ndeg + 1, K, Bt, int_N)
+      CALL hdg_postprocess_solution(q, u, K, Bt, int_N, refElv_star, refElPol, Nelems, u_star, u_int)
 
-      CALL cons2phys(TRANSPOSE(RESHAPE(u, (/phys%Neq, SIZE(T,1)*SIZE(T,2)/))), u_sol)
-      CALL cons2phys(TRANSPOSE(RESHAPE(u_star, (/phys%Neq, SIZE(T,1)*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2/))), u_star_sol)
+      CALL cons2phys(TRANSPOSE(RESHAPE(u, (/phys%Neq, SIZE(T, 1)*SIZE(T, 2)/))), u_sol)
+      CALL cons2phys(TRANSPOSE(RESHAPE(u_star, (/phys%Neq, SIZE(T, 1)*(refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2/))), u_star_sol)
 
       ! elemental error,global error, area elements
       CALL free_reference_element_pol(refElv_star)
 
-      DEALLOCATE(K)
-      DEALLOCATE(Bt)
-      DEALLOCATE(int_N)
-      DEALLOCATE(u_star)
-      DEALLOCATE(u_int)
+      DEALLOCATE (K)
+      DEALLOCATE (Bt)
+      DEALLOCATE (int_N)
+      DEALLOCATE (u_star)
+      DEALLOCATE (u_int)
 
    END SUBROUTINE post_process_matrix_solution
 
-   SUBROUTINE L2_error_estimator_eval(X,T,u,q,error_param,error_L2,eg_L2)
+   SUBROUTINE L2_error_estimator_eval(X, T, u, q, error_param, error_L2, eg_L2)
       USE physics, ONLY: cons2phys
 
-      REAL*8, INTENT(IN)                :: X(:,:)
-      INTEGER, INTENT(IN)               :: T(:,:)
+      REAL*8, INTENT(IN)                :: X(:, :)
+      INTEGER, INTENT(IN)               :: T(:, :)
       REAL*8, INTENT(IN)                :: u(:), q(:)
       INTEGER, INTENT(IN)               :: error_param
       REAL*8, INTENT(OUT)               :: error_L2(:)
       REAL*8, INTENT(OUT)               :: eg_L2
 
       TYPE(Reference_element_type)      :: refElv_star
-      REAL*8, ALLOCATABLE               :: K(:,:,:), Bt(:,:,:), int_N(:,:,:)
-      REAL*8, ALLOCATABLE               :: u_star(:), u_int(:), u_sol(:,:), u_star_sol(:,:)
-      INTEGER                           :: n_elements
+      REAL*8, ALLOCATABLE               :: K(:, :, :), Bt(:, :, :), int_N(:, :, :)
+      REAL*8, ALLOCATABLE               :: u_star(:), u_int(:), u_sol(:, :), u_star_sol(:, :)
+      INTEGER                           :: Nelems
 
-      n_elements = Mesh%Nelems
+      Nelems = Mesh%Nelems
 
-      ALLOCATE(K((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq, n_elements))
-      ALLOCATE(Bt((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq*mesh%ndim*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2, n_elements))
-      ALLOCATE(int_N((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq, n_elements))
-      ALLOCATE(u_star((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements))
-      ALLOCATE(u_int((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements))
-      ALLOCATE(u_sol(Mesh%Nnodesperelem*n_elements*phys%neq/phys%Neq, phys%npv))
-      ALLOCATE(u_star_sol((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq*n_elements/phys%Neq, phys%npv))
+      ALLOCATE (K((refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq, (refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq, Nelems))
+      ALLOCATE(Bt((refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2*phys%neq,phys%neq*mesh%ndim*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2, Nelems))
+      ALLOCATE (int_N((refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq, phys%neq, Nelems))
+      ALLOCATE (u_star((refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq*Nelems))
+      ALLOCATE (u_int((refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq*Nelems))
+      ALLOCATE (u_sol(Mesh%Nnodesperelem*Nelems*phys%neq/phys%Neq, phys%npv))
+      ALLOCATE (u_star_sol((refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2*phys%neq*Nelems/phys%Neq, phys%npv))
 
-      CALL create_reference_element(refElv_star,2,refElPol%Ndeg+1, verbose = 0)
+      CALL create_reference_element(refElv_star, 2, refElPol%Ndeg + 1, verbose=0)
 
       ! local calculation of the p+1 solution u_star
-      CALL hdg_post_process_matrix(X,T,refElv_star,refElPol%Ndeg,refElPol%Ndeg+1, K, Bt, int_N)
-      CALL hdg_postprocess_solution(q,u,K,Bt,int_N,refElv_star,refElPol,n_elements, u_star, u_int)
+      CALL hdg_post_process_matrix(X, T, refElv_star, refElPol%Ndeg, refElPol%Ndeg + 1, K, Bt, int_N)
+      CALL hdg_postprocess_solution(q, u, K, Bt, int_N, refElv_star, refElPol, Nelems, u_star, u_int)
 
-      CALL cons2phys(TRANSPOSE(RESHAPE(u, (/phys%Neq, SIZE(T,1)*SIZE(T,2)/))), u_sol)
-      CALL cons2phys(TRANSPOSE(RESHAPE(u_star, (/phys%Neq, SIZE(T,1)*(refElPol%Ndeg+2)*(refElPol%Ndeg+3)/2/))), u_star_sol)
+      CALL cons2phys(TRANSPOSE(RESHAPE(u, (/phys%Neq, SIZE(T, 1)*SIZE(T, 2)/))), u_sol)
+      CALL cons2phys(TRANSPOSE(RESHAPE(u_star, (/phys%Neq, SIZE(T, 1)*(refElPol%Ndeg + 2)*(refElPol%Ndeg + 3)/2/))), u_star_sol)
 
       ! elemental error,global error, area elements
       CALL calculate_L2_error_two_sols_different_p_scalar(X,T,u_sol(:,error_param),refElPol,X,T,u_star_sol(:,error_param),refElv_star,error_L2,eg_L2)
       CALL free_reference_element_pol(refElv_star)
 
-      DEALLOCATE(K)
-      DEALLOCATE(Bt)
-      DEALLOCATE(int_N)
-      DEALLOCATE(u_sol)
-      DEALLOCATE(u_star_sol)
-      DEALLOCATE(u_star)
-      DEALLOCATE(u_int)
+      DEALLOCATE (K)
+      DEALLOCATE (Bt)
+      DEALLOCATE (int_N)
+      DEALLOCATE (u_sol)
+      DEALLOCATE (u_star_sol)
+      DEALLOCATE (u_star)
+      DEALLOCATE (u_int)
 
    END SUBROUTINE L2_error_estimator_eval
 
    SUBROUTINE hdg_post_process_matrix(X, T, refElv, p1, p2, K, Bt, int_N, M)
       TYPE(Reference_element_type), INTENT(IN) :: refElv
-      REAL*8, INTENT(IN)                       :: X(:,:)
-      INTEGER, INTENT(IN)                      :: T(:,:)
+      REAL*8, INTENT(IN)                       :: X(:, :)
+      INTEGER, INTENT(IN)                      :: T(:, :)
       INTEGER, INTENT(IN)                      :: p1, p2
-      REAL*8, INTENT(OUT)                      :: K(:,:,:), Bt(:,:,:), int_N(:,:,:)
-      REAL*8, INTENT(OUT), OPTIONAL            :: M(:,:,:)
-      INTEGER                                  :: n_elements, Nv2, iElem
+      REAL*8, INTENT(OUT)                      :: K(:, :, :), Bt(:, :, :), int_N(:, :, :)
+      REAL*8, INTENT(OUT), OPTIONAL            :: M(:, :, :)
+      INTEGER                                  :: Nelems, Nv2, iElem
       REAL*8, DIMENSION(:, :), ALLOCATABLE     :: shapeFunctions
       REAL*8, DIMENSION(:, :), ALLOCATABLE     :: Ke, Bte, int_Ne, Me
 
       ! Initialization
-      n_elements = SIZE(T, 1)
+      Nelems = SIZE(T, 1)
 
       Nv2 = 0
-      IF(refElv%elemType .EQ. 0) THEN
+      IF (refElv%elemType .EQ. 0) THEN
          ! the casting is only necessary for not showing the compiler warning
-         Nv2 = INT(0.5*(p2+1)*(p2+2))
-      ELSEIF(refElv%elemType .EQ. 1) THEN
-         Nv2 = p2*(p2+1)
+         Nv2 = INT(0.5*(p2 + 1)*(p2 + 2))
+      ELSEIF (refElv%elemType .EQ. 1) THEN
+         Nv2 = p2*(p2 + 1)
       ELSE
-         WRITE(*,*) "not coded.stop."
+         WRITE (*, *) "not coded.stop."
          STOP
       END IF
 
-      ALLOCATE(shapeFunctions(Nv2, SIZE(T, 2)))
-      ALLOCATE(Ke(SIZE(K,1),SIZE(K,2)))
-      ALLOCATE(Bte(SIZE(Bt,1),SIZE(Bt,2)))
-      ALLOCATE(int_Ne(SIZE(int_N,1), SIZE(int_N,2)))
-      IF(PRESENT(M)) THEN
-         ALLOCATE(Me(SIZE(M,1), SIZE(M,2)))
+      ALLOCATE (shapeFunctions(Nv2, SIZE(T, 2)))
+      ALLOCATE (Ke(SIZE(K, 1), SIZE(K, 2)))
+      ALLOCATE (Bte(SIZE(Bt, 1), SIZE(Bt, 2)))
+      ALLOCATE (int_Ne(SIZE(int_N, 1), SIZE(int_N, 2)))
+      IF (PRESENT(M)) THEN
+         ALLOCATE (Me(SIZE(M, 1), SIZE(M, 2)))
       END IF
 
       shapeFunctions = 0.
 
-      CALL compute_shape_functions_at_interp_points(p1,p2,refElv%elemType,shapeFunctions)
+      CALL compute_shape_functions_at_interp_points(p1, p2, refElv%elemType, shapeFunctions)
 
       ! Loop in elements
-      IF(PRESENT(M)) THEN
-         DO iElem = 1, n_elements
+      IF (PRESENT(M)) THEN
+         DO iElem = 1, Nelems
 
             CALL elemental_matrices(MATMUL(shapeFunctions, X(T(iElem, :), :)), refElv, Ke, Bte, int_Ne, Me)
             K(:, :, iElem) = Ke
@@ -200,7 +291,7 @@ CONTAINS
             M(:, :, iElem) = Me
          END DO
       ELSE
-         DO iElem = 1, n_elements
+         DO iElem = 1, Nelems
 
             CALL elemental_matrices(MATMUL(shapeFunctions, X(T(iElem, :), :)), refElv, Ke, Bte, int_Ne)
             K(:, :, iElem) = Ke
@@ -209,40 +300,38 @@ CONTAINS
          END DO
       END IF
 
-
-      DEALLOCATE(shapeFunctions)
-      DEALLOCATE(Ke)
-      DEALLOCATE(Bte)
-      DEALLOCATE(int_Ne)
-      IF(PRESENT(M)) THEN
-         DEALLOCATE(Me)
+      DEALLOCATE (shapeFunctions)
+      DEALLOCATE (Ke)
+      DEALLOCATE (Bte)
+      DEALLOCATE (int_Ne)
+      IF (PRESENT(M)) THEN
+         DEALLOCATE (Me)
       END IF
 
    END SUBROUTINE hdg_post_process_matrix
 
    SUBROUTINE elemental_matrices(Xe, refElv, Ke, Bte, int_Ne, Me)
       TYPE(Reference_element_type), INTENT(IN)               :: refElv
-      REAL*8, DIMENSION(:,:), INTENT(IN)                     :: Xe
+      REAL*8, DIMENSION(:, :), INTENT(IN)                     :: Xe
       REAL*8, DIMENSION(:, :), INTENT(INOUT)                 :: Ke, Bte, int_Ne
       REAL*8, DIMENSION(:, :), OPTIONAL, INTENT(INOUT)       :: Me
-      REAL*8, ALLOCATABLE,DIMENSION(:,:)                     :: K_loc, Bx, By
-      REAL*8, ALLOCATABLE,DIMENSION(:)                       :: int_N_loc, Nx_g, Ny_g
+      REAL*8, ALLOCATABLE, DIMENSION(:, :)                     :: K_loc, Bx, By
+      REAL*8, ALLOCATABLE, DIMENSION(:)                       :: int_N_loc, Nx_g, Ny_g
       REAL*8, DIMENSION(2, 2)                                :: J, invJ
       REAL*8                                                 :: xg, dvolu, detJ
       INTEGER                                                :: n_gauss, g
 
-
-      ALLOCATE(K_loc(refElv%Nnodes2D,refElv%Nnodes2D))
-      ALLOCATE(Bx(refElv%Nnodes2D,refElv%Nnodes2D))
-      ALLOCATE(By(refElv%Nnodes2D,refElv%Nnodes2D))
-      ALLOCATE(int_N_loc(refElv%Nnodes2D))
-      ALLOCATE(Nx_g(refElv%Nnodes2D))
-      ALLOCATE(Ny_g(refElv%Nnodes2D))
+      ALLOCATE (K_loc(refElv%Nnodes2D, refElv%Nnodes2D))
+      ALLOCATE (Bx(refElv%Nnodes2D, refElv%Nnodes2D))
+      ALLOCATE (By(refElv%Nnodes2D, refElv%Nnodes2D))
+      ALLOCATE (int_N_loc(refElv%Nnodes2D))
+      ALLOCATE (Nx_g(refElv%Nnodes2D))
+      ALLOCATE (Ny_g(refElv%Nnodes2D))
 
       Ke = 0.
       Bte = 0.
       int_Ne = 0.
-      IF(PRESENT(Me)) THEN
+      IF (PRESENT(Me)) THEN
          Me = 0.
       END IF
       K_loc = 0.
@@ -274,7 +363,7 @@ CONTAINS
          xg = dot_PRODUCT(refElv%N2d(g, :), Xe(:, 1))
 
          ! Integration weight
-         dvolu = refElv%gauss_weights2D(g) * detJ
+         dvolu = refElv%gauss_weights2D(g)*detJ
 
          IF (switch%axisym) THEN
             dvolu = dvolu*xg
@@ -283,16 +372,16 @@ CONTAINS
          ! x and y derivatives
          CALL invert_matrix(J, invJ)
 
-         Nx_g = invJ(1, 1) * refElv%Nxi2D(g, :) + invJ(1, 2) * refElv%Neta2D(g, :)
-         Ny_g = invJ(2, 1) * refElv%Nxi2D(g, :) + invJ(2, 2) * refElv%Neta2D(g, :)
+         Nx_g = invJ(1, 1)*refElv%Nxi2D(g, :) + invJ(1, 2)*refElv%Neta2D(g, :)
+         Ny_g = invJ(2, 1)*refElv%Nxi2D(g, :) + invJ(2, 2)*refElv%Neta2D(g, :)
 
          ! Contribution of the current integration point to the elemental matrix
-         K_loc = K_loc + (TensorProduct(Nx_g, Nx_g) + TensorProduct(Ny_g,Ny_g)) * dvolu
-         IF(PRESENT(Me)) THEN
-            Me = Me + TensorProduct(refElv%N2D(g, :), refElv%N2D(g, :)) * dvolu
+         K_loc = K_loc + (TensorProduct(Nx_g, Nx_g) + TensorProduct(Ny_g, Ny_g))*dvolu
+         IF (PRESENT(Me)) THEN
+            Me = Me + TensorProduct(refElv%N2D(g, :), refElv%N2D(g, :))*dvolu
          END IF
-         Bx = Bx + TensorProduct(Nx_g, refElv%N2D(g, :)) * dvolu
-         By = By + TensorProduct(Ny_g, refElv%N2D(g, :)) * dvolu
+         Bx = Bx + TensorProduct(Nx_g, refElv%N2D(g, :))*dvolu
+         By = By + TensorProduct(Ny_g, refElv%N2D(g, :))*dvolu
          int_N_loc = int_N_loc + refElv%N2D(g, :)*dvolu
       END DO
 
@@ -301,26 +390,24 @@ CONTAINS
       CALL expand_matrix_Bt(Bx, By, Bte)
       CALL expand_matrix_A(RESHAPE(int_N_loc, [SIZE(int_N_loc), 1]), phys%neq, int_Ne)
 
-      DEALLOCATE(K_loc)
-      DEALLOCATE(Bx)
-      DEALLOCATE(By)
-      DEALLOCATE(int_N_loc)
-      DEALLOCATE(Nx_g)
-      DEALLOCATE(Ny_g)
+      DEALLOCATE (K_loc)
+      DEALLOCATE (Bx)
+      DEALLOCATE (By)
+      DEALLOCATE (int_N_loc)
+      DEALLOCATE (Nx_g)
+      DEALLOCATE (Ny_g)
 
    CONTAINS
 
       PURE SUBROUTINE expand_matrix_A(A, n, res)
-         REAL*8, INTENT(IN)                        :: A(:,:)
+         REAL*8, INTENT(IN)                        :: A(:, :)
          INTEGER, INTENT(IN)                       :: n
-         REAL*8, ALLOCATABLE, DIMENSION(:,:,:,:)   :: temp_1, temp_2
-         REAL*8, INTENT(OUT)                       :: res(:,:)
+         REAL*8, ALLOCATABLE, DIMENSION(:, :, :, :)   :: temp_1, temp_2
+         REAL*8, INTENT(OUT)                       :: res(:, :)
          INTEGER                                   :: i, j, k, l
 
-
-         ALLOCATE(temp_1(SIZE(A,1), SIZE(A,2),n ,n))
-         ALLOCATE(temp_2(n, SIZE(A,1), n, SIZE(A,2)))
-
+         ALLOCATE (temp_1(SIZE(A, 1), SIZE(A, 2), n, n))
+         ALLOCATE (temp_2(n, SIZE(A, 1), n, SIZE(A, 2)))
 
          temp_1 = 0.
          temp_2 = 0.
@@ -328,7 +415,7 @@ CONTAINS
 
          ! equivalent to matlab repmat res(:,:,1:n+1:n^2) = repmat(A, [1 1 n]);
          DO i = 1, n
-            temp_1(:,:,i,i) = A
+            temp_1(:, :, i, i) = A
          END DO
 
          ! [1 2 3 4] --> [3 1 4 2]
@@ -342,16 +429,15 @@ CONTAINS
             END DO
          END DO
 
-
          ! reshape
-         res = RESHAPE(temp_2, [n*SIZE(A,1), n*SIZE(A,2)])
+         res = RESHAPE(temp_2, [n*SIZE(A, 1), n*SIZE(A, 2)])
 
-         DEALLOCATE(temp_1, temp_2)
+         DEALLOCATE (temp_1, temp_2)
       END SUBROUTINE expand_matrix_A
 
       PURE SUBROUTINE expand_matrix_Bt(Bx, By, B)
          REAL*8, INTENT(IN)     :: Bx(:, :), By(:, :)
-         REAL*8, INTENT(OUT)    :: B(:,:)
+         REAL*8, INTENT(OUT)    :: B(:, :)
          INTEGER*4              :: i, k, j, n, m, neq_dim, neq, ndim
 
          neq_dim = 2*Mesh%ndim
@@ -375,13 +461,13 @@ CONTAINS
 
    END SUBROUTINE elemental_matrices
 
-   SUBROUTINE hdg_postprocess_solution(qin, uin, K, Bt, int_N, refElv_star, refElv, n_elements, u_star,u_int)
+   SUBROUTINE hdg_postprocess_solution(qin, uin, K, Bt, int_N, refElv_star, refElv, Nelems, u_star, u_int)
       USE LinearAlgebra, ONLY: solve_linear_system
       TYPE(Reference_element_type), INTENT(IN)                 :: refElv
       TYPE(Reference_element_type), INTENT(IN)                 :: refElv_star
       REAL*8, DIMENSION(:), INTENT(IN)                         :: qin, uin
       REAL*8, DIMENSION(:, :, :), INTENT(IN)                   :: K, Bt, int_N
-      INTEGER, INTENT(IN)                                      :: n_elements
+      INTEGER, INTENT(IN)                                      :: Nelems
       REAL*8, DIMENSION(:), INTENT(OUT)                        :: u_star
       REAL*8, DIMENSION(:), INTENT(OUT)                        :: u_int
 
@@ -394,96 +480,95 @@ CONTAINS
       INTEGER                                                  :: NeqNv, NeqNvStar, NeqNvStar2, NeqNvStar4, NeqNvStar2Elem, NeqNvStar4Elem
       INTEGER                                                  :: SizeK1, SizeK2, SizeBt1, SizeBt2, SizeIntN1, SizeIntN2, SizeIntUeStar1, SizeIntUeStar2, SizeA
 
-      SizeK1 = SIZE(K,1)
-      SizeK2 = SIZE(K,2)
-      SizeBt1 = SIZE(Bt,1)
-      SizeBt2 = SIZE(Bt,2)
-      SizeIntN1 = SIZE(int_N,1)
-      SizeIntN2 = SIZE(int_N,2)
+      SizeK1 = SIZE(K, 1)
+      SizeK2 = SIZE(K, 2)
+      SizeBt1 = SIZE(Bt, 1)
+      SizeBt2 = SIZE(Bt, 2)
+      SizeIntN1 = SIZE(int_N, 1)
+      SizeIntN2 = SIZE(int_N, 2)
 
       Nv_star = refElv_star%Nnodes2D
       Nv = refElv%Nnodes2D
-      NeqNv = phys%Neq * Nv
-      NeqNvStar = phys%Neq * Nv_star
-      NeqNvStar2 = phys%neq * NeqNvStar
-      NeqNvStar4 = phys%neq*Mesh%ndim * NeqNvStar
-      NeqNvStar2Elem = phys%neq * Nv_star
-      NeqNvStar4Elem = phys%neq*Mesh%ndim * Nv_star
-
+      NeqNv = phys%Neq*Nv
+      NeqNvStar = phys%Neq*Nv_star
+      NeqNvStar2 = phys%neq*NeqNvStar
+      NeqNvStar4 = phys%neq*Mesh%ndim*NeqNvStar
+      NeqNvStar2Elem = phys%neq*Nv_star
+      NeqNvStar4Elem = phys%neq*Mesh%ndim*Nv_star
 
       ! Reshape matrices (this might not be needed)
-      ALLOCATE(u(Nv, phys%Neq*n_elements))
-      ALLOCATE(q(Nv, refElPol%ndim*phys%Neq*n_elements))
-      ALLOCATE(u_star2D(Nv_star, phys%Neq*n_elements))
-      ALLOCATE(q_star2D(Nv_star, refElPol%ndim*phys%Neq*n_elements))
+      ALLOCATE (u(Nv, phys%Neq*Nelems))
+      ALLOCATE (q(Nv, refElPol%ndim*phys%Neq*Nelems))
+      ALLOCATE (u_star2D(Nv_star, phys%Neq*Nelems))
+      ALLOCATE (q_star2D(Nv_star, refElPol%ndim*phys%Neq*Nelems))
 
-      ALLOCATE(Ke(SizeK1,SizeK2))
-      ALLOCATE(Bte(SizeBt1,SizeBt2))
-      ALLOCATE(int_Ne(SizeIntN1,SizeIntN2))
-      ALLOCATE(int_ue_star(SizeIntN1,SizeIntN2))
+      ALLOCATE (Ke(SizeK1, SizeK2))
+      ALLOCATE (Bte(SizeBt1, SizeBt2))
+      ALLOCATE (int_Ne(SizeIntN1, SizeIntN2))
+      ALLOCATE (int_ue_star(SizeIntN1, SizeIntN2))
 
       SizeIntUeStar1 = SizeIntN1
       SizeIntUeStar2 = SizeIntN2
 
-      ! reshape uin to u(Nv, 2*n_elements)
+      ! reshape uin to u(Nv, 2*Nelems)
       counter = 1
-      DO j = 1, n_elements*Nv
+      DO j = 1, Nelems*Nv
          DO i = 1, phys%Neq
-            u(MOD(j - 1, Nv) + 1,(i - 1) * n_elements + (j - 1) / Nv + 1) = uin(counter)
+            u(MOD(j - 1, Nv) + 1, (i - 1)*Nelems + (j - 1)/Nv + 1) = uin(counter)
             counter = counter + 1
          END DO
       END DO
 
-      ! reshape qin to q(Nv, 4*n_elements)
+      ! reshape qin to q(Nv, 4*Nelems)
       counter = 1
-      DO j = 1, n_elements*Nv
+      DO j = 1, Nelems*Nv
          DO i = 1, phys%Neq*refElPol%ndim
-            q(MOD(j - 1, Nv) + 1,(i - 1) * n_elements + (j - 1) / Nv + 1) = qin(counter)
+            q(MOD(j - 1, Nv) + 1, (i - 1)*Nelems + (j - 1)/Nv + 1) = qin(counter)
             counter = counter + 1
          END DO
       END DO
 
-      ALLOCATE(shapeFunctions(Nv_star,Nv))
+      ALLOCATE (shapeFunctions(Nv_star, Nv))
 
-      CALL compute_shape_functions_at_interp_points(refElv%nDeg, refElv_star%nDeg, refElv%elemType,shapeFunctions)
+      CALL compute_shape_functions_at_interp_points(refElv%nDeg, refElv_star%nDeg, refElv%elemType, shapeFunctions)
 
       ! Interpolate solution at finer mesh
-      ALLOCATE(L_int(refElPol%ndim*phys%Neq*n_elements*Nv_star))
+      ALLOCATE (L_int(refElPol%ndim*phys%Neq*Nelems*Nv_star))
 
       u_star2D = MATMUL(shapeFunctions, u)
       q_star2D = MATMUL(shapeFunctions, q)
 
       counter = 1
-      DO j = 1, n_elements*Nv_star
+      DO j = 1, Nelems*Nv_star
          DO i = 1, phys%Neq
-            u_int(counter) = u_star2D(MOD(j - 1, Nv_star) + 1,(i - 1) * n_elements + (j - 1) / Nv_star + 1)
+            u_int(counter) = u_star2D(MOD(j - 1, Nv_star) + 1, (i - 1)*Nelems + (j - 1)/Nv_star + 1)
             counter = counter + 1
          END DO
       END DO
 
-      ! reshape qin to q(Nv, 4*n_elements)
+      ! reshape qin to q(Nv, 4*Nelems)
       counter = 1
-      DO j = 1, n_elements*Nv_star
+      DO j = 1, Nelems*Nv_star
          DO i = 1, phys%Neq*refElPol%ndim
-            L_int(counter) = q_star2D(MOD(j - 1, Nv_star) + 1,(i - 1) * n_elements + (j - 1) / Nv_star + 1)
+            L_int(counter) = q_star2D(MOD(j - 1, Nv_star) + 1, (i - 1)*Nelems + (j - 1)/Nv_star + 1)
             counter = counter + 1
          END DO
       END DO
 
       SizeA = NeqNvStar + phys%neq
 
-      ALLOCATE(A(SizeA, SizeA))
-      ALLOCATE(b(SizeA))
-      ALLOCATE(sol(SizeA))
-      ALLOCATE(ind_u_star(NeqNvStar))
-      ALLOCATE(ind_L_star(phys%Neq*refElPol%ndim*Nv_star))
-      ALLOCATE(int_ue(phys%Neq))
-      ALLOCATE(BtL(NeqNvStar))
+      ALLOCATE (A(SizeA, SizeA))
+      ALLOCATE (b(SizeA))
+      ALLOCATE (sol(SizeA))
+      ALLOCATE (ind_u_star(NeqNvStar))
+      ALLOCATE (ind_L_star(phys%Neq*refElPol%ndim*Nv_star))
+      ALLOCATE (int_ue(phys%Neq))
+      ALLOCATE (BtL(NeqNvStar))
 
-      DO ielem = 1, n_elements
+      DO ielem = 1, Nelems
          ! Index
-         ind_u_star = (ielem - 1) * NeqNvStar2Elem + (/(j, j=1,NeqNvStar2Elem)/)
-         ind_L_star = (ielem - 1) * NeqNvStar4Elem + (/(j, j=1,NeqNvStar4Elem)/)
+         ind_u_star = (ielem - 1)*NeqNvStar2Elem + (/(j, j=1, NeqNvStar2Elem)/)
+         ind_L_star = (ielem - 1)*NeqNvStar4Elem + (/(j, j=1, NeqNvStar4Elem)/)
 
          ! elemental matrices
          Ke = K(:, :, ielem)
@@ -496,37 +581,37 @@ CONTAINS
          int_ue = MATMUL(TRANSPOSE(int_Ne), u_int(ind_u_star))
 
          ! Lagrange multipliers
-         A(1:SizeK1,1:SizeK2) = Ke
-         A(SizeK1+1:SizeA,1:SizeIntUeStar1) = TRANSPOSE(int_ue_star)
-         A(1:SizeIntUeStar1,SizeK1+1:SizeA) = int_ue_star
-         A(SizeIntUeStar1+1:SizeA,SizeIntUeStar1+1:SizeA) = 0.
+         A(1:SizeK1, 1:SizeK2) = Ke
+         A(SizeK1 + 1:SizeA, 1:SizeIntUeStar1) = TRANSPOSE(int_ue_star)
+         A(1:SizeIntUeStar1, SizeK1 + 1:SizeA) = int_ue_star
+         A(SizeIntUeStar1 + 1:SizeA, SizeIntUeStar1 + 1:SizeA) = 0.
 
          b(1:NeqNvStar) = BtL
-         b(NeqNvStar+1:SizeA) = int_ue
+         b(NeqNvStar + 1:SizeA) = int_ue
 
          ! elemental solution
-         CALL solve_linear_system_sing(A,b,sol)
+         CALL solve_linear_system_sing(A, b, sol)
          ! Postprocessed solution
-         u_star(ind_u_star) = sol(1 : SIZE(sol) - phys%neq)
+         u_star(ind_u_star) = sol(1:SIZE(sol) - phys%neq)
       END DO
 
-      DEALLOCATE(u)
-      DEALLOCATE(q)
-      DEALLOCATE(u_star2D)
-      DEALLOCATE(q_star2D)
-      DEALLOCATE(A)
-      DEALLOCATE(b)
-      DEALLOCATE(sol)
-      DEALLOCATE(L_int)
-      DEALLOCATE(BtL)
-      DEALLOCATE(int_ue)
-      DEALLOCATE(ind_u_star)
-      DEALLOCATE(ind_L_star)
-      DEALLOCATE(shapeFunctions)
-      DEALLOCATE(Ke)
-      DEALLOCATE(Bte)
-      DEALLOCATE(int_Ne)
-      DEALLOCATE(int_ue_star)
+      DEALLOCATE (u)
+      DEALLOCATE (q)
+      DEALLOCATE (u_star2D)
+      DEALLOCATE (q_star2D)
+      DEALLOCATE (A)
+      DEALLOCATE (b)
+      DEALLOCATE (sol)
+      DEALLOCATE (L_int)
+      DEALLOCATE (BtL)
+      DEALLOCATE (int_ue)
+      DEALLOCATE (ind_u_star)
+      DEALLOCATE (ind_L_star)
+      DEALLOCATE (shapeFunctions)
+      DEALLOCATE (Ke)
+      DEALLOCATE (Bte)
+      DEALLOCATE (int_Ne)
+      DEALLOCATE (int_ue_star)
 
    END SUBROUTINE hdg_postprocess_solution
 
@@ -546,7 +631,7 @@ CONTAINS
       REAL*8                                      :: ue_p1(refEl1%Nnodes2D), ue_p2(refEl2%Nnodes2D)
       INTEGER                                     :: ind_p1(refEl1%Nnodes2D), ind_p2(refEl2%Nnodes2D)
       INTEGER                                     :: nnodes_p1, nnodes_p2, n_elements, iElem, i
-      REAL*8                                      :: elem_area, elem_sol_norm, elem_error, total_area, total_norm_sol
+      REAL*8                                      :: elem_area, elem_sol_norm, elem_error, totals(3)
 #ifdef PARALL
       INTEGER                                     :: ierr
 #endif
@@ -587,53 +672,50 @@ CONTAINS
 
       END DO
 
+#ifdef PARALL
+      ! Ghost values are needed locally, but global norms must count each element once.
+      totals(1) = SUM(error2, MASK=Mesh%ghostElems .EQ. 0)
+      totals(2) = SUM(sol_norm, MASK=Mesh%ghostElems .EQ. 0)
+      totals(3) = SUM(dom_area, MASK=Mesh%ghostElems .EQ. 0)
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, totals, SIZE(totals), MPI_REAL8, &
+         MPI_SUM, MPI_COMM_WORLD, ierr)
+#else
+      totals = (/SUM(error2), SUM(sol_norm), SUM(dom_area)/)
+#endif
+
       IF(adapt%difference .EQ. 0) THEN
          ! relative error
          error = SQRT(error2/sol_norm)
 
       ELSEIF(adapt%difference .EQ. 1) THEN
-         total_norm_sol = SUM(sol_norm)
-         total_area = SUM(dom_area)
-
-#ifdef PARALL
-         CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_norm_sol, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-         CALL MPI_ALLREDUCE(MPI_IN_PLACE, total_area, 1, MPI_REAL8, MPI_SUM, MPI_COMM_WORLD, ierr)
-
-         DO iElem = 1, n_elements
-            error(iElem) = SQRT(error2(iElem)/total_norm_sol*total_area/dom_area(iElem))
-         END DO
-#else
-         error = SQRT(error2/total_norm_sol*total_area/dom_area)
-#endif
-
+         error = SQRT(error2/totals(2)*totals(3)/dom_area)
 
       ELSE
          WRITE(*,*) "Choice of relative/absolute difference for the adaptivity not valid. stop."
          STOP
       END IF
 
-      eg = SQRT(SUM(error2)/SUM(dom_area))
-
+      eg = SQRT(totals(1)/totals(3))
    END SUBROUTINE calculate_L2_error_two_sols_different_p_scalar
 
    SUBROUTINE compute_elemental_error(ue_p2, ue_p1, refEl2, refEl1, Xe_p2, Xe_p1, n, coordGauss, elem_error, sol_norm, elem_area)
       TYPE(Reference_element_type), INTENT(IN)           :: refEl2, refEl1
       REAL*8, DIMENSION(:), INTENT(IN)                   :: ue_p2, ue_p1
-      REAL*8, DIMENSION(:,:,:), INTENT(INOUT)            :: n
+      REAL*8, DIMENSION(:, :, :), INTENT(INOUT)            :: n
       REAL*8, DIMENSION(:, :), INTENT(IN)                :: Xe_p2, Xe_p1
       REAL*8, DIMENSION(:, :), INTENT(IN)                :: coordGauss
       REAL*8, INTENT(OUT)                                :: elem_error, sol_norm, elem_area
 
-      REAL*8, DIMENSION(refEl2%NGauss2D,refEl2%Ndim)     :: xyg_xi, xyg_eta, xyg_p2, xyg_p1, xyg_err
-      REAL*8, DIMENSION(refEl2%Ndim,refEl2%NGauss2D)     :: gxy0,gxy
+      REAL*8, DIMENSION(refEl2%NGauss2D, refEl2%Ndim)     :: xyg_xi, xyg_eta, xyg_p2, xyg_p1, xyg_err
+      REAL*8, DIMENSION(refEl2%Ndim, refEl2%NGauss2D)     :: gxy0, gxy
       REAL*8, DIMENSION(refEl2%NGauss2D)                 :: detJ, dvolu, ueg_p1, ueg_p2, err_gauss
       LOGICAL                                            :: convergence
 
       xyg_xi = MATMUL(refEl2%Nxi2D, Xe_p2)
       xyg_eta = MATMUL(refEl2%Neta2D, Xe_p2)
 
-      detJ = xyg_xi(:, 1) * xyg_eta(:, 2) - xyg_xi(:, 2) * xyg_eta(:, 1)
-      dvolu = detJ * refEl2%gauss_weights2D
+      detJ = xyg_xi(:, 1)*xyg_eta(:, 2) - xyg_xi(:, 2)*xyg_eta(:, 1)
+      dvolu = detJ*refEl2%gauss_weights2D
 
       ! check gauss point position
       xyg_p2 = MATMUL(refEl2%N2D, Xe_p2)
@@ -643,42 +725,41 @@ CONTAINS
       IF (MAXVAL(ABS(xyg_err)) .GT. 1e-10) THEN
          gxy0 = TRANSPOSE(coordGauss)
 
-         CALL recompute_gauss_points(Xe_p1,xyg_p2,refEl1,gxy0,n, gxy,convergence)
+         CALL recompute_gauss_points(Xe_p1, xyg_p2, refEl1, gxy0, n, gxy, convergence)
 
          IF (.NOT. convergence) THEN
-            WRITE(*,*) "Recomputation of Gauss points failed (not converged). stop."
+            WRITE (*, *) "Recomputation of Gauss points failed (not converged). stop."
             STOP
          END IF
       END IF
 
-      ueg_p2 = MATMUL(refEl2%N2D,ue_p2)
-      ueg_p1 = MATMUL(n(:,:,1),ue_p1)
-      err_gauss = ueg_p2-ueg_p1
-      elem_error = DOT_PRODUCT(err_gauss,dvolu*err_gauss)
+      ueg_p2 = MATMUL(refEl2%N2D, ue_p2)
+      ueg_p1 = MATMUL(n(:, :, 1), ue_p1)
+      err_gauss = ueg_p2 - ueg_p1
+      elem_error = DOT_PRODUCT(err_gauss, dvolu*err_gauss)
       elem_area = SUM(dvolu)
-      sol_norm = DOT_PRODUCT(ueg_p2,dvolu*ueg_p2)
+      sol_norm = DOT_PRODUCT(ueg_p2, dvolu*ueg_p2)
 
    END SUBROUTINE compute_elemental_error
 
    SUBROUTINE recompute_gauss_points(Xe_M, xyg_g, refEl1, gxy0, n, gxy, convergence)
       TYPE(Reference_element_type), INTENT(IN)    :: refEl1
       REAL*8, DIMENSION(:, :), INTENT(IN)         :: Xe_M, xyg_g
-      REAL*8, DIMENSION(:,:)                      :: gxy0
-      REAL*8, DIMENSION(:,:), INTENT(OUT)         :: gxy
-      REAL*8, DIMENSION(:,:,:), INTENT(INOUT)     :: n
+      REAL*8, DIMENSION(:, :)                      :: gxy0
+      REAL*8, DIMENSION(:, :), INTENT(OUT)         :: gxy
+      REAL*8, DIMENSION(:, :, :), INTENT(INOUT)     :: n
       LOGICAL, INTENT(OUT)                        :: convergence
       ! Declarations for other variables used in the subroutine
       REAL*8                                      :: res_x(SIZE(gxy0,1),SIZE(gxy0,2)), res_fun(SIZE(xyg_g,1), SIZE(xyg_g,2)), ac(SIZE(Xe_M,1),SIZE(Xe_M,2)), bd(SIZE(Xe_M,1),SIZE(Xe_M,2))
-      REAL*8                                      :: ac_perm(SIZE(ac,2),1,SIZE(ac,1)), bd_perm(SIZE(bd,2),1,SIZE(bd,1))
-      REAL*8                                      :: Vand(SIZE(Xe_M,1),SIZE(Xe_M,1)), invVand(SIZE(Xe_M,1),SIZE(Xe_M,1))
-      REAL*8                                      :: invDetJ(1,1,SIZE(n,1)), invJ(2,2,SIZE(n,1)), aux(1,2,SIZE(n,1))
+      REAL*8                                      :: ac_perm(SIZE(ac, 2), 1, SIZE(ac, 1)), bd_perm(SIZE(bd, 2), 1, SIZE(bd, 1))
+      REAL*8                                      :: Vand(SIZE(Xe_M, 1), SIZE(Xe_M, 1)), invVand(SIZE(Xe_M, 1), SIZE(Xe_M, 1))
+      REAL*8                                      :: invDetJ(1, 1, SIZE(n, 1)), invJ(2, 2, SIZE(n, 1)), aux(1, 2, SIZE(n, 1))
       REAL*8                                      :: p(SIZE(Xe_M,1),SIZE(n,1)), dpxi(SIZE(Xe_M,1),SIZE(n,1)), dpeta(SIZE(Xe_M,1),SIZE(n,1)), shapeFunctions(3*SIZE(n,1),SIZE(Xe_M,1))
-      INTEGER                                     :: n_gauss, max_iter, iter,i, j
+      INTEGER                                     :: n_gauss, max_iter, iter, i, j
       REAL*8                                      :: tol
 
-
       ! Determine n_gauss, max_iter, tol, etc.
-      n_gauss =  SIZE(n,1)
+      n_gauss = SIZE(n, 1)
       iter = 1
       convergence = .TRUE.
       res_x = 1.0d0
@@ -687,37 +768,37 @@ CONTAINS
       tol = 1e-10
       gxy = gxy0
 
-      CALL vandermonde_2d(Vand,refEl1)
-      CALL invert_matrix(Vand,invVand)
+      CALL vandermonde_2d(Vand, refEl1)
+      CALL invert_matrix(Vand, invVand)
 
       DO WHILE (MAXVAL(ABS(res_fun)) > tol .AND. MAXVAL(ABS(res_x)) > tol .AND. iter < max_iter)
 
          ac = MATMUL(n(:, :, 2), Xe_M)
          bd = MATMUL(n(:, :, 3), Xe_M)
 
-         invDetJ(1,1,:) = 1.0d0 / (ac(:, 1) * bd(:, 2) - bd(:, 1) * ac(:,2))
+         invDetJ(1, 1, :) = 1.0d0/(ac(:, 1)*bd(:, 2) - bd(:, 1)*ac(:, 2))
 
          ! permute [1 2] --> [2 3 1]
-         DO i = 1, SIZE(ac,1)
-            DO j = 1, SIZE(ac,2)
+         DO i = 1, SIZE(ac, 1)
+            DO j = 1, SIZE(ac, 2)
                ac_perm(j, 1, i) = ac(i, j)
                bd_perm(j, 1, i) = bd(i, j)
             END DO
          END DO
 
-         invJ(1, 1, :) = (bd_perm(2, 1, :) - bd_perm(1, 1, :)) * invDetJ(1, 1, :)
-         invJ(2, 1, :) = (-ac_perm(2, 1, :) + ac_perm(1, 1, :)) * invDetJ(1, 1, :)
+         invJ(1, 1, :) = (bd_perm(2, 1, :) - bd_perm(1, 1, :))*invDetJ(1, 1, :)
+         invJ(2, 1, :) = (-ac_perm(2, 1, :) + ac_perm(1, 1, :))*invDetJ(1, 1, :)
 
-         aux(1,:,:) = TRANSPOSE(xyg_g - MATMUL(n(:, :, 1), Xe_M))
+         aux(1, :, :) = TRANSPOSE(xyg_g - MATMUL(n(:, :, 1), Xe_M))
          gxy = gxy0 + RESHAPE(SUM(invJ*aux, 2), [2, n_gauss])
 
-         CALL orthopoly2d_deriv(gxy(i,1), gxy(i,2), refEl1%nDeg, n_gauss, p, dpxi, dpeta)
+         CALL orthopoly2d_deriv(gxy(i, 1), gxy(i, 2), refEl1%nDeg, n_gauss, p, dpxi, dpeta)
 
-         shapeFunctions = TRANSPOSE(MATMUL(invVand, RESHAPE([p,dpxi,dpeta],[3*SIZE(Xe_M,1), SIZE(n,1)])))
+         shapeFunctions = TRANSPOSE(MATMUL(invVand, RESHAPE([p, dpxi, dpeta], [3*SIZE(Xe_M, 1), SIZE(n, 1)])))
 
          n(:, :, 1) = shapeFunctions(:, :)
-         n(:, :, 2) = shapeFunctions(n_gauss + 1:2 * n_gauss, :)
-         n(:, :, 3) = shapeFunctions(2 * n_gauss + 1:, :)
+         n(:, :, 2) = shapeFunctions(n_gauss + 1:2*n_gauss, :)
+         n(:, :, 3) = shapeFunctions(2*n_gauss + 1:, :)
 
          res_fun = xyg_g - MATMUL(n(:, :, 1), Xe_M)
          res_x = gxy - gxy0
