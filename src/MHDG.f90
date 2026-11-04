@@ -22,7 +22,7 @@ PROGRAM MHDG
    Nthreads = OMPvar%Nthreads
 
    IF (MPIvar%glob_id .EQ. 0) THEN
-      WRITE(6,*) "Using ", Nthreads, " threads"
+      WRITE (6, *) "Using ", Nthreads, " threads"
    END IF
 
    ! Read input file param.txt
@@ -44,8 +44,8 @@ PROGRAM MHDG
    ! Initialization of the simulation parameters !TODO check if I need to pass dt to init_sim
    CALL init_sim(nts, dt)
 
+   ! Load the mesh
    CALL load_mesh()
-
 
    ! Linear solver: set the start to true
    matK%start = .TRUE.
@@ -257,34 +257,40 @@ PROGRAM MHDG
          ! Apply filtering
          ! call HDG_FilterSolution()
 
-         ! Compute error on oscillations, print max value of oscillation and save solution as check-point if oscillations are lower than threshold
-         IF (adapt%adaptivity) THEN
-            CALL compute_error_oscillations(oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec)
-         END IF
          ! save solution
          IF (switch%saveNR) THEN
             CALL setSolName(save_name, mesh_name, ir, .FALSE., .TRUE.)
             CALL HDF5_save_solution(save_name)
          END IF
 
+         ! Compute error on oscillations, print max value of oscillation and save solution as check-point if oscillations are lower than threshold
+         IF (adapt%adaptivity) THEN
+            CALL compute_error_oscillations(oscillations, min_osc, max_osc, n_osc, ir, ir_check, Mesh_prec)
+         END IF
+
+
+
          ! Check convergence of Newton-Raphson
          errNR = computeResidual(sol%u, uiter, 1.)
          errNR = errNR/numer%dumpnr
 
          IF (MPIvar%glob_id .EQ. 0) THEN
-            WRITE (*, *)   "Error:                  ", errNR
+            WRITE (*, *) "Error:                  ", errNR
 #ifdef WITH_PETSC
-            IF(lssolver%sollib .EQ. 3) THEN
+            IF (lssolver%sollib .EQ. 3) THEN
                WRITE (*, *) "Relative Residue PETSc: ", matPETSC%residue
-               WRITE (*,*)  "Number of Iterations:   ", matPETSC%its
-               WRITE (*,*)  "Converged Reason:       ", matPETSC%convergedReason
+               WRITE (*, *) "Number of Iterations:   ", matPETSC%its
+               WRITE (*, *) "Converged Reason:       ", matPETSC%convergedReason
             END IF
 #endif
          END IF
 
          IF (errNR .LT. numer%tNR) THEN
             ! save check-point solution if NR error is smaller than threshold
-            WRITE(*,*) "Solution saved as checkpoint."
+            IF (MPIvar%glob_id .EQ. 0) THEN
+               WRITE (*, *) "Solution saved as checkpoint."
+            END IF
+
             CALL update_uconv_qconv(uiter_best, qiter_best)
             errNR_adapt = 1e10
             ir_adapt = 0
@@ -298,55 +304,56 @@ PROGRAM MHDG
          ELSE
             uiter = sol%u
             !! ADAPTIVITY
-            IF(errNR .LT. errNR_adapt) THEN
+            IF (errNR .LT. errNR_adapt) THEN
 
                errNR_adapt = errNR
                ir_adapt = ir
 
                ! if the NR is the lowest reached so far, then save it as best check-point
                IF (MPIvar%glob_id .EQ. 0) THEN
-                  WRITE(*,*) "Solution saved as last checkpoint."
+                  WRITE (*, *) "Solution saved as last checkpoint."
                END IF
 
                CALL update_uiter_qiter_best(uiter_best, qiter_best, sol%u, sol%q)
                divergence_counter_adapt = 0
-            ELSEIF(errNR .GT. errNR_adapt) THEN
+            ELSEIF (errNR .GT. errNR_adapt) THEN
                divergence_counter_adapt = divergence_counter_adapt + 1
             END IF
 
             IF (MPIvar%glob_id .EQ. 0) THEN
-               WRITE(*,*) "ir_check: ", ir_check
+               WRITE (*, *) "ir_check: ", ir_check
             END IF
 
             ! call adaptivity if one of the following conditions is respected
             IF ((adapt%adaptivity) .AND. ((adapt%osc_adapt .AND. (max_osc .GT. adapt%osc_tol)) .OR. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)))) THEN !  .or. (flag)) then
-
                IF (switch%ME .EQV. .TRUE.) THEN
-                  time%it=time%it-1
+                  time%it = time%it - 1
                END IF
+
                ! call adaptivity precedure
                CALL adaptivity()
+
                IF (switch%ME .EQV. .TRUE.) THEN
-                  time%it=time%it+1
+                  time%it = time%it + 1
                END IF
 
                ! u0 also needs to be projected from old mesh to new mesh
                CALL project_u0_newmesh()
 
-               IF((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0)) THEN
+               IF ((adapt%NR_adapt) .AND. (MOD(ir, adapt%freq_NR_adapt) .EQ. 0)) THEN
                   ! Update check-point solution to the one projected on the new mesh
-                  DEALLOCATE(sol%u_conv)
-                  ALLOCATE(sol%u_conv(SIZE(sol%u)))
+                  DEALLOCATE (sol%u_conv)
+                  ALLOCATE (sol%u_conv(SIZE(sol%u)))
                   sol%u_conv = sol%u
-                  DEALLOCATE(sol%q_conv)
-                  ALLOCATE(sol%q_conv(SIZE(sol%q)))
+                  DEALLOCATE (sol%q_conv)
+                  ALLOCATE (sol%q_conv(SIZE(sol%q)))
                   sol%q_conv = sol%q
                END IF
 
                ! update uiter to new mapped solution
                CALL update_uiter()
 
-               IF(ir_check .NE. numer%nrp) THEN
+               IF (ir_check .NE. numer%nrp) THEN
                   ir = ir_check
                ELSE
                   ir = 0
@@ -475,7 +482,7 @@ PROGRAM MHDG
          END IF
       END IF
 
-      IF(checkpoint .GT. 1) THEN
+      IF (checkpoint .GT. 1) THEN
          convergence_counter = convergence_counter + 1
       END IF
 
@@ -485,9 +492,9 @@ PROGRAM MHDG
    CALL setSolName(save_name, mesh_name, time%it, .TRUE., .TRUE.)
    CALL HDF5_save_solution(save_name)
 
-   CALL cpu_TIME(time_finish)
+   CALL cpu_TIME(time_end)
    CALL system_CLOCK(clock_end, clock_rate)
-   PRINT '("Elapsed cpu-time = ",f10.3," seconds.")', time_finish - time_start
+   PRINT '("Elapsed cpu-time = ",f10.3," seconds.")', time_end - time_start
    PRINT '("Elapsed run-time = ",f10.3," seconds.")', (clock_end - clock_start)/REAL(clock_rate)
 
    ! Print timing infos
