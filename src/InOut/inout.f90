@@ -28,7 +28,7 @@ CONTAINS
       CHARACTER(10)               :: str
       REAL*8, PARAMETER           ::tol = 1e-6
       REAL*8                      :: xmin
-      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem
+      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem, Nfaces
       INTEGER                     :: Nextfaces, Nnodesperface, IERR
       INTEGER(HID_T)              :: file_id
 
@@ -185,7 +185,7 @@ CONTAINS
       CHARACTER(70)               :: npr, nid
       REAL*8, PARAMETER           ::tol = 1e-6
       REAL*8                      :: xmin
-      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem, Nfaces
+      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem
       INTEGER                     :: Nextfaces, Nnodesperface, IERR
       INTEGER(HID_T)              :: file_id
 #ifdef PARALL
@@ -1216,7 +1216,7 @@ CONTAINS
       CHARACTER(LEN=*)            :: fname
       CHARACTER(len=1000)         :: fname_complete
       CHARACTER(10)               :: str
-      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem, Nfaces
+      INTEGER                     :: elemType, ndim, Nnodes, Nelems, Nnodesperelem
       INTEGER                     :: Nextfaces, Nnodesperface, IERR
       INTEGER(HID_T)              :: file_id, group_id
 
