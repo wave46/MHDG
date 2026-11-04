@@ -133,9 +133,7 @@ PROGRAM MHDG
    CALL HDG_precalculatedfirstequation()
 
    ! Initialize shock capturing
-   IF ((switch%shockcp .GT. 0) .OR. (adapt%shockcp_adapt .GT. 0))  THEN
-      CALL initializeShockCapturing()
-   END IF
+   CALL initializeShockCapturing()
 
    ! add initial perturbation (pertini), magnetic or blob
    CALL add_initial_perturbation()
