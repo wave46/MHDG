@@ -364,9 +364,7 @@ CONTAINS
 
       ! Deep copy previous Mesh and reference element
       CALL free_mesh_loc(Mesh_prec)
-      CALL deep_copy_mesh_struct(Mesh,Mesh_prec)
-      CALL free_reference_element_pol(refElPol_prec)
-      CALL deep_copy_refel_struct(refElPol,refElPol_prec)
+      CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
 
       ! Rescale to dimensional values
       Mesh%X = Mesh%X*phys%lscale
