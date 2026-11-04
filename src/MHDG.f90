@@ -58,89 +58,66 @@ PROGRAM MHDG
    mkelms = .FALSE.
 
    ! Create the reference element based on the mesh type
-#ifdef PARALL
-   CALL mpi_barrier(MPI_COMM_WORLD,ierr)
-#endif
-   CALL create_reference_element(refElPol, 2, verbose = 1)
+   CALL create_reference_element(refElPol, 2, verbose=1)
 
-#ifdef TOR3D
-   ! create toroidal reference element and toroidal structures
-   CALL create_reference_element(refElTor, 1, numer%ptor, verbose = 1)
-   CALL create_toroidal_structures(refElTor, refElPol)
-   ! Define toroidal discretization
-   CALL define_toroidal_discretization()
-#endif
+   ! Check if the parameters are consistent and stop the code if not
+   CALL error_checking()
 
+   IF(reorder) THEN
+      CALL reorder_mesh(perm_elems)
+      CALL free_mesh_order()
+   END IF
 
    ! Mesh preprocess: create the mesh related structures
    ! used in the HDG scheme
    ierr = 1
 #ifdef PARALL
-   IF((MPIvar%glob_size .GT. 1)) THEN
-      CALL mesh_preprocess_serial(ierr)
-   ELSE
-      CALL mesh_preprocess(ierr)
-   END IF
+   CALL mesh_preprocess_serial(ierr)
 #else
    CALL mesh_preprocess(ierr)
 #endif
 
+#ifdef TOR3D
+! create toroidal reference element and toroidal structures
+   CALL create_reference_element(refElTor, 1, numer%ptor, verbose=1)
+   CALL create_toroidal_structures(refElTor, refElPol)
+   ! Define toroidal discretization
+   CALL define_toroidal_discretization()
+#endif
 
-   IF((ierr .EQ. 0)) THEN
-      CALL free_mesh
-      IF((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
-         CALL load_gmsh_mesh(mesh_name, 1)
-      ELSE
-         CALL load_gmsh_mesh(mesh_name, 0)
-      END IF
+   ! initialise magnetic field (the mesh is needed)
+   CALL initialize_magnetic_field_Jtor()
+   ! load magnetic field and Jtor
+   CALL load_magnetic_field_Jtor()
 
-      CALL mesh_preprocess_serial(ierr)
+   IF (switch%gmsh2h5) THEN
+      h5_filename = TRIM(ADJUSTL(mesh_name))
+      CALL HDF5_save_mesh_serial(Mesh, h5_filename)
+   END IF
 
-      IF(ierr .EQ. 0) THEN
-         WRITE(*,*) "Problem in mesh_preprocess. stop."
-         STOP
-      END IF
+   ! initialise solution
+   CALL initialize_solution()
+
+   IF(reorder) THEN
+      CALL reorder_solution(perm_elems)
+      DEALLOCATE(perm_elems)
    END IF
 
 #ifdef PARALL
-   ! if the restart solution is given
-   IF (nb_args .EQ. 2) THEN
-      ! load the serial solution
-      CALL initialize_solution()
-      ! decompose the domain over the processes
-      CALL domain_decomposition()
-      ! decompose the solution over the processes
-      CALL solution_decomposition()
-   ELSE ! if the restart solution is not given
-      ! just decompose the domain
-      CALL domain_decomposition()
-   END IF
+   ! just decompose the domain
+   CALL domain_decomposition(mesh_name)
+   ! decompose the solution over the processes
+   CALL solution_decomposition()
+   ! decompose the magnetic field and Jtor over the processes
+   CALL Bfield_Jtor_decomposition()
+#ifdef TOR3D
+   ! REcreate toroidal reference element and toroidal structures
+   !call create_reference_element(refElTor, 1, numer%ptor, verbose = 1)
+   !call create_toroidal_structures(refElTor, refElPol)
+   ! Define toroidal discretization
+   CALL define_toroidal_discretization()
 #endif
-
-
-   ! if the restart solution is not given
-   IF ((nb_args .EQ. 1)) THEN
-      ! initialise magnetic field (the mesh is needed)
-      CALL initialize_magnetic_field()
-      ! load magnetic field and Jtor
-      CALL load_magnetic_field_Jtor()
-      ! initialise solution
-      CALL initialize_solution()
-   ELSEIF ((MPIvar%glob_size .EQ. 1)) THEN
-      ! load the serial solution
-      CALL initialize_solution()
-      ! initialise magnetic field (the mesh is needed)
-      CALL initialize_magnetic_field()
-      ! load magnetic field and Jtor
-      CALL load_magnetic_field_Jtor()
-   ELSE
-      ! initialise magnetic field (the mesh is needed)
-      CALL initialize_magnetic_field()
-      ! load magnetic field and Jtor
-      CALL load_magnetic_field_Jtor()
-   END IF
-
-
+#endif
    restart_adapt = adapt%rest_adapt
    CALL set_parameters()
 
