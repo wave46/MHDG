@@ -185,44 +185,60 @@ PROGRAM MHDG
       ! uiter = sol%u0
       CALL update_uiter()
 
+      time_adapt = adapt%time_adapt
+
       ir = 1
-      DO WHILE(ir .LE. numer%nrp) ! ************ NEWTON-RAPHSON LOOP *********************
-         ! update nonconstant dumping factor
+      DO WHILE (ir .LE. numer%nrp) ! ************ NEWTON-RAPHSON LOOP *********************
+
          CALL update_dumpnr()
 
          IF (MPIvar%glob_id .EQ. 0) THEN
             WRITE (6, *) "***** NR iteration: ", ir, "*****"
-            WRITE (6, *) "NR dumping factor:  ",  numer%dumpnr
+            WRITE (6, *) "NR dumping factor:  ", numer%dumpnr
          END IF
 
          ! Compute Jacobian
          CALL HDG_computeJacobian()
+
          ! Set boundary conditions
          CALL hdg_BC()
+
          ! Compute elemental mapping
          CALL hdg_Mapping()
+
          ! Assembly the global matrix
          CALL hdg_Assembly()
+
          ! Solve linear system
 #ifdef WITH_PETSC
          CALL solve_global_system(ir)
 #else
          CALL solve_global_system()
 #endif
+
          ! Compute element-by-element solution
          CALL compute_element_solution()
          ! Check for NaN (should work with optimization flags)
          CALL check_for_NaNs()
-         IF (adapt%adaptivity .AND. restart_adapt) THEN
+
+         IF ((adapt%adaptivity .AND. restart_adapt) .OR. (time_adapt .AND. (MOD(it, adapt%freq_t_adapt) .EQ. 0))) THEN
+
             IF (switch%ME .EQV. .TRUE.) THEN
-               time%it=time%it-1
+               time%it = time%it - 1
             END IF
+
             CALL adaptivity()
+
+            CALL update_u0(sol%u)
+            CALL free_mesh_loc(Mesh_prec)
+            CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
+
             IF (switch%ME .EQV. .TRUE.) THEN
-               time%it=time%it+1
+               time%it = time%it + 1
             END IF
-            DEALLOCATE(uiter)
-            ALLOCATE(uiter(SIZE(sol%u)))
+
+            DEALLOCATE (uiter)
+            ALLOCATE (uiter(SIZE(sol%u)))
             uiter = 0.
          END IF
 
@@ -390,22 +406,6 @@ PROGRAM MHDG
                CALL update_solution()
                time%it = 0
 
-               ! update sol%u_conv = sol%u, sol%q_conv = sol%q
-               CALL update_uconv_qconv(sol%u, sol%q)
-               CALL free_mesh_loc(Mesh_prec)
-               CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
-
-               ! call the adaptive procedure if time refinement is on
-               IF((adapt%adaptivity) .AND. (adapt%time_adapt) .AND. (MOD(it,adapt%freq_t_adapt) .EQ. 0)) THEN
-
-                  CALL adaptivity
-
-                  CALL update_u0(sol%u)
-                  CALL free_mesh_loc(Mesh_prec)
-                  CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
-               END IF
-
-               ! compute dt
             ELSE
                ! Time advancing simulation
                IF (MPIvar%glob_id .EQ. 0) THEN
@@ -423,18 +423,8 @@ PROGRAM MHDG
             ! update u0
             CALL update_solution()
 
-            ! call the adaptive procedure if time refinement is on
-            IF((adapt%adaptivity) .AND. (adapt%time_adapt) .AND. (MOD(it,adapt%freq_t_adapt) .EQ. 0)) THEN
-
-               CALL adaptivity
-
-               CALL update_u0(sol%u)
-               CALL free_mesh_loc(Mesh_prec)
-               CALL deep_copy_mesh_struct(Mesh, Mesh_prec)
-            END IF
-
             ! if moving equilibrium case then update the magnetic field, otherwise just continue
-            IF(switch%ME) THEN
+            IF (switch%ME) THEN
                ! ReLoad magnetic field and Jtor
                CALL load_magnetic_field()
                CALL loadJtorMap()
