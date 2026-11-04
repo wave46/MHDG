@@ -419,6 +419,430 @@ CONTAINS
    END SUBROUTINE reorder_solution
 #endif
 
+#ifdef PARALL
+   SUBROUTINE domain_decomposition(mesh_name)
+      USE in_out, ONLY: HDF5_save_mesh_serial
+      CHARACTER(LEN=1024), INTENT(IN) :: mesh_name
+      CHARACTER(LEN=255)              :: h5_filename, nid
+      INTEGER                         :: ierr, i
+
+      IF (MPIvar%glob_size .GT. 1) THEN
+         ! split the mesh
+         IF ((switch%testcase .GE. 60) .AND. (switch%testcase .LE. 80)) THEN
+            CALL split_mesh(MPIvar%glob_size, 1, verbose=.FALSE.)
+         ELSE
+            CALL split_mesh(MPIvar%glob_size, 2, verbose=.FALSE.)
+         END IF
+         CALL mesh_preprocess(ierr)
+
+         IF (switch%gmsh2h5) THEN
+            WRITE (nid, '(I3.3)') MPIvar%glob_id
+            h5_filename = TRIM(ADJUSTL(mesh_name)) // TRIM(ADJUSTL(nid))
+            WRITE (nid, '(I3.3)') MPIvar%glob_size
+            h5_filename = TRIM(ADJUSTL(h5_filename)) // TRIM(ADJUSTL(nid))
+            Mesh%X = Mesh%X*phys%lscale
+            CALL HDF5_save_mesh_serial(Mesh, h5_filename)
+            Mesh%X = Mesh%X/phys%lscale
+         END IF
+      ELSE
+
+#ifdef TOR3D
+         IF (ASSOCIATED(Mesh%toroidal)) THEN
+            DEALLOCATE (Mesh%toroidal)
+            NULLIFY (Mesh%toroidal)
+         END IF
+#endif
+         ALLOCATE (Mesh%ghostelems(Mesh%Nelems))
+         ALLOCATE (Mesh%ghostfaces(Mesh%Nfaces))
+         ALLOCATE (Mesh%ghostpro(Mesh%Nfaces))
+         ALLOCATE (Mesh%ghostloc(Mesh%Nfaces))
+         ALLOCATE (Mesh%loc2glob_el(Mesh%Nelems))
+         ALLOCATE (Mesh%loc2glob_fa(Mesh%Nfaces))
+         ALLOCATE (Mesh%loc2glob_nodes(Mesh%Nnodes))
+
+         Mesh%ghostelems = 0
+         Mesh%ghostfaces = 0
+         Mesh%ghostpro = 0
+         Mesh%ghostLoc = 0
+         Mesh%loc2glob_el = [(i, i=1, Mesh%Nelems)]
+         Mesh%loc2glob_fa = [(i, i=1, Mesh%Nfaces)]
+         Mesh%loc2glob_nodes = [(i, i=1, Mesh%Nnodes)]
+
+         Mesh%nghostelems = 0
+         Mesh%nghostfaces = 0
+         Mesh%Nel_glob = Mesh%Nelems
+         Mesh%Nfa_glob = Mesh%Nfaces
+         Mesh%Nno_glob = Mesh%Nnodes
+         Mesh%Nintfaces_glob = Mesh%Nintfaces
+         Mesh%Nextfaces_glob = Mesh%Nextfaces
+         Mesh%Ndir_glob = Mesh%Ndir
+         Mesh%Ngho_glob = 0
+         Mesh%Nintfaces_nogho = Mesh%Nintfaces
+         Mesh%Nextfaces_nogho = Mesh%Nextfaces
+
+      END IF
+
+   END SUBROUTINE domain_decomposition
+
+   SUBROUTINE Bfield_Jtor_decomposition
+
+      REAL*8, ALLOCATABLE       :: B_glob(:, :), magnetic_flux_glob(:), magnetic_psi_glob(:), Bperturb_glob(:, :), Jtor_glob(:)
+      INTEGER                   :: i, Nnodes_local, Nnodes_glob, Nnodes_tor
+      INTEGER, ALLOCATABLE      :: indices(:), indices_loc(:), indices_glob(:)
+
+      IF (MPIvar%glob_size .EQ. 1) RETURN
+
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*, *) "*************************************************"
+         WRITE (*, *) "*           BFIELD JTOR DECOMPOSITION           *"
+         WRITE (*, *) "*************************************************"
+      END IF
+
+#ifdef TOR3D
+      Nnodes_local = Mesh%Nnodes*Mesh%nnodes_toroidal
+      Nnodes_glob = Mesh%Nno_glob*Mesh%nnodes_toroidal
+      Nnodes_tor = Mesh%Nnodes_toroidal
+#else
+      Nnodes_local = Mesh%Nnodes
+      Nnodes_glob = Mesh%Nno_glob
+      Nnodes_tor = 1
+#endif
+
+      ALLOCATE (indices(Nnodes_local/Nnodes_tor))
+      ALLOCATE (indices_loc(Nnodes_local/Nnodes_tor))
+      ALLOCATE (indices_glob(Nnodes_local/Nnodes_tor))
+      indices = [(i, i=1, Nnodes_local/Nnodes_tor)]
+      indices_loc = 0
+      indices_glob = 0
+
+
+      ALLOCATE (B_glob(Nnodes_glob, 3))
+      ALLOCATE (magnetic_flux_glob(Nnodes_glob))
+      ALLOCATE (magnetic_psi_glob(Nnodes_glob))
+      B_glob = phys%B
+
+      magnetic_flux_glob = phys%magnetic_flux
+      magnetic_psi_glob = phys%magnetic_psi
+
+      IF (switch%rmp .OR. switch%ripple) THEN
+         ALLOCATE (Bperturb_glob(Nnodes_glob, 3))
+         Bperturb_glob = phys%Bperturb
+         DEALLOCATE (phys%Bperturb); NULLIFY (phys%Bperturb)
+         ALLOCATE (phys%Bperturb(Nnodes_local, 3))
+      END IF
+      IF (switch%OhmicSrc) THEN
+         ALLOCATE (Jtor_glob(Nnodes_glob))
+         Jtor_glob = phys%Jtor
+         DEALLOCATE (phys%Jtor); NULLIFY (phys%Jtor)
+         ALLOCATE (phys%Jtor(Nnodes_local))
+      END IF
+
+      DEALLOCATE (phys%B); NULLIFY (phys%B)
+      DEALLOCATE (phys%magnetic_flux); NULLIFY (phys%magnetic_flux)
+      DEALLOCATE (phys%magnetic_psi); NULLIFY (phys%magnetic_psi)
+      ALLOCATE (phys%B(Nnodes_local, 3))
+      ALLOCATE (phys%magnetic_flux(Nnodes_local))
+      ALLOCATE (phys%magnetic_psi(Nnodes_local))
+
+      DO i = 1, Nnodes_tor
+         indices_loc = (i - 1)*Mesh%Nnodes + indices
+         indices_glob = (i - 1)*Mesh%Nno_glob + Mesh%loc2glob_nodes(indices)
+         phys%B(indices_loc, :) = B_glob(indices_glob, :)
+         phys%magnetic_flux(indices_loc) = magnetic_flux_glob(indices_glob)
+         phys%magnetic_psi(indices_loc) = magnetic_psi_glob(indices_glob)
+      END DO
+
+      IF (switch%rmp .OR. switch%ripple) THEN
+         DO i = 1, Nnodes_tor
+            indices_loc = (i - 1)*Mesh%Nnodes + indices
+            indices_glob = (i - 1)*Mesh%Nno_glob + Mesh%loc2glob_nodes(indices)
+            phys%Bperturb(indices_loc, :) = Bperturb_glob(indices_glob, :)
+         END DO
+      END IF
+
+      IF (switch%OhmicSrc) THEN
+         DO i = 1, Nnodes_tor
+            indices_loc = (i - 1)*Mesh%Nnodes + indices
+            indices_glob = (i - 1)*Mesh%Nno_glob + Mesh%loc2glob_nodes(indices)
+            phys%Jtor(indices_loc) = Jtor_glob(indices_glob)
+         END DO
+      END IF
+
+      DEALLOCATE (indices)
+      DEALLOCATE (indices_loc)
+      DEALLOCATE (indices_glob)
+      DEALLOCATE (B_glob)
+      DEALLOCATE (magnetic_flux_glob)
+      DEALLOCATE (magnetic_psi_glob)
+      IF (ALLOCATED(Bperturb_glob)) THEN
+         DEALLOCATE (Bperturb_glob)
+      END IF
+      IF (ALLOCATED(Jtor_glob)) THEN
+         DEALLOCATE (Jtor_glob)
+      END IF
+
+   END SUBROUTINE Bfield_Jtor_decomposition
+
+#ifdef TOR3D
+   SUBROUTINE solution_decomposition()
+      REAL*8, POINTER           :: u_glob(:), u_tilde_glob(:), q_glob(:)
+      REAL*8, ALLOCATABLE         :: u_glob_2d(:,:), u_loc_2d(:,:), u_loc(:), q_glob_2d(:,:), q_loc_2d(:,:), q_loc(:), utilde_glob_2d_pol(:,:), utilde_glob_2d_tor(:,:), utilde_loc_2d_pol(:,:), utilde_loc_2d_tor(:,:), utilde_loc(:)
+      INTEGER, ALLOCATABLE      :: indices_u(:, :), indices_q(:, :), indices_utilde_pol(:, :), indices_utilde_tor(:, :)
+      INTEGER                     :: Nelems_global, Nfaces_global, Nelems_local, Nfaces_local, Ntor, Nnodesperelem, Nnodesperface, Nnodesperelem_tor1d, Neq, size_utilde
+      INTEGER                     :: iel, ifa, itor, index, index_1_u, index_2_u, index_start_u, index_end_u, index_1_q, index_2_q, index_start_q, index_end_q, index_start_utilde, index_end_utilde,index_1_utilde, index_2_utilde
+
+      NULLIFY (u_glob, u_tilde_glob, q_glob)
+
+      IF (mpivar%glob_size .EQ. 1) RETURN
+
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*, *) "*************************************************"
+         WRITE (*, *) "*            SOLUTION DECOMPOSITION             *"
+         WRITE (*, *) "*************************************************"
+      END IF
+
+      u_glob => sol%u
+      u_tilde_glob => sol%u_tilde
+      q_glob => sol%q
+
+      Nelems_global = Mesh%Nel_glob
+      Nfaces_global = Mesh%Nfa_glob
+      Nelems_local = Mesh%Nelems
+      Nfaces_local = Mesh%Nfaces
+      Ntor = numer%ntor
+      Nnodesperelem_tor1d = numer%ptor + 1
+      Nnodesperelem = Mesh%Nnodesperelem
+      Nnodesperface = Mesh%Nnodesperface
+      Neq = phys%Neq
+      ndim = 3
+
+      ! size of utilde per equation local
+      IF (MPIvar%ntor .GT. 1) THEN
+         size_utilde = (Ntor*(Nfaces_local*Nnodesperface*Nnodesperelem_tor1d + Nelems_local*Nnodesperelem) + Nelems_local*Nnodesperelem)*neq
+      ELSE
+         size_utilde = Ntor*(Nfaces_local*Nnodesperface*Nnodesperelem_tor1d + Nelems_local*Nnodesperelem)*neq
+      END IF
+
+      ! allocate the indices array
+      ALLOCATE (indices_u(Nelems_global, Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq))
+      ALLOCATE (indices_q(Nelems_global, Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim))
+      ALLOCATE (indices_utilde_pol(Nelems_global, Ntor*Nnodesperelem*Neq))
+      ALLOCATE (indices_utilde_tor(Nfaces_global, Ntor*Nnodesperelem_tor1d*Nnodesperface*Neq))
+      indices_u = 0
+      indices_q = 0
+      indices_utilde_pol = 0
+      indices_utilde_tor = 0
+      index_start_utilde = 0
+      index_end_utilde = 0
+      index_1_utilde = 0
+      index_2_utilde = 0
+
+      ! Loop over elements and toroidal slices
+      DO iel = 1, Nelems_global
+         DO itor = 1, ntor
+            index_1_u = (itor - 1)*Nelems_global*Nnodesperelem_tor1d*Nnodesperelem*Neq + (iel - 1)*Nnodesperelem_tor1d*Nnodesperelem*Neq + 1
+            index_2_u = index_1_u + Nnodesperelem_tor1d*Nnodesperelem*Neq - 1
+            index_1_q = (itor - 1) * Nelems_global * Nnodesperelem_tor1d * Nnodesperelem * Neq * ndim + (iel - 1) * Nnodesperelem_tor1d * Nnodesperelem * Neq * ndim + 1
+            index_2_q = index_1_q + Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim - 1
+            index_1_utilde = (itor - 1) * (Nelems_global * Nnodesperelem + Nfaces_global * Nnodesperface * Nnodesperelem_tor1d) * Neq + (iel - 1)*Nnodesperelem*Neq + 1
+            index_2_utilde = index_1_utilde + Nnodesperelem*Neq - 1
+
+            index_start_u = (itor - 1)*Nnodesperelem_tor1d*Nnodesperelem*Neq + 1
+            index_end_u = index_start_u + Nnodesperelem_tor1d*Nnodesperelem*Neq - 1
+            index_start_q = (itor - 1)*Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim + 1
+            index_end_q = index_start_q + Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim - 1
+            index_start_utilde = (itor - 1)*Nnodesperelem*Neq + 1
+            index_end_utilde = index_start_utilde + Nnodesperelem*Neq - 1
+
+            indices_u(iel, index_start_u:index_end_u) = [(i, i=index_1_u, index_2_u)]
+            indices_q(iel, index_start_q:index_end_q) = [(i, i=index_1_q, index_2_q)]
+            indices_utilde_pol(iel, index_start_utilde:index_end_utilde) = [(i, i=index_1_utilde, index_2_utilde)]
+         END DO
+      END DO
+
+      DO ifa = 1, Nfaces_global
+         DO itor = 1, ntor
+            index_1_utilde = (itor - 1) * (Nelems_global * Nnodesperelem + Nfaces_global * Nnodesperface * Nnodesperelem_tor1d) * Neq + (Nelems_global * Nnodesperelem + (ifa - 1) * Nnodesperface * Nnodesperelem_tor1d) * Neq + 1
+            index_2_utilde = index_1_utilde + Nnodesperface*Nnodesperelem_tor1d*Neq - 1
+
+            index_start_utilde = (itor - 1)*Nnodesperface*Nnodesperelem_tor1d*Neq + 1
+            index_end_utilde = index_start_utilde + Nnodesperface*Nnodesperelem_tor1d*Neq - 1
+            indices_utilde_tor(ifa, index_start_utilde:index_end_utilde) = [(i, i=index_1_utilde, index_2_utilde)]
+         END DO
+      END DO
+
+      ALLOCATE (u_glob_2d(Nelems_global, Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq))
+      ALLOCATE (q_glob_2d(Nelems_global, Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim))
+      ALLOCATE (utilde_glob_2d_pol(Nelems_global, Ntor*Nnodesperelem*Neq))
+      ALLOCATE (utilde_glob_2d_tor(Nfaces_global, Ntor*Nnodesperelem_tor1d*Nnodesperface*Neq))
+      u_glob_2d = 0.
+      q_glob_2d = 0.
+      utilde_glob_2d_pol = 0.
+      utilde_glob_2d_tor = 0.
+
+      DO iel = 1, Nelems_global
+         u_glob_2d(iel, :) = u_glob(indices_u(iel, :))
+         q_glob_2d(iel, :) = q_glob(indices_q(iel, :))
+         utilde_glob_2d_pol(iel, :) = u_tilde_glob(indices_utilde_pol(iel, :))
+      END DO
+
+      DO ifa = 1, Nfaces_global
+         utilde_glob_2d_tor(ifa, :) = u_tilde_glob(indices_utilde_tor(ifa, :))
+      END DO
+
+      ALLOCATE (u_loc_2d(Nelems_local, Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq))
+      ALLOCATE (q_loc_2d(Nelems_local, Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim))
+      ALLOCATE (utilde_loc_2d_pol(Nelems_local, Ntor*Nnodesperelem*Neq))
+      ALLOCATE (utilde_loc_2d_tor(Nfaces_local, Ntor*Nnodesperelem_tor1d*Nnodesperface*Neq))
+      u_loc_2d = 0.
+      q_loc_2d = 0.
+      utilde_loc_2d_pol = 0.
+      utilde_loc_2d_tor = 0.
+
+      DO i = 1, Nelems_local
+         index = Mesh%loc2glob_el(i)
+         u_loc_2d(i, :) = u_glob_2d(index, :)
+         q_loc_2d(i, :) = q_glob_2d(index, :)
+         utilde_loc_2d_pol(i, :) = utilde_glob_2d_pol(index, :)
+      END DO
+      DO i = 1, Nfaces_local
+         index = Mesh%loc2glob_fa(i)
+         utilde_loc_2d_tor(i, :) = utilde_glob_2d_tor(index, :)
+      END DO
+
+      ALLOCATE (u_loc(Nelems_local*Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq))
+      ALLOCATE (q_loc(Nelems_local*Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim))
+      ALLOCATE (utilde_loc(size_utilde))
+      u_loc = 0.
+      q_loc = 0.
+      utilde_loc = 0.
+
+      DO itor = 1, ntor
+         index_start_u = (itor - 1)*Nnodesperelem_tor1d*Nnodesperelem*Neq + 1
+         index_end_u = index_start_u + Nnodesperelem_tor1d*Nnodesperelem*Neq - 1
+         index_start_q = (itor - 1)*Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim + 1
+         index_end_q = index_start_q + Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim - 1
+         index_start_utilde = (itor - 1)*Nnodesperelem*Neq + 1
+         index_end_utilde = index_start_utilde + Nnodesperelem*Neq - 1
+
+         DO iel = 1, Nelems_local
+            index_1_u = (itor - 1)*Nelems_local*Nnodesperelem*Nnodesperelem_tor1d*Neq + (iel - 1)*Nnodesperelem_tor1d*Nnodesperelem*Neq + 1
+            index_2_u = index_1_u + Nnodesperelem_tor1d*Nnodesperelem*Neq - 1
+            index_1_q = (itor - 1)*Nelems_local*Nnodesperelem *Nnodesperelem_tor1d *  Neq * ndim + (iel - 1 )*Nnodesperelem_tor1d * Nnodesperelem * Neq * ndim + 1
+            index_2_q = index_1_q + Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim - 1
+            index_1_utilde = (itor - 1)*(Nelems_local*Nnodesperelem + Nfaces_local*Nnodesperface*Nnodesperelem_tor1d) * Neq + (iel - 1) * Nnodesperelem * Neq + 1
+            index_2_utilde = index_1_utilde + Nnodesperelem*Neq - 1
+
+            u_loc(index_1_u:index_2_u) = u_loc_2d(iel, index_start_u:index_end_u)
+            q_loc(index_1_q:index_2_q) = q_loc_2d(iel, index_start_q:index_end_q)
+            utilde_loc(index_1_utilde:index_2_utilde) = utilde_loc_2d_pol(iel, index_start_utilde:index_end_utilde)
+         END DO
+      END DO
+
+      DO itor = 1, Ntor
+         index_start_utilde = (itor - 1)*Nnodesperface*Nnodesperelem_tor1d*Neq + 1
+         index_end_utilde = index_start_utilde + Nnodesperface*Nnodesperelem_tor1d*Neq - 1
+         DO ifa = 1, Nfaces_local
+            index_1_utilde = Nelems_local*Nnodesperelem*Neq + (itor - 1)*(Nelems_local*Nnodesperelem + Nfaces_local*Nnodesperface*Nnodesperelem_tor1d) * Neq + (ifa - 1) * Nnodesperface*Nnodesperelem_tor1d * Neq + 1
+            index_2_utilde = index_1_utilde + Nnodesperface*Nnodesperelem_tor1d*Neq - 1
+            utilde_loc(index_1_utilde:index_2_utilde) = utilde_loc_2d_tor(ifa, index_start_utilde:index_end_utilde)
+         END DO
+      END DO
+
+      DEALLOCATE (sol%u)
+      DEALLOCATE (sol%q)
+      DEALLOCATE (sol%u_tilde)
+      NULLIFY (sol%u)
+      NULLIFY (sol%q)
+      NULLIFY (sol%u_tilde)
+
+      ALLOCATE (sol%u(Nelems_local*Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq))
+      ALLOCATE (sol%q(Nelems_local*Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq*ndim))
+      ALLOCATE (sol%u_tilde(size_utilde))
+      sol%u = u_loc
+      sol%q = q_loc
+      sol%u_tilde = utilde_loc
+
+      DEALLOCATE (indices_u, indices_q, indices_utilde_pol, indices_utilde_tor)
+      DEALLOCATE (u_glob_2d, u_loc_2d, u_loc)
+      DEALLOCATE (q_glob_2d, q_loc_2d, q_loc)
+      DEALLOCATE (utilde_glob_2d_pol, utilde_glob_2d_tor, utilde_loc_2d_pol, utilde_loc_2d_tor, utilde_loc)
+      NULLIFY (u_glob, u_tilde_glob, q_glob)
+
+   END SUBROUTINE solution_decomposition
+#else
+   SUBROUTINE solution_decomposition()
+      REAL*8, POINTER           :: u_glob(:), u_tilde_glob(:), q_glob(:)
+      REAL*8, ALLOCATABLE       :: u_3d(:, :, :), u_tilde_3d(:, :, :), q_4D(:, :, :, :)
+      REAL*8, ALLOCATABLE       :: u_3d_local(:, :, :), u_tilde_3d_local(:, :, :), q_4d_local(:, :, :, :)
+      INTEGER                   :: i, index
+
+      NULLIFY (u_glob, u_tilde_glob, q_glob)
+
+      IF (mpivar%glob_size .EQ. 1) RETURN
+
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*, *) "*************************************************"
+         WRITE (*, *) "           SOLUTION DECOMPOSITION                "
+         WRITE (*, *) "*************************************************"
+      END IF
+
+      u_glob => sol%u
+      u_tilde_glob => sol%u_tilde
+      q_glob => sol%q
+
+      ALLOCATE (u_3d(Mesh%Nel_glob, Mesh%Nnodesperelem, phys%neq))
+      ALLOCATE (u_tilde_3d(Mesh%Nfa_glob, Mesh%Nnodesperface, phys%neq))
+      ALLOCATE (q_4d(Mesh%Nel_glob, Mesh%Nnodesperelem, phys%neq, Mesh%Ndim))
+
+      u_tilde_3d = 0.
+      u_3d = 0.
+      q_4D = 0.
+
+      CALL reshape_transpose_permute(u_glob, u_3d, phys%neq, Mesh%Nel_glob, Mesh%Nnodesperelem)
+      CALL reshape_transpose_permute(u_tilde_glob, u_tilde_3d, phys%neq, Mesh%Nfa_glob, Mesh%Nnodesperface)
+      CALL reshape_transpose_permute_4D(q_glob, q_4D, Mesh%Ndim, phys%neq, Mesh%Nel_glob, Mesh%Nnodesperelem)
+
+      ALLOCATE (u_3d_local(Mesh%Nelems, Mesh%Nnodesperelem, phys%neq))
+      ALLOCATE (u_tilde_3d_local(Mesh%Nfaces, Mesh%Nnodesperface, phys%neq))
+      ALLOCATE (q_4d_local(Mesh%Nelems, Mesh%Nnodesperelem, phys%neq, Mesh%Ndim))
+      u_3d_local = 0.
+      u_tilde_3d_local = 0.
+      q_4d_local = 0.
+
+      DO i = 1, Mesh%Nelems
+         index = Mesh%loc2glob_el(i)
+         u_3d_local(i, :, :) = u_3d(index, :, :)
+         q_4d_local(i, :, :, :) = q_4D(index, :, :, :)
+      END DO
+
+      DO i = 1, Mesh%Nfaces
+         u_tilde_3d_local(i, :, :) = u_tilde_3d(Mesh%loc2glob_fa(i), :, :)
+      END DO
+
+      DEALLOCATE (sol%u, sol%u_tilde, sol%q)
+
+      ALLOCATE (sol%u(Mesh%Nelems*Mesh%Nnodesperelem*phys%neq))
+      ALLOCATE (sol%u_tilde(Mesh%Nfaces*Mesh%Nnodesperface*phys%neq))
+      ALLOCATE (sol%q(Mesh%Nelems*Mesh%Nnodesperelem*phys%neq*Mesh%Ndim))
+      sol%u = 0
+      sol%u_tilde = 0
+      sol%q = 0
+
+      CALL flatten_row_major(u_3d_local, sol%u, SIZE(u_3d_local, 1), SIZE(u_3d_local, 2), SIZE(u_3d_local, 3))
+      CALL flatten_row_major(u_tilde_3d_local, sol%u_tilde, SIZE(u_tilde_3d_local,1), SIZE(u_tilde_3d_local,2), SIZE(u_tilde_3d_local,3))
+      CALL flatten_row_major_4D(q_4d_local, sol%q, SIZE(q_4d_local, 1), SIZE(q_4d_local, 2), SIZE(q_4d_local, 3), SIZE(q_4d_local, 4))
+
+      DEALLOCATE (u_3d, u_tilde_3d, q_4d)
+      DEALLOCATE (u_3d_local, u_tilde_3d_local, q_4d_local)
+      NULLIFY (u_glob, u_tilde_glob, q_glob)
+   END SUBROUTINE solution_decomposition
+#endif
+! TOR3D
+#endif
+! PARALL
+
+
    SUBROUTINE split_mesh(ndiv, divtype, verbose)
 
       INTEGER, INTENT(IN)                     :: nDiv, divType
