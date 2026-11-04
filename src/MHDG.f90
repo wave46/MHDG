@@ -392,7 +392,7 @@ PROGRAM MHDG
          ! Check steady state and update or exit
          !****************************************
          IF (errlstime .LT. numer%tTM) THEN
-            IF (switch%psdtime) THEN
+            IF ((switch%psdtime) .AND. (it .NE. nts)) THEN
                ! Pseudo-time simulation
 
                ! save solution
@@ -433,7 +433,7 @@ PROGRAM MHDG
             END IF
          END IF
       ELSE
-         IF (switch%psdtime) THEN
+         IF ((switch%psdtime) .AND. (it .NE. nts)) THEN
             ! save solution
             CALL setSolName(save_name, mesh_name, it, .TRUE., .TRUE.)
             CALL HDF5_save_solution(save_name)
