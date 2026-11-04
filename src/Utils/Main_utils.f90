@@ -204,60 +204,48 @@ CONTAINS
 
       ! Free elmat, mat, magnetic field, Jtor, puff (to save some memory for the adaptivity)
       CALL free_before_adaptivity()
-      CALL adaptively_refine_mesh(mesh_name,count_adapt,order)
 
-      ! save new mesh and solution
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         WRITE (count_adapt_char, *) count_adapt
-         CALL HDF5_save_mesh("./res/new_mesh_n" // TRIM(ADJUSTL(count_adapt_char)) // ".h5", Mesh%Ndim, Mesh%Nelems, Mesh%Nextfaces, Mesh%Nnodes, Mesh%Nnodesperelem, Mesh%Nnodesperface, Mesh%elemType, Mesh%T, Mesh%X, Mesh%Tb, Mesh%boundaryFlag)
-         !call HDF5_save_solution("./res/projected_solution_n" // TRIM(ADJUSTL(count_adapt_char)))
-      END IF
+      CALL adaptively_refine_mesh(mesh_name, count_adapt, order)
 
-#ifdef PARALL
-
-      Mesh%X = Mesh%X/phys%lscale
-
-      ! Domain decomposition on the new mesh
-      CALL split_mesh(MPIvar%glob_size, 3, .FALSE.)
-      CALL mesh_preprocess(ierr)
-      Mesh%X = Mesh%X*phys%lscale
-
-      ! Restart communication
-      CALL init_com()
-
-      ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
-      CALL gather_mesh(Mesh_prec,  T_glob = T_glob, X_glob = X_glob)
-      CALL gather_solution(Mesh_in = Mesh_prec, Nnodesperelem = Mesh_prec%Nnodesperelem, u_in = sol%u_conv, q_in = sol%q_conv, u_glob = u_glob, q_glob = q_glob)
-      ! Project the check-point solution to the new mesh
-      CALL projectSolutionDifferentMeshes_general(T_glob,X_glob,Mesh%T,Mesh%X, u_glob, q_glob, sol%u, sol%q)
-
-      DEALLOCATE(X_glob,T_glob, u_glob, q_glob)
-      NULLIFY(X_glob, T_glob, u_glob, q_glob)
-
-      ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
-      CALL gather_mesh(Mesh_in = Mesh, T_glob = T_glob, X_glob = X_glob)
-      CALL gather_solution(Mesh_in = Mesh, Nnodesperelem = Mesh%Nnodesperelem, u_in = sol%u, q_in = sol%q, u_glob = u_glob, q_glob = q_glob)
-
-      DEALLOCATE(X_glob,T_glob, u_glob, q_glob)
-      NULLIFY(X_glob, T_glob, u_glob, q_glob)
-
-#else
-      Mesh%X = Mesh%X*phys%lscale
-      Mesh%X = Mesh%X/phys%lscale
-
-      ! Project the check-point solution to the new mesh
-      CALL projectSolutionDifferentMeshes_general(Mesh_prec%T,Mesh_prec%X,Mesh%T, Mesh%X, sol%u_conv, sol%q_conv, sol%u, sol%q)
-
+#ifdef TOR3D
+      CALL define_toroidal_discretization()
 #endif
-      IF(MPIvar%glob_id .EQ. 0) THEN
+
+      ! save new mesh
+      WRITE (param_adapt_char, *) adapt%param_est
+      WRITE (count_adapt_char, *) count_adapt
+      file_name = TRIM(ADJUSTL(mesh_name)) // '_param' //TRIM(ADJUSTL(param_adapt_char)) // '_n' //TRIM(ADJUSTL(count_adapt_char))
+      Mesh%X = Mesh%X/phys%lscale
+      CALL HDF5_save_mesh_serial(Mesh, file_name)
+      Mesh%X = Mesh%X*phys%lscale
+
+#ifndef TOR3D
 #ifndef PARALL
-         WRITE(*,*) "Number of elements previous mesh: ", Mesh_prec%Nelems
-         WRITE(*,*) "Number of elements current mesh:  ", Mesh%Nelems
+      CALL adaptivity_serial_project_solution_2D()
 #else
-         WRITE(*,*) "Number of elements previous mesh: ", Mesh_prec%Nel_glob
-         WRITE(*,*) "Number of elements current mesh:  ", Mesh%Nel_glob
+      CALL adaptivity_parallel_project_solution_2D()
 #endif
+#else
+#ifndef PARALL
+      CALL adaptivity_serial_project_solution_3D()
+#else
+      CALL adaptivity_parallel_project_solution_3D()
+#endif
+#endif
+
+#ifndef PARALL
+      WRITE (*, *) "Number of elements previous mesh: ", Mesh_prec%Nelems
+      WRITE (*, *) "Number of elements current mesh:  ", Mesh%Nelems
+#else
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*, *) "Number of elements previous mesh: ", Mesh_prec%Nel_glob
+         WRITE (*, *) "Number of elements current mesh:  ", Mesh%Nel_glob
       END IF
+#endif
+
+#ifdef TOR3D
+      CALL define_toroidal_discretization()
+#endif
 
       ! Extract new trace solution
       CALL update_solution_arrays()
