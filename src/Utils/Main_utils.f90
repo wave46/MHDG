@@ -7,174 +7,344 @@
 MODULE Main_utils
 
    USE in_out
-   USE GMSH_io_module, ONLY: load_gmsh_mesh, HDF5_save_mesh, convert_gmsh_to_hdf5, gmsh_mesh2d_write, hdf5_save_mesh_struct
+   USE GMSH_io_module, ONLY: load_gmsh_mesh, gmsh_mesh2d_write
    USE reference_element
    USE preprocess
    USE MPI_OMP
    USE printutils
    USE debug
    USE initialization
+#ifdef WITH_PASTIX
+   USE solve_pastix, ONLY: terminate_mat_PASTIX
+#endif
+#ifdef WITH_PSBLAS
+   USE solve_psblas, ONLY: terminate_PSBLAS
+#endif
 #ifdef WITH_PETSC
-   USE solve_petsc, ONLY: matPETSC, InitPETSC
+   USE solve_petsc, ONLY: matPETSC, InitPETSC, terminate_PETSC, FinalizePETSC
 #endif
    USE adaptivity_general_module
+   USE adaptivity_projection_module, ONLY: projectSolutionDifferentMeshes_general, projectSolutionDifferentMeshes_general_arrays
    USE Postprocess, ONLY: computeL2ErrorAnalyticSol
 #ifdef PARALL
    USE Communications
    USE domain_decomposition_module
+#else
+   USE domain_decomposition_module, ONLY: reorder_mesh, reorder_solution
 #endif
    USE HDG_LimitingTechniques
 
    IMPLICIT NONE
 
    INTEGER                      :: Np, Nel, Nfp, Nf, Ndim, Nthreads
-   INTEGER                      :: it, ir, ir_check, it0, nts, nu, nut, nb_args, IERR, k, i,is, count_adapt = 0, ir_adapt = 0, checkpoint = 1, divergence_counter_adapt = 0, convergence_counter = 1, order
+   INTEGER                       :: it, ir, ir_check, it0, nts, nu, nut, nb_args, IERR, k, i,is, ir_count_adapt = 0, count_adapt = 0, ir_adapt = 0, checkpoint = 1, divergence_counter_adapt = 0, convergence_counter = 1, order
 
    LOGICAL, ALLOCATABLE         :: mkelms(:)
    REAL*8                       :: dt, dt0, errNR, errNR_adapt, errlstime
-   REAL*8, ALLOCATABLE          :: uiter(:), L2err(:),u0_temp(:,:)
+   REAL*8, ALLOCATABLE          :: uiter(:), L2err(:), u0_temp(:, :)
    REAL*8, POINTER              :: uiter_best(:) => NULL(), qiter_best(:) => NULL()
-   CHARACTER(LEN=1024)          :: mesh_name,mesh_name_proj, save_name
-   CHARACTER ( len = 255 )      :: gmsh_filename
-   CHARACTER ( len = 255 )      :: h5_filename
-   CHARACTER ( len = 50 )       :: count_adapt_char
-   REAL*8                       :: cputtot, runttot
+   CHARACTER(LEN=1024)          :: mesh_name, mesh_name_proj, save_name
+   CHARACTER(len=255)           :: gmsh_filename
+   REAL*8                       :: cputtot, runttot, time_start, time_end
    INTEGER                      :: OMP_GET_MAX_THREADS
-   INTEGER                      :: clock_rate,clock_start, clock_end
-   REAL*8                       :: time_start, time_finish
-   REAL*8,ALLOCATABLE           :: xs(:,:)
+   INTEGER                      :: clock_rate, clock_start, clock_end
+   REAL*8, ALLOCATABLE           :: xs(:, :)
    REAL*8, ALLOCATABLE          :: oscillations(:)
    REAL*8                       :: max_osc = -100., min_osc = -100.
-   INTEGER,ALLOCATABLE          :: vector_nodes_unique(:,:)
-   INTEGER                      :: N_n_vertex, n_osc
-   INTEGER*8                    :: file_id
+   INTEGER                      :: n_osc
    TYPE(Mesh_type)              :: Mesh_prec
-   LOGICAL                      :: restart_adapt
+   LOGICAL                      :: restart_adapt, time_adapt, reorder = .TRUE.
+   INTEGER, ALLOCATABLE         :: perm_elems(:), perm_faces(:)
 #ifdef PARALL
-   TYPE(Mesh_type)              :: Mesh_glob
-   REAL*8, POINTER              :: X_glob(:,:) => NULL(), B_glob(:,:) => NULL()
+   REAL*8, POINTER              :: X_glob(:, :) => NULL(), B_glob(:, :) => NULL()
    REAL*8, POINTER              :: u_glob(:) => NULL(), q_glob(:) => NULL(), magnetic_flux_glob(:) => NULL(), u_tilde_glob(:) => NULL()
-   INTEGER, POINTER             :: T_glob(:,:) => NULL(), Tb_glob(:,:) => NULL(), F_glob(:,:) => NULL(), N_glob(:,:) => NULL(), flipface_glob(:,:) => NULL(), Tlin_glob(:,:) => NULL(), &
-   & boundaryFlag_glob(:) => NULL(), extFaces_Glob(:,:) => NULL(), intFaces_Glob(:,:) => NULL()
-   CHARACTER(70)                :: npr, nid
 #endif
 #ifdef TOR3D
-   INTEGER                      :: Neq, ntorloc,Nfl, Np1dPol, Np1dTor, Ng1dPol, Ng1dTor,
+   INTEGER                      :: Neq, ntorloc, Nfl, Np1dPol, Np1dTor, Ng1dPol, Ng1dTor
 #endif
-   TYPE(Reference_element_type) :: refElPol_prec
-
 
 CONTAINS
 
-#ifdef PARALL
-   SUBROUTINE domain_decomposition()
-      IF(MPIvar%glob_size .GT. 1) THEN
-         ! split the mesh
+#ifndef TOR3D
+#ifndef PARALL
+   SUBROUTINE adaptivity_serial_project_solution_2D()
 
-         CALL free_mesh_loc(Mesh_glob)
-         CALL deep_copy_mesh_struct(Mesh, Mesh_glob)
-         Mesh_glob%X = Mesh_glob%X*phys%lscale
-         CALL split_mesh(MPIvar%glob_size, 3 , .FALSE.)
-         CALL mesh_preprocess(ierr)
+      Mesh%X = Mesh%X*phys%lscale
+      Mesh%X = Mesh%X/phys%lscale
 
-         WRITE (nid, *) MPIvar%glob_id + 1
-         WRITE (npr, *) MPIvar%glob_size
-         h5_filename = TRIM(ADJUSTL(mesh_name)) // '_' // TRIM(ADJUSTL(nid)) // '_' // TRIM(ADJUSTL(npr)) // '.h5'
-         Mesh%X = Mesh%X*phys%lscale
-         CALL HDF5_save_mesh_struct(Mesh, h5_filename)
-         Mesh%X = Mesh%X/phys%lscale
-         !call HDF5_save_mesh(h5_filename, Mesh%Ndim, mesh%Nelems, mesh%Nextfaces, mesh%Nnodes, mesh%Nnodesperelem, mesh%Nnodesperface, mesh%elemType, mesh%T, mesh%X, mesh%Tb, mesh%boundaryFlag)
+      ! Project the check-point solution to the new mesh
+      CALL projectSolutionDifferentMeshes_general(Mesh_prec%T, Mesh_prec%X, Mesh%T, Mesh%X, sol%u_conv, sol%q_conv, sol%u, sol%q)
 
-      ELSE
-         ALLOCATE(Mesh%ghostelems(Mesh%Nelems))
-         ALLOCATE(Mesh%ghostfaces(Mesh%Nfaces))
-         ALLOCATE(Mesh%ghostpro(Mesh%Nfaces))
-         ALLOCATE(Mesh%ghostloc(Mesh%Nfaces))
-         ALLOCATE(Mesh%loc2glob_el(Mesh%Nelems))
-         ALLOCATE(Mesh%loc2glob_fa(Mesh%Nfaces))
-         ALLOCATE(Mesh%loc2glob_nodes(Mesh%Nnodes))
+   END SUBROUTINE adaptivity_serial_project_solution_2D
+#else
+   SUBROUTINE adaptivity_parallel_project_solution_2D()
+      INTEGER, POINTER          :: T_glob(:,:)
+      REAL*8, POINTER           :: X_glob(:,:)
 
-         Mesh%ghostelems = 0
-         Mesh%ghostfaces = 0
-         Mesh%ghostpro = 0
-         Mesh%ghostLoc = 0
-         Mesh%loc2glob_el = [(i, i = 1, Mesh%Nelems)]
-         Mesh%loc2glob_fa = [(i, i = 1, Mesh%Nfaces)]
-         Mesh%loc2glob_nodes = [(i, i = 1, Mesh%Nnodes)]
+      NULLIFY(T_glob, X_glob)
 
-         Mesh%Nel_glob = Mesh%Nelems
-         Mesh%Nfa_glob = Mesh%Nfaces
-         Mesh%Nno_glob = Mesh%Nnodes
-      END IF
+      Mesh%X = Mesh%X/phys%lscale
 
-   END SUBROUTINE domain_decomposition
+      ! Domain decomposition on the new mesh
+      CALL domain_decomposition(mesh_name)
 
-   SUBROUTINE solution_decomposition()
-      REAL*8, POINTER           :: u_glob(:), u_tilde_glob(:), q_glob(:)
-      REAL*8, ALLOCATABLE       :: u_3d(:,:,:), u_tilde_3d(:,:,:), q_4D(:,:,:,:)
-      REAL*8, ALLOCATABLE       :: u_3d_local(:,:,:), u_tilde_3d_local(:,:,:), q_4d_local(:,:,:,:)
-      INTEGER                   :: i, index
+      Mesh%X = Mesh%X*phys%lscale
 
-      IF(MPIvar%glob_id .EQ. 0) THEN
-         WRITE(*,*) "*************************************************"
-         WRITE(*,*) "           SOLUTION DECOMPOSITION                "
-         WRITE(*,*) "*************************************************"
-      END IF
+      ! Restart communication
+      CALL init_com()
 
-      u_glob => sol%u
-      u_tilde_glob => sol%u_tilde
-      q_glob => sol%q
+      ! Gather checkpoint solution and project it to the new mesh
+      CALL gather_mesh(Mesh_prec, T_glob=T_glob, X_glob=X_glob)
+      CALL gather_solution(Mesh_in = Mesh_prec, Nnodesperelem = Mesh_prec%Nnodesperelem, u_in = sol%u_conv, q_in = sol%q_conv, u_glob = u_glob, q_glob = q_glob)
+      CALL projectSolutionDifferentMeshes_general(T_glob, X_glob, Mesh%T, Mesh%X, u_glob, q_glob, sol%u, sol%q)
 
-      ALLOCATE(u_3d(Mesh%Nel_glob, Mesh%Nnodesperelem, phys%neq))
-      ALLOCATE(u_tilde_3d(Mesh%Nfa_glob, Mesh%Nnodesperface, phys%neq))
-      ALLOCATE(q_4d(Mesh%Nel_glob, Mesh%Nnodesperelem, phys%neq, Mesh%Ndim))
-      u_tilde_3d = 0.
-      u_3d = 0.
-      q_4D = 0.
+      DEALLOCATE (X_glob, T_glob, u_glob, q_glob)
+      NULLIFY (X_glob, T_glob, u_glob, q_glob)
 
-      CALL reshape_transpose_permute(u_glob, u_3d, phys%neq, Mesh%Nel_glob, Mesh%Nnodesperelem)
-      CALL reshape_transpose_permute(u_tilde_glob, u_tilde_3d, phys%neq, Mesh%Nfa_glob, Mesh%Nnodesperface)
-      CALL reshape_transpose_permute_4D(q_glob, q_4D, Mesh%Ndim, phys%neq, Mesh%Nel_glob, Mesh%Nnodesperelem)
+      ! Gather projected solution on decomposed mesh
+      CALL gather_mesh(Mesh_in=Mesh, T_glob=T_glob, X_glob=X_glob)
+      CALL gather_solution(Mesh_in=Mesh, Nnodesperelem=Mesh%Nnodesperelem, u_in=sol%u, q_in=sol%q, u_glob=u_glob, q_glob=q_glob)
 
-      ALLOCATE(u_3d_local(Mesh%Nelems, Mesh%Nnodesperelem, phys%neq))
-      ALLOCATE(u_tilde_3d_local(Mesh%Nfaces, Mesh%Nnodesperface, phys%neq))
-      ALLOCATE(q_4d_local(Mesh%Nelems, Mesh%Nnodesperelem, phys%neq, Mesh%Ndim))
-      u_3d_local = 0.
-      u_tilde_3d_local = 0.
-      q_4d_local = 0.
+      DEALLOCATE (X_glob, T_glob, u_glob, q_glob)
+      NULLIFY (X_glob, T_glob, u_glob, q_glob)
 
-      DO i = 1, Mesh%Nelems
-         index = Mesh%loc2glob_el(i)
-         u_3d_local(i,:,:) = u_3d(index,:,:)
-         q_4d_local(i,:,:,:) = q_4D(index,:,:,:)
+   END SUBROUTINE adaptivity_parallel_project_solution_2D
+#endif
+#else
+#ifndef PARALL
+   SUBROUTINE adaptivity_serial_project_solution_3D()
+      INTEGER                   :: j, itor, ptor, iel, Ntor, Nelems, Nelems_prec, Nnodesperelem, Nnodesperelem_tor1d, Neq, start_range_u, end_range_u, start_range_q, end_range_q
+      INTEGER, ALLOCATABLE      :: u_tor_slice_indices_elem(:), q_tor_slice_indices_elem(:), u_tor_slice_indices_prec(:), q_tor_slice_indices_prec(:), u_tor_slice_indices(:), q_tor_slice_indices(:)
+      REAL*8, POINTER           :: u_tor_slice(:), q_tor_slice(:), u_conv_tor_slice(:), q_conv_tor_slice(:)
+
+      NULLIFY (u_tor_slice, q_tor_slice, u_conv_tor_slice, q_conv_tor_slice)
+      DEALLOCATE (sol%u, sol%q)
+      NULLIFY (sol%u, sol%q)
+
+      Ntor = numer%ntor
+      Nelems_prec = Mesh_prec%Nelems
+      Nelems = Mesh%Nelems
+      Nnodesperelem = Mesh%Nnodesperelem
+      Nnodesperelem_tor1d = numer%ptor + 1
+      Neq = phys%Neq
+      Ndim = mesh%Ndim + 1
+
+      ALLOCATE (sol%u(Nelems*Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq))
+      ALLOCATE (sol%q(Nelems*Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq*Ndim))
+
+      sol%u = 0.
+      sol%q = 0.
+
+      Mesh%X = Mesh%X*phys%lscale
+      Mesh%X = Mesh%X/phys%lscale
+
+      ! indices corresponding to one element DoFs
+      ALLOCATE (u_tor_slice_indices_elem(Nnodesperelem*Neq))
+      ALLOCATE (q_tor_slice_indices_elem(Nnodesperelem*Neq*Ndim))
+
+      ! indices corresponding to the whole toroidal slice for the converged solution on the previous mesh
+      ALLOCATE (u_tor_slice_indices_prec(Nelems_prec*Nnodesperelem*Neq))
+      ALLOCATE (q_tor_slice_indices_prec(Nelems_prec*Nnodesperelem*Neq*Ndim))
+
+      ! solution for one toroidal slice on the previous mesh
+      ALLOCATE (u_conv_tor_slice(Nelems_prec*Nnodesperelem*Neq))
+      ALLOCATE (q_conv_tor_slice(Nelems_prec*Nnodesperelem*Neq*Ndim))
+
+      ! indices corresponding to the whole toroidal slice for the new mesh
+      ALLOCATE (u_tor_slice_indices(Nelems*Nnodesperelem*Neq))
+      ALLOCATE (q_tor_slice_indices(Nelems*Nnodesperelem*Neq*Ndim))
+
+      ! solution for one toroidal slice on the new mesh
+      ALLOCATE (u_tor_slice(Nelems*Nnodesperelem*Neq))
+      ALLOCATE (q_tor_slice(Nelems*Nnodesperelem*Neq*Ndim))
+
+      DO itor = 1, Ntor
+         DO ptor = 1, Nnodesperelem_tor1d
+
+            start_range_u = 1
+            end_range_u = 1
+            start_range_q = 1
+            end_range_q = 1
+
+            ! Extract the solution corresponding to the current toroidal slice
+            DO iel = 1, Nelems_prec
+               u_tor_slice_indices_elem = (itor-1)*Nelems_prec*Nnodesperelem*Nnodesperelem_tor1d*Neq + (ptor-1)*Neq*Nnodesperelem + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + [(i, i = 1, Neq*Nnodesperelem)]
+               q_tor_slice_indices_elem = (itor-1)*Nelems_prec*Nnodesperelem*Nnodesperelem_tor1d*Neq*Ndim + (ptor-1)*Neq*Nnodesperelem*Ndim + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d*Ndim + [(i, i = 1, Neq*Nnodesperelem*Ndim)]
+
+               end_range_u = start_range_u + Neq*Nnodesperelem - 1
+               end_range_q = start_range_q + Neq*Nnodesperelem*Ndim - 1
+
+               u_tor_slice_indices_prec(start_range_u:end_range_u) = u_tor_slice_indices_elem
+               q_tor_slice_indices_prec(start_range_q:end_range_q) = q_tor_slice_indices_elem
+
+               start_range_u = end_range_u + 1
+               start_range_q = end_range_q + 1
+            END DO
+
+            u_conv_tor_slice = sol%u_conv(u_tor_slice_indices_prec)
+            q_conv_tor_slice = sol%q_conv(q_tor_slice_indices_prec)
+
+            ! Project the check-point solution to the new mesh
+            CALL projectSolutionDifferentMeshes_general(Mesh_prec%T, Mesh_prec%X, Mesh%T, Mesh%X, u_conv_tor_slice, q_conv_tor_slice, u_tor_slice, q_tor_slice)
+
+            start_range_u = 1
+            end_range_u = 1
+            start_range_q = 1
+            end_range_q = 1
+
+            ! Fill in the toroidal slice projected solution in the correct location of the solution vector on the new mesh
+            DO iel = 1, Nelems
+               u_tor_slice_indices_elem = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq + (ptor-1)*Neq*Nnodesperelem + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + [(i, i = 1, Neq*Nnodesperelem)]
+               q_tor_slice_indices_elem = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq*Ndim + (ptor-1)*Neq*Nnodesperelem*Ndim + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d*Ndim + [(i, i = 1, Neq*Nnodesperelem*Ndim)]
+
+               end_range_u = start_range_u + Neq*Nnodesperelem - 1
+               end_range_q = start_range_q + Neq*Nnodesperelem*Ndim - 1
+
+               u_tor_slice_indices(start_range_u:end_range_u) = u_tor_slice_indices_elem
+               q_tor_slice_indices(start_range_q:end_range_q) = q_tor_slice_indices_elem
+
+               start_range_u = end_range_u + 1
+               start_range_q = end_range_q + 1
+            END DO
+
+            sol%u(u_tor_slice_indices) = u_tor_slice
+            sol%q(q_tor_slice_indices) = q_tor_slice
+
+         END DO
       END DO
 
-      DO i = 1, Mesh%Nfaces
-         u_tilde_3d_local(i,:,:) = u_tilde_3d(Mesh%loc2glob_fa(i),:,:)
+      DEALLOCATE (u_tor_slice, q_tor_slice, u_conv_tor_slice, q_conv_tor_slice, u_tor_slice_indices_elem, q_tor_slice_indices_elem, u_tor_slice_indices_prec, q_tor_slice_indices_prec, u_tor_slice_indices, q_tor_slice_indices)
+      NULLIFY (u_tor_slice, q_tor_slice, u_conv_tor_slice, q_conv_tor_slice)
+
+   END SUBROUTINE adaptivity_serial_project_solution_3D
+#else
+   SUBROUTINE adaptivity_parallel_project_solution_3D()
+      INTEGER                   :: j, itor, ptor, iel, Ntor, Nelems, Nelems_prec,Nelems_glob, Nelems_prec_glob, Nnodesperelem, Nnodesperelem_tor1d, Neq, start_range_u, end_range_u, start_range_q, end_range_q
+      INTEGER, ALLOCATABLE      :: u_tor_slice_indices_elem(:), q_tor_slice_indices_elem(:), u_tor_slice_indices_prec(:), q_tor_slice_indices_prec(:), u_tor_slice_indices(:), q_tor_slice_indices(:)
+      REAL*8, POINTER           :: u_tor_slice(:), q_tor_slice(:), u_conv_tor_slice(:), q_conv_tor_slice(:)
+      REAL*8, POINTER           :: X_glob(:, :)
+      INTEGER, POINTER           :: T_glob(:, :)
+
+      Mesh%X = Mesh%X/phys%lscale
+
+      NULLIFY (u_tor_slice, q_tor_slice, u_conv_tor_slice, q_conv_tor_slice, X_glob, T_glob)
+      DEALLOCATE (sol%u, sol%q)
+      NULLIFY (sol%u, sol%q)
+
+      CALL domain_decomposition(mesh_name)
+
+      Mesh%X = Mesh%X*phys%lscale
+
+      ! Restart communication
+      CALL init_com()
+
+      Ntor = numer%ntor
+      Nelems_prec_glob = Mesh_prec%Nel_glob
+      Nelems_prec = Mesh_prec%Nelems
+      Nelems_glob = Mesh%Nel_glob
+      Nelems = Mesh%Nelems
+      Nnodesperelem = Mesh%Nnodesperelem
+      Nnodesperelem_tor1d = numer%ptor + 1
+      Neq = phys%Neq
+      Ndim = mesh%Ndim + 1
+
+      ALLOCATE (sol%u(Nelems*Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq))
+      ALLOCATE (sol%q(Nelems*Ntor*Nnodesperelem_tor1d*Nnodesperelem*Neq*Ndim))
+
+      sol%u = 0.
+      sol%q = 0.
+
+      Mesh%X = Mesh%X*phys%lscale
+      Mesh%X = Mesh%X/phys%lscale
+
+      ! indices corresponding to one element DoFs
+      ALLOCATE (u_tor_slice_indices_elem(Nnodesperelem*Neq))
+      ALLOCATE (q_tor_slice_indices_elem(Nnodesperelem*Neq*Ndim))
+
+      ! indices corresponding to the whole toroidal slice for the converged solution on the previous mesh
+      ALLOCATE (u_tor_slice_indices_prec(Nelems_prec_glob*Nnodesperelem*Neq))
+      ALLOCATE (q_tor_slice_indices_prec(Nelems_prec_glob*Nnodesperelem*Neq*Ndim))
+
+      ! solution for one toroidal slice on the previous mesh
+      ALLOCATE (u_conv_tor_slice(Nelems_prec_glob*Nnodesperelem*Neq))
+      ALLOCATE (q_conv_tor_slice(Nelems_prec_glob*Nnodesperelem*Neq*Ndim))
+      ! indices corresponding to the whole toroidal slice for the new mesh
+      ALLOCATE (u_tor_slice_indices(Nelems*Nnodesperelem*Neq))
+      ALLOCATE (q_tor_slice_indices(Nelems*Nnodesperelem*Neq*Ndim))
+
+      ! solution for one toroidal slice on the new mesh
+      ALLOCATE (u_tor_slice(Nelems*Nnodesperelem*Neq))
+      ALLOCATE (q_tor_slice(Nelems*Nnodesperelem*Neq*Ndim))
+
+      ! Gather checkpoint solution and project it to the new mesh
+      CALL gather_mesh(Mesh_prec, T_glob=T_glob, X_glob=X_glob)
+      CALL gather_solution_3D(Mesh_in=Mesh_prec, u_in=sol%u_conv, q_in=sol%q_conv, u_glob=u_glob, q_glob=q_glob)
+
+      DO itor = 1, Ntor
+         DO ptor = 1, Nnodesperelem_tor1d
+
+            start_range_u = 1
+            end_range_u = 1
+            start_range_q = 1
+            end_range_q = 1
+
+            ! Extract the solution corresponding to the current toroidal slice
+            DO iel = 1, Nelems_prec_glob
+               u_tor_slice_indices_elem = (itor-1)*Nelems_prec_glob*Nnodesperelem*Nnodesperelem_tor1d*Neq + (ptor-1)*Neq*Nnodesperelem + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + [(i, i = 1, Neq*Nnodesperelem)]
+               q_tor_slice_indices_elem = (itor-1)*Nelems_prec_glob*Nnodesperelem*Nnodesperelem_tor1d*Neq*Ndim + (ptor-1)*Neq*Nnodesperelem*Ndim + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d*Ndim + [(i, i = 1, Neq*Nnodesperelem*Ndim)]
+
+               end_range_u = start_range_u + Neq*Nnodesperelem - 1
+               end_range_q = start_range_q + Neq*Nnodesperelem*Ndim - 1
+
+               u_tor_slice_indices_prec(start_range_u:end_range_u) = u_tor_slice_indices_elem
+               q_tor_slice_indices_prec(start_range_q:end_range_q) = q_tor_slice_indices_elem
+
+               start_range_u = end_range_u + 1
+               start_range_q = end_range_q + 1
+            END DO
+
+            u_conv_tor_slice = u_glob(u_tor_slice_indices_prec)
+            q_conv_tor_slice = q_glob(q_tor_slice_indices_prec)
+
+            CALL projectSolutionDifferentMeshes_general(T_glob, X_glob, Mesh%T, Mesh%X, u_conv_tor_slice, q_conv_tor_slice, u_tor_slice, q_tor_slice)
+
+            start_range_u = 1
+            end_range_u = 1
+            start_range_q = 1
+            end_range_q = 1
+
+            ! Fill in the toroidal slice projected solution in the correct location of the solution vector on the new mesh
+            DO iel = 1, Nelems
+               u_tor_slice_indices_elem = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq + (ptor-1)*Neq*Nnodesperelem + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + [(i, i = 1, Neq*Nnodesperelem)]
+               q_tor_slice_indices_elem = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq*Ndim + (ptor-1)*Neq*Nnodesperelem*Ndim + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d*Ndim + [(i, i = 1, Neq*Nnodesperelem*Ndim)]
+
+               end_range_u = start_range_u + Neq*Nnodesperelem - 1
+               end_range_q = start_range_q + Neq*Nnodesperelem*Ndim - 1
+
+               u_tor_slice_indices(start_range_u:end_range_u) = u_tor_slice_indices_elem
+               q_tor_slice_indices(start_range_q:end_range_q) = q_tor_slice_indices_elem
+
+               start_range_u = end_range_u + 1
+               start_range_q = end_range_q + 1
+            END DO
+
+            sol%u(u_tor_slice_indices) = u_tor_slice
+            sol%q(q_tor_slice_indices) = q_tor_slice
+
+         END DO
       END DO
 
-      DEALLOCATE(sol%u, sol%u_tilde, sol%q)
+      DEALLOCATE (u_tor_slice, q_tor_slice, u_conv_tor_slice, q_conv_tor_slice, u_tor_slice_indices_elem, q_tor_slice_indices_elem, u_tor_slice_indices_prec, q_tor_slice_indices_prec, u_tor_slice_indices, q_tor_slice_indices)
+      NULLIFY (u_tor_slice, q_tor_slice, u_conv_tor_slice, q_conv_tor_slice)
 
-      ALLOCATE(sol%u(Mesh%Nelems*Mesh%Nnodesperelem*phys%neq))
-      ALLOCATE(sol%u_tilde(Mesh%Nfaces*Mesh%Nnodesperface*phys%neq))
-      ALLOCATE(sol%q(Mesh%Nelems*Mesh%Nnodesperelem*phys%neq*Mesh%Ndim))
-      sol%u = 0
-      sol%u_tilde = 0
-      sol%q = 0
-
-      CALL flatten_row_major(u_3d_local, sol%u, SIZE(u_3d_local,1), SIZE(u_3d_local,2), SIZE(u_3d_local,3))
-      CALL flatten_row_major(u_tilde_3d_local, sol%u_tilde, SIZE(u_tilde_3d_local,1), SIZE(u_tilde_3d_local,2), SIZE(u_tilde_3d_local,3))
-      CALL flatten_row_major_4D(q_4d_local, sol%q, SIZE(q_4d_local,1), SIZE(q_4d_local,2), SIZE(q_4d_local,3),SIZE(q_4d_local,4))
-
-
-      DEALLOCATE(u_3d, u_tilde_3d, q_4d)
-      DEALLOCATE(u_3d_local, u_tilde_3d_local, q_4d_local)
-      NULLIFY(u_glob, u_tilde_glob, q_glob)
-
-   END SUBROUTINE solution_decomposition
+   END SUBROUTINE adaptivity_parallel_project_solution_3D
+#endif
 #endif
 
    SUBROUTINE adaptivity()
+
+      CHARACTER(70)               :: param_adapt_char, count_adapt_char
+      CHARACTER(1024)             :: file_name
 
       ! Start timing
       IF (utils%timing) THEN
@@ -182,7 +352,7 @@ CONTAINS
          CALL system_CLOCK(timing%cks1, timing%clock_rate1)
       END IF
 
-      IF(restart_adapt) THEN
+      IF (restart_adapt) THEN
          time%t = time%t + time%dt
          time%it = time%it + 1
          time%ik = time%ik + 1
@@ -772,51 +942,309 @@ CONTAINS
 
    SUBROUTINE check_for_NaNs()
       DO i = 1, SIZE(sol%u)
-         IF(ISNAN(sol%u(i))) THEN
+         IF (ISNAN(sol%u(i))) THEN
             WRITE (6, *) "NaN detected. STOPPING."
             STOP
          END IF
       END DO
    END SUBROUTINE check_for_NaNs
 
+#ifndef TOR3D
    SUBROUTINE project_u0_newmesh()
+      INTEGER, POINTER          :: T_glob(:,:)
+      REAL*8, POINTER           :: X_glob(:,:)
 
-      IF(.NOT. ((adapt%NR_adapt) .AND. (MOD(ir,adapt%freq_NR_adapt) .EQ. 0))) THEN
-         ALLOCATE(u0_temp(SIZE(sol%u0,1),SIZE(sol%u0,2)))
+      NULLIFY(T_glob, X_glob)
+
+      IF (.NOT. ((adapt%NR_adapt) .AND. (MOD(ir, adapt%freq_NR_adapt) .EQ. 0))) THEN
+         ALLOCATE (u0_temp(SIZE(sol%u0, 1), SIZE(sol%u0, 2)))
          u0_temp = sol%u0
       ELSE
-         ALLOCATE(u0_temp(SIZE(sol%u_conv),SIZE(sol%u0,2)))
+         ALLOCATE (u0_temp(SIZE(sol%u_conv), SIZE(sol%u0, 2)))
          u0_temp = 0
-         u0_temp(:,1) = sol%u_conv
+         u0_temp(:, 1) = sol%u_conv
       END IF
 
-      DEALLOCATE(sol%u0)
-      ALLOCATE(sol%u0(Mesh%Nelems*Mesh%Nnodesperelem*phys%neq,time%tis))
+      DEALLOCATE (sol%u0)
+      ALLOCATE (sol%u0(Mesh%Nelems*Mesh%Nnodesperelem*phys%neq, time%tis))
       sol%u0 = 0.
 
       Mesh%X = Mesh%X*phys%lscale
       Mesh_prec%X = Mesh_prec%X*phys%lscale
 
 #ifndef PARALL
-      CALL projectSolutionDifferentMeshes_general_arrays(Mesh_prec%T,Mesh_prec%X, Mesh%T, Mesh%X, u1 = u0_temp(:,1), u2 = sol%u0(:,1))
+      CALL projectSolutionDifferentMeshes_general_arrays(Mesh_prec%T, Mesh_prec%X, Mesh%T, Mesh%X, u1=u0_temp(:, 1), u2=sol%u0(:, 1))
 #else
       ! Ghost cells are removed from the mesh and the solution and then the result is gathered over the processes
 
-      CALL gather_mesh(Mesh_in = Mesh_prec, T_glob = T_glob, X_glob = X_glob)
-      CALL gather_solution(Mesh_in = Mesh_prec, Nnodesperelem = Mesh_prec%Nnodesperelem, u_in = u0_temp(:,1), u_glob = u_glob)
+      CALL gather_mesh(Mesh_in=Mesh_prec, T_glob=T_glob, X_glob=X_glob)
+      CALL gather_solution(Mesh_in=Mesh_prec, Nnodesperelem=Mesh_prec%Nnodesperelem, u_in=u0_temp(:, 1), u_glob=u_glob)
 
-      CALL projectSolutionDifferentMeshes_general_arrays(T_glob,X_glob, Mesh%T, Mesh%X, u1 = u_glob, u2 = sol%u0(:,1))
-      DEALLOCATE(T_glob, X_glob, u_glob)
-      NULLIFY(T_glob, X_glob, u_glob)
+      CALL projectSolutionDifferentMeshes_general_arrays(T_glob, X_glob, Mesh%T, Mesh%X, u1=u_glob, u2=sol%u0(:, 1))
+      DEALLOCATE (T_glob, X_glob, u_glob)
+      NULLIFY (T_glob, X_glob, u_glob)
 #endif
-
-
 
       Mesh%X = Mesh%X/phys%lscale
       Mesh_prec%X = Mesh_prec%X/phys%lscale
 
-      DEALLOCATE(u0_temp)
+      DEALLOCATE (u0_temp)
    END SUBROUTINE project_u0_newmesh
+#else
+#ifndef PARALL
+   SUBROUTINE project_u0_newmesh()
+      INTEGER                   :: itor, ptor, iel, Ntor, Nelems, Nelems_prec, Nnodesperelem, Nnodesperelem_tor1d, Neq, start_range_u, end_range_u, size_utilde, Nfaces, Nnodesperface
+      INTEGER, ALLOCATABLE      :: u0_tor_slice_indices_elem(:), u0_tor_slice_indices_prec(:), u0_tor_slice_indices(:)
+      REAL*8, ALLOCATABLE           :: u0_tor_slice(:), u0_prec_tor_slice(:)
+
+      Mesh%X = Mesh%X*phys%lscale
+      Mesh_prec%X = Mesh_prec%X*phys%lscale
+
+      Ntor = numer%ntor
+      Nfaces = Mesh%Nfaces
+      Nnodesperface = Mesh%Nnodesperface
+      Nelems_prec = Mesh_prec%Nelems
+      Nelems = Mesh%Nelems
+      Nnodesperelem = Mesh%Nnodesperelem
+      Nnodesperelem_tor1d = numer%ptor + 1
+      Neq = phys%Neq
+      Ndim = mesh%Ndim + 1
+
+      sol%u = 0.
+      sol%q = 0.
+
+      ! indices corresponding to one element DoFs
+      ALLOCATE (u0_tor_slice_indices_elem(Nnodesperelem*Neq))
+
+      ! indices corresponding to the whole toroidal slice for the converged solution on the previous mesh
+      ALLOCATE (u0_tor_slice_indices_prec(Nelems_prec*Nnodesperelem*Neq))
+
+      ! solution for one toroidal slice on the previous mesh
+      ALLOCATE (u0_prec_tor_slice(Nelems_prec*Nnodesperelem*Neq))
+
+      ! indices corresponding to the whole toroidal slice for the new mesh
+      ALLOCATE (u0_tor_slice_indices(Nelems*Nnodesperelem*Neq))
+
+      ! solution for one toroidal slice on the new mesh
+      ALLOCATE (u0_tor_slice(Nelems*Nnodesperelem*Neq))
+
+      IF (.NOT. ((adapt%NR_adapt) .AND. (MOD(ir, adapt%freq_NR_adapt) .EQ. 0))) THEN
+         ALLOCATE (u0_temp(SIZE(sol%u0, 1), SIZE(sol%u0, 2)))
+         u0_temp = sol%u0
+      ELSE
+         ALLOCATE (u0_temp(SIZE(sol%u_conv), SIZE(sol%u0, 2)))
+         u0_temp = 0
+         u0_temp(:, 1) = sol%u_conv
+      END IF
+
+      DEALLOCATE (sol%u0)
+
+      ALLOCATE (sol%u0(neq*Nelems*ntorloc*Nnodesperelem_tor1d*Nnodesperelem, 1)) ! Size of u, time%tis
+      sol%u0 = 0.
+
+      DO itor = 1, Ntor
+         DO ptor = 1, Nnodesperelem_tor1d
+
+            start_range_u = 1
+            end_range_u = 1
+
+            ! Extract the solution corresponding to the current toroidal slice
+            DO iel = 1, Nelems_prec
+               u0_tor_slice_indices_elem = (itor-1)*Nelems_prec*Nnodesperelem*Nnodesperelem_tor1d*Neq + (ptor-1)*Neq*Nnodesperelem + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + [(i, i = 1, Neq*Nnodesperelem)]
+
+               end_range_u = start_range_u + Neq*Nnodesperelem - 1
+
+               u0_tor_slice_indices_prec(start_range_u:end_range_u) = u0_tor_slice_indices_elem
+
+               start_range_u = end_range_u + 1
+            END DO
+
+            u0_prec_tor_slice = u0_temp(u0_tor_slice_indices_prec, 1)
+
+            CALL projectSolutionDifferentMeshes_general_arrays(Mesh_prec%T, Mesh_prec%X, Mesh%T, Mesh%X, u1=u0_prec_tor_slice, u2=u0_tor_slice)
+
+            ! Put the projected solution in the right place in sol%u0
+            start_range_u = 1
+            end_range_u = 1
+
+            DO iel = 1, Nelems
+               u0_tor_slice_indices_elem = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq + (ptor-1)*Neq*Nnodesperelem + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + [(i, i = 1, Neq*Nnodesperelem)]
+
+               end_range_u = start_range_u + Neq*Nnodesperelem - 1
+
+               u0_tor_slice_indices(start_range_u:end_range_u) = u0_tor_slice_indices_elem
+
+               start_range_u = end_range_u + 1
+            END DO
+
+            sol%u0(u0_tor_slice_indices, 1) = u0_tor_slice
+
+         END DO
+      END DO
+
+      Mesh%X = Mesh%X/phys%lscale
+      Mesh_prec%X = Mesh_prec%X/phys%lscale
+
+      DEALLOCATE (u0_temp)
+      DEALLOCATE (u0_tor_slice_indices_elem, u0_tor_slice_indices_prec, u0_tor_slice_indices, u0_prec_tor_slice, u0_tor_slice)
+   END SUBROUTINE project_u0_newmesh
+#else
+   SUBROUTINE project_u0_newmesh()
+      INTEGER                   :: itor, ptor, iel, Ntor, Nelems, Nelems_prec, Nelems_glob, Nelems_prec_glob, Nnodesperelem, Nnodesperelem_tor1d, Neq, start_range_u, end_range_u
+      INTEGER, ALLOCATABLE      :: u0_tor_slice_indices_elem(:), u0_tor_slice_indices_prec(:), u0_tor_slice_indices(:)
+      REAL*8, ALLOCATABLE       :: u0_tor_slice(:), u0_prec_tor_slice(:), u0_temp(:, :)
+      REAL*8, POINTER           :: u0_glob(:)
+      REAL*8, POINTER           :: X_glob(:, :)
+      INTEGER, POINTER           :: T_glob(:, :)
+
+      Mesh%X = Mesh%X*phys%lscale
+      Mesh_prec%X = Mesh_prec%X*phys%lscale
+
+      NULLIFY (u0_glob, X_glob, T_glob)
+
+      ! Store u0 data before decomposition
+      IF (.NOT. ((adapt%NR_adapt) .AND. (MOD(ir, adapt%freq_NR_adapt) .EQ. 0))) THEN
+         ALLOCATE (u0_temp(SIZE(sol%u0, 1), SIZE(sol%u0, 2)))
+         u0_temp = sol%u0
+      ELSE
+         ALLOCATE (u0_temp(SIZE(sol%u_conv), SIZE(sol%u0, 2)))
+         u0_temp = 0
+         u0_temp(:, 1) = sol%u_conv
+      END IF
+
+      Ntor = numer%ntor
+      Nelems_prec_glob = Mesh_prec%Nel_glob
+      Nelems_prec = Mesh_prec%Nelems
+      Nelems_glob = Mesh%Nel_glob
+      Nelems = Mesh%Nelems
+      Nnodesperelem = Mesh%Nnodesperelem
+      Nnodesperelem_tor1d = numer%ptor + 1
+      Neq = phys%Neq
+
+      DEALLOCATE (sol%u0)
+      ALLOCATE (sol%u0(neq*Nelems*ntorloc*Nnodesperelem_tor1d*Nnodesperelem, 1))
+      sol%u0 = 0.
+
+      ! indices corresponding to one element DoFs
+      ALLOCATE (u0_tor_slice_indices_elem(Nnodesperelem*Neq))
+
+      ! indices corresponding to the whole toroidal slice for the converged solution on the previous mesh
+      ALLOCATE (u0_tor_slice_indices_prec(Nelems_prec_glob*Nnodesperelem*Neq))
+
+      ! solution for one toroidal slice on the previous mesh
+      ALLOCATE (u0_prec_tor_slice(Nelems_prec_glob*Nnodesperelem*Neq))
+
+      ! indices corresponding to the whole toroidal slice for the new mesh
+      ALLOCATE (u0_tor_slice_indices(Nelems*Nnodesperelem*Neq))
+
+      ! solution for one toroidal slice on the new mesh
+      ALLOCATE (u0_tor_slice(Nelems*Nnodesperelem*Neq))
+
+      ! Gather checkpoint solution and project it to the new mesh
+      CALL gather_mesh(Mesh_prec, T_glob=T_glob, X_glob=X_glob)
+      CALL gather_solution_3D(Mesh_in=Mesh_prec, u_in=u0_temp(:, 1), u_glob=u0_glob)
+
+      DO itor = 1, Ntor
+         DO ptor = 1, Nnodesperelem_tor1d
+
+            start_range_u = 1
+            end_range_u = 1
+
+            ! Extract the solution corresponding to the current toroidal slice
+            DO iel = 1, Nelems_prec_glob
+               u0_tor_slice_indices_elem = (itor-1)*Nelems_prec_glob*Nnodesperelem*Nnodesperelem_tor1d*Neq + (ptor-1)*Neq*Nnodesperelem + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + [(i, i = 1, Neq*Nnodesperelem)]
+
+               end_range_u = start_range_u + Neq*Nnodesperelem - 1
+
+               u0_tor_slice_indices_prec(start_range_u:end_range_u) = u0_tor_slice_indices_elem
+
+               start_range_u = end_range_u + 1
+            END DO
+
+            u0_prec_tor_slice = u0_glob(u0_tor_slice_indices_prec)
+
+            CALL projectSolutionDifferentMeshes_general_arrays(T_glob, X_glob, Mesh%T, Mesh%X, u1=u0_prec_tor_slice, u2=u0_tor_slice)
+
+            ! Put the projected solution in the right place in sol%u0
+            start_range_u = 1
+            end_range_u = 1
+
+            DO iel = 1, Nelems
+               u0_tor_slice_indices_elem = (itor-1)*Nelems*Nnodesperelem*Nnodesperelem_tor1d*Neq + (ptor-1)*Neq*Nnodesperelem + (iel-1)*Neq*Nnodesperelem*Nnodesperelem_tor1d + [(i, i = 1, Neq*Nnodesperelem)]
+
+               end_range_u = start_range_u + Neq*Nnodesperelem - 1
+
+               u0_tor_slice_indices(start_range_u:end_range_u) = u0_tor_slice_indices_elem
+
+               start_range_u = end_range_u + 1
+            END DO
+
+            sol%u0(u0_tor_slice_indices, 1) = u0_tor_slice
+
+         END DO
+      END DO
+
+      DEALLOCATE (u0_glob, X_glob, T_glob)
+      NULLIFY (u0_glob, X_glob, T_glob)
+
+      DEALLOCATE (u0_tor_slice_indices_elem, u0_tor_slice_indices_prec, u0_tor_slice_indices, u0_prec_tor_slice, u0_tor_slice)
+
+      Mesh%X = Mesh%X/phys%lscale
+      Mesh_prec%X = Mesh_prec%X/phys%lscale
+
+      DEALLOCATE (u0_temp)
+   END SUBROUTINE project_u0_newmesh
+#endif
+#endif
+
+#ifdef TOR3D
+   !**********************************************
+   ! Definition of the toroidal discretization
+   !**********************************************
+   SUBROUTINE define_toroidal_discretization
+      INTEGER                   :: i, ntorloc, itor, itorg, nnodes_toroidal
+      INTEGER                   :: ind(numer%ptor + 1)
+      REAL*8                    :: tdiv(numer%ntor + 1), tel(numer%ptor + 1), htor
+
+      IF (MPIvar%glob_id .EQ. 0) THEN
+         WRITE (*, *) "*************************************************"
+         WRITE (*, *) "*         DEFINE TOROIDAL DISCRETIZATION        *"
+         WRITE (*, *) "*************************************************"
+      END IF
+
+      ! Toroidal discretization
+      htor = numer%tmax/numer%ntor
+      tdiv = 0.
+      DO i = 1, numer%ntor
+         tdiv(i + 1) = i*htor
+      END DO
+#ifdef PARALL
+      IF (MPIvar%ntor .GT. 1) THEN
+         ntorloc = numer%ntor/MPIvar%ntor + 1
+      ELSE
+         ntorloc = numer%ntor
+      END IF
+#else
+      ntorloc = numer%ntor
+#endif
+
+      nnodes_toroidal = ntorloc + 1 + (numer%ptor - 1)*ntorloc
+      Mesh%Nnodes_toroidal = nnodes_toroidal
+      ALLOCATE (Mesh%toroidal(nnodes_toroidal))
+
+      DO itor = 1, ntorloc
+#ifdef PARALL
+         itorg = itor + (MPIvar%itor - 1)*numer%ntor/MPIvar%ntor
+         IF (itorg == numer%ntor + 1) itorg = 1
+#else
+         itorg = itor
+#endif
+         tel = tdiv(itorg) + 0.5*(refElTor%coord1d + 1)*(tdiv(itorg + 1) - tdiv(itorg))
+         ind = (itor - 1)*numer%ptor + (/(i, i=1, numer%ptor + 1)/)
+         Mesh%toroidal(ind) = tel
+      END DO
+   END SUBROUTINE define_toroidal_discretization
+#endif
 
    SUBROUTINE reduce_diffusion()
       ! Update the diffusion, the elemental matrices and the solution
