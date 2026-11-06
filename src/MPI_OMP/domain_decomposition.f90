@@ -590,8 +590,8 @@ CONTAINS
       REAL*8, POINTER           :: u_glob(:), u_tilde_glob(:), q_glob(:)
       REAL*8, ALLOCATABLE         :: u_glob_2d(:,:), u_loc_2d(:,:), u_loc(:), q_glob_2d(:,:), q_loc_2d(:,:), q_loc(:), utilde_glob_2d_pol(:,:), utilde_glob_2d_tor(:,:), utilde_loc_2d_pol(:,:), utilde_loc_2d_tor(:,:), utilde_loc(:)
       INTEGER, ALLOCATABLE      :: indices_u(:, :), indices_q(:, :), indices_utilde_pol(:, :), indices_utilde_tor(:, :)
-      INTEGER                     :: Nelems_global, Nfaces_global, Nelems_local, Nfaces_local, Ntor, Nnodesperelem, Nnodesperface, Nnodesperelem_tor1d, Neq, size_utilde
-      INTEGER                     :: iel, ifa, itor, index, index_1_u, index_2_u, index_start_u, index_end_u, index_1_q, index_2_q, index_start_q, index_end_q, index_start_utilde, index_end_utilde,index_1_utilde, index_2_utilde
+      INTEGER                     :: Nelems_global, Nfaces_global, Nelems_local, Nfaces_local, Ntor, Nnodesperelem, Nnodesperface, Nnodesperelem_tor1d, Neq, size_utilde, Ndim
+      INTEGER                     :: i, iel, ifa, itor, index, index_1_u, index_2_u, index_start_u, index_end_u, index_1_q, index_2_q, index_start_q, index_end_q, index_start_utilde, index_end_utilde,index_1_utilde, index_2_utilde
 
       NULLIFY (u_glob, u_tilde_glob, q_glob)
 
