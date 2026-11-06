@@ -2124,9 +2124,9 @@ CONTAINS
       !!$OMP end PARALLEL
 
 #ifndef PARALL
-      CALL construct_global_operators_2D(R_f, P_f, Nfaces, phys%neq, np_PL, np_PH, nDoF_PL, nDoF_PH, level_counter)
+      CALL construct_MG_global_operators_2D(R_f, P_f, Nfaces, phys%neq, np_PL, np_PH, nDoF_PL, nDoF_PH, level_counter)
 #else
-      CALL construct_global_operators_2D(R_f, P_f, Nfaces - Mesh%Nghostfaces, phys%neq, np_PL, np_PH, nDoF_PL, nDoF_PH, level_counter)
+      CALL construct_MG_global_operators_2D(R_f, P_f, Nfaces - Mesh%Nghostfaces, phys%neq, np_PL, np_PH, nDoF_PL, nDoF_PH, level_counter)
 #endif
       DEALLOCATE (faces, wq_PH, wq_PL, xq_PH, xq_PL, N_PogPH, N_PogPL, N_PH, N_PL, N_PLPH, dNdxi_PogPL, dNdxi_PogPH, J_PH, J_PL, M_PH, M_PL, M_PHPL, M_PLPH, R_f, P_f, R_f_block, P_f_block)
 
@@ -2137,7 +2137,7 @@ CONTAINS
 
    END SUBROUTINE create_MG_structures_2D
 
-   SUBROUTINE construct_global_operators_2D(R_f, P_f, Nfaces, Neq, np_PL, np_PH, nDoF_PL, nDoF_PH, level_counter)
+   SUBROUTINE construct_MG_global_operators_2D(R_f, P_f, Nfaces, Neq, np_PL, np_PH, nDoF_PL, nDoF_PH, level_counter)
       USE LinearAlgebra, ONLY: col
       INTEGER, INTENT(IN)          :: Nfaces, Neq, np_PL, np_PH, nDoF_PL, nDoF_PH, level_counter
       REAL*8, INTENT(IN)           :: R_f(Nfaces, np_PL, np_PH), P_f(Nfaces, np_PH, np_PL)
@@ -2209,7 +2209,7 @@ CONTAINS
       DEALLOCATE (R_vals)
       DEALLOCATE (P_vals)
 
-   END SUBROUTINE construct_global_operators_2D
+   END SUBROUTINE construct_MG_global_operators_2D
 #else
    SUBROUTINE create_MG_structures_3D(order_pol_PL, order_pol_PH, order_pol_Pog, order_tor_PL, order_tor_PH, level_counter)
       USE reference_element, ONLY: create_reference_element, Vandermonde_1D, orthopoly1D, orthopoly1d_deriv, Reference_element_type
@@ -2552,9 +2552,9 @@ CONTAINS
       END ASSOCIATE
 
 #ifndef PARALL
-      CALL construct_global_operators_3D(R_el, P_el, R_f, P_f, Ntor, Nelems, Nfaces, np_pol_2D_PL, np_pol_2D_PH,  np_tor_2D_PL, np_tor_2D_PH, np_pol_1D_PL, np_pol_1D_PH, np_tor_1D_PL, np_tor_1D_PH, Neq, level_counter)
+      CALL construct_MG_global_operators_3D(R_el, P_el, R_f, P_f, Ntor, Nelems, Nfaces, np_pol_2D_PL, np_pol_2D_PH,  np_tor_2D_PL, np_tor_2D_PH, np_pol_1D_PL, np_pol_1D_PH, np_tor_1D_PL, np_tor_1D_PH, Neq, level_counter)
 #else
-      CALL construct_global_operators_3D(R_el, P_el, R_f, P_f, Ntor, Nelems-Mesh%Nghostelems, Nfaces-Mesh%Nghostfaces, np_pol_2D_PL, np_pol_2D_PH, np_tor_2D_PL, np_tor_2D_PH, np_pol_1D_PL, np_pol_1D_PH, np_tor_1D_PL, np_tor_1D_PH, Neq, level_counter)
+      CALL construct_MG_global_operators_3D(R_el, P_el, R_f, P_f, Ntor, Nelems-Mesh%Nghostelems, Nfaces-Mesh%Nghostfaces, np_pol_2D_PL, np_pol_2D_PH, np_tor_2D_PL, np_tor_2D_PH, np_pol_1D_PL, np_pol_1D_PH, np_tor_1D_PL, np_tor_1D_PH, Neq, level_counter)
 #endif
       mesh%X = mesh%X/phys%lscale
 
@@ -2656,7 +2656,7 @@ CONTAINS
 
    END SUBROUTINE create_MG_structures_3D
 
-   SUBROUTINE construct_global_operators_3D(R_el, P_el, R_f, P_f, Ntor, Nelems, Nfaces, np_pol_2D_PL, np_pol_2D_PH, np_tor_2D_PL, np_tor_2D_PH, np_pol_1D_PL, np_pol_1D_PH, np_tor_1D_PL, np_tor_1D_PH, Neq, level_counter)
+   SUBROUTINE construct_MG_global_operators_3D(R_el, P_el, R_f, P_f, Ntor, Nelems, Nfaces, np_pol_2D_PL, np_pol_2D_PH, np_tor_2D_PL, np_tor_2D_PH, np_pol_1D_PL, np_pol_1D_PH, np_tor_1D_PL, np_tor_1D_PH, Neq, level_counter)
       USE LinearAlgebra, ONLY: col
       IMPLICIT NONE
       INTEGER, INTENT(IN)          :: Ntor, Nelems, Nfaces
@@ -2844,7 +2844,7 @@ CONTAINS
       DEALLOCATE (idx_PH)
       DEALLOCATE (idx_PL)
 
-   END SUBROUTINE construct_global_operators_3D
+   END SUBROUTINE construct_MG_global_operators_3D
 
    SUBROUTINE compute_jacobian_2D_tor(nq_pol_1D, nq_tor_1D, xydNorm, htor, xyg, J)
       USE LinearAlgebra, ONLY: col, TensorProduct
@@ -2865,7 +2865,7 @@ CONTAINS
 
    END SUBROUTINE compute_jacobian_2D_tor
 
-   PURE SUBROUTINE compute_jacobian_2D_pol(np, nq, dNdxi, dNdeta, xy, J)
+   SUBROUTINE compute_jacobian_2D_pol(np, nq, dNdxi, dNdeta, xy, J)
       INTEGER, INTENT(IN)          :: np, nq
       REAL*8, INTENT(IN)           :: dNdxi(np, nq), dNdeta(np, nq), xy(np, 2)
       REAL*8, INTENT(OUT)          :: J(nq)
@@ -2912,7 +2912,7 @@ CONTAINS
 
    END SUBROUTINE compute_toroidal_sf_and_weights_2D
 
-   PURE SUBROUTINE compute_sf_derivatives_at_phys_points(dNdxi, xy, xydNorm)
+   SUBROUTINE compute_sf_derivatives_at_phys_points(dNdxi, xy, xydNorm)
       IMPLICIT NONE
       REAL*8, INTENT(IN)           :: dNdxi(:, :)
       REAL*8, INTENT(IN)           :: xy(:, :)
@@ -3002,7 +3002,7 @@ CONTAINS
 
    END SUBROUTINE assemble_M_matrix
 
-   PURE SUBROUTINE KRON(M, np1, np2, Neq, M_block)
+   SUBROUTINE KRON(M, np1, np2, Neq, M_block)
       IMPLICIT NONE
       INTEGER, INTENT(IN)          :: np1, np2, Neq
       REAL*8, INTENT(IN)           :: M(np1, np2)
