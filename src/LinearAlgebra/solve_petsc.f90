@@ -470,7 +470,6 @@ CONTAINS
       PetscDraw                      :: draw
       IS                        ::isrow, iscol
       VecScatter                :: scat
-      Mat                         :: Aperm
       IS                          :: is_num, is_perm
       Vec                         :: bperm, xperm
       VecScatter                  :: sc
