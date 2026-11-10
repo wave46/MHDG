@@ -237,3 +237,11 @@ diagnostics and can be used with the limiter off.
 Enabled balance reporting requires a 2D model with plasma temperatures and
 neutrals. Physical wall reporting supports Bohm, BohmPump and BohmPuff
 boundaries; other physical boundaries produce a warning.
+
+`line_integrated_density_diagnostics = .true.` in `UTILS_LST` adds chord-density
+reporting at the same Newton assembly point as balance diagnostics, also when balances are off. Supply
+`density_chord = R1,Z1,R2,Z2` in metres in `INPUT_LST`; reporting defaults off.
+`density_chord` controls reporting only; feedback retains its HDF5 chord.
+Different chords produce a one-time warning when the feedback curve loads.
+See [chord-density reporting](../inputs/controls.md#optional-chord-density-reporting)
+for the two chord-length normalizations. Feedback is unchanged.

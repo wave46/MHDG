@@ -15,6 +15,7 @@ MODULE in_out
   USE build_provenance, ONLY: solver_git_commit, solver_git_dirty, solver_build_id
   USE balance_diagnostics, ONLY: balance_diag, balance_diagnostics_mode_name
   USE GLOBALS
+  USE density_diagnostics_module, ONLY: density_diagnostics_available, save_density_diagnostics
   USE magnetic_field, ONLY: reconstruct_feedback_derivative_history, magnetic_input_position
   USE MPI_OMP
   USE printutils
@@ -874,6 +875,7 @@ CONTAINS
       LOGICAL :: diagnostics_enabled
 
       diagnostics_enabled = balance_diag%has_values()
+      diagnostics_enabled = diagnostics_enabled .OR. (utils%line_integrated_density_diagnostics .AND. density_diagnostics_available)
 #if defined(NEUTRAL) && defined(TEMPERATURE)
       diagnostics_enabled = diagnostics_enabled .OR. &
            &switch%neutral_flux_limiter_save_2d
@@ -883,6 +885,7 @@ CONTAINS
       CALL HDF5_group_create('diagnostics', parent_id, diagnostics_id, &
            &ierr_local)
       CALL balance_diag%write_hdf5(diagnostics_id)
+      CALL save_density_diagnostics(diagnostics_id)
 #if defined(NEUTRAL) && defined(TEMPERATURE)
       IF (switch%neutral_flux_limiter_save_2d) THEN
          CALL save_neutral_flux_limiter_diagnostics(diagnostics_id, u_values, &

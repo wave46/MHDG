@@ -467,6 +467,7 @@ MODULE types
      CHARACTER(len=1000) :: impurity_concentration_path ! where do we read impurity radiation from
      CHARACTER(len=1000) :: target_density_path ! where do we read target density from
      CHARACTER(len=1000) :: target_density_xpr_path ! where do we read target density expression from (only used if the target_density is on)
+     REAL*8 :: density_chord(4) = 0.d0 ! diagnostic chord in metres: R1,Z1,R2,Z2; independent of feedback
      CHARACTER(len=1000) :: zeff_path ! where do we read Zeff from
      CHARACTER(len=1000) :: diffusion_1D_path ! where do we read 1D diffusion profiles from (only used if the import_diffusion_1D is on)
      LOGICAL             :: field_from_grid !if true, then reads equilibrium file n rectangular grid; if false - on nodes of the mesh
@@ -617,6 +618,7 @@ MODULE types
   ! Utilities: type for printing/debugging/saving...
   !*******************************************************
   TYPE Utils_type
+     LOGICAL :: line_integrated_density_diagnostics = .FALSE.
      INTEGER :: printint       ! Integer for printing
      LOGICAL :: timing         ! Timing of the code
      INTEGER :: freqdisp       ! Frequency of results display

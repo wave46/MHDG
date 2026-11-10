@@ -22,6 +22,7 @@ SUBROUTINE READ_input()
   USE globals
   USE MPI_OMP
   USE hdg_residual_module, ONLY: hdg_residual
+  USE density_diagnostics_module, ONLY: reset_density_diagnostics
   USE neutral_flux_limiter, ONLY: neutral_tn_source_invalid, &
        neutral_tn_source_ti, neutral_tn_source_fixed, parse_neutral_tn_source
   USE balance_diagnostics, ONLY: balance_mode_invalid, &
@@ -95,6 +96,9 @@ SUBROUTINE READ_input()
   CHARACTER(LEN=16)     :: newton_convergence,newton_formulation
   REAL*8                :: residual_atol,residual_rtol,residual_scales(7)
   CHARACTER(LEN=16)     :: balance_diagnostics_mode,residual_diagnostics_mode
+  LOGICAL               :: line_integrated_density_diagnostics
+  REAL*8                :: density_chord(4)
+  REAL*8, PARAMETER     :: density_chord_unset = -HUGE(1.d0)
   REAL*8                :: neutral_flux_limiter_tn_eV,neutral_flux_limiter_eps
   REAL*8                :: neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min
   REAL*8, PARAMETER     :: diff_nn_min_unset = -HUGE(1.d0)
@@ -135,7 +139,7 @@ SUBROUTINE READ_input()
        & shockcp, limrho, difcor, thresh, filter, ckeramp, saveNR, saveTau, transport_1d, fixdPotLim, dirivortcore,dirivortlim, convvort,pertini,&
        & logrho,bxgradb,flux_limiter,import_diffusion_1D,neutral_perpendicular_diffusion,&
        & neutral_wall_sources_in_elements,neutral_flux_limiter_save_2d
-  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path, impurity_model_path
+  NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path, impurity_model_path, density_chord
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump,neutralp_lambda, &
        newton_convergence,newton_formulation,residual_atol,residual_rtol,residual_scales
   NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, check_neutral_positivity, max_divergence_refinements, rest_adapt, osc_adapt, max_oscillation_refinements, osc_tol, osc_check, geometry_path, max_elements
@@ -160,7 +164,7 @@ SUBROUTINE READ_input()
     &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min,&
     &ionization_ion_energy_fraction, heating_ion_fraction
 #endif
-  NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave, balance_diagnostics_mode,residual_diagnostics_mode
+  NAMELIST /UTILS_LST/ PRINTint, dotiming, freqdisp, freqsave, balance_diagnostics_mode,residual_diagnostics_mode, line_integrated_density_diagnostics
   NAMELIST /LSSOLV_LST/ sollib, lstiming, kspitrace, rtol, atol, kspitmax, igz, rprecond,Nrprecond, kspnorm, kspmethd, pctype, gmresres,mglevels, mgtypeform,itmax, itrace, rest, istop, tol, kmethd, ptype,&
        &petsc_factor_solver,&
        &smther, jsweeps,&
@@ -185,6 +189,9 @@ SUBROUTINE READ_input()
   target_density_xpr_path = ''
   zeff_path = ''
   target_variable = 0
+  density_chord = density_chord_unset
+  line_integrated_density_diagnostics = .FALSE.
+  CALL reset_density_diagnostics()
   field_dimensions = 0
   jtor_dimensions = 0
   puff_dimension = 0
@@ -475,6 +482,30 @@ SUBROUTINE READ_input()
   ENDIF
 #endif
   CALL balance_diag%configure(balance_diagnostics_mode_id)
+  IF (ANY(density_chord /= density_chord_unset)) THEN
+     IF (ANY(density_chord == density_chord_unset) .OR. ANY(.NOT. ieee_is_finite(density_chord))) THEN
+        PRINT *, 'density_chord requires four finite coordinates: R1, Z1, R2, Z2 in metres'
+        STOP 1
+     ENDIF
+     IF (NORM2(density_chord(3:4)-density_chord(1:2)) <= 0.d0) THEN
+        PRINT *, 'density_chord endpoints must be distinct'
+        STOP 1
+     ENDIF
+  ENDIF
+  IF (line_integrated_density_diagnostics .AND. ALL(density_chord == density_chord_unset)) THEN
+     PRINT *, 'line_integrated_density_diagnostics requires density_chord in INPUT_LST'
+     STOP 1
+  ENDIF
+  IF (line_integrated_density_diagnostics) THEN
+#ifdef TOR3D
+     PRINT *, 'LCFS density diagnostics require a 2D build'
+     STOP 1
+#endif
+     IF (.NOT. field_from_grid) THEN
+        PRINT *, 'LCFS density diagnostics require a rectangular-grid equilibrium'
+        STOP 1
+     ENDIF
+  ENDIF
   CALL hdg_residual%configure(residual_diagnostics_mode)
   SELECT CASE(TRIM(newton_convergence))
   CASE('update','residual','both')
@@ -561,6 +592,9 @@ SUBROUTINE READ_input()
   input%save_folder       = TRIM(ADJUSTL(save_folder))
   input%puff_path        = TRIM(ADJUSTL(puff_path))
   input%target_density_path = TRIM(ADJUSTL(target_density_path))
+  input%density_chord = 0.d0
+  IF (ANY(density_chord /= density_chord_unset)) input%density_chord = density_chord
+  utils%line_integrated_density_diagnostics = line_integrated_density_diagnostics
   input%target_density_xpr_path = TRIM(ADJUSTL(target_density_xpr_path))
   input%target_density_dimension = target_density_dimension
   input%target_density_xpr_dimension = target_density_xpr_dimension

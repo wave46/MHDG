@@ -269,6 +269,14 @@ It needs Python 3 with h5py and NumPy, uses no external
 equilibrium or case data, and does not launch a solver simulation. The nodal
 checks initialize MPI; parallel builds need a working local MPI launcher.
 
+`make check-density-chord` checks optional chord-density reporting on a
+synthetic six-triangle mesh: native feedback quadrature, full-integral
+normalizations, geometric mesh/LCFS lengths, ownership with incorrect ghost values,
+missing geometry/coverage, independent diagnostic/feedback chords and mismatch
+warnings, HDF5 snapshots, and namelist defaults/validation. With `MODE=parall`,
+it runs two ranks with one and two OpenMP threads. The launcher follows the
+existing `MPIEXEC` convention (default `mpirun.openmpi`).
+
 For completed-restart executable checks with prepared external inputs, use:
 
 ```bash

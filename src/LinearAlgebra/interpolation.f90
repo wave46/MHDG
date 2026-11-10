@@ -419,67 +419,54 @@ CONTAINS
    INTEGER, INTENT(IN) :: qp_len, nodes2D, T(:,:)
    REAL*8, INTENT(IN)  :: x_vec(:), y_vec(:), f(:), Xc(:,:)
    REAL*8, INTENT(OUT) :: nli
-   INTEGER             :: i, inp, np_len
-   REAL*8              :: x, y, x_prev, y_prev, f_prev, dl, f_cur, d(nodes2D)
-   LOGICAL             :: is_inside
+   INTEGER             :: i, inp
+   REAL*8              :: x, y, values(qp_len)
+   LOGICAL             :: is_inside, valid(qp_len)
    INTEGER             :: element_index
 #ifdef PARALL
    INTEGER, INTENT(IN) :: ghost_elems(:)
 #endif
 
-   ! Initialize result
-   nli = 0.0D0
-   x_prev = 0.0D0
-   y_prev = 0.0D0
-   f_prev = 0.0D0
-   dl = 0.0D0
-   f_cur = 0.0D0
-   d = 0.0D0
+   values = 0.d0
+   valid = .FALSE.
 
    DO i = 1, qp_len
       x = x_vec(i)
       y = y_vec(i)
-      np_len = SIZE(Xc, 1)
-
       ! Check if the point (x, y) is inside the mesh
       CALL point_in_mesh(x, y, Xc, T, is_inside, element_index)
-
-      IF (.NOT. is_inside) THEN
-         x_prev = x
-         y_prev = y
-         f_prev = 0.
-         CYCLE  ! Skip this point if it is outside the mesh
-      ENDIF
+      IF (.NOT. is_inside) CYCLE
 #ifdef PARALL
-      ! Check if the element is a ghost element
-      IF ((ghost_elems(element_index) .EQ. 1)) THEN
-         x_prev = x
-         y_prev = y
-         f_prev = 0.
-         CYCLE
-      END IF
+      IF (ghost_elems(element_index) == 1) CYCLE
 #endif
-
-      ! Compute distances to the point (x, y)
-      d = SQRT((Xc(T(element_index, :), 1) - x)**2 + (Xc(T(element_index, :), 2) - y)**2)
-
-      ! Find the index of the closest node in the element
-      inp = MINLOC(d, DIM = 1)
-      f_cur = f((element_index-1)*nodes2D + inp)
-
-      ! Compute the line segment length and update the summation
-      IF (i > 1) THEN
-         dl = SQRT((x - x_prev)**2 + (y - y_prev)**2) * 1.901e-3
-         nli = nli + 0.5D0 * (f_cur + f_prev) * dl
-      END IF
-
-      ! Update previous values
-      x_prev = x
-      y_prev = y
-      f_prev = f_cur
+      inp = nodesearch(x,y,nodes2D,Xc(T(element_index,:),1),Xc(T(element_index,:),2))
+      values(i) = f((element_index-1)*nodes2D + inp)
+      valid(i) = .TRUE.
    END DO
-
+   nli = integrate_line_samples(x_vec(:qp_len),y_vec(:qp_len),values,valid)
   END SUBROUTINE lineintegration
+
+  PURE FUNCTION integrate_line_samples(x,y,values,valid) RESULT(integral)
+    REAL*8, INTENT(IN) :: x(:),y(:),values(:)
+    LOGICAL, INTENT(IN) :: valid(:)
+    REAL*8 :: integral,previous,dl
+    INTEGER :: i
+
+    integral = 0.d0
+    previous = 0.d0
+    DO i = 1,SIZE(values)
+       IF (.NOT. valid(i)) THEN
+          previous = 0.d0
+          CYCLE
+       ENDIF
+       IF (i > 1) THEN
+          ! Retain the existing feedback length normalization and endpoint rule.
+          dl = SQRT((x(i)-x(i-1))**2+(y(i)-y(i-1))**2)*1.901d-3
+          integral = integral+0.5d0*(values(i)+previous)*dl
+       ENDIF
+       previous = values(i)
+    ENDDO
+  END FUNCTION integrate_line_samples
 
   SUBROUTINE point_in_mesh(x, y, Xc, T, is_inside, element_index)
      IMPLICIT NONE

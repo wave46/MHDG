@@ -79,6 +79,7 @@
     zeff_path = ''                            ! Optional time-dependent Zeff, independent of equilibrium evolution
     target_density_path = ''                  ! Required for feedback: target_variable = 1, 2 or 3
     target_density_xpr_path = ''              ! Also required for impurity feedback: target_variable = 3
+    density_chord = 0.0, 0.0, 10.0, 0.0       ! Reporting: R1,Z1,R2,Z2 [m]; illustrative midplane chord
     diffusion_1D_path = 'path/to/diffusion.h5'  ! Used when import_diffusion_1D = .true.
 /
 
@@ -271,6 +272,7 @@
 /
 
 &UTILS_LST
+    line_integrated_density_diagnostics = .false. ! Optional chord-density report
     residual_diagnostics_mode = 'off' ! off, summary, equations
     balance_diagnostics_mode = 'summary' ! off, summary, equations, detailed
                                         ! Enabled modes require a 2D neutral-temperature model

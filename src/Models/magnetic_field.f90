@@ -1933,6 +1933,7 @@ SUBROUTINE read_control_curve(curve, path, dataset)
    CHARACTER(LEN=*), INTENT(IN) :: path, dataset
    INTEGER(HID_T) :: file_id
    INTEGER :: n, ierr, coordinate
+   REAL*8 :: feedback_chord(4)
    CHARACTER(LEN=7), PARAMETER :: chord_names(4) = &
         [CHARACTER(LEN=7) :: 'x_lower', 'x_upper', 'y_lower', 'y_upper']
 
@@ -1957,6 +1958,18 @@ SUBROUTINE read_control_curve(curve, path, dataset)
       STOP 1
    ENDIF
    curve%path = path
+   IF (dataset == 'target_density' .AND. utils%line_integrated_density_diagnostics .AND. &
+       switch%target_variable /= 0) THEN
+      feedback_chord = curve%chord([1,3,2,4]) ! R1,Z1,R2,Z2, as in the diagnostic input
+      ! Reversed endpoints describe the same chord. Each measurement keeps its own.
+      IF (MIN(MAXVAL(ABS(feedback_chord-input%density_chord)), &
+              MAXVAL(ABS(feedback_chord-input%density_chord([3,4,1,2])))) > &
+              1.d-10*MAX(1.d0,MAXVAL(ABS(feedback_chord)))) THEN
+         IF (MPIvar%glob_id == 0) WRITE(6,'(3A)') &
+              'Warning: diagnostic density_chord differs from feedback chord in ',TRIM(path), &
+              '; each uses its own chord'
+      ENDIF
+   ENDIF
    IF (MPIvar%glob_id == 0) WRITE(6,*) 'Control curve loaded: ', TRIM(path), ' ', TRIM(dataset)
 END SUBROUTINE read_control_curve
 

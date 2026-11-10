@@ -26,6 +26,7 @@ SUBROUTINE HDG_BC()
   USE analytical, only: analytical_solution
   USE balance_diagnostics, ONLY: balance_accumulator_type, &
        &balance_plasma_bc_type, balance_diag
+  USE density_diagnostics_module, ONLY: report_density_diagnostics
 
   IMPLICIT NONE
 #ifdef TOR3D
@@ -758,6 +759,7 @@ CONTAINS
     CALL balance_diag%finalize()
     CALL balance_diag%report()
   ENDIF
+  CALL report_density_diagnostics()
 
   DEALLOCATE(ures)
 

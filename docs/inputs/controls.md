@@ -63,6 +63,35 @@ The spelling `propotional` is part of the input format. Gains use dimensional
 density errors and seconds; choose their values for the actuator's units and
 scale.
 
+### Optional chord-density reporting
+
+Reporting defaults off. Add to existing namelist blocks:
+
+```fortran
+&INPUT_LST
+  density_chord = 0.0, 0.0, 10.0, 0.0 ! R1,Z1,R2,Z2 [m]; illustrative midplane chord
+/
+&UTILS_LST
+  line_integrated_density_diagnostics = .true.
+/
+```
+
+Replace the fictitious endpoints with a chord through your mesh. Reporting uses
+`density_chord` independently of feedback's HDF5 chord. Different chords produce
+one warning when feedback loads its target. Reporting also works with balances off.
+
+The report prints the full one-way line integral including SOL [m⁻²], that
+integral divided by the in-mesh chord length [m⁻³], and the same integral divided
+by the inside-LCFS chord length [m⁻³]. Neither normalization is a volume average.
+Lengths use geometric intersections; density uses the feedback's 1000-point
+sampling convention with one MPI owner per sample. A 2D rectangular-grid
+equilibrium and mesh coverage of the inside-LCFS chord are required.
+
+Like balance diagnostics, reporting samples each Newton assembly before its
+update. The latest assembled snapshot is saved under `/diagnostics/density_chord` as
+`measurement_time_seconds`, `endpoints_m` (R1,Z1,R2,Z2), `full_integral_m-2`,
+`mesh_length_m` and `lcfs_length_m`. Feedback and legacy `physics/n_li` are unchanged.
+
 ## HDF5 format
 
 Normally, supply **separate files**, for example `puff_path = 'puff.h5'` and
