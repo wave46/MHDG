@@ -65,6 +65,24 @@ def test_heat_limiter_contract_checks_activation_fractions_and_temperature_units
         assert any(wrong_dataset in failure for failure in report["failures"])
 
 
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("saved", ["matching", "opposite", "missing"])
+def test_neoclassical_heat_contract_checks_saved_activation(tmp_path, enabled, saved):
+    candidate = tmp_path / "candidate.h5"
+    write_solver_output(path=candidate)
+    (tmp_path / "param.txt").write_text(
+        "&PHYS_LST\n neoclassical_heat_conduction=" + (".true." if enabled else ".false.") + "\n/\n")
+    if saved != "missing":
+        with h5py.File(candidate, "r+") as handle:
+            handle["simulation_parameters/physics/neoclassical_heat_conduction"] = int(
+                enabled if saved == "matching" else not enabled)
+    report = check_output_contract(candidate, tmp_path, "NGammaTiTeNeutral", {}, {})
+    assert report["status"] == ("passed" if saved == "matching" else "failed")
+    if saved != "matching":
+        assert any("physics/neoclassical_heat_conduction" in failure for failure in report["failures"])
+
+
 def test_disabled_heat_limiter_does_not_require_saved_inactive_coefficients(tmp_path):
     candidate = tmp_path / "candidate.h5"
     write_solver_output(path=candidate)
