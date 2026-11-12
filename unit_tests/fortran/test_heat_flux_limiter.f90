@@ -1,13 +1,10 @@
 PROGRAM test_heat_flux_limiter
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   USE globals, ONLY: phys,simpar,switch
-  USE physics, ONLY: compute_heat_flux_limiters,compute_flux_limiter,heat_flux_cap_floor, &
-       compute_free_streaming_heat_flux_ions,compute_free_streaming_heat_flux_electrons, &
-       compute_spitzer_harm_flux_ions,compute_spitzer_harm_flux_electrons, &
-       computeVi,computeVe,compute_dV_dUi,compute_dV_dUe, &
-       evaluate_energy_conductivity
+  USE physics, ONLY: parallel_heat_conduction_flux,conductive_heat_flux_result,computeVi,computeVe
+  USE adimensionalization_module, ONLY: ion_mass_si,electron_mass_si
   IMPLICIT NONE
-  REAL*8, PARAMETER :: perturbation=2.d-7
+  REAL*8, PARAMETER :: perturbation=2.d-7,heat_flux_floor=1.d-10
   INTEGER :: species,checks,reconstructions
   REAL*8 :: worst
 
@@ -34,32 +31,35 @@ CONTAINS
     CHARACTER(*), INTENT(IN) :: label
     REAL*8, INTENT(IN) :: density,temperature
     LOGICAL, INTENT(IN) :: enabled
-    REAL*8 :: u(5),q(2,5),b(3),v(5),dv(5,5),da(5),ju(5),jq(2,5)
+    REAL*8 :: u(5),q(2,5),b(3),v(5),ju(5),jq(2,5)
     REAL*8 :: alpha,coefficient,qfs,qscale,cap,x,phi(2),expected,affine,realized
     REAL*8 :: trial(5),qtrial(2,5),scale,plus,minus
     INTEGER :: direction,j,k,energy
+    TYPE(parallel_heat_conduction_flux) :: heat_flux
+    TYPE(conductive_heat_flux_result) :: response
 
     switch%flux_limiter=enabled
     energy=which+2
     b=[.3d0,-.4d0,SQRT(.75d0)]
     u=[density,.2d0*density,density*(1.5d0*phys%Mref*temperature+.02d0), &
          density*1.5d0*phys%Mref*temperature,.1d0*density]
-    CALL coefficients(u,which,v,dv,alpha,da,coefficient,qfs)
-    cap=MAX(ABS(qfs),heat_flux_cap_floor)
+    CALL coefficients(u,which,v,alpha,coefficient,qfs)
+    cap=MAX(ABS(qfs),heat_flux_floor)
     qscale=.2d0*cap/(coefficient*alpha*v(energy)*b(1))
     DO direction=-1,1
       q=0.d0;q(1,energy)=direction*.7d0*qscale
       x=coefficient*alpha*DOT_PRODUCT(MATMUL(q,v),b(1:2))
-      CALL compute_heat_flux_limiters(u,x,x,phi(1),phi(2))
+      CALL heat_flux%init(u,Q=q,b=b)
+      CALL heat_flux%evaluate_fluxes()
+      response=heat_flux%ion_heat_flux
+      IF (which==2) response=heat_flux%electron_heat_flux
+      phi(which)=response%limiter
       expected=1.d0
-      IF (enabled) CALL compute_flux_limiter(qfs,x,MERGE(phys%c_fli,phys%c_fle,which==1),expected)
+      IF (enabled) expected=1.d0/(1.d0+ABS(x)/(MERGE(phys%c_fli,phys%c_fle,which==1)*cap))
       CALL close(phi(which),expected,1.d0,label//' limiter value')
-      ju=phi(which)*coefficient*(DOT_PRODUCT(MATMUL(q,v),b(1:2))*da+ &
-           alpha*MATMUL(TRANSPOSE(MATMUL(q,dv)),b(1:2)))
-      DO j=1,5
-        jq(:,j)=phi(which)*coefficient*alpha*v(j)*b(1:2)
-      ENDDO
-      affine=phi(which)*coefficient*alpha*DOT_PRODUCT(MATMUL(TRANSPOSE(MATMUL(q,dv)),b(1:2)),u)
+      ju=0.d0;ju(:4)=response%state_derivative
+      jq=0.d0;jq(:,:4)=response%gradient_derivative(:2,:)
+      affine=response%affine
       realized=DOT_PRODUCT(ju,u)+SUM(jq*q)-affine
       CALL close(realized,phi(which)*x,cap,label//' physical-flux reconstruction')
       CALL close(DOT_PRODUCT(ju,u)+SUM(jq*q),0.d0,cap,label//' joint degree-zero contraction')
@@ -83,19 +83,27 @@ CONTAINS
     ENDDO
   END SUBROUTINE check_fixture
 
-  SUBROUTINE coefficients(state,which,v,dv,alpha,da,coefficient,qfs)
+  SUBROUTINE coefficients(state,which,v,alpha,coefficient,qfs)
     REAL*8, INTENT(IN) :: state(5)
     INTEGER, INTENT(IN) :: which
-    REAL*8, INTENT(OUT) :: v(5),dv(5,5),alpha,da(5),coefficient,qfs
-    CALL evaluate_energy_conductivity(state,which+2,alpha,da)
+    REAL*8, INTENT(OUT) :: v(5),alpha,coefficient,qfs
+    REAL*8 :: energy,minimum_energy
+    TYPE(parallel_heat_conduction_flux) :: heat_flux
+    CALL heat_flux%init(state)
+    CALL heat_flux%evaluate_conductivities()
+    minimum_energy=1.d-5/simpar%refval_temperature*1.5d0*phys%Mref
     IF (which==1) THEN
-      CALL computeVi(state,v);CALL compute_dV_dUi(state,dv)
+      alpha=heat_flux%ion_heat_flux%conductivity%value
+      CALL computeVi(state,v)
       coefficient=phys%diff_pari
-      CALL compute_free_streaming_heat_flux_ions(state,qfs)
+      energy=MAX(state(3)/state(1)-.5d0*(state(2)/state(1))**2,minimum_energy)
+      qfs=(2.d0/3.d0)**1.5d0*energy**1.5d0*state(1)
     ELSE
-      CALL computeVe(state,v);CALL compute_dV_dUe(state,dv)
+      alpha=heat_flux%electron_heat_flux%conductivity%value
+      CALL computeVe(state,v)
       coefficient=phys%diff_pare
-      CALL compute_free_streaming_heat_flux_electrons(state,qfs)
+      energy=MAX(state(4)/state(1),minimum_energy)
+      qfs=(2.d0/3.d0)**1.5d0*SQRT(ion_mass_si/electron_mass_si)*energy**1.5d0*state(1)
     ENDIF
     coefficient=coefficient*(2.d0/(3.d0*phys%Mref))**(1.d0+phys%epn)
   END SUBROUTINE coefficients
@@ -104,13 +112,14 @@ CONTAINS
     REAL*8, INTENT(IN) :: state(5),gradient(2,5),b(3),phi
     INTEGER, INTENT(IN) :: which
     REAL*8, INTENT(OUT) :: result
-    REAL*8 :: classical
-    IF (which==1) THEN
-      CALL compute_spitzer_harm_flux_ions(state,gradient,b,classical)
-    ELSE
-      CALL compute_spitzer_harm_flux_electrons(state,gradient,b,classical)
-    ENDIF
-    result=-phi*classical
+    LOGICAL :: enabled
+    TYPE(parallel_heat_conduction_flux) :: heat_flux
+    enabled=switch%flux_limiter;switch%flux_limiter=.FALSE.
+    CALL heat_flux%init(state,Q=gradient,b=b)
+    CALL heat_flux%evaluate_fluxes()
+    result=phi*heat_flux%ion_heat_flux%diffusive_flux
+    IF (which==2) result=phi*heat_flux%electron_heat_flux%diffusive_flux
+    switch%flux_limiter=enabled
   END SUBROUTINE held_value
 
   SUBROUTINE close(actual,expected,normalization,label)

@@ -328,8 +328,9 @@ MODULE types
      ! Flux limiter related
      REAL*8                    :: c_fli ! Fraction of the free streaming flux used in the ion flux limiter
      REAL*8                    :: c_fle ! Fraction of the free streaming flux used in the electron flux limiter
-     REAL*8                    :: T_fluxlim_maxi ! Max ion temperature [eV] in old heat flux limiter (limiting T in T^(5/2))
-     REAL*8                    :: T_fluxlim_maxe ! Max electron temperature [eV] in old heat flux limiter (limiting T in T^(5/2))
+     REAL*8                    :: T_fluxlim_maxi ! Ion parallel-conductivity temperature ceiling [eV]
+     REAL*8                    :: T_fluxlim_maxe ! Electron parallel-conductivity temperature ceiling [eV]
+     LOGICAL :: neoclassical_heat_conduction = .FALSE. ! Closed-surface neoclassical conductivity
      ! Diffusion coefficients 1D imported from file
      REAL*8, POINTER           :: rho_1D(:) => NULL() ! Radial coordinate for 1D diffusion profiles
      REAL*8, POINTER           :: diff_n_1D(:) => NULL() ! Perpendicular diffusion in the continuity equation

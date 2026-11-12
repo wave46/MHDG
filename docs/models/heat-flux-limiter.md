@@ -1,73 +1,155 @@
-# Parallel heat-flux limiter
+# Parallel heat conduction
 
-For ions and electrons, parallel conduction follows the Spitzer–Härm law,
-with a limiter that prevents the conductive flux from exceeding a chosen
-fraction of the free-streaming flux:
+For ions and electrons, parallel conductive heat flows down the temperature
+gradient. Magnetic topology selects the transport law: closed field lines
+use classical or neoclassically corrected conductivity; open field lines
+use classical conductivity with optional free-streaming saturation.
+Prescribed sheath energy loss is assembled separately.
 
-$$
-q_{\parallel,s}=\phi_s q_{\mathrm{SH},s},\qquad
-q_{\mathrm{SH},s}=-\kappa_{\parallel,s}\nabla_\parallel T_s,\qquad
-\phi_s=\frac{1}{1+|q_{\mathrm{SH},s}|/q_{\max,s}}.
-$$
+## Closed field lines: neoclassical correction
 
-Here $s$ denotes ions or electrons, and $q_{\max,s}$ is the allowed flux.
-The free-streaming flux scales as
-$nT_s^{3/2}$, with the appropriate species mass. The dimensionless inputs
-`c_fli` and `c_fle` set its allowed fraction for each species, and
-`flux_limiter` enables both limiters. The prescribed sheath energy loss is
-assembled separately.
-
-## Temperature limits
-
-The parallel conductivity grows as $T_s^p$, normally with $p=5/2$.
-Ion temperature uses thermal energy after subtracting bulk kinetic energy.
-The inputs `T_fluxlim_maxi` and `T_fluxlim_maxe`, specified in **eV**, set
-separate upper temperatures for the ion and electron conductivities. Above
-these temperatures the conductivity stays at its capped value. The
-manufactured solution (MMS) testcase 2 bypasses these upper limits.
-
-The conductivity uses a numerical temperature floor barely above zero:
+`neoclassical_heat_conduction=.true.` in `PHYS_LST` enables the SOLPS-ITER
+plateau/banana correction for a singly charged hydrogenic majority. The
+default is false, giving classical conductivity on closed surfaces. The
+closed-surface heat flux is
 
 $$
-T_{\kappa,\min}\approx2.67\times10^{-20}\ \mathrm{eV}.
+q_{\parallel,s}=-\kappa_{\parallel,s}\nabla_\parallel T_s,
+\qquad \kappa_{\parallel,s}\propto T_s^{5/2}F_s.
 $$
 
-With the code's fixed reference scales, the reference ion energy is about
-4.00 eV, giving this floor from $\tfrac23\,10^{-20}E_{\rm ref}$.
-This is only a numerical positivity check, with no meaningful physical
-temperature scale. It keeps the conductivity positive without changing
-the energy or temperature stored in the solution.
+The correction accounts for the change in collisional parallel transport
+as the collision length grows relative to the magnetic connection length.
+In a torus, this response sets poloidal temperature variations and the
+resulting neoclassical radial heat transport. The fits connect the
+Pfirsch–Schlüter, plateau and banana regimes.
 
-The **free-streaming cap** uses a separate, fixed temperature floor of
-$10^{-5}$ eV. Below it the cap still varies linearly with density. A further
-minimum free-streaming flux of $10^{-10}$ in solver flux units prevents a
-zero denominator when evaluating the limiter.
-
-## Tangent
-
-Inside the conductivity's temperature limits, its derivative follows the
-power law. Below the lower floor or above the upper limit, the conductivity
-is constant and its derivative is zero. Exactly at the lower limit the
-constant-side derivative is used; exactly at the upper limit the power-law
-side is used. Multiplying all conservative state components by the same
-factor leaves temperature and conductivity unchanged.
-
-The limiter is recomputed at each nonlinear assembly. With
-$h=\phi q_{\mathrm{SH}}$, the tangent holds $\phi$ fixed:
+The [SOLPS-ITER manual 3.0.9](https://solps-tutorials.readthedocs.io/files/SOLPS-ITER_manual_3.0.9.pdf)
+gives the electron fit on p.389 and the ion fit on p.396, equation C.180:
 
 $$
-\delta h=\phi_0\,\delta q_{\mathrm{SH}}.
+F_e=\frac{0.58\epsilon^{3/2}}{K_1},\qquad
+K_1=\frac{1}{1+2.01\sqrt{\nu_e^*}+1.53\nu_e^*}
+ +\frac{0.52\epsilon^3\nu_e^*}{1+0.89\epsilon^{3/2}\nu_e^*},
 $$
 
-Conductivity and temperature-gradient derivatives remain active; derivatives
-of $\phi$ and the free-streaming cap are omitted. This is an approximate
-tangent. The physical flux remains $\phi q_{\mathrm{SH}}$, and its
-linearized expression reproduces that flux at the current state, including
-when a floor or conductivity cap is active. Volume terms use the element
-state; face terms use trace temperature and element gradients.
+$$
+F_i=\frac{1.60\epsilon^{3/2}}{K_2},\qquad
+K_2=\frac{0.66+1.88\sqrt{\epsilon}-1.54\epsilon}
+ {1+1.03\sqrt{\nu_i^*}+0.31\nu_i^*}
+ +\frac{1.17\epsilon^3\nu_i^*}{1+0.74\epsilon^{3/2}\nu_i^*}.
+$$
 
-The limiter is excluded from the thermal stabilization coefficient. That
-penalty therefore remains finite when the physical conduction saturates.
-It contributes separately to the numerical heat flux: the limiter bounds
-physical parallel conduction, not the total HDG flux. See
-[thermal stabilization](../numerics/thermal-stabilization.md).
+Both use the collisionality
+
+$$
+\nu_s^*=\frac{L_\parallel}{2\pi\epsilon^{3/2}\tau_s\sqrt{T_{s,J}/m_s}}.
+$$
+
+With temperatures expressed as energies in joules and singly charged ions,
+
+$$
+C=\frac{4\pi\epsilon_0}{e^2},\qquad
+\tau_e=\frac{3C^2\sqrt{m_e}T_{e,J}^{3/2}}{4\sqrt{2\pi}n_e\ln\Lambda},\qquad
+\tau_i^{\rm Br}=\frac{3C^2\sqrt{m_i}T_{i,J}^{3/2}}{4\sqrt{\pi}n_e\ln\Lambda}.
+$$
+
+The implementation accepts temperatures in eV, density in m⁻³ and circuit
+length in metres. The shared Coulomb logarithm is 15. Electron and ion
+reference collision times follow Braginskii's electron–ion and ion–ion
+conventions. The fits approach approximately unity at high collisionality.
+The fitted values are used across the full collisionality range.
+
+The ion correction and its neoclassical motivation are described by
+[Rozhansky et al., section 3, equations (36)–(38)](https://pure.mpg.de/pubman/item/item_2141150_3/component/file_2141149/Rozhansky_New.pdf).
+
+### Closed-surface geometry
+
+Each axis-connected closed contour supplies a full poloidal circuit length
+and an effective inverse aspect ratio:
+
+$$
+L_\parallel=\oint\frac{|B|}{|B_{\rm pol}|}\,dl_{\rm pol},\qquad
+\epsilon=\frac{(\oint dl_{\rm pol})^2}{2\pi\oint R\,dl_{\rm pol}}.
+$$
+
+Circular surfaces give the usual minor-to-major-radius ratio. At large
+aspect ratio, the circuit length approaches the familiar expression
+
+$$
+\epsilon=\frac{r}{R_0},\qquad L_\parallel\simeq2\pi R_0q.
+$$
+
+The profiles use the loaded equilibrium's contours and magnetic field.
+The current implementation builds them from a rectangular equilibrium
+grid, with either flux-derived or supplied poloidal field components.
+Temperature-model assembly currently supports this correction in 2D with
+`epn=2.5`.
+
+At a regular magnetic axis, poloidal field strength and contour circumference
+both vanish linearly with minor radius, leaving a finite circuit length.
+The first two small contours determine its smooth continuation in normalized
+poloidal flux:
+
+$$
+L_\parallel(\psi_N)=L_0+C\psi_N+O(\psi_N^2),\qquad \psi_N=\rho^2.
+$$
+
+Near an ordinary X-point, the local flux is a quadratic saddle and the
+circuit length grows logarithmically. The final two resolved contours
+supply the offset and slope, both in metres:
+
+$$
+L_\parallel(\psi_N)\sim A+B\ln\frac{1}{1-\psi_N}.
+$$
+
+These endpoint forms follow from local equilibrium expansions; fitting the
+last two contours is the numerical continuation choice. See
+[Webster (2009), section VI, equation (21)](https://doi.org/10.1063/1.3046070)
+and the [MIT plasma-edge scaling report, p.4](https://library.psfc.mit.edu/catalog/reports/1990/95rr/95rr012/95rr012_full.pdf).
+Limiter boundaries use a finite smooth continuation in normalized flux.
+
+## Open field lines: free-streaming limiter
+
+`flux_limiter=.true.` in `SWITCH_LST` enables local saturation on open field
+lines, including private flux. The limiter fractions `c_fli` and `c_fle`
+control the maximum ion and electron conductive heat flux:
+
+$$
+q_{\parallel,s}=
+\frac{-\kappa_{\parallel,s}\nabla_\parallel T_s}
+ {1+|\kappa_{\parallel,s}\nabla_\parallel T_s|/(c_{{\rm fl},s}q_{{\rm FS},s})},
+\qquad q_{{\rm FS},s}\propto\frac{n_sT_s^{3/2}}{\sqrt{m_s}}.
+$$
+
+This limits the classical conductive flux as it approaches a chosen fraction
+of the thermal free-streaming flux. The ion temperature uses thermal energy
+after subtracting bulk kinetic energy. The local temperature floor is
+10⁻⁵ eV and the minimum free-streaming flux is 10⁻¹⁰ in solver units.
+
+The closed/open selection follows the SOLPS-ITER manual, equations C.127
+and C.175. Closed surfaces use a free-streaming multiplier of one, with
+either classical or neoclassically corrected conductivity selected above.
+The topology stays fixed during each Newton solve.
+
+## Conductivity ceiling and Newton treatment
+
+`T_fluxlim_maxi` and `T_fluxlim_maxe` specify the conductivity ceilings in eV:
+
+$$
+\kappa_{\parallel,s}=\kappa_{s,0}
+\min\!\left(T_s^{5/2}F_s,T_{\max,s}^{5/2}\right).
+$$
+
+The correction factor is one on open field lines and when the neoclassical
+model is disabled. MMS testcase 2 uses the uncapped conductivity law.
+The specific-thermal-energy floor is 10⁻²⁰ in solver units.
+
+Newton assembly differentiates the conductivity with respect to density
+and temperature. On open field lines the current free-streaming multiplier
+is updated at each assembly and held fixed during linearization. The
+conductive flux uses the element state in volume terms and the trace state
+on faces, together with the element gradient.
+
+Thermal stabilization uses the corrected, capped conductivity before local
+free-streaming saturation. See the [thermal stabilization description](../numerics/thermal-stabilization.md).

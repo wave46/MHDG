@@ -48,7 +48,6 @@ SUBROUTINE HDG_BC()
   REAL*8                    :: thetafg(refElTor%Ngauss1d),dsurf(refElTor%Ngl),n_g(refElTor%Ngl,3),t_g(refElPol%Ngauss1d,2)
   INTEGER*4                 :: ind_qf(refElTor%Nfl*3*phys%Neq)
   REAL*8                    :: qqf(refElTor%Nfl,3*phys%Neq),qfg(refElTor%Ngl,phys%neq*3)
-  REAL*8                    :: coefi,coefe
   REAL*8                    :: tdiv(numer%ntor + 1)
   REAL*8                    :: xyf(refElPol%Ngauss1d,2),xyd_g(refElPol%Ngauss1d,2),xydNorm_g(refElPol%Ngauss1d)
   INTEGER                   :: ind_asf(refElTor%Nfl),ind_ash(refElTor%Nfl)
@@ -90,9 +89,6 @@ SUBROUTINE HDG_BC()
   DO i = 1,numer%ntor
     tdiv(i + 1) = i*htor
   END DO
-
-  coefi = phys%diff_pari*(2./(3.*phys%Mref))**(1 + phys%epn)
-  coefe = phys%diff_pare*(2./(3.*phys%Mref))**(1 + phys%epn)
 
 #ifdef PARALL
   IF (MPIvar%ntor .GT. 1) THEN
@@ -517,7 +513,6 @@ CONTAINS
   INTEGER                   :: ind_qf(refElPol%Nfacenodes*phys%neq*2)
   REAL*8                    :: uf(refElPol%Nfacenodes*phys%neq),qf(refElPol%Nfacenodes,phys%neq*2)
   REAL*8                    :: ue(refElPol%Nfacenodes,phys%neq)
-  REAL*8                    :: coefi,coefe
   REAL*8,ALLOCATABLE        :: ures(:,:)
   INTEGER*4                 :: inde(Mesh%Nnodesperelem)
   INTEGER                   :: sizeu
@@ -553,9 +548,6 @@ CONTAINS
   diagnostics_on = balance_diag%enabled()
   IF (diagnostics_on) &
     &CALL balance_diag%initialize_accumulator(boundary_diagnostics)
-
-  coefi = phys%diff_pari*(2./(3.*phys%Mref))**(1 + phys%epn)
-  coefe = phys%diff_pare*(2./(3.*phys%Mref))**(1 + phys%epn)
 
   ! Some indices
   ind_asf = (/(i,i=0,Neq*(Npfl - 1),Neq)/)
@@ -956,7 +948,7 @@ CONTAINS
       ! Shape functions product
       Ni = refElPol%N1D(g,:)*dline
 
-      CALL assembly_dirichletstr_bc(iel,ind_asf,ind_ash,ind_fe,ind_fg,Ni,qfg(g,:),uex(g,:),b(g,1:2),n_g)
+      CALL assembly_dirichletstr_bc(iel,ind_asf,ind_ash,ind_fe,ind_fg,Ni,qfg(g,:),uex(g,:),b(g,1:2),n_g,rho_pol_norm(g),topology_region(g))
 
     END DO
 
@@ -1073,7 +1065,7 @@ CONTAINS
         END DO
       ELSE
 #ifdef TEMPERATURE
-        CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g),dtau_du)
+        CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g),dtau_du,topology_region(g),rho_pol_norm(g))
 #else
         CALL computeTauGaussPoints(upg(g,:),ufg(g,:),qfg(g,:),b(g,1:2),n_g,iel,1.,xyg(g,:),tau_stab,diff_iso_tau(:,:,g))
 #endif
@@ -1377,10 +1369,12 @@ CONTAINS
   !**********************************
   ! Assembly Dirichlet in strong form
   !**********************************
-  SUBROUTINE assembly_dirichletstr_bc(iel,ind_asf,ind_ash,ind_fe,ind_fg,Ni,qg,ufg,bg,ng)
+  SUBROUTINE assembly_dirichletstr_bc(iel,ind_asf,ind_ash,ind_fe,ind_fg,Ni,qg,ufg,bg,ng,rho,topology_region)
       INTEGER*4        :: iel,ind_asf(:),ind_ash(:),ind_fe(:),ind_fg(:)
       REAL*8           :: Ni(:),ufg(:),bg(:),ng(:)
       REAL*8           :: qg(:)
+      REAL*8, OPTIONAL, INTENT(IN) :: rho
+      INTEGER, OPTIONAL, INTENT(IN) :: topology_region
       REAL*8           :: bn,An(Neq,Neq)
       INTEGER          :: i,j,idm
       REAL*8           :: kmultconv(Neq*Npfl),kmultfseq(Ndim*Neq*Npfl)
@@ -1390,9 +1384,7 @@ CONTAINS
 #ifndef TEMPERATURE
       REAL*8           :: auxvec(Neq)
 #else
-      REAL*8           :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
-      REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
-      REAL*8           :: flux_limiter_i,flux_limiter_e,q_sh_i,q_sh_e
+    TYPE(parallel_heat_conduction_flux) :: heat_flux
 #endif
 
       bn = dot_PRODUCT(bg,ng)
@@ -1421,36 +1413,18 @@ CONTAINS
       Qpr = RESHAPE(qg,(/Ndim,Neq/))
 
 #ifdef TEMPERATURE
-    ! Compute V(U^(k-1))
-      CALL computeVi(ufg,Vveci)
-      CALL computeVe(ufg,Vvece)
-
-    ! Compute dV_dU (k-1)
-      CALL compute_dV_dUi(ufg,dV_dUi)
-      CALL compute_dV_dUe(ufg,dV_dUe)
-
-    ! Compute Gamma and tau
-      gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),bg)   ! scalar
-      gme = dot_PRODUCT(MATMUL(Qpr,Vvece),bg)
-      Taui = MATMUL(Qpr,dV_dUi)                       ! 2x3
-      Taue = MATMUL(Qpr,dV_dUe)
-
-    CALL evaluate_energy_conductivity(ufg,3,Alphai,dAlpha_dUi)
-    CALL evaluate_energy_conductivity(ufg,4,Alphae,dAlpha_dUe)
-
-    CALL compute_spitzer_harm_flux(Alphai,gmi,phys%diff_pari,q_sh_i)
-    CALL compute_spitzer_harm_flux(Alphae,gme,phys%diff_pare,q_sh_e)
-    CALL compute_heat_flux_limiters(ufg,q_sh_i,q_sh_e,flux_limiter_i,flux_limiter_e)
+    CALL heat_flux%init(ufg,topology_region,rho,Qpr,bg)
+    CALL heat_flux%evaluate_fluxes()
 
     ! assemblyExtFacesContribution supplies the constant heat-flux RHS term.
     DO i = 3,4
       DO j = 1,4
         IF (i == 3) THEN
           elMat%Aul_dir(ind_fe(i + ind_asf),iel) = elMat%Aul_dir(ind_fe(i + ind_asf),iel) - &
-                    &Ni*bn*((flux_limiter_i*coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:,j),bg))))*ufg(j))
+                    &Ni*bn*(heat_flux%ion_heat_flux%state_derivative(j)*ufg(j))
         ELSE
           elMat%Aul_dir(ind_fe(i + ind_asf),iel) = elMat%Aul_dir(ind_fe(i + ind_asf),iel) - &
-                    &Ni*bn*((flux_limiter_e*coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:,j),bg))))*ufg(j))
+                    &Ni*bn*(heat_flux%electron_heat_flux%state_derivative(j)*ufg(j))
         END IF
       END DO
     END DO
@@ -1489,9 +1463,7 @@ CONTAINS
     TYPE(balance_plasma_bc_type) :: diagnostic_plasma_bc
     real*8           :: kmult(Npfl,Npfl),kmultf(Npfl)
 #ifdef TEMPERATURE
-        REAL*8           :: Vveci(Neq),Alphai,taui(Ndim,Neq),dV_dUi(Neq,Neq),gmi,dAlpha_dUi(Neq)
-        REAL*8           :: Vvece(Neq),Alphae,taue(Ndim,Neq),dV_dUe(Neq,Neq),gme,dAlpha_dUe(Neq)
-        REAL*8           :: flux_limiter_i,flux_limiter_e,q_sh_i,q_sh_e
+    TYPE(parallel_heat_conduction_flux) :: heat_flux
         REAL*8           :: W3(Neq), dW3_dU(Neq,Neq), QdW3(Ndim,Neq)
         REAL*8           :: W4(Neq), dW4_dU(Neq,Neq), QdW4(Ndim,Neq)
 #ifdef NEUTRALP
@@ -1592,14 +1564,6 @@ CONTAINS
 
     !IF (ntang) THEN
 
-      ! Compute V(U^(k-1))
-        CALL computeVi(ufg,Vveci)
-        CALL computeVe(ufg,Vvece)
-
-      ! Compute dV_dU (k-1)
-        CALL compute_dV_dUi(ufg,dV_dUi)
-        CALL compute_dV_dUe(ufg,dV_dUe)
-
       ! Split diffusion matrices/vectors for the energies equations
       CALL compute_W3(ufg,W3,diffiso(1,1),diffiso(2,2),diffiso(3,3))
       CALL compute_dW3_dU(ufg,dW3_dU,diffiso(1,1),diffiso(2,2),diffiso(3,3))
@@ -1623,9 +1587,6 @@ CONTAINS
       QdW5p = neutral_limiter_phi*QdW5p
 #endif
 
-      CALL evaluate_energy_conductivity(ufg,3,Alphai,dAlpha_dUi)
-      CALL evaluate_energy_conductivity(ufg,4,Alphae,dAlpha_dUe)
-
       ! Jacobian matrix for convection part
       CALL jacobianMatricesBohm(ufg,Abohm)
 
@@ -1636,16 +1597,8 @@ CONTAINS
           topology_region,outward_normal)
       ENDIF
 
-        gmi = dot_PRODUCT(MATMUL(Qpr,Vveci),bg)  ! scalar
-        gme = dot_PRODUCT(MATMUL(Qpr,Vvece),bg)             ! scalar
-        Taui = MATMUL(Qpr,dV_dUi)                      ! 2x3
-        Taue = MATMUL(Qpr,dV_dUe)      ! 2x3
-
-      ! Compute flux limiters
-
-      CALL compute_spitzer_harm_flux(Alphai,gmi,phys%diff_pari,q_sh_i)
-      CALL compute_spitzer_harm_flux(Alphae,gme,phys%diff_pare,q_sh_e)
-      CALL compute_heat_flux_limiters(ufg,q_sh_i,q_sh_e,flux_limiter_i,flux_limiter_e)
+    CALL heat_flux%init(ufg,topology_region,rho,Qpr,bg)
+    CALL heat_flux%evaluate_fluxes()
 
 #ifdef NEUTRAL
       call compute_Dnn_dU(ufg,Dnn_dU)
@@ -1665,29 +1618,29 @@ CONTAINS
       DO i = 1,2
         indi = ind_asf + i
         IF (i == 1) THEN
-          DO j = 1,Neq
+          DO j = 1,4
             indj = ind_asf + j
                  elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) + Abohm(i,j)*NiNi*bn
                  elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) -&
-                      &(flux_limiter_i*coefi*(gmi*dAlpha_dUi(j) + Alphai*(dot_PRODUCT(Taui(:,j),bg))))*NiNi*bn
+                      &heat_flux%ion_heat_flux%state_derivative(j)*NiNi*bn
             DO k = 1,Ndim
               elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) = elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) -&
-                &flux_limiter_i*coefi*Alphai*Vveci(j)*bg(k)*NiNi*bn
+                &heat_flux%ion_heat_flux%gradient_derivative(k,j)*NiNi*bn
             END DO
           END DO
-              elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - (flux_limiter_i*coefi*Alphai*( dot_PRODUCT (MATMUL(TRANSPOSE(Taui),bg),ufg)  ))*Ni*bn
+              elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - heat_flux%ion_heat_flux%affine*Ni*bn
         ELSE
-          DO j = 1,Neq
+          DO j = 1,4
             indj = ind_asf + j
                  elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) + Abohm(i,j)*NiNi*bn
                  elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) = elMat%ALL(ind_ff(indi + 2),ind_ff(indj),iel) -&
-                      &(flux_limiter_e*coefe*(gme*dAlpha_dUe(j) + Alphae*(dot_PRODUCT(Taue(:,j),bg))))*NiNi*bn
+                      &heat_flux%electron_heat_flux%state_derivative(j)*NiNi*bn
             DO k = 1,Ndim
               elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) = elMat%Alq(ind_ff(indi+2),ind_fG(k+(j-1)*Ndim+ind_ash),iel) -&
-                &flux_limiter_e*coefe*Alphae*Vvece(j)*bg(k)*NiNi*bn
+                &heat_flux%electron_heat_flux%gradient_derivative(k,j)*NiNi*bn
             END DO
           END DO
-              elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - (flux_limiter_e*coefe*Alphae*( dot_PRODUCT (MATMUL(TRANSPOSE(Taue),bg),ufg)  ))*Ni*bn
+              elMat%fh(ind_ff(indi+2),iel) = elMat%fh(ind_ff(indi+2),iel) - heat_flux%electron_heat_flux%affine*Ni*bn
         ENDIF
       END DO
       !endif
@@ -1933,9 +1886,9 @@ CONTAINS
         &DOT_PRODUCT(MATMUL(Qpr,W3),ng-bn*bg), &
         &electron_energy_split_diffusive_flux= &
         &DOT_PRODUCT(MATMUL(Qpr,W4),ng-bn*bg), &
-        &ion_parallel_conductive_flux=flux_limiter_i*coefi*Alphai*gmi, &
+        &ion_parallel_conductive_flux=heat_flux%ion_heat_flux%diffusive_flux, &
         &electron_parallel_conductive_flux= &
-        &flux_limiter_e*coefe*Alphae*gme, &
+        &heat_flux%electron_heat_flux%diffusive_flux, &
         &ion_sheath_coefficient=phys%Gmbohm, &
         &electron_sheath_coefficient=phys%Gmbohme)
       CALL boundary_diagnostics%accumulate_bc( &

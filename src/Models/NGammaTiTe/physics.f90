@@ -8,8 +8,9 @@
 MODULE physics
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_quiet_nan, ieee_value
   USE solver_status, ONLY: finite_solver_values
-  USE adimensionalization_module, ONLY: ion_mass_si, electron_mass_si
+  USE adimensionalization_module, ONLY: ion_mass_si, electron_mass_si, coulomb_logarithm
   USE globals
+  USE magnetic_geometry_state, ONLY: magnetic_equilibrium
   USE magnetic_field
   USE smooth_transition, ONLY: smoothstep01, smoothstep01_derivative
   USE impurity_radiation_model, ONLY: init_impurity_radiation_model, &
@@ -19,12 +20,12 @@ MODULE physics
        &apply_neutral_perpendicular_operator, evaluate_neutral_flux_limiter, &
        &neutral_tn_source_ti, neutral_tn_source_fixed
   IMPLICIT NONE
+  PRIVATE :: magnetic_equilibrium
   PRIVATE :: smoothstep01, smoothstep01_derivative
   PRIVATE :: exchange_collision_temperature, temperature_exchange_coefficient
-  PRIVATE :: finite_solver_values, ion_mass_si, electron_mass_si
+  PRIVATE :: finite_solver_values, ion_mass_si, electron_mass_si, coulomb_logarithm
 
   REAL*8, PARAMETER :: eirene_rate_te_min_phys = 1.d-1
-  REAL*8, PARAMETER :: heat_flux_cap_floor = 1.d-10
   REAL*8, PARAMETER, PRIVATE :: exchange_mass_ratio = electron_mass_si/ion_mass_si
   ! Physical electron-temperature endpoints [eV] of the Ohmic source safeguard.
   REAL*8, PARAMETER :: ohmic_te_off_phys = 0.1d0, ohmic_te_full_phys = 1.d0
@@ -53,6 +54,36 @@ MODULE physics
   REAL*8, PARAMETER :: neutral_manuelcx_coeffs(5) = (/-6.837d-4, 8.004d-3, -3.581d-2, 4.518d-1, -3.259d1/)
   REAL*8, PARAMETER :: boltzmann_constant_si = 1.38064852d-23
   REAL*8, PARAMETER :: elementary_charge_si = 1.60217662d-19
+
+  ! Capped specific-energy factor E_s**epn*F_s in solver units.
+  TYPE :: heat_conductivity
+    ! density_degree is the homogeneity degree under uniform scaling of U.
+    REAL*8 :: value = 0.d0, state_derivative(4) = 0.d0, density_degree = 0.d0
+  END TYPE heat_conductivity
+
+  ! H = kappa*grad_parallel(T); the physical conductive heat flux is -H.
+  TYPE :: conductive_heat_flux_result
+    TYPE(heat_conductivity) :: conductivity
+    REAL*8 :: diffusive_flux = 0.d0, limiter = 1.d0
+    REAL*8 :: state_derivative(4) = 0.d0, gradient_derivative(3,4) = 0.d0, affine = 0.d0
+  END TYPE conductive_heat_flux_result
+
+  TYPE :: parallel_heat_conduction_flux
+    TYPE(conductive_heat_flux_result) :: ion_heat_flux, electron_heat_flux
+    REAL*8, PRIVATE :: state(4), gradient(3,4), field_direction(3)
+    REAL*8, PRIVATE :: energy(2), energy_derivative(4,2), length_m, epsilon
+    LOGICAL, PRIVATE :: use_neoclassical_correction, use_free_streaming_saturation
+    LOGICAL, PRIVATE :: has_flux_inputs = .FALSE.
+  CONTAINS
+    PROCEDURE :: init
+    PROCEDURE :: evaluate_fluxes
+    PROCEDURE :: evaluate_conductivities
+    PROCEDURE, PRIVATE :: compute_classical_conductivities
+    PROCEDURE, PRIVATE :: apply_neoclassical_correction
+    PROCEDURE, PRIVATE :: apply_conductivity_ceiling
+    PROCEDURE, PRIVATE :: compute_conductive_fluxes
+    PROCEDURE, PRIVATE :: apply_free_streaming_saturation
+  END TYPE parallel_heat_conduction_flux
 
   TYPE neutral_runtime_constants_t
     REAL*8 :: rate_scale
@@ -89,12 +120,59 @@ MODULE physics
   TYPE(neutral_flux_limiter_config_t), SAVE :: neutral_limiter_config
 
   PRIVATE :: evaluate_automatic_stabilization
+  PRIVATE :: evaluate_fluxes
+  PRIVATE :: evaluate_conductivities
+  PRIVATE :: init
+  PRIVATE :: compute_classical_conductivities
+  PRIVATE :: apply_neoclassical_correction
+  PRIVATE :: apply_conductivity_ceiling
+  PRIVATE :: compute_conductive_fluxes
+  PRIVATE :: apply_free_streaming_saturation
   INTERFACE
-    MODULE SUBROUTINE evaluate_automatic_stabilization(up,uc,b,normal,length_factor,diff_iso,tau,dtau_du)
+    MODULE SUBROUTINE evaluate_automatic_stabilization(up,uc,b,normal,length_factor,diff_iso,tau,dtau_du,topology_region,rho)
       REAL*8, INTENT(IN) :: up(:),uc(:),b(:),normal(:),length_factor,diff_iso(:,:)
       REAL*8, INTENT(OUT) :: tau(:,:)
       REAL*8, OPTIONAL, INTENT(OUT) :: dtau_du(:,:)
+      INTEGER, OPTIONAL, INTENT(IN) :: topology_region
+      REAL*8, OPTIONAL, INTENT(IN) :: rho
     END SUBROUTINE evaluate_automatic_stabilization
+
+
+    MODULE SUBROUTINE init(this,U,topology_region,rho,Q,b)
+      CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
+      REAL*8, INTENT(IN) :: U(:)
+      INTEGER, OPTIONAL, INTENT(IN) :: topology_region
+      REAL*8, OPTIONAL, INTENT(IN) :: rho,Q(:,:),b(:)
+    END SUBROUTINE init
+
+    MODULE SUBROUTINE evaluate_fluxes(this)
+      CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
+    END SUBROUTINE evaluate_fluxes
+
+    MODULE SUBROUTINE evaluate_conductivities(this)
+      CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
+    END SUBROUTINE evaluate_conductivities
+
+    MODULE SUBROUTINE compute_classical_conductivities(this)
+      CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
+    END SUBROUTINE compute_classical_conductivities
+
+    MODULE SUBROUTINE apply_neoclassical_correction(this)
+      CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
+    END SUBROUTINE apply_neoclassical_correction
+
+    MODULE SUBROUTINE apply_conductivity_ceiling(this)
+      CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
+    END SUBROUTINE apply_conductivity_ceiling
+
+    MODULE SUBROUTINE compute_conductive_fluxes(this)
+      CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
+    END SUBROUTINE compute_conductive_fluxes
+
+    MODULE SUBROUTINE apply_free_streaming_saturation(this)
+      CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
+    END SUBROUTINE apply_free_streaming_saturation
+
   END INTERFACE
 
 
@@ -1526,6 +1604,7 @@ CONTAINS
   !*****************************************
   ! Parallel diffusion terms
   !****************************************
+
   SUBROUTINE computeVi(U, V)
     REAL*8, INTENT(IN)  :: U(:)
     REAL*8, INTENT(OUT) :: V(:)
@@ -1542,15 +1621,6 @@ CONTAINS
     V(1) = -U(4)/U(1)**2
     V(4) = 1./U(1)
   ENDSUBROUTINE computeVe
-
-  !                                SUBROUTINE computeVe(U,V)
-  !                                real*8, intent(IN)  :: U(:)
-  !                                real*8, intent(OUT) :: V(:)
-  !                                V = 0.d0
-  !                                V(1) = U(2)**2/U(1)**3 - U(4)/U(1)**2
-  !                                V(2) = -U(2)/U(1)**2
-  !                                V(4) = 1./U(1)
-  !                                ENDSUBROUTINE computeVe
 
   SUBROUTINE compute_dV_dUi(U, dV_dU)
     REAL*8, INTENT(IN)  :: U(:)
@@ -1664,152 +1734,6 @@ CONTAINS
     dVun_dU(inn, ign) = -1.d0/Unn**2
   ENDSUBROUTINE compute_dVun_dU
 #endif
-
-  SUBROUTINE evaluate_energy_conductivity(U, energy_row, alpha, derivative)
-    REAL*8, INTENT(IN) :: U(:)
-    INTEGER, INTENT(IN) :: energy_row
-    REAL*8, INTENT(OUT) :: alpha
-    REAL*8, OPTIONAL, INTENT(OUT) :: derivative(:)
-    REAL*8 :: specific_energy, temperature_cap
-    REAL*8, PARAMETER :: floor_energy = 1.d-20
-    LOGICAL :: apply_temperature_cap
-
-    specific_energy = U(energy_row)/U(1)
-    temperature_cap = phys%T_fluxlim_maxe
-    IF (energy_row == 3) THEN
-      specific_energy = specific_energy-0.5d0*U(2)**2/U(1)**2
-      temperature_cap = phys%T_fluxlim_maxi
-    ENDIF
-    IF (PRESENT(derivative)) derivative = 0.d0
-
-    ! MMS testcase 2 uses the uncapped conductivity law.
-    apply_temperature_cap = switch%testcase /= 2
-    IF (apply_temperature_cap .AND. 2.d0/(3.d0*phys%Mref)*specific_energy > temperature_cap) THEN
-      alpha = (1.5d0*phys%Mref*temperature_cap)**phys%epn
-      RETURN
-    ENDIF
-
-    IF (specific_energy <= floor_energy) THEN
-      alpha = floor_energy**phys%epn
-      RETURN
-    ENDIF
-
-    alpha = specific_energy**phys%epn
-    IF (.NOT. PRESENT(derivative)) RETURN
-
-    IF (energy_row == 3) THEN
-      CALL computeVi(U,derivative)
-    ELSE
-      CALL computeVe(U,derivative)
-    ENDIF
-    derivative = phys%epn*specific_energy**(phys%epn-1.d0)*derivative
-  END SUBROUTINE evaluate_energy_conductivity
-
-  SUBROUTINE compute_free_streaming_heat_flux_electrons(U, qfs)
-    REAL*8, INTENT(IN)  :: U(:)
-    REAL*8, INTENT(OUT) :: qfs
-    REAL*8, PARAMETER :: tmin = 1e-5 ! eV    
-    REAL*8            :: tmin_cons
-    REAL*8, PARAMETER :: mi = ion_mass_si
-    REAL*8, PARAMETER :: me = electron_mass_si
-    REAL*8             :: t, n
-
-    tmin_cons = tmin/simpar%refval_temperature*3*phys%Mref/2.
-    
-
-    t = MAX(U(4)/U(1), tmin_cons)
-    n = U(1)
-    
-
-    qfs = (2./3.)**1.5*SQRT(mi/me)*t**1.5*n
-
-
-  END SUBROUTINE
-
-
-  SUBROUTINE compute_free_streaming_heat_flux_ions(U,qfs)
-    REAL*8, INTENT(IN)  :: U(:)
-    REAL*8, INTENT(OUT) :: qfs
-    REAL*8, PARAMETER :: tmin = 1e-5 ! eV    
-    REAL*8            :: tmin_cons
-    REAL*8             :: t, n
-
-    tmin_cons = tmin/simpar%refval_temperature*3*phys%Mref/2.
-
-    t = MAX(U(3)/U(1) - 0.5*U(2)**2/U(1)**2, tmin_cons)
-    n = U(1)
-
-
-
-    qfs = (2./3.)**1.5*t**1.5*n
-
-
-  END SUBROUTINE
-
-
-  SUBROUTINE compute_spitzer_harm_flux(alpha, parallel_gradient, parallel_diffusion, heat_flux)
-    REAL*8, INTENT(IN) :: alpha, parallel_gradient, parallel_diffusion
-    REAL*8, INTENT(OUT) :: heat_flux
-    REAL*8 :: coefficient
-
-    ! parallel_gradient is the parallel derivative of specific thermal energy.
-    coefficient = parallel_diffusion*(2.d0/(3.d0*phys%Mref))**(1.d0 + phys%epn)
-    heat_flux = -coefficient*alpha*parallel_gradient
-  END SUBROUTINE compute_spitzer_harm_flux
-
-  SUBROUTINE compute_spitzer_harm_flux_ions(U, Q, b, q_sh_i)
-    REAL*8, INTENT(IN) :: U(:), Q(:,:), b(:)
-    REAL*8, INTENT(OUT):: q_sh_i
-    REAL*8             :: Alphai, gmi
-    REAL*8             :: Vveci(SIZE(U))
-
-    CALL evaluate_energy_conductivity(U,3,Alphai)
-    CALL computeVi(U, Vveci)
-    gmi = dot_PRODUCT(MATMUL(Q,Vveci),b(1:SIZE(Q,1)))
-    CALL compute_spitzer_harm_flux(Alphai,gmi,phys%diff_pari,q_sh_i)
-  
-  END SUBROUTINE compute_spitzer_harm_flux_ions
-
-  SUBROUTINE compute_spitzer_harm_flux_electrons(U, Q, b, q_sh_e)
-    REAL*8, INTENT(IN) :: U(:), Q(:,:), b(:)
-    REAL*8, INTENT(OUT):: q_sh_e
-    REAL*8             :: Alphae, gme
-    REAL*8             :: Vvece(SIZE(U))
-
-    CALL evaluate_energy_conductivity(U,4,Alphae)
-    CALL computeVe(U, Vvece)
-    gme = dot_PRODUCT(MATMUL(Q,Vvece),b(1:SIZE(Q,1)))
-    CALL compute_spitzer_harm_flux(Alphae,gme,phys%diff_pare,q_sh_e)
-
-  END SUBROUTINE compute_spitzer_harm_flux_electrons
-
-  SUBROUTINE compute_flux_limiter(qfs,qsh,c_fl, flux_limiter)
-    REAL*8, INTENT(IN)  :: qfs, qsh, c_fl
-    REAL*8, INTENT(OUT) :: flux_limiter
-    REAL*8 :: qfs_clamped
-    
-
-    qfs_clamped = MAX(ABS(qfs), heat_flux_cap_floor)
-
-    flux_limiter = 1.0 / (1.0 + ABS(qsh) / (c_fl * qfs_clamped))
-
-
-  END SUBROUTINE compute_flux_limiter
-
-  SUBROUTINE compute_heat_flux_limiters(U,qsh_i,qsh_e,phi_i,phi_e)
-    REAL*8, INTENT(IN) :: U(:),qsh_i,qsh_e
-    REAL*8, INTENT(OUT) :: phi_i,phi_e
-    REAL*8 :: qfs_i,qfs_e
-
-    phi_i = 1.d0
-    phi_e = 1.d0
-    IF (.NOT. switch%flux_limiter) RETURN
-    CALL compute_free_streaming_heat_flux_ions(U,qfs_i)
-    CALL compute_free_streaming_heat_flux_electrons(U,qfs_e)
-    CALL compute_flux_limiter(qfs_i,qsh_i,phys%c_fli,phi_i)
-    CALL compute_flux_limiter(qfs_e,qsh_e,phys%c_fle,phi_e)
-  END SUBROUTINE compute_heat_flux_limiters
-   
 
   ! ******************************
   ! Parallel electric field terms
@@ -3105,7 +3029,7 @@ SUBROUTINE compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, gamma_ke)
   logical :: is_core
   real*8             :: n, v, ti, te, V0, nB, nu_e, DB, D_perp, nu_perp, d_star, rho_L, nu_star, L_para, dn_dr, dn_dz, C_Omega, tau_para, tau, C_star, aa, an, a_phi, b_nr, b_phir, b_ni, b_phii, gr, gi
   real*8, intent(OUT) :: gamma_ke
-  REAL*8, PARAMETER :: tol = 1.e-20, m_ratio = sqrt(3670.4829678537167), coulomb_log = 15.
+  REAL*8, PARAMETER :: tol = 1.e-20, m_ratio = sqrt(3670.4829678537167)
 
   n = max(tol, U(1))
   v = U(2)/n
@@ -3115,7 +3039,7 @@ SUBROUTINE compute_gamma_ke(U, Q, B, gradB, q_cyl, omega, gamma_ke)
   V0 = V0*m_ratio
   nB = n
 
-  nu_e = 2.91e-12*n*simpar%refval_density*coulomb_log*(Te*simpar%refval_temperature)**(-1.5)*simpar%refval_time
+  nu_e = 2.91e-12*n*simpar%refval_density*coulomb_logarithm*(Te*simpar%refval_temperature)**(-1.5)*simpar%refval_time
   DB = Te/abs(B)
   D_perp = 1e-2*DB
   nu_perp = 1e-2*DB
@@ -3267,13 +3191,16 @@ ENDSUBROUTINE  compute_ddissip_du
   !*******************************************
   ! Compute the stabilization tensor tau
   !*******************************************
-  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau,diff_iso,dtau_du)
+  SUBROUTINE computeTauGaussPoints(up, uc, q, b, n, iel, isext, xy, tau,diff_iso,dtau_du,topology_region,rho)
     REAL*8, INTENT(IN) :: up(:), uc(:), q(:), b(:), n(:), xy(:), isext
     INTEGER, INTENT(IN) :: iel
     REAL*8, INTENT(OUT) :: tau(:,:)
     REAL*8, OPTIONAL, INTENT(OUT) :: dtau_du(:,:)
     REAL*8, INTENT(IN) :: diff_iso(:,:)
-    REAL*8 :: length_factor
+    INTEGER, OPTIONAL, INTENT(IN) :: topology_region
+    REAL*8, OPTIONAL, INTENT(IN) :: rho
+    REAL*8 :: length_factor,psi_normalized,local_rho,flux_normal(2)
+    INTEGER :: local_region
 
     length_factor = DBLE(refElPol%ndeg)/Mesh%elemSize(iel)
 #ifdef TOR3D
@@ -3282,7 +3209,15 @@ ENDSUBROUTINE  compute_ddissip_du
       length_factor = DBLE(refElTor%ndeg)/(xy(1)*numer%tmax/numer%ntor)
     ENDIF
 #endif
-    CALL evaluate_automatic_stabilization(up,uc,b,n,length_factor,diff_iso,tau,dtau_du)
+    ! Normal 2D assembly supplies its existing quadrature-point cache.
+    IF (PRESENT(topology_region).AND.PRESENT(rho)) THEN
+      CALL evaluate_automatic_stabilization(up,uc,b,n,length_factor,diff_iso,tau,dtau_du,topology_region,rho)
+    ELSEIF (phys%neoclassical_heat_conduction) THEN
+      CALL magnetic_equilibrium%evaluate_topology(xy(1),xy(2),psi_normalized,local_rho,flux_normal,local_region)
+      CALL evaluate_automatic_stabilization(up,uc,b,n,length_factor,diff_iso,tau,dtau_du,local_region,local_rho)
+    ELSE
+      CALL evaluate_automatic_stabilization(up,uc,b,n,length_factor,diff_iso,tau,dtau_du)
+    ENDIF
   ENDSUBROUTINE computeTauGaussPoints
 
   !!

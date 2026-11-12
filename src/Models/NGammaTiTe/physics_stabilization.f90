@@ -4,11 +4,17 @@ SUBMODULE (physics) physics_stabilization
   IMPLICIT NONE
 CONTAINS
 
-  MODULE PROCEDURE evaluate_automatic_stabilization
+  MODULE SUBROUTINE evaluate_automatic_stabilization(up,uc,b,normal,length_factor,diff_iso,tau,dtau_du,topology_region,rho)
+    REAL*8, INTENT(IN) :: up(:),uc(:),b(:),normal(:),length_factor,diff_iso(:,:)
+    REAL*8, INTENT(OUT) :: tau(:,:)
+    REAL*8, OPTIONAL, INTENT(OUT) :: dtau_du(:,:)
+    INTEGER, OPTIONAL, INTENT(IN) :: topology_region
+    REAL*8, OPTIONAL, INTENT(IN) :: rho
     REAL*8 :: advective,bn,bnorm,Etan,heat_part
     REAL*8 :: dadvective(SIZE(uc)),dheat(SIZE(uc)),dneutral(SIZE(uc))
+    TYPE(parallel_heat_conduction_flux) :: heat_flux
     INTEGER :: i
-    LOGICAL :: differentiate
+    LOGICAL :: differentiate,corrected
 
     differentiate = .FALSE.
     IF (PRESENT(dtau_du)) dtau_du = 0.d0
@@ -24,10 +30,16 @@ CONTAINS
       tau(i,i) = advective+diff_iso(i,i)*length_factor
       IF (differentiate) dtau_du(i,:) = dadvective
     ENDDO
-    CALL thermal_stabilization(3,phys%T_fluxlim_maxi,phys%diff_pari,heat_part,dheat)
+    corrected = .FALSE.
+    IF (phys%neoclassical_heat_conduction) THEN
+      CALL heat_flux%init(uc,topology_region,rho)
+      CALL heat_flux%evaluate_conductivities()
+      corrected = heat_flux%use_neoclassical_correction
+    ENDIF
+    CALL thermal_stabilization(3,phys%T_fluxlim_maxi,phys%diff_pari,heat_flux%ion_heat_flux%conductivity,heat_part,dheat)
     tau(3,3) = tau(3,3)+heat_part
     IF (differentiate) dtau_du(3,:) = dtau_du(3,:)+dheat
-    CALL thermal_stabilization(4,phys%T_fluxlim_maxe,phys%diff_pare,heat_part,dheat)
+    CALL thermal_stabilization(4,phys%T_fluxlim_maxe,phys%diff_pare,heat_flux%electron_heat_flux%conductivity,heat_part,dheat)
     tau(4,4) = tau(4,4)+heat_part
     IF (differentiate) dtau_du(4,:) = dtau_du(4,:)+dheat
 #ifdef NEUTRAL
@@ -47,23 +59,35 @@ CONTAINS
 
   CONTAINS
 
-    SUBROUTINE thermal_stabilization(row,temperature_cap,parallel_diffusion,thermal_tau,derivative)
+    SUBROUTINE thermal_stabilization(row,temperature_cap,parallel_diffusion,conductivity,thermal_tau,derivative)
       INTEGER, INTENT(IN) :: row
       REAL*8, INTENT(IN) :: temperature_cap,parallel_diffusion
+      TYPE(heat_conductivity), INTENT(IN) :: conductivity
       REAL*8, INTENT(OUT) :: thermal_tau,derivative(:)
       REAL*8 :: temperature,geometry,dtemperature(SIZE(uc))
+      REAL*8 :: energy_to_temperature
 
-      temperature = MIN(temperature_cap,up(row+4))
       geometry = ABS(bn)*parallel_diffusion*bnorm*length_factor
-      thermal_tau = ABS(bn)*parallel_diffusion*temperature**2.5d0*bnorm/uc(1)*length_factor
       derivative = 0.d0
-      IF (.NOT.differentiate) RETURN
-      CALL capped_temperature_derivative(uc,row,up(row+4),temperature_cap,dtemperature)
-      derivative = geometry*2.5d0*temperature**1.5d0/uc(1)*dtemperature
-      derivative(1) = derivative(1)-thermal_tau/uc(1)
+      IF (corrected) THEN
+        energy_to_temperature = (2.d0/(3.d0*phys%Mref))**phys%epn
+        thermal_tau = geometry*energy_to_temperature*conductivity%value/uc(1)
+        IF (differentiate) THEN
+          derivative(:4) = geometry*energy_to_temperature/uc(1)*conductivity%state_derivative
+          derivative(1) = derivative(1)-thermal_tau/uc(1)
+        ENDIF
+      ELSE
+        temperature = MIN(temperature_cap,up(row+4))
+        thermal_tau = ABS(bn)*parallel_diffusion*temperature**2.5d0*bnorm/uc(1)*length_factor
+        IF (differentiate) THEN
+          CALL capped_temperature_derivative(uc,row,up(row+4),temperature_cap,dtemperature)
+          derivative = geometry*2.5d0*temperature**1.5d0/uc(1)*dtemperature
+          derivative(1) = derivative(1)-thermal_tau/uc(1)
+        ENDIF
+      ENDIF
     END SUBROUTINE thermal_stabilization
 
-  END PROCEDURE evaluate_automatic_stabilization
+  END SUBROUTINE evaluate_automatic_stabilization
 
   SUBROUTINE advective_stabilization(up,uc,bn,advective_tau,derivative,differentiate)
     REAL*8, INTENT(IN) :: up(:),uc(:),bn

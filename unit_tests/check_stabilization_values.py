@@ -21,14 +21,15 @@ def check_dimension(build, ndim):
             subprocess.run(command, cwd=tmp, check=True)
 
         objects = []
-        for name in ['physics', 'physics_stabilization']:
+        for name in ['physics', 'heat_fluxes/heat_fluxes', 'heat_fluxes/classical',
+                     'heat_fluxes/neoclassical', 'heat_fluxes/free_streaming', 'physics_stabilization']:
             source = ROOT/'src/Models/NGammaTiTe'/f'{name}.f90'
-            obj = tmp/f'{name}.o'
+            obj = tmp/f'{source.stem}.o'
             run(['gfortran', *flags, *includes, '-c', str(source), '-o', str(obj)])
             objects.append(str(obj))
         run(['gfortran', *flags, *includes,
              str(ROOT/'unit_tests/fortran/test_stabilization_values.f90'),
-             *objects, str(build/'globals.o'), str(build/'neutral_flux_limiter.o'),
+             *objects, *[str(build/name) for name in ['globals.o', 'neutral_flux_limiter.o', 'interpolation.o', 'magnetic_topology.o', 'flux_surface_geometry.o', 'magnetic_geometry_state.o']],
              '-Wl,--gc-sections', '-o', str(tmp/'probe')])
         result = subprocess.run([str(tmp/'probe')], cwd=tmp, check=True,
                                 capture_output=True, text=True)

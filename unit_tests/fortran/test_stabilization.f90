@@ -82,11 +82,12 @@ CONTAINS
   END SUBROUTINE fixture
 
   SUBROUTINE freeze_heat_limiter()
-    REAL*8 :: shi,she,face_gradient(2,5)
+    REAL*8 :: face_gradient(2,5)
+    TYPE(parallel_heat_conduction_flux) :: heat_flux
     face_gradient=RESHAPE(gradient,[2,5])
-    CALL compute_spitzer_harm_flux_ions(trace_state,face_gradient,b,shi)
-    CALL compute_spitzer_harm_flux_electrons(trace_state,face_gradient,b,she)
-    CALL compute_heat_flux_limiters(trace_state,shi,she,held_heat_phi(1),held_heat_phi(2))
+    CALL heat_flux%init(trace_state,Q=face_gradient,b=b)
+    CALL heat_flux%evaluate_fluxes()
+    held_heat_phi=[heat_flux%ion_heat_flux%limiter,heat_flux%electron_heat_flux%limiter]
   END SUBROUTINE freeze_heat_limiter
 
   SUBROUTINE check_coefficients(label)
@@ -345,6 +346,20 @@ CONTAINS
   END SUBROUTINE assemble
 
   ! Direct flux values, independent of the matrix/RHS reconstruction.
+  SUBROUTINE reference_classical_heat_fluxes(state,gradient,field,ion_flux,electron_flux)
+    REAL*8, INTENT(IN) :: state(5),gradient(2,5),field(3)
+    REAL*8, INTENT(OUT) :: ion_flux,electron_flux
+    REAL*8 :: ion_energy,electron_energy,ion_gradient(5),electron_gradient(5),scale
+    ion_energy=state(3)/state(1)-.5d0*(state(2)/state(1))**2
+    electron_energy=state(4)/state(1)
+    ion_energy=MIN(MAX(ion_energy,1.d-20),1.5d0*phys%Mref*phys%T_fluxlim_maxi)
+    electron_energy=MIN(MAX(electron_energy,1.d-20),1.5d0*phys%Mref*phys%T_fluxlim_maxe)
+    CALL computeVi(state,ion_gradient);CALL computeVe(state,electron_gradient)
+    scale=(2.d0/(3.d0*phys%Mref))**(1.d0+phys%epn)
+    ion_flux=-phys%diff_pari*scale*ion_energy**phys%epn*DOT_PRODUCT(MATMUL(gradient,ion_gradient),field(:2))
+    electron_flux=-phys%diff_pare*scale*electron_energy**phys%epn*DOT_PRODUCT(MATMUL(gradient,electron_gradient),field(:2))
+  END SUBROUTINE reference_classical_heat_fluxes
+
   SUBROUTINE evaluate_face_residual(kind,element,trace,gradient,neutral_phi,residual)
     INTEGER, INTENT(IN) :: kind
     REAL*8, INTENT(IN) :: element(5),trace(5),gradient(10),neutral_phi
@@ -368,8 +383,7 @@ CONTAINS
     IF(switch%neutral_perpendicular_diffusion) pn=pnormal
     CALL compute_W5p(trace,w)
     g(5)=g(5)+neutral_phi*DOT_PRODUCT(MATMUL(grad,w),pn)
-    CALL compute_spitzer_harm_flux_ions(trace,grad,b,shi)
-    CALL compute_spitzer_harm_flux_electrons(trace,grad,b,she)
+    CALL reference_classical_heat_fluxes(trace,grad,b,shi,she)
     g(3)=g(3)-bn*held_heat_phi(1)*shi
     g(4)=g(4)-bn*held_heat_phi(2)*she
     IF(kind<3)THEN

@@ -8,6 +8,7 @@ MODULE adimensionalization_module
   IMPLICIT NONE
   PRIVATE
   PUBLIC :: adimensionalization
+  REAL*8, PARAMETER, PUBLIC :: coulomb_logarithm = 15.d0
   REAL*8, PARAMETER, PUBLIC :: ion_mass_si = 3.35d-27
   REAL*8, PARAMETER, PUBLIC :: electron_mass_si = 9.109d-31
 
@@ -142,7 +143,7 @@ SUBROUTINE adimensionalization()
   coef = 3*sqrt2/e**4/12.*eps0**2*pi**1.5*mi/me*SQRT(me)*e**1.5
   !tau_ie = mi/me*2.4/3.*1e10*sqrt(Tev)*u0**2/n0/t0
   !tau_ie =(12./15.)*(kB/e)*2./3.*sqrt(Tev)*mi*u0**2/(n0*t0*kB)
-  tau_ie = -(12./15.)*(kB/e)*2./3.*coef*SQRT(Tev)*mi*u0**2/(n0*t0*kB)
+  tau_ie = -(12.d0/coulomb_logarithm)*(kB/e)*2./3.*coef*SQRT(Tev)*mi*u0**2/(n0*t0*kB)
   !   tau_ie = 2./3.*coef*Tev**(0.5)*u0**2/n0/t0*mi/k0
   phys%diff_pari = k_star/33.333333333333336
   phys%diff_pare = k_star

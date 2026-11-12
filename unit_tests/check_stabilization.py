@@ -93,13 +93,17 @@ contains
         inc = ['-I', str(tmp), '-I', str(build), '-J', str(tmp)]
         objects = []
         for path in [ROOT/'src/Models/NGammaTiTe/physics.f90',
+                     ROOT/'src/Models/NGammaTiTe/heat_fluxes/heat_fluxes.f90',
+                     ROOT/'src/Models/NGammaTiTe/heat_fluxes/classical.f90',
+                     ROOT/'src/Models/NGammaTiTe/heat_fluxes/neoclassical.f90',
+                     ROOT/'src/Models/NGammaTiTe/heat_fluxes/free_streaming.f90',
                      ROOT/'src/Models/NGammaTiTe/physics_stabilization.f90',
                      ROOT/'src/Models/bohm_boundary.f90', ROOT/'src/HDG/hdg_Stabilization.f90', tmp/'faces.f90']:
             obj = tmp/(path.stem+'.o')
             run(['gfortran', *FLAGS, *inc, '-c', str(path), '-o', str(obj)])
             objects.append(str(obj))
         run(['gfortran', *FLAGS, *inc, str(ROOT/'unit_tests/fortran/test_stabilization.f90'),
-             *objects, *[str(build/name) for name in ['globals.o', 'neutral_flux_limiter.o', 'smooth_transition.o', 'interpolation.o']],
+             *objects, *[str(build/name) for name in ['globals.o', 'neutral_flux_limiter.o', 'smooth_transition.o', 'interpolation.o', 'magnetic_topology.o', 'flux_surface_geometry.o', 'magnetic_geometry_state.o']],
              '-Wl,--gc-sections', '-o', str(tmp/'probe')])
         result = subprocess.run([str(tmp/'probe')], cwd=tmp, capture_output=True, text=True)
         print(result.stdout, end='')

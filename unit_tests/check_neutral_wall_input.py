@@ -108,6 +108,12 @@ def main():
         ("UTILS_LST", "residual_report_off", "residual_diagnostics_mode='off',balance_diagnostics_mode='detailed'", (1.0,1.0)),
         ("UTILS_LST", "residual_report_invalid", "residual_diagnostics_mode='invalid'", "residual_diagnostics_mode must be"),
     ])
+    cases.extend([
+        ("PHYS_LST","heat_neoclassical","neoclassical_heat_conduction=.true.",(1.0,1.0)),
+        ("INPUT_LST","heat_stored_field","compute_from_flux=.false.",(1.0,1.0)),
+        ("INPUT_LST","heat_missing_geometry","field_from_grid=.false.","Closed-surface heat geometry currently uses an equilibrium grid"),
+        ("PHYS_LST","heat_bad_power","neoclassical_heat_conduction=.true.,epn=2","requires epn=2.5"),
+    ])
     with tempfile.TemporaryDirectory(prefix="mhdg-neutral-wall-input-") as scratch:
         for namelist, name, entries, expected in cases:
             directory = Path(scratch) / name
@@ -115,6 +121,9 @@ def main():
             source = template
             if name == "stabilization_missing":
                 source = re.sub(r"(?mi)^\s*stab\s*=[^\n]*\n", "", source)
+            if name in ('heat_stored_field','heat_missing_geometry'):
+                source = re.sub(r'(?mi)^\s*neoclassical_heat_conduction\s*=.*$', '', source)
+                source = source.replace('&PHYS_LST', '&PHYS_LST\n neoclassical_heat_conduction=.true.', 1)
             text = re.sub(rf"(?ms)(&{namelist}\b.*?)(^\s*/\s*$)",
                           lambda match: f"{match[1]}  {entries}\n{match[2]}",
                           source, count=1)
@@ -146,6 +155,10 @@ def main():
                 report = re.search(r"^RESIDUAL_REPORT_MODE\s+(\S+)", output, re.M)
                 report_choice={"residual_report_summary":"summary","residual_report_equations":"equations"}.get(name,"off")
                 passed = passed and report is not None and report[1] == report_choice
+            if passed and name in ("omitted","heat_neoclassical"):
+                heat=re.search(r"^HEAT_TRANSPORT\s+([TF])",output,re.M)
+                enabled=name == "heat_neoclassical"
+                passed=heat is not None and (heat[1]=="T")==enabled
             if passed and name == "stabilization_prescribed":
                 selected = re.search(r"^STABILIZATION_TYPE\s+(\d+)", output, re.M)
                 prescribed = re.search(r"^STABILIZATION_TAU\s+(.+)$", output, re.M)

@@ -48,6 +48,17 @@ differences in density and electron energy below, inside, at and above the
 temperature interval, with in-range and clamped densities. It also checks the
 existing zero-rate cutoff. It needs no MPI launch or external case data.
 
+`make check-neoclassical-heat` checks the neoclassical conductivity factor and its
+density/temperature derivatives across collisionalities, including the
+axis limit. Circular-equilibrium controls independently verify full-circuit
+connection length, aspect ratio, physical units and geometry refresh.
+It also checks reuse of `parallel_heat_conduction_flux` across core/open regions,
+spatial dimensions and flux/conductivity-only evaluations. It checks that `init`
+captures its inputs and that argument-free evaluations can be repeated.
+`check-heat-flux-assembly` also checks the corrected conductivity against
+literal collision-time/SOLPS fits, all five assembly paths, density-dependent
+affine terms and prescribed-trace lifting, with bounds checking and optimization.
+
 `make check-energy-conductivity` checks the production ion/electron conductivity
 values and derivatives at negative, zero, floored, ordinary and capped specific
 energies. It covers active-branch derivatives at the floor/cap, the convergence
@@ -354,3 +365,9 @@ The input gate checks the default update choice and residual-control validation.
 The same residual fixture also compares absolute and incremental elimination
 against independent dense solutions, including a nonzero gradient mismatch,
 unequal periodic traces, prescribed offsets and complete-state damping.
+
+The heat assembly probe covers the sharp closed-core neoclassical and
+open-field free-streaming laws, including main-SOL and private-flux points.
+It checks the conductivity state derivatives, held-multiplier gradient derivatives,
+and affine flux reconstruction in volume, interior/exterior faces, Bohm and
+prescribed-trace assembly.

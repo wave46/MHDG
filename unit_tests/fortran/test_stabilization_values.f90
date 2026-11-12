@@ -1,6 +1,8 @@
 PROGRAM test_stabilization_values
   USE globals, ONLY: phys,simpar,switch,numer,Mesh,refElPol,refElTor,stab_automatic
-  USE physics, ONLY: set_model_layout,cons2phys,computeTauGaussPoints,jacobianMatricesFace
+  USE physics, ONLY: parallel_heat_conduction_flux
+  USE physics, ONLY: set_model_layout,cons2phys,computeTauGaussPoints,jacobianMatricesFace,initialize_neutral_rate_runtime_constants
+  USE flux_surface_geometry, ONLY: core_surface_geometry
   IMPLICIT NONE
 #ifdef TOR3D
   INTEGER, PARAMETER :: ndim=3
@@ -41,9 +43,63 @@ PROGRAM test_stabilization_values
 #ifdef TOR3D
   CALL check_toroidal_faces()
 #endif
+#ifndef TOR3D
+  CALL check_neoclassical_tau()
+#endif
   WRITE(*,*) 'Stabilization values: PASS; dimension, checks:',ndim,checks
 
 CONTAINS
+
+#ifndef TOR3D
+  SUBROUTINE check_neoclassical_tau()
+    REAL*8 :: state(5),trial(1,5),physical(1,phys%npv),derivative(5,5)
+    REAL*8 :: plus(5,5),minus(5,5),alpha,parallel,step,numeric(2)
+    TYPE(parallel_heat_conduction_flux) :: heat_flux
+    INTEGER :: row,j
+    ALLOCATE(core_surface_geometry%rho(2),core_surface_geometry%L(2),core_surface_geometry%eps(2))
+    core_surface_geometry%rho=[0.d0,1.d0]
+    core_surface_geometry%L=25.d0;core_surface_geometry%eps=.2d0
+    phys%epn=2.5d0;simpar%refval_temperature=1.d3;simpar%refval_density=1.d19
+    phys%T_fluxlim_maxi=1.d3;phys%T_fluxlim_maxe=1.d3
+    ! Requesting dtau also evaluates the existing neutral row.
+    phys%a=1.d0;phys%diff_nn=100.d0;phys%diff_nn_min=1.d-4;phys%neutralp_ti_supp=.01d0
+    simpar%refval_time=1.d-6
+    CALL initialize_neutral_rate_runtime_constants()
+    phys%alpha_iz=0.d0;phys%alpha_iz(1,1)=LOG(4.d5)
+    phys%alpha_cx=0.d0;phys%alpha_cx(1)=LOG(5.d5)
+    state=[1.2d0,.18d0,1.d0,1.5d0,.2d0];trial(1,:)=state
+    n=[.6d0,.8d0];q=0.d0
+    CALL cons2phys(trial,physical)
+    CALL computeTauGaussPoints(physical(1,:),state,q,b,n,1,0.,xy,original,diffusion)
+    phys%neoclassical_heat_conduction=.TRUE.
+    CALL computeTauGaussPoints(physical(1,:),state,q,b,n,1,0.,xy,tau,diffusion,derivative,1,.5d0)
+    expected=original
+    geometry=ABS(DOT_PRODUCT(b(1:ndim),n))*NORM2(b(1:ndim))*length_factor/state(1)
+    CALL heat_flux%init(state,1,.5d0)
+    CALL heat_flux%evaluate_conductivities()
+    DO row=3,4
+      parallel=phys%diff_pari
+      IF (row==4) parallel=phys%diff_pare
+      alpha=heat_flux%ion_heat_flux%conductivity%value
+      IF (row==4) alpha=heat_flux%electron_heat_flux%conductivity%value
+      expected(row,row)=original(row,row)+geometry*parallel* &
+           ((2.d0/(3.d0*phys%Mref))**phys%epn*alpha-physical(1,row+4)**2.5d0)
+    ENDDO
+    CALL close(tau,expected)
+    DO j=1,5
+      step=1.d-6*MAX(ABS(state(j)),.1d0)
+      trial(1,:)=state;trial(1,j)=state(j)+step;CALL cons2phys(trial,physical)
+      CALL computeTauGaussPoints(physical(1,:),trial(1,:),q,b,n,1,0.,xy,plus,diffusion,topology_region=1,rho=.5d0)
+      trial(1,j)=state(j)-step;CALL cons2phys(trial,physical)
+      CALL computeTauGaussPoints(physical(1,:),trial(1,:),q,b,n,1,0.,xy,minus,diffusion,topology_region=1,rho=.5d0)
+      numeric=[plus(3,3)-minus(3,3),plus(4,4)-minus(4,4)]/(2.d0*step)
+      IF (ANY(ABS(numeric-derivative(3:4,j))>3.d-7*MAX(1.d0,ABS(numeric),ABS(derivative(3:4,j))))) &
+           ERROR STOP 'neoclassical thermal tau derivative'
+      checks=checks+1
+    ENDDO
+    phys%neoclassical_heat_conduction=.FALSE.
+  END SUBROUTINE check_neoclassical_tau
+#endif
 
   SUBROUTINE check_state(state)
     REAL*8, INTENT(IN) :: state(5)

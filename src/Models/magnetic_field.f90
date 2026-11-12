@@ -13,6 +13,7 @@ MODULE magnetic_field
   USE rectangular_series_io, ONLY: locate_series_time
   USE equilibrium_series, ONLY: equilibrium_series_t, equilibrium_sample_t
   USE prec_const
+  USE flux_surface_geometry, ONLY: core_surface_geometry
   USE globals
   USE MPI_OMP
   USE HDF5_io_module
@@ -32,6 +33,7 @@ MODULE magnetic_field
        field_alpha_plus_one, field_alpha_minus_one, &
        field_alpha_plus_inverse_two_pi, field_alpha_minus_inverse_two_pi
   IMPLICIT NONE
+  PRIVATE :: core_surface_geometry
 
   REAL*8, PARAMETER :: field_fit_accepted_rms = 0.10d0
   REAL*8, PARAMETER :: field_fit_fatal_rms = 0.25d0
@@ -597,6 +599,15 @@ CONTAINS
 
     CALL configure_equilibrium_scales(xvec, yvec, Br2D, Bz2D, sample, frame, alpha)
     CALL report_field_fit(alpha, ALLOCATED(Br2D))
+    IF (phys%neoclassical_heat_conduction) THEN
+      IF (input%compute_from_flux) THEN
+        CALL core_surface_geometry%build(magnetic_equilibrium,Bphi2D,Bphi_dx2D, &
+             Bphi_dy2D,Bphi_dxy2D,alpha,simpar%refval_length)
+      ELSE
+        CALL core_surface_geometry%build(magnetic_equilibrium,Bphi2D,Bphi_dx2D, &
+             Bphi_dy2D,Bphi_dxy2D,alpha,simpar%refval_length,Br2D,Bz2D)
+      ENDIF
+    ENDIF
 
     DO i = 1, Mesh%Nnodes
        x = Mesh%X(i, 1)

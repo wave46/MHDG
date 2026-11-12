@@ -65,6 +65,7 @@ MODULE magnetic_topology
    CONTAINS
      PROCEDURE :: init => equilibrium_geometry_init
      PROCEDURE :: analyze => equilibrium_geometry_analyze
+     PROCEDURE :: closed_surface_radius => first_level_crossing
      PROCEDURE :: evaluate_flux => equilibrium_geometry_evaluate_flux
      PROCEDURE :: evaluate_topology => equilibrium_geometry_evaluate_topology
      PROCEDURE :: classify => equilibrium_geometry_classify

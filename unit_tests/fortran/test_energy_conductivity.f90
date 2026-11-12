@@ -1,7 +1,7 @@
 PROGRAM test_energy_conductivity
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   USE globals, ONLY: phys, switch
-  USE physics, ONLY: evaluate_energy_conductivity
+  USE physics, ONLY: parallel_heat_conduction_flux,heat_conductivity
   IMPLICIT NONE
   REAL*8, PARAMETER :: energy_floor=1.d-20, perturbation=1.d-6
   REAL*8 :: u(5), trial(5), derivative(5), a, expected, plus, minus, step, numerical
@@ -92,7 +92,17 @@ CONTAINS
     INTEGER, INTENT(IN) :: which
     REAL*8, INTENT(OUT) :: value
     REAL*8, OPTIONAL, INTENT(OUT) :: tangent(:)
-    CALL evaluate_energy_conductivity(state,which+2,value,tangent)
+    TYPE(parallel_heat_conduction_flux) :: heat_flux
+    TYPE(heat_conductivity) :: conductivity
+    CALL heat_flux%init(state)
+    CALL heat_flux%evaluate_conductivities()
+    conductivity=heat_flux%ion_heat_flux%conductivity
+    IF (which==2) conductivity=heat_flux%electron_heat_flux%conductivity
+    value=conductivity%value
+    IF (PRESENT(tangent)) THEN
+      tangent=0.d0
+      tangent(:4)=conductivity%state_derivative
+    ENDIF
   END SUBROUTINE coefficient
 
   SUBROUTINE close(actual,reference,normalization,tolerance,label)

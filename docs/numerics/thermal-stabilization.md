@@ -14,7 +14,7 @@ perpendicular diffusion and parallel thermal conduction. For each energy equatio
 $$
 \tau_s=a+\frac{p}{h_e}D_{\perp,s}
 +\frac{p}{h_e}|b\cdot n|\,\|b_{\mathrm{active}}\|
-\frac{\kappa_{\parallel,s}(\min(\widehat T_s,T_{\max,s}))}{\widehat U_1}.
+\frac{\kappa_{\parallel,s}(\widehat T_s,\widehat n_s)}{\widehat U_1}.
 $$
 
 Here $n$ is the outward unit normal. On 2D and TOR3D side faces, $p/h_e$
@@ -41,35 +41,33 @@ $u_\parallel-c_{\rm flux}$, $u_\parallel$, $u_\parallel+c_{\rm flux}$
 and $5u_\parallel/3$. Here $c_{\rm flux}$ is the adiabatic acoustic speed
 of this convection block, with ratio of specific heats $\gamma=5/3$. The same scalar is added
 to every diagonal row, including the neutral row as extra numerical damping.
-Here $\kappa_{\parallel,s}$ is the unlimited parallel conductivity used by
-the stabilization, with the existing $T^{5/2}$ law. Physical conductivity
-uses `epn`.
 
-The heat-flux limiter is **excluded** from stabilization. It limits the
-physical parallel conductive flux separately. Thus saturation of conduction
-does not simultaneously weaken control of the element–trace temperature
-jump. Perpendicular diffusion and the prescribed sheath heat loss are
-unchanged. Neutral stabilization likewise uses its unlimited diffusion
-coefficient, supplied before applying the neutral physical limiter.
+Here $\kappa_{\parallel,s}$ is the parallel conductivity before local
+free-streaming saturation, including the conductivity ceiling and selected
+closed-surface correction. Classical stabilization uses the $T^{5/2}$ law;
+physical conductivity uses `epn`. With `neoclassical_heat_conduction` enabled,
+closed-core thermal stabilization uses the corrected, capped conductivity and
+its density and temperature derivatives. Geometry stays fixed during Newton
+assembly. See the [physical correction](../models/heat-flux-limiter.md#closed-field-lines-neoclassical-correction).
 
-An unlimited penalty can carry numerical heat flux larger than the physical
-limited conduction. It is an HDG stabilization contribution, not an extra
-physical conductivity or a guarantee that the total numerical heat flux is
-limited. Its effect on wall heat loss still depends on resolution and the
-element–trace jump; convergence alone does not establish wall-flux accuracy.
+The free-streaming multiplier bounds the physical parallel conductive flux.
+The conductivity penalty controls the element–trace temperature jump. Neutral
+stabilization similarly uses the unlimited neutral diffusion coefficient.
+The penalty can carry numerical heat flux larger than the physical limited
+conduction; assess wall heat-flux accuracy using mesh resolution and the
+size of the element–trace temperature jump.
 
 The model-local `physics_stabilization` submodule owns coefficient evaluation;
 HDG assembly owns jumps, matrix placement and boundary conditions. Values are
-recomputed from the current trace state without a cache or restart state.
-The shared value evaluator has no gradient or limiter dependence. The
-[physical heat limiter](../models/heat-flux-limiter.md) uses the same frozen
-limiter policy in volume and face tangents.
+recomputed from the current trace state and geometry at each assembly. The
+[free-streaming multiplier](../models/heat-flux-limiter.md#open-field-lines-free-streaming-limiter)
+is held fixed in volume and face linearizations.
 
 For the five-equation 2D plasma–neutral model, the tangent differentiates all
 five diagonal coefficients with respect to $\widehat U$: the common advective
 estimate, both thermal terms and the unlimited neutral diffusion coefficient.
 Supplied plasma diffusion profiles remain fixed during this assembly.
-There is no coefficient derivative with respect to the element gradient $Q$.
+These stabilization coefficients are independent of the element gradient $Q$.
 TOR3D and other model families use frozen-coefficient tangents.
 
 For an ordinary face, stabilization contributes
@@ -106,22 +104,23 @@ adds its product with $\partial\tau_2/\partial\widehat U_j$.
 | Element with prescribed trace | None after trace elimination | None |
 
 The physics submodule computes tau values and derivatives from state and
-geometry. The HDG helper only adds the supplied coefficient products to the
+geometry. The HDG helper adds the supplied coefficient products to the
 specified matrix and RHS entries; its caller chooses the ordinary or Bohm
 jump and the destination equation. Interior faces call it for both element
 balance and trace-flux continuity, which are different rows of the HDG system.
 
-The advective term has degree zero in $\widehat U$. Each thermal term has
-degree minus one, so its derivative contracted with $\widehat U$ equals the
-negative thermal term, including above its temperature cap. Neutral diffusion
-has its own density-dependent rates; no common homogeneity cancellation is
-assumed. These identities apply away from the density floor.
+The advective term has degree zero in $\widehat U$. Classical thermal terms
+have degree minus one, so their derivatives contracted with $\widehat U$
+equal the negative thermal terms, including above the conductivity ceiling.
+The neoclassical conductivity contributes its additional density response
+through the shared conductivity derivative. Neutral diffusion
+is differentiated through its density-dependent rates. These identities apply
+away from the density floor.
 
 The characteristic-speed interpretation requires admissible temperatures.
 For trial states the coefficient continues its square root with the absolute
-value of the radicand. ABS/MAX use active-branch derivatives without extra
-smoothing. At a spectral MAX tie the velocity branch is selected. Temperature derivatives vanish below
+value of the radicand. ABS/MAX use active-branch derivatives. At a spectral MAX
+tie the velocity branch is selected. Temperature derivatives vanish below
 or at their floor and above their cap; the uncapped derivative is used at the
 cap. At the singular zero of the square-root spectral estimate, its derivative
-is held at zero. This convention avoids an infinite tangent; it does not make
-the coefficient differentiable there.
+is held at zero. The tangent remains finite at this singular state.
