@@ -1,20 +1,20 @@
 #ifdef TEMPERATURE
-! Hydrogenic-majority SOLPS-ITER neoclassical heat-conductivity fits.
+! Closed-surface conductivity: neoclassical and mean-free-path corrections.
 ! Source conventions and applicability: docs/models/heat-flux-limiter.md.
-SUBMODULE (physics:heat_fluxes) neoclassical
+SUBMODULE (physics:heat_fluxes) core_corrections
   USE prec_const, ONLY: PI
   IMPLICIT NONE
   REAL*8, PARAMETER :: charge_si = 1.602176634d-19, epsilon0_si = 8.8541878128d-12
 CONTAINS
 
-  MODULE SUBROUTINE apply_neoclassical_correction(this)
+  MODULE SUBROUTINE apply_core_correction(this)
     CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
 
     CALL correct_species_conductivity(this%state(1),this%energy(1),this%energy_derivative(:,1), &
          this%length_m,this%epsilon,3,this%ion_heat_flux%conductivity)
     CALL correct_species_conductivity(this%state(1),this%energy(2),this%energy_derivative(:,2), &
          this%length_m,this%epsilon,4,this%electron_heat_flux%conductivity)
-  END SUBROUTINE apply_neoclassical_correction
+  END SUBROUTINE apply_core_correction
 
   SUBROUTINE correct_species_conductivity(density,energy,energy_derivative,length_m,epsilon,row,conductivity)
     REAL*8, INTENT(IN) :: density,energy,energy_derivative(4),length_m,epsilon
@@ -24,14 +24,29 @@ CONTAINS
 
     IF (energy > energy_floor) THEN
       temperature_eV = 2.d0/(3.d0*phys%Mref)*energy*simpar%refval_temperature
-      CALL neoclassical_heat_factor(temperature_eV,density*simpar%refval_density, &
-           length_m,epsilon,row,factor,slope)
+      SELECT CASE (phys%core_heat_conduction_mode)
+      CASE ('mean_free_path')
+        CALL mean_free_path_factor(temperature_eV,density*simpar%refval_density,length_m,factor,slope)
+      CASE ('neoclassical')
+        CALL neoclassical_heat_factor(temperature_eV,density*simpar%refval_density, &
+             length_m,epsilon,row,factor,slope)
+      END SELECT
       conductivity%value = conductivity%value*factor
       conductivity%state_derivative = conductivity%value/energy*(phys%epn-2.d0*slope)*energy_derivative
       conductivity%state_derivative(1) = conductivity%state_derivative(1)+conductivity%value/density*slope
       conductivity%density_degree = slope
     ENDIF
   END SUBROUTINE correct_species_conductivity
+
+  PURE SUBROUTINE mean_free_path_factor(temperature_eV,density_m3,length_m,factor,collisionality_slope)
+    REAL*8, INTENT(IN) :: temperature_eV,density_m3,length_m
+    REAL*8, INTENT(OUT) :: factor,collisionality_slope
+    REAL*8 :: mean_free_path_ratio
+
+    mean_free_path_ratio = 7.5d16*temperature_eV**2/(density_m3*length_m)
+    factor = 1.d0/(1.d0+mean_free_path_ratio)
+    collisionality_slope = mean_free_path_ratio*factor
+  END SUBROUTINE mean_free_path_factor
 
   PURE SUBROUTINE neoclassical_heat_factor(temperature_eV,density_m3,length_m,epsilon, &
        energy_row,factor,collisionality_slope)
@@ -60,5 +75,5 @@ CONTAINS
          +c*x/(1.d0+d*x)**2
     collisionality_slope = -dfit_dlogx/fit
   END SUBROUTINE neoclassical_heat_factor
-END SUBMODULE neoclassical
+END SUBMODULE core_corrections
 #endif

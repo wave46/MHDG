@@ -22,7 +22,7 @@ def check_dimension(build, ndim):
 
         objects = []
         for name in ['physics', 'heat_fluxes/heat_fluxes', 'heat_fluxes/classical',
-                     'heat_fluxes/neoclassical', 'heat_fluxes/free_streaming', 'physics_stabilization']:
+                     'heat_fluxes/core_corrections', 'heat_fluxes/free_streaming', 'physics_stabilization']:
             source = ROOT/'src/Models/NGammaTiTe'/f'{name}.f90'
             obj = tmp/f'{source.stem}.o'
             run(['gfortran', *flags, *includes, '-c', str(source), '-o', str(obj)])

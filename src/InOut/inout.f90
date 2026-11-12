@@ -1251,7 +1251,7 @@ CONTAINS
          CALL HDF5_real_saving(group_id2, phys%c_fli, 'c_fli')
          CALL HDF5_real_saving(group_id2, phys%c_fle, 'c_fle')
       ENDIF
-      CALL HDF5_logical_saving(group_id2, phys%neoclassical_heat_conduction, 'neoclassical_heat_conduction')
+      CALL HDF5_string_saving(group_id2, phys%core_heat_conduction_mode, 'core_heat_conduction_mode')
       CALL HDF5_real_saving(group_id2, phys%T_fluxlim_maxi, 'T_fluxlim_maxi')
       CALL HDF5_real_saving(group_id2, phys%T_fluxlim_maxe, 'T_fluxlim_maxe')
       IF (switch%import_diffusion_1D) THEN 

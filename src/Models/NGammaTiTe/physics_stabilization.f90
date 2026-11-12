@@ -31,10 +31,10 @@ CONTAINS
       IF (differentiate) dtau_du(i,:) = dadvective
     ENDDO
     corrected = .FALSE.
-    IF (phys%neoclassical_heat_conduction) THEN
+    IF (phys%core_heat_conduction_mode /= 'off') THEN
       CALL heat_flux%init(uc,topology_region,rho)
       CALL heat_flux%evaluate_conductivities()
-      corrected = heat_flux%use_neoclassical_correction
+      corrected = heat_flux%use_core_correction
     ENDIF
     CALL thermal_stabilization(3,phys%T_fluxlim_maxi,phys%diff_pari,heat_flux%ion_heat_flux%conductivity,heat_part,dheat)
     tau(3,3) = tau(3,3)+heat_part

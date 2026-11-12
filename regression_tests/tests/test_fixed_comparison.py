@@ -66,21 +66,19 @@ def test_heat_limiter_contract_checks_activation_fractions_and_temperature_units
 
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-@pytest.mark.parametrize("saved", ["matching", "opposite", "missing"])
-def test_neoclassical_heat_contract_checks_saved_activation(tmp_path, enabled, saved):
+@pytest.mark.parametrize("requested", ["off", "neoclassical", "mean_free_path"])
+@pytest.mark.parametrize("saved", ["off", "neoclassical", "mean_free_path", None])
+def test_core_heat_mode_contract_checks_saved_selection(tmp_path, requested, saved):
     candidate = tmp_path / "candidate.h5"
     write_solver_output(path=candidate)
-    (tmp_path / "param.txt").write_text(
-        "&PHYS_LST\n neoclassical_heat_conduction=" + (".true." if enabled else ".false.") + "\n/\n")
-    if saved != "missing":
+    (tmp_path / "param.txt").write_text(f"&PHYS_LST\n core_heat_conduction_mode='{requested}'\n/\n")
+    if saved is not None:
         with h5py.File(candidate, "r+") as handle:
-            handle["simulation_parameters/physics/neoclassical_heat_conduction"] = int(
-                enabled if saved == "matching" else not enabled)
+            handle["simulation_parameters/physics/core_heat_conduction_mode"] = np.bytes_(saved)
     report = check_output_contract(candidate, tmp_path, "NGammaTiTeNeutral", {}, {})
-    assert report["status"] == ("passed" if saved == "matching" else "failed")
-    if saved != "matching":
-        assert any("physics/neoclassical_heat_conduction" in failure for failure in report["failures"])
+    assert report["status"] == ("passed" if saved == requested else "failed")
+    if saved != requested:
+        assert any("physics/core_heat_conduction_mode" in failure for failure in report["failures"])
 
 
 def test_disabled_heat_limiter_does_not_require_saved_inactive_coefficients(tmp_path):

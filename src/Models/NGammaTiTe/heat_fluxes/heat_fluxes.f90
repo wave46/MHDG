@@ -31,12 +31,12 @@ CONTAINS
     this%epsilon = 0.d0
     closed_surface = .FALSE.
     IF (PRESENT(topology_region)) closed_surface = topology_region == magnetic_region_core
-    this%use_neoclassical_correction = phys%neoclassical_heat_conduction .AND. closed_surface
+    this%use_core_correction = phys%core_heat_conduction_mode /= 'off' .AND. closed_surface
     this%use_free_streaming_saturation = switch%flux_limiter .AND. .NOT.closed_surface
-    IF (phys%neoclassical_heat_conduction) THEN
-      IF (.NOT.PRESENT(topology_region)) ERROR STOP 'Neoclassical conductivity requires magnetic topology'
+    IF (phys%core_heat_conduction_mode /= 'off') THEN
+      IF (.NOT.PRESENT(topology_region)) ERROR STOP 'Core conductivity correction requires magnetic topology'
       IF (closed_surface) THEN
-        IF (.NOT.PRESENT(rho)) ERROR STOP 'Neoclassical conductivity requires rho'
+        IF (.NOT.PRESENT(rho)) ERROR STOP 'Core conductivity correction requires rho'
         CALL core_surface_geometry%interp(rho,this%length_m,this%epsilon)
       ENDIF
     ENDIF
@@ -57,7 +57,7 @@ CONTAINS
     this%ion_heat_flux = conductive_heat_flux_result()
     this%electron_heat_flux = conductive_heat_flux_result()
     CALL this%compute_classical_conductivities()
-    IF (this%use_neoclassical_correction) CALL this%apply_neoclassical_correction()
+    IF (this%use_core_correction) CALL this%apply_core_correction()
     CALL this%apply_conductivity_ceiling()
   END SUBROUTINE evaluate_conductivities
 
@@ -66,9 +66,9 @@ CONTAINS
 
     IF (switch%testcase /= 2) THEN
       CALL cap_species_conductivity(this%energy(1),phys%T_fluxlim_maxi, &
-           this%use_neoclassical_correction,this%ion_heat_flux%conductivity)
+           this%use_core_correction,this%ion_heat_flux%conductivity)
       CALL cap_species_conductivity(this%energy(2),phys%T_fluxlim_maxe, &
-           this%use_neoclassical_correction,this%electron_heat_flux%conductivity)
+           this%use_core_correction,this%electron_heat_flux%conductivity)
     ENDIF
   END SUBROUTINE apply_conductivity_ceiling
 

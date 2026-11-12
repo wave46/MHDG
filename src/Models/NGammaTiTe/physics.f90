@@ -72,14 +72,14 @@ MODULE physics
     TYPE(conductive_heat_flux_result) :: ion_heat_flux, electron_heat_flux
     REAL*8, PRIVATE :: state(4), gradient(3,4), field_direction(3)
     REAL*8, PRIVATE :: energy(2), energy_derivative(4,2), length_m, epsilon
-    LOGICAL, PRIVATE :: use_neoclassical_correction, use_free_streaming_saturation
+    LOGICAL, PRIVATE :: use_core_correction, use_free_streaming_saturation
     LOGICAL, PRIVATE :: has_flux_inputs = .FALSE.
   CONTAINS
     PROCEDURE :: init
     PROCEDURE :: evaluate_fluxes
     PROCEDURE :: evaluate_conductivities
     PROCEDURE, PRIVATE :: compute_classical_conductivities
-    PROCEDURE, PRIVATE :: apply_neoclassical_correction
+    PROCEDURE, PRIVATE :: apply_core_correction
     PROCEDURE, PRIVATE :: apply_conductivity_ceiling
     PROCEDURE, PRIVATE :: compute_conductive_fluxes
     PROCEDURE, PRIVATE :: apply_free_streaming_saturation
@@ -124,7 +124,7 @@ MODULE physics
   PRIVATE :: evaluate_conductivities
   PRIVATE :: init
   PRIVATE :: compute_classical_conductivities
-  PRIVATE :: apply_neoclassical_correction
+  PRIVATE :: apply_core_correction
   PRIVATE :: apply_conductivity_ceiling
   PRIVATE :: compute_conductive_fluxes
   PRIVATE :: apply_free_streaming_saturation
@@ -157,9 +157,9 @@ MODULE physics
       CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
     END SUBROUTINE compute_classical_conductivities
 
-    MODULE SUBROUTINE apply_neoclassical_correction(this)
+    MODULE SUBROUTINE apply_core_correction(this)
       CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
-    END SUBROUTINE apply_neoclassical_correction
+    END SUBROUTINE apply_core_correction
 
     MODULE SUBROUTINE apply_conductivity_ceiling(this)
       CLASS(parallel_heat_conduction_flux), INTENT(INOUT) :: this
@@ -3212,7 +3212,7 @@ ENDSUBROUTINE  compute_ddissip_du
     ! Normal 2D assembly supplies its existing quadrature-point cache.
     IF (PRESENT(topology_region).AND.PRESENT(rho)) THEN
       CALL evaluate_automatic_stabilization(up,uc,b,n,length_factor,diff_iso,tau,dtau_du,topology_region,rho)
-    ELSEIF (phys%neoclassical_heat_conduction) THEN
+    ELSEIF (phys%core_heat_conduction_mode /= 'off') THEN
       CALL magnetic_equilibrium%evaluate_topology(xy(1),xy(2),psi_normalized,local_rho,flux_normal,local_region)
       CALL evaluate_automatic_stabilization(up,uc,b,n,length_factor,diff_iso,tau,dtau_du,local_region,local_rho)
     ELSE

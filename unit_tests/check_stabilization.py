@@ -95,7 +95,7 @@ contains
         for path in [ROOT/'src/Models/NGammaTiTe/physics.f90',
                      ROOT/'src/Models/NGammaTiTe/heat_fluxes/heat_fluxes.f90',
                      ROOT/'src/Models/NGammaTiTe/heat_fluxes/classical.f90',
-                     ROOT/'src/Models/NGammaTiTe/heat_fluxes/neoclassical.f90',
+                     ROOT/'src/Models/NGammaTiTe/heat_fluxes/core_corrections.f90',
                      ROOT/'src/Models/NGammaTiTe/heat_fluxes/free_streaming.f90',
                      ROOT/'src/Models/NGammaTiTe/physics_stabilization.f90',
                      ROOT/'src/Models/bohm_boundary.f90', ROOT/'src/HDG/hdg_Stabilization.f90', tmp/'faces.f90']:

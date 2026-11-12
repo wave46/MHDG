@@ -128,7 +128,7 @@ SUBROUTINE READ_input()
   LOGICAL               :: flux_limiter
   REAL*8                :: c_fli, c_fle
   REAL*8                :: T_fluxlim_maxi, T_fluxlim_maxe
-  LOGICAL               :: neoclassical_heat_conduction
+  CHARACTER(LEN=32)     :: core_heat_conduction_mode
 
   ! 1D diffusion
   LOGICAL               :: import_diffusion_1D, neutral_perpendicular_diffusion, neutral_wall_sources_in_elements
@@ -154,7 +154,7 @@ SUBROUTINE READ_input()
   & Re, Re_pump, Re_n, Re_n_pump, apply_trim, recycle_plasma_diffusion, bohm_momentum_always_include_diffusion, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,&
   & feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr, cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,Zeff, Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
-    &neoclassical_heat_conduction,&
+    &core_heat_conduction_mode,&
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
     &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min,&
     &ionization_ion_energy_fraction, heating_ion_fraction
@@ -162,7 +162,7 @@ SUBROUTINE READ_input()
   NAMELIST /PHYS_LST/ diff_n, diff_u, diff_e, diff_ee, diff_vort, diff_nn,diff_nn_min,neutralp_ti_supp_eV,I_0,heating_power, heating_dr,heating_dz,heating_sigmar,heating_sigmaz,heating_equation, Re, Re_pump, Re_n, Re_n_pump, apply_trim, recycle_plasma_diffusion, bohm_momentum_always_include_diffusion, puff,feedback_propotional_gain,feedback_integral_gain,feedback_derivative_gain,feedback_propotional_gain_xpr, feedback_integral_gain_xpr, feedback_derivative_gain_xpr,cryopump_power,puff_slope, density_source, ener_source_e, ener_source_ee, sigma_source, fluxg_trunc, part_source,ener_source,&
   & diff_k_min, diff_k_max, k_max, Zeff,Pohmic, Tbg, bcflags, bohmth,&
     &bohm_energy_thresh,Gmbohm, Gmbohme, a, Mref, tie, diff_pari, diff_pare, diff_pot, epn, etapar, Potfloat,diagsource, c_fli, c_fle, T_fluxlim_maxi, T_fluxlim_maxe,&
-    &neoclassical_heat_conduction,&
+    &core_heat_conduction_mode,&
     &neutral_flux_limiter_mode,neutral_flux_limiter_tn_source,neutral_flux_limiter_tn_eV,&
     &neutral_flux_limiter_eps,neutral_flux_limiter_fs_fraction,neutral_flux_limiter_fs_flux_min,&
     &ionization_ion_energy_fraction, heating_ion_fraction
@@ -232,7 +232,7 @@ SUBROUTINE READ_input()
   heating_ion_fraction = heating_ion_fraction_unset
   neutral_perpendicular_diffusion = .FALSE.
   neutral_wall_sources_in_elements = .FALSE.
-  neoclassical_heat_conduction = .FALSE.
+  core_heat_conduction_mode = 'off'
   neutral_flux_limiter_mode = 'off'
   neutral_flux_limiter_save_2d = .FALSE.
   neutral_flux_limiter_tn_source = 'ti'
@@ -419,13 +419,19 @@ SUBROUTINE READ_input()
           &ionization_ion_energy_fraction
      STOP
   ENDIF
-  IF (neoclassical_heat_conduction) THEN
+  core_heat_conduction_mode = TRIM(ADJUSTL(core_heat_conduction_mode))
+  SELECT CASE (core_heat_conduction_mode)
+  CASE ('off', 'neoclassical', 'mean_free_path')
+  CASE DEFAULT
+     ERROR STOP 'core_heat_conduction_mode must be off, neoclassical or mean_free_path'
+  END SELECT
+  IF (core_heat_conduction_mode /= 'off') THEN
 #if !defined(TEMPERATURE) || defined(TOR3D)
-     ERROR STOP 'Neoclassical heat conduction is implemented for 2D temperature models'
+     ERROR STOP 'Core conductivity correction is implemented for 2D temperature models'
 #endif
      IF (.NOT.field_from_grid) &
           ERROR STOP 'Closed-surface heat geometry currently uses an equilibrium grid'
-     IF (ABS(epn-2.5d0)>1.d-12) ERROR STOP 'Neoclassical heat conduction requires epn=2.5'
+     IF (ABS(epn-2.5d0)>1.d-12) ERROR STOP 'Core conductivity correction requires epn=2.5'
   ENDIF
   neutral_flux_limiter_mode = TRIM(ADJUSTL(neutral_flux_limiter_mode))
   SELECT CASE (neutral_flux_limiter_mode)
@@ -796,7 +802,7 @@ SUBROUTINE READ_input()
   phys%diff_pot           = diff_pot
   phys%c_fli              = c_fli
   phys%c_fle              = c_fle
-  phys%neoclassical_heat_conduction = neoclassical_heat_conduction
+  phys%core_heat_conduction_mode = core_heat_conduction_mode
   phys%T_fluxlim_maxi     = T_fluxlim_maxi
   phys%T_fluxlim_maxe     = T_fluxlim_maxe
   phys%epn                = epn
@@ -1008,7 +1014,7 @@ SUBROUTINE READ_input()
      PRINT *, '                - applying trim:                                      ', phys%apply_trim
      PRINT *, '                - puff coefficient in the neutral equation:           ', phys%puff
      PRINT *, '                - cryopump power coefficient in the neutral equation: ', phys%cryopump_power
-     PRINT *, '                - neoclassical heat conduction:                       ', phys%neoclassical_heat_conduction
+     PRINT *, '                - core heat-conduction mode:                          ', TRIM(phys%core_heat_conduction_mode)
      PRINT *, '                - open-field heat-flux saturation:                     ', switch%flux_limiter
      IF (switch%flux_limiter) THEN
        PRINT *, '                - c_fli (ions):                                      ', phys%c_fli

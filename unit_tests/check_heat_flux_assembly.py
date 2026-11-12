@@ -76,10 +76,13 @@ def heat(state, gradient, neoclassical=False):
     density, velocity = state[0], state[1]/state[0]
     specific = state[2:4]/density - np.array([.5*velocity**2, 0.])
     alpha = np.maximum(specific, 1.e-20)**2.5
-    if neoclassical == 1:
+    if neoclassical in (1, 4):
         for j, energy in enumerate(specific):
             if energy > 1.e-20:
-                alpha[j] *= neoclassical_factor(2./(3.*MREF)*energy*1000.,density*1.e19,j+3)
+                temperature = 2./(3.*MREF)*energy*1000.
+                factor = (1./(1.+7.5e16*temperature**2/(density*1.e19*25.))
+                          if neoclassical == 4 else neoclassical_factor(temperature,density*1.e19,j+3))
+                alpha[j] *= factor
     alpha = np.minimum(alpha,(1.5*MREF*CAPS)**2.5)
     vectors = np.zeros((5, 2))
     vectors[0] = [-state[2]/density**2+state[1]**2/density**3, -state[3]/density**2]
@@ -89,7 +92,7 @@ def heat(state, gradient, neoclassical=False):
 
 
 def limiter(state, gradient, enabled, neoclassical=False):
-    if not enabled or abs(neoclassical) <= 1:
+    if not enabled or abs(neoclassical) <= 1 or neoclassical == 4:
         return np.ones(2)
     density, velocity = state[0], state[1]/state[0]
     specific = state[2:4]/density-np.array([.5*velocity**2, 0.])
@@ -152,7 +155,7 @@ def run_checks(build, optimized):
                      ROOT/'src/Models/NGammaTiTe/physics.f90',
                      ROOT/'src/Models/NGammaTiTe/heat_fluxes/heat_fluxes.f90',
                      ROOT/'src/Models/NGammaTiTe/heat_fluxes/classical.f90',
-                     ROOT/'src/Models/NGammaTiTe/heat_fluxes/neoclassical.f90',
+                     ROOT/'src/Models/NGammaTiTe/heat_fluxes/core_corrections.f90',
                      ROOT/'src/Models/NGammaTiTe/heat_fluxes/free_streaming.f90', tmp/'extracted.f90']:
             obj = tmp/(path.stem+'.o')
             subprocess.run(['gfortran', *flags, '-fPIC', '-c', '-I', str(tmp), '-I', str(build),
@@ -174,11 +177,11 @@ def run_checks(build, optimized):
         columns, cases = 0, 0
         # Each conductivity/cap branch reaches every assembly path. Limiter-off
         # and reversed/zero flux controls exercise representative branches.
-        scenarios = [(state, 1, True, model) for state in states for model in (False, True)]
+        scenarios = [(state, 1, True, model) for state in states for model in (False, True, 4)]
         scenarios += [(states[1], sign, enabled, model)
                       for sign, enabled, model in [(-1, True, False),(-1, True, True),
                                                    (0, True, True),(1, False, False),(1, False, True)]]
-        scenarios += [(states[1],1,True,region) for region in (-2,-3,2,3)]  # SOL/PFR, correction disabled/enabled
+        scenarios += [(states[1],1,True,region) for region in (-2,-3,2,3,5,6)]  # SOL/PFR, correction disabled/enabled
         for route, (state, sign, enabled, neoclassical) in product(range(1,6),scenarios):
             try:
                 columns += check_fixture(library.probe, state, sign*gradient, route, enabled, neoclassical)

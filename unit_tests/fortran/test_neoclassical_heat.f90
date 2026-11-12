@@ -17,7 +17,7 @@ PROGRAM test_neoclassical_heat
   CHARACTER(256) :: message
 
   phys%Mref=1.d0;phys%epn=2.5d0
-  phys%neoclassical_heat_conduction=.TRUE.
+  phys%core_heat_conduction_mode='neoclassical'
   switch%testcase=2 ! Check the correction independently of the temperature cap.
   simpar%refval_temperature=1.d0;simpar%refval_density=1.d19
   ALLOCATE(core_surface_geometry%rho(2),core_surface_geometry%L(2),core_surface_geometry%eps(2))
@@ -47,6 +47,7 @@ PROGRAM test_neoclassical_heat
     CALL close(factor,expected,1.d-7,'collisional asymptote')
   ENDDO
 
+  CALL check_mean_free_path()
   CALL check_object_reuse()
 
   ! Circular psi, Btor=C/R: |B|/|Bpol| is constant on each circle.
@@ -95,6 +96,35 @@ PROGRAM test_neoclassical_heat
   IF (profiles%generation/=equilibrium%generation) ERROR STOP 'geometry provenance'
   WRITE(*,*) 'Neoclassical heat: PASS; checks, worst scaled discrepancy:',checks,worst
 CONTAINS
+  SUBROUTINE check_mean_free_path()
+    REAL*8, PARAMETER :: lengths(3)=[1.d0,25.d0,100.d0]
+    INTEGER :: il
+
+    phys%core_heat_conduction_mode='mean_free_path'
+    phys%Mref=1.3d0;simpar%refval_temperature=50.d0
+    DO row=3,4
+      DO i=1,SIZE(temperatures)
+        DO j=1,SIZE(densities)
+          DO il=1,SIZE(lengths)
+            temperature=temperatures(i);density=densities(j);length=lengths(il)
+            expected=1.d0/(1.d0+7.5d16*temperature**2/(density*length))
+            CALL conductivity_factor(temperature,density,length,.2d0,row,factor,slope)
+            CALL close(factor/expected,1.d0,2.d-14,'connection-length factor and physical units')
+            CALL close(slope,1.d0-expected,2.d-14,'connection-length homogeneity')
+            CALL conductivity_factor(temperature,density*(1.d0+step),length,.2d0,row,plus,unused)
+            CALL conductivity_factor(temperature,density*(1.d0-step),length,.2d0,row,minus,unused)
+            CALL close((plus-minus)/(2.d0*step)/factor,slope,2.d-8,'connection density derivative')
+            CALL conductivity_factor(temperature*(1.d0+step),density,length,.2d0,row,plus,unused)
+            CALL conductivity_factor(temperature*(1.d0-step),density,length,.2d0,row,minus,unused)
+            CALL close((plus-minus)/(2.d0*step)/factor,-2.d0*slope,2.d-8,'connection temperature derivative')
+          ENDDO
+        ENDDO
+      ENDDO
+    ENDDO
+    phys%core_heat_conduction_mode='neoclassical'
+    phys%Mref=1.d0;simpar%refval_temperature=1.d0
+  END SUBROUTINE check_mean_free_path
+
   SUBROUTINE conductivity_factor(temperature_eV,density_m3,length_m,epsilon,row,factor,slope)
     REAL*8, INTENT(IN) :: temperature_eV,density_m3,length_m,epsilon
     INTEGER, INTENT(IN) :: row
@@ -152,7 +182,7 @@ CONTAINS
       CALL compare_result(reused%ion_heat_flux,fresh%ion_heat_flux)
       CALL compare_result(reused%electron_heat_flux,fresh%electron_heat_flux)
     ENDDO
-    phys%neoclassical_heat_conduction=.FALSE.
+    phys%core_heat_conduction_mode='off'
     CALL reused%init(state,2,.5d0)
     CALL reused%evaluate_conductivities()
     CALL fresh%init(state,2,.5d0)
@@ -161,7 +191,7 @@ CONTAINS
     CALL compare_result(reused%electron_heat_flux,fresh%electron_heat_flux)
     IF (reused%ion_heat_flux%diffusive_flux/=0.d0 .OR. reused%electron_heat_flux%limiter/=1.d0) &
          ERROR STOP 'conductivity-only evaluation retained flux data'
-    phys%neoclassical_heat_conduction=.TRUE.
+    phys%core_heat_conduction_mode='neoclassical'
   END SUBROUTINE check_object_reuse
 
   SUBROUTINE compare_result(actual,reference)

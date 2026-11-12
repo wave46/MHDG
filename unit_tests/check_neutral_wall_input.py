@@ -21,6 +21,7 @@ def main():
     template = re.sub(r"(?mi)^\s*recycle_plasma_diffusion\s*=[^\n]*\n", "", template)
     template = re.sub(r"(?mi)^\s*bohm_momentum_always_include_diffusion\s*=[^\n]*\n", "", template)
     template = re.sub(r"(?mi)^\s*(newton_formulation|newton_convergence|residual_atol|residual_scales|residual_diagnostics_mode)\s*=[^\n]*\n", "", template)
+    template = re.sub(r"(?mi)^\s*core_heat_conduction_mode\s*=[^\n]*\n", "", template)
     if k_equation:
         template = template.replace("&PHYS_LST", "&PHYS_LST\n"
             "  diff_k_min=10, diff_k_max=10, k_max=1.e10", 1)
@@ -109,10 +110,13 @@ def main():
         ("UTILS_LST", "residual_report_invalid", "residual_diagnostics_mode='invalid'", "residual_diagnostics_mode must be"),
     ])
     cases.extend([
-        ("PHYS_LST","heat_neoclassical","neoclassical_heat_conduction=.true.",(1.0,1.0)),
+        ("PHYS_LST","heat_neoclassical","core_heat_conduction_mode='neoclassical'",(1.0,1.0)),
+        ("PHYS_LST","heat_mean_free_path","core_heat_conduction_mode='mean_free_path'",(1.0,1.0)),
+        ("PHYS_LST","heat_off","core_heat_conduction_mode='off'",(1.0,1.0)),
+        ("PHYS_LST","heat_mode_invalid","core_heat_conduction_mode='invalid'","core_heat_conduction_mode must be"),
         ("INPUT_LST","heat_stored_field","compute_from_flux=.false.",(1.0,1.0)),
         ("INPUT_LST","heat_missing_geometry","field_from_grid=.false.","Closed-surface heat geometry currently uses an equilibrium grid"),
-        ("PHYS_LST","heat_bad_power","neoclassical_heat_conduction=.true.,epn=2","requires epn=2.5"),
+        ("PHYS_LST","heat_bad_power","core_heat_conduction_mode='neoclassical',epn=2","requires epn=2.5"),
     ])
     with tempfile.TemporaryDirectory(prefix="mhdg-neutral-wall-input-") as scratch:
         for namelist, name, entries, expected in cases:
@@ -122,8 +126,7 @@ def main():
             if name == "stabilization_missing":
                 source = re.sub(r"(?mi)^\s*stab\s*=[^\n]*\n", "", source)
             if name in ('heat_stored_field','heat_missing_geometry'):
-                source = re.sub(r'(?mi)^\s*neoclassical_heat_conduction\s*=.*$', '', source)
-                source = source.replace('&PHYS_LST', '&PHYS_LST\n neoclassical_heat_conduction=.true.', 1)
+                source = source.replace('&PHYS_LST', "&PHYS_LST\n core_heat_conduction_mode='neoclassical'", 1)
             text = re.sub(rf"(?ms)(&{namelist}\b.*?)(^\s*/\s*$)",
                           lambda match: f"{match[1]}  {entries}\n{match[2]}",
                           source, count=1)
@@ -155,10 +158,11 @@ def main():
                 report = re.search(r"^RESIDUAL_REPORT_MODE\s+(\S+)", output, re.M)
                 report_choice={"residual_report_summary":"summary","residual_report_equations":"equations"}.get(name,"off")
                 passed = passed and report is not None and report[1] == report_choice
-            if passed and name in ("omitted","heat_neoclassical"):
-                heat=re.search(r"^HEAT_TRANSPORT\s+([TF])",output,re.M)
-                enabled=name == "heat_neoclassical"
-                passed=heat is not None and (heat[1]=="T")==enabled
+            if passed and isinstance(expected, tuple):
+                mode = re.search(r"^CORE_HEAT_MODE\s+(\S+)", output, re.M)
+                choice = {"heat_neoclassical": "neoclassical", "heat_mean_free_path": "mean_free_path",
+                          "heat_stored_field": "neoclassical"}.get(name, "off")
+                passed = mode is not None and mode[1] == choice
             if passed and name == "stabilization_prescribed":
                 selected = re.search(r"^STABILIZATION_TYPE\s+(\d+)", output, re.M)
                 prescribed = re.search(r"^STABILIZATION_TAU\s+(.+)$", output, re.M)

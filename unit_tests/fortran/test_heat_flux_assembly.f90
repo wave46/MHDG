@@ -25,8 +25,13 @@ CONTAINS
 
     isdir=.FALSE.
     topology_region=1;rho=.5d0
+    phys%core_heat_conduction_mode='off'
+    IF (neoclassical>0) phys%core_heat_conduction_mode='neoclassical'
     IF (ABS(neoclassical)>1) topology_region=ABS(neoclassical)
-    phys%neoclassical_heat_conduction=neoclassical>0
+    IF (neoclassical>=4) THEN
+      phys%core_heat_conduction_mode='mean_free_path'
+      topology_region=neoclassical-3
+    ENDIF
     IF (.NOT.ALLOCATED(core_surface_geometry%rho)) THEN
       ALLOCATE(core_surface_geometry%rho(2),core_surface_geometry%L(2),core_surface_geometry%eps(2))
       core_surface_geometry%rho=[0.d0,1.d0]

@@ -149,16 +149,15 @@ separately under `/simulation_parameters/physics`.
 
 ## Heat-conduction metadata
 
-`/simulation_parameters/physics/neoclassical_heat_conduction` records the
-selected conductivity correction as an integer boolean (`0` or `1`), for
-both enabled and disabled runs. `T_fluxlim_maxi` and `T_fluxlim_maxe` in the
-same group are temperatures in solver units; multiply by the saved
-`adimensionalization/temperature_scale` to obtain eV.
+`/simulation_parameters/physics/core_heat_conduction_mode` records the selected
+core conductivity law as a string: `off`, `neoclassical` or `mean_free_path`.
+`T_fluxlim_maxi` and `T_fluxlim_maxe` in the same group are temperatures in
+solver units; multiply by the saved `adimensionalization/temperature_scale`
+to obtain eV.
 
 These fields document the saved run. Current `PHYS_LST` inputs select the
-conductivity settings on restart. Older files without the boolean do not
-identify whether the neoclassical correction was enabled; its absence must
-not be interpreted as false.
+conductivity settings on restart. Mode provenance for older files without
+this field comes from their original inputs.
 
 ## Older-file compatibility and implementation
 

@@ -277,7 +277,7 @@
     diff_pare           = 20            ! (1.0492e7) parallel diffusion for the electron temperature
     diff_pot            = 4             ! diffusion in the potential equation (only used for analytic tests)
     ! **** Flux limiter coefficients
-    neoclassical_heat_conduction = .false. ! SOLPS closed-surface parallel conductivity correction
+    core_heat_conduction_mode = 'off' ! off, neoclassical or mean_free_path
     c_fli               = 1e5            ! Ion free-streaming fraction on open field lines
     c_fle               = 2e-1            ! Electron free-streaming fraction on open field lines
     T_fluxlim_maxi      = 50.              ! Parallel-conductivity temperature ceiling [eV]

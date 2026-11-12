@@ -2,30 +2,38 @@
 
 For ions and electrons, parallel conductive heat flows down the temperature
 gradient. Magnetic topology selects the transport law: closed field lines
-use classical or neoclassically corrected conductivity; open field lines
+use classical or corrected conductivity; open field lines
 use classical conductivity with optional free-streaming saturation.
 Prescribed sheath energy loss is assembled separately.
 
-## Closed field lines: neoclassical correction
+## Closed field lines: conductivity corrections
 
-`neoclassical_heat_conduction=.true.` in `PHYS_LST` enables the SOLPS-ITER
-plateau/banana correction for a singly charged hydrogenic majority. The
-default is false, giving classical conductivity on closed surfaces. The
-closed-surface heat flux is
+`core_heat_conduction_mode` in `PHYS_LST` selects `off` (the default),
+`neoclassical` or `mean_free_path`. With `off`, closed surfaces use classical
+conductivity. Both active corrections use a singly charged hydrogenic
+majority. The closed-surface heat flux is
 
 $$
 q_{\parallel,s}=-\kappa_{\parallel,s}\nabla_\parallel T_s,
 \qquad \kappa_{\parallel,s}\propto T_s^{5/2}F_s.
 $$
 
-The correction accounts for the change in collisional parallel transport
-as the collision length grows relative to the magnetic connection length.
+### Neoclassical correction
+
+The `neoclassical` correction accounts for the change in collisional
+parallel transport as the collision length grows relative to the magnetic
+connection length.
 In a torus, this response sets poloidal temperature variations and the
 resulting neoclassical radial heat transport. The fits connect the
 Pfirsch–Schlüter, plateau and banana regimes.
 
-The [SOLPS-ITER manual 3.0.9](https://solps-tutorials.readthedocs.io/files/SOLPS-ITER_manual_3.0.9.pdf)
-gives the electron fit on p.389 and the ion fit on p.396, equation C.180:
+[Rozhansky et al. (2009), section 3, equations (36)–(38)](https://pure.mpg.de/pubman/item/item_2141150_3/component/file_2141149/Rozhansky_New.pdf)
+describe the ion parallel-conductivity prescription. Its collisionality
+interpolation, and the electron interpolation, are based on
+[Hinton and Hazeltine (1976), equations (6.125), (6.133) and Table III](https://doi.org/10.1103/RevModPhys.48.239).
+The electron factor uses the normalized $K_{11}$ interpolation; the ion
+factor uses the $K_2$ interpolation with finite-aspect-ratio dependence.
+With the conventions below, the factors used here are:
 
 $$
 F_e=\frac{0.58\epsilon^{3/2}}{K_1},\qquad
@@ -60,8 +68,30 @@ reference collision times follow Braginskii's electron–ion and ion–ion
 conventions. The fits approach approximately unity at high collisionality.
 The fitted values are used across the full collisionality range.
 
-The ion correction and its neoclassical motivation are described by
-[Rozhansky et al., section 3, equations (36)–(38)](https://pure.mpg.de/pubman/item/item_2141150_3/component/file_2141149/Rozhansky_New.pdf).
+### Mean-free-path correction
+
+`core_heat_conduction_mode='mean_free_path'` selects the algebraic
+long-mean-free-path correction, using each species' temperature:
+
+$$
+F_s=\frac{1}{1+\lambda_{HC,s}/L_\parallel},\qquad
+\lambda_{HC,s}[\mathrm{m}]=7.5\times10^{16}
+\frac{T_s[\mathrm{eV}]^2}{n_e[\mathrm{m}^{-3}]}.
+$$
+
+The factor approaches unity for a short collision length and reduces
+conductivity when that length exceeds the magnetic circuit length. At fixed
+density and geometry the strongly limited conductivity scales as $T_s^{1/2}$.
+The kinetic motivation for heat-flux suppression is developed by
+[Luciani, Mora and Virmont (1983), *Nonlocal Heat Transport Due to Steep Temperature Gradients*](https://doi.org/10.1103/PhysRevLett.51.1664),
+and [Epperlein and Short (1991), *A practical nonlocal model for electron heat transport in laser plasmas*](https://doi.org/10.1063/1.859789).
+Heat-carrying electrons sample temperatures over their collision length,
+reducing the local collisional response when that length becomes
+comparable to the parallel temperature-variation scale.
+
+Here a local algebraic approximation uses $\lambda_{HC}/L_\parallel$,
+with the full magnetic circuit length as its suppression scale. Applying
+the same expression to ions with $T_s=T_i$ is the model's ion extension.
 
 ### Closed-surface geometry
 
@@ -127,9 +157,8 @@ of the thermal free-streaming flux. The ion temperature uses thermal energy
 after subtracting bulk kinetic energy. The local temperature floor is
 10⁻⁵ eV and the minimum free-streaming flux is 10⁻¹⁰ in solver units.
 
-The closed/open selection follows the SOLPS-ITER manual, equations C.127
-and C.175. Closed surfaces use a free-streaming multiplier of one, with
-either classical or neoclassically corrected conductivity selected above.
+Closed surfaces use a free-streaming multiplier of one, with
+either classical or corrected conductivity selected above.
 The topology stays fixed during each Newton solve.
 
 ## Conductivity ceiling and Newton treatment
@@ -141,8 +170,8 @@ $$
 \min\!\left(T_s^{5/2}F_s,T_{\max,s}^{5/2}\right).
 $$
 
-The correction factor is one on open field lines and when the neoclassical
-model is disabled. MMS testcase 2 uses the uncapped conductivity law.
+The correction factor is one on open field lines and when the core
+correction is disabled. MMS testcase 2 uses the uncapped conductivity law.
 The specific-thermal-energy floor is 10⁻²⁰ in solver units.
 
 Newton assembly differentiates the conductivity with respect to density

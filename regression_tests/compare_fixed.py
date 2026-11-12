@@ -609,7 +609,7 @@ def check_output_contract(path, directory, model, provenance, overrides):
              "neutral_perpendicular_diffusion", "neutralp_lambda", "neutral_flux_limiter_mode",
              "neutral_flux_limiter_tn_source", "neutral_flux_limiter_tn_ev", "compute_from_flux",
              "re_n", "re_n_pump", "flux_limiter", "c_fli", "c_fle",
-             "t_fluxlim_maxi", "t_fluxlim_maxe", "neoclassical_heat_conduction"}
+             "t_fluxlim_maxi", "t_fluxlim_maxe", "core_heat_conduction_mode"}
     overrides = {**read_selected_input_values(directory / "param.txt", names),
                  **{key.lower(): value for key, value in overrides.items()}}
     label, equations = MODELS[model]
@@ -623,8 +623,8 @@ def check_output_contract(path, directory, model, provenance, overrides):
     for name in ("neutral_flux_limiter_mode", "neutral_flux_limiter_tn_source"):
         if name in overrides:
             expected[f"simulation_parameters/physics/{name}"] = overrides[name]
-    if "neoclassical_heat_conduction" in overrides:
-        expected["simulation_parameters/physics/neoclassical_heat_conduction"] = overrides["neoclassical_heat_conduction"]
+    if "core_heat_conduction_mode" in overrides:
+        expected["simulation_parameters/physics/core_heat_conduction_mode"] = overrides["core_heat_conduction_mode"]
     if "neutralp_lambda" in overrides:
         expected["simulation_parameters/numerics/NeutralP_lambda"] = overrides["neutralp_lambda"]
     if "re_n" in overrides or "re_n_pump" in overrides:

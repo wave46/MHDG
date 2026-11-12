@@ -45,10 +45,10 @@ to every diagonal row, including the neutral row as extra numerical damping.
 Here $\kappa_{\parallel,s}$ is the parallel conductivity before local
 free-streaming saturation, including the conductivity ceiling and selected
 closed-surface correction. Classical stabilization uses the $T^{5/2}$ law;
-physical conductivity uses `epn`. With `neoclassical_heat_conduction` enabled,
-closed-core thermal stabilization uses the corrected, capped conductivity and
-its density and temperature derivatives. Geometry stays fixed during Newton
-assembly. See the [physical correction](../models/heat-flux-limiter.md#closed-field-lines-neoclassical-correction).
+physical conductivity uses `epn`. With `core_heat_conduction_mode` set to
+`neoclassical` or `mean_free_path`, closed-core thermal stabilization uses
+the corrected, capped conductivity and its density and temperature
+derivatives. Geometry stays fixed during Newton assembly. See the [physical correction](../models/heat-flux-limiter.md#closed-field-lines-conductivity-corrections).
 
 The free-streaming multiplier bounds the physical parallel conductive flux.
 The conductivity penalty controls the element–trace temperature jump. Neutral

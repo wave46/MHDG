@@ -599,7 +599,7 @@ CONTAINS
 
     CALL configure_equilibrium_scales(xvec, yvec, Br2D, Bz2D, sample, frame, alpha)
     CALL report_field_fit(alpha, ALLOCATED(Br2D))
-    IF (phys%neoclassical_heat_conduction) THEN
+    IF (phys%core_heat_conduction_mode /= 'off') THEN
       IF (input%compute_from_flux) THEN
         CALL core_surface_geometry%build(magnetic_equilibrium,Bphi2D,Bphi_dx2D, &
              Bphi_dy2D,Bphi_dxy2D,alpha,simpar%refval_length)

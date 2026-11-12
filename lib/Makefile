@@ -5,7 +5,7 @@
 #---------------------------------------
 include Make.inc/arch.make
 
-HEAT_FLUX_OBJECTS = heat_fluxes.o heat_flux_classical.o heat_flux_neoclassical.o heat_flux_free_streaming.o
+HEAT_FLUX_OBJECTS = heat_fluxes.o heat_flux_classical.o heat_flux_core_corrections.o heat_flux_free_streaming.o
 HEAT_CONDUCTION_OBJECTS = $(HEAT_FLUX_OBJECTS) flux_surface_geometry.o magnetic_topology.o interpolation.o
 PHYSICS_CHECK_OBJECTS = neutral_wall_physics_check.o globals.o neutral_flux_limiter.o $(HEAT_CONDUCTION_OBJECTS)
 
@@ -503,10 +503,10 @@ heat_flux_classical.F : $(SDIR)/Models/NGammaTiTe/heat_fluxes/classical.f90
 heat_flux_classical.o : heat_flux_classical.F heat_fluxes.o
 	$(FC) -c $(FCFLAGS) $(INC) $< -o $@
 
-heat_flux_neoclassical.F : $(SDIR)/Models/NGammaTiTe/heat_fluxes/neoclassical.f90
+heat_flux_core_corrections.F : $(SDIR)/Models/NGammaTiTe/heat_fluxes/core_corrections.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-heat_flux_neoclassical.o : heat_flux_neoclassical.F heat_fluxes.o prec_const.o
+heat_flux_core_corrections.o : heat_flux_core_corrections.F heat_fluxes.o prec_const.o
 	$(FC) -c $(FCFLAGS) $(INC) $< -o $@
 
 heat_flux_free_streaming.F : $(SDIR)/Models/NGammaTiTe/heat_fluxes/free_streaming.f90

@@ -44,19 +44,22 @@ PROGRAM test_stabilization_values
   CALL check_toroidal_faces()
 #endif
 #ifndef TOR3D
-  CALL check_neoclassical_tau()
+  CALL check_core_tau('neoclassical')
+  CALL check_core_tau('mean_free_path')
 #endif
   WRITE(*,*) 'Stabilization values: PASS; dimension, checks:',ndim,checks
 
 CONTAINS
 
 #ifndef TOR3D
-  SUBROUTINE check_neoclassical_tau()
+  SUBROUTINE check_core_tau(mode)
+    CHARACTER(*), INTENT(IN) :: mode
     REAL*8 :: state(5),trial(1,5),physical(1,phys%npv),derivative(5,5)
     REAL*8 :: plus(5,5),minus(5,5),alpha,parallel,step,numeric(2)
     TYPE(parallel_heat_conduction_flux) :: heat_flux
     INTEGER :: row,j
-    ALLOCATE(core_surface_geometry%rho(2),core_surface_geometry%L(2),core_surface_geometry%eps(2))
+    IF (.NOT.ALLOCATED(core_surface_geometry%rho)) &
+         ALLOCATE(core_surface_geometry%rho(2),core_surface_geometry%L(2),core_surface_geometry%eps(2))
     core_surface_geometry%rho=[0.d0,1.d0]
     core_surface_geometry%L=25.d0;core_surface_geometry%eps=.2d0
     phys%epn=2.5d0;simpar%refval_temperature=1.d3;simpar%refval_density=1.d19
@@ -71,7 +74,7 @@ CONTAINS
     n=[.6d0,.8d0];q=0.d0
     CALL cons2phys(trial,physical)
     CALL computeTauGaussPoints(physical(1,:),state,q,b,n,1,0.,xy,original,diffusion)
-    phys%neoclassical_heat_conduction=.TRUE.
+    phys%core_heat_conduction_mode=mode
     CALL computeTauGaussPoints(physical(1,:),state,q,b,n,1,0.,xy,tau,diffusion,derivative,1,.5d0)
     expected=original
     geometry=ABS(DOT_PRODUCT(b(1:ndim),n))*NORM2(b(1:ndim))*length_factor/state(1)
@@ -94,11 +97,11 @@ CONTAINS
       CALL computeTauGaussPoints(physical(1,:),trial(1,:),q,b,n,1,0.,xy,minus,diffusion,topology_region=1,rho=.5d0)
       numeric=[plus(3,3)-minus(3,3),plus(4,4)-minus(4,4)]/(2.d0*step)
       IF (ANY(ABS(numeric-derivative(3:4,j))>3.d-7*MAX(1.d0,ABS(numeric),ABS(derivative(3:4,j))))) &
-           ERROR STOP 'neoclassical thermal tau derivative'
+           ERROR STOP 'core thermal tau derivative'
       checks=checks+1
     ENDDO
-    phys%neoclassical_heat_conduction=.FALSE.
-  END SUBROUTINE check_neoclassical_tau
+    phys%core_heat_conduction_mode='off'
+  END SUBROUTINE check_core_tau
 #endif
 
   SUBROUTINE check_state(state)
