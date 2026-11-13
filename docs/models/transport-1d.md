@@ -47,6 +47,19 @@ electron-temperature drop used in the Bohm contribution.
 The [normalization convention](#coordinates-and-normalization) below matters
 when choosing the heat-diffusion weights from literature values.
 
+### Transport 1D relaxation
+
+`transport_1d_relaxation` is the fraction of each new raw diffusion/pinch
+profile used per update, with finite $0<\alpha\le1$ and default $\alpha=1$:
+
+$$
+C_k=(1-\alpha)C_{k-1}+\alpha C_{\mathrm{model}}(U_k,Q_k).
+$$
+
+The first update uses the full proposal. Smaller values damp coefficient
+feedback while preserving its converged fixed point. The setting is saved
+at `/transport_1d/params/transport_1d_relaxation`.
+
 ### Pinch model and equation selection
 
 Pinch adds radial convection to the selected plasma equations. Choose its
@@ -257,7 +270,8 @@ HDF5 files contain the top-level group `/transport_1d`:
 | --- | --- |
 | `/transport_1d/profiles` | `rho_grid`, `shell_weight`, conservative profiles `U_fs`, and radial-gradient profiles `Q_rad_fs` |
 | `/transport_1d/coefficients` | `chi_i_fs`, `chi_e_fs`, `d_fs`, `nu_mom_fs`, `vpinch_fs` |
-| `/transport_1d/params` | Model settings, including normalized floors/speed, region policy and equation selection |
+| `/transport_1d/params` | Model settings, including dimensionless `transport_1d_relaxation`, normalized floors/speed, region policy and equation selection |
+| `/transport_1d/diagnostics` | Relative L2 differences between proposed and used coefficients, ordered by `coefficient_order` |
 
 Plot the coefficients against the saved radial coordinate
 `/transport_1d/profiles/rho_grid`, which can extend beyond the LCFS.
@@ -306,12 +320,12 @@ assembly. The sequence in
 2. `transport_model_1d%update_from_flux_surfaces(fs_transport)` copies the
    radial grid, builds temporary thermodynamic/geometry profiles, projected
    gradients, electron-temperature drop and collisionality, then computes
-   diffusion and pinch.
+   diffusion and pinch, then applies optional coefficient-profile relaxation.
 3. HDG assembly uses `apply_1D_diffusion(...)` and
    `compute_1D_pinch_matrix(...)`.
 
 The transport object retains configuration, `rho_grid` and the five output
-coefficient profiles. Thermodynamic profiles, geometry, gradients,
+coefficient profiles and mixing history. Thermodynamic profiles, geometry, gradients,
 collisionality, `a_minor`, `delta_te` and intermediate Bohm / gyro-Bohm values
 belong to a temporary `transport_model_derived_t` used during one update.
 

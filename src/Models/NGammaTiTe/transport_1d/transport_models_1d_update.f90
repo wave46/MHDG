@@ -1,4 +1,5 @@
 SUBMODULE (transport_models_1d) transport_models_1d_update
+USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
 IMPLICIT NONE
 
 CONTAINS
@@ -7,6 +8,7 @@ CONTAINS
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
     TYPE(transport_model_derived_t) :: work
+    REAL*8, ALLOCATABLE :: previous(:,:)
 
     IF (.NOT. fs_data%profiles_built) RETURN
 
@@ -15,6 +17,20 @@ CONTAINS
     END IF
     IF (.NOT. this%is_initialized) RETURN
 
+    ! A same-sized grid or a new geometry must not inherit old coefficient history.
+    IF (this%profile_history_ready) THEN
+       IF (this%profile_geometry_generation /= magnetic_geometry_cache%generation .OR. &
+            ANY(this%rho_grid /= fs_data%rho_grid)) CALL this%reset_profile_history()
+    ENDIF
+    IF (this%config%transport_1d_relaxation < 1.d0 .AND. this%profile_history_ready) THEN
+       ALLOCATE(previous(5,this%nrho))
+       previous(1,:) = this%d_fs
+       previous(2,:) = this%nu_mom_fs
+       previous(3,:) = this%chi_i_fs
+       previous(4,:) = this%chi_e_fs
+       previous(5,:) = this%vpinch_fs
+    ENDIF
+    this%profile_relative_defect = 0.d0
     CALL work%init(this%nrho)
 
     this%rho_grid = fs_data%rho_grid
@@ -30,8 +46,31 @@ CONTAINS
     CALL tm1d_compute_mixed_transport(this, work)
     CALL this%compute_pinch_profile(work)
 
+    ! Relax combined raw outputs, after pinch has used the NEW raw diffusivity.
+    ! Interpolation, floors, topology masks and blending remain in the consumers.
+    IF (ALLOCATED(previous)) THEN
+       CALL relax_profile(this%d_fs,previous(1,:),this%config%transport_1d_relaxation,this%profile_relative_defect(1))
+       CALL relax_profile(this%nu_mom_fs,previous(2,:),this%config%transport_1d_relaxation,this%profile_relative_defect(2))
+       CALL relax_profile(this%chi_i_fs,previous(3,:),this%config%transport_1d_relaxation,this%profile_relative_defect(3))
+       CALL relax_profile(this%chi_e_fs,previous(4,:),this%config%transport_1d_relaxation,this%profile_relative_defect(4))
+       CALL relax_profile(this%vpinch_fs,previous(5,:),this%config%transport_1d_relaxation,this%profile_relative_defect(5))
+    ENDIF
+    this%profile_history_ready = .TRUE.
+    this%profile_geometry_generation = magnetic_geometry_cache%generation
     CALL work%destroy()
   END SUBROUTINE tm1d_update_from_flux_surfaces
+
+  SUBROUTINE relax_profile(profile,previous,alpha,relative_defect)
+    REAL*8, INTENT(INOUT) :: profile(:)
+    REAL*8, INTENT(IN) :: previous(:),alpha
+    REAL*8, INTENT(OUT) :: relative_defect
+    REAL*8 :: proposal_norm,defect_norm
+
+    proposal_norm = NORM2(profile)
+    defect_norm = (1.d0-alpha)*NORM2(profile-previous)
+    profile = (1.d0-alpha)*previous+alpha*profile
+    relative_defect = defect_norm/MAX(proposal_norm,NORM2(profile),model_tol)
+  END SUBROUTINE relax_profile
 
   SUBROUTINE tm1d_fill_delta_te(this, fs_data, work)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this

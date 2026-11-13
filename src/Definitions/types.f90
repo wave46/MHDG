@@ -484,6 +484,7 @@ MODULE types
   END TYPE Inputs_type
 
   TYPE Transport_model_input_type
+     REAL*8 :: transport_1d_relaxation = 1.d0
      REAL*8 :: rho_core = 0.8d0
      REAL*8 :: rho_edge = 0.99d0
      REAL*8 :: rho_diffusion_model_max = 1.d0

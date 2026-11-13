@@ -1091,6 +1091,7 @@ SUBROUTINE READ_input()
           transport_model_input%c_bohm_n_rho_slope
      PRINT *, '                - prandtl (transport model):            ', transport_model_input%prandtl
      PRINT *, '                - pinch_model (transport model):        ', transport_model_input%pinch_model
+     PRINT *, '                - transport_1d_relaxation (transport model): ', transport_model_input%transport_1d_relaxation
      PRINT *, '                - pinch_equations (transport model):    ', transport_model_input%pinch_equations
      PRINT *, '                - c_pinch (transport model):            ', transport_model_input%c_pinch
      PRINT *, '                - nu_th (transport model):              ', transport_model_input%nu_th
@@ -1280,15 +1281,17 @@ CONTAINS
 END SUBROUTINE READ_input
 
 SUBROUTINE read_transport_model_input()
+  USE transport_models_1d_config, ONLY: tm1d_validate_relaxation
   USE globals
   USE MPI_OMP
   IMPLICIT NONE
 
+  REAL*8 :: transport_1d_relaxation
   INTEGER :: utransport, ios
   REAL*8 :: rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
   INTEGER :: pinch_model, pinch_equations(4)
   CHARACTER(LEN=32) :: transport_region_policy
-  NAMELIST /TRANSPORT_MODEL_1D_LST/ rho_core, rho_edge, rho_diffusion_model_max, &
+  NAMELIST /TRANSPORT_MODEL_1D_LST/ transport_1d_relaxation, rho_core, rho_edge, rho_diffusion_model_max, &
        transport_region_policy, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, &
        c_bohm_n, c_bohm_n_rho_slope, prandtl, pinch_model, pinch_equations, c_pinch, nu_th, &
        vpinch_const_phys, &
@@ -1296,6 +1299,7 @@ SUBROUTINE read_transport_model_input()
        rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, &
        diff_ee_min_phys
 
+  transport_1d_relaxation = transport_model_input%transport_1d_relaxation
   rho_core = transport_model_input%rho_core
   rho_edge = transport_model_input%rho_edge
   rho_diffusion_model_max = transport_model_input%rho_diffusion_model_max
@@ -1340,6 +1344,8 @@ SUBROUTINE read_transport_model_input()
   IF (ANY(pinch_equations < 0) .OR. ANY(pinch_equations > 4)) &
        ERROR STOP 'pinch_equations entries must be in [0,4] (0 means unused)'
 
+  CALL tm1d_validate_relaxation(transport_1d_relaxation)
+  transport_model_input%transport_1d_relaxation = transport_1d_relaxation
   transport_model_input%rho_core = rho_core
   transport_model_input%rho_edge = rho_edge
   transport_model_input%rho_diffusion_model_max = rho_diffusion_model_max

@@ -1,12 +1,13 @@
 MODULE transport_models_1d_config
   USE magnetic_topology, ONLY: magnetic_region_core, magnetic_region_main_sol
+  USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   IMPLICIT NONE
 
   PRIVATE
   PUBLIC :: transport_model_config_t, tm1d_config_reset, tm1d_config_apply
   PUBLIC :: tm1d_region_policy_from_name, tm1d_region_policy_name
   PUBLIC :: tm1d_region_is_included, tm1d_build_pinch_velocity
-  PUBLIC :: tm1d_particle_taper_factor
+  PUBLIC :: tm1d_particle_taper_factor, tm1d_validate_relaxation
   PUBLIC :: transport_region_legacy_all_regions
   PUBLIC :: transport_region_core_and_main_sol, transport_region_core_only
 
@@ -20,6 +21,7 @@ MODULE transport_models_1d_config
        'core_only']
 
   TYPE :: transport_model_config_t
+     REAL*8 :: transport_1d_relaxation = 1.d0
      REAL*8 :: rho_edge = rho_edge_default
      REAL*8 :: rho_core = rho_core_default
      REAL*8 :: rho_diffusion_model_max = 1.d0
@@ -51,6 +53,7 @@ CONTAINS
   SUBROUTINE tm1d_config_reset(config)
     TYPE(transport_model_config_t), INTENT(INOUT) :: config
 
+    config%transport_1d_relaxation = 1.d0
     config%rho_edge = rho_edge_default
     config%rho_core = rho_core_default
     config%rho_diffusion_model_max = 1.d0
@@ -84,16 +87,21 @@ CONTAINS
        vpinch_const_phys, rho_pinch_axis_width, &
        rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, &
        diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys, &
-       pinch_equations)
+       pinch_equations, transport_1d_relaxation)
     TYPE(transport_model_config_t), INTENT(INOUT) :: config
     REAL*8, INTENT(IN) :: refval_time, refval_length
     REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+    REAL*8, INTENT(IN), OPTIONAL :: transport_1d_relaxation
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
     INTEGER, INTENT(IN), OPTIONAL :: pinch_equations(:)
     CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: transport_region_policy
     INTEGER :: policy, i, equation
     LOGICAL :: valid
 
+    IF (PRESENT(transport_1d_relaxation)) THEN
+       CALL tm1d_validate_relaxation(transport_1d_relaxation)
+       config%transport_1d_relaxation = transport_1d_relaxation
+    ENDIF
     IF (PRESENT(rho_edge)) config%rho_edge = rho_edge
     IF (PRESENT(rho_core)) config%rho_core = rho_core
     IF (PRESENT(rho_diffusion_model_max)) config%rho_diffusion_model_max = rho_diffusion_model_max
@@ -136,6 +144,13 @@ CONTAINS
     IF (PRESENT(diff_e_min_phys)) config%diff_e_min = diff_e_min_phys*refval_time/refval_length**2
     IF (PRESENT(diff_ee_min_phys)) config%diff_ee_min = diff_ee_min_phys*refval_time/refval_length**2
   END SUBROUTINE tm1d_config_apply
+
+  SUBROUTINE tm1d_validate_relaxation(alpha)
+    REAL*8, INTENT(IN) :: alpha
+
+    IF (.NOT. ieee_is_finite(alpha)) ERROR STOP 'transport_1d_relaxation must be finite and in (0,1]'
+    IF (alpha <= 0.d0 .OR. alpha > 1.d0) ERROR STOP 'transport_1d_relaxation must be finite and in (0,1]'
+  END SUBROUTINE tm1d_validate_relaxation
 
   SUBROUTINE tm1d_region_policy_from_name(name, policy, valid)
     CHARACTER(LEN=*), INTENT(IN) :: name

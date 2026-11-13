@@ -184,6 +184,7 @@ CONTAINS
     ALLOCATE(sol%u_tilde, SOURCE=this%trace)
     sol%u0 = this%u0
     time%bdf_start_step = this%clock%bdf_start_step
+    CALL transport_model_1d%reset_profile_history()
   END SUBROUTINE restore_accepted_plasma
 
   SUBROUTINE capture_accepted_mesh(this)
@@ -1243,9 +1244,14 @@ CONTAINS
          rho_pinch_model_max=transport_model_input%rho_pinch_model_max, rho_pinch_edge_width=transport_model_input%rho_pinch_edge_width, &
          rho_blend_width=transport_model_input%rho_blend_width, diff_n_min_phys=transport_model_input%diff_n_min_phys, &
          diff_u_min_phys=transport_model_input%diff_u_min_phys, diff_e_min_phys=transport_model_input%diff_e_min_phys, &
-         diff_ee_min_phys=transport_model_input%diff_ee_min_phys)
+         diff_ee_min_phys=transport_model_input%diff_ee_min_phys, &
+         transport_1d_relaxation=transport_model_input%transport_1d_relaxation)
     CALL fs_transport%build_profiles(transport_model_1d%config%transport_region_policy)
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
+    IF (MPIvar%glob_id == 0 .AND. transport_model_1d%config%transport_1d_relaxation < 1.d0) &
+         WRITE(6,'(A,F8.5,A,ES12.4)') 'Transport profile relaxation: alpha=', &
+         transport_model_1d%config%transport_1d_relaxation, '; max relative coefficient defect=', &
+         MAXVAL(transport_model_1d%profile_relative_defect)
   END SUBROUTINE update_reduced_transport_profiles
 
   SUBROUTINE adaptivity(preserve_history, accepted, status)
@@ -1872,6 +1878,7 @@ CONTAINS
     ! Time history and feedback state stay intact for the same timestep.
     sol%u = uiter_best
     sol%q = qiter_best
+    CALL transport_model_1d%reset_profile_history()
     CALL update_uconv_qconv(sol%u, sol%q)
     prepared = .TRUE.
   END FUNCTION prepare_divergence_refinement

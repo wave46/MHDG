@@ -20,6 +20,10 @@ MODULE transport_models_1d
 
   TYPE :: transport_model_1d_t
      LOGICAL :: is_initialized = .FALSE.
+     LOGICAL :: profile_history_ready = .FALSE.
+     INTEGER :: profile_geometry_generation = -1
+     ! Current proposal-to-used relative L2 defects: D, mu, chi_i, chi_e, V.
+     REAL*8 :: profile_relative_defect(5) = 0.d0
      INTEGER :: nrho = 0
      REAL*8, ALLOCATABLE :: rho_grid(:)
      TYPE(transport_model_config_t) :: config
@@ -31,6 +35,7 @@ MODULE transport_models_1d
    CONTAINS
      PROCEDURE :: init => tm1d_init
      PROCEDURE :: destroy => tm1d_destroy
+     PROCEDURE :: reset_profile_history => tm1d_reset_profile_history
      PROCEDURE :: set_config => tm1d_set_config
      PROCEDURE :: update_from_flux_surfaces => tm1d_update_from_flux_surfaces
      PROCEDURE :: compute_pinch_profile => tm1d_compute_pinch_profile
@@ -177,9 +182,18 @@ CONTAINS
     IF (ALLOCATED(this%vpinch_fs)) DEALLOCATE(this%vpinch_fs)
     IF (ALLOCATED(this%rho_grid)) DEALLOCATE(this%rho_grid)
 
+    CALL this%reset_profile_history()
     this%is_initialized = .FALSE.
     this%nrho = 0
   END SUBROUTINE tm1d_clear_storage
+
+  SUBROUTINE tm1d_reset_profile_history(this)
+    CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+
+    this%profile_history_ready = .FALSE.
+    this%profile_geometry_generation = -1
+    this%profile_relative_defect = 0.d0
+  END SUBROUTINE tm1d_reset_profile_history
 
   SUBROUTINE tm1d_set_config(this, rho_edge, rho_core, rho_diffusion_model_max, &
        transport_region_policy, c_bohm_i, c_gyrobohm_i, c_bohm_e, &
@@ -187,12 +201,18 @@ CONTAINS
        c_pinch, nu_th, &
        vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, &
        rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, &
-       diff_e_min_phys, diff_ee_min_phys, pinch_equations)
+       diff_e_min_phys, diff_ee_min_phys, pinch_equations, transport_1d_relaxation)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
+    REAL*8, INTENT(IN), OPTIONAL :: transport_1d_relaxation
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
     INTEGER, INTENT(IN), OPTIONAL :: pinch_equations(:)
     CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: transport_region_policy
+    REAL*8 :: previous_alpha
+    INTEGER :: previous_policy
+
+    previous_alpha = this%config%transport_1d_relaxation
+    previous_policy = this%config%transport_region_policy
 
     CALL tm1d_config_apply(this%config, simpar%refval_time, simpar%refval_length, &
          rho_edge=rho_edge, rho_core=rho_core, rho_diffusion_model_max=rho_diffusion_model_max, &
@@ -206,7 +226,9 @@ CONTAINS
          rho_pinch_model_max=rho_pinch_model_max, rho_pinch_edge_width=rho_pinch_edge_width, &
          rho_blend_width=rho_blend_width, diff_n_min_phys=diff_n_min_phys, &
          diff_u_min_phys=diff_u_min_phys, diff_e_min_phys=diff_e_min_phys, &
-         diff_ee_min_phys=diff_ee_min_phys)
+         diff_ee_min_phys=diff_ee_min_phys, transport_1d_relaxation=transport_1d_relaxation)
+    IF (previous_alpha /= this%config%transport_1d_relaxation .OR. &
+         previous_policy /= this%config%transport_region_policy) CALL this%reset_profile_history()
   END SUBROUTINE tm1d_set_config
 
   SUBROUTINE tm1d_finalize(this)

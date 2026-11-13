@@ -1,4 +1,7 @@
 &TRANSPORT_MODEL_1D_LST
+  ! Fraction of new raw diffusion/pinch profiles per update; finite, 0 < alpha <= 1.
+  transport_1d_relaxation = 1.0
+
   ! Reference radii used by the mixed Bohm / gyro-Bohm model.
   ! rho_core and rho_edge define the two points entering Delta_Te.
   rho_core = 0.8

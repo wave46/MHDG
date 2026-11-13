@@ -6,7 +6,7 @@ CONTAINS
   MODULE SUBROUTINE tm1d_write_hdf5(this, parent_group_id)
     CLASS(transport_model_1d_t), INTENT(IN) :: this
     INTEGER(HID_T), INTENT(IN) :: parent_group_id
-    INTEGER(HID_T) :: coeffs_group_id, params_group_id
+    INTEGER(HID_T) :: coeffs_group_id, params_group_id, diagnostics_group_id
     INTEGER :: ierr
     INTEGER :: pinch_equations(4)
 
@@ -23,6 +23,7 @@ CONTAINS
     CALL HDF5_group_close(coeffs_group_id, ierr)
 
     CALL HDF5_group_create('params', parent_group_id, params_group_id, ierr)
+    CALL HDF5_real_saving(params_group_id, this%config%transport_1d_relaxation, 'transport_1d_relaxation')
     CALL HDF5_real_saving(params_group_id, this%config%rho_core, 'rho_core')
     CALL HDF5_real_saving(params_group_id, this%config%rho_edge, 'rho_edge')
     CALL HDF5_real_saving(params_group_id, this%config%rho_diffusion_model_max, 'rho_diffusion_model_max')
@@ -54,6 +55,11 @@ CONTAINS
     CALL HDF5_real_saving(params_group_id, this%config%rho_pinch_model_max, 'rho_pinch_model_max')
     CALL HDF5_real_saving(params_group_id, this%config%rho_pinch_edge_width, 'rho_pinch_edge_width')
     CALL HDF5_group_close(params_group_id, ierr)
+
+    CALL HDF5_group_create('diagnostics', parent_group_id, diagnostics_group_id, ierr)
+    CALL HDF5_array1D_saving(diagnostics_group_id, this%profile_relative_defect, 5, 'coefficient_relative_defect')
+    CALL HDF5_string_saving(diagnostics_group_id, 'D,nu_mom,chi_i,chi_e,vpinch', 'coefficient_order')
+    CALL HDF5_group_close(diagnostics_group_id, ierr)
   END SUBROUTINE tm1d_write_hdf5
 
 END SUBMODULE transport_models_1d_io
