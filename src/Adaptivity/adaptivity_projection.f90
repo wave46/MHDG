@@ -1,5 +1,5 @@
 MODULE adaptivity_projection_module
-  USE globals, ONLY: phys, refElPol, utils
+  USE globals, ONLY: phys, refElPol, utils, adapt
   USE MPI_OMP, ONLY: MPIvar
   USE mpi, ONLY: MPI_ALLREDUCE, MPI_COMM_WORLD, MPI_IN_PLACE, MPI_INTEGER, MPI_SUM
   USE element_mapping_module, ONLY: map_physical_to_nearest_reference, map_physical_to_reference, &
@@ -11,7 +11,6 @@ MODULE adaptivity_projection_module
 
   REAL*8, PARAMETER :: linear_candidate_tolerance = 1.d-10
   REAL*8, PARAMETER :: curved_owner_tolerance = 1.d-8
-  REAL*8, PARAMETER :: recovery_distance_ratio = 1.d-2
   REAL*8, PARAMETER :: recovery_box_padding_ratio = 0.5d0
 
   PUBLIC :: projectSolutionDifferentMeshes_general
@@ -252,7 +251,9 @@ CONTAINS
           nearest_distances(point) = nearest_distance
           nearest_sizes(point) = nearest_size
        ENDIF
-       IF(nearest_valid .AND. nearest_distance .LE. recovery_distance_ratio*MAX(1.d-12,nearest_size)) THEN
+       ! Extend only across a small geometry gap; interpolate at the nearest old reference point.
+       IF(nearest_valid .AND. nearest_distance .LE. &
+            adapt%projection_recovery_distance_ratio*MAX(1.d-12,nearest_size)) THEN
           point_elements(point) = nearest_element
           reference_points(point,:) = nearest_reference
        ENDIF
@@ -333,7 +334,11 @@ CONTAINS
     CALL MPI_ALLREDUCE(MPI_IN_PLACE, global_missing, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
     IF(global_missing .EQ. 0) RETURN
 
-    IF(MPIvar%glob_id .EQ. 0) WRITE(*,*) "Projection unmatched points after recovery: ", global_missing
+    IF(MPIvar%glob_id .EQ. 0) THEN
+       WRITE(*,*) "Projection unmatched points after recovery: ", global_missing
+       WRITE(*,*) "Projection recovery distance ratio (shortest old edge): ", &
+            adapt%projection_recovery_distance_ratio
+    ENDIF
     IF(local_missing .EQ. 0) RETURN
 
     DO point = 1, SIZE(target_points,1)

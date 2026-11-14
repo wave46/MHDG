@@ -1267,6 +1267,8 @@ CONTAINS
       ! Record the convergence/recovery policy; restart inputs select the new run's policy.
       CALL HDF5_group_create('adaptivity', group_id1, group_id2, ierr)
       CALL HDF5_logical_saving(group_id2, adapt%check_neutral_positivity, 'check_neutral_positivity')
+      CALL HDF5_real_saving(group_id2, adapt%projection_recovery_distance_ratio, &
+           'projection_recovery_distance_ratio')
       CALL HDF5_group_close(group_id2, ierr)
 
       ! Create switches parameters group

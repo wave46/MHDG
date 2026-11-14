@@ -18,6 +18,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 .PHONY : check-adaptivity-estimator
 .PHONY : check-adaptive-checkpoint
 .PHONY : check-adaptive-element-limit
+.PHONY : check-projection-recovery
 .PHONY : check-divergence-refinement
 .PHONY : check-equilibrium-series
 .PHONY : check-linear-solve-status
@@ -73,7 +74,7 @@ clean:
 	$(RM) me_restart_check
 	$(RM) adaptivity_estimator_check
 	$(RM) adaptive_checkpoint_check
-	$(RM) adaptive_element_limit_check
+	$(RM) adaptive_element_limit_check projection_recovery_check
 	$(RM) divergence_refinement_check
 	$(RM) bdf_coefficients_check linear_solve_status_check
 	$(RM) newton_damping_check hdg_residual_check
@@ -241,6 +242,10 @@ check-adaptive-checkpoint : MHDG
 check-divergence-refinement : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_divergence_refinement.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o divergence_refinement_check $(LIB)
 	python3 ../unit_tests/check_divergence_refinement.py ./divergence_refinement_check $(MODE)
+
+check-projection-recovery : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_projection_recovery.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o projection_recovery_check $(LIB)
+	python3 ../unit_tests/check_projection_recovery.py ./projection_recovery_check $(MODE)
 
 check-adaptive-element-limit : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_adaptive_element_limit.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o adaptive_element_limit_check $(LIB)

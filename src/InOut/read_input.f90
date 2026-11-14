@@ -48,6 +48,7 @@ SUBROUTINE READ_input()
   INTEGER,ALLOCATABLE,DIMENSION(:) :: n_quant_ind,param_est
   INTEGER               :: num_param_est, num_n_quant_ind
   REAL*8                :: thr_ind, tol_est, osc_tol, osc_check
+  REAL*8                :: projection_recovery_distance_ratio
   INTEGER               :: bcflags(1:10), ntor, ptor, npartor,bohmtypebc
   REAL*8                :: dt0, R0, diff_n, diff_u, tau(1:7), tNr, tTM, div, Tbg, neutralp_lambda
   REAL*8                :: tfi, a, bohmth,bohm_energy_thresh, q, diffred, diffmin
@@ -143,7 +144,8 @@ SUBROUTINE READ_input()
   NAMELIST /INPUT_LST/ field_path, field_dimensions,field_from_grid,compute_from_flux,divide_by_2pi, jtor_path, jtor_dimensions,external_heating_path,external_heating_from_grid, save_folder,puff_path,puff_dimension,target_density_path,target_density_dimension,target_density_xpr_path,target_density_xpr_dimension,zeff_path,zeff_dimension, diffusion_1D_path, transport_model_path, impurity_model_path, density_chord
   NAMELIST /NUMER_LST/ tau,nrp,tNR,tTM,div,sc_coe,sc_sen,minrho,so_coe,df_coe,dc_coe,thr,thrpre,stab,dumpnr_min,dumpnr_max,dumpnr_width,dumpnr_n0,ntor,ptor,tmax,npartor,bohmtypebc,exbdump,neutralp_lambda, &
        newton_convergence,newton_formulation,residual_atol,residual_rtol,residual_scales
-  NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, check_neutral_positivity, max_divergence_refinements, rest_adapt, osc_adapt, max_oscillation_refinements, osc_tol, osc_check, geometry_path, max_elements
+  NAMELIST /ADAPT_LST/ adaptivity,shockcp_adapt, evaluator, param_est, thr_ind, quant_ind, n_quant_ind,tol_est, difference, time_adapt, NR_adapt, freq_t_adapt, freq_NR_adapt, div_adapt, check_neutral_positivity, max_divergence_refinements, rest_adapt, osc_adapt, max_oscillation_refinements, osc_tol, osc_check, geometry_path, max_elements, &
+       projection_recovery_distance_ratio
   NAMELIST /GEOM_LST/ R0, q
   NAMELIST /MAGN_LST/ amp_rmp,nbCoils_rmp,torElongCoils_rmp,parite,nbRow,amp_ripple,nbCoils_ripple,triang,ellip ! RMP and Ripple
   NAMELIST /TIME_LST/ dt0, nts, tfi, tsw, tis, time_mode, time_units, t_start, t_final, &
@@ -182,6 +184,7 @@ SUBROUTINE READ_input()
   n_quant_ind = -1
   max_divergence_refinements = 4
   max_elements = 0
+  projection_recovery_distance_ratio = 1.d-2 ! Preserve the historical limit when omitted.
   max_oscillation_refinements = 10
   check_neutral_positivity = .TRUE.
   compute_from_flux = .TRUE.
@@ -664,6 +667,11 @@ SUBROUTINE READ_input()
   adapt%adaptivity        = adaptivity
   IF (max_elements .LT. 0) ERROR STOP 'max_elements must be nonnegative (0 leaves mesh size unlimited)'
   adapt%max_elements      = max_elements
+  IF (.NOT. ieee_is_finite(projection_recovery_distance_ratio) .OR. &
+      projection_recovery_distance_ratio .LT. 0.d0) THEN
+     ERROR STOP 'projection_recovery_distance_ratio must be finite and nonnegative'
+  ENDIF
+  adapt%projection_recovery_distance_ratio = projection_recovery_distance_ratio
   adapt%shockcp_adapt     = shockcp_adapt
   num_param_est        = COUNT(param_est /= -1)
   ALLOCATE(adapt%param_est(num_param_est))
@@ -1143,6 +1151,8 @@ SUBROUTINE READ_input()
         PRINT *, '        ***************** Adaptivity ****************************'
         PRINT *, '                - adaptivity :                                         ', adapt%adaptivity
         PRINT *, '                - maximum global adaptive elements (0 = unlimited):    ', adapt%max_elements
+        PRINT *, '                - projection recovery gap / shortest old edge:         ', &
+             adapt%projection_recovery_distance_ratio
         PRINT *, '                - adaptivity evaluator:                                ', adapt%evaluator
         PRINT *, '                - option for shock capturing:                          ', adapt%shockcp_adapt
         PRINT *, '                - threshold for the indicator:                         ', adapt%thr_ind

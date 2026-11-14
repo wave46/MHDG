@@ -593,6 +593,7 @@ MODULE types
   TYPE adaptivity_type
      LOGICAL             :: adaptivity ! Adaptivity enabled or not (1 or 0)
      INTEGER             :: max_elements = 0 ! Global adaptive triangle limit; 0 leaves mesh size unlimited
+     REAL*8              :: projection_recovery_distance_ratio = 1.d-2 ! Nearest-point gap / shortest old corner edge
      INTEGER             :: shockcp_adapt
      INTEGER             :: evaluator ! 1,2,3 (indicator, estimator, both)
      REAL*8              :: thr_ind ! Threshold for the detection of oscillations (indicator)
