@@ -89,9 +89,13 @@
   ! in private flux and beyond the model cutoff. Plasma equations only.
   ! 0 disables; use e.g. 1,2,3,4 to select all four plasma channels.
   band_equations = 0
+  diffusion_coordinate = 'rho_pol_norm'
   band_diff_phys = 0.05,0.05,0.10,0.10  ! [m^2/s]: particles, momentum, ions, electrons
   band_center = 1.0                   ! rho_pol_norm
   band_width = 0.02                   ! full flat-plateau width
   ! band_transition_width = 0.005     ! shared shoulder width; default band_width/4
+  ! OMP alternative: diffusion_coordinate='omp_distance', band_center=0.0,
+  ! band_width=0.004 gives a 4 mm plateau and default 1 mm shoulders.
+  ! OMP positions are R-R_sep [m] at Z=Z_axis; resolved rho values are printed/saved.
   ! The band can go below the model floors above; pinch remains unchanged.
 /

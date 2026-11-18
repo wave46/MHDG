@@ -30,6 +30,7 @@ def main():
         ("negative_shoulder", "band_equations=1, band_transition_width=-2", "positive or -1"),
         ("across_axis", "band_equations=1, band_center=.001", "landmarks must be nonnegative"),
         ("unresolved", "band_equations=1, band_width=1.e-30", "strictly increasing"),
+        ("coordinate", "diffusion_coordinate='unknown'", "diffusion_coordinate must be"),
     ]
     direct = [
         ("negative", "entries must be in [0,4]"),
@@ -38,6 +39,18 @@ def main():
         ("nan", "coordinates must be finite"),
         ("infinity", "finite and nonnegative"),
         ("no_geometry", "requires the magnetic geometry cache"),
+    ]
+    omp_cases = [
+        ("omp", None),
+        ("omp_reversed", None),
+        ("omp_outside", "outside the outboard equilibrium grid"),
+        ("omp_past_axis", "outside the outboard equilibrium grid"),
+        ("omp_no_geometry", "requires the magnetic equilibrium and geometry cache"),
+        ("omp_bad_scale", "finite positive equilibrium length scale"),
+        ("omp_no_crossing", "Could not locate the OMP separatrix"),
+        ("omp_unresolved", "Mapped OMP band boundaries must be strictly increasing"),
+        ("omp_unprepared", "must be prepared for the current equilibrium"),
+        ("omp_stale", "must be prepared for the current equilibrium"),
     ]
     with tempfile.TemporaryDirectory(prefix="mhdg-transport-band-") as scratch:
         for name, entries, expected in valid + invalid:
@@ -78,7 +91,35 @@ def main():
                                  capture_output=True, text=True, timeout=15)
             if run.returncode == 0 or expected not in run.stdout + run.stderr:
                 raise SystemExit(f"FAIL: direct {argument}\n{run.stdout}{run.stderr}")
-    print(f"transport band input/runtime/output checks: {len(valid) + len(invalid) + len(direct)} PASS")
+        for argument, expected in omp_cases:
+            directory = Path(scratch) / argument
+            directory.mkdir()
+            (directory / "transport_model.nml").write_text(
+                "&TRANSPORT_MODEL_1D_LST\n diffusion_coordinate='omp_distance'\n"
+                " band_equations=1,2,3,4, band_center=0, band_width=.02\n"
+                " band_diff_phys=.016,.032,.048,.064\n/\n"
+            )
+            run = subprocess.run([str(executable), argument], cwd=directory,
+                                 capture_output=True, text=True, timeout=15)
+            output = run.stdout + run.stderr
+            if expected:
+                if run.returncode == 0 or expected not in output:
+                    raise SystemExit(f"FAIL: {argument}\n{output}")
+                continue
+            if run.returncode != 0 or "transport OMP band checks: PASS" not in output:
+                raise SystemExit(f"FAIL: {argument}\n{output}")
+            assert output.count("Transport band: OMP distance [m] -> rho_pol_norm") == 4, output
+            with h5py.File(directory / "transport_band_omp.h5") as handle:
+                params = handle["transport_1d/params"]
+                s = 2.0 + np.array([-.015, -.01, 0., .01, .015]) / .5
+                expected_rho = np.sqrt((s * s + .1 * s**3) / 4.8)
+                np.testing.assert_allclose(params["band_rho"][()], expected_rho, atol=1e-10)
+                np.testing.assert_allclose(params["band_center"][()], 0.)
+                np.testing.assert_allclose(params["band_width"][()], .02)
+                np.testing.assert_allclose(params["band_transition_width"][()], .005)
+                assert b"omp_distance" in params["band_coordinate"][()].tobytes()
+    count = len(valid) + len(invalid) + len(direct) + len(omp_cases)
+    print(f"transport band input/runtime/output checks: {count} PASS")
 
 
 if __name__ == "__main__":

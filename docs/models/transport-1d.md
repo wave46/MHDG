@@ -56,6 +56,7 @@ near a selected flux surface. Enable it with plasma equation IDs in
 follow the same convention as `pinch_equations` below. Neutrals are excluded.
 
 ```fortran
+  diffusion_coordinate = 'rho_pol_norm'
   band_equations = 1,2,3,4
   band_diff_phys = 0.05,0.05,0.10,0.10  ! [m^2/s]: particles, momentum, ions, electrons
   band_center = 1.0
@@ -63,13 +64,31 @@ follow the same convention as `pinch_equations` below. Neutrals are excluded.
   ! band_transition_width = 0.005      ! default: band_width/4 on each side
 ```
 
-Locations and widths use `rho_pol_norm`. `band_width` is the **full flat-plateau
-width**. Each shoulder has width `band_transition_width`; omit it or set `-1`
+`diffusion_coordinate` defaults to `rho_pol_norm`. `band_width` is the **full
+flat-plateau width**. Each shoulder has width `band_transition_width`; omit it or set `-1`
 for the automatic quarter-width. With the example above, the plateau spans
 0.99–1.01 and the shoulders recover the background at 0.985 and 1.015.
 The full affected interval must lie at nonnegative rho, with positive widths
 and distinct boundaries. Active diffusion targets must be finite and
 nonnegative. Heat targets use the solver's [heat-diffusion convention](#coordinates-and-normalization).
+
+To specify the band in metres at the outer midplane, use:
+
+```fortran
+  diffusion_coordinate = 'omp_distance'
+  band_center = 0.0       ! R - R_sep [m], positive outward, at Z = Z_axis
+  band_width = 0.004      ! 4 mm flat plateau; default 1 mm shoulder on each side
+```
+
+The solver locates the outboard separatrix and evaluates equilibrium flux at
+the center and all four boundaries. Each position maps separately to
+`rho_pol_norm`; the intervening smooth shoulders are evaluated in rho. Equal
+OMP shoulder widths can therefore become unequal rho widths. All positions
+must lie on the increasing normalized-flux outboard branch within the equilibrium
+grid. The mapping is refreshed when the settings or equilibrium change and
+rebuilt after model reinitialization. Rank zero prints the input metre positions
+and corresponding rho values whenever the mapping is prepared. Runtime application
+uses the prepared values without modifying geometry or shared state.
 
 The band blends the perpendicular coefficient as
 `C = (1-W)*C_background + W*C_band`, where `W` is one throughout the plateau,
@@ -322,10 +341,12 @@ the effective coefficients at every mesh point.
 
 When the band is enabled, `/transport_1d/params` additionally records
 `band_equations` (sorted and zero-padded), `band_diff` (four targets in solver
-units), `band_coordinate` (`rho_pol_norm`), `band_center`, `band_width`, the
+units), `band_coordinate` (`rho_pol_norm` or `omp_distance`), `band_center`, `band_width`, the
 effective `band_transition_width`, and `band_rho`. The five `band_rho` entries
 are the inner shoulder boundary, inner plateau boundary, center, outer plateau
-boundary and outer shoulder boundary. Saved raw profiles precede this band.
+boundary and outer shoulder boundary. Center and widths retain the input
+coordinate units (rho or metres); `band_rho` always contains normalized poloidal
+radii. Saved raw profiles precede this band.
 
 The effective pinch selection is saved as a sorted, zero-padded integer array
 at `/transport_1d/params/pinch_equations`.

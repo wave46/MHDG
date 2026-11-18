@@ -1248,7 +1248,8 @@ CONTAINS
          transport_1d_relaxation=transport_model_input%transport_1d_relaxation, &
          band_equations=transport_model_input%band_equations, band_diff_phys=transport_model_input%band_diff_phys, &
          band_center=transport_model_input%band_center, band_width=transport_model_input%band_width, &
-         band_transition_width=transport_model_input%band_transition_width)
+         band_transition_width=transport_model_input%band_transition_width, &
+         diffusion_coordinate=transport_model_input%diffusion_coordinate)
     CALL fs_transport%build_profiles(transport_model_1d%config%transport_region_policy)
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
     IF (MPIvar%glob_id == 0 .AND. transport_model_1d%config%transport_1d_relaxation < 1.d0) &

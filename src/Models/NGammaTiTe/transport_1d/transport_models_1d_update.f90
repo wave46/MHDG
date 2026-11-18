@@ -16,6 +16,7 @@ CONTAINS
        CALL this%init(fs_data%nrho, this%config%rho_edge, this%config%rho_core, this%config%rho_diffusion_model_max)
     END IF
     IF (.NOT. this%is_initialized) RETURN
+    CALL this%prepare_band()
 
     ! A same-sized grid or a new geometry must not inherit old coefficient history.
     IF (this%profile_history_ready) THEN

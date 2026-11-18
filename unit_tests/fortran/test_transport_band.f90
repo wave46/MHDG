@@ -1,11 +1,11 @@
 PROGRAM test_transport_band
   USE input_reader, ONLY: read_transport_model_input
-  USE globals, ONLY: input, transport_model_input, simpar, switch
+  USE globals, ONLY: input, transport_model_input, simpar, switch, phys
   USE MPI_OMP, ONLY: MPIvar
   USE transport_models_1d, ONLY: transport_model_1d_t
   USE magnetic_topology, ONLY: magnetic_region_core, magnetic_region_main_sol, &
        magnetic_region_private_flux, magnetic_region_undefined
-  USE magnetic_geometry_state, ONLY: magnetic_geometry_cache
+  USE magnetic_geometry_state, ONLY: magnetic_geometry_cache, magnetic_equilibrium
   USE HDF5_io_module, ONLY: HID_T, HDF5_create, HDF5_close, &
        HDF5_group_create, HDF5_group_close, HDF5_array2D_saving
   USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_value, ieee_quiet_nan, ieee_positive_inf
@@ -25,6 +25,11 @@ PROGRAM test_transport_band
   simpar%refval_length = 4.d0
   switch%transport_1d = .TRUE.
   CALL get_command_argument(1,argument)
+  IF (INDEX(argument,'omp') == 1) THEN
+     CALL check_omp_band(TRIM(argument))
+     WRITE (*,'(A)') 'transport OMP band checks: PASS'
+     STOP
+  ENDIF
   SELECT CASE (TRIM(argument))
   CASE ('negative')
      CALL model%set_config(band_equations=[-1])
@@ -103,6 +108,143 @@ PROGRAM test_transport_band
   WRITE (*,'(A)') 'transport band checks: PASS'
 
 CONTAINS
+
+  SUBROUTINE check_omp_band(mode)
+    CHARACTER(LEN=*), INTENT(IN) :: mode
+    TYPE(transport_model_1d_t) :: omp_model
+    REAL*8 :: band_start, plateau_start, plateau_end, band_end, center_rho, before
+    REAL*8 :: local_iso(6,6,1), local_ani(6,6,1), point(1), sign_flux
+    INTEGER :: topology(1), eq
+
+    input%transport_model_path = 'transport_model.nml'
+    CALL read_transport_model_input()
+    CALL omp_model%set_config(diffusion_coordinate=transport_model_input%diffusion_coordinate, &
+         band_equations=transport_model_input%band_equations, band_diff_phys=transport_model_input%band_diff_phys, &
+         band_center=transport_model_input%band_center, band_width=transport_model_input%band_width, &
+         band_transition_width=transport_model_input%band_transition_width, &
+         rho_diffusion_model_max=.9d0, transport_region_policy='core_only')
+    CALL omp_model%init(3)
+    phys%lscale = .5d0
+    sign_flux = 1.d0
+    IF (mode == 'omp_reversed') sign_flux = -1.d0
+    CALL omp_geometry(.1d0,2.d0,sign_flux)
+    SELECT CASE (mode)
+    CASE ('omp_outside')
+       CALL omp_model%set_config(band_center=2.d0)
+    CASE ('omp_past_axis')
+       CALL omp_model%set_config(band_center=-2.d0)
+    CASE ('omp_no_geometry')
+       magnetic_geometry_cache%is_initialized = .FALSE.
+    CASE ('omp_bad_scale')
+       phys%lscale = 0.d0
+    CASE ('omp_no_crossing')
+       magnetic_equilibrium%psi_lcfs = 1.d20
+    CASE ('omp_unresolved')
+       CALL omp_model%set_config(band_width=1.d-30)
+    CASE ('omp_unprepared')
+       CALL omp_model%band_edges(band_start,plateau_start,plateau_end,band_end)
+       ERROR STOP 'Unprepared OMP band accepted'
+    END SELECT
+    CALL omp_model%prepare_band()
+    IF (mode == 'omp_stale') THEN
+       magnetic_equilibrium%generation = magnetic_equilibrium%generation + 1
+       CALL omp_model%band_edges(band_start,plateau_start,plateau_end,band_end)
+       ERROR STOP 'Stale OMP band accepted'
+    ENDIF
+    IF (mode /= 'omp' .AND. mode /= 'omp_reversed') ERROR STOP 'Invalid OMP band accepted'
+    CALL check_omp_mapping(omp_model,.1d0,2.d0)
+    ! Repeated configuration/update must retain the prepared map and avoid log spam.
+    CALL omp_model%set_config(band_center=transport_model_input%band_center, &
+         band_diff_phys=transport_model_input%band_diff_phys)
+    IF (omp_model%band_geometry_generation < 0) ERROR STOP 'Unchanged OMP configuration invalidated map'
+    CALL omp_model%prepare_band()
+
+    CALL HDF5_create('transport_band_omp.h5',file_id)
+    CALL HDF5_group_create('transport_1d',file_id,group_id)
+    CALL omp_model%write_hdf5(group_id)
+    CALL HDF5_group_close(group_id)
+    CALL HDF5_close(file_id)
+
+    point = omp_model%band_center_rho
+    topology = magnetic_region_private_flux
+    local_iso = 2.d0
+    local_ani = 1.d0
+    CALL omp_model%apply_1D_diffusion(point,local_iso,local_ani,topology)
+    DO eq=1,4
+       CALL check_close(local_ani(eq,eq,1),omp_model%config%band_diff(eq),'OMP target in PFR')
+       CALL check_close(local_iso(eq,eq,1),1.d0+omp_model%config%band_diff(eq),'OMP isotropic preservation')
+    ENDDO
+
+    CALL omp_model%set_config(band_center=.003d0)
+    IF (omp_model%band_geometry_generation /= -1) ERROR STOP 'Changed OMP input retained map'
+    CALL omp_model%prepare_band()
+    CALL check_omp_mapping(omp_model,.1d0,2.d0)
+    before = omp_model%band_end_rho
+    CALL omp_model%init(5)
+    IF (omp_model%band_geometry_generation /= -1) ERROR STOP 'Reinitialization retained OMP map'
+    CALL omp_model%prepare_band()
+    CALL check_close(omp_model%band_end_rho,before,'Reinitialization changed OMP map')
+    CALL omp_geometry(.2d0,2.2d0,sign_flux)
+    CALL omp_model%prepare_band()
+    CALL check_omp_mapping(omp_model,.2d0,2.2d0)
+    IF (ABS(omp_model%band_end_rho-before) < 1.d-6) ERROR STOP 'Equilibrium change did not refresh map'
+
+    CALL omp_model%set_config(diffusion_coordinate='rho_pol_norm',band_center=1.d0)
+    CALL omp_model%band_edges(band_start,plateau_start,plateau_end,band_end,center_rho)
+    CALL check_close(center_rho,1.d0,'Coordinate switch back to rho')
+    CALL check_close(band_start,.985d0,'Rho default shoulder after coordinate switch')
+    CALL omp_model%destroy()
+    CALL magnetic_equilibrium%clear()
+    magnetic_geometry_cache%is_initialized = .FALSE.
+  END SUBROUTINE check_omp_band
+
+  SUBROUTINE omp_geometry(curvature,sep_radius,sign_flux)
+    REAL*8, INTENT(IN) :: curvature, sep_radius, sign_flux
+    REAL*8 :: r(33), z(9), psi(9,33), s
+    INTEGER :: ir, iz, ierr
+    CHARACTER(LEN=256) :: message
+
+    r = [(1.d0+.25d0*(ir-1),ir=1,33)]
+    z = [(-2.d0+.5d0*(iz-1),iz=1,9)]
+    DO ir=1,33
+       s = r(ir)-4.d0
+       psi(:,ir) = sign_flux*(s*s+curvature*s**3+(z-.25d0)**2)
+    ENDDO
+    CALL magnetic_equilibrium%init(r,z,psi,ierr,message)
+    IF (ierr /= 0) ERROR STOP 'Synthetic OMP equilibrium initialization failed'
+    magnetic_equilibrium%r_axis = 4.d0
+    magnetic_equilibrium%z_axis = .25d0
+    magnetic_equilibrium%psi_axis = 0.d0
+    magnetic_equilibrium%psi_lcfs = sign_flux*(sep_radius**2+curvature*sep_radius**3)
+    ! Exact manufactured derivatives make bicubic evaluation of this cubic exact.
+    DO ir=1,33
+       s = r(ir)-4.d0
+       magnetic_equilibrium%psi_r(:,ir) = sign_flux*(2.d0*s+3.d0*curvature*s*s)
+       magnetic_equilibrium%psi_z(:,ir) = sign_flux*2.d0*(z-.25d0)
+    ENDDO
+    magnetic_equilibrium%psi_rz = 0.d0
+    magnetic_geometry_cache%is_initialized = .TRUE.
+  END SUBROUTINE omp_geometry
+
+  SUBROUTINE check_omp_mapping(this,curvature,sep_radius)
+    TYPE(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: curvature, sep_radius
+    REAL*8 :: c
+
+    c = this%config%band_center
+    CALL check_close(this%band_start_rho,expected_omp_rho(c-.015d0,curvature,sep_radius),'OMP inner shoulder')
+    CALL check_close(this%plateau_start_rho,expected_omp_rho(c-.01d0,curvature,sep_radius),'OMP plateau start')
+    CALL check_close(this%band_center_rho,expected_omp_rho(c,curvature,sep_radius),'OMP center')
+    CALL check_close(this%plateau_end_rho,expected_omp_rho(c+.01d0,curvature,sep_radius),'OMP plateau end')
+    CALL check_close(this%band_end_rho,expected_omp_rho(c+.015d0,curvature,sep_radius),'OMP outer shoulder')
+  END SUBROUTINE check_omp_mapping
+
+  REAL*8 FUNCTION expected_omp_rho(distance,curvature,sep_radius) RESULT(value)
+    REAL*8, INTENT(IN) :: distance, curvature, sep_radius
+    REAL*8 :: s
+    s = sep_radius + distance/.5d0
+    value = SQRT((s*s+curvature*s**3)/(sep_radius**2+curvature*sep_radius**3))
+  END FUNCTION expected_omp_rho
 
   SUBROUTINE initialize_profiles(this)
     TYPE(transport_model_1d_t), INTENT(INOUT) :: this

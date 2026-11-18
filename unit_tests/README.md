@@ -138,7 +138,10 @@ The band target checks physical-input normalization and rejection, central
 plateau and smooth recovery, private-flux application beyond the modeled
 cutoff, targets below modeled floors, plasma selection, isotropic preservation,
 configuration reinitialization, and HDF5 metadata. It uses synthetic profiles
-and needs no external geometry or case files.
+and needs no external geometry or case files. It also checks nonlinear OMP
+mapping with both flux signs, printed/saved coordinate correspondence,
+configuration and equilibrium refresh, reinitialization, and rejection of
+invalid or stale mappings using a manufactured equilibrium.
 
 The topology target also checks that reversing the psi convention preserves the
 outward normalized-flux direction.  The second target checks all four supported

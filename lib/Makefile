@@ -634,8 +634,8 @@ transport_models_1d_diffusion_bohm_gyrobohm.o : transport_models_1d_diffusion_bo
 transport_models_1d_common.F : $(SDIR)/Models/$(RMDL)/transport_1d/transport_models_1d_common.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-transport_models_1d_common.o : transport_models_1d_common.F transport_models_1d.o flux_surface_transport_data.o globals.o physics.o interpolation.o
-	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
+transport_models_1d_common.o : transport_models_1d_common.F transport_models_1d.o flux_surface_transport_data.o globals.o physics.o interpolation.o magnetic_geometry_state.o MPI_OMP.o
+	$(FC) -c $(FCFLAGS) -fno-finite-math-only $(INC) $< -o $@
 
 transport_models_1d_io.F : $(SDIR)/Models/$(RMDL)/transport_1d/transport_models_1d_io.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@

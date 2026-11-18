@@ -535,6 +535,9 @@ CONTAINS
 
 #endif
 
+    ! Output may follow a remesh/rollback before the next transport update.
+    IF (switch%transport_1d) CALL transport_model_1d%prepare_band()
+
 #ifdef TOR3D
     IF (MPIvar%glob_size .GT. 1) THEN
        WRITE (nip, *) MPIvar%ipol

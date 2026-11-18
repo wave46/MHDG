@@ -27,6 +27,9 @@ MODULE transport_models_1d
      INTEGER :: nrho = 0
      REAL*8, ALLOCATABLE :: rho_grid(:)
      TYPE(transport_model_config_t) :: config
+     INTEGER :: band_geometry_generation = -1
+     REAL*8 :: band_start_rho = 0.d0, plateau_start_rho = 0.d0
+     REAL*8 :: band_center_rho = 0.d0, plateau_end_rho = 0.d0, band_end_rho = 0.d0
      REAL*8, ALLOCATABLE :: chi_i_fs(:)
      REAL*8, ALLOCATABLE :: chi_e_fs(:)
      REAL*8, ALLOCATABLE :: d_fs(:)
@@ -37,6 +40,8 @@ MODULE transport_models_1d
      PROCEDURE :: destroy => tm1d_destroy
      PROCEDURE :: reset_profile_history => tm1d_reset_profile_history
      PROCEDURE :: set_config => tm1d_set_config
+     PROCEDURE :: prepare_band => tm1d_prepare_band
+     PROCEDURE :: band_edges => tm1d_band_rho_edges
      PROCEDURE :: update_from_flux_surfaces => tm1d_update_from_flux_surfaces
      PROCEDURE :: compute_pinch_profile => tm1d_compute_pinch_profile
      PROCEDURE :: interp_transport => tm1d_interp_transport
@@ -49,6 +54,14 @@ MODULE transport_models_1d
   TYPE(transport_model_1d_t), SAVE :: transport_model_1d
 
   INTERFACE
+     MODULE SUBROUTINE tm1d_prepare_band(this)
+       CLASS(transport_model_1d_t), INTENT(INOUT) :: this
+     END SUBROUTINE tm1d_prepare_band
+     MODULE SUBROUTINE tm1d_band_rho_edges(this, band_start, plateau_start, plateau_end, band_end, center)
+       CLASS(transport_model_1d_t), INTENT(IN) :: this
+       REAL*8, INTENT(OUT) :: band_start, plateau_start, plateau_end, band_end
+       REAL*8, INTENT(OUT), OPTIONAL :: center
+     END SUBROUTINE tm1d_band_rho_edges
      MODULE SUBROUTINE tm1d_update_from_flux_surfaces(this, fs_data)
        CLASS(transport_model_1d_t), INTENT(INOUT) :: this
        TYPE(flux_surface_transport_t), INTENT(IN) :: fs_data
@@ -185,6 +198,7 @@ CONTAINS
     CALL this%reset_profile_history()
     this%is_initialized = .FALSE.
     this%nrho = 0
+    this%band_geometry_generation = -1
   END SUBROUTINE tm1d_clear_storage
 
   SUBROUTINE tm1d_reset_profile_history(this)
@@ -202,7 +216,7 @@ CONTAINS
        vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, &
        rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, &
        diff_e_min_phys, diff_ee_min_phys, pinch_equations, transport_1d_relaxation, &
-       band_equations, band_diff_phys, band_center, band_width, band_transition_width)
+       band_equations, band_diff_phys, band_center, band_width, band_transition_width, diffusion_coordinate)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     REAL*8, INTENT(IN), OPTIONAL :: transport_1d_relaxation
@@ -211,11 +225,18 @@ CONTAINS
     INTEGER, INTENT(IN), OPTIONAL :: pinch_equations(:)
     INTEGER, INTENT(IN), OPTIONAL :: band_equations(:)
     CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: transport_region_policy
+    CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: diffusion_coordinate
     REAL*8 :: previous_alpha
+    REAL*8 :: previous_band_center, previous_band_width, previous_band_transition
+    CHARACTER(LEN=32) :: previous_coordinate
     INTEGER :: previous_policy
 
     previous_alpha = this%config%transport_1d_relaxation
     previous_policy = this%config%transport_region_policy
+    previous_band_center = this%config%band_center
+    previous_band_width = this%config%band_width
+    previous_band_transition = this%config%band_transition_width
+    previous_coordinate = this%config%diffusion_coordinate
 
     CALL tm1d_config_apply(this%config, simpar%refval_time, simpar%refval_length, &
          rho_edge=rho_edge, rho_core=rho_core, rho_diffusion_model_max=rho_diffusion_model_max, &
@@ -231,9 +252,14 @@ CONTAINS
          diff_u_min_phys=diff_u_min_phys, diff_e_min_phys=diff_e_min_phys, &
          diff_ee_min_phys=diff_ee_min_phys, transport_1d_relaxation=transport_1d_relaxation, &
          band_equations=band_equations, band_diff_phys=band_diff_phys, &
-         band_center=band_center, band_width=band_width, band_transition_width=band_transition_width)
+         band_center=band_center, band_width=band_width, band_transition_width=band_transition_width, &
+         diffusion_coordinate=diffusion_coordinate)
     IF (previous_alpha /= this%config%transport_1d_relaxation .OR. &
          previous_policy /= this%config%transport_region_policy) CALL this%reset_profile_history()
+    IF (previous_coordinate /= this%config%diffusion_coordinate .OR. &
+         previous_band_center /= this%config%band_center .OR. &
+         previous_band_width /= this%config%band_width .OR. &
+         previous_band_transition /= this%config%band_transition_width) this%band_geometry_generation = -1
   END SUBROUTINE tm1d_set_config
 
   SUBROUTINE tm1d_finalize(this)

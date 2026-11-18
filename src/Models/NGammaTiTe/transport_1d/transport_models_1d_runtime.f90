@@ -71,7 +71,7 @@ CONTAINS
     IF (.NOT. ANY(this%config%band_enabled)) RETURN
     IF (.NOT. magnetic_geometry_cache%is_initialized) &
          ERROR STOP 'A transport band requires the magnetic geometry cache'
-    CALL tm1d_band_edges(this%config, band_start, plateau_start, plateau_end, band_end)
+    CALL this%band_edges(band_start, plateau_start, plateau_end, band_end)
     DO g = 1, SIZE(rho_pol_norm)
        SELECT CASE (region(g))
        CASE (magnetic_region_core, magnetic_region_main_sol, magnetic_region_private_flux)

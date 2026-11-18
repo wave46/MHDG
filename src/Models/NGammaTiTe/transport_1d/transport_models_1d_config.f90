@@ -24,6 +24,7 @@ MODULE transport_models_1d_config
   TYPE :: transport_model_config_t
      REAL*8 :: transport_1d_relaxation = 1.d0
      LOGICAL :: band_enabled(4) = .FALSE.
+     CHARACTER(LEN=32) :: diffusion_coordinate = 'rho_pol_norm'
      REAL*8 :: band_diff(4) = 0.d0
      REAL*8 :: band_center = 1.d0
      REAL*8 :: band_width = 0.d0
@@ -61,6 +62,7 @@ CONTAINS
 
     config%transport_1d_relaxation = 1.d0
     config%band_enabled = .FALSE.
+    config%diffusion_coordinate = 'rho_pol_norm'
     config%band_diff = 0.d0
     config%band_center = 1.d0
     config%band_width = 0.d0
@@ -99,7 +101,7 @@ CONTAINS
        rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, &
        diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys, &
        pinch_equations, transport_1d_relaxation, band_equations, band_diff_phys, &
-       band_center, band_width, band_transition_width)
+       band_center, band_width, band_transition_width, diffusion_coordinate)
     TYPE(transport_model_config_t), INTENT(INOUT) :: config
     REAL*8, INTENT(IN) :: refval_time, refval_length
     REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
@@ -109,6 +111,7 @@ CONTAINS
     INTEGER, INTENT(IN), OPTIONAL :: pinch_equations(:)
     INTEGER, INTENT(IN), OPTIONAL :: band_equations(:)
     CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: transport_region_policy
+    CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: diffusion_coordinate
     INTEGER :: policy, i, equation
     LOGICAL :: valid
 
@@ -168,6 +171,14 @@ CONTAINS
           IF (equation /= 0) config%band_enabled(equation) = .TRUE.
        ENDDO
     ENDIF
+    IF (PRESENT(diffusion_coordinate)) THEN
+       SELECT CASE (diffusion_coordinate)
+       CASE ('rho_pol_norm', 'omp_distance')
+          config%diffusion_coordinate = diffusion_coordinate
+       CASE DEFAULT
+          ERROR STOP 'diffusion_coordinate must be rho_pol_norm or omp_distance'
+       END SELECT
+    ENDIF
     IF (PRESENT(band_center)) config%band_center = band_center
     IF (PRESENT(band_width)) config%band_width = band_width
     IF (PRESENT(band_transition_width)) config%band_transition_width = band_transition_width
@@ -195,10 +206,12 @@ CONTAINS
     CALL tm1d_band_edges(config, band_start, plateau_start, plateau_end, band_end)
     IF (ANY(.NOT. ieee_is_finite([band_start,plateau_start,plateau_end,band_end]))) &
          ERROR STOP 'Band landmarks must be finite'
-    IF (band_start < 0.d0 .OR. band_start >= plateau_start .OR. &
+    IF (config%diffusion_coordinate == 'rho_pol_norm' .AND. band_start < 0.d0) &
+         ERROR STOP 'Band landmarks must be nonnegative'
+    IF (band_start >= plateau_start .OR. &
          plateau_start >= config%band_center .OR. config%band_center >= plateau_end .OR. &
          plateau_end >= band_end) &
-         ERROR STOP 'Band landmarks must be nonnegative and strictly increasing'
+         ERROR STOP 'Band landmarks must be strictly increasing'
   END SUBROUTINE tm1d_validate_band
 
   PURE SUBROUTINE tm1d_band_edges(config, band_start, plateau_start, plateau_end, band_end)
