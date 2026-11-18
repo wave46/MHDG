@@ -8,7 +8,8 @@ CONTAINS
     INTEGER(HID_T), INTENT(IN) :: parent_group_id
     INTEGER(HID_T) :: coeffs_group_id, params_group_id, diagnostics_group_id
     INTEGER :: ierr
-    INTEGER :: pinch_equations(4)
+    INTEGER :: pinch_equations(4), band_equations(4)
+    REAL*8 :: band_rho(5), band_start, plateau_start, plateau_end, band_end
 
     IF (.NOT. switch%transport_1d) RETURN
     IF (.NOT. this%is_initialized) RETURN
@@ -54,6 +55,18 @@ CONTAINS
     CALL HDF5_real_saving(params_group_id, this%config%rho_pinch_axis_width, 'rho_pinch_axis_width')
     CALL HDF5_real_saving(params_group_id, this%config%rho_pinch_model_max, 'rho_pinch_model_max')
     CALL HDF5_real_saving(params_group_id, this%config%rho_pinch_edge_width, 'rho_pinch_edge_width')
+    IF (ANY(this%config%band_enabled)) THEN
+       band_equations = PACK([1, 2, 3, 4], this%config%band_enabled, [0, 0, 0, 0])
+       CALL tm1d_band_edges(this%config, band_start, plateau_start, plateau_end, band_end)
+       band_rho = [band_start,plateau_start,this%config%band_center,plateau_end,band_end]
+       CALL HDF5_array1D_saving_int(params_group_id, band_equations, 4, 'band_equations')
+       CALL HDF5_array1D_saving(params_group_id, this%config%band_diff, 4, 'band_diff')
+       CALL HDF5_string_saving(params_group_id, 'rho_pol_norm', 'band_coordinate')
+       CALL HDF5_real_saving(params_group_id, this%config%band_center, 'band_center')
+       CALL HDF5_real_saving(params_group_id, this%config%band_width, 'band_width')
+       CALL HDF5_real_saving(params_group_id, plateau_start-band_start, 'band_transition_width')
+       CALL HDF5_array1D_saving(params_group_id, band_rho, 5, 'band_rho')
+    ENDIF
     CALL HDF5_group_close(params_group_id, ierr)
 
     CALL HDF5_group_create('diagnostics', parent_group_id, diagnostics_group_id, ierr)

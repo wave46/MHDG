@@ -84,4 +84,14 @@
   diff_u_min_phys = 0.01
   diff_e_min_phys = 0.01
   diff_ee_min_phys = 0.01
+
+  ! Optional prescribed band, applied after the modeled background, including
+  ! in private flux and beyond the model cutoff. Plasma equations only.
+  ! 0 disables; use e.g. 1,2,3,4 to select all four plasma channels.
+  band_equations = 0
+  band_diff_phys = 0.05,0.05,0.10,0.10  ! [m^2/s]: particles, momentum, ions, electrons
+  band_center = 1.0                   ! rho_pol_norm
+  band_width = 0.02                   ! full flat-plateau width
+  ! band_transition_width = 0.005     ! shared shoulder width; default band_width/4
+  ! The band can go below the model floors above; pinch remains unchanged.
 /

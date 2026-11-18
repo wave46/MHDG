@@ -131,7 +131,14 @@ make check-magnetic-geometry
 make check-transport-region-policy
 make check-transport-taper
 make check-transport-pinch
+make check-transport-band
 ```
+
+The band target checks physical-input normalization and rejection, central
+plateau and smooth recovery, private-flux application beyond the modeled
+cutoff, targets below modeled floors, plasma selection, isotropic preservation,
+configuration reinitialization, and HDF5 metadata. It uses synthetic profiles
+and needs no external geometry or case files.
 
 The topology target also checks that reversing the psi convention preserves the
 outward normalized-flux direction.  The second target checks all four supported

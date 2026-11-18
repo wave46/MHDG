@@ -9,7 +9,7 @@ MODULE transport_models_1d
   USE transport_models_1d_config, ONLY: transport_model_config_t, &
        tm1d_config_reset, tm1d_config_apply, tm1d_region_policy_name, &
        tm1d_region_is_included, tm1d_build_pinch_velocity, &
-       tm1d_particle_taper_factor
+       tm1d_particle_taper_factor, tm1d_band_edges
   USE transport_models_1d_derived, ONLY: transport_model_derived_t
   IMPLICIT NONE
 
@@ -201,12 +201,15 @@ CONTAINS
        c_pinch, nu_th, &
        vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, &
        rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, &
-       diff_e_min_phys, diff_ee_min_phys, pinch_equations, transport_1d_relaxation)
+       diff_e_min_phys, diff_ee_min_phys, pinch_equations, transport_1d_relaxation, &
+       band_equations, band_diff_phys, band_center, band_width, band_transition_width)
     CLASS(transport_model_1d_t), INTENT(INOUT) :: this
     REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     REAL*8, INTENT(IN), OPTIONAL :: transport_1d_relaxation
+    REAL*8, INTENT(IN), OPTIONAL :: band_diff_phys(4), band_center, band_width, band_transition_width
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
     INTEGER, INTENT(IN), OPTIONAL :: pinch_equations(:)
+    INTEGER, INTENT(IN), OPTIONAL :: band_equations(:)
     CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: transport_region_policy
     REAL*8 :: previous_alpha
     INTEGER :: previous_policy
@@ -226,7 +229,9 @@ CONTAINS
          rho_pinch_model_max=rho_pinch_model_max, rho_pinch_edge_width=rho_pinch_edge_width, &
          rho_blend_width=rho_blend_width, diff_n_min_phys=diff_n_min_phys, &
          diff_u_min_phys=diff_u_min_phys, diff_e_min_phys=diff_e_min_phys, &
-         diff_ee_min_phys=diff_ee_min_phys, transport_1d_relaxation=transport_1d_relaxation)
+         diff_ee_min_phys=diff_ee_min_phys, transport_1d_relaxation=transport_1d_relaxation, &
+         band_equations=band_equations, band_diff_phys=band_diff_phys, &
+         band_center=band_center, band_width=band_width, band_transition_width=band_transition_width)
     IF (previous_alpha /= this%config%transport_1d_relaxation .OR. &
          previous_policy /= this%config%transport_region_policy) CALL this%reset_profile_history()
   END SUBROUTINE tm1d_set_config

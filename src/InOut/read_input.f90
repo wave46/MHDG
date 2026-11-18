@@ -1291,7 +1291,7 @@ CONTAINS
 END SUBROUTINE READ_input
 
 SUBROUTINE read_transport_model_input()
-  USE transport_models_1d_config, ONLY: tm1d_validate_relaxation
+  USE transport_models_1d_config, ONLY: tm1d_validate_relaxation, transport_model_config_t, tm1d_config_apply
   USE globals
   USE MPI_OMP
   IMPLICIT NONE
@@ -1300,6 +1300,9 @@ SUBROUTINE read_transport_model_input()
   INTEGER :: utransport, ios
   REAL*8 :: rho_core, rho_edge, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
   INTEGER :: pinch_model, pinch_equations(4)
+  INTEGER :: band_equations(4)
+  REAL*8 :: band_diff_phys(4), band_center, band_width, band_transition_width
+  TYPE(transport_model_config_t) :: checked_config
   CHARACTER(LEN=32) :: transport_region_policy
   NAMELIST /TRANSPORT_MODEL_1D_LST/ transport_1d_relaxation, rho_core, rho_edge, rho_diffusion_model_max, &
        transport_region_policy, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, &
@@ -1307,9 +1310,14 @@ SUBROUTINE read_transport_model_input()
        vpinch_const_phys, &
        rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, &
        rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, &
-       diff_ee_min_phys
+       diff_ee_min_phys, band_equations, band_diff_phys, band_center, band_width, band_transition_width
 
   transport_1d_relaxation = transport_model_input%transport_1d_relaxation
+  band_equations = transport_model_input%band_equations
+  band_diff_phys = transport_model_input%band_diff_phys
+  band_center = transport_model_input%band_center
+  band_width = transport_model_input%band_width
+  band_transition_width = transport_model_input%band_transition_width
   rho_core = transport_model_input%rho_core
   rho_edge = transport_model_input%rho_edge
   rho_diffusion_model_max = transport_model_input%rho_diffusion_model_max
@@ -1355,6 +1363,15 @@ SUBROUTINE read_transport_model_input()
        ERROR STOP 'pinch_equations entries must be in [0,4] (0 means unused)'
 
   CALL tm1d_validate_relaxation(transport_1d_relaxation)
+  ! Validate physical band inputs using the same contract as direct configuration.
+  CALL tm1d_config_apply(checked_config, 1.d0, 1.d0, band_equations=band_equations, &
+       band_diff_phys=band_diff_phys, band_center=band_center, band_width=band_width, &
+       band_transition_width=band_transition_width)
+  transport_model_input%band_equations = band_equations
+  transport_model_input%band_diff_phys = band_diff_phys
+  transport_model_input%band_center = band_center
+  transport_model_input%band_width = band_width
+  transport_model_input%band_transition_width = band_transition_width
   transport_model_input%transport_1d_relaxation = transport_1d_relaxation
   transport_model_input%rho_core = rho_core
   transport_model_input%rho_edge = rho_edge

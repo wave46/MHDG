@@ -47,6 +47,44 @@ electron-temperature drop used in the Bohm contribution.
 The [normalization convention](#coordinates-and-normalization) below matters
 when choosing the heat-diffusion weights from literature values.
 
+### Prescribed transport band
+
+An optional band prescribes a flat central diffusion level and smooth shoulders
+that recover the existing local background. It can reduce or increase diffusion
+near a selected flux surface. Enable it with plasma equation IDs in
+`band_equations`; omission or `0` disables it. IDs, zero slots and duplicates
+follow the same convention as `pinch_equations` below. Neutrals are excluded.
+
+```fortran
+  band_equations = 1,2,3,4
+  band_diff_phys = 0.05,0.05,0.10,0.10  ! [m^2/s]: particles, momentum, ions, electrons
+  band_center = 1.0
+  band_width = 0.02
+  ! band_transition_width = 0.005      ! default: band_width/4 on each side
+```
+
+Locations and widths use `rho_pol_norm`. `band_width` is the **full flat-plateau
+width**. Each shoulder has width `band_transition_width`; omit it or set `-1`
+for the automatic quarter-width. With the example above, the plateau spans
+0.99–1.01 and the shoulders recover the background at 0.985 and 1.015.
+The full affected interval must lie at nonnegative rho, with positive widths
+and distinct boundaries. Active diffusion targets must be finite and
+nonnegative. Heat targets use the solver's [heat-diffusion convention](#coordinates-and-normalization).
+
+The band blends the perpendicular coefficient as
+`C = (1-W)*C_background + W*C_band`, where `W` is one throughout the plateau,
+zero outside the shoulders, and a cubic smoothstep across each shoulder.
+Unselected channels keep their background. The isotropic contribution is
+preserved. The analytic window supports bands narrower than the reduced grid.
+
+The background includes the existing parameter-file diffusion, imported
+addition and modeled replacement/blending. The band is applied afterward in
+core, main SOL **and private flux**, independently of the background model's
+region policy and outer cutoff. It requires the magnetic geometry cache and
+does not act in undefined regions. The prescribed target may be below
+`diff_*_min_phys`; those floors apply to the modeled background. Pinch and
+raw-profile relaxation keep their existing definitions.
+
 ### Transport 1D relaxation
 
 `transport_1d_relaxation` is the fraction of each new raw diffusion/pinch
@@ -281,6 +319,13 @@ diffusion coefficients by $L_0^2/t_0$ to obtain m²/s, and `vpinch_fs` by $L_0/t
 to obtain m/s. These profiles precede the local topology masks, diffusion
 floors, radial windows and blending used in assembly; they are not a map of
 the effective coefficients at every mesh point.
+
+When the band is enabled, `/transport_1d/params` additionally records
+`band_equations` (sorted and zero-padded), `band_diff` (four targets in solver
+units), `band_coordinate` (`rho_pol_norm`), `band_center`, `band_width`, the
+effective `band_transition_width`, and `band_rho`. The five `band_rho` entries
+are the inner shoulder boundary, inner plateau boundary, center, outer plateau
+boundary and outer shoulder boundary. Saved raw profiles precede this band.
 
 The effective pinch selection is saved as a sorted, zero-padded integer array
 at `/transport_1d/params/pinch_equations`.

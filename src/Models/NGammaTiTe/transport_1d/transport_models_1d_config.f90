@@ -8,6 +8,7 @@ MODULE transport_models_1d_config
   PUBLIC :: tm1d_region_policy_from_name, tm1d_region_policy_name
   PUBLIC :: tm1d_region_is_included, tm1d_build_pinch_velocity
   PUBLIC :: tm1d_particle_taper_factor, tm1d_validate_relaxation
+  PUBLIC :: tm1d_band_edges
   PUBLIC :: transport_region_legacy_all_regions
   PUBLIC :: transport_region_core_and_main_sol, transport_region_core_only
 
@@ -22,6 +23,11 @@ MODULE transport_models_1d_config
 
   TYPE :: transport_model_config_t
      REAL*8 :: transport_1d_relaxation = 1.d0
+     LOGICAL :: band_enabled(4) = .FALSE.
+     REAL*8 :: band_diff(4) = 0.d0
+     REAL*8 :: band_center = 1.d0
+     REAL*8 :: band_width = 0.d0
+     REAL*8 :: band_transition_width = -1.d0 ! automatic: band_width/4
      REAL*8 :: rho_edge = rho_edge_default
      REAL*8 :: rho_core = rho_core_default
      REAL*8 :: rho_diffusion_model_max = 1.d0
@@ -54,6 +60,11 @@ CONTAINS
     TYPE(transport_model_config_t), INTENT(INOUT) :: config
 
     config%transport_1d_relaxation = 1.d0
+    config%band_enabled = .FALSE.
+    config%band_diff = 0.d0
+    config%band_center = 1.d0
+    config%band_width = 0.d0
+    config%band_transition_width = -1.d0
     config%rho_edge = rho_edge_default
     config%rho_core = rho_core_default
     config%rho_diffusion_model_max = 1.d0
@@ -87,13 +98,16 @@ CONTAINS
        vpinch_const_phys, rho_pinch_axis_width, &
        rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, &
        diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys, &
-       pinch_equations, transport_1d_relaxation)
+       pinch_equations, transport_1d_relaxation, band_equations, band_diff_phys, &
+       band_center, band_width, band_transition_width)
     TYPE(transport_model_config_t), INTENT(INOUT) :: config
     REAL*8, INTENT(IN) :: refval_time, refval_length
     REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     REAL*8, INTENT(IN), OPTIONAL :: transport_1d_relaxation
+    REAL*8, INTENT(IN), OPTIONAL :: band_diff_phys(4), band_center, band_width, band_transition_width
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
     INTEGER, INTENT(IN), OPTIONAL :: pinch_equations(:)
+    INTEGER, INTENT(IN), OPTIONAL :: band_equations(:)
     CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: transport_region_policy
     INTEGER :: policy, i, equation
     LOGICAL :: valid
@@ -143,7 +157,62 @@ CONTAINS
     IF (PRESENT(diff_u_min_phys)) config%diff_u_min = diff_u_min_phys*refval_time/refval_length**2
     IF (PRESENT(diff_e_min_phys)) config%diff_e_min = diff_e_min_phys*refval_time/refval_length**2
     IF (PRESENT(diff_ee_min_phys)) config%diff_ee_min = diff_ee_min_phys*refval_time/refval_length**2
+
+    IF (PRESENT(band_equations)) THEN
+       IF (SIZE(band_equations) > 4) ERROR STOP 'band_equations accepts at most four entries'
+       IF (ANY(band_equations < 0) .OR. ANY(band_equations > 4)) &
+            ERROR STOP 'band_equations entries must be in [0,4] (0 means unused)'
+       config%band_enabled = .FALSE.
+       DO i = 1, SIZE(band_equations)
+          equation = band_equations(i)
+          IF (equation /= 0) config%band_enabled(equation) = .TRUE.
+       ENDDO
+    ENDIF
+    IF (PRESENT(band_center)) config%band_center = band_center
+    IF (PRESENT(band_width)) config%band_width = band_width
+    IF (PRESENT(band_transition_width)) config%band_transition_width = band_transition_width
+    CALL tm1d_validate_band(config, band_diff_phys)
+    IF (PRESENT(band_diff_phys)) config%band_diff = band_diff_phys*refval_time/refval_length**2
   END SUBROUTINE tm1d_config_apply
+
+  SUBROUTINE tm1d_validate_band(config, band_diff_phys)
+    TYPE(transport_model_config_t), INTENT(IN) :: config
+    REAL*8, INTENT(IN), OPTIONAL :: band_diff_phys(4)
+    REAL*8 :: targets(4), band_start, plateau_start, plateau_end, band_end
+
+    IF (.NOT. ANY(config%band_enabled)) RETURN
+    targets = config%band_diff
+    IF (PRESENT(band_diff_phys)) targets = band_diff_phys
+    IF (ANY(.NOT. ieee_is_finite(targets)) .OR. ANY(targets < 0.d0)) &
+         ERROR STOP 'Active band diffusivities must be finite and nonnegative'
+    IF (.NOT. ieee_is_finite(config%band_center) .OR. &
+         .NOT. ieee_is_finite(config%band_width) .OR. &
+         .NOT. ieee_is_finite(config%band_transition_width)) &
+         ERROR STOP 'Active band coordinates must be finite'
+    IF (config%band_width <= 0.d0) ERROR STOP 'Active band_width must be positive'
+    IF (config%band_transition_width /= -1.d0 .AND. config%band_transition_width <= 0.d0) &
+         ERROR STOP 'band_transition_width must be positive or -1 (automatic)'
+    CALL tm1d_band_edges(config, band_start, plateau_start, plateau_end, band_end)
+    IF (ANY(.NOT. ieee_is_finite([band_start,plateau_start,plateau_end,band_end]))) &
+         ERROR STOP 'Band landmarks must be finite'
+    IF (band_start < 0.d0 .OR. band_start >= plateau_start .OR. &
+         plateau_start >= config%band_center .OR. config%band_center >= plateau_end .OR. &
+         plateau_end >= band_end) &
+         ERROR STOP 'Band landmarks must be nonnegative and strictly increasing'
+  END SUBROUTINE tm1d_validate_band
+
+  PURE SUBROUTINE tm1d_band_edges(config, band_start, plateau_start, plateau_end, band_end)
+    TYPE(transport_model_config_t), INTENT(IN) :: config
+    REAL*8, INTENT(OUT) :: band_start, plateau_start, plateau_end, band_end
+    REAL*8 :: transition
+
+    transition = config%band_transition_width
+    IF (transition == -1.d0) transition = 0.25d0*config%band_width
+    plateau_start = config%band_center - 0.5d0*config%band_width
+    plateau_end = config%band_center + 0.5d0*config%band_width
+    band_start = plateau_start - transition
+    band_end = plateau_end + transition
+  END SUBROUTINE tm1d_band_edges
 
   SUBROUTINE tm1d_validate_relaxation(alpha)
     REAL*8, INTENT(IN) :: alpha

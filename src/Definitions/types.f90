@@ -485,6 +485,11 @@ MODULE types
 
   TYPE Transport_model_input_type
      REAL*8 :: transport_1d_relaxation = 1.d0
+     INTEGER :: band_equations(4) = 0
+     REAL*8 :: band_diff_phys(4) = 0.d0
+     REAL*8 :: band_center = 1.d0
+     REAL*8 :: band_width = 0.d0
+     REAL*8 :: band_transition_width = -1.d0 ! automatic: band_width/4
      REAL*8 :: rho_core = 0.8d0
      REAL*8 :: rho_edge = 0.99d0
      REAL*8 :: rho_diffusion_model_max = 1.d0

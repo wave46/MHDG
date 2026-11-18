@@ -15,6 +15,7 @@ BALANCE_DIAGNOSTICS_OBJECTS = balance_diagnostics.o \
 	balance_diagnostics_reporting.o balance_diagnostics_output.o
 
 .PHONY : clean check-magnetic-topology check-magnetic-geometry check-transport-region-policy check-transport-taper check-transport-pinch check-transport-relaxation check-neutral-flux-limiter check-neutral-wall-flux check-neutral-wall-input check-neutral-wall-diagnostics check-me-restart
+.PHONY : check-transport-band
 .PHONY : check-adaptivity-estimator
 .PHONY : check-adaptive-checkpoint
 .PHONY : check-adaptive-element-limit
@@ -70,6 +71,7 @@ clean:
 	$(RM) MHDG-* Convergence *~
 	$(RM) magnetic_topology_check magnetic_geometry_check density_chord_check
 	$(RM) transport_region_policy_check transport_taper_check transport_pinch_check transport_relaxation_check
+	$(RM) transport_band_check
 	$(RM) neutral_flux_limiter_check neutral_wall_flux_check neutral_wall_input_check neutral_wall_diagnostics_check
 	$(RM) me_restart_check
 	$(RM) adaptivity_estimator_check
@@ -140,6 +142,10 @@ check-transport-pinch : MHDG
 check-transport-relaxation : MHDG
 	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_transport_relaxation.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o transport_relaxation_check $(LIB)
 	python3 ../unit_tests/check_transport_relaxation.py ./transport_relaxation_check
+
+check-transport-band : MHDG
+	$(FC) $(FCFLAGS) $(INC) -I. -O0 -fno-fast-math -fcheck=all ../unit_tests/fortran/test_transport_band.f90 time_stepping.o newton_predictor.o $(filter-out MHDG.o Convergence.o %_check.o time_stepping.o newton_predictor.o,$(wildcard *.o)) -o transport_band_check $(LIB)
+	python3 ../unit_tests/check_transport_band.py ./transport_band_check
 
 check-neutral-flux-limiter : neutral_flux_limiter.o
 	$(FC) $(FCFLAGS) $(INC) -I. ../unit_tests/fortran/test_neutral_flux_limiter.f90 neutral_flux_limiter.o -o neutral_flux_limiter_check
@@ -640,7 +646,7 @@ transport_models_1d_io.o : transport_models_1d_io.F transport_models_1d.o flux_s
 transport_models_1d_runtime.F : $(SDIR)/Models/$(RMDL)/transport_1d/transport_models_1d_runtime.f90
 	$(CMP) -s $< $@ || $(CP) -f $< $@
 
-transport_models_1d_runtime.o : transport_models_1d_runtime.F transport_models_1d.o flux_surface_transport_data.o globals.o physics.o interpolation.o
+transport_models_1d_runtime.o : transport_models_1d_runtime.F transport_models_1d.o flux_surface_transport_data.o globals.o physics.o interpolation.o magnetic_geometry_state.o
 	$(FC) -c $(FCFLAGS) $(INC)  $< -o $@
 
 transport_models_1d_pinch.F : $(SDIR)/Models/$(RMDL)/transport_1d/transport_models_1d_pinch.f90
