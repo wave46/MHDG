@@ -57,7 +57,7 @@ derivative contributions to the current actuator value. Set its gains in
 | --- | --- | --- |
 | $K_p$ (proportional) | `feedback_propotional_gain` | `feedback_propotional_gain_xpr` |
 | $K_i$ (integral) | `feedback_integral_gain` | `feedback_integral_gain_xpr` |
-| [$K_d$ (derivative)](#derivative-timing) | `feedback_derivative_gain` | `feedback_derivative_gain_xpr` |
+| $K_d$ ([derivative](#derivative-timing)) | `feedback_derivative_gain` | `feedback_derivative_gain_xpr` |
 
 The spelling `propotional` is part of the input format. Gains use dimensional
 density errors and seconds; choose their values for the actuator's units and
@@ -140,13 +140,13 @@ Supply a **two-way chord-integrated density signal**, as in a double-pass
 experimental measurement. The controller divides this supplied signal by two
 before comparing it with the simulated one-way ion-density integral:
 
-$$
+```math
 r(t) = \frac{N_{\mathrm{target,file}}(t)}{2},
 \qquad
 y(t) \simeq \int_{\mathrm{chord}} n_i(R,Z,t)\,\mathrm{d}\ell,
 \qquad
 e = r-y.
-$$
+```
 
 Here $n_i$ is the evolved ion density and $r,y$ are in m⁻². The chord is the
 straight segment between the supplied endpoints. Double a one-way target
@@ -172,11 +172,11 @@ endpoint without accumulating rejected feedback updates.
 
 Each controller adds its contributions to the current actuator value $a$:
 
-$$
+```math
 a_{\mathrm{trial}} = a + K_p e + K_i I + D,
 \qquad
 a_{\mathrm{new}} = \max(a_{\mathrm{trial}},0).
-$$
+```
 
 $I$ is the stored integral accumulator and $D$ is the derivative contribution
 defined below. Actuators have a lower bound of zero; the controller imposes
@@ -192,12 +192,12 @@ controller evaluation stored target $r_{\mathrm{prev}}$, measurement
 $y_{\mathrm{prev}}$ and measurement time $t_{\mathrm{prev}}$, the derivative
 contribution is
 
-$$
+```math
 D = K_d\left[
 \frac{r(t+h)-r_{\mathrm{prev}}}{h}
 -\frac{y(t)-y_{\mathrm{prev}}}{t-t_{\mathrm{prev}}}
 \right].
-$$
+```
 
 Separate intervals avoid artificial derivative spikes when the timestep
 changes; equal intervals recover the error-difference formula. The first

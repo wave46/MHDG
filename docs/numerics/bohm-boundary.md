@@ -7,33 +7,33 @@ contains element gradients. These are weak face conditions.
 
 ## Target and weights
 
-With $s_n=\operatorname{sign}(b\cdot\nu)$, define
+With $s_n=\mathrm{sign}(b\cdot\nu)$, define
 
-$$
+```math
 M=\frac{s_n\widehat U_2}{\widehat U_1c_s(\widehat U)},\qquad
 E=\max(\widehat U_3,10^{-20}),\qquad
 \beta=\frac{E}{E+E_{\rm th}}.
-$$
+```
 
 `bohm_energy_thresh` is **already dimensionless**: it is read directly in
 the same units as $\widehat U_3$, without further input scaling. It is an ion
 **total energy-density** scale, including parallel kinetic energy, not an eV
 cutoff or a density cutoff separately.
 
-With the current physical normalization, $n_{\rm ref}=10^{19}$ m$^{-3}$,
+With the current physical normalization, $n_{\rm ref}=10^{19}$ m⁻³,
 $u_{\rm ref}\simeq1.384\times10^4$ m/s and
 $E_{\rm ref}=m_i u_{\rm ref}^2/e\simeq4.00$ eV,
 
-$$
+```math
 \widehat U_3=\frac{n_i}{n_{\rm ref}}\left[
 \frac{3T_i[\mathrm{eV}]}{2E_{\rm ref}[\mathrm{eV}]}
 +\frac12\left(\frac{u_\parallel}{u_{\rm ref}}\right)^2\right].
-$$
+```
 
 For example, $E_{\rm th}=2\times10^{-4}$ corresponds at zero flow to
-$n_iT_i\simeq5.34\times10^{15}$ eV m$^{-3}$: about **0.053 eV at
-$10^{17}$ m$^{-3}$**, or **0.1 eV at $5.3\times10^{16}$ m$^{-3}$**.
-At $10^{17}$ m$^{-3}$ the total energy is **0.080 eV per ion** at this
+$n_iT_i\simeq5.34\times10^{15}$ eV m⁻³: about **0.053 eV at
+$10^{17}$ m⁻³**, or **0.1 eV at $5.3\times10^{16}$ m⁻³**.
+At $10^{17}$ m⁻³ the total energy is **0.080 eV per ion** at this
 threshold. At zero flow it equals $3T_i/2$, explaining why this energy
 estimate and the corresponding ion temperature differ.
 At this energy density $\beta=1/2$; parallel flow increases the energy used
@@ -46,14 +46,14 @@ zero derivative at and below its clipping point. $E_{\rm th}=0$ gives $\beta=1$.
 
 For the clipped cubic $S(z)=z^2(3-2z)$ on $(0,1)$, zero below and one above,
 
-$$
+```math
 A=S\!\left(\frac{|b\cdot\nu|}{\texttt{bohmth}}\right),\qquad
 w=1-S\!\left(\frac{M-1/\beta}{0.20}\right),
-$$
+```
 
-$$
+```math
 p_0=w(1-\beta A),\qquad p_s=w\beta A,\qquad p_F=1-w.
-$$
+```
 
 The coefficients are dimensionless weights, not independent constants:
 
@@ -82,12 +82,12 @@ fixed during Newton.
 
 For diagonal stabilization, the momentum equation is
 
-$$
+```math
 B_2=\tau_{22}\left[p_ss_nc_s\widehat U_1+p_FU_2-\widehat U_2\right]
 -r_g g_2(\widehat U,Q)=0,\qquad
 r_g=\begin{cases}1,&\texttt{bohm\_momentum\_always\_include\_diffusion=true},\\
 p_F,&\texttt{false}.\end{cases}
-$$
+```
 
 $g_2$ is the full normal diffusive momentum flux. `bohm_momentum_always_include_diffusion` defaults
 to `true`: full diffusion remains in all branches and can offset the target
@@ -95,9 +95,9 @@ velocity. The imposed branch is then a mixed condition. This changes the
 boundary equation, not just the Newton iteration: on the fully imposed
 branch,
 
-$$
+```math
 M=\beta A-\frac{s_ng_2}{\tau_{22}\widehat U_1c_s}.
-$$
+```
 
 Diffusion can shift Mach below or above the target $\beta A$, including
 below one when $A=\beta=1$. With `false`, the
@@ -131,18 +131,18 @@ angle, suppression and Mach helpers. HDG assembly owns matrix insertion.
 Let $c=p_ss_nc_s$ and $f=p_F$. With tau and transport held fixed, the added
 momentum terms are
 
-$$
+```math
 \frac{\partial B_2}{\partial U_j}=\tau_{22}f\delta_{j2},\qquad
 \frac{\partial B_2}{\partial Q}=-r_g\frac{\partial g_2}{\partial Q},
-$$
+```
 
-$$
+```math
 \frac{\partial B_2}{\partial\widehat U_j}
 =\tau_{22}\left[c\delta_{j1}+\widehat U_1\frac{\partial c}{\partial\widehat U_j}
 +U_2\frac{\partial f}{\partial\widehat U_j}-\delta_{j2}\right]
 -r_g\frac{\partial g_2}{\partial\widehat U_j}
 -g_2\frac{\partial r_g}{\partial\widehat U_j}.
-$$
+```
 
 | Contribution | Destination |
 |---|---|
@@ -150,12 +150,12 @@ $$
 | Trace momentum, target density, sound speed and weight derivatives | `All` |
 | Direct and $W_2$ gradient derivatives | `Alq` |
 | $W_2$ trace derivatives | `All` |
-| Optional diffusion-weight derivative $-g_2\,\partial p_F/\partial\widehat U$ | `All`; its contraction with $\widehat U$ also enters affine `fh` |
-| $\tau_{22}(\widehat U_1\,\partial c/\partial\widehat U+U_2\,\partial f/\partial\widehat U)\cdot\widehat U$ | Affine `fh` |
+| Optional diffusion-weight derivative $`-g_2\,\partial p_F/\partial\widehat U`$ | `All`; its contraction with $\widehat U$ also enters affine `fh` |
+| $`\tau_{22}(\widehat U_1\,\partial c/\partial\widehat U+U_2\,\partial f/\partial\widehat U)\cdot\widehat U`$ | Affine `fh` |
 
 The same $r_g$ scales direct and $W_2$ diffusion and all their state/gradient
 derivatives. Since $p_F=1-\delta$, the optional coefficient derivative is
-$+g_2\,\partial\delta/\partial\widehat U$. It adds no element-state
+$`+g_2\,\partial\delta/\partial\widehat U`$. It adds no element-state
 column: the weights depend on the trace. Balance diagnostics use the same
 multiplier for both diffusion contributions.
 

@@ -3,7 +3,9 @@
 In `NUMER_LST`, `newton_convergence` selects `update` (default, existing `tNR`
 test), `residual`, or `both`. Residual acceptance requires
 
-$$ r_k\leq\varepsilon_{\mathrm{abs}}+\varepsilon_{\mathrm{rel}}r_0, $$
+```math
+r_k\leq\varepsilon_{\mathrm{abs}}+\varepsilon_{\mathrm{rel}}r_0,
+```
 
 where `residual_atol` and `residual_rtol` set the two tolerances. Their defaults,
 `1.d-6` and `1.d-4`, are provisional. `both` additionally requires the preceding
@@ -21,7 +23,9 @@ Newton loop follows this sequence:
 3. If the selected residual criterion and state-acceptance policy pass, accept $X_k$.
 4. Otherwise solve for a correction and apply the damping factor $\lambda$:
 
-   $$ J_k\Delta X=-F(X_k),\qquad X_{k+1}=X_k+\lambda\Delta X. $$
+```math
+J_k\Delta X=-F(X_k),\qquad X_{k+1}=X_k+\lambda\Delta X.
+```
 
 The next iteration repeats steps 1–2 at $X_{k+1}$ to evaluate $F(X_{k+1})$.
 With `update` stopping, the solver instead accepts $X_{k+1}$ when its update
@@ -61,13 +65,13 @@ These describe the saved run; restart controls come from the current input.
 
 For element state $U$, gradient $Q$, and trace $\widehat U$, the assembled blocks give
 
-$$
+```math
 \begin{aligned}
 R_U^e &= A_{uu}U+A_{uq}Q+A_{ul}\widehat U_{\mathrm{local}}+A_{ul,\mathrm{dir}}-S,\\
 R_Q^e &= Q+M_Q^{-1}(A_{qu}U+A_{ql}\widehat U_{\mathrm{local}}+A_{ql,\mathrm{dir}}),\\
 R_{\widehat U}^e &= A_{lu}U+A_{lq}Q+A_{ll}\widehat U_{\mathrm{global}}-f_h.
 \end{aligned}
-$$
+```
 
 $S$ and $f_h$ include boundary data and affine linearization corrections, as well
 as physical terms. Transient conservation includes the assembled BDF/history
@@ -80,13 +84,13 @@ uses fixed positive reference $s_j$, set by `residual_scales(j)` (default one).
 All references are in solver units; local density or temperature is never a divisor.
 For direction $d$, the local squared norms are
 
-$$
+```math
 \begin{aligned}
 \ell_{U,j,e}^2 &= \frac{(R_{U,j}^e)^T M_e^{-1}R_{U,j}^e}{V_e s_j^2},\\
 \ell_{Q,j,e}^2 &= \frac{\sum_d(R_{Q,j,d}^e)^T M_eR_{Q,j,d}^e}{N_{\mathrm{dim}}V_e s_j^2},\\
 \ell_{\widehat U,j,f}^2 &= \frac{(R_{\widehat U,j}^f)^T M_f^{-1}R_{\widehat U,j}^f}{S_f s_j^2}.
 \end{aligned}
-$$
+```
 
 Each residual here is a vector over local nodal test functions. Conservation and
 trace use inverse mass; the already normalized gradient uses mass. Global block/

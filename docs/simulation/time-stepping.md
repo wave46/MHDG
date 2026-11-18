@@ -88,11 +88,11 @@ be at least `dt_min`; a positive `dt_max` must be at least both `dt0` and
 `t_final`. With `'seconds'`, inputs are normalized once during initialization.
 With `'normalized'`, supply solver time units:
 
-$$
+```math
 t_{\mathrm{physical}} = t_0\widehat{t},
 \qquad
 \Delta t_{\mathrm{physical}} = t_0\Delta\widehat{t}.
-$$
+```
 
 The time reference $t_0$ is saved as
 `/simulation_parameters/adimensionalization/time_scale`. Equilibrium,
@@ -162,27 +162,27 @@ accepted intervals establish history. It leaves the BDF1 equations unchanged.
 For each field $y$ in the conservative variables, gradients and independent
 face trace, the guess uses one common weight:
 
-$$
+```math
 y_{\mathrm{guess}} = y_n + w(y_n-y_{n-1}),
 \qquad
 w = \min\!\left(1,\frac{h}{t_n-t_{n-1}}\right).
-$$
+```
 
 $h$ is the proposed interval. The cap limits extrapolation to one previous
 accepted change when the timestep grows. Prediction is attempted only when
 the two latest accepted rates change by no more than
 `newton_predictor_rate_limit` (default `0.35`, or 35%):
 
-$$
+```math
 v_{\mathrm{previous}}=\frac{y_{n-1}-y_{n-2}}{t_{n-1}-t_{n-2}},
 \qquad
 v_{\mathrm{current}}=\frac{y_n-y_{n-1}}{t_n-t_{n-1}},
-$$
+```
 
-$$
+```math
 C_y=\frac{\lVert v_{\mathrm{current}}-v_{\mathrm{previous}}\rVert}
 {\max(\lVert v_{\mathrm{current}}\rVert,\lVert v_{\mathrm{previous}}\rVert)}.
-$$
+```
 
 The largest $C_y$ must satisfy the limit; if both rates vanish, $C_y=0$.
 Otherwise ordinary Newton runs while history continues updating. This is a

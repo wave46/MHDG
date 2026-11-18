@@ -13,11 +13,11 @@ the constructor does not validate lengths, ordering or finiteness.
 
 Within each interval, the interpolant has the form
 
-$$
+```math
 S_i(x)=a_i(x-x_i)^3+b_i(x-x_i)^2+c_i(x-x_i)+d_i,
 \qquad
 S_i'(x)=3a_i(x-x_i)^2+2b_i(x-x_i)+c_i.
-$$
+```
 
 It passes through the supplied values with continuous first and second
 derivatives. End conditions are

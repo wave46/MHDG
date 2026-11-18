@@ -10,11 +10,11 @@ In the 2D NGammaTiTe family, $U$ is the element state, $\widehat U$ the
 independent face trace, and $Q$ the element gradient variable. Constitutive
 coefficients use
 
-$$
+```math
 D_n=D_n(U),\quad D_k=D_k(U)\quad\text{in the volume},
 \qquad
 D_n=D_n(\widehat U),\quad D_k=D_k(\widehat U)\quad\text{on faces}.
-$$
+```
 
 The face convention includes interior, periodic, MPI partition and physical
 boundary faces. Gradients remain element quantities. The neutral limiter

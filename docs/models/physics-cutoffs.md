@@ -37,7 +37,7 @@ These are physical electron temperatures, converted once to thresholds on
 | Positive density, $0.1<T_e<1$ eV | $w(T_e)\eta(T_e)j_\phi^2$ | Derivative of both the weight and resistivity |
 | Positive density, $T_e\ge1$ eV | Original temperature-dependent law | Derivative of that law |
 
-For $x=(T_e-0.1\,\mathrm{eV})/(0.9\,\mathrm{eV})$, the transition weight is
+For $`x=(T_e-0.1\,\mathrm{eV})/(0.9\,\mathrm{eV})`$, the transition weight is
 $w=3x^2-2x^3$. The shared `smooth_transition` utility clips this cubic to zero
 below $x=0$ and one above $x=1$, with zero slope at both endpoints. The source
 and its state Jacobian are continuous at both temperature thresholds.

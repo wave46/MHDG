@@ -108,7 +108,7 @@ also evaluated on the current mesh.
 Let $m_0$, $n_0$, $u_0$ and $t_0$ be the solver's reference mass, density,
 speed and time. The energy-density and power-density scales are
 
-$$
+```math
 \begin{aligned}
 \mathcal E_0 &= m_0 n_0 u_0^2, \\
 S_{\mathrm{heating},0} &= \frac{\mathcal E_0}{t_0}, \\
@@ -116,7 +116,7 @@ S_{\mathrm{heating},0} &= \frac{\mathcal E_0}{t_0}, \\
 &= \frac{S_{\mathrm{heating},s}}{S_{\mathrm{heating},0}},
 \qquad s\in\{i,e\}.
 \end{aligned}
-$$
+```
 
 Here $\mathcal E_0$ is in J/m³, $S_{\mathrm{heating},0}$ is in W/m³, and
 $\widehat S_{\mathrm{heating},s}$ is the normalized source used in the

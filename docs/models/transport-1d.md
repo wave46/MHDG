@@ -52,9 +52,9 @@ when choosing the heat-diffusion weights from literature values.
 `transport_1d_relaxation` is the fraction of each new raw diffusion/pinch
 profile used per update, with finite $0<\alpha\le1$ and default $\alpha=1$:
 
-$$
+```math
 C_k=(1-\alpha)C_{k-1}+\alpha C_{\mathrm{model}}(U_k,Q_k).
-$$
+```
 
 The first update uses the full proposal. Smaller values damp coefficient
 feedback while preserving its converged fixed point. The setting is saved
@@ -139,45 +139,45 @@ and code names.
 
 The mixed Bohm / gyro-Bohm model is:
 
-$$
+```math
 \chi_i = c_{\mathrm{B},i}\,\chi_{\mathrm{B}} + c_{\mathrm{gB},i}\,\chi_{\mathrm{gB}},
 \qquad
 \chi_e = c_{\mathrm{B},e}\,\chi_{\mathrm{B}} + c_{\mathrm{gB},e}\,\chi_{\mathrm{gB}}.
-$$
+```
 
 with
 
-$$
+```math
 \chi_{\mathrm{B}}
 = \rho_s c_s q^2 a\,
 \frac{\left|\partial_r p_e\right|}{\max(p_e,\varepsilon)}\,
 \Delta T_e,
-$$
+```
 
-$$
+```math
 \chi_{\mathrm{gB}}
 = \rho_s^2 c_s\,
 \frac{\left|\partial_r T_e\right|}{\max(T_e,\varepsilon)},
-$$
+```
 
 and
 
-$$
+```math
 \Delta T_e
 = \frac{T_e(\rho_{\mathrm{core}})-T_e(\rho_{\mathrm{edge}})}
         {\max\!\left(T_e(\rho_{\mathrm{edge}}),\varepsilon\right)}.
-$$
+```
 
 The particle and momentum transport are then built as
 
-$$
+```math
 d_{\mathrm{fs}}
 = c_{\mathrm{B},n}\,
 \max\!\left(1-c_{\mathrm{B},n,\rho}\rho_{\mathrm{pol,n}},0\right)\,
 \frac{\chi_i\chi_e}{\max(\chi_i+\chi_e,\varepsilon)},
 \qquad
 \nu_{\mathrm{mom}} = \mathrm{Pr}\,\chi_i.
-$$
+```
 
 The particle-diffusion taper decreases linearly with normalized poloidal
 radius and is bounded below by zero. Its default slope is
@@ -192,36 +192,36 @@ particle-pinch models; they do not define MHDG's equation selection or sign.
 
 1. Militello-style collisionality suppression
 
-$$
+```math
 V_{\mathrm{pinch}}
-= \min\!\left(1,\exp\!\left[1-\frac{\nu_*}{\max(\nu_{\mathrm{th}},\varepsilon)}\right]\right)
+= \min\!\left(1,\exp\!\left[1-\frac{\nu_{\ast}}{\max(\nu_{\mathrm{th}},\varepsilon)}\right]\right)
 \; c_{\mathrm{pinch}}\, d_{\mathrm{fs}}\,
 \frac{\rho_{\mathrm{pol,n}}}{\max(a_{\mathrm{minor}},\varepsilon)}
-$$
+```
 
 2. Geometric / Polevoi-style baseline
 
-$$
+```math
 V_{\mathrm{pinch}}
 = c_{\mathrm{pinch}}\, d_{\mathrm{fs}}\,
 \frac{\rho_{\mathrm{pol,n}}}{\max(a_{\mathrm{minor}},\varepsilon)}
-$$
+```
 
 3. Constant pinch
 
-$$
+```math
 V_{\mathrm{pinch}} = V_{\mathrm{const}}.
-$$
+```
 
 ## Coordinates and normalization
 
 The pinch expressions use the radial factor $\rho_{\mathrm{pol,n}}/a$.
 The inverse aspect ratio entering the electron collisionality is
 
-$$
+```math
 \epsilon_{\mathrm{asp}}
 = \frac{a\,\rho_{\mathrm{pol,n}}}{R_{\mathrm{maj}}}.
-$$
+```
 
 The correspondence between code names and physical notation is:
 
@@ -233,7 +233,7 @@ The correspondence between code names and physical notation is:
 | `Rmaj` | $R_{\mathrm{maj}}$ | Major radius |
 | `q_fs` | $q$ | Safety-factor profile |
 | `eps_fs` | $\epsilon_{\mathrm{asp}}$ | Inverse-aspect-ratio profile |
-| `nuestar_fs`, `nu_th` | $\nu_*$, $\nu_{\mathrm{th}}$ | Normalized electron collisionality and its suppression threshold |
+| `nuestar_fs`, `nu_th` | $\nu_{\ast}$, $\nu_{\mathrm{th}}$ | Normalized electron collisionality and its suppression threshold |
 | `c_bohm_n_rho_slope` | $c_{\mathrm{B},n,\rho}$ | Particle-diffusion taper slope |
 | `prandtl` | $\mathrm{Pr}$ | Momentum-to-ion-heat diffusivity ratio |
 | `c_pinch` | $c_{\mathrm{pinch}}$ | Signed pinch coefficient |

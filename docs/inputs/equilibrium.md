@@ -128,11 +128,11 @@ assumed default COCOS.
 At a supplied timestamp, the solver uses that frame. Between two frames at
 $t_i$ and $t_{i+1}$, the input quantities are interpolated linearly. For example,
 
-$$
+```math
 w = \frac{t-t_i}{t_{i+1}-t_i},
 \qquad
 \psi(R,Z,t) = (1-w)\psi_i(R,Z) + w\psi_{i+1}(R,Z).
-$$
+```
 
 The same temporal interpolation applies to toroidal field, separatrix flux
 and any supplied reference fields/current. Geometry and topology are then
@@ -158,23 +158,23 @@ and timestamps; see the [heating input guide](heating.md).
 For physical cylindrical coordinates $R$ (outward) and $Z$ (upward), the
 poloidal magnetic field is reconstructed as
 
-$$
+```math
 B_R = -\frac{\alpha_B}{R}\frac{\partial\psi}{\partial Z},
 \qquad
 B_Z = \frac{\alpha_B}{R}\frac{\partial\psi}{\partial R},
 \qquad
 B_{\mathrm{pol}} = \sqrt{B_R^2+B_Z^2}.
-$$
+```
 
 The toroidal current density is
 
-$$
+```math
 \Delta^*\psi = \frac{\partial^2\psi}{\partial R^2}
 - \frac{1}{R}\frac{\partial\psi}{\partial R}
 + \frac{\partial^2\psi}{\partial Z^2},
 \qquad
 J_\phi = -\frac{\alpha_J}{\mu_0 R}\Delta^*\psi.
-$$
+```
 
 Derivatives are with respect to physical coordinates in metres. Fields are in
 tesla, and $J_\phi$ is the physical toroidal current density in A/m². The code

@@ -4,11 +4,11 @@
 
 With outward wall normal $\boldsymbol{\nu}$, the physical recycling condition is
 
-$$
+```math
 -\boldsymbol{\Gamma}_n\cdot\boldsymbol{\nu}
 =R\,\Gamma_{\mathrm{rec}}
 +S-\kappa n_n-F_{\mathrm{abs}}.
-$$
+```
 
 $R$ is the plasma recycling fraction, including TRIM reflection when enabled;
 $S$ is inward puff, $\kappa n_n$ is pumping, and $F_{\mathrm{abs}}$ is neutral
@@ -18,27 +18,27 @@ walls, multiplied by the TRIM coefficient when enabled.
 The volume/raw reconstructed plasma flux includes parallel flow, pinch and
 perpendicular diffusion:
 
-$$
+```math
 \boldsymbol{\Gamma}_p
 =n_pu_{\parallel p}\boldsymbol b+n_p\boldsymbol v_{\mathrm{pinch}}
 -D_p\nabla_\perp n_p,
 \qquad \nabla_\perp=(I-\boldsymbol b\boldsymbol b^T)\nabla.
-$$
+```
 
 For Bohm/BohmPump/BohmPuff walls, define the outward normal convection/pinch
 and raw diffusive fluxes
 
-$$
+```math
 \Gamma_{p,\mathrm{adv}}
 =(n_pu_{\parallel p}\boldsymbol b+n_p\boldsymbol v_{\mathrm{pinch}})
 \cdot\boldsymbol\nu,\qquad
 \Gamma_{p,\mathrm{diff}}=-D_p\nabla_\perp n_p\cdot\boldsymbol\nu.
-$$
+```
 
 The ion flux driving recycling is selected by `recycle_plasma_diffusion`
 in `PHYS_LST`:
 
-$$
+```math
 \Gamma_{\mathrm{rec}}=
 \begin{cases}
 \Gamma_{p,\mathrm{adv}},
@@ -46,7 +46,7 @@ $$
 \Gamma_{p,\mathrm{adv}}+\Gamma_{p,\mathrm{diff}},
 &\texttt{.true.}\ \text{(legacy)}.
 \end{cases}
-$$
+```
 
 The default recycles the prescribed Bohm convection/pinch outflow; `.true.`
 restores the previous raw-diffusion recycling law. This choice changes neutral
@@ -60,13 +60,13 @@ remains independent.
 The neutral flux includes diffusion, optional pressure transport and, for
 NeutralGamma, parallel flow:
 
-$$
+```math
 \boldsymbol{\Gamma}_n
 =n_nu_{\parallel n}\boldsymbol b
 -\phi D_n\mathsf P_n\left[
 \nabla n_n+\lambda\frac{n_n}{T_i^{\mathrm{lim}}+T_s}\nabla T_i
 \right].
-$$
+```
 
 Here $u_{\parallel n}=0$ in the diffusive neutral model;
 $\mathsf P_n=I$ for isotropic diffusion or $I-\boldsymbol b\boldsymbol b^T$
@@ -87,21 +87,21 @@ $\Gamma_{a,\nu}=\boldsymbol\Gamma_a\cdot\boldsymbol\nu$ and stabilization
 corrections $\Gamma_{a,\mathrm{stab}}=\tau_a(n_a-\widehat n_a)$.
 The numerical ion outflow and density wall condition are
 
-$$
+```math
 \widehat\Gamma_{p,\nu}
 =\Gamma_{p,\mathrm{adv}}+\Gamma_{p,\mathrm{diff}}+\Gamma_{p,\mathrm{stab}},
 \qquad
 \Gamma_{p,\mathrm{diff}}+\Gamma_{p,\mathrm{stab}}=0
 \quad\text{weakly on the wall}.
-$$
+```
 
 Thus the prescribed ion outflow is $\Gamma_{p,\mathrm{adv}}$.
 The neutral boundary equation is
 
-$$
+```math
 \Gamma_{n,\nu}(\widehat U,Q)+\Gamma_{n,\mathrm{stab}}
 +R\,\Gamma_{\mathrm{rec}}+S-\kappa\widehat n_n-F_{\mathrm{abs}}(\widehat U)=0.
-$$
+```
 
 Both the element face equation and BC use $\widehat U$ for wall convection,
 state-dependent coefficients, limiter and losses, and $Q$ for gradients.
@@ -116,21 +116,21 @@ $U$ and $\widehat U$ need not coincide at convergence.
 With the default `recycle_plasma_diffusion = .false.`, the net ion loss
 after neutral recycling is
 
-$$
+```math
 \widehat\Gamma_{p,\nu}-R\,\Gamma_{p,\mathrm{adv}}
 =(1-R)\Gamma_{p,\mathrm{adv}}
 +\Gamma_{p,\mathrm{diff}}+\Gamma_{p,\mathrm{stab}}
 \simeq(1-R)\Gamma_{p,\mathrm{adv}}.
-$$
+```
 
 With the legacy setting `.true.`, it instead becomes
 
-$$
+```math
 \widehat\Gamma_{p,\nu}-R(\Gamma_{p,\mathrm{adv}}+\Gamma_{p,\mathrm{diff}})
 =(1-R)(\Gamma_{p,\mathrm{adv}}+\Gamma_{p,\mathrm{diff}})
 +\Gamma_{p,\mathrm{stab}}
 \simeq(1-R)\Gamma_{p,\mathrm{adv}}-R\,\Gamma_{p,\mathrm{diff}}.
-$$
+```
 
 Consequently, positive raw ion diffusion can increase neutral return without
 increasing numerical ion outflow. A small

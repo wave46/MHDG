@@ -13,10 +13,10 @@ Prescribed sheath energy loss is assembled separately.
 conductivity. Both active corrections use a singly charged hydrogenic
 majority. The closed-surface heat flux is
 
-$$
+```math
 q_{\parallel,s}=-\kappa_{\parallel,s}\nabla_\parallel T_s,
 \qquad \kappa_{\parallel,s}\propto T_s^{5/2}F_s.
-$$
+```
 
 ### Neoclassical correction
 
@@ -35,32 +35,32 @@ The electron factor uses the normalized $K_{11}$ interpolation; the ion
 factor uses the $K_2$ interpolation with finite-aspect-ratio dependence.
 With the conventions below, the factors used here are:
 
-$$
+```math
 F_e=\frac{0.58\epsilon^{3/2}}{K_1},\qquad
-K_1=\frac{1}{1+2.01\sqrt{\nu_e^*}+1.53\nu_e^*}
- +\frac{0.52\epsilon^3\nu_e^*}{1+0.89\epsilon^{3/2}\nu_e^*},
-$$
+K_1=\frac{1}{1+2.01\sqrt{\nu_{e}^{\ast}}+1.53\nu_{e}^{\ast}}
+ +\frac{0.52\epsilon^3\nu_{e}^{\ast}}{1+0.89\epsilon^{3/2}\nu_{e}^{\ast}},
+```
 
-$$
+```math
 F_i=\frac{1.60\epsilon^{3/2}}{K_2},\qquad
 K_2=\frac{0.66+1.88\sqrt{\epsilon}-1.54\epsilon}
- {1+1.03\sqrt{\nu_i^*}+0.31\nu_i^*}
- +\frac{1.17\epsilon^3\nu_i^*}{1+0.74\epsilon^{3/2}\nu_i^*}.
-$$
+ {1+1.03\sqrt{\nu_{i}^{\ast}}+0.31\nu_{i}^{\ast}}
+ +\frac{1.17\epsilon^3\nu_{i}^{\ast}}{1+0.74\epsilon^{3/2}\nu_{i}^{\ast}}.
+```
 
 Both use the collisionality
 
-$$
-\nu_s^*=\frac{L_\parallel}{2\pi\epsilon^{3/2}\tau_s\sqrt{T_{s,J}/m_s}}.
-$$
+```math
+\nu_{s}^{\ast}=\frac{L_\parallel}{2\pi\epsilon^{3/2}\tau_s\sqrt{T_{s,J}/m_s}}.
+```
 
 With temperatures expressed as energies in joules and singly charged ions,
 
-$$
+```math
 C=\frac{4\pi\epsilon_0}{e^2},\qquad
 \tau_e=\frac{3C^2\sqrt{m_e}T_{e,J}^{3/2}}{4\sqrt{2\pi}n_e\ln\Lambda},\qquad
 \tau_i^{\rm Br}=\frac{3C^2\sqrt{m_i}T_{i,J}^{3/2}}{4\sqrt{\pi}n_e\ln\Lambda}.
-$$
+```
 
 The implementation accepts temperatures in eV, density in m⁻³ and circuit
 length in metres. The shared Coulomb logarithm is 15. Electron and ion
@@ -73,11 +73,11 @@ The fitted values are used across the full collisionality range.
 `core_heat_conduction_mode='mean_free_path'` selects the algebraic
 long-mean-free-path correction, using each species' temperature:
 
-$$
+```math
 F_s=\frac{1}{1+\lambda_{HC,s}/L_\parallel},\qquad
 \lambda_{HC,s}[\mathrm{m}]=7.5\times10^{16}
 \frac{T_s[\mathrm{eV}]^2}{n_e[\mathrm{m}^{-3}]}.
-$$
+```
 
 The factor approaches unity for a short collision length and reduces
 conductivity when that length exceeds the magnetic circuit length. At fixed
@@ -98,17 +98,17 @@ the same expression to ions with $T_s=T_i$ is the model's ion extension.
 Each axis-connected closed contour supplies a full poloidal circuit length
 and an effective inverse aspect ratio:
 
-$$
+```math
 L_\parallel=\oint\frac{|B|}{|B_{\rm pol}|}\,dl_{\rm pol},\qquad
 \epsilon=\frac{(\oint dl_{\rm pol})^2}{2\pi\oint R\,dl_{\rm pol}}.
-$$
+```
 
 Circular surfaces give the usual minor-to-major-radius ratio. At large
 aspect ratio, the circuit length approaches the familiar expression
 
-$$
+```math
 \epsilon=\frac{r}{R_0},\qquad L_\parallel\simeq2\pi R_0q.
-$$
+```
 
 The profiles use the loaded equilibrium's contours and magnetic field.
 The current implementation builds them from a rectangular equilibrium
@@ -121,17 +121,17 @@ both vanish linearly with minor radius, leaving a finite circuit length.
 The first two small contours determine its smooth continuation in normalized
 poloidal flux:
 
-$$
+```math
 L_\parallel(\psi_N)=L_0+C\psi_N+O(\psi_N^2),\qquad \psi_N=\rho^2.
-$$
+```
 
 Near an ordinary X-point, the local flux is a quadratic saddle and the
 circuit length grows logarithmically. The final two resolved contours
 supply the offset and slope, both in metres:
 
-$$
+```math
 L_\parallel(\psi_N)\sim A+B\ln\frac{1}{1-\psi_N}.
-$$
+```
 
 These endpoint forms follow from local equilibrium expansions; fitting the
 last two contours is the numerical continuation choice. See
@@ -145,12 +145,12 @@ Limiter boundaries use a finite smooth continuation in normalized flux.
 lines, including private flux. The limiter fractions `c_fli` and `c_fle`
 control the maximum ion and electron conductive heat flux:
 
-$$
+```math
 q_{\parallel,s}=
 \frac{-\kappa_{\parallel,s}\nabla_\parallel T_s}
  {1+|\kappa_{\parallel,s}\nabla_\parallel T_s|/(c_{{\rm fl},s}q_{{\rm FS},s})},
 \qquad q_{{\rm FS},s}\propto\frac{n_sT_s^{3/2}}{\sqrt{m_s}}.
-$$
+```
 
 This limits the classical conductive flux as it approaches a chosen fraction
 of the thermal free-streaming flux. The ion temperature uses thermal energy
@@ -165,10 +165,10 @@ The topology stays fixed during each Newton solve.
 
 `T_fluxlim_maxi` and `T_fluxlim_maxe` specify the conductivity ceilings in eV:
 
-$$
+```math
 \kappa_{\parallel,s}=\kappa_{s,0}
 \min\!\left(T_s^{5/2}F_s,T_{\max,s}^{5/2}\right).
-$$
+```
 
 The correction factor is one on open field lines and when the core
 correction is disabled. MMS testcase 2 uses the uncapped conductivity law.

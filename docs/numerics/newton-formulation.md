@@ -8,10 +8,10 @@ driver requires `absolute`.
 For the complete current state $X_k=(U_k,Q_k,\widehat U_k)$ and the assembled
 tangent $J_k$, the equivalent systems are
 
-$$
+```math
 J_kX_{\mathrm{trial}}=J_kX_k-F(X_k),\qquad
 J_k\Delta X=-F(X_k),\qquad X_{\mathrm{trial}}=X_k+\Delta X.
-$$
+```
 
 The assembled tangent includes the selected coefficient derivatives and lagged
 coefficients. Incremental form asks the linear solver to resolve the correction
@@ -24,24 +24,24 @@ Write $R_U,R_Q,R_{\widehat U}$ for the three current
 [HDG residual blocks](hdg-residuals.md). The gradient residual already includes
 the inverse gradient mass. The incremental local equations are
 
-$$
+```math
 \begin{aligned}
 A_{uu}\Delta U+A_{uq}\Delta Q+A_{ul}\Delta\widehat U&=-R_U,\\
 \Delta Q+M_Q^{-1}(A_{qu}\Delta U+A_{ql}\Delta\widehat U)&=-R_Q.
 \end{aligned}
-$$
+```
 
 `HDG_mapping` eliminates the element unknowns in favour of face unknowns.
 Define $B=A_{uu}-A_{uq}M_Q^{-1}A_{qu}$ and
 $C=A_{ul}-A_{uq}M_Q^{-1}A_{ql}$. Its incremental maps are
 
-$$
+```math
 \begin{aligned}
 \Delta U&=-B^{-1}C\Delta\widehat U+U_0,
 &U_0&=B^{-1}(-R_U+A_{uq}R_Q),\\
 \Delta Q&=-M_Q^{-1}(A_{qu}\Delta U+A_{ql}\Delta\widehat U)-R_Q.
 \end{aligned}
-$$
+```
 
 The constant part of the second map is $Q_0=-M_Q^{-1}A_{qu}U_0-R_Q$, stored
 as `L0`. A restart or mesh transfer can leave a nonzero gradient residual;
@@ -51,10 +51,10 @@ $R_Q$ carries this mismatch into the correction.
 contributions into the global trace system. With the map slopes stored as
 `UU` and `LL`, its element contributions are
 
-$$
+```math
 K^e=A_{lu}\,\mathrm{UU}+A_{lq}\,\mathrm{LL}+A_{ll},\qquad
 b^e=-R_{\widehat U}-A_{lu}U_0-A_{lq}Q_0.
-$$
+```
 
 `element_conservation_residual`, `element_gradient_residual` and
 `element_trace_residual` contain the current element
@@ -78,10 +78,10 @@ increments; their boundary data are already eliminated into local loads.
 An absolute solve reconstructs $X_{\mathrm{trial}}$; an incremental solve
 reconstructs $\Delta X$. Damping gives, respectively,
 
-$$
+```math
 X_{k+1}=X_k+\lambda(X_{\mathrm{trial}}-X_k),\qquad
 X_{k+1}=X_k+\lambda\Delta X.
-$$
+```
 
 A failed solve or nonfinite trial restores the saved current state.
 

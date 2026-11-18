@@ -11,11 +11,11 @@ TOR3D (other models use model-specific selectors):
 Automatic stabilization combines the convective spectral radius,
 perpendicular diffusion and parallel thermal conduction. For each energy equation,
 
-$$
+```math
 \tau_s=a+\frac{p}{h_e}D_{\perp,s}
 +\frac{p}{h_e}|b\cdot n|\,\|b_{\mathrm{active}}\|
 \frac{\kappa_{\parallel,s}(\widehat T_s,\widehat n_s)}{\widehat U_1}.
-$$
+```
 
 Here $n$ is the outward unit normal. On 2D and TOR3D side faces, $p/h_e$
 is the poloidal degree divided by the stored element size (the shortest vertex
@@ -29,12 +29,12 @@ Newton assembly. Temperatures and transport coefficients
 are in solver units. For the coupled four-equation plasma convection block,
 the common scalar is its spectral radius:
 
-$$
+```math
 a=|b\cdot n|\max\left(\frac53|u_\parallel|,
                        |u_\parallel|+c_{\rm flux}\right),\qquad
 u_\parallel=\frac{\widehat U_2}{\widehat U_1},\qquad
 c_{\rm flux}=\sqrt{\frac53 M_{\rm ref}(\widehat T_i+\widehat T_e)}.
-$$
+```
 
 The flux Jacobian has eigenvalues $(b\cdot n)$ times
 $u_\parallel-c_{\rm flux}$, $u_\parallel$, $u_\parallel+c_{\rm flux}$
@@ -73,26 +73,26 @@ TOR3D and other model families use frozen-coefficient tangents.
 For an ordinary face, stabilization contributes
 $\tau_i(\widehat U)(U_i-\widehat U_i)$. Its trace derivative is
 
-$$
+```math
 \frac{\partial}{\partial\widehat U_j}
   [\tau_i(\widehat U)(U_i-\widehat U_i)]
 =-\tau_i\delta_{ij}
  +(U_i-\widehat U_i)\frac{\partial\tau_i}{\partial\widehat U_j}.
-$$
+```
 
 The assembly adds $+\tau_i$ in the element-state column
 and $-\tau_i$ in the trace-state column. The HDG coefficient helper adds the second
 term above, with shape-function products and the face integration weight.
 It also adds the matching absolute-Newton affine RHS:
 
-$$
+```math
 (U_i-\widehat U_i)\sum_j
 \frac{\partial\tau_i}{\partial\widehat U_j}\widehat U_j.
-$$
+```
 
 For [Bohm momentum](bohm-boundary.md), replace $U_2-\widehat U_2$ by the actual
 blended target jump
-$p_s\,\operatorname{sign}(b\cdot n)c_s\widehat U_1+p_F U_2-\widehat U_2$.
+$`p_s\,\mathrm{sign}(b\cdot n)c_s\widehat U_1+p_F U_2-\widehat U_2`$.
 The boundary assembly differentiates this target; the coefficient helper
 adds its product with $\partial\tau_2/\partial\widehat U_j$.
 
