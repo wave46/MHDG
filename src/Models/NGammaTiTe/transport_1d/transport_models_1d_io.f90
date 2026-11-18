@@ -9,6 +9,7 @@ CONTAINS
     INTEGER(HID_T) :: coeffs_group_id, params_group_id, diagnostics_group_id
     INTEGER :: ierr
     INTEGER :: pinch_equations(4), band_equations(4)
+    REAL*8 :: sol_start, sol_end, pfr_start, pfr_end
     REAL*8 :: band_rho(5), band_start, plateau_start, plateau_end, band_end, center
 
     IF (.NOT. switch%transport_1d) RETURN
@@ -67,6 +68,16 @@ CONTAINS
        CALL this%band_edges(band_start, plateau_start, plateau_end, band_end, center)
        band_rho = [band_start,plateau_start,center,plateau_end,band_end]
        CALL HDF5_array1D_saving(params_group_id, band_rho, 5, 'band_rho')
+    ENDIF
+    IF (ANY(this%config%far_sol_min > 0.d0)) THEN
+       CALL this%far_sol_edges(sol_start, sol_end, pfr_start, pfr_end)
+       CALL HDF5_array1D_saving(params_group_id, this%config%far_sol_min, 4, 'far_sol_min')
+       CALL HDF5_string_saving(params_group_id, TRIM(this%config%diffusion_coordinate), 'far_sol_coordinate')
+       CALL HDF5_real_saving(params_group_id, this%config%far_sol_start, 'far_sol_start')
+       CALL HDF5_real_saving(params_group_id, this%config%far_sol_width, 'far_sol_width')
+       CALL HDF5_real_saving(params_group_id, this%config%far_sol_pfr_scale, 'far_sol_pfr_scale')
+       CALL HDF5_array1D_saving(params_group_id, [sol_start,sol_end], 2, 'far_sol_rho')
+       CALL HDF5_array1D_saving(params_group_id, [pfr_start,pfr_end], 2, 'far_sol_pfr_rho')
     ENDIF
     CALL HDF5_group_close(params_group_id, ierr)
 

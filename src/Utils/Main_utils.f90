@@ -1249,7 +1249,10 @@ CONTAINS
          band_equations=transport_model_input%band_equations, band_diff_phys=transport_model_input%band_diff_phys, &
          band_center=transport_model_input%band_center, band_width=transport_model_input%band_width, &
          band_transition_width=transport_model_input%band_transition_width, &
-         diffusion_coordinate=transport_model_input%diffusion_coordinate)
+         diffusion_coordinate=transport_model_input%diffusion_coordinate, &
+         far_sol_min_phys=transport_model_input%far_sol_min_phys, &
+         far_sol_start=transport_model_input%far_sol_start, far_sol_width=transport_model_input%far_sol_width, &
+         far_sol_pfr_scale=transport_model_input%far_sol_pfr_scale)
     CALL fs_transport%build_profiles(transport_model_1d%config%transport_region_policy)
     CALL transport_model_1d%update_from_flux_surfaces(fs_transport)
     IF (MPIvar%glob_id == 0 .AND. transport_model_1d%config%transport_1d_relaxation < 1.d0) &

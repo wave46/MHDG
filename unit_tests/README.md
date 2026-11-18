@@ -137,7 +137,9 @@ make check-transport-band
 The band target checks physical-input normalization and rejection, central
 plateau and smooth recovery, private-flux application beyond the modeled
 cutoff, targets below modeled floors, plasma selection, isotropic preservation,
-configuration reinitialization, and HDF5 metadata. It uses synthetic profiles
+configuration reinitialization, and HDF5 metadata. The same target checks far-SOL
+minima, scaled PFR ramps, core/undefined exclusion, narrow ramps, band precedence,
+and inactive/higher-background channel preservation. It uses synthetic profiles
 and needs no external geometry or case files. It also checks nonlinear OMP
 mapping with both flux signs, printed/saved coordinate correspondence,
 configuration and equilibrium refresh, reinitialization, and rejection of

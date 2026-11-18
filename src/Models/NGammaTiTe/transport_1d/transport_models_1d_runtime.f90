@@ -33,14 +33,26 @@ CONTAINS
     REAL*8, INTENT(IN) :: rho_pol_norm(:)
     REAL*8, INTENT(INOUT) :: diff_iso(:, :, :), diff_ani(:, :, :)
     INTEGER, INTENT(IN) :: region(:)
-    INTEGER :: g, equation
-    REAL*8 :: rho_g, w, chi_i, chi_e, d, nu_mom, vpinch
-    REAL*8 :: band_start, plateau_start, plateau_end, band_end, coefficient
-
     IF (.NOT. this%is_initialized) RETURN
     IF (SIZE(diff_iso, 3) /= SIZE(rho_pol_norm)) RETURN
     IF (SIZE(diff_ani, 3) /= SIZE(rho_pol_norm)) RETURN
     IF (SIZE(region) /= SIZE(rho_pol_norm)) RETURN
+
+    CALL tm1d_apply_background_diffusion(this, rho_pol_norm, diff_iso, diff_ani, region)
+    IF ((ANY(this%config%band_enabled) .OR. ANY(this%config%far_sol_min > 0.d0)) .AND. &
+         .NOT. magnetic_geometry_cache%is_initialized) &
+         ERROR STOP 'Diffusion shapes require the magnetic geometry cache'
+    CALL tm1d_apply_transport_band(this, rho_pol_norm, diff_iso, diff_ani, region)
+    CALL tm1d_apply_far_sol_minimum(this, rho_pol_norm, diff_iso, diff_ani, region)
+  END SUBROUTINE tm1d_apply_1D_diffusion
+
+  SUBROUTINE tm1d_apply_background_diffusion(this, rho_pol_norm, diff_iso, diff_ani, region)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho_pol_norm(:)
+    REAL*8, INTENT(INOUT) :: diff_iso(:, :, :), diff_ani(:, :, :)
+    INTEGER, INTENT(IN) :: region(:)
+    INTEGER :: g
+    REAL*8 :: rho_g, w, chi_i, chi_e, d, nu_mom, vpinch
 
     DO g = 1, SIZE(rho_pol_norm)
        IF (.NOT. tm1d_region_is_included(&
@@ -67,28 +79,70 @@ CONTAINS
        diff_ani(4, 4, g) = diff_ani(4, 4, g) + w*(chi_e - diff_ani(4, 4, g))
     END DO
 
-    ! The band also acts outside the background model's cutoff/topology policy.
+  END SUBROUTINE tm1d_apply_background_diffusion
+
+  SUBROUTINE tm1d_apply_transport_band(this, rho_pol_norm, diff_iso, diff_ani, region)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho_pol_norm(:)
+    REAL*8, INTENT(INOUT) :: diff_iso(:, :, :), diff_ani(:, :, :)
+    INTEGER, INTENT(IN) :: region(:)
+    INTEGER :: g, equation
+    REAL*8 :: band_start, plateau_start, plateau_end, band_end, w, coefficient
+
     IF (.NOT. ANY(this%config%band_enabled)) RETURN
-    IF (.NOT. magnetic_geometry_cache%is_initialized) &
-         ERROR STOP 'A transport band requires the magnetic geometry cache'
     CALL this%band_edges(band_start, plateau_start, plateau_end, band_end)
     DO g = 1, SIZE(rho_pol_norm)
        SELECT CASE (region(g))
        CASE (magnetic_region_core, magnetic_region_main_sol, magnetic_region_private_flux)
           w = smoothstep01((rho_pol_norm(g)-band_start)/(plateau_start-band_start)) * &
                smoothstep01((band_end-rho_pol_norm(g))/(band_end-plateau_end))
-          IF (w <= 0.d0) CYCLE
-          DO equation = 1, 4
-             IF (.NOT. this%config%band_enabled(equation)) CYCLE
-             coefficient = (1.d0-w)*diff_ani(equation,equation,g) + w*this%config%band_diff(equation)
-             ! Preserve the residual isotropic contribution, including at W=1.
-             diff_iso(equation,equation,g) = &
-                  (diff_iso(equation,equation,g)-diff_ani(equation,equation,g)) + coefficient
-             diff_ani(equation,equation,g) = coefficient
-          ENDDO
+       CASE DEFAULT
+          CYCLE
        END SELECT
+       IF (w <= 0.d0) CYCLE
+       DO equation = 1, 4
+          IF (.NOT. this%config%band_enabled(equation)) CYCLE
+          coefficient = (1.d0-w)*diff_ani(equation,equation,g) + w*this%config%band_diff(equation)
+          IF (coefficient == diff_ani(equation,equation,g)) CYCLE
+          ! Preserve the residual isotropic contribution, including at W=1.
+          diff_iso(equation,equation,g) = &
+               (diff_iso(equation,equation,g)-diff_ani(equation,equation,g)) + coefficient
+          diff_ani(equation,equation,g) = coefficient
+       ENDDO
     ENDDO
-  END SUBROUTINE tm1d_apply_1D_diffusion
+  END SUBROUTINE tm1d_apply_transport_band
+
+  SUBROUTINE tm1d_apply_far_sol_minimum(this, rho_pol_norm, diff_iso, diff_ani, region)
+    CLASS(transport_model_1d_t), INTENT(IN) :: this
+    REAL*8, INTENT(IN) :: rho_pol_norm(:)
+    REAL*8, INTENT(INOUT) :: diff_iso(:, :, :), diff_ani(:, :, :)
+    INTEGER, INTENT(IN) :: region(:)
+    INTEGER :: g, equation
+    REAL*8 :: sol_start, sol_end, pfr_start, pfr_end, w, coefficient
+
+    IF (.NOT. ANY(this%config%far_sol_min > 0.d0)) RETURN
+    CALL this%far_sol_edges(sol_start, sol_end, pfr_start, pfr_end)
+    DO g = 1, SIZE(rho_pol_norm)
+       SELECT CASE (region(g))
+       CASE (magnetic_region_main_sol)
+          w = smoothstep01((rho_pol_norm(g)-sol_start)/(sol_end-sol_start))
+       CASE (magnetic_region_private_flux)
+          w = smoothstep01((rho_pol_norm(g)-pfr_start)/(pfr_end-pfr_start))
+       CASE DEFAULT
+          CYCLE
+       END SELECT
+       IF (w <= 0.d0) CYCLE
+       DO equation = 1, 4
+          IF (this%config%far_sol_min(equation) <= 0.d0 .OR. &
+               this%config%far_sol_min(equation) <= diff_ani(equation,equation,g)) CYCLE
+          coefficient = diff_ani(equation,equation,g) + &
+               w*(this%config%far_sol_min(equation)-diff_ani(equation,equation,g))
+          diff_iso(equation,equation,g) = &
+               (diff_iso(equation,equation,g)-diff_ani(equation,equation,g)) + coefficient
+          diff_ani(equation,equation,g) = coefficient
+       ENDDO
+    ENDDO
+  END SUBROUTINE tm1d_apply_far_sol_minimum
 
   MODULE SUBROUTINE tm1d_compute_1D_pinch_matrix(this, b, rho, APinch, &
        region, outward_normal)

@@ -1303,6 +1303,7 @@ SUBROUTINE read_transport_model_input()
   INTEGER :: band_equations(4)
   CHARACTER(LEN=32) :: diffusion_coordinate
   REAL*8 :: band_diff_phys(4), band_center, band_width, band_transition_width
+  REAL*8 :: far_sol_min_phys(4), far_sol_start, far_sol_width, far_sol_pfr_scale
   TYPE(transport_model_config_t) :: checked_config
   CHARACTER(LEN=32) :: transport_region_policy
   NAMELIST /TRANSPORT_MODEL_1D_LST/ transport_1d_relaxation, rho_core, rho_edge, rho_diffusion_model_max, &
@@ -1312,7 +1313,7 @@ SUBROUTINE read_transport_model_input()
        rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, &
        rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, &
        diff_ee_min_phys, band_equations, band_diff_phys, band_center, band_width, band_transition_width, &
-       diffusion_coordinate
+       diffusion_coordinate, far_sol_min_phys, far_sol_start, far_sol_width, far_sol_pfr_scale
 
   transport_1d_relaxation = transport_model_input%transport_1d_relaxation
   band_equations = transport_model_input%band_equations
@@ -1321,6 +1322,10 @@ SUBROUTINE read_transport_model_input()
   band_center = transport_model_input%band_center
   band_width = transport_model_input%band_width
   band_transition_width = transport_model_input%band_transition_width
+  far_sol_min_phys = transport_model_input%far_sol_min_phys
+  far_sol_start = transport_model_input%far_sol_start
+  far_sol_width = transport_model_input%far_sol_width
+  far_sol_pfr_scale = transport_model_input%far_sol_pfr_scale
   rho_core = transport_model_input%rho_core
   rho_edge = transport_model_input%rho_edge
   rho_diffusion_model_max = transport_model_input%rho_diffusion_model_max
@@ -1366,16 +1371,22 @@ SUBROUTINE read_transport_model_input()
        ERROR STOP 'pinch_equations entries must be in [0,4] (0 means unused)'
 
   CALL tm1d_validate_relaxation(transport_1d_relaxation)
-  ! Validate physical band inputs using the same contract as direct configuration.
+  ! Validate physical diffusion-shape inputs using the direct configuration contract.
   CALL tm1d_config_apply(checked_config, 1.d0, 1.d0, band_equations=band_equations, &
        band_diff_phys=band_diff_phys, band_center=band_center, band_width=band_width, &
-       band_transition_width=band_transition_width, diffusion_coordinate=diffusion_coordinate)
+       band_transition_width=band_transition_width, diffusion_coordinate=diffusion_coordinate, &
+       far_sol_min_phys=far_sol_min_phys, far_sol_start=far_sol_start, &
+       far_sol_width=far_sol_width, far_sol_pfr_scale=far_sol_pfr_scale)
   transport_model_input%band_equations = band_equations
   transport_model_input%diffusion_coordinate = diffusion_coordinate
   transport_model_input%band_diff_phys = band_diff_phys
   transport_model_input%band_center = band_center
   transport_model_input%band_width = band_width
   transport_model_input%band_transition_width = band_transition_width
+  transport_model_input%far_sol_min_phys = far_sol_min_phys
+  transport_model_input%far_sol_start = far_sol_start
+  transport_model_input%far_sol_width = far_sol_width
+  transport_model_input%far_sol_pfr_scale = far_sol_pfr_scale
   transport_model_input%transport_1d_relaxation = transport_1d_relaxation
   transport_model_input%rho_core = rho_core
   transport_model_input%rho_edge = rho_edge

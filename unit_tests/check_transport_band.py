@@ -1,4 +1,4 @@
-"""Check band input, normalization, application/lifecycle, and HDF5 metadata."""
+"""Check diffusion-shape inputs, runtime/lifecycle, and HDF5 metadata."""
 
 from pathlib import Path
 import subprocess
@@ -32,20 +32,43 @@ def main():
         ("unresolved", "band_equations=1, band_width=1.e-30", "strictly increasing"),
         ("coordinate", "diffusion_coordinate='unknown'", "diffusion_coordinate must be"),
     ]
+    invalid += [
+        ("far_negative", "far_sol_min_phys=-1,0,0,0", "finite and nonnegative"),
+        ("far_nan", "far_sol_min_phys=NaN,0,0,0", "finite and nonnegative"),
+        ("far_zero_width", "far_sol_min_phys=1, far_sol_width=0", "far_sol_width must be positive"),
+        ("far_nan_start", "far_sol_min_phys=1, far_sol_start=NaN", "coordinates and PFR scale must be finite"),
+        ("far_zero_scale", "far_sol_min_phys=1, far_sol_pfr_scale=0", "far_sol_pfr_scale must be positive"),
+        ("far_unresolved", "far_sol_min_phys=1, far_sol_width=1.e-30", "strictly increasing"),
+        ("far_inside", "far_sol_min_phys=1, far_sol_start=.99", "outside the separatrix"),
+        ("far_pfr_axis", "far_sol_min_phys=1, far_sol_pfr_scale=10", "Mirrored PFR endpoints"),
+        ("far_omp_inside", "far_sol_min_phys=1, diffusion_coordinate='omp_distance', far_sol_start=-.01", "outside the separatrix"),
+    ]
+    far_cases = [
+        ("far_rho", "", None),
+        ("far_narrow", "far_sol_start=1.002, far_sol_width=.004, far_sol_pfr_scale=.5", None),
+        ("far_overlap", "band_equations=1,2,3,4, band_diff_phys=.1,.1,.1,.1, band_center=1.17, band_width=.08", None),
+        ("far_omp", "diffusion_coordinate='omp_distance', far_sol_start=.04, far_sol_width=.02", None),
+        ("far_omp_reversed", "diffusion_coordinate='omp_distance', far_sol_start=.04, far_sol_width=.02", None),
+        ("far_no_geometry", "", "require the magnetic geometry cache"),
+        ("far_omp_outside", "diffusion_coordinate='omp_distance', far_sol_start=.04, far_sol_width=.02", "outside the outboard equilibrium grid"),
+        ("far_omp_unprepared", "diffusion_coordinate='omp_distance', far_sol_start=.04, far_sol_width=.02", "must be prepared for the current equilibrium"),
+        ("far_direct_negative", "", "finite and nonnegative"),
+        ("far_direct_nan", "", "finite and nonnegative"),
+    ]
     direct = [
         ("negative", "entries must be in [0,4]"),
         ("neutral", "entries must be in [0,4]"),
         ("overlong", "accepts at most four entries"),
         ("nan", "coordinates must be finite"),
         ("infinity", "finite and nonnegative"),
-        ("no_geometry", "requires the magnetic geometry cache"),
+        ("no_geometry", "require the magnetic geometry cache"),
     ]
     omp_cases = [
         ("omp", None),
         ("omp_reversed", None),
         ("omp_outside", "outside the outboard equilibrium grid"),
         ("omp_past_axis", "outside the outboard equilibrium grid"),
-        ("omp_no_geometry", "requires the magnetic equilibrium and geometry cache"),
+        ("omp_no_geometry", "require the magnetic equilibrium and geometry cache"),
         ("omp_bad_scale", "finite positive equilibrium length scale"),
         ("omp_no_crossing", "Could not locate the OMP separatrix"),
         ("omp_unresolved", "Mapped OMP band boundaries must be strictly increasing"),
@@ -74,7 +97,7 @@ def main():
             with h5py.File(directory / "transport_band.h5") as handle:
                 params = handle["transport_1d/params"]
                 if not expected:
-                    assert not any(key.startswith("band_") for key in params)
+                    assert not any(key.startswith(("band_", "far_sol_")) for key in params)
                     continue
                 np.testing.assert_array_equal(params["band_equations"][()],
                                               expected + [0] * (4 - len(expected)))
@@ -118,8 +141,43 @@ def main():
                 np.testing.assert_allclose(params["band_width"][()], .02)
                 np.testing.assert_allclose(params["band_transition_width"][()], .005)
                 assert b"omp_distance" in params["band_coordinate"][()].tobytes()
-    count = len(valid) + len(invalid) + len(direct) + len(omp_cases)
-    print(f"transport band input/runtime/output checks: {count} PASS")
+        for argument, entries, error in far_cases:
+            directory = Path(scratch) / argument
+            directory.mkdir()
+            (directory / "transport_model.nml").write_text(
+                "&TRANSPORT_MODEL_1D_LST\n far_sol_min_phys=16,0,32,64\n"
+                f" {entries}\n/\n"
+            )
+            run = subprocess.run([str(executable), argument], cwd=directory,
+                                 capture_output=True, text=True, timeout=15)
+            output = run.stdout + run.stderr
+            if error:
+                if run.returncode == 0 or error not in output:
+                    raise SystemExit(f"FAIL: {argument}\n{output}")
+                continue
+            if run.returncode != 0 or "transport far-SOL checks: PASS" not in output:
+                raise SystemExit(f"FAIL: {argument}\n{output}")
+            with h5py.File(directory / "transport_far.h5") as handle:
+                params = handle["transport_1d/params"]
+                np.testing.assert_allclose(params["far_sol_min"][()], [2, 0, 4, 8])
+                onset, width, scale = 1.15, .05, 1/3
+                if argument == "far_narrow":
+                    onset, width, scale = 1.002, .004, .5
+                rho_edges = np.array([onset, onset + width])
+                coordinate = b"rho_pol_norm"
+                if argument.startswith("far_omp"):
+                    onset, width = .04, .02
+                    radius = 2.0 + np.array([onset, onset + width]) / .5
+                    rho_edges = np.sqrt((radius**2 + .1*radius**3) / 4.8)
+                    coordinate = b"omp_distance"
+                np.testing.assert_allclose(params["far_sol_start"][()], onset)
+                np.testing.assert_allclose(params["far_sol_width"][()], width)
+                np.testing.assert_allclose(params["far_sol_pfr_scale"][()], scale)
+                np.testing.assert_allclose(params["far_sol_rho"][()], rho_edges, atol=1e-10)
+                np.testing.assert_allclose(params["far_sol_pfr_rho"][()], 1-scale*(rho_edges-1), atol=1e-10)
+                assert coordinate in params["far_sol_coordinate"][()].tobytes()
+    count = len(valid) + len(invalid) + len(direct) + len(omp_cases) + len(far_cases)
+    print(f"transport diffusion-shape input/runtime/output checks: {count} PASS")
 
 
 if __name__ == "__main__":

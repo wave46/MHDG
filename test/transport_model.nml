@@ -98,4 +98,14 @@
   ! band_width=0.004 gives a 4 mm plateau and default 1 mm shoulders.
   ! OMP positions are R-R_sep [m] at Z=Z_axis; resolved rho values are printed/saved.
   ! The band can go below the model floors above; pinch remains unchanged.
+
+  ! Optional far-region minimum AFTER the band, independent of the model cutoff.
+  ! Zero disables a channel; all zeros (default) disable the feature.
+  far_sol_min_phys = 0.0,0.0,0.0,0.0   ! [m^2/s]: particles, momentum, ions, electrons
+  far_sol_start = 1.15                ! onset in diffusion_coordinate
+  far_sol_width = 0.05                ! smooth ramp width in diffusion_coordinate
+  ! far_sol_pfr_scale = 0.3333333333333333 ! default 1/3; mirror departures in rho
+  ! Default main-SOL ramp 1.15 -> 1.20 gives PFR 0.95 -> 0.933333.
+  ! OMP alternative: far_sol_start=0.04, far_sol_width=0.02 [m].
+  ! This raises lower plasma diffusion only; core/undefined regions are excluded.
 /

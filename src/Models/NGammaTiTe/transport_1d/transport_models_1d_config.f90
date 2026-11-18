@@ -8,7 +8,7 @@ MODULE transport_models_1d_config
   PUBLIC :: tm1d_region_policy_from_name, tm1d_region_policy_name
   PUBLIC :: tm1d_region_is_included, tm1d_build_pinch_velocity
   PUBLIC :: tm1d_particle_taper_factor, tm1d_validate_relaxation
-  PUBLIC :: tm1d_band_edges
+  PUBLIC :: tm1d_band_edges, tm1d_validate_far_rho
   PUBLIC :: transport_region_legacy_all_regions
   PUBLIC :: transport_region_core_and_main_sol, transport_region_core_only
 
@@ -29,6 +29,10 @@ MODULE transport_models_1d_config
      REAL*8 :: band_center = 1.d0
      REAL*8 :: band_width = 0.d0
      REAL*8 :: band_transition_width = -1.d0 ! automatic: band_width/4
+     REAL*8 :: far_sol_min(4) = 0.d0
+     REAL*8 :: far_sol_start = 1.15d0
+     REAL*8 :: far_sol_width = 0.05d0
+     REAL*8 :: far_sol_pfr_scale = 1.d0/3.d0
      REAL*8 :: rho_edge = rho_edge_default
      REAL*8 :: rho_core = rho_core_default
      REAL*8 :: rho_diffusion_model_max = 1.d0
@@ -67,6 +71,10 @@ CONTAINS
     config%band_center = 1.d0
     config%band_width = 0.d0
     config%band_transition_width = -1.d0
+    config%far_sol_min = 0.d0
+    config%far_sol_start = 1.15d0
+    config%far_sol_width = 0.05d0
+    config%far_sol_pfr_scale = 1.d0/3.d0
     config%rho_edge = rho_edge_default
     config%rho_core = rho_core_default
     config%rho_diffusion_model_max = 1.d0
@@ -101,12 +109,14 @@ CONTAINS
        rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, &
        diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys, &
        pinch_equations, transport_1d_relaxation, band_equations, band_diff_phys, &
-       band_center, band_width, band_transition_width, diffusion_coordinate)
+       band_center, band_width, band_transition_width, diffusion_coordinate, &
+       far_sol_min_phys, far_sol_start, far_sol_width, far_sol_pfr_scale)
     TYPE(transport_model_config_t), INTENT(INOUT) :: config
     REAL*8, INTENT(IN) :: refval_time, refval_length
     REAL*8, INTENT(IN), OPTIONAL :: rho_edge, rho_core, rho_diffusion_model_max, c_bohm_i, c_gyrobohm_i, c_bohm_e, c_gyrobohm_e, c_bohm_n, c_bohm_n_rho_slope, prandtl, c_pinch, nu_th, vpinch_const_phys, rho_pinch_axis_width, rho_pinch_model_max, rho_pinch_edge_width, rho_blend_width, diff_n_min_phys, diff_u_min_phys, diff_e_min_phys, diff_ee_min_phys
     REAL*8, INTENT(IN), OPTIONAL :: transport_1d_relaxation
     REAL*8, INTENT(IN), OPTIONAL :: band_diff_phys(4), band_center, band_width, band_transition_width
+    REAL*8, INTENT(IN), OPTIONAL :: far_sol_min_phys(4), far_sol_start, far_sol_width, far_sol_pfr_scale
     INTEGER, INTENT(IN), OPTIONAL :: pinch_model
     INTEGER, INTENT(IN), OPTIONAL :: pinch_equations(:)
     INTEGER, INTENT(IN), OPTIONAL :: band_equations(:)
@@ -184,6 +194,11 @@ CONTAINS
     IF (PRESENT(band_transition_width)) config%band_transition_width = band_transition_width
     CALL tm1d_validate_band(config, band_diff_phys)
     IF (PRESENT(band_diff_phys)) config%band_diff = band_diff_phys*refval_time/refval_length**2
+    IF (PRESENT(far_sol_start)) config%far_sol_start = far_sol_start
+    IF (PRESENT(far_sol_width)) config%far_sol_width = far_sol_width
+    IF (PRESENT(far_sol_pfr_scale)) config%far_sol_pfr_scale = far_sol_pfr_scale
+    CALL tm1d_validate_far_sol(config, far_sol_min_phys)
+    IF (PRESENT(far_sol_min_phys)) config%far_sol_min = far_sol_min_phys*refval_time/refval_length**2
   END SUBROUTINE tm1d_config_apply
 
   SUBROUTINE tm1d_validate_band(config, band_diff_phys)
@@ -226,6 +241,43 @@ CONTAINS
     band_start = plateau_start - transition
     band_end = plateau_end + transition
   END SUBROUTINE tm1d_band_edges
+
+  SUBROUTINE tm1d_validate_far_sol(config, far_sol_min_phys)
+    TYPE(transport_model_config_t), INTENT(IN) :: config
+    REAL*8, INTENT(IN), OPTIONAL :: far_sol_min_phys(4)
+    REAL*8 :: targets(4), ramp_end
+
+    targets = config%far_sol_min
+    IF (PRESENT(far_sol_min_phys)) targets = far_sol_min_phys
+    IF (ANY(.NOT. ieee_is_finite(targets)) .OR. ANY(targets < 0.d0)) &
+         ERROR STOP 'far_sol_min_phys must be finite and nonnegative'
+    IF (.NOT. ANY(targets > 0.d0)) RETURN
+    IF (ANY(.NOT. ieee_is_finite([config%far_sol_start,config%far_sol_width,config%far_sol_pfr_scale]))) &
+         ERROR STOP 'Active far-SOL coordinates and PFR scale must be finite'
+    IF (config%far_sol_width <= 0.d0) ERROR STOP 'Active far_sol_width must be positive'
+    IF (config%far_sol_pfr_scale <= 0.d0) ERROR STOP 'Active far_sol_pfr_scale must be positive'
+    ramp_end = config%far_sol_start + config%far_sol_width
+    IF (.NOT. ieee_is_finite(ramp_end) .OR. ramp_end <= config%far_sol_start) &
+         ERROR STOP 'Far-SOL ramp endpoints must be finite and strictly increasing'
+    IF (config%diffusion_coordinate == 'rho_pol_norm') THEN
+       CALL tm1d_validate_far_rho(config%far_sol_start, ramp_end, config%far_sol_pfr_scale)
+    ELSE IF (config%far_sol_start <= 0.d0) THEN
+       ERROR STOP 'Far-SOL OMP onset must be outside the separatrix'
+    ENDIF
+  END SUBROUTINE tm1d_validate_far_sol
+
+  SUBROUTINE tm1d_validate_far_rho(rho_start, rho_end, pfr_scale)
+    REAL*8, INTENT(IN) :: rho_start, rho_end, pfr_scale
+    REAL*8 :: pfr_start, pfr_end
+
+    IF (rho_start <= 1.d0 .OR. rho_end <= rho_start) &
+         ERROR STOP 'Far-SOL rho endpoints must increase outside the separatrix'
+    pfr_start = 1.d0 - pfr_scale*(rho_start-1.d0)
+    pfr_end = 1.d0 - pfr_scale*(rho_end-1.d0)
+    IF (ANY(.NOT. ieee_is_finite([pfr_start,pfr_end])) .OR. &
+         pfr_end < 0.d0 .OR. pfr_end >= pfr_start .OR. pfr_start >= 1.d0) &
+         ERROR STOP 'Mirrored PFR endpoints must be distinct and in [0,1)'
+  END SUBROUTINE tm1d_validate_far_rho
 
   SUBROUTINE tm1d_validate_relaxation(alpha)
     REAL*8, INTENT(IN) :: alpha

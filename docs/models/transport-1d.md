@@ -51,7 +51,8 @@ when choosing the heat-diffusion weights from literature values.
 
 An optional band prescribes a flat central diffusion level and smooth shoulders
 that recover the existing local background. It can reduce or increase diffusion
-near a selected flux surface. Enable it with plasma equation IDs in
+near a selected flux surface. The band and far-SOL minimum are intended for
+warm starts from an established plasma solution. Enable the band with plasma equation IDs in
 `band_equations`; omission or `0` disables it. IDs, zero slots and duplicates
 follow the same convention as `pinch_equations` below. Neutrals are excluded.
 
@@ -103,6 +104,43 @@ region policy and outer cutoff. It requires the magnetic geometry cache and
 does not act in undefined regions. The prescribed target may be below
 `diff_*_min_phys`; those floors apply to the modeled background. Pinch and
 raw-profile relaxation keep their existing definitions.
+
+### Far-SOL diffusion minimum
+
+An optional smooth ramp raises diffusion in main SOL and private flux after
+applying the band. It never lowers an existing coefficient, never acts in the
+core or undefined regions, and is independent of the background model's cutoff
+and topology policy. It requires the magnetic geometry cache. Both features
+belong to enabled `transport_1d`; neutrals and pinch remain unchanged.
+
+```fortran
+  far_sol_min_phys = 1.0,0.0,2.0,2.0  ! [m^2/s]: particles, momentum, ions, electrons
+  far_sol_start = 1.15
+  far_sol_width = 0.05
+  ! far_sol_pfr_scale = 0.3333333333333333 ! default: 1/3
+```
+
+`far_sol_min_phys` defaults to four zeros (inactive); zero disables that channel.
+The targets must be finite and nonnegative and use the same heat-diffusion
+convention as the band. The main-SOL ramp starts at `far_sol_start` (default
+1.15), reaches the full minimum at `far_sol_start + far_sol_width` (default
+width 0.05), and uses cubic smoothstep between them. The local coefficient is
+`C_final = C_band + V*max(C_far_min-C_band,0)`.
+
+Both endpoints use the shared `diffusion_coordinate`. For example, with
+`'omp_distance'`, `far_sol_start=0.04, far_sol_width=0.02` means onset 4 cm
+outside the OMP separatrix and full minimum at 6 cm. Both positions map
+individually to rho before constructing the ramp. Rank zero prints the OMP
+positions and resolved rho, plus the PFR thresholds; rho inputs print just
+the main-SOL/PFR thresholds. Mapping and refresh follow the band lifecycle.
+
+The PFR ramp mirrors departure from rho=1, scaled by `far_sol_pfr_scale`
+(default 1/3). For main-SOL endpoints `rho_start,rho_end`, its endpoints are
+`1-scale*(rho_start-1)` and `1-scale*(rho_end-1)`. Thus 1.15–1.20 maps to
+0.95–0.933333 in PFR: the minimum becomes fully active toward **smaller** rho.
+Scaling applies after any OMP mapping, to both onset departure and ramp width.
+The scale must be finite and positive; main-SOL endpoints must be distinct and
+above one, and mirrored PFR endpoints must be distinct and nonnegative.
 
 ### Transport 1D relaxation
 
@@ -310,7 +348,8 @@ choosing the Bohm / gyro-Bohm weights.
 The four `diff_*_min_phys` inputs are in m²/s, and `vpinch_const_phys` is in
 m/s. They are converted to solver units when applying the model configuration,
 using factors $t_0/L_0^2$ for diffusion and $t_0/L_0$ for velocity. Radial
-coordinates, window widths and model weights are dimensionless.
+coordinates and widths are dimensionless except for band/far-SOL inputs in
+`omp_distance` mode, which are in metres. Model weights are dimensionless.
 
 The mixed ion and electron diffusion profiles have a numerical lower bound
 of `1.e-10` in solver units before particle and momentum diffusion are formed.
@@ -346,7 +385,13 @@ effective `band_transition_width`, and `band_rho`. The five `band_rho` entries
 are the inner shoulder boundary, inner plateau boundary, center, outer plateau
 boundary and outer shoulder boundary. Center and widths retain the input
 coordinate units (rho or metres); `band_rho` always contains normalized poloidal
-radii. Saved raw profiles precede this band.
+radii. Saved raw profiles precede this band and the far-region ramp.
+
+When a far-region minimum is active, the same parameter group records
+`far_sol_min` (four normalized targets), `far_sol_coordinate`, `far_sol_start`,
+`far_sol_width` (input-coordinate units), `far_sol_pfr_scale`, `far_sol_rho`
+(main-SOL onset/full endpoints), and `far_sol_pfr_rho` (PFR onset/full endpoints).
+Inactive features add no corresponding parameter datasets.
 
 The effective pinch selection is saved as a sorted, zero-padded integer array
 at `/transport_1d/params/pinch_equations`.

@@ -25,6 +25,11 @@ PROGRAM test_transport_band
   simpar%refval_length = 4.d0
   switch%transport_1d = .TRUE.
   CALL get_command_argument(1,argument)
+  IF (INDEX(argument,'far') == 1) THEN
+     CALL check_far_sol(TRIM(argument))
+     WRITE (*,'(A)') 'transport far-SOL checks: PASS'
+     STOP
+  ENDIF
   IF (INDEX(argument,'omp') == 1) THEN
      CALL check_omp_band(TRIM(argument))
      WRITE (*,'(A)') 'transport OMP band checks: PASS'
@@ -109,6 +114,129 @@ PROGRAM test_transport_band
 
 CONTAINS
 
+  SUBROUTINE check_far_sol(mode)
+    CHARACTER(LEN=*), INTENT(IN) :: mode
+    TYPE(transport_model_1d_t) :: far_model, band_background
+    REAL*8 :: sol_start, sol_end, pfr_start, pfr_end, delta_sol, delta_pfr, before
+    REAL*8 :: points(16), local_iso(6,6,16), local_ani(6,6,16), expected_iso(6,6,16), expected_ani(6,6,16)
+    REAL*8 :: far_weights(16), expected, correction, sign_flux
+    INTEGER :: topology(16), eq, i
+    LOGICAL :: omp
+
+    IF (mode == 'far_direct_negative') &
+         CALL far_model%set_config(far_sol_min_phys=[-1.d0,0.d0,0.d0,0.d0])
+    IF (mode == 'far_direct_nan') &
+         CALL far_model%set_config(far_sol_min_phys=[ieee_value(0.d0,ieee_quiet_nan),0.d0,0.d0,0.d0])
+    input%transport_model_path = 'transport_model.nml'
+    CALL read_transport_model_input()
+    CALL far_model%set_config(diffusion_coordinate=transport_model_input%diffusion_coordinate, &
+         band_equations=transport_model_input%band_equations, band_diff_phys=transport_model_input%band_diff_phys, &
+         band_center=transport_model_input%band_center, band_width=transport_model_input%band_width, &
+         far_sol_min_phys=transport_model_input%far_sol_min_phys, &
+         far_sol_start=transport_model_input%far_sol_start, far_sol_width=transport_model_input%far_sol_width, &
+         far_sol_pfr_scale=transport_model_input%far_sol_pfr_scale, &
+         rho_diffusion_model_max=.9d0, transport_region_policy='core_only')
+    CALL initialize_profiles(far_model)
+    omp = far_model%config%diffusion_coordinate == 'omp_distance'
+    sign_flux = 1.d0
+    IF (mode == 'far_omp_reversed') sign_flux = -1.d0
+    phys%lscale = .5d0
+    IF (omp) CALL omp_geometry(.1d0,2.d0,sign_flux)
+    magnetic_geometry_cache%is_initialized = .TRUE.
+    IF (mode == 'far_omp_outside') CALL far_model%set_config(far_sol_start=2.d0)
+    IF (mode == 'far_omp_unprepared') THEN
+       CALL far_model%far_sol_edges(sol_start,sol_end,pfr_start,pfr_end)
+       ERROR STOP 'Unprepared far-SOL ramp accepted'
+    ENDIF
+    CALL far_model%prepare_diffusion_shapes()
+    CALL far_model%far_sol_edges(sol_start,sol_end,pfr_start,pfr_end)
+    IF (omp) THEN
+       CALL check_close(sol_start,expected_omp_rho(far_model%config%far_sol_start,.1d0,2.d0),'Far OMP start')
+       CALL check_close(sol_end,expected_omp_rho(far_model%config%far_sol_start+ &
+            far_model%config%far_sol_width,.1d0,2.d0),'Far OMP end')
+    ENDIF
+    CALL check_close((1.d0-pfr_start)/(sol_start-1.d0),far_model%config%far_sol_pfr_scale,'PFR onset scale')
+    CALL check_close((pfr_start-pfr_end)/(sol_end-sol_start),far_model%config%far_sol_pfr_scale,'PFR width scale')
+    band_background = far_model
+    CALL band_background%set_config(far_sol_min_phys=[0.d0,0.d0,0.d0,0.d0])
+    ! Its band map is unchanged when only the far feature is disabled.
+    CALL band_background%prepare_diffusion_shapes()
+    delta_sol = sol_end-sol_start
+    delta_pfr = pfr_end-pfr_start
+    points = [1.d0,sol_start,sol_start+.25d0*delta_sol,sol_start+.5d0*delta_sol,sol_end,sol_end+delta_sol, &
+         1.d0,pfr_start,pfr_start+.25d0*delta_pfr,pfr_start+.5d0*delta_pfr,pfr_end,pfr_end+delta_pfr, &
+         pfr_end,sol_end,pfr_end,sol_end]
+    topology(1:6) = magnetic_region_main_sol
+    topology(7:12) = magnetic_region_private_flux
+    topology(13:14) = magnetic_region_core
+    topology(15:16) = magnetic_region_undefined
+    far_weights = [0.d0,0.d0,.15625d0,.5d0,1.d0,1.d0,0.d0,0.d0,.15625d0,.5d0,1.d0,1.d0, &
+         0.d0,0.d0,0.d0,0.d0]
+    local_ani = .125d0
+    DO i=1,16
+       DO eq=1,6
+          local_ani(eq,eq,i) = REAL(eq,8)
+       ENDDO
+       local_ani(3,3,i) = 6.d0 ! Above its floor: must never be lowered by the ramp.
+    ENDDO
+    local_iso = local_ani + .375d0
+    expected_iso = local_iso
+    expected_ani = local_ani
+    CALL band_background%apply_1D_diffusion(points,expected_iso,expected_ani,topology)
+    IF (mode == 'far_no_geometry') magnetic_geometry_cache%is_initialized = .FALSE.
+    CALL far_model%apply_1D_diffusion(points,local_iso,local_ani,topology)
+    DO i=1,16
+       DO eq=1,4
+          expected = expected_ani(eq,eq,i)
+          correction = far_weights(i)*MAX(far_model%config%far_sol_min(eq)-expected,0.d0)
+          expected_ani(eq,eq,i) = expected+correction
+          expected_iso(eq,eq,i) = expected_iso(eq,eq,i)+correction
+       ENDDO
+    ENDDO
+    CALL check_array_close(local_ani,expected_ani,'Far-SOL channel/topology/ramp/precedence')
+    CALL check_array_close(local_iso,expected_iso,'Far-SOL isotropic/neutral/off-diagonal preservation')
+    IF (ANY(far_model%d_fs /= 6.d0) .OR. ANY(far_model%vpinch_fs /= -3.d0)) &
+         ERROR STOP 'Far-SOL changed raw diffusion or pinch'
+
+    CALL HDF5_create('transport_far.h5',file_id)
+    CALL HDF5_group_create('transport_1d',file_id,group_id)
+    CALL far_model%write_hdf5(group_id)
+    CALL HDF5_group_close(group_id)
+    CALL HDF5_close(file_id)
+    CALL far_model%set_config(far_sol_min_phys=transport_model_input%far_sol_min_phys)
+    IF (far_model%diffusion_geometry_generation < 0) ERROR STOP 'Repeated far settings invalidated mapping'
+    CALL check_close(far_model%config%far_sol_min(1),2.d0,'Repeated far normalization')
+    before = sol_end
+    CALL far_model%init(5)
+    CALL far_model%prepare_diffusion_shapes()
+    CALL far_model%far_sol_edges(sol_start,sol_end,pfr_start,pfr_end)
+    CALL check_close(sol_end,before,'Far mapping on reinitialization')
+    IF (omp) THEN
+       CALL omp_geometry(.2d0,2.2d0,sign_flux)
+       CALL far_model%prepare_diffusion_shapes()
+       CALL far_model%far_sol_edges(sol_start,sol_end,pfr_start,pfr_end)
+       CALL check_close(sol_end,expected_omp_rho(far_model%config%far_sol_start+ &
+            far_model%config%far_sol_width,.2d0,2.2d0),'Far mapping on equilibrium change')
+       IF (ABS(sol_end-before) < 1.d-6) ERROR STOP 'Far map did not refresh'
+    ENDIF
+    CALL far_model%set_config(far_sol_pfr_scale=.25d0)
+    IF (far_model%diffusion_geometry_generation /= -1) ERROR STOP 'Changed far settings retained mapping'
+    CALL far_model%prepare_diffusion_shapes()
+    CALL far_model%far_sol_edges(sol_start,sol_end,pfr_start,pfr_end)
+    CALL check_close(pfr_end,1.d0-.25d0*(sol_end-1.d0),'Changed PFR factor')
+    ! Enabling a previously inactive feature must map its own landmarks.
+    IF (omp .AND. .NOT. ANY(far_model%config%band_enabled)) THEN
+       CALL far_model%set_config(band_equations=[1],band_center=0.d0,band_width=.02d0)
+       IF (far_model%diffusion_geometry_generation /= -1) ERROR STOP 'Enabling band retained stale mapping'
+       CALL far_model%prepare_diffusion_shapes()
+       CALL check_close(far_model%band_center_rho,1.d0,'Band enabled after far-only mapping')
+    ENDIF
+    CALL far_model%destroy()
+    IF (ANY(far_model%config%far_sol_min /= 0.d0)) ERROR STOP 'Destroy retained far settings'
+    CALL magnetic_equilibrium%clear()
+    magnetic_geometry_cache%is_initialized = .FALSE.
+  END SUBROUTINE check_far_sol
+
   SUBROUTINE check_omp_band(mode)
     CHARACTER(LEN=*), INTENT(IN) :: mode
     TYPE(transport_model_1d_t) :: omp_model
@@ -145,7 +273,7 @@ CONTAINS
        CALL omp_model%band_edges(band_start,plateau_start,plateau_end,band_end)
        ERROR STOP 'Unprepared OMP band accepted'
     END SELECT
-    CALL omp_model%prepare_band()
+    CALL omp_model%prepare_diffusion_shapes()
     IF (mode == 'omp_stale') THEN
        magnetic_equilibrium%generation = magnetic_equilibrium%generation + 1
        CALL omp_model%band_edges(band_start,plateau_start,plateau_end,band_end)
@@ -156,8 +284,8 @@ CONTAINS
     ! Repeated configuration/update must retain the prepared map and avoid log spam.
     CALL omp_model%set_config(band_center=transport_model_input%band_center, &
          band_diff_phys=transport_model_input%band_diff_phys)
-    IF (omp_model%band_geometry_generation < 0) ERROR STOP 'Unchanged OMP configuration invalidated map'
-    CALL omp_model%prepare_band()
+    IF (omp_model%diffusion_geometry_generation < 0) ERROR STOP 'Unchanged OMP configuration invalidated map'
+    CALL omp_model%prepare_diffusion_shapes()
 
     CALL HDF5_create('transport_band_omp.h5',file_id)
     CALL HDF5_group_create('transport_1d',file_id,group_id)
@@ -176,16 +304,16 @@ CONTAINS
     ENDDO
 
     CALL omp_model%set_config(band_center=.003d0)
-    IF (omp_model%band_geometry_generation /= -1) ERROR STOP 'Changed OMP input retained map'
-    CALL omp_model%prepare_band()
+    IF (omp_model%diffusion_geometry_generation /= -1) ERROR STOP 'Changed OMP input retained map'
+    CALL omp_model%prepare_diffusion_shapes()
     CALL check_omp_mapping(omp_model,.1d0,2.d0)
     before = omp_model%band_end_rho
     CALL omp_model%init(5)
-    IF (omp_model%band_geometry_generation /= -1) ERROR STOP 'Reinitialization retained OMP map'
-    CALL omp_model%prepare_band()
+    IF (omp_model%diffusion_geometry_generation /= -1) ERROR STOP 'Reinitialization retained OMP map'
+    CALL omp_model%prepare_diffusion_shapes()
     CALL check_close(omp_model%band_end_rho,before,'Reinitialization changed OMP map')
     CALL omp_geometry(.2d0,2.2d0,sign_flux)
-    CALL omp_model%prepare_band()
+    CALL omp_model%prepare_diffusion_shapes()
     CALL check_omp_mapping(omp_model,.2d0,2.2d0)
     IF (ABS(omp_model%band_end_rho-before) < 1.d-6) ERROR STOP 'Equilibrium change did not refresh map'
 
