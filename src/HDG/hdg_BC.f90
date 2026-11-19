@@ -1735,10 +1735,7 @@ CONTAINS
                !NEW BOHM BC: Impose everywhere a value for velocity
                elMat%Alu(ind_ff(ind), ind_fe(ind - 1), iel) = elMat%Alu(ind_ff(ind), ind_fe(ind - 1), iel) + tau(i, i)*delta*setval*NiNi
                elMat%Alu(ind_ff(ind), ind_fe(ind), iel) = elMat%Alu(ind_ff(ind), ind_fe(ind), iel) + tau(i, i)*(1.-delta)*NiNi
-               !elMat%Alu(ind_ff(ind),ind_fe(ind),iel) = elMat%Alu(ind_ff(ind),ind_fe(ind),iel) + tau(i,i)*NiNi
-               !weird investigations
-               elMat%ALL(ind_ff(ind), ind_ff(ind), iel) = elMat%ALL(ind_ff(ind), ind_ff(ind), iel) - tau(i, i)*NiNi
-               elMat%Alu(ind_ff(ind), ind_fe(ind), iel) = elMat%Alu(ind_ff(ind), ind_fe(ind), iel) + tau(i, i)*NiNi
+
 #ifdef TEMPERATURE
                !linearization of sound speed
                DO j = 1, Neqstab
