@@ -11,6 +11,7 @@ SUBROUTINE HDG_BC()
    USE LinearAlgebra
    USE physics
    USE analytical, ONLY: analytical_solution
+   USE printutils, ONLY:saveMatrix
 
    IMPLICIT NONE
 #ifdef TOR3D
