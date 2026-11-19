@@ -2263,8 +2263,8 @@ CONTAINS
             ! Poloidal face
             tau_aux(1) = tau_aux(1) + phys%diff_n
             tau_aux(2) = tau_aux(2) + phys%diff_u
-            tau_aux(3) = tau_aux(3) + phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
-            tau_aux(4) = tau_aux(4) + phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(numer%tmax*xy(1)/numer%ntor)/phys%lscale
+            tau_aux(3) = tau_aux(3) + phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1)*refElTor%Ndeg/(1*xy(1)/numer%ntor)/phys%lscale
+            tau_aux(4) = tau_aux(4) + phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(1*xy(1)/numer%ntor)/phys%lscale
 #ifdef NEUTRAL
             tau_aux(5) = phys%diff_nn!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
 #endif
