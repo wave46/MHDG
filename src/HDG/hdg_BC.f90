@@ -1130,6 +1130,7 @@ CONTAINS
 
          IF (ABS(inc) .LE. phys%bohmth) THEN
             setval = sn*SoundSpeed/phys%bohmth*ABS(inc)*bohm_suppresion
+            delta = 0
 #ifdef TEMPERATURE
             dcs_du = sn*dcs_du/phys%bohmth*ABS(inc)*bohm_suppresion
 #endif
