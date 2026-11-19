@@ -53,7 +53,7 @@ MODULE Main_utils
    REAL*8                       :: max_osc = -100., min_osc = -100.
    INTEGER                      :: n_osc
    TYPE(Mesh_type)              :: Mesh_prec
-   LOGICAL                      :: restart_adapt, time_adapt, reorder = .TRUE.
+   LOGICAL                      :: restart_adapt, time_adapt, reorder = .FALSE.
    INTEGER, ALLOCATABLE         :: perm_elems(:), perm_faces(:)
 #ifdef PARALL
    REAL*8, POINTER              :: X_glob(:, :) => NULL(), B_glob(:, :) => NULL()
