@@ -24,11 +24,13 @@ CONTAINS
    !*****************************************
    ! Analytical solution
    !****************************************
-   SUBROUTINE analytical_solution(x, y, t, u)
+   SUBROUTINE analytical_solution(iel, x, y, t, u)
+      INTEGER, INTENT(IN)                                 :: iel
       REAL*8, DIMENSION(:), INTENT(IN)        :: x, y, t
       REAL*8, DIMENSION(:, :), INTENT(OUT)     :: u
       REAL*8, DIMENSION(SIZE(u, 1), phys%npv)  :: up
-      INTEGER                   :: i, j, ind, N1D, N2D
+      INTEGER                   :: i, j, ind, ind_fluxel,N1D, N2D
+      REAL*8                                    :: sigma, fluxel
       REAL*8                    :: a, b, r, xx, yy, tt, xmax, xmin, ymax, ymin, xm, ym
 
 
@@ -87,25 +89,36 @@ CONTAINS
                up(ind, 3) = 20 + COS(a*tt)
                up(ind, 4) = 10 - SIN(a*tt)
 
-             CASE (50:63)
+             CASE (50:59)
+               ! Default initial density (for boundary conditions or for initialisation without a core)
+               up(ind, 1) = 3.
+               up(ind, 3) = 18.
+               up(ind, 4) = 18.
+#ifdef NEUTRAL
+               up(ind, 11) = 1.e-8
+#endif
+               ! Apply the magnetic-flux profile for initialisation only in case there is a core
+               IF (SIZE(Mesh%T, 2)*N1D .EQ. SIZE(up, 1) .AND. .NOT. ANY(Mesh%boundaryFlag .EQ. 8)) THEN
+                  ind_fluxel = (j - 1)*Mesh%Nnodes + Mesh%T(iel, i)
+                  fluxel = phys%magnetic_flux(ind_fluxel)
+                  fluxel = (fluxel - phys%Flux2Dmin) / (phys%Flux2Dmax - phys%Flux2Dmin)
+                  sigma = 0.4
+                  up(ind, 1) = 3.*EXP(-fluxel**2/(2.*sigma**2))
+                  up(ind, 3) = 18.*EXP(-fluxel**2/(2.*sigma**2))
+                  up(ind, 4) = 18.*EXP(-fluxel**2/(2.*sigma**2))
+               END IF
+
+             CASE (60:64)
                up(ind, 1) = 1.
                up(ind, 3) = 18.
                up(ind, 4) = 18.
 #ifdef NEUTRAL
                up(ind,11) = 0.
 #endif
-             CASE (64)
-               up(ind, 1) = 1.
-               up(ind, 3) = 18.
-               up(ind, 4) = 18.
-               r = SQRT((xx - geom%R0)**2 + yy**2)
-               !               if (abs(r-1).lt.1e-6) then
-               !               ! outer boundary
-               !               endif
              CASE (65)
                up(ind, 1) = 1.
                up(ind, 2) = 0.
-               r = SQRT((xx*phys%lscale - geom%R0)**2 + (yy*phys%lscale - 0.75)**2)
+               r = sqrt((xx*phys%lscale - geom%R0)**2 + (yy*phys%lscale - 0.75)**2)
                IF (r .LE. 0.05) THEN
                   up(ind, 2) = 1.
                END IF
@@ -128,8 +141,8 @@ CONTAINS
       REAL*8, DIMENSION(:, :), INTENT(OUT)     :: ux, uy, ut
       REAL*8, DIMENSION(SIZE(u, 1), phys%npv)  :: upx, upy, upt
       REAL*8, DIMENSION(SIZE(u, 1), phys%npv)   :: up
-      INTEGER                   :: i, j, ind, N1D, N2D
-      REAL*8                    :: a, r, xx, yy, tt, xmax, xmin, ymax, ymin, xm, ym
+      INTEGER                      :: i, j, ind, N1D, N2D
+      REAL*8                       :: a, r, xx, yy, tt, xmax, xmin, ymax, ymin, xm, ym
 
 
       N2D = SIZE(x, 1)
@@ -231,10 +244,10 @@ CONTAINS
    SUBROUTINE body_force(x, y, t, f)
       REAL*8, DIMENSION(:), INTENT(IN) :: x, y, t
       REAL*8, DIMENSION(:, :), INTENT(OUT) :: f
-      REAL*8                    :: a, b, D, mu, csii, csie, kpari, kpare, Mref, epn, tie, pcourr
-      INTEGER                   :: i, j, ind, N1D, N2D
-      REAL*8                    :: r, xx, yy, tt, xmax, xmin, ymax, ymin, xm, ym
-      REAL*8                    :: cx, cy, sx, sy, cx2, sx2, cy2, sy2, r2, cc, ss, ct, st
+      REAL*8                       :: a, b, D, mu, csii, csie, kpari, kpare, Mref, epn, tie, pcourr
+      INTEGER                      :: i, j, ind, N1D, N2D
+      REAL*8                       :: r, xx, yy, tt, xmax, xmin, ymax, ymin, xm, ym
+      REAL*8                       :: cx, cy, sx, sy, cx2, sx2, cy2, sy2, r2, cc, ss, ct, st
 
       N2D = SIZE(x, 1)
       N1D = SIZE(t, 1)
@@ -1263,34 +1276,26 @@ CONTAINS
          up(:, 4) = 10 - SIN(a*x)*COS(a*y)
        CASE (5:6)
          ! Cartesian case, square mesh, horizontal field
-         up(:, 1) = 1.
+         up(:, 1) = 3.
          up(:, 3) = 18.
          up(:, 4) = 18.
        CASE (50:59)
-         IF(SIZE(fluxel,1) .EQ. SIZE(up,1)) THEN
-            ! case in which analytical_solution is called to initialise the initial solution
+         ! Default initial values (for boundary conditions or for initialisation without a core)
+         up(:, 1) = 3.
+         up(:, 3) = 18.
+         up(:, 4) = 18.
+#ifdef NEUTRAL
+         up(:, 11) = 1.e-8
+#endif
+         ! Apply the magnetic-flux profile for initialisation only in case there is a core
+         IF (size(fluxel,1) .EQ. size(up,1) .AND. .NOT. ANY(Mesh%boundaryFlag .EQ. 8)) THEN
             fluxel = phys%magnetic_flux(Mesh%T(iel,:))
             fluxel = (fluxel - phys%Flux2Dmin)/(phys%Flux2Dmax - phys%Flux2Dmin)
             sigma = 0.4
-            up(:, 1) = 1.*EXP(-fluxel**2/(2*sigma**2))
-            up(:, 3) = 18.*EXP(-fluxel**2/(2*sigma**2))
-            up(:, 4) = 18.*EXP(-fluxel**2/(2*sigma**2))
-         ELSE
-            ! case in which analytical_solution is called to apply boundary conditions
-            up(:, 1) = 1.
-            up(:, 3) = 18.
-            up(:, 4) = 18.
+            up(:, 1) = 3.*EXP(-fluxel**2/(2.*sigma**2))
+            up(:, 3) = 18.*EXP(-fluxel**2/(2.*sigma**2))
+            up(:, 4) = 18.*EXP(-fluxel**2/(2.*sigma**2))
          END IF
-#ifdef NEUTRAL
-         up(:,11)= 1.e-8
-#endif
-
-         !                                      r =         sqrt ( (x*phys%lscale-geom%R0)**2 + (y*phys%lscale)**2 )
-         !                                      th = atan(x-geom%R0,y)
-         !                                      up(:,1) = 2.+ cos(r*2*pi)*sin(th*4*pi)
-         !                                      up(:,2) = 10. + cos(r*2*pi)*sin(th*4*pi)
-         !                                      up(:,3) = 36. + cos(r*2*pi)*sin(th*4*pi)
-         !                                      up(:,4) = 36. + cos(r*2*pi)*sin(th*4*pi)
        CASE (60:64)
          up(:, 1) = 1.
          up(:, 3) = 18.
