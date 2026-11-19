@@ -66,7 +66,7 @@ PROGRAM MHDG
 
    IF(reorder) THEN
       CALL reorder_mesh(perm_elems)
-      CALL free_mesh_order()
+      CALL free_mesh_ordered()
    END IF
 
    ! Mesh preprocess: create the mesh related structures
