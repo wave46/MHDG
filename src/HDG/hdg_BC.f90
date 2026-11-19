@@ -1112,7 +1112,7 @@ CONTAINS
             SoundSpeed = SQRT(phys%Mref)
          END IF
 #endif
-         inc = bn/norm2(b(g, 1:2))
+         inc = bn/norm2(b(g, :))
 
 #ifdef NGAMMA
          ! NEW BOHM BC
