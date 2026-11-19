@@ -12,6 +12,7 @@ SUBROUTINE HDG_computeJacobian()
    USE analytical, ONLY: body_force, analytical_solution
    USE physics
    USE hdg_limitingtechniques, ONLY: HDG_ShockCapturing
+   USE printutils, only: saveMatrix
 
    IMPLICIT NONE
 
