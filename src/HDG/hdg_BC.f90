@@ -31,26 +31,40 @@ SUBROUTINE HDG_BC()
    REAL*8                       :: htor, Xf(Mesh%Nnodesperface, Mesh%Ndim)
    REAL*8                       :: uf(refElTor%Nfl*phys%neq)
    REAL*8                       :: thetafg(refElTor%Ngauss1d), dsurf(refElTor%Ngl), n_g(refElTor%Ngl, 3), t_g(refElPol%Ngauss1d, 2)
-   INTEGER*4                    :: ind_qf(refElTor%Nfl*3*phys%Neq)
+   INTEGER*4                    :: ind_qf(refElTor%Nfl*3*phys%Neq), ind_ue(refElTor%Nfl*phys%Neq)
    REAL*8                       :: qqf(refElTor%Nfl, 3*phys%Neq), qfg(refElTor%Ngl, phys%neq*3)
    REAL*8                       :: coefi, coefe
    REAL*8                       :: tdiv(numer%ntor + 1)
-   REAL*8                       :: tau_save_el(refElPol%Ngauss1d, phys%neq), xy_g_save_el(refElPol%Ngauss1d, 2)
    REAL*8                       :: xyf(refElPol%Ngauss1d, 2), xyd_g(refElPol%Ngauss1d, 2), xydNorm_g(refElPol%Ngauss1d)
    INTEGER                      :: ind_asf(refElTor%Nfl), ind_ash(refElTor%Nfl)
-   REAL*8                       :: Bfl(refElTor%Nfl, 3)
+   REAL*8                       :: Bfl(refElTor%Nfl, 3), psifl(refElPol%Nfacenodes)
    INTEGER                      :: indbt(refElTor%Nfl)
-   REAL*8                       :: Bmod_nod(refElTor%Nfl), b_nod(refElTor%Nfl, 3)
+   REAL*8                       :: Bmod_nod(refElTor%Nfl), b_nod(refElTor%Nfl, 3), psig(refElTor%Nfl)
    REAL*8                       :: uex(refElTor%Ngl, phys%neq), uexpg(refElTor%Ngl, phys%npv)
    REAL*8                       :: upg(refElTor%Ngl, phys%npv)
+   REAL*8                       :: ueg(refElTor%Ngl, phys%neq)
    REAL*8, POINTER              :: Nfi(:, :)
    REAL*8                       :: ug(refElTor%Ngl), ufg(refElTor%Ngl, phys%neq)
    REAL*8                       :: diff_iso_fac(phys%neq, phys%neq, refElTor%Ngl), diff_ani_fac(phys%neq, phys%neq, refElTor%Ngl)
    REAL*8                       :: Bmod(refElTor%Ngl), b(refElTor%Ngl, 3)
 
+   REAL*8                       :: totalflux_pump, totalflux_puff, totalflux_parallel, totalflux_perpendicular, totalflux_neutral, totalflux_numerical
+   REAL*8                       :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular, faceflux_neutral, faceflux_numerical
+   REAL*8                       :: tau_save_el(refElTor%Ngl, phys%neq), xy_g_save_el(refElTor%Ngl, 2)
+   LOGICAL                      :: save_tau
+
    IF (utils%timing) THEN
       CALL cpu_TIME(timing%tps1)
       CALL system_CLOCK(timing%cks1, timing%clock_rate1)
+   END IF
+
+   IF (utils%printflux) THEN
+      totalflux_pump = 0.
+      totalflux_puff = 0.
+      totalflux_parallel = 0.
+      totalflux_perpendicular = 0.
+      totalflux_neutral = 0.
+      totalflux_numerical = 0.
    END IF
 
    Ndim = 3                                               ! Number of dimensions
@@ -65,6 +79,7 @@ SUBROUTINE HDG_BC()
    NGaussPol = refElPol%Ngauss1D
    NGaussTor = refElTor%Ngauss1D
    Ngfl = refElTor%Ngl
+   save_tau = switch%saveTau
 
    ! Some indices
    ind_asf = (/(i, i=0, Neq*(Npfl - 1), Neq)/)
@@ -127,14 +142,17 @@ SUBROUTINE HDG_BC()
          !                      Magnetic field
          !****************************************************
          ! Magnetic field of the nodes of the face
-         indbt = colint(tensorSumInt(Mesh%T(iel, nod), (itor - 1)*(Np1Dtor - 1)*Mesh%Nnodes +&
-         &Mesh%Nnodes*((/(i, i=1, Np1Dtor)/) - 1)))
+         indbt = colint(tensorSumInt(Mesh%T(iel, nod), (itor - 1)*(Np1Dtor - 1)*Mesh%Nnodes + Mesh%Nnodes*((/(i, i=1, Np1Dtor)/) - 1)))
          Bfl = phys%B(indbt, :)
          ! Magnetic field norm and direction at element nodes
          Bmod_nod = SQRT(Bfl(:, 1)**2 + Bfl(:, 2)**2 + Bfl(:, 3)**2)
          b_nod(:, 1) = Bfl(:, 1)/Bmod_nod
          b_nod(:, 2) = Bfl(:, 2)/Bmod_nod
          b_nod(:, 3) = Bfl(:, 3)/Bmod_nod
+
+         ! Normalized magnetic flux of the nodes of the face: PSI
+         !psifl = phys%magnetic_psi(Mesh%T(iel, nod))
+         psifl = 0.
 
          ! Gauss points position
          xyf = MATMUL(refElPol%N1D, Xf)
@@ -167,6 +185,7 @@ SUBROUTINE HDG_BC()
          ind_fe = colint(tensorSumInt((/(i, i=1, Neq)/), (refElTor%faceNodes3(ifl, :) - 1)*Neq))
          ind_fg = colint(tensorSumInt((/(i, i=1, 3*Neq)/), (refElTor%faceNodes3(ifl, :) - 1)*3*Neq))
          ind_qf = (iel3 - 1)*Ndim*Neq*Npel + ind_fg
+         ind_ue = (iel3 - 1)*Neq*Npel + ind_fe
          qqf = TRANSPOSE(RESHAPE(sol%q(ind_qf), (/Ndim*Neq, Npfl/)))
 
          ! Solution in this face
@@ -176,6 +195,10 @@ SUBROUTINE HDG_BC()
          Bmod = MATMUL(refElTor%sFTF, Bmod_nod)
          b = MATMUL(refElTor%sFTF, b_nod)
 
+         ! Normalized magnetic flux at Gauss points: PSI
+         !psig = matmul(refElPol%N1d, psifl)
+         psig = 0.
+
          ! Face shape functions
          Nfi => refElTor%sFTF
 
@@ -184,6 +207,7 @@ SUBROUTINE HDG_BC()
 
          ! Set the face solution
          ufg = MATMUL(Nfi, TRANSPOSE(RESHAPE(uf, [neq, Npfl])))
+         ueg = MATMUL(Nfi, TRANSPOSE(RESHAPE(sol%u(ind_ue), [neq, Npfl])))
 
          ! Physical variables at Gauss points
          CALL cons2phys(ufg, upg)
@@ -209,7 +233,14 @@ SUBROUTINE HDG_BC()
           CASE (bc_Transmission)
             CALL set_Transmission_bc()
           CASE (bc_Bohm)
-            CALL set_Bohm_bc()
+            CALL set_Bohm_bc(tau_save_el, xy_g_save_el, faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular, faceflux_neutral, faceflux_numerical)
+          CASE (bc_BohmPump)
+            CALL set_Bohm_bc(tau_save_el, xy_g_save_el, faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular, faceflux_neutral, faceflux_numerical)
+          CASE (bc_BohmPuff)
+            CALL set_Bohm_bc(tau_save_el, xy_g_save_el, faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular, faceflux_neutral, faceflux_numerical)
+          CASE (bc_iter_core)
+            WRITE (6, *) "Error: 3D ITER core boundary is not implemented"
+            ERROR STOP 1
           CASE DEFAULT
             WRITE (6, *) "Error: wrong boundary type"
             STOP
@@ -332,9 +363,9 @@ CONTAINS
             IF (numer%stab > 1) THEN
                ! Compute tau in the Gauss points
                IF (numer%stab < 6) THEN
-                  CALL computeTauGaussPoints(upg(g, :), ufg(g, :), b(g, :), n_g(g, :), iel, 1., xyf(g, :), tau_stab)
+                  CALL computeTauGaussPoints(upg(g, :), ufg(g, :), b(g, :), n_g(g, :), iel, 1., xyf(igpol, :), tau_stab)
                ELSE
-                  CALL computeTauGaussPoints_matrix(upg(g, :), ufg(g, :), b(g, :), n_g(g, :), xyf(g, :), 1., iel, tau_stab)
+                  CALL computeTauGaussPoints_matrix(upg(g, :), ufg(g, :), b(g, :), n_g(g, :), xyf(igpol, :), 1., iel, tau_stab)
                END IF
                !****************** end stabilization part******************************
             ELSE
@@ -395,19 +426,47 @@ CONTAINS
    !****************************
    ! Bohm
    !****************************
-   SUBROUTINE set_Bohm_bc()
-      INTEGER                   :: i, j, k
-      INTEGER                   :: g, igpol, igtor
-      REAL*8                    :: dsurfg
-      REAL*8                    :: setval, delta
-      REAL*8                    :: inc, sn
-      REAL*8                    :: NiNi(Npfl, Npfl), Ni(Npfl)
-      REAL*8                    :: soundSpeed
-      REAL*8                    :: bn
-      REAL                      :: tau_stab(Neq, Neq)
+   SUBROUTINE set_Bohm_bc(tau_save_el, xy_g_save_el, &
+      faceflux_pump, faceflux_puff, faceflux_parallel, &
+      faceflux_perpendicular, faceflux_neutral, faceflux_numerical)
+      INTEGER                            :: i, j, k
+      INTEGER                            :: g, igpol, igtor, delta
+      REAL*8                             :: dsurfg
+      REAL*8                             :: setval
+      REAL*8                             :: inc, sn
+      REAL*8                             :: NiNi(Npfl, Npfl), Ni(Npfl)
+      REAL*8                             :: soundSpeed
+      REAL*8                             :: bn
+      REAL                               :: tau_stab(Neq, Neq)
+      REAL*8, INTENT(OUT)                :: tau_save_el(:, :), xy_g_save_el(:, :)
+      REAL*8                             :: dcs_du(Neq)
+      REAL*8                             :: bohm_suppresion, energy_zero_threshold
+      REAL*8, INTENT(OUT)                :: faceflux_pump, faceflux_puff, faceflux_parallel, faceflux_perpendicular, faceflux_neutral, faceflux_numerical
+      REAL*8                             :: flgflux_pump, flgflux_puff, flgflux_parallel, flgflux_perpendicular, flgflux_neutral, flgflux_numerical
+
+      IF (numer%bohmtypebc /= 0) THEN
+         WRITE (6, *) "Error: 3D Bohm boundary type is not implemented", numer%bohmtypebc
+         ERROR STOP 1
+      END IF
+
+      IF (utils%printflux) THEN
+         faceflux_pump = 0.d0
+         faceflux_puff = 0.d0
+         faceflux_parallel = 0.d0
+         faceflux_perpendicular = 0.d0
+         faceflux_neutral = 0.d0
+         faceflux_numerical = 0.d0
+         flgflux_pump = 0.d0
+         flgflux_puff = 0.d0
+         flgflux_parallel = 0.d0
+         flgflux_perpendicular = 0.d0
+         flgflux_neutral = 0.d0
+         flgflux_numerical = 0.d0
+      END IF
+      energy_zero_threshold = 1.e-20_8
 
       !*****************************
-      ! Loop in face Gauss points
+      ! Loop in face Gauss points (preserving 3D structure)
       !*****************************
       DO igtor = 1, NGaussTor
          DO igpol = 1, NGaussPol
@@ -416,46 +475,62 @@ CONTAINS
 
             ! Calculate the integration weight
             IF (switch%axisym) THEN
+               ! Retaining original 3D axisymmetry handling for dsurfg
                dsurfg = dsurf(g)*xyf(igpol, 1)
             ELSE
                dsurfg = dsurf(g)
             END IF
 
+            ! bn is dot product of magnetic field and normal vector (both 3D)
             bn = dot_PRODUCT(b(g, :), n_g(g, :))
 
-            ! Sound speed
+            ! Sound speed calculation, integrating 2D logic
 #ifndef TEMPERATURE
             SoundSpeed = SQRT(phys%a)
+            bohm_suppresion = 1./(1.+1.e-2/ufg(g, 1))
+            !bohm_suppresion = 1.
 #else
-            SoundSpeed = upg(g, 9)
+            ! use compute_cs and compute_dcs_du for temperature-dependent sound speed
+            CALL compute_cs(ufg(g, :), SoundSpeed)
+            CALL compute_dcs_du(ufg(g, :), dcs_du)
+
             IF (switch%decoup) THEN
                SoundSpeed = SQRT(phys%Mref)
             END IF
+            bohm_suppresion = MAX(ufg(g, 3), energy_zero_threshold)/(MAX(ufg(g, 3), energy_zero_threshold) + phys%bohm_energy_thresh)
 #endif
-            inc = bn/NORM2(b(g, 1:2))
+            ! Normalize 'inc' using the full 3D magnetic field vector
+            !inc = bn/NORM2(b(g, 1:2))
+            inc = bn/NORM2(b(g, :))
 
-            setval = ufg(g, 2)
+            ! Bohm condition logic, incorporating NGAMMA and energy suppression from 2D
+#ifdef NGAMMA
+            ! NEW BOHM BC logic from 2D
+            setval = ABS(upg(g, 2)) ! Assuming upg(g,2) is still the relevant velocity for Bohm
+            sn = SIGN(1.d0, bn)
+            delta = 1
 
             IF (ABS(inc) .LE. phys%bohmth) THEN
-               sn = 1.
+               setval = sn*SoundSpeed/phys%bohmth*ABS(inc)*bohm_suppresion
+               !sn = 1.
                delta = 0
+#ifdef TEMPERATURE
+               dcs_du = sn*dcs_du/phys%bohmth*ABS(inc)*bohm_suppresion
+#endif
             ELSE
-               sn = SIGN(1., inc)
-               delta = 1
-               IF ((ABS(upg(g, 2))) .LE. SoundSpeed) THEN
-                  setval = sn*SoundSpeed
-                  delta = 1
-               ELSE IF ((ABS(upg(g, 2))) .GT. SoundSpeed) THEN
+               IF (ABS(upg(g, 2)) .LE. SoundSpeed/bohm_suppresion) THEN
+                  setval = sn*SoundSpeed*bohm_suppresion
+#ifdef TEMPERATURE
+                  dcs_du = sn*dcs_du*bohm_suppresion
+#endif
+               ELSE IF (ABS(upg(g, 2)) .GT. SoundSpeed/bohm_suppresion) THEN
                   delta = 0
-                  setval = upg(g, 2)
-               END IF
-               IF (numer%bohmtypebc == 1) THEN
-                  delta = 1
+                  !setval = sn*setval ! Commented out as in 2D
                END IF
             END IF
+#endif
 
-            ! Impose the velocity at the sound speed in case of subsonic
-            ! velocity.
+            ! Shape functions (Nfi and Nfi are from 3D context)
             NiNi = tensorProduct(Nfi(g, :), Nfi(g, :))*dsurfg
             Ni = Nfi(g, :)*dsurfg
 
@@ -463,25 +538,38 @@ CONTAINS
             IF (numer%stab > 1) THEN
                ! Compute tau in the Gauss points
                IF (numer%stab < 6) THEN
-                  CALL computeTauGaussPoints(upg(g, :), ufg(g, :), b(g, :), n_g(g, :), iel, 1., xyf(g, :), tau_stab)
+                  ! Pass full 3D b vector and n_g vector
+                  CALL computeTauGaussPoints(upg(g, :), ufg(g, :), b(g, :), n_g(g, :), iel, 1.d0, xyf(igpol, :), tau_stab)
                ELSE
-                  CALL computeTauGaussPoints_matrix(upg(g, :), ufg(g, :), b(g, :), n_g(g, :), xyf(g, :), 1., iel, tau_stab)
+                  CALL computeTauGaussPoints_matrix(upg(g, :), ufg(g, :), b(g, :), n_g(g, :), xyf(igpol, :), 1.d0, iel, tau_stab)
                END IF
-               !****************** end stabilization part******************************
+
+               IF (save_tau) THEN
+                  DO i = 1, Neq
+                     tau_save_el(g, i) = tau_stab(i, i)
+                  END DO
+                  ! Store 3D coordinates
+                  xy_g_save_el(g, 1:2) = xyf(igpol, 1:2)
+               END IF
             ELSE
-               tau_stab = 0.
+               tau_stab = 0.d0
                DO i = 1, Neq
                   tau_stab(i, i) = numer%tau(i)
                END DO
             END IF
+            !****************** end stabilization part******************************
 
             ! Assembly Bohm contribution
-            IF (numer%bohmtypebc .EQ. 0) THEN
-               CALL assembly_bohm_bc(iel3, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, NiNi, Ni, qfg(g, :),&
-               &ufg(g, :), b(g, :), n_g(g, :), tau_stab, setval, delta, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g))
-            ELSE
-               CALL assembly_bohm_bc_new(iel3, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, NiNi, Ni, qfg(g, :),&
-               &ufg(g, :), upg(g, :), b(g, :), n_g(g, :), tau_stab, setval, delta, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g))
+            CALL assembly_bohm_bc(iel3, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, NiNi, Ni, qfg(g, :), ufg(g, :), upg(g, :), ueg(g, :), b(g, :), psig(igpol), n_g(g, :), tau_stab, setval, dcs_du, delta, diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), dsurfg, flgflux_pump, flgflux_puff, flgflux_parallel, flgflux_perpendicular, flgflux_neutral, flgflux_numerical)
+
+            IF (utils%printflux) THEN
+               ! Summing conribution from each part of the face
+               faceflux_pump = faceflux_pump + flgflux_pump
+               faceflux_puff = faceflux_puff + flgflux_puff
+               faceflux_parallel = faceflux_parallel + flgflux_parallel
+               faceflux_perpendicular = faceflux_perpendicular + flgflux_perpendicular
+               faceflux_neutral = faceflux_neutral + flgflux_neutral
+               faceflux_numerical = faceflux_numerical + flgflux_numerical
             END IF
 
          END DO
@@ -1767,7 +1855,11 @@ CONTAINS
       END IF
 
       ! Jacobian matrix for pinch part
+#ifdef TOR3D
+      APinch = 0.
+#else
       CALL computePinch(bg, psig, APinch)
+#endif
 
 #ifdef TEMPERATURE
 
