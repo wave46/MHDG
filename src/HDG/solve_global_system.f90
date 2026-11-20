@@ -128,10 +128,8 @@ SUBROUTINE solve_global_system()
          CALL fill_rhs_PETSC(matPETSC)
          CALL build_mat_PETSC(matPETSC)
          CALL setup_ksp_pc_settings(matPETSC, ir)
-
-         IF ((iargc() .EQ. 2) .AND. (ir .EQ. 1)) THEN
-            CALL extractInitialGuess_PETSC()
-         END IF
+         CALL extractInitialGuess_PETSC()
+         CALL solve_mat_PETSC(matPETSC, ir)
          matK%start = .FALSE.
       ELSE
          ! init mat petsc is called even for non-starting iterations because adaptivity can change the mesh
@@ -139,9 +137,8 @@ SUBROUTINE solve_global_system()
          CALL fill_rhs_PETSC(matPETSC)
          CALL build_mat_PETSC(matPETSC)
          CALL extractInitialGuess_PETSC()
+         CALL solve_mat_PETSC(matPETSC, ir)
       END IF
-
-      CALL solve_mat_PETSC(matPETSC, ir)
 #else
       WRITE (6, *) "Trying to use PETSc but compiled without option -DWITH_PETSC"
       STOP
@@ -568,95 +565,92 @@ CONTAINS
       INTEGER                   :: total_n = 0, counts_recv(MPIvar%glob_size), displs(MPIvar%glob_size)
       REAL*8, ALLOCATABLE       :: aux_sol_glob_petsc(:)
 
-      IF (matK%start) THEN
-
 #ifdef TOR3D
-         ! ********* Parallel 3D ***********
-         IF (MPIvar%ntor .GT. 1) THEN
-            ntorass = numer%ntor/MPIvar%ntor
-         ELSE
-            ntorass = numer%ntor
-         END IF
+      ! ********* Parallel 3D ***********
+      IF (MPIvar%ntor .GT. 1) THEN
+         ntorass = numer%ntor/MPIvar%ntor
+      ELSE
+         ntorass = numer%ntor
+      END IF
 
-         Neq = phys%Neq
-         Nfl = refElTor%Nfl
-         N2d = Mesh%Nelems
-         Np2d = refElPol%Nnodes2D
-         Nfaces = Mesh%Nfaces
-         Nfdir = Mesh%Ndir
-         Nghostf = Mesh%nghostfaces
-         Nghoste = Mesh%nghostelems
+      Neq = phys%Neq
+      Nfl = refElTor%Nfl
+      N2d = Mesh%Nelems
+      Np2d = refElPol%Nnodes2D
+      Nfaces = Mesh%Nfaces
+      Nfdir = Mesh%Ndir
+      Nghostf = Mesh%nghostfaces
+      Nghoste = Mesh%nghostelems
 
-         IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .EQ. MPIvar%ntor) THEN
-            ct = 0
-            dd = 1 + ntorass*(N2D*Np2D + (Nfaces - Nfdir)*Nfl)*Neq
-            ddl = 1
-            DO i = 1, N2D
-               IF (Mesh%ghostelems(i) .EQ. 1) CYCLE
-               ct = ct + 1
-               indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-               indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-               sol%u_tilde0(indlp) = sol%u_tilde(indgp)
-            END DO
-         END IF
-
-         DO itor = 1, ntorass
-            ct = 0
-            dd = 1 + (itor - 1)*(N2D*Np2D + (Nfaces - Nfdir)*Nfl)*Neq
-            ddl = 1 + (itor - 1)*((N2D - Nghoste)*Np2D + (Nfaces - Nfdir - Nghostf)*Nfl)*Neq
-
-            IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .NE. MPIvar%ntor) THEN
-               ddl = ddl - (N2D - Nghoste)*Np2d*Neq
-            END IF
-
-            DO i = 1, N2D
-               IF (Mesh%ghostelems(i) .EQ. 1) CYCLE
-               IF (MPIvar%ntor .GT. 1 .AND. itor == 1) CYCLE
-               ct = ct + 1
-               indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-               indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-               sol%u_tilde0(indlp) = sol%u_tilde(indgp)
-            END DO
-            ct = 0
-            dd = dd + (N2D*Np2D)*Neq
-            ddl = ddl + ((N2D - Nghoste)*Np2D)*Neq
-
-            DO i = 1, Mesh%Nfaces
-               IF (Mesh%ghostfaces(i) .EQ. 1) CYCLE
-               ct = ct + 1
-               indgt = dd + (i - 1)*Nfl*Neq + (/(j, j=0, Neq*Nfl - 1)/)
-               indlt = ddl + (ct - 1)*Nfl*Neq + (/(j, j=0, Neq*Nfl - 1)/)
-               sol%u_tilde0(indlt) = sol%u_tilde(indgt)
-            END DO
-         END DO
-         IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .NE. MPIvar%ntor) THEN
-            ct = 0
-            dd = 1 + ntorass*(N2D*Np2D + (Nfaces - Nfdir)*Nfl)*Neq
-            ddl = 1 + ntorass*((N2D - Nghoste)*Np2D + (Nfaces - Nfdir - Nghostf)*Nfl)*Neq
-            ddl = ddl - (N2D - Nghoste)*Np2d*Neq
-            DO i = 1, N2D
-               IF (Mesh%ghostelems(i) .EQ. 1) CYCLE
-               ct = ct + 1
-               indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-               indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
-               sol%u_tilde0(indlp) = sol%u_tilde(indgp)
-            END DO
-         END IF
-
-#else
-         ! ********* Parallel 2D ***********
+      IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .EQ. MPIvar%ntor) THEN
          ct = 0
-         Neq = phys%Neq
-         Nfp = Mesh%Nnodesperface
+         dd = 1 + ntorass*(N2D*Np2D + (Nfaces - Nfdir)*Nfl)*Neq
+         ddl = 1
+         DO i = 1, N2D
+            IF (Mesh%ghostelems(i) .EQ. 1) CYCLE
+            ct = ct + 1
+            indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
+            indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
+            sol%u_tilde0(indlp) = sol%u_tilde(indgp)
+         END DO
+      END IF
+
+      DO itor = 1, ntorass
+         ct = 0
+         dd = 1 + (itor - 1)*(N2D*Np2D + (Nfaces - Nfdir)*Nfl)*Neq
+         ddl = 1 + (itor - 1)*((N2D - Nghoste)*Np2D + (Nfaces - Nfdir - Nghostf)*Nfl)*Neq
+
+         IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .NE. MPIvar%ntor) THEN
+            ddl = ddl - (N2D - Nghoste)*Np2d*Neq
+         END IF
+
+         DO i = 1, N2D
+            IF (Mesh%ghostelems(i) .EQ. 1) CYCLE
+            IF (MPIvar%ntor .GT. 1 .AND. itor == 1) CYCLE
+            ct = ct + 1
+            indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
+            indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
+            sol%u_tilde0(indlp) = sol%u_tilde(indgp)
+         END DO
+         ct = 0
+         dd = dd + (N2D*Np2D)*Neq
+         ddl = ddl + ((N2D - Nghoste)*Np2D)*Neq
+
          DO i = 1, Mesh%Nfaces
             IF (Mesh%ghostfaces(i) .EQ. 1) CYCLE
             ct = ct + 1
-            indg = (i - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
-            indl = (ct - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
-            sol%u_tilde0(indl) = sol%u_tilde(indg)
+            indgt = dd + (i - 1)*Nfl*Neq + (/(j, j=0, Neq*Nfl - 1)/)
+            indlt = ddl + (ct - 1)*Nfl*Neq + (/(j, j=0, Neq*Nfl - 1)/)
+            sol%u_tilde0(indlt) = sol%u_tilde(indgt)
          END DO
-#endif
+      END DO
+      IF (MPIvar%ntor .GT. 1 .AND. MPIvar%itor .NE. MPIvar%ntor) THEN
+         ct = 0
+         dd = 1 + ntorass*(N2D*Np2D + (Nfaces - Nfdir)*Nfl)*Neq
+         ddl = 1 + ntorass*((N2D - Nghoste)*Np2D + (Nfaces - Nfdir - Nghostf)*Nfl)*Neq
+         ddl = ddl - (N2D - Nghoste)*Np2d*Neq
+         DO i = 1, N2D
+            IF (Mesh%ghostelems(i) .EQ. 1) CYCLE
+            ct = ct + 1
+            indgp = dd + (i - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
+            indlp = ddl + (ct - 1)*Np2D*Neq + (/(j, j=0, Np2D*Neq - 1)/)
+            sol%u_tilde0(indlp) = sol%u_tilde(indgp)
+         END DO
       END IF
+
+#else
+      ! ********* Parallel 2D ***********
+      ct = 0
+      Neq = phys%Neq
+      Nfp = Mesh%Nnodesperface
+      DO i = 1, Mesh%Nfaces
+         IF (Mesh%ghostfaces(i) .EQ. 1) CYCLE
+         ct = ct + 1
+         indg = (i - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
+         indl = (ct - 1)*Neq*Nfp + (/(j, j=1, Neq*Nfp)/)
+         sol%u_tilde0(indl) = sol%u_tilde(indg)
+      END DO
+#endif
 
       IF (lssolver%sollib .EQ. 3) THEN
 #ifdef WITH_PETSC
@@ -666,7 +660,7 @@ CONTAINS
          counts_recv = 0
          displs = 0
 
-         aux_sol_glob_petsc(matPETSC%loc2glob) = sol%u_tilde0
+         aux_sol_glob_petsc(matPETSC%loc2glob) = sol%u_tilde0(1:matK%n)
          counts_recv(MPIvar%glob_id + 1) = matK%n
 
          CALL MPI_ALLREDUCE(MPI_IN_PLACE, counts_recv, MPIvar%glob_size, MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
