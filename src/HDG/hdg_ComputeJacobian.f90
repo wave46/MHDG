@@ -8,11 +8,15 @@
 
 SUBROUTINE HDG_computeJacobian()
    USE globals
-   USE LinearAlgebra, ONLY: tensorProduct, tensorSumInt
    USE analytical, ONLY: body_force, analytical_solution
    USE physics
    USE hdg_limitingtechniques, ONLY: HDG_ShockCapturing
-   USE printutils, only: saveMatrix
+   USE printutils, ONLY: saveMatrix
+#ifndef TOR3D
+   USE LinearAlgebra, ONLY: tensorProduct, tensorSumInt, add_scaled_matrix, add_scaled_transpose_matrix
+#else
+   USE LinearAlgebra, ONLY: tensorProduct, tensorSumInt, add_scaled_matrix, add_scaled_transpose_matrix, colint, col
+#endif
 
    IMPLICIT NONE
 
@@ -384,7 +388,7 @@ CONTAINS
       REAL*8                      :: detJ(Ng2d)
       REAL*8                      :: iJ11(Ng2d), iJ12(Ng2d)
       REAL*8                      :: iJ21(Ng2d), iJ22(Ng2d)
-      REAL*8                      :: fluxg(Ng2d)
+      REAL*8                      :: fluxg(Ng2d), Psig(Ng2d)
       REAL*8                      :: xy(Ng2d, 2), teg(Ng1dtor)
       REAL*8                      :: ueg(Ngvo, neq), upg(Ngvo, phys%npv), u0eg(Ngvo, neq, time%tis)
       REAL*8                      :: qeg(Ngvo, neq*Ndim)
@@ -438,6 +442,10 @@ CONTAINS
       Bmod = MATMUL(refElTor%N3D, Bmod_nod)
       b = MATMUL(refElTor%N3D, b_nod)
 
+      ! Normalized magnetic flux at Gauss points: PSI
+      !Psig = matmul(refElPol%N2D, psiel)
+      Psig = 0.
+
       ! toroidal current at Gauss points
       IF (switch%ohmicsrc) THEN
          Jtor = MATMUL(refElPol%N3D, Jtorel)
@@ -450,7 +458,7 @@ CONTAINS
       qeg = MATMUL(refElTor%N3D, qe)
 
       ! Compute diffusion at Gauss points
-      CALL setLocalDiff(xy, ueg, diff_iso_vol, diff_ani_vol, Bmod)
+      CALL setLocalDiff(xy, ueg, diff_iso_vol, diff_ani_vol)
 
       ! Solution at previous time steps,at Gauss points
       DO i = 1, time%tis
@@ -464,61 +472,61 @@ CONTAINS
       ! Body force at the integration points
       CALL body_force(xy(:, 1), xy(:, 2), teg, force)
 
-      ! Some sources for West cases
-      IF (switch%testcase .GE. 51 .AND. switch%testcase .LE. 55) THEN
-         fluxg = MATMUL(refElPol%N2D, fluxel)
-         DO g = 1, Ngvo
-            IF (switch%testcase == 51) THEN
-               IF (fluxg(g) .LE. -0.88 .AND. fluxg(g) .GE. -0.90) THEN
-                  !force(g,1) = 3.20119388718018e-05
-                  force(g, 1) = 4.782676673609557e-05
-               END IF
-            ELSE IF (switch%testcase == 52) THEN
-               sigma = 0.1
-               x0 = 0.
-               A = (phys%lscale**2)/(2*PI*sigma**2)
-#ifndef NEUTRAL
-               force(g, 1) = 0.4*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
-#endif
-#ifdef TEMPERATURE
-               force(g, 3) = 0.
-               force(g, 4) = 30.*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
-#endif
-               !if (fluxg(g) .le. -0.90 .and. fluxg(g) .ge. -1.) then
-               !  force(g,1) = 9.45155008295538e-06
-               !end if
-            ELSE IF (switch%testcase == 53) THEN
-               IF (fluxg(g) .LE. -0.90) THEN
-                  force(g, 1) = 7.24032211339971e-06
-               END IF
-#ifdef TEMPERATURE
-               force(g, 3) = 18*force(g, 1)
-               force(g, 4) = force(g, 3)
-#endif
-            ELSE IF (switch%testcase == 54) THEN
-#ifndef NEUTRAL
-               sigma = 0.22
-               x0 = 0.
-               A = (phys%lscale**2)/(2*PI*sigma**2)
-               IF (fluxg(g) .LE. 0.35) THEN
-                  force(g, 1) = 1.*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
-               END IF
-               !if (fluxg(g) .le. -1.03) then
-               !  force(g,1) = 0.000115575293741846
-               !end if
-#endif
-            ELSE IF (switch%testcase == 55) THEN
-               IF (fluxg(g) .LE. -0.88 .AND. fluxg(g) .GE. -0.90) THEN
-                  force(g, 1) = 10
-               END IF
-#ifdef TEMPERATURE
-               force(g, 3) = 18*force(g, 1)
-               force(g, 4) = force(g, 3)
-#endif
-            END IF
-         END DO
-      END IF
-      !! end sources
+!       ! Some sources for West cases
+!       if (switch%testcase .ge. 51 .and. switch%testcase .le. 55) then
+!          fluxg = matmul(refElPol%N2D, fluxel)
+!          do g = 1, Ngvo
+!             if (switch%testcase == 51) then
+!                if (fluxg(g) .le. -0.88 .and. fluxg(g) .ge. -0.90) then
+!                   !force(g,1) = 3.20119388718018e-05
+!                   force(g, 1) = 4.782676673609557e-05
+!                end if
+!             else if (switch%testcase == 52) then
+!                sigma = 0.1
+!                x0 = 0.
+!                A = (phys%lscale**2)/(2*PI*sigma**2)
+! #ifndef NEUTRAL
+!                force(g, 1) = 0.4*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
+! #endif
+! #ifdef TEMPERATURE
+!                force(g, 3) = 0.
+!                force(g, 4) = 30.*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
+! #endif
+!                !if (fluxg(g) .le. -0.90 .and. fluxg(g) .ge. -1.) then
+!                !  force(g,1) = 9.45155008295538e-06
+!                !end if
+!             else if (switch%testcase == 53) then
+!                if (fluxg(g) .le. -0.90) then
+!                   force(g, 1) = 7.24032211339971e-06
+!                end if
+! #ifdef TEMPERATURE
+!                force(g, 3) = 18*force(g, 1)
+!                force(g, 4) = force(g, 3)
+! #endif
+!             else if (switch%testcase == 54) then
+! #ifndef NEUTRAL
+!                sigma = 0.22
+!                x0 = 0.
+!                A = (phys%lscale**2)/(2*PI*sigma**2)
+!                if (fluxg(g) .le. 0.35) then
+!                   force(g, 1) = 1.*A*EXP(-((fluxg(g) - x0)**2)/(2*sigma**2))
+!                end if
+!                !if (fluxg(g) .le. -1.03) then
+!                !  force(g,1) = 0.000115575293741846
+!                !end if
+! #endif
+!             else if (switch%testcase == 55) then
+!                if (fluxg(g) .le. -0.88 .and. fluxg(g) .ge. -0.90) then
+!                   force(g, 1) = 10
+!                end if
+! #ifdef TEMPERATURE
+!                force(g, 3) = 18*force(g, 1)
+!                force(g, 4) = force(g, 3)
+! #endif
+!             end if
+!          end do
+!       end if
+!       !! end sources
 
       ! Loop in 2D Gauss points
       J11 = MATMUL(refElPol%Nxi2D, Xel(:, 1))                           ! ng x 1
@@ -603,12 +611,14 @@ CONTAINS
             CALL cross_product(bg, gradbmod, driftg)
             driftg = phys%dfcoef*driftg/Bmod(g)
 
-            CALL assemblyVolumeContribution(Auq, Auu, rhs, b(g, :), divbg, driftg, force(g, :),&
+            CALL assemblyVolumeContribution(Auq, Auu, rhs, b(g, :), Psig(igpol), divbg, driftg, force(g, :),&
             &ktis, diff_iso_vol(:, :, g), diff_ani_vol(:, :, g), Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upg(g, :),&
             &ueg(g, :), qeg(g, :), u0eg(g, :, :), Jtor(g))
          END DO ! end loop in volume Gauss points
       END DO
+
       CALL do_assembly(Auq, Auu, rhs, ind_ass, ind_asq, iel)
+
       DEALLOCATE (Auq, Auu, rhs)
 
    END SUBROUTINE elemental_matrices_volume
@@ -638,7 +648,7 @@ CONTAINS
       REAL*8                    :: n_g(Ng2d, 3)
       INTEGER*4                 :: ind_ff(Neq*Np2D), ind_fe(Neq*Np2D), ind_fg(Neq*Ndim*Np2D)
       REAL*8, PARAMETER         :: tol = 1e-12
-      REAL*8                    :: Bmod_nod(Np2D), b_nod(Np2D, 3), b(Ng2d, 3), Bmod(Ng2d)
+      REAL*8                    :: Bmod_nod(Np2D), b_nod(Np2D, 3), b(Ng2d, 3), Bmod(Ng2d), Psig(Ng2d)
       REAL*8                    :: tau(Neq, Neq)
       REAL*8                    :: diff_iso_fac(Neq, Neq, Ng2D), diff_ani_fac(Neq, Neq, Ng2D)
 
@@ -660,11 +670,15 @@ CONTAINS
       Bmod = MATMUL(refElPol%N2D, Bmod_nod)
       b = MATMUL(refElPol%N2D, b_nod)
 
+      ! Normalaized magnetic flux at Gauss points: PSI
+      !Psig = matmul(refElPol%N2D, psifl)
+      Psig = 0.
+
       ! Trace solution at face Gauss points
       ufg = MATMUL(refElPol%N2D, uf)
 
       ! Compute diffusion at Gauss points
-      CALL setLocalDiff(xyf, ufg, diff_iso_fac, diff_ani_fac, Bmod)
+      CALL setLocalDiff(xyf, ufg, diff_iso_fac, diff_ani_fac)
 
       ! Loop in 2D Gauss points
       Ngauss = Ng2d
@@ -722,14 +736,14 @@ CONTAINS
             ! Non constant stabilization
             ! Compute tau in the Gauss points
             IF (numer%stab < 6) THEN
-               CALL computeTauGaussPoints(upgf(g, :), ufg(g, :), b(g, :), Bmod(g), n_g(g, :), iel2, 0., xyf(g, :), tau)
+               CALL computeTauGaussPoints(upgf(g, :), ufg(g, :), b(g, :), n_g(g, :), iel2, 0., xyf(g, :), tau)
             ELSE
                CALL computeTauGaussPoints_matrix(upgf(g, :), ufg(g, :), b(g, :), n_g(g, :), xyf(g, :), 0., iel2, tau)
             END IF
          END IF
 
          ! Assembly local contributions
-         CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), &
+         CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), Psig(g), &
             n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
       END DO
       !      end do
@@ -762,7 +776,7 @@ CONTAINS
       REAL*8, POINTER            :: Nfg(:)
       REAL*8                    :: tau(Neq, Neq)
       REAL*8, PARAMETER          :: tol = 1e-12
-      REAL*8                    :: Bmod_nod(Npfl), b_nod(Npfl, 3), b(Ngfl, 3), Bmod(Ngfl)
+      REAL*8                    :: Bmod_nod(Npfl), b_nod(Npfl, 3), b(Ngfl, 3), Bmod(Ngfl), Psig(Ng1Dpol)
       REAL*8                    :: diff_iso_fac(Neq, Neq, Ngfl), diff_ani_fac(Neq, Neq, Ngfl)
 
       ind_asf = (/(i, i=0, Neq*(Npfl - 1), Neq)/)
@@ -803,12 +817,15 @@ CONTAINS
       Bmod = MATMUL(refElTor%sFTF, Bmod_nod)
       b = MATMUL(refElTor%sFTF, b_nod)
 
+      ! Normalaized magnetic flux at Gauss points: PSI
+      !Psig = matmul(refElPol%N1d, psifl)
+      psig = 0.
       ! Element solution at face Gauss points
       uefg = MATMUL(refElTor%sFTF, uef)
       ! Gradient solution at face gauss points
       qfg = MATMUL(refElTor%sFTF, qef)
       ! Compute diffusion at faces Gauss points
-      CALL setLocalDiff(xyf, uefg, diff_iso_fac, diff_ani_fac, Bmod)
+      CALL setLocalDiff(xyf, uefg, diff_iso_fac, diff_ani_fac)
 
       ! Physical variables at face Gauss points
       CALL cons2phys(ufg, upgf)
@@ -861,14 +878,14 @@ CONTAINS
                ! Non constant stabilization
                ! Compute tau in the Gauss points
                IF (numer%stab < 6) THEN
-                  CALL computeTauGaussPoints(upgf(g, :), ufg(g, :), b(g, :), Bmod(g), n_g(g, :), iel2, 0., xyf(g, :), tau)
+                  CALL computeTauGaussPoints(upgf(g, :), ufg(g, :), b(g, :), n_g(g, :), iel2, 0., xyf(igpol, :), tau)
                ELSE
-                  CALL computeTauGaussPoints_matrix(upgf(g, :), ufg(g, :), b(g, :), n_g(g, :), xyf(g, :), 0., iel2, tau)
+                  CALL computeTauGaussPoints_matrix(upgf(g, :), ufg(g, :), b(g, :), n_g(g, :), xyf(igpol, :), 0., iel2, tau)
                END IF
             END IF
 
             ! Assembly local contributions
-            CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), &
+            CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), Psig(igpol), &
                n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
 
          END DO ! Gauss points
@@ -906,17 +923,18 @@ CONTAINS
       REAL*8                    :: tau(Neq, Neq)
 
       REAL*8, PARAMETER         :: tol = 1e-12
-      REAL*8                    :: Bmod_nod(Npfl), b_nod(Npfl, 3), b(Ngfl, 3), Bmod(Ngfl)
+      REAL*8                    :: Bmod_nod(Npfl), b_nod(Npfl, 3), b(Ngfl, 3), Bmod(Ngfl), Psig(Ng1dPol)
       REAL*8                    :: diff_iso_fac(Neq, Neq, Ngfl), diff_ani_fac(Neq, Neq, Ngfl)
 
+      ! Indices
       ind_asf = (/(i, i=0, Neq*(Npfl - 1), Neq)/)
       ind_ash = (/(i, i=0, Neq*(Npfl - 1)*Ndim, Neq*Ndim)/)
+      ind_ff = Np2d*Neq + (ifa - 2)*Npfl*Neq + (/(i, i=1, Npfl*Neq)/)
+      ind_fe = colint(tensorSumInt((/(i, i=1, Neq)/), (refElTor%faceNodes3(ifa - 1, :) - 1)*Neq))
+      ind_fg = colint(tensorSumInt((/(i, i=1, 3*Neq)/), (refElTor%faceNodes3(ifa - 1, :) - 1)*3*Neq))
 
       ! toroidal element size
       htor = tel(Np1Dtor) - tel(1)
-
-      ! Gauss points position in the toroidal direction
-      teg = MATMUL(refElTor%N1d, tel)
 
       !****************************************************
       !                      Magnetic field
@@ -930,18 +948,24 @@ CONTAINS
       ! Magnetic field norm and direction at Gauss points
       Bmod = MATMUL(refElTor%sFTF, Bmod_nod)
       b = MATMUL(refElTor%sFTF, b_nod)
+      !****************************************************
+      !                    end Magnetic field
+      !****************************************************
 
-      ! Indices
-      ind_ff = Np2d*Neq + (ifa - 2)*Npfl*Neq + (/(i, i=1, Npfl*Neq)/)
-      ind_fe = colint(tensorSumInt((/(i, i=1, Neq)/), (refElTor%faceNodes3(ifa - 1, :) - 1)*Neq))
-      ind_fg = colint(tensorSumInt((/(i, i=1, 3*Neq)/), (refElTor%faceNodes3(ifa - 1, :) - 1)*3*Neq))
-
+      ! Normalized magnetic flux at Gauss points: PSI
+      ! TODO check it is correct for 3D!!!!
+      !Psig = matmul(refElPol%N1D, psifl)
+      Psig = 0.
       ! Trace solution at face Gauss points
       xyf = MATMUL(refElPol%N1D, Xfl)
+      ! Shape function derivatives at Gauss points
       xyDer = MATMUL(refElPol%Nxi1D, Xfl)
 
+      ! Gauss points position in the toroidal direction
+      teg = MATMUL(refElTor%N1d, tel)
+
       IF (isdir) THEN
-         CALL analytical_solution(xyf(:, 1), xyf(:, 2), teg, ufg)
+         CALL analytical_solution(iel, xyf(:, 1), xyf(:, 2), teg, ufg)
       ELSE
 #ifdef PARALL
          IF (Mesh%flipface(iel2, ifa - 1)) THEN
@@ -1018,10 +1042,10 @@ CONTAINS
                ! Non constant stabilization
                ! Compute tau in the Gauss points
                IF (numer%stab < 6) THEN
-                  CALL computeTauGaussPoints(upgf(g, :), ufg(g, :), b(g, :), n_g(g, :), iel2, isext, xyf(g, :), tau)
+                  CALL computeTauGaussPoints(upgf(g, :), ufg(g, :), b(g, :), n_g(g, :), iel2, isext, xyf(igpol, :), tau)
 
                ELSE
-                  CALL computeTauGaussPoints_matrix(upgf(g, :), ufg(g, :), b(g, :), n_g(g, :), xyf(g, :), isext, iel2, tau)
+                  CALL computeTauGaussPoints_matrix(upgf(g, :), ufg(g, :), b(g, :), n_g(g, :), xyf(igpol, :), isext, iel2, tau)
                END IF
             END IF
 
@@ -1029,16 +1053,15 @@ CONTAINS
 #ifdef PARALL
             IF (Mesh%boundaryFlag(Mesh%F(iel2, ifa - 1) - Mesh%Nintfaces) .EQ. 0) THEN
                ! Ghost face: assembly it as interior
-               CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), &
+               CALL assemblyIntFacesContribution(iel, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), Psig(igpol), &
                   n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
             ELSE
-               CALL assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), &
+               CALL assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), Psig(igpol), &
                   n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
             END IF
 #else
-            CALL assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), &
+            CALL assemblyExtFacesContribution(iel, isdir, ind_asf, ind_ash, ind_ff, ind_fe, ind_fg, b(g, :), Psig(igpol), &
                n_g(g, :), diff_iso_fac(:, :, g), diff_ani_fac(:, :, g), NNif, Nif, Nfbn, ufg(g, :), qfg(g, :), tau)
-
 #endif
          END DO ! Gauss points
       END DO
@@ -1336,7 +1359,7 @@ CONTAINS
       qeg = MATMUL(refElPol%N2D, qe)
 
       ! Compute diffusion at Gauss points
-      CALL setLocalDiff(xy, ueg, diff_iso_vol, diff_ani_vol)
+      CALL setLocalDiff(iel, xy, ueg, diff_iso_vol, diff_ani_vol)
 
       IF (save_tau) THEN
          diff_nn_Vol_el = diff_iso_vol(neq, neq, :)
@@ -1618,7 +1641,7 @@ CONTAINS
       qfg = MATMUL(refElPol%N1D, qef)
 
       ! Compute diffusion at faces Gauss points
-      CALL setLocalDiff(xyf, uefg, diff_iso_fac, diff_ani_fac)
+      CALL setLocalDiff(iel, xyf, uefg, diff_iso_fac, diff_ani_fac)
 
       IF (save_tau) THEN
          indsave = (ifa - 1)*Ngauss + (/(i, i=1, Ngauss)/)
@@ -1767,7 +1790,7 @@ CONTAINS
       qfg = MATMUL(refElPol%N1D, qef)
 
       ! Compute diffusion at faces Gauss points
-      CALL setLocalDiff(xyf, uefg, diff_iso_fac, diff_ani_fac)
+      CALL setLocalDiff(iel, xyf, uefg, diff_iso_fac, diff_ani_fac)
 
       IF (save_tau) THEN
          indsave = (ifa - 1)*Ngauss + (/(i, i=1, Ngauss)/)
@@ -1951,6 +1974,662 @@ CONTAINS
    !
    !********************************************************************
 
+#ifdef TOR3D
+   SUBROUTINE assemblyVolumeContribution(Auq, Auu, rhs, b3, psi, divb, drift, f,&
+   &ktis, diffiso, diffani, Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upe, ue, qe, u0e, Jtor)
+      REAL*8, INTENT(INOUT)       :: Auq(:, :, :), Auu(:, :, :), rhs(:, :)
+      REAL*8, INTENT(IN)          :: b3(:), psi, divb, drift(:), f(:), ktis(:)
+      REAL*8, INTENT(IN)          :: diffiso(:, :), diffani(:, :)
+      REAL*8, INTENT(IN)          :: Ni(:), NNi(:, :), Nxyzg(:, :), NNxy(:, :), NxyzNi(:, :, :), NNbb(:)
+      REAL*8, INTENT(IN)          :: upe(:), ue(:), Jtor
+      REAL*8, INTENT(INOUT)       :: u0e(:, :)
+      REAL*8, INTENT(IN)          :: qe(:)
+#ifdef VORTICITY
+      REAL*8                      :: kcoeff, exb(3)
+      INTEGER*4                   :: alpha, beta, ii
+#endif
+      INTEGER*4                   :: i, j, k, iord, z
+      REAL*8, DIMENSION(neq, neq) :: A
+      REAL*8, DIMENSION(neq, Ndim):: APinch
+      REAL*8                      :: Qpr(Ndim, Neq), bb(3)
+      REAL*8                      :: W2(Neq), dW2_dU(Neq, Neq), QdW2(Ndim, Neq)
+      REAL*8                      :: QdW2_dot_b(Neq)
+      REAL*8                      :: qq(3, Neq), b(Ndim)
+      REAL*8                      :: grad_n(3), gradpar_n, alpha
+      REAL*8                    :: alpha1, alpha2, scale_kmult
+
+#ifdef TEMPERATURE
+      REAL*8, DIMENSION(neq, neq) :: GG
+      REAL*8                      :: Telect
+      REAL*8                      :: Vveci(Neq), dV_dUi(Neq, Neq), Alphai, dAlpha_dUi(Neq), gmi, taui(Ndim, Neq)
+      REAL*8                      :: Vvece(Neq), dV_dUe(Neq, Neq), Alphae, dAlpha_dUe(Neq), gme, taue(Ndim, Neq)
+      REAL*8                      :: W, dW_dU(Neq, Neq), s, ds_dU(Neq), Zet(ndim, Neq)
+      REAL*8                      :: Taui_dot_b(Neq), Taue_dot_b(Neq), Zet_dot_b(Neq)
+      REAL*8                      :: Taui_ue_dot_b, Taue_ue_dot_b
+      REAL*8                      :: Sohmic, dSohmic_dU(Neq) ! Ohmic heating
+      REAL*8                      :: W3(Neq), dW3_dU(Neq, Neq), QdW3(Ndim, Neq)
+      REAL*8                      :: W4(Neq), dW4_dU(Neq, Neq), QdW4(Ndim, Neq)
+      REAL*8                      :: QdW3_dot_b(Neq), QdW4_dot_b(Neq)
+#else
+      REAL*8                      :: auxvec(Neq)
+#endif
+#ifdef NEUTRAL
+      REAL*8                      :: niz, nrec, fGammacx, fGammarec
+      REAL*8                      :: dniz_dU(Neq), dnrec_dU(Neq), dfGammacx_dU(Neq), dfGammarec_dU(Neq)
+#ifdef TEMPERATURE
+      REAL*8                      :: sigmaviz, sigmavrec, sigmavcx, Tloss, Tlossrec, fEiiz, fEirec, fEicx
+      !amjuel radiation losses
+      REAL*8                      :: sigmavEiz, sigmavErec
+      REAL*8                      :: dsigmavEiz_dU(Neq), dsigmavErec_dU(Neq)
+      REAL*8                      :: dsigmaviz_dU(Neq), dsigmavrec_dU(Neq), dsigmavcx_dU(Neq), dTloss_dU(Neq), dTlossrec_dU(Neq)
+      REAL*8                      :: dfEiiz_dU(Neq), dfEirec_dU(Neq), dfEicx_dU(Neq)
+      REAL*8                      :: Dnn_dU(Neq), Dnn_dU_U
+#endif
+      REAL*8                      :: Sn(Neq, Neq), Sn0(Neq)
+#endif
+      REAL*8                      :: kmult(SIZE(Auq, 1), SIZE(Auq, 2))
+
+      b = b3(1:Ndim)
+
+      bb = 0.
+      bb = b3
+
+      ! Jacobian for convection term
+      CALL jacobianMatrices(ue, A)
+
+      ! Jacobian for pinch term
+      CALL computePinch(b(1:2), psi, APinch)
+
+      ! Compute Q^T^(k-1)
+      Qpr = RESHAPE(qe, (/Ndim, Neq/))
+
+      ! Split diffusion matrices/vectors for the momentum equation
+      CALL compute_W2(ue, W2, diffiso(1, 1), diffiso(2, 2))
+      CALL compute_dW2_dU(ue, dW2_dU, diffiso(1, 1), diffiso(2, 2))
+      QdW2 = MATMUL(Qpr, dW2_dU)
+      QdW2_dot_b = MATMUL(TRANSPOSE(QdW2), b)
+
+      qq = 0.
+      qq(1:Ndim, :) = Qpr
+
+      ! Perpendicular gradient of density
+      grad_n = qq(:, 1)
+      gradpar_n = dot_PRODUCT(grad_n, b3)
+
+#ifdef TEMPERATURE
+      ! Jacobian for the curvature term
+      CALL GimpMatrix(ue, divb, GG)
+
+      ! Compute V(U^(k-1))
+      CALL computeVi(ue, Vveci)
+      CALL computeVe(ue, Vvece)
+
+      ! Compute dV_dU (k-1)
+      CALL compute_dV_dUi(ue, dV_dUi)
+      CALL compute_dV_dUe(ue, dV_dUe)
+
+      ! Compute Alpha(U^(k-1))
+      Alphai = computeAlphai(ue)
+      Alphae = computeAlphae(ue)
+
+      ! Compute dAlpha/dU^(k-1)
+      CALL compute_dAlpha_dUi(ue, dAlpha_dUi)
+      CALL compute_dAlpha_dUe(ue, dAlpha_dUe)
+
+      gmi = dot_PRODUCT(MATMUL(Qpr, Vveci), b)    ! scalar
+      gme = dot_PRODUCT(MATMUL(Qpr, Vvece), b)    ! scalar
+      Taui = MATMUL(Qpr, dV_dUi)                 ! Ndim x Neq
+      Taue = MATMUL(Qpr, dV_dUe)                 ! Ndim x Neq
+      Taui_dot_b = MATMUL(TRANSPOSE(Taui), b)
+      Taue_dot_b = MATMUL(TRANSPOSE(Taue), b)
+
+      ! Parallel current term
+      ! Compute W(U^(k-1))
+      CALL compute_W(ue, W)
+      ! Compute dW_dU(U^(k-1))
+      CALL compute_dW_dU(ue, dW_dU)
+
+      ! Split diffusion matrices/vectors for the energies equations
+      CALL compute_W3(ue, W3, diffiso(1, 1), diffiso(2, 2), diffiso(3, 3))
+      CALL compute_dW3_dU(ue, dW3_dU, diffiso(1, 1), diffiso(2, 2), diffiso(3, 3))
+      QdW3 = MATMUL(Qpr, dW3_dU)
+      QdW3_dot_b = MATMUL(TRANSPOSE(QdW3), b)
+
+      CALL compute_W4(ue, W4, diffiso(1, 1), diffiso(4, 4))
+      CALL compute_dW4_dU(ue, dW4_dU, diffiso(1, 1), diffiso(4, 4))
+      QdW4 = MATMUL(Qpr, dW4_dU)
+      QdW4_dot_b = MATMUL(TRANSPOSE(QdW4), b)
+
+      ! Temperature exchange terms
+      ! s(U^(k-1))
+      CALL compute_S(ue, s)
+      ! ds_du(U^(k-1))
+
+      CALL compute_dS_dU(ue, ds_dU)
+
+      !Ohmic Heating
+      IF (switch%ohmicsrc) THEN
+         !Compute Sohmic(U^(k-1))
+         CALL compute_Sohmic(ue, Sohmic)
+         !Compute dSohmic_dU(U^(k-1))
+         CALL compute_dSohmic_dU(ue, dSohmic_dU)
+      END IF
+
+      Zet = MATMUL(Qpr, dW_dU)       ! Ndim x Neq
+      Zet_dot_b = MATMUL(TRANSPOSE(Zet), b)
+      Taui_ue_dot_b = dot_PRODUCT(Taui_dot_b, ue)
+      Taue_ue_dot_b = dot_PRODUCT(Taue_dot_b, ue)
+
+#endif
+
+#ifdef NEUTRAL
+      !Neutral Source Terms needed in the plasma and neutral density equations
+      CALL compute_niz(ue, niz)
+      CALL compute_nrec(ue, nrec)
+      CALL compute_dniz_dU(ue, dniz_dU)
+      CALL compute_dnrec_dU(ue, dnrec_dU)
+#ifdef TEMPERATURE
+      CALL compute_sigmaviz(ue, sigmaviz)
+      CALL compute_sigmavrec(ue, sigmavrec)
+      CALL compute_dsigmaviz_dU(ue, dsigmaviz_dU)
+      CALL compute_dsigmavrec_dU(ue, dsigmavrec_dU)
+#endif
+      !Neutral Source Terms needed in the plasma momentum equation
+      CALL compute_fGammacx(ue, fGammacx)
+      CALL compute_dfGammacx_dU(ue, dfGammacx_dU)
+      CALL compute_fGammarec(ue, fGammarec)
+      CALL compute_dfGammarec_dU(ue, dfGammarec_dU)
+#ifdef TEMPERATURE
+      CALL compute_sigmavcx(ue, sigmavcx)
+      CALL compute_dsigmavcx_dU(ue, dsigmavcx_dU)
+      !Neutral Source Terms needed in the ion energy equation
+      CALL compute_fEiiz(ue, fEiiz)
+      CALL compute_dfEiiz_dU(ue, dfEiiz_dU)
+      CALL compute_fEirec(ue, fEirec)
+      CALL compute_dfEirec_dU(ue, dfEirec_dU)
+      CALL compute_fEicx(ue, fEicx)
+      CALL compute_dfEicx_dU(ue, dfEicx_dU)
+      !Neutral Source Terms needed in the electron energy equation
+      CALL compute_Tloss(ue, Tloss)
+      CALL compute_dTloss_dU(ue, dTloss_dU)
+      CALL compute_Tlossrec(ue, Tlossrec)
+      CALL compute_dTlossrec_dU(ue, dTlossrec_dU)
+
+#ifdef AMJUELSPLINES
+      !Amjuel energy losses
+      CALL compute_sigmavEiz(ue, sigmavEiz)
+      CALL compute_sigmavErec(ue, sigmavErec)
+      CALL compute_dsigmavEiz_dU(ue, dsigmavEiz_dU)
+      CALL compute_dsigmavErec_dU(ue, dsigmavErec_dU)
+#else
+      !! hot fix do NOT use
+      WRITE (*, *) 'this is a hotfix.do not use.STOPPING.'
+      STOP
+      sigmavEiz = sigmaviz*Tloss
+      sigmavErec = sigmavrec*Tlossrec
+#endif
+
+      CALL compute_Dnn_dU(ue, Dnn_dU)
+      Dnn_dU_u = dot_PRODUCT(Dnn_dU, Ue)
+
+#endif
+
+      !Assembly the matrix for neutral sources
+#ifdef TEMPERATURE
+#ifdef AMJUELSPLINES
+      CALL assemblyNeutral(ue, niz, dniz_dU, nrec, dnrec_dU, sigmaviz, dsigmaviz_dU, sigmavrec, dsigmavrec_dU,&
+      &fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, sigmavcx, dsigmavcx_dU, fEiiz,&
+      &dfEiiz_dU, fEirec, dfEirec_dU, fEicx, dfEicx_dU, Sn, Sn0, &
+         sigmavEiz=sigmavEiz, dsigmavEiz_dU=dsigmavEiz_dU, sigmavErec=sigmavErec, dsigmavErec_dU=dsigmavErec_dU)
+#else
+      CALL assemblyNeutral(ue, niz, dniz_dU, nrec, dnrec_dU, sigmaviz, dsigmaviz_dU, sigmavrec, dsigmavrec_dU,&
+      &fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, sigmavcx, dsigmavcx_dU, fEiiz,&
+      &dfEiiz_dU, fEirec, dfEirec_dU, fEicx, dfEicx_dU, Sn, Sn0, &
+         Tloss=Tloss, dTloss_dU=dTloss_dU, Tlossrec=Tlossrec, dTlossrec_dU=dTlossrec_dU)
+#endif
+#else
+      CALL assemblyNeutral(ue, niz, dniz_dU, nrec, dnrec_dU, fGammacx, dfGammacx_dU, fGammarec, dfGammarec_dU, Sn, Sn0)
+#endif
+#endif
+!NEUTRAL
+
+      ! Assembly local matrix
+      ! Loop in equations
+      DO i = 1, Neq
+         ! ind_i = i + ind_ass
+         IF (.NOT. switch%steady) THEN
+            ! Time derivative contribution
+#ifdef VORTICITY
+            ! in the vorticity model I don't assemble the mass matrix for the potential equation
+            IF (i .NE. 4) THEN
+#endif
+               z = i + (i - 1)*Neq
+               alpha = ktis(1)/time%dt
+               ! Auu(:, :, z) = Auu(:, :, z) + ktis(1)*NNi/time%dt
+               CALL add_scaled_matrix(alpha, NNi, Auu(:, :, z))
+#ifdef VORTICITY
+            END IF
+#endif
+         END IF
+
+#ifndef TEMPERATURE
+         IF (i == 2) THEN
+            ! Curvature contribution (isothermal)
+
+            z = i + (i - 2)*Neq
+            IF (switch%logrho) THEN
+               alpha = -phys%a*divb*upe(1)
+               ! Auu(:, :, z) = Auu(:, :, z) - phys%a*divb*upe(1)*NNi
+               CALL add_scaled_matrix(alpha, NNi, Auu(:, :, z))
+               rhs(:, i) = rhs(:, i) + Ni*phys%a*divb*upe(1)*(1 - ue(1))
+            ELSE
+               alpha = -phys%a*divb
+               ! Auu(:, :, z) = Auu(:, :, z) - phys%a*divb*NNi
+               CALL add_scaled_matrix(alpha, NNi, Auu(:, :, z))
+            END IF
+
+            ! split perpendicular diffusion momentum equation (LU) (isothermal)
+            DO j = 1, Neq
+               z = i + (j - 1)*Neq
+               DO k = 1, Ndim
+                  !Auu(:, :, z) = Auu(:, :, z) + (NxyzNi(:, :, k)*QdW2(k, j))
+                  alpha = QdW2(k, j)
+                  CALL add_scaled_matrix(alpha, NxyzNi(:, :, k), Auu(:, :, z))
+               END DO
+               !Auu(:, :, z) = Auu(:, :, z) - QdW2_dot_b(j)*NNxy
+               alpha = -QdW2_dot_b(j)
+               CALL add_scaled_matrix(alpha, NNxy, Auu(:, :, z))
+
+            END DO
+         END IF
+#ifdef VORTICITY
+         IF (switch%driftdia .AND. i .NE. 4) THEN
+#else
+         IF (switch%driftdia) THEN
+#endif
+            ! B x GradB drift (isothermal)
+            DO k = 1, Ndim
+               z = i + (i - 1)*Neq
+               ! Auu(:, :, z) = Auu(:, :, z) + TRANSPOSE(NxyzNi(:, :, k))*drift(k)
+               alpha = drift(k)
+               CALL add_scaled_transpose_matrix(alpha, NxyzNi(:, :, k), Auu(:, :, z))
+            END DO
+         END IF
+#else
+         ! if temperature is active
+         IF (i == 2) THEN
+            DO j = 1, Neq
+               z = i + (j - 1)*Neq
+               ! Curvature contribution (non-isothermal)
+               alpha = -GG(i, j)
+               ! Auu(:, :, z) = Auu(:, :, z) - GG(i, j)*NNi
+               CALL add_scaled_matrix(alpha, NNi, Auu(:, :, z))
+
+               ! split perpendicular diffusion momentum equation (LU) (non-isothermal)
+               DO k = 1, Ndim
+                  alpha = QdW2(k, j)
+                  ! Auu(:, :, z) = Auu(:, :, z) + QdW2(k, j)*NxyzNi(:, :, k)
+                  CALL add_scaled_matrix(alpha, NxyzNi(:, :, k), Auu(:, :, z))
+               END DO
+               alpha = -QdW2_dot_b(j)
+               ! Auu(:, :, z) = Auu(:, :, z) - QdW2_dot_b(j)*NNxy
+               CALL add_scaled_matrix(alpha, NNxy, Auu(:, :, z))
+            END DO
+         END IF
+
+         IF (switch%driftdia) THEN
+            Telect = upe(8)
+            ! B x GradB drift (non-isothermal)
+            DO k = 1, Ndim
+               z = i + (i - 1)*Neq
+               alpha = Telect*drift(k)
+               CALL add_scaled_transpose_matrix(alpha, NxyzNi(:, :, k), Auu(:, :, z))
+            END DO
+         END IF
+
+         ! Parallel diffusion for the temperature
+         IF (i == 3) THEN
+            DO j = 1, 4
+               z = i + (j - 1)*Neq
+               ! Keep NNxy and NNi terms explicit for readability.
+               alpha1 = coefi*(gmi*dAlpha_dUi(j) + Alphai*Taui_dot_b(j))
+               alpha2 = Zet_dot_b(j) + ds_dU(j)
+               ! Auu(:, :, z) = Auu(:, :, z) + coefi*(gmi*dAlpha_dUi(j) + Alphai*Taui_dot_b(j))*NNxy
+               CALL add_scaled_matrix(alpha1, NNxy, Auu(:, :, z))
+
+               ! Auu(:, :, z) = Auu(:, :, z) + (Zet_dot_b(j) + ds_dU(j))*NNi
+               CALL add_scaled_matrix(alpha2, NNi, Auu(:, :, z))
+
+               DO k = 1, Ndim
+                  z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
+                  ! Auq(:, :, z) = Auq(:, :, z) + coefi*Alphai*Vveci(j)*b(k)*NNxy
+                  alpha = coefi*Alphai*Vveci(j)*b(k)
+                  CALL add_scaled_matrix(alpha, NNxy, Auq(:, :, z))
+                  IF (j == 4) THEN
+                     ! Auq(:, :, z) = Auq(:, :, z) + W*b(k)*NNi
+                     alpha = W*b(k)
+                     CALL add_scaled_matrix(alpha, NNi, Auq(:, :, z))
+                  END IF
+               END DO
+
+               ! split diffusion electron energy equation (LU)
+               z = i + (j - 1)*Neq
+               DO k = 1, Ndim
+                  alpha = QdW3(k, j)
+                  CALL add_scaled_matrix(alpha, NxyzNi(:, :, k), Auu(:, :, z))
+               END DO
+
+               alpha = -QdW3_dot_b(j)
+               CALL add_scaled_matrix(alpha, NNxy, Auu(:, :, z))
+            END DO
+
+
+
+            rhs(:, i) = rhs(:, i) + coefi*Alphai*Taui_ue_dot_b*NNbb + s*Ni
+         ELSEIF (i == 4) THEN
+            DO j = 1, 4
+               z = i + (j - 1)*Neq
+               alpha1 = coefe*(gme*dAlpha_dUe(j) + Alphae*Taue_dot_b(j))
+               alpha2 = -(Zet_dot_b(j) + ds_dU(j))
+               ! Auu(:, :, z) = Auu(:, :, z) + coefe*(gme*dAlpha_dUe(j) + Alphae*Taue_dot_b(j))*NNxy
+               CALL add_scaled_matrix(alpha1, NNxy, Auu(:, :, z))
+               ! Auu(:, :, z) = Auu(:, :, z) - (Zet_dot_b(j) + ds_dU(j))*NNi
+               CALL add_scaled_matrix(alpha2, NNi, Auu(:, :, z))
+               IF (switch%ohmicsrc) THEN
+                  alpha = -dSohmic_dU(j)*(Jtor**2)
+                  ! Auu(:, :, z) = Auu(:, :, z) - dSohmic_dU(j)*(Jtor**2)*NNi
+                  CALL add_scaled_matrix(alpha, NNi, Auu(:, :, z))
+               END IF
+               DO k = 1, Ndim
+                  z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
+                  ! Auq(:, :, z) = Auq(:, :, z) + coefe*Alphae*Vvece(j)*b(k)*NNxy
+                  alpha = coefe*Alphae*Vvece(j)*b(k)
+                  CALL add_scaled_matrix(alpha, NNxy, Auq(:, :, z))
+                  IF (j == 4) THEN
+                     ! Auq(:, :, z) = Auq(:, :, z) - W*b(k)*NNi
+                     alpha = -W*b(k)
+                     CALL add_scaled_matrix(alpha, NNi, Auq(:, :, z))
+                  END IF
+               END DO
+
+               ! split perpendicular diffusion electron energy equation (LU)
+               z = i + (j - 1)*Neq
+               DO k = 1, Ndim
+                  alpha = QdW4(k, j)
+                  CALL add_scaled_matrix(alpha, NxyzNi(:, :, k), Auu(:, :, z))
+               END DO
+               alpha = -QdW4_dot_b(j)
+               CALL add_scaled_matrix(alpha, NNxy, Auu(:, :, z))
+            END DO
+            rhs(:, i) = rhs(:, i) + coefe*Alphae*Taue_ue_dot_b*NNbb - s*Ni
+            IF (switch%ohmicsrc) THEN
+               rhs(:, i) = rhs(:, i) + Sohmic*(Jtor**2)*Ni
+            END IF
+#ifdef NEUTRAL
+         ELSEIF (i == neq) THEN
+            DO j = 1, neq
+               z = i + (j - 1)*Neq
+               DO k = 1, Ndim
+                  !z = i+(k-1)*Neq+(j-1)*Neq*Ndim
+                  alpha = Dnn_dU(j)*Qpr(k, i)
+                  ! Auu(:, :, z) = Auu(:, :, z) + Dnn_dU(j)*Qpr(k, i)*NxyzNi(:, :, k)
+                  CALL add_scaled_matrix(alpha, NxyzNi(:, :, k), Auu(:, :, z))
+               END DO
+            END DO
+
+            DO k = 1, Ndim
+               rhs(:, i) = rhs(:, i) + Dnn_dU_U*Qpr(k, i)*Nxyzg(:, k)
+            END DO
+#endif
+         END IF
+#endif
+
+         ! Convection contribution
+         DO j = 1, Neq
+            z = i + (j - 1)*Neq
+            !Auu(:, :, z) = Auu(:, :, z) - A(i, j)*NNxy
+            alpha = -A(i, j)
+            ! Auu(:, :, z) = Auu(:, :, z) - A(i, j)*NNxy
+            CALL add_scaled_matrix(alpha, NNxy, Auu(:, :, z))
+
+#ifdef NEUTRAL
+            !Sources
+            alpha = Sn(i, j)
+            ! Auu(:, :, z) = Auu(:, :, z) + Sn(i, j)*NNi
+            CALL add_scaled_matrix(alpha, NNi, Auu(:, :, z))
+#endif
+         END DO
+
+         ! Pinch contribution
+         z = i + (i - 1)*Neq
+         alpha = -APinch(i, 1)
+         ! Auu(:, :, z) = Auu(:, :, z) - APinch(i, 1)*NxyzNi(:, :, 1)
+         CALL add_scaled_matrix(alpha, NxyzNi(:, :, 1), Auu(:, :, z))
+         alpha = -APinch(i, 2)
+         ! Auu(:, :, z) = Auu(:, :, z) - APinch(i, 2)*NxyzNi(:, :, 2)
+         CALL add_scaled_matrix(alpha, NxyzNi(:, :, 2), Auu(:, :, z))
+
+         DO k = 1, Ndim
+            ! split perpendicular diffusion contributions (LQ)
+            IF (i == 2) THEN
+               DO j = 1, Neq
+                  z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
+                  alpha1 = W2(j)
+                  alpha2 = -W2(j)*b(k)
+                  ! Auq(:, :, z) = Auq(:, :, z) + W2(j)*NxyzNi(:, :, k)
+                  CALL add_scaled_matrix(alpha1, NxyzNi(:, :, k), Auq(:, :, z))
+                  ! Auq(:, :, z) = Auq(:, :, z) - W2(j)*b(k)*NNxy
+                  CALL add_scaled_matrix(alpha2, NNxy, Auq(:, :, z))
+               END DO
+#ifdef TEMPERATURE
+            ELSEIF (i == 3) THEN
+               DO j = 1, Neq
+                  z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
+                  alpha1 = W3(j)
+                  alpha2 = -W3(j)*b(k)
+                  ! Auq(:, :, z) = Auq(:, :, z) + W3(j)*NxyzNi(:, :, k)
+                  CALL add_scaled_matrix(alpha1, NxyzNi(:, :, k), Auq(:, :, z))
+                  ! Auq(:, :, z) = Auq(:, :, z) - W3(j)*b(k)*NNxy
+                  CALL add_scaled_matrix(alpha2, NNxy, Auq(:, :, z))
+               END DO
+            ELSEIF (i == 4) THEN
+               DO j = 1, Neq
+                  z = i + (k - 1)*Neq + (j - 1)*Neq*Ndim
+                  alpha1 = W4(j)
+                  alpha2 = -W4(j)*b(k)
+                  ! Auq(:, :, z) = Auq(:, :, z) + W4(j)*NxyzNi(:, :, k)
+                  CALL add_scaled_matrix(alpha1, NxyzNi(:, :, k), Auq(:, :, z))
+                  ! Auq(:, :, z) = Auq(:, :, z) - W4(j)*b(k)*NNxy
+                  CALL add_scaled_matrix(alpha2, NNxy, Auq(:, :, z))
+               END DO
+#endif
+            END IF
+
+!                ! Diagonal terms for perpendicular diffusion
+!                z = i + (k - 1)*Neq + (i - 1)*Neq*Ndim
+!                kmult = diffiso(i, i)*NxyzNi(:, :, k) - diffani(i, i)*NNxy*b(k)
+
+! #ifdef VORTICITY
+!                if (i == 4) then
+!                   kmult = kmult/ue(1)
+!                end if
+! #endif
+
+!                Auq(:, :, z) = Auq(:, :, z) + kmult
+
+            ! Diagonal terms for perpendicular diffusion
+            z = i + (k - 1)*Neq + (i - 1)*Neq*Ndim
+
+! optional scaling for vorticity case
+            scale_kmult = 1.d0
+#ifdef VORTICITY
+            IF (i == 4) THEN
+               scale_kmult = 1.d0/ue(1)
+            END IF
+#endif
+
+            ! kmult = diffiso(i,i)*NxyzNi(:,:,k) - diffani(i,i)*NNxy*b(k)
+            alpha1 = scale_kmult*diffiso(i, i)
+            alpha2 = -scale_kmult*diffani(i, i)*b(k)
+
+            ! Auq(:,:,z) += alpha1 * NxyzNi(:,:,k)
+            !Auq(:, :, z) = Auq(:, :, z) + scale_kmult*diffiso(i, i)*NxyzNi(:, :, k)
+            !rhs(:, i) = rhs(:, i) - scale_kmult*diffiso(i, i)*Nxyzg(:, k)*qpr(k, i)
+            CALL add_scaled_matrix(alpha1, NxyzNi(:, :, k), Auq(:, :, z))
+
+            ! Auq(:,:,z) += alpha2 * NNxy
+            !Auq(:, :, z) = Auq(:, :, z) - scale_kmult*diffani(i, i)*b(k)*NNxy
+            CALL add_scaled_matrix(alpha2, NNxy, Auq(:, :, z))
+            !rhs(:, i) = rhs(:, i) + scale_kmult*diffani(i, i)*b(k)*NNbb*qpr(k, i)
+#ifndef TEMPERATURE
+            ! Added term for n=exp(x) change of variable \Grad \chi **2
+            IF (switch%logrho) THEN
+               IF (i == 1) THEN
+                  alpha = -2*(diffiso(i, i)*grad_n(k) - diffani(i, i)*b(k)*gradpar_n)
+                  ! Auq(:, :, z) = Auq(:, :, z) - 2*(diffiso(i, i)*grad_n(k) - diffani(i, i)*b(k)*gradpar_n)*NNi
+                  CALL add_scaled_matrix(alpha, NNi, Auq(:, :, z))
+                  rhs(:, i) = rhs(:, i) - Ni*(diffiso(i, i)*grad_n(k)*grad_n(k) - diffani(i, i)*gradpar_n**2/Ndim)
+               END IF
+            END IF
+#endif
+
+#ifdef VORTICITY
+            IF (switch%bxgradb) THEN
+               ! B x GradB current in the vorticity equation
+               IF (i == 3) THEN
+                  ii = 1
+                  z = i + (ii - 1)*Neq
+                  IF (switch%logrho) THEN
+                     alpha = 2*upe(1)*drift(k)
+                     CALL add_scaled_transpose_matrix(alpha, NxyzNi(:, :, k), Auu(:, :, z)) ! TODO: first order linearization
+                  ELSE
+                     alpha = 2*drift(k)
+                     CALL add_scaled_transpose_matrix(alpha, NxyzNi(:, :, k), Auu(:, :, z))
+                  END IF
+               END IF
+            END IF
+            IF (switch%driftexb .AND. i .NE. 4) THEN
+               ! ExB terms
+               kcoeff = phys%dfcoef*numer%exbdump/Bmod
+               CALL ijk_cross_product(k, alpha, beta)
+               ii = 4
+               z = i + (k - 1)*Neq + (ii - 1)*Neq*Ndim
+
+               alpha1 = kcoeff*b3(beta)*ue(i)
+               alpha2 = -kcoeff*b3(alpha)*ue(i)
+
+               ! Auq(:, :, z) = Auq(:, :, z) + kcoeff*b3(beta)*ue(i)*NxyzNi(:, :, alpha)
+               CALL add_scaled_matrix(alpha1, NxyzNi(:, :, alpha), Auq(:, :, z))
+               ! Auq(:, :, z) = Auq(:, :, z) - kcoeff*b3(alpha)*ue(i)*NxyzNi(:, :, beta)
+               CALL add_scaled_matrix(alpha2, NxyzNi(:, :, beta), Auq(:, :, z))
+
+               CALL cross_product(qq(:, ii), bb, exb)
+               z = i + (i - 1)*Neq
+               alpha = kcoeff*exb(k)
+               ! Auu(:, :, z) = Auu(:, :, z) + kcoeff*exb(k)*NxyzNi(:, :, k)
+               CALL add_scaled_matrix(alpha, NxyzNi(:, :, k), Auu(:, :, z))
+               rhs(:, i) = rhs(:, i) + kcoeff*exb(k)*ue(i)*Nxyzg(:, k)
+            END IF
+
+            ! Non-diagonal terms for perpendicular diffusion
+            DO ii = 1, Neq
+               IF (ii == i) CYCLE ! diagonal already assembled
+               IF (ABS(diffiso(i, ii)) < 1e-12 .AND. ABS(diffani(i, ii)) < 1e-12) CYCLE
+               kcoeff = 1.
+               ! Non-linear correction for non-linear diffusive terms.
+               ! TODO: find a smarter way to include it,avoiding if statements and model dependencies (i==3,ii==1 only holds for Isothermal+Vorticity model)
+
+               !if ((i == 3 .or. i == 4) .and. ii == 1) then
+               IF ((i == 3) .AND. ii == 1) THEN
+                  z = i + (ii - 1)*Neq
+                  kcoeff = 1./ue(1)
+                  alpha1 = -kcoeff**2*diffiso(i, ii)*Qpr(k, ii)
+                  alpha2 = kcoeff**2*diffani(i, ii)*Qpr(k, ii)*b(k)
+                  ! Auu(:, :, z) = Auu(:, :, z) - kcoeff**2*diffiso(i, ii)*Qpr(k, ii)*NxyzNi(:, :, k)
+                  CALL add_scaled_matrix(alpha1, NxyzNi(:, :, k), Auu(:, :, z))
+                  ! Auu(:, :, z) = Auu(:, :, z) + kcoeff**2*diffani(i, ii)*Qpr(k, ii)*b(k)*NNxy
+                  CALL add_scaled_matrix(alpha2, NNxy, Auu(:, :, z))
+                  rhs(:, i) = rhs(:, i) - kcoeff*(diffiso(i, ii)*Qpr(k, ii)*Nxyzg(:, k) - diffani(i, ii)*Qpr(k, ii)*b(k)*NNbb)
+               END IF
+               z = i + (k - 1)*Neq + (ii - 1)*Ndim*Neq
+               alpha1 = kcoeff*diffiso(i, ii)
+               alpha2 = -kcoeff*diffani(i, ii)*b(k)
+               ! Auq(:, :, z) = Auq(:, :, z) + kcoeff*diffiso(i, ii)*NxyzNi(:, :, k)
+               CALL add_scaled_matrix(alpha1, NxyzNi(:, :, k), Auq(:, :, z))
+               ! Auq(:, :, z) = Auq(:, :, z) - kcoeff*diffani(i, ii)*b(k)*NNxy
+               CALL add_scaled_matrix(alpha2, NNxy, Auq(:, :, z))
+               ! Off-diagonal perpendicular diffusion, using frozen qpr
+               !rhs(:, i) = rhs(:, i) - kcoeff*diffiso(i, ii)*Nxyzg(:, k)*qpr(k, ii)
+               !rhs(:, i) = rhs(:, i) + kcoeff*diffani(i, ii)*b(k)*NNbb*qpr(k, ii)
+
+            END DO
+
+#endif
+         END DO ! loop in k: 1-Ndim
+
+#ifdef VORTICITY
+         ! The vorticity is the source term in the potential equation
+         IF (i == 4) THEN
+            j = 3
+            z = i + (j - 1)*Neq
+            ! Auu(:, :, z) = Auu(:, :, z) + NNi
+            CALL add_scaled_matrix(1.d0, NNi, Auu(:, :, z))
+         END IF
+#endif
+
+#ifdef VORTICITY
+
+         IF (switch%testcase .EQ. 7) THEN
+            IF ((xy(1) - geom%R0)/phys%lscale .GT. 0.4) THEN
+               ! implicit sources to take into account parallel losses
+               IF (switch%logrho) THEN
+                  IF (i == 1) THEN
+                     rhs(:, i) = rhs(:, i) - phys%diagsource(i)*Ni
+                  ELSE IF (i == 3) THEN
+                     j = 4
+                     z = i + (j - 1)*Neq
+                     alpha = phys%diagsource(i)
+                     ! Auu(:, :, z) = Auu(:, :, z) + phys%diagsource(i)*NNi
+                     CALL add_scaled_matrix(alpha, NNi, Auu(:, :, z))
+                  END IF
+               ELSE
+                  IF (i == 1) THEN
+                     z = i + (i - 1)*Neq
+                     alpha = phys%diagsource(i)
+                     ! Auu(:, :, z) = Auu(:, :, z) + phys%diagsource(i)*NNi
+                     CALL add_scaled_matrix(alpha, NNi, Auu(:, :, z))
+                  ELSE IF (i == 3) THEN
+                     j = 4
+                     z = i + (j - 1)*Neq
+                     alpha = phys%diagsource(i)
+                     ! Auu(:, :, z) = Auu(:, :, z) + phys%diagsource(i)*NNi
+                     CALL add_scaled_matrix(alpha, NNi, Auu(:, :, z))
+                  END IF
+               END IF
+            END IF
+         END IF
+#endif
+      END DO ! Loop in equations
+
+      ! Assembly RHS
+      IF (.NOT. switch%steady) THEN
+#ifdef VORTICITY
+         u0e(4,:) = 0.
+#endif
+         DO iord = 1,time%tis
+            ! Time derivative contribution
+            rhs=rhs+ktis(iord + 1)*tensorProduct(Ni,u0e(:,iord))/time%dt
+         END DO
+      END IF
+
+      ! Linear body force contribution
+      rhs = rhs+tensorProduct(Ni,f)
+#ifdef NEUTRAL
+      rhs = rhs-tensorProduct(Ni,Sn0)
+#endif
+
+   END SUBROUTINE assemblyVolumeContribution
+#else
    SUBROUTINE assemblyVolumeContribution(Auq, Auu, rhs, b3, psi, divb, drift, f,&
    &ktis, diffiso, diffani, Ni, NNi, Nxyzg, NNxy, NxyzNi, NNbb, upe, ue, qe, u0e, Jtor)
       REAL*8, INTENT(INOUT)     :: Auq(:, :, :), Auu(:, :, :), rhs(:, :)
@@ -2447,6 +3126,7 @@ CONTAINS
       rhs = rhs - tensorProduct(Ni, Sn0)
 #endif
    END SUBROUTINE assemblyVolumeContribution
+#endif
 
    !********************************************************************
    !
@@ -2495,7 +3175,11 @@ CONTAINS
       CALL jacobianMatrices(uf, A)
 
       ! Jacobian for pinch term
+#ifdef TOR3D
+      CALL computePinch(b(1:2), psi, APinch)
+#else
       CALL computePinch(b, psi, APinch)
+#endif
 
       ! Compute Q^T^(k-1)
       Qpr = RESHAPE(qf, (/Ndim, Neq/))
@@ -2666,10 +3350,12 @@ CONTAINS
             elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_jf), iel) + kmult
             elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_jf), iel) + kmult
          END DO ! j-loop
+#ifndef TOR3D
          ! Pinch contribution
          elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) = elMat%Aul(ind_fe(ind_if), ind_ff(ind_if), iel) + (APinch(i, 1)*n(1) + APinch(i, 2)*n(2))*NNif
          elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) = elMat%ALL(ind_ff(ind_if), ind_ff(ind_if), iel) + (APinch(i, 1)*n(1) + APinch(i, 2)*n(2))*NNif
 
+#endif
 #ifdef TEMPERATURE
          ! Parallel diffusion for the temperature
          IF (i == 3) THEN
@@ -2798,7 +3484,11 @@ CONTAINS
       CALL jacobianMatrices(uf, A)
 
       ! Jacobian matrices Pinch
+#ifdef TOR3D
+      CALL computePinch(b(1:2), psi, APinch)
+#else
       CALL computePinch(b, psi, APinch)
+#endif
 
       ! Compute Q^T^(k-1)
       Qpr = RESHAPE(qf, (/Ndim, Neq/))
