@@ -613,7 +613,7 @@ CONTAINS
       REAL*8, INTENT(IN)  		    :: xy(:, :)
       REAL*8, INTENT(IN)  		    :: u(:,:)
       REAL*8, INTENT(OUT)		     :: d_iso(:, :, :), d_ani(:, :, :)
-      REAL*8		                  :: iperdiff(SIZE(xy, 1))
+      REAL*8                              :: iperdiff(SIZE(d_iso, 3))
 #ifdef NEUTRAL
       INTEGER             		    :: i
       REAL*8				                :: ti_min=1e-6,ti
@@ -2154,20 +2154,21 @@ CONTAINS
    ! Compute the stabilization tensor tau
    !*******************************************
 
-   SUBROUTINE computeTauGaussPoints(up, uc, b, n, iel, isext, xy, tau)
+   SUBROUTINE computeTauGaussPoints(up, uc, b, n, iel, isext, xy, edge_length, tau)
       REAL*8, INTENT(IN)        :: up(:), uc(:), b(:), n(:), xy(:)
       REAL*8, INTENT(IN)        :: isext
       INTEGER, INTENT(IN)       ::  iel
-
+      REAL*8, INTENT(IN)        :: edge_length
       REAL*8, INTENT(OUT)       :: tau(:, :)
 #ifdef NEUTRAL
-      REAL*8                    :: tau_aux(5),diff_iso(5,5,1),diff_ani(5,5,1)
+      REAL*8                    :: tau_aux(5), diff_iso(5, 5, 1), diff_ani(5, 5, 1)
 #else
-      REAL*8                    :: tau_aux(4),diff_iso(4,4,1),diff_ani(4,4,1)
+      REAL*8                    :: tau_aux(4), diff_iso(4, 4, 1), diff_ani(4, 4, 1)
 #endif
       INTEGER                   :: ndim
-      REAL*8                    :: bn, bnorm,xyd(1,SIZE(xy)),uu(1,SIZE(uc))
+      REAL*8                    :: bn, bnorm, xyd(1, SIZE(xy)), uu(1, SIZE(uc))
       REAL*8                    :: U1, U2, U3, U4
+      REAL*8                    :: cs, tau_conv, hinv, Ti, Te, bn2, Tmin
       U1 = uc(1)
       U2 = uc(2)
       U3 = uc(3)
@@ -2177,8 +2178,8 @@ CONTAINS
       ndim = SIZE(n)
       bn = dot_PRODUCT(b(1:ndim), n)
       bnorm = NORM2(b(1:ndim))
-      xyd(1,:) = xy(:)
-      uu(1,:) = uc(:)
+      xyd(1, :) = xy(:)
+      uu(1, :) = uc(:)
 
       CALL setLocalDiff(xyd, uu, diff_iso, diff_ani)
 
@@ -2248,49 +2249,55 @@ CONTAINS
 #endif
 
       ELSEIF (numer%stab == 4) THEN
-         tau_aux = MAX(ABS(5./3.*up(2)*bn), ABS(0.3*bn*(3*uc(1) + SQRT(ABS(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)), &
-            phys%lscale/geom%R0*ABS(bn)*phys%diff_pari*up(7)**2.5, phys%lscale/geom%R0*ABS(bn)*phys%diff_pare*up(8)**2.5)
+         Tmin = 1.e-3
+         cs       = SQRT(MAX(5./3.*phys%Mref*(up(7)+up(8)), 0.))
+         tau_conv = ABS(bn)*(ABS(up(2)) + cs)
+         Ti = MAX(up(7), Tmin);  Te = MAX(up(8), Tmin)
+         bn2 = bn**2
+
+         ! length scale: toroidal-normal face -> toroidal size, else poloidal
+#ifdef TOR3D
+         IF (ABS(n(3)) > 0.1) THEN      ! (inside #ifdef TOR3D)
+            !hinv = refElTor%ndeg/(numer%tmax*xy(1)/numer%ntor)
+            hinv = refElTor%ndeg/(xy(1)/numer%ntor)
+         ELSE
+#endif
+            hinv = refElPol%ndeg/Mesh%elemSize(iel)
+#ifdef TOR3D
+         END IF
+#endif
+
+         tau_aux(1) = tau_conv + diff_iso(1,1,1)*hinv
+         tau_aux(2) = tau_conv + diff_iso(2,2,1)*hinv
+         tau_aux(3) = tau_conv + (diff_iso(3,3,1)*(1.-bn2) + bn2*phys%diff_pari*Ti**2.5*bnorm/uc(1))*hinv
+         tau_aux(4) = tau_conv + (diff_iso(4,4,1)*(1.-bn2) + bn2*phys%diff_pare*Te**2.5*bnorm/uc(1))*hinv
+
 
       ELSEIF (numer%stab == 5) THEN
-         !if (ABS(isext - 1.) .lt. 1e-12) then
-         ! ! exterior faces
-         !   tau_aux = ABS((4*uc(2)*bn)/uc(1))
-         !else
          tau_aux = MAX(ABS(5./3.*up(2)*bn), ABS(0.3*bn*(3*uc(1) + SQRT(ABS(10*uc(3)*uc(1) + 10*uc(4)*uc(1) - 5*uc(2)**2)))/uc(1)))
-
 #ifdef TOR3D
          IF (ABS(n(3)) > 0.1) THEN
             ! Poloidal face
-            tau_aux(1) = tau_aux(1) + phys%diff_n
-            tau_aux(2) = tau_aux(2) + phys%diff_u
-            tau_aux(3) = tau_aux(3) + phys%diff_e + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1)*refElTor%Ndeg/(1*xy(1)/numer%ntor)/phys%lscale
-            tau_aux(4) = tau_aux(4) + phys%diff_ee + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(1*xy(1)/numer%ntor)/phys%lscale
+            tau_aux(1) = tau_aux(1) + phys%diff_n*refElPol%ndeg/Mesh%elemSize(iel)
+            tau_aux(2) = tau_aux(2) + phys%diff_u*refElPol%ndeg/Mesh%elemSize(iel)
+            tau_aux(3) = tau_aux(3) + phys%diff_e*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1)*refElTor%Ndeg/(1.*xy(1)/numer%ntor)!/phys%lscale
+            tau_aux(4) = tau_aux(4) + phys%diff_ee*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElTor%Ndeg/(1.*xy(1)/numer%ntor)!/phys%lscale
+
 #ifdef NEUTRAL
             tau_aux(5) = phys%diff_nn!numer%tau(5) !tau_aux(5) + diff_iso(5,5,1)
 #endif
          ELSE
 #endif
             ! Toroidal face
-            tau_aux(1) = tau_aux(1) + diff_iso(1,1,1)*refElPol%ndeg/Mesh%elemSize(iel)
-            tau_aux(2) = tau_aux(2) + diff_iso(2,2,1)*refElPol%ndeg/Mesh%elemSize(iel)
-            tau_aux(3) = tau_aux(3) + diff_iso(3,3,1)*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pari*(MIN(1.,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
-            tau_aux(4) = tau_aux(4) + diff_iso(4,4,1)*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pare*(MIN(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
+            tau_aux(1) = tau_aux(1) + diff_iso(1, 1, 1)*refElPol%ndeg/Mesh%elemSize(iel)
+            tau_aux(2) = tau_aux(2) + diff_iso(2, 2, 1)*refElPol%ndeg/Mesh%elemSize(iel)
+            tau_aux(3) = tau_aux(3) + diff_iso(3, 3, 1)*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pari*(MIN(1.,up(7)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
+            tau_aux(4) = tau_aux(4) + diff_iso(4, 4, 1)*refElPol%ndeg/Mesh%elemSize(iel) + ABS(bn)*phys%diff_pare*(MIN(1.,up(8)))**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)!/phys%lscale
+
 #ifdef NEUTRAL
-            tau_aux(5) = tau_aux(5) + diff_iso(5,5,1)*refElPol%ndeg/Mesh%elemSize(iel) !! !numer%tau(5) diff_iso(5,5,1)
+            tau_aux(5) = tau_aux(5) + diff_iso(5, 5, 1)*refElPol%ndeg/Mesh%elemSize(iel) !! !numer%tau(5) diff_iso(5,5,1)
 #endif
-
-            !        ! Toroidal face
-            !        tau_aux(1) = tau_aux(1) +  diff_iso(1,1,1)
-            !        tau_aux(2) = tau_aux(2) +  diff_iso(2,2,1)
-            !        tau_aux(3) = tau_aux(3) +  diff_iso(3,3,1) + abs(bn)*phys%diff_pari*up(7)**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-            !        tau_aux(4) = tau_aux(4) +  diff_iso(4,4,1) + abs(bn)*phys%diff_pare*up(8)**2.5*bnorm/uc(1)*refElPol%ndeg/Mesh%elemSize(iel)/phys%lscale
-            !#ifdef NEUTRAL
-            !        tau_aux(5) = tau_aux(5) +  diff_iso(5,5,1)
-            !#endif
-#ifdef TOR3D
          END IF
-#endif
-
       ELSE
          WRITE (6, *) "Wrong stabilization type: ", numer%stab
          STOP
@@ -2303,8 +2310,6 @@ CONTAINS
       tau(5, 5) = tau_aux(5)
 #endif
    END SUBROUTINE computeTauGaussPoints
-
-   !!
 
    SUBROUTINE computeTauGaussPoints_matrix(up, uc, b, n, xy, isext, iel, tau)
 
