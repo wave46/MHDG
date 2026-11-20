@@ -2154,11 +2154,10 @@ CONTAINS
    ! Compute the stabilization tensor tau
    !*******************************************
 
-   SUBROUTINE computeTauGaussPoints(up, uc, b, n, iel, isext, xy, edge_length, tau)
+   SUBROUTINE computeTauGaussPoints(up, uc, b, n, iel, isext, xy, tau)
       REAL*8, INTENT(IN)        :: up(:), uc(:), b(:), n(:), xy(:)
       REAL*8, INTENT(IN)        :: isext
       INTEGER, INTENT(IN)       ::  iel
-      REAL*8, INTENT(IN)        :: edge_length
       REAL*8, INTENT(OUT)       :: tau(:, :)
 #ifdef NEUTRAL
       REAL*8                    :: tau_aux(5), diff_iso(5, 5, 1), diff_ani(5, 5, 1)
