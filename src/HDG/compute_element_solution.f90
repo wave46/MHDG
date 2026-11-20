@@ -100,7 +100,7 @@ SUBROUTINE compute_element_solution
          ind_ug = (iel3d-1)*neq*Np*Ndim + (/(i, i=1, Neq*Np*Ndim)/)
 
          ! elemental solutions
-         sol%q(ind_ug) = MATMUL(elMat%LL(:, :, iel), sol%u_tilde(ind_uf)) + elMat%L0(:, iel)
+         sol%q(ind_ug) = MATMUL(elMat%LL(:, :, iel3d), sol%u_tilde(ind_uf)) + elMat%L0(:, iel3d)
       END DO
    END DO
    !$OMP END DO
